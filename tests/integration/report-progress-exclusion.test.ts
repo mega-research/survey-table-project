@@ -22,6 +22,8 @@ interface SeedContact {
   attempts: string[];
   responded: boolean;
   unsubscribed: boolean;
+  /** 자격미달(screened_out) 응답이 매칭된 컨택 — 부적격이라 분모에서 빠진다 */
+  screenedOut: boolean;
 }
 
 interface FakeState {
@@ -43,10 +45,10 @@ function isClosing(c: SeedContact): boolean {
 }
 
 function isExcluded(c: SeedContact): boolean {
-  const codeBranch =
-    state.negativeCodes.length > 0 &&
-    c.attempts.some((a) => state.negativeCodes.includes(a));
-  return codeBranch || c.unsubscribed;
+  if (c.screenedOut) return true;
+  if (c.unsubscribed) return true;
+  if (state.negativeCodes.length === 0) return false;
+  return c.attempts.some((a) => state.negativeCodes.includes(a));
 }
 
 // SQL 패턴 식별 후 in-memory 결과 직조
@@ -144,6 +146,7 @@ interface SeedContactInput {
   attempts?: string[];
   responded?: boolean;
   unsubscribed?: boolean;
+  screenedOut?: boolean;
 }
 
 function setup(
@@ -160,6 +163,7 @@ function setup(
     attempts: c.attempts ?? [],
     responded: c.responded ?? false,
     unsubscribed: c.unsubscribed ?? false,
+    screenedOut: c.screenedOut ?? false,
   }));
 }
 
@@ -260,6 +264,29 @@ describe('getProgressTotals — negative exclusion', () => {
     // A + NULL + 리터럴 (미분류) = 3개 그룹
     expect(rows).toHaveLength(3);
     expect(totals.groupCount).toBe(rows.length);
+  });
+
+  it('자격미달 응답이 매칭된 컨택은 분모·분자에서 제외된다', async () => {
+    setup(['1.조사완료'], ['수신거부'], [
+      { groupValue: 'A', responded: true },        // 분자+분모
+      { groupValue: 'A' },                          // 분모만
+      { groupValue: 'A', screenedOut: true },       // 부적격 — 제외
+    ]);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    expect(totals.listTotal).toBe(2);
+    expect(totals.completedTotal).toBe(1);
+    expect(totals.excludedTotal).toBe(1);
+  });
+
+  it('자격미달은 negative 코드가 하나도 없어도 제외된다', async () => {
+    setup(['1.조사완료'], [], [
+      { groupValue: 'A', responded: true },
+      { groupValue: 'A', screenedOut: true },
+    ]);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    expect(totals.listTotal).toBe(1);
+    expect(totals.completedTotal).toBe(1);
+    expect(totals.excludedTotal).toBe(1);
   });
 });
 

@@ -84,6 +84,7 @@ import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { responsesToLookupShape } from '@/utils/branch-eval';
 import {
   type BranchEvalCtx,
   collectTraversedQuestionIds,
@@ -140,32 +141,6 @@ function getDisplayableItemsOfStep(
   return step.items
     .filter((i) => shouldDisplayQuestion(i.question, responses, allQuestions, allGroups, evalCtx))
     .map((i) => i.question);
-}
-
-/**
- * responses (Record<string, unknown>) → LookupEvalCtx 가 기대하는
- * Record<string, Record<string, string | undefined>> 형태로 변환.
- *
- * - table 질문은 응답이 object (cell-id → value) 형태 → 그대로 평탄화 가능.
- * - 비-table 응답은 LUT 비교 좌변이 CellRef 일 때만 의미가 있으므로 건너뜀.
- * - LUT 의 좌변/우변은 항상 table input 셀을 가리키므로 이 변환으로 충분.
- */
-function responsesToLookupShape(
-  responses: ResponsesMap,
-): Record<string, Record<string, string | undefined>> {
-  const out: Record<string, Record<string, string | undefined>> = {};
-  for (const [qid, raw] of Object.entries(responses)) {
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      const cells: Record<string, string | undefined> = {};
-      for (const [cellId, cellVal] of Object.entries(raw as Record<string, unknown>)) {
-        if (typeof cellVal === 'string') cells[cellId] = cellVal;
-        else if (cellVal == null) cells[cellId] = undefined;
-        // checkbox 배열 / object 응답은 numeric 비교 대상 아님 → skip
-      }
-      out[qid] = cells;
-    }
-  }
-  return out;
 }
 
 /**

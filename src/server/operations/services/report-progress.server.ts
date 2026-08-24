@@ -6,8 +6,8 @@ import 'server-only';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
 import {
   type OperationsDataScope,
@@ -60,15 +60,51 @@ function buildClosingFilter(positiveCodes: string[], isTest: boolean): SQL {
 }
 
 /**
- * 모집단 제외 정의 — negative codes OR unsubscribed_at.
+ * 모집단 제외 정의 — negative codes OR unsubscribed_at OR 자격미달 응답.
  *
  * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
  * `unsubscribed_at IS NOT NULL` 도 자동 negative 효과 (메일 푸터 unsubscribe 흐름).
  *
- * negative codes 빈 배열이면 unsubscribed_at 만 평가.
+ * 자격미달(status='screened_out')은 조사 대상 조건 불충족이라 애초에 모집단이 아니다.
+ * 완료 수(분자)에서는 is_completed=false 로 이미 빠지므로, 여기서 분모까지 빼면
+ * 응답률 = 완료 / (전체 - 부적격) 이 된다.
+ *
+ * negative codes 빈 배열이면 unsubscribed_at 과 자격미달만 평가.
+ * isTest 는 buildClosingFilter 와 같은 스코프 플래그를 받는다 — 반대 파티션의
+ * 자격미달 응답이 분모를 깎지 않게 하기 위함이다.
  */
-function buildExcludeFilter(negativeCodes: string[]): SQL {
-  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)} OR ct.unsubscribed_at IS NOT NULL`;
+function buildScreenedOutExists(isTest: boolean): SQL {
+  return sql`EXISTS (SELECT 1 FROM survey_responses sr
+                     WHERE sr.contact_target_id = ct.id
+                       AND sr.status = 'screened_out'
+                       AND sr.deleted_at IS NULL
+                       AND sr.is_test = ${isTest})`;
+}
+
+function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
+  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}
+    OR ct.unsubscribed_at IS NOT NULL
+    OR ${buildScreenedOutExists(isTest)}`;
+}
+
+/**
+ * 제외 사유별 내역 — 겹치지 않는 버킷으로 쪼갠다.
+ *
+ * 한 컨택이 여러 사유에 동시에 해당할 수 있으므로(예: 결과코드 `수신거부` + unsubscribed_at,
+ * 또는 자격미달 응답 + 담당자가 나중에 찍은 부적격 코드) 단순 COUNT 를 나열하면 합이
+ * 제외 총계를 넘는다. 푸터가 "제외 N = a + b + c" 로 읽히려면 버킷이 배타적이어야 한다.
+ *
+ * 우선순위는 응답자 행동 > 담당자 판정 > 메일 수신 상태 순이다. 자격미달은 응답 내용으로
+ * 확정된 사실이라 가장 구체적이고, 결과코드는 담당자 판정, 수신거부는 그중 가장 약한 신호다.
+ */
+function buildExcludeBreakdownSelect(negativeCodes: string[], isTest: boolean): SQL {
+  const screened = buildScreenedOutExists(isTest);
+  const negative = sql`(${buildNegativeCodeExists(negativeCodes, sql`ct.id`)})`;
+  return sql`
+      COUNT(*) FILTER (WHERE ${screened})::int AS excluded_screened_out,
+      COUNT(*) FILTER (WHERE NOT (${screened}) AND ${negative})::int AS excluded_negative_code,
+      COUNT(*) FILTER (WHERE NOT (${screened}) AND NOT ${negative}
+                         AND ct.unsubscribed_at IS NOT NULL)::int AS excluded_unsubscribed`;
 }
 
 /**
@@ -142,7 +178,8 @@ export const getProgressGroupLabel = cache(
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);
-    const scheme = surveyRow[0]?.contactColumns as ContactColumnScheme | null | undefined;
+    // getContactColumnScheme 를 거치지 않고 직접 읽는 경로라 같은 보정이 필요하다.
+    const scheme = normalizeContactColumnScheme(surveyRow[0]?.contactColumns ?? null);
     const col = scheme?.columns.find((c) => c.source === `attrs.${groupAttrsKey}`);
     return col?.label ?? groupAttrsKey;
   },
@@ -233,7 +270,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes, isTest);
-  const excludeFilter = buildExcludeFilter(negativeCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes, isTest);
 
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
@@ -341,7 +378,7 @@ export async function getProgressTotals(
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes, isTest);
-  const excludeFilter = buildExcludeFilter(negativeCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes, isTest);
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
@@ -354,7 +391,8 @@ export async function getProgressTotals(
       ) grouped) AS group_count,
       COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
       COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
-      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total
+      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total,
+      ${buildExcludeBreakdownSelect(negativeCodes, isTest)}
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ct.is_test = ${isTest}
@@ -366,6 +404,9 @@ export async function getProgressTotals(
     listTotal: Number(r['list_total'] ?? 0),
     completedTotal: Number(r['completed_total'] ?? 0),
     excludedTotal: Number(r['excluded_total'] ?? 0),
+    excludedScreenedOut: Number(r['excluded_screened_out'] ?? 0),
+    excludedNegativeCode: Number(r['excluded_negative_code'] ?? 0),
+    excludedUnsubscribed: Number(r['excluded_unsubscribed'] ?? 0),
   };
 }
 

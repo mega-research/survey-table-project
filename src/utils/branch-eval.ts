@@ -34,6 +34,34 @@ export const emptyBranchEvalCtx = (): BranchEvalCtx => ({
 });
 
 /**
+ * 응답 맵(Record<string, unknown>) → BranchEvalCtx.responses 형태로 변환.
+ *
+ * - table 질문은 응답이 object (cell-id → value) 형태 → 그대로 평탄화 가능.
+ * - 비-table 응답은 LUT 비교 좌변이 CellRef 일 때만 의미가 있으므로 건너뜀.
+ * - LUT 의 좌변/우변은 항상 table input 셀을 가리키므로 이 변환으로 충분.
+ *
+ * 응답 페이지(클라이언트)와 completeResponse(서버)가 같은 컨텍스트로 표시 조건을
+ * 평가해야 판정이 갈리지 않으므로 공용 유틸로 둔다.
+ */
+export function responsesToLookupShape(
+  responses: Record<string, unknown>,
+): Record<string, Record<string, string | undefined>> {
+  const out: Record<string, Record<string, string | undefined>> = {};
+  for (const [qid, raw] of Object.entries(responses)) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const cells: Record<string, string | undefined> = {};
+      for (const [cellId, cellVal] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof cellVal === 'string') cells[cellId] = cellVal;
+        else if (cellVal == null) cells[cellId] = undefined;
+        // checkbox 배열 / object 응답은 numeric 비교 대상 아님 → skip
+      }
+      out[qid] = cells;
+    }
+  }
+  return out;
+}
+
+/**
  * NumericComparison 평가 진입점 (T16~).
  * - `cmp.left` 미존재(legacy 데이터) 시 cellValue 를 "현재 평가 중인 셀" 로 wrap 하여 cell-impersonation.
  * - fail-safe 적용된 ComparisonResult 반환. 단순 boolean 이 필요한 곳은 `.satisfied` 사용.

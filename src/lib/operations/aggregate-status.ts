@@ -11,8 +11,8 @@
 
 export interface StatusCounts {
   /**
-   * 종결된 응답의 합계 (completed + screenedOut + quotafulOut + bad + drop).
-   * in_progress는 분모에 포함되지 않음 — 진행중 응답은 KPI Row의 별도 셀로 노출됨.
+   * 종결된 응답 중 적격 모수의 합계 (completed + quotafulOut + bad + drop).
+   * in_progress 는 진행중 셀로 별도 노출되어 제외되고, screened_out 은 부적격이라 제외된다.
    */
   total: number;
   completed: number;
@@ -77,10 +77,11 @@ export function mapRowsToCounts(rows: StatusRow[]): StatusCounts {
     }
   }
 
-  // 종결 응답만 합산 (in_progress 제외) — Total은 "끝까지 진행된 응답"의 의미
+  // 종결 응답만 합산 (in_progress 제외) — Total은 "끝까지 진행된 응답"의 의미.
+  // screened_out(자격미달)은 부적격이라 분모에서 빠진다 — 조사 대상이 아니었던 응답이므로
+  // 전체·완료 어느 쪽에도 세지 않는다 (ADR: 자격미달 부적격 처리).
   counts.total =
     counts.completed +
-    counts.screenedOut +
     counts.quotafulOut +
     counts.bad +
     counts.drop;

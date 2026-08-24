@@ -6,8 +6,9 @@
  * y 범위 기준 top/mid/bottom 가로 밴드로 잘라 R2 에 올리고 data-link-bands 에
  * 밴드 URL 을 기록한다. 발송/미리보기 직전 renderMailPreview 진입점에서
  * expandImageLinkAreas 가 img 를 <table> 3행으로 치환하고 가운데 밴드를
- * <a href="{{invite_link}}"> 로 감싼다 — href 는 기존 변수 치환 파이프라인이
- * 실제 URL 로 바꾼다 (변수 치환보다 먼저 실행되어야 하는 이유).
+ * <a href="..."> 로 감싼다. href 는 img 의 data-link-href (변수 토큰 또는 외부 URL)
+ * 이며 없으면 {{invite_link}} 기본값 — 기존 변수 치환 파이프라인이 실제 URL 로
+ * 바꾼다 (변수 치환보다 먼저 실행되어야 하는 이유).
  *
  * 이미지맵(<area coords>) 대신 밴드 슬라이스를 쓰는 이유: area 좌표는 렌더
  * 픽셀 고정이라 %폭(반응형) 이미지에서 어긋나지만, 밴드는 모든 조각이 같은
@@ -19,6 +20,15 @@ export const IMG_TAG_RE = /<img\b[^>]*>/g;
 
 /** sanitize transformTags 의 표 테두리 주입을 면제받기 위한 마커 클래스 */
 export const LINK_BANDS_CLASS = 'mail-link-bands';
+
+/** 클릭 영역 링크 대상 기본값 — 컨택별 초대링크 변수 */
+export const DEFAULT_LINK_HREF = '{{invite_link}}';
+
+/** img 태그의 data-link-href 를 읽는다. 없거나 공백이면 기본값. */
+export function readLinkHref(tag: string): string {
+  const raw = tag.match(/\bdata-link-href="([^"]*)"/i)?.[1]?.trim();
+  return raw ? raw : DEFAULT_LINK_HREF;
+}
 
 export interface LinkRect {
   x: number;
@@ -114,6 +124,7 @@ function buildBandTable(tag: string, alignDecl: string): string | null {
   const bands = parseLinkBands(tag.match(/data-link-bands="([^"]*)"/)?.[1]);
   if (!bands) return null;
   const widthDecl = extractWidthDecl(tag);
+  const href = readLinkHref(tag);
   // font-size/line-height 0: 클라이언트가 셀 안에 공백 텍스트 노드를 만들어도
   // 밴드 사이에 틈이 생기지 않게 하는 슬라이스 메일 표준 보정
   const row = (inner: string) =>
@@ -123,7 +134,7 @@ function buildBandTable(tag: string, alignDecl: string): string | null {
   const rows = [
     bands.top ? row(bandImg(bands.top, '')) : '',
     row(
-      `<a href="{{invite_link}}" target="_blank" rel="noopener noreferrer">` +
+      `<a href="${href}" target="_blank" rel="noopener noreferrer">` +
         `${bandImg(bands.mid, '설문 참여 링크')}</a>`,
     ),
     bands.bottom ? row(bandImg(bands.bottom, '')) : '',
@@ -137,7 +148,7 @@ function buildBandTable(tag: string, alignDecl: string): string | null {
 
 /**
  * data-link-bands 를 가진 img 를 가로 밴드 <table> 로 치환.
- * 가운데 밴드는 <a href="{{invite_link}}"> 로 감싼다.
+ * 가운데 밴드는 <a href="(data-link-href ?? {{invite_link}})"> 로 감싼다.
  * data-link-* 속성은 여기서 제거하지 않는다 — sanitize 가 최종 스트립.
  */
 export function expandImageLinkAreas(html: string): string {

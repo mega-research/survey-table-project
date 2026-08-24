@@ -14,6 +14,7 @@ import { getOperationsDataScope } from '@/server/data-scope.server';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters.server';
 import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
+import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress';
 import {
   countContactTargets,
   getProgressColumnScheme,
@@ -155,7 +156,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const isEmpty = (await countContactTargets(surveyId, scope)) === 0;
 
   const { rows, totals } = isEmpty
-    ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 } }
+    ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
     : await Promise.all([
         getProgressRows({
           surveyId,

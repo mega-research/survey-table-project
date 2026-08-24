@@ -466,6 +466,7 @@ export function getTableValidationBranchRule(
         value: 'table-validation',
         action: rule.action,
         ...(targetQuestionId !== undefined ? { targetQuestionId } : {}),
+        ...(rule.endOutcome ? { endOutcome: rule.endOutcome } : {}),
       };
     }
   }

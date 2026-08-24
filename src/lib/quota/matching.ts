@@ -40,7 +40,7 @@ function matchesChoice(category: QuotaCategory, answer: unknown): boolean {
 
 /** 한 차원에서 응답이 속하는 카테고리 id. 미매칭이면 null. */
 export function resolveCategoryId(dimension: QuotaDimension, answer: unknown): string | null {
-  for (const category of dimension.categories) {
+  for (const category of dimension.categories ?? []) {
     const matched =
       dimension.kind === 'numeric' ? matchesNumeric(category, answer) : matchesChoice(category, answer);
     if (matched) return category.id;
@@ -54,7 +54,7 @@ export function deriveCategoryIds(
   answers: Record<string, unknown>,
 ): string[] | null {
   const ids: string[] = [];
-  for (const dimension of config.dimensions) {
+  for (const dimension of config.dimensions ?? []) {
     const categoryId = resolveCategoryId(dimension, answers[dimension.questionId]);
     if (categoryId === null) return null;
     ids.push(categoryId);
@@ -70,7 +70,7 @@ export function cellKeyOf(categoryIds: string[]): string {
 /** 셀의 목표. 미등록(sparse)이면 null. */
 export function findTarget(config: QuotaConfig, categoryIds: string[]): number | null {
   const key = cellKeyOf(categoryIds);
-  for (const cell of config.cells) {
+  for (const cell of config.cells ?? []) {
     if (cellKeyOf(cell.categoryIds) === key) return cell.target;
   }
   return null;

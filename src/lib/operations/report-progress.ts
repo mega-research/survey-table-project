@@ -125,17 +125,44 @@ export interface ProgressTotals {
   completedTotal: number;
   /** 푸터 합계 — 모집단 제외 ct 누적. */
   excludedTotal: number;
+  /**
+   * 제외 사유별 내역 — 서로 겹치지 않는 버킷이라 셋의 합이 `excludedTotal` 과 같다.
+   * 행 단위 합산(computeTotals)에는 사유 정보가 없어 0 으로 남는다.
+   */
+  excludedScreenedOut: number;
+  excludedNegativeCode: number;
+  excludedUnsubscribed: number;
 }
+
+/** 조사 대상 0건 등 집계를 돌릴 필요가 없을 때 쓰는 빈 합계. */
+export const EMPTY_PROGRESS_TOTALS: ProgressTotals = {
+  groupCount: 0,
+  listTotal: 0,
+  completedTotal: 0,
+  excludedTotal: 0,
+  excludedScreenedOut: 0,
+  excludedNegativeCode: 0,
+  excludedUnsubscribed: 0,
+};
 
 /** 푸터 합계 — "총 N개 그룹 · 리스트 합계 X / 완료 Y · 제외 Z". */
 export function computeTotals(rows: ProgressRow[]): ProgressTotals {
   return rows.reduce<ProgressTotals>(
     (acc, r) => ({
+      ...acc,
       groupCount: acc.groupCount + 1,
       listTotal: acc.listTotal + r.listCount,
       completedTotal: acc.completedTotal + r.completedCount,
       excludedTotal: acc.excludedTotal + r.excludedCount,
     }),
-    { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 },
+    {
+      groupCount: 0,
+      listTotal: 0,
+      completedTotal: 0,
+      excludedTotal: 0,
+      excludedScreenedOut: 0,
+      excludedNegativeCode: 0,
+      excludedUnsubscribed: 0,
+    },
   );
 }

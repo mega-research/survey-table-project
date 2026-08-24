@@ -25,6 +25,11 @@ export interface MailAttachment {
 export interface CampaignFilterSnapshot {
   /** 다중 절 필터 (조사대상목록과 동일 직렬화). blindIndex 미포함 raw — 요청 시 재계산. */
   clauses?: { source: string; value: string; op: 'AND' | 'OR' | null }[];
+  /**
+   * 깔때기(헤더) 필터 — URL 의 hcol[]/hm[]/hv[] 와 동형 직렬화.
+   * 빌더(clauses)와 상호배타지만 스냅샷은 둘을 따로 담는다 (재현 시 AND 결합).
+   */
+  headerClauses?: { source: string; mode: 'in' | 'text' | 'exact'; hv: string }[];
   /** 미응답자만 (responded_at IS NULL) — 별도 체크박스로 유지 */
   unrespondedOnly?: boolean;
   /** "발송 후 N일 경과 단체 메일의 미오픈자 재발송" 동선 (?from=<cid>&unopenedAfterDays=7) */

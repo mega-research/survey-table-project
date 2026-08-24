@@ -40,7 +40,7 @@ export function TableCellCheckEditor({
               colIndex,
             );
             const isSelected =
-              condition.tableConditions?.rowIds.includes(row.id) || false;
+              condition.tableConditions?.rowIds?.includes(row.id) || false;
             const isMergeStart = mergeInfo.mergeStartRowId === row.id;
 
             return (

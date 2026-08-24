@@ -11,5 +11,7 @@ export type ListContactAttrValuesInput = z.infer<typeof ListContactAttrValuesInp
 export const ListContactAttrValuesOutput = z.object({
   values: z.array(z.string()),
   truncated: z.boolean(),
+  /** 이 컬럼이 비어 있는 행 존재 여부 — "(값 없음)" 선택지 노출 판단용. */
+  hasEmpty: z.boolean(),
 });
 export type ListContactAttrValuesOutput = z.infer<typeof ListContactAttrValuesOutput>;

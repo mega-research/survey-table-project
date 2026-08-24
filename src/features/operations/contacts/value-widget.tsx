@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import {
+  contactResultFilterOptions,
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
   placeholderFor,
@@ -26,7 +27,7 @@ interface Props {
 
 /**
  * 컬럼 source 에 따라 다른 입력 위젯 렌더.
- * - system.contact_result -> 결과코드 dropdown
+ * - system.contact_result -> 결과코드 dropdown (+ "결과 없음")
  * - system.web -> 응답 완료/미응답 dropdown
  * - 그 외 (system.resid / attrs.* / pii.*) -> text input
  */
@@ -38,9 +39,9 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
           <SelectValue placeholder="결과코드 선택" />
         </SelectTrigger>
         <SelectContent className="max-h-72">
-          {resultCodeOptions.map((rc) => (
-            <SelectItem key={rc.code} value={rc.code}>
-              {rc.label}
+          {contactResultFilterOptions(resultCodeOptions).map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
             </SelectItem>
           ))}
         </SelectContent>

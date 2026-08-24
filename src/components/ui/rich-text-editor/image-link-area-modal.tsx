@@ -5,15 +5,30 @@ import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Editor } from '@tiptap/react';
 
 import { Button } from '@/components/ui/button';
-import { parseLinkRect, type LinkRect } from '@/lib/mail/image-link-area';
+import { DEFAULT_LINK_HREF, parseLinkRect, type LinkRect } from '@/lib/mail/image-link-area';
+
+import type { VariableDef } from './types';
 
 const IMAGE_NODE = 'imageResize';
+/** 링크 대상 select 의 "직접 입력" 항목 값 */
+const CUSTOM_TARGET = '__custom__';
+const TOKEN_ONLY_RE = /^\{\{([^{}]+)\}\}$/;
 /** 드래그 최소 크기 (상대값) — 이보다 작으면 오클릭으로 보고 무시 */
 const MIN_RECT_SIZE = 0.02;
 
 interface Props {
   editor: Editor;
+  /** 링크 대상으로 고를 수 있는 변수 (attrs 컬럼). 기본값 응답 페이지 링크는 항상 포함. */
+  variableCatalog: VariableDef[];
   onClose: () => void;
+}
+
+/** 저장된 href 를 select 값 + 직접 입력값으로 분해 */
+function splitHref(href: string | null | undefined): { target: string; custom: string } {
+  const v = (href ?? '').trim();
+  if (!v || v === DEFAULT_LINK_HREF) return { target: DEFAULT_LINK_HREF, custom: '' };
+  if (TOKEN_ONLY_RE.test(v)) return { target: v, custom: '' };
+  return { target: CUSTOM_TARGET, custom: v };
 }
 
 interface Point {
@@ -39,9 +54,25 @@ function normalizeRect(a: Point, b: Point): LinkRect {
   return { x, y, w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
 }
 
-export function ImageLinkAreaModal({ editor, onClose }: Props) {
+export function ImageLinkAreaModal({ editor, variableCatalog, onClose }: Props) {
   const attrs = editor.getAttributes(IMAGE_NODE);
   const src = (attrs['src'] ?? '') as string;
+
+  const initialHref = splitHref(attrs['linkHref'] as string | null | undefined);
+  const [target, setTarget] = useState(initialHref.target);
+  const [custom, setCustom] = useState(initialHref.custom);
+  const attrVars = variableCatalog.filter((v) => v.category === 'attrs');
+  // 저장된 토큰이 현재 카탈로그에 없어도(컬럼 삭제 등) 선택지에 남겨 값을 잃지 않게 한다.
+  const orphanToken =
+    target !== CUSTOM_TARGET &&
+    target !== DEFAULT_LINK_HREF &&
+    !attrVars.some((v) => `{{${v.key}}}` === target)
+      ? target
+      : null;
+  const resolvedHref = target === CUSTOM_TARGET ? custom.trim() : target;
+  // 기본값은 속성을 비워 기존 템플릿과 같은 형태로 저장
+  const linkHrefAttr = resolvedHref && resolvedHref !== DEFAULT_LINK_HREF ? resolvedHref : null;
+  const hrefValid = target !== CUSTOM_TARGET || /^https?:\/\/\S+$/i.test(custom.trim());
 
   const [rect, setRect] = useState<LinkRect | null>(
     parseLinkRect(attrs['linkRect'] as string | null | undefined),
@@ -63,6 +94,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
       .updateAttributes(IMAGE_NODE, {
         linkRect: [rect.x, rect.y, rect.w, rect.h].map((n) => n.toFixed(4)).join(','),
         linkNatural: `${natural.width},${natural.height}`,
+        linkHref: linkHrefAttr,
       })
       .setNodeSelection(from)
       .run();
@@ -74,7 +106,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
     editor
       .chain()
       .focus()
-      .updateAttributes(IMAGE_NODE, { linkRect: null, linkNatural: null })
+      .updateAttributes(IMAGE_NODE, { linkRect: null, linkNatural: null, linkHref: null })
       .setNodeSelection(from)
       .run();
     onClose();
@@ -108,9 +140,42 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
           <h3 className="text-sm font-semibold text-gray-900">클릭 영역 지정</h3>
           <p className="mt-0.5 text-xs text-gray-500">
             이미지 위를 드래그해 설문 참여 버튼 영역을 지정하세요. 수신자가 이 영역을
-            누르면 개인별 초대링크로 이동합니다. 저장 시 이미지가 가로 밴드로 분할되어
+            누르면 아래에서 고른 링크로 이동합니다. 저장 시 이미지가 가로 밴드로 분할되어
             지정한 높이 구간 전체가 클릭 가능해집니다.
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-5 py-3">
+          <label htmlFor="image-link-target" className="text-xs font-medium text-gray-700">
+            링크 대상
+          </label>
+          <select
+            id="image-link-target"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900"
+          >
+            <option value={DEFAULT_LINK_HREF}>응답 페이지 링크 (개인별 초대링크)</option>
+            {attrVars.map((v) => (
+              <option key={v.key} value={`{{${v.key}}}`}>
+                {v.label} {`{{${v.key}}}`}
+              </option>
+            ))}
+            {orphanToken && <option value={orphanToken}>{orphanToken} (카탈로그에 없음)</option>}
+            <option value={CUSTOM_TARGET}>직접 입력 (URL)</option>
+          </select>
+          {target === CUSTOM_TARGET && (
+            <input
+              type="url"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="https://"
+              className="h-8 min-w-[16rem] flex-1 rounded-md border border-gray-300 px-2 text-xs text-gray-900"
+            />
+          )}
+          {!hrefValid && (
+            <span className="text-xs text-red-600">http(s):// 로 시작하는 URL 을 입력하세요</span>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -168,7 +233,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
             <Button size="sm" variant="outline" onClick={onClose}>
               취소
             </Button>
-            <Button size="sm" onClick={save} disabled={!rect || !natural}>
+            <Button size="sm" onClick={save} disabled={!rect || !natural || !hrefValid}>
               저장
             </Button>
           </div>

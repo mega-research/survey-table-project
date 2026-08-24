@@ -33,6 +33,7 @@ describe('contacts.attrValues procedures', () => {
     vi.mocked(svc.listContactAttrValues).mockResolvedValue({
       values: ['상장', '코스닥'],
       truncated: false,
+      hasEmpty: false,
     });
 
     const client = createRouterClient({ attrValues }, { context: authedContext() });
@@ -44,7 +45,7 @@ describe('contacts.attrValues procedures', () => {
       attrsKey: '기업유형',
       scope: 'test',
     });
-    expect(res).toEqual({ values: ['상장', '코스닥'], truncated: false });
+    expect(res).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
   });
 
   it('스킴 밖 컬럼이면 FORBIDDEN_COLUMN 에러로 매핑한다', async () => {
@@ -73,7 +74,7 @@ describe('contacts.attrValues procedures', () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
-    vi.mocked(svc.listContactAttrValues).mockResolvedValue({ values: ['상장'], truncated: false });
+    vi.mocked(svc.listContactAttrValues).mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
 
     const client = createRouterClient(
       { attrValues },
@@ -81,7 +82,7 @@ describe('contacts.attrValues procedures', () => {
     );
     const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
 
-    expect(res).toEqual({ values: ['상장'], truncated: false });
+    expect(res).toEqual({ values: ['상장'], truncated: false, hasEmpty: false });
   });
 
   it('게스트가 다른 설문 surveyId 로 조회하면 FORBIDDEN', async () => {

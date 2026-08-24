@@ -35,6 +35,22 @@ describe('normalizeHeaderKey', () => {
     expect(normalizeHeaderKey(null)).toBe('');
     expect(normalizeHeaderKey(undefined)).toBe('');
   });
+  // 회귀: 서식이 섞인 헤더 셀은 richText 객체로 올라온다. String() 으로 바로 찍으면
+  // 컬럼명이 통째로 '[object Object]' 가 되어 업로드 마법사의 컬럼 설정이 무너진다.
+  it('richText 헤더 → run 들의 text 를 이어붙인다', () => {
+    expect(normalizeHeaderKey({ richText: [{ text: '연번' }] })).toBe('연번');
+    expect(
+      normalizeHeaderKey({ richText: [{ text: '센터' }, { text: ' ID' }] }),
+    ).toBe('센터 ID');
+  });
+  it('하이퍼링크 헤더 → 표시 텍스트', () => {
+    expect(
+      normalizeHeaderKey({ text: '개별 URL', hyperlink: 'https://example.com' }),
+    ).toBe('개별 URL');
+  });
+  it('수식 헤더 → 계산 결과', () => {
+    expect(normalizeHeaderKey({ formula: 'A1', result: '이메일' })).toBe('이메일');
+  });
 });
 
 describe('previewExcel - individual-mini.xlsx (Row 0 병합, Row 1 헤더)', () => {
@@ -133,5 +149,92 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['합계']).toBe('3');
+  });
+
+  // 직렬화 왕복 회귀: 수식 결과가 0/false 면 xlsx 를 거친 뒤 cell.value 에서 result 키가
+  // 사라지고 Cell.result 에만 남는다. 값만 보면 { formula } 뿐이라 [object Object] 가 된다.
+  it('수식 결과 0 → 값에서 result 가 사라져도 0 으로 읽는다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '수량';
+      ws.getCell('A2').value = { formula: '1-1', result: 0 };
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['수량']).toBe('0');
+  });
+
+  it('수식 결과 false → false 로 읽는다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '여부';
+      ws.getCell('A2').value = { formula: 'FALSE()', result: false };
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['여부']).toBe('false');
+  });
+
+  // 수식 문자열을 값으로 내보내면 안 된다. 결과가 없으면 사람이 보는 값도 없다.
+  it('결과 없는 수식 셀 → 빈 문자열', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '미계산';
+      ws.getCell('B1').value = '이름';
+      ws.getCell('A2').value = { formula: 'A9' };
+      ws.getCell('B2').value = '홍길동';
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['미계산']).toBe('');
+    expect(row0['이름']).toBe('홍길동');
+  });
+});
+
+describe('헤더 셀 직렬화 왕복 - richText·하이퍼링크·수식', () => {
+  it('richText 헤더 → 사람이 읽는 컬럼명', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = { richText: [{ text: '센터' }, { text: ' ID' }] };
+      ws.getCell('A2').value = 'v';
+    });
+    const result = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 1 });
+    expect(result.headers[0]).toBe('센터 ID');
+  });
+
+  // richText 를 품은 하이퍼링크 셀 — text 가 문자열이 아니라 richText 객체다.
+  it('richText 를 품은 하이퍼링크 헤더 → 중첩 text 까지 풀어낸다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = {
+        text: { richText: [{ text: '개별' }, { text: ' URL' }] },
+        hyperlink: 'https://example.com',
+      } as unknown as ExcelJS.CellValue;
+      ws.getCell('A2').value = 'v';
+    });
+    const result = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 1 });
+    expect(result.headers[0]).toBe('개별 URL');
+  });
+
+  it('수식 결과가 0 인 헤더 → 0 으로 읽는다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = { formula: '1-1', result: 0 };
+      ws.getCell('A2').value = 'v';
+    });
+    const result = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 1 });
+    expect(result.headers[0]).toBe('0');
+  });
+
+  it('어떤 헤더도 [object Object] 로 떨어지지 않는다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = { richText: [{ text: '연번' }] };
+      ws.getCell('B1').value = {
+        text: { richText: [{ text: '개별 URL' }] },
+        hyperlink: 'https://example.com',
+      } as unknown as ExcelJS.CellValue;
+      ws.getCell('C1').value = { formula: '1-1', result: 0 };
+      ws.getCell('D1').value = { formula: 'FALSE()', result: false };
+      ws.getCell('A2').value = 'v';
+    });
+    const result = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 1 });
+    expect(result.headers.some((h) => h.includes('[object Object]'))).toBe(false);
   });
 });

@@ -7,16 +7,21 @@ import {
   type ColumnCandidate,
 } from '@/server/read-models/contacts-filters.server';
 import {
+  FILTER_NONE_LABEL,
+  FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
+  contactResultFilterOptions,
   HEADER_FILTER_VALUE_SEPARATOR as SEP,
   MAIL_FILTER_OPTIONS,
   WEB_FILTER_OPTIONS,
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
 import { STATUS_LABEL } from '@/lib/operations/recipient-status';
+import { mapStatusPill } from '@/lib/operations/profiles';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
-  it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {
+  it('평상시에는 상태 옵션만 — 레거시 항목 미노출', () => {
     expect(webFilterOptionsFor([])).toEqual(
       WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
     );
@@ -40,6 +45,48 @@ describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', 
     expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
     // 새 상태 옵션은 그대로 유지
     expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+
+  it('종결 상태 3종(자격미달·쿼터마감·불량)도 선택지에 있다', () => {
+    const values = webFilterOptionsFor([]).map((o) => o.value);
+    expect(values).toContain('screened_out');
+    expect(values).toContain('quotaful_out');
+    expect(values).toContain('bad');
+  });
+
+  it('종결 상태 3종 라벨은 응답 내역 표(mapStatusPill)와 같은 문구', () => {
+    // 같은 상태를 두 화면이 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
+    // completed/in_progress 는 이 필터가 먼저 쓰던 문구('응답 완료'·'진행 중')를
+    // 유지하고, none 은 매칭 응답 자체가 없는 값이라 표 라벨 축 밖이다.
+    for (const value of ['screened_out', 'quotaful_out', 'bad']) {
+      const option = WEB_FILTER_OPTIONS.find((o) => o.value === value);
+      expect(option?.label).toBe(mapStatusPill({ status: value }).label);
+    }
+  });
+});
+
+describe('contactResultFilterOptions — 컨택결과 선택지', () => {
+  it('등록 코드 뒤에 "결과 없음" 을 덧붙인다', () => {
+    const options = contactResultFilterOptions([
+      { code: '1.조사완료', label: '1.조사완료' },
+      { code: '6.거절', label: '6.거절' },
+    ]);
+    expect(options.map((o) => o.value)).toEqual(['1.조사완료', '6.거절', FILTER_NONE_VALUE]);
+    // 빈 값 라벨은 컬럼마다 다른 말을 쓰지 않고 표의 '—' 표시와 같은 공용 문구를 쓴다.
+    expect(options.at(-1)?.label).toBe(FILTER_NONE_LABEL);
+  });
+
+  it('센티널과 같은 코드는 선택지에서 빼고 빈 값 항목을 유지한다', () => {
+    // 센티널은 항상 "빈 값" 을 뜻한다. 같은 문자열의 실제 코드를 함께 내밀면
+    // 사용자가 고른 것과 실제로 걸리는 행이 갈라진다 — 값 쪽을 포기한다.
+    const options = contactResultFilterOptions([
+      { code: '1.조사완료', label: '1.조사완료' },
+      { code: FILTER_NONE_VALUE, label: '진짜코드' },
+    ]);
+    expect(options).toEqual([
+      { value: '1.조사완료', label: '1.조사완료' },
+      { value: FILTER_NONE_VALUE, label: FILTER_NONE_LABEL },
+    ]);
   });
 });
 
@@ -67,10 +114,10 @@ describe('placeholderFor', () => {
     expect(placeholderFor('pii.mobile')).toBe('정확한 값 입력 (부분 검색 불가)');
   });
 
-  it('attrs 는 범위 검색 힌트 포함, 나머지는 검색어 계열', () => {
-    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 범위 (예: 10-13)');
-    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 범위 (예: 10-13)');
-    expect(placeholderFor('system.web')).toBe('검색어 또는 범위 (예: 10-13)');
+  it('attrs 는 숫자 검색 힌트 포함, 나머지는 검색어 계열', () => {
+    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
+    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
+    expect(placeholderFor('system.web')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
   });
 
   it('system.all 은 전체 검색 안내', () => {
@@ -156,6 +203,44 @@ describe('parseClausesFromUrl - source 분기', () => {
     ).toEqual([]);
   });
 
+  it('system.contact_result + "결과 없음" 센티널 → includeNull, value 는 왕복용 보존', () => {
+    const result = parseClausesFromUrl(
+      ['system.contact_result'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'enum',
+          value: FILTER_NONE_VALUE,
+          includeNull: true,
+        },
+      },
+    ]);
+  });
+
+  it('센티널은 같은 이름의 결과코드가 있어도 항상 빈 값을 뜻한다', () => {
+    // UI(contactResultFilterOptions)가 충돌 코드를 아예 내밀지 않으므로 파서도
+    // 예외 없이 센티널 = 빈 값으로 해석한다. 세 층의 판정을 한 규칙으로 묶는다.
+    const shadowed: ContactResultCode[] = [
+      ...resultCodes,
+      { code: FILTER_NONE_VALUE, label: '진짜코드', order: 99 },
+    ];
+    const result = parseClausesFromUrl(
+      ['system.contact_result'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      shadowed,
+    );
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
   it('system.web + true/false → boolean', () => {
     const t = parseClausesFromUrl(['system.web'], ['true'], [''], candidates, resultCodes);
     const t0 = t[0];
@@ -165,6 +250,13 @@ describe('parseClausesFromUrl - source 분기', () => {
     const f0 = f[0];
     if (!f0) throw new Error('expected f[0]');
     expect(f0.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'false' });
+  });
+
+  it('system.web + 종결 상태(자격미달·쿼터마감·불량) → boolean 조건으로 수용', () => {
+    for (const value of ['screened_out', 'quotaful_out', 'bad']) {
+      const parsed = parseClausesFromUrl(['system.web'], [value], [''], candidates, resultCodes);
+      expect(parsed[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value });
+    }
   });
 
   it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
@@ -225,12 +317,30 @@ describe('parseClausesFromUrl - source 분기', () => {
     ]);
   });
 
-  it('attrs.* + 단일 숫자는 부분검색 유지 (범위 문법 - , 있어야 idlist)', () => {
+  it('attrs.* + 단일 숫자 → idlist + textFallback (연번 15 는 15 만, 텍스트 값은 부분검색 유지)', () => {
     const single = parseClausesFromUrl(['attrs.지역'], ['15'], [''], candidates, resultCodes);
-    const s0 = single[0];
-    if (!s0) throw new Error('expected single[0]');
-    expect(s0.condition.mode).toBe('text');
-    // 숫자가 아닌 하이픈 문자열도 text 유지
+    expect(single).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'attrs.지역',
+          mode: 'idlist',
+          value: '15',
+          ranges: [{ from: 15, to: 15 }],
+          textFallback: true,
+        },
+      },
+    ]);
+  });
+
+  it('attrs.* + 선행 0 숫자는 text 유지 (010 을 10 으로 접으면 원 행이 사라진다)', () => {
+    const single = parseClausesFromUrl(['attrs.지역'], ['010'], [''], candidates, resultCodes);
+    const z0 = single[0];
+    if (!z0) throw new Error('expected single[0]');
+    expect(z0.condition.mode).toBe('text');
+  });
+
+  it('attrs.* + 숫자가 아닌 하이픈 문자열은 text 유지', () => {
     const textDash = parseClausesFromUrl(
       ['attrs.지역'],
       ['서울-강남'],
@@ -573,6 +683,138 @@ describe('parseHeaderFiltersFromUrl', () => {
     ).toEqual([]);
   });
 
+  it('attrs.* in — "(값 없음)" 센티널은 includeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울${SEP}${FILTER_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['서울']);
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
+  it('attrs.* in — "(값 없음)" 단독도 절이 성립한다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual([]);
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
+  it('attrs.* in — "— 제외" 센티널 단독은 excludeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [FILTER_NOT_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition).toEqual({
+      source: 'attrs.지역',
+      mode: 'in',
+      value: '',
+      values: [],
+      excludeNull: true,
+    });
+  });
+
+  it('attrs.* in — "— 제외" 센티널이 값과 섞이면 그냥 값으로 본다 (토글은 단독 생성)', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울${SEP}${FILTER_NOT_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['서울', FILTER_NOT_NONE_VALUE]);
+    expect(result[0]?.condition.excludeNull).toBeUndefined();
+  });
+
+  it('pii.* in — "— 제외" 센티널 단독은 excludeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['pii.email'],
+      ['in'],
+      [FILTER_NOT_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition).toEqual({
+      source: 'pii.email',
+      mode: 'in',
+      value: '',
+      values: [],
+      excludeNull: true,
+    });
+  });
+
+  it('pii.* in — "값 없음" 센티널 단독만 수용한다 (blindIndex 미계산)', () => {
+    const ok = parseHeaderFiltersFromUrl(
+      ['pii.email'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(ok[0]?.condition).toEqual({
+      source: 'pii.email',
+      mode: 'in',
+      value: '',
+      values: [],
+      includeNull: true,
+    });
+
+    // 값 열거는 blind index 라 불가능 — 센티널 외 값이 섞이면 절 자체를 버린다.
+    expect(
+      parseHeaderFiltersFromUrl(
+        ['pii.email'],
+        ['in'],
+        [`a@b.com${SEP}${FILTER_NONE_VALUE}`],
+        candidates,
+        resultCodes,
+      ),
+    ).toEqual([]);
+  });
+
+  it('system.contact_result in — "결과 없음" 단독 선택도 절이 성립한다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.contact_result'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'in',
+          value: '',
+          values: [],
+          includeNull: true,
+        },
+      },
+    ]);
+  });
+
+  it('system.contact_result in — 코드 + "결과 없음" 혼합', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.contact_result'],
+      ['in'],
+      [`1.조사완료${SEP}${FILTER_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['1.조사완료']);
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
   it('system.web in — 어휘 외 값 필터링, 상태 값과 레거시 true/false 는 수용', () => {
     const result = parseHeaderFiltersFromUrl(
       ['system.web'],
@@ -587,6 +829,17 @@ describe('parseHeaderFiltersFromUrl', () => {
         condition: { source: 'system.web', mode: 'in', value: '', values: ['true', 'drop'] },
       },
     ]);
+  });
+
+  it('system.web in — 종결 상태 3종도 어휘로 수용', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.web'],
+      ['in'],
+      [`screened_out${SEP}quotaful_out${SEP}bad`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['screened_out', 'quotaful_out', 'bad']);
   });
 
   it('in 값의 선행·후행 공백은 원형 보존 — distinct 가 보여준 값과 정확 일치해야 함', () => {

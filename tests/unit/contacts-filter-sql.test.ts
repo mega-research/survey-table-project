@@ -117,6 +117,149 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.params).toContain('거절');
   });
 
+  it('attrs.* in — "(값 없음)" 은 키 부재와 빈 문자열을 함께 잡는다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'attrs.지역', mode: 'in', value: '', values: [], includeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('IS NULL');
+    // 표가 키 부재와 '' 를 똑같이 '—' 로 그리므로 필터도 둘을 함께 잡아야 한다.
+    expect(query.sql).toContain("= ''");
+    expect(query.sql).not.toContain(' IN ');
+  });
+
+  it('attrs.* in — 값 + "(값 없음)" 혼합은 IN 과 빈값 조건의 OR', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'attrs.지역',
+            mode: 'in',
+            value: '',
+            values: ['서울'],
+            includeNull: true,
+          },
+        },
+      ]),
+    );
+    expect(query.sql).toContain(' IN ');
+    expect(query.sql).toContain(' OR ');
+    expect(query.sql).toContain('IS NULL');
+    expect(query.params).toContain('서울');
+  });
+
+  it('pii.* in — "값 없음" 은 contact_pii 행 부재(NOT EXISTS)로 판정', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'pii.phone', mode: 'in', value: '', values: [], includeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('NOT EXISTS');
+    expect(query.sql).toContain('contact_pii');
+    expect(query.params).toContain('phone');
+  });
+
+  it('attrs.* in — "— 제외" 는 키 부재와 빈 문자열을 함께 배제한다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'attrs.지역', mode: 'in', value: '', values: [], excludeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('IS NOT NULL');
+    expect(query.sql).toContain("<> ''");
+    expect(query.sql).not.toContain(' IN ');
+    expect(query.params).toContain('지역');
+  });
+
+  it('pii.* in — "— 제외" 는 contact_pii 행 존재(EXISTS)로 판정', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'pii.phone', mode: 'in', value: '', values: [], excludeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('EXISTS');
+    expect(query.sql).not.toContain('NOT EXISTS');
+    expect(query.params).toContain('phone');
+  });
+
+  it('pii.* in — includeNull 없으면 절 불성립 (값 열거 불가)', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'pii.phone', mode: 'in', value: '', values: ['a@b.com'] },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('FALSE');
+    expect(query.sql).not.toContain('NOT EXISTS');
+  });
+
+  it('system.contact_result in — "결과 없음" 단독은 IS NULL, IN 절 없음', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        { op: null, condition: { source: 'system.contact_result', mode: 'in', value: '', values: [], includeNull: true } },
+      ]),
+    );
+    expect(query.sql).toContain('result_code');
+    expect(query.sql).toContain('IS NULL');
+    expect(query.sql).not.toContain(' IN ');
+  });
+
+  it('system.contact_result in — 코드 + "결과 없음" 은 IN 과 IS NULL 의 OR', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'in',
+            value: '',
+            values: ['완료'],
+            includeNull: true,
+          },
+        },
+      ]),
+    );
+    expect(query.sql).toContain(' IN ');
+    expect(query.sql).toContain('IS NULL');
+    expect(query.sql).toContain(' OR ');
+    expect(query.params).toContain('완료');
+  });
+
+  it('system.contact_result enum — includeNull 이면 = 비교 대신 IS NULL', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'enum',
+            value: '__none__',
+            includeNull: true,
+          },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('IS NULL');
+    // 센티널 문자열이 값으로 새어 들어가면 안 된다 — SQL 은 값 공간을 보지 않는다.
+    expect(query.params).not.toContain('__none__');
+  });
+
   it('system.web in — 레거시 true 는 responded_at IS NOT NULL 유지 (구 URL 호환)', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['true'])]));
     expect(query.sql).toContain('responded_at IS NOT NULL');
@@ -137,6 +280,18 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.sql).toContain(' OR ');
     expect(query.params).toContain('completed');
     expect(query.params).toContain('drop');
+  });
+
+  it('system.web in — 종결 상태 3종도 매칭 응답 status 조건', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.web', ['screened_out', 'quotaful_out', 'bad'])]),
+    );
+    // 표시/정렬과 같은 매칭(역참조) 기준 — 파서만 통과하고 SQL 이 FALSE 면 0건이 된다.
+    expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
+    expect(query.sql).not.toContain('FALSE');
+    expect(query.params).toContain('screened_out');
+    expect(query.params).toContain('quotaful_out');
+    expect(query.params).toContain('bad');
   });
 
   it('system.web in — none 은 매칭 응답 없음 (status IS NULL)', () => {
@@ -202,6 +357,32 @@ describe('buildContactsFilterSql — attrs idlist (NO 범위 검색)', () => {
   it('빈 ranges → FALSE', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([attrsIdlist('NO', [])]));
     expect(query.sql).toContain('FALSE');
+  });
+
+  it('단일 숫자 textFallback — 숫자 값은 = 비교, 비숫자 값만 ILIKE 로 함께 건진다', () => {
+    const clause: FilterClause = {
+      op: null,
+      condition: {
+        source: 'attrs.NO',
+        mode: 'idlist',
+        value: '1',
+        ranges: [{ from: 1, to: 1 }],
+        textFallback: true,
+      },
+    };
+    const query = dialect.sqlToQuery(buildContactsFilterSql([clause]));
+    expect(query.sql).toContain('IS NULL AND');
+    expect(query.sql).toContain('ILIKE');
+    expect(query.params).toContain(1);
+    expect(query.params).toContain('1');
+    expect(hasTokenOutsideOuterParens(query.sql.trim())).toBe(false);
+  });
+
+  it('textFallback 없는 범위 입력은 ILIKE 를 만들지 않는다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([attrsIdlist('NO', [{ from: 1, to: 10 }])]),
+    );
+    expect(query.sql).not.toContain('ILIKE');
   });
 });
 

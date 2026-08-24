@@ -4,10 +4,6 @@ import type { NumRange } from './range-list';
 export type CombineOp = 'AND' | 'OR';
 export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
 
-/**
- * 필터 한 조건. WHERE 조립(contacts-filter-sql)과 조건 산출(read-models)이 공유하므로
- * DB 를 모르는 이 모듈이 소유한다 — 어느 한쪽에 두면 다른 쪽이 역방향으로 끌어간다.
- */
 export interface FilterCondition {
   source: string;
   mode: ConditionMode;
@@ -17,8 +13,25 @@ export interface FilterCondition {
   blindIndex?: string;
   /** mode === 'in' (헤더 체크박스 필터) 일 때만 populated. 컬럼 내 OR 값 목록. */
   values?: string[];
+  /**
+   * system.contact_result 전용 — "결과 없음"(최신 회차 result_code IS NULL) 을 OR 로 포함.
+   * UI 센티널(FILTER_NONE_VALUE)을 파서가 여기로 승격시키므로 SQL 은 값 공간을 보지 않는다.
+   * enum 모드에서는 이 플래그만으로 조건이 성립하고 value 는 URL 왕복용으로만 남는다.
+   */
+  includeNull?: boolean;
+  /**
+   * includeNull 의 여집합 — 값이 있는 행만 (빈 값 제외). 입력형 컬럼(pii·고카디널리티
+   * attrs)의 "— 제외하고 보기" 토글이 단독 절로 만든다. includeNull 과 동시에 서지 않는다.
+   */
+  excludeNull?: boolean;
   /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
   subConditions?: FilterCondition[];
+  /**
+   * attrs.* + mode === 'idlist' 전용 — 값이 순수 정수가 아닌 행에 한해 부분검색(ILIKE)도
+   * OR 로 함께 건다. 단일 숫자 입력("1")이 숫자 컬럼에서는 정확 매칭이면서
+   * 텍스트 컬럼("A1")에서는 종전 부분검색으로 남게 하는 이음새.
+   */
+  textFallback?: boolean;
 }
 
 export interface FilterClause {
@@ -46,11 +59,18 @@ export const FILTER_SOURCE = {
  * 상태 축. 검색바 dropdown(value-widget)과 헤더 필터(header-filter-popover)가 공유.
  * 구 URL 의 'true'/'false'(respondedAt 이진)는 WEB_FILTER_VALUES 로만 계속 수용하고
  * UI 옵션에는 노출하지 않는다.
+ *
+ * 종결 상태 3종(screened_out/quotaful_out/bad)의 라벨은 응답 내역 표
+ * (mapStatusPill · profiles 필터)와 같은 문자열이어야 한다 — 같은 상태를 두 화면이
+ * 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
  */
 export const WEB_FILTER_OPTIONS = [
   { value: 'completed', label: '응답 완료' },
   { value: 'in_progress', label: '진행 중' },
   { value: 'drop', label: '이탈' },
+  { value: 'screened_out', label: '자격 미달' },
+  { value: 'quotaful_out', label: '쿼터마감' },
+  { value: 'bad', label: '불량' },
   { value: 'none', label: '미응답' },
 ] as const;
 
@@ -62,10 +82,90 @@ export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * "값 없음"(NULL / 미기록) 을 체크박스 한 줄로 표현하기 위한 센티널.
+ * 컨택결과·수신자 그룹·반송 사유처럼 값 공간이 사용자 자유 텍스트라 in-band 충돌이
+ * 원리상 가능한 축에서 쓴다 — 그래서 값 자체를 SQL 로 흘리지 않고, 파서가 이 문자열을
+ * 별도 플래그(또는 IS NULL 분기)로 승격시킨다.
+ *
+ * 충돌 규칙은 "센티널이 항상 이긴다" 하나뿐이다. 실제 값이 이 문자열과 같으면 그 값을
+ * 선택지에서 빼고(withNoneOption / facets / attrs distinct), 파서는 예외 없이 빈 값으로
+ * 해석한다. 값 쪽을 살리려면 UI·파서·SQL 세 층이 같은 예외를 알아야 하는데 파서는
+ * attrs 의 실제 값 목록을 모르므로 그 규칙은 구현이 불가능하다 — 한 층만 예외를 알면
+ * 화면에서 고른 것과 실제로 걸리는 행이 갈라진다.
+ */
+export const FILTER_NONE_VALUE = '__none__';
+
+/**
+ * 빈 값 선택지의 공용 라벨 — 표에서 그 행이 실제로 어떻게 보이는지(대시)를 그대로 쓴다.
+ * 컬럼마다 "결과 없음"·"발송 안 함"처럼 다른 말을 쓰면 같은 개념을 매번 다시 배워야 하고,
+ * 화면의 '—' 와 필터 문구가 연결되지 않는다.
+ */
+export const FILTER_NONE_LABEL = '— (없음)';
+
+/** 입력형 컬럼(pii·고카디널리티 attrs)의 빈 값 토글 라벨. 체크박스 목록 항목의 짝. */
+export const FILTER_NONE_TOGGLE_LABEL = '— 인 것만 보기';
+
+/**
+ * FILTER_NONE_VALUE 의 여집합 센티널 — "값이 있는 행만"(빈 값 제외).
+ * 같은 "센티널이 항상 이긴다" 규칙을 따르지만, 이 값은 체크박스 목록에는 절대
+ * 오르지 않고 입력형 컬럼(pii·고카디널리티 attrs)의 토글에서 단독으로만 생성된다 —
+ * 그래서 파서도 단독 값일 때만 센티널로 해석한다.
+ */
+export const FILTER_NOT_NONE_VALUE = '__not_none__';
+
+/** 입력형 컬럼의 빈 값 제외 토글 라벨. FILTER_NONE_TOGGLE_LABEL 의 짝. */
+export const FILTER_NOT_NONE_TOGGLE_LABEL = '— 제외하고 보기';
+
+/**
+ * 선택지 목록 끝에 빈 값 항목을 덧붙인다.
+ * 센티널과 같은 실제 값은 제거한다 — 남겨두면 파서가 그것도 빈 값으로 해석해
+ * 사용자가 고른 값과 다른 행이 걸린다.
+ */
+export function withNoneOption(
+  options: Array<{ value: string; label: string }>,
+  noneLabel: string = FILTER_NONE_LABEL,
+): Array<{ value: string; label: string }> {
+  return [
+    ...options.filter((o) => o.value !== FILTER_NONE_VALUE),
+    { value: FILTER_NONE_VALUE, label: noneLabel },
+  ];
+}
+
+/**
+ * 컨택결과 드롭다운/체크박스 선택지 — 등록 결과코드 + "결과 없음".
+ * 검색바(value-widget)와 헤더 필터(header-filter-popover)가 공유한다.
+ */
+export function contactResultFilterOptions(
+  resultCodes: ReadonlyArray<{ code: string; label: string }>,
+): Array<{ value: string; label: string }> {
+  return withNoneOption(resultCodes.map((rc) => ({ value: rc.code, label: rc.label })));
+}
+
+/**
+ * 단체 메일 수신자 목록 전용 깔때기 source. 컨택 절 파이프라인(FILTER_SOURCE)과
+ * 별개 축이다 — mail_recipients 발송 스냅샷 위에서만 의미가 있고, 서버도 전용
+ * 파서로 좁게 해석한다. 라벨은 표 헤더와 같은 문구.
+ */
+export const RECIPIENT_FILTER_SOURCE = {
+  /** contact_targets.group_value */
+  GROUP: 'recipient.group',
+  /** mail_recipients.error_reason — 표에서는 "메모" 로 노출 */
+  ERROR: 'recipient.error',
+  /** 컨택 최신 회차 result_code */
+  RESULT: 'recipient.result',
+} as const;
+
+export const RECIPIENT_FILTER_LABEL: Record<string, string> = {
+  [RECIPIENT_FILTER_SOURCE.GROUP]: '그룹',
+  [RECIPIENT_FILTER_SOURCE.ERROR]: '메모',
+  [RECIPIENT_FILTER_SOURCE.RESULT]: '최근 결과코드',
+};
+
+/**
  * 메일(최신 수신 상태) 필터 값 어휘 — 순서가 곧 정렬 순위 축(잘된 순).
  * 라벨은 recipientStatusMeta(STATUS_LABEL)와 동일해야 한다 — 동기화는
  * 단위 테스트로 고정 (컴포넌트 → lib 역방향 import 를 피하기 위한 복제).
- * 'none' 은 발송 이력 없음 (latestMailStatus IS NULL).
+ * 'none' 은 발송 이력 없음 (latestMailStatus IS NULL) — 라벨은 FILTER_NONE_LABEL 공용.
  */
 export const MAIL_FILTER_OPTIONS = [
   { value: 'opened', label: '열람' },
@@ -77,7 +177,8 @@ export const MAIL_FILTER_OPTIONS = [
   { value: 'bounced', label: '반송' },
   { value: 'complained', label: '신고' },
   { value: 'failed', label: '실패' },
-  { value: 'none', label: '메일 없음' },
+  // 발송 이력이 한 건도 없는 컨택 (latestMailStatus IS NULL).
+  { value: 'none', label: FILTER_NONE_LABEL },
 ] as const;
 
 /** 메일 필터로 수용 가능한 전체 값. */
@@ -128,11 +229,12 @@ export function escapeLikePattern(value: string): string {
  * source 종류 → input placeholder 텍스트.
  *
  * @param attrsLabel attrs.* 등 텍스트 매칭 컬럼의 placeholder. 진척 보고는 '부분일치',
- *                   조사 대상 기본값은 범위 검색 힌트 포함 (NO 등 숫자 컬럼 범위 검색 안내).
+ *                   조사 대상 기본값은 숫자 검색 힌트 포함 (연번 등 숫자 컬럼 안내 —
+ *                   숫자만 입력하면 그 숫자인 값만, 범위/목록도 숫자 매칭).
  */
 export function placeholderFor(
   source: string | null,
-  attrsLabel = '검색어 또는 범위 (예: 10-13)',
+  attrsLabel = '검색어 또는 번호 (예: 3, 1-10, 12)',
 ): string {
   if (!source) return '검색어';
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';
@@ -152,6 +254,18 @@ export interface ColumnCandidate {
    */
   hidden?: boolean;
 }
+
+/**
+ * 단체 메일 마법사 미리보기 표의 깔때기 필터 컬럼 — 표가 고정 컬럼이라 후보도
+ * 컨택 컬럼 스킴과 무관하게 고정한다 (스킴에서 system.* 컬럼을 지워도 마법사
+ * 필터는 살아 있어야 한다). label 은 표 헤더와 같은 문구를 쓴다.
+ * 페이지(서버 파싱 후보)와 마법사(헤더 렌더)가 이 한 목록을 공유한다.
+ */
+export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
+  { source: FILTER_SOURCE.WEB, label: '응답' },
+  { source: FILTER_SOURCE.EMAIL, label: '수신 상황' },
+  { source: FILTER_SOURCE.CONTACT_RESULT, label: '최근 결과코드' },
+];
 
 /** 서버 모듈에서 pii blindIndex 계산을 위해 piiType 포함. */
 export interface ColumnCandidateWithPii extends ColumnCandidate {

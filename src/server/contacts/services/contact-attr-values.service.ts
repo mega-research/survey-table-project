@@ -4,12 +4,12 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import {
   targetScopeCondition,
   type OperationsDataScope,
 } from '@/server/data-scope.server';
-import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
@@ -36,6 +36,8 @@ export interface ListContactAttrValuesInput {
 export interface ListContactAttrValuesResult {
   values: string[];
   truncated: boolean;
+  /** 이 컬럼이 비어 있는(미기재) 행이 하나라도 있는지 — "(값 없음)" 선택지 노출 판단용. */
+  hasEmpty: boolean;
 }
 
 /**
@@ -45,7 +47,9 @@ export interface ListContactAttrValuesResult {
  *   attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를
  *   열거하는 것을 막는다 (ForbiddenAttrColumnError).
  * - LIMIT+1 조회로 고카디널리티 감지 — 초과 시 truncated=true.
- * - 빈 문자열 값은 제외 (표에서 — 로 표시되는 미기재 행).
+ * - 빈 문자열/미기재 값은 목록에서 제외하고 hasEmpty 플래그로만 알린다. 값 목록에
+ *   섞으면 빈 문자열이 체크박스 라벨로 렌더돼 클릭할 수 없는 항목이 되고, 고카디널리티
+ *   판정(LIMIT)의 한 자리도 잡아먹는다.
  */
 export async function listContactAttrValues(
   input: ListContactAttrValuesInput,
@@ -60,7 +64,8 @@ export async function listContactAttrValues(
     .where(eq(surveys.id, surveyId))
     .limit(1);
 
-  const scheme = (schemeRow?.scheme as ContactColumnScheme | null) ?? null;
+  // getContactColumnScheme 를 거치지 않고 직접 읽는 경로라 같은 JSONB 보정이 필요하다.
+  const scheme = normalizeContactColumnScheme(schemeRow?.scheme ?? null);
   const source = `${FILTER_SOURCE.ATTRS_PREFIX}${attrsKey}`;
   let allowed = scheme?.columns.some((c) => c.source === source && !c.hidden) ?? false;
   if (!allowed) {
@@ -75,21 +80,38 @@ export async function listContactAttrValues(
   if (!allowed) throw new ForbiddenAttrColumnError(attrsKey);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
-  const rows = await db
-    .selectDistinct({ v: valueExpr })
-    .from(contactTargets)
-    .where(
-      and(
-        eq(contactTargets.surveyId, surveyId),
-        targetScopeCondition(scope),
-        sql`${valueExpr} IS NOT NULL AND ${valueExpr} <> ''`,
-      ),
-    )
-    // ORDER BY 1 (위치 지정) 필수 — ${valueExpr} 를 그대로 쓰면 attrsKey 가 별도
-    // placeholder 로 바인딩되어 select list 의 식과 "다른 식"이 되고, PG 가
-    // "for SELECT DISTINCT, ORDER BY expressions must appear in select list" 로 거부한다.
-    .orderBy(sql`1`)
-    .limit(ATTR_VALUES_CHECKBOX_LIMIT + 1);
+
+  // 값 목록과 "빈 값 존재 여부" 를 한 번에 왕복한다.
+  // 빈 값을 DISTINCT 목록에 섞지 않는 이유는 위 주석 참조 — 대신 LIMIT 1 존재 확인만
+  // 따로 던진다 (첫 매칭에서 끊기므로 전량 스캔이 아니다).
+  const [rows, emptyRows] = await Promise.all([
+    db
+      .selectDistinct({ v: valueExpr })
+      .from(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.surveyId, surveyId),
+          targetScopeCondition(scope),
+          sql`${valueExpr} IS NOT NULL AND ${valueExpr} <> ''`,
+        ),
+      )
+      // ORDER BY 1 (위치 지정) 필수 — ${valueExpr} 를 그대로 쓰면 attrsKey 가 별도
+      // placeholder 로 바인딩되어 select list 의 식과 "다른 식"이 되고, PG 가
+      // "for SELECT DISTINCT, ORDER BY expressions must appear in select list" 로 거부한다.
+      .orderBy(sql`1`)
+      .limit(ATTR_VALUES_CHECKBOX_LIMIT + 1),
+    db
+      .select({ id: contactTargets.id })
+      .from(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.surveyId, surveyId),
+          targetScopeCondition(scope),
+          sql`(${valueExpr} IS NULL OR ${valueExpr} = '')`,
+        ),
+      )
+      .limit(1),
+  ]);
 
   const truncated = rows.length > ATTR_VALUES_CHECKBOX_LIMIT;
   // SQL ORDER BY 1 은 텍스트 사전순 — 체크박스 목록은 자연 정렬(숫자 인식)로 재정렬.
@@ -97,6 +119,9 @@ export async function listContactAttrValues(
   const values = rows
     .slice(0, ATTR_VALUES_CHECKBOX_LIMIT)
     .map((r) => r.v)
+    // 센티널과 같은 실제 값은 선택지에서 제외 — 파서가 빈 값으로 승격시키므로
+    // 노출하면 사용자가 고른 값과 다른 행이 걸린다.
+    .filter((v) => v !== FILTER_NONE_VALUE)
     .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }));
-  return { values, truncated };
+  return { values, truncated, hasEmpty: emptyRows.length > 0 };
 }

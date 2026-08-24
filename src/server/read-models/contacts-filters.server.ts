@@ -3,6 +3,8 @@ import 'server-only';
 import { blindIndex } from '@/lib/crypto/blind';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import {
+  FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
   FILTER_SOURCE,
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
@@ -83,7 +85,7 @@ export function parseClausesFromUrl(
  * 엑셀 오토필터 시맨틱: 컬럼 내 OR(in 값 목록), 컬럼 간 AND.
  * - attrs.*: in(구분자 조인 값 목록) 또는 text(고카디널리티 부분검색 폴백)
  * - pii.*: exact 만 (blind index 전문 일치)
- * - system.contact_result: in — 유효 결과코드만 통과
+ * - system.contact_result: in — 유효 결과코드 + "결과 없음" 센티널만 통과
  * - system.web: in — 'true'/'false' 만 통과
  * 같은 컬럼이 중복 등장하면 마지막 항목이 이긴다 (드롭다운 재적용 시나리오).
  * 검증 실패 절은 silent drop (URL 직접 조작 가드).
@@ -136,9 +138,23 @@ function buildHeaderCondition(
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
-      const values = splitHeaderValues(hv);
-      if (values.length === 0) return null;
-      return { source: col, mode: 'in', value: '', values };
+      const raw = splitHeaderValues(hv);
+      // 빈 값 제외 센티널은 토글이 단독으로만 만든다 — 다른 값과 섞여 오면 값으로 본다.
+      if (raw.length === 1 && raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
+      // 센티널은 값이 아니라 플래그로 승격. 같은 문자열의 실제 값은 distinct 조회가
+      // 선택지에서 빼두므로 여기서 예외를 둘 필요가 없다 (FILTER_NONE_VALUE 주석 참조).
+      const distinct = raw.filter((v) => v !== FILTER_NONE_VALUE);
+      const includeNull = distinct.length !== raw.length;
+      if (distinct.length === 0 && !includeNull) return null;
+      return {
+        source: col,
+        mode: 'in',
+        value: '',
+        values: distinct,
+        ...(includeNull ? { includeNull: true } : {}),
+      };
     }
     if (mode === 'text') {
       const trimmed = hv.trim();
@@ -150,6 +166,19 @@ function buildHeaderCondition(
   }
 
   if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
+    // pii 는 blind index 라 distinct 열거가 불가능해 체크박스가 없다. 유일한 예외가
+    // "값 없음"/"값 있음" 으로, 값 비교 없이 행 부재만 보면 되므로 in 모드 + 센티널로 들어온다.
+    if (mode === 'in') {
+      const raw = splitHeaderValues(hv);
+      if (raw.length !== 1) return null;
+      if (raw[0] === FILTER_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], includeNull: true };
+      }
+      if (raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
+      return null;
+    }
     if (mode !== 'exact' || !candidate.piiType) return null;
     const trimmed = hv.trim();
     if (trimmed.length === 0) return null;
@@ -161,9 +190,18 @@ function buildHeaderCondition(
   if (col === FILTER_SOURCE.CONTACT_RESULT) {
     if (mode !== 'in') return null;
     const valid = new Set(resultCodes.map((rc) => rc.code));
-    const values = splitHeaderValues(hv).filter((v) => valid.has(v));
-    if (values.length === 0) return null;
-    return { source: col, mode: 'in', value: '', values };
+    const raw = splitHeaderValues(hv);
+    // 센티널이 항상 이긴다 — 같은 이름의 코드는 UI 가 선택지에서 빼둔다.
+    const includeNull = raw.includes(FILTER_NONE_VALUE);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE && valid.has(v));
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
   }
 
   if (col === FILTER_SOURCE.WEB) {
@@ -184,18 +222,36 @@ function buildHeaderCondition(
 }
 
 /**
- * attrs 검색어 해석 — 범위 문법이면 idlist(숫자 범위 검색), 아니면 text(부분검색).
+ * 선행 0 이 붙은 숫자 토큰("010", "007-010")이 하나라도 있는 입력.
+ * 값 자체가 자릿수로 의미를 갖는 코드(휴대폰 앞자리·우편번호)라 숫자로 접으면
+ * "010" 이 10 이 되어 원래 찾던 행이 사라진다 — 이런 입력은 숫자 해석을 포기한다.
+ */
+function hasLeadingZeroToken(input: string): boolean {
+  return /(^|[\s,-])0\d/.test(input);
+}
+
+/**
+ * attrs 검색어 해석 — 숫자 문법이면 idlist(숫자 매칭), 아니면 text(부분검색).
  *
- * 범위 문법 판정: parseIdListInput 통과 + `-` 또는 `,` 포함.
- * 단일 숫자("15")는 부분검색 유지 — 혼합 텍스트 컬럼의 숫자 부분검색을 깨지 않기 위함.
- * 정확 매칭이 필요하면 "15-15" 로 입력한다.
+ * 숫자 문법 판정: parseIdListInput 통과 + 선행 0 토큰 없음.
+ * - "1-10, 12" → 범위/목록 숫자 매칭
+ * - "1" → 숫자 1 인 값만 (부분검색이면 1044 까지 걸려 연번 검색이 무의미해진다)
+ *
+ * 단일 숫자에는 textFallback 을 붙인다 — 값이 순수 정수가 아닌 컬럼("A1", "서울1")은
+ * 종전대로 부분검색으로 걸린다. 즉 바뀌는 건 "값이 숫자인 행은 숫자로 비교" 하나뿐이다.
+ * 범위/목록 문법은 종전대로 숫자 값에만 걸린다 (텍스트 폴백 없음).
  */
 function attrsTextOrIdlistCondition(col: string, trimmed: string): FilterCondition {
-  if (/[-,]/.test(trimmed)) {
-    const ranges = parseIdListInput(trimmed);
-    if (ranges !== null) {
-      return { source: col, mode: 'idlist', value: trimmed, ranges };
-    }
+  const ranges = hasLeadingZeroToken(trimmed) ? null : parseIdListInput(trimmed);
+  if (ranges !== null) {
+    const isRangeSyntax = /[-,]/.test(trimmed);
+    return {
+      source: col,
+      mode: 'idlist',
+      value: trimmed,
+      ranges,
+      ...(isRangeSyntax ? {} : { textFallback: true }),
+    };
   }
   return { source: col, mode: 'text', value: trimmed };
 }
@@ -278,6 +334,18 @@ function buildClause(
   }
 
   if (col === FILTER_SOURCE.CONTACT_RESULT) {
+    // 센티널이 항상 이긴다. value 는 URL·스냅샷 왕복용으로 보존한다.
+    if (trimmed === FILTER_NONE_VALUE) {
+      return {
+        op,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'enum',
+          value: FILTER_NONE_VALUE,
+          includeNull: true,
+        },
+      };
+    }
     const code = resultCodes.find((rc) => rc.code === trimmed);
     if (!code) return null;
     return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };

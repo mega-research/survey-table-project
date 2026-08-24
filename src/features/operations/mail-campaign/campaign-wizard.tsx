@@ -26,18 +26,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { MailTemplate } from '@/db/schema/mail';
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
+import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/features/operations/pager-jump';
+import { buildPageItems } from '@/features/operations/table-primitives';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
+import type { MailTemplate } from '@/db/schema/mail';
 import {
   useCreateCampaign,
   useFetchCandidateIds,
   usePreviewPreflight,
 } from '@/features/operations/queries/use-campaigns';
-import { buildPageItems } from '@/features/operations/table-primitives';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
@@ -47,6 +50,11 @@ import type {
   CampaignSortDir,
   CampaignSortKey,
 } from '@/shared/contracts/mail-io';
+import {
+  CAMPAIGN_HEADER_FILTER_COLUMNS,
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+} from '@/lib/operations/filter-shared';
 
 interface Props {
   surveyId: string;
@@ -403,31 +411,46 @@ export function CampaignWizard({
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
-                  <SortHeader
-                    label="응답"
-                    sortKey="responded"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.WEB}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader
-                    label="수신 상황"
-                    sortKey="mailStatus"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader
+                      label="수신 상황"
+                      sortKey="mailStatus"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.EMAIL}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader
-                    label="최근 결과코드"
-                    sortKey="resultCode"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader
+                      label="최근 결과코드"
+                      sortKey="resultCode"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.CONTACT_RESULT}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -455,11 +478,7 @@ export function CampaignWizard({
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">
-                      {r.respondedAt ? (
-                        <span className="text-emerald-600">응답완료</span>
-                      ) : (
-                        <span className="text-slate-400">미응답</span>
-                      )}
+                      <ResponseCell status={r.responseStatus} progressPct={r.progressPct} />
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {r.latestMailStatus ? (
@@ -631,10 +650,68 @@ function SortHeader({
   );
 }
 
+/**
+ * 미리보기 "응답" 셀 — 조사 대상 목록과 같은 상태 어휘(mapStatusPill)를 쓴다.
+ *
+ * 이전에는 respondedAt 유무로 응답완료/미응답만 그렸는데, respondedAt 은 완료 시각만
+ * 담아 진행중·이탈이 전부 "미응답" 으로 뭉개졌다. 헤더 깔때기는 4상태로 거르므로
+ * "진행 중" 으로 좁힌 결과가 표에서는 미응답으로 보이는 어긋남이 생겼다.
+ */
+function ResponseCell({
+  status,
+  progressPct,
+}: {
+  status: string | null;
+  progressPct: number | null;
+}) {
+  if (status == null) return <span className="text-slate-400">미응답</span>;
+  const base = mapStatusPill({ status });
+  const pill: StatusPillResult = {
+    label: base.label,
+    tone: base.tone,
+    ...(status !== 'completed' && progressPct != null ? { sub: `${progressPct}%` } : {}),
+  };
+  return <StatusPill pill={pill} />;
+}
+
+/**
+ * 미리보기 표 헤더의 깔때기 필터 — 조사 대상 목록과 같은 HeaderFilterPopover 를
+ * 그대로 쓴다 (URL hcol/hm/hv 직렬화·빌더 상호배타 경고 포함). 라벨은 서버 파싱
+ * 후보와 같은 목록(CAMPAIGN_HEADER_FILTER_COLUMNS)에서 가져와 한 곳에서만 관리한다.
+ */
+function PreviewHeaderFilter({
+  surveyId,
+  source,
+  resultCodeOptions,
+}: {
+  surveyId: string;
+  source: string;
+  resultCodeOptions: ContactResultCode[];
+}) {
+  const label = CAMPAIGN_HEADER_FILTER_COLUMNS.find((c) => c.source === source)?.label ?? source;
+  return (
+    <HeaderFilterPopover
+      surveyId={surveyId}
+      source={source}
+      label={label}
+      // system.email_count 는 popover 의 kind 분기에 없어 고정 옵션 주입이 필요하다.
+      {...(source === FILTER_SOURCE.EMAIL
+        ? {
+            fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+          }
+        : {})}
+      resultCodeOptions={resultCodeOptions}
+    />
+  );
+}
+
 function buildFilterSnapshot(current: CampaignFilterSnapshot): CampaignFilterSnapshot {
   // 빈 필드 제거 (DB 스냅샷 깔끔하게)
   const out: CampaignFilterSnapshot = {};
   if (current.clauses && current.clauses.length > 0) out.clauses = current.clauses;
+  if (current.headerClauses && current.headerClauses.length > 0) {
+    out.headerClauses = current.headerClauses;
+  }
   if (current.unrespondedOnly) out.unrespondedOnly = true;
   if (current.unopenedFromCampaignId) {
     out.unopenedFromCampaignId = current.unopenedFromCampaignId;

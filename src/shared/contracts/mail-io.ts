@@ -70,6 +70,8 @@ export interface CampaignRecipientRow {
   openedAt: Date | null;
   bouncedAt: Date | null;
   complainedAt: Date | null;
+  /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
+  latestResultCode: string | null;
 }
 
 export interface CampaignCandidateRow {
@@ -80,6 +82,13 @@ export interface CampaignCandidateRow {
   groupValue: string | null;
   attrs: Record<string, string>;
   respondedAt: Date | null;
+  /**
+   * 매칭 응답의 status — 표시와 필터가 같은 축을 보게 하는 값.
+   * respondedAt 은 완료 시각만 담아 진행중·이탈을 미응답과 구분하지 못한다.
+   */
+  responseStatus: string | null;
+  /** 미완료 응답의 진척률 — 상태 pill 의 부속 표시 (조사 대상 목록과 같은 규칙). */
+  progressPct: number | null;
   latestResultCode: string | null;
   /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
   latestMailStatus: MailRecipientStatus | null;

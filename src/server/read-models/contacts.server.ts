@@ -36,6 +36,7 @@ import {
   type ContactsSortDir,
   type ContactsSortKey,
   attrsSortKey,
+  normalizeContactColumnScheme,
 } from '@/lib/operations/contacts';
 import {
   attrsNaturalSortExprs,
@@ -311,7 +312,9 @@ export const getContactColumnScheme = cache(
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);
-    return (row?.scheme as ContactColumnScheme | null) ?? null;
+    // JSONB 드리프트 보정 — columns 가 배열이 아닌 저장분이 실재한다 (report 페이지
+    // 500 의 원인). 소비처는 columns 를 배열로 가정하므로 여기서 한 번만 보정한다.
+    return normalizeContactColumnScheme(row?.scheme ?? null);
   },
 );
 
