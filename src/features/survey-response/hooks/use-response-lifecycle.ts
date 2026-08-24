@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
 import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-rebase';
+import { consumeSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';
 import { isRelaxableRequiredIssueKind } from '@/features/survey-response/lib/admin-edit-required-relax';
@@ -481,6 +482,10 @@ export function useResponseLifecycle({
 
   const handleResponse = useCallback(
     (questionId: string, value: unknown) => {
+      // 미리 채운 값(prefill·숫자 빈값 기본치)인지 먼저 소비한다. 렌더러가 쓰기 직전에
+      // 남긴 표시이고 한 번만 유효하므로, 아래 어떤 분기보다 앞에서 읽어야 한다.
+      const isSeedWrite = consumeSeedWrite(questionId);
+
       // UI는 즉시 반영 (로컬 응답 맵 + 펜딩 스토어 + 하이라이트 제거)
       setResponses((prev) => ({ ...prev, [questionId]: value }));
       setPendingResponse(questionId, value);
@@ -500,8 +505,13 @@ export function useResponseLifecycle({
       // - createResponseWithFirstAnswer는 (surveyId, sessionId) 멱등 — 더블 클릭 방어
       // - 후속 답변은 별도 DB 쓰기 없음 (제출 시 completeResponse가 일괄 저장)
       // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
+      // 미리 채운 값은 응답자가 아무것도 하지 않아도 마운트 직후 스스로 쓰인다.
+      // 그것으로 응답 행을 만들면 링크를 열기만 해도 진행 중 응답이 생겨 진척·이탈
+      // 통계가 왜곡된다. 값은 pending 에 남아 실제 첫 답변이나 최종 complete 에 합쳐지므로
+      // 유실되지 않는다 — 루트 사이드카(__ 접두사)를 다루는 원칙과 같다.
       if (
         !questionId.startsWith('__') &&
+        !isSeedWrite &&
         !isAdminEdit &&
         !isPreview &&
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&

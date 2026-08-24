@@ -7,6 +7,7 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
@@ -17,12 +18,15 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  questionId,
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
+  const { markSeedWrite } = useResponseSources();
   const template = cell.defaultValueTemplate ?? '';
   const isPrefilled = template.trim().length > 0;
   // prefill 은 attrs 만 치환한다(quotes 를 넘기지 않는다). 이 결과는 onUpdateValue 로 응답에
@@ -40,6 +44,7 @@ export const InputCell = React.memo(function InputCell({
   // 재기록 루프가 생기고, onUpdateValue 는 셀별로 생성되어 identity 가 불안정하다.
   const applyPrefill = useEffectEvent(() => {
     if (isPrefilled && currentValue !== prefilledValue) {
+      markSeedWrite?.(questionId);
       onUpdateValue(prefilledValue);
     }
   });
@@ -69,6 +74,7 @@ export const InputCell = React.memo(function InputCell({
       typeof cell.emptyDefault === 'number' &&
       cellResponse === undefined
     ) {
+      markSeedWrite?.(questionId);
       onUpdateValue(String(cell.emptyDefault));
     }
   });

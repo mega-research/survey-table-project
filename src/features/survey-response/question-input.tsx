@@ -25,6 +25,7 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -669,6 +670,8 @@ function TextResponseInput({
   onChange: (v: unknown) => void;
   attrs: Record<string, string>;
 }) {
+  // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
+  const { markSeedWrite } = useResponseSources();
   const template = question.defaultValueTemplate ?? '';
   const isPrefilled = template.trim().length > 0;
   const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
@@ -687,6 +690,7 @@ function TextResponseInput({
   // 최신값을 읽는다(표 셀 input-cell.tsx 와 동일 사유 — value 를 deps 에 넣으면 재기록 루프 위험).
   const applyPrefill = useEffectEvent(() => {
     if (isPrefilled && value !== prefilledValue) {
+      markSeedWrite?.(question.id);
       onChange(prefilledValue);
     }
   });
@@ -703,6 +707,7 @@ function TextResponseInput({
       typeof question.emptyDefault === 'number' &&
       (value === undefined || value === null)
     ) {
+      markSeedWrite?.(question.id);
       onChange(String(question.emptyDefault));
     }
   });

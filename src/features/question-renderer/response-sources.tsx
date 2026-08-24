@@ -46,6 +46,16 @@ export interface ResponseSources {
   /** null 이면 value/onChange props 가 유일한 원본이다 (controlled 렌더). */
   questionResponses: QuestionResponseSource | null;
   optionTexts: OptionTextSource;
+  /**
+   * 곧 이어질 이 질문의 쓰기가 **응답자의 입력이 아니라 미리 채운 값**임을 알린다.
+   *
+   * prefill(defaultValueTemplate)과 숫자 빈값 기본치는 마운트 직후 스스로 한 번 쓴다.
+   * 렌더러 입장에서는 둘 다 그냥 쓰기지만, 호스트에게는 "응답자가 아무것도 하지 않았다" 는
+   * 사실이 중요할 수 있다. 렌더러는 그 사실만 알리고 무엇을 할지는 호스트가 정한다.
+   *
+   * 호출 규약: 알린 **직후 동기적으로** 해당 질문에 쓴다. 미주입이면 no-op.
+   */
+  markSeedWrite?: ((questionId: string) => void) | undefined;
 }
 
 const NOOP_UNSUBSCRIBE = () => {};
