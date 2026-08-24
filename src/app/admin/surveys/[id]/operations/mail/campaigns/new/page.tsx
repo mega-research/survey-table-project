@@ -15,7 +15,16 @@ import {
   getContactColumnScheme,
   getContactResultCodes,
 } from '@/lib/operations/contacts.server';
-import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import {
+  parseClausesFromUrl,
+  parseHeaderFiltersFromUrl,
+  type FilterClause,
+} from '@/lib/operations/contacts-filters.server';
+import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
+import {
+  parseHeaderFilterEntries,
+  type HeaderFilterEntry,
+} from '@/lib/operations/header-filter-url';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 const PAGE_SIZE = 20;
@@ -27,11 +36,35 @@ interface Props {
     col?: string | string[];
     q?: string | string[];
     op?: string | string[];
+    hcol?: string | string[];
+    hm?: string | string[];
+    hv?: string | string[];
     unresponded?: string;
     sort?: string;
     dir?: string;
     page?: string;
   }>;
+}
+
+function toParamList(value: string | string[] | undefined): string[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * searchParams 의 hcol/hm/hv → 스냅샷 엔트리. 직렬화 형상과 모드 검증은
+ * parseHeaderFilterEntries 한 곳에만 두기 위해 URLSearchParams 로 되돌려 통과시킨다.
+ */
+function buildHeaderSnapshot(
+  hcol: string | string[] | undefined,
+  hm: string | string[] | undefined,
+  hv: string | string[] | undefined,
+): HeaderFilterEntry[] {
+  const params = new URLSearchParams();
+  for (const v of toParamList(hcol)) params.append('hcol', v);
+  for (const v of toParamList(hm)) params.append('hm', v);
+  for (const v of toParamList(hv)) params.append('hv', v);
+  return parseHeaderFilterEntries(params);
 }
 
 function parsePage(value: string | undefined): number {
@@ -76,7 +109,29 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     getContactResultCodes(surveyId),
   ]);
   const columnCandidates = buildColumnCandidates(scheme);
-  const clauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  // 미리보기 표는 고정 컬럼이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
+  const headerCandidates = [
+    ...columnCandidates,
+    ...CAMPAIGN_HEADER_FILTER_COLUMNS.filter(
+      (c) => !columnCandidates.some((cc) => cc.source === c.source),
+    ),
+  ];
+  const headerClauses = parseHeaderFiltersFromUrl(
+    sp.hcol,
+    sp.hm,
+    sp.hv,
+    headerCandidates,
+    resultCodes,
+  );
+  // 조사 대상 목록과 같은 결합 규칙 — UI 는 상호배타지만 URL 직접 조작 시 AND 로 무해 처리.
+  const clauses: FilterClause[] = [
+    ...builderClauses,
+    ...headerClauses.map((c, i) => ({
+      condition: c.condition,
+      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
+    })),
+  ];
   const unrespondedOnly = sp.unresponded === '1';
 
   const sort: CampaignSortKey = CAMPAIGN_SORT_KEYS.includes(sp.sort as CampaignSortKey)
@@ -95,15 +150,23 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     pageSize: PAGE_SIZE,
   });
 
+  // 스냅샷은 빌더/깔때기를 따로 담는다 — 깔때기의 in 모드 다중값은 {source,value,op}
+  // 삼중항으로 표현할 수 없어 URL 과 동형인 hcol/hm/hv 를 그대로 보존한다.
+  // 유효 절만 담기도록 파싱을 통과한 source 집합으로 원본 엔트리를 거른다.
+  const validHeaderSources = new Set(headerClauses.map((c) => c.condition.source));
+  const headerSnapshot = buildHeaderSnapshot(sp.hcol, sp.hm, sp.hv).filter((e) =>
+    validHeaderSources.has(e.source),
+  );
   const currentFilter: CampaignFilterSnapshot = {
-    clauses: clauses.map((c) => ({
+    clauses: builderClauses.map((c) => ({
       source: c.condition.source,
       value: c.condition.value,
       op: c.op,
     })),
+    ...(headerSnapshot.length > 0 ? { headerClauses: headerSnapshot } : {}),
     unrespondedOnly,
   };
-  const initialClauses = clauses.map((c) => ({
+  const initialClauses = builderClauses.map((c) => ({
     op: c.op,
     source: c.condition.source,
     value: c.condition.value,

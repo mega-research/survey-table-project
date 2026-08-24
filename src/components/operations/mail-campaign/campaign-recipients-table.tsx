@@ -1,11 +1,14 @@
 import Link from 'next/link';
 
+import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
+import { RECIPIENT_FILTER_LABEL, RECIPIENT_FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import type { HeaderFilterEntry } from '@/lib/operations/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
 
@@ -19,6 +22,14 @@ interface Props {
   /** 활성 status 필터 목록. 빈 배열 = 전체. */
   currentStatuses: MailRecipientStatus[];
   currentQuery: string;
+  /** 활성 깔때기(hcol/hm/hv) — 칩·검색 링크가 유실시키지 않도록 함께 실어 나른다. */
+  headerEntries: HeaderFilterEntry[];
+  /** 그룹 깔때기 체크박스 선택지 (이 캠페인 수신자에 실제로 등장하는 값) */
+  groupOptions: Array<{ value: string; label: string }>;
+  /** 메모(반송/실패 사유) 깔때기 체크박스 선택지 */
+  errorOptions: Array<{ value: string; label: string }>;
+  /** 최근 결과코드 깔때기 체크박스 선택지 */
+  resultOptions: Array<{ value: string; label: string }>;
 }
 
 // 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
@@ -36,16 +47,30 @@ const STATUS_FILTER_CHIPS: Array<{
   { value: 'skipped_unsubscribed', label: '수신거부' },
 ];
 
+type HrefOverrides = Partial<{
+  statuses: MailRecipientStatus[];
+  q: string;
+  recipPage: number | string;
+  headerEntries: HeaderFilterEntry[];
+}>;
+
 function buildHref(
   surveyId: string,
   campaignId: string,
   // recipPage 에 '__PAGE__' 토큰 문자열을 넘기면 PagerJump 용 href 템플릿이 된다.
-  overrides: Partial<{ statuses: MailRecipientStatus[]; q: string; recipPage: number | string }>,
+  overrides: HrefOverrides,
 ): string {
   const params = new URLSearchParams();
   if (overrides.statuses && overrides.statuses.length > 0)
     params.set('status', overrides.statuses.join(','));
-  if (overrides.q && overrides.q.trim()) params.set('q', overrides.q.trim());
+  // 이메일 검색은 rq — 깔때기 적용이 지우는 빌더 파라미터('q')와 이름이 겹치면 안 된다.
+  if (overrides.q && overrides.q.trim()) params.set('rq', overrides.q.trim());
+  // 상태 칩·페이저를 눌러도 깔때기가 살아 있어야 한다.
+  for (const e of overrides.headerEntries ?? []) {
+    params.append('hcol', e.source);
+    params.append('hm', e.mode);
+    params.append('hv', e.hv);
+  }
   if (overrides.recipPage && overrides.recipPage !== 1)
     params.set('recipPage', String(overrides.recipPage));
   const qs = params.toString();
@@ -63,8 +88,17 @@ export function CampaignRecipientsTable({
   pageSize,
   currentStatuses,
   currentQuery,
+  headerEntries,
+  groupOptions,
+  errorOptions,
+  resultOptions,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // 모든 링크가 활성 깔때기를 기본으로 물고 간다 — 한 군데라도 빠뜨리면 그 링크를
+  // 누르는 순간 필터가 조용히 풀린다.
+  const hrefFor = (overrides: HrefOverrides): string =>
+    buildHref(surveyId, campaignId, { headerEntries, ...overrides });
 
   const toggledStatuses = (status: MailRecipientStatus): MailRecipientStatus[] =>
     currentStatuses.includes(status)
@@ -78,10 +112,12 @@ export function CampaignRecipientsTable({
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">수신자 목록</h2>
           <p className="mt-1 text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
+        {/* GET 폼 제출은 쿼리스트링을 폼 필드로 통째 교체한다 — 유지할 파라미터는
+            전부 hidden 으로 실어야 검색 순간에 조용히 사라지지 않는다. */}
         <form className="flex items-center gap-2" action="" method="get">
           <input
             type="search"
-            name="q"
+            name="rq"
             defaultValue={currentQuery}
             placeholder="이메일 검색"
             className="rounded border border-slate-200 px-3 py-1.5 text-sm"
@@ -89,6 +125,13 @@ export function CampaignRecipientsTable({
           {currentStatuses.length > 0 ? (
             <input type="hidden" name="status" value={currentStatuses.join(',')} />
           ) : null}
+          {headerEntries.map((e) => (
+            <span key={e.source}>
+              <input type="hidden" name="hcol" value={e.source} />
+              <input type="hidden" name="hm" value={e.mode} />
+              <input type="hidden" name="hv" value={e.hv} />
+            </span>
+          ))}
           <button
             type="submit"
             className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
@@ -100,7 +143,7 @@ export function CampaignRecipientsTable({
 
       <div className="flex flex-wrap gap-1.5">
         <Link
-          href={buildHref(surveyId, campaignId, { statuses: [], q: currentQuery })}
+          href={hrefFor({ statuses: [], q: currentQuery })}
           className={`rounded-full px-3 py-1 text-xs ${
             currentStatuses.length === 0
               ? 'bg-blue-600 text-white'
@@ -112,7 +155,7 @@ export function CampaignRecipientsTable({
         {STATUS_FILTER_CHIPS.map((chip) => (
           <Link
             key={chip.value}
-            href={buildHref(surveyId, campaignId, {
+            href={hrefFor({
               statuses: toggledStatuses(chip.value),
               q: currentQuery,
             })}
@@ -135,17 +178,48 @@ export function CampaignRecipientsTable({
         </Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                 <th className="px-3 py-2">시스템ID</th>
                 <th className="px-3 py-2">이메일</th>
-                <th className="px-3 py-2">그룹</th>
+                <th className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1">
+                    {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP]}
+                    <HeaderFilterPopover
+                      surveyId={surveyId}
+                      source={RECIPIENT_FILTER_SOURCE.GROUP}
+                      label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP] ?? '그룹'}
+                      fixedOptions={groupOptions}
+                    />
+                  </span>
+                </th>
                 <th className="px-3 py-2">상태</th>
                 <th className="px-3 py-2">발송</th>
                 <th className="px-3 py-2">전달</th>
                 <th className="px-3 py-2">열람</th>
-                <th className="px-3 py-2">메모</th>
+                <th className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1">
+                    {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.RESULT]}
+                    <HeaderFilterPopover
+                      surveyId={surveyId}
+                      source={RECIPIENT_FILTER_SOURCE.RESULT}
+                      label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.RESULT] ?? '최근 결과코드'}
+                      fixedOptions={resultOptions}
+                    />
+                  </span>
+                </th>
+                <th className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1">
+                    {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.ERROR]}
+                    <HeaderFilterPopover
+                      surveyId={surveyId}
+                      source={RECIPIENT_FILTER_SOURCE.ERROR}
+                      label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.ERROR] ?? '메모'}
+                      fixedOptions={errorOptions}
+                    />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -184,7 +258,10 @@ export function CampaignRecipientsTable({
                     <td className="px-3 py-2 text-xs text-slate-500">
                       <LocalDateTime value={r.openedAt} />
                     </td>
-                    <td className="px-3 py-2 text-xs text-rose-600">{r.errorReason ?? ''}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">
+                      {r.latestResultCode ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-rose-600">{r.errorReason ?? '—'}</td>
                   </tr>
                 );
               })}
@@ -201,7 +278,7 @@ export function CampaignRecipientsTable({
           <PageLink
             href={
               page > 1
-                ? buildHref(surveyId, campaignId, {
+                ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
                     recipPage: page - 1,
@@ -227,7 +304,7 @@ export function CampaignRecipientsTable({
             ) : (
               <PageLink
                 key={item}
-                href={buildHref(surveyId, campaignId, {
+                href={hrefFor({
                   statuses: currentStatuses,
                   q: currentQuery,
                   recipPage: item,
@@ -240,7 +317,7 @@ export function CampaignRecipientsTable({
           <PageLink
             href={
               page < totalPages
-                ? buildHref(surveyId, campaignId, {
+                ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
                     recipPage: page + 1,
@@ -252,7 +329,7 @@ export function CampaignRecipientsTable({
           </PageLink>
           <PagerJump
             totalPages={totalPages}
-            hrefTemplate={buildHref(surveyId, campaignId, {
+            hrefTemplate={hrefFor({
               statuses: currentStatuses,
               q: currentQuery,
               recipPage: '__PAGE__',

@@ -22,6 +22,16 @@ export const FilterSnapshotSchema = z
       )
       .max(20)
       .optional(),
+    headerClauses: z
+      .array(
+        z.object({
+          source: z.string().max(200),
+          mode: z.enum(['in', 'text', 'exact']),
+          hv: z.string().max(2000),
+        }),
+      )
+      .max(20)
+      .optional(),
     unrespondedOnly: z.boolean().optional(),
     unopenedFromCampaignId: z.string().uuid().optional(),
     unopenedAfterDays: z.number().int().min(0).max(365).optional(),

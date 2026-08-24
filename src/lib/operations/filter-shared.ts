@@ -36,10 +36,68 @@ export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * "값 없음"(NULL / 미기록) 을 체크박스 한 줄로 표현하기 위한 센티널.
+ * 컨택결과·수신자 그룹·반송 사유처럼 값 공간이 사용자 자유 텍스트라 in-band 충돌이
+ * 원리상 가능한 축에서 쓴다 — 그래서 값 자체를 SQL 로 흘리지 않고, 파서가 이 문자열을
+ * 별도 플래그(또는 IS NULL 분기)로 승격시킨다. 실제 값이 이 문자열을 선점하면
+ * 실제 값이 이기고 "없음" 선택지는 목록에서 사라진다 (아래 두 옵션 빌더).
+ */
+export const FILTER_NONE_VALUE = '__none__';
+
+/**
+ * 빈 값 선택지의 공용 라벨 — 표에서 그 행이 실제로 어떻게 보이는지(대시)를 그대로 쓴다.
+ * 컬럼마다 "결과 없음"·"발송 안 함"처럼 다른 말을 쓰면 같은 개념을 매번 다시 배워야 하고,
+ * 화면의 '—' 와 필터 문구가 연결되지 않는다.
+ */
+export const FILTER_NONE_LABEL = '— (없음)';
+
+/** 입력형 컬럼(pii·고카디널리티 attrs)의 빈 값 토글 라벨. 체크박스 목록 항목의 짝. */
+export const FILTER_NONE_TOGGLE_LABEL = '— 인 것만 보기';
+
+/** 선택지 목록 끝에 "없음" 을 덧붙인다 — 실제 값이 센티널을 선점했으면 붙이지 않는다. */
+export function withNoneOption(
+  options: Array<{ value: string; label: string }>,
+  noneLabel: string = FILTER_NONE_LABEL,
+): Array<{ value: string; label: string }> {
+  if (options.some((o) => o.value === FILTER_NONE_VALUE)) return options;
+  return [...options, { value: FILTER_NONE_VALUE, label: noneLabel }];
+}
+
+/**
+ * 컨택결과 드롭다운/체크박스 선택지 — 등록 결과코드 + "결과 없음".
+ * 검색바(value-widget)와 헤더 필터(header-filter-popover)가 공유한다.
+ */
+export function contactResultFilterOptions(
+  resultCodes: ReadonlyArray<{ code: string; label: string }>,
+): Array<{ value: string; label: string }> {
+  return withNoneOption(resultCodes.map((rc) => ({ value: rc.code, label: rc.label })));
+}
+
+/**
+ * 단체 메일 수신자 목록 전용 깔때기 source. 컨택 절 파이프라인(FILTER_SOURCE)과
+ * 별개 축이다 — mail_recipients 발송 스냅샷 위에서만 의미가 있고, 서버도 전용
+ * 파서로 좁게 해석한다. 라벨은 표 헤더와 같은 문구.
+ */
+export const RECIPIENT_FILTER_SOURCE = {
+  /** contact_targets.group_value */
+  GROUP: 'recipient.group',
+  /** mail_recipients.error_reason — 표에서는 "메모" 로 노출 */
+  ERROR: 'recipient.error',
+  /** 컨택 최신 회차 result_code */
+  RESULT: 'recipient.result',
+} as const;
+
+export const RECIPIENT_FILTER_LABEL: Record<string, string> = {
+  [RECIPIENT_FILTER_SOURCE.GROUP]: '그룹',
+  [RECIPIENT_FILTER_SOURCE.ERROR]: '메모',
+  [RECIPIENT_FILTER_SOURCE.RESULT]: '최근 결과코드',
+};
+
+/**
  * 메일(최신 수신 상태) 필터 값 어휘 — 순서가 곧 정렬 순위 축(잘된 순).
  * 라벨은 recipientStatusMeta(STATUS_LABEL)와 동일해야 한다 — 동기화는
  * 단위 테스트로 고정 (컴포넌트 → lib 역방향 import 를 피하기 위한 복제).
- * 'none' 은 발송 이력 없음 (latestMailStatus IS NULL).
+ * 'none' 은 발송 이력 없음 (latestMailStatus IS NULL) — 라벨은 FILTER_NONE_LABEL 공용.
  */
 export const MAIL_FILTER_OPTIONS = [
   { value: 'opened', label: '열람' },
@@ -51,7 +109,8 @@ export const MAIL_FILTER_OPTIONS = [
   { value: 'bounced', label: '반송' },
   { value: 'complained', label: '신고' },
   { value: 'failed', label: '실패' },
-  { value: 'none', label: '메일 없음' },
+  // 발송 이력이 한 건도 없는 컨택 (latestMailStatus IS NULL).
+  { value: 'none', label: FILTER_NONE_LABEL },
 ] as const;
 
 /** 메일 필터로 수용 가능한 전체 값. */
@@ -126,6 +185,18 @@ export interface ColumnCandidate {
    */
   hidden?: boolean;
 }
+
+/**
+ * 단체 메일 마법사 미리보기 표의 깔때기 필터 컬럼 — 표가 고정 컬럼이라 후보도
+ * 컨택 컬럼 스킴과 무관하게 고정한다 (스킴에서 system.* 컬럼을 지워도 마법사
+ * 필터는 살아 있어야 한다). label 은 표 헤더와 같은 문구를 쓴다.
+ * 페이지(서버 파싱 후보)와 마법사(헤더 렌더)가 이 한 목록을 공유한다.
+ */
+export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
+  { source: FILTER_SOURCE.WEB, label: '응답' },
+  { source: FILTER_SOURCE.EMAIL, label: '수신 상황' },
+  { source: FILTER_SOURCE.CONTACT_RESULT, label: '최근 결과코드' },
+];
 
 /** 서버 모듈에서 pii blindIndex 계산을 위해 piiType 포함. */
 export interface ColumnCandidateWithPii extends ColumnCandidate {

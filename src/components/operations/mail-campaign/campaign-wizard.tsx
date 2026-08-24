@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
+import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
@@ -37,7 +38,12 @@ import type {
   CampaignSortDir,
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
-import type { ColumnCandidate } from '@/lib/operations/filter-shared';
+import {
+  CAMPAIGN_HEADER_FILTER_COLUMNS,
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  type ColumnCandidate,
+} from '@/lib/operations/filter-shared';
 import { toast } from 'sonner';
 
 import { getErrorMessage } from '@/lib/get-error-message';
@@ -398,25 +404,46 @@ export function CampaignWizard({
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
-                  <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.WEB}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader
-                    label="수신 상황"
-                    sortKey="mailStatus"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader
+                      label="수신 상황"
+                      sortKey="mailStatus"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.EMAIL}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader
-                    label="최근 결과코드"
-                    sortKey="resultCode"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
+                  <span className="inline-flex items-center gap-1">
+                    <SortHeader
+                      label="최근 결과코드"
+                      sortKey="resultCode"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.CONTACT_RESULT}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -618,10 +645,44 @@ function SortHeader({
   );
 }
 
+/**
+ * 미리보기 표 헤더의 깔때기 필터 — 조사 대상 목록과 같은 HeaderFilterPopover 를
+ * 그대로 쓴다 (URL hcol/hm/hv 직렬화·빌더 상호배타 경고 포함). 라벨은 서버 파싱
+ * 후보와 같은 목록(CAMPAIGN_HEADER_FILTER_COLUMNS)에서 가져와 한 곳에서만 관리한다.
+ */
+function PreviewHeaderFilter({
+  surveyId,
+  source,
+  resultCodeOptions,
+}: {
+  surveyId: string;
+  source: string;
+  resultCodeOptions: ContactResultCode[];
+}) {
+  const label = CAMPAIGN_HEADER_FILTER_COLUMNS.find((c) => c.source === source)?.label ?? source;
+  return (
+    <HeaderFilterPopover
+      surveyId={surveyId}
+      source={source}
+      label={label}
+      // system.email_count 는 popover 의 kind 분기에 없어 고정 옵션 주입이 필요하다.
+      {...(source === FILTER_SOURCE.EMAIL
+        ? {
+            fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+          }
+        : {})}
+      resultCodeOptions={resultCodeOptions}
+    />
+  );
+}
+
 function buildFilterSnapshot(current: CampaignFilterSnapshot): CampaignFilterSnapshot {
   // 빈 필드 제거 (DB 스냅샷 깔끔하게)
   const out: CampaignFilterSnapshot = {};
   if (current.clauses && current.clauses.length > 0) out.clauses = current.clauses;
+  if (current.headerClauses && current.headerClauses.length > 0) {
+    out.headerClauses = current.headerClauses;
+  }
   if (current.unrespondedOnly) out.unrespondedOnly = true;
   if (current.unopenedFromCampaignId) {
     out.unopenedFromCampaignId = current.unopenedFromCampaignId;

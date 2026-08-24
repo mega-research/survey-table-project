@@ -3,6 +3,7 @@ import 'server-only';
 import { blindIndex } from '@/lib/crypto/blind';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import {
+  FILTER_NONE_VALUE,
   FILTER_SOURCE,
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
@@ -28,6 +29,12 @@ export interface FilterCondition {
   blindIndex?: string;
   /** mode === 'in' (헤더 체크박스 필터) 일 때만 populated. 컬럼 내 OR 값 목록. */
   values?: string[];
+  /**
+   * system.contact_result 전용 — "결과 없음"(최신 회차 result_code IS NULL) 을 OR 로 포함.
+   * UI 센티널(FILTER_NONE_VALUE)을 파서가 여기로 승격시키므로 SQL 은 값 공간을 보지 않는다.
+   * enum 모드에서는 이 플래그만으로 조건이 성립하고 value 는 URL 왕복용으로만 남는다.
+   */
+  includeNull?: boolean;
   /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
   subConditions?: FilterCondition[];
 }
@@ -101,7 +108,7 @@ export function parseClausesFromUrl(
  * 엑셀 오토필터 시맨틱: 컬럼 내 OR(in 값 목록), 컬럼 간 AND.
  * - attrs.*: in(구분자 조인 값 목록) 또는 text(고카디널리티 부분검색 폴백)
  * - pii.*: exact 만 (blind index 전문 일치)
- * - system.contact_result: in — 유효 결과코드만 통과
+ * - system.contact_result: in — 유효 결과코드 + "결과 없음" 센티널만 통과
  * - system.web: in — 'true'/'false' 만 통과
  * 같은 컬럼이 중복 등장하면 마지막 항목이 이긴다 (드롭다운 재적용 시나리오).
  * 검증 실패 절은 silent drop (URL 직접 조작 가드).
@@ -154,9 +161,19 @@ function buildHeaderCondition(
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
-      const values = splitHeaderValues(hv);
-      if (values.length === 0) return null;
-      return { source: col, mode: 'in', value: '', values };
+      const raw = splitHeaderValues(hv);
+      // "(값 없음)" 센티널은 값이 아니라 플래그로 승격 — distinct 목록에서 온 실제 값이
+      // 센티널 문자열과 같으면 실제 값이 이긴다 (아래 !includes 검사).
+      const distinct = raw.filter((v) => v !== FILTER_NONE_VALUE);
+      const includeNull = distinct.length !== raw.length;
+      if (distinct.length === 0 && !includeNull) return null;
+      return {
+        source: col,
+        mode: 'in',
+        value: '',
+        values: distinct,
+        ...(includeNull ? { includeNull: true } : {}),
+      };
     }
     if (mode === 'text') {
       const trimmed = hv.trim();
@@ -168,6 +185,13 @@ function buildHeaderCondition(
   }
 
   if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
+    // pii 는 blind index 라 distinct 열거가 불가능해 체크박스가 없다. 유일한 예외가
+    // "값 없음" 으로, 값 비교 없이 행 부재만 보면 되므로 in 모드 + 센티널로 들어온다.
+    if (mode === 'in') {
+      const raw = splitHeaderValues(hv);
+      if (raw.length !== 1 || raw[0] !== FILTER_NONE_VALUE) return null;
+      return { source: col, mode: 'in', value: '', values: [], includeNull: true };
+    }
     if (mode !== 'exact' || !candidate.piiType) return null;
     const trimmed = hv.trim();
     if (trimmed.length === 0) return null;
@@ -179,9 +203,18 @@ function buildHeaderCondition(
   if (col === FILTER_SOURCE.CONTACT_RESULT) {
     if (mode !== 'in') return null;
     const valid = new Set(resultCodes.map((rc) => rc.code));
-    const values = splitHeaderValues(hv).filter((v) => valid.has(v));
-    if (values.length === 0) return null;
-    return { source: col, mode: 'in', value: '', values };
+    const raw = splitHeaderValues(hv);
+    // 실제 코드가 센티널 문자열을 선점했으면 코드 쪽이 이긴다 (valid 검사가 먼저).
+    const values = raw.filter((v) => valid.has(v));
+    const includeNull = raw.some((v) => !valid.has(v) && v === FILTER_NONE_VALUE);
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
   }
 
   if (col === FILTER_SOURCE.WEB) {
@@ -297,8 +330,22 @@ function buildClause(
 
   if (col === FILTER_SOURCE.CONTACT_RESULT) {
     const code = resultCodes.find((rc) => rc.code === trimmed);
-    if (!code) return null;
-    return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
+    if (code) {
+      return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
+    }
+    // 등록 코드가 아니면서 센티널이면 "결과 없음". value 는 URL·스냅샷 왕복용으로 보존한다.
+    if (trimmed === FILTER_NONE_VALUE) {
+      return {
+        op,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'enum',
+          value: FILTER_NONE_VALUE,
+          includeNull: true,
+        },
+      };
+    }
+    return null;
   }
 
   if (col === FILTER_SOURCE.WEB) {

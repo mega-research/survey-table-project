@@ -38,7 +38,7 @@ import {
   buildContactsFilterSql,
   latestResultCodeExpr,
 } from '@/lib/operations/contacts-filter-sql';
-import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import { escapeLikePattern, FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 import {
   campaignScopeCondition,
@@ -270,6 +270,8 @@ export interface CampaignRecipientRow {
   contactTargetId: string | null;
   contactResid: number | null;
   contactGroupValue: string | null;
+  /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
+  latestResultCode: string | null;
   emailMasked: string;
   status: MailRecipientStatus;
   /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
@@ -289,6 +291,117 @@ export interface ListCampaignRecipientsResult {
   page: number;
 }
 
+/**
+ * 수신자 목록 깔때기가 보는 두 축의 표현식.
+ * 빈 문자열은 NULL 과 같은 "없음" 으로 접는다 — 표가 둘 다 '—'/공백 으로 그리므로
+ * 화면과 필터가 어긋나지 않게 하려면 여기서 합쳐야 한다.
+ */
+const RECIPIENT_GROUP_EXPR = sql`NULLIF(${contactTargets.groupValue}, '')`;
+const RECIPIENT_ERROR_EXPR = sql`NULLIF(${mailRecipients.errorReason}, '')`;
+// 컨택결과는 조사 대상 목록과 같은 표현식을 공유한다 — 두 화면이 같은 값을 보여야 한다.
+// latestResultCodeExpr 는 "contact_targets"."id" 로 상관되므로 이 쿼리의 LEFT JOIN 별칭과 맞는다.
+const RECIPIENT_RESULT_EXPR = sql`NULLIF(${latestResultCodeExpr}, '')`;
+
+/**
+ * 깔때기 값 목록 → WHERE 조건. FILTER_NONE_VALUE 는 IS NULL 로 승격시켜 OR 결합한다
+ * (NULL 은 IN 목록으로 표현 불가). 값이 없으면 null 반환 = 조건 미부착(전체).
+ */
+function buildRecipientFacetCond(expr: SQL, values: string[] | undefined): SQL | null {
+  if (!values || values.length === 0) return null;
+  const concrete = values.filter((v) => v !== FILTER_NONE_VALUE);
+  const includeNull = concrete.length !== values.length;
+  const parts: SQL[] = [];
+  if (concrete.length > 0) {
+    parts.push(
+      sql`${expr} IN (${sql.join(
+        concrete.map((v) => sql`${v}`),
+        sql`, `,
+      )})`,
+    );
+  }
+  if (includeNull) parts.push(sql`${expr} IS NULL`);
+  if (parts.length === 0) return null;
+  return sql`(${sql.join(parts, sql` OR `)})`;
+}
+
+export interface CampaignRecipientFacets {
+  /** 이 캠페인 수신자에 실제로 등장하는 그룹 값 (NULL 제외, 오름차순) */
+  groupValues: string[];
+  /** 이 캠페인 수신자에 실제로 등장하는 반송/실패 사유 (NULL 제외, 오름차순) */
+  errorReasons: string[];
+  /** 이 캠페인 수신자에 실제로 등장하는 컨택결과 코드 (NULL 제외, 오름차순) */
+  resultCodes: string[];
+  /** 그룹 없음 행이 존재하는지 — 빈 값 선택지 노출 판단용 */
+  hasEmptyGroup: boolean;
+  /** 사유 없음 행이 존재하는지 */
+  hasEmptyError: boolean;
+  /** 컨택결과 없음 행이 존재하는지 */
+  hasEmptyResult: boolean;
+}
+
+/** 깔때기 체크박스 목록이 너무 길어지지 않도록 하는 상한. 초과분은 잘라서 노출한다. */
+const FACET_LIMIT = 200;
+
+/**
+ * 수신자 목록 깔때기의 distinct 값 목록.
+ *
+ * 필터 자체와 같은 scope·archived 가드를 걸되 현재 걸린 깔때기 조건은 빼고 센다 —
+ * 엑셀 오토필터처럼 "지금 고를 수 있는 값 전체" 를 보여주기 위함이다. 조건을 함께
+ * 걸면 한 값을 고르는 순간 나머지 선택지가 사라져 해제 외에는 조작이 불가능해진다.
+ */
+export async function listCampaignRecipientFacets(args: {
+  surveyId: string;
+  campaignId: string;
+  scope: OperationsDataScope;
+}): Promise<CampaignRecipientFacets> {
+  const where = and(
+    eq(mailRecipients.campaignId, args.campaignId),
+    eq(mailCampaigns.surveyId, args.surveyId),
+    campaignScopeCondition(args.scope),
+    isNull(mailCampaigns.archivedAt),
+    isNull(mailRecipients.archivedAt),
+  )!;
+
+  // DISTINCT 는 PG 에서 처리 — 1만명 캠페인에서 전량을 앱으로 끌어오지 않기 위함.
+  // 반환 행 수는 (그룹 × 사유) 실제 조합 수로 묶인다.
+  const rows = await db
+    .selectDistinct({
+      groupValue: sql<string | null>`${RECIPIENT_GROUP_EXPR}`,
+      errorReason: sql<string | null>`${RECIPIENT_ERROR_EXPR}`,
+      resultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
+    })
+    .from(mailRecipients)
+    .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+    .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+    .where(where);
+
+  const groups = new Set<string>();
+  const errors = new Set<string>();
+  const results = new Set<string>();
+  let hasEmptyGroup = false;
+  let hasEmptyError = false;
+  let hasEmptyResult = false;
+  for (const r of rows) {
+    if (r.groupValue == null) hasEmptyGroup = true;
+    else groups.add(r.groupValue);
+    if (r.errorReason == null) hasEmptyError = true;
+    else errors.add(r.errorReason);
+    if (r.resultCode == null) hasEmptyResult = true;
+    else results.add(r.resultCode);
+  }
+  const sorted = (set: Set<string>) =>
+    [...set].sort((a, b) => a.localeCompare(b, 'ko-KR')).slice(0, FACET_LIMIT);
+
+  return {
+    groupValues: sorted(groups),
+    errorReasons: sorted(errors),
+    resultCodes: sorted(results),
+    hasEmptyGroup,
+    hasEmptyError,
+    hasEmptyResult,
+  };
+}
+
 export async function listCampaignRecipients(args: {
   surveyId: string;
   campaignId: string;
@@ -298,6 +411,12 @@ export async function listCampaignRecipients(args: {
   /** 필터할 status 목록. 빈 배열 또는 미지정 = 전체. */
   statuses?: MailRecipientStatus[];
   q?: string;
+  /** 깔때기 — contact_targets.group_value. FILTER_NONE_VALUE 는 그룹 없음(NULL). */
+  groupValues?: string[];
+  /** 깔때기 — mail_recipients.error_reason. FILTER_NONE_VALUE 는 사유 없음(NULL/빈 문자열). */
+  errorReasons?: string[];
+  /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
+  resultCodes?: string[];
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -316,6 +435,12 @@ export async function listCampaignRecipients(args: {
     const escaped = escapeLikePattern(q);
     whereParts.push(sql`${mailRecipients.emailSnapshot} ILIKE ${'%' + escaped + '%'}`);
   }
+  const groupCond = buildRecipientFacetCond(RECIPIENT_GROUP_EXPR, args.groupValues);
+  if (groupCond) whereParts.push(groupCond);
+  const errorCond = buildRecipientFacetCond(RECIPIENT_ERROR_EXPR, args.errorReasons);
+  if (errorCond) whereParts.push(errorCond);
+  const resultCond = buildRecipientFacetCond(RECIPIENT_RESULT_EXPR, args.resultCodes);
+  if (resultCond) whereParts.push(resultCond);
   const where = and(...whereParts)!;
 
   const [countRow] = await db
@@ -334,6 +459,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
       status: mailRecipients.status,
@@ -359,6 +485,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
+      latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
       unsubscribedAt: r.contactUnsubscribedAt,

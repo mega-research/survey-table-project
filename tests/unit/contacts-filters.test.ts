@@ -7,6 +7,9 @@ import {
   type ColumnCandidate,
 } from '@/lib/operations/contacts-filters.server';
 import {
+  FILTER_NONE_LABEL,
+  FILTER_NONE_VALUE,
+  contactResultFilterOptions,
   HEADER_FILTER_VALUE_SEPARATOR as SEP,
   MAIL_FILTER_OPTIONS,
   WEB_FILTER_OPTIONS,
@@ -40,6 +43,25 @@ describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', 
     expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
     // 새 상태 옵션은 그대로 유지
     expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+});
+
+describe('contactResultFilterOptions — 컨택결과 선택지', () => {
+  it('등록 코드 뒤에 "결과 없음" 을 덧붙인다', () => {
+    const options = contactResultFilterOptions([
+      { code: '1.조사완료', label: '1.조사완료' },
+      { code: '6.거절', label: '6.거절' },
+    ]);
+    expect(options.map((o) => o.value)).toEqual(['1.조사완료', '6.거절', FILTER_NONE_VALUE]);
+    // 빈 값 라벨은 컬럼마다 다른 말을 쓰지 않고 표의 '—' 표시와 같은 공용 문구를 쓴다.
+    expect(options.at(-1)?.label).toBe(FILTER_NONE_LABEL);
+  });
+
+  it('센티널을 선점한 코드가 있으면 "결과 없음" 항목을 내밀지 않는다 — 모호한 선택지 차단', () => {
+    const options = contactResultFilterOptions([
+      { code: FILTER_NONE_VALUE, label: '진짜코드' },
+    ]);
+    expect(options).toEqual([{ value: FILTER_NONE_VALUE, label: '진짜코드' }]);
   });
 });
 
@@ -154,6 +176,43 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(
       parseClausesFromUrl(['system.contact_result'], ['unknown'], [''], candidates, resultCodes),
     ).toEqual([]);
+  });
+
+  it('system.contact_result + "결과 없음" 센티널 → includeNull, value 는 왕복용 보존', () => {
+    const result = parseClausesFromUrl(
+      ['system.contact_result'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'enum',
+          value: FILTER_NONE_VALUE,
+          includeNull: true,
+        },
+      },
+    ]);
+  });
+
+  it('센티널을 선점한 실제 결과코드가 있으면 코드가 이긴다 — includeNull 미부여', () => {
+    const shadowed: ContactResultCode[] = [
+      ...resultCodes,
+      { code: FILTER_NONE_VALUE, label: '진짜코드', order: 99 },
+    ];
+    const result = parseClausesFromUrl(
+      ['system.contact_result'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      shadowed,
+    );
+    expect(result[0]?.condition.includeNull).toBeUndefined();
+    expect(result[0]?.condition.value).toBe(FILTER_NONE_VALUE);
   });
 
   it('system.web + true/false → boolean', () => {
@@ -571,6 +630,92 @@ describe('parseHeaderFiltersFromUrl', () => {
     expect(
       parseHeaderFiltersFromUrl(['system.contact_result'], ['in'], ['없는코드'], candidates, resultCodes),
     ).toEqual([]);
+  });
+
+  it('attrs.* in — "(값 없음)" 센티널은 includeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울${SEP}${FILTER_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['서울']);
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
+  it('attrs.* in — "(값 없음)" 단독도 절이 성립한다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual([]);
+    expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
+  it('pii.* in — "값 없음" 센티널 단독만 수용한다 (blindIndex 미계산)', () => {
+    const ok = parseHeaderFiltersFromUrl(
+      ['pii.email'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(ok[0]?.condition).toEqual({
+      source: 'pii.email',
+      mode: 'in',
+      value: '',
+      values: [],
+      includeNull: true,
+    });
+
+    // 값 열거는 blind index 라 불가능 — 센티널 외 값이 섞이면 절 자체를 버린다.
+    expect(
+      parseHeaderFiltersFromUrl(
+        ['pii.email'],
+        ['in'],
+        [`a@b.com${SEP}${FILTER_NONE_VALUE}`],
+        candidates,
+        resultCodes,
+      ),
+    ).toEqual([]);
+  });
+
+  it('system.contact_result in — "결과 없음" 단독 선택도 절이 성립한다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.contact_result'],
+      ['in'],
+      [FILTER_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'in',
+          value: '',
+          values: [],
+          includeNull: true,
+        },
+      },
+    ]);
+  });
+
+  it('system.contact_result in — 코드 + "결과 없음" 혼합', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.contact_result'],
+      ['in'],
+      [`1.조사완료${SEP}${FILTER_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['1.조사완료']);
+    expect(result[0]?.condition.includeNull).toBe(true);
   });
 
   it('system.web in — 어휘 외 값 필터링, 상태 값과 레거시 true/false 는 수용', () => {

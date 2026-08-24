@@ -82,7 +82,22 @@ describe('listContactAttrValues', () => {
       scope: 'real',
     });
 
-    expect(result).toEqual({ values: ['상장', '코스닥'], truncated: false });
+    expect(result).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
+  });
+
+  it('빈 값 행이 있으면 hasEmpty=true — "(값 없음)" 선택지 노출 신호', async () => {
+    selectResults.push([{ scheme: visibleScheme }]);
+    selectResults.push([{ v: '상장' }]);
+    selectResults.push([{ id: 'ct-1' }]); // 빈 값 존재 확인 쿼리
+
+    const result = await listContactAttrValues({
+      surveyId: 'sv-1',
+      attrsKey: '기업유형',
+      scope: 'real',
+    });
+
+    // 빈 값은 values 에 섞이지 않고 플래그로만 알린다.
+    expect(result).toEqual({ values: ['상장'], truncated: false, hasEmpty: true });
   });
 
   it('limit+1 건 조회 시 truncated=true, values 는 limit 개로 절단', async () => {
