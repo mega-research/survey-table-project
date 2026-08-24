@@ -23,7 +23,7 @@ import type { Question, SurveyLookup } from '@/types/survey';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers.service';
-import { assertAnswerValueSize, loadPiiQuestionIds } from './response.service';
+import { assertAnswerValueSize, loadPiiQuestionIds } from './submitted-answers';
 
 export { SurveyOwnershipError };
 
