@@ -597,7 +597,7 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId: dropResponseId, reset: false });
+    expect(acquired).toEqual({ responseId: dropResponseId, reset: false, versionId: null });
     expect(await readRow(dropResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: { q1: '이탈 전 답' },
@@ -652,7 +652,7 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId: sameTabResponseId, reset: false });
+    expect(acquired).toEqual({ responseId: sameTabResponseId, reset: false, versionId: null });
     expect(await readRow(sameTabResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: { q1: '이탈 전 답' },
@@ -671,7 +671,7 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId: staleVersionResponseId, reset: true });
+    expect(acquired).toEqual({ responseId: staleVersionResponseId, reset: true, versionId: null });
     expect(await readRow(staleVersionResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: {},
@@ -692,7 +692,7 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId: concludedResponseId, reset: true });
+    expect(acquired).toEqual({ responseId: concludedResponseId, reset: true, versionId: null });
     expect(await readRow(concludedResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: {},
@@ -761,7 +761,7 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId, reset: true });
+    expect(acquired).toEqual({ responseId, reset: true, versionId: null });
     const rows = await db.execute<{
       id: string;
       question_responses: Record<string, unknown>;
