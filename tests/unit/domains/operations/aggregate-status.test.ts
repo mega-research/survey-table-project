@@ -51,7 +51,7 @@ describe('mapRowsToCounts', () => {
       { status: 'bad', count: 2 },
     ];
     expect(mapRowsToCounts(rows)).toEqual({
-      total: 13,
+      total: 6, // screened_out(7) 제외 — quotaful_out(4) + bad(2)
       completed: 0,
       screenedOut: 7,
       quotafulOut: 4,
@@ -61,7 +61,7 @@ describe('mapRowsToCounts', () => {
     });
   });
 
-  it('total === 종결 카테고리 카운트의 합 (in_progress 제외)', () => {
+  it('total === 적격 종결 카운트의 합 (in_progress·screened_out 제외)', () => {
     const rows = [
       { status: 'completed', count: 100 },
       { status: 'in_progress', count: 50 },
@@ -71,14 +71,36 @@ describe('mapRowsToCounts', () => {
       { status: 'drop', count: 15 },
     ];
     const result = mapRowsToCounts(rows);
-    const sumOfConcluded =
+    const sumOfEligible =
       result.completed +
-      result.screenedOut +
       result.quotafulOut +
       result.bad +
       result.drop;
-    expect(result.total).toBe(150);  // in_progress(50) 제외
-    expect(result.total).toBe(sumOfConcluded);
+    expect(result.total).toBe(130);  // in_progress(50)·screened_out(20) 제외
+    expect(result.total).toBe(sumOfEligible);
     expect(result.inProgress).toBe(50);  // inProgress 필드는 보존됨
+    expect(result.screenedOut).toBe(20); // 카운트 자체는 보존됨 (KPI 카드에 노출)
+  });
+
+  it('자격미달은 부적격이라 total 에 합산되지 않는다', () => {
+    const rows = [
+      { status: 'completed', count: 97 },
+      { status: 'screened_out', count: 4 },
+      { status: 'drop', count: 26 },
+    ];
+    const result = mapRowsToCounts(rows);
+
+    expect(result.screenedOut).toBe(4);
+    expect(result.total).toBe(123); // 97 + 26 — screened_out 제외
+  });
+
+  it('쿼터마감·불량은 적격 미완료라 total 에 남는다', () => {
+    const rows = [
+      { status: 'completed', count: 10 },
+      { status: 'quotaful_out', count: 3 },
+      { status: 'bad', count: 2 },
+      { status: 'screened_out', count: 5 },
+    ];
+    expect(mapRowsToCounts(rows).total).toBe(15); // 10 + 3 + 2
   });
 });

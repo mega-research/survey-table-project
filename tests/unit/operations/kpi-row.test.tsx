@@ -31,4 +31,23 @@ describe('KpiRow', () => {
     expect(screen.getByText('완료')).toAppearBefore(screen.getByText('쿼터'));
     expect(screen.getByText('쿼터')).toAppearBefore(screen.getByText('자격 미달'));
   });
+
+  it('자격 미달 카드는 비율 대신 제외 안내를 보여준다', () => {
+    render(<KpiRow counts={{ ...counts, total: 123, completed: 97, screenedOut: 4 }} quota={null} />);
+
+    const label = screen.getByText('자격 미달');
+    const card = label.parentElement as HTMLElement;
+
+    expect(within(card).getByText('전체·완료에서 제외')).toBeInTheDocument();
+    expect(within(card).queryByText('0.0%')).not.toBeInTheDocument();
+  });
+
+  it('자격 미달 카드에 전체 설명을 툴팁으로 단다', () => {
+    render(<KpiRow counts={{ ...counts, total: 123, completed: 97, screenedOut: 4 }} quota={null} />);
+
+    expect(screen.getByText('전체·완료에서 제외')).toHaveAttribute(
+      'title',
+      '자격미달인 사람은 전체응답(분모), 완료(분자)에서 제외됩니다.',
+    );
+  });
 });
