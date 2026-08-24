@@ -38,7 +38,7 @@ import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
-import { SurveyResponseHeader } from '@/features/survey-response/survey-response-header';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   InvalidTestLinkScreen,
   SurveyCompletedScreen,

@@ -6,7 +6,7 @@ import { PanelTop } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { ResponseHeaderSettings } from '@/features/survey-builder/response-header-settings';
-import { SurveyResponseHeader } from '@/features/survey-response/survey-response-header';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';

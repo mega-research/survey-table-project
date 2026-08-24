@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 
 import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
-import { RootGroupNameBadge } from '@/features/survey-response/step-views/root-group-name-badge';
+import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { RenderStep, StepItem } from '@/utils/group-ordering';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';

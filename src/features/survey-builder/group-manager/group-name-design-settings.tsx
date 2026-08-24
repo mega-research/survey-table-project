@@ -2,7 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 
-import { RootGroupNameBadge } from '@/features/survey-response/step-views/root-group-name-badge';
+import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
