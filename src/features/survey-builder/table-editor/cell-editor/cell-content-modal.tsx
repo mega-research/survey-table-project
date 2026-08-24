@@ -3,13 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   CheckSquare,
   ChevronDown,
   Circle,
@@ -19,7 +12,6 @@ import {
   Tag,
   Type,
   Video,
-  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -34,9 +26,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
 import {
@@ -53,16 +43,12 @@ import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import {
   type ContentType,
   GROUPABLE_CELL_TYPES,
-  INPUT_TEXT_ALIGN_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
   REQUIRED_CELL_TYPES,
-  TEXT_POSITION_CELL_TYPES,
   buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
-import type { CellFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
-import { VariableButton } from '@/features/survey-builder/variable-button';
 import { runAsyncAction } from '@/utils/run-async-action';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
@@ -98,32 +84,12 @@ import { CellGatingEditor } from './cell-gating-editor';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
+import { CellIdentityFields } from './cell-identity-fields';
+import { CellMergeFields } from './cell-merge-fields';
+import { CellMobileFields } from './cell-mobile-fields';
 import { InputCellTab } from './input-cell-tab';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
-
-const TEXT_POSITION_OPTIONS: Array<{
-  value: NonNullable<TableCell['textPosition']>;
-  icon: typeof ArrowUp;
-  label: string;
-}> = [
-  { value: 'top', icon: ArrowUp, label: '위' },
-  { value: 'bottom', icon: ArrowDown, label: '아래' },
-  { value: 'left', icon: ArrowLeft, label: '왼쪽' },
-  { value: 'right', icon: ArrowRight, label: '오른쪽' },
-];
-
-// 입력값 가로 정렬 — 'inherit' 은 미지정으로, 셀 정렬(horizontalAlign)을 따른다
-const INPUT_TEXT_ALIGN_OPTIONS: Array<{
-  value: CellFormState['inputTextAlign'];
-  icon: typeof AlignLeft | null;
-  label: string;
-}> = [
-  { value: 'inherit', icon: null, label: '셀 정렬 따름' },
-  { value: 'left', icon: AlignLeft, label: '왼쪽' },
-  { value: 'center', icon: AlignCenter, label: '가운데' },
-  { value: 'right', icon: AlignRight, label: '오른쪽' },
-];
 
 interface CellContentModalProps {
   isOpen: boolean;
@@ -257,13 +223,6 @@ export function CellContentModal({
     backgroundColor,
     textColor,
     horizontalAlign,
-    mobileDisplay,
-    mobileLabel,
-    textPosition,
-    inputTextAlign,
-    isMergeEnabled,
-    rowspan,
-    colspan,
     cellCode,
     isCustomCellCode,
     exportLabel,
@@ -293,7 +252,6 @@ export function CellContentModal({
   const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
     setContentType,
-    setTextContent,
     setImageUrl,
     setVideoUrl,
     setCheckboxOptions,
@@ -325,17 +283,8 @@ export function CellContentModal({
     setBackgroundColor,
     setTextColor,
     setHorizontalAlign,
-    setMobileDisplay,
-    setMobileLabel,
-    setTextPosition,
-    setInputTextAlign,
-    setIsMergeEnabled,
-    setRowspan,
-    setColspan,
     setCellCode,
-    setIsCustomCellCode,
     setExportLabel,
-    setIsCustomExportLabel,
     setSpssVarType,
     setSpssMeasure,
     setAnswerQuoteText,
@@ -756,210 +705,15 @@ export function CellContentModal({
           <DialogTitle>셀 내용 편집</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="common-text-content">셀 텍스트 내용</Label>
-            <div className="flex items-start gap-2">
-              <Textarea
-                id="common-text-content"
-                ref={textContentRef}
-                value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-                placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
-                rows={3}
-                className="flex-1 resize-none"
-              />
-              {variableCatalog.length > 0 && (
-                <VariableButton
-                  catalog={variableCatalog}
-                  inputRef={textContentRef}
-                  onChange={(v) => setTextContent(v)}
-                />
-              )}
-            </div>
-            {textContent && (
-              <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
-                미리보기: {textContent}
-              </div>
-            )}
-
-            {TEXT_POSITION_CELL_TYPES.has(contentType) && (
-              <div className="space-y-2 pt-1">
-                <Label className="text-sm font-medium">텍스트 위치</Label>
-                <div className="flex gap-2">
-                  {TEXT_POSITION_OPTIONS.map(({ value, icon: Icon, label }) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      variant={textPosition === value ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTextPosition(value)}
-                      className="flex-1"
-                    >
-                      <Icon className="mr-2 h-4 w-4" />
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500">
-                  왼쪽/오른쪽 선택 시 텍스트와 입력 영역이 한 줄에 배치되고 세로 가운데 정렬됩니다.
-                </p>
-              </div>
-            )}
-
-            {INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) && (
-              <div className="space-y-2 pt-1">
-                <Label className="text-sm font-medium">입력값 정렬</Label>
-                <div className="flex gap-2">
-                  {INPUT_TEXT_ALIGN_OPTIONS.map(({ value, icon: Icon, label }) => (
-                    <Button
-                      key={value}
-                      type="button"
-                      variant={inputTextAlign === value ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setInputTextAlign(value)}
-                      className="flex-1"
-                    >
-                      {Icon && <Icon className="mr-2 h-4 w-4" />}
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500">
-                  값이 칸 안에서 채워지는 방향입니다. 오른쪽을 고르면 숫자가 오른쪽 끝에 붙어
-                  자릿수를 비교하기 좋습니다.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="cell-code">셀 코드</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    id="cell-code"
-                    value={cellCode}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setCellCode(val);
-                      // 사용자가 자동생성값과 다르게 수정하면 커스텀으로 표시
-                      setIsCustomCellCode(val !== '' && val !== autoCellCode);
-                    }}
-                    placeholder={autoCellCode || '예: Q4-1_r1_c1'}
-                    className="h-9"
-                  />
-                  {isCustomCellCode && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setCellCode(autoCellCode || '');
-                        setIsCustomCellCode(false);
-                      }}
-                      title="자동값으로 초기화"
-                      className="h-9 w-9 shrink-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-                {autoCellCode && isCustomCellCode && (
-                  <p className="text-[10px] text-gray-400">자동: {autoCellCode}</p>
-                )}
-                {!cellCode &&
-                  (INTERACTIVE_CELL_TYPES.has(contentType) || contentType === 'ranking') && (
-                    <p className="text-[10px] text-amber-500">
-                      셀코드가 비어있으면 내보내기에서 제외됩니다.
-                    </p>
-                  )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="export-label">엑셀 라벨</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    id="export-label"
-                    value={exportLabel}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setExportLabel(val);
-                      setIsCustomExportLabel(val !== '' && val !== autoExportLabel);
-                    }}
-                    placeholder={autoExportLabel || '예: 가구TV보유_TV종류_UHD'}
-                    className="h-9"
-                  />
-                  {isCustomExportLabel && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setExportLabel(autoExportLabel || '');
-                        setIsCustomExportLabel(false);
-                      }}
-                      title="자동값으로 초기화"
-                      className="h-9 w-9 shrink-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-                {autoExportLabel && isCustomExportLabel && (
-                  <p className="text-[10px] text-gray-400">자동: {autoExportLabel}</p>
-                )}
-              </div>
-            </div>
-
-            {/* SPSS 변수 타입 / 측정 수준 (입력 셀만 표시) */}
-            {INTERACTIVE_CELL_TYPES.has(contentType) && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="cell-spss-var-type" className="text-xs">
-                    변수 타입
-                  </Label>
-                  <select
-                    id="cell-spss-var-type"
-                    value={spssVarType || ''}
-                    onChange={(e) =>
-                      setSpssVarType((e.target.value || undefined) as TableCell['spssVarType'])
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-                  >
-                    <option value="" disabled>
-                      선택
-                    </option>
-                    <option value="Numeric">Numeric</option>
-                    <option value="String">String</option>
-                    <option value="Date">Date</option>
-                    <option value="DateTime">DateTime</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="cell-spss-measure" className="text-xs">
-                    측정 수준
-                  </Label>
-                  <select
-                    id="cell-spss-measure"
-                    value={spssMeasure || ''}
-                    onChange={(e) =>
-                      setSpssMeasure((e.target.value || undefined) as TableCell['spssMeasure'])
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-                  >
-                    <option value="" disabled>
-                      선택
-                    </option>
-                    <option value="Nominal">Nominal (명목)</option>
-                    <option value="Ordinal">Ordinal (순서)</option>
-                    <option value="Continuous">Continuous (척도)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <CellIdentityFields
+          form={form}
+          setters={setters}
+          cell={cell}
+          textContentRef={textContentRef}
+          autoCellCode={autoCellCode}
+          autoExportLabel={autoExportLabel}
+          variableCatalog={variableCatalog}
+        />
 
         <Tabs
           value={contentType}
@@ -1469,200 +1223,16 @@ export function CellContentModal({
           )}
 
         {/* 셀 병합 설정 */}
-        <div className="mt-6 border-t border-gray-200 pt-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-900">셀 병합</h3>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="merge-toggle" className="cursor-pointer text-sm text-gray-600">
-                {isMergeEnabled ? '활성화됨' : '비활성화됨'}
-              </Label>
-              <Switch
-                id="merge-toggle"
-                checked={isMergeEnabled}
-                onCheckedChange={(checked) => {
-                  setIsMergeEnabled(checked);
-                  if (!checked) {
-                    setRowspan(1);
-                    setColspan(1);
-                  } else {
-                    // 토글 켤 때 빈 값이면 1로 설정
-                    if (rowspan === '') setRowspan(1);
-                    if (colspan === '') setColspan(1);
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          {isMergeEnabled && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="rowspan">행 병합 (세로로 아래)</Label>
-                  <Input
-                    id="rowspan"
-                    type="number"
-                    min={1}
-                    value={rowspan}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '') {
-                        setRowspan('');
-                      } else {
-                        const num = parseInt(value);
-                        if (!isNaN(num) && num >= 1) {
-                          setRowspan(num);
-                        }
-                      }
-                    }}
-                    onBlur={() => {
-                      if (rowspan === '') {
-                        setRowspan(1);
-                      }
-                    }}
-                    className="w-full"
-                    placeholder="1"
-                  />
-                  <p className="text-xs text-gray-500">
-                    현재: {rowspan === '' || rowspan === 1 ? '병합 안 함' : `${rowspan}칸 병합`}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="colspan">열 병합 (가로로 우측)</Label>
-                  <Input
-                    id="colspan"
-                    type="number"
-                    min={1}
-                    value={colspan}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '') {
-                        setColspan('');
-                      } else {
-                        const num = parseInt(value);
-                        if (!isNaN(num) && num >= 1) {
-                          setColspan(num);
-                        }
-                      }
-                    }}
-                    onBlur={() => {
-                      if (colspan === '') {
-                        setColspan(1);
-                      }
-                    }}
-                    className="w-full"
-                    placeholder="1"
-                  />
-                  <p className="text-xs text-gray-500">
-                    현재: {colspan === '' || colspan === 1 ? '병합 안 함' : `${colspan}칸 병합`}
-                  </p>
-                </div>
-              </div>
-
-              {((typeof rowspan === 'number' && rowspan > 1) ||
-                (typeof colspan === 'number' && colspan > 1)) && (
-                <div className="mt-3 rounded-lg bg-yellow-50 p-3">
-                  <p className="text-xs text-yellow-800">
-                    <strong>주의:</strong> 셀을 병합하면 오른쪽/아래에 있는 셀들이 자동으로
-                    숨겨집니다. 병합된 영역만큼의 공간이 필요하므로 테이블 구조를 미리 확인하세요.
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <CellMergeFields form={form} setters={setters} />
 
         {/* 모바일 카드 표시 설정 */}
-        {(showContentMobileDisplay || showInteractiveMobileLabel) && (
-          <div className="mt-6 border-t border-gray-200 pt-6">
-            <h3 className="mb-3 text-sm font-medium text-gray-900">모바일 카드 표시</h3>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={mobileDisplay === 'hidden' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMobileDisplay('hidden')}
-                className="flex-1"
-              >
-                숨기기
-              </Button>
-              {showContentMobileDisplay ? (
-                <>
-                  {contentType === 'text' && (
-                    <>
-                      <Button
-                        type="button"
-                        variant={mobileDisplay === 'header' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setMobileDisplay('header')}
-                        className="flex-1"
-                      >
-                        헤더
-                      </Button>
-                      {/* 카드 범례: 이 표의 모든 응답 카드 상단에 한 행으로 표시 (스케일 앵커 라벨용) */}
-                      <Button
-                        type="button"
-                        variant={mobileDisplay === 'legend' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setMobileDisplay('legend')}
-                        className="flex-1"
-                      >
-                        카드 범례
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    type="button"
-                    variant={mobileDisplay === 'inline' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setMobileDisplay('inline')}
-                    className="flex-1"
-                  >
-                    바로표시
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={mobileDisplay === 'collapsed' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setMobileDisplay('collapsed')}
-                    className="flex-1"
-                  >
-                    자세히
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  variant={mobileDisplay !== 'hidden' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setMobileDisplay('inline')}
-                  className="flex-1"
-                >
-                  표시
-                </Button>
-              )}
-            </div>
-
-            {/* 셀 라벨 — 모바일 카드/드릴다운에서 입력칸 위에 붙는 제목 */}
-            {showInteractiveMobileLabel && mobileDisplay !== 'hidden' && (
-              <div className="mt-4 space-y-2">
-                <Label htmlFor="mobile-label">셀 라벨</Label>
-                <Input
-                  id="mobile-label"
-                  value={mobileLabel}
-                  onChange={(e) => setMobileLabel(e.target.value)}
-                  placeholder={exportLabel || columnLabel || '열 제목'}
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500">
-                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도 없으면
-                  열 제목이 사용됩니다.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        <CellMobileFields
+          form={form}
+          setters={setters}
+          columnLabel={columnLabel}
+          showContentMobileDisplay={showContentMobileDisplay}
+          showInteractiveMobileLabel={showInteractiveMobileLabel}
+        />
 
         <div className="mt-6 border-t border-gray-200 pt-6">
           <h3 className="mb-4 text-sm font-semibold text-gray-900">셀 스타일</h3>
