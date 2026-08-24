@@ -113,7 +113,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
     expect(result).toMatchObject({ id: 'r1', isCompleted: true });
   });
 
-  it('가드에 막혀 0행이고 종결 status(screened_out)면 완료 처리를 거부한다 (덮어쓰기 방지)', async () => {
+  it('가드에 막혀 0행이고 종결 status(screened_out)면 멱등 흡수하되 덮어쓰지 않는다 (덮어쓰기 방지)', async () => {
     updateReturningMock.mockResolvedValue([]);
     // 폴백 SELECT: 이미 자격미달 종결 — isCompleted=false
     selectLimitMock.mockResolvedValue([
@@ -122,7 +122,18 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
 
     const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
 
-    await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
+    // 종결 상태(status !== 'in_progress')는 isCompleted 와 무관하게 멱등 흡수 대상이다
+    // (fix round 1 — screened_out 재시도가 throw 대신 "이미 완료된 설문" 안내로 접히도록).
+    // throw 하지 않는 것과 별개로, 원 계약(자격미달 종결 행을 completed 로 덮어쓰지 않는다)은
+    // 반환된 행의 status/isCompleted 가 그대로 screened_out/false 인지로 여전히 고정한다.
+    const result = await completeResponse({ responseId: 'r1' });
+
+    expect(result).toMatchObject({
+      id: 'r1',
+      status: 'screened_out',
+      isCompleted: false,
+      alreadyCompleted: true,
+    });
   });
 
   it('가드에 막혀 0행이고 soft-delete 된 행이면 (완료여부 무관) 완료 처리를 거부한다 (부활 방지)', async () => {
