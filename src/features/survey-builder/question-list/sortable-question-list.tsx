@@ -53,7 +53,7 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
-import { resolveEffectiveOptionTextsByQuestion } from '@/features/survey-response/lib/required-option-text-validation';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';

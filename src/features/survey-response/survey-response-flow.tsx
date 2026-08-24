@@ -76,10 +76,8 @@ import {
   collectNumericIssues,
   collectVisibleTableCells,
 } from '@/features/survey-response/lib/numeric-validation';
-import {
-  collectRequiredOptionTextIssues,
-  resolveEffectiveOptionTextsByQuestion,
-} from '@/features/survey-response/lib/required-option-text-validation';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
+import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
 import { generateId } from '@/lib/utils';
 import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';

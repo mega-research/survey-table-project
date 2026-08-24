@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import {
   collectRequiredOptionTextIssues,
   collectVisibleTableCells,
-  resolveEffectiveOptionTextsByQuestion,
 } from '@/features/survey-response/lib/required-option-text-validation';
 import type { Question, TableCell } from '@/types/survey';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
