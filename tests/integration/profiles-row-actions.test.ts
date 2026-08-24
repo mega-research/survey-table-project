@@ -698,7 +698,7 @@ describe('profiles-row-actions', () => {
       expect(after?.startedAt.getTime()).toBe(before?.startedAt.getTime());
     });
 
-    it('삭제된 응답은 수정 거부 — Cannot edit deleted response throw', async () => {
+    it('삭제된 응답은 수정 거부 — response_deleted throw', async () => {
       const surveyId = createTestSurvey();
       const responseId = createTestResponse(surveyId);
       await softDeleteResponse({ surveyId, responseId });
@@ -709,7 +709,7 @@ describe('profiles-row-actions', () => {
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),
-      ).rejects.toThrow('Cannot edit deleted response');
+      ).rejects.toMatchObject({ reason: 'response_deleted' });
     });
 
     it('response_answers 를 새 응답으로 재기록한다 (옛 답 제거 + 새 답 INSERT)', async () => {
@@ -751,7 +751,7 @@ describe('profiles-row-actions', () => {
       expect(remaining0.questionId).toBe(newQid);
     });
 
-    it('존재하지 않는 응답은 Response not found throw', async () => {
+    it('존재하지 않는 응답은 response_not_found throw', async () => {
       const surveyId = createTestSurvey();
       await expect(
         saveAdminEdit(
@@ -759,7 +759,7 @@ describe('profiles-row-actions', () => {
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),
-      ).rejects.toThrow('Response not found');
+      ).rejects.toMatchObject({ reason: 'response_not_found' });
     });
   });
 

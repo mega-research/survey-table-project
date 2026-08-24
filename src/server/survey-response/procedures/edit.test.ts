@@ -62,8 +62,10 @@ describe('surveyResponse.edit procedures', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
-  it("'Response not found' throw는 NOT_FOUND로 매핑된다", async () => {
-    vi.mocked(svc.saveAdminEdit).mockRejectedValue(new Error('Response not found') as never);
+  it('response_not_found throw는 NOT_FOUND로 매핑된다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockRejectedValue(
+      new svc.ResponseEditError('response_not_found') as never,
+    );
     const client = createRouterClient({ edit }, { context: authedContext() });
     await expect(
       client.edit.saveAdminEdit({
@@ -75,9 +77,9 @@ describe('surveyResponse.edit procedures', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
-  it("'Cannot edit deleted response' throw는 BAD_REQUEST로 매핑된다", async () => {
+  it('response_deleted throw는 BAD_REQUEST로 매핑된다', async () => {
     vi.mocked(svc.saveAdminEdit).mockRejectedValue(
-      new Error('Cannot edit deleted response') as never,
+      new svc.ResponseEditError('response_deleted') as never,
     );
     const client = createRouterClient({ edit }, { context: authedContext() });
     await expect(
@@ -222,8 +224,10 @@ describe('surveyResponse.edit procedures', () => {
     );
   });
 
-  it('Version conflict 에러를 CONFLICT ORPCError 로 매핑한다', async () => {
-    vi.mocked(svc.saveAdminEdit).mockRejectedValue(new Error('Version conflict') as never);
+  it('version_conflict 에러를 CONFLICT ORPCError 로 매핑한다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockRejectedValue(
+      new svc.ResponseEditError('version_conflict') as never,
+    );
     const client = createRouterClient({ edit }, { context: authedContext() });
     await expect(
       client.edit.saveAdminEdit({

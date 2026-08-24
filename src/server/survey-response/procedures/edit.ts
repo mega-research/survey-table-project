@@ -7,11 +7,23 @@ import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit
 import * as svc from '../services/response-edit.service';
 import { SurveyNotAcceptingResponsesError } from '../services/response.service';
 
+/** ResponseEditError 사유별 사용자 표시 — 문구는 그대로 유지한다. */
+const EDIT_ERROR_RESPONSES: Record<
+  svc.ResponseEditErrorReason,
+  { code: 'NOT_FOUND' | 'BAD_REQUEST' | 'CONFLICT'; message: string }
+> = {
+  response_not_found: { code: 'NOT_FOUND', message: '응답을 찾을 수 없습니다' },
+  response_deleted: { code: 'BAD_REQUEST', message: '삭제된 응답은 수정할 수 없습니다' },
+  version_conflict: {
+    code: 'CONFLICT',
+    message: '수정 중 새 버전이 배포되었습니다. 새로고침 후 다시 수정해 주세요.',
+  },
+};
+
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.
- * - SurveyOwnershipError('not_found') / 'Response not found' → NOT_FOUND.
- * - 'Cannot edit deleted response' → BAD_REQUEST.
- * - 'Version conflict' → CONFLICT.
+ * - SurveyOwnershipError('not_found') → NOT_FOUND.
+ * - ResponseEditError → 사유별 매핑(위 표).
  * - answer_value_too_large(크기 가드) → BAD_REQUEST.
  */
 function mapServiceError(err: unknown): never {
@@ -24,16 +36,9 @@ function mapServiceError(err: unknown): never {
       message: '응답값이 너무 큽니다. 해당 문항의 입력을 줄여 주세요.',
     });
   }
-  if (err instanceof Error && err.message === 'Response not found') {
-    throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다' });
-  }
-  if (err instanceof Error && err.message === 'Cannot edit deleted response') {
-    throw new ORPCError('BAD_REQUEST', { message: '삭제된 응답은 수정할 수 없습니다' });
-  }
-  if (err instanceof Error && err.message === 'Version conflict') {
-    throw new ORPCError('CONFLICT', {
-      message: '수정 중 새 버전이 배포되었습니다. 새로고침 후 다시 수정해 주세요.',
-    });
+  if (err instanceof svc.ResponseEditError) {
+    const mapped = EDIT_ERROR_RESPONSES[err.reason];
+    throw new ORPCError(mapped.code, { message: mapped.message });
   }
   throw err;
 }

@@ -276,7 +276,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         { id: 'admin-1', email: 'a@b.com' },
         false,
       ),
-    ).rejects.toThrow('Cannot edit deleted response');
+    ).rejects.toMatchObject({ reason: 'response_deleted' });
 
     // 경합에서 졌으면 정규화 응답 재작성은 하지 않아야 한다 (롤백 의도).
     expect(replaceResponseAnswers).not.toHaveBeenCalled();

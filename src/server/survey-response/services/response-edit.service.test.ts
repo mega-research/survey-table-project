@@ -202,7 +202,7 @@ describe('saveAdminEdit 파티션 가드', () => {
         EDITOR,
         true,
       ),
-    ).rejects.toThrow('Response not found');
+    ).rejects.toMatchObject({ reason: 'response_not_found' });
 
     // 실데이터 파티션 행은 게스트 시도로 인해 조용히 바뀌지 않아야 한다.
     expect(h.responses[0]?.isTest).toBe(true);
@@ -359,7 +359,7 @@ describe('버전 가드와 이관', () => {
     });
   }
 
-  it('렌더 버전이 현재 배포 버전과 다르면 Version conflict 로 거부한다', async () => {
+  it('렌더 버전이 현재 배포 버전과 다르면 version_conflict 로 거부한다', async () => {
     h.surveys.push({ id: SURVEY_ID, testModeEnabled: false, currentVersionId: 'v85' });
     pushResponse({ versionId: 'v81' });
 
@@ -369,7 +369,7 @@ describe('버전 가드와 이관', () => {
         EDITOR,
         false,
       ),
-    ).rejects.toThrow('Version conflict');
+    ).rejects.toMatchObject({ reason: 'version_conflict' });
 
     // 가드에서 즉시 거부되어 응답 UPDATE(트랜잭션)까지 도달하지 않았는지 확인.
     expect(db.transaction).not.toHaveBeenCalled();

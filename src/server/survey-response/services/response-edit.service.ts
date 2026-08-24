@@ -27,9 +27,28 @@ import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers.service';
 import { assertAnswerValueSize, loadPiiQuestionIds } from './response.service';
 
-// 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
-// procedure 가 ORPCError 로 매핑한다.
 export { SurveyOwnershipError };
+
+/** 응답 편집 거부 사유. */
+export type ResponseEditErrorReason =
+  | 'response_not_found'
+  | 'response_deleted'
+  | 'version_conflict';
+
+/**
+ * 응답 편집 거부. procedure 가 메시지 문자열이 아니라 reason 으로 분기한다 —
+ * 문구를 손대면 매핑이 조용히 죽던 자리였다(SurveyNotAcceptingResponsesError 와 같은 형태).
+ * 여기 메시지는 로그용이고 사용자에게 보이는 문구는 procedure 가 따로 만든다.
+ */
+export class ResponseEditError extends Error {
+  readonly reason: ResponseEditErrorReason;
+
+  constructor(reason: ResponseEditErrorReason) {
+    super(`응답을 수정할 수 없습니다. (${reason})`);
+    this.name = 'ResponseEditError';
+    this.reason = reason;
+  }
+}
 
 /** 이관 시 metadata 갱신 sql 조각 — adminEditRollback 1회 백업 (+ 출처 버전 기록) */
 function buildMigrationMetadataSql(rollback: {
@@ -79,7 +98,7 @@ function buildMigrationMetadataSql(rollback: {
  * feature 의 scoped 절차와 동일 패턴) — 게스트는 전역 테스트 모드 플래그와 무관하게
  * 항상 real 파티션만 읽고 쓴다. select/UPDATE 모두 resolveWriteScopeIsTest 로 확정한
  * isTest 값으로 스코프를 좁혀, 테스트 파티션 responseId 를 알아내도 편집이 닿지 않게
- * 한다 — 파티션이 안 맞으면 존재하지 않는 응답과 동일하게 'Response not found' 로 처리.
+ * 한다 — 파티션이 안 맞으면 존재하지 않는 응답과 동일하게 response_not_found 로 처리.
  */
 export async function saveAdminEdit(
   input: SaveAdminEditInput,
@@ -100,7 +119,7 @@ export async function saveAdminEdit(
   // 버전과 다르면 저장을 거부한다. 입력 구조와 저장 버전의 불일치를 원천 차단하는 게
   // 목적이므로, 입력값 보존 없이 새로고침 재진입을 요구한다.
   if (input.versionId !== (ownerRow.currentVersionId ?? null)) {
-    throw new Error('Version conflict');
+    throw new ResponseEditError('version_conflict');
   }
 
   const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isGuest);
@@ -112,9 +131,9 @@ export async function saveAdminEdit(
       eq(surveyResponses.isTest, isTest),
     ),
   });
-  if (!existing) throw new Error('Response not found');
+  if (!existing) throw new ResponseEditError('response_not_found');
   if (existing.deletedAt !== null) {
-    throw new Error('Cannot edit deleted response');
+    throw new ResponseEditError('response_deleted');
   }
 
   // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(=현재 배포 버전). 미배포 설문(null)만
@@ -294,7 +313,7 @@ export async function saveAdminEdit(
       .returning({ id: surveyResponses.id });
 
     if (updated.length === 0) {
-      throw new Error('Cannot edit deleted response');
+      throw new ResponseEditError('response_deleted');
     }
 
     await replaceResponseAnswers(tx, responseId, surveyId, storedResponses);
