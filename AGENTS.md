@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-24 (read-models 에 버전 스냅샷 추가 · features/ 파일 수 실측 반영. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-08-24 (read-models 에 버전 스냅샷 추가 · 두 화면 공용 조각을 question-renderer 로 · features/ 파일 수와 하위 폴더 실측 반영. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
 
 ---
 
@@ -106,8 +106,10 @@ src/
 │
 ├── features/                   # 프론트 기능 묶음 5개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
 │   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
+│   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
+│   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
-│   ├── survey-builder/         # 설문 편집기 (116개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 (117개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
@@ -123,14 +125,16 @@ src/
 │   │   ├── utils/              # option-value-remap
 │   │   └── (루트 21개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
 │   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
-│   ├── question-renderer/      # 빌더 미리보기·응답 페이지 양쪽이 쓰는 질문 렌더러 (73개) — 어떤 feature 도 import 하지 않는다
+│   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (76개) — 어떤 feature 도 import 하지 않는다
+│   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
 │   │   ├── cells/              # 표 셀 렌더러
 │   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅
-│   │   ├── stores/             # survey-response-store(실응답)·test-response-store(테스트/미리보기) — 응답 쓰기 훅이 여기 있어 렌더러 소유
-│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer
-│   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (30개) — 렌더러만 import
+│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts
+│   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (28개) — 렌더러만 import
 │   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
-│   │   └── lib/                # version-rebase (순수)
+│   │   ├── lib/                # version-rebase·numeric-validation·required-option-text-validation (순수)
+│   │   ├── step-views/         # 스텝 단위 화면
+│   │   └── stores/             # survey-response-store(실응답) — 미리보기용 test-response-store 는 survey-builder/stores
 │   ├── operations/             # 운영 콘솔 (83개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
