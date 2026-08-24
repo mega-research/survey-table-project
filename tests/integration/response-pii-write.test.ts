@@ -233,7 +233,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('스냅샷에서 piiEncrypted=true 면 jsonb_set 값이 v1: 암호문이다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -252,7 +252,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('PII 문항: 평문은 상한 이하지만 암호문이 넘으면 UPDATE 이전에 거부한다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await expect(
       updateQuestionResponse({
@@ -269,7 +269,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('비PII 문항: 평문 220KB 는 종전대로 저장된다', async () => {
     executeMock.mockResolvedValue([{ pii: false }]);
     const { updateQuestionResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -282,7 +282,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('piiEncrypted=false 면 평문 그대로 저장한다', async () => {
     executeMock.mockResolvedValue([{ pii: false }]);
     const { updateQuestionResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -301,7 +301,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('assert 쿼리 SQL 텍스트에 live 합집합 조각(FROM questions 서브셀렉트 + OR COALESCE)이 포함된다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -342,7 +342,7 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
 
   it('INSERT values 의 questionResponses 값이 평문이 아닌 v1: 암호문이다', async () => {
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -380,7 +380,7 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
 
   it('평문이 상한 이하라도 암호문이 상한을 넘으면 INSERT 이전에 거부한다', async () => {
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB). 이 경로의 판정 기준은 저장될 값이다.
     await expect(
@@ -444,7 +444,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -482,7 +482,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -521,7 +521,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -556,7 +556,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-entry.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -831,7 +831,7 @@ describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () =
       { id: PLAIN_QUESTION_ID, pii: true },
     ]);
     const { saveDraftResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-draft.service'
     );
     await expect(
       saveDraftResponse({
@@ -849,7 +849,7 @@ describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () =
   it('비PII 문항이면 같은 평문 220KB 가 종전대로 저장된다', async () => {
     executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: false }]);
     const { saveDraftResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-draft.service'
     );
     const result = await saveDraftResponse({
       responseId: RESPONSE_ID,
@@ -862,7 +862,7 @@ describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () =
   it('beacon 래퍼는 같은 거부를 500 이 아니라 skipped 로 접는다', async () => {
     executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: true }]);
     const { saveDraftResponseIfActive } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-draft.service'
     );
     // judgeRowGate 용 사전 조회 — in_progress 활성 행.
     responseFindFirstMock.mockResolvedValue({

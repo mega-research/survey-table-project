@@ -13,10 +13,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { questions, surveyResponses, surveys } from '@/db/schema';
-import {
-  applyDraftAnswersUpdate,
-  saveDraftResponse,
-} from '@/server/survey-response/services/response.service';
+import { applyDraftAnswersUpdate, saveDraftResponse } from '@/server/survey-response/services/response-draft.service';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

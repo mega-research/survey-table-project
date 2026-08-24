@@ -104,7 +104,7 @@ describe('updateQuestionResponse — progress_pct SET', () => {
   });
 
   it('set() 인자에 progressPct SQL 이 포함된다', async () => {
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await updateQuestionResponse({ responseId: 'r1', questionId: 'q3', value: 'value' });
 
     expect(updateSetMock).toHaveBeenCalledTimes(1);
@@ -119,7 +119,7 @@ describe('updateQuestionResponse — progress_pct SET', () => {
   it('응답 행 없음 → throw (응답을 찾을 수 없습니다.)', async () => {
     // 변조 가드(#5): 응답 행 조회가 비면 곧장 거부.
     findFirstMock.mockResolvedValue(undefined);
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await expect(
       updateQuestionResponse({ responseId: 'missing', questionId: 'q1', value: 'v' }),
     ).rejects.toThrow('응답을 찾을 수 없습니다.');

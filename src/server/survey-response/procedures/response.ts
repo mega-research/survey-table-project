@@ -12,7 +12,9 @@ import {
   CompleteResponseOutput,
 } from '../domain/response';
 import * as completion from '../services/response-completion.service';
-import * as svc from '../services/response.service';
+import * as core from '../services/response-answer-write';
+import * as draft from '../services/response-draft.service';
+import * as entry from '../services/response-entry.service';
 
 // 회당 소수 호출 쓰기(생성/완료/updateAnswer)는 response-mutation 그룹으로 IP 당 rate limit 한다.
 // saveDraft 는 고빈도 체크포인트라 별도 response-draft 버킷을 쓴다 — 같은 버킷이면
@@ -30,7 +32,7 @@ const draftRateLimited = pub.use(withRateLimit('response-draft'));
 const updateAnswer = rateLimited
   .input(UpdateQuestionResponseInput)
   .output(SurveyResponseRowSchema)
-  .handler(({ input }) => svc.updateQuestionResponse(input));
+  .handler(({ input }) => core.updateQuestionResponse(input));
 
 /**
  * 페이지 이동 전 변경 답변을 한 요청으로 저장한다.
@@ -39,7 +41,7 @@ const saveDraft = draftRateLimited
   .input(SaveDraftResponseInput)
   .output(SaveDraftResponseOutput)
   .handler(async ({ input }) => {
-    const result = await svc.saveDraftResponse(input);
+    const result = await draft.saveDraftResponse(input);
     return {
       ok: true as const,
       applied: result.applied,
@@ -53,7 +55,7 @@ const saveDraft = draftRateLimited
 const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => svc.createResponseWithFirstAnswer(input));
+  .handler(({ input }) => entry.createResponseWithFirstAnswer(input));
 
 /**
  * 답변 없는 빈 응답 행 생성(pub). notice-only 등 silent data loss 방지 fallback.
@@ -61,7 +63,7 @@ const createWithFirstAnswer = rateLimited
 const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => svc.createBlankResponse(input));
+  .handler(({ input }) => entry.createBlankResponse(input));
 
 /**
  * 응답 완료(pub). JSONB + response_answers 이중 쓰기, prefill 재검증, 컨택 매칭 후처리.

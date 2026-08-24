@@ -4,13 +4,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ORPCContext } from '@/server/context';
 
 import * as completion from '../services/response-completion.service';
-import * as svc from '../services/response.service';
+import * as core from '../services/response-answer-write';
+import * as draft from '../services/response-draft.service';
+import * as entry from '../services/response-entry.service';
 import { response } from './response';
 
-vi.mock('../services/response.service', () => ({
-  startResponse: vi.fn(),
+vi.mock('../services/response-answer-write', () => ({
   updateQuestionResponse: vi.fn(),
+}));
+
+vi.mock('../services/response-draft.service', () => ({
   saveDraftResponse: vi.fn(),
+}));
+
+vi.mock('../services/response-entry.service', () => ({
+  startResponse: vi.fn(),
   createResponseWithFirstAnswer: vi.fn(),
   createBlankResponse: vi.fn(),
 }));
@@ -48,14 +56,14 @@ describe('surveyResponse.response procedures', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('updateAnswer(pub)는 객체 input 을 service 에 그대로 위임한다', async () => {
-    vi.mocked(svc.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
+    vi.mocked(core.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ response }, { context: anonContext() });
     await client.response.updateAnswer({
       responseId: RESPONSE_ID,
       questionId: QUESTION_ID,
       value: { foo: 'bar' },
     });
-    expect(svc.updateQuestionResponse).toHaveBeenCalledWith({
+    expect(core.updateQuestionResponse).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       questionId: QUESTION_ID,
       value: { foo: 'bar' },
@@ -64,7 +72,7 @@ describe('surveyResponse.response procedures', () => {
 
   it('updateAnswer(pub)는 대상자 테스트 attempt 식별자를 손실 없이 위임한다', async () => {
     const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
-    vi.mocked(svc.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
+    vi.mocked(core.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ response }, { context: anonContext() });
 
     await client.response.updateAnswer({
@@ -75,7 +83,7 @@ describe('surveyResponse.response procedures', () => {
       sessionId: 'target-test-session',
     } as never);
 
-    expect(svc.updateQuestionResponse).toHaveBeenCalledWith({
+    expect(core.updateQuestionResponse).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       questionId: QUESTION_ID,
       value: 'answer',
@@ -85,7 +93,7 @@ describe('surveyResponse.response procedures', () => {
   });
 
   it('saveDraft(pub)는 현재 페이지 답변 묶음을 service에 위임한다', async () => {
-    vi.mocked(svc.saveDraftResponse).mockResolvedValue({ applied: true });
+    vi.mocked(draft.saveDraftResponse).mockResolvedValue({ applied: true });
     const client = createRouterClient({ response }, { context: anonContext() });
 
     const result = await client.response.saveDraft({
@@ -94,14 +102,14 @@ describe('surveyResponse.response procedures', () => {
     });
 
     expect(result).toEqual({ ok: true, applied: true });
-    expect(svc.saveDraftResponse).toHaveBeenCalledWith({
+    expect(draft.saveDraftResponse).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       answers: { q1: '첫 답', q2: '둘째 답' },
     });
   });
 
   it('saveDraft(pub)는 service 가 stale 로 판정하면 applied:false 를 그대로 실어 보낸다', async () => {
-    vi.mocked(svc.saveDraftResponse).mockResolvedValue({ applied: false });
+    vi.mocked(draft.saveDraftResponse).mockResolvedValue({ applied: false });
     const client = createRouterClient({ response }, { context: anonContext() });
 
     const result = await client.response.saveDraft({
@@ -114,7 +122,7 @@ describe('surveyResponse.response procedures', () => {
   });
 
   it('createWithFirstAnswer(pub)는 created 분기를 통과시킨다', async () => {
-    vi.mocked(svc.createResponseWithFirstAnswer).mockResolvedValue({
+    vi.mocked(entry.createResponseWithFirstAnswer).mockResolvedValue({
       kind: 'created',
       id: RESPONSE_ID,
       contactTargetId: CONTACT_ID,
@@ -131,7 +139,7 @@ describe('surveyResponse.response procedures', () => {
       clientSignals: CLIENT_SIGNALS,
     });
     expect(res).toEqual({ kind: 'created', id: RESPONSE_ID, contactTargetId: CONTACT_ID });
-    expect(svc.createResponseWithFirstAnswer).toHaveBeenCalledWith(
+    expect(entry.createResponseWithFirstAnswer).toHaveBeenCalledWith(
       expect.objectContaining({
         surveyId: SURVEY_ID,
         sessionId: 'sess-1',
@@ -142,7 +150,7 @@ describe('surveyResponse.response procedures', () => {
 
   it('createWithFirstAnswer(pub)는 테스트 attemptId를 위임한다', async () => {
     const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
-    vi.mocked(svc.createResponseWithFirstAnswer).mockResolvedValue({
+    vi.mocked(entry.createResponseWithFirstAnswer).mockResolvedValue({
       kind: 'created',
       id: RESPONSE_ID,
       contactTargetId: CONTACT_ID,
@@ -161,13 +169,13 @@ describe('surveyResponse.response procedures', () => {
       attemptId,
     } as never);
 
-    expect(svc.createResponseWithFirstAnswer).toHaveBeenCalledWith(
+    expect(entry.createResponseWithFirstAnswer).toHaveBeenCalledWith(
       expect.objectContaining({ attemptId }),
     );
   });
 
   it('createWithFirstAnswer(pub)는 blocked 분기(reason)를 통과시킨다', async () => {
-    vi.mocked(svc.createResponseWithFirstAnswer).mockResolvedValue({
+    vi.mocked(entry.createResponseWithFirstAnswer).mockResolvedValue({
       kind: 'blocked',
       reason: 'token_already_used',
     } as never);
@@ -186,7 +194,7 @@ describe('surveyResponse.response procedures', () => {
   });
 
   it('createBlank(pub)는 clientSignals null 도 통과시켜 service 에 위임한다', async () => {
-    vi.mocked(svc.createBlankResponse).mockResolvedValue({
+    vi.mocked(entry.createBlankResponse).mockResolvedValue({
       kind: 'created',
       id: RESPONSE_ID,
       contactTargetId: null,
@@ -200,14 +208,14 @@ describe('surveyResponse.response procedures', () => {
       clientSignals: null,
     });
     expect(res).toEqual({ kind: 'created', id: RESPONSE_ID, contactTargetId: null });
-    expect(svc.createBlankResponse).toHaveBeenCalledWith(
+    expect(entry.createBlankResponse).toHaveBeenCalledWith(
       expect.objectContaining({ surveyId: SURVEY_ID, clientSignals: null }),
     );
   });
 
   it('createBlank(pub)는 테스트 attemptId를 위임한다', async () => {
     const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
-    vi.mocked(svc.createBlankResponse).mockResolvedValue({
+    vi.mocked(entry.createBlankResponse).mockResolvedValue({
       kind: 'created',
       id: RESPONSE_ID,
       contactTargetId: CONTACT_ID,
@@ -224,7 +232,7 @@ describe('surveyResponse.response procedures', () => {
       attemptId,
     } as never);
 
-    expect(svc.createBlankResponse).toHaveBeenCalledWith(expect.objectContaining({ attemptId }));
+    expect(entry.createBlankResponse).toHaveBeenCalledWith(expect.objectContaining({ attemptId }));
   });
 
   it('complete(pub)는 responseId + data 를 service 에 위임한다', async () => {

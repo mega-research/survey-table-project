@@ -10,9 +10,7 @@ import {
   recordVisibilitySegment,
 } from '@/server/survey-response/services/lifecycle.service';
 import { completeResponse } from '@/server/survey-response/services/response-completion.service';
-import {
-  saveTestTargetFirstAnswer,
-} from '@/server/survey-response/services/response.service';
+import { saveTestTargetFirstAnswer } from '@/server/survey-response/services/response-entry.service';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,

@@ -15,10 +15,7 @@ process.env['DUPLICATE_DETECTION_SALT'] = 'test-salt';
 // 모듈 import 가 db/index.ts 의 DATABASE_URL throw 로 깨지지 않도록만 mock.
 vi.mock('@/db', () => ({ db: {} }));
 
-import {
-  createResponseWithFirstAnswer,
-  createBlankResponse,
-} from '@/server/survey-response/services/response.service';
+import { createBlankResponse, createResponseWithFirstAnswer } from '@/server/survey-response/services/response-entry.service';
 
 const VALID_SIGNALS = {
   deviceId: 'dev-1',

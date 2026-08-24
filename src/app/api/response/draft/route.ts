@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { SaveDraftResponseInput } from '@/server/survey-response/domain/response';
-import { saveDraftResponseIfActive } from '@/server/survey-response/services/response.service';
+import { saveDraftResponseIfActive } from '@/server/survey-response/services/response-draft.service';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import {

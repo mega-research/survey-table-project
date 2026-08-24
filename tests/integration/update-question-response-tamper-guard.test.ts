@@ -93,7 +93,7 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
   });
 
   it('in_progress + 유효 questionId + 정상 크기면 성공한다', async () => {
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     const res = await updateQuestionResponse({
       responseId: RESPONSE_ID,
       questionId: QUESTION_ID,
@@ -106,7 +106,7 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
     // questionId 자체는 유효하나, 가드 WHERE(isNull(deletedAt) AND status=in_progress)에
     // 막혀 UPDATE 가 0행을 반환.
     updateReturningMock.mockResolvedValue([]);
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await expect(
       updateQuestionResponse({ responseId: RESPONSE_ID, questionId: QUESTION_ID, value: 'x' }),
     ).rejects.toThrow();
@@ -114,7 +114,7 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
 
   it('응답 행 자체가 없으면 거부한다', async () => {
     responseFindFirstMock.mockResolvedValue(undefined);
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await expect(
       updateQuestionResponse({ responseId: 'missing', questionId: QUESTION_ID, value: 'x' }),
     ).rejects.toThrow();
@@ -123,14 +123,14 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
   it('versionId 스냅샷/surveyId questions 에 없는 questionId 는 거부한다 (임의 키 주입 차단)', async () => {
     // questionId 존재 검사가 빈 결과 → 미존재.
     questionExistsMock.mockResolvedValue([]);
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await expect(
       updateQuestionResponse({ responseId: RESPONSE_ID, questionId: 'q-rogue', value: 'x' }),
     ).rejects.toThrow();
   });
 
   it('value 직렬화 바이트 상한을 초과하면 거부한다', async () => {
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     // 1MB 가까운 거대 문자열 — 합리적 KB 상한 초과.
     const huge = 'a'.repeat(2_000_000);
     await expect(
@@ -141,7 +141,7 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
   });
 
   it('정확히 상한 바이트면 통과한다 (부등호 경계 고정)', async () => {
-    const { updateQuestionResponse } = await import('@/server/survey-response/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     // JSON.stringify 가 따옴표 2바이트를 더해 직렬화 결과가 정확히 262144B 다.
     const atLimit = 'a'.repeat(256 * 1024 - 2);
     await expect(
