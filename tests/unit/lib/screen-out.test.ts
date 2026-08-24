@@ -112,4 +112,34 @@ describe('detectScreenOut', () => {
   it('질문 목록이 비어 있으면 false', () => {
     expect(detectScreenOut([], { 'q-radio': 'option-1' })).toBe(false);
   });
+
+  it('테이블 검증 규칙의 end 분기도 endOutcome 을 따른다', () => {
+    const q = {
+      id: 'q-validation',
+      surveyId: 's1',
+      type: 'table',
+      title: 'B2',
+      required: false,
+      order: 2,
+      tableColumns: [{ id: 'col-1', label: '보기' }],
+      tableRowsData: [
+        {
+          id: 'row-1',
+          label: '해당사항 없음',
+          cells: [{ id: 'cell-1', content: '', type: 'checkbox' as const }],
+        },
+      ],
+      tableValidationRules: [
+        {
+          id: 'rule-1',
+          type: 'exclusive-check' as const,
+          conditions: { checkType: 'checkbox' as const, rowIds: ['row-1'] },
+          action: 'end' as const,
+          endOutcome: 'screened_out' as const,
+        },
+      ],
+    } as Question;
+
+    expect(detectScreenOut([q], { 'q-validation': { 'cell-1': true } })).toBe(true);
+  });
 });

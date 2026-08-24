@@ -91,6 +91,8 @@ export interface TableValidationRule {
   action: BranchAction;
   targetQuestionId?: string; // 기본 타겟 (targetQuestionMap이 없을 때 사용)
   targetQuestionMap?: Record<string, string>; // { "디지털 TV": "question-id-1", "UHD TV": "question-id-2" }
+  /** action 이 'end' 일 때의 종료 결과. 미지정은 'completed'. BranchRule.endOutcome 과 같은 의미. */
+  endOutcome?: 'completed' | 'screened_out';
   /** @deprecated 분기 규칙에서는 사용하지 않음. 입력 차단 메시지는 NumberFormat을 사용 */
   errorMessage?: string;
 }
