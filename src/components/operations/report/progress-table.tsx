@@ -76,6 +76,13 @@ export function ProgressTable({
   const residVisible = !groupByActive && showResid;
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(totals.groupCount / size));
+  // 제외 사유 내역 — 서버가 배타적 버킷으로 세므로 합이 excludedTotal 과 같다.
+  // 0 인 사유는 접는다 (대부분 설문에서 한두 가지만 발생).
+  const excludeReasons = [
+    { label: '자격 미달', count: totals.excludedScreenedOut },
+    { label: '결과코드 부적격', count: totals.excludedNegativeCode },
+    { label: '수신거부', count: totals.excludedUnsubscribed },
+  ].filter((r) => r.count > 0);
 
   const handleSortClick = (colKey: ProgressSortKey) => {
     const newDir: SortDir = sort === colKey && dir === 'desc' ? 'asc' : 'desc';
@@ -96,6 +103,8 @@ export function ProgressTable({
   // (# 또는 그룹 값 컬럼 N개) + N meta + 3 fixed (리스트수/완료/응답률)
   const colSpan =
     (groupByActive ? groupColumns.length : residVisible ? 1 : 0) + metaColumns.length + 3;
+  // 전체 행의 "전체" 라벨이 차지할 좌측 컬럼 수. 0 이면 라벨 칸 자체가 없다.
+  const leadingColSpan = colSpan - 3;
 
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
@@ -155,6 +164,32 @@ export function ProgressTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
+          {/* 전체 행 — 헤더 아래 항상 첫 줄. totals 는 getProgressTotals 가 준
+              페이지네이션·분류 단계 무관 합계라, 대/중/소 어느 기준으로 묶어도
+              같은 전체 값을 보여준다. 정렬·페이지 이동에도 자리를 지킨다. */}
+          <tr className="border-b-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+            {leadingColSpan > 0 && (
+              <td colSpan={leadingColSpan} className="px-3 py-2">
+                전체
+              </td>
+            )}
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums')}>
+              {numberFormatter.format(totals.listTotal)}
+            </td>
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums')}>
+              {numberFormatter.format(totals.completedTotal)}
+            </td>
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2')}>
+              <span
+                className={cn(
+                  'inline-block rounded px-2 py-0.5 text-xs font-semibold',
+                  TONE_CLASS[toneFromRate(totals.completedTotal, totals.listTotal)],
+                )}
+              >
+                {formatRate(totals.completedTotal, totals.listTotal)}
+              </span>
+            </td>
+          </tr>
           {rows.length === 0 && (
             <tr>
               <td colSpan={colSpan} className="px-4 py-6 text-center text-slate-400">
@@ -221,6 +256,21 @@ export function ProgressTable({
       <div className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
         리스트 합계 {numberFormatter.format(totals.listTotal)} · 완료{' '}
         {numberFormatter.format(totals.completedTotal)}
+        {totals.excludedTotal > 0 && (
+          <>
+            {' · 제외 '}
+            {numberFormatter.format(totals.excludedTotal)}
+            {excludeReasons.length > 0 && (
+              <>
+                {' ('}
+                {excludeReasons
+                  .map((r) => `${r.label} ${numberFormatter.format(r.count)}`)
+                  .join(', ')}
+                {')'}
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {totalPages > 1 && (

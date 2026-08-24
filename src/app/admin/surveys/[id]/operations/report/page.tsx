@@ -13,7 +13,11 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
+import {
+  EMPTY_PROGRESS_TOTALS,
+  type ProgressSortKey,
+  type SortDir,
+} from '@/lib/operations/report-progress';
 import {
   getProgressColumnScheme,
   getProgressGroupLabel,
@@ -163,7 +167,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const isEmpty = Number(countRows[0]?.ct ?? 0) === 0;
 
   const { rows, totals } = isEmpty
-    ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 } }
+    ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
     : await Promise.all([
         getProgressRows({
           surveyId,
