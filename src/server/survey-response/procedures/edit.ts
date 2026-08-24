@@ -5,7 +5,7 @@ import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit.service';
-import { SurveyNotAcceptingResponsesError } from '../services/response.service';
+import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
 
 /** ResponseEditError 사유별 사용자 표시 — 문구는 그대로 유지한다. */
 const EDIT_ERROR_RESPONSES: Record<

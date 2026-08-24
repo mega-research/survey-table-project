@@ -523,10 +523,10 @@ describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () =>
     wireHappyPath();
     // versionId null → 멤버십은 select 경로.
     H.selectLimitMock.mockResolvedValue([{ id: 'q1', piiEncrypted: false }]);
-    const svc = await import('@/server/survey-response/services/response.service');
+    const gate = await import('@/server/survey-response/services/response-gate');
 
     await expect(callCreate('first', { value: HUGE })).rejects.toBeInstanceOf(
-      svc.SurveyNotAcceptingResponsesError,
+      gate.SurveyNotAcceptingResponsesError,
     );
     await expect(callCreate('first', { value: HUGE })).rejects.toMatchObject({
       reason: 'answer_value_too_large',

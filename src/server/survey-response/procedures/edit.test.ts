@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ORPCContext } from '@/server/context';
 
 import * as svc from '../services/response-edit.service';
-import { SurveyNotAcceptingResponsesError } from '../services/response.service';
+import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
 import { edit } from './edit';
 
 vi.mock('../services/response-edit.service', async () => {

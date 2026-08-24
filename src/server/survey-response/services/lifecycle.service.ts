@@ -28,7 +28,8 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
-import { SurveyNotAcceptingResponsesError, extractDraftSeq } from './response.service';
+import { extractDraftSeq } from './response.service';
+import { SurveyNotAcceptingResponsesError } from './response-gate';
 
 // ========================
 // 응답 라이프사이클 service (pub)
