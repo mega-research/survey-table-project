@@ -69,7 +69,7 @@ import {
   settleCreatedQuestion,
 } from '@/features/survey-builder/lib/persist-question';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
-import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { collectRankingOptCells } from '@/utils/ranking-source';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   INTERACTIVE_CELL_TYPES,
@@ -84,6 +84,7 @@ import { CellGatingEditor } from './cell-gating-editor';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
+import { validateCellEdit } from './validate-cell-edit';
 import { CellIdentityFields } from './cell-identity-fields';
 import { CellMergeFields } from './cell-merge-fields';
 import { CellMobileFields } from './cell-mobile-fields';
@@ -376,36 +377,10 @@ export function CellContentModal({
   }, []);
 
   const handleSave = async () => {
-    // 빌더 validator: ranking 셀은 옵션이 최소 1개 이상이어야 함.
-    if (contentType === 'ranking' && rankingOptions.length === 0) {
-      toast.error('순위형 셀은 최소 1개 이상의 옵션이 필요합니다.');
+    const validationError = validateCellEdit(form, { cell, currentQuestionId, questions });
+    if (validationError) {
+      toast.error(validationError);
       return;
-    }
-    // ranking_opt 셀은 content/rankingLabel/imageUrl/videoUrl 중 하나 이상 필요.
-    // 단, "기타로 사용" 셀은 드롭다운 라벨이 자동 폴백(기타 (직접 입력))되므로 빈 상태도 허용.
-    if (contentType === 'ranking_opt' && !isOtherRankingCell) {
-      const hasContent = !!(
-        textContent.trim() ||
-        rankingLabel.trim() ||
-        imageUrl.trim() ||
-        videoUrl.trim()
-      );
-      if (!hasContent) {
-        toast.error(
-          '순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.',
-        );
-        return;
-      }
-    }
-    if (contentType === 'ranking_opt' && isOtherRankingCell) {
-      // 같은 질문 내 기타 ranking_opt 셀이 이미 존재하면 차단 (자기 자신은 제외).
-      const hostQuestion = questions.find((q) => q.id === currentQuestionId);
-      if (hasExistingOtherRankingCell(hostQuestion?.tableRowsData, cell.id)) {
-        toast.error(
-          '이 질문에는 이미 "기타"로 지정된 순위 옵션 셀이 있습니다. 질문당 최대 1개만 지정할 수 있습니다.',
-        );
-        return;
-      }
     }
 
     setIsSaving(true);
