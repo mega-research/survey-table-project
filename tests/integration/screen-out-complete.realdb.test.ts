@@ -150,4 +150,50 @@ describe.skipIf(!isLocalDb)('자격미달 종료 저장 실DB 왕복', () => {
     expect(row?.status).toBe('completed');
     expect(row?.isCompleted).toBe(true);
   });
+
+  it('이미 자격미달로 종결된 행에 complete 를 재호출해도 에러 없이 흡수된다', async () => {
+    const { responseId } = await seed('screened_out');
+
+    await completeResponse({
+      responseId,
+      data: { questionResponses: { 'q-screen': 'option-1' } },
+    });
+
+    // 늦은/재시도 complete 흉내 — 정상 제출 후 네트워크 응답 유실로 인한 재시도와 동일한 모양.
+    // status 가 이미 'screened_out' 이라 가드 UPDATE 는 0행이지만, 복구 분기가 종결 상태로
+    // 판정해 throw 대신 멱등 흡수해야 한다(리뷰 지적 1). throw 하지 않고 반환되는 것 자체가
+    // 이 케이스의 핵심 단언이다.
+    await completeResponse({ responseId });
+
+    const [row] = await db
+      .select({ status: surveyResponses.status, isCompleted: surveyResponses.isCompleted })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, responseId));
+
+    expect(row?.status).toBe('screened_out');
+    expect(row?.isCompleted).toBe(false);
+  });
+
+  it('data 없는 빈 complete 도 저장된 답변 기준으로 자격미달을 판정한다', async () => {
+    const { responseId } = await seed('screened_out');
+
+    // draft 저장 경로를 흉내낸다 — 자격미달 옵션이 이미 question_responses 에 저장된 상태.
+    await db
+      .update(surveyResponses)
+      .set({ questionResponses: { 'q-screen': 'option-1' } })
+      .where(eq(surveyResponses.id, responseId));
+
+    // 클라이언트가 data 없이 complete 를 호출해도(계약상 optional) 서버가 저장된 값을
+    // 재평가해야 한다 — 그렇지 않으면 자격미달 답변이 판정 없이 completed 로 새어나간다
+    // (리뷰 지적 2).
+    await completeResponse({ responseId });
+
+    const [row] = await db
+      .select({ status: surveyResponses.status, isCompleted: surveyResponses.isCompleted })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, responseId));
+
+    expect(row?.status).toBe('screened_out');
+    expect(row?.isCompleted).toBe(false);
+  });
 });
