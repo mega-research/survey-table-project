@@ -225,6 +225,33 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     expect(setArg['progressPct']).toBe(75);
   });
 
+  // 정책 정렬(A-6b 리뷰): 손상된 스냅샷(questions 가 배열이 아님)은 진척률만 비우고
+  // 저장을 진행한다. 이전에는 forEach 에서 TypeError 가 나 관리자 수정이 통째로 실패했고,
+  // 그건 같은 파일이 스냅샷 미확보에 대해 선언한 fail-safe 와 어긋났다.
+  it('snapshot.questions 가 배열이 아니면 progressPct=null 로 저장을 진행한다', async () => {
+    findFirstMock.mockResolvedValue({
+      id: 'r1',
+      status: 'in_progress',
+      versionId: 'v1',
+      deletedAt: null,
+    });
+    selectLimitMock.mockResolvedValue([{ snapshot: { questions: '깨진 JSONB' } }]);
+
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    await expect(
+      saveAdminEdit(
+        { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const brokenSnapshotCall = updateSetMock.mock.calls[0];
+    if (!brokenSnapshotCall) throw new Error('updateSetMock 호출 없음');
+    const setArg = brokenSnapshotCall[0] as Record<string, unknown>;
+    expect(setArg['progressPct']).toBeNull();
+  });
+
   it('versionId=null → progressPct=null', async () => {
     findFirstMock.mockResolvedValue({
       id: 'r1',
