@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { surveys, surveyVersions, surveyResponses } from '@/db/schema';
+import type { QuestionData, SurveyVersionSnapshot } from '@/db/schema/schema-types';
 import { completeResponse } from '@/features/survey-response/server/services/response.service';
 
 const isLocalDb =
@@ -21,37 +22,47 @@ const isLocalDb =
 
 const createdSurveyIds: string[] = [];
 
-function buildSnapshot(endOutcome?: 'completed' | 'screened_out') {
+// DB 스냅샷 컬럼의 실제 선언 타입(surveys.ts:365 `.$type<SurveyVersionSnapshot>()`)을
+// 그대로 만족시킨다. 명시적 반환 타입을 주면 각 리터럴이 컨텍스트 타입을 받아
+// action: 'end' 가 string 으로 넓혀지지 않고 BranchAction 리터럴로 유지된다.
+function buildSnapshot(endOutcome?: 'completed' | 'screened_out'): SurveyVersionSnapshot {
+  const questions: QuestionData[] = [
+    {
+      id: 'q-screen',
+      type: 'radio',
+      title: '학년',
+      required: true,
+      order: 0,
+      options: [
+        {
+          id: 'opt-low',
+          label: '1학년',
+          value: 'option-1',
+          branchRule: {
+            id: 'br-1',
+            value: '',
+            action: 'end',
+            ...(endOutcome ? { endOutcome } : {}),
+          },
+        },
+        { id: 'opt-grad', label: '졸업자', value: 'option-5' },
+      ],
+    },
+  ];
+
   return {
     title: '자격미달 테스트',
     description: '',
-    settings: {},
-    lookups: [],
     groups: [],
-    questions: [
-      {
-        id: 'q-screen',
-        surveyId: 'seed',
-        type: 'radio',
-        title: '학년',
-        required: true,
-        order: 0,
-        options: [
-          {
-            id: 'opt-low',
-            label: '1학년',
-            value: 'option-1',
-            branchRule: {
-              id: 'br-1',
-              value: '',
-              action: 'end',
-              ...(endOutcome ? { endOutcome } : {}),
-            },
-          },
-          { id: 'opt-grad', label: '졸업자', value: 'option-5' },
-        ],
-      },
-    ],
+    settings: {
+      isPublic: true,
+      allowMultipleResponses: false,
+      showProgressBar: false,
+      shuffleQuestions: false,
+      requireLogin: false,
+      thankYouMessage: '',
+    },
+    questions,
   };
 }
 
