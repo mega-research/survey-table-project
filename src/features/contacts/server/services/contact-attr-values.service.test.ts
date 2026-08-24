@@ -85,7 +85,23 @@ describe('listContactAttrValues', () => {
     expect(result).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
   });
 
-  it('빈 값 행이 있으면 hasEmpty=true — "(값 없음)" 선택지 노출 신호', async () => {
+  it('센티널과 같은 실제 값은 선택지에서 제외한다 — 노출하면 빈 값으로 오판정된다', async () => {
+    selectResults.push([{ scheme: visibleScheme }]);
+    selectResults.push([{ v: '상장' }, { v: '__none__' }]);
+    selectResults.push([]);
+
+    const result = await listContactAttrValues({
+      surveyId: 'sv-1',
+      attrsKey: '기업유형',
+      scope: 'real',
+    });
+
+    // 파서는 이 문자열을 무조건 빈 값 플래그로 승격시키므로, 선택지로 내밀면
+    // 사용자가 고른 실제 값 대신 미기재 행이 걸린다.
+    expect(result.values).toEqual(['상장']);
+  });
+
+  it('빈 값 행이 있으면 hasEmpty=true — 빈 값 선택지 노출 신호', async () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([{ v: '상장' }]);
     selectResults.push([{ id: 'ct-1' }]); // 빈 값 존재 확인 쿼리

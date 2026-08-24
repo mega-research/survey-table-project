@@ -58,8 +58,20 @@ interface Props {
   /**
    * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
    * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
+   * 클라이언트 컴포넌트에서만 넘길 수 있다 — 서버 컴포넌트는 아래 두 prop 을 쓴다.
    */
   onApplyParams?: (p: URLSearchParams) => void;
+  /**
+   * 적용 시 파라미터 이름 승격. 깔때기 적용은 빌더 파라미터(col/q/op)를 지우므로,
+   * 'q' 를 다른 뜻으로 쓰는 페이지는 지워지기 전에 자기 이름으로 옮겨야 한다.
+   * 직렬화 가능하므로 서버 컴포넌트에서도 넘길 수 있다.
+   */
+  renameOnApply?: { from: string; to: string };
+  /**
+   * 적용 시 함께 지울 파라미터 (예: 수신자 목록의 'recipPage').
+   * 공용 헬퍼는 'page' 만 리셋하므로 페이지 전용 이름은 여기로 알린다.
+   */
+  resetParams?: string[];
 }
 
 type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
@@ -92,6 +104,8 @@ export function HeaderFilterPopover({
   resultCodeOptions = [],
   fixedOptions,
   onApplyParams,
+  renameOnApply,
+  resetParams,
 }: Props) {
   const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
   const searchParams = useSearchParams();
@@ -191,10 +205,20 @@ export function HeaderFilterPopover({
   const commit = (entry: HeaderFilterEntry | null) => {
     pushParams((p) => {
       if (entry) {
+        // 이름 승격은 upsertHeaderFilter 의 빌더 파라미터 제거보다 먼저 — 순서가
+        // 뒤집히면 옮기기 전에 값이 사라진다.
+        if (renameOnApply) {
+          const carried = p.get(renameOnApply.from);
+          if (carried !== null && p.get(renameOnApply.to) === null) {
+            p.set(renameOnApply.to, carried);
+          }
+        }
         upsertHeaderFilter(p, entry);
+        for (const name of resetParams ?? []) p.delete(name);
         onApplyParams?.(p);
       } else {
         removeHeaderFilter(p, source);
+        for (const name of resetParams ?? []) p.delete(name);
       }
     });
     setConfirmEntry(null);

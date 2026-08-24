@@ -9,7 +9,7 @@ import {
   targetScopeCondition,
   type OperationsDataScope,
 } from '@/lib/operations/data-scope.server';
-import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
 
@@ -118,6 +118,9 @@ export async function listContactAttrValues(
   const values = rows
     .slice(0, ATTR_VALUES_CHECKBOX_LIMIT)
     .map((r) => r.v)
+    // 센티널과 같은 실제 값은 선택지에서 제외 — 파서가 빈 값으로 승격시키므로
+    // 노출하면 사용자가 고른 값과 다른 행이 걸린다.
+    .filter((v) => v !== FILTER_NONE_VALUE)
     .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }));
   return { values, truncated, hasEmpty: emptyRows.length > 0 };
 }

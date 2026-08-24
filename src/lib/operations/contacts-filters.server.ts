@@ -162,8 +162,8 @@ function buildHeaderCondition(
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
       const raw = splitHeaderValues(hv);
-      // "(값 없음)" 센티널은 값이 아니라 플래그로 승격 — distinct 목록에서 온 실제 값이
-      // 센티널 문자열과 같으면 실제 값이 이긴다 (아래 !includes 검사).
+      // 센티널은 값이 아니라 플래그로 승격. 같은 문자열의 실제 값은 distinct 조회가
+      // 선택지에서 빼두므로 여기서 예외를 둘 필요가 없다 (FILTER_NONE_VALUE 주석 참조).
       const distinct = raw.filter((v) => v !== FILTER_NONE_VALUE);
       const includeNull = distinct.length !== raw.length;
       if (distinct.length === 0 && !includeNull) return null;
@@ -204,9 +204,9 @@ function buildHeaderCondition(
     if (mode !== 'in') return null;
     const valid = new Set(resultCodes.map((rc) => rc.code));
     const raw = splitHeaderValues(hv);
-    // 실제 코드가 센티널 문자열을 선점했으면 코드 쪽이 이긴다 (valid 검사가 먼저).
-    const values = raw.filter((v) => valid.has(v));
-    const includeNull = raw.some((v) => !valid.has(v) && v === FILTER_NONE_VALUE);
+    // 센티널이 항상 이긴다 — 같은 이름의 코드는 UI 가 선택지에서 빼둔다.
+    const includeNull = raw.includes(FILTER_NONE_VALUE);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE && valid.has(v));
     if (values.length === 0 && !includeNull) return null;
     return {
       source: col,
@@ -329,11 +329,7 @@ function buildClause(
   }
 
   if (col === FILTER_SOURCE.CONTACT_RESULT) {
-    const code = resultCodes.find((rc) => rc.code === trimmed);
-    if (code) {
-      return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
-    }
-    // 등록 코드가 아니면서 센티널이면 "결과 없음". value 는 URL·스냅샷 왕복용으로 보존한다.
+    // 센티널이 항상 이긴다. value 는 URL·스냅샷 왕복용으로 보존한다.
     if (trimmed === FILTER_NONE_VALUE) {
       return {
         op,
@@ -345,7 +341,9 @@ function buildClause(
         },
       };
     }
-    return null;
+    const code = resultCodes.find((rc) => rc.code === trimmed);
+    if (!code) return null;
+    return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
   }
 
   if (col === FILTER_SOURCE.WEB) {

@@ -362,43 +362,52 @@ export async function listCampaignRecipientFacets(args: {
     isNull(mailRecipients.archivedAt),
   )!;
 
-  // DISTINCT 는 PG 에서 처리 — 1만명 캠페인에서 전량을 앱으로 끌어오지 않기 위함.
-  // 반환 행 수는 (그룹 × 사유) 실제 조합 수로 묶인다.
-  const rows = await db
-    .selectDistinct({
-      groupValue: sql<string | null>`${RECIPIENT_GROUP_EXPR}`,
-      errorReason: sql<string | null>`${RECIPIENT_ERROR_EXPR}`,
-      resultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
-    })
-    .from(mailRecipients)
-    .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
-    .where(where);
+  /**
+   * 축 하나의 distinct 값 + 빈 값 존재 여부.
+   *
+   * 축을 합쳐 한 번에 DISTINCT 하면 (그룹 × 사유 × 결과코드) 조합 수만큼 행이 나온다.
+   * 반송 사유처럼 행마다 거의 고유한 값이 섞이면 수신자 수만큼이 그대로 앱으로 넘어오므로,
+   * 축별로 나눠 LIMIT 을 SQL 에 내려 전송량을 상한에 묶는다.
+   *
+   * NULLS FIRST 는 hasEmpty 판정을 LIMIT 에서 보호한다 — 빈 값이 창 밖으로 밀리면
+   * 실제로는 있는 "없음" 선택지가 사라진다.
+   */
+  const facetOf = async (expr: SQL): Promise<{ values: string[]; hasEmpty: boolean }> => {
+    const rows = await db
+      .selectDistinct({ v: sql<string | null>`${expr}` })
+      .from(mailRecipients)
+      .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+      .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+      .where(where)
+      // ORDER BY 1 (위치 지정) 필수 — 식을 다시 쓰면 DISTINCT select list 와 다른 식으로
+      // 취급돼 PG 가 거부한다 (contact-attr-values.service 와 같은 함정).
+      .orderBy(sql`1 ASC NULLS FIRST`)
+      .limit(FACET_LIMIT + 2);
 
-  const groups = new Set<string>();
-  const errors = new Set<string>();
-  const results = new Set<string>();
-  let hasEmptyGroup = false;
-  let hasEmptyError = false;
-  let hasEmptyResult = false;
-  for (const r of rows) {
-    if (r.groupValue == null) hasEmptyGroup = true;
-    else groups.add(r.groupValue);
-    if (r.errorReason == null) hasEmptyError = true;
-    else errors.add(r.errorReason);
-    if (r.resultCode == null) hasEmptyResult = true;
-    else results.add(r.resultCode);
-  }
-  const sorted = (set: Set<string>) =>
-    [...set].sort((a, b) => a.localeCompare(b, 'ko-KR')).slice(0, FACET_LIMIT);
+    const hasEmpty = rows.some((r) => r.v == null);
+    const values = rows
+      .map((r) => r.v)
+      // 센티널과 같은 실제 값은 선택지에서 제외한다 — 노출하면 파서가 빈 값으로 승격시켜
+      // 화면에 보이는 값과 다른 행이 걸린다 (FILTER_NONE_VALUE 주석 참조).
+      .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
+      .sort((a, b) => a.localeCompare(b, 'ko-KR'))
+      .slice(0, FACET_LIMIT);
+    return { values, hasEmpty };
+  };
+
+  const [group, error, result] = await Promise.all([
+    facetOf(RECIPIENT_GROUP_EXPR),
+    facetOf(RECIPIENT_ERROR_EXPR),
+    facetOf(RECIPIENT_RESULT_EXPR),
+  ]);
 
   return {
-    groupValues: sorted(groups),
-    errorReasons: sorted(errors),
-    resultCodes: sorted(results),
-    hasEmptyGroup,
-    hasEmptyError,
-    hasEmptyResult,
+    groupValues: group.values,
+    errorReasons: error.values,
+    resultCodes: result.values,
+    hasEmptyGroup: group.hasEmpty,
+    hasEmptyError: error.hasEmpty,
+    hasEmptyResult: result.hasEmpty,
   };
 }
 
@@ -447,6 +456,9 @@ export async function listCampaignRecipients(args: {
     .select({ total: sql<number>`count(*)::int` })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+    // where 가 컨택 상관 조건(그룹·최근 결과코드)을 담을 수 있으므로 행 조회와 같은
+    // 조인 집합을 가져야 한다. 빠뜨리면 PG 가 missing FROM-clause entry 로 거절한다.
+    .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

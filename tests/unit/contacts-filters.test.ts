@@ -57,11 +57,17 @@ describe('contactResultFilterOptions — 컨택결과 선택지', () => {
     expect(options.at(-1)?.label).toBe(FILTER_NONE_LABEL);
   });
 
-  it('센티널을 선점한 코드가 있으면 "결과 없음" 항목을 내밀지 않는다 — 모호한 선택지 차단', () => {
+  it('센티널과 같은 코드는 선택지에서 빼고 빈 값 항목을 유지한다', () => {
+    // 센티널은 항상 "빈 값" 을 뜻한다. 같은 문자열의 실제 코드를 함께 내밀면
+    // 사용자가 고른 것과 실제로 걸리는 행이 갈라진다 — 값 쪽을 포기한다.
     const options = contactResultFilterOptions([
+      { code: '1.조사완료', label: '1.조사완료' },
       { code: FILTER_NONE_VALUE, label: '진짜코드' },
     ]);
-    expect(options).toEqual([{ value: FILTER_NONE_VALUE, label: '진짜코드' }]);
+    expect(options).toEqual([
+      { value: '1.조사완료', label: '1.조사완료' },
+      { value: FILTER_NONE_VALUE, label: FILTER_NONE_LABEL },
+    ]);
   });
 });
 
@@ -199,7 +205,9 @@ describe('parseClausesFromUrl - source 분기', () => {
     ]);
   });
 
-  it('센티널을 선점한 실제 결과코드가 있으면 코드가 이긴다 — includeNull 미부여', () => {
+  it('센티널은 같은 이름의 결과코드가 있어도 항상 빈 값을 뜻한다', () => {
+    // UI(contactResultFilterOptions)가 충돌 코드를 아예 내밀지 않으므로 파서도
+    // 예외 없이 센티널 = 빈 값으로 해석한다. 세 층의 판정을 한 규칙으로 묶는다.
     const shadowed: ContactResultCode[] = [
       ...resultCodes,
       { code: FILTER_NONE_VALUE, label: '진짜코드', order: 99 },
@@ -211,8 +219,7 @@ describe('parseClausesFromUrl - source 분기', () => {
       candidates,
       shadowed,
     );
-    expect(result[0]?.condition.includeNull).toBeUndefined();
-    expect(result[0]?.condition.value).toBe(FILTER_NONE_VALUE);
+    expect(result[0]?.condition.includeNull).toBe(true);
   });
 
   it('system.web + true/false → boolean', () => {

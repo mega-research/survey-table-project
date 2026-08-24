@@ -47,6 +47,15 @@ const STATUS_FILTER_CHIPS: Array<{
   { value: 'skipped_unsubscribed', label: '수신거부' },
 ];
 
+/**
+ * 이 화면의 이메일 검색은 rq 다. 깔때기 적용이 빌더 파라미터('q')를 지우므로,
+ * 구 URL 로 들어온 q 를 지워지기 전에 rq 로 옮긴다.
+ */
+const LEGACY_SEARCH_RENAME = { from: 'q', to: 'rq' } as const;
+
+/** 필터가 좁아지면 첫 페이지로 — 공용 헬퍼는 'page' 만 리셋한다. */
+const RECIPIENT_RESET_PARAMS = ['recipPage'];
+
 type HrefOverrides = Partial<{
   statuses: MailRecipientStatus[];
   q: string;
@@ -190,6 +199,8 @@ export function CampaignRecipientsTable({
                       surveyId={surveyId}
                       source={RECIPIENT_FILTER_SOURCE.GROUP}
                       label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP] ?? '그룹'}
+                      renameOnApply={LEGACY_SEARCH_RENAME}
+                      resetParams={RECIPIENT_RESET_PARAMS}
                       fixedOptions={groupOptions}
                     />
                   </span>
@@ -205,6 +216,8 @@ export function CampaignRecipientsTable({
                       surveyId={surveyId}
                       source={RECIPIENT_FILTER_SOURCE.RESULT}
                       label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.RESULT] ?? '최근 결과코드'}
+                      renameOnApply={LEGACY_SEARCH_RENAME}
+                      resetParams={RECIPIENT_RESET_PARAMS}
                       fixedOptions={resultOptions}
                     />
                   </span>
@@ -216,6 +229,8 @@ export function CampaignRecipientsTable({
                       surveyId={surveyId}
                       source={RECIPIENT_FILTER_SOURCE.ERROR}
                       label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.ERROR] ?? '메모'}
+                      renameOnApply={LEGACY_SEARCH_RENAME}
+                      resetParams={RECIPIENT_RESET_PARAMS}
                       fixedOptions={errorOptions}
                     />
                   </span>

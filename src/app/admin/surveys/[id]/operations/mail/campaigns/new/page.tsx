@@ -20,6 +20,7 @@ import {
   parseHeaderFiltersFromUrl,
   type FilterClause,
 } from '@/lib/operations/contacts-filters.server';
+import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
@@ -97,10 +98,14 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     );
   }
 
-  // templateId 미지정이면 첫 템플릿으로 redirect — URL 일관성 유지
+  // templateId 미지정이면 첫 템플릿으로 redirect — URL 일관성 유지.
+  // 기존 쿼리는 보존한다 (재발송 동선의 필터·자동선택 유실 방지 — 헬퍼 주석 참조).
   if (!sp.templateId) {
     redirect(
-      `/admin/surveys/${surveyId}/operations/mail/campaigns/new?templateId=${templates[0]!.id}`,
+      `/admin/surveys/${surveyId}/operations/mail/campaigns/new?${buildTemplateRedirectQuery(
+        sp,
+        templates[0]!.id,
+      )}`,
     );
   }
 

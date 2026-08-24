@@ -39,8 +39,13 @@ export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
  * "값 없음"(NULL / 미기록) 을 체크박스 한 줄로 표현하기 위한 센티널.
  * 컨택결과·수신자 그룹·반송 사유처럼 값 공간이 사용자 자유 텍스트라 in-band 충돌이
  * 원리상 가능한 축에서 쓴다 — 그래서 값 자체를 SQL 로 흘리지 않고, 파서가 이 문자열을
- * 별도 플래그(또는 IS NULL 분기)로 승격시킨다. 실제 값이 이 문자열을 선점하면
- * 실제 값이 이기고 "없음" 선택지는 목록에서 사라진다 (아래 두 옵션 빌더).
+ * 별도 플래그(또는 IS NULL 분기)로 승격시킨다.
+ *
+ * 충돌 규칙은 "센티널이 항상 이긴다" 하나뿐이다. 실제 값이 이 문자열과 같으면 그 값을
+ * 선택지에서 빼고(withNoneOption / facets / attrs distinct), 파서는 예외 없이 빈 값으로
+ * 해석한다. 값 쪽을 살리려면 UI·파서·SQL 세 층이 같은 예외를 알아야 하는데 파서는
+ * attrs 의 실제 값 목록을 모르므로 그 규칙은 구현이 불가능하다 — 한 층만 예외를 알면
+ * 화면에서 고른 것과 실제로 걸리는 행이 갈라진다.
  */
 export const FILTER_NONE_VALUE = '__none__';
 
@@ -54,13 +59,19 @@ export const FILTER_NONE_LABEL = '— (없음)';
 /** 입력형 컬럼(pii·고카디널리티 attrs)의 빈 값 토글 라벨. 체크박스 목록 항목의 짝. */
 export const FILTER_NONE_TOGGLE_LABEL = '— 인 것만 보기';
 
-/** 선택지 목록 끝에 "없음" 을 덧붙인다 — 실제 값이 센티널을 선점했으면 붙이지 않는다. */
+/**
+ * 선택지 목록 끝에 빈 값 항목을 덧붙인다.
+ * 센티널과 같은 실제 값은 제거한다 — 남겨두면 파서가 그것도 빈 값으로 해석해
+ * 사용자가 고른 값과 다른 행이 걸린다.
+ */
 export function withNoneOption(
   options: Array<{ value: string; label: string }>,
   noneLabel: string = FILTER_NONE_LABEL,
 ): Array<{ value: string; label: string }> {
-  if (options.some((o) => o.value === FILTER_NONE_VALUE)) return options;
-  return [...options, { value: FILTER_NONE_VALUE, label: noneLabel }];
+  return [
+    ...options.filter((o) => o.value !== FILTER_NONE_VALUE),
+    { value: FILTER_NONE_VALUE, label: noneLabel },
+  ];
 }
 
 /**
