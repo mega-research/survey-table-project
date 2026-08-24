@@ -7,12 +7,35 @@
  * 단위 테스트: tests/unit/domains/operations/contacts.test.ts.
  */
 
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
+
 /**
  * system.resid 컬럼의 기본 표시 라벨.
  * 고객 엑셀의 NO/ID 류 컬럼과 구분하기 위해 '번호' 대신 '시스템ID' 사용
  * (기존 설문 스킴은 0073 수동 마이그레이션으로 일괄 갱신, 커스텀 라벨은 보존).
  */
 export const RESID_DEFAULT_LABEL = '시스템ID';
+
+/**
+ * contact_columns / test_contact_columns JSONB 드리프트 방어.
+ *
+ * 이 컬럼은 `.$type<ContactColumnScheme>()` 로 선언돼 있어 타입 시스템은 `columns` 가
+ * 항상 배열이라고 믿지만, JSONB 는 그 계약을 강제하지 않는다. 실제로 `columns` 키가 없는
+ * 객체가 저장돼 있어 `scheme?.columns.find(...)` 가 런타임에 터졌다 — 옵셔널 체이닝이
+ * `scheme` 만 막고 `columns` 는 막지 못한다.
+ *
+ * 호출부마다 `?.` 를 덧대는 대신 로더 한 곳에서 형태를 보정한다. columns 가 배열이 아니면
+ * 빈 배열로 낮추되 나머지 필드(version/headerRow 등)는 보존한다 — 스킴 전체를 null 로
+ * 버리면 컬럼 설정이 통째로 사라진 것처럼 보인다.
+ */
+export function normalizeContactColumnScheme(
+  raw: unknown,
+): ContactColumnScheme | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const scheme = raw as ContactColumnScheme;
+  if (Array.isArray(scheme.columns)) return scheme;
+  return { ...scheme, columns: [] };
+}
 
 /**
  * 사전 정의된 시스템 정렬 키. attrs.* 정렬은 별도로 `attrs.<key>` 형태로 받음

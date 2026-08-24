@@ -6,11 +6,12 @@ import { eq, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
-import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/schema-types';
+import type { ProgressColumnScheme } from '@/db/schema/schema-types';
 
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import { buildFilterSql, type FilterCondition } from './progress-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
+import { normalizeContactColumnScheme } from './contacts';
 import {
   targetScopeCondition,
   testFlagForScope,
@@ -179,7 +180,8 @@ export const getProgressGroupLabel = cache(async (
     .from(surveys)
     .where(eq(surveys.id, surveyId))
     .limit(1);
-  const scheme = surveyRow[0]?.contactColumns as ContactColumnScheme | null | undefined;
+  // getContactColumnScheme 를 거치지 않고 직접 읽는 경로라 같은 보정이 필요하다.
+  const scheme = normalizeContactColumnScheme(surveyRow[0]?.contactColumns ?? null);
   const col = scheme?.columns.find((c) => c.source === `attrs.${groupAttrsKey}`);
   return col?.label ?? groupAttrsKey;
 });
