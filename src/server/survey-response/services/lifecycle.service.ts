@@ -28,7 +28,7 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
-import { extractDraftSeq } from './response.service';
+import { extractDraftSeq } from '../domain/draft-seq';
 import { SurveyNotAcceptingResponsesError } from './response-gate';
 
 // ========================
