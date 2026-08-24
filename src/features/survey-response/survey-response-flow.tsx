@@ -81,6 +81,7 @@ import {
   resolveEffectiveOptionTextsByQuestion,
 } from '@/features/survey-response/lib/required-option-text-validation';
 import { generateId } from '@/lib/utils';
+import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
@@ -105,6 +106,11 @@ export interface SurveyResponseFlowProps {
    * 확보한 값을 넘긴다 — 없으면 클라이언트가 같은 답을 한 번 더 묻는다.
    */
   resolvedSurveyId?: string | undefined;
+  /**
+   * 라우트가 서버에서 미리 조회해 넘긴 진입 자료. 있으면 로더가 설문·attrs 조회를 건너뛴다.
+   * 판정 분기는 로더가 그대로 하므로 두 진입 경로의 동작이 갈리지 않는다.
+   */
+  entrySeed?: ResponseEntrySeed | undefined;
   inviteToken?: string | null;
   // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
   testToken?: string | null;
@@ -247,6 +253,7 @@ function SurveyResponseIdentityBoundary({ flowProps }: { flowProps: SurveyRespon
 function SurveyResponseFlowControl({
   surveyIdentifier,
   resolvedSurveyId,
+  entrySeed,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
   mode = 'public',
@@ -269,6 +276,7 @@ function SurveyResponseFlowControl({
     identifier,
     // admin-edit·preview 는 자체 컨텍스트로 조회를 건너뛰므로 seed 가 의미 없다.
     ...(!isAdminEdit && !isPreview && resolvedSurveyId ? { resolvedSurveyId } : {}),
+    ...(!isAdminEdit && !isPreview && entrySeed ? { entrySeed } : {}),
     isAdminEdit,
     isPreview,
     adminContext,

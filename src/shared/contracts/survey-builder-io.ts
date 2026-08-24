@@ -1,7 +1,7 @@
 // 설문 빌더·응답 경계 계약 — UI 와 서버가 주고받는 입출력 모양.
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
-import type { Question, QuestionGroup, SurveySettings } from '@/types/survey';
+import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
 
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
@@ -39,3 +39,22 @@ export type SurveyControl = {
   testSession: 'none' | 'valid' | 'invalid';
   testSessionKind: 'anonymous' | 'target' | null;
 };
+
+/**
+ * 라우트가 서버에서 미리 조회해 응답 페이지에 넘기는 진입 자료.
+ *
+ * 짧은 초대 링크(/i/<code>)는 이미 서버 컴포넌트다. 거기서 설문과 컨택 attrs 까지 조회해
+ * 넘기면 응답자가 첫 화면을 보기까지의 순차 왕복이 사라진다.
+ *
+ * **판정은 여기 담지 않는다.** 서버는 조회만 하고, 설문 없음·비공개·초대 필수·무효 토큰
+ * 같은 분기는 종전대로 클라이언트 로더가 한 곳에서 내린다 — 분기를 서버에도 복제하면
+ * 두 진입 경로가 조용히 갈라진다.
+ */
+export interface ResponseEntrySeed {
+  /** forResponse 조회 결과. null 이면 설문 없음(로더가 기존 에러 화면을 낸다). */
+  forResponse: { survey: Survey; versionId: string | null; control: SurveyControl } | null;
+  /** attrs 조회 결과. 무효 토큰이면 null — 로더가 기존과 같이 익명 폴백한다. */
+  contactAttrs: Record<string, string> | null;
+  /** attrs 조회가 테스트 링크 만료로 거부됐다(RPC 의 INVALID_TEST_LINK 와 같은 뜻). */
+  attrsInvalidTest?: boolean;
+}

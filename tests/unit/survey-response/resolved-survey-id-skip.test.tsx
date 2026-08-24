@@ -111,6 +111,51 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
     expect(forResponse).toHaveBeenCalledWith(expect.objectContaining({ surveyId: 'survey-1' }));
   });
 
+  it('entrySeed 를 받으면 설문·attrs 조회 왕복이 통째로 없다', async () => {
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="my-survey-slug"
+        resolvedSurveyId="survey-1"
+        entrySeed={{
+          forResponse: {
+            survey,
+            versionId: 'version-1',
+            control: {
+              isPaused: false,
+              pausedMessage: null,
+              testSession: 'none',
+              testSessionKind: null,
+            },
+          },
+          contactAttrs: { 회사: '메가리서치' },
+        }}
+        inviteToken="11111111-1111-4111-8111-111111111111"
+        testToken={null}
+      />,
+    );
+
+    expect(await screen.findByPlaceholderText('답변')).toBeInTheDocument();
+    expect(bySlug).not.toHaveBeenCalled();
+    expect(forResponse).not.toHaveBeenCalled();
+    expect(attrsLookup).not.toHaveBeenCalled();
+  });
+
+  it('entrySeed 의 설문이 null 이면 종전과 같은 에러 화면을 낸다', async () => {
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="my-survey-slug"
+        resolvedSurveyId="survey-1"
+        entrySeed={{ forResponse: null, contactAttrs: null }}
+        inviteToken="11111111-1111-4111-8111-111111111111"
+        testToken={null}
+      />,
+    );
+
+    // 판정은 서버가 아니라 로더가 한다 — seed 는 조회 결과만 나른다.
+    expect(await screen.findByText('요청하신 설문을 찾을 수 없습니다.')).toBeInTheDocument();
+    expect(forResponse).not.toHaveBeenCalled();
+  });
+
   it('받지 못하면 종전대로 식별자를 먼저 조회한다', async () => {
     render(
       <SurveyResponseFlow surveyIdentifier="my-survey-slug" inviteToken={null} testToken={null} />,

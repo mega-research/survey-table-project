@@ -9,7 +9,7 @@ import { normalizeQuestions } from '@/lib/question';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import type { SurveyControl } from '@/shared/contracts/survey-builder-io';
+import type { ResponseEntrySeed, SurveyControl } from '@/shared/contracts/survey-builder-io';
 import { client } from '@/shared/lib/rpc';
 import type { QuestionGroup, Survey } from '@/types/survey';
 
@@ -45,6 +45,11 @@ interface UseSurveyLoaderArgs {
    * 식별자 해석만 건너뛸 뿐 설문 조회(forResponse)와 이후 분기는 그대로다.
    */
   resolvedSurveyId?: string | undefined;
+  /**
+   * 라우트가 서버에서 미리 조회해 넘긴 진입 자료. 있으면 forResponse 와 attrs 조회를
+   * 건너뛴다 — **판정 분기는 그대로 아래에서 한다**. 서버는 조회만 하고 결정은 여기 한 곳이다.
+   */
+  entrySeed?: ResponseEntrySeed | undefined;
   isAdminEdit: boolean;
   isPreview?: boolean;
   adminContext: AdminContext | undefined;
@@ -96,6 +101,7 @@ interface UseSurveyLoaderResult {
 export function useSurveyLoader({
   identifier,
   resolvedSurveyId,
+  entrySeed,
   isAdminEdit,
   isPreview = false,
   adminContext,
@@ -249,11 +255,14 @@ export function useSurveyLoader({
           return;
         }
 
-        const result = await client.surveyBuilder.publicRead.forResponse({
-          surveyId,
-          ...(testToken != null ? { testToken } : {}),
-          ...(inviteToken != null ? { inviteToken } : {}),
-        });
+        const result =
+          entrySeed !== undefined
+            ? entrySeed.forResponse
+            : await client.surveyBuilder.publicRead.forResponse({
+                surveyId,
+                ...(testToken != null ? { testToken } : {}),
+                ...(inviteToken != null ? { inviteToken } : {}),
+              });
         if (cancelled) return;
 
         if (!result) {
@@ -276,12 +285,9 @@ export function useSurveyLoader({
             // 이미 로드된 설문을 통째로 에러 화면으로 막지 않고, 빈 attrs 익명 응답으로 강등한다.
             // (service 는 무효 토큰을 null 로 흡수하지만 DB/transport 예외는 여기서 throw 될 수 있다.)
             let attrs: Record<string, string> | null = null;
-            try {
-              attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
-              if (cancelled) return;
-            } catch (attrsError) {
-              if (cancelled) return;
-              if (attrsError instanceof ORPCError && attrsError.code === 'INVALID_TEST_LINK') {
+            if (entrySeed !== undefined) {
+              // 서버가 이미 조회했다. 만료 판정도 RPC 의 INVALID_TEST_LINK 와 같은 뜻으로 온다.
+              if (entrySeed.attrsInvalidTest) {
                 setControl({
                   ...result.control,
                   testSession: 'invalid',
@@ -289,7 +295,23 @@ export function useSurveyLoader({
                 });
                 return;
               }
-              console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
+              attrs = entrySeed.contactAttrs;
+            } else {
+              try {
+                attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
+                if (cancelled) return;
+              } catch (attrsError) {
+                if (cancelled) return;
+                if (attrsError instanceof ORPCError && attrsError.code === 'INVALID_TEST_LINK') {
+                  setControl({
+                    ...result.control,
+                    testSession: 'invalid',
+                    testSessionKind: null,
+                  });
+                  return;
+                }
+                console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
+              }
             }
             if (attrs) {
               setContactAttrs(attrs);
