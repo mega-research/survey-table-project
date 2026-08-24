@@ -6,7 +6,7 @@ import {
   type DispatchChunkResult,
 } from '@/server/mail/services/campaign-dispatch';
 
-import { ctxLogger, inngest, type MailCampaignQueuedData } from '../client';
+import { ctxLogger, inngest, type MailCampaignQueuedData } from '@/lib/inngest/client';
 
 const CHUNK_SIZE = 50;
 const FUNCTION_ID = 'campaign-dispatcher';

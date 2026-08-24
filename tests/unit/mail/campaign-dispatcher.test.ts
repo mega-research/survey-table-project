@@ -4,7 +4,7 @@ import {
   cleanupAfterDispatchRetryExhaustion,
   finishCampaignDispatch,
   runCampaignChunks,
-} from '@/lib/inngest/functions/campaign-dispatcher';
+} from '@/server/workflows/jobs/campaign-dispatcher';
 
 describe('campaign dispatcher chunk loop', () => {
   it('cancelled chunk 이후 예약된 chunk를 실행하지 않는다', async () => {

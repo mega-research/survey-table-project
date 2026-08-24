@@ -5,7 +5,7 @@ import { logger as baseLogger } from '@/lib/logger';
 import { runDeletionExecutor } from '@/server/storage-lifecycle/deletion-executor.server';
 import { rebuildMutableKeyRefs } from '@/server/storage-lifecycle/key-ref-index.server';
 
-import { ctxLogger, inngest } from '../client';
+import { ctxLogger, inngest } from '@/lib/inngest/client';
 
 /**
  * R2 유예 삭제 집행 cron — 일 1회 (KST 04:00).

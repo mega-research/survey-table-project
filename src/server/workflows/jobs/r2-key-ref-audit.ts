@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { rebuildAllKeyRefs } from '@/server/storage-lifecycle/key-ref-index.server';
 
-import { ctxLogger, inngest } from '../client';
+import { ctxLogger, inngest } from '@/lib/inngest/client';
 
 /**
  * R2 참조 인덱스 전량 감사 cron — 월 1회 (KST 매월 1일 03:00).

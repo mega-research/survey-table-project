@@ -1,6 +1,6 @@
 import { reconcileCampaignRecipients } from '@/server/mail/services/campaign-reconcile';
 
-import { ctxLogger, inngest, type MailCampaignDispatchedData } from '../client';
+import { ctxLogger, inngest, type MailCampaignDispatchedData } from '@/lib/inngest/client';
 
 /**
  * 발송 직후 recipient 상태 reconcile.

@@ -6,7 +6,7 @@ import {
   campaignReconciler,
   r2DeletionExecutor,
   r2KeyRefAudit,
-} from '@/lib/inngest/functions';
+} from '@/server/workflows/jobs';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
