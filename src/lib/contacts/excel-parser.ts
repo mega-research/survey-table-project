@@ -15,10 +15,14 @@ function toArrayBuffer(input: Buffer | ArrayBuffer): ArrayBuffer {
 /**
  * 엑셀 컬럼명 정규화. 줄바꿈 → 공백, 연속 공백 → 1개, trim.
  * attrs key 로 사용되므로 일관성 중요.
+ *
+ * 헤더 셀도 데이터 셀과 같은 `cellToString` 을 거친다 — 엑셀에서 서식이 섞인 헤더는
+ * richText 객체로 올라오고, String() 으로 바로 찍으면 컬럼명이 통째로 '[object Object]'
+ * 가 된다 (하이퍼링크·수식 헤더도 동일).
  */
 export function normalizeHeaderKey(value: unknown): string {
   if (value == null) return '';
-  return String(value).replace(/\s+/g, ' ').trim();
+  return cellToString(value).replace(/\s+/g, ' ').trim();
 }
 
 /** 셀 → 문자열. 숫자/null/undefined 모두 안전하게 string. */

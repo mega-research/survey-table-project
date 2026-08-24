@@ -35,6 +35,22 @@ describe('normalizeHeaderKey', () => {
     expect(normalizeHeaderKey(null)).toBe('');
     expect(normalizeHeaderKey(undefined)).toBe('');
   });
+  // 회귀: 서식이 섞인 헤더 셀은 richText 객체로 올라온다. String() 으로 바로 찍으면
+  // 컬럼명이 통째로 '[object Object]' 가 되어 업로드 마법사의 컬럼 설정이 무너진다.
+  it('richText 헤더 → run 들의 text 를 이어붙인다', () => {
+    expect(normalizeHeaderKey({ richText: [{ text: '연번' }] })).toBe('연번');
+    expect(
+      normalizeHeaderKey({ richText: [{ text: '센터' }, { text: ' ID' }] }),
+    ).toBe('센터 ID');
+  });
+  it('하이퍼링크 헤더 → 표시 텍스트', () => {
+    expect(
+      normalizeHeaderKey({ text: '개별 URL', hyperlink: 'https://example.com' }),
+    ).toBe('개별 URL');
+  });
+  it('수식 헤더 → 계산 결과', () => {
+    expect(normalizeHeaderKey({ formula: 'A1', result: '이메일' })).toBe('이메일');
+  });
 });
 
 describe('previewExcel - individual-mini.xlsx (Row 0 병합, Row 1 헤더)', () => {
