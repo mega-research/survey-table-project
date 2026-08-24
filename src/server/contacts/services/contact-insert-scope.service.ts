@@ -4,18 +4,8 @@ import 'server-only';
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { ensureTestContactColumns } from './test-contact-columns';
-import {
-  type OperationsDataScope,
-  resolveWriteScopeIsTest,
-} from '@/server/data-scope.server';
+import { type OperationsDataScope, lockWriteScope } from '@/server/data-scope.server';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-
-interface SurveyScopeRow extends Record<string, unknown> {
-  id: string;
-  test_mode_enabled: boolean;
-  contact_columns: ContactColumnScheme | null;
-  test_contact_columns: ContactColumnScheme | null;
-}
 
 export interface PreparedContactInsertScope {
   scope: OperationsDataScope;
@@ -37,17 +27,13 @@ export async function prepareContactInsertScope(
     isGuest: boolean;
   },
 ): Promise<PreparedContactInsertScope> {
-  const rows = await tx.execute<SurveyScopeRow>(sql`
-    SELECT id, test_mode_enabled, contact_columns, test_contact_columns
-    FROM surveys
-    WHERE id = ${input.surveyId}::uuid
-    FOR UPDATE
-  `);
-  const survey = rows[0];
-  if (!survey) throw new Error('설문을 찾을 수 없습니다.');
+  const locked = await lockWriteScope(tx, input.surveyId, input.isGuest, {
+    lock: 'update',
+    columns: ['contactColumns', 'testContactColumns'],
+  });
+  if (!locked) throw new Error('설문을 찾을 수 없습니다.');
 
-  const isTest = resolveWriteScopeIsTest(survey.test_mode_enabled, input.isGuest);
-  const scope: OperationsDataScope = isTest ? 'test' : 'real';
+  const { isTest, scope, row: survey } = locked;
   const [countRow] = await tx
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)
@@ -62,8 +48,8 @@ export async function prepareContactInsertScope(
   }
 
   const scheme = isTest
-    ? ensureTestContactColumns(survey.contact_columns, survey.test_contact_columns)
-    : survey.contact_columns;
+    ? ensureTestContactColumns(survey.contactColumns, survey.testContactColumns)
+    : survey.contactColumns;
 
   if (isTest && existingCount === 0) {
     await tx

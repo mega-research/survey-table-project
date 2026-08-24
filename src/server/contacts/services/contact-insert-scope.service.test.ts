@@ -4,16 +4,28 @@ vi.mock('@/db', () => ({ db: {} }));
 
 import { prepareContactInsertScope } from './contact-insert-scope.service';
 
-/** surveys FOR UPDATE 행 1건 + 대상자 count 1건을 순서대로 돌려주는 tx stub. */
+/**
+ * lockWriteScope 의 잠금 조회와 대상자 count 를 한 select stub 으로 받는다.
+ * 잠금 쪽만 `.for('update')` 를 붙이므로 호출 순서에 기대지 않고 갈린다.
+ */
 function makeTx(surveyRow: Record<string, unknown>, targetCount: number) {
   const deleteCalls: unknown[] = [];
   const updateCalls: unknown[] = [];
+  const lockModes: unknown[] = [];
   const tx = {
-    execute: vi.fn(async () => [surveyRow]),
     select: vi.fn(() => {
       const chain = {
         from: () => chain,
-        where: async () => [{ total: targetCount }],
+        where: () => ({
+          // 잠금 조회 — lockWriteScope 가 .for('update') 로 소비한다.
+          for: async (mode: unknown) => {
+            lockModes.push(mode);
+            return [surveyRow];
+          },
+          // 대상자 count — await 로 바로 소비된다.
+          then: <R,>(resolve: (rows: Array<{ total: number }>) => R) =>
+            Promise.resolve([{ total: targetCount }]).then(resolve),
+        }),
       };
       return chain;
     }),
@@ -26,16 +38,16 @@ function makeTx(surveyRow: Record<string, unknown>, targetCount: number) {
       return { set: () => ({ where: vi.fn(async () => undefined) }) };
     }),
   };
-  return { tx, deleteCalls, updateCalls };
+  return { tx, deleteCalls, updateCalls, lockModes };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
+/** lockWriteScope 투영 — enabled(전역 테스트 모드 플래그) + 요청 컬럼. */
 const TEST_MODE_ON_ROW = {
-  id: SURVEY_ID,
-  test_mode_enabled: true,
-  contact_columns: null,
-  test_contact_columns: null,
+  enabled: true,
+  contactColumns: null,
+  testContactColumns: null,
 };
 
 describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
@@ -74,5 +86,18 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
     expect(prepared.scope).toBe('test');
     // 어드민 기존 동작 — test 스코프가 비어 있으면 익명 테스트 응답을 정리한다.
     expect(deleteCalls).toHaveLength(1);
+  });
+
+  it('설문 행을 FOR UPDATE 로 잠근 뒤 준비한다', async () => {
+    const { tx, lockModes } = makeTx(TEST_MODE_ON_ROW, 0);
+
+    await prepareContactInsertScope(tx as never, {
+      surveyId: SURVEY_ID,
+      requestedCount: 1,
+      requireEmptyTestScope: false,
+      isGuest: false,
+    });
+
+    expect(lockModes).toEqual(['update']);
   });
 });
