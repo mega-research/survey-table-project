@@ -21,18 +21,23 @@ interface KpiCellSpec {
    * 비율 텍스트(△n%)에 적용할 색상 — 'drop'은 의미상 부정적이므로 rose 톤.
    * total 셀은 '100%'를 보여주는 것이 어색하므로 숨김 처리.
    * 'live'는 진행중 셀 전용 — 펄스 인디케이터 + "live" 텍스트로 렌더된다.
+   * 'excluded'는 자격 미달 셀 전용 — 부적격이라 total 대비 비율이 의미 없어 제외 안내를 쓴다.
    */
-  deltaTone?: 'rose' | 'slate' | 'live' | 'hidden';
+  deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded';
 }
 
 const CELLS: KpiCellSpec[] = [
   { label: '전체', field: 'total', deltaTone: 'hidden' },
   { label: '진행중', field: 'inProgress', deltaTone: 'live' },
   { label: '완료', field: 'completed', deltaTone: 'slate' },
-  { label: '자격 미달', field: 'screenedOut', deltaTone: 'slate' },
+  { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
   { label: '불량', field: 'bad', deltaTone: 'slate' },
   { label: '이탈', field: 'drop', deltaTone: 'rose' },
 ];
+
+/** 자격 미달 셀 전용 문구 — 카드에는 짧게, 전체 문장은 title 툴팁으로 노출한다. */
+const EXCLUDED_SHORT = '전체·완료에서 제외';
+const EXCLUDED_FULL = '자격미달인 사람은 전체응답(분모), 완료(분자)에서 제외됩니다.';
 
 function formatValue(value: number, isEmpty: boolean): string {
   if (isEmpty) return '—';
@@ -47,6 +52,7 @@ function formatDelta(
 ): string {
   if (tone === 'hidden') return '';
   if (tone === 'live') return 'live';
+  if (tone === 'excluded') return EXCLUDED_SHORT;
   if (isEmpty || total === 0) return '—';
   const pct = (value / total) * 100;
   // 소수 첫째 자리 — 분석 페이지와 동일한 표기 정책
@@ -72,11 +78,17 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
             deltaTone === 'rose' && 'text-rose-600',
             deltaTone === 'live' && 'text-blue-600',
             deltaTone === 'slate' && 'text-slate-400',
+            deltaTone === 'excluded' && 'text-slate-500',
           )}>
             {deltaTone === 'live' && (
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             )}
-            <span>{delta}</span>
+            <span
+              className={cn(deltaTone === 'excluded' && 'cursor-help')}
+              {...(deltaTone === 'excluded' ? { title: EXCLUDED_FULL } : {})}
+            >
+              {delta}
+            </span>
           </div>
         )}
       </CardContent>
@@ -128,8 +140,10 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {CELLS.map((cell) => {
         const value = counts[cell.field];
-        // 진행중 셀은 isEmpty 와 무관하게 항상 카운트 노출 (live 가시성 보존)
-        const cellIsEmpty = cell.deltaTone === 'live' ? false : isEmpty;
+        // 진행중 셀과 자격 미달 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
+        // (live 가시성 / 제외 안내가 존재 이유)
+        const cellIsEmpty =
+          cell.deltaTone === 'live' || cell.deltaTone === 'excluded' ? false : isEmpty;
         const kpiCell = (
           <KpiCell
             key={cell.field}
