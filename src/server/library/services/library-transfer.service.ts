@@ -30,6 +30,7 @@ export async function importLibrary(json: string): Promise<void> {
   try {
     const data = JSON.parse(json);
 
+    let importedQuestions: NewSavedQuestion[] | null = null;
     if (data.savedQuestions) {
       // tmp/survey/ URL 포함 가능성 (다른 환경 export) → promote 후 insert.
       // 외부 JSON 역직렬화 경계: 읽기 경계 정규화(보존 모드)로 수렴 — 무변형 passthrough,
@@ -37,33 +38,39 @@ export async function importLibrary(json: string): Promise<void> {
       const rawQuestions = normalizeQuestions(
         data.savedQuestions.map((sq: NewSavedQuestion) => sq.question),
       );
+      // promote 는 R2 왕복이라 트랜잭션 밖에서 끝낸다 — 네트워크 대기 동안 tx 를 열어두지 않는다.
       const promotedQuestions = await promoteNoticeAttachments(
         await promoteSurveyImages(rawQuestions),
       );
 
-      const importedQuestions: NewSavedQuestion[] = data.savedQuestions.map(
-        (sq: NewSavedQuestion, i: number) => ({
-          ...sq,
-          question: promotedQuestions[i] as unknown as NewSavedQuestion['question'],
-          isPreset: false,
-        }),
-      );
-
-      await db.insert(savedQuestions).values(importedQuestions);
+      importedQuestions = data.savedQuestions.map((sq: NewSavedQuestion, i: number) => ({
+        ...sq,
+        question: promotedQuestions[i] as unknown as NewSavedQuestion['question'],
+        isPreset: false,
+      }));
     }
 
+    let newCategories: NewQuestionCategory[] = [];
     if (data.categories) {
       const existingCategories = await getAllCategories();
       const existingIds = new Set(existingCategories.map((c) => c.id));
 
-      const newCategories = data.categories.filter(
+      newCategories = data.categories.filter(
         (c: NewQuestionCategory) => !existingIds.has(c.id!),
       );
-
-      if (newCategories.length > 0) {
-        await db.insert(questionCategories).values(newCategories);
-      }
     }
+
+    if (!importedQuestions && newCategories.length === 0) return;
+
+    // 두 INSERT 를 한 트랜잭션으로 — 카테고리에서 깨졌을 때 질문만 남는 반쪽 import 를 막는다.
+    await db.transaction(async (tx) => {
+      if (importedQuestions) {
+        await tx.insert(savedQuestions).values(importedQuestions);
+      }
+      if (newCategories.length > 0) {
+        await tx.insert(questionCategories).values(newCategories);
+      }
+    });
   } catch (error) {
     logger.error({ err: error }, '라이브러리 import 실패');
     throw error;
