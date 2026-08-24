@@ -11,6 +11,7 @@ import {
   UpdateQuestionResponseInput,
   CompleteResponseOutput,
 } from '../domain/response';
+import * as completion from '../services/response-completion.service';
 import * as svc from '../services/response.service';
 
 // 회당 소수 호출 쓰기(생성/완료/updateAnswer)는 response-mutation 그룹으로 IP 당 rate limit 한다.
@@ -68,7 +69,7 @@ const createBlank = rateLimited
 const complete = rateLimited
   .input(CompleteResponseInput)
   .output(CompleteResponseOutput)
-  .handler(({ input }) => svc.completeResponse(input));
+  .handler(({ input }) => completion.completeResponse(input));
 
 export const response = {
   updateAnswer,

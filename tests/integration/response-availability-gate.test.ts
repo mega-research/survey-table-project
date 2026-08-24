@@ -275,14 +275,14 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
   it('완료 카운트가 maxResponses 이상이면 완료를 거부한다', async () => {
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow();
   });
 
   it('완료 카운트가 maxResponses 미만이면 완료를 통과시킨다', async () => {
     countResultMock.mockResolvedValue([{ total: 1 }]);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -293,7 +293,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 0 }]);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -304,7 +304,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
     await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
       reason: 'max_responses_reached',
@@ -317,7 +317,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 0 }]);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
       reason: 'survey_paused',
     });
@@ -879,7 +879,7 @@ describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
     countResultMock.mockResolvedValue([{ total: 1 }]);
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
     await completeResponse({ responseId: 'r1' });
 
     // completeResponse 이 시나리오(data 없음, versionId 없음)에서는 정원 count 쿼리 1건만
@@ -939,8 +939,12 @@ describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete �
       isTest: true,
     });
 
-    const { createResponseWithFirstAnswer, completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+    const { createResponseWithFirstAnswer } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion.service'
+    );
 
     const createResult = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,

@@ -108,7 +108,7 @@ describe('completeResponse 실제 대상자 후처리', () => {
     const { logger } = await import('@/lib/logger');
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response.service');
+      await import('@/server/survey-response/services/response-completion.service');
 
     await expect(completeResponse({ responseId: completedResponse.id })).resolves.toMatchObject({
       id: completedResponse.id,

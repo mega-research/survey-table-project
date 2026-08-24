@@ -151,7 +151,7 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
 
     await completeResponse({
@@ -173,7 +173,7 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
 
     await completeResponse({
@@ -193,7 +193,7 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
 
     await completeResponse({
@@ -213,7 +213,7 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
 
     await completeResponse({

@@ -80,7 +80,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
     // 0행 이후 폴백 SELECT 도 행 없음
     selectLimitMock.mockResolvedValue([]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
 
     // data 없이 호출 → prefill SELECT 분기 skip, 곧장 트랜잭션 UPDATE 로 진입
     await expect(completeResponse({ responseId: 'does-not-exist' })).rejects.toThrow(
@@ -93,7 +93,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
     const result = await completeResponse({ responseId: 'r1' });
 
     expect(result).toMatchObject({ id: 'r1', surveyId: 's1' });
@@ -107,7 +107,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: null, contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
     const result = await completeResponse({ responseId: 'r1' });
 
     expect(result).toMatchObject({ id: 'r1', isCompleted: true });
@@ -120,7 +120,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: false, status: 'screened_out', deletedAt: null, contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
 
     await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
   });
@@ -132,7 +132,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: new Date(), contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
 
     await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
   });

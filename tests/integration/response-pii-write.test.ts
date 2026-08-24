@@ -615,7 +615,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('트랜잭션 set 의 questionResponses 에서 PII 값만 암호문이고 비PII 는 평문이다', async () => {
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -638,7 +638,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('replaceResponseAnswers 도 동일하게 암호화된 맵을 받는다', async () => {
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -662,7 +662,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
   it('loadPiiQuestionIds 쿼리 텍스트에 UNION 과 live pii_encrypted 조각이 포함된다', async () => {
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -718,7 +718,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -770,7 +770,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({ responseId: RESPONSE_ID });
 
@@ -787,7 +787,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
     // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -908,7 +908,7 @@ describe('completeResponse — 저장값(암호문) 기준 바이트 필터', ()
 
   it('평문 필터는 통과하지만 암호문이 상한을 넘는 PII 키를 drop 하고 완료는 계속한다', async () => {
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -934,7 +934,7 @@ describe('completeResponse — 저장값(암호문) 기준 바이트 필터', ()
 
   it('비PII 문항의 같은 평문 220KB 는 종전대로 저장된다', async () => {
     const { completeResponse } = await import(
-      '@/server/survey-response/services/response.service'
+      '@/server/survey-response/services/response-completion.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,

@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
 import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
 import { hardResetResponse } from '@/server/survey-response/services/response-manage.service';
-import { completeResponse } from '@/server/survey-response/services/response.service';
+import { completeResponse } from '@/server/survey-response/services/response-completion.service';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
