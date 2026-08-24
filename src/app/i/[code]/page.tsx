@@ -28,6 +28,9 @@ export default async function ShortInvitePage({ params }: PageProps) {
   return (
     <SurveyResponseFlow
       surveyIdentifier={resolved.accessIdentifier}
+      // 초대 코드를 풀면서 설문 id 를 이미 조회했다. 넘기지 않으면 클라이언트가
+      // 슬러그·비공개 토큰으로 같은 답을 한 번 더 물어 왕복이 하나 늘어난다.
+      resolvedSurveyId={resolved.surveyId}
       inviteToken={resolved.inviteToken}
       testToken={null}
     />

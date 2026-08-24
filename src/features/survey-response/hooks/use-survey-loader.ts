@@ -35,6 +35,16 @@ interface PreviewContext {
 
 interface UseSurveyLoaderArgs {
   identifier: string;
+  /**
+   * 호출한 라우트가 서버에서 이미 알아낸 설문 id.
+   *
+   * 짧은 초대 링크(/i/<code>)는 서버 컴포넌트가 초대 코드를 풀면서 설문 id 를 이미 손에
+   * 쥔다. 그런데 넘겨주지 않으면 이 훅이 슬러그·비공개 토큰으로 **그 답을 다시** 묻는다 —
+   * 응답자 입장에서 순수한 왕복 한 번이 늘어난다. 값이 오면 그 조회를 건너뛴다.
+   *
+   * 식별자 해석만 건너뛸 뿐 설문 조회(forResponse)와 이후 분기는 그대로다.
+   */
+  resolvedSurveyId?: string | undefined;
   isAdminEdit: boolean;
   isPreview?: boolean;
   adminContext: AdminContext | undefined;
@@ -85,6 +95,7 @@ interface UseSurveyLoaderResult {
  */
 export function useSurveyLoader({
   identifier,
+  resolvedSurveyId,
   isAdminEdit,
   isPreview = false,
   adminContext,
@@ -198,32 +209,38 @@ export function useSurveyLoader({
           return;
         }
 
+        // 파싱 자체는 순수 계산이라 건너뛸 이유가 없다. 아래 비공개 설문 가드가 type 을 쓴다.
         const { type, value } = parsesurveyIdentifier(identifier);
 
-        let surveyId: string | null = null;
+        let surveyId: string | null = resolvedSurveyId ?? null;
 
-        switch (type) {
-          case 'slug': {
-            const dbSurvey = await client.surveyBuilder.publicRead.bySlug({ slug: value });
-            if (cancelled) return;
-            if (dbSurvey) surveyId = dbSurvey.id;
-            break;
-          }
-          case 'privateToken': {
-            const dbSurvey = await client.surveyBuilder.publicRead.byPrivateToken({ token: value });
-            if (cancelled) return;
-            if (dbSurvey) {
-              surveyId = dbSurvey.id;
-            } else {
-              // UUID 형태지만 private_token 매칭 실패 — surveys.id 로 직접 시도.
-              // 단체 메일/컨택 응답 링크가 surveys.id 직접 URL을 사용하므로 호환 필요.
-              surveyId = value;
+        // 호출한 라우트가 서버에서 이미 풀어 준 경우 이 왕복은 통째로 없다.
+        if (!surveyId) {
+          switch (type) {
+            case 'slug': {
+              const dbSurvey = await client.surveyBuilder.publicRead.bySlug({ slug: value });
+              if (cancelled) return;
+              if (dbSurvey) surveyId = dbSurvey.id;
+              break;
             }
-            break;
+            case 'privateToken': {
+              const dbSurvey = await client.surveyBuilder.publicRead.byPrivateToken({
+                token: value,
+              });
+              if (cancelled) return;
+              if (dbSurvey) {
+                surveyId = dbSurvey.id;
+              } else {
+                // UUID 형태지만 private_token 매칭 실패 — surveys.id 로 직접 시도.
+                // 단체 메일/컨택 응답 링크가 surveys.id 직접 URL을 사용하므로 호환 필요.
+                surveyId = value;
+              }
+              break;
+            }
+            case 'id':
+              surveyId = value;
+              break;
           }
-          case 'id':
-            surveyId = value;
-            break;
         }
 
         if (!surveyId) {

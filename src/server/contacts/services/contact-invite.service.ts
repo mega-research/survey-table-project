@@ -8,7 +8,12 @@ import { surveys } from '@/db/schema/surveys';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
 export type ResolvedInvite =
-  | { kind: 'valid'; accessIdentifier: string; inviteToken: string }
+  /**
+   * surveyId 는 이 조회가 이미 손에 쥔 값이다. 응답 페이지가 그것을 받으면 슬러그·비공개
+   * 토큰으로 같은 답을 다시 묻는 왕복이 사라진다 — accessIdentifier 는 URL 표기용으로
+   * 그대로 두고(비공개 설문이면 privateToken), surveyId 를 따로 싣는다.
+   */
+  | { kind: 'valid'; surveyId: string; accessIdentifier: string; inviteToken: string }
   | { kind: 'invalid_test' };
 
 /**
@@ -45,5 +50,10 @@ export async function resolveInviteCode(code: string): Promise<ResolvedInvite | 
     isPublic: row.isPublic,
   });
 
-  return { kind: 'valid', accessIdentifier, inviteToken: row.inviteToken };
+  return {
+    kind: 'valid',
+    surveyId: row.surveyId,
+    accessIdentifier,
+    inviteToken: row.inviteToken,
+  };
 }
