@@ -20,11 +20,18 @@ export const FILTER_SOURCE = {
  * 상태 축. 검색바 dropdown(value-widget)과 헤더 필터(header-filter-popover)가 공유.
  * 구 URL 의 'true'/'false'(respondedAt 이진)는 WEB_FILTER_VALUES 로만 계속 수용하고
  * UI 옵션에는 노출하지 않는다.
+ *
+ * 종결 상태 3종(screened_out/quotaful_out/bad)의 라벨은 응답 내역 표
+ * (mapStatusPill · profiles 필터)와 같은 문자열이어야 한다 — 같은 상태를 두 화면이
+ * 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
  */
 export const WEB_FILTER_OPTIONS = [
   { value: 'completed', label: '응답 완료' },
   { value: 'in_progress', label: '진행 중' },
   { value: 'drop', label: '이탈' },
+  { value: 'screened_out', label: '자격 미달' },
+  { value: 'quotaful_out', label: '쿼터마감' },
+  { value: 'bad', label: '불량' },
   { value: 'none', label: '미응답' },
 ] as const;
 
