@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
 
+import { repairPrefixedXlsx } from './xlsx-namespace-repair';
+
 /**
  * Buffer / ArrayBuffer 입력을 exceljs 가 받는 ArrayBuffer 로 정규화.
  * Node Buffer 는 Uint8Array view — 독립 ArrayBuffer 로 복사 (slice 만으로는
@@ -78,6 +80,54 @@ function cellNodeToString(cell: ExcelJS.Cell): string {
   return cellToString(value);
 }
 
+/**
+ * 엑셀을 읽을 수 없을 때의 사용자향 에러. procedure 가 typed error 로 바꿔
+ * 마법사 화면에 문구를 그대로 띄운다 — 이게 없으면 oRPC 가 운영에서 메시지를
+ * 'Internal server error' 로 갈아끼워, 사용자는 왜 실패했는지 알 수 없다.
+ */
+export class ExcelReadError extends Error {
+  override readonly name = 'ExcelReadError';
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+  }
+}
+
+export const EXCEL_UNREADABLE_MESSAGE =
+  '엑셀 파일을 읽을 수 없습니다. 파일이 손상됐거나 xlsx 형식이 아닐 수 있습니다. ' +
+  'Excel 에서 파일을 열어 "다른 이름으로 저장"(.xlsx)한 뒤 다시 업로드해 주세요.';
+
+/**
+ * 워크북 로드 단일 창구.
+ *
+ * exceljs 4.4 는 접두사 네임스페이스로 저장된 파트(<x:workbook> — OpenXML SDK /
+ * ClosedXML 계열 출력)를 파싱하지 못하고 `Cannot read properties of undefined
+ * (reading 'sheets')` 로 죽는다. 실패하면 접두사만 벗겨 한 번 재시도하고
+ * (xlsx-namespace-repair 참조), 그래도 안 되면 사용자향 문구로 바꿔 던진다.
+ *
+ * 정상 파일은 첫 시도에서 끝나므로 이 폴백 비용을 지지 않는다.
+ */
+async function loadWorkbook(buffer: Buffer | ArrayBuffer): Promise<ExcelJS.Workbook> {
+  const source = toArrayBuffer(buffer);
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(source);
+    return wb;
+  } catch (error) {
+    const repaired = repairPrefixedXlsx(source);
+    if (repaired) {
+      try {
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(toArrayBuffer(repaired));
+        return wb;
+      } catch {
+        // 복구본도 실패 — 원래 에러를 원인으로 남긴다.
+      }
+    }
+    throw new ExcelReadError(EXCEL_UNREADABLE_MESSAGE, { cause: error });
+  }
+}
+
 export interface PreviewOptions {
   sheetName: string;
   /** 1-based 헤더 행 번호. 디폴트 1. */
@@ -100,8 +150,7 @@ export async function previewExcel(
   buffer: Buffer | ArrayBuffer,
   opts: PreviewOptions,
 ): Promise<PreviewResult> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(toArrayBuffer(buffer));
+  const wb = await loadWorkbook(buffer);
 
   const sheetNames = wb.worksheets.map((w) => w.name);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
@@ -143,8 +192,7 @@ export async function parseExcelRows(
   buffer: Buffer | ArrayBuffer,
   opts: ParseRowsOptions,
 ): Promise<Array<Record<string, string>>> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(toArrayBuffer(buffer));
+  const wb = await loadWorkbook(buffer);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
   if (!ws) return [];
 
