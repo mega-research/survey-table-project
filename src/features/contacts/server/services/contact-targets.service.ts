@@ -3,7 +3,6 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
@@ -20,6 +19,8 @@ import type {
   UpdateContactTargetInput,
 } from '../../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -33,7 +34,7 @@ async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isGuest: boolean,
-): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
+): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
   const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
 
   const [target] = await tx
@@ -56,7 +57,7 @@ async function lockCurrentSurveyScope(
   tx: DbTransaction,
   surveyId: string,
   isGuest: boolean,
-): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
+): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
   const [survey] = await tx
     .select({
       enabled: surveys.testModeEnabled,
@@ -71,7 +72,10 @@ async function lockCurrentSurveyScope(
   const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
   return {
     isTest,
-    scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
+    // 잠금 아래 raw JSONB 를 읽는 지점이라 소비처로 내보내기 전에 형태를 보정한다.
+    scheme: normalizeContactColumnScheme(
+      (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
+    ),
   };
 }
 

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContactColumnScheme, ContactUploadMapping } from '@/db/schema/schema-types';
+import type { ContactUploadMapping } from '@/db/schema/schema-types';
+import {
+  normalizeContactColumnScheme,
+  type NormalizedContactColumnScheme,
+} from '@/lib/operations/contacts';
 import { appendNewColumnsToScheme, getSchemeRouting } from '@/lib/contacts/scheme-helpers';
 
-function baseScheme(): ContactColumnScheme {
-  return {
+// 프로덕션과 같은 입구를 거친다 — 정규화가 스킴의 유일한 생산자라는 계약을 테스트도 따른다.
+function baseScheme(): NormalizedContactColumnScheme {
+  return normalizeContactColumnScheme({
     version: 1,
     headerRow: 2,
     columns: [
@@ -16,7 +21,7 @@ function baseScheme(): ContactColumnScheme {
       { key: 'web', label: 'web', source: 'system.web', order: 6 },
       { key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: 7 },
     ],
-  };
+  })!;
 }
 
 function mapping(overrides: Partial<ContactUploadMapping> = {}): ContactUploadMapping {
