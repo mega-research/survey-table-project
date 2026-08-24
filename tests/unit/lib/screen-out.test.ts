@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Question } from '@/types/survey';
-import { detectScreenOut } from '@/lib/survey-response/screen-out';
+import { detectScreenOut } from '@/server/survey-response/domain/screen-out';
 
 /**
  * 자격미달 판정 — end 분기의 endOutcome 이 'screened_out' 일 때만 true.

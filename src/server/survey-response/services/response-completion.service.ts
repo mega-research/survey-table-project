@@ -17,7 +17,7 @@ import {
   snapshotLookups as readSnapshotLookups,
   snapshotQuestions as readSnapshotQuestions,
 } from '@/server/read-models/version-snapshot';
-import { detectScreenOut } from '@/lib/survey-response/screen-out';
+import { detectScreenOut } from '../domain/screen-out';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
