@@ -29,6 +29,7 @@ import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
 import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
+import { detectScreenOut } from '@/lib/survey-response/screen-out';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
@@ -1923,6 +1924,9 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   //
   // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
   // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
+  // 자격미달 판정(detectScreenOut)이 쓰는 응답 시점 스냅샷 질문. calc/게이팅 재계산이
+  // 필요 없는 설문에서도 판정은 해야 하므로 아래 if 블록 밖에서 보관한다.
+  let snapshotQuestions: Question[] = [];
   let storedRecalc: {
     questions: Question[];
     lookups: SurveyLookup[];
@@ -1941,6 +1945,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       | undefined;
     // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
     const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
+    snapshotQuestions = snapQuestions;
     const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
     const hasCalcCells = snapQuestions.some((q) =>
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
@@ -1997,6 +2002,14 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   let quotaOverflow = false;
   if (validatedResponses && gateRow && !gateRow.isTest) {
     quotaOverflow = await detectQuotaOverflow(gateRow.surveyId, validatedResponses);
+  }
+
+  // 자격미달 판정 — 클라이언트 신고를 신뢰하지 않고 응답 시점 스냅샷의 분기 규칙을
+  // 서버가 다시 평가한다 (응답 페이지는 pub 표면). 스냅샷이 없으면(prune·레거시)
+  // 판정을 건너뛰어 기존 완료 동작을 유지한다 — 저장을 막지 않는 fail-safe.
+  let screenedOut = false;
+  if (validatedResponses && snapshotQuestions.length > 0) {
+    screenedOut = detectScreenOut(snapshotQuestions, validatedResponses);
   }
 
   // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
@@ -2058,10 +2071,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     const [updated] = await tx
       .update(surveyResponses)
       .set({
-        isCompleted: true,
+        // 자격미달은 부적격이라 완료 수(분자)에 들어가면 안 된다 — is_completed 로 갈린다.
+        isCompleted: !screenedOut,
         completedAt,
         // 운영 현황 콘솔용 추적 컬럼
-        status: 'completed',
+        status: screenedOut ? 'screened_out' : 'completed',
         progressPct: 100,
         lastActivityAt: completedAt,
         // 서버 클럭 기준 경과 초 (started_at부터 now()까지)
