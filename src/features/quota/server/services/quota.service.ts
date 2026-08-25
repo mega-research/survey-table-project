@@ -8,14 +8,19 @@ import { surveyResponses, surveys } from '@/db/schema/surveys';
 import type { QuotaConfig } from '@/db/schema/schema-types';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
+import {
+  normalizeQuotaConfig,
+  type NormalizedQuotaConfig,
+} from '@/lib/quota/normalize';
 
 /** 설문의 쿼터 플랜 조회. 미설정이면 null. */
-export async function getQuotaConfig(surveyId: string): Promise<QuotaConfig | null> {
+export async function getQuotaConfig(surveyId: string): Promise<NormalizedQuotaConfig | null> {
   const row = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { quotaConfig: true },
   });
-  return row?.quotaConfig ?? null;
+  // JSONB 드리프트 보정 — 소비처는 dimensions·cells·categories 를 배열로 순회한다.
+  return normalizeQuotaConfig(row?.quotaConfig ?? null);
 }
 
 /** 설문의 쿼터 플랜 저장(덮어쓰기). 없는 설문이면 throw. */

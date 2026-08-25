@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaDimension } from '@/db/schema/schema-types';
 import {
   cellKeyOf,
   countCell,
@@ -10,6 +10,7 @@ import {
   resolveCategoryId,
   tallyAll,
 } from '@/lib/quota/matching';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 const genderDim: QuotaDimension = {
   id: 'd-gender',
@@ -33,7 +34,8 @@ const ageDim: QuotaDimension = {
   ],
 };
 
-const config: QuotaConfig = {
+// 프로덕션과 같은 입구를 거친다 — 정규화가 쿼터 플랜의 유일한 생산자다.
+const config = normalizeQuotaConfig({
   enabled: true,
   dimensions: [genderDim, ageDim],
   cells: [
@@ -41,7 +43,7 @@ const config: QuotaConfig = {
     { categoryIds: ['c-m', 'c-20'], target: 5 },
   ],
   closedMessage: null,
-};
+})!;
 
 describe('normalizeAnswerValues', () => {
   it('문자열은 단일 배열로', () => {

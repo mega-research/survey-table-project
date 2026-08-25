@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import { quotaTone } from '@/lib/operations/quota-status';
 import { buildQuotaStatus } from '@/lib/operations/quota-status';
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**
  * contact_columns JSONB 드리프트 방어.
@@ -68,13 +68,32 @@ describe('normalizeContactColumnScheme', () => {
  */
 describe('quota_config 드리프트 방어', () => {
   it('categories 가 없는 차원이 있어도 집계가 죽지 않는다', () => {
-    const config = {
+    // 드리프트된 저장분. 정규화를 거치지 않으면 buildQuotaStatus 에 넘길 수조차 없다
+    // (NormalizedQuotaConfig 브랜드가 컴파일에서 막는다) — 그게 이 방어의 본체다.
+    const config = normalizeQuotaConfig({
       enabled: true,
       dimensions: [{ id: 'd1', questionId: 'q1', kind: 'choice', label: '성별' }],
       cells: [{ categoryIds: ['c-unknown'], target: 10 }],
-    } as unknown as QuotaConfig;
+    })!;
 
+    expect(config.dimensions[0]?.categories).toEqual([]);
     expect(() => buildQuotaStatus(config, [])).not.toThrow();
+  });
+
+  it('dimensions·cells 가 배열이 아니어도 빈 배열로 낮춘다', () => {
+    const config = normalizeQuotaConfig({ enabled: true, dimensions: null, cells: 'oops' })!;
+    expect(config.dimensions).toEqual([]);
+    expect(config.cells).toEqual([]);
+    expect(() => buildQuotaStatus(config, [])).not.toThrow();
+  });
+
+  it('categoryIds 가 없는 셀은 버린다 — 셀 키 계산이 join 에서 죽는다', () => {
+    const config = normalizeQuotaConfig({
+      enabled: true,
+      dimensions: [],
+      cells: [{ target: 10 }, { categoryIds: ['c-1'], target: 5 }],
+    })!;
+    expect(config.cells).toHaveLength(1);
   });
 
   it('quotaTone 은 target 0 을 즉시 마감으로 본다', () => {

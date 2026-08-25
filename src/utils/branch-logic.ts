@@ -333,6 +333,10 @@ export function checkTableValidationRule(
   // 응답 데이터는 평면 구조: { "cell-id": value, ... }
   const tableResponse = response as Record<string, unknown>;
   const { conditions, type } = rule;
+  // tableValidationRules 도 JSONB 라 형태 검증이 없다. conditions 나 rowIds 가 없으면
+  // 규칙을 적용할 근거가 없으므로 미매칭으로 본다 — 여기서 던지면 응답 제출과
+  // 자격미달 서버 재평가가 같이 죽는다.
+  if (!conditions || !Array.isArray(conditions.rowIds)) return false;
   const { rowIds, cellColumnIndex, expectedValues } = conditions;
 
   // 메인 조건: 지정된 행(rowIds)에서 기대값 매칭 행을 수집.
@@ -597,6 +601,13 @@ function evaluateConditionGroup(
   allQuestions: Question[],
   ctx: BranchEvalCtx,
 ): boolean {
+  // JSONB 드리프트 방어 — displayCondition 은 z.custom 이라 zod 가 형태를 검증하지 않는다.
+  // conditions 가 배열이 아니면 "조건 없음" 으로 본다(= 표시). 숨기는 쪽으로 폴백하면
+  // 응답자가 답해야 할 질문을 못 보고 지나치므로, 설문에서는 보이는 쪽이 안전한 실패다.
+  // 이 함수는 shouldDisplay{Group,Row,Column,DynamicGroup,Question} 5곳이 공유하는
+  // 급소라 여기 한 곳이 응답 페이지 렌더와 서버 재평가(detectScreenOut)를 함께 막는다.
+  if (!Array.isArray(displayCondition.conditions)) return true;
+
   // 조건들을 평가 (enabled가 false인 조건은 제외)
   const results = displayCondition.conditions
     .filter((condition) => condition.enabled !== false)
