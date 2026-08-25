@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { sql, type SQL } from 'drizzle-orm';
 
-import { getContactResultCodes } from './contacts.server';
+import { getContactResultCodes } from './contacts';
 
 import {
   extractResultCodeStatuses,

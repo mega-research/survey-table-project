@@ -11,26 +11,26 @@ import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
-import { getSurveyContactStats } from '@/server/operations/services/contact-stats.server';
+import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
   hasActiveFilters,
   normalizeListArgs,
 } from '@/lib/operations/profiles';
-import { listResponsesForProfiles } from '@/server/operations/services/profiles.server';
+import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import {
   hydrateProfileColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
-import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts.server';
+import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts';
 import {
   parseProfilesClausesFromUrl,
   parseProfilesHeaderFiltersFromUrl,
   PROFILES_EXTRA_CANDIDATES,
-} from '@/server/operations/services/profiles-filters.server';
+} from '@/server/operations/services/profiles-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope.server';

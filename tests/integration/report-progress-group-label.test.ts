@@ -62,7 +62,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { getProgressGroupLabel } from '@/server/operations/services/report-progress.server';
+import { getProgressGroupLabel } from '@/server/operations/services/report-progress';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000010';
 

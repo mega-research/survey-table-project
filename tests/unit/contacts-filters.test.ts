@@ -5,7 +5,7 @@ import {
   parseHeaderFiltersFromUrl,
   placeholderFor,
   type ColumnCandidate,
-} from '@/server/read-models/contacts-filters.server';
+} from '@/server/read-models/contacts-filters';
 import {
   FILTER_NONE_LABEL,
   FILTER_NONE_VALUE,

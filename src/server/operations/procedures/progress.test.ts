@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/progress.service', async () => {
+vi.mock('../services/progress', async () => {
   const actual = await vi.importActual<
-    typeof import('../services/progress.service')
-  >('../services/progress.service');
+    typeof import('../services/progress')
+  >('../services/progress');
   return {
     ...actual,
     updateProgressColumns: vi.fn(),
   };
 });
 
-import * as svc from '../services/progress.service';
+import * as svc from '../services/progress';
 import { progress } from './progress';
 
 function authedContext(): ORPCContext {

@@ -21,11 +21,11 @@ vi.mock('@/db', () => ({
 vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/server/read-models/contact-sample.server', () => ({
+vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(),
 }));
 
-import { getFirstContactSample } from '@/server/read-models/contact-sample.server';
+import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope.server';
 
 import { getSurveyTestSample } from './test-sample.service';

@@ -13,7 +13,7 @@ import { renderForTestSend } from './render-for-send';
 import { sendTestMail } from './send';
 import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample.server';
+import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope.server';
 
 import type {

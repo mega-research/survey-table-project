@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { authed, pub, withRateLimit } from '@/server/orpc';
 
 import { QuotaCheckInput, QuotaCheckResult, QuotaConfigSchema } from '../domain/quota';
-import * as svc from '../services/quota.service';
+import * as svc from '../services/quota';
 
 const get = authed
   .input(z.object({ surveyId: z.string() }))

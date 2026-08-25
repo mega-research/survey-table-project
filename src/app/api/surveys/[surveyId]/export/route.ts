@@ -5,7 +5,7 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
-import { getSurveyContactStats } from '@/server/operations/services/contact-stats.server';
+import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';

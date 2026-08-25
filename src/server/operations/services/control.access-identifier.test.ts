@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 
-import { getControlState, setTestMode } from './control.service';
+import { getControlState, setTestMode } from './control';
 
 const capturedSets: Array<Record<string, unknown>> = [];
 let surveyRow: Record<string, unknown> | undefined;

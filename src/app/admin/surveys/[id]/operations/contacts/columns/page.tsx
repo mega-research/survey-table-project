@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ColumnSchemeEditor } from '@/features/operations/contacts/column-scheme-editor';
-import { getContactColumnScheme } from '@/server/read-models/contacts.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const metadata: Metadata = {

@@ -6,7 +6,7 @@ import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/server/read-models/contacts.server';
+} from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const metadata: Metadata = {

@@ -8,7 +8,7 @@ import {
   parseHeaderFiltersFromUrl,
   splitHeaderValues,
   type ParseExtraHooks,
-} from '@/server/read-models/contacts-filters.server';
+} from '@/server/read-models/contacts-filters';
 import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql';
 import {
   escapeLikePattern,
@@ -16,7 +16,7 @@ import {
   type FilterCondition as ClauseFilterCondition,
 } from '@/lib/operations/filter-shared';
 import { STATUS_FILTERS } from '@/lib/operations/profiles';
-import { type ColumnCandidate } from './progress-filters.server';
+import { type ColumnCandidate } from './progress-filters';
 import { parseIdListInput } from '@/lib/operations/range-list';
 
 /** 응답 전용 추가 컬럼 후보 — 명단 후보 앞에 노출. */

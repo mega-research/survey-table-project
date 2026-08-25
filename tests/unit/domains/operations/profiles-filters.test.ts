@@ -8,9 +8,9 @@ import {
   parseProfilesHeaderFiltersFromUrl,
   PROFILES_EXTRA_CANDIDATES,
   type ProfilesClauseCols,
-} from '@/server/operations/services/profiles-filters.server';
+} from '@/server/operations/services/profiles-filters';
 import { HEADER_FILTER_VALUE_SEPARATOR as SEP } from '@/lib/operations/filter-shared';
-import type { ColumnCandidate } from '@/server/operations/services/progress-filters.server';
+import type { ColumnCandidate } from '@/server/operations/services/progress-filters';
 
 const candidates: ColumnCandidate[] = [
   ...PROFILES_EXTRA_CANDIDATES,

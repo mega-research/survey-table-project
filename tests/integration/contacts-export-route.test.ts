@@ -11,14 +11,14 @@ vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
 vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/server/read-models/contacts.server', () => ({
+vi.mock('@/server/read-models/contacts', () => ({
   getContactColumnScheme: vi.fn(),
   listContactsForExport: vi.fn(),
   MAX_CONTACT_EXPORT_ROWS: 50000,
 }));
-vi.mock('@/server/operations/services/contacts-export.server', async (importOriginal) => {
+vi.mock('@/server/operations/services/contacts-export', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/server/operations/services/contacts-export.server')>();
+    await importOriginal<typeof import('@/server/operations/services/contacts-export')>();
   return { ...actual, decryptPiiForExport: vi.fn(async () => new Map()) };
 });
 
@@ -28,7 +28,7 @@ import { loadOperationsDataScope } from '@/server/data-scope.server';
 import {
   getContactColumnScheme,
   listContactsForExport,
-} from '@/server/read-models/contacts.server';
+} from '@/server/read-models/contacts';
 import { GET } from '@/app/api/surveys/[surveyId]/contacts/export/route';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 

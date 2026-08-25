@@ -9,10 +9,10 @@ import {
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import { getContactColumnScheme } from '@/server/read-models/contacts.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { parseConditionFromUrl } from '@/server/operations/services/progress-filters.server';
+import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
 import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress';
 import {
@@ -21,7 +21,7 @@ import {
   getProgressGroupLabel,
   getProgressRows,
   getProgressTotals,
-} from '@/server/operations/services/report-progress.server';
+} from '@/server/operations/services/report-progress';
 
 export const dynamic = 'force-dynamic';
 

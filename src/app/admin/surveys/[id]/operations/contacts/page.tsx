@@ -20,11 +20,11 @@ import {
   getContactColumnScheme,
   getContactResultCodes,
   listContactsForSurvey,
-} from '@/server/read-models/contacts.server';
+} from '@/server/read-models/contacts';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
-} from '@/server/read-models/contacts-filters.server';
+} from '@/server/read-models/contacts-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 

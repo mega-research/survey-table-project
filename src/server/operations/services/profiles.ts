@@ -21,11 +21,11 @@ import type { FilterClause } from '@/lib/operations/filter-shared';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from '@/server/read-models/result-code-statuses.server';
+} from '@/server/read-models/result-code-statuses';
 import type { ProfilesRow } from '@/shared/contracts/operations-io';
 import type { ResponseStatus } from '@/shared/contracts/survey-response';
 
-import { buildProfilesFilterSql } from './profiles-filters.server';
+import { buildProfilesFilterSql } from './profiles-filters';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/operations-io) 소관 — 여기서 다시 내보낸다.
 export type { ProfilesRow };

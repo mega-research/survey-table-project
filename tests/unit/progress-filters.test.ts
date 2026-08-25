@@ -4,7 +4,7 @@ import {
   placeholderFor,
   parseConditionFromUrl,
   type ColumnCandidate,
-} from '@/server/operations/services/progress-filters.server';
+} from '@/server/operations/services/progress-filters';
 
 // CONTACT_PII_HMAC_KEY 는 tests/setup.ts 에서 ??= 로 이미 셋업됨.
 

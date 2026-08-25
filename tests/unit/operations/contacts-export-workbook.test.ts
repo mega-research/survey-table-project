@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // contacts-export.server → @/db 는 import 시 DATABASE_URL 검사 — 단위 테스트에서는 차단
 vi.mock('@/db', () => ({ db: {} }));
 
-import { buildContactsExportWorkbook } from '@/server/operations/services/contacts-export.server';
+import { buildContactsExportWorkbook } from '@/server/operations/services/contacts-export';
 import type { ContactExportRowData, ExportColumn } from '@/lib/operations/contacts-export';
 
 const columns: ExportColumn[] = [

@@ -145,7 +145,7 @@ export async function createCampaign(
     //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
     //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } =
-      await import('@/server/read-models/result-code-statuses.server');
+      await import('@/server/read-models/result-code-statuses');
     const { listBouncedContactIds } = await import('./campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
@@ -325,9 +325,9 @@ export async function fetchCandidateIds(
   const { previewCampaignCandidates, countCampaignCandidates } =
     await import('./campaigns.server');
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
-    await import('@/server/read-models/contacts.server');
+    await import('@/server/read-models/contacts');
   const { parseClausesFromUrl, parseHeaderFiltersFromUrl } = await import(
-    '@/server/read-models/contacts-filters.server'
+    '@/server/read-models/contacts-filters'
   );
   const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
   const scope = await loadOperationsDataScope(surveyId);

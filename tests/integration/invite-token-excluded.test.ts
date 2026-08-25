@@ -93,7 +93,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/read-models/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({

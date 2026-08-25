@@ -8,7 +8,7 @@ import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
-} from '@/server/workflows/test-mail-archive.server';
+} from '@/server/workflows/test-mail-archive';
 import { lockWriteScope } from '@/server/data-scope.server';
 import { generateInviteCode } from '@/lib/survey-url';
 

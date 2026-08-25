@@ -12,13 +12,13 @@ import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
-} from '@/server/operations/services/aggregate-daily.server';
-import { aggregateStatus } from '@/server/operations/services/aggregate-status.server';
-import { getDailyStats } from '@/server/operations/services/daily-stats.server';
-import { getDropFunnel } from '@/server/operations/services/drop-funnel.server';
-import { getPageDwell } from '@/server/operations/services/page-dwell.server';
-import { getQuotaStatus } from '@/server/quota/services/quota-status.server';
-import { getResponseTime } from '@/server/operations/services/response-time.server';
+} from '@/server/operations/services/aggregate-daily';
+import { aggregateStatus } from '@/server/operations/services/aggregate-status';
+import { getDailyStats } from '@/server/operations/services/daily-stats';
+import { getDropFunnel } from '@/server/operations/services/drop-funnel';
+import { getPageDwell } from '@/server/operations/services/page-dwell';
+import { getQuotaStatus } from '@/server/quota/services/quota-status';
+import { getResponseTime } from '@/server/operations/services/response-time';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';

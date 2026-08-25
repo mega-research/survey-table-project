@@ -6,7 +6,7 @@ import { db } from '@/db';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from './result-code-statuses.server';
+} from './result-code-statuses';
 import { isValidUUID } from '@/lib/utils';
 
 import {

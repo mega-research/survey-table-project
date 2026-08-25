@@ -374,7 +374,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/read-models/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
@@ -388,7 +388,7 @@ vi.mock('@/server/read-models/result-code-statuses.server', async () => {
 import {
   isResponseExcluded,
   listResponsesForProfiles,
-} from '@/server/operations/services/profiles.server';
+} from '@/server/operations/services/profiles';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const OTHER_SURVEY_ID = '00000000-0000-4000-8000-000000000041';

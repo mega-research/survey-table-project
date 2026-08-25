@@ -7,7 +7,7 @@ import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from '@/server/read-models/result-code-statuses.server';
+} from '@/server/read-models/result-code-statuses';
 
 import type { CreateCampaignResult, SendSingleCampaignInput } from '../domain/mail-campaign';
 import { createCampaign } from './mail-campaigns.service';

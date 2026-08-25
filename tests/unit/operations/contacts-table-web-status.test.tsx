@@ -14,7 +14,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 
 import { ContactsTable } from '@/features/operations/contacts/contacts-table';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import type { ContactsRow } from '@/server/read-models/contacts.server';
+import type { ContactsRow } from '@/server/read-models/contacts';
 
 const scheme: ContactColumnScheme = {
   version: 1,

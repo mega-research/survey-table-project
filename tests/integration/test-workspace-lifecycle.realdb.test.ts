@@ -12,11 +12,11 @@ import {
   testResponseAttempts,
 } from '@/db/schema';
 import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
-import { getControlState } from '@/server/operations/services/control.service';
-import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
+import { getControlState } from '@/server/operations/services/control';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
 import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
 import { processResendEvent } from '@/server/mail/services/resend-webhook';
-import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive.server';
+import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive';
 import { computeCycleBreakdown } from '@/server/mail/services/mail-billing-cycles';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

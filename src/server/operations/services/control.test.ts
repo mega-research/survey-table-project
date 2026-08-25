@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getControlState, setPaused } from './control.service';
+import { getControlState, setPaused } from './control';
 
 // db.update().set().where().returning() 체인의 set 페이로드와 where 조건을 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];

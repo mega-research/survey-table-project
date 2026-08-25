@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/quota.service', () => ({
+vi.mock('../services/quota', () => ({
   getQuotaConfig: vi.fn(),
   saveQuotaConfig: vi.fn(),
   checkQuota: vi.fn(),
   markQuotaFull: vi.fn(),
 }));
 
-import * as svc from '../services/quota.service';
+import * as svc from '../services/quota';
 import { quota } from './quota';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 

@@ -18,7 +18,7 @@ import {
   previewCampaignCandidates,
 } from '@/server/mail/services/campaigns.server';
 import { FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
-import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters.server';
+import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

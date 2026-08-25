@@ -14,7 +14,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/read-models/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: mockGetResultCodeStatuses,
   buildNegativeCodeExists: vi.fn(),
 }));

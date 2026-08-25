@@ -2,7 +2,7 @@ import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
 
-import * as svc from '../services/control.service';
+import * as svc from '../services/control';
 
 const ControlStateSchema = z.object({
   isPaused: z.boolean(),

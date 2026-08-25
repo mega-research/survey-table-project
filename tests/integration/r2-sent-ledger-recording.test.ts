@@ -135,7 +135,7 @@ vi.mock('@/server/mail/services/send', () => ({
   sendTestMail: sendTestMailMock,
 }));
 
-vi.mock('@/server/read-models/contact-sample.server', () => ({
+vi.mock('@/server/read-models/contact-sample', () => ({
   getContactSampleById: vi.fn(async () => null),
   getFirstContactSample: vi.fn(async () => null),
 }));

@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
-export { disableTestWorkspace } from './test-workspace.service';
+export { disableTestWorkspace } from './test-workspace';
 
 export interface SurveyControlState {
   isPaused: boolean;

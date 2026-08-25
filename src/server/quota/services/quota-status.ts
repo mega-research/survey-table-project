@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
 
 import type { OperationsDataScope } from '@/server/data-scope.server';
 import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/operations/quota-status';

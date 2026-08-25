@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
-import { getFirstContactSample } from '@/server/read-models/contact-sample.server';
+import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope.server';
 
 import type { SurveyTestSample } from '../domain/test-sample';

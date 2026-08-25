@@ -25,7 +25,7 @@ vi.mock('@/server/data-scope.server', () => ({
   getOperationsDataScope: vi.fn(async () => 'real'),
   testFlagForScope: vi.fn(() => false),
 }));
-vi.mock('@/server/operations/services/profiles.server', () => ({
+vi.mock('@/server/operations/services/profiles', () => ({
   isResponseExcluded: vi.fn(async () => false),
 }));
 vi.mock('@/db', () => ({

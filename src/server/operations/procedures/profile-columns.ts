@@ -4,7 +4,7 @@ import {
   UpdateProfileColumnsInput,
   UpdateProfileColumnsResult,
 } from '../domain/profile-columns';
-import * as svc from '../services/profile-columns.service';
+import * as svc from '../services/profile-columns';
 
 /**
  * 응답 내역 컬럼 픽커 갱신.

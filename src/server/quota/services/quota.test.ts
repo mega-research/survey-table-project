@@ -53,7 +53,7 @@ describe('checkQuota', () => {
 
   it('isTest 완료 응답을 셀 카운트 모수에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
     mockSurveyFindFirst.mockResolvedValue({ quotaConfig: config });
-    const { checkQuota } = await import('./quota.service');
+    const { checkQuota } = await import('./quota');
 
     await checkQuota({
       responseId: 'r1',
@@ -73,7 +73,7 @@ describe('checkQuota', () => {
       quotaConfig: { ...config, cells: [{ categoryIds: ['c-f'], target: 0 }] },
     });
     mockResponseFindFirst.mockResolvedValue({ isTest: true });
-    const { checkQuota } = await import('./quota.service');
+    const { checkQuota } = await import('./quota');
 
     const result = await checkQuota({
       responseId: 'test-response',
@@ -89,7 +89,7 @@ describe('checkQuota', () => {
   it('responseId와 surveyId가 섞였거나 stale이면 quota mutation을 거부한다', async () => {
     mockSurveyFindFirst.mockResolvedValue({ quotaConfig: config });
     mockResponseFindFirst.mockResolvedValue(null);
-    const { checkQuota } = await import('./quota.service');
+    const { checkQuota } = await import('./quota');
 
     await expect(
       checkQuota({

@@ -66,7 +66,7 @@ describe('운영 응답 범위', () => {
   });
 
   it('aggregateStatus는 전달된 test scope의 응답만 집계한다', async () => {
-    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status.server');
+    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
     await aggregateStatus('survey-1', 'test');
 
@@ -76,7 +76,7 @@ describe('운영 응답 범위', () => {
   });
 
   it('aggregateStatus는 전달된 real scope의 응답만 집계한다', async () => {
-    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status.server');
+    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
     await aggregateStatus('survey-1', 'real');
 
@@ -86,7 +86,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {
-    const { listContactsForSurvey } = await import('@/server/read-models/contacts.server');
+    const { listContactsForSurvey } = await import('@/server/read-models/contacts');
 
     await listContactsForSurvey({
       surveyId: `contacts-${scope}`,
@@ -102,7 +102,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
-    const { getContactDetailById } = await import('@/server/read-models/contacts.server');
+    const { getContactDetailById } = await import('@/server/read-models/contacts');
 
     const result = await getContactDetailById(`contact-${scope}`, scope);
 
@@ -111,7 +111,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 메일 이력은 %s scope와 보관 상태를 제한한다', async (scope, isTest) => {
-    const { getMailRecipientsForTarget } = await import('@/server/read-models/contacts.server');
+    const { getMailRecipientsForTarget } = await import('@/server/read-models/contacts');
 
     await getMailRecipientsForTarget(`contact-${scope}`, scope);
 
@@ -122,7 +122,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('report는 contact와 response를 모두 %s scope로 제한한다', async (scope, isTest) => {
-    const { getProgressRows } = await import('@/server/operations/services/report-progress.server');
+    const { getProgressRows } = await import('@/server/operations/services/report-progress');
 
     await getProgressRows({
       surveyId: `report-${scope}`,
@@ -156,7 +156,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('메일 미리보기 sample은 %s scope의 첫 대상만 조회한다', async (scope, isTest) => {
-    const { getFirstContactSample } = await import('@/server/read-models/contact-sample.server');
+    const { getFirstContactSample } = await import('@/server/read-models/contact-sample');
 
     const result = await getFirstContactSample(`sample-${scope}`, scope);
 

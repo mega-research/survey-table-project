@@ -14,10 +14,10 @@ import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/server/read-models/contacts.server';
-import { parseClausesFromUrl } from '@/server/read-models/contacts-filters.server';
+} from '@/server/read-models/contacts';
+import { parseClausesFromUrl } from '@/server/read-models/contacts-filters';
 import { getOperationsDataScope } from '@/server/data-scope.server';
-import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters.server';
+import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';

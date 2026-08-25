@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import * as svc from '../services/control.service';
+import * as svc from '../services/control';
 import { control } from './control';
 
-vi.mock('../services/control.service', () => ({
+vi.mock('../services/control', () => ({
   getControlState: vi.fn(),
   setPaused: vi.fn(),
   setTestMode: vi.fn(),

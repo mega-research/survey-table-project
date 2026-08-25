@@ -16,7 +16,7 @@ import { maskEmail } from '@/lib/operations/contacts';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from '@/server/read-models/result-code-statuses.server';
+} from '@/server/read-models/result-code-statuses';
 import {
   buildContactsFilterSql,
   latestResultCodeExpr,

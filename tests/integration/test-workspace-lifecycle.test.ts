@@ -2,11 +2,11 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
-import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
 import {
   archiveTestMailForTargets,
   archiveTestWorkspaceMail,
-} from '@/server/workflows/test-mail-archive.server';
+} from '@/server/workflows/test-mail-archive';
 
 type RecipientStatus =
   | 'queued'

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
-import { getControlState } from '@/server/operations/services/control.service';
+import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 

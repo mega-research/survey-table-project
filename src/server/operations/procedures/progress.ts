@@ -4,7 +4,7 @@ import {
   UpdateProgressColumnsInput,
   UpdateProgressColumnsResult,
 } from '../domain/progress';
-import * as svc from '../services/progress.service';
+import * as svc from '../services/progress';
 
 /**
  * 진척률 표 컬럼 갱신.

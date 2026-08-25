@@ -6,7 +6,7 @@ import { contactTargets, questions, surveyVersions, surveys } from '@/db/schema'
 import { encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';

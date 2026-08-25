@@ -14,9 +14,9 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope.server';
-import { type FilterCondition, buildFilterSql } from './progress-filters.server';
+import { type FilterCondition, buildFilterSql } from './progress-filters';
 import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress';
-import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses.server';
+import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 

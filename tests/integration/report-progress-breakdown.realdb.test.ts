@@ -14,7 +14,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { surveys, surveyResponses, contactTargets, contactAttempts } from '@/db/schema';
-import { getProgressTotals } from '@/server/operations/services/report-progress.server';
+import { getProgressTotals } from '@/server/operations/services/report-progress';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

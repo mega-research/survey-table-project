@@ -20,7 +20,7 @@ vi.mock('@/db', () => {
 
 import { db } from '@/db';
 
-import { updateProfileColumns } from './profile-columns.service';
+import { updateProfileColumns } from './profile-columns';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 

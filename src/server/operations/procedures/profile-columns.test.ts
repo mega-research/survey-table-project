@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/profile-columns.service', async () => {
+vi.mock('../services/profile-columns', async () => {
   const actual = await vi.importActual<
-    typeof import('../services/profile-columns.service')
-  >('../services/profile-columns.service');
+    typeof import('../services/profile-columns')
+  >('../services/profile-columns');
   return {
     ...actual,
     updateProfileColumns: vi.fn(),
   };
 });
 
-import * as svc from '../services/profile-columns.service';
+import * as svc from '../services/profile-columns';
 import { profileColumns } from './profile-columns';
 
 function authedContext(): ORPCContext {
