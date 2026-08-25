@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // 무거운 자식(TipTap 에디터 / 표 에디터)은 대체한다 — 검증 대상은 질문 레벨 옵션의
-// "변수번호"(optionCode) Input 배선이다. tests/unit/survey/answer-quote-builder-controls.test.tsx
+// "변수번호"(optionCode) Input 배선이다. question-basic-tab-answer-quote.test.tsx
 // 와 동일한 하네스 패턴(실제 option 헬퍼로 formData 를 굴림).
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: () => null,

@@ -24,6 +24,8 @@ vi.mock('@/shared/lib/rpc', () => ({
 }));
 
 import { CellContentModal } from '@/features/survey-builder/table-editor/cell-editor/cell-content-modal';
+// SSOT 배열을 실측 대조하는 계약 테스트라 값 import 가 본질이다 — 테스트는 클라이언트 번들에 실리지 않는다.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { PERSISTED_QUESTION_FIELDS } from '@/db/schema/question-persisted-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { ChoiceGroup, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
