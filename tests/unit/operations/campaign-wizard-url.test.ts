@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
+import { buildTemplateRedirectQuery } from '@/features/operations/mail-campaign/campaign-wizard-url';
 
 /**
  * 마법사는 templateId 없이 진입하면 첫 템플릿으로 리다이렉트한다. 그때 쿼리를

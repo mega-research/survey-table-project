@@ -19,7 +19,7 @@ import { parseClausesFromUrl } from '@/server/read-models/contacts-filters';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
-import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
+import { buildTemplateRedirectQuery } from '@/features/operations/mail-campaign/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,

@@ -17,7 +17,9 @@ vi.mock('./submitted-answers', async (importOriginal) => ({
 }));
 
 // in_progress 경로의 progress 재계산이 실 snapshot 조회로 가지 않도록 고정한다.
-vi.mock('./response-progress', () => ({
+vi.mock('./response-progress', async (importOriginal) => ({
+  // calculateProgressPct(순수)는 실구현 유지 — 병합 전 lib 모듈에서 오던 동작 그대로
+  ...(await importOriginal<typeof import('./response-progress')>()),
   getProgressSnapshot: vi.fn(async () => ({ positionMap: new Map(), totalQuestions: 0 })),
 }));
 

@@ -13,8 +13,7 @@ import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/cryp
 import { logger } from '@/lib/logger';
 import { resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
-import { calculateProgressPct } from '@/lib/operations/response-progress';
-import { getProgressSnapshot } from './response-progress';
+import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';

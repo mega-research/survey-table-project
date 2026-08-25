@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateProgressPct } from '@/lib/operations/response-progress';
+import { calculateProgressPct } from './response-progress';
 
 /** 테스트용 positionMap 헬퍼 — id `q1`..`qN` → position 1..N */
 function makePositionMap(n: number): Map<string, number> {
