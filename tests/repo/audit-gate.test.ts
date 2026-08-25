@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateAuditReport,
   parseAllowlist,
-} from '../../../.github/audit-gate';
+} from '../../.github/audit-gate';
 
 // pnpm 8 정상 보고서 골격(취약점 0건). advisories + metadata.vulnerabilities 가 모두 존재.
 function cleanReport() {

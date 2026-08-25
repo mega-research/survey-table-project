@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
  * 아니라 '본문 인증 없는 액션' 이므로, components/ 나 features/ 로 옮겨도 잡혀야 한다.
  */
 
-const SRC_DIR = resolve(__dirname, '..', '..', '..', 'src');
+const SRC_DIR = resolve(__dirname, '..', '..', 'src');
 
 /** 의도적으로 남긴 서버 액션 파일 (src 기준 상대경로, POSIX 구분자). */
 const ALLOWED = ['actions/auth-actions.ts', 'actions/unsubscribe-actions.ts'];

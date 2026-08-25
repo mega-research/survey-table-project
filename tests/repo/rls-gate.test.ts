@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateMigrations, loadMigrations } from '../../../.github/rls-gate';
+import { evaluateMigrations, loadMigrations } from '../../.github/rls-gate';
 
 describe('evaluateMigrations', () => {
   it('CREATE TABLE 에 ENABLE RLS 가 있으면 ok 를 반환한다', () => {

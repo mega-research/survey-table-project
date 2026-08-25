@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { findMigrationDrift } from '../../../.github/migration-journal-gate';
+import { findMigrationDrift } from '../../.github/migration-journal-gate';
 
 describe('findMigrationDrift', () => {
   it('journal 에 추적된 파일은 untracked 가 아니다', () => {
