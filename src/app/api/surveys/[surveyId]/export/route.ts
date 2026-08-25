@@ -40,9 +40,9 @@ async function handleExport(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + 게스트 설문 스코프 가드. oRPC authed 미들웨어와 동일한 canAccessSurvey 를
-    // 적용해, ADMIN_USER_IDS 로 어드민을 잠갔을 때 이 REST 라우트가 형제 우회 경로가
-    // 되지 않도록 한다(게스트는 grant 된 설문만, 그 외 임의 인증사용자는 전체 차단).
+    // 인증 + 게스트 설문 스코프 가드. requireAuth 가 세션 + status='active' 를 보장하고
+    // canAccessSurvey 가 설문 일치를 강제한다 — oRPC scoped 와 같은 정책이라 이 REST
+    // 라우트가 형제 우회 경로가 되지 않는다(게스트는 grant 된 설문만).
     const user = await requireAuth();
     const { surveyId } = await params;
     // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는

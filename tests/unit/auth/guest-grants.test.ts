@@ -5,7 +5,6 @@ import {
   getGuestSurveyIds,
   guestPathRedirect,
   guestPostLoginRedirect,
-  isAdminOrGuestGrantHolder,
   isForeignSurveyConsolePath,
   isGuestUser,
   parseGuestGrants,
@@ -52,47 +51,20 @@ describe('getGuestSurveyIds / isGuestUser', () => {
 });
 
 describe('canAccessSurvey', () => {
-  it('admin allowlist 통과자는 어느 설문이든 true', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+  it('grant 없는 내부 계정은 어느 설문이든 true', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
     expect(canAccessSurvey('admin-1', 'survey-x')).toBe(true);
   });
 
   it('게스트는 grant 된 설문들만 true', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a,guest-1:survey-b');
     expect(canAccessSurvey('guest-1', 'survey-a')).toBe(true);
     expect(canAccessSurvey('guest-1', 'survey-b')).toBe(true);
     expect(canAccessSurvey('guest-1', 'survey-c')).toBe(false);
   });
 
-  it('allowlist 밖 + grant 없음은 false', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    expect(canAccessSurvey('nobody', 'survey-a')).toBe(false);
-  });
-
-  it('allowlist 미설정 fail-open 이어도 grant 보유자는 grant 설문만 접근한다', () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    expect(canAccessSurvey('guest-1', 'survey-a')).toBe(true);
-    expect(canAccessSurvey('guest-1', 'survey-b')).toBe(false);
-  });
-});
-
-describe('isAdminOrGuestGrantHolder', () => {
-  it('admin allowlist 포함이면 true', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    expect(isAdminOrGuestGrantHolder('admin-1')).toBe(true);
-  });
-
-  it('allowlist 밖이라도 grant 보유자면 true - 게스트 업로드 표면 허용', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    expect(isAdminOrGuestGrantHolder('guest-1')).toBe(true);
-  });
-
-  it('allowlist 밖 + grant 없음이면 false', () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    expect(isAdminOrGuestGrantHolder('nobody')).toBe(false);
+  it('grant 목록이 비어 있으면 게스트가 아니므로 통과한다', () => {
+    expect(canAccessSurvey('nobody', 'survey-a')).toBe(true);
   });
 });
 

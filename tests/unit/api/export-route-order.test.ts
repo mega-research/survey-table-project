@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { NextRequest } from 'next/server';
 
@@ -15,12 +15,17 @@ const { authState, mockFindFirst } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+    };
+  }),
 }));
 
 vi.mock('@/db', () => ({
@@ -56,11 +61,6 @@ describe('export 라우트 questions 조회는 order 오름차순으로 정렬�
     authState.user = { id: 'admin' };
     mockFindFirst.mockReset();
     mockFindFirst.mockResolvedValue(undefined); // → 404, 인자만 캡처
-    delete process.env['ADMIN_USER_IDS'];
-  });
-
-  afterEach(() => {
-    delete process.env['ADMIN_USER_IDS'];
   });
 
   it('GET /export 는 with.questions.orderBy = asc(order)', async () => {

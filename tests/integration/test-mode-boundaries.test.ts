@@ -16,12 +16,17 @@ const {
   selectWhereArgs: [] as unknown[],
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+    };
+  }),
 }));
 
 vi.mock('@/db', () => ({

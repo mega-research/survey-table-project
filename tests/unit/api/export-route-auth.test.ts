@@ -6,12 +6,17 @@ const { authState } = vi.hoisted(() => ({
   authState: { user: null as null | { id: string } },
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+    };
+  }),
 }));
 
 vi.mock('@/db', () => ({
@@ -43,12 +48,12 @@ describe('GET /api/surveys/[surveyId]/export requires authentication', () => {
   });
 
   afterEach(() => {
-    delete process.env['ADMIN_USER_IDS'];
+    vi.unstubAllEnvs();
   });
 
-  it('returns 403 for authenticated user not in ADMIN_USER_IDS allowlist', async () => {
-    authState.user = { id: 'intruder-id' };
-    process.env['ADMIN_USER_IDS'] = 'real-admin-id';
+  it('게스트는 grant 밖 설문 export 가 403 이다 - oRPC scoped 와 같은 축', async () => {
+    authState.user = { id: 'guest-1' };
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:other-survey');
 
     const request = new NextRequest(
       'http://localhost/api/surveys/test-id/export?type=raw',

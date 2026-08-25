@@ -6,7 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
+import { allowActiveUser, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
   imageKindToExt,
   sanitizeImageExt,
@@ -72,7 +72,7 @@ const MAIL_CONVERTIBLE_TYPES = [
 // 예기치 못한 에러의 err 로깅·Sentry 캡처·500 응답은 로깅 래퍼(withRouteLogging)가 담당한다.
 async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
   // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
-  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  const guard = await guardUploadRoute(ctx, allowActiveUser);
   if (!guard.ok) return guard.response;
 
   const formData = await request.formData();

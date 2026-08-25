@@ -4,12 +4,17 @@ const { authState } = vi.hoisted(() => ({
   authState: { user: null as null | { id: string } },
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+    };
+  }),
 }));
 
 // withRouteLogging 의 로그 컨텍스트 캡처 — 403 거부 로그에 행위자가 남는지 검증용.
@@ -38,13 +43,13 @@ function buildRequest() {
   });
 }
 
-describe('POST /api/upload/image requires admin', () => {
+describe('POST /api/upload/image requires auth', () => {
   beforeEach(() => {
     authState.user = null;
   });
 
   afterEach(() => {
-    delete process.env['ADMIN_USER_IDS'];
+    vi.unstubAllEnvs();
   });
 
   it('returns 401 without auth', async () => {
@@ -52,26 +57,25 @@ describe('POST /api/upload/image requires admin', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns 403 for authenticated user not in ADMIN_USER_IDS allowlist', async () => {
-    authState.user = { id: 'intruder-id' };
-    process.env['ADMIN_USER_IDS'] = 'real-admin-id';
+  it('게스트도 본문 이미지 업로드는 통과한다 - 401/403 이 아니다', async () => {
+    authState.user = { id: 'guest-1' };
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
 
     const response = await POST(buildRequest() as never);
-    expect(response.status).toBe(403);
+    expect([401, 403]).not.toContain(response.status);
   });
 
-  it('403 거부 access 로그에도 행위자(userId·role)가 바인딩된다', async () => {
-    authState.user = { id: 'intruder-id' };
-    process.env['ADMIN_USER_IDS'] = 'real-admin-id';
+  it('access 로그에 행위자(userId·role)가 바인딩된다', async () => {
+    authState.user = { id: 'guest-1' };
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
     captured.contexts.length = 0;
 
-    const response = await POST(buildRequest() as never);
-    expect(response.status).toBe(403);
+    await POST(buildRequest() as never);
 
     // 래퍼의 access 로그 시점(ctx.log 접근)에 병합된 컨텍스트가 캡처된다
     const last = captured.contexts[captured.contexts.length - 1];
     expect(last).toBeDefined();
-    expect(last?.['userId']).toBe('intruder-id');
-    expect(last?.['role']).toBe('user');
+    expect(last?.['userId']).toBe('guest-1');
+    expect(last?.['role']).toBe('guest');
   });
 });

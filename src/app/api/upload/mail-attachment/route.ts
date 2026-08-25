@@ -7,7 +7,7 @@ import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
+import { allowActiveUser, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
@@ -22,7 +22,7 @@ import {
 
 async function handleMailAttachmentUpload(request: NextRequest, ctx: RouteLogContext) {
   // 게스트도 메일 첨부 업로드가 필요하다.
-  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  const guard = await guardUploadRoute(ctx, allowActiveUser);
   if (!guard.ok) return guard.response;
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];

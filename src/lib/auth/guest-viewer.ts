@@ -8,16 +8,16 @@ import { isGuestUser } from '@/lib/auth/guest-grants';
  *
  * 게스트에게 숨겨야 하는 관리자 UI(설문 편집·엑셀 내보내기·테스트 모드 등)의
  * 서버 렌더 분기와, 운영 콘솔 데이터 스코프 고정에 사용한다. 접근 강제는 여기가
- * 아니라 미들웨어(guestPathRedirect) + procedure(scoped/authed)가 담당한다.
+ * 아니라 admin 레이아웃(guestPathRedirect) + procedure(scoped/authed)가 담당한다.
  *
  * layout.tsx, overview/profiles/preview 등 여러 RSC 가 각자 직접 호출하고
  * loadOperationsDataScope 내부에서도 호출되어 요청당 여러 번 실행되므로 React
- * cache 로 감싸 supabase auth.getUser() 왕복을 요청당 1회로 줄인다.
+ * cache 로 감싸 세션 조회 왕복을 요청당 1회로 줄인다.
  */
 async function loadIsGuestViewer(): Promise<boolean> {
-  // getCurrentUser 는 supabase 에러를 삼키고 null 을 돌려주는데, null 을 "게스트 아님"
-  // 으로 해석하면 일시적 auth 장애가 게스트를 어드민 스코프로 흘려보낸다. 호출부는
-  // 모두 미들웨어·procedure 인증을 통과한 뒤라 세션이 반드시 있으므로 fail-closed 로
+  // getCurrentUser 는 세션이 없으면 null 을 돌려주는데, null 을 "게스트 아님" 으로
+  // 해석하면 일시적 auth 장애가 게스트를 어드민 스코프로 흘려보낸다. 호출부는 모두
+  // 레이아웃 가드·procedure 인증을 통과한 뒤라 세션이 반드시 있으므로 fail-closed 로
   // requireAuth 를 쓴다.
   const user = await requireAuth();
   return isGuestUser(user.id);
