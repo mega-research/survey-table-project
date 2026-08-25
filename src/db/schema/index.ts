@@ -1,3 +1,4 @@
+export * from './auth';
 export * from './surveys';
 export * from './contacts';
 export * from './mail';
