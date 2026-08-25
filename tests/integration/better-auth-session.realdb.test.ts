@@ -22,7 +22,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import { accounts, sessions, users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
-import type { UserStatus } from '@/shared/contracts/auth';
+import {
+  CREDENTIAL_PROVIDER_ID,
+  LOCAL_CREDENTIAL_ISSUER,
+  type UserStatus,
+} from '@/shared/contracts/auth';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -52,8 +56,8 @@ async function seedUser(status: UserStatus): Promise<{ id: string; email: string
     id: crypto.randomUUID(),
     userId: id,
     accountId: id,
-    providerId: 'credential',
-    issuer: 'local:credential',
+    providerId: CREDENTIAL_PROVIDER_ID,
+    issuer: LOCAL_CREDENTIAL_ISSUER,
     password: await hashPassword(PASSWORD),
     createdAt: now,
     updatedAt: now,

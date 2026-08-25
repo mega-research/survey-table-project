@@ -36,7 +36,10 @@ async function main() {
   const { hashPassword } = await import('better-auth/crypto');
   const { eq } = await import('drizzle-orm');
   const { db } = await import('../src/db');
-  const { accounts, users } = await import('../src/db/schema');
+  const { accounts, users, userStatusEvents } = await import('../src/db/schema');
+  const { CREDENTIAL_PROVIDER_ID, LOCAL_CREDENTIAL_ISSUER } = await import(
+    '../src/shared/contracts/auth'
+  );
 
   console.log(`대상 DB: ${new URL(process.env['DATABASE_URL'] ?? '').host}`);
 
@@ -47,7 +50,21 @@ async function main() {
       .update(users)
       .set({ status: 'active', isSuperadmin: true, userType: 'internal', updatedAt: new Date() })
       .where(eq(users.id, existing.id));
-    console.log(`기존 계정을 active 슈퍼어드민(internal)으로 승격했습니다: ${email}`);
+    if (existing.status !== 'active') {
+      // 상태를 실제로 바꿨으면 감사 행을 남긴다. CLI 시드에는 행위자 계정이 없어
+      // 대상 계정 자신을 changedBy 로 기록한다 (전이 UI 는 티켓 04 소관).
+      await db.insert(userStatusEvents).values({
+        id: crypto.randomUUID(),
+        userId: existing.id,
+        fromStatus: existing.status,
+        toStatus: 'active',
+        changedBy: existing.id,
+        reason: 'auth:seed 슈퍼어드민 승격',
+      });
+    }
+    console.log(
+      `기존 계정을 active 슈퍼어드민 internal 로 승격했습니다: ${email} — 비밀번호는 변경되지 않습니다`,
+    );
     process.exit(0);
   }
 
@@ -68,8 +85,8 @@ async function main() {
     id: crypto.randomUUID(),
     userId,
     accountId: userId,
-    providerId: 'credential',
-    issuer: 'local:credential',
+    providerId: CREDENTIAL_PROVIDER_ID,
+    issuer: LOCAL_CREDENTIAL_ISSUER,
     password: await hashPassword(password),
     createdAt: now,
     updatedAt: now,

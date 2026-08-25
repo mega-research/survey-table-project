@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const handlerMock = vi.fn(async () => new Response('delegated', { status: 200 }));
+const handlerMock = vi.fn(async (_request: Request) => new Response('delegated', { status: 200 }));
 vi.mock('@/lib/auth/server', () => ({
   auth: { handler: (request: Request) => handlerMock(request) },
 }));
