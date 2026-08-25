@@ -4,7 +4,9 @@ import { SurveyResponseFlow } from '@/features/survey-response/survey-response-f
 import {
   InvalidInviteLinkScreen,
   InvalidTestLinkScreen,
+  TooManyRequestsScreen,
 } from '@/features/survey-response/survey-response-screens';
+import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
 import * as contactAttrsSvc from '@/server/contacts/services/contact-attrs.service';
 import { resolveInviteCode } from '@/server/contacts/services/contact-invite.service';
@@ -23,6 +25,11 @@ interface PageProps {
 }
 
 export default async function ShortInvitePage({ params }: PageProps) {
+  // 조회보다 먼저 센다. 이 라우트는 procedure 를 지나지 않으므로 여기서 걸지 않으면
+  // 같은 조회를 RPC 로 할 때만 계측되고 이 문은 무제한이 된다(rsc-guard 주석 참조).
+  // 무효 코드도 함께 세어 열거 비용까지 같은 한도 안에 둔다.
+  if (await isRscRateLimited('public-read')) return <TooManyRequestsScreen />;
+
   const { code } = await params;
   const resolved = await resolveInviteCode(code);
   if (!resolved) return <InvalidInviteLinkScreen />;

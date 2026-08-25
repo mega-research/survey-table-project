@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Eye } from 'lucide-react';
 
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
+import { TooManyRequestsScreen } from '@/features/survey-response/survey-response-screens';
+import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import {
   getSurveyById,
   getSurveyByPreviewToken,
@@ -37,6 +39,10 @@ export const metadata: Metadata = {
  * mode="preview" 라 응답을 저장하지 않으므로 인증 없이 노출해도 안전하다.
  */
 export default async function PublicSurveyPreviewPage({ params }: PageProps) {
+  // /i/<code> 와 같은 이유 — 공개 RSC 라 procedure 를 지나지 않아 조회가 계측 밖이다.
+  // previewToken 은 unguessable 이지만 유효 토큰 하나로 무제한 반복이 가능하다.
+  if (await isRscRateLimited('public-read')) return <TooManyRequestsScreen />;
+
   const { token } = await params;
 
   const idRow = await getSurveyByPreviewToken({ token });

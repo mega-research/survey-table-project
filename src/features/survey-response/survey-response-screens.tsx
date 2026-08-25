@@ -111,6 +111,21 @@ export function InvalidInviteLinkScreen() {
   );
 }
 
+/**
+ * 공개 진입 라우트의 rate limit 차단 화면.
+ *
+ * 링크 자체는 유효하므로 "유효하지 않은 링크" 로 말하면 응답자가 담당자에게 링크를
+ * 다시 요청하게 된다. 잠시 뒤 다시 열면 된다는 것을 알려야 한다.
+ */
+export function TooManyRequestsScreen() {
+  return (
+    <InvalidLinkScreen
+      title="잠시 후 다시 시도해주세요"
+      body="접속이 일시적으로 몰렸습니다. 링크는 그대로 유효하니 잠시 뒤 다시 열어주세요."
+    />
+  );
+}
+
 export function InvalidTestLinkScreen() {
   return (
     <InvalidLinkScreen

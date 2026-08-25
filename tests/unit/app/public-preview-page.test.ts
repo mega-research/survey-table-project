@@ -4,17 +4,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // idRow/survey 를 null-check 없이 계속 쓰는 계약(admin preview 와 동일 패턴)을 재현하려면
 // mock 도 반드시 throw 해야 한다. vi.mock factory 는 호이스팅되므로 참조 변수는
 // vi.hoisted 로 감싼다(test-mode-control.test.tsx 의 refreshMock 과 동일 관행).
-const { notFoundMock, getSurveyByPreviewTokenMock, getSurveyByIdMock, getSurveyForResponseMock } =
-  vi.hoisted(() => ({
-    notFoundMock: vi.fn(() => {
-      throw new Error('NEXT_NOT_FOUND');
-    }),
-    getSurveyByPreviewTokenMock: vi.fn(),
-    getSurveyByIdMock: vi.fn(),
-    getSurveyForResponseMock: vi.fn(),
-  }));
+const {
+  notFoundMock,
+  getSurveyByPreviewTokenMock,
+  getSurveyByIdMock,
+  getSurveyForResponseMock,
+  isRscRateLimitedMock,
+} = vi.hoisted(() => ({
+  notFoundMock: vi.fn(() => {
+    throw new Error('NEXT_NOT_FOUND');
+  }),
+  getSurveyByPreviewTokenMock: vi.fn(),
+  getSurveyByIdMock: vi.fn(),
+  getSurveyForResponseMock: vi.fn(),
+  isRscRateLimitedMock: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({ notFound: notFoundMock }));
+
+// 가드는 next/headers 를 읽어 요청 스코프가 필요하다. 여기서는 라우팅 계약이 관심사라
+// 판정을 갈아끼운다 — 가드 자체의 정책(fail-open·버킷 공유)은 rate-limit/rsc-guard.test.ts 소관.
+vi.mock('@/lib/rate-limit/rsc-guard', () => ({
+  isRscRateLimited: (...a: unknown[]) => isRscRateLimitedMock(...a),
+}));
 
 vi.mock('@/server/survey-builder/services/survey-read.service', () => ({
   getSurveyByPreviewToken: (...a: unknown[]) => getSurveyByPreviewTokenMock(...a),
@@ -81,6 +93,7 @@ function flattenText(node: unknown, acc: string[] = []): string[] {
 describe('PublicSurveyPreviewPage (/preview/[token])', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isRscRateLimitedMock.mockResolvedValue(false);
   });
 
   it('유효한 previewToken은 해당 설문을 resolve해 SurveyResponseFlow를 preview 모드로 렌더한다', async () => {
@@ -187,4 +200,16 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     expect(text).not.toContain('설문 편집');
     expect(findElementByType(result, SurveyResponseFlowStub)).toBeNull();
   });
+  it('한도 초과면 안내 화면을 돌려주고 토큰 조회를 하지 않는다', async () => {
+    isRscRateLimitedMock.mockResolvedValue(true);
+
+    await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+
+    // 가드가 조회보다 먼저 돌지 않으면 막아도 DB 작업은 이미 나간 뒤다 — 가드의 목적이 사라진다.
+    expect(getSurveyByPreviewTokenMock).not.toHaveBeenCalled();
+    expect(getSurveyByIdMock).not.toHaveBeenCalled();
+    expect(getSurveyForResponseMock).not.toHaveBeenCalled();
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
+
 });
