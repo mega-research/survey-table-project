@@ -51,6 +51,15 @@ export interface RawExportContext {
   questionMeta: ReadonlyMap<string, { order: number; label: string }>;
 }
 
+/**
+ * 엑셀 상태열 라벨 — 콘솔 pill 어휘(mapStatusPill)를 따르되, 자격 미달은
+ * 스크리닝으로 설문을 정상 종결한 응답이라 rawdata 에서는 완료 계열로 표기한다.
+ */
+export function formatRawStatusLabel(status: string): string {
+  if (status === 'screened_out') return '완료(자격 미달)';
+  return mapStatusPill({ status }).label;
+}
+
 /** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
 function isAnsweredValue(value: unknown): boolean {
   if (value == null) return false;
@@ -110,7 +119,7 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
     header: '개별 URL',
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
   },
-  { header: '상태', value: (row) => mapStatusPill({ status: row.status }).label },
+  { header: '상태', value: (row) => formatRawStatusLabel(row.status) },
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
@@ -163,7 +172,7 @@ export function addResponseListSheet(
       ...(ctx.hasContactGroups ? [row.groupValue ?? '공개링크'] : []),
       formatPlatformKo(row.platform as Platform | null),
       row.browser ?? 'Other',
-      mapStatusPill({ status: row.status }).label,
+      formatRawStatusLabel(row.status),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
       formatTotalTime(row.totalSeconds, row.status),

@@ -391,6 +391,16 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(dr.getCell(10).value).toBe('진행 중'); // 소요시간
   });
 
+  it('자격 미달 응답은 두 시트 모두 상태가 완료(자격 미달)로 표기된다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ status: 'screened_out' })],
+      TEST_CTX,
+    );
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(6).value).toBe('완료(자격 미달)');
+    expect(wb.getWorksheet('응답 내역')!.getRow(2).getCell(6).value).toBe('완료(자격 미달)');
+  });
+
   it('응답 내역 시트는 컨택 설문에서 번호+순번 두 식별자를 갖는다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws1 = wb.getWorksheet('응답 내역')!;
