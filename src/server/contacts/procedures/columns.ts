@@ -6,7 +6,7 @@ import {
   UpdateContactColumnsInput,
   UpdateContactGroupLevelsInput,
 } from '../domain/contact-column';
-import * as svc from '../services/contact-columns.service';
+import * as svc from '../services/contact-columns';
 
 const update = authed
   .input(UpdateContactColumnsInput)

@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import * as svc from '../services/response-edit.service';
+import * as svc from '../services/response-edit';
 import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
 import { edit } from './edit';
 
-vi.mock('../services/response-edit.service', async () => {
-  const actual = await vi.importActual<typeof import('../services/response-edit.service')>(
-    '../services/response-edit.service',
+vi.mock('../services/response-edit', async () => {
+  const actual = await vi.importActual<typeof import('../services/response-edit')>(
+    '../services/response-edit',
   );
   return {
     ...actual,

@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-result-codes.service', () => ({
+vi.mock('../services/contact-result-codes', () => ({
   updateResultCodes: vi.fn(),
 }));
 
-import * as svc from '../services/contact-result-codes.service';
+import * as svc from '../services/contact-result-codes';
 import { resultCodes } from './result-codes';
 
 function authedContext(): ORPCContext {

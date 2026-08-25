@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-attempts.service', () => ({
+vi.mock('../services/contact-attempts', () => ({
   addAttempt: vi.fn(),
   updateAttempt: vi.fn(),
   deleteAttempt: vi.fn(),
 }));
 
-import * as svc from '../services/contact-attempts.service';
+import * as svc from '../services/contact-attempts';
 import { attempts } from './attempts';
 
 function authedContext(): ORPCContext {

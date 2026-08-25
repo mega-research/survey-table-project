@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { resolveInviteCode } from '@/server/contacts/services/contact-invite.service';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

@@ -13,13 +13,13 @@ const { findPrunableMock, pruneMock, recordRefsMock } = vi.hoisted(() => ({
   recordRefsMock: vi.fn(async () => 0),
 }));
 
-vi.mock('@/server/survey-builder/services/versioning/version-retention.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-retention-sql', () => ({
   findPrunableVersionIds: findPrunableMock,
 }));
-vi.mock('@/server/survey-builder/services/versioning/version-prune.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-prune', () => ({
   pruneVersionSnapshots: pruneMock,
 }));
-vi.mock('@/server/storage-lifecycle/key-ref-index.server', () => ({
+vi.mock('@/server/storage-lifecycle/key-ref-index', () => ({
   recordKeyRefs: recordRefsMock,
 }));
 
@@ -33,7 +33,7 @@ vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
 
 import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
-import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';
+import { publishSurvey } from '@/server/survey-builder/services/survey-publish';
 import type { Question, Survey } from '@/types/survey';
 
 const SURVEY_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';

@@ -12,7 +12,7 @@ import {
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from './test-campaign';
-import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {

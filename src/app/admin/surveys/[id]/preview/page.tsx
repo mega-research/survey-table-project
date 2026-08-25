@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   getSurveyById,
   getSurveyForResponse,
-} from '@/server/survey-builder/services/survey-read.service';
+} from '@/server/survey-builder/services/survey-read';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';

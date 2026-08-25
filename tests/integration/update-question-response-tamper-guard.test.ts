@@ -55,7 +55,7 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 

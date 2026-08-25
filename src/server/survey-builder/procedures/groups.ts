@@ -8,7 +8,7 @@ import {
   ReorderGroupsInput,
   UpdateQuestionGroupInput,
 } from '../domain/question-group';
-import * as svc from '../services/question-groups.service';
+import * as svc from '../services/question-groups';
 
 const create = authed
   .input(CreateQuestionGroupInput)

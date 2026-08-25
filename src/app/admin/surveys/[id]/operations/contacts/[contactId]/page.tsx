@@ -13,7 +13,7 @@ import {
   getMailRecipientsForTarget,
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
-import { getOperationsDataScope } from '@/server/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

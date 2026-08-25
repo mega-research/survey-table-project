@@ -96,7 +96,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/storage-lifecycle/sent-ledger.server', () => ({
+vi.mock('@/server/storage-lifecycle/sent-ledger', () => ({
   recordSentKeys: recordSentKeysMock,
 }));
 
@@ -140,7 +140,7 @@ vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(async () => null),
 }));
 
-vi.mock('@/server/data-scope.server', () => ({
+vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(async () => ({ mode: 'all' })),
 }));
 

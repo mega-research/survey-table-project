@@ -122,7 +122,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn((...args: unknown[]) => replaceResponseAnswersMock(...args)),
 }));
 
@@ -170,7 +170,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     executeQueue.push([]); // loadValidQuestionIds: 스냅샷 없음 → 빈 집합
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await expect(
       completeResponse({
@@ -192,7 +192,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     executeQueue.push([]); // loadValidQuestionIds: 빈 집합
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await expect(
       completeResponse({
@@ -212,7 +212,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     executeQueue.push([]); // loadValidQuestionIds: 비배열 → 빈 배열 폴백 → 빈 집합
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await expect(
       completeResponse({
@@ -233,7 +233,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     executeQueue.push([]); // loadValidQuestionIds: 빈 배열 → 빈 집합
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     // 에러 없이 완료된다 (제출 키는 멤버십 필터가 전부 걸러 {} 저장 — 질문 0개 설문의 기존 의미론)
     await expect(
@@ -252,7 +252,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     // 페이로드가 없으므로 loadValidQuestionIds(execute)와 가드 select 는 실행되지 않는다
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await expect(
       completeResponse({ responseId: RESPONSE_ID }),
@@ -272,7 +272,7 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     executeQueue.push([{ id: QID }]); // loadValidQuestionIds: 스냅샷에 질문 존재
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,

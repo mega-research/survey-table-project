@@ -162,15 +162,15 @@ vi.mock('@/server/read-models/library-taxonomy', () => ({
   getAllCategories: vi.fn(async () => []),
 }));
 
-import { importLibrary } from '@/server/library/services/library-transfer.service';
+import { importLibrary } from '@/server/library/services/library-transfer';
 import {
   createSavedQuestion,
   updateSavedQuestion,
-} from '@/server/library/services/saved-questions.service';
+} from '@/server/library/services/saved-questions';
 import {
   createQuestion,
   updateQuestion,
-} from '@/server/survey-builder/services/questions.service';
+} from '@/server/survey-builder/services/questions';
 import { NoticeAttachmentPromoteError } from '@/lib/survey/notice-attachment-promote';
 import type { Question } from '@/types/survey';
 

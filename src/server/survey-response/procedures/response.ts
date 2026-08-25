@@ -11,10 +11,10 @@ import {
   UpdateQuestionResponseInput,
   CompleteResponseOutput,
 } from '../domain/response';
-import * as completion from '../services/response-completion.service';
+import * as completion from '../services/response-completion';
 import * as core from '../services/response-answer-write';
-import * as draft from '../services/response-draft.service';
-import * as entry from '../services/response-entry.service';
+import * as draft from '../services/response-draft';
+import * as entry from '../services/response-entry';
 
 // 회당 소수 호출 쓰기(생성/완료/updateAnswer)는 response-mutation 그룹으로 IP 당 rate limit 한다.
 // saveDraft 는 고빈도 체크포인트라 별도 response-draft 버킷을 쓴다 — 같은 버킷이면

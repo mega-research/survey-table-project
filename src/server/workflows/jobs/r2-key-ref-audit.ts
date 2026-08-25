@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 
-import { rebuildAllKeyRefs } from '@/server/storage-lifecycle/key-ref-index.server';
+import { rebuildAllKeyRefs } from '@/server/storage-lifecycle/key-ref-index';
 
 import { ctxLogger, inngest } from '@/lib/inngest/client';
 

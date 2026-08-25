@@ -20,12 +20,12 @@ const { registerMock } = vi.hoisted(() => ({
   >(async () => ({ registered: 0, rejectedKeys: [] as string[] })),
 }));
 
-vi.mock('@/server/storage-lifecycle/deletion-queue.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/server/storage-lifecycle/deletion-queue.server')>()),
+vi.mock('@/server/storage-lifecycle/deletion-queue', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/storage-lifecycle/deletion-queue')>()),
   registerDeletionCandidates: registerMock,
 }));
 
-import { pruneVersionSnapshots } from '@/server/survey-builder/services/versioning/version-prune.server';
+import { pruneVersionSnapshots } from '@/server/survey-builder/services/versioning/version-prune';
 
 const dialect = new PgDialect();
 

@@ -12,8 +12,8 @@ import type { SurveyResponse } from '../domain/response';
 import {
   type TestResponseResetFields,
   resetTestResponseRow,
-} from './reset-test-response.server';
-import { assertAnonymousTestSession } from './test-target-attempt.server';
+} from './reset-test-response';
+import { assertAnonymousTestSession } from './test-target-attempt';
 
 /**
  * 컨택에 묶인 응답 행의 생성·재사용 — 진행 중 행을 찾고, 되살리고, 재사용 여부를 확정하고,

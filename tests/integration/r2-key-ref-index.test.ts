@@ -30,7 +30,7 @@ import {
   deleteKeyRefsBySourceIds,
   getIndexedReferencedKeys,
   recordKeyRefs,
-} from '@/server/storage-lifecycle/key-ref-index.server';
+} from '@/server/storage-lifecycle/key-ref-index';
 
 const dialect = new PgDialect();
 

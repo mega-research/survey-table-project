@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/survey-read.service', () => ({
+vi.mock('../services/survey-read', () => ({
   getSurveyBySlug: vi.fn(),
   getSurveyByPrivateToken: vi.fn(),
   getSurveyForResponse: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('@/lib/rate-limit/rate-limiter', async (importOriginal) => {
   };
 });
 
-import * as surveySvc from '../services/survey-read.service';
+import * as surveySvc from '../services/survey-read';
 import { publicRead } from './public-read';
 
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';

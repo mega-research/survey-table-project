@@ -13,7 +13,7 @@ import {
   listContactsForExport,
   MAX_CONTACT_EXPORT_ROWS,
 } from '@/server/read-models/contacts';
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 
 // 대형 명단 + PII 복호화 대비 (기본 10초 → 30초)
 export const maxDuration = 30;

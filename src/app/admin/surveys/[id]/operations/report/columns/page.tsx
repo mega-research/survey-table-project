@@ -5,7 +5,7 @@ import { ProgressColumnEditor } from '@/features/operations/report/progress-colu
 import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getProgressColumnScheme } from '@/server/operations/services/report-progress';
-import { getOperationsDataScope } from '@/server/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const dynamic = 'force-dynamic';
 

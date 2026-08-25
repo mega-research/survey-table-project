@@ -7,7 +7,7 @@ import {
   ListHistoryInput,
   ListPendingInput,
 } from '../domain/file-cleanup';
-import * as svc from '../services/file-cleanup.service';
+import * as svc from '../services/file-cleanup';
 
 /** 삭제 대기 목록 — R2 유예 삭제 큐의 pending 후보 (admin 큐 페이지). */
 const listPending = authed

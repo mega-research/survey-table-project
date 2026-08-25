@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 import {
   EXCEL_UNREADABLE_MESSAGE,
   ExcelReadError,
@@ -16,8 +16,8 @@ import {
   ParseExcelPreviewInput,
   ParseExcelPreviewResultSchema,
 } from '../domain/contact-upload';
-import * as columnsSvc from '../services/contact-columns.service';
-import * as uploadsSvc from '../services/contact-uploads.service';
+import * as columnsSvc from '../services/contact-columns';
+import * as uploadsSvc from '../services/contact-uploads';
 
 /**
  * 읽을 수 없는 엑셀은 typed error 로 내보낸다. 평범한 Error 로 두면 oRPC 가 운영에서

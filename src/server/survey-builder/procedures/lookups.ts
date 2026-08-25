@@ -8,7 +8,7 @@ import {
   SurveyLookupSchema,
   UpsertSurveyLookupInput,
 } from '../domain/survey-lookup';
-import * as svc from '../services/survey-lookups.service';
+import * as svc from '../services/survey-lookups';
 
 const copy = authed
   .input(CopySavedLookupInput)

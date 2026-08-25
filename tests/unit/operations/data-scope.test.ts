@@ -5,7 +5,7 @@ import {
   loadOperationsDataScope,
   resolveWriteScopeIsTest,
   testFlagForScope,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 
 // loadOperationsDataScope 는 db.select({...}).from(surveys).where(...).limit(1) 체인을 쓴다.
 // 실 PG 없는 vitest 환경이라 반환 행만 갈아끼워 분기를 검증한다.

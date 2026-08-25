@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/test-sample.service', () => ({
+vi.mock('../services/test-sample', () => ({
   getSurveyTestSample: vi.fn(),
 }));
 
-import * as svc from '../services/test-sample.service';
+import * as svc from '../services/test-sample';
 import { testSample } from './test-sample';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';

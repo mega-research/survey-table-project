@@ -7,7 +7,7 @@ import {
   SurveyAnalyticsSchema,
   SurveyIdInput,
 } from '../domain/analytics';
-import * as svc from '../services/analytics.service';
+import * as svc from '../services/analytics';
 
 // ========================
 // stats — 응답 통계

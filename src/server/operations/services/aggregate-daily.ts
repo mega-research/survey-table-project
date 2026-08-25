@@ -16,7 +16,7 @@ import {
   responseScopeCondition,
   testFlagForScope,
   type OperationsDataScope,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 
 /**
  * 단일 설문의 일자(또는 시간)별 응답 시작 카운트를 반환한다 (서버 전용).

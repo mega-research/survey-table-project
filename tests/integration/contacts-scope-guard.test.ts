@@ -109,8 +109,8 @@ vi.mock('@/db', () => {
   };
 });
 
-import { deleteContactTarget, updateContactTarget } from '@/server/contacts/services/contact-targets.service';
-import { deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts.service';
+import { deleteContactTarget, updateContactTarget } from '@/server/contacts/services/contact-targets';
+import { deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
 
 beforeEach(() => {
   updateReturningQueue.length = 0;

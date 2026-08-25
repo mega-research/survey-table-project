@@ -4,18 +4,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { prepareContactInsertScope } from '@/server/contacts/services/contact-insert-scope.service';
+import { prepareContactInsertScope } from '@/server/contacts/services/contact-insert-scope';
 import {
   recordStepVisit,
   recordVisibilitySegment,
-} from '@/server/survey-response/services/lifecycle.service';
-import { completeResponse } from '@/server/survey-response/services/response-completion.service';
-import { saveTestTargetFirstAnswer } from '@/server/survey-response/services/response-entry.service';
+} from '@/server/survey-response/services/lifecycle';
+import { completeResponse } from '@/server/survey-response/services/response-completion';
+import { saveTestTargetFirstAnswer } from '@/server/survey-response/services/response-entry';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
   assertTestTargetAttemptOwner,
-} from '@/server/survey-response/services/test-target-attempt.server';
+} from '@/server/survey-response/services/test-target-attempt';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

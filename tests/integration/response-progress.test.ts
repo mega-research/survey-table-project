@@ -74,7 +74,7 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -154,7 +154,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       versionId: 'v1',
       deletedAt: null,
     });
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
@@ -179,7 +179,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     });
     // snapshot 로더가 호출되면 빈 questions 배열 반환
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: [] } }]);
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
@@ -206,7 +206,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         },
       },
     ]);
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       {
         surveyId: 's1',
@@ -237,7 +237,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     });
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: '깨진 JSONB' } }]);
 
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await expect(
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
@@ -259,7 +259,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       versionId: null,
       deletedAt: null,
     });
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       {
         surveyId: 's1',
@@ -292,11 +292,11 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     updateReturningMock.mockResolvedValue([]);
 
     const { replaceResponseAnswers } = await import(
-      '@/server/survey-response/services/response-answers.service'
+      '@/server/survey-response/services/response-answers'
     );
     vi.mocked(replaceResponseAnswers).mockClear();
 
-    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await expect(
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },

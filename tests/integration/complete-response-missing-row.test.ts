@@ -56,7 +56,7 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -80,7 +80,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
     // 0행 이후 폴백 SELECT 도 행 없음
     selectLimitMock.mockResolvedValue([]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion');
 
     // data 없이 호출 → prefill SELECT 분기 skip, 곧장 트랜잭션 UPDATE 로 진입
     await expect(completeResponse({ responseId: 'does-not-exist' })).rejects.toThrow(
@@ -93,7 +93,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion');
     const result = await completeResponse({ responseId: 'r1' });
 
     expect(result).toMatchObject({ id: 'r1', surveyId: 's1' });
@@ -107,7 +107,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: null, contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion');
     const result = await completeResponse({ responseId: 'r1' });
 
     expect(result).toMatchObject({ id: 'r1', isCompleted: true });
@@ -120,7 +120,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: false, status: 'screened_out', deletedAt: null, contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion');
 
     // 종결 상태(status !== 'in_progress')는 isCompleted 와 무관하게 멱등 흡수 대상이다
     // (fix round 1 — screened_out 재시도가 throw 대신 "이미 완료된 설문" 안내로 접히도록).
@@ -143,7 +143,7 @@ describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)
       { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: new Date(), contactTargetId: null, pageVisits: null },
     ]);
 
-    const { completeResponse } = await import('@/server/survey-response/services/response-completion.service');
+    const { completeResponse } = await import('@/server/survey-response/services/response-completion');
 
     await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
   });

@@ -94,7 +94,7 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -108,7 +108,7 @@ describe('completeResponse 실제 대상자 후처리', () => {
     const { logger } = await import('@/lib/logger');
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await expect(completeResponse({ responseId: completedResponse.id })).resolves.toMatchObject({
       id: completedResponse.id,

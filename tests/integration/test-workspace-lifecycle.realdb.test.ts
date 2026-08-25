@@ -11,7 +11,7 @@ import {
   surveys,
   testResponseAttempts,
 } from '@/db/schema';
-import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
+import { deleteContactTarget } from '@/server/contacts/services/contact-targets';
 import { getControlState } from '@/server/operations/services/control';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
 import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';

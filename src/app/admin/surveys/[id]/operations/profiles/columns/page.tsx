@@ -5,7 +5,7 @@ import { ProfileColumnEditor } from '@/features/operations/profiles/profile-colu
 import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
-import { getOperationsDataScope } from '@/server/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const dynamic = 'force-dynamic';
 

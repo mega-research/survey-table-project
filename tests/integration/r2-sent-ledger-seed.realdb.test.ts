@@ -14,7 +14,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { mailCampaigns, r2SentKeys, surveys } from '@/db/schema';
-import { seedSentLedgerFromCampaignSnapshots } from '@/server/storage-lifecycle/sent-ledger-seed.server';
+import { seedSentLedgerFromCampaignSnapshots } from '@/server/storage-lifecycle/sent-ledger-seed';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

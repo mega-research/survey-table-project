@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/saved-cells.service', () => ({
+vi.mock('../services/saved-cells', () => ({
   listSavedCells: vi.fn(),
   searchSavedCells: vi.fn(),
   createSavedCell: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('../services/saved-cells.service', () => ({
   applySavedCell: vi.fn(),
 }));
 
-import * as svc from '../services/saved-cells.service';
+import * as svc from '../services/saved-cells';
 import { savedCells } from './saved-cells';
 
 function authedContext(): ORPCContext {

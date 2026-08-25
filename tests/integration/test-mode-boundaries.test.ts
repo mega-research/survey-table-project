@@ -66,13 +66,13 @@ vi.mock('@/lib/spss/sav-builder', () => ({
 import { db } from '@/db';
 import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
-import { getCompletedResponses } from '@/server/survey-builder/services/response-read.service';
-import { getResponseSummary } from '@/server/analytics/services/analytics.service';
+import { getCompletedResponses } from '@/server/survey-builder/services/response-read';
+import { getResponseSummary } from '@/server/analytics/services/analytics';
 import {
   campaignScopeCondition,
   responseScopeCondition,
   targetScopeCondition,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 
 const dialect = new PgDialect();
 const surveyId = 'survey-boundary';

@@ -20,8 +20,8 @@ import {
   SurveyWithDetailsOutput,
   VariableCatalogOutput,
 } from '../domain/survey-read';
-import * as responseSvc from '../services/response-read.service';
-import * as surveySvc from '../services/survey-read.service';
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 설문 조회 (authed)

@@ -8,7 +8,7 @@ import {
   SavedLookupSchema,
   UpdateSavedLookupInput,
 } from '../domain/saved-lookup';
-import * as svc from '../services/saved-lookups.service';
+import * as svc from '../services/saved-lookups';
 
 const list = authed
   .input(ListSavedLookupsInput.optional())

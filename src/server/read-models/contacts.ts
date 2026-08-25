@@ -53,7 +53,7 @@ import {
   type OperationsDataScope,
   responseScopeCondition,
   targetScopeCondition,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import {
   CONTACT_METHOD_LABEL,

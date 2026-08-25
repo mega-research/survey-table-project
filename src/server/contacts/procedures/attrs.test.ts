@@ -6,12 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-attrs.service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/contact-attrs.service')>();
+vi.mock('../services/contact-attrs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/contact-attrs')>();
   return { ...actual, lookupContactAttrs: vi.fn() };
 });
 
-import * as svc from '../services/contact-attrs.service';
+import * as svc from '../services/contact-attrs';
 import { attrs } from './attrs';
 
 function anonContext(): ORPCContext {

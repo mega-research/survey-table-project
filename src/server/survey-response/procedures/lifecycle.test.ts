@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import * as svc from '../services/lifecycle.service';
+import * as svc from '../services/lifecycle';
 import { lifecycle } from './lifecycle';
 
-vi.mock('../services/lifecycle.service', () => ({
+vi.mock('../services/lifecycle', () => ({
   recordStepVisit: vi.fn(),
   recordVisibilitySegment: vi.fn(),
   resumeOrCreateResponse: vi.fn(),

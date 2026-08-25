@@ -1,11 +1,11 @@
 import { assertSurveyAccess, scoped } from '@/server/orpc';
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 
 import {
   ListContactAttrValuesInput,
   ListContactAttrValuesOutput,
 } from '../domain/contact-attr-values';
-import * as svc from '../services/contact-attr-values.service';
+import * as svc from '../services/contact-attr-values';
 
 /**
  * 헤더 필터 드롭다운 — attrs 컬럼 distinct 값 조회.

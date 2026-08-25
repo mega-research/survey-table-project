@@ -61,7 +61,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('hide: pageVisits set에 jsonb_set + leftAt 백필, lastActivityAt 미갱신', async () => {
     const { recordVisibilitySegment } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'hide' });
 
     const hideSetCall = setMock.mock.calls[0];
@@ -75,7 +75,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('show: pageVisits set에 append(||), lastActivityAt 갱신', async () => {
     const { recordVisibilitySegment } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'show' });
 
     const showSetCall = setMock.mock.calls[0];
@@ -89,7 +89,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('hide: where 가드에 status in_progress + leftAt NULL 조건이 포함된다', async () => {
     const { recordVisibilitySegment } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'hide' });
     expect(whereMock).toHaveBeenCalledTimes(1); // 단일 UPDATE + WHERE 가드
     const hideWhereCall = whereMock.mock.calls[0];
@@ -100,7 +100,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('show: where 가드에 멱등 조건(leftAt IS NOT NULL)이 포함된다', async () => {
     const { recordVisibilitySegment } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'show' });
     expect(whereMock).toHaveBeenCalledTimes(1);
     const showWhereCall = whereMock.mock.calls[0];
@@ -121,7 +121,7 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
   it('응답 행이 없으면 다시 throw 한다', async () => {
     selectLimitMock.mockResolvedValue([]);
     const { recordStepVisit } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
     await expect(
       recordStepVisit({ responseId: 'missing', nextStepId: 'group:next' }),
@@ -134,7 +134,7 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
       { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
     ]);
     const { recordStepVisit } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
     controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null });
     await expect(
@@ -148,7 +148,7 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
     ]);
     controlFlagsMock.mockResolvedValue({ isPaused: true, pausedMessage: '점검 중입니다' });
     const { recordStepVisit } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
     await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
       denial: 'survey_paused',
@@ -165,7 +165,7 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
     ]);
     controlFlagsMock.mockResolvedValue(null);
     const { recordStepVisit } =
-      await import('@/server/survey-response/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
     await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
       denial: null,

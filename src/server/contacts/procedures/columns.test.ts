@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-columns.service', () => ({
+vi.mock('../services/contact-columns', () => ({
   updateContactColumns: vi.fn(),
   updateContactGroupLevels: vi.fn(),
   getExistingContactsCount: vi.fn(),
 }));
 
-import * as svc from '../services/contact-columns.service';
+import * as svc from '../services/contact-columns';
 import { columns } from './columns';
 
 function authedContext(): ORPCContext {

@@ -278,7 +278,7 @@ import {
   copySavedLookupToSurvey,
   upsertSurveyLookup,
   deleteSurveyLookup,
-} from '@/server/survey-builder/services/survey-lookups.service';
+} from '@/server/survey-builder/services/survey-lookups';
 
 const TEST_SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 

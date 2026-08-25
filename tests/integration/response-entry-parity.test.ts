@@ -120,7 +120,7 @@ vi.mock('@/server/survey-response/services/check', () => ({
   }),
 }));
 
-vi.mock('@/server/survey-response/services/test-target-attempt.server', () => ({
+vi.mock('@/server/survey-response/services/test-target-attempt', () => ({
   acquireTestTargetResponse: vi.fn((...a: unknown[]) => {
     H.order.push('acquire');
     return H.acquireMock(...a);
@@ -142,7 +142,7 @@ vi.mock('@/server/read-models/survey-control', async (importOriginal) => {
   };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -189,7 +189,7 @@ type Over = {
 };
 
 async function callCreate(kind: Kind, over: Over = {}) {
-  const svc = await import('@/server/survey-response/services/response-entry.service');
+  const svc = await import('@/server/survey-response/services/response-entry');
   const common = {
     surveyId: SURVEY_ID,
     sessionId: over.sessionId ?? 'sess-a2',
@@ -541,7 +541,7 @@ describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () =>
 
   it('대상자 테스트 lane: export 직접 호출도 tx 를 열기 전에 차단한다', async () => {
     wireHappyPath();
-    const svc = await import('@/server/survey-response/services/response-entry.service');
+    const svc = await import('@/server/survey-response/services/response-entry');
 
     await expect(
       svc.saveTestTargetFirstAnswer({

@@ -1,0 +1,143 @@
+import { and, eq, sql } from 'drizzle-orm';
+import 'server-only';
+
+import { type DbTransaction, db } from '@/db';
+import { contactAttempts, contactTargets } from '@/db/schema';
+import { logger } from '@/lib/logger';
+import { isUniqueViolation } from '@/lib/pg-error';
+import { lockWriteScope } from '@/server/data-scope';
+
+import type {
+  AddContactAttemptInput,
+  DeleteContactAttemptInput,
+  UpdateContactAttemptInput,
+} from '../domain/contact-attempt';
+
+/**
+ * 현재 DB 모드에 속한 대상자를 잠근다. 목록을 본 뒤 모드가 바뀌어도 회차 변경은
+ * 현재 스코프 대상자에게만 허용된다.
+ */
+async function lockTargetInCurrentScope(
+  tx: DbTransaction,
+  contactTargetId: string,
+  surveyId: string,
+  isGuest: boolean,
+): Promise<void> {
+  const locked = await lockWriteScope(tx, surveyId, isGuest, { lock: 'update' });
+  if (!locked) throw new Error('NOT_FOUND');
+  const { isTest } = locked;
+
+  const [target] = await tx
+    .select({ id: contactTargets.id })
+    .from(contactTargets)
+    .where(
+      and(
+        eq(contactTargets.id, contactTargetId),
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, isTest),
+      ),
+    )
+    .for('update');
+  if (!target) throw new Error('NOT_FOUND');
+}
+
+/**
+ * 회차 추가 — attempt_no 는 MAX(attempt_no)+1 로 자동 발번.
+ * UNIQUE(contact_target_id, attempt_no) 가 race 가드.
+ *
+ * I6: 두 사용자 동시 추가 시 23505 (UNIQUE 위반) 발생 가능 → 최대 3회 재시도.
+ * 3회 모두 실패 시 user-facing error.
+ *
+ * surveyId 는 input 으로 받되 service 로직에서는 사용하지 않는다(revalidate 제거).
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ */
+export async function addAttempt(
+  input: AddContactAttemptInput,
+  isGuest: boolean,
+): Promise<{ id: string; attemptNo: number }> {
+  const { contactTargetId, resultCode, note } = input;
+
+  const MAX_RETRIES = 3;
+  let lastError: unknown = null;
+  let result: { id: string; attemptNo: number } | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      result = await db.transaction(async (tx) => {
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest);
+        const [maxRow] = await tx
+          .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
+          .from(contactAttempts)
+          .where(eq(contactAttempts.contactTargetId, contactTargetId));
+        const nextNo = (maxRow?.maxNo ?? 0) + 1;
+
+        const [row] = await tx
+          .insert(contactAttempts)
+          .values({
+            contactTargetId,
+            attemptNo: nextNo,
+            resultCode,
+            note: note ?? null,
+          })
+          .returning({ id: contactAttempts.id, attemptNo: contactAttempts.attemptNo });
+        if (!row) throw new Error('contact_attempts INSERT 실패');
+        return row;
+      });
+      break; // 성공 시 retry loop 종료
+    } catch (e) {
+      lastError = e;
+      if (!isUniqueViolation(e)) throw e; // 다른 에러는 즉시 전파
+      // UNIQUE 위반은 retry — 다음 iteration 에서 MAX+1 재계산
+    }
+  }
+
+  if (result == null) {
+    logger.error({ contactTargetId, err: lastError }, '[addAttempt] race retry 소진');
+    throw new Error('동시 편집 충돌이 발생했습니다. 다시 시도해주세요.');
+  }
+
+  return result;
+}
+
+/**
+ * 회차 수정 — resultCode/note 갱신.
+ * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
+ * attempt.id + contactTargetId 스코프로 UPDATE 한다. 영향 0행이면 NOT_FOUND throw.
+ */
+export async function updateAttempt(
+  input: UpdateContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
+  const { id, contactTargetId, surveyId, resultCode, note } = input;
+  await db.transaction(async (tx) => {
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    const updated = await tx
+      .update(contactAttempts)
+      .set({ resultCode, note: note ?? null })
+      .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+      .returning({ id: contactAttempts.id });
+    if (updated.length === 0) throw new Error('NOT_FOUND');
+  });
+}
+
+/**
+ * 회차 삭제.
+ * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
+ * attempt.id + contactTargetId 스코프로 DELETE 한다. 영향 0행이면 NOT_FOUND throw.
+ */
+export async function deleteAttempt(
+  input: DeleteContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
+  const { id, contactTargetId, surveyId } = input;
+  await db.transaction(async (tx) => {
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    const deleted = await tx
+      .delete(contactAttempts)
+      .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+      .returning({ id: contactAttempts.id });
+    if (deleted.length === 0) throw new Error('NOT_FOUND');
+  });
+}

@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/media.service', () => ({
+vi.mock('../services/media', () => ({
   deleteImages: vi.fn(),
   deleteMailAttachmentTmp: vi.fn(),
   deleteNoticeAttachmentTmp: vi.fn(),
 }));
 
-import * as svc from '../services/media.service';
+import * as svc from '../services/media';
 import { media } from './media';
 
 function authedContext(): ORPCContext {

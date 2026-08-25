@@ -3,27 +3,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import * as completion from '../services/response-completion.service';
+import * as completion from '../services/response-completion';
 import * as core from '../services/response-answer-write';
-import * as draft from '../services/response-draft.service';
-import * as entry from '../services/response-entry.service';
+import * as draft from '../services/response-draft';
+import * as entry from '../services/response-entry';
 import { response } from './response';
 
 vi.mock('../services/response-answer-write', () => ({
   updateQuestionResponse: vi.fn(),
 }));
 
-vi.mock('../services/response-draft.service', () => ({
+vi.mock('../services/response-draft', () => ({
   saveDraftResponse: vi.fn(),
 }));
 
-vi.mock('../services/response-entry.service', () => ({
+vi.mock('../services/response-entry', () => ({
   startResponse: vi.fn(),
   createResponseWithFirstAnswer: vi.fn(),
   createBlankResponse: vi.fn(),
 }));
 
-vi.mock('../services/response-completion.service', () => ({
+vi.mock('../services/response-completion', () => ({
   completeResponse: vi.fn(),
 }));
 

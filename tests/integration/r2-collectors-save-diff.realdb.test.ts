@@ -20,12 +20,12 @@ import {
   savedQuestions,
   surveys as surveysTable,
 } from '@/db/schema';
-import { updateSavedQuestion } from '@/server/library/services/saved-questions.service';
+import { updateSavedQuestion } from '@/server/library/services/saved-questions';
 import { updateMailTemplate } from '@/server/mail/services/templates';
-import { updateQuestion } from '@/server/survey-builder/services/questions.service';
-import { saveSurveyDiff } from '@/server/survey-builder/services/survey-save.service';
-import { updateSurvey } from '@/server/survey-builder/services/surveys.service';
-import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue.server';
+import { updateQuestion } from '@/server/survey-builder/services/questions';
+import { saveSurveyDiff } from '@/server/survey-builder/services/survey-save';
+import { updateSurvey } from '@/server/survey-builder/services/surveys';
+import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

@@ -8,7 +8,7 @@ vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/guest-grants')>()),
   canAccessSurvey: vi.fn(),
 }));
-vi.mock('@/server/data-scope.server', () => ({
+vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 vi.mock('@/server/read-models/contacts', () => ({
@@ -24,7 +24,7 @@ vi.mock('@/server/operations/services/contacts-export', async (importOriginal) =
 
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey } from '@/lib/auth/guest-grants';
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 import {
   getContactColumnScheme,
   listContactsForExport,

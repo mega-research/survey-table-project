@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { surveyResponses, surveys, surveyVersions } from '@/db/schema';
-import { findPrunableVersionIds } from '@/server/survey-builder/services/versioning/version-retention.server';
+import { findPrunableVersionIds } from '@/server/survey-builder/services/versioning/version-retention-sql';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

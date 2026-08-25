@@ -19,9 +19,9 @@ import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
-import { getOperationsDataScope } from '@/server/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
+import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.

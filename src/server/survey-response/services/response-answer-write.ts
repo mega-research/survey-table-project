@@ -13,7 +13,7 @@ import {
 import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import {
   lockAndAssertResponseMutation,
-} from './test-target-attempt.server';
+} from './test-target-attempt';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
 

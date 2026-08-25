@@ -8,9 +8,9 @@ import {
 } from '@/features/survey-response/survey-response-screens';
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
-import * as contactAttrsSvc from '@/server/contacts/services/contact-attrs.service';
-import { resolveInviteCode } from '@/server/contacts/services/contact-invite.service';
-import { getSurveyForResponse } from '@/server/survey-builder/services/survey-read.service';
+import * as contactAttrsSvc from '@/server/contacts/services/contact-attrs';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
+import { getSurveyForResponse } from '@/server/survey-builder/services/survey-read';
 
 /**
  * 짧은 초대 링크도 공개 응답 표면이다 — 루트 layout 의 robots: 'index, follow' 를

@@ -7,7 +7,7 @@ import {
   QuestionCategorySchema,
   UpdateCategoryInput,
 } from '../domain/question-category';
-import * as svc from '../services/question-categories.service';
+import * as svc from '../services/question-categories';
 
 const list = authed
   .output(z.array(QuestionCategorySchema))

@@ -5,7 +5,7 @@ import {
   SaveSurveyWithDetailsInput,
   SurveyDiffPayloadSchema,
 } from '../domain/survey-save';
-import * as svc from '../services/survey-save.service';
+import * as svc from '../services/survey-save';
 
 /**
  * 설문 저장 procedure (authed).

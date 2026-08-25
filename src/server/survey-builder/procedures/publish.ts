@@ -9,7 +9,7 @@ import {
   PublishSurveyInput,
   SurveyVersionRowSchema,
 } from '../domain/survey-publish';
-import * as svc from '../services/survey-publish.service';
+import * as svc from '../services/survey-publish';
 
 /**
  * 설문 배포 procedure (authed).

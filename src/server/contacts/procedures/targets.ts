@@ -11,8 +11,8 @@ import {
   GenerateTestContactsResult,
   UpdateContactTargetInput,
 } from '../domain/contact-target';
-import * as svc from '../services/contact-targets.service';
-import { generateTestContacts } from '../services/test-contacts.service';
+import * as svc from '../services/contact-targets';
+import { generateTestContacts } from '../services/test-contacts';
 
 const add = scoped
   .input(AddContactTargetInput)

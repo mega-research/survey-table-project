@@ -179,7 +179,7 @@ function resetCalls(): Array<Record<string, unknown>> {
 
 async function firstAnswer() {
   const { createResponseWithFirstAnswer } = await import(
-    '@/server/survey-response/services/response-entry.service'
+    '@/server/survey-response/services/response-entry'
   );
   return createResponseWithFirstAnswer({
     surveyId: SURVEY_ID,
@@ -289,7 +289,7 @@ describe('익명 테스트 세션 재진입 — 종결 행 제자리 리셋', ()
       .mockResolvedValueOnce([{ id: EXISTING_RESPONSE_ID }]);
 
     const { saveDraftResponse } = await import(
-      '@/server/survey-response/services/response-draft.service'
+      '@/server/survey-response/services/response-draft'
     );
     const late = await saveDraftResponse({
       responseId: EXISTING_RESPONSE_ID,

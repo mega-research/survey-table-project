@@ -4,23 +4,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContactUploadMapping } from '@/shared/contracts/contacts';
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-uploads.service', () => ({
+vi.mock('../services/contact-uploads', () => ({
   parseExcelPreview: vi.fn(),
   ingestContactUpload: vi.fn(),
   matchContactUpload: vi.fn(),
 }));
 
-vi.mock('../services/contact-columns.service', () => ({
+vi.mock('../services/contact-columns', () => ({
   updateContactColumns: vi.fn(),
   getExistingContactsCount: vi.fn(),
 }));
 
-vi.mock('@/server/data-scope.server', () => ({
+vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(async () => 'real'),
 }));
 
-import * as columnsSvc from '../services/contact-columns.service';
-import * as uploadsSvc from '../services/contact-uploads.service';
+import * as columnsSvc from '../services/contact-columns';
+import * as uploadsSvc from '../services/contact-uploads';
 import { uploads } from './uploads';
 
 function authedContext(): ORPCContext {

@@ -58,7 +58,7 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
-import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle';
 
 const ROW_BASE = {
   id: 'response-1',

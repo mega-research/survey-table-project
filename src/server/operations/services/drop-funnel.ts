@@ -11,7 +11,7 @@ import {
   type FunnelQuestion,
 } from '@/lib/operations/drop-funnel';
 import { buildCanonicalSteps } from '@/lib/operations/page-dwell';
-import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope.server';
+import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
 
 /** 빈 결과 — published version 없거나 snapshot이 비어있을 때. */
 const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };

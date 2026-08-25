@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/library-transfer.service', () => ({
+vi.mock('../services/library-transfer', () => ({
   exportLibrary: vi.fn(),
   importLibrary: vi.fn(),
   initializePresetQuestions: vi.fn(),
 }));
 
-import * as svc from '../services/library-transfer.service';
+import * as svc from '../services/library-transfer';
 import { transfer } from './library-transfer';
 
 function authedContext(): ORPCContext {

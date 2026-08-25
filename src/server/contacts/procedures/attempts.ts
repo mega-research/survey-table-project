@@ -9,7 +9,7 @@ import {
   DeleteContactAttemptInput,
   UpdateContactAttemptInput,
 } from '../domain/contact-attempt';
-import * as svc from '../services/contact-attempts.service';
+import * as svc from '../services/contact-attempts';
 
 const add = scoped
   .input(AddContactAttemptInput)

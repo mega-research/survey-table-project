@@ -34,14 +34,14 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-vi.mock('@/server/contacts/services/contact-attrs.service', async (importOriginal) => {
+vi.mock('@/server/contacts/services/contact-attrs', async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import('@/server/contacts/services/contact-attrs.service')
+    typeof import('@/server/contacts/services/contact-attrs')
   >();
   return { ...actual, lookupContactAttrs: vi.fn() };
 });
 
-import * as contactAttrsService from '@/server/contacts/services/contact-attrs.service';
+import * as contactAttrsService from '@/server/contacts/services/contact-attrs';
 import { attrs } from '@/server/contacts/procedures/attrs';
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 

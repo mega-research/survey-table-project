@@ -20,7 +20,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { countMigratableResponses } from '@/server/survey-builder/services/survey-publish.service';
+import { countMigratableResponses } from '@/server/survey-builder/services/survey-publish';
 
 describe('countMigratableResponses', () => {
   beforeEach(() => {

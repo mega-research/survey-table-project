@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/response-manage.service', async () => {
+vi.mock('../services/response-manage', async () => {
   const actual = await vi.importActual<
-    typeof import('../services/response-manage.service')
-  >('../services/response-manage.service');
+    typeof import('../services/response-manage')
+  >('../services/response-manage');
   return {
     ...actual,
     softDeleteResponse: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('../services/response-manage.service', async () => {
   };
 });
 
-import * as svc from '../services/response-manage.service';
+import * as svc from '../services/response-manage';
 import { manage } from './manage';
 
 function authedContext(): ORPCContext {

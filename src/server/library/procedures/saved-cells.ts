@@ -7,7 +7,7 @@ import {
   PartialTableCellSchema,
   SavedCellSchema,
 } from '../domain/saved-cell';
-import * as svc from '../services/saved-cells.service';
+import * as svc from '../services/saved-cells';
 
 const list = authed
   .output(z.array(SavedCellSchema))

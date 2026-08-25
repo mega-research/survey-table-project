@@ -1,7 +1,7 @@
 import { pub, withRateLimit } from '@/server/orpc';
 
 import { ContactAttrsOutput, LookupContactAttrsInput } from '../domain/contact-attrs';
-import * as svc from '../services/contact-attrs.service';
+import * as svc from '../services/contact-attrs';
 
 /**
  * inviteToken 으로 contact attrs 조회(pub). 익명 응답자도 호출 가능.

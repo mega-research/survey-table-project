@@ -3,7 +3,7 @@ import { ContactUploadAction } from '@/features/operations/contacts/contact-uplo
 import { UploadHistoryTable } from '@/features/operations/contacts/upload-history-table';
 import { Card, CardContent } from '@/components/ui/card';
 import { listContactUploads } from '@/server/read-models/contacts';
-import { getOperationsDataScope } from '@/server/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 업로드',

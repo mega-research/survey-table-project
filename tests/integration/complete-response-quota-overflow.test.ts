@@ -81,7 +81,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(() => Promise.resolve(undefined)),
 }));
 
@@ -189,7 +189,7 @@ describe('completeResponse — soft quota 초과 플래그', () => {
     queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -214,7 +214,7 @@ describe('completeResponse — soft quota 초과 플래그', () => {
     queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -236,7 +236,7 @@ describe('completeResponse — soft quota 초과 플래그', () => {
     queueSelects([{ [GATE_QID]: '남' }]); // 완료 1건 < target 2
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -256,7 +256,7 @@ describe('completeResponse — soft quota 초과 플래그', () => {
     selectTerminalQueue.push([{ total: 0 }], [{ id: GATE_QID }]);
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,

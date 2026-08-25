@@ -15,7 +15,7 @@ import {
   surveys as surveysTable,
   surveyVersions,
 } from '@/db/schema';
-import { findReferencedKeys } from '@/server/storage-lifecycle/reference-scan.server';
+import { findReferencedKeys } from '@/server/storage-lifecycle/reference-scan';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

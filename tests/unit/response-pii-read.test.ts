@@ -51,7 +51,7 @@ describe('response-read.service — authed procedure 노출 경계', () => {
       { id: 'r2', questionResponses: { q1: cipher, q2: 7 } },
     ]);
     const { getResponsesBySurvey } = await import(
-      '@/server/survey-builder/services/response-read.service'
+      '@/server/survey-builder/services/response-read'
     );
     const rows = await getResponsesBySurvey('s1');
     expect(rows[0]?.questionResponses).toEqual({ q1: '010-1234-5678', q2: 7 });
@@ -63,7 +63,7 @@ describe('response-read.service — authed procedure 노출 경계', () => {
       { id: 'r3', questionResponses: { q1: cipher, q2: '평문' } },
     ]);
     const { getCompletedResponses } = await import(
-      '@/server/survey-builder/services/response-read.service'
+      '@/server/survey-builder/services/response-read'
     );
     const rows = await getCompletedResponses('s1');
     expect(rows[0]?.questionResponses).toEqual({ q1: 'kim@example.com', q2: '평문' });

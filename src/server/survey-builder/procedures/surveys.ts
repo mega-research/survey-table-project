@@ -10,7 +10,7 @@ import {
   SurveyRowSchema,
   UpdateSurveyInput,
 } from '../domain/survey';
-import * as svc from '../services/surveys.service';
+import * as svc from '../services/surveys';
 
 /**
  * 설문 CRUD procedure (authed). 모든 빌더 경로는 관리자 인증 필수.

@@ -8,13 +8,13 @@ import { db } from '@/db';
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
-import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger.server';
+import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
 import { renderForTestSend } from './render-for-send';
 import { sendTestMail } from './send';
 import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 
 import type {
   GetMailPreviewSampleInput,

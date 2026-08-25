@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/survey-lookups.service', () => ({
+vi.mock('../services/survey-lookups', () => ({
   copySavedLookupToSurvey: vi.fn(),
   upsertSurveyLookup: vi.fn(),
   deleteSurveyLookup: vi.fn(),
 }));
 
-import * as svc from '../services/survey-lookups.service';
+import * as svc from '../services/survey-lookups';
 import { lookups } from './lookups';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';

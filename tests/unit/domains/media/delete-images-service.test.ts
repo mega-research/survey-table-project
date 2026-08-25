@@ -22,7 +22,7 @@ vi.mock('@/lib/image-utils-server', () => ({
   deleteR2ObjectsByKey: vi.fn(async () => true),
 }));
 
-import { deleteImages } from '@/server/media/services/media.service';
+import { deleteImages } from '@/server/media/services/media';
 
 const PUBLIC_URL = 'https://pub-x.r2.dev';
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/survey-read.service', () => ({
+vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../services/survey-read.service', () => ({
   getVariableCatalogForSurvey: vi.fn(),
 }));
 
-vi.mock('../services/response-read.service', () => ({
+vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
   getCompletedResponses: vi.fn(),
   getResponseById: vi.fn(),
@@ -25,8 +25,8 @@ vi.mock('../services/response-read.service', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
-import * as responseSvc from '../services/response-read.service';
-import * as surveySvc from '../services/survey-read.service';
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
 import { read } from './read';
 
 // UUID 픽스처는 v4 형태로 통일.

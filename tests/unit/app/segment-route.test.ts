@@ -8,7 +8,7 @@ const { recordMock, guardMock, fineMock } = vi.hoisted(() => ({
   fineMock: vi.fn(),
 }));
 
-vi.mock('@/server/survey-response/services/lifecycle.service', () => ({
+vi.mock('@/server/survey-response/services/lifecycle', () => ({
   recordVisibilitySegment: recordMock,
 }));
 

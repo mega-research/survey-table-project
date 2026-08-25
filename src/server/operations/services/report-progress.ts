@@ -13,7 +13,7 @@ import {
   type OperationsDataScope,
   targetScopeCondition,
   testFlagForScope,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
 import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress';
 import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';

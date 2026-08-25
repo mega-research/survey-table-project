@@ -28,23 +28,23 @@ const {
   indexedMock: vi.fn(async () => new Set<string>()),
 }));
 
-vi.mock('@/server/storage-lifecycle/deletion-queue.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/server/storage-lifecycle/deletion-queue.server')>()),
+vi.mock('@/server/storage-lifecycle/deletion-queue', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/storage-lifecycle/deletion-queue')>()),
   fetchDueCandidates: fetchDueMock,
   resolveCandidate: resolveMock,
   isCandidateResolvable: resolvableMock,
 }));
-vi.mock('@/server/storage-lifecycle/sent-ledger.server', () => ({
+vi.mock('@/server/storage-lifecycle/sent-ledger', () => ({
   getLedgeredKeys: ledgerMock,
   recordSentKeys: vi.fn(async () => 0),
 }));
-vi.mock('@/server/storage-lifecycle/reference-scan.server', () => ({
+vi.mock('@/server/storage-lifecycle/reference-scan', () => ({
   findReferencedKeys: referencedMock,
 }));
-vi.mock('@/server/storage-lifecycle/r2-object-delete.server', () => ({
+vi.mock('@/server/storage-lifecycle/r2-object-delete', () => ({
   deleteR2ObjectVerified: deleteMock,
 }));
-vi.mock('@/server/storage-lifecycle/key-ref-index.server', () => ({
+vi.mock('@/server/storage-lifecycle/key-ref-index', () => ({
   getIndexedReferencedKeys: indexedMock,
 }));
 vi.mock('@sentry/nextjs', () => ({
@@ -55,7 +55,7 @@ vi.mock('@sentry/nextjs', () => ({
 import {
   executeDueDeletionBatch,
   runDeletionExecutor,
-} from '@/server/storage-lifecycle/deletion-executor.server';
+} from '@/server/storage-lifecycle/deletion-executor';
 
 function candidate(id: string, key: string): R2DeletionCandidate {
   return {

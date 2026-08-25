@@ -9,7 +9,7 @@ import {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
-import * as svc from '../services/lifecycle.service';
+import * as svc from '../services/lifecycle';
 
 // stepVisit/visibilitySegment 는 진행 중 응답에 빈번한 beacon 성 jsonb UPDATE 를 트리거한다.
 // REST /api/response/segment 와 동일 서비스(recordVisibilitySegment)에 도달하므로,

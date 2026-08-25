@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/surveys.service', () => ({
+vi.mock('../services/surveys', () => ({
   ensureSurveyInDb: vi.fn(),
   createSurvey: vi.fn(),
   updateSurvey: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('../services/surveys.service', () => ({
   duplicateSurvey: vi.fn(),
 }));
 
-import * as svc from '../services/surveys.service';
+import * as svc from '../services/surveys';
 import { surveys } from './surveys';
 
 function authedContext(): ORPCContext {

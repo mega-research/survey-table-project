@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/duplicate.service', () => ({
+vi.mock('../services/duplicate', () => ({
   checkDuplicateOnEntry: vi.fn(),
 }));
 
-import * as svc from '../services/duplicate.service';
+import * as svc from '../services/duplicate';
 import { duplicate } from './duplicate';
 
 function anonContext(): ORPCContext {

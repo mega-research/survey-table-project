@@ -8,7 +8,7 @@ import {
   SavedQuestionSchema,
   UpdateSavedQuestionInput,
 } from '../domain/saved-question';
-import * as svc from '../services/saved-questions.service';
+import * as svc from '../services/saved-questions';
 
 const list = authed
   .output(z.array(SavedQuestionSchema))

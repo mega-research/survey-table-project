@@ -48,7 +48,7 @@ vi.mock('@/server/survey-response/services/signals', () => ({
   computeSignals: vi.fn(() => ({ ipHash: null, fpHash: null, deviceId: null })),
 }));
 
-import { checkDuplicateOnEntry } from '@/server/survey-response/services/duplicate.service';
+import { checkDuplicateOnEntry } from '@/server/survey-response/services/duplicate';
 
 const TEST_SURVEY_ID = 'aaaaaaaa-0001-0001-0001-000000000001';
 

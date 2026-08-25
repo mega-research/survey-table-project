@@ -28,7 +28,7 @@ vi.mock('@/db', () => ({
   savedQuestions: { id: 'id', usageCount: 'usageCount' },
 }));
 
-import { applyMultipleSavedQuestions } from '@/server/library/services/saved-questions.service';
+import { applyMultipleSavedQuestions } from '@/server/library/services/saved-questions';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
 describe('applyMultipleSavedQuestions 순서 보존 (L75 회귀)', () => {

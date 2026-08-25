@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/question-categories.service', () => ({
+vi.mock('../services/question-categories', () => ({
   listCategories: vi.fn(),
   createCategory: vi.fn(),
   updateCategory: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('../services/question-categories.service', () => ({
   initializeDefaultCategories: vi.fn(),
 }));
 
-import * as svc from '../services/question-categories.service';
+import * as svc from '../services/question-categories';
 import { questionCategories } from './question-categories';
 
 function authedContext(): ORPCContext {

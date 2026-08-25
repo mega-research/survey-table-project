@@ -2,9 +2,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import { addContactTarget } from '@/server/contacts/services/contact-targets.service';
-import { ingestContactUpload } from '@/server/contacts/services/contact-uploads.service';
-import { generateTestContacts } from '@/server/contacts/services/test-contacts.service';
+import { addContactTarget } from '@/server/contacts/services/contact-targets';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
+import { generateTestContacts } from '@/server/contacts/services/test-contacts';
 
 type TargetRow = {
   id: string;
@@ -58,8 +58,8 @@ const h = vi.hoisted(() => ({
 
 const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
 
-vi.mock('@/server/data-scope.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/server/data-scope.server')>()),
+vi.mock('@/server/data-scope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/data-scope')>()),
   loadOperationsDataScope: vi.fn(async () => h.scope),
   // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));

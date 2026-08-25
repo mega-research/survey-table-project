@@ -3,20 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-attr-values.service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/contact-attr-values.service')>();
+vi.mock('../services/contact-attr-values', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/contact-attr-values')>();
   return {
     ...actual,
     listContactAttrValues: vi.fn(),
   };
 });
 
-vi.mock('@/server/data-scope.server', () => ({
+vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 
-import { loadOperationsDataScope } from '@/server/data-scope.server';
-import * as svc from '../services/contact-attr-values.service';
+import { loadOperationsDataScope } from '@/server/data-scope';
+import * as svc from '../services/contact-attr-values';
 import { attrValues } from './attr-values';
 
 function authedContext(): ORPCContext {

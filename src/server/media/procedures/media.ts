@@ -7,7 +7,7 @@ import {
   DeleteMailAttachmentTmpInput,
   DeleteNoticeAttachmentTmpInput,
 } from '../domain/media';
-import * as svc from '../services/media.service';
+import * as svc from '../services/media';
 
 /** 이미지 URL 일괄 삭제 (기존 POST /api/upload/image/delete 대체). */
 const deleteImages = authed

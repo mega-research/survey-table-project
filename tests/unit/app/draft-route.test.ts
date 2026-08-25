@@ -8,7 +8,7 @@ const { saveMock, guardMock, fineMock } = vi.hoisted(() => ({
   fineMock: vi.fn(),
 }));
 
-vi.mock('@/server/survey-response/services/response-draft.service', () => ({
+vi.mock('@/server/survey-response/services/response-draft', () => ({
   saveDraftResponseIfActive: saveMock,
 }));
 

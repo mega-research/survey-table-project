@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { R2DeletionCandidate } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/file-cleanup.service', () => ({
+vi.mock('../services/file-cleanup', () => ({
   listPending: vi.fn(),
   listHistory: vi.fn(),
   cancel: vi.fn(),
 }));
 
-import * as svc from '../services/file-cleanup.service';
+import * as svc from '../services/file-cleanup';
 import { fileCleanup } from './file-cleanup';
 
 function authedContext(): ORPCContext {

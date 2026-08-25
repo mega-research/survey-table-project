@@ -28,7 +28,7 @@ vi.mock('@/lib/rate-limit/rsc-guard', () => ({
   isRscRateLimited: (...a: unknown[]) => isRscRateLimitedMock(...a),
 }));
 
-vi.mock('@/server/survey-builder/services/survey-read.service', () => ({
+vi.mock('@/server/survey-builder/services/survey-read', () => ({
   getSurveyByPreviewToken: (...a: unknown[]) => getSurveyByPreviewTokenMock(...a),
   getSurveyById: (...a: unknown[]) => getSurveyByIdMock(...a),
   getSurveyForResponse: (...a: unknown[]) => getSurveyForResponseMock(...a),

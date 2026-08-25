@@ -20,7 +20,7 @@ vi.mock('@/db', () => ({
   db: { select: selectMock },
 }));
 
-import { resolveInviteCode } from '@/server/contacts/services/contact-invite.service';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
 
 beforeEach(() => {
   selectMock.mockClear();

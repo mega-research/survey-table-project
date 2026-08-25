@@ -8,7 +8,7 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import {
   type OperationsDataScope,
   responseScopeCondition,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 
 /**
  * 쿼터 모수의 단일 정의 — 설문의 완료·비삭제·해당 파티션 응답을 전부 읽어 평문 답으로 돌려준다.

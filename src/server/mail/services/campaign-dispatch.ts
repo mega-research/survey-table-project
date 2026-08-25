@@ -12,7 +12,7 @@ import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
-import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger.server';
+import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from './recipient-status-transition';
 import { renderForCampaignSend } from './render-for-send';

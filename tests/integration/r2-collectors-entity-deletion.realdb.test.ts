@@ -23,11 +23,11 @@ import {
   surveys as surveysTable,
   surveyVersions,
 } from '@/db/schema';
-import { deleteSavedCell } from '@/server/library/services/saved-cells.service';
-import { deleteSavedQuestion } from '@/server/library/services/saved-questions.service';
+import { deleteSavedCell } from '@/server/library/services/saved-cells';
+import { deleteSavedQuestion } from '@/server/library/services/saved-questions';
 import { deleteMailTemplate } from '@/server/mail/services/templates';
-import { deleteQuestion } from '@/server/survey-builder/services/questions.service';
-import { deleteSurvey } from '@/server/survey-builder/services/surveys.service';
+import { deleteQuestion } from '@/server/survey-builder/services/questions';
+import { deleteSurvey } from '@/server/survey-builder/services/surveys';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

@@ -27,7 +27,7 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
-import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle';
 
 describe('resumeOrCreateResponse 응답 복원', () => {
   beforeEach(() => {

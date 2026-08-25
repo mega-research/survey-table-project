@@ -3,17 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import * as svc from '../services/contact-targets.service';
-import { generateTestContacts } from '../services/test-contacts.service';
+import * as svc from '../services/contact-targets';
+import { generateTestContacts } from '../services/test-contacts';
 import { targets } from './targets';
 
-vi.mock('../services/contact-targets.service', () => ({
+vi.mock('../services/contact-targets', () => ({
   addContactTarget: vi.fn(),
   updateContactTarget: vi.fn(),
   deleteContactTarget: vi.fn(),
 }));
 
-vi.mock('../services/test-contacts.service', () => ({
+vi.mock('../services/test-contacts', () => ({
   generateTestContacts: vi.fn(),
 }));
 

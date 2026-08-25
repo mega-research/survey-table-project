@@ -2,8 +2,8 @@ import * as Sentry from '@sentry/nextjs';
 
 import { logger as baseLogger } from '@/lib/logger';
 
-import { runDeletionExecutor } from '@/server/storage-lifecycle/deletion-executor.server';
-import { rebuildMutableKeyRefs } from '@/server/storage-lifecycle/key-ref-index.server';
+import { runDeletionExecutor } from '@/server/storage-lifecycle/deletion-executor';
+import { rebuildMutableKeyRefs } from '@/server/storage-lifecycle/key-ref-index';
 
 import { ctxLogger, inngest } from '@/lib/inngest/client';
 

@@ -10,7 +10,7 @@ import {
   RestoreResponseInput,
   SoftDeleteResponseInput,
 } from '../domain/response-manage';
-import * as svc from '../services/response-manage.service';
+import * as svc from '../services/response-manage';
 
 /** SurveyOwnershipError('not_found') → NOT_FOUND. */
 function mapServiceError(err: unknown): never {

@@ -10,7 +10,7 @@ import {
   ReorderQuestionsInput,
   UpdateQuestionInput,
 } from '../domain/question';
-import * as svc from '../services/questions.service';
+import * as svc from '../services/questions';
 
 const create = authed
   .input(CreateQuestionInput)

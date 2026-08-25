@@ -14,7 +14,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import * as surveySvc from './survey-read.service';
+import * as surveySvc from './survey-read';
 
 // 응답자에게 절대 노출돼서는 안 되는 민감/라이브 컬럼.
 const SENSITIVE_FIELDS = [

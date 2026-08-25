@@ -7,7 +7,7 @@ import {
   ImportLibraryInput,
   PresetQuestionsSchema,
 } from '../domain/library-transfer';
-import * as svc from '../services/library-transfer.service';
+import * as svc from '../services/library-transfer';
 
 // 라이브러리 내보내기 — JSON 문자열 반환
 const exportLibrary = authed

@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { authed } from '@/server/orpc';
 
 import { UpdateResultCodesInput } from '../domain/contact-result-code';
-import * as svc from '../services/contact-result-codes.service';
+import * as svc from '../services/contact-result-codes';
 
 const update = authed
   .input(UpdateResultCodesInput)

@@ -21,13 +21,13 @@ const { resolveInviteCodeMock, getSurveyForResponseMock, lookupContactAttrsMock,
 vi.mock('@/lib/rate-limit/rsc-guard', () => ({
   isRscRateLimited: (...a: unknown[]) => guardMock(...a),
 }));
-vi.mock('@/server/contacts/services/contact-invite.service', () => ({
+vi.mock('@/server/contacts/services/contact-invite', () => ({
   resolveInviteCode: (...a: unknown[]) => resolveInviteCodeMock(...a),
 }));
-vi.mock('@/server/survey-builder/services/survey-read.service', () => ({
+vi.mock('@/server/survey-builder/services/survey-read', () => ({
   getSurveyForResponse: (...a: unknown[]) => getSurveyForResponseMock(...a),
 }));
-vi.mock('@/server/contacts/services/contact-attrs.service', () => ({
+vi.mock('@/server/contacts/services/contact-attrs', () => ({
   lookupContactAttrs: (...a: unknown[]) => lookupContactAttrsMock(...a),
   // 팩토리는 호이스팅되므로 클래스도 여기서 만든다(상위 스코프 변수 참조 불가).
   InvalidTestLinkError: class InvalidTestLinkError extends Error {},

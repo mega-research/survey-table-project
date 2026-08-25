@@ -6,7 +6,7 @@ vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(),
   getContactSampleById: vi.fn(),
 }));
-vi.mock('@/server/data-scope.server', () => ({
+vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 vi.mock('./send', () => ({
@@ -24,7 +24,7 @@ vi.mock('./image-link-band-slices', () => ({
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { sendTestMail } from './send';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
-import { loadOperationsDataScope } from '@/server/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope';
 import { MailWrapper } from './template-wrapper';
 
 import { getMailPreviewSample, sendTestTemplateMail } from './preview';

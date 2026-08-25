@@ -10,7 +10,7 @@ import {
   getSurveyById,
   getSurveyByPreviewToken,
   getSurveyForResponse,
-} from '@/server/survey-builder/services/survey-read.service';
+} from '@/server/survey-builder/services/survey-read';
 
 interface PageProps {
   params: Promise<{ token: string }>;

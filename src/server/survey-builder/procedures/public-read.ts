@@ -7,7 +7,7 @@ import {
   SurveyForResponseOutput,
   SurveyIdRowOutput,
 } from '../domain/survey-read';
-import * as surveySvc from '../services/survey-read.service';
+import * as surveySvc from '../services/survey-read';
 
 // 응답자 공개 경로(survey-response-flow). 원본 3함수 모두 requireAuth 없음 → pub 유지.
 //

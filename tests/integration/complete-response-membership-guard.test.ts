@@ -104,7 +104,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn((...args: unknown[]) => replaceResponseAnswersMock(...args)),
 }));
 
@@ -172,7 +172,7 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     queueSelects({ validQuestionIds: [VALID_QID], attrs: {} });
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -202,7 +202,7 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     queueSelects({ validQuestionIds: [VALID_QID, 'q-huge'], attrs: {} });
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     // 256KB 를 넘는 거대 문자열 (utf8 1바이트 문자 × 300KB)
     const huge = 'a'.repeat(300 * 1024);
@@ -232,7 +232,7 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     });
 
     const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion.service');
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,

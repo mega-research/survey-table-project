@@ -1,7 +1,7 @@
 import { pub, withRateLimit } from '@/server/orpc';
 
 import { CheckDuplicateOnEntryInput, CheckResultSchema } from '../domain/duplicate';
-import * as svc from '../services/duplicate.service';
+import * as svc from '../services/duplicate';
 
 /**
  * 진입 시 중복 감지(pub). 익명 응답자가 페이지 진입 직후 호출.

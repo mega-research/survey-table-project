@@ -28,7 +28,7 @@ import {
   campaignScopeCondition,
   targetScopeCondition,
   testFlagForScope,
-} from '@/server/data-scope.server';
+} from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import type {
   CampaignFilterSnapshot,

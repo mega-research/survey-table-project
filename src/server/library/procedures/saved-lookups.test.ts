@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/saved-lookups.service', () => ({
+vi.mock('../services/saved-lookups', () => ({
   listSavedLookups: vi.fn(),
   createSavedLookup: vi.fn(),
   updateSavedLookup: vi.fn(),
   deleteSavedLookup: vi.fn(),
 }));
 
-import * as svc from '../services/saved-lookups.service';
+import * as svc from '../services/saved-lookups';
 import { savedLookups } from './saved-lookups';
 
 function authedContext(): ORPCContext {

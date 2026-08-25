@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { RecordVisibilitySegmentInput } from '@/server/survey-response/domain/lifecycle';
-import { recordVisibilitySegment } from '@/server/survey-response/services/lifecycle.service';
+import { recordVisibilitySegment } from '@/server/survey-response/services/lifecycle';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import {

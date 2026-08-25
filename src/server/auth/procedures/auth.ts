@@ -1,7 +1,7 @@
 import { authed, pub } from '@/server/orpc';
 
 import { GetUserOutput, UpdatePasswordInput, UpdatePasswordOutput } from '../domain/auth';
-import * as svc from '../services/auth.service';
+import * as svc from '../services/auth';
 
 /**
  * 현재 인증 사용자 조회(pub). 익명도 호출 가능하며, 미인증이면 null.
