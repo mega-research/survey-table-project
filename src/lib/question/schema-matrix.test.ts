@@ -30,7 +30,7 @@ import type { QuestionVariant } from '@/lib/question';
 import { MOBILE_TABLE_DISPLAY_TYPES, isMobileTableDisplayType } from '@/types/question-types';
 import type { Question } from '@/types/survey';
 
-import { makeAllQuestionVariants, makeQuestion } from '../../helpers/question-factory';
+import { makeAllQuestionVariants, makeQuestion } from '../../../tests/helpers/question-factory';
 
 /**
  * 유형 × 필드 매트릭스 박제 — 2026-06-12 실측 탐색(8방향 + 적대 검증)으로 확정한

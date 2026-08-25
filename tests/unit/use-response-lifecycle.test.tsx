@@ -1321,7 +1321,7 @@ describe('draft seq — 이어하기 seed 및 applied 가드', () => {
   });
 });
 
-// calc 셀(수식 기반 계산 셀)을 가진 질문. tests/unit/cell-formula-inject.test.ts 의
+// calc 셀(수식 기반 계산 셀)을 가진 질문. src/lib/survey/cell-formula-inject.test.ts 의
 // calcTable 헬퍼와 동일 최소 구조 — 입력 셀 하나 + 그 값을 그대로 참조하는 calc 셀 하나.
 function calcTableQuestion(id: string): Question {
   return {

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeQuestion, normalizeQuestions } from '@/lib/question';
 import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 
-import { makeOption, makeQuestion } from '../../helpers/question-factory';
+import { makeOption, makeQuestion } from '../../../tests/helpers/question-factory';
 
 /**
  * 읽기 경계 정규화 characterization.
