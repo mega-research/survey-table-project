@@ -44,6 +44,7 @@ import type {
   ParseExcelPreviewInput,
   ParseExcelPreviewResult,
 } from '../domain/contact-upload';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
 interface SurveyModeRow extends Record<string, unknown> {
   test_mode_enabled: boolean;
@@ -158,7 +159,7 @@ export async function ingestContactUpload(
     if (survey.test_mode_enabled) {
       throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
     }
-    const existingScheme = (survey.contact_columns as ContactColumnScheme | null) ?? null;
+    const existingScheme = normalizeContactColumnScheme(survey.contact_columns ?? null);
 
     // 유효 PII 라우팅: replace 는 위저드 입력만, merge/append 는 기존 스킴 우선
     const schemeRouting =

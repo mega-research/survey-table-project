@@ -30,15 +30,16 @@ import {
   listContactsForExport,
 } from '@/server/read-models/contacts.server';
 import { GET } from '@/app/api/surveys/[surveyId]/contacts/export/route';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
-const SCHEME = {
+const SCHEME = normalizeContactColumnScheme({
   version: 1,
   headerRow: 1,
   columns: [
     { key: 'resid', label: '번호', source: 'system.resid' as const, order: 0 },
     { key: '회사명', label: '회사명', source: 'attrs.회사명' as const, order: 1 },
   ],
-};
+})!;
 
 function makeRequest(query: string): NextRequest {
   return new NextRequest(`http://localhost/api/surveys/s1/contacts/export${query}`);

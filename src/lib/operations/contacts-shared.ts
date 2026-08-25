@@ -9,7 +9,8 @@
  */
 
 import { attrsKeyOf } from './contacts';
-import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 시스템 필드 추출
@@ -24,7 +25,7 @@ export interface SystemFieldKeys {
  * 휴리스틱: key 가 한국어 표준 명칭이면 그것으로 매핑.
  * 이메일/사업자번호는 contact_pii 사이드 테이블로 이전되어 이 함수에서 더 이상 다루지 않음.
  */
-export function extractSystemFieldKeys(scheme: ContactColumnScheme): SystemFieldKeys {
+export function extractSystemFieldKeys(scheme: NormalizedContactColumnScheme): SystemFieldKeys {
   const result: SystemFieldKeys = {};
   for (const c of scheme.columns) {
     const k = attrsKeyOf(c.source);

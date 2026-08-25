@@ -1,7 +1,7 @@
 // 응답 내역(profiles) 표시 컬럼 스킴 헬퍼 — 클라이언트(에디터)·서버(페이지) 공용, server-only 금지.
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';
@@ -36,7 +36,7 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
  * - 컨택 스킴에서 사라진 attrs/pii 고아 key 는 결과에서 제거 → save 시 자동 정리.
  */
 export function hydrateProfileColumns(
-  contactScheme: ContactColumnScheme | null,
+  contactScheme: NormalizedContactColumnScheme | null,
   savedScheme: ProfileColumnScheme | null,
 ): ProfileColumnDef[] {
   const residLabel =

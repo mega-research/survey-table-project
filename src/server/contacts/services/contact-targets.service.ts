@@ -11,7 +11,6 @@ import {
 } from '@/server/workflows/test-mail-archive.server';
 import { lockWriteScope } from '@/server/data-scope.server';
 import { generateInviteCode } from '@/lib/survey-url';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import type {
   AddContactTargetInput,
@@ -20,6 +19,11 @@ import type {
   UpdateContactTargetInput,
 } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
+import {
+  type NormalizedContactColumnScheme,
+  normalizeContactColumnScheme,
+} from '@/lib/operations/contacts';
+
 import { allocateContactResid } from './contact-resid';
 
 /**
@@ -32,7 +36,7 @@ async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isGuest: boolean,
-): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
+): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
   const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
 
   const [target] = await tx
@@ -55,7 +59,7 @@ async function lockCurrentSurveyScope(
   tx: DbTransaction,
   surveyId: string,
   isGuest: boolean,
-): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
+): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
   const locked = await lockWriteScope(tx, surveyId, isGuest, {
     lock: 'update',
     columns: ['contactColumns', 'testContactColumns'],
@@ -65,7 +69,8 @@ async function lockCurrentSurveyScope(
   const { isTest, row } = locked;
   return {
     isTest,
-    scheme: (isTest ? row.testContactColumns : row.contactColumns) ?? null,
+    // 잠금 아래 raw JSONB 를 읽는 지점이라 소비처로 내보내기 전에 형태를 보정한다.
+    scheme: normalizeContactColumnScheme((isTest ? row.testContactColumns : row.contactColumns) ?? null),
   };
 }
 

@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { SurveyNotAcceptingResponsesError } from './response-gate';
@@ -152,7 +153,9 @@ export async function detectQuotaOverflow(
       where: eq(surveys.id, surveyId),
       columns: { quotaConfig: true },
     });
-    const config = surveyRow?.quotaConfig;
+    // JSONB 드리프트 보정 — 소비처(deriveCategoryIds·findTarget·countCell)는
+    // dimensions·cells·categories 를 배열로 순회한다.
+    const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
     if (!config?.enabled) return false;
 
     const categoryIds = deriveCategoryIds(config, plainAnswers);

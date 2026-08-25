@@ -19,19 +19,19 @@ vi.mock('@/shared/lib/rpc', () => ({
 
 import { client } from '@/shared/lib/rpc';
 import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
 const updateColumnsMock = vi.mocked(client.operations.progress.updateColumns);
 
-const contactScheme: ContactColumnScheme = {
+const contactScheme = normalizeContactColumnScheme({
   version: 1,
   headerRow: 1,
   columns: [
     { key: 'resid', label: '시스템ID', source: 'system.resid', order: 1 },
     { key: 'c1', label: '중복여부', source: 'attrs.중복여부', order: 2 },
   ],
-};
+})!;
 
 const initialScheme: ProgressColumnScheme = {
   version: 1,

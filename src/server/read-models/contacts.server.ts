@@ -37,6 +37,7 @@ import {
   type ContactsSortKey,
   attrsSortKey,
   normalizeContactColumnScheme,
+  type NormalizedContactColumnScheme,
 } from '@/lib/operations/contacts';
 import {
   attrsNaturalSortExprs,
@@ -304,7 +305,10 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
  * NULL 이면 null 반환 — 호출자가 디폴트 스킴 생성.
  */
 export const getContactColumnScheme = cache(
-  async (surveyId: string, scope: OperationsDataScope): Promise<ContactColumnScheme | null> => {
+  async (
+    surveyId: string,
+    scope: OperationsDataScope,
+  ): Promise<NormalizedContactColumnScheme | null> => {
     const [row] = await db
       .select({
         scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,

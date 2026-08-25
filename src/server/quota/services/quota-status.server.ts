@@ -7,6 +7,7 @@ import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answer
 
 import type { OperationsDataScope } from '@/server/data-scope.server';
 import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/operations/quota-status';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**
  * 설문 쿼터 현황(셀별 + 요약). 쿼터 미설정이면 null.
@@ -21,7 +22,7 @@ export async function getQuotaStatus(
     where: eq(surveys.id, surveyId),
     columns: { quotaConfig: true },
   });
-  const config = surveyRow?.quotaConfig ?? null;
+  const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
   if (!config) return null;
 
   const answersList = await loadCompletedPlainAnswers(surveyId, scope);

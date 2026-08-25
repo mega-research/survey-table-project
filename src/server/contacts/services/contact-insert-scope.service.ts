@@ -3,14 +3,18 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import { ensureTestContactColumns } from './test-contact-columns';
+import {
+  type NormalizedContactColumnScheme,
+  normalizeContactColumnScheme,
+} from '@/lib/operations/contacts';
 import { type OperationsDataScope, lockWriteScope } from '@/server/data-scope.server';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+
+import { ensureTestContactColumns } from './test-contact-columns';
 
 export interface PreparedContactInsertScope {
   scope: OperationsDataScope;
   isTest: boolean;
-  scheme: ContactColumnScheme | null;
+  scheme: NormalizedContactColumnScheme | null;
   existingCount: number;
 }
 
@@ -47,9 +51,12 @@ export async function prepareContactInsertScope(
     throw new Error('TEST_TARGET_LIMIT');
   }
 
-  const scheme = isTest
-    ? ensureTestContactColumns(survey.contactColumns, survey.testContactColumns)
-    : survey.contactColumns;
+  // 잠금 아래 raw JSONB 를 읽는 지점이라 소비처로 내보내기 전에 형태를 보정한다.
+  const scheme = normalizeContactColumnScheme(
+    isTest
+      ? ensureTestContactColumns(survey.contactColumns, survey.testContactColumns)
+      : survey.contactColumns,
+  );
 
   if (isTest && existingCount === 0) {
     await tx

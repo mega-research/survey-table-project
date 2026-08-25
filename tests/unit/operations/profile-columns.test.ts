@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import {
   formatIpHash,
   hydrateProfileColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns';
 
-const contactScheme: ContactColumnScheme = {
+const contactScheme = normalizeContactColumnScheme({
   version: 1,
   headerRow: 1,
   columns: [
@@ -17,7 +17,7 @@ const contactScheme: ContactColumnScheme = {
     { key: '지역', label: '지역', source: 'attrs.지역', order: 2 },
     { key: '담당자', label: '담당자', source: 'pii.담당자', order: 3 },
   ],
-};
+})!;
 
 describe('hydrateProfileColumns', () => {
   it('저장 스킴이 없으면 시스템 컬럼 기본 세트 + attrs/pii 풀(숨김)을 만든다', () => {

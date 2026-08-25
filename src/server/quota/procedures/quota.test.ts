@@ -2,7 +2,6 @@ import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
-import type { QuotaConfig } from '@/shared/contracts/quota';
 
 vi.mock('../services/quota.service', () => ({
   getQuotaConfig: vi.fn(),
@@ -13,6 +12,7 @@ vi.mock('../services/quota.service', () => ({
 
 import * as svc from '../services/quota.service';
 import { quota } from './quota';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 function authedContext(): ORPCContext {
   return {
@@ -22,7 +22,8 @@ function authedContext(): ORPCContext {
   } as ORPCContext;
 }
 
-const sampleConfig: QuotaConfig = {
+// 프로덕션과 같은 입구를 거친다 — 정규화가 쿼터 플랜의 유일한 생산자다.
+const sampleConfig = normalizeQuotaConfig({
   enabled: true,
   dimensions: [
     {
@@ -35,7 +36,7 @@ const sampleConfig: QuotaConfig = {
   ],
   cells: [{ categoryIds: ['c-f'], target: 10 }],
   closedMessage: null,
-};
+})!;
 
 describe('quota procedures', () => {
   beforeEach(() => vi.clearAllMocks());

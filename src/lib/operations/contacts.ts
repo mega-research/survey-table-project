@@ -28,13 +28,30 @@ export const RESID_DEFAULT_LABEL = '시스템ID';
  * 빈 배열로 낮추되 나머지 필드(version/headerRow 등)는 보존한다 — 스킴 전체를 null 로
  * 버리면 컬럼 설정이 통째로 사라진 것처럼 보인다.
  */
+declare const NORMALIZED_SCHEME: unique symbol;
+
+/**
+ * 정규화를 거친 컬럼 스킴 — `columns` 가 배열임이 보장된다.
+ *
+ * `normalizeContactColumnScheme` 만 이 타입을 만들 수 있다. 스킴의 `columns` 를 무보호로
+ * 읽는 소비 함수는 이 타입을 받게 해서, DB JSONB 를 그대로 캐스팅해 넘기는 호출부가
+ * 런타임이 아니라 컴파일에서 걸리게 한다.
+ *
+ * 브랜드는 타입 전용이라(런타임 프로퍼티 없음) 직렬화·RSC 경계 통과에 영향이 없고,
+ * `ContactColumnScheme` 로는 그대로 대입되므로 편집기 등 기존 소비처는 손대지 않아도 된다.
+ */
+export type NormalizedContactColumnScheme = ContactColumnScheme & {
+  readonly [NORMALIZED_SCHEME]: true;
+};
+
 export function normalizeContactColumnScheme(
   raw: unknown,
-): ContactColumnScheme | null {
+): NormalizedContactColumnScheme | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const scheme = raw as ContactColumnScheme;
-  if (Array.isArray(scheme.columns)) return scheme;
-  return { ...scheme, columns: [] };
+  // 브랜드는 런타임에 존재하지 않는 표식이므로 이 한 곳에서만 단언한다.
+  if (Array.isArray(scheme.columns)) return scheme as NormalizedContactColumnScheme;
+  return { ...scheme, columns: [] } as unknown as NormalizedContactColumnScheme;
 }
 
 /**

@@ -14,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProgressColumnDef, ProgressColumnScheme } from '@/shared/contracts/operations';
 import {
   GROUP_LEVELS,
@@ -24,12 +23,13 @@ import {
 } from '@/lib/contacts/group-levels';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
 
 interface Props {
   surveyId: string;
   initialScheme: ProgressColumnScheme;
   /** contact_columns 의 attrs.<key> 풀 — 모든 attrs 키를 자동 노출하는 소스 */
-  contactScheme: ContactColumnScheme | null;
+  contactScheme: NormalizedContactColumnScheme | null;
 }
 
 const ATTRS_PREFIX = 'attrs.';
@@ -43,7 +43,7 @@ const ATTRS_PREFIX = 'attrs.';
  * - contactScheme 에서 사라진 키(고아)는 결과에 포함되지 않음 → save 후 자동 정리.
  */
 function hydrateColumns(
-  contactScheme: ContactColumnScheme | null,
+  contactScheme: NormalizedContactColumnScheme | null,
   initialScheme: ProgressColumnScheme,
 ): ProgressColumnDef[] {
   const attrsPool = (contactScheme?.columns ?? [])
