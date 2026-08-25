@@ -24,7 +24,7 @@ import * as uploadsSvc from '../services/contact-uploads';
 import { uploads } from './uploads';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const mapping: ContactUploadMapping = {
@@ -111,7 +111,7 @@ describe('contacts.uploads procedures', () => {
   it('인증 없으면 existingCount가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { uploads },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.uploads.existingCount({ surveyId: 'sv-1' }),

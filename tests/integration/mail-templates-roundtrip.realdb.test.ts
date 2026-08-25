@@ -36,8 +36,13 @@ process.env['CLOUDFLARE_R2_PUBLIC_URL'] ??= 'https://r2-test.invalid';
 function adminContext(): ORPCContext {
   return {
     db,
-    supabase: {} as never,
-    user: { id: 'test-admin', email: 'test@local' },
+    user: {
+      id: 'test-admin',
+      email: 'test@local',
+      name: '테스트관리자',
+      status: 'active',
+      isSuperadmin: false,
+    },
   };
 }
 

@@ -12,7 +12,7 @@ import * as svc from '../services/contact-result-codes';
 import { resultCodes } from './result-codes';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 describe('resultCodes procedures', () => {
@@ -50,7 +50,7 @@ describe('resultCodes procedures', () => {
   it('인증 없으면 update가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { contacts: { resultCodes } },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.contacts.resultCodes.update({ surveyId: 's-1', codes: null }),

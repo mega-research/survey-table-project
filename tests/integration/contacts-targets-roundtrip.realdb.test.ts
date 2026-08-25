@@ -37,8 +37,13 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 function adminContext(): ORPCContext {
   return {
     db,
-    supabase: {} as never,
-    user: { id: 'test-admin', email: 'test@local' },
+    user: {
+      id: 'test-admin',
+      email: 'test@local',
+      name: '테스트관리자',
+      status: 'active',
+      isSuperadmin: false,
+    },
   };
 }
 

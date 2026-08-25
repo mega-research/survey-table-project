@@ -15,7 +15,7 @@ import * as svc from '../services/saved-cells';
 import { savedCells } from './saved-cells';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 describe('savedCells procedures', () => {
@@ -41,7 +41,7 @@ describe('savedCells procedures', () => {
   it('인증 없으면 list가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { savedCells },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.savedCells.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });

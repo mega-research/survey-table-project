@@ -14,7 +14,7 @@ vi.mock('../services/control', () => ({
 }));
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -127,7 +127,7 @@ describe('operations.control procedures', () => {
   it('인증 없으면 get이 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { control },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.control.get({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
@@ -135,15 +135,13 @@ describe('operations.control procedures', () => {
   });
 
   it('게스트는 grant 일치 설문이어도 get 은 FORBIDDEN (테스트 토큰 노출 차단)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );
@@ -154,15 +152,13 @@ describe('operations.control procedures', () => {
   });
 
   it('게스트는 grant 일치 설문이어도 setTestMode 는 FORBIDDEN (authed 유지)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );
@@ -173,15 +169,13 @@ describe('operations.control procedures', () => {
   });
 
   it('게스트는 grant 일치 설문이어도 disable 은 FORBIDDEN (테스트 데이터 삭제 차단)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );
@@ -192,11 +186,10 @@ describe('operations.control procedures', () => {
   });
 
   it('게스트는 grant 일치 설문이어도 setPaused 는 FORBIDDEN (authed 유지)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.control.setPaused({ surveyId: SURVEY_ID, isPaused: true }),

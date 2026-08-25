@@ -5,7 +5,7 @@ import type { ORPCContext } from '@/server/context';
 import { router } from '@/server/router';
 
 function mockContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 describe('health.check', () => {

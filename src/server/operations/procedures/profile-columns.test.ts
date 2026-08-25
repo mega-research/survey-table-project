@@ -17,7 +17,7 @@ import * as svc from '../services/profile-columns';
 import { profileColumns } from './profile-columns';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -54,7 +54,7 @@ describe('operations.profileColumns procedures', () => {
   it('인증 없으면 updateColumns가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { profileColumns },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.profileColumns.updateColumns({ surveyId: SURVEY_ID, scheme: scheme() }),

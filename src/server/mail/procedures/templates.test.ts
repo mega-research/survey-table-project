@@ -19,7 +19,7 @@ import * as svc from '../services/templates';
 import { templates } from './templates';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 function validInput() {
@@ -111,7 +111,7 @@ describe('mail.templates procedures', () => {
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { templates },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.templates.create({ surveyId: 'sv-1', input: validInput() }),
@@ -119,7 +119,6 @@ describe('mail.templates procedures', () => {
   });
 
   it('게스트는 grant 설문이면 create 가 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     vi.mocked(svc.createMailTemplate).mockResolvedValue({
       id: 'tpl-1',
@@ -128,7 +127,7 @@ describe('mail.templates procedures', () => {
     } as never);
     const client = createRouterClient(
       { templates },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = { surveyId: 'sv-1', input: validInput() };
     const res = await client.templates.create(input);
@@ -137,11 +136,10 @@ describe('mail.templates procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 create 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { templates },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.templates.create({ surveyId: 'sv-other', input: validInput() }),

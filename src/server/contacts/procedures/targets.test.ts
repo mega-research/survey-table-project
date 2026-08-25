@@ -18,7 +18,7 @@ vi.mock('../services/test-contacts', () => ({
 }));
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 describe('contacts.targets procedures', () => {
@@ -69,7 +69,7 @@ describe('contacts.targets procedures', () => {
   it('인증 없으면 add가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.targets.add({ surveyId: 'sv-1', attrs: {} })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
@@ -77,12 +77,11 @@ describe('contacts.targets procedures', () => {
   });
 
   it('게스트는 grant 설문이면 add 가 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     vi.mocked(svc.addContactTarget).mockResolvedValue({ id: 'ct-1', resid: 42 } as never);
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
@@ -91,11 +90,10 @@ describe('contacts.targets procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 add 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.targets.add({ surveyId: 'sv-other', attrs: { name: '홍길동' } }),
@@ -104,11 +102,10 @@ describe('contacts.targets procedures', () => {
   });
 
   it('게스트는 grant 설문이어도 remove 가 FORBIDDEN 이다 - authed 유지', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.targets.remove({ surveyId: 'sv-1', id: 'ct-1' }),

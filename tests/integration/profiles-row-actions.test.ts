@@ -93,15 +93,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-// manage procedure import 가 @/server/context → @/lib/supabase/server 를 끌어오므로
+// manage procedure import 가 @/server/context → @/lib/auth/server 를 끌어오므로
 // 모듈 resolve 안전망으로 stub. service 직접 호출 경로는 인증을 쓰지 않고,
-// procedure 인증 가드는 context.user(null) 로만 판정하므로 getUser 응답값은 무의미.
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
-    },
-  })),
+// procedure 인증 가드는 context.user(null) 로만 판정하므로 세션 응답값은 무의미.
+vi.mock('@/lib/auth/server', () => ({
+  auth: { api: { getSession: vi.fn(async () => null) } },
 }));
 
 // drizzle-orm 은 실제 eq/and 를 사용 (not mocked)
@@ -783,7 +779,6 @@ describe('profiles-row-actions', () => {
 
       const noUserContext: ORPCContext = {
         db: {} as never,
-        supabase: {} as never,
         user: null,
       };
       const client = createRouterClient({ manage }, { context: noUserContext });

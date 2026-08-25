@@ -13,7 +13,7 @@ import * as svc from '../services/contact-attempts';
 import { attempts } from './attempts';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 describe('attempts procedures', () => {
@@ -50,7 +50,7 @@ describe('attempts procedures', () => {
   it('인증 없으면 add가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.contacts.attempts.add({
@@ -62,12 +62,11 @@ describe('attempts procedures', () => {
   });
 
   it('게스트는 grant 설문이면 add 가 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s-1');
     vi.mocked(svc.addAttempt).mockResolvedValue({ id: 'att-1', attemptNo: 1 } as never);
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = {
       contactTargetId: 'ct-1',
@@ -80,11 +79,10 @@ describe('attempts procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 add 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s-1');
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.contacts.attempts.add({

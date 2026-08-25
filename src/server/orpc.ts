@@ -1,11 +1,6 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import {
-  canAccessSurvey,
-  isAdminOrGuestGrantHolder,
-  isGuestUser,
-} from '@/lib/auth/guest-grants';
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
@@ -77,53 +72,53 @@ export function withRateLimit(group: RateLimitGroup) {
 }
 
 /**
- * 관리자 베이스 — supabase 세션 필수 + allowlist 런타임 가드.
+ * 세션·계정 상태 공통 가드 — authed/scoped 가 함께 쓴다.
+ * 미인증은 UNAUTHORIZED, 비활성 계정은 FORBIDDEN. 통과하면 non-null 로 좁혀진다.
+ */
+function requireActiveUser(user: ORPCContext['user']): NonNullable<ORPCContext['user']> {
+  if (!user) {
+    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
+  }
+  if (user.status !== 'active') {
+    throw new ORPCError('FORBIDDEN', { message: '활성 계정만 접근할 수 있습니다.' });
+  }
+  return user;
+}
+
+/**
+ * 관리자 베이스 — Better Auth 세션 필수 + 계정 상태 가드.
  *
  * 1) context.user non-null 검사(미인증이면 UNAUTHORIZED).
- * 2) grant-first: 게스트 grant 보유자는 항상 게스트 — allowlist fail-open 여부와
- *    무관하게 admin 전용 표면에서 거부한다(FORBIDDEN). 게스트 허용 표면은 scoped 담당.
- * 3) ADMIN_USER_IDS allowlist 검사(미포함이면 FORBIDDEN).
- *    allowlist 미설정이면 fail-open(통과) — isAdminUserAllowed 참조.
+ * 2) status === 'active' 검사 — 비활성 계정(suspended/departed 등)은 FORBIDDEN.
+ *    세션 발급 자체를 lib/auth/server.ts 훅이 막지만, 발급 뒤 상태가 바뀐 세션도
+ *    있으므로 요청 시점에 다시 본다.
+ * 3) 게스트 grant 보유자는 admin 전용 표면에서 거부한다(FORBIDDEN).
+ *    게스트 허용 표면은 scoped 담당.
  *
  * 통과하면 context.user가 non-null로 좁혀진다.
  */
 export const authed = base.use(({ context, next }) => {
-  if (!context.user) {
-    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
-  }
-  if (isGuestUser(context.user.id)) {
+  const user = requireActiveUser(context.user);
+  if (isGuestUser(user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
-  if (!isAdminUserAllowed(context.user.id)) {
-    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
-  }
-  return next({ context: { user: context.user } });
+  return next({ context: { user } });
 });
 
 /**
- * 설문 스코프 베이스 — 세션 필수 + (admin allowlist ∨ 게스트 grant 보유).
+ * 설문 스코프 베이스 — 세션 + active 계정. 게스트도 통과한다.
  *
  * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
  * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
  * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
  * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
- * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
- *
- * grant-first: grant 보유자는 admin allowlist 검사 없이 통과시킨다. 이후
- * assertSurveyAccess 가 설문 일치를 강제하므로 allowlist fail-open 여부와
- * 무관하게 게스트는 자기 설문 밖으로 나갈 수 없어 안전하다.
+ * 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
  */
 export const scoped = base.use(({ context, next }) => {
-  if (!context.user) {
-    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
-  }
-  if (!isAdminOrGuestGrantHolder(context.user.id)) {
-    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
-  }
-  return next({ context: { user: context.user } });
+  return next({ context: { user: requireActiveUser(context.user) } });
 });
 
-/** 설문 접근 강제 — admin 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
+/** 설문 접근 강제 — 내부 계정은 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
 export function assertSurveyAccess(userId: string, surveyId: string): void {
   if (!canAccessSurvey(userId, surveyId)) {
     throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });

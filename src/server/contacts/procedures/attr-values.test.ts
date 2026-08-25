@@ -20,7 +20,7 @@ import * as svc from '../services/contact-attr-values';
 import { attrValues } from './attr-values';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
@@ -63,7 +63,7 @@ describe('contacts.attrValues procedures', () => {
   it('인증 없으면 UNAUTHORIZED', async () => {
     const client = createRouterClient(
       { attrValues },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' }),
@@ -71,14 +71,13 @@ describe('contacts.attrValues procedures', () => {
   });
 
   it('게스트는 grant 설문이면 distinct 조회가 위임된다 — 헤더 필터는 게스트 콘솔 표면', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
     vi.mocked(svc.listContactAttrValues).mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
 
     const client = createRouterClient(
       { attrValues },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
 
@@ -86,12 +85,11 @@ describe('contacts.attrValues procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 조회하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
 
     const client = createRouterClient(
       { attrValues },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.attrValues.list({

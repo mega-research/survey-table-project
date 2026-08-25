@@ -17,8 +17,7 @@ import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com' },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false },
   } as ORPCContext;
 }
 
@@ -73,7 +72,7 @@ describe('quota procedures', () => {
   it('인증 없으면 UNAUTHORIZED', async () => {
     const client = createRouterClient(
       { quota },
-      { context: { db: {} as never, supabase: {} as never, user: null } as ORPCContext },
+      { context: { db: {} as never, user: null } as ORPCContext },
     );
     await expect(client.quota.get({ surveyId: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
@@ -85,7 +84,6 @@ describe('quota procedures', () => {
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
           user: null,
           headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
         } as ORPCContext,

@@ -20,7 +20,7 @@ import * as singleSvc from '../services/single-send';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -124,7 +124,7 @@ describe('mail.campaigns procedures', () => {
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.campaigns.create({
@@ -137,7 +137,6 @@ describe('mail.campaigns procedures', () => {
   });
 
   it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
@@ -146,7 +145,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -159,7 +158,6 @@ describe('mail.campaigns procedures', () => {
   });
 
   it('게스트는 grant 설문이면 create 가 isGuest=true 로 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(svc.createCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
@@ -168,7 +166,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -182,11 +180,10 @@ describe('mail.campaigns procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(
       client.campaigns.sendSingle({

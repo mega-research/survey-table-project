@@ -18,7 +18,7 @@ vi.mock('../services/response-edit', async () => {
 });
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 // 픽스처 UUID 는 v4 형태(...-4xxx-8xxx-...). input 이 z.string() 이라 엄격 강제는 아님.
@@ -111,7 +111,7 @@ describe('surveyResponse.edit procedures', () => {
   it('인증 없으면 saveAdminEdit가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { edit },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.edit.saveAdminEdit({
@@ -124,7 +124,6 @@ describe('surveyResponse.edit procedures', () => {
   });
 
   it('게스트는 grant 설문이면 saveAdminEdit 가 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
@@ -132,8 +131,7 @@ describe('surveyResponse.edit procedures', () => {
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );
@@ -155,7 +153,6 @@ describe('surveyResponse.edit procedures', () => {
   it('게스트도 이관 versionId 를 실어 saveAdminEdit 가 동일하게 위임된다', async () => {
     // 관리자 수정의 최신 버전 이관·빈 필수 완화는 역할이 아니라 admin-edit 표면에
     // 걸려 있다 — 게스트 grant 사용자도 같은 경로를 그대로 쓴다는 계약을 잠근다.
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
@@ -163,8 +160,7 @@ describe('surveyResponse.edit procedures', () => {
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );
@@ -184,15 +180,13 @@ describe('surveyResponse.edit procedures', () => {
   });
 
   it('게스트가 다른 설문 surveyId 로 saveAdminEdit 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { edit },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );

@@ -35,11 +35,11 @@ const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 const VERSION_ID = '33333333-4444-4555-8666-777777777777';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 function anonContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 describe('surveyBuilder.read procedures', () => {
@@ -196,15 +196,19 @@ describe('surveyBuilder.read procedures', () => {
     expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
   });
 
-  it('allowlist 밖 세션은 exportJson이 FORBIDDEN으로 막힌다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+  it('비활성 계정 세션은 exportJson이 FORBIDDEN으로 막힌다', async () => {
     const client = createRouterClient(
       { read },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'intruder-1', email: 'x@y.com' },
+          user: {
+            id: 'suspended-1',
+            email: 'x@y.com',
+            name: '정지계정',
+            status: 'suspended',
+            isSuperadmin: false,
+          },
         },
       },
     );
@@ -215,15 +219,13 @@ describe('surveyBuilder.read procedures', () => {
   });
 
   it('게스트 grant 보유자는 exportCsv가 FORBIDDEN으로 막힌다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { read },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
         },
       },
     );

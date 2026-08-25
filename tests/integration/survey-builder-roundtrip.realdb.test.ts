@@ -40,8 +40,13 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 function authedContext(): ORPCContext {
   return {
     db,
-    supabase: {} as never,
-    user: { id: 'admin-roundtrip', email: 'admin@example.com' },
+    user: {
+      id: 'admin-roundtrip',
+      email: 'admin@example.com',
+      name: '테스트관리자',
+      status: 'active',
+      isSuperadmin: false,
+    },
   };
 }
 

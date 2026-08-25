@@ -1,17 +1,13 @@
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-
 /**
  * 설문 단위 게스트 grant.
  *
  * GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]" — 해당 유저는 grant 된
  * 설문들의 operations 표면에만 접근한다. 같은 userId 를 반복 등재하면 설문
- * 여러 개를 가질 수 있다 (guest1:s1,guest1:s2). admin-allowlist 와 같은
- * 접근제어 인프라 상수.
+ * 여러 개를 가질 수 있다 (guest1:s1,guest1:s2). 접근제어 인프라 상수.
  *
- * 주의: grant 보유자는 ADMIN_USER_IDS 설정 여부와 무관하게 항상 게스트로
- * 취급된다(canAccessSurvey grant-first). ADMIN_USER_IDS 미설정(fail-open) 이
- * 남기는 리스크는 grant 가 없는 임의 가입자가 admin 취급되는 경우로 한정되며,
- * 이 경우도 allowlist 를 반드시 설정해 막아야 한다.
+ * grant 보유자는 항상 게스트로 취급된다(grant-first). 계정 발급 기반 게스트
+ * (users.user_type='guest' + survey_participants)로의 교체는 역할 모델 v2
+ * 티켓 21 소관이며, 그때까지 이 env 가 유일한 게스트 판정 출처다.
  */
 
 const ENV_KEY = 'GUEST_SURVEY_GRANTS';
@@ -45,24 +41,21 @@ export function isGuestUser(userId: string): boolean {
   return getGuestSurveyIds(userId).length > 0;
 }
 
-/**
- * admin allowlist 통과 또는 게스트 grant 보유 판정 — 게스트에게 열린 표면
- * (scoped 베이스, 업로드 라우트)의 공용 1차 가드. 설문 일치는 별도로
- * canAccessSurvey/assertSurveyAccess 가 강제한다.
- */
-export function isAdminOrGuestGrantHolder(userId: string): boolean {
-  return isGuestUser(userId) || isAdminUserAllowed(userId);
-}
-
-/** 설문 접근 판정 — grant 보유자는 항상 게스트(grant 설문들만), 그 외는 admin allowlist 판정. */
+/** 설문 접근 판정 — grant 보유자는 grant 설문들만, 그 외 내부 계정은 전 설문. */
 export function canAccessSurvey(userId: string, surveyId: string): boolean {
   const granted = getGuestSurveyIds(userId);
   if (granted.length > 0) return granted.includes(surveyId);
-  return isAdminUserAllowed(userId);
+  return true;
 }
 
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
 export const GUEST_FORCE_LOGOUT_PATH = '/admin/logout';
+
+/**
+ * 담당이 아닌 설문 콘솔로 로그인한 게스트를 되돌릴 때 로그인 화면에 실어 보내는 사유.
+ * 로그인 페이지(RSC)가 붙이고 로그인 폼(client)이 안내 문구로 바꿔 보여준다.
+ */
+export const GUEST_FOREIGN_SURVEY_REASON = 'foreign-survey';
 
 /** 설문 콘솔(operations/preview) 경로에서 설문 id 캡처. */
 const SURVEY_CONSOLE_PATH = /^\/admin\/surveys\/([^/]+)\/(?:operations|preview)(?:\/|$)/;

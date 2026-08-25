@@ -15,11 +15,11 @@ import * as svc from '../services/surveys';
 import { surveys } from './surveys';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 function anonContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';

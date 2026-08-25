@@ -47,7 +47,7 @@ const testRouter = {
 };
 
 function ctx(headers: Headers): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null, headers };
+  return { db: {} as never, user: null, headers };
 }
 
 const TRUSTED = () => new Headers({ 'x-real-ip': '203.0.113.7' });

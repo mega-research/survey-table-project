@@ -12,7 +12,7 @@ import * as svc from '../services/preview';
 import { preview } from './preview';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 function validSendInput() {
@@ -78,7 +78,7 @@ describe('mail.preview procedures', () => {
   it('인증 없으면 sample이 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { preview },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.preview.sample({ surveyId: 'sv-1' }),
@@ -86,7 +86,6 @@ describe('mail.preview procedures', () => {
   });
 
   it('게스트는 grant 설문이면 sample 이 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const sampleData = {
       attrs: { name: '홍길동' },
@@ -97,7 +96,7 @@ describe('mail.preview procedures', () => {
     vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
     const client = createRouterClient(
       { preview },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const res = await client.preview.sample({ surveyId: 'sv-1' });
     expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });

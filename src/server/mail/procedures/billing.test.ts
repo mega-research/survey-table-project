@@ -12,7 +12,7 @@ import * as svc from '../services/billing';
 import { billing } from './billing';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 const validCreateInput = {
@@ -70,7 +70,7 @@ describe('billing procedures', () => {
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { mail: { billing } },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.mail.billing.create(validCreateInput)).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
@@ -80,7 +80,7 @@ describe('billing procedures', () => {
   it('인증 없으면 deleteLatest가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { mail: { billing } },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.mail.billing.deleteLatest({ id: '7231b5bc-c40e-4605-92cc-b4ded7afeff8' }),
@@ -88,11 +88,10 @@ describe('billing procedures', () => {
   });
 
   it('게스트는 billing.create 가 FORBIDDEN (authed 유지 확인)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { mail: { billing } },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     await expect(client.mail.billing.create(validCreateInput)).rejects.toMatchObject({
       code: 'FORBIDDEN',

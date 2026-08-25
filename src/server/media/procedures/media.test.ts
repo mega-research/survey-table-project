@@ -15,13 +15,12 @@ import { media } from './media';
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com' },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false },
   };
 }
 
 function anonContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 describe('media procedures', () => {
@@ -80,12 +79,11 @@ describe('media procedures', () => {
   });
 
   it('게스트도 deleteMailAttachmentTmp 를 위임받는다 (surveyId 없어 tmp 네임스페이스 검증에만 의존)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     vi.mocked(svc.deleteMailAttachmentTmp).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { media },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
     );
     const input = { key: 'tmp/mail-attachment/abc.pdf' };
     const res = await client.media.deleteMailAttachmentTmp(input);

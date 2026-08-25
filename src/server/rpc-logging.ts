@@ -1,6 +1,5 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { isGuestUser } from '@/lib/auth/guest-grants';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
@@ -20,21 +19,19 @@ import type { ORPCContext } from './context';
  */
 
 /**
- * 로그용 role 판정 — 접근제어와 같은 헬퍼(guest-grants/admin-allowlist)를 재사용한다.
+ * 로그용 role 판정 — 접근제어와 같은 헬퍼(guest-grants)를 재사용한다.
  *
- * grant-first: 게스트 grant 보유자는 항상 guest. 그 외 allowlist 통과는 admin
- * (ADMIN_USER_IDS 미설정 fail-open 포함 — 접근제어 판정과 동일하게 기록한다).
- * 둘 다 아니면 user (세션은 있으나 admin 표면 권한이 없는 계정 — pub 표면에서 관측 가능).
+ * grant-first: 게스트 grant 보유자는 항상 guest. 그 외 인증 계정은 admin
+ * (authed 베이스가 세션 + active 만 보므로 접근제어 판정과 같은 축이다).
  * 비인증은 anonymous.
  *
- * 향후 superadmin/admin/user/guest RBAC 확장 시 이 함수만 교체한다 — 소비처는
+ * 향후 superadmin/admin/게스트·실사 RBAC 확장 시 이 함수만 교체한다 — 소비처는
  * 열린 string 으로 취급 (LogContext.role 참조).
  */
 function resolveLogRole(userId: string | undefined): string {
   if (!userId) return 'anonymous';
   if (isGuestUser(userId)) return 'guest';
-  if (isAdminUserAllowed(userId)) return 'admin';
-  return 'user';
+  return 'admin';
 }
 
 /**

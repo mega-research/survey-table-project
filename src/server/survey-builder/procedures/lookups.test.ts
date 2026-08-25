@@ -17,7 +17,7 @@ const SAVED_LOOKUP_ID = '22222222-2222-4222-8222-222222222222';
 const SURVEY_LOOKUP_ID = '33333333-3333-4333-8333-333333333333';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
 }
 
 describe('surveyBuilder lookups procedures', () => {
@@ -60,7 +60,7 @@ describe('surveyBuilder lookups procedures', () => {
   it('인증 없으면 copy가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { lookups },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.lookups.copy({ surveyId: SURVEY_ID, savedLookupId: SAVED_LOOKUP_ID }),
