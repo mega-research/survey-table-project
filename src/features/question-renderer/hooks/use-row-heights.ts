@@ -26,7 +26,9 @@ const LINE_HEIGHT = 26; // 텍스트 라인 높이
 // layout.tsx에서 "Wanted Sans Variable" 웹폰트를 로드하고 globals.css --font-sans도 동일.
 // (이전 'Pretendard'는 미로드 폰트 → 브라우저 폴백 대체 → 측정값이 렌더 높이와 어긋남)
 // 크기는 표 셀 본문 고정 16px(text-base) 기준 — 셀 렌더 크기와 함께 움직여야 한다.
-const TABLE_FONT = '16px "Wanted Sans Variable"';
+// export 는 회귀 가드 전용 — globals.css --font-sans 와의 일치를 테스트가 기계로 고정한다
+// (tests/unit/measurement-font.test.ts). 과거 미로드 폰트로 측정해 임계값이 뒤집힌 적이 있다.
+export const TABLE_FONT = '16px "Wanted Sans Variable"';
 
 /**
  * 셀 타입에 따른 높이 계산

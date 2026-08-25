@@ -2,6 +2,10 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
+// contracts 정의를 그대로 되내보낸다 — 정의는 shared/contracts 한 곳뿐이라 드리프트가
+// 생길 수 없고, 소비자 대부분이 Question·QuestionGroup 과 같은 문장에서 함께 받는다.
+// 질문 구조 옆에서 쓰이는 타입이라 import 를 한 자리에 두는 편이 읽기에 낫다.
+// (얕은 모듈을 만드는 호환 재수출과는 다르다 — src/lib 잔류 기준 아래 재수출 원칙 참조)
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
 export { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 export type { MobileTableDisplayMode } from '@/types/mobile-table-display';

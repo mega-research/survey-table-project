@@ -20,7 +20,8 @@ import {
  */
 
 /** tick 폰트 — SVG fontSize=11, globals.css --font-sans 로드 폰트명과 일치해야 측정이 정확. */
-const TICK_FONT = '11px "Wanted Sans Variable"';
+// export 는 회귀 가드 전용 — tests/unit/measurement-font.test.ts 참조.
+export const TICK_FONT = '11px "Wanted Sans Variable"';
 const ELLIPSIS = '…';
 /** 이웃 tick 라벨과 맞닿지 않도록 슬롯 폭에서 빼는 여유 (양쪽 합). */
 const TICK_GAP = 8;

@@ -140,7 +140,6 @@ export const INPUT_TEXT_ALIGN_CELL_TYPES = new Set<ContentType>(['input', 'calc'
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 /** 필수 응답 가능 셀 타입 — 정의는 셀 의미론(table-cell-semantics)이 소유한다. 호환 재수출. */
-export { REQUIRED_CELL_TYPES };
 export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
   'checkbox',
   'radio',

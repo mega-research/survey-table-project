@@ -43,8 +43,8 @@ import {
   type ContentType,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
-  REQUIRED_CELL_TYPES,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
+import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
 import { runAsyncAction } from '@/utils/run-async-action';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
