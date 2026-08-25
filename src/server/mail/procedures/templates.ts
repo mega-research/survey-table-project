@@ -11,7 +11,7 @@ import {
   UpdateMailTemplateInput,
   UpdateMailTemplateOutput,
 } from '../domain/mail-template';
-import * as svc from '../services/mail-templates.service';
+import * as svc from '../services/templates';
 
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.

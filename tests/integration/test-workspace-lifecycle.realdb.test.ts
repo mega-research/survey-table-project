@@ -17,7 +17,7 @@ import { disableTestWorkspace } from '@/server/operations/services/test-workspac
 import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
 import { processResendEvent } from '@/server/mail/services/resend-webhook';
 import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive';
-import { computeCycleBreakdown } from '@/server/mail/services/mail-billing-cycles';
+import { computeCycleBreakdown } from '@/server/mail/services/billing-cycle-summary';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

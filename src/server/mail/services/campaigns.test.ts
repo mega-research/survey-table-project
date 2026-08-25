@@ -77,7 +77,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { cancelCampaign } from './mail-campaigns.service';
+import { cancelCampaign } from './campaigns';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 const CAMPAIGN_ID = '44444444-4444-4444-8444-444444444444';

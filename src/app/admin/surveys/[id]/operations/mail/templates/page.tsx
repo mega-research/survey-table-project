@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 
 import { MailTemplateList } from '@/features/operations/mail-template/mail-template-list';
 import { Button } from '@/components/ui/button';
-import { getMailTemplatesBySurvey } from '@/server/mail/services/mail-templates.service';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 
 interface Props {
   params: Promise<{ id: string }>;

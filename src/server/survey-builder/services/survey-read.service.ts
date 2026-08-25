@@ -125,7 +125,7 @@ export async function getSurveyBySlug(
 // privateToken 컬럼은 uuid 타입이라 비-UUID 값으로 조회하면 PG 가
 // 22P02(invalid input syntax for type uuid) 를 던진다. 인증 없는 공개 라우트
 // (/preview/[token] 등)에서 호출되므로 형태가 다른 값은 DB 까지 보내지 않고
-// throw 없이 undefined 로 흡수한다 — lookupContactByToken(mail-unsubscribe.service.ts)
+// throw 없이 undefined 로 흡수한다 — lookupContactByToken(mail/services/unsubscribe.ts)
 // 과 동일 패턴. 서비스 레벨에서 막아야 RPC 프로시저 직접 호출 경로까지 함께 보호된다.
 export async function getSurveyByPrivateToken(
   input: SurveyByPrivateTokenInput,

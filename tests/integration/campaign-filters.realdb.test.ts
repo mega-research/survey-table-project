@@ -16,7 +16,7 @@ import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
 import {
   listCampaignRecipients,
   previewCampaignCandidates,
-} from '@/server/mail/services/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
 import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
 

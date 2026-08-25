@@ -9,7 +9,7 @@ import {
   mailRecipients,
   surveys,
 } from '@/db/schema';
-import { listCampaignRecipients } from '@/server/mail/services/campaigns.server';
+import { listCampaignRecipients } from '@/server/mail/services/campaigns-read';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

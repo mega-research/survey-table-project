@@ -146,7 +146,7 @@ export async function createCampaign(
     //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } =
       await import('@/server/read-models/result-code-statuses');
-    const { listBouncedContactIds } = await import('./campaigns.server');
+    const { listBouncedContactIds } = await import('./campaigns-read');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
       kind === 'single' ? Promise.resolve([]) : listBouncedContactIds(input.surveyId),
@@ -323,7 +323,7 @@ export async function fetchCandidateIds(
   const { surveyId, filter } = input;
 
   const { previewCampaignCandidates, countCampaignCandidates } =
-    await import('./campaigns.server');
+    await import('./campaigns-read');
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
     await import('@/server/read-models/contacts');
   const { parseClausesFromUrl, parseHeaderFiltersFromUrl } = await import(
@@ -396,7 +396,7 @@ export async function fetchCandidateIds(
 }
 
 /**
- * 마법사 ⑤ preflight — campaigns.server 의 preflightRecipients 를 한 번 더 노출.
+ * 마법사 ⑤ preflight — campaigns-read 의 preflightRecipients 를 한 번 더 노출.
  */
 export async function previewPreflight(
   input: PreviewPreflightInput,
@@ -404,7 +404,7 @@ export async function previewPreflight(
   const { surveyId, selectedContactIds } = input;
 
   const { preflightRecipients, listBouncedContactIds } =
-    await import('./campaigns.server');
+    await import('./campaigns-read');
   const [scope, bouncedContactIds] = await Promise.all([
     loadOperationsDataScope(surveyId),
     listBouncedContactIds(surveyId),

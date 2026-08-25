@@ -13,7 +13,7 @@ import {
   getCampaignDetail,
   listCampaignRecipientFacets,
   listCampaignRecipients,
-} from '@/server/mail/services/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
 import {

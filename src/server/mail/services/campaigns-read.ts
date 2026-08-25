@@ -591,7 +591,7 @@ export async function listBouncedContactIds(surveyId: string): Promise<string[]>
   if (blinds.length === 0) return [];
 
   // 발송이 쓰는 주소의 근사치를 대조한다 — createCampaign 은 contact_pii 를 column_key
-  // 오름차순으로 훑되(mail-campaigns.service.ts 의 asc(contactPii.columnKey)), 첫 email 컬럼의
+  // 오름차순으로 훑되(campaigns.ts 의 asc(contactPii.columnKey)), 첫 email 컬럼의
   // 복호화가 실패하거나 결과가 공백이면 다음 컬럼으로 폴백한다. 이 서브쿼리는 그 폴백을
   // 모델링하지 않고 단순 column_key 최솟값만 본다 — 복호화 가능 여부는 SQL 술어로 표현할 수
   // 없고, 정확히 맞추려면 설문 전체 컨택의 cipher 를 매번 복호화해야 해서 preflight 비용이
@@ -1033,7 +1033,7 @@ export async function preflightRecipients(args: {
 /**
  * 주어진 컨택 id 중 "발송 가능한 email cipher" 를 가진 id Set 반환.
  *
- * createCampaign(mail-campaigns.service.ts) 의 발송 명단 산출과 동일 기준:
+ * createCampaign(campaigns.ts) 의 발송 명단 산출과 동일 기준:
  *   - 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순으로 훑어
  *     "복호화에 성공한(빈 문자열/공백 아님) 첫 컬럼" 을 발송 email 로 채택.
  *   - 첫 컬럼이 blank/공백/복호화 실패면 다음 컬럼으로 폴백한다.

@@ -165,7 +165,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('campaign 목록은 %s scope와 보관되지 않은 캠페인만 조회한다', async (scope, isTest) => {
-    const { listCampaignsForSurvey } = await import('@/server/mail/services/campaigns.server');
+    const { listCampaignsForSurvey } = await import('@/server/mail/services/campaigns-read');
 
     await listCampaignsForSurvey({
       surveyId: `campaign-${scope}`,
@@ -183,7 +183,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('campaign 상세는 %s survey scope와 보관 상태를 제한한다', async (scope, isTest) => {
-    const { getCampaignDetail } = await import('@/server/mail/services/campaigns.server');
+    const { getCampaignDetail } = await import('@/server/mail/services/campaigns-read');
 
     const result = await getCampaignDetail(
       `campaign-survey-${scope}`,
@@ -206,7 +206,7 @@ describe('운영 응답 범위', () => {
 
   it.each(SCOPE_CASES)('campaign recipient count와 목록은 %s survey scope를 공유한다', async (scope, isTest) => {
     const { mailCampaigns } = await import('@/db/schema');
-    const { listCampaignRecipients } = await import('@/server/mail/services/campaigns.server');
+    const { listCampaignRecipients } = await import('@/server/mail/services/campaigns-read');
 
     const result = await listCampaignRecipients({
       surveyId: `recipient-survey-${scope}`,

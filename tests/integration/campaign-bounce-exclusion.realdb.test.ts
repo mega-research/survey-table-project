@@ -11,7 +11,7 @@ import {
   surveys,
 } from '@/db/schema';
 import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
-import { listBouncedContactIds } from '@/server/mail/services/campaigns.server';
+import { listBouncedContactIds } from '@/server/mail/services/campaigns-read';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

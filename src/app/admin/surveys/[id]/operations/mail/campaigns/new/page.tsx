@@ -3,13 +3,13 @@ import { redirect } from 'next/navigation';
 
 import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
-import { getMailTemplatesBySurvey } from '@/server/mail/services/mail-templates.service';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   CAMPAIGN_SORT_KEYS,
   previewCampaignCandidates,
   type CampaignSortDir,
   type CampaignSortKey,
-} from '@/server/mail/services/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import {
   buildColumnCandidates,
   getContactColumnScheme,

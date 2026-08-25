@@ -168,7 +168,7 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
   buildNegativeCodeExists: vi.fn(() => ({ queryChunks: [] })),
 }));
 
-import { createCampaign } from '@/server/mail/services/mail-campaigns.service';
+import { createCampaign } from '@/server/mail/services/campaigns';
 import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';

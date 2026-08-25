@@ -15,8 +15,8 @@ import {
   ResyncCampaignResult,
   SendSingleCampaignInput,
 } from '../domain/mail-campaign';
-import * as svc from '../services/mail-campaigns.service';
-import { sendSingleCampaign } from '../services/mail-single-send.service';
+import * as svc from '../services/campaigns';
+import { sendSingleCampaign } from '../services/single-send';
 
 const create = scoped
   .input(CreateCampaignInput)

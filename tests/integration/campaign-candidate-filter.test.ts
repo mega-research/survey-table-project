@@ -50,7 +50,7 @@ vi.mock('@/server/read-models/result-code-statuses', async () => {
   };
 });
 
-import { countCampaignCandidates } from '@/server/mail/services/campaigns.server';
+import { countCampaignCandidates } from '@/server/mail/services/campaigns-read';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 

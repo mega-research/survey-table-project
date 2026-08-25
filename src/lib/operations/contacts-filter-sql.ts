@@ -11,9 +11,9 @@ import {
 /**
  * 컨택 필터 WHERE 빌더 — DB 의존 없는 순수 SQL 조립 모듈.
  *
- * contacts.server (조사대상목록) 와 campaigns.server (단체 메일 후보) 가 공유한다.
+ * read-models/contacts (조사대상목록) 와 mail/services/campaigns-read (단체 메일 후보) 가 공유한다.
  * `@/db` 를 import 하지 않으므로 단위 테스트에서 db mock 없이 검증 가능하고,
- * campaigns.server 가 무거운 contacts.server 전체를 끌어오지 않게 한다.
+ * campaigns-read 가 무거운 read-models/contacts 전체를 끌어오지 않게 한다.
  */
 
 // 최신 회차의 result_code — buildClauseSql(enum) 과 contacts.server SELECT 양쪽에서 사용.

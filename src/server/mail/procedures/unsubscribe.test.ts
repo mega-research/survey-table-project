@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/mail-unsubscribe.service', () => ({
+vi.mock('../services/unsubscribe', () => ({
   lookupContactByToken: vi.fn(),
   revertUnsubscribeByContactId: vi.fn(),
 }));
 
-import * as svc from '../services/mail-unsubscribe.service';
+import * as svc from '../services/unsubscribe';
 import { unsubscribe } from './unsubscribe';
 
 function anonContext(): ORPCContext {

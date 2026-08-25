@@ -23,7 +23,7 @@ export type PromotableNoticeQuestion = {
 /**
  * promote 가 최종 실패했을 때 throw 되는 에러.
  * publish 흐름이 이를 catch 해 트랜잭션을 abort 시키도록 한다.
- * (mail-attachment-promote.ts 의 AttachmentPromoteError 와 동일 패턴)
+ * (mail/services/attachment-promote.ts 의 AttachmentPromoteError 와 동일 패턴)
  */
 export class NoticeAttachmentPromoteError extends Error {
   failedKeys: string[];

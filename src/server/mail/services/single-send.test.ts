@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
-import { createCampaign } from './mail-campaigns.service';
-import { sendSingleCampaign } from './mail-single-send.service';
-import { getMailTemplate } from './mail-templates.service';
+import { createCampaign } from './campaigns';
+import { sendSingleCampaign } from './single-send';
+import { getMailTemplate } from './templates';
 
 const selectResultQueue: Array<Array<Record<string, unknown>>> = [];
 
@@ -22,11 +22,11 @@ vi.mock('@/db', () => {
   return { db: { select: vi.fn(() => chainFactory()) } };
 });
 
-vi.mock('./mail-campaigns.service', () => ({
+vi.mock('./campaigns', () => ({
   createCampaign: vi.fn(async () => ({ campaignId: 'camp-1', queuedCount: 1, skippedCount: 0 })),
 }));
 
-vi.mock('./mail-templates.service', () => ({
+vi.mock('./templates', () => ({
   getMailTemplate: vi.fn(async () => ({ id: 'tpl-1', name: '리마인더' })),
 }));
 

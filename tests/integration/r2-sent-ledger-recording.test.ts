@@ -147,7 +147,7 @@ vi.mock('@/server/data-scope.server', () => ({
 import { db } from '@/db';
 import { prepareCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
-import { sendTestTemplateMail } from '@/server/mail/services/mail-preview.service';
+import { sendTestTemplateMail } from '@/server/mail/services/preview';
 
 function recordedKeys(callIndex = 0): string[] {
   const call = recordSentKeysMock.mock.calls[callIndex];

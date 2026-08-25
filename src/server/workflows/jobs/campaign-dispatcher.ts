@@ -108,7 +108,7 @@ export async function finishCampaignDispatch(
 /**
  * 단체 메일 단체 메일 발송 dispatcher.
  *
- * 트리거: `mail/campaign.queued` (mail-campaigns.service 의 createCampaign 트랜잭션 끝에 emit)
+ * 트리거: `mail/campaign.queued` (campaigns.ts 의 createCampaign 트랜잭션 끝에 emit)
  * concurrency: 모든 campaign dispatcher를 전역 직렬 처리.
  *   - Resend rate limit 안전 마진 (per-domain 10 req/s 기본)
  *   - 카운터 race condition 회피

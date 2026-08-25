@@ -10,7 +10,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
 
 import { urlToR2Key } from '@/lib/r2-client';
 
-// survey-image-promote 와 mail-image-promote 가 각각 갖고 있던 같은 구현의
+// survey-image-promote 와 mail/services/image-promote 가 각각 갖고 있던 같은 구현의
 // 테스트를 소유자 한 곳으로 합쳤다(케이스 합집합).
 describe('urlToR2Key', () => {
   it('pathname 에서 leading slash 를 제거한다', () => {

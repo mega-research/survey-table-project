@@ -27,7 +27,7 @@ import { getContactSampleById, getFirstContactSample } from '@/server/read-model
 import { loadOperationsDataScope } from '@/server/data-scope.server';
 import { MailWrapper } from './template-wrapper';
 
-import { getMailPreviewSample, sendTestTemplateMail } from './mail-preview.service';
+import { getMailPreviewSample, sendTestTemplateMail } from './preview';
 
 const sampleData: FirstContactSample = {
   attrs: { name: '홍길동' },

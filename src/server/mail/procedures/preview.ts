@@ -6,7 +6,7 @@ import {
   SendTestTemplateMailInput,
   SendTestTemplateMailOutput,
 } from '../domain/mail-preview';
-import * as svc from '../services/mail-preview.service';
+import * as svc from '../services/preview';
 
 /** 미리보기용 첫 컨택 샘플 조회(읽기 전용). 컨택 0건이면 null. */
 const sample = scoped

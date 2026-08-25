@@ -25,7 +25,7 @@ import {
 } from '@/db/schema';
 import { deleteSavedCell } from '@/server/library/services/saved-cells.service';
 import { deleteSavedQuestion } from '@/server/library/services/saved-questions.service';
-import { deleteMailTemplate } from '@/server/mail/services/mail-templates.service';
+import { deleteMailTemplate } from '@/server/mail/services/templates';
 import { deleteQuestion } from '@/server/survey-builder/services/questions.service';
 import { deleteSurvey } from '@/server/survey-builder/services/surveys.service';
 

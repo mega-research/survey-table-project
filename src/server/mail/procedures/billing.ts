@@ -6,7 +6,7 @@ import {
   CreateBillingPeriodInput,
   DeleteLatestBillingPeriodInput,
 } from '../domain/mail-billing';
-import * as svc from '../services/mail-billing.service';
+import * as svc from '../services/billing';
 
 /**
  * 요금제 행 등록.

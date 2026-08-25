@@ -5,7 +5,7 @@ import {
   revertUnsubscribeAction,
 } from '@/actions/unsubscribe-actions';
 import { Button } from '@/components/ui/button';
-import { lookupContactByToken } from '@/server/mail/services/mail-unsubscribe.service';
+import { lookupContactByToken } from '@/server/mail/services/unsubscribe';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 
 export const metadata: Metadata = {

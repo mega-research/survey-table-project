@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
-import { getMailTemplatesBySurvey } from '@/server/mail/services/mail-templates.service';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import { attrsKeyOf } from '@/lib/operations/contacts';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {

@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/mail-templates.service', async () => {
+vi.mock('../services/templates', async () => {
   const actual = await vi.importActual<
-    typeof import('../services/mail-templates.service')
-  >('../services/mail-templates.service');
+    typeof import('../services/templates')
+  >('../services/templates');
   return {
     ...actual,
     createMailTemplate: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../services/mail-templates.service', async () => {
   };
 });
 
-import * as svc from '../services/mail-templates.service';
+import * as svc from '../services/templates';
 import { templates } from './templates';
 
 function authedContext(): ORPCContext {

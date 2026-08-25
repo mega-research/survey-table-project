@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/mail-campaigns.service', () => ({
+vi.mock('../services/campaigns', () => ({
   createCampaign: vi.fn(),
   cancelCampaign: vi.fn(),
   resyncCampaign: vi.fn(),
@@ -11,12 +11,12 @@ vi.mock('../services/mail-campaigns.service', () => ({
   previewPreflight: vi.fn(),
 }));
 
-vi.mock('../services/mail-single-send.service', () => ({
+vi.mock('../services/single-send', () => ({
   sendSingleCampaign: vi.fn(),
 }));
 
-import * as svc from '../services/mail-campaigns.service';
-import * as singleSvc from '../services/mail-single-send.service';
+import * as svc from '../services/campaigns';
+import * as singleSvc from '../services/single-send';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {

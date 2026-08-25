@@ -86,7 +86,7 @@ vi.mock('@/db', () => ({
 import {
   listCampaignRecipientFacets,
   listCampaignRecipients,
-} from '@/server/mail/services/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000041';

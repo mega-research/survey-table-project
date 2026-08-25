@@ -30,7 +30,7 @@ import {
   MailImagePromoteError,
   promoteMailImages,
   tmpToPermanentUrl,
-} from '@/server/mail/services/mail-image-promote';
+} from '@/server/mail/services/image-promote';
 
 describe('extractTmpMailUrls', () => {
   beforeEach(() => {

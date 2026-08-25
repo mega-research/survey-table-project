@@ -6,7 +6,7 @@ import {
   RevertUnsubscribeByContactIdInput,
   RevertUnsubscribeByContactIdOutput,
 } from '../domain/mail-unsubscribe';
-import * as svc from '../services/mail-unsubscribe.service';
+import * as svc from '../services/unsubscribe';
 
 /**
  * 토큰으로 컨택 조회(pub). 무효 토큰이면 service 가 ok=false 반환 — 호출부가 fallback 처리.

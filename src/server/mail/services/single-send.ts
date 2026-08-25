@@ -10,8 +10,8 @@ import {
 } from '@/server/read-models/result-code-statuses';
 
 import type { CreateCampaignResult, SendSingleCampaignInput } from '../domain/mail-campaign';
-import { createCampaign } from './mail-campaigns.service';
-import { getMailTemplate } from './mail-templates.service';
+import { createCampaign } from './campaigns';
+import { getMailTemplate } from './templates';
 
 /**
  * 컨택 1명에게 템플릿 메일 발송 — kind='single' 캠페인 생성 후 기존 파이프라인 재사용.

@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
-import { createCampaign } from '@/server/mail/services/mail-campaigns.service';
+import { createCampaign } from '@/server/mail/services/campaigns';
 
 const resultCodeGate = vi.hoisted(() => ({
   entered: null as (() => void) | null,

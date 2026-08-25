@@ -21,7 +21,7 @@ import {
   surveys as surveysTable,
 } from '@/db/schema';
 import { updateSavedQuestion } from '@/server/library/services/saved-questions.service';
-import { updateMailTemplate } from '@/server/mail/services/mail-templates.service';
+import { updateMailTemplate } from '@/server/mail/services/templates';
 import { updateQuestion } from '@/server/survey-builder/services/questions.service';
 import { saveSurveyDiff } from '@/server/survey-builder/services/survey-save.service';
 import { updateSurvey } from '@/server/survey-builder/services/surveys.service';

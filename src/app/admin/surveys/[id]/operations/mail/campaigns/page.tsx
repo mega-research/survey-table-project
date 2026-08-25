@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
-} from '@/server/mail/services/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { getOperationsDataScope } from '@/server/data-scope.server';
 
 const PAGE_SIZE = 20;

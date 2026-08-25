@@ -248,7 +248,7 @@ vi.mock('@/server/read-models/result-code-statuses', async () => {
   };
 });
 
-import { createCampaign } from '@/server/mail/services/mail-campaigns.service';
+import { createCampaign } from '@/server/mail/services/campaigns';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';
@@ -321,7 +321,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
 
   // 회귀: listBouncedContactIds 가 반환한 id 가 mail_recipients 재페치 WHERE 의
   // notInArray 에 실제로 반영돼 발송에서 빠지는지 검증한다. 기존에는 db.selectDistinct
-  // 를 항상 빈 배열로 목킹해 이 분기(mail-campaigns.service.ts:170-172)가 한 번도
+  // 를 항상 빈 배열로 목킹해 이 분기(campaigns.ts:170-172)가 한 번도
   // 실행되지 않았다 — 통째로 지워도 스위트가 초록이었다.
   it('반송 이력이 있는 컨택은 mail_recipients 에 포함되지 않는다', async () => {
     const idValid = seedContact();

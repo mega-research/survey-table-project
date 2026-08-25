@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/mail-preview.service', () => ({
+vi.mock('../services/preview', () => ({
   getMailPreviewSample: vi.fn(),
   sendTestTemplateMail: vi.fn(),
 }));
 
-import * as svc from '../services/mail-preview.service';
+import * as svc from '../services/preview';
 import { preview } from './preview';
 
 function authedContext(): ORPCContext {
