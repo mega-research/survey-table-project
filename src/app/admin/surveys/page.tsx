@@ -16,7 +16,6 @@ import {
   Globe,
   Loader2,
   Lock,
-  LogOut,
   MoreVertical,
   Plus,
   Search,
@@ -25,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { logout } from '@/actions/auth-actions';
+import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -147,16 +146,7 @@ export default function SurveyListPage() {
                 <User className="h-5 w-5" />
               </Button>
             </Link>
-            <form action={logout}>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="로그아웃"
-                className="text-red-500 hover:bg-red-50 hover:text-red-600"
-              >
-                <LogOut className="h-5 w-5" />
-              </Button>
-            </form>
+            <LogoutButton iconOnly />
           </div>
         </div>
       </nav>

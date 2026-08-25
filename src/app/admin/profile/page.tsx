@@ -4,9 +4,9 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { AlertCircle, ArrowLeft, CheckCircle, Lock, LogOut, User } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle, Lock, User } from 'lucide-react';
 
-import { logout } from '@/actions/auth-actions';
+import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
 import { client } from '@/shared/lib/rpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,17 +53,7 @@ export default function AdminProfilePage() {
             <ArrowLeft className="h-5 w-5" />
             <span>설문 관리로 돌아가기</span>
           </Link>
-          <form action={logout}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="sm"
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              로그아웃
-            </Button>
-          </form>
+          <LogoutButton />
         </div>
 
         {/* 프로필 카드 */}
@@ -132,9 +122,9 @@ export default function AdminProfilePage() {
                   id="newPassword"
                   name="newPassword"
                   type="password"
-                  placeholder="새 비밀번호를 입력하세요 (최소 6자)"
+                  placeholder="새 비밀번호를 입력하세요 (최소 8자)"
                   required
-                  minLength={6}
+                  minLength={8}
                   disabled={isLoading}
                 />
               </div>
@@ -149,7 +139,7 @@ export default function AdminProfilePage() {
                   type="password"
                   placeholder="새 비밀번호를 다시 입력하세요"
                   required
-                  minLength={6}
+                  minLength={8}
                   disabled={isLoading}
                 />
               </div>

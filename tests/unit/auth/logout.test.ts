@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { logout } from '@/actions/auth-actions';
 import { GET } from '@/app/admin/logout/route';
 
-const { getUser, signOut } = vi.hoisted(() => ({
-  getUser: vi.fn(),
-  signOut: vi.fn(async () => ({ error: null })),
+const { getSession, signOut } = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  signOut: vi.fn(
+    async () =>
+      new Response(null, {
+        headers: { 'set-cookie': 'better-auth.session_token=; Max-Age=0; Path=/' },
+      }),
+  ),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: async () => ({ auth: { getUser, signOut } }),
-}));
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
+vi.mock('@/lib/auth/server', () => ({ auth: { api: { getSession, signOut } } }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -22,30 +22,33 @@ beforeEach(() => {
 describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
   const req = (search = '') => new Request(`https://example.com/admin/logout${search}`);
 
-  it('게스트는 현재 브라우저만 로그아웃(local scope)하고 로그인으로 보낸다', async () => {
+  it('게스트는 세션을 끝내고 만료 쿠키와 함께 로그인으로 보낸다', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'guest-1' } });
 
     const res = await GET(req());
 
-    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(signOut).toHaveBeenCalledOnce();
     expect(res.headers.get('location')).toBe('https://example.com/admin/login');
+    expect(res.headers.getSetCookie().join(';')).toContain('Max-Age=0');
   });
 
-  it('redirect 파라미터를 로그인창까지 전달한다 - 재로그인 시 무권한 안내 근거', async () => {
+  it('redirect·reason 파라미터를 로그인창까지 전달한다 - 재로그인 안내 근거', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'guest-1' } });
 
-    const res = await GET(req('?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview'));
+    const res = await GET(
+      req('?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview&reason=foreign-survey'),
+    );
 
     expect(res.headers.get('location')).toBe(
-      'https://example.com/admin/login?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview',
+      'https://example.com/admin/login?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview&reason=foreign-survey',
     );
   });
 
   it('내비게이션이 아닌 요청(prefetch 등)은 signOut 없이 로그인으로만 보낸다', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'guest-1' } });
 
     const res = await GET(
       new Request('https://example.com/admin/logout?redirect=%2Fadmin%2Fsurveys', {
@@ -61,7 +64,7 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
 
   it('sec-fetch-mode: navigate 는 정상 로그아웃한다', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'guest-1' } });
 
     const res = await GET(
       new Request('https://example.com/admin/logout', {
@@ -69,13 +72,13 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
       }),
     );
 
-    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(signOut).toHaveBeenCalledOnce();
     expect(res.headers.get('location')).toBe('https://example.com/admin/login');
   });
 
   it('내부 절대경로가 아닌 redirect 는 버린다 - open redirect 차단', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'guest-1' } });
 
     for (const bad of ['https://evil.example', '//evil.example', '/\\evil.example']) {
       const res = await GET(req(`?redirect=${encodeURIComponent(bad)}`));
@@ -84,7 +87,7 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
   });
 
   it('게스트가 아닌 인증 사용자는 로그아웃 없이 콘솔로 돌려보낸다 - 로그아웃 CSRF 차단', async () => {
-    getUser.mockResolvedValue({ data: { user: { id: 'admin-1' } } });
+    getSession.mockResolvedValue({ user: { id: 'admin-1' } });
 
     const res = await GET(req());
 
@@ -93,18 +96,11 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
   });
 
   it('미인증 요청은 로그아웃 없이 로그인으로 보낸다', async () => {
-    getUser.mockResolvedValue({ data: { user: null } });
+    getSession.mockResolvedValue(null);
 
     const res = await GET(req());
 
     expect(signOut).not.toHaveBeenCalled();
     expect(res.headers.get('location')).toBe('https://example.com/admin/login');
-  });
-});
-
-describe('logout 서버 액션', () => {
-  it('local scope 로 로그아웃한다 - 공유 게스트 계정의 타 기기 세션 보존', async () => {
-    await logout();
-    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 });
