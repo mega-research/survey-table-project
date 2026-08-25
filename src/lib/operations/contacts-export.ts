@@ -1,7 +1,7 @@
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import { recipientStatusMeta } from '@/components/operations/mail-campaign/recipient-status-badge';
-import { mapStatusPill } from '@/lib/operations/profiles';
+import { formatExportStatusLabel } from '@/lib/operations/profiles';
 import { buildInviteUrl } from '@/lib/survey-url';
 
 /**
@@ -110,10 +110,10 @@ export function formatExportCell(
     return row.latestMailStatus ? recipientStatusMeta(row.latestMailStatus).label : '';
   }
   if (source === 'system.web') {
-    // 목록 표의 StatusPill 과 같은 상태 어휘 — 완료는 라벨만, 미완료(진행중·이탈 등)는
+    // 엑셀 공용 상태 어휘(formatExportStatusLabel) — 완료는 라벨만, 미완료(진행중·이탈 등)는
     // 진행율 % 부속 표기. 응답 없으면 빈 문자열.
     if (row.responseStatus == null) return '';
-    const label = mapStatusPill({ status: row.responseStatus }).label;
+    const label = formatExportStatusLabel(row.responseStatus);
     return row.responseStatus !== 'completed' && row.progressPct != null
       ? `${label} ${row.progressPct}%`
       : label;

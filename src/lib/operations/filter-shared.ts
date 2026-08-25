@@ -24,6 +24,8 @@ export const FILTER_SOURCE = {
  * 종결 상태 3종(screened_out/quotaful_out/bad)의 라벨은 응답 내역 표
  * (mapStatusPill · profiles 필터)와 같은 문자열이어야 한다 — 같은 상태를 두 화면이
  * 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
+ * 유일한 예외는 엑셀 export(rawdata·조사 대상) — formatExportStatusLabel 이
+ * 자격 미달을 완료 계열("완료(자격 미달)")로 표기한다.
  */
 export const WEB_FILTER_OPTIONS = [
   { value: 'completed', label: '응답 완료' },
