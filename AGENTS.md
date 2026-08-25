@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-25 (구조 리뷰 실측 대조 — lib 하위 도메인 폴더 서술 7곳을 이주 완료 후 실물로 정정 · workflows 루트 test-mail-archive 등재 · types 3파일·shared/lib image-utils·lib pg-error 등재 · survey-builder 루트 24/hooks 3/stores 4 · components/ui 23. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-08-25 (리팩터 마감 세션 A — server 트리 무접미사 통일(ADR 0016)·mail 역할 정직 개명·lib 쌍둥이 -format 계열 개명·quota-status-calc/result-code-statuses-normalize 재배치·features 루트 잔류 기준 명문화(전수 실측 72파일 중 이동 1)·명명 메타테스트 신설. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
 
 ---
 
@@ -84,7 +84,7 @@ src/
 │   ├── rpc-error-policy.ts     # 에러 → RPC 코드 매핑
 │   ├── rpc-timeout.ts          # 타임아웃 가드
 │   ├── health.ts               # health procedure (코어 옆)
-│   ├── data-scope.server.ts    # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
+│   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota
@@ -100,7 +100,7 @@ src/
 │   │                           # 갈라야 하는 자리(응답 이관의 생존 판정 등)에서는 쓰지 말고 호출측이 직접 Array.isArray 로 볼 것
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
-│   │   ├── test-mail-archive.server.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
+│   │   ├── test-mail-archive.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
 │   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
@@ -111,6 +111,8 @@ src/
 │   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
+│   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
+│   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
 │   ├── survey-builder/         # 설문 편집기 (130개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
@@ -137,7 +139,7 @@ src/
 │   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate (순수)
 │   │   ├── step-views/         # 스텝 단위 화면
 │   │   └── stores/             # survey-response-store(실응답)·live-response-sources — 미리보기용 test-response-store 는 survey-builder/stores
-│   ├── operations/             # 운영 콘솔 (83개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
+│   ├── operations/             # 운영 콘솔 (84개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   └── analytics/              # 차트 및 리포팅 (23개)
@@ -173,10 +175,12 @@ src/
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
-│   ├── contacts/               # 그룹 레벨·업로드 병합 매칭·업로드 제한 순수 공용 (엑셀 파서·스킴 헬퍼는 server/contacts, 컬럼 자동감지는 features/operations)
-│   ├── operations/             # 운영 집계의 순수 format 짝 23파일 (SQL 집계 *.server.ts 는 server/operations/services — 흡수 대상 잔여)
+│   ├── contacts/               # 그룹 레벨·업로드 병합 매칭·업로드 제한·결과코드 정규화(result-code-statuses-normalize) 순수 공용
+│   │                           # (엑셀 파서·스킴 헬퍼는 server/contacts, 컬럼 자동감지는 features/operations)
+│   ├── operations/             # 운영 콘솔 공유 계산 19파일 — format 짝 11개는 *-format.ts(서버 쌍이 동일 어간 소유) + 공유 판정·필터 8개. UI 도 소비하므로 여기가 정답 (ADR 0016)
+│   │                           # contacts-filter-sql.server.ts 는 drizzle 의존 서버 전용 — lib 안 .server.ts 마킹의 예
 │   ├── mail/                   # 렌더 미리보기·변수 추출·이미지 클릭영역·상수 4파일 (발송·dispatch·reconcile·빌링은 server/mail)
-│   ├── quota/                  # 쿼터 응답 매칭·정규화 (쿼터 게이트는 features/survey-response/lib/quota-gate)
+│   ├── quota/                  # 쿼터 응답 매칭·정규화·달성 상태 계산 quota-status-calc (쿼터 게이트는 features/survey-response/lib/quota-gate)
 │   ├── r2-client.ts            # R2 인프라 어댑터 — S3Client 단일 소유자 + 객체 존재 검사 + URL→key
 │   ├── r2-env.ts               # R2 env 검증 (SDK 를 모르는 순수 헬퍼)
 │   ├── image-utils-server.ts   # 서버 이미지/파일 삭제·복사
@@ -485,7 +489,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
-> 운영 집계는 `server/operations/services/*.server.ts` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 순수 format 짝은 아직 `lib/operations`). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
+> 운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
 > 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
 
 ---
@@ -628,7 +632,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
-- 읽기/쓰기 파티션은 `server/data-scope.server.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
+- 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
 - 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
@@ -769,7 +773,9 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 
 - 컴포넌트: `kebab-case.tsx` (예: `question-edit-modal.tsx`)
 - 스토어/유틸/액션/타입: `kebab-case.ts`
-- 서버 전용 운영 집계: `*.server.ts`
+- **server/ 트리는 무접미사** (ADR 0016) — `.service.ts`·`.server.ts` 금지, 폴더가 계층을 말한다. 메타테스트(`tests/unit/server-tree-naming.test.ts`)가 강제
+- **`.server.ts` 는 lib 등 공유 트리 전용** — "공유 트리 속 서버 전용" 표시. 마킹은 내용물 기준(server-only·DB·서버 env 의존)이며 소비자 기준 금지
+- **서버 파일과 같은 어간의 lib 공유 계산은 역할 접미사** — `-format` 기본(예: `drop-funnel-format.ts` ↔ server `drop-funnel.ts`), 서버가 어간을 소유
 
 ### 컴포넌트 구조
 
