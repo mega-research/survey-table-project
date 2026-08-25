@@ -4,49 +4,51 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-25 (리팩터 마감 세션 A — server 트리 무접미사 통일(ADR 0016)·mail 역할 정직 개명·lib 쌍둥이 -format 계열 개명·quota-status-calc/result-code-statuses-normalize 재배치·features 루트 잔류 기준 명문화(전수 실측 72파일 중 이동 1)·명명 메타테스트 신설. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-08-25 (역할 모델 v2 티켓 01 — Better Auth 1.7.1 서버 기반: 인증 5테이블 drizzle 스키마 + 마이그레이션 0084(선반영 재생용)·0085(users.user_type + accounts.issuer 정합)·`lib/auth/server.ts` 인스턴스·`/api/auth` 라우트(auth-sensitive IP rate limit)·`pnpm auth:seed`. **운영 세션은 아직 Supabase Auth** — 스왑은 티켓 02. 직전: 리팩터 마감 세션 A — server 트리 무접미사(ADR 0016)·명명 메타테스트, server/=oRPC 도메인 10개 · features/=5개 묶음 불변)
 
 ---
 
 ## 기술 스택
 
-| 영역           | 기술                                        | 버전            |
-| -------------- | ------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)             | 16.2.11         |
-| UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
-| 스타일링       | TailwindCSS                                 | 4.x             |
-| 컴포넌트       | shadcn/ui (Radix UI)                        | -               |
-| 상태관리       | Zustand + Immer                             | 5.0.8 / 11.1.3  |
-| 데이터 페칭    | TanStack Query                              | 5.90.11         |
-| RPC            | oRPC (server/client/tanstack-query/openapi) | 1.14.4          |
-| 스키마 검증    | Zod                                         | 4.4.3           |
-| 테이블         | TanStack Table                              | 8.21.3          |
-| 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
-| 리치 에디터    | TipTap                                      | 3.15.3          |
-| 드래그앤드롭   | @dnd-kit                                    | -               |
-| ID 생성        | NanoID                                      | 5.1.11          |
-| ORM            | Drizzle ORM                                 | 0.45.2          |
-| DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
-| 데이터베이스   | PostgreSQL (Supabase)                       | -               |
-| 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
-| 이미지 처리    | sharp                                       | 0.35.3          |
-| HTML sanitize  | sanitize-html                               | 2.17.0          |
-| 이메일 발송    | Resend + React Email                        | 6.12.3          |
-| 이메일 webhook | svix                                        | 1.93.0          |
-| 백그라운드 잡  | Inngest                                     | 4.4.0           |
-| 레이트리밋     | @upstash/ratelimit + @upstash/redis         | 2.0.8 / 1.38.0  |
-| 로깅           | pino + @axiomhq/js                          | 10.3.1 / 2.0.0  |
-| 엑셀 생성      | ExcelJS                                     | 4.4.0           |
-| SPSS .sav 생성 | sav-writer                                  | 1.0.0           |
-| 차트           | Recharts + Tremor                           | 2.15.4 / 3.18.7 |
-| 에러 모니터링  | Sentry (@sentry/nextjs)                     | 10.x            |
-| 테스트         | Vitest + Testing Library + MSW + Playwright | 4.1.0 / 1.60    |
-| 언어           | TypeScript (strict)                         | 5.9.3           |
+| 영역           | 기술                                         | 버전            |
+| -------------- | -------------------------------------------- | --------------- |
+| 프레임워크     | Next.js (App Router, Turbopack)              | 16.2.11         |
+| UI 라이브러리  | React (React Compiler)                       | 19.2.3          |
+| 스타일링       | TailwindCSS                                  | 4.x             |
+| 컴포넌트       | shadcn/ui (Radix UI)                         | -               |
+| 상태관리       | Zustand + Immer                              | 5.0.8 / 11.1.3  |
+| 데이터 페칭    | TanStack Query                               | 5.90.11         |
+| RPC            | oRPC (server/client/tanstack-query/openapi)  | 1.14.4          |
+| 스키마 검증    | Zod                                          | 4.4.3           |
+| 인증           | Better Auth (email+password, drizzle 어댑터) | 1.7.1           |
+| 테이블         | TanStack Table                               | 8.21.3          |
+| 텍스트 측정    | @chenglou/pretext                            | 0.0.5           |
+| 리치 에디터    | TipTap                                       | 3.15.3          |
+| 드래그앤드롭   | @dnd-kit                                     | -               |
+| ID 생성        | NanoID                                       | 5.1.11          |
+| ORM            | Drizzle ORM                                  | 0.45.2          |
+| DB 드라이버    | postgres (postgres-js)                       | 3.4.7           |
+| 데이터베이스   | PostgreSQL (Supabase)                        | -               |
+| 파일 저장소    | Cloudflare R2 (S3 호환)                      | -               |
+| 이미지 처리    | sharp                                        | 0.35.3          |
+| HTML sanitize  | sanitize-html                                | 2.17.0          |
+| 이메일 발송    | Resend + React Email                         | 6.12.3          |
+| 이메일 webhook | svix                                         | 1.93.0          |
+| 백그라운드 잡  | Inngest                                      | 4.4.0           |
+| 레이트리밋     | @upstash/ratelimit + @upstash/redis          | 2.0.8 / 1.38.0  |
+| 로깅           | pino + @axiomhq/js                           | 10.3.1 / 2.0.0  |
+| 엑셀 생성      | ExcelJS                                      | 4.4.0           |
+| SPSS .sav 생성 | sav-writer                                   | 1.0.0           |
+| 차트           | Recharts + Tremor                            | 2.15.4 / 3.18.7 |
+| 에러 모니터링  | Sentry (@sentry/nextjs)                      | 10.x            |
+| 테스트         | Vitest + Testing Library + MSW + Playwright  | 4.1.0 / 1.60    |
+| 언어           | TypeScript (strict)                          | 5.9.3           |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
 > `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22) — 소스 참조가 처음부터 0이었다.
 > 폼은 제어 컴포넌트 + zod 로, 목록은 TanStack Table 로 직접 다룬다.
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
+> Better Auth 는 역할 모델 v2 티켓 01로 **서버 기반만** 들어왔다 (인스턴스·테이블·시드·rate limit). 운영 세션·로그인 화면은 아직 Supabase Auth — 스왑은 티켓 02.
 
 ---
 
@@ -172,6 +174,7 @@ src/
 │                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
 │   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
+│   │                           # + server.ts — Better Auth 인스턴스 (역할 모델 v2 티켓 01, 세션 스왑 전)
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
@@ -234,7 +237,43 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘 SSOT는 `shared/contracts/auth.ts`.
+
+### 인증 도메인 (auth.ts — Better Auth 관할)
+
+```
+users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
+├── id (uuid PK — 앱이 crypto.randomUUID() 생성, DB default 없음)
+├── name, email (UNIQUE), emailVerified, image
+├── status                 # pending|active|rejected|suspended|departed — pending/rejected 는
+│                          # 도달 불가 어휘(공개 가입 폐기, ADR-0018). DB default 'pending' 은 안전장치
+├── isSuperadmin, jobTitle
+├── userType               # internal|guest|fieldwork (0085, NOT NULL default 'internal' + CHECK)
+└── createdAt, updatedAt
+
+sessions                   # 세션 (30일 만기 + 하루 1회 사용 시 연장)
+├── id, token (UNIQUE), userId (FK cascade)
+├── expiresAt, ipAddress, userAgent
+└── createdAt, updatedAt
+
+accounts                   # 크리덴셜 (비밀번호 해시 보유)
+├── id, userId (FK cascade), accountId, providerId
+├── issuer                 # better-auth 1.7 필수 — 이메일+비밀번호는 'local:credential'
+│                          # UNIQUE(issuer, accountId)
+├── password (해시), OAuth 토큰류(미사용 nullable)
+└── createdAt, updatedAt
+
+verifications              # 토큰 검증 (identifier 인덱스) — 현재 미사용(이메일 재설정 없음)
+
+user_status_events         # 계정 상태 전이 감사 (append-only)
+├── id, userId (FK restrict), fromStatus, toStatus
+├── changedBy (FK restrict), reason
+└── createdAt
+```
+
+> **선반영 주의**: 프로덕션·스테이징에는 5테이블이 2026-07-14 선반영돼 있다. `0084_better_auth_tables.sql` 은
+> **빈 DB 재생 전용 — 프로덕션·스테이징에 적용 금지**, 적용 대상은 `0085_better_auth_v2_reconcile.sql`
+> (user_type + issuer 백필 + 어댑터 기대 인덱스)뿐이다. RLS 5테이블 전부 ON(정책 0 = deny-all).
 
 ### 설문 도메인 (surveys.ts)
 
@@ -566,6 +605,7 @@ POST   /api/response/segment                   # 구간 응답 저장 (sendBeaco
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+*      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
 ```
 
 ---
@@ -589,6 +629,11 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 ## 인증과 권한
 
 - 세션은 Supabase Auth (`lib/supabase/*`), `proxy.ts` 미들웨어가 `/admin`·`/analytics`에서 세션을 갱신한다.
+- **Better Auth 서버 기반**(역할 모델 v2 티켓 01, ADR-0018): 인스턴스는 `lib/auth/server.ts` — email+password,
+  UUID user id, 30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·
+  이메일 비밀번호 재설정 없음(분실은 슈퍼어드민 재설정, 티켓 04). sign-in 전 비활성 상태(active 외)를
+  차단하며 실패 응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
+  **운영 세션 스왑은 티켓 02** — 그 전까지 아래 Supabase 기반 체계가 현행이다.
 - procedure 베이스 3종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
@@ -600,7 +645,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## 레이트리밋과 로깅
 
-- **레이트리밋** (`lib/rate-limit/`): Upstash Redis 2단 판정(`isRateLimitedTwoTier`). 입력의 sessionId/responseId를 클라이언트 축으로 삼아 `group:ip:clientId`로 같은 NAT 뒤 응답자를 격리하고, `group-ip:ip` 전체 가드가 식별자 회전 남용을 막는다. **UPSTASH env 미설정이면 limiter가 no-op(항상 통과)**. 신뢰 IP 헤더 부재 시에만 fail-closed.
+- **레이트리밋** (`lib/rate-limit/`): Upstash Redis 2단 판정(`isRateLimitedTwoTier`). 입력의 sessionId/responseId를 클라이언트 축으로 삼아 `group:ip:clientId`로 같은 NAT 뒤 응답자를 격리하고, `group-ip:ip` 전체 가드가 식별자 회전 남용을 막는다. **UPSTASH env 미설정이면 limiter가 no-op(항상 통과)**. 신뢰 IP 헤더 부재 시에만 fail-closed. `/api/auth` 민감 POST 경로는 `auth-sensitive`(IP 당 10회/10분, 단일 축) 버킷을 라우트에서 선적용한다.
 - **로깅** (`lib/logger/`): pino + Axiom transport. `base`의 `rpcLoggingMiddleware`가 최전방이라 인증·레이트리밋 거부까지 기록된다. PII 마스킹은 `redact.ts` 소관.
 
 ---
@@ -660,6 +705,7 @@ pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
+pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
 pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)
 pnpm spss:rollback    # SPSS 필드 롤백 (:live 동일)
 pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
@@ -711,6 +757,11 @@ NEXT_PUBLIC_APP_URL=
 INNGEST_*=
 SENTRY_*=  NEXT_PUBLIC_SENTRY_DSN=
 
+# Better Auth (lib/auth/server.ts)
+BETTER_AUTH_SECRET=             # 세션 서명 비밀키 (openssl rand -base64 32)
+BETTER_AUTH_URL=                # baseURL (로컬 http://localhost:3000)
+BETTER_AUTH_TRUSTED_ORIGINS=    # 콤마 목록 (baseURL 은 자동 포함)
+
 # PII 암호화
 CONTACT_PII_AES_KEY=            # cipher 키 (환경별 분리 필수)
 CONTACT_PII_HMAC_KEY=           # blind index 키
@@ -730,7 +781,7 @@ ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비�
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
-> `.env.example`의 `BETTER_AUTH_*` 와 `EMAIL_SEND_MODE` 는 코드 참조 0건이다 — 전자는 미착수 전환 계획의 잔재, 후자는 발송 모드 분기가 구현되지 않은 자리다.
+> `.env.example`의 `EMAIL_SEND_MODE` 는 코드 참조 0건이다 — 발송 모드 분기가 구현되지 않은 자리다. (`BETTER_AUTH_*` 는 2026-08-25 티켓 01부터 실사용.)
 
 ---
 
