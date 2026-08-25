@@ -9,9 +9,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 import { resultErrorMessage } from '@/lib/get-error-message';
-import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
+import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { client } from '@/shared/lib/rpc';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
 
 interface Props {
   surveyId: string;

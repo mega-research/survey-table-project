@@ -14,7 +14,7 @@ import {
 import { saveAdminEdit } from '@/server/survey-response/services/response-edit';
 import { manage } from '@/server/survey-response/procedures/manage';
 import type { ORPCContext } from '@/server/context';
-import type { StatusCounts } from '@/lib/operations/aggregate-status';
+import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import * as aggregateStatusServer from '@/server/operations/services/aggregate-status';
 import * as profilesServer from '@/server/operations/services/profiles';
 import type { ListProfilesResult } from '@/server/operations/services/profiles';

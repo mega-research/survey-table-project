@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractResultCodeStatuses } from '@/lib/operations/result-code-statuses';
+import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
 import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('extractResultCodeStatuses', () => {

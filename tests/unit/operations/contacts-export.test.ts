@@ -7,7 +7,7 @@ import {
   resolveExportColumns,
   formatExportCell,
   type ContactExportRowData,
-} from '@/lib/operations/contacts-export';
+} from '@/lib/operations/contacts-export-format';
 
 function makeScheme(): ContactColumnScheme {
   return {

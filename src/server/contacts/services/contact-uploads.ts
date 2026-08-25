@@ -26,7 +26,7 @@ import {
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { logger } from '@/lib/logger';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 import type {
@@ -44,7 +44,7 @@ import type {
   ParseExcelPreviewInput,
   ParseExcelPreviewResult,
 } from '../domain/contact-upload';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 interface SurveyModeRow extends Record<string, unknown> {
   test_mode_enabled: boolean;

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatIpHash } from '@/lib/operations/profile-columns';
+import { formatIpHash } from '@/lib/operations/profile-columns-format';
 import {
   type ProfilesView,
   type SortDir,
@@ -17,7 +17,7 @@ import {
   type StepLocation,
   formatTotalTime,
   mapStatusPill,
-} from '@/lib/operations/profiles';
+} from '@/lib/operations/profiles-format';
 import { cn } from '@/lib/utils';
 import type { ProfileColumnDef } from '@/shared/contracts/operations';
 import type { ProfilesRow } from '@/shared/contracts/operations-io';

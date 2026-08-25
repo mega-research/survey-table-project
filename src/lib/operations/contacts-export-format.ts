@@ -1,7 +1,7 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
-import { mapStatusPill } from '@/lib/operations/profiles';
+import { mapStatusPill } from '@/lib/operations/profiles-format';
 import { buildInviteUrl } from '@/lib/survey-url';
 
 /**

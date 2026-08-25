@@ -11,7 +11,7 @@ import {
   type DailyBucket,
   type DailyMode,
   type DailyRow,
-} from '@/lib/operations/aggregate-daily';
+} from '@/lib/operations/aggregate-daily-format';
 import {
   responseScopeCondition,
   testFlagForScope,

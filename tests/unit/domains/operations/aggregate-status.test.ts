@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mapRowsToCounts } from '@/lib/operations/aggregate-status';
+import { mapRowsToCounts } from '@/lib/operations/aggregate-status-format';
 
 describe('mapRowsToCounts', () => {
   it('mixed statuses: completed/in_progress/drop → 각 버킷에 합산되고 total은 in_progress 제외 합', () => {

@@ -20,7 +20,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 import { client } from '@/shared/lib/rpc';
 import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 const updateColumnsMock = vi.mocked(client.operations.progress.updateColumns);
 

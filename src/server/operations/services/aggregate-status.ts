@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
-import { mapRowsToCounts, type StatusCounts } from '@/lib/operations/aggregate-status';
+import { mapRowsToCounts, type StatusCounts } from '@/lib/operations/aggregate-status-format';
 import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope';
 
 /**

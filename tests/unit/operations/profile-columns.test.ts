@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import {
   formatIpHash,
   hydrateProfileColumns,
   visibleProfileColumns,
-} from '@/lib/operations/profile-columns';
+} from '@/lib/operations/profile-columns-format';
 
 const contactScheme = normalizeContactColumnScheme({
   version: 1,

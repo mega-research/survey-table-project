@@ -19,7 +19,7 @@ export interface NumRange {
  * - 역방향 (50-10) 은 자동 swap (10-50)
  * - 빈 토큰/이중 콤마/공백만 → null
  *
- * progress-filters.server.ts 와 contacts-filters.server.ts 양쪽에서 공유.
+ * server 의 operations/progress-filters 와 read-models/contacts-filters 양쪽에서 공유.
  */
 export function parseIdListInput(input: string): NumRange[] | null {
   if (!ID_LIST_REGEX.test(input)) return null;

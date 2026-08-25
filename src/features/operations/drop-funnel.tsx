@@ -14,7 +14,7 @@ import { CHART_COLOR_ROSE_400 } from '@/features/operations/chart-tokens';
 import type {
   DropFunnelBar,
   DropFunnelOutput,
-} from '@/lib/operations/drop-funnel';
+} from '@/lib/operations/drop-funnel-format';
 import { numberFormatter } from '@/features/operations/format';
 
 import { EmptyState } from './empty-state';

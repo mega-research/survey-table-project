@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import type { DownloadColumnCandidate } from '@/lib/operations/contacts-export';
+import type { DownloadColumnCandidate } from '@/lib/operations/contacts-export-format';
 
 interface Props {
   surveyId: string;

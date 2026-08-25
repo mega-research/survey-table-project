@@ -17,12 +17,12 @@ import {
   buildStepLocationMap,
   hasActiveFilters,
   normalizeListArgs,
-} from '@/lib/operations/profiles';
+} from '@/lib/operations/profiles-format';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import {
   hydrateProfileColumns,
   visibleProfileColumns,
-} from '@/lib/operations/profile-columns';
+} from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
 import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts';

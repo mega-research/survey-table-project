@@ -22,7 +22,7 @@ import { prepareContactInsertScope } from './contact-insert-scope';
 import {
   type NormalizedContactColumnScheme,
   normalizeContactColumnScheme,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 
 import { allocateContactResid } from './contact-resid';
 

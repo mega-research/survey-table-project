@@ -7,7 +7,7 @@ import {
   maskPhone,
   maskBizNumber,
   attrsKeyOf,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 
 // normalizeContactListArgs / hasActiveContactFilters 테스트는 함수 제거와 함께 삭제됨
 // (다중 조건 필터 모델로 전환 — page.tsx 가 인라인으로 page/sort/dir 파싱).

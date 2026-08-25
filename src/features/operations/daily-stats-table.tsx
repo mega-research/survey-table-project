@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { DailyStatsRow } from '@/lib/operations/daily-stats';
+import type { DailyStatsRow } from '@/lib/operations/daily-stats-format';
 import { numberFormatter } from '@/features/operations/format';
 
 import { EmptyState } from './empty-state';

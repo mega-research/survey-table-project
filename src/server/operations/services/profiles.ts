@@ -4,14 +4,14 @@ import 'server-only';
 import { deletedResponse, notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
-import { attrsSortKey } from '@/lib/operations/contacts';
-import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql';
+import { attrsSortKey } from '@/lib/operations/contacts-format';
+import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql.server';
 import type { Platform } from '@/lib/operations/parse-ua';
 import {
   type NormalizedListArgs,
   type ProfilesSystemSortKey,
   type SortDir,
-} from '@/lib/operations/profiles';
+} from '@/lib/operations/profiles-format';
 import {
   type OperationsDataScope,
   responseScopeCondition,

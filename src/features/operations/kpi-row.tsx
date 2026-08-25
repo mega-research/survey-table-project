@@ -1,8 +1,8 @@
 import { Fragment } from 'react';
 
-import type { StatusCounts } from '@/lib/operations/aggregate-status';
+import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import { numberFormatter } from '@/features/operations/format';
-import type { QuotaSummary } from '@/lib/operations/quota-status';
+import type { QuotaSummary } from '@/lib/quota/quota-status-calc';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 

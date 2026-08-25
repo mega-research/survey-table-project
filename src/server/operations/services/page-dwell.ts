@@ -10,7 +10,7 @@ import {
   formatPageDwell,
   type DwellOutput,
   type DwellStats,
-} from '@/lib/operations/page-dwell';
+} from '@/lib/operations/page-dwell-format';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
 
 /** 빈 결과 — published version이 없거나 snapshot이 비어있을 때. */

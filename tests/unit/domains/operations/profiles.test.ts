@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap } from '@/lib/operations/profiles'
+import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap } from '@/lib/operations/profiles-format'
 import type { Question, QuestionGroup } from '@/types/survey'
 
 // buildStepLocationMap 테스트용 최소 fixture — buildRenderSteps 가 읽는 필드만 의미 있다.

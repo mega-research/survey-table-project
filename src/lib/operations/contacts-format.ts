@@ -1,7 +1,7 @@
 /**
  * 운영 콘솔 컨택리스트 페이지의 표시용 pure helper + 클라/서버 공용 타입.
  *
- * 'server-only' marker 는 contacts.server.ts 에만 둔다. 본 모듈은 DB/server-only
+ * 'server-only' marker 는 server/read-models/contacts.ts 에만 둔다. 본 모듈은 DB/server-only
  * 의존을 일체 갖지 않아 client component 가 import 해도 안전하다.
  *
  * 단위 테스트: tests/unit/domains/operations/contacts.test.ts.

@@ -7,7 +7,7 @@ import { MoreHorizontal } from 'lucide-react';
 
 import { client } from '@/shared/lib/rpc';
 import { getErrorMessage } from '@/lib/get-error-message';
-import type { ProfilesView } from '@/lib/operations/profiles';
+import type { ProfilesView } from '@/lib/operations/profiles-format';
 import {
   AlertDialog,
   AlertDialogAction,

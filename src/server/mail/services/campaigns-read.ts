@@ -12,7 +12,7 @@ import {
 import { decryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
 import { firstEmailRowByTarget, selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
-import { maskEmail } from '@/lib/operations/contacts';
+import { maskEmail } from '@/lib/operations/contacts-format';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -21,7 +21,7 @@ import {
   buildContactsFilterSql,
   latestResultCodeExpr,
   matchedResponseSubquery,
-} from '@/lib/operations/contacts-filter-sql';
+} from '@/lib/operations/contacts-filter-sql.server';
 import { FILTER_NONE_VALUE, escapeLikePattern } from '@/lib/operations/filter-shared';
 import {
   type OperationsDataScope,

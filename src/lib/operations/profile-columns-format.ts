@@ -1,7 +1,7 @@
 // 응답 내역(profiles) 표시 컬럼 스킴 헬퍼 — 클라이언트(에디터)·서버(페이지) 공용, server-only 금지.
 import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';

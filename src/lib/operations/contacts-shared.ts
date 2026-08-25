@@ -8,9 +8,9 @@
  * pure module — DB / 'server-only' import 없음.
  */
 
-import { attrsKeyOf } from './contacts';
+import { attrsKeyOf } from './contacts-format';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 시스템 필드 추출

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
-import type { QuotaStatus } from '@/lib/operations/quota-status';
+import type { QuotaStatus } from '@/lib/quota/quota-status-calc';
 
 const cat = (id: string, label: string) => ({ id, label });
 

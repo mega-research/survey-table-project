@@ -5,7 +5,7 @@ import {
   shapeDropFunnel,
   type DropFunnelInput,
   type FunnelQuestion,
-} from '@/lib/operations/drop-funnel';
+} from '@/lib/operations/drop-funnel-format';
 
 /** 테스트용 snapshot 헬퍼 — id `q1`..`qN` 형식, 라벨 `Q1`..`QN`. */
 function makeQuestions(n: number): FunnelQuestion[] {

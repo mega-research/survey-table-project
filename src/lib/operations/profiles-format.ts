@@ -1,7 +1,7 @@
 /**
  * 운영 콘솔 응답 내역 페이지의 표시용 pure helper + 클라/서버 공용 타입.
  *
- * 'server-only' marker 는 `profiles.server.ts` 에만 둔다. 클라이언트 컴포넌트
+ * 'server-only' marker 는 server/operations/services/profiles.ts 에만 둔다. 클라이언트 컴포넌트
  * (`profiles-filter-bar.tsx` 등) 가 import 해도 안전하도록 본 모듈은 DB/server-only
  * 의존을 일체 갖지 않는다.
  *
@@ -12,7 +12,7 @@ import { buildRenderSteps, stepIdOf } from '@/utils/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 클라/서버 공용 타입 + 화이트리스트 (profiles.server.ts 와 client 양쪽이 사용)
+// 클라/서버 공용 타입 + 화이트리스트 (server/operations/services/profiles.ts 와 client 양쪽이 사용)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SORT_KEYS = [

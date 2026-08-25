@@ -25,7 +25,7 @@ export const getProgressSnapshot = cache(
 /**
  * 응답한 질문 ID 집합과 snapshot position map 으로부터 진행률 % 계산.
  *
- * 정책 (drop-funnel.ts 의 position-based 계산 패턴 차용, 단 반올림은 우리 쪽만 적용):
+ * 정책 (lib/operations/drop-funnel-format.ts 의 position-based 계산 패턴 차용, 단 반올림은 우리 쪽만 적용):
  *   - max position / totalQuestions x 100 (반올림 → smallint 저장용)
  *   - positionMap 에 없는 questionId (legacy / 다른 version) 는 무시
  *   - 응답 0개 또는 모두 legacy -> null

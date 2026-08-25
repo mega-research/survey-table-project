@@ -4,9 +4,9 @@ import 'server-only';
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';
-import { piiKeyOf } from '@/lib/operations/contacts';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { piiKeyOf } from '@/lib/operations/contacts-format';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 export { getSchemeRouting, type SchemeRouting } from '@/lib/contacts/match-contacts';
 

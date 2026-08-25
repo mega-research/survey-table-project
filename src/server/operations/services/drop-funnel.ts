@@ -9,8 +9,8 @@ import {
   formatDropFunnel,
   type DropFunnelOutput,
   type FunnelQuestion,
-} from '@/lib/operations/drop-funnel';
-import { buildCanonicalSteps } from '@/lib/operations/page-dwell';
+} from '@/lib/operations/drop-funnel-format';
+import { buildCanonicalSteps } from '@/lib/operations/page-dwell-format';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
 
 /** 빈 결과 — published version 없거나 snapshot이 비어있을 때. */

@@ -10,7 +10,7 @@ import {
   shapeResponseTime,
   type Platform,
   type ResponseTimeRow,
-} from '@/lib/operations/response-time';
+} from '@/lib/operations/response-time-format';
 import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope';
 
 /**

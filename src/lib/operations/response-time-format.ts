@@ -4,7 +4,7 @@
  * 파일 구성:
  *   - 본 파일: 타입 정의 + 순수 함수 (`trimmedMean`, `shapeResponseTime`)
  *     서버 의존성 없음 → 단위 테스트 대상.
- *   - `response-time.server.ts`: DB 어댑터 `getResponseTime`.
+ *   - server/operations/services/response-time.ts: DB 어댑터 `getResponseTime`.
  *
  * 정책 (plan §5, §10 C):
  *   - 표는 항상 4행 고정: Total / Desktop / Mobile / Pad (tablet → "Pad" 라벨).

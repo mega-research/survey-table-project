@@ -13,8 +13,8 @@ import {
   CONTACTS_PAGE_SIZE,
   effectiveSortKey,
   normalizeSortKey,
-} from '@/lib/operations/contacts';
-import { buildDownloadCandidates } from '@/lib/operations/contacts-export';
+} from '@/lib/operations/contacts-format';
+import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
 import {
   buildColumnCandidates,
   getContactColumnScheme,

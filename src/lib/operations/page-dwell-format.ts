@@ -9,7 +9,7 @@
  * 파일 구성:
  *   - 본 파일: 타입 정의 + 순수 변환 함수 (`trimmedStats`, `shapePageDwell`)
  *     서버 의존성 없음 → 단위 테스트 대상.
- *   - `page-dwell.server.ts`: DB 어댑터 `getPageDwell`.
+ *   - server/operations/services/page-dwell.ts: DB 어댑터 `getPageDwell`.
  *
  * 정책 (plan §5, §10):
  *   - **stepId 컨벤션** (응답 페이지 `stepIdOf`와 일치):
@@ -134,7 +134,7 @@ export function buildCanonicalSteps(snapshot: SurveyVersionSnapshot): CanonicalS
   const rawGroups = Array.isArray(snapshot.groups) ? snapshot.groups : [];
   const rawQuestions = Array.isArray(snapshot.questions) ? snapshot.questions : [];
 
-  // buildRenderSteps 가 읽는 필드만 도메인 형태로 정규화한다 (profiles.ts 와 동일 패턴).
+  // buildRenderSteps 가 읽는 필드만 도메인 형태로 정규화한다 (profiles-format.ts 와 동일 패턴).
   const qs: Question[] = rawQuestions.map((q) => ({
     id: q.id,
     order: q.order,

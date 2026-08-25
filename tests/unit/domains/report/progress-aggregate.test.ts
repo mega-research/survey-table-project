@@ -5,7 +5,7 @@ import {
   sortGroupRows,
   computeTotals,
   type ProgressRow,
-} from '@/lib/operations/report-progress';
+} from '@/lib/operations/report-progress-format';
 
 describe('computeRate', () => {
   it('completed/list * 100 백분율을 반환', () => {

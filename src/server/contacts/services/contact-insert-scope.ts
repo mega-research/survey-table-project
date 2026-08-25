@@ -6,7 +6,7 @@ import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import {
   type NormalizedContactColumnScheme,
   normalizeContactColumnScheme,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 import { type OperationsDataScope, lockWriteScope } from '@/server/data-scope';
 
 import { ensureTestContactColumns } from './test-contact-columns';

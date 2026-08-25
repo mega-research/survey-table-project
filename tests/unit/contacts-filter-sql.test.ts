@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sql as sqlTag } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql';
+import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 
 const dialect = new PgDialect();
@@ -311,7 +311,7 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
   });
 
   it('mailStatusRankExpr — 열람이 전달 완료보다 앞, 발송 이력 없음은 NULL(축 밖)', async () => {
-    const { mailStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
+    const { mailStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql.server');
     const query = dialect.sqlToQuery(mailStatusRankExpr);
     const pos = (s: string) => query.sql.indexOf(s);
     expect(pos("'opened'")).toBeGreaterThan(-1);
@@ -420,7 +420,7 @@ describe('buildContactsFilterSql — any 모드 (전체 컬럼 검색)', () => {
 
 describe('matchedResponseSubquery — web 컬럼 매칭 응답 서브쿼리 (표시·정렬·필터 공유)', () => {
   it('매칭은 contact_target_id 역참조 — response_id(완료 시점에만 기록)만 보면 진행중·이탈이 응답없음 취급된다', async () => {
-    const { matchedResponseSubquery } = await import('@/lib/operations/contacts-filter-sql');
+    const { matchedResponseSubquery } = await import('@/lib/operations/contacts-filter-sql.server');
     const query = dialect.sqlToQuery(matchedResponseSubquery(sqlTag`status`));
     expect(query.sql).toContain('survey_responses');
     expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
@@ -432,7 +432,7 @@ describe('matchedResponseSubquery — web 컬럼 매칭 응답 서브쿼리 (표
 
 describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
   it('숫자 CASE 캐스트 표현식 + 텍스트 표현식 순서쌍을 반환한다', async () => {
-    const { attrsNaturalSortExprs } = await import('@/lib/operations/contacts-filter-sql');
+    const { attrsNaturalSortExprs } = await import('@/lib/operations/contacts-filter-sql.server');
     const [numeric, text] = attrsNaturalSortExprs('NO');
     const numQ = dialect.sqlToQuery(numeric);
     expect(numQ.sql).toContain('CASE WHEN');

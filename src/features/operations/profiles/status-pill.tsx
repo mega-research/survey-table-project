@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import type { StatusPillResult } from '@/lib/operations/profiles';
+import type { StatusPillResult } from '@/lib/operations/profiles-format';
 
 interface Props {
   pill: StatusPillResult;

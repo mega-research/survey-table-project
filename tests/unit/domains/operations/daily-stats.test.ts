@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shapeDailyStats } from '@/lib/operations/daily-stats';
+import { shapeDailyStats } from '@/lib/operations/daily-stats-format';
 
 describe('shapeDailyStats', () => {
   it('빈 입력 → 빈 배열', () => {

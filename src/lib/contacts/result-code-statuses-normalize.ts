@@ -10,7 +10,7 @@
  * 사용자가 빌더에서 한 번 저장하면 명시 status 박혀 fallback 우회.
  *
  * 이 파일은 pure 함수만 노출 — DB 의존성 없음. client/server 양쪽에서 import 가능.
- * cache wrapped DB 호출은 `result-code-statuses.server.ts` 참조.
+ * cache wrapped DB 호출은 server/read-models/result-code-statuses.ts 참조.
  */
 
 import { DEFAULT_RESULT_CODES, type ContactResultCode, type ResultCodeStatus } from '@/shared/contracts/contacts';

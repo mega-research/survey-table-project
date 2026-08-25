@@ -7,7 +7,7 @@ import { getContactResultCodes } from './contacts';
 import {
   extractResultCodeStatuses,
   type ResultCodeStatuses,
-} from '@/lib/operations/result-code-statuses';
+} from '@/lib/contacts/result-code-statuses-normalize';
 
 /**
  * `surveys.contact_result_codes` 조회 → extractResultCodeStatuses 적용.

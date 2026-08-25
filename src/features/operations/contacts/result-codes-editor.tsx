@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { type ContactResultCode, DEFAULT_RESULT_CODES, type ResultCodeStatus } from '@/shared/contracts/contacts';
-import { resolveCodeStatus } from '@/lib/operations/result-code-statuses';
+import { resolveCodeStatus } from '@/lib/contacts/result-code-statuses-normalize';
 import { client } from '@/shared/lib/rpc';
 
 interface ResultCodesEditorProps {

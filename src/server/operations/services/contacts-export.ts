@@ -12,7 +12,7 @@ import {
   formatExportCell,
   type ContactExportRowData,
   type ExportColumn,
-} from '@/lib/operations/contacts-export';
+} from '@/lib/operations/contacts-export-format';
 
 /** inArray 파라미터 폭주 방지용 청크 크기 */
 const PII_QUERY_CHUNK = 5000;

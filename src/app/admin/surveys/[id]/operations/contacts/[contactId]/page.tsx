@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
-import { attrsKeyOf } from '@/lib/operations/contacts';
+import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { STATUS_FILTERS, type StatusFilter } from '@/lib/operations/profiles';
+import { STATUS_FILTERS, type StatusFilter } from '@/lib/operations/profiles-format';
 import {
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidate,

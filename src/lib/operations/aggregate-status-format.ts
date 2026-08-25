@@ -6,7 +6,7 @@
  *
  * 파일 구성:
  *   - 본 파일: 타입 정의 + 순수 변환 함수 `mapRowsToCounts` (서버 의존성 없음 → 테스트 가능)
- *   - `aggregate-status.server.ts`: 실제 DB 호출 어댑터 `aggregateStatus`
+ *   - server/operations/services/aggregate-status.ts: 실제 DB 호출 어댑터 `aggregateStatus`
  */
 
 export interface StatusCounts {

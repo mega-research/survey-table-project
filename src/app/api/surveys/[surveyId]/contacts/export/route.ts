@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { resolveExportColumns } from '@/lib/operations/contacts-export';
+import { resolveExportColumns } from '@/lib/operations/contacts-export-format';
 import {
   buildContactsExportWorkbook,
   decryptPiiForExport,

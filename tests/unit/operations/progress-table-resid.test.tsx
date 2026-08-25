@@ -8,7 +8,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { ProgressTable } from '@/features/operations/report/progress-table';
-import type { ProgressTotals } from '@/lib/operations/report-progress';
+import type { ProgressTotals } from '@/lib/operations/report-progress-format';
 
 const totals: ProgressTotals = {
   groupCount: 0,

@@ -13,9 +13,9 @@ import {
   type ContactsSortKey,
   attrsKeyOf,
   piiKeyOf,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
-import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles';
+import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles-format';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import type {
   ContactColumnDef,

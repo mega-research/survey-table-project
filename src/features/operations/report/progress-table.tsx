@@ -14,7 +14,7 @@ import {
   type ProgressSortKey,
   type SortDir,
   type ProgressTotals,
-} from '@/lib/operations/report-progress';
+} from '@/lib/operations/report-progress-format';
 import type { ProgressColumnDef } from '@/shared/contracts/operations';
 import { numberFormatter } from '@/features/operations/format';
 

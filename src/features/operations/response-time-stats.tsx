@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { formatSeconds, numberFormatter } from '@/features/operations/format';
-import type { ResponseTimeRow } from '@/lib/operations/response-time';
+import type { ResponseTimeRow } from '@/lib/operations/response-time-format';
 
 interface Props {
   data: ResponseTimeRow[];

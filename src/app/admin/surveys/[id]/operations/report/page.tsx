@@ -8,13 +8,13 @@ import {
 } from '@/features/operations/report/progress-group-by-tabs';
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
-import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
-import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress';
+import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress-format';
+import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress-format';
 import {
   countContactTargets,
   getProgressColumnScheme,

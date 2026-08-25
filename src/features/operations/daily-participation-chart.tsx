@@ -11,7 +11,7 @@ import {
   formatDayLabel,
   type DailyBucket,
   type DailyMode,
-} from '@/lib/operations/aggregate-daily';
+} from '@/lib/operations/aggregate-daily-format';
 import { CHART_COLOR_BLUE_500 } from '@/features/operations/chart-tokens';
 import { numberFormatter } from '@/features/operations/format';
 

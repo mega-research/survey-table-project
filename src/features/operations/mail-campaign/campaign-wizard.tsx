@@ -32,8 +32,8 @@ import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles-format';
 import type { MailTemplate } from '@/db/schema/mail';
 import {
   useCreateCampaign,

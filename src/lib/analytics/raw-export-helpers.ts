@@ -4,7 +4,7 @@ import {
   parseQuestionNumberFromTitle,
   type StepGroupInput,
   type StepQuestionInput,
-} from '@/lib/operations/profiles';
+} from '@/lib/operations/profiles-format';
 import type { Question, QuestionOption } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions, toSpssValueLabelPairs } from '@/utils/ranking-source';

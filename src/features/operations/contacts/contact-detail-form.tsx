@@ -20,7 +20,7 @@ import {
 } from '@/features/operations/contacts/send-single-mail-dialog';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
-import { piiKeyOf } from '@/lib/operations/contacts';
+import { piiKeyOf } from '@/lib/operations/contacts-format';
 import type {
   ContactColumnScheme,
   ContactMethod,

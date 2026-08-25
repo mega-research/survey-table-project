@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { KpiRow } from '@/features/operations/kpi-row';
-import type { StatusCounts } from '@/lib/operations/aggregate-status';
+import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 
 const counts: StatusCounts = {
   total: 0,

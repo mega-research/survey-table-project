@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDayLabel, shapeDailyBuckets } from '@/lib/operations/aggregate-daily';
+import { formatDayLabel, shapeDailyBuckets } from '@/lib/operations/aggregate-daily-format';
 
 describe('shapeDailyBuckets — day 모드', () => {
   it('빈 입력 → 빈 배열', () => {

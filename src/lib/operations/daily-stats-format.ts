@@ -3,7 +3,7 @@
  *
  * 파일 구성:
  *   - 본 파일: 타입 정의 + 순수 변환 함수 `shapeDailyStats` (서버 의존성 없음 → 테스트 가능)
- *   - `daily-stats.server.ts`: 실제 DB 호출 어댑터 `getDailyStats` (KST 기반 SQL).
+ *   - server/operations/services/daily-stats.ts: 실제 DB 호출 어댑터 `getDailyStats` (KST 기반 SQL).
  *
  * 정책 (plan §5):
  *   - 기본 정렬: 일자 내림차순 (최근부터) — 목업 p1 "시간별 전환" 표와 동일.

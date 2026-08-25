@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildQuotaStatus, quotaTone } from '@/lib/operations/quota-status';
+import { buildQuotaStatus, quotaTone } from '@/lib/quota/quota-status-calc';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 // 프로덕션과 같은 입구를 거친다 — 정규화가 쿼터 플랜의 유일한 생산자다.

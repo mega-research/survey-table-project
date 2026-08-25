@@ -4,13 +4,13 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import {
   targetScopeCondition,
   type OperationsDataScope,
 } from '@/server/data-scope';
 import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
+import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
 /**

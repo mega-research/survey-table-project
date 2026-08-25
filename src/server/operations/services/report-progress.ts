@@ -7,7 +7,7 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 import {
   type OperationsDataScope,
@@ -15,7 +15,7 @@ import {
   testFlagForScope,
 } from '@/server/data-scope';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
-import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress';
+import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress-format';
 import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };

@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { CONTACT_METHOD_LABEL, type ContactColumnDef, type ContactColumnScheme, type ContactMethod } from '@/shared/contracts/contacts';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
+import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { buildInviteUrl } from '@/lib/survey-url';
 

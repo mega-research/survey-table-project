@@ -5,7 +5,7 @@ import {
   shapePageDwell,
   trimmedStats,
   type DwellInput,
-} from '@/lib/operations/page-dwell';
+} from '@/lib/operations/page-dwell-format';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { QuestionData, QuestionGroupData, SurveyVersionSnapshot } from '@/shared/contracts/survey';
 

@@ -4,7 +4,7 @@ import type { ContactUploadMapping } from '@/shared/contracts/contacts';
 import {
   normalizeContactColumnScheme,
   type NormalizedContactColumnScheme,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 import { appendNewColumnsToScheme, getSchemeRouting } from '@/server/contacts/services/scheme-helpers';
 
 // 프로덕션과 같은 입구를 거친다 — 정규화가 스킴의 유일한 생산자라는 계약을 테스트도 따른다.

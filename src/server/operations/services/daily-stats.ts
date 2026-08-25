@@ -10,7 +10,7 @@ import {
   shapeDailyStats,
   type DailyStatsRawRow,
   type DailyStatsRow,
-} from '@/lib/operations/daily-stats';
+} from '@/lib/operations/daily-stats-format';
 import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope';
 
 /**

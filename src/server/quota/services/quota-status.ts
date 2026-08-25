@@ -6,7 +6,7 @@ import { surveys } from '@/db/schema/surveys';
 import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
 
 import type { OperationsDataScope } from '@/server/data-scope';
-import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/operations/quota-status';
+import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/quota/quota-status-calc';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**

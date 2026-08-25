@@ -8,7 +8,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { ProgressTable } from '@/features/operations/report/progress-table';
-import type { ProgressRow, ProgressTotals } from '@/lib/operations/report-progress';
+import type { ProgressRow, ProgressTotals } from '@/lib/operations/report-progress-format';
 
 /**
  * 전체 행 — 헤더 바로 아래 첫 줄에 항상 있어야 한다. 값은 페이지에 보이는 행들의

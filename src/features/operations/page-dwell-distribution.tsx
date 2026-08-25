@@ -20,7 +20,7 @@ import {
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
 import { CHART_COLOR_BLUE_500 } from '@/features/operations/chart-tokens';
 import { formatSeconds } from '@/features/operations/format';
-import type { DwellOutput, DwellPage } from '@/lib/operations/page-dwell';
+import type { DwellOutput, DwellPage } from '@/lib/operations/page-dwell-format';
 
 import { EmptyState } from './empty-state';
 import {

@@ -9,13 +9,13 @@ import {
   splitHeaderValues,
   type ParseExtraHooks,
 } from '@/server/read-models/contacts-filters';
-import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql';
+import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql.server';
 import {
   escapeLikePattern,
   type FilterClause,
   type FilterCondition as ClauseFilterCondition,
 } from '@/lib/operations/filter-shared';
-import { STATUS_FILTERS } from '@/lib/operations/profiles';
+import { STATUS_FILTERS } from '@/lib/operations/profiles-format';
 import { type ColumnCandidate } from './progress-filters';
 import { parseIdListInput } from '@/lib/operations/range-list';
 

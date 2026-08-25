@@ -17,7 +17,7 @@ import {
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
 import { STATUS_LABEL } from '@/lib/operations/recipient-status';
-import { mapStatusPill } from '@/lib/operations/profiles';
+import { mapStatusPill } from '@/lib/operations/profiles-format';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {

@@ -7,9 +7,9 @@ import {
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
+import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles-format';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';

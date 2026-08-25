@@ -30,7 +30,7 @@ import {
   listContactsForExport,
 } from '@/server/read-models/contacts';
 import { GET } from '@/app/api/surveys/[surveyId]/contacts/export/route';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 const SCHEME = normalizeContactColumnScheme({
   version: 1,

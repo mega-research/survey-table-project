@@ -4,7 +4,7 @@ import {
   shapeResponseTime,
   trimmedMean,
   type Platform,
-} from '@/lib/operations/response-time';
+} from '@/lib/operations/response-time-format';
 
 describe('trimmedMean', () => {
   it('빈 배열 → null', () => {

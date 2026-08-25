@@ -38,7 +38,7 @@ import {
   attrsSortKey,
   normalizeContactColumnScheme,
   type NormalizedContactColumnScheme,
-} from '@/lib/operations/contacts';
+} from '@/lib/operations/contacts-format';
 import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
@@ -46,7 +46,7 @@ import {
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
-} from '@/lib/operations/contacts-filter-sql';
+} from '@/lib/operations/contacts-filter-sql.server';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
 import {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
-import { quotaTone } from '@/lib/operations/quota-status';
-import { buildQuotaStatus } from '@/lib/operations/quota-status';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { quotaTone } from '@/lib/quota/quota-status-calc';
+import { buildQuotaStatus } from '@/lib/quota/quota-status-calc';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**

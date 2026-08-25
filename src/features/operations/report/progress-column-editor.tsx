@@ -23,7 +23,7 @@ import {
 } from '@/lib/contacts/group-levels';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
 
 interface Props {
   surveyId: string;

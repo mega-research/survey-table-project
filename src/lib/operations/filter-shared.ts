@@ -219,7 +219,7 @@ export type HeaderFilterMode = (typeof HEADER_FILTER_MODES)[number];
 
 /**
  * ILIKE wildcard escape — `%` `_` `\` 를 리터럴로 처리.
- * profiles.server.ts / report-progress.server.ts / contacts.server.ts 가 공유.
+ * server 의 operations/profiles·operations/report-progress·read-models/contacts 가 공유.
  */
 export function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');

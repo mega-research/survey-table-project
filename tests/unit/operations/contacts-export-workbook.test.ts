@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/db', () => ({ db: {} }));
 
 import { buildContactsExportWorkbook } from '@/server/operations/services/contacts-export';
-import type { ContactExportRowData, ExportColumn } from '@/lib/operations/contacts-export';
+import type { ContactExportRowData, ExportColumn } from '@/lib/operations/contacts-export-format';
 
 const columns: ExportColumn[] = [
   { source: 'system.resid', label: '번호' },

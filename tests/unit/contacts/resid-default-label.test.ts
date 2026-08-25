@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { ensureTestContactColumns } from '@/server/contacts/services/test-contact-columns';
 
 describe('resid 기본 라벨 — 시스템ID', () => {

@@ -9,7 +9,7 @@
  *
  * 파일 구성:
  *   - 본 파일: 타입 정의 + 순수 변환 함수 `shapeDropFunnel` (서버 의존성 없음 → 단위 테스트 대상)
- *   - `drop-funnel.server.ts`: DB 어댑터 `getDropFunnel`
+ *   - server/operations/services/drop-funnel.ts: DB 어댑터 `getDropFunnel`
  *
  * server 경로 주의:
  *   - `getDropFunnel` 은 이제 drop 세션의 *마지막 pageVisit stepId* (`table:<uuid>`/`group:<rootId>`)
