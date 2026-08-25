@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { CycleSummaryTable } from '@/features/operations/mail-cost/cycle-summary-table';
-import type { CycleSummary } from '@/server/mail/services/billing-cycle-summary';
+import type { CycleSummary } from '@/shared/contracts/mail-io';
 
 const cycle: CycleSummary = {
   cycleKey: '2026-07-15T00:00:00.000Z',
