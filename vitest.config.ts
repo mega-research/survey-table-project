@@ -9,11 +9,11 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // 같은 57파일이 12.8초 → 6.5초, environment 비용 36.5초 → 3밀리초).
 // node 프로젝트에서 DOM 부재로 실패하는 테스트가 나오면 여기에 추가할 것.
 const DOM_TS_TESTS = [
-  'tests/unit/mail-template/table-attrs-helpers.test.ts',
+  'src/components/ui/rich-text-editor/table-attrs-helpers.test.ts',
   'tests/integration/contacts-export-route.test.ts',
   // TipTap 은 document 가 있어야 스키마를 만든다
-  'tests/unit/rich-text-editor/extensions.test.ts',
-  'tests/unit/rich-text-editor/file-attachment-node.test.ts',
+  'src/components/ui/rich-text-editor/extensions.test.ts',
+  'src/components/ui/rich-text-editor/file-attachment-node.test.ts',
 ];
 
 const isRealDb = process.env['RUN_REALDB'] === '1';

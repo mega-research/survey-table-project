@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { extractRawSql } from '../../integration/_helpers/result-code-mock';
+import { extractRawSql } from './_helpers/result-code-mock';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000051';
 const OTHER_SURVEY_ID = '00000000-0000-4000-8000-000000000052';
