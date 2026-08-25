@@ -18,7 +18,7 @@ import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
 import { MobileOptionCard } from './mobile-card-shared';
-import { RankingDropdownStack } from './ranking-dropdown-stack';
+import { RankingDropdownStack } from './cells/ranking-dropdown-stack';
 
 interface RankingQuestionProps {
   question: Question;

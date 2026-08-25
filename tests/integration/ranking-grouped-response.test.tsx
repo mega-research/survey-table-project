@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Question, RankingAnswer } from '@/types/survey';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
-import type { RankingDropdownStackProps } from '@/features/question-renderer/ranking-dropdown-stack';
+import type { RankingDropdownStackProps } from '@/features/question-renderer/cells/ranking-dropdown-stack';
 
 // 데스크탑 강제 — isMobile=false 로 Radix Select 대신 내부 select 확인 불필요한 분기 제거.
 // 하지만 RankingDropdownStack 을 모킹해 native select 로 교체하므로 matchMedia 영향 없음.
@@ -38,7 +38,7 @@ vi.mock('@/features/question-renderer/mobile-card-shared', () => ({
  * - positions 개수만큼 <select> 를 렌더하고, 선택 시 onChange 를 호출.
  * - 각 select 의 aria-label 은 "${rank}순위 선택" — 실제 컴포넌트와 동일 패턴.
  */
-vi.mock('@/features/question-renderer/ranking-dropdown-stack', () => ({
+vi.mock('@/features/question-renderer/cells/ranking-dropdown-stack', () => ({
   RankingDropdownStack: ({
     answers,
     options,

@@ -8,7 +8,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { RankingDropdownStack } from '@/features/question-renderer/ranking-dropdown-stack';
+import { RankingDropdownStack } from '@/features/question-renderer/cells/ranking-dropdown-stack';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { Question, QuestionOption } from '@/types/survey';
