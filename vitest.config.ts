@@ -4,7 +4,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 
 // DOM 이 필요한 .ts 테스트. 나머지 .ts 는 node 환경에서 돌린다 —
-// 529개 중 DOM 을 쓰는 것은 .tsx 컴포넌트 테스트와 아래 목록뿐인데, 예전에는 전역
+// 전 스위트에서 DOM 을 쓰는 것은 .tsx 컴포넌트 테스트와 아래 목록뿐인데, 예전에는 전역
 // environment:'jsdom' 이라 400여 파일이 쓰지도 않는 jsdom 을 매번 띄웠다(2026-08-19 측정:
 // 같은 57파일이 12.8초 → 6.5초, environment 비용 36.5초 → 3밀리초).
 // node 프로젝트에서 DOM 부재로 실패하는 테스트가 나오면 여기에 추가할 것.
