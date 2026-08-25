@@ -5,22 +5,18 @@ import * as svc from '../services/auth';
 
 /**
  * 현재 인증 사용자 조회(pub). 익명도 호출 가능하며, 미인증이면 null.
- * 미들웨어 redirect 체크/클라 인증 상태 쿼리에서 사용하므로 공개로 둔다.
+ * 컨텍스트가 이미 세션을 읽어 두므로 context.user 를 그대로 돌려준다.
  */
-const getUser = pub
-  .output(GetUserOutput)
-  .handler(({ context }) => svc.getUser(context.supabase));
+const getUser = pub.output(GetUserOutput).handler(({ context }) => context.user);
 
 /**
- * 비밀번호 변경(authed). authed 통과로 context.user 가 non-null.
- * 검증/재인증 로직은 service 에 위임.
+ * 비밀번호 변경(authed). 검증/재인증은 service 가 Better Auth 에 위임한다.
+ * changePassword 는 세션 헤더를 필요로 하므로 context.headers 를 함께 넘긴다.
  */
 const updatePassword = authed
   .input(UpdatePasswordInput)
   .output(UpdatePasswordOutput)
-  .handler(({ input, context }) =>
-    svc.updatePassword(context.supabase, context.user, input),
-  );
+  .handler(({ input, context }) => svc.updatePassword(context.headers, input));
 
 export const auth = {
   getUser,

@@ -1,77 +1,52 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { APIError } from 'better-auth/api';
 
-import type { AuthUser } from '@/server/context';
+import { auth } from '@/lib/auth/server';
 
 import type { UpdatePasswordInput, UpdatePasswordOutput } from '../domain/auth';
 
-/**
- * 현재 supabase 세션 사용자를 조회.
- * 익명(미인증)이면 null 반환. pub procedure 에서 호출되므로 인증 강제 없음.
- *
- * 반환은 supabase User -> 도메인 AuthUser 명시 매핑.
- * email 은 string | undefined -> string | null 로 정규화(세탁 금지).
- */
-export async function getUser(supabase: SupabaseClient): Promise<AuthUser | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  return {
-    id: user.id,
-    email: user.email ?? null,
-  };
-}
+/** Better Auth 최소 비밀번호 길이(lib/auth/server.ts emailAndPassword.minPasswordLength)와 동일. */
+const MIN_PASSWORD_LENGTH = 8;
 
 /**
- * 비밀번호 변경 — 검증 로직(확인 일치/최소 길이/현재 비번 재인증) 포함.
- * authed procedure 에서 호출되며, context.user(non-null) 를 전달받는다.
+ * 비밀번호 변경 — 확인 일치·최소 길이 검증 후 Better Auth 에 위임한다.
+ * 현재 비밀번호 재인증과 해시 교체는 changePassword 가 한 번에 처리한다.
  *
  * 검증 실패/재인증 실패는 throw 대신 { error } 로 반환(기존 action UX 유지).
- * supabase.auth.signInWithPassword 로 현재 비밀번호를 재인증한 뒤 updateUser.
+ * 다른 기기 세션은 함께 폐기한다(revokeOtherSessions) — 비밀번호를 바꾸는 이유가
+ * 대개 유출 의심이라 남겨두면 목적을 잃는다.
  */
 export async function updatePassword(
-  supabase: SupabaseClient,
-  user: AuthUser,
+  headers: Headers | undefined,
   input: UpdatePasswordInput,
 ): Promise<UpdatePasswordOutput> {
   const { currentPassword, newPassword, confirmPassword } = input;
 
-  // 새 비밀번호 확인
   if (newPassword !== confirmPassword) {
     return { error: '새 비밀번호가 일치하지 않습니다.' };
   }
-
-  // 비밀번호 최소 요구사항 검증
-  if (newPassword.length < 6) {
-    return { error: '비밀번호는 최소 6자 이상이어야 합니다.' };
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return { error: `비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.` };
   }
-
-  // 현재 비밀번호 재인증에 email 필요. authed 통과해도 email 은 null 가능.
-  if (!user.email) {
+  // authed 를 통과했으면 세션이 있으므로 headers 도 있다. RSC 직접 호출 등 headers 를
+  // 채우지 않은 경로는 세션을 증명할 수 없으니 거부한다.
+  if (!headers) {
     return { error: '로그인이 필요합니다.' };
   }
 
-  // 현재 비밀번호로 재인증
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: currentPassword,
-  });
-
-  if (signInError) {
-    return { error: '현재 비밀번호가 올바르지 않습니다.' };
-  }
-
-  // 비밀번호 업데이트
-  const { error: updateError } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
-
-  if (updateError) {
-    return { error: updateError.message };
+  try {
+    await auth.api.changePassword({
+      body: { currentPassword, newPassword, revokeOtherSessions: true },
+      headers,
+    });
+  } catch (err) {
+    // changePassword 가 APIError 를 던지는 경우는 현재 비밀번호 불일치가 사실상 전부다
+    // (세션·입력 검증은 위에서 이미 통과). 그 외 예외는 그대로 올려 500 으로 남긴다.
+    if (err instanceof APIError) {
+      return { error: '현재 비밀번호가 올바르지 않습니다.' };
+    }
+    throw err;
   }
 
   return { success: true };
