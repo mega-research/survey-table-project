@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QuotaConfig } from '@/db/schema/schema-types';
 import { buildQuotaStatus, quotaTone } from '@/lib/operations/quota-status';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
-const config: QuotaConfig = {
+// 프로덕션과 같은 입구를 거친다 — 정규화가 쿼터 플랜의 유일한 생산자다.
+const config = normalizeQuotaConfig({
   enabled: true,
   dimensions: [
     {
@@ -32,7 +33,7 @@ const config: QuotaConfig = {
     { categoryIds: ['c-f', 'c-60'], target: 4 },
   ],
   closedMessage: null,
-};
+})!;
 
 describe('quotaTone', () => {
   it('100% 이상 done', () => expect(quotaTone(4, 4)).toBe('done'));

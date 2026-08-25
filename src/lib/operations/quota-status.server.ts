@@ -9,6 +9,7 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 
 import { responseScopeCondition, type OperationsDataScope } from './data-scope.server';
 import { buildQuotaStatus, type QuotaStatus, type QuotaSummary } from './quota-status';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**
  * 설문 쿼터 현황(셀별 + 요약). 쿼터 미설정이면 null.
@@ -23,7 +24,7 @@ export async function getQuotaStatus(
     where: eq(surveys.id, surveyId),
     columns: { quotaConfig: true },
   });
-  const config = surveyRow?.quotaConfig ?? null;
+  const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
   if (!config) return null;
 
   const rows = await db

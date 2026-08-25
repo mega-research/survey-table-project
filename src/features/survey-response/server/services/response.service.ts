@@ -57,6 +57,7 @@ import type {
 } from '../../domain/response';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { replaceResponseAnswers } from './response-answers.service';
+import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
@@ -1747,7 +1748,7 @@ async function detectQuotaOverflow(
       where: eq(surveys.id, surveyId),
       columns: { quotaConfig: true },
     });
-    const config = surveyRow?.quotaConfig;
+    const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
     if (!config?.enabled) return false;
 
     const categoryIds = deriveCategoryIds(config, plainAnswers);
