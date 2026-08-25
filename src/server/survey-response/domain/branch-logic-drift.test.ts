@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectScreenOut } from '@/server/survey-response/domain/screen-out';
+import { detectScreenOut } from './screen-out';
 import { getBranchRuleForResponse, shouldDisplayQuestion } from '@/utils/branch-logic';
 import type { Question } from '@/types/survey';
 
