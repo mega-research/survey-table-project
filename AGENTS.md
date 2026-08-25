@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-24 (read-models 에 버전 스냅샷 추가 · 두 화면 공용 조각을 question-renderer 로 · features/ 파일 수와 하위 폴더 실측 반영. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-08-25 (리팩터 검증 5단계 문서 대조 — Inngest 함수 위치를 server/workflows/jobs 로 정정 · survey-builder 실측 130 · pnpm test 2단 실행 서술 제거 · db:drift 등재 · EMAIL_SEND_MODE 잔재 표기. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
 
 ---
 
@@ -100,6 +100,7 @@ src/
 │   │                           # 갈라야 하는 자리(응답 이관의 생존 판정 등)에서는 쓰지 말고 호출측이 직접 Array.isArray 로 볼 것
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
+│   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
 │   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
@@ -109,7 +110,7 @@ src/
 │   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
-│   ├── survey-builder/         # 설문 편집기 (117개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 (130개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
@@ -179,7 +180,7 @@ src/
 │   ├── image-utils-server.ts   # 서버 이미지/파일 삭제·복사
 │   ├── image-extractor.ts      # 질문에서 이미지 URL 추출
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
-│   ├── inngest/                # Inngest 클라이언트 + functions
+│   ├── inngest/                # Inngest 클라이언트 어댑터만 (client.ts) — 함수는 server/workflows/jobs
 │   ├── question/               # 질문 스키마/정규화/가드/변형
 │   ├── survey/                 # 토큰 치환, 이미지/첨부 promote, 컨택 attrs context
 │   ├── survey-response/        # 구조 생존 판정, 테스트 응답 초기화 (*.server.ts) — version-rebase 는 features/survey-response/lib
@@ -561,7 +562,8 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## 백그라운드 잡 (Inngest)
 
-`lib/inngest/functions/` — 4개 함수 (`functions/index.ts` 등록).
+`server/workflows/jobs/` — 4개 함수 (`jobs/index.ts` 등록). 잡은 여러 도메인의 쓰기를 조율하므로 workflows 층이 집이다.
+클라이언트 어댑터(`lib/inngest/client.ts`)만 인프라로 lib 에 남는다.
 
 | 함수                 | 트리거                           | 역할                                                      |
 | -------------------- | -------------------------------- | --------------------------------------------------------- |
@@ -634,12 +636,13 @@ pnpm build            # 프로덕션 빌드 (Turbopack)
 pnpm start            # 프로덕션 서버
 pnpm lint             # ESLint 검사 (eslint 9 flat config)
 pnpm lint:fix         # ESLint 자동 수정
-pnpm test             # Vitest — 본 스위트 + 격리 flaky 2단 실행
+pnpm test             # Vitest 단일 실행 (realdb 스위트는 제외 — 아래 test:integration)
 pnpm test:watch       # Vitest watch
 pnpm test:coverage    # 커버리지 (spss 계열만 집계)
 pnpm test:e2e         # Playwright E2E
 pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
-pnpm db:setup-test    # 테스트 DB 준비
+pnpm db:setup-test    # 테스트 DB 준비 (마이그레이션 전량 재생 = 재생 검증)
+pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm inngest          # Inngest 로컬 dev 서버
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
 pnpm db:studio        # Drizzle Studio
@@ -717,7 +720,7 @@ ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비�
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
-> `.env.example`의 `BETTER_AUTH_*` 항목은 미착수 전환 계획의 잔재로 코드에서 참조되지 않는다.
+> `.env.example`의 `BETTER_AUTH_*` 와 `EMAIL_SEND_MODE` 는 코드 참조 0건이다 — 전자는 미착수 전환 계획의 잔재, 후자는 발송 모드 분기가 구현되지 않은 자리다.
 
 ---
 
@@ -732,6 +735,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 `src/server`·`src/app`·`src/actions` 중 하나라도 부르면 **잔류**, `features`·`components` 만 부르면 lib 을 떠난다.
 
 행선지:
+
 - 소비자가 **한 feature 뿐**이면 그 feature 안으로. 그 feature 의 기존 `lib/`·`utils/`·`hooks/` 관례를 따르고 **새 하위 폴더를 만들지 않는다**.
 - **여러 feature 나 `components/ui`** 가 부르면 공용 구역으로. **순수 함수는 `src/utils/`**, **DOM·네트워크·React 를 만지는 런타임 조각은 `src/shared/lib/`**.
 - 단 feature 간 방향(`survey-builder → survey-response → question-renderer`)이 허용하면 **하위 feature 에 두는 것이 공용 구역보다 낫다** — 특히 렌더러가 주입받는 컨텍스트는 렌더러가 소유한다.

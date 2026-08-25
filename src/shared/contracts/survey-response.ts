@@ -30,10 +30,15 @@ export interface PageVisit {
 //
 // 전이(앱 코드 기준):
 //   in_progress ──(완료 제출)──────────────────▶ completed
+//   in_progress ──(완료 제출 + 자격미달 판정)──▶ screened_out
 //   in_progress ──(3h 유휴 sweep_stale_sessions)──▶ drop ──(재진입 되살리기)──▶ in_progress
 //   in_progress ──(쿼터 마감 markQuotaFull)────▶ quotaful_out
 //   completed   ──(운영 콘솔 재응답 허용)──────▶ in_progress
-// screened_out·bad 는 앱 코드가 직접 쓰지 않는 종결값이다(운영·SQL 경로 예약).
+//
+// screened_out 은 완료 확정과 같은 지점에서 갈린다 — 자격미달 end 규칙이 매칭되면
+// completeResponse 가 completed 대신 이 값을 쓴다(response-completion.service).
+// 판정 자체는 survey-response/domain/screen-out 소관이다.
+// bad 만 앱 코드가 직접 쓰지 않는 종결값이다(운영·SQL 경로 예약).
 
 /** survey_responses.status 전체 값. 순서는 스키마 주석·ResumeStatusSchema 와 같다. */
 export const responseStatusValues = [
