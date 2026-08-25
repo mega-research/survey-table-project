@@ -474,6 +474,40 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
   });
 
+  it('완료가 blocked 로 돌아오면 안내 화면으로 접고 완료 처리하지 않는다', async () => {
+    // 종전에는 게이트 위반이 예외로 나가 운영에서 마스킹됐고, 응답자는 설문을 다 채운 뒤
+    // 재시도 토스트만 반복해서 봤다 — 재시도해도 같은 게이트라 빠져나갈 길이 없었다.
+    complete.mockResolvedValue({ kind: 'blocked', reason: 'not_accepting' });
+    const args = baseArgs({ currentResponseId: 'r1' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(args.setDuplicateStatus).toHaveBeenCalledWith({
+      kind: 'blocked',
+      reason: 'not_accepting',
+    });
+    expect(args.setIsCompleted).not.toHaveBeenCalledWith(true);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('완료가 blocked 면 회복용 세션 키를 지우지 않는다 — 이어가기가 끊기면 안 된다', async () => {
+    const inviteToken = 'invite-blocked';
+    const key = `survey-session:survey-1:invite:${inviteToken}`;
+    window.localStorage.setItem(key, 'session-abc');
+    complete.mockResolvedValue({ kind: 'blocked', reason: 'survey_paused' });
+    const args = baseArgs({ currentResponseId: 'r1', inviteToken });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(window.localStorage.getItem(key)).toBe('session-abc');
+  });
+
   it('마운트 후 수집된 signals 를 blank fallback INSERT 에 싣는다 (스테일 클로저 회귀 방지)', async () => {
     createBlank.mockResolvedValue({ id: 'blank-2', contactTargetId: null });
     const initial = baseArgs({ currentResponseId: null });
