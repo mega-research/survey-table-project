@@ -4,6 +4,7 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
+import { isUniqueViolation } from '@/lib/pg-error';
 import { lockWriteScope } from '@/server/data-scope.server';
 
 import type {
@@ -38,24 +39,6 @@ async function lockTargetInCurrentScope(
     )
     .for('update');
   if (!target) throw new Error('NOT_FOUND');
-}
-
-/**
- * Postgres UNIQUE 위반 (SQLSTATE 23505) 감지.
- * drizzle-orm + postgres-js 의 error 객체에 code 필드.
- * 폴백으로 message 문자열도 검사.
- *
- * 기존 contact-actions.ts 의 file-private 헬퍼를 동반 이관(한 글자도 변형 금지).
- */
-function isUniqueViolation(e: unknown): boolean {
-  if (e == null || typeof e !== 'object') return false;
-  const err = e as { code?: unknown; message?: unknown };
-  if (err.code === '23505') return true;
-  if (typeof err.message === 'string') {
-    if (err.message.includes('23505')) return true;
-    if (err.message.toLowerCase().includes('unique')) return true;
-  }
-  return false;
 }
 
 /**

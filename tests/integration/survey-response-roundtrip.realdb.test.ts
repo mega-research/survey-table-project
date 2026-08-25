@@ -139,6 +139,9 @@ describe.skipIf(!isLocalDb)('surveyResponse.response procedure round-trip (real 
         exposedQuestionIds: [question.id],
       },
     });
+    // 완료 게이트에 걸리면 blocked 가 돌아온다 — 이 시나리오는 통과해야 하므로 먼저 단언한다.
+    expect('kind' in completed).toBe(false);
+    if ('kind' in completed) throw new Error(`완료가 차단됐다: ${completed.reason}`);
     expect(completed.id).toBe(responseId);
 
     // 4. survey_responses 검증: isCompleted/status/progressPct

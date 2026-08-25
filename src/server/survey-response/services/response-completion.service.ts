@@ -22,12 +22,13 @@ import { responsesToLookupShape } from '@/utils/branch-eval';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
-import type { CompleteResponseInput, SurveyResponse } from '../domain/response';
+import type { CompleteResponseInput, CompleteResponseResult } from '../domain/response';
 import { replaceResponseAnswers } from './response-answers.service';
 import {
   assertResponseCompletable,
   loadSurveyGateRow,
   loadVersionGateRow,
+  toGateBlockedResult,
 } from './response-gate';
 import {
   detectQuotaOverflow,
@@ -64,7 +65,9 @@ async function countCompletedResponses(surveyId: string): Promise<number> {
   return row?.total ?? 0;
 }
 
-export async function completeResponse(input: CompleteResponseInput): Promise<SurveyResponse> {
+export async function completeResponse(
+  input: CompleteResponseInput,
+): Promise<CompleteResponseResult> {
   const { responseId, data } = input;
 
   // 완료 게이트(하드체크): 폐쇄/draft/중단/비공개 설문 완료를 차단하고, maxResponses 정원을
@@ -72,8 +75,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   // 것이지 이미 진행 중인 응답을 몰수하는 것이 아니라서, 마감 시각에 걸친 응답자는 끝까지
   // 진행해 저장된다(CHECKS_FOR.completeResponse 주석 참조).
   // 그 결과 마감 후 완료 시도가 정원 검사에 처음으로 도달한다 — 정원이 찬 설문이면 사유가
-  // end_date_passed 대신 max_responses_reached 로 나온다. 어느 쪽도 차단이며, 완료 경로는
-  // blocked 폴딩을 타지 않으므로 응답자가 보는 화면도 종전과 같다(사유 태그만 바뀐다).
+  // end_date_passed 대신 max_responses_reached 로 나온다. 어느 쪽도 차단이다.
+  // 위반은 던지지 않고 blocked 로 접어 돌려준다(진입 경로 admitAndCreateResponse 와 같은 규약).
+  // 던지면 운영에서 마스킹돼 500 이 되고, 응답자는 설문을 다 채운 뒤 사유를 모른 채
+  // 재시도 토스트만 반복해서 본다 — 빠져나갈 길이 없다.
   // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다. count
   // 쿼리와 실제 완료 UPDATE 사이의 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은
   // DB 락 없이 허용하는 잔여 window 다.
@@ -85,13 +90,21 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     const survey = await loadSurveyGateRow(gateRow.surveyId);
     const version = await loadVersionGateRow(gateRow.versionId);
     const completedCount = await countCompletedResponses(gateRow.surveyId);
-    assertResponseCompletable(survey, version, {
-      contactTargetId: gateRow.contactTargetId,
-      completedCount,
-      // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다
-      // (여기서 재차 testToken 을 검증하지 않는다. complete 는 responseId 만 받는 pub 엔드포인트).
-      isTest: gateRow.isTest,
-    });
+    try {
+      assertResponseCompletable(survey, version, {
+        contactTargetId: gateRow.contactTargetId,
+        completedCount,
+        // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다
+        // (여기서 재차 testToken 을 검증하지 않는다. complete 는 responseId 만 받는 pub 엔드포인트).
+        isTest: gateRow.isTest,
+      });
+    } catch (err) {
+      // 가용성 사유만 접는다. 변조 가드 등 그 밖의 예외는 toGateBlockedResult 가 null 을
+      // 돌려주므로 종전대로 던져 나간다.
+      const blocked = toGateBlockedResult(err);
+      if (blocked) return blocked;
+      throw err;
+    }
   }
 
   // 정제 파이프라인 — 순서가 계약이다. 오염 가드 → prefill 복원 → (calc 재계산) → PII 암호화.

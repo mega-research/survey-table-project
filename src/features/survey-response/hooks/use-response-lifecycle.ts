@@ -940,6 +940,16 @@ export function useResponseLifecycle({
           ...(testIdentity ?? {}),
         });
 
+        // 완료 게이트 차단 — 제출이 성립하지 않았다. 아래 어떤 처리보다 먼저 갈라야 한다:
+        // localStorage 세션 키를 지우면 재진입 시 같은 행을 못 찾아 이어가기가 끊기고,
+        // 그대로 흘리면 차단당한 응답자가 감사 화면을 본다.
+        // 종전에는 서버가 던졌고 운영에서 마스킹돼 재시도 토스트로만 끝났다.
+        if (completed && 'kind' in completed) {
+          resetResponseState();
+          setDuplicateStatus({ kind: 'blocked', reason: completed.reason });
+          return;
+        }
+
         // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)
         if (typeof window !== 'undefined' && loadedSurvey) {
           window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));

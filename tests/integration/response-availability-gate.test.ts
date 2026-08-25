@@ -276,7 +276,11 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion.service');
-    await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow();
+    // 차단은 던지지 않고 blocked 로 접어 돌려준다 — 던지면 운영에서 마스킹돼 500 이 되고
+    // 응답자가 사유를 모른 채 재시도만 반복한다(진입 경로와 같은 규약).
+    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
+      kind: 'blocked',
+    });
   });
 
   it('완료 카운트가 maxResponses 미만이면 완료를 통과시킨다', async () => {
@@ -306,8 +310,11 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion.service');
     // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
-    await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
-      reason: 'max_responses_reached',
+    // 응답자에게 나가는 사유는 not_accepting 으로 뭉갠다 — pub 표면이라 설문 상태를
+    // 추측할 수 있는 정보를 줄인다(toGateBlockReason).
+    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
+      kind: 'blocked',
+      reason: 'not_accepting',
     });
   });
 
@@ -318,7 +325,8 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     countResultMock.mockResolvedValue([{ total: 0 }]);
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion.service');
-    await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
+    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
+      kind: 'blocked',
       reason: 'survey_paused',
     });
   });

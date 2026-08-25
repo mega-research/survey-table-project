@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { NewSurveyResponse, surveyResponses } from '@/db/schema';
+import { isUniqueViolation } from '@/lib/pg-error';
 
 import type { BlockReason } from '../domain/duplicate';
 import { extractDraftSeq } from '../domain/draft-seq';
@@ -216,7 +217,14 @@ export async function insertResponseWithContactReuse(params: {
       });
   } catch (e) {
     // idx_active_response_per_contact 경합 — 다른 요청이 방금 활성 행을 만들었다.
-    if (contactTargetId) {
+    //
+    // UNIQUE 위반일 때만 물려받는다. 종전에는 모든 예외를 잡아, 컨택에 활성 행이 있기만 하면
+    // NOT NULL·체크 제약·커넥션 오류까지 삼키고 기존 행을 물려받았다 — 응답자에게는 성공으로
+    // 보이지만 원인은 Sentry 에도 남지 않는다.
+    // 이 INSERT 가 걸릴 수 있는 UNIQUE 는 (survey_id, session_id) 와 partial
+    // idx_active_response_per_contact 둘인데 앞은 onConflictDoNothing 이 흡수하므로,
+    // 여기까지 온 UNIQUE 위반은 곧 그 partial 인덱스 경합이다.
+    if (contactTargetId && isUniqueViolation(e)) {
       const active = await findActiveResponseByContact(surveyId, contactTargetId);
       if (active) return takeover(active);
     }

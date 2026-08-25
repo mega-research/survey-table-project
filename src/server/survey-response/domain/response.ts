@@ -33,10 +33,20 @@ export const QuestionResponsesSchema = z.record(z.string(), z.unknown());
 export const SurveyResponseRowSchema = z.custom<SurveyResponse>();
 
 /**
- * complete 출력 — 이미 완료된 행에 대한 늦은 complete(멱등)면 alreadyCompleted 가 실린다.
- * 클라이언트는 이 표식으로 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내를 띄운다.
+ * complete 출력.
+ *
+ * - 성공: 응답 행. 이미 완료된 행에 대한 늦은 complete(멱등)면 alreadyCompleted 가 실린다.
+ *   클라이언트는 이 표식으로 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내를 띄운다.
+ * - blocked: 완료 게이트 위반. 진입 경로(FirstAnswerResult)와 같은 모양·같은 사유 union 이라
+ *   응답자 화면이 두 경로를 같은 분기로 처리한다. 던지면 운영에서 마스킹돼 500 이 되고,
+ *   응답자는 설문을 다 채운 뒤 사유를 모른 채 재시도 토스트만 반복해서 본다.
+ *
+ * 응답 행에는 `kind` 필드가 없으므로 `'kind' in result` 로 안전하게 갈린다.
  */
-export const CompleteResponseOutput = z.custom<SurveyResponse & { alreadyCompleted?: boolean }>();
+export type CompleteResponseResult =
+  | (SurveyResponse & { alreadyCompleted?: boolean })
+  | { kind: 'blocked'; reason: BlockReason };
+export const CompleteResponseOutput = z.custom<CompleteResponseResult>();
 
 export const TestAttemptIdentityFields = {
   attemptId: z.string().uuid().optional(),
