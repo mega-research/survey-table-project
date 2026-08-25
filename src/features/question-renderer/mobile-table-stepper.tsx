@@ -8,7 +8,7 @@ import {
   useColumnSectionMap,
   useRowGroups,
 } from '@/features/question-renderer/hooks/use-row-groups';
-import { collectMobileLegendLabels } from '@/features/question-renderer/utils/mobile-display-cells';
+import { collectMobileLegendLabels } from '@/features/question-renderer/utils/split-display-cells';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';

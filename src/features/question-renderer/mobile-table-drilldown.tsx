@@ -9,7 +9,7 @@ import {
   type ClassifiedSection,
   classifyTable,
 } from '@/features/question-renderer/utils/classify-table';
-import { resolveMobileCellLabel } from '@/features/question-renderer/utils/mobile-display-cells';
+import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,

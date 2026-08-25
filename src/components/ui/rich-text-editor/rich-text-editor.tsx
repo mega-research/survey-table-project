@@ -19,7 +19,7 @@ import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
 import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
 import { Toolbar } from './toolbar';
-import { stripTrailingEmptyParagraph } from './trailing-node';
+import { stripTrailingEmptyParagraph } from './tiptap/trailing-node';
 import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 import { useEditorFileAttachmentTracker } from './use-editor-file-attachment-tracker';
 import { useEditorImageTracker } from './use-editor-image-tracker';

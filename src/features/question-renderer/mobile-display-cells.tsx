@@ -9,7 +9,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { splitMobileDisplayCells } from '@/features/question-renderer/utils/mobile-display-cells';
+import { splitMobileDisplayCells } from '@/features/question-renderer/utils/split-display-cells';
 
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
 function DisplayCellContent({ cell }: { cell: TableCell }) {

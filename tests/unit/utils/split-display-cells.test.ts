@@ -6,7 +6,7 @@ import {
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
   splitMobileDisplayCells,
-} from '@/features/question-renderer/utils/mobile-display-cells';
+} from '@/features/question-renderer/utils/split-display-cells';
 
 function cell(partial: Partial<TableCell>): TableCell {
   return {

@@ -8,7 +8,7 @@ import { DynamicRowSelectorModal } from '@/features/question-renderer/dynamic-ro
 import { MobileRowWiseOriginalSheet } from '@/features/question-renderer/mobile-row-wise-original-sheet';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
-import { findMobileHeaderCell } from '@/features/question-renderer/utils/mobile-display-cells';
+import { findMobileHeaderCell } from '@/features/question-renderer/utils/split-display-cells';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';

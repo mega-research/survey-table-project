@@ -38,7 +38,7 @@ import {
   type HAlign,
   type VAlign,
 } from './table-attrs-helpers';
-import { TrailingNode } from './trailing-node';
+import { TrailingNode } from './tiptap/trailing-node';
 import { createVarTokenPlugin } from './var-token-plugin';
 import type { RichTextEditorKind } from './types';
 
@@ -311,7 +311,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
       // StarterKit 3.x 에 bundled된 ext를 끄고 아래에서 별도 configure
       underline: false,
       link: false,
-      // StarterKit 의 trailingNode 끄고 @/lib/tiptap/trailing-node 사용
+      // StarterKit 의 trailingNode 끄고 ./tiptap/trailing-node 사용
       trailingNode: false,
     }),
     Underline,

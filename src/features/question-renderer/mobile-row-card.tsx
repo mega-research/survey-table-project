@@ -17,7 +17,7 @@ import {
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
   resolveMobileCellLabel,
-} from '@/features/question-renderer/utils/mobile-display-cells';
+} from '@/features/question-renderer/utils/split-display-cells';
 import { getAlignmentClasses } from '@/features/question-renderer/utils/table-grid-utils';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';

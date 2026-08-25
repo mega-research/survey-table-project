@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell } from '@/types/survey';
-import { resolveMobileCellLabel } from '@/features/question-renderer/utils/mobile-display-cells';
+import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 
 function cell(partial: Partial<TableCell>): TableCell {
   return {

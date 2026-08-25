@@ -1,7 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { questionTypes } from '@/features/survey-builder/question-types';
+import { questionTypes } from '@/features/survey-builder/question-type-meta';
 import type { Question } from '@/types/survey';
 
 /**
