@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-25 (리팩터 검증 5단계 문서 대조 — Inngest 함수 위치를 server/workflows/jobs 로 정정 · survey-builder 실측 130 · pnpm test 2단 실행 서술 제거 · db:drift 등재 · EMAIL_SEND_MODE 잔재 표기. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-08-25 (구조 리뷰 실측 대조 — lib 하위 도메인 폴더 서술 7곳을 이주 완료 후 실물로 정정 · workflows 루트 test-mail-archive 등재 · types 3파일·shared/lib image-utils·lib pg-error 등재 · survey-builder 루트 24/hooks 3/stores 4 · components/ui 23. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
 
 ---
 
@@ -100,6 +100,7 @@ src/
 │   │                           # 갈라야 하는 자리(응답 이관의 생존 판정 등)에서는 쓰지 말고 호출측이 직접 Array.isArray 로 볼 것
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
+│   │   ├── test-mail-archive.server.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
 │   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
@@ -119,12 +120,12 @@ src/
 │   │   ├── lookup/             # LUT 선택·편집·CSV·보관함 (공용 리프 — condition·formula 가 소비)
 │   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
 │   │   ├── group-manager/      # 그룹 관리
-│   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync)
-│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태) — 구 src/stores
+│   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
+│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
 │   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap
-│   │   └── (루트 21개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
+│   │   └── (루트 24개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
 │   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
 │   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (76개) — 어떤 feature 도 import 하지 않는다
 │   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
@@ -133,9 +134,9 @@ src/
 │   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts
 │   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (28개) — 렌더러만 import
 │   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
-│   │   ├── lib/                # version-rebase·numeric-validation·required-option-text-validation (순수)
+│   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate (순수)
 │   │   ├── step-views/         # 스텝 단위 화면
-│   │   └── stores/             # survey-response-store(실응답) — 미리보기용 test-response-store 는 survey-builder/stores
+│   │   └── stores/             # survey-response-store(실응답)·live-response-sources — 미리보기용 test-response-store 는 survey-builder/stores
 │   ├── operations/             # 운영 콘솔 (83개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
@@ -148,6 +149,7 @@ src/
 │   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0). 구 db/schema/schema-types.ts
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
+│   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts
 │
 ├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
@@ -156,7 +158,7 @@ src/
 │   └── index.ts                # 잔존 사유 주석 포함 배럴
 │
 ├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (24개 + rich-text-editor/)
+│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (23개 + rich-text-editor/)
 │   └── providers/              # Context providers
 │
 ├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
@@ -171,10 +173,10 @@ src/
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
-│   ├── contacts/               # 엑셀 파서, 컬럼 자동감지, 스킴 헬퍼, 업로드 제한
-│   ├── operations/             # 운영 콘솔 집계 로직 (*.server.ts = SQL 집계)
-│   ├── mail/                   # 메일 발송/렌더/캠페인 dispatch+reconcile/빌링/첨부
-│   ├── quota/                  # 쿼터 게이트 + 응답 매칭
+│   ├── contacts/               # 그룹 레벨·업로드 병합 매칭·업로드 제한 순수 공용 (엑셀 파서·스킴 헬퍼는 server/contacts, 컬럼 자동감지는 features/operations)
+│   ├── operations/             # 운영 집계의 순수 format 짝 23파일 (SQL 집계 *.server.ts 는 server/operations/services — 흡수 대상 잔여)
+│   ├── mail/                   # 렌더 미리보기·변수 추출·이미지 클릭영역·상수 4파일 (발송·dispatch·reconcile·빌링은 server/mail)
+│   ├── quota/                  # 쿼터 응답 매칭·정규화 (쿼터 게이트는 features/survey-response/lib/quota-gate)
 │   ├── r2-client.ts            # R2 인프라 어댑터 — S3Client 단일 소유자 + 객체 존재 검사 + URL→key
 │   ├── r2-env.ts               # R2 env 검증 (SDK 를 모르는 순수 헬퍼)
 │   ├── image-utils-server.ts   # 서버 이미지/파일 삭제·복사
@@ -182,10 +184,10 @@ src/
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
 │   ├── inngest/                # Inngest 클라이언트 어댑터만 (client.ts) — 함수는 server/workflows/jobs
 │   ├── question/               # 질문 스키마/정규화/가드/변형
-│   ├── survey/                 # 토큰 치환, 이미지/첨부 promote, 컨택 attrs context
-│   ├── survey-response/        # 구조 생존 판정, 테스트 응답 초기화 (*.server.ts) — version-rebase 는 features/survey-response/lib
-│   ├── analytics/              # 통계/교차분석/필터 (analyzer/cross-tab/filter)
-│   ├── duplicate-detection/    # 중복 응답 감지
+│   ├── survey/                 # 토큰 치환, 수식·셀 게이팅, 이미지/첨부 promote, PII 보관기한, 응답 헤더 설정 (컨택 attrs context 는 features/question-renderer)
+│   ├── survey-response/        # 구조 생존 판정 1파일 (테스트 응답 초기화는 server/survey-response, version-rebase 는 features/survey-response/lib)
+│   ├── analytics/              # 통계 analyzer + 엑셀/SPSS export 워크북 계산 (교차분석·필터는 features/analytics)
+│   ├── duplicate-detection/    # 중복 감지 신호 타입 1파일 (판정 로직은 server/survey-response)
 │   ├── lookup/                 # LUT 룩업
 │   ├── upload/                 # 업로드 정책(첨부·이미지) + 라우트 진입 가드(route-guard)
 │   ├── sanitize.ts             # HTML sanitize (서버: jsdom 금지, sanitize-html 사용)
@@ -194,6 +196,7 @@ src/
 │   ├── option-value-code-migration.ts  # 옵션 value→optionCode 일괄 마이그레이션 순수 로직
 │   ├── date-formatters.ts      # 날짜·시각 표시 공통 포매터
 │   ├── get-error-message.ts    # 에러 → 사용자 표시 메시지
+│   ├── pg-error.ts             # Postgres 에러 판별 (SQLSTATE 23505 등) — 드라이버 모양을 읽는 인프라 헬퍼
 │   ├── fake-data-generator.ts  # 테스트용 더미 응답 생성
 │   └── utils.ts                # 공통 유틸리티 (cn())
 │
@@ -213,8 +216,11 @@ src/
 │   ├── index.ts                # drizzle(postgres-js) 클라이언트
 │   └── schema/                 # Drizzle ORM 스키마 (아래 DB 섹션 참조)
 │
-├── types/survey.ts             # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (796줄, 소비 221파일)
-│                               # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
+├── types/                      # 전역 타입·어휘 3파일
+│   ├── survey.ts               # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (808줄, 소비 237파일)
+│   │                           # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
+│   ├── question-types.ts       # 질문 유형 어휘 런타임 SoT — QUESTION_TYPES 배열 ↔ QuestionType 동치를 tsc 로 강제
+│   └── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
 └── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
