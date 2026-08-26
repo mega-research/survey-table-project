@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 05 — 프로필 + 계정 유형별 라우팅: 세 유형 모두 `/admin/profile` 에서 이름·아바타·비밀번호를 바꾸고, 로그인 후 목적지가 유형별로 갈린다(internal→설문 목록 · guest→`/guest` · fieldwork→`/fieldwork`). 유형별 홈 SSOT 는 `lib/auth/account-home.ts` 의 `ACCOUNT_HOME_PATH`. oRPC `account` 베이스 신설(세션+active, 유형 무관 — `scoped` 와는 가드가 같아도 별개 객체다), REST 짝 `requireActiveAccount`, 페이지 짝 `requireAccountTypePage`. admin·analytics 레이아웃이 비내부 계정을 자기 홈으로 돌려보내되 `ACCOUNT_PAGES`(프로필)는 비켜준다. 아바타는 전용 라우트 `/api/upload/avatar`. 게스트·실사 홈은 빈 상태 스텁이고 목록은 티켓 22·25 소관이다. 직전: 티켓 04 계정 상태 전이·비밀번호 재설정 — 전이표 SSOT `USER_STATUS_TRANSITIONS`, 전 전이·재설정이 세션 폐기 + 감사 행)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 페이즈 A 하드닝 — Codex 적대적 리뷰 7건 반영 완료. `assertSurveyAccess` 가 계정 유형을 먼저 본다(발급한 게스트가 임의 설문에 닿던 구멍), `/api/auth` POST 허용목록, 세션 폐기 표식 `users.sessions_revoked_at`(0087)으로 재설정·로그인 경합 차단, 서버 데이터를 부르는 RSC 페이지 전부 자기 가드 + 메타테스트(`tests/repo/rsc-page-guards.test.ts`). 직전: 티켓 05 프로필 + 계정 유형별 라우팅 — 세 유형 공통 `/admin/profile`, 유형별 홈 SSOT `ACCOUNT_HOME_PATH`, `account` 베이스)
 
 ---
 
@@ -662,6 +662,19 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
   않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). 퇴사의 멤버십·소유권 정리와
   재입사의 팀 배정은 티켓 06·14·19 소관이라 아직 없다.
+- **RSC 페이지는 자기 가드를 갖는다.** App Router 는 소프트 내비게이션에서 상위 레이아웃을
+  다시 돌리지 않는다 — 콘솔 RSC 는 procedure 가 아니라 service 를 직접 부르므로 레이아웃만
+  믿으면 세션이 폐기된 뒤에도 데이터를 읽는다. 서버 데이터를 부르는 `page.tsx` 는 전부
+  `requireAuth`·`requireAdminPage`·`assertGuestSurveyPageAccess` 중 하나를 부르고,
+  `tests/repo/rsc-page-guards.test.ts` 가 빠뜨림을 잡는다(무인증 응답자 표면만 허용 목록).
+- **세션 폐기는 표식으로 경합까지 닫는다.** 재설정·상태 전이는 세션을 지우면서
+  `users.sessions_revoked_at`(0087)을 갱신하고, 로그인은 시작 시점의 값을 읽어뒀다가 세션을
+  만들기 직전에 다시 읽어 다르면 생성을 취소한다(`lib/auth/session-revocation.ts`).
+  시각의 대소가 아니라 **같은 컬럼의 두 번 읽기**라 앱·DB 시계 오차와 무관하다.
+  표식은 **먼저 찍힌 것이 이긴다** — 흐름 도중 다시 읽어 덮으면 막으려던 창이 그대로 열린다.
+- **`/api/auth` POST 는 허용목록이다**(`sign-in/email`·`sign-out`). catch-all 이 전 엔드포인트를
+  열어두면 `update-user` 로 아바타 URL 검증을, `change-password` 로 다른 기기 로그아웃을
+  우회할 수 있다. 서버는 `auth.api.*` 를 직접 부르므로 목록을 좁혀도 앱 동작은 그대로다.
 - **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로
   `/admin`·`/analytics`·`/guest`·`/fieldwork` 진입을 거르고 `x-pathname` 요청 헤더를 넘긴다.
   쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/admin/layout.tsx`·
@@ -680,7 +693,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (게스트 포함). 지금은 인증 가드가 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`scoped`** — 세션 + active (게스트 포함). **베이스는 유형으로 막지 않지만 `assertSurveyAccess` 가 막는다** — guest·fieldwork 는 설문 부여 모델이 아직 없어 기본 거부다(티켓 21·24 가 실제 조회로 바꾼다). 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
   (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
