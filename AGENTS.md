@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 07 설문 팀 귀속 — `surveys` 소유·배치 컬럼 7종(0089)과 기존 설문 배치 대기 백필, 접근 판정 코어 `server/survey-access`(resolveSurveyCapabilities + assertSurveyCapability)와 작업 범위 코어 `server/work-scope`, 설문 목록·생성이 범위에 묶임 + 목록 화면 범위 스위처(.pen FLOW 6). 직전: 티켓 06 팀·멤버십 — `teams`·`team_members`·`team_lifecycle_events`(0088), 서버 도메인 `server/workspace`, 팀 관리 화면 `/admin/teams`(.pen FLOW 7))
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 08 사이드바·팀 스위처·설문 목록 — admin 공통 셸 `features/workspace/admin-shell`(네이비 사이드바 + 팀 스위처 + 하단 프로필, .pen FLOW 6-1)을 `app/admin/layout.tsx` 가 내부 계정에 입히고, 설문 목록을 `features/survey-builder/survey-list`(상태 칩·검색·정렬·상세 검색·페이지네이션·카드)로 개편. 작업 범위는 `shared/lib/work-scope-context` 로 화면 트리에 흐르고 쿼리 키에 범위가 들어가 팀 간 캐시가 격리된다. 팀 미배치는 프로필만(.pen FLOW 9-1). 직전: 티켓 07 설문 팀 귀속 — `surveys` 소유·배치 컬럼 7종(0089), 접근 판정 코어 `server/survey-access`, 작업 범위 코어 `server/work-scope`)
 
 ---
 
@@ -119,7 +119,10 @@ src/
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
 │   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
-│   ├── survey-builder/         # 설문 편집기 (130개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (139개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
+│   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·페이지네이션·카드 + 순수 파이프라인
+│   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
@@ -129,7 +132,7 @@ src/
 │   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
-│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
+│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
 │   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap
@@ -149,8 +152,12 @@ src/
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   ├── analytics/              # 차트 및 리포팅 (23개)
-│   ├── workspace/              # 워크스페이스 관리 (16개, 티켓 03 신설) — 사용자 관리 + 내 프로필 + 팀 관리
-│   │   │                       # 재배치·사이드바(티켓 08·14)가 여기로 들어온다. 진입점은 폴더 안
+│   ├── workspace/              # 워크스페이스 관리 (21개, 티켓 03 신설) — 사용자 관리 + 내 프로필 + 팀 관리 + admin 셸
+│   │   │                       # 재배치 센터(티켓 14)가 여기로 들어온다. 진입점은 폴더 안
+│   │   ├── admin-shell/        # admin 공통 셸 (티켓 08, .pen FLOW 6-1) — admin-shell 진입점(레이아웃이 연다)
+│   │   │                       # + sidebar(로고·메뉴)·team-switcher(팀 전환+메가리서치)·sidebar-profile(프로필·로그아웃)
+│   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만). 범위 전환 시 쿠키 기록
+│   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
 │   │   │                       # + user-reset-password-modal · user-rehire-modal + user-vocabulary
@@ -170,6 +177,9 @@ src/
 │   │                           #   <domain>-io.ts  경계를 건너는 모양 — RPC 입출력 zod + RSC 가 props 로 넘기는 read model 행
 │   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0). 구 db/schema/schema-types.ts
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
+│   ├── lib/work-scope-cookie.ts   # 작업 범위 쿠키 R/W (브라우저 편의값 — 판정은 server/work-scope)
+│   ├── lib/work-scope-context.tsx # 작업 범위 React 컨텍스트 — 공급은 workspace(AdminShell), 소비는 survey-builder(목록)
+│   │                              # feature 간 직접 import 금지의 탈출구라 모양이 여기 산다 (티켓 08)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts
@@ -730,13 +740,17 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   잠기지 않게), 일반 사용자의 `system` 요청은 **거부한다**(조용히 접으면 부분 목록을 전체로 착각한다).
   요청이 범위를 지목하지 않으면 `work_scope` 쿠키를 읽는다(이름 SSOT 는 `shared/contracts/workspace.ts`).
   설문 목록 응답은 **해석된 범위**를 함께 돌려준다 — 요청과 다를 수 있어 화면이 그것을 정답으로 삼는다.
+  화면 쪽은 사이드바 팀 스위처(티켓 08)가 담당한다 — `app/admin/layout.tsx` 가 같은 판정 코어로 초기
+  범위를 해석해 `AdminShell` 에 넘기고(무효 쿠키는 거부가 아니라 기본 범위로 접는다 — 쿠키는 편의값),
+  전환은 쿠키 기록 + 전체 쿼리 캐시 무효화 + `router.refresh` 로 처리한다. 목록 쿼리 키에는 항상
+  해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
 - **설문을 만드는 경로 셋(빌더 자동 생성·명시 생성·복제)은 전부 소유·배치 컬럼을 채운다.** 시스템
   전체 보기는 teams 행이 아니라 조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수
   없다 — 서버가 `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
   팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
   **관문 배선은 아직 목록·생성·복제 + 응답 상세 편집까지다** — 빌더·운영 콘솔·REST 전면 배선은
-  티켓 09~11 이 한다. 그때까지 URL 직접 진입과 `/analytics` 목록은 종전 가드(인증·게스트 grant)만
-  받는다. 관문 함수의 이름은 **`assertSurveyCapability`** 다(티켓 09~11 본문이 지목하는
+  티켓 09~~11 이 한다. 그때까지 URL 직접 진입과 `/analytics` 목록은 종전 가드(인증·게스트 grant)만
+  받는다. 관문 함수의 이름은 **`assertSurveyCapability`** 다(티켓 09~~11 본문이 지목하는
   `assertSurveyAccess` 는 게스트 grant 용 옛 함수이며 그 배선 때 걷힌다).
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
