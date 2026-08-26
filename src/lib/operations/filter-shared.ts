@@ -150,6 +150,19 @@ export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
 );
 
 /**
+ * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의
+ * 메일 수신거부 필터(SQL)와 메일 컬럼 badge 표시가 공유하는 단일 기준.
+ * 컨택 회차에서 수동 기록된 수신거부(예: "13.수신거부")를 메일
+ * unsubscribed_at 과 같은 축으로 취급한다.
+ */
+export const UNSUBSCRIBE_RESULT_CODE_KEYWORD = '수신거부';
+
+/** 최근 결과코드가 수신거부 판정인지 — badge 표시(클라이언트) 공용 판정. */
+export function isUnsubscribeResultCode(code: string | null): boolean {
+  return code != null && code.includes(UNSUBSCRIBE_RESULT_CODE_KEYWORD);
+}
+
+/**
  * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인
  * 스냅샷 재발송 경유)이 있으면 실제 서버 의미 그대로 라벨링해 함께 노출한다.
  * 레거시를 새 옵션('미응답' 등)으로 위장 표시하면 화면과 실제 대상 집합이

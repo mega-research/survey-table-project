@@ -15,7 +15,11 @@ import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
-import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
+import {
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  isUnsubscribeResultCode,
+} from '@/lib/operations/filter-shared';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -112,8 +116,9 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
         : { display: '—', plain: undefined };
     case 'system.email_count':
       // 수신거부는 발송 상태보다 우선 표시 — 필터의 수신거부 판정
-      // (unsubscribed_at OR 발송 스킵)과 화면이 어긋나지 않게 한다.
-      if (row.unsubscribedAt) {
+      // (unsubscribed_at OR 발송 스킵 OR 최근 결과코드 수신거부)과 화면이
+      // 어긋나지 않게 한다.
+      if (row.unsubscribedAt || isUnsubscribeResultCode(row.latestResultCode)) {
         return {
           display: <RecipientStatusBadge status="skipped_unsubscribed" />,
           plain: recipientStatusMeta('skipped_unsubscribed').label,

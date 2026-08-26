@@ -2,7 +2,11 @@ import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { FilterClause, FilterCondition } from './contacts-filters.server';
-import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
+import {
+  FILTER_SOURCE,
+  UNSUBSCRIBE_RESULT_CODE_KEYWORD,
+  escapeLikePattern,
+} from './filter-shared';
 
 /**
  * 컨택 필터 WHERE 빌더 — DB 의존 없는 순수 SQL 조립 모듈.
@@ -42,12 +46,15 @@ export const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
  *
  * 'skipped_unsubscribed'(수신거부)는 발송 스킵 상태만으로는 발송 후 수신거부자를
  * 놓친다 — 표의 수신거부 표시와 같은 판정이 되도록 contact_targets.unsubscribed_at
- * 을 OR 로 결합한다.
+ * 과 최근 결과코드의 수신거부 기록(UNSUBSCRIBE_RESULT_CODE_KEYWORD)을 OR 로
+ * 결합한다.
  */
 function mailStatusCondSql(value: string): SQL {
   if (value === 'none') return sql`${latestMailStatusExpr} IS NULL`;
   if (value === 'skipped_unsubscribed') {
-    return sql`(${latestMailStatusExpr} = ${value} OR "contact_targets".unsubscribed_at IS NOT NULL)`;
+    return sql`(${latestMailStatusExpr} = ${value}
+      OR "contact_targets".unsubscribed_at IS NOT NULL
+      OR ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%')`;
   }
   return sql`${latestMailStatusExpr} = ${value}`;
 }
