@@ -213,11 +213,28 @@ export async function loadSurveyCapabilities(
 }
 
 /**
+ * capability 요구에 대한 거부 사유 — 순수 함수 (티켓 09).
+ *
+ * 볼 수조차 없는(survey.view 없음) 설문은 존재를 알리지 않는다: 없는 설문과 같은
+ * not_found 다. 사유가 갈리면 id 스캔으로 타 팀 설문의 존재가 확인된다. forbidden 은
+ * "보이는 설문에서 그 작업만 못 한다"(참여자의 발행 등)에만 쓴다. 이 구분을 호출부마다
+ * 다시 쓰면 한 표면만 존재를 흘리게 되므로 여기가 유일한 정본이다.
+ */
+export function denialReasonFor(
+  capabilities: ReadonlySet<SurveyCapability>,
+  capability: SurveyCapability,
+): 'not_found' | 'forbidden' | null {
+  if (!capabilities.has('survey.view')) return 'not_found';
+  if (!capabilities.has(capability)) return 'forbidden';
+  return null;
+}
+
+/**
  * 관문 — 이 capability 가 없으면 통과시키지 않는다.
  *
- * 존재를 알려주지 않기 위해 없는 설문과 권한 없는 설문을 같은 not_found 로 접는 것은
- * **호출부의 선택**이다. 여기서는 두 사유를 갈라 돌려주고, 화면·procedure 가 자기 표면에
- * 맞는 코드로 옮긴다.
+ * 거부 사유는 denialReasonFor 가 정한다 — not_found 는 "없거나 볼 수 없음"(존재 은닉),
+ * forbidden 은 "보이지만 그 작업 권한 없음". 화면·procedure 는 사유를 자기 표면의
+ * 코드(notFound()·NOT_FOUND/FORBIDDEN)로 옮기기만 한다.
  */
 export async function assertSurveyCapability(
   user: SurveyAccessUser,
@@ -225,5 +242,6 @@ export async function assertSurveyCapability(
   capability: SurveyCapability,
 ): Promise<void> {
   const caps = await loadSurveyCapabilities(user, surveyId);
-  if (!caps.has(capability)) throw new SurveyAccessError('forbidden');
+  const denial = denialReasonFor(caps, capability);
+  if (denial) throw new SurveyAccessError(denial);
 }

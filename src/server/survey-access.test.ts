@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
+  denialReasonFor,
   resolveSurveyCapabilities,
   type SurveyAccessSubject,
   type SurveyAccessTarget,
@@ -165,5 +166,24 @@ describe('resolveSurveyCapabilities — 계정 유형', () => {
   it('유형 게이트는 슈퍼어드민 플래그보다 먼저다', () => {
     // isSuperadmin 은 internal 전용 플래그다 — 비내부 계정에 실려 와도 열지 않는다.
     expect(caps(subject({ userType: 'guest', isSuperadmin: true }), survey())).toEqual([]);
+  });
+});
+
+describe('denialReasonFor — 거부 사유의 유일한 정본', () => {
+  it('survey.view 가 없으면 어떤 요구든 not_found — 존재를 알리지 않는다', () => {
+    expect(denialReasonFor(new Set(), 'survey.edit')).toBe('not_found');
+    expect(denialReasonFor(new Set(), 'survey.view')).toBe('not_found');
+  });
+
+  it('보이는 설문에서 그 작업만 못 하면 forbidden', () => {
+    expect(
+      denialReasonFor(new Set<SurveyCapability>(['survey.view']), 'survey.publish'),
+    ).toBe('forbidden');
+  });
+
+  it('요구 capability 를 가지면 거부하지 않는다', () => {
+    expect(
+      denialReasonFor(new Set<SurveyCapability>(['survey.view', 'survey.edit']), 'survey.edit'),
+    ).toBeNull();
   });
 });
