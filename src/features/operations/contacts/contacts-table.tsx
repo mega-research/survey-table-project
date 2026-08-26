@@ -119,6 +119,14 @@ function computeCell(
           }
         : { display: '—', plain: undefined };
     case 'system.email_count':
+      // 수신거부는 발송 상태보다 우선 표시 — 필터의 수신거부 판정
+      // (unsubscribed_at OR 발송 스킵)과 화면이 어긋나지 않게 한다.
+      if (row.unsubscribedAt) {
+        return {
+          display: <RecipientStatusBadge status="skipped_unsubscribed" />,
+          plain: recipientStatusMeta('skipped_unsubscribed').label,
+        };
+      }
       return row.latestMailStatus
         ? {
             display: <RecipientStatusBadge status={row.latestMailStatus} />,

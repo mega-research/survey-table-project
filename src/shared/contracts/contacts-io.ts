@@ -104,6 +104,8 @@ export interface ContactsRow {
   responseStatus: string | null;
   /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
   latestMailStatus: MailRecipientStatus | null;
+  /** 수신거부 시각 — 메일 컬럼에서 발송 상태보다 우선 표시 (필터의 수신거부 판정과 동일 축) */
+  unsubscribedAt: Date | null;
   inviteToken: string;
   createdAt: Date;
 }
