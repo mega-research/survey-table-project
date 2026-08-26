@@ -106,6 +106,7 @@ export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandida
         if (status !== 'all') p.set('status', status);
         else p.delete('status');
       }}
+      resetExtraParams={['status']}
     />
   );
 }

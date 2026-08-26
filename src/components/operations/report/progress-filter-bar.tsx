@@ -19,6 +19,7 @@ import {
 } from '@/lib/operations/filter-shared';
 
 import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
+import { FilterResetButton } from '@/components/operations/filters/filter-reset-button';
 
 interface Props {
   surveyId: string;
@@ -125,6 +126,15 @@ export function ProgressFilterBar({
       >
         검색
       </Button>
+      <FilterResetButton
+        className="h-10"
+        clearParams={['col', 'q', 'page']}
+        activeParams={['col', 'q']}
+        onReset={() => {
+          setSource(null);
+          setValue('');
+        }}
+      />
       <Button asChild variant="outline" className="ml-auto h-10">
         <Link href={`/admin/surveys/${surveyId}/operations/report/columns`}>컬럼 설정</Link>
       </Button>

@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
+import { FilterResetButton } from '@/components/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
@@ -370,6 +371,12 @@ export function CampaignWizard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <FilterResetButton
+              size="sm"
+              label="필터 초기화"
+              clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'page']}
+              activeParams={['col', 'q', 'op', 'hcol', 'hm', 'hv']}
+            />
             <Button
               variant="outline"
               size="sm"

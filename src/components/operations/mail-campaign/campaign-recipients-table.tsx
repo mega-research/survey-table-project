@@ -125,6 +125,8 @@ export function CampaignRecipientsTable({
             전부 hidden 으로 실어야 검색 순간에 조용히 사라지지 않는다. */}
         <form className="flex items-center gap-2" action="" method="get">
           <input
+            // 초기화(Link 네비게이션) 후에도 남는 uncontrolled 입력값을 key 로 리마운트해 비운다.
+            key={currentQuery}
             type="search"
             name="rq"
             defaultValue={currentQuery}
@@ -147,6 +149,22 @@ export function CampaignRecipientsTable({
           >
             검색
           </button>
+          {/* 상태 칩·이메일 검색·헤더 깔때기 일괄 초기화 — 걸린 게 없으면 비활성 표시 */}
+          {currentStatuses.length > 0 || currentQuery.trim() !== '' || headerEntries.length > 0 ? (
+            <Link
+              href={buildHref(surveyId, campaignId, {})}
+              className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              초기화
+            </Link>
+          ) : (
+            <span
+              aria-disabled="true"
+              className="cursor-default rounded border border-slate-100 bg-white px-3 py-1.5 text-sm text-slate-300"
+            >
+              초기화
+            </span>
+          )}
         </form>
       </div>
 

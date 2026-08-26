@@ -33,6 +33,7 @@ import {
 import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
 import { ClauseRow, type ClauseRowValue } from './clause-row';
+import { FilterResetButton } from './filter-reset-button';
 
 // 서버 FilterClause 와 형상 같지만 client 모듈이라 서버 import 못 함 - 인라인.
 export interface ClientFilterClause {
@@ -62,6 +63,8 @@ interface Props {
   trailing?: React.ReactNode;
   /** 검색 실행 시 URL 파라미터 추가 조작 (예: status 반영). */
   onSubmitParams?: (p: URLSearchParams) => void;
+  /** 초기화 버튼이 함께 지울 페이지 전용 필터 파라미터 (예: 응답 내역 status). */
+  resetExtraParams?: string[];
 }
 
 /**
@@ -81,6 +84,7 @@ export function FilterBarCore({
   columnsSettingsHref,
   trailing,
   onSubmitParams,
+  resetExtraParams = [],
 }: Props) {
   // ClauseRowValue.id 는 React key 안정성을 위한 식별자 — URL 의 인덱스가 아니라 행 자체의
   // 생명주기를 따라간다. 매 mount/sync 시 새로 부여하므로 영속 ID 는 아님.
@@ -242,6 +246,19 @@ export function FilterBarCore({
             </Badge>
           )}
         </Button>
+        <FilterResetButton
+          className="h-10"
+          clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'page', ...resetExtraParams]}
+          activeParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', ...resetExtraParams]}
+          onReset={() => {
+            // URL 변화가 서버 initial 로 되돌아와 동기화되지만, 검색 전 입력값은
+            // URL 에 없어 남는다 — 로컬 state 도 즉시 비운다.
+            setFirstSource(FILTER_SOURCE.ALL);
+            setFirstValue('');
+            setExtraClauses([]);
+            setAdvancedOpen(false);
+          }}
+        />
         {trailing}
         {columnsSettingsHref && (
           <Button asChild variant="outline" className="ml-auto h-10">
