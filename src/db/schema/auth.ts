@@ -32,6 +32,9 @@ export const users = pgTable('users', {
   isSuperadmin: boolean('is_superadmin').notNull().default(false),
   // 직책 — 슈퍼어드민이 사용자 관리에서 입력 (internal 전용, 티켓 03)
   jobTitle: text('job_title'),
+  // 소속 기관 메모 — guest 전용 자유 입력 (0086). internal 은 팀 멤버십(티켓 06),
+  // fieldwork 는 실사 업체 엔티티(티켓 24)에서 소속을 얻으므로 이 컬럼을 쓰지 않는다.
+  organization: text('organization'),
   // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0085 마이그레이션)
   userType: text('user_type').$type<UserType>().notNull().default('internal'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

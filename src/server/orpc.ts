@@ -1,9 +1,9 @@
 import { ORPCError, os } from '@orpc/server';
 
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
-import { isActiveUser } from '@/shared/contracts/auth';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
+import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
+import { isActiveUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { rpcLoggingMiddleware } from './rpc-logging';
@@ -104,6 +104,20 @@ export const authed = base.use(({ context, next }) => {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   return next({ context: { user } });
+});
+
+/**
+ * 슈퍼어드민 베이스 — authed(세션 + active + 게스트 아님) + isSuperadmin.
+ *
+ * 전역 관리 표면(사용자 관리·계정 상태 전이·실사 업체 관리) 전용이다. 슈퍼어드민이
+ * 아닌 내부 계정은 FORBIDDEN — 권한 없음과 존재 여부를 구분하지 않는다(authed 와 같은 코드).
+ * authed 파생이라 게스트 차단·비활성 계정 차단은 한 번만 쓰여 있다.
+ */
+export const superadmin = authed.use(({ context, next }) => {
+  if (!context.user.isSuperadmin) {
+    throw new ORPCError('FORBIDDEN', { message: '슈퍼어드민만 접근할 수 있습니다.' });
+  }
+  return next({ context: { user: context.user } });
 });
 
 /**

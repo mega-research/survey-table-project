@@ -69,6 +69,7 @@
     "0082_revoke_default_function_execute",
     "0083_fix_revoke_trigger_procedure_ddl",
     "0084_better_auth_tables",
-    "0085_better_auth_v2_reconcile"
+    "0085_better_auth_v2_reconcile",
+    "0086_users_organization"
   ]
 }
