@@ -246,6 +246,8 @@ export function FilterBarCore({
             </Badge>
           )}
         </Button>
+        {trailing}
+        {/* 페이지 전용 컨트롤(응답 내역 상태 select 등) 오른쪽에 배치 */}
         <FilterResetButton
           className="h-10"
           clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'page', ...resetExtraParams]}
@@ -259,7 +261,6 @@ export function FilterBarCore({
             setAdvancedOpen(false);
           }}
         />
-        {trailing}
         {columnsSettingsHref && (
           <Button asChild variant="outline" className="ml-auto h-10">
             <Link href={columnsSettingsHref}>컬럼 설정</Link>
