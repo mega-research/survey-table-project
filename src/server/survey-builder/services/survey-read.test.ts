@@ -6,7 +6,7 @@ import type { Survey as SurveyType } from '@/types/survey';
 // publish/analytics 와 빌더 read 가 동일 매핑을 공유하도록 강제하여
 // "신규 질문 컬럼이 한쪽 사본에만 추가돼 publish 스냅샷/분석에서 누락"되는 divergence 를 차단한다.
 //
-// getSurveyWithDetails 만 갈아끼우고 나머지는 원본을 살린다 — getSurveys 는 아래에서
+// getSurveyWithDetails 만 갈아끼우고 나머지는 원본을 살린다 — 다른 조회들은 아래에서
 // 모킹된 @/db 를 상대로 실제 컬럼 투영을 검증해야 하므로 통 mock 으로 덮으면 안 된다.
 vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/read-models/survey-structure')>()),

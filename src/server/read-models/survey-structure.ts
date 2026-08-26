@@ -18,26 +18,8 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 // 설문 조회 함수
 // ========================
 
-// 설문 목록 조회.
-// 목록 화면(빌더 목록·분석 대시보드)이 실제로 읽는 컬럼만 투영한다.
-// 전 컬럼 판과 8컬럼 판이 같은 이름으로 나뉘어 있던 것을 이쪽으로 합쳤다 —
-// 전 컬럼 판의 유일한 소비자였던 analytics 대시보드가 읽는 5필드가 여기 포함된다.
-export async function getSurveys() {
-  const result = await db.query.surveys.findMany({
-    columns: {
-      id: true,
-      title: true,
-      description: true,
-      slug: true,
-      privateToken: true,
-      createdAt: true,
-      updatedAt: true,
-      isPublic: true,
-    },
-    orderBy: [desc(surveys.createdAt)],
-  });
-  return result;
-}
+// 무범위 목록(구 getSurveys)은 제거됐다(티켓 09) — 마지막 소비자였던 분석 대시보드가
+// 작업 범위 목록(getSurveyListWithCounts)으로 옮겨 갔다. 목록은 항상 범위를 지나야 한다.
 
 /**
  * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, desc, eq, ilike, ne } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
 import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
@@ -14,7 +14,6 @@ import {
   getScopedSurveys,
   getSurveyById,
   getSurveyWithDetails,
-  getSurveys,
 } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { contactTargets, surveyVersions, surveys } from '@/db/schema';
@@ -57,7 +56,6 @@ export {
   getQuestionsBySurvey,
   getSurveyById,
   getSurveyWithDetails,
-  getSurveys,
 };
 
 // ========================
@@ -73,15 +71,6 @@ export async function isSlugAvailable(input: SlugAvailableInput): Promise<boolea
       : eq(surveys.slug, slug),
   });
   return !existing;
-}
-
-// 설문 검색
-export async function searchSurveys(query: string) {
-  const result = await db.query.surveys.findMany({
-    where: ilike(surveys.title, `%${query}%`),
-    orderBy: [desc(surveys.createdAt)],
-  });
-  return result;
 }
 
 // ========================

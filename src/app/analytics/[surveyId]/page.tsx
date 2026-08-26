@@ -7,17 +7,29 @@ import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
+import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AnalyticsPageProps {
   params: Promise<{ surveyId: string }>;
 }
 
+/** 없는 설문과 타 팀 설문을 같은 notFound 로 접는다 — 존재를 알려주지 않는다(티켓 09). */
+async function assertAnalyticsPageAccess(surveyId: string): Promise<void> {
+  const viewer = await requireAdminPage();
+  try {
+    await assertSurveyCapability(viewer, surveyId, 'analytics.view');
+  } catch (error) {
+    if (error instanceof SurveyAccessError) notFound();
+    throw error;
+  }
+}
+
 export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps) {
   const { surveyId } = await params;
 
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
-  await requireAdminPage();
+  await assertAnalyticsPageAccess(surveyId);
 
   // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
   const [survey, responses, versions] = await Promise.all([
@@ -78,9 +90,11 @@ export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps
   );
 }
 
-// 메타데이터 생성
+// 메타데이터 생성 — 페이지와 같은 관문을 지난다. 여기서 새면 404 응답의 <title> 로
+// 타 팀 설문 제목이 실린다.
 export async function generateMetadata({ params }: AnalyticsPageProps) {
   const { surveyId } = await params;
+  await assertAnalyticsPageAccess(surveyId);
   const survey = await getSurveyWithDetails(surveyId);
 
   if (!survey) {

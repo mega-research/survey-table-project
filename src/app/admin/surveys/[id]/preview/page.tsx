@@ -9,6 +9,9 @@ import {
   getSurveyById,
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
+import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
+import { requireAuth } from '@/lib/auth';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
@@ -27,6 +30,17 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
   await assertGuestSurveyPageAccess(surveyId);
+  // 팀 경계(티켓 09) — env grant 게스트는 위 가드가 grant 설문 일치로 이미 판정했고
+  // 팀 멤버십이 없어 capability 판정에 걸리므로 내부 계정만 관문을 지난다(티켓 21 이 통합).
+  const viewer = await requireAuth();
+  if (!isGuestUser(viewer.id)) {
+    try {
+      await assertSurveyCapability(viewer, surveyId, 'survey.view');
+    } catch (error) {
+      if (error instanceof SurveyAccessError) notFound();
+      throw error;
+    }
+  }
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 

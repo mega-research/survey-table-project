@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import { ArrowRight, BarChart3, Calendar, FileText, Plus, Users } from 'lucide-react';
@@ -6,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
-import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import { getSurveys } from '@/server/read-models/survey-structure';
+import { getSurveyListWithCounts } from '@/server/survey-builder/services/survey-read';
+import { WorkScopeError } from '@/server/work-scope';
+import { WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
 
 // 라이브 응답 수를 보여주는 대시보드. 빌드 타임 prerender(static) 대상이 되면
 // 프로덕션 DB에 카운트 쿼리를 실행하다 statement_timeout 으로 빌드가 실패한다.
@@ -15,25 +17,30 @@ import { getSurveys } from '@/server/read-models/survey-structure';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsListPage() {
-  // 이 페이지는 procedure 가 아니라 read model 을 직접 부르므로 자기 가드가 필요하다.
+  // 이 페이지는 procedure 가 아니라 service 를 직접 부르므로 자기 가드가 필요하다.
   // 레이아웃은 세션·상태·계정 유형까지만 보고, 설문 단위 게스트(env grant)는 userType 이
   // 'internal' 이라 그 문을 통과한다 — 여기서 막지 않으면 담당 아닌 설문의 제목·응답 수까지
   // 전부 렌더된다. 상세 페이지([surveyId])는 이미 같은 가드를 쓰고 있었다.
-  await requireAdminPage();
+  const user = await requireAdminPage();
 
-  // 모든 설문의 응답 수를 단일 GROUP BY 로 집계 (설문별 count fan-out 제거)
-  const [surveys, countsMap] = await Promise.all([
-    getSurveys(),
-    getResponseCountsGroupedBySurvey(),
-  ]);
-  const surveysWithResponses = surveys.map((survey) => {
-    const counts = countsMap.get(survey.id) ?? { total: 0, completed: 0 };
-    return {
-      ...survey,
-      totalResponses: counts.total,
-      completedResponses: counts.completed,
-    };
-  });
+  // 목록은 설문 목록과 같은 작업 범위 판정을 지난다(티켓 09) — 종전의 무범위 getSurveys()
+  // 는 팀 밖 설문의 제목·응답 수까지 렌더했다. 범위는 admin 셸이 기록한 쿠키를 서버가
+  // 멤버십으로 재해석한다.
+  const requestedScope = (await cookies()).get(WORK_SCOPE_COOKIE)?.value ?? null;
+  let listResult;
+  try {
+    listResult = await getSurveyListWithCounts(user, requestedScope);
+  } catch (error) {
+    if (!(error instanceof WorkScopeError)) throw error;
+    // 쿠키는 편의값이다 — 강등된 슈퍼어드민의 'system' 잔존 쿠키 같은 무효 값은
+    // 거부(500)가 아니라 기본 범위로 접는다(admin 레이아웃과 같은 처리).
+    listResult = await getSurveyListWithCounts(user, null);
+  }
+  const surveysWithResponses = listResult.surveys.map((survey) => ({
+    ...survey,
+    totalResponses: survey.responseCount,
+    completedResponses: survey.completedResponseCount,
+  }));
 
   return (
     <div className="min-h-screen bg-gray-50">
