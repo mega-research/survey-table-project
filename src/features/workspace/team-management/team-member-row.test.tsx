@@ -9,6 +9,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { TeamMemberItem } from '@/shared/contracts/workspace-io';
+
 const { changeRole, removeMember, updateJobTitle } = vi.hoisted(() => ({
   changeRole: vi.fn(),
   removeMember: vi.fn(),
@@ -24,17 +26,17 @@ vi.mock('./queries/use-teams', () => ({
 import { TeamMemberRow } from './team-member-row';
 
 const TEAM_ID = '22222222-2222-4222-8222-222222222222';
-const MEMBER = {
+const MEMBER: TeamMemberItem = {
   userId: '44444444-4444-4444-8444-444444444444',
   name: '정분석',
   email: 'jung@megaresearch.co.kr',
   jobTitle: '과장',
-  role: 'member' as const,
-  status: 'active' as const,
+  role: 'member',
+  status: 'active',
   otherTeamCount: 1,
 };
 
-function renderRow(overrides: Partial<typeof MEMBER> = {}, canManage = true) {
+function renderRow(overrides: Partial<TeamMemberItem> = {}, canManage = true) {
   return render(
     <TeamMemberRow teamId={TEAM_ID} member={{ ...MEMBER, ...overrides }} canManage={canManage} />,
   );
