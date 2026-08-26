@@ -39,6 +39,31 @@ export const userTypeValues = ['internal', 'guest', 'fieldwork'] as const;
 export type UserType = (typeof userTypeValues)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 인증 사용자 — 서버와 UI 가 합의한 세션 사용자 모양
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 세션에서 읽어낸 현재 사용자. oRPC 컨텍스트(server/context)·REST 가드(lib/auth)·
+ * auth.getUser 출력이 모두 이 모양을 쓴다.
+ */
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  name: string;
+  status: UserStatus;
+  isSuperadmin: boolean;
+}
+
+/**
+ * 표면 접근을 허용할 계정 상태인가 — 인증 게이트의 단일 술어.
+ * 세션 발급 자체는 lib/auth/server.ts 훅이 막지만, 발급 뒤 상태가 바뀐 세션도 있으므로
+ * 요청 시점에 다시 본다(oRPC authed/scoped · requireAuth · 보호 경로 레이아웃 공용).
+ */
+export function isActiveUser(status: UserStatus | undefined): boolean {
+  return status === 'active';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // accounts.provider_id / accounts.issuer — 크리덴셜 계정 규약값 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────
 //

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { ResultCodesEditor } from '@/features/operations/contacts/result-codes-editor';
 import { getContactResultCodes } from '@/server/read-models/contacts';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 export const metadata: Metadata = {
   title: '현황 - 결과코드 설정',
@@ -12,6 +13,9 @@ interface PageProps {
 }
 
 export default async function ContactResultCodesPage({ params }: PageProps) {
+  // 게스트 차단 화면 — admin 레이아웃의 경로 가드는 소프트 내비게이션에서 재실행되지 않으므로
+  // 페이지가 스스로 막는다(페이지는 내비게이션마다 반드시 다시 렌더된다).
+  await requireAdminPage();
   const { id: surveyId } = await params;
   const codes = await getContactResultCodes(surveyId);
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { isGuestUser, sanitizeInternalPath } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
+import { sanitizeInternalPath } from '@/lib/auth/safe-redirect';
 import { auth } from '@/lib/auth/server';
 
 /**

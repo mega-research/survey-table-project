@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ColumnSchemeEditor } from '@/features/operations/contacts/column-scheme-editor';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 export const metadata: Metadata = {
   title: '현황 - 컬럼 설정',
@@ -14,6 +15,9 @@ interface PageProps {
 }
 
 export default async function ContactsColumnsPage({ params }: PageProps) {
+  // 게스트 차단 화면 — admin 레이아웃의 경로 가드는 소프트 내비게이션에서 재실행되지 않으므로
+  // 페이지가 스스로 막는다(페이지는 내비게이션마다 반드시 다시 렌더된다).
+  await requireAdminPage();
   const { id: surveyId } = await params;
   const scope = await getOperationsDataScope(surveyId);
   const scheme = await getContactColumnScheme(surveyId, scope);

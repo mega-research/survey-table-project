@@ -74,17 +74,6 @@ export function isForeignSurveyConsolePath(
 }
 
 /**
- * open redirect 방지 — 같은 출처 내부 절대경로만 통과, 그 외 null.
- * ('//', '/\\' 는 protocol-relative 외부 URL 우회 차단)
- */
-export function sanitizeInternalPath(raw: string | null | undefined): string | null {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
-    return null;
-  }
-  return raw;
-}
-
-/**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
  *

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeRedirectPath } from '@/lib/auth/safe-redirect';
+import { sanitizeInternalPath, sanitizeRedirectPath } from '@/lib/auth/safe-redirect';
 
 describe('sanitizeRedirectPath', () => {
   it('내부 절대경로는 그대로 통과한다', () => {
@@ -32,5 +32,32 @@ describe('sanitizeRedirectPath', () => {
     expect(sanitizeRedirectPath('/')).toBe('/admin/surveys');
     expect(sanitizeRedirectPath('/admin/login')).toBe('/admin/surveys');
     expect(sanitizeRedirectPath('/admin/login?redirect=%2Fadmin')).toBe('/admin/surveys');
+  });
+});
+
+describe('sanitizeInternalPath', () => {
+  it('내부 절대경로는 그대로, 그 외는 null — 파라미터를 아예 붙이지 않는 자리용', () => {
+    expect(sanitizeInternalPath('/admin/surveys/s1/operations/overview')).toBe(
+      '/admin/surveys/s1/operations/overview',
+    );
+    expect(sanitizeInternalPath('')).toBeNull();
+    expect(sanitizeInternalPath(null)).toBeNull();
+  });
+
+  it('sanitizeRedirectPath 와 같은 차단 규칙을 쓴다 — 제어 문자 포함', () => {
+    for (const bad of [
+      'https://evil.example',
+      '//evil.example',
+      '/\\evil.example',
+      '/\t/evil.example',
+      '\t//evil.example',
+    ]) {
+      expect(sanitizeInternalPath(bad)).toBeNull();
+    }
+  });
+
+  it('루트와 로그인 페이지는 그대로 통과한다 — 기본값 대체는 상위 함수 몫', () => {
+    expect(sanitizeInternalPath('/')).toBe('/');
+    expect(sanitizeInternalPath('/admin/login')).toBe('/admin/login');
   });
 });

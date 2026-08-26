@@ -1,16 +1,11 @@
 import 'server-only';
 
 import { db } from '@/db';
-import { auth } from '@/lib/auth/server';
-import type { UserStatus } from '@/shared/contracts/auth';
+import { readSessionUser } from '@/lib/auth/session';
+import type { AuthUser } from '@/shared/contracts/auth';
 
-export interface AuthUser {
-  id: string;
-  email: string | null;
-  name: string;
-  status: UserStatus;
-  isSuperadmin: boolean;
-}
+// 인증 사용자 모양은 shared/contracts/auth 소관 — 컨텍스트 소비자가 함께 받도록 되내보낸다.
+export type { AuthUser };
 
 export interface ORPCContext {
   db: typeof db;
@@ -31,21 +26,5 @@ export interface ORPCContext {
  * route handler 는 request.headers 를 전달하고, RSC 경로는 생략 가능(빈 Headers).
  */
 export async function createContext(headers: Headers = new Headers()): Promise<ORPCContext> {
-  const session = await auth.api.getSession({ headers });
-
-  return {
-    db,
-    user: session
-      ? {
-          id: session.user.id,
-          email: session.user.email ?? null,
-          name: session.user.name,
-          // status 는 additionalFields 라 세션 페이로드에서 optional 로 좁혀진다.
-          // 값이 없으면 로그인 불가 상태로 접는 편이 안전하다(스키마 default 와 동일 취지).
-          status: (session.user.status as UserStatus | undefined) ?? 'pending',
-          isSuperadmin: session.user.isSuperadmin ?? false,
-        }
-      : null,
-    headers,
-  };
+  return { db, user: await readSessionUser(headers), headers };
 }

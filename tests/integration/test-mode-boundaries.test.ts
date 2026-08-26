@@ -89,7 +89,6 @@ function expectRealOnly(where: unknown) {
 }
 
 beforeEach(() => {
-  delete process.env['ADMIN_USER_IDS'];
   authState.user = { id: 'admin' };
   responseWhereArgs.length = 0;
   selectWhereArgs.length = 0;

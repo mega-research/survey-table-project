@@ -1,6 +1,7 @@
 import { ORPCError, os } from '@orpc/server';
 
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { isActiveUser } from '@/shared/contracts/auth';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
@@ -79,7 +80,7 @@ function requireActiveUser(user: ORPCContext['user']): NonNullable<ORPCContext['
   if (!user) {
     throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
   }
-  if (user.status !== 'active') {
+  if (!isActiveUser(user.status)) {
     throw new ORPCError('FORBIDDEN', { message: '활성 계정만 접근할 수 있습니다.' });
   }
   return user;

@@ -9,7 +9,8 @@ import {
   isForeignSurveyConsolePath,
 } from '@/lib/auth/guest-grants';
 import { sanitizeRedirectPath } from '@/lib/auth/safe-redirect';
-import { auth } from '@/lib/auth/server';
+import { readSessionUser } from '@/lib/auth/session';
+import { isActiveUser } from '@/shared/contracts/auth';
 
 import { LoginForm } from './login-form';
 
@@ -29,10 +30,10 @@ export default async function AdminLoginPage({ searchParams }: PageProps) {
   const { redirect: redirectTo, reason } = await searchParams;
 
   // active 세션 보유자는 목적지로 보낸다 (만료·폐기 쿠키면 세션 null → 폼 표시).
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (session?.user.status === 'active') {
+  const user = await readSessionUser(await headers());
+  if (user && isActiveUser(user.status)) {
     const target = sanitizeRedirectPath(redirectTo);
-    const grantedSurveyIds = getGuestSurveyIds(session.user.id);
+    const grantedSurveyIds = getGuestSurveyIds(user.id);
     if (grantedSurveyIds.length > 0) {
       const targetPath = target.split(/[?#]/)[0] ?? target;
       // 담당이 아닌 설문 콘솔을 향한 게스트 로그인 — 자기 설문으로 몰래 보내면 착각을
