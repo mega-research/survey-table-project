@@ -63,6 +63,8 @@ export const FILTER_SOURCE = {
  * 종결 상태 3종(screened_out/quotaful_out/bad)의 라벨은 응답 내역 표
  * (mapStatusPill · profiles 필터)와 같은 문자열이어야 한다 — 같은 상태를 두 화면이
  * 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
+ * 유일한 예외는 엑셀 export(rawdata·조사 대상) — formatExportStatusLabel 이
+ * 자격 미달을 완료 계열("완료(자격 미달)")로 표기한다.
  */
 export const WEB_FILTER_OPTIONS = [
   { value: 'completed', label: '응답 완료' },
@@ -185,6 +187,14 @@ export const MAIL_FILTER_OPTIONS = [
 export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
   MAIL_FILTER_OPTIONS.map((o) => o.value),
 );
+
+/**
+ * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의
+ * 유효 메일 상태(effectiveMailStatusExpr — 표시·필터·정렬 공유)가 쓰는
+ * 단일 기준. 컨택 회차에서 수동 기록된 수신거부(예: "13.수신거부")를 메일
+ * unsubscribed_at 과 같은 축으로 취급한다.
+ */
+export const UNSUBSCRIBE_RESULT_CODE_KEYWORD = '수신거부';
 
 /**
  * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인

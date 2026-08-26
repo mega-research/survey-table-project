@@ -443,3 +443,35 @@ describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
     expect(textQ.sql).not.toContain('::numeric');
   });
 });
+
+describe('buildContactsFilterSql — 메일 필터 (유효 메일 상태)', () => {
+  function mailClause(value: string): FilterClause {
+    return {
+      op: null,
+      condition: { source: 'system.email_count', mode: 'boolean', value },
+    };
+  }
+
+  it('수신거부 — unsubscribed_at 또는 최근 결과코드 수신거부를 유효 상태로 접어 잡는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('skipped_unsubscribed')]));
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    // 결과코드 키워드는 parameter binding 으로 진입한다.
+    expect(query.params).toContain('수신거부');
+    expect(query.params).toContain('skipped_unsubscribed');
+  });
+
+  it('열람 — 유효 상태 기준이라 수신거부 판정자는 열람 필터에 다시 잡히지 않는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('opened')]));
+    // CASE 로 수신거부 신호가 먼저 접히므로 opened 비교는 수신거부 판정자를 제외한다.
+    expect(query.sql).toContain('CASE');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    expect(query.params).toContain('opened');
+  });
+
+  it('없음(none) — 유효 상태 IS NULL 이라 발송 이력 없는 수신거부 판정자는 잡히지 않는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('none')]));
+    expect(query.sql).toContain('IS NULL');
+    expect(query.sql).toContain('CASE');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+  });
+});

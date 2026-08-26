@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
@@ -115,6 +116,15 @@ export function CampaignWizard({
   const [unrespondedOnly, setUnrespondedOnly] = useState<boolean>(
     currentFilter.unrespondedOnly ?? false,
   );
+
+  // 초기화·뒤로가기로 URL 의 unresponded 가 바뀌면 서버가 새 currentFilter 를 내려준다 —
+  // 로컬 체크박스 동기화 (effect 대신 렌더 중 조정 패턴).
+  const serverUnresponded = currentFilter.unrespondedOnly ?? false;
+  const [prevServerUnresponded, setPrevServerUnresponded] = useState(serverUnresponded);
+  if (prevServerUnresponded !== serverUnresponded) {
+    setPrevServerUnresponded(serverUnresponded);
+    setUnrespondedOnly(serverUnresponded);
+  }
 
   const totalPages = Math.max(1, Math.ceil(candidates.total / candidates.pageSize));
   const selectedCount = selectedIds.size;
@@ -321,6 +331,7 @@ export function CampaignWizard({
           columnCandidates={columnCandidates}
           resultCodeOptions={resultCodeOptions}
           ariaLabel="수신자 필터"
+          resetExtraParams={['unresponded']}
         />
 
         <div className="flex items-center gap-2">
@@ -369,6 +380,13 @@ export function CampaignWizard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <FilterResetButton
+              size="sm"
+              label="필터 초기화"
+              // unresponded(미응답자만)도 수신 후보를 실제 제한하는 필터 — 초기화에 포함.
+              clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'unresponded', 'page']}
+              activeParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'unresponded']}
+            />
             <Button
               variant="outline"
               size="sm"

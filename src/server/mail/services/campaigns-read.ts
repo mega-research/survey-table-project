@@ -1,4 +1,4 @@
-import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -404,7 +404,16 @@ export async function listCampaignRecipients(args: {
   ];
 
   if (args.statuses && args.statuses.length > 0) {
-    whereParts.push(inArray(mailRecipients.status, args.statuses));
+    // '수신거부' 탭(skipped_unsubscribed)은 발송 스킵 상태만으로는 발송 후
+    // 수신거부자를 놓친다 — 행의 수신거부 badge(contact_targets.unsubscribed_at)와
+    // 같은 판정이 되도록 OR 로 결합한다.
+    const statusCond = args.statuses.includes('skipped_unsubscribed')
+      ? or(
+          inArray(mailRecipients.status, args.statuses),
+          isNotNull(contactTargets.unsubscribedAt),
+        )!
+      : inArray(mailRecipients.status, args.statuses);
+    whereParts.push(statusCond);
   }
   const q = (args.q ?? '').trim();
   if (q) {

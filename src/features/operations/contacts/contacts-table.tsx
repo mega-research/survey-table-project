@@ -119,6 +119,8 @@ function computeCell(
           }
         : { display: '—', plain: undefined };
     case 'system.email_count':
+      // latestMailStatus 는 서버의 유효 메일 상태(effectiveMailStatusExpr) — 수신거부
+      // 판정이면 이미 'skipped_unsubscribed' 로 내려오므로 여기선 그대로 그린다.
       return row.latestMailStatus
         ? {
             display: <RecipientStatusBadge status={row.latestMailStatus} />,

@@ -156,6 +156,19 @@ describe('formatExportCell', () => {
     expect(formatExportCell('system.web', makeRow(), base)).toBe('');
   });
 
+  it('web 자격 미달은 rawdata 엑셀과 같은 완료 계열 표기, 진행율 부속은 유지', () => {
+    expect(
+      formatExportCell(
+        'system.web',
+        makeRow({ responseStatus: 'screened_out', progressPct: 62 }),
+        base,
+      ),
+    ).toBe('완료(자격 미달) 62%');
+    expect(
+      formatExportCell('system.web', makeRow({ responseStatus: 'screened_out' }), base),
+    ).toBe('완료(자격 미달)');
+  });
+
   it('초대링크는 baseUrl/i/inviteCode', () => {
     expect(formatExportCell('system.invite_url', makeRow(), base)).toBe(
       'https://s.example.com/i/abc123',

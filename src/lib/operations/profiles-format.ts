@@ -216,6 +216,16 @@ export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
   }
 }
 
+/**
+ * 엑셀 export 상태 라벨 — 콘솔 pill 어휘(mapStatusPill)를 따르되, 자격 미달은
+ * 스크리닝으로 설문을 정상 종결한 응답이라 export 에서는 완료 계열로 표기한다.
+ * rawdata 엑셀(raw-workbook)과 조사 대상 엑셀(contacts-export)이 공유한다.
+ */
+export function formatExportStatusLabel(status: string): string {
+  if (status === 'screened_out') return '완료(자격 미달)'
+  return mapStatusPill({ status }).label
+}
+
 /** 응답자의 진행 위치(step) 한 곳을 질문 단위 표시로 환산한 결과. */
 export interface StepLocation {
   /** 대표 질문(group step=첫 질문, table step=해당 질문)의 order. */

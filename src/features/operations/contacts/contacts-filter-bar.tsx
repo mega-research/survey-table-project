@@ -19,6 +19,8 @@ interface Props {
   columnsSettingsHref?: string;
   /** form aria-label. 기본 "조사 대상 필터". */
   ariaLabel?: string;
+  /** 초기화 버튼이 함께 지울 페이지 전용 필터 파라미터 (메일 마법사의 unresponded 등). */
+  resetExtraParams?: string[];
 }
 
 /**
@@ -31,6 +33,7 @@ export function ContactsFilterBar({
   resultCodeOptions,
   columnsSettingsHref,
   ariaLabel = '조사 대상 필터',
+  resetExtraParams,
 }: Props) {
   return (
     <FilterBarCore
@@ -38,6 +41,7 @@ export function ContactsFilterBar({
       columnCandidates={columnCandidates}
       ariaLabel={ariaLabel}
       {...(columnsSettingsHref !== undefined ? { columnsSettingsHref } : {})}
+      {...(resetExtraParams !== undefined ? { resetExtraParams } : {})}
       renderValueWidget={({ source, value, onChange, inputId }) => (
         <ValueWidget
           source={source}

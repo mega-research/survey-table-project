@@ -9,7 +9,7 @@ import {
 } from '@/lib/analytics/spss-excel-export';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles-format';
+import { formatExportStatusLabel, formatTotalTime } from '@/lib/operations/profiles-format';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -110,7 +110,7 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
     header: '개별 URL',
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
   },
-  { header: '상태', value: (row) => mapStatusPill({ status: row.status }).label },
+  { header: '상태', value: (row) => formatExportStatusLabel(row.status) },
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
@@ -163,7 +163,7 @@ export function addResponseListSheet(
       ...(ctx.hasContactGroups ? [row.groupValue ?? '공개링크'] : []),
       formatPlatformKo(row.platform as Platform | null),
       row.browser ?? 'Other',
-      mapStatusPill({ status: row.status }).label,
+      formatExportStatusLabel(row.status),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
       formatTotalTime(row.totalSeconds, row.status),
