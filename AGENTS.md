@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-25 (역할 모델 v2 티켓 01 — Better Auth 1.7.1 서버 기반: 인증 5테이블 drizzle 스키마 + 마이그레이션 0084(선반영 재생용)·0085(users.user_type + accounts.issuer 정합)·`lib/auth/server.ts` 인스턴스·`/api/auth` 라우트(auth-sensitive IP rate limit)·`pnpm auth:seed`. **운영 세션은 아직 Supabase Auth** — 스왑은 티켓 02. 직전: 리팩터 마감 세션 A — server 트리 무접미사(ADR 0016)·명명 메타테스트, server/=oRPC 도메인 10개 · features/=5개 묶음 불변)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 02 — 인증 스왑 완료: 세션·미들웨어·REST·로그인 화면 전부 Better Auth. ADMIN_USER_IDS allowlist 은퇴(authed = 세션 + status active), proxy 는 쿠키 1차 게이트 + admin/analytics 레이아웃 재검증, 로그인 화면 v2 카피(FLOW 3-1), auth 서버 액션 삭제로 잔존 액션 1파일, `@supabase/ssr` 제거. 직전: 티켓 01 Better Auth 서버 기반 — 인증 5테이블 + 마이그레이션 0084(선반영 재생용)·0085·`pnpm auth:seed`)
 
 ---
 
@@ -48,7 +48,8 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22) — 소스 참조가 처음부터 0이었다.
 > 폼은 제어 컴포넌트 + zod 로, 목록은 TanStack Table 로 직접 다룬다.
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
-> Better Auth 는 역할 모델 v2 티켓 01로 **서버 기반만** 들어왔다 (인스턴스·테이블·시드·rate limit). 운영 세션·로그인 화면은 아직 Supabase Auth — 스왑은 티켓 02.
+> Better Auth 가 세션의 유일한 출처다 (티켓 02). Supabase 는 DB 호스팅으로만 남고 `@supabase/ssr` 은 제거됐다 —
+> `@supabase/supabase-js` 는 유지보수 스크립트(`scripts/*.ts`) 전용으로 남아 있다.
 
 ---
 
@@ -156,13 +157,13 @@ src/
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts
 │
-├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
-│   ├── auth-actions.ts         # login/logout (redirect+쿠키 의미론이 server action 특화)
+├── actions/                    # 잔존 서버 액션 — 1파일 (의도적 유지)
 │   ├── unsubscribe-actions.ts  # 수신거부 POST form (메일 클라 JS 비활성 환경 + redirect)
-│   └── index.ts                # 잔존 사유 주석 포함 배럴
+│   └── index.ts                # 잔존 사유 주석 배럴 (auth 는 Better Auth 로 이관 완료)
 │
 ├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
 │   ├── ui/                     # shadcn/ui 기반 컴포넌트 (23개 + rich-text-editor/)
+│   ├── auth/                   # logout-button (authClient.signOut 공용 버튼)
 │   └── providers/              # Context providers
 │
 ├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
@@ -172,9 +173,10 @@ src/
 │
 ├── lib/                        # 인프라 어댑터 + 프론트·서버가 함께 쓰는 계산 (도메인 로직 흡수 완료 — 트래커 E-1)
 │                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
-│   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
-│   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
-│   │                           # + server.ts — Better Auth 인스턴스 (역할 모델 v2 티켓 01, 세션 스왑 전)
+│   ├── auth/ + auth.ts         # 인증 어댑터 + 가드. server.ts=Better Auth 인스턴스 · client.ts=브라우저 authClient
+│   │                           # · safe-redirect=로그인 복귀 경로 정제 · protected-paths=proxy/레이아웃 공용 AUTH_PAGES
+│   │                           # · guest-grants=게스트 grant(티켓 21에서 계정 모델로 교체) · require-admin-page
+│   │                           # · guest-viewer · require-survey-ownership. auth.ts=requireAuth/getCurrentUser
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
@@ -230,7 +232,7 @@ src/
 │   └── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
-└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
+└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 쿠키 1차 게이트 + x-pathname 전달)
 ```
 
 ---
@@ -584,7 +586,7 @@ RSC (서버 컴포넌트)
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
 - procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
 - **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon·외부 프레임워크 핸들러 마운트(`/api/inngest`·`/api/auth`)는 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
-- 그 원칙에 따라 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
+- 그 원칙에 따라 잔존 서버 액션은 `actions/` 1파일뿐 (unsubscribe form — 의도적 유지).
 - **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
 - 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향 · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
 
@@ -628,18 +630,26 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## 인증과 권한
 
-- 세션은 Supabase Auth (`lib/supabase/*`), `proxy.ts` 미들웨어가 `/admin`·`/analytics`에서 세션을 갱신한다.
-- **Better Auth 서버 기반**(역할 모델 v2 티켓 01, ADR-0018): 인스턴스는 `lib/auth/server.ts` — email+password,
-  UUID user id, 30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·
-  이메일 비밀번호 재설정 없음(분실은 슈퍼어드민 재설정, 티켓 04). sign-in 전 비활성 상태(active 외)를
-  차단하며 실패 응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
-  **운영 세션 스왑은 티켓 02** — 그 전까지 아래 Supabase 기반 체계가 현행이다.
+- **세션은 Better Auth**(ADR-0018). 인스턴스는 `lib/auth/server.ts` — email+password, UUID user id,
+  30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·이메일 비밀번호
+  재설정 없음(분실은 슈퍼어드민 재설정, 티켓 04). sign-in 전 비활성 상태(active 외)를 차단하며 실패
+  응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
+- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로 `/admin`·`/analytics`
+  진입을 거르고 `x-pathname` 요청 헤더를 넘긴다. 쿠키 유효성·계정 상태(active)·게스트 경로 제한은
+  `app/admin/layout.tsx`·`app/analytics/layout.tsx` 가 서버에서 재검증한다. 비로그인 접근을 허용하는
+  경로 목록은 `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있다(현재 `/admin/login` 뿐).
+- **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/admin/login` 으로 되돌아오고,
+  목적지 해석은 그 페이지(RSC)가 한다 — 게스트 grant 가 서버 설정이라 클라이언트가 결정할 수 없다.
+  복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
+  로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
+- REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active')를 쓴다 — oRPC `authed` 와
+  같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막는다.
 - procedure 베이스 3종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
-  - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
-  - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
-- 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
-- allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+  - **`authed`** — 세션 + `status === 'active'` + 게스트 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
+  - **`scoped`** — 세션 + active (게스트 포함). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+- 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃(`/admin/logout`) → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`). 계정 발급 모델(`users.user_type='guest'`)로의 교체는 티켓 21.
+- 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 
 ---
 
@@ -733,7 +743,7 @@ import { Button } from "@/components/ui/button";
 ## 환경 변수
 
 ```env
-# Supabase
+# Supabase (DB 호스팅 전용 — 아래 3키는 앱 런타임 미사용, 유지보수 스크립트만 쓴다)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -768,7 +778,6 @@ CONTACT_PII_HMAC_KEY=           # blind index 키
 DUPLICATE_DETECTION_SALT=       # 중복 감지 해시 솔트
 
 # 권한
-ADMIN_USER_IDS=                 # admin 표면 허용 supabase user.id 콤마 목록. 미설정 시 fail-open + 경고
 GUEST_SURVEY_GRANTS=            # "<userId>:<surveyId>[,...]" 게스트 설문 위임
 
 # 레이트리밋 (미설정이면 limiter no-op)
