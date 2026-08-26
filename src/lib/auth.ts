@@ -22,6 +22,22 @@ export async function requireAuth(): Promise<AuthUser> {
 }
 
 /**
+ * 자기 계정 표면용 인증 — 세션 + active. **계정 유형을 보지 않는다.**
+ *
+ * oRPC `account` 베이스의 REST·RSC 짝이다. 세 유형 모두 자기 이름·아바타·비밀번호를
+ * 바꾸므로(.pen FLOW 3-2) 아바타 업로드처럼 프로필에 딸린 REST 표면은 이 문을 쓴다.
+ * 내부 전용 표면은 계속 requireAuth 를 쓸 것 — 이 함수로 갈아끼우면 게스트·실사에게
+ * export·업로드가 열린다.
+ */
+export async function requireActiveAccount(): Promise<AuthUser> {
+  const user = await readSessionUser(await headers());
+  if (!user || !isActiveUser(user.status)) {
+    throw new Error('인증이 필요합니다.');
+  }
+  return user;
+}
+
+/**
  * 현재 사용자 조회 — 인증되지 않으면 null 반환. 계정 상태는 걸러내지 않는다.
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {

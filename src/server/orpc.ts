@@ -123,17 +123,29 @@ export const superadmin = authed.use(({ context, next }) => {
 });
 
 /**
- * 설문 스코프 베이스 — 세션 + active 계정. 게스트도 통과한다.
+ * 자기 계정 베이스 — 세션 + active. **계정 유형을 보지 않는다.**
  *
- * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
- * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
- * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
- * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
- * 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
+ * 프로필처럼 "누구든 자기 것만 만지는" 표면 전용이다. authed 는 내부 전용이라 게스트·실사가
+ * 자기 이름·비밀번호조차 바꿀 수 없고, scoped 는 설문 스코프를 강제하는 자리라 surveyId 가
+ * 없는 이 표면에는 맞지 않는다.
+ *
+ * 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고
+ * context.user.id 를 쓸 것. 남의 계정을 지목할 수 있는 표면은 superadmin 소관이다(티켓 04).
  */
-export const scoped = base.use(({ context, next }) => {
+export const account = base.use(({ context, next }) => {
   return next({ context: { user: requireActiveUser(context.user) } });
 });
+
+/**
+ * 설문 스코프 베이스 — 인증 가드는 account 와 **같다**(세션 + active, 게스트도 통과).
+ * 다른 것은 handler 의 의무뿐이라 미들웨어를 새로 쓰지 않고 account 를 그대로 쓴다.
+ *
+ * 이 베이스를 쓰는 procedure 는 반드시 handler 첫 줄에서
+ * assertSurveyAccess(context.user.id, input.surveyId) 를 호출해 설문 일치를 강제해야 한다
+ * (유일한 예외: 입력에 surveyId 가 없는 media.deleteMailAttachmentTmp — tmp 네임스페이스
+ * 검증에 의존). 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
+ */
+export const scoped = account;
 
 /** 설문 접근 강제 — 내부 계정은 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
 export function assertSurveyAccess(userId: string, surveyId: string): void {
