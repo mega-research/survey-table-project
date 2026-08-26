@@ -3,6 +3,73 @@
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
 
+import type { SurveyAssignmentStatus, SurveyVisibility, WorkScope } from './workspace';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// surveys.status — 설문 수명 상태 (컬럼 어휘)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 'closed' 는 미구현 어휘다 — 쓰는 경로가 없고 프로덕션에도 0건이다(조사 종료는 endDate·
+// isPaused 로 한다). 목록 상태 칩(.pen FLOW 6)이 세 값을 다 그리므로 어휘에는 남긴다.
+
+export const surveyStatusValues = ['draft', 'published', 'closed'] as const;
+export type SurveyStatus = (typeof surveyStatusValues)[number];
+
+/** DB text 컬럼 값을 어휘로 접는다 — 모르는 값은 draft 로(로더 정규화 관례, 캐스트 금지). */
+export function normalizeSurveyStatus(value: string): SurveyStatus {
+  return value === 'published' || value === 'closed' ? value : 'draft';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 목록 (surveyBuilder.read.list) — 티켓 07 도입, 티켓 08 확장
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
+ *
+ * owner 두 필드는 화면 편의다 — 카드의 「작성자」 표기와 상세 검색 소유자 필터,
+ * 그리고 수정·삭제 버튼의 노출 근사(canEditSurveyCard)에 쓴다. 실제 판정은 언제나
+ * 서버 capability 엔진이 한다(티켓 07).
+ */
+export interface SurveyListItem {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string | null;
+  privateToken: string | null;
+  responseCount: number;
+  completedResponseCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  /** 마감일 — 상세 검색 기간 필터의 「마감일」 기준. */
+  endDate: Date | null;
+  isPublic: boolean;
+  status: SurveyStatus;
+  /** 소속 팀. 배치 대기 설문은 null 이다(티켓 07). */
+  teamId: string | null;
+  teamName: string | null;
+  visibility: SurveyVisibility;
+  assignmentStatus: SurveyAssignmentStatus;
+  /** 소유자. 0089 2단계 배포 중이라 옛 설문은 null 일 수 있다. */
+  ownerUserId: string | null;
+  ownerName: string | null;
+}
+
+/**
+ * 목록 응답 — 설문뿐 아니라 **어느 범위로 해석됐는지**와 고를 수 있는 범위를 함께 준다.
+ *
+ * 화면이 요청한 범위와 서버가 해석한 범위는 다를 수 있다(해산된 팀 쿠키 등). 해석 결과를
+ * 돌려주지 않으면 스위처가 실제로 보고 있는 것과 다른 팀을 가리킨 채로 남는다.
+ */
+export interface SurveyListResult {
+  scope: WorkScope;
+  /** 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀. */
+  teams: { id: string; name: string }[];
+  /** 「메가리서치」(시스템 전체 보기)를 고를 수 있는가. */
+  canSeeSystemScope: boolean;
+  surveys: SurveyListItem[];
+}
+
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
  *

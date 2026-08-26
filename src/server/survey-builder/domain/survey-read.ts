@@ -7,12 +7,11 @@ import type {
   Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
-import type { SurveyControl } from '@/shared/contracts/survey-builder-io';
 import type {
-  SurveyAssignmentStatus,
-  SurveyVisibility,
-  WorkScope,
-} from '@/shared/contracts/workspace';
+  SurveyControl,
+  SurveyListItem,
+  SurveyListResult,
+} from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
 
@@ -40,46 +39,14 @@ export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 // list (getSurveyListWithCounts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
- */
-export type SurveyListItem = {
-  id: string;
-  title: string;
-  description: string | null;
-  slug: string | null;
-  privateToken: string | null;
-  responseCount: number;
-  completedResponseCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-  isPublic: boolean;
-  /** 소속 팀. 배치 대기 설문은 null 이다(티켓 07). */
-  teamId: string | null;
-  teamName: string | null;
-  visibility: SurveyVisibility;
-  assignmentStatus: SurveyAssignmentStatus;
-};
+// 행·응답 모양은 UI(목록 화면·상세 검색)도 쓰므로 계약 소관 — 여기서 다시 내보낸다(티켓 08).
+export type { SurveyListItem, SurveyListResult };
 export const SurveyListItemSchema = z.custom<SurveyListItem>();
 
 /** 목록 조회 입력 — 화면이 기억하는 작업 범위. 유효성은 서버가 다시 판정한다. */
 export const SurveyListInput = z.object({ scope: z.string().nullish() });
 export type SurveyListInput = z.infer<typeof SurveyListInput>;
 
-/**
- * 목록 응답 — 설문뿐 아니라 **어느 범위로 해석됐는지**와 고를 수 있는 범위를 함께 준다.
- *
- * 화면이 요청한 범위와 서버가 해석한 범위는 다를 수 있다(해산된 팀 쿠키 등). 해석 결과를
- * 돌려주지 않으면 스위처가 실제로 보고 있는 것과 다른 팀을 가리킨 채로 남는다.
- */
-export type SurveyListResult = {
-  scope: WorkScope;
-  /** 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀. */
-  teams: { id: string; name: string }[];
-  /** 「메가리서치」(시스템 전체 보기)를 고를 수 있는가. */
-  canSeeSystemScope: boolean;
-  surveys: SurveyListItem[];
-};
 export const SurveyListOutput = z.custom<SurveyListResult>();
 
 // ─────────────────────────────────────────────────────────────────────────────

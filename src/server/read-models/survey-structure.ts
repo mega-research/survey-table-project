@@ -5,7 +5,7 @@ import { cache } from 'react';
 import { and, desc, eq, isNull, or, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveys, teams } from '@/db/schema';
+import { questionGroups, questions, surveys, teams, users } from '@/db/schema';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
@@ -72,15 +72,19 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
       privateToken: surveys.privateToken,
       createdAt: surveys.createdAt,
       updatedAt: surveys.updatedAt,
+      endDate: surveys.endDate,
       isPublic: surveys.isPublic,
+      status: surveys.status,
       teamId: surveys.teamId,
       teamName: teams.name,
       visibility: surveys.visibility,
       assignmentStatus: surveys.assignmentStatus,
       ownerUserId: surveys.ownerUserId,
+      ownerName: users.name,
     })
     .from(surveys)
     .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .leftJoin(users, eq(users.id, surveys.ownerUserId))
     .where(and(...conditions))
     .orderBy(desc(surveys.createdAt));
 }

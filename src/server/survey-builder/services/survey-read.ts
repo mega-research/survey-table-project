@@ -19,6 +19,7 @@ import {
 import { db } from '@/db';
 import { contactTargets, surveyVersions, surveys } from '@/db/schema';
 import { getVariableCatalog } from '@/server/read-models/variable-catalog';
+import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
@@ -124,11 +125,17 @@ export async function getSurveyListWithCounts(
       completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
       createdAt: survey.createdAt,
       updatedAt: survey.updatedAt,
+      endDate: survey.endDate,
       isPublic: survey.isPublic,
+      // text 컬럼이라 어휘로 접는다 — 캐스트 대신 로더 정규화(JSONB 드리프트 관례와 동일 취지).
+      status: normalizeSurveyStatus(survey.status),
       teamId: survey.teamId,
       teamName: survey.teamName,
       visibility: survey.visibility,
       assignmentStatus: survey.assignmentStatus,
+      // 화면 편의(작성자 표기·소유자 필터·버튼 노출 근사)다 — 판정은 서버 capability 가 한다.
+      ownerUserId: survey.ownerUserId,
+      ownerName: survey.ownerName,
     })),
   };
 }

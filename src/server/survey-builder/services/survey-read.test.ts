@@ -120,12 +120,15 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       privateToken: '11111111-1111-1111-1111-111111111111',
       createdAt,
       updatedAt,
+      endDate: null,
       isPublic: true,
+      status: 'published',
       teamId: 'team-1',
       teamName: '연구1본부 - 1팀',
       visibility: 'team' as const,
       assignmentStatus: 'assigned' as const,
       ownerUserId: 'u-1',
+      ownerName: '홍길동',
       ...over,
     };
   }
@@ -170,15 +173,29 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         completedResponseCount: 3,
         createdAt,
         updatedAt,
+        endDate: null,
         isPublic: true,
+        status: 'published',
         teamId: 'team-1',
         teamName: '연구1본부 - 1팀',
         visibility: 'team',
         assignmentStatus: 'assigned',
+        // 소유자는 화면 편의(작성자 표기·소유자 필터·버튼 노출 근사, 티켓 08)다.
+        // 접근 판정은 여전히 서버 capability 엔진만 한다(티켓 07).
+        ownerUserId: 'u-1',
+        ownerName: '홍길동',
       },
     ]);
-    // ownerUserId 는 목록 밖이다 — 화면이 소유자 판정을 흉내 내지 않게 한다.
-    expect(result.surveys[0]).not.toHaveProperty('ownerUserId');
+  });
+
+  it('status 는 어휘 밖 값을 draft 로 접는다', async () => {
+    vi.mocked(getScopedSurveys).mockResolvedValue([
+      scopedRow({ status: 'weird-legacy-value' }),
+    ] as never);
+
+    const result = await getSurveyListWithCounts(member, null);
+
+    expect(result.surveys[0]?.status).toBe('draft');
   });
 
   it('그 팀의 팀장은 invite_only 까지 보는 조건으로 조회한다', async () => {
