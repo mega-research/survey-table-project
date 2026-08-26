@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 페이즈 A 하드닝 — Codex 적대적 리뷰 7건 반영 완료. `assertSurveyAccess` 가 계정 유형을 먼저 본다(발급한 게스트가 임의 설문에 닿던 구멍), `/api/auth` POST 허용목록, 세션 폐기 표식 `users.sessions_revoked_at`(0087)으로 재설정·로그인 경합 차단, 서버 데이터를 부르는 RSC 페이지 전부 자기 가드 + 메타테스트(`tests/repo/rsc-page-guards.test.ts`). 직전: 티켓 05 프로필 + 계정 유형별 라우팅 — 세 유형 공통 `/admin/profile`, 유형별 홈 SSOT `ACCOUNT_HOME_PATH`, `account` 베이스)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 06 팀·멤버십 — `teams`·`team_members`·`team_lifecycle_events`(0088), 서버 도메인 `server/workspace`(팀 CRUD·pull 모델 멤버십·마지막 팀장 가드·직책 팀 경계), 팀 관리 화면 `/admin/teams`·`/admin/teams/[teamId]`(.pen FLOW 7). 직전: 페이즈 A 하드닝 — `assertSurveyAccess` 가 계정 유형을 먼저 본다, `/api/auth` POST 허용목록, 세션 폐기 표식 `users.sessions_revoked_at`(0087), 서버 데이터를 부르는 RSC 페이지 전부 자기 가드 + 메타테스트(`tests/repo/rsc-page-guards.test.ts`))
 
 ---
 
@@ -77,7 +77,7 @@ src/
 │   ├── analytics/              # 분석 대시보드
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
-├── server/                     # oRPC 백엔드 — 코어 + 도메인 10개 (경량 DDD: domain 순수 · procedures 얇음 · services)
+├── server/                     # oRPC 백엔드 — 코어 + 도메인 11개 (경량 DDD: domain 순수 · procedures 얇음 · services)
 │   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
 │   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
 │   ├── router.ts               # 전체 도메인 router 합성 (AppRouter)
@@ -90,7 +90,7 @@ src/
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
-│       │                       # · mail · analytics · library · auth · media · quota
+│       │                       # · mail · analytics · library · auth · media · quota · workspace
 │       ├── domain/             # zod 계약 + 순수 규칙 (**client-safe** — server-only·Node·DB 의존 0. zod 는 런타임 의존이라 'import 0' 이 아니다)
 │       │                       # UI 도 쓰는 모양은 shared/contracts 소관 — 여기는 그것을 다시 내보내고 서버 전용 입력·규칙만 남긴다
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
@@ -147,15 +147,18 @@ src/
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   ├── analytics/              # 차트 및 리포팅 (23개)
-│   ├── workspace/              # 워크스페이스 관리 (10개, 티켓 03 신설) — 사용자 관리 + 내 프로필
-│   │   │                       # 팀 관리·재배치·사이드바(티켓 06~14)가 여기로 들어온다. 진입점은 폴더 안
-│   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필이 함께 쓴다(루트 잔류 기준 ①)
+│   ├── workspace/              # 워크스페이스 관리 (16개, 티켓 03 신설) — 사용자 관리 + 내 프로필 + 팀 관리
+│   │   │                       # 재배치·사이드바(티켓 08·14)가 여기로 들어온다. 진입점은 폴더 안
+│   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
 │   │   │                       # + user-reset-password-modal · user-rehire-modal + user-vocabulary
 │   │   │                       # + queries/use-users
 │   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
-│   │   └── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
-│   │                           # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
+│   │   ├── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
+│   │   │                       # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
+│   │   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
+│   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
+│   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
 │   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여 설문 목록은 티켓 21·22
 │   └── fieldwork-console/      # 실사 홈 (티켓 05 스텁) — 초대 설문·조사 대상은 티켓 24~27
 │
@@ -251,7 +254,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -289,6 +292,31 @@ user_status_events         # 계정 상태 전이 감사 (append-only)
 > **선반영 주의**: 프로덕션·스테이징에는 5테이블이 2026-07-14 선반영돼 있다. `0084_better_auth_tables.sql` 은
 > **빈 DB 재생 전용 — 프로덕션·스테이징에 적용 금지**, 적용 대상은 `0085_better_auth_v2_reconcile.sql`
 > (user_type + issuer 백필 + 어댑터 기대 인덱스)뿐이다. RLS 5테이블 전부 ON(정책 0 = deny-all).
+
+### 워크스페이스 도메인 (workspace.ts — 팀·멤버십)
+
+```
+teams                      # 팀 = 설문 소유·접근 경계 (0088)
+├── id, name (전체 조직 경로 포함 표시명), description, order
+├── status                 # active | archived — 해산은 삭제가 아니라 archived (ADR-0011, 티켓 13)
+├── archivedBy, archivedAt
+└── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
+
+team_members               # 소속의 단일 정본 (ADR-0008)
+├── id, teamId (FK restrict), userId (FK restrict)
+├── role                   # leader | member
+└── createdAt              (UNIQUE(teamId, userId) — 서로 다른 팀 겸직은 허용)
+
+team_lifecycle_events      # 팀 생성·이름 변경·해산 감사 (append-only)
+├── id, teamId (FK restrict), action (create|rename|dissolve)
+├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름)
+└── createdAt
+```
+
+> 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
+> archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/workspace/services/memberships.ts`
+> 의 `getActiveTeamMemberships` 하나로 모은다. `survey_groups`·`survey_participants`·`surveys.team_id` 는
+> 아직 없다(티켓 07·12·18).
 
 ### 설문 도메인 (surveys.ts)
 
@@ -538,6 +566,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
 /admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
+/admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
+/admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
 /admin/profile                    # 내 프로필 — **세 계정 유형 공통**. /admin 아래지만 내부 전용이 아니다(ACCOUNT_PAGES)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
@@ -662,6 +692,16 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
   않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). 퇴사의 멤버십·소유권 정리와
   재입사의 팀 배정은 티켓 06·14·19 소관이라 아직 없다.
+- **팀 멤버십은 소속의 단일 정본이다**(ADR-0008, 티켓 06). 팀 관리 표면은 `server/workspace` 가
+  담당하고 관문은 두 겹이다 — procedure 의 `assertTeamManager` 가 **입력의 teamId 로** 팀장
+  여부를 묻고(어딘가의 팀장이면 통과시키는 순간 A팀 팀장이 B팀 멤버를 만진다), 서비스가
+  대상의 소속·상태·유형을 다시 본다. 특히 직책 수정은 **대상이 그 팀 소속인지** 확인해야
+  한다 — 확인이 빠지면 팀장이 userId 만 갈아끼워 타 팀·미배치·슈퍼어드민의 직책을 바꾼다.
+  팀 목록·생성·이름 변경은 조직 구조를 다루므로 `superadmin` 전용이고, 상세는 `authed` 로
+  열되 소속이 아니면 NOT_FOUND(존재를 알려주지 않는다). 팀원 추가는 **pull 모델**이라
+  미배치 internal active 만 검색·추가되며, 타 팀 active 멤버를 당기는 겸직 생성은
+  슈퍼어드민만 할 수 있다. 마지막 팀장은 강등도 제외도 막고, 판정 경합은 팀 키
+  advisory lock(같은 사람을 두 팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화한다.
 - **RSC 페이지는 자기 가드를 갖는다.** App Router 는 소프트 내비게이션에서 상위 레이아웃을
   다시 돌리지 않는다 — 콘솔 RSC 는 procedure 가 아니라 service 를 직접 부르므로 레이아웃만
   믿으면 세션이 폐기된 뒤에도 데이터를 읽는다. 서버 데이터를 부르는 `page.tsx` 는 전부
