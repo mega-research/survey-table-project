@@ -15,6 +15,7 @@ import {
   type UserTypeFilter,
 } from '@/shared/contracts/auth-io';
 
+import { PRIMARY_BUTTON } from '../field-styles';
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
 import { UserRehireModal } from './user-rehire-modal';
@@ -81,7 +82,7 @@ export function UserManagementView() {
           </div>
           <Button
             onClick={() => setCreateOpen(true)}
-            className="h-[38px] rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
+            className={PRIMARY_BUTTON}
           >
             <Plus className="mr-1 h-4 w-4" />
             사용자 생성

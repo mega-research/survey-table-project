@@ -43,14 +43,13 @@ export function useTeamDetail(teamId: string) {
 /**
  * 팀원 추가 후보 검색 — 미배치 internal 사용자만.
  *
- * 모달이 열려 있을 때만 돈다(enabled). 검색어는 호출측이 디바운스해 넘긴다 — 타이핑마다
- * 왕복하면 서버가 아니라 사용자가 먼저 지친다.
+ * 모달이 열려 있는 동안만 마운트되므로 따로 열림 여부를 받지 않는다. 검색어는 호출측이
+ * 디바운스해 넘긴다 — 타이핑마다 왕복하면 서버가 아니라 사용자가 먼저 지친다.
  */
-export function useAssignableUsers(teamId: string, query: string, enabled: boolean) {
+export function useAssignableUsers(teamId: string, query: string) {
   return useQuery({
     queryKey: teamKeys.assignable(teamId, query),
     queryFn: () => orpc.workspace.members.searchAssignable.call({ teamId, query }),
-    enabled,
     staleTime: 5_000,
     refetchOnWindowFocus: false,
   });

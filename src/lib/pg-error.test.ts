@@ -37,4 +37,16 @@ describe('isUniqueViolation', () => {
     expect(isUniqueViolation(null)).toBe(false);
     expect(isUniqueViolation('23505')).toBe(false);
   });
+
+  it('SQL 원문에 unique 라는 이름이 실려 있다고 참이 되지 않는다', () => {
+    // cause 사슬을 따라가면서 drizzle 의 `Failed query: <SQL>` 메시지도 검사 대상이 됐다.
+    // 인덱스·컬럼 이름에 unique 가 들어간 스키마에서 아무 에러나 UNIQUE 위반으로 읽히면
+    // 도메인 에러 매핑이 통째로 거짓말이 된다.
+    const notNull = new Error('Failed query: insert into "teams" ("unique_code") values ($1)', {
+      cause: Object.assign(new Error('null value in column violates not-null constraint'), {
+        code: '23502',
+      }),
+    });
+    expect(isUniqueViolation(notNull)).toBe(false);
+  });
 });

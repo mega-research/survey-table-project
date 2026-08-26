@@ -297,7 +297,7 @@ user_status_events         # 계정 상태 전이 감사 (append-only)
 
 ```
 teams                      # 팀 = 설문 소유·접근 경계 (0088)
-├── id, name (전체 조직 경로 포함 표시명), description, order
+├── id, name (전체 조직 경로 포함 표시명), order
 ├── status                 # active | archived — 해산은 삭제가 아니라 archived (ADR-0011, 티켓 13)
 ├── archivedBy, archivedAt
 └── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
@@ -307,12 +307,15 @@ team_members               # 소속의 단일 정본 (ADR-0008)
 ├── role                   # leader | member
 └── createdAt              (UNIQUE(teamId, userId) — 서로 다른 팀 겸직은 허용)
 
-team_lifecycle_events      # 팀 생성·이름 변경·해산 감사 (append-only)
-├── id, teamId (FK restrict), action (create|rename|dissolve)
-├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름)
+team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 구성
+├── id, teamId (FK restrict)
+├── action                 # create|rename|dissolve | member_add|member_role|member_remove
+├── targetUserId           # 멤버 사건의 대상 (팀 자체 사건은 NULL)
+├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
 └── createdAt
 ```
 
+> 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
 > archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/workspace/services/memberships.ts`
 > 의 `getActiveTeamMemberships` 하나로 모은다. `survey_groups`·`survey_participants`·`surveys.team_id` 는
@@ -698,10 +701,14 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   대상의 소속·상태·유형을 다시 본다. 특히 직책 수정은 **대상이 그 팀 소속인지** 확인해야
   한다 — 확인이 빠지면 팀장이 userId 만 갈아끼워 타 팀·미배치·슈퍼어드민의 직책을 바꾼다.
   팀 목록·생성·이름 변경은 조직 구조를 다루므로 `superadmin` 전용이고, 상세는 `authed` 로
-  열되 소속이 아니면 NOT_FOUND(존재를 알려주지 않는다). 팀원 추가는 **pull 모델**이라
-  미배치 internal active 만 검색·추가되며, 타 팀 active 멤버를 당기는 겸직 생성은
-  슈퍼어드민만 할 수 있다. 마지막 팀장은 강등도 제외도 막고, 판정 경합은 팀 키
-  advisory lock(같은 사람을 두 팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화한다.
+  열되 **슈퍼어드민·그 팀 팀장**이 아니면 NOT_FOUND(존재를 알려주지 않는다). 팀원 추가는
+  **pull 모델**이라 미배치 internal active 만 검색·추가되며, 타 팀 active 멤버를 당기는
+  겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
+  팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
+  `team_lifecycle_events` 에 감사 행을 남긴다.
+- **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
+  세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
+  팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
 - **RSC 페이지는 자기 가드를 갖는다.** App Router 는 소프트 내비게이션에서 상위 레이아웃을
   다시 돌리지 않는다 — 콘솔 RSC 는 procedure 가 아니라 service 를 직접 부르므로 레이아웃만
   믿으면 세션이 폐기된 뒤에도 데이터를 읽는다. 서버 데이터를 부르는 `page.tsx` 는 전부

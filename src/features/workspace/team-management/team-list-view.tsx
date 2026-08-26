@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { TeamListItem } from '@/shared/contracts/workspace-io';
 
+import { PRIMARY_BUTTON } from '../field-styles';
+
 import { useTeams } from './queries/use-teams';
 import { TeamFormModal } from './team-form-modal';
 
@@ -52,7 +54,8 @@ function TeamCard({ team }: { team: TeamListItem }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <span className="text-[13px] text-[#6E6E73]">{team.description ?? '독립 접근 단위'}</span>
+      {/* 카드 부제는 팀마다 다른 설명이 아니라 고정 문구다 — 팀이 무엇인지를 말한다(.pen 7-1). */}
+      <span className="text-[13px] text-[#6E6E73]">독립 접근 단위</span>
       <CardStats
         items={[
           { value: team.memberCount, label: '멤버' },
@@ -92,7 +95,7 @@ export function TeamListView() {
           <h1 className="text-[22px] font-semibold text-[#1C1C1E]">팀 관리</h1>
           <Button
             onClick={() => setCreateOpen(true)}
-            className="h-[38px] rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
+            className={PRIMARY_BUTTON}
           >
             <Plus className="mr-1 h-4 w-4" />새 팀
           </Button>

@@ -29,24 +29,36 @@ export const TEAM_ROLE_LABEL: Record<TeamRole, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// team_lifecycle_events — 팀 수명주기 감사 어휘
+// team_lifecycle_events — 팀 감사 어휘 (팀 자체 + 멤버 구성)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// dissolve 는 티켓 13 이 쓴다. 어휘를 지금 함께 두는 이유는 CHECK 제약이 이미 세 값을
-// 알고 있어서다 — 나중에 값을 늘리려면 마이그레이션이 또 필요하다.
+// 멤버 사건까지 한 테이블에 남기는 이유는 제외가 team_members 행을 지우기 때문이다 —
+// 감사 행이 없으면 "누가 언제 누구를 뺐는가" 가 어디에도 남지 않는다.
+// dissolve 는 티켓 13 이 쓴다. 어휘를 지금 함께 두는 이유는 CHECK 제약이 이미 값을 알고
+// 있어서다 — 나중에 값을 늘리려면 마이그레이션이 또 필요하다.
 
-export const teamLifecycleActionValues = ['create', 'rename', 'dissolve'] as const;
+export const teamLifecycleActionValues = [
+  'create',
+  'rename',
+  'dissolve',
+  'member_add',
+  'member_role',
+  'member_remove',
+] as const;
 export type TeamLifecycleAction = (typeof teamLifecycleActionValues)[number];
 
 /**
  * 감사 행의 metadata JSONB.
  *
- * 팀 이름은 바뀌므로 사건 시점의 이름을 함께 남긴다 — 나중에 teams 를 조인하면 지금 이름만
- * 보이고 "그때 무엇을 만들었는가" 를 알 수 없다.
+ * 팀 이름·역할은 바뀌므로 사건 시점의 값을 함께 남긴다 — 나중에 teams·team_members 를
+ * 조인하면 지금 값만 보이고 "그때 무엇이 어떻게 바뀌었는가" 를 알 수 없다.
  */
 export interface TeamLifecycleMetadata {
   teamName?: string;
   previousName?: string;
+  /** 멤버 사건의 역할 — member_add 는 to 만, member_role 은 from·to 둘 다. */
+  fromRole?: TeamRole;
+  toRole?: TeamRole;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

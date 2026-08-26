@@ -8,6 +8,7 @@ import {
   Activity,
   ArrowLeft,
   BarChart3,
+  Building2,
   Copy,
   CopyPlus,
   Edit,
@@ -154,11 +155,18 @@ export default function SurveyListPage() {
             </Button>
             {currentUser?.isSuperadmin && (
               // 사이드바(티켓 08) 전까지의 임시 진입점. 접근 판정은 페이지·procedure 가 한다.
-              <Link href="/admin/users">
-                <Button variant="ghost" size="icon" title="사용자 관리">
-                  <Users className="h-5 w-5" />
-                </Button>
-              </Link>
+              <>
+                <Link href="/admin/users">
+                  <Button variant="ghost" size="icon" title="사용자 관리">
+                    <Users className="h-5 w-5" />
+                  </Button>
+                </Link>
+                <Link href="/admin/teams">
+                  <Button variant="ghost" size="icon" title="팀 관리">
+                    <Building2 className="h-5 w-5" />
+                  </Button>
+                </Link>
+              </>
             )}
             <Link href="/admin/profile">
               <Button variant="ghost" size="icon" title="프로필">

@@ -13,8 +13,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/get-error-message';
+import { isActiveUser } from '@/shared/contracts/auth';
 import { TEAM_ROLE_LABEL, teamRoleValues, type TeamRole } from '@/shared/contracts/workspace';
 import type { TeamMemberItem } from '@/shared/contracts/workspace-io';
+
+import { USER_STATUS_LABEL } from '../user-management/user-vocabulary';
 
 import {
   useChangeTeamMemberRole,
@@ -91,8 +94,17 @@ export function TeamMemberRow({ teamId, member, canManage }: Props) {
             {member.name.slice(0, 1)}
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-[14.5px] font-semibold text-[#1C1C1E]">
-              {member.name}
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-[14.5px] font-semibold text-[#1C1C1E]">
+                {member.name}
+              </span>
+              {/* 비활성 멤버는 표식을 단다 — 정지·퇴사한 사람이 팀장 자리에 남아 있는 것을
+                  화면에서 알아볼 수 있어야 한다(재배치는 티켓 14 소관). */}
+              {!isActiveUser(member.status) && (
+                <span className="shrink-0 rounded-full bg-[#F5F5F7] px-2 py-[2px] text-[10.5px] font-semibold text-[#6E6E73]">
+                  {USER_STATUS_LABEL[member.status]}
+                </span>
+              )}
             </span>
             <span className="truncate text-[12px] text-[#6E6E73]">
               {member.email}

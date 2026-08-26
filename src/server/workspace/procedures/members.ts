@@ -19,7 +19,7 @@ import {
   WorkspaceActionOutput,
 } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '../services/memberships';
+import { getTeamRole } from '../services/active-membership';
 import { toWorkspaceRpcError } from './teams';
 
 /**
@@ -32,8 +32,8 @@ async function assertTeamManager(
   user: { id: string; isSuperadmin: boolean },
   teamId: string,
 ): Promise<void> {
-  if (user.isSuperadmin) return;
-  const role = await getTeamRole(user.id, teamId);
+  // 슈퍼어드민은 소속을 묻지 않는다(왕복 회피). 판정 자체는 아래 술어 하나가 한다.
+  const role = user.isSuperadmin ? null : await getTeamRole(user.id, teamId);
   if (!canManageTeamMembers(user, role)) {
     throw new ORPCError('FORBIDDEN', { message: '팀 관리 권한이 없습니다.' });
   }
@@ -76,7 +76,7 @@ const add = authed
   .handler(async ({ input, context }) => {
     await assertTeamManager(context.user, input.teamId);
     return svc
-      .addMember({ isSuperadmin: context.user.isSuperadmin }, input)
+      .addMember({ id: context.user.id, isSuperadmin: context.user.isSuperadmin }, input)
       .catch(rethrowMemberError);
   });
 
@@ -86,7 +86,7 @@ const changeRole = authed
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertTeamManager(context.user, input.teamId);
-    return svc.changeMemberRole(input).catch(rethrowMemberError);
+    return svc.changeMemberRole(context.user.id, input).catch(rethrowMemberError);
   });
 
 /** 팀원 제외 — 마지막 팀장 제외 금지. */
@@ -95,7 +95,7 @@ const remove = authed
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertTeamManager(context.user, input.teamId);
-    return svc.removeMember(input).catch(rethrowMemberError);
+    return svc.removeMember(context.user.id, input).catch(rethrowMemberError);
   });
 
 /** 직책 수정 — 요청자의 팀 권한과 **대상의 팀 소속**을 둘 다 본다(서비스 주석 참조). */

@@ -3,14 +3,13 @@
 // client-safe — server-only·Node·DB 의존 없음(zod 는 런타임 의존).
 import * as z from 'zod';
 
-import { teamRoleValues } from './workspace';
 import { userStatusValues } from './auth';
+import { teamRoleValues } from './workspace';
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
 /** 팀 이름 — 전체 조직 경로를 담는다(`연구1본부 - 1팀`). 표시용이지만 활성 팀 안에서 유일하다. */
 const TeamNameField = z.string().trim().min(1, '팀 이름을 입력하세요.').max(100);
-const TeamDescriptionField = z.string().trim().max(500);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 팀 관리 목록 (.pen FLOW 7-1)
@@ -19,7 +18,6 @@ const TeamDescriptionField = z.string().trim().max(500);
 export const TeamListItem = z.object({
   id: z.uuid(),
   name: z.string(),
-  description: z.string().nullable(),
   memberCount: z.number().int(),
   /**
    * 이 팀이 소유한 설문 수.
@@ -49,20 +47,6 @@ export const ListTeamsOutput = z.object({
 export type ListTeamsOutput = z.infer<typeof ListTeamsOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 내 팀 목록 — 팀 스위처·팀 상세 진입 (티켓 08 이 사이드바에서 쓴다)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const MyTeamItem = z.object({
-  teamId: z.uuid(),
-  teamName: z.string(),
-  role: TeamRoleSchema,
-});
-export type MyTeamItem = z.infer<typeof MyTeamItem>;
-
-export const ListMyTeamsOutput = z.array(MyTeamItem);
-export type ListMyTeamsOutput = z.infer<typeof ListMyTeamsOutput>;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 팀 상세 (.pen FLOW 7-2)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -73,6 +57,10 @@ export const TeamMemberItem = z.object({
   /** 직책 — users 전역 속성. 팀 상세에서 팀장·슈퍼어드민이 인라인 편집한다. */
   jobTitle: z.string().nullable(),
   role: TeamRoleSchema,
+  /**
+   * 계정 상태. 팀 상세는 비활성 멤버도 그대로 보여주고 표식을 단다 — 안 보이면 정지·퇴사한
+   * 사람이 팀장 자리를 차지한 채 남아 있는 것을 아무도 눈치채지 못한다.
+   */
   status: z.enum(userStatusValues),
   /**
    * 이 사람이 **다른** 활성 팀에 소속된 수. 0 이면 겸직 없음.
@@ -92,7 +80,6 @@ export type TeamMemberItem = z.infer<typeof TeamMemberItem>;
 export const TeamDetailOutput = z.object({
   id: z.uuid(),
   name: z.string(),
-  description: z.string().nullable(),
   memberCount: z.number().int(),
   surveyCount: z.number().int(),
   members: z.array(TeamMemberItem),
@@ -108,22 +95,14 @@ export type TeamIdInput = z.infer<typeof TeamIdInput>;
 // 팀 생성·이름 변경 (슈퍼어드민)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CreateTeamInput = z.object({
-  name: TeamNameField,
-  description: TeamDescriptionField.optional(),
-});
+export const CreateTeamInput = z.object({ name: TeamNameField });
 export type CreateTeamInput = z.infer<typeof CreateTeamInput>;
 
 /** 생성 직후 응답 — drizzle raw row(status·archivedBy 등 내부 컬럼)를 노출하지 않는다. */
 export const CreateTeamOutput = z.object({ id: z.uuid() });
 export type CreateTeamOutput = z.infer<typeof CreateTeamOutput>;
 
-export const RenameTeamInput = z.object({
-  teamId: z.uuid(),
-  name: TeamNameField,
-  /** null 로 보내면 설명을 지운다. 생략하면 그대로 둔다. */
-  description: TeamDescriptionField.nullable().optional(),
-});
+export const RenameTeamInput = z.object({ teamId: z.uuid(), name: TeamNameField });
 export type RenameTeamInput = z.infer<typeof RenameTeamInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────

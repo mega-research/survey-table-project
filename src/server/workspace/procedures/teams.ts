@@ -6,7 +6,6 @@ import {
   CreateTeamInput,
   CreateTeamOutput,
   DuplicateTeamNameError,
-  ListMyTeamsOutput,
   ListTeamsOutput,
   RenameTeamInput,
   TeamDetailOutput,
@@ -38,11 +37,6 @@ export function rethrowWorkspaceError(err: unknown): never {
 /** 팀 관리 목록 (.pen FLOW 7-1) — 조직 구조를 보는 화면이라 슈퍼어드민 전용. */
 const list = superadmin.output(ListTeamsOutput).handler(() => svc.listTeams());
 
-/** 내가 속한 활성 팀 — 팀 스위처·팀 상세 진입(티켓 08). */
-const listMine = authed
-  .output(ListMyTeamsOutput)
-  .handler(({ context }) => svc.listMyTeams(context.user.id));
-
 /** 팀 생성 (슈퍼어드민) — 이름은 전체 조직 경로를 담는다(ADR-0008). */
 const create = superadmin
   .input(CreateTeamInput)
@@ -51,7 +45,7 @@ const create = superadmin
     svc.createTeam(context.user.id, input).catch(rethrowWorkspaceError),
   );
 
-/** 팀 이름·설명 수정 (슈퍼어드민) — 조직도를 바꾸는 일이라 팀장에게 열지 않는다. */
+/** 팀 이름 수정 (슈퍼어드민) — 조직도를 바꾸는 일이라 팀장에게 열지 않는다. */
 const rename = superadmin
   .input(RenameTeamInput)
   .output(WorkspaceActionOutput)
@@ -60,10 +54,10 @@ const rename = superadmin
   );
 
 /**
- * 팀 상세 (.pen FLOW 7-2) — 슈퍼어드민 또는 그 팀 소속만.
+ * 팀 상세 (.pen FLOW 7-2) — 슈퍼어드민 또는 그 팀 팀장.
  *
- * 소속 판정은 서비스가 한다. 목록(list)과 달리 authed 인 이유는 팀장·팀원도 자기 팀 상세를
- * 열기 때문이다 — 남의 팀 id 를 찍으면 NOT_FOUND 로 떨어진다(존재를 알려주지 않는다).
+ * 판정은 서비스가 한다. 목록(list)과 달리 authed 인 이유는 팀장도 자기 팀 상세를 열기
+ * 때문이다 — 자격이 없으면 NOT_FOUND 로 떨어진다(존재를 알려주지 않는다).
  */
 const detail = authed
   .input(TeamIdInput)
@@ -77,4 +71,4 @@ const detail = authed
       .catch(rethrowWorkspaceError),
   );
 
-export const teams = { list, listMine, create, rename, detail };
+export const teams = { list, create, rename, detail };

@@ -12,13 +12,12 @@ import {
   TeamNotFoundError,
   type CreateTeamInput,
   type CreateTeamOutput,
-  type ListMyTeamsOutput,
   type ListTeamsOutput,
   type RenameTeamInput,
   type TeamDetailOutput,
   type WorkspaceActionOutput,
 } from '../domain/teams';
-import { getActiveTeamMemberships } from './memberships';
+import { getTeamRole } from './active-membership';
 
 const OK: WorkspaceActionOutput = { success: true };
 
@@ -43,7 +42,6 @@ export async function listTeams(): Promise<ListTeamsOutput> {
     .select({
       id: teams.id,
       name: teams.name,
-      description: teams.description,
       memberCount: sql<number>`count(${teamMembers.id})::int`,
     })
     .from(teams)
@@ -61,12 +59,6 @@ export async function listTeams(): Promise<ListTeamsOutput> {
     teams: rows.map((row) => ({ ...row, surveyCount: teamSurveyCount() })),
     systemSummary: { teamCount: rows.length, surveyCount: surveyTotal?.value ?? 0 },
   };
-}
-
-/** 내가 속한 활성 팀 — 팀 스위처·팀 상세 진입(티켓 08)이 쓴다. */
-export async function listMyTeams(userId: string): Promise<ListMyTeamsOutput> {
-  const memberships = await getActiveTeamMemberships(userId);
-  return memberships.map((m) => ({ teamId: m.teamId, teamName: m.teamName, role: m.role }));
 }
 
 /**
@@ -88,11 +80,7 @@ export async function createTeam(
 
       const [team] = await tx
         .insert(teams)
-        .values({
-          name: input.name,
-          description: input.description ?? null,
-          order: (maxOrder?.value ?? -1) + 1,
-        })
+        .values({ name: input.name, order: (maxOrder?.value ?? -1) + 1 })
         .returning({ id: teams.id, name: teams.name });
       if (!team) throw new Error('createTeam: 팀 생성 실패');
 
@@ -112,7 +100,7 @@ export async function createTeam(
 }
 
 /**
- * 팀 이름·설명 수정 (슈퍼어드민).
+ * 팀 이름 수정 (슈퍼어드민).
  *
  * 이름은 전체 조직 경로라 바뀌면 조직도가 바뀐 것이다 — 감사에 이전 이름을 함께 남긴다.
  * 해산된 팀은 대상이 아니다(status='active' 조건).
@@ -129,24 +117,20 @@ export async function renameTeam(
       });
       if (!before) throw new TeamNotFoundError();
 
+      // 이름이 그대로면 아무 일도 하지 않는다 — 조직도는 바뀌지 않았고 감사에 남길 것도 없다.
+      if (before.name === input.name) return OK;
+
       await tx
         .update(teams)
-        .set({
-          name: input.name,
-          ...(input.description !== undefined ? { description: input.description } : {}),
-          updatedAt: new Date(),
-        })
+        .set({ name: input.name, updatedAt: new Date() })
         .where(eq(teams.id, before.id));
 
-      // 이름이 그대로면(설명만 고침) 감사 행을 남기지 않는다 — 조직도는 바뀌지 않았다.
-      if (before.name !== input.name) {
-        await tx.insert(teamLifecycleEvents).values({
-          teamId: before.id,
-          action: 'rename',
-          changedBy: actorUserId,
-          metadata: { teamName: input.name, previousName: before.name },
-        });
-      }
+      await tx.insert(teamLifecycleEvents).values({
+        teamId: before.id,
+        action: 'rename',
+        changedBy: actorUserId,
+        metadata: { teamName: input.name, previousName: before.name },
+      });
 
       return OK;
     });
@@ -159,8 +143,9 @@ export async function renameTeam(
 /**
  * 팀 상세 (.pen FLOW 7-2) — 멤버 표 + 요청자의 관리 권한.
  *
- * 접근은 슈퍼어드민이거나 그 팀 소속이어야 한다. 소속이 아닌 사람에게 팀 이름·멤버 명단을
- * 보여줄 이유가 없다 — 팀은 독립 접근 단위다(ADR-0008).
+ * 여는 사람은 **슈퍼어드민 또는 그 팀 팀장**이다(.pen 7-2 컬럼 머리). 이 화면은 명단·이메일·
+ * 겸직 수를 그대로 펼치는 관리 화면이라 팀원에게까지 열 이유가 지금은 없다 — 필요해지면
+ * 그때 여는 편이, 열어둔 것을 뒤늦게 좁히는 것보다 낫다.
  */
 export async function getTeamDetail(
   actor: { id: string; isSuperadmin: boolean },
@@ -168,14 +153,12 @@ export async function getTeamDetail(
 ): Promise<TeamDetailOutput> {
   const team = await db.query.teams.findFirst({
     where: and(eq(teams.id, teamId), eq(teams.status, 'active')),
-    columns: { id: true, name: true, description: true },
+    columns: { id: true, name: true },
   });
   if (!team) throw new TeamNotFoundError();
 
-  const myRole = actor.isSuperadmin
-    ? null
-    : ((await getActiveTeamMemberships(actor.id)).find((m) => m.teamId === teamId)?.role ?? null);
-  if (!actor.isSuperadmin && myRole === null) {
+  const myRole = actor.isSuperadmin ? null : await getTeamRole(actor.id, teamId);
+  if (!canManageTeamMembers(actor, myRole)) {
     // 존재를 알려주지 않는다 — 남의 팀 id 를 찍어보는 것과 없는 팀을 찍어보는 것이 같은 답을 받는다.
     throw new TeamNotFoundError();
   }
@@ -204,7 +187,8 @@ export async function getTeamDetail(
     .leftJoin(otherTeams, eq(otherTeams.userId, teamMembers.userId))
     .where(eq(teamMembers.teamId, teamId))
     // 팀장을 위에 세운다 — 표의 첫 줄이 누구에게 물어야 하는지를 알려준다.
-    .orderBy(asc(teamMembers.role), asc(users.name));
+    // 역할 문자열의 사전순에 기대지 않는다: 값이 하나만 늘어도 조용히 순서가 뒤집힌다.
+    .orderBy(sql`case when ${teamMembers.role} = 'leader' then 0 else 1 end`, asc(users.name));
 
   return {
     ...team,

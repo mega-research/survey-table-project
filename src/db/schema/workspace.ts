@@ -31,7 +31,6 @@ export const teams = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
-    description: text('description'),
     order: integer('order').notNull().default(0),
     status: text('status').$type<TeamStatus>().notNull().default('active'),
     archivedBy: uuid('archived_by').references(() => users.id, { onDelete: 'restrict' }),
@@ -69,7 +68,10 @@ export const teamMembers = pgTable(
   ],
 );
 
-/** 팀 생성·이름 변경·해산 감사 기록. 수정·삭제하지 않는 append-only 테이블이다. */
+/**
+ * 팀 감사 기록 — 팀 자체(create/rename/dissolve)와 멤버 구성(member_*).
+ * 수정·삭제하지 않는 append-only 테이블이다.
+ */
 export const teamLifecycleEvents = pgTable(
   'team_lifecycle_events',
   {
@@ -78,6 +80,8 @@ export const teamLifecycleEvents = pgTable(
       .notNull()
       .references(() => teams.id, { onDelete: 'restrict' }),
     action: text('action').$type<TeamLifecycleAction>().notNull(),
+    /** 멤버 사건의 대상. 팀 자체 사건에서는 null 이다. */
+    targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'restrict' }),
     changedBy: uuid('changed_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

@@ -15,7 +15,6 @@ import { teams } from './teams';
 
 vi.mock('../services/teams', () => ({
   listTeams: vi.fn(),
-  listMyTeams: vi.fn(),
   createTeam: vi.fn(),
   renameTeam: vi.fn(),
   getTeamDetail: vi.fn(),
@@ -46,13 +45,11 @@ beforeEach(() => {
     teams: [],
     systemSummary: { teamCount: 0, surveyCount: 0 },
   });
-  vi.mocked(svc.listMyTeams).mockResolvedValue([]);
   vi.mocked(svc.createTeam).mockResolvedValue({ id: TEAM_ID });
   vi.mocked(svc.renameTeam).mockResolvedValue({ success: true });
   vi.mocked(svc.getTeamDetail).mockResolvedValue({
     id: TEAM_ID,
     name: '연구1본부 - 1팀',
-    description: null,
     memberCount: 0,
     surveyCount: 0,
     members: [],
@@ -97,7 +94,7 @@ describe('팀 관리 표면', () => {
 });
 
 describe('팀 상세', () => {
-  it('슈퍼어드민이 아니어도 열리고, 소속 판정은 서비스가 한다', async () => {
+  it('슈퍼어드민이 아니어도 열리고, 자격 판정은 서비스가 한다', async () => {
     await clientWith().teams.detail({ teamId: TEAM_ID });
     expect(svc.getTeamDetail).toHaveBeenCalledWith(
       { id: ACTOR_ID, isSuperadmin: false },
@@ -105,7 +102,7 @@ describe('팀 상세', () => {
     );
   });
 
-  it('남의 팀은 존재를 알려주지 않는다 (NOT_FOUND)', async () => {
+  it('자격이 없으면 존재를 알려주지 않는다 (NOT_FOUND)', async () => {
     vi.mocked(svc.getTeamDetail).mockRejectedValue(new TeamNotFoundError());
     await expect(clientWith().teams.detail({ teamId: TEAM_ID })).rejects.toMatchObject({
       code: 'NOT_FOUND',

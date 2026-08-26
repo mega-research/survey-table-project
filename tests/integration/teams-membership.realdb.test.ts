@@ -8,7 +8,7 @@
  * 실행 조건: DATABASE_URL 이 127.0.0.1/localhost 일 때만 (pnpm test:integration).
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
@@ -35,8 +35,9 @@ import { createTeam, getTeamDetail, listTeams } from '@/server/workspace/service
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
-const SUPERADMIN = { isSuperadmin: true };
-const LEADER = { isSuperadmin: false };
+/** 행위자 — 감사 행의 changedBy 가 되므로 id 가 필요하다. beforeEach 가 실제 값을 심는다. */
+let SUPERADMIN = { id: '', isSuperadmin: true };
+let LEADER = { id: '', isSuperadmin: false };
 
 const createdUserIds: string[] = [];
 const createdTeamIds: string[] = [];
@@ -80,6 +81,8 @@ let actorId: string;
 beforeEach(async () => {
   if (!isLocalDb) return;
   actorId = await seedUser({ isSuperadmin: true });
+  SUPERADMIN = { id: actorId, isSuperadmin: true };
+  LEADER = { id: actorId, isSuperadmin: false };
 });
 
 afterAll(async () => {
@@ -198,11 +201,27 @@ describe.skipIf(!isLocalDb)('마지막 팀장 (real local DB)', () => {
     await addMember(SUPERADMIN, { teamId, userId: leaderId, role: 'leader' });
 
     await expect(
-      changeMemberRole({ teamId, userId: leaderId, role: 'member' }),
+      changeMemberRole(actorId, { teamId, userId: leaderId, role: 'member' }),
     ).rejects.toBeInstanceOf(LastTeamLeaderError);
-    await expect(removeMember({ teamId, userId: leaderId })).rejects.toBeInstanceOf(
+    await expect(removeMember(actorId, { teamId, userId: leaderId })).rejects.toBeInstanceOf(
       LastTeamLeaderError,
     );
+  });
+
+  it('퇴사한 유일 팀장은 제외할 수 있다 — 유령 팀장에 팀이 잠기지 않는다', async () => {
+    const teamId = await seedTeam(actorId);
+    const leaderId = await seedUser();
+    await addMember(SUPERADMIN, { teamId, userId: leaderId, role: 'leader' });
+    // 계정 상태 전이 자체는 티켓 04 소관이라 여기서는 결과 상태만 만든다.
+    await db.update(users).set({ status: 'departed' }).where(eq(users.id, leaderId));
+
+    await removeMember(actorId, { teamId, userId: leaderId });
+
+    const remaining = await db
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .where(eq(teamMembers.teamId, teamId));
+    expect(remaining).toEqual([]);
   });
 
   it('팀장이 둘이면 한 명은 내려올 수 있다', async () => {
@@ -212,7 +231,7 @@ describe.skipIf(!isLocalDb)('마지막 팀장 (real local DB)', () => {
     await addMember(SUPERADMIN, { teamId, userId: first, role: 'leader' });
     await addMember(SUPERADMIN, { teamId, userId: second, role: 'leader' });
 
-    await changeMemberRole({ teamId, userId: second, role: 'member' });
+    await changeMemberRole(actorId, { teamId, userId: second, role: 'member' });
 
     const [row] = await db
       .select({ role: teamMembers.role })
@@ -228,13 +247,71 @@ describe.skipIf(!isLocalDb)('마지막 팀장 (real local DB)', () => {
     await addMember(SUPERADMIN, { teamId: teamA, userId, role: 'member' });
     await addMember(SUPERADMIN, { teamId: teamB, userId, role: 'member' });
 
-    await removeMember({ teamId: teamA, userId });
+    await removeMember(actorId, { teamId: teamA, userId });
 
     const remaining = await db
       .select({ teamId: teamMembers.teamId })
       .from(teamMembers)
       .where(eq(teamMembers.userId, userId));
     expect(remaining).toEqual([{ teamId: teamB }]);
+  });
+});
+
+describe.skipIf(!isLocalDb)('멤버 구성 감사 (real local DB)', () => {
+  it('추가·역할 변경·제외가 모두 감사 행을 남긴다', async () => {
+    const teamId = await seedTeam(actorId);
+    const userId = await seedUser();
+    const helper = await seedUser();
+    // 마지막 팀장 가드에 걸리지 않도록 팀장을 하나 더 둔다.
+    await addMember(SUPERADMIN, { teamId, userId: helper, role: 'leader' });
+
+    await addMember(SUPERADMIN, { teamId, userId, role: 'member' });
+    await changeMemberRole(actorId, { teamId, userId, role: 'leader' });
+    await removeMember(actorId, { teamId, userId });
+
+    const events = await db
+      .select({
+        action: teamLifecycleEvents.action,
+        targetUserId: teamLifecycleEvents.targetUserId,
+        changedBy: teamLifecycleEvents.changedBy,
+        metadata: teamLifecycleEvents.metadata,
+      })
+      .from(teamLifecycleEvents)
+      .where(
+        and(
+          eq(teamLifecycleEvents.teamId, teamId),
+          eq(teamLifecycleEvents.targetUserId, userId),
+        ),
+      )
+      .orderBy(asc(teamLifecycleEvents.createdAt));
+
+    expect(events.map((event) => event.action)).toEqual([
+      'member_add',
+      'member_role',
+      'member_remove',
+    ]);
+    expect(events.every((event) => event.changedBy === actorId)).toBe(true);
+    // 제외된 사람의 마지막 역할은 team_members 가 사라진 뒤 여기에만 남는다.
+    expect(events[2]?.metadata).toEqual({ fromRole: 'leader' });
+  });
+
+  it('역할이 그대로면 감사 행을 남기지 않는다', async () => {
+    const teamId = await seedTeam(actorId);
+    const userId = await seedUser();
+    await addMember(SUPERADMIN, { teamId, userId, role: 'member' });
+
+    await changeMemberRole(actorId, { teamId, userId, role: 'member' });
+
+    const events = await db
+      .select({ action: teamLifecycleEvents.action })
+      .from(teamLifecycleEvents)
+      .where(
+        and(
+          eq(teamLifecycleEvents.teamId, teamId),
+          eq(teamLifecycleEvents.targetUserId, userId),
+        ),
+      );
+    expect(events.map((event) => event.action)).toEqual(['member_add']);
   });
 });
 
@@ -279,6 +356,16 @@ describe.skipIf(!isLocalDb)('팀 상세 (real local DB)', () => {
 
     await expect(
       getTeamDetail({ id: outsider, isSuperadmin: false }, teamId),
+    ).rejects.toBeInstanceOf(TeamNotFoundError);
+  });
+
+  it('팀원은 관리 화면을 열 수 없다 (.pen 7-2 는 슈퍼어드민·팀장 화면)', async () => {
+    const teamId = await seedTeam(actorId);
+    const memberId = await seedUser();
+    await addMember(SUPERADMIN, { teamId, userId: memberId, role: 'member' });
+
+    await expect(
+      getTeamDetail({ id: memberId, isSuperadmin: false }, teamId),
     ).rejects.toBeInstanceOf(TeamNotFoundError);
   });
 

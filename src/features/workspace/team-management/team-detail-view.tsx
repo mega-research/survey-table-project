@@ -20,7 +20,7 @@ interface Props {
 /**
  * 팀 상세 (.pen FLOW 7-2) — 멤버 표 + 직책·역할 편집 + 팀원 추가.
  *
- * 슈퍼어드민과 그 팀 소속만 열린다. 남의 팀 id 로는 서버가 NOT_FOUND 를 돌려주므로 화면도
+ * 슈퍼어드민과 그 팀 팀장만 열린다. 자격이 없으면 서버가 NOT_FOUND 를 돌려주므로 화면도
  * "찾을 수 없다" 로 끝난다 — 존재 여부를 알려주지 않는다.
  *
  * 「설문」 탭은 아직 열 것이 없다. 설문이 팀에 귀속되는 것은 티켓 07 이고, 목록 개편은 08 이다.
@@ -85,15 +85,17 @@ export function TeamDetailView({ teamId }: Props) {
           >
             {`설문 ${team.surveyCount}`}
           </span>
-          {team.canManageSettings && (
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="px-[18px] py-[9px] text-[14px] text-[#6E6E73] hover:text-[#1C1C1E]"
-            >
-              설정
-            </button>
-          )}
+          {/* 설정 탭은 늘 자리에 있다(.pen 7-2 는 3탭). 다만 팀 이름은 조직 경로라 슈퍼어드민만
+              고친다(ADR-0008) — 팀장에게는 보이되 잠긴다. */}
+          <button
+            type="button"
+            disabled={!team.canManageSettings}
+            title={team.canManageSettings ? undefined : '팀 이름은 슈퍼어드민이 관리합니다.'}
+            onClick={() => setSettingsOpen(true)}
+            className="px-[18px] py-[9px] text-[14px] text-[#6E6E73] hover:text-[#1C1C1E] disabled:cursor-not-allowed disabled:text-[#C7C7CC] disabled:hover:text-[#C7C7CC]"
+          >
+            설정
+          </button>
         </div>
 
         <div className="flex gap-[14px] px-[22px] text-[12px] font-medium text-[#9CA3AF]">
@@ -126,10 +128,7 @@ export function TeamDetailView({ teamId }: Props) {
 
       {addOpen && <MemberAddModal teamId={teamId} onClose={() => setAddOpen(false)} />}
       {settingsOpen && (
-        <TeamFormModal
-          team={{ id: team.id, name: team.name, description: team.description }}
-          onClose={() => setSettingsOpen(false)}
-        />
+        <TeamFormModal team={{ id: team.id, name: team.name }} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   );

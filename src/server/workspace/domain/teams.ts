@@ -9,7 +9,6 @@ export {
   ChangeTeamMemberRoleInput,
   CreateTeamInput,
   CreateTeamOutput,
-  ListMyTeamsOutput,
   ListTeamsOutput,
   RemoveTeamMemberInput,
   RenameTeamInput,
@@ -134,13 +133,22 @@ export function assertMemberAssignable(input: {
 }
 
 /**
- * 이 팀에 팀장이 남는가 — 역할 강등과 제외가 함께 본다.
+ * 이 팀에 팀을 관리할 수 있는 사람이 남는가 — 역할 강등과 제외가 함께 본다.
  *
- * 대상이 팀장이 아니면 팀장 수와 무관하다. 팀장이면 이 사람 말고 또 있어야 한다.
- * (leaderCount 는 대상을 포함한 현재 팀장 수다.)
+ * 세는 것은 **활성 팀장**이다. 정지·퇴사한 팀장은 로그인조차 못 하므로 팀을 지키지 못한다.
+ * 그리고 **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한 팀장이 퇴사한 순간
+ * 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다. 지켜야 할 것은
+ * "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.
+ *
+ * (activeLeaderCount 는 대상이 활성 팀장이면 대상을 포함한 수다.)
  */
-export function assertLastLeaderKept(input: { currentRole: TeamRole; leaderCount: number }): void {
-  if (input.currentRole === 'leader' && input.leaderCount <= 1) {
+export function assertLastLeaderKept(input: {
+  currentRole: TeamRole;
+  targetIsActive: boolean;
+  activeLeaderCount: number;
+}): void {
+  if (input.currentRole !== 'leader' || !input.targetIsActive) return;
+  if (input.activeLeaderCount <= 1) {
     throw new LastTeamLeaderError();
   }
 }

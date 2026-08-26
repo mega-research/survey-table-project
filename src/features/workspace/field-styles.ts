@@ -11,3 +11,10 @@ export const FIELD_INPUT =
 
 /** 필드 아래 보조 설명. */
 export const FIELD_HINT = 'text-[10.5px] text-[#9CA3AF]';
+
+/**
+ * 화면 우상단·모달 하단의 주 동작 버튼 (사용자 생성 · 새 팀 · 저장).
+ * 세 곳이 같은 치수를 쓰므로 문자열을 복제하지 않는다 — 사본이 갈리면 버튼만 어긋난다.
+ */
+export const PRIMARY_BUTTON =
+  'h-[38px] rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]';

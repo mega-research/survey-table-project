@@ -23,7 +23,6 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS teams (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
-  description text,
   "order" integer NOT NULL DEFAULT 0,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
   archived_by uuid REFERENCES users (id) ON DELETE RESTRICT,
@@ -51,11 +50,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS team_members_team_user_uq
   ON team_members (team_id, user_id);
 CREATE INDEX IF NOT EXISTS team_members_user_id_idx ON team_members (user_id);
 
--- 팀 생성·해산 감사 (append-only).
+-- 팀에 일어난 일의 감사 (append-only) — 팀 자체(create/rename/dissolve)와 멤버 구성
+-- (member_add/member_role/member_remove)을 한 테이블에 남긴다. 제외는 team_members 행을
+-- 지우므로, 이 행이 없으면 "누가 언제 누구를 뺐는가" 가 어디에도 남지 않는다.
 CREATE TABLE IF NOT EXISTS team_lifecycle_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   team_id uuid NOT NULL REFERENCES teams (id) ON DELETE RESTRICT,
-  action text NOT NULL CHECK (action IN ('create', 'rename', 'dissolve')),
+  action text NOT NULL CHECK (
+    action IN ('create', 'rename', 'dissolve', 'member_add', 'member_role', 'member_remove')
+  ),
+  -- 멤버 사건의 대상. 팀 자체 사건에서는 NULL 이다.
+  target_user_id uuid REFERENCES users (id) ON DELETE RESTRICT,
   changed_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   metadata jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -64,6 +69,8 @@ CREATE TABLE IF NOT EXISTS team_lifecycle_events (
 CREATE INDEX IF NOT EXISTS team_lifecycle_events_team_idx
   ON team_lifecycle_events (team_id);
 
+COMMENT ON TABLE team_lifecycle_events IS
+  '팀 수명주기 + 멤버 구성 감사 (append-only). 제외는 멤버 행을 지우므로 흔적이 여기에만 남는다';
 COMMENT ON TABLE teams IS
   '팀 — 설문 소유·접근 경계. 시스템 전체 보기(메가리서치)는 팀이 아니라 행이 없다 (ADR-0006)';
 COMMENT ON TABLE team_members IS

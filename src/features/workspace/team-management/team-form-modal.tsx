@@ -9,12 +9,12 @@ import { Label } from '@/components/ui/label';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { CreateTeamInput, RenameTeamInput } from '@/shared/contracts/workspace-io';
 
-import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
+import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL, PRIMARY_BUTTON } from '../field-styles';
 import { useCreateTeam, useRenameTeam } from './queries/use-teams';
 
 interface Props {
   /** 있으면 수정, 없으면 생성 — 두 폼이 같은 칸을 쓰므로 화면도 하나로 둔다. */
-  team?: { id: string; name: string; description: string | null };
+  team?: { id: string; name: string };
   onClose: () => void;
 }
 
@@ -26,7 +26,6 @@ interface Props {
  */
 export function TeamFormModal({ team, onClose }: Props) {
   const [name, setName] = useState(team?.name ?? '');
-  const [description, setDescription] = useState(team?.description ?? '');
   const [error, setError] = useState<string | null>(null);
   const createTeam = useCreateTeam();
   const renameTeam = useRenameTeam();
@@ -37,18 +36,20 @@ export function TeamFormModal({ team, onClose }: Props) {
     setError(null);
 
     // 규칙은 경계 계약 한 곳에만 둔다 — 길이·공백 처리를 여기서 재현하면 서버와 갈린다.
-    const parsed = team
-      ? RenameTeamInput.safeParse({ teamId: team.id, name, description: description || null })
-      : CreateTeamInput.safeParse({ name, description });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
-      return;
-    }
-
     try {
-      if ('teamId' in parsed.data) {
+      if (team) {
+        const parsed = RenameTeamInput.safeParse({ teamId: team.id, name });
+        if (!parsed.success) {
+          setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
+          return;
+        }
         await renameTeam.mutateAsync(parsed.data);
       } else {
+        const parsed = CreateTeamInput.safeParse({ name });
+        if (!parsed.success) {
+          setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
+          return;
+        }
         await createTeam.mutateAsync(parsed.data);
       }
       onClose();
@@ -83,18 +84,6 @@ export function TeamFormModal({ team, onClose }: Props) {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="team-description" className={FIELD_LABEL}>
-              설명 (선택)
-            </Label>
-            <Input
-              id="team-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className={FIELD_INPUT}
-            />
-          </div>
-
           {error && <p className="text-[12.5px] text-red-600">{error}</p>}
 
           <div className="flex justify-end gap-2">
@@ -109,7 +98,7 @@ export function TeamFormModal({ team, onClose }: Props) {
             <Button
               type="submit"
               disabled={isPending}
-              className="h-[38px] rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
+              className={PRIMARY_BUTTON}
             >
               {team ? '저장' : '팀 만들기'}
             </Button>

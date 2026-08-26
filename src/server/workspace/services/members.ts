@@ -3,8 +3,9 @@ import 'server-only';
 import { and, asc, count, eq, ilike, notExists, or, sql } from 'drizzle-orm';
 
 import { type DbTransaction, db } from '@/db';
-import { teamMembers, teams, users } from '@/db/schema';
+import { teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
+import type { TeamLifecycleAction, TeamLifecycleMetadata } from '@/shared/contracts/workspace';
 
 import {
   AlreadyTeamMemberError,
@@ -23,6 +24,31 @@ import {
 } from '../domain/teams';
 
 const OK: WorkspaceActionOutput = { success: true };
+
+/**
+ * 멤버 구성 변화를 감사에 남긴다.
+ *
+ * 제외는 team_members 행을 지우므로 이 행이 없으면 "누가 언제 누구를 뺐는가" 가 어디에도
+ * 남지 않는다. 역할은 사건 시점 값을 함께 적는다 — 나중에 조인하면 지금 역할만 보인다.
+ */
+async function recordMemberEvent(
+  tx: DbTransaction,
+  input: {
+    teamId: string;
+    targetUserId: string;
+    actorUserId: string;
+    action: Extract<TeamLifecycleAction, 'member_add' | 'member_role' | 'member_remove'>;
+    metadata?: TeamLifecycleMetadata;
+  },
+): Promise<void> {
+  await tx.insert(teamLifecycleEvents).values({
+    teamId: input.teamId,
+    action: input.action,
+    targetUserId: input.targetUserId,
+    changedBy: input.actorUserId,
+    metadata: input.metadata ?? null,
+  });
+}
 
 /** 멤버 구성을 바꾸는 흐름은 전부 같은 팀 키로 직렬화한다 — 마지막 팀장 판정의 경합 차단. */
 async function lockTeamMembers(tx: DbTransaction, teamId: string): Promise<void> {
@@ -93,7 +119,7 @@ export async function searchAssignableUsers(
  * 잡아 마지막 팀장 판정과 순서를 맞춘다 — 두 키의 획득 순서는 이 함수 하나로 고정된다.
  */
 export async function addMember(
-  actor: { isSuperadmin: boolean },
+  actor: { id: string; isSuperadmin: boolean },
   input: AddTeamMemberInput,
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
@@ -125,31 +151,48 @@ export async function addMember(
       if (isUniqueViolation(err)) throw new AlreadyTeamMemberError();
       throw err;
     }
+    await recordMemberEvent(tx, {
+      teamId: input.teamId,
+      targetUserId: input.userId,
+      actorUserId: actor.id,
+      action: 'member_add',
+      metadata: { toRole: input.role },
+    });
     return OK;
   });
 }
 
 /** 역할 변경 — 마지막 팀장 강등 금지. */
 export async function changeMemberRole(
+  actorUserId: string,
   input: ChangeTeamMemberRoleInput,
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
     await lockTeamMembers(tx, input.teamId);
 
-    const member = await tx.query.teamMembers.findFirst({
-      where: and(eq(teamMembers.teamId, input.teamId), eq(teamMembers.userId, input.userId)),
-      columns: { id: true, role: true },
-    });
+    const member = await findMemberWithStatus(tx, input.teamId, input.userId);
     if (!member) throw new TeamMemberNotFoundError();
 
-    if (member.role === 'leader' && input.role === 'member') {
+    // 팀장을 남기는 규칙은 도메인 한 곳에만 둔다 — 여기서 "leader → member 일 때만" 을
+    // 다시 쓰면 같은 판정이 두 벌이 된다. 승격(→leader)은 팀장을 줄이지 않으므로 묻지 않는다.
+    if (input.role === 'member') {
       assertLastLeaderKept({
         currentRole: member.role,
-        leaderCount: await countLeaders(tx, input.teamId),
+        targetIsActive: member.status === 'active',
+        activeLeaderCount: await countActiveLeaders(tx, input.teamId),
       });
     }
 
+    if (member.role === input.role) return OK;
+
     await tx.update(teamMembers).set({ role: input.role }).where(eq(teamMembers.id, member.id));
+    await recordMemberEvent(tx, {
+      teamId: input.teamId,
+      targetUserId: input.userId,
+      actorUserId,
+      action: 'member_role',
+      metadata: { fromRole: member.role, toRole: input.role },
+    });
     return OK;
   });
 }
@@ -160,22 +203,30 @@ export async function changeMemberRole(
  * 제외된 사람은 미배치가 된다(다른 팀 겸직이 있으면 그 팀에는 남는다). 소유 설문 승계
  * 확인은 여기 없다 — 설문 소유자 개념이 티켓 07 에서 생기고, 승계 제안은 티켓 19 가 붙인다.
  */
-export async function removeMember(input: RemoveTeamMemberInput): Promise<WorkspaceActionOutput> {
+export async function removeMember(
+  actorUserId: string,
+  input: RemoveTeamMemberInput,
+): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
     await lockTeamMembers(tx, input.teamId);
 
-    const member = await tx.query.teamMembers.findFirst({
-      where: and(eq(teamMembers.teamId, input.teamId), eq(teamMembers.userId, input.userId)),
-      columns: { id: true, role: true },
-    });
+    const member = await findMemberWithStatus(tx, input.teamId, input.userId);
     if (!member) throw new TeamMemberNotFoundError();
 
     assertLastLeaderKept({
       currentRole: member.role,
-      leaderCount: await countLeaders(tx, input.teamId),
+      targetIsActive: member.status === 'active',
+      activeLeaderCount: await countActiveLeaders(tx, input.teamId),
     });
 
     await tx.delete(teamMembers).where(eq(teamMembers.id, member.id));
+    await recordMemberEvent(tx, {
+      teamId: input.teamId,
+      targetUserId: input.userId,
+      actorUserId,
+      action: 'member_remove',
+      metadata: { fromRole: member.role },
+    });
     return OK;
   });
 }
@@ -209,11 +260,33 @@ export async function updateMemberJobTitle(
   });
 }
 
-/** 이 팀의 현재 팀장 수 (대상 포함). */
-async function countLeaders(tx: DbTransaction, teamId: string): Promise<number> {
+/**
+ * 이 팀의 **활성** 팀장 수 (대상 포함).
+ *
+ * 정지·퇴사한 팀장은 로그인도 못 하므로 팀을 지키는 사람으로 세지 않는다 — 세면
+ * "관리자가 있다" 는 판정이 거짓이 된다.
+ */
+async function countActiveLeaders(tx: DbTransaction, teamId: string): Promise<number> {
   const [row] = await tx
     .select({ value: count() })
     .from(teamMembers)
-    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, 'leader')));
+    .innerJoin(users, eq(users.id, teamMembers.userId))
+    .where(
+      and(
+        eq(teamMembers.teamId, teamId),
+        eq(teamMembers.role, 'leader'),
+        eq(users.status, 'active'),
+      ),
+    );
   return row?.value ?? 0;
+}
+
+/** 멤버 행 + 그 사람의 계정 상태 — 마지막 팀장 판정이 둘을 함께 봐야 한다. */
+async function findMemberWithStatus(tx: DbTransaction, teamId: string, userId: string) {
+  const [row] = await tx
+    .select({ id: teamMembers.id, role: teamMembers.role, status: users.status })
+    .from(teamMembers)
+    .innerJoin(users, eq(users.id, teamMembers.userId))
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  return row;
 }

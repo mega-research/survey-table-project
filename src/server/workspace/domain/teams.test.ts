@@ -110,16 +110,27 @@ describe('assertMemberAssignable', () => {
 
 describe('assertLastLeaderKept', () => {
   it('팀장이 둘 이상이면 한 명을 내려도 된다', () => {
-    expect(() => assertLastLeaderKept({ currentRole: 'leader', leaderCount: 2 })).not.toThrow();
+    expect(() =>
+      assertLastLeaderKept({ currentRole: 'leader', targetIsActive: true, activeLeaderCount: 2 }),
+    ).not.toThrow();
   });
 
-  it('마지막 팀장은 강등·제외할 수 없다', () => {
-    expect(() => assertLastLeaderKept({ currentRole: 'leader', leaderCount: 1 })).toThrow(
-      LastTeamLeaderError,
-    );
+  it('마지막 활성 팀장은 강등·제외할 수 없다', () => {
+    expect(() =>
+      assertLastLeaderKept({ currentRole: 'leader', targetIsActive: true, activeLeaderCount: 1 }),
+    ).toThrow(LastTeamLeaderError);
   });
 
   it('팀원을 다루는 일은 팀장 수와 무관하다', () => {
-    expect(() => assertLastLeaderKept({ currentRole: 'member', leaderCount: 1 })).not.toThrow();
+    expect(() =>
+      assertLastLeaderKept({ currentRole: 'member', targetIsActive: true, activeLeaderCount: 1 }),
+    ).not.toThrow();
+  });
+
+  it('비활성 팀장은 지켜주지 않는다 — 그러지 않으면 팀이 유령 팀장에 잠긴다', () => {
+    // 유일한 팀장이 퇴사한 상황: 활성 팀장은 0명이라 옛 규칙으로는 강등도 제외도 거부됐다.
+    expect(() =>
+      assertLastLeaderKept({ currentRole: 'leader', targetIsActive: false, activeLeaderCount: 0 }),
+    ).not.toThrow();
   });
 });

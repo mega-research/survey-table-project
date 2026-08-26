@@ -28,7 +28,7 @@ export function MemberAddModal({ teamId, onClose }: Props) {
   const [debounced, setDebounced] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: addMember, isPending } = useAddTeamMember();
-  const { data, isLoading } = useAssignableUsers(teamId, debounced, true);
+  const { data, isLoading } = useAssignableUsers(teamId, debounced);
 
   // 타이핑마다 왕복하지 않는다 — 250ms 는 사람이 다음 글자를 치는 간격보다 짧다.
   useEffect(() => {

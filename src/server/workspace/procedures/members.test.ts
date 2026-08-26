@@ -12,7 +12,7 @@ import type { ORPCContext } from '@/server/context';
 
 import { CrossTeamAssignmentError, LastTeamLeaderError } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '../services/memberships';
+import { getTeamRole } from '../services/active-membership';
 import { members } from './members';
 
 vi.mock('../services/members', () => ({
@@ -23,7 +23,7 @@ vi.mock('../services/members', () => ({
   updateMemberJobTitle: vi.fn(),
 }));
 
-vi.mock('../services/memberships', () => ({ getTeamRole: vi.fn() }));
+vi.mock('../services/active-membership', () => ({ getTeamRole: vi.fn() }));
 
 const LEADER_ID = '11111111-1111-4111-8111-111111111111';
 const TEAM_A = '22222222-2222-4222-8222-222222222222';
@@ -66,7 +66,7 @@ describe('팀 관리 관문', () => {
   it('자기 팀에서는 팀장이 멤버를 다룰 수 있다', async () => {
     await clientWith().members.add({ teamId: TEAM_A, userId: TARGET_ID, role: 'member' });
     expect(svc.addMember).toHaveBeenCalledWith(
-      { isSuperadmin: false },
+      { id: LEADER_ID, isSuperadmin: false },
       { teamId: TEAM_A, userId: TARGET_ID, role: 'member' },
     );
   });
@@ -102,7 +102,10 @@ describe('팀 관리 관문', () => {
       userId: TARGET_ID,
     });
     expect(getTeamRole).not.toHaveBeenCalled();
-    expect(svc.removeMember).toHaveBeenCalledWith({ teamId: TEAM_B, userId: TARGET_ID });
+    expect(svc.removeMember).toHaveBeenCalledWith(LEADER_ID, {
+      teamId: TEAM_B,
+      userId: TARGET_ID,
+    });
   });
 });
 
