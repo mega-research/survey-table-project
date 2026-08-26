@@ -10,44 +10,25 @@ import { Button } from '@/components/ui/button';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import {
   selectableUserStatusValues,
-  type UserListItem,
   type UserStatusFilter,
   type UserTypeFilter,
 } from '@/shared/contracts/auth-io';
 
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
+import { USER_STATUS_LABEL, USER_TYPE_LABEL } from './user-vocabulary';
 
-/** 유형 칩 — .pen FLOW 1-1 의 전체/내부/게스트/실사 순서. */
-const TYPE_TABS: { value: UserTypeFilter; label: string }[] = [
-  { value: 'all', label: '전체' },
-  { value: 'internal', label: '내부' },
-  { value: 'guest', label: '게스트' },
-  { value: 'fieldwork', label: '실사' },
-];
+/** 유형 칩 — .pen FLOW 1-1 의 전체/내부/게스트/실사 순서. 라벨은 유형 어휘에서 온다. */
+const TYPE_TABS: UserTypeFilter[] = ['all', 'internal', 'guest', 'fieldwork'];
 
-const TYPE_LABEL: Record<UserType, string> = {
-  internal: '내부',
-  guest: '게스트',
-  fieldwork: '실사',
-};
+function typeTabLabel(filter: UserTypeFilter): string {
+  return filter === 'all' ? '전체' : USER_TYPE_LABEL[filter];
+}
 
 const TYPE_PILL: Record<UserType, string> = {
   internal: 'bg-[#DBEAFE] text-[#1D4ED8]',
   guest: 'bg-[#FEF3C7] text-[#D97706]',
   fieldwork: 'bg-[#F3F4F6] text-[#6E6E73]',
-};
-
-/**
- * 상태 표시 어휘. pending/rejected 는 도달 불가지만(ADR-0018) 과거 데이터가 실려 있어도
- * 빈 배지로 보이지 않게 라벨을 함께 둔다 — 필터 선택지에는 없다.
- */
-const STATUS_LABEL: Record<UserStatus, string> = {
-  pending: '승인 대기',
-  active: '재직 중',
-  rejected: '승인 거절',
-  suspended: '일시 정지',
-  departed: '퇴사',
 };
 
 const STATUS_PILL: Record<UserStatus, string> = {
@@ -61,19 +42,6 @@ const STATUS_PILL: Record<UserStatus, string> = {
 /** 아바타 이니셜 — 이름 첫 글자. 게스트만 유형색을 달리 준다(.pen). */
 function avatarTone(userType: UserType): string {
   return userType === 'guest' ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#E0E7FF] text-[#2743AE]';
-}
-
-/**
- * 「소속」 열 — 유형마다 출처가 다르다. 지금 채울 수 있는 것은 게스트의 소속 기관뿐이고
- * 내부(팀)·실사(업체)는 각각 티켓 06·24 에서 붙는다.
- */
-function affiliationText(user: UserListItem): string {
-  return user.organization ?? '—';
-}
-
-/** 「직책·역할」 열 — 내부는 직책. 팀 역할·실사 역할은 뒤 티켓에서 합쳐진다. */
-function roleText(user: UserListItem): string {
-  return user.jobTitle ?? '—';
 }
 
 export function UserManagementView() {
@@ -114,21 +82,21 @@ export function UserManagementView() {
 
         <div className="flex items-center gap-2">
           {TYPE_TABS.map((tab) => {
-            const selected = tab.value === userType;
-            const count = typeCounts?.[tab.value];
+            const selected = tab === userType;
+            const count = typeCounts?.[tab];
             return (
               <button
-                key={tab.value}
+                key={tab}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => setUserType(tab.value)}
+                onClick={() => setUserType(tab)}
                 className={`h-[30px] rounded-lg px-3 text-[12.5px] transition-colors ${
                   selected
                     ? 'bg-[#EEF2FF] font-semibold text-[#2743AE]'
                     : 'border border-[#E5E5EA] bg-white text-[#6E6E73] hover:text-[#3A3A3C]'
                 }`}
               >
-                {tab.label}
+                {typeTabLabel(tab)}
                 {count === undefined ? '' : ` ${count}`}
               </button>
             );
@@ -148,7 +116,7 @@ export function UserManagementView() {
             <option value="all">상태 · 전체</option>
             {selectableUserStatusValues.map((value) => (
               <option key={value} value={value}>
-                상태 · {STATUS_LABEL[value]}
+                상태 · {USER_STATUS_LABEL[value]}
               </option>
             ))}
           </select>
@@ -160,6 +128,8 @@ export function UserManagementView() {
               <tr className="text-left text-[11.5px] font-medium text-[#9CA3AF]">
                 <th className="px-5 py-3 font-medium">사용자</th>
                 <th className="px-3 py-3 font-medium">유형</th>
+                {/* 소속·역할은 유형마다 출처가 다르다 — 지금 채울 수 있는 것은 게스트의
+                    소속 기관과 내부의 직책뿐이고, 팀(티켓 06)·업체(24)·팀 역할이 뒤이어 붙는다. */}
                 <th className="px-3 py-3 font-medium">소속 (팀·기관·업체)</th>
                 <th className="px-3 py-3 font-medium">직책·역할</th>
                 <th className="px-3 py-3 font-medium">상태</th>
@@ -188,18 +158,18 @@ export function UserManagementView() {
                     <span
                       className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${TYPE_PILL[user.userType]}`}
                     >
-                      {TYPE_LABEL[user.userType]}
+                      {USER_TYPE_LABEL[user.userType]}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
-                    {affiliationText(user)}
+                    {user.organization ?? '—'}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">{roleText(user)}</td>
+                  <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">{user.jobTitle ?? '—'}</td>
                   <td className="px-3 py-3">
                     <span
                       className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${STATUS_PILL[user.status]}`}
                     >
-                      {STATUS_LABEL[user.status]}
+                      {USER_STATUS_LABEL[user.status]}
                     </span>
                   </td>
                 </tr>

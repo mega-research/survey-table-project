@@ -3,16 +3,20 @@ import * as z from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
-import type { UserStatus } from '@/shared/contracts/auth';
+import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
 
 afterEach(() => vi.unstubAllEnvs());
 
-function ctx(userId: string | null, status: UserStatus = 'active'): ORPCContext {
+function ctx(
+  userId: string | null,
+  status: UserStatus = 'active',
+  userType: UserType = 'internal',
+): ORPCContext {
   return {
     db: {} as never,
     user: userId
-      ? { id: userId, email: 'x@y.z', name: '테스트', status, isSuperadmin: false }
+      ? { id: userId, email: 'x@y.z', name: '테스트', status, isSuperadmin: false, userType }
       : null,
   };
 }
@@ -80,5 +84,24 @@ describe('authed 베이스', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
     const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+/**
+ * 계정 유형 게이트 — guest/fieldwork 계정은 내부 표면(authed)에 들어오지 못한다.
+ *
+ * 티켓 03 이 사용자 관리에서 guest 유형 계정을 발급할 수 있게 만들었으므로, 그 계정이
+ * 내부 표면에 들어오지 못하게 하는 서버 판정을 함께 둔다. 유형별 라우팅과 각 콘솔 화면은
+ * 티켓 05·22·25 소관이고, scoped 는 게스트에게 열어줄 표면이라 유형으로 막지 않는다.
+ */
+describe('계정 유형 게이트', () => {
+  it.each(['guest', 'fieldwork'] as const)('%s 유형 계정은 authed 에서 FORBIDDEN', async (userType) => {
+    const client = createRouterClient({ adminOnly }, { context: ctx('u-1', 'active', userType) });
+    await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('scoped 는 유형으로 막지 않는다 (게스트 콘솔 표면)', async () => {
+    const client = createRouterClient({ echo }, { context: ctx('u-1', 'active', 'guest') });
+    await expect(client.echo({ surveyId: 's1' })).resolves.toEqual({ ok: true });
   });
 });

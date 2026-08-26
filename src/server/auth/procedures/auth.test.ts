@@ -16,7 +16,7 @@ const HEADERS = new Headers({ cookie: 'better-auth.session_token=t' });
 function authedContext(status: UserStatus = 'active'): ORPCContext {
   return {
     db: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status, isSuperadmin: false },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status, isSuperadmin: false, userType: 'internal' },
     headers: HEADERS,
   };
 }

@@ -43,6 +43,7 @@ function adminContext(): ORPCContext {
       name: '테스트관리자',
       status: 'active',
       isSuperadmin: false,
+      userType: 'internal',
     },
   };
 }

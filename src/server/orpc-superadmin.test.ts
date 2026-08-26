@@ -1,20 +1,22 @@
 import { createRouterClient } from '@orpc/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ORPCContext } from '@/server/context';
-import { superadmin } from '@/server/orpc';
-import type { UserStatus } from '@/shared/contracts/auth';
+import type { ORPCContext } from './context';
+import { superadmin } from './orpc';
+import type { UserStatus, UserType } from '@/shared/contracts/auth';
 
 afterEach(() => vi.unstubAllEnvs());
 
 function ctx(
   userId: string | null,
-  opts: { status?: UserStatus; isSuperadmin?: boolean } = {},
+  opts: { status?: UserStatus; isSuperadmin?: boolean; userType?: UserType } = {},
 ): ORPCContext {
-  const { status = 'active', isSuperadmin = true } = opts;
+  const { status = 'active', isSuperadmin = true, userType = 'internal' } = opts;
   return {
     db: {} as never,
-    user: userId ? { id: userId, email: 'x@y.z', name: '테스트', status, isSuperadmin } : null,
+    user: userId
+      ? { id: userId, email: 'x@y.z', name: '테스트', status, isSuperadmin, userType }
+      : null,
   };
 }
 

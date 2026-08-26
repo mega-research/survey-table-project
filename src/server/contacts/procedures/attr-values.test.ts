@@ -20,7 +20,7 @@ import * as svc from '../services/contact-attr-values';
 import { attrValues } from './attr-values';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
@@ -77,7 +77,7 @@ describe('contacts.attrValues procedures', () => {
 
     const client = createRouterClient(
       { attrValues },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
 
@@ -89,7 +89,7 @@ describe('contacts.attrValues procedures', () => {
 
     const client = createRouterClient(
       { attrValues },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(
       client.attrValues.list({

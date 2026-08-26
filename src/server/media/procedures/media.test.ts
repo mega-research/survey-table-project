@@ -15,7 +15,7 @@ import { media } from './media';
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'},
   };
 }
 
@@ -83,7 +83,7 @@ describe('media procedures', () => {
     vi.mocked(svc.deleteMailAttachmentTmp).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { media },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const input = { key: 'tmp/mail-attachment/abc.pdf' };
     const res = await client.media.deleteMailAttachmentTmp(input);

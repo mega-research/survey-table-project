@@ -20,7 +20,7 @@ import * as singleSvc from '../services/single-send';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -145,7 +145,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -166,7 +166,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -183,7 +183,7 @@ describe('mail.campaigns procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(
       client.campaigns.sendSingle({

@@ -19,7 +19,7 @@ import * as svc from '../services/templates';
 import { templates } from './templates';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function validInput() {
@@ -127,7 +127,7 @@ describe('mail.templates procedures', () => {
     } as never);
     const client = createRouterClient(
       { templates },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const input = { surveyId: 'sv-1', input: validInput() };
     const res = await client.templates.create(input);
@@ -139,7 +139,7 @@ describe('mail.templates procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { templates },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(
       client.templates.create({ surveyId: 'sv-other', input: validInput() }),

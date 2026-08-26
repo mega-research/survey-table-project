@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { type SQL, and, asc, count, eq } from 'drizzle-orm';
+import { type SQL, and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { accounts, userStatusEvents, users } from '@/db/schema';
@@ -84,8 +84,12 @@ export async function createUser(
   input: CreateUserInput,
 ): Promise<CreateUserOutput> {
   // 선검사는 UI 문구를 위한 것이고, 동시 생성 경합은 아래 UNIQUE 위반이 잡는다.
+  //
+  // 대소문자를 접어서 본다. 입력은 경계(zod)에서 이미 소문자지만 users.email UNIQUE 는
+  // case-sensitive 라, 대문자가 섞인 옛 행(Supabase Auth 시절 이관분)이 있으면 선검사도
+  // UNIQUE 도 통과해 같은 사람의 계정이 둘 생긴다 — 그러면 로그인은 소문자 행으로만 간다.
   const existing = await db.query.users.findFirst({
-    where: eq(users.email, input.email),
+    where: sql`lower(${users.email}) = ${input.email}`,
     columns: { id: true },
   });
   if (existing) throw new DuplicateEmailError();

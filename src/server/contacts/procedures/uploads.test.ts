@@ -24,7 +24,7 @@ import * as uploadsSvc from '../services/contact-uploads';
 import { uploads } from './uploads';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const mapping: ContactUploadMapping = {

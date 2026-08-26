@@ -14,7 +14,7 @@ vi.mock('../services/control', () => ({
 }));
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -141,7 +141,7 @@ describe('operations.control procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
@@ -158,7 +158,7 @@ describe('operations.control procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
@@ -175,7 +175,7 @@ describe('operations.control procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
@@ -189,7 +189,7 @@ describe('operations.control procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(
       client.control.setPaused({ surveyId: SURVEY_ID, isPaused: true }),

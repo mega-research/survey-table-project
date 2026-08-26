@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { AuthUser, UserStatus } from '@/shared/contracts/auth';
+import type { AuthUser, UserStatus, UserType } from '@/shared/contracts/auth';
 
 import { auth } from './server';
 
@@ -22,5 +22,8 @@ export async function readSessionUser(headers: Headers): Promise<AuthUser | null
     // 로그인 불가 상태로 접는다 — 스키마 default 와 같은 취지의 안전 기본값이다.
     status: (session.user.status as UserStatus | undefined) ?? 'pending',
     isSuperadmin: session.user.isSuperadmin ?? false,
+    // status 와 같은 취지의 안전 기본값 — 값이 없으면 내부 표면을 열지 않는 쪽으로 접는다.
+    // (컬럼은 NOT NULL default 'internal' 이라 실제 행에는 항상 값이 있다)
+    userType: (session.user.userType as UserType | undefined) ?? 'guest',
   };
 }

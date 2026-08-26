@@ -101,6 +101,21 @@ const CreateUserCommon = z.object({
 });
 
 /**
+ * 비우고 보낼 수 있는 자유 입력 — 공백만 남은 값은 미입력으로 접는다.
+ *
+ * 폼은 비운 칸을 빈 문자열로 보낸다. 그대로 저장하면 DB 에 `''` 가 남아 목록의
+ * `?? '—'` 폴백이 걸리지 않고 셀이 빈칸으로 렌더된다(값 없음과 빈 값이 갈린다).
+ */
+function optionalText(max: number) {
+  return z
+    .string()
+    .trim()
+    .max(max)
+    .transform((value) => (value ? value : undefined))
+    .optional();
+}
+
+/**
  * 사용자 직접 생성 입력.
  *
  * fieldwork 는 의도적으로 빠져 있다 — 실사 계정은 소속 업체(fieldwork_orgs)가 있어야
@@ -110,11 +125,11 @@ const CreateUserCommon = z.object({
 export const CreateUserInput = z.discriminatedUnion('userType', [
   CreateUserCommon.extend({
     userType: z.literal('internal'),
-    jobTitle: z.string().trim().max(50).optional(),
+    jobTitle: optionalText(50),
   }),
   CreateUserCommon.extend({
     userType: z.literal('guest'),
-    organization: z.string().trim().max(100).optional(),
+    organization: optionalText(100),
   }),
 ]);
 export type CreateUserInput = z.infer<typeof CreateUserInput>;

@@ -52,6 +52,8 @@ export interface AuthUser {
   name: string;
   status: UserStatus;
   isSuperadmin: boolean;
+  /** 계정 유형. 내부 표면 접근 판정에 쓴다 — guest/fieldwork 는 자기 콘솔만 본다. */
+  userType: UserType;
 }
 
 /**
@@ -61,6 +63,17 @@ export interface AuthUser {
  */
 export function isActiveUser(status: UserStatus | undefined): boolean {
   return status === 'active';
+}
+
+/**
+ * 내부(사내) 계정인가 — admin 표면 접근의 단일 술어.
+ *
+ * guest·fieldwork 계정은 발급되는 순간 로그인은 되지만(계정 수명주기는 세 유형 공통)
+ * 내부 표면은 전부 서버에서 막힌다. 각자의 콘솔(티켓 22·25)은 이 술어를 지나지 않는
+ * 자기 가드(oRPC scoped 등)로 열린다.
+ */
+export function isInternalUser(userType: UserType | undefined): boolean {
+  return userType === 'internal';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

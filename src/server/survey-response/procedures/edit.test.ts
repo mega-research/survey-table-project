@@ -18,7 +18,7 @@ vi.mock('../services/response-edit', async () => {
 });
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 // 픽스처 UUID 는 v4 형태(...-4xxx-8xxx-...). input 이 z.string() 이라 엄격 강제는 아님.
@@ -131,7 +131,7 @@ describe('surveyResponse.edit procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
@@ -160,7 +160,7 @@ describe('surveyResponse.edit procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
@@ -186,7 +186,7 @@ describe('surveyResponse.edit procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );

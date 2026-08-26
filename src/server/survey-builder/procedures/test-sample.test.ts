@@ -13,7 +13,7 @@ import { testSample } from './test-sample';
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 describe('surveyBuilder testSample procedures', () => {

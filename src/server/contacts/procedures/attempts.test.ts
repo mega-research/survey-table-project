@@ -13,7 +13,7 @@ import * as svc from '../services/contact-attempts';
 import { attempts } from './attempts';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 describe('attempts procedures', () => {
@@ -66,7 +66,7 @@ describe('attempts procedures', () => {
     vi.mocked(svc.addAttempt).mockResolvedValue({ id: 'att-1', attemptNo: 1 } as never);
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const input = {
       contactTargetId: 'ct-1',
@@ -82,7 +82,7 @@ describe('attempts procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s-1');
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(
       client.contacts.attempts.add({

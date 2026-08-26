@@ -23,6 +23,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { LogoutButton } from '@/components/auth/logout-button';
@@ -30,15 +31,22 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/features/survey-builder/queries/use-surveys';
-import { useCurrentUser } from '@/features/workspace/queries/use-current-user';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
+import { orpc } from '@/shared/lib/rpc';
 
 export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
   const { mutate: deleteSurvey } = useDeleteSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
-  const { data: currentUser } = useCurrentUser();
+  // 사이드바(티켓 08) 전까지 「사용자 관리」 진입점을 슈퍼어드민에게만 보여주기 위한 조회.
+  // 표시 판정일 뿐이라 틀려도 데이터는 새지 않는다 — 차단은 페이지·procedure 가 한다.
+  const { data: currentUser } = useQuery({
+    queryKey: ['auth', 'current-user'],
+    queryFn: () => orpc.auth.getUser.call(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 

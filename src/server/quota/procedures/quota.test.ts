@@ -17,7 +17,7 @@ import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'},
   } as ORPCContext;
 }
 

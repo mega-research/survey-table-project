@@ -3,7 +3,7 @@ import { ORPCError, os } from '@orpc/server';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
-import { isActiveUser } from '@/shared/contracts/auth';
+import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { rpcLoggingMiddleware } from './rpc-logging';
@@ -87,20 +87,22 @@ function requireActiveUser(user: ORPCContext['user']): NonNullable<ORPCContext['
 }
 
 /**
- * 관리자 베이스 — Better Auth 세션 필수 + 계정 상태 가드.
+ * 관리자 베이스 — Better Auth 세션 필수 + 계정 상태·유형 가드.
  *
  * 1) context.user non-null 검사(미인증이면 UNAUTHORIZED).
  * 2) status === 'active' 검사 — 비활성 계정(suspended/departed 등)은 FORBIDDEN.
  *    세션 발급 자체를 lib/auth/server.ts 훅이 막지만, 발급 뒤 상태가 바뀐 세션도
  *    있으므로 요청 시점에 다시 본다.
- * 3) 게스트 grant 보유자는 admin 전용 표면에서 거부한다(FORBIDDEN).
- *    게스트 허용 표면은 scoped 담당.
+ * 3) userType === 'internal' 검사 — guest/fieldwork 계정은 내부 표면 전체에서 거부한다.
+ *    각자의 콘솔(티켓 22·25)은 scoped 등 자기 가드로 열린다. 유형별 라우팅은 티켓 05.
+ * 4) 게스트 grant 보유자(env 모델)는 admin 전용 표면에서 거부한다(FORBIDDEN).
+ *    게스트 허용 표면은 scoped 담당. 이 축은 티켓 21 에서 계정 유형으로 합쳐진다.
  *
  * 통과하면 context.user가 non-null로 좁혀진다.
  */
 export const authed = base.use(({ context, next }) => {
   const user = requireActiveUser(context.user);
-  if (isGuestUser(user.id)) {
+  if (!isInternalUser(user.userType) || isGuestUser(user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   return next({ context: { user } });

@@ -12,7 +12,7 @@ import * as svc from '../services/billing';
 import { billing } from './billing';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const validCreateInput = {
@@ -91,7 +91,7 @@ describe('billing procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
     const client = createRouterClient(
       { mail: { billing } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     await expect(client.mail.billing.create(validCreateInput)).rejects.toMatchObject({
       code: 'FORBIDDEN',

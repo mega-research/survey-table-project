@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
  * 무엇을 부르든 v2 계정 공급 모델과 어긋난다.
  */
 
-const APP_DIR = resolve(__dirname, '..', '..', '..', 'src/app');
+const APP_DIR = resolve(__dirname, '..', '..', 'src/app');
 
 const RETIRED_ROUTES = ['admin/signup', 'admin/forgot-password', 'admin/reset-password'];
 

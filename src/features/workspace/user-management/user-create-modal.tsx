@@ -9,19 +9,20 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { MIN_PASSWORD_LENGTH, type CreateUserInput } from '@/shared/contracts/auth-io';
+import { CreateUserInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 import type { UserType } from '@/shared/contracts/auth';
 
 import { useCreateUser } from './queries/use-users';
+import { USER_TYPE_LABEL } from './user-vocabulary';
 
 /**
  * 유형 세그먼트 — .pen FLOW 1-2. 실사는 노출하되 비활성이다: 실사 계정은 소속 업체가
  * 있어야 성립하고 그 엔티티(fieldwork_orgs)는 티켓 24 에서 생긴다.
  */
-const TYPE_SEGMENTS: { value: UserType; label: string; disabled?: boolean }[] = [
-  { value: 'internal', label: '내부' },
-  { value: 'guest', label: '게스트' },
-  { value: 'fieldwork', label: '실사', disabled: true },
+const TYPE_SEGMENTS: { value: UserType; disabled?: boolean }[] = [
+  { value: 'internal' },
+  { value: 'guest' },
+  { value: 'fieldwork', disabled: true },
 ];
 
 const FIELD_LABEL = 'text-[12.5px] font-semibold text-[#374151]';
@@ -62,19 +63,20 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
     event.preventDefault();
     setError(null);
 
-    if (form.password.length < MIN_PASSWORD_LENGTH) {
-      setError(`비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
+    const common = { name: form.name, email: form.email, password: form.password };
+    // 규칙은 경계 계약 한 곳에만 둔다 — 여기서 길이·형식을 손으로 재현하면 서버와 갈린다.
+    const parsed = CreateUserInput.safeParse(
+      userType === 'internal'
+        ? { userType: 'internal', ...common, jobTitle: form.jobTitle }
+        : { userType: 'guest', ...common, organization: form.organization },
+    );
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
       return;
     }
 
-    const common = { name: form.name, email: form.email, password: form.password };
-    const input: CreateUserInput =
-      userType === 'internal'
-        ? { userType: 'internal', ...common, jobTitle: form.jobTitle }
-        : { userType: 'guest', ...common, organization: form.organization };
-
     try {
-      await createUser(input);
+      await createUser(parsed.data);
       close();
     } catch (err) {
       // 서버가 유일한 판정자다 — 이메일 중복(CONFLICT)·입력 검증 실패 문구를 그대로 보여준다.
@@ -107,7 +109,7 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
                         : 'text-[#6E6E73] hover:text-[#3A3A3C]'
                     } ${segment.disabled ? 'cursor-not-allowed opacity-50 hover:text-[#6E6E73]' : ''}`}
                   >
-                    {segment.label}
+                    {USER_TYPE_LABEL[segment.value]}
                   </button>
                 );
               })}

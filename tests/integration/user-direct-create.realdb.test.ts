@@ -116,6 +116,10 @@ describe.skipIf(!isLocalDb)('계정 직접 발급 (real local DB)', () => {
       organization: '한국물류협회',
       jobTitle: null,
     });
+
+    // 세션 페이로드가 userType 을 싣는지까지 본다. 안 실리면 readSessionUser 의 안전
+    // 기본값('guest')이 조용히 발동해 내부 계정 전원이 admin 표면에서 막힌다.
+    expect(signedIn.user).toMatchObject({ userType: 'guest' });
   });
 
   it('발급 감사 행이 행위자와 함께 남는다', async () => {
@@ -152,6 +156,32 @@ describe.skipIf(!isLocalDb)('계정 직접 발급 (real local DB)', () => {
     await expect(createUser(actorId, input)).rejects.toBeInstanceOf(DuplicateEmailError);
     const rows = await db.select().from(users).where(eq(users.email, email));
     expect(rows).toHaveLength(1);
+  });
+
+  it('대문자가 섞인 옛 행이 있어도 같은 이메일을 다시 발급하지 않는다', async () => {
+    const actorId = await seedActor();
+    const email = uniqueEmail('MixedCase');
+    // 옛 Supabase Auth 이관분처럼 대문자가 섞인 행. UNIQUE 는 대소문자를 구분하므로
+    // 선검사가 접어서 보지 않으면 소문자 계정이 하나 더 생긴다.
+    const legacyId = crypto.randomUUID();
+    await db.insert(users).values({
+      id: legacyId,
+      name: '옛계정',
+      email,
+      emailVerified: true,
+      status: 'active',
+      userType: 'internal',
+    });
+    createdUserIds.push(legacyId);
+
+    await expect(
+      createUser(actorId, {
+        userType: 'internal',
+        name: '새계정',
+        email: email.toLowerCase(),
+        password: PASSWORD,
+      }),
+    ).rejects.toBeInstanceOf(DuplicateEmailError);
   });
 
   it('목록은 유형 필터와 유형 칩 카운트를 함께 준다', async () => {

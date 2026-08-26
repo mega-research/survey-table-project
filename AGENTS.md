@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 02 — 인증 스왑 완료: 세션·미들웨어·REST·로그인 화면 전부 Better Auth. ADMIN_USER_IDS allowlist 은퇴(authed = 세션 + status active), proxy 는 쿠키 1차 게이트 + admin/analytics 레이아웃 재검증, 로그인 화면 v2 카피(FLOW 3-1), auth 서버 액션 삭제로 잔존 액션 1파일, `@supabase/ssr` 제거. 직전: 티켓 01 Better Auth 서버 기반 — 인증 5테이블 + 마이그레이션 0084(선반영 재생용)·0085·`pnpm auth:seed`)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 03 — 사용자 직접 생성: 슈퍼어드민이 `/admin/users` 에서 계정을 발급하고 생성 즉시 active 라 바로 로그인된다. `superadmin` oRPC 베이스 + `requireSuperadminPage` 신설, 계정 유형 게이트(`authed`·`requireAuth` 는 internal 만), `auth.users.list/create` procedure, `features/workspace` 묶음 신설(6번째), 게스트 소속 기관 컬럼 `users.organization`(마이그레이션 0086), 경계 계약 `shared/contracts/auth-io.ts`. 실사 유형 생성과 케밥 액션은 티켓 24·04 소관이라 아직 없다. 직전: 티켓 02 인증 스왑 — 세션·미들웨어·REST·로그인 화면 전부 Better Auth, ADMIN_USER_IDS allowlist 은퇴, `@supabase/ssr` 제거)
 
 ---
 
@@ -109,8 +109,8 @@ src/
 │
 │   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
 │
-├── features/                   # 프론트 기능 묶음 5개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
-│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
+├── features/                   # 프론트 기능 묶음 6개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
+│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics·workspace 독립
 │   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
@@ -145,7 +145,10 @@ src/
 │   ├── operations/             # 운영 콘솔 (84개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
-│   └── analytics/              # 차트 및 리포팅 (23개)
+│   ├── analytics/              # 차트 및 리포팅 (23개)
+│   └── workspace/              # 워크스페이스 관리 (4개, 티켓 03 신설) — 사용자 관리 목록·계정 생성 모달
+│       │                       # 팀 관리·재배치·사이드바(티켓 06~14)가 여기로 들어온다. 진입점은 폴더 안
+│       └── user-management/    # user-management-view 진입점 + user-create-modal + user-vocabulary + queries/use-users
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -239,7 +242,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘 SSOT는 `shared/contracts/auth.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘 SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -250,6 +253,7 @@ users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
 ├── status                 # pending|active|rejected|suspended|departed — pending/rejected 는
 │                          # 도달 불가 어휘(공개 가입 폐기, ADR-0018). DB default 'pending' 은 안전장치
 ├── isSuperadmin, jobTitle
+├── organization           # 게스트 소속 기관 메모 (0086, nullable) — internal 은 팀·fieldwork 는 업체에서 소속을 얻는다
 ├── userType               # internal|guest|fieldwork (0085, NOT NULL default 'internal' + CHECK)
 └── createdAt, updatedAt
 
@@ -524,6 +528,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
+/admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 ```
@@ -584,11 +589,11 @@ RSC (서버 컴포넌트)
 ```
 
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
-- procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
+- procedure 베이스 4종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
 - **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon·외부 프레임워크 핸들러 마운트(`/api/inngest`·`/api/auth`)는 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
 - 그 원칙에 따라 잔존 서버 액션은 `actions/` 1파일뿐 (unsubscribe form — 의도적 유지).
 - **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
-- 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향 · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
+- 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향(operations·analytics·workspace 는 독립) · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
 
 ---
 
@@ -642,12 +647,18 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   목적지 해석은 그 페이지(RSC)가 한다 — 게스트 grant 가 서버 설정이라 클라이언트가 결정할 수 없다.
   복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
   로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
-- REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active')를 쓴다 — oRPC `authed` 와
-  같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막는다.
-- procedure 베이스 3종 (`server/orpc.ts`):
+- REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active' + userType='internal')를 쓴다 — oRPC `authed` 와
+  같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막고, 전역 관리 RSC 는 `requireSuperadminPage` 가 슈퍼어드민만 통과시킨다(둘 다 거부는 notFound).
+- procedure 베이스 4종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
-  - **`authed`** — 세션 + `status === 'active'` + 게스트 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
+  - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
+  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리, 이후 상태 전이·실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`scoped`** — 세션 + active (게스트 포함). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+- **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
+  세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
+  (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열리며,
+  **유형별 로그인 라우팅과 게스트·실사 홈은 티켓 05·22·25 소관이라 지금은 목적지가 없다**(내부 화면에서
+  거부될 뿐이다). `readSessionUser` 의 안전 기본값은 'guest' — 값이 없으면 내부를 열지 않는 쪽으로 접는다.
 - 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃(`/admin/logout`) → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`). 계정 발급 모델(`users.user_type='guest'`)로의 교체는 티켓 21.
 - 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 

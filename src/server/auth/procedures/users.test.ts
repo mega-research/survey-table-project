@@ -23,6 +23,7 @@ function context(opts: { isSuperadmin?: boolean } = {}): ORPCContext {
       name: '슈퍼어드민',
       status: 'active',
       isSuperadmin: opts.isSuperadmin ?? true,
+      userType: 'internal',
     },
     headers: new Headers(),
   };
@@ -112,5 +113,32 @@ describe('users 생성 procedure', () => {
   it('그 밖의 예외는 그대로 올린다', async () => {
     vi.mocked(svc.createUser).mockRejectedValue(new Error('boom'));
     await expect(clientWith().users.create(VALID_CREATE)).rejects.toThrow();
+  });
+});
+
+describe('users 생성 입력 정규화', () => {
+  it('비워 보낸 직책은 미입력으로 접는다 (DB 에 빈 문자열을 남기지 않는다)', async () => {
+    await clientWith().users.create({ ...VALID_CREATE, jobTitle: '   ' });
+    expect(svc.createUser).toHaveBeenCalledWith(SUPERADMIN_ID, {
+      ...VALID_CREATE,
+      jobTitle: undefined,
+    });
+  });
+
+  it('비워 보낸 소속 기관도 미입력으로 접는다', async () => {
+    await clientWith().users.create({
+      userType: 'guest',
+      name: '김담당',
+      email: 'client@klog.or.kr',
+      password: 'initial-pw-12',
+      organization: '',
+    });
+    expect(svc.createUser).toHaveBeenCalledWith(SUPERADMIN_ID, {
+      userType: 'guest',
+      name: '김담당',
+      email: 'client@klog.or.kr',
+      password: 'initial-pw-12',
+      organization: undefined,
+    });
   });
 });

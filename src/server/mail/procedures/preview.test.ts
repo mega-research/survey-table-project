@@ -12,7 +12,7 @@ import * as svc from '../services/preview';
 import { preview } from './preview';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function validSendInput() {
@@ -96,7 +96,7 @@ describe('mail.preview procedures', () => {
     vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
     const client = createRouterClient(
       { preview },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
     );
     const res = await client.preview.sample({ surveyId: 'sv-1' });
     expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });

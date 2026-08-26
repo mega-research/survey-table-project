@@ -35,7 +35,7 @@ const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 const VERSION_ID = '33333333-4444-4555-8666-777777777777';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function anonContext(): ORPCContext {
@@ -208,6 +208,7 @@ describe('surveyBuilder.read procedures', () => {
             name: '정지계정',
             status: 'suspended',
             isSuperadmin: false,
+            userType: 'internal',
           },
         },
       },
@@ -225,7 +226,7 @@ describe('surveyBuilder.read procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
         },
       },
     );
