@@ -174,3 +174,11 @@ export const SYSTEM_SCOPE = 'system';
 
 /** 시스템 전체 보기의 표시 이름 — 팀이 아니라 슈퍼어드민의 가상 범위다(ADR-0006). */
 export const SYSTEM_SCOPE_LABEL = '메가리서치';
+
+/**
+ * 마지막으로 고른 범위를 담는 쿠키 이름.
+ *
+ * 브라우저가 쓰고(shared/lib/work-scope-cookie) 서버가 읽는다(server/work-scope). 이름이
+ * 두 벌이 되면 화면은 바꿨다고 믿고 서버는 못 읽는 조용한 어긋남이 된다.
+ */
+export const WORK_SCOPE_COOKIE = 'work_scope';

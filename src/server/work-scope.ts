@@ -1,6 +1,12 @@
 import 'server-only';
 
-import { SYSTEM_SCOPE, type WorkScope } from '@/shared/contracts/workspace';
+import { cookies } from 'next/headers';
+
+import {
+  SYSTEM_SCOPE,
+  WORK_SCOPE_COOKIE,
+  type WorkScope,
+} from '@/shared/contracts/workspace';
 
 import {
   loadAccessSubject,
@@ -55,12 +61,28 @@ export function resolveWorkScopeFor(
   return teamId ? { kind: 'team', teamId } : { kind: 'none' };
 }
 
-/** 세션 사용자로 시작하는 짧은 길 — 멤버십을 읽어 순수 판정에 넘긴다. */
+/**
+ * 세션 사용자로 시작하는 짧은 길 — 멤버십을 읽어 순수 판정에 넘긴다.
+ *
+ * 요청이 범위를 지목하지 않으면 쿠키를 본다. 화면은 첫 조회에서 아직 자기 범위를 모르므로
+ * (서버가 해석해 돌려주기 전이다) 요청에 실려 온 쿠키가 출발점이 된다. 값이 무엇이든 아래
+ * 순수 판정을 그대로 통과하므로 무효한 쿠키는 첫 활성 팀으로 접힌다.
+ */
 export async function resolveWorkScope(
   user: SurveyAccessUser,
   requested: string | null,
 ): Promise<WorkScope> {
-  return resolveWorkScopeFor(await loadAccessSubject(user), requested);
+  const scope = requested ?? (await readWorkScopeCookie());
+  return resolveWorkScopeFor(await loadAccessSubject(user), scope);
+}
+
+async function readWorkScopeCookie(): Promise<string | null> {
+  try {
+    return (await cookies()).get(WORK_SCOPE_COOKIE)?.value ?? null;
+  } catch {
+    // 요청 컨텍스트 밖(잡·스크립트)에서는 쿠키가 없다 — 범위 미지정으로 본다.
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

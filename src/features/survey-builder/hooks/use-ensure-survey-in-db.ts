@@ -4,6 +4,7 @@ import { useCallback, useRef } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { readWorkScopeCookie } from '@/shared/lib/work-scope-cookie';
 
 /**
  * CREATE 페이지에서 서버 액션 호출 전 설문이 DB에 존재하는지 보장하는 훅.
@@ -27,6 +28,9 @@ export function useEnsureSurveyInDb() {
       title: store.currentSurvey.title,
       ...(store.currentSurvey.privateToken !== undefined ? { privateToken: store.currentSurvey.privateToken } : {}),
       settings: store.currentSurvey.settings,
+      // 새 설문이 붙을 팀 — 화면이 보고 있던 범위를 그대로 넘긴다. 서버가 다시 판정하며,
+      // 시스템 전체 보기·미배치면 거부한다(티켓 07).
+      scope: readWorkScopeCookie(),
     })
       .then(() => {
         useSurveyBuilderStore.getState().markSavedToDb();

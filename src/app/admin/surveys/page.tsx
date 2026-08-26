@@ -32,12 +32,19 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/features/survey-builder/queries/use-surveys';
+import { ScopeSwitcher } from '@/features/workspace/scope-switcher';
+import { writeWorkScopeCookie } from '@/shared/lib/work-scope-cookie';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 import { orpc } from '@/shared/lib/rpc';
 
 export default function SurveyListPage() {
-  const { data: surveys, isLoading, error } = useSurveys();
+  // 첫 조회는 범위를 지목하지 않는다 — 서버가 요청 쿠키를 읽어 판정하고 결과를 돌려준다.
+  // 스위처로 바꾼 뒤부터 이 값이 채워지며, queryKey 가 갈려 다른 범위의 캐시를 재사용하지
+  // 않는다(.pen 6-1 노트).
+  const [requestedScope, setRequestedScope] = useState<string | null>(null);
+
+  const { data, isLoading, error } = useSurveys(requestedScope);
   const { mutate: deleteSurvey } = useDeleteSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   // 사이드바(티켓 08) 전까지 「사용자 관리」 진입점을 슈퍼어드민에게만 보여주기 위한 조회.
@@ -79,11 +86,20 @@ export default function SurveyListPage() {
     );
   }
 
-  const surveyList = surveys ?? [];
+  const surveyList = data?.surveys ?? [];
+  // 서버가 해석한 범위가 정답이다 — 요청한 범위와 다를 수 있다(해산된 팀 쿠키 등).
+  const scope = data?.scope ?? { kind: 'none' as const };
+  const isSystemScope = scope.kind === 'system';
+  const canCreateSurvey = scope.kind === 'team';
 
   const filteredSurveys = surveyList.filter((survey) =>
     survey.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const handleScopeChange = (next: string) => {
+    writeWorkScopeCookie(next);
+    setRequestedScope(next);
+  };
 
   const handleDeleteSurvey = (surveyId: string) => {
     if (confirm('이 설문을 삭제하시겠습니까?')) {
@@ -143,16 +159,40 @@ export default function SurveyListPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600">
                 <FileText className="h-5 w-5 text-white" />
               </div>
-              <span className="text-xl font-semibold text-gray-900">설문 관리</span>
+              <span className="text-xl font-semibold text-gray-900">
+                {isSystemScope ? '설문 관리 — 시스템 전체 보기' : '설문 관리'}
+              </span>
             </div>
+            {/* 티켓 08 이 사이드바 상단으로 옮긴다 (.pen FLOW 6-1). */}
+            <ScopeSwitcher
+              scope={scope}
+              teams={data?.teams ?? []}
+              canSeeSystemScope={data?.canSeeSystemScope ?? false}
+              onSelect={handleScopeChange}
+            />
           </div>
 
           <div className="flex items-center space-x-2">
-            <Button asChild>
-              <Link href="/admin/surveys/create">
+            {canCreateSurvey ? (
+              <Button asChild>
+                <Link href="/admin/surveys/create">
+                  <Plus className="mr-2 h-4 w-4" />새 설문 만들기
+                </Link>
+              </Button>
+            ) : (
+              // 시스템 전체 보기는 조회 범위라 소유 목적지가 될 수 없다 (.pen 6-2 노트).
+              // 팀 미배치 사용자도 같은 이유로 만들 수 없다.
+              <Button
+                disabled
+                title={
+                  isSystemScope
+                    ? '설문을 만들려면 소유 팀을 먼저 선택하세요'
+                    : '소속된 팀이 없어 설문을 만들 수 없습니다'
+                }
+              >
                 <Plus className="mr-2 h-4 w-4" />새 설문 만들기
-              </Link>
-            </Button>
+              </Button>
+            )}
             {currentUser?.isSuperadmin && (
               // 사이드바(티켓 08) 전까지의 임시 진입점. 접근 판정은 페이지·procedure 가 한다.
               <>
@@ -201,12 +241,20 @@ export default function SurveyListPage() {
               <FileText className="h-8 w-8 text-gray-400" />
             </div>
             <h3 className="mb-2 text-lg font-medium text-gray-900">
-              {searchQuery ? '검색 결과가 없습니다' : '아직 설문이 없습니다'}
+              {searchQuery
+                ? '검색 결과가 없습니다'
+                : scope.kind === 'none'
+                  ? '소속된 팀이 없습니다'
+                  : '아직 설문이 없습니다'}
             </h3>
             <p className="mb-6 text-gray-500">
-              {searchQuery ? '다른 검색어로 시도해보세요' : '첫 번째 설문을 만들어보세요!'}
+              {searchQuery
+                ? '다른 검색어로 시도해보세요'
+                : scope.kind === 'none'
+                  ? '팀에 배정되면 설문 목록이 보입니다. 관리자에게 문의하세요.'
+                  : '첫 번째 설문을 만들어보세요!'}
             </p>
-            {!searchQuery && (
+            {!searchQuery && canCreateSurvey && (
               <Button asChild>
                 <Link href="/admin/surveys/create">
                   <Plus className="mr-2 h-4 w-4" />새 설문 만들기
@@ -311,6 +359,27 @@ export default function SurveyListPage() {
                   전체 응답 {survey.responseCount.toLocaleString('ko-KR')}건 · 완료{' '}
                   {survey.completedResponseCount.toLocaleString('ko-KR')}건
                 </p>
+
+                {/* .pen 6-2 — 정상 설문은 소유 팀을, 배치 대기 설문은 배지를 단다. */}
+                <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+                  {survey.assignmentStatus === 'assignment_pending' ? (
+                    <span className="rounded-full bg-orange-100 px-2 py-1 font-medium text-orange-700">
+                      배치 대기
+                    </span>
+                  ) : (
+                    survey.teamName && (
+                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                        <Building2 className="h-3 w-3" />
+                        {survey.teamName}
+                      </span>
+                    )
+                  )}
+                  {survey.visibility === 'invite_only' && (
+                    <span className="rounded-full bg-purple-100 px-2 py-1 text-purple-700">
+                      초대된 멤버만
+                    </span>
+                  )}
+                </div>
 
                 <div className="flex items-center justify-between text-xs text-gray-400">
                   <span>수정일: {formatLocalDate(survey.updatedAt)}</span>

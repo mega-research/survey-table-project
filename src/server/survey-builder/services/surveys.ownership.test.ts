@@ -32,6 +32,15 @@ import { resolveWorkScope } from '@/server/work-scope';
 
 import { SurveyOwnershipRequiredError, createSurvey, ensureSurveyInDb } from './surveys';
 
+const SETTINGS = {
+  isPublic: true,
+  allowMultipleResponses: false,
+  showProgressBar: true,
+  shuffleQuestions: false,
+  requireLogin: false,
+  thankYouMessage: '감사합니다',
+};
+
 const actor = { id: 'u-1', isSuperadmin: false, userType: 'internal' as const };
 
 beforeEach(() => {
@@ -74,7 +83,7 @@ describe('ensureSurveyInDb — 빌더 자동 생성도 같은 귀속을 받는�
     await ensureSurveyInDb(actor, {
       id: 'draft-1',
       title: '제목 없는 설문',
-      settings: {},
+      settings: SETTINGS,
       scope: 'team-1',
     });
 
@@ -88,7 +97,7 @@ describe('ensureSurveyInDb — 빌더 자동 생성도 같은 귀속을 받는�
   it('범위를 정할 수 없으면 자동 생성도 막힌다', async () => {
     vi.mocked(resolveWorkScope).mockResolvedValue({ kind: 'none' });
     await expect(
-      ensureSurveyInDb(actor, { id: 'draft-1', title: '제목 없는 설문', settings: {} }),
+      ensureSurveyInDb(actor, { id: 'draft-1', title: '제목 없는 설문', settings: SETTINGS }),
     ).rejects.toBeInstanceOf(SurveyOwnershipRequiredError);
   });
 });
