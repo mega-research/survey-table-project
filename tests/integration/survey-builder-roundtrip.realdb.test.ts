@@ -18,7 +18,7 @@
 
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
@@ -26,6 +26,9 @@ import {
   questions as questionsTable,
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
+  teamMembers as teamMembersTable,
+  teams as teamsTable,
+  users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
@@ -37,12 +40,17 @@ import { isSlugAvailable } from '@/server/survey-builder/services/survey-read';
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
+// 역할 모델 v2(티켓 07·09): 생성은 팀 범위를, 저장·발행은 capability 를 요구하므로
+// 실사용자·팀·멤버십 픽스처가 있어야 왕복이 성립한다. id 는 실제 uuid 컬럼과 맞춘다.
+const ACTOR_ID = crypto.randomUUID();
+const TEAM_ID = crypto.randomUUID();
+
 function authedContext(): ORPCContext {
   return {
     db,
     user: {
-      id: 'admin-roundtrip',
-      email: 'admin@example.com',
+      id: ACTOR_ID,
+      email: `builder-roundtrip-${ACTOR_ID}@example.com`,
       name: '테스트관리자',
       status: 'active',
       isSuperadmin: false,
@@ -55,11 +63,28 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
   const client = createRouterClient({ surveys, save, publish }, { context: authedContext() });
   const createdSurveyIds: string[] = [];
 
+  beforeAll(async () => {
+    await db.insert(usersTable).values({
+      id: ACTOR_ID,
+      name: '테스트관리자',
+      email: `builder-roundtrip-${ACTOR_ID}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({ id: TEAM_ID, name: `빌더왕복팀-${TEAM_ID.slice(0, 8)}` });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: ACTOR_ID, role: 'member' });
+  });
+
   afterAll(async () => {
     for (const id of createdSurveyIds) {
       // survey 삭제 시 questions/survey_versions 는 FK cascade 로 정리된다.
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
+    await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, ACTOR_ID));
+    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_ID));
   });
 
   it('create -> saveDiff(질문 1개 upsert) -> publish 왕복: 버전/스냅샷/currentVersionId가 DB에 반영된다', async () => {
@@ -468,5 +493,73 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       .from(questionGroupsTable)
       .where(eq(questionGroupsTable.surveyId, copy.id));
     expect(copiedGroup?.displayCondition?.conditions[0]?.sourceQuestionId).toBe(copiedQ1.id);
+  });
+  // 관문 음성 케이스(티켓 09) — 타 팀 사용자는 이 팀의 설문을 만질 수 없다. 실 DB 로
+  // capability 로더(멤버십·소유 컬럼 조회)까지 통째로 검증하는 유일한 자리다.
+  it('타 팀 사용자의 saveDiff·publish·duplicate 는 NOT_FOUND 로 거부된다', async () => {
+    const created = await client.surveys.create({ title: '빌더-왕복-타팀-차단' });
+    createdSurveyIds.push(created.id);
+
+    const outsiderId = crypto.randomUUID();
+    const outsiderTeamId = crypto.randomUUID();
+    await db.insert(usersTable).values({
+      id: outsiderId,
+      name: '타팀사용자',
+      email: `builder-roundtrip-outsider-${outsiderId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({
+      id: outsiderTeamId,
+      name: `빌더왕복-타팀-${outsiderTeamId.slice(0, 8)}`,
+    });
+    await db
+      .insert(teamMembersTable)
+      .values({ teamId: outsiderTeamId, userId: outsiderId, role: 'leader' });
+
+    try {
+      const outsiderClient = createRouterClient(
+        { surveys, save, publish },
+        {
+          context: {
+            db,
+            user: {
+              id: outsiderId,
+              email: `builder-roundtrip-outsider-${outsiderId}@example.com`,
+              name: '타팀사용자',
+              status: 'active',
+              isSuperadmin: false,
+              userType: 'internal',
+            },
+          },
+        },
+      );
+
+      await expect(
+        outsiderClient.save.saveDiff({
+          surveyId: created.id,
+          metadata: { title: '탈취 시도', settings: { isPublic: true } },
+        } as never),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.publish.publish({ surveyId: created.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.surveys.duplicate({ surveyId: created.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      // 원본은 그대로다 — 거부가 쓰기 전에 일어났음을 확인한다.
+      const [row] = await db
+        .select({ title: surveysTable.title })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, created.id));
+      expect(row?.title).toBe('빌더-왕복-타팀-차단');
+    } finally {
+      await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, outsiderId));
+      await db.delete(teamsTable).where(eq(teamsTable.id, outsiderTeamId));
+      await db.delete(usersTable).where(eq(usersTable.id, outsiderId));
+    }
   });
 });

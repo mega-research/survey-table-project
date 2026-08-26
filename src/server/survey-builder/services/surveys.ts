@@ -46,8 +46,11 @@ import type {
  * 팀 범위에서만 설문을 만들 수 있다. 시스템 전체 보기는 teams 행이 아니라 조회 범위라
  * 소유 목적지가 될 수 없고(.pen 6-2 노트), 팀 미배치 사용자는 애초에 내부 설문 경로가 닫혀
  * 있다. 화면은 두 경우 모두 생성 버튼을 비활성으로 두지만 판정은 여기서 다시 한다.
+ *
+ * 설문을 만드는 네 경로(ensure·create·duplicate·saveWithDetails 생성 모드)가 전부 이
+ * 함수를 지나야 한다 — 하나라도 비켜가면 소유자 없는 배치 대기 설문이 생긴다.
  */
-async function resolveNewSurveyOwnership(
+export async function resolveNewSurveyOwnership(
   actor: SurveyAccessUser,
   requestedScope: string | null | undefined,
 ): Promise<{ teamId: string; ownerUserId: string; createdBy: string; assignmentStatus: 'assigned' }> {

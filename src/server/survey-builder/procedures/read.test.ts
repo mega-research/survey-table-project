@@ -7,13 +7,15 @@ vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
-  searchSurveys: vi.fn(),
   isSlugAvailable: vi.fn(),
   getQuestionGroupsBySurvey: vi.fn(),
   getQuestionsBySurvey: vi.fn(),
   getAllTags: vi.fn(),
   getVariableCatalogForSurvey: vi.fn(),
 }));
+
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
 
 vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
@@ -24,6 +26,10 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsJson: vi.fn(),
   exportResponsesAsCsv: vi.fn(),
 }));
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import * as responseSvc from '../services/response-read';
 import * as surveySvc from '../services/survey-read';
@@ -83,13 +89,6 @@ describe('surveyBuilder.read procedures', () => {
     const res = await client.read.withDetails({ surveyId: SURVEY_ID });
     expect(surveySvc.getSurveyWithDetails).toHaveBeenCalledWith(SURVEY_ID);
     expect(res).toBeNull();
-  });
-
-  it('search는 query를 풀어 searchSurveys에 위임한다', async () => {
-    vi.mocked(surveySvc.searchSurveys).mockResolvedValue([] as never);
-    const client = createRouterClient({ read }, { context: authedContext() });
-    await client.read.search({ query: 'foo' });
-    expect(surveySvc.searchSurveys).toHaveBeenCalledWith('foo');
   });
 
   it('slugAvailable는 input 객체를 그대로 isSlugAvailable에 위임한다', async () => {
@@ -245,6 +244,53 @@ describe('surveyBuilder.read procedures', () => {
         },
       },
     );
+    await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
+  });
+});
+
+describe('surveyBuilder.read — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ['byId', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['withDetails', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['questionGroups', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['questions', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['surveyVersions', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['variableCatalog', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['responsesBySurvey', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['completedResponses', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['responseById', 'responses.view', () => ({ responseId: RESPONSE_ID, surveyId: SURVEY_ID })],
+    ['responsesWithAnswers', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['exportJson', 'export.download', () => ({ surveyId: SURVEY_ID })],
+    ['exportCsv', 'export.download', () => ({ surveyId: SURVEY_ID })],
+  ] as const)('%s 는 %s 관문을 지난다', async (name, capability, makeInput) => {
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const call = client.read[name] as (input: unknown) => Promise<unknown>;
+    await call(makeInput());
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, capability);
+  });
+
+  it('타 팀 설문 id 는 NOT_FOUND — 조회 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(client.read.withDetails({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(surveySvc.getSurveyWithDetails).not.toHaveBeenCalled();
+  });
+
+  it('응답 열람 권한이 없으면 export 계열도 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
     await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });

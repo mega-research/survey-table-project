@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
 vi.mock('../services/questions', async () => {
   const actual = await vi.importActual<
     typeof import('../services/questions')
@@ -17,6 +20,10 @@ vi.mock('../services/questions', async () => {
 });
 
 import * as svc from '../services/questions';
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { questions } from './questions';
 
 function authedContext(): ORPCContext {
@@ -161,5 +168,28 @@ describe('surveyBuilder.questions procedures', () => {
     await expect(
       client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data: { title: 'Q1-edit' } }),
     ).rejects.toMatchObject({ message: 'DB 연결 오류' });
+  });
+});
+
+describe('surveyBuilder.questions — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('질문 mutation 은 survey.edit 관문을 지난다', async () => {
+    vi.mocked(svc.updateQuestion).mockResolvedValue({ id: QUESTION_ID } as never);
+    const context = authedContext();
+    const client = createRouterClient({ questions }, { context });
+    await client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data: {} });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, 'survey.edit');
+  });
+
+  it('타 팀 설문 id 로 질문을 만들면 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ questions }, { context: authedContext() });
+    await expect(
+      client.questions.create({ surveyId: SURVEY_ID, type: 'text', title: 'Q', order: 1 } as never),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.createQuestion).not.toHaveBeenCalled();
   });
 });

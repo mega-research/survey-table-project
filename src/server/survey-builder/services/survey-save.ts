@@ -2,6 +2,12 @@ import 'server-only';
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
+import {
+  denialReasonFor,
+  loadSurveyCapabilities,
+  SurveyAccessError,
+  type SurveyAccessUser,
+} from '@/server/survey-access';
 import { db } from '@/db';
 import {
   NewQuestion,
@@ -28,6 +34,7 @@ import type {
   SurveyDiffPayload,
   SurveyDiffPayloadInput,
 } from '../domain/survey-save';
+import { resolveNewSurveyOwnership } from './surveys';
 
 // 원본 interface SurveyDiffPayload 를 re-export(소비처 use-survey-sync 가 import type).
 export type { SurveyDiffPayload };
@@ -414,10 +421,23 @@ export async function saveSurveyDiff(
 }
 
 // ========================
-// 전체 설문 저장 (설문 + 그룹 + 질문 일괄) — 신규 생성 전용
+// 전체 설문 저장 (설문 + 그룹 + 질문 일괄)
 // ========================
 
+/**
+ * 신규 생성(create 페이지)과 기존 갱신이 한 입구로 들어온다 — 모드 분기가 관문이다(티켓 09).
+ *
+ * 존재 확인과 쓰기를 같은 트랜잭션에 둔다. procedure 층에서 "행이 없으면 생성 모드" 를
+ * 미리 정하면 판정과 쓰기 사이에 끼어든 생성이 남의 행 덮어쓰기가 되고, 삭제된 설문
+ * id 로는 tombstone 이 조용히 되살아난다.
+ *
+ * - 기존 행: survey.edit capability 요구. 삭제된 행은 loadSurveyCapabilities 가 없는
+ *   것으로 보므로 not_found — 저장 경로로는 tombstone 을 만질 수 없다.
+ * - 새 행: 생성이므로 소유·배치를 스탬프한다. 범위는 요청 쿠키(work_scope)를 서버가
+ *   다시 해석하며, 시스템 전체 보기·팀 미배치는 SurveyOwnershipRequiredError 로 막힌다.
+ */
 export async function saveSurveyWithDetails(
+  actor: SurveyAccessUser,
   surveyData: SurveyType,
 ): Promise<SaveResult> {
   // slug 정규화: '' -> null (UNIQUE 컬럼에 빈 문자열을 쓰면 두 번째부터 충돌)
@@ -439,6 +459,17 @@ export async function saveSurveyWithDetails(
       where: eq(surveys.id, surveyData.id),
     });
     const surveyId = surveyData.id;
+
+    // 관문 — 기존 행이면 편집 권한을 묻는다. 삭제된 행은 capability 로더도 없는 것으로
+    // 보지만(로더의 deletedAt 필터), 티켓 17 이 복구 경로를 열며 그 필터를 손대도 저장
+    // 경로가 tombstone 을 되살리지 않도록 여기서도 명시적으로 거른다.
+    if (existingSurvey) {
+      if (existingSurvey.deletedAt !== null) throw new SurveyAccessError('not_found');
+      const capabilities = await loadSurveyCapabilities(actor, surveyId);
+      const denial = denialReasonFor(capabilities, 'survey.edit');
+      if (denial) throw new SurveyAccessError(denial);
+    }
+
     const promotedResponseHeader = await promoteSurveyResponseHeader(
       surveyData.settings.responseHeader,
     );
@@ -501,8 +532,12 @@ export async function saveSurveyWithDetails(
         .set(updateSet)
         .where(eq(surveys.id, surveyData.id));
     } else {
+      // 생성 모드 — 소유·배치 스탬프는 다른 생성 경로(ensure·create·duplicate)와 같은
+      // 판정을 지난다. 범위는 요청 쿠키를 서버가 재해석한다(티켓 07·09).
+      const ownership = await resolveNewSurveyOwnership(actor, undefined);
       // INSERT 시점은 새 설문이라 lookups 가 비어있는 게 정상. surveyData.lookups 가 있으면 그대로, 없으면 빈 배열.
       await tx.insert(surveys).values({
+        ...ownership,
         id: surveyData.id,
         title: surveyData.title,
         description: surveyData.description,

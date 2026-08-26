@@ -11,6 +11,18 @@ vi.mock('../services/surveys', () => ({
   duplicateSurvey: vi.fn(),
 }));
 
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+// toRpcSurveyAccessError 는 순수 매핑이라 실물을 그대로 쓴다(importOriginal spread).
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  assertSurveyCapabilityRpc: vi.fn(),
+}));
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
+
 import * as svc from '../services/surveys';
 import { surveys } from './surveys';
 
@@ -111,6 +123,57 @@ describe('surveyBuilder.surveys procedures', () => {
     const client = createRouterClient({ surveys }, { context: anonContext() });
     await expect(client.surveys.create({ title: 'x' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
+    });
+  });
+});
+
+describe('surveyBuilder.surveys — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('update 는 survey.edit, delete 는 survey.delete 관문을 지난다', async () => {
+    vi.mocked(svc.updateSurvey).mockResolvedValue(SURVEY_ROW as never);
+    vi.mocked(svc.deleteSurvey).mockResolvedValue(undefined as never);
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
+
+    await client.surveys.update({ surveyId: SURVEY_ID, data: { title: '바뀐 제목' } });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, 'survey.edit');
+
+    await client.surveys.delete({ surveyId: SURVEY_ID });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'survey.delete',
+    );
+  });
+
+  it('타 팀 설문 id 로 delete 하면 NOT_FOUND — service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+    await expect(client.surveys.delete({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(svc.deleteSurvey).not.toHaveBeenCalled();
+  });
+
+  it('편집 권한 없는 update 는 FORBIDDEN — service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+    await expect(
+      client.surveys.update({ surveyId: SURVEY_ID, data: { title: 'x' } }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.updateSurvey).not.toHaveBeenCalled();
+  });
+
+  it('duplicate 의 서비스 관문 거부(볼 수 없는 원본)는 NOT_FOUND 로 옮긴다', async () => {
+    vi.mocked(svc.duplicateSurvey).mockRejectedValue(new SurveyAccessError('not_found'));
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+    await expect(client.surveys.duplicate({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
     });
   });
 });

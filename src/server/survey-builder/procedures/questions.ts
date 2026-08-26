@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   CreateQuestionInput,
@@ -12,15 +13,21 @@ import {
 } from '../domain/question';
 import * as svc from '../services/questions';
 
+// 질문 mutation 은 전부 설문 편집이다 — handler 첫 줄에서 survey.edit 관문을 지난다(티켓 09).
+
 const create = authed
   .input(CreateQuestionInput)
   .output(QuestionRow)
-  .handler(({ input }) => svc.createQuestion(input));
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
+    return svc.createQuestion(input);
+  });
 
 const update = authed
   .input(UpdateQuestionInput)
   .output(QuestionRow)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
     try {
       return await svc.updateQuestion(input.questionId, input.surveyId, input.data);
     } catch (err) {
@@ -39,12 +46,18 @@ const update = authed
 const remove = authed
   .input(DeleteQuestionInput)
   .output(QuestionMutationOutput)
-  .handler(({ input }) => svc.deleteQuestion(input.questionId, input.surveyId));
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
+    return svc.deleteQuestion(input.questionId, input.surveyId);
+  });
 
 const reorder = authed
   .input(ReorderQuestionsInput)
   .output(QuestionMutationOutput)
-  .handler(({ input }) => svc.reorderQuestions(input.questionIds, input.surveyId));
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
+    return svc.reorderQuestions(input.questionIds, input.surveyId);
+  });
 
 export const questions = {
   create,

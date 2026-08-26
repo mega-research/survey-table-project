@@ -64,12 +64,6 @@ export const SurveyRowOutput = z.custom<SurveyRow | null | undefined>();
 export const SurveyWithDetailsOutput = z.custom<SurveyType | null>();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// search (searchSurveys) — SurveyRow[]
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const SurveyRowArrayOutput = z.custom<SurveyRow[]>();
-
-// ─────────────────────────────────────────────────────────────────────────────
 // slugAvailable (isSlugAvailable)
 // ─────────────────────────────────────────────────────────────────────────────
 

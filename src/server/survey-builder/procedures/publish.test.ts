@@ -3,11 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
 vi.mock('../services/survey-publish', () => ({
   publishSurvey: vi.fn(),
+  countMigratableResponses: vi.fn(),
 }));
 
 import * as svc from '../services/survey-publish';
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { publish } from './publish';
 
 function authedContext(): ORPCContext {
@@ -59,5 +67,37 @@ describe('surveyBuilder.publish procedures', () => {
     await expect(
       client.publish.publish({ surveyId: SURVEY_ID }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+});
+
+describe('surveyBuilder.publish — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('publish·migratableCount 는 survey.publish 관문을 지난다', async () => {
+    vi.mocked(svc.publishSurvey).mockResolvedValue(VERSION_ROW as never);
+    vi.mocked(svc.countMigratableResponses).mockResolvedValue({ count: 0 } as never);
+    const context = authedContext();
+    const client = createRouterClient({ publish }, { context });
+
+    await client.publish.publish({ surveyId: SURVEY_ID });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'survey.publish',
+    );
+
+    await client.publish.migratableCount({ surveyId: SURVEY_ID });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('발행 권한이 없으면(참여자 등) service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ publish }, { context: authedContext() });
+    await expect(client.publish.publish({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.publishSurvey).not.toHaveBeenCalled();
   });
 });
