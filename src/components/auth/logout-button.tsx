@@ -14,6 +14,17 @@ interface Props {
 }
 
 /**
+ * 로그아웃 실행의 단일 출처 — 세션 종료 후 전체 리로드로 RSC 캐시/상태를 초기화한다.
+ *
+ * 아래 공용 버튼과 사이드바 하단 프로필(features/workspace/admin-shell)이 함께 쓴다 —
+ * 흐름이 두 벌이 되면 한쪽만 고쳐지는 순간 로그아웃 의미론이 갈린다.
+ */
+export async function signOutToLogin(): Promise<void> {
+  await authClient.signOut();
+  window.location.assign('/admin/login');
+}
+
+/**
  * 세션 종료 후 로그인 페이지로 이동하는 공용 로그아웃 버튼.
  *
  * signOut 이 실패해도 버튼이 영구 비활성으로 굳지 않도록 finally 에서 잠금을 푼다.
@@ -24,9 +35,7 @@ export function LogoutButton({ children, iconOnly = false }: Props) {
   async function handleLogout() {
     setIsLoading(true);
     try {
-      await authClient.signOut();
-      // 전체 리로드로 RSC 캐시/상태를 초기화한다.
-      window.location.assign('/admin/login');
+      await signOutToLogin();
     } finally {
       setIsLoading(false);
     }

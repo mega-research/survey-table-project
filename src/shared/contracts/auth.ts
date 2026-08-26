@@ -92,6 +92,11 @@ export interface AuthUser {
   isSuperadmin: boolean;
   /** 계정 유형. 내부 표면 접근 판정에 쓴다 — guest/fieldwork 는 자기 콘솔만 본다. */
   userType: UserType;
+  /**
+   * 아바타 URL — 사이드바 하단 프로필 표시용(티켓 08). 없으면 이니셜로 그린다.
+   * 표시 전용이라 optional — 판정에 쓰지 않으므로 기존 mock 이 채우지 않아도 된다.
+   */
+  image?: string | null;
 }
 
 /**

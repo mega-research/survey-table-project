@@ -18,7 +18,7 @@ vi.mock('next/headers', () => ({ headers: () => Promise.resolve(new Headers()) }
 import { getCurrentUser, requireActiveAccount, requireAuth } from './auth';
 
 function user(userType: UserType, status: UserStatus = 'active'): AuthUser {
-  return { id: `user-${userType}`, email: 'x@y.z', name: '테스트', status, isSuperadmin: false, userType };
+  return { id: `user-${userType}`, email: 'x@y.z', name: '테스트', status, isSuperadmin: false, userType, image: null };
 }
 
 const NON_INTERNAL = userTypeValues.filter((t) => t !== 'internal');
