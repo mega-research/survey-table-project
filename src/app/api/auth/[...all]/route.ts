@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { toNextJsHandler } from 'better-auth/next-js';
 
 import { auth } from '@/lib/auth/server';
+import { runWithSessionRevocationMark } from '@/lib/auth/session-revocation';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
@@ -75,7 +76,9 @@ async function handlePost(request: NextRequest, ctx: RouteLogContext): Promise<R
       }
     }
   }
-  return handlers.POST(request);
+  // 세션을 만드는 흐름은 폐기 표식 저장소 안에서 돈다 — 로그인 도중 슈퍼어드민이 재설정하면
+  // 세션 생성이 취소된다(티켓 30). 저장소 밖이면 판정하지 않으므로 다른 경로는 영향이 없다.
+  return runWithSessionRevocationMark(() => handlers.POST(request));
 }
 
 export const GET = withRouteLogging('/api/auth/[...all]', handleGet);

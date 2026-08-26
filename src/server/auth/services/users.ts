@@ -228,9 +228,16 @@ async function isLastActiveSuperadmin(
   return (row?.value ?? 0) <= 1;
 }
 
-/** 대상 계정의 모든 세션을 끊는다 — 전이·재설정이 공유하는 마무리. */
-async function revokeSessions(tx: Tx, userId: string): Promise<void> {
+/**
+ * 대상 계정의 모든 세션을 끊는다 — 전이·재설정이 공유하는 마무리.
+ *
+ * 지우는 것만으로는 부족하다. 이미 옛 해시를 읽어둔 로그인이 이 트랜잭션 **뒤에** 세션을
+ * 만들 수 있기 때문이다. 그래서 폐기 시각을 표식으로 남긴다 — 로그인 흐름이 시작 시점의
+ * 값과 대조해 자기가 낡았음을 알아채고 세션 생성을 취소한다(lib/auth/session-revocation).
+ */
+async function revokeSessions(tx: Tx, userId: string, now: Date): Promise<void> {
   await tx.delete(sessions).where(eq(sessions.userId, userId));
+  await tx.update(users).set({ sessionsRevokedAt: now }).where(eq(users.id, userId));
 }
 
 /**
@@ -288,7 +295,7 @@ export async function changeUserStatus(
 
     // Better Auth sign-in 훅의 비활성 차단이 1차 방어다. 잔존 세션도 항상 끊어 재직 복귀를
     // 포함한 모든 전이가 깨끗한 로그인에서 시작되게 한다.
-    await revokeSessions(tx, input.userId);
+    await revokeSessions(tx, input.userId, now);
 
     await tx.insert(userStatusEvents).values({
       id: crypto.randomUUID(),
@@ -329,7 +336,7 @@ export async function resetUserPassword(
 
     const now = new Date();
     await writeCredentialPassword(tx, input.userId, passwordHash, now);
-    await revokeSessions(tx, input.userId);
+    await revokeSessions(tx, input.userId, now);
 
     await tx.insert(userStatusEvents).values({
       id: crypto.randomUUID(),

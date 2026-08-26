@@ -9,6 +9,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { accounts, sessions, users, verifications } from '@/db/schema';
 
+import { isSessionCreationStale, setSessionRevocationMark } from './session-revocation';
+
 const THIRTY_DAYS_SECONDS = 60 * 60 * 24 * 30;
 const ONE_DAY_SECONDS = 60 * 60 * 24;
 
@@ -79,8 +81,14 @@ export const auth = betterAuth({
       if (!email) return;
       const user = await db.query.users.findFirst({
         where: eq(users.email, email),
-        columns: { status: true },
+        columns: { id: true, status: true, sessionsRevokedAt: true },
       });
+      // 로그인이 시작된 시점의 폐기 표식을 담아둔다. 이 흐름이 세션을 만들기 직전에 다시 읽어
+      // 비교한다 — 그 사이 슈퍼어드민이 재설정·전이를 했다면 이 로그인은 옛 해시로 통과한
+      // 것이므로 세션을 만들지 않는다(티켓 30).
+      if (user) {
+        setSessionRevocationMark({ userId: user.id, revokedAt: user.sessionsRevokedAt });
+      }
       if (user && user.status !== 'active') {
         // 차단 401이 미존재 계정 401과 응답 시간까지 구분되지 않도록 네이티브 실패 경로와
         // 동일하게 더미 해시를 수행한다(better-auth sign-in 라우트는 계정 없음/비밀번호
@@ -93,6 +101,35 @@ export const auth = betterAuth({
         throw APIError.from('UNAUTHORIZED', BASE_ERROR_CODES.INVALID_EMAIL_OR_PASSWORD);
       }
     }),
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        /**
+         * 세션 INSERT 직전 마지막 관문.
+         *
+         * 로그인이 시작된 뒤 대상 계정의 세션이 일괄 폐기됐다면(재설정·상태 전이) 이 로그인은
+         * 이미 무효인 크리덴셜로 통과한 것이다. 해시 검증은 이미 끝났고 되돌릴 수 없으므로,
+         * 남은 유일한 자리가 여기다.
+         *
+         * `false` 를 돌려주면 세션은 안 만들어지지만 sign-in 은 **성공으로 응답한다** — 쿠키
+         * 없는 가짜 성공이라 클라이언트가 로그인됐다고 믿는다. 그래서 던진다. 문구·코드는
+         * 잘못된 비밀번호와 같은 것을 써서 계정 상태가 응답으로 새지 않게 한다.
+         */
+        before: async (session) => {
+          const userId = (session as { userId?: unknown }).userId;
+          if (typeof userId !== 'string') return;
+          const row = await db.query.users.findFirst({
+            where: eq(users.id, userId),
+            columns: { sessionsRevokedAt: true },
+          });
+          if (isSessionCreationStale(userId, row?.sessionsRevokedAt ?? null)) {
+            throw APIError.from('UNAUTHORIZED', BASE_ERROR_CODES.INVALID_EMAIL_OR_PASSWORD);
+          }
+          return;
+        },
+      },
+    },
   },
   advanced: {
     database: {

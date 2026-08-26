@@ -1,14 +1,17 @@
 import { APIError } from 'better-auth/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { changePassword, findFirst, updateReturning, updateCalls } = vi.hoisted(() => ({
+const { changePassword, getSession, findFirst, updateReturning, updateCalls } = vi.hoisted(() => ({
   changePassword: vi.fn(),
+  getSession: vi.fn(),
   findFirst: vi.fn(),
   updateReturning: { rows: [] as unknown[] },
   updateCalls: [] as unknown[],
 }));
 
-vi.mock('@/lib/auth/server', () => ({ auth: { api: { changePassword } } }));
+vi.mock('@/lib/auth/server', () => ({
+  auth: { api: { changePassword, getSession } },
+}));
 
 vi.mock('@/db', () => ({
   db: {
@@ -34,7 +37,12 @@ const HEADERS = new Headers({ cookie: 'better-auth.session_token=t' });
 const VALID = { currentPassword: 'old-pw-12', newPassword: 'new-pw-12', confirmPassword: 'new-pw-12' };
 
 describe('updatePassword', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // 폐기 표식을 심으려면 대상이 필요해 세션을 먼저 읽는다(티켓 30).
+    getSession.mockResolvedValue({ user: { id: 'user-1' } });
+    findFirst.mockResolvedValue({ sessionsRevokedAt: null });
+  });
 
   it('새 비밀번호와 확인이 다르면 Better Auth 를 부르지 않는다', async () => {
     const res = await updatePassword(HEADERS, { ...VALID, confirmPassword: 'other-pw-12' });

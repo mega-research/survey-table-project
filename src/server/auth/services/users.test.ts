@@ -424,7 +424,9 @@ describe('resetUserPassword', () => {
   it('상태는 바꾸지 않는다 (정지·퇴사 계정도 재설정 자체는 된다)', async () => {
     target({ status: 'suspended' });
     await resetUserPassword(ACTOR, { userId: TARGET, password: 'temp-pw-1234' });
-    expect(updatedValues(users)).toBeUndefined();
+    // users 에 쓰는 것은 폐기 표식뿐이다 — status 는 건드리지 않는다(티켓 30).
+    expect(updatedValues(users)).not.toHaveProperty('status');
+    expect(updatedValues(users)).toHaveProperty('sessionsRevokedAt');
     expect(inserted(userStatusEvents)).toMatchObject({
       fromStatus: 'suspended',
       toStatus: 'suspended',

@@ -37,6 +37,9 @@ export const users = pgTable('users', {
   organization: text('organization'),
   // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0085 마이그레이션)
   userType: text('user_type').$type<UserType>().notNull().default('internal'),
+  // 세션이 마지막으로 일괄 폐기된 시각 (0087, 티켓 30). 재설정·상태 전이가 갱신한다.
+  // 로그인 경합 판정에서 **값이 바뀌었는지**만 보므로 시각 자체의 정확도는 중요하지 않다.
+  sessionsRevokedAt: timestamp('sessions_revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

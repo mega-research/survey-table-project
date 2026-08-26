@@ -6,6 +6,10 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
+import {
+  runWithSessionRevocationMark,
+  setSessionRevocationMark,
+} from '@/lib/auth/session-revocation';
 import { MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 
 import { InvalidAvatarUrlError } from '../domain/auth';
@@ -55,9 +59,23 @@ export async function updatePassword(
   }
 
   try {
-    await auth.api.changePassword({
-      body: { currentPassword, newPassword, revokeOtherSessions: true },
-      headers,
+    // 슈퍼어드민 재설정과 경합할 수 있다 — 재설정이 이 변경의 재인증 **뒤**, 세션 재발급
+    // **앞**에 커밋되면 관리자가 끊은 세션이 곧바로 되살아난다. 로그인과 같은 표식으로
+    // 그 창을 닫는다(티켓 30). 표식을 심으려면 대상이 필요하므로 세션을 먼저 읽는다.
+    await runWithSessionRevocationMark(async () => {
+      const session = await auth.api.getSession({ headers });
+      const userId = session?.user.id;
+      if (userId) {
+        const row = await db.query.users.findFirst({
+          where: eq(users.id, userId),
+          columns: { sessionsRevokedAt: true },
+        });
+        setSessionRevocationMark({ userId, revokedAt: row?.sessionsRevokedAt ?? null });
+      }
+      await auth.api.changePassword({
+        body: { currentPassword, newPassword, revokeOtherSessions: true },
+        headers,
+      });
     });
   } catch (err) {
     // 재인증 실패만 그 문구로 돌려준다. APIError 를 통째로 뭉개면 Better Auth 내부의
