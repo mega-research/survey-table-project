@@ -260,6 +260,31 @@ const eslintConfig = [
     },
   },
   {
+    // 워크스페이스(사용자 관리·팀·재배치) — 독립. 기존 5묶음과 상호 참조하지 않는다.
+    files: ["src/features/workspace/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/features/*",
+                "@/features/*/**",
+                "**/features/*/**",
+                "!@/features/workspace",
+                "!@/features/workspace/**",
+                "!**/features/workspace/**",
+              ],
+              message:
+                "features/workspace 이 import 할 수 있는 다른 feature 는 없음 입니다. 양쪽이 쓰는 조각은 공용 구역(components/ui·hooks·utils·shared)으로 옮기고, 한쪽 전용이면 호출자가 props 로 주입하세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // 공용 구역은 feature 를 모른다 — shared 가 feature 를 import 하면 그 feature 가 사실상 공용이 된 것이다.
     files: [
       "src/components/**/*.{ts,tsx}",

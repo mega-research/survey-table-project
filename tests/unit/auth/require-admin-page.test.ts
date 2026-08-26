@@ -19,6 +19,11 @@ async function loadGuard() {
   return mod.requireAdminPage;
 }
 
+async function loadSuperadminGuard() {
+  const mod = await import('@/lib/auth/require-admin-page');
+  return mod.requireSuperadminPage;
+}
+
 describe('requireAdminPage', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -51,5 +56,42 @@ describe('requireAdminPage', () => {
     const requireAdminPage = await loadGuard();
     await expect(requireAdminPage()).rejects.toThrow('인증이 필요합니다.');
     expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * requireSuperadminPage 는 전역 관리 화면(사용자 관리 등)에 oRPC superadmin 베이스와
+ * 같은 판정을 적용한다 — 페이지만 열리고 데이터는 못 받는 어긋남을 막는다.
+ */
+describe('requireSuperadminPage', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    notFound.mockClear();
+    requireAuth.mockReset();
+  });
+
+  it('active 슈퍼어드민은 통과한다', async () => {
+    requireAuth.mockResolvedValue({ id: 'su-1', isSuperadmin: true });
+
+    const requireSuperadminPage = await loadSuperadminGuard();
+    await expect(requireSuperadminPage()).resolves.toEqual({ id: 'su-1', isSuperadmin: true });
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('슈퍼어드민이 아닌 내부 계정은 notFound 로 막는다', async () => {
+    requireAuth.mockResolvedValue({ id: 'user-1', isSuperadmin: false });
+
+    const requireSuperadminPage = await loadSuperadminGuard();
+    await expect(requireSuperadminPage()).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalledOnce();
+  });
+
+  it('게스트는 슈퍼어드민 플래그가 있어도 막는다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    requireAuth.mockResolvedValue({ id: 'guest-1', isSuperadmin: true });
+
+    const requireSuperadminPage = await loadSuperadminGuard();
+    await expect(requireSuperadminPage()).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalledOnce();
   });
 });

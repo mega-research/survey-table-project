@@ -23,3 +23,17 @@ export async function requireAdminPage() {
   }
   return user;
 }
+
+/**
+ * 전역 관리 전용 RSC 페이지 진입 가드 (사용자 관리 등).
+ *
+ * oRPC superadmin 베이스와 같은 판정이다 — 페이지는 열리는데 데이터만 FORBIDDEN 으로
+ * 막히는 어긋남을 만들지 않는다. 거부는 존재를 노출하지 않도록 notFound().
+ */
+export async function requireSuperadminPage() {
+  const user = await requireAdminPage();
+  if (!user.isSuperadmin) {
+    notFound();
+  }
+  return user;
+}

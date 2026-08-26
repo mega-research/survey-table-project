@@ -21,6 +21,7 @@ import {
   Search,
   Trash2,
   User,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/features/survey-builder/queries/use-surveys';
+import { useCurrentUser } from '@/features/workspace/queries/use-current-user';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 
@@ -36,6 +38,7 @@ export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
   const { mutate: deleteSurvey } = useDeleteSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
+  const { data: currentUser } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -141,6 +144,14 @@ export default function SurveyListPage() {
                 <Plus className="mr-2 h-4 w-4" />새 설문 만들기
               </Link>
             </Button>
+            {currentUser?.isSuperadmin && (
+              // 사이드바(티켓 08) 전까지의 임시 진입점. 접근 판정은 페이지·procedure 가 한다.
+              <Link href="/admin/users">
+                <Button variant="ghost" size="icon" title="사용자 관리">
+                  <Users className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
             <Link href="/admin/profile">
               <Button variant="ghost" size="icon" title="프로필">
                 <User className="h-5 w-5" />
