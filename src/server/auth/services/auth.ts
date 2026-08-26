@@ -1,13 +1,22 @@
 import 'server-only';
 
 import { APIError } from 'better-auth/api';
+import { eq } from 'drizzle-orm';
 
+import { db } from '@/db';
+import { users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
+import { MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 
-import type { UpdatePasswordInput, UpdatePasswordOutput } from '../domain/auth';
-
-/** Better Auth 최소 비밀번호 길이(lib/auth/server.ts emailAndPassword.minPasswordLength)와 동일. */
-const MIN_PASSWORD_LENGTH = 8;
+import { InvalidAvatarUrlError } from '../domain/auth';
+import type {
+  ProfileView,
+  UpdatePasswordInput,
+  UpdatePasswordOutput,
+  UpdateProfileInput,
+  UpdateProfileOutput,
+} from '../domain/auth';
+import { UserNotFoundError } from '../domain/users';
 
 /**
  * 비밀번호 변경 — 확인 일치·최소 길이 검증 후 Better Auth 에 위임한다.
@@ -50,4 +59,70 @@ export async function updatePassword(
   }
 
   return { success: true };
+}
+
+/**
+ * 내 프로필 조회 — 세션이 아니라 DB 를 읽는다.
+ *
+ * 아바타 URL 은 세션 페이로드에 없고, 직책·소속은 사용자 관리에서 다른 사람이 바꿀 수 있어
+ * 세션 발급 시점 값이 낡아 있을 수 있다.
+ */
+export async function getProfile(userId: string): Promise<ProfileView> {
+  const row = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      userType: true,
+      jobTitle: true,
+      organization: true,
+    },
+  });
+  // 세션이 가리키는 행이 없다 — 삭제된 계정의 세션이 살아 있는 경우뿐이다.
+  if (!row) throw new UserNotFoundError();
+  return row;
+}
+
+/**
+ * 아바타 URL 이 우리 R2 공개 URL 인지 확인한다.
+ *
+ * 경계(zod)는 길이와 문자열 여부까지만 본다 — "우리 것인가" 는 env 를 봐야 알 수 있어
+ * 서버에서만 판정할 수 있다. R2 env 가 없는 환경(로컬 일부·테스트)에서는 외부 URL 을
+ * 통과시키는 대신 아바타 설정 자체를 거부한다 — 열어두는 쪽이 조용히 위험하다.
+ */
+function assertOwnAvatarUrl(url: string): void {
+  const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+  if (!publicUrl) throw new InvalidAvatarUrlError();
+  if (!url.startsWith(`${publicUrl}/`)) throw new InvalidAvatarUrlError();
+}
+
+/**
+ * 내 프로필 수정 — 이름과 아바타만.
+ *
+ * 이메일·직책·소속·유형·상태는 입력에 없다(UpdateProfileInput 주석 참조). 대상은 항상
+ * 호출자 자신이라 userId 를 입력에서 받지 않는다.
+ */
+export async function updateProfile(
+  userId: string,
+  input: UpdateProfileInput,
+): Promise<UpdateProfileOutput> {
+  if (input.image !== null) assertOwnAvatarUrl(input.image);
+
+  const [updated] = await db
+    .update(users)
+    .set({ name: input.name, image: input.image, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      image: users.image,
+      userType: users.userType,
+      jobTitle: users.jobTitle,
+      organization: users.organization,
+    });
+  if (!updated) throw new UserNotFoundError();
+  return updated;
 }

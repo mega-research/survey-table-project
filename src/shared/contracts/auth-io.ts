@@ -204,3 +204,72 @@ export function toChangeUserStatusAction(
 ): ChangeUserStatusInput['action'] {
   return action;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 프로필 — 세 계정 유형 공통 자기 계정 화면 (.pen FLOW 3-2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 프로필 화면이 읽는 내 계정.
+ *
+ * 세션 페이로드가 아니라 DB 에서 읽는다 — 아바타 URL 은 세션에 실리지 않고, 직책·소속은
+ * 다른 사람이 바꿀 수 있어(사용자 관리) 세션 발급 시점 값이 낡아 있을 수 있다.
+ */
+export const ProfileView = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  /** 아바타 이미지 URL (R2 공개 URL). 미설정이면 null — 화면은 이름 첫 글자로 대체한다. */
+  image: z.string().nullable(),
+  userType: z.enum(userTypeValues),
+  /** 직책 — 본인 수정 불가(읽기 전용). 팀장·슈퍼어드민이 바꾼다. */
+  jobTitle: z.string().nullable(),
+  /** 소속 기관 — guest 전용. 본인 수정 불가. */
+  organization: z.string().nullable(),
+});
+export type ProfileView = z.infer<typeof ProfileView>;
+
+/**
+ * 프로필 수정 입력 — 본인이 바꿀 수 있는 것만.
+ *
+ * 이메일(로그인 ID)·직책·소속·유형·상태는 여기 없다. 있어야 할 이유가 없는 게 아니라
+ * **있으면 안 된다** — 자기 계정 표면에서 바꿀 수 있으면 계정 발급 정책이 무의미해진다.
+ *
+ * image 는 null 로 보내 지울 수 있다(기본 아바타로 되돌리기). 값이 있으면 서버가 우리
+ * R2 공개 URL 인지 확인한다 — 외부 URL 을 넣으면 남의 서버가 우리 화면에 그림을 그린다.
+ */
+export const UpdateProfileInput = z.object({
+  name: z.string().trim().min(1, '이름을 입력하세요.').max(50),
+  image: z.string().max(2048).nullable(),
+});
+export type UpdateProfileInput = z.infer<typeof UpdateProfileInput>;
+
+export const UpdateProfileOutput = ProfileView;
+export type UpdateProfileOutput = z.infer<typeof UpdateProfileOutput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 비밀번호 변경 — 본인이 바꾼다 (재설정은 슈퍼어드민 소관, 위 ResetUserPasswordInput)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 비밀번호 변경 입력. 현재 비밀번호 재인증이 필수라 재설정과 모양이 다르다.
+ *
+ * 길이·일치 검증은 서비스가 한 번 더 하고 결과를 문구로 돌려준다 — 여기서 zod 로 조이면
+ * 같은 규칙이 두 벌이 되고, 실패가 BAD_REQUEST 예외가 되어 폼 옆 문구 UX 가 깨진다.
+ */
+export const UpdatePasswordInput = z.object({
+  currentPassword: z.string(),
+  newPassword: z.string(),
+  confirmPassword: z.string(),
+});
+export type UpdatePasswordInput = z.infer<typeof UpdatePasswordInput>;
+
+/**
+ * 비밀번호 변경 출력 — 판별 유니온.
+ * 검증 실패·재인증 실패를 예외가 아니라 문구로 돌려준다(폼 옆에 그대로 띄운다).
+ */
+export const UpdatePasswordOutput = z.union([
+  z.object({ success: z.literal(true) }),
+  z.object({ error: z.string() }),
+]);
+export type UpdatePasswordOutput = z.infer<typeof UpdatePasswordOutput>;

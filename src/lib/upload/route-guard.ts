@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { requireAuth } from '@/lib/auth';
+import { requireActiveAccount, requireAuth } from '@/lib/auth';
 import { isGuestUser } from '@/lib/auth/guest-grants';
 import type { RouteLogContext } from '@/lib/logger';
 
@@ -29,6 +29,30 @@ export const allowActiveUser = (): boolean => true;
 
 /** 공지 첨부 — 게스트 차단. oRPC authed 와 동일 정책. */
 export const allowAdminOnly = (userId: string): boolean => !isGuestUser(userId);
+
+/**
+ * 아바타 업로드 — 세 계정 유형 공통 진입 가드 (oRPC account 베이스의 REST 짝).
+ *
+ * guardUploadRoute 와 갈라져 있는 것은 인증 함수 하나 때문이다. 저쪽은 requireAuth(내부 전용)를
+ * 써서 게스트·실사에게 export·업로드 표면이 열리지 않게 하고, 프로필은 세 유형 모두 자기
+ * 아바타를 올려야 하므로 requireActiveAccount 를 쓴다. 이름이 다른 두 함수로 둔 이유가 이것이다 —
+ * 플래그 하나로 합치면 호출부에서 어느 청중을 향한 문인지 읽히지 않는다.
+ */
+export async function guardAvatarUploadRoute(
+  ctx: RouteLogContext,
+): Promise<UploadRouteGuardResult> {
+  try {
+    const user = await requireActiveAccount();
+    // 403 이 없는 문이라 바인딩만 남긴다 — 남용 추적에 행위자와 유형이 필요하다.
+    ctx.bind({ userId: user.id, role: user.userType });
+    return { ok: true, userId: user.id };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 }),
+    };
+  }
+}
 
 export async function guardUploadRoute(
   ctx: RouteLogContext,
