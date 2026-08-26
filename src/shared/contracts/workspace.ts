@@ -82,3 +82,75 @@ export function canManageTeamMembers(
 export function canManageTeamSettings(actor: { isSuperadmin: boolean }): boolean {
   return actor.isSuperadmin;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// surveys.visibility — 설문 공개 범위 (SSOT, 티켓 07)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// v2 에서 invite_only 의 뜻이 바뀌었다(스펙 §3) — "소유 팀 **팀원에게만** 숨김"이다.
+// 소유자·참여자·소유 팀 팀장·슈퍼어드민은 팀 공개와 완전히 같게 동작한다. v1 처럼
+// 팀장까지 막으면 팀장이 자기 팀 설문을 관리할 수 없어 승계·해산이 잠긴다.
+
+export const surveyVisibilityValues = ['team', 'invite_only'] as const;
+export type SurveyVisibility = (typeof surveyVisibilityValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// surveys.assignment_status — 팀 배치 상태 (SSOT, 티켓 07)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 가짜 기본 팀을 만들지 않기 위한 어휘다(ADR-0006). 팀 도입 이전 설문과 해산으로 팀을
+// 잃은 설문은 team_id 가 NULL 인 채 assignment_pending 으로 서고, 재배치 센터(티켓 14)가
+// 팀을 정해줄 때까지 슈퍼어드민 외에는 아무도 접근할 수 없다.
+//
+// DB CHECK 가 team_id 와의 정합을 강제한다 — assigned ↔ team_id NOT NULL,
+// assignment_pending ↔ team_id NULL. 둘 중 하나만 바꾸는 쓰기는 DB 가 거부한다.
+
+export const surveyAssignmentStatusValues = ['assigned', 'assignment_pending'] as const;
+export type SurveyAssignmentStatus = (typeof surveyAssignmentStatusValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// surveys.ownership_status — 소유권 상태 (SSOT, 티켓 07)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// succession_pending 은 소유자가 떠났는데 후임 후보가 없어 승계가 멈춘 상태다(스펙 §4).
+// 어휘를 지금 두는 이유는 CHECK 제약이 값을 알고 있어야 해서다 — 나중에 값을 늘리려면
+// 마이그레이션이 또 필요하다. 실제 전이는 티켓 19 가 붙인다.
+
+export const surveyOwnershipStatusValues = ['normal', 'succession_pending'] as const;
+export type SurveyOwnershipStatus = (typeof surveyOwnershipStatusValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 capability — 권한 판정의 최소 단위 (SSOT, 스펙 §8)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 역할 이름으로 분기하지 않고 언제나 capability 로 묻는다. 역할은 프리셋일 뿐이라
+// 화면과 서버가 각자 "팀장이면" 같은 조건을 쓰기 시작하면 매트릭스가 두 벌이 된다.
+//
+// 여기 없는 것: team.manageMembers·dissolve·reassign·system.admin. 그것들은 설문이
+// 아니라 팀·시스템 축이라 이 집합에 섞지 않는다 — 판정은 canManageTeamMembers·
+// canManageTeamSettings(위)와 superadmin 베이스가 한다.
+
+export const surveyCapabilityValues = [
+  'survey.view',
+  'survey.edit',
+  'survey.publish',
+  /** soft delete — 참여자까지 갖는 권한이라 복구 경로(티켓 17)가 전제다. */
+  'survey.delete',
+  /** 참여자·게스트·실사를 **추가**. 접근 가능한 내부인이면 누구나 할 수 있다(스펙 §4). */
+  'survey.invite',
+  /** 제외·공개 범위 변경·게스트/실사 부여 해제 — 스펙 §8 의 한 행이라 하나로 둔다. */
+  'survey.manageAccess',
+  'survey.transferOwnership',
+  'operations.view',
+  'responses.view',
+  'contacts.view',
+  'contacts.manage',
+  /** 결과코드·메모 쓰기 — 실사원도 갖는 유일한 쓰기라 contacts.manage 와 가른다. */
+  'contacts.writeAttempts',
+  'mail.view',
+  'mail.send',
+  'analytics.view',
+  'export.download',
+  'surveyGroup.manage',
+] as const;
+export type SurveyCapability = (typeof surveyCapabilityValues)[number];

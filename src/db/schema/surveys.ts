@@ -15,6 +15,11 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
+import type {
+  SurveyAssignmentStatus,
+  SurveyOwnershipStatus,
+  SurveyVisibility,
+} from '@/shared/contracts/workspace';
 import type { ProfileColumnScheme, ProgressColumnScheme } from '@/shared/contracts/operations';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type {
@@ -45,6 +50,9 @@ import type {
   TableRow,
   TableValidationRule,
 } from '@/types/survey';
+
+import { users } from './auth';
+import { teams } from './workspace';
 
 // 설문 테이블
 export const surveys = pgTable(
@@ -116,6 +124,30 @@ export const surveys = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
 
     contactEmail: text('contact_email'),
+
+    // 워크스페이스 귀속 (0089 마이그레이션, 역할 모델 v2 티켓 07)
+    //
+    // 설문은 팀에 속하고 팀원은 자기 팀 설문만 본다(ADR-0006·0008). 팀을 아직 못 정한
+    // 설문은 가짜 기본 팀에 넣지 않고 teamId=NULL + assignmentStatus='assignment_pending'
+    // 으로 세운다 — 그 상태에서는 슈퍼어드민만 닿을 수 있고 재배치 센터(티켓 14)가 팀을
+    // 정해준다. 둘의 정합은 DB CHECK 가 강제한다.
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    visibility: text('visibility').$type<SurveyVisibility>().notNull().default('team'),
+    // ownerUserId·createdBy 는 앱이 채우는 값이라 2단계 배포다(주의사항 8) — 0089 는
+    // nullable 로 추가하고 백필만 한다. SET NOT NULL 은 앱 배포 후(티켓 29).
+    ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'restrict' }),
+    // survey_groups 테이블은 티켓 12 소관이라 아직 없다 — FK 도 그때 붙는다.
+    surveyGroupId: uuid('survey_group_id'),
+    ownershipStatus: text('ownership_status')
+      .$type<SurveyOwnershipStatus>()
+      .notNull()
+      .default('normal'),
+    assignmentStatus: text('assignment_status')
+      .$type<SurveyAssignmentStatus>()
+      .notNull()
+      .default('assignment_pending'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -123,6 +155,12 @@ export const surveys = pgTable(
     // 0069 마이그레이션의 surveys_preview_token_unique 와 이름을 맞춘다. nullable 컬럼이라
     // NULL 행은 제약에서 제외(다중 NULL 허용) — contact_targets.invite_code(0054)와 동일 패턴.
     unique('surveys_preview_token_unique').on(table.previewToken),
+    // 배치 상태와 팀은 한 몸이다 — 한쪽만 바꾸는 쓰기를 DB 가 거부한다.
+    check(
+      'surveys_assignment_check',
+      sql`(${table.assignmentStatus} = 'assigned' AND ${table.teamId} IS NOT NULL)
+        OR (${table.assignmentStatus} = 'assignment_pending' AND ${table.teamId} IS NULL)`,
+    ),
   ],
 );
 

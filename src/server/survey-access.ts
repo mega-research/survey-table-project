@@ -1,0 +1,226 @@
+import 'server-only';
+
+import { and, eq, isNull } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { surveys } from '@/db/schema';
+import type { UserType } from '@/shared/contracts/auth';
+import {
+  surveyCapabilityValues,
+  type SurveyAssignmentStatus,
+  type SurveyCapability,
+  type SurveyVisibility,
+} from '@/shared/contracts/workspace';
+
+import { getActiveTeamMemberships } from './workspace/services/active-membership';
+
+/**
+ * 설문 접근 판정 — 이 파일이 유일한 정본이다 (역할 모델 v2 티켓 07, 스펙 §8).
+ *
+ * data-scope.ts 의 형제로 코어 계층에 둔다. "어느 파티션을 보는가" 를 그쪽이 정하듯
+ * "무엇을 할 수 있는가" 는 여기가 정한다 — 도메인마다 각자 판정하면 매트릭스가 여러 벌이 된다.
+ *
+ * 판정은 순수 함수(resolveSurveyCapabilities)가 하고, DB 조회는 로더(loadSurveyAccess)가
+ * 한다. 관문(assertSurveyCapability)은 둘을 잇는 얇은 층이다.
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 주체·대상 모양
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SurveyAccessSubject {
+  userId: string;
+  isSuperadmin: boolean;
+  userType: UserType;
+  /** **active 팀**의 멤버십 teamId — archived 팀 멤버십은 소속이 아니다(ADR-0011). */
+  activeTeamIds: readonly string[];
+  /** 위 중 role='leader' 인 teamId. */
+  leaderTeamIds: readonly string[];
+}
+
+export interface SurveyAccessTarget {
+  teamId: string | null;
+  visibility: SurveyVisibility;
+  /** 2단계 배포 중이라 nullable — 백필 전 행이 소유자 없이 존재할 수 있다. */
+  ownerUserId: string | null;
+  assignmentStatus: SurveyAssignmentStatus;
+}
+
+/**
+ * 설문 단위 초대 — survey_participants 는 티켓 18 이 만든다.
+ *
+ * 지금 이 자리를 비워두지 않는 이유는 판정 순서가 초대 유무에 달려 있기 때문이다. 나중에
+ * 인자를 끼워 넣으면 그때 모든 호출부의 순서가 바뀐다.
+ */
+export interface SurveyParticipation {
+  kind: 'member' | 'guest' | 'fieldwork';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 역할 프리셋 — 스펙 §8 표의 열
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALL_CAPABILITIES: readonly SurveyCapability[] = surveyCapabilityValues;
+
+/**
+ * 소유자와 소유 팀 팀장은 같은 전권을 갖는다(v2 델타 — v1 은 팀장을 invite_only 에서 막았다).
+ * 팀장이 자기 팀 설문을 관리하지 못하면 승계·해산·재배치가 소유자 부재로 잠긴다.
+ */
+const OWNER_CAPS: readonly SurveyCapability[] = ALL_CAPABILITIES;
+const LEADER_CAPS: readonly SurveyCapability[] = ALL_CAPABILITIES;
+
+/**
+ * 참여자 — 삭제까지 받는 신뢰 수준이라 운영 깊이(응답 상세·컨택·메일·export)를 함께 준다
+ * (스펙 §4 ⚠️가정, §11-1). 빠지는 것은 설문 자체의 처분권이다: 발행·공유 관리·소유권 이전,
+ * 그리고 팀 소유 구조인 설문 그룹.
+ */
+const PARTICIPANT_CAPS: readonly SurveyCapability[] = [
+  'survey.view',
+  'survey.edit',
+  'survey.delete',
+  'survey.invite',
+  'operations.view',
+  'responses.view',
+  'contacts.view',
+  'contacts.manage',
+  'contacts.writeAttempts',
+  'mail.view',
+  'mail.send',
+  'analytics.view',
+  'export.download',
+];
+
+/**
+ * 팀 공개 설문의 팀원 — 만들고 고치고 현황·분석을 보되 응답자 개인 데이터(응답 상세·컨택
+ * 원본·메일·export)에는 닿지 않는다. 설문 그룹은 팀 공용 구조라 팀원도 정리할 수 있다.
+ */
+const TEAM_MEMBER_CAPS: readonly SurveyCapability[] = [
+  'survey.view',
+  'survey.edit',
+  'survey.invite',
+  'operations.view',
+  'analytics.view',
+  'surveyGroup.manage',
+];
+
+const NONE: ReadonlySet<SurveyCapability> = new Set();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 판정 (순수)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 이 사람이 이 설문에서 할 수 있는 일 — DB 를 만지지 않는 순수 함수.
+ *
+ * 순서가 곧 정책이다:
+ *  1. 계정 유형 — guest·fieldwork 는 각자의 부여 모델(티켓 21·24)이 붙기 전까지 기본 거부.
+ *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
+ *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
+ *  4. 배치 대기 설문 — 슈퍼어드민 외 차단. 팀이 정해지기 전에는 소유자도 못 연다(ADR-0006).
+ *  5. 소유자 → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원.
+ *
+ * invite_only 는 8번만 지운다 — "소유 팀 팀원에게만 숨김"이 v2 의 뜻이다(스펙 §3).
+ */
+export function resolveSurveyCapabilities(
+  subject: SurveyAccessSubject,
+  survey: SurveyAccessTarget,
+  participation?: SurveyParticipation | null,
+): ReadonlySet<SurveyCapability> {
+  // isSuperadmin 은 internal 전용 플래그다 — 유형 게이트가 먼저 선다.
+  if (subject.userType !== 'internal') return NONE;
+  if (subject.isSuperadmin) return new Set(ALL_CAPABILITIES);
+  if (subject.activeTeamIds.length === 0) return NONE;
+  if (survey.assignmentStatus === 'assignment_pending') return NONE;
+
+  if (survey.ownerUserId !== null && survey.ownerUserId === subject.userId) {
+    return new Set(OWNER_CAPS);
+  }
+  if (survey.teamId !== null && subject.leaderTeamIds.includes(survey.teamId)) {
+    return new Set(LEADER_CAPS);
+  }
+  // 참여자는 팀 경계를 넘는다 — 소유 팀 소속이 아니어도 선다(스펙 §4).
+  if (participation?.kind === 'member') return new Set(PARTICIPANT_CAPS);
+
+  if (
+    survey.visibility === 'team' &&
+    survey.teamId !== null &&
+    subject.activeTeamIds.includes(survey.teamId)
+  ) {
+    return new Set(TEAM_MEMBER_CAPS);
+  }
+  return NONE;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 로더 · 관문
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 세션이 들고 있는 만큼의 주체 정보 — 멤버십은 로더가 채운다. */
+export interface SurveyAccessUser {
+  id: string;
+  isSuperadmin: boolean;
+  userType: UserType;
+}
+
+export class SurveyAccessError extends Error {
+  constructor(public readonly reason: 'not_found' | 'forbidden') {
+    super(reason);
+    this.name = 'SurveyAccessError';
+  }
+}
+
+/** 이 사람의 유효 소속을 읽어 판정 주체로 만든다. */
+export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyAccessSubject> {
+  // 내부 계정이 아니면 멤버십 자체가 금지다(스펙 §1) — 조회를 아낀다.
+  const memberships =
+    user.userType === 'internal' ? await getActiveTeamMemberships(user.id) : [];
+  return {
+    userId: user.id,
+    isSuperadmin: user.isSuperadmin,
+    userType: user.userType,
+    activeTeamIds: memberships.map((m) => m.teamId),
+    leaderTeamIds: memberships.filter((m) => m.role === 'leader').map((m) => m.teamId),
+  };
+}
+
+/**
+ * 설문 하나에 대한 capability 를 DB 에서 읽어 판정한다.
+ *
+ * 삭제된 설문(deletedAt)은 없는 것으로 본다 — 복구 경로는 티켓 17 이 자기 관문으로 연다.
+ * 참여자 조회는 survey_participants 가 생기는 티켓 18 에서 이 자리에 붙는다.
+ */
+export async function loadSurveyCapabilities(
+  user: SurveyAccessUser,
+  surveyId: string,
+): Promise<ReadonlySet<SurveyCapability>> {
+  const [row] = await db
+    .select({
+      teamId: surveys.teamId,
+      visibility: surveys.visibility,
+      ownerUserId: surveys.ownerUserId,
+      assignmentStatus: surveys.assignmentStatus,
+    })
+    .from(surveys)
+    .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
+    .limit(1);
+  if (!row) throw new SurveyAccessError('not_found');
+
+  const subject = await loadAccessSubject(user);
+  return resolveSurveyCapabilities(subject, row, null);
+}
+
+/**
+ * 관문 — 이 capability 가 없으면 통과시키지 않는다.
+ *
+ * 존재를 알려주지 않기 위해 없는 설문과 권한 없는 설문을 같은 not_found 로 접는 것은
+ * **호출부의 선택**이다. 여기서는 두 사유를 갈라 돌려주고, 화면·procedure 가 자기 표면에
+ * 맞는 코드로 옮긴다.
+ */
+export async function assertSurveyCapability(
+  user: SurveyAccessUser,
+  surveyId: string,
+  capability: SurveyCapability,
+): Promise<void> {
+  const caps = await loadSurveyCapabilities(user, surveyId);
+  if (!caps.has(capability)) throw new SurveyAccessError('forbidden');
+}
