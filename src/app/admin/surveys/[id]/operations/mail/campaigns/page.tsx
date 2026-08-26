@@ -10,6 +10,7 @@ import {
   listUnsubscribedContacts,
 } from '@/server/mail/services/campaigns-read';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
 
 const PAGE_SIZE = 20;
 const UNSUB_PAGE_SIZE = 10;
@@ -26,6 +27,9 @@ function parsePage(value: string | undefined): number {
 
 export default async function MailCampaignsListPage({ params, searchParams }: Props) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
+  await assertGuestSurveyPageAccess(surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
   const page = parsePage(sp.page);

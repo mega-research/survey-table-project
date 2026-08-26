@@ -22,6 +22,7 @@ import { getResponseTime } from '@/server/operations/services/response-time';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
+import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.
@@ -84,6 +85,9 @@ export default async function OperationsOverviewPage({
   searchParams,
 }: OperationsOverviewPageProps) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
+  await assertGuestSurveyPageAccess(surveyId);
   const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = await searchParams;
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);

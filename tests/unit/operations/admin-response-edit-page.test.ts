@@ -7,6 +7,11 @@ const RESPONSE_ID = '00000000-0000-4000-8000-000000000053';
 const CONTACT_ID = '00000000-0000-4000-8000-000000000054';
 
 vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
+// 이 테스트의 관심사는 컨택 스코프 격리다. 페이지를 요청 스코프 밖에서 직접 부르므로
+// headers() 를 쓰는 진입 가드는 목으로 둔다 — 가드 자체는 guest-page-guard.test.ts 가 본다.
+vi.mock('@/lib/auth/guest-page-guard', () => ({
+  assertGuestSurveyPageAccess: vi.fn(async () => undefined),
+}));
 vi.mock('@/lib/auth/require-survey-ownership', () => ({
   requireSurveyOwnership: vi.fn(),
 }));

@@ -12,6 +12,7 @@ import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
 
 import { AdminResponseEditor } from './admin-response-editor';
+import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
 
 interface PageProps {
   params: Promise<{ id: string; responseId: string }>;
@@ -36,6 +37,9 @@ export const metadata = { title: '응답 수정' };
  */
 export default async function AdminResponseEditPage({ params, searchParams }: PageProps) {
   const { id: surveyId, responseId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
+  await assertGuestSurveyPageAccess(surveyId);
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
