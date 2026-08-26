@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 08 사이드바·팀 스위처·설문 목록 — admin 공통 셸 `features/workspace/admin-shell`(네이비 사이드바 + 팀 스위처 + 하단 프로필, .pen FLOW 6-1)을 `app/admin/layout.tsx` 가 내부 계정에 입히고, 설문 목록을 `features/survey-builder/survey-list`(상태 칩·검색·정렬·상세 검색·페이지네이션·카드)로 개편. 작업 범위는 `shared/lib/work-scope-context` 로 화면 트리에 흐르고 쿼리 키에 범위가 들어가 팀 간 캐시가 격리된다. 팀 미배치는 프로필만(.pen FLOW 9-1). 직전: 티켓 07 설문 팀 귀속 — `surveys` 소유·배치 컬럼 7종(0089), 접근 판정 코어 `server/survey-access`, 작업 범위 코어 `server/work-scope`)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 09 관문 배선 A — 빌더·분석 도메인의 surveyId procedure 전수와 콘솔 RSC(preview·분석 2면)가 capability 관문을 지난다. RPC 어댑터 `server/rpc-survey-access`(NOT_FOUND 은닉/FORBIDDEN)·페이지 어댑터 `server/page-survey-access`(notFound 접기) 신설, 거부 사유 정본은 코어 `denialReasonFor`. `saveWithDetails` 는 서비스 트랜잭션 안 모드 분기(기존 행 survey.edit + tombstone 거부, 새 행 소유 스탬프 — 네 번째 생성 경로였다). `/analytics` 목록은 작업 범위 조회로 교체, 무범위 `getSurveys`·`read.search` 제거. 운영 콘솔·REST 배선은 티켓 10·11. 직전: 티켓 08 admin 셸·팀 스위처·설문 목록 개편)
 
 ---
 
@@ -89,7 +89,9 @@ src/
 │   ├── health.ts               # health procedure (코어 옆)
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
-│   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + assertSurveyCapability(관문)
+│   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
+│   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
+│   ├── page-survey-access.ts   # 관문의 RSC 페이지 어댑터 — assertSurveyCapabilityPage(사유 불문 notFound 접기)
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota · workspace
@@ -744,14 +746,25 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   범위를 해석해 `AdminShell` 에 넘기고(무효 쿠키는 거부가 아니라 기본 범위로 접는다 — 쿠키는 편의값),
   전환은 쿠키 기록 + 전체 쿼리 캐시 무효화 + `router.refresh` 로 처리한다. 목록 쿼리 키에는 항상
   해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
-- **설문을 만드는 경로 셋(빌더 자동 생성·명시 생성·복제)은 전부 소유·배치 컬럼을 채운다.** 시스템
-  전체 보기는 teams 행이 아니라 조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수
-  없다 — 서버가 `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
+- **설문을 만드는 경로 넷(빌더 자동 생성·명시 생성·복제·전체 저장 생성 모드)은 전부
+  `resolveNewSurveyOwnership` 로 소유·배치 컬럼을 채운다.** 시스템 전체 보기는 teams 행이 아니라
+  조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수 없다 — 서버가
+  `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
   팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
-  **관문 배선은 아직 목록·생성·복제 + 응답 상세 편집까지다** — 빌더·운영 콘솔·REST 전면 배선은
-  티켓 09~~11 이 한다. 그때까지 URL 직접 진입과 `/analytics` 목록은 종전 가드(인증·게스트 grant)만
-  받는다. 관문 함수의 이름은 **`assertSurveyCapability`** 다(티켓 09~~11 본문이 지목하는
-  `assertSurveyAccess` 는 게스트 grant 용 옛 함수이며 그 배선 때 걷힌다).
+  복제·기존 행 ensure 는 원본에 **survey.edit** 을 요구한다 — 열람만 가진 주체가 사본의 전권을
+  얻거나 타 팀 설문의 존재를 확인하는 우회를 막는다.
+- **관문 배선(티켓 09 완료분)**: 빌더·분석 도메인의 surveyId procedure 전수가 handler 첫 줄에서
+  `assertSurveyCapabilityRpc` 를 지난다(조회 survey.view · 응답 responses.view · 내보내기
+  export.download · mutation survey.edit · 발행 survey.publish · 삭제 survey.delete · 분석
+  analytics.view). 거부 사유의 정본은 코어 `denialReasonFor` 하나다 — **survey.view 가 없으면
+  forbidden 이 아니라 not_found**(id 스캔으로 타 팀 설문 존재 확인 차단), 보이는 설문의 권한
+  부족만 forbidden. RSC(preview·분석 2면·응답 상세 편집)는 `assertSurveyCapabilityPage` 로 사유
+  불문 notFound 접기(preview 는 env grant 게스트를 `isGuestUser` 로 비켜준다 — 티켓 21 이 통합).
+  `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신 한
+  입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 보관함(library)은
+  surveyId 없는 조직 공용이라 authed 유지. **운영 콘솔·REST 배선은 티켓 10·11 몫**이며 그때까지
+  운영 콘솔 URL 직접 진입은 종전 가드(인증·게스트 grant)만 받는다. 옛 `assertSurveyAccess`
+  (`server/orpc.ts` 의 게스트 grant 용)는 scoped 표면이 아직 쓰므로 10·11 이 걷는다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
