@@ -38,7 +38,7 @@ import type { FilterClause } from './contacts-filters.server';
 import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
-  latestMailStatusExpr,
+  effectiveMailStatusExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
@@ -76,10 +76,12 @@ export interface ContactsRow {
   progressPct: number | null;
   /** 매칭 응답의 status (completed/in_progress/drop 등). 응답 없으면 null */
   responseStatus: string | null;
-  /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
+  /**
+   * 유효 메일 상태 — 수신거부 판정(unsubscribed_at 또는 최근 결과코드 수신거부)이면
+   * 발송 이력과 무관하게 'skipped_unsubscribed'. 필터·정렬과 같은 표현식
+   * (effectiveMailStatusExpr) 기준. 발송 이력도 수신거부 판정도 없으면 null.
+   */
   latestMailStatus: MailRecipientStatus | null;
-  /** 수신거부 시각 — 메일 컬럼에서 발송 상태보다 우선 표시 (필터의 수신거부 판정과 동일 축) */
-  unsubscribedAt: Date | null;
   inviteToken: string;
   createdAt: Date;
 }
@@ -204,8 +206,7 @@ export async function listContactsForSurvey(
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
-      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
-      unsubscribedAt: contactTargets.unsubscribedAt,
+      latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -228,7 +229,6 @@ export async function listContactsForSurvey(
     progressPct: r.progressPct,
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
-    unsubscribedAt: r.unsubscribedAt,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));
@@ -270,7 +270,7 @@ export async function listContactsForExport(
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
-      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
+      latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))

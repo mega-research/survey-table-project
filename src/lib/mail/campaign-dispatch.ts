@@ -7,7 +7,7 @@ import { render } from '@react-email/render';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema/contacts';
+import { contactAttempts, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/db/schema/schema-types';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -24,6 +24,7 @@ import {
 } from '@/lib/mail/send-bulk';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
+import { getResultCodeStatuses } from '@/lib/operations/result-code-statuses.server';
 
 type CampaignDispatchState = Pick<
   typeof mailCampaigns.$inferSelect,
@@ -101,6 +102,7 @@ async function claimRecipientDelivery(
   recipientId: string,
   now: Date,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
+  negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   const leaseToken = randomUUID();
   const leaseExpiresAt = new Date(now.getTime() + DELIVERY_LEASE_MS);
@@ -223,6 +225,28 @@ async function claimRecipientDelivery(
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
       }
+      // 큐잉 → dispatch 사이에 negative(모집단 제외) 결과코드 회차가 기록된 컨택 재검증.
+      // 캠페인 생성 시점 배제(preflightRecipients·buildNegativeCodeExists)와 같은
+      // 판정(회차 이력 EXISTS)을 발송 직전에 반복한다 — unsubscribed_at 재검증과
+      // 동일한 TOCTOU 방어.
+      if (negativeResultCodes.length > 0) {
+        const [negativeAttempt] = await tx
+          .select({ attemptId: contactAttempts.id })
+          .from(contactAttempts)
+          .where(
+            and(
+              eq(contactAttempts.contactTargetId, currentContact.id),
+              inArray(contactAttempts.resultCode, negativeResultCodes),
+            ),
+          )
+          .limit(1);
+        if (negativeAttempt) {
+          return finishWithoutSend(
+            'skipped_unsubscribed',
+            '모집단 제외 결과코드가 기록되어 발송을 건너뛰었습니다.',
+          );
+        }
+      }
       if (proposedPayload === null) {
         return finishWithoutSend('failed', '발송에 필요한 recipient snapshot이 없습니다.');
       }
@@ -278,12 +302,14 @@ async function claimRecipientDeliveryWithWait(
   campaignId: string,
   recipientId: string,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
+  negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   let claim = await claimRecipientDelivery(
     campaignId,
     recipientId,
     new Date(),
     proposedPayload,
+    negativeResultCodes,
   );
   if (claim.kind !== 'busy') return claim;
 
@@ -299,6 +325,7 @@ async function claimRecipientDeliveryWithWait(
       recipientId,
       new Date(),
       proposedPayload,
+      negativeResultCodes,
     );
   }
   if (claim.kind === 'busy') {
@@ -652,6 +679,9 @@ export async function dispatchCampaignChunk(
     return { sent: 0, failed: 0, cancelled: true };
   }
 
+  // 발송 직전 재검증용 negative(모집단 제외) 결과코드 — 청크당 1회 로드.
+  const { negative: negativeResultCodes } = await getResultCodeStatuses(campaign.surveyId);
+
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   const fromDomain = process.env['RESEND_FROM_DOMAIN'];
 
@@ -788,6 +818,7 @@ export async function dispatchCampaignChunk(
       campaignId,
       proposed.recipientId,
       proposed.payload,
+      negativeResultCodes,
     );
     if (claim.kind === 'cancelled') return { sent, failed, cancelled: true };
     if (claim.kind === 'terminalized') {

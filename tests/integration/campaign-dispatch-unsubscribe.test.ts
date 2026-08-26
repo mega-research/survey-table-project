@@ -8,10 +8,16 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  * skipped_unsubscribed 로 마감하는지 검증.
  */
 
-const { sendRecipientMock, selectState } = vi.hoisted(() => ({
-  sendRecipientMock: vi.fn(),
-  selectState: { call: 0 },
-}));
+const { sendRecipientMock, selectState, negativeCodesState, negativeAttemptContacts } = vi.hoisted(
+  () => ({
+    sendRecipientMock: vi.fn(),
+    selectState: { call: 0 },
+    // getResultCodeStatuses mock 이 반환할 negative(모집단 제외) 코드 목록.
+    negativeCodesState: { codes: [] as string[] },
+    // negative 결과코드 회차가 기록된 contact_targets.id 집합.
+    negativeAttemptContacts: new Set<string>(),
+  }),
+);
 
 process.env['NEXT_PUBLIC_APP_URL'] = 'https://example.com';
 process.env['RESEND_FROM_DOMAIN'] = 'mail.example.com';
@@ -115,6 +121,12 @@ vi.mock('@/db', () => {
             result = claimedRecipient
               ? [{ id: claimedRecipient.recipientId, contactTargetId: claimedRecipient.contactTargetId }]
               : [];
+          } else if (keys.includes('attemptId')) {
+            // 발송 직전 negative 결과코드 회차 재검증 조회.
+            result = claimedRecipient?.contactTargetId
+              && negativeAttemptContacts.has(claimedRecipient.contactTargetId)
+              ? [{ attemptId: 'attempt-1' }]
+              : [];
           } else if (keys.includes('unsubscribedAt')) {
             result = claimedRecipient?.contactTargetId
               ? [{
@@ -134,6 +146,9 @@ vi.mock('@/db', () => {
               return this;
             },
             where() {
+              return this;
+            },
+            limit() {
               return this;
             },
             for: vi.fn(async () => result),
@@ -204,12 +219,21 @@ vi.mock('@/lib/mail/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
+vi.mock('@/lib/operations/result-code-statuses.server', () => ({
+  getResultCodeStatuses: vi.fn(async () => ({
+    positive: [],
+    negative: negativeCodesState.codes,
+  })),
+}));
+
 import { dispatchCampaignChunk } from '@/lib/mail/campaign-dispatch';
 
 beforeEach(() => {
   setPayloads.length = 0;
   selectState.call = 0;
   claimIndex = 0;
+  negativeCodesState.codes = [];
+  negativeAttemptContacts.clear();
   recipientRows[0]!.emailSnapshot = 'active@example.com';
   recipientRows[0]!.status = 'queued';
   recipientRows[0]!.sendAttemptedAt = null;
@@ -241,6 +265,24 @@ describe('dispatchCampaignChunk 수신거부 재검증', () => {
 
     const skipped = setPayloads.some((p) => p['status'] === 'skipped_unsubscribed');
     expect(skipped).toBe(true);
+  });
+
+  it('큐잉 후 negative 결과코드 회차가 기록된 수신자는 발송을 건너뛴다', async () => {
+    negativeCodesState.codes = ['수신거부'];
+    negativeAttemptContacts.add('contact-r1');
+
+    await dispatchCampaignChunk('c1', ['r1']);
+
+    expect(sendRecipientMock).not.toHaveBeenCalled();
+    expect(setPayloads.some((p) => p['status'] === 'skipped_unsubscribed')).toBe(true);
+  });
+
+  it('negative 코드가 비어 있으면 결과코드 재검증 없이 발송한다', async () => {
+    negativeAttemptContacts.add('contact-r1');
+
+    await dispatchCampaignChunk('c1', ['r1']);
+
+    expect(sendRecipientMock).toHaveBeenCalledTimes(1);
   });
 
   it('이메일 스냅샷이 없으면 외부 발송 입력에서 제외한다', async () => {

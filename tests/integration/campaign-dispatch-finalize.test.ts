@@ -135,6 +135,12 @@ vi.mock('@/db', () => {
   return { db };
 });
 
+// negative 결과코드 재검증은 이 스위트의 관심사가 아니다 — 빈 목록으로 무력화
+// (전용 검증은 campaign-dispatch-unsubscribe.test.ts).
+vi.mock('@/lib/operations/result-code-statuses.server', () => ({
+  getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
+}));
+
 vi.mock('@react-email/render', () => ({
   render: vi.fn(async () => '<html></html>'),
 }));

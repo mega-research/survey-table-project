@@ -41,30 +41,40 @@ export const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
 )`;
 
 /**
- * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
- * 최신 수신 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ * 유효 메일 상태 — 수신거부 신호(contact_targets.unsubscribed_at 또는 최근
+ * 결과코드의 수신거부 기록)가 있으면 발송 이력과 무관하게 'skipped_unsubscribed',
+ * 없으면 최신 수신 상태(latestMailStatusExpr).
  *
- * 'skipped_unsubscribed'(수신거부)는 발송 스킵 상태만으로는 발송 후 수신거부자를
- * 놓친다 — 표의 수신거부 표시와 같은 판정이 되도록 contact_targets.unsubscribed_at
- * 과 최근 결과코드의 수신거부 기록(UNSUBSCRIBE_RESULT_CODE_KEYWORD)을 OR 로
- * 결합한다.
+ * 표시(contacts.server SELECT)·필터(mailStatusCondSql)·정렬(mailStatusRankExpr)이
+ * 반드시 이 단일 표현식을 공유해야 한다 — 갈라지면 셀에 수신거부로 보이는 행이
+ * 열람/없음 필터에 다시 잡히는 어긋남이 생긴다.
+ */
+export const effectiveMailStatusExpr = sql<MailRecipientStatus | null>`(CASE
+  WHEN "contact_targets".unsubscribed_at IS NOT NULL THEN 'skipped_unsubscribed'
+  WHEN ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%' THEN 'skipped_unsubscribed'
+  ELSE ${latestMailStatusExpr}
+END)`;
+
+/**
+ * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
+ * 유효 메일 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ *
+ * 유효 상태 기준이므로 수신거부 판정자는 'skipped_unsubscribed' 에서만 잡히고,
+ * 원래 발송 상태(열람 등)나 'none' 필터에는 다시 잡히지 않는다.
  */
 function mailStatusCondSql(value: string): SQL {
-  if (value === 'none') return sql`${latestMailStatusExpr} IS NULL`;
-  if (value === 'skipped_unsubscribed') {
-    return sql`(${latestMailStatusExpr} = ${value}
-      OR "contact_targets".unsubscribed_at IS NOT NULL
-      OR ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%')`;
-  }
-  return sql`${latestMailStatusExpr} = ${value}`;
+  return value === 'none'
+    ? sql`${effectiveMailStatusExpr} IS NULL`
+    : sql`${effectiveMailStatusExpr} = ${value}`;
 }
 
 /**
  * 메일 컬럼 상태 순위 정렬 표현식 — MAIL_FILTER_OPTIONS 순서(잘된 순: 열람 →
  * 전달 완료 → … → 실패)와 동일 축. 발송 이력 없음은 NULL 로 축 밖 — orderExpr 의
  * NULLS LAST 가 방향과 무관하게 항상 마지막에 고정한다 (web 정렬과 같은 규칙).
+ * 축은 유효 메일 상태 — 수신거부 판정자는 원래 발송 상태가 아니라 수신거부 순위로 선다.
  */
-export const mailStatusRankExpr = sql<number | null>`(CASE ${latestMailStatusExpr}
+export const mailStatusRankExpr = sql<number | null>`(CASE ${effectiveMailStatusExpr}
   WHEN 'opened' THEN 1
   WHEN 'delivered' THEN 2
   WHEN 'sent' THEN 3
