@@ -13,7 +13,7 @@ import { CreateUserInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io
 import type { UserType } from '@/shared/contracts/auth';
 
 import { useCreateUser } from './queries/use-users';
-import { FIELD_INPUT, FIELD_LABEL } from './field-styles';
+import { FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { USER_TYPE_LABEL } from './user-vocabulary';
 
 /**

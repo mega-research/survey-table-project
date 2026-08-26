@@ -10,7 +10,7 @@ import { MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 
 import { InvalidAvatarUrlError } from '../domain/auth';
 import type {
-  ProfileView,
+  MyProfile,
   UpdatePasswordInput,
   UpdatePasswordOutput,
   UpdateProfileInput,
@@ -67,7 +67,7 @@ export async function updatePassword(
  * 아바타 URL 은 세션 페이로드에 없고, 직책·소속은 사용자 관리에서 다른 사람이 바꿀 수 있어
  * 세션 발급 시점 값이 낡아 있을 수 있다.
  */
-export async function getProfile(userId: string): Promise<ProfileView> {
+export async function getProfile(userId: string): Promise<MyProfile> {
   const row = await db.query.users.findFirst({
     where: eq(users.id, userId),
     columns: {

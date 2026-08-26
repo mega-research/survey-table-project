@@ -82,6 +82,12 @@ describe('자기 계정 베이스 — 세 유형 모두 통과', () => {
 });
 
 describe('설문 스코프 베이스 — 유형으로 막지 않는다', () => {
+  it('account 와 별개의 베이스다 (한쪽을 조여도 다른 쪽이 따라오지 않는다)', () => {
+    // 지금은 두 가드가 같은 판정을 하지만 지는 계약이 다르다. 별칭으로 묶으면 account 에
+    // 자기 id 강제 같은 조임을 더할 때 설문 스코프 전 표면이 조용히 따라 바뀐다.
+    expect(scoped).not.toBe(account);
+  });
+
   it.each(userTypeValues)('%s 계정도 scoped 베이스를 통과한다', async (userType) => {
     // scoped 는 유형이 아니라 설문 일치로 막는다(handler 의 assertSurveyAccess).
     // 게스트 콘솔(티켓 22)·실사 콘솔(티켓 25)이 이 축으로 열린다.

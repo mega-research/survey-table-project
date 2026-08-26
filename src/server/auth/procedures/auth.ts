@@ -5,7 +5,7 @@ import { account, pub } from '@/server/orpc';
 import {
   GetUserOutput,
   InvalidAvatarUrlError,
-  ProfileView,
+  MyProfile,
   UpdatePasswordInput,
   UpdatePasswordOutput,
   UpdateProfileInput,
@@ -27,7 +27,7 @@ const getUser = pub.output(GetUserOutput).handler(({ context }) => context.user)
  * 자기 이름조차 볼 수 없다. 대상은 항상 호출자 자신이라 입력에 userId 가 없다.
  */
 const getProfile = account
-  .output(ProfileView)
+  .output(MyProfile)
   .handler(({ context }) => svc.getProfile(context.user.id));
 
 /** 내 프로필 수정 — 이름·아바타만. 이메일·직책·소속은 본인이 바꿀 수 없다. */

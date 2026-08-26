@@ -7,7 +7,12 @@ import sharp from 'sharp';
 import { type RouteLogContext, withRouteLogging } from '@/lib/logger';
 import { r2Client } from '@/lib/r2-client';
 import { validateFilename } from '@/lib/upload/attachment-policy';
-import { detectImageKind } from '@/lib/upload/image-policy';
+import {
+  AVATAR_SIZE_ERROR,
+  AVATAR_TYPE_ERROR,
+  AVATAR_UPLOAD_POLICY,
+  detectImageKind,
+} from '@/lib/upload/image-policy';
 import { guardAvatarUploadRoute } from '@/lib/upload/route-guard';
 
 /**
@@ -20,14 +25,7 @@ import { guardAvatarUploadRoute } from '@/lib/upload/route-guard';
  * 공유할 값어치가 있는 것은 magic byte 감지뿐이라 그것만 정책 모듈로 올렸다.
  */
 
-/** 아바타로 받는 형식 — SVG·GIF 제외(정지 이미지만). */
-const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/bmp'];
-
-/** 원본 업로드 상한. 어차피 정사각으로 깎으므로 크게 받을 이유가 없다. */
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
-
-/** 저장 해상도 — 헤더 30px·프로필 72px 표시에 2배수까지 충분하다. */
-const AVATAR_SIZE_PX = 256;
+const { allowedTypes, maxBytes, sizePx } = AVATAR_UPLOAD_POLICY;
 
 async function handleAvatarUpload(request: NextRequest, ctx: RouteLogContext) {
   const guard = await guardAvatarUploadRoute(ctx);
@@ -41,14 +39,11 @@ async function handleAvatarUpload(request: NextRequest, ctx: RouteLogContext) {
   // 로그에는 파일 메타만 싣는다 (본문 금지)
   ctx.bind({ filename: file.name, size: file.size, contentType: file.type });
 
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json(
-      { error: '지원하지 않는 파일 형식입니다. JPG, PNG, WebP, BMP만 업로드 가능합니다.' },
-      { status: 400 },
-    );
+  if (!allowedTypes.includes(file.type as (typeof allowedTypes)[number])) {
+    return NextResponse.json({ error: AVATAR_TYPE_ERROR }, { status: 400 });
   }
-  if (file.size > MAX_SIZE_BYTES) {
-    return NextResponse.json({ error: '파일 크기는 5MB 이하여야 합니다.' }, { status: 400 });
+  if (file.size > maxBytes) {
+    return NextResponse.json({ error: AVATAR_SIZE_ERROR }, { status: 400 });
   }
   const filenameError = validateFilename(file.name);
   if (filenameError) {
@@ -58,7 +53,7 @@ async function handleAvatarUpload(request: NextRequest, ctx: RouteLogContext) {
   // MIME 헤더 외에 실제 바이트로 형식 확인 (defense in depth) — 헤더는 위조된다.
   const headerBuffer = Buffer.from(await file.slice(0, 16).arrayBuffer());
   const detectedKind = detectImageKind(headerBuffer);
-  if (!detectedKind || !ALLOWED_TYPES.includes(detectedKind)) {
+  if (!detectedKind || !allowedTypes.includes(detectedKind as (typeof allowedTypes)[number])) {
     return NextResponse.json(
       { error: '파일 내용이 이미지 형식과 일치하지 않습니다.' },
       { status: 400 },
@@ -80,7 +75,7 @@ async function handleAvatarUpload(request: NextRequest, ctx: RouteLogContext) {
   try {
     body = await sharp(Buffer.from(await file.arrayBuffer()))
       .rotate() // EXIF 방향 반영 — 세워 찍은 사진이 눕는 것을 막는다
-      .resize(AVATAR_SIZE_PX, AVATAR_SIZE_PX, { fit: 'cover', position: 'attention' })
+      .resize(sizePx, sizePx, { fit: 'cover', position: 'attention' })
       .webp({ quality: 82 })
       .toBuffer();
   } catch (conversionError) {

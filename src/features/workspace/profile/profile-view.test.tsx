@@ -9,10 +9,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ProfileView as Profile } from '@/shared/contracts/auth-io';
+import type { MyProfile } from '@/shared/contracts/auth-io';
 
 const { profileQuery, updateProfile, updatePassword, uploadAvatar } = vi.hoisted(() => ({
-  profileQuery: { data: undefined as Profile | undefined, isLoading: false, error: null as unknown },
+  profileQuery: { data: undefined as MyProfile | undefined, isLoading: false, error: null as unknown },
   updateProfile: vi.fn(),
   updatePassword: vi.fn(),
   uploadAvatar: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('./queries/use-profile', () => ({
 
 import { ProfileView } from './profile-view';
 
-const INTERNAL: Profile = {
+const INTERNAL: MyProfile = {
   id: '55555555-5555-4555-8555-555555555555',
   name: '김새로',
   email: 'saero.kim@megaresearch.co.kr',
@@ -37,7 +37,7 @@ const INTERNAL: Profile = {
   organization: null,
 };
 
-function renderView(profile: Profile = INTERNAL) {
+function renderView(profile: MyProfile = INTERNAL) {
   profileQuery.data = profile;
   profileQuery.isLoading = false;
   profileQuery.error = null;
@@ -64,12 +64,19 @@ describe('ProfileView — 기본 정보', () => {
     expect(screen.getByText(/직책은 팀장·슈퍼어드민이 팀 상세에서 변경합니다/)).toBeInTheDocument();
   });
 
-  it('게스트에게는 직책 대신 소속을 보여준다', () => {
-    // .pen: 게스트·실사는 이름·아바타·비밀번호만 만진다.
-    renderView({ ...INTERNAL, userType: 'guest', jobTitle: null, organization: '한국물류협회' });
-    expect(screen.getByLabelText('소속')).toHaveValue('한국물류협회');
-    expect(screen.queryByLabelText('직책')).not.toBeInTheDocument();
-  });
+  it.each(['guest', 'fieldwork'] as const)(
+    '%s 에게는 이름과 아바타만 보인다 (이메일·직책 없음)',
+    (userType) => {
+      // 스펙 §10 · .pen FLOW 3-2 진입 노트: 게스트·실사는 이름·아바타·비밀번호만 보인다.
+      renderView({ ...INTERNAL, userType, jobTitle: null, organization: '한국물류협회' });
+      expect(screen.getByLabelText('이름')).toBeInTheDocument();
+      expect(screen.queryByLabelText('이메일 (로그인 ID)')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('직책')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('소속')).not.toBeInTheDocument();
+      // 비밀번호 카드는 남는다.
+      expect(screen.getByLabelText('현재 비밀번호')).toBeInTheDocument();
+    },
+  );
 
   it('이름 변경을 저장하면 이름과 아바타만 보낸다', async () => {
     const user = userEvent.setup();
@@ -106,7 +113,7 @@ describe('ProfileView — 기본 정보', () => {
     });
 
     expect(uploadAvatar).not.toHaveBeenCalled();
-    expect(await screen.findByText(/JPG, PNG, WebP, BMP 파일만/)).toBeInTheDocument();
+    expect(await screen.findByText(/JPG, PNG, WebP, BMP만 업로드 가능합니다/)).toBeInTheDocument();
   });
 
   it('아바타를 기본 이미지로 되돌리면 null 로 저장한다', async () => {

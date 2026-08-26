@@ -12,16 +12,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { accountHomePath } from '@/lib/auth/account-home';
 import { getErrorMessage } from '@/lib/get-error-message';
+import {
+  AVATAR_ACCEPT_ATTR,
+  AVATAR_SIZE_ERROR,
+  AVATAR_TYPE_ERROR,
+  AVATAR_UPLOAD_POLICY,
+} from '@/lib/upload/image-policy';
 import { isInternalUser } from '@/shared/contracts/auth';
-import type { ProfileView as Profile } from '@/shared/contracts/auth-io';
+import type { MyProfile } from '@/shared/contracts/auth-io';
 import { MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 
-import { FIELD_INPUT, FIELD_LABEL } from '../user-management/field-styles';
+import { FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useProfile, useUpdatePassword, useUpdateProfile, uploadAvatar } from './queries/use-profile';
-
-/** 아바타 입력 정책 — 서버 라우트(/api/upload/avatar)와 같은 값이어야 한다. */
-const AVATAR_ACCEPT = 'image/jpeg,image/png,image/webp,image/bmp';
-const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 const CARD = 'rounded-[14px] border border-[#E5E5EA] bg-white p-6';
 const CARD_TITLE = 'text-[15px] font-semibold text-[#1C1C1E]';
@@ -43,7 +45,7 @@ function Banner({ tone, children }: { tone: 'error' | 'success'; children: React
 }
 
 /** 기본 정보 — 아바타·이름은 본인이 바꾸고, 이메일·직책은 읽기 전용이다 (.pen FLOW 3-2). */
-function BasicInfoCard({ profile }: { profile: Profile }) {
+function BasicInfoCard({ profile }: { profile: MyProfile }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(profile.name);
   // 저장 전 미리보기까지 상태로 들고 있는다 — 업로드는 끝났지만 아직 저장하지 않은 값이다.
@@ -61,12 +63,13 @@ function BasicInfoCard({ profile }: { profile: Profile }) {
 
     setError(null);
     setSaved(false);
-    if (!AVATAR_ACCEPT.split(',').includes(file.type)) {
-      setError('JPG, PNG, WebP, BMP 파일만 올릴 수 있습니다.');
+    // 서버가 유일한 판정자지만 화면이 먼저 걸러야 5MB 를 올리고 나서 거부당하지 않는다.
+    if (!AVATAR_UPLOAD_POLICY.allowedTypes.includes(file.type as 'image/png')) {
+      setError(AVATAR_TYPE_ERROR);
       return;
     }
-    if (file.size > AVATAR_MAX_BYTES) {
-      setError('파일 크기는 5MB 이하여야 합니다.');
+    if (file.size > AVATAR_UPLOAD_POLICY.maxBytes) {
+      setError(AVATAR_SIZE_ERROR);
       return;
     }
 
@@ -130,7 +133,7 @@ function BasicInfoCard({ profile }: { profile: Profile }) {
         <input
           ref={fileInput}
           type="file"
-          accept={AVATAR_ACCEPT}
+          accept={AVATAR_ACCEPT_ATTR}
           onChange={handlePick}
           className="hidden"
           aria-label="아바타 이미지 파일"
@@ -151,45 +154,36 @@ function BasicInfoCard({ profile }: { profile: Profile }) {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="profile-email" className={FIELD_LABEL}>
-            이메일 (로그인 ID)
-          </Label>
-          <Input id="profile-email" value={profile.email} readOnly className={READONLY_INPUT} />
-        </div>
-        {isInternalUser(profile.userType) ? (
-          <div className="space-y-2">
-            <Label htmlFor="profile-job-title" className={FIELD_LABEL}>
-              직책
-            </Label>
-            <Input
-              id="profile-job-title"
-              value={profile.jobTitle ?? '—'}
-              readOnly
-              className={READONLY_INPUT}
-            />
+      {/* 이메일·직책은 내부 계정에게만 보인다. 게스트·실사는 이름·아바타·비밀번호만
+          만지고 보는 것도 그뿐이다(스펙 §10, .pen FLOW 3-2 진입 노트). */}
+      {isInternalUser(profile.userType) && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="profile-email" className={FIELD_LABEL}>
+                이메일 (로그인 ID)
+              </Label>
+              <Input id="profile-email" value={profile.email} readOnly className={READONLY_INPUT} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-job-title" className={FIELD_LABEL}>
+                직책
+              </Label>
+              <Input
+                id="profile-job-title"
+                value={profile.jobTitle ?? '—'}
+                readOnly
+                className={READONLY_INPUT}
+              />
+            </div>
           </div>
-        ) : (
-          <div className="space-y-2">
-            <Label htmlFor="profile-organization" className={FIELD_LABEL}>
-              소속
-            </Label>
-            <Input
-              id="profile-organization"
-              value={profile.organization ?? '—'}
-              readOnly
-              className={READONLY_INPUT}
-            />
-          </div>
-        )}
-      </div>
 
-      <p className={NOTE}>
-        {isInternalUser(profile.userType)
-          ? '이메일·직책은 본인이 수정할 수 없습니다 — 직책은 팀장·슈퍼어드민이 팀 상세에서 변경합니다.'
-          : '이메일·소속은 본인이 수정할 수 없습니다 — 담당 연구원에게 요청하세요.'}
-      </p>
+          <p className={NOTE}>
+            이메일·직책은 본인이 수정할 수 없습니다 — 직책은 팀장·슈퍼어드민이 팀 상세에서
+            변경합니다.
+          </p>
+        </>
+      )}
 
       {error && <Banner tone="error">{error}</Banner>}
       {saved && <Banner tone="success">프로필을 저장했습니다.</Banner>}

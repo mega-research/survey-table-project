@@ -137,15 +137,21 @@ export const account = base.use(({ context, next }) => {
 });
 
 /**
- * 설문 스코프 베이스 — 인증 가드는 account 와 **같다**(세션 + active, 게스트도 통과).
- * 다른 것은 handler 의 의무뿐이라 미들웨어를 새로 쓰지 않고 account 를 그대로 쓴다.
+ * 설문 스코프 베이스 — 세션 + active 계정. 게스트도 통과한다.
+ *
+ * 지금은 인증 가드가 account 와 글자까지 같지만 **별개의 베이스로 둔다**. 두 베이스가 지는
+ * 계약이 다르기 때문이다 — 이쪽은 "설문 일치를 handler 가 강제한다", 저쪽은 "자기 것만
+ * 만진다". 별칭으로 묶으면 한쪽을 조일 때(예: account 에 자기 id 강제) 다른 쪽 전 표면이
+ * 조용히 따라 바뀐다.
  *
  * 이 베이스를 쓰는 procedure 는 반드시 handler 첫 줄에서
  * assertSurveyAccess(context.user.id, input.surveyId) 를 호출해 설문 일치를 강제해야 한다
  * (유일한 예외: 입력에 surveyId 가 없는 media.deleteMailAttachmentTmp — tmp 네임스페이스
  * 검증에 의존). 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
  */
-export const scoped = account;
+export const scoped = base.use(({ context, next }) => {
+  return next({ context: { user: requireActiveUser(context.user) } });
+});
 
 /** 설문 접근 강제 — 내부 계정은 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
 export function assertSurveyAccess(userId: string, surveyId: string): void {

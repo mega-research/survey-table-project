@@ -11,6 +11,10 @@ import { getProfile } from '@/server/auth/services/auth';
 export default async function GuestHomePage() {
   const user = await requireAccountTypePage('guest');
   // 소속 기관은 세션 페이로드에 없다 — 헤더 표시에 쓰므로 DB 에서 읽는다.
-  const profile = await getProfile(user.id);
-  return <GuestHomeView user={user} organization={profile.organization} />;
+  // 헤더 한 줄 때문에 홈 전체를 500 으로 떨어뜨리지 않는다 — 세션이 가리키는 행이 사라진
+  // 경우(세션 cascade 때문에 사실상 도달 불가)에도 이름만으로 화면은 성립한다.
+  const organization = await getProfile(user.id)
+    .then((profile) => profile.organization)
+    .catch(() => null);
+  return <GuestHomeView user={user} organization={organization} />;
 }

@@ -215,7 +215,7 @@ export function toChangeUserStatusAction(
  * 세션 페이로드가 아니라 DB 에서 읽는다 — 아바타 URL 은 세션에 실리지 않고, 직책·소속은
  * 다른 사람이 바꿀 수 있어(사용자 관리) 세션 발급 시점 값이 낡아 있을 수 있다.
  */
-export const ProfileView = z.object({
+export const MyProfile = z.object({
   id: z.uuid(),
   name: z.string(),
   email: z.string(),
@@ -227,7 +227,7 @@ export const ProfileView = z.object({
   /** 소속 기관 — guest 전용. 본인 수정 불가. */
   organization: z.string().nullable(),
 });
-export type ProfileView = z.infer<typeof ProfileView>;
+export type MyProfile = z.infer<typeof MyProfile>;
 
 /**
  * 프로필 수정 입력 — 본인이 바꿀 수 있는 것만.
@@ -244,7 +244,7 @@ export const UpdateProfileInput = z.object({
 });
 export type UpdateProfileInput = z.infer<typeof UpdateProfileInput>;
 
-export const UpdateProfileOutput = ProfileView;
+export const UpdateProfileOutput = MyProfile;
 export type UpdateProfileOutput = z.infer<typeof UpdateProfileOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────

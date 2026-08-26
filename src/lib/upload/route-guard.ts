@@ -5,7 +5,8 @@ import { isGuestUser } from '@/lib/auth/guest-grants';
 import type { RouteLogContext } from '@/lib/logger';
 
 /**
- * R2 업로드 라우트 3종(image·mail-attachment·notice-attachment)의 공통 진입 가드.
+ * R2 업로드 라우트 4종(image·mail-attachment·notice-attachment·avatar)의 진입 가드.
+ * 아래 guardUploadRoute 는 앞 3종(내부 전용), guardAvatarUploadRoute 는 avatar(세 유형 공통).
  *
  * 셋 다 401 -> 행위자 바인딩 -> 403 순서가 같은데 조각이 어긋나 있었다.
  * - 401 관용구가 둘이었다. image 는 getCurrentUser null 검사, 나머지는 requireAuth try/catch.
@@ -43,8 +44,14 @@ export async function guardAvatarUploadRoute(
 ): Promise<UploadRouteGuardResult> {
   try {
     const user = await requireActiveAccount();
-    // 403 이 없는 문이라 바인딩만 남긴다 — 남용 추적에 행위자와 유형이 필요하다.
-    ctx.bind({ userId: user.id, role: user.userType });
+    // 403 이 없는 문이라 바인딩만 남긴다 — 남용 추적에 행위자가 필요하다.
+    // role 은 다른 업로드 라우트와 같은 어휘를 쓰고(guest|admin), 계정 유형은 별도 필드로
+    // 싣는다 — 같은 필드에 두 어휘가 섞이면 로그 분석이 갈린다.
+    ctx.bind({
+      userId: user.id,
+      role: isGuestUser(user.id) ? 'guest' : 'admin',
+      userType: user.userType,
+    });
     return { ok: true, userId: user.id };
   } catch {
     return {

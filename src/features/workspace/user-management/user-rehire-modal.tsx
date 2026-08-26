@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { ChangeUserStatusInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
-import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from './field-styles';
+import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useChangeUserStatus } from './queries/use-users';
 import { USER_STATUS_LABEL } from './user-vocabulary';
 

@@ -36,6 +36,14 @@ describe('accountHomePath', () => {
     const homes = userTypeValues.map((t) => accountHomePath(t));
     expect(new Set(homes).size).toBe(homes.length);
   });
+
+  it('값이 없거나 어휘 밖이면 게스트 홈으로 접는다', () => {
+    // 세션 페이로드를 건너온 값이라 타입만으로는 보장되지 않는다. 폴백이 없으면
+    // redirect(undefined) 가 되어 리다이렉트가 조용히 깨진다.
+    expect(accountHomePath(undefined)).toBe('/guest');
+    expect(accountHomePath('nonsense' as never)).toBe('/guest');
+    expect(resolvePostLoginDestination(undefined, '/admin/surveys')).toBe('/guest');
+  });
 });
 
 describe('isAccountTypePath — 이 경로가 어느 유형의 구역인가', () => {

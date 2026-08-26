@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { MIN_PASSWORD_LENGTH, ResetUserPasswordInput } from '@/shared/contracts/auth-io';
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
-import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from './field-styles';
+import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useResetUserPassword } from './queries/use-users';
 
 

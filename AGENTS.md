@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 04 — 계정 상태 전이·비밀번호 재설정: 사용자 행 케밥에서 일시 정지·재직 복귀·퇴사·재입사와 재설정을 처리한다. 허용 전이표 SSOT 는 `shared/contracts/auth.ts` 의 `USER_STATUS_TRANSITIONS`(서버 강제와 화면 케밥이 같은 표를 본다), 강제는 `server/auth/domain/user-status-transition.ts`. 모든 전이·재설정이 대상 세션을 전부 끊고 `user_status_events` 에 감사 행을 남긴다. `auth.users.changeStatus/resetPassword` procedure 신설. 퇴사의 멤버십·소유권 정리와 재입사 팀 배정은 티켓 06·14·19 소관이라 아직 없다. 직전: 티켓 03 사용자 직접 생성 — `/admin/users` 발급 화면, `superadmin` 베이스 + `requireSuperadminPage`, 계정 유형 게이트, `features/workspace` 묶음 신설, `users.organization`(0086))
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 05 — 프로필 + 계정 유형별 라우팅: 세 유형 모두 `/admin/profile` 에서 이름·아바타·비밀번호를 바꾸고, 로그인 후 목적지가 유형별로 갈린다(internal→설문 목록 · guest→`/guest` · fieldwork→`/fieldwork`). 유형별 홈 SSOT 는 `lib/auth/account-home.ts` 의 `ACCOUNT_HOME_PATH`. oRPC `account` 베이스 신설(세션+active, 유형 무관 — `scoped` 와는 가드가 같아도 별개 객체다), REST 짝 `requireActiveAccount`, 페이지 짝 `requireAccountTypePage`. admin·analytics 레이아웃이 비내부 계정을 자기 홈으로 돌려보내되 `ACCOUNT_PAGES`(프로필)는 비켜준다. 아바타는 전용 라우트 `/api/upload/avatar`. 게스트·실사 홈은 빈 상태 스텁이고 목록은 티켓 22·25 소관이다. 직전: 티켓 04 계정 상태 전이·비밀번호 재설정 — 전이표 SSOT `USER_STATUS_TRANSITIONS`, 전 전이·재설정이 세션 폐기 + 감사 행)
 
 ---
 
@@ -109,8 +109,9 @@ src/
 │
 │   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
 │
-├── features/                   # 프론트 기능 묶음 6개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
-│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics·workspace 독립
+├── features/                   # 프론트 기능 묶음 8개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
+│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향
+│   │                           # operations·analytics·workspace·guest-console·fieldwork-console 은 각각 독립(서로 import 0)
 │   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
@@ -146,11 +147,17 @@ src/
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   ├── analytics/              # 차트 및 리포팅 (23개)
-│   └── workspace/              # 워크스페이스 관리 (7개, 티켓 03 신설) — 사용자 관리 목록·계정 생성·수명주기
-│       │                       # 팀 관리·재배치·사이드바(티켓 06~14)가 여기로 들어온다. 진입점은 폴더 안
-│       └── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
-│                               # + user-reset-password-modal · user-rehire-modal + user-vocabulary + queries/use-users
-│                               # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
+│   ├── workspace/              # 워크스페이스 관리 (10개, 티켓 03 신설) — 사용자 관리 + 내 프로필
+│   │   │                       # 팀 관리·재배치·사이드바(티켓 06~14)가 여기로 들어온다. 진입점은 폴더 안
+│   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필이 함께 쓴다(루트 잔류 기준 ①)
+│   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
+│   │   │                       # + user-reset-password-modal · user-rehire-modal + user-vocabulary
+│   │   │                       # + queries/use-users
+│   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
+│   │   └── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
+│   │                           # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
+│   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여 설문 목록은 티켓 21·22
+│   └── fieldwork-console/      # 실사 홈 (티켓 05 스텁) — 초대 설문·조사 대상은 티켓 24~27
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -531,8 +538,12 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
 /admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
+/admin/profile                    # 내 프로필 — **세 계정 유형 공통**. /admin 아래지만 내부 전용이 아니다(ACCOUNT_PAGES)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
+
+/guest                            # 게스트 홈 (티켓 05 스텁 — 부여 설문 목록은 티켓 22)
+/fieldwork                        # 실사 홈 (티켓 05 스텁 — 초대 설문 목록은 티켓 25)
 ```
 
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
@@ -591,7 +602,7 @@ RSC (서버 컴포넌트)
 ```
 
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
-- procedure 베이스 4종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
+- procedure 베이스 5종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
 - **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon·외부 프레임워크 핸들러 마운트(`/api/inngest`·`/api/auth`)는 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
 - 그 원칙에 따라 잔존 서버 액션은 `actions/` 1파일뿐 (unsubscribe form — 의도적 유지).
 - **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
@@ -604,7 +615,8 @@ RSC (서버 컴포넌트)
 ```
 POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
 *      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
-POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
+POST   /api/upload/image                       # 이미지 업로드 (multipart, 내부 전용, 삭제는 media.deleteImages RPC)
+POST   /api/upload/avatar                      # 아바타 업로드 (세 계정 유형 공통, 정사각 WebP 로 깎아 저장)
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
 GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
@@ -650,26 +662,42 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
   않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). 퇴사의 멤버십·소유권 정리와
   재입사의 팀 배정은 티켓 06·14·19 소관이라 아직 없다.
-- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로 `/admin`·`/analytics`
-  진입을 거르고 `x-pathname` 요청 헤더를 넘긴다. 쿠키 유효성·계정 상태(active)·게스트 경로 제한은
-  `app/admin/layout.tsx`·`app/analytics/layout.tsx` 가 서버에서 재검증한다. 비로그인 접근을 허용하는
-  경로 목록은 `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있다(현재 `/admin/login` 뿐).
+- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로
+  `/admin`·`/analytics`·`/guest`·`/fieldwork` 진입을 거르고 `x-pathname` 요청 헤더를 넘긴다.
+  쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/admin/layout.tsx`·
+  `app/analytics/layout.tsx` 가 서버에서 재검증한다. 유형 구역(`/guest`·`/fieldwork`)은 페이지의
+  `requireAccountTypePage` 가 본다. 비로그인 접근을 허용하는 경로 목록은
+  `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있고(현재 `/admin/login` 뿐), 유형과 무관하게
+  열리는 admin 경로는 같은 파일의 `ACCOUNT_PAGES`(현재 `/admin/profile` 뿐)다.
 - **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/admin/login` 으로 되돌아오고,
   목적지 해석은 그 페이지(RSC)가 한다 — 게스트 grant 가 서버 설정이라 클라이언트가 결정할 수 없다.
   복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
   로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
 - REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active' + userType='internal')를 쓴다 — oRPC `authed` 와
   같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막고, 전역 관리 RSC 는 `requireSuperadminPage` 가 슈퍼어드민만 통과시킨다(둘 다 거부는 notFound).
-- procedure 베이스 4종 (`server/orpc.ts`):
+- procedure 베이스 5종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
-  - **`scoped`** — 세션 + active (게스트 포함). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
+  - **`scoped`** — 세션 + active (게스트 포함). 지금은 인증 가드가 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
-  (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열리며,
-  **유형별 로그인 라우팅과 게스트·실사 홈은 티켓 05·22·25 소관이라 지금은 목적지가 없다**(내부 화면에서
-  거부될 뿐이다). `readSessionUser` 의 안전 기본값은 'guest' — 값이 없으면 내부를 열지 않는 쪽으로 접는다.
+  (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
+  `readSessionUser` 의 안전 기본값은 'guest' — 값이 없으면 내부를 열지 않는 쪽으로 접는다.
+- **유형별 목적지**(티켓 05): 홈 표의 SSOT 는 `lib/auth/account-home.ts` 의 `ACCOUNT_HOME_PATH`
+  (internal→`/admin/surveys` · guest→`/guest` · fieldwork→`/fieldwork`). 로그인 직후 목적지는
+  `resolvePostLoginDestination` 이 정한다 — 게스트·실사가 요청한 내부 경로는 자기 홈으로 접는다
+  (그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가는 루프가 된다). admin·analytics
+  레이아웃은 비내부 계정을 자기 홈으로 **리다이렉트**하고(존재를 감출 이유가 없어 notFound 가 아니다),
+  `ACCOUNT_PAGES`(현재 `/admin/profile`)만 비켜준다. 설문 단위 env grant 게스트는 이 축과 별개로
+  살아 있다 — 그 모델의 목적지는 grant 설문 콘솔이라 `guestPostLoginRedirect` 가 먼저 갈라진다
+  (티켓 21 에서 두 축이 합쳐진다).
+- **프로필은 세 유형 공통**(.pen FLOW 3-2, `/admin/profile`). 본인이 바꾸는 것은 이름·아바타·비밀번호
+  뿐이다 — `UpdateProfileInput` 에 이메일·직책·소속이 없는 것이 이 표면의 정의다. 내부 계정은
+  이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
+  것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
+  서비스가 그 URL 이 우리 R2 공개 URL 인지 확인한다(외부 주소면 남의 서버가 우리 화면에 그림을 그린다).
 - 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃(`/admin/logout`) → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`). 계정 발급 모델(`users.user_type='guest'`)로의 교체는 티켓 21.
 - 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 

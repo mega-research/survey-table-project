@@ -4,7 +4,7 @@ import type { AuthUser } from '@/server/context';
 
 // 프로필·비밀번호 변경의 경계 계약은 shared/contracts/auth-io 소관 — 되내보내기만 한다.
 export {
-  ProfileView,
+  MyProfile,
   UpdatePasswordInput,
   UpdatePasswordOutput,
   UpdateProfileInput,
