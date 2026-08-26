@@ -22,42 +22,43 @@ import { getTeamRole } from '@/server/read-models/team-memberships';
 const OK: WorkspaceActionOutput = { success: true };
 
 /**
- * 설문이 팀에 귀속되기 전까지의 팀별 설문 수.
- *
- * surveys.team_id 는 티켓 07 이 만든다. 그때까지 어떤 설문도 팀 소유가 아니므로 0 이
- * 사실이다 — 07 이 이 함수를 실제 집계로 바꾸면 화면·계약은 그대로 둔 채 값만 살아난다.
- */
-function teamSurveyCount(): number {
-  return 0;
-}
-
-/**
  * 팀 관리 목록 (.pen FLOW 7-1) — 활성 팀 + 메가리서치 카드 지표.
  *
  * 「메가리서치」는 팀이 아니라 시스템 전체 보기라 teams 행이 없다(ADR-0006). 카드에 쓰는
  * 팀 수·전체 설문 수를 목록과 함께 돌려주는 이유가 그것이다.
  */
 export async function listTeams(): Promise<ListTeamsOutput> {
-  const rows = await db
-    .select({
-      id: teams.id,
-      name: teams.name,
-      memberCount: sql<number>`count(${teamMembers.id})::int`,
-    })
-    .from(teams)
-    .leftJoin(teamMembers, eq(teamMembers.teamId, teams.id))
-    .where(eq(teams.status, 'active'))
-    .groupBy(teams.id)
-    .orderBy(asc(teams.order), asc(teams.name));
+  // 멤버 수와 설문 수를 한 쿼리에서 세면 조인이 곱해져 양쪽이 부풀어 오른다 — 팀별
+  // 설문 수는 따로 집계해 붙인다(티켓 07 이 surveys.team_id 를 만들면서 살아난 값이다).
+  const [rows, surveyRows, surveyTotalRows] = await Promise.all([
+    db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        memberCount: sql<number>`count(${teamMembers.id})::int`,
+      })
+      .from(teams)
+      .leftJoin(teamMembers, eq(teamMembers.teamId, teams.id))
+      .where(eq(teams.status, 'active'))
+      .groupBy(teams.id)
+      .orderBy(asc(teams.order), asc(teams.name)),
+    db
+      .select({ teamId: surveys.teamId, value: count() })
+      .from(surveys)
+      .where(isNull(surveys.deletedAt))
+      .groupBy(surveys.teamId),
+    db.select({ value: count() }).from(surveys).where(isNull(surveys.deletedAt)),
+  ]);
 
-  const [surveyTotal] = await db
-    .select({ value: count() })
-    .from(surveys)
-    .where(isNull(surveys.deletedAt));
+  const surveyCountByTeam = new Map(
+    surveyRows.filter((r) => r.teamId !== null).map((r) => [r.teamId as string, r.value]),
+  );
 
   return {
-    teams: rows.map((row) => ({ ...row, surveyCount: teamSurveyCount() })),
-    systemSummary: { teamCount: rows.length, surveyCount: surveyTotal?.value ?? 0 },
+    teams: rows.map((row) => ({ ...row, surveyCount: surveyCountByTeam.get(row.id) ?? 0 })),
+    // 메가리서치 카드의 설문 수는 배치 대기까지 포함한 전체다 — 시스템 전체 보기가
+    // 실제로 반환하는 범위와 같은 수여야 한다.
+    systemSummary: { teamCount: rows.length, surveyCount: surveyTotalRows[0]?.value ?? 0 },
   };
 }
 
@@ -190,10 +191,15 @@ export async function getTeamDetail(
     // 역할 문자열의 사전순에 기대지 않는다: 값이 하나만 늘어도 조용히 순서가 뒤집힌다.
     .orderBy(sql`case when ${teamMembers.role} = 'leader' then 0 else 1 end`, asc(users.name));
 
+  const [teamSurveys] = await db
+    .select({ value: count() })
+    .from(surveys)
+    .where(and(eq(surveys.teamId, teamId), isNull(surveys.deletedAt)));
+
   return {
     ...team,
     memberCount: members.length,
-    surveyCount: teamSurveyCount(),
+    surveyCount: teamSurveys?.value ?? 0,
     members,
     canManageMembers: canManageTeamMembers(actor, myRole),
     canManageSettings: canManageTeamSettings(actor),

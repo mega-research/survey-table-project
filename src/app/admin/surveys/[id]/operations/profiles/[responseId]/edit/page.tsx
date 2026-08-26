@@ -26,7 +26,7 @@ export const metadata = { title: '응답 수정' };
 /**
  * 어드민 응답 수정 라우트.
  *
- * - requireSurveyOwnership 가 인증 + 설문 존재 가드.
+ * - requireSurveyOwnership 가 인증 + 설문 단위 capability 가드(responses.view).
  * - getResponseById 로 응답 조회 (soft delete 포함).
  *   - 삭제된 응답이면 안내 화면 (복원 안내).
  *   - 응답 surveyId 가 path 와 다르면 notFound.
@@ -43,7 +43,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
-  await requireSurveyOwnership(surveyId);
+  await requireSurveyOwnership(surveyId, 'responses.view');
   const scope = await getOperationsDataScope(surveyId);
 
   const response = await getResponseById(responseId, { includeDeleted: true });

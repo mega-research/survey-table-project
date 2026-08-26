@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 06 팀·멤버십 — `teams`·`team_members`·`team_lifecycle_events`(0088), 서버 도메인 `server/workspace`(팀 CRUD·pull 모델 멤버십·마지막 팀장 가드·직책 팀 경계), 팀 관리 화면 `/admin/teams`·`/admin/teams/[teamId]`(.pen FLOW 7). 직전: 페이즈 A 하드닝 — `assertSurveyAccess` 가 계정 유형을 먼저 본다, `/api/auth` POST 허용목록, 세션 폐기 표식 `users.sessions_revoked_at`(0087), 서버 데이터를 부르는 RSC 페이지 전부 자기 가드 + 메타테스트(`tests/repo/rsc-page-guards.test.ts`))
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 07 설문 팀 귀속 — `surveys` 소유·배치 컬럼 7종(0089)과 기존 설문 배치 대기 백필, 접근 판정 코어 `server/survey-access`(resolveSurveyCapabilities + assertSurveyCapability)와 작업 범위 코어 `server/work-scope`, 설문 목록·생성이 범위에 묶임 + 목록 화면 범위 스위처(.pen FLOW 6). 직전: 티켓 06 팀·멤버십 — `teams`·`team_members`·`team_lifecycle_events`(0088), 서버 도메인 `server/workspace`, 팀 관리 화면 `/admin/teams`(.pen FLOW 7))
 
 ---
 
@@ -88,6 +88,8 @@ src/
 │   ├── rpc-timeout.ts          # 타임아웃 가드
 │   ├── health.ts               # health procedure (코어 옆)
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
+│   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
+│   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + assertSurveyCapability(관문)
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota · workspace
@@ -317,9 +319,9 @@ team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 �
 
 > 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
-> archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/workspace/services/memberships.ts`
-> 의 `getActiveTeamMemberships` 하나로 모은다. `survey_groups`·`survey_participants`·`surveys.team_id` 는
-> 아직 없다(티켓 07·12·18).
+> archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/read-models/team-memberships.ts`
+> 의 `getActiveTeamMemberships` 하나로 모은다(팀 관리와 설문 접근 판정이 함께 보므로 도메인이 아니라 read-model 이다).
+> `surveys.team_id` 는 티켓 07 이 붙였다. `survey_groups`·`survey_participants` 는 아직 없다(티켓 12·18).
 
 ### 설문 도메인 (surveys.ts)
 
@@ -341,6 +343,12 @@ surveys                    # 설문 설정
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
 ├── currentVersionId              # 현재 활성 배포 버전
+├── teamId                        # 소유 팀 (0089, nullable — 배치 대기면 NULL)
+├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
+├── ownerUserId, createdBy        # 소유자·작성자 (0089, 2단계 배포 중이라 아직 nullable)
+├── surveyGroupId                 # 설문 그룹 (컬럼만 — 테이블·FK 는 티켓 12)
+├── ownershipStatus               # normal | succession_pending (승계 전이는 티켓 19)
+├── assignmentStatus              # assigned | assignment_pending — teamId 와 CHECK 로 한 몸
 ├── deletedAt (soft delete)
 └── createdAt, updatedAt
 
@@ -706,6 +714,28 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
   팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
   `team_lifecycle_events` 에 감사 행을 남긴다.
+- **설문 접근 판정은 `server/survey-access.ts` 하나가 한다**(티켓 07, 스펙 §8). `data-scope` 가
+  "어느 파티션을 보는가" 를 정하듯 이쪽이 "무엇을 할 수 있는가" 를 정하는 코어다. 순수 함수
+  `resolveSurveyCapabilities` 의 **순서가 곧 정책**이다 — 계정 유형 → 슈퍼어드민 → 팀 미배치 →
+  배치 대기 → 소유자 → 소유 팀 팀장 → 참여자 → 팀 공개 설문의 팀원. `invite_only` 는 마지막
+  하나(팀원)만 지운다: v2 에서 그 뜻이 "소유 팀 **팀원에게만** 숨김" 으로 바뀌었고, 팀장까지 막으면
+  팀장이 자기 팀 설문을 관리할 수 없어 승계·해산이 잠긴다. 팀 미배치 사용자는 **초대 설문을 포함해**
+  전부 차단이고(CONTEXT.md 「팀 미배치 사용자」), 배치 대기 설문은 소유자에게도 닫힌다 — 팀이 정해지기
+  전에는 아무도 열 수 없다(ADR-0006). 게스트·실사는 부여 모델이 붙기 전까지 기본 거부다(티켓 21·24).
+  매트릭스 테스트는 표를 옮겨 열마다 검증한다 — 프리셋 상수를 다시 읽어 비교하면 구현이 스스로를
+  채점해 매트릭스가 바뀌어도 GREEN 이 유지된다.
+- **작업 범위는 `server/work-scope.ts` 가 정한다.** 팀 | 시스템 전체 보기(메가리서치) | 없음 셋이며,
+  폴백은 마지막 유효 팀 → 첫 active 팀 → 없음이다(.pen FLOW 6-1). 화면이 보내는 값은 편의일 뿐이라
+  서버가 멤버십으로 다시 해석한다 — 내 팀이 아닌 teamId 는 **접고**(쿠키에 남은 해산 팀으로 화면이
+  잠기지 않게), 일반 사용자의 `system` 요청은 **거부한다**(조용히 접으면 부분 목록을 전체로 착각한다).
+  요청이 범위를 지목하지 않으면 `work_scope` 쿠키를 읽는다(이름 SSOT 는 `shared/contracts/workspace.ts`).
+  설문 목록 응답은 **해석된 범위**를 함께 돌려준다 — 요청과 다를 수 있어 화면이 그것을 정답으로 삼는다.
+- **설문을 만드는 경로 셋(빌더 자동 생성·명시 생성·복제)은 전부 소유·배치 컬럼을 채운다.** 시스템
+  전체 보기는 teams 행이 아니라 조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수
+  없다 — 서버가 `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
+  팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
+  **관문 배선은 아직 목록·생성 + 응답 상세 편집(`requireSurveyOwnership`)까지다** — 빌더·운영 콘솔·
+  REST 전면 배선은 티켓 09~11 이 한다. 그때까지 URL 직접 진입은 종전 가드(인증·게스트 grant)만 받는다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
