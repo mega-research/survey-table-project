@@ -12,17 +12,15 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { ChangeUserStatusInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
+import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from './field-styles';
 import { useChangeUserStatus } from './queries/use-users';
 import { USER_STATUS_LABEL } from './user-vocabulary';
 
-const FIELD_LABEL = 'text-[12.5px] font-semibold text-[#374151]';
-const FIELD_INPUT =
-  'h-9 rounded-lg border-[#D1D5DB] text-[13px] placeholder:text-[#9CA3AF] focus-visible:ring-[#2E4FCE]';
-const FIELD_HINT = 'text-[10.5px] text-[#9CA3AF]';
 
 interface Props {
-  user: UserListItem | null;
-  onOpenChange: (open: boolean) => void;
+  /** 대상 사용자. 이 모달은 열릴 때만 마운트되므로 null 이 오지 않는다. */
+  user: UserListItem;
+  onClose: () => void;
 }
 
 /**
@@ -34,22 +32,16 @@ interface Props {
  * .pen 의 「새 소속 팀」·「팀 역할」은 자리만 두고 비활성이다 — 팀 엔티티는 티켓 06 에서
  * 생기고 재입사 시 팀 배정 연계는 티켓 14 소관이라, 지금 받으면 저장할 곳이 없다.
  */
-export function UserRehireModal({ user, onOpenChange }: Props) {
+export function UserRehireModal({ user, onClose }: Props) {
   const [password, setPassword] = useState('');
-  const [jobTitle, setJobTitle] = useState('');
+  // 지금 직책을 채워 연다. 보낸 값이 곧 저장될 값이라(서비스가 비운 값을 지운다) 채우지
+  // 않으면 비밀번호만 입력하고 제출한 순간 멀쩡한 직책이 조용히 사라진다.
+  const [jobTitle, setJobTitle] = useState(user.jobTitle ?? '');
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: changeStatus, isPending } = useChangeUserStatus();
 
-  function close() {
-    setPassword('');
-    setJobTitle('');
-    setError(null);
-    onOpenChange(false);
-  }
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!user) return;
     setError(null);
 
     const parsed = ChangeUserStatusInput.safeParse({
@@ -65,17 +57,17 @@ export function UserRehireModal({ user, onOpenChange }: Props) {
 
     try {
       await changeStatus(parsed.data);
-      close();
+      onClose();
     } catch (err) {
       setError(getErrorMessage(err, '재입사 처리를 하지 못했습니다.'));
     }
   }
 
   return (
-    <Dialog open={user !== null} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+    <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <DialogContent className="max-w-[520px] gap-0 rounded-2xl p-7">
         <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">
-          재입사 처리{user ? ` — ${user.name}` : ''}
+          재입사 처리 — {user.name}
         </DialogTitle>
         <p className="mt-1 text-[12px] text-[#6E6E73]">
           퇴사 계정을 새 소속으로 다시 시작합니다.
@@ -153,7 +145,7 @@ export function UserRehireModal({ user, onOpenChange }: Props) {
               maxLength={50}
               className={FIELD_INPUT}
             />
-            <p className={FIELD_HINT}>비우면 지웁니다.</p>
+            <p className={FIELD_HINT}>필요한 경우 수정할 수 있습니다. 비우면 지웁니다.</p>
           </div>
 
           {error && (
@@ -167,7 +159,7 @@ export function UserRehireModal({ user, onOpenChange }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={close}
+              onClick={onClose}
               disabled={isPending}
               className="h-[34px] rounded-[9px] border-[#D1D5DB] px-4 text-[13px] font-semibold text-[#374151]"
             >

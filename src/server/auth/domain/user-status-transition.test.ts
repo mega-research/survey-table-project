@@ -10,14 +10,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { UserStatus } from '@/shared/contracts/auth';
-import {
-  availableUserStatusActions,
-  reducesActiveSuperadminCount,
-  userStatusActionValues,
-} from '@/shared/contracts/auth';
+import { availableUserStatusActions, userStatusActionValues } from '@/shared/contracts/auth';
 
 import { LastActiveSuperadminError, UserStatusTransitionError } from './users';
-import { resolveUserStatusTransition } from './user-status-transition';
+import { leavesActiveStatus, resolveUserStatusTransition } from './user-status-transition';
 
 const ALL_STATUSES: UserStatus[] = ['pending', 'active', 'rejected', 'suspended', 'departed'];
 
@@ -85,12 +81,12 @@ describe('resolveUserStatusTransition — 마지막 active 슈퍼어드민 가�
   });
 });
 
-describe('reducesActiveSuperadminCount', () => {
-  it('정지·퇴사만 active 인원을 줄인다 — 이 액션에서만 카운트 쿼리를 돈다', () => {
-    expect(reducesActiveSuperadminCount('suspend')).toBe(true);
-    expect(reducesActiveSuperadminCount('depart')).toBe(true);
-    expect(reducesActiveSuperadminCount('resume')).toBe(false);
-    expect(reducesActiveSuperadminCount('rehire')).toBe(false);
+describe('leavesActiveStatus', () => {
+  it('정지·퇴사만 대상을 active 밖으로 보낸다 — 이 액션에서만 카운트 쿼리를 돈다', () => {
+    expect(leavesActiveStatus('suspend')).toBe(true);
+    expect(leavesActiveStatus('depart')).toBe(true);
+    expect(leavesActiveStatus('resume')).toBe(false);
+    expect(leavesActiveStatus('rehire')).toBe(false);
   });
 });
 

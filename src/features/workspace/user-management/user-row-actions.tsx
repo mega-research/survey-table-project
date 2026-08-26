@@ -31,7 +31,7 @@ import { USER_STATUS_ACTION_LABEL } from './user-vocabulary';
 /** 확인 다이얼로그 문구 — 되돌리기 비용이 다른 만큼 정지와 퇴사를 같은 문장으로 묻지 않는다. */
 const CONFIRM_COPY: Record<Exclude<UserStatusAction, 'rehire'>, string> = {
   suspend:
-    '일시 정지하면 이 계정의 모든 세션이 폐기되고 로그인이 막힙니다. 팀 멤버십과 설문 소유권은 그대로 남습니다.',
+    '일시 정지하면 이 계정의 모든 세션이 폐기되고 로그인이 막힙니다. 재직 복귀로 언제든 되돌릴 수 있습니다.',
   resume: '재직 복귀하면 다시 로그인할 수 있습니다. 기존 세션은 폐기된 채로 남습니다.',
   depart:
     '퇴사 처리하면 모든 세션이 폐기되고 로그인이 막힙니다. 되돌리려면 재입사 처리가 필요하며, 일반 재직 복귀로는 돌아올 수 없습니다.',

@@ -19,14 +19,19 @@ import {
 import * as svc from '../services/users';
 
 /**
- * 계정 수명주기 에러 → RPC 코드.
+ * 사용자 관리 도메인 에러 → RPC 코드. 이 파일의 매핑 규약은 여기 하나다.
  *
- * 전이 거부와 마지막 슈퍼어드민 가드는 둘 다 CONFLICT 다 — 입력은 문법적으로 옳고
+ * 이메일 중복·전이 거부·마지막 슈퍼어드민 가드는 모두 CONFLICT 다 — 입력은 문법적으로 옳고
  * 지금 상태와 충돌할 뿐이라, 화면은 문구를 그대로 띄우고 목록을 다시 읽으면 된다.
+ * 매핑되지 않은 예외는 null 을 돌려 호출측이 그대로 올린다(500 으로 남는다).
  */
 function toRpcError(err: unknown): ORPCError<string, unknown> | null {
   if (err instanceof UserNotFoundError) return new ORPCError('NOT_FOUND', { message: err.message });
-  if (err instanceof UserStatusTransitionError || err instanceof LastActiveSuperadminError) {
+  if (
+    err instanceof DuplicateEmailError ||
+    err instanceof UserStatusTransitionError ||
+    err instanceof LastActiveSuperadminError
+  ) {
     return new ORPCError('CONFLICT', { message: err.message });
   }
   return null;
@@ -51,10 +56,7 @@ const create = superadmin
     try {
       return await svc.createUser(context.user.id, input);
     } catch (err) {
-      if (err instanceof DuplicateEmailError) {
-        throw new ORPCError('CONFLICT', { message: err.message });
-      }
-      throw err;
+      throw toRpcError(err) ?? err;
     }
   });
 

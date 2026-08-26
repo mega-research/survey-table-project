@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 03 — 사용자 직접 생성: 슈퍼어드민이 `/admin/users` 에서 계정을 발급하고 생성 즉시 active 라 바로 로그인된다. `superadmin` oRPC 베이스 + `requireSuperadminPage` 신설, 계정 유형 게이트(`authed`·`requireAuth` 는 internal 만), `auth.users.list/create` procedure, `features/workspace` 묶음 신설(6번째), 게스트 소속 기관 컬럼 `users.organization`(마이그레이션 0086), 경계 계약 `shared/contracts/auth-io.ts`. 실사 유형 생성과 케밥 액션은 티켓 24·04 소관이라 아직 없다. 직전: 티켓 02 인증 스왑 — 세션·미들웨어·REST·로그인 화면 전부 Better Auth, ADMIN_USER_IDS allowlist 은퇴, `@supabase/ssr` 제거)
+> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 04 — 계정 상태 전이·비밀번호 재설정: 사용자 행 케밥에서 일시 정지·재직 복귀·퇴사·재입사와 재설정을 처리한다. 허용 전이표 SSOT 는 `shared/contracts/auth.ts` 의 `USER_STATUS_TRANSITIONS`(서버 강제와 화면 케밥이 같은 표를 본다), 강제는 `server/auth/domain/user-status-transition.ts`. 모든 전이·재설정이 대상 세션을 전부 끊고 `user_status_events` 에 감사 행을 남긴다. `auth.users.changeStatus/resetPassword` procedure 신설. 퇴사의 멤버십·소유권 정리와 재입사 팀 배정은 티켓 06·14·19 소관이라 아직 없다. 직전: 티켓 03 사용자 직접 생성 — `/admin/users` 발급 화면, `superadmin` 베이스 + `requireSuperadminPage`, 계정 유형 게이트, `features/workspace` 묶음 신설, `users.organization`(0086))
 
 ---
 
@@ -146,9 +146,11 @@ src/
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   ├── analytics/              # 차트 및 리포팅 (23개)
-│   └── workspace/              # 워크스페이스 관리 (4개, 티켓 03 신설) — 사용자 관리 목록·계정 생성 모달
+│   └── workspace/              # 워크스페이스 관리 (7개, 티켓 03 신설) — 사용자 관리 목록·계정 생성·수명주기
 │       │                       # 팀 관리·재배치·사이드바(티켓 06~14)가 여기로 들어온다. 진입점은 폴더 안
-│       └── user-management/    # user-management-view 진입점 + user-create-modal + user-vocabulary + queries/use-users
+│       └── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
+│                               # + user-reset-password-modal · user-rehire-modal + user-vocabulary + queries/use-users
+│                               # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -242,7 +244,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘 SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -528,7 +530,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
-/admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성)
+/admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 ```
@@ -637,8 +639,17 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 - **세션은 Better Auth**(ADR-0018). 인스턴스는 `lib/auth/server.ts` — email+password, UUID user id,
   30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·이메일 비밀번호
-  재설정 없음(분실은 슈퍼어드민 재설정, 티켓 04). sign-in 전 비활성 상태(active 외)를 차단하며 실패
-  응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
+  재설정 없음(분실은 슈퍼어드민이 새 임시 비밀번호를 지정). sign-in 전 비활성 상태(active 외)를 차단하며
+  실패 응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
+- **계정 수명주기**는 `server/auth`(도메인 규칙 + 서비스)와 `/admin/users` 행 케밥이 담당한다.
+  허용 전이는 `shared/contracts/auth.ts` 의 `USER_STATUS_TRANSITIONS` 하나가 정하고, 서버 강제
+  (`resolveUserStatusTransition`)와 화면 메뉴(`availableUserStatusActions`)가 같은 표를 본다 —
+  화면이 표를 따로 들면 "메뉴엔 있는데 누르면 CONFLICT" 가 된다. 전이는 advisory lock + 행 잠금
+  아래에서 처리하고(마지막 슈퍼어드민 동시 정지 경합 차단), **모든 전이·재설정이 대상 세션을 전부
+  끊고 `user_status_events` 에 감사 행을 남긴다**(재설정은 상태가 그대로라 from=to). 마지막 active
+  슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
+  않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). 퇴사의 멤버십·소유권 정리와
+  재입사의 팀 배정은 티켓 06·14·19 소관이라 아직 없다.
 - **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로 `/admin`·`/analytics`
   진입을 거르고 `x-pathname` 요청 헤더를 넘긴다. 쿠키 유효성·계정 상태(active)·게스트 경로 제한은
   `app/admin/layout.tsx`·`app/analytics/layout.tsx` 가 서버에서 재검증한다. 비로그인 접근을 허용하는
@@ -652,7 +663,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - procedure 베이스 4종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
-  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리, 이후 상태 전이·실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
+  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`scoped`** — 세션 + active (게스트 포함). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면

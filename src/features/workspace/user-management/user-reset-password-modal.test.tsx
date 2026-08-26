@@ -18,7 +18,7 @@ vi.mock('./queries/use-users', () => ({
 
 import { UserResetPasswordModal } from './user-reset-password-modal';
 
-const onOpenChange = vi.fn();
+const onClose = vi.fn();
 
 const USER: UserListItem = {
   id: '55555555-5555-4555-8555-555555555555',
@@ -33,7 +33,7 @@ const USER: UserListItem = {
 };
 
 function renderModal() {
-  return render(<UserResetPasswordModal user={USER} onOpenChange={onOpenChange} />);
+  return render(<UserResetPasswordModal user={USER} onClose={onClose} />);
 }
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ describe('UserResetPasswordModal', () => {
     await user.click(screen.getByRole('button', { name: '재설정' }));
 
     expect(mutateAsync).toHaveBeenCalledWith({ userId: USER.id, password: 'temp-pw-1234' });
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('8자 미만은 서버까지 보내지 않고 문구를 띄운다', async () => {
@@ -83,6 +83,6 @@ describe('UserResetPasswordModal', () => {
     await user.click(screen.getByRole('button', { name: '재설정' }));
 
     expect(await screen.findByText('사용자를 찾을 수 없습니다.')).toBeInTheDocument();
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

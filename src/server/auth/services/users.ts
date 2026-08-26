@@ -2,7 +2,7 @@ import 'server-only';
 
 import { type SQL, and, asc, count, eq, sql } from 'drizzle-orm';
 
-import { db } from '@/db';
+import { type DbTransaction as Tx, db } from '@/db';
 import { accounts, sessions, userStatusEvents, users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
 import { isUniqueViolation } from '@/lib/pg-error';
@@ -11,12 +11,12 @@ import {
   LOCAL_CREDENTIAL_ISSUER,
   type UserStatusAction,
   type UserType,
-  reducesActiveSuperadminCount,
 } from '@/shared/contracts/auth';
 
 import {
   PASSWORD_RESET_REASON,
   USER_STATUS_ACTION_REASON,
+  leavesActiveStatus,
   resolveUserStatusTransition,
 } from '../domain/user-status-transition';
 import { DuplicateEmailError, UserNotFoundError } from '../domain/users';
@@ -162,8 +162,6 @@ export async function createUser(
 // 계정 수명주기 — 상태 전이 · 비밀번호 재설정 (티켓 04)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /** 인스턴스 설정 해셔를 그대로 쓴다 — 발급·재설정·재입사가 같은 알고리즘으로 해시해야 한다. */
 async function hashPassword(plain: string): Promise<string> {
   const authContext = await auth.$context;
@@ -220,7 +218,7 @@ async function isLastActiveSuperadmin(
   target: { isSuperadmin: boolean; status: (typeof users.$inferSelect)['status'] },
   action: UserStatusAction,
 ): Promise<boolean> {
-  if (!reducesActiveSuperadminCount(action)) return false;
+  if (!leavesActiveStatus(action)) return false;
   if (!target.isSuperadmin || target.status !== 'active') return false;
 
   const [row] = await tx

@@ -215,14 +215,14 @@ export function UserManagementView() {
       </div>
 
       <UserCreateModal open={createOpen} onOpenChange={setCreateOpen} />
-      <UserResetPasswordModal
-        user={resetTarget}
-        onOpenChange={(open) => (open ? undefined : setResetTarget(null))}
-      />
-      <UserRehireModal
-        user={rehireTarget}
-        onOpenChange={(open) => (open ? undefined : setRehireTarget(null))}
-      />
+      {/* 열릴 때만 마운트한다 — 두 모달은 대상의 현재 값(직책 등)으로 초기 상태를 잡으므로
+          띄워둔 채 대상만 갈아끼우면 앞사람의 입력이 남는다. */}
+      {resetTarget && (
+        <UserResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
+      )}
+      {rehireTarget && (
+        <UserRehireModal user={rehireTarget} onClose={() => setRehireTarget(null)} />
+      )}
     </div>
   );
 }

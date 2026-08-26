@@ -18,7 +18,7 @@ vi.mock('./queries/use-users', () => ({
 
 import { UserRehireModal } from './user-rehire-modal';
 
-const onOpenChange = vi.fn();
+const onClose = vi.fn();
 
 const USER: UserListItem = {
   id: '55555555-5555-4555-8555-555555555555',
@@ -32,8 +32,8 @@ const USER: UserListItem = {
   createdAt: '2026-08-26T00:00:00.000Z',
 };
 
-function renderModal() {
-  return render(<UserRehireModal user={USER} onOpenChange={onOpenChange} />);
+function renderModal(overrides: Partial<UserListItem> = {}) {
+  return render(<UserRehireModal user={{ ...USER, ...overrides }} onClose={onClose} />);
 }
 
 beforeEach(() => {
@@ -70,12 +70,31 @@ describe('UserRehireModal', () => {
       password: 'rehire-pw-12',
       jobTitle: '선임연구원',
     });
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onClose).toHaveBeenCalled();
   });
 
-  it('비워 둔 직책은 미입력으로 접어 보낸다', async () => {
+  it('지금 직책을 채워 열고 손대지 않으면 그대로 보낸다', async () => {
+    // 보낸 값이 곧 저장될 값이라, 채우지 않으면 비밀번호만 입력하고 제출한 순간
+    // 멀쩡한 직책이 조용히 지워진다.
     const user = userEvent.setup();
-    renderModal();
+    renderModal({ jobTitle: '책임연구원' });
+    expect(screen.getByLabelText('직책')).toHaveValue('책임연구원');
+
+    await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
+    await user.click(screen.getByRole('button', { name: '재입사 처리' }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      action: 'rehire',
+      userId: USER.id,
+      password: 'rehire-pw-12',
+      jobTitle: '책임연구원',
+    });
+  });
+
+  it('직책을 비우고 제출하면 지운다', async () => {
+    const user = userEvent.setup();
+    renderModal({ jobTitle: '책임연구원' });
+    await user.clear(screen.getByLabelText('직책'));
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
     await user.click(screen.getByRole('button', { name: '재입사 처리' }));
 
@@ -108,6 +127,6 @@ describe('UserRehireModal', () => {
     await user.click(screen.getByRole('button', { name: '재입사 처리' }));
 
     expect(await screen.findByText('허용되지 않은 계정 상태 전이입니다.')).toBeInTheDocument();
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

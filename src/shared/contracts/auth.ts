@@ -64,14 +64,6 @@ export function availableUserStatusActions(status: UserStatus): UserStatusAction
   );
 }
 
-/**
- * 이 작업이 active 슈퍼어드민 인원을 줄이는가 — 마지막 슈퍼어드민 가드가 필요한 축.
- * 서버는 이 술어가 참일 때만 카운트 쿼리를 돈다.
- */
-export function reducesActiveSuperadminCount(action: UserStatusAction): boolean {
-  return USER_STATUS_TRANSITIONS[action].to !== 'active';
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // users.user_type — 계정 유형 어휘 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────

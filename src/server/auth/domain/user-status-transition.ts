@@ -4,10 +4,19 @@ import {
   USER_STATUS_TRANSITIONS,
   type UserStatus,
   type UserStatusAction,
-  reducesActiveSuperadminCount,
 } from '@/shared/contracts/auth';
 
 import { LastActiveSuperadminError, UserStatusTransitionError } from './users';
+
+/**
+ * 이 작업이 대상을 active 밖으로 내보내는가.
+ *
+ * 마지막 슈퍼어드민 가드가 필요한 축이 이것이다 — 서버는 이 술어가 참일 때만 카운트 쿼리를
+ * 돈다. 슈퍼어드민 여부는 여기서 보지 않는다(호출측 isLastActiveSuperadmin 이 합성한다).
+ */
+export function leavesActiveStatus(action: UserStatusAction): boolean {
+  return USER_STATUS_TRANSITIONS[action].to !== 'active';
+}
 
 /**
  * 다음 상태를 정한다. 허용되지 않으면 던진다.
@@ -29,7 +38,7 @@ export function resolveUserStatusTransition(
   if (!transition.from.includes(current)) {
     throw new UserStatusTransitionError();
   }
-  if (isLastActiveSuperadmin && reducesActiveSuperadminCount(action)) {
+  if (isLastActiveSuperadmin && leavesActiveStatus(action)) {
     throw new LastActiveSuperadminError(
       action === 'suspend'
         ? '마지막 슈퍼어드민은 일시 정지할 수 없습니다.'

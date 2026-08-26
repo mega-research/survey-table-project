@@ -13,6 +13,7 @@ import { CreateUserInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io
 import type { UserType } from '@/shared/contracts/auth';
 
 import { useCreateUser } from './queries/use-users';
+import { FIELD_INPUT, FIELD_LABEL } from './field-styles';
 import { USER_TYPE_LABEL } from './user-vocabulary';
 
 /**
@@ -25,9 +26,6 @@ const TYPE_SEGMENTS: { value: UserType; disabled?: boolean }[] = [
   { value: 'fieldwork', disabled: true },
 ];
 
-const FIELD_LABEL = 'text-[12.5px] font-semibold text-[#374151]';
-const FIELD_INPUT =
-  'h-9 rounded-lg border-[#D1D5DB] text-[13px] placeholder:text-[#9CA3AF] focus-visible:ring-[#2E4FCE]';
 
 type CreatableType = Extract<UserType, 'internal' | 'guest'>;
 

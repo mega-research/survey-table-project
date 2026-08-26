@@ -12,15 +12,14 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { MIN_PASSWORD_LENGTH, ResetUserPasswordInput } from '@/shared/contracts/auth-io';
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
+import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from './field-styles';
 import { useResetUserPassword } from './queries/use-users';
 
-const FIELD_LABEL = 'text-[12.5px] font-semibold text-[#374151]';
-const FIELD_INPUT =
-  'h-9 rounded-lg border-[#D1D5DB] text-[13px] placeholder:text-[#9CA3AF] focus-visible:ring-[#2E4FCE]';
 
 interface Props {
-  user: UserListItem | null;
-  onOpenChange: (open: boolean) => void;
+  /** 대상 사용자. 이 모달은 열릴 때만 마운트되므로 null 이 오지 않는다. */
+  user: UserListItem;
+  onClose: () => void;
 }
 
 /**
@@ -29,20 +28,13 @@ interface Props {
  * 이메일 재설정 링크 플로우는 없다(ADR-0018) — 슈퍼어드민이 새 임시 비밀번호를 직접 정하고
  * 사내 채널로 전달한다. 저장과 동시에 대상의 모든 세션이 끊긴다는 점을 화면에서 먼저 말한다.
  */
-export function UserResetPasswordModal({ user, onOpenChange }: Props) {
+export function UserResetPasswordModal({ user, onClose }: Props) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: resetPassword, isPending } = useResetUserPassword();
 
-  function close() {
-    setPassword('');
-    setError(null);
-    onOpenChange(false);
-  }
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!user) return;
     setError(null);
 
     // 길이 규칙은 경계 계약 한 곳에만 둔다 — 여기서 손으로 재현하면 서버와 갈린다.
@@ -54,20 +46,20 @@ export function UserResetPasswordModal({ user, onOpenChange }: Props) {
 
     try {
       await resetPassword(parsed.data);
-      close();
+      onClose();
     } catch (err) {
       setError(getErrorMessage(err, '비밀번호를 재설정하지 못했습니다.'));
     }
   }
 
   return (
-    <Dialog open={user !== null} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+    <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <DialogContent className="max-w-[460px] gap-0 rounded-2xl p-7">
         <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">
           비밀번호 재설정
         </DialogTitle>
         <p className="mt-1 text-[12px] text-[#6E6E73]">
-          {user ? `${user.name} · ${user.email}` : ''}
+          {user.name} · {user.email}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">
@@ -84,7 +76,7 @@ export function UserResetPasswordModal({ user, onOpenChange }: Props) {
               required
               className={FIELD_INPUT}
             />
-            <p className="text-[10.5px] text-[#9CA3AF]">{MIN_PASSWORD_LENGTH}자 이상</p>
+            <p className={FIELD_HINT}>{MIN_PASSWORD_LENGTH}자 이상</p>
           </div>
 
           <div className="flex items-center gap-2 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[12.5px] text-[#B45309]">
@@ -108,7 +100,7 @@ export function UserResetPasswordModal({ user, onOpenChange }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={close}
+              onClick={onClose}
               disabled={isPending}
               className="h-[34px] rounded-[9px] border-[#D1D5DB] px-4 text-[13px] font-semibold text-[#374151]"
             >
