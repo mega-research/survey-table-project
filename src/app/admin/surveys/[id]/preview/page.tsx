@@ -9,7 +9,7 @@ import {
   getSurveyById,
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
-import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAuth } from '@/lib/auth';
 import { isGuestUser } from '@/lib/auth/guest-grants';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -34,12 +34,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
   // 팀 멤버십이 없어 capability 판정에 걸리므로 내부 계정만 관문을 지난다(티켓 21 이 통합).
   const viewer = await requireAuth();
   if (!isGuestUser(viewer.id)) {
-    try {
-      await assertSurveyCapability(viewer, surveyId, 'survey.view');
-    } catch (error) {
-      if (error instanceof SurveyAccessError) notFound();
-      throw error;
-    }
+    await assertSurveyCapabilityPage(viewer, surveyId, 'survey.view');
   }
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();

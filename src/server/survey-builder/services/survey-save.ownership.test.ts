@@ -46,10 +46,10 @@ vi.mock('@/db', () => ({
   },
 }));
 
-// 순수 판정(denialReasonFor)·에러 클래스는 실물, DB 로더만 모킹.
+// 에러 클래스는 실물, 관문만 모킹 — 관문 자체의 판정은 survey-access 테스트 소관.
 vi.mock('@/server/survey-access', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  loadSurveyCapabilities: vi.fn(),
+  assertSurveyCapability: vi.fn(),
 }));
 
 vi.mock('./surveys', () => ({ resolveNewSurveyOwnership: vi.fn() }));
@@ -69,7 +69,7 @@ vi.mock('@/lib/survey/notice-attachment-promote', () => ({
   promoteNoticeAttachments: vi.fn(async (v: unknown) => v),
 }));
 
-import { loadSurveyCapabilities, SurveyAccessError } from '@/server/survey-access';
+import { assertSurveyCapability, SurveyAccessError } from '@/server/survey-access';
 
 import { saveSurveyWithDetails } from './survey-save';
 import { resolveNewSurveyOwnership } from './surveys';
@@ -123,21 +123,19 @@ describe('saveSurveyWithDetails — 생성 모드', () => {
       assignmentStatus: 'assigned',
     });
     // 새 행에는 capability 를 물을 대상이 없다 — 생성 판정만 지난다.
-    expect(loadSurveyCapabilities).not.toHaveBeenCalled();
+    expect(assertSurveyCapability).not.toHaveBeenCalled();
   });
 });
 
 describe('saveSurveyWithDetails — 갱신 모드', () => {
   it('기존 설문이면 survey.edit 을 요구하고 소유 스탬프를 다시 찍지 않는다', async () => {
     findFirstSurvey.mockResolvedValue({ id: SURVEY_ID, deletedAt: null });
-    vi.mocked(loadSurveyCapabilities).mockResolvedValue(
-      new Set(['survey.view', 'survey.edit'] as const),
-    );
+    vi.mocked(assertSurveyCapability).mockResolvedValue(undefined);
 
     const result = await saveSurveyWithDetails(actor, surveyPayload());
 
     expect(result).toEqual({ surveyId: SURVEY_ID });
-    expect(loadSurveyCapabilities).toHaveBeenCalledWith(actor, SURVEY_ID);
+    expect(assertSurveyCapability).toHaveBeenCalledWith(actor, SURVEY_ID, 'survey.edit');
     expect(resolveNewSurveyOwnership).not.toHaveBeenCalled();
     expect(updateCalls.length).toBe(1);
     expect(insertedValues).toEqual([]);
@@ -145,7 +143,7 @@ describe('saveSurveyWithDetails — 갱신 모드', () => {
 
   it('편집 권한이 없으면 forbidden — 아무것도 쓰지 않는다', async () => {
     findFirstSurvey.mockResolvedValue({ id: SURVEY_ID, deletedAt: null });
-    vi.mocked(loadSurveyCapabilities).mockResolvedValue(new Set(['survey.view'] as const));
+    vi.mocked(assertSurveyCapability).mockRejectedValue(new SurveyAccessError('forbidden'));
 
     await expect(saveSurveyWithDetails(actor, surveyPayload())).rejects.toMatchObject({
       name: 'SurveyAccessError',
@@ -157,7 +155,7 @@ describe('saveSurveyWithDetails — 갱신 모드', () => {
 
   it('볼 수조차 없는 설문(타 팀)은 not_found — 존재를 알리지 않는다', async () => {
     findFirstSurvey.mockResolvedValue({ id: SURVEY_ID, deletedAt: null });
-    vi.mocked(loadSurveyCapabilities).mockRejectedValue(new SurveyAccessError('not_found'));
+    vi.mocked(assertSurveyCapability).mockRejectedValue(new SurveyAccessError('not_found'));
 
     await expect(saveSurveyWithDetails(actor, surveyPayload())).rejects.toMatchObject({
       reason: 'not_found',
@@ -175,8 +173,8 @@ describe('saveSurveyWithDetails — tombstone', () => {
       name: 'SurveyAccessError',
       reason: 'not_found',
     });
-    // 부활 금지 — capability 조회 전에 끝나고, 어떤 쓰기도 일어나지 않는다.
-    expect(loadSurveyCapabilities).not.toHaveBeenCalled();
+    // 부활 금지 — capability 관문 전에 끝나고, 어떤 쓰기도 일어나지 않는다.
+    expect(assertSurveyCapability).not.toHaveBeenCalled();
     expect(resolveNewSurveyOwnership).not.toHaveBeenCalled();
     expect(updateCalls).toEqual([]);
     expect(insertedValues).toEqual([]);

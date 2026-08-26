@@ -35,6 +35,7 @@ vi.mock('@/lib/survey/survey-image-promote', () => ({
   promoteSurveyResponseHeader: vi.fn(async (v: unknown) => v ?? null),
 }));
 
+import { db } from '@/db';
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import { assertSurveyCapability } from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
@@ -117,7 +118,7 @@ describe('ensureSurveyInDb — 빌더 자동 생성도 같은 귀속을 받는�
 });
 
 describe('duplicateSurvey — 원본 접근 권한이 먼저다', () => {
-  it('원본을 볼 수 없으면 복제하지 않는다 — 읽기 전에 관문을 통과해야 한다', async () => {
+  it('원본 편집 권한이 없으면 복제하지 않는다 — 읽기 전에 관문을 통과해야 한다', async () => {
     // 이 검사가 없으면 id 만 아는 내부 사용자가 타 팀 설문을 복제해 그 사본의 소유자가 된다.
     const denied = new Error('forbidden');
     vi.mocked(assertSurveyCapability).mockRejectedValueOnce(denied);
@@ -131,6 +132,29 @@ describe('duplicateSurvey — 원본 접근 권한이 먼저다', () => {
     vi.mocked(getSurveyById).mockResolvedValueOnce(undefined as never);
 
     await expect(duplicateSurvey(actor, { surveyId: 'sv-1' })).resolves.toBeNull();
-    expect(assertSurveyCapability).toHaveBeenCalledWith(actor, 'sv-1', 'survey.view');
+    expect(assertSurveyCapability).toHaveBeenCalledWith(actor, 'sv-1', 'survey.edit');
+  });
+});
+
+describe('ensureSurveyInDb — 기존 행은 존재 오라클을 봉인한다', () => {
+  it('이미 있는 설문이면 편집 관문을 지나야 { created: false } 를 돌려준다', async () => {
+    vi.mocked(db.query.surveys.findFirst).mockResolvedValueOnce({ id: 'existing-1' } as never);
+    vi.mocked(assertSurveyCapability).mockResolvedValueOnce(undefined);
+
+    await expect(
+      ensureSurveyInDb(actor, { id: 'existing-1', title: '제목', settings: SETTINGS }),
+    ).resolves.toEqual({ surveyId: 'existing-1', created: false });
+    expect(assertSurveyCapability).toHaveBeenCalledWith(actor, 'existing-1', 'survey.edit');
+  });
+
+  it('관문이 거부하면 존재 여부(created:false)조차 돌려주지 않는다', async () => {
+    vi.mocked(db.query.surveys.findFirst).mockResolvedValueOnce({ id: 'other-team' } as never);
+    const denied = new Error('not_found');
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(denied);
+
+    await expect(
+      ensureSurveyInDb(actor, { id: 'other-team', title: '제목', settings: SETTINGS }),
+    ).rejects.toBe(denied);
+    expect(insertedValues).toEqual([]);
   });
 });

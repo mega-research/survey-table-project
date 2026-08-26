@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import { requireAuth } from '@/lib/auth';
-import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { getResponseById } from '@/server/read-models/responses';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
@@ -46,12 +46,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
   const viewer = await requireAuth();
-  try {
-    await assertSurveyCapability(viewer, surveyId, 'responses.view');
-  } catch (error) {
-    if (error instanceof SurveyAccessError) notFound();
-    throw error;
-  }
+  await assertSurveyCapabilityPage(viewer, surveyId, 'responses.view');
   const scope = await getOperationsDataScope(surveyId);
 
   const response = await getResponseById(responseId, { includeDeleted: true });

@@ -3,8 +3,7 @@ import 'server-only';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import {
-  denialReasonFor,
-  loadSurveyCapabilities,
+  assertSurveyCapability,
   SurveyAccessError,
   type SurveyAccessUser,
 } from '@/server/survey-access';
@@ -465,9 +464,7 @@ export async function saveSurveyWithDetails(
     // 경로가 tombstone 을 되살리지 않도록 여기서도 명시적으로 거른다.
     if (existingSurvey) {
       if (existingSurvey.deletedAt !== null) throw new SurveyAccessError('not_found');
-      const capabilities = await loadSurveyCapabilities(actor, surveyId);
-      const denial = denialReasonFor(capabilities, 'survey.edit');
-      if (denial) throw new SurveyAccessError(denial);
+      await assertSurveyCapability(actor, surveyId, 'survey.edit');
     }
 
     const promotedResponseHeader = await promoteSurveyResponseHeader(

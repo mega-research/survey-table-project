@@ -22,10 +22,17 @@ import * as svc from '../services/surveys';
  * 기존 설문을 지목하는 update/delete 는 handler 첫 줄에서 capability 관문을 지난다(티켓 09).
  */
 
+// ensure 는 기존 행이면 서비스가 편집 관문을 지난다(존재 오라클 봉인) — 사유만 옮긴다.
 const ensure = authed
   .input(EnsureSurveyInDbInput)
   .output(EnsureSurveyResultSchema)
-  .handler(({ context, input }) => svc.ensureSurveyInDb(context.user, input));
+  .handler(async ({ context, input }) => {
+    try {
+      return await svc.ensureSurveyInDb(context.user, input);
+    } catch (error) {
+      throw toRpcSurveyAccessError(error);
+    }
+  });
 
 const create = authed
   .input(CreateSurveyInput)

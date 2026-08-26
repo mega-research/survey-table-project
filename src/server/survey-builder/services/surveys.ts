@@ -84,7 +84,13 @@ export async function ensureSurveyInDb(
     columns: { id: true },
   });
 
-  if (existing) return { surveyId: input.id, created: false };
+  if (existing) {
+    // 존재 오라클 봉인(티켓 09 리뷰) — 관문 없이 { created: false } 를 돌려주면 타 팀
+    // 설문 id 의 존재가 확인된다. 기존 행에 대한 ensure 는 편집 흐름의 일부이므로
+    // survey.edit 을 요구한다(권한이 없으면 not_found 로 접혀 없는 설문과 같아진다).
+    await assertSurveyCapability(actor, input.id, 'survey.edit');
+    return { surveyId: input.id, created: false };
+  }
 
   const ownership = await resolveNewSurveyOwnership(actor, input.scope);
 
@@ -242,7 +248,9 @@ export async function duplicateSurvey(
 
   // 복제는 원본을 읽어 새 설문을 만드는 일이라 **원본 접근 권한이 먼저다**. 이 검사가 없으면
   // id 만 아는 내부 사용자가 타 팀 설문을 복제해 그 사본의 소유자가 된다(팀 경계 우회).
-  await assertSurveyCapability(actor, surveyId, 'survey.view');
+  // 요구는 편집이다(플랜 D7) — 열람만 가진 주체(이후 게스트·실사의 제한 화면)가 사본을
+  // 만들어 그 사본의 전권을 얻는 우회를 막는다. 지금 내부 프리셋은 view=edit 라 무변경.
+  await assertSurveyCapability(actor, surveyId, 'survey.edit');
 
   const original = await getSurveyById(surveyId);
   if (!original) return null;

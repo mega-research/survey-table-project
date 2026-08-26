@@ -1,3 +1,5 @@
+import { cache } from 'react';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -7,23 +9,19 @@ import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
-import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AnalyticsPageProps {
   params: Promise<{ surveyId: string }>;
 }
 
-/** 없는 설문과 타 팀 설문을 같은 notFound 로 접는다 — 존재를 알려주지 않는다(티켓 09). */
-async function assertAnalyticsPageAccess(surveyId: string): Promise<void> {
+// 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
+// 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
+const assertAnalyticsPageAccess = cache(async (surveyId: string): Promise<void> => {
   const viewer = await requireAdminPage();
-  try {
-    await assertSurveyCapability(viewer, surveyId, 'analytics.view');
-  } catch (error) {
-    if (error instanceof SurveyAccessError) notFound();
-    throw error;
-  }
-}
+  await assertSurveyCapabilityPage(viewer, surveyId, 'analytics.view');
+});
 
 export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps) {
   const { surveyId } = await params;
