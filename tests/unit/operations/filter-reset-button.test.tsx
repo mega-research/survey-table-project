@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { FilterResetButton } from '@/components/operations/filters/filter-reset-button';
+import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
 
 function pushedParams(): URLSearchParams {
   const lastCall = pushMock.mock.calls.at(-1);
@@ -64,5 +65,48 @@ describe('FilterResetButton', () => {
     );
     await user.click(screen.getByRole('button', { name: '초기화' }));
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ContactsFilterBar resetExtraParams — 메일 마법사 unresponded', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentParams = new URLSearchParams();
+  });
+
+  function renderWizardBar() {
+    return render(
+      <ContactsFilterBar
+        surveyId="sv-1"
+        initialClauses={[]}
+        columnCandidates={[{ source: 'attrs.전시회명', label: '전시회명' }]}
+        resultCodeOptions={[]}
+        ariaLabel="수신자 필터"
+        resetExtraParams={['unresponded']}
+      />,
+    );
+  }
+
+  it('unresponded 만 걸려 있어도 초기화가 활성이고, 클릭 시 함께 지운다', async () => {
+    const user = userEvent.setup();
+    currentParams = new URLSearchParams('unresponded=1');
+    renderWizardBar();
+    const button = screen.getByRole('button', { name: '초기화' });
+    expect(button).not.toBeDisabled();
+    await user.click(button);
+    const next = pushedParams();
+    expect(next.has('unresponded')).toBe(false);
+  });
+
+  it('빌더 조건과 함께 걸린 unresponded 도 초기화 한 번에 지운다', async () => {
+    const user = userEvent.setup();
+    currentParams = new URLSearchParams('col=attrs.a&q=v&unresponded=1&templateId=t1');
+    renderWizardBar();
+    await user.click(screen.getByRole('button', { name: '초기화' }));
+    const next = pushedParams();
+    expect(next.has('col')).toBe(false);
+    expect(next.has('unresponded')).toBe(false);
+    // 필터가 아닌 파라미터(템플릿 선택)는 보존.
+    expect(next.get('templateId')).toBe('t1');
   });
 });
