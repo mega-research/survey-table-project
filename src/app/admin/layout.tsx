@@ -7,9 +7,10 @@ import {
   getGuestSurveyIds,
   guestPathRedirect,
 } from '@/lib/auth/guest-grants';
-import { AUTH_PAGES } from '@/lib/auth/protected-paths';
+import { accountHomePath } from '@/lib/auth/account-home';
+import { ACCOUNT_PAGES, AUTH_PAGES } from '@/lib/auth/protected-paths';
 import { readSessionUser } from '@/lib/auth/session';
-import { isActiveUser } from '@/shared/contracts/auth';
+import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 // TanStack Query 는 관리자 화면만 쓴다. 공개 응답 페이지(/survey, /i, /preview, /unsubscribe)는
 // plain RPC client 만 쓰므로 Provider 를 루트가 아니라 여기서 연다 — 응답자 번들에서 Query 런타임을 뺀다.
@@ -35,6 +36,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     }
     if (!isActiveUser(user.status)) {
       redirect('/admin/login');
+    }
+
+    // 계정 유형 게이트 — /admin 은 내부 구역이다. 게스트·실사는 자기 홈으로 돌려보낸다.
+    // notFound 가 아니라 리다이렉트인 이유: 이 구역의 존재는 비밀이 아니고, 잘못 들어온
+    // 사용자에게 갈 곳을 알려주는 편이 낫다(막다른 404 보다). 진짜 차단은 페이지·procedure
+    // 가드가 한다 — 이 레이아웃은 하드 내비게이션에서만 다시 돈다.
+    // 프로필은 세 유형 공통 화면이라 비켜준다(.pen FLOW 3-2).
+    if (!isInternalUser(user.userType) && !ACCOUNT_PAGES.has(pathname)) {
+      redirect(accountHomePath(user.userType));
     }
 
     // 게스트(설문 단위 grant) — 자기 설문 콘솔 밖은 전부 강제 로그아웃으로 보낸다.

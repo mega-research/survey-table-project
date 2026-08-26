@@ -8,6 +8,7 @@ import {
   guestPostLoginRedirect,
   isForeignSurveyConsolePath,
 } from '@/lib/auth/guest-grants';
+import { resolvePostLoginDestination } from '@/lib/auth/account-home';
 import { sanitizeRedirectPath } from '@/lib/auth/safe-redirect';
 import { readSessionUser } from '@/lib/auth/session';
 import { isActiveUser } from '@/shared/contracts/auth';
@@ -22,9 +23,12 @@ interface PageProps {
  * 로그인 화면 + 로그인 직후 목적지 해석기.
  *
  * 로그인 폼은 Better Auth 클라이언트로 세션을 만든 뒤 이 페이지로 되돌아온다. 목적지 판정에
- * 게스트 grant(서버 설정)가 필요해 클라이언트가 스스로 결정할 수 없기 때문 — 세션이 생긴
- * 상태로 다시 들어오면 여기서 유형별 목적지를 계산해 보낸다. 이미 로그인한 사용자가 로그인
- * 주소를 직접 열었을 때의 처리도 같은 경로다.
+ * 게스트 grant(서버 설정)와 계정 유형이 필요해 클라이언트가 스스로 결정할 수 없기 때문 —
+ * 세션이 생긴 상태로 다시 들어오면 여기서 유형별 목적지를 계산해 보낸다. 이미 로그인한
+ * 사용자가 로그인 주소를 직접 열었을 때의 처리도 같은 경로다.
+ *
+ * 목적지는 두 축이다. 설문 단위 env grant 게스트는 grant 설문 콘솔로, 그 밖은 계정 유형의
+ * 홈(internal→설문 목록 · guest→/guest · fieldwork→/fieldwork)으로 간다.
  */
 export default async function AdminLoginPage({ searchParams }: PageProps) {
   const { redirect: redirectTo, reason } = await searchParams;
@@ -48,7 +52,9 @@ export default async function AdminLoginPage({ searchParams }: PageProps) {
       // 자기 grant 설문으로 정착시킨다.
       redirect(guestPostLoginRedirect(target, grantedSurveyIds));
     }
-    redirect(target);
+    // 계정 유형별 목적지. env grant 게스트가 위에서 먼저 갈라지는 것은 그 모델의 목적지가
+    // 설문 콘솔이라 유형 홈과 다르기 때문이다 — 티켓 21 에서 두 축이 하나로 합쳐진다.
+    redirect(resolvePostLoginDestination(user.userType, target));
   }
 
   return <LoginForm redirectTo={redirectTo ?? ''} reason={reason ?? ''} />;

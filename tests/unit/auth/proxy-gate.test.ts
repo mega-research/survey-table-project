@@ -48,7 +48,13 @@ describe('proxy 세션 쿠키 게이트', () => {
     expect(res.headers.get('location')).toBeNull();
   });
 
-  it('보호 대상은 /admin 과 /analytics 뿐이다', () => {
-    expect(config.matcher).toEqual(['/admin/:path*', '/analytics/:path*']);
+  it('내부 구역과 계정 유형 구역을 모두 보호한다', () => {
+    // 유형 구역(/guest·/fieldwork)을 빠뜨리면 그 구역만 세션 없이 렌더를 시작한다.
+    expect(config.matcher).toEqual([
+      '/admin/:path*',
+      '/analytics/:path*',
+      '/guest/:path*',
+      '/fieldwork/:path*',
+    ]);
   });
 });

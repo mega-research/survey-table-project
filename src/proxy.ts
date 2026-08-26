@@ -37,10 +37,16 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * /admin 및 /analytics 경로 보호
-     * 정적 파일과 이미지는 제외
+     * /admin·/analytics(내부 구역)와 /guest·/fieldwork(계정 유형 구역) 보호.
+     * 정적 파일과 이미지는 제외.
+     *
+     * 유형 구역도 같은 1차 게이트를 지난다 — 쿠키 없는 요청을 로그인으로 보내는 일은
+     * 경로마다 다를 이유가 없고, 빠뜨리면 그 구역만 세션 없이 렌더를 시작한다.
+     * 유형 일치 판정은 페이지의 requireAccountTypePage 몫이다.
      */
     '/admin/:path*',
     '/analytics/:path*',
+    '/guest/:path*',
+    '/fieldwork/:path*',
   ],
 };

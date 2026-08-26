@@ -29,6 +29,7 @@ const ACTIVE = {
   name: '관리자',
   status: 'active' as const,
   isSuperadmin: false,
+  userType: 'internal' as const,
 };
 
 function resetHeaders() {
@@ -106,5 +107,32 @@ describe('AdminLayout 재검증', () => {
     await expect(
       render('/admin/surveys/survey-a/operations/contacts'),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('AdminLayout 계정 유형 게이트', () => {
+  it.each([
+    ['guest', '/guest'],
+    ['fieldwork', '/fieldwork'],
+  ] as const)('%s 계정은 내부 경로에서 자기 홈으로 돌려보낸다', async (userType, home) => {
+    // 티켓 03 이 계정 발급을 열었으므로 이 축이 없으면 발급이 곧 내부 표면 접근이 된다.
+    readSessionUser.mockResolvedValue({ ...ACTIVE, userType });
+    await expect(render('/admin/surveys')).rejects.toThrow('REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(home);
+  });
+
+  it.each(['guest', 'fieldwork'] as const)(
+    '%s 계정도 프로필은 통과한다 (세 유형 공통 화면)',
+    async (userType) => {
+      readSessionUser.mockResolvedValue({ ...ACTIVE, userType });
+      await render('/admin/profile');
+      expect(redirect).not.toHaveBeenCalled();
+    },
+  );
+
+  it('유형이 실려 오지 않으면 내부로 열지 않는다', async () => {
+    // readSessionUser 의 안전 기본값과 같은 방향 — 값이 없으면 닫는 쪽으로 접는다.
+    readSessionUser.mockResolvedValue({ ...ACTIVE, userType: undefined });
+    await expect(render('/admin/surveys')).rejects.toThrow('REDIRECT');
   });
 });

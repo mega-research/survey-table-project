@@ -285,6 +285,56 @@ const eslintConfig = [
     },
   },
   {
+    // 게스트 콘솔(홈·열람) — 독립. 기존 묶음과 상호 참조하지 않는다.
+    files: ["src/features/guest-console/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/features/*",
+                "@/features/*/**",
+                "**/features/*/**",
+                "!@/features/guest-console",
+                "!@/features/guest-console/**",
+                "!**/features/guest-console/**",
+              ],
+              message:
+                "features/guest-console 이 import 할 수 있는 다른 feature 는 없음 입니다. 양쪽이 쓰는 조각은 공용 구역(components/ui·hooks·utils·shared)으로 옮기고, 한쪽 전용이면 호출자가 props 로 주입하세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // 실사 콘솔(홈·조사 대상·대리 응답) — 독립. 기존 묶음과 상호 참조하지 않는다.
+    files: ["src/features/fieldwork-console/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/features/*",
+                "@/features/*/**",
+                "**/features/*/**",
+                "!@/features/fieldwork-console",
+                "!@/features/fieldwork-console/**",
+                "!**/features/fieldwork-console/**",
+              ],
+              message:
+                "features/fieldwork-console 이 import 할 수 있는 다른 feature 는 없음 입니다. 양쪽이 쓰는 조각은 공용 구역(components/ui·hooks·utils·shared)으로 옮기고, 한쪽 전용이면 호출자가 props 로 주입하세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // 공용 구역은 feature 를 모른다 — shared 가 feature 를 import 하면 그 feature 가 사실상 공용이 된 것이다.
     files: [
       "src/components/**/*.{ts,tsx}",
