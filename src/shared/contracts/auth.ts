@@ -13,8 +13,7 @@
 // 복귀시키기 위해 어휘만 보존한다. 단 로그인 차단 판정(status !== 'active')에는
 // 값이 실려 있으면 그대로 걸린다 — 안전한 기본값이다.
 //
-// 전이(앱 코드 기준, 티켓 04 에서 구현):
-//   active ⇄ suspended, active/suspended → departed, departed → active(재입사)
+// 허용 전이는 아래 USER_STATUS_TRANSITIONS 가 정본이다.
 
 /** users.status 전체 값. pending/rejected 는 도달 불가 어휘 (위 주석 참조). */
 export const userStatusValues = [
@@ -25,6 +24,53 @@ export const userStatusValues = [
   'departed',
 ] as const;
 export type UserStatus = (typeof userStatusValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 상태 전이 — 슈퍼어드민이 사용자 행 케밥에서 일으키는 작업 (SSOT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 상태 전이 작업 어휘. 값 자체가 RPC 입력의 판별자다. */
+export const userStatusActionValues = ['suspend', 'resume', 'depart', 'rehire'] as const;
+export type UserStatusAction = (typeof userStatusActionValues)[number];
+
+/**
+ * 허용 전이표 — 서버 강제와 화면 케밥이 함께 보는 유일한 출처.
+ *
+ * `as const satisfies Record<...>` 로 쓰면 안 된다. action 유니온으로 인덱싱할 때 키별
+ * 리터럴 튜플의 유니온이 되어 `.from.includes(current)` 의 인자 타입이 never 로 좁혀진다
+ * (워크트리 Plan2 Task 5 에서 실제로 tsc 가 막았다). 명시적 Record 주석으로 조회 결과
+ * 타입을 균일화하면서, 신규 action 이 누락되면 컴파일 에러로 호명되는 성질은 유지한다.
+ *
+ * departed → active 가 resume 이 아니라 rehire 인 것이 핵심이다 — 퇴사는 세션·팀·소유권을
+ * 정리하므로 일반 재직 복귀로 되살릴 수 없다(ADR-0010).
+ */
+export const USER_STATUS_TRANSITIONS: Record<
+  UserStatusAction,
+  { from: readonly UserStatus[]; to: UserStatus }
+> = {
+  suspend: { from: ['active'], to: 'suspended' },
+  resume: { from: ['suspended'], to: 'active' },
+  depart: { from: ['active', 'suspended'], to: 'departed' },
+  rehire: { from: ['departed'], to: 'active' },
+};
+
+/**
+ * 이 상태의 행에서 열 수 있는 전이 작업 — 케밥 메뉴 구성에 UI 가 쓴다.
+ * 서버 강제(resolveUserStatusTransition)와 같은 표를 보므로 화면과 판정이 갈리지 않는다.
+ */
+export function availableUserStatusActions(status: UserStatus): UserStatusAction[] {
+  return userStatusActionValues.filter((action) =>
+    USER_STATUS_TRANSITIONS[action].from.includes(status),
+  );
+}
+
+/**
+ * 이 작업이 active 슈퍼어드민 인원을 줄이는가 — 마지막 슈퍼어드민 가드가 필요한 축.
+ * 서버는 이 술어가 참일 때만 카운트 쿼리를 돈다.
+ */
+export function reducesActiveSuperadminCount(action: UserStatusAction): boolean {
+  return USER_STATUS_TRANSITIONS[action].to !== 'active';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // users.user_type — 계정 유형 어휘 (SSOT)

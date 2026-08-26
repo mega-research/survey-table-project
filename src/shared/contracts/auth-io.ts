@@ -3,7 +3,13 @@
 // client-safe — server-only·Node·DB 의존 없음(zod 는 런타임 의존).
 import * as z from 'zod';
 
-import { type UserStatus, type UserType, userStatusValues, userTypeValues } from './auth';
+import {
+  type UserStatus,
+  type UserStatusAction,
+  type UserType,
+  userStatusValues,
+  userTypeValues,
+} from './auth';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 필터 어휘
@@ -90,14 +96,20 @@ export const MIN_PASSWORD_LENGTH = 8;
 /** Better Auth 기본 maxPasswordLength. 해시 비용 상한이지 정책이 아니다. */
 export const MAX_PASSWORD_LENGTH = 128;
 
+/**
+ * 비밀번호 입력 — 발급·재설정·재입사가 같은 규칙을 본다.
+ * 규칙이 갈리면 발급만 8자를 강제하고 재설정으로는 짧은 비밀번호가 들어온다.
+ */
+const PasswordField = z
+  .string()
+  .min(MIN_PASSWORD_LENGTH, `비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`)
+  .max(MAX_PASSWORD_LENGTH);
+
 const CreateUserCommon = z.object({
   name: z.string().trim().min(1, '이름을 입력하세요.').max(50),
   // Better Auth 가 이메일을 소문자로 저장·조회하므로 경계에서 같은 규칙으로 정규화한다.
   email: z.string().trim().toLowerCase().pipe(z.email('이메일 형식이 올바르지 않습니다.').max(255)),
-  password: z
-    .string()
-    .min(MIN_PASSWORD_LENGTH, `비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`)
-    .max(MAX_PASSWORD_LENGTH),
+  password: PasswordField,
 });
 
 /**
@@ -139,3 +151,56 @@ export const creatableUserTypes = ['internal', 'guest'] as const satisfies reado
 
 export const CreateUserOutput = z.object({ id: z.uuid() });
 export type CreateUserOutput = z.infer<typeof CreateUserOutput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 상태 전이 · 비밀번호 재설정
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UserTarget = z.object({ userId: z.uuid() });
+
+/**
+ * 상태 전이 입력 — action 판별 유니온.
+ *
+ * 재입사만 모양이 다르다. ADR-0010 에 따라 퇴사자는 일반 재직 복귀로 살리지 않고
+ * "새로 시작"시키므로 임시 비밀번호를 함께 정한다(전 세션은 이미 퇴사 시점에 폐기됐고,
+ * 이 전이도 다시 폐기한다). 직책은 필요하면 이 자리에서 고칠 수 있다.
+ *
+ * .pen FLOW 9-4 의 「새 소속 팀」·「팀 역할」은 여기 없다 — 팀 엔티티가 티켓 06 에서
+ * 생기고 재입사 배정 연계는 티켓 14 소관이라, 지금 필드를 받으면 저장할 곳이 없다.
+ */
+export const ChangeUserStatusInput = z.discriminatedUnion('action', [
+  UserTarget.extend({ action: z.literal('suspend') }),
+  UserTarget.extend({ action: z.literal('resume') }),
+  UserTarget.extend({ action: z.literal('depart') }),
+  UserTarget.extend({
+    action: z.literal('rehire'),
+    password: PasswordField,
+    jobTitle: optionalText(50),
+  }),
+]);
+export type ChangeUserStatusInput = z.infer<typeof ChangeUserStatusInput>;
+
+/** 전이 후 상태 — 화면이 낙관적 갱신 없이 결과를 확인하는 값. */
+export const ChangeUserStatusOutput = z.object({ status: z.enum(userStatusValues) });
+export type ChangeUserStatusOutput = z.infer<typeof ChangeUserStatusOutput>;
+
+/**
+ * 비밀번호 재설정 입력 — 이메일 링크 플로우는 없다(.pen FLOW 1-3).
+ * 슈퍼어드민이 새 임시 비밀번호를 정하고 사내 채널로 전달한다.
+ */
+export const ResetUserPasswordInput = UserTarget.extend({ password: PasswordField });
+export type ResetUserPasswordInput = z.infer<typeof ResetUserPasswordInput>;
+
+export const ResetUserPasswordOutput = z.object({ success: z.literal(true) });
+export type ResetUserPasswordOutput = z.infer<typeof ResetUserPasswordOutput>;
+
+/**
+ * 역방향 포함 검사 — 어휘(userStatusActionValues)에 action 이 늘면 이 return 할당이
+ * 컴파일 에러가 된다. 판별 유니온의 variant 는 손으로 나열할 수밖에 없어(zod), 어휘를
+ * 빠짐없이 덮는지는 tsc 에게 맡긴다. types/question-types.ts 의 같은 관례.
+ */
+export function toChangeUserStatusAction(
+  action: UserStatusAction,
+): ChangeUserStatusInput['action'] {
+  return action;
+}

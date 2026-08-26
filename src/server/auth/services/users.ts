@@ -3,21 +3,32 @@ import 'server-only';
 import { type SQL, and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { accounts, userStatusEvents, users } from '@/db/schema';
+import { accounts, sessions, userStatusEvents, users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
   CREDENTIAL_PROVIDER_ID,
   LOCAL_CREDENTIAL_ISSUER,
+  type UserStatusAction,
   type UserType,
+  reducesActiveSuperadminCount,
 } from '@/shared/contracts/auth';
 
-import { DuplicateEmailError } from '../domain/users';
+import {
+  PASSWORD_RESET_REASON,
+  USER_STATUS_ACTION_REASON,
+  resolveUserStatusTransition,
+} from '../domain/user-status-transition';
+import { DuplicateEmailError, UserNotFoundError } from '../domain/users';
 import type {
+  ChangeUserStatusInput,
+  ChangeUserStatusOutput,
   CreateUserInput,
   CreateUserOutput,
   ListUsersInput,
   ListUsersOutput,
+  ResetUserPasswordInput,
+  ResetUserPasswordOutput,
 } from '../domain/users';
 
 /** 목록/카운트 공용 — 'all' 이면 좁히지 않는다(undefined 는 drizzle 이 무시한다). */
@@ -94,8 +105,7 @@ export async function createUser(
   });
   if (existing) throw new DuplicateEmailError();
 
-  const authContext = await auth.$context;
-  const passwordHash = await authContext.password.hash(input.password);
+  const passwordHash = await hashPassword(input.password);
 
   const id = crypto.randomUUID();
   const now = new Date();
@@ -146,4 +156,193 @@ export async function createUser(
   }
 
   return { id };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 계정 수명주기 — 상태 전이 · 비밀번호 재설정 (티켓 04)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** 인스턴스 설정 해셔를 그대로 쓴다 — 발급·재설정·재입사가 같은 알고리즘으로 해시해야 한다. */
+async function hashPassword(plain: string): Promise<string> {
+  const authContext = await auth.$context;
+  return authContext.password.hash(plain);
+}
+
+/**
+ * 크리덴셜 계정의 비밀번호 해시를 갈아끼운다.
+ *
+ * 행이 없으면 만든다 — Better Auth 이전에 이관된 행처럼 크리덴셜 계정이 아예 없는 사용자가
+ * 있을 수 있고, 그 경우 UPDATE 는 0행을 고치고 조용히 끝나 "재설정했다는데 로그인은 안 되는"
+ * 상태가 된다. 규약값(providerId·issuer·accountId)은 발급 경로와 같은 상수를 쓴다.
+ */
+async function writeCredentialPassword(
+  tx: Tx,
+  userId: string,
+  passwordHash: string,
+  now: Date,
+): Promise<void> {
+  const updated = await tx
+    .update(accounts)
+    .set({ password: passwordHash, updatedAt: now })
+    .where(
+      and(
+        eq(accounts.userId, userId),
+        eq(accounts.providerId, CREDENTIAL_PROVIDER_ID),
+        eq(accounts.issuer, LOCAL_CREDENTIAL_ISSUER),
+      ),
+    )
+    .returning({ id: accounts.id });
+  if (updated.length > 0) return;
+
+  await tx.insert(accounts).values({
+    id: crypto.randomUUID(),
+    userId,
+    accountId: userId,
+    providerId: CREDENTIAL_PROVIDER_ID,
+    issuer: LOCAL_CREDENTIAL_ISSUER,
+    password: passwordHash,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/**
+ * 이 전이로 active 슈퍼어드민이 0명이 되는가.
+ *
+ * 대상이 지금 active 가 아니면(이미 정지된 슈퍼어드민의 퇴사) 이 전이는 active 인원을
+ * 줄이지 않으므로 카운트 쿼리를 돌지 않고 false 다 — 워크트리 Plan2 Task 5 에서 이 조건을
+ * 빠뜨려 정지된 슈퍼어드민의 퇴사가 오차단됐다.
+ */
+async function isLastActiveSuperadmin(
+  tx: Tx,
+  target: { isSuperadmin: boolean; status: (typeof users.$inferSelect)['status'] },
+  action: UserStatusAction,
+): Promise<boolean> {
+  if (!reducesActiveSuperadminCount(action)) return false;
+  if (!target.isSuperadmin || target.status !== 'active') return false;
+
+  const [row] = await tx
+    .select({ value: count() })
+    .from(users)
+    .where(and(eq(users.isSuperadmin, true), eq(users.status, 'active')));
+  return (row?.value ?? 0) <= 1;
+}
+
+/** 대상 계정의 모든 세션을 끊는다 — 전이·재설정이 공유하는 마무리. */
+async function revokeSessions(tx: Tx, userId: string): Promise<void> {
+  await tx.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+/**
+ * 계정 상태 전이 — 일시 정지 / 재직 복귀 / 퇴사 / 재입사.
+ *
+ * 한 트랜잭션 안에서 행 잠금 → 전이 검증 → 세션 폐기 → 감사 기록을 마친다. 앞의 advisory
+ * lock 은 전이를 직렬화한다 — 마지막 남은 슈퍼어드민 둘을 동시에 정지시키려는 경합에서
+ * 각자 "다른 active 가 1명 있다"고 읽으면 둘 다 통과해 슈퍼어드민이 0명이 된다.
+ *
+ * 퇴사의 멤버십·소유권 정리와 재입사의 팀 배정은 여기 없다 — 팀 엔티티가 티켓 06 에서
+ * 생기고 승계·재배치는 티켓 14·19 소관이다. 지금 이 함수가 보장하는 것은 상태·세션·감사뿐이다.
+ */
+export async function changeUserStatus(
+  actorUserId: string,
+  input: ChangeUserStatusInput,
+): Promise<ChangeUserStatusOutput> {
+  // 해시는 느리다. 트랜잭션(과 advisory lock) 밖에서 미리 만들어 잠금 구간을 짧게 둔다.
+  const passwordHash = input.action === 'rehire' ? await hashPassword(input.password) : null;
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('user-status-transition')::bigint)`);
+
+    const [target] = await tx
+      .select({
+        id: users.id,
+        status: users.status,
+        isSuperadmin: users.isSuperadmin,
+      })
+      .from(users)
+      .where(eq(users.id, input.userId))
+      .for('update');
+    if (!target) throw new UserNotFoundError();
+
+    const nextStatus = resolveUserStatusTransition(
+      target.status,
+      input.action,
+      await isLastActiveSuperadmin(tx, target, input.action),
+    );
+    const now = new Date();
+
+    if (input.action === 'rehire' && passwordHash) {
+      await writeCredentialPassword(tx, input.userId, passwordHash, now);
+    }
+
+    await tx
+      .update(users)
+      .set({
+        status: nextStatus,
+        updatedAt: now,
+        // 재입사 모달은 현재 직책을 채워 보여주므로 보낸 값이 곧 저장될 값이다 — 비우면
+        // 지운다. 다른 전이는 직책을 건드리지 않는다.
+        ...(input.action === 'rehire' ? { jobTitle: input.jobTitle ?? null } : {}),
+      })
+      .where(eq(users.id, input.userId));
+
+    // Better Auth sign-in 훅의 비활성 차단이 1차 방어다. 잔존 세션도 항상 끊어 재직 복귀를
+    // 포함한 모든 전이가 깨끗한 로그인에서 시작되게 한다.
+    await revokeSessions(tx, input.userId);
+
+    await tx.insert(userStatusEvents).values({
+      id: crypto.randomUUID(),
+      userId: input.userId,
+      fromStatus: target.status,
+      toStatus: nextStatus,
+      changedBy: actorUserId,
+      reason: USER_STATUS_ACTION_REASON[input.action],
+      createdAt: now,
+    });
+
+    return { status: nextStatus };
+  });
+}
+
+/**
+ * 비밀번호 재설정 — 슈퍼어드민이 새 임시 비밀번호를 직접 정한다 (.pen FLOW 1-3).
+ *
+ * 이메일 재설정 링크는 없다(ADR-0018). 저장과 동시에 대상의 모든 세션을 폐기한다 —
+ * 재설정하는 이유가 대개 분실·유출이라 남겨두면 목적을 잃는다.
+ *
+ * 상태는 바뀌지 않지만 감사 행은 남긴다(from=to). 비밀번호 교체는 계정 수명주기의 사건이고,
+ * 남길 곳이 user_status_events 말고 없다.
+ */
+export async function resetUserPassword(
+  actorUserId: string,
+  input: ResetUserPasswordInput,
+): Promise<ResetUserPasswordOutput> {
+  const passwordHash = await hashPassword(input.password);
+
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ id: users.id, status: users.status })
+      .from(users)
+      .where(eq(users.id, input.userId))
+      .for('update');
+    if (!target) throw new UserNotFoundError();
+
+    const now = new Date();
+    await writeCredentialPassword(tx, input.userId, passwordHash, now);
+    await revokeSessions(tx, input.userId);
+
+    await tx.insert(userStatusEvents).values({
+      id: crypto.randomUUID(),
+      userId: input.userId,
+      fromStatus: target.status,
+      toStatus: target.status,
+      changedBy: actorUserId,
+      reason: PASSWORD_RESET_REASON,
+      createdAt: now,
+    });
+
+    return { success: true };
+  });
 }

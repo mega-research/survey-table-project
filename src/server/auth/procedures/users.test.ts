@@ -3,13 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import { DuplicateEmailError } from '../domain/users';
+import {
+  DuplicateEmailError,
+  LastActiveSuperadminError,
+  UserNotFoundError,
+  UserStatusTransitionError,
+} from '../domain/users';
 import * as svc from '../services/users';
 import { users } from './users';
 
 vi.mock('../services/users', () => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
+  changeUserStatus: vi.fn(),
+  resetUserPassword: vi.fn(),
 }));
 
 const SUPERADMIN_ID = '11111111-1111-4111-8111-111111111111';
@@ -48,6 +55,8 @@ beforeEach(() => {
     typeCounts: { all: 0, internal: 0, guest: 0, fieldwork: 0 },
   });
   vi.mocked(svc.createUser).mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222' });
+  vi.mocked(svc.changeUserStatus).mockResolvedValue({ status: 'suspended' });
+  vi.mocked(svc.resetUserPassword).mockResolvedValue({ success: true });
 });
 
 describe('users 목록 procedure', () => {
@@ -140,5 +149,134 @@ describe('users 생성 입력 정규화', () => {
       password: 'initial-pw-12',
       organization: undefined,
     });
+  });
+});
+
+const TARGET_ID = '44444444-4444-4444-8444-444444444444';
+
+describe('users 상태 전이 procedure', () => {
+  it('비-슈퍼어드민 호출은 FORBIDDEN', async () => {
+    const client = clientWith({ isSuperadmin: false });
+    await expect(
+      client.users.changeStatus({ action: 'suspend', userId: TARGET_ID }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.changeUserStatus).not.toHaveBeenCalled();
+  });
+
+  it('행위자 id 와 입력을 service 에 넘긴다', async () => {
+    await clientWith().users.changeStatus({ action: 'suspend', userId: TARGET_ID });
+    expect(svc.changeUserStatus).toHaveBeenCalledWith(SUPERADMIN_ID, {
+      action: 'suspend',
+      userId: TARGET_ID,
+    });
+  });
+
+  it('어휘에 없는 action 은 입력 검증에서 거부한다', async () => {
+    await expect(
+      clientWith().users.changeStatus({ action: 'promote', userId: TARGET_ID } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.changeUserStatus).not.toHaveBeenCalled();
+  });
+
+  it('재입사는 임시 비밀번호가 없으면 거부한다', async () => {
+    await expect(
+      clientWith().users.changeStatus({ action: 'rehire', userId: TARGET_ID } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.changeUserStatus).not.toHaveBeenCalled();
+  });
+
+  it('재입사 비밀번호도 8자 미만은 거부한다 (전역 정책)', async () => {
+    await expect(
+      clientWith().users.changeStatus({
+        action: 'rehire',
+        userId: TARGET_ID,
+        password: 'short7c',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('비워 보낸 직책은 미입력으로 접는다', async () => {
+    vi.mocked(svc.changeUserStatus).mockResolvedValue({ status: 'active' });
+    await clientWith().users.changeStatus({
+      action: 'rehire',
+      userId: TARGET_ID,
+      password: 'rehire-pw-12',
+      jobTitle: '   ',
+    });
+    expect(svc.changeUserStatus).toHaveBeenCalledWith(SUPERADMIN_ID, {
+      action: 'rehire',
+      userId: TARGET_ID,
+      password: 'rehire-pw-12',
+      jobTitle: undefined,
+    });
+  });
+
+  it('허용되지 않은 전이는 CONFLICT 로 바꾼다', async () => {
+    vi.mocked(svc.changeUserStatus).mockRejectedValue(new UserStatusTransitionError());
+    await expect(
+      clientWith().users.changeStatus({ action: 'resume', userId: TARGET_ID }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '허용되지 않은 계정 상태 전이입니다.' });
+  });
+
+  it('마지막 슈퍼어드민 가드도 CONFLICT 로 바꾼다', async () => {
+    vi.mocked(svc.changeUserStatus).mockRejectedValue(
+      new LastActiveSuperadminError('마지막 슈퍼어드민은 일시 정지할 수 없습니다.'),
+    );
+    await expect(
+      clientWith().users.changeStatus({ action: 'suspend', userId: TARGET_ID }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: '마지막 슈퍼어드민은 일시 정지할 수 없습니다.',
+    });
+  });
+
+  it('없는 사용자는 NOT_FOUND 로 바꾼다', async () => {
+    vi.mocked(svc.changeUserStatus).mockRejectedValue(new UserNotFoundError());
+    await expect(
+      clientWith().users.changeStatus({ action: 'suspend', userId: TARGET_ID }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('그 밖의 예외는 그대로 올린다', async () => {
+    vi.mocked(svc.changeUserStatus).mockRejectedValue(new Error('boom'));
+    await expect(
+      clientWith().users.changeStatus({ action: 'suspend', userId: TARGET_ID }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('users 비밀번호 재설정 procedure', () => {
+  it('비-슈퍼어드민 호출은 FORBIDDEN', async () => {
+    const client = clientWith({ isSuperadmin: false });
+    await expect(
+      client.users.resetPassword({ userId: TARGET_ID, password: 'temp-pw-1234' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.resetUserPassword).not.toHaveBeenCalled();
+  });
+
+  it('행위자 id 와 입력을 service 에 넘긴다', async () => {
+    const res = await clientWith().users.resetPassword({
+      userId: TARGET_ID,
+      password: 'temp-pw-1234',
+    });
+    expect(svc.resetUserPassword).toHaveBeenCalledWith(SUPERADMIN_ID, {
+      userId: TARGET_ID,
+      password: 'temp-pw-1234',
+    });
+    expect(res).toEqual({ success: true });
+  });
+
+  it('8자 미만 임시 비밀번호는 거부한다 (전역 정책)', async () => {
+    await expect(
+      clientWith().users.resetPassword({ userId: TARGET_ID, password: 'short7c' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.resetUserPassword).not.toHaveBeenCalled();
+  });
+
+  it('없는 사용자는 NOT_FOUND 로 바꾼다', async () => {
+    vi.mocked(svc.resetUserPassword).mockRejectedValue(new UserNotFoundError());
+    await expect(
+      clientWith().users.resetPassword({ userId: TARGET_ID, password: 'temp-pw-1234' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
