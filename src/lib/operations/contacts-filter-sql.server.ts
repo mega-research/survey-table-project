@@ -43,11 +43,17 @@ export const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
 /**
  * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
  * 최신 수신 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ *
+ * 'skipped_unsubscribed'(수신거부)는 발송 스킵 상태만으로는 발송 후 수신거부자를
+ * 놓친다 — 표의 수신거부 표시와 같은 판정이 되도록 contact_targets.unsubscribed_at
+ * 을 OR 로 결합한다.
  */
 function mailStatusCondSql(value: string): SQL {
-  return value === 'none'
-    ? sql`${latestMailStatusExpr} IS NULL`
-    : sql`${latestMailStatusExpr} = ${value}`;
+  if (value === 'none') return sql`${latestMailStatusExpr} IS NULL`;
+  if (value === 'skipped_unsubscribed') {
+    return sql`(${latestMailStatusExpr} = ${value} OR "contact_targets".unsubscribed_at IS NOT NULL)`;
+  }
+  return sql`${latestMailStatusExpr} = ${value}`;
 }
 
 /**
