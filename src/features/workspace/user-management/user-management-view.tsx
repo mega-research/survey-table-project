@@ -10,12 +10,16 @@ import { Button } from '@/components/ui/button';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import {
   selectableUserStatusValues,
+  type UserListItem,
   type UserStatusFilter,
   type UserTypeFilter,
 } from '@/shared/contracts/auth-io';
 
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
+import { UserRehireModal } from './user-rehire-modal';
+import { UserResetPasswordModal } from './user-reset-password-modal';
+import { UserRowActions } from './user-row-actions';
 import { USER_STATUS_LABEL, USER_TYPE_LABEL } from './user-vocabulary';
 
 /** 유형 칩 — .pen FLOW 1-1 의 전체/내부/게스트/실사 순서. 라벨은 유형 어휘에서 온다. */
@@ -48,6 +52,10 @@ export function UserManagementView() {
   const [userType, setUserType] = useState<UserTypeFilter>('all');
   const [status, setStatus] = useState<UserStatusFilter>('all');
   const [createOpen, setCreateOpen] = useState(false);
+  // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
+  // 사이 목록이 새로고침돼도 보고 있던 사람이 바뀌지 않는다.
+  const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
+  const [rehireTarget, setRehireTarget] = useState<UserListItem | null>(null);
   const { data, isLoading, error } = useUsers(userType, status);
 
   const items = data?.items ?? [];
@@ -133,6 +141,9 @@ export function UserManagementView() {
                 <th className="px-3 py-3 font-medium">소속 (팀·기관·업체)</th>
                 <th className="px-3 py-3 font-medium">직책·역할</th>
                 <th className="px-3 py-3 font-medium">상태</th>
+                <th className="px-3 py-3 font-medium">
+                  <span className="sr-only">액션</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -172,6 +183,13 @@ export function UserManagementView() {
                       {USER_STATUS_LABEL[user.status]}
                     </span>
                   </td>
+                  <td className="px-3 py-3 text-right">
+                    <UserRowActions
+                      user={user}
+                      onRehire={setRehireTarget}
+                      onResetPassword={setResetTarget}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -197,6 +215,14 @@ export function UserManagementView() {
       </div>
 
       <UserCreateModal open={createOpen} onOpenChange={setCreateOpen} />
+      <UserResetPasswordModal
+        user={resetTarget}
+        onOpenChange={(open) => (open ? undefined : setResetTarget(null))}
+      />
+      <UserRehireModal
+        user={rehireTarget}
+        onOpenChange={(open) => (open ? undefined : setRehireTarget(null))}
+      />
     </div>
   );
 }

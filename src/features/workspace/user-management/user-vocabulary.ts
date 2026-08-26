@@ -1,4 +1,4 @@
-import type { UserStatus, UserType } from '@/shared/contracts/auth';
+import type { UserStatus, UserStatusAction, UserType } from '@/shared/contracts/auth';
 
 /**
  * 사용자 관리 화면의 표시 어휘 — 목록과 생성 모달이 함께 쓴다.
@@ -22,4 +22,15 @@ export const USER_STATUS_LABEL: Record<UserStatus, string> = {
   rejected: '승인 거절',
   suspended: '일시 정지',
   departed: '퇴사',
+};
+
+/**
+ * 케밥 액션 라벨 — .pen FLOW 1-1 의 「일시 정지·재직 복귀·퇴사·재입사」 어휘.
+ * 상태 라벨과 짝이 맞아야 한다 — 「퇴사」 상태의 행이 여는 액션은 「재입사 처리」다.
+ */
+export const USER_STATUS_ACTION_LABEL: Record<UserStatusAction, string> = {
+  suspend: '일시 정지',
+  resume: '재직 복귀',
+  depart: '퇴사 처리',
+  rehire: '재입사 처리',
 };
