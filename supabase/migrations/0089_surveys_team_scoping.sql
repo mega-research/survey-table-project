@@ -34,23 +34,23 @@ ALTER TABLE surveys ADD COLUMN IF NOT EXISTS ownership_status text NOT NULL DEFA
 ALTER TABLE surveys
   ADD COLUMN IF NOT EXISTS assignment_status text NOT NULL DEFAULT 'assignment_pending';
 
--- 백필 — 기존 설문은 팀 없이 배치 대기, 소유자는 최초 active 슈퍼어드민.
+-- 백필 — 소유자를 최초 active 슈퍼어드민으로 채운다.
+--
+-- 배치 상태는 손대지 않는다. 위에서 추가한 컬럼의 DEFAULT 가 이미 assignment_pending 이고
+-- team_id 는 NULL 이라 기존 설문 전부가 그 상태로 들어와 있다 — 여기서 다시 SET 하면
+-- **재적용 시 정상 배치된 설문까지 배치 대기로 되돌린다**. 백필이 실제로 해야 하는 일은
+-- 소유자 하나뿐이고, 그래서 조건도 소유자 미지정 행으로 좁힌다(재적용 안전).
+--
 -- 슈퍼어드민이 아직 없으면 owner_user_id 는 NULL 로 남는다(빈 DB 재생이 그렇다). 그 경우도
 -- assignment_pending 이라 슈퍼어드민 외에는 접근할 수 없어 열린 문이 되지 않는다.
 UPDATE surveys
-SET
-  owner_user_id = COALESCE(
-    owner_user_id,
-    (
-      SELECT id FROM users
-      WHERE is_superadmin = true AND status = 'active'
-      ORDER BY created_at ASC
-      LIMIT 1
-    )
-  ),
-  assignment_status = 'assignment_pending',
-  team_id = NULL
-WHERE assignment_status <> 'assignment_pending' OR team_id IS NOT NULL OR owner_user_id IS NULL;
+SET owner_user_id = (
+  SELECT id FROM users
+  WHERE is_superadmin = true AND status = 'active'
+  ORDER BY created_at ASC
+  LIMIT 1
+)
+WHERE owner_user_id IS NULL;
 
 DO $$
 BEGIN

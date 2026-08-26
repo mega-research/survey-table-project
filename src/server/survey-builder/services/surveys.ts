@@ -3,7 +3,7 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
-import { type SurveyAccessUser } from '@/server/survey-access';
+import { assertSurveyCapability, type SurveyAccessUser } from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { db } from '@/db';
@@ -236,6 +236,10 @@ export async function duplicateSurvey(
   input: SurveyIdInput,
 ): Promise<SurveyRow | null> {
   const { surveyId } = input;
+
+  // 복제는 원본을 읽어 새 설문을 만드는 일이라 **원본 접근 권한이 먼저다**. 이 검사가 없으면
+  // id 만 아는 내부 사용자가 타 팀 설문을 복제해 그 사본의 소유자가 된다(팀 경계 우회).
+  await assertSurveyCapability(actor, surveyId, 'survey.view');
 
   const original = await getSurveyById(surveyId);
   if (!original) return null;

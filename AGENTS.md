@@ -98,7 +98,7 @@ src/
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · 팀 멤버십 · 활성 팀 목록)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -734,8 +734,10 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   전체 보기는 teams 행이 아니라 조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수
   없다 — 서버가 `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
   팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
-  **관문 배선은 아직 목록·생성 + 응답 상세 편집(`requireSurveyOwnership`)까지다** — 빌더·운영 콘솔·
-  REST 전면 배선은 티켓 09~11 이 한다. 그때까지 URL 직접 진입은 종전 가드(인증·게스트 grant)만 받는다.
+  **관문 배선은 아직 목록·생성·복제 + 응답 상세 편집까지다** — 빌더·운영 콘솔·REST 전면 배선은
+  티켓 09~11 이 한다. 그때까지 URL 직접 진입과 `/analytics` 목록은 종전 가드(인증·게스트 grant)만
+  받는다. 관문 함수의 이름은 **`assertSurveyCapability`** 다(티켓 09~11 본문이 지목하는
+  `assertSurveyAccess` 는 게스트 grant 용 옛 함수이며 그 배선 때 걷힌다).
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.

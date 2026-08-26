@@ -24,13 +24,27 @@ vi.mock('@/db', () => {
 
 vi.mock('@/server/work-scope', () => ({ resolveWorkScope: vi.fn() }));
 
+vi.mock('@/server/survey-access', () => ({
+  assertSurveyCapability: vi.fn(),
+  SurveyAccessError: class extends Error {},
+}));
+
+vi.mock('@/server/read-models/survey-structure', () => ({ getSurveyById: vi.fn() }));
+
 vi.mock('@/lib/survey/survey-image-promote', () => ({
   promoteSurveyResponseHeader: vi.fn(async (v: unknown) => v ?? null),
 }));
 
+import { getSurveyById } from '@/server/read-models/survey-structure';
+import { assertSurveyCapability } from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
 
-import { SurveyOwnershipRequiredError, createSurvey, ensureSurveyInDb } from './surveys';
+import {
+  SurveyOwnershipRequiredError,
+  createSurvey,
+  duplicateSurvey,
+  ensureSurveyInDb,
+} from './surveys';
 
 const SETTINGS = {
   isPublic: true,
@@ -99,5 +113,24 @@ describe('ensureSurveyInDb — 빌더 자동 생성도 같은 귀속을 받는�
     await expect(
       ensureSurveyInDb(actor, { id: 'draft-1', title: '제목 없는 설문', settings: SETTINGS }),
     ).rejects.toBeInstanceOf(SurveyOwnershipRequiredError);
+  });
+});
+
+describe('duplicateSurvey — 원본 접근 권한이 먼저다', () => {
+  it('원본을 볼 수 없으면 복제하지 않는다 — 읽기 전에 관문을 통과해야 한다', async () => {
+    // 이 검사가 없으면 id 만 아는 내부 사용자가 타 팀 설문을 복제해 그 사본의 소유자가 된다.
+    const denied = new Error('forbidden');
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(denied);
+
+    await expect(duplicateSurvey(actor, { surveyId: 'other-team-survey' })).rejects.toBe(denied);
+    expect(getSurveyById).not.toHaveBeenCalled();
+  });
+
+  it('관문을 통과하면 원본 조회로 넘어간다', async () => {
+    vi.mocked(assertSurveyCapability).mockResolvedValueOnce(undefined);
+    vi.mocked(getSurveyById).mockResolvedValueOnce(undefined as never);
+
+    await expect(duplicateSurvey(actor, { surveyId: 'sv-1' })).resolves.toBeNull();
+    expect(assertSurveyCapability).toHaveBeenCalledWith(actor, 'sv-1', 'survey.view');
   });
 });

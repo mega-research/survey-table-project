@@ -3,7 +3,8 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
-import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
+import { requireAuth } from '@/lib/auth';
+import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
 import { getResponseById } from '@/server/read-models/responses';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
@@ -26,7 +27,8 @@ export const metadata = { title: '응답 수정' };
 /**
  * 어드민 응답 수정 라우트.
  *
- * - requireSurveyOwnership 가 인증 + 설문 단위 capability 가드(responses.view).
+ * - 인증 + 설문 단위 capability 가드(responses.view). 없는 설문과 권한 없는 설문을
+ *   똑같이 notFound 로 접는다 — 콘솔에서 남의 팀 설문의 **존재**를 알려줄 이유가 없다.
  * - getResponseById 로 응답 조회 (soft delete 포함).
  *   - 삭제된 응답이면 안내 화면 (복원 안내).
  *   - 응답 surveyId 가 path 와 다르면 notFound.
@@ -43,7 +45,13 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
-  await requireSurveyOwnership(surveyId, 'responses.view');
+  const viewer = await requireAuth();
+  try {
+    await assertSurveyCapability(viewer, surveyId, 'responses.view');
+  } catch (error) {
+    if (error instanceof SurveyAccessError) notFound();
+    throw error;
+  }
   const scope = await getOperationsDataScope(surveyId);
 
   const response = await getResponseById(responseId, { includeDeleted: true });

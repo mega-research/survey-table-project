@@ -2,6 +2,7 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 
+import { isValidUUID } from '@/lib/utils';
 import {
   SYSTEM_SCOPE,
   WORK_SCOPE_COOKIE,
@@ -52,7 +53,11 @@ export function resolveWorkScopeFor(
   }
 
   if (subject.isSuperadmin) {
-    return requested ? { kind: 'team', teamId: requested } : { kind: 'system' };
+    // 슈퍼어드민은 자기 소속이 아닌 팀도 지목할 수 있어 멤버십으로 걸러지지 않는다. 그래서
+    // 형식만이라도 여기서 본다 — 쿠키에 담긴 아무 문자열이 그대로 uuid 비교로 내려가면
+    // Postgres 가 invalid input syntax 로 500 을 낸다. 없는 팀이면 목록이 비는 것으로 족하다.
+    if (requested && isValidUUID(requested)) return { kind: 'team', teamId: requested };
+    return { kind: 'system' };
   }
 
   const matched =
@@ -72,11 +77,12 @@ export async function resolveWorkScope(
   user: SurveyAccessUser,
   requested: string | null,
 ): Promise<WorkScope> {
-  const scope = requested ?? (await readWorkScopeCookie());
+  const scope = requested ?? (await readRequestWorkScopeCookie());
   return resolveWorkScopeFor(await loadAccessSubject(user), scope);
 }
 
-async function readWorkScopeCookie(): Promise<string | null> {
+/** 요청에 실려 온 쿠키. 브라우저 쪽 동명 헬퍼(shared/lib)와 구분해 이름을 길게 둔다. */
+async function readRequestWorkScopeCookie(): Promise<string | null> {
   try {
     return (await cookies()).get(WORK_SCOPE_COOKIE)?.value ?? null;
   } catch {
@@ -96,8 +102,8 @@ async function readWorkScopeCookie(): Promise<string | null> {
  * 를 다시 묻기 시작하면 매트릭스가 두 벌이 된다.
  */
 export type SurveyScopeFilter =
-  /** 시스템 전체 보기 — 전 팀 + 배치 대기 설문까지. */
-  | { kind: 'all'; viewerId: string }
+  /** 시스템 전체 보기 — 전 팀 + 배치 대기 설문까지. 조건이 없어 viewerId 도 필요 없다. */
+  | { kind: 'all' }
   | {
       kind: 'team';
       teamId: string;
@@ -118,7 +124,7 @@ export function buildSurveyScopeFilter(
   scope: WorkScope,
 ): SurveyScopeFilter {
   if (scope.kind === 'none') return { kind: 'none' };
-  if (scope.kind === 'system') return { kind: 'all', viewerId: subject.userId };
+  if (scope.kind === 'system') return { kind: 'all' };
   return {
     kind: 'team',
     teamId: scope.teamId,

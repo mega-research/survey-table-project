@@ -63,11 +63,14 @@ export interface SurveyParticipation {
 const ALL_CAPABILITIES: readonly SurveyCapability[] = surveyCapabilityValues;
 
 /**
- * 소유자와 소유 팀 팀장은 같은 전권을 갖는다(v2 델타 — v1 은 팀장을 invite_only 에서 막았다).
- * 팀장이 자기 팀 설문을 관리하지 못하면 승계·해산·재배치가 소유자 부재로 잠긴다.
+ * 전권 — 슈퍼어드민·소유자·소유 팀 팀장이 나눠 갖는 같은 집합이다(스펙 §8 의 세 열이 동일).
+ *
+ * 이름을 셋으로 나누지 않는 이유는 값이 하나라서다 — 사본이 셋이면 한 열만 고쳐지고 나머지가
+ * 조용히 어긋난다. 세 주체를 가르는 것은 집합이 아니라 **판정 순서**이고, 그 순서는 아래
+ * resolveSurveyCapabilities 가 갖는다. v2 델타는 여기 있다: v1 은 팀장을 invite_only 에서
+ * 막았지만, 팀장이 자기 팀 설문을 관리하지 못하면 승계·해산·재배치가 소유자 부재로 잠긴다.
  */
-const OWNER_CAPS: readonly SurveyCapability[] = ALL_CAPABILITIES;
-const LEADER_CAPS: readonly SurveyCapability[] = ALL_CAPABILITIES;
+const FULL_CAPS: readonly SurveyCapability[] = ALL_CAPABILITIES;
 
 /**
  * 참여자 — 삭제까지 받는 신뢰 수준이라 운영 깊이(응답 상세·컨택·메일·export)를 함께 준다
@@ -133,10 +136,10 @@ export function resolveSurveyCapabilities(
   if (survey.assignmentStatus === 'assignment_pending') return NONE;
 
   if (survey.ownerUserId !== null && survey.ownerUserId === subject.userId) {
-    return new Set(OWNER_CAPS);
+    return new Set(FULL_CAPS);
   }
   if (survey.teamId !== null && subject.leaderTeamIds.includes(survey.teamId)) {
-    return new Set(LEADER_CAPS);
+    return new Set(FULL_CAPS);
   }
   // 참여자는 팀 경계를 넘는다 — 소유 팀 소속이 아니어도 선다(스펙 §4).
   if (participation?.kind === 'member') return new Set(PARTICIPANT_CAPS);

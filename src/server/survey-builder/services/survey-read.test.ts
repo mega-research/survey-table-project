@@ -201,7 +201,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       null,
     );
 
-    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all', viewerId: 'su-1' });
+    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all' });
     expect(result.scope).toEqual({ kind: 'system' });
     expect(result.canSeeSystemScope).toBe(true);
     expect(result.teams).toEqual([{ id: 'team-9', name: '연구3본부 - 7팀' }]);

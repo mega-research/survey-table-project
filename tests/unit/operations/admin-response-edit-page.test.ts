@@ -12,8 +12,14 @@ vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
 vi.mock('@/lib/auth/guest-page-guard', () => ({
   assertGuestSurveyPageAccess: vi.fn(async () => undefined),
 }));
-vi.mock('@/lib/auth/require-survey-ownership', () => ({
-  requireSurveyOwnership: vi.fn(),
+// 페이지는 이제 capability 관문을 직접 부른다(티켓 07) — 통과시켜 두고 스코프 관심사만 본다.
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => ({ id: 'u-1', isSuperadmin: false, userType: 'internal' })),
+}));
+
+vi.mock('@/server/survey-access', () => ({
+  assertSurveyCapability: vi.fn(),
+  SurveyAccessError: class SurveyAccessError extends Error {},
 }));
 vi.mock('@/server/read-models/responses', () => ({
   getResponseById: vi.fn(async () => ({

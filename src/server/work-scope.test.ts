@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { SurveyAccessSubject } from './survey-access';
 import { WorkScopeError, buildSurveyScopeFilter, resolveWorkScopeFor } from './work-scope';
 
+const TEAM_UUID = '22222222-2222-4222-8222-222222222222';
+
 function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
   return {
     userId: 'u-1',
@@ -45,7 +47,12 @@ describe('resolveWorkScopeFor — 시스템 전체 보기', () => {
   });
 
   it('슈퍼어드민은 자기 소속이 아닌 팀도 지목할 수 있다', () => {
-    expect(resolveWorkScopeFor(su, 'team-9')).toEqual({ kind: 'team', teamId: 'team-9' });
+    expect(resolveWorkScopeFor(su, TEAM_UUID)).toEqual({ kind: 'team', teamId: TEAM_UUID });
+  });
+
+  it('슈퍼어드민의 팀 지목도 형식은 본다 — 쿠키의 아무 문자열이 SQL 로 내려가지 않는다', () => {
+    // 멤버십으로 걸러지지 않는 경로라 여기서 접지 않으면 uuid 비교에서 Postgres 가 500 을 낸다.
+    expect(resolveWorkScopeFor(su, 'not-a-uuid')).toEqual({ kind: 'system' });
   });
 
   it('일반 사용자의 system 요청은 거부한다 — 조용히 접지 않는다', () => {
@@ -65,10 +72,7 @@ describe('resolveWorkScopeFor — 계정 유형', () => {
 describe('buildSurveyScopeFilter — 목록 조회 조건', () => {
   it('시스템 범위는 전 팀 + 배치 대기까지 본다', () => {
     const su = subject({ isSuperadmin: true });
-    expect(buildSurveyScopeFilter(su, { kind: 'system' })).toEqual({
-      kind: 'all',
-      viewerId: 'u-1',
-    });
+    expect(buildSurveyScopeFilter(su, { kind: 'system' })).toEqual({ kind: 'all' });
   });
 
   it('팀 범위의 팀원은 invite_only 를 뚫지 못한다', () => {
