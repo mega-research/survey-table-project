@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { generateId } from '@/lib/utils';
-import { nextGroupKey } from '@/utils/choice-group-helpers';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
@@ -85,16 +86,22 @@ export function ChoiceOptCellTab({
     onChoiceGroupIdChange('');
   }
 
+  // groupKey 는 응답 저장 키라 재패딩은 응답이 존재할 수 없는 draft 에서만 허용.
+  const canRepadKeys = useSurveyBuilderStore((s) => s.currentSurvey.status === 'draft');
+
   function handleGroupSelectChange(value: string) {
     if (value === '__new__') {
-      const key = nextGroupKey(choiceGroups, selectedType);
+      // 순번이 10 에 도달하면 같은 종류의 기존 키를 0 패딩으로 재발번 (rad1 → rad01).
+      const { key, groups: repaddedGroups } = issueGroupKey(choiceGroups, selectedType, {
+        repadExisting: canRepadKeys,
+      });
       const newGroup: ChoiceGroup = {
         id: generateId(),
         groupKey: key,
         type: selectedType,
         label: '',
       };
-      onChoiceGroupsChange([...choiceGroups, newGroup]);
+      onChoiceGroupsChange([...repaddedGroups, newGroup]);
       onChoiceGroupIdChange(newGroup.id);
     } else {
       onChoiceGroupIdChange(value);

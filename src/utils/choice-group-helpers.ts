@@ -155,6 +155,45 @@ export function nextGroupKey(groups: ChoiceGroup[], type: ChoiceGroup['type']): 
 }
 
 /**
+ * 그룹 생성용 발번 — 새 순번이 10 이상(자릿수 증가)이면 같은 prefix 의 짧은 키를
+ * 새 자릿수로 0 패딩해(rad1 → rad01) 사전순과 번호순을 일치시킨다.
+ *
+ * groupKey 는 SPSS 변수명이자 응답 저장 키(GroupedChoiceAnswer 의 키)다. 재패딩은
+ * 저장된 응답의 키와 어긋나므로, 호출자는 응답이 존재할 수 없는 설문(게시 이력
+ * 없는 draft — 응답은 게시 스냅샷을 통해서만 생긴다)에서만 repadExisting 을 켠다.
+ * 꺼진 경우 기존 키는 건드리지 않고 다음 순번만 발번한다.
+ *
+ * 반환 groups 는 재패딩이 일어났을 때만 새 배열, 아니면 원본 참조 그대로.
+ */
+export function issueGroupKey(
+  groups: ChoiceGroup[],
+  type: ChoiceGroup['type'],
+  { repadExisting }: { repadExisting: boolean },
+): { key: string; groups: ChoiceGroup[] } {
+  const prefix = KEY_PREFIX[type];
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  let max = 0;
+  for (const g of groups) {
+    const m = g.groupKey.match(pattern);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  const next = max + 1;
+  const width = String(next).length;
+  if (width === 1 || !repadExisting) return { key: `${prefix}${next}`, groups };
+
+  let changed = false;
+  const repadded = groups.map((g) => {
+    const m = g.groupKey.match(pattern);
+    if (!m) return g;
+    const padded = `${prefix}${String(Number(m[1])).padStart(width, '0')}`;
+    if (padded === g.groupKey) return g;
+    changed = true;
+    return { ...g, groupKey: padded };
+  });
+  return { key: `${prefix}${next}`, groups: changed ? repadded : groups };
+}
+
+/**
  * 멤버 0 그룹을 제거한 choiceGroups를 반환한다 (저장 시 자동 정리 — 삭제 UI 없음).
  * 변경 없으면 원본 참조 유지, choiceGroups 자체가 없으면 undefined.
  */
