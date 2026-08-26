@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './workspace';
 export * from './surveys';
 export * from './contacts';
 export * from './mail';

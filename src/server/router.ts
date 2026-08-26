@@ -33,6 +33,8 @@ import { control } from '@/server/operations/procedures/control';
 import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
+import { members } from '@/server/workspace/procedures/members';
+import { teams } from '@/server/workspace/procedures/teams';
 import { duplicate } from '@/server/survey-response/procedures/duplicate';
 import { edit } from '@/server/survey-response/procedures/edit';
 import { lifecycle } from '@/server/survey-response/procedures/lifecycle';
@@ -99,6 +101,10 @@ export const router = {
     control,
   },
   quota,
+  workspace: {
+    teams,
+    members,
+  },
 };
 
 export type AppRouter = typeof router;

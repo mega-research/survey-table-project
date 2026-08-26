@@ -71,6 +71,7 @@
     "0084_better_auth_tables",
     "0085_better_auth_v2_reconcile",
     "0086_users_organization",
-    "0087_users_sessions_revoked_at"
+    "0087_users_sessions_revoked_at",
+    "0088_teams_and_memberships"
   ]
 }
