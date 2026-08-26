@@ -72,12 +72,25 @@ describe('updatePassword', () => {
     expect(res).toEqual({ success: true });
   });
 
-  it('APIError 는 현재 비밀번호 오류 메시지로 접는다', async () => {
+  it('재인증 실패 APIError 만 현재 비밀번호 오류 메시지로 접는다', async () => {
     changePassword.mockRejectedValue(
       new APIError('BAD_REQUEST', { message: 'Invalid password', code: 'INVALID_PASSWORD' }),
     );
     const res = await updatePassword(HEADERS, VALID);
     expect(res).toEqual({ error: '현재 비밀번호가 올바르지 않습니다.' });
+  });
+
+  it('재인증과 무관한 APIError 는 삼키지 않고 올린다', async () => {
+    // Better Auth 는 세션 재발급·쿠키 설정 실패도 APIError 로 던진다. 통째로 뭉개면
+    // 사용자는 맞는 비밀번호를 계속 다시 넣고 우리는 진짜 원인을 못 본다
+    // (그 사이 비밀번호는 이미 바뀌어 있을 수도 있다).
+    changePassword.mockRejectedValue(
+      new APIError('INTERNAL_SERVER_ERROR', {
+        message: 'failed to create session',
+        code: 'FAILED_TO_CREATE_SESSION',
+      }),
+    );
+    await expect(updatePassword(HEADERS, VALID)).rejects.toBeInstanceOf(APIError);
   });
 
   it('APIError 가 아닌 예외는 그대로 올린다', async () => {

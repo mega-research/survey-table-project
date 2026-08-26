@@ -40,7 +40,7 @@ const create = scoped
   .input(CreateMailTemplateInput)
   .output(CreateMailTemplateOutput)
   .handler(async ({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     try {
       return await svc.createMailTemplate(input);
     } catch (err) {
@@ -52,7 +52,7 @@ const update = scoped
   .input(UpdateMailTemplateInput)
   .output(UpdateMailTemplateOutput)
   .handler(async ({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     try {
       return await svc.updateMailTemplate(input);
     } catch (err) {
@@ -64,7 +64,7 @@ const remove = scoped
   .input(DeleteMailTemplateInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     try {
       await svc.deleteMailTemplate(input);
       return { ok: true as const };

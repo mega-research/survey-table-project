@@ -5,6 +5,7 @@ import { ArrowRight, BarChart3, Calendar, FileText, Plus, Users } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
 import { getSurveys } from '@/server/read-models/survey-structure';
 
@@ -14,6 +15,12 @@ import { getSurveys } from '@/server/read-models/survey-structure';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsListPage() {
+  // 이 페이지는 procedure 가 아니라 read model 을 직접 부르므로 자기 가드가 필요하다.
+  // 레이아웃은 세션·상태·계정 유형까지만 보고, 설문 단위 게스트(env grant)는 userType 이
+  // 'internal' 이라 그 문을 통과한다 — 여기서 막지 않으면 담당 아닌 설문의 제목·응답 수까지
+  // 전부 렌더된다. 상세 페이지([surveyId])는 이미 같은 가드를 쓰고 있었다.
+  await requireAdminPage();
+
   // 모든 설문의 응답 수를 단일 GROUP BY 로 집계 (설문별 count fan-out 제거)
   const [surveys, countsMap] = await Promise.all([
     getSurveys(),

@@ -3,7 +3,7 @@ import { ORPCError, os } from '@orpc/server';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
-import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
+import { type AuthUser, isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { rpcLoggingMiddleware } from './rpc-logging';
@@ -145,7 +145,7 @@ export const account = base.use(({ context, next }) => {
  * 조용히 따라 바뀐다.
  *
  * 이 베이스를 쓰는 procedure 는 반드시 handler 첫 줄에서
- * assertSurveyAccess(context.user.id, input.surveyId) 를 호출해 설문 일치를 강제해야 한다
+ * assertSurveyAccess(context.user, input.surveyId) 를 호출해 설문 일치를 강제해야 한다
  * (유일한 예외: 입력에 surveyId 가 없는 media.deleteMailAttachmentTmp — tmp 네임스페이스
  * 검증에 의존). 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
  */
@@ -153,9 +153,22 @@ export const scoped = base.use(({ context, next }) => {
   return next({ context: { user: requireActiveUser(context.user) } });
 });
 
-/** 설문 접근 강제 — 내부 계정은 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
-export function assertSurveyAccess(userId: string, surveyId: string): void {
-  if (!canAccessSurvey(userId, surveyId)) {
+/**
+ * 설문 접근 강제 — scoped procedure 의 handler 첫 줄에서 부른다.
+ *
+ * **계정 유형을 먼저 본다.** guest·fieldwork 유형에는 아직 설문 부여 모델 자체가 없다
+ * (게스트 부여는 티켓 21, 실사 초대는 티켓 24·25). 그런데 `canAccessSurvey` 는 env grant 가
+ * 비어 있으면 true 를 돌려준다 — "grant 가 없다 = 내부 사용자다" 라는 전제로 쓰인 폴백이고,
+ * 티켓 03 이 user_type 게스트 발급을 열면서 그 전제가 깨졌다. 유형 검사가 없으면 발급한
+ * 게스트 계정 하나가 **모든 설문**의 컨택·응답·메일에 닿는다.
+ *
+ * 그래서 기본은 거부다. 유형별 부여가 생기는 티켓 21·24 가 이 자리의 거부를 실제 조회로
+ * 바꾼다 — 그때까지 열어둘 이유가 없다.
+ *
+ * 내부 계정은 종전대로 env grant 로 판정한다(grant 없으면 전 설문).
+ */
+export function assertSurveyAccess(user: AuthUser, surveyId: string): void {
+  if (!isInternalUser(user.userType) || !canAccessSurvey(user.id, surveyId)) {
     throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
   }
 }

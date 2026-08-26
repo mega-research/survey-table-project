@@ -19,6 +19,16 @@ import type {
 import { UserNotFoundError } from '../domain/users';
 
 /**
+ * 현재 비밀번호 불일치인가 — Better Auth 의 오류 코드로 판정한다.
+ *
+ * 문구가 아니라 코드를 본다. 메시지는 로케일·버전에 따라 바뀌지만 코드는 계약이다.
+ */
+function isInvalidPasswordError(err: APIError): boolean {
+  const code = (err.body as { code?: unknown } | undefined)?.code;
+  return code === 'INVALID_PASSWORD' || code === 'INVALID_EMAIL_OR_PASSWORD';
+}
+
+/**
  * 비밀번호 변경 — 확인 일치·최소 길이 검증 후 Better Auth 에 위임한다.
  * 현재 비밀번호 재인증과 해시 교체는 changePassword 가 한 번에 처리한다.
  *
@@ -50,9 +60,10 @@ export async function updatePassword(
       headers,
     });
   } catch (err) {
-    // changePassword 가 APIError 를 던지는 경우는 현재 비밀번호 불일치가 사실상 전부다
-    // (세션·입력 검증은 위에서 이미 통과). 그 외 예외는 그대로 올려 500 으로 남긴다.
-    if (err instanceof APIError) {
+    // 재인증 실패만 그 문구로 돌려준다. APIError 를 통째로 뭉개면 Better Auth 내부의
+    // 세션 재발급·쿠키 설정 실패까지 "비밀번호가 틀렸다" 로 보고돼, 사용자는 맞는 비밀번호를
+    // 계속 다시 넣고 우리는 진짜 원인을 못 본다(비밀번호는 이미 바뀌어 있을 수도 있다).
+    if (err instanceof APIError && isInvalidPasswordError(err)) {
       return { error: '현재 비밀번호가 올바르지 않습니다.' };
     }
     throw err;

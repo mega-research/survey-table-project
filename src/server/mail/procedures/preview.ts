@@ -13,7 +13,7 @@ const sample = scoped
   .input(GetMailPreviewSampleInput)
   .output(GetMailPreviewSampleOutput)
   .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     return svc.getMailPreviewSample(input);
   });
 
@@ -26,7 +26,7 @@ const testSend = scoped
   .input(SendTestTemplateMailInput)
   .output(SendTestTemplateMailOutput)
   .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     return svc.sendTestTemplateMail(input);
   });
 

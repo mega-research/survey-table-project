@@ -75,3 +75,31 @@ describe('/api/auth POST rate limit', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('/api/auth POST 허용목록', () => {
+  it.each(['sign-in/email', 'sign-out'])('%s 는 위임된다', async (subpath) => {
+    const res = await POST(makeRequest(subpath, { 'x-real-ip': '1.2.3.4' }));
+    expect(handlerMock).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    'update-user',
+    'change-password',
+    'delete-user',
+    'list-sessions',
+    'revoke-sessions',
+    'sign-up/email',
+  ])('%s 는 404 로 막고 위임하지 않는다', async (subpath) => {
+    // catch-all 이 전 엔드포인트를 열어두면 oRPC 에 세워둔 계약을 우회할 수 있다 —
+    // update-user 로 아바타 URL 검증을, change-password 로 다른 기기 로그아웃을 건너뛴다.
+    const res = await POST(makeRequest(subpath, { 'x-real-ip': '1.2.3.4' }));
+    expect(res.status).toBe(404);
+    expect(handlerMock).not.toHaveBeenCalled();
+  });
+
+  it('허용목록이 rate limit 보다 먼저다 (차단 경로는 limiter 를 소모하지 않는다)', async () => {
+    await POST(makeRequest('sign-up/email', { 'x-real-ip': '1.2.3.4' }));
+    expect(limitMock).not.toHaveBeenCalled();
+  });
+});

@@ -47,7 +47,7 @@ const saveAdminEdit = scoped
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     try {
       return await svc.saveAdminEdit(
         input,

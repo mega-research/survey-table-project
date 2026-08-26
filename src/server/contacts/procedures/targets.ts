@@ -18,7 +18,7 @@ const add = scoped
   .input(AddContactTargetInput)
   .output(ContactTargetRowSchema)
   .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
     return svc.addContactTarget(input, isGuestUser(context.user.id));
   });
@@ -27,7 +27,7 @@ const update = scoped
   .input(UpdateContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     await svc.updateContactTarget(input, isGuestUser(context.user.id));
     return { ok: true as const };
   });

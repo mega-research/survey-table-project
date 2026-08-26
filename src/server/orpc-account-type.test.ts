@@ -8,12 +8,13 @@
  */
 import { createRouterClient } from '@orpc/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as z from 'zod';
 
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import { userTypeValues } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
-import { account, authed, scoped, superadmin } from './orpc';
+import { account, assertSurveyAccess, authed, scoped, superadmin } from './orpc';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -32,6 +33,16 @@ const internalOnly = authed.handler(({ context }) => ({ id: context.user.id }));
 const superadminOnly = superadmin.handler(({ context }) => ({ id: context.user.id }));
 const selfService = account.handler(({ context }) => ({ id: context.user.id }));
 const surveyScoped = scoped.handler(({ context }) => ({ id: context.user.id }));
+
+/** 실제 scoped procedure 의 모양 — handler 첫 줄에서 설문 일치를 강제한다. */
+const surveyGuarded = scoped
+  .input(z.object({ surveyId: z.string() }))
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user, input.surveyId);
+    return { id: context.user.id };
+  });
+
+const SOME_SURVEY = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
 
 const NON_INTERNAL = userTypeValues.filter((t) => t !== 'internal');
 
@@ -93,6 +104,39 @@ describe('설문 스코프 베이스 — 유형으로 막지 않는다', () => {
     // 게스트 콘솔(티켓 22)·실사 콘솔(티켓 25)이 이 축으로 열린다.
     const client = createRouterClient({ surveyScoped }, { context: ctx(userType) });
     await expect(client.surveyScoped()).resolves.toEqual({ id: `user-${userType}` });
+  });
+});
+
+describe('assertSurveyAccess — 계정 유형 축 (음성)', () => {
+  it.each(NON_INTERNAL)(
+    '%s 계정은 grant 가 없어도 임의 설문에 닿지 못한다',
+    async (userType) => {
+      // canAccessSurvey 는 env grant 가 비면 true 를 돌려준다 — "grant 없음 = 내부 사용자" 라는
+      // 전제였는데, 티켓 03 이 user_type 게스트 발급을 열면서 그 전제가 깨졌다.
+      // 이 유형들에는 아직 설문 grant 모델 자체가 없다(티켓 21·24 소관) — 기본은 거부다.
+      const client = createRouterClient({ surveyGuarded }, { context: ctx(userType) });
+      await expect(client.surveyGuarded({ surveyId: SOME_SURVEY })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+    },
+  );
+
+  it('내부 계정은 grant 가 없으면 전 설문에 닿는다 (기존 동작)', async () => {
+    const client = createRouterClient({ surveyGuarded }, { context: ctx('internal') });
+    await expect(client.surveyGuarded({ surveyId: SOME_SURVEY })).resolves.toEqual({
+      id: 'user-internal',
+    });
+  });
+
+  it('env grant 내부 계정은 grant 설문만 통과한다 (회귀)', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `user-internal:${SOME_SURVEY}`);
+    const client = createRouterClient({ surveyGuarded }, { context: ctx('internal') });
+    await expect(client.surveyGuarded({ surveyId: SOME_SURVEY })).resolves.toEqual({
+      id: 'user-internal',
+    });
+    await expect(
+      client.surveyGuarded({ surveyId: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 

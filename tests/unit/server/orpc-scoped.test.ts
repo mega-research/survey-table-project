@@ -22,7 +22,7 @@ function ctx(
 }
 
 const echo = scoped.input(z.object({ surveyId: z.string() })).handler(({ context, input }) => {
-  assertSurveyAccess(context.user.id, input.surveyId);
+  assertSurveyAccess(context.user, input.surveyId);
   return { ok: true };
 });
 
@@ -100,8 +100,20 @@ describe('계정 유형 게이트', () => {
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('scoped 는 유형으로 막지 않는다 (게스트 콘솔 표면)', async () => {
-    const client = createRouterClient({ echo }, { context: ctx('u-1', 'active', 'guest') });
-    await expect(client.echo({ surveyId: 's1' })).resolves.toEqual({ ok: true });
+  it('scoped 베이스 자체는 유형으로 막지 않는다 (게스트·실사 콘솔이 열릴 축)', async () => {
+    // 베이스는 통과시킨다 — 티켓 22·25 의 콘솔이 이 축으로 열린다.
+    const passthrough = scoped.handler(() => ({ ok: true }));
+    const client = createRouterClient({ passthrough }, { context: ctx('u-1', 'active', 'guest') });
+    await expect(client.passthrough()).resolves.toEqual({ ok: true });
   });
+
+  it.each(['guest', 'fieldwork'] as const)(
+    '%s 유형은 설문 일치 강제에서 막힌다 (부여 모델이 아직 없다)',
+    async (userType) => {
+      // 베이스를 통과하는 것과 임의 설문에 닿아도 되는 것은 다른 이야기다. 이 유형들에는
+      // 아직 설문 부여 모델이 없으므로(티켓 21·24) assertSurveyAccess 가 기본 거부한다.
+      const client = createRouterClient({ echo }, { context: ctx('u-1', 'active', userType) });
+      await expect(client.echo({ surveyId: 's1' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    },
+  );
 });

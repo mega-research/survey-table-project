@@ -176,6 +176,21 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     expect(await signInFailure(departed.email, PASSWORD)).toEqual(missing);
   });
 
+  it('공백이 섞인 이메일로도 비활성 계정을 식별할 수 없다', async () => {
+    // 훅은 trim 한 값으로 조회하는데 Better Auth 는 원본에 z.email() 을 건다. 훅이 그 차이를
+    // 무시하면 비활성 계정만 401 이 되고 나머지는 400 이 되어 계정 상태가 응답 코드로 샌다.
+    const actorId = await seedActor();
+    const suspended = await seedUser(actorId, 'padded-suspended');
+    await changeUserStatus(actorId, { action: 'suspend', userId: suspended.id });
+    const active = await seedUser(actorId, 'padded-active');
+
+    const pad = (email: string) => ` ${email} `;
+    const missing = await signInFailure(pad(`ticket04-none-${crypto.randomUUID()}@example.com`), PASSWORD);
+    expect(missing).not.toBeNull();
+    expect(await signInFailure(pad(suspended.email), PASSWORD)).toEqual(missing);
+    expect(await signInFailure(pad(active.email), PASSWORD)).toEqual(missing);
+  });
+
   it('퇴사자는 재직 복귀가 아니라 재입사로만 돌아온다', async () => {
     const actorId = await seedActor();
     const { id, email } = await seedUser(actorId, 'rehire');

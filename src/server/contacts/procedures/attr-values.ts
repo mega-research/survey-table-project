@@ -23,7 +23,7 @@ const list = scoped
   .input(ListContactAttrValuesInput)
   .output(ListContactAttrValuesOutput)
   .handler(async ({ input, context, errors }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyAccess(context.user, input.surveyId);
     const scope = await loadOperationsDataScope(input.surveyId);
     try {
       return await svc.listContactAttrValues({ ...input, scope });

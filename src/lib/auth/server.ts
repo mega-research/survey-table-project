@@ -69,7 +69,13 @@ export const auth = betterAuth({
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path !== '/sign-in/email') return;
-      const email = typeof ctx.body?.email === 'string' ? ctx.body.email.trim().toLowerCase() : '';
+      const raw = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
+      // Better Auth 는 **원본** 이메일에 z.email() 을 걸어 형식 불량이면 400 을 낸다. 우리가
+      // trim 한 값으로만 조회하면 " known@a.b " 같은 입력에서 비활성 계정은 이 훅의 401 로,
+      // 그 밖은 Better Auth 의 400 으로 갈려 계정 상태가 응답 코드로 새어 나간다.
+      // 원본이 Better Auth 검증을 통과하지 못할 모양이면 판정을 그쪽에 넘긴다.
+      if (raw !== raw.trim()) return;
+      const email = raw.toLowerCase();
       if (!email) return;
       const user = await db.query.users.findFirst({
         where: eq(users.email, email),
