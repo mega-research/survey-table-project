@@ -3,6 +3,8 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
+import { type SurveyAccessUser } from '@/server/survey-access';
+import { resolveWorkScope } from '@/server/work-scope';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { db } from '@/db';
 import {
@@ -37,8 +39,41 @@ import type {
 // 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
 // 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
+
+/**
+ * 새 설문이 붙을 팀 (역할 모델 v2 티켓 07).
+ *
+ * 팀 범위에서만 설문을 만들 수 있다. 시스템 전체 보기는 teams 행이 아니라 조회 범위라
+ * 소유 목적지가 될 수 없고(.pen 6-2 노트), 팀 미배치 사용자는 애초에 내부 설문 경로가 닫혀
+ * 있다. 화면은 두 경우 모두 생성 버튼을 비활성으로 두지만 판정은 여기서 다시 한다.
+ */
+async function resolveNewSurveyOwnership(
+  actor: SurveyAccessUser,
+  requestedScope: string | null | undefined,
+): Promise<{ teamId: string; ownerUserId: string; createdBy: string; assignmentStatus: 'assigned' }> {
+  const scope = await resolveWorkScope(actor, requestedScope ?? null);
+  if (scope.kind !== 'team') {
+    throw new SurveyOwnershipRequiredError();
+  }
+  return {
+    teamId: scope.teamId,
+    ownerUserId: actor.id,
+    createdBy: actor.id,
+    assignmentStatus: 'assigned',
+  };
+}
+
+/** 소유 팀을 정할 수 없어 설문을 만들 수 없다 — 화면은 팀을 먼저 고르라고 안내한다. */
+export class SurveyOwnershipRequiredError extends Error {
+  constructor() {
+    super('설문을 만들려면 소유 팀을 먼저 선택해야 합니다.');
+    this.name = 'SurveyOwnershipRequiredError';
+  }
+}
+
 // 설문이 DB에 존재하는지 확인하고, 없으면 최소한의 레코드를 생성 (idempotent)
 export async function ensureSurveyInDb(
+  actor: SurveyAccessUser,
   input: EnsureSurveyInDbInput,
 ): Promise<EnsureSurveyResult> {
   const existing = await db.query.surveys.findFirst({
@@ -48,7 +83,10 @@ export async function ensureSurveyInDb(
 
   if (existing) return { surveyId: input.id, created: false };
 
+  const ownership = await resolveNewSurveyOwnership(actor, input.scope);
+
   await db.insert(surveys).values({
+    ...ownership,
     id: input.id,
     title: input.title,
     privateToken: input.privateToken,
@@ -65,8 +103,13 @@ export async function ensureSurveyInDb(
 }
 
 // 설문 생성
-export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> {
+export async function createSurvey(
+  actor: SurveyAccessUser,
+  data: CreateSurveyInput,
+): Promise<SurveyRow> {
+  const ownership = await resolveNewSurveyOwnership(actor, data.scope);
   const newSurvey: NewSurvey = {
+    ...ownership,
     title: data.title,
     description: data.description,
     slug: data.slug,
@@ -189,6 +232,7 @@ function remapQuestionIdRefs<T>(value: T, idMap: Map<string, string>): T {
 
 // 설문 복제
 export async function duplicateSurvey(
+  actor: SurveyAccessUser,
   input: SurveyIdInput,
 ): Promise<SurveyRow | null> {
   const { surveyId } = input;
@@ -210,6 +254,13 @@ export async function duplicateSurvey(
     const newSurveyRows = await tx
       .insert(surveys)
       .values({
+        // 복제본은 원본의 팀·공개 범위를 잇고 소유자만 복제한 사람이 된다. 팀을 잇지 않으면
+        // 복제본이 배치 대기로 떨어져 만든 사람조차 목록에서 볼 수 없다.
+        teamId: original.teamId,
+        assignmentStatus: original.assignmentStatus,
+        visibility: original.visibility,
+        ownerUserId: actor.id,
+        createdBy: actor.id,
         title: `${original.title} (복사본)`,
         description: original.description,
         isPublic: original.isPublic,

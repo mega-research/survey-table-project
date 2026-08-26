@@ -3,10 +3,15 @@ import 'server-only';
 import { and, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
+import { listActiveTeams } from '@/server/read-models/teams';
+import { loadAccessSubject, type SurveyAccessUser } from '@/server/survey-access';
+import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
 import {
   getQuestionGroupsBySurvey,
   getQuestionsBySurvey,
+  getScopedSurveys,
   getSurveyById,
   getSurveyWithDetails,
   getSurveys,
@@ -31,7 +36,7 @@ import type {
   SurveyForResponseInput,
   SurveyForResponseResult,
   SurveyIdRow,
-  SurveyListItem,
+  SurveyListResult,
 } from '../domain/survey-read';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
@@ -82,24 +87,60 @@ export async function searchSurveys(query: string) {
 // 복합 조회 (authed)
 // ========================
 
-// 전체 설문 목록 조회 (요약 정보)
-export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
-  const surveyList = await getSurveys();
+/**
+ * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
+ *
+ * 판정은 전부 코어(work-scope)가 하고 여기는 조회를 잇는다. 범위를 해석한 결과를 함께
+ * 돌려주는 이유는 화면이 요청한 범위와 서버가 해석한 범위가 다를 수 있어서다 — 해산된 팀이
+ * 쿠키에 남은 경우가 그렇다.
+ */
+export async function getSurveyListWithCounts(
+  user: SurveyAccessUser,
+  requestedScope?: string | null,
+): Promise<SurveyListResult> {
+  const subject = await loadAccessSubject(user);
+  const scope = resolveWorkScopeFor(subject, requestedScope ?? null);
+  const filter = buildSurveyScopeFilter(subject, scope);
+
+  const [surveyList, teams] = await Promise.all([
+    getScopedSurveys(filter),
+    listSelectableTeams(subject),
+  ]);
   const responseCounts = await getResponseCountsGroupedBySurvey(
     surveyList.map((survey) => survey.id),
   );
 
-  return surveyList.map((survey) => ({
-    id: survey.id,
-    title: survey.title,
-    description: survey.description,
-    slug: survey.slug,
-    privateToken: survey.privateToken,
-    responseCount: responseCounts.get(survey.id)?.total ?? 0,
-    completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
-    createdAt: survey.createdAt,
-    updatedAt: survey.updatedAt,
-    isPublic: survey.isPublic,
+  return {
+    scope,
+    teams,
+    canSeeSystemScope: subject.isSuperadmin,
+    surveys: surveyList.map((survey) => ({
+      id: survey.id,
+      title: survey.title,
+      description: survey.description,
+      slug: survey.slug,
+      privateToken: survey.privateToken,
+      responseCount: responseCounts.get(survey.id)?.total ?? 0,
+      completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
+      createdAt: survey.createdAt,
+      updatedAt: survey.updatedAt,
+      isPublic: survey.isPublic,
+      teamId: survey.teamId,
+      teamName: survey.teamName,
+      visibility: survey.visibility,
+      assignmentStatus: survey.assignmentStatus,
+    })),
+  };
+}
+
+/** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀을 고를 수 있다. */
+async function listSelectableTeams(
+  subject: Awaited<ReturnType<typeof loadAccessSubject>>,
+): Promise<{ id: string; name: string }[]> {
+  if (subject.isSuperadmin) return listActiveTeams();
+  return (await getActiveTeamMemberships(subject.userId)).map((m) => ({
+    id: m.teamId,
+    name: m.teamName,
   }));
 }
 

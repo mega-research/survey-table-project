@@ -28,6 +28,8 @@ export const EnsureSurveyInDbInput = z.object({
   title: z.string(),
   privateToken: z.string().optional(),
   settings: SurveySettingsSchema,
+  /** 화면이 보고 있던 작업 범위 — 새 설문이 붙을 팀. 서버가 다시 판정한다(티켓 07). */
+  scope: z.string().nullish(),
 });
 export type EnsureSurveyInDbInput = z.infer<typeof EnsureSurveyInDbInput>;
 
@@ -51,6 +53,8 @@ export const CreateSurveyInput = z.object({
   slug: z.string().optional(),
   isPublic: z.boolean().optional(),
   settings: z.custom<Partial<SurveyType['settings']>>().optional(),
+  /** 화면이 보고 있던 작업 범위 — 새 설문이 붙을 팀. 서버가 다시 판정한다(티켓 07). */
+  scope: z.string().nullish(),
 });
 export type CreateSurveyInput = z.infer<typeof CreateSurveyInput>;
 

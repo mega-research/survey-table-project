@@ -12,7 +12,7 @@ import type { ORPCContext } from '@/server/context';
 
 import { CrossTeamAssignmentError, LastTeamLeaderError } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '../services/active-membership';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 import { members } from './members';
 
 vi.mock('../services/members', () => ({
@@ -23,7 +23,7 @@ vi.mock('../services/members', () => ({
   updateMemberJobTitle: vi.fn(),
 }));
 
-vi.mock('../services/active-membership', () => ({ getTeamRole: vi.fn() }));
+vi.mock('@/server/read-models/team-memberships', () => ({ getTeamRole: vi.fn() }));
 
 const LEADER_ID = '11111111-1111-4111-8111-111111111111';
 const TEAM_A = '22222222-2222-4222-8222-222222222222';

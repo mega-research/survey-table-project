@@ -52,25 +52,28 @@ describe('surveyBuilder.surveys procedures', () => {
       surveyId: SURVEY_ID,
       created: true,
     } as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const input = { id: SURVEY_ID, title: '설문 제목', settings: SETTINGS };
     const res = await client.surveys.ensure(input);
-    expect(svc.ensureSurveyInDb).toHaveBeenCalledWith(input);
+    expect(svc.ensureSurveyInDb).toHaveBeenCalledWith(context.user, input);
     expect(res).toEqual({ surveyId: SURVEY_ID, created: true });
   });
 
   it('create는 service.createSurvey에 위임하고 survey 행을 반환한다', async () => {
     vi.mocked(svc.createSurvey).mockResolvedValue(SURVEY_ROW as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const input = { title: '설문 제목' };
     const res = await client.surveys.create(input);
-    expect(svc.createSurvey).toHaveBeenCalledWith(input);
+    expect(svc.createSurvey).toHaveBeenCalledWith(context.user, input);
     expect(res).toMatchObject({ id: SURVEY_ID, title: '설문 제목' });
   });
 
   it('update는 (surveyId, data)를 단일 input object로 묶어 service에 위임한다', async () => {
     vi.mocked(svc.updateSurvey).mockResolvedValue(SURVEY_ROW as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const input = { surveyId: SURVEY_ID, data: { title: '바뀐 제목' } };
     const res = await client.surveys.update(input);
     expect(svc.updateSurvey).toHaveBeenCalledWith(input);
@@ -79,7 +82,8 @@ describe('surveyBuilder.surveys procedures', () => {
 
   it('delete는 service.deleteSurvey에 위임한다(void)', async () => {
     vi.mocked(svc.deleteSurvey).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const input = { surveyId: SURVEY_ID };
     await client.surveys.delete(input);
     expect(svc.deleteSurvey).toHaveBeenCalledWith(input);
@@ -87,16 +91,18 @@ describe('surveyBuilder.surveys procedures', () => {
 
   it('duplicate는 service.duplicateSurvey에 위임하고 행(또는 null)을 반환한다', async () => {
     vi.mocked(svc.duplicateSurvey).mockResolvedValue(SURVEY_ROW as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const input = { surveyId: SURVEY_ID };
     const res = await client.surveys.duplicate(input);
-    expect(svc.duplicateSurvey).toHaveBeenCalledWith(input);
+    expect(svc.duplicateSurvey).toHaveBeenCalledWith(context.user, input);
     expect(res).toMatchObject({ id: SURVEY_ID });
   });
 
   it('duplicate는 원본 not found 시 null을 통과시킨다', async () => {
     vi.mocked(svc.duplicateSurvey).mockResolvedValue(null as never);
-    const client = createRouterClient({ surveys }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
     const res = await client.surveys.duplicate({ surveyId: SURVEY_ID });
     expect(res).toBeNull();
   });

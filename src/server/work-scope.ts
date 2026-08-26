@@ -1,0 +1,106 @@
+import 'server-only';
+
+import { SYSTEM_SCOPE, type WorkScope } from '@/shared/contracts/workspace';
+
+import {
+  loadAccessSubject,
+  type SurveyAccessSubject,
+  type SurveyAccessUser,
+} from './survey-access';
+
+/**
+ * 작업 범위 — 이 요청이 **어느 팀의 워크스페이스를** 보고 있는가 (역할 모델 v2 티켓 07).
+ *
+ * data-scope.ts 의 형제다. 그쪽이 "실/테스트 어느 파티션인가" 를 정하듯 여기는 "어느 팀
+ * 경계인가" 를 정한다. 둘 다 요청 스코프 판정이라 코어 계층에 나란히 둔다.
+ *
+ * 화면은 이 값을 쿠키·URL 로 기억하지만(티켓 08 팀 스위처) **그건 편의일 뿐이다** —
+ * 실제 범위는 언제나 여기서 멤버십을 다시 읽어 정한다.
+ */
+
+export class WorkScopeError extends Error {
+  constructor(public readonly reason: 'forbidden') {
+    super(reason);
+    this.name = 'WorkScopeError';
+  }
+}
+
+/**
+ * 요청이 들고 온 범위를 검증해 실제 범위로 바꾼다 — 순수 함수.
+ *
+ * - `system` 은 슈퍼어드민만. 일반 사용자의 요청은 **거부한다** — 조용히 자기 팀으로
+ *   접으면 "전체를 봤다" 고 착각한 화면이 부분 목록을 전체로 표시한다.
+ * - 팀 지목이 내 소속과 어긋나면 첫 활성 팀으로 **접는다**. 쿠키에 남은 옛 팀(해산·이동)
+ *   때문에 화면이 잠기지 않게 하는 쪽이 낫고, 조회는 해석된 범위로만 나가므로 새지 않는다.
+ * - 슈퍼어드민은 자기 소속이 아닌 팀도 지목할 수 있다(전 팀 접근).
+ */
+export function resolveWorkScopeFor(
+  subject: SurveyAccessSubject,
+  requested: string | null,
+): WorkScope {
+  if (subject.userType !== 'internal') return { kind: 'none' };
+
+  if (requested === SYSTEM_SCOPE) {
+    if (!subject.isSuperadmin) throw new WorkScopeError('forbidden');
+    return { kind: 'system' };
+  }
+
+  if (subject.isSuperadmin) {
+    return requested ? { kind: 'team', teamId: requested } : { kind: 'system' };
+  }
+
+  const matched =
+    requested && subject.activeTeamIds.includes(requested) ? requested : null;
+  const teamId = matched ?? subject.activeTeamIds[0];
+  return teamId ? { kind: 'team', teamId } : { kind: 'none' };
+}
+
+/** 세션 사용자로 시작하는 짧은 길 — 멤버십을 읽어 순수 판정에 넘긴다. */
+export async function resolveWorkScope(
+  user: SurveyAccessUser,
+  requested: string | null,
+): Promise<WorkScope> {
+  return resolveWorkScopeFor(await loadAccessSubject(user), requested);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 목록 조회 조건
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 해석된 범위를 목록 쿼리가 읽을 수 있는 조건으로 옮긴 것.
+ *
+ * SQL 조립(read-models)과 판정(여기)을 가르는 자리다 — read-models 가 "이 사람이 팀장인가"
+ * 를 다시 묻기 시작하면 매트릭스가 두 벌이 된다.
+ */
+export type SurveyScopeFilter =
+  /** 시스템 전체 보기 — 전 팀 + 배치 대기 설문까지. */
+  | { kind: 'all'; viewerId: string }
+  | {
+      kind: 'team';
+      teamId: string;
+      viewerId: string;
+      /** invite_only 설문까지 보는가 — 소유 팀 팀장·슈퍼어드민만(스펙 §3). */
+      seesInviteOnly: boolean;
+    }
+  | { kind: 'none' };
+
+/**
+ * 이 범위에서 이 사람이 보게 될 설문의 조건.
+ *
+ * invite_only 는 팀원에게만 숨기는 것이라, 팀장이 아니어도 **자기가 소유한** 설문은
+ * 목록에 남아야 한다 — 그 조건은 viewerId 로 쿼리가 함께 본다.
+ */
+export function buildSurveyScopeFilter(
+  subject: SurveyAccessSubject,
+  scope: WorkScope,
+): SurveyScopeFilter {
+  if (scope.kind === 'none') return { kind: 'none' };
+  if (scope.kind === 'system') return { kind: 'all', viewerId: subject.userId };
+  return {
+    kind: 'team',
+    teamId: scope.teamId,
+    viewerId: subject.userId,
+    seesInviteOnly: subject.isSuperadmin || subject.leaderTeamIds.includes(scope.teamId),
+  };
+}

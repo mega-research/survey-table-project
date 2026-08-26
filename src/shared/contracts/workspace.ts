@@ -154,3 +154,23 @@ export const surveyCapabilityValues = [
   'surveyGroup.manage',
 ] as const;
 export type SurveyCapability = (typeof surveyCapabilityValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 작업 범위 — 지금 보고 있는 워크스페이스 (SSOT, 티켓 07)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 화면은 이 값을 쿠키·URL 로 기억하지만(티켓 08 팀 스위처) 그건 편의일 뿐이다 — 실제 범위는
+// 서버가 멤버십을 다시 읽어 정한다(server/work-scope.ts). 여기 두는 것은 모양뿐이다.
+
+export type WorkScope =
+  | { kind: 'team'; teamId: string }
+  /** 메가리서치 — 전 팀 + 배치 대기까지 보는 슈퍼어드민의 가상 범위(ADR-0006). */
+  | { kind: 'system' }
+  /** 볼 수 있는 범위가 없다 — 팀 미배치 내부 사용자, 그리고 게스트·실사. */
+  | { kind: 'none' };
+
+/** 시스템 전체 보기를 지목하는 예약어. teams 에 행이 없으므로 teamId 와 섞이지 않는다. */
+export const SYSTEM_SCOPE = 'system';
+
+/** 시스템 전체 보기의 표시 이름 — 팀이 아니라 슈퍼어드민의 가상 범위다(ADR-0006). */
+export const SYSTEM_SCOPE_LABEL = '메가리서치';

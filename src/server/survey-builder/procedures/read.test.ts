@@ -46,12 +46,27 @@ describe('surveyBuilder.read procedures', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllEnvs());
 
-  it('list는 인자 없이 getSurveyListWithCounts에 위임한다', async () => {
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue([] as never);
-    const client = createRouterClient({ read }, { context: authedContext() });
-    const res = await client.read.list();
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith();
-    expect(res).toEqual([]);
+  it('list는 세션 사용자와 요청 범위를 그대로 넘긴다', async () => {
+    const result = { scope: { kind: 'system' }, teams: [], canSeeSystemScope: true, surveys: [] };
+    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue(result as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const res = await client.read.list({ scope: 'team-1' });
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1');
+    expect(res).toEqual(result);
+  });
+
+  it('list 는 범위 미지정을 null 로 넘긴다 — 서버가 기본 범위를 정한다', async () => {
+    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue({
+      scope: { kind: 'none' },
+      teams: [],
+      canSeeSystemScope: false,
+      surveys: [],
+    } as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    await client.read.list({});
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null);
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {

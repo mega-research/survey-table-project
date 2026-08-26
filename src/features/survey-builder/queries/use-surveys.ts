@@ -21,19 +21,22 @@ export const surveyKeys = {
 // ========================
 
 /**
- * 설문 목록 조회 (요약 정보 포함)
+ * 설문 목록 조회 — 작업 범위로 좁힌 결과 + 고를 수 있는 범위 (티켓 07).
+ *
+ * scope 는 화면이 고른 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 응답의 scope 가
+ * 요청과 다를 수 있으므로(해산된 팀 등) 화면은 응답 쪽을 정답으로 삼아야 한다.
  */
-export function surveyListQueryOptions() {
+export function surveyListQueryOptions(scope?: string | null) {
   return {
-    queryKey: surveyKeys.lists(),
-    queryFn: () => orpc.surveyBuilder.read.list.call(),
+    queryKey: surveyKeys.list(scope ?? undefined),
+    queryFn: () => orpc.surveyBuilder.read.list.call({ scope: scope ?? null }),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   };
 }
 
-export function useSurveys() {
-  return useQuery(surveyListQueryOptions());
+export function useSurveys(scope?: string | null) {
+  return useQuery(surveyListQueryOptions(scope));
 }
 
 /**

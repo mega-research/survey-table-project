@@ -12,7 +12,7 @@ import {
   type SurveyVisibility,
 } from '@/shared/contracts/workspace';
 
-import { getActiveTeamMemberships } from './workspace/services/active-membership';
+import { getActiveTeamMemberships } from './read-models/team-memberships';
 
 /**
  * 설문 접근 판정 — 이 파일이 유일한 정본이다 (역할 모델 v2 티켓 07, 스펙 §8).

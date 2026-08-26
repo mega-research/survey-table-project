@@ -20,12 +20,12 @@ import * as svc from '../services/surveys';
 const ensure = authed
   .input(EnsureSurveyInDbInput)
   .output(EnsureSurveyResultSchema)
-  .handler(({ input }) => svc.ensureSurveyInDb(input));
+  .handler(({ context, input }) => svc.ensureSurveyInDb(context.user, input));
 
 const create = authed
   .input(CreateSurveyInput)
   .output(SurveyRowSchema)
-  .handler(({ input }) => svc.createSurvey(input));
+  .handler(({ context, input }) => svc.createSurvey(context.user, input));
 
 const update = authed
   .input(UpdateSurveyInput)
@@ -41,7 +41,7 @@ const del = authed
 const duplicate = authed
   .input(SurveyIdInput)
   .output(DuplicateResultSchema)
-  .handler(({ input }) => svc.duplicateSurvey(input));
+  .handler(({ context, input }) => svc.duplicateSurvey(context.user, input));
 
 export const surveys = {
   ensure,

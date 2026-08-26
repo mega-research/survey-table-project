@@ -11,6 +11,7 @@ import {
   SlugAvailableInput,
   SlugAvailableOutput,
   SurveyIdInput,
+  SurveyListInput,
   SurveyListOutput,
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
@@ -27,10 +28,18 @@ import * as surveySvc from '../services/survey-read';
 // 설문 조회 (authed)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 설문 목록 + 질문 수 요약. */
+/**
+ * 설문 목록 — 작업 범위로 좁힌다(티켓 07).
+ *
+ * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반
+ * 사용자의 system 요청은 거부되고, 내 팀이 아닌 teamId 는 첫 활성 팀으로 접힌다.
+ */
 const list = authed
+  .input(SurveyListInput)
   .output(SurveyListOutput)
-  .handler(() => surveySvc.getSurveyListWithCounts());
+  .handler(({ context, input }) =>
+    surveySvc.getSurveyListWithCounts(context.user, input.scope ?? null),
+  );
 
 /** 설문 단일 조회(cache). */
 const byId = authed

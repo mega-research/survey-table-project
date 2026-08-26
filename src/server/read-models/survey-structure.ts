@@ -2,10 +2,11 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveys } from '@/db/schema';
+import { questionGroups, questions, surveys, teams } from '@/db/schema';
+import type { SurveyScopeFilter } from '@/server/work-scope';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isCodedChoiceType } from '@/types/question-types';
@@ -36,6 +37,52 @@ export async function getSurveys() {
     orderBy: [desc(surveys.createdAt)],
   });
   return result;
+}
+
+/**
+ * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
+ *
+ * 판정은 하지 않는다 — 무엇을 보게 되는지는 이미 buildSurveyScopeFilter 가 정했고 여기는
+ * 그 조건을 SQL 로 옮길 뿐이다. 이 함수가 "팀장인가" 를 다시 물으면 매트릭스가 두 벌이 된다.
+ *
+ * 팀 범위에서 배치 대기 설문을 빼는 것은 조건이 아니라 정의다 — 배치 대기는 team_id 가
+ * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
+ */
+export async function getScopedSurveys(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
+
+  const conditions: SQL[] = [isNull(surveys.deletedAt)];
+  if (filter.kind === 'team') {
+    conditions.push(eq(surveys.teamId, filter.teamId));
+    if (!filter.seesInviteOnly) {
+      // invite_only 는 소유 팀 팀원에게만 숨긴다 — 자기가 소유한 설문은 남는다(스펙 §3).
+      // 참여자로 초대돼 보이는 타 팀 설문은 티켓 18 이 이 자리에 UNION 으로 붙인다.
+      conditions.push(
+        or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, filter.viewerId))!,
+      );
+    }
+  }
+
+  return db
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      slug: surveys.slug,
+      privateToken: surveys.privateToken,
+      createdAt: surveys.createdAt,
+      updatedAt: surveys.updatedAt,
+      isPublic: surveys.isPublic,
+      teamId: surveys.teamId,
+      teamName: teams.name,
+      visibility: surveys.visibility,
+      assignmentStatus: surveys.assignmentStatus,
+      ownerUserId: surveys.ownerUserId,
+    })
+    .from(surveys)
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .where(and(...conditions))
+    .orderBy(desc(surveys.createdAt));
 }
 
 // 설문 단일 조회. React `cache()` 로 동일 RSC pass 내 중복 호출을 dedupe

@@ -17,7 +17,7 @@ import {
   type TeamDetailOutput,
   type WorkspaceActionOutput,
 } from '../domain/teams';
-import { getTeamRole } from './active-membership';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 
 const OK: WorkspaceActionOutput = { success: true };
 

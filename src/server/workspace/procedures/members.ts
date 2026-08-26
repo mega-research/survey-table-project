@@ -19,7 +19,7 @@ import {
   WorkspaceActionOutput,
 } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '../services/active-membership';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 import { toWorkspaceRpcError } from './teams';
 
 /**

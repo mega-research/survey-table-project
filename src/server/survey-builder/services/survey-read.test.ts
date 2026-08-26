@@ -11,10 +11,19 @@ import type { Survey as SurveyType } from '@/types/survey';
 vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/read-models/survey-structure')>()),
   getSurveyWithDetails: vi.fn(),
+  getScopedSurveys: vi.fn(),
 }));
 
 vi.mock('@/server/read-models/responses', () => ({
   getResponseCountsGroupedBySurvey: vi.fn(),
+}));
+
+vi.mock('@/server/read-models/team-memberships', () => ({
+  getActiveTeamMemberships: vi.fn(),
+}));
+
+vi.mock('@/server/read-models/teams', () => ({
+  listActiveTeams: vi.fn(),
 }));
 
 const surveysFindFirst = vi.fn();
@@ -44,7 +53,12 @@ vi.mock('@/db', () => ({
 }));
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
+import {
+  getScopedSurveys,
+  getSurveyWithDetails as getSurveyWithDetailsData,
+} from '@/server/read-models/survey-structure';
+import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
+import { listActiveTeams } from '@/server/read-models/teams';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 
@@ -94,57 +108,58 @@ describe('survey-read.service getSurveyWithDetails', () => {
 });
 
 describe('survey-read.service getSurveyListWithCounts', () => {
+  const createdAt = new Date('2026-06-01T00:00:00.000Z');
+  const updatedAt = new Date('2026-06-02T00:00:00.000Z');
+
+  function scopedRow(over: Record<string, unknown> = {}) {
+    return {
+      id: 'survey-1',
+      title: '첫 설문',
+      description: null,
+      slug: 'first',
+      privateToken: '11111111-1111-1111-1111-111111111111',
+      createdAt,
+      updatedAt,
+      isPublic: true,
+      teamId: 'team-1',
+      teamName: '연구1본부 - 1팀',
+      visibility: 'team' as const,
+      assignmentStatus: 'assigned' as const,
+      ownerUserId: 'u-1',
+      ...over,
+    };
+  }
+
+  const member = { id: 'u-1', isSuperadmin: false, userType: 'internal' as const };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getActiveTeamMemberships).mockResolvedValue([
+      { teamId: 'team-1', teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'member' },
+    ]);
+    vi.mocked(listActiveTeams).mockResolvedValue([]);
+    vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(new Map());
+    vi.mocked(getScopedSurveys).mockResolvedValue([]);
   });
 
-  it('목록에 필요한 survey 컬럼만 조회하고 전체/완료 응답 수를 병합한다', async () => {
-    const createdAt = new Date('2026-06-01T00:00:00.000Z');
-    const updatedAt = new Date('2026-06-02T00:00:00.000Z');
-    surveysFindMany.mockResolvedValue([
-      {
-        id: 'survey-1',
-        title: '첫 설문',
-        description: null,
-        slug: 'first',
-        privateToken: '11111111-1111-1111-1111-111111111111',
-        createdAt,
-        updatedAt,
-        isPublic: true,
-      },
-      {
-        id: 'survey-2',
-        title: '둘째 설문',
-        description: '설명',
-        slug: null,
-        privateToken: null,
-        createdAt,
-        updatedAt,
-        isPublic: false,
-      },
-    ]);
+  it('해석된 범위로 조회하고 전체/완료 응답 수를 병합한다', async () => {
+    vi.mocked(getScopedSurveys).mockResolvedValue([scopedRow()]);
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(
       new Map([['survey-1', { total: 5, completed: 3 }]]),
     );
 
-    const result = await getSurveyListWithCounts();
+    const result = await getSurveyListWithCounts(member, null);
 
-    expect(surveysFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        columns: {
-          id: true,
-          title: true,
-          description: true,
-          slug: true,
-          privateToken: true,
-          createdAt: true,
-          updatedAt: true,
-          isPublic: true,
-        },
-      }),
-    );
-    expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1', 'survey-2']);
-    expect(result).toEqual([
+    expect(getScopedSurveys).toHaveBeenCalledWith({
+      kind: 'team',
+      teamId: 'team-1',
+      viewerId: 'u-1',
+      seesInviteOnly: false,
+    });
+    expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1']);
+    expect(result.scope).toEqual({ kind: 'team', teamId: 'team-1' });
+    expect(result.canSeeSystemScope).toBe(false);
+    expect(result.surveys).toEqual([
       {
         id: 'survey-1',
         title: '첫 설문',
@@ -156,21 +171,50 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         createdAt,
         updatedAt,
         isPublic: true,
-      },
-      {
-        id: 'survey-2',
-        title: '둘째 설문',
-        description: '설명',
-        slug: null,
-        privateToken: null,
-        responseCount: 0,
-        completedResponseCount: 0,
-        createdAt,
-        updatedAt,
-        isPublic: false,
+        teamId: 'team-1',
+        teamName: '연구1본부 - 1팀',
+        visibility: 'team',
+        assignmentStatus: 'assigned',
       },
     ]);
-    expect(result[0]).not.toHaveProperty('questionCount');
+    // ownerUserId 는 목록 밖이다 — 화면이 소유자 판정을 흉내 내지 않게 한다.
+    expect(result.surveys[0]).not.toHaveProperty('ownerUserId');
+  });
+
+  it('그 팀의 팀장은 invite_only 까지 보는 조건으로 조회한다', async () => {
+    vi.mocked(getActiveTeamMemberships).mockResolvedValue([
+      { teamId: 'team-1', teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'leader' },
+    ]);
+
+    await getSurveyListWithCounts(member, 'team-1');
+
+    expect(getScopedSurveys).toHaveBeenCalledWith(
+      expect.objectContaining({ seesInviteOnly: true }),
+    );
+  });
+
+  it('슈퍼어드민의 기본 범위는 시스템 전체이고 고를 수 있는 팀은 전 팀이다', async () => {
+    vi.mocked(listActiveTeams).mockResolvedValue([{ id: 'team-9', name: '연구3본부 - 7팀' }]);
+
+    const result = await getSurveyListWithCounts(
+      { id: 'su-1', isSuperadmin: true, userType: 'internal' },
+      null,
+    );
+
+    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all', viewerId: 'su-1' });
+    expect(result.scope).toEqual({ kind: 'system' });
+    expect(result.canSeeSystemScope).toBe(true);
+    expect(result.teams).toEqual([{ id: 'team-9', name: '연구3본부 - 7팀' }]);
+  });
+
+  it('팀 미배치 사용자는 아무 설문도 조회하지 않는다', async () => {
+    vi.mocked(getActiveTeamMemberships).mockResolvedValue([]);
+
+    const result = await getSurveyListWithCounts(member, null);
+
+    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'none' });
+    expect(result.scope).toEqual({ kind: 'none' });
+    expect(result.surveys).toEqual([]);
   });
 });
 
