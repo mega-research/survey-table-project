@@ -1,163 +1,24 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useState } from 'react';
+import { ProfileView } from '@/features/workspace/profile/profile-view';
+import { requireActiveAccount } from '@/lib/auth';
 
-import Link from 'next/link';
-
-import { AlertCircle, ArrowLeft, CheckCircle, Lock, User } from 'lucide-react';
-
-import { LogoutButton } from '@/components/auth/logout-button';
-import { Button } from '@/components/ui/button';
-import { client } from '@/shared/lib/rpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-
-export default function AdminProfilePage() {
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  async function handleSubmit(formData: FormData) {
-    setIsLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    const result = await client.auth.updatePassword({
-      currentPassword: formData.get('currentPassword') as string,
-      newPassword: formData.get('newPassword') as string,
-      confirmPassword: formData.get('confirmPassword') as string,
-    });
-
-    if ('error' in result) {
-      setError(result.error);
-    } else {
-      setSuccess(true);
-      // 폼 초기화
-      const form = document.getElementById('password-form') as HTMLFormElement;
-      form?.reset();
-    }
-
-    setIsLoading(false);
+/**
+ * 프로필 (.pen FLOW 3-2) — 세 계정 유형 공통.
+ *
+ * `/admin` 아래 있지만 내부 전용이 아니다. 가드가 requireAdminPage 가 아니라
+ * requireActiveAccount 인 것이 그 뜻이고, admin 레이아웃의 유형 게이트도 이 경로를
+ * ACCOUNT_PAGES 로 비켜준다. 데이터를 주는 auth.getProfile 도 account 베이스라 두 축이 같다.
+ *
+ * 비로그인은 proxy·레이아웃이 이미 걸러내지만, 소프트 내비게이션에서 레이아웃이 다시 돌지
+ * 않으므로 여기서도 세션을 확인한다(티켓 02 기록).
+ */
+export default async function AdminProfilePage() {
+  try {
+    await requireActiveAccount();
+  } catch {
+    // 만료·폐기된 쿠키를 든 요청은 proxy 를 통과한다(쿠키 존재만 본다) — 500 대신 로그인으로.
+    redirect('/admin/login?redirect=%2Fadmin%2Fprofile');
   }
-
-  return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between">
-          <Link
-            href="/admin/surveys"
-            className="flex items-center gap-2 text-gray-600 transition-colors hover:text-gray-900"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            <span>설문 관리로 돌아가기</span>
-          </Link>
-          <LogoutButton />
-        </div>
-
-        {/* 프로필 카드 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                <User className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <CardTitle>관리자 프로필</CardTitle>
-                <CardDescription>계정 정보를 관리합니다</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
-
-        {/* 비밀번호 변경 카드 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
-                <Lock className="h-5 w-5 text-gray-600" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">비밀번호 변경</CardTitle>
-                <CardDescription>보안을 위해 정기적으로 비밀번호를 변경하세요</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form id="password-form" action={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {success && (
-                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>비밀번호가 성공적으로 변경되었습니다.</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword" className="text-sm font-medium">
-                  현재 비밀번호
-                </Label>
-                <Input
-                  id="currentPassword"
-                  name="currentPassword"
-                  type="password"
-                  placeholder="현재 비밀번호를 입력하세요"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-sm font-medium">
-                  새 비밀번호
-                </Label>
-                <Input
-                  id="newPassword"
-                  name="newPassword"
-                  type="password"
-                  placeholder="새 비밀번호를 입력하세요 (최소 8자)"
-                  required
-                  minLength={8}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium">
-                  새 비밀번호 확인
-                </Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  placeholder="새 비밀번호를 다시 입력하세요"
-                  required
-                  minLength={8}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    변경 중...
-                  </span>
-                ) : (
-                  '비밀번호 변경'
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+  return <ProfileView />;
 }
