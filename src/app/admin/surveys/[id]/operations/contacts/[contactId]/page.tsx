@@ -32,8 +32,10 @@ export default async function ContactDetailPage({ params }: PageProps) {
   await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
   const scope = await getOperationsDataScope(surveyId);
 
-  const detail = await getContactDetailById(contactId, scope);
-  if (!detail || detail.contact.surveyId !== surveyId) notFound();
+  // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
+  // 이미 복호화된 뒤에 접히게 된다(티켓 15).
+  const detail = await getContactDetailById(contactId, surveyId, scope);
+  if (!detail) notFound();
 
   // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
   // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는

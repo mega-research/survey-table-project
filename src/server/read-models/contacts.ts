@@ -384,6 +384,15 @@ export interface ContactDetailResult {
  */
 export async function getContactDetailById(
   id: string,
+  /**
+   * 이 컨택이 속해야 하는 설문 — **조회 조건이지 사후 확인이 아니다** (티켓 15).
+   *
+   * 예전에는 id 로만 찾은 뒤 호출측이 `detail.contact.surveyId !== surveyId` 를 봤다.
+   * 그 사이에 `decryptForTarget` 이 이미 돌아 **타 팀 컨택의 PII 가 복호화**됐다 —
+   * 화면에는 안 나가지만 서버 안에서 팀 경계를 넘은 것이고, "권한 확인 후에만 복호화"
+   * 라는 contact-pii-repo 의 전제가 깨진다. 조건을 WHERE 로 내려 아예 못 찾게 한다.
+   */
+  surveyId: string,
   scope: OperationsDataScope,
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
@@ -404,7 +413,13 @@ export async function getContactDetailById(
       updatedAt: contactTargets.updatedAt,
     })
     .from(contactTargets)
-    .where(and(eq(contactTargets.id, id), targetScopeCondition(scope)))
+    .where(
+      and(
+        eq(contactTargets.id, id),
+        eq(contactTargets.surveyId, surveyId),
+        targetScopeCondition(scope),
+      ),
+    )
     .limit(1);
 
   if (!contact) return null;

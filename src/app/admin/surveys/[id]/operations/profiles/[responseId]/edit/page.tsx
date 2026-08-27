@@ -47,12 +47,10 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
   const scope = await getOperationsDataScope(surveyId);
 
-  const response = await getResponseById(responseId, { includeDeleted: true });
-  if (
-    !response ||
-    response.surveyId !== surveyId ||
-    response.isTest !== testFlagForScope(scope)
-  ) {
+  // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
+  // 이미 복호화된 뒤에 접히게 된다(티켓 15).
+  const response = await getResponseById(responseId, { surveyId, includeDeleted: true });
+  if (!response || response.isTest !== testFlagForScope(scope)) {
     notFound();
   }
 
