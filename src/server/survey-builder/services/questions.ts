@@ -16,6 +16,9 @@ import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
 
+import { CrossSurveyRowError } from '../domain/survey-save';
+import { assertGroupReferenceBelongsToSurvey } from './question-groups';
+
 import type {
   CreateQuestionInput,
   QuestionRow,
@@ -28,6 +31,8 @@ import type {
 
 /** 질문 생성 — 24필드 explicit whitelist set(spread 금지, 불변식 A). */
 export async function createQuestion(data: CreateQuestionInput): Promise<QuestionRow> {
+  // 질문이 매달릴 그룹이 이 설문 것인지 먼저 본다 — FK 는 설문 경계를 모른다(티켓 15).
+  await assertGroupReferenceBelongsToSurvey(data.groupId, data.surveyId);
   const existingQuestions = await getQuestionsBySurvey(data.surveyId);
 
   const maxOrder =
@@ -114,6 +119,8 @@ export async function updateQuestion(
   surveyId: string,
   data: UpdateQuestionData,
 ): Promise<QuestionRow> {
+  // 옮겨 붙일 그룹이 이 설문 것인지 먼저 본다 — FK 는 설문 경계를 모른다(티켓 15).
+  await assertGroupReferenceBelongsToSurvey(data.groupId, surveyId);
   // PERSISTED_QUESTION_FIELDS 순회가 화이트리스트다 (id, surveyId, createdAt 등 변경 방지).
   // 신규 컬럼이 SSOT 에 등재되면 아래 data[field] 인덱스 접근이 UpdateQuestionData
   // 누락을 컴파일 에러로 호명한다 — 수동 if-체인의 silent drop(H17 류) 벡터 봉인.
@@ -221,7 +228,9 @@ export async function reorderQuestions(
   // 타 설문 소속(또는 미존재) id 가 섞인 것이므로 전체 reorder 를 거부한다.
   const allBelong = validQuestionIds.every((id) => currentOrderMap.has(id));
   if (!allBelong) {
-    throw new Error('다른 설문 소속 질문이 reorder 요청에 포함되어 거부되었습니다.');
+    // 도메인 에러로 던진다 — 문자열 Error 는 RPC 매핑이 없어 500 으로 마스킹되고,
+    // 화면은 "다른 설문 소속" 이라는 정확한 사유 대신 「내부 오류」만 받는다(티켓 15).
+    throw new CrossSurveyRowError('question');
   }
 
   const updates: Promise<unknown>[] = [];

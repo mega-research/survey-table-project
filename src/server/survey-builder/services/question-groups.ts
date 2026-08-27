@@ -7,11 +7,42 @@ import { db } from '@/db';
 import { NewQuestionGroup, questionGroups, questions } from '@/db/schema';
 import { generateId, isValidUUID } from '@/lib/utils';
 
+import { CrossSurveyRowError } from '../domain/survey-save';
 import type {
   CreateQuestionGroupInput,
   GroupRow,
   UpdateQuestionGroupData,
 } from '../domain/question-group';
+
+/**
+ * 이 그룹 참조가 그 설문 것인지 확인한다 — 단건 mutation 용 (티켓 15).
+ *
+ * 설문 관문은 **경로의 설문**만 본다. 그 뒤 payload 가 들고 오는 참조
+ * — `question.groupId` · `group.parentGroupId` — 는 그대로 쓰이는데, `questions.group_id`
+ * 의 FK 는 그룹의 **존재**만 보고 설문 경계를 모르며 `parentGroupId` 에는 FK 조차 없다.
+ * 그래서 A팀 사용자가 자기 설문의 질문을 B팀 그룹에 매달 수 있었다. 행 자체는 남의 것이
+ * 되지 않지만 교차 팀 그래프가 만들어지고, 로더가 설문별로 그룹을 읽으므로 어느 화면으로도
+ * 되돌릴 수 없다.
+ *
+ * **없는 id 도 같은 사유로 접는다** — 갈라 두면 FK 오류(500)와 거부(FORBIDDEN)의 차이가
+ * 「그 그룹 id 가 존재하는가」를 알려주는 오라클이 된다.
+ *
+ * 전체 저장(survey-save)에는 같은 판정의 **배치 판**이 따로 있다 — 그쪽은 트랜잭션 안에서
+ * `FOR SHARE` 로 잠그고, 같은 payload 가 새로 만드는 그룹(knownIds)까지 함께 봐야 한다.
+ * 지는 계약이 달라 합치지 않았다.
+ */
+export async function assertGroupReferenceBelongsToSurvey(
+  groupId: string | null | undefined,
+  surveyId: string,
+): Promise<void> {
+  if (!groupId) return;
+  const [row] = await db
+    .select({ surveyId: questionGroups.surveyId })
+    .from(questionGroups)
+    .where(eq(questionGroups.id, groupId))
+    .limit(1);
+  if (!row || row.surveyId !== surveyId) throw new CrossSurveyRowError('group');
+}
 
 // 원본: src/actions/question-group-actions.ts
 // requireAuth/revalidatePath 는 procedure(authed) + 소비처 router.refresh 로 대체.
@@ -20,6 +51,7 @@ import type {
 
 /** 질문 그룹 생성 — sibling maxOrder 계산 후 insert. */
 export async function createQuestionGroup(data: CreateQuestionGroupInput): Promise<GroupRow> {
+  await assertGroupReferenceBelongsToSurvey(data.parentGroupId, data.surveyId);
   const siblingGroups = await getQuestionGroupsBySurvey(data.surveyId);
   const filteredGroups = siblingGroups.filter((g) =>
     data.parentGroupId ? g.parentGroupId === data.parentGroupId : !g.parentGroupId,
@@ -54,6 +86,7 @@ export async function updateQuestionGroup(
   surveyId: string,
   data: UpdateQuestionGroupData,
 ): Promise<GroupRow> {
+  await assertGroupReferenceBelongsToSurvey(data.parentGroupId, surveyId);
   const [updated] = await db
     .update(questionGroups)
     .set({
@@ -146,7 +179,8 @@ export async function reorderGroups(
   // 타 설문 소속(또는 미존재) id 가 섞인 것이므로 전체 reorder 를 거부한다.
   const allBelong = validGroupIds.every((id) => currentOrderMap.has(id));
   if (!allBelong) {
-    throw new Error('다른 설문 소속 그룹이 reorder 요청에 포함되어 거부되었습니다.');
+    // 문자열 Error 는 RPC 매핑이 없어 500 이 된다 — 질문 reorder 와 같은 어휘로 던진다.
+    throw new CrossSurveyRowError('group');
   }
 
   const updates: Promise<unknown>[] = [];
