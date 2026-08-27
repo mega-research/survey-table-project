@@ -3,8 +3,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
-import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { getResponseById } from '@/server/read-models/responses';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
@@ -13,7 +12,6 @@ import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
 
 import { AdminResponseEditor } from './admin-response-editor';
-import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
 
 interface PageProps {
   params: Promise<{ id: string; responseId: string }>;
@@ -40,13 +38,13 @@ export const metadata = { title: '응답 수정' };
 export default async function AdminResponseEditPage({ params, searchParams }: PageProps) {
   const { id: surveyId, responseId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
-  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
-  await assertGuestSurveyPageAccess(surveyId);
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  // env grant 게스트의 접근을 의도적으로 복원한다 — 종전에는 capability 판정에 게스트
+  // 우회가 없어 grant 설문에서도 404 였지만, saveAdminEdit RPC 는 게스트를 허용해 왔다.
+  await assertSurveyConsolePageAccess(surveyId, 'responses.view');
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
-  const viewer = await requireAuth();
-  await assertSurveyCapabilityPage(viewer, surveyId, 'responses.view');
   const scope = await getOperationsDataScope(surveyId);
 
   const response = await getResponseById(responseId, { includeDeleted: true });

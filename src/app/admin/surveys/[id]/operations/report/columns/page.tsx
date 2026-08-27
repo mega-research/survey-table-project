@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getProgressColumnScheme } from '@/server/operations/services/report-progress';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +27,9 @@ interface PageProps {
 export default async function ReportColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
-  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
-  await assertGuestSurveyPageAccess(surveyId);
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다 (티켓 10).
+  // 진척률 컬럼 후보가 컨택 스킴(attrs.*)에서 나오므로 리포트 본면과 같은 contacts.view.
+  await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
   const scope = await getOperationsDataScope(surveyId);
 
   const [scheme, contactScheme] = await Promise.all([

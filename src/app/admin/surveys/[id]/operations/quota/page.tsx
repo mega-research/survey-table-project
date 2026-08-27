@@ -5,6 +5,7 @@ import { getQuestionsBySurvey } from '@/server/read-models/survey-structure';
 import { getQuotaConfig } from '@/server/quota/services/quota';
 import type { Question } from '@/types/survey';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 쿼터 설정',
@@ -41,9 +42,11 @@ function toQuestion(row: Awaited<ReturnType<typeof getQuestionsBySurvey>>[number
 
 export default async function QuotaPage({ params }: PageProps) {
   // 게스트 차단 화면 — admin 레이아웃의 경로 가드는 소프트 내비게이션에서 재실행되지 않으므로
-  // 페이지가 스스로 막는다(페이지는 내비게이션마다 반드시 다시 렌더된다).
-  await requireAdminPage();
+  // 페이지가 스스로 막는다(페이지는 내비게이션마다 반드시 다시 렌더된다). 설문 단위
+  // capability 관문(operations.view)은 거부 사유 불문 notFound 로 접는다 (티켓 10).
+  const viewer = await requireAdminPage();
   const { id: surveyId } = await params;
+  await assertSurveyCapabilityPage(viewer, surveyId, 'operations.view');
   const [config, questionRows] = await Promise.all([
     getQuotaConfig(surveyId),
     getQuestionsBySurvey(surveyId),

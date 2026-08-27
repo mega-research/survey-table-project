@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +27,9 @@ interface PageProps {
 export default async function ProfilesColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
-  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
-  await assertGuestSurveyPageAccess(surveyId);
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  // 컬럼 설정은 응답 내역 화면의 표시 방식이라 responses.view 를 따른다.
+  await assertSurveyConsolePageAccess(surveyId, 'responses.view');
   const scope = await getOperationsDataScope(surveyId);
 
   const [scheme, contactScheme] = await Promise.all([

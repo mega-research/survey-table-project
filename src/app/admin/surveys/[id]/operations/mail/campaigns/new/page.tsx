@@ -25,7 +25,7 @@ import {
   parseHeaderFilterEntries,
   type HeaderFilterEntry,
 } from '@/features/operations/filters/header-filter-url';
-import { assertGuestSurveyPageAccess } from '@/lib/auth/guest-page-guard';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 const PAGE_SIZE = 20;
 
@@ -75,8 +75,9 @@ function parsePage(value: string | undefined): number {
 export default async function NewCampaignPage({ params, searchParams }: Props) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
-  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
-  await assertGuestSurveyPageAccess(surveyId);
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다 (티켓 10).
+  // 발송 등록 화면이라 열람(mail.view)이 아니라 mail.send 를 요구한다.
+  await assertSurveyConsolePageAccess(surveyId, 'mail.send');
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
 

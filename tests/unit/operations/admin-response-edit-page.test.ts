@@ -8,18 +8,14 @@ const CONTACT_ID = '00000000-0000-4000-8000-000000000054';
 
 vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
 // 이 테스트의 관심사는 컨택 스코프 격리다. 페이지를 요청 스코프 밖에서 직접 부르므로
-// headers() 를 쓰는 진입 가드는 목으로 둔다 — 가드 자체는 guest-page-guard.test.ts 가 본다.
-vi.mock('@/lib/auth/guest-page-guard', () => ({
-  assertGuestSurveyPageAccess: vi.fn(async () => undefined),
-}));
-// 페이지는 이제 capability 관문을 직접 부른다(티켓 07) — 통과시켜 두고 스코프 관심사만 본다.
-vi.mock('@/lib/auth', () => ({
-  requireAuth: vi.fn(async () => ({ id: 'u-1', isSuperadmin: false, userType: 'internal' })),
-}));
-
-vi.mock('@/server/survey-access', () => ({
-  assertSurveyCapability: vi.fn(),
-  SurveyAccessError: class SurveyAccessError extends Error {},
+// headers() 를 쓰는 진입 관문(티켓 10 의 콘솔 페이지 관문)은 통과시켜 두고 스코프 관심사만
+// 본다 — 관문 자체는 src/server/page-survey-access.test.ts 가 본다.
+vi.mock('@/server/page-survey-access', () => ({
+  assertSurveyConsolePageAccess: vi.fn(async () => ({
+    id: 'u-1',
+    isSuperadmin: false,
+    userType: 'internal',
+  })),
 }));
 vi.mock('@/server/read-models/responses', () => ({
   getResponseById: vi.fn(async () => ({
