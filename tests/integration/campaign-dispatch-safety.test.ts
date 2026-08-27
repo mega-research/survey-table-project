@@ -137,6 +137,10 @@ function makeSelect() {
     if (tableName === 'surveys') {
       return [{ testModeEnabled: state.surveyTestModeEnabled }];
     }
+    if (tableName === 'contact_attempts') {
+      // 수신거부/negative 재검증 조회 — 이 스위트의 관심사가 아니라 항상 빈 결과.
+      return [];
+    }
     if (tableName === 'contact_targets') {
       const params = whereQuery ? compiled(whereQuery).params : [];
       const row = state.recipients.find((candidate) => (
@@ -161,6 +165,12 @@ function makeSelect() {
     },
     where(query: unknown) {
       whereQuery = query;
+      return chain;
+    },
+    orderBy() {
+      return chain;
+    },
+    limit() {
       return chain;
     },
     for: async (mode: string) => {

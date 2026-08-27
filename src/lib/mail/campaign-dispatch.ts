@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createElement } from 'react';
 
 import { render } from '@react-email/render';
-import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactAttempts, contactTargets } from '@/db/schema/contacts';
@@ -25,6 +25,7 @@ import {
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { getResultCodeStatuses } from '@/lib/operations/result-code-statuses.server';
+import { isUnsubscribeResultCode } from '@/lib/operations/filter-shared';
 
 type CampaignDispatchState = Pick<
   typeof mailCampaigns.$inferSelect,
@@ -224,6 +225,20 @@ async function claimRecipientDelivery(
       }
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
+      }
+      // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증 — 결과코드
+      // status(negative) 무관, 최근 회차 기준 (조회·후보 배제와 같은 수신거부 3축).
+      const [latestAttempt] = await tx
+        .select({ resultCode: contactAttempts.resultCode })
+        .from(contactAttempts)
+        .where(eq(contactAttempts.contactTargetId, currentContact.id))
+        .orderBy(desc(contactAttempts.attemptNo))
+        .limit(1);
+      if (isUnsubscribeResultCode(latestAttempt?.resultCode ?? null)) {
+        return finishWithoutSend(
+          'skipped_unsubscribed',
+          '수신거부 결과코드가 기록되어 발송을 건너뛰었습니다.',
+        );
       }
       // 큐잉 → dispatch 사이에 negative(모집단 제외) 결과코드 회차가 기록된 컨택 재검증.
       // 캠페인 생성 시점 배제(preflightRecipients·buildNegativeCodeExists)와 같은

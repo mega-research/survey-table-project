@@ -90,7 +90,10 @@ vi.mock('@/db', () => {
         select: vi.fn((selection?: Record<string, unknown>) => {
           const keys = Object.keys(selection ?? {});
           let result: unknown[];
-          if (keys.includes('contactTargetId') && keys.length === 2) {
+          if (keys.includes('resultCode')) {
+            // 수신거부 결과코드 재검증 조회 — 이 스위트의 관심사가 아니라 빈 결과.
+            result = [];
+          } else if (keys.includes('contactTargetId') && keys.length === 2) {
             result = [{ id: 'r1', contactTargetId: 'contact-r1' }];
           } else if (keys.includes('unsubscribedAt')) {
             result = [{ id: 'contact-r1', unsubscribedAt: null }];
@@ -104,6 +107,12 @@ vi.mock('@/db', () => {
               return this;
             },
             where() {
+              return this;
+            },
+            orderBy() {
+              return this;
+            },
+            limit() {
               return this;
             },
             for: vi.fn(async () => result),

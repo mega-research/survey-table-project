@@ -97,11 +97,11 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
 
     const totals = await getProgressTotals(surveyId, 'real', null);
 
-    expect(totals.excludedTotal).toBe(3);
+    // 수신거부는 모집단 제외 사유가 아니다 (2026-08-27 결정) — resid 4 는 분모에 남는다.
+    expect(totals.excludedTotal).toBe(2);
     expect(totals.excludedScreenedOut).toBe(1);
     expect(totals.excludedNegativeCode).toBe(1);
-    expect(totals.excludedUnsubscribed).toBe(1);
-    expect(totals.listTotal).toBe(1);
+    expect(totals.listTotal).toBe(2);
   });
 
   it('한 컨택이 세 사유에 모두 해당해도 한 번만, 가장 구체적인 사유로 센다', async () => {
@@ -114,24 +114,21 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
     const totals = await getProgressTotals(surveyId, 'real', null);
 
     expect(totals.excludedTotal).toBe(1);
-    // 우선순위: 자격 미달 > 결과코드 부적격 > 수신거부
+    // 우선순위: 자격 미달 > 결과코드 부적격
     expect(totals.excludedScreenedOut).toBe(1);
     expect(totals.excludedNegativeCode).toBe(0);
-    expect(totals.excludedUnsubscribed).toBe(0);
-    const sum =
-      totals.excludedScreenedOut + totals.excludedNegativeCode + totals.excludedUnsubscribed;
+    const sum = totals.excludedScreenedOut + totals.excludedNegativeCode;
     expect(sum).toBe(totals.excludedTotal);
   });
 
-  it('결과코드 부적격과 수신거부가 겹치면 결과코드 쪽으로 센다', async () => {
+  it('수신거부만으로는 제외되지 않는다 — 분모 유지', async () => {
     const surveyId = await seedSurvey();
-    await seedContacts(surveyId, [{ resid: 1, negativeCode: true, unsubscribed: true }]);
+    await seedContacts(surveyId, [{ resid: 1, unsubscribed: true }]);
 
     const totals = await getProgressTotals(surveyId, 'real', null);
 
-    expect(totals.excludedTotal).toBe(1);
-    expect(totals.excludedNegativeCode).toBe(1);
-    expect(totals.excludedUnsubscribed).toBe(0);
+    expect(totals.excludedTotal).toBe(0);
+    expect(totals.listTotal).toBe(1);
   });
 
   it('반대 파티션(test)의 자격미달은 real 집계의 제외에 들어가지 않는다', async () => {

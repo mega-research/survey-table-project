@@ -38,6 +38,7 @@ import {
 import {
   buildContactsFilterSql,
   latestResultCodeExpr,
+  latestResultUnsubscribedSql,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql';
 import {
@@ -720,7 +721,8 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  * 발송 후보 WHERE — 다중 절 필터(조사대상목록과 동일) + 메일 발송 자동 제외 정책 결합.
  *
  * 항상 적용되는 자동 제외:
- *   - unsubscribed_at IS NULL (수신거부)
+ *   - unsubscribed_at IS NULL (수신거부 — 메일 해지)
+ *   - 최근 결과코드 수신거부 아님 (status 무관 — neutral 수신거부 코드도 메일 제외)
  *   - email PII 존재 (이메일 누락 제외)
  *   - 부정 결과코드 마킹 제외
  * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
@@ -742,6 +744,7 @@ function buildCandidateWhere(
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
     isNull(contactTargets.unsubscribedAt),
+    sql`NOT (${latestResultUnsubscribedSql})`,
     HAS_EMAIL_PII,
     buildNotExcludedByNegativeCode(negativeCodes),
     buildContactsFilterSql(clauses),
@@ -755,7 +758,7 @@ function buildCandidateWhere(
 }
 
 export interface CampaignExclusionCounts {
-  /** unsubscribed_at IS NOT NULL */
+  /** 메일 해지(unsubscribed_at) OR 최근 결과코드 수신거부 */
   unsubscribed: number;
   /** 부정 결과코드 마킹 (수신거부 아님) */
   negativeCode: number;
@@ -796,12 +799,14 @@ async function countCandidateExclusions(
       ? inArray(contactTargets.id, [...bouncedContactIds])
       : sql`FALSE`;
 
+  // 수신거부 버킷 = 메일 해지 OR 최근 결과코드 수신거부 (buildCandidateWhere 의 배제 축과 동일).
+  const unsubCond = sql`(${contactTargets.unsubscribedAt} IS NOT NULL OR ${latestResultUnsubscribedSql})`;
   const [row] = await db
     .select({
-      unsubscribed: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NOT NULL)::int`,
-      negativeCode: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND ${negExists})::int`,
-      emailMissing: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
-      bounced: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
+      unsubscribed: sql<number>`count(*) FILTER (WHERE ${unsubCond})::int`,
+      negativeCode: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND ${negExists})::int`,
+      emailMissing: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
+      bounced: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
     })
     .from(contactTargets)
     .where(and(...baseParts)!);
@@ -1007,8 +1012,6 @@ const latestAttemptAtExpr = sql<Date | null>`(
   ORDER BY attempt_no DESC LIMIT 1
 )`;
 
-// 최근 결과코드가 수신거부 키워드 판정인지 (조사 대상 필터와 같은 축).
-const resultUnsubscribedCond = sql`${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`;
 
 export async function listUnsubscribedContacts(args: {
   surveyId: string;
@@ -1022,7 +1025,7 @@ export async function listUnsubscribedContacts(args: {
   const where = and(
     eq(contactTargets.surveyId, args.surveyId),
     targetScopeCondition(args.scope),
-    or(isNotNull(contactTargets.unsubscribedAt), resultUnsubscribedCond),
+    or(isNotNull(contactTargets.unsubscribedAt), latestResultUnsubscribedSql),
   )!;
 
   const [countRow] = await db
@@ -1108,6 +1111,8 @@ export async function preflightRecipients(args: {
     .select({
       id: contactTargets.id,
       unsubscribedAt: contactTargets.unsubscribedAt,
+      // 최근 결과코드 수신거부 — status(negative) 무관하게 수신거부 버킷으로 분류.
+      resultUnsubscribed: sql<boolean>`(${latestResultUnsubscribedSql})`.as('result_unsubscribed'),
       hasEmail: sql<boolean>`EXISTS (
         SELECT 1 FROM contact_pii cp
         WHERE cp.contact_target_id = "contact_targets"."id"
@@ -1141,7 +1146,7 @@ export async function preflightRecipients(args: {
   for (const r of rows) {
     found.add(r.id);
     // 우선순위: unsubscribed → excludedByCode → !hasEmail → bounced → (복호화 검증) → valid
-    if (r.unsubscribedAt !== null) {
+    if (r.unsubscribedAt !== null || r.resultUnsubscribed) {
       unsubscribedIds.push(r.id);
     } else if (r.excludedByCode) {
       excludedByCodeIds.push(r.id);

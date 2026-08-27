@@ -150,6 +150,9 @@ export async function createCampaign(
     const { buildNegativeCodeExists, getResultCodeStatuses } = await import(
       '@/lib/operations/result-code-statuses.server'
     );
+    const { latestResultUnsubscribedSql } = await import(
+      '@/lib/operations/contacts-filter-sql'
+    );
     const { listBouncedContactIds } = await import('@/lib/operations/campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
@@ -181,6 +184,8 @@ export async function createCampaign(
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
           isNull(contactTargets.unsubscribedAt),
+          // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
+          sql`NOT (${latestResultUnsubscribedSql})`,
           notExcludedByCode,
           ...(bouncedContactIds.length > 0
             ? [notInArray(contactTargets.id, bouncedContactIds)]

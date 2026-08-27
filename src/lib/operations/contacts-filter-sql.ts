@@ -64,6 +64,14 @@ END)`;
 export const isUnsubscribedSql = sql`${effectiveMailStatusExpr} = 'skipped_unsubscribed'`;
 
 /**
+ * 최근 결과코드가 수신거부 키워드인지 — 단체메일 배제(후보·preflight·createCampaign)와
+ * 수신거부자 명단이 공유하는 축. 결과코드의 status(negative 여부)와 무관하게 성립한다 —
+ * 수신거부는 "메일 거부" 의사라 모집단(진척률 분모)에서는 빼지 않되 단체메일에서는
+ * 항상 제외해야 하므로, neutral 수신거부 코드도 이 축이 잡는다.
+ */
+export const latestResultUnsubscribedSql = sql`${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`;
+
+/**
  * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
  * 유효 메일 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
  *
