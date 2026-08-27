@@ -166,10 +166,14 @@ const UserTarget = z.object({ userId: z.uuid() });
  * "새로 시작"시키므로 임시 비밀번호를 함께 정한다(전 세션은 이미 퇴사 시점에 폐기됐고,
  * 이 전이도 다시 폐기한다). 직책은 필요하면 이 자리에서 고칠 수 있다.
  *
- * **재입사만 팀 배정을 함께 받는다**(.pen FLOW 9-4 의 별표, 티켓 14). 퇴사가 유효 소속을
- * 끊어놓았으므로 상태만 되돌리면 그 사람은 로그인만 되는 미배치로 돌아온다 — 재입사를
- * 「새 소속으로 다시 시작」이라고 부르는 이상 목적지를 여기서 받아야 한다. 상태 전이와 배정은
- * 한 트랜잭션이다(server/workflows/user-rehire).
+ * **재입사만 팀 배정을 함께 받는다**(.pen FLOW 9-4 의 별표, 티켓 14). 재입사를 「새 소속으로
+ * 다시 시작」이라고 부르는 이상 목적지를 여기서 받아야 한다. 상태 전이와 배정은 한
+ * 트랜잭션이다(server/workflows/user-rehire).
+ *
+ * 필드가 **nullable 인 이유**는 팀에 소속될 수 없는 계정이 있어서다 — guest·fieldwork 는
+ * 멤버십 자체가 금지고(스펙 §1) 슈퍼어드민은 팀 소속과 무관한 전역 관리자다(CONTEXT.md).
+ * 그 계정들까지 팀을 요구하면 한 번 퇴사한 뒤 영영 돌아올 수 없다. 「필수」는 계약이 아니라
+ * **유형별 규칙**이라 서버가 대상의 유형을 읽고 강제한다(화면도 같은 규칙으로 칸을 감춘다).
  */
 export const ChangeUserStatusInput = z.discriminatedUnion('action', [
   UserTarget.extend({ action: z.literal('suspend') }),
@@ -179,9 +183,12 @@ export const ChangeUserStatusInput = z.discriminatedUnion('action', [
     action: z.literal('rehire'),
     password: PasswordField,
     jobTitle: optionalText(50),
-    /** 새 소속 팀 — 선택이 아니다. 비우면 미배치로 되살아나 재배치 센터로 다시 흘러간다. */
-    teamId: z.uuid(),
-    teamRole: z.enum(teamRoleValues),
+    /**
+     * 새 소속 팀. 내부 일반 계정에는 **필수**다 — 비우면 미배치로 되살아나 재배치 센터로
+     * 다시 흘러간다. 팀에 소속될 수 없는 계정(guest·fieldwork·슈퍼어드민)에는 null 이어야 한다.
+     */
+    teamId: z.uuid().nullable(),
+    teamRole: z.enum(teamRoleValues).nullable(),
   }),
 ]);
 export type ChangeUserStatusInput = z.infer<typeof ChangeUserStatusInput>;

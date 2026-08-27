@@ -112,19 +112,16 @@ export async function createSurveyGroup(
   actorUserId: string,
   input: CreateSurveyGroupInput,
 ): Promise<CreateSurveyGroupOutput> {
-  const team = await db.query.teams.findFirst({
-    where: and(eq(teams.id, input.teamId), eq(teams.status, 'active')),
-    columns: { id: true },
-  });
-  if (!team) throw new TeamNotFoundError();
+  return db.transaction(async (tx) => {
+  await requireActiveTeamLocked(tx, input.teamId);
 
-  const [tail] = await db
+  const [tail] = await tx
     .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
     .from(surveyGroups)
     .where(eq(surveyGroups.teamId, input.teamId));
 
   try {
-    const [group] = await db
+    const [group] = await tx
       .insert(surveyGroups)
       .values({
         teamId: input.teamId,
@@ -139,23 +136,34 @@ export async function createSurveyGroup(
     if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
     throw err;
   }
+  });
 }
 
+/**
+ * 이름 변경 — 그룹 행을 잠그고 그 팀이 아직 살아 있는지 다시 본다.
+ *
+ * 관문(procedure)이 이미 확인했지만 별도 왕복이라, 그 사이 해산이 커밋되면 archived 팀의
+ * 그룹 이름이 바뀐다. 그 행은 감사 계보로 남기기로 한 것이다(티켓 13).
+ */
 export async function renameSurveyGroup(
   input: RenameSurveyGroupInput,
 ): Promise<WorkspaceActionOutput> {
-  try {
-    const [row] = await db
-      .update(surveyGroups)
-      .set({ name: input.name, updatedAt: new Date() })
-      .where(eq(surveyGroups.id, input.groupId))
-      .returning({ id: surveyGroups.id });
-    if (!row) throw new SurveyGroupNotFoundError();
-    return OK;
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
-    throw err;
-  }
+  return db.transaction(async (tx) => {
+    const { teamId } = await lockGroup(tx, input.groupId);
+    await requireActiveTeamLocked(tx, teamId);
+    try {
+      const [row] = await tx
+        .update(surveyGroups)
+        .set({ name: input.name, updatedAt: new Date() })
+        .where(eq(surveyGroups.id, input.groupId))
+        .returning({ id: surveyGroups.id });
+      if (!row) throw new SurveyGroupNotFoundError();
+      return OK;
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
+      throw err;
+    }
+  });
 }
 
 /**
@@ -178,6 +186,8 @@ export async function reorderSurveyGroups(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext('survey-groups-' || ${input.teamId}))`,
     );
+    // 관문과 이 쓰기 사이에 해산이 커밋될 수 있다 — 잠긴 값으로 다시 본다.
+    await requireActiveTeamLocked(tx, input.teamId);
     for (const [index, groupId] of input.orderedGroupIds.entries()) {
       await tx
         .update(surveyGroups)
@@ -195,12 +205,20 @@ export async function reorderSurveyGroups(
  * 않습니다」). 그래서 여기서 설문을 따로 UPDATE 하지 않는다 — DB 가 원자적으로 처리한다.
  */
 export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActionOutput> {
-  const [row] = await db
-    .delete(surveyGroups)
-    .where(eq(surveyGroups.id, groupId))
-    .returning({ id: surveyGroups.id });
-  if (!row) throw new SurveyGroupNotFoundError();
-  return OK;
+  return db.transaction(async (tx) => {
+    // 그룹 행 → 팀 행 순으로 잠근다(담기와 같은 방향). 해산은 팀 → 설문만 잡으므로 사이클이 없다.
+    const { teamId } = await lockGroup(tx, groupId);
+    // **삭제야말로 되돌릴 수 없다.** 관문 확인 뒤 해산이 커밋된 사이에 이 삭제가 실행되면
+    // 티켓 13 이 감사 계보로 남기기로 한 archived 팀의 그룹 행이 영구히 사라진다.
+    await requireActiveTeamLocked(tx, teamId);
+
+    const [row] = await tx
+      .delete(surveyGroups)
+      .where(eq(surveyGroups.id, groupId))
+      .returning({ id: surveyGroups.id });
+    if (!row) throw new SurveyGroupNotFoundError();
+    return OK;
+  });
 }
 
 /**
@@ -332,6 +350,27 @@ export async function moveSurveyToGroup(
 }
 
 /** 그룹 행을 잠그고 소유 팀을 돌려준다 — 담기·이동이 공유하는 첫 단계(잠금 순서 고정). */
+/**
+ * 이 팀이 아직 살아 있는지 **잠긴 값으로** 확인한다 (Codex 2차 리뷰).
+ *
+ * procedure 관문(assertSurveyGroupManage)도 같은 것을 묻지만 그건 별도 왕복이라, 확인과
+ * 쓰기 사이에 해산이 커밋되면 archived 팀의 그룹 행이 그대로 수정·삭제된다. 티켓 13 이
+ * 그 행을 **감사 계보로 보존**하기로 한 이상(0090 헤더) 그 창을 닫아야 한다.
+ *
+ * `FOR SHARE` 인 이유는 해산의 `FOR NO KEY UPDATE`(teams UPDATE)와 **충돌**하기 때문이다.
+ * 해산이 팀 행을 먼저 잠그므로(dissolveTeam), 해산 중이면 여기서 대기하다 archived 를 보고
+ * 거부된다. 새 설문 귀속(resolveNewSurveyOwnership)·설문 배치(assignSurveys)가 쓰는 것과
+ * 같은 잠금이다 — 「해산된 팀에는 아무것도 새로 붙지 않는다」를 지키는 자리가 하나의 방식이어야 한다.
+ */
+async function requireActiveTeamLocked(tx: DbTransaction, teamId: string): Promise<void> {
+  const [team] = await tx
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.status, 'active')))
+    .for('share');
+  if (!team) throw new TeamNotFoundError();
+}
+
 async function lockGroup(tx: DbTransaction, groupId: string): Promise<{ teamId: string }> {
   const [group] = await tx
     .select({ id: surveyGroups.id, teamId: surveyGroups.teamId })

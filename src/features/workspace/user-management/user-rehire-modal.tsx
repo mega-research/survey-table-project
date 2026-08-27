@@ -28,6 +28,16 @@ import { USER_STATUS_LABEL } from './user-vocabulary';
 
 const ROLE_LABEL: Record<TeamRole, string> = { member: '팀원', leader: '팀장' };
 
+/**
+ * 이 계정이 팀에 소속될 수 있는가 — 서버의 requiresTeamAssignment 와 같은 규칙.
+ *
+ * guest·fieldwork 는 멤버십 자체가 금지고(스펙 §1) 슈퍼어드민은 팀 소속과 무관하다.
+ * 그 계정에 팀 칸을 보여주면 채울 수 없는 필수 칸이 되어 재입사가 영영 막힌 것처럼 보인다.
+ */
+function requiresTeamAssignment(user: UserListItem): boolean {
+  return user.userType === 'internal' && !user.isSuperadmin;
+}
+
 
 interface Props {
   /** 대상 사용자. 이 모달은 열릴 때만 마운트되므로 null 이 오지 않는다. */
@@ -41,16 +51,21 @@ interface Props {
  * 퇴사자는 일반 재직 복귀로 살리지 않는다(ADR-0010). 새 임시 비밀번호를 정하는 것이
  * 이 화면의 필수 입력이고, 재설정 메일은 발송하지 않는다.
  *
- * **「새 소속 팀」은 필수다**(티켓 14). 퇴사가 유효 소속을 끊어놓았으므로 상태만 되돌리면
- * 로그인만 되는 미배치로 되살아나 재배치 센터로 다시 흘러간다 — 「새 소속으로 다시 시작」이라고
- * 말하는 화면이 목적지를 안 받으면 그 문장이 거짓이 된다. 상태 전이와 배정은 서버에서 한
- * 트랜잭션이라(server/workflows/user-rehire) 배정이 막히면 계정도 퇴사 상태로 남는다.
+ * **내부 일반 계정에는 「새 소속 팀」이 필수다**(티켓 14). 상태만 되돌리면 로그인만 되는
+ * 미배치로 되살아나 재배치 센터로 다시 흘러간다 — 「새 소속으로 다시 시작」이라고 말하는
+ * 화면이 목적지를 안 받으면 그 문장이 거짓이 된다. 상태 전이와 옛 소속 정리와 새 배정은
+ * 서버에서 한 트랜잭션이라(server/workflows/user-rehire) 배정이 막히면 계정도 퇴사 상태로 남는다.
+ *
+ * 팀에 소속될 수 없는 계정(guest·실사·슈퍼어드민)에는 두 칸이 아예 없다 — 채울 수 없는
+ * 필수 칸을 보여주면 그 계정은 영영 못 돌아오는 것처럼 보인다.
  */
 export function UserRehireModal({ user, onClose }: Props) {
   const [password, setPassword] = useState('');
   const [teamId, setTeamId] = useState<string | null>(null);
   const [teamRole, setTeamRole] = useState<TeamRole>('member');
-  const teams = useTeams();
+  const needsTeam = requiresTeamAssignment(user);
+  // 팀 목록은 칸이 있을 때만 필요하다 — 없는 화면에서 부르면 쓰지도 않을 왕복이 하나 는다.
+  const teams = useTeams(needsTeam);
   // 지금 직책을 채워 연다. 보낸 값이 곧 저장될 값이라(서비스가 비운 값을 지운다) 채우지
   // 않으면 비밀번호만 입력하고 제출한 순간 멀쩡한 직책이 조용히 사라진다.
   const [jobTitle, setJobTitle] = useState(user.jobTitle ?? '');
@@ -61,22 +76,24 @@ export function UserRehireModal({ user, onClose }: Props) {
     event.preventDefault();
     setError(null);
 
+    // **팀 필수 여부는 계약이 아니라 유형별 규칙이라 화면이 직접 본다.** 계약의 teamId 는
+    // nullable 이다 — 팀에 소속될 수 없는 계정을 위해서다. 그래서 zod 는 여기를 잡아주지
+    // 않고, 안 막으면 「필수」 별표를 달아둔 칸을 비운 채 제출돼 서버가 CONFLICT 로 되돌린다.
+    if (needsTeam && teamId === null) {
+      setError('새 소속 팀을 선택하세요.');
+      return;
+    }
+
     const parsed = ChangeUserStatusInput.safeParse({
       action: 'rehire',
       userId: user.id,
       password,
       jobTitle,
-      teamId,
-      teamRole,
+      teamId: needsTeam ? teamId : null,
+      teamRole: needsTeam ? teamRole : null,
     });
     if (!parsed.success) {
-      // teamId 가 null 이면 zod 가 uuid 위반으로 잡는다. 문구가 기계적이라 이 한 경우만
-      // 사람이 읽을 수 있게 바꾼다 — 별표만 달아두고 이유를 안 말하면 제출이 왜 막히는지 모른다.
-      setError(
-        teamId === null
-          ? '새 소속 팀을 선택하세요.'
-          : (parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.'),
-      );
+      setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
       return;
     }
 
@@ -114,6 +131,7 @@ export function UserRehireModal({ user, onClose }: Props) {
             <span>이전 팀 멤버십과 설문 초대는 자동 복구하지 않습니다.</span>
           </div>
 
+          {needsTeam && (
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="rehire-team" className={FIELD_LABEL}>
@@ -154,6 +172,7 @@ export function UserRehireModal({ user, onClose }: Props) {
               <p className={FIELD_HINT}>팀장 지정은 선택한 팀의 마지막 팀장 규칙을 확인합니다.</p>
             </div>
           </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="rehire-password" className={FIELD_LABEL}>

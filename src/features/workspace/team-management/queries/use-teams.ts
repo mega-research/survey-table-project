@@ -23,11 +23,17 @@ export const teamKeys = {
     [...teamKeys.all, 'assignable', teamId, query] as const,
 };
 
-/** 팀 관리 목록 + 메가리서치 카드 지표 (슈퍼어드민 전용 표면). */
-export function useTeams() {
+/**
+ * 팀 관리 목록 + 메가리서치 카드 지표 (슈퍼어드민 전용 표면).
+ *
+ * `enabled` 는 팀 칸이 아예 없는 화면(팀에 소속될 수 없는 계정의 재입사 모달)이 쓰지도 않을
+ * 왕복을 만들지 않게 하는 스위치다. 기본은 켜짐 — 호출자 대부분은 목록이 필요하다.
+ */
+export function useTeams(enabled = true) {
   return useQuery({
     queryKey: teamKeys.list(),
     queryFn: () => orpc.workspace.teams.list.call(),
+    enabled,
     staleTime: 10_000,
     refetchOnWindowFocus: false,
   });

@@ -196,6 +196,122 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
         .where(eq(questionsTable.id, victim.questionId));
       expect(row?.title).toBe('원본 질문');
     });
+
+    /**
+     * 행 자신의 id 가 아니라 **부모 참조**로 경계를 넘는 경로 (Codex 2차 리뷰).
+     *
+     * 질문의 `groupId` 와 그룹의 `parentGroupId` 는 DB FK 가 전역이라 타 설문 그룹 id 를
+     * 그대로 받아준다. 그러면 내 설문의 질문이 남의 설문 그룹에 매달린 채 영속되고 어느
+     * 화면으로도 고칠 수 없다. 없는 id 도 같은 사유로 접어야 한다 — 갈라 두면 FK 오류와
+     * 거부의 차이가 「그 그룹이 존재하는가」를 알려주는 오라클이 된다.
+     */
+    async function seedSurveyWithGroup(title: string) {
+      const created = await client.surveys.create({ title });
+      createdSurveyIds.push(created.id);
+      const groupId = crypto.randomUUID();
+      await client.save.saveDiff({
+        surveyId: created.id,
+        groups: [{ id: groupId, name: '원본 그룹', order: 0 }] as never,
+      });
+      return { surveyId: created.id, groupId };
+    }
+
+    it('타 설문 그룹을 질문의 groupId 로 매달 수 없다', async () => {
+      const victim = await seedSurveyWithGroup('교차참조-피해자');
+      const attacker = await client.surveys.create({ title: '교차참조-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: crypto.randomUUID(),
+                type: 'text',
+                title: '남의 그룹에 매달기',
+                required: false,
+                order: 1,
+                groupId: victim.groupId,
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 공격자 설문에는 아무 질문도 남지 않는다(트랜잭션 전체 롤백).
+      const rows = await db
+        .select({ id: questionsTable.id })
+        .from(questionsTable)
+        .where(eq(questionsTable.surveyId, attacker.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    it('타 설문 그룹을 parentGroupId 로 매달 수 없다', async () => {
+      const victim = await seedSurveyWithGroup('교차부모-피해자');
+      const attacker = await client.surveys.create({ title: '교차부모-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          groups: [
+            { id: crypto.randomUUID(), name: '자식', order: 0, parentGroupId: victim.groupId },
+          ] as never,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('없는 그룹 id 도 같은 사유로 접는다 — 존재 오라클을 만들지 않는다', async () => {
+      const attacker = await client.surveys.create({ title: '존재오라클' });
+      createdSurveyIds.push(attacker.id);
+
+      // 타 설문 그룹(FORBIDDEN)과 없는 id(FK 500)가 갈리면 그 차이가 곧 존재 확인이 된다.
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: crypto.randomUUID(),
+                type: 'text',
+                title: '유령 그룹',
+                required: false,
+                order: 1,
+                groupId: crypto.randomUUID(),
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('자기 설문 그룹에는 정상적으로 매달린다', async () => {
+      // 위 셋이 과잉 차단이 아님을 고정한다 — 같은 payload 의 새 그룹도 통과해야 한다.
+      const own = await client.surveys.create({ title: '정상매달기' });
+      createdSurveyIds.push(own.id);
+      const groupId = crypto.randomUUID();
+      const questionId = crypto.randomUUID();
+
+      await client.save.saveDiff({
+        surveyId: own.id,
+        groups: [{ id: groupId, name: '내 그룹', order: 0 }] as never,
+        questionChanges: {
+          upserted: [
+            { id: questionId, type: 'text', title: 'Q', required: false, order: 1, groupId },
+          ] as never,
+          deleted: [],
+        },
+      });
+
+      const [row] = await db
+        .select({ groupId: questionsTable.groupId })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, questionId));
+      expect(row?.groupId).toBe(groupId);
+    });
   });
 
   it('create -> saveDiff(질문 1개 upsert) -> publish 왕복: 버전/스냅샷/currentVersionId가 DB에 반영된다', async () => {

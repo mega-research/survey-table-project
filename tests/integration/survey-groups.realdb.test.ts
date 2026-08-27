@@ -22,6 +22,8 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
+import * as svc from '@/server/workspace/services/survey-groups';
+import { TeamNotFoundError } from '@/server/workspace/domain/teams';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -46,6 +48,8 @@ function contextFor(userId: string): ORPCContext {
 }
 
 const createdSurveyIds: string[] = [];
+/** 해산 케이스가 심는 팀 — 고정 팀 둘(TEAM_A·B)을 archived 로 만들면 다른 케이스가 깨진다. */
+const createdTeamIds: string[] = [];
 const createdGroupIds: string[] = [];
 /** 케이스가 추가로 심은 사용자 — 설문이 소유자로 참조하므로 설문을 지운 뒤에 정리한다. */
 const createdUserIds: string[] = [];
@@ -129,10 +133,15 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     if (createdGroupIds.length > 0) {
       await db.delete(surveyGroupsTable).where(inArray(surveyGroupsTable.id, createdGroupIds));
     }
+    if (createdTeamIds.length > 0) {
+      await db.delete(surveyGroupsTable).where(inArray(surveyGroupsTable.teamId, createdTeamIds));
+    }
     await db
       .delete(teamMembersTable)
       .where(inArray(teamMembersTable.userId, [MEMBER_ID, OUTSIDER_ID]));
-    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B]));
+    await db
+      .delete(teamsTable)
+      .where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
     await db
       .delete(usersTable)
       .where(inArray(usersTable.id, [MEMBER_ID, OUTSIDER_ID, ...createdUserIds]));
@@ -324,6 +333,74 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       first,
       second,
     ]);
+  });
+
+  /**
+   * 관문(procedure)이 아니라 **서비스가** 해산을 막는가 (Codex 2차 리뷰).
+   *
+   * 관문의 active 팀 확인은 별도 왕복이라, 확인과 쓰기 사이에 해산이 커밋되면 archived 팀의
+   * 그룹 행이 그대로 수정·삭제된다. 티켓 13 이 그 행을 감사 계보로 남기기로 한 이상 그 창을
+   * 닫아야 한다. 관문을 **건너뛰고 서비스를 직접** 불러 그 재검증만 본다 — 관문을 태우면
+   * 관문이 먼저 막아 서비스 쪽 구멍이 그대로 있어도 초록이다.
+   */
+  describe('해산된 팀의 그룹은 서비스 단계에서도 막힌다', () => {
+    async function seedArchivedTeamGroup() {
+      const teamId = crypto.randomUUID();
+      await db
+        .insert(teamsTable)
+        .values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
+      createdTeamIds.push(teamId);
+      await db.insert(teamMembersTable).values({ teamId, userId: MEMBER_ID, role: 'leader' });
+      const groupId = await seedGroup(clientFor(MEMBER_ID), teamId, '해산 전 그룹');
+      // 해산을 흉내낸다 — 티켓 13 의 dissolveTeam 이 하는 것과 같은 상태.
+      await db
+        .update(teamsTable)
+        .set({ status: 'archived', archivedAt: new Date() })
+        .where(eq(teamsTable.id, teamId));
+      return { teamId, groupId };
+    }
+
+    it('삭제 — 감사 계보로 남겨야 할 행이 사라지지 않는다', async () => {
+      const { groupId } = await seedArchivedTeamGroup();
+
+      await expect(svc.removeSurveyGroup(groupId)).rejects.toBeInstanceOf(TeamNotFoundError);
+
+      const [row] = await db
+        .select({ id: surveyGroupsTable.id })
+        .from(surveyGroupsTable)
+        .where(eq(surveyGroupsTable.id, groupId));
+      expect(row).toBeDefined();
+    });
+
+    it('이름 변경 — 해산 시점 이름이 보존된다', async () => {
+      const { groupId } = await seedArchivedTeamGroup();
+
+      await expect(
+        svc.renameSurveyGroup({ groupId, name: '되살리기' }),
+      ).rejects.toBeInstanceOf(TeamNotFoundError);
+
+      const [row] = await db
+        .select({ name: surveyGroupsTable.name })
+        .from(surveyGroupsTable)
+        .where(eq(surveyGroupsTable.id, groupId));
+      expect(row?.name).toBe('해산 전 그룹');
+    });
+
+    it('생성 — 죽은 팀에 새 폴더가 붙지 않는다', async () => {
+      const { teamId } = await seedArchivedTeamGroup();
+
+      await expect(
+        svc.createSurveyGroup(MEMBER_ID, { teamId, name: '사후 그룹' }),
+      ).rejects.toBeInstanceOf(TeamNotFoundError);
+    });
+
+    it('정렬 — 죽은 팀의 순서도 고칠 수 없다', async () => {
+      const { teamId, groupId } = await seedArchivedTeamGroup();
+
+      await expect(
+        svc.reorderSurveyGroups({ teamId, orderedGroupIds: [groupId] }),
+      ).rejects.toBeInstanceOf(TeamNotFoundError);
+    });
   });
 
   it('타 팀 그룹 id 가 정렬 배열에 섞여도 그 행에는 닿지 않는다', async () => {

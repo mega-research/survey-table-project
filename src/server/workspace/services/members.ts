@@ -171,6 +171,47 @@ export async function addMember(
   });
 }
 
+/**
+ * 이 사람의 **활성 팀 소속을 전부 끊는다** — 재입사가 새 소속을 앉히기 전의 정리 (티켓 14).
+ *
+ * 퇴사는 멤버십 행을 지우지 않는다. 팀 상세가 비활성 멤버를 표식과 함께 계속 보여주기
+ * 위해서다(안 보이면 퇴사한 사람이 팀장 자리를 차지한 채 남아 있는 것을 아무도 눈치채지
+ * 못한다). 그래서 재입사 시점에는 옛 소속이 그대로 남아 있고, 정리하지 않으면 새 소속
+ * 배정이 「이미 다른 팀에 소속됨」으로 막힌다 — .pen FLOW 9-4 의 「이전 팀 멤버십은 자동
+ * 복구하지 않습니다」가 지켜지지 않는 것이기도 하다.
+ *
+ * **마지막 팀장 가드를 부르지 않는다.** 그 가드가 세는 것은 활성 팀장이고 이 시점의 대상은
+ * 이미 비활성(퇴사)이라 애초에 세어지지 않는다 — 부르면 "유일한 팀장이 퇴사해 활성 팀장이
+ * 0명" 인 팀에서 재입사가 영구히 막힌다(AGENTS.md 「마지막 팀장 가드가 지키는 것」).
+ *
+ * 팀 키를 **id 오름차순으로** 잡는다. 겸직이면 여러 팀을 한 트랜잭션에서 만지는 유일한
+ * 흐름이라, 순서를 고정하지 않으면 서로 다른 재입사 둘이 사이클을 만든다.
+ */
+export async function clearActiveMembershipsInTx(
+  tx: DbTransaction,
+  actorUserId: string,
+  userId: string,
+): Promise<void> {
+  const rows = await tx
+    .select({ id: teamMembers.id, teamId: teamMembers.teamId, role: teamMembers.role })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+    .where(and(eq(teamMembers.userId, userId), eq(teams.status, 'active')))
+    .orderBy(asc(teamMembers.teamId));
+
+  for (const row of rows) {
+    await lockTeamMembers(tx, row.teamId);
+    await tx.delete(teamMembers).where(eq(teamMembers.id, row.id));
+    await recordMemberEvent(tx, {
+      teamId: row.teamId,
+      targetUserId: userId,
+      actorUserId,
+      action: 'member_remove',
+      metadata: { fromRole: row.role },
+    });
+  }
+}
+
 /** 역할 변경 — 마지막 팀장 강등 금지. */
 export async function changeMemberRole(
   actorUserId: string,

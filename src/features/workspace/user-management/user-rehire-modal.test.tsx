@@ -67,6 +67,28 @@ describe('UserRehireModal', () => {
     expect(await screen.findByText('새 소속 팀을 선택하세요.')).toBeInTheDocument();
   });
 
+  it('팀에 소속될 수 없는 계정에는 팀 칸이 아예 없다', async () => {
+    // 채울 수 없는 필수 칸을 보여주면 그 계정은 영영 못 돌아오는 것처럼 보인다.
+    // guest·fieldwork 는 멤버십 자체가 금지고 슈퍼어드민은 팀 소속과 무관하다.
+    const user = userEvent.setup();
+    renderModal({ userType: 'guest' });
+
+    expect(screen.queryByLabelText(/새 소속 팀/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/팀 역할/)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
+    await user.click(screen.getByRole('button', { name: '재입사 처리' }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: null, teamRole: null }),
+    );
+  });
+
+  it('슈퍼어드민 퇴사자도 팀 없이 되살린다', () => {
+    renderModal({ isSuperadmin: true });
+    expect(screen.queryByLabelText(/새 소속 팀/)).not.toBeInTheDocument();
+  });
+
   it('이전 멤버십을 복구하지 않는다는 것을 말한다 (ADR-0010)', () => {
     renderModal();
     expect(

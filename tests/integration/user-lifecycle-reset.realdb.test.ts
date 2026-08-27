@@ -31,7 +31,7 @@ import { auth } from '@/lib/auth/server';
 import { UserNotFoundError, UserStatusTransitionError } from '@/server/auth/domain/users';
 import { changeUserStatus, createUser, resetUserPassword } from '@/server/auth/services/users';
 import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
-import { rehireUserWithTeam } from '@/server/workflows/user-rehire';
+import { RehireTeamAssignmentError, rehireUserWithTeam } from '@/server/workflows/user-rehire';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -41,7 +41,7 @@ const NEW_PASSWORD = 'temp-pw-4567';
 const createdUserIds: string[] = [];
 const createdTeamIds: string[] = [];
 
-/** 재입사가 배정할 목적지 팀. 티켓 14 부터 재입사는 팀 없이 성립하지 않는다. */
+/** 재입사가 배정할 목적지 팀. 티켓 14 부터 내부 일반 계정의 재입사는 팀 없이 성립하지 않는다. */
 async function seedTeam(): Promise<string> {
   const [team] = await db
     .insert(teams)
@@ -254,6 +254,138 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
 
     const row = await db.query.users.findFirst({ where: eq(users.id, id) });
     expect(row).toMatchObject({ jobTitle: '선임연구원' });
+  });
+
+  it('팀이 있던 사람도 재입사한다 — 옛 소속을 끊고 새 소속을 앉힌다', async () => {
+    // **퇴사는 멤버십 행을 지우지 않는다**(팀 상세가 비활성 멤버를 표식과 함께 보여줘야 하므로).
+    // 정리 단계가 없으면 「이미 다른 팀에 소속됨」으로 막혀 팀이 있던 사람은 아무도 재입사할
+    // 수 없다 — 실제로 그게 정상 동선이라 이 테스트가 없으면 기능 전체가 죽은 채로 초록이다.
+    const actorId = await seedActor();
+    const { id } = await seedUser(actorId, '옛소속');
+    const oldTeam = await seedTeam();
+    const newTeam = await seedTeam();
+    await db.insert(teamMembers).values({ teamId: oldTeam, userId: id, role: 'leader' });
+
+    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    // 퇴사해도 행은 남는다 — 이 사실이 위 정리 단계의 전제다.
+    expect(await getActiveTeamMemberships(id)).toHaveLength(1);
+
+    await rehireUserWithTeam(
+      { id: actorId, isSuperadmin: true },
+      {
+        action: 'rehire',
+        userId: id,
+        password: NEW_PASSWORD,
+        teamId: newTeam,
+        teamRole: 'member',
+      },
+    );
+
+    // 옛 팀은 끊기고 새 팀만 남는다(.pen 9-4 「이전 팀 멤버십은 자동 복구하지 않습니다」).
+    expect(await getActiveTeamMemberships(id)).toMatchObject([{ teamId: newTeam, role: 'member' }]);
+
+    // 누가 언제 뺐는지는 감사 행에만 남는다 — 멤버 행을 지우기 때문이다.
+    const events = await db
+      .select({ action: teamLifecycleEvents.action, teamId: teamLifecycleEvents.teamId })
+      .from(teamLifecycleEvents)
+      .where(eq(teamLifecycleEvents.targetUserId, id));
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { action: 'member_remove', teamId: oldTeam },
+        { action: 'member_add', teamId: newTeam },
+      ]),
+    );
+  });
+
+  it('유일한 팀장이었어도 재입사가 막히지 않는다', async () => {
+    // 마지막 팀장 가드가 세는 것은 **활성** 팀장이고 이 시점의 대상은 이미 퇴사 상태다.
+    // 정리 단계가 그 가드를 부르면 "활성 팀장 0명" 인 팀에서 재입사가 영구히 막힌다.
+    const actorId = await seedActor();
+    const { id } = await seedUser(actorId, '유일팀장');
+    const oldTeam = await seedTeam();
+    const newTeam = await seedTeam();
+    await db.insert(teamMembers).values({ teamId: oldTeam, userId: id, role: 'leader' });
+
+    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await rehireUserWithTeam(
+      { id: actorId, isSuperadmin: true },
+      { action: 'rehire', userId: id, password: NEW_PASSWORD, teamId: newTeam, teamRole: 'leader' },
+    );
+
+    expect(await getActiveTeamMemberships(id)).toMatchObject([{ teamId: newTeam, role: 'leader' }]);
+  });
+
+  it('팀에 소속될 수 없는 계정은 팀 없이 재입사한다', async () => {
+    // guest·fieldwork 는 멤버십 자체가 금지고(스펙 §1) 슈퍼어드민은 팀 소속과 무관하다.
+    // 팀을 요구하면 그 계정들은 한 번 퇴사한 뒤 영영 돌아올 수 없다.
+    const actorId = await seedActor();
+    const guestId = crypto.randomUUID();
+    await db.insert(users).values({
+      id: guestId,
+      name: '게스트',
+      email: `ticket04-guest-${guestId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'guest',
+    });
+    createdUserIds.push(guestId);
+
+    await changeUserStatus(actorId, { action: 'depart', userId: guestId });
+    await rehireUserWithTeam(
+      { id: actorId, isSuperadmin: true },
+      { action: 'rehire', userId: guestId, password: NEW_PASSWORD, teamId: null, teamRole: null },
+    );
+
+    expect(await statusOf(guestId)).toBe('active');
+    expect(await getActiveTeamMemberships(guestId)).toHaveLength(0);
+  });
+
+  it('팀에 소속될 수 없는 계정에 팀을 보내면 거부하고 전부 롤백한다', async () => {
+    const actorId = await seedActor();
+    const guestId = crypto.randomUUID();
+    await db.insert(users).values({
+      id: guestId,
+      name: '게스트2',
+      email: `ticket04-guest2-${guestId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'guest',
+    });
+    createdUserIds.push(guestId);
+    await changeUserStatus(actorId, { action: 'depart', userId: guestId });
+
+    await expect(
+      rehireUserWithTeam(
+        { id: actorId, isSuperadmin: true },
+        {
+          action: 'rehire',
+          userId: guestId,
+          password: NEW_PASSWORD,
+          teamId: await seedTeam(),
+          teamRole: 'member',
+        },
+      ),
+    ).rejects.toBeInstanceOf(RehireTeamAssignmentError);
+
+    // 계정은 여전히 퇴사 상태다 — 상태만 살아나는 창이 없다는 것이 이 흐름의 계약이다.
+    expect(await statusOf(guestId)).toBe('departed');
+  });
+
+  it('내부 일반 계정에 팀이 없으면 거부하고 전부 롤백한다', async () => {
+    const actorId = await seedActor();
+    const { id } = await seedUser(actorId, '팀누락');
+    await changeUserStatus(actorId, { action: 'depart', userId: id });
+
+    await expect(
+      rehireUserWithTeam(
+        { id: actorId, isSuperadmin: true },
+        { action: 'rehire', userId: id, password: NEW_PASSWORD, teamId: null, teamRole: null },
+      ),
+    ).rejects.toBeInstanceOf(RehireTeamAssignmentError);
+
+    expect(await statusOf(id)).toBe('departed');
   });
 
   it('모든 전이가 감사 행을 남긴다', async () => {

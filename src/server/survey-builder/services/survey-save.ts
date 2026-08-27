@@ -115,6 +115,47 @@ async function assertGroupsBelongToSurvey(
   if (rows.some((row) => row.surveyId !== surveyId)) throw new CrossSurveyRowError('group');
 }
 
+/**
+ * payload 가 **참조하는** 그룹이 이 설문 것인지 확인한다 (Codex 2차 리뷰).
+ *
+ * 위 두 함수는 upsert 되는 **행 자신의 id** 만 본다. 그런데 행이 들고 오는 부모 참조
+ * — `question.groupId` 와 `group.parentGroupId` — 는 그대로 쓰이고, DB FK 는 설문 경계를
+ * 모르는 전역 참조라 타 설문 그룹 id 를 그대로 받아준다. 그러면 내 설문의 질문이 남의 설문
+ * 그룹에 매달린 채 영속되고, 어느 화면으로도 고칠 수 없다(로더가 설문별로 그룹을 읽어 그
+ * 참조를 보여주지도 않는다).
+ *
+ * **없는 id 도 같은 사유로 접는다.** 갈라 두면 FK 오류(500)와 거부(FORBIDDEN)의 차이가
+ * 「그 그룹 id 가 존재하는가」를 알려주는 오라클이 된다 — 관문이 존재를 숨기려고 애쓰는
+ * 것과 같은 정보다.
+ *
+ * `knownIds` 는 같은 payload 가 새로 만드는 그룹이다. 그것들은 `surveyId` 를 명시해 쓰므로
+ * 정의상 이 설문 것이고, DB 에는 아직 없을 수 있어 조회로는 확인되지 않는다.
+ *
+ * 잠금이 `FOR SHARE` 인 것은 부모를 **읽기만** 하기 때문이다 — 같은 트랜잭션이 이미
+ * `FOR UPDATE` 로 잡은 행과도 충돌하지 않는다.
+ */
+const EMPTY_GROUP_IDS: ReadonlySet<string> = new Set();
+
+async function assertGroupRefsBelongToSurvey(
+  tx: DbTransaction,
+  refs: readonly (string | null | undefined)[],
+  surveyId: string,
+  knownIds: ReadonlySet<string>,
+): Promise<void> {
+  const ids = [...new Set(refs.filter((id): id is string => Boolean(id)))].filter(
+    (id) => !knownIds.has(id),
+  );
+  if (ids.length === 0) return;
+
+  const rows = await tx
+    .select({ id: questionGroups.id, surveyId: questionGroups.surveyId })
+    .from(questionGroups)
+    .where(inArray(questionGroups.id, ids))
+    .for('share');
+  const ownerBy = new Map(rows.map((row) => [row.id, row.surveyId]));
+  if (ids.some((id) => ownerBy.get(id) !== surveyId)) throw new CrossSurveyRowError('group');
+}
+
 function toQuestionRow(question: SurveyType['questions'][number], surveyId: string) {
   return ({
     id: question.id,
@@ -358,6 +399,13 @@ export async function saveSurveyDiff(
           preservedGroups.map((g) => g.id),
           surveyId,
         );
+        // 부모 참조도 같은 경계를 진다 — 쓰기 **전에** 본다(FK 오류로 갈리면 존재 오라클이 된다).
+        await assertGroupRefsBelongToSurvey(
+          tx,
+          preservedGroups.map((g) => g.parentGroupId),
+          surveyId,
+          newGroupIds,
+        );
         const groupValues = preservedGroups.map((group) => ({
           id: group.id,
           surveyId,
@@ -432,6 +480,15 @@ export async function saveSurveyDiff(
           tx,
           promotedQuestions.map((q) => q.id),
           surveyId,
+        );
+        // 질문이 매달릴 그룹도 이 설문 것이어야 한다 — FK 는 설문 경계를 모른다.
+        // 이 시점에는 payload 의 새 그룹이 위에서 이미 삽입돼 있으므로 조회만으로 충분하다
+        // (그룹 블록이 아예 없는 diff 라면 참조 대상은 원래부터 DB 에 있던 그룹이다).
+        await assertGroupRefsBelongToSurvey(
+          tx,
+          promotedQuestions.map((q) => q.groupId),
+          surveyId,
+          EMPTY_GROUP_IDS,
         );
 
         // 업서트 대상의 이전 행을 읽어 old 측에, 새 콘텐츠를 new 측에 넣는다
@@ -693,6 +750,13 @@ export async function saveSurveyWithDetails(
         surveyData.groups.map((g) => g.id),
         surveyId,
       );
+      // 부모 참조도 같은 경계를 진다 — 쓰기 **전에** 본다(FK 오류로 갈리면 존재 오라클이 된다).
+      await assertGroupRefsBelongToSurvey(
+        tx,
+        surveyData.groups.map((g) => g.parentGroupId),
+        surveyId,
+        newGroupIds,
+      );
 
       const groupValues = surveyData.groups.map((group) => ({
         id: group.id,
@@ -758,6 +822,14 @@ export async function saveSurveyWithDetails(
         tx,
         surveyData.questions.map((q) => q.id),
         surveyId,
+      );
+      // 질문이 매달릴 그룹도 이 설문 것이어야 한다 — 위에서 payload 그룹을 이미 삽입했으므로
+      // 조회만으로 충분하다.
+      await assertGroupRefsBelongToSurvey(
+        tx,
+        surveyData.questions.map((q) => q.groupId),
+        surveyId,
+        EMPTY_GROUP_IDS,
       );
 
       if (surveyData.questions.length > 0) {
