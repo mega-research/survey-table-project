@@ -5,6 +5,7 @@ import {
   assertSurveyCapabilityRpc,
   toRpcSurveyAccessError,
 } from '@/server/rpc-survey-access';
+import { toRpcWorkScopeError } from '@/server/rpc-work-scope';
 
 import {
   CreateSurveyInput,
@@ -37,7 +38,10 @@ function rethrowCreateError(error: unknown): never {
   if (error instanceof SurveyOwnershipRequiredError) {
     throw new ORPCError('CONFLICT', { message: error.message });
   }
-  throw toRpcSurveyAccessError(error);
+  // 생성 경로는 작업 범위를 먼저 판정한다(resolveNewSurveyOwnership) — 일반 사용자가
+  // scope='system' 을 실어 보내면 코어가 거부하고, 매핑이 없으면 그 거부가 500 이 된다.
+  // 두 매퍼 모두 해당 없는 예외는 그대로 돌려주므로 겹쳐 써도 서로를 삼키지 않는다.
+  throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
 }
 
 const ensure = authed

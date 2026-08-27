@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { toRpcWorkScopeError } from '@/server/rpc-work-scope';
 
 import {
   AllTagsOutput,
@@ -42,7 +43,12 @@ const list = authed
   .input(SurveyListInput)
   .output(SurveyListOutput)
   .handler(({ context, input }) =>
-    surveySvc.getSurveyListWithCounts(context.user, input.scope ?? null),
+    surveySvc
+      .getSurveyListWithCounts(context.user, input.scope ?? null)
+      // 일반 사용자의 system 요청은 코어가 거부한다 — 매핑이 없으면 그 거부가 500 이 된다.
+      .catch((error: unknown) => {
+        throw toRpcWorkScopeError(error);
+      }),
   );
 
 /** 설문 단일 조회(cache). */
