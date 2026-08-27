@@ -47,6 +47,8 @@ function contextFor(userId: string): ORPCContext {
 
 const createdSurveyIds: string[] = [];
 const createdGroupIds: string[] = [];
+/** 케이스가 추가로 심은 사용자 — 설문이 소유자로 참조하므로 설문을 지운 뒤에 정리한다. */
+const createdUserIds: string[] = [];
 
 async function seedUser(id: string): Promise<void> {
   await db.insert(usersTable).values({
@@ -131,7 +133,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       .delete(teamMembersTable)
       .where(inArray(teamMembersTable.userId, [MEMBER_ID, OUTSIDER_ID]));
     await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B]));
-    await db.delete(usersTable).where(inArray(usersTable.id, [MEMBER_ID, OUTSIDER_ID]));
+    await db
+      .delete(usersTable)
+      .where(inArray(usersTable.id, [MEMBER_ID, OUTSIDER_ID, ...createdUserIds]));
   });
 
   it('팀원이 그룹을 만들고 미분류 설문을 담고 케밥으로 옮기는 전 과정', async () => {
@@ -252,6 +256,29 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     expect(
       (await member.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' })).map((c) => c.id),
     ).not.toContain(pendingId);
+  });
+
+  it('팀원에게 숨긴 invite_only 설문은 담기 후보에 제목조차 나오지 않는다', async () => {
+    const mine = await seedSurvey(TEAM_A, '내가 만든 초대 전용', MEMBER_ID);
+    await db
+      .update(surveysTable)
+      .set({ visibility: 'invite_only' })
+      .where(eq(surveysTable.id, mine));
+
+    // 같은 팀의 다른 사람이 소유한 invite_only — 팀원에게는 존재 자체가 숨겨진다(스펙 §3).
+    const leaderId = crypto.randomUUID();
+    await seedUser(leaderId);
+    createdUserIds.push(leaderId);
+    const hidden = await seedSurvey(TEAM_A, '남의 초대 전용 설문', leaderId);
+    await db
+      .update(surveysTable)
+      .set({ visibility: 'invite_only' })
+      .where(eq(surveysTable.id, hidden));
+
+    const candidates = await member.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' });
+
+    // 소유자인 나는 내 것을 본다. 남의 invite_only 는 목록에서 아예 빠진다.
+    expect(candidates.map((c) => c.id)).toEqual([mine]);
   });
 
   it('담기 후보 검색은 제목 부분 일치로 좁힌다', async () => {

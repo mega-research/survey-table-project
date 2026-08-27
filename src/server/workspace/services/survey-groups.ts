@@ -162,14 +162,18 @@ export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActio
 }
 
 /**
- * 「설문 담기」 후보 — 그 팀의 **미분류** 설문만 (.pen FLOW 2-2).
+ * 「설문 담기」 후보 — 그 팀의 **미분류** 설문 중 **요청자가 볼 수 있는 것만** (.pen FLOW 2-2).
+ *
+ * 팀 소속이라고 팀의 모든 설문이 보이는 것은 아니다 — `invite_only` 는 소유 팀 팀원에게만
+ * 숨긴다(스펙 §3). survey.view 없는 행을 "편집 권한 없음" 으로 그려 남겨두면 제목이 그대로
+ * 새어 목록 화면이 숨긴 것을 이 패널이 보여준다. 그래서 **거르는 것이 먼저이고**
+ * `canMove` 는 그다음이다.
  *
  * `canMove` 는 근사가 아니라 서버 판정 그대로다: 주체를 한 번 싣고
  * resolveSurveyCapabilities(순수)를 행마다 돌린다. 목록 화면의 canEditSurveyCard 처럼
- * 규칙을 두 벌 쓰면 "선택은 되는데 담기면 거부" 가 생긴다.
- *
- * 요구는 survey.edit + surveyGroup.manage 둘 다다 — 참여자(티켓 18)는 편집권은 있어도
- * 그 팀의 그룹 구조를 만질 자격이 없다.
+ * 규칙을 두 벌 쓰면 "선택은 되는데 담기면 거부" 가 생긴다. 요구는 survey.edit +
+ * surveyGroup.manage 둘 다다 — 참여자(티켓 18)는 편집권은 있어도 그 팀의 그룹 구조를 만질
+ * 자격이 없다. 그 조합이 「볼 수는 있지만 담을 수는 없는」 행을 만든다.
  */
 export async function listUngroupedSurveys(input: {
   user: SurveyAccessUser;
@@ -198,14 +202,17 @@ export async function listUngroupedSurveys(input: {
     .orderBy(asc(surveys.title));
 
   const subject = await loadAccessSubject(input.user);
-  return rows.map((row) => {
+  return rows.flatMap((row) => {
     const caps = resolveSurveyCapabilities(subject, row, null);
-    return {
-      id: row.id,
-      title: row.title,
-      updatedAt: row.updatedAt,
-      canMove: caps.has('survey.edit') && caps.has('surveyGroup.manage'),
-    };
+    if (!caps.has('survey.view')) return [];
+    return [
+      {
+        id: row.id,
+        title: row.title,
+        updatedAt: row.updatedAt,
+        canMove: caps.has('survey.edit') && caps.has('surveyGroup.manage'),
+      },
+    ];
   });
 }
 
