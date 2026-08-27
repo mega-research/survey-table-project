@@ -14,6 +14,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
+import { useWorkScope } from '@/shared/lib/work-scope-context';
+
+import { AdminShell } from './admin-shell';
 
 const refresh = vi.fn();
 const writeWorkScopeCookie = vi.fn();
@@ -34,9 +37,6 @@ vi.mock('@/shared/lib/work-scope-cookie', () => ({
 vi.mock('./sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar" />,
 }));
-
-import { AdminShell } from './admin-shell';
-import { useWorkScope } from '@/shared/lib/work-scope-context';
 
 const TEAM_A = '11111111-1111-4111-8111-111111111111';
 const TEAM_B = '22222222-2222-4222-8222-222222222222';

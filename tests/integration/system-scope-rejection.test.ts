@@ -7,29 +7,30 @@
  *
  *  ① 입력(RPC) — 화면이 명시적으로 지목한 값. **거부한다.** 조용히 자기 팀으로 접으면
  *     "전체를 봤다" 고 믿는 화면이 부분 목록을 전체로 표시한다(work-scope 의 계약).
- *  ② 쿠키 — 브라우저 편의값. 화면(admin 셸·분석 목록)은 **기본 범위로 접는다** — 강등된
- *     슈퍼어드민의 잔존 쿠키로 화면이 통째로 잠기지 않게. 접는 쪽이 더 좁으므로 새지 않는다.
- *     같은 쿠키가 **쓰기 경로**(설문 생성)로 들어오면 거부다 — 생성은 접을 기본값이 없다.
+ *  ② 쿠키 — 브라우저 편의값. **기본 범위로 접는다** — 강등된 슈퍼어드민의 잔존 쿠키로
+ *     화면이 통째로 잠기지 않게. 접는 쪽이 언제나 더 좁으므로 시스템 범위는 얻지 못한다.
+ *     읽기(화면)와 쓰기(설문 생성)가 같은 처리를 진다 — 갈라 두면 스위처에는 팀이 보이는데
+ *     생성만 막히는 상태가 생긴다.
  *  ③ URL — 시스템 범위 화면(팀 관리·사용자 관리·재배치 센터)으로의 직접 진입.
- *     **notFound 로 접는다.**
+ *     **notFound 로 접는다.** 그 축은 파일 스캔 가드라 `tests/repo/system-scope-page-guards`
+ *     에 산다(레포 관례: 소스를 훑는 드리프트 가드는 tests/repo).
  *
  * ①이 예전에는 500 이었다(WorkScopeError 에 RPC 매핑이 없었다). 데이터가 새지는 않았지만
  * "거부" 가 아니라 크래시였고 Sentry 에도 예상 못 한 오류로 쌓였다 — 티켓 15 가 매핑을 붙였다.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { createRouterClient } from '@orpc/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ORPCContext } from '@/server/context';
 import { surveys } from '@/server/survey-builder/procedures/surveys';
 import { read } from '@/server/survey-builder/procedures/read';
-import { resolveWorkScopeFor, WorkScopeError } from '@/server/work-scope';
+import { resolveWorkScope, resolveWorkScopeFor, WorkScopeError } from '@/server/work-scope';
 import { SYSTEM_SCOPE, WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
-const APP_DIR = resolve(REPO_ROOT, 'src/app');
 
 const IDS = vi.hoisted(() => ({
   MEMBER_ID: '4b000000-0000-4000-8000-0000000e0001',
@@ -85,19 +86,10 @@ vi.mock('@/db', () => {
 });
 
 function clientFor(userId: string, isSuperadmin: boolean) {
-  const context: ORPCContext = {
-    db: {} as never,
-    user: {
-      id: userId,
-      email: `${userId}@megaresearch.co.kr`,
-      name: '테스터',
-      status: 'active',
-      isSuperadmin,
-      userType: 'internal',
-    },
-    headers: new Headers(),
-  };
-  return createRouterClient({ surveys, read }, { context });
+  return createRouterClient(
+    { surveys, read },
+    { context: internalActorContext({ id: userId, isSuperadmin }) },
+  );
 }
 
 const member = clientFor(IDS.MEMBER_ID, false);
@@ -158,11 +150,19 @@ describe('① 입력: 일반 사용자의 system 요청은 FORBIDDEN 이다', ()
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('② 쿠키: system 이 남아 있어도 시스템 범위를 얻지 못한다', () => {
-  it('쓰기 경로(설문 생성)는 거부한다 — 접을 기본 목적지가 없다', async () => {
-    // 입력에 scope 가 없으면 서비스가 쿠키를 읽는다(resolveWorkScope). 그 값이 system 이면
-    // 일반 사용자에게는 거부다 — 조용히 첫 팀에 만들어 주면 "어느 팀에 만든 것인지" 를
-    // 사용자도 서버도 말할 수 없게 된다.
-    await expect(member.surveys.create(NEW_SURVEY)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  it('쓰기 경로(설문 생성)가 읽는 쿠키도 접힌다 — 결과는 자기 팀이다', async () => {
+    // 입력에 scope 가 없으면 서비스가 쿠키를 읽는다(resolveWorkScope). 잔존 'system' 은
+    // 거부가 아니라 기본 범위로 접힌다 — 화면이 이미 접은 것과 같은 처리라야, 스위처에는
+    // 팀 A 가 보이는데 생성만 막히는 상태가 생기지 않는다.
+    await expect(
+      resolveWorkScope({ id: IDS.MEMBER_ID, isSuperadmin: false, userType: 'internal' }, null),
+    ).resolves.toEqual({ kind: 'team', teamId: IDS.TEAM_ID });
+  });
+
+  it('슈퍼어드민의 같은 쿠키는 접히지 않는다 — 접기가 뭉뚱그린 것이 아니다', async () => {
+    await expect(
+      resolveWorkScope({ id: IDS.ADMIN_ID, isSuperadmin: true, userType: 'internal' }, null),
+    ).resolves.toEqual({ kind: 'system' });
   });
 
   it('읽기 화면은 기본 범위로 접는다 — 접힌 결과는 언제나 자기 팀이다', () => {
@@ -187,69 +187,6 @@ describe('② 쿠키: system 이 남아 있어도 시스템 범위를 얻지 못
       const source = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
       expect(source, `${rel} 이 쿠키 범위를 해석한다`).toContain('WORK_SCOPE_COOKIE');
       expect(source, `${rel} 에 접기 처리가 없다`).toMatch(/catch/);
-    }
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ③ URL 축 — 시스템 범위 화면으로의 직접 진입
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * 팀 경계로 좁힐 수 없는 화면 — 전부 슈퍼어드민 전용이어야 한다.
- *
- * 재배치 센터의 사람·설문은 **어느 팀에도 속하지 않아** 팀장에게 하나라도 열면 전사 열람이
- * 되고(티켓 14), 팀 관리 목록과 사용자 관리는 조직 구조 자체를 다룬다.
- */
-const SYSTEM_SCOPE_ROUTES = [
-  'admin/teams',
-  'admin/users',
-  'admin/reassignment',
-];
-
-/** 그 아래여도 팀 경계로 좁혀지는 화면 — 사유를 함께 적는다. */
-const TEAM_SCOPED_EXCEPTIONS: Record<string, string> = {
-  'admin/teams/[teamId]/page.tsx':
-    '팀 상세는 그 팀 소속도 연다 — 슈퍼어드민 전용이 아니고 서비스가 NOT_FOUND 로 접는다',
-};
-
-function collectPages(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) found.push(...collectPages(full));
-    else if (entry === 'page.tsx') found.push(full);
-  }
-  return found;
-}
-
-describe('③ URL: 시스템 범위 화면은 슈퍼어드민 가드를 진다', () => {
-  const pages = collectPages(APP_DIR).map((full) => ({
-    rel: relative(APP_DIR, full).replaceAll('\\', '/'),
-    source: readFileSync(full, 'utf8'),
-  }));
-
-  it('탐지기가 실제로 그 화면들을 찾아낸다', () => {
-    const matched = pages.filter((page) =>
-      SYSTEM_SCOPE_ROUTES.some((route) => page.rel.startsWith(`${route}/`)),
-    );
-    // 라우트가 사라지거나 경로가 바뀌면 아래 검사가 조용히 0건이 된다.
-    expect(matched.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('예외를 뺀 전부가 requireSuperadminPage 를 부른다', () => {
-    const unguarded = pages
-      .filter((page) => SYSTEM_SCOPE_ROUTES.some((route) => page.rel.startsWith(`${route}/`)))
-      .filter((page) => !(page.rel in TEAM_SCOPED_EXCEPTIONS))
-      .filter((page) => !/\brequireSuperadminPage\s*\(/.test(page.source))
-      .map((page) => page.rel);
-    expect(unguarded).toEqual([]);
-  });
-
-  it('예외 목록은 실재하는 화면만 담는다', () => {
-    const known = new Set(pages.map((page) => page.rel));
-    for (const rel of Object.keys(TEAM_SCOPED_EXCEPTIONS)) {
-      expect(known, `${rel} 가 사라졌다면 예외 목록에서도 지울 것`).toContain(rel);
     }
   });
 });

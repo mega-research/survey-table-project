@@ -13,7 +13,8 @@
  *  ② **입력 키** — zod object 의 shape 키. 비-object 입력(z.custom·z.union)은 키를 못 읽으므로
  *     `hasObjectInput: false` 로 표시하고, 인벤토리가 그런 표면을 따로 다루게 한다.
  *
- * 이 파일은 `.test.ts` 가 아니라 vitest include 에 잡히지 않는다(_helpers 와 같은 관례).
+ * 확장자가 `.test.ts` 가 아니라 vitest include 패턴에 잡히지 않는다 — 테스트가 아니라
+ * 테스트가 쓰는 조각이다.
  */
 import { account, authed, pub, scoped, superadmin } from '@/server/orpc';
 import { router } from '@/server/router';

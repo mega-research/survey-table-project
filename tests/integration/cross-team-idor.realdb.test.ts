@@ -20,10 +20,11 @@
  */
 import { createRouterClient } from '@orpc/server';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 import {
+  contactAttempts,
   contactTargets,
   mailCampaigns,
   mailTemplates,
@@ -36,10 +37,13 @@ import {
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
-import type { ORPCContext } from '@/server/context';
 import { loadSurveyCapabilities } from '@/server/survey-access';
+import { getSurveyListWithCounts } from '@/server/survey-builder/services/survey-read';
 import { attempts } from '@/server/contacts/procedures/attempts';
 import { campaigns } from '@/server/mail/procedures/campaigns';
+import { preview } from '@/server/mail/procedures/preview';
+import { unsubscribe } from '@/server/mail/procedures/unsubscribe';
+import { edit } from '@/server/survey-response/procedures/edit';
 import { targets } from '@/server/contacts/procedures/targets';
 import { groups as questionGroupProcedures } from '@/server/survey-builder/procedures/groups';
 import { questions as questionProcedures } from '@/server/survey-builder/procedures/questions';
@@ -47,6 +51,24 @@ import { templates } from '@/server/mail/procedures/templates';
 import { manage } from '@/server/survey-response/procedures/manage';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
+import { internalActorContext } from '@tests/helpers/rpc-context';
+
+/**
+ * 콘솔 서비스 일부는 요청 스코프(`next/headers`)를 읽어 실/테스트 파티션을 정한다.
+ * realdb 스위트는 요청 컨텍스트 밖에서 돌기 때문에 빈 쿠키·헤더를 준다 — 판정은 결국
+ * 설문의 testModeEnabled 로 떨어지므로 이 목이 팀 경계 검증에 개입하지 않는다.
+ */
+/**
+ * 데이터 스코프 판정은 「이 뷰어가 게스트인가」를 세션으로 묻는다. 이 스위트는 주체를
+ * 직접 만들어 procedure 컨텍스트로 넣으므로 세션이 없다 — 게스트가 아님만 알려 준다.
+ * 팀 경계 판정은 컨텍스트의 user 로 돌아가므로 이 목이 개입하지 않는다.
+ */
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: async () => false }));
+
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined, getAll: () => [] }),
+  headers: async () => new Headers(),
+}));
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -65,21 +87,6 @@ const createdUserIds = [SUPERADMIN_ID, A_LEADER_ID, A_MEMBER_ID, B_LEADER_ID, UN
 const createdTeamIds: string[] = [];
 const createdSurveyIds: string[] = [];
 
-function contextFor(userId: string, isSuperadmin = false): ORPCContext {
-  return {
-    db: {} as never,
-    user: {
-      id: userId,
-      email: `${userId}@example.com`,
-      name: '테스터',
-      status: 'active',
-      isSuperadmin,
-      userType: 'internal',
-    },
-    headers: new Headers(),
-  };
-}
-
 /** A팀 팀장으로 부르는 클라이언트 — 자기 팀 설문에서는 전권이다. */
 const aLeader = createRouterClient(
   {
@@ -87,12 +94,15 @@ const aLeader = createRouterClient(
     attempts,
     templates,
     campaigns,
+    preview,
+    unsubscribe,
+    edit,
     manage,
     questions: questionProcedures,
     questionGroups: questionGroupProcedures,
     surveyGroups,
   },
-  { context: contextFor(A_LEADER_ID) },
+  { context: internalActorContext({ id: A_LEADER_ID }) },
 );
 
 interface Fixture {
@@ -112,6 +122,7 @@ interface Fixture {
   responseBId: string;
   templateBId: string;
   campaignBId: string;
+  attemptBId: string;
   questionBId: string;
   questionGroupBId: string;
 }
@@ -228,6 +239,14 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
       status: 'completed',
     });
 
+    const attemptBId = crypto.randomUUID();
+    await db.insert(contactAttempts).values({
+      id: attemptBId,
+      contactTargetId: contactBId,
+      attemptNo: 1,
+      resultCode: '부재',
+    });
+
     const templateBId = crypto.randomUUID();
     await db.insert(mailTemplates).values({
       id: templateBId,
@@ -282,6 +301,7 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
       responseBId,
       templateBId,
       campaignBId,
+      attemptBId,
       questionBId,
       questionGroupBId,
     };
@@ -359,13 +379,25 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
   // ───────────────────────────────────────────────────────────────────────────
 
   describe('내 설문 + 남의 하위 행 = 아무 일도 일어나지 않는다', () => {
+    /** 관문·스코프 조건이 낸 거부. 500 은 여기 없다 — 사고와 거부를 가르는 목록이다. */
+    const REFUSAL_CODES = new Set(['NOT_FOUND', 'FORBIDDEN', 'CONFLICT', 'BAD_REQUEST']);
+
     /**
      * 거부의 **코드**는 표면마다 다르다 — 없는 행이면 NOT_FOUND, 소속 불일치면 CONFLICT.
      * 지켜야 하는 계약은 코드가 아니라 「남의 행이 그대로다」이므로 여기서는 거부만 확인하고
      * 행의 생존은 각 검사가 DB 를 직접 읽어 확인한다.
      */
     async function expectRejected(promise: Promise<unknown>): Promise<void> {
-      await expect(promise).rejects.toBeDefined();
+      const error = await promise.then(
+        (value) => {
+          throw new Error(`거부돼야 하는데 통과했다: ${JSON.stringify(value)}`);
+        },
+        (err: unknown) => err,
+      );
+      const code = (error as { code?: string }).code;
+      // **의도한 거부**여야 한다. 아무 예외나 통과시키면 500(관문이 아니라 사고로 멈춘 것)도
+      // 초록이 되어, 실제로는 스코프 조건이 빠졌는데 다른 데서 터진 경우를 못 가른다.
+      expect(REFUSAL_CODES, `의도한 거부가 아니다: ${String(error)}`).toContain(code);
     }
 
     /**
@@ -395,12 +427,93 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
       expect(row?.attrs).toEqual({ 이름: 'B팀 응답자' });
     });
 
-    it('결과코드 회차 쓰기', async () => {
+    it('결과코드 회차 쓰기 3종', async () => {
       await expectRejected(
         aLeader.attempts.add({
           surveyId: fx.surveyAId,
           contactTargetId: fx.contactBId,
           resultCode: '완료',
+        }),
+      );
+      await expectRejected(
+        aLeader.attempts.update({
+          surveyId: fx.surveyAId,
+          contactTargetId: fx.contactBId,
+          id: fx.attemptBId,
+          resultCode: '탈취',
+        }),
+      );
+      await expectRejected(
+        aLeader.attempts.remove({
+          surveyId: fx.surveyAId,
+          contactTargetId: fx.contactBId,
+          id: fx.attemptBId,
+        }),
+      );
+
+      const [row] = await db
+        .select({ resultCode: contactAttempts.resultCode })
+        .from(contactAttempts)
+        .where(eq(contactAttempts.id, fx.attemptBId));
+      expect(row?.resultCode).toBe('부재');
+    });
+
+    it('수신거부 해제 — 남의 컨택은 건드리지 못한다', async () => {
+      // 이 표면은 예외가 아니라 **결과 객체**로 거부한다(화면이 문구를 그대로 띄운다).
+      // 거부의 모양이 표면마다 다른 것 자체는 문제가 아니지만, 적어 두지 않으면 다음 사람이
+      // "예외가 안 났으니 통과했다" 로 읽는다.
+      await expect(
+        aLeader.unsubscribe.revertByContactId({
+          surveyId: fx.surveyAId,
+          contactId: fx.contactBId,
+        }),
+      ).resolves.toMatchObject({ ok: false });
+    });
+
+    it('관리자 응답 수정 — 남의 응답은 열리지 않는다', async () => {
+      await expectRejected(
+        aLeader.edit.saveAdminEdit({
+          surveyId: fx.surveyAId,
+          responseId: fx.responseBId,
+          questionResponses: { q1: '탈취' },
+          versionId: crypto.randomUUID(),
+        }),
+      );
+
+      const [row] = await db
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, fx.responseBId));
+      expect(row?.questionResponses).toEqual({});
+    });
+
+    it('메일 미리보기·발송 후보 — 남의 컨택·템플릿을 끌어오지 못한다', async () => {
+      // 미리보기 샘플은 「컨택 0건이면 null」이 계약이라 거부도 null 이다 — 조회 자체가
+      // surveyId 로 좁혀져 남의 컨택은 애초에 안 잡힌다(수신거부 해제와 같은 무예외 부류).
+      await expect(
+        aLeader.preview.sample({ surveyId: fx.surveyAId, contactTargetId: fx.contactBId }),
+      ).resolves.toBeNull();
+      // 프리플라이트는 mutation 이 아니라 **집계 보고**라 거부도 숫자로 나온다.
+      // 남의 컨택이 발송 후보로 서지 않는다는 것이 여기서 확인해야 할 사실이다.
+      await expect(
+        aLeader.campaigns.previewPreflight({
+          surveyId: fx.surveyAId,
+          selectedContactIds: [fx.contactBId],
+        }),
+      ).resolves.toMatchObject({ validCount: 0, notFoundCount: 1 });
+      await expectRejected(
+        aLeader.campaigns.create({
+          surveyId: fx.surveyAId,
+          mailTemplateId: fx.templateBId,
+          title: '탈취 캠페인',
+          contactTargetIds: [fx.contactBId],
+        }),
+      );
+      await expectRejected(
+        aLeader.campaigns.sendSingle({
+          surveyId: fx.surveyAId,
+          contactTargetId: fx.contactBId,
+          mailTemplateId: fx.templateBId,
         }),
       );
     });
@@ -516,6 +629,42 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
       expect(group?.name).toBe('B팀 문항 그룹');
     });
 
+    it('정렬 — 남의 행 id 가 섞이면 통째로 거부한다', async () => {
+      await expectRejected(
+        aLeader.questions.reorder({ surveyId: fx.surveyAId, questionIds: [fx.questionBId] }),
+      );
+      await expectRejected(
+        aLeader.questionGroups.reorder({
+          surveyId: fx.surveyAId,
+          groupIds: [fx.questionGroupBId],
+        }),
+      );
+    });
+
+    it('참조 주입 — 내 질문을 남의 팀 그룹에 매달지 못한다', async () => {
+      // 행 자체는 내 것이라 위 검사들이 못 잡는 축이다. FK 는 그룹의 존재만 보고 설문
+      // 경계를 모르며 parentGroupId 에는 FK 조차 없다(티켓 15).
+      await expectRejected(
+        aLeader.questions.create({
+          surveyId: fx.surveyAId,
+          id: crypto.randomUUID(),
+          groupId: fx.questionGroupBId,
+          type: 'text',
+          title: '주입 질문',
+          order: 0,
+        }),
+      );
+      await expectRejected(
+        aLeader.questionGroups.create({
+          surveyId: fx.surveyAId,
+          id: crypto.randomUUID(),
+          name: '주입 그룹',
+          parentGroupId: fx.questionGroupBId,
+          order: 0,
+        }),
+      );
+    });
+
     it('설문 그룹 담기·이동 — 남의 팀 설문은 내 폴더에 들어오지 않는다', async () => {
       await expectRejected(
         aLeader.surveyGroups.collect({ groupId: fx.groupAId, surveyIds: [fx.surveyBId] }),
@@ -565,9 +714,6 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
 
   describe('목록 조회는 팀 밖 설문을 담지 않는다', () => {
     it('B팀 설문은 A팀 사람의 어떤 범위에서도 나오지 않는다', async () => {
-      const { getSurveyListWithCounts } = await import(
-        '@/server/survey-builder/services/survey-read'
-      );
       for (const userId of [A_LEADER_ID, A_MEMBER_ID]) {
         const result = await getSurveyListWithCounts(
           { id: userId, isSuperadmin: false, userType: 'internal' },
@@ -581,9 +727,6 @@ describe.skipIf(!isLocalDb)('교차 팀 IDOR (real local DB)', () => {
     });
 
     it('invite_only 는 같은 팀 팀원의 목록에서만 빠진다', async () => {
-      const { getSurveyListWithCounts } = await import(
-        '@/server/survey-builder/services/survey-read'
-      );
       const asMember = await getSurveyListWithCounts(
         { id: A_MEMBER_ID, isSuperadmin: false, userType: 'internal' },
         fx.teamAId,

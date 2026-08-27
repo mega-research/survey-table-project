@@ -23,9 +23,10 @@
 import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ORPCContext } from '@/server/context';
 import { router } from '@/server/router';
 import * as gate from '@/server/rpc-survey-access';
+import * as accessCore from '@/server/survey-access';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 import {
   enumerateProcedures,
   isInternalBase,
@@ -56,28 +57,12 @@ const { ACTOR_ID, FOREIGN_SURVEY_ID, FOREIGN_CHILD_ID } = IDS;
 // 모킹 — surveys 조회만 살리고 나머지는 전부 사고로 만든다
 // ─────────────────────────────────────────────────────────────────────────────
 
-vi.mock('@/db', async () => {
+vi.mock('@/db', async (importOriginal) => {
+  // importOriginal 스프레드가 필수다 — `@/db` 는 스키마를 통째로 되내보내므로, 팩토리가
+  // `{ db }` 만 돌려주면 테이블 export 가 사라지고 전 표면이 「없는 설문」으로 초록이 된다.
+  const actual = await importOriginal<typeof import('@/db')>();
+  const { createDbStub } = await import('@tests/helpers/db-stub');
   const { surveyGroups, surveys } = await import('@/db/schema');
-
-  /** 어떤 체이닝(where·limit·innerJoin·orderBy…)도 받아 결과로 resolve 하는 스텁. */
-  function resolving(rows: unknown[]): unknown {
-    const chain: unknown = new Proxy(
-      {},
-      {
-        get(_target, prop) {
-          if (prop === 'then') {
-            return (onFulfilled: (value: unknown) => unknown) => onFulfilled(rows);
-          }
-          return () => chain;
-        },
-      },
-    );
-    return chain;
-  }
-
-  function explode(): never {
-    throw new Error(IDS.SERVICE_REACHED);
-  }
 
   const foreignSurveyRow = {
     id: IDS.FOREIGN_SURVEY_ID,
@@ -88,59 +73,24 @@ vi.mock('@/db', async () => {
     deletedAt: null,
   };
 
-  /**
-   * 조회는 두 테이블만 살려 둔다.
-   *  - `surveys` : 관문이 판정에 쓰는 행. 없으면 "없는 설문" 이 되어 팀 경계가 아니라
-   *    존재 여부를 검사하는 꼴이 된다.
-   *  - `survey_groups` : 담기 표면은 **그룹 구조 관문이 먼저** 선다. 그것을 통과시켜야
-   *    그 뒤의 설문 관문이 실제로 검증된다 — 그룹에서 막히면 설문 관문은 돌지도 않는다.
-   */
-  const select = () => ({
-    from: (table: unknown) => {
-      if (table === surveys) return resolving([foreignSurveyRow]);
-      if (table === surveyGroups) return resolving([{ teamId: IDS.MY_TEAM_ID }]);
-      return resolving([]);
-    },
-  });
-
-  const relationalQuery = new Proxy(
-    {},
-    {
-      get(_target, table) {
-        if (table !== 'surveys') return explode();
-        return {
-          findFirst: async () => foreignSurveyRow,
-          findMany: async () => [foreignSurveyRow],
-        };
-      },
-    },
-  );
-
-  /**
-   * 트랜잭션은 열어 준다 — 관문이 서비스 트랜잭션 **안**에 있는 경로(saveWithDetails)를
-   * 검증하려면 tx 가 열려야 한다. 쓰기는 여전히 전부 사고이므로 신호는 살아 있다.
-   */
-  const txStub = {
-    select,
-    selectDistinct: select,
-    insert: explode,
-    update: explode,
-    delete: explode,
-    execute: explode,
-    query: relationalQuery,
-  };
-
   return {
-    db: {
-      select,
-      selectDistinct: select,
-      insert: explode,
-      update: explode,
-      delete: explode,
-      execute: explode,
-      transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(txStub),
-      query: relationalQuery,
-    },
+    ...actual,
+    db: createDbStub({
+      reachedMessage: IDS.SERVICE_REACHED,
+      /**
+       * 조회는 두 테이블만 살려 둔다.
+       *  - `surveys` : 관문이 판정에 쓰는 행. 없으면 "없는 설문" 이 되어 팀 경계가 아니라
+       *    존재 여부를 검사하는 꼴이 된다.
+       *  - `survey_groups` : 담기 표면은 **그룹 구조 관문이 먼저** 선다. 그것을 통과시켜야
+       *    그 뒤의 설문 관문이 실제로 검증된다 — 그룹에서 막히면 설문 관문은 돌지도 않는다.
+       */
+      rowsFor: (table) => {
+        if (table === surveys) return [foreignSurveyRow];
+        if (table === surveyGroups) return [{ teamId: IDS.MY_TEAM_ID }];
+        return [];
+      },
+      relationalRowFor: (table) => (table === 'surveys' ? foreignSurveyRow : undefined),
+    }),
   };
 });
 
@@ -149,6 +99,17 @@ vi.mock('@/server/read-models/team-memberships', () => ({
   getActiveTeamMemberships: vi.fn(async () => [{ teamId: IDS.MY_TEAM_ID, role: 'member' }]),
   getTeamRole: vi.fn(async () => null),
 }));
+
+/**
+ * 코어 관문에도 스파이를 얹는다 — 관문이 **서비스 안**에 있는 경로(duplicate·ensure·
+ * saveWithDetails)는 procedure 어댑터를 지나지 않아, 요구 capability 를 다른 데서 볼 수 없다.
+ * 그것을 안 보면 서비스의 요구를 survey.edit → survey.view 로 약화해도 교차 팀 주체는
+ * 어차피 둘 다 없어 NOT_FOUND 라 스위트가 통과한다(구현이 스스로를 채점하는 구조).
+ */
+vi.mock('@/server/survey-access', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/survey-access')>();
+  return { ...actual, assertSurveyCapability: vi.fn(actual.assertSurveyCapability) };
+});
 
 // 관문 호출을 기록한다 — "거부됐다" 뿐 아니라 "무엇을 요구했는가" 까지 고정하기 위해서다.
 vi.mock('@/server/rpc-survey-access', async (importOriginal) => {
@@ -176,7 +137,7 @@ type GateKind = 'rpc' | 'scoped' | 'batch' | 'service';
 
 interface SurfaceSpec {
   gate: GateKind;
-  /** 관문이 요구하는 capability. batch 는 배열. service 는 procedure 밖이라 생략. */
+  /** 관문이 요구하는 capability. batch 는 배열. service 는 코어 스파이로 확인한다. */
   capability?: string | readonly string[];
   input: unknown;
   /**
@@ -227,9 +188,14 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.delete',
     input: { surveyId: S },
   },
-  'surveyBuilder.surveys.duplicate': { gate: 'service', input: { surveyId: S } },
+  'surveyBuilder.surveys.duplicate': {
+    gate: 'service',
+    capability: 'survey.edit',
+    input: { surveyId: S },
+  },
   'surveyBuilder.surveys.ensure': {
     gate: 'service',
+    capability: 'survey.edit',
     input: { id: S, title: '남의 팀 설문', privateToken: 'tok-cross-team', settings: {} },
   },
 
@@ -241,6 +207,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
   },
   'surveyBuilder.save.saveWithDetails': {
     gate: 'service',
+    capability: 'survey.edit',
     input: { id: S, title: '남의 팀 설문', questions: [], groups: [] },
   },
   'surveyBuilder.publish.publish': {
@@ -636,6 +603,42 @@ const ALIASED_SURVEY_SURFACES: Record<string, string> = {
 };
 
 /**
+ * 설문이 아닌 **다른 경계**가 지키는 내부 표면 — 하위 id 는 받지만 설문 id 는 안 받는다.
+ *
+ * 자동 탐지는 `surveyId`·`surveyIds` 키만 본다. 그래서 「object 입력 + 하위 id 만」인 표면은
+ * 목록에서 조용히 빠지고, 그것을 잡는 검사도 없었다(비-object 입력만 대조했다). 오늘 그런
+ * 표면이 설문 경계를 필요로 하지 않는 것은 사실이지만 **그건 우연이지 게이트가 지켜준 것이
+ * 아니었다** — 여기에 적어 두면 새 표면은 사유 없이는 들어올 수 없다.
+ *
+ * 사유는 「무엇이 대신 지키는가」여야 한다. 쓸 말이 없으면 설문 관문이 빠진 것이다.
+ */
+const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
+  'workspace.surveyGroups.rename': '그룹의 소유 팀으로 판정 — 타 팀 그룹은 NOT_FOUND 로 접힌다',
+  'workspace.surveyGroups.remove': '위와 같음',
+  'workspace.surveyGroups.reorder': '입력 teamId 로 그룹 구조 관문을 지난다',
+  'library.savedQuestions.update': '보관함은 조직 공용이라 설문 경계가 없다',
+  'library.savedQuestions.remove': '보관함 — 조직 공용',
+  'library.savedQuestions.apply': '보관함 — 조직 공용',
+  'library.savedQuestions.applyMultiple': '보관함 — 조직 공용',
+  'library.savedLookups.update': '보관함 — 조직 공용',
+  'library.savedLookups.remove': '보관함 — 조직 공용',
+  'library.savedCells.remove': '보관함 — 조직 공용',
+  'library.savedCells.apply': '보관함 — 조직 공용',
+  'library.questionCategories.update': '보관함 분류 — 조직 공용',
+  'library.questionCategories.remove': '보관함 분류 — 조직 공용',
+  'media.fileCleanup.cancel': 'R2 유예 삭제 큐 — 설문이 아니라 키 단위 전역 자원',
+  'mail.billing.deleteLatest': '메일 비용 정산 — 설문 스코프가 아닌 전역 장부',
+};
+
+/**
+ * 팀 경계를 지목하지만 설문은 안 받는 표면 — 이 스위트의 축이 아니다.
+ *
+ * 팀 관리·멤버십은 `assertTeamManager`(입력 teamId 로 판정)와 서비스의 대상 소속 재확인이
+ * 지키고, 그쪽 음성 테스트는 teams·members 의 colocated 테스트와 teams-membership.realdb 다.
+ */
+const TEAM_SCOPE_KEYS = new Set(['teamId', 'userId']);
+
+/**
  * 응답자(pub) 표면 — 인증 자체가 없으므로 팀 경계가 아니라 토큰·설문 공개 여부가 자격이다.
  *
  * 이 목록은 "관문이 없다" 를 승인하는 자리가 아니라 **분류를 고정하는 자리**다. 새 procedure
@@ -661,20 +664,9 @@ const SUPERADMIN_SURVEY_SURFACES = new Set([
 // 호출 준비
 // ─────────────────────────────────────────────────────────────────────────────
 
-const context: ORPCContext = {
-  db: {} as never,
-  user: {
-    id: ACTOR_ID,
-    email: 'a-team-member@megaresearch.co.kr',
-    name: 'A팀 팀원',
-    status: 'active',
-    isSuperadmin: false,
-    userType: 'internal',
-  },
-  headers: new Headers(),
-};
-
-const client = createRouterClient(router, { context });
+const client = createRouterClient(router, {
+  context: internalActorContext({ id: ACTOR_ID, name: 'A팀 팀원' }),
+});
 
 /** 점으로 이은 경로를 따라 클라이언트의 호출 함수를 꺼낸다. */
 function callerFor(path: string): (input: unknown) => Promise<unknown> {
@@ -708,6 +700,7 @@ beforeEach(() => {
   vi.mocked(gate.assertSurveyCapabilityRpc).mockClear();
   vi.mocked(gate.assertScopedSurveyCapabilityRpc).mockClear();
   vi.mocked(gate.assertSurveyCapabilityBatchRpc).mockClear();
+  vi.mocked(accessCore.assertSurveyCapability).mockClear();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -741,6 +734,43 @@ describe('표면 인벤토리 (라우터 열거)', () => {
     for (const path of Object.keys(ALIASED_SURVEY_SURFACES)) {
       expect(byPath.get(path), `${path} 가 사라졌다면 별칭 목록에서도 지울 것`).toBeDefined();
     }
+  });
+
+  it('하위 id 만 받는 내부 표면은 전부 사유와 함께 등재돼 있다', () => {
+    // 자동 탐지가 못 보는 두 번째 사각지대. 「id 로 끝나는 키를 받는데 설문 id 는 없는」
+    // 내부 표면이 새로 생기면 여기서 걸려 사유 등재를 강요받는다.
+    const childIdKey = /^ids?$|Ids?$/;
+    const unexplained = procedures
+      .filter((p) => isInternalBase(p.base) && p.hasObjectInput && !takesSurveyId(p))
+      .filter((p) =>
+        p.inputKeys.some((key) => childIdKey.test(key) && !TEAM_SCOPE_KEYS.has(key)),
+      )
+      .map((p) => p.path)
+      .filter((path) => !(path in OTHER_BOUNDARY_SURFACES) && !(path in ALIASED_SURVEY_SURFACES));
+    expect(unexplained).toEqual([]);
+  });
+
+  it('그 목록도 유령을 담지 않는다', () => {
+    for (const path of Object.keys(OTHER_BOUNDARY_SURFACES)) {
+      expect(byPath.get(path), `${path} 가 사라졌다면 목록에서도 지울 것`).toBeDefined();
+    }
+  });
+
+  it('목이 외래 설문 행을 실제로 돌려준다 — 「없는 설문」으로 초록이 된 것이 아니다', async () => {
+    // 이 스위트의 유일한 실패 방식은 조용한 거짓 초록이다: db 목이 surveys 를 못 찾으면
+    // 관문 유무와 무관하게 전 표면이 NOT_FOUND 가 된다. 같은 행을 슈퍼어드민이 보면
+    // 권한이 서고 A팀 팀원이 보면 안 선다는 **대비**가 「팀 경계를 쟀다」는 증거다.
+    const asSuperadmin = await accessCore.loadSurveyCapabilities(
+      { id: '3a000000-0000-4000-8000-00000000ad01', isSuperadmin: true, userType: 'internal' },
+      FOREIGN_SURVEY_ID,
+    );
+    expect(asSuperadmin.size).toBeGreaterThan(0);
+
+    const asMember = await accessCore.loadSurveyCapabilities(
+      { id: ACTOR_ID, isSuperadmin: false, userType: 'internal' },
+      FOREIGN_SURVEY_ID,
+    );
+    expect(asMember.size).toBe(0);
   });
 
   it('입력 키로 탐지할 수 없는 내부 표면은 전부 별칭 목록에 있다 — 사각지대 봉인', () => {
@@ -810,6 +840,14 @@ describe('타 팀 설문 id 주입은 전 표면에서 NOT_FOUND 다', () => {
         expect(gate.assertSurveyCapabilityBatchRpc).toHaveBeenCalledWith(
           expect.objectContaining({ id: ACTOR_ID }),
           [FOREIGN_SURVEY_ID],
+          spec.capability,
+        );
+      } else {
+        // 관문이 서비스 안에 있는 경로 — 코어를 직접 물어본다. 결과(NOT_FOUND)만 보면
+        // 요구를 survey.edit → survey.view 로 약화해도 스위트가 통과한다.
+        expect(accessCore.assertSurveyCapability).toHaveBeenCalledWith(
+          expect.objectContaining({ id: ACTOR_ID }),
+          FOREIGN_SURVEY_ID,
           spec.capability,
         );
       }

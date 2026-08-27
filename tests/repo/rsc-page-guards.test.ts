@@ -1,7 +1,6 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
+
+import { loadAppFiles } from '@tests/helpers/app-files';
 
 /**
  * 회귀 가드: 서버 데이터를 직접 부르는 RSC 페이지는 자기 인증 가드를 가져야 한다 (티켓 31).
@@ -16,8 +15,6 @@ import { describe, expect, it } from 'vitest';
  *
  * 사람 눈에 맡기면 새 페이지가 조용히 빠진다. 이 테스트가 그 자리를 지킨다.
  */
-
-const APP_DIR = resolve(__dirname, '..', '..', 'src/app');
 
 /** 페이지가 서버 데이터에 닿는다는 신호 — service·read-model·drizzle 직접 import. */
 const SERVER_DATA_IMPORT = /from '@\/(server\/read-models|server\/[a-z-]+\/services|db)/;
@@ -40,23 +37,7 @@ const PUBLIC_PAGES: Record<string, string> = {
   'survey/[id]/page.tsx': '공개 응답 페이지 — 설문 자체가 공개 표면이다',
 };
 
-function collectPages(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) {
-      found.push(...collectPages(full));
-    } else if (entry === 'page.tsx') {
-      found.push(full);
-    }
-  }
-  return found;
-}
-
-const pages = collectPages(APP_DIR).map((full) => ({
-  rel: relative(APP_DIR, full).replaceAll('\\', '/'),
-  source: readFileSync(full, 'utf8'),
-}));
+const pages = loadAppFiles('page.tsx');
 
 const dataPages = pages.filter((page) => SERVER_DATA_IMPORT.test(page.source));
 

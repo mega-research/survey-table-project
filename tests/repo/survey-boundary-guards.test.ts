@@ -13,13 +13,12 @@
  * 인증만 보는 가드는 팀 경계를 모른다 — `requireAdminPage` 는 "내부 활성 계정" 까지만
  * 확인하므로, 그것만 붙은 콘솔 페이지는 URL 의 설문 id 를 그대로 믿고 남의 팀 설문을 렌더한다.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const REPO_ROOT = resolve(__dirname, '..', '..');
-const APP_DIR = resolve(REPO_ROOT, 'src/app');
+import { APP_DIR, loadAppFiles, REPO_ROOT } from '@tests/helpers/app-files';
 
 /** 설문 단위 RSC 콘솔 — URL 에 설문 id 가 실리는 화면 묶음. */
 const SURVEY_CONSOLE_ROOTS = ['admin/surveys/[id]', 'analytics/[surveyId]'];
@@ -38,29 +37,13 @@ const REST_CAPABILITY_GATE =
  */
 const CLIENT_PAGE = /^\s*['"]use client['"]/m;
 
-function collectFiles(dir: string, name: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) found.push(...collectFiles(full, name));
-    else if (entry === name) found.push(full);
-  }
-  return found;
-}
-
-function load(name: string, root = APP_DIR) {
-  return collectFiles(root, name).map((full) => ({
-    rel: relative(APP_DIR, full).replaceAll('\\', '/'),
-    source: readFileSync(full, 'utf8'),
-  }));
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RSC — 설문 콘솔 페이지
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('설문 콘솔 RSC 페이지는 설문 capability 관문을 진다', () => {
-  const consolePages = load('page.tsx').filter((page) =>
+  const consolePages = loadAppFiles('page.tsx').filter((page) =>
     SURVEY_CONSOLE_ROOTS.some((root) => page.rel.startsWith(`${root}/`)),
   );
 
@@ -101,7 +84,7 @@ describe('설문 콘솔 RSC 페이지는 설문 capability 관문을 진다', ()
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('설문 스코프 REST 라우트는 관문을 진다', () => {
-  const surveyRoutes = load('route.ts').filter((route) =>
+  const surveyRoutes = loadAppFiles('route.ts').filter((route) =>
     route.rel.startsWith('api/surveys/[surveyId]/'),
   );
 
@@ -128,10 +111,69 @@ describe('설문 스코프 REST 라우트는 관문을 진다', () => {
    * (lib/upload/route-guard.ts 주석). 여기서는 "그 셋이 정말 설문 스코프가 아닌가" 만 본다.
    */
   it('업로드 라우트는 설문 id 를 받지 않는다 — 면제의 근거', () => {
-    const uploads = load('route.ts').filter((route) => route.rel.startsWith('api/upload/'));
+    const uploads = loadAppFiles('route.ts').filter((route) => route.rel.startsWith('api/upload/'));
     expect(uploads.length).toBeGreaterThanOrEqual(3);
     for (const route of uploads) {
       expect(route.rel, '업로드 경로에 설문 세그먼트가 생겼다').not.toContain('[surveyId]');
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 정적 가드가 증명하지 못하는 것 — 행동 검증이 어디 있는지 못 박는다
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 위 검사들은 「관문 함수 이름이 파일에 있다」만 증명한다. 그 호출이 **실제로 돌고
+ * 민감 조회보다 먼저** 서는지는 증명하지 못한다 — 실제로 티켓 15 에서 컨택·응답 상세
+ * RSC 가 관문을 지난 뒤 **하위 행을 설문 경계 없이 읽어 복호화**하고 있었다.
+ *
+ * 그래서 행동 검증이 있는 자리를 여기서 함께 묶는다. 그 파일이 사라지거나 교차 팀
+ * 케이스가 빠지면 정적 가드만 남는데, 그 상태는 사람 눈에 「초록」으로 보인다.
+ */
+const BEHAVIOURAL_COVERAGE: Record<string, readonly string[]> = {
+  // REST export 3종의 404 존재 은닉 (티켓 11)
+  'tests/unit/api/export-route-auth.test.ts': ['타 팀 설문', '404'],
+  'tests/integration/contacts-export-route.test.ts': ['타 팀 설문', '404'],
+  // 하위 행 주입 — 관문이 통과한 뒤의 축 (티켓 15)
+  'tests/integration/cross-team-idor.realdb.test.ts': ['남의 하위 행'],
+};
+
+describe('정적 가드의 짝이 되는 행동 검증이 실재한다', () => {
+  it.each(Object.entries(BEHAVIOURAL_COVERAGE))('%s', (rel, needles) => {
+    const source = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
+    for (const needle of needles) {
+      expect(source, `${rel} 에서 「${needle}」 검증이 사라졌다`).toContain(needle);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 외부 지속 — 팀이 사라져도 계속 도는 경로는 팀 컬럼을 읽지 않는다
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 팀 해산·배치 대기 뒤에도 **공개 응답·예약 메일·백그라운드 잡은 계속 돈다**(ADR-0011).
+ *
+ * 그 약속의 근거는 정책 문장이 아니라 **그 경로들이 팀 컬럼을 아예 읽지 않는다**는 사실이다.
+ * 누군가 새 게이트에 `teamId`·`assignmentStatus` 를 끌어들이는 순간 약속이 조용히 깨지고,
+ * 증상은 「해산 뒤 응답이 안 들어온다」로 한참 뒤에 나타난다. 여기서 그 사실을 고정한다.
+ */
+const TEAM_COLUMN_FREE_PATHS = [
+  'src/server/survey-response/services/response-gate.ts',
+  'src/server/mail/services/campaign-dispatch.ts',
+  'src/server/workflows/jobs/campaign-dispatcher.ts',
+  'src/server/workflows/jobs/campaign-reconciler.ts',
+];
+
+const TEAM_COLUMN = /\bteamId\b|\bassignmentStatus\b|\bteam_id\b|\bassignment_status\b/;
+
+describe('팀이 사라져도 도는 경로는 팀 컬럼을 읽지 않는다', () => {
+  it.each(TEAM_COLUMN_FREE_PATHS)('%s', (rel) => {
+    const source = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
+    expect(
+      TEAM_COLUMN.test(source),
+      `${rel} 가 팀 컬럼을 읽기 시작했다 — 해산 뒤 외부 지속 약속(ADR-0011)이 깨진다`,
+    ).toBe(false);
   });
 });
