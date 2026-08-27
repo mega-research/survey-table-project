@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 15 **B 검증 게이트** — 팀 격리 음성 스위트를 **라우터 열거** 위에 세웠다. `tests/helpers/rpc-surface.ts` 가 `@/server/router` 를 런타임에 훑어(베이스는 미들웨어 동일성, 입력 키는 zod shape) 「설문 id 를 받는 내부 표면」을 뽑고, 그 집합이 인벤토리와 어긋나면 그 자리에서 빨개진다 — **새 surveyId procedure 는 `tests/integration/cross-team-idor-rpc.test.ts` 등재가 의무다**. 두 축: 타 팀 설문 id 주입(전 표면 NOT_FOUND + 요구 capability 고정)과 내 설문 + 남의 하위 행(realdb — 관문 통과 뒤 남는 축). 후자는 **거부와 「조용한 무동작」을 갈라 적는다**. 시스템 범위 거부는 입력·쿠키·URL 세 채널을 각각 고정했고, 그 과정에서 `WorkScopeError` 에 RPC 매핑이 없어 「거부」가 실제로는 500 이던 것을 `server/rpc-work-scope.ts` 로 닫았다. 마이그레이션 없음. 직전: 티켓 14 재배치 센터 — 슈퍼어드민 전용 인박스, 마이그레이션 0091 `survey_ownership_events`, 재입사의 팀 배정 연계)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 15 **B 검증 게이트** — 팀 격리 음성 스위트를 **라우터 열거** 위에 세웠다. `tests/helpers/rpc-surface.ts` 가 `@/server/router` 를 런타임에 훑어(베이스는 미들웨어 동일성, 입력 키는 zod shape) 「설문 id 를 받는 내부 표면」을 뽑고, 그 집합이 인벤토리와 어긋나면 그 자리에서 빨개진다 — **새 surveyId procedure 는 `tests/integration/cross-team-idor-rpc.test.ts` 등재가 의무다**. 두 축: 타 팀 설문 id 주입(전 표면 NOT_FOUND + 요구 capability 고정)과 내 설문 + 남의 하위 행(realdb — 관문 통과 뒤 남는 축). 후자는 **거부와 「조용한 무동작」을 갈라 적는다**. 시스템 범위 거부는 입력·쿠키·URL 세 채널을 각각 고정했고, 그 과정에서 `WorkScopeError` 에 RPC 매핑이 없어 「거부」가 실제로는 500 이던 것을 `server/rpc-work-scope.ts` 로 닫았다. 리뷰 3축(Standards·Spec·Codex 적대적)이 **관문 통과 뒤의 축**을 열었다 — 컨택·응답 상세 RSC 가 하위 행을 설문 경계 없이 읽어 **타 팀 PII 를 복호화**하고 있었고, 질문·그룹의 `groupId`·`parentGroupId` 로 교차 팀 그래프를 만들 수 있었으며, 여러 교차 팀 거부가 500 으로 마스킹되고 있었다. 마이그레이션 없음. 직전: 티켓 14 재배치 센터 — 슈퍼어드민 전용 인박스, 마이그레이션 0091 `survey_ownership_events`, 재입사의 팀 배정 연계)
 
 ---
 
@@ -813,8 +813,10 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
   **거부는 `server/rpc-work-scope.ts` 의 `toRpcWorkScopeError` 가 FORBIDDEN 으로 옮긴다**(티켓 15) —
   매핑이 없던 동안 그 「거부」는 실제로 500 이었다(rpc-error-policy 가 미지의 예외를 마스킹한다).
-  지는 표면은 설문 목록과 생성 경로다. **쿠키에서 온 범위는 이 길로 오지 않는다** — 화면이 기본
-  범위로 접으므로, 접는 쪽과 거부하는 쪽이 갈리는 것은 판정이 둘이어서가 아니라 값의 출처 때문이다.
+  지는 표면은 설문 목록과 생성 경로 넷이다. **거부와 접기를 가르는 것은 값의 출처다** —
+  입력이 명시한 범위는 거부하고, **쿠키에서 온 범위는 `resolveWorkScope` 가 접는다**(티켓 15).
+  화면(admin 셸·분석 목록)이 이미 접고 있었는데 쓰기 경로만 거부해서, 강등된 슈퍼어드민에게
+  「스위처엔 팀이 보이는데 설문 생성만 막힌다」가 생겼다. 접는 쪽은 언제나 더 좁아 새지 않는다.
 - **설문을 만드는 경로 넷(빌더 자동 생성·명시 생성·복제·전체 저장 생성 모드)은 전부
   `resolveNewSurveyOwnership` 로 소유·배치 컬럼을 채운다.** 시스템 전체 보기는 teams 행이 아니라
   조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수 없다 — 서버가
@@ -867,6 +869,22 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   표면」으로 보여 리뷰를 통과한다. RSC 콘솔 페이지·REST export 라우트는 라우터가 없어
   파일 시스템을 훑는다(`tests/repo/survey-boundary-guards.test.ts` — `rsc-page-guards`(인증)·
   `analytics-page-guards`(렌더 내용)와 분담이 갈린다: 이쪽은 **어느 설문인가**를 본다).
+  **정적 가드는 「관문 이름이 파일에 있다」까지만 증명한다** — 그 호출이 민감 조회보다 먼저
+  서는지는 못 본다. 실제로 티켓 15 에서 컨택·응답 상세 RSC 가 관문을 지난 뒤 하위 행을
+  **설문 경계 없이 읽어 복호화**하고 있었다.
+- **관문이 통과한 뒤에도 남는 축이 있다 — 「내 설문 + 남의 하위 행」**(티켓 15). 관문은 경로의
+  설문만 보므로, 서비스의 WHERE 에 `surveyId` 가 함께 들어 있지 않으면 남의 팀 컨택·응답·
+  템플릿·캠페인이 그대로 움직인다. **하위 행 id 는 전역 PK 라 FK 도 설문 경계를 모른다.**
+  세 가지가 이 축의 규칙이다.
+  ① **조회는 조건이지 사후 확인이 아니다** — `getContactDetailById`·`getResponseById` 는
+  `surveyId` 를 WHERE 로 받는다. 사후 비교로 두면 그 사이에 PII·응답 원문이 이미 복호화된다.
+  ② **payload 가 들고 오는 참조도 검사한다** — `question.groupId`·`group.parentGroupId` 는
+  `assertGroupReferenceBelongsToSurvey`(단건)와 survey-save 의 배치 판이 본다. **없는 id 도
+  같은 사유로 접는다**(갈라 두면 FK 오류 500 과 거부의 차이가 존재 오라클이 된다).
+  ③ **거부는 RPC 어휘로 나가야 한다** — 문자열 `Error` 로 던지면 rpc-error-policy 가 500 으로
+  마스킹해, 정확히 거부된 요청이 화면에는 「내부 오류」로 보인다. 컨택·회차·캠페인·단건 발송·
+  reorder 가 그랬다(티켓 15 가 매핑). 이 축의 음성 검증은 목으로는 못 한다 — 목이 돌려주는 행은
+  언제나 테스트가 정한 행이라 WHERE 절이 무엇이든 통과하므로 `*.realdb` 로 간다.
 - **팀 해산은 확정 즉시, 한 트랜잭션, 되돌릴 수 없다**(ADR-0011, 티켓 13, .pen FLOW 8-1).
   `workspace.teams.dissolve`(superadmin 전용, 팀 관리 목록의 카드 케밥이 유일한 진입점)가
   팀 `archived` + 소속 설문 배치 대기(`teamId=null`·`assignment_pending`·`surveyGroupId=null`)
