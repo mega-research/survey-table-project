@@ -19,6 +19,9 @@ import {
  * forbidden(보이지만 그 작업 권한 없음)은 403. Route Handler 는 throw 가 아니라
  * NextResponse 반환으로 끝나는 표면이라 assert 가 아니라 check 다:
  * 통과하면 null, 거부면 그대로 return 할 응답을 돌려준다.
+ *
+ * 403 바디는 rpc 어댑터의 문구가 아니라 종전 REST 거부 바디('권한이 없습니다.')를
+ * 그대로 쓴다 — 이 표면의 기존 소비자(다운로드 실패 안내)가 보던 계약이다.
  */
 export async function checkSurveyCapabilityRest(
   user: SurveyAccessUser,

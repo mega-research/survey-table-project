@@ -54,6 +54,7 @@ vi.mock('@/lib/analytics/split-workbook', () => ({
 
 import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
 import { GET } from '@/app/api/surveys/[surveyId]/export/route';
+import { GET as GET_SPLIT_PREVIEW } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
 
 describe('GET /api/surveys/[surveyId]/export requires authentication', () => {
   beforeEach(() => {
@@ -108,6 +109,18 @@ describe('GET /api/surveys/[surveyId]/export requires authentication', () => {
       'test-id',
       'export.download',
     );
+  });
+
+  it('split-preview 도 타 팀 설문이면 404 다 - 같은 관문을 지난다 (티켓 11)', async () => {
+    authState.user = { id: 'admin-1' };
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('not_found'));
+
+    const request = new NextRequest('http://localhost/api/surveys/test-id/export/split-preview');
+    const response = await GET_SPLIT_PREVIEW(request, {
+      params: Promise.resolve({ surveyId: 'test-id' }),
+    });
+
+    expect(response.status).toBe(404);
   });
 
   it('보이는 설문의 export 권한만 없으면 403 이다', async () => {

@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 10 관문 배선 B — 운영 콘솔 도메인(operations·contacts·mail·quota·survey-response 관리 경로)의 procedure 전수와 콘솔 RSC 전수(설문 `[id]` 레이아웃 포함)가 capability 관문을 지난다. scoped 표면용 게스트 겸용 어댑터 `assertScopedSurveyCapabilityRpc`·콘솔 페이지 관문 `assertSurveyConsolePageAccess` 신설, 옛 `assertSurveyAccess`(orpc.ts)·`assertGuestSurveyPageAccess`(guest-page-guard) 는 걷었다. `control.get` 은 관문 NOT_FOUND 를 null 로 접어 미저장 설문 폴백 규약 유지, hardReset 의 컨택 unlink 교차 해제 수리. pub 응답자 표면·webhook·Inngest 잡·billing 은 무변경. REST 배선은 티켓 11. 직전: 티켓 09 빌더·분석 관문 배선)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 11 관문 배선 C — export REST 3종(export·split-preview·contacts export)이 REST 어댑터 `server/rest-survey-access`(`checkScopedSurveyCapabilityRest`, not_found→404 존재 은닉/forbidden→403)로 `export.download` 관문을 지난다. env grant 게스트의 grant 설문 export 는 현행 유지 — 게스트 항상 차단은 티켓 21 몫. 업로드 REST 3종은 surveyId 없는 tmp 전용이라 의도된 면제(route-guard 주석). 옛 `SurveyOwnershipError`(require-survey-ownership)는 코어 `SurveyAccessError` 로 흡수·삭제. `/analytics` 목록 범위 필터는 티켓 09 완료분으로 이미 충족. 직전: 티켓 10 운영 콘솔 관문 배선)
 
 ---
 
@@ -207,7 +207,7 @@ src/
 │   ├── auth/ + auth.ts         # 인증 어댑터 + 가드. server.ts=Better Auth 인스턴스 · client.ts=브라우저 authClient
 │   │                           # · safe-redirect=로그인 복귀 경로 정제 · protected-paths=proxy/레이아웃 공용 AUTH_PAGES
 │   │                           # · guest-grants=게스트 grant(티켓 21에서 계정 모델로 교체) · require-admin-page
-│   │                           # · guest-viewer · require-survey-ownership. auth.ts=requireAuth/getCurrentUser
+│   │                           # · guest-viewer. auth.ts=requireAuth/getCurrentUser
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
@@ -674,7 +674,7 @@ POST   /api/upload/image                       # 이미지 업로드 (multipart,
 POST   /api/upload/avatar                      # 아바타 업로드 (세 계정 유형 공통, 정사각 WebP 로 깎아 저장)
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
@@ -771,8 +771,13 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   한 입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 무관문 예외는
   셋뿐이고 전부 사유가 주석에 있다 — 보관함(library, surveyId 없는 조직 공용)·
   `uploads.parsePreview`(무상태 엑셀 파싱)·`media.deleteMailAttachmentTmp`(tmp 키 검증 의존).
-  billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)는 걷었다.
-  **REST 배선(export·upload)은 티켓 11 몫**이며 그때까지 종전 가드(canAccessSurvey)만 받는다.
+  billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)·
+  `SurveyOwnershipError`(require-survey-ownership)는 걷었다. **REST 표면(티켓 11)**: export 3종
+  (export·split-preview·contacts export)은 `server/rest-survey-access.ts` 의
+  `checkScopedSurveyCapabilityRest`(not_found→404 존재 은닉·forbidden→403, env grant 게스트는
+  grant 일치)로 `export.download` 를 지고, 게스트의 grant 설문 export 현행 유지·항상 차단 전환은
+  티켓 21 몫이다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
+  (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.

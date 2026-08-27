@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
 
 vi.mock('../services/response-manage', async () => {
   const actual = await vi.importActual<
@@ -22,8 +23,6 @@ vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   assertSurveyCapabilityRpc: vi.fn(),
 }));
-
-import { SurveyAccessError } from '@/server/survey-access';
 
 import * as svc from '../services/response-manage';
 import { manage } from './manage';
