@@ -481,6 +481,23 @@ describe('profiles-row-actions', () => {
       expect(contactAfter?.responseId).toBeNull();
       expect(contactAfter?.respondedAt).toBeNull();
     });
+
+    it('타 설문의 responseId 로는 그 설문의 컨택 매칭을 풀지 않는다 (교차 unlink 차단)', async () => {
+      // unlink UPDATE 가 responseId 만으로 걸리면, A 설문 관점의 호출로 B 설문의
+      // 컨택 링크가 풀린다 — surveyId 조건이 함께 걸려 있어야 한다.
+      const surveyA = createTestSurvey();
+      const surveyB = createTestSurvey();
+      const responseId = createTestResponse(surveyB);
+      const contactId = linkContactToResponse(surveyB, responseId);
+
+      await hardResetResponse({ surveyId: surveyA, responseId });
+
+      const contact = h.contactStore.get(contactId);
+      expect(contact?.responseId).toBe(responseId);
+      expect(contact?.respondedAt).not.toBeNull();
+      // 응답 행 삭제도 (surveyId, responseId) 2중 조건이라 B 의 행은 남는다.
+      expect(h.responseStore.get(responseId)).toBeDefined();
+    });
   });
 
   // ─────────────────────────────────────────────────────────────

@@ -141,10 +141,17 @@ export async function hardResetResponse(
     const anchorId = row
       ? await resolveContactAnchor(tx, surveyId, responseId, row.contactTargetId)
       : null;
+    // unlink 도 surveyId 로 좁힌다 — 위 select 가 빈 결과(타 설문 responseId)여도 이
+    // UPDATE 는 돌므로, responseId 만 걸면 다른 설문의 컨택 매칭이 풀리는 교차 해제가 된다.
     await tx
       .update(contactTargets)
       .set({ responseId: null, respondedAt: null })
-      .where(eq(contactTargets.responseId, responseId));
+      .where(
+        and(
+          eq(contactTargets.responseId, responseId),
+          eq(contactTargets.surveyId, surveyId),
+        ),
+      );
     await tx
       .delete(surveyResponses)
       .where(
