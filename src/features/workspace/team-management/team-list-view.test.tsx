@@ -59,4 +59,33 @@ describe('TeamListView — 해산 진입점', () => {
     expect(await screen.findByText(/되돌릴 수 없습니다/)).toBeInTheDocument();
     expect(screen.getByLabelText('확인을 위해 팀 이름을 입력하세요')).toBeInTheDocument();
   });
+
+  it('모달은 목록 스냅샷이 아니라 최신 행을 본다', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<TeamListView />);
+
+    await user.click(screen.getByRole('button', { name: `${TEAM.name} 메뉴` }));
+    await user.click(within(await screen.findByRole('menu')).getByText('팀 해산…'));
+    // 카드에도 같은 이름이 있으므로 다이얼로그 안에서만 본다.
+    expect((await screen.findByRole('dialog')).textContent).toContain(TEAM.name);
+
+    // 열어둔 사이 다른 관리자가 이름을 바꿨다. 객체 스냅샷을 붙들고 있으면 모달은 옛 이름을
+    // 보여주고 서버는 그 이름을 거부한다 — 화면이 방금 자기가 보여준 문자열을 거부하는 셈이다.
+    const renamed = { ...TEAM, name: '연구1본부 - 통합1팀', memberCount: 5 };
+    useTeams.mockReturnValue({
+      data: { teams: [renamed], systemSummary: { teamCount: 1, surveyCount: 8 } },
+      isLoading: false,
+      error: null,
+    });
+    rerender(<TeamListView />);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain(renamed.name);
+    expect(within(dialog).getByText(/팀원 5명이 미배치로 전환됩니다/)).toBeInTheDocument();
+    // 확인란의 placeholder 도 최신 이름이어야 한다 — 옛 이름을 따라 치면 서버가 거부한다.
+    expect(within(dialog).getByLabelText('확인을 위해 팀 이름을 입력하세요')).toHaveAttribute(
+      'placeholder',
+      renamed.name,
+    );
+  });
 });

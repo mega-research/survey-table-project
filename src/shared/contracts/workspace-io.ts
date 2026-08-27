@@ -112,7 +112,12 @@ export type RenameTeamInput = z.infer<typeof RenameTeamInput>;
  * 없는데(되돌릴 수 있다) 해산에는 있는 이유가 그것이다. 서버도 이 값을 실제 팀 이름과
  * 대조한다 — 화면만 검사하면 raw RPC 한 번으로 우회된다.
  */
-export const DissolveTeamInput = z.object({ teamId: z.uuid(), confirmName: z.string() });
+export const DissolveTeamInput = z.object({
+  teamId: z.uuid(),
+  // 저장된 이름은 이미 trim 돼 있다(TeamNameField). 붙여넣기에 딸려온 공백 때문에 버튼이
+  // 사유 없이 잠긴 것처럼 보이지 않도록 여기서 접는다 — 화면과 서버가 같은 규칙을 본다.
+  confirmName: z.string().trim(),
+});
 export type DissolveTeamInput = z.infer<typeof DissolveTeamInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────

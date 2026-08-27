@@ -6,6 +6,7 @@ import {
   toRpcSurveyAccessError,
 } from '@/server/rpc-survey-access';
 
+import { SurveyOwnershipRequiredError } from '../domain/survey';
 import {
   CrossSurveyRowError,
   SaveResultSchema,
@@ -17,6 +18,9 @@ import * as svc from '../services/survey-save';
 /**
  * 저장 payload 가 타 설문 하위 행을 지목하면 FORBIDDEN 이다.
  *
+ * saveWithDetails 의 생성 모드는 resolveNewSurveyOwnership 을 지나므로 소유 팀을 정할 수
+ * 없는 거부(시스템 전체 보기·팀 미배치·해산된 팀)도 여기로 온다 — 매핑이 없으면 500 이 된다.
+ *
  * 정상 저장에서는 절대 나오지 않는 에러다 — 새 id 는 삽입, 내 설문 id 는 갱신이라 이 분기에
  * 닿으려면 남의 설문 질문 id 를 알아야 한다. 조용히 무시하면 화면은 저장됐다고 말하는데
  * 실제로는 일부가 빠진 상태가 되므로 거절하고 알린다.
@@ -24,6 +28,9 @@ import * as svc from '../services/survey-save';
 function rethrowSaveError(error: unknown): never {
   if (error instanceof CrossSurveyRowError) {
     throw new ORPCError('FORBIDDEN', { message: error.message });
+  }
+  if (error instanceof SurveyOwnershipRequiredError) {
+    throw new ORPCError('CONFLICT', { message: error.message });
   }
   throw toRpcSurveyAccessError(error);
 }

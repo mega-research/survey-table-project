@@ -120,3 +120,16 @@ export const SurveyRowSchema = z.custom<SurveyRow>();
 
 /** duplicateSurvey 는 원본 not found 시 null 반환(404 표현). */
 export const DuplicateResultSchema = SurveyRowSchema.nullable();
+
+/**
+ * 소유 팀을 정할 수 없어 설문을 만들 수 없다 — 화면은 팀을 먼저 고르라고 안내한다.
+ *
+ * 에러가 도메인에 사는 이유는 이걸 던지는 곳(services)과 RPC 어휘로 옮기는 곳(procedures)이
+ * 달라서다. 서비스가 소유하면 procedure 가 에러 하나 때문에 남의 서비스 파일을 import 한다.
+ */
+export class SurveyOwnershipRequiredError extends Error {
+  constructor() {
+    super('설문을 만들려면 소유 팀을 먼저 선택해야 합니다.');
+    this.name = 'SurveyOwnershipRequiredError';
+  }
+}

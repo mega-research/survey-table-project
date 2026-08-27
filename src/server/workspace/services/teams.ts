@@ -257,7 +257,7 @@ export async function dissolveTeam(
       .for('update');
     if (!team) throw new TeamNotFoundError();
     // 확인란 대조는 서버에도 있어야 한다 — 화면만 검사하면 raw RPC 로 우회된다.
-    if (team.name !== input.confirmName) throw new TeamNameMismatchError();
+    if (team.name !== input.confirmName.trim()) throw new TeamNameMismatchError();
 
     const [memberRow] = await tx
       .select({ value: count() })

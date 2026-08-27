@@ -69,6 +69,33 @@ describe('TeamDissolveModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('붙여넣기에 딸려온 앞뒤 공백은 접고 보낸다', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    // 팀 이름을 목록에서 복사하면 공백이 딸려오기 쉽다. 여기서 접지 않으면 버튼이 사유 없이
+    // 잠긴 것처럼 보여, 사용자는 자기 오타를 의심하며 같은 입력을 반복한다.
+    await user.type(screen.getByLabelText('확인을 위해 팀 이름을 입력하세요'), `  ${TEAM.name} `);
+    const button = screen.getByRole('button', { name: '팀 해산' });
+    expect(button).toBeEnabled();
+
+    await user.click(button);
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ teamId: TEAM.id, confirmName: TEAM.name }),
+    );
+  });
+
+  it('경고가 다이얼로그 설명으로 붙는다 — 열자마자 읽히도록', () => {
+    renderModal();
+
+    // 평범한 p 로 두면 aria-describedby 가 비어 스크린리더는 제목만 읽는다.
+    // 되돌릴 수 없는 확정 화면에서 그 한 줄은 장식이 아니다.
+    const dialog = screen.getByRole('dialog');
+    const describedBy = dialog.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)?.textContent).toMatch(/되돌릴 수 없습니다/);
+  });
+
   it('서버 거부 문구를 그대로 보여주고 모달을 닫지 않는다', async () => {
     const user = userEvent.setup();
     mutateAsync.mockRejectedValue(new Error('팀 이름이 일치하지 않습니다.'));

@@ -1,3 +1,5 @@
+import { ORPCError } from '@orpc/server';
+
 import { authed } from '@/server/orpc';
 import {
   assertSurveyCapabilityRpc,
@@ -11,6 +13,7 @@ import {
   EnsureSurveyInDbInput,
   EnsureSurveyResultSchema,
   SurveyIdInput,
+  SurveyOwnershipRequiredError,
   SurveyRowSchema,
   UpdateSurveyInput,
 } from '../domain/survey';
@@ -23,6 +26,20 @@ import * as svc from '../services/surveys';
  */
 
 // ensure 는 기존 행이면 서비스가 편집 관문을 지난다(존재 오라클 봉인) — 사유만 옮긴다.
+/**
+ * 소유 팀을 정할 수 없는 생성 거부를 RPC 어휘로 옮긴다.
+ *
+ * 매핑이 없으면 rpc-error-policy 가 정체불명의 500 으로 마스킹한다. 도달 경로가 둘 있다 —
+ * 시스템 전체 보기·팀 미배치에서 만들려는 경우(화면이 버튼을 잠그지만 raw RPC 는 남는다),
+ * 그리고 **해산된 팀 범위**(티켓 13). 둘 다 입력은 옳고 지금 상태와 충돌할 뿐이라 CONFLICT 다.
+ */
+function rethrowCreateError(error: unknown): never {
+  if (error instanceof SurveyOwnershipRequiredError) {
+    throw new ORPCError('CONFLICT', { message: error.message });
+  }
+  throw toRpcSurveyAccessError(error);
+}
+
 const ensure = authed
   .input(EnsureSurveyInDbInput)
   .output(EnsureSurveyResultSchema)
@@ -30,14 +47,16 @@ const ensure = authed
     try {
       return await svc.ensureSurveyInDb(context.user, input);
     } catch (error) {
-      throw toRpcSurveyAccessError(error);
+      rethrowCreateError(error);
     }
   });
 
 const create = authed
   .input(CreateSurveyInput)
   .output(SurveyRowSchema)
-  .handler(({ context, input }) => svc.createSurvey(context.user, input));
+  .handler(({ context, input }) =>
+    svc.createSurvey(context.user, input).catch(rethrowCreateError),
+  );
 
 const update = authed
   .input(UpdateSurveyInput)

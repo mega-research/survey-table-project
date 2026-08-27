@@ -24,6 +24,7 @@ import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 
+import { SurveyOwnershipRequiredError } from '../domain/survey';
 import type {
   CreateSurveyInput,
   EnsureSurveyInDbInput,
@@ -88,14 +89,6 @@ export async function resolveNewSurveyOwnership(
     createdBy: actor.id,
     assignmentStatus: 'assigned',
   };
-}
-
-/** 소유 팀을 정할 수 없어 설문을 만들 수 없다 — 화면은 팀을 먼저 고르라고 안내한다. */
-export class SurveyOwnershipRequiredError extends Error {
-  constructor() {
-    super('설문을 만들려면 소유 팀을 먼저 선택해야 합니다.');
-    this.name = 'SurveyOwnershipRequiredError';
-  }
 }
 
 // 설문이 DB에 존재하는지 확인하고, 없으면 최소한의 레코드를 생성 (idempotent)

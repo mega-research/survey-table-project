@@ -90,13 +90,19 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
  */
 export function TeamListView() {
   const [createOpen, setCreateOpen] = useState(false);
-  const [dissolveTarget, setDissolveTarget] = useState<TeamListItem | null>(null);
+  // **id 만 들고 렌더 시점에 최신 행을 읽는다.** 객체 스냅샷을 붙들면 그 사이 이름이
+  // 바뀌었을 때 모달이 옛 이름을 보여주고 서버가 그 이름을 거부한다 — 화면이 방금 자기가
+  // 보여준 문자열을 거부하는 셈이라 사용자는 오타를 의심하며 같은 입력을 반복한다.
+  // 영향 요약의 숫자가 낡는 문제도 같은 수정으로 닫힌다.
+  const [dissolveTargetId, setDissolveTargetId] = useState<string | null>(null);
   const { data, isLoading, error } = useTeams();
   // 셸 밖(테스트 렌더)에서도 이 화면이 서므로 optional 로 받는다.
   const workScope = useWorkScopeOptional();
 
   const teams = data?.teams ?? [];
   const summary = data?.systemSummary;
+  // 목록에서 사라지면(다른 사람이 먼저 해산) 모달도 자연히 닫힌다.
+  const dissolveTarget = teams.find((t) => t.id === dissolveTargetId) ?? null;
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
@@ -150,7 +156,7 @@ export function TeamListView() {
               <TeamCard
                 key={team.id}
                 team={team}
-                onDissolve={() => setDissolveTarget(team)}
+                onDissolve={() => setDissolveTargetId(team.id)}
               />
             ))}
           </div>
@@ -182,7 +188,7 @@ export function TeamListView() {
       {dissolveTarget && (
         <TeamDissolveModal
           team={dissolveTarget}
-          onClose={() => setDissolveTarget(null)}
+          onClose={() => setDissolveTargetId(null)}
           onDissolved={(team) => {
             // 해산한 팀을 보고 있었다면 작업 범위를 시스템 전체 보기로 되돌린다. 안 그러면
             // 쿠키에 남은 teamId 로 스위처가 「알 수 없는 팀」에 갇힌다 — 슈퍼어드민의 팀

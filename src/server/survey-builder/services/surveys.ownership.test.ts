@@ -61,12 +61,8 @@ import { getSurveyById } from '@/server/read-models/survey-structure';
 import { assertSurveyCapability } from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
 
-import {
-  SurveyOwnershipRequiredError,
-  createSurvey,
-  duplicateSurvey,
-  ensureSurveyInDb,
-} from './surveys';
+import { SurveyOwnershipRequiredError } from '../domain/survey';
+import { createSurvey, duplicateSurvey, ensureSurveyInDb } from './surveys';
 
 const SETTINGS = {
   isPublic: true,

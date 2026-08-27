@@ -69,7 +69,14 @@ async function seedUser(id: string, isSuperadmin: boolean): Promise<void> {
   });
 }
 
-/** 팀 하나 + 팀원 1명 + 그룹 1개 + 그룹에 담긴 설문 1건. 해산의 전형적 대상. */
+/**
+ * 팀 하나 + 팀원 1명 + 그룹 1개 + 그룹에 담긴 설문 1건 + **소프트 삭제된 설문 1건**.
+ *
+ * 삭제된 설문을 함께 두는 이유는 서비스가 일부러 `deletedAt` 필터를 걸지 않기 때문이다.
+ * 거르면 그 행의 `team_id` 가 해산된 팀을 계속 가리켜 FK RESTRICT 가 훗날의 팀 행 정리를
+ * 막고, 휴지통에서 되살린 설문이 없는 팀 소유로 살아난다. 시드가 없으면 그 결정을
+ * 되돌려도 테스트가 초록이다.
+ */
 async function seedTeamWithWork(label: string) {
   const { id: teamId } = await admin.teams.create({
     name: `해산팀-${label}-${crypto.randomUUID().slice(0, 8)}`,
@@ -94,12 +101,27 @@ async function seedTeamWithWork(label: string) {
   const { id: groupId } = await admin.surveyGroups.create({ teamId, name: `그룹-${label}` });
   await admin.surveyGroups.collect({ groupId, surveyIds: [surveyId] });
 
+  const deletedSurveyId = crypto.randomUUID();
+  await db.insert(surveysTable).values({
+    id: deletedSurveyId,
+    title: `삭제된 설문 ${label}`,
+    teamId,
+    visibility: 'team',
+    assignmentStatus: 'assigned',
+    ownerUserId: MEMBER_ID,
+    createdBy: MEMBER_ID,
+    isPublic: false,
+    status: 'draft',
+    deletedAt: new Date(),
+  });
+  createdSurveyIds.push(deletedSurveyId);
+
   const [team] = await db
     .select({ name: teamsTable.name })
     .from(teamsTable)
     .where(eq(teamsTable.id, teamId));
 
-  return { teamId, teamName: team?.name ?? '', surveyId, groupId };
+  return { teamId, teamName: team?.name ?? '', surveyId, deletedSurveyId, groupId };
 }
 
 async function surveyRow(surveyId: string) {
@@ -152,7 +174,7 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
   });
 
   it('확정 한 번에 팀·설문·그룹·감사가 함께 움직인다', async () => {
-    const { teamId, teamName, surveyId } = await seedTeamWithWork('원자성');
+    const { teamId, teamName, surveyId, deletedSurveyId } = await seedTeamWithWork('원자성');
 
     await admin.teams.dissolve({ teamId, confirmName: teamName });
 
@@ -170,12 +192,19 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
     expect(survey?.assignmentStatus).toBe('assignment_pending');
     expect(survey?.surveyGroupId).toBeNull();
 
+    // 소프트 삭제된 설문도 팀을 놓는다 — 남겨두면 죽은 팀을 가리키는 FK 가 살아남는다.
+    const deleted = await surveyRow(deletedSurveyId);
+    expect(deleted?.deletedAt).not.toBeNull();
+    expect(deleted?.teamId).toBeNull();
+    expect(deleted?.assignmentStatus).toBe('assignment_pending');
+
     const events = await db
       .select({ action: teamEventsTable.action, metadata: teamEventsTable.metadata })
       .from(teamEventsTable)
       .where(and(eq(teamEventsTable.teamId, teamId), eq(teamEventsTable.action, 'dissolve')));
     expect(events).toHaveLength(1);
     // 규모는 트랜잭션 안에서 잰 값이다 — 설문은 teamId 를 잃어 사후에 되짚을 수 없다.
+    // surveyCount 는 **살아 있는** 1건 — 함께 움직인 삭제분은 재배치 대상이 아니라 세지 않는다.
     expect(events[0]?.metadata).toMatchObject({ teamName, memberCount: 1, surveyCount: 1 });
   });
 
@@ -214,8 +243,13 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
 
     // 하나는 성공, 하나는 이미 해산된 팀이라 NOT_FOUND.
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    // 진 쪽은 잠금이 풀린 뒤 archived 를 보고 물러난다 — 무슨 에러든 좋은 게 아니라
+    // NOT_FOUND 여야 한다. 여기서 다른 코드가 나오면 조건부 UPDATE 가 아니라 다른 이유로
+    // 실패한 것이다(직렬화 오류 등).
     const rejected = results.find((r) => r.status === 'rejected');
-    expect((rejected as PromiseRejectedResult).reason).toBeInstanceOf(ORPCError);
+    const reason = (rejected as PromiseRejectedResult).reason;
+    expect(reason).toBeInstanceOf(ORPCError);
+    expect(reason).toMatchObject({ code: 'NOT_FOUND' });
 
     const events = await db
       .select({ id: teamEventsTable.id })
@@ -265,7 +299,7 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
     );
     await expect(
       surveyClient.surveys.create({ title: '유령이 될 뻔한 설문', scope: teamId }),
-    ).rejects.toBeDefined();
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('해산된 팀의 그룹은 더 이상 만질 수 없다', async () => {

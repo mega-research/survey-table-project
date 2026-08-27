@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { FileText, Globe, Loader2, TriangleAlert, Users } from 'lucide-react';
 
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/get-error-message';
 import type { TeamListItem } from '@/shared/contracts/workspace-io';
 
@@ -38,15 +39,17 @@ export function TeamDissolveModal({ team, onClose, onDissolved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const dissolveTeam = useDissolveTeam();
 
-  // 정확히 같아야 한다. 공백 차이로 통과시키면 확인란이 장식이 된다 — 서버도 같은 대조를 한다.
-  const canDissolve = confirmName === team.name;
+  // 앞뒤 공백만 접는다(계약도 같은 규칙). 대소문자는 접지 않는다 — 한글 조직 경로라 접을
+  // 이득이 없고 확인의 의미만 약해진다. 서버도 같은 대조를 한다.
+  const trimmedName = confirmName.trim();
+  const canDissolve = trimmedName === team.name;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!canDissolve) return;
     setError(null);
     try {
-      await dissolveTeam.mutateAsync({ teamId: team.id, confirmName });
+      await dissolveTeam.mutateAsync({ teamId: team.id, confirmName: trimmedName });
       onDissolved(team);
       onClose();
     } catch (err) {
@@ -62,9 +65,11 @@ export function TeamDissolveModal({ team, onClose, onDissolved }: Props) {
           {team.name}
           {objectParticle(team.name)} 해산할까요?
         </DialogTitle>
-        <p className="mt-3.5 text-[13px] text-[#6E6E73]">
+        {/* DialogDescription 이라야 aria-describedby 에 걸린다 — 평범한 p 로 두면 스크린리더가
+            다이얼로그를 열 때 제목만 읽고 "되돌릴 수 없다" 는 경고를 전달하지 못한다. */}
+        <DialogDescription className="mt-3.5 text-[13px] text-[#6E6E73]">
           이 작업은 되돌릴 수 없습니다. 해산을 확정하면 즉시 적용됩니다.
-        </p>
+        </DialogDescription>
 
         <div className="mt-3.5 flex flex-col gap-[9px] rounded-[10px] bg-[#F9FAFB] p-3.5">
           <ImpactRow icon={<Users className="h-3.5 w-3.5 shrink-0 text-[#374151]" />}>
@@ -82,14 +87,17 @@ export function TeamDissolveModal({ team, onClose, onDissolved }: Props) {
           <label htmlFor="dissolve-confirm" className="text-[12px] text-[#9CA3AF]">
             확인을 위해 팀 이름을 입력하세요
           </label>
-          <input
+          {/* bare input 에 FIELD_INPUT 을 붙이면 안 된다 — 그건 shadcn Input 위에 얹는
+              **오버라이드 세트**라 테두리 폭·너비·좌우 패딩이 base(components/ui/input)에 있다.
+              Tailwind preflight 가 border 폭을 0 으로 깔아 색만 남고 테두리가 사라진다. */}
+          <Input
             id="dissolve-confirm"
             value={confirmName}
             onChange={(e) => setConfirmName(e.target.value)}
             placeholder={team.name}
             autoComplete="off"
             autoFocus
-            className={FIELD_INPUT}
+            className={`${FIELD_INPUT} rounded-[9px] border-[#E5E5EA]`}
           />
 
           {error && <p className="text-[12.5px] text-red-600">{error}</p>}
