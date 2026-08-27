@@ -68,8 +68,11 @@ export const isUnsubscribedSql = sql`${effectiveMailStatusExpr} = 'skipped_unsub
  * 수신거부자 명단이 공유하는 축. 결과코드의 status(negative 여부)와 무관하게 성립한다 —
  * 수신거부는 "메일 거부" 의사라 모집단(진척률 분모)에서는 빼지 않되 단체메일에서는
  * 항상 제외해야 하므로, neutral 수신거부 코드도 이 축이 잡는다.
+ *
+ * COALESCE 필수 — 회차가 없으면 서브쿼리·LIKE 가 NULL 이고, 호출부의 `NOT (...)` 이
+ * 3값 논리로 NULL 이 되어 회차 없는 정상 컨택 전부가 WHERE 에서 탈락한다.
  */
-export const latestResultUnsubscribedSql = sql`${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`;
+export const latestResultUnsubscribedSql = sql`COALESCE(${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%', FALSE)`;
 
 /**
  * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는

@@ -4,16 +4,18 @@ import { extractResultCodeStatuses } from '@/lib/operations/result-code-statuses
 import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/db/schema/schema-types';
 
 describe('extractResultCodeStatuses', () => {
-  it('DEFAULT 13개에서 positive=[1.조사완료], negative=[수신거부]', () => {
+  it('DEFAULT 13개에서 positive=[1.조사완료], negative=[] — 수신거부는 neutral', () => {
+    // 수신거부는 조사 거절 의사일 뿐 모집단 이탈이 아니다 (2026-08-27 결정).
+    // 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당한다.
     const result = extractResultCodeStatuses(DEFAULT_RESULT_CODES);
     expect(result.positive).toEqual(['1.조사완료']);
-    expect(result.negative).toEqual(['수신거부']);
+    expect(result.negative).toEqual([]);
   });
 
   it('NULL 사용자 정의 안 함 → DEFAULT 적용', () => {
     const result = extractResultCodeStatuses(null);
     expect(result.positive).toEqual(['1.조사완료']);
-    expect(result.negative).toEqual(['수신거부']);
+    expect(result.negative).toEqual([]);
   });
 
   it('명시 status 가 fallback 우선 — 수신거부를 neutral 로 재정의', () => {

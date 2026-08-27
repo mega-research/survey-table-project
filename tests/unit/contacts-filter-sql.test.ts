@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sql as sqlTag } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql';
+import { buildContactsFilterSql, latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 
 const dialect = new PgDialect();
@@ -531,5 +531,13 @@ describe('buildContactsFilterSql — 컨택결과 수신거부 3축 통합', () 
       ]),
     );
     expect(query.sql).not.toContain('unsubscribed_at');
+  });
+});
+
+describe('latestResultUnsubscribedSql', () => {
+  it('COALESCE 로 비-NULL 판정이다 — 회차 없는 컨택이 NOT (...) 에서 탈락하지 않는다', () => {
+    const query = dialect.sqlToQuery(sqlTag`${latestResultUnsubscribedSql}`);
+    expect(query.sql.toUpperCase()).toContain('COALESCE');
+    expect(query.sql.toUpperCase()).toContain('FALSE');
   });
 });

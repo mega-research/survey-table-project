@@ -53,7 +53,7 @@ const recipientRows: Array<{
   sendAttemptedAt: Date | null;
   sendLeaseToken: string | null;
   sendLeaseExpiresAt: Date | null;
-  sendPayloadSnapshot: null;
+  sendPayloadSnapshot: Record<string, unknown> | null;
   contactTargetId: string | null;
 }> = [
   {
@@ -222,6 +222,7 @@ vi.mock('@/lib/mail/render-for-send', () => ({
 }));
 
 vi.mock('@/lib/mail/send-bulk', () => ({
+  RetryableCampaignSendError: class RetryableCampaignSendError extends Error {},
   resolveCampaignAttachments: vi.fn(async () => undefined),
   sendCampaignRecipient: sendRecipientMock,
 }));
@@ -251,6 +252,7 @@ beforeEach(() => {
   recipientRows[0]!.sendAttemptedAt = null;
   recipientRows[0]!.sendLeaseToken = null;
   recipientRows[0]!.sendLeaseExpiresAt = null;
+  recipientRows[0]!.sendPayloadSnapshot = null;
   recipientRows[0]!.resendMessageId = null;
   recipientRows[1]!.status = 'queued';
   recipientRows[1]!.resendMessageId = null;
@@ -296,6 +298,19 @@ describe('dispatchCampaignChunk 수신거부 재검증', () => {
     await dispatchCampaignChunk('c1', ['r1']);
 
     expect(sendRecipientMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sending 복구 재시도도 수신거부 결과코드가 기록되면 차단한다', async () => {
+    // 429 등으로 sending 에 남은 수신자 — lease 만료 후 복구 창 안, payload 보존 상태.
+    recipientRows[0]!.status = 'sending';
+    recipientRows[0]!.sendAttemptedAt = new Date();
+    recipientRows[0]!.sendPayloadSnapshot = {
+      from: 'a', replyTo: 'b', to: 'active@example.com', subject: 's', html: 'h', attachments: [],
+    };
+    latestCodeByContact.set('contact-r1', '수신거부');
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).rejects.toThrow('수신거부');
+    expect(sendRecipientMock).not.toHaveBeenCalled();
   });
 
   it('neutral 수신거부 결과코드도 최근 회차면 발송을 건너뛴다', async () => {

@@ -214,6 +214,19 @@ async function claimRecipientDelivery(
       ? lockedContact
       : null;
 
+    // 최근 회차 결과코드가 수신거부인지 — 결과코드 status(negative) 무관 (수신거부 3축).
+    // queued 스킵과 sending 복구 차단이 공유한다. busy 조기 반환 뒤에만 호출해
+    // lease 대기 폴링마다 조회하지 않는다.
+    const latestResultCodeUnsubscribed = async (contactId: string): Promise<boolean> => {
+      const [latestAttempt] = await tx
+        .select({ resultCode: contactAttempts.resultCode })
+        .from(contactAttempts)
+        .where(eq(contactAttempts.contactTargetId, contactId))
+        .orderBy(desc(contactAttempts.attemptNo))
+        .limit(1);
+      return isUnsubscribeResultCode(latestAttempt?.resultCode ?? null);
+    };
+
     let sendAttemptedAt = recipient.sendAttemptedAt;
     let sendPayloadSnapshot = recipient.sendPayloadSnapshot;
     if (recipient.status === 'queued') {
@@ -226,15 +239,8 @@ async function claimRecipientDelivery(
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
       }
-      // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증 — 결과코드
-      // status(negative) 무관, 최근 회차 기준 (조회·후보 배제와 같은 수신거부 3축).
-      const [latestAttempt] = await tx
-        .select({ resultCode: contactAttempts.resultCode })
-        .from(contactAttempts)
-        .where(eq(contactAttempts.contactTargetId, currentContact.id))
-        .orderBy(desc(contactAttempts.attemptNo))
-        .limit(1);
-      if (isUnsubscribeResultCode(latestAttempt?.resultCode ?? null)) {
+      // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증.
+      if (await latestResultCodeUnsubscribed(currentContact.id)) {
         return finishWithoutSend(
           'skipped_unsubscribed',
           '수신거부 결과코드가 기록되어 발송을 건너뛰었습니다.',
@@ -280,6 +286,11 @@ async function claimRecipientDelivery(
         return { kind: 'payload_missing' };
       }
       if (!currentContact || currentContact.unsubscribedAt !== null) {
+        return { kind: 'recovery_blocked' };
+      }
+      // sending 복구 재시도도 수신거부 결과코드를 차단한다 — 결과코드 수신거부는
+      // unsubscribed_at 을 세우지 않으므로 위 검사만으로는 재발송이 나갈 수 있다.
+      if (await latestResultCodeUnsubscribed(currentContact.id)) {
         return { kind: 'recovery_blocked' };
       }
     } else {

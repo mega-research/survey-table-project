@@ -454,7 +454,8 @@ export interface ContactResultCode {
  *
  * status 매핑:
  * - '1.조사완료' → 'positive' (응답 완료 인정)
- * - '수신거부' → 'negative' (모집단 제외)
+ * - '수신거부' → 'neutral' (2026-08-27 결정 — 조사 거절 의사일 뿐 모집단 이탈이
+ *   아니므로 분모 유지. 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당)
  * - 나머지 11개 → 필드 생략 (= 'neutral')
  */
 export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
@@ -470,7 +471,7 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '10.메일발송', label: '10.메일발송', order: 10, tone: 'blue' },
   { code: '11.기타', label: '11.기타', order: 11, tone: 'amber' },
   { code: '12.담당자퇴사', label: '12.담당자퇴사', order: 12, tone: 'rose' },
-  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'negative' },
+  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'neutral' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

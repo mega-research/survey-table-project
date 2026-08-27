@@ -10,6 +10,7 @@ import type { ProgressColumnScheme } from '@/db/schema/schema-types';
 
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import { buildFilterSql, type FilterCondition } from './progress-filters.server';
+import { isUnsubscribeResultCode } from './filter-shared';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 import { normalizeContactColumnScheme } from './contacts';
 import {
@@ -84,8 +85,17 @@ function buildScreenedOutExists(isTest: boolean): SQL {
                        AND sr.is_test = ${isTest})`;
 }
 
+/**
+ * 진척률 분모 제외용 negative 코드 — 수신거부 계열 코드는 설정이 negative 여도
+ * 분모를 깎지 않는다 (수신거부 = 분모 유지 정책의 설정 무관 강제). 기본 코드셋을
+ * 아직 저장하지 않은 기존 설문(수신거부 negative 잔존)도 이 필터가 정렬한다.
+ */
+function progressNegativeCodes(negativeCodes: string[]): string[] {
+  return negativeCodes.filter((c) => !isUnsubscribeResultCode(c));
+}
+
 function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
-  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}
+  return sql`${buildNegativeCodeExists(progressNegativeCodes(negativeCodes), sql`ct.id`)}
     OR ${buildScreenedOutExists(isTest)}`;
 }
 
@@ -101,7 +111,7 @@ function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
  */
 function buildExcludeBreakdownSelect(negativeCodes: string[], isTest: boolean): SQL {
   const screened = buildScreenedOutExists(isTest);
-  const negative = sql`(${buildNegativeCodeExists(negativeCodes, sql`ct.id`)})`;
+  const negative = sql`(${buildNegativeCodeExists(progressNegativeCodes(negativeCodes), sql`ct.id`)})`;
   return sql`
       COUNT(*) FILTER (WHERE ${screened})::int AS excluded_screened_out,
       COUNT(*) FILTER (WHERE NOT (${screened}) AND ${negative})::int AS excluded_negative_code`;
