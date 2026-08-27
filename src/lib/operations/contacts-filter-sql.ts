@@ -6,6 +6,7 @@ import {
   FILTER_SOURCE,
   UNSUBSCRIBE_RESULT_CODE_KEYWORD,
   escapeLikePattern,
+  isUnsubscribeResultCode,
 } from './filter-shared';
 
 /**
@@ -54,6 +55,13 @@ export const effectiveMailStatusExpr = sql<MailRecipientStatus | null>`(CASE
   WHEN ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%' THEN 'skipped_unsubscribed'
   ELSE ${latestMailStatusExpr}
 END)`;
+
+/**
+ * 세 수신거부 신호(메일 해지 링크 unsubscribed_at · 발송 스킵 상태 · 최근 결과코드
+ * 수신거부)를 하나로 접은 단일 판정. 컨택결과 필터의 수신거부 코드 선택도 이 판정을
+ * OR 로 결합해, 어느 경로의 수신거부든 같은 조회로 잡히게 한다.
+ */
+export const isUnsubscribedSql = sql`${effectiveMailStatusExpr} = 'skipped_unsubscribed'`;
 
 /**
  * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
@@ -158,8 +166,10 @@ export function buildClauseSql(
   if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
     // includeNull = "결과 없음" — 회차 이력이 없거나 최신 회차 result_code 가 NULL.
     // 표(latestResultCode ?? '—')와 같은 판정이라 화면과 필터가 어긋나지 않는다.
-    return cond.includeNull === true
-      ? sql`${latestResultCodeExpr} IS NULL`
+    if (cond.includeNull === true) return sql`${latestResultCodeExpr} IS NULL`;
+    // 수신거부 코드 선택은 메일 경로 수신거부(해지 링크·발송 스킵)까지 함께 잡는다.
+    return isUnsubscribeResultCode(cond.value)
+      ? sql`(${latestResultCodeExpr} = ${cond.value} OR ${isUnsubscribedSql})`
       : sql`${latestResultCodeExpr} = ${cond.value}`;
   }
 
@@ -302,6 +312,8 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
       );
     }
     if (cond.includeNull === true) parts.push(sql`${latestResultCodeExpr} IS NULL`);
+    // 수신거부 코드가 선택에 포함되면 메일 경로 수신거부(해지 링크·발송 스킵)도 함께 잡는다.
+    if (values.some((v) => isUnsubscribeResultCode(v))) parts.push(isUnsubscribedSql);
     return sql`(${sql.join(parts, sql` OR `)})`;
   }
 

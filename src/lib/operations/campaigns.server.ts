@@ -40,7 +40,12 @@ import {
   latestResultCodeExpr,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql';
-import { escapeLikePattern, FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
+import {
+  escapeLikePattern,
+  FILTER_NONE_VALUE,
+  isUnsubscribeResultCode,
+  UNSUBSCRIBE_RESULT_CODE_KEYWORD,
+} from '@/lib/operations/filter-shared';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 import {
   campaignScopeCondition,
@@ -195,6 +200,7 @@ export async function getCampaignDetail(
   // count 쿼리는 부수 정보 — 실패해도 페이지 전체를 죽이지 않도록 0 fallback.
   // skipped_unsubscribed 상태는 발송 시도조차 없었으므로 "발송 대상 중 수신거부 응답"
   // 의미에서 제외 — 등록 시점 스킵은 skippedUnsubscribedCount(목록 카드)가 별도 표현.
+  // 수신거부 판정은 수신자 탭 필터와 같은 축(메일 해지 OR 최근 결과코드 수신거부).
   const [campaignRows, currentUnsubscribedCount] = await Promise.all([
     db
       .select({
@@ -220,7 +226,10 @@ export async function getCampaignDetail(
       .where(
         and(
           eq(mailRecipients.campaignId, cid),
-          isNotNull(contactTargets.unsubscribedAt),
+          or(
+            isNotNull(contactTargets.unsubscribedAt),
+            sql`${RECIPIENT_RESULT_EXPR} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`,
+          ),
           ne(mailRecipients.status, 'skipped_unsubscribed'),
           isNull(mailRecipients.archivedAt),
           campaignScopeCondition(scope),
@@ -440,12 +449,13 @@ export async function listCampaignRecipients(args: {
 
   if (args.statuses && args.statuses.length > 0) {
     // '수신거부' 탭(skipped_unsubscribed)은 발송 스킵 상태만으로는 발송 후
-    // 수신거부자를 놓친다 — 행의 수신거부 badge(contact_targets.unsubscribed_at)와
-    // 같은 판정이 되도록 OR 로 결합한다.
+    // 수신거부자를 놓친다 — 행의 수신거부 badge 와 같은 판정이 되도록 메일 해지
+    // (contact_targets.unsubscribed_at)와 최근 결과코드 수신거부를 OR 로 결합한다.
     const statusCond = args.statuses.includes('skipped_unsubscribed')
       ? or(
           inArray(mailRecipients.status, args.statuses),
           isNotNull(contactTargets.unsubscribedAt),
+          sql`${RECIPIENT_RESULT_EXPR} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`,
         )!
       : inArray(mailRecipients.status, args.statuses);
     whereParts.push(statusCond);
@@ -984,8 +994,21 @@ export interface UnsubscribedContactRow {
   resid: number;
   emailMasked: string;
   groupValue: string | null;
-  unsubscribedAt: Date;
+  /** 메일 해지(unsubscribed_at). 컨택결과 단독 수신거부면 null */
+  unsubscribedAt: Date | null;
+  /** 최근 결과코드가 수신거부면 그 회차 기록 시각. 아니면 null */
+  resultUnsubscribedAt: Date | null;
 }
+
+// 최신 회차 기록 시각 — 컨택결과 수신거부 행의 해지 시각 표기용.
+const latestAttemptAtExpr = sql<Date | null>`(
+  SELECT created_at FROM contact_attempts
+  WHERE contact_target_id = "contact_targets"."id"
+  ORDER BY attempt_no DESC LIMIT 1
+)`;
+
+// 최근 결과코드가 수신거부 키워드 판정인지 (조사 대상 필터와 같은 축).
+const resultUnsubscribedCond = sql`${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`;
 
 export async function listUnsubscribedContacts(args: {
   surveyId: string;
@@ -994,10 +1017,12 @@ export async function listUnsubscribedContacts(args: {
   pageSize?: number;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
+  // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
+  // 최근 결과코드 수신거부. 발송 스킵 상태는 이 둘 중 하나에서 파생되므로 별도 축 없음.
   const where = and(
     eq(contactTargets.surveyId, args.surveyId),
     targetScopeCondition(args.scope),
-    isNotNull(contactTargets.unsubscribedAt),
+    or(isNotNull(contactTargets.unsubscribedAt), resultUnsubscribedCond),
   )!;
 
   const [countRow] = await db
@@ -1015,24 +1040,29 @@ export async function listUnsubscribedContacts(args: {
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
       unsubscribedAt: contactTargets.unsubscribedAt,
+      latestResultCode: latestResultCodeExpr.as('latest_result_code'),
+      latestAttemptAt: latestAttemptAtExpr.as('latest_attempt_at'),
     })
     .from(contactTargets)
     .where(where)
-    .orderBy(desc(contactTargets.unsubscribedAt))
+    .orderBy(
+      sql`COALESCE(${contactTargets.unsubscribedAt}, ${latestAttemptAtExpr}) DESC NULLS LAST`,
+    )
     .limit(pageSize)
     .offset(offset);
 
   const maskMap = await fetchEmailMaskHints(rows.map((r) => r.id));
 
   return {
-    rows: rows
-      .filter((r): r is typeof r & { unsubscribedAt: Date } => r.unsubscribedAt !== null)
-      .map((r) => ({
-        id: r.id,
-        resid: r.resid,
-        emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-        groupValue: r.groupValue,
-        unsubscribedAt: r.unsubscribedAt,
+    rows: rows.map((r) => ({
+      id: r.id,
+      resid: r.resid,
+      emailMasked: maskMap.get(r.id) || EMAIL_DASH,
+      groupValue: r.groupValue,
+      unsubscribedAt: r.unsubscribedAt,
+      resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
+        ? r.latestAttemptAt
+        : null,
       })),
     total,
     page: clampedPage,

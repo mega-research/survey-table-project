@@ -475,3 +475,61 @@ describe('buildContactsFilterSql — 메일 필터 (유효 메일 상태)', () =
     expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
   });
 });
+
+describe('buildContactsFilterSql — 컨택결과 수신거부 3축 통합', () => {
+  function resultEnumClause(value: string): FilterClause {
+    return {
+      op: null,
+      condition: { source: 'system.contact_result', mode: 'enum', value },
+    };
+  }
+
+  it('수신거부 코드 선택은 메일 경로 수신거부(유효 상태)까지 OR 로 잡는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([resultEnumClause('13.수신거부')]));
+    expect(query.sql).toContain('result_code');
+    // 유효 메일 상태 CASE 가 OR 로 결합됐는지 — unsubscribed_at 신호 포함.
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    expect(query.params).toContain('13.수신거부');
+  });
+
+  it('일반 코드 선택은 결과코드 일치만 본다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([resultEnumClause('6.거절')]));
+    expect(query.sql).toContain('result_code');
+    expect(query.sql).not.toContain('unsubscribed_at');
+  });
+
+  it('헤더 체크박스(in)에 수신거부 코드가 포함되면 메일 경로 수신거부도 잡는다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'in',
+            value: '',
+            values: ['1.조사완료', '13.수신거부'],
+          },
+        },
+      ]),
+    );
+    expect(query.sql).toContain(' IN ');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+  });
+
+  it('헤더 체크박스(in)에 수신거부 코드가 없으면 결과코드만 본다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'in',
+            value: '',
+            values: ['1.조사완료'],
+          },
+        },
+      ]),
+    );
+    expect(query.sql).not.toContain('unsubscribed_at');
+  });
+});

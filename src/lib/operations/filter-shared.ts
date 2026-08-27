@@ -157,6 +157,11 @@ export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
  */
 export const UNSUBSCRIBE_RESULT_CODE_KEYWORD = '수신거부';
 
+/** 결과코드가 수신거부 판정인지 — SQL 조립 분기·badge 표시가 공유하는 판정. */
+export function isUnsubscribeResultCode(code: string | null | undefined): boolean {
+  return code != null && code.includes(UNSUBSCRIBE_RESULT_CODE_KEYWORD);
+}
+
 /**
  * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인
  * 스냅샷 재발송 경유)이 있으면 실제 서버 의미 그대로 라벨링해 함께 노출한다.

@@ -7,7 +7,11 @@ import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
-import { RECIPIENT_FILTER_LABEL, RECIPIENT_FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import {
+  RECIPIENT_FILTER_LABEL,
+  RECIPIENT_FILTER_SOURCE,
+  isUnsubscribeResultCode,
+} from '@/lib/operations/filter-shared';
 import type { HeaderFilterEntry } from '@/lib/operations/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
@@ -271,11 +275,16 @@ export function CampaignRecipientsTable({
                       <div className="flex flex-wrap items-center gap-1">
                         <RecipientStatusBadge status={r.status} />
                         {/* status='skipped_unsubscribed' 는 이미 status badge 가 "수신거부" 라 중복 노출 회피.
-                            발송 후 본인이 footer 링크로 해지한 경우에만 별도 badge 노출. */}
-                        {r.unsubscribedAt && r.status !== 'skipped_unsubscribed' && (
+                            발송 후 footer 링크 해지 또는 컨택결과 수신거부 기록 시 별도 badge 노출. */}
+                        {(r.unsubscribedAt || isUnsubscribeResultCode(r.latestResultCode))
+                          && r.status !== 'skipped_unsubscribed' && (
                           <span
                             className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
-                            title={`수신거부 ${r.unsubscribedAt.toISOString()}`}
+                            title={
+                              r.unsubscribedAt
+                                ? `수신거부 ${r.unsubscribedAt.toISOString()}`
+                                : `컨택결과 수신거부 (${r.latestResultCode ?? ''})`
+                            }
                           >
                             수신거부
                           </span>
