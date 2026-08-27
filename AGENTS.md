@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 14 재배치 센터 — `/admin/reassignment` 슈퍼어드민 전용 인박스. 팀을 잃은 **사람**(미배치)과 **설문**(배치 대기)을 한곳에서 처리한다. 입구는 팀 관리의 「메가리서치」 카드 하나 — 사이드바 항목도 teamId 딥링크도 없다(팀 경계로 좁힐 수 없는 목록이라 팀장에게 하나라도 열면 전사 열람). `workspace.reassignment` 5종 전부 superadmin. **새 소유자는 목적지 팀의 활성 멤버여야 한다** — 판정 코어의 소유자 분기가 소유 팀 소속일 때만 전권을 주므로 팀 밖 사람을 앉히면 자기 설문을 못 여는 소유자가 생긴다. 일괄 배치는 전부 아니면 전무. 마이그레이션 0091 `survey_ownership_events` — 해산이 `team_id` 를 NULL 로 내려 설문 행에서 지워지는 **출신 팀**을 되짚는 유일한 경로이고, 해산이 설문별 `unassign` 행을 함께 남긴다. 재입사(9-4)는 상태 전이 + 팀 배정을 `server/workflows/user-rehire` 가 한 트랜잭션으로 묶는다. 직전: 티켓 13 팀 해산)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 15 **B 검증 게이트** — 팀 격리 음성 스위트를 **라우터 열거** 위에 세웠다. `tests/helpers/rpc-surface.ts` 가 `@/server/router` 를 런타임에 훑어(베이스는 미들웨어 동일성, 입력 키는 zod shape) 「설문 id 를 받는 내부 표면」을 뽑고, 그 집합이 인벤토리와 어긋나면 그 자리에서 빨개진다 — **새 surveyId procedure 는 `tests/integration/cross-team-idor-rpc.test.ts` 등재가 의무다**. 두 축: 타 팀 설문 id 주입(전 표면 NOT_FOUND + 요구 capability 고정)과 내 설문 + 남의 하위 행(realdb — 관문 통과 뒤 남는 축). 후자는 **거부와 「조용한 무동작」을 갈라 적는다**. 시스템 범위 거부는 입력·쿠키·URL 세 채널을 각각 고정했고, 그 과정에서 `WorkScopeError` 에 RPC 매핑이 없어 「거부」가 실제로는 500 이던 것을 `server/rpc-work-scope.ts` 로 닫았다. 마이그레이션 없음. 직전: 티켓 14 재배치 센터 — 슈퍼어드민 전용 인박스, 마이그레이션 0091 `survey_ownership_events`, 재입사의 팀 배정 연계)
 
 ---
 
@@ -89,6 +89,7 @@ src/
 │   ├── health.ts               # health procedure (코어 옆)
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
+│   ├── rpc-work-scope.ts       # 위 거부의 RPC 어댑터 — toRpcWorkScopeError(WorkScopeError→FORBIDDEN, 티켓 15)
 │   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
 │   │                           # + assertSurveyCapabilityBatch(여러 설문·여러 capability 를 한 왕복으로 — 담기 200건용, 티켓 12)
 │   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
@@ -810,6 +811,10 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   범위를 해석해 `AdminShell` 에 넘기고(무효 쿠키는 거부가 아니라 기본 범위로 접는다 — 쿠키는 편의값),
   전환은 쿠키 기록 + 전체 쿼리 캐시 무효화 + `router.refresh` 로 처리한다. 목록 쿼리 키에는 항상
   해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
+  **거부는 `server/rpc-work-scope.ts` 의 `toRpcWorkScopeError` 가 FORBIDDEN 으로 옮긴다**(티켓 15) —
+  매핑이 없던 동안 그 「거부」는 실제로 500 이었다(rpc-error-policy 가 미지의 예외를 마스킹한다).
+  지는 표면은 설문 목록과 생성 경로다. **쿠키에서 온 범위는 이 길로 오지 않는다** — 화면이 기본
+  범위로 접으므로, 접는 쪽과 거부하는 쪽이 갈리는 것은 판정이 둘이어서가 아니라 값의 출처 때문이다.
 - **설문을 만드는 경로 넷(빌더 자동 생성·명시 생성·복제·전체 저장 생성 모드)은 전부
   `resolveNewSurveyOwnership` 로 소유·배치 컬럼을 채운다.** 시스템 전체 보기는 teams 행이 아니라
   조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수 없다 — 서버가
@@ -845,6 +850,23 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   grant 일치)로 `export.download` 를 지고, 게스트의 grant 설문 export 현행 유지·항상 차단 전환은
   티켓 21 몫이다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
   (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
+- **관문 배선의 검증은 라우터 열거가 진다**(티켓 15, B 검증 게이트). 손으로 적은 목록만 도는
+  음성 스위트는 새로 붙은 표면을 영원히 초록으로 두므로, `tests/helpers/rpc-surface.ts` 가
+  `@/server/router` 를 런타임에 훑어 표면 목록을 만든다 — 베이스는 **미들웨어 동일성**으로
+  (authed·account·scoped 는 길이가 같지만 두 번째 미들웨어가 서로 다른 객체다), 입력 키는
+  zod object 의 shape 으로 읽는다. **`surveyId`·`surveyIds` 를 받는 authed·scoped procedure 를
+  새로 만들면 `tests/integration/cross-team-idor-rpc.test.ts` 의 인벤토리에 등재해야 한다** —
+  등재하지 않으면 그 파일이 즉시 빨개진다(그것이 「누락 표면 없음」의 증명이다). 키 이름이
+  다르거나(`id`) 입력이 zod object 가 아닌 표면은 자동 탐지가 못 보므로 별칭 목록에 적는다.
+  음성 스위트는 두 축이다 — **타 팀 설문 id 주입**(전 표면 NOT_FOUND + 요구 capability 고정,
+  db mock 이 서비스 도달을 사고로 만든다)과 **내 설문 + 남의 하위 행**
+  (`cross-team-idor.realdb.test.ts` — 관문이 통과한 뒤 남는 축이라 실 DB 로만 보인다).
+  후자에서 **거부와 「조용한 무동작」을 갈라 적는다**: 응답 관리 4종·질문 삭제·문항 그룹 삭제는
+  WHERE 에 surveyId 가 함께 걸려 0행이 영향받고 표면은 그대로 `{ok:true}` 를 준다. 보안상으로는
+  거부와 같지만 부류를 적어 두지 않으면, 나중에 누가 `surveyId` 조건을 빼도 「원래 ok 를 주던
+  표면」으로 보여 리뷰를 통과한다. RSC 콘솔 페이지·REST export 라우트는 라우터가 없어
+  파일 시스템을 훑는다(`tests/repo/survey-boundary-guards.test.ts` — `rsc-page-guards`(인증)·
+  `analytics-page-guards`(렌더 내용)와 분담이 갈린다: 이쪽은 **어느 설문인가**를 본다).
 - **팀 해산은 확정 즉시, 한 트랜잭션, 되돌릴 수 없다**(ADR-0011, 티켓 13, .pen FLOW 8-1).
   `workspace.teams.dissolve`(superadmin 전용, 팀 관리 목록의 카드 케밥이 유일한 진입점)가
   팀 `archived` + 소속 설문 배치 대기(`teamId=null`·`assignment_pending`·`surveyGroupId=null`)
