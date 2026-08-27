@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 12 설문 그룹 — `survey_groups`(0090) + `surveys.survey_group_id` FK(ON DELETE SET NULL)가 붙고 `workspace.surveyGroups` RPC 8종이 열렸다. **그룹은 접근 권한이 아니라 정리용 묶음**이라 관문이 두 갈래다 — 구조 편집은 그 팀 active 멤버 누구나, 설문을 넣고 빼는 것만 그 설문의 `survey.edit`+`surveyGroup.manage`. 담기 200건을 위해 코어에 `assertSurveyCapabilityBatch` 를 새로 뒀다. 화면은 그룹 관리 모달·담기 패널·삭제 확인·카드 케밥 이동 서브메뉴(.pen FLOW 2) + 그룹 화면 `?group=<id>` + 사이드바 그룹 트리. 설문이 팀을 옮길 때 `survey_group_id` 를 NULL 로 내리는 것은 티켓 13·14·19 의 계약으로 남겼다. 직전: 티켓 11 관문 배선 C)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 13 팀 해산 — `workspace.teams.dissolve`(superadmin)가 확정 즉시 한 트랜잭션으로 팀 archived + 소속 설문 배치 대기(teamId=null·assignment_pending·surveyGroupId=null) + 감사 행을 처리한다. `team_members` 행은 남긴다 — 유효 소속 판정이 active 팀만 조인하므로 팀원은 자동 미배치가 되고, 지우면 해산 시점 명부가 사라진다(ADR-0011). 확인 문구(팀 이름 재입력) 대조는 화면과 서버 양쪽. 잠금은 멤버 변경과 **같은 팀 키** + 최종 UPDATE 의 `status='active'` 조건. **해산 취소 표면 없음** — 복구는 재배치 센터(티켓 14). 함께 닫은 것 셋: 슈퍼어드민의 archived 팀 멤버 명부 변조·그룹 쓰기·**새 설문 귀속**. 마이그레이션 없음(0088 에 컬럼·어휘가 이미 있다). 직전: 티켓 12 설문 그룹 + Codex 하드닝)
 
 ---
 
@@ -824,6 +824,23 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   grant 일치)로 `export.download` 를 지고, 게스트의 grant 설문 export 현행 유지·항상 차단 전환은
   티켓 21 몫이다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
   (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
+- **팀 해산은 확정 즉시, 한 트랜잭션, 되돌릴 수 없다**(ADR-0011, 티켓 13, .pen FLOW 8-1).
+  `workspace.teams.dissolve`(superadmin 전용, 팀 관리 목록의 카드 케밥이 유일한 진입점)가
+  팀 `archived` + 소속 설문 배치 대기(`teamId=null`·`assignment_pending`·`surveyGroupId=null`)
+  - 감사 행을 함께 쓴다. **`team_members` 행은 지우지 않는다** — 유효 소속 판정
+    (`getActiveTeamMemberships`)이 active 팀만 조인하므로 팀원은 그 순간 자동으로 미배치가 되고,
+    행을 지우면 "해산 시점 명부" 가 어디에도 안 남는다. 확인 문구(팀 이름 재입력) 대조는 화면과
+    **서버 양쪽**에 있다 — 화면만 검사하면 raw RPC 한 번으로 팀이 사라진다. 잠금은 멤버 변경과
+    **같은 팀 키**(`lockTeamMembers`)를 쓰고 최종 UPDATE 에 `status='active'` 조건을 함께 건다:
+    잠금만으로는 앞선 해산 뒤에 락을 받은 두 번째가 감사 행을 더 쓰고 archivedBy 를 덮는다.
+    **해산 취소 procedure 를 만들지 말 것** — 확인 모달의 "되돌릴 수 없습니다" 가 거짓이 되고
+    정식 복구 경로는 재배치 센터(티켓 14)다. 해산 뒤에도 **공개 응답·예약 메일·Inngest 잡·
+    게스트 콘솔은 계속 돈다**(그 경로들이 팀 컬럼을 읽지 않는 것이 근거다 — 새 응답 게이트를
+    만들 때 `teamId`·`assignmentStatus` 를 끌어들이면 그 약속이 깨진다). 「해산이 끝이어야
+    하는데 열려 있던」 경로 셋도 함께 닫혔다 — 슈퍼어드민은 관문을 소속 조회 없이 통과하므로
+    archived 팀의 **멤버 명부**(members 3종에 `requireActiveTeam`)·**그룹 쓰기**
+    (`getSurveyGroupTeamId` 가 active 팀만)·**새 설문 귀속**(`resolveNewSurveyOwnership` 이
+    쓰기 직전 재확인)에 계속 닿을 수 있었다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
