@@ -63,26 +63,40 @@ export type CreateSurveyInput = z.infer<typeof CreateSurveyInput>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 업데이트 data 는 원본 Partial<{...11필드...}> 형태. endDate 는 Date|null 혼용이라
- * z.custom 으로 타입만 보장하고 service 가 updatedAt 자동 set 한다.
- * 다인자(surveyId, data) -> 단일 input object 로 묶음(oRPC procedure 단일 input).
+ * 업데이트 data — **allowlist 다.**
+ *
+ * 이 스키마가 통과시키는 키가 곧 갱신 가능한 컬럼이다. 예전에는 `z.custom<Partial<{...}>>()`
+ * 이었는데 z.custom 은 검증 함수를 주지 않으면 **런타임에 아무것도 보지 않는다** — 타입만
+ * 있고 값은 그대로 흘렀다. 서비스가 그 객체를 drizzle `.set()` 에 펼치므로 `survey.edit` 만
+ * 가진 팀원이 raw RPC 로 `ownerUserId` 를 실어 보내면 소유자가 되어 FULL_CAPS 로 승격하고,
+ * `deletedAt` 을 실으면 TEAM_MEMBER_CAPS 에 없는 `survey.delete` 관문까지 우회했다.
+ * `teamId`·`assignmentStatus`·`visibility`·`surveyGroupId` 도 같은 경로였다.
+ *
+ * `.strict()` 인 이유는 조용히 버리지 않기 위해서다 — 권한 컬럼을 실어 보낸 요청은
+ * BAD_REQUEST 로 되돌아가야 로그에 남는다. 서비스도 허용 필드만 명시 set 해 두 겹으로 막는다.
+ *
+ * `responseHeader` 만 z.custom 으로 남긴다. 판별 유니온이라 zod 로 옮기면 타입과 드리프트가
+ * 생기고, 값은 JSONB 컬럼으로만 가서 권한에 닿지 않으며 읽는 쪽이 정규화한다
+ * (`normalizeResponseHeaderConfig`, JSONB 드리프트 관례).
  */
-export const UpdateSurveyDataSchema = z.custom<
-  Partial<{
-    title: string;
-    description: string;
-    slug: string;
-    isPublic: boolean;
-    allowMultipleResponses: boolean;
-    showProgressBar: boolean;
-    shuffleQuestions: boolean;
-    requireLogin: boolean;
-    endDate: Date | null;
-    maxResponses: number | null;
-    thankYouMessage: string;
-    responseHeader: SurveyType['settings']['responseHeader'];
-  }>
->();
+export const UpdateSurveyDataSchema = z
+  .object({
+    title: z.string().optional(),
+    description: z.string().optional(),
+    slug: z.string().optional(),
+    isPublic: z.boolean().optional(),
+    allowMultipleResponses: z.boolean().optional(),
+    showProgressBar: z.boolean().optional(),
+    shuffleQuestions: z.boolean().optional(),
+    requireLogin: z.boolean().optional(),
+    // Date 와 ISO 문자열이 모두 들어온다 — 컬럼이 Date 를 원하므로 여기서 접는다.
+    endDate: z.coerce.date().nullable().optional(),
+    maxResponses: z.number().int().nullable().optional(),
+    thankYouMessage: z.string().optional(),
+    responseHeader: z.custom<SurveyType['settings']['responseHeader']>().optional(),
+  })
+  .strict();
+export type UpdateSurveyData = z.infer<typeof UpdateSurveyDataSchema>;
 
 export const UpdateSurveyInput = z.object({
   surveyId: z.string(),

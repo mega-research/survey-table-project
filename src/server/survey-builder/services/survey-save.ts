@@ -7,7 +7,7 @@ import {
   SurveyAccessError,
   type SurveyAccessUser,
 } from '@/server/survey-access';
-import { db } from '@/db';
+import { db, type DbTransaction } from '@/db';
 import {
   NewQuestion,
   NewQuestionGroup,
@@ -28,10 +28,11 @@ import type { Survey as SurveyType } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
-import type {
-  SaveResult,
-  SurveyDiffPayload,
-  SurveyDiffPayloadInput,
+import {
+  CrossSurveyRowError,
+  type SaveResult,
+  type SurveyDiffPayload,
+  type SurveyDiffPayloadInput,
 } from '../domain/survey-save';
 import { resolveNewSurveyOwnership } from './surveys';
 
@@ -75,6 +76,45 @@ const addKeys = (set: Set<string>, value: unknown): void => {
  * duplicateSurvey 의 행 조립은 여기 합치지 않는다 — 그쪽은 stripOptionCodes 와
  * stripTableRowsData 를 걸지 않고 updatedAt 도 두지 않아 의미가 다르다.
  */
+/**
+ * payload 가 지목한 하위 행이 **이 설문 것인지** 확인한다 (Codex 리뷰).
+ *
+ * 질문·그룹은 전역 PK 라 `where id in (...)` 한 줄이면 남의 설문 행에도 닿는다. 저장 관문은
+ * 부모 surveyId 하나만 보므로, 이 확인이 없으면 편집 권한이 있는 설문의 payload 에 타 팀
+ * 질문 id 를 섞어 그 질문을 지우거나 내용을 덮어쓸 수 있다.
+ *
+ * 존재하지 않는 id 는 통과시킨다 — 새 행의 삽입이 정상 동선이다. 잠그는 이유는 확인과 쓰기
+ * 사이에 그 행이 다른 설문으로 옮겨가는 창을 닫기 위해서다(현재 그런 경로는 없지만, 확인의
+ * 근거가 잠기지 않은 값이면 확인이 아니다).
+ */
+async function assertQuestionsBelongToSurvey(
+  tx: DbTransaction,
+  ids: readonly string[],
+  surveyId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const rows = await tx
+    .select({ id: questions.id, surveyId: questions.surveyId })
+    .from(questions)
+    .where(inArray(questions.id, [...new Set(ids)]))
+    .for('update');
+  if (rows.some((row) => row.surveyId !== surveyId)) throw new CrossSurveyRowError('question');
+}
+
+async function assertGroupsBelongToSurvey(
+  tx: DbTransaction,
+  ids: readonly string[],
+  surveyId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const rows = await tx
+    .select({ id: questionGroups.id, surveyId: questionGroups.surveyId })
+    .from(questionGroups)
+    .where(inArray(questionGroups.id, [...new Set(ids)]))
+    .for('update');
+  if (rows.some((row) => row.surveyId !== surveyId)) throw new CrossSurveyRowError('group');
+}
+
 function toQuestionRow(question: SurveyType['questions'][number], surveyId: string) {
   return ({
     id: question.id,
@@ -301,10 +341,23 @@ export async function saveSurveyDiff(
         .map((g) => g.id);
 
       if (groupIdsToRemove.length > 0) {
-        await tx.delete(questionGroups).where(inArray(questionGroups.id, groupIdsToRemove));
+        await tx
+          .delete(questionGroups)
+          .where(
+            and(
+              inArray(questionGroups.id, groupIdsToRemove),
+              eq(questionGroups.surveyId, surveyId),
+            ),
+          );
       }
 
       if (preservedGroups.length > 0) {
+        // 전역 PK upsert 라 타 설문 그룹 id 가 섞이면 그 그룹의 내용이 덮어써진다.
+        await assertGroupsBelongToSurvey(
+          tx,
+          preservedGroups.map((g) => g.id),
+          surveyId,
+        );
         const groupValues = preservedGroups.map((group) => ({
           id: group.id,
           surveyId,
@@ -347,14 +400,22 @@ export async function saveSurveyDiff(
       // (survey_versions, 불변·응답 페이지 서빙 중)·복제 설문·보관함(saved_questions/
       // saved_cells)이 같은 URL·키를 참조할 수 있어 무확인 삭제가 그쪽 콘텐츠를 파괴한다.
       if (questionChanges.deleted.length > 0) {
+        // 삭제 id 는 payload 가 그대로 준 값이다 — 이 설문 것인지 먼저 묻는다.
+        await assertQuestionsBelongToSurvey(tx, questionChanges.deleted, surveyId);
         // 삭제 전 행 콘텐츠를 읽어 diff 의 old 측에 넣는다 — 빠진 키는 큐 후보로만
         // 등록되고, 집행 시 전역 재확인이 공유 참조를 거른다.
         const deletedRows = await tx
           .select()
           .from(questions)
-          .where(inArray(questions.id, questionChanges.deleted));
+          .where(
+            and(inArray(questions.id, questionChanges.deleted), eq(questions.surveyId, surveyId)),
+          );
         addKeys(oldContentKeys, deletedRows);
-        await tx.delete(questions).where(inArray(questions.id, questionChanges.deleted));
+        await tx
+          .delete(questions)
+          .where(
+            and(inArray(questions.id, questionChanges.deleted), eq(questions.surveyId, surveyId)),
+          );
       }
 
       // 3b. Upsert (추가 + 수정)
@@ -366,14 +427,24 @@ export async function saveSurveyDiff(
           await promoteSurveyImages(questionChanges.upserted),
         );
 
+        // 전역 PK upsert 라 타 설문 질문 id 가 섞이면 그 질문의 내용이 덮어써진다.
+        await assertQuestionsBelongToSurvey(
+          tx,
+          promotedQuestions.map((q) => q.id),
+          surveyId,
+        );
+
         // 업서트 대상의 이전 행을 읽어 old 측에, 새 콘텐츠를 new 측에 넣는다
         const oldUpsertedRows = await tx
           .select()
           .from(questions)
           .where(
-            inArray(
-              questions.id,
-              promotedQuestions.map((q) => q.id),
+            and(
+              inArray(
+                questions.id,
+                promotedQuestions.map((q) => q.id),
+              ),
+              eq(questions.surveyId, surveyId),
             ),
           );
         addKeys(oldContentKeys, oldUpsertedRows);
@@ -399,11 +470,17 @@ export async function saveSurveyDiff(
           .map((id, index) => ({ id, order: index + 1 }))
           .filter(({ id }) => !upsertedIds.has(id)); // upsert된 질문은 이미 order 포함
 
+        // 순서만 바꾸는 경로도 전역 PK 였다 — 타 설문 질문의 order 가 흔들렸다.
+        await assertQuestionsBelongToSurvey(
+          tx,
+          orderUpdates.map(({ id }) => id),
+          surveyId,
+        );
         for (const { id, order } of orderUpdates) {
           await tx
             .update(questions)
             .set({ order, updatedAt: new Date() })
-            .where(eq(questions.id, id));
+            .where(and(eq(questions.id, id), eq(questions.surveyId, surveyId)));
         }
       }
     }
@@ -598,8 +675,23 @@ export async function saveSurveyWithDetails(
         .map((g) => g.id);
 
       if (groupIdsToRemove.length > 0) {
-        await tx.delete(questionGroups).where(inArray(questionGroups.id, groupIdsToRemove));
+        await tx
+          .delete(questionGroups)
+          .where(
+            and(
+              inArray(questionGroups.id, groupIdsToRemove),
+              eq(questionGroups.surveyId, surveyId),
+            ),
+          );
       }
+
+      // 삭제 대상은 이 설문에서 읽은 것이라 안전하지만, upsert 는 전역 PK 라 payload 가
+      // 들고 온 타 설문 그룹 id 가 그대로 그 그룹을 덮어쓴다.
+      await assertGroupsBelongToSurvey(
+        tx,
+        surveyData.groups.map((g) => g.id),
+        surveyId,
+      );
 
       const groupValues = surveyData.groups.map((group) => ({
         id: group.id,
@@ -653,8 +745,19 @@ export async function saveSurveyWithDetails(
 
       if (questionIdsToRemove.length > 0) {
         // 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다(사유는 saveSurveyDiff 3a 참조).
-        await tx.delete(questions).where(inArray(questions.id, questionIdsToRemove));
+        await tx
+          .delete(questions)
+          .where(
+            and(inArray(questions.id, questionIdsToRemove), eq(questions.surveyId, surveyId)),
+          );
       }
+
+      // upsert 는 전역 PK 라 타 설문 질문 id 가 섞이면 그 질문의 내용이 덮어써진다.
+      await assertQuestionsBelongToSurvey(
+        tx,
+        surveyData.questions.map((q) => q.id),
+        surveyId,
+      );
 
       if (surveyData.questions.length > 0) {
         // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)

@@ -139,16 +139,38 @@ export async function createSurvey(
   return survey;
 }
 
-// 설문 업데이트
+/**
+ * 설문 설정 업데이트 — **갱신 가능한 컬럼은 아래 픽업이 정한다.**
+ *
+ * payload 를 `.set()` 에 그대로 펼치지 않는다. 도메인 스키마가 이미 allowlist 지만, 이 자리는
+ * 권한·귀속·삭제 컬럼(ownerUserId·teamId·assignmentStatus·visibility·surveyGroupId·deletedAt)이
+ * 한 번의 스프레드로 갱신될 수 있는 지점이라 두 겹으로 막는다. 새 설정 필드를 열 때는
+ * 스키마와 이 픽업을 함께 늘려야 한다 — 한쪽만 늘리면 통과는 하는데 저장이 안 된다.
+ */
 export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow> {
   const { surveyId, data } = input;
 
+  const picked: Partial<SurveyRow> = {};
+  if (data.title !== undefined) picked.title = data.title;
+  if (data.description !== undefined) picked.description = data.description;
+  if (data.slug !== undefined) picked.slug = data.slug;
+  if (data.isPublic !== undefined) picked.isPublic = data.isPublic;
+  if (data.allowMultipleResponses !== undefined) {
+    picked.allowMultipleResponses = data.allowMultipleResponses;
+  }
+  if (data.showProgressBar !== undefined) picked.showProgressBar = data.showProgressBar;
+  if (data.shuffleQuestions !== undefined) picked.shuffleQuestions = data.shuffleQuestions;
+  if (data.requireLogin !== undefined) picked.requireLogin = data.requireLogin;
+  if (data.endDate !== undefined) picked.endDate = data.endDate;
+  if (data.maxResponses !== undefined) picked.maxResponses = data.maxResponses;
+  if (data.thankYouMessage !== undefined) picked.thankYouMessage = data.thankYouMessage;
+
   // responseHeader 가 실려 온 경우에만 로고 tmp-to-permanent 승격 후 set(미포함 시 기존 값 보존)
-  const dataToUpdate =
+  const dataToUpdate: Partial<SurveyRow> =
     data.responseHeader === undefined
-      ? data
+      ? picked
       : {
-          ...data,
+          ...picked,
           responseHeader: await promoteSurveyResponseHeader(data.responseHeader),
         };
 

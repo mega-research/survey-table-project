@@ -120,9 +120,16 @@ const NONE: ReadonlySet<SurveyCapability> = new Set();
  *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
  *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
  *  4. 배치 대기 설문 — 슈퍼어드민 외 차단. 팀이 정해지기 전에는 소유자도 못 연다(ADR-0006).
- *  5. 소유자 → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원.
+ *  5. 소유자(**소유 팀 소속일 때만**) → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원.
  *
  * invite_only 는 8번만 지운다 — "소유 팀 팀원에게만 숨김"이 v2 의 뜻이다(스펙 §3).
+ *
+ * 5번이 소유 팀 소속을 함께 묻는 것이 이 함수의 revocation 계약이다. 예전에는 소유자 일치만
+ * 보고 FULL_CAPS 를 줬는데, 그러면 A팀 설문을 소유한 사람이 A팀에서 제외돼도 다른 팀 겸직이
+ * 남아 있는 한(3번 가드는 "아무 팀에나 속했는가"만 묻는다) 그 설문의 응답·컨택·메일·export·
+ * 삭제 전권을 계속 행사했다. 팀을 접근 경계로 삼는 계약이 제외로 끊기지 않으면 경계가 아니다
+ * (Codex 적대적 리뷰). 설문이 고아가 되지는 않는다 — 소유 팀 팀장(6)과 슈퍼어드민(2)이
+ * 언제나 남고, 소유권 이전·승계는 티켓 19 가 정식 동선을 준다.
  */
 export function resolveSurveyCapabilities(
   subject: SurveyAccessSubject,
@@ -135,7 +142,12 @@ export function resolveSurveyCapabilities(
   if (subject.activeTeamIds.length === 0) return NONE;
   if (survey.assignmentStatus === 'assignment_pending') return NONE;
 
-  if (survey.ownerUserId !== null && survey.ownerUserId === subject.userId) {
+  if (
+    survey.ownerUserId !== null &&
+    survey.ownerUserId === subject.userId &&
+    survey.teamId !== null &&
+    subject.activeTeamIds.includes(survey.teamId)
+  ) {
     return new Set(FULL_CAPS);
   }
   if (survey.teamId !== null && subject.leaderTeamIds.includes(survey.teamId)) {

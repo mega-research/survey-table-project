@@ -87,6 +87,117 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
     await db.delete(usersTable).where(eq(usersTable.id, ACTOR_ID));
   });
 
+  // 저장 관문은 부모 surveyId 의 survey.edit 하나만 본다. 그 뒤 하위 행은 전역 PK 로
+  // 지워지고 덮어써졌기 때문에, 편집 권한이 있는 설문의 payload 에 남의 설문 질문 id 를
+  // 섞으면 그 질문이 삭제·변조됐다(Codex 적대적 리뷰). 여기서 그 경로 전부를 막는다.
+  describe('교차 설문 하위 ID 쓰기 차단', () => {
+    async function seedSurveyWithQuestion(title: string) {
+      const created = await client.surveys.create({ title });
+      createdSurveyIds.push(created.id);
+      const questionId = crypto.randomUUID();
+      await client.save.saveDiff({
+        surveyId: created.id,
+        questionChanges: {
+          upserted: [
+            { id: questionId, type: 'text', title: '원본 질문', required: false, order: 1 },
+          ] as never,
+          deleted: [],
+        },
+      });
+      return { surveyId: created.id, questionId };
+    }
+
+    it('타 설문 질문은 삭제·덮어쓰기·순서변경 어느 쪽으로도 건드릴 수 없다', async () => {
+      const victim = await seedSurveyWithQuestion('교차쓰기-피해자');
+      const attacker = await client.surveys.create({ title: '교차쓰기-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      // 1) 삭제
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: { upserted: [], deleted: [victim.questionId] },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 2) 내용 덮어쓰기
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: victim.questionId,
+                type: 'text',
+                title: '가로챈 제목',
+                required: false,
+                order: 1,
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 3) 순서 변경
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [],
+            deleted: [],
+            reorderedIds: [victim.questionId],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 피해자 질문은 그대로 살아 있고 제목도 안 바뀌었다.
+      const [row] = await db
+        .select({ id: questionsTable.id, title: questionsTable.title })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, victim.questionId));
+      expect(row).toBeDefined();
+      expect(row?.title).toBe('원본 질문');
+    });
+
+    it('전체 저장도 타 설문 질문 id 를 거부한다', async () => {
+      const victim = await seedSurveyWithQuestion('교차쓰기-전체저장-피해자');
+      const attacker = await client.surveys.create({ title: '교차쓰기-전체저장-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveWithDetails({
+          id: attacker.id,
+          title: '교차쓰기-전체저장-공격자',
+          settings: {
+            isPublic: false,
+            allowMultipleResponses: false,
+            showProgressBar: true,
+            shuffleQuestions: false,
+            requireLogin: false,
+            thankYouMessage: '',
+          },
+          questions: [
+            {
+              id: victim.questionId,
+              type: 'text',
+              title: '전체저장으로 가로채기',
+              required: false,
+              order: 1,
+            },
+          ],
+          groups: [],
+        } as never),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      const [row] = await db
+        .select({ title: questionsTable.title })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, victim.questionId));
+      expect(row?.title).toBe('원본 질문');
+    });
+  });
+
   it('create -> saveDiff(질문 1개 upsert) -> publish 왕복: 버전/스냅샷/currentVersionId가 DB에 반영된다', async () => {
     // 1. create: 새 설문 행 생성
     const created = await client.surveys.create({ title: '빌더-왕복-테스트-설문' });

@@ -127,6 +127,61 @@ describe('surveyBuilder.surveys procedures', () => {
   });
 });
 
+describe('surveyBuilder.surveys — update 는 allowlist 다 (Codex 리뷰)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(svc.updateSurvey).mockResolvedValue(SURVEY_ROW as never);
+  });
+
+  // survey.edit 만 가진 팀원이 권한·귀속·삭제 컬럼을 payload 로 실어 승격하던 자리다.
+  // 조용히 버리면 로그에 안 남으므로 BAD_REQUEST 로 되돌린다.
+  const FORBIDDEN_KEYS: Record<string, unknown> = {
+    ownerUserId: '99999999-9999-4999-8999-999999999999',
+    teamId: '88888888-8888-4888-8888-888888888888',
+    assignmentStatus: 'assigned',
+    visibility: 'invite_only',
+    surveyGroupId: '77777777-7777-4777-8777-777777777777',
+    deletedAt: new Date(),
+    createdBy: '66666666-6666-4666-8666-666666666666',
+    ownershipStatus: 'succession_pending',
+    status: 'published',
+    currentVersionId: '55555555-5555-4555-8555-555555555555',
+    privateToken: 'stolen',
+    previewToken: 'stolen',
+    testToken: 'stolen',
+    isPaused: true,
+  };
+
+  it('권한·귀속·삭제 컬럼은 어느 것도 통과하지 못한다 — service 에 닿지 않는다', async () => {
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+
+    for (const [key, value] of Object.entries(FORBIDDEN_KEYS)) {
+      await expect(
+        client.surveys.update({
+          surveyId: SURVEY_ID,
+          data: { title: '정상 제목', [key]: value } as never,
+        }),
+      ).rejects.toBeDefined();
+    }
+
+    expect(svc.updateSurvey).not.toHaveBeenCalled();
+  });
+
+  it('허용 필드만 담긴 요청은 그대로 통과한다', async () => {
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+
+    await client.surveys.update({
+      surveyId: SURVEY_ID,
+      data: { title: '바뀐 제목', isPublic: true, maxResponses: null },
+    });
+
+    expect(svc.updateSurvey).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      data: { title: '바뀐 제목', isPublic: true, maxResponses: null },
+    });
+  });
+});
+
 describe('surveyBuilder.surveys — capability 관문 (티켓 09)', () => {
   beforeEach(() => vi.clearAllMocks());
 

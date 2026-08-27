@@ -17,11 +17,18 @@ interface AdminAnalyticsPageProps {
   params: Promise<{ id: string }>;
 }
 
-// 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
-// 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
+/**
+ * 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
+ * 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
+ *
+ * `/analytics/[surveyId]` 와 같은 이유로 **responses.view 도 요구한다** — 이 페이지도
+ * `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
+ * 직렬화한다. 분석 화면이 둘이라 한쪽만 조이면 다른 쪽이 그대로 뒷문이 된다.
+ */
 const assertAnalyticsPageAccess = cache(async (surveyId: string): Promise<void> => {
   const viewer = await requireAdminPage();
   await assertSurveyCapabilityPage(viewer, surveyId, 'analytics.view');
+  await assertSurveyCapabilityPage(viewer, surveyId, 'responses.view');
 });
 
 export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalyticsPageProps) {

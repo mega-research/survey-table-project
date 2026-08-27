@@ -24,20 +24,28 @@ vi.mock('@/server/data-scope', () => ({
 vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(),
 }));
+vi.mock('@/server/survey-access', () => ({ loadSurveyCapabilities: vi.fn() }));
 
 import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { loadSurveyCapabilities } from '@/server/survey-access';
 
 import { getSurveyTestSample } from './test-sample';
+
+const VIEWER = { id: 'u-1', isSuperadmin: false, userType: 'internal' as const };
 
 describe('getSurveyTestSample', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 기본은 컨택 열람 권한 보유 — 권한 축은 아래 전용 케이스가 고정한다.
+    vi.mocked(loadSurveyCapabilities).mockResolvedValue(
+      new Set(['survey.view', 'contacts.view']) as never,
+    );
   });
 
   it('설문이 DB 에 없으면(미저장 로컬 설문) throw 대신 null 을 반환한다', async () => {
     limitMock.mockResolvedValue([]);
-    await expect(getSurveyTestSample('local-only-id')).resolves.toBeNull();
+    await expect(getSurveyTestSample(VIEWER, 'local-only-id')).resolves.toBeNull();
     expect(loadOperationsDataScope).not.toHaveBeenCalled();
     expect(getFirstContactSample).not.toHaveBeenCalled();
   });
@@ -49,16 +57,28 @@ describe('getSurveyTestSample', () => {
       attrs: { 이름: '홍길동' },
       resid: 1,
     } as never);
-    await expect(getSurveyTestSample('s1')).resolves.toEqual({
+    await expect(getSurveyTestSample(VIEWER, 's1')).resolves.toEqual({
       attrs: { 이름: '홍길동' },
       resid: 1,
     });
+  });
+
+  // survey.view 는 있고 contacts.view 는 없는 주체 = 팀 공개 설문의 일반 팀원.
+  // 이 RPC 가 컨택 열람 매트릭스를 우회하던 자리다(Codex 적대적 리뷰).
+  it('contacts.view 가 없으면 실컨택을 읽지도 않고 null 이다', async () => {
+    limitMock.mockResolvedValue([{ id: 's1' }]);
+    vi.mocked(loadSurveyCapabilities).mockResolvedValue(new Set(['survey.view']) as never);
+
+    await expect(getSurveyTestSample(VIEWER, 's1')).resolves.toBeNull();
+
+    expect(loadOperationsDataScope).not.toHaveBeenCalled();
+    expect(getFirstContactSample).not.toHaveBeenCalled();
   });
 
   it('설문은 있는데 컨택이 0건이면 null (기존 동작 보존)', async () => {
     limitMock.mockResolvedValue([{ id: 's1' }]);
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real' as never);
     vi.mocked(getFirstContactSample).mockResolvedValue(null as never);
-    await expect(getSurveyTestSample('s1')).resolves.toBeNull();
+    await expect(getSurveyTestSample(VIEWER, 's1')).resolves.toBeNull();
   });
 });

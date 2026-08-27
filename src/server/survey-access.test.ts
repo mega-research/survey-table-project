@@ -79,8 +79,10 @@ describe('resolveSurveyCapabilities — 스펙 §8 매트릭스 열', () => {
     );
   });
 
-  it('소유자 열', () => {
-    expect(caps(subject({ userId: OWNER_ID }), survey())).toEqual(OWNER_COLUMN.sort());
+  it('소유자 열 — 소유 팀에 소속돼 있을 때', () => {
+    expect(caps(subject({ userId: OWNER_ID, activeTeamIds: [TEAM_ID] }), survey())).toEqual(
+      OWNER_COLUMN.sort(),
+    );
   });
 
   it('소유 팀 팀장 열 — 소유자와 같은 전권', () => {
@@ -129,6 +131,30 @@ describe('resolveSurveyCapabilities — 차단 분기', () => {
     expect(caps(subject(), survey({ ownerUserId: null }), null)).toEqual(
       TEAM_MEMBER_COLUMN.sort(),
     );
+  });
+});
+
+describe('resolveSurveyCapabilities — 소유권은 팀 제외로 끊긴다', () => {
+  // 팀을 접근 경계로 삼는 계약이 제외로 끊기지 않으면 경계가 아니다(Codex 적대적 리뷰).
+  // 3번 가드는 "아무 팀에나 속했는가"만 묻기 때문에 겸직이 남으면 그대로 통과했다.
+  it('소유 팀에서 빠진 소유자는 겸직이 남아 있어도 전권을 잃는다', () => {
+    const removedOwner = subject({ userId: OWNER_ID, activeTeamIds: [OTHER_TEAM_ID] });
+    expect(caps(removedOwner, survey())).toEqual([]);
+  });
+
+  it('그래도 설문이 고아가 되지는 않는다 — 소유 팀 팀장과 슈퍼어드민은 남는다', () => {
+    expect(
+      caps(subject({ activeTeamIds: [TEAM_ID], leaderTeamIds: [TEAM_ID] }), survey()),
+    ).toEqual(LEADER_COLUMN.sort());
+    expect(caps(subject({ isSuperadmin: true, activeTeamIds: [] }), survey())).toEqual(
+      [...surveyCapabilityValues].sort(),
+    );
+  });
+
+  it('소유 팀에 남아 있으면 invite_only 여도 전권이다', () => {
+    expect(
+      caps(subject({ userId: OWNER_ID, activeTeamIds: [TEAM_ID] }), survey({ visibility: 'invite_only' })),
+    ).toEqual(OWNER_COLUMN.sort());
   });
 });
 

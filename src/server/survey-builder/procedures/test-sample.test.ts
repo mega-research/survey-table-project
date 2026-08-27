@@ -31,9 +31,11 @@ describe('surveyBuilder testSample procedures', () => {
       attrs: { 이름: '홍길동' },
       resid: 1,
     } as never);
-    const client = createRouterClient({ testSample }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ testSample }, { context });
     const res = await client.testSample.get({ surveyId: SURVEY_ID });
-    expect(svc.getSurveyTestSample).toHaveBeenCalledWith(SURVEY_ID);
+    // 실컨택 반환 여부를 서비스가 판정하려면 주체가 넘어가야 한다(contacts.view).
+    expect(svc.getSurveyTestSample).toHaveBeenCalledWith(context.user, SURVEY_ID);
     expect(res).toEqual({ attrs: { 이름: '홍길동' }, resid: 1 });
   });
 
