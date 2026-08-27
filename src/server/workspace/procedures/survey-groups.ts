@@ -46,15 +46,22 @@ import { toWorkspaceRpcError } from './teams';
 const SURVEY_MOVE_CAPABILITIES = ['survey.edit', 'surveyGroup.manage'] as const;
 
 /**
- * 그룹 구조 관문 — 슈퍼어드민 또는 그 팀의 active 멤버.
+ * 그룹 구조 관문 — **active 팀**이면서 슈퍼어드민 또는 그 팀의 active 멤버.
  *
  * 판정은 **입력의 teamId 로** 한다. "어딘가의 팀원인가" 를 물으면 A팀 팀원이 B팀 그룹을
  * 만든다(members 의 assertTeamManager 와 같은 이유).
+ *
+ * 팀 상태 검사가 **슈퍼어드민 분기보다 앞**에 있다. 슈퍼어드민은 소속 조회를 건너뛰므로,
+ * 뒤에 두면 해산된 팀의 그룹을 정렬·조회할 수 있다 — `getSurveyGroupTeamId` 로 닫은
+ * rename·remove·collect·move 와 이 표면만 어긋난다(티켓 13).
  */
 async function assertSurveyGroupManage(
   user: { id: string; isSuperadmin: boolean },
   teamId: string,
 ): Promise<void> {
+  if (!(await svc.isActiveTeam(teamId))) {
+    throw new ORPCError('FORBIDDEN', { message: '그룹 관리 권한이 없습니다.' });
+  }
   if (user.isSuperadmin) return;
   const memberships = await getActiveTeamMemberships(user.id);
   if (!memberships.some((m) => m.teamId === teamId)) {

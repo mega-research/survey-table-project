@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, count, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys, teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
@@ -124,10 +124,15 @@ export async function renameTeam(
       // 이름이 그대로면 아무 일도 하지 않는다 — 조직도는 바뀌지 않았고 감사에 남길 것도 없다.
       if (before.name === input.name) return OK;
 
-      await tx
+      // WHERE 에 status 를 함께 건다 — 해산된 팀의 이름은 감사 기록이다. 조건이 없으면
+      // before 를 active 로 읽은 뒤 dissolve 가 커밋되는 창에서 archived 팀의 이름을 바꾸고,
+      // dissolve 이벤트 **뒤에** rename 감사 행을 남긴다(ADR-0011 이 행을 남기는 이유와 어긋난다).
+      const [renamed] = await tx
         .update(teams)
         .set({ name: input.name, updatedAt: new Date() })
-        .where(eq(teams.id, before.id));
+        .where(and(eq(teams.id, before.id), eq(teams.status, 'active')))
+        .returning({ id: teams.id });
+      if (!renamed) throw new TeamNotFoundError();
 
       await tx.insert(teamLifecycleEvents).values({
         teamId: before.id,
@@ -242,10 +247,14 @@ export async function dissolveTeam(
   return db.transaction(async (tx) => {
     await lockTeamMembers(tx, input.teamId);
 
-    const team = await tx.query.teams.findFirst({
-      where: and(eq(teams.id, input.teamId), eq(teams.status, 'active')),
-      columns: { id: true, name: true },
-    });
+    // **팀 행을 먼저 잠근다.** 이름 대조도 잠긴 값으로 해야 한다 — 잠그지 않으면 이름을 읽어
+    // 확인란과 맞춘 뒤 다른 슈퍼어드민의 renameTeam 이 끼어들어, 확인한 적 없는 이름의 팀이
+    // 해산되고 감사에는 옛 이름이 박힌다.
+    const [team] = await tx
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(and(eq(teams.id, input.teamId), eq(teams.status, 'active')))
+      .for('update');
     if (!team) throw new TeamNotFoundError();
     // 확인란 대조는 서버에도 있어야 한다 — 화면만 검사하면 raw RPC 로 우회된다.
     if (team.name !== input.confirmName) throw new TeamNameMismatchError();
@@ -255,17 +264,10 @@ export async function dissolveTeam(
       .from(teamMembers)
       .where(eq(teamMembers.teamId, team.id));
 
-    const movedSurveys = await tx
-      .update(surveys)
-      .set({
-        teamId: null,
-        assignmentStatus: 'assignment_pending',
-        surveyGroupId: null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(surveys.teamId, team.id), isNull(surveys.deletedAt)))
-      .returning({ id: surveys.id });
-
+    // **팀을 먼저 archived 로 바꾼다.** 설문을 먼저 옮기면 두 UPDATE 사이에 커밋되는 설문
+    // 생성이 구제되지 않는다 — 생성 경로는 팀 행에 FOR SHARE 를 잡으므로(surveys 서비스의
+    // resolveNewSurveyOwnership), 팀이 잠긴 뒤에는 그 트랜잭션이 대기하다 archived 를 보고
+    // 거부된다. 순서를 뒤집으면 그 보호가 통째로 무의미해진다.
     const [archived] = await tx
       .update(teams)
       .set({
@@ -278,6 +280,38 @@ export async function dissolveTeam(
       .returning({ id: teams.id });
     if (!archived) throw new TeamNotFoundError();
 
+    // 설문 행은 **id 오름차순으로 잠근다.** 「설문 담기」가 같은 순서로 잠그기 때문이다
+    // (survey-groups 의 collectSurveysIntoGroup). UPDATE 한 문장으로 두면 잠금 순서가 실행
+    // 계획(team_id 인덱스 → 힙 순서)에 달려 담기와 사이클을 만들고, 40P01 은 도메인 에러가
+    // 아니라 500 으로 샌다.
+    //
+    // `deletedAt` 으로 좁히지 않는다. 삭제된 설문을 남겨두면 archived 팀을 가리킨 채
+    // `assigned` 로 굳어, 복구 동선(티켓 17)이 열리는 순간 없는 팀 소속으로 부활하고
+    // 재배치 큐(assignment_pending 기준)에도 안 잡힌다. 감사에 적는 수만 살아 있는 행으로 센다.
+    const targets = await tx
+      .select({ id: surveys.id, deletedAt: surveys.deletedAt })
+      .from(surveys)
+      .where(eq(surveys.teamId, team.id))
+      .orderBy(asc(surveys.id))
+      .for('update');
+
+    if (targets.length > 0) {
+      await tx
+        .update(surveys)
+        .set({
+          teamId: null,
+          assignmentStatus: 'assignment_pending',
+          surveyGroupId: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          inArray(
+            surveys.id,
+            targets.map((t) => t.id),
+          ),
+        );
+    }
+
     await tx.insert(teamLifecycleEvents).values({
       teamId: team.id,
       action: 'dissolve',
@@ -285,7 +319,8 @@ export async function dissolveTeam(
       metadata: {
         teamName: team.name,
         memberCount: memberRow?.value ?? 0,
-        surveyCount: movedSurveys.length,
+        // 화면(listTeams·getTeamDetail)이 보여준 숫자와 같은 모집단이어야 한다.
+        surveyCount: targets.filter((t) => t.deletedAt === null).length,
       },
     });
 

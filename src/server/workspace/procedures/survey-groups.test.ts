@@ -27,6 +27,7 @@ import { assertSurveyCapabilityBatchRpc } from '@/server/rpc-survey-access';
 import { surveyGroups } from './survey-groups';
 
 vi.mock('../services/survey-groups', () => ({
+  isActiveTeam: vi.fn(),
   listSurveyGroups: vi.fn(),
   getSurveyGroupTeamId: vi.fn(),
   createSurveyGroup: vi.fn(),
@@ -74,6 +75,8 @@ beforeEach(() => {
   // 케이스가 있으므로 기본 통과 구현을 매번 다시 깔아야 다음 테스트로 새지 않는다.
   vi.clearAllMocks();
   vi.mocked(assertSurveyCapabilityBatchRpc).mockResolvedValue(undefined);
+  // 해산된 팀에는 그룹 표면 전체가 닫힌다 — 기본은 살아 있는 팀(티켓 13).
+  vi.mocked(svc.isActiveTeam).mockResolvedValue(true);
   vi.mocked(svc.listSurveyGroups).mockResolvedValue([]);
   vi.mocked(svc.createSurveyGroup).mockResolvedValue({ id: GROUP_A });
   vi.mocked(svc.renameSurveyGroup).mockResolvedValue({ success: true });
@@ -300,5 +303,29 @@ describe('도메인 에러 → RPC 코드', () => {
     await expect(
       client.surveyGroups.move({ surveyId: SURVEY_1, groupId: null }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '설문을 찾을 수 없습니다.' });
+  });
+});
+
+describe('해산된 팀의 그룹 표면은 통째로 닫힌다 (티켓 13)', () => {
+  beforeEach(() => {
+    vi.mocked(svc.isActiveTeam).mockResolvedValue(false);
+  });
+
+  // getSurveyGroupTeamId 로 닫은 rename·remove·collect·move 와 이 표면이 어긋나면
+  // "해산된 팀의 그룹은 쓰기가 닫힌다" 가 한 곳에서만 거짓이 된다.
+  it('슈퍼어드민도 정렬·목록·후보 조회를 할 수 없다', async () => {
+    const client = clientWith({ isSuperadmin: true });
+
+    for (const call of [
+      client.surveyGroups.list({ teamId: TEAM_A }),
+      client.surveyGroups.reorder({ teamId: TEAM_A, orderedGroupIds: [GROUP_A] }),
+      client.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' }),
+      client.surveyGroups.create({ teamId: TEAM_A, name: '되살리기' }),
+    ]) {
+      await expect(call).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
+
+    expect(svc.reorderSurveyGroups).not.toHaveBeenCalled();
+    expect(svc.createSurveyGroup).not.toHaveBeenCalled();
   });
 });

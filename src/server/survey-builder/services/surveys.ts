@@ -6,7 +6,7 @@ import { getSurveyById } from '@/server/read-models/survey-structure';
 import { assertSurveyCapability, type SurveyAccessUser } from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import {
   NewQuestion,
   NewQuestionGroup,
@@ -54,6 +54,8 @@ import type {
 export async function resolveNewSurveyOwnership(
   actor: SurveyAccessUser,
   requestedScope: string | null | undefined,
+  /** INSERT 와 **같은 트랜잭션**을 넘겨야 한다 — 아래 FOR SHARE 가 그때만 의미를 갖는다. */
+  executor: DbOrTx = db,
 ): Promise<{ teamId: string; ownerUserId: string; createdBy: string; assignmentStatus: 'assigned' }> {
   const scope = await resolveWorkScope(actor, requestedScope ?? null);
   if (scope.kind !== 'team') {
@@ -66,13 +68,18 @@ export async function resolveNewSurveyOwnership(
   // 접힌다. 그런데 **슈퍼어드민의 팀 범위는 멤버십으로 걸러지지 않는다**(work-scope 의
   // UUID 형식 검사만 지난다). 해산 전에 그 팀을 보고 있었다면 `work_scope` 쿠키에 id 가
   // 남아, 해산 뒤 만든 설문이 archived 팀 소유로 붙는다 — 배치 대기도 아니고 아무도 못 보는
-  // (슈퍼어드민 외) 유령 설문이 된다. 화면의 쿠키 정리는 해산을 실행한 본인에게만 닿으므로
-  // 쓰기 직전에 한 번 더 묻는다.
-  const [team] = await db
+  // (슈퍼어드민 외) 유령 설문이 된다.
+  //
+  // 잠금이 `FOR SHARE` 인 것이 핵심이다. 그냥 읽으면 확인과 INSERT 사이에 해산이 커밋되어
+  // 같은 유령이 생긴다 — INSERT 의 FK 검사가 잡는 `FOR KEY SHARE` 는 해산의 UPDATE 가 잡는
+  // `FOR NO KEY UPDATE` 와 **충돌하지 않아** DB 도 막아주지 않는다. `FOR SHARE` 는 충돌하므로
+  // 해산이 팀 행을 잠근 뒤에는 여기서 대기하다 archived 를 보고 거부된다(해산이 팀을 설문보다
+  // 먼저 잠그는 이유가 이것이다).
+  const [team] = await executor
     .select({ id: teams.id })
     .from(teams)
     .where(and(eq(teams.id, scope.teamId), eq(teams.status, 'active')))
-    .limit(1);
+    .for('share');
   if (!team) throw new SurveyOwnershipRequiredError();
 
   return {
@@ -109,20 +116,27 @@ export async function ensureSurveyInDb(
     return { surveyId: input.id, created: false };
   }
 
-  const ownership = await resolveNewSurveyOwnership(actor, input.scope);
+  // R2 승격은 트랜잭션 밖에서 먼저 끝낸다 — 팀 행을 잠근 채 외부 왕복을 기다리면 그동안
+  // 해산이 막힌다.
+  const responseHeader = (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null;
 
-  await db.insert(surveys).values({
-    ...ownership,
-    id: input.id,
-    title: input.title,
-    privateToken: input.privateToken,
-    isPublic: input.settings.isPublic ?? true,
-    allowMultipleResponses: input.settings.allowMultipleResponses ?? false,
-    showProgressBar: input.settings.showProgressBar ?? true,
-    shuffleQuestions: input.settings.shuffleQuestions ?? false,
-    requireLogin: input.settings.requireLogin ?? false,
-    thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
-    responseHeader: (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null,
+  await db.transaction(async (tx) => {
+    // 귀속 판정과 INSERT 가 같은 트랜잭션이어야 FOR SHARE 가 해산을 막는다.
+    const ownership = await resolveNewSurveyOwnership(actor, input.scope, tx);
+
+    await tx.insert(surveys).values({
+      ...ownership,
+      id: input.id,
+      title: input.title,
+      privateToken: input.privateToken,
+      isPublic: input.settings.isPublic ?? true,
+      allowMultipleResponses: input.settings.allowMultipleResponses ?? false,
+      showProgressBar: input.settings.showProgressBar ?? true,
+      shuffleQuestions: input.settings.shuffleQuestions ?? false,
+      requireLogin: input.settings.requireLogin ?? false,
+      thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
+      responseHeader,
+    });
   });
 
   return { surveyId: input.id, created: true };
@@ -133,24 +147,31 @@ export async function createSurvey(
   actor: SurveyAccessUser,
   data: CreateSurveyInput,
 ): Promise<SurveyRow> {
-  const ownership = await resolveNewSurveyOwnership(actor, data.scope);
-  const newSurvey: NewSurvey = {
-    ...ownership,
-    title: data.title,
-    description: data.description,
-    slug: data.slug,
-    isPublic: data.isPublic ?? true,
-    allowMultipleResponses: data.settings?.allowMultipleResponses ?? false,
-    showProgressBar: data.settings?.showProgressBar ?? true,
-    shuffleQuestions: data.settings?.shuffleQuestions ?? false,
-    requireLogin: data.settings?.requireLogin ?? false,
-    endDate: data.settings?.endDate ? new Date(data.settings.endDate) : null,
-    maxResponses: data.settings?.maxResponses ?? null,
-    thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
-    responseHeader: (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null,
-  };
+  // R2 승격은 팀 행을 잠그기 전에 끝낸다 — 잠근 채 외부 왕복을 기다리면 그동안 해산이 막힌다.
+  const responseHeader = (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null;
 
-  const [survey] = await db.insert(surveys).values(newSurvey).returning();
+  const survey = await db.transaction(async (tx) => {
+    // 귀속 판정과 INSERT 가 같은 트랜잭션이어야 FOR SHARE 가 해산을 막는다.
+    const ownership = await resolveNewSurveyOwnership(actor, data.scope, tx);
+    const newSurvey: NewSurvey = {
+      ...ownership,
+      title: data.title,
+      description: data.description,
+      slug: data.slug,
+      isPublic: data.isPublic ?? true,
+      allowMultipleResponses: data.settings?.allowMultipleResponses ?? false,
+      showProgressBar: data.settings?.showProgressBar ?? true,
+      shuffleQuestions: data.settings?.shuffleQuestions ?? false,
+      requireLogin: data.settings?.requireLogin ?? false,
+      endDate: data.settings?.endDate ? new Date(data.settings.endDate) : null,
+      maxResponses: data.settings?.maxResponses ?? null,
+      thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
+      responseHeader,
+    };
+
+    const [row] = await tx.insert(surveys).values(newSurvey).returning();
+    return row;
+  });
   if (!survey) throw new Error('createSurvey: 설문 생성 실패');
 
   return survey;
@@ -305,13 +326,29 @@ export async function duplicateSurvey(
       orderBy: [questions.order],
     });
 
+    // 복제는 resolveNewSurveyOwnership 을 지나지 않고 원본의 귀속을 잇는다 — 그래서 해산
+    // 가드도 여기서 따로 진다. 원본을 읽은 뒤 복제 트랜잭션이 도는 동안(질문·그룹 수십 ms)
+    // 그 팀이 해산되면 사본만 archived 팀에 붙어 만든 사람도 못 여는 유령이 된다.
+    // 팀이 이미 해산됐으면 원본이 그랬듯 배치 대기로 떨어뜨린다.
+    const ownedTeam =
+      original.teamId === null
+        ? null
+        : (
+            await tx
+              .select({ id: teams.id })
+              .from(teams)
+              .where(and(eq(teams.id, original.teamId), eq(teams.status, 'active')))
+              .for('share')
+          )[0] ?? null;
+    const copyTeamId = ownedTeam ? original.teamId : null;
+
     const newSurveyRows = await tx
       .insert(surveys)
       .values({
         // 복제본은 원본의 팀·공개 범위를 잇고 소유자만 복제한 사람이 된다. 팀을 잇지 않으면
         // 복제본이 배치 대기로 떨어져 만든 사람조차 목록에서 볼 수 없다.
-        teamId: original.teamId,
-        assignmentStatus: original.assignmentStatus,
+        teamId: copyTeamId,
+        assignmentStatus: copyTeamId === null ? 'assignment_pending' : 'assigned',
         visibility: original.visibility,
         ownerUserId: actor.id,
         createdBy: actor.id,

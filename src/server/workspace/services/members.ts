@@ -257,6 +257,10 @@ export async function updateMemberJobTitle(
   input: UpdateMemberJobTitleInput,
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
+    // 형제 둘과 같은 순서로 잠근다 — 잠금 없이 확인만 하면 검사와 UPDATE 사이에 해산이
+    // 커밋되어 그 검사가 아무것도 막지 못한다.
+    await lockTeamMembers(tx, input.teamId);
+
     // 해산된 팀의 명부는 감사 기록이다 — 사후 변조를 막는다(티켓 13). 일반 사용자는
     // assertTeamManager 가 archived 팀 역할을 null 로 만들어 이미 막히지만, 슈퍼어드민은
     // 그 관문을 소속 조회 없이 통과한다.

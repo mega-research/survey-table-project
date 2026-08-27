@@ -73,6 +73,16 @@ export async function listSurveyGroups(
     .orderBy(asc(surveyGroups.order), asc(surveyGroups.name));
 }
 
+/** 이 팀이 아직 살아 있는가 — 해산된 팀에는 그룹 표면 전체가 닫힌다(티켓 13). */
+export async function isActiveTeam(teamId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.status, 'active')))
+    .limit(1);
+  return row !== undefined;
+}
+
 /**
  * 그룹의 소유 팀 — groupId 만 받는 표면의 권한 판정용. 없으면 null.
  *

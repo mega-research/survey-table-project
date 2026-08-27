@@ -21,11 +21,25 @@ vi.mock('@/db', () => {
       };
     },
   });
+  // 팀 active 확인은 INSERT 와 같은 트랜잭션에서 FOR SHARE 로 잠근다(티켓 13).
   const select = () => ({
-    from: () => ({ where: () => ({ limit: async () => activeTeamRows }) }),
+    from: () => ({
+      where: () => ({
+        limit: async () => activeTeamRows,
+        for: async () => activeTeamRows,
+      }),
+    }),
   });
+  const executor = {
+    query: { surveys: { findFirst: vi.fn(async () => undefined) } },
+    insert,
+    select,
+  };
   return {
-    db: { query: { surveys: { findFirst: vi.fn(async () => undefined) } }, insert, select },
+    db: {
+      ...executor,
+      transaction: async (fn: (tx: unknown) => unknown) => fn(executor),
+    },
   };
 });
 

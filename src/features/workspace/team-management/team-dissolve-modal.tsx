@@ -59,7 +59,8 @@ export function TeamDissolveModal({ team, onClose, onDissolved }: Props) {
       <DialogContent className="max-w-[500px] gap-0 rounded-2xl p-[22px]">
         <DialogTitle className="flex items-center gap-2.5 text-[17px] font-semibold text-[#1C1C1E]">
           <TriangleAlert className="h-5 w-5 shrink-0 text-[#EF4444]" />
-          {team.name}을 해산할까요?
+          {team.name}
+          {objectParticle(team.name)} 해산할까요?
         </DialogTitle>
         <p className="mt-3.5 text-[13px] text-[#6E6E73]">
           이 작업은 되돌릴 수 없습니다. 해산을 확정하면 즉시 적용됩니다.
@@ -113,6 +114,21 @@ export function TeamDissolveModal({ team, onClose, onDissolved }: Props) {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * 목적격 조사 — 받침이 있으면 「을」, 없으면 「를」.
+ *
+ * 팀 이름은 전체 조직 경로를 담은 표시명이라 무엇으로 끝날지 정해져 있지 않다(현행 시드는
+ * 전부 「N팀」이지만 규칙이 아니다). 되돌릴 수 없는 확정 화면의 첫 줄이 「소비자조사본부을」로
+ * 나오면 안 된다. 한글 음절은 (코드 - 0xAC00) % 28 이 0 이 아니면 종성이 있다.
+ */
+function objectParticle(name: string): '을' | '를' {
+  const last = name.trim().at(-1);
+  if (!last) return '을';
+  const code = last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return '을'; // 한글 음절이 아니면(숫자·영문) 안전한 쪽
+  return (code - 0xac00) % 28 === 0 ? '를' : '을';
 }
 
 function ImpactRow({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {

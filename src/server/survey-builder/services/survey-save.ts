@@ -608,7 +608,8 @@ export async function saveSurveyWithDetails(
     } else {
       // 생성 모드 — 소유·배치 스탬프는 다른 생성 경로(ensure·create·duplicate)와 같은
       // 판정을 지난다. 범위는 요청 쿠키를 서버가 재해석한다(티켓 07·09).
-      const ownership = await resolveNewSurveyOwnership(actor, undefined);
+      // 이미 트랜잭션 안이라 tx 를 넘긴다 — 팀 행 FOR SHARE 가 그때만 해산을 막는다.
+      const ownership = await resolveNewSurveyOwnership(actor, undefined, tx);
       // INSERT 시점은 새 설문이라 lookups 가 비어있는 게 정상. surveyData.lookups 가 있으면 그대로, 없으면 빈 배열.
       await tx.insert(surveys).values({
         ...ownership,

@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
@@ -77,14 +79,22 @@ export function useRenameTeam() {
  *
  * 무효화가 `teamKeys.all` 로 끝나지 않는다. 해산은 팀 목록뿐 아니라 **화면 전체의 전제**를
  * 바꾼다 — 해산된 팀 소속이던 사람은 그 순간 미배치가 되고, 소속 설문은 배치 대기로 내려가
- * 설문 목록·그룹 트리·작업 범위가 전부 낡는다. 그래서 호출측(TeamListView)이 성공 후
- * 작업 범위까지 함께 정리한다.
+ * 설문 목록·그룹 트리·작업 범위가 전부 낡는다.
+ *
+ * `router.refresh()` 가 함께 있어야 한다. `invalidateQueries()` 는 클라이언트 쿼리만 접고
+ * **RSC 가 props 로 내려준 값은 갱신하지 못한다** — 사이드바 팀 스위처의 목록이 그것이라,
+ * 새로고침이 없으면 방금 해산한 팀이 스위처에 남고 그걸 누르는 순간 「알 수 없는 팀」 범위에
+ * 갇힌다(admin 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다).
  */
 export function useDissolveTeam() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   return useMutation({
     mutationFn: (input: DissolveTeamInput) => client.workspace.teams.dissolve(input),
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      router.refresh();
+    },
   });
 }
 

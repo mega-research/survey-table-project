@@ -114,7 +114,7 @@ describe('saveSurveyWithDetails — 생성 모드', () => {
 
     await saveSurveyWithDetails(actor, surveyPayload());
 
-    expect(resolveNewSurveyOwnership).toHaveBeenCalledWith(actor, undefined);
+    expect(resolveNewSurveyOwnership).toHaveBeenCalledWith(actor, undefined, expect.anything());
     expect(insertedValues[0]).toMatchObject({
       id: SURVEY_ID,
       teamId: 'team-1',
