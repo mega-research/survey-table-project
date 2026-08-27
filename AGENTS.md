@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-26 (역할 모델 v2 티켓 09 관문 배선 A — 빌더·분석 도메인의 surveyId procedure 전수와 콘솔 RSC(preview·분석 2면)가 capability 관문을 지난다. RPC 어댑터 `server/rpc-survey-access`(NOT_FOUND 은닉/FORBIDDEN)·페이지 어댑터 `server/page-survey-access`(notFound 접기) 신설, 거부 사유 정본은 코어 `denialReasonFor`. `saveWithDetails` 는 서비스 트랜잭션 안 모드 분기(기존 행 survey.edit + tombstone 거부, 새 행 소유 스탬프 — 네 번째 생성 경로였다). `/analytics` 목록은 작업 범위 조회로 교체, 무범위 `getSurveys`·`read.search` 제거. 운영 콘솔·REST 배선은 티켓 10·11. 직전: 티켓 08 admin 셸·팀 스위처·설문 목록 개편)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 10 관문 배선 B — 운영 콘솔 도메인(operations·contacts·mail·quota·survey-response 관리 경로)의 procedure 전수와 콘솔 RSC 전수(설문 `[id]` 레이아웃 포함)가 capability 관문을 지난다. scoped 표면용 게스트 겸용 어댑터 `assertScopedSurveyCapabilityRpc`·콘솔 페이지 관문 `assertSurveyConsolePageAccess` 신설, 옛 `assertSurveyAccess`(orpc.ts)·`assertGuestSurveyPageAccess`(guest-page-guard) 는 걷었다. `control.get` 은 관문 NOT_FOUND 를 null 로 접어 미저장 설문 폴백 규약 유지, hardReset 의 컨택 unlink 교차 해제 수리. pub 응답자 표면·webhook·Inngest 잡·billing 은 무변경. REST 배선은 티켓 11. 직전: 티켓 09 빌더·분석 관문 배선)
 
 ---
 
@@ -91,7 +91,9 @@ src/
 │   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
 │   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
 │   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
+│   │                           # + assertScopedSurveyCapabilityRpc(scoped 표면용 — env grant 게스트는 grant 일치, 내부는 capability. 티켓 21 이 통합)
 │   ├── page-survey-access.ts   # 관문의 RSC 페이지 어댑터 — assertSurveyCapabilityPage(사유 불문 notFound 접기)
+│   │                           # + assertSurveyConsolePageAccess(게스트 허용 콘솔 페이지용 — requireAuth 포함, viewer 반환)
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota · workspace
@@ -753,26 +755,37 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
   복제·기존 행 ensure 는 원본에 **survey.edit** 을 요구한다 — 열람만 가진 주체가 사본의 전권을
   얻거나 타 팀 설문의 존재를 확인하는 우회를 막는다.
-- **관문 배선(티켓 09 완료분)**: 빌더·분석 도메인의 surveyId procedure 전수가 handler 첫 줄에서
-  `assertSurveyCapabilityRpc` 를 지난다(조회 survey.view · 응답 responses.view · 내보내기
-  export.download · mutation survey.edit · 발행 survey.publish · 삭제 survey.delete · 분석
-  analytics.view). 거부 사유의 정본은 코어 `denialReasonFor` 하나다 — **survey.view 가 없으면
-  forbidden 이 아니라 not_found**(id 스캔으로 타 팀 설문 존재 확인 차단), 보이는 설문의 권한
-  부족만 forbidden. RSC(preview·분석 2면·응답 상세 편집)는 `assertSurveyCapabilityPage` 로 사유
-  불문 notFound 접기(preview 는 env grant 게스트를 `isGuestUser` 로 비켜준다 — 티켓 21 이 통합).
-  `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신 한
-  입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 보관함(library)은
-  surveyId 없는 조직 공용이라 authed 유지. **운영 콘솔·REST 배선은 티켓 10·11 몫**이며 그때까지
-  운영 콘솔 URL 직접 진입은 종전 가드(인증·게스트 grant)만 받는다. 옛 `assertSurveyAccess`
-  (`server/orpc.ts` 의 게스트 grant 용)는 scoped 표면이 아직 쓰므로 10·11 이 걷는다.
+- **관문 배선(티켓 09·10 완료분)**: 빌더·분석·운영 콘솔 도메인의 surveyId procedure 전수가
+  handler 첫 줄에서 capability 관문을 지난다. 매핑 — 조회 survey.view · 운영 제어·현황 조회
+  operations.view · 응답 조회·응답 관리 4종·응답 상세 편집 responses.view · 컨택 열람
+  contacts.view · 컨택 관리·업로드·결과코드 어휘·수신거부 해제 contacts.manage · 결과코드
+  회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·발송 mail.send ·
+  내보내기 export.download · mutation(운영 제어·쿼터 저장·컬럼 픽커 저장 포함) survey.edit ·
+  발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. 거부 사유의 정본은 코어
+  `denialReasonFor` 하나다 — **survey.view 가 없으면 forbidden 이 아니라 not_found**(id 스캔으로
+  타 팀 설문 존재 확인 차단), 보이는 설문의 권한 부족만 forbidden. authed 표면은
+  `assertSurveyCapabilityRpc`, **scoped 표면(게스트 허용 콘솔)은 `assertScopedSurveyCapabilityRpc`**
+  — env grant 게스트는 grant 일치(불일치 FORBIDDEN), 내부 계정은 capability(티켓 21 이 통합).
+  `control.get` 만 관문 NOT_FOUND 를 null 로 접는다(미저장 설문의 빌더 헤더 10초 폴링 OFF 폴백
+  규약). `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신
+  한 입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 무관문 예외는
+  셋뿐이고 전부 사유가 주석에 있다 — 보관함(library, surveyId 없는 조직 공용)·
+  `uploads.parsePreview`(무상태 엑셀 파싱)·`media.deleteMailAttachmentTmp`(tmp 키 검증 의존).
+  billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)는 걷었다.
+  **REST 배선(export·upload)은 티켓 11 몫**이며 그때까지 종전 가드(canAccessSurvey)만 받는다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
 - **RSC 페이지는 자기 가드를 갖는다.** App Router 는 소프트 내비게이션에서 상위 레이아웃을
   다시 돌리지 않는다 — 콘솔 RSC 는 procedure 가 아니라 service 를 직접 부르므로 레이아웃만
   믿으면 세션이 폐기된 뒤에도 데이터를 읽는다. 서버 데이터를 부르는 `page.tsx` 는 전부
-  `requireAuth`·`requireAdminPage`·`assertGuestSurveyPageAccess` 중 하나를 부르고,
+  `requireAuth`·`requireAdminPage`·`assertSurveyConsolePageAccess` 중 하나를 부르고,
   `tests/repo/rsc-page-guards.test.ts` 가 빠뜨림을 잡는다(무인증 응답자 표면만 허용 목록).
+  설문 콘솔 페이지의 capability 는 `[id]` 레이아웃이 survey.view 를 한 번 접고 leaf 가 자기
+  정밀 관문을 가진다 — 게스트 허용 화면은 `assertSurveyConsolePageAccess(surveyId, cap)`,
+  게스트 차단 화면(컬럼 스킴·결과코드·업로드·쿼터)은 `requireAdminPage` +
+  `assertSurveyCapabilityPage` 짝. 구 `assertGuestSurveyPageAccess`(guest-page-guard)는 티켓 10
+  이 걷었다.
 - **세션 폐기는 표식으로 경합까지 닫는다.** 재설정·상태 전이는 세션을 지우면서
   `users.sessions_revoked_at`(0087)을 갱신하고, 로그인은 시작 시점의 값을 읽어뒀다가 세션을
   만들기 직전에 다시 읽어 다르면 생성을 취소한다(`lib/auth/session-revocation.ts`).
@@ -799,7 +812,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (게스트 포함). **베이스는 유형으로 막지 않지만 `assertSurveyAccess` 가 막는다** — guest·fieldwork 는 설문 부여 모델이 아직 없어 기본 거부다(티켓 21·24 가 실제 조회로 바꾼다). 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`scoped`** — 세션 + active (게스트 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — env grant 게스트는 grant 일치로, 내부 계정은 capability 로 판정하고, grant 없는 guest·fieldwork 유형은 capability 코어의 계정 유형 게이트가 기본 거부한다(티켓 21·24 가 실제 조회로 바꾼다). 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
   (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
