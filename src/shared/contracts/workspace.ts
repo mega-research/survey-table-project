@@ -59,6 +59,15 @@ export interface TeamLifecycleMetadata {
   /** 멤버 사건의 역할 — member_add 는 to 만, member_role 은 from·to 둘 다. */
   fromRole?: TeamRole;
   toRole?: TeamRole;
+  /**
+   * 해산 시점의 규모 — 팀원 수와 배치 대기로 넘어간 설문 수 (티켓 13).
+   *
+   * 트랜잭션 **안에서** 잰 값이다. 화면이 확인 모달에 보여준 숫자는 그 사이 바뀔 수 있으므로
+   * 기록에 남는 것은 이쪽이다. team_members 행은 감사용으로 남지만 설문은 teamId 를 잃어
+   * 사후에 "그때 몇 건이었나" 를 되짚을 방법이 없다.
+   */
+  memberCount?: number;
+  surveyCount?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

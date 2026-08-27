@@ -9,6 +9,7 @@ export {
   ChangeTeamMemberRoleInput,
   CreateTeamInput,
   CreateTeamOutput,
+  DissolveTeamInput,
   ListTeamsOutput,
   RemoveTeamMemberInput,
   RenameTeamInput,
@@ -31,6 +32,19 @@ export class TeamNotFoundError extends Error {
   constructor() {
     super('팀을 찾을 수 없습니다.');
     this.name = 'TeamNotFoundError';
+  }
+}
+
+/**
+ * 해산 확인란에 적은 이름이 실제 팀 이름과 다르다 (티켓 13).
+ *
+ * 화면 검사만으로는 부족하다 — 이 대조가 서버에 없으면 확인란은 장식이 되고 raw RPC 한 번에
+ * 팀이 사라진다. procedure 가 CONFLICT 로 바꾼다(입력 형식은 옳고 지금 상태와 다를 뿐이다).
+ */
+export class TeamNameMismatchError extends Error {
+  constructor() {
+    super('팀 이름이 일치하지 않습니다.');
+    this.name = 'TeamNameMismatchError';
   }
 }
 

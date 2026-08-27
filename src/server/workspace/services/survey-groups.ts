@@ -73,13 +73,22 @@ export async function listSurveyGroups(
     .orderBy(asc(surveyGroups.order), asc(surveyGroups.name));
 }
 
-/** 그룹의 소유 팀 — groupId 만 받는 표면의 권한 판정용. 없으면 null. */
+/**
+ * 그룹의 소유 팀 — groupId 만 받는 표면의 권한 판정용. 없으면 null.
+ *
+ * **해산된 팀의 그룹은 없는 것으로 본다**(티켓 13). 팀이 archived 가 되면 그 그룹은 아무도
+ * 도달할 수 없는 잔여물이고(설문은 이미 전부 미분류로 떨어져 나갔다), 슈퍼어드민만 멤버십
+ * 검사를 건너뛰어 이름 변경·삭제가 열려 있었다. 그룹 행 자체는 감사 계보로 남긴다
+ * (0090 헤더) — 여기서 막는 것은 쓰기 경로다.
+ */
 export async function getSurveyGroupTeamId(groupId: string): Promise<string | null> {
-  const group = await db.query.surveyGroups.findFirst({
-    where: eq(surveyGroups.id, groupId),
-    columns: { teamId: true },
-  });
-  return group?.teamId ?? null;
+  const [row] = await db
+    .select({ teamId: surveyGroups.teamId })
+    .from(surveyGroups)
+    .innerJoin(teams, and(eq(teams.id, surveyGroups.teamId), eq(teams.status, 'active')))
+    .where(eq(surveyGroups.id, groupId))
+    .limit(1);
+  return row?.teamId ?? null;
 }
 
 /**

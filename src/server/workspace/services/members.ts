@@ -50,8 +50,14 @@ async function recordMemberEvent(
   });
 }
 
-/** 멤버 구성을 바꾸는 흐름은 전부 같은 팀 키로 직렬화한다 — 마지막 팀장 판정의 경합 차단. */
-async function lockTeamMembers(tx: DbTransaction, teamId: string): Promise<void> {
+/**
+ * 멤버 구성을 바꾸는 흐름은 전부 같은 팀 키로 직렬화한다 — 마지막 팀장 판정의 경합 차단.
+ *
+ * 해산(teams 의 dissolveTeam)도 이 키를 잡는다. 해산은 멤버십의 **유효성**을 통째로 끊는
+ * 일이라 멤버 추가와 같은 축의 경합이다 — 키가 갈리면 해산 직전에 들어온 멤버가 archived
+ * 팀의 유령 행으로 남는다. 키 문자열이 두 벌이 되지 않게 정의는 여기 하나다.
+ */
+export async function lockTeamMembers(tx: DbTransaction, teamId: string): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('team-members-' || ${teamId}))`);
 }
 
@@ -169,6 +175,10 @@ export async function changeMemberRole(
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
     await lockTeamMembers(tx, input.teamId);
+    // 해산된 팀의 명부는 감사 기록이다 — 사후 변조를 막는다(티켓 13). 일반 사용자는
+    // assertTeamManager 가 archived 팀 역할을 null 로 만들어 이미 막히지만, 슈퍼어드민은
+    // 그 관문을 소속 조회 없이 통과한다.
+    await requireActiveTeam(tx, input.teamId);
 
     const member = await findMemberWithStatus(tx, input.teamId, input.userId);
     if (!member) throw new TeamMemberNotFoundError();
@@ -209,6 +219,10 @@ export async function removeMember(
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
     await lockTeamMembers(tx, input.teamId);
+    // 해산된 팀의 명부는 감사 기록이다 — 사후 변조를 막는다(티켓 13). 일반 사용자는
+    // assertTeamManager 가 archived 팀 역할을 null 로 만들어 이미 막히지만, 슈퍼어드민은
+    // 그 관문을 소속 조회 없이 통과한다.
+    await requireActiveTeam(tx, input.teamId);
 
     const member = await findMemberWithStatus(tx, input.teamId, input.userId);
     if (!member) throw new TeamMemberNotFoundError();
@@ -243,6 +257,11 @@ export async function updateMemberJobTitle(
   input: UpdateMemberJobTitleInput,
 ): Promise<WorkspaceActionOutput> {
   return db.transaction(async (tx) => {
+    // 해산된 팀의 명부는 감사 기록이다 — 사후 변조를 막는다(티켓 13). 일반 사용자는
+    // assertTeamManager 가 archived 팀 역할을 null 로 만들어 이미 막히지만, 슈퍼어드민은
+    // 그 관문을 소속 조회 없이 통과한다.
+    await requireActiveTeam(tx, input.teamId);
+
     const member = await tx.query.teamMembers.findFirst({
       where: and(eq(teamMembers.teamId, input.teamId), eq(teamMembers.userId, input.userId)),
       columns: { id: true },

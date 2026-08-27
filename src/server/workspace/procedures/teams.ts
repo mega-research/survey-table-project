@@ -5,11 +5,13 @@ import { authed, superadmin } from '@/server/orpc';
 import {
   CreateTeamInput,
   CreateTeamOutput,
+  DissolveTeamInput,
   DuplicateTeamNameError,
   ListTeamsOutput,
   RenameTeamInput,
   TeamDetailOutput,
   TeamIdInput,
+  TeamNameMismatchError,
   TeamNotFoundError,
   WorkspaceActionOutput,
 } from '../domain/teams';
@@ -23,7 +25,7 @@ import * as svc from '../services/teams';
  */
 export function toWorkspaceRpcError(err: unknown): ORPCError<string, unknown> | null {
   if (err instanceof TeamNotFoundError) return new ORPCError('NOT_FOUND', { message: err.message });
-  if (err instanceof DuplicateTeamNameError) {
+  if (err instanceof DuplicateTeamNameError || err instanceof TeamNameMismatchError) {
     return new ORPCError('CONFLICT', { message: err.message });
   }
   return null;
@@ -71,4 +73,19 @@ const detail = authed
       .catch(rethrowWorkspaceError),
   );
 
-export const teams = { list, create, rename, detail };
+/**
+ * 팀 해산 — 슈퍼어드민 전용, 확정 즉시 (.pen FLOW 8-1).
+ *
+ * 조직 구조를 없애는 일이라 목록·생성·이름 변경과 같은 축이다. 팀장은 자기 팀을 해산할 수
+ * 없다 — 팀 상세가 아니라 팀 관리 목록의 카드 케밥에 진입점이 있는 이유가 그것이다.
+ *
+ * **해산 취소 procedure 는 만들지 않는다**(ADR-0011). 복구 경로는 재배치 센터(티켓 14)다.
+ */
+const dissolve = superadmin
+  .input(DissolveTeamInput)
+  .output(WorkspaceActionOutput)
+  .handler(({ input, context }) =>
+    svc.dissolveTeam(context.user.id, input).catch(rethrowWorkspaceError),
+  );
+
+export const teams = { list, create, rename, detail, dissolve };

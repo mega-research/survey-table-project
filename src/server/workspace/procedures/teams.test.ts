@@ -9,7 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import { DuplicateTeamNameError, TeamNotFoundError } from '../domain/teams';
+import {
+  DuplicateTeamNameError,
+  TeamNameMismatchError,
+  TeamNotFoundError,
+} from '../domain/teams';
 import * as svc from '../services/teams';
 import { teams } from './teams';
 
@@ -18,6 +22,7 @@ vi.mock('../services/teams', () => ({
   createTeam: vi.fn(),
   renameTeam: vi.fn(),
   getTeamDetail: vi.fn(),
+  dissolveTeam: vi.fn(),
 }));
 
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111';
@@ -107,5 +112,57 @@ describe('팀 상세', () => {
     await expect(clientWith().teams.detail({ teamId: TEAM_ID })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+});
+
+/**
+ * 팀 해산 (티켓 13, .pen FLOW 8-1).
+ *
+ * 여기서 고정하는 것 셋 — 슈퍼어드민 전용이라는 것, 확인 문구 대조가 **서버에** 있다는 것,
+ * 그리고 **해산 취소 표면이 존재하지 않는다**는 것(ADR-0011).
+ */
+describe('팀 해산', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(svc.dissolveTeam).mockResolvedValue({ success: true });
+  });
+
+  it('슈퍼어드민만 해산할 수 있다 — 팀장도 못 한다', async () => {
+    const member = clientWith();
+    await expect(
+      member.teams.dissolve({ teamId: TEAM_ID, confirmName: '연구1본부 - 1팀' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.dissolveTeam).not.toHaveBeenCalled();
+
+    const admin = clientWith({ isSuperadmin: true });
+    await admin.teams.dissolve({ teamId: TEAM_ID, confirmName: '연구1본부 - 1팀' });
+    expect(svc.dissolveTeam).toHaveBeenCalledWith(ACTOR_ID, {
+      teamId: TEAM_ID,
+      confirmName: '연구1본부 - 1팀',
+    });
+  });
+
+  it('확인 문구 불일치는 CONFLICT — 판정은 서버가 한다', async () => {
+    vi.mocked(svc.dissolveTeam).mockRejectedValue(new TeamNameMismatchError());
+    const admin = clientWith({ isSuperadmin: true });
+
+    await expect(
+      admin.teams.dissolve({ teamId: TEAM_ID, confirmName: '엉뚱한 이름' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '팀 이름이 일치하지 않습니다.' });
+  });
+
+  it('이미 해산된 팀은 NOT_FOUND', async () => {
+    vi.mocked(svc.dissolveTeam).mockRejectedValue(new TeamNotFoundError());
+    const admin = clientWith({ isSuperadmin: true });
+
+    await expect(
+      admin.teams.dissolve({ teamId: TEAM_ID, confirmName: '연구1본부 - 1팀' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('해산 취소 표면은 존재하지 않는다 (ADR-0011)', () => {
+    const surface = Object.keys(teams);
+    expect(surface).toEqual(['list', 'create', 'rename', 'detail', 'dissolve']);
+    expect(surface.some((k) => /restore|undo|reactivate|unarchive/i.test(k))).toBe(false);
   });
 });

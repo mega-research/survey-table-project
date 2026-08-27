@@ -9,14 +9,17 @@ import { canManageTeamMembers, canManageTeamSettings } from '@/shared/contracts/
 
 import {
   DuplicateTeamNameError,
+  TeamNameMismatchError,
   TeamNotFoundError,
   type CreateTeamInput,
   type CreateTeamOutput,
+  type DissolveTeamInput,
   type ListTeamsOutput,
   type RenameTeamInput,
   type TeamDetailOutput,
   type WorkspaceActionOutput,
 } from '../domain/teams';
+import { lockTeamMembers } from './members';
 import { getTeamRole } from '@/server/read-models/team-memberships';
 
 const OK: WorkspaceActionOutput = { success: true };
@@ -204,4 +207,88 @@ export async function getTeamDetail(
     canManageMembers: canManageTeamMembers(actor, myRole),
     canManageSettings: canManageTeamSettings(actor),
   };
+}
+
+/**
+ * 팀 해산 — 확정 즉시, 한 트랜잭션 (ADR-0011, .pen FLOW 8-1).
+ *
+ * 세 가지가 함께 일어난다.
+ *  1. 팀이 `archived` 로 바뀐다. **행을 지우지 않는다** — 감사 계보와 「해산 시점 명부」가
+ *     거기 걸려 있다.
+ *  2. 소속 설문이 전부 배치 대기가 된다(`teamId=null` + `assignmentStatus='assignment_pending'`).
+ *     DB CHECK 가 둘을 한 몸으로 묶으므로 같은 SET 절에서 바꿔야 한다. `surveyGroupId` 도
+ *     함께 내린다 — 그룹은 팀 소유물이라 팀을 잃은 설문이 남의 팀 폴더에 남으면 안 된다
+ *     (0090 마이그레이션 헤더의 계약).
+ *  3. 감사 행 하나. 규모(팀원 수·설문 수)는 **트랜잭션 안에서 잰 값**이다 — 화면이 모달에
+ *     보여준 숫자는 그 사이 바뀔 수 있고, 설문은 teamId 를 잃어 사후에 되짚을 수 없다.
+ *
+ * `team_members` 행은 건드리지 않는다. 유효 소속 판정의 SSOT 인 `getActiveTeamMemberships`
+ * 가 active 팀만 조인하므로, 팀이 archived 가 되는 순간 팀원 전원이 자동으로 미배치가 된다
+ * (ADR-0011). 행을 지우면 명부가 사라지고, 남기려면 멤버 수만큼 감사 행을 따로 써야 한다.
+ *
+ * **해산 취소는 없다.** 이 함수의 짝이 되는 복구 함수를 만들지 말 것 — 되돌리기가 있으면
+ * 확인 모달의 "되돌릴 수 없습니다" 가 거짓이 되고, 재배치(티켓 14)가 이미 정식 복구 경로다.
+ *
+ * 동시성: 팀 키 advisory lock 으로 직렬화하고, 최종 UPDATE 도 `status='active'` 를 조건에
+ * 넣어 0행이면 던진다. 잠금만으로는 부족하다 — 앞선 트랜잭션이 이미 해산한 뒤에 락을 받으면
+ * 두 번째 해산이 감사 행을 하나 더 쓰고 archivedBy 를 덮는다. 키는 멤버 변경과 **같은 것**을
+ * 쓴다(members 의 lockTeamMembers): 해산은 멤버십의 유효성을 통째로 끊는 일이라 같은 축의
+ * 경합이고, 키가 갈리면 해산 직전에 들어온 멤버가 archived 팀의 유령 행으로 남는다.
+ */
+export async function dissolveTeam(
+  actorUserId: string,
+  input: DissolveTeamInput,
+): Promise<WorkspaceActionOutput> {
+  return db.transaction(async (tx) => {
+    await lockTeamMembers(tx, input.teamId);
+
+    const team = await tx.query.teams.findFirst({
+      where: and(eq(teams.id, input.teamId), eq(teams.status, 'active')),
+      columns: { id: true, name: true },
+    });
+    if (!team) throw new TeamNotFoundError();
+    // 확인란 대조는 서버에도 있어야 한다 — 화면만 검사하면 raw RPC 로 우회된다.
+    if (team.name !== input.confirmName) throw new TeamNameMismatchError();
+
+    const [memberRow] = await tx
+      .select({ value: count() })
+      .from(teamMembers)
+      .where(eq(teamMembers.teamId, team.id));
+
+    const movedSurveys = await tx
+      .update(surveys)
+      .set({
+        teamId: null,
+        assignmentStatus: 'assignment_pending',
+        surveyGroupId: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(surveys.teamId, team.id), isNull(surveys.deletedAt)))
+      .returning({ id: surveys.id });
+
+    const [archived] = await tx
+      .update(teams)
+      .set({
+        status: 'archived',
+        archivedBy: actorUserId,
+        archivedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(teams.id, team.id), eq(teams.status, 'active')))
+      .returning({ id: teams.id });
+    if (!archived) throw new TeamNotFoundError();
+
+    await tx.insert(teamLifecycleEvents).values({
+      teamId: team.id,
+      action: 'dissolve',
+      changedBy: actorUserId,
+      metadata: {
+        teamName: team.name,
+        memberCount: memberRow?.value ?? 0,
+        surveyCount: movedSurveys.length,
+      },
+    });
+
+    return OK;
+  });
 }

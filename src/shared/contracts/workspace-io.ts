@@ -105,6 +105,16 @@ export type CreateTeamOutput = z.infer<typeof CreateTeamOutput>;
 export const RenameTeamInput = z.object({ teamId: z.uuid(), name: TeamNameField });
 export type RenameTeamInput = z.infer<typeof RenameTeamInput>;
 
+/**
+ * 팀 해산 (.pen FLOW 8-1) — **확인 문구로 팀 이름을 다시 받는다.**
+ *
+ * 되돌릴 수 없는 일이라 오조작 한 번이 팀 전체를 미배치로 만든다. 그룹 삭제는 이름 입력이
+ * 없는데(되돌릴 수 있다) 해산에는 있는 이유가 그것이다. 서버도 이 값을 실제 팀 이름과
+ * 대조한다 — 화면만 검사하면 raw RPC 한 번으로 우회된다.
+ */
+export const DissolveTeamInput = z.object({ teamId: z.uuid(), confirmName: z.string() });
+export type DissolveTeamInput = z.infer<typeof DissolveTeamInput>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 멤버십 (.pen FLOW 7-2·7-3)
 // ─────────────────────────────────────────────────────────────────────────────
