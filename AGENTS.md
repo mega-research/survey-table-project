@@ -188,10 +188,10 @@ src/
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/work-scope-cookie.ts   # 작업 범위 쿠키 R/W (브라우저 편의값 — 판정은 server/work-scope)
 │   ├── lib/work-scope-context.tsx # 작업 범위 React 컨텍스트 — 공급은 workspace(AdminShell), 소비는 survey-builder(목록)
-│   ├── lib/survey-group-queries.ts # 설문 그룹 쿼리 키 + 목록 조회 옵션 — 사이드바 트리(workspace)와
+│   │                              # feature 간 직접 import 금지의 탈출구라 모양이 여기 산다 (티켓 08)
+│   ├── lib/survey-group-queries.ts # 설문 그룹 쿼리 키 + 목록 조회 옵션 (티켓 12) — 사이드바 트리(workspace)와
 │   │                              # 목록·모달(survey-builder)이 같은 캐시를 봐야 해서 여기 산다. mutation 은
 │   │                              # 설문 목록 키까지 접어야 해 survey-builder/queries 소유(공유→feature 역전 금지)
-│   │                              # feature 간 직접 import 금지의 탈출구라 모양이 여기 산다 (티켓 08)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts

@@ -114,6 +114,13 @@ describe('assertSurveyCapabilityBatch', () => {
     ).rejects.toBeInstanceOf(SurveyAccessError);
   });
 
+  it('빈 목록은 통과가 아니라 거부다 — 단건 관문과 기본값 방향을 맞춘다', async () => {
+    await expect(assertSurveyCapabilityBatch(user, [], ['survey.edit'])).rejects.toMatchObject({
+      reason: 'not_found',
+    });
+    expect(getActiveTeamMemberships).not.toHaveBeenCalled();
+  });
+
   it('보이지만 요구 capability 하나가 없으면 forbidden 이다', async () => {
     // 팀원은 팀 공개 설문에 survey.publish 가 없다(스펙 §8) — 볼 수는 있으므로 forbidden.
     surveyRows.push(row({ id: A }));

@@ -281,6 +281,25 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     expect(candidates.map((c) => c.id)).toEqual([mine]);
   });
 
+  it('그룹 카운트도 팀원에게 숨긴 invite_only 를 세지 않는다', async () => {
+    const groupId = await seedGroup(member, TEAM_A, '카운트 시험');
+    const visible = await seedSurvey(TEAM_A, '팀 공개 설문', MEMBER_ID);
+    await member.surveyGroups.collect({ groupId, surveyIds: [visible] });
+
+    const leaderId = crypto.randomUUID();
+    await seedUser(leaderId);
+    createdUserIds.push(leaderId);
+    const hidden = await seedSurvey(TEAM_A, '숨은 설문', leaderId);
+    await db
+      .update(surveysTable)
+      .set({ visibility: 'invite_only', surveyGroupId: groupId })
+      .where(eq(surveysTable.id, hidden));
+
+    // 팀원에게는 1건 — 사이드바 숫자와 그룹 화면 카드 수가 같아야 한다.
+    const asMember = await member.surveyGroups.list({ teamId: TEAM_A });
+    expect(asMember.find((g) => g.id === groupId)?.surveyCount).toBe(1);
+  });
+
   it('담기 후보 검색은 제목 부분 일치로 좁힌다', async () => {
     await seedSurvey(TEAM_A, '2026 브랜드 인지도 조사', MEMBER_ID);
     const target = await seedSurvey(TEAM_A, '고객 만족도 조사', MEMBER_ID);

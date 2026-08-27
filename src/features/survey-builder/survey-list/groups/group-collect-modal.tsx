@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Loader2, Search } from 'lucide-react';
 
@@ -31,10 +31,19 @@ interface GroupCollectModalProps {
  */
 export function GroupCollectModal({ teamId, group, onClose }: GroupCollectModalProps) {
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const { data, isLoading } = useUngroupedSurveys(teamId, query.trim(), true);
+  // 타이핑마다 왕복하지 않는다 — 250ms 는 사람이 다음 글자를 치는 간격보다 짧다
+  // (member-add-modal 의 pull 검색과 같은 관례). 키마다 새 쿼리 키가 생기면 목록이 통째로
+  // 스피너로 바뀌었다 돌아오기를 반복한다.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const { data, isLoading } = useUngroupedSurveys(teamId, debounced, true);
   const collect = useCollectSurveysIntoGroup();
 
   const candidates = useMemo(() => data ?? [], [data]);
@@ -59,6 +68,10 @@ export function GroupCollectModal({ teamId, group, onClose }: GroupCollectModalP
       onClose();
     } catch (err) {
       setError(getErrorMessage(err, '설문을 담지 못했습니다.'));
+      // 담기는 전부 아니면 전무라 한 건만 어긋나도 전체가 거부된다. 그 사이 누가 같은 설문을
+      // 옮긴 것이 대부분이므로 선택을 비워 새로 고쳐진 후보에서 다시 고르게 한다 — 그대로
+      // 두면 같은 버튼이 같은 이유로 계속 실패한다(후보 무효화는 mutation 의 onSettled 몫).
+      setSelected(new Set());
     }
   }
 
@@ -90,7 +103,7 @@ export function GroupCollectModal({ teamId, group, onClose }: GroupCollectModalP
             </div>
           ) : candidates.length === 0 ? (
             <p className="py-10 text-center text-[12.5px] text-[#9CA3AF]">
-              {query.trim() ? '검색 결과가 없습니다.' : '담을 수 있는 미분류 설문이 없습니다.'}
+              {debounced ? '검색 결과가 없습니다.' : '담을 수 있는 미분류 설문이 없습니다.'}
             </p>
           ) : (
             candidates.map((item) => {
@@ -104,6 +117,7 @@ export function GroupCollectModal({ teamId, group, onClose }: GroupCollectModalP
                   )}
                 >
                   <Checkbox
+                    aria-label={item.title}
                     checked={checked}
                     disabled={!item.canMove}
                     onCheckedChange={() => toggle(item.id)}

@@ -36,6 +36,8 @@ interface ListToolbarProps {
   onSearchQueryChange: (query: string) => void;
   sortBy: SurveyListSortBy;
   onSortByChange: (sortBy: SurveyListSortBy) => void;
+  /** 그룹 화면은 검색이 그 그룹 안에서만 좁혀진다 — 문구가 동작을 반대로 안내하면 안 된다. */
+  searchPlaceholder: string;
   advancedOpen: boolean;
   onToggleAdvanced: () => void;
 }
@@ -49,6 +51,7 @@ export function ListToolbar({
   onSearchQueryChange,
   sortBy,
   onSortByChange,
+  searchPlaceholder,
   advancedOpen,
   onToggleAdvanced,
 }: ListToolbarProps) {
@@ -86,7 +89,7 @@ export function ListToolbar({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchQueryChange(e.target.value)}
-          placeholder="설문 검색..."
+          placeholder={searchPlaceholder}
           className="h-9 w-full rounded-[9px] border border-[#E5E5EA] bg-white pl-9 pr-3 text-[13px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
         />
       </div>

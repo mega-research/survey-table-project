@@ -101,7 +101,7 @@ describe('그룹 구조 표면 — 팀 공용, 입력 teamId 로 판정', () => 
     await client.surveyGroups.reorder({ teamId: TEAM_A, orderedGroupIds: [GROUP_A] });
     await client.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' });
 
-    expect(svc.listSurveyGroups).toHaveBeenCalledWith(TEAM_A);
+    expect(svc.listSurveyGroups).toHaveBeenCalledWith(context().user, TEAM_A);
     expect(svc.createSurveyGroup).toHaveBeenCalledWith(MEMBER_ID, {
       teamId: TEAM_A,
       name: '2026 상반기',
@@ -133,7 +133,7 @@ describe('그룹 구조 표면 — 팀 공용, 입력 teamId 로 판정', () => 
 
     await client.surveyGroups.list({ teamId: TEAM_B });
 
-    expect(svc.listSurveyGroups).toHaveBeenCalledWith(TEAM_B);
+    expect(svc.listSurveyGroups).toHaveBeenCalledWith(context({ isSuperadmin: true }).user, TEAM_B);
     expect(getActiveTeamMemberships).not.toHaveBeenCalled();
   });
 });
@@ -220,7 +220,28 @@ describe('설문 담기 — 그룹 관문 + 설문별 capability', () => {
   });
 });
 
-describe('단건 이동 — 설문 capability 가 판정의 전부', () => {
+describe('단건 이동 — 목적지 그룹과 설문 양쪽 관문', () => {
+  it('타 팀 그룹으로 옮기려 하면 설문 관문까지 가지 않는다', async () => {
+    const client = clientWith();
+
+    await expect(
+      client.surveyGroups.move({ surveyId: SURVEY_1, groupId: GROUP_B }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // 없는 그룹과 같은 응답이라 존재가 새지 않는다 — rename·remove 와 같은 결론.
+    expect(assertSurveyCapabilityBatchRpc).not.toHaveBeenCalled();
+    expect(svc.moveSurveyToGroup).not.toHaveBeenCalled();
+  });
+
+  it('미분류로 빼기는 목적지가 없어 설문 관문 하나로 끝난다', async () => {
+    const client = clientWith();
+
+    await client.surveyGroups.move({ surveyId: SURVEY_1, groupId: null });
+
+    expect(svc.getSurveyGroupTeamId).not.toHaveBeenCalled();
+    expect(svc.moveSurveyToGroup).toHaveBeenCalledWith({ surveyId: SURVEY_1, groupId: null });
+  });
+
   it('그룹으로 옮길 때도 미분류로 뺄 때도 같은 짝을 요구한다', async () => {
     const client = clientWith();
 

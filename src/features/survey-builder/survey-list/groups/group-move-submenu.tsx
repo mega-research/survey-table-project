@@ -4,6 +4,7 @@ import { Check, Folder, FolderInput, FolderMinus } from 'lucide-react';
 
 import {
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -41,6 +42,11 @@ export function GroupMoveSubmenu({
         그룹 이동
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-[238px]">
+        {/* 패널이 열리면 트리거 문구는 부모 메뉴에 남는다 — 라벨이 없으면 그룹 이름이
+            설문 제목처럼 읽힌다(.pen FLOW 2-4 의 「서브메뉴 라벨 행」). */}
+        <DropdownMenuLabel className="text-[11px] font-semibold text-[#9CA3AF]">
+          그룹 이동
+        </DropdownMenuLabel>
         {groups.length === 0 ? (
           <p className="px-2 py-2 text-[12px] text-[#9CA3AF]">아직 만든 그룹이 없습니다.</p>
         ) : (

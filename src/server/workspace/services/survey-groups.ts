@@ -1,30 +1,30 @@
+import { and, asc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, asc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
-
-import { db, type DbTransaction } from '@/db';
+import { type DbTransaction, db } from '@/db';
 import { surveyGroups, surveys, teams } from '@/db/schema';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
+  type SurveyAccessUser,
   loadAccessSubject,
   resolveSurveyCapabilities,
-  type SurveyAccessUser,
 } from '@/server/survey-access';
 
 import {
-  DuplicateSurveyGroupNameError,
-  SurveyAlreadyGroupedError,
-  SurveyGroupNotFoundError,
-  SurveyGroupTargetNotFoundError,
-  SurveyTeamMismatchError,
   type CollectSurveysIntoGroupInput,
   type CreateSurveyGroupInput,
   type CreateSurveyGroupOutput,
+  DuplicateSurveyGroupNameError,
   type ListSurveyGroupsOutput,
   type ListUngroupedSurveysOutput,
   type MoveSurveyToGroupInput,
   type RenameSurveyGroupInput,
   type ReorderSurveyGroupsInput,
+  SurveyAlreadyGroupedError,
+  SurveyGroupNotFoundError,
+  SurveyGroupTargetNotFoundError,
+  SurveyTeamMismatchError,
 } from '../domain/survey-groups';
 import { TeamNotFoundError, type WorkspaceActionOutput } from '../domain/teams';
 
@@ -33,11 +33,22 @@ const OK: WorkspaceActionOutput = { success: true };
 /**
  * 팀의 그룹 목록 + 소속 설문 수 (.pen FLOW 2-1).
  *
- * 조인 조건에 `surveys.teamId = surveyGroups.teamId` 를 함께 건다. 그룹은 팀 소유물이라
- * 팀이 다른 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이
- * surveyGroupId 를 안 내린 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
+ * 세는 것은 **요청자가 볼 수 있는 설문**이다. `invite_only` 는 소유 팀 팀원에게만 숨기는데
+ * (스펙 §3) 카운트가 그것까지 세면 사이드바는 「임원 조사 3」이라 하고 그룹 화면에는 카드가
+ * 1장만 나온다 — 뺄셈 한 번으로 "내게 숨겨진 설문이 2건 있다" 가 드러난다. 그래서 조인 조건이
+ * 목록 조회(`buildSurveyScopeFilter` 의 seesInviteOnly)와 같은 술어를 쓴다.
+ *
+ * 조인에 `surveys.teamId = surveyGroups.teamId` 도 함께 건다. 그룹은 팀 소유물이라 팀이 다른
+ * 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이 surveyGroupId 를 안 내린
+ * 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
  */
-export async function listSurveyGroups(teamId: string): Promise<ListSurveyGroupsOutput> {
+export async function listSurveyGroups(
+  user: SurveyAccessUser,
+  teamId: string,
+): Promise<ListSurveyGroupsOutput> {
+  const subject = await loadAccessSubject(user);
+  const seesInviteOnly = subject.isSuperadmin || subject.leaderTeamIds.includes(teamId);
+
   return db
     .select({
       id: surveyGroups.id,
@@ -52,6 +63,9 @@ export async function listSurveyGroups(teamId: string): Promise<ListSurveyGroups
         eq(surveys.surveyGroupId, surveyGroups.id),
         eq(surveys.teamId, surveyGroups.teamId),
         isNull(surveys.deletedAt),
+        seesInviteOnly
+          ? undefined
+          : or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, subject.userId)),
       ),
     )
     .where(eq(surveyGroups.teamId, teamId))
@@ -130,12 +144,21 @@ export async function renameSurveyGroup(
  *
  * UPDATE 를 teamId 로도 좁히는 것이 팀 경계다: 배열에 타 팀 groupId 가 섞여 들어와도
  * 그 행에는 닿지 않는다(관문이 이미 요청자의 팀을 확인했으므로 조용히 무시해도 안전하다).
- * 순서 값의 lost update 는 표시 순서일 뿐 불변식이 아니라 잠그지 않는다.
+ *
+ * 팀 키 advisory lock 을 잡는 이유는 lost update 때문이 아니다(순서 값은 표시용이라 덮여도
+ * 불변식이 안 깨진다) — **행 잠금 순서가 요청자마다 다르기 때문**이다. 그룹이 팀 공용이라
+ * 두 팀원이 같은 목록을 동시에 드래그하는 것이 정상 동선인데, 한쪽은 [g1,g2] 다른 쪽은
+ * [g2,g1] 로 UPDATE 하면 서로의 락을 기다려 40P01 데드락이 난다. 그 에러는 도메인 에러가
+ * 아니라 500 으로 새어 나간다. 같은 팀의 정렬을 직렬화하면 순서 사이클 자체가 없어진다
+ * (members 의 lockTeamMembers 와 같은 관례).
  */
 export async function reorderSurveyGroups(
   input: ReorderSurveyGroupsInput,
 ): Promise<WorkspaceActionOutput> {
   await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('survey-groups-' || ${input.teamId}))`,
+    );
     for (const [index, groupId] of input.orderedGroupIds.entries()) {
       await tx
         .update(surveyGroups)
@@ -196,7 +219,10 @@ export async function listUngroupedSurveys(input: {
         eq(surveys.teamId, input.teamId),
         isNull(surveys.surveyGroupId),
         isNull(surveys.deletedAt),
-        input.query.length > 0 ? ilike(surveys.title, `%${input.query}%`) : undefined,
+        // `%`·`_` 를 그대로 넘기면 사용자가 친 「50%」가 와일드카드가 되어 검색이 넓어진다.
+        input.query.length > 0
+          ? ilike(surveys.title, `%${escapeLikePattern(input.query)}%`)
+          : undefined,
       ),
     )
     .orderBy(asc(surveys.title));
@@ -221,8 +247,8 @@ export async function listUngroupedSurveys(input: {
  *
  * 관문이 본 teamId·surveyGroupId 는 판정 시점의 값이다. 그 사이에 다른 담기·단건 이동·팀
  * 해산·재배치가 끼어들면 UPDATE 는 옛 판정을 근거로 강행되어 "미분류만" 불변식과 팀 경계가
- * 함께 깨진다. 잠금 순서는 그룹 → 설문으로 고정한다(moveSurveyToGroup 과 같은 순서라 두
- * 함수 사이에 데드락이 생기지 않는다).
+ * 함께 깨진다. 잠금 순서는 그룹 → 설문(그 안에서는 id 오름차순)으로 고정한다 —
+ * moveSurveyToGroup 과 같은 순서라 두 함수 사이에도 데드락이 생기지 않는다.
  *
  * `updatedAt` 은 손대지 않는다 — 폴더에 넣는 일은 설문 내용을 고치는 일이 아니고, 건드리면
  * 「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다.
@@ -237,6 +263,10 @@ export async function collectSurveysIntoGroup(
       .select({ id: surveys.id, surveyGroupId: surveys.surveyGroupId, teamId: surveys.teamId })
       .from(surveys)
       .where(and(inArray(surveys.id, input.surveyIds), isNull(surveys.deletedAt)))
+      // 설문들 **사이의** 잠금 순서도 고정한다. ORDER BY 가 없으면 실행 계획이 순서를
+      // 정해(건수에 따라 인덱스 스캔 ↔ 비트맵 스캔) 겹치는 집합을 동시에 담는 두 요청의
+      // 잠금 순서가 갈리고, 그때 데드락이 성립한다.
+      .orderBy(asc(surveys.id))
       .for('update');
     if (rows.length !== input.surveyIds.length) throw new SurveyGroupTargetNotFoundError();
 
@@ -271,7 +301,8 @@ export async function moveSurveyToGroup(
       .where(and(eq(surveys.id, input.surveyId), isNull(surveys.deletedAt)))
       .for('update');
     if (!survey) throw new SurveyGroupTargetNotFoundError();
-    if (input.groupId !== null && survey.teamId !== groupTeamId) throw new SurveyTeamMismatchError();
+    if (input.groupId !== null && survey.teamId !== groupTeamId)
+      throw new SurveyTeamMismatchError();
 
     await tx
       .update(surveys)

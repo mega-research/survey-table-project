@@ -42,12 +42,17 @@ export function useUngroupedSurveys(teamId: string | null, query: string, enable
  *
  * 그룹 목록(카운트)과 설문 목록(카드의 소속 그룹)이 함께 움직인다 — 한쪽만 접으면 담기
  * 직후 카드가 아직 미분류로 보이거나 그룹 카운트가 옛 값으로 남는다.
+ *
+ * `onSettled` 인 것이 중요하다. 실패의 대부분은 CONFLICT — 그 사이 누가 같은 설문을 옮겨
+ * "미분류 설문만" 조건이 깨진 경우다. 성공에만 무효화하면 화면은 옛 후보 목록을 그대로 들고
+ * 있어 다시 눌러도 같은 실패가 반복되고, staleTime·refetchOnWindowFocus:false 때문에 모달을
+ * 닫았다 여는 것 말고는 회복 경로가 없다.
  */
 function useSurveyGroupMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResult>) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
     },

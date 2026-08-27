@@ -3,20 +3,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-import { Folder, Loader2, Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { Folder, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
-import { useDeleteSurvey, useDuplicateSurvey, surveyListQueryOptions } from '../queries/use-surveys';
+import {
+  surveyListQueryOptions,
+  useDeleteSurvey,
+  useDuplicateSurvey,
+} from '../queries/use-surveys';
 import { useSurveyListStore } from '../stores/survey-list-ui-store';
 import { AdvancedSearchPanel } from './advanced-search-panel';
-import { NoResultsEmptyState, NoSurveysEmptyState, NoTeamEmptyState } from './empty-states';
+import {
+  EmptyGroupState,
+  NoResultsEmptyState,
+  NoSurveysEmptyState,
+  NoTeamEmptyState,
+} from './empty-states';
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
 import { ListPagination } from './list-pagination';
@@ -72,7 +81,12 @@ export function SurveyListView() {
   // 쿠키가 접힌 경우(해산된 팀 등) 팀 A 의 그룹 목록으로 팀 B 의 설문을 좁히게 된다.
   const resolvedScope = data?.scope ?? contextScope ?? null;
   const teamScopeId = resolvedScope?.kind === 'team' ? resolvedScope.teamId : null;
-  const { data: groups } = useSurveyGroups(teamScopeId);
+  const {
+    data: groups,
+    isPending: groupsPending,
+    isError: groupsError,
+  } = useSurveyGroups(teamScopeId);
+  const router = useRouter();
   const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
 
@@ -96,7 +110,9 @@ export function SurveyListView() {
   // 팀이나 그룹을 바꾸면 필터·페이지를 전부 되돌린다 — 이전 화면에서 남은 검색어·페이지가
   // 새 목록을 조용히 0건/빈 페이지로 만들지 않게(새 워크스페이스에서 시작하는 것과 동일 취급).
   const scopeKey = `${
-    contextScope?.kind === 'team' ? `team:${contextScope.teamId}` : (contextScope?.kind ?? 'no-shell')
+    contextScope?.kind === 'team'
+      ? `team:${contextScope.teamId}`
+      : (contextScope?.kind ?? 'no-shell')
   }|group:${requestedGroupId ?? ''}`;
   const prevScopeKeyRef = useRef(scopeKey);
   useEffect(() => {
@@ -111,6 +127,15 @@ export function SurveyListView() {
   // 유령 그룹 주소로 빈 화면에 갇히지 않게.
   const activeGroup = groupList.find((g) => g.id === requestedGroupId) ?? null;
   const groupId = activeGroup?.id ?? null;
+  // 목록을 **실제로 받아본 뒤** 그 그룹이 없으면 주소도 정리한다. 안 그러면 보고 있던 그룹을
+  // 삭제했을 때 URL 만 죽은 `?group=` 을 계속 실어 나르고(새로고침·뒤로가기·링크 공유),
+  // scopeKey 가 그대로라 필터 리셋도 일어나지 않는다. 로딩·에러 중에는 손대지 않는다 —
+  // "아직 안 왔다" 와 "없더라" 는 다른 상태다.
+  const groupsSettled = teamScopeId !== null && !groupsPending && !groupsError;
+  useEffect(() => {
+    if (!requestedGroupId || !groupsSettled || activeGroup) return;
+    router.replace('/admin/surveys');
+  }, [requestedGroupId, groupsSettled, activeGroup, router]);
 
   // 칩 카운트·소유자 목록은 그룹 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
   const scopedSurveys = useMemo(() => narrowToGroup(allSurveys, groupId), [allSurveys, groupId]);
@@ -126,16 +151,16 @@ export function SurveyListView() {
     [allSurveys, searchQuery, statusChip, advanced, groupId, sortBy],
   );
 
-  const { pageItems, totalPages, page: clampedPage } = useMemo(
-    () => paginateSurveyList(filtered, page),
-    [filtered, page],
-  );
+  const {
+    pageItems,
+    totalPages,
+    page: clampedPage,
+  } = useMemo(() => paginateSurveyList(filtered, page), [filtered, page]);
 
   function handleDelete(surveyId: string) {
     if (confirm('이 설문을 삭제하시겠습니까?')) {
       deleteSurvey(surveyId, {
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : '삭제에 실패했습니다.'),
+        onError: (err) => toast.error(err instanceof Error ? err.message : '삭제에 실패했습니다.'),
       });
     }
   }
@@ -156,8 +181,7 @@ export function SurveyListView() {
     moveSurveyToGroup(
       { surveyId, groupId: nextGroupId },
       {
-        onSuccess: () =>
-          toast.success(nextGroupId ? '그룹으로 이동했습니다' : '그룹에서 뺐습니다'),
+        onSuccess: () => toast.success(nextGroupId ? '그룹으로 이동했습니다' : '그룹에서 뺐습니다'),
         onError: (err) =>
           toast.error(err instanceof Error ? err.message : '그룹을 옮기지 못했습니다.'),
       },
@@ -179,6 +203,10 @@ export function SurveyListView() {
   const canCreate = scope.kind === 'team';
   // 그룹은 팀 소유물이라 팀 범위에서만 존재한다 — 시스템 전체 보기에는 그룹 개념이 없다(.pen 6-2).
   const canManageGroups = teamScopeId !== null;
+  // 그룹 화면 주소로 들어왔으면 그룹 목록이 올 때까지 기다린다 — 먼저 그리면 「설문 목록」
+  // 제목 + 팀 전체 카드가 한 번 번쩍였다가 그룹으로 접힌다.
+  const showLoading =
+    isLoading || (requestedGroupId !== null && teamScopeId !== null && groupsPending);
   const currentUserId = workScope?.currentUserId ?? null;
   const isSuperadmin = workScope?.isSuperadmin ?? false;
 
@@ -193,53 +221,63 @@ export function SurveyListView() {
           </h1>
         )}
         <div className="flex items-center gap-2.5">
-        {canManageGroups && (
-          <button
-            type="button"
-            onClick={() => setGroupManagerOpen(true)}
-            className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
-          >
-            <Folder className="h-4 w-4" />
-            {activeGroup ? '그룹 편집' : '그룹 관리'}
-          </button>
-        )}
-        {canCreate ? (
-          <Link
-            href="/admin/surveys/create"
-            className="flex h-[42px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[14px] font-semibold text-white hover:bg-[#2743AE]"
-          >
-            <Plus className="h-4 w-4" />
-            새 설문 만들기
-          </Link>
-        ) : (
-          // 시스템 전체 보기는 조회 범위라 소유 목적지가 될 수 없다 (.pen 6-2 노트).
-          <span
-            title={
-              isSystemScope
-                ? '설문을 만들려면 소유 팀을 먼저 선택하세요'
-                : '소속된 팀이 없어 설문을 만들 수 없습니다'
-            }
-            className="flex h-[42px] cursor-not-allowed items-center gap-1.5 rounded-[9px] bg-[#E5E7EB] px-4 text-[14px] font-semibold text-[#9CA3AF]"
-          >
-            <Plus className="h-4 w-4" />새 설문 만들기
-          </span>
-        )}
+          {canManageGroups && (
+            <button
+              type="button"
+              onClick={() => setGroupManagerOpen(true)}
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+            >
+              <Folder className="h-4 w-4" />
+              {activeGroup ? '그룹 편집' : '그룹 관리'}
+            </button>
+          )}
+          {canCreate ? (
+            <Link
+              href="/admin/surveys/create"
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[14px] font-semibold text-white hover:bg-[#2743AE]"
+            >
+              <Plus className="h-4 w-4" />새 설문 만들기
+            </Link>
+          ) : (
+            // 시스템 전체 보기는 조회 범위라 소유 목적지가 될 수 없다 (.pen 6-2 노트).
+            <span
+              title={
+                isSystemScope
+                  ? '설문을 만들려면 소유 팀을 먼저 선택하세요'
+                  : '소속된 팀이 없어 설문을 만들 수 없습니다'
+              }
+              className="flex h-[42px] cursor-not-allowed items-center gap-1.5 rounded-[9px] bg-[#E5E7EB] px-4 text-[14px] font-semibold text-[#9CA3AF]"
+            >
+              <Plus className="h-4 w-4" />새 설문 만들기
+            </span>
+          )}
         </div>
       </div>
 
-      {isLoading && (
+      {showLoading && (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-[#9CA3AF]" />
         </div>
       )}
 
-      {error && !isLoading && (
+      {error && !showLoading && (
         <div className="py-24 text-center text-[13.5px] text-[#6E6E73]">
           설문 목록을 불러올 수 없습니다.
         </div>
       )}
 
-      {!isLoading && !error && (
+      {/* 그룹 목록을 못 가져오면 `?group=` 주소인데 팀 전체 목록이 그려진다 — 정상 폴백
+          ("불러왔는데 그 그룹이 없더라")과 갈라서 조용히 서지 않게 한다. */}
+      {requestedGroupId !== null && groupsError && !showLoading && !error && (
+        <div className="py-24 text-center text-[13.5px] text-[#6E6E73]">
+          그룹을 불러올 수 없습니다.{' '}
+          <Link href="/admin/surveys" className="text-[#2E4FCE] hover:underline">
+            전체 목록으로
+          </Link>
+        </div>
+      )}
+
+      {!showLoading && !error && !(requestedGroupId !== null && groupsError) && (
         <>
           <div className="relative">
             <ListToolbar
@@ -250,6 +288,7 @@ export function SurveyListView() {
               onSearchQueryChange={setSearchQuery}
               sortBy={sortBy}
               onSortByChange={setSortBy}
+              searchPlaceholder={activeGroup ? '그룹 내 설문 검색' : '설문 검색...'}
               advancedOpen={advancedOpen}
               onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
             />
@@ -269,6 +308,10 @@ export function SurveyListView() {
             <NoTeamEmptyState />
           ) : allSurveys.length === 0 ? (
             <NoSurveysEmptyState canCreate={canCreate} />
+          ) : activeGroup && scopedSurveys.length === 0 ? (
+            // 그룹이 비어 있는 것과 필터로 0건이 된 것은 다른 화면이다 — 「초기화」로는
+            // URL 이 소유한 그룹 좁힘이 풀리지 않아 버튼이 아무 일도 하지 않는다.
+            <EmptyGroupState />
           ) : filtered.length === 0 ? (
             <NoResultsEmptyState onReset={resetAll} />
           ) : (

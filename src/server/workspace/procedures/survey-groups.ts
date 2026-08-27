@@ -105,7 +105,7 @@ const list = authed
   .output(ListSurveyGroupsOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyGroupManage(context.user, input.teamId);
-    return svc.listSurveyGroups(input.teamId);
+    return svc.listSurveyGroups(context.user, input.teamId);
   });
 
 const create = authed
@@ -168,22 +168,25 @@ const collect = authed
   });
 
 /**
- * 단건 이동 (카드 케밥) — 설문 capability 가 판정의 전부다.
+ * 단건 이동 (카드 케밥) — 목적지 그룹과 설문 양쪽에 관문을 건다.
  *
- * 그룹 쪽 팀 관문을 따로 걸지 않는 것은 목적지 그룹의 팀을 서비스가 **잠긴 설문 행의
- * teamId** 와 대조하기 때문이다. 설문의 surveyGroup.manage 를 가진 주체는 그 설문 팀의
- * 사람이므로, 팀이 일치하는 그룹이면 그 그룹도 같은 팀 것이다. 미분류로 빼는 경우
- * (groupId=null)는 목적지 자체가 없다.
+ * 「설문의 `surveyGroup.manage` 를 가진 주체는 그 설문 팀의 사람이다」는 성립하지 않는다.
+ * capability 판정의 **소유자 분기가 팀장·팀원 분기보다 먼저 오고 팀 소속을 묻지 않는다**
+ * (아무 팀에나 속해 있으면 통과한다). 그래서 그 주장에 기대면 둘이 뚫린다 — ① 팀에서 빠진
+ * 옛 소유자가 그 팀 공용 폴더를 계속 재배치하고 ② 없는 그룹(NOT_FOUND)과 타 팀 그룹
+ * (CONFLICT)이 갈려 `rename`·`remove` 가 닫아둔 존재 은닉이 이 표면 하나로 무효가 된다.
+ * 그래서 `collect` 와 같은 관문을 목적지에도 건다.
+ *
+ * 미분류로 빼는 경우(groupId=null)만 목적지가 없어 설문 관문 하나로 끝난다.
  */
 const move = authed
   .input(MoveSurveyToGroupInput)
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyCapabilityBatchRpc(
-      context.user,
-      [input.surveyId],
-      SURVEY_MOVE_CAPABILITIES,
-    );
+    if (input.groupId !== null) {
+      await assertSurveyGroupManageByGroupId(context.user, input.groupId);
+    }
+    await assertSurveyCapabilityBatchRpc(context.user, [input.surveyId], SURVEY_MOVE_CAPABILITIES);
     return svc.moveSurveyToGroup(input).catch(rethrowSurveyGroupError);
   });
 

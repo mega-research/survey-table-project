@@ -290,12 +290,19 @@ const NO_CAPABILITIES: ReadonlySet<SurveyCapability> = new Set();
  *
  * 하나라도 막히면 그 자리에서 던진다. 부분 성공을 허용하면 "N개 중 3개만 담겼다" 는 상태를
  * 화면이 표현할 수 없고, 담기는 트랜잭션 하나라 실제로도 전부 아니면 전무다.
+ *
+ * 빈 목록은 **통과가 아니라 거부**다. 검사 루프가 0회 돌아 조용히 통과하면 단건 관문
+ * (대상이 없으면 not_found)과 기본값 방향이 반대가 되고, 앞으로 입력에 `.min(1)` 을 빠뜨린
+ * 표면이 하나 생기는 순간 빈 요청이 관문을 지나 서비스까지 들어간다. fail-open 은 리뷰에서
+ * 눈에 띄지 않으므로 코어에서 닫는다.
  */
 export async function assertSurveyCapabilityBatch(
   user: SurveyAccessUser,
   surveyIds: readonly string[],
   capabilities: readonly SurveyCapability[],
 ): Promise<void> {
+  if (surveyIds.length === 0) throw new SurveyAccessError('not_found');
+
   const caps = await loadSurveyCapabilitiesBatch(user, surveyIds);
   for (const surveyId of surveyIds) {
     const own = caps.get(surveyId) ?? NO_CAPABILITIES;

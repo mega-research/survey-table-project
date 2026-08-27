@@ -45,7 +45,7 @@ export class DuplicateSurveyGroupNameError extends Error {
  */
 export class SurveyTeamMismatchError extends Error {
   constructor() {
-    super('다른 팀의 설문은 그룹에 담을 수 없습니다.');
+    super('그룹과 설문의 소유 팀이 다릅니다.');
     this.name = 'SurveyTeamMismatchError';
   }
 }
