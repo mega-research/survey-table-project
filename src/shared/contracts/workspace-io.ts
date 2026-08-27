@@ -4,7 +4,7 @@
 import * as z from 'zod';
 
 import { userStatusValues } from './auth';
-import { teamRoleValues } from './workspace';
+import { surveyVisibilityValues, teamRoleValues } from './workspace';
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
@@ -277,3 +277,117 @@ export const MoveSurveyToGroupInput = z.object({
   groupId: z.uuid().nullable(),
 });
 export type MoveSurveyToGroupInput = z.infer<typeof MoveSurveyToGroupInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 재배치 센터 (.pen FLOW 8-2~8-4·9-2) — 슈퍼어드민 전용 인박스
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 해산이 만들어낸 두 종류의 고아를 한곳에서 처리한다: 팀을 잃은 **사람**(미배치)과 팀을 잃은
+// **설문**(배치 대기). 팀 관리의 「메가리서치」 카드가 유일한 입구다 — 팀이 아니라 시스템
+// 전체 보기라 재배치가 그 카드의 일이다(ADR-0006).
+
+const SurveyVisibilitySchema = z.enum(surveyVisibilityValues);
+
+/** 인박스 머리의 지표 셋 (.pen 8-2). 「처리 대기」 배지는 사용자 + 설문의 합이다. */
+export const ReassignmentSummary = z.object({
+  archivedTeamCount: z.number().int(),
+  unassignedUserCount: z.number().int(),
+  pendingSurveyCount: z.number().int(),
+});
+export type ReassignmentSummary = z.infer<typeof ReassignmentSummary>;
+
+export const UnassignedUserItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  jobTitle: z.string().nullable(),
+  /**
+   * 직전 소속 팀 이름 (.pen 8-2 의 `연구1본부 - 1팀 (해산)`).
+   *
+   * 해산이 team_members 행을 **지우지 않기** 때문에 읽을 수 있는 값이다(ADR-0011, 티켓 13).
+   * 미배치인데 멤버십 행이 남아 있다면 그 팀은 archived 일 수밖에 없으므로 별도 플래그를
+   * 두지 않는다 — active 팀 행이 있으면 애초에 미배치가 아니다.
+   * 제외로 미배치가 된 사람은 행이 지워져 null 이다.
+   */
+  previousTeamName: z.string().nullable(),
+});
+export type UnassignedUserItem = z.infer<typeof UnassignedUserItem>;
+
+export const PendingSurveyItem = z.object({
+  surveyId: z.uuid(),
+  title: z.string(),
+  ownerUserId: z.uuid().nullable(),
+  /** 소유자 이름. null 이면 소유자가 없는 설문(팀 도입 이전 백필분)이라 화면이 메가리서치로 적는다. */
+  ownerName: z.string().nullable(),
+  /** 소유자도 지금 미배치인가 (.pen 8-4 의 `박도윤 · 미배치 (해산)`). */
+  ownerIsUnassigned: z.boolean(),
+  /** 감사(survey_ownership_events)에서 되짚은 출신 팀. 설문 행에는 남지 않는다. */
+  previousTeamName: z.string().nullable(),
+  updatedAt: z.string(),
+});
+export type PendingSurveyItem = z.infer<typeof PendingSurveyItem>;
+
+export const ReassignmentInboxOutput = z.object({
+  summary: ReassignmentSummary,
+  unassignedUsers: z.array(UnassignedUserItem),
+  pendingSurveys: z.array(PendingSurveyItem),
+});
+export type ReassignmentInboxOutput = z.infer<typeof ReassignmentInboxOutput>;
+
+/**
+ * 미배치 사용자 팀 배정 (.pen 8-3).
+ *
+ * 팀 상세의 「팀원 추가」와 같은 일을 하지만 입구가 다르다 — 저쪽은 팀장이 자기 팀으로
+ * 당기는 pull, 이쪽은 슈퍼어드민이 목적지를 정해 밀어넣는 push 다. 직책을 함께 받는 것도
+ * 이쪽뿐이다(해산으로 소속을 잃은 사람의 직책을 새 팀 기준으로 다시 적는 자리라서).
+ */
+export const AssignUserToTeamInput = z.object({
+  userId: z.uuid(),
+  teamId: z.uuid(),
+  role: TeamRoleSchema,
+  /** 빈 문자열은 「직책 없음」이다 — 화면의 선택 입력이라 미입력과 지우기를 가르지 않는다. */
+  jobTitle: z.string().trim().max(50).nullable(),
+});
+export type AssignUserToTeamInput = z.infer<typeof AssignUserToTeamInput>;
+
+/**
+ * 배치 대기 설문 배치 (.pen 8-4 단건 · 9-2 일괄).
+ *
+ * 단건과 일괄이 **같은 입력**이다 — 화면 둘이 하는 일이 「선택한 설문들에 같은 목적지·소유자·
+ * 공개 범위를 적용한다」로 정확히 같고, 단건은 그 목록의 길이가 1 인 경우다. 계약을 가르면
+ * 원자성 규칙(한 건이라도 실패하면 전체 취소)이 두 벌이 된다.
+ */
+export const AssignSurveysInput = z.object({
+  surveyIds: z
+    .array(z.uuid())
+    .min(1, '설문을 하나 이상 선택하세요.')
+    .max(200, '한 번에 200건까지 배치할 수 있습니다.')
+    .transform((ids) => [...new Set(ids)]),
+  teamId: z.uuid(),
+  ownerUserId: z.uuid(),
+  visibility: SurveyVisibilitySchema,
+});
+export type AssignSurveysInput = z.infer<typeof AssignSurveysInput>;
+
+/** 몇 건이 실제로 움직였는가 — 화면이 「N건을 배치했습니다」로 쓴다. */
+export const AssignSurveysOutput = z.object({ assignedCount: z.number().int() });
+export type AssignSurveysOutput = z.infer<typeof AssignSurveysOutput>;
+
+/** 새 소유자 후보 = 목적지 팀의 **active internal 멤버**. 이유는 서비스 주석 참조. */
+export const OwnerCandidateItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  jobTitle: z.string().nullable(),
+  role: TeamRoleSchema,
+});
+export type OwnerCandidateItem = z.infer<typeof OwnerCandidateItem>;
+
+export const ListOwnerCandidatesOutput = z.array(OwnerCandidateItem);
+export type ListOwnerCandidatesOutput = z.infer<typeof ListOwnerCandidatesOutput>;
+
+/** 단건 재배치 화면(.pen 8-4)이 여는 설문 하나. */
+export const PendingSurveyDetailOutput = PendingSurveyItem;
+export type PendingSurveyDetailOutput = z.infer<typeof PendingSurveyDetailOutput>;
+
+export const SurveyIdOnlyInput = z.object({ surveyId: z.uuid() });
+export type SurveyIdOnlyInput = z.infer<typeof SurveyIdOnlyInput>;

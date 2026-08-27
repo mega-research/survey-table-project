@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -17,6 +18,8 @@ import {
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type {
   SurveyAssignmentStatus,
+  SurveyOwnershipAction,
+  SurveyOwnershipEventMetadata,
   SurveyOwnershipStatus,
   SurveyVisibility,
 } from '@/shared/contracts/workspace';
@@ -165,6 +168,37 @@ export const surveys = pgTable(
         OR (${table.assignmentStatus} = 'assignment_pending' AND ${table.teamId} IS NULL)`,
     ),
   ],
+);
+
+/**
+ * 설문 소유 팀·소유자 이동 감사 (append-only, 0091 — 티켓 14).
+ *
+ * 해산은 `surveys.team_id` 를 NULL 로 내리므로 설문 행만 봐서는 **출신 팀**을 알 수 없고,
+ * 팀 쪽 감사(dissolve)는 규모만 적을 뿐 어느 설문인지 적지 않는다. 배치 대기 설문이 어디서
+ * 왔는지 아는 유일한 경로가 이 테이블이다(.pen FLOW 8-4 의 「현재 소유 팀 · 해산됨」).
+ *
+ * survey_id 만 CASCADE 다 — 현행 설문 삭제가 하드 삭제라 RESTRICT 로 걸면 감사 행 하나가
+ * 설문 삭제를 영구히 막는다. 사람·팀은 하드 삭제되지 않으므로 RESTRICT 로 계보를 지킨다.
+ */
+export const surveyOwnershipEvents = pgTable(
+  'survey_ownership_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    action: text('action').$type<SurveyOwnershipAction>().notNull(),
+    fromOwnerId: uuid('from_owner_id').references(() => users.id, { onDelete: 'restrict' }),
+    toOwnerId: uuid('to_owner_id').references(() => users.id, { onDelete: 'restrict' }),
+    fromTeamId: uuid('from_team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    toTeamId: uuid('to_team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    metadata: jsonb('metadata').$type<SurveyOwnershipEventMetadata>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('survey_ownership_events_survey_idx').on(table.surveyId, table.createdAt)],
 );
 
 // 질문 그룹 테이블

@@ -28,10 +28,13 @@ const OK: WorkspaceActionOutput = { success: true };
 /**
  * 멤버 구성 변화를 감사에 남긴다.
  *
+ * 재배치 센터의 팀 배정(services/reassignment)도 이 함수를 부른다 — 입구가 달라도 남는
+ * 사건은 같은 `member_add` 여야 한다. 감사 모양이 두 벌이 되면 팀 상세의 이력이 갈린다.
+ *
  * 제외는 team_members 행을 지우므로 이 행이 없으면 "누가 언제 누구를 뺐는가" 가 어디에도
  * 남지 않는다. 역할은 사건 시점 값을 함께 적는다 — 나중에 조인하면 지금 역할만 보인다.
  */
-async function recordMemberEvent(
+export async function recordMemberEvent(
   tx: DbTransaction,
   input: {
     teamId: string;
@@ -62,7 +65,7 @@ export async function lockTeamMembers(tx: DbTransaction, teamId: string): Promis
 }
 
 /** 해산되지 않은 팀인지 확인한다. 해산된 팀에는 아무도 넣지 않는다(ADR-0011). */
-async function requireActiveTeam(tx: DbTransaction, teamId: string): Promise<void> {
+export async function requireActiveTeam(tx: DbTransaction, teamId: string): Promise<void> {
   const team = await tx.query.teams.findFirst({
     where: and(eq(teams.id, teamId), eq(teams.status, 'active')),
     columns: { id: true },
@@ -71,7 +74,7 @@ async function requireActiveTeam(tx: DbTransaction, teamId: string): Promise<voi
 }
 
 /** 이 사람이 지금 소속된 활성 팀 id 들. */
-async function activeTeamIdsOf(tx: DbTransaction, userId: string): Promise<string[]> {
+export async function activeTeamIdsOf(tx: DbTransaction, userId: string): Promise<string[]> {
   const rows = await tx
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)

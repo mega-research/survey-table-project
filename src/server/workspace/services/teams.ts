@@ -3,7 +3,14 @@ import 'server-only';
 import { and, asc, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveys, teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
+import {
+  surveyOwnershipEvents,
+  surveys,
+  teamLifecycleEvents,
+  teamMembers,
+  teams,
+  users,
+} from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { canManageTeamMembers, canManageTeamSettings } from '@/shared/contracts/workspace';
 
@@ -289,7 +296,12 @@ export async function dissolveTeam(
     // `assigned` 로 굳어, 복구 동선(티켓 17)이 열리는 순간 없는 팀 소속으로 부활하고
     // 재배치 큐(assignment_pending 기준)에도 안 잡힌다. 감사에 적는 수만 살아 있는 행으로 센다.
     const targets = await tx
-      .select({ id: surveys.id, deletedAt: surveys.deletedAt })
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        ownerUserId: surveys.ownerUserId,
+        deletedAt: surveys.deletedAt,
+      })
       .from(surveys)
       .where(eq(surveys.teamId, team.id))
       .orderBy(asc(surveys.id))
@@ -310,6 +322,23 @@ export async function dissolveTeam(
             targets.map((t) => t.id),
           ),
         );
+
+      // **설문별 계보를 남긴다** — 이 행이 없으면 배치 대기 설문의 출신 팀을 아무도 못
+      // 되짚는다. 위 UPDATE 가 team_id 를 NULL 로 내리는 순간 설문 행에서 출처가 지워지고,
+      // 바로 아래 dissolve 감사는 **규모**만 적을 뿐 어느 설문인지 적지 않기 때문이다.
+      // 재배치 센터(티켓 14)의 「현재 소유 팀 · 해산됨」 줄이 여기서 나온다.
+      //
+      // 삭제된 설문도 함께 적는다 — 복구 동선(티켓 17)이 열리면 그 설문도 출신 팀을 물어본다.
+      await tx.insert(surveyOwnershipEvents).values(
+        targets.map((t) => ({
+          surveyId: t.id,
+          action: 'unassign' as const,
+          fromOwnerId: t.ownerUserId,
+          fromTeamId: team.id,
+          changedBy: actorUserId,
+          metadata: { surveyTitle: t.title, fromTeamName: team.name },
+        })),
+      );
     }
 
     await tx.insert(teamLifecycleEvents).values({

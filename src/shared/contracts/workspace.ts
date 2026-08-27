@@ -129,6 +129,32 @@ export const surveyOwnershipStatusValues = ['normal', 'succession_pending'] as c
 export type SurveyOwnershipStatus = (typeof surveyOwnershipStatusValues)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// survey_ownership_events — 설문 소유 이동 감사 어휘 (SSOT, 티켓 14)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// unassign  팀을 잃었다 (해산). 이 행이 없으면 배치 대기 설문의 **출신 팀**을 되짚을 수
+//           없다 — 해산이 surveys.team_id 를 NULL 로 내리기 때문이다.
+// assign    배치 대기 → 팀 배치 (재배치 센터).
+// transfer  이미 배치된 설문의 팀·소유자 이동 (티켓 19 승계·수동 이전).
+
+export const surveyOwnershipActionValues = ['unassign', 'assign', 'transfer'] as const;
+export type SurveyOwnershipAction = (typeof surveyOwnershipActionValues)[number];
+
+/**
+ * 감사 행의 부수 정보 — 사건 시점 값의 사본.
+ *
+ * 팀 이름을 함께 적는 이유는 team_lifecycle_events 와 같다: 나중에 조인하면 **지금** 이름만
+ * 보인다. 해산된 팀은 이름을 재사용할 수 있으므로(활성 팀 부분 UNIQUE) 더욱 그렇다.
+ */
+export interface SurveyOwnershipEventMetadata {
+  surveyTitle?: string;
+  fromTeamName?: string;
+  toTeamName?: string;
+  fromVisibility?: SurveyVisibility;
+  toVisibility?: SurveyVisibility;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 설문 capability — 권한 판정의 최소 단위 (SSOT, 스펙 §8)
 // ─────────────────────────────────────────────────────────────────────────────
 //

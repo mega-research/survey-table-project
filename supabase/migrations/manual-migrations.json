@@ -74,6 +74,7 @@
     "0087_users_sessions_revoked_at",
     "0088_teams_and_memberships",
     "0089_surveys_team_scoping",
-    "0090_survey_groups"
+    "0090_survey_groups",
+    "0091_survey_ownership_events"
   ]
 }

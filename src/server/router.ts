@@ -34,6 +34,7 @@ import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { members } from '@/server/workspace/procedures/members';
+import { reassignment } from '@/server/workspace/procedures/reassignment';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
 import { teams } from '@/server/workspace/procedures/teams';
 import { duplicate } from '@/server/survey-response/procedures/duplicate';
@@ -107,6 +108,8 @@ export const router = {
     members,
     // 설문 그룹. surveyBuilder.groups(문항 그룹)와 이름이 겹치지 않게 키를 길게 쓴다.
     surveyGroups,
+    // 재배치 센터 — 팀을 잃은 사람·설문의 인박스 (슈퍼어드민 전용).
+    reassignment,
   },
 };
 
