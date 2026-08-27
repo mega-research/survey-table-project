@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 13 팀 해산 — `workspace.teams.dissolve`(superadmin)가 확정 즉시 한 트랜잭션으로 팀 archived + 소속 설문 배치 대기(teamId=null·assignment_pending·surveyGroupId=null) + 감사 행을 처리한다. `team_members` 행은 남긴다 — 유효 소속 판정이 active 팀만 조인하므로 팀원은 자동 미배치가 되고, 지우면 해산 시점 명부가 사라진다(ADR-0011). 확인 문구(팀 이름 재입력) 대조는 화면과 서버 양쪽. 잠금은 멤버 변경과 **같은 팀 키** + 최종 UPDATE 의 `status='active'` 조건. **해산 취소 표면 없음** — 복구는 재배치 센터(티켓 14). 함께 닫은 것 셋: 슈퍼어드민의 archived 팀 멤버 명부 변조·그룹 쓰기·**새 설문 귀속**. 마이그레이션 없음(0088 에 컬럼·어휘가 이미 있다). 직전: 티켓 12 설문 그룹 + Codex 하드닝)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 14 재배치 센터 — `/admin/reassignment` 슈퍼어드민 전용 인박스. 팀을 잃은 **사람**(미배치)과 **설문**(배치 대기)을 한곳에서 처리한다. 입구는 팀 관리의 「메가리서치」 카드 하나 — 사이드바 항목도 teamId 딥링크도 없다(팀 경계로 좁힐 수 없는 목록이라 팀장에게 하나라도 열면 전사 열람). `workspace.reassignment` 5종 전부 superadmin. **새 소유자는 목적지 팀의 활성 멤버여야 한다** — 판정 코어의 소유자 분기가 소유 팀 소속일 때만 전권을 주므로 팀 밖 사람을 앉히면 자기 설문을 못 여는 소유자가 생긴다. 일괄 배치는 전부 아니면 전무. 마이그레이션 0091 `survey_ownership_events` — 해산이 `team_id` 를 NULL 로 내려 설문 행에서 지워지는 **출신 팀**을 되짚는 유일한 경로이고, 해산이 설문별 `unassign` 행을 함께 남긴다. 재입사(9-4)는 상태 전이 + 팀 배정을 `server/workflows/user-rehire` 가 한 트랜잭션으로 묶는다. 직전: 티켓 13 팀 해산)
 
 ---
 
@@ -112,6 +112,7 @@ src/
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
 │   │   ├── test-mail-archive.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
+│   │   ├── user-rehire.ts        # 재입사 — 상태 전이(auth)와 팀 배정(workspace)을 한 트랜잭션으로 (티켓 14)
 │   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
@@ -161,7 +162,7 @@ src/
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   ├── analytics/              # 차트 및 리포팅 (23개)
 │   ├── workspace/              # 워크스페이스 관리 (21개, 티켓 03 신설) — 사용자 관리 + 내 프로필 + 팀 관리 + admin 셸
-│   │   │                       # 재배치 센터(티켓 14)가 여기로 들어온다. 진입점은 폴더 안
+│   │   │                       # + 재배치 센터. 진입점은 폴더 안
 │   │   ├── admin-shell/        # admin 공통 셸 (티켓 08, .pen FLOW 6-1) — admin-shell 진입점(레이아웃이 연다)
 │   │   │                       # + sidebar(로고·메뉴)·team-switcher(팀 전환+메가리서치)·sidebar-profile(프로필·로그아웃)
 │   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만)
@@ -174,7 +175,11 @@ src/
 │   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
 │   │   ├── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
 │   │   │                       # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
-│   │   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
+│   │   ├── reassignment/       # 재배치 센터 (티켓 14 — .pen FLOW 8-2~8-4·9-2): reassignment-view 진입점
+│   │                       # + survey-reassign-view(단건 8-4) + user-assign-modal(8-3) + survey-assign-bar(9-2)
+│   │                       # + assignment-fields(목적지·소유자·공개 범위 공유 필드) + reassignment-vocabulary
+│   │                       # + queries/use-reassignment
+│   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
 │   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
 │   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
 │   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여 설문 목록은 티켓 21·22
@@ -342,7 +347,18 @@ survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 
 ├── id, teamId (FK restrict), name, order
 ├── createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
+
+survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0091, 티켓 14 — append-only)
+├── id, surveyId (FK **cascade**)
+├── action                 # unassign(해산) | assign(재배치 센터) | transfer(승계·티켓 19)
+├── fromOwnerId, toOwnerId, fromTeamId, toTeamId (전부 FK restrict, nullable)
+├── changedBy (FK restrict), metadata (JSONB — 사건 시점 설문 제목·팀 이름·공개 범위)
+└── createdAt              (INDEX (surveyId, createdAt DESC))
 ```
+
+> `survey_id` 만 CASCADE 인 이유: 현행 설문 삭제가 하드 삭제라(`deleteSurvey` → `tx.delete`)
+> RESTRICT 로 걸면 감사 행 하나가 설문 삭제를 영구히 막는다. 형제 감사인 `response_edit_logs`
+> 도 같은 이유로 CASCADE 다. 나머지 FK 는 RESTRICT — 사람과 팀은 하드 삭제되지 않는다.
 
 > 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
@@ -613,6 +629,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
 /admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
 /admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
+/admin/reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
+/admin/reassignment/surveys/[surveyId]  # 단건 설문 재배치 (새 소유자·목적지 팀·공개 범위 원자 확정)
 /admin/profile                    # 내 프로필 — **세 계정 유형 공통**. /admin 아래지만 내부 전용이 아니다(ACCOUNT_PAGES)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
@@ -841,6 +859,41 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     archived 팀의 **멤버 명부**(members 3종에 `requireActiveTeam`)·**그룹 쓰기**
     (`getSurveyGroupTeamId` 가 active 팀만)·**새 설문 귀속**(`resolveNewSurveyOwnership` 이
     쓰기 직전 재확인)에 계속 닿을 수 있었다.
+- **재배치 센터는 팀 경계로 좁힐 수 없는 목록이라 슈퍼어드민 전용이다**(티켓 14, .pen FLOW
+  8-2~8-4·9-2). `/admin/reassignment` 는 팀 관리의 「메가리서치」 카드가 유일한 입구고
+  사이드바 항목도 `teamId` 딥링크도 없다 — 여기 있는 사람과 설문은 **어느 팀에도 속하지
+  않아** 팀장에게 하나라도 열면 그 순간 전사 열람이 된다. `workspace.reassignment` 5종
+  (`inbox`·`pendingSurvey`·`ownerCandidates`·`assignUser`·`assignSurveys`)이 전부 superadmin
+  베이스이며, 페이지도 `requireSuperadminPage` 라 두 경로의 권한 축이 같다.
+  - **새 소유자는 목적지 팀의 활성 멤버여야 한다**(`OwnerNotInTeamError`). 이것이 이 티켓의
+    핵심 불변식이다 — `resolveSurveyCapabilities` 의 소유자 분기는 **소유 팀 소속일 때만**
+    전권을 주므로(티켓 13 하드닝), 팀 밖 사람을 앉히면 배치는 성공하는데 그 소유자가 자기
+    설문을 못 여는 설문이 만들어지고 화면에는 아무 경고도 뜨지 않는다. 후보 목록
+    (`listOwnerCandidates`)과 서버 검증이 **같은 모집단**을 보는 것이 그 계약이다.
+  - **단건(8-4)과 일괄(9-2)은 같은 RPC** 다. 단건은 목록 길이가 1 인 경우일 뿐이라 나누면
+    「전부 아니면 전무」 규칙이 두 벌이 된다. 없는 id 와 「배치 대기가 아닌」 id 는 **같은
+    사유**로 접는다 — 갈라 말하면 재배치 주소가 전체 설문의 존재 확인 창구가 된다.
+  - 잠금 순서는 **팀 멤버 → 팀 행 `FOR SHARE` → 설문 id 오름차순**으로 해산·담기와 같다.
+    맞추는 것이 목적이 아니라 배치가 해산의 **정확히 반대 방향 이동**이라 서로를 기다려야 한다.
+    배치는 `survey_group_id` 를 NULL 로 둔다(그룹은 팀 소유물 — 새 팀에서는 미분류).
+  - 인박스 목록은 **200건 상한, 지표는 전체 수**다. 0089 백필이 팀 도입 이전 설문 전부를
+    배치 대기로 세워 초기 운영에서 수천 건일 수 있다 — 화면이 「상위 N건」임을 말한다.
+  - **배치 취소 표면을 만들지 말 것.** 인박스는 처리하는 곳이지 되돌리는 곳이 아니다(해산에
+    취소가 없는 것과 같은 이유). 되돌리려면 정식 이전(티켓 19)을 쓴다.
+- **배치 대기 설문의 「출신 팀」은 `survey_ownership_events` 에만 남는다**(0091, 티켓 14).
+  해산이 `surveys.team_id` 를 NULL 로 내리므로 설문 행에는 출처가 없고, 팀 쪽 `dissolve`
+  감사는 **규모**(surveyCount)만 적을 뿐 어느 설문인지 적지 않는다. 그래서 `dissolveTeam` 이
+  설문별 `unassign` 행을 함께 쓴다 — 이 행이 없으면 .pen 8-4 의 「현재 소유 팀 · 해산됨」도,
+  "누가 이 설문을 저 팀으로 옮겼는가" 도 답할 수 없다. 티켓 19 승계가 `transfer` 로 이어 쓴다.
+- **재입사는 상태 전이와 팀 배정이 한 트랜잭션이다**(티켓 14, .pen FLOW 9-4). 퇴사가 유효
+  소속을 끊어놓았으므로 상태만 되돌리면 로그인만 되는 미배치로 되살아나 재배치 센터로 다시
+  흘러간다 — 「새 소속으로 다시 시작합니다」라고 말하는 화면이 목적지를 안 받으면 그 문장이
+  거짓이 된다. 그래서 `ChangeUserStatusInput` 의 rehire 변이만 `teamId`·`teamRole` 을 **필수**로
+  받고, 두 도메인의 쓰기라 `server/workflows/user-rehire` 가 묶는다(도메인끼리는 서로를 못
+  부른다). **순서가 계약이다** — 상태 전이가 먼저다. 배정의 `assertMemberAssignable` 이 대상의
+  재직 여부를 보므로 뒤집으면 재입사가 자기 자신의 재직 검사에 걸린다. 배정 실패는 워크플로가
+  `RehireTeamAssignmentError` 로 **사유 문구만 보존해** 감싼다 — 워크스페이스 도메인 에러를
+  그대로 올리면 auth procedure 가 그 도메인을 import 해야 한다.
 - **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
   세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
   팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.

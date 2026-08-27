@@ -325,6 +325,11 @@ export function ReassignmentView() {
 
         {!isLoading && !error && tab === 'surveys' && (
           <>
+            {/* .pen 9-2 의 부제. 이 설문들이 「사라진」 게 아니라 슈퍼어드민에게만 보이는
+                중이라는 사실을 말해주지 않으면, 팀원이 못 찾는 설문을 장애로 신고한다. */}
+            <p className="text-[12.5px] text-[#6E6E73]">
+              기존 설문은 실제 팀과 소유자를 지정하기 전까지 슈퍼어드민에게만 보입니다.
+            </p>
             <SurveyAssignBar
               surveyIds={[...visibleSelected]}
               onAssigned={() => setSelected(new Set())}
