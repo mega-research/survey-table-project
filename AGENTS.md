@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 11 관문 배선 C — export REST 3종(export·split-preview·contacts export)이 REST 어댑터 `server/rest-survey-access`(`checkScopedSurveyCapabilityRest`, not_found→404 존재 은닉/forbidden→403)로 `export.download` 관문을 지난다. env grant 게스트의 grant 설문 export 는 현행 유지 — 게스트 항상 차단은 티켓 21 몫. 업로드 REST 3종은 surveyId 없는 tmp 전용이라 의도된 면제(route-guard 주석). 옛 `SurveyOwnershipError`(require-survey-ownership)는 코어 `SurveyAccessError` 로 흡수·삭제. `/analytics` 목록 범위 필터는 티켓 09 완료분으로 이미 충족. 직전: 티켓 10 운영 콘솔 관문 배선)
+> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 12 설문 그룹 — `survey_groups`(0090) + `surveys.survey_group_id` FK(ON DELETE SET NULL)가 붙고 `workspace.surveyGroups` RPC 8종이 열렸다. **그룹은 접근 권한이 아니라 정리용 묶음**이라 관문이 두 갈래다 — 구조 편집은 그 팀 active 멤버 누구나, 설문을 넣고 빼는 것만 그 설문의 `survey.edit`+`surveyGroup.manage`. 담기 200건을 위해 코어에 `assertSurveyCapabilityBatch` 를 새로 뒀다. 화면은 그룹 관리 모달·담기 패널·삭제 확인·카드 케밥 이동 서브메뉴(.pen FLOW 2) + 그룹 화면 `?group=<id>` + 사이드바 그룹 트리. 설문이 팀을 옮길 때 `survey_group_id` 를 NULL 로 내리는 것은 티켓 13·14·19 의 계약으로 남겼다. 직전: 티켓 11 관문 배선 C)
 
 ---
 
@@ -90,7 +90,9 @@ src/
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
 │   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
+│   │                           # + assertSurveyCapabilityBatch(여러 설문·여러 capability 를 한 왕복으로 — 담기 200건용, 티켓 12)
 │   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
+│   │                           # + assertSurveyCapabilityBatchRpc(배치 짝)
 │   │                           # + assertScopedSurveyCapabilityRpc(scoped 표면용 — env grant 게스트는 grant 일치, 내부는 capability. 티켓 21 이 통합)
 │   ├── page-survey-access.ts   # 관문의 RSC 페이지 어댑터 — assertSurveyCapabilityPage(사유 불문 notFound 접기)
 │   │                           # + assertSurveyConsolePageAccess(게스트 허용 콘솔 페이지용 — requireAuth 포함, viewer 반환)
@@ -127,6 +129,8 @@ src/
 │   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
 │   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·페이지네이션·카드 + 순수 파이프라인
 │   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
+│   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
+│   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
@@ -137,7 +141,7 @@ src/
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
 │   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library — 구 src/hooks/queries
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-library·use-cell-library — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap
 │   │   └── (루트 24개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
@@ -160,7 +164,8 @@ src/
 │   │   │                       # 재배치 센터(티켓 14)가 여기로 들어온다. 진입점은 폴더 안
 │   │   ├── admin-shell/        # admin 공통 셸 (티켓 08, .pen FLOW 6-1) — admin-shell 진입점(레이아웃이 연다)
 │   │   │                       # + sidebar(로고·메뉴)·team-switcher(팀 전환+메가리서치)·sidebar-profile(프로필·로그아웃)
-│   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만). 범위 전환 시 쿠키 기록
+│   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만)
+│   │   │                       # + sidebar-group-tree(설문 그룹 트리 — 그룹 화면 입구, 티켓 12). 범위 전환 시 쿠키 기록
 │   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
@@ -183,6 +188,9 @@ src/
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/work-scope-cookie.ts   # 작업 범위 쿠키 R/W (브라우저 편의값 — 판정은 server/work-scope)
 │   ├── lib/work-scope-context.tsx # 작업 범위 React 컨텍스트 — 공급은 workspace(AdminShell), 소비는 survey-builder(목록)
+│   ├── lib/survey-group-queries.ts # 설문 그룹 쿼리 키 + 목록 조회 옵션 — 사이드바 트리(workspace)와
+│   │                              # 목록·모달(survey-builder)이 같은 캐시를 봐야 해서 여기 산다. mutation 은
+│   │                              # 설문 목록 키까지 접어야 해 survey-builder/queries 소유(공유→feature 역전 금지)
 │   │                              # feature 간 직접 import 금지의 탈출구라 모양이 여기 산다 (티켓 08)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
@@ -329,13 +337,24 @@ team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 �
 ├── targetUserId           # 멤버 사건의 대상 (팀 자체 사건은 NULL)
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
 └── createdAt
+
+survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 티켓 12)
+├── id, teamId (FK restrict), name, order
+├── createdBy (FK restrict)
+└── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
 ```
 
 > 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
 > archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/read-models/team-memberships.ts`
 > 의 `getActiveTeamMemberships` 하나로 모은다(팀 관리와 설문 접근 판정이 함께 보므로 도메인이 아니라 read-model 이다).
-> `surveys.team_id` 는 티켓 07 이 붙였다. `survey_groups`·`survey_participants` 는 아직 없다(티켓 12·18).
+> `surveys.team_id` 는 티켓 07 이, `survey_groups` 는 티켓 12 가 붙였다. `survey_participants` 는 아직 없다(티켓 18).
+> **그룹은 접근 권한이 아니라 정리용 묶음이다** — 담겼다는 사실이 판정에 들어가지 않는다.
+> `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이라 그룹 삭제는 설문을 미분류로
+> 되돌릴 뿐이다. 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
+> 내려야 한다** — 복합 FK 로 강제하지 못한 이유(MATCH SIMPLE 은 team_id NULL 을 건너뛰고
+> MATCH FULL 은 그룹 없는 정상 설문을 위반으로 만든다)는 0090 헤더에 있고, 지키는 것은
+> 서비스(잠긴 값 재검증)와 조회(team_id 동시 일치 조인)다. 팀 해산·재배치·승계(티켓 13·14·19)의 계약이다.
 
 ### 설문 도메인 (surveys.ts)
 
@@ -360,7 +379,7 @@ surveys                    # 설문 설정
 ├── teamId                        # 소유 팀 (0089, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
 ├── ownerUserId, createdBy        # 소유자·작성자 (0089, 2단계 배포 중이라 아직 nullable)
-├── surveyGroupId                 # 설문 그룹 (컬럼만 — 테이블·FK 는 티켓 12)
+├── surveyGroupId                 # 소속 그룹 (NULL = 미분류, FK ON DELETE SET NULL — 0090)
 ├── ownershipStatus               # normal | succession_pending (승계 전이는 티켓 19)
 ├── assignmentStatus              # assigned | assignment_pending — teamId 와 CHECK 로 한 몸
 ├── deletedAt (soft delete)
@@ -590,6 +609,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
+/admin/surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
 /admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
 /admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
 /admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
@@ -728,6 +748,22 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
   팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
   `team_lifecycle_events` 에 감사 행을 남긴다.
+- **설문 그룹은 접근 권한이 아니라 정리용 묶음이다**(티켓 12, .pen FLOW 2). 그래서 관문이
+  두 갈래다 — **그룹 구조**(목록·생성·이름 변경·정렬·삭제·담기 후보 조회)는 팀 공용이라
+  슈퍼어드민 또는 그 팀 active 멤버면 팀장·팀원을 가리지 않고, **설문을 넣고 빼는 것**만
+  그 설문의 `survey.edit` + `surveyGroup.manage` 를 함께 요구한다. 전자만 보면 참여자
+  (티켓 18)가 남의 팀 폴더를 재배치하고, 후자만 보면 팀원이 못 고치는 설문을 옮긴다.
+  판정은 `assertSurveyCapabilityBatchRpc` 로 한 왕복에 끝낸다(담기는 최대 200건이고
+  하나라도 막히면 트랜잭션 하나라 전부 거부다). `groupId` 만 받는 표면(이름 변경·삭제)은
+  **타 팀 그룹을 없는 그룹과 같은 NOT_FOUND 로 접는다** — 사유가 갈리면 id 스캔으로 타 팀
+  그룹의 존재가 확인된다. 담기 후보의 `canMove` 는 근사가 아니라 서버 판정 그대로다
+  (주체 한 번 + `resolveSurveyCapabilities` 를 행마다). 담기·이동은 그룹 행 → 설문 행
+  순서로 `FOR UPDATE` 를 잡고 **잠긴 값으로** 팀 일치·미분류 여부를 다시 본다. 그룹 이동은
+  `surveys.updatedAt` 을 건드리지 않는다 — 폴더에 넣는 일은 내용 수정이 아니고, 건드리면
+  「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다. 화면 쪽은 그룹 화면이 목록의
+  다른 상태가 아니라 **주소**(`/admin/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
+  입구다. 지목한 그룹이 목록에 없으면(삭제됨·타 팀 id) 좁힘 자체를 하지 않아 빈 화면에
+  갇히지 않는다.
 - **설문 접근 판정은 `server/survey-access.ts` 하나가 한다**(티켓 07, 스펙 §8). `data-scope` 가
   "어느 파티션을 보는가" 를 정하듯 이쪽이 "무엇을 할 수 있는가" 를 정하는 코어다. 순수 함수
   `resolveSurveyCapabilities` 의 **순서가 곧 정책**이다 — 계정 유형 → 슈퍼어드민 → 팀 미배치 →
