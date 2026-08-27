@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const insertedValues: Record<string, unknown>[] = [];
+/** 소유 팀이 active 인가 — resolveNewSurveyOwnership 의 마지막 확인(티켓 13). 기본은 활성. */
+const activeTeamRows: { id: string }[] = [{ id: 'team-1' }];
 
 vi.mock('@/db', () => {
   const insert = () => ({
@@ -19,7 +21,12 @@ vi.mock('@/db', () => {
       };
     },
   });
-  return { db: { query: { surveys: { findFirst: vi.fn(async () => undefined) } }, insert } };
+  const select = () => ({
+    from: () => ({ where: () => ({ limit: async () => activeTeamRows }) }),
+  });
+  return {
+    db: { query: { surveys: { findFirst: vi.fn(async () => undefined) } }, insert, select },
+  };
 });
 
 vi.mock('@/server/work-scope', () => ({ resolveWorkScope: vi.fn() }));
@@ -156,5 +163,36 @@ describe('ensureSurveyInDb — 기존 행은 존재 오라클을 봉인한다', 
       ensureSurveyInDb(actor, { id: 'other-team', title: '제목', settings: SETTINGS }),
     ).rejects.toBe(denied);
     expect(insertedValues).toEqual([]);
+  });
+});
+
+/**
+ * 해산된 팀에는 아무것도 새로 붙지 않는다 (티켓 13).
+ *
+ * 일반 사용자는 유효 소속에서 archived 팀이 빠져 범위가 none 으로 접히지만, **슈퍼어드민의
+ * 팀 범위는 멤버십으로 걸러지지 않는다** — work_scope 쿠키에 남은 해산 팀 id 가 UUID 형식
+ * 검사만 지나고 통과한다. 그 상태로 만든 설문은 배치 대기도 아니면서 슈퍼어드민 외에는
+ * 아무도 못 보는 유령이 된다.
+ */
+describe('해산된 팀에는 새 설문이 붙지 않는다', () => {
+  beforeEach(() => {
+    vi.mocked(resolveWorkScope).mockResolvedValue({ kind: 'team', teamId: 'team-1' });
+    // 조회 결과 0행 = 그 teamId 가 active 팀이 아니다(해산됨 또는 없음).
+    activeTeamRows.length = 0;
+  });
+
+  it('createSurvey 가 거부한다', async () => {
+    await expect(createSurvey(actor, { title: '유령 설문' } as never)).rejects.toBeInstanceOf(
+      SurveyOwnershipRequiredError,
+    );
+    expect(insertedValues).toHaveLength(0);
+  });
+
+  it('빌더 자동 생성(ensureSurveyInDb)도 거부한다', async () => {
+    vi.mocked(getSurveyById).mockResolvedValue(null as never);
+    await expect(
+      ensureSurveyInDb(actor, { id: 'ghost', title: '유령', settings: {} } as never),
+    ).rejects.toBeInstanceOf(SurveyOwnershipRequiredError);
+    expect(insertedValues).toHaveLength(0);
   });
 });

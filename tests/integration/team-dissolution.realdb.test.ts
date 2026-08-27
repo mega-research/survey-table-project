@@ -27,6 +27,7 @@ import { getActiveTeamMemberships } from '@/server/read-models/team-memberships'
 import { loadSurveyGateRow } from '@/server/survey-response/services/response-gate';
 import { teams as teamProcedures } from '@/server/workspace/procedures/teams';
 import { surveyGroups as groupProcedures } from '@/server/workspace/procedures/survey-groups';
+import { surveys as surveyProcedures } from '@/server/survey-builder/procedures/surveys';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -250,6 +251,21 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
     const gate = await loadSurveyGateRow(surveyId);
     expect(gate.status).toBe('published');
     expect(gate.isPublic).toBe(true);
+  });
+
+  it('해산된 팀에는 새 설문이 붙지 않는다 — 슈퍼어드민 쿠키가 남아 있어도', async () => {
+    const { teamId, teamName } = await seedTeamWithWork('신규차단');
+
+    await admin.teams.dissolve({ teamId, confirmName: teamName });
+
+    // 슈퍼어드민의 팀 범위는 멤버십으로 걸러지지 않는다 — 해산 전 쿠키를 그대로 흉내낸다.
+    const surveyClient = createRouterClient(
+      { surveys: surveyProcedures },
+      { context: contextFor(ADMIN_ID, true) },
+    );
+    await expect(
+      surveyClient.surveys.create({ title: '유령이 될 뻔한 설문', scope: teamId }),
+    ).rejects.toBeDefined();
   });
 
   it('해산된 팀의 그룹은 더 이상 만질 수 없다', async () => {

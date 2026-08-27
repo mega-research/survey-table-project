@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import { assertSurveyCapability, type SurveyAccessUser } from '@/server/survey-access';
@@ -14,6 +14,7 @@ import {
   questionGroups,
   questions,
   surveys,
+  teams,
 } from '@/db/schema';
 import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
 import { collectSurveyContentKeys } from '@/server/storage-lifecycle/entity-collectors';
@@ -58,6 +59,22 @@ export async function resolveNewSurveyOwnership(
   if (scope.kind !== 'team') {
     throw new SurveyOwnershipRequiredError();
   }
+
+  // 해산된 팀에는 아무것도 새로 붙지 않는다 (티켓 13).
+  //
+  // 일반 사용자는 여기까지 못 온다 — 유효 소속에서 archived 팀이 빠져 범위가 none 으로
+  // 접힌다. 그런데 **슈퍼어드민의 팀 범위는 멤버십으로 걸러지지 않는다**(work-scope 의
+  // UUID 형식 검사만 지난다). 해산 전에 그 팀을 보고 있었다면 `work_scope` 쿠키에 id 가
+  // 남아, 해산 뒤 만든 설문이 archived 팀 소유로 붙는다 — 배치 대기도 아니고 아무도 못 보는
+  // (슈퍼어드민 외) 유령 설문이 된다. 화면의 쿠키 정리는 해산을 실행한 본인에게만 닿으므로
+  // 쓰기 직전에 한 번 더 묻는다.
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, scope.teamId), eq(teams.status, 'active')))
+    .limit(1);
+  if (!team) throw new SurveyOwnershipRequiredError();
+
   return {
     teamId: scope.teamId,
     ownerUserId: actor.id,
