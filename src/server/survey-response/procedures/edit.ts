@@ -2,7 +2,11 @@ import { ORPCError } from '@orpc/server';
 
 import { isGuestUser } from '@/lib/auth/guest-grants';
 import { scoped } from '@/server/orpc';
-import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import {
+  assertScopedSurveyCapabilityRpc,
+  toRpcSurveyAccessError,
+} from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit';
@@ -23,13 +27,13 @@ const EDIT_ERROR_RESPONSES: Record<
 
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.
- * - SurveyOwnershipError('not_found') → NOT_FOUND.
+ * - SurveyAccessError('not_found')(서비스 안 존재 확인) → NOT_FOUND.
  * - ResponseEditError → 사유별 매핑(위 표).
  * - answer_value_too_large(크기 가드) → BAD_REQUEST.
  */
 function mapServiceError(err: unknown): never {
-  if (err instanceof svc.SurveyOwnershipError) {
-    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다' });
+  if (err instanceof SurveyAccessError) {
+    throw toRpcSurveyAccessError(err);
   }
   // 응답자 경로와 공유하는 크기 가드. 사유 문자열은 외부 계약이라 그대로 두고 코드만 접는다.
   if (err instanceof SurveyNotAcceptingResponsesError && err.reason === 'answer_value_too_large') {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
 
 import * as svc from '../services/response-edit';
 import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
@@ -18,7 +19,11 @@ vi.mock('../services/response-edit', async () => {
   };
 });
 
-vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
+// toRpcSurveyAccessError(순수 매핑)는 실물 유지 — 관문만 vi.fn 으로 대체한다.
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  assertScopedSurveyCapabilityRpc: vi.fn(),
+}));
 
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
@@ -72,9 +77,9 @@ describe('surveyResponse.edit procedures', () => {
     expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 
-  it('SurveyOwnershipError는 NOT_FOUND로 매핑된다', async () => {
+  it('서비스 안 존재 확인의 SurveyAccessError 는 NOT_FOUND 로 매핑된다', async () => {
     vi.mocked(svc.saveAdminEdit).mockRejectedValue(
-      new svc.SurveyOwnershipError('not_found') as never,
+      new SurveyAccessError('not_found') as never,
     );
     const client = createRouterClient({ edit }, { context: authedContext() });
     await expect(

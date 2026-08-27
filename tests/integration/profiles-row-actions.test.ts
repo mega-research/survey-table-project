@@ -28,9 +28,9 @@ import type { ListProfilesResult } from '@/server/operations/services/profiles';
 //   - @/db/schema : surveyResponses, contactTargets, surveys, responseAnswers, questions
 //   - next/cache : revalidatePath (소비처에서만 호출 — service 는 미사용이나 안전망 mock)
 //
-// service 는 인증을 더 이상 내부에서 하지 않는다(authed 미들웨어가 담당). 소유권 검증
-// (surveys row 존재 → SurveyOwnershipError) 만 service 안에 보존되므로
-// db.query.surveys.findFirst 로 검증한다.
+// service 는 인증을 더 이상 내부에서 하지 않는다(관문은 procedure 몫). 존재 확인
+// (surveys row 없으면 SurveyAccessError('not_found') — 관문·서비스 사이 레이스 방어)만
+// service 안에 보존되므로 db.query.surveys.findFirst 로 검증한다.
 //
 // vi.mock 는 hoist 되므로 mock 안에서 참조하는 state 는 vi.hoisted 로 끌어올린다.
 // in-memory map 으로 CRUD 흐름을 통합 검증한다.
@@ -784,8 +784,8 @@ describe('profiles-row-actions', () => {
   //
   // oRPC 마이그레이션으로 인증은 service 가 아니라 authed 미들웨어(procedure 레벨)가
   // 담당한다. 미인증 차단 검증은 procedure 레벨로 이동 — context.user 가 null 이면
-  // service/db 호출 전에 UNAUTHORIZED 로 막힌다. service 의 소유권 검증
-  // (SurveyOwnershipError) 은 인증과 별개이므로 service 직접 호출로 그대로 검증한다.
+  // service/db 호출 전에 UNAUTHORIZED 로 막힌다. service 의 존재 확인
+  // (SurveyAccessError) 은 관문과 별개의 레이스 방어이므로 service 직접 호출로 검증한다.
   // (procedure UNAUTHORIZED 매핑은 src/features/.../procedures/manage.test.ts 와 중복 커버.)
   // ─────────────────────────────────────────────────────────────
 
@@ -805,7 +805,7 @@ describe('profiles-row-actions', () => {
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 
-    it('존재하지 않는 surveyId 로 호출하면 SurveyOwnershipError 를 throw 한다', async () => {
+    it('존재하지 않는 surveyId 로 호출하면 SurveyAccessError 를 throw 한다', async () => {
       // survey 를 store 에 넣지 않음 — findFirst 가 undefined 반환
       const nonExistentSurveyId = 'does-not-exist';
       const responseId = createTestResponse('some-survey');

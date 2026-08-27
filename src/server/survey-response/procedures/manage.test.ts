@@ -17,7 +17,13 @@ vi.mock('../services/response-manage', async () => {
   };
 });
 
-vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+// toRpcSurveyAccessError(순수 매핑)는 실물 유지 — 관문만 vi.fn 으로 대체한다.
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  assertSurveyCapabilityRpc: vi.fn(),
+}));
+
+import { SurveyAccessError } from '@/server/survey-access';
 
 import * as svc from '../services/response-manage';
 import { manage } from './manage';
@@ -131,9 +137,9 @@ describe('surveyResponse.manage procedures', () => {
     });
   });
 
-  it('SurveyOwnershipError는 NOT_FOUND로 매핑된다', async () => {
+  it('서비스 안 존재 확인의 SurveyAccessError 는 NOT_FOUND 로 매핑된다', async () => {
     vi.mocked(svc.softDeleteResponse).mockRejectedValue(
-      new svc.SurveyOwnershipError('not_found') as never,
+      new SurveyAccessError('not_found') as never,
     );
     const client = createRouterClient({ manage }, { context: authedContext() });
     await expect(

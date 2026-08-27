@@ -1,7 +1,8 @@
 import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { assertSurveyCapabilityRpc, toRpcSurveyAccessError } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
 
 import type { ReeditDenial } from '../domain/acceptance';
 import {
@@ -13,10 +14,10 @@ import {
 } from '../domain/response-manage';
 import * as svc from '../services/response-manage';
 
-/** SurveyOwnershipError('not_found') → NOT_FOUND. */
+/** 서비스 안 존재 확인(레이스 방어)이 던진 SurveyAccessError('not_found') → NOT_FOUND. */
 function mapServiceError(err: unknown): never {
-  if (err instanceof svc.SurveyOwnershipError) {
-    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다' });
+  if (err instanceof SurveyAccessError) {
+    throw toRpcSurveyAccessError(err);
   }
   throw err;
 }

@@ -10,7 +10,7 @@ import {
   surveys,
   surveyVersions,
 } from '@/db/schema';
-import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import { SurveyAccessError } from '@/server/survey-access';
 
 import { reeditDenial, type ReeditDenial } from '../domain/acceptance';
 import type {
@@ -19,8 +19,6 @@ import type {
   RestoreResponseInput,
   SoftDeleteResponseInput,
 } from '../domain/response-manage';
-
-export { SurveyOwnershipError };
 
 /**
  * 재응답 허용 불가 사유. union 은 domain/acceptance 의 ReeditDenial 이 소유한다 —
@@ -62,16 +60,18 @@ async function resolveContactAnchor(
 // 들어오면 변경 행 0인 상태로 ok:true 반환 — 단일 admin 환경에서는 UI 가
 // 항상 올바른 surveyId 를 전달하므로 별도 throw 가 없다.
 //
-// 인증은 authed 미들웨어가 담당. 소유권 검증(surveys row 존재 확인)은 인증과
-// 별개이므로 service 안에 보존한다. 캐시 갱신(revalidatePath)은 소비처 router.refresh 로 대체.
+// 인증·설문 접근은 procedure 관문(assertSurveyCapabilityRpc, 티켓 10)이 담당한다.
+// 아래 존재 확인은 관문 통과 후 설문이 하드 삭제되는 좁은 창의 레이스 방어로만 남는다
+// (티켓 11 — 구 SurveyOwnershipError 를 코어 SurveyAccessError 로 흡수).
+// 캐시 갱신(revalidatePath)은 소비처 router.refresh 로 대체.
 
-/** 소유권 검증 — surveys row 존재 확인 (require-survey-ownership.ts 패턴 인라인 복제). */
+/** 존재 확인 — 관문과 서비스 사이의 하드 삭제 레이스 방어. */
 async function assertSurveyExists(surveyId: string): Promise<void> {
   const row = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { id: true },
   });
-  if (!row) throw new SurveyOwnershipError('not_found');
+  if (!row) throw new SurveyAccessError('not_found');
 }
 
 export async function softDeleteResponse(

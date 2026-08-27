@@ -8,7 +8,7 @@ import {
   surveyResponses,
   surveys,
 } from '@/db/schema';
-import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import { SurveyAccessError } from '@/server/survey-access';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { resolveWriteScopeIsTest } from '@/server/data-scope';
@@ -23,8 +23,6 @@ import type { Question, SurveyLookup } from '@/types/survey';
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers';
 import { assertAnswerValueSize, loadPiiQuestionIds } from './submitted-answers';
-
-export { SurveyOwnershipError };
 
 /** 응답 편집 거부 사유. */
 export type ResponseEditErrorReason =
@@ -87,9 +85,9 @@ function buildMigrationMetadataSql(rollback: {
  *
  * spread 사용 금지 — 명시적 set 만.
  *
- * 인증은 authed 미들웨어가 담당. 단 소유권 검증(surveys row 존재 확인)은 인증과
- * 별개이므로 service 안에 보존한다 — 없는 설문이면 SurveyOwnershipError('not_found').
- * 캐시 갱신(revalidatePath)은 소비처 router.push 로 대체한다.
+ * 인증·설문 접근은 procedure 관문이 담당한다. 단 존재 확인(surveys row)은 service 안에
+ * 보존한다 — env grant 게스트 경로는 관문이 DB 를 안 보므로 여기가 유일한 확인이고,
+ * 없는 설문이면 SurveyAccessError('not_found'). 캐시 갱신은 소비처 router.push 로 대체한다.
  *
  * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다(다른
  * feature 의 scoped 절차와 동일 패턴) — 게스트는 전역 테스트 모드 플래그와 무관하게
@@ -104,13 +102,15 @@ export async function saveAdminEdit(
 ): Promise<{ ok: true }> {
   const { surveyId, responseId, questionResponses } = input;
 
-  // 소유권 검증 — surveys row 존재 확인 (require-survey-ownership.ts 패턴 인라인 복제)
-  // testModeEnabled 도 함께 읽어 쓰기 파티션 산정에 재사용 — 별도 쿼리를 추가하지 않는다.
+  // 존재 확인 — 관문(assertScopedSurveyCapabilityRpc)이 앞서지만, env grant 게스트
+  // 경로는 관문이 DB 를 안 보므로 여기 확인이 유일한 존재 확인이다(티켓 11 — 구
+  // SurveyOwnershipError 를 코어 SurveyAccessError 로 흡수). 이 쿼리는 검증 전용이
+  // 아니다: testModeEnabled(쓰기 파티션)·currentVersionId(낙관 버전 가드)도 함께 읽는다.
   const ownerRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { id: true, testModeEnabled: true, currentVersionId: true },
   });
-  if (!ownerRow) throw new SurveyOwnershipError('not_found');
+  if (!ownerRow) throw new SurveyAccessError('not_found');
 
   // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점의 현재 배포
   // 버전과 다르면 저장을 거부한다. 입력 구조와 저장 버전의 불일치를 원천 차단하는 게
