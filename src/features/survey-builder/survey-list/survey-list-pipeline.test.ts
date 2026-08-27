@@ -7,6 +7,7 @@ import {
   distinctOwners,
   filterSurveyList,
   INITIAL_ADVANCED_FILTERS,
+  narrowToGroup,
   paginateSurveyList,
   sortSurveyList,
   SURVEY_LIST_PAGE_SIZE,
@@ -54,7 +55,33 @@ describe('countByStatusChip', () => {
   });
 });
 
+describe('narrowToGroup', () => {
+  it('groupId 가 없으면 원본을 그대로 돌려준다', () => {
+    const rows = [item({ id: 'a' }), item({ id: 'b', surveyGroupId: 'g-1' })];
+    expect(narrowToGroup(rows, null)).toBe(rows);
+  });
+
+  it('그 그룹의 설문만 남긴다 — 미분류는 빠진다', () => {
+    const rows = [
+      item({ id: 'a', surveyGroupId: 'g-1' }),
+      item({ id: 'b', surveyGroupId: 'g-2' }),
+      item({ id: 'c', surveyGroupId: null }),
+    ];
+    expect(narrowToGroup(rows, 'g-1').map((s) => s.id)).toEqual(['a']);
+  });
+});
+
 describe('filterSurveyList', () => {
+  it('그룹 좁힘은 다른 필터보다 먼저 적용된다', () => {
+    const rows = [
+      item({ id: 'a', surveyGroupId: 'g-1', status: 'draft' }),
+      item({ id: 'b', surveyGroupId: 'g-2', status: 'draft' }),
+    ];
+    const out = filterSurveyList(rows, { ...baseFilters, statusChip: 'draft', groupId: 'g-1' });
+    expect(out.map((s) => s.id)).toEqual(['a']);
+  });
+
+
   it('상태 칩으로 좁힌다', () => {
     const rows = [item({ id: 'a', status: 'draft' }), item({ id: 'b', status: 'published' })];
     const out = filterSurveyList(rows, { ...baseFilters, statusChip: 'draft' });

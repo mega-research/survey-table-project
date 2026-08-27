@@ -185,6 +185,8 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         // 접근 판정은 여전히 서버 capability 엔진만 한다(티켓 07).
         ownerUserId: 'u-1',
         ownerName: '홍길동',
+        // 소속 그룹도 화면 편의다(그룹 화면 좁힘·케밥의 현재 그룹, 티켓 12).
+        surveyGroupId: null,
       },
     ]);
   });

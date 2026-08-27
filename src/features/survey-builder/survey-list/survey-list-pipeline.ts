@@ -1,8 +1,10 @@
 // 설문 목록 렌더링 파이프라인 — 순수 계산 (역할 모델 v2 티켓 08, .pen FLOW 6 목록 툴바).
 //
 // 서버는 범위로 좁힌 전체 목록을 주고(read.list), 칩·검색·상세 검색·정렬·페이지는 화면이
-// 이 함수들로 접는다. 문의 칩·미답변 문의 필터는 Plan 3 게이트로 어휘에서 뺐고, 그룹
-// 필터는 티켓 12(설문 그룹)가 붙인다.
+// 이 함수들로 접는다. 문의 칩·미답변 문의 필터는 Plan 3 게이트로 어휘에서 뺐다.
+//
+// 그룹 필터(티켓 12)는 여기 상태가 아니라 **URL 이 정한다**(`?group=<id>`) — 그룹 화면은
+// 브레드크럼과 제목을 가진 별개의 화면이라 뒤로 가기·새로고침·링크 공유가 살아 있어야 한다.
 
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
 
@@ -36,6 +38,23 @@ export interface SurveyListFilterState {
   searchQuery: string;
   statusChip: SurveyListStatusChip;
   advanced: SurveyListAdvancedFilters;
+  /** 그룹 화면(`?group=<id>`)의 좁힘. null 이면 그룹과 무관하게 전부 본다. */
+  groupId?: string | null;
+}
+
+/**
+ * 그룹 좁힘 — 그룹 화면(`?group=<id>`)이 보는 부분집합.
+ *
+ * 칩 카운트·소유자 목록도 이 결과를 받아야 한다. 그룹 화면의 「전체 N」이 팀 전체를 세면
+ * 화면에 3장 있는데 칩은 14 라고 말한다. 소속 팀이 다른 그룹 id 는 서버가 이미 null 로
+ * 접어 보내므로 여기서 팀을 다시 보지 않는다.
+ */
+export function narrowToGroup(
+  items: readonly SurveyListItem[],
+  groupId: string | null,
+): readonly SurveyListItem[] {
+  if (!groupId) return items;
+  return items.filter((s) => s.surveyGroupId === groupId);
 }
 
 /** 상태 칩별 목록 건수 — 툴바 칩에 "전체 N" 형태로 표시. */
@@ -72,6 +91,9 @@ export function filterSurveyList(
   filters: SurveyListFilterState,
 ): readonly SurveyListItem[] {
   let result: readonly SurveyListItem[] = items;
+
+  // 그룹 좁힘이 먼저다 — 칩 카운트와 같은 부분집합에서 출발해야 화면과 숫자가 어긋나지 않는다.
+  result = narrowToGroup(result, filters.groupId ?? null);
 
   if (filters.statusChip !== 'all') {
     result = result.filter((s) => s.status === filters.statusChip);

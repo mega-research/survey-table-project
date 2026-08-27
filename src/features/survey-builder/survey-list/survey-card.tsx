@@ -31,7 +31,9 @@ import { getSurveyAccessUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
 import type { WorkScope } from '@/shared/contracts/workspace';
+import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
+import { GroupMoveSubmenu } from './groups/group-move-submenu';
 import { canEditSurveyCard } from './survey-list-capability';
 
 interface SurveyCardProps {
@@ -42,6 +44,10 @@ interface SurveyCardProps {
   onDelete: (surveyId: string) => void;
   onDuplicate: (surveyId: string) => void;
   isDuplicating: boolean;
+  /** 팀 범위에서만 채워진다 — 시스템 전체 보기·미배치에는 그룹 개념이 없다. */
+  groups: readonly SurveyGroupListItem[];
+  /** null 이면 케밥에서 「그룹 이동」 항목 자체를 그리지 않는다(핸들러 없는 자리는 안 만든다). */
+  onMoveToGroup: ((surveyId: string, groupId: string | null) => void) | null;
 }
 
 /** 수정일 텍스트 접미사 — 내 설문이 아니면 작성자를, 남의 팀 설문이면 소유 팀을 잇는다. */
@@ -71,8 +77,10 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
 /**
  * 설문 카드 (.pen FLOW 6 설문 카드 컴포넌트).
  *
- * 케밥의 공유 설정·그룹 이동은 티켓 16·12 가 붙인다 — 핸들러가 생기기 전에는 항목 자체를
- * 그리지 않는다(콜백 게이트, disabled placeholder 금지). 문의 액션은 Plan 3 게이트로 미노출.
+ * 케밥의 공유 설정은 티켓 16 이 붙인다 — 핸들러가 생기기 전에는 항목 자체를 그리지 않는다
+ * (콜백 게이트, disabled placeholder 금지). 「그룹 이동」도 같은 규칙이라 팀 범위가 아니면
+ * (시스템 전체 보기·미배치) onMoveToGroup 이 null 로 와서 항목이 사라진다.
+ * 문의 액션은 Plan 3 게이트로 미노출.
  * 수정·삭제의 비활성은 근사(canEditSurveyCard)일 뿐이고 강제는 서버 관문이 한다.
  */
 export function SurveyCard({
@@ -83,6 +91,8 @@ export function SurveyCard({
   onDelete,
   onDuplicate,
   isDuplicating,
+  groups,
+  onMoveToGroup,
 }: SurveyCardProps) {
   const canEdit = canEditSurveyCard(survey, scope, currentUserId, isSuperadmin);
   const isPending = survey.assignmentStatus === 'assignment_pending';
@@ -148,6 +158,14 @@ export function SurveyCard({
               )}
               복제
             </DropdownMenuItem>
+            {onMoveToGroup && (
+              <GroupMoveSubmenu
+                groups={groups}
+                currentGroupId={survey.surveyGroupId}
+                disabled={!canEdit}
+                onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
+              />
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={!canEdit}

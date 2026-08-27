@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import type { TeamRole } from '@/shared/contracts/workspace';
 import { useWorkScope } from '@/shared/lib/work-scope-context';
 
+import { SidebarGroupTree } from './sidebar-group-tree';
 import { getSidebarMenuItemIds } from './sidebar-menu';
 import { SidebarProfile } from './sidebar-profile';
 import { TeamSwitcher } from './team-switcher';
@@ -66,13 +67,19 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
 
       <nav className="flex flex-col gap-[3px]">
         {menuItemIds.includes('surveys') && (
-          <SidebarMenuLink
-            href="/admin/surveys"
-            label="설문 목록"
-            icon={<FileText className="h-4 w-4 shrink-0" />}
-            active={pathname?.startsWith('/admin/surveys') ?? false}
-            collapsed={collapsed}
-          />
+          <>
+            <SidebarMenuLink
+              href="/admin/surveys"
+              label="설문 목록"
+              icon={<FileText className="h-4 w-4 shrink-0" />}
+              active={pathname?.startsWith('/admin/surveys') ?? false}
+              collapsed={collapsed}
+            />
+            {/* 그룹 트리는 접힌 사이드바에 넣지 않는다 — 이름 없는 폴더 아이콘 줄만 남는다. */}
+            {!collapsed && (
+              <SidebarGroupTree teamId={scope.kind === 'team' ? scope.teamId : null} />
+            )}
+          </>
         )}
         {menuItemIds.includes('users') && (
           <SidebarMenuLink

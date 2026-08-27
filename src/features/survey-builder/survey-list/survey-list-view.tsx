@@ -1,20 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-import { Loader2, Plus } from 'lucide-react';
+import { Folder, Loader2, Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
+import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
 import { useDeleteSurvey, useDuplicateSurvey, surveyListQueryOptions } from '../queries/use-surveys';
 import { useSurveyListStore } from '../stores/survey-list-ui-store';
 import { AdvancedSearchPanel } from './advanced-search-panel';
 import { NoResultsEmptyState, NoSurveysEmptyState, NoTeamEmptyState } from './empty-states';
+import { GroupManageModal } from './groups/group-manage-modal';
+import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
 import { ListPagination } from './list-pagination';
 import { ListToolbar } from './list-toolbar';
 import { SurveyCard } from './survey-card';
@@ -22,6 +26,7 @@ import {
   countByStatusChip,
   distinctOwners,
   filterSurveyList,
+  narrowToGroup,
   paginateSurveyList,
   sortSurveyList,
 } from './survey-list-pipeline';
@@ -59,6 +64,15 @@ export function SurveyListView() {
   const { mutate: deleteSurvey } = useDeleteSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
 
+  // 그룹 화면은 목록의 다른 상태가 아니라 별개의 주소다(`?group=<id>`) — 뒤로 가기·새로고침·
+  // 링크 공유가 살아 있어야 해서 스토어가 아니라 URL 이 정본이다.
+  const searchParams = useSearchParams();
+  const requestedGroupId = searchParams.get('group');
+  const teamScopeId = contextScope?.kind === 'team' ? contextScope.teamId : null;
+  const { data: groups } = useSurveyGroups(teamScopeId);
+  const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
+  const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+
   const {
     searchQuery,
     statusChip,
@@ -76,10 +90,11 @@ export function SurveyListView() {
     resetAll,
   } = useSurveyListStore();
 
-  // 팀을 바꾸면 필터·페이지를 전부 되돌린다 — 이전 팀에서 남은 검색어·페이지가 새 팀 목록을
-  // 조용히 0건/빈 페이지로 만들지 않게(새 워크스페이스에서 시작하는 것과 동일 취급).
-  const scopeKey =
-    contextScope?.kind === 'team' ? `team:${contextScope.teamId}` : (contextScope?.kind ?? 'no-shell');
+  // 팀이나 그룹을 바꾸면 필터·페이지를 전부 되돌린다 — 이전 화면에서 남은 검색어·페이지가
+  // 새 목록을 조용히 0건/빈 페이지로 만들지 않게(새 워크스페이스에서 시작하는 것과 동일 취급).
+  const scopeKey = `${
+    contextScope?.kind === 'team' ? `team:${contextScope.teamId}` : (contextScope?.kind ?? 'no-shell')
+  }|group:${requestedGroupId ?? ''}`;
   const prevScopeKeyRef = useRef(scopeKey);
   useEffect(() => {
     if (prevScopeKeyRef.current === scopeKey) return;
@@ -88,12 +103,24 @@ export function SurveyListView() {
   }, [scopeKey, resetAll]);
 
   const allSurveys = useMemo(() => data?.surveys ?? [], [data]);
-  const counts = useMemo(() => countByStatusChip(allSurveys), [allSurveys]);
-  const owners = useMemo(() => distinctOwners(allSurveys), [allSurveys]);
+  const groupList = useMemo(() => groups ?? [], [groups]);
+  // 지목한 그룹이 목록에 없으면(삭제됐거나 남의 팀 id) 그룹 좁힘 자체를 하지 않는다 —
+  // 유령 그룹 주소로 빈 화면에 갇히지 않게.
+  const activeGroup = groupList.find((g) => g.id === requestedGroupId) ?? null;
+  const groupId = activeGroup?.id ?? null;
+
+  // 칩 카운트·소유자 목록은 그룹 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
+  const scopedSurveys = useMemo(() => narrowToGroup(allSurveys, groupId), [allSurveys, groupId]);
+  const counts = useMemo(() => countByStatusChip(scopedSurveys), [scopedSurveys]);
+  const owners = useMemo(() => distinctOwners(scopedSurveys), [scopedSurveys]);
 
   const filtered = useMemo(
-    () => sortSurveyList(filterSurveyList(allSurveys, { searchQuery, statusChip, advanced }), sortBy),
-    [allSurveys, searchQuery, statusChip, advanced, sortBy],
+    () =>
+      sortSurveyList(
+        filterSurveyList(allSurveys, { searchQuery, statusChip, advanced, groupId }),
+        sortBy,
+      ),
+    [allSurveys, searchQuery, statusChip, advanced, groupId, sortBy],
   );
 
   const { pageItems, totalPages, page: clampedPage } = useMemo(
@@ -122,6 +149,18 @@ export function SurveyListView() {
     });
   }
 
+  function handleMoveToGroup(surveyId: string, nextGroupId: string | null) {
+    moveSurveyToGroup(
+      { surveyId, groupId: nextGroupId },
+      {
+        onSuccess: () =>
+          toast.success(nextGroupId ? '그룹으로 이동했습니다' : '그룹에서 뺐습니다'),
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : '그룹을 옮기지 못했습니다.'),
+      },
+    );
+  }
+
   // 팀 미배치 — 조회 없이 빈 상태만 (.pen FLOW 9-1).
   if (isUnassigned) {
     return (
@@ -135,15 +174,32 @@ export function SurveyListView() {
   const scope = data?.scope ?? contextScope ?? { kind: 'none' as const };
   const isSystemScope = scope.kind === 'system';
   const canCreate = scope.kind === 'team';
+  // 그룹은 팀 소유물이라 팀 범위에서만 존재한다 — 시스템 전체 보기에는 그룹 개념이 없다(.pen 6-2).
+  const canManageGroups = scope.kind === 'team' && teamScopeId !== null;
   const currentUserId = workScope?.currentUserId ?? null;
   const isSuperadmin = workScope?.isSuperadmin ?? false;
 
   return (
     <div className="flex flex-col gap-5 p-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-[#1C1C1E]">
-          {isSystemScope ? '설문 목록 — 시스템 전체 보기' : '설문 목록'}
-        </h1>
+        {activeGroup ? (
+          <GroupViewHeader groupName={activeGroup.name} />
+        ) : (
+          <h1 className="text-2xl font-semibold text-[#1C1C1E]">
+            {isSystemScope ? '설문 목록 — 시스템 전체 보기' : '설문 목록'}
+          </h1>
+        )}
+        <div className="flex items-center gap-2.5">
+        {canManageGroups && (
+          <button
+            type="button"
+            onClick={() => setGroupManagerOpen(true)}
+            className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+          >
+            <Folder className="h-4 w-4" />
+            {activeGroup ? '그룹 편집' : '그룹 관리'}
+          </button>
+        )}
         {canCreate ? (
           <Link
             href="/admin/surveys/create"
@@ -165,6 +221,7 @@ export function SurveyListView() {
             <Plus className="h-4 w-4" />새 설문 만들기
           </span>
         )}
+        </div>
       </div>
 
       {isLoading && (
@@ -224,6 +281,8 @@ export function SurveyListView() {
                     onDelete={handleDelete}
                     onDuplicate={handleDuplicate}
                     isDuplicating={isDuplicating}
+                    groups={groupList}
+                    onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
                   />
                 ))}
               </div>
@@ -231,7 +290,17 @@ export function SurveyListView() {
               <ListPagination page={clampedPage} totalPages={totalPages} onPageChange={setPage} />
             </>
           )}
+
+          {activeGroup && <GroupViewFooterNote />}
         </>
+      )}
+
+      {groupManagerOpen && teamScopeId && (
+        <GroupManageModal
+          teamId={teamScopeId}
+          groups={groupList}
+          onClose={() => setGroupManagerOpen(false)}
+        />
       )}
     </div>
   );
