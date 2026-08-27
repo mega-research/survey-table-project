@@ -42,7 +42,7 @@ describe('operations.progress procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'contacts.view',
+      'survey.edit',
     );
     expect(svc.updateProgressColumns).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });

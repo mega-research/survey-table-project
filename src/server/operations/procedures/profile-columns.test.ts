@@ -42,7 +42,7 @@ describe('operations.profileColumns procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'responses.view',
+      'survey.edit',
     );
     expect(svc.updateProfileColumns).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });
