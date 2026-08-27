@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
+import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveExportColumns } from '@/lib/operations/contacts-export-format';
 import {
@@ -24,7 +25,7 @@ const XLSX_MIME =
 /**
  * 조사 대상 명단 엑셀 다운로드.
  * PII 를 평문으로 내보내므로 응답 export 라우트와 동일하게
- * requireAuth + 게스트 설문 스코프 가드(canAccessSurvey)를 적용한다.
+ * requireAuth + 설문 관문(checkScopedSurveyCapabilityRest, export.download)을 적용한다.
  */
 async function handleContactsExport(
   request: NextRequest,
@@ -42,9 +43,10 @@ async function handleContactsExport(
       role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
-    if (!canAccessSurvey(user.id, surveyId)) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
+    // 설문 관문(티켓 11) — env grant 게스트는 grant 일치, 내부 계정은 capability
+    // (export.download). PII 평문 export 라 타 팀 설문은 존재부터 은닉한다(404).
+    const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
+    if (denied) return denied;
 
     const scope = await loadOperationsDataScope(surveyId);
 

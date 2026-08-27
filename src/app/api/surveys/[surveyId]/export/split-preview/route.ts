@@ -8,7 +8,8 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/server
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
+import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   detectSplitCandidates,
@@ -28,8 +29,9 @@ async function handleSplitPreview(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + 게스트 설문 스코프 가드(export/route.ts 와 동일 정책). 설문 구조·응답 집계를
-    // 노출하므로 게스트는 grant 된 설문만, 그 외 임의 인증사용자는 형제 우회를 차단한다.
+    // 인증 + 설문 관문(export/route.ts 와 동일 정책, 티켓 11). 설문 구조·응답 집계를
+    // 노출하므로 env grant 게스트는 grant 일치로, 내부 계정은 capability(export.download)로
+    // 판정한다.
     const user = await requireAuth();
     const { surveyId } = await params;
     ctx.bind({
@@ -37,9 +39,8 @@ async function handleSplitPreview(
       role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
-    if (!canAccessSurvey(user.id, surveyId)) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
+    const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
+    if (denied) return denied;
     const basis = request.nextUrl.searchParams.get('basis');
     if (basis) ctx.bind({ basis });
 

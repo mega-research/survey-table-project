@@ -17,6 +17,12 @@ import type { RouteLogContext } from '@/lib/logger';
  *   guest/admin 두 갈래로 통일한다 — 로그 필드 한정 변경이고 인증·인가 판정은 그대로다.
  *
  * 허용 술어는 라우트마다 의도적으로 다르므로 주입받는다.
+ *
+ * 설문 capability 관문(티켓 09~11)은 여기 없다 — 의도된 면제다. 업로드 요청에는
+ * surveyId 자체가 없고 쓰기는 tmp/ 네임스페이스(설문 미귀속 R2 키)에 갇힌다. 설문에
+ * 닿는 것은 영구 승격 시점이고 그 경로(설문 저장 survey.edit · 메일 템플릿 저장
+ * mail.send · media.* RPC)가 capability 관문을 진다. 여기에 관문을 달려면 업로드
+ * 계약에 surveyId 를 신설해야 하는데 지키는 것이 없다 (티켓 11 전수 검토).
  */
 export type UploadRouteGuardResult =
   | { ok: true; userId: string }

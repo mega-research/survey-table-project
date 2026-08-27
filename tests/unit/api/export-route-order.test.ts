@@ -28,6 +28,12 @@ vi.mock('@/lib/auth', () => ({
   }),
 }));
 
+// 설문 관문(티켓 11)은 통과로 둔다 — 이 파일의 관심사가 아니다. 관문 자체는
+// src/server/rest-survey-access.test.ts 와 export-route-auth.test.ts 가 본다.
+vi.mock('@/server/rest-survey-access', () => ({
+  checkScopedSurveyCapabilityRest: vi.fn(async () => null),
+}));
+
 vi.mock('@/db', () => ({
   db: {
     query: { surveys: { findFirst: mockFindFirst }, surveyResponses: { findMany: vi.fn() } },

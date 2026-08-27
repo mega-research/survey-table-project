@@ -10,7 +10,8 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/server
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
+import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   generateRawDataWorkbook,
@@ -40,9 +41,9 @@ async function handleExport(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + 게스트 설문 스코프 가드. requireAuth 가 세션 + status='active' 를 보장하고
-    // canAccessSurvey 가 설문 일치를 강제한다 — oRPC scoped 와 같은 정책이라 이 REST
-    // 라우트가 형제 우회 경로가 되지 않는다(게스트는 grant 된 설문만).
+    // 인증 + 설문 관문. requireAuth 가 세션 + status='active' 를 보장하고, 관문이
+    // env grant 게스트는 grant 일치로·내부 계정은 capability(export.download)로 판정한다
+    // (티켓 11) — oRPC 표면과 같은 정책이라 이 REST 라우트가 형제 우회 경로가 되지 않는다.
     const user = await requireAuth();
     const { surveyId } = await params;
     // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는
@@ -52,9 +53,8 @@ async function handleExport(
       role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
-    if (!canAccessSurvey(user.id, surveyId)) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
+    const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
+    if (denied) return denied;
 
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
     if (type) ctx.bind({ exportType: type });

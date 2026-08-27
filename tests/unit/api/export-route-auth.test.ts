@@ -19,6 +19,18 @@ vi.mock('@/lib/auth', () => ({
   }),
 }));
 
+// 코어 capability 판정을 대체한다 — 어댑터(rest-survey-access)는 실물이 돌아
+// 게스트 grant 분기·HTTP 매핑까지 관통 검증된다.
+vi.mock('@/server/survey-access', () => {
+  class SurveyAccessError extends Error {
+    constructor(public readonly reason: 'not_found' | 'forbidden') {
+      super(reason);
+      this.name = 'SurveyAccessError';
+    }
+  }
+  return { SurveyAccessError, assertSurveyCapability: vi.fn() };
+});
+
 vi.mock('@/db', () => ({
   db: {
     query: { surveys: { findFirst: vi.fn() }, surveyResponses: { findMany: vi.fn() } },
@@ -40,6 +52,7 @@ vi.mock('@/lib/analytics/split-workbook', () => ({
   buildSplitWorkbook: vi.fn(),
 }));
 
+import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
 import { GET } from '@/app/api/surveys/[surveyId]/export/route';
 
 describe('GET /api/surveys/[surveyId]/export requires authentication', () => {
@@ -59,6 +72,49 @@ describe('GET /api/surveys/[surveyId]/export requires authentication', () => {
       'http://localhost/api/surveys/test-id/export?type=raw',
     );
 
+    const response = await GET(request, {
+      params: Promise.resolve({ surveyId: 'test-id' }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('게스트는 grant 일치 설문 export 가 계속 열린다 - 차단은 티켓 21 몫 (회귀)', async () => {
+    authState.user = { id: 'guest-1' };
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:test-id');
+
+    const request = new NextRequest('http://localhost/api/surveys/test-id/export?type=raw');
+    const response = await GET(request, {
+      params: Promise.resolve({ surveyId: 'test-id' }),
+    });
+
+    // 관문을 지나 설문 조회(mock undefined)로 넘어갔다는 뜻의 404 - 관문 403/401 이 아니다.
+    expect(response.status).toBe(404);
+    expect(assertSurveyCapability).not.toHaveBeenCalled();
+  });
+
+  it('내부 계정이라도 타 팀 설문(export.download 불가)은 404 다 - 존재 은닉 (티켓 11)', async () => {
+    authState.user = { id: 'admin-1' };
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('not_found'));
+
+    const request = new NextRequest('http://localhost/api/surveys/test-id/export?type=raw');
+    const response = await GET(request, {
+      params: Promise.resolve({ surveyId: 'test-id' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(assertSurveyCapability).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'admin-1' }),
+      'test-id',
+      'export.download',
+    );
+  });
+
+  it('보이는 설문의 export 권한만 없으면 403 이다', async () => {
+    authState.user = { id: 'admin-1' };
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('forbidden'));
+
+    const request = new NextRequest('http://localhost/api/surveys/test-id/export?type=sav');
     const response = await GET(request, {
       params: Promise.resolve({ surveyId: 'test-id' }),
     });
