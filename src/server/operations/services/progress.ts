@@ -16,8 +16,8 @@ import type {
  * - 검증: key 중복 + 라벨 빈 문자열 거부.
  *   (order 는 UI 의 ↑↓ 버튼이 idx 로 재할당하므로 충돌 검증 불필요.)
  *
- * 인증은 authed 미들웨어가 담당. 원본 action 은 requireAuth 만 사용했으므로
- * 소유권 SELECT 를 추가하지 않는다(없던 검증을 더하면 동작 변경).
+ * 접근 판정은 procedure 관문(assertSurveyCapabilityRpc, 티켓 10)이 담당 —
+ * 서비스는 스킴 형식 검증과 쓰기만 한다.
  * 검증 실패는 throw 가 아니라 { ok:false, error } 로 반환 — 소비처 분기 계약 보존.
  * 캐시 갱신(revalidatePath 2경로)은 소비처 router.refresh 로 대체.
  */

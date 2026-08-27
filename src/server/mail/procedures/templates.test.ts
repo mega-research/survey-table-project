@@ -1,7 +1,10 @@
-import { createRouterClient } from '@orpc/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRouterClient, ORPCError } from '@orpc/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
 
 vi.mock('../services/templates', async () => {
   const actual = await vi.importActual<
@@ -36,7 +39,6 @@ function validInput() {
 
 describe('mail.templates procedures', () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllEnvs());
 
   it('create는 입력을 service.createMailTemplate에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.createMailTemplate).mockResolvedValue({
@@ -44,9 +46,15 @@ describe('mail.templates procedures', () => {
       bodyHtml: '<p>saved</p>',
       attachments: [],
     } as never);
-    const client = createRouterClient({ templates }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ templates }, { context });
     const input = { surveyId: 'sv-1', input: validInput() };
     const res = await client.templates.create(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'mail.send',
+    );
     expect(svc.createMailTemplate).toHaveBeenCalledWith(input);
     expect(res).toEqual({ id: 'tpl-1', bodyHtml: '<p>saved</p>', attachments: [] });
   });
@@ -56,18 +64,30 @@ describe('mail.templates procedures', () => {
       bodyHtml: '<p>saved</p>',
       attachments: [],
     } as never);
-    const client = createRouterClient({ templates }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ templates }, { context });
     const input = { surveyId: 'sv-1', templateId: 'tpl-1', input: validInput() };
     const res = await client.templates.update(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'mail.send',
+    );
     expect(svc.updateMailTemplate).toHaveBeenCalledWith(input);
     expect(res).toEqual({ bodyHtml: '<p>saved</p>', attachments: [] });
   });
 
   it('remove는 service.deleteMailTemplate에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteMailTemplate).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ templates }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ templates }, { context });
     const input = { surveyId: 'sv-1', templateId: 'tpl-1' };
     const res = await client.templates.remove(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'mail.send',
+    );
     expect(svc.deleteMailTemplate).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });
   });
@@ -118,32 +138,25 @@ describe('mail.templates procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 create 가 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    vi.mocked(svc.createMailTemplate).mockResolvedValue({
-      id: 'tpl-1',
-      bodyHtml: '<p>saved</p>',
-      attachments: [],
-    } as never);
-    const client = createRouterClient(
-      { templates },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+  it('타 팀 설문 id 로 create 하면 관문 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
     );
-    const input = { surveyId: 'sv-1', input: validInput() };
-    const res = await client.templates.create(input);
-    expect(svc.createMailTemplate).toHaveBeenCalledWith(input);
-    expect(res).toEqual({ id: 'tpl-1', bodyHtml: '<p>saved</p>', attachments: [] });
+    const client = createRouterClient({ templates }, { context: authedContext() });
+    await expect(
+      client.templates.create({ surveyId: 'sv-1', input: validInput() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.createMailTemplate).not.toHaveBeenCalled();
   });
 
-  it('게스트가 다른 설문 surveyId 로 create 하면 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    const client = createRouterClient(
-      { templates },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+  it('발송 권한 없는 설문에 remove 하면 관문 FORBIDDEN — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
     );
+    const client = createRouterClient({ templates }, { context: authedContext() });
     await expect(
-      client.templates.create({ surveyId: 'sv-other', input: validInput() }),
+      client.templates.remove({ surveyId: 'sv-1', templateId: 'tpl-1' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(svc.createMailTemplate).not.toHaveBeenCalled();
+    expect(svc.deleteMailTemplate).not.toHaveBeenCalled();
   });
 });

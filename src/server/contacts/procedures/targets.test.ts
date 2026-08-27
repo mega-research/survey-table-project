@@ -1,7 +1,12 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+
+import {
+  assertScopedSurveyCapabilityRpc,
+  assertSurveyCapabilityRpc,
+} from '@/server/rpc-survey-access';
 
 import * as svc from '../services/contact-targets';
 import { generateTestContacts } from '../services/test-contacts';
@@ -17,6 +22,11 @@ vi.mock('../services/test-contacts', () => ({
   generateTestContacts: vi.fn(),
 }));
 
+vi.mock('@/server/rpc-survey-access', () => ({
+  assertScopedSurveyCapabilityRpc: vi.fn(),
+  assertSurveyCapabilityRpc: vi.fn(),
+}));
+
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
@@ -27,33 +37,48 @@ describe('contacts.targets procedures', () => {
 
   it('add는 입력을 service.addContactTarget에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.addContactTarget).mockResolvedValue({ id: 'ct-1', resid: 42 } as never);
-    const client = createRouterClient({ targets }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ targets }, { context });
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'contacts.manage',
+    );
     expect(svc.addContactTarget).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 
   it('update는 service.updateContactTarget에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.updateContactTarget).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ targets }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ targets }, { context });
     const input = { id: 'ct-1', surveyId: 'sv-1', attrs: { name: '수정' } };
     const res = await client.targets.update(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'contacts.manage',
+    );
     expect(svc.updateContactTarget).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
   it('remove는 surveyId/id 입력을 service.deleteContactTarget에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteContactTarget).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ targets }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ targets }, { context });
     const res = await client.targets.remove({ surveyId: 'sv-1', id: 'ct-9' });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, 'sv-1', 'contacts.manage');
     expect(svc.deleteContactTarget).toHaveBeenCalledWith({ surveyId: 'sv-1', id: 'ct-9' }, false);
     expect(res).toEqual({ ok: true });
   });
 
   it('generateTest는 검증된 입력을 테스트 대상자 생성 service에 위임한다', async () => {
     vi.mocked(generateTestContacts).mockResolvedValue({ createdCount: 3 });
-    const client = createRouterClient({ targets }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ targets }, { context });
     const input = {
       surveyId: '11111111-1111-4111-8111-111111111111',
       count: 3,
@@ -62,8 +87,35 @@ describe('contacts.targets procedures', () => {
 
     const result = await client.targets.generateTest(input);
 
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      input.surveyId,
+      'contacts.manage',
+    );
     expect(generateTestContacts).toHaveBeenCalledWith(input, false);
     expect(result).toEqual({ createdCount: 3 });
+  });
+
+  it('타 팀 설문 id 로 add 하면 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ targets }, { context: authedContext() });
+    await expect(
+      client.targets.add({ surveyId: 'sv-1', attrs: { name: '홍길동' } }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.addContactTarget).not.toHaveBeenCalled();
+  });
+
+  it('타 팀 설문 id 로 remove 하면 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ targets }, { context: authedContext() });
+    await expect(client.targets.remove({ surveyId: 'sv-1', id: 'ct-9' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(svc.deleteContactTarget).not.toHaveBeenCalled();
   });
 
   it('인증 없으면 add가 UNAUTHORIZED로 막힌다', async () => {
@@ -87,18 +139,6 @@ describe('contacts.targets procedures', () => {
     const res = await client.targets.add(input);
     expect(svc.addContactTarget).toHaveBeenCalledWith(input, true);
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
-  });
-
-  it('게스트가 다른 설문 surveyId 로 add 하면 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    const client = createRouterClient(
-      { targets },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
-    );
-    await expect(
-      client.targets.add({ surveyId: 'sv-other', attrs: { name: '홍길동' } }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(svc.addContactTarget).not.toHaveBeenCalled();
   });
 
   it('게스트는 grant 설문이어도 remove 가 FORBIDDEN 이다 - authed 유지', async () => {

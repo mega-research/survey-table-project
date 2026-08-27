@@ -1,12 +1,15 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 vi.mock('../services/unsubscribe', () => ({
   lookupContactByToken: vi.fn(),
   revertUnsubscribeByContactId: vi.fn(),
 }));
+
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
 
 import * as svc from '../services/unsubscribe';
 import { unsubscribe } from './unsubscribe';
@@ -64,11 +67,31 @@ describe('mail.unsubscribe procedures', () => {
 
   it('revertByContactId 는 입력을 service 에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.revertUnsubscribeByContactId).mockResolvedValue({ ok: true } as never);
-    const client = createRouterClient({ unsubscribe }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ unsubscribe }, { context });
     const input = { contactId: VALID_CONTACT, surveyId: VALID_SURVEY };
     const res = await client.unsubscribe.revertByContactId(input);
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      VALID_SURVEY,
+      'contacts.manage',
+    );
     expect(svc.revertUnsubscribeByContactId).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });
+  });
+
+  it('타 팀 설문 id 로 revertByContactId 하면 관문 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ unsubscribe }, { context: authedContext() });
+    await expect(
+      client.unsubscribe.revertByContactId({
+        contactId: VALID_CONTACT,
+        surveyId: VALID_SURVEY,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.revertUnsubscribeByContactId).not.toHaveBeenCalled();
   });
 
   it('revertByContactId 는 service 가 반환한 실패(error)를 그대로 통과시킨다', async () => {

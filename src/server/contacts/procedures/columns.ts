@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   UpdateContactColumnsInput,
@@ -11,7 +12,8 @@ import * as svc from '../services/contact-columns';
 const update = authed
   .input(UpdateContactColumnsInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
     await svc.updateContactColumns(input);
     return { ok: true as const };
   });
@@ -20,7 +22,8 @@ const update = authed
 const updateGroupLevels = authed
   .input(UpdateContactGroupLevelsInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
     await svc.updateContactGroupLevels(input);
     return { ok: true as const };
   });

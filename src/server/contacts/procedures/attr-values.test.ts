@@ -1,4 +1,4 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
@@ -15,7 +15,11 @@ vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
+
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+
 import * as svc from '../services/contact-attr-values';
 import { attrValues } from './attr-values';
 
@@ -36,9 +40,15 @@ describe('contacts.attrValues procedures', () => {
       hasEmpty: false,
     });
 
-    const client = createRouterClient({ attrValues }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ attrValues }, { context });
     const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
 
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'contacts.view',
+    );
     expect(loadOperationsDataScope).toHaveBeenCalledWith(SURVEY_ID);
     expect(svc.listContactAttrValues).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,
@@ -70,33 +80,15 @@ describe('contacts.attrValues procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 distinct 조회가 위임된다 — 헤더 필터는 게스트 콘솔 표면', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
-    vi.mocked(svc.listContactAttrValues).mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
-
-    const client = createRouterClient(
-      { attrValues },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+  it('타 팀 설문 id 면 NOT_FOUND — 스코프 해석과 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
     );
-    const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
-
-    expect(res).toEqual({ values: ['상장'], truncated: false, hasEmpty: false });
-  });
-
-  it('게스트가 다른 설문 surveyId 로 조회하면 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-
-    const client = createRouterClient(
-      { attrValues },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
-    );
+    const client = createRouterClient({ attrValues }, { context: authedContext() });
     await expect(
-      client.attrValues.list({
-        surveyId: '00000000-0000-4000-8000-000000000099',
-        attrsKey: '기업유형',
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(loadOperationsDataScope).not.toHaveBeenCalled();
     expect(svc.listContactAttrValues).not.toHaveBeenCalled();
   });
 });

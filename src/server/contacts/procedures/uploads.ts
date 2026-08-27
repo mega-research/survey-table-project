@@ -1,11 +1,8 @@
 import * as z from 'zod';
 
 import { loadOperationsDataScope } from '@/server/data-scope';
-import {
-  EXCEL_UNREADABLE_MESSAGE,
-  ExcelReadError,
-} from '../services/excel-parser';
 import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import { GetExistingContactsCountInput } from '../domain/contact-column';
 import {
@@ -18,6 +15,10 @@ import {
 } from '../domain/contact-upload';
 import * as columnsSvc from '../services/contact-columns';
 import * as uploadsSvc from '../services/contact-uploads';
+import {
+  EXCEL_UNREADABLE_MESSAGE,
+  ExcelReadError,
+} from '../services/excel-parser';
 
 /**
  * 읽을 수 없는 엑셀은 typed error 로 내보낸다. 평범한 Error 로 두면 oRPC 가 운영에서
@@ -44,6 +45,8 @@ const parsePreview = authed
   .input(ParseExcelPreviewInput)
   .output(ParseExcelPreviewResultSchema)
   .handler(async ({ input, errors }) => {
+    // surveyId 없는 무상태 엑셀 파싱이라 설문 capability 관문을 태울 대상이 없다 —
+    // 설문에 닿는 ingest/matchPreview 가 관문을 지므로 authed 만 유지한다 (티켓 10).
     try {
       return await uploadsSvc.parseExcelPreview(input);
     } catch (error) {
@@ -55,7 +58,8 @@ const ingest = authed
   .errors(EXCEL_UNREADABLE_ERROR)
   .input(IngestContactUploadInput)
   .output(IngestContactUploadResultSchema)
-  .handler(async ({ input, errors }) => {
+  .handler(async ({ context, input, errors }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
     try {
       return await uploadsSvc.ingestContactUpload(input);
     } catch (error) {
@@ -67,7 +71,8 @@ const matchPreview = authed
   .errors(EXCEL_UNREADABLE_ERROR)
   .input(MatchContactUploadInput)
   .output(MatchContactUploadResultSchema)
-  .handler(async ({ input, errors }) => {
+  .handler(async ({ context, input, errors }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
     try {
       return await uploadsSvc.matchContactUpload(input);
     } catch (error) {
@@ -78,9 +83,13 @@ const matchPreview = authed
 const existingCount = authed
   .input(GetExistingContactsCountInput)
   .output(z.number())
-  .handler(async ({ input }) =>
-    columnsSvc.getExistingContactsCount(input.surveyId, await loadOperationsDataScope(input.surveyId)),
-  );
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
+    return columnsSvc.getExistingContactsCount(
+      input.surveyId,
+      await loadOperationsDataScope(input.surveyId),
+    );
+  });
 
 export const uploads = {
   parsePreview,

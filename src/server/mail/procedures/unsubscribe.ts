@@ -1,4 +1,5 @@
 import { authed, pub, withRateLimit } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   LookupContactByTokenInput,
@@ -20,13 +21,17 @@ const lookup = pub
   .handler(({ input }) => svc.lookupContactByToken(input));
 
 /**
- * 운영자 수신거부 해제(authed). surveyId scope 일치 검증은 service 가 수행.
- * 인증 게이트는 authed 미들웨어가 담당(원본 requireAuth 대체).
+ * 운영자 수신거부 해제(authed). 인증 게이트는 authed 미들웨어가 담당하고,
+ * 설문 접근은 관문이 판정한다 — surveyId-컨택 일치는 service 가 이어서 확인한다.
  */
 const revertByContactId = authed
   .input(RevertUnsubscribeByContactIdInput)
   .output(RevertUnsubscribeByContactIdOutput)
-  .handler(({ input }) => svc.revertUnsubscribeByContactId(input));
+  .handler(async ({ context, input }) => {
+    // 수신거부 해제는 컨택 관리 행위라 contacts.manage 를 따른다.
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
+    return svc.revertUnsubscribeByContactId(input);
+  });
 
 export const unsubscribe = {
   lookup,

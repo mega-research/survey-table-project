@@ -1,4 +1,4 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactResultCode } from '@/shared/contracts/contacts';
@@ -7,6 +7,10 @@ import type { ORPCContext } from '@/server/context';
 vi.mock('../services/contact-result-codes', () => ({
   updateResultCodes: vi.fn(),
 }));
+
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import * as svc from '../services/contact-result-codes';
 import { resultCodes } from './result-codes';
@@ -20,13 +24,26 @@ describe('resultCodes procedures', () => {
 
   it('update는 surveyId와 codes를 service.updateResultCodes에 위임한다', async () => {
     vi.mocked(svc.updateResultCodes).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ contacts: { resultCodes } }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ contacts: { resultCodes } }, { context });
     const codes: ContactResultCode[] = [
       { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green', status: 'positive' },
     ];
     const res = await client.contacts.resultCodes.update({ surveyId: 's-1', codes });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, 's-1', 'contacts.manage');
     expect(svc.updateResultCodes).toHaveBeenCalledWith('s-1', codes);
     expect(res).toEqual({ ok: true });
+  });
+
+  it('타 팀 설문 id 로 update 하면 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ contacts: { resultCodes } }, { context: authedContext() });
+    await expect(
+      client.contacts.resultCodes.update({ surveyId: 's-1', codes: null }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.updateResultCodes).not.toHaveBeenCalled();
   });
 
   it('update는 codes=null(기본 코드셋 복귀)도 그대로 전달한다', async () => {

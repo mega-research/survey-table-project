@@ -1,7 +1,8 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import * as svc from '../services/response-edit';
 import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
@@ -17,6 +18,8 @@ vi.mock('../services/response-edit', async () => {
   };
 });
 
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
+
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
@@ -31,7 +34,8 @@ describe('surveyResponse.edit procedures', () => {
 
   it('saveAdminEdit는 입력을 service에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
-    const client = createRouterClient({ edit }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ edit }, { context });
     const input = {
       surveyId: SURVEY_ID,
       responseId: RESPONSE_ID,
@@ -39,12 +43,33 @@ describe('surveyResponse.edit procedures', () => {
       versionId: null,
     };
     const res = await client.edit.saveAdminEdit(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'responses.view',
+    );
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
       input,
       { id: 'admin-1', email: 'a@b.com' },
       false,
     );
     expect(res).toEqual({ ok: true });
+  });
+
+  it('관문 NOT_FOUND 는 그대로 던지고 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ edit }, { context: authedContext() });
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {},
+        versionId: null,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 
   it('SurveyOwnershipError는 NOT_FOUND로 매핑된다', async () => {
@@ -177,28 +202,6 @@ describe('surveyResponse.edit procedures', () => {
       true,
     );
     expect(res).toEqual({ ok: true });
-  });
-
-  it('게스트가 다른 설문 surveyId 로 saveAdminEdit 하면 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    const client = createRouterClient(
-      { edit },
-      {
-        context: {
-          db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
-        },
-      },
-    );
-    await expect(
-      client.edit.saveAdminEdit({
-        surveyId: 'other-survey',
-        responseId: RESPONSE_ID,
-        questionResponses: {},
-        versionId: null,
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 
   it('versionId 를 service 입력으로 그대로 전달한다', async () => {

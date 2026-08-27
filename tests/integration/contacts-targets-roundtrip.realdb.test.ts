@@ -22,6 +22,9 @@ import {
   contactTargets as contactTargetsTable,
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
+  teamMembers as teamMembersTable,
+  teams as teamsTable,
+  users as usersTable,
 } from '@/db/schema';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
@@ -34,17 +37,34 @@ import { targets } from '@/server/contacts/procedures/targets';
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
+// 역할 모델 v2(티켓 10): 컨택 procedure 가 capability(contacts.manage)를 요구하므로
+// 실사용자·팀·멤버십 픽스처와 소유 컬럼이 채워진 설문이 있어야 왕복이 성립한다.
+const ACTOR_ID = crypto.randomUUID();
+const TEAM_ID = crypto.randomUUID();
+
 function adminContext(): ORPCContext {
   return {
     db,
     user: {
-      id: 'test-admin',
-      email: 'test@local',
+      id: ACTOR_ID,
+      email: `contacts-roundtrip-${ACTOR_ID}@example.com`,
       name: '테스트관리자',
       status: 'active',
       isSuperadmin: false,
       userType: 'internal',
     },
+  };
+}
+
+/** 액터가 소유자인 배치 완료 설문 — 관문(contacts.manage)을 통과하는 최소 소유 구성. */
+function ownedSurveyValues(title: string) {
+  return {
+    title,
+    teamId: TEAM_ID,
+    assignmentStatus: 'assigned' as const,
+    visibility: 'team' as const,
+    ownerUserId: ACTOR_ID,
+    createdBy: ACTOR_ID,
   };
 }
 
@@ -73,6 +93,18 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
       END;
       $$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public;
     `);
+
+    await db.insert(usersTable).values({
+      id: ACTOR_ID,
+      name: '테스트관리자',
+      email: `contacts-roundtrip-${ACTOR_ID}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({ id: TEAM_ID, name: `컨택왕복팀-${TEAM_ID.slice(0, 8)}` });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: ACTOR_ID, role: 'member' });
   });
 
   afterAll(async () => {
@@ -82,13 +114,16 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
       await db.delete(contactTargetsTable).where(eq(contactTargetsTable.surveyId, id));
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
+    await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, ACTOR_ID));
+    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_ID));
   });
 
   it('add -> update -> remove 왕복: resid 자동발번 + attrs 저장/변경/삭제가 DB에 반영된다', async () => {
     // 1. survey 선행 insert (contact_targets.survey_id FK)
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '컨택-왕복-테스트-설문' })
+      .values(ownedSurveyValues('컨택-왕복-테스트-설문'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -136,7 +171,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
   it('resid는 같은 설문 안에서 순차 발번된다', async () => {
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '컨택-resid-순차-테스트' })
+      .values(ownedSurveyValues('컨택-resid-순차-테스트'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -152,7 +187,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     // 매칭 서브쿼리가 response_id 만 보면 진행중/이탈 응답이 web 컬럼에서 영영 미응답 처리된다.
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '컨택-web-상태-테스트' })
+      .values(ownedSurveyValues('컨택-web-상태-테스트'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -201,7 +236,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
   it('columns.update: resid hidden 스킴도 저장되고, 정상 스킴은 surveys.contactColumns에 저장된다', async () => {
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '컨택-컬럼스킴-테스트' })
+      .values(ownedSurveyValues('컨택-컬럼스킴-테스트'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -241,5 +276,80 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
       .from(surveysTable)
       .where(eq(surveysTable.id, survey.id));
     expect(afterUpdate?.contactColumns).toEqual(goodScheme);
+  });
+
+  it('타 팀 사용자는 남의 설문 컨택에 NOT_FOUND — 하위 id 를 알아도 소속 설문 기준으로 거부된다 (티켓 10)', async () => {
+    const [survey] = await db
+      .insert(surveysTable)
+      .values(ownedSurveyValues('컨택-타팀-차단-설문'))
+      .returning({ id: surveysTable.id });
+    if (!survey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(survey.id);
+
+    const target = await client.targets.add({ surveyId: survey.id, attrs: { name: '피해자' } });
+
+    const outsiderId = crypto.randomUUID();
+    const outsiderTeamId = crypto.randomUUID();
+    await db.insert(usersTable).values({
+      id: outsiderId,
+      name: '타팀사용자',
+      email: `contacts-roundtrip-outsider-${outsiderId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({
+      id: outsiderTeamId,
+      name: `컨택왕복-타팀-${outsiderTeamId.slice(0, 8)}`,
+    });
+    await db
+      .insert(teamMembersTable)
+      .values({ teamId: outsiderTeamId, userId: outsiderId, role: 'leader' });
+
+    try {
+      const outsiderClient = createRouterClient(
+        { targets, columns },
+        {
+          context: {
+            db,
+            user: {
+              id: outsiderId,
+              email: `contacts-roundtrip-outsider-${outsiderId}@example.com`,
+              name: '타팀사용자',
+              status: 'active',
+              isSuperadmin: false,
+              userType: 'internal',
+            },
+          },
+        },
+      );
+
+      // 관문 거부: 설문 id 를 알아도, 하위 컨택 id 를 알아도 존재를 알려주지 않는다.
+      await expect(
+        outsiderClient.targets.add({ surveyId: survey.id, attrs: { name: '침입' } }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.targets.update({
+          id: target.id,
+          surveyId: survey.id,
+          attrs: { name: '변조' },
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.targets.remove({ surveyId: survey.id, id: target.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      // 원본 컨택은 그대로다 — 거부가 쓰기 전에 일어났음을 확인한다.
+      const [row] = await db
+        .select({ attrs: contactTargetsTable.attrs })
+        .from(contactTargetsTable)
+        .where(eq(contactTargetsTable.id, target.id));
+      expect(row?.attrs).toEqual({ name: '피해자' });
+    } finally {
+      await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, outsiderId));
+      await db.delete(teamsTable).where(eq(teamsTable.id, outsiderTeamId));
+      await db.delete(usersTable).where(eq(usersTable.id, outsiderId));
+    }
   });
 });

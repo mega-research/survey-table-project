@@ -1,7 +1,8 @@
 import { ORPCError } from '@orpc/server';
 
 import { isGuestUser } from '@/lib/auth/guest-grants';
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { scoped } from '@/server/orpc';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit';
@@ -47,7 +48,8 @@ const saveAdminEdit = scoped
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user, input.surveyId);
+    // 응답 수정은 스펙 §8 에서 응답 상세 열람과 한 행 — responses.view 로 지킨다.
+    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     try {
       return await svc.saveAdminEdit(
         input,

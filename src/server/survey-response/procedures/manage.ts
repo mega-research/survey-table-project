@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import type { ReeditDenial } from '../domain/acceptance';
 import {
@@ -32,7 +33,9 @@ const REEDIT_UNAVAILABLE_MESSAGE: Record<ReeditDenial, string> = {
 const softDelete = authed
   .input(SoftDeleteResponseInput)
   .output(ResponseManageOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
+    // 응답 관리 4종은 스펙 §8 에서 응답 상세·수정과 한 행 — responses.view 로 지킨다.
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     try {
       return await svc.softDeleteResponse(input);
     } catch (err) {
@@ -43,7 +46,8 @@ const softDelete = authed
 const restore = authed
   .input(RestoreResponseInput)
   .output(ResponseManageOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     try {
       return await svc.restoreResponse(input);
     } catch (err) {
@@ -55,6 +59,7 @@ const hardReset = authed
   .input(HardResetResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     try {
       // 초기화 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
       return await svc.hardResetResponse(input, {
@@ -70,6 +75,7 @@ const allowReedit = authed
   .input(AllowReeditResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     try {
       // 재응답 허용 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
       return await svc.allowReeditResponse(input, {
