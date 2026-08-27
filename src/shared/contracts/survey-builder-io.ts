@@ -53,6 +53,14 @@ export interface SurveyListItem {
   /** 소유자. 0089 2단계 배포 중이라 옛 설문은 null 일 수 있다. */
   ownerUserId: string | null;
   ownerName: string | null;
+  /**
+   * 소속 그룹 (null = 미분류, 티켓 12).
+   *
+   * 그룹은 접근이 아니라 정리용 묶음이라 목록 조회 조건이 아니다 — 화면이 이 값으로
+   * 그룹 화면(`?group=<id>`)을 좁히고 카드 케밥의 현재 그룹을 표시한다. 소속 팀이 다른
+   * 그룹 id 는 서버가 null 로 접어 보낸다.
+   */
+  surveyGroupId: string | null;
 }
 
 /**

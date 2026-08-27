@@ -34,6 +34,7 @@ import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { members } from '@/server/workspace/procedures/members';
+import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
 import { teams } from '@/server/workspace/procedures/teams';
 import { duplicate } from '@/server/survey-response/procedures/duplicate';
 import { edit } from '@/server/survey-response/procedures/edit';
@@ -104,6 +105,8 @@ export const router = {
   workspace: {
     teams,
     members,
+    // 설문 그룹. surveyBuilder.groups(문항 그룹)와 이름이 겹치지 않게 키를 길게 쓴다.
+    surveyGroups,
   },
 };
 

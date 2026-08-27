@@ -2,10 +2,10 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { and, desc, eq, isNull, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveys, teams, users } from '@/db/schema';
+import { questionGroups, questions, surveyGroups, surveys, teams, users } from '@/db/schema';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
@@ -63,10 +63,17 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
       assignmentStatus: surveys.assignmentStatus,
       ownerUserId: surveys.ownerUserId,
       ownerName: users.name,
+      // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
+      // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
+      // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
+      surveyGroupId: sql<
+        string | null
+      >`case when ${surveys.teamId} is not distinct from ${surveyGroups.teamId} then ${surveys.surveyGroupId} else null end`,
     })
     .from(surveys)
     .leftJoin(teams, eq(teams.id, surveys.teamId))
     .leftJoin(users, eq(users.id, surveys.ownerUserId))
+    .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
     .where(and(...conditions))
     .orderBy(desc(surveys.createdAt));
 }

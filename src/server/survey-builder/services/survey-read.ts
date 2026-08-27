@@ -125,6 +125,7 @@ export async function getSurveyListWithCounts(
       // 화면 편의(작성자 표기·소유자 필터·버튼 노출 근사)다 — 판정은 서버 capability 가 한다.
       ownerUserId: survey.ownerUserId,
       ownerName: survey.ownerName,
+      surveyGroupId: survey.surveyGroupId,
     })),
   };
 }

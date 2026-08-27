@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
@@ -244,4 +244,64 @@ export async function assertSurveyCapability(
   const caps = await loadSurveyCapabilities(user, surveyId);
   const denial = denialReasonFor(caps, capability);
   if (denial) throw new SurveyAccessError(denial);
+}
+
+/**
+ * 여러 설문의 capability 를 한 왕복으로 판정한다 (티켓 12).
+ *
+ * 「설문 담기」처럼 한 요청이 N 건을 검사하는 표면이 assertSurveyCapability 를 루프로 부르면
+ * 설문마다 설문 행 조회 + 멤버십 조회가 따로 돈다(200건이면 400 왕복). 판정 자체는
+ * resolveSurveyCapabilities 라는 **순수 함수**라, 주체를 한 번 싣고 대상 행을 한 번에 읽으면
+ * 결과가 완전히 같으면서 왕복은 2회다.
+ *
+ * 없는 설문·삭제된 설문의 id 는 맵에 담기지 않는다 — 호출부가 `?? EMPTY` 로 받으면
+ * denialReasonFor 가 not_found 를 돌려주므로 "없음" 과 "볼 수 없음" 이 같은 결론이 된다.
+ */
+export async function loadSurveyCapabilitiesBatch(
+  user: SurveyAccessUser,
+  surveyIds: readonly string[],
+): Promise<Map<string, ReadonlySet<SurveyCapability>>> {
+  const result = new Map<string, ReadonlySet<SurveyCapability>>();
+  if (surveyIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      id: surveys.id,
+      teamId: surveys.teamId,
+      visibility: surveys.visibility,
+      ownerUserId: surveys.ownerUserId,
+      assignmentStatus: surveys.assignmentStatus,
+    })
+    .from(surveys)
+    .where(and(inArray(surveys.id, [...new Set(surveyIds)]), isNull(surveys.deletedAt)));
+
+  const subject = await loadAccessSubject(user);
+  for (const row of rows) {
+    result.set(row.id, resolveSurveyCapabilities(subject, row, null));
+  }
+  return result;
+}
+
+/** 빈 capability 집합 — 존재하지 않는 설문의 판정 입력. */
+const NO_CAPABILITIES: ReadonlySet<SurveyCapability> = new Set();
+
+/**
+ * 배치 관문 — 설문 전부가 요구 capability 를 **모두** 가져야 통과한다.
+ *
+ * 하나라도 막히면 그 자리에서 던진다. 부분 성공을 허용하면 "N개 중 3개만 담겼다" 는 상태를
+ * 화면이 표현할 수 없고, 담기는 트랜잭션 하나라 실제로도 전부 아니면 전무다.
+ */
+export async function assertSurveyCapabilityBatch(
+  user: SurveyAccessUser,
+  surveyIds: readonly string[],
+  capabilities: readonly SurveyCapability[],
+): Promise<void> {
+  const caps = await loadSurveyCapabilitiesBatch(user, surveyIds);
+  for (const surveyId of surveyIds) {
+    const own = caps.get(surveyId) ?? NO_CAPABILITIES;
+    for (const capability of capabilities) {
+      const denial = denialReasonFor(own, capability);
+      if (denial) throw new SurveyAccessError(denial);
+    }
+  }
 }

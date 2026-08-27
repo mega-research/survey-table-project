@@ -7,6 +7,7 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
   assertSurveyCapability,
+  assertSurveyCapabilityBatch,
   SurveyAccessError,
   type SurveyAccessUser,
 } from './survey-access';
@@ -29,6 +30,24 @@ export async function assertSurveyCapabilityRpc(
 ): Promise<void> {
   try {
     await assertSurveyCapability(user, surveyId, capability);
+  } catch (error) {
+    throw toRpcSurveyAccessError(error);
+  }
+}
+
+/**
+ * 여러 설문에 같은 요구를 한 번에 거는 관문 (티켓 12).
+ *
+ * 「설문 담기」가 최대 200건을 한 요청으로 받는다 — 단건 관문을 루프로 돌리면 설문마다
+ * DB 왕복 두 번이 난다. 판정 결과는 단건과 동일하고 거부 코드 매핑도 같다.
+ */
+export async function assertSurveyCapabilityBatchRpc(
+  user: SurveyAccessUser,
+  surveyIds: readonly string[],
+  capabilities: readonly SurveyCapability[],
+): Promise<void> {
+  try {
+    await assertSurveyCapabilityBatch(user, surveyIds, capabilities);
   } catch (error) {
     throw toRpcSurveyAccessError(error);
   }

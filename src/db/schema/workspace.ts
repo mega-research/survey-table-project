@@ -90,3 +90,37 @@ export const teamLifecycleEvents = pgTable(
   },
   (t) => [index('team_lifecycle_events_team_idx').on(t.teamId)],
 );
+
+/**
+ * 팀 공용 설문 그룹 — 정리용 묶음 (마이그레이션 0090, 티켓 12).
+ *
+ * 그룹은 **접근 권한이 아니다.** 담겼다는 사실이 설문을 누가 볼 수 있는지에 영향을 주지 않고,
+ * 판정은 계속 `surveys.teamId`·`visibility`·`ownerUserId` 로만 한다. 구조 편집(생성·이름
+ * 변경·정렬·삭제)은 모든 active 팀원의 공동 권한이고, 설문을 넣고 빼는 것만 그 설문의
+ * `survey.edit` 을 따로 요구한다.
+ *
+ * 그룹은 팀 소유물이라 **설문이 팀을 옮기면 `surveys.surveyGroupId` 는 NULL 로 내려야 한다** —
+ * 팀 해산(티켓 13)·재배치(14)·승계(19)가 지켜야 할 계약이다. DB 복합 FK 로 강제하지 않은
+ * 이유는 0090 마이그레이션 헤더에 적었다.
+ */
+export const surveyGroups = pgTable(
+  'survey_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    order: integer('order').notNull().default(0),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // 그룹 이름은 팀 안에서만 유일하다 — 여러 팀이 같은 이름의 그룹을 갖는 것이 정상이다.
+  (t) => [
+    uniqueIndex('survey_groups_team_name_uq').on(t.teamId, t.name),
+    index('survey_groups_team_order_idx').on(t.teamId, t.order),
+  ],
+);

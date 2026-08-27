@@ -52,7 +52,7 @@ import type {
 } from '@/types/survey';
 
 import { users } from './auth';
-import { teams } from './workspace';
+import { surveyGroups, teams } from './workspace';
 
 // 설문 테이블
 export const surveys = pgTable(
@@ -137,8 +137,11 @@ export const surveys = pgTable(
     // nullable 로 추가하고 백필만 한다. SET NOT NULL 은 앱 배포 후(티켓 29).
     ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'restrict' }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'restrict' }),
-    // survey_groups 테이블은 티켓 12 소관이라 아직 없다 — FK 도 그때 붙는다.
-    surveyGroupId: uuid('survey_group_id'),
+    // 소속 그룹 (NULL = 미분류, 0090). 그룹은 정리용 묶음이라 접근 판정에 쓰이지 않는다.
+    // 그룹 삭제는 이 값을 NULL 로 되돌릴 뿐 설문을 지우지 않는다(ON DELETE SET NULL).
+    surveyGroupId: uuid('survey_group_id').references(() => surveyGroups.id, {
+      onDelete: 'set null',
+    }),
     ownershipStatus: text('ownership_status')
       .$type<SurveyOwnershipStatus>()
       .notNull()

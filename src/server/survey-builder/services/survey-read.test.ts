@@ -129,6 +129,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       assignmentStatus: 'assigned' as const,
       ownerUserId: 'u-1',
       ownerName: '홍길동',
+      surveyGroupId: null,
       ...over,
     };
   }

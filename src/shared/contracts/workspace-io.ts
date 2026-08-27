@@ -166,3 +166,99 @@ export type UpdateMemberJobTitleInput = z.infer<typeof UpdateMemberJobTitleInput
 /** 성공만 알리면 되는 변경 — 화면은 목록을 다시 읽는다. */
 export const WorkspaceActionOutput = z.object({ success: z.literal(true) });
 export type WorkspaceActionOutput = z.infer<typeof WorkspaceActionOutput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 그룹 (.pen FLOW 2) — 팀 공용 정리용 묶음
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 그룹 이름 — 팀 안에서 유일하다. 팀 이름보다 짧게 쓰는 폴더 라벨이라 60자. */
+const SurveyGroupNameField = z.string().trim().min(1, '그룹 이름을 입력하세요.').max(60);
+
+export const SurveyGroupListItem = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  order: z.number().int(),
+  /** 소속 설문 수 — 삭제되지 않은 설문만 센다(삭제 확인 모달의 「설문 N개가 미분류로」). */
+  surveyCount: z.number().int(),
+});
+export type SurveyGroupListItem = z.infer<typeof SurveyGroupListItem>;
+
+export const ListSurveyGroupsInput = z.object({ teamId: z.uuid() });
+export type ListSurveyGroupsInput = z.infer<typeof ListSurveyGroupsInput>;
+
+export const ListSurveyGroupsOutput = z.array(SurveyGroupListItem);
+export type ListSurveyGroupsOutput = z.infer<typeof ListSurveyGroupsOutput>;
+
+export const CreateSurveyGroupInput = z.object({ teamId: z.uuid(), name: SurveyGroupNameField });
+export type CreateSurveyGroupInput = z.infer<typeof CreateSurveyGroupInput>;
+
+/** 생성 직후 응답 — drizzle raw row(teamId·createdBy 등 내부 컬럼)를 노출하지 않는다. */
+export const CreateSurveyGroupOutput = z.object({ id: z.uuid() });
+export type CreateSurveyGroupOutput = z.infer<typeof CreateSurveyGroupOutput>;
+
+export const RenameSurveyGroupInput = z.object({
+  groupId: z.uuid(),
+  name: SurveyGroupNameField,
+});
+export type RenameSurveyGroupInput = z.infer<typeof RenameSurveyGroupInput>;
+
+/**
+ * 정렬 — 화면이 보여주는 순서 전체를 통째로 보낸다.
+ *
+ * teamId 를 함께 받는 것은 장식이 아니라 권한 축이다. 서버는 요청자가 그 팀의 팀원인지 묻고,
+ * UPDATE 도 그 teamId 로 좁힌다 — 타 팀 groupId 가 배열에 섞여도 아무 행에도 닿지 않는다.
+ */
+export const ReorderSurveyGroupsInput = z.object({
+  teamId: z.uuid(),
+  orderedGroupIds: z.array(z.uuid()).min(1).max(200),
+});
+export type ReorderSurveyGroupsInput = z.infer<typeof ReorderSurveyGroupsInput>;
+
+export const SurveyGroupIdInput = z.object({ groupId: z.uuid() });
+export type SurveyGroupIdInput = z.infer<typeof SurveyGroupIdInput>;
+
+/**
+ * 「설문 담기」 후보 — **미분류 설문만** 나온다 (.pen FLOW 2-2).
+ *
+ * 다른 그룹에 있는 설문을 여기서 빼오는 암묵 이동을 원천 차단하려는 것이다. 그룹 간 이동은
+ * 설문 카드 케밥의 단건 동선(FLOW 2-4)만 쓴다.
+ */
+export const ListUngroupedSurveysInput = z.object({
+  teamId: z.uuid(),
+  query: z.string().trim().max(100).default(''),
+});
+export type ListUngroupedSurveysInput = z.infer<typeof ListUngroupedSurveysInput>;
+
+export const UngroupedSurveyItem = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  updatedAt: z.date(),
+  /** 담기 가능 여부 — 서버가 capability 로 판정한다. false 인 행은 화면에서 선택 비활성. */
+  canMove: z.boolean(),
+});
+export type UngroupedSurveyItem = z.infer<typeof UngroupedSurveyItem>;
+
+export const ListUngroupedSurveysOutput = z.array(UngroupedSurveyItem);
+export type ListUngroupedSurveysOutput = z.infer<typeof ListUngroupedSurveysOutput>;
+
+/**
+ * 일괄 담기 — 같은 id 가 두 번 들어와도 한 번으로 접는다.
+ *
+ * 접지 않으면 "요청 수 == 조회된 행 수" 검증이 중복 때문에 오탐으로 NOT_FOUND 를 던진다.
+ */
+export const CollectSurveysIntoGroupInput = z.object({
+  groupId: z.uuid(),
+  surveyIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(200)
+    .transform((ids) => [...new Set(ids)]),
+});
+export type CollectSurveysIntoGroupInput = z.infer<typeof CollectSurveysIntoGroupInput>;
+
+/** 단건 이동 (카드 케밥) — `groupId: null` 은 미분류로 이동(그룹에서 빼기). */
+export const MoveSurveyToGroupInput = z.object({
+  surveyId: z.uuid(),
+  groupId: z.uuid().nullable(),
+});
+export type MoveSurveyToGroupInput = z.infer<typeof MoveSurveyToGroupInput>;
