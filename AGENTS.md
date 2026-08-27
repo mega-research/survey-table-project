@@ -1096,6 +1096,23 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 }
 ```
 
+### 경계 스키마와 z.custom
+
+`z.custom<T>()` 은 **검증 함수를 주지 않으면 런타임에 아무것도 보지 않는다** — 타입만 붙고 값은
+그대로 흐른다. 반대로 `z.object()`(및 `.partial()`)는 unknown 키를 **버린다**(`tests/unit/
+zod-unknown-key-contract.test.ts` 가 실측으로 못 박는다).
+
+그래서 **요청 객체를 DB 쓰기로 넘기는 입력 스키마에는 z.custom 을 쓰지 않는다.** 실제로
+`UpdateSurveyDataSchema` 가 z.custom 이던 시절 서비스가 그 객체를 drizzle `.set()` 에 펼쳐,
+`survey.edit` 만 가진 팀원이 `ownerUserId` 를 실어 소유자 전권으로 승격하고 `deletedAt` 으로
+삭제 관문까지 우회했다(2026-08-27). 지금은 `.strict()` allowlist + 서비스의 명시 필드 대입 두
+겹이다.
+
+z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요청자가 못 만진다)와 **JSONB 리프
+필드**(`options`·`displayCondition`·`attachments`·`scheme` 등. 값이 JSONB 컬럼으로만 가고 권한
+컬럼에 닿지 않으며, 형태 드리프트는 로더 정규화가 받는다). 그 경우에도 **쓰기는 명시 필드
+대입**이어야 한다 — 스프레드 한 줄이면 위 사고가 재현된다.
+
 ### 언어/스타일
 
 - 문서/주석은 한국어, 변수명/함수명은 영어.
