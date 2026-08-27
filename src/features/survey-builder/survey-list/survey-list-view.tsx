@@ -68,7 +68,10 @@ export function SurveyListView() {
   // 링크 공유가 살아 있어야 해서 스토어가 아니라 URL 이 정본이다.
   const searchParams = useSearchParams();
   const requestedGroupId = searchParams.get('group');
-  const teamScopeId = contextScope?.kind === 'team' ? contextScope.teamId : null;
+  // 그룹은 팀 소유물이라 **서버가 해석한 범위**로 물어야 한다 — 화면 컨텍스트의 팀을 쓰면
+  // 쿠키가 접힌 경우(해산된 팀 등) 팀 A 의 그룹 목록으로 팀 B 의 설문을 좁히게 된다.
+  const resolvedScope = data?.scope ?? contextScope ?? null;
+  const teamScopeId = resolvedScope?.kind === 'team' ? resolvedScope.teamId : null;
   const { data: groups } = useSurveyGroups(teamScopeId);
   const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
@@ -171,11 +174,11 @@ export function SurveyListView() {
   }
 
   // 서버가 해석한 범위가 정답이다 — 요청한 범위와 다를 수 있다(해산된 팀 쿠키 등).
-  const scope = data?.scope ?? contextScope ?? { kind: 'none' as const };
+  const scope = resolvedScope ?? { kind: 'none' as const };
   const isSystemScope = scope.kind === 'system';
   const canCreate = scope.kind === 'team';
   // 그룹은 팀 소유물이라 팀 범위에서만 존재한다 — 시스템 전체 보기에는 그룹 개념이 없다(.pen 6-2).
-  const canManageGroups = scope.kind === 'team' && teamScopeId !== null;
+  const canManageGroups = teamScopeId !== null;
   const currentUserId = workScope?.currentUserId ?? null;
   const isSuperadmin = workScope?.isSuperadmin ?? false;
 
