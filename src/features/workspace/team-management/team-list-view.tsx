@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { ArrowLeft, Loader2, MoreVertical, Plus, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, MoreVertical, Plus, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -85,8 +85,9 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
  * 팀 관리 (.pen FLOW 7-1) — 슈퍼어드민 전용.
  *
  * 맨 위 「메가리서치」 카드는 팀이 아니라 시스템 전체 보기다(ADR-0006). teams 행이 없으므로
- * 케밥도 상세도 없고, 팀 수·전체 설문 수만 보여준다. 재배치 센터(티켓 14)가 이 카드로
- * 들어오는 유일한 입구가 된다.
+ * 케밥도 상세도 없고, 팀 수·전체 설문 수만 보여준다. **재배치 센터의 유일한 입구가 이 카드다**
+ * (.pen FLOW 8-2) — 사이드바 항목을 만들지 않는 이유는 거기 있는 사람과 설문이 어느 팀에도
+ * 속하지 않아 팀 범위로는 설명되지 않기 때문이다.
  */
 export function TeamListView() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -135,12 +136,21 @@ export function TeamListView() {
           <span className="text-[13px] text-[#6E6E73]">
             슈퍼어드민 전용 · 모든 팀 · 재배치 센터
           </span>
-          <CardStats
-            items={[
-              { value: summary?.teamCount ?? 0, label: '팀' },
-              { value: summary?.surveyCount ?? 0, label: '전체 설문' },
-            ]}
-          />
+          <div className="flex items-end justify-between">
+            <CardStats
+              items={[
+                { value: summary?.teamCount ?? 0, label: '팀' },
+                { value: summary?.surveyCount ?? 0, label: '전체 설문' },
+              ]}
+            />
+            <Link
+              href="/admin/reassignment"
+              className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-[7px] text-[12.5px] font-semibold text-[#2E4FCE] hover:bg-[#F5F7FF]"
+            >
+              재배치 센터
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </section>
 
         <section className="space-y-3">
