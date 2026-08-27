@@ -802,7 +802,12 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   contacts.view · 컨택 관리·업로드·결과코드 어휘·수신거부 해제 contacts.manage · 결과코드
   회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·발송 mail.send ·
   내보내기 export.download · mutation(운영 제어·쿼터 저장·컬럼 픽커 저장 포함) survey.edit ·
-  발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. 거부 사유의 정본은 코어
+  발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. **단 분석 RSC 화면 둘
+  (`/analytics/[surveyId]`·`/admin/surveys/[id]/analytics`)은 `responses.view` 도 요구한다** —
+  `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
+  직렬화하므로 RSC payload 에 그대로 실린다(analytics **RPC** 는 집계 스키마로만 나가 종전대로
+  analytics.view 다). 두 화면이 갈리지 않게 `tests/repo/analytics-page-guards.test.ts` 가 묶는다.
+  거부 사유의 정본은 코어
   `denialReasonFor` 하나다 — **survey.view 가 없으면 forbidden 이 아니라 not_found**(id 스캔으로
   타 팀 설문 존재 확인 차단), 보이는 설문의 권한 부족만 forbidden. authed 표면은
   `assertSurveyCapabilityRpc`, **scoped 표면(게스트 허용 콘솔)은 `assertScopedSurveyCapabilityRpc`**
