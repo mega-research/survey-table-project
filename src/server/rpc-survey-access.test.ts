@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * RPC 관문 어댑터 (역할 모델 v2 티켓 09).
@@ -18,7 +18,11 @@ vi.mock('./survey-access', () => {
 });
 
 import { SurveyAccessError, assertSurveyCapability } from './survey-access';
-import { assertSurveyCapabilityRpc, toRpcSurveyAccessError } from './rpc-survey-access';
+import {
+  assertScopedSurveyCapabilityRpc,
+  assertSurveyCapabilityRpc,
+  toRpcSurveyAccessError,
+} from './rpc-survey-access';
 
 const user = { id: 'u-1', isSuperadmin: false, userType: 'internal' as const };
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
@@ -53,6 +57,53 @@ describe('assertSurveyCapabilityRpc', () => {
     await expect(
       assertSurveyCapabilityRpc(user, SURVEY_ID, 'survey.view'),
     ).rejects.toThrow('connection lost');
+  });
+});
+
+describe('assertScopedSurveyCapabilityRpc — 게스트 허용(scoped) 표면 (티켓 10)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('env grant 게스트는 grant 설문이면 capability 판정 없이 통과한다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    await expect(
+      assertScopedSurveyCapabilityRpc(
+        { ...user, id: 'guest-1' },
+        SURVEY_ID,
+        'contacts.manage',
+      ),
+    ).resolves.toBeUndefined();
+    expect(assertSurveyCapability).not.toHaveBeenCalled();
+  });
+
+  it('env grant 게스트는 grant 밖 설문이면 FORBIDDEN — 종전 판정 유지', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
+    await expect(
+      assertScopedSurveyCapabilityRpc({ ...user, id: 'guest-1' }, SURVEY_ID, 'contacts.view'),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(assertSurveyCapability).not.toHaveBeenCalled();
+  });
+
+  it('grant 없는 내부 계정은 capability 관문에 위임한다', async () => {
+    vi.mocked(assertSurveyCapability).mockResolvedValue(undefined);
+    await expect(
+      assertScopedSurveyCapabilityRpc(user, SURVEY_ID, 'mail.send'),
+    ).resolves.toBeUndefined();
+    expect(assertSurveyCapability).toHaveBeenCalledWith(user, SURVEY_ID, 'mail.send');
+  });
+
+  it('grant 없는 guest·fieldwork 유형 계정은 capability 거부가 NOT_FOUND 로 옮겨진다', async () => {
+    // 유형별 기본 거부는 코어(resolveSurveyCapabilities 의 계정 유형 게이트)가 정한다 —
+    // 여기서는 그 거부(not_found)가 RPC 어휘로 옮겨지는 것만 본다. 구 assertSurveyAccess
+    // 의 FORBIDDEN 에서 존재 은닉(NOT_FOUND) 쪽으로 조정된 지점이다.
+    vi.mocked(assertSurveyCapability).mockRejectedValue(new SurveyAccessError('not_found'));
+    await expect(
+      assertScopedSurveyCapabilityRpc(
+        { id: 'guest-account', isSuperadmin: false, userType: 'guest' },
+        SURVEY_ID,
+        'contacts.view',
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 

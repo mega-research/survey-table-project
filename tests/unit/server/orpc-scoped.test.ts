@@ -1,10 +1,17 @@
 import { createRouterClient } from '@orpc/server';
-import * as z from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
-import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
+import { authed, scoped } from '@/server/orpc';
+
+/**
+ * scoped/authed 베이스의 인증·상태·유형 게이트.
+ *
+ * 설문 접근 판정 자체는 베이스가 아니라 handler 첫 줄의 관문이 한다 — env grant 게스트와
+ * capability 를 가르는 assertScopedSurveyCapabilityRpc 는 src/server/rpc-survey-access.test.ts,
+ * capability 매트릭스는 src/server/survey-access.test.ts 가 검증한다(티켓 10).
+ */
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -21,15 +28,12 @@ function ctx(
   };
 }
 
-const echo = scoped.input(z.object({ surveyId: z.string() })).handler(({ context, input }) => {
-  assertSurveyAccess(context.user, input.surveyId);
-  return { ok: true };
-});
+const echo = scoped.handler(() => ({ ok: true }));
 
 describe('scoped 베이스', () => {
   it('미인증은 UNAUTHORIZED', async () => {
     const client = createRouterClient({ echo }, { context: ctx(null) });
-    await expect(client.echo({ surveyId: 's1' })).rejects.toMatchObject({
+    await expect(client.echo()).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -38,24 +42,15 @@ describe('scoped 베이스', () => {
     '%s 계정은 FORBIDDEN',
     async (status) => {
       const client = createRouterClient({ echo }, { context: ctx('user-1', status) });
-      await expect(client.echo({ surveyId: 's1' })).rejects.toMatchObject({
+      await expect(client.echo()).rejects.toMatchObject({
         code: 'FORBIDDEN',
       });
     },
   );
 
-  it('grant 없는 active 계정은 어느 설문이든 통과', async () => {
+  it('active 계정은 베이스를 통과한다 (설문 접근은 handler 관문 몫)', async () => {
     const client = createRouterClient({ echo }, { context: ctx('admin-1') });
-    await expect(client.echo({ surveyId: 'any' })).resolves.toEqual({ ok: true });
-  });
-
-  it('게스트는 grant 설문만 통과, 다른 설문은 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
-    const client = createRouterClient({ echo }, { context: ctx('guest-1') });
-    await expect(client.echo({ surveyId: 's1' })).resolves.toEqual({ ok: true });
-    await expect(client.echo({ surveyId: 's2' })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-    });
+    await expect(client.echo()).resolves.toEqual({ ok: true });
   });
 });
 
@@ -92,7 +87,8 @@ describe('authed 베이스', () => {
  *
  * 티켓 03 이 사용자 관리에서 guest 유형 계정을 발급할 수 있게 만들었으므로, 그 계정이
  * 내부 표면에 들어오지 못하게 하는 서버 판정을 함께 둔다. 유형별 라우팅과 각 콘솔 화면은
- * 티켓 05·22·25 소관이고, scoped 는 게스트에게 열어줄 표면이라 유형으로 막지 않는다.
+ * 티켓 05·22·25 소관이고, scoped 는 게스트에게 열어줄 표면이라 유형으로 막지 않는다 —
+ * 유형별 설문 접근(부여 모델 전 기본 거부)은 capability 코어의 계정 유형 게이트가 정한다.
  */
 describe('계정 유형 게이트', () => {
   it.each(['guest', 'fieldwork'] as const)('%s 유형 계정은 authed 에서 FORBIDDEN', async (userType) => {
@@ -106,14 +102,4 @@ describe('계정 유형 게이트', () => {
     const client = createRouterClient({ passthrough }, { context: ctx('u-1', 'active', 'guest') });
     await expect(client.passthrough()).resolves.toEqual({ ok: true });
   });
-
-  it.each(['guest', 'fieldwork'] as const)(
-    '%s 유형은 설문 일치 강제에서 막힌다 (부여 모델이 아직 없다)',
-    async (userType) => {
-      // 베이스를 통과하는 것과 임의 설문에 닿아도 되는 것은 다른 이야기다. 이 유형들에는
-      // 아직 설문 부여 모델이 없으므로(티켓 21·24) assertSurveyAccess 가 기본 거부한다.
-      const client = createRouterClient({ echo }, { context: ctx('u-1', 'active', userType) });
-      await expect(client.echo({ surveyId: 's1' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    },
-  );
 });

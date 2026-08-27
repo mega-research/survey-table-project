@@ -2,6 +2,7 @@ import 'server-only';
 
 import { ORPCError } from '@orpc/server';
 
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
@@ -31,6 +32,30 @@ export async function assertSurveyCapabilityRpc(
   } catch (error) {
     throw toRpcSurveyAccessError(error);
   }
+}
+
+/**
+ * scoped 표면(게스트 허용 콘솔)용 관문 — 주체에 따라 판정 축을 가른다 (티켓 10).
+ *
+ * env grant 게스트는 팀 멤버십이 없어 capability 판정이 항상 거부한다 — grant 일치가
+ * 그들의 유일한 자격이므로 종전 판정(grant 설문만, 불일치 FORBIDDEN)을 그대로 둔다.
+ * 내부 계정은 위 capability 관문을 지나고, grant 없는 guest·fieldwork 계정은 capability
+ * 판정의 계정 유형 게이트가 NOT_FOUND 로 접는다(구 assertSurveyAccess 의 FORBIDDEN 에서
+ * 존재 은닉 쪽으로 조정). 게스트 부여가 계정 모델로 바뀌는 티켓 21 이 이 분기를
+ * capability 판정 하나로 합친다.
+ */
+export async function assertScopedSurveyCapabilityRpc(
+  user: SurveyAccessUser,
+  surveyId: string,
+  capability: SurveyCapability,
+): Promise<void> {
+  if (isGuestUser(user.id)) {
+    if (!canAccessSurvey(user.id, surveyId)) {
+      throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
+    }
+    return;
+  }
+  await assertSurveyCapabilityRpc(user, surveyId, capability);
 }
 
 /**
