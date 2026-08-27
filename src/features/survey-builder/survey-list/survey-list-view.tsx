@@ -209,6 +209,7 @@ export function SurveyListView() {
     isLoading || (requestedGroupId !== null && teamScopeId !== null && groupsPending);
   const currentUserId = workScope?.currentUserId ?? null;
   const isSuperadmin = workScope?.isSuperadmin ?? false;
+  const leaderTeamIds = workScope?.leaderTeamIds ?? [];
 
   return (
     <div className="flex flex-col gap-5 p-10">
@@ -324,6 +325,7 @@ export function SurveyListView() {
                     scope={scope}
                     currentUserId={currentUserId}
                     isSuperadmin={isSuperadmin}
+                    leaderTeamIds={leaderTeamIds}
                     onDelete={handleDelete}
                     onDuplicate={handleDuplicate}
                     isDuplicating={isDuplicating}

@@ -77,6 +77,12 @@ export function AdminShell({ user, memberships, teams, initialScope, children }:
     [queryClient, router],
   );
 
+  // 셸은 이미 role 이 실린 멤버십을 받는다 — 카드가 팀장·팀원을 가르려면 그 값이 필요하다.
+  const leaderTeamIds = useMemo(
+    () => memberships.filter((m) => m.role === 'leader').map((m) => m.teamId),
+    [memberships],
+  );
+
   const contextValue = useMemo(
     () => ({
       scope,
@@ -84,9 +90,10 @@ export function AdminShell({ user, memberships, teams, initialScope, children }:
       canSeeSystemScope: user.isSuperadmin,
       isSuperadmin: user.isSuperadmin,
       currentUserId: user.id,
+      leaderTeamIds,
       setScope,
     }),
-    [scope, teams, user.isSuperadmin, user.id, setScope],
+    [scope, teams, user.isSuperadmin, user.id, leaderTeamIds, setScope],
   );
 
   return (

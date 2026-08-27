@@ -35,3 +35,32 @@ export function canEditSurveyCard(
   }
   return false;
 }
+
+/**
+ * 설문 카드의 「분석」 노출 여부 **근사치**.
+ *
+ * 분석 화면은 복호화된 원문 응답을 렌더하므로 `analytics.view` 뿐 아니라 `responses.view`
+ * 도 요구한다(Codex 적대적 리뷰). 그런데 팀 공개 설문의 **일반 팀원**은 analytics.view 는
+ * 있어도 responses.view 가 없다 — 버튼을 그대로 두면 눌렀을 때 404 로 떨어진다.
+ *
+ * 그래서 이 근사는 `canEditSurveyCard` 보다 좁다. responses.view 를 주는 주체만 통과시킨다:
+ * 슈퍼어드민 · 소유자 · 소유 팀 팀장. 팀원은 제외다. 참여자(티켓 18)는 responses.view 를
+ * 갖지만 목록이 참여 행을 안 내려받으므로 그때 근사를 넓혀야 한다 — 지금은 안전한 방향
+ * (실제보다 자주 감춤)으로 틀린다.
+ *
+ * 소유자 분기가 팀 소속을 함께 보는 것은 서버 판정과 맞추기 위해서다 — 소유 팀에서 빠진
+ * 소유자는 서버에서 전권을 잃는다(survey-access 의 revocation 계약).
+ */
+export function canViewSurveyAnalyticsCard(
+  survey: SurveyCardCapabilitySubject,
+  scope: WorkScope,
+  currentUserId: string | null,
+  isSuperadmin: boolean,
+  leaderTeamIds: readonly string[],
+): boolean {
+  if (isSuperadmin) return true;
+  const inOwningTeam = scope.kind === 'team' && survey.teamId === scope.teamId;
+  if (currentUserId !== null && survey.ownerUserId === currentUserId && inOwningTeam) return true;
+  if (survey.teamId !== null && leaderTeamIds.includes(survey.teamId)) return true;
+  return false;
+}

@@ -34,13 +34,15 @@ import type { WorkScope } from '@/shared/contracts/workspace';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
-import { canEditSurveyCard } from './survey-list-capability';
+import { canEditSurveyCard, canViewSurveyAnalyticsCard } from './survey-list-capability';
 
 interface SurveyCardProps {
   survey: SurveyListItem;
   scope: WorkScope;
   currentUserId: string | null;
   isSuperadmin: boolean;
+  /** 내가 팀장인 팀 — 「분석」 노출 근사에 쓴다(팀원과 팀장의 응답 열람 권한이 갈린다). */
+  leaderTeamIds: readonly string[];
   onDelete: (surveyId: string) => void;
   onDuplicate: (surveyId: string) => void;
   isDuplicating: boolean;
@@ -81,13 +83,15 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  * (콜백 게이트, disabled placeholder 금지). 「그룹 이동」도 같은 규칙이라 팀 범위가 아니면
  * (시스템 전체 보기·미배치) onMoveToGroup 이 null 로 와서 항목이 사라진다.
  * 문의 액션은 Plan 3 게이트로 미노출.
- * 수정·삭제의 비활성은 근사(canEditSurveyCard)일 뿐이고 강제는 서버 관문이 한다.
+ * 수정·삭제·분석의 비활성은 근사(canEditSurveyCard·canViewSurveyAnalyticsCard)일 뿐이고
+ * 강제는 서버 관문이 한다.
  */
 export function SurveyCard({
   survey,
   scope,
   currentUserId,
   isSuperadmin,
+  leaderTeamIds,
   onDelete,
   onDuplicate,
   isDuplicating,
@@ -95,6 +99,14 @@ export function SurveyCard({
   onMoveToGroup,
 }: SurveyCardProps) {
   const canEdit = canEditSurveyCard(survey, scope, currentUserId, isSuperadmin);
+  // 분석 화면은 responses.view 까지 요구한다 — 팀원은 못 들어가므로 버튼도 잠근다.
+  const canViewAnalytics = canViewSurveyAnalyticsCard(
+    survey,
+    scope,
+    currentUserId,
+    isSuperadmin,
+    leaderTeamIds,
+  );
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
     {
@@ -228,6 +240,7 @@ export function SurveyCard({
           href={`/admin/surveys/${survey.id}/analytics`}
           icon={<ChartColumn className="h-3 w-3" />}
           label="분석"
+          disabled={!canViewAnalytics}
         />
       </div>
     </div>

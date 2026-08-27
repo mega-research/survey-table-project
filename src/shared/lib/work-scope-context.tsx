@@ -23,6 +23,13 @@ export interface WorkScopeContextValue {
   /** 세션 사용자 id — 카드 버튼 노출 근사(canEditSurveyCard)용. 판정은 서버가 한다. */
   currentUserId: string | null;
   /**
+   * 내가 팀장인 팀 — 카드 버튼 노출 근사용. 판정은 서버가 한다.
+   *
+   * 팀장과 팀원은 같은 팀 범위 안에서도 갖는 capability 가 다르다(팀장은 전권, 팀원은
+   * 응답·컨택·메일·export 가 없다). role 없이 근사하면 팀장의 버튼까지 함께 감춰진다.
+   */
+  leaderTeamIds: readonly string[];
+  /**
    * 범위 전환 — teamId 또는 SYSTEM_SCOPE('system')를 받는다.
    * 쿠키 기록·설문 캐시 무효화·RSC 갱신은 공급자(AdminShell)가 처리한다.
    */
