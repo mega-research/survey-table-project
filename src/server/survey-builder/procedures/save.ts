@@ -5,6 +5,7 @@ import {
   assertSurveyCapabilityRpc,
   toRpcSurveyAccessError,
 } from '@/server/rpc-survey-access';
+import { toRpcWorkScopeError } from '@/server/rpc-work-scope';
 
 import { SurveyOwnershipRequiredError } from '../domain/survey';
 import {
@@ -32,7 +33,12 @@ function rethrowSaveError(error: unknown): never {
   if (error instanceof SurveyOwnershipRequiredError) {
     throw new ORPCError('CONFLICT', { message: error.message });
   }
-  throw toRpcSurveyAccessError(error);
+  // saveWithDetails 는 갱신처럼 보이지만 서비스 안에서 신규 생성까지 맡는다 —
+  // 그 분기가 resolveNewSurveyOwnership 을 지나므로 생성 표면과 같은 매핑을 진다.
+  // 지금은 범위를 입력으로 받지 않아 WorkScopeError 가 나올 길이 없지만(쿠키 출처는
+  // work-scope 가 접는다), 형제 rethrow 와 다르게 두면 payload 에 scope 가 생기는 날
+  // 이쪽만 500 으로 돌아간다.
+  throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
 }
 
 /**

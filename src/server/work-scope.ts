@@ -77,8 +77,20 @@ export async function resolveWorkScope(
   user: SurveyAccessUser,
   requested: string | null,
 ): Promise<WorkScope> {
-  const scope = requested ?? (await readRequestWorkScopeCookie());
-  return resolveWorkScopeFor(await loadAccessSubject(user), scope);
+  const subject = await loadAccessSubject(user);
+  // 요청이 범위를 명시했으면 거부는 거부다 — 조용히 접으면 화면이 부분을 전체로 착각한다.
+  if (requested !== null) return resolveWorkScopeFor(subject, requested);
+
+  // 쿠키에서 온 값은 **접는다**. 화면(admin 셸·분석 목록)이 이미 같은 처리를 하므로,
+  // 여기만 거부하면 스위처에는 팀이 보이는데 설문 생성만 막히는 상태가 생긴다
+  // (강등된 슈퍼어드민의 잔존 'system' 쿠키). 접는 쪽은 언제나 더 좁으므로 새지 않는다.
+  const cookie = await readRequestWorkScopeCookie();
+  try {
+    return resolveWorkScopeFor(subject, cookie);
+  } catch (error) {
+    if (!(error instanceof WorkScopeError)) throw error;
+    return resolveWorkScopeFor(subject, null);
+  }
 }
 
 /** 요청에 실려 온 쿠키. 브라우저 쪽 동명 헬퍼(shared/lib)와 구분해 이름을 길게 둔다. */

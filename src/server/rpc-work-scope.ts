@@ -16,7 +16,7 @@ import { WorkScopeError } from './work-scope';
  * (존재를 감출 것이 없어 NOT_FOUND 가 아니다).
  *
  * **쿠키에서 온 범위는 이 길로 오지 않는다.** 쿠키는 편의값이라 화면 쪽(admin 레이아웃·분석
- * 목록)이 기본 범위로 접는다 — 접는 쪽과 거부하는 쪽이 갈리는 것은 provenance 때문이지
+ * 목록)이 기본 범위로 접는다 — 접는 쪽과 거부하는 쪽이 갈리는 것은 **값의 출처** 때문이지
  * 판정이 둘이어서가 아니다.
  */
 export function toRpcWorkScopeError(error: unknown): unknown {
