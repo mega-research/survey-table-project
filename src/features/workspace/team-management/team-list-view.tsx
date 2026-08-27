@@ -4,20 +4,24 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { ArrowLeft, Loader2, MoreVertical, Plus } from 'lucide-react';
+import { ArrowLeft, Loader2, MoreVertical, Plus, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
 import type { TeamListItem } from '@/shared/contracts/workspace-io';
+import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import { PRIMARY_BUTTON } from '../field-styles';
 
 import { useTeams } from './queries/use-teams';
+import { TeamDissolveModal } from './team-dissolve-modal';
 import { TeamFormModal } from './team-form-modal';
 
 /** 카드 하단 지표 — `3 멤버 · 8 설문` (.pen FLOW 7-1). */
@@ -34,7 +38,7 @@ function CardStats({ items }: { items: { value: number; label: string }[] }) {
   );
 }
 
-function TeamCard({ team }: { team: TeamListItem }) {
+function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => void }) {
   return (
     <div className="flex flex-col gap-[5px] rounded-xl border border-[#E5E5EA] bg-white p-[14px]">
       <div className="flex items-center justify-between">
@@ -50,6 +54,17 @@ function TeamCard({ team }: { team: TeamListItem }) {
           <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem asChild>
               <Link href={`/admin/teams/${team.id}`}>팀 상세</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {/* .pen FLOW 7-1 의 케밥은 이 항목을 **항상 강조**해 둔다(bg #FEF2F2) — 되돌릴 수
+                없는 액션이라 hover 로만 드러나면 안 된다. 말줄임표도 목업 그대로: 누르는 즉시
+                일어나지 않고 확인 단계가 하나 더 있다는 뜻이다. */}
+            <DropdownMenuItem
+              onSelect={onDissolve}
+              className="justify-between bg-[#FEF2F2] font-semibold text-[#EF4444] focus:bg-[#FEE2E2] focus:text-[#EF4444]"
+            >
+              팀 해산…
+              <TriangleAlert className="h-3.5 w-3.5" />
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -75,7 +90,10 @@ function TeamCard({ team }: { team: TeamListItem }) {
  */
 export function TeamListView() {
   const [createOpen, setCreateOpen] = useState(false);
+  const [dissolveTarget, setDissolveTarget] = useState<TeamListItem | null>(null);
   const { data, isLoading, error } = useTeams();
+  // 셸 밖(테스트 렌더)에서도 이 화면이 서므로 optional 로 받는다.
+  const workScope = useWorkScopeOptional();
 
   const teams = data?.teams ?? [];
   const summary = data?.systemSummary;
@@ -129,7 +147,11 @@ export function TeamListView() {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {teams.map((team) => (
-              <TeamCard key={team.id} team={team} />
+              <TeamCard
+                key={team.id}
+                team={team}
+                onDissolve={() => setDissolveTarget(team)}
+              />
             ))}
           </div>
 
@@ -157,6 +179,20 @@ export function TeamListView() {
       </div>
 
       {createOpen && <TeamFormModal onClose={() => setCreateOpen(false)} />}
+      {dissolveTarget && (
+        <TeamDissolveModal
+          team={dissolveTarget}
+          onClose={() => setDissolveTarget(null)}
+          onDissolved={(team) => {
+            // 해산한 팀을 보고 있었다면 작업 범위를 시스템 전체 보기로 되돌린다. 안 그러면
+            // 쿠키에 남은 teamId 로 스위처가 「알 수 없는 팀」에 갇힌다 — 슈퍼어드민의 팀
+            // 범위는 멤버십으로 걸러지지 않아 archived 팀 id 도 그대로 통과한다.
+            if (workScope?.scope.kind === 'team' && workScope.scope.teamId === team.id) {
+              workScope.setScope(SYSTEM_SCOPE);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

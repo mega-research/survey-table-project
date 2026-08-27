@@ -6,6 +6,7 @@ import type {
   AddTeamMemberInput,
   ChangeTeamMemberRoleInput,
   CreateTeamInput,
+  DissolveTeamInput,
   RemoveTeamMemberInput,
   RenameTeamInput,
   UpdateMemberJobTitleInput,
@@ -68,6 +69,22 @@ export function useRenameTeam() {
   return useMutation({
     mutationFn: (input: RenameTeamInput) => client.workspace.teams.rename(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: teamKeys.all }),
+  });
+}
+
+/**
+ * 팀 해산 — 되돌릴 수 없다(ADR-0011).
+ *
+ * 무효화가 `teamKeys.all` 로 끝나지 않는다. 해산은 팀 목록뿐 아니라 **화면 전체의 전제**를
+ * 바꾼다 — 해산된 팀 소속이던 사람은 그 순간 미배치가 되고, 소속 설문은 배치 대기로 내려가
+ * 설문 목록·그룹 트리·작업 범위가 전부 낡는다. 그래서 호출측(TeamListView)이 성공 후
+ * 작업 범위까지 함께 정리한다.
+ */
+export function useDissolveTeam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DissolveTeamInput) => client.workspace.teams.dissolve(input),
+    onSuccess: () => queryClient.invalidateQueries(),
   });
 }
 
