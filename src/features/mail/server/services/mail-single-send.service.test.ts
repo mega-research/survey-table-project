@@ -53,8 +53,18 @@ describe('sendSingleCampaign 가드', () => {
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
+  it('최근 결과코드가 수신거부면 에러', async () => {
+    selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([{ id: 'ct-1' }]); // 최근 결과코드 수신거부
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
+      '수신거부 결과코드가 기록된',
+    );
+    expect(createCampaign).not.toHaveBeenCalled();
+  });
+
   it('부정 결과코드가 기록된 컨택이면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
     vi.mocked(getResultCodeStatuses).mockResolvedValueOnce({ positive: [], negative: ['DNC'] });
     selectResultQueue.push([{ id: 'ct-1' }]); // 부정 결과코드 존재
     await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('연락금지 결과코드가 기록된');
@@ -63,6 +73,7 @@ describe('sendSingleCampaign 가드', () => {
 
   it('이메일 PII 가 없으면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([]); // email pii empty
     await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('이메일 정보가 없는');
@@ -71,6 +82,7 @@ describe('sendSingleCampaign 가드', () => {
 
   it('템플릿이 없으면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([{ id: 'pii-1' }]);
     vi.mocked(getMailTemplate).mockResolvedValueOnce(null);
@@ -80,6 +92,7 @@ describe('sendSingleCampaign 가드', () => {
 
   it('가드 통과 시 kind=single 로 createCampaign 위임', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([{ id: 'pii-1' }]);
     const res = await sendSingleCampaign(INPUT, 'admin-1', false);
