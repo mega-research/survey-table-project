@@ -18,10 +18,20 @@ import { eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
-import { accounts, sessions, userStatusEvents, users } from '@/db/schema';
+import {
+  accounts,
+  sessions,
+  teamLifecycleEvents,
+  teamMembers,
+  teams,
+  userStatusEvents,
+  users,
+} from '@/db/schema';
 import { auth } from '@/lib/auth/server';
 import { UserNotFoundError, UserStatusTransitionError } from '@/server/auth/domain/users';
 import { changeUserStatus, createUser, resetUserPassword } from '@/server/auth/services/users';
+import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
+import { rehireUserWithTeam } from '@/server/workflows/user-rehire';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -29,6 +39,17 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 const PASSWORD = 'initial-pw-123';
 const NEW_PASSWORD = 'temp-pw-4567';
 const createdUserIds: string[] = [];
+const createdTeamIds: string[] = [];
+
+/** 재입사가 배정할 목적지 팀. 티켓 14 부터 재입사는 팀 없이 성립하지 않는다. */
+async function seedTeam(): Promise<string> {
+  const [team] = await db
+    .insert(teams)
+    .values({ name: `재입사팀-${crypto.randomUUID().slice(0, 8)}` })
+    .returning({ id: teams.id });
+  createdTeamIds.push(team!.id);
+  return team!.id;
+}
 
 async function seedActor(): Promise<string> {
   const id = crypto.randomUUID();
@@ -89,7 +110,15 @@ afterAll(async () => {
   await db.delete(userStatusEvents).where(inArray(userStatusEvents.changedBy, createdUserIds));
   await db.delete(sessions).where(inArray(sessions.userId, createdUserIds));
   await db.delete(accounts).where(inArray(accounts.userId, createdUserIds));
+  // 팀 쪽 행이 users 를 FK RESTRICT 로 잡고 있어 사용자보다 먼저 지운다.
+  if (createdTeamIds.length > 0) {
+    await db.delete(teamLifecycleEvents).where(inArray(teamLifecycleEvents.teamId, createdTeamIds));
+    await db.delete(teamMembers).where(inArray(teamMembers.teamId, createdTeamIds));
+  }
   await db.delete(users).where(inArray(users.id, createdUserIds));
+  if (createdTeamIds.length > 0) {
+    await db.delete(teams).where(inArray(teams.id, createdTeamIds));
+  }
 });
 
 describe.skipIf(!isLocalDb)('비밀번호 재설정 (real local DB)', () => {
@@ -201,14 +230,23 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     ).rejects.toBeInstanceOf(UserStatusTransitionError);
     expect(await statusOf(id)).toBe('departed');
 
-    await changeUserStatus(actorId, {
-      action: 'rehire',
-      userId: id,
-      password: NEW_PASSWORD,
-      jobTitle: '선임연구원',
-    });
+    // 재입사는 상태 전이와 팀 배정을 한 트랜잭션으로 묶는다(티켓 14).
+    const teamId = await seedTeam();
+    await rehireUserWithTeam(
+      { id: actorId, isSuperadmin: true },
+      {
+        action: 'rehire',
+        userId: id,
+        password: NEW_PASSWORD,
+        jobTitle: '선임연구원',
+        teamId,
+        teamRole: 'member',
+      },
+    );
 
     expect(await statusOf(id)).toBe('active');
+    // 팀 배정까지 이어진다 — 상태만 되돌리면 로그인만 되는 미배치로 되살아난다.
+    expect(await getActiveTeamMemberships(id)).toMatchObject([{ teamId, role: 'member' }]);
     const signedIn = await signIn(email, NEW_PASSWORD);
     expect(signedIn.user.id).toBe(id);
     // 재입사는 비밀번호 재설정을 겸한다 — 퇴사 전 비밀번호는 더 이상 통하지 않는다.
@@ -224,7 +262,16 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
 
     await changeUserStatus(actorId, { action: 'suspend', userId: id });
     await changeUserStatus(actorId, { action: 'depart', userId: id });
-    await changeUserStatus(actorId, { action: 'rehire', userId: id, password: NEW_PASSWORD });
+    await rehireUserWithTeam(
+      { id: actorId, isSuperadmin: true },
+      {
+        action: 'rehire',
+        userId: id,
+        password: NEW_PASSWORD,
+        teamId: await seedTeam(),
+        teamRole: 'member',
+      },
+    );
 
     const events = await db
       .select()

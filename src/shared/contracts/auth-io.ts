@@ -3,6 +3,7 @@
 // client-safe — server-only·Node·DB 의존 없음(zod 는 런타임 의존).
 import * as z from 'zod';
 
+import { teamRoleValues } from './workspace';
 import {
   type UserStatus,
   type UserStatusAction,
@@ -165,8 +166,10 @@ const UserTarget = z.object({ userId: z.uuid() });
  * "새로 시작"시키므로 임시 비밀번호를 함께 정한다(전 세션은 이미 퇴사 시점에 폐기됐고,
  * 이 전이도 다시 폐기한다). 직책은 필요하면 이 자리에서 고칠 수 있다.
  *
- * .pen FLOW 9-4 의 「새 소속 팀」·「팀 역할」은 여기 없다 — 팀 엔티티가 티켓 06 에서
- * 생기고 재입사 배정 연계는 티켓 14 소관이라, 지금 필드를 받으면 저장할 곳이 없다.
+ * **재입사만 팀 배정을 함께 받는다**(.pen FLOW 9-4 의 별표, 티켓 14). 퇴사가 유효 소속을
+ * 끊어놓았으므로 상태만 되돌리면 그 사람은 로그인만 되는 미배치로 돌아온다 — 재입사를
+ * 「새 소속으로 다시 시작」이라고 부르는 이상 목적지를 여기서 받아야 한다. 상태 전이와 배정은
+ * 한 트랜잭션이다(server/workflows/user-rehire).
  */
 export const ChangeUserStatusInput = z.discriminatedUnion('action', [
   UserTarget.extend({ action: z.literal('suspend') }),
@@ -176,6 +179,9 @@ export const ChangeUserStatusInput = z.discriminatedUnion('action', [
     action: z.literal('rehire'),
     password: PasswordField,
     jobTitle: optionalText(50),
+    /** 새 소속 팀 — 선택이 아니다. 비우면 미배치로 되살아나 재배치 센터로 다시 흘러간다. */
+    teamId: z.uuid(),
+    teamRole: z.enum(teamRoleValues),
   }),
 ]);
 export type ChangeUserStatusInput = z.infer<typeof ChangeUserStatusInput>;

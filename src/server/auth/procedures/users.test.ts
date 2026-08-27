@@ -12,6 +12,8 @@ import {
 import * as svc from '../services/users';
 import { users } from './users';
 
+import { RehireTeamAssignmentError, rehireUserWithTeam } from '@/server/workflows/user-rehire';
+
 vi.mock('../services/users', () => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
@@ -19,7 +21,16 @@ vi.mock('../services/users', () => ({
   resetUserPassword: vi.fn(),
 }));
 
+// 재입사는 상태 전이(auth)와 팀 배정(workspace)을 한 트랜잭션으로 묶어야 해서 워크플로가
+// 처리한다. 에러 클래스는 실물이 필요하므로 모듈을 통째로 갈지 않고 함수만 바꾼다.
+vi.mock('@/server/workflows/user-rehire', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/workflows/user-rehire')>()),
+  rehireUserWithTeam: vi.fn(),
+}));
+
 const SUPERADMIN_ID = '11111111-1111-4111-8111-111111111111';
+const TEAM_ID = '33333333-3333-4333-8333-333333333333';
+const TEAM_ASSIGNMENT = { teamId: TEAM_ID, teamRole: 'member' } as const;
 
 function context(opts: { isSuperadmin?: boolean } = {}): ORPCContext {
   return {
@@ -180,9 +191,13 @@ describe('users 상태 전이 procedure', () => {
 
   it('재입사는 임시 비밀번호가 없으면 거부한다', async () => {
     await expect(
-      clientWith().users.changeStatus({ action: 'rehire', userId: TARGET_ID } as never),
+      clientWith().users.changeStatus({
+        action: 'rehire',
+        userId: TARGET_ID,
+        ...TEAM_ASSIGNMENT,
+      } as never),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-    expect(svc.changeUserStatus).not.toHaveBeenCalled();
+    expect(rehireUserWithTeam).not.toHaveBeenCalled();
   });
 
   it('재입사 비밀번호도 8자 미만은 거부한다 (전역 정책)', async () => {
@@ -191,24 +206,55 @@ describe('users 상태 전이 procedure', () => {
         action: 'rehire',
         userId: TARGET_ID,
         password: 'short7c',
+        ...TEAM_ASSIGNMENT,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('비워 보낸 직책은 미입력으로 접는다', async () => {
-    vi.mocked(svc.changeUserStatus).mockResolvedValue({ status: 'active' });
+  it('재입사는 새 소속 팀이 없으면 거부한다', async () => {
+    // .pen 9-4 의 별표가 계약에도 있다 — 팀 없이 되살리면 로그인만 되는 미배치가 된다.
+    await expect(
+      clientWith().users.changeStatus({
+        action: 'rehire',
+        userId: TARGET_ID,
+        password: 'rehire-pw-12',
+      } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(rehireUserWithTeam).not.toHaveBeenCalled();
+  });
+
+  it('재입사만 워크플로로 간다 — 상태 전이와 팀 배정이 한 트랜잭션이라', async () => {
+    vi.mocked(rehireUserWithTeam).mockResolvedValue({ status: 'active' });
     await clientWith().users.changeStatus({
       action: 'rehire',
       userId: TARGET_ID,
       password: 'rehire-pw-12',
       jobTitle: '   ',
+      ...TEAM_ASSIGNMENT,
     });
-    expect(svc.changeUserStatus).toHaveBeenCalledWith(SUPERADMIN_ID, {
+    // 비워 보낸 직책은 미입력으로 접는다.
+    expect(rehireUserWithTeam).toHaveBeenCalledWith(expect.objectContaining({ id: SUPERADMIN_ID }), {
       action: 'rehire',
       userId: TARGET_ID,
       password: 'rehire-pw-12',
       jobTitle: undefined,
+      ...TEAM_ASSIGNMENT,
     });
+    expect(svc.changeUserStatus).not.toHaveBeenCalled();
+  });
+
+  it('팀 배정 실패는 CONFLICT 로 바꾼다 — 사유 문구를 그대로 보존한다', async () => {
+    vi.mocked(rehireUserWithTeam).mockRejectedValue(
+      new RehireTeamAssignmentError('해산된 팀입니다.'),
+    );
+    await expect(
+      clientWith().users.changeStatus({
+        action: 'rehire',
+        userId: TARGET_ID,
+        password: 'rehire-pw-12',
+        ...TEAM_ASSIGNMENT,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '해산된 팀입니다.' });
   });
 
   it('허용되지 않은 전이는 CONFLICT 로 바꾼다', async () => {

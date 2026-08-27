@@ -122,6 +122,9 @@ beforeEach(() => {
   findMany.mockResolvedValue([]);
 });
 
+/** 재입사 계약의 팀 필드 — RPC 입력이 요구하지만 auth 서비스는 쓰지 않는다. */
+const TEAM_ASSIGNMENT = { teamId: '33333333-3333-4333-8333-333333333333', teamRole: 'member' } as const;
+
 describe('createUser', () => {
   const INTERNAL = {
     userType: 'internal' as const,
@@ -341,6 +344,9 @@ describe('changeUserStatus', () => {
       userId: TARGET,
       password: 'rehire-pw-12',
       jobTitle: '선임연구원',
+      // 팀 배정은 이 서비스가 아니라 워크플로가 한다(server/workflows/user-rehire).
+      // 계약이 요구하므로 채우지만 여기서는 읽지 않는다 — 그 사실 자체가 계층의 경계다.
+      ...TEAM_ASSIGNMENT,
     });
 
     expect(res).toEqual({ status: 'active' });
@@ -361,6 +367,7 @@ describe('changeUserStatus', () => {
       action: 'rehire',
       userId: TARGET,
       password: 'rehire-pw-12',
+      ...TEAM_ASSIGNMENT,
     });
     expect(updatedValues(users)).toMatchObject({ jobTitle: null });
   });
@@ -375,6 +382,7 @@ describe('changeUserStatus', () => {
       action: 'rehire',
       userId: TARGET,
       password: 'rehire-pw-12',
+      ...TEAM_ASSIGNMENT,
     });
 
     expect(inserted(accounts)).toMatchObject({

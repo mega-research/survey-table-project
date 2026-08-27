@@ -163,7 +163,7 @@ export async function createUser(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 인스턴스 설정 해셔를 그대로 쓴다 — 발급·재설정·재입사가 같은 알고리즘으로 해시해야 한다. */
-async function hashPassword(plain: string): Promise<string> {
+export async function hashPassword(plain: string): Promise<string> {
   const authContext = await auth.$context;
   return authContext.password.hash(plain);
 }
@@ -247,8 +247,10 @@ async function revokeSessions(tx: Tx, userId: string, now: Date): Promise<void> 
  * lock 은 전이를 직렬화한다 — 마지막 남은 슈퍼어드민 둘을 동시에 정지시키려는 경합에서
  * 각자 "다른 active 가 1명 있다"고 읽으면 둘 다 통과해 슈퍼어드민이 0명이 된다.
  *
- * 퇴사의 멤버십·소유권 정리와 재입사의 팀 배정은 여기 없다 — 팀 엔티티가 티켓 06 에서
- * 생기고 승계·재배치는 티켓 14·19 소관이다. 지금 이 함수가 보장하는 것은 상태·세션·감사뿐이다.
+ * 이 함수가 보장하는 것은 **상태·세션·감사**뿐이다. 재입사의 팀 배정은 워크스페이스 도메인의
+ * 쓰기라 여기서 부를 수 없어(도메인 간 직접 import 금지) server/workflows/user-rehire 가
+ * 같은 트랜잭션으로 묶는다 — 그 층이 applyUserStatusChange 를 직접 쓰는 이유다.
+ * 퇴사의 멤버십·소유권 정리는 여전히 없다(승계는 티켓 19).
  */
 export async function changeUserStatus(
   actorUserId: string,
@@ -256,59 +258,72 @@ export async function changeUserStatus(
 ): Promise<ChangeUserStatusOutput> {
   // 해시는 느리다. 트랜잭션(과 advisory lock) 밖에서 미리 만들어 잠금 구간을 짧게 둔다.
   const passwordHash = input.action === 'rehire' ? await hashPassword(input.password) : null;
+  return db.transaction((tx) => applyUserStatusChange(tx, actorUserId, input, passwordHash));
+}
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('user-status-transition')::bigint)`);
+/**
+ * 상태 전이의 트랜잭션 본문 — 호출측이 트랜잭션을 소유한다.
+ *
+ * 재입사는 팀 배정과 **한 트랜잭션**이어야 한다. 갈라 두면 상태만 active 로 바뀌고 배정이
+ * 실패하는 창이 생겨, 「새 소속으로 다시 시작」한다던 사람이 미배치로 되살아난다.
+ * 비밀번호 해시는 느려서 잠금 구간 밖에서 만들어 넘긴다.
+ */
+export async function applyUserStatusChange(
+  tx: Tx,
+  actorUserId: string,
+  input: ChangeUserStatusInput,
+  passwordHash: string | null,
+): Promise<ChangeUserStatusOutput> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('user-status-transition')::bigint)`);
 
-    const [target] = await tx
-      .select({
-        id: users.id,
-        status: users.status,
-        isSuperadmin: users.isSuperadmin,
-      })
-      .from(users)
-      .where(eq(users.id, input.userId))
-      .for('update');
-    if (!target) throw new UserNotFoundError();
+  const [target] = await tx
+    .select({
+      id: users.id,
+      status: users.status,
+      isSuperadmin: users.isSuperadmin,
+    })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .for('update');
+  if (!target) throw new UserNotFoundError();
 
-    const nextStatus = resolveUserStatusTransition(
-      target.status,
-      input.action,
-      await isLastActiveSuperadmin(tx, target, input.action),
-    );
-    const now = new Date();
+  const nextStatus = resolveUserStatusTransition(
+    target.status,
+    input.action,
+    await isLastActiveSuperadmin(tx, target, input.action),
+  );
+  const now = new Date();
 
-    if (input.action === 'rehire' && passwordHash) {
-      await writeCredentialPassword(tx, input.userId, passwordHash, now);
-    }
+  if (input.action === 'rehire' && passwordHash) {
+    await writeCredentialPassword(tx, input.userId, passwordHash, now);
+  }
 
-    await tx
-      .update(users)
-      .set({
-        status: nextStatus,
-        updatedAt: now,
-        // 재입사 모달은 현재 직책을 채워 보여주므로 보낸 값이 곧 저장될 값이다 — 비우면
-        // 지운다. 다른 전이는 직책을 건드리지 않는다.
-        ...(input.action === 'rehire' ? { jobTitle: input.jobTitle ?? null } : {}),
-      })
-      .where(eq(users.id, input.userId));
+  await tx
+    .update(users)
+    .set({
+      status: nextStatus,
+      updatedAt: now,
+      // 재입사 모달은 현재 직책을 채워 보여주므로 보낸 값이 곧 저장될 값이다 — 비우면
+      // 지운다. 다른 전이는 직책을 건드리지 않는다.
+      ...(input.action === 'rehire' ? { jobTitle: input.jobTitle ?? null } : {}),
+    })
+    .where(eq(users.id, input.userId));
 
-    // Better Auth sign-in 훅의 비활성 차단이 1차 방어다. 잔존 세션도 항상 끊어 재직 복귀를
-    // 포함한 모든 전이가 깨끗한 로그인에서 시작되게 한다.
-    await revokeSessions(tx, input.userId, now);
+  // Better Auth sign-in 훅의 비활성 차단이 1차 방어다. 잔존 세션도 항상 끊어 재직 복귀를
+  // 포함한 모든 전이가 깨끗한 로그인에서 시작되게 한다.
+  await revokeSessions(tx, input.userId, now);
 
-    await tx.insert(userStatusEvents).values({
-      id: crypto.randomUUID(),
-      userId: input.userId,
-      fromStatus: target.status,
-      toStatus: nextStatus,
-      changedBy: actorUserId,
-      reason: USER_STATUS_ACTION_REASON[input.action],
-      createdAt: now,
-    });
-
-    return { status: nextStatus };
+  await tx.insert(userStatusEvents).values({
+    id: crypto.randomUUID(),
+    userId: input.userId,
+    fromStatus: target.status,
+    toStatus: nextStatus,
+    changedBy: actorUserId,
+    reason: USER_STATUS_ACTION_REASON[input.action],
+    createdAt: now,
   });
+
+  return { status: nextStatus };
 }
 
 /**

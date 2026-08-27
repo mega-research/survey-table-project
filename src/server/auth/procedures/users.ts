@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { superadmin } from '@/server/orpc';
+import { RehireTeamAssignmentError, rehireUserWithTeam } from '@/server/workflows/user-rehire';
 
 import {
   ChangeUserStatusInput,
@@ -30,7 +31,10 @@ function toRpcError(err: unknown): ORPCError<string, unknown> | null {
   if (
     err instanceof DuplicateEmailError ||
     err instanceof UserStatusTransitionError ||
-    err instanceof LastActiveSuperadminError
+    err instanceof LastActiveSuperadminError ||
+    // 재입사의 팀 배정 실패 — 전체가 롤백돼 계정은 퇴사 상태 그대로다. 사유 문구는 워크스페이스
+    // 도메인이 쓴 것을 워크플로가 감싸 보존한다(경계를 넘지 않으려고 감싼다).
+    err instanceof RehireTeamAssignmentError
   ) {
     return new ORPCError('CONFLICT', { message: err.message });
   }
@@ -65,13 +69,19 @@ const create = superadmin
  *
  * 어떤 전이가 가능한지는 서버가 유일한 판정자다. 화면 케밥은 같은 전이표를 보고 메뉴를
  * 구성하지만, 목록을 띄워둔 사이 상태가 바뀌었으면 열려 있던 메뉴가 이미 낡은 것이다.
+ *
+ * **재입사만 다른 입구로 간다.** 상태 전이(auth)와 팀 배정(workspace)을 한 트랜잭션으로
+ * 묶어야 해서 워크플로 층이 처리한다 — 도메인 서비스끼리는 서로를 부를 수 없다.
+ * 여기서 갈라 두는 편이 auth 서비스가 워크플로를 아는 것보다 낫다(의존 방향이 한쪽이다).
  */
 const changeStatus = superadmin
   .input(ChangeUserStatusInput)
   .output(ChangeUserStatusOutput)
   .handler(async ({ input, context }) => {
     try {
-      return await svc.changeUserStatus(context.user.id, input);
+      return input.action === 'rehire'
+        ? await rehireUserWithTeam(context.user, input)
+        : await svc.changeUserStatus(context.user.id, input);
     } catch (err) {
       throw toRpcError(err) ?? err;
     }
