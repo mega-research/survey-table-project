@@ -9,7 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SURVEY_VISIBILITY_LABEL, type SurveyVisibility } from '@/shared/contracts/workspace';
+import {
+  SURVEY_VISIBILITY_LABEL,
+  type SurveyVisibility,
+  surveyVisibilityValues,
+} from '@/shared/contracts/workspace';
 
 import { useTeams } from '../team-management/queries/use-teams';
 import { useOwnerCandidates } from './queries/use-reassignment';
@@ -147,7 +151,7 @@ export function VisibilityField({ fields, width }: { fields: Fields; width: stri
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {(Object.keys(SURVEY_VISIBILITY_LABEL) as SurveyVisibility[]).map((value) => (
+          {surveyVisibilityValues.map((value) => (
             <SelectItem key={value} value={value}>
               {SURVEY_VISIBILITY_LABEL[value]}
             </SelectItem>

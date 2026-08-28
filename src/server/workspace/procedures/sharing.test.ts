@@ -5,10 +5,10 @@
  * 설문을 초대 전용으로 바꿔 같은 팀에서 숨길 수 있다 — 편집권과 공유권은 다른 축이다
  * (스펙 §7: 범위 변경은 소유자·팀장·슈퍼어드민만).
  */
-import { createRouterClient, ORPCError } from '@orpc/server';
+import { ORPCError, createRouterClient } from '@orpc/server';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ORPCContext } from '@/server/context';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import { SharingSurveyNotFoundError } from '../domain/sharing';
@@ -21,18 +21,7 @@ vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn(
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 const SURVEY_ID = '22222222-2222-4222-8222-222222222222';
 
-const context: ORPCContext = {
-  db: {} as never,
-  user: {
-    id: ACTOR_ID,
-    email: 'owner@megaresearch.co.kr',
-    name: '김소유',
-    status: 'active',
-    isSuperadmin: false,
-    userType: 'internal',
-  },
-  headers: new Headers(),
-};
+const context = internalActorContext({ id: ACTOR_ID, name: '김소유' });
 
 const client = createRouterClient({ sharing }, { context });
 

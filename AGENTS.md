@@ -146,7 +146,9 @@ src/
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
 │   │   │                       # 지금은 공개 범위 블록뿐. 참여자·클라이언트·실사·소유권 이전은 티켓 18·21·24·19
-│   │   │                       # 여는 곳은 설문 카드 케밥이라 workspace 가 아니라 여기 산다(그룹 UI 와 같은 이유)
+│   │   │                       # PRD 맵은 workspace 로 적었지만 입구가 설문 카드라 그 배치는 불가능하다
+│   │                       # (두 묶음은 서로 import 금지 — 그룹 UI 가 survey-list/groups 에 사는 선례)
+│   │                       # 후속 블록도 workspace 표면을 RPC 로 부르므로 feature import 는 안 생긴다
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/

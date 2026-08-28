@@ -11,19 +11,22 @@
  *  ② 팀원은 전환 **후에** 상세·편집·운영·분석 어디서도 NOT_FOUND 다 — FORBIDDEN 이 아니다.
  *     사유가 갈리면 id 스캔으로 숨긴 설문의 존재가 확인된다(denialReasonFor 의 계약).
  *
- * 목록 축은 여기 없다. 그쪽은 SQL 조건(getScopedSurveys 의 seesInviteOnly)이라 목으로는
- * 무엇을 넣어도 통과하므로, 판정은 work-scope.test.ts 가, 실제 조회는
- * cross-team-idor.realdb.test.ts 의 「invite_only 는 같은 팀 팀원의 목록에서만 빠진다」가 진다.
+ * 목록 축은 **두 조각으로 나뉜다**. 판정(누가 invite_only 를 보는가)은 순수 함수라 여기서
+ * 함께 고정하고, 그 판정이 실제 SQL 조건으로 옮겨졌는지는 목으로 증명되지 않아
+ * cross-team-idor.realdb.test.ts·survey-sharing.realdb.test.ts 가 진다. 나눠 적는 이유는
+ * 「기본 게이트가 목록에 대해 아무것도 보증하지 않는다」를 피하면서, 목이 증명할 수 없는 것을
+ * 증명한 척하지 않기 위해서다.
  *
  * 소유자·팀장·슈퍼어드민이 전환 전후로 같다는 축은 코어 순수 함수 쪽
  * (src/server/survey-access.test.ts)이 매트릭스 열로 고정한다.
  */
 import { createRouterClient } from '@orpc/server';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { router } from '@/server/router';
-import { loadSurveyCapabilities } from '@/server/survey-access';
-import { internalActorContext } from '@tests/helpers/rpc-context';
+import { loadAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
+import { buildSurveyScopeFilter } from '@/server/work-scope';
 
 const IDS = vi.hoisted(() => ({
   /** 주체 — A팀 **팀원**. 소유자도 팀장도 슈퍼어드민도 아니다. */
@@ -41,7 +44,11 @@ const IDS = vi.hoisted(() => ({
  * 목 팩토리는 호이스트되므로 상태도 vi.hoisted 로 만든다. 「전환」을 컬럼 하나로 표현해야
  * 다른 조건(소유자·팀·배치 상태)이 그대로임을 스위트가 스스로 보증한다.
  */
-const state = vi.hoisted(() => ({ visibility: 'team' as 'team' | 'invite_only' }));
+const state = vi.hoisted(() => ({
+  visibility: 'team' as 'team' | 'invite_only',
+  /** 주체의 팀 역할 — 목록 판정 케이스만 팀장으로 올려 본다. */
+  role: 'member' as 'member' | 'leader',
+}));
 
 vi.mock('@/db', async (importOriginal) => {
   // importOriginal 스프레드 필수 — `@/db` 는 스키마를 통째로 되내보낸다(db-stub 주석 참조).
@@ -70,7 +77,7 @@ vi.mock('@/db', async (importOriginal) => {
 
 // 주체는 A팀 팀원 — 멤버십은 read-model 하나로 모여 있어 여기만 심으면 된다.
 vi.mock('@/server/read-models/team-memberships', () => ({
-  getActiveTeamMemberships: vi.fn(async () => [{ teamId: IDS.TEAM_ID, role: 'member' }]),
+  getActiveTeamMemberships: vi.fn(async () => [{ teamId: IDS.TEAM_ID, role: state.role }]),
   getTeamRole: vi.fn(async () => null),
 }));
 
@@ -107,8 +114,21 @@ const SURFACES: Record<string, { call: () => Promise<unknown>; capability: strin
 
 const member = { id: MEMBER_ID, isSuperadmin: false, userType: 'internal' as const };
 
+/**
+ * 목록이 invite_only 를 보여줄지 정하는 순수 판정 — `getScopedSurveys` 가 이 플래그를 SQL
+ * 조건으로 옮긴다(그 번역이 맞는지는 realdb 스위트가 본다).
+ */
+async function seesInviteOnly(user: typeof member): Promise<boolean> {
+  const filter = buildSurveyScopeFilter(await loadAccessSubject(user), {
+    kind: 'team',
+    teamId: IDS.TEAM_ID,
+  });
+  return filter.kind === 'team' && filter.seesInviteOnly;
+}
+
 beforeEach(() => {
   state.visibility = 'team';
+  state.role = 'member';
 });
 
 describe('전환 전 — 팀 공개 설문이라 팀원에게 열려 있다', () => {
@@ -122,12 +142,10 @@ describe('전환 전 — 팀 공개 설문이라 팀원에게 열려 있다', ()
   it.each(Object.entries(SURFACES))('%s 표면이 관문에서 막히지 않는다', async (_name, surface) => {
     // 관문을 지나면 서비스가 목 db 에 닿아 사고(또는 빈 결과)로 끝난다 — 어느 쪽이든
     // NOT_FOUND 가 아니라는 것이 「열려 있었다」의 증거다.
-    await surface
-      .call()
-      .then(
-        () => undefined,
-        (err: unknown) => expect(err).not.toMatchObject({ code: 'NOT_FOUND' }),
-      );
+    await surface.call().then(
+      () => undefined,
+      (err: unknown) => expect(err).not.toMatchObject({ code: 'NOT_FOUND' }),
+    );
   });
 });
 
@@ -143,5 +161,13 @@ describe('전환 후 — invite_only 는 같은 팀 팀원에게서 전부 사�
   it.each(Object.entries(SURFACES))('%s 표면이 NOT_FOUND 로 접힌다', async (_name, surface) => {
     // FORBIDDEN 이면 「있긴 있는데 못 본다」가 되어 숨긴 설문의 존재가 드러난다.
     await expect(surface.call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('목록 판정도 팀원에게는 숨기고 팀장·슈퍼어드민에게는 보인다', async () => {
+    expect(await seesInviteOnly(member)).toBe(false);
+    expect(await seesInviteOnly({ ...member, isSuperadmin: true })).toBe(true);
+
+    state.role = 'leader';
+    expect(await seesInviteOnly(member)).toBe(true);
   });
 });

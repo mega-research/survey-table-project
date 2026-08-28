@@ -1,12 +1,26 @@
-// 설문 카드 버튼 노출 근사 — 순수 판정 (역할 모델 v2 티켓 08).
-
+// 설문 카드 버튼 노출 근사 — 순수 판정 (역할 모델 v2 티켓 08·16).
 import type { SurveyVisibility, WorkScope } from '@/shared/contracts/workspace';
 
-/** canEditSurveyCard 판정에 필요한 목록 아이템 최소 필드. */
+/** 판정에 필요한 목록 아이템 최소 필드. */
 export interface SurveyCardCapabilitySubject {
   ownerUserId: string | null;
   visibility: SurveyVisibility;
   teamId: string | null;
+}
+
+/**
+ * 지금 목록을 보고 있는 사람 — 세 근사가 공통으로 묻는 것.
+ *
+ * 넷을 낱개 인자로 흘리면 근사를 하나 더할 때마다 시그니처가 늘고(티켓 16 이 세 번째였다)
+ * 티켓 18 이 참여 행을 얹을 때 세 함수와 모든 호출부를 한꺼번에 고쳐야 한다. 함께 다니는
+ * 값이면 타입 하나로 묶어 두는 편이 그 변경을 한 자리로 모은다.
+ */
+export interface SurveyCardViewer {
+  scope: WorkScope;
+  currentUserId: string | null;
+  isSuperadmin: boolean;
+  /** 내가 팀장인 팀 — 팀원과 팀장의 권한이 갈리는 근사에서만 쓴다. */
+  leaderTeamIds: readonly string[];
 }
 
 /**
@@ -24,10 +38,9 @@ export interface SurveyCardCapabilitySubject {
  */
 export function canEditSurveyCard(
   survey: SurveyCardCapabilitySubject,
-  scope: WorkScope,
-  currentUserId: string | null,
-  isSuperadmin: boolean,
+  viewer: SurveyCardViewer,
 ): boolean {
+  const { scope, currentUserId, isSuperadmin } = viewer;
   if (isSuperadmin) return true;
   if (currentUserId !== null && survey.ownerUserId === currentUserId) return true;
   if (survey.visibility === 'team' && scope.kind === 'team' && survey.teamId === scope.teamId) {
@@ -52,12 +65,9 @@ export function canEditSurveyCard(
  */
 export function canViewSurveyAnalyticsCard(
   survey: SurveyCardCapabilitySubject,
-  scope: WorkScope,
-  currentUserId: string | null,
-  isSuperadmin: boolean,
-  leaderTeamIds: readonly string[],
+  viewer: SurveyCardViewer,
 ): boolean {
-  return hasFullSurveyControl(survey, scope, currentUserId, isSuperadmin, leaderTeamIds);
+  return hasFullSurveyControl(survey, viewer);
 }
 
 /**
@@ -67,21 +77,19 @@ export function canViewSurveyAnalyticsCard(
  * 남아 있는 소유자 · 소유 팀 팀장. 팀 공개 설문의 팀원은 `survey.edit` 은 있어도 이건 없다
  * (스펙 §7: 범위 변경은 소유자·팀장·슈퍼어드민만).
  *
- * 오늘은 `canViewSurveyAnalyticsCard` 와 판정이 같지만 **이유가 다르다**. 저쪽이 요구하는
+ * 오늘은 `canViewSurveyAnalyticsCard` 와 결과가 같지만 **이유가 다르다**. 저쪽이 요구하는
  * responses.view 는 참여자(티켓 18)도 갖고 이쪽 manageAccess 는 참여자도 못 갖는다 — 참여
- * 행이 목록에 실리는 날 둘은 갈린다. 그래서 이름과 문서를 따로 둔다.
+ * 행이 목록에 실리는 날 둘은 갈린다. 이름을 하나로 합치면 그날 한쪽만 넓히는 변경이
+ * 다른 쪽을 조용히 함께 넓힌다.
  *
  * 모달을 **여는 것**은 이 판정이 막지 않는다. 접근 가능한 내부인이면 누구나 참여자를 추가할
  * 수 있어야 하므로(스펙 §7) 잠기는 것은 범위 세그먼트뿐이다.
  */
 export function canManageSurveyAccessCard(
   survey: SurveyCardCapabilitySubject,
-  scope: WorkScope,
-  currentUserId: string | null,
-  isSuperadmin: boolean,
-  leaderTeamIds: readonly string[],
+  viewer: SurveyCardViewer,
 ): boolean {
-  return hasFullSurveyControl(survey, scope, currentUserId, isSuperadmin, leaderTeamIds);
+  return hasFullSurveyControl(survey, viewer);
 }
 
 /**
@@ -92,10 +100,7 @@ export function canManageSurveyAccessCard(
  */
 function hasFullSurveyControl(
   survey: SurveyCardCapabilitySubject,
-  scope: WorkScope,
-  currentUserId: string | null,
-  isSuperadmin: boolean,
-  leaderTeamIds: readonly string[],
+  { scope, currentUserId, isSuperadmin, leaderTeamIds }: SurveyCardViewer,
 ): boolean {
   if (isSuperadmin) return true;
   const inOwningTeam = scope.kind === 'team' && survey.teamId === scope.teamId;

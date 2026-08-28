@@ -322,10 +322,7 @@ export function SurveyListView() {
                   <SurveyCard
                     key={survey.id}
                     survey={survey}
-                    scope={scope}
-                    currentUserId={currentUserId}
-                    isSuperadmin={isSuperadmin}
-                    leaderTeamIds={leaderTeamIds}
+                    viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
                     onDelete={handleDelete}
                     onDuplicate={handleDuplicate}
                     isDuplicating={isDuplicating}

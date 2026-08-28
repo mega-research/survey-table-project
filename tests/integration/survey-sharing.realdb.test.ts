@@ -135,9 +135,7 @@ describe.skipIf(!isLocalDb)('공유 설정 — 공개 범위 (real local DB)', (
       .delete(teamMembersTable)
       .where(inArray(teamMembersTable.userId, [OWNER_ID, LEADER_ID, MEMBER_ID]));
     await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
-    await db
-      .delete(usersTable)
-      .where(inArray(usersTable.id, [OWNER_ID, LEADER_ID, MEMBER_ID]));
+    await db.delete(usersTable).where(inArray(usersTable.id, [OWNER_ID, LEADER_ID, MEMBER_ID]));
   });
 
   it('소유자가 전환하면 팀원의 목록에서 사라지고 되돌리면 돌아온다', async () => {

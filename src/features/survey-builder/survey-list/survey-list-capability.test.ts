@@ -1,122 +1,119 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WorkScope } from '@/shared/contracts/workspace';
+
 import {
+  type SurveyCardCapabilitySubject,
+  type SurveyCardViewer,
   canEditSurveyCard,
   canManageSurveyAccessCard,
   canViewSurveyAnalyticsCard,
 } from './survey-list-capability';
 
-const teamSurvey = {
+const teamSurvey: SurveyCardCapabilitySubject = {
   ownerUserId: 'owner-1',
-  visibility: 'team' as const,
+  visibility: 'team',
   teamId: 'team-1',
 };
 
+const teamScope: WorkScope = { kind: 'team', teamId: 'team-1' };
+const systemScope: WorkScope = { kind: 'system' };
+
+function viewer(overrides: Partial<SurveyCardViewer> = {}): SurveyCardViewer {
+  return {
+    scope: teamScope,
+    currentUserId: 'member-9',
+    isSuperadmin: false,
+    leaderTeamIds: [],
+    ...overrides,
+  };
+}
+
 describe('canEditSurveyCard', () => {
   it('슈퍼어드민은 항상 true', () => {
-    expect(canEditSurveyCard(teamSurvey, { kind: 'system' }, 'su-1', true)).toBe(true);
-  });
-
-  it('본인 소유 설문은 범위와 무관하게 true', () => {
-    expect(canEditSurveyCard(teamSurvey, { kind: 'system' }, 'owner-1', false)).toBe(true);
-  });
-
-  it('지금 보고 있는 팀의 팀 공개 설문은 true', () => {
     expect(
-      canEditSurveyCard(teamSurvey, { kind: 'team', teamId: 'team-1' }, 'member-9', false),
+      canEditSurveyCard(
+        teamSurvey,
+        viewer({ scope: systemScope, currentUserId: 'su-1', isSuperadmin: true }),
+      ),
     ).toBe(true);
   });
 
-  it('초대 전용 설문은 비소유자에게 false — 팀원에게만 숨김이 어휘의 뜻', () => {
+  it('본인 소유 설문은 범위와 무관하게 true', () => {
     expect(
-      canEditSurveyCard(
-        { ...teamSurvey, visibility: 'invite_only' },
-        { kind: 'team', teamId: 'team-1' },
-        'member-9',
-        false,
-      ),
-    ).toBe(false);
+      canEditSurveyCard(teamSurvey, viewer({ scope: systemScope, currentUserId: 'owner-1' })),
+    ).toBe(true);
+  });
+
+  it('지금 보고 있는 팀의 팀 공개 설문은 true', () => {
+    expect(canEditSurveyCard(teamSurvey, viewer())).toBe(true);
+  });
+
+  it('초대 전용 설문은 비소유자에게 false — 팀원에게만 숨김이 어휘의 뜻', () => {
+    expect(canEditSurveyCard({ ...teamSurvey, visibility: 'invite_only' }, viewer())).toBe(false);
   });
 
   it('소유자를 모르는 옛 설문(0089 이전)은 팀 공개 판정으로만 연다', () => {
     expect(
       canEditSurveyCard(
         { ...teamSurvey, ownerUserId: null },
-        { kind: 'team', teamId: 'team-2' },
-        'member-9',
-        false,
+        viewer({ scope: { kind: 'team', teamId: 'team-2' } }),
       ),
     ).toBe(false);
   });
 });
 
 /**
- * 분석 화면은 responses.view 까지 요구하므로(Codex 적대적 리뷰) 「분석」 버튼은 수정 버튼보다
- * 좁게 열려야 한다. 특히 **팀 공개 설문의 팀원은 수정은 되는데 분석은 안 된다** — 두 근사가
- * 같아지는 순간 팀원이 누를 때마다 404 로 떨어진다.
+ * 「분석」과 「공유 설정의 범위 세그먼트」는 **오늘 결과가 같다**(둘 다 전권 세 열). 이유는
+ * 다르다 — 분석은 responses.view 를, 공유는 survey.manageAccess 를 근사하고 참여자
+ * (티켓 18)는 앞의 것만 갖는다. 그래서 케이스는 한 번만 적고 두 함수에 함께 물어, 오늘의
+ * 동치를 명시적으로 못 박는다. 갈리는 날 이 표가 그 자리에서 빨개진다.
  */
-describe('canViewSurveyAnalyticsCard', () => {
-  const teamScope = { kind: 'team' as const, teamId: 'team-1' };
+describe('전권 세 열 근사 — 분석 · 공유 범위', () => {
+  const cases: ReadonlyArray<[string, SurveyCardViewer, SurveyCardCapabilitySubject, boolean]> = [
+    [
+      '슈퍼어드민은 항상 true',
+      viewer({ scope: systemScope, isSuperadmin: true }),
+      teamSurvey,
+      true,
+    ],
+    ['소유 팀에 있는 소유자는 true', viewer({ currentUserId: 'owner-1' }), teamSurvey, true],
+    ['소유 팀 팀장은 true', viewer({ leaderTeamIds: ['team-1'] }), teamSurvey, true],
+    [
+      '소유 팀 팀장은 invite_only 여도 true',
+      viewer({ leaderTeamIds: ['team-1'] }),
+      { ...teamSurvey, visibility: 'invite_only' },
+      true,
+    ],
+    ['일반 팀원은 false', viewer(), teamSurvey, false],
+    [
+      '타 팀 팀장은 false — 팀장 자격은 그 팀 설문에만 선다',
+      viewer({ leaderTeamIds: ['team-2'] }),
+      teamSurvey,
+      false,
+    ],
+    [
+      '소유 팀에서 빠진 소유자는 false — 서버의 revocation 계약과 같은 방향',
+      viewer({ scope: { kind: 'team', teamId: 'team-2' }, currentUserId: 'owner-1' }),
+      teamSurvey,
+      false,
+    ],
+  ];
 
-  it('슈퍼어드민은 항상 true', () => {
-    expect(canViewSurveyAnalyticsCard(teamSurvey, { kind: 'system' }, 'u-1', true, [])).toBe(true);
+  it.each(cases)('%s', (_name, v, survey, expected) => {
+    expect(canViewSurveyAnalyticsCard(survey, v)).toBe(expected);
+    expect(canManageSurveyAccessCard(survey, v)).toBe(expected);
   });
 
-  it('소유 팀에 있는 소유자는 true', () => {
-    expect(canViewSurveyAnalyticsCard(teamSurvey, teamScope, 'owner-1', false, [])).toBe(true);
-  });
-
-  it('소유 팀 팀장은 true', () => {
-    expect(canViewSurveyAnalyticsCard(teamSurvey, teamScope, 'u-2', false, ['team-1'])).toBe(true);
-  });
-
-  it('팀 공개 설문의 일반 팀원은 false — 수정은 되지만 분석은 안 된다', () => {
-    expect(canEditSurveyCard(teamSurvey, teamScope, 'u-2', false)).toBe(true);
-    expect(canViewSurveyAnalyticsCard(teamSurvey, teamScope, 'u-2', false, [])).toBe(false);
-  });
-
-  it('타 팀 팀장은 false — 팀장 자격은 그 팀 설문에만 선다', () => {
-    expect(canViewSurveyAnalyticsCard(teamSurvey, teamScope, 'u-2', false, ['team-2'])).toBe(false);
-  });
-});
-
-/**
- * 공유 설정의 공개 범위 세그먼트는 서버의 `survey.manageAccess` 를 근사한다. 팀 공개 설문의
- * 팀원이 여기를 통과하면 「내가 못 만질 설문을 나만 볼 수 있게」 만들 수 있으므로, 수정
- * 근사보다 좁아야 한다.
- */
-describe('canManageSurveyAccessCard', () => {
-  const teamScope = { kind: 'team' as const, teamId: 'team-1' };
-
-  it('슈퍼어드민은 항상 true', () => {
-    expect(canManageSurveyAccessCard(teamSurvey, { kind: 'system' }, 'u-1', true, [])).toBe(true);
-  });
-
-  it('소유 팀에 있는 소유자는 true', () => {
-    expect(canManageSurveyAccessCard(teamSurvey, teamScope, 'owner-1', false, [])).toBe(true);
-  });
-
-  it('소유 팀 팀장은 true — invite_only 여도 같다', () => {
-    expect(canManageSurveyAccessCard(teamSurvey, teamScope, 'u-2', false, ['team-1'])).toBe(true);
-    expect(
-      canManageSurveyAccessCard(
-        { ...teamSurvey, visibility: 'invite_only' },
-        teamScope,
-        'u-2',
-        false,
-        ['team-1'],
-      ),
-    ).toBe(true);
-  });
-
-  it('팀 공개 설문의 일반 팀원은 false — 편집은 되지만 공개 범위는 못 바꾼다', () => {
-    expect(canEditSurveyCard(teamSurvey, teamScope, 'u-2', false)).toBe(true);
-    expect(canManageSurveyAccessCard(teamSurvey, teamScope, 'u-2', false, [])).toBe(false);
-  });
-
-  it('소유 팀에서 빠진 소유자는 false — 서버의 revocation 계약과 같은 방향', () => {
-    expect(
-      canManageSurveyAccessCard(teamSurvey, { kind: 'team', teamId: 'team-2' }, 'owner-1', false, []),
-    ).toBe(false);
+  /**
+   * 두 근사는 `canEditSurveyCard` 보다 **좁아야** 한다. 같아지는 순간 팀원이 「분석」을
+   * 누르면 404 로 떨어지고(responses.view 없음), 공개 범위를 초대 전용으로 바꿔 자기가
+   * 못 고치는 설문을 팀에서 숨길 수 있다.
+   */
+  it('팀 공개 설문의 일반 팀원은 편집은 되지만 분석·공개 범위는 안 된다', () => {
+    const v = viewer();
+    expect(canEditSurveyCard(teamSurvey, v)).toBe(true);
+    expect(canViewSurveyAnalyticsCard(teamSurvey, v)).toBe(false);
+    expect(canManageSurveyAccessCard(teamSurvey, v)).toBe(false);
   });
 });

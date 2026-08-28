@@ -9,8 +9,8 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { cn } from '@/lib/utils';
 import {
   SURVEY_VISIBILITY_LABEL,
-  surveyVisibilityValues,
   type SurveyVisibility,
+  surveyVisibilityValues,
 } from '@/shared/contracts/workspace';
 
 import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
@@ -38,6 +38,14 @@ const VISIBILITY_ICON: Record<SurveyVisibility, typeof Users> = {
 
 /**
  * 공유 설정 모달 (.pen FLOW 4-2, 역할 모델 v2 티켓 16).
+ *
+ * **왜 workspace 가 아니라 여기 사는가** — PRD 파일 맵은 공유 모달을 `features/workspace` 로
+ * 적었지만 그 배치는 실현 불가능하다. 입구가 설문 카드 케밥(.pen 4-1)인데 survey-builder 는
+ * workspace 를 import 할 수 없고(ESLint 방향: builder → response → renderer) 반대도 마찬가지라,
+ * workspace 에 두면 카드가 이 모달을 열 방법이 없다. 설문 그룹 UI 가 같은 이유로
+ * `survey-list/groups` 에 사는 선례다 — 서버 도메인이 workspace 인 것과 화면이 어디 사는가는
+ * 별개다. 티켓 18·21·24 의 참여자·게스트·실사 검색도 **RPC 로** workspace 표면을 부르므로
+ * (`client.workspace.*`, 그룹 쿼리와 같은 경로) feature import 는 필요 없다.
  *
  * 지금은 공개 범위 한 블록뿐이다. 참여자(내부)·클라이언트(게스트)·실사 블록과 푸터의
  * 「소유권 이전」은 각각 티켓 18·21·24·19 가 이 골격 위에 얹는다 — 핸들러 없는 자리를

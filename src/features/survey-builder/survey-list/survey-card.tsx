@@ -39,6 +39,7 @@ import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
 import {
+  type SurveyCardViewer,
   canEditSurveyCard,
   canManageSurveyAccessCard,
   canViewSurveyAnalyticsCard,
@@ -46,11 +47,8 @@ import {
 
 interface SurveyCardProps {
   survey: SurveyListItem;
-  scope: WorkScope;
-  currentUserId: string | null;
-  isSuperadmin: boolean;
-  /** 내가 팀장인 팀 — 「분석」 노출 근사에 쓴다(팀원과 팀장의 응답 열람 권한이 갈린다). */
-  leaderTeamIds: readonly string[];
+  /** 지금 목록을 보고 있는 사람 — 버튼 노출 근사 셋이 함께 본다. */
+  viewer: SurveyCardViewer;
   onDelete: (surveyId: string) => void;
   onDuplicate: (surveyId: string) => void;
   isDuplicating: boolean;
@@ -96,32 +94,19 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  */
 export function SurveyCard({
   survey,
-  scope,
-  currentUserId,
-  isSuperadmin,
-  leaderTeamIds,
+  viewer,
   onDelete,
   onDuplicate,
   isDuplicating,
   groups,
   onMoveToGroup,
 }: SurveyCardProps) {
-  const canEdit = canEditSurveyCard(survey, scope, currentUserId, isSuperadmin);
+  const { scope, currentUserId } = viewer;
+  const canEdit = canEditSurveyCard(survey, viewer);
   // 분석 화면은 responses.view 까지 요구한다 — 팀원은 못 들어가므로 버튼도 잠근다.
-  const canViewAnalytics = canViewSurveyAnalyticsCard(
-    survey,
-    scope,
-    currentUserId,
-    isSuperadmin,
-    leaderTeamIds,
-  );
-  const canManageAccess = canManageSurveyAccessCard(
-    survey,
-    scope,
-    currentUserId,
-    isSuperadmin,
-    leaderTeamIds,
-  );
+  const canViewAnalytics = canViewSurveyAnalyticsCard(survey, viewer);
+  // 공개 범위 변경은 survey.manageAccess — 팀원은 편집은 되지만 여기는 잠긴다.
+  const canManageAccess = canManageSurveyAccessCard(survey, viewer);
   const [sharingOpen, setSharingOpen] = useState(false);
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
