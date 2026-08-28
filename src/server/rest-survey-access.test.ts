@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * REST 관문 어댑터 (티켓 11).
@@ -60,33 +60,25 @@ describe('checkSurveyCapabilityRest', () => {
   });
 });
 
-describe('checkScopedSurveyCapabilityRest — 게스트 허용 REST 표면 (티켓 11)', () => {
+describe('checkScopedSurveyCapabilityRest — export 3종의 문 (티켓 11·21)', () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllEnvs());
 
-  it('env grant 게스트는 grant 설문이면 capability 판정 없이 통과한다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    await expect(
-      checkScopedSurveyCapabilityRest({ ...user, id: 'guest-1' }, SURVEY_ID, 'export.download'),
-    ).resolves.toBeNull();
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
-  });
+  // 티켓 11 은 게스트의 grant 설문 export 를 현행 유지로 남겨 뒀다(콘솔 다운로드 버튼이
+  // 살아 있어서). 티켓 21 이 그 분기를 걷었다 — 스펙 §8 의 「게스트 export 항상 차단」이
+  // 여기서 참이 된다.
 
-  it('env grant 게스트는 grant 밖 설문이면 403 — 종전 판정 유지', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
-    const denied = await checkScopedSurveyCapabilityRest(
-      { ...user, id: 'guest-1' },
-      SURVEY_ID,
-      'export.download',
-    );
-    expect(denied?.status).toBe(403);
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
-  });
-
-  it('grant 없는 내부 계정은 capability 관문에 위임한다', async () => {
+  it('주체가 누구든 capability 관문에 위임한다', async () => {
     vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('not_found'));
     const denied = await checkScopedSurveyCapabilityRest(user, SURVEY_ID, 'export.download');
     expect(denied?.status).toBe(404);
     expect(assertSurveyCapability).toHaveBeenCalledWith(user, SURVEY_ID, 'export.download');
+  });
+
+  it('게스트 계정에게 우회로가 남아 있지 않다', async () => {
+    const guest = { ...user, id: 'guest-1', userType: 'guest' as const };
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('forbidden'));
+    const denied = await checkScopedSurveyCapabilityRest(guest, SURVEY_ID, 'export.download');
+    expect(denied?.status).toBe(403);
+    expect(assertSurveyCapability).toHaveBeenCalledWith(guest, SURVEY_ID, 'export.download');
   });
 });

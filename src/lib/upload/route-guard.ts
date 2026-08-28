@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { requireActiveAccount, requireAuth } from '@/lib/auth';
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import type { RouteLogContext } from '@/lib/logger';
+import { type AuthUser, isInternalUser } from '@/shared/contracts/auth';
 
 /**
  * R2 업로드 라우트 4종(image·mail-attachment·notice-attachment·avatar)의 진입 가드.
@@ -29,13 +29,19 @@ export type UploadRouteGuardResult =
   | { ok: false; response: NextResponse };
 
 /**
- * 메일 첨부·본문 이미지 — 게스트도 올린다. tmp 네임스페이스 한정이라 설문 스코프 없이 허용.
- * requireAuth 가 이미 세션 + active 를 보장하므로 추가 제한이 없다(oRPC scoped 와 동일 축).
+ * 메일 첨부·본문 이미지 — tmp 네임스페이스 한정이라 설문 스코프 없이 허용한다.
+ * requireAuth 가 이미 세션 + active + 내부 계정을 보장하므로 추가 제한이 없다.
  */
 export const allowActiveUser = (): boolean => true;
 
-/** 공지 첨부 — 게스트 차단. oRPC authed 와 동일 정책. */
-export const allowAdminOnly = (userId: string): boolean => !isGuestUser(userId);
+/**
+ * 공지 첨부 — 내부 계정 전용. oRPC authed 와 동일 정책.
+ *
+ * 티켓 21 이후 requireAuth 가 이미 같은 것을 보장하므로 이 술어는 두 번째 겹이다. 굳이
+ * 남기는 이유는 이 자리가 **정책을 적는 자리**이기 때문이다 — 위 allowActiveUser 와 나란히
+ * 서 있어야 두 업로드 표면의 청중이 다르다는 사실이 코드에 남는다.
+ */
+export const allowAdminOnly = (user: AuthUser): boolean => isInternalUser(user.userType);
 
 /**
  * 아바타 업로드 — 세 계정 유형 공통 진입 가드 (oRPC account 베이스의 REST 짝).
@@ -51,11 +57,11 @@ export async function guardAvatarUploadRoute(
   try {
     const user = await requireActiveAccount();
     // 403 이 없는 문이라 바인딩만 남긴다 — 남용 추적에 행위자가 필요하다.
-    // role 은 다른 업로드 라우트와 같은 어휘를 쓰고(guest|admin), 계정 유형은 별도 필드로
+    // role 은 rpc 로그와 같은 어휘를 쓰고(admin|guest|fieldwork), 계정 유형은 별도 필드로
     // 싣는다 — 같은 필드에 두 어휘가 섞이면 로그 분석이 갈린다.
     ctx.bind({
       userId: user.id,
-      role: isGuestUser(user.id) ? 'guest' : 'admin',
+      role: logRoleOf(user),
       userType: user.userType,
     });
     return { ok: true, userId: user.id };
@@ -69,12 +75,11 @@ export async function guardAvatarUploadRoute(
 
 export async function guardUploadRoute(
   ctx: RouteLogContext,
-  allow: (userId: string) => boolean,
+  allow: (user: AuthUser) => boolean,
 ): Promise<UploadRouteGuardResult> {
-  let userId: string;
+  let user: AuthUser;
   try {
-    const user = await requireAuth();
-    userId = user.id;
+    user = await requireAuth();
   } catch {
     return {
       ok: false,
@@ -84,15 +89,19 @@ export async function guardUploadRoute(
 
   // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
   // 업로드 남용·권한 설정 오류 추적이 가능하다.
-  ctx.bind({ userId, role: isGuestUser(userId) ? 'guest' : 'admin' });
+  ctx.bind({ userId: user.id, role: logRoleOf(user) });
 
-  // 게스트가 admin 전용 업로드 표면(공지 첨부)을 두드리는 것을 차단한다.
-  if (!allow(userId)) {
+  if (!allow(user)) {
     return {
       ok: false,
       response: NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 }),
     };
   }
 
-  return { ok: true, userId };
+  return { ok: true, userId: user.id };
+}
+
+/** 로그용 역할 — rpc-logging 의 어휘와 같다(internal 만 admin). */
+function logRoleOf(user: AuthUser): string {
+  return isInternalUser(user.userType) ? 'admin' : user.userType;
 }

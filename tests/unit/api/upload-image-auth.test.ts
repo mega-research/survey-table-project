@@ -1,18 +1,23 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const { authState } = vi.hoisted(() => ({
-  authState: { user: null as null | { id: string } },
+  authState: { user: null as null | { id: string; userType?: 'internal' | 'guest' | 'fieldwork' } },
 }));
 
+// 실물 requireAuth 와 같은 정책 — 세션 + active + **내부 계정**.
 vi.mock('@/lib/auth', () => ({
   requireAuth: vi.fn(async () => {
-    if (!authState.user) throw new Error('인증이 필요합니다.');
+    const user = authState.user;
+    if (!user) throw new Error('인증이 필요합니다.');
+    const userType = user.userType ?? 'internal';
+    if (userType !== 'internal') throw new Error('인증이 필요합니다.');
     return {
-      id: authState.user.id,
+      id: user.id,
       email: 'a@b.com',
       name: '테스트',
       status: 'active',
       isSuperadmin: false,
+      userType,
     };
   }),
 }));
@@ -57,17 +62,16 @@ describe('POST /api/upload/image requires auth', () => {
     expect(response.status).toBe(401);
   });
 
-  it('게스트도 본문 이미지 업로드는 통과한다 - 401/403 이 아니다', async () => {
-    authState.user = { id: 'guest-1' };
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+  // 티켓 21 부터 업로드 라우트의 청중은 내부 계정뿐이다 — 게스트는 requireAuth 에서 막힌다.
+  it('게스트 계정은 401 이다', async () => {
+    authState.user = { id: 'guest-1', userType: 'guest' };
 
     const response = await POST(buildRequest() as never);
-    expect([401, 403]).not.toContain(response.status);
+    expect(response.status).toBe(401);
   });
 
   it('access 로그에 행위자(userId·role)가 바인딩된다', async () => {
-    authState.user = { id: 'guest-1' };
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    authState.user = { id: 'admin-1' };
     captured.contexts.length = 0;
 
     await POST(buildRequest() as never);
@@ -75,7 +79,7 @@ describe('POST /api/upload/image requires auth', () => {
     // 래퍼의 access 로그 시점(ctx.log 접근)에 병합된 컨텍스트가 캡처된다
     const last = captured.contexts[captured.contexts.length - 1];
     expect(last).toBeDefined();
-    expect(last?.['userId']).toBe('guest-1');
-    expect(last?.['role']).toBe('guest');
+    expect(last?.['userId']).toBe('admin-1');
+    expect(last?.['role']).toBe('admin');
   });
 });

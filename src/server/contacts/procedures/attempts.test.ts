@@ -98,12 +98,14 @@ describe('attempts procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 add 가 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s-1');
+  // 관문(mock)이 통과시킨 뒤에도 서비스로 넘어가는 **파티션 플래그**는 계정 유형에서 나온다
+  // (티켓 21 — 예전에는 env grant 목록을 다시 읽었다). 실제 게스트 계정은 이 표면의
+  // capability(contacts.writeAttempts)를 갖지 못해 관문에서 막힌다.
+  it('게스트 계정이면 실데이터 파티션 플래그가 서비스로 전달된다', async () => {
     vi.mocked(svc.addAttempt).mockResolvedValue({ id: 'att-1', attemptNo: 1 } as never);
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = {
       contactTargetId: 'ct-1',

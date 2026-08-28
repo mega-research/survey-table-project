@@ -128,12 +128,12 @@ describe('contacts.targets procedures', () => {
     });
   });
 
-  it('게스트는 grant 설문이면 add 가 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+  // 관문(mock)이 통과시킨 뒤에도 파티션 플래그는 계정 유형에서 나온다(티켓 21).
+  it('게스트 계정이면 실데이터 파티션 플래그가 서비스로 전달된다', async () => {
     vi.mocked(svc.addContactTarget).mockResolvedValue({ id: 'ct-1', resid: 42 } as never);
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
@@ -141,11 +141,10 @@ describe('contacts.targets procedures', () => {
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 
-  it('게스트는 grant 설문이어도 remove 가 FORBIDDEN 이다 - authed 유지', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+  it('게스트 계정은 remove 가 FORBIDDEN 이다 - authed 유지', async () => {
     const client = createRouterClient(
       { targets },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     await expect(
       client.targets.remove({ surveyId: 'sv-1', id: 'ct-1' }),

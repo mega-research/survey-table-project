@@ -10,7 +10,6 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/server
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
@@ -41,16 +40,18 @@ async function handleExport(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + 설문 관문. requireAuth 가 세션 + status='active' 를 보장하고, 관문이
-    // env grant 게스트는 grant 일치로·내부 계정은 capability(export.download)로 판정한다
-    // (티켓 11) — oRPC 표면과 같은 정책이라 이 REST 라우트가 형제 우회 경로가 되지 않는다.
+    // 인증 + 설문 관문. requireAuth 가 세션 + active + **내부 계정**을 보장하고, 관문이
+    // capability(export.download)로 판정한다 — oRPC 표면과 같은 정책이라 이 REST 라우트가
+    // 형제 우회 경로가 되지 않는다. 게스트·실사에게 export 는 항상 차단이다(스펙 §8):
+    // 문 앞에서 유형으로 한 번, 들어와도 capability 로 한 번 (티켓 21).
+    // role 이 상수인 것도 그 결과다 — 이 문을 지난 사람은 언제나 내부 계정이다.
     const user = await requireAuth();
     const { surveyId } = await params;
     // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는
     // 별개의 운영 기록. 로그에는 쿼리 파라미터·행수만 싣는다 (응답 본문 금지).
     ctx.bind({
       userId: user.id,
-      role: isGuestUser(user.id) ? 'guest' : 'admin',
+      role: 'admin',
       surveyId,
     });
     const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');

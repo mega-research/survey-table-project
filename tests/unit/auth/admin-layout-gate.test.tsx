@@ -74,40 +74,8 @@ describe('AdminLayout 재검증', () => {
     expect(readSessionUser).not.toHaveBeenCalled();
   });
 
-  it('게스트가 grant 밖 경로에 오면 원래 목적지를 실어 강제 로그아웃으로 보낸다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'admin-1:survey-a');
-    readSessionUser.mockResolvedValue(ACTIVE);
-    await expect(render('/admin/billing/mail-cost')).rejects.toThrow(
-      'REDIRECT:/admin/logout?redirect=%2Fadmin%2Fbilling%2Fmail-cost',
-    );
-  });
-
-  it('prefetch 는 로그아웃 라우트로 보내지 않는다 — 몰래 세션이 지워지는 사고 방지', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'admin-1:survey-a');
-    readSessionUser.mockResolvedValue(ACTIVE);
-    resetHeaders();
-    requestHeaders.set('x-pathname', '/admin/billing/mail-cost');
-    requestHeaders.set('next-router-prefetch', '1');
-    await expect(
-      AdminLayout({ children: 'PAGE' as unknown as React.ReactNode }),
-    ).rejects.toThrow('REDIRECT:/admin/login?redirect=%2Fadmin%2Fbilling%2Fmail-cost');
-  });
-
-  it('게스트가 grant 설문 안의 차단 화면에 오면 그 설문 overview 로 되돌린다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'admin-1:survey-a');
-    readSessionUser.mockResolvedValue(ACTIVE);
-    await expect(render('/admin/surveys/survey-a/operations/quota')).rejects.toThrow(
-      'REDIRECT:/admin/surveys/survey-a/operations/overview',
-    );
-  });
-
-  it('게스트의 grant 설문 콘솔은 통과한다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'admin-1:survey-a');
-    readSessionUser.mockResolvedValue(ACTIVE);
-    await expect(
-      render('/admin/surveys/survey-a/operations/contacts'),
-    ).resolves.toBeDefined();
-  });
+  // 게스트의 경로 화이트리스트·강제 로그아웃 분기는 티켓 21 에서 사라졌다 —
+  // 아래 「계정 유형 게이트」가 그 일을 대신한다(자기 홈으로 리다이렉트).
 });
 
 describe('AdminLayout 계정 유형 게이트', () => {

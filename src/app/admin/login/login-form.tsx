@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authClient } from '@/lib/auth/client';
-import { GUEST_FOREIGN_SURVEY_REASON } from '@/lib/auth/guest-grants';
 
 /**
  * 인증 실패 문구는 항상 하나다 — 계정 미존재·비밀번호 불일치·비활성 계정
@@ -16,20 +15,16 @@ import { GUEST_FOREIGN_SURVEY_REASON } from '@/lib/auth/guest-grants';
  */
 const SIGN_IN_FAILED = '이메일 또는 비밀번호가 올바르지 않습니다.';
 
-const FOREIGN_SURVEY_MESSAGE =
-  '해당 설문지에 권한이 없습니다. 해당 설문 담당 계정으로 로그인해 주세요.';
-
 interface LoginFormProps {
   /** 로그인 후 복귀할 경로. proxy 가 붙인 redirect 쿼리에서 전달된다. */
   redirectTo: string;
-  /** 되돌려진 사유. 현재는 게스트의 무권한 설문 콘솔 진입뿐이다. */
-  reason: string;
 }
 
-export function LoginForm({ redirectTo, reason }: LoginFormProps) {
-  const [error, setError] = useState<string | null>(
-    reason === GUEST_FOREIGN_SURVEY_REASON ? FOREIGN_SURVEY_MESSAGE : null,
-  );
+// 「담당 설문이 아닙니다」 안내는 티켓 21 에서 사라졌다 — 그 문구는 env grant 게스트를 강제
+// 로그아웃시키던 동선의 것이고, 계정 모델의 게스트는 로그아웃 대신 자기 홈(/guest)으로 간다.
+
+export function LoginForm({ redirectTo }: LoginFormProps) {
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(formData: FormData) {

@@ -2,7 +2,6 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
@@ -42,24 +41,18 @@ export async function checkSurveyCapabilityRest(
 }
 
 /**
- * 게스트 허용 REST 표면용 — assertScopedSurveyCapabilityRpc 의 REST 짝.
+ * 비내부 계정도 지나는 REST 표면용 — assertScopedSurveyCapabilityRpc 의 REST 짝.
  *
- * env grant 게스트는 팀 멤버십이 없어 capability 판정이 항상 거부한다 — grant 일치가
- * 유일한 자격이므로 종전 판정(grant 설문만, 불일치 403)을 그대로 둔다. 내부 계정은
- * capability 관문을 지난다. 스펙 §8 의 "게스트 export 항상 차단"은 게스트 부여가 계정
- * 모델로 바뀌는 티켓 21 의 체크리스트다 — 그 전에 막으면 게스트 콘솔의 살아 있는
- * 다운로드 버튼이 깨진다.
+ * 여기에도 게스트 분기가 있었고 티켓 21 이 걷었다(rpc 짝의 주석 참조). 이 표면들은 export
+ * 3종인데, **게스트에게 export 는 항상 차단**이라는 스펙 §8 의 칸이 이제 두 겹으로 지켜진다 —
+ * `requireAuth` 가 비내부 계정을 아예 들이지 않고, 설령 들어와도 게스트 열에는
+ * `export.download` 가 없다. 예전에는 그 칸이 열려 있었다: env grant 게스트 콘솔의 다운로드
+ * 버튼이 살아 있어 티켓 11 이 현행 유지로 두고 이 티켓에 인계했다.
  */
 export async function checkScopedSurveyCapabilityRest(
   user: SurveyAccessUser,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<NextResponse | null> {
-  if (isGuestUser(user.id)) {
-    if (!canAccessSurvey(user.id, surveyId)) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
-    return null;
-  }
   return checkSurveyCapabilityRest(user, surveyId, capability);
 }

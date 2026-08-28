@@ -3,11 +3,6 @@ import { redirect } from 'next/navigation';
 
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AdminShell } from '@/features/workspace/admin-shell/admin-shell';
-import {
-  GUEST_FORCE_LOGOUT_PATH,
-  getGuestSurveyIds,
-  guestPathRedirect,
-} from '@/lib/auth/guest-grants';
 import { accountHomePath } from '@/lib/auth/account-home';
 import { ACCOUNT_PAGES, AUTH_PAGES } from '@/lib/auth/protected-paths';
 import { readSessionUser } from '@/lib/auth/session';
@@ -54,24 +49,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       redirect(accountHomePath(user.userType));
     }
 
-    // 게스트(설문 단위 grant) — 자기 설문 콘솔 밖은 전부 강제 로그아웃으로 보낸다.
-    // 통과한 경우에도 내부 셸은 입히지 않는다 — 위임받은 설문 콘솔만 보는 계정이다.
-    const grantedSurveyIds = getGuestSurveyIds(user.id);
-    if (grantedSurveyIds.length > 0) {
-      const dest = guestPathRedirect(pathname, grantedSurveyIds);
-      if (dest === GUEST_FORCE_LOGOUT_PATH) {
-        // 링크 prefetch 는 로그아웃 라우트로 보내지 않는다 — prefetch 가 리다이렉트를
-        // 따라가 세션을 지우는 사고 방지. 로그인으로 직행.
-        const isPrefetch =
-          requestHeaders.get('next-router-prefetch') !== null ||
-          requestHeaders.get('purpose') === 'prefetch';
-        const target = `?redirect=${encodeURIComponent(pathname)}`;
-        redirect(isPrefetch ? `/admin/login${target}` : `${GUEST_FORCE_LOGOUT_PATH}${target}`);
-      }
-      if (dest !== null) {
-        redirect(dest);
-      }
-    } else if (isInternalUser(user.userType)) {
+    // 여기까지 온 비내부 계정은 ACCOUNT_PAGES(프로필)뿐이다 — 셸 없이 그대로 연다.
+    // 티켓 21 전에는 이 자리에 env grant 게스트의 경로 화이트리스트와 강제 로그아웃 분기가
+    // 있었다. 게스트가 계정 유형이 되면서 위의 유형 게이트 한 줄이 그 일을 대신한다.
+    if (isInternalUser(user.userType)) {
       return (
         <QueryProvider>
           <InternalShell user={user}>{children}</InternalShell>

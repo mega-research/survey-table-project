@@ -1,8 +1,8 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
+import type { UserType } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 
@@ -19,19 +19,17 @@ import type { ORPCContext } from './context';
  */
 
 /**
- * 로그용 role 판정 — 접근제어와 같은 헬퍼(guest-grants)를 재사용한다.
+ * 로그용 role 판정 — **계정 유형**이 곧 역할이다 (티켓 21).
  *
- * grant-first: 게스트 grant 보유자는 항상 guest. 그 외 인증 계정은 admin
- * (authed 베이스가 세션 + active 만 보므로 접근제어 판정과 같은 축이다).
+ * 예전에는 env grant 목록(guest-grants)을 다시 읽어 게스트를 가렸다. 계정 모델로 바뀌면서
+ * 그 출처가 세션 자신이 됐고, 그 덕에 실사도 뭉개지지 않고 자기 이름으로 남는다.
  * 비인증은 anonymous.
  *
- * 향후 superadmin/admin/게스트·실사 RBAC 확장 시 이 함수만 교체한다 — 소비처는
- * 열린 string 으로 취급 (LogContext.role 참조).
+ * 소비처는 열린 string 으로 취급한다 (LogContext.role 참조).
  */
-function resolveLogRole(userId: string | undefined): string {
-  if (!userId) return 'anonymous';
-  if (isGuestUser(userId)) return 'guest';
-  return 'admin';
+function resolveLogRole(user: { userType: UserType } | null | undefined): string {
+  if (!user) return 'anonymous';
+  return user.userType === 'internal' ? 'admin' : user.userType;
 }
 
 /**
@@ -56,7 +54,7 @@ export const rpcLoggingMiddleware = os
     const fields = {
       rpc: path.join('.'),
       userId: context.user?.id,
-      role: resolveLogRole(context.user?.id),
+      role: resolveLogRole(context.user),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
       surveyId: extractSurveyIdOrUndefined(input),
     };

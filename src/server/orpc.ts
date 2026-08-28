@@ -1,6 +1,5 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
 import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
@@ -95,21 +94,22 @@ function requireActiveUser(user: ORPCContext['user']): NonNullable<ORPCContext['
  *    있으므로 요청 시점에 다시 본다.
  * 3) userType === 'internal' 검사 — guest/fieldwork 계정은 내부 표면 전체에서 거부한다.
  *    각자의 콘솔(티켓 22·25)은 scoped 등 자기 가드로 열린다. 유형별 라우팅은 티켓 05.
- * 4) 게스트 grant 보유자(env 모델)는 admin 전용 표면에서 거부한다(FORBIDDEN).
- *    게스트 허용 표면은 scoped 담당. 이 축은 티켓 21 에서 계정 유형으로 합쳐진다.
+ *
+ * 게스트 판정이 여기서 한 줄 사라진 것이 티켓 21 의 자국이다 — 예전에는 env grant 보유자를
+ * userId 로 따로 걸렀다. 지금은 계정 유형이 곧 게스트라 위의 3)이 그 일을 함께 한다.
  *
  * 통과하면 context.user가 non-null로 좁혀진다.
  */
 export const authed = base.use(({ context, next }) => {
   const user = requireActiveUser(context.user);
-  if (!isInternalUser(user.userType) || isGuestUser(user.id)) {
+  if (!isInternalUser(user.userType)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   return next({ context: { user } });
 });
 
 /**
- * 슈퍼어드민 베이스 — authed(세션 + active + 게스트 아님) + isSuperadmin.
+ * 슈퍼어드민 베이스 — authed(세션 + active + 내부 계정) + isSuperadmin.
  *
  * 전역 관리 표면(사용자 관리·계정 상태 전이·실사 업체 관리) 전용이다. 슈퍼어드민이
  * 아닌 내부 계정은 FORBIDDEN — 권한 없음과 존재 여부를 구분하지 않는다(authed 와 같은 코드).

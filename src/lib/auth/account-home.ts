@@ -56,8 +56,8 @@ export function isAccountTypePath(pathname: string, userType: UserType | undefin
  * 게스트·실사는 자기 구역과 공통 계정 화면(프로필)만 존중하고 나머지는 자기 홈으로 접는다 —
  * 내부 경로로 그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가게 된다.
  *
- * 설문 단위 env grant 게스트는 이 함수를 지나지 않는다 — 그 모델은 grant 설문 콘솔이
- * 목적지라 `guestPostLoginRedirect` 가 따로 판정한다(티켓 21 에서 계정 유형으로 합쳐진다).
+ * 티켓 21 부터 **모든 계정이 이 함수 하나를 지난다**. 예전에는 설문 단위 env grant 게스트가
+ * grant 설문 콘솔을 목적지로 삼아 따로 판정됐다.
  */
 export function resolvePostLoginDestination(
   userType: UserType | undefined,
@@ -65,8 +65,8 @@ export function resolvePostLoginDestination(
 ): string {
   const home = accountHomePath(userType);
   const path = target.split(/[?#]/)[0] ?? target;
-  // 로그인·로그아웃으로 되돌리면 그대로 로그인 화면을 오가는 루프가 된다.
-  if (!path || AUTH_PAGES.has(path) || path === '/admin/logout') return home;
+  // 로그인 화면으로 되돌리면 그대로 로그인 화면을 오가는 루프가 된다.
+  if (!path || AUTH_PAGES.has(path)) return home;
   // 자기 계정 화면은 유형과 무관하게 열린다.
   if (ACCOUNT_PAGES.has(path)) return target;
   if (userType === 'internal') return target;

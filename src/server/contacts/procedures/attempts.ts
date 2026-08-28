@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
-import { isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestAccount } from '@/shared/contracts/auth';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
@@ -34,7 +34,7 @@ const add = scoped
     // 결과코드 회차 쓰기는 실사원도 갖는 유일한 쓰기라 contacts.manage 가 아니라 writeAttempts.
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.writeAttempts');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.addAttempt(input, isGuestUser(context.user.id)).catch(rethrowAttemptNotFound);
+    return svc.addAttempt(input, isGuestAccount(context.user.userType)).catch(rethrowAttemptNotFound);
   });
 
 const update = scoped
@@ -42,7 +42,7 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.writeAttempts');
-    await svc.updateAttempt(input, isGuestUser(context.user.id)).catch(rethrowAttemptNotFound);
+    await svc.updateAttempt(input, isGuestAccount(context.user.userType)).catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });
 
@@ -51,7 +51,7 @@ const remove = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.writeAttempts');
-    await svc.deleteAttempt(input, isGuestUser(context.user.id)).catch(rethrowAttemptNotFound);
+    await svc.deleteAttempt(input, isGuestAccount(context.user.userType)).catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });
 

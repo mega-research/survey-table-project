@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveExportColumns } from '@/lib/operations/contacts-export-format';
@@ -40,7 +39,7 @@ async function handleContactsExport(
     // 어떤 값·id 매핑도 싣지 않는다 (contacts-export.server.ts 의 기존 원칙과 동일).
     ctx.bind({
       userId: user.id,
-      role: isGuestUser(user.id) ? 'guest' : 'admin',
+      role: 'admin',
       surveyId,
     });
     // 설문 관문(티켓 11) — env grant 게스트는 grant 일치, 내부 계정은 capability

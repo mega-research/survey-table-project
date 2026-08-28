@@ -185,14 +185,13 @@ describe('operations.control procedures', () => {
     });
   });
 
-  it('게스트는 grant 일치 설문이어도 get 은 FORBIDDEN (테스트 토큰 노출 차단)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 get 이 FORBIDDEN (테스트 토큰 노출 차단)', async () => {
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -202,14 +201,13 @@ describe('operations.control procedures', () => {
     expect(svc.getControlState).not.toHaveBeenCalled();
   });
 
-  it('게스트는 grant 일치 설문이어도 setTestMode 는 FORBIDDEN (authed 유지)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 setTestMode 가 FORBIDDEN (authed 유지)', async () => {
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -219,14 +217,13 @@ describe('operations.control procedures', () => {
     expect(svc.setTestMode).not.toHaveBeenCalled();
   });
 
-  it('게스트는 grant 일치 설문이어도 disable 은 FORBIDDEN (테스트 데이터 삭제 차단)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 disable 이 FORBIDDEN (테스트 데이터 삭제 차단)', async () => {
     const client = createRouterClient(
       { control },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -236,11 +233,10 @@ describe('operations.control procedures', () => {
     expect(svc.disableTestWorkspace).not.toHaveBeenCalled();
   });
 
-  it('게스트는 grant 일치 설문이어도 setPaused 는 FORBIDDEN (authed 유지)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 setPaused 가 FORBIDDEN (authed 유지)', async () => {
     const client = createRouterClient(
       { control },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     await expect(
       client.control.setPaused({ surveyId: SURVEY_ID, isPaused: true }),

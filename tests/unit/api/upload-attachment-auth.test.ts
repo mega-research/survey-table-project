@@ -1,18 +1,23 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const { authState } = vi.hoisted(() => ({
-  authState: { user: null as null | { id: string } },
+  authState: { user: null as null | { id: string; userType?: 'internal' | 'guest' | 'fieldwork' } },
 }));
 
+// 실물 requireAuth 와 같은 정책 — 세션 + active + **내부 계정**.
 vi.mock('@/lib/auth', () => ({
   requireAuth: vi.fn(async () => {
-    if (!authState.user) throw new Error('인증이 필요합니다.');
+    const user = authState.user;
+    if (!user) throw new Error('인증이 필요합니다.');
+    const userType = user.userType ?? 'internal';
+    if (userType !== 'internal') throw new Error('인증이 필요합니다.');
     return {
-      id: authState.user.id,
+      id: user.id,
       email: 'a@b.com',
       name: '테스트',
       status: 'active',
       isSuperadmin: false,
+      userType,
     };
   }),
 }));
@@ -44,27 +49,34 @@ describe.each([
   });
 });
 
-describe('게스트 허용 범위는 라우트마다 다르다', () => {
-  beforeEach(() => {
-    authState.user = { id: 'guest-1' };
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-  });
-
+/**
+ * 티켓 21 전에는 두 라우트의 게스트 허용 범위가 갈렸다 — 메일 첨부는 열고 공지 첨부는 403.
+ * env grant 게스트가 내부 계정이라 문 안까지 들어왔기 때문이다. 계정 모델에서는 두 문
+ * 모두 requireAuth 의 유형 게이트에서 먼저 닫힌다.
+ */
+describe('업로드 라우트의 청중은 내부 계정뿐이다', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('메일 첨부는 게스트도 올린다 - tmp 네임스페이스 한정', async () => {
-    const res = await mailAttachmentPOST(
-      buildRequest('http://localhost/api/upload/mail-attachment') as never,
-    );
-    expect(res.status).not.toBe(403);
+  it.each([
+    ['mail-attachment', mailAttachmentPOST, 'http://localhost/api/upload/mail-attachment'],
+    ['notice-attachment', noticeAttachmentPOST, 'http://localhost/api/upload/notice-attachment'],
+  ] as const)('%s 는 게스트 계정에 401 이다', async (_name, POST, url) => {
+    authState.user = { id: 'guest-1', userType: 'guest' };
+    const res = await POST(buildRequest(url) as never);
+    expect(res.status).toBe(401);
   });
 
-  it('공지 첨부는 게스트가 403 - oRPC authed 와 같은 정책', async () => {
-    const res = await noticeAttachmentPOST(
+  it('내부 계정은 두 라우트 모두 403 이 아니다', async () => {
+    authState.user = { id: 'admin-1' };
+    const mail = await mailAttachmentPOST(
+      buildRequest('http://localhost/api/upload/mail-attachment') as never,
+    );
+    const notice = await noticeAttachmentPOST(
       buildRequest('http://localhost/api/upload/notice-attachment') as never,
     );
-    expect(res.status).toBe(403);
+    expect(mail.status).not.toBe(403);
+    expect(notice.status).not.toBe(403);
   });
 });

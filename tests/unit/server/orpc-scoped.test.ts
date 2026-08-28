@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
@@ -8,12 +8,10 @@ import { authed, scoped } from '@/server/orpc';
 /**
  * scoped/authed 베이스의 인증·상태·유형 게이트.
  *
- * 설문 접근 판정 자체는 베이스가 아니라 handler 첫 줄의 관문이 한다 — env grant 게스트와
- * capability 를 가르는 assertScopedSurveyCapabilityRpc 는 src/server/rpc-survey-access.test.ts,
- * capability 매트릭스는 src/server/survey-access.test.ts 가 검증한다(티켓 10).
+ * 설문 접근 판정 자체는 베이스가 아니라 handler 첫 줄의 관문이 한다 —
+ * assertScopedSurveyCapabilityRpc 는 src/server/rpc-survey-access.test.ts,
+ * capability 매트릭스는 src/server/survey-access.test.ts 가 검증한다(티켓 10·21).
  */
-
-afterEach(() => vi.unstubAllEnvs());
 
 function ctx(
   userId: string | null,
@@ -75,9 +73,11 @@ describe('authed 베이스', () => {
     },
   );
 
-  it('게스트 grant 보유자는 admin 전용 표면에서 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
-    const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
+  it('게스트 계정은 admin 전용 표면에서 FORBIDDEN', async () => {
+    const client = createRouterClient(
+      { adminOnly },
+      { context: ctx('guest-1', 'active', 'guest') },
+    );
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

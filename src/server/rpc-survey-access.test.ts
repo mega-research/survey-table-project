@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * RPC 관문 어댑터 (역할 모델 v2 티켓 09).
@@ -60,31 +60,14 @@ describe('assertSurveyCapabilityRpc', () => {
   });
 });
 
-describe('assertScopedSurveyCapabilityRpc — 게스트 허용(scoped) 표면 (티켓 10)', () => {
+describe('assertScopedSurveyCapabilityRpc — 비내부 계정도 지나는 표면 (티켓 10·21)', () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllEnvs());
 
-  it('env grant 게스트는 grant 설문이면 capability 판정 없이 통과한다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    await expect(
-      assertScopedSurveyCapabilityRpc(
-        { ...user, id: 'guest-1' },
-        SURVEY_ID,
-        'contacts.manage',
-      ),
-    ).resolves.toBeUndefined();
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
-  });
+  // 티켓 21 이 이 어댑터의 게스트 분기를 걷었다 — 게스트가 env 설정이 아니라 계정 유형이
+  // 되면서 자격 판정이 코어로 옮겨갔다. 그래서 이 함수에 남은 계약은 「예외 없이 코어에
+  // 위임한다」 하나뿐이고, 그것이 곧 「부여 여부와 무관하게 게스트는 이 문에서 막힌다」다.
 
-  it('env grant 게스트는 grant 밖 설문이면 FORBIDDEN — 종전 판정 유지', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
-    await expect(
-      assertScopedSurveyCapabilityRpc({ ...user, id: 'guest-1' }, SURVEY_ID, 'contacts.view'),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
-  });
-
-  it('grant 없는 내부 계정은 capability 관문에 위임한다', async () => {
+  it('주체가 누구든 코어 판정에 그대로 위임한다', async () => {
     vi.mocked(assertSurveyCapability).mockResolvedValue(undefined);
     await expect(
       assertScopedSurveyCapabilityRpc(user, SURVEY_ID, 'mail.send'),
@@ -92,10 +75,16 @@ describe('assertScopedSurveyCapabilityRpc — 게스트 허용(scoped) 표면 (�
     expect(assertSurveyCapability).toHaveBeenCalledWith(user, SURVEY_ID, 'mail.send');
   });
 
-  it('grant 없는 guest·fieldwork 유형 계정은 capability 거부가 NOT_FOUND 로 옮겨진다', async () => {
-    // 유형별 기본 거부는 코어(resolveSurveyCapabilities 의 계정 유형 게이트)가 정한다 —
-    // 여기서는 그 거부(not_found)가 RPC 어휘로 옮겨지는 것만 본다. 구 assertSurveyAccess
-    // 의 FORBIDDEN 에서 존재 은닉(NOT_FOUND) 쪽으로 조정된 지점이다.
+  it('게스트 계정도 예외 없이 코어를 지난다 — 우회 분기가 남아 있지 않다', async () => {
+    const guest = { id: 'guest-account', isSuperadmin: false, userType: 'guest' as const };
+    vi.mocked(assertSurveyCapability).mockRejectedValue(new SurveyAccessError('forbidden'));
+    await expect(
+      assertScopedSurveyCapabilityRpc(guest, SURVEY_ID, 'contacts.manage'),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(assertSurveyCapability).toHaveBeenCalledWith(guest, SURVEY_ID, 'contacts.manage');
+  });
+
+  it('코어가 not_found 를 주면 존재 은닉(NOT_FOUND)으로 옮겨진다', async () => {
     vi.mocked(assertSurveyCapability).mockRejectedValue(new SurveyAccessError('not_found'));
     await expect(
       assertScopedSurveyCapabilityRpc(

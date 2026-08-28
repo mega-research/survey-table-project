@@ -8,7 +8,6 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/server
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
@@ -36,7 +35,7 @@ async function handleSplitPreview(
     const { surveyId } = await params;
     ctx.bind({
       userId: user.id,
-      role: isGuestUser(user.id) ? 'guest' : 'admin',
+      role: 'admin',
       surveyId,
     });
     const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');

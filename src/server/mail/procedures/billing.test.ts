@@ -87,11 +87,10 @@ describe('billing procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 billing.create 가 FORBIDDEN (authed 유지 확인)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+  it('게스트 계정은 billing.create 가 FORBIDDEN (authed 유지 확인)', async () => {
     const client = createRouterClient(
       { mail: { billing } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     await expect(client.mail.billing.create(validCreateInput)).rejects.toMatchObject({
       code: 'FORBIDDEN',

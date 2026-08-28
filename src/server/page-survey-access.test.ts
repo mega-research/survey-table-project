@@ -100,22 +100,13 @@ describe('assertSurveyConsolePageAccess — 게스트 허용 콘솔 페이지 �
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
-  it('env grant 게스트는 grant 설문이면 capability 판정 없이 통과한다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    const guest = { ...internalViewer, id: 'guest-1' };
-    requireAuth.mockResolvedValue(guest);
-    await expect(
-      assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.manage'),
-    ).resolves.toBe(guest);
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
-  });
-
-  it('env grant 게스트는 grant 밖 설문이면 notFound — 종전 판정 유지', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
-    requireAuth.mockResolvedValue({ ...internalViewer, id: 'guest-1' });
-    await expect(
-      assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view'),
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+  // 티켓 21 이 이 가드의 env grant 게스트 분기를 걷었다 — 게스트는 /admin 구역에 아예
+  // 들어오지 못하고(레이아웃 유형 게이트) 자기 화면은 /guest 다.
+  it('세션이 없으면 capability 판정까지 가지 않는다', async () => {
+    requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
+    await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view')).rejects.toThrow(
+      '인증이 필요합니다.',
+    );
     expect(assertSurveyCapability).not.toHaveBeenCalled();
   });
 });

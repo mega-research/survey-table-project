@@ -237,14 +237,13 @@ describe('surveyBuilder.read procedures', () => {
     expect(responseSvc.exportResponsesAsJson).not.toHaveBeenCalled();
   });
 
-  it('게스트 grant 보유자는 exportCsv가 FORBIDDEN으로 막힌다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 exportCsv가 FORBIDDEN으로 막힌다', async () => {
     const client = createRouterClient(
       { read },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );

@@ -153,15 +153,15 @@ describe('surveyResponse.edit procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 saveAdminEdit 가 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  // 관문(mock)이 통과시킨 뒤 서비스로 넘어가는 파티션 플래그가 계정 유형에서 나온다(티켓 21).
+  it('게스트 계정이면 saveAdminEdit 가 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -183,14 +183,13 @@ describe('surveyResponse.edit procedures', () => {
   it('게스트도 이관 versionId 를 실어 saveAdminEdit 가 동일하게 위임된다', async () => {
     // 관리자 수정의 최신 버전 이관·빈 필수 완화는 역할이 아니라 admin-edit 표면에
     // 걸려 있다 — 게스트 grant 사용자도 같은 경로를 그대로 쓴다는 계약을 잠근다.
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'},
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );

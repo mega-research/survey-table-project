@@ -7,15 +7,13 @@
  * 발급한 계정이 자기 비밀번호조차 못 바꾸는 상태가 된다.
  */
 import { createRouterClient } from '@orpc/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import { userTypeValues } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { account, authed, scoped, superadmin } from './orpc';
-
-afterEach(() => vi.unstubAllEnvs());
 
 function ctx(
   userType: UserType,
@@ -99,17 +97,17 @@ describe('설문 스코프 베이스 — 유형으로 막지 않는다', () => {
   });
 });
 
-describe('설문 단위 env grant 게스트 — 유형 축과 별개로 살아 있다', () => {
-  it('grant 보유 내부 계정도 authed 표면에서 FORBIDDEN', async () => {
-    // 티켓 21 에서 이 축이 계정 유형으로 합쳐질 때까지 두 판정이 함께 걸린다.
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'user-internal:s1');
+describe('판정 축은 계정 유형 하나다 (티켓 21)', () => {
+  // 예전에는 env 설정(GUEST_SURVEY_GRANTS)에 이름이 오른 **내부** 계정도 authed 에서
+  // 거부됐다 — 게스트를 설정 파일로 만들던 시절의 축이다. 그 축이 사라져서 내부 계정은
+  // 언제나 내부 표면을 쓰고, 게스트 판정은 위의 유형 게이트가 전부 진다.
+  it('내부 계정은 authed 표면을 그대로 쓴다', async () => {
     const client = createRouterClient({ internalOnly }, { context: ctx('internal') });
-    await expect(client.internalOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(client.internalOnly()).resolves.toEqual({ id: 'user-internal' });
   });
 
-  it('grant 보유자도 자기 계정 표면은 쓴다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'user-internal:s1');
-    const client = createRouterClient({ selfService }, { context: ctx('internal') });
-    await expect(client.selfService()).resolves.toEqual({ id: 'user-internal' });
+  it('게스트 계정도 자기 계정 표면은 쓴다', async () => {
+    const client = createRouterClient({ selfService }, { context: ctx('guest') });
+    await expect(client.selfService()).resolves.toEqual({ id: 'user-guest' });
   });
 });

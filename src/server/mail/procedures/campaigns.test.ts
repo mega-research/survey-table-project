@@ -175,8 +175,8 @@ describe('mail.campaigns procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  // 관문(mock)이 통과시킨 뒤 서비스로 넘어가는 파티션 플래그가 계정 유형에서 나온다(티켓 21).
+  it('게스트 계정이면 sendSingle 이 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
       queuedCount: 1,
@@ -184,7 +184,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -196,8 +196,7 @@ describe('mail.campaigns procedures', () => {
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
-  it('게스트는 grant 설문이면 create 가 isGuest=true 로 위임된다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정이면 create 가 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(svc.createCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
       queuedCount: 1,
@@ -205,7 +204,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = {
       surveyId: SURVEY_ID,

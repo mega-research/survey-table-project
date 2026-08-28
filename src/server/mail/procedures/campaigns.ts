@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
-import { isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestAccount } from '@/shared/contracts/auth';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
@@ -74,7 +74,7 @@ const create = scoped
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
     return svc
-      .createCampaign(input, context.user.id, isGuestUser(context.user.id))
+      .createCampaign(input, context.user.id, isGuestAccount(context.user.userType))
       .catch(rethrowCampaignRefusal);
   });
 
@@ -83,7 +83,7 @@ const cancel = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
-    await svc.cancelCampaign(input, isGuestUser(context.user.id)).catch(rethrowCampaignRefusal);
+    await svc.cancelCampaign(input, isGuestAccount(context.user.userType)).catch(rethrowCampaignRefusal);
     return { ok: true as const };
   });
 
@@ -117,7 +117,7 @@ const sendSingle = scoped
   .output(CreateCampaignResult)
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
-    return sendSingleCampaign(input, context.user.id, isGuestUser(context.user.id)).catch(
+    return sendSingleCampaign(input, context.user.id, isGuestAccount(context.user.userType)).catch(
       rethrowCampaignRefusal,
     );
   });

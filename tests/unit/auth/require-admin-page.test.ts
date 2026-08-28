@@ -33,7 +33,7 @@ describe('requireAdminPage', () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it('게스트가 아닌 active 계정은 통과한다', async () => {
+  it('active 내부 계정은 통과한다', async () => {
     requireAuth.mockResolvedValue({ id: 'admin-2' });
 
     const requireAdminPage = await loadGuard();
@@ -41,16 +41,9 @@ describe('requireAdminPage', () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
-  it('게스트 grant 보유 세션은 notFound 로 막는다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    requireAuth.mockResolvedValue({ id: 'guest-1' });
-
-    const requireAdminPage = await loadGuard();
-    await expect(requireAdminPage()).rejects.toThrow('NEXT_NOT_FOUND');
-    expect(notFound).toHaveBeenCalledOnce();
-  });
-
-  it('미인증·비활성 계정은 requireAuth 가 먼저 막는다', async () => {
+  // 게스트·실사 차단은 티켓 21 부터 requireAuth 의 유형 게이트가 진다 —
+  // 이 가드는 그 결과를 그대로 통과시킬 뿐이다.
+  it('미인증·비활성·비내부 계정은 requireAuth 가 먼저 막는다', async () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
 
     const requireAdminPage = await loadGuard();
@@ -86,12 +79,11 @@ describe('requireSuperadminPage', () => {
     expect(notFound).toHaveBeenCalledOnce();
   });
 
-  it('게스트는 슈퍼어드민 플래그가 있어도 막는다', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
-    requireAuth.mockResolvedValue({ id: 'guest-1', isSuperadmin: true });
+  it('비내부 계정은 requireAuth 가 먼저 막는다 — 슈퍼어드민 플래그와 무관하다', async () => {
+    requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
 
     const requireSuperadminPage = await loadSuperadminGuard();
-    await expect(requireSuperadminPage()).rejects.toThrow('NEXT_NOT_FOUND');
-    expect(notFound).toHaveBeenCalledOnce();
+    await expect(requireSuperadminPage()).rejects.toThrow('인증이 필요합니다.');
+    expect(notFound).not.toHaveBeenCalled();
   });
 });

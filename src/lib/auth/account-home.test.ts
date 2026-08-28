@@ -98,9 +98,9 @@ describe('resolvePostLoginDestination', () => {
     expect(resolvePostLoginDestination('internal', '')).toBe('/admin/surveys');
   });
 
-  it('로그인·로그아웃 라우트는 목적지가 될 수 없다', () => {
+  it('로그인 라우트는 목적지가 될 수 없다', () => {
     // 되돌려 보내면 그대로 로그인 화면을 오가는 루프가 된다.
     expect(resolvePostLoginDestination('internal', '/admin/login')).toBe('/admin/surveys');
-    expect(resolvePostLoginDestination('guest', '/admin/logout')).toBe('/guest');
+    expect(resolvePostLoginDestination('guest', '/admin/login')).toBe('/guest');
   });
 });

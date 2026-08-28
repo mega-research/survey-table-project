@@ -3,7 +3,6 @@ import 'server-only';
 import { notFound } from 'next/navigation';
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import type { AuthUser } from '@/shared/contracts/auth';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -38,15 +37,16 @@ export async function assertSurveyCapabilityPage(
 }
 
 /**
- * 게스트 허용 설문 콘솔 페이지용 관문 — 세션 확인 + 주체별 판정을 한 번에 (티켓 10).
+ * 설문 콘솔 페이지용 관문 — 세션 확인 + capability 판정을 한 번에 (티켓 10·21).
  *
- * 구 assertGuestSurveyPageAccess(게스트만 판정, 내부 계정 즉시 통과)를 대체한다:
- * env grant 게스트는 grant 일치(불일치 notFound), 내부 계정은 capability 판정
- * (거부 사유 불문 notFound). rpc-survey-access 의 assertScopedSurveyCapabilityRpc 와
- * 같은 분기를 페이지 표면 어휘로 옮긴 짝이며, 티켓 21 이 두 축을 합친다.
+ * 여기에도 env grant 게스트 분기가 있었고 티켓 21 이 걷었다 — 게스트가 계정 모델로 바뀌면서
+ * 그 자격이 코어의 판정 대상이 됐기 때문이다(rpc 짝의 주석 참조). 남은 것은 세션 확인과
+ * 코어 판정 둘뿐이고, 게스트·실사는 애초에 `/admin` 구역에 들어오지 못한다(레이아웃의 유형
+ * 게이트가 자기 홈으로 돌려보낸다). 클라이언트가 보는 화면은 `/guest` 다(티켓 22).
  *
  * 게스트 차단 화면(컬럼 스킴·결과코드·업로드·쿼터)은 이걸 쓰지 말고
- * requireAdminPage + assertSurveyCapabilityPage 짝을 쓴다.
+ * requireAdminPage + assertSurveyCapabilityPage 짝을 쓴다 — 지금은 정책이 같지만
+ * **이유가 다르다**: 저쪽은 「관리 화면」임을 말하고 이쪽은 「설문 콘솔」임을 말한다.
  *
  * tests/repo/rsc-page-guards.test.ts 의 가드 목록에 등재돼 있다 — 이름을 바꾸면
  * 그 정규식도 함께 바꿀 것.
@@ -56,10 +56,6 @@ export async function assertSurveyConsolePageAccess(
   capability: SurveyCapability,
 ): Promise<AuthUser> {
   const viewer = await requireAuth();
-  if (isGuestUser(viewer.id)) {
-    if (!canAccessSurvey(viewer.id, surveyId)) notFound();
-    return viewer;
-  }
   await assertSurveyCapabilityPage(viewer, surveyId, capability);
   return viewer;
 }

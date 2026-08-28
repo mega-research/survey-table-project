@@ -44,9 +44,11 @@ describe('superadmin 베이스', () => {
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('게스트 grant 보유 계정은 슈퍼어드민 플래그가 있어도 FORBIDDEN', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
-    const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
+  it('게스트 계정은 슈퍼어드민 플래그가 있어도 FORBIDDEN', async () => {
+    const client = createRouterClient(
+      { adminOnly },
+      { context: ctx('guest-1', { userType: 'guest' }) },
+    );
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
