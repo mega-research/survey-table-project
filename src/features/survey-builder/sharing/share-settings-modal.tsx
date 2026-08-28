@@ -14,6 +14,7 @@ import {
 } from '@/shared/contracts/workspace';
 
 import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
+import { GuestsBlock } from './guests-block';
 import { OwnershipTransferModal } from './ownership-transfer-modal';
 import { ParticipantsBlock } from './participants-block';
 
@@ -53,9 +54,9 @@ const VISIBILITY_ICON: Record<SurveyVisibility, typeof Users> = {
  * 별개다. 티켓 18·21·24 의 참여자·게스트·실사 검색도 **RPC 로** workspace 표면을 부르므로
  * (`client.workspace.*`, 그룹 쿼리와 같은 경로) feature import 는 필요 없다.
  *
- * 지금은 공개 범위 + 참여자 두 블록과 푸터의 「소유권 이전」이다. 클라이언트(게스트)·실사
- * 블록은 티켓 21·24 가 이 골격 위에 얹는다 — 핸들러 없는 자리를 비활성 placeholder 로 미리
- * 그리지 않는다(카드 케밥의 콜백 게이트와 같은 규칙).
+ * 지금은 공개 범위 + 참여자 + 클라이언트(게스트) 세 블록과 푸터의 「소유권 이전」이다.
+ * 실사 블록은 티켓 24 가 이 골격 위에 얹는다 — 핸들러 없는 자리를 비활성 placeholder 로
+ * 미리 그리지 않는다(카드 케밥의 콜백 게이트와 같은 규칙).
  *
  * 「소유권 이전」은 **공개 범위 변경과 같은 권한 축이지만 다른 표면**이다. 되돌리는 동선이
  * 없고 발행·삭제 권한이 함께 움직여서 확인 단계를 따로 둔다 — 저장 버튼에 묶으면 범위만
@@ -100,7 +101,7 @@ export function ShareSettingsModal({
 
   return (
     <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent className="max-w-[560px] gap-0 rounded-2xl p-[22px]">
+      <DialogContent className="max-h-[85vh] max-w-[560px] gap-0 overflow-y-auto rounded-2xl p-[22px]">
         <DialogTitle className="truncate text-[16.5px] font-semibold text-[#1C1C1E]">
           공유 설정 — {surveyTitle}
         </DialogTitle>
@@ -157,6 +158,11 @@ export function ShareSettingsModal({
             도중 취소를 누른 사람이 초대까지 되돌아간 줄로 읽는다. */}
         <div className="mt-4 border-t border-[#F0F0F2] pt-4">
           <ParticipantsBlock surveyId={surveyId} />
+        </div>
+
+        {/* 클라이언트 블록도 같은 축이다 — 부여·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
+        <div className="mt-4 border-t border-[#F0F0F2] pt-4">
+          <GuestsBlock surveyId={surveyId} />
         </div>
 
         {error && <p className="mt-3 text-[12.5px] text-red-600">{error}</p>}

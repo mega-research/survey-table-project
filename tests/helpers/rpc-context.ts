@@ -15,7 +15,7 @@ export interface InternalActorOptions {
   name?: string;
 }
 
-/** 활성 내부 계정 주체. 게스트·실사 축은 각자의 스위트가 자기 컨텍스트를 만든다. */
+/** 활성 내부 계정 주체. */
 export function internalActorContext(options: InternalActorOptions): ORPCContext {
   return {
     db: {} as never,
@@ -26,6 +26,34 @@ export function internalActorContext(options: InternalActorOptions): ORPCContext
       status: 'active',
       isSuperadmin: options.isSuperadmin ?? false,
       userType: 'internal',
+    },
+    headers: new Headers(),
+  };
+}
+
+export interface GuestActorOptions {
+  id: string;
+  name?: string;
+  /** 계정 유형 — 실사 축(티켓 24)도 같은 모양을 쓰므로 값으로 받는다. */
+  userType?: 'guest' | 'fieldwork';
+}
+
+/**
+ * 활성 **비내부** 계정 주체 (티켓 21).
+ *
+ * `isSuperadmin: true` 로 두는 것이 의도다 — 비내부 계정에 그 플래그가 실려 와도 열리면
+ * 안 되고, 음성 스위트는 가장 불리한 조건에서 물어야 한다.
+ */
+export function guestActorContext(options: GuestActorOptions): ORPCContext {
+  return {
+    db: {} as never,
+    user: {
+      id: options.id,
+      email: `${options.id}@client.example.com`,
+      name: options.name ?? '클라이언트',
+      status: 'active',
+      isSuperadmin: true,
+      userType: options.userType ?? 'guest',
     },
     headers: new Headers(),
   };
