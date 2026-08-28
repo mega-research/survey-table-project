@@ -103,6 +103,19 @@ export function canManageTeamSettings(actor: { isSuperadmin: boolean }): boolean
 export const surveyVisibilityValues = ['team', 'invite_only'] as const;
 export type SurveyVisibility = (typeof surveyVisibilityValues)[number];
 
+/**
+ * 화면 표기 (.pen FLOW 4-2 세그먼트, 티켓 16) — `TEAM_ROLE_LABEL` 과 같은 자리에 둔다.
+ *
+ * 여기가 SSOT 인 이유는 이 어휘를 그리는 화면이 서로 다른 feature 묶음에 흩어져 있어서다
+ * (공유 설정은 survey-builder, 재배치 센터는 workspace — 둘은 서로 import 할 수 없다).
+ * 실제로 재배치 센터가 `team` 을 「팀 전체」로 적어, 같은 컬럼이 화면마다 다른 말로 보였다.
+ * 「팀 전체」는 시스템 전체 보기(메가리서치)와 헷갈리므로 쓰지 않는다.
+ */
+export const SURVEY_VISIBILITY_LABEL: Record<SurveyVisibility, string> = {
+  team: '팀 공개',
+  invite_only: '초대된 멤버만',
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // surveys.assignment_status — 팀 배치 상태 (SSOT, 티켓 07)
 // ─────────────────────────────────────────────────────────────────────────────

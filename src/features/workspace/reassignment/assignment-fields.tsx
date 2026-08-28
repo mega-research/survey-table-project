@@ -9,17 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { SurveyVisibility } from '@/shared/contracts/workspace';
+import { SURVEY_VISIBILITY_LABEL, type SurveyVisibility } from '@/shared/contracts/workspace';
 
 import { useTeams } from '../team-management/queries/use-teams';
 import { useOwnerCandidates } from './queries/use-reassignment';
 
 const SELECT_TRIGGER = 'h-[34px] rounded-lg border-[#E5E5EA] bg-white text-[13px]';
-
-export const VISIBILITY_LABEL: Record<SurveyVisibility, string> = {
-  team: '팀 전체',
-  invite_only: '초대된 멤버만',
-};
 
 /**
  * 목적지·소유자·공개 범위 한 벌 — 일괄 배치 바(.pen 9-2)와 단건 패널(.pen 8-4)이 공유한다.
@@ -152,9 +147,9 @@ export function VisibilityField({ fields, width }: { fields: Fields; width: stri
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {(Object.keys(VISIBILITY_LABEL) as SurveyVisibility[]).map((value) => (
+          {(Object.keys(SURVEY_VISIBILITY_LABEL) as SurveyVisibility[]).map((value) => (
             <SelectItem key={value} value={value}>
-              {VISIBILITY_LABEL[value]}
+              {SURVEY_VISIBILITY_LABEL[value]}
             </SelectItem>
           ))}
         </SelectContent>

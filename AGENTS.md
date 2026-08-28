@@ -4,7 +4,18 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-27 (역할 모델 v2 티켓 15 **B 검증 게이트** — 팀 격리 음성 스위트를 **라우터 열거** 위에 세웠다. `tests/helpers/rpc-surface.ts` 가 `@/server/router` 를 런타임에 훑어(베이스는 미들웨어 동일성, 입력 키는 zod shape) 「설문 id 를 받는 내부 표면」을 뽑고, 그 집합이 인벤토리와 어긋나면 그 자리에서 빨개진다 — **새 surveyId procedure 는 `tests/integration/cross-team-idor-rpc.test.ts` 등재가 의무다**. 두 축: 타 팀 설문 id 주입(전 표면 NOT_FOUND + 요구 capability 고정)과 내 설문 + 남의 하위 행(realdb — 관문 통과 뒤 남는 축). 후자는 **거부와 「조용한 무동작」을 갈라 적는다**. 시스템 범위 거부는 입력·쿠키·URL 세 채널을 각각 고정했고, 그 과정에서 `WorkScopeError` 에 RPC 매핑이 없어 「거부」가 실제로는 500 이던 것을 `server/rpc-work-scope.ts` 로 닫았다. 리뷰 3축(Standards·Spec·Codex 적대적)이 **관문 통과 뒤의 축**을 열었다 — 컨택·응답 상세 RSC 가 하위 행을 설문 경계 없이 읽어 **타 팀 PII 를 복호화**하고 있었고, 질문·그룹의 `groupId`·`parentGroupId` 로 교차 팀 그래프를 만들 수 있었으며, 여러 교차 팀 거부가 500 으로 마스킹되고 있었다. 마이그레이션 없음. 직전: 티켓 14 재배치 센터 — 슈퍼어드민 전용 인박스, 마이그레이션 0091 `survey_ownership_events`, 재입사의 팀 배정 연계)
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 16 **invite_only 공개 범위** — 엔진은 이미 v2 의미
+> (「소유 팀 **팀원에게만** 숨김」)를 갖고 있었고, 이번에 **바꾸는 경로**가 생겼다.
+> `workspace.sharing.setVisibility` 하나가 `surveys.visibility` 를 만지며 요구는 `survey.edit` 이
+> 아니라 **`survey.manageAccess`** 다 — 편집권은 팀원도 갖지만 범위 변경은 소유자·팀장·
+> 슈퍼어드민뿐이다(스펙 §7). `UpdateSurveyDataSchema` 에 `visibility` 가 없는 것과 한 몸이다.
+> 화면은 `features/survey-builder/sharing` 의 공유 설정 모달(.pen 4-2 골격 — 공개 범위 블록만.
+> 참여자·클라이언트·실사·소유권 이전은 티켓 18·21·24·19)이고 입구는 설문 카드 케밥이다.
+> 여는 것은 막지 않고 세그먼트만 잠근다. 화면 표기는 `SURVEY_VISIBILITY_LABEL` 이 SSOT 가 됐다 —
+> 재배치 센터가 같은 컬럼을 「팀 전체」로 적어 두 화면이 어긋나 있었다. 음성 검증 둘:
+> `invite-only-visibility.test.ts`(전환 전/후 짝)와 `survey-sharing.realdb.test.ts`(목록 SQL·
+> updatedAt 보존). 마이그레이션 없음. 직전: 티켓 15 B 검증 게이트 — 라우터 열거 기반 교차 팀
+> IDOR 스위트 + 「관문 통과 뒤의 축」)
 
 ---
 
@@ -127,12 +138,15 @@ src/
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
 │   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
-│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (139개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (150개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
 │   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·페이지네이션·카드 + 순수 파이프라인
 │   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
+│   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
+│   │   │                       # 지금은 공개 범위 블록뿐. 참여자·클라이언트·실사·소유권 이전은 티켓 18·21·24·19
+│   │   │                       # 여는 곳은 설문 카드 케밥이라 workspace 가 아니라 여기 산다(그룹 UI 와 같은 이유)
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
@@ -143,7 +157,7 @@ src/
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
 │   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-library·use-cell-library — 구 src/hooks/queries
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-library·use-cell-library — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap
 │   │   └── (루트 24개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
@@ -284,7 +298,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지)는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -767,6 +781,20 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
   팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
   `team_lifecycle_events` 에 감사 행을 남긴다.
+- **공개 범위를 바꾸는 유일한 경로는 `workspace.sharing.setVisibility` 다**(티켓 16, .pen FLOW 4-2).
+  요구는 `survey.edit` 이 아니라 **`survey.manageAccess`** — 편집은 팀 공개 설문의 팀원도 갖지만
+  범위 변경은 소유자·소유 팀 팀장·슈퍼어드민뿐이다(스펙 §7). 같은 이유로 `UpdateSurveyDataSchema`
+  의 allowlist 에 `visibility` 가 없다: 두 표면 중 하나만 조이면 다른 쪽이 우회로가 된다. 서비스는
+  `updatedAt` 을 건드리지 않는다 — 공개 범위는 설문 내용이 아니고, 건드리면 「최신 수정순」 기본
+  정렬이 공유 한 번에 뒤집힌다(그룹 이동과 같은 계약). 감사 행도 남기지 않는다:
+  `survey_ownership_events` 의 어휘는 소유 **이동**이라 이 축이 아니다. 화면은
+  `features/survey-builder/sharing` 의 공유 설정 모달이고, 여는 것은 막지 않고 **범위 세그먼트만**
+  잠근다(추가는 접근 내부인 누구나가 스펙 §7). 노출 근사는 `canManageSurveyAccessCard` —
+  오늘은 `canViewSurveyAnalyticsCard` 와 판정이 같지만 이유가 달라(참여자는 responses.view 는
+  갖고 manageAccess 는 못 갖는다) 티켓 18 에서 갈린다. 음성 검증 둘:
+  `tests/integration/invite-only-visibility.test.ts`(전환 전 열려 있었음 ↔ 전환 후 전 표면
+  NOT_FOUND — 짝으로 물어야 관문 유무를 갈라낸다)와 `survey-sharing.realdb.test.ts`(목록 SQL·
+  updatedAt 보존은 목으로는 증명되지 않는다).
 - **설문 그룹은 접근 권한이 아니라 정리용 묶음이다**(티켓 12, .pen FLOW 2). 그래서 관문이
   두 갈래다 — **그룹 구조**(목록·생성·이름 변경·정렬·삭제·담기 후보 조회)는 팀 공용이라
   슈퍼어드민 또는 그 팀 active 멤버면 팀장·팀원을 가리지 않고, **설문을 넣고 빼는 것**만

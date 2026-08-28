@@ -35,6 +35,7 @@ import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { members } from '@/server/workspace/procedures/members';
 import { reassignment } from '@/server/workspace/procedures/reassignment';
+import { sharing } from '@/server/workspace/procedures/sharing';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
 import { teams } from '@/server/workspace/procedures/teams';
 import { duplicate } from '@/server/survey-response/procedures/duplicate';
@@ -110,6 +111,8 @@ export const router = {
     surveyGroups,
     // 재배치 센터 — 팀을 잃은 사람·설문의 인박스 (슈퍼어드민 전용).
     reassignment,
+    // 공유 설정 — 공개 범위 (.pen FLOW 4-2). 참여자·게스트·실사는 티켓 18·21·24.
+    sharing,
   },
 };
 

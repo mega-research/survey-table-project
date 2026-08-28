@@ -574,6 +574,13 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: ['survey.edit', 'surveyGroup.manage'],
     input: { surveyId: S, groupId: null },
   },
+
+  // ── 공유 설정(공개 범위) ────────────────────────────────────────────────
+  'workspace.sharing.setVisibility': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, visibility: 'invite_only' },
+  },
 };
 
 /**

@@ -391,3 +391,18 @@ export type PendingSurveyDetailOutput = z.infer<typeof PendingSurveyDetailOutput
 
 export const SurveyIdOnlyInput = z.object({ surveyId: z.uuid() });
 export type SurveyIdOnlyInput = z.infer<typeof SurveyIdOnlyInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 공유 설정 — 공개 범위 (.pen FLOW 4-2, 티켓 16)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 공개 범위만 별도 표면인 것은 권한 축이 다르기 때문이다. 설문 편집(`survey.edit`)은
+// 팀원도 갖지만 범위 변경은 `survey.manageAccess` — 소유자·소유 팀 팀장·슈퍼어드민뿐이다
+// (스펙 §7). 그래서 `UpdateSurveyDataSchema` 의 allowlist 에 `visibility` 가 없고,
+// 그 컬럼을 만지는 유일한 경로가 여기다(재배치 센터의 최초 배치는 별개 흐름).
+
+export const SetSurveyVisibilityInput = z.object({
+  surveyId: z.uuid(),
+  visibility: SurveyVisibilitySchema,
+});
+export type SetSurveyVisibilityInput = z.infer<typeof SetSurveyVisibilityInput>;

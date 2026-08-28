@@ -1,0 +1,158 @@
+'use client';
+
+import { useState } from 'react';
+
+import { Loader2, Lock, Users } from 'lucide-react';
+
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { getErrorMessage } from '@/lib/get-error-message';
+import { cn } from '@/lib/utils';
+import {
+  SURVEY_VISIBILITY_LABEL,
+  surveyVisibilityValues,
+  type SurveyVisibility,
+} from '@/shared/contracts/workspace';
+
+import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
+
+interface ShareSettingsModalProps {
+  surveyId: string;
+  surveyTitle: string;
+  visibility: SurveyVisibility;
+  /**
+   * 공개 범위를 바꿀 수 있는가 — 서버의 `survey.manageAccess` **근사치**
+   * (canManageSurveyAccessCard). 강제는 서버 관문이 한다.
+   */
+  canManageAccess: boolean;
+  onClose: () => void;
+}
+
+/**
+ * 세그먼트 두 칸 (.pen 4-2). 라벨은 어휘 SSOT 를 그대로 쓴다 — 재배치 센터가 같은 컬럼을
+ * 다른 말로 적어 두 화면이 어긋났던 자리다(SURVEY_VISIBILITY_LABEL 주석).
+ */
+const VISIBILITY_ICON: Record<SurveyVisibility, typeof Users> = {
+  team: Users,
+  invite_only: Lock,
+};
+
+/**
+ * 공유 설정 모달 (.pen FLOW 4-2, 역할 모델 v2 티켓 16).
+ *
+ * 지금은 공개 범위 한 블록뿐이다. 참여자(내부)·클라이언트(게스트)·실사 블록과 푸터의
+ * 「소유권 이전」은 각각 티켓 18·21·24·19 가 이 골격 위에 얹는다 — 핸들러 없는 자리를
+ * 비활성 placeholder 로 미리 그리지 않는다(카드 케밥의 콜백 게이트와 같은 규칙).
+ *
+ * 모달을 **여는 것**은 권한으로 막지 않는다. 접근 가능한 내부인이면 누구나 참여자를 추가할
+ * 수 있는 것이 스펙 §7 이고, 잠기는 것은 범위 세그먼트뿐이다. 그래서 팀원에게는 지금 상태가
+ * 읽기 전용으로 보인다.
+ *
+ * 저장은 **닫기와 한 몸**이다 — 세그먼트를 누르는 즉시 저장하면 「취소」가 아무 뜻도 없게 되고,
+ * 되돌리려면 다시 눌러야 하는데 그 사이 목록·그룹 카운트가 두 번 흔들린다.
+ */
+export function ShareSettingsModal({
+  surveyId,
+  surveyTitle,
+  visibility,
+  canManageAccess,
+  onClose,
+}: ShareSettingsModalProps) {
+  const [selected, setSelected] = useState<SurveyVisibility>(visibility);
+  const [error, setError] = useState<string | null>(null);
+  const setVisibility = useSetSurveyVisibility();
+
+  const isDirty = selected !== visibility;
+
+  async function handleSave() {
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    setError(null);
+    try {
+      await setVisibility.mutateAsync({ surveyId, visibility: selected });
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err, '공개 범위를 저장하지 못했습니다.'));
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
+      <DialogContent className="max-w-[560px] gap-0 rounded-2xl p-[22px]">
+        <DialogTitle className="truncate text-[16.5px] font-semibold text-[#1C1C1E]">
+          공유 설정 — {surveyTitle}
+        </DialogTitle>
+
+        <div className="mt-4 flex flex-col gap-1.5">
+          <span className="text-[13px] font-semibold text-[#374151]">팀 공개 범위</span>
+
+          <div
+            role="radiogroup"
+            aria-label="공개 범위"
+            className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]"
+          >
+            {surveyVisibilityValues.map((value) => {
+              const Icon = VISIBILITY_ICON[value];
+              const active = selected === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={!canManageAccess || setVisibility.isPending}
+                  onClick={() => {
+                    setSelected(value);
+                    setError(null);
+                  }}
+                  className={cn(
+                    'flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] text-[13px] font-medium transition-colors',
+                    active ? 'bg-white text-[#1C1C1E] shadow-sm' : 'text-[#6E6E73]',
+                    canManageAccess && !active && 'hover:text-[#1C1C1E]',
+                    !canManageAccess && 'cursor-not-allowed',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {SURVEY_VISIBILITY_LABEL[value]}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+            「초대된 멤버만」은 소유 팀 팀원에게만 숨깁니다 — 소유자·참여자·팀장·슈퍼어드민은 항상
+            접근합니다.
+          </p>
+          {!canManageAccess && (
+            <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+              공개 범위는 소유자·팀장·슈퍼어드민만 바꿀 수 있습니다.
+            </p>
+          )}
+        </div>
+
+        {error && <p className="mt-3 text-[12.5px] text-red-600">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2 border-t border-[#F0F0F2] pt-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={setVisibility.isPending}
+            className="flex h-[34px] items-center rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7] disabled:opacity-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canManageAccess || setVisibility.isPending}
+            className="flex h-[34px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE] disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF]"
+          >
+            {setVisibility.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            저장
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

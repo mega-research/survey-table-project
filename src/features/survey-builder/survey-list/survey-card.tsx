@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import Link from 'next/link';
 
 import {
@@ -15,6 +17,7 @@ import {
   Loader2,
   Lock,
   Pencil,
+  Share2,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,11 +33,16 @@ import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
-import type { WorkScope } from '@/shared/contracts/workspace';
+import { SURVEY_VISIBILITY_LABEL, type WorkScope } from '@/shared/contracts/workspace';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
+import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
-import { canEditSurveyCard, canViewSurveyAnalyticsCard } from './survey-list-capability';
+import {
+  canEditSurveyCard,
+  canManageSurveyAccessCard,
+  canViewSurveyAnalyticsCard,
+} from './survey-list-capability';
 
 interface SurveyCardProps {
   survey: SurveyListItem;
@@ -79,9 +87,9 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
 /**
  * 설문 카드 (.pen FLOW 6 설문 카드 컴포넌트).
  *
- * 케밥의 공유 설정은 티켓 16 이 붙인다 — 핸들러가 생기기 전에는 항목 자체를 그리지 않는다
- * (콜백 게이트, disabled placeholder 금지). 「그룹 이동」도 같은 규칙이라 팀 범위가 아니면
- * (시스템 전체 보기·미배치) onMoveToGroup 이 null 로 와서 항목이 사라진다.
+ * 케밥 순서는 .pen 4-1 노트를 따른다 — 공유 설정 · 링크 복사 · 그룹 이동 · 삭제.
+ * 「그룹 이동」은 콜백 게이트라 팀 범위가 아니면(시스템 전체 보기·미배치) onMoveToGroup 이
+ * null 로 와서 항목 자체가 사라진다(핸들러 없는 자리는 안 만든다).
  * 문의 액션은 Plan 3 게이트로 미노출.
  * 수정·삭제·분석의 비활성은 근사(canEditSurveyCard·canViewSurveyAnalyticsCard)일 뿐이고
  * 강제는 서버 관문이 한다.
@@ -107,6 +115,14 @@ export function SurveyCard({
     isSuperadmin,
     leaderTeamIds,
   );
+  const canManageAccess = canManageSurveyAccessCard(
+    survey,
+    scope,
+    currentUserId,
+    isSuperadmin,
+    leaderTeamIds,
+  );
+  const [sharingOpen, setSharingOpen] = useState(false);
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
     {
@@ -146,6 +162,10 @@ export function SurveyCard({
                 <Pencil className="h-3.5 w-3.5" />
                 수정
               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
+              <Share2 className="h-3.5 w-3.5" />
+              공유 설정
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
@@ -218,7 +238,7 @@ export function SurveyCard({
           ) : survey.visibility === 'invite_only' ? (
             <span className="flex items-center gap-1 rounded-full bg-[#F5F5F7] px-2 py-0.5 text-[11px] font-medium text-[#6E6E73]">
               <Lock className="h-3 w-3" />
-              초대된 멤버만
+              {SURVEY_VISIBILITY_LABEL.invite_only}
             </span>
           ) : null}
         </div>
@@ -243,6 +263,16 @@ export function SurveyCard({
           disabled={!canViewAnalytics}
         />
       </div>
+
+      {sharingOpen && (
+        <ShareSettingsModal
+          surveyId={survey.id}
+          surveyTitle={survey.title}
+          visibility={survey.visibility}
+          canManageAccess={canManageAccess}
+          onClose={() => setSharingOpen(false)}
+        />
+      )}
     </div>
   );
 }

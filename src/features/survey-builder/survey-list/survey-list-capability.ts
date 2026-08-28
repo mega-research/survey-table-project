@@ -48,10 +48,49 @@ export function canEditSurveyCard(
  * 갖지만 목록이 참여 행을 안 내려받으므로 그때 근사를 넓혀야 한다 — 지금은 안전한 방향
  * (실제보다 자주 감춤)으로 틀린다.
  *
+ * 판정 자체는 전권 세 열(hasFullSurveyControl)과 같다.
+ */
+export function canViewSurveyAnalyticsCard(
+  survey: SurveyCardCapabilitySubject,
+  scope: WorkScope,
+  currentUserId: string | null,
+  isSuperadmin: boolean,
+  leaderTeamIds: readonly string[],
+): boolean {
+  return hasFullSurveyControl(survey, scope, currentUserId, isSuperadmin, leaderTeamIds);
+}
+
+/**
+ * 공유 설정의 **공개 범위 세그먼트**를 만질 수 있는지 **근사치** (티켓 16, .pen FLOW 4-2).
+ *
+ * 서버 요구는 `survey.manageAccess` 이고 그것을 주는 열은 셋뿐이다 — 슈퍼어드민 · 소유 팀에
+ * 남아 있는 소유자 · 소유 팀 팀장. 팀 공개 설문의 팀원은 `survey.edit` 은 있어도 이건 없다
+ * (스펙 §7: 범위 변경은 소유자·팀장·슈퍼어드민만).
+ *
+ * 오늘은 `canViewSurveyAnalyticsCard` 와 판정이 같지만 **이유가 다르다**. 저쪽이 요구하는
+ * responses.view 는 참여자(티켓 18)도 갖고 이쪽 manageAccess 는 참여자도 못 갖는다 — 참여
+ * 행이 목록에 실리는 날 둘은 갈린다. 그래서 이름과 문서를 따로 둔다.
+ *
+ * 모달을 **여는 것**은 이 판정이 막지 않는다. 접근 가능한 내부인이면 누구나 참여자를 추가할
+ * 수 있어야 하므로(스펙 §7) 잠기는 것은 범위 세그먼트뿐이다.
+ */
+export function canManageSurveyAccessCard(
+  survey: SurveyCardCapabilitySubject,
+  scope: WorkScope,
+  currentUserId: string | null,
+  isSuperadmin: boolean,
+  leaderTeamIds: readonly string[],
+): boolean {
+  return hasFullSurveyControl(survey, scope, currentUserId, isSuperadmin, leaderTeamIds);
+}
+
+/**
+ * 서버 매트릭스의 **전권 세 열**(슈퍼어드민 · 소유자 · 소유 팀 팀장)에 해당하는가.
+ *
  * 소유자 분기가 팀 소속을 함께 보는 것은 서버 판정과 맞추기 위해서다 — 소유 팀에서 빠진
  * 소유자는 서버에서 전권을 잃는다(survey-access 의 revocation 계약).
  */
-export function canViewSurveyAnalyticsCard(
+function hasFullSurveyControl(
   survey: SurveyCardCapabilitySubject,
   scope: WorkScope,
   currentUserId: string | null,
