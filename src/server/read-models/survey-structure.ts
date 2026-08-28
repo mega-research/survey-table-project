@@ -1,14 +1,13 @@
-import 'server-only';
-
 import { cache } from 'react';
 
-import { and, count, desc, eq, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { type SQL, and, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { questionGroups, questions, surveyGroups, surveys, teams, users } from '@/db/schema';
-import type { SurveyScopeFilter } from '@/server/work-scope';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import type { SurveyScopeFilter } from '@/server/work-scope';
 import { isCodedChoiceType } from '@/types/question-types';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
@@ -20,6 +19,45 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 // 무범위 목록(구 getSurveys)은 제거됐다(티켓 09) — 마지막 소비자였던 분석 대시보드가
 // 작업 범위 목록(getSurveyListWithCounts)으로 옮겨 갔다. 목록은 항상 범위를 지나야 한다.
+
+/**
+ * 목록 두 벌이 함께 쓰는 투영 (티켓 17).
+ *
+ * `getScopedSurveys`(보이는 설문)와 `getDeletedSurveys`(휴지통)는 조회 조건만 다르고 화면은
+ * 같은 카드를 그린다. 컬럼을 각자 적으면 한쪽에 필드가 늘 때 다른 쪽이 조용히 옛 모양으로
+ * 남고, 그 순간 `SurveyListItem` 조립이 두 갈래가 된다.
+ *
+ * `deletedAt` 이 양쪽에 있는 것은 의도다. 범위 목록에서는 조건이 `IS NULL` 이라 언제나
+ * null 이지만, 그 덕에 화면이 값 하나로 「휴지통을 보고 있는가」를 판정한다 — 모드를 별도
+ * 플래그로 내려보내면 목록과 모드가 어긋나는 상태가 표현 가능해진다.
+ *
+ * 그룹 열은 두 목록이 서로 다른 규칙을 쓰므로 각자 붙인다.
+ *
+ * 상수가 아니라 **함수**인 것은 평가 시점 때문이다. 모듈 최상위에서 `teams.name` 을 읽으면
+ * import 시점에 스키마가 필요해져, `@/db/schema` 를 부분 모킹하는 테스트가 이 모듈을
+ * 체인에 들이는 순간 「No "teams" export」로 깨진다. 쿼리를 만들 때 부르면 종전과 같다.
+ */
+function surveyListColumns() {
+  return {
+    id: surveys.id,
+    title: surveys.title,
+    description: surveys.description,
+    slug: surveys.slug,
+    privateToken: surveys.privateToken,
+    createdAt: surveys.createdAt,
+    updatedAt: surveys.updatedAt,
+    endDate: surveys.endDate,
+    isPublic: surveys.isPublic,
+    status: surveys.status,
+    teamId: surveys.teamId,
+    teamName: teams.name,
+    visibility: surveys.visibility,
+    assignmentStatus: surveys.assignmentStatus,
+    ownerUserId: surveys.ownerUserId,
+    ownerName: users.name,
+    deletedAt: surveys.deletedAt,
+  } as const;
+}
 
 /**
  * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
@@ -47,25 +85,7 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 
   return db
     .select({
-      id: surveys.id,
-      title: surveys.title,
-      description: surveys.description,
-      slug: surveys.slug,
-      privateToken: surveys.privateToken,
-      createdAt: surveys.createdAt,
-      updatedAt: surveys.updatedAt,
-      endDate: surveys.endDate,
-      isPublic: surveys.isPublic,
-      status: surveys.status,
-      teamId: surveys.teamId,
-      teamName: teams.name,
-      visibility: surveys.visibility,
-      assignmentStatus: surveys.assignmentStatus,
-      ownerUserId: surveys.ownerUserId,
-      ownerName: users.name,
-      // 조건이 `deleted_at IS NULL` 이라 언제나 null 이다 — 삭제됨 목록(getDeletedSurveys)과
-      // 같은 모양을 유지하려고 함께 투영한다. 화면이 이 값 하나로 두 목록을 가른다(티켓 17).
-      deletedAt: surveys.deletedAt,
+      ...surveyListColumns(),
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
@@ -96,23 +116,8 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 export async function getDeletedSurveys() {
   return db
     .select({
-      id: surveys.id,
-      title: surveys.title,
-      description: surveys.description,
-      slug: surveys.slug,
-      privateToken: surveys.privateToken,
-      createdAt: surveys.createdAt,
-      updatedAt: surveys.updatedAt,
-      endDate: surveys.endDate,
-      isPublic: surveys.isPublic,
-      status: surveys.status,
-      teamId: surveys.teamId,
-      teamName: teams.name,
-      visibility: surveys.visibility,
-      assignmentStatus: surveys.assignmentStatus,
-      ownerUserId: surveys.ownerUserId,
-      ownerName: users.name,
-      deletedAt: surveys.deletedAt,
+      ...surveyListColumns(),
+      // 삭제된 설문에 폴더를 보여줘도 그 폴더 화면에서는 안 보여 갈 곳 없는 링크가 된다.
       surveyGroupId: sql<string | null>`null::uuid`,
     })
     .from(surveys)
@@ -201,8 +206,12 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       ...(g.color != null ? { color: g.color } : {}),
       ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
       ...(g.hideName != null ? { hideName: g.hideName } : {}),
-      ...(g.nameDesign != null ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> } : {}),
-      ...(g.displayCondition != null ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> } : {}),
+      ...(g.nameDesign != null
+        ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> }
+        : {}),
+      ...(g.displayCondition != null
+        ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> }
+        : {}),
     })),
     questions: questionList.map((q) => {
       const mapped: QuestionType = {
@@ -213,12 +222,22 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         required: q.required,
         ...(q.requiredMessage != null ? { requiredMessage: q.requiredMessage } : {}),
         ...(q.groupId != null ? { groupId: q.groupId } : {}),
-        ...(q.options != null ? { options: q.options as NonNullable<QuestionType['options']> } : {}),
-        ...(q.selectLevels != null ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> } : {}),
+        ...(q.options != null
+          ? { options: q.options as NonNullable<QuestionType['options']> }
+          : {}),
+        ...(q.selectLevels != null
+          ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> }
+          : {}),
         ...(q.tableTitle != null ? { tableTitle: q.tableTitle } : {}),
-        ...(q.tableColumns != null ? { tableColumns: q.tableColumns as NonNullable<QuestionType['tableColumns']> } : {}),
-        ...(q.tableRowsData != null ? { tableRowsData: q.tableRowsData as NonNullable<QuestionType['tableRowsData']> } : {}),
-        ...(q.tableHeaderGrid != null ? { tableHeaderGrid: q.tableHeaderGrid as NonNullable<QuestionType['tableHeaderGrid']> } : {}),
+        ...(q.tableColumns != null
+          ? { tableColumns: q.tableColumns as NonNullable<QuestionType['tableColumns']> }
+          : {}),
+        ...(q.tableRowsData != null
+          ? { tableRowsData: q.tableRowsData as NonNullable<QuestionType['tableRowsData']> }
+          : {}),
+        ...(q.tableHeaderGrid != null
+          ? { tableHeaderGrid: q.tableHeaderGrid as NonNullable<QuestionType['tableHeaderGrid']> }
+          : {}),
         order: q.order,
         ...(q.allowOtherOption != null ? { allowOtherOption: q.allowOtherOption } : {}),
         ...(q.optionsColumns != null ? { optionsColumns: q.optionsColumns } : {}),
@@ -229,15 +248,35 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
         ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
         ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),
-        ...(q.requiresAcknowledgment != null ? { requiresAcknowledgment: q.requiresAcknowledgment } : {}),
+        ...(q.requiresAcknowledgment != null
+          ? { requiresAcknowledgment: q.requiresAcknowledgment }
+          : {}),
         ...(q.placeholder != null ? { placeholder: q.placeholder } : {}),
         ...(q.defaultValueTemplate != null ? { defaultValueTemplate: q.defaultValueTemplate } : {}),
-        ...((q.inputType as 'text' | 'number' | null) != null ? { inputType: q.inputType as 'text' | 'number' } : {}),
+        ...((q.inputType as 'text' | 'number' | null) != null
+          ? { inputType: q.inputType as 'text' | 'number' }
+          : {}),
         ...(q.emptyDefault != null ? { emptyDefault: q.emptyDefault } : {}),
-        ...(q.tableValidationRules != null ? { tableValidationRules: q.tableValidationRules as NonNullable<QuestionType['tableValidationRules']> } : {}),
-        ...(q.dynamicRowConfigs != null ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> } : {}),
-        ...(q.numberFormat != null ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> } : {}),
-        ...(q.sumConstraints != null ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> } : {}),
+        ...(q.tableValidationRules != null
+          ? {
+              tableValidationRules: q.tableValidationRules as NonNullable<
+                QuestionType['tableValidationRules']
+              >,
+            }
+          : {}),
+        ...(q.dynamicRowConfigs != null
+          ? {
+              dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<
+                QuestionType['dynamicRowConfigs']
+              >,
+            }
+          : {}),
+        ...(q.numberFormat != null
+          ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
+          : {}),
+        ...(q.sumConstraints != null
+          ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
+          : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
         ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
         ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
@@ -251,12 +290,20 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
         ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
         ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
-        ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),
+        ...(q.displayCondition != null
+          ? {
+              displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']>,
+            }
+          : {}),
         ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
         ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
         ...(q.exportLabel != null ? { exportLabel: q.exportLabel } : {}),
-        ...(q.spssVarType != null ? { spssVarType: q.spssVarType as NonNullable<QuestionType['spssVarType']> } : {}),
-        ...(q.spssMeasure != null ? { spssMeasure: q.spssMeasure as NonNullable<QuestionType['spssMeasure']> } : {}),
+        ...(q.spssVarType != null
+          ? { spssVarType: q.spssVarType as NonNullable<QuestionType['spssVarType']> }
+          : {}),
+        ...(q.spssMeasure != null
+          ? { spssMeasure: q.spssMeasure as NonNullable<QuestionType['spssMeasure']> }
+          : {}),
       };
       // strip된 셀 데이터를 hydrate (cellCode, exportLabel, spssVarType 등 복원)
       if (mapped.type === 'table' && mapped.tableRowsData && mapped.tableColumns) {

@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import type { Survey as SurveyRow } from '@/db/schema';
-import type { Survey as SurveyType, SurveySettings } from '@/types/survey';
+import type { SurveySettings, Survey as SurveyType } from '@/types/survey';
 
 export type { SurveyRow, SurveyType, SurveySettings };
 
@@ -113,7 +113,13 @@ export const SurveyIdInput = z.object({
 });
 export type SurveyIdInput = z.infer<typeof SurveyIdInput>;
 
-export const DeleteSurveyOutput = z.void();
+/**
+ * 성공만 알리면 되는 설문 수명주기 변경 — 삭제와 복구가 함께 쓴다(티켓 17).
+ *
+ * 이름에 delete 를 남겨두면 restore 가 「삭제 출력」을 반환하는 모양이 되어, 다음 사람이
+ * 계약이 겹친 것을 실수로 읽는다.
+ */
+export const SurveyLifecycleOutput = z.void();
 
 /** db schema Survey 행 전체. */
 export const SurveyRowSchema = z.custom<SurveyRow>();

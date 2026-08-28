@@ -1,19 +1,16 @@
 import { ORPCError } from '@orpc/server';
 
 import { authed, superadmin } from '@/server/orpc';
-import {
-  assertSurveyCapabilityRpc,
-  toRpcSurveyAccessError,
-} from '@/server/rpc-survey-access';
+import { assertSurveyCapabilityRpc, toRpcSurveyAccessError } from '@/server/rpc-survey-access';
 import { toRpcWorkScopeError } from '@/server/rpc-work-scope';
 
 import {
   CreateSurveyInput,
-  DeleteSurveyOutput,
   DuplicateResultSchema,
   EnsureSurveyInDbInput,
   EnsureSurveyResultSchema,
   SurveyIdInput,
+  SurveyLifecycleOutput,
   SurveyOwnershipRequiredError,
   SurveyRowSchema,
   UpdateSurveyInput,
@@ -58,9 +55,7 @@ const ensure = authed
 const create = authed
   .input(CreateSurveyInput)
   .output(SurveyRowSchema)
-  .handler(({ context, input }) =>
-    svc.createSurvey(context.user, input).catch(rethrowCreateError),
-  );
+  .handler(({ context, input }) => svc.createSurvey(context.user, input).catch(rethrowCreateError));
 
 const update = authed
   .input(UpdateSurveyInput)
@@ -75,7 +70,7 @@ const update = authed
 // 티켓 17 부터 실제 동작은 soft delete 다 — 관문·요구 capability·응답 모양은 그대로다.
 const del = authed
   .input(SurveyIdInput)
-  .output(DeleteSurveyOutput)
+  .output(SurveyLifecycleOutput)
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.delete');
     return svc.deleteSurvey(input).catch((error: unknown) => {
@@ -97,7 +92,7 @@ const del = authed
  */
 const restore = superadmin
   .input(SurveyIdInput)
-  .output(DeleteSurveyOutput)
+  .output(SurveyLifecycleOutput)
   .handler(({ input }) =>
     svc.restoreSurvey(input).catch((error: unknown) => {
       throw toRpcSurveyAccessError(error);

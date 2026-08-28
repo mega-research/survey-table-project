@@ -4,18 +4,17 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 16 **invite_only 공개 범위** — 엔진은 이미 v2 의미
-> (「소유 팀 **팀원에게만** 숨김」)를 갖고 있었고, 이번에 **바꾸는 경로**가 생겼다.
-> `workspace.sharing.setVisibility` 하나가 `surveys.visibility` 를 만지며 요구는 `survey.edit` 이
-> 아니라 **`survey.manageAccess`** 다 — 편집권은 팀원도 갖지만 범위 변경은 소유자·팀장·
-> 슈퍼어드민뿐이다(스펙 §7). `UpdateSurveyDataSchema` 에 `visibility` 가 없는 것과 한 몸이다.
-> 화면은 `features/survey-builder/sharing` 의 공유 설정 모달(.pen 4-2 골격 — 공개 범위 블록만.
-> 참여자·클라이언트·실사·소유권 이전은 티켓 18·21·24·19)이고 입구는 설문 카드 케밥이다.
-> 여는 것은 막지 않고 세그먼트만 잠근다. 화면 표기는 `SURVEY_VISIBILITY_LABEL` 이 SSOT 가 됐다 —
-> 재배치 센터가 같은 컬럼을 「팀 전체」로 적어 두 화면이 어긋나 있었다. 음성 검증 둘:
-> `invite-only-visibility.test.ts`(전환 전/후 짝)와 `survey-sharing.realdb.test.ts`(목록 SQL·
-> updatedAt 보존). 마이그레이션 없음. 직전: 티켓 15 B 검증 게이트 — 라우터 열거 기반 교차 팀
-> IDOR 스위트 + 「관문 통과 뒤의 축」)
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 17 **soft delete + 복구** — 설문 삭제가 `tx.delete`
+> 에서 `deleted_at` 표시로 바뀌었다. CASCADE 가 질문·응답·컨택·메일을 함께 없애던 것이
+> 티켓 18 의 참여자 삭제권 전제와 맞지 않아서다(스펙 §4). **복구는 슈퍼어드민 전용**이고
+> capability 관문을 쓰지 않는다 — 코어가 삭제된 설문을 조회 단계에서 걸러 언제나 not_found 를
+> 주기 때문이다. 조회는 두 갈래로 닫았다: 관문이 있는 내부 표면은 코어 한 곳이, 관문이 없는
+> 응답자 경로(슬러그·비공개 토큰·미리보기 토큰·쿼터)는 각자 조건을 건다. `getSurveyById`
+> 한 줄이 빌더 상세·운영 RSC·미리보기·응답 페이지·복제를 한꺼번에 닫는다. **R2 는 관행 그대로
+> 후보를 등록하되 실제로 지워지지 않는다** — 참조 표면의 `surveys`·`questions` 에 deletedAt
+> 술어가 없어 살아남은 행이 참조를 계속 주장한다(`reference-surface.test.ts` 가 못 박는다).
+> 화면은 시스템 전체 보기 툴바의 「삭제됨 N」 칩 + 복구 전용 카드. 마이그레이션 없음 —
+> `surveys.deleted_at` 은 이미 있었다. 직전: 티켓 16 invite_only 공개 범위)
 
 ---
 
@@ -783,6 +782,35 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
   팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
   `team_lifecycle_events` 에 감사 행을 남긴다.
+- **설문 삭제는 soft delete 다**(티켓 17, 스펙 §4 「삭제 전제」). `deleteSurvey` 가 `deleted_at`
+  을 찍을 뿐이라 질문·응답·컨택·메일이 전부 남는다 — 예전 `tx.delete` + CASCADE 는 참여자
+  (티켓 18)에게 삭제권이 넓어지는 전제와 맞지 않았다. **복구(`surveyBuilder.surveys.restore`)는
+  슈퍼어드민 전용이고 capability 관문을 쓰지 않는다** — 코어가 삭제된 설문을
+  `deleted_at IS NULL` 로 걸러 언제나 not_found 를 주기 때문이고, 그 필터를 느슨하게 하면
+  「삭제는 안 보인다」가 통째로 무너진다. 소유자·팀장에게 열지 않는 것도 의도다: 되돌리는 일이
+  흔해지면 삭제가 실질적인 아카이브가 된다. 복구가 팀·소유자·상태를 **되돌리지 않는 것**이
+  요점이다 — 삭제가 애초에 건드리지 않으므로 되살릴 것은 `deleted_at` 하나다.
+  **조회는 두 갈래로 닫힌다.** 관문이 있는 내부 표면은 capability 코어 하나가 닫으므로
+  티켓 09~11 이 배선한 전 표면이 자동이고, **관문이 없는 응답자(pub) 경로는 각자 조건을
+  건다** — `getSurveyBySlug`·`getSurveyByPrivateToken`·`getSurveyByPreviewToken`·
+  `getQuotaConfig`. 토큰은 삭제된 설문을 여는 마지막 열쇠라 특히 그렇다. read-model 의
+  `getSurveyById` 한 줄이 빌더 상세·운영 RSC·미리보기·`getSurveyForResponse`·변수 카탈로그·
+  복제를 한꺼번에 닫는다(삭제된 행을 일부러 읽어야 하는 곳은 자기 쿼리를 따로 쓴다 —
+  플래그를 달면 기본값이 호출부마다 갈리고 React cache 키도 함께 깨진다).
+  **R2 는 관행 그대로 후보를 등록하되 실제로는 지워지지 않는다** — `REFERENCE_SURFACE` 의
+  `surveys`·`questions` 에 deletedAt 술어가 **없어** 살아남은 행이 참조를 계속 주장하기
+  때문이다. 바로 옆 `mail_templates` 가 반대 선례라 「일관성」을 이유로 술어를 달기 쉬운데,
+  달면 삭제 7일 뒤 파일이 지워지고 그 뒤의 복구는 이미지·첨부가 빠진 설문을 되살린다
+  (`reference-surface.test.ts` 가 이 자리를 못 박는다). 옛 `deleteKeyRefsBySourceIds` 는
+  뺐다 — 「행이 소멸하는데 인덱스만 남는다」는 전제가 사라졌다.
+  화면은 **시스템 전체 보기 툴바의 「삭제됨 N」 칩**이다. 상태 칩의 다섯 번째 값이 아니라
+  별개의 모드다(칩은 받아온 목록을 접고 이쪽은 조회를 바꾼다). `deletedCount` 가 **null 이면
+  이 화면에 휴지통이 없다** — 「비어 있는 휴지통」과 「볼 수 없는 사람」이 같은 그림이 되면
+  안 되기 때문이다. 휴지통 카드(`DeletedSurveyCard`)도 별개 컴포넌트다.
+  검증은 둘로 나뉜다 — `tests/integration/soft-delete-surface-inventory.test.ts`(기본 게이트,
+  새 pub 표면이 붙으면 등재를 강요)와 `soft-delete-invisibility.realdb.test.ts`(등재된 표면이
+  실제로 거부하는지). 목이 돌려주는 행은 언제나 테스트가 정한 행이라 WHERE 절은 실 DB 로만
+  보인다.
 - **공개 범위를 바꾸는 유일한 경로는 `workspace.sharing.setVisibility` 다**(티켓 16, .pen FLOW 4-2).
   요구는 `survey.edit` 이 아니라 **`survey.manageAccess`** — 편집은 팀 공개 설문의 팀원도 갖지만
   범위 변경은 소유자·소유 팀 팀장·슈퍼어드민뿐이다(스펙 §7). 같은 이유로 `UpdateSurveyDataSchema`
@@ -1051,6 +1079,17 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 - `r2_deletion_candidates` — 등록 후 7일 유예, cron 집행자가 장부·전역 참조를 재확인한 키만 삭제.
 - `r2_sent_keys` — 발송된 메일 콘텐츠에서 추출한 키의 append-only 장부. **장부에 오른 키는 참조 유무와 무관하게 영구 보존** (수신함 참조는 DB로 복원 불가).
 - `r2_key_refs` — 참조 인덱스. 유지가 아니라 **재생성** 구조(불변 소스는 삽입 시 1회, 가변 소스는 주기 전량 재추출)이며 집행 판정에서 삭제 권한이 없는 사전 필터다.
+
+- **설문 삭제가 등록하는 후보는 사실상 전부 '보존됨' 으로 닫힌다**(티켓 17). soft delete 라
+  소멸하는 행이 없어 참조 재확인이 언제나 히트하기 때문이다. 등록 자체는 관행으로 남겼으므로
+  `/admin/file-cleanup` 대기 큐에 「지워지지 않을 후보」가 쌓이는 것이 정상이다 — 큐의 길이를
+  「지워질 파일 수」로 읽지 말 것.
+- **참조 표면(`REFERENCE_SURFACE`)의 `surveys`·`questions` 에는 deletedAt 술어를 달지 말 것**
+  (티켓 17). 설문 삭제가 soft delete 라 그 행들은 살아남고, 살아남은 행이 키의 참조를 계속
+  주장하는 것이 「설문을 지워도 R2 파일은 지우지 않는다」를 지탱한다. 바로 옆
+  `mail_templates` 가 반대 선례(soft delete 된 템플릿은 참조 자격을 잃는다 — 의도된 정책)라
+  일관성을 이유로 같은 줄을 달기 쉬운데, 달면 삭제 7일 뒤 집행자가 파일을 지우고 그 뒤의
+  복구는 이미지·첨부가 빠진 설문을 되살린다. `reference-surface.test.ts` 가 못 박는다.
 
 관리 UI는 `/admin/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
 

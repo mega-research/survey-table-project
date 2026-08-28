@@ -1,14 +1,16 @@
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, isNull, ne } from 'drizzle-orm';
-
-import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
-import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
-import { listActiveTeams } from '@/server/read-models/teams';
-import { loadAccessSubject, SurveyAccessError, type SurveyAccessUser } from '@/server/survey-access';
-import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
+import { db } from '@/db';
+import { contactTargets, surveyVersions, surveys } from '@/db/schema';
+import { normalizeQuestions } from '@/lib/question';
+import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { isValidUUID } from '@/lib/utils';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
+import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { isValidTestToken } from '@/server/read-models/survey-control';
+import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import {
   getQuestionGroupsBySurvey,
   getQuestionsBySurvey,
@@ -16,24 +18,25 @@ import {
   getSurveyById,
   getSurveyWithDetails,
 } from '@/server/read-models/survey-structure';
-import { db } from '@/db';
-import { contactTargets, surveyVersions, surveys } from '@/db/schema';
+import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
+import { listActiveTeams } from '@/server/read-models/teams';
 import { getVariableCatalog } from '@/server/read-models/variable-catalog';
+import {
+  SurveyAccessError,
+  type SurveyAccessUser,
+  loadAccessSubject,
+} from '@/server/survey-access';
+import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
-import { normalizeQuestions } from '@/lib/question';
-import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
-import { isValidTestToken } from '@/server/read-models/survey-control';
-import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
-import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 import type {
   SlugAvailableInput,
-  SurveyBySlugInput,
   SurveyByPreviewTokenInput,
   SurveyByPrivateTokenInput,
+  SurveyBySlugInput,
   SurveyForResponseInput,
   SurveyForResponseResult,
   SurveyIdRow,
@@ -63,7 +66,17 @@ export {
 // 설문 조회 (authed)
 // ========================
 
-// 슬러그 사용 가능 여부 확인
+/**
+ * 슬러그 사용 가능 여부 확인.
+ *
+ * **삭제된 설문의 슬러그도 「사용 중」이다 — 일부러 그렇다**(티켓 17). `surveys.slug` 는
+ * UNIQUE 라, 삭제됐다는 이유로 내주면 다른 설문이 그 값을 가져가고 그때부터 복구가 제약
+ * 위반으로 영영 실패한다. soft delete 의 값어치가 복구인 이상 슬러그는 함께 예약된다.
+ *
+ * 다른 조회 경로들과 방향이 반대인 유일한 자리다 — 저쪽은 「삭제된 것을 감춘다」이고 여기는
+ * 「삭제된 것도 자리를 지킨다」다. 화면에는 이름을 왜 못 쓰는지 보이지 않으므로(그 설문은
+ * 안 보인다) 슈퍼어드민이 휴지통에서 확인해야 한다.
+ */
 export async function isSlugAvailable(input: SlugAvailableInput): Promise<boolean> {
   const { slug, excludeSurveyId } = input;
   const existing = await db.query.surveys.findFirst({
@@ -164,14 +177,12 @@ async function listSelectableTeams(
 // capability 코어가 `deleted_at IS NULL` 로 조회해 삭제된 설문을 not_found 로 접지만,
 // 응답자 경로에는 그 코어가 서지 않는다. 슬러그·비공개 토큰·미리보기 토큰은 삭제된 설문을
 // 여는 마지막 열쇠가 되므로 조회 조건에 함께 건다.
-// `tests/integration/soft-delete-invisibility.test.ts` 가 이 구역 전수를 음성으로 고정한다.
+// `tests/integration/soft-delete-invisibility.realdb.test.ts` 가 이 구역 전수를 음성으로 고정한다.
 
 // 슬러그로 설문 조회 (pub — 익명 응답자 진입).
 // 익명 노출 경로이므로 full row 를 반환하지 않고 호출자(use-survey-loader)가 실제 쓰는 id 만
 // 투영한다. testToken/testModeEnabled/isPaused/pausedMessage/privateToken 유출 차단(I-3).
-export async function getSurveyBySlug(
-  input: SurveyBySlugInput,
-): Promise<SurveyIdRow | undefined> {
+export async function getSurveyBySlug(input: SurveyBySlugInput): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: and(eq(surveys.slug, input.slug), isNull(surveys.deletedAt)),
     columns: { id: true },
@@ -246,10 +257,7 @@ export async function getSurveyForResponse(
     const tokenIsValid = isValidTestToken(survey, input.testToken);
     const testTarget = tokenIsValid
       ? await db.query.contactTargets.findFirst({
-          where: and(
-            eq(contactTargets.surveyId, surveyId),
-            eq(contactTargets.isTest, true),
-          ),
+          where: and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, true)),
           columns: { id: true },
         })
       : null;

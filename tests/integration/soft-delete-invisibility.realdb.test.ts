@@ -17,6 +17,7 @@
  *     응답·컨택·질문·버전 행을 세어 확인하고, 복구 뒤 ①②가 그대로 되돌아오는지 본다.
  */
 import { createRouterClient } from '@orpc/server';
+import { PUB_SURVEY_SURFACES } from '@tests/helpers/deleted-survey-surfaces';
 import { count, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -30,15 +31,16 @@ import {
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
-import type { ORPCContext } from '@/server/context';
-import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
 import { lookupContactAttrs } from '@/server/contacts/services/contact-attrs';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
+import type { ORPCContext } from '@/server/context';
 import { getQuotaConfig } from '@/server/quota/services/quota';
+import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import { getSurveyById } from '@/server/read-models/survey-structure';
-import { loadSurveyCapabilities, SurveyAccessError } from '@/server/survey-access';
+import { SurveyAccessError, loadSurveyCapabilities } from '@/server/survey-access';
 import { surveys as surveysProcedures } from '@/server/survey-builder/procedures/surveys';
 import * as surveyReadSvc from '@/server/survey-builder/services/survey-read';
-import { PUB_SURVEY_SURFACES } from '@tests/helpers/deleted-survey-surfaces';
+import { loadSurveyGateRow } from '@/server/survey-response/services/response-gate';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -123,10 +125,7 @@ async function seedSurvey(): Promise<void> {
 }
 
 async function softDelete(): Promise<void> {
-  await db
-    .update(surveysTable)
-    .set({ deletedAt: new Date() })
-    .where(eq(surveysTable.id, surveyId));
+  await db.update(surveysTable).set({ deletedAt: new Date() }).where(eq(surveysTable.id, surveyId));
 }
 
 describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () => {
@@ -147,9 +146,7 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
       });
     }
     await db.insert(teamsTable).values({ id: TEAM_ID, name: `삭제팀-${TEAM_ID.slice(0, 8)}` });
-    await db
-      .insert(teamMembersTable)
-      .values({ teamId: TEAM_ID, userId: OWNER_ID, role: 'member' });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: OWNER_ID, role: 'member' });
   });
 
   beforeEach(async () => {
@@ -245,6 +242,15 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
       expect(await lookupContactAttrs({ surveyId, inviteToken: INVITE_TOKEN })).toBeNull();
     });
 
+    /**
+     * 슬러그만 방향이 반대다 — 감추는 것이 아니라 자리를 지킨다. `surveys.slug` 가 UNIQUE 라,
+     * 삭제됐다고 내주면 다른 설문이 가져가고 그때부터 복구가 제약 위반으로 영영 실패한다.
+     */
+    it('슬러그는 삭제 후에도 예약된 채 남는다 — 복구가 제약 위반으로 막히지 않게', async () => {
+      await softDelete();
+      expect(await surveyReadSvc.isSlugAvailable({ slug: SLUG })).toBe(false);
+    });
+
     it('쿼터 플랜 조회가 null 이 된다 — 삭제된 설문이 마감 계산을 이어가지 않는다', async () => {
       await db
         .update(surveysTable)
@@ -266,6 +272,30 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
       // 응답 생성 계열은 게이트가, 조회 계열은 조회 조건이 막는다 — 아래 두 케이스가 각 축의 대표다.
       expect(paths).toContain('surveyResponse.response.createWithFirstAnswer');
       expect(paths).toContain('surveyBuilder.publicRead.forResponse');
+    });
+
+    /**
+     * **진행 중 응답의 쓰기는 계속된다 — 지금은 의도된 동작이다**(deleted-survey-surfaces 주석).
+     *
+     * 삭제가 soft delete 라 그 응답 행은 보존되고, 제출만 게이트가 막는다. 응답자는 쓰던 것을
+     * 잃지 않고 복구되면 그대로 이어갈 수 있다. 이 축으로는 아무것도 노출되지 않으므로 티켓의
+     * 요구(미노출 + 데이터 보존)는 지켜진다.
+     *
+     * 여기 적어 두는 이유는 **선택이었다는 사실을 남기기 위해서**다. 언젠가 막기로 정하면 이
+     * 케이스가 그 자리에서 빨개져, 응답자 화면 문구까지 함께 정하도록 강제한다.
+     */
+    it('삭제돼도 진행 중 응답의 제어 플래그 조회만 닫히고 행은 살아 있다', async () => {
+      await softDelete();
+
+      // 제어 플래그는 닫힌다 — 이것이 fail-open 의 입력이다.
+      expect(await getSurveyControlFlags(surveyId)).toBeNull();
+      // 응답 행은 그대로다. 제출 차단은 loadSurveyGateRow 가 진다.
+      const [row] = await db
+        .select({ id: surveyResponsesTable.id })
+        .from(surveyResponsesTable)
+        .where(eq(surveyResponsesTable.id, responseId));
+      expect(row?.id).toBe(responseId);
+      await expect(loadSurveyGateRow(surveyId)).rejects.toThrow();
     });
   });
 
