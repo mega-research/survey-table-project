@@ -34,8 +34,10 @@ interface GuestsBlockProps {
  * 본체다. 칩은 부여된 사람마다 따로 산다 — 한 설문에 여러 클라이언트가 붙고 각자 볼 것이
  * 다르기 때문이다.
  *
- * 권한 축은 참여자와 같다: 검색·추가·탭 저장은 이 모달을 연 사람이면 누구나, 「제외」만
- * 서버가 준 `canRemove` 로 잠근다.
+ * 권한 축은 **둘**이다. 검색·추가는 이 모달을 연 사람이면 누구나 하고, 「제외」와 **탭 칩**은
+ * 서버가 준 `canManage`(=`survey.manageAccess`)로 함께 잠근다 — 스펙 §11-5 의 「초대 제거·범위
+ * 변경」이 그 둘이고, 탭을 넓히면 조사 대상(마스킹)·쿼터가 외부인에게 열린다. 새 부여는 언제나
+ * 기본 탭으로 서므로 「추가는 누구나」와 어긋나지 않는다.
  *
  * 화면에 없는 것이 계약이다 — 메일 탭 체크박스가 없고, 「분석」·「다운로드」도 없다.
  * 열 수 없는 것은 어휘에도 두지 않는다(SurveyGuestTabs 주석).
@@ -90,7 +92,7 @@ export function GuestsBlock({ surveyId }: GuestsBlockProps) {
   }
 
   const guests = data?.guests ?? [];
-  const canRemove = data?.canRemove ?? false;
+  const canManage = data?.canManage ?? false;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -130,7 +132,7 @@ export function GuestsBlock({ surveyId }: GuestsBlockProps) {
         <GuestCard
           key={guest.userId}
           guest={guest}
-          canRemove={canRemove}
+          canManage={canManage}
           isSaving={setTabs.isPending}
           isRemoving={removeGuest.isPending}
           onToggleTab={(tab) => handleToggleTab(guest, tab)}
@@ -144,6 +146,11 @@ export function GuestsBlock({ surveyId }: GuestsBlockProps) {
         설문지 미리보기는 항상 포함, 현황은 체크한 탭만 보입니다 ·
         분석·다운로드·응답 상세·컨택 원본·메일은 항상 차단.
       </p>
+      {guests.length > 0 && !canManage && (
+        <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+          열람 탭 변경과 부여 해제는 소유자·팀장·슈퍼어드민만 할 수 있습니다.
+        </p>
+      )}
     </div>
   );
 }
@@ -164,14 +171,14 @@ function metaLine(organization: string | null, email: string): string {
 
 function GuestCard({
   guest,
-  canRemove,
+  canManage,
   isSaving,
   isRemoving,
   onToggleTab,
   onRemove,
 }: {
   guest: SurveyGuestItem;
-  canRemove: boolean;
+  canManage: boolean;
   isSaving: boolean;
   isRemoving: boolean;
   onToggleTab: (tab: SurveyGuestTab) => void;
@@ -191,7 +198,7 @@ function GuestCard({
           </span>
         </div>
         {/* 해제는 소유자·팀장·슈퍼어드민만 — 권한이 없으면 버튼 자체를 그리지 않는다. */}
-        {canRemove && (
+        {canManage && (
           <button
             type="button"
             disabled={isRemoving}
@@ -203,7 +210,9 @@ function GuestCard({
         )}
       </div>
 
-      <TabChips tabs={guest.tabs} disabled={isSaving} onToggle={onToggleTab} />
+      {/* 칩은 권한이 없어도 **보여준다** — 지금 무엇이 열려 있는지는 초대한 사람도 알아야
+          한다. 잠기는 것은 누르는 것뿐이다. */}
+      <TabChips tabs={guest.tabs} disabled={isSaving || !canManage} onToggle={onToggleTab} />
     </div>
   );
 }
@@ -213,6 +222,9 @@ function GuestCard({
  *
  * 어휘 순서는 `surveyGuestTabValues` 가 정한다. 화면이 자기 배열을 들면 탭이 늘었을 때
  * 계약에는 있는데 안 그려지는 값이 생긴다.
+ *
+ * `disabled` 는 저장 중이거나 관리 권한이 없을 때 선다 — 강제는 서버 관문이 하고 여기는
+ * 「눌러도 FORBIDDEN 인 버튼」을 안 만드는 것이 목적이다.
  */
 function TabChips({
   tabs,

@@ -32,7 +32,7 @@ import {
   type SurveyCapability,
 } from '@/shared/contracts/workspace';
 import { guestActorContext } from '@tests/helpers/rpc-context';
-import { enumerateProcedures } from '@tests/helpers/rpc-surface';
+import { enumerateProcedures, takesSurveyId } from '@tests/helpers/rpc-surface';
 
 const IDS = vi.hoisted(() => ({
   GUEST_ID: '4b000000-0000-4000-8000-00000000c001',
@@ -130,6 +130,15 @@ describe('내부 표면은 게스트에게 전부 닫혀 있다', () => {
       procedures.filter((p) => !internalOnlySurfaces.includes(p.path)).map((p) => p.base),
     );
     expect([...reachable].sort()).toEqual(['account', 'pub', 'scoped']);
+  });
+
+  it('scoped 표면은 전부 설문 관문을 진다 — 무관문 문이 하나도 없다', () => {
+    // 베이스가 게스트를 통과시키는 유일한 문이므로 여기 예외가 하나라도 생기면 위의
+    // capability 검사가 통째로 우회된다. 티켓 21 이 마지막 예외를 authed 로 옮겼다.
+    const scopedWithoutSurvey = procedures
+      .filter((p) => p.base === 'scoped' && !takesSurveyId(p))
+      .map((p) => p.path);
+    expect(scopedWithoutSurvey).toEqual([]);
   });
 });
 

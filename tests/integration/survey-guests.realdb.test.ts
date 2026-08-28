@@ -344,13 +344,22 @@ describe.skipIf(!isLocalDb)('설문 게스트 부여 (real local DB)', () => {
       expect([...(await guestAccess()).capabilities]).toContain('survey.view');
     });
 
-    it('팀원은 해제하지 못한다 — 목록의 canRemove 도 false 다', async () => {
+    it('팀원은 해제도 탭 변경도 못 한다 — 목록의 canManage 도 false 다', async () => {
       await clientFor(OWNER_ID).guests.add({ surveyId, userId: GUEST_ID });
 
       const asMember = await clientFor(MEMBER_ID).guests.list({ surveyId });
-      expect(asMember.canRemove).toBe(false);
+      expect(asMember.canManage).toBe(false);
       await expect(
         clientFor(MEMBER_ID).guests.remove({ surveyId, userId: GUEST_ID }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      // 탭 넓히기는 「초대의 범위 변경」이라 같은 축이다(스펙 §11-5) — 이것이 열려 있으면
+      // 팀원이 외부인에게 조사 대상(마스킹)·쿼터를 켜 줄 수 있다.
+      await expect(
+        clientFor(MEMBER_ID).guests.setTabs({
+          surveyId,
+          userId: GUEST_ID,
+          tabs: { overview: true, progressReport: true, contactsMasked: true, quota: true },
+        }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
 
@@ -362,7 +371,7 @@ describe.skipIf(!isLocalDb)('설문 게스트 부여 (real local DB)', () => {
       ] as const) {
         await clientFor(OWNER_ID).guests.add({ surveyId, userId: GUEST_ID });
         const actor = clientFor(userId, isSuperadmin);
-        expect((await actor.guests.list({ surveyId })).canRemove).toBe(true);
+        expect((await actor.guests.list({ surveyId })).canManage).toBe(true);
         await expect(
           actor.guests.remove({ surveyId, userId: GUEST_ID }),
         ).resolves.toEqual({ success: true });

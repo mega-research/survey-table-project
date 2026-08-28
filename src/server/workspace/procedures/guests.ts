@@ -3,12 +3,13 @@
  *
  * **관문은 참여자 블록과 같은 두 축이다**(스펙 §7·§11-5).
  *
- * - 조회·검색·추가·탭 저장은 `survey.invite` : 그 설문에 접근 가능한 내부인이면 누구나
- *   클라이언트를 들일 수 있다. 탭 화이트리스트가 이쪽에 서는 것은 그것이 **초대의 모양**이기
- *   때문이다 — 무엇을 열어 줄지 고르는 것과 들이는 것은 한 동작이고, .pen 도 체크박스를
- *   추가 버튼과 같은 블록에 그린다.
- * - 해제는 `survey.manageAccess` : 소유자·소유 팀 팀장·슈퍼어드민만. 들이는 것과 내보내는
- *   것은 무게가 다르다.
+ * - 조회·검색·추가는 `survey.invite` : 그 설문에 접근 가능한 내부인이면 누구나 클라이언트를
+ *   들일 수 있다. 새 부여는 언제나 기본 탭(응답 현황만)으로 서므로, 들이는 행위 자체가
+ *   무엇을 더 열어 주지는 않는다.
+ * - **해제와 탭 저장**은 `survey.manageAccess` : 소유자·소유 팀 팀장·슈퍼어드민만.
+ *   스펙 §11-5 의 「**초대** 제거·범위 변경」이 이 둘이다 — 게스트의 탭 화이트리스트가
+ *   곧 그 초대의 범위이고, 넓히면 조사 대상(마스킹)·쿼터가 외부인에게 열린다. .pen 이
+ *   체크박스를 추가 버튼과 같은 블록에 그리는 것은 배치의 문제이지 권한의 문제가 아니다.
  *
  * 검색이 관문을 지는 이유도 참여자와 같다 — 후보 목록은 발급된 클라이언트 계정 명부라
  * 관문 없이 열면 설문 id 하나로 전 고객사 계정을 훑을 수 있다.
@@ -56,10 +57,10 @@ function rethrowGuestError(err: unknown): never {
 }
 
 /**
- * 게스트 목록 + 내가 해제할 수 있는가.
+ * 게스트 목록 + 내가 이 부여들을 관리할 수 있는가.
  *
- * `canRemove` 의 판정은 참여자 블록과 **같은 술어**(`survey.manageAccess`)다 — 제외 권한이
- * 초대 종류마다 갈리면 한 모달 안에서 규칙이 두 벌이 된다.
+ * 판정은 참여자 블록과 **같은 술어**(`survey.manageAccess`)다 — 제외 권한이 초대 종류마다
+ * 갈리면 한 모달 안에서 규칙이 두 벌이 된다. 게스트 쪽만 그 값이 탭 칩까지 잠근다.
  */
 const list = authed
   .input(ListSurveyGuestsInput)
@@ -70,7 +71,7 @@ const list = authed
       svc.listSurveyGuests(input.surveyId),
       loadSurveyCapabilities(context.user, input.surveyId),
     ]);
-    return { guests, canRemove: canRemoveSurveyParticipant(capabilities) };
+    return { guests, canManage: canRemoveSurveyParticipant(capabilities) };
   });
 
 const searchCandidates = authed
@@ -93,7 +94,7 @@ const setTabs = authed
   .input(SetSurveyGuestTabsInput)
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.invite');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     return svc.setSurveyGuestTabs(input).catch(rethrowGuestError);
   });
 

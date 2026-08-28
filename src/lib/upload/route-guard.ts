@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { requireActiveAccount, requireAuth } from '@/lib/auth';
 import type { RouteLogContext } from '@/lib/logger';
-import { type AuthUser, isInternalUser } from '@/shared/contracts/auth';
+import { type AuthUser, isInternalUser, logRoleForUserType } from '@/shared/contracts/auth';
 
 /**
  * R2 업로드 라우트 4종(image·mail-attachment·notice-attachment·avatar)의 진입 가드.
@@ -13,8 +13,8 @@ import { type AuthUser, isInternalUser } from '@/shared/contracts/auth';
  *   getCurrentUser 는 계정 상태를 보지 않으므로 비활성 계정을 통과시킨다.
  *   엄격한 requireAuth(세션 + status='active') 쪽으로 통일한다.
  * - role 바인딩이 라우트마다 달랐다. 같은 주석이 밝힌 목적이 "403 거부 로그에도
- *   행위자가 남아야 남용 추적이 된다" 인데 게스트가 뭉개지면 그 목적에 불리하다.
- *   guest/admin 두 갈래로 통일한다 — 로그 필드 한정 변경이고 인증·인가 판정은 그대로다.
+ *   행위자가 남아야 남용 추적이 된다" 인데 유형이 뭉개지면 그 목적에 불리하다.
+ *   어휘는 `logRoleForUserType`(shared/contracts/auth) 하나가 소유하고 rpc 로그와 공유한다.
  *
  * 허용 술어는 라우트마다 의도적으로 다르므로 주입받는다.
  *
@@ -57,11 +57,11 @@ export async function guardAvatarUploadRoute(
   try {
     const user = await requireActiveAccount();
     // 403 이 없는 문이라 바인딩만 남긴다 — 남용 추적에 행위자가 필요하다.
-    // role 은 rpc 로그와 같은 어휘를 쓰고(admin|guest|fieldwork), 계정 유형은 별도 필드로
-    // 싣는다 — 같은 필드에 두 어휘가 섞이면 로그 분석이 갈린다.
+    // role 어휘는 rpc 로그와 한 함수를 공유한다(logRoleForUserType). 계정 유형은 별도
+    // 필드로 싣는다 — 같은 필드에 두 어휘가 섞이면 로그 분석이 갈린다.
     ctx.bind({
       userId: user.id,
-      role: logRoleOf(user),
+      role: logRoleForUserType(user.userType),
       userType: user.userType,
     });
     return { ok: true, userId: user.id };
@@ -89,7 +89,7 @@ export async function guardUploadRoute(
 
   // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
   // 업로드 남용·권한 설정 오류 추적이 가능하다.
-  ctx.bind({ userId: user.id, role: logRoleOf(user) });
+  ctx.bind({ userId: user.id, role: logRoleForUserType(user.userType) });
 
   if (!allow(user)) {
     return {
@@ -101,7 +101,3 @@ export async function guardUploadRoute(
   return { ok: true, userId: user.id };
 }
 
-/** 로그용 역할 — rpc-logging 의 어휘와 같다(internal 만 admin). */
-function logRoleOf(user: AuthUser): string {
-  return isInternalUser(user.userType) ? 'admin' : user.userType;
-}

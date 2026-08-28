@@ -137,7 +137,8 @@ export async function addSurveyGuest(
         surveyId: input.surveyId,
         userId: input.userId,
         kind: 'guest',
-        guestTabs: DEFAULT_SURVEY_GUEST_TABS,
+        // 공유 상수를 그대로 넘기지 않는다 — 드라이버가 값을 만지면 전역 기본값이 변한다.
+        guestTabs: { ...DEFAULT_SURVEY_GUEST_TABS },
         addedBy: actorUserId,
       });
     } catch (error) {

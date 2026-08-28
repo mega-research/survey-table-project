@@ -602,9 +602,10 @@ const SURFACES: Record<string, SurfaceSpec> = {
 
   // ── 설문 게스트 부여 ────────────────────────────────────────────────────
   //
-  // 참여자와 같은 두 축이다 — 조회·검색·추가·탭 저장은 survey.invite, 해제만
-  // manageAccess. 검색이 관문을 지는 것이 특히 중요하다: 후보 목록은 발급된 클라이언트
-  // 계정 명부라 관문 없이 열면 설문 id 하나로 전 고객사 계정을 훑을 수 있다.
+  // 조회·검색·추가는 survey.invite, **해제와 탭 저장**은 manageAccess — 스펙 §11-5 의
+  // 「초대 제거·범위 변경」이 그 둘이다. 검색이 관문을 지는 것이 특히 중요하다: 후보
+  // 목록은 발급된 클라이언트 계정 명부라 관문 없이 열면 설문 id 하나로 전 고객사 계정을
+  // 훑을 수 있다.
   'workspace.guests.list': {
     gate: 'rpc',
     capability: 'survey.invite',
@@ -622,7 +623,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
   },
   'workspace.guests.setTabs': {
     gate: 'rpc',
-    capability: 'survey.invite',
+    capability: 'survey.manageAccess',
     input: {
       surveyId: S,
       userId: C,
@@ -882,12 +883,13 @@ describe('표면 인벤토리 (라우터 열거)', () => {
     );
   });
 
-  it('scoped 베이스는 설문 관문 없이 쓰이지 않는다 — 유일한 예외만 남는다', () => {
+  it('scoped 베이스는 설문 관문 없이 쓰이지 않는다 — 예외가 하나도 없다', () => {
     const scopedWithoutSurvey = procedures
       .filter((p) => p.base === 'scoped' && !takesSurveyId(p))
       .map((p) => p.path);
-    // tmp 네임스페이스 검증에 의존하는 표면 하나(orpc.ts 주석).
-    expect(scopedWithoutSurvey).toEqual(['media.deleteMailAttachmentTmp']);
+    // 티켓 21 이 마지막 예외(media.deleteMailAttachmentTmp)를 authed 로 옮겼다 — 메일은
+    // 게스트에게 항상 차단이라, 관문을 달 수 없는 문을 비내부 계정에 열어 둘 이유가 없다.
+    expect(scopedWithoutSurvey).toEqual([]);
   });
 });
 

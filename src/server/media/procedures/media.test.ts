@@ -78,16 +78,28 @@ describe('media procedures', () => {
     expect(svc.deleteImages).not.toHaveBeenCalled();
   });
 
-  it('게스트도 deleteMailAttachmentTmp 를 위임받는다 (surveyId 없어 tmp 네임스페이스 검증에만 의존)', async () => {
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    vi.mocked(svc.deleteMailAttachmentTmp).mockResolvedValue({ ok: true } as never);
+  // 티켓 21 이 이 표면을 scoped → authed 로 옮겼다 — 메일은 게스트에게 항상 차단이라
+  // 「surveyId 가 없어 관문을 못 다는 예외」를 비내부 계정에 열어 둘 이유가 없다.
+  it('게스트 계정은 deleteMailAttachmentTmp 가 FORBIDDEN 이다', async () => {
     const client = createRouterClient(
       { media },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false , userType: 'internal'} } },
+      {
+        context: {
+          db: {} as never,
+          user: {
+            id: 'guest-1',
+            email: 'g@b.com',
+            name: '게스트',
+            status: 'active',
+            isSuperadmin: false,
+            userType: 'guest',
+          },
+        },
+      },
     );
-    const input = { key: 'tmp/mail-attachment/abc.pdf' };
-    const res = await client.media.deleteMailAttachmentTmp(input);
-    expect(svc.deleteMailAttachmentTmp).toHaveBeenCalledWith(input);
-    expect(res.ok).toBe(true);
+    await expect(
+      client.media.deleteMailAttachmentTmp({ key: 'tmp/mail-attachment/abc.pdf' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.deleteMailAttachmentTmp).not.toHaveBeenCalled();
   });
 });

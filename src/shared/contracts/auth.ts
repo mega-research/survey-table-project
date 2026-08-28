@@ -127,6 +127,17 @@ export function isGuestAccount(userType: UserType | undefined): boolean {
   return userType === 'guest';
 }
 
+/**
+ * 로그에 남기는 행위자 역할 — RPC 미들웨어와 업로드 REST 가드가 **같은 어휘**를 쓴다.
+ *
+ * 어휘가 두 벌이면 같은 사람이 표면마다 다른 이름으로 남아 로그 분석이 갈린다. 실제로
+ * 티켓 21 전에는 두 자리가 각자 `isGuestUser(userId)` 를 다시 읽고 있었다.
+ * 내부 계정만 'admin' 이고 나머지는 유형 이름 그대로다 — 실사가 admin 으로 뭉개지지 않는다.
+ */
+export function logRoleForUserType(userType: UserType | undefined): string {
+  return isInternalUser(userType) ? 'admin' : (userType ?? 'guest');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // accounts.provider_id / accounts.issuer — 크리덴셜 계정 규약값 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────

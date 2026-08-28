@@ -2,7 +2,7 @@ import { ORPCError, os } from '@orpc/server';
 
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import type { UserType } from '@/shared/contracts/auth';
+import { logRoleForUserType, type UserType } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 
@@ -22,14 +22,11 @@ import type { ORPCContext } from './context';
  * 로그용 role 판정 — **계정 유형**이 곧 역할이다 (티켓 21).
  *
  * 예전에는 env grant 목록(guest-grants)을 다시 읽어 게스트를 가렸다. 계정 모델로 바뀌면서
- * 그 출처가 세션 자신이 됐고, 그 덕에 실사도 뭉개지지 않고 자기 이름으로 남는다.
- * 비인증은 anonymous.
- *
- * 소비처는 열린 string 으로 취급한다 (LogContext.role 참조).
+ * 그 출처가 세션 자신이 됐고, 어휘는 `logRoleForUserType` 하나가 소유한다(업로드 REST
+ * 가드와 공유 — 표면마다 다른 이름으로 남으면 로그 분석이 갈린다). 비인증만 여기서 정한다.
  */
 function resolveLogRole(user: { userType: UserType } | null | undefined): string {
-  if (!user) return 'anonymous';
-  return user.userType === 'internal' ? 'admin' : user.userType;
+  return user ? logRoleForUserType(user.userType) : 'anonymous';
 }
 
 /**

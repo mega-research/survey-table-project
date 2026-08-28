@@ -42,7 +42,8 @@ async function handleContactsExport(
       role: 'admin',
       surveyId,
     });
-    // 설문 관문(티켓 11) — env grant 게스트는 grant 일치, 내부 계정은 capability
+    // 설문 관문 — requireAuth 가 비내부 계정을 들이지 않고, 관문이 capability 로 판정한다
+    // (티켓 11·21). 게스트·실사에게 export 는 항상 차단이라 role 도 상수다.
     // (export.download). PII 평문 export 라 타 팀 설문은 존재부터 은닉한다(404).
     const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
     if (denied) return denied;

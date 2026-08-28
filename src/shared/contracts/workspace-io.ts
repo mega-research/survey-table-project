@@ -4,7 +4,12 @@
 import * as z from 'zod';
 
 import { userStatusValues } from './auth';
-import { surveyParticipantKindValues, surveyVisibilityValues, teamRoleValues } from './workspace';
+import {
+  surveyParticipantKindValues,
+  surveyVisibilityValues,
+  type SurveyGuestTabs,
+  teamRoleValues,
+} from './workspace';
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
@@ -501,12 +506,18 @@ export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipan
 // 참여자에게는 없는 축이라 한 계약으로 합치면 절반이 항상 null 인 필드가 되고, 화면도
 // kind 로 다시 갈라야 한다(.pen 도 블록을 나눠 그린다).
 
+/**
+ * 탭 화이트리스트의 경계 모양.
+ *
+ * `satisfies` 로 어휘 타입에 묶는 것이 요점이다 — 탭이 늘었을 때 한쪽만 늘면 tsc 가
+ * 그 자리에서 호명한다(둘이 따로 놀면 「계약에는 있는데 검증에서 떨어지는」 키가 생긴다).
+ */
 const SurveyGuestTabsSchema = z.object({
   overview: z.boolean(),
   progressReport: z.boolean(),
   contactsMasked: z.boolean(),
   quota: z.boolean(),
-});
+}) satisfies z.ZodType<SurveyGuestTabs>;
 
 /** 공유 모달의 게스트 행 (.pen 4-2 클라이언트 블록). */
 export const SurveyGuestItem = z.object({
@@ -524,14 +535,16 @@ export const SurveyGuestItem = z.object({
 export type SurveyGuestItem = z.infer<typeof SurveyGuestItem>;
 
 /**
- * 게스트 목록 + **내가 부여를 해제할 수 있는가**.
+ * 게스트 목록 + **내가 이 부여들을 관리할 수 있는가**(해제·탭 변경).
  *
- * 참여자 목록과 같은 이유로 서버가 답을 함께 준다 — 화면이 역할을 다시 세면 「목록엔
- * 제외가 있는데 누르면 FORBIDDEN」이 된다.
+ * 참여자 목록의 `canRemove` 와 이름이 다른 이유는 잠기는 것이 둘이기 때문이다. 스펙 §11-5
+ * 는 「**초대** 제거·범위 변경」을 소유자·팀장·슈퍼어드민으로 묶는데, 게스트의 탭
+ * 화이트리스트가 정확히 그 「초대의 범위」다 — 추가만 접근자 누구나이고, 이미 선 부여를
+ * 넓히거나 좁히는 것은 관리 행위다.
  */
 export const ListSurveyGuestsOutput = z.object({
   guests: z.array(SurveyGuestItem),
-  canRemove: z.boolean(),
+  canManage: z.boolean(),
 });
 export type ListSurveyGuestsOutput = z.infer<typeof ListSurveyGuestsOutput>;
 
@@ -574,7 +587,7 @@ export const AddSurveyGuestInput = z.object({
 export type AddSurveyGuestInput = z.infer<typeof AddSurveyGuestInput>;
 
 /**
- * 탭 화이트리스트 저장 — **네 값을 통째로** 받는다.
+ * 탭 화이트리스트 저장 — **네 값을 통째로** 받는다. 관문은 `survey.manageAccess` 다.
  *
  * 부분 갱신(`{quota: true}`)을 받지 않는 것이 의도다. 체크박스 넷은 한 화면에서 함께
  * 보이므로 통째로 보내는 것이 화면과 같은 단위이고, 부분 갱신을 열면 나중에 탭이 늘었을 때

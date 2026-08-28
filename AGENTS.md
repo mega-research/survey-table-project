@@ -981,8 +981,11 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   `control.get` 만 관문 NOT_FOUND 를 null 로 접는다(미저장 설문의 빌더 헤더 10초 폴링 OFF 폴백
   규약). `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신
   한 입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 무관문 예외는
-  셋뿐이고 전부 사유가 주석에 있다 — 보관함(library, surveyId 없는 조직 공용)·
-  `uploads.parsePreview`(무상태 엑셀 파싱)·`media.deleteMailAttachmentTmp`(tmp 키 검증 의존).
+  **둘뿐**이고 전부 사유가 주석에 있다 — 보관함(library, surveyId 없는 조직 공용)·
+  `uploads.parsePreview`(무상태 엑셀 파싱). 둘 다 `authed` 라 내부 계정만 지난다.
+  `media.deleteMailAttachmentTmp` 는 셋째였는데 티켓 21 이 `scoped`→`authed` 로 옮겼다 —
+  메일은 게스트에게 항상 차단이라, 관문을 달 수 없는 문(입력에 surveyId 가 없다)을 비내부
+  계정에 열어 둘 이유가 사라졌다. **그래서 scoped 베이스에는 무관문 표면이 하나도 없다.**
   billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)·
   `SurveyOwnershipError`(require-survey-ownership)는 걷었다. **REST 표면(티켓 11)**: export 3종
   (export·split-preview·contacts export)은 `server/rest-survey-access.ts` 의
@@ -1122,7 +1125,13 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. 실사는 티켓 24 가 자기 열을 연다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. 실사는 티켓 24 가 자기 열을 연다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial` 두 스위트가 각각 목록으로 고정한다.
+- **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
+  남아 있는 이유는 하나다** — 이름이 **표면의 청중**을 적기 때문이다. 티켓 21 이 게스트 분기를
+  걷으면서 셋 다 본문이 한 줄 위임으로 줄었지만, 「이 페이지는 관리 화면이다」·「이 문은 비내부
+  계정도 지난다」는 사실은 호출부에서 읽혀야 하고 `tests/repo` 의 정적 가드도 그 이름으로 목록을
+  만든다. 합치면 어느 문이 누구에게 열려 있는지가 코드에서 사라진다. 실사(티켓 24)가 코어에
+  자기 열을 얻으면 이 셋의 본문은 그대로 둔 채 판정만 늘어난다.
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
   (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
@@ -1156,8 +1165,12 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     않는다. 판정은 `resolveSurveyAccess`/`loadSurveyAccess` 가 capability 와 **함께** 돌려주며
     `guestTabs === null` 은 「탭 축이 없는 주체」(내부·실사)다 — 전부 false 인 객체와 갈라 둔 이유는
     내부 계정에게 「모든 탭이 닫혔다」를 주면 콘솔이 자기 탭을 스스로 숨기기 때문이다.
-  - **관문은 참여자 블록과 같은 두 축**이다(스펙 §7). 조회·검색·추가·탭 저장은 `survey.invite`
-    (탭은 초대의 모양이라 추가 쪽에 선다), 해제만 `survey.manageAccess`. 검색이 관문을 지는 것이
+  - **관문은 두 축**이다(스펙 §7·§11-5). 조회·검색·추가는 `survey.invite`, **해제와 탭 저장**은
+    `survey.manageAccess`. 탭이 관리 쪽에 서는 것은 §11-5 의 「**초대** 제거·범위 변경」이 이
+    둘이기 때문이다 — 새 부여는 언제나 기본 탭으로 서므로 「추가는 누구나」와 어긋나지 않지만,
+    이미 선 부여를 넓히면 조사 대상(마스킹)·쿼터가 외부인에게 열린다. 화면도 같은 값
+    (`canManage`)으로 칩과 「제외」를 함께 잠그되 칩은 **보여준다**(지금 무엇이 열려 있는지는
+    초대한 사람도 알아야 한다). 검색이 관문을 지는 것이
     특히 중요하다 — 후보 목록은 발급된 클라이언트 계정 명부라 관문 없이 열면 설문 id 하나로 전
     고객사 계정을 훑을 수 있다. 대상 자격은 서비스가 본다: **guest + active 만**.
   - 서비스의 WHERE 에 `kind='guest'` 를 함께 거는 것이 칸막이다 — 참여자·게스트가 같은 테이블에
