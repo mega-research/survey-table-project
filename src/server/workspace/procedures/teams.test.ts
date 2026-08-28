@@ -9,11 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import {
-  DuplicateTeamNameError,
-  TeamNameMismatchError,
-  TeamNotFoundError,
-} from '../domain/teams';
+import { DuplicateTeamNameError, TeamNameMismatchError, TeamNotFoundError } from '../domain/teams';
 import * as svc from '../services/teams';
 import { teams } from './teams';
 
@@ -101,10 +97,7 @@ describe('팀 관리 표면', () => {
 describe('팀 상세', () => {
   it('슈퍼어드민이 아니어도 열리고, 자격 판정은 서비스가 한다', async () => {
     await clientWith().teams.detail({ teamId: TEAM_ID });
-    expect(svc.getTeamDetail).toHaveBeenCalledWith(
-      { id: ACTOR_ID, isSuperadmin: false },
-      TEAM_ID,
-    );
+    expect(svc.getTeamDetail).toHaveBeenCalledWith({ id: ACTOR_ID, isSuperadmin: false }, TEAM_ID);
   });
 
   it('자격이 없으면 존재를 알려주지 않는다 (NOT_FOUND)', async () => {

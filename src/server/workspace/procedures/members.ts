@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 import { canManageTeamMembers } from '@/shared/contracts/workspace';
 
 import {
@@ -19,7 +20,6 @@ import {
   WorkspaceActionOutput,
 } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '@/server/read-models/team-memberships';
 import { toWorkspaceRpcError } from './teams';
 
 /**

@@ -8,10 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getErrorMessage } from '@/lib/get-error-message';
-import { ChangeUserStatusInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
-import type { UserListItem } from '@/shared/contracts/auth-io';
-
 import {
   Select,
   SelectContent,
@@ -19,6 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { getErrorMessage } from '@/lib/get-error-message';
+import { ChangeUserStatusInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
+import type { UserListItem } from '@/shared/contracts/auth-io';
 import type { TeamRole } from '@/shared/contracts/workspace';
 
 import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
@@ -37,7 +36,6 @@ const ROLE_LABEL: Record<TeamRole, string> = { member: '팀원', leader: '팀장
 function requiresTeamAssignment(user: UserListItem): boolean {
   return user.userType === 'internal' && !user.isSuperadmin;
 }
-
 
 interface Props {
   /** 대상 사용자. 이 모달은 열릴 때만 마운트되므로 null 이 오지 않는다. */
@@ -111,9 +109,7 @@ export function UserRehireModal({ user, onClose }: Props) {
         <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">
           재입사 처리 — {user.name}
         </DialogTitle>
-        <p className="mt-1 text-[12px] text-[#6E6E73]">
-          퇴사 계정을 새 소속으로 다시 시작합니다.
-        </p>
+        <p className="mt-1 text-[12px] text-[#6E6E73]">퇴사 계정을 새 소속으로 다시 시작합니다.</p>
 
         <div className="mt-4 flex items-center gap-2 text-[11.5px] font-semibold">
           <span className="inline-flex rounded-full bg-[#F5F5F7] px-2 py-[3px] text-[#6E6E73]">
@@ -132,46 +128,46 @@ export function UserRehireModal({ user, onClose }: Props) {
           </div>
 
           {needsTeam && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="rehire-team" className={FIELD_LABEL}>
-                새 소속 팀 *
-              </Label>
-              {/* 미선택은 빈 문자열로 계속 제어한다 — 붙였다 뗐다 하면 Radix 가 비제어로
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rehire-team" className={FIELD_LABEL}>
+                  새 소속 팀 *
+                </Label>
+                {/* 미선택은 빈 문자열로 계속 제어한다 — 붙였다 뗐다 하면 Radix 가 비제어로
                   전환돼 트리거가 빈칸으로 굳는다(reassignment/assignment-fields 의 같은 주석). */}
-              <Select value={teamId ?? ''} onValueChange={setTeamId}>
-                <SelectTrigger id="rehire-team" className={FIELD_INPUT}>
-                  <SelectValue placeholder={teams.isLoading ? '불러오는 중...' : '팀 선택'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(teams.data?.teams ?? []).map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className={FIELD_HINT}>active 팀을 1개 이상 지정해야 합니다.</p>
+                <Select value={teamId ?? ''} onValueChange={setTeamId}>
+                  <SelectTrigger id="rehire-team" className={FIELD_INPUT}>
+                    <SelectValue placeholder={teams.isLoading ? '불러오는 중...' : '팀 선택'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(teams.data?.teams ?? []).map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className={FIELD_HINT}>active 팀을 1개 이상 지정해야 합니다.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rehire-team-role" className={FIELD_LABEL}>
+                  팀 역할 *
+                </Label>
+                <Select value={teamRole} onValueChange={(next) => setTeamRole(next as TeamRole)}>
+                  <SelectTrigger id="rehire-team-role" className={FIELD_INPUT}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ROLE_LABEL) as TeamRole[]).map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {ROLE_LABEL[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className={FIELD_HINT}>팀장 지정은 선택한 팀의 마지막 팀장 규칙을 확인합니다.</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="rehire-team-role" className={FIELD_LABEL}>
-                팀 역할 *
-              </Label>
-              <Select value={teamRole} onValueChange={(next) => setTeamRole(next as TeamRole)}>
-                <SelectTrigger id="rehire-team-role" className={FIELD_INPUT}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(ROLE_LABEL) as TeamRole[]).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {ROLE_LABEL[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className={FIELD_HINT}>팀장 지정은 선택한 팀의 마지막 팀장 규칙을 확인합니다.</p>
-            </div>
-          </div>
           )}
 
           <div className="space-y-2">

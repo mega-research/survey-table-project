@@ -1,44 +1,44 @@
+import type { SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
 import 'server-only';
 
-import type { SQL } from 'drizzle-orm';
-import { and, asc, count, desc, eq, exists, inArray, isNull, notExists, sql } from 'drizzle-orm';
-
 import { type DbTransaction, db } from '@/db';
-import {
-  surveyOwnershipEvents,
-  surveys,
-  teamMembers,
-  teams,
-  users,
-} from '@/db/schema';
+import { surveyOwnershipEvents, surveys, teamMembers, teams, users } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
 
 import {
-  AlreadyTeamMemberError,
-  TargetUserNotFoundError,
-  TeamNotFoundError,
-  assertMemberAssignable,
-  type WorkspaceActionOutput,
-} from '../domain/teams';
-import {
-  OwnerNotInTeamError,
-  SurveyNotPendingError,
-  UserAlreadyAssignedError,
   type AssignSurveysInput,
   type AssignSurveysOutput,
   type AssignUserToTeamInput,
   type ListOwnerCandidatesOutput,
+  OwnerNotInTeamError,
   type PendingSurveyDetailOutput,
   type PendingSurveyItem,
   type ReassignmentInboxOutput,
+  SurveyNotPendingError,
   type UnassignedUserItem,
+  UserAlreadyAssignedError,
 } from '../domain/reassignment';
 import {
-  activeTeamIdsOf,
-  lockTeamMembers,
-  recordMemberEvent,
-  requireActiveTeam,
-} from './members';
+  AlreadyTeamMemberError,
+  TargetUserNotFoundError,
+  TeamNotFoundError,
+  type WorkspaceActionOutput,
+  assertMemberAssignable,
+} from '../domain/teams';
+import { activeTeamIdsOf, lockTeamMembers, recordMemberEvent, requireActiveTeam } from './members';
 
 const OK: WorkspaceActionOutput = { success: true };
 
@@ -76,8 +76,22 @@ const UNASSIGNED_USER_WHERE = and(
 );
 
 /** 배치 대기 설문을 고르는 조건 — 위와 같은 이유로 한 곳에 둔다. */
+/**
+ * 인박스가 받는 설문 = **배치 대기 또는 승계 대기** · 삭제되지 않음.
+ *
+ * 둘을 한 목록에 두는 이유는 처리자가 하는 일이 같기 때문이다 — 새 소유자를 정해 주는 것.
+ * 다른 것은 원인뿐이다(팀 해산 vs 소유자 퇴사, 티켓 13·19). 탭을 나누면 「지금 손봐야 할
+ * 설문」을 두 곳에서 세어야 한다.
+ *
+ * `assignment_pending` 에 `teamId IS NULL` 을 따로 묻지 않는 이유는 DB CHECK 가 둘을 한 몸으로
+ * 강제해서다(surveys_assignment_check) — 두 조건을 다 쓰면 어느 쪽이 정본인지 흐려진다.
+ * 승계 대기는 팀을 그대로 갖는다(소유자만 비었다).
+ */
 const PENDING_SURVEY_WHERE = and(
-  eq(surveys.assignmentStatus, 'assignment_pending'),
+  or(
+    eq(surveys.assignmentStatus, 'assignment_pending'),
+    eq(surveys.ownershipStatus, 'succession_pending'),
+  ),
   isNull(surveys.deletedAt),
 );
 
@@ -127,13 +141,7 @@ async function loadUnassignedUsers(): Promise<UnassignedUserItem[]> {
   }));
 }
 
-/**
- * 배치 대기 설문 = `assignment_pending` · 삭제되지 않음.
- *
- * `teamId IS NULL` 을 따로 묻지 않는 이유는 DB CHECK 가 둘을 한 몸으로 강제해서다
- * (surveys_assignment_check) — 한쪽만 보는 것으로 충분하고, 두 조건을 다 쓰면 어느 쪽이
- * 정본인지 흐려진다.
- */
+/** 인박스 목록 조회 — 조건은 PENDING_SURVEY_WHERE 가 정한다. */
 async function loadPendingSurveys(where: SQL | undefined = PENDING_SURVEY_WHERE) {
   return db
     .select({
@@ -227,7 +235,9 @@ export async function getReassignmentInbox(): Promise<ReassignmentInboxOutput> {
  * 배치 대기가 아닌 설문은 **없는 설문과 같이** null 이다 — 이미 배치된 설문의 존재를
  * 재배치 주소로 확인할 수 있게 두면 인박스 밖 설문의 id 스캔이 된다.
  */
-export async function getPendingSurvey(surveyId: string): Promise<PendingSurveyDetailOutput | null> {
+export async function getPendingSurvey(
+  surveyId: string,
+): Promise<PendingSurveyDetailOutput | null> {
   const rows = await loadPendingSurveys(and(PENDING_SURVEY_WHERE, eq(surveys.id, surveyId)));
   const row = rows[0];
   if (!row) return null;
@@ -389,6 +399,7 @@ export async function assignSurveys(
         ownerUserId: surveys.ownerUserId,
         visibility: surveys.visibility,
         assignmentStatus: surveys.assignmentStatus,
+        ownershipStatus: surveys.ownershipStatus,
         deletedAt: surveys.deletedAt,
       })
       .from(surveys)
@@ -403,7 +414,12 @@ export async function assignSurveys(
     if (missing) throw new SurveyNotPendingError(missing);
 
     for (const row of rows) {
-      if (row.assignmentStatus !== 'assignment_pending' || row.deletedAt !== null) {
+      // 인박스에 서는 두 상태를 모두 받는다 — 배치 대기(해산)와 승계 대기(퇴사, 티켓 19).
+      // 처리자가 하는 일이 같으므로(새 소유자 지정) 표면도 하나다.
+      const isPending =
+        row.assignmentStatus === 'assignment_pending' ||
+        row.ownershipStatus === 'succession_pending';
+      if (!isPending || row.deletedAt !== null) {
         throw new SurveyNotPendingError(row.id);
       }
     }
@@ -415,9 +431,12 @@ export async function assignSurveys(
         ownerUserId: input.ownerUserId,
         visibility: input.visibility,
         assignmentStatus: 'assigned',
+        // 승계 대기도 여기서 해소된다 — 새 소유자가 정해졌다는 것이 그 상태의 종료 조건이다.
+        ownershipStatus: 'normal',
         // 그룹은 팀 소유물이다 — 새 팀에서는 미분류로 시작한다(티켓 12 인계). 배치 대기
         // 설문은 이미 NULL 이지만 명시적으로 쓴다: 이 열이 team_id 와 함께 움직인다는 규칙이
-        // 코드에 보여야 다음 이동 경로(승계·티켓 19)가 같은 것을 빠뜨리지 않는다.
+        // 코드에 보여야 다음 이동 경로가 같은 것을 빠뜨리지 않는다. 승계 대기 설문은 팀을
+        // 갖고 있었으므로 여기서 실제로 미분류가 된다(팀이 바뀌면 그룹은 따라갈 수 없다).
         surveyGroupId: null,
         updatedAt: new Date(),
       })

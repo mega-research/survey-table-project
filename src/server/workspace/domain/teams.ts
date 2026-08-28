@@ -1,7 +1,7 @@
 // 팀·멤버십 도메인 — 경계 계약(shared/contracts/workspace-io)의 재노출 + 서버 전용 규칙.
 // client-safe — server-only·Node·DB 의존 없음.
-import type { TeamRole } from '@/shared/contracts/workspace';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
+import type { TeamRole } from '@/shared/contracts/workspace';
 
 export {
   AddTeamMemberInput,

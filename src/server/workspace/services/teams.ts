@@ -1,6 +1,5 @@
-import 'server-only';
-
 import { and, asc, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import {
@@ -12,22 +11,22 @@ import {
   users,
 } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 import { canManageTeamMembers, canManageTeamSettings } from '@/shared/contracts/workspace';
 
 import {
-  DuplicateTeamNameError,
-  TeamNameMismatchError,
-  TeamNotFoundError,
   type CreateTeamInput,
   type CreateTeamOutput,
   type DissolveTeamInput,
+  DuplicateTeamNameError,
   type ListTeamsOutput,
   type RenameTeamInput,
   type TeamDetailOutput,
+  TeamNameMismatchError,
+  TeamNotFoundError,
   type WorkspaceActionOutput,
 } from '../domain/teams';
 import { lockTeamMembers } from './members';
-import { getTeamRole } from '@/server/read-models/team-memberships';
 
 const OK: WorkspaceActionOutput = { success: true };
 

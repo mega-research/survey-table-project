@@ -10,13 +10,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
+import { UserRowActions } from './user-row-actions';
+
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
 vi.mock('./queries/use-users', () => ({
   useChangeUserStatus: () => ({ mutateAsync, isPending: false }),
 }));
-
-import { UserRowActions } from './user-row-actions';
 
 const onRehire = vi.fn();
 const onResetPassword = vi.fn();
@@ -38,6 +38,7 @@ function renderActions(status: UserListItem['status'] = 'active') {
     <UserRowActions
       user={{ ...BASE, status }}
       onRehire={onRehire}
+      onDepart={vi.fn()}
       onResetPassword={onResetPassword}
     />,
   );
@@ -111,19 +112,33 @@ describe('UserRowActions — 실행', () => {
     const user = userEvent.setup();
     renderActions('active');
     await openMenu(user);
-    await user.click(screen.getByRole('menuitem', { name: '퇴사 처리' }));
+    await user.click(screen.getByRole('menuitem', { name: '일시 정지' }));
     await user.click(screen.getByRole('button', { name: '취소' }));
 
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('퇴사 확인 문구는 재입사로만 되돌릴 수 있다고 말한다', async () => {
+  /**
+   * 퇴사는 확인 문구만으로 끝나지 않는다 — 승계 지정을 받아야 해서 전용 모달로 간다
+   * (.pen FLOW 9-3, 티켓 19). 여기 인라인 다이얼로그가 남아 있으면 소유 설문이 조용히
+   * 승계 대기로 흘러간다.
+   */
+  it('퇴사 처리는 인라인 확인이 아니라 승계 모달을 연다', async () => {
+    const onDepart = vi.fn();
     const user = userEvent.setup();
-    renderActions('active');
+    render(
+      <UserRowActions
+        user={{ ...BASE, status: 'active' }}
+        onRehire={vi.fn()}
+        onDepart={onDepart}
+        onResetPassword={vi.fn()}
+      />,
+    );
     await openMenu(user);
     await user.click(screen.getByRole('menuitem', { name: '퇴사 처리' }));
 
-    expect(screen.getByText(/재입사 처리가 필요하며/)).toBeInTheDocument();
+    expect(onDepart).toHaveBeenCalledWith(expect.objectContaining({ id: BASE.id }));
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('서버가 거부하면 다이얼로그를 열어둔 채 문구를 보여준다', async () => {

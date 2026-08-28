@@ -66,10 +66,7 @@ const detail = authed
   .output(TeamDetailOutput)
   .handler(({ input, context }) =>
     svc
-      .getTeamDetail(
-        { id: context.user.id, isSuperadmin: context.user.isSuperadmin },
-        input.teamId,
-      )
+      .getTeamDetail({ id: context.user.id, isSuperadmin: context.user.isSuperadmin }, input.teamId)
       .catch(rethrowWorkspaceError),
   );
 

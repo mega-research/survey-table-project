@@ -600,6 +600,18 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, userId: C },
   },
 
+  // ── 소유권 이전 ─────────────────────────────────────────────────────────
+  'workspace.ownership.candidates': {
+    gate: 'rpc',
+    capability: 'survey.transferOwnership',
+    input: { surveyId: S },
+  },
+  'workspace.ownership.transfer': {
+    gate: 'rpc',
+    capability: 'survey.transferOwnership',
+    input: { surveyId: S, newOwnerUserId: C },
+  },
+
   // ── 공유 설정(공개 범위) ────────────────────────────────────────────────
   'workspace.sharing.setVisibility': {
     gate: 'rpc',

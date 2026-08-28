@@ -9,11 +9,11 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { CreateUserInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 import type { UserType } from '@/shared/contracts/auth';
+import { CreateUserInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/auth-io';
 
-import { useCreateUser } from './queries/use-users';
 import { FIELD_INPUT, FIELD_LABEL } from '../field-styles';
+import { useCreateUser } from './queries/use-users';
 import { USER_TYPE_LABEL } from './user-vocabulary';
 
 /**
@@ -25,7 +25,6 @@ const TYPE_SEGMENTS: { value: UserType; disabled?: boolean }[] = [
   { value: 'guest' },
   { value: 'fieldwork', disabled: true },
 ];
-
 
 type CreatableType = Extract<UserType, 'internal' | 'guest'>;
 
@@ -85,7 +84,9 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-w-[520px] gap-0 rounded-2xl p-7">
-        <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">사용자 생성</DialogTitle>
+        <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">
+          사용자 생성
+        </DialogTitle>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">
           <div className="space-y-2">

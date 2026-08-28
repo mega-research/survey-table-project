@@ -16,13 +16,7 @@
 // 허용 전이는 아래 USER_STATUS_TRANSITIONS 가 정본이다.
 
 /** users.status 전체 값. pending/rejected 는 도달 불가 어휘 (위 주석 참조). */
-export const userStatusValues = [
-  'pending',
-  'active',
-  'rejected',
-  'suspended',
-  'departed',
-] as const;
+export const userStatusValues = ['pending', 'active', 'rejected', 'suspended', 'departed'] as const;
 export type UserStatus = (typeof userStatusValues)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────

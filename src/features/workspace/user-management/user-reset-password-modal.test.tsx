@@ -10,13 +10,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
+import { UserResetPasswordModal } from './user-reset-password-modal';
+
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
 vi.mock('./queries/use-users', () => ({
   useResetUserPassword: () => ({ mutateAsync, isPending: false }),
 }));
-
-import { UserResetPasswordModal } from './user-reset-password-modal';
 
 const onClose = vi.fn();
 
@@ -70,9 +70,7 @@ describe('UserResetPasswordModal', () => {
     await user.click(screen.getByRole('button', { name: '재설정' }));
 
     expect(mutateAsync).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText('비밀번호는 최소 8자 이상이어야 합니다.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('비밀번호는 최소 8자 이상이어야 합니다.')).toBeInTheDocument();
   });
 
   it('서버 실패는 모달을 열어둔 채 문구로 보여준다', async () => {

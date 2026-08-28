@@ -9,15 +9,16 @@ import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import {
-  selectableUserStatusValues,
   type UserListItem,
   type UserStatusFilter,
   type UserTypeFilter,
+  selectableUserStatusValues,
 } from '@/shared/contracts/auth-io';
 
 import { PRIMARY_BUTTON } from '../field-styles';
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
+import { UserDepartModal } from './user-depart-modal';
 import { UserRehireModal } from './user-rehire-modal';
 import { UserResetPasswordModal } from './user-reset-password-modal';
 import { UserRowActions } from './user-row-actions';
@@ -57,6 +58,7 @@ export function UserManagementView() {
   // 사이 목록이 새로고침돼도 보고 있던 사람이 바뀌지 않는다.
   const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
   const [rehireTarget, setRehireTarget] = useState<UserListItem | null>(null);
+  const [departTarget, setDepartTarget] = useState<UserListItem | null>(null);
   const { data, isLoading, error } = useUsers(userType, status);
 
   const items = data?.items ?? [];
@@ -80,10 +82,7 @@ export function UserManagementView() {
               계정을 직접 발급하고 상태를 관리합니다. 가입 신청은 없습니다.
             </p>
           </div>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className={PRIMARY_BUTTON}
-          >
+          <Button onClick={() => setCreateOpen(true)} className={PRIMARY_BUTTON}>
             <Plus className="mr-1 h-4 w-4" />
             사용자 생성
           </Button>
@@ -188,6 +187,7 @@ export function UserManagementView() {
                     <UserRowActions
                       user={user}
                       onRehire={setRehireTarget}
+                      onDepart={setDepartTarget}
                       onResetPassword={setResetTarget}
                     />
                   </td>
@@ -220,6 +220,9 @@ export function UserManagementView() {
           띄워둔 채 대상만 갈아끼우면 앞사람의 입력이 남는다. */}
       {resetTarget && (
         <UserResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
+      )}
+      {departTarget && (
+        <UserDepartModal user={departTarget} onClose={() => setDepartTarget(null)} />
       )}
       {rehireTarget && (
         <UserRehireModal user={rehireTarget} onClose={() => setRehireTarget(null)} />

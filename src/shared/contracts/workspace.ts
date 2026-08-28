@@ -163,9 +163,7 @@ export interface SurveyGuestTabs {
  * capability 로 물으면 `survey.manageAccess` 가 정확히 그 셋이라 여기서 역할을 다시 세지
  * 않는다 — 화면이 자기 표를 따로 들면 「목록엔 제외 버튼이 있는데 누르면 FORBIDDEN」이 된다.
  */
-export function canRemoveSurveyParticipant(
-  capabilities: ReadonlySet<SurveyCapability>,
-): boolean {
+export function canRemoveSurveyParticipant(capabilities: ReadonlySet<SurveyCapability>): boolean {
   return capabilities.has('survey.manageAccess');
 }
 

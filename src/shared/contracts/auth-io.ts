@@ -3,7 +3,6 @@
 // client-safe — server-only·Node·DB 의존 없음(zod 는 런타임 의존).
 import * as z from 'zod';
 
-import { teamRoleValues } from './workspace';
 import {
   type UserStatus,
   type UserStatusAction,
@@ -11,6 +10,9 @@ import {
   userStatusValues,
   userTypeValues,
 } from './auth';
+import { teamRoleValues } from './workspace';
+// 퇴사 입력이 승계 지정을 함께 받는다(티켓 19) — 계약 파일끼리는 서로를 볼 수 있다.
+import { SuccessionAssignment } from './workspace-io';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 필터 어휘
@@ -178,7 +180,21 @@ const UserTarget = z.object({ userId: z.uuid() });
 export const ChangeUserStatusInput = z.discriminatedUnion('action', [
   UserTarget.extend({ action: z.literal('suspend') }),
   UserTarget.extend({ action: z.literal('resume') }),
-  UserTarget.extend({ action: z.literal('depart') }),
+  UserTarget.extend({
+    action: z.literal('depart'),
+    /**
+     * 소유 설문의 승계 지정 (.pen FLOW 9-3, 티켓 19).
+     *
+     * **소유 설문 전수를 적어야 한다** — 서버가 대조해 빠진 것이 있으면 거부한다. 빠뜨린
+     * 설문을 조용히 승계 대기로 흘려보내면 화면이 보여준 것과 결과가 달라지고, 그 차이는
+     * 재배치 인박스에서야 드러난다. `newOwnerUserId: null` 은 「후보 없음 — 승계 대기로」
+     * 라는 **명시적 선택**이다.
+     *
+     * 소유 설문이 없으면 빈 배열이다. 옵셔널로 두지 않는 것은 「안 보냈다」와 「없다」를
+     * 서버가 구별할 이유가 없어서다 — 어느 쪽이든 전수 대조가 답을 낸다.
+     */
+    succession: z.array(SuccessionAssignment),
+  }),
   UserTarget.extend({
     action: z.literal('rehire'),
     password: PasswordField,

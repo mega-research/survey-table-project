@@ -34,6 +34,7 @@ import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { members } from '@/server/workspace/procedures/members';
+import { ownership } from '@/server/workspace/procedures/ownership';
 import { participants } from '@/server/workspace/procedures/participants';
 import { reassignment } from '@/server/workspace/procedures/reassignment';
 import { sharing } from '@/server/workspace/procedures/sharing';
@@ -116,6 +117,8 @@ export const router = {
     sharing,
     // 설문 참여자 — 팀 경계를 넘는 유일한 접근 경로 (.pen FLOW 4-2, 티켓 18).
     participants,
+    // 소유권 이전 · 승계 제안 (.pen FLOW 4-4·9-3, 티켓 19).
+    ownership,
   },
 };
 

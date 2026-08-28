@@ -313,7 +313,7 @@ describe('changeUserStatus', () => {
       changeUserStatus(ACTOR, { action: 'suspend', userId: TARGET }),
     ).rejects.toBeInstanceOf(LastActiveSuperadminError);
     await expect(
-      changeUserStatus(ACTOR, { action: 'depart', userId: TARGET }),
+      changeUserStatus(ACTOR, { action: 'depart', succession: [], userId: TARGET }),
     ).rejects.toBeInstanceOf(LastActiveSuperadminError);
   });
 
@@ -331,7 +331,7 @@ describe('changeUserStatus', () => {
     target({ status: 'suspended', isSuperadmin: true });
     txState.activeSuperadmins = 0;
 
-    await expect(changeUserStatus(ACTOR, { action: 'depart', userId: TARGET })).resolves.toEqual({
+    await expect(changeUserStatus(ACTOR, { action: 'depart', succession: [], userId: TARGET })).resolves.toEqual({
       status: 'departed',
     });
   });

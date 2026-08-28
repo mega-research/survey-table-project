@@ -8,13 +8,13 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { UserCreateModal } from './user-create-modal';
+
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
 vi.mock('./queries/use-users', () => ({
   useCreateUser: () => ({ mutateAsync, isPending: false }),
 }));
-
-import { UserCreateModal } from './user-create-modal';
 
 const onOpenChange = vi.fn();
 

@@ -197,7 +197,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     const suspended = await seedUser(actorId, 'blocked-suspended');
     const departed = await seedUser(actorId, 'blocked-departed');
     await changeUserStatus(actorId, { action: 'suspend', userId: suspended.id });
-    await changeUserStatus(actorId, { action: 'depart', userId: departed.id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: departed.id });
 
     const missing = await signInFailure(`ticket04-missing-${crypto.randomUUID()}@example.com`, PASSWORD);
     expect(missing).not.toBeNull();
@@ -223,7 +223,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
   it('퇴사자는 재직 복귀가 아니라 재입사로만 돌아온다', async () => {
     const actorId = await seedActor();
     const { id, email } = await seedUser(actorId, 'rehire');
-    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: id });
 
     await expect(
       changeUserStatus(actorId, { action: 'resume', userId: id }),
@@ -266,7 +266,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     const newTeam = await seedTeam();
     await db.insert(teamMembers).values({ teamId: oldTeam, userId: id, role: 'leader' });
 
-    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: id });
     // 퇴사해도 행은 남는다 — 이 사실이 위 정리 단계의 전제다.
     expect(await getActiveTeamMemberships(id)).toHaveLength(1);
 
@@ -306,7 +306,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     const newTeam = await seedTeam();
     await db.insert(teamMembers).values({ teamId: oldTeam, userId: id, role: 'leader' });
 
-    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: id });
     await rehireUserWithTeam(
       { id: actorId, isSuperadmin: true },
       { action: 'rehire', userId: id, password: NEW_PASSWORD, teamId: newTeam, teamRole: 'leader' },
@@ -331,7 +331,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     });
     createdUserIds.push(guestId);
 
-    await changeUserStatus(actorId, { action: 'depart', userId: guestId });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: guestId });
     await rehireUserWithTeam(
       { id: actorId, isSuperadmin: true },
       { action: 'rehire', userId: guestId, password: NEW_PASSWORD, teamId: null, teamRole: null },
@@ -354,7 +354,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
       userType: 'guest',
     });
     createdUserIds.push(guestId);
-    await changeUserStatus(actorId, { action: 'depart', userId: guestId });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: guestId });
 
     await expect(
       rehireUserWithTeam(
@@ -376,7 +376,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
   it('내부 일반 계정에 팀이 없으면 거부하고 전부 롤백한다', async () => {
     const actorId = await seedActor();
     const { id } = await seedUser(actorId, '팀누락');
-    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: id });
 
     await expect(
       rehireUserWithTeam(
@@ -393,7 +393,7 @@ describe.skipIf(!isLocalDb)('계정 상태 전이 (real local DB)', () => {
     const { id } = await seedUser(actorId, 'audit');
 
     await changeUserStatus(actorId, { action: 'suspend', userId: id });
-    await changeUserStatus(actorId, { action: 'depart', userId: id });
+    await changeUserStatus(actorId, { action: 'depart', succession: [], userId: id });
     await rehireUserWithTeam(
       { id: actorId, isSuperadmin: true },
       {

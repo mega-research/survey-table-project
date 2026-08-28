@@ -1,6 +1,5 @@
-import 'server-only';
-
 import { and, asc, count, eq, ilike, notExists, or, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
@@ -8,19 +7,19 @@ import { isUniqueViolation } from '@/lib/pg-error';
 import type { TeamLifecycleAction, TeamLifecycleMetadata } from '@/shared/contracts/workspace';
 
 import {
-  AlreadyTeamMemberError,
-  TargetUserNotFoundError,
-  TeamMemberNotFoundError,
-  TeamNotFoundError,
-  assertLastLeaderKept,
-  assertMemberAssignable,
   type AddTeamMemberInput,
+  AlreadyTeamMemberError,
   type ChangeTeamMemberRoleInput,
   type RemoveTeamMemberInput,
   type SearchAssignableUsersInput,
   type SearchAssignableUsersOutput,
+  TargetUserNotFoundError,
+  TeamMemberNotFoundError,
+  TeamNotFoundError,
   type UpdateMemberJobTitleInput,
   type WorkspaceActionOutput,
+  assertLastLeaderKept,
+  assertMemberAssignable,
 } from '../domain/teams';
 
 const OK: WorkspaceActionOutput = { success: true };

@@ -15,7 +15,6 @@ import type { UserListItem } from '@/shared/contracts/auth-io';
 import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useResetUserPassword } from './queries/use-users';
 
-
 interface Props {
   /** 대상 사용자. 이 모달은 열릴 때만 마운트되므로 null 이 오지 않는다. */
   user: UserListItem;
@@ -85,8 +84,8 @@ export function UserResetPasswordModal({ user, onClose }: Props) {
           </div>
 
           <p className="text-[11px] text-[#9CA3AF]">
-            임시 비밀번호는 사내 메신저·구두 등 별도 채널로 전달하고, 사용자는 로그인 후
-            프로필에서 변경합니다. 이메일 재설정 링크는 없습니다.
+            임시 비밀번호는 사내 메신저·구두 등 별도 채널로 전달하고, 사용자는 로그인 후 프로필에서
+            변경합니다. 이메일 재설정 링크는 없습니다.
           </p>
 
           {error && (

@@ -10,10 +10,12 @@
  *   전자만 보면 참여자(티켓 18)가 남의 팀 폴더 구조를 재배치하고, 후자만 보면 팀원이
  *   못 고치는 설문을 옮긴다.
  */
-import { createRouterClient, ORPCError } from '@orpc/server';
+import { ORPCError, createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
+import { assertSurveyCapabilityBatchRpc } from '@/server/rpc-survey-access';
 
 import {
   DuplicateSurveyGroupNameError,
@@ -22,8 +24,6 @@ import {
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
 import * as svc from '../services/survey-groups';
-import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
-import { assertSurveyCapabilityBatchRpc } from '@/server/rpc-survey-access';
 import { surveyGroups } from './survey-groups';
 
 vi.mock('../services/survey-groups', () => ({

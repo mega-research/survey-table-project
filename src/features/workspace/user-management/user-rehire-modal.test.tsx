@@ -7,11 +7,12 @@
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { selectOption } from '@tests/helpers/select';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
-import { selectOption } from '@tests/helpers/select';
+import { UserRehireModal } from './user-rehire-modal';
 
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
@@ -29,8 +30,6 @@ vi.mock('../team-management/queries/use-teams', () => ({
     error: null,
   }),
 }));
-
-import { UserRehireModal } from './user-rehire-modal';
 
 const onClose = vi.fn();
 
@@ -164,9 +163,7 @@ describe('UserRehireModal', () => {
     await user.click(screen.getByRole('button', { name: '재입사 처리' }));
 
     expect(mutateAsync).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText('비밀번호는 최소 8자 이상이어야 합니다.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('비밀번호는 최소 8자 이상이어야 합니다.')).toBeInTheDocument();
   });
 
   it('서버 실패는 모달을 열어둔 채 문구로 보여준다', async () => {

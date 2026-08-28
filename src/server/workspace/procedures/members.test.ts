@@ -9,10 +9,10 @@ import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { getTeamRole } from '@/server/read-models/team-memberships';
 
 import { CrossTeamAssignmentError, LastTeamLeaderError } from '../domain/teams';
 import * as svc from '../services/members';
-import { getTeamRole } from '@/server/read-models/team-memberships';
 import { members } from './members';
 
 vi.mock('../services/members', () => ({

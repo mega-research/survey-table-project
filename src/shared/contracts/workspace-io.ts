@@ -481,3 +481,73 @@ export type AddSurveyParticipantInput = z.infer<typeof AddSurveyParticipantInput
 
 export const RemoveSurveyParticipantInput = AddSurveyParticipantInput;
 export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipantInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 소유권 이전 · 승계 (.pen FLOW 4-4·9-3, 티켓 19)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 두 입구가 같은 이동을 만든다 — 공유 모달의 수동 이전과 퇴사 처리의 승계. 계약을 나누되
+// 실행은 한 서비스로 모은다: 「소유자가 바뀐다」는 사실의 불변식(소유자는 소유 팀 사람이어야
+// 한다, 그룹은 팀을 따라간다)이 두 벌이 되면 한쪽만 조여진다.
+
+export const TransferSurveyOwnershipInput = z.object({
+  surveyId: z.uuid(),
+  newOwnerUserId: z.uuid(),
+});
+export type TransferSurveyOwnershipInput = z.infer<typeof TransferSurveyOwnershipInput>;
+
+/**
+ * 이전 후보 한 명 (.pen 4-4 「새 소유자」 드롭다운).
+ *
+ * 후보 모집단은 **같은 팀 active 멤버 + 이 설문 참여자**다(스펙 §4). `source` 를 함께 주는
+ * 이유는 화면이 「박도윤 · 연구1본부 - 1팀」과 「정분석 · 참여자」를 갈라 적기 때문이다.
+ */
+export const TransferCandidateItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  teamName: z.string().nullable(),
+  source: z.enum(['team_member', 'participant']),
+});
+export type TransferCandidateItem = z.infer<typeof TransferCandidateItem>;
+
+export const ListTransferCandidatesOutput = z.array(TransferCandidateItem);
+export type ListTransferCandidatesOutput = z.infer<typeof ListTransferCandidatesOutput>;
+
+/**
+ * 퇴사 처리 화면이 미리 보는 설문 한 건 (.pen 9-3).
+ *
+ * `proposedUserId` 가 null 이면 **승계 대기**로 간다는 뜻이다 — 「후보가 없다」와 「아직 안
+ * 정했다」를 화면이 갈라야 하므로 null 을 그대로 노출한다.
+ */
+export const SuccessionPlanItem = z.object({
+  surveyId: z.uuid(),
+  title: z.string(),
+  teamName: z.string().nullable(),
+  proposedUserId: z.uuid().nullable(),
+  proposedName: z.string().nullable(),
+  /** 왜 이 사람이 제안됐는가 — 화면이 「참여자 (가장 먼저 초대됨)」/「팀장」으로 적는다. */
+  proposedReason: z.enum(['participant', 'team_leader']).nullable(),
+  /** 이 설문에서 고를 수 있는 후임 전체 — 처리자가 제안을 바꿀 수 있어야 한다. */
+  candidates: z.array(TransferCandidateItem),
+});
+export type SuccessionPlanItem = z.infer<typeof SuccessionPlanItem>;
+
+export const SuccessionPreviewInput = z.object({ userId: z.uuid() });
+export type SuccessionPreviewInput = z.infer<typeof SuccessionPreviewInput>;
+
+export const SuccessionPreviewOutput = z.object({ surveys: z.array(SuccessionPlanItem) });
+export type SuccessionPreviewOutput = z.infer<typeof SuccessionPreviewOutput>;
+
+/**
+ * 퇴사 처리와 함께 확정하는 승계 지정.
+ *
+ * `newOwnerUserId: null` 은 **승계 대기로 보낸다**는 명시적 선택이다 — 목록에서 빠뜨린 것과
+ * 구별해야 해서 설문 id 를 반드시 적게 한다. 서버는 소유 설문 전수가 이 목록에 있는지
+ * 확인하고, 빠진 것이 있으면 거부한다(조용히 승계 대기로 흘려보내지 않는다).
+ */
+export const SuccessionAssignment = z.object({
+  surveyId: z.uuid(),
+  newOwnerUserId: z.uuid().nullable(),
+});
+export type SuccessionAssignment = z.infer<typeof SuccessionAssignment>;

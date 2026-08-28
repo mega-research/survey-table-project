@@ -113,29 +113,29 @@ export async function createSurveyGroup(
   input: CreateSurveyGroupInput,
 ): Promise<CreateSurveyGroupOutput> {
   return db.transaction(async (tx) => {
-  await requireActiveTeamLocked(tx, input.teamId);
+    await requireActiveTeamLocked(tx, input.teamId);
 
-  const [tail] = await tx
-    .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
-    .from(surveyGroups)
-    .where(eq(surveyGroups.teamId, input.teamId));
+    const [tail] = await tx
+      .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
+      .from(surveyGroups)
+      .where(eq(surveyGroups.teamId, input.teamId));
 
-  try {
-    const [group] = await tx
-      .insert(surveyGroups)
-      .values({
-        teamId: input.teamId,
-        name: input.name,
-        createdBy: actorUserId,
-        order: (tail?.maxOrder ?? -1) + 1,
-      })
-      .returning({ id: surveyGroups.id });
-    if (!group) throw new SurveyGroupNotFoundError();
-    return { id: group.id };
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
-    throw err;
-  }
+    try {
+      const [group] = await tx
+        .insert(surveyGroups)
+        .values({
+          teamId: input.teamId,
+          name: input.name,
+          createdBy: actorUserId,
+          order: (tail?.maxOrder ?? -1) + 1,
+        })
+        .returning({ id: surveyGroups.id });
+      if (!group) throw new SurveyGroupNotFoundError();
+      return { id: group.id };
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
+      throw err;
+    }
   });
 }
 

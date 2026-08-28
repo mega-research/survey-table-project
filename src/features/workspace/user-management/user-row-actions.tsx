@@ -41,6 +41,8 @@ interface Props {
   user: UserListItem;
   /** 재입사는 입력이 필요해 확인 다이얼로그가 아니라 전용 모달을 연다. */
   onRehire: (user: UserListItem) => void;
+  /** 퇴사 — 승계 지정 모달을 연다(.pen 9-3, 티켓 19). */
+  onDepart: (user: UserListItem) => void;
   onResetPassword: (user: UserListItem) => void;
 }
 
@@ -51,7 +53,7 @@ interface Props {
  * 화면에 뜬 액션이 서버에서 거부되는 어긋남이 생기지 않는다. 그래도 판정자는 서버다:
  * 목록을 띄워둔 사이 상태가 바뀌면 열려 있던 메뉴가 낡은 것이라, 실패 문구를 그대로 띄운다.
  */
-export function UserRowActions({ user, onRehire, onResetPassword }: Props) {
+export function UserRowActions({ user, onRehire, onDepart, onResetPassword }: Props) {
   const [confirming, setConfirming] = useState<Exclude<UserStatusAction, 'rehire'> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: changeStatus, isPending } = useChangeUserStatus();
@@ -64,8 +66,14 @@ export function UserRowActions({ user, onRehire, onResetPassword }: Props) {
   }
 
   function openAction(action: UserStatusAction) {
+    // 재입사와 퇴사는 확인 문구만으로 끝나지 않는다 — 각자 전용 모달이 목적지(재입사)와
+    // 승계 지정(퇴사)을 받는다. 나머지 전이는 여기서 확인만 받는다.
     if (action === 'rehire') {
       onRehire(user);
+      return;
+    }
+    if (action === 'depart') {
+      onDepart(user);
       return;
     }
     setError(null);
@@ -76,6 +84,8 @@ export function UserRowActions({ user, onRehire, onResetPassword }: Props) {
     if (!confirming) return;
     setError(null);
     try {
+      // depart 는 전용 모달로 갔으므로 여기 도달하지 않는다 — 타입도 그 사실을 안다.
+      if (confirming === 'depart') return;
       await changeStatus({ action: confirming, userId: user.id });
       closeConfirm();
     } catch (err) {

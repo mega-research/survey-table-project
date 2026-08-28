@@ -115,8 +115,9 @@ describe('재배치 센터 procedure', () => {
   });
 
   it('일괄 배치는 200건을 넘기면 입력에서 거부한다', async () => {
-    const ids = Array.from({ length: 201 }, (_, i) =>
-      `44444444-4444-4444-8444-${String(i).padStart(12, '0')}`,
+    const ids = Array.from(
+      { length: 201 },
+      (_, i) => `44444444-4444-4444-8444-${String(i).padStart(12, '0')}`,
     );
     await expect(
       clientWith({ isSuperadmin: true }).reassignment.assignSurveys({
