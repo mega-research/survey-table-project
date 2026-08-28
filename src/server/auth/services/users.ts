@@ -250,7 +250,9 @@ async function revokeSessions(tx: Tx, userId: string, now: Date): Promise<void> 
  * 이 함수가 보장하는 것은 **상태·세션·감사**뿐이다. 재입사의 팀 배정은 워크스페이스 도메인의
  * 쓰기라 여기서 부를 수 없어(도메인 간 직접 import 금지) server/workflows/user-rehire 가
  * 같은 트랜잭션으로 묶는다 — 그 층이 applyUserStatusChange 를 직접 쓰는 이유다.
- * 퇴사의 멤버십·소유권 정리는 여전히 없다(승계는 티켓 19).
+ * **소유권 정리는 워크플로가 진다**(user-departure, 티켓 19) — 이 함수는 상태·세션·감사만
+ * 다룬다. 멤버십 행은 **일부러 지우지 않는다**: 팀 상세가 비활성 멤버를 표식과 함께 계속
+ * 보여줘야 하고, 유효 소속 판정(getActiveTeamMemberships)이 아니라 계정 상태가 접근을 막는다.
  */
 export async function changeUserStatus(
   actorUserId: string,

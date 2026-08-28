@@ -17,17 +17,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import {
   surveyGroups as groupsTable,
+  teamLifecycleEvents as lifecycleEventsTable,
   surveyOwnershipEvents as ownershipEventsTable,
   surveyParticipants as participantsTable,
+  userStatusEvents as statusEventsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
-  userStatusEvents as statusEventsTable,
   users as usersTable,
 } from '@/db/schema';
-import type { ORPCContext } from '@/server/context';
 import { users as userProcedures } from '@/server/auth/procedures/users';
+import type { ORPCContext } from '@/server/context';
 import { loadSurveyCapabilities } from '@/server/survey-access';
+import { members as memberProcedures } from '@/server/workspace/procedures/members';
 import { ownership as ownershipProcedures } from '@/server/workspace/procedures/ownership';
 import { reassignment as reassignmentProcedures } from '@/server/workspace/procedures/reassignment';
 
@@ -129,7 +131,12 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
     groupId = crypto.randomUUID();
     await db
       .insert(groupsTable)
-      .values({ id: groupId, teamId: TEAM_A, name: `그룹-${groupId.slice(0, 8)}`, createdBy: OWNER_ID });
+      .values({
+        id: groupId,
+        teamId: TEAM_A,
+        name: `그룹-${groupId.slice(0, 8)}`,
+        createdBy: OWNER_ID,
+      });
 
     surveyId = crypto.randomUUID();
     await db.insert(surveysTable).values({
@@ -152,6 +159,10 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
     // 퇴사 케이스가 남긴 상태 감사는 user_id RESTRICT 라 손으로 걷어야 사용자가 지워진다.
     await db.delete(statusEventsTable).where(inArray(statusEventsTable.userId, ALL_USERS));
     await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, ALL_USERS));
+    // 멤버 제외 케이스가 남긴 팀 감사도 team_id RESTRICT 라 함께 걷는다.
+    await db
+      .delete(lifecycleEventsTable)
+      .where(inArray(lifecycleEventsTable.teamId, [TEAM_A, TEAM_B]));
     await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B]));
     await db.delete(usersTable).where(inArray(usersTable.id, ALL_USERS));
   });
@@ -165,6 +176,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       await ownershipClient(OWNER_ID).ownership.transfer({
         surveyId,
         newOwnerUserId: TEAMMATE_ID,
+        expectedOwnerUserId: OWNER_ID,
       });
 
       const row = await surveyRow();
@@ -178,6 +190,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       await ownershipClient(OWNER_ID).ownership.transfer({
         surveyId,
         newOwnerUserId: TEAMMATE_ID,
+        expectedOwnerUserId: OWNER_ID,
       });
 
       const subject = (id: string) => ({ id, isSuperadmin: false, userType: 'internal' as const });
@@ -194,6 +207,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       await ownershipClient(LEADER_ID).ownership.transfer({
         surveyId,
         newOwnerUserId: TEAMMATE_ID,
+        expectedOwnerUserId: OWNER_ID,
       });
 
       const [event] = await db
@@ -219,6 +233,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
         ownershipClient(OUTSIDER_ID).ownership.transfer({
           surveyId,
           newOwnerUserId: TEAMMATE_ID,
+          expectedOwnerUserId: OWNER_ID,
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
@@ -229,13 +244,44 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
         ownershipClient(OWNER_ID).ownership.transfer({
           surveyId,
           newOwnerUserId: OUTSIDER_ID,
+          expectedOwnerUserId: OWNER_ID,
         }),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
     });
 
+    /**
+     * 티켓 체크박스의 「동시 요청 중 하나만 성공」. `FOR UPDATE` 는 두 요청을 줄 세울 뿐이라
+     * 대조가 없으면 **둘 다 성공하고 나중 것이 이긴다** — 화면이 「현재 소유자: 김연구」를
+     * 보고 누른 요청이 이미 바뀐 위에 그대로 얹힌다.
+     */
+    it('뒤늦은 이전은 거부된다 — 기대 소유자가 잠긴 값과 다르면 CONFLICT', async () => {
+      await ownershipClient(OWNER_ID).ownership.transfer({
+        surveyId,
+        newOwnerUserId: TEAMMATE_ID,
+        expectedOwnerUserId: OWNER_ID,
+      });
+
+      // 두 번째 요청은 **팀장**이 보낸다 — 옛 소유자는 이전 직후 권한을 잃어 관문에서 먼저
+      // 걸리므로(FORBIDDEN) 낙관적 대조까지 도달하지 못한다. 팀장은 소유자가 누구든 권한이
+      // 유지되므로 이 축을 실제로 검사할 수 있는 유일한 주체다.
+      await expect(
+        ownershipClient(LEADER_ID).ownership.transfer({
+          surveyId,
+          newOwnerUserId: LEADER_ID,
+          expectedOwnerUserId: OWNER_ID, // 화면이 아직 옛 소유자를 보고 있다
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+      expect((await surveyRow())?.ownerUserId).toBe(TEAMMATE_ID);
+    });
+
     it('지금 소유자에게 다시 넘기면 CONFLICT — 아무 일도 안 하는 요청이다', async () => {
       await expect(
-        ownershipClient(OWNER_ID).ownership.transfer({ surveyId, newOwnerUserId: OWNER_ID }),
+        ownershipClient(OWNER_ID).ownership.transfer({
+          surveyId,
+          newOwnerUserId: OWNER_ID,
+          expectedOwnerUserId: OWNER_ID,
+        }),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
     });
   });
@@ -250,6 +296,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
     await ownershipClient(OWNER_ID).ownership.transfer({
       surveyId,
       newOwnerUserId: OUTSIDER_ID,
+      expectedOwnerUserId: OWNER_ID,
     });
 
     const row = await surveyRow();
@@ -276,6 +323,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
     await ownershipClient(OWNER_ID).ownership.transfer({
       surveyId,
       newOwnerUserId: TEAMMATE_ID,
+      expectedOwnerUserId: OWNER_ID,
     });
 
     const rows = await db
@@ -328,10 +376,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       expect(user?.status).toBe('departed');
       expect((await surveyRow())?.ownerUserId).toBe(LEADER_ID);
 
-      await db
-        .update(usersTable)
-        .set({ status: 'active' })
-        .where(eq(usersTable.id, OWNER_ID));
+      await db.update(usersTable).set({ status: 'active' }).where(eq(usersTable.id, OWNER_ID));
     });
 
     it('후임을 지정하지 않으면 승계 대기로 선다 — 소유자는 계보로 남는다', async () => {
@@ -347,10 +392,7 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       // 팀은 그대로다 — 승계 대기는 배치 대기와 다른 축이다.
       expect(row?.teamId).toBe(TEAM_A);
 
-      await db
-        .update(usersTable)
-        .set({ status: 'active' })
-        .where(eq(usersTable.id, OWNER_ID));
+      await db.update(usersTable).set({ status: 'active' }).where(eq(usersTable.id, OWNER_ID));
     });
 
     /**
@@ -402,6 +444,71 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
 
     const after = await reassignClient(SUPERADMIN_ID).reassignment.inbox();
     expect(after.pendingSurveys.map((s) => s.surveyId)).not.toContain(surveyId);
+  });
+
+  /**
+   * 리뷰가 짚은 자리 — 팀이 안 바뀐 해소가 폴더 정리를 지우면 안 된다. 배치 대기(해산발)는
+   * 팀이 없었으므로 언제나 미분류가 되지만, 승계 대기는 팀을 그대로 갖고 있다.
+   */
+  it('같은 팀으로 승계 대기를 해소하면 그룹이 남는다', async () => {
+    await db
+      .update(surveysTable)
+      .set({ ownershipStatus: 'succession_pending' })
+      .where(eq(surveysTable.id, surveyId));
+
+    await reassignClient(SUPERADMIN_ID).reassignment.assignSurveys({
+      surveyIds: [surveyId],
+      teamId: TEAM_A,
+      ownerUserId: TEAMMATE_ID,
+      visibility: 'team',
+    });
+
+    const row = await surveyRow();
+    expect(row?.ownershipStatus).toBe('normal');
+    expect(row?.surveyGroupId).toBe(groupId);
+  });
+
+  it('다른 팀으로 해소하면 그룹은 미분류가 된다 — 그룹은 팀 소유물이다', async () => {
+    await db
+      .update(surveysTable)
+      .set({ ownershipStatus: 'succession_pending' })
+      .where(eq(surveysTable.id, surveyId));
+
+    await reassignClient(SUPERADMIN_ID).reassignment.assignSurveys({
+      surveyIds: [surveyId],
+      teamId: TEAM_B,
+      ownerUserId: OUTSIDER_ID,
+      visibility: 'team',
+    });
+
+    const row = await surveyRow();
+    expect(row?.teamId).toBe(TEAM_B);
+    expect(row?.surveyGroupId).toBeNull();
+  });
+
+  /**
+   * 소유자를 팀에서 빼면 그 설문은 소유자조차 못 여는 상태가 된다(티켓 13 revocation 계약).
+   * 소유자가 살아 있어 승계 대기로도 안 잡혀 인박스에도 안 뜬다 — 입구에서 막는다.
+   */
+  it('소유 설문이 남은 사람은 팀에서 제외되지 않는다', async () => {
+    const teamClient = createRouterClient(
+      { members: memberProcedures },
+      { context: contextFor(LEADER_ID) },
+    );
+
+    await expect(
+      teamClient.members.remove({ teamId: TEAM_A, userId: OWNER_ID }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    // 이전한 뒤에는 제외된다.
+    await ownershipClient(OWNER_ID).ownership.transfer({
+      surveyId,
+      newOwnerUserId: TEAMMATE_ID,
+      expectedOwnerUserId: OWNER_ID,
+    });
+    await teamClient.members.remove({ teamId: TEAM_A, userId: OWNER_ID });
+
+    await db.insert(teamMembersTable).values({ teamId: TEAM_A, userId: OWNER_ID, role: 'member' });
   });
 
   it('참여 행이 여럿이면 가장 먼저 초대된 사람이 제안된다', async () => {

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -31,18 +32,25 @@ export class DepartureSuccessionError extends Error {
  * 주인으로 남는다. 그 설문은 소유자가 살아 있으므로 승계 대기로도 안 잡히고, 재배치
  * 인박스에도 안 뜬다 — 어디에서도 보이지 않는 고아가 된다.
  *
- * **순서가 계약이다 — 승계가 먼저다.**
- * 재입사는 상태를 먼저 바꿨지만(배정이 재직 여부를 보므로) 여기는 반대다. 승계는 새 소유자의
- * 자격만 보고 **떠나는 사람의 상태는 보지 않으므로** 순서에 자유가 있는데, 승계를 먼저 두면
- * 「소유 설문 전수 대조」(applySuccessionInTx)가 **퇴사 이전의 목록**을 본다. 상태를 먼저
- * 바꾸면 그 사이 다른 요청이 설문을 넘길 수 있고, 그때 대조가 실패해 퇴사 전체가 롤백된다 —
- * 화면이 보여준 목록과 서버가 대조하는 목록을 같게 두는 쪽이 예측 가능하다.
+ * **잠금 순서가 계약이다 — 전역 전이 키를 가장 먼저 잡는다.**
+ *
+ * 재입사가 「전역 키(user-status-transition) → 사용자 키 → 팀 키」로 잡고 "전역 키를 뒤에
+ * 잡는 경로는 없다"를 불변식으로 적어 뒀다. 승계는 설문 행을 `FOR UPDATE` 로 잠그므로,
+ * 그냥 두면 이 흐름만 「설문 → 전역 키」가 되어 그 문장이 깨진다. 그래서 트랜잭션 첫 줄에서
+ * 같은 전역 키를 먼저 잡는다 — advisory **xact** 락은 같은 트랜잭션에서 재진입이 안전해,
+ * 뒤이어 `applyUserStatusChange` 가 다시 잡아도 그대로 통과한다.
+ *
+ * 승계를 상태 전이보다 먼저 두는 것은 순서상 **필수는 아니다**. 둘이 한 트랜잭션이라 소유
+ * 설문 조회는 어느 쪽이든 같은 스냅샷을 본다 — 실패를 빨리 드러내는 편이 낫다는 선택이다
+ * (전수 대조가 어긋나면 상태를 건드리기 전에 멈춘다).
  */
 export async function departUserWithSuccession(
   actor: { id: string },
   input: DepartInput,
 ): Promise<ChangeUserStatusOutput> {
   return db.transaction(async (tx) => {
+    // 전역 전이 키를 먼저 — 아래 applyUserStatusChange 가 같은 키를 다시 잡는다(재진입 안전).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('user-status-transition')::bigint)`);
     try {
       await applySuccessionInTx(tx, actor.id, input.userId, input.succession);
     } catch (err) {

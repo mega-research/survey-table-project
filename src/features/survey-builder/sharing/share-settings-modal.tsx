@@ -28,6 +28,8 @@ interface ShareSettingsModalProps {
   canManageAccess: boolean;
   /** 「현재 소유자」 표기 (.pen 4-4 부제). 소유자를 모르는 옛 설문은 null 이다. */
   currentOwnerName: string | null;
+  /** 이전 요청이 되돌려 보낼 낙관적 동시성 토큰. */
+  currentOwnerUserId: string | null;
   onClose: () => void;
 }
 
@@ -72,6 +74,7 @@ export function ShareSettingsModal({
   visibility,
   canManageAccess,
   currentOwnerName,
+  currentOwnerUserId,
   onClose,
 }: ShareSettingsModalProps) {
   const [selected, setSelected] = useState<SurveyVisibility>(visibility);
@@ -199,6 +202,7 @@ export function ShareSettingsModal({
           surveyId={surveyId}
           surveyTitle={surveyTitle}
           currentOwnerName={currentOwnerName}
+          currentOwnerUserId={currentOwnerUserId}
           onClose={() => setTransferOpen(false)}
         />
       )}

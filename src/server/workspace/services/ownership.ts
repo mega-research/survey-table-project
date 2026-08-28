@@ -14,7 +14,6 @@ import type {
   ListTransferCandidatesOutput,
   SuccessionAssignment,
   SuccessionPlanItem,
-  TransferCandidateItem,
   TransferSurveyOwnershipInput,
   WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
@@ -22,11 +21,15 @@ import type {
 import {
   AmbiguousOwnerTeamError,
   NotATransferCandidateError,
+  OwnerHasNoTeamError,
+  OwnerTeamNotActiveError,
+  OwnershipChangedError,
   OwnershipSurveyNotFoundError,
   SelfTransferError,
   type SuccessionCandidate,
   proposeSuccessor,
 } from '../domain/succession';
+import { lockTeamMembers } from './members';
 
 const OK: WorkspaceActionOutput = { success: true };
 
@@ -45,10 +48,15 @@ const OK: WorkspaceActionOutput = { success: true };
  */
 export async function listTransferCandidates(
   surveyId: string,
+  executor: DbTransaction | typeof db = db,
 ): Promise<ListTransferCandidatesOutput> {
   // FROM 은 users 이고 설문은 **한 행짜리 조인**이다. 반대로 두면 users 와의 조인 조건이
   // 없어 전 사용자 카테시안이 만들어진 뒤 WHERE 로 걸러진다.
-  const rows = await db
+  //
+  // 실행자를 받는 이유는 이 조회가 **잠금 안에서도** 불리기 때문이다(수동 이전의 후보 재확인).
+  // `db` 로 고정하면 잠긴 설문 행을 다른 스냅샷으로 다시 읽어, 후보 판정과 팀 판정이 서로
+  // 다른 상태를 볼 수 있다(티켓 15 「조회는 조건이지 사후 확인이 아니다」와 같은 축).
+  const rows = await executor
     .select({
       userId: users.id,
       name: users.name,
@@ -123,25 +131,38 @@ async function resolveOwningTeam(
   newOwnerUserId: string,
 ): Promise<{ teamId: string; movedTeam: boolean }> {
   const memberships = await tx
-    .select({ teamId: teamMembers.teamId, teamName: teams.name })
+    .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
     .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.status, 'active')))
     .where(eq(teamMembers.userId, newOwnerUserId));
 
   if (survey.teamId && memberships.some((m) => m.teamId === survey.teamId)) {
+    await lockOwningTeam(tx, survey.teamId);
     return { teamId: survey.teamId, movedTeam: false };
   }
-  if (memberships.length === 0) {
-    throw new AmbiguousOwnerTeamError(
-      '새 소유자가 활성 팀에 속해 있지 않습니다. 팀에 배정한 뒤 다시 시도하세요.',
-    );
-  }
-  if (memberships.length > 1) {
-    throw new AmbiguousOwnerTeamError(
-      '새 소유자가 여러 팀에 속해 있어 설문이 갈 팀을 정할 수 없습니다. 같은 팀 멤버에게 이전하세요.',
-    );
-  }
-  return { teamId: memberships[0]!.teamId, movedTeam: true };
+  if (memberships.length === 0) throw new OwnerHasNoTeamError();
+  if (memberships.length > 1) throw new AmbiguousOwnerTeamError();
+  const teamId = memberships[0]!.teamId;
+  await lockOwningTeam(tx, teamId);
+  return { teamId, movedTeam: true };
+}
+
+/**
+ * 목적지 팀이 **살아 있는지** 잠근 채로 확인한다.
+ *
+ * 무잠금으로 읽으면 그 사이 커밋된 해산(dissolveTeam)을 못 보고 archived 팀으로 소유권을
+ * 옮긴다 — 재배치(assignSurveys)·담기·새 설문 귀속이 모두 같은 창을 이 방식으로 닫는다.
+ * 잠금 키·모양을 그쪽과 맞추는 것이 목적이 아니라, **해산이 진행 중이면 여기서 기다렸다가
+ * archived 를 보고 거부**해야 하기 때문이다(ADR-0011).
+ */
+async function lockOwningTeam(tx: DbTransaction, teamId: string): Promise<void> {
+  await lockTeamMembers(tx, teamId);
+  const [team] = await tx
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.status, 'active')))
+    .for('share');
+  if (!team) throw new OwnerTeamNotActiveError();
 }
 
 /**
@@ -158,7 +179,7 @@ export async function transferOwnershipInTx(
   actorUserId: string,
   surveyId: string,
   newOwnerUserId: string,
-  options: { requireCandidate?: boolean } = {},
+  options: { requireCandidate?: boolean; expectedOwnerUserId?: string | null } = {},
 ): Promise<void> {
   const [survey] = await tx
     .select({
@@ -172,6 +193,16 @@ export async function transferOwnershipInTx(
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
     .for('update');
   if (!survey) throw new OwnershipSurveyNotFoundError();
+
+  // 잠긴 값과 대조한다 — 이것이 「동시 요청 중 하나만 성공」을 만든다. FOR UPDATE 는 두 요청을
+  // 줄 세울 뿐이라, 대조가 없으면 서로 다른 후임을 지목한 둘이 모두 성공하고 나중 것이 이긴다.
+  // 승계는 토큰이 없다(옵션 미전달) — 퇴사 트랜잭션이 소유 설문 전수를 이미 대조했다.
+  if (
+    options.expectedOwnerUserId !== undefined &&
+    survey.ownerUserId !== options.expectedOwnerUserId
+  ) {
+    throw new OwnershipChangedError();
+  }
   if (survey.ownerUserId === newOwnerUserId) throw new SelfTransferError();
 
   const [target] = await tx
@@ -185,7 +216,7 @@ export async function transferOwnershipInTx(
   // 수동 이전만 후보 자격을 요구한다. 승계는 처리자가 목록에서 고른 사람이고, 그 목록을
   // 만든 것이 같은 후보 규칙이라 여기서 다시 물으면 왕복만 는다.
   if (options.requireCandidate) {
-    const candidates = await listTransferCandidates(surveyId);
+    const candidates = await listTransferCandidates(surveyId, tx);
     if (!candidates.some((c) => c.userId === newOwnerUserId)) {
       throw new NotATransferCandidateError();
     }
@@ -227,6 +258,7 @@ export async function transferSurveyOwnership(
   await db.transaction((tx) =>
     transferOwnershipInTx(tx, actorUserId, input.surveyId, input.newOwnerUserId, {
       requireCandidate: true,
+      expectedOwnerUserId: input.expectedOwnerUserId,
     }),
   );
   return OK;
@@ -252,72 +284,81 @@ async function loadOwnedSurveys(dbc: DbTransaction | typeof db, userId: string) 
 }
 
 /**
- * 한 설문의 승계 후보를 제안 규칙이 읽는 모양으로 만든다.
- *
- * 후보 목록(listTransferCandidates)과 **같은 모집단**을 봐야 한다 — 제안된 사람이 드롭다운에
- * 없으면 처리자는 화면이 고장 난 것으로 읽는다.
- */
-async function loadSuccessionCandidates(
-  surveyId: string,
-  teamId: string | null,
-): Promise<{ candidates: TransferCandidateItem[]; rule: SuccessionCandidate[] }> {
-  const candidates = await listTransferCandidates(surveyId);
-
-  const participantRows = await db
-    .select({ userId: surveyParticipants.userId, invitedAt: surveyParticipants.createdAt })
-    .from(surveyParticipants)
-    .where(and(eq(surveyParticipants.surveyId, surveyId), eq(surveyParticipants.kind, 'member')));
-  const invitedAtOf = new Map(participantRows.map((r) => [r.userId, r.invitedAt]));
-
-  const leaderRows = teamId
-    ? await db
-        .select({ userId: teamMembers.userId })
-        .from(teamMembers)
-        .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.status, 'active')))
-        .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, 'leader')))
-    : [];
-  const leaderIds = new Set(leaderRows.map((r) => r.userId));
-
-  return {
-    candidates,
-    rule: candidates.map((c) => ({
-      userId: c.userId,
-      isParticipant: invitedAtOf.has(c.userId),
-      invitedAt: invitedAtOf.get(c.userId) ?? null,
-      isOwningTeamLeader: leaderIds.has(c.userId),
-    })),
-  };
-}
-
-/**
  * 퇴사 처리 화면의 미리보기 (.pen 9-3).
  *
  * 제안만 하고 **아무것도 바꾸지 않는다** — 무확인 자동 이전은 하지 않는다(스펙 §4).
  * 후보가 없는 설문은 `proposedUserId: null` 로 나가고 화면이 「승계 대기」로 적는다.
+ *
+ * 참여 행과 팀장은 **설문 수와 무관하게 각각 한 번씩** 읽는다. 설문마다 조회하면 소유 설문이
+ * 수십 건인 사람을 처리할 때 그만큼 왕복이 늘고, 퇴사 모달은 그 왕복이 끝나야 열린다.
+ * 후보 목록만 설문별로 남는다 — 조건(소유 팀 · 그 설문의 참여자)이 설문마다 다르다.
  */
 export async function previewSuccession(
   userId: string,
 ): Promise<{ surveys: SuccessionPlanItem[] }> {
   const owned = await loadOwnedSurveys(db, userId);
+  if (owned.length === 0) return { surveys: [] };
 
-  const items = await Promise.all(
-    owned.map(async (survey): Promise<SuccessionPlanItem> => {
-      const { candidates, rule } = await loadSuccessionCandidates(survey.id, survey.teamId);
-      const proposed = proposeSuccessor(rule);
-      const proposedCandidate = candidates.find((c) => c.userId === proposed?.userId) ?? null;
-      return {
-        surveyId: survey.id,
-        title: survey.title,
-        teamName: survey.teamName,
-        proposedUserId: proposed?.userId ?? null,
-        proposedName: proposedCandidate?.name ?? null,
-        proposedReason: proposed ? (proposed.isParticipant ? 'participant' : 'team_leader') : null,
-        candidates,
-      };
-    }),
+  const surveyIds = owned.map((s) => s.id);
+  const teamIds = [
+    ...new Set(owned.map((s) => s.teamId).filter((id): id is string => id !== null)),
+  ];
+
+  const [participantRows, leaderRows, candidateLists] = await Promise.all([
+    db
+      .select({
+        surveyId: surveyParticipants.surveyId,
+        userId: surveyParticipants.userId,
+        invitedAt: surveyParticipants.createdAt,
+      })
+      .from(surveyParticipants)
+      .where(
+        and(inArray(surveyParticipants.surveyId, surveyIds), eq(surveyParticipants.kind, 'member')),
+      ),
+    teamIds.length > 0
+      ? db
+          .select({ teamId: teamMembers.teamId, userId: teamMembers.userId })
+          .from(teamMembers)
+          .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.status, 'active')))
+          .where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.role, 'leader')))
+      : Promise.resolve([] as { teamId: string; userId: string }[]),
+    Promise.all(owned.map((survey) => listTransferCandidates(survey.id))),
+  ]);
+
+  const invitedAtOf = new Map(
+    participantRows.map((r) => [`${r.surveyId}:${r.userId}`, r.invitedAt]),
   );
+  const leadersOf = new Map<string, Set<string>>();
+  for (const row of leaderRows) {
+    const set = leadersOf.get(row.teamId) ?? new Set<string>();
+    set.add(row.userId);
+    leadersOf.set(row.teamId, set);
+  }
 
-  return { surveys: items };
+  const surveysOut = owned.map((survey, index): SuccessionPlanItem => {
+    const candidates = candidateLists[index]!;
+    const leaders = (survey.teamId && leadersOf.get(survey.teamId)) || new Set<string>();
+    const rule: SuccessionCandidate[] = candidates.map((c) => ({
+      userId: c.userId,
+      isParticipant: invitedAtOf.has(`${survey.id}:${c.userId}`),
+      invitedAt: invitedAtOf.get(`${survey.id}:${c.userId}`) ?? null,
+      isOwningTeamLeader: leaders.has(c.userId),
+    }));
+
+    const proposed = proposeSuccessor(rule);
+    const proposedCandidate = candidates.find((c) => c.userId === proposed?.userId) ?? null;
+    return {
+      surveyId: survey.id,
+      title: survey.title,
+      teamName: survey.teamName,
+      proposedUserId: proposed?.userId ?? null,
+      proposedName: proposedCandidate?.name ?? null,
+      proposedReason: proposed ? (proposed.isParticipant ? 'participant' : 'team_leader') : null,
+      candidates,
+    };
+  });
+
+  return { surveys: surveysOut };
 }
 
 /** 소유 설문 목록이 미리보기와 어긋난다 — 그 사이 설문이 늘거나 줄었다. */
@@ -350,7 +391,12 @@ export async function applySuccessionInTx(
     throw new SuccessionPlanMismatchError();
   }
 
-  for (const assignment of assignments) {
+  // **id 오름차순으로 돈다.** 입력 순서(클라이언트가 정한다)로 잠그면 재배치·해산·담기가
+  // 쓰는 순서와 어긋나 두 경로가 2건 이상 겹칠 때 사이클이 생긴다. `owned` 는 이미 정렬돼
+  // 있으므로 그것을 순서의 정본으로 삼는다.
+  const byId = new Map(assignments.map((a) => [a.surveyId, a]));
+  for (const survey of owned) {
+    const assignment = byId.get(survey.id)!;
     if (assignment.newOwnerUserId) {
       await transferOwnershipInTx(tx, actorUserId, assignment.surveyId, assignment.newOwnerUserId);
       continue;
@@ -361,25 +407,4 @@ export async function applySuccessionInTx(
       .set({ ownershipStatus: 'succession_pending', updatedAt: new Date() })
       .where(eq(surveys.id, assignment.surveyId));
   }
-}
-
-/** 승계 대기 설문 id — 재배치 센터가 인박스에 함께 싣는다. */
-export async function listSuccessionPendingIds(): Promise<string[]> {
-  const rows = await db
-    .select({ id: surveys.id })
-    .from(surveys)
-    .where(and(eq(surveys.ownershipStatus, 'succession_pending'), isNull(surveys.deletedAt)));
-  return rows.map((r) => r.id);
-}
-
-/** 재배치 센터가 여러 설문의 승계 대기를 한 번에 해소할 때 쓴다. */
-export async function clearSuccessionPending(
-  tx: DbTransaction,
-  surveyIds: readonly string[],
-): Promise<void> {
-  if (surveyIds.length === 0) return;
-  await tx
-    .update(surveys)
-    .set({ ownershipStatus: 'normal' })
-    .where(inArray(surveys.id, [...surveyIds]));
 }

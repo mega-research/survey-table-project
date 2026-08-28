@@ -1,8 +1,8 @@
-import { and, asc, count, eq, ilike, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, ilike, isNull, notExists, or, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
-import { teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
+import { surveys, teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
 import type { TeamLifecycleAction, TeamLifecycleMetadata } from '@/shared/contracts/workspace';
 
@@ -10,6 +10,7 @@ import {
   type AddTeamMemberInput,
   AlreadyTeamMemberError,
   type ChangeTeamMemberRoleInput,
+  MemberOwnsSurveysError,
   type RemoveTeamMemberInput,
   type SearchAssignableUsersInput,
   type SearchAssignableUsersOutput,
@@ -251,10 +252,19 @@ export async function changeMemberRole(
 }
 
 /**
- * 팀원 제외 — 마지막 팀장은 제외할 수 없다.
+ * 팀원 제외 — 마지막 팀장은 제외할 수 없고, **소유 설문이 있으면 먼저 이전해야 한다**.
  *
- * 제외된 사람은 미배치가 된다(다른 팀 겸직이 있으면 그 팀에는 남는다). 소유 설문 승계
- * 확인은 여기 없다 — 설문 소유자 개념이 티켓 07 에서 생기고, 승계 제안은 티켓 19 가 붙인다.
+ * 제외된 사람은 미배치가 된다(다른 팀 겸직이 있으면 그 팀에는 남는다).
+ *
+ * 소유 설문 검사가 여기 있는 이유는 `resolveSurveyCapabilities` 의 소유자 분기가 **소유 팀
+ * 소속일 때만** 전권을 주기 때문이다(티켓 13 revocation 계약). 그냥 빼면 그 설문들은 소유자가
+ * 자기 설문을 못 여는 상태가 되고, 소유자가 살아 있으므로 승계 대기로도 잡히지 않아 재배치
+ * 인박스에도 안 뜬다 — 어디에서도 보이지 않는 고아가 된다.
+ *
+ * 여기서 승계를 **대신 해 주지는 않는다**. 스펙 §4 의 「팀 이탈 처리 모달에서 자동 제안 +
+ * 확인」은 퇴사와 같은 확인 동선을 요구하는데, 그 화면은 아직 없다(티켓 19 는 퇴사 축만
+ * 세웠다). 무확인 자동 이전은 금지이므로 조용히 넘기는 대신 **막고 안내한다** — 처리자는
+ * 공유 설정의 「소유권 이전」으로 옮긴 뒤 다시 제외한다.
  */
 export async function removeMember(
   actorUserId: string,
@@ -275,6 +285,18 @@ export async function removeMember(
       targetIsActive: member.status === 'active',
       activeLeaderCount: await countActiveLeaders(tx, input.teamId),
     });
+
+    const [owned] = await tx
+      .select({ value: count() })
+      .from(surveys)
+      .where(
+        and(
+          eq(surveys.teamId, input.teamId),
+          eq(surveys.ownerUserId, input.userId),
+          isNull(surveys.deletedAt),
+        ),
+      );
+    if ((owned?.value ?? 0) > 0) throw new MemberOwnsSurveysError(owned!.value);
 
     await tx.delete(teamMembers).where(eq(teamMembers.id, member.id));
     await recordMemberEvent(tx, {

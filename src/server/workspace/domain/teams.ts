@@ -97,6 +97,22 @@ export class CrossTeamAssignmentError extends Error {
 }
 
 /** 마지막 팀장을 강등·제외하려 했다 — 팀에 관리자가 없어진다. */
+/**
+ * 제외하려는 사람이 그 팀의 설문을 소유하고 있다 — 먼저 이전해야 한다.
+ *
+ * 그냥 빼면 소유자 분기가 소유 팀 소속을 함께 묻기 때문에(티켓 13 revocation 계약) 그 설문은
+ * 소유자조차 못 여는 상태가 된다. 소유자가 살아 있어 승계 대기로도 안 잡혀 재배치 인박스에도
+ * 안 뜬다 — 어디에서도 보이지 않는 고아가 되므로 입구에서 막는다(티켓 19).
+ */
+export class MemberOwnsSurveysError extends Error {
+  constructor(public readonly surveyCount: number) {
+    super(
+      `이 팀에서 소유 중인 설문 ${surveyCount}건을 먼저 다른 사람에게 이전해야 제외할 수 있습니다.`,
+    );
+    this.name = 'MemberOwnsSurveysError';
+  }
+}
+
 export class LastTeamLeaderError extends Error {
   constructor() {
     super('마지막 팀장은 강등하거나 제외할 수 없습니다.');

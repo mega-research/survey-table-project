@@ -1,15 +1,8 @@
 // 소유권 승계 도메인 (.pen FLOW 4-4·9-3, 티켓 19).
 //
-// client-safe — server-only·Node·DB 의존 없음. 계약은 shared/contracts 가 소유하고 여기는
-// 그것을 다시 내보내며 **제안 규칙(순수)** 과 서버 전용 에러 어휘를 더한다.
-
-export {
-  OwnerCandidateItem,
-  SuccessionPlanItem,
-  SuccessionPreviewOutput,
-  TransferSurveyOwnershipInput,
-  WorkspaceActionOutput,
-} from '@/shared/contracts/workspace-io';
+// client-safe — server-only·Node·DB 의존 없음. **제안 규칙(순수)** 과 서버 전용 에러 어휘만
+// 산다 — 계약은 소비자(procedures·services)가 shared/contracts 에서 직접 받는다. 형제
+// 도메인처럼 되내보내지 않는 이유는 이 파일의 소비자가 그 통로를 아무도 쓰지 않아서다.
 
 /**
  * 후임 제안이 보는 후보 한 명.
@@ -62,17 +55,42 @@ export function proposeSuccessor(
 }
 
 /**
- * 새 소유자가 그 설문의 소유 팀 사람이 아니다 — 어느 팀으로 옮길지 정할 수 없다.
+ * 새 소유자가 어느 팀에도 속해 있지 않다.
  *
  * `resolveSurveyCapabilities` 의 소유자 분기는 **소유 팀 소속일 때만** 전권을 준다(티켓 13
- * revocation 계약). 그래서 팀 밖 사람에게 넘기려면 설문이 그 사람의 팀으로 따라가야 하는데,
- * 활성 팀이 없거나 둘 이상이면 어느 팀인지 시스템이 고를 수 없다. 조용히 하나를 고르면
- * 설문이 엉뚱한 팀의 목록에 나타난다.
+ * revocation 계약). 팀 없는 사람에게 넘기면 설문이 갈 팀이 없고, 그 소유자는 자기 설문을
+ * 열지도 못한다.
+ *
+ * 아래 `AmbiguousOwnerTeamError` 와 **갈라 두는 이유는 조치가 다르기 때문**이다 — 이쪽은
+ * 「그 사람을 팀에 배정하라」이고 저쪽은 「다른 사람을 고르라」다. 한 타입으로 묶으면 화면이
+ * 문구를 파싱해 조치를 갈라야 한다.
  */
+export class OwnerHasNoTeamError extends Error {
+  constructor() {
+    super('새 소유자가 활성 팀에 속해 있지 않습니다. 팀에 배정한 뒤 다시 시도하세요.');
+    this.name = 'OwnerHasNoTeamError';
+  }
+}
+
+/** 새 소유자가 여러 팀에 속해 설문이 갈 팀을 시스템이 고를 수 없다 — 다른 사람을 고르게 한다. */
 export class AmbiguousOwnerTeamError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor() {
+    super(
+      '새 소유자가 여러 팀에 속해 있어 설문이 갈 팀을 정할 수 없습니다. 같은 팀 멤버에게 이전하세요.',
+    );
     this.name = 'AmbiguousOwnerTeamError';
+  }
+}
+
+/**
+ * 목적지 팀이 해산됐다 — 잠근 채로 확인했을 때 archived 였다.
+ *
+ * 무잠금으로 읽으면 그 사이 커밋된 해산을 못 보고 archived 팀으로 소유권을 옮긴다.
+ */
+export class OwnerTeamNotActiveError extends Error {
+  constructor() {
+    super('해산된 팀으로는 소유권을 옮길 수 없습니다.');
+    this.name = 'OwnerTeamNotActiveError';
   }
 }
 
@@ -89,6 +107,19 @@ export class OwnershipSurveyNotFoundError extends Error {
   constructor() {
     super('설문을 찾을 수 없습니다.');
     this.name = 'OwnershipSurveyNotFoundError';
+  }
+}
+
+/**
+ * 화면이 보고 있던 소유자와 지금 소유자가 다르다 — 그 사이 다른 요청이 먼저 넘겼다.
+ *
+ * `FOR UPDATE` 만으로는 이것을 못 막는다(직렬화될 뿐 둘 다 성공한다). 기대 소유자를 함께
+ * 받아 잠긴 값과 대조하는 것이 「동시 요청 중 하나만 성공」을 실제로 만드는 유일한 장치다.
+ */
+export class OwnershipChangedError extends Error {
+  constructor() {
+    super('그 사이 소유자가 바뀌었습니다. 새로고침한 뒤 다시 시도하세요.');
+    this.name = 'OwnershipChangedError';
   }
 }
 

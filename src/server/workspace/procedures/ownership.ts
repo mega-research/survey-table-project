@@ -24,6 +24,9 @@ import {
 import {
   AmbiguousOwnerTeamError,
   NotATransferCandidateError,
+  OwnerHasNoTeamError,
+  OwnerTeamNotActiveError,
+  OwnershipChangedError,
   OwnershipSurveyNotFoundError,
   SelfTransferError,
 } from '../domain/succession';
@@ -43,7 +46,10 @@ function rethrowOwnershipError(err: unknown): never {
   if (
     err instanceof NotATransferCandidateError ||
     err instanceof SelfTransferError ||
-    err instanceof AmbiguousOwnerTeamError
+    err instanceof OwnerHasNoTeamError ||
+    err instanceof AmbiguousOwnerTeamError ||
+    err instanceof OwnerTeamNotActiveError ||
+    err instanceof OwnershipChangedError
   ) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }

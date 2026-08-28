@@ -14,6 +14,8 @@ interface OwnershipTransferModalProps {
   surveyTitle: string;
   /** 지금 소유자 이름 — 「현재 소유자: 김연구」 부제 (.pen 4-4). null 이면 생략한다. */
   currentOwnerName: string | null;
+  /** 화면이 보고 있던 소유자 id — 낙관적 동시성 토큰으로 그대로 되돌려 보낸다. */
+  currentOwnerUserId: string | null;
   onClose: () => void;
 }
 
@@ -38,6 +40,7 @@ export function OwnershipTransferModal({
   surveyId,
   surveyTitle,
   currentOwnerName,
+  currentOwnerUserId,
   onClose,
 }: OwnershipTransferModalProps) {
   const [selected, setSelected] = useState<string>('');
@@ -51,7 +54,11 @@ export function OwnershipTransferModal({
     if (!selected) return;
     setError(null);
     try {
-      await transfer.mutateAsync({ surveyId, newOwnerUserId: selected });
+      await transfer.mutateAsync({
+        surveyId,
+        newOwnerUserId: selected,
+        expectedOwnerUserId: currentOwnerUserId,
+      });
       onClose();
     } catch (err) {
       setError(getErrorMessage(err, '소유권을 이전하지 못했습니다.'));

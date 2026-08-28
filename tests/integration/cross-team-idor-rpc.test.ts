@@ -609,7 +609,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
   'workspace.ownership.transfer': {
     gate: 'rpc',
     capability: 'survey.transferOwnership',
-    input: { surveyId: S, newOwnerUserId: C },
+    input: { surveyId: S, newOwnerUserId: C, expectedOwnerUserId: null },
   },
 
   // ── 공유 설정(공개 범위) ────────────────────────────────────────────────

@@ -57,8 +57,9 @@ function requiresTeamAssignment(target: { userType: string; isSuperadmin: boolea
  *  3. 새 소속 배정.
  *
  * 잠금 순서는 전이의 전역 키(user-status-transition) → 사용자 키 → 팀 키(id 오름차순)다.
- * 팀원 추가(addMember)가 사용자 → 팀 순으로 잡는 것과 어긋나지 않고, 전역 키를 뒤에 잡는
- * 경로는 없다.
+ * 팀원 추가(addMember)가 사용자 → 팀 순으로 잡는 것과 어긋나지 않고, **전역 키를 뒤에 잡는
+ * 경로는 없다** — 퇴사 워크플로(user-departure)가 설문 행을 잠그면서도 그 전역 키를 첫 줄에서
+ * 먼저 잡는 것이 이 문장을 지키기 위해서다(티켓 19).
  *
  * 직책은 상태 전이 쪽이 쓴다 — 배정에는 넘기지 않아(undefined) 같은 열을 두 번 갱신하지 않는다.
  */

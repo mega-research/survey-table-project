@@ -493,6 +493,17 @@ export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipan
 export const TransferSurveyOwnershipInput = z.object({
   surveyId: z.uuid(),
   newOwnerUserId: z.uuid(),
+  /**
+   * 화면이 보고 있던 소유자 — **낙관적 동시성 토큰**이다(티켓 19).
+   *
+   * `FOR UPDATE` 는 직렬화만 한다. 서로 다른 후임을 지목한 두 요청은 순서대로 들어가 **둘 다
+   * 성공하고 나중 것이 이긴다** — 「현재 소유자: 김연구」를 보고 누른 요청이 이미 박도윤으로
+   * 바뀐 위에 그대로 얹힌다. 기대 소유자를 함께 보내면 잠긴 값과 대조해 뒤늦은 요청을 거부할
+   * 수 있다(티켓 체크박스 「동시 요청 중 하나만 성공」).
+   *
+   * 소유자를 모르는 옛 설문(0089 2단계 배포)은 null 을 보낸다.
+   */
+  expectedOwnerUserId: z.uuid().nullable(),
 });
 export type TransferSurveyOwnershipInput = z.infer<typeof TransferSurveyOwnershipInput>;
 

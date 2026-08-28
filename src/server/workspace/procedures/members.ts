@@ -10,6 +10,7 @@ import {
   ChangeTeamMemberRoleInput,
   CrossTeamAssignmentError,
   LastTeamLeaderError,
+  MemberOwnsSurveysError,
   RemoveTeamMemberInput,
   SearchAssignableUsersInput,
   SearchAssignableUsersOutput,
@@ -53,7 +54,9 @@ function rethrowMemberError(err: unknown): never {
     err instanceof UnassignableUserError ||
     err instanceof AlreadyTeamMemberError ||
     err instanceof CrossTeamAssignmentError ||
-    err instanceof LastTeamLeaderError
+    err instanceof LastTeamLeaderError ||
+    // 소유 설문이 남은 사람의 제외 — 먼저 이전하라는 안내다(티켓 19).
+    err instanceof MemberOwnsSurveysError
   ) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }

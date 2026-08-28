@@ -116,8 +116,11 @@ export function UserDepartModal({ user, onClose }: UserDepartModalProps) {
                           : ''}
                       </option>
                     ))}
-                    {/* 후보가 있어도 고를 수 있다 — 「지금은 정하지 않는다」가 유효한 선택이다. */}
-                    <option value={PENDING}>승계 대기로 전환</option>
+                    {/* 승계 대기는 **후보가 없는 설문에만** 준다(.pen 9-3: 「참여자·팀장 후보가
+                        없는 설문만」). 후보가 있는데도 미루게 하면 인박스가 미룬 일로 찬다. */}
+                    {survey.candidates.length === 0 && (
+                      <option value={PENDING}>승계 대기로 전환</option>
+                    )}
                   </select>
                   {survey.proposedUserId === null && (
                     <span className="text-[11px] text-[#9CA3AF]">

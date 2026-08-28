@@ -396,6 +396,7 @@ export async function assignSurveys(
       .select({
         id: surveys.id,
         title: surveys.title,
+        teamId: surveys.teamId,
         ownerUserId: surveys.ownerUserId,
         visibility: surveys.visibility,
         assignmentStatus: surveys.assignmentStatus,
@@ -424,6 +425,11 @@ export async function assignSurveys(
       }
     }
 
+    // 그룹은 **팀이 실제로 바뀐 설문만** 미분류로 내린다(티켓 12 인계). 배치 대기 설문은
+    // 팀이 없었으므로 언제나 여기 들어오고, 승계 대기 설문은 같은 팀으로 해소하면 폴더 정리를
+    // 잃지 않는다 — 무조건 NULL 로 두면 소유자만 바꾸는 해소가 폴더까지 지운다.
+    const movedTeamIds = rows.filter((row) => row.teamId !== input.teamId).map((row) => row.id);
+
     await tx
       .update(surveys)
       .set({
@@ -433,14 +439,16 @@ export async function assignSurveys(
         assignmentStatus: 'assigned',
         // 승계 대기도 여기서 해소된다 — 새 소유자가 정해졌다는 것이 그 상태의 종료 조건이다.
         ownershipStatus: 'normal',
-        // 그룹은 팀 소유물이다 — 새 팀에서는 미분류로 시작한다(티켓 12 인계). 배치 대기
-        // 설문은 이미 NULL 이지만 명시적으로 쓴다: 이 열이 team_id 와 함께 움직인다는 규칙이
-        // 코드에 보여야 다음 이동 경로가 같은 것을 빠뜨리지 않는다. 승계 대기 설문은 팀을
-        // 갖고 있었으므로 여기서 실제로 미분류가 된다(팀이 바뀌면 그룹은 따라갈 수 없다).
-        surveyGroupId: null,
         updatedAt: new Date(),
       })
       .where(inArray(surveys.id, input.surveyIds));
+
+    if (movedTeamIds.length > 0) {
+      await tx
+        .update(surveys)
+        .set({ surveyGroupId: null })
+        .where(inArray(surveys.id, movedTeamIds));
+    }
 
     await tx.insert(surveyOwnershipEvents).values(
       rows.map((row) => ({
