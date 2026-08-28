@@ -744,14 +744,25 @@ export async function dispatchCampaignChunk(
     : null;
   // 회신 주소만 스냅샷이 아니라 **발송 시점**에 해석된다(티켓 20) — 소유권이 이전되면
   // 그 다음 발송분부터 새 소유자에게 답장이 간다. 발신 주소(from)·제목·본문은 종전대로
-  // 스냅샷 그대로다. 이미 claim 된 recipient 는 sendPayloadSnapshot 의 값을 쓰므로
-  // 재시도가 회신 주소를 바꾸지도 않는다.
-  const replyTo = await resolveSendReplyTo({
-    surveyId: campaign.surveyId,
-    replyTo: campaign.replyToSnapshot,
-    fromLocal: campaign.fromLocalSnapshot,
-    fromDomain,
-  });
+  // 스냅샷 그대로다.
+  //
+  // 해석 단위는 **청크**다 — from·제목·본문·첨부와 같은 자리에서 한 번 정한다. 청크를
+  // 처리하는 도중에 소유권이 이전되면 그 청크의 나머지 수신자까지 이전 소유자 주소로
+  // 나가지만, 계약의 단위가 캠페인 발송이지 개별 수신자가 아니라 그것이 경계다. 수신자마다
+  // 다시 읽으면 왕복이 수신자 수만큼 늘고, 한 청크 안에서 회신 주소가 갈리는 편이 더 나쁘다.
+  //
+  // **새 payload 를 만들 수신자가 있을 때만 조회한다.** 전원이 이미 claim 돼 있는 재시도
+  // 청크는 sendPayloadSnapshot 의 값을 그대로 쓰므로 이 값을 쓰지 않는데, 그때도 조회하면
+  // 소유자 조회 한 번의 실패가 「값이 이미 정해진」 재시도를 통째로 막는다.
+  const needsFreshPayload = activeRows.some((row) => row.sendPayloadSnapshot === null);
+  const replyTo = needsFreshPayload
+    ? await resolveSendReplyTo({
+        surveyId: campaign.surveyId,
+        replyTo: campaign.replyToSnapshot,
+        fromLocal: campaign.fromLocalSnapshot,
+        fromDomain,
+      })
+    : null;
 
   const proposedSends = await Promise.all(
     activeRows.map(async (row): Promise<{

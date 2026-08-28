@@ -228,6 +228,28 @@ describe('dispatchCampaignChunk 회신 주소 소유자 연동', () => {
     expect(replyTo).toBe('noreply@mail.example.com');
   });
 
+  it('이미 payload 가 굳은 재시도 청크는 소유자 조회조차 하지 않는다', async () => {
+    // 재시도는 sendPayloadSnapshot 의 값을 그대로 쓴다 — 그때도 조회하면 소유자 조회 한 번의
+    // 실패가 「값이 이미 정해진」 재시도를 통째로 막는다.
+    Object.assign(recipient, {
+      status: 'sending',
+      sendPayloadSnapshot: {
+        from: 'Survey <noreply@mail.example.com>',
+        replyTo: 'frozen@example.com',
+        to: 'active@example.com',
+        subject: 'subject',
+        html: '<html></html>',
+        attachments: [],
+      },
+    });
+    ownerEmailMock.mockResolvedValue('owner@example.com');
+
+    selectState.call = 0;
+    await dispatchCampaignChunk('c1', ['r1']);
+
+    expect(ownerEmailMock).not.toHaveBeenCalled();
+  });
+
   it('발신 주소는 소유자와 무관하게 스냅샷 그대로다', async () => {
     ownerEmailMock.mockResolvedValue('owner@example.com');
 
