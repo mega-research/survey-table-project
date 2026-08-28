@@ -29,13 +29,17 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 // 작업 범위 목록(getSurveyListWithCounts)으로 옮겨 갔다. 목록은 항상 범위를 지나야 한다.
 
 /**
- * 「내가 이 설문의 참여자인가」 — 목록 조건과 투영이 함께 쓰는 조각 (티켓 18).
+ * 「내가 이 설문의 참여자로서 실제로 접근하는가」 — 목록 **조건**과 **투영**이 함께 쓰는 조각.
  *
- * 배치 대기 설문을 제외하는 것이 조건의 일부다. 판정 코어가 `assignment_pending` 을
- * 참여자 분기보다 **먼저** 차단하므로(팀이 정해지기 전에는 아무도 못 연다, ADR-0006),
- * 목록만 보여주면 열리지 않는 카드가 그려진다.
+ * 하나로 두는 것이 중요하다. 처음에는 조건과 투영을 따로 썼는데 그 순간 갈렸다 — 투영 쪽에만
+ * 배치 대기 조건이 빠져, 슈퍼어드민의 시스템 전체 보기에서 배치 대기 설문의 `isParticipant`
+ * 가 true 로 나왔다(리뷰에서 잡힘). 같은 사실은 한 자리에서만 말한다.
+ *
+ * 배치 대기를 빼는 것이 그 사실의 일부다. 판정 코어가 `assignment_pending` 을 참여자
+ * 분기보다 **먼저** 차단하므로(팀이 정해지기 전에는 아무도 못 연다, ADR-0006), 목록·투영이
+ * 그것보다 넓으면 열리지 않는 카드가 그려지고 버튼도 열린 것처럼 보인다.
  */
-function invitedToSurvey(viewerId: string): SQL {
+function participatesInSurvey(viewerId: string): SQL {
   return and(
     eq(surveys.assignmentStatus, 'assigned'),
     exists(
@@ -77,15 +81,11 @@ function surveyListColumns(viewerId: string | null) {
      *
      * 참여자는 `responses.view` 를 갖지만 팀원은 못 갖는다. 이 값이 없으면 카드가 둘을
      * 구별할 수 없어 초대받은 사람에게 「분석」이 잠긴 채로 보인다(티켓 16 주석의 예고).
+     * 목록 조건과 **같은 술어**를 쓴다 — 따로 쓰면 갈린다(participatesInSurvey 주석).
      * 휴지통 목록은 viewerId 를 주지 않는다 — 복구 말고 할 수 있는 일이 없다.
      */
     isParticipant:
-      viewerId === null
-        ? sql<boolean>`false`
-        : sql<boolean>`exists (
-            select 1 from survey_participants sp
-            where sp.survey_id = ${surveys.id} and sp.user_id = ${viewerId} and sp.kind = 'member'
-          )`,
+      viewerId === null ? sql<boolean>`false` : participatesInSurvey(viewerId).mapWith(Boolean),
     id: surveys.id,
     title: surveys.title,
     description: surveys.description,
@@ -122,6 +122,12 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
   if (filter.kind === 'team') {
     // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
     // 초대는 팀 축 밖의 접근이라 팀 조건을 좁히는 대신 OR 로 잇는다.
+    //
+    // **겸직자에게는 초대 설문이 모든 팀 범위에 똑같이 나타난다 — 의도한 동작이다.**
+    // 그 설문은 어느 팀에도 속하지 않아 「이 초대는 A팀 화면의 것」이라고 말할 근거가 없다.
+    // 한쪽 범위에만 붙이면 규칙을 임의로 정하는 셈이고, 다른 팀으로 스위처를 돌린 사람은
+    // 초대받은 설문이 사라진 것으로 읽는다. 카드가 소유 팀을 함께 적으므로(`… 소유`)
+    // 어디 것인지는 화면에서 구별된다.
     const inTeam = filter.seesInviteOnly
       ? eq(surveys.teamId, filter.teamId)
       : // invite_only 는 소유 팀 팀원에게만 숨긴다 — 자기가 소유한 설문은 남는다(스펙 §3).
@@ -130,7 +136,7 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
           or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, filter.viewerId)),
         )!;
 
-    conditions.push(or(inTeam, invitedToSurvey(filter.viewerId))!);
+    conditions.push(or(inTeam, participatesInSurvey(filter.viewerId))!);
   }
 
   return db
@@ -139,9 +145,11 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
-      surveyGroupId: sql<
-        string | null
-      >`case when ${surveys.teamId} is not distinct from ${surveyGroups.teamId} then ${surveys.surveyGroupId} else null end`,
+      //
+      // **초대받은 타 팀 설문도 여기서 미분류로 접힌다**(티켓 18). 그 설문은 소유 팀의 그룹에
+      // 담겨 있지만 그 그룹은 보는 사람의 사이드바에 없다 — id 를 그대로 실어 보내면 어느
+      // 화면에서도 열 수 없는 폴더를 가리키게 된다.
+      surveyGroupId: visibleGroupId(filter),
     })
     .from(surveys)
     .leftJoin(teams, eq(teams.id, surveys.teamId))
@@ -149,6 +157,21 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
     .where(and(...conditions))
     .orderBy(desc(surveys.createdAt));
+}
+
+/**
+ * 화면이 열 수 있는 그룹 id 만 남긴다.
+ *
+ * 두 가지를 접는다 — 깨진 상태(설문 팀 ≠ 그룹 팀)와 **보는 범위 밖의 그룹**. 뒤의 것이
+ * 티켓 18 이 더한 축이다: 초대받은 타 팀 설문은 소유 팀 그룹에 담겨 있고 그 그룹은 이
+ * 사람의 사이드바에 없다. 시스템 전체 보기에는 그룹 개념이 없으므로 좁힐 범위도 없다.
+ */
+function visibleGroupId(filter: SurveyScopeFilter): SQL<string | null> {
+  const sameTeam = sql`${surveys.teamId} is not distinct from ${surveyGroups.teamId}`;
+  const inScope = filter.kind === 'team' ? sql`${surveys.teamId} = ${filter.teamId}` : sql`true`;
+  return sql<
+    string | null
+  >`case when ${sameTeam} and ${inScope} then ${surveys.surveyGroupId} else null end`;
 }
 
 /**

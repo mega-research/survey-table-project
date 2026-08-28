@@ -53,28 +53,26 @@ export function useParticipantCandidates(surveyId: string, query: string, enable
  * `onSettled` 인 것은 그룹·공유와 같은 이유다: 실패의 대부분은 그 사이 상태가 바뀐 경우라,
  * 성공에만 접으면 화면이 옛 후보 목록을 들고 같은 실패를 반복한다.
  */
-function useParticipantMutation<TInput>(fn: (input: TInput) => Promise<unknown>, surveyId: string) {
+function useParticipantMutation<TInput>(fn: (input: TInput) => Promise<unknown>) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: surveyParticipantKeys.list(surveyId) });
+      // `all` 접두가 목록과 후보 캐시를 함께 접는다 — 목록만 따로 부르면 그 줄이 흡수된다.
       queryClient.invalidateQueries({ queryKey: surveyParticipantKeys.all });
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
     },
   });
 }
 
-export function useAddSurveyParticipant(surveyId: string) {
-  return useParticipantMutation<AddSurveyParticipantInput>(
-    (input) => client.workspace.participants.add(input),
-    surveyId,
+export function useAddSurveyParticipant() {
+  return useParticipantMutation<AddSurveyParticipantInput>((input) =>
+    client.workspace.participants.add(input),
   );
 }
 
-export function useRemoveSurveyParticipant(surveyId: string) {
-  return useParticipantMutation<RemoveSurveyParticipantInput>(
-    (input) => client.workspace.participants.remove(input),
-    surveyId,
+export function useRemoveSurveyParticipant() {
+  return useParticipantMutation<RemoveSurveyParticipantInput>((input) =>
+    client.workspace.participants.remove(input),
   );
 }

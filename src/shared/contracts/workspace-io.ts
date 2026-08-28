@@ -4,11 +4,7 @@
 import * as z from 'zod';
 
 import { userStatusValues } from './auth';
-import {
-  surveyParticipantKindValues,
-  surveyVisibilityValues,
-  teamRoleValues,
-} from './workspace';
+import { surveyParticipantKindValues, surveyVisibilityValues, teamRoleValues } from './workspace';
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
@@ -427,9 +423,13 @@ export const SurveyParticipantItem = z.object({
   name: z.string(),
   email: z.string(),
   kind: SurveyParticipantKindSchema,
-  /** 소속 표기 — 내부 계정은 팀 이름이 온다. 팀 미배치면 null. */
+  /**
+   * 소속 표기 — 내부 계정은 활성 팀 이름이 온다. 팀 미배치면 null.
+   *
+   * .pen 4-2 의 「부가」 줄은 팀 · 이메일 둘뿐이다. 직책은 팀 상세에서 다루는 값이라
+   * 여기 싣지 않는다 — 화면이 안 그리는 필드를 계약이 나르면 죽은 채로 남는다.
+   */
   teamName: z.string().nullable(),
-  jobTitle: z.string().nullable(),
   addedAt: z.date(),
 });
 export type SurveyParticipantItem = z.infer<typeof SurveyParticipantItem>;
@@ -467,7 +467,6 @@ export const ParticipantCandidateItem = z.object({
   name: z.string(),
   email: z.string(),
   teamName: z.string().nullable(),
-  jobTitle: z.string().nullable(),
 });
 export type ParticipantCandidateItem = z.infer<typeof ParticipantCandidateItem>;
 

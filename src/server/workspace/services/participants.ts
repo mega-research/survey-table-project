@@ -1,6 +1,5 @@
+import { and, asc, eq, getTableName, ilike, notExists, or, sql } from 'drizzle-orm';
 import 'server-only';
-
-import { and, asc, eq, ilike, notExists, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyParticipants, surveys, users } from '@/db/schema';
@@ -8,11 +7,12 @@ import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
 
 import {
+  type AddSurveyParticipantInput,
   OwnerCannotBeParticipantError,
   ParticipantAlreadyExistsError,
   ParticipantNotFoundError,
   ParticipantNotInvitableError,
-  type AddSurveyParticipantInput,
+  ParticipantSurveyNotFoundError,
   type RemoveSurveyParticipantInput,
   type SearchParticipantCandidatesInput,
   type SearchParticipantCandidatesOutput,
@@ -29,15 +29,20 @@ const OK: WorkspaceActionOutput = { success: true };
  * 화면은 같은 이름이 두 줄 뜨는 것을 참여가 둘인 것으로 읽는다. 겸직은 드물고 여기서
  * 필요한 것은 「어디 사람인가」 한 줄이라 첫 팀만 고른다.
  *
- * 바깥 컬럼을 `${users.id}` 로 끼워 넣지 않고 **문자열로 적는 것**이 의도다. 투영 자리의
- * 서브쿼리에서는 drizzle 이 그 참조를 테이블 접두사 없이(`"id"`) 펴는데, 서브쿼리 안에는
- * `users` 가 없어 Postgres 가 해석하지 못한다. 두 소비자 모두 FROM 또는 조인에 `users` 를
- * 두므로 별칭은 언제나 같다.
+ * 바깥 컬럼을 `${users.id}` 로 끼워 넣지 **못한다**. drizzle 0.45.2 는 그 참조를 FROM 이
+ * `users` 하나뿐일 때 테이블 접두사 없이(`"id"`) 펴는데, 상관 서브쿼리 안에는 `users` 가
+ * 없어 Postgres 가 해석하지 못한다(실측: `.from(users)` → `"id"`, 조인이 있으면
+ * `"users"."id"`). 두 소비자가 그 두 모양을 하나씩 쓰므로 한쪽은 반드시 깨진다.
+ *
+ * 그래서 참조를 **스키마에서 뽑아** 언제나 정규화된 형태로 만든다 — 이름을 손으로 적으면
+ * 테이블·컬럼 개명이 tsc 에도 db:drift 에도 안 잡힌다.
  */
+const usersIdRef = sql`${sql.identifier(getTableName(users))}.${sql.identifier(users.id.name)}`;
+
 const activeTeamName = sql<string | null>`(
   select t.name from team_members tm
   join teams t on t.id = tm.team_id
-  where tm.user_id = "users"."id" and t.status = 'active'
+  where tm.user_id = ${usersIdRef} and t.status = 'active'
   order by t."order", t.name
   limit 1
 )`;
@@ -48,9 +53,7 @@ const activeTeamName = sql<string | null>`(
  * `kind='member'` 만 본다 — 게스트·실사는 같은 테이블에 살지만 모달의 다른 블록이고
  * (티켓 21·24) 권한도 다르다. 한 목록으로 합치면 화면이 kind 로 다시 갈라야 한다.
  */
-export async function listSurveyParticipants(
-  surveyId: string,
-): Promise<SurveyParticipantItem[]> {
+export async function listSurveyParticipants(surveyId: string): Promise<SurveyParticipantItem[]> {
   return db
     .select({
       userId: users.id,
@@ -58,7 +61,6 @@ export async function listSurveyParticipants(
       email: users.email,
       kind: surveyParticipants.kind,
       teamName: activeTeamName,
-      jobTitle: users.jobTitle,
       addedAt: surveyParticipants.createdAt,
     })
     .from(surveyParticipants)
@@ -83,10 +85,7 @@ export async function searchParticipantCandidates(
     .select({ one: sql`1` })
     .from(surveyParticipants)
     .where(
-      and(
-        eq(surveyParticipants.surveyId, input.surveyId),
-        eq(surveyParticipants.userId, users.id),
-      ),
+      and(eq(surveyParticipants.surveyId, input.surveyId), eq(surveyParticipants.userId, users.id)),
     );
 
   const isOwner = db
@@ -101,7 +100,6 @@ export async function searchParticipantCandidates(
       name: users.name,
       email: users.email,
       teamName: activeTeamName,
-      jobTitle: users.jobTitle,
     })
     .from(users)
     .where(
@@ -140,7 +138,10 @@ export async function addSurveyParticipant(
       .from(surveys)
       .where(eq(surveys.id, input.surveyId))
       .for('update');
-    if (survey?.ownerUserId === input.userId) throw new OwnerCannotBeParticipantError();
+    // 관문을 지난 뒤 사라진 설문 — 그냥 내려가면 INSERT 가 FK 위반으로 터져
+    // rpc-error-policy 가 500 으로 마스킹한다(티켓 15 「거부는 RPC 어휘로」).
+    if (!survey) throw new ParticipantSurveyNotFoundError();
+    if (survey.ownerUserId === input.userId) throw new OwnerCannotBeParticipantError();
 
     const [target] = await tx
       .select({ status: users.status, userType: users.userType })

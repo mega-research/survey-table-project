@@ -26,6 +26,7 @@ import {
   ParticipantAlreadyExistsError,
   ParticipantNotFoundError,
   ParticipantNotInvitableError,
+  ParticipantSurveyNotFoundError,
   RemoveSurveyParticipantInput,
   SearchParticipantCandidatesInput,
   SearchParticipantCandidatesOutput,
@@ -44,10 +45,13 @@ function rethrowParticipantError(err: unknown): never {
   if (err instanceof ParticipantNotInvitableError) {
     throw new ORPCError('BAD_REQUEST', { message: err.message });
   }
-  if (err instanceof OwnerCannotBeParticipantError || err instanceof ParticipantAlreadyExistsError) {
+  if (
+    err instanceof OwnerCannotBeParticipantError ||
+    err instanceof ParticipantAlreadyExistsError
+  ) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
-  if (err instanceof ParticipantNotFoundError) {
+  if (err instanceof ParticipantNotFoundError || err instanceof ParticipantSurveyNotFoundError) {
     throw new ORPCError('NOT_FOUND', { message: err.message });
   }
   throw err;

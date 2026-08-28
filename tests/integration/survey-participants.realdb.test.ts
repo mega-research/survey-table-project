@@ -17,7 +17,7 @@
  *  ④ 추가와 제외의 권한 축이 다르다 — 추가는 접근자 누구나, 제외는 소유자·팀장·슈퍼어드민.
  */
 import { createRouterClient } from '@orpc/server';
-import { count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
@@ -31,8 +31,11 @@ import {
 import type { ORPCContext } from '@/server/context';
 import { getScopedSurveys } from '@/server/read-models/survey-structure';
 import { loadAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
+import { publish as publishProcedures } from '@/server/survey-builder/procedures/publish';
+import { surveys as surveyProcedures } from '@/server/survey-builder/procedures/surveys';
 import { buildSurveyScopeFilter } from '@/server/work-scope';
 import { participants as participantsProcedures } from '@/server/workspace/procedures/participants';
+import { surveyGroups as surveyGroupProcedures } from '@/server/workspace/procedures/survey-groups';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -46,6 +49,7 @@ const B_OUTSIDER_ID = crypto.randomUUID();
 const SUPERADMIN_ID = crypto.randomUUID();
 /** 초대 불가 계정 — 유형 정합 검증용. */
 const GUEST_ID = crypto.randomUUID();
+const FIELDWORK_ID = crypto.randomUUID();
 const DEPARTED_ID = crypto.randomUUID();
 
 const TEAM_A = crypto.randomUUID();
@@ -58,6 +62,7 @@ const ALL_USER_IDS = [
   B_OUTSIDER_ID,
   SUPERADMIN_ID,
   GUEST_ID,
+  FIELDWORK_ID,
   DEPARTED_ID,
 ];
 
@@ -92,7 +97,11 @@ function subjectOf(userId: string, isSuperadmin = false) {
 
 async function seedUser(
   id: string,
-  over: { userType?: 'internal' | 'guest'; status?: 'active' | 'departed'; isSuperadmin?: boolean } = {},
+  over: {
+    userType?: 'internal' | 'guest' | 'fieldwork';
+    status?: 'active' | 'departed';
+    isSuperadmin?: boolean;
+  } = {},
 ): Promise<void> {
   await db.insert(usersTable).values({
     id,
@@ -139,6 +148,7 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
     await seedUser(B_OUTSIDER_ID);
     await seedUser(SUPERADMIN_ID, { isSuperadmin: true });
     await seedUser(GUEST_ID, { userType: 'guest' });
+    await seedUser(FIELDWORK_ID, { userType: 'fieldwork' });
     await seedUser(DEPARTED_ID, { status: 'departed' });
 
     await db.insert(teamsTable).values([
@@ -202,6 +212,26 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
         .from(teamMembersTable)
         .where(eq(teamMembersTable.userId, B_OUTSIDER_ID));
       expect(membership?.value).toBe(1); // B팀 하나 그대로
+    });
+
+    /**
+     * 겸직자에게 초대 설문이 **모든 팀 범위에** 나타나는 것은 의도다(getScopedSurveys 주석).
+     * 그 설문은 어느 팀에도 속하지 않아 한쪽 범위에만 붙일 근거가 없다.
+     */
+    it('겸직자는 어느 팀 범위에서도 초대 설문을 본다', async () => {
+      await db
+        .insert(teamMembersTable)
+        .values({ teamId: TEAM_A, userId: B_OUTSIDER_ID, role: 'member' });
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      expect(await visibleIds(B_OUTSIDER_ID, TEAM_A)).toContain(surveyId);
+      expect(await visibleIds(B_OUTSIDER_ID, TEAM_B)).toContain(surveyId);
+
+      await db
+        .delete(teamMembersTable)
+        .where(
+          and(eq(teamMembersTable.teamId, TEAM_A), eq(teamMembersTable.userId, B_OUTSIDER_ID)),
+        );
     });
 
     it('제외하면 그 설문이 다시 닫힌다', async () => {
@@ -325,9 +355,13 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
   // ───────────────────────────────────────────────────────────────────────────
 
   describe('초대할 수 없는 대상', () => {
-    it('게스트 계정은 참여자로 초대할 수 없다', async () => {
+    // 티켓 체크박스는 guest **와 fieldwork** 를 함께 요구한다 — 하나만 보면 절반이다.
+    it.each([
+      ['게스트', () => GUEST_ID],
+      ['실사', () => FIELDWORK_ID],
+    ])('%s 계정은 참여자로 초대할 수 없다', async (_label, idOf) => {
       await expect(
-        clientFor(A_OWNER_ID).participants.add({ surveyId, userId: GUEST_ID }),
+        clientFor(A_OWNER_ID).participants.add({ surveyId, userId: idOf() }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     });
 
@@ -356,6 +390,36 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
         clientFor(A_OWNER_ID).participants.remove({ surveyId, userId: B_OUTSIDER_ID }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
+
+    /**
+     * 같은 테이블에 kind 셋이 산다(티켓 21·24 가 채운다). 참여자 제외 표면이 kind 조건을
+     * 빠뜨리면 이 버튼 하나가 게스트 부여까지 지운다 — 서비스의 `kind='member'` 조건이
+     * 그것을 막는다.
+     */
+    it('게스트 부여 행은 참여자 제외 표면이 건드리지 않는다', async () => {
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: GUEST_ID,
+        kind: 'guest',
+        addedBy: A_OWNER_ID,
+      });
+
+      await expect(
+        clientFor(A_OWNER_ID).participants.remove({ surveyId, userId: GUEST_ID }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      const [row] = await db
+        .select({ kind: participantsTable.kind })
+        .from(participantsTable)
+        .where(
+          and(eq(participantsTable.surveyId, surveyId), eq(participantsTable.userId, GUEST_ID)),
+        );
+      expect(row?.kind).toBe('guest');
+
+      // 참여자 목록에도 섞이지 않는다 — 모달의 다른 블록이다.
+      const list = await clientFor(A_OWNER_ID).participants.list({ surveyId });
+      expect(list.participants.map((p) => p.userId)).not.toContain(GUEST_ID);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -377,6 +441,7 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
       expect(ids).not.toContain(A_OWNER_ID); // 소유자
       expect(ids).not.toContain(A_MEMBER_ID); // 이미 참여 중
       expect(ids).not.toContain(GUEST_ID); // 비내부
+      expect(ids).not.toContain(FIELDWORK_ID); // 비내부
       expect(ids).not.toContain(DEPARTED_ID); // 비활성
     });
 
@@ -384,6 +449,66 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
       await expect(
         clientFor(B_OUTSIDER_ID).participants.searchCandidates({ surveyId, query: '' }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 관통 — capability 집합이 아니라 실제 표면으로 확인한다
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('참여자가 실제 표면에서 하는 일', () => {
+    it('삭제(soft)를 관통한다 — 행이 남고 목록에서만 사라진다', async () => {
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      await createRouterClient(
+        { surveys: surveyProcedures },
+        { context: contextFor(B_OUTSIDER_ID) },
+      ).surveys.delete({ surveyId });
+
+      const [row] = await db
+        .select({ deletedAt: surveysTable.deletedAt })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      expect(row?.deletedAt).not.toBeNull(); // soft — 티켓 17
+      expect(await visibleIds(A_OWNER_ID, TEAM_A)).not.toContain(surveyId);
+
+      await db.update(surveysTable).set({ deletedAt: null }).where(eq(surveysTable.id, surveyId));
+    });
+
+    it('발행은 FORBIDDEN — capability 집합뿐 아니라 관문도 막는다', async () => {
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      await expect(
+        createRouterClient(
+          { publish: publishProcedures },
+          { context: contextFor(B_OUTSIDER_ID) },
+        ).publish.publish({ surveyId }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    /**
+     * 티켓의 「소유 팀의 다른 설문·**그룹**·멤버십은 불변」 중 그룹 축.
+     *
+     * 참여자는 `surveyGroup.manage` 를 못 갖는다 — 그룹은 팀 소유 구조라 팀 사람만 정리한다.
+     * 담기·이동은 `survey.edit` + `surveyGroup.manage` 를 **둘 다** 요구하므로, 편집권만 있는
+     * 참여자는 여기서 멈춘다(티켓 12 의 두 갈래 관문).
+     */
+    it('소유 팀의 그룹은 못 만진다 — 설문 편집권과 그룹 관리권은 다른 축이다', async () => {
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+      const asParticipant = createRouterClient(
+        { surveyGroups: surveyGroupProcedures },
+        { context: contextFor(B_OUTSIDER_ID) },
+      );
+
+      // 구조 표면 — 팀 멤버십을 요구한다. 참여자는 A팀 사람이 아니다.
+      await expect(asParticipant.surveyGroups.list({ teamId: TEAM_A })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+
+      // 설문을 미분류로 빼는 것도 막힌다 — surveyGroup.manage 가 없다.
+      await expect(
+        asParticipant.surveyGroups.move({ surveyId, groupId: null }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
   });
 

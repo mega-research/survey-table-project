@@ -53,6 +53,19 @@ export class ParticipantAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * 초대하려는 설문이 사라졌다 — 관문의 조회와 INSERT 사이에 삭제·경합이 끼어든 경우.
+ *
+ * 어휘를 따로 두는 이유는 이것이 없으면 FK 위반이 그대로 올라가 rpc-error-policy 가 500 으로
+ * 마스킹하기 때문이다 — 정확히 거부된 요청이 화면에는 「내부 오류」로 보인다(티켓 15).
+ */
+export class ParticipantSurveyNotFoundError extends Error {
+  constructor() {
+    super('설문을 찾을 수 없습니다.');
+    this.name = 'ParticipantSurveyNotFoundError';
+  }
+}
+
 /** 제외하려는 참여 행이 없다 — 그 사이 다른 사람이 먼저 뺐다. */
 export class ParticipantNotFoundError extends Error {
   constructor() {

@@ -4,17 +4,17 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 17 **soft delete + 복구** — 설문 삭제가 `tx.delete`
-> 에서 `deleted_at` 표시로 바뀌었다. CASCADE 가 질문·응답·컨택·메일을 함께 없애던 것이
-> 티켓 18 의 참여자 삭제권 전제와 맞지 않아서다(스펙 §4). **복구는 슈퍼어드민 전용**이고
-> capability 관문을 쓰지 않는다 — 코어가 삭제된 설문을 조회 단계에서 걸러 언제나 not_found 를
-> 주기 때문이다. 조회는 두 갈래로 닫았다: 관문이 있는 내부 표면은 코어 한 곳이, 관문이 없는
-> 응답자 경로(슬러그·비공개 토큰·미리보기 토큰·쿼터)는 각자 조건을 건다. `getSurveyById`
-> 한 줄이 빌더 상세·운영 RSC·미리보기·응답 페이지·복제를 한꺼번에 닫는다. **R2 는 관행 그대로
-> 후보를 등록하되 실제로 지워지지 않는다** — 참조 표면의 `surveys`·`questions` 에 deletedAt
-> 술어가 없어 살아남은 행이 참조를 계속 주장한다(`reference-surface.test.ts` 가 못 박는다).
-> 화면은 시스템 전체 보기 툴바의 「삭제됨 N」 칩 + 복구 전용 카드. 마이그레이션 없음 —
-> `surveys.deleted_at` 은 이미 있었다. 직전: 티켓 16 invite_only 공개 범위)
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 18 **설문 참여자** — 마이그레이션 **0092**
+> `survey_participants`(member·guest·fieldwork 통합). **팀 경계를 넘는 유일한 접근 경로**다 —
+> 지금까지 설문 접근은 전부 `surveys.team_id` 를 지나 판정됐는데 이 축만 그 밖에 있고,
+> 초대는 `team_members` 에 아무것도 쓰지 않는다. 판정 코어가 참여 행을 **설문 행과 같은
+> 쿼리에서 LEFT JOIN** 으로 읽고(따로 조회하면 전 관문의 왕복이 하나씩 는다), 목록은 팀
+> 조건과 **OR** 로 잇는다(초대 설문은 어느 팀 범위에도 속하지 않는다 — 배치 대기는 함께 뺀다).
+> 관문이 표면마다 다르다: 조회·검색·추가는 `survey.invite`(접근 내부인 누구나), 제외는
+> `survey.manageAccess`(소유자·팀장·슈퍼어드민). 검색이 관문을 지는 것이 중요하다 — 후보는
+> 내부 계정 명부라 관문 없이 열면 설문 id 하나로 전사 검색이 된다. 소유자는 참여자로 추가
+> 불가(입구에서 막는다). 카드 노출 근사 셋이 여기서 처음 갈렸다 — 참여자는 분석은 열리고
+> 공개 범위는 잠긴다(티켓 16 이 예고한 분기점). 직전: 티켓 17 soft delete + 복구)
 
 ---
 
@@ -299,7 +299,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지)는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`)는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -364,6 +364,14 @@ survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 
 ├── createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
 
+survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0092, 티켓 18)
+├── id, surveyId (FK **cascade**), userId (FK restrict)
+├── kind                   # member | guest | fieldwork — users.user_type 과의 정합은 서비스가 지킨다
+│                          # (두 테이블에 걸친 조건이라 CHECK 불가)
+├── guestTabs (JSONB)      # kind=guest 전용 현황 탭 화이트리스트 (티켓 21 이 소비)
+├── addedBy (FK restrict), createdAt
+└── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
+
 survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0091, 티켓 14 — append-only)
 ├── id, surveyId (FK **cascade**)
 ├── action                 # unassign(해산) | assign(재배치 센터) | transfer(승계·티켓 19)
@@ -380,7 +388,8 @@ survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0091, �
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
 > archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/read-models/team-memberships.ts`
 > 의 `getActiveTeamMemberships` 하나로 모은다(팀 관리와 설문 접근 판정이 함께 보므로 도메인이 아니라 read-model 이다).
-> `surveys.team_id` 는 티켓 07 이, `survey_groups` 는 티켓 12 가 붙였다. `survey_participants` 는 아직 없다(티켓 18).
+> `surveys.team_id` 는 티켓 07 이, `survey_groups` 는 티켓 12 가, `survey_participants` 는 티켓 18 이 붙였다.
+> **`survey_participants` 만 팀 축 밖이다** — 초대는 `team_members` 에 아무것도 쓰지 않고 그 설문 하나만 연다.
 > **그룹은 접근 권한이 아니라 정리용 묶음이다** — 담겼다는 사실이 판정에 들어가지 않는다.
 > `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이라 그룹 삭제는 설문을 미분류로
 > 되돌릴 뿐이다. 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
@@ -782,6 +791,28 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
   팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
   `team_lifecycle_events` 에 감사 행을 남긴다.
+- **참여자는 팀 경계를 넘는 유일한 접근 경로다**(티켓 18, 스펙 §4·§8, .pen FLOW 4-2).
+  `survey_participants`(0092) 행 하나가 타 팀 사람을 **그 설문 하나에만** 들인다 — 팀 멤버십은
+  만들지 않고 소유 팀의 다른 설문·그룹은 그대로다. 판정 코어가 참여 행을 **설문 행과 같은
+  쿼리에서 LEFT JOIN** 으로 읽는다(따로 조회하면 관문이 도는 모든 표면에서 왕복이 하나씩 늘고,
+  아끼려 캐시를 두면 초대를 뺀 직후에도 통과하는 창이 생긴다). 목록은 팀 조건과 **OR** 로
+  잇되 **배치 대기를 함께 뺀다** — 코어가 `assignment_pending` 을 참여자 분기보다 먼저 막으므로
+  목록만 넓히면 열리지 않는 카드가 그려진다.
+  **관문이 표면마다 다르다**(스펙 §7·§11-5) — 조회·검색·추가는 `survey.invite`(그 설문에
+  접근 가능한 내부인 누구나: 소유자·팀장·참여자·팀 공개면 팀원), 제외는 `survey.manageAccess`
+  (소유자·소유 팀 팀장·슈퍼어드민). **검색이 관문을 지는 것이 특히 중요하다** — 후보 목록은
+  조직의 내부 계정 명부라 관문 없이 열면 설문 id 하나로 전사 사용자 검색이 된다.
+  대상 자격은 서비스가 본다: **internal + active 만**(guest·fieldwork 를 member 로 초대하면
+  코어가 어차피 거부하지만 「추가는 됐는데 아무것도 안 되는」 유령 행이 남는다), 그리고
+  **소유자는 참여자로 추가 불가**(이미 전권이라 행만 유령이고 목록에 「제외」 버튼이 생긴다 —
+  티켓의 「소유자는 누구도 제외 불가」를 입구에서 지킨다). `kind` 와 `users.userType` 의 정합을
+  DB CHECK 로 못 거는 이유는 두 테이블에 걸친 조건이라서다.
+  화면은 공유 설정 모달의 참여자 블록이고 **제외 버튼만 서버가 준 `canRemove` 로 잠근다**.
+  카드 노출 근사 셋이 여기서 처음 갈렸다 — 참여자는 `canEditSurveyCard`·
+  `canViewSurveyAnalyticsCard` 는 통과하고 `canManageSurveyAccessCard` 는 못 넘는다(티켓 16 이
+  예고한 분기점). 목록 행의 `isParticipant` 가 그 입력이다.
+  음성 검증은 `tests/integration/survey-participants.realdb.test.ts` — 판정 입력을 조인으로
+  읽고 목록은 exists 서브쿼리라 목으로는 무엇이든 통과한다.
 - **설문 삭제는 soft delete 다**(티켓 17, 스펙 §4 「삭제 전제」). `deleteSurvey` 가 `deleted_at`
   을 찍을 뿐이라 질문·응답·컨택·메일이 전부 남는다 — 예전 `tx.delete` + CASCADE 는 참여자
   (티켓 18)에게 삭제권이 넓어지는 전제와 맞지 않았다. **복구(`surveyBuilder.surveys.restore`)는

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Loader2, Search } from 'lucide-react';
 
 import { getErrorMessage } from '@/lib/get-error-message';
 import { cn } from '@/lib/utils';
+import { SURVEY_PARTICIPANT_KIND_LABEL } from '@/shared/contracts/workspace';
 import type {
   ParticipantCandidateItem,
   SurveyParticipantItem,
@@ -34,13 +35,20 @@ interface ParticipantsBlockProps {
  */
 export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // 타이핑마다 전사 명부를 왕복하지 않는다 — 팀원 추가 모달과 같은 250ms.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const { data, isPending, isError } = useSurveyParticipants(surveyId);
   // 검색어가 있을 때만 후보를 부른다 — 모달을 열자마자 전 사용자 명부를 당기지 않는다.
-  const candidates = useParticipantCandidates(surveyId, query, query.trim().length > 0);
-  const addParticipant = useAddSurveyParticipant(surveyId);
-  const removeParticipant = useRemoveSurveyParticipant(surveyId);
+  const candidates = useParticipantCandidates(surveyId, debounced, debounced.length > 0);
+  const addParticipant = useAddSurveyParticipant();
+  const removeParticipant = useRemoveSurveyParticipant();
 
   async function handleAdd(userId: string) {
     setError(null);
@@ -111,8 +119,8 @@ export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
       {error && <p className="text-[11.5px] text-red-600">{error}</p>}
 
       <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-        열람·편집·운영·삭제 가능 · 발행·공유 관리·소유권 이전은 소유자·팀장·슈퍼어드민 전용 ·
-        초대 추가는 접근자 누구나.
+        열람·편집·운영·삭제 가능 · 발행·공유 관리·소유권 이전은 소유자·팀장·슈퍼어드민 전용 · 초대
+        추가는 접근자 누구나.
       </p>
     </div>
   );
@@ -151,7 +159,7 @@ function ParticipantRow({
           {participant.name}
         </span>
         <span className="shrink-0 rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-[#1D4ED8]">
-          참여자
+          {SURVEY_PARTICIPANT_KIND_LABEL[participant.kind]}
         </span>
         <span className="truncate text-[11px] text-[#9CA3AF]">
           {metaLine(participant.teamName, participant.email)}
@@ -187,9 +195,7 @@ function CandidateList({
     <div className="absolute top-full right-0 left-0 z-10 mt-1 max-h-[220px] overflow-y-auto rounded-[9px] border border-[#E5E5EA] bg-white py-1 shadow-lg">
       {isPending && <p className="px-3 py-2 text-[11.5px] text-[#9CA3AF]">검색 중…</p>}
       {!isPending && candidates.length === 0 && (
-        <p className="px-3 py-2 text-[11.5px] text-[#9CA3AF]">
-          추가할 수 있는 사용자가 없습니다.
-        </p>
+        <p className="px-3 py-2 text-[11.5px] text-[#9CA3AF]">추가할 수 있는 사용자가 없습니다.</p>
       )}
       {candidates.map((candidate) => (
         <button
