@@ -4,7 +4,17 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 21 **게스트 부여 + 차단 게이트** — 클라이언트가
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 22 **게스트 콘솔** — 부여가 실제로 열리는 화면이
+> 붙었다. `/guest` 홈(부여 설문 카드)과 열람 화면 다섯(미리보기 · 응답 현황 · 진척 보고 ·
+> 조사 대상 마스킹 · 쿼터 현황). **탭 관문이 화면과 주소 양쪽에 선다** — 탭 바는 허용된 탭만
+> 그리고 `assertGuestSurveyPageAccess` 가 같은 판정을 주소 축에서 다시 하되 **사유를 갈라 말하지
+> 않는다**(부여 안 됨과 탭 안 열림이 다르면 주소 조작으로 부여 구성이 확인된다). **조사 대상은
+> 서버에서 투영을 끝낸다** — 운영 콘솔 행에는 초대 토큰이 실려 있어 게스트에게 가면 열람이
+> 대리 응답이 된다. 현황·진척·쿼터는 운영 위젯을 그대로 쓰고(같은 숫자여야 한다) 컨택 표만
+> 새로 짰다(헤더 필터 팝오버가 RPC 를 당기고 PII 필터는 마스킹본에서도 오라클이다).
+> 마이그레이션 없음. 직전: 티켓 21 게스트 부여 게이트)
+>
+> 티켓 21 **게스트 부여 + 차단 게이트** — 클라이언트가
 > env 설정이 아니라 **계정**이 됐다. `survey_participants` 의 `kind='guest'` 행 하나가 그 설문
 > 하나를 열고, 열리는 것은 프리뷰와 허용된 현황 탭뿐이다(게스트 열 = `survey.view` +
 > `operations.view`). 설문마다 달라지는 것은 capability 가 아니라 `guest_tabs` 이며 기본값은
@@ -196,7 +206,9 @@ src/
 │   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
 │   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
 │   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
-│   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여는 티켓 21, 화면은 티켓 22
+│   ├── guest-console/          # 게스트 콘솔 (티켓 22) — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
+│   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
+│   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
 │   └── fieldwork-console/      # 실사 홈 (티켓 05 스텁) — 초대 설문·조사 대상은 티켓 24~27
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
@@ -679,7 +691,11 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 
-/guest                            # 게스트 홈 (티켓 05 스텁 — 부여 설문 목록은 티켓 22)
+/guest                            # 게스트 홈 — 부여 설문 카드 (티켓 22, .pen FLOW 5-2)
+/guest/surveys/[surveyId]         # 탭 없는 주소 — 첫 화면으로 리다이렉트(허용 탭 없으면 미리보기)
+/guest/surveys/[surveyId]/preview   # 설문지 미리보기 — 화이트리스트 밖(부여됐으면 언제나)
+/guest/surveys/[surveyId]/overview  # 응답 현황  · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황
+                                  # 넷은 전부 탭 화이트리스트가 연다 (.pen FLOW 5-3)
 /fieldwork                        # 실사 홈 (티켓 05 스텁 — 초대 설문 목록은 티켓 25)
 ```
 
@@ -1177,13 +1193,27 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
   - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/admin/logout`).
     그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
-  - 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
-    게스트가 보는 콘솔(`/guest`)은 티켓 22 다. 21 시점에 게스트가 닿을 수 있는 RPC 표면은 0건이라
-    탭 게이트 헬퍼는 만들지 않았다 — 소비자가 없는 관문은 그 자체로 검증되지 않는다.
+  - 부여 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
+    **게스트가 보는 콘솔은 `/guest` 다**(티켓 22). 그 관문이 `server/page-guest-access.ts` 의
+    `assertGuestSurveyPageAccess` — capability(`operations.view`)를 지난 뒤 **탭 축을 다시 묻는다**.
+    `tab` 을 생략하면 탭을 묻지 않는다(미리보기는 화이트리스트 밖). **거부는 전부 notFound 이고
+    사유를 갈라 말하지 않는다** — 「부여 안 됨」과 「탭 안 열림」이 다른 응답을 주면 주소 조작으로
+    부여 사실과 탭 구성이 확인된다. 화면도 같은 판정을 하되(탭 바가 허용 탭만 그린다) 강제는
+    서버가 한다.
+  - **게스트 콘솔의 조사 대상은 서버에서 투영을 끝낸다**(`read-models/guest-contacts`). 운영 콘솔의
+    `ContactsRow` 에는 `inviteToken`(그 사람의 응답 링크)과 컨택 id 가 실려 있어, 게스트에게 가면
+    **열람이 대리 응답**이 된다 — 표시 문자열만 남긴 새 행을 만든다. 마스킹 단위는 컬럼 스킴의
+    `piiType` 이고 **PII 로 매핑하지 않은 attrs 컬럼은 마스킹 대상이 아니다**(업로드 시점의 결정이
+    곧 무엇이 개인정보인가의 정의다). 메일 컬럼은 아예 뺀다.
+  - 현황·진척·쿼터는 **운영 콘솔 위젯을 그대로** 쓴다(게스트와 담당자가 같은 숫자를 봐야 한다).
+    조립은 app 층이 한다 — 기능 묶음끼리는 서로 import 하지 않지만 라우트는 어느 묶음이든 쓴다.
+    컨택 표만 새로 짠 이유는 저쪽 표의 헤더 필터 팝오버가 RPC 를 당기고(게스트에게 닫힌 표면)
+    PII 컬럼 필터가 마스킹본 위에서도 오라클이 되기 때문이다.
   - 음성 검증 둘: `tests/integration/guest-account-denial.test.ts`(라우터를 열거해 authed·superadmin
     전수가 게스트에게 FORBIDDEN, 부여 설문에서 열리는 capability 가 정확히 둘 — 나머지 어휘 전수는
-    관문 거부)와 `survey-guest-grants.realdb.test.ts`(부여 왕복·설문별 탭 독립·대상 자격·권한 축 —
-    조인과 WHERE 는 목으로 증명되지 않는다).
+    관문 거부)와 `survey-guests.realdb.test.ts`(부여 왕복·설문별 탭 독립·대상 자격·권한 축 —
+    조인과 WHERE 는 목으로 증명되지 않는다). 콘솔 축은 `guest-console.realdb.test.ts`
+    (홈 목록·탭 관문·마스킹 투영 — 「초대 토큰과 컨택 id 가 직렬화 결과에 없다」를 직접 본다).
 - 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isGuestViewer` → 계정 유형).
 
 ---
