@@ -4,17 +4,15 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 20 **메일 회신·문의 소유자 연동** — 회신 주소만
-> 스냅샷 밖에 두고 **발송 시점**에 해석한다. 규칙은 `server/mail/services/reply-to.ts` 의
-> **명시 → 소유자 → 발신 주소** 하나이고 캠페인 발송과 템플릿 테스트 발송이 함께 쓴다.
-> 스냅샷에 주소가 박혀 있으면 **소유자 조회 자체를 생략**하고(지연 평가), 이미 claim 된
-> 수신자는 `send_payload_snapshot` 을 써서 재시도가 회신 주소를 바꾸지 않는다. 소유자
-> 이메일은 `read-models/survey-owner-email` 이 라이브로 읽되 **계정 상태를 묻지 않는다** —
-> 승계 대기의 회신은 「이전 소유자」가 계약이라서다. 그 연동을 도달 가능하게 하려고 템플릿의
-> 회신 주소를 **선택 입력**으로 열었다(빈 값은 null 로 정규화 — 빈 문자열이면 폴백이 안 선다).
-> 응답 화면 문의 이메일도 같은 규칙이되 겹치는 것은 **pub 조회뿐**이다. 재배치 인박스는
-> 승계 대기를 배치 대기와 갈라 적고 회신 경고를 붙인다. 마이그레이션 없음.
-> 직전: 티켓 19 소유권 이전·승계)
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 21 **게스트 부여 + 차단 게이트** — 클라이언트가
+> env 설정이 아니라 **계정**이 됐다. `survey_participants` 의 `kind='guest'` 행 하나가 그 설문
+> 하나를 열고, 열리는 것은 프리뷰와 허용된 현황 탭뿐이다(게스트 열 = `survey.view` +
+> `operations.view`). 설문마다 달라지는 것은 capability 가 아니라 `guest_tabs` 이며 기본값은
+> **응답 현황 하나**다. 그래서 분석·내보내기·응답 상세·컨택 원본·메일·편집은 탭을 아무리 열어도
+> 항상 차단이다 — 티켓 11 이 남겨 둔 「게스트 export 현행 유지」도 함께 뒤집혔다.
+> `GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·강제 로그아웃 라우트는 은퇴했고, scoped 어댑터
+> 3형제의 게스트 분기가 사라져 **판정은 코어 하나**가 한다. 마이그레이션 없음(0092 컬럼 소비).
+> 직전: 티켓 20 메일 회신 소유자 연동)
 
 ---
 
@@ -89,7 +87,7 @@ src/
 │
 ├── server/                     # oRPC 백엔드 — 코어 + 도메인 11개 (경량 DDD: domain 순수 · procedures 얇음 · services)
 │   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
-│   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
+│   ├── orpc.ts                 # base + pub / authed(내부) / superadmin / account / scoped + withRateLimit
 │   ├── router.ts               # 전체 도메인 router 합성 (AppRouter)
 │   ├── handler.ts              # RPCHandler (+ Sentry onError)
 │   ├── openapi.ts              # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트)
@@ -104,7 +102,7 @@ src/
 │   │                           # + assertSurveyCapabilityBatch(여러 설문·여러 capability 를 한 왕복으로 — 담기 200건용, 티켓 12)
 │   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
 │   │                           # + assertSurveyCapabilityBatchRpc(배치 짝)
-│   │                           # + assertScopedSurveyCapabilityRpc(scoped 표면용 — env grant 게스트는 grant 일치, 내부는 capability. 티켓 21 이 통합)
+│   │                           # + assertScopedSurveyCapabilityRpc(비내부 계정도 지나는 표면 표시 — 판정은 코어 하나, 티켓 21 이 게스트 분기를 걷었다)
 │   ├── page-survey-access.ts   # 관문의 RSC 페이지 어댑터 — assertSurveyCapabilityPage(사유 불문 notFound 접기)
 │   │                           # + assertSurveyConsolePageAccess(게스트 허용 콘솔 페이지용 — requireAuth 포함, viewer 반환)
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
@@ -144,7 +142,7 @@ src/
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
-│   │   │                       # 지금은 공개 범위 블록뿐. 참여자·클라이언트·실사·소유권 이전은 티켓 18·21·24·19
+│   │   │                       # 공개 범위·참여자·클라이언트(게스트) 블록 + 소유권 이전. 실사는 티켓 24
 │   │   │                       # PRD 맵은 workspace 로 적었지만 입구가 설문 카드라 그 배치는 불가능하다
 │   │                       # (두 묶음은 서로 import 금지 — 그룹 UI 가 survey-list/groups 에 사는 선례)
 │   │                       # 후속 블록도 workspace 표면을 RPC 로 부르므로 feature import 는 안 생긴다
@@ -158,7 +156,7 @@ src/
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
 │   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-library·use-cell-library — 구 src/hooks/queries
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-survey-participants·use-survey-guests·use-library·use-cell-library
 │   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap
 │   │   └── (루트 24개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
@@ -198,7 +196,7 @@ src/
 │   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
 │   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
 │   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
-│   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여 설문 목록은 티켓 21·22
+│   ├── guest-console/          # 게스트 홈 (티켓 05 스텁) — 부여는 티켓 21, 화면은 티켓 22
 │   └── fieldwork-console/      # 실사 홈 (티켓 05 스텁) — 초대 설문·조사 대상은 티켓 24~27
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
@@ -235,8 +233,9 @@ src/
 │                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
 │   ├── auth/ + auth.ts         # 인증 어댑터 + 가드. server.ts=Better Auth 인스턴스 · client.ts=브라우저 authClient
 │   │                           # · safe-redirect=로그인 복귀 경로 정제 · protected-paths=proxy/레이아웃 공용 AUTH_PAGES
-│   │                           # · guest-grants=게스트 grant(티켓 21에서 계정 모델로 교체) · require-admin-page
-│   │                           # · guest-viewer. auth.ts=requireAuth/getCurrentUser
+│   │                           # · require-admin-page · guest-viewer(계정 유형 → 데이터 파티션)
+│   │                           # auth.ts=requireAuth/requireActiveAccount/getCurrentUser
+│   │                           # (구 guest-grants=env grant 게스트는 티켓 21 이 걷었다)
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
@@ -364,11 +363,11 @@ survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 
 ├── createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
 
-survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0092, 티켓 18)
+survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0092, 티켓 18·21)
 ├── id, surveyId (FK **cascade**), userId (FK restrict)
 ├── kind                   # member | guest | fieldwork — users.user_type 과의 정합은 서비스가 지킨다
 │                          # (두 테이블에 걸친 조건이라 CHECK 불가)
-├── guestTabs (JSONB)      # kind=guest 전용 현황 탭 화이트리스트 (티켓 21 이 소비)
+├── guestTabs (JSONB)      # kind=guest 전용 현황 탭 화이트리스트 (티켓 21) — NULL 이면 기본값(응답 현황만)
 ├── addedBy (FK restrict), createdAt
 └── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
 
@@ -934,7 +933,9 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   하나(팀원)만 지운다: v2 에서 그 뜻이 "소유 팀 **팀원에게만** 숨김" 으로 바뀌었고, 팀장까지 막으면
   팀장이 자기 팀 설문을 관리할 수 없어 승계·해산이 잠긴다. 팀 미배치 사용자는 **초대 설문을 포함해**
   전부 차단이고(CONTEXT.md 「팀 미배치 사용자」), 배치 대기 설문은 소유자에게도 닫힌다 — 팀이 정해지기
-  전에는 아무도 열 수 없다(ADR-0006). 게스트·실사는 부여 모델이 붙기 전까지 기본 거부다(티켓 21·24).
+  전에는 아무도 열 수 없다(ADR-0006). **게스트는 이 사슬을 타지 않는다** — 팀도 소유권도 없어
+  4~8번이 무의미하고 자격은 「이 설문에 부여됐는가」 하나뿐이다(아래 게스트 절). 실사는 부여
+  모델이 붙기 전까지 기본 거부다(티켓 24).
   매트릭스 테스트는 표를 옮겨 열마다 검증한다 — 프리셋 상수를 다시 읽어 비교하면 구현이 스스로를
   채점해 매트릭스가 바뀌어도 GREEN 이 유지된다.
 - **작업 범위는 `server/work-scope.ts` 가 정한다.** 팀 | 시스템 전체 보기(메가리서치) | 없음 셋이며,
@@ -974,8 +975,9 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   거부 사유의 정본은 코어
   `denialReasonFor` 하나다 — **survey.view 가 없으면 forbidden 이 아니라 not_found**(id 스캔으로
   타 팀 설문 존재 확인 차단), 보이는 설문의 권한 부족만 forbidden. authed 표면은
-  `assertSurveyCapabilityRpc`, **scoped 표면(게스트 허용 콘솔)은 `assertScopedSurveyCapabilityRpc`**
-  — env grant 게스트는 grant 일치(불일치 FORBIDDEN), 내부 계정은 capability(티켓 21 이 통합).
+  `assertSurveyCapabilityRpc`, **scoped 표면(비내부 계정도 지나는 문)은 `assertScopedSurveyCapabilityRpc`**
+  — 티켓 21 이 게스트 분기를 걷어 지금은 코어 판정에 그대로 위임한다. 이름을 남기는 이유는
+  **표면의 청중을 코드에 적어 두기 위해서**이고, tests/repo 의 정적 가드도 그 구분을 본다.
   `control.get` 만 관문 NOT_FOUND 를 null 로 접는다(미저장 설문의 빌더 헤더 10초 폴링 OFF 폴백
   규약). `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신
   한 입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 무관문 예외는
@@ -984,9 +986,9 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)·
   `SurveyOwnershipError`(require-survey-ownership)는 걷었다. **REST 표면(티켓 11)**: export 3종
   (export·split-preview·contacts export)은 `server/rest-survey-access.ts` 의
-  `checkScopedSurveyCapabilityRest`(not_found→404 존재 은닉·forbidden→403, env grant 게스트는
-  grant 일치)로 `export.download` 를 지고, 게스트의 grant 설문 export 현행 유지·항상 차단 전환은
-  티켓 21 몫이다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
+  `checkScopedSurveyCapabilityRest`(not_found→404 존재 은닉·forbidden→403)로 `export.download` 를
+  진다. **게스트·실사에게 export 는 항상 차단**이다(티켓 21) — `requireAuth` 가 비내부 계정을
+  들이지 않고, 설령 들어와도 게스트 열에 `export.download` 가 없다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
   (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
 - **관문 배선의 검증은 라우터 열거가 진다**(티켓 15, B 검증 게이트). 손으로 적은 목록만 도는
   음성 스위트는 새로 붙은 표면을 영원히 초록으로 두므로, `tests/helpers/rpc-surface.ts` 가
@@ -1110,17 +1112,17 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있고(현재 `/admin/login` 뿐), 유형과 무관하게
   열리는 admin 경로는 같은 파일의 `ACCOUNT_PAGES`(현재 `/admin/profile` 뿐)다.
 - **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/admin/login` 으로 되돌아오고,
-  목적지 해석은 그 페이지(RSC)가 한다 — 게스트 grant 가 서버 설정이라 클라이언트가 결정할 수 없다.
+  목적지 해석은 그 페이지(RSC)가 한다 — 계정 유형이 세션에만 있어 클라이언트가 결정할 수 없다.
   복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
   로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
 - REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active' + userType='internal')를 쓴다 — oRPC `authed` 와
   같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막고, 전역 관리 RSC 는 `requireSuperadminPage` 가 슈퍼어드민만 통과시킨다(둘 다 거부는 notFound).
 - procedure 베이스 5종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
-  - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'` + 게스트 grant 아님. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우).
+  - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (게스트 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — env grant 게스트는 grant 일치로, 내부 계정은 capability 로 판정하고, grant 없는 guest·fieldwork 유형은 capability 코어의 계정 유형 게이트가 기본 거부한다(티켓 21·24 가 실제 조회로 바꾼다). 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. 실사는 티켓 24 가 자기 열을 연다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
 - **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
   세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
   (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
@@ -1130,16 +1132,46 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   `resolvePostLoginDestination` 이 정한다 — 게스트·실사가 요청한 내부 경로는 자기 홈으로 접는다
   (그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가는 루프가 된다). admin·analytics
   레이아웃은 비내부 계정을 자기 홈으로 **리다이렉트**하고(존재를 감출 이유가 없어 notFound 가 아니다),
-  `ACCOUNT_PAGES`(현재 `/admin/profile`)만 비켜준다. 설문 단위 env grant 게스트는 이 축과 별개로
-  살아 있다 — 그 모델의 목적지는 grant 설문 콘솔이라 `guestPostLoginRedirect` 가 먼저 갈라진다
-  (티켓 21 에서 두 축이 합쳐진다).
+  `ACCOUNT_PAGES`(현재 `/admin/profile`)만 비켜준다. **목적지 축은 하나다**(티켓 21) — 예전에는
+  설문 단위 env grant 게스트가 먼저 갈라져 grant 설문 콘솔로 갔고 담당 아닌 설문을 향한 로그인은
+  강제 로그아웃까지 했는데, 그 동선이 통째로 사라졌다.
 - **프로필은 세 유형 공통**(.pen FLOW 3-2, `/admin/profile`). 본인이 바꾸는 것은 이름·아바타·비밀번호
   뿐이다 — `UpdateProfileInput` 에 이메일·직책·소속이 없는 것이 이 표면의 정의다. 내부 계정은
   이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
   것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
   서비스가 그 URL 이 우리 R2 공개 URL 인지 확인한다(외부 주소면 남의 서버가 우리 화면에 그림을 그린다).
-- 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃(`/admin/logout`) → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`). 계정 발급 모델(`users.user_type='guest'`)로의 교체는 티켓 21.
-- 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+- **게스트(클라이언트)는 계정이고, 자격은 설문 단위 부여 하나다**(티켓 21, 스펙 §5·§8, .pen FLOW 4-2).
+  `survey_participants` 의 `kind='guest'` 행이 그 설문 **하나만** 열고 팀 멤버십은 만들지 않는다.
+  판정은 코어의 게스트 분기이며 **팀·소유권 사슬을 타지 않는다** — 팀도 소유권도 없는 계정이라
+  그 분기들이 무의미하고, 함께 막는 것은 배치 대기뿐이다(팀이 정해지기 전에는 아무도 못 연다).
+  공개 범위도 관여하지 않는다: 부여가 유일한 자격이다.
+  - **열리는 것은 둘뿐**이다 — `survey.view`(프리뷰) + `operations.view`(허용 탭). 게스트 열에
+    없는 것이 곧 **「항상 차단」의 정본**이다: 분석·내보내기·응답 상세·컨택 원본·메일·편집.
+    설문마다 달라지는 것은 이 집합이 아니라 `guest_tabs` 라, **탭을 전부 켜도 capability 는
+    늘지 않는다**. 탭을 capability 로 쪼개면 매트릭스 열이 설문마다 갈려 판정이 프리셋이 아니게 된다.
+  - **탭 화이트리스트**(`overview`·`progressReport`·`contactsMasked`·`quota`)는 설문마다 독립이고
+    기본값은 **응답 현황 하나**다. 어휘·기본값·정규화 SSOT 는 `shared/contracts/workspace.ts`
+    (`surveyGuestTabValues`·`DEFAULT_SURVEY_GUEST_TABS`·`normalizeSurveyGuestTabs`). 컬럼이 비어
+    있으면 기본값, 객체인데 키가 없으면 false — 나중에 탭이 늘어도 옛 부여가 새 탭을 자동으로 얻지
+    않는다. 판정은 `resolveSurveyAccess`/`loadSurveyAccess` 가 capability 와 **함께** 돌려주며
+    `guestTabs === null` 은 「탭 축이 없는 주체」(내부·실사)다 — 전부 false 인 객체와 갈라 둔 이유는
+    내부 계정에게 「모든 탭이 닫혔다」를 주면 콘솔이 자기 탭을 스스로 숨기기 때문이다.
+  - **관문은 참여자 블록과 같은 두 축**이다(스펙 §7). 조회·검색·추가·탭 저장은 `survey.invite`
+    (탭은 초대의 모양이라 추가 쪽에 선다), 해제만 `survey.manageAccess`. 검색이 관문을 지는 것이
+    특히 중요하다 — 후보 목록은 발급된 클라이언트 계정 명부라 관문 없이 열면 설문 id 하나로 전
+    고객사 계정을 훑을 수 있다. 대상 자격은 서비스가 본다: **guest + active 만**.
+  - 서비스의 WHERE 에 `kind='guest'` 를 함께 거는 것이 칸막이다 — 참여자·게스트가 같은 테이블에
+    살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
+  - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/admin/logout`).
+    그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
+  - 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
+    게스트가 보는 콘솔(`/guest`)은 티켓 22 다. 21 시점에 게스트가 닿을 수 있는 RPC 표면은 0건이라
+    탭 게이트 헬퍼는 만들지 않았다 — 소비자가 없는 관문은 그 자체로 검증되지 않는다.
+  - 음성 검증 둘: `tests/integration/guest-account-denial.test.ts`(라우터를 열거해 authed·superadmin
+    전수가 게스트에게 FORBIDDEN, 부여 설문에서 열리는 capability 가 정확히 둘 — 나머지 어휘 전수는
+    관문 거부)와 `survey-guest-grants.realdb.test.ts`(부여 왕복·설문별 탭 독립·대상 자격·권한 축 —
+    조인과 WHERE 는 목으로 증명되지 않는다).
+- 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isGuestViewer` → 계정 유형).
 
 ---
 
@@ -1189,7 +1221,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
 - 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
-- 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
+- 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 `isGuestViewer`(계정 유형, 티켓 21)이며 접근제어가 아니라 **파티션** 축이다.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
 ---
@@ -1277,9 +1309,6 @@ BETTER_AUTH_TRUSTED_ORIGINS=    # 콤마 목록 (baseURL 은 자동 포함)
 CONTACT_PII_AES_KEY=            # cipher 키 (환경별 분리 필수)
 CONTACT_PII_HMAC_KEY=           # blind index 키
 DUPLICATE_DETECTION_SALT=       # 중복 감지 해시 솔트
-
-# 권한
-GUEST_SURVEY_GRANTS=            # "<userId>:<surveyId>[,...]" 게스트 설문 위임
 
 # 레이트리밋 (미설정이면 limiter no-op)
 UPSTASH_REDIS_REST_URL=
