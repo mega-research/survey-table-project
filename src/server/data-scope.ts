@@ -10,6 +10,16 @@ import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export type OperationsDataScope = 'real' | 'test';
 
+/**
+ * 게스트 화면이 보는 파티션 — **언제나 실데이터**다 (스펙 §11-3, 티켓 21·22).
+ *
+ * `loadOperationsDataScope` 를 태우면 결론은 같지만 세션과 설문을 한 번씩 더 읽는다.
+ * 게스트 콘솔은 전역 테스트 모드를 아예 묻지 않는 화면이라 상수로 고정하고, 그 계약을
+ * **여기** 적는다 — 파티션 규칙의 집이 두 곳이 되면 담당 연구원이 테스트 모드를 켰을 때
+ * 클라이언트가 무엇을 보는지가 화면마다 갈린다.
+ */
+export const GUEST_DATA_SCOPE: OperationsDataScope = 'real';
+
 export function testFlagForScope(scope: OperationsDataScope): boolean {
   return scope === 'test';
 }

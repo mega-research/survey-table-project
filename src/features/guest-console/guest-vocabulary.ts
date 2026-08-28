@@ -1,3 +1,4 @@
+import { formatLocalDate } from '@/lib/date-formatters';
 import {
   SURVEY_GUEST_TAB_LABEL,
   type SurveyGuestTab,
@@ -60,18 +61,16 @@ export function firstGuestTabSegment(tabs: SurveyGuestTabs): string | null {
   return allowedGuestTabs(tabs)[0]?.segment ?? null;
 }
 
-/** 카드·서브헤더의 기간 표기 — `2026. 08. 10. ~ 2026. 09. 05.` (.pen 5-2). */
+/**
+ * 카드·서브헤더의 기간 표기 — `2026. 08. 10. ~ 2026. 09. 05.` (.pen 5-2).
+ *
+ * 날짜는 공용 포매터(`formatLocalDate`)가 만든다 — **KST 고정**이 이 레포의 원칙이고
+ * (date-formatters 헤더), 이 함수는 서버 컴포넌트(홈 카드)와 클라이언트 컴포넌트
+ * (열람 서브헤더) 양쪽에서 불린다. 자체 Intl 을 쓰면 UTC 호스트에서 SSR 이 하루 앞 날짜를
+ * 박고 클라이언트 재렌더가 그것을 다른 값으로 바꾼다.
+ */
 export function guestPeriodLabel(publishedAt: Date | null, endDate: Date | null): string {
-  const start = publishedAt ? formatDay(publishedAt) : '발행 전';
-  const end = endDate ? formatDay(endDate) : '마감일 없음';
+  const start = publishedAt ? formatLocalDate(publishedAt) : '발행 전';
+  const end = endDate ? formatLocalDate(endDate) : '마감일 없음';
   return `${start} ~ ${end}`;
-}
-
-/** `2026. 08. 10.` — 한국어 표기의 점 세 개. */
-function formatDay(value: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(value);
 }

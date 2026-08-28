@@ -13,8 +13,12 @@ import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
-import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress-format';
-import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress-format';
+import type { SortDir } from '@/lib/operations/report-progress-format';
+import {
+  EMPTY_PROGRESS_TOTALS,
+  parseProgressSort,
+  resolveActiveGroupKeys,
+} from '@/lib/operations/report-progress-format';
 import {
   countContactTargets,
   getProgressColumnScheme,
@@ -41,30 +45,6 @@ interface PageProps {
     dir?: string;
     groupBy?: string;
   }>;
-}
-
-const VALID_SORTS: ProgressSortKey[] = [
-  'firstResid',
-  'groupLabel',
-  'listCount',
-  'completedCount',
-  'responseRate',
-];
-
-/**
- * sort 검증 — 고정 5종 + meta:<key> + group:<attrs키> (현재 활성 기준 키만 허용).
- * 알 수 없는 값은 기본 'responseRate' 으로 폴백.
- */
-function parseSort(
-  s: string | undefined,
-  metaKeys: string[],
-  groupKeys: string[],
-): ProgressSortKey {
-  if (!s) return 'responseRate';
-  if (VALID_SORTS.includes(s as ProgressSortKey)) return s as ProgressSortKey;
-  if (s.startsWith('meta:') && metaKeys.includes(s.slice(5))) return s as ProgressSortKey;
-  if (s.startsWith('group:') && groupKeys.includes(s.slice(6))) return s as ProgressSortKey;
-  return 'responseRate';
 }
 
 /**
@@ -131,22 +111,14 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   // - 콤마 목록 → 지정된 분류 기준 키만 채택(칩 좁혀보기), 기준 순서로 정규화 + 중복
   //   제거. 유효 키가 하나도 없으면 전체 기준 폴백.
   // - 분류 기준 미지정 설문은 기존처럼 업로드 그룹(group_value) 기준 (칩 없음).
-  const rawGroupBy = typeof sp.groupBy === 'string' ? sp.groupBy : null;
-  let activeCriteria: GroupByOption[];
-  if (rawGroupBy === null) {
-    activeCriteria = groupByCriteria;
-  } else {
-    const requestedKeys = rawGroupBy
-      .split(',')
-      .map((k) => k.trim())
-      .filter((k) => k.length > 0);
-    const matched = groupByCriteria.filter((c) => requestedKeys.includes(c.key));
-    activeCriteria = matched.length > 0 ? matched : groupByCriteria;
-  }
+  const activeCriteria: GroupByOption[] = resolveActiveGroupKeys(
+    groupByCriteria,
+    typeof sp.groupBy === 'string' ? sp.groupBy : undefined,
+  );
   const activeKeys = activeCriteria.map((c) => c.key);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
-  const parsedSort = parseSort(sp.sort, metaKeys, activeKeys);
+  const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
   // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
   const showResid = scheme.showResid ?? true;
   const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;

@@ -13,11 +13,14 @@ interface Props {
 /**
  * 게스트의 「조사 대상 (마스킹)」 표 (.pen FLOW 5-2 칩 · 스펙 §5, 역할 모델 v2 티켓 22).
  *
- * 운영 콘솔의 `ContactsTable` 을 재사용하지 않는다. 이유가 둘이다.
- *  ① **경계** — guest-console 은 operations 를 import 하지 않는다(PRD 의존 방향).
- *  ② **표면** — 저쪽 표는 헤더 필터 팝오버가 붙어 있고 그 팝오버는 컨택 값 distinct 를
- *     RPC 로 당긴다(게스트에게 닫힌 표면이다). PII 컬럼으로 좁히는 필터는 마스킹본에서도
- *     「이 명단에 이 번호가 있는가」를 확인하는 오라클이 된다.
+ * **이 표만 새로 짰다.** 현황·진척·쿼터 위젯은 운영 콘솔의 것을 그대로 쓴다 — 게스트가
+ * 보는 숫자와 담당자가 보는 숫자는 같아야 하고, 조립은 app 층이 한다(기능 묶음끼리는 서로
+ * import 하지 않지만 라우트는 어느 묶음이든 쓸 수 있다).
+ *
+ * 표 하나만 예외인 이유는 저쪽 표가 **헤더 필터 팝오버**를 달고 있기 때문이다. 그 팝오버는
+ * 컨택 값 distinct 를 RPC 로 당기는데(게스트에게 닫힌 표면이다), PII 컬럼으로 좁히는 필터는
+ * 마스킹본 위에서도 「이 명단에 이 번호가 있는가」를 확인하는 오라클이 된다. 옵트아웃 prop 을
+ * 붙이는 대신 표를 나눈 것은 그 표가 이미 정렬·필터·행 링크로 넓어서다.
  *
  * 그래서 여기는 **정렬도 필터도 없는 읽기 표**다. 행을 눌러도 아무 일이 없다 — 컨택 상세는
  * 원문을 복호화하는 화면이고 게스트에게는 존재하지 않는다.
@@ -37,13 +40,13 @@ export function GuestContactsTable({ page, basePath }: Props) {
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr className="border-b border-[#E5E5EA] bg-[#F9FAFB]">
-              {page.columns.map((column, index) => (
+              {page.columns.map((label, index) => (
                 <th
-                  key={`${column.label}-${index}`}
+                  key={`${label}-${index}`}
                   scope="col"
                   className="px-3 py-2 text-[12px] font-semibold whitespace-nowrap text-[#374151]"
                 >
-                  {column.label}
+                  {label}
                 </th>
               ))}
             </tr>

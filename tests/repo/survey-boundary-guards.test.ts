@@ -20,12 +20,27 @@ import { describe, expect, it } from 'vitest';
 
 import { APP_DIR, loadAppFiles, REPO_ROOT } from '@tests/helpers/app-files';
 
-/** 설문 단위 RSC 콘솔 — URL 에 설문 id 가 실리는 화면 묶음. */
-const SURVEY_CONSOLE_ROOTS = ['admin/surveys/[id]', 'analytics/[surveyId]'];
+/**
+ * 설문 단위 RSC 콘솔 — URL 에 설문 id 가 실리는 화면 묶음.
+ *
+ * 게스트 콘솔(`guest/surveys/[surveyId]`)도 여기 있다(티켓 22). 주소에 설문 id 가 실리는
+ * 순간 「남의 설문 id 를 넣으면 멈추는가」가 같은 질문이 되기 때문이다 — 청중이 다르다고
+ * 인벤토리를 나누면 새 트리가 이 게이트 밖에서 자란다.
+ */
+const SURVEY_CONSOLE_ROOTS = [
+  'admin/surveys/[id]',
+  'analytics/[surveyId]',
+  'guest/surveys/[surveyId]',
+];
 
-/** 설문 capability 관문으로 인정하는 호출. 어느 capability 인지는 각 화면이 정한다. */
+/**
+ * 설문 capability 관문으로 인정하는 호출. 어느 capability 인지는 각 화면이 정한다.
+ *
+ * `assertGuestSurveyPageAccess` 는 capability(`operations.view`) 위에 **탭 축**을 하나 더
+ * 묻는 게스트 짝이다(티켓 22).
+ */
 const PAGE_CAPABILITY_GATE =
-  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess)\s*\(/;
+  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess)\s*\(/;
 
 /** REST 쪽 짝 — 사유를 HTTP 코드로 옮기는 어댑터(404 존재 은닉 / 403). */
 const REST_CAPABILITY_GATE =

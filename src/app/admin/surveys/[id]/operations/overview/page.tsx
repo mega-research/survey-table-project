@@ -19,6 +19,7 @@ import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
+import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
@@ -49,22 +50,6 @@ interface OperationsOverviewPageProps {
     weekOffset?: string;
     dwellOffset?: string;
   }>;
-}
-
-/**
- * KST(Asia/Seoul) 기준 오늘 일자를 'YYYY-MM-DD' 로 반환.
- * `availableDates` 가 비어 있는 hour 모드 진입 시 fallback 으로 사용한다.
- */
-function todayKst(): string {
-  const now = new Date();
-  // ko-KR 로케일은 'YYYY. MM. DD.' 형태로 반환되므로 정규화해서 'YYYY-MM-DD' 로 만든다.
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(now); // en-CA → 'YYYY-MM-DD'
 }
 
 /**
@@ -99,7 +84,7 @@ export default async function OperationsOverviewPage({
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate =
-    mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
+    mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
     await Promise.all([

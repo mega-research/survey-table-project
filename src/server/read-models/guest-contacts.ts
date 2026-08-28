@@ -3,11 +3,9 @@ import 'server-only';
 import { attrsKeyOf, CONTACTS_PAGE_SIZE, piiKeyOf } from '@/lib/operations/contacts-format';
 import { mapStatusPill } from '@/lib/operations/profiles-format';
 import type { ContactColumnDef } from '@/shared/contracts/contacts';
-import type {
-  GuestContactColumn,
-  GuestContactRow,
-  GuestContactsPage,
-} from '@/shared/contracts/workspace-io';
+import type { GuestContactRow, GuestContactsPage } from '@/shared/contracts/workspace-io';
+
+import { GUEST_DATA_SCOPE } from '../data-scope';
 
 import { getContactColumnScheme, listContactsForSurvey } from './contacts';
 
@@ -34,15 +32,13 @@ export async function listGuestContacts(
   surveyId: string,
   page: number,
 ): Promise<GuestContactsPage> {
-  // 게스트 화면은 전역 테스트 모드와 무관하게 언제나 실데이터다(§11-3) — 스코프를
-  // 조회하지 않고 상수로 고정한다. loadOperationsDataScope 를 태워도 결과는 같지만,
-  // 그 함수는 세션을 다시 읽으므로 왕복만 늘고 결론은 여기 적힌 것과 같다.
-  const scheme = await getContactColumnScheme(surveyId, 'real');
+  // 파티션 상수의 집은 data-scope 다 — 화면과 read-model 이 같은 값을 본다.
+  const scheme = await getContactColumnScheme(surveyId, GUEST_DATA_SCOPE);
   const columnDefs = visibleColumns(scheme?.columns ?? []);
 
   const result = await listContactsForSurvey({
     surveyId,
-    scope: 'real',
+    scope: GUEST_DATA_SCOPE,
     page,
     pageSize: CONTACTS_PAGE_SIZE,
     clauses: [],
@@ -51,7 +47,7 @@ export async function listGuestContacts(
   });
 
   return {
-    columns: columnDefs.map((column): GuestContactColumn => ({ label: column.label })),
+    columns: columnDefs.map((column) => column.label),
     rows: result.rows.map((row): GuestContactRow => ({
       resid: row.resid,
       cells: columnDefs.map((column) => cellOf(column, row)),

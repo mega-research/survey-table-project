@@ -640,11 +640,6 @@ export interface GuestSurveyCardRow {
 // 응답 링크)과 컨택 id 가 실려 있어, 게스트에게 가면 열람이 대리 응답이 된다.
 // **화면이 무엇을 안 그리는가가 아니라 무엇이 오지 않는가가 계약이다.**
 
-/** 표 머리 한 칸 — 스킴이 정한 라벨뿐이다(정렬·필터가 없어 source 키가 필요 없다). */
-export interface GuestContactColumn {
-  label: string;
-}
-
 /** 표 한 줄 — 표시 문자열만. 값이 없으면 null 이고 화면이 「—」로 그린다. */
 export interface GuestContactRow {
   resid: number;
@@ -652,7 +647,8 @@ export interface GuestContactRow {
 }
 
 export interface GuestContactsPage {
-  columns: GuestContactColumn[];
+  /** 표 머리 — 스킴이 정한 라벨뿐이다(정렬·필터가 없어 source 키가 필요 없다). */
+  columns: string[];
   rows: GuestContactRow[];
   total: number;
   page: number;

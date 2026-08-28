@@ -4,6 +4,7 @@ import { DropFunnel } from '@/features/operations/drop-funnel';
 import { KpiRow } from '@/features/operations/kpi-row';
 import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
+import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { assertGuestSurveyPageAccess } from '@/server/page-guest-access';
 import {
   aggregateDaily,
@@ -16,7 +17,7 @@ import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
-import { GUEST_SCOPE, todayKst } from '../guest-operations';
+import { GUEST_DATA_SCOPE } from '@/server/data-scope';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -41,13 +42,15 @@ export const metadata = { title: '응답 현황' };
  * 빠지는 것 셋이 이 화면의 정의다.
  *  - **엑셀 내보내기 버튼**: 게스트에게 export 는 항상 차단이다(스펙 §5). 화면에 없고
  *    서버(`export.download` 미보유)에서도 막힌다.
- *  - **쿼터 현황판**: 별도 탭의 내용이라 화이트리스트를 우회하게 된다. KPI 의 쿼터 요약만
- *    남기는데, 그것은 「목표 대비 몇 건」 한 줄이라 현황 지표의 일부다.
+ *  - **쿼터**: 현황판도 KPI 의 쿼터 칸도 「쿼터 현황」 탭이 켜졌을 때만 채운다. 그 칸은
+ *    목표치·달성률·마감 셀 수를 그리는데, 스펙 §5 의 탭 표가 쿼터를 **기본 OFF 의 별개
+ *    항목**으로 두므로 응답 현황만 허용된 게스트에게 보이면 화이트리스트를 우회한 것이다.
+ *    현황판 자체는 이 화면에 없다 — 그것은 쿼터 탭의 내용이다.
  *  - **응답자 문의 카드**: 백엔드가 없는 자리표시자다(운영 콘솔의 InquiriesEmptyCard).
  */
 export default async function GuestOverviewPage({ params, searchParams }: Props) {
   const { surveyId } = await params;
-  await assertGuestSurveyPageAccess(surveyId, 'overview');
+  const { tabs } = await assertGuestSurveyPageAccess(surveyId, 'overview');
 
   const {
     mode = 'day',
@@ -58,25 +61,26 @@ export default async function GuestOverviewPage({ params, searchParams }: Props)
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
-  const availableDates = await aggregateDailyAvailableDates(surveyId, GUEST_SCOPE);
+  const availableDates = await aggregateDailyAvailableDates(surveyId, GUEST_DATA_SCOPE);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
-  const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
+  const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus] =
     await Promise.all([
-      aggregateStatus(surveyId, GUEST_SCOPE),
+      aggregateStatus(surveyId, GUEST_DATA_SCOPE),
       aggregateDaily({
         surveyId,
-        scope: GUEST_SCOPE,
+        scope: GUEST_DATA_SCOPE,
         mode,
         ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
       }),
-      getDailyStats(surveyId, GUEST_SCOPE),
-      getResponseTime(surveyId, GUEST_SCOPE),
-      getDropFunnel(surveyId, GUEST_SCOPE),
-      getPageDwell(surveyId, GUEST_SCOPE),
-      getQuotaStatus(surveyId, GUEST_SCOPE),
+      getDailyStats(surveyId, GUEST_DATA_SCOPE),
+      getResponseTime(surveyId, GUEST_DATA_SCOPE),
+      getDropFunnel(surveyId, GUEST_DATA_SCOPE),
+      getPageDwell(surveyId, GUEST_DATA_SCOPE),
+      // 쿼터 탭이 꺼져 있으면 조회 자체를 하지 않는다 — 쓰지 않을 값을 읽지 않는다.
+      tabs.quota ? getQuotaStatus(surveyId, GUEST_DATA_SCOPE) : null,
     ]);
 
   return (

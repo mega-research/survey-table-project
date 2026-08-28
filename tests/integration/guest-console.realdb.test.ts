@@ -352,7 +352,7 @@ describe.skipIf(!isLocalDb)('게스트 콘솔 (real local DB)', () => {
 
     it('메일 컬럼은 아예 빠진다 — 메일 축은 게스트에게 항상 차단이다', async () => {
       const page = await listGuestContacts(contactsSurveyId, 1);
-      expect(page.columns.map((c) => c.label)).toEqual(['시스템ID', '기관명', '연락처']);
+      expect(page.columns).toEqual(['시스템ID', '기관명', '연락처']);
     });
 
     it('일반 attrs 컬럼은 그대로 보인다 — 마스킹의 단위는 스킴의 piiType 이다', async () => {

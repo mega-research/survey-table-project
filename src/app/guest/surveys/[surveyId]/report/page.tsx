@@ -7,7 +7,12 @@ import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress-format';
+import type { SortDir } from '@/lib/operations/report-progress-format';
+import {
+  EMPTY_PROGRESS_TOTALS,
+  parseProgressSort,
+  resolveActiveGroupKeys,
+} from '@/lib/operations/report-progress-format';
 import { assertGuestSurveyPageAccess } from '@/server/page-guest-access';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import {
@@ -18,11 +23,11 @@ import {
   getProgressTotals,
 } from '@/server/operations/services/report-progress';
 
-import { GUEST_SCOPE } from '../guest-operations';
+import { GUEST_DATA_SCOPE } from '@/server/data-scope';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
-  searchParams: Promise<{ page?: string; groupBy?: string }>;
+  searchParams: Promise<{ page?: string; groupBy?: string; sort?: string; dir?: string }>;
 }
 
 export const dynamic = 'force-dynamic';
@@ -34,27 +39,29 @@ const PAGE_SIZE = 20;
 /**
  * 진척 보고 — 그룹별 진척률 (.pen FLOW 5-2 칩 「진척 보고」, 스펙 §5).
  *
- * 운영 콘솔의 같은 표를 같은 서비스 위에 얹되 **필터 바와 정렬 조작을 뺀다**.
+ * 운영 콘솔의 같은 표를 같은 서비스 위에 얹되 **필터 바만 뺀다**.
  *
  * 필터 바는 컨택 컬럼(PII 포함)으로 좁히는 검색이라 마스킹본 위에서도 「이 값이 명단에
  * 있는가」를 확인하는 오라클이 된다 — 게스트가 보는 것은 집계이지 명단 조회가 아니다.
- * 정렬을 응답률 내림차순으로 고정하는 것도 같은 축이다: 정렬 키가 열리면 그룹의 순위로
- * 개별 값을 역산할 여지가 생기고, 이 화면에는 그것을 요구하는 업무가 없다.
  *
- * 분류 기준 칩은 남긴다 — 그것은 **집계 축의 전환**이지 행 조회가 아니다.
+ * **정렬과 분류 기준 칩은 남긴다.** 둘 다 집계 축을 다루지 개별 행을 조회하지 않는다.
+ * 표가 정렬 가능한 헤더를 그리므로 페이지가 그것을 받지 않으면 눌러도 아무 일이 없는
+ * 죽은 컨트롤이 된다 — 차단이 아니라 고장으로 보인다. 해석은 운영 콘솔과 같은 함수
+ * (`parseProgressSort`)를 쓴다.
  */
 export default async function GuestReportPage({ params, searchParams }: Props) {
   const { surveyId } = await params;
   await assertGuestSurveyPageAccess(surveyId, 'progressReport');
 
-  const { page: pageStr, groupBy } = await searchParams;
-  const pageRaw = Number(pageStr);
+  const sp = await searchParams;
+  const pageRaw = Number(sp.page);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+  const dir: SortDir = sp.dir === 'asc' ? 'asc' : 'desc';
 
   const [scheme, groupLabel, contactScheme] = await Promise.all([
     getProgressColumnScheme(surveyId),
-    getProgressGroupLabel(surveyId, GUEST_SCOPE),
-    getContactColumnScheme(surveyId, GUEST_SCOPE),
+    getProgressGroupLabel(surveyId, GUEST_DATA_SCOPE),
+    getContactColumnScheme(surveyId, GUEST_DATA_SCOPE),
   ]);
 
   const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
@@ -64,42 +71,36 @@ export default async function GuestReportPage({ params, searchParams }: Props) {
     key: c.key,
     label: c.label,
   }));
-  // 관리자 화면과 같은 해석 — 미지정이면 지정된 기준 전체, 콤마 목록이면 그 중 유효한 것만.
-  const requestedKeys =
-    typeof groupBy === 'string'
-      ? groupBy
-          .split(',')
-          .map((k) => k.trim())
-          .filter((k) => k.length > 0)
-      : null;
-  const matched =
-    requestedKeys === null ? [] : groupByCriteria.filter((c) => requestedKeys.includes(c.key));
-  const activeCriteria = matched.length > 0 ? matched : groupByCriteria;
+  // 해석은 운영 콘솔과 같은 함수다 — 두 화면이 같은 표를 그리므로 규칙도 하나여야 한다.
+  const activeCriteria = resolveActiveGroupKeys(groupByCriteria, sp.groupBy);
   const activeKeys = activeCriteria.map((c) => c.key);
+  const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
 
   const showResid = scheme.showResid ?? true;
+  // 보이지 않는 컬럼으로 정렬하면 순서가 설명되지 않는다 — 운영 콘솔과 같은 폴백.
+  const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;
   const residLabel =
     contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
     RESID_DEFAULT_LABEL;
 
-  const isEmpty = (await countContactTargets(surveyId, GUEST_SCOPE)) === 0;
+  const isEmpty = (await countContactTargets(surveyId, GUEST_DATA_SCOPE)) === 0;
   const { rows, totals } = isEmpty
     ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
     : await Promise.all([
         getProgressRows({
           surveyId,
-          scope: GUEST_SCOPE,
+          scope: GUEST_DATA_SCOPE,
           condition: null,
           page,
           size: PAGE_SIZE,
-          sort: 'responseRate',
-          dir: 'desc',
+          sort,
+          dir,
           metaKeys,
           groupByKeys: activeKeys,
         }),
-        getProgressTotals(surveyId, GUEST_SCOPE, null, activeKeys),
+        getProgressTotals(surveyId, GUEST_DATA_SCOPE, null, activeKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (
@@ -129,8 +130,8 @@ export default async function GuestReportPage({ params, searchParams }: Props) {
             groupColumns={activeCriteria.map((c) => ({ key: c.key, label: c.label }))}
             page={page}
             size={PAGE_SIZE}
-            sort="responseRate"
-            dir="desc"
+            sort={sort}
+            dir={dir}
           />
         </>
       )}

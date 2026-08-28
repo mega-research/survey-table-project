@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { ClipboardList } from 'lucide-react';
+
 import { AccountMenu } from '@/components/auth/account-menu';
 import type { AuthUser } from '@/shared/contracts/auth';
 
@@ -25,8 +27,14 @@ export function GuestShell({ user, organization, children }: Props) {
     <div className="min-h-screen bg-[#F9FAFB]">
       <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5EA] bg-white px-6">
         {/* 로고는 홈으로 — 열람 화면에서 목록으로 돌아가는 두 번째 길이다(첫째는 뒤로 버튼). */}
-        <Link href="/guest" className="text-[14px] font-semibold text-[#1C1C1E]">
-          메가허브
+        <Link href="/guest" className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-[#E0E7FF]"
+          >
+            <ClipboardList className="h-[15px] w-[15px] text-[#2743AE]" />
+          </span>
+          <span className="text-[14px] font-semibold text-[#1C1C1E]">메가허브</span>
         </Link>
         <AccountMenu
           name={user.name}
