@@ -34,6 +34,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     ownerUserId: 'u-1',
     ownerName: '홍길동',
     surveyGroupId: null,
+  deletedAt: null,
     ...over,
   };
 }

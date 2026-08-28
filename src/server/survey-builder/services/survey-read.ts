@@ -1,11 +1,12 @@
 import 'server-only';
 
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
 import { listActiveTeams } from '@/server/read-models/teams';
-import { loadAccessSubject, type SurveyAccessUser } from '@/server/survey-access';
+import { loadAccessSubject, SurveyAccessError, type SurveyAccessUser } from '@/server/survey-access';
 import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
 import {
@@ -87,14 +88,24 @@ export async function isSlugAvailable(input: SlugAvailableInput): Promise<boolea
 export async function getSurveyListWithCounts(
   user: SurveyAccessUser,
   requestedScope?: string | null,
+  options: { deleted?: boolean } = {},
 ): Promise<SurveyListResult> {
   const subject = await loadAccessSubject(user);
   const scope = resolveWorkScopeFor(subject, requestedScope ?? null);
   const filter = buildSurveyScopeFilter(subject, scope);
 
-  const [surveyList, teams] = await Promise.all([
-    getScopedSurveys(filter),
+  // 휴지통은 슈퍼어드민의 시스템 전체 보기에만 있다(티켓 17). 삭제된 설문은 팀 경계로
+  // 좁힐 수 없어 — 해산된 팀의 것일 수도 있다 — 팀 화면에 두면 그 순간 전사 열람이 된다
+  // (재배치 인박스가 슈퍼어드민 전용인 것과 같은 근거).
+  const canSeeDeleted = subject.isSuperadmin && scope.kind === 'system';
+  // 요청은 접지 않고 **거부한다**. 조용히 일반 목록으로 접으면 "휴지통이 비었다" 와
+  // "휴지통을 볼 수 없다" 가 화면에서 같은 그림이 되고, 삭제된 설문이 없다고 오해한다.
+  if (options.deleted && !canSeeDeleted) throw new SurveyAccessError('forbidden');
+
+  const [surveyList, teams, deletedCount] = await Promise.all([
+    options.deleted ? getDeletedSurveys() : getScopedSurveys(filter),
     listSelectableTeams(subject),
+    canSeeDeleted ? countDeletedSurveys() : Promise.resolve(null),
   ]);
   const responseCounts = await getResponseCountsGroupedBySurvey(
     surveyList.map((survey) => survey.id),
@@ -104,6 +115,7 @@ export async function getSurveyListWithCounts(
     scope,
     teams,
     canSeeSystemScope: subject.isSuperadmin,
+    deletedCount,
     surveys: surveyList.map((survey) => ({
       id: survey.id,
       title: survey.title,
@@ -126,6 +138,9 @@ export async function getSurveyListWithCounts(
       ownerUserId: survey.ownerUserId,
       ownerName: survey.ownerName,
       surveyGroupId: survey.surveyGroupId,
+      // 일반 목록의 행은 언제나 null 이다(조회 조건이 deleted_at IS NULL) — 화면은 이 값으로
+      // 「휴지통을 보고 있는가」를 판정한다.
+      deletedAt: survey.deletedAt,
     })),
   };
 }
@@ -144,6 +159,12 @@ async function listSelectableTeams(
 // ========================
 // 공개(pub) 응답자 조회 — requireAuth 없음
 // ========================
+//
+// **이 구역은 관문이 없다 — deletedAt 필터를 각자 걸어야 한다**(티켓 17). 내부 표면은
+// capability 코어가 `deleted_at IS NULL` 로 조회해 삭제된 설문을 not_found 로 접지만,
+// 응답자 경로에는 그 코어가 서지 않는다. 슬러그·비공개 토큰·미리보기 토큰은 삭제된 설문을
+// 여는 마지막 열쇠가 되므로 조회 조건에 함께 건다.
+// `tests/integration/soft-delete-invisibility.test.ts` 가 이 구역 전수를 음성으로 고정한다.
 
 // 슬러그로 설문 조회 (pub — 익명 응답자 진입).
 // 익명 노출 경로이므로 full row 를 반환하지 않고 호출자(use-survey-loader)가 실제 쓰는 id 만
@@ -152,7 +173,7 @@ export async function getSurveyBySlug(
   input: SurveyBySlugInput,
 ): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.slug, input.slug),
+    where: and(eq(surveys.slug, input.slug), isNull(surveys.deletedAt)),
     columns: { id: true },
   });
   return survey;
@@ -171,7 +192,7 @@ export async function getSurveyByPrivateToken(
   if (!isValidUUID(input.token)) return undefined;
 
   const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.privateToken, input.token),
+    where: and(eq(surveys.privateToken, input.token), isNull(surveys.deletedAt)),
     columns: { id: true },
   });
   return survey;
@@ -191,7 +212,7 @@ export async function getSurveyByPreviewToken(
   if (!isValidUUID(input.token)) return undefined;
 
   const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.previewToken, input.token),
+    where: and(eq(surveys.previewToken, input.token), isNull(surveys.deletedAt)),
     columns: { id: true },
   });
   return survey;

@@ -17,10 +17,13 @@ import {
   surveyListQueryOptions,
   useDeleteSurvey,
   useDuplicateSurvey,
+  useRestoreSurvey,
 } from '../queries/use-surveys';
 import { useSurveyListStore } from '../stores/survey-list-ui-store';
 import { AdvancedSearchPanel } from './advanced-search-panel';
+import { DeletedSurveyCard } from './deleted-survey-card';
 import {
+  EmptyDeletedState,
   EmptyGroupState,
   NoResultsEmptyState,
   NoSurveysEmptyState,
@@ -65,12 +68,38 @@ export function SurveyListView() {
           : null;
   const isUnassigned = contextScope?.kind === 'none';
 
+  // 휴지통은 슈퍼어드민의 시스템 전체 보기에만 있다(티켓 17). 범위가 바뀌면 스토어도
+  // resetAll 로 따라 내려가지만 그건 effect 라 한 렌더 늦는다 — 그 한 번의 요청이
+  // FORBIDDEN 으로 떨어져 에러 배너가 번쩍이므로 조회 조건 자체를 여기서 좁힌다.
+  const canSeeDeleted = (workScope?.isSuperadmin ?? false) && contextScope?.kind === 'system';
+
+  const {
+    searchQuery,
+    statusChip,
+    showDeleted,
+    sortBy,
+    advancedOpen,
+    advanced,
+    page,
+    setSearchQuery,
+    setStatusChip,
+    setShowDeleted,
+    setSortBy,
+    setAdvancedOpen,
+    setAdvanced,
+    setPage,
+    resetAdvanced,
+    resetAll,
+  } = useSurveyListStore();
+
   const { data, isLoading, error } = useQuery({
-    ...surveyListQueryOptions(requestedScope),
+    // 휴지통은 조회 조건이 달라 쿼리 키가 갈린다 — 모드 토글이 곧 새 왕복이다(티켓 17).
+    ...surveyListQueryOptions(requestedScope, showDeleted && canSeeDeleted),
     // 팀 미배치는 조회 자체를 하지 않는다 — 서버도 빈 목록을 주지만 왕복부터 없앤다.
     enabled: !isUnassigned,
   });
   const { mutate: deleteSurvey } = useDeleteSurvey();
+  const { mutate: restoreSurvey, isPending: isRestoring } = useRestoreSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
 
   // 그룹 화면은 목록의 다른 상태가 아니라 별개의 주소다(`?group=<id>`) — 뒤로 가기·새로고침·
@@ -89,23 +118,6 @@ export function SurveyListView() {
   const router = useRouter();
   const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
-
-  const {
-    searchQuery,
-    statusChip,
-    sortBy,
-    advancedOpen,
-    advanced,
-    page,
-    setSearchQuery,
-    setStatusChip,
-    setSortBy,
-    setAdvancedOpen,
-    setAdvanced,
-    setPage,
-    resetAdvanced,
-    resetAll,
-  } = useSurveyListStore();
 
   // 팀이나 그룹을 바꾸면 필터·페이지를 전부 되돌린다 — 이전 화면에서 남은 검색어·페이지가
   // 새 목록을 조용히 0건/빈 페이지로 만들지 않게(새 워크스페이스에서 시작하는 것과 동일 취급).
@@ -174,6 +186,14 @@ export function SurveyListView() {
         else toast.error('설문 복제에 실패했습니다');
       },
       onError: () => toast.error('설문 복제에 실패했습니다'),
+    });
+  }
+
+  function handleRestore(surveyId: string) {
+    restoreSurvey(surveyId, {
+      onSuccess: () => toast.success('설문을 복구했습니다'),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : '설문을 복구하지 못했습니다.'),
     });
   }
 
@@ -292,6 +312,9 @@ export function SurveyListView() {
               searchPlaceholder={activeGroup ? '그룹 내 설문 검색' : '설문 검색...'}
               advancedOpen={advancedOpen}
               onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
+              deletedCount={data?.deletedCount ?? null}
+              showDeleted={showDeleted && canSeeDeleted}
+              onToggleDeleted={setShowDeleted}
             />
             {advancedOpen && (
               <AdvancedSearchPanel
@@ -308,7 +331,13 @@ export function SurveyListView() {
             // 셸 밖 트리에서 서버가 미배치로 해석한 경우 — FLOW 9-1 문구로 안내한다.
             <NoTeamEmptyState />
           ) : allSurveys.length === 0 ? (
-            <NoSurveysEmptyState canCreate={canCreate} />
+            // 휴지통이 비어 있는 것과 팀에 설문이 없는 것은 다른 화면이다 — 여기서 「새 설문
+            // 만들기」를 권하면 방금 무엇을 보러 왔는지와 어긋난다.
+            showDeleted && canSeeDeleted ? (
+              <EmptyDeletedState />
+            ) : (
+              <NoSurveysEmptyState canCreate={canCreate} />
+            )
           ) : activeGroup && scopedSurveys.length === 0 ? (
             // 그룹이 비어 있는 것과 필터로 0건이 된 것은 다른 화면이다 — 「초기화」로는
             // URL 이 소유한 그룹 좁힘이 풀리지 않아 버튼이 아무 일도 하지 않는다.
@@ -318,18 +347,30 @@ export function SurveyListView() {
           ) : (
             <>
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                {pageItems.map((survey) => (
-                  <SurveyCard
-                    key={survey.id}
-                    survey={survey}
-                    viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
-                    onDelete={handleDelete}
-                    onDuplicate={handleDuplicate}
-                    isDuplicating={isDuplicating}
-                    groups={groupList}
-                    onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
-                  />
-                ))}
+                {pageItems.map((survey) =>
+                  // 휴지통은 카드가 다르다 — 삭제된 설문에서 할 수 있는 일은 복구뿐이라
+                  // 케밥·수정·현황·분석이 전부 없다(티켓 17). 서버가 목록을 갈라 주므로
+                  // 화면은 행이 들고 온 deletedAt 만 보면 된다.
+                  survey.deletedAt ? (
+                    <DeletedSurveyCard
+                      key={survey.id}
+                      survey={survey}
+                      onRestore={handleRestore}
+                      isRestoring={isRestoring}
+                    />
+                  ) : (
+                    <SurveyCard
+                      key={survey.id}
+                      survey={survey}
+                      viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
+                      onDelete={handleDelete}
+                      onDuplicate={handleDuplicate}
+                      isDuplicating={isDuplicating}
+                      groups={groupList}
+                      onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
+                    />
+                  ),
+                )}
               </div>
 
               <ListPagination page={clampedPage} totalPages={totalPages} onPageChange={setPage} />

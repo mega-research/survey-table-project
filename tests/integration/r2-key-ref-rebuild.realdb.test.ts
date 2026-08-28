@@ -123,7 +123,19 @@ describe.skipIf(!isLocalDb)('r2_key_refs 재구축 — 스캔 표면과 일치',
     expect(indexed).toEqual(new Set([liveVersionKey, liveTemplateKey]));
   });
 
-  it('설문 hard delete 가 소멸한 버전의 인덱스 행을 함께 거둔다', async () => {
+  /**
+   * 티켓 17 에서 이 케이스의 계약이 뒤집혔다.
+   *
+   * 예전에는 설문 삭제가 hard delete 라 버전 행이 소멸했고, 인덱스만 남으면 소멸한 버전이
+   * 참조를 계속 주장해 방금 등록한 후보를 '보존됨' 으로 닫아버렸다. 그래서 삭제 경로가
+   * `deleteKeyRefsBySourceIds` 로 인덱스를 함께 거뒀다.
+   *
+   * 이제 삭제는 soft delete 라 **버전 행이 살아남는다**. 살아남은 행이 그 키의 참조를 계속
+   * 주장하는 것이 「삭제해도 R2 파일은 지우지 않는다」(티켓 17)를 지탱하므로, 인덱스를 거두면
+   * 오히려 인덱스가 스캔보다 좁아져 위험 방향 드리프트 신호(indexMisses)가 헛되이 오른다.
+   * 그래서 지금 확인하는 것은 **인덱스가 남는다**는 반대 방향이다.
+   */
+  it('설문 soft delete 는 살아남은 버전의 인덱스 행을 그대로 둔다', async () => {
     await db.insert(surveys).values({
       id: deletedSurveyId,
       title: '삭제 대상 설문',
@@ -152,22 +164,30 @@ describe.skipIf(!isLocalDb)('r2_key_refs 재구축 — 스캔 표면과 일치',
 
     await deleteSurvey({ surveyId: deletedSurveyId });
 
-    const leftovers = await db
+    // 설문 행은 지워지지 않고 표시만 된다 — 버전·질문도 함께 살아 있다.
+    const [surveyRow] = await db
+      .select({ deletedAt: surveys.deletedAt })
+      .from(surveys)
+      .where(eq(surveys.id, deletedSurveyId));
+    expect(surveyRow?.deletedAt).not.toBeNull();
+
+    const remaining = await db
       .select({ key: r2KeyRefs.key })
       .from(r2KeyRefs)
       .where(
-        and(
-          eq(r2KeyRefs.sourceTable, 'survey_versions'),
-          eq(r2KeyRefs.sourceId, versionId),
-        ),
+        and(eq(r2KeyRefs.sourceTable, 'survey_versions'), eq(r2KeyRefs.sourceId, versionId)),
       );
-    expect(leftovers).toEqual([]);
+    expect(remaining).toEqual([{ key: deletedSurveyVersionKey }]);
 
-    // 후보는 등록됐고, 인덱스가 비었으므로 집행이 '보존됨'으로 닫히지 않는다
+    // 후보 등록은 관행 그대로 남는다(티켓 17 지시). 다만 살아남은 행이 참조를 주장하므로
+    // 집행자는 이 키를 지우지 않고 '보존됨' 으로 닫는다 — 그것이 복구의 전제다.
     const candidates = await db
       .select({ key: r2DeletionCandidates.key, status: r2DeletionCandidates.status })
       .from(r2DeletionCandidates)
       .where(eq(r2DeletionCandidates.key, deletedSurveyVersionKey));
     expect(candidates).toContainEqual({ key: deletedSurveyVersionKey, status: 'pending' });
+    expect(await findReferencedKeys([deletedSurveyVersionKey])).toEqual(
+      new Set([deletedSurveyVersionKey]),
+    );
   });
 });

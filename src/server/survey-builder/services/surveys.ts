@@ -1,9 +1,13 @@
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
-import { assertSurveyCapability, type SurveyAccessUser } from '@/server/survey-access';
+import {
+  assertSurveyCapability,
+  SurveyAccessError,
+  type SurveyAccessUser,
+} from '@/server/survey-access';
 import { resolveWorkScope } from '@/server/work-scope';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { db, type DbOrTx } from '@/db';
@@ -18,7 +22,6 @@ import {
 } from '@/db/schema';
 import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
 import { collectSurveyContentKeys } from '@/server/storage-lifecycle/entity-collectors';
-import { deleteKeyRefsBySourceIds } from '@/server/storage-lifecycle/key-ref-index';
 import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-diff-collector';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
@@ -232,27 +235,67 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
   });
 }
 
-// 설문 삭제 — 질문 이미지는 R2 에서 지우지 않는다. 복제 설문·보관함(saved_questions)이
-// 같은 URL 을 공유 참조할 수 있어 무확인 삭제가 다른 설문/보관함 콘텐츠를 파괴한다.
+/**
+ * 설문 삭제 — **soft delete** 다 (역할 모델 v2 티켓 17).
+ *
+ * 예전에는 `tx.delete` 로 행을 지웠고 CASCADE 가 질문·응답·컨택·메일을 함께 없앴다. 참여자
+ * (티켓 18)에게까지 삭제권이 넓어지는 이상 되돌릴 수 없는 파괴는 전제가 될 수 없어(스펙 §4
+ * 「삭제 전제」) `deleted_at` 을 찍는 것으로 바꿨다. **행과 응답 데이터는 그대로 남는다** —
+ * 복구(restoreSurvey)가 팀·소유자·상태를 되돌릴 것이 아니라 애초에 건드리지 않는다.
+ *
+ * 조회에서 사라지는 것은 이 함수가 아니라 읽는 쪽이 진다 — capability 코어가
+ * `deleted_at IS NULL` 로 조회하므로 관문을 지나는 내부 표면 전부가 자동으로 닫히고,
+ * 관문이 없는 응답자(pub) 경로는 각자 같은 조건을 건다(tests/integration/soft-delete-*).
+ *
+ * R2 는 **관행 그대로** 유예 삭제 큐에 후보를 등록한다(티켓 17 지시). 실제로 지워지지는
+ * 않는다 — 집행자가 보는 참조 표면(REFERENCE_SURFACE)에 `surveys`·`questions` 가
+ * deletedAt 술어 없이 들어 있어, 살아남은 행이 그 키의 참조를 계속 주장하기 때문이다.
+ * 그 사실이 이 티켓의 「R2 파일은 삭제하지 않음」을 지탱한다.
+ *
+ * 옛 코드의 `deleteKeyRefsBySourceIds`(survey_versions)는 뺐다. 그것이 있던 이유는
+ * "행이 소멸하는데 인덱스만 남아 후보를 전부 '보존됨' 으로 닫는다" 였는데, soft delete 에서는
+ * 버전 행이 소멸하지 않아 전제가 사라졌다. 남겨두면 인덱스만 스캔보다 좁아져
+ * `indexMisses`(위험 방향 드리프트 신호)가 삭제할 때마다 헛되이 오른다.
+ */
 export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
   const { surveyId } = input;
 
-  // CASCADE 로 소멸될 콘텐츠 전체의 키를 삭제 전에 같은 트랜잭션에서 수집해
-  // 유예 삭제 큐에 등록한다 — 삭제 후에는 참조를 복원할 수 없다.
   await db.transaction(async (tx) => {
-    const { keys, versionIds } = await collectSurveyContentKeys(tx, surveyId);
+    const { keys } = await collectSurveyContentKeys(tx, surveyId);
     await registerDeletionCandidates(tx, {
       keys,
       source: 'survey-delete',
       reason: `설문 삭제: ${surveyId}`,
     });
-    // r2_key_refs 에는 FK 가 없어 CASCADE 가 닿지 않는다. 남겨두면 소멸한
-    // 버전이 인덱스로 참조를 계속 주장해 방금 등록한 후보를 전부 '보존됨'
-    // 종결 상태로 닫아버린다. 가변 소스는 집행 직전 일일 리빌드가 테이블
-    // 단위로 교체하므로 불변 소스인 survey_versions 만 여기서 거둔다.
-    await deleteKeyRefsBySourceIds(tx, 'survey_versions', versionIds);
-    await tx.delete(surveys).where(eq(surveys.id, surveyId));
+
+    // 이미 삭제된 설문에는 시각을 덮어쓰지 않는다 — 관문이 먼저 막지만 그 조회와 이
+    // UPDATE 는 별도 왕복이고, 덮어쓰면 "언제 지워졌나" 가 두 번째 요청 시각으로 밀린다.
+    const updated = await tx
+      .update(surveys)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
+      .returning({ id: surveys.id });
+    if (updated.length === 0) throw new SurveyAccessError('not_found');
   });
+}
+
+/**
+ * 삭제 취소 (티켓 17) — 슈퍼어드민 전용.
+ *
+ * 되살릴 것이 `deleted_at` 하나뿐인 것이 soft delete 의 요점이다. 팀·소유자·공개 범위·그룹·
+ * 배포 버전은 삭제가 건드리지 않았으므로 복구도 건드리지 않는다 — "원래 팀·소유자·상태
+ * 그대로" 는 되돌리는 코드가 아니라 **아무것도 잃지 않은 삭제**가 지킨다.
+ *
+ * 이미 살아 있는 설문은 not_found 다. 「복구했다」는 응답이 실제로는 아무 일도 없었던
+ * 경우와 구별되지 않으면, 목록이 먼저 갱신된 두 번째 관리자가 성공 문구만 보고 지나간다.
+ */
+export async function restoreSurvey(input: SurveyIdInput): Promise<void> {
+  const restored = await db
+    .update(surveys)
+    .set({ deletedAt: null })
+    .where(and(eq(surveys.id, input.surveyId), isNotNull(surveys.deletedAt)))
+    .returning({ id: surveys.id });
+  if (restored.length === 0) throw new SurveyAccessError('not_found');
 }
 
 // 복제 시 질문 id 는 새로 발번되므로 JSONB 안의 질문 id 참조 — 표시조건의

@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 
 import {
   Select,
@@ -40,6 +40,15 @@ interface ListToolbarProps {
   searchPlaceholder: string;
   advancedOpen: boolean;
   onToggleAdvanced: () => void;
+  /**
+   * 삭제된 설문 건수 — **null 이면 휴지통 칩 자체를 그리지 않는다**(티켓 17).
+   *
+   * 0 과 null 을 가르는 이유는 서버 계약과 같다: 「비어 있는 휴지통」과 「휴지통을 볼 수 없는
+   * 사람」은 다른 화면이어야 한다. 채워지는 것은 슈퍼어드민의 시스템 전체 보기뿐이다.
+   */
+  deletedCount: number | null;
+  showDeleted: boolean;
+  onToggleDeleted: (next: boolean) => void;
 }
 
 /** 목록 툴바 (.pen FLOW 6) — 상태 칩 · 검색 · 정렬 · 상세 검색 토글. */
@@ -54,6 +63,9 @@ export function ListToolbar({
   searchPlaceholder,
   advancedOpen,
   onToggleAdvanced,
+  deletedCount,
+  showDeleted,
+  onToggleDeleted,
 }: ListToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -80,6 +92,28 @@ export function ListToolbar({
           );
         })}
       </div>
+
+      {/* 휴지통은 칩과 나란히 서지만 성격이 다르다 — 칩은 받아온 목록을 접고 이쪽은 조회를
+          바꾼다(티켓 17). 구분선으로 그 경계를 보이게 둔다. */}
+      {deletedCount !== null && (
+        <>
+          <span className="h-4 w-px bg-[#E5E5EA]" aria-hidden />
+          <button
+            type="button"
+            aria-pressed={showDeleted}
+            onClick={() => onToggleDeleted(!showDeleted)}
+            className={cn(
+              'flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors',
+              showDeleted
+                ? 'bg-[#B91C1C] font-semibold text-white'
+                : 'border border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+            )}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            삭제됨 {deletedCount}
+          </button>
+        </>
+      )}
 
       <div className="flex-1" />
 

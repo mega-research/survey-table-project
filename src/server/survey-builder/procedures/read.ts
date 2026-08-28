@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { assertSurveyCapabilityRpc, toRpcSurveyAccessError } from '@/server/rpc-survey-access';
 import { toRpcWorkScopeError } from '@/server/rpc-work-scope';
 
 import {
@@ -44,10 +44,11 @@ const list = authed
   .output(SurveyListOutput)
   .handler(({ context, input }) =>
     surveySvc
-      .getSurveyListWithCounts(context.user, input.scope ?? null)
+      .getSurveyListWithCounts(context.user, input.scope ?? null, { deleted: input.deleted === true })
       // 일반 사용자의 system 요청은 코어가 거부한다 — 매핑이 없으면 그 거부가 500 이 된다.
+      // 휴지통 요청(deleted)의 거부도 같은 자리에서 옮긴다(SurveyAccessError → FORBIDDEN).
       .catch((error: unknown) => {
-        throw toRpcWorkScopeError(error);
+        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
       }),
   );
 

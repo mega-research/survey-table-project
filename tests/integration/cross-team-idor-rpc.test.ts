@@ -665,6 +665,10 @@ const RESPONDENT_SURFACES = new Set([
 const SUPERADMIN_SURVEY_SURFACES = new Set([
   'workspace.reassignment.pendingSurvey',
   'workspace.reassignment.assignSurveys',
+  // 삭제 취소(티켓 17) — capability 관문을 쓸 수 없다. 코어가 삭제된 설문을 조회 단계에서
+  // 걸러 언제나 not_found 를 주기 때문이고, 그 필터를 느슨하게 하면 「삭제는 안 보인다」가
+  // 무너진다. 그래서 이 표면만 판정 축이 팀이 아니라 전역 권한이다.
+  'surveyBuilder.surveys.restore',
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────

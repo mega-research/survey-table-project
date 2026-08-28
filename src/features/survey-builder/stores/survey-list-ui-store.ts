@@ -19,6 +19,15 @@ import {
 interface SurveyListUIState {
   searchQuery: string;
   statusChip: SurveyListStatusChip;
+  /**
+   * 휴지통을 보고 있는가 (티켓 17).
+   *
+   * 상태 칩의 다섯 번째 값이 아니라 **별개의 모드**다. 칩은 이미 받아온 목록을 접는 순수
+   * 필터인데 이 값은 **서버 조회 자체**를 바꾼다(쿼리 키가 갈린다) — 같은 어휘에 섞으면
+   * "칩을 눌렀는데 왕복이 일어나는 것 하나" 가 생겨 다음 사람이 파이프라인에서 그것을 찾는다.
+   * 모드 안에서는 칩이 종전대로 동작한다.
+   */
+  showDeleted: boolean;
   sortBy: SurveyListSortBy;
   advancedOpen: boolean;
   advanced: SurveyListAdvancedFilters;
@@ -26,6 +35,7 @@ interface SurveyListUIState {
 
   setSearchQuery: (query: string) => void;
   setStatusChip: (chip: SurveyListStatusChip) => void;
+  setShowDeleted: (showDeleted: boolean) => void;
   setSortBy: (sortBy: SurveyListSortBy) => void;
   setAdvancedOpen: (open: boolean) => void;
   setAdvanced: (patch: Partial<SurveyListAdvancedFilters>) => void;
@@ -41,6 +51,7 @@ export const useSurveyListStore = create<SurveyListUIState>()(
     (set) => ({
       searchQuery: '',
       statusChip: 'all',
+      showDeleted: false,
       sortBy: 'updatedAt',
       advancedOpen: false,
       advanced: { ...INITIAL_ADVANCED_FILTERS },
@@ -48,6 +59,10 @@ export const useSurveyListStore = create<SurveyListUIState>()(
 
       setSearchQuery: (query) => set({ searchQuery: query, page: 1 }),
       setStatusChip: (chip) => set({ statusChip: chip, page: 1 }),
+      // 모드를 바꾸면 목록이 통째로 갈리므로 칩·검색어·페이지를 함께 되돌린다 — 남겨두면
+      // 휴지통이 「진행중 + 검색어」로 좁혀진 채 열려 비어 보인다.
+      setShowDeleted: (showDeleted) =>
+        set({ showDeleted, statusChip: 'all', searchQuery: '', page: 1 }),
       setSortBy: (sortBy) => set({ sortBy }),
       setAdvancedOpen: (open) => set({ advancedOpen: open }),
       setAdvanced: (patch) =>
@@ -58,6 +73,7 @@ export const useSurveyListStore = create<SurveyListUIState>()(
         set({
           searchQuery: '',
           statusChip: 'all',
+          showDeleted: false,
           sortBy: 'updatedAt',
           advancedOpen: false,
           advanced: { ...INITIAL_ADVANCED_FILTERS },

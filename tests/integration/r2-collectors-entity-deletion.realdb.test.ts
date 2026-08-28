@@ -61,7 +61,13 @@ describe.skipIf(!isLocalDb)('수집원 — 엔티티 삭제 실DB 왕복', () =>
     }
   });
 
-  it('설문 삭제: cascade 범위 전체의 키가 큐에 등록된다', async () => {
+  /**
+   * 티켓 17 이후 「cascade 범위」는 소멸하지 않는다 — 삭제가 soft delete 라 하위 행이 전부
+   * 살아 있다. 그럼에도 수집·등록은 관행 그대로 남긴다(티켓 17 지시): 설문 콘텐츠 전체를
+   * 한 번에 훑는 수집원이 정확한지는 여전히 여기서만 확인할 수 있고, 등록된 후보는 집행 직전
+   * 참조 재확인에서 '보존됨' 으로 닫힌다.
+   */
+  it('설문 삭제: 콘텐츠 전 범위의 키가 큐에 등록되고 행은 남는다', async () => {
     const qImgKey = key('survey');
     const noticeAttKey = key('notice-attachment');
     const headerLogoKey = key('survey');
@@ -127,8 +133,12 @@ describe.skipIf(!isLocalDb)('수집원 — 엔티티 삭제 실DB 왕복', () =>
 
     await deleteSurvey({ surveyId: survey.id });
 
-    const [gone] = await db.select().from(surveysTable).where(eq(surveysTable.id, survey.id));
-    expect(gone).toBeUndefined();
+    // 행은 남고 표시만 된다 — 예전 hard delete 계약이 뒤집힌 자리다(티켓 17).
+    const [row] = await db
+      .select({ deletedAt: surveysTable.deletedAt })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, survey.id));
+    expect(row?.deletedAt).not.toBeNull();
 
     const pending = await pendingKeys();
     for (const k of [

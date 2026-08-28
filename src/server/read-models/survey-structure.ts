@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { and, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { questionGroups, questions, surveyGroups, surveys, teams, users } from '@/db/schema';
@@ -63,6 +63,9 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
       assignmentStatus: surveys.assignmentStatus,
       ownerUserId: surveys.ownerUserId,
       ownerName: users.name,
+      // 조건이 `deleted_at IS NULL` 이라 언제나 null 이다 — 삭제됨 목록(getDeletedSurveys)과
+      // 같은 모양을 유지하려고 함께 투영한다. 화면이 이 값 하나로 두 목록을 가른다(티켓 17).
+      deletedAt: surveys.deletedAt,
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
@@ -78,11 +81,67 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     .orderBy(desc(surveys.createdAt));
 }
 
+/**
+ * 삭제된 설문 전수 (역할 모델 v2 티켓 17) — **슈퍼어드민의 시스템 전체 보기 전용**.
+ *
+ * `getScopedSurveys` 의 반대편이다. 저쪽은 "이 범위에서 무엇이 보이는가" 라 팀·공개 범위
+ * 조건이 붙지만, 이쪽은 **팀 경계로 좁힐 수 없는 목록**이다 — 삭제된 설문은 어느 팀 화면에도
+ * 속하지 않고 해산된 팀의 것일 수도 있다(재배치 인박스가 슈퍼어드민 전용인 것과 같은 이유).
+ * 호출자가 권한을 이미 판정했다는 전제로 조건 없이 전부 준다.
+ *
+ * 투영을 `getScopedSurveys` 와 맞추는 것은 화면이 같은 카드를 그리기 때문이다 — 모양이
+ * 갈리면 복구 목록만 다른 컴포넌트를 요구하게 된다. 그룹 id 는 항상 null 로 접는다:
+ * 삭제된 설문에 폴더를 보여줘도 그 폴더 화면에서는 보이지 않아 갈 곳 없는 링크가 된다.
+ */
+export async function getDeletedSurveys() {
+  return db
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      slug: surveys.slug,
+      privateToken: surveys.privateToken,
+      createdAt: surveys.createdAt,
+      updatedAt: surveys.updatedAt,
+      endDate: surveys.endDate,
+      isPublic: surveys.isPublic,
+      status: surveys.status,
+      teamId: surveys.teamId,
+      teamName: teams.name,
+      visibility: surveys.visibility,
+      assignmentStatus: surveys.assignmentStatus,
+      ownerUserId: surveys.ownerUserId,
+      ownerName: users.name,
+      deletedAt: surveys.deletedAt,
+      surveyGroupId: sql<string | null>`null::uuid`,
+    })
+    .from(surveys)
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .leftJoin(users, eq(users.id, surveys.ownerUserId))
+    .where(isNotNull(surveys.deletedAt))
+    .orderBy(desc(surveys.deletedAt));
+}
+
+/** 삭제된 설문 건수 — 목록 툴바의 「삭제됨 N」 칩. 목록과 같은 조건을 본다. */
+export async function countDeletedSurveys(): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(surveys)
+    .where(isNotNull(surveys.deletedAt));
+  return row?.value ?? 0;
+}
+
 // 설문 단일 조회. React `cache()` 로 동일 RSC pass 내 중복 호출을 dedupe
 // (예: layout 과 page 가 같은 surveyId 를 동시에 조회해도 DB 한 번).
+//
+// **삭제된 설문은 없는 것으로 본다**(티켓 17). 이 함수가 빌더 상세·운영 콘솔 RSC·미리보기·
+// 응답 페이지 조회(getSurveyForResponse)·변수 카탈로그·복제의 공통 입구라, 여기 한 줄이
+// 그 경로 전부를 한꺼번에 닫는다. 삭제된 행을 일부러 읽어야 하는 곳(복구 목록·복구 실행)은
+// 자기 쿼리를 따로 쓴다 — 이 함수에 플래그를 다는 순간 "기본값이 무엇인가" 가 호출부마다
+// 갈리고, React cache 키가 인자별로 갈려 dedupe 도 함께 깨진다.
 export const getSurveyById = cache(async (surveyId: string) => {
   const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
+    where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
   });
   return survey;
 });

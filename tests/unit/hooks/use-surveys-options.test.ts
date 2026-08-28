@@ -38,6 +38,7 @@ describe('surveyListQueryOptions', () => {
 
   it('범위를 요청하지 않으면 서버가 쿠키로 판정하도록 null 을 보낸다', () => {
     surveyListQueryOptions().queryFn();
-    expect(listCall).toHaveBeenCalledWith({ scope: null });
+    // 휴지통 여부는 언제나 명시한다 — 서버 기본값에 기대면 두 모드의 계약이 갈린다(티켓 17).
+    expect(listCall).toHaveBeenCalledWith({ scope: null, deleted: false });
   });
 });

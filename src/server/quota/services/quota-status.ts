@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -19,7 +19,7 @@ export async function getQuotaStatus(
   scope: OperationsDataScope = 'real',
 ): Promise<QuotaStatus | null> {
   const surveyRow = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
+    where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
     columns: { quotaConfig: true },
   });
   const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);

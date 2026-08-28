@@ -58,7 +58,9 @@ describe('surveyBuilder.read procedures', () => {
     const context = authedContext();
     const client = createRouterClient({ read }, { context });
     const res = await client.read.list({ scope: 'team-1' });
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1');
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1', {
+      deleted: false,
+    });
     expect(res).toEqual(result);
   });
 
@@ -72,7 +74,9 @@ describe('surveyBuilder.read procedures', () => {
     const context = authedContext();
     const client = createRouterClient({ read }, { context });
     await client.read.list({});
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null);
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null, {
+      deleted: false,
+    });
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {

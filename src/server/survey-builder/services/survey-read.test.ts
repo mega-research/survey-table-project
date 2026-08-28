@@ -12,6 +12,8 @@ vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/read-models/survey-structure')>()),
   getSurveyWithDetails: vi.fn(),
   getScopedSurveys: vi.fn(),
+  getDeletedSurveys: vi.fn(),
+  countDeletedSurveys: vi.fn(),
 }));
 
 vi.mock('@/server/read-models/responses', () => ({
@@ -54,6 +56,8 @@ vi.mock('@/db', () => ({
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
 import {
+  countDeletedSurveys,
+  getDeletedSurveys,
   getScopedSurveys,
   getSurveyWithDetails as getSurveyWithDetailsData,
 } from '@/server/read-models/survey-structure';
@@ -130,6 +134,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       ownerUserId: 'u-1',
       ownerName: '홍길동',
       surveyGroupId: null,
+      deletedAt: null,
       ...over,
     };
   }
@@ -144,6 +149,8 @@ describe('survey-read.service getSurveyListWithCounts', () => {
     vi.mocked(listActiveTeams).mockResolvedValue([]);
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(new Map());
     vi.mocked(getScopedSurveys).mockResolvedValue([]);
+    vi.mocked(getDeletedSurveys).mockResolvedValue([]);
+    vi.mocked(countDeletedSurveys).mockResolvedValue(0);
   });
 
   it('해석된 범위로 조회하고 전체/완료 응답 수를 병합한다', async () => {
@@ -187,6 +194,8 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         ownerName: '홍길동',
         // 소속 그룹도 화면 편의다(그룹 화면 좁힘·케밥의 현재 그룹, 티켓 12).
         surveyGroupId: null,
+        // 일반 목록의 행은 언제나 null — 화면이 이 값으로 휴지통 여부를 가른다(티켓 17).
+        deletedAt: null,
       },
     ]);
   });

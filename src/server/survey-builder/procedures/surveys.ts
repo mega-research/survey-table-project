@@ -1,6 +1,6 @@
 import { ORPCError } from '@orpc/server';
 
-import { authed } from '@/server/orpc';
+import { authed, superadmin } from '@/server/orpc';
 import {
   assertSurveyCapabilityRpc,
   toRpcSurveyAccessError,
@@ -71,13 +71,38 @@ const update = authed
   });
 
 // delete 는 예약어이므로 export 키는 del 로 둔다(router 접근 경로는 surveys.delete).
+//
+// 티켓 17 부터 실제 동작은 soft delete 다 — 관문·요구 capability·응답 모양은 그대로다.
 const del = authed
   .input(SurveyIdInput)
   .output(DeleteSurveyOutput)
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.delete');
-    return svc.deleteSurvey(input);
+    return svc.deleteSurvey(input).catch((error: unknown) => {
+      // 관문을 지난 뒤 다른 요청이 먼저 지운 경우 — 관문의 어휘로 되돌린다.
+      throw toRpcSurveyAccessError(error);
+    });
   });
+
+/**
+ * 삭제 취소 (티켓 17) — **슈퍼어드민 전용**.
+ *
+ * capability 관문을 쓸 수 없다. 코어가 삭제된 설문을 조회 단계에서 `deleted_at IS NULL` 로
+ * 걸러 언제나 not_found 를 주기 때문이고, 그 필터를 느슨하게 하면 삭제가 「안 보인다」는
+ * 성질 자체가 무너진다. 그래서 이 표면만 판정 축을 팀이 아니라 전역 권한으로 바꾼다 —
+ * 삭제된 설문 목록도 같은 이유로 시스템 전체 보기 + 슈퍼어드민에서만 열린다.
+ *
+ * 소유자·팀장에게 열지 않는 것은 의도다. 삭제가 사고였다면 되돌릴 사람은 있지만, 되돌리는
+ * 일이 흔해지면 「삭제」가 실질적으로 아카이브가 되어 팀이 그것을 정리 수단으로 쓰기 시작한다.
+ */
+const restore = superadmin
+  .input(SurveyIdInput)
+  .output(DeleteSurveyOutput)
+  .handler(({ input }) =>
+    svc.restoreSurvey(input).catch((error: unknown) => {
+      throw toRpcSurveyAccessError(error);
+    }),
+  );
 
 // 복제는 원본 읽기 권한 검사가 서비스 안(원본 조회 직전)에 있다 — 사유만 RPC 어휘로 옮긴다.
 const duplicate = authed
@@ -96,5 +121,6 @@ export const surveys = {
   create,
   update,
   delete: del,
+  restore,
   duplicate,
 };

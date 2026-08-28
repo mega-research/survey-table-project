@@ -8,6 +8,7 @@ vi.mock('../services/surveys', () => ({
   createSurvey: vi.fn(),
   updateSurvey: vi.fn(),
   deleteSurvey: vi.fn(),
+  restoreSurvey: vi.fn(),
   duplicateSurvey: vi.fn(),
 }));
 
@@ -228,6 +229,81 @@ describe('surveyBuilder.surveys — capability 관문 (티켓 09)', () => {
     vi.mocked(svc.duplicateSurvey).mockRejectedValue(new SurveyAccessError('not_found'));
     const client = createRouterClient({ surveys }, { context: authedContext() });
     await expect(client.surveys.duplicate({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+});
+
+/**
+ * 삭제 취소 (티켓 17).
+ *
+ * 여기서 고정하는 것은 **판정 축이 팀이 아니라 전역 권한**이라는 사실이다. capability 관문을
+ * 쓸 수 없는 유일한 설문 표면이라(코어가 삭제된 설문을 조회 단계에서 걸러 언제나 not_found
+ * 를 준다) 베이스가 유일한 방어선이고, authed 로 내려가는 순간 아무도 눈치채지 못한다.
+ */
+describe('surveyBuilder.surveys.restore — 슈퍼어드민 전용 (티켓 17)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function superadminContext(): ORPCContext {
+    return {
+      db: {} as never,
+      user: {
+        id: 'su-1',
+        email: 'su@megaresearch.co.kr',
+        name: '슈퍼어드민',
+        status: 'active',
+        isSuperadmin: true,
+        userType: 'internal',
+      },
+    };
+  }
+
+  it('슈퍼어드민은 service.restoreSurvey 에 위임한다', async () => {
+    vi.mocked(svc.restoreSurvey).mockResolvedValue(undefined as never);
+    const client = createRouterClient({ surveys }, { context: superadminContext() });
+
+    await client.surveys.restore({ surveyId: SURVEY_ID });
+
+    expect(svc.restoreSurvey).toHaveBeenCalledWith({ surveyId: SURVEY_ID });
+    // capability 관문은 쓰지 않는다 — 쓰면 삭제된 설문이라 언제나 NOT_FOUND 가 된다.
+    expect(assertSurveyCapabilityRpc).not.toHaveBeenCalled();
+  });
+
+  it('일반 사용자는 FORBIDDEN — service 에 닿지 않는다', async () => {
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+
+    await expect(client.surveys.restore({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.restoreSurvey).not.toHaveBeenCalled();
+  });
+
+  it('비로그인은 UNAUTHORIZED', async () => {
+    const client = createRouterClient({ surveys }, { context: anonContext() });
+
+    await expect(client.surveys.restore({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(svc.restoreSurvey).not.toHaveBeenCalled();
+  });
+
+  it('이미 살아 있는 설문(service 의 not_found)은 NOT_FOUND 로 나간다', async () => {
+    vi.mocked(svc.restoreSurvey).mockRejectedValue(new SurveyAccessError('not_found'));
+    const client = createRouterClient({ surveys }, { context: superadminContext() });
+
+    await expect(client.surveys.restore({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('delete 도 service 의 not_found 를 NOT_FOUND 로 옮긴다 — 경합으로 먼저 지워진 경우', async () => {
+    // clearAllMocks 는 구현을 지우지 않는다 — 앞 describe 가 심은 거부가 남아 있으면
+    // 관문에서 먼저 떨어져 이 케이스가 검증하려는 자리에 닿지 못한다.
+    vi.mocked(assertSurveyCapabilityRpc).mockResolvedValue(undefined);
+    vi.mocked(svc.deleteSurvey).mockRejectedValue(new SurveyAccessError('not_found'));
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+
+    await expect(client.surveys.delete({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });

@@ -61,6 +61,13 @@ export interface SurveyListItem {
    * 그룹 id 는 서버가 null 로 접어 보낸다.
    */
   surveyGroupId: string | null;
+  /**
+   * 삭제 시각 — **삭제됨 목록에서만** 채워진다(티켓 17).
+   *
+   * 일반 목록의 행은 언제나 null 이다(조회 조건이 `deleted_at IS NULL`). 그래서 화면은
+   * 이 값 하나로 「지금 휴지통을 보고 있는가」를 알 수 있고, 카드가 복구 액션으로 갈린다.
+   */
+  deletedAt: Date | null;
 }
 
 /**
@@ -76,6 +83,14 @@ export interface SurveyListResult {
   /** 「메가리서치」(시스템 전체 보기)를 고를 수 있는가. */
   canSeeSystemScope: boolean;
   surveys: SurveyListItem[];
+  /**
+   * 삭제된 설문 건수 — **null 이면 이 화면에 휴지통이 없다**(티켓 17).
+   *
+   * 숫자가 아니라 null 로 부재를 말하는 것은, 화면이 「0건짜리 휴지통 칩」과 「휴지통을 볼 수
+   * 없는 사람」을 갈라야 하기 때문이다. 채워지는 것은 슈퍼어드민의 시스템 전체 보기뿐이다 —
+   * 삭제된 설문은 팀 경계로 좁힐 수 없어(해산된 팀의 것일 수도 있다) 팀 화면에 둘 자리가 없다.
+   */
+  deletedCount: number | null;
 }
 
 /**
