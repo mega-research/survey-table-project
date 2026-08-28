@@ -37,6 +37,10 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
+vi.mock('@/server/read-models/survey-owner-email', () => ({
+  getSurveyOwnerEmail: vi.fn(),
+}));
+
 vi.mock('@/db', () => ({
   db: {
     query: {
@@ -65,6 +69,7 @@ import { getActiveTeamMemberships } from '@/server/read-models/team-memberships'
 import { listActiveTeams } from '@/server/read-models/teams';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
+import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 
 import * as readModels from '@/server/read-models/survey-structure';
 
@@ -707,5 +712,98 @@ describe('survey-read.service getSurveyForResponse control', () => {
       testSession: 'valid',
       testSessionKind: 'anonymous',
     });
+  });
+});
+
+// 응답자 화면의 문의 이메일은 **설정값이 없으면 현재 소유자**로 해석된다(티켓 20).
+// 스냅샷에 박아 두면 소유권 이전이 반영되지 않고, surveys 행에 채워 넣으면 빌더 설정
+// 패널이 「미설정인데 값이 보이는」 화면이 된다 — 그래서 pub 조회 시점에만 겹쳐 준다.
+describe('survey-read.service getSurveyForResponse contactEmail 소유자 연동', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getSurveyOwnerEmail).mockReset();
+  });
+
+  const SETTINGS = {
+    isPublic: true,
+    allowMultipleResponses: false,
+    showProgressBar: true,
+    shuffleQuestions: false,
+    requireLogin: false,
+    thankYouMessage: '감사합니다',
+  };
+
+  function publishedSurvey(contactEmail: string | null) {
+    surveysFindFirst.mockResolvedValue({
+      id: 'survey-contact-1',
+      currentVersionId: 'ver-contact',
+      requireInviteToken: false,
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail,
+      lookups: [],
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    surveyVersionsFindFirst.mockResolvedValue({
+      id: 'ver-contact',
+      snapshot: { title: '설문', questions: [], groups: [], settings: SETTINGS },
+    });
+  }
+
+  it('문의 이메일이 비어 있으면 현재 소유자 이메일로 채운다', async () => {
+    publishedSurvey(null);
+    vi.mocked(getSurveyOwnerEmail).mockResolvedValue('owner@example.com');
+
+    const result = await getSurveyForResponse({ surveyId: 'survey-contact-1' });
+
+    expect(result?.survey.contactEmail).toBe('owner@example.com');
+    expect(getSurveyOwnerEmail).toHaveBeenCalledWith('survey-contact-1');
+  });
+
+  it('문의 이메일이 설정돼 있으면 소유자를 조회하지 않는다', async () => {
+    publishedSurvey('help@example.kr');
+    vi.mocked(getSurveyOwnerEmail).mockResolvedValue('owner@example.com');
+
+    const result = await getSurveyForResponse({ surveyId: 'survey-contact-1' });
+
+    expect(result?.survey.contactEmail).toBe('help@example.kr');
+    expect(getSurveyOwnerEmail).not.toHaveBeenCalled();
+  });
+
+  it('소유자가 없으면 null 그대로 — 화면이 문의 안내를 감춘다', async () => {
+    publishedSurvey(null);
+    vi.mocked(getSurveyOwnerEmail).mockResolvedValue(null);
+
+    const result = await getSurveyForResponse({ surveyId: 'survey-contact-1' });
+
+    expect(result?.survey.contactEmail).toBeNull();
+  });
+
+  it('미배포 설문 fallback 경로에도 같은 규칙이 선다', async () => {
+    surveysFindFirst.mockResolvedValue({
+      id: 'survey-draft-1',
+      currentVersionId: null,
+      requireInviteToken: false,
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: null,
+      quotaConfig: null,
+      lookups: [],
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    vi.mocked(getSurveyWithDetailsData).mockResolvedValue({
+      id: 'survey-draft-1',
+      title: '초안',
+      contactEmail: null,
+    } as unknown as SurveyType);
+    vi.mocked(getSurveyOwnerEmail).mockResolvedValue('owner@example.com');
+
+    const result = await getSurveyForResponse({ surveyId: 'survey-draft-1' });
+
+    expect(result?.survey.contactEmail).toBe('owner@example.com');
   });
 });

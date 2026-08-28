@@ -15,6 +15,7 @@ import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from './recipient-status-transition';
+import { resolveSendReplyTo } from './reply-to';
 import { renderForCampaignSend } from './render-for-send';
 import {
   RetryableCampaignSendError,
@@ -741,9 +742,16 @@ export async function dispatchCampaignChunk(
   const from = fromDomain
     ? `${campaign.fromNameSnapshot} <${campaign.fromLocalSnapshot}@${fromDomain}>`
     : null;
-  const replyTo =
-    campaign.replyToSnapshot
-    ?? (fromDomain ? `${campaign.fromLocalSnapshot}@${fromDomain}` : null);
+  // 회신 주소만 스냅샷이 아니라 **발송 시점**에 해석된다(티켓 20) — 소유권이 이전되면
+  // 그 다음 발송분부터 새 소유자에게 답장이 간다. 발신 주소(from)·제목·본문은 종전대로
+  // 스냅샷 그대로다. 이미 claim 된 recipient 는 sendPayloadSnapshot 의 값을 쓰므로
+  // 재시도가 회신 주소를 바꾸지도 않는다.
+  const replyTo = await resolveSendReplyTo({
+    surveyId: campaign.surveyId,
+    replyTo: campaign.replyToSnapshot,
+    fromLocal: campaign.fromLocalSnapshot,
+    fromDomain,
+  });
 
   const proposedSends = await Promise.all(
     activeRows.map(async (row): Promise<{

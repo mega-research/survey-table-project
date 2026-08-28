@@ -27,6 +27,7 @@ vi.mock('../team-management/queries/use-teams', () => ({
 }));
 
 import { ReassignmentView } from './reassignment-view';
+import { SUCCESSION_REPLY_WARNING } from './reassignment-vocabulary';
 
 const USER = {
   userId: '11111111-1111-4111-8111-111111111111',
@@ -42,8 +43,21 @@ const SURVEY = {
   ownerUserId: null,
   ownerName: null,
   ownerIsUnassigned: false,
+  pendingKind: 'assignment' as const,
+  teamName: null,
   previousTeamName: '연구1본부 - 1팀',
   updatedAt: '2026-08-27T00:00:00.000Z',
+};
+
+/** 소유자만 잃은 설문 — 팀은 그대로다(티켓 19 승계 대기). */
+const SUCCESSION_SURVEY = {
+  ...SURVEY,
+  surveyId: '33333333-3333-4333-8333-333333333333',
+  title: '고객 만족도 조사',
+  ownerName: '박도윤',
+  pendingKind: 'succession' as const,
+  teamName: '연구2본부 - 3팀',
+  previousTeamName: null,
 };
 
 function mockInbox(overrides: Record<string, unknown> = {}) {
@@ -147,5 +161,41 @@ describe('ReassignmentView', () => {
     // 팀 도입 이전 백필분은 owner_user_id 가 NULL 이다 — 「소유자 없음」은 오류처럼 읽힌다.
     const row = screen.getByText('브랜드 인지도 조사').closest('div')!.parentElement!;
     expect(within(row.parentElement!).getByText('메가리서치')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 승계 대기는 배치 대기와 같은 목록에 서지만 상태 표기가 갈린다 — 팀이 멀쩡한 설문을 두고
+ * 「팀이 없어졌다」고 말하면 안 되고, 떠난 소유자에게 회신이 계속 간다는 사실(티켓 20)을
+ * 인박스가 말해야 한다.
+ */
+describe('ReassignmentView 승계 대기', () => {
+  it('승계 대기 설문은 상태 필과 소속 팀을 따로 적는다', async () => {
+    mockInbox({ pendingSurveys: [SUCCESSION_SURVEY] });
+    render(<ReassignmentView />);
+
+    await userEvent.click(screen.getByRole('button', { name: /배치 대기 설문/ }));
+
+    expect(screen.getByText('승계 대기')).toBeInTheDocument();
+    expect(screen.getByText('연구2본부 - 3팀')).toBeInTheDocument();
+    expect(screen.queryByText(/\(해산\)/)).not.toBeInTheDocument();
+  });
+
+  it('회신 주소가 아직 이전 소유자라고 경고한다', async () => {
+    mockInbox({ pendingSurveys: [SUCCESSION_SURVEY] });
+    render(<ReassignmentView />);
+
+    await userEvent.click(screen.getByRole('button', { name: /배치 대기 설문/ }));
+
+    expect(screen.getByText(SUCCESSION_REPLY_WARNING)).toBeInTheDocument();
+  });
+
+  it('배치 대기 설문에는 그 경고가 없다', async () => {
+    render(<ReassignmentView />);
+
+    await userEvent.click(screen.getByRole('button', { name: /배치 대기 설문/ }));
+
+    expect(screen.getByText('배치 대기')).toBeInTheDocument();
+    expect(screen.queryByText(SUCCESSION_REPLY_WARNING)).not.toBeInTheDocument();
   });
 });

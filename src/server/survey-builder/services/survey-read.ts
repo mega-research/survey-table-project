@@ -10,6 +10,7 @@ import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
 import { isValidTestToken } from '@/server/read-models/survey-control';
+import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import {
   getQuestionGroupsBySurvey,
@@ -352,7 +353,10 @@ export async function getSurveyForResponse(
           survey.quotaConfig && survey.quotaConfig.enabled
             ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
             : null,
-        contactEmail: survey.contactEmail ?? null,
+        // 문의 이메일만 스냅샷 원칙 밖이다(티켓 20) — 미설정이면 **현재** 소유자로 해석한다.
+        // 스냅샷에 굳히면 소유권 이전이 응답 화면에 영영 반영되지 않고, 설정값이 있으면
+        // 그것이 답이라 조회 자체를 하지 않는다(지연 평가).
+        contactEmail: survey.contactEmail ?? (await getSurveyOwnerEmail(surveyId)),
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
       };
@@ -372,7 +376,12 @@ export async function getSurveyForResponse(
       ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
       : null;
 
-  return { survey: { ...surveyData, quotaGate }, versionId: null, control };
+  // 미배포 경로도 같은 규칙이다 — 두 갈래가 갈리면 publish 전후로 문의 안내가 달라진다.
+  // 겹치는 것은 **pub 조회**뿐이다: 빌더가 쓰는 getSurveyWithDetails 는 그대로 둔다
+  // (거기까지 채우면 설정 패널이 「미설정인데 값이 보이는」 화면이 된다).
+  const contactEmail = surveyData.contactEmail ?? (await getSurveyOwnerEmail(surveyId));
+
+  return { survey: { ...surveyData, quotaGate, contactEmail }, versionId: null, control };
 }
 
 // ========================

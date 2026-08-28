@@ -16,7 +16,12 @@ import {
   VisibilityField,
   useAssignmentFields,
 } from './assignment-fields';
-import { PENDING_OWNER_FALLBACK, formatPreviousTeam } from './reassignment-vocabulary';
+import {
+  PENDING_KIND_LABEL,
+  PENDING_OWNER_FALLBACK,
+  SUCCESSION_REPLY_WARNING,
+  formatPendingTeam,
+} from './reassignment-vocabulary';
 import { usePendingSurvey, useAssignSurveys } from './queries/use-reassignment';
 
 /** 현재 상태 요약 — 바뀌는 것 둘과 바뀌지 않는 것 하나 (.pen 8-4). */
@@ -115,16 +120,13 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
             재배치 센터
           </Link>
           <span className="px-1.5">/</span>
-          <span>배치 대기 설문</span>
+          <span>{PENDING_KIND_LABEL[survey.pendingKind]} 설문</span>
         </nav>
 
         <h1 className="text-[22px] font-semibold text-[#1C1C1E]">{survey.title}</h1>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <StatusCard
-            label="현재 소유 팀"
-            value={`${formatPreviousTeam(survey.previousTeamName)} · 배치 대기`}
-          />
+          <StatusCard label="현재 소유 팀" value={formatPendingTeam(survey)} />
           <StatusCard
             icon={<Users className="h-3.5 w-3.5" />}
             label="현재 소유자"
@@ -138,6 +140,14 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
             value="응답 · 게스트 · 메일 계속"
           />
         </div>
+
+        {/* 소유자만 비었을 뿐 설문은 계속 돈다 — 회신·문의가 아직 이전 소유자에게 간다는
+            사실을 여기서도 말한다(티켓 20). 인박스와 같은 문구를 쓴다. */}
+        {survey.pendingKind === 'succession' && (
+          <p className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-[14px] py-[11px] text-[12.5px] text-[#B45309]">
+            {SUCCESSION_REPLY_WARNING}
+          </p>
+        )}
 
         <form
           onSubmit={handleSubmit}

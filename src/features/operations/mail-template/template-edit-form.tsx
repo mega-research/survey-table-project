@@ -90,7 +90,6 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
     state.subject.trim().length > 0 &&
     state.fromLocal.trim().length > 0 &&
     state.fromName.trim().length > 0 &&
-    state.replyTo.trim().length > 0 &&
     !isUploading &&
     !pending;
 

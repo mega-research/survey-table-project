@@ -150,10 +150,14 @@ async function loadPendingSurveys(where: SQL | undefined = PENDING_SURVEY_WHERE)
       ownerUserId: surveys.ownerUserId,
       ownerName: users.name,
       ownerHasTeam: exists(activeMembershipOf(users.id)),
+      assignmentStatus: surveys.assignmentStatus,
+      // 승계 대기는 팀을 그대로 갖는다 — 화면이 「이전 소속 (해산)」으로 적으면 거짓말이 된다.
+      teamName: teams.name,
       updatedAt: surveys.updatedAt,
     })
     .from(surveys)
     .leftJoin(users, eq(users.id, surveys.ownerUserId))
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
     .where(where)
     .orderBy(desc(surveys.updatedAt))
     .limit(INBOX_PAGE_SIZE);
@@ -197,6 +201,10 @@ function toPendingSurveyItem(
     ownerName: row.ownerName,
     // 소유자가 없는 설문(팀 도입 이전 백필분)은 「미배치」가 아니라 소유자 자체가 없는 것이다.
     ownerIsUnassigned: row.ownerUserId !== null && !row.ownerHasTeam,
+    // 배치 상태를 먼저 본다 — 둘 다 대기인 설문(해산된 팀의 설문을 소유자도 함께 떠난 경우)은
+    // 팀부터 정해야 하므로 「배치 대기」가 더 급한 사실이다.
+    pendingKind: row.assignmentStatus === 'assignment_pending' ? 'assignment' : 'succession',
+    teamName: row.teamName,
     previousTeamName,
     updatedAt: row.updatedAt.toISOString(),
   };

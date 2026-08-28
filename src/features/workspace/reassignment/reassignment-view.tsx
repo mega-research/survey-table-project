@@ -12,7 +12,12 @@ import type {
   UnassignedUserItem,
 } from '@/shared/contracts/workspace-io';
 
-import { PENDING_OWNER_FALLBACK, formatPreviousTeam } from './reassignment-vocabulary';
+import {
+  PENDING_KIND_LABEL,
+  PENDING_OWNER_FALLBACK,
+  SUCCESSION_REPLY_WARNING,
+  formatPreviousTeam,
+} from './reassignment-vocabulary';
 import { SurveyAssignBar } from './survey-assign-bar';
 import { UserAssignModal } from './user-assign-modal';
 import { useReassignmentInbox } from './queries/use-reassignment';
@@ -182,12 +187,19 @@ function PendingSurveyTable({
                 {survey.title}
               </Link>
               <span className="text-[11.5px] text-[#9CA3AF]">
-                {formatPreviousTeam(survey.previousTeamName)} · 미분류
+                {survey.pendingKind === 'succession'
+                  ? (survey.teamName ?? '소속 팀 없음')
+                  : `${formatPreviousTeam(survey.previousTeamName)} · 미분류`}
               </span>
+              {/* 승계 대기 설문은 떠난 소유자가 컬럼에 남아 있어 메일 회신·문의가 계속 그
+                  주소로 간다(티켓 20). 인박스에서 말하지 않으면 아무도 모른다. */}
+              {survey.pendingKind === 'succession' && (
+                <span className="text-[11.5px] text-[#B45309]">{SUCCESSION_REPLY_WARNING}</span>
+              )}
             </div>
             <span className="w-[130px] shrink-0">
               <span className="rounded-full bg-[#FEF3C7] px-[9px] py-1 text-[11px] font-semibold text-[#B45309]">
-                배치 대기
+                {PENDING_KIND_LABEL[survey.pendingKind]}
               </span>
             </span>
             <span className="w-[160px] shrink-0 text-[12.5px] text-[#374151]">

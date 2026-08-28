@@ -268,6 +268,13 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
 }));
 
+// 회신 주소는 발송 시점에 소유자를 조인해 해석한다(티켓 20) — 이 스위트의 @/db mock 은
+// select 체인을 발송 경로 모양으로만 흉내내므로 read-model 을 모듈 단위로 고정한다.
+// null 이면 fromLocal@domain 폴백이라 이 파일들이 검증하던 발송 동작은 그대로다.
+vi.mock('@/server/read-models/survey-owner-email', () => ({
+  getSurveyOwnerEmail: vi.fn(async () => null),
+}));
+
 vi.mock('@react-email/render', () => ({
   render: renderMock,
 }));

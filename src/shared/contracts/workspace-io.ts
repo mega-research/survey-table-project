@@ -321,6 +321,17 @@ export const PendingSurveyItem = z.object({
   ownerName: z.string().nullable(),
   /** 소유자도 지금 미배치인가 (.pen 8-4 의 `박도윤 · 미배치 (해산)`). */
   ownerIsUnassigned: z.boolean(),
+  /**
+   * 왜 인박스에 서 있는가 — 팀을 잃었는가(해산, 티켓 13) 소유자를 잃었는가(퇴사, 티켓 19).
+   *
+   * 처리자가 하는 일은 같아 목록도 하나지만(PENDING_SURVEY_WHERE) **상태 표기와 경고는
+   * 갈린다**. 승계 대기 설문은 팀을 그대로 갖고 있고, 소유자 컬럼에는 떠난 사람이 남아 있어
+   * 발송되는 메일의 회신이 계속 그 주소로 간다(티켓 20). 그 사실을 말하지 않으면 인박스는
+   * 「나중에 해도 되는 정리 목록」으로 읽힌다.
+   */
+  pendingKind: z.enum(['assignment', 'succession']),
+  /** 현재 소유 팀 이름. 배치 대기는 팀이 없어 null, 승계 대기는 팀을 그대로 갖는다. */
+  teamName: z.string().nullable(),
   /** 감사(survey_ownership_events)에서 되짚은 출신 팀. 설문 행에는 남지 않는다. */
   previousTeamName: z.string().nullable(),
   updatedAt: z.string(),
