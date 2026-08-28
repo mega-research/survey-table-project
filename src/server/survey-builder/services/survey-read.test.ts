@@ -135,6 +135,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       ownerName: '홍길동',
       surveyGroupId: null,
       deletedAt: null,
+      isParticipant: false,
       ...over,
     };
   }
@@ -196,6 +197,8 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         surveyGroupId: null,
         // 일반 목록의 행은 언제나 null — 화면이 이 값으로 휴지통 여부를 가른다(티켓 17).
         deletedAt: null,
+        // 참여자 여부는 카드 버튼 노출 근사가 본다(티켓 18).
+        isParticipant: false,
       },
     ]);
   });
@@ -230,7 +233,8 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       null,
     );
 
-    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all' });
+    // viewerId 는 좁히는 조건이 아니라 「내가 참여자인가」 투영의 입력이다(티켓 18).
+    expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all', viewerId: 'su-1' });
     expect(result.scope).toEqual({ kind: 'system' });
     expect(result.canSeeSystemScope).toBe(true);
     expect(result.teams).toEqual([{ id: 'team-9', name: '연구3본부 - 7팀' }]);

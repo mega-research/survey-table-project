@@ -1,10 +1,18 @@
 import { cache } from 'react';
 
-import { type SQL, and, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { type SQL, and, count, desc, eq, exists, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveyGroups, surveys, teams, users } from '@/db/schema';
+import {
+  questionGroups,
+  questions,
+  surveyGroups,
+  surveyParticipants,
+  surveys,
+  teams,
+  users,
+} from '@/db/schema';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { SurveyScopeFilter } from '@/server/work-scope';
@@ -19,6 +27,31 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 // 무범위 목록(구 getSurveys)은 제거됐다(티켓 09) — 마지막 소비자였던 분석 대시보드가
 // 작업 범위 목록(getSurveyListWithCounts)으로 옮겨 갔다. 목록은 항상 범위를 지나야 한다.
+
+/**
+ * 「내가 이 설문의 참여자인가」 — 목록 조건과 투영이 함께 쓰는 조각 (티켓 18).
+ *
+ * 배치 대기 설문을 제외하는 것이 조건의 일부다. 판정 코어가 `assignment_pending` 을
+ * 참여자 분기보다 **먼저** 차단하므로(팀이 정해지기 전에는 아무도 못 연다, ADR-0006),
+ * 목록만 보여주면 열리지 않는 카드가 그려진다.
+ */
+function invitedToSurvey(viewerId: string): SQL {
+  return and(
+    eq(surveys.assignmentStatus, 'assigned'),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(surveyParticipants)
+        .where(
+          and(
+            eq(surveyParticipants.surveyId, surveys.id),
+            eq(surveyParticipants.userId, viewerId),
+            eq(surveyParticipants.kind, 'member'),
+          ),
+        ),
+    ),
+  )!;
+}
 
 /**
  * 목록 두 벌이 함께 쓰는 투영 (티켓 17).
@@ -37,8 +70,22 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
  * import 시점에 스키마가 필요해져, `@/db/schema` 를 부분 모킹하는 테스트가 이 모듈을
  * 체인에 들이는 순간 「No "teams" export」로 깨진다. 쿼리를 만들 때 부르면 종전과 같다.
  */
-function surveyListColumns() {
+function surveyListColumns(viewerId: string | null) {
   return {
+    /**
+     * 내가 이 설문의 참여자인가 (티켓 18) — 카드의 버튼 노출 근사가 본다.
+     *
+     * 참여자는 `responses.view` 를 갖지만 팀원은 못 갖는다. 이 값이 없으면 카드가 둘을
+     * 구별할 수 없어 초대받은 사람에게 「분석」이 잠긴 채로 보인다(티켓 16 주석의 예고).
+     * 휴지통 목록은 viewerId 를 주지 않는다 — 복구 말고 할 수 있는 일이 없다.
+     */
+    isParticipant:
+      viewerId === null
+        ? sql<boolean>`false`
+        : sql<boolean>`exists (
+            select 1 from survey_participants sp
+            where sp.survey_id = ${surveys.id} and sp.user_id = ${viewerId} and sp.kind = 'member'
+          )`,
     id: surveys.id,
     title: surveys.title,
     description: surveys.description,
@@ -73,19 +120,22 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
   if (filter.kind === 'team') {
-    conditions.push(eq(surveys.teamId, filter.teamId));
-    if (!filter.seesInviteOnly) {
-      // invite_only 는 소유 팀 팀원에게만 숨긴다 — 자기가 소유한 설문은 남는다(스펙 §3).
-      // 참여자로 초대돼 보이는 타 팀 설문은 티켓 18 이 이 자리에 UNION 으로 붙인다.
-      conditions.push(
-        or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, filter.viewerId))!,
-      );
-    }
+    // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
+    // 초대는 팀 축 밖의 접근이라 팀 조건을 좁히는 대신 OR 로 잇는다.
+    const inTeam = filter.seesInviteOnly
+      ? eq(surveys.teamId, filter.teamId)
+      : // invite_only 는 소유 팀 팀원에게만 숨긴다 — 자기가 소유한 설문은 남는다(스펙 §3).
+        and(
+          eq(surveys.teamId, filter.teamId),
+          or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, filter.viewerId)),
+        )!;
+
+    conditions.push(or(inTeam, invitedToSurvey(filter.viewerId))!);
   }
 
   return db
     .select({
-      ...surveyListColumns(),
+      ...surveyListColumns(filter.viewerId),
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
@@ -116,7 +166,7 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 export async function getDeletedSurveys() {
   return db
     .select({
-      ...surveyListColumns(),
+      ...surveyListColumns(null),
       // 삭제된 설문에 폴더를 보여줘도 그 폴더 화면에서는 안 보여 갈 곳 없는 링크가 된다.
       surveyGroupId: sql<string | null>`null::uuid`,
     })

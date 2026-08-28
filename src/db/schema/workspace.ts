@@ -11,6 +11,8 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type {
+  SurveyGuestTabs,
+  SurveyParticipantKind,
   TeamLifecycleAction,
   TeamLifecycleMetadata,
   TeamRole,
@@ -18,6 +20,7 @@ import type {
 } from '@/shared/contracts/workspace';
 
 import { users } from './auth';
+import { surveys } from './surveys';
 
 /**
  * 팀 — 설문 소유·접근의 최소 워크스페이스이자 기본 접근 경계 (마이그레이션 0088).
@@ -122,5 +125,44 @@ export const surveyGroups = pgTable(
   (t) => [
     uniqueIndex('survey_groups_team_name_uq').on(t.teamId, t.name),
     index('survey_groups_team_order_idx').on(t.teamId, t.order),
+  ],
+);
+
+/**
+ * 설문 단위 부여 — 참여자·게스트·실사 통합 (마이그레이션 0092, 티켓 18).
+ *
+ * **팀 경계를 넘는 유일한 접근 경로다.** 지금까지 설문 접근은 전부 `surveys.teamId` 를 지나
+ * 판정됐는데(ADR-0006·0008) 이 테이블만 그 축 밖에 있다 — 타 팀 사람을 그 설문 하나에만
+ * 들인다. 그래서 여기 행이 생기는 것과 팀 멤버십이 생기는 것은 전혀 다른 일이고,
+ * 초대는 `team_members` 에 아무것도 쓰지 않는다.
+ *
+ * `kind` 와 `users.userType` 의 정합은 **서비스가 지킨다** — 두 테이블에 걸친 조건이라
+ * CHECK 로 걸 수 없다(0092 헤더 참조).
+ */
+export const surveyParticipants = pgTable(
+  'survey_participants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 설문이 하드 삭제되면 부여도 의미가 없다 — 앱의 삭제는 soft 라 사실상 안 쓰이는 경로다. */
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    kind: text('kind').$type<SurveyParticipantKind>().notNull(),
+    /** kind='guest' 전용 현황 탭 화이트리스트 — 티켓 21 이 소비한다. */
+    guestTabs: jsonb('guest_tabs').$type<SurveyGuestTabs>(),
+    addedBy: uuid('added_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 한 사람이 한 설문에 두 자격으로 서지 않는다 — kind 를 키에 넣지 않는 것이 의도다.
+    uniqueIndex('survey_participants_survey_user_uq').on(t.surveyId, t.userId),
+    index('survey_participants_survey_kind_idx').on(t.surveyId, t.kind),
+    // "내가 초대받은 설문" 을 뒤집어 읽는 목록 조회가 이 인덱스를 탄다.
+    index('survey_participants_user_idx').on(t.userId),
   ],
 );

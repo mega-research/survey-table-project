@@ -7,7 +7,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SurveyAssignmentStatus, SurveyVisibility } from '@/shared/contracts/workspace';
+import type {
+  SurveyAssignmentStatus,
+  SurveyParticipantKind,
+  SurveyVisibility,
+} from '@/shared/contracts/workspace';
 
 interface Row {
   id: string;
@@ -15,6 +19,8 @@ interface Row {
   visibility: SurveyVisibility;
   ownerUserId: string | null;
   assignmentStatus: SurveyAssignmentStatus;
+  /** LEFT JOIN survey_participants 의 결과 — 초대가 없으면 null (티켓 18). */
+  participantKind: SurveyParticipantKind | null;
 }
 
 const surveyRows: Row[] = [];
@@ -24,7 +30,11 @@ vi.mock('@/db', () => {
     const rows = Promise.resolve(surveyRows);
     return Object.assign(rows, { limit: () => Promise.resolve(surveyRows.slice(0, 1)) });
   };
-  return { db: { select: () => ({ from: () => ({ where: result }) }) } };
+  // 참여 행은 설문 행과 **같은 쿼리**에서 LEFT JOIN 으로 읽는다(티켓 18) — 목도 그 사슬을
+  // 흉내내야 한다. 조인을 무시하고 통과시키는 것이 맞다: 여기서 검증하는 것은 SQL 이 아니라
+  // 판정이고, 행이 들고 오는 participantKind 를 테스트가 직접 정한다.
+  const chain = { where: result, leftJoin: () => ({ where: result }) };
+  return { db: { select: () => ({ from: () => chain }) } };
 });
 
 vi.mock('./read-models/team-memberships', () => ({ getActiveTeamMemberships: vi.fn() }));
@@ -47,6 +57,7 @@ const MISSING = 'cccccccc-3333-4333-8333-333333333333';
 
 function row(over: Partial<Row> & { id: string }): Row {
   return {
+    participantKind: null,
     teamId: TEAM_ID,
     visibility: 'team',
     ownerUserId: null,

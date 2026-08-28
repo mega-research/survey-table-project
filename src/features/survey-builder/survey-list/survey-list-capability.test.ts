@@ -14,6 +14,7 @@ const teamSurvey: SurveyCardCapabilitySubject = {
   ownerUserId: 'owner-1',
   visibility: 'team',
   teamId: 'team-1',
+  isParticipant: false,
 };
 
 const teamScope: WorkScope = { kind: 'team', teamId: 'team-1' };
@@ -115,5 +116,39 @@ describe('전권 세 열 근사 — 분석 · 공유 범위', () => {
     expect(canEditSurveyCard(teamSurvey, v)).toBe(true);
     expect(canViewSurveyAnalyticsCard(teamSurvey, v)).toBe(false);
     expect(canManageSurveyAccessCard(teamSurvey, v)).toBe(false);
+  });
+});
+
+/**
+ * 참여자(티켓 18)가 세 근사를 처음으로 **갈라놓는다**. 티켓 16 당시 두 근사는 결과가 같고
+ * 이유만 달랐는데, 목록이 참여 행을 싣게 되면서 그 차이가 실제로 드러난다.
+ */
+describe('참여자 — 팀 축 밖의 접근', () => {
+  const invited: SurveyCardCapabilitySubject = {
+    ownerUserId: 'owner-1',
+    visibility: 'invite_only',
+    // 남의 팀 설문이다 — 지금 보고 있는 범위(team-1)와 소유 팀이 다르다.
+    teamId: 'team-9',
+    isParticipant: true,
+  };
+
+  it('타 팀 초대 설문을 편집·분석할 수 있다 — 팀도 공개 범위도 묻지 않는다', () => {
+    const v = viewer();
+    expect(canEditSurveyCard(invited, v)).toBe(true);
+    expect(canViewSurveyAnalyticsCard(invited, v)).toBe(true);
+  });
+
+  it('공개 범위는 못 바꾼다 — 여기서 분석 근사와 갈린다', () => {
+    const v = viewer();
+    expect(canViewSurveyAnalyticsCard(invited, v)).toBe(true);
+    expect(canManageSurveyAccessCard(invited, v)).toBe(false);
+  });
+
+  it('초대가 없으면 같은 행이 전부 닫힌다 — 열어준 것은 참여 행 하나다', () => {
+    const notInvited = { ...invited, isParticipant: false };
+    const v = viewer();
+    expect(canEditSurveyCard(notInvited, v)).toBe(false);
+    expect(canViewSurveyAnalyticsCard(notInvited, v)).toBe(false);
+    expect(canManageSurveyAccessCard(notInvited, v)).toBe(false);
   });
 });

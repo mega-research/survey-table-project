@@ -14,6 +14,7 @@ import {
 } from '@/shared/contracts/workspace';
 
 import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
+import { ParticipantsBlock } from './participants-block';
 
 interface ShareSettingsModalProps {
   surveyId: string;
@@ -47,9 +48,9 @@ const VISIBILITY_ICON: Record<SurveyVisibility, typeof Users> = {
  * 별개다. 티켓 18·21·24 의 참여자·게스트·실사 검색도 **RPC 로** workspace 표면을 부르므로
  * (`client.workspace.*`, 그룹 쿼리와 같은 경로) feature import 는 필요 없다.
  *
- * 지금은 공개 범위 한 블록뿐이다. 참여자(내부)·클라이언트(게스트)·실사 블록과 푸터의
- * 「소유권 이전」은 각각 티켓 18·21·24·19 가 이 골격 위에 얹는다 — 핸들러 없는 자리를
- * 비활성 placeholder 로 미리 그리지 않는다(카드 케밥의 콜백 게이트와 같은 규칙).
+ * 지금은 공개 범위 + 참여자 두 블록이다. 클라이언트(게스트)·실사 블록과 푸터의 「소유권
+ * 이전」은 각각 티켓 21·24·19 가 이 골격 위에 얹는다 — 핸들러 없는 자리를 비활성
+ * placeholder 로 미리 그리지 않는다(카드 케밥의 콜백 게이트와 같은 규칙).
  *
  * 모달을 **여는 것**은 권한으로 막지 않는다. 접근 가능한 내부인이면 누구나 참여자를 추가할
  * 수 있는 것이 스펙 §7 이고, 잠기는 것은 범위 세그먼트뿐이다. 그래서 팀원에게는 지금 상태가
@@ -137,6 +138,13 @@ export function ShareSettingsModal({
               공개 범위는 소유자·팀장·슈퍼어드민만 바꿀 수 있습니다.
             </p>
           )}
+        </div>
+
+        {/* 참여자 블록은 자기 mutation 을 즉시 반영한다 — 공개 범위의 「저장」과 축이 다르다.
+            들이고 빼는 일은 되돌릴 확인이 필요 없고, 한 모달의 저장 버튼에 묶으면 검색·추가
+            도중 취소를 누른 사람이 초대까지 되돌아간 줄로 읽는다. */}
+        <div className="mt-4 border-t border-[#F0F0F2] pt-4">
+          <ParticipantsBlock surveyId={surveyId} />
         </div>
 
         {error && <p className="mt-3 text-[12.5px] text-red-600">{error}</p>}

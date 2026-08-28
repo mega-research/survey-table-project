@@ -3,12 +3,13 @@ import 'server-only';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveys } from '@/db/schema';
+import { surveyParticipants, surveys } from '@/db/schema';
 import type { UserType } from '@/shared/contracts/auth';
 import {
   surveyCapabilityValues,
   type SurveyAssignmentStatus,
   type SurveyCapability,
+  type SurveyParticipantKind,
   type SurveyVisibility,
 } from '@/shared/contracts/workspace';
 
@@ -47,13 +48,15 @@ export interface SurveyAccessTarget {
 }
 
 /**
- * 설문 단위 초대 — survey_participants 는 티켓 18 이 만든다.
+ * 설문 단위 초대 (survey_participants, 티켓 18).
  *
- * 지금 이 자리를 비워두지 않는 이유는 판정 순서가 초대 유무에 달려 있기 때문이다. 나중에
- * 인자를 끼워 넣으면 그때 모든 호출부의 순서가 바뀐다.
+ * 이 한 줄이 **팀 경계를 넘는 유일한 통로**다 — 나머지 판정은 전부 `surveys.teamId` 를
+ * 지나는데 이것만 그 축 밖에 있다. 그래서 로더가 설문 행과 **같은 쿼리에서** 읽는다:
+ * 따로 조회하면 모든 관문의 왕복이 하나씩 늘고, 그 비용이 아까워 캐시를 두는 순간
+ * 「초대를 뺐는데 잠깐 남아 있는」 창이 생긴다.
  */
 export interface SurveyParticipation {
-  kind: 'member' | 'guest' | 'fieldwork';
+  kind: SurveyParticipantKind;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +205,10 @@ export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyA
  * 설문 하나에 대한 capability 를 DB 에서 읽어 판정한다.
  *
  * 삭제된 설문(deletedAt)은 없는 것으로 본다 — 복구 경로는 티켓 17 이 자기 관문으로 연다.
- * 참여자 조회는 survey_participants 가 생기는 티켓 18 에서 이 자리에 붙는다.
+ *
+ * 참여 행은 **같은 쿼리에서** LEFT JOIN 으로 읽는다(티켓 18). 따로 조회하면 관문이 도는
+ * 모든 표면에서 왕복이 하나씩 늘고, 그 비용을 아끼려 캐시를 두면 초대를 뺀 직후에도 잠깐
+ * 통과하는 창이 생긴다.
  */
 export async function loadSurveyCapabilities(
   user: SurveyAccessUser,
@@ -214,14 +220,29 @@ export async function loadSurveyCapabilities(
       visibility: surveys.visibility,
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
+      participantKind: surveyParticipants.kind,
     })
     .from(surveys)
+    .leftJoin(surveyParticipants, participationJoin(user.id))
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
     .limit(1);
   if (!row) throw new SurveyAccessError('not_found');
 
   const subject = await loadAccessSubject(user);
-  return resolveSurveyCapabilities(subject, row, null);
+  return resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind));
+}
+
+/** 설문 행에 이 사람의 참여 행을 잇는 조인 조건 — 단건·배치 로더가 같은 것을 쓴다. */
+function participationJoin(userId: string) {
+  return and(
+    eq(surveyParticipants.surveyId, surveys.id),
+    eq(surveyParticipants.userId, userId),
+  );
+}
+
+/** 조인 결과(없으면 null)를 판정 입력으로 옮긴다. */
+function toParticipation(kind: SurveyParticipantKind | null): SurveyParticipation | null {
+  return kind ? { kind } : null;
 }
 
 /**
@@ -283,13 +304,15 @@ export async function loadSurveyCapabilitiesBatch(
       visibility: surveys.visibility,
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
+      participantKind: surveyParticipants.kind,
     })
     .from(surveys)
+    .leftJoin(surveyParticipants, participationJoin(user.id))
     .where(and(inArray(surveys.id, [...new Set(surveyIds)]), isNull(surveys.deletedAt)));
 
   const subject = await loadAccessSubject(user);
   for (const row of rows) {
-    result.set(row.id, resolveSurveyCapabilities(subject, row, null));
+    result.set(row.id, resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind)));
   }
   return result;
 }

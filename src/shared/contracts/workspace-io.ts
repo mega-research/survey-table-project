@@ -4,7 +4,11 @@
 import * as z from 'zod';
 
 import { userStatusValues } from './auth';
-import { surveyVisibilityValues, teamRoleValues } from './workspace';
+import {
+  surveyParticipantKindValues,
+  surveyVisibilityValues,
+  teamRoleValues,
+} from './workspace';
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
@@ -406,3 +410,75 @@ export const SetSurveyVisibilityInput = z.object({
   visibility: SurveyVisibilitySchema,
 });
 export type SetSurveyVisibilityInput = z.infer<typeof SetSurveyVisibilityInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 참여자 (.pen FLOW 4-2 참여자 블록, 티켓 18)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 추가와 제외의 권한 축이 다르다(스펙 §7·§11-5) — 추가는 그 설문에 접근 가능한 내부인
+// 누구나(`survey.invite`), 제외는 소유자·소유 팀 팀장·슈퍼어드민만(`survey.manageAccess`).
+// 계약을 하나로 합치지 않는 이유가 그것이다.
+
+const SurveyParticipantKindSchema = z.enum(surveyParticipantKindValues);
+
+/** 공유 모달의 참여자 행 (.pen 4-2). */
+export const SurveyParticipantItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  kind: SurveyParticipantKindSchema,
+  /** 소속 표기 — 내부 계정은 팀 이름이 온다. 팀 미배치면 null. */
+  teamName: z.string().nullable(),
+  jobTitle: z.string().nullable(),
+  addedAt: z.date(),
+});
+export type SurveyParticipantItem = z.infer<typeof SurveyParticipantItem>;
+
+/**
+ * 참여자 목록 + **내가 제외할 수 있는가**.
+ *
+ * 화면이 역할을 다시 세지 않도록 서버가 답을 함께 준다 — 근사를 하나 더 만들면
+ * 「목록엔 제외 버튼이 있는데 누르면 FORBIDDEN」이 생긴다.
+ */
+export const ListSurveyParticipantsOutput = z.object({
+  participants: z.array(SurveyParticipantItem),
+  canRemove: z.boolean(),
+});
+export type ListSurveyParticipantsOutput = z.infer<typeof ListSurveyParticipantsOutput>;
+
+export const ListSurveyParticipantsInput = z.object({ surveyId: z.uuid() });
+export type ListSurveyParticipantsInput = z.infer<typeof ListSurveyParticipantsInput>;
+
+/**
+ * 초대 후보 검색 — internal active 사용자 (팀 무관).
+ *
+ * 팀으로 좁히지 않는 것이 이 티켓의 요점이다. 참여자는 팀 경계를 넘고 팀 멤버십을 만들지
+ * 않는다(스펙 §4). 이미 참여 중인 사람과 소유자는 후보에서 빠진다 — 목록에 있는 사람을
+ * 다시 추가하는 동선은 실패밖에 없다.
+ */
+export const SearchParticipantCandidatesInput = z.object({
+  surveyId: z.uuid(),
+  query: z.string().trim().max(100),
+});
+export type SearchParticipantCandidatesInput = z.infer<typeof SearchParticipantCandidatesInput>;
+
+export const ParticipantCandidateItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  teamName: z.string().nullable(),
+  jobTitle: z.string().nullable(),
+});
+export type ParticipantCandidateItem = z.infer<typeof ParticipantCandidateItem>;
+
+export const SearchParticipantCandidatesOutput = z.array(ParticipantCandidateItem);
+export type SearchParticipantCandidatesOutput = z.infer<typeof SearchParticipantCandidatesOutput>;
+
+export const AddSurveyParticipantInput = z.object({
+  surveyId: z.uuid(),
+  userId: z.uuid(),
+});
+export type AddSurveyParticipantInput = z.infer<typeof AddSurveyParticipantInput>;
+
+export const RemoveSurveyParticipantInput = AddSurveyParticipantInput;
+export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipantInput>;

@@ -75,6 +75,7 @@
     "0088_teams_and_memberships",
     "0089_surveys_team_scoping",
     "0090_survey_groups",
-    "0091_survey_ownership_events"
+    "0091_survey_ownership_events",
+    "0092_survey_participants"
   ]
 }

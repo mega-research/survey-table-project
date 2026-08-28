@@ -114,8 +114,14 @@ async function readRequestWorkScopeCookie(): Promise<string | null> {
  * 를 다시 묻기 시작하면 매트릭스가 두 벌이 된다.
  */
 export type SurveyScopeFilter =
-  /** 시스템 전체 보기 — 전 팀 + 배치 대기 설문까지. 조건이 없어 viewerId 도 필요 없다. */
-  | { kind: 'all' }
+  /**
+   * 시스템 전체 보기 — 전 팀 + 배치 대기 설문까지. 좁히는 조건은 없다.
+   *
+   * 그래도 `viewerId` 를 싣는 이유는 티켓 18 이다: 목록 행마다 「내가 이 설문의 참여자인가」를
+   * 함께 읽어야 카드가 버튼 노출을 제대로 근사한다. 슈퍼어드민에게는 그 값이 판정을 바꾸지
+   * 않지만, 두 변형의 투영이 갈리면 서비스가 행 모양을 두 벌로 조립하게 된다.
+   */
+  | { kind: 'all'; viewerId: string }
   | {
       kind: 'team';
       teamId: string;
@@ -130,13 +136,16 @@ export type SurveyScopeFilter =
  *
  * invite_only 는 팀원에게만 숨기는 것이라, 팀장이 아니어도 **자기가 소유한** 설문은
  * 목록에 남아야 한다 — 그 조건은 viewerId 로 쿼리가 함께 본다.
+ *
+ * **참여자로 초대받은 타 팀 설문도 같은 viewerId 로 붙는다**(티켓 18). 그 설문은 어느 팀
+ * 범위에도 속하지 않으므로 팀 조건과 OR 로 잇는다 — 초대는 팀 축 밖의 접근이다.
  */
 export function buildSurveyScopeFilter(
   subject: SurveyAccessSubject,
   scope: WorkScope,
 ): SurveyScopeFilter {
   if (scope.kind === 'none') return { kind: 'none' };
-  if (scope.kind === 'system') return { kind: 'all' };
+  if (scope.kind === 'system') return { kind: 'all', viewerId: subject.userId };
   return {
     kind: 'team',
     teamId: scope.teamId,

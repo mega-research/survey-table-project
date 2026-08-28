@@ -117,6 +117,59 @@ export const SURVEY_VISIBILITY_LABEL: Record<SurveyVisibility, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// survey_participants.kind — 설문 단위 부여의 종류 (SSOT, 티켓 18)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 한 테이블에 셋을 담는 이유는 **설문 단위 부여**라는 한 가지 사실을 말하기 때문이다
+// (스펙 §9). 저장소를 셋으로 나누면 「이 설문에 누가 초대돼 있는가」를 묻는 데 세 번
+// 조인해야 하고, 공유 모달 한 화면이 그 셋을 한꺼번에 그린다.
+//
+// - member    참여자(internal) — 티켓 18. 열람·편집·운영·삭제까지, 발행·공유 관리·이전 제외.
+// - guest     클라이언트 계정 — 티켓 21 이 실제 판정을 붙인다(탭 화이트리스트는 guestTabs).
+// - fieldwork 실사 계정 — 티켓 24~27.
+//
+// **kind 와 users.userType 의 정합은 서비스가 지킨다**(스펙 §9). DB CHECK 로 못 거는 이유는
+// 두 테이블에 걸친 조건이라서다 — guest 계정을 member 로 초대하면 capability 코어의 계정
+// 유형 게이트가 어차피 전부 거부하지만, 그 전에 입구에서 막아야 「추가됐는데 아무것도 안
+// 되는」 유령 행이 안 생긴다.
+
+export const surveyParticipantKindValues = ['member', 'guest', 'fieldwork'] as const;
+export type SurveyParticipantKind = (typeof surveyParticipantKindValues)[number];
+
+/** 화면 표기 — .pen FLOW 4-2 의 필 라벨. */
+export const SURVEY_PARTICIPANT_KIND_LABEL: Record<SurveyParticipantKind, string> = {
+  member: '참여자',
+  guest: '게스트',
+  fieldwork: '실사원',
+};
+
+/**
+ * 게스트에게 열리는 현황 탭 화이트리스트 (kind='guest' 전용, 티켓 21 이 소비).
+ *
+ * 지금 어휘를 두는 이유는 컬럼이 이미 이 모양을 알고 있어야 해서다 — 나중에 늘리려면
+ * JSONB 라 마이그레이션은 없어도 읽는 쪽 정규화가 두 벌이 된다(스펙 §5, .pen 4-2 칩 4종).
+ */
+export interface SurveyGuestTabs {
+  overview: boolean;
+  progressReport: boolean;
+  contactsMasked: boolean;
+  quota: boolean;
+}
+
+/**
+ * 참여자를 **제외**할 수 있는가 — 화면과 서버가 함께 보는 술어 (스펙 §7·§11-5).
+ *
+ * 추가는 접근 가능한 내부인 누구나 할 수 있지만 제외는 소유자·소유 팀 팀장·슈퍼어드민뿐이다.
+ * capability 로 물으면 `survey.manageAccess` 가 정확히 그 셋이라 여기서 역할을 다시 세지
+ * 않는다 — 화면이 자기 표를 따로 들면 「목록엔 제외 버튼이 있는데 누르면 FORBIDDEN」이 된다.
+ */
+export function canRemoveSurveyParticipant(
+  capabilities: ReadonlySet<SurveyCapability>,
+): boolean {
+  return capabilities.has('survey.manageAccess');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // surveys.assignment_status — 팀 배치 상태 (SSOT, 티켓 07)
 // ─────────────────────────────────────────────────────────────────────────────
 //

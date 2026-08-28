@@ -575,6 +575,31 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, groupId: null },
   },
 
+  // ── 설문 참여자 ─────────────────────────────────────────────────────────
+  //
+  // 초대는 팀 경계를 넘는 유일한 통로라(티켓 18) 이 스위트의 축이 특히 중요하다 —
+  // 관문이 없으면 「남의 팀 설문에 나를 참여자로 추가」가 그대로 권한 상승이 된다.
+  'workspace.participants.list': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S },
+  },
+  'workspace.participants.searchCandidates': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S, query: '' },
+  },
+  'workspace.participants.add': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S, userId: C },
+  },
+  'workspace.participants.remove': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, userId: C },
+  },
+
   // ── 공유 설정(공개 범위) ────────────────────────────────────────────────
   'workspace.sharing.setVisibility': {
     gate: 'rpc',

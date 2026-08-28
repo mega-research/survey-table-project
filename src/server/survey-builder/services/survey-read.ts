@@ -154,6 +154,7 @@ export async function getSurveyListWithCounts(
       // 일반 목록의 행은 언제나 null 이다(조회 조건이 deleted_at IS NULL) — 화면은 이 값으로
       // 「휴지통을 보고 있는가」를 판정한다.
       deletedAt: survey.deletedAt,
+      isParticipant: survey.isParticipant,
     })),
   };
 }

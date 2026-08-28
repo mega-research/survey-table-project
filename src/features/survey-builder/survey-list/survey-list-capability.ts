@@ -6,6 +6,13 @@ export interface SurveyCardCapabilitySubject {
   ownerUserId: string | null;
   visibility: SurveyVisibility;
   teamId: string | null;
+  /**
+   * 내가 이 설문의 참여자인가 (티켓 18).
+   *
+   * 참여는 **팀 축 밖**이라 scope·teamId 로는 알 수 없다 — 목록이 행마다 실어 보낸다.
+   * 이 값이 근사 셋을 처음으로 갈라놓는다: 참여자는 편집·분석은 되고 공개 범위는 안 된다.
+   */
+  isParticipant: boolean;
 }
 
 /**
@@ -43,6 +50,8 @@ export function canEditSurveyCard(
   const { scope, currentUserId, isSuperadmin } = viewer;
   if (isSuperadmin) return true;
   if (currentUserId !== null && survey.ownerUserId === currentUserId) return true;
+  // 참여자는 팀과 무관하게 편집한다(스펙 §4·§8) — 초대받은 타 팀 설문이 여기로 들어온다.
+  if (survey.isParticipant) return true;
   if (survey.visibility === 'team' && scope.kind === 'team' && survey.teamId === scope.teamId) {
     return true;
   }
@@ -57,17 +66,17 @@ export function canEditSurveyCard(
  * 있어도 responses.view 가 없다 — 버튼을 그대로 두면 눌렀을 때 404 로 떨어진다.
  *
  * 그래서 이 근사는 `canEditSurveyCard` 보다 좁다. responses.view 를 주는 주체만 통과시킨다:
- * 슈퍼어드민 · 소유자 · 소유 팀 팀장. 팀원은 제외다. 참여자(티켓 18)는 responses.view 를
- * 갖지만 목록이 참여 행을 안 내려받으므로 그때 근사를 넓혀야 한다 — 지금은 안전한 방향
- * (실제보다 자주 감춤)으로 틀린다.
+ * 슈퍼어드민 · 소유자 · 소유 팀 팀장 · **참여자**(티켓 18). 팀원만 제외다.
  *
- * 판정 자체는 전권 세 열(hasFullSurveyControl)과 같다.
+ * 참여자가 들어오면서 이 근사와 `canManageSurveyAccessCard` 가 **갈렸다**. 티켓 16 당시에는
+ * 둘의 결과가 같았고 이유만 달랐는데(참여자는 responses.view 는 갖고 manageAccess 는 못
+ * 갖는다), 목록이 참여 행을 싣게 된 지금 그 차이가 실제로 드러난다.
  */
 export function canViewSurveyAnalyticsCard(
   survey: SurveyCardCapabilitySubject,
   viewer: SurveyCardViewer,
 ): boolean {
-  return hasFullSurveyControl(survey, viewer);
+  return hasFullSurveyControl(survey, viewer) || survey.isParticipant;
 }
 
 /**
@@ -77,10 +86,10 @@ export function canViewSurveyAnalyticsCard(
  * 남아 있는 소유자 · 소유 팀 팀장. 팀 공개 설문의 팀원은 `survey.edit` 은 있어도 이건 없다
  * (스펙 §7: 범위 변경은 소유자·팀장·슈퍼어드민만).
  *
- * 오늘은 `canViewSurveyAnalyticsCard` 와 결과가 같지만 **이유가 다르다**. 저쪽이 요구하는
- * responses.view 는 참여자(티켓 18)도 갖고 이쪽 manageAccess 는 참여자도 못 갖는다 — 참여
- * 행이 목록에 실리는 날 둘은 갈린다. 이름을 하나로 합치면 그날 한쪽만 넓히는 변경이
- * 다른 쪽을 조용히 함께 넓힌다.
+ * **참여자는 여기 못 들어온다** — 티켓 16 이 예고한 분기점이 티켓 18 에서 실제로 갈렸다.
+ * `canViewSurveyAnalyticsCard` 가 요구하는 responses.view 는 참여자도 갖지만 manageAccess 는
+ * 소유자·팀장·슈퍼어드민뿐이다(스펙 §8). 두 근사를 이름 하나로 합쳤다면 참여자를 넓히는
+ * 한 줄이 공개 범위까지 조용히 열었을 것이다.
  *
  * 모달을 **여는 것**은 이 판정이 막지 않는다. 접근 가능한 내부인이면 누구나 참여자를 추가할
  * 수 있어야 하므로(스펙 §7) 잠기는 것은 범위 세그먼트뿐이다.

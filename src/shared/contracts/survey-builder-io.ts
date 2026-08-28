@@ -68,6 +68,13 @@ export interface SurveyListItem {
    * 이 값 하나로 「지금 휴지통을 보고 있는가」를 알 수 있고, 카드가 복구 액션으로 갈린다.
    */
   deletedAt: Date | null;
+  /**
+   * 내가 이 설문의 참여자인가 (티켓 18).
+   *
+   * 카드의 버튼 노출 근사가 본다 — 참여자는 `responses.view` 를 갖지만 팀원은 못 가지므로,
+   * 이 값이 없으면 초대받은 사람에게 「분석」이 잠긴 채로 보인다. 판정은 언제나 서버가 한다.
+   */
+  isParticipant: boolean;
 }
 
 /**

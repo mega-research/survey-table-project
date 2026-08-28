@@ -72,7 +72,11 @@ describe('resolveWorkScopeFor — 계정 유형', () => {
 describe('buildSurveyScopeFilter — 목록 조회 조건', () => {
   it('시스템 범위는 전 팀 + 배치 대기까지 본다', () => {
     const su = subject({ isSuperadmin: true });
-    expect(buildSurveyScopeFilter(su, { kind: 'system' })).toEqual({ kind: 'all' });
+    // viewerId 는 좁히는 조건이 아니다 — 행마다 「내가 참여자인가」를 투영하는 입력이다(티켓 18).
+    expect(buildSurveyScopeFilter(su, { kind: 'system' })).toEqual({
+      kind: 'all',
+      viewerId: su.userId,
+    });
   });
 
   it('팀 범위의 팀원은 invite_only 를 뚫지 못한다', () => {

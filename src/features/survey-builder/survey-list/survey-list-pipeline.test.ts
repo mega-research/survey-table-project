@@ -35,6 +35,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     ownerName: '홍길동',
     surveyGroupId: null,
   deletedAt: null,
+  isParticipant: false,
     ...over,
   };
 }
