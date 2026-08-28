@@ -11,6 +11,7 @@ import {
   teamRoleValues,
 } from './workspace';
 
+
 const TeamRoleSchema = z.enum(teamRoleValues);
 
 /** 팀 이름 — 전체 조직 경로를 담는다(`연구1본부 - 1팀`). 표시용이지만 활성 팀 안에서 유일하다. */
@@ -602,6 +603,61 @@ export type SetSurveyGuestTabsInput = z.infer<typeof SetSurveyGuestTabsInput>;
 
 export const RemoveSurveyGuestInput = AddSurveyGuestInput;
 export type RemoveSurveyGuestInput = z.infer<typeof RemoveSurveyGuestInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 게스트 홈 — 부여 설문 카드 (.pen FLOW 5-2, 티켓 22)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// RPC 가 아니라 **RSC 가 props 로 넘기는 read model 행**이라 zod 가 아니라 인터페이스다
+// (survey-builder-io 의 SurveyListItem 과 같은 부류).
+
+/**
+ * 카드에 찍히는 설문의 진행 상태.
+ *
+ * 문자열 라벨이 아니라 판별자를 넘기는 것이 요점이다 — 「진행중」·「종료」는 화면 문구이고,
+ * 서버가 그것을 만들어 보내면 같은 뜻이 두 자리에서 다르게 번역된다.
+ */
+export type GuestSurveyLifecycle = 'draft' | 'running' | 'paused' | 'closed';
+
+/** 게스트 홈의 설문 카드 한 줄. */
+export interface GuestSurveyCardRow {
+  surveyId: string;
+  title: string;
+  /** 현재 배포 버전의 발행 시각 — 기간의 시작. 미발행이면 null. */
+  publishedAt: Date | null;
+  /** 마감일 — 기간의 끝. 없으면 「마감일 없음」. */
+  endDate: Date | null;
+  lifecycle: GuestSurveyLifecycle;
+  /** 이 설문에서 이 게스트에게 열린 현황 탭. */
+  tabs: SurveyGuestTabs;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 게스트 「조사 대상 (마스킹)」 탭 — 서버에서 끝낸 투영 (티켓 22)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 운영 콘솔의 행(`ContactsRow`)을 그대로 쓰지 않는다. 그 행에는 `inviteToken`(그 사람의
+// 응답 링크)과 컨택 id 가 실려 있어, 게스트에게 가면 열람이 대리 응답이 된다.
+// **화면이 무엇을 안 그리는가가 아니라 무엇이 오지 않는가가 계약이다.**
+
+/** 표 머리 한 칸 — 스킴이 정한 라벨뿐이다(정렬·필터가 없어 source 키가 필요 없다). */
+export interface GuestContactColumn {
+  label: string;
+}
+
+/** 표 한 줄 — 표시 문자열만. 값이 없으면 null 이고 화면이 「—」로 그린다. */
+export interface GuestContactRow {
+  resid: number;
+  cells: (string | null)[];
+}
+
+export interface GuestContactsPage {
+  columns: GuestContactColumn[];
+  rows: GuestContactRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 소유권 이전 · 승계 (.pen FLOW 4-4·9-3, 티켓 19)
