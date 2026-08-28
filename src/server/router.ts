@@ -33,6 +33,7 @@ import { control } from '@/server/operations/procedures/control';
 import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
+import { guests } from '@/server/workspace/procedures/guests';
 import { members } from '@/server/workspace/procedures/members';
 import { ownership } from '@/server/workspace/procedures/ownership';
 import { participants } from '@/server/workspace/procedures/participants';
@@ -113,10 +114,12 @@ export const router = {
     surveyGroups,
     // 재배치 센터 — 팀을 잃은 사람·설문의 인박스 (슈퍼어드민 전용).
     reassignment,
-    // 공유 설정 — 공개 범위 (.pen FLOW 4-2). 게스트·실사 블록은 티켓 21·24.
+    // 공유 설정 — 공개 범위 (.pen FLOW 4-2). 실사 블록은 티켓 24.
     sharing,
     // 설문 참여자 — 팀 경계를 넘는 유일한 접근 경로 (.pen FLOW 4-2, 티켓 18).
     participants,
+    // 클라이언트(게스트) 부여 + 현황 탭 화이트리스트 (.pen FLOW 4-2, 티켓 21).
+    guests,
     // 소유권 이전 · 승계 제안 (.pen FLOW 4-4·9-3, 티켓 19).
     ownership,
   },

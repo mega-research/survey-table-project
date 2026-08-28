@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
+import {
+  DEFAULT_SURVEY_GUEST_TABS,
+  NO_SURVEY_GUEST_TABS,
+  surveyCapabilityValues,
+  type SurveyCapability,
+} from '@/shared/contracts/workspace';
 
 import {
   denialReasonFor,
+  resolveSurveyAccess,
   resolveSurveyCapabilities,
   type SurveyAccessSubject,
   type SurveyAccessTarget,
@@ -71,6 +77,13 @@ const TEAM_MEMBER_COLUMN: SurveyCapability[] = [
   'analytics.view',
   'surveyGroup.manage',
 ];
+/**
+ * 게스트 열 — 프리뷰와 허용 탭뿐이다(스펙 §8).
+ *
+ * 여기 **없는 것**이 티켓 21 의 「항상 차단」 목록과 같은 문장이다: analytics.view ·
+ * export.download · responses.view · contacts.view · mail.* · survey.edit.
+ */
+const GUEST_COLUMN: SurveyCapability[] = ['survey.view', 'operations.view'];
 
 describe('resolveSurveyCapabilities — 스펙 §8 매트릭스 열', () => {
   it('슈퍼어드민은 전 capability 를 갖는다', () => {
@@ -181,17 +194,91 @@ describe('resolveSurveyCapabilities — invite_only 는 팀원에게만 숨긴�
 });
 
 describe('resolveSurveyCapabilities — 계정 유형', () => {
-  it('게스트·실사는 부여 모델이 붙기 전까지 기본 거부다', () => {
-    expect(caps(subject({ userType: 'guest' }), survey())).toEqual([]);
+  it('실사는 부여 모델이 붙기 전까지 기본 거부다', () => {
     expect(caps(subject({ userType: 'fieldwork' }), survey())).toEqual([]);
-    // 참여자 행이 있어도 아직 열리지 않는다 — 티켓 21·24 가 이 자리를 채운다.
-    expect(caps(subject({ userType: 'guest' }), survey(), { kind: 'guest' })).toEqual([]);
+    // 참여 행이 있어도 아직 열리지 않는다 — 티켓 24 가 이 자리를 채운다.
     expect(caps(subject({ userType: 'fieldwork' }), survey(), { kind: 'fieldwork' })).toEqual([]);
   });
 
   it('유형 게이트는 슈퍼어드민 플래그보다 먼저다', () => {
     // isSuperadmin 은 internal 전용 플래그다 — 비내부 계정에 실려 와도 열지 않는다.
-    expect(caps(subject({ userType: 'guest', isSuperadmin: true }), survey())).toEqual([]);
+    expect(caps(subject({ userType: 'fieldwork', isSuperadmin: true }), survey())).toEqual([]);
+  });
+});
+
+describe('resolveSurveyCapabilities — 게스트 열 (티켓 21)', () => {
+  const guest = (over: Partial<SurveyAccessSubject> = {}) =>
+    subject({ userType: 'guest', activeTeamIds: [], leaderTeamIds: [], ...over });
+
+  it('부여된 설문에서 프리뷰와 현황만 — 분석·export·응답·컨택·메일은 없다', () => {
+    expect(caps(guest(), survey(), { kind: 'guest' })).toEqual(GUEST_COLUMN.sort());
+  });
+
+  it('부여가 없으면 아무것도 없다 — 설문 존재조차 알리지 않는다', () => {
+    expect(caps(guest(), survey())).toEqual([]);
+  });
+
+  it('참여자·실사 행으로는 게스트 자격이 서지 않는다', () => {
+    expect(caps(guest(), survey(), { kind: 'member' })).toEqual([]);
+    expect(caps(guest(), survey(), { kind: 'fieldwork' })).toEqual([]);
+  });
+
+  it('공개 범위는 게스트 판정에 관여하지 않는다 — 부여가 유일한 자격이다', () => {
+    expect(caps(guest(), survey({ visibility: 'invite_only' }), { kind: 'guest' })).toEqual(
+      GUEST_COLUMN.sort(),
+    );
+  });
+
+  it('배치 대기 설문은 부여돼 있어도 열리지 않는다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect(caps(guest(), pending, { kind: 'guest' })).toEqual([]);
+  });
+
+  it('게스트 계정에 실린 슈퍼어드민 플래그는 무시된다', () => {
+    expect(caps(guest({ isSuperadmin: true }), survey(), { kind: 'guest' })).toEqual(
+      GUEST_COLUMN.sort(),
+    );
+  });
+
+  it('부여된 kind 가 guest 여도 계정이 내부면 게스트 사슬을 타지 않는다', () => {
+    // 유형이 먼저다 — 내부 계정은 팀·소유 사슬로 판정된다(잘못 만든 행이 권한을 깎지 않는다).
+    expect(caps(subject(), survey(), { kind: 'guest' })).toEqual(TEAM_MEMBER_COLUMN.sort());
+  });
+});
+
+describe('resolveSurveyAccess — 탭 축은 capability 와 따로 산다 (티켓 21)', () => {
+  const guest = subject({ userType: 'guest', activeTeamIds: [], leaderTeamIds: [] });
+
+  it('내부 계정에게는 탭 축이 없다 — 전부 false 가 아니라 null 이다', () => {
+    expect(resolveSurveyAccess(subject(), survey()).guestTabs).toBeNull();
+    expect(resolveSurveyAccess(subject({ isSuperadmin: true }), survey()).guestTabs).toBeNull();
+  });
+
+  it('부여된 게스트는 저장된 탭을 그대로 본다', () => {
+    const tabs = { overview: false, progressReport: true, contactsMasked: false, quota: true };
+    expect(resolveSurveyAccess(guest, survey(), { kind: 'guest', guestTabs: tabs }).guestTabs).toEqual(
+      tabs,
+    );
+  });
+
+  it('탭이 비어 있는 옛 행은 기본값(응답 현황만)으로 읽힌다', () => {
+    expect(
+      resolveSurveyAccess(guest, survey(), { kind: 'guest', guestTabs: null }).guestTabs,
+    ).toEqual(DEFAULT_SURVEY_GUEST_TABS);
+  });
+
+  it('부여가 없으면 탭도 전부 닫힌다 — 탭만 열린 상태는 만들지 않는다', () => {
+    const access = resolveSurveyAccess(guest, survey());
+    expect(access.capabilities.size).toBe(0);
+    expect(access.guestTabs).toEqual(NO_SURVEY_GUEST_TABS);
+  });
+
+  it('배치 대기 설문은 부여와 탭이 남아 있어도 전부 닫힌다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    const tabs = { overview: true, progressReport: true, contactsMasked: true, quota: true };
+    expect(resolveSurveyAccess(guest, pending, { kind: 'guest', guestTabs: tabs }).guestTabs).toEqual(
+      NO_SURVEY_GUEST_TABS,
+    );
   });
 });
 

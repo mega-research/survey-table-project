@@ -144,16 +144,80 @@ export const SURVEY_PARTICIPANT_KIND_LABEL: Record<SurveyParticipantKind, string
 };
 
 /**
- * 게스트에게 열리는 현황 탭 화이트리스트 (kind='guest' 전용, 티켓 21 이 소비).
+ * 게스트에게 열리는 현황 탭 화이트리스트 (kind='guest' 전용, 티켓 21).
  *
- * 지금 어휘를 두는 이유는 컬럼이 이미 이 모양을 알고 있어야 해서다 — 나중에 늘리려면
- * JSONB 라 마이그레이션은 없어도 읽는 쪽 정규화가 두 벌이 된다(스펙 §5, .pen 4-2 칩 4종).
+ * 어휘가 컬럼과 같은 자리에 사는 이유는 `survey_participants.guest_tabs` 가 이 모양을
+ * `$type<>` 로 참조하기 때문이다 — JSONB 라 마이그레이션은 없어도 읽는 쪽 정규화가 두 벌이
+ * 되면 「체크는 했는데 안 열리는」 탭이 생긴다(스펙 §5, .pen 4-2 칩 4종).
+ *
+ * 메일 탭은 **선택지에 없다** — 게스트에게 항상 차단이라 어휘에 넣으면 화면이 체크박스를
+ * 그릴 수 있게 된다. 열 수 없는 것은 어휘에도 없다.
  */
 export interface SurveyGuestTabs {
   overview: boolean;
   progressReport: boolean;
   contactsMasked: boolean;
   quota: boolean;
+}
+
+/** 체크박스 순서의 정본 — .pen 4-2 의 칩 4종. */
+export const surveyGuestTabValues = [
+  'overview',
+  'progressReport',
+  'contactsMasked',
+  'quota',
+] as const;
+export type SurveyGuestTab = (typeof surveyGuestTabValues)[number];
+
+/** 화면 표기 — 어휘와 문구를 한 자리에서 잇는다(TEAM_ROLE_LABEL 과 같은 규약). */
+export const SURVEY_GUEST_TAB_LABEL: Record<SurveyGuestTab, string> = {
+  overview: '응답 현황',
+  progressReport: '진척 보고',
+  contactsMasked: '조사 대상 (마스킹)',
+  quota: '쿼터 현황',
+};
+
+/**
+ * 부여 직후의 기본값 — **응답 현황 하나뿐**이다(스펙 §5 표).
+ *
+ * 전부 켠 채로 시작하지 않는 것이 요점이다. 클라이언트에게 열어 줄 것은 담당 연구원이
+ * 매번 고르는 값이지, 빼는 것을 잊으면 새는 값이 아니다.
+ */
+export const DEFAULT_SURVEY_GUEST_TABS: SurveyGuestTabs = {
+  overview: true,
+  progressReport: false,
+  contactsMasked: false,
+  quota: false,
+};
+
+/** 아무 탭도 열리지 않은 상태 — 부여가 없는 주체의 판정 결과. */
+export const NO_SURVEY_GUEST_TABS: SurveyGuestTabs = {
+  overview: false,
+  progressReport: false,
+  contactsMasked: false,
+  quota: false,
+};
+
+/**
+ * JSONB 컬럼 값 → 탭 화이트리스트 (로더 정규화, 드리프트 흡수).
+ *
+ * 두 방향을 각각 다르게 접는다.
+ *  - **컬럼이 비어 있으면**(NULL·비객체) 기본값이다. kind='guest' 행은 언제나 네 키를 다
+ *    쓰고 들어오므로, 비어 있는 것은 옛 행이거나 손으로 넣은 행이다 — 그 경우의 계약은
+ *    「기본은 응답 현황만」이다.
+ *  - **객체인데 키가 없으면 false** 다. 나중에 탭을 늘렸을 때 옛 행이 새 탭을 자동으로
+ *    얻으면 안 된다 — 부여는 늘 명시여야 한다.
+ *
+ * 호출부가 `?.` 로 덧대지 않도록 여기서 한 번에 정규화한다(JSONB 드리프트 관례).
+ */
+export function normalizeSurveyGuestTabs(raw: unknown): SurveyGuestTabs {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ...DEFAULT_SURVEY_GUEST_TABS };
+  }
+  const source = raw as Record<string, unknown>;
+  const tabs = { ...NO_SURVEY_GUEST_TABS };
+  for (const tab of surveyGuestTabValues) tabs[tab] = source[tab] === true;
+  return tabs;
 }
 
 /**

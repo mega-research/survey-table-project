@@ -494,6 +494,103 @@ export const RemoveSurveyParticipantInput = AddSurveyParticipantInput;
 export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipantInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 설문 게스트 부여 (.pen FLOW 4-2 클라이언트 블록, 티켓 21)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 참여자와 같은 테이블·같은 권한 축이지만 계약을 따로 두는 이유는 **탭 화이트리스트**다.
+// 참여자에게는 없는 축이라 한 계약으로 합치면 절반이 항상 null 인 필드가 되고, 화면도
+// kind 로 다시 갈라야 한다(.pen 도 블록을 나눠 그린다).
+
+const SurveyGuestTabsSchema = z.object({
+  overview: z.boolean(),
+  progressReport: z.boolean(),
+  contactsMasked: z.boolean(),
+  quota: z.boolean(),
+});
+
+/** 공유 모달의 게스트 행 (.pen 4-2 클라이언트 블록). */
+export const SurveyGuestItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  /**
+   * 소속 기관 메모 — 게스트에게는 팀이 없으므로 이 칸이 「어디 사람인가」를 말한다
+   * (users.organization, 0086). 안 적힌 계정은 null 이다.
+   */
+  organization: z.string().nullable(),
+  tabs: SurveyGuestTabsSchema,
+  addedAt: z.date(),
+});
+export type SurveyGuestItem = z.infer<typeof SurveyGuestItem>;
+
+/**
+ * 게스트 목록 + **내가 부여를 해제할 수 있는가**.
+ *
+ * 참여자 목록과 같은 이유로 서버가 답을 함께 준다 — 화면이 역할을 다시 세면 「목록엔
+ * 제외가 있는데 누르면 FORBIDDEN」이 된다.
+ */
+export const ListSurveyGuestsOutput = z.object({
+  guests: z.array(SurveyGuestItem),
+  canRemove: z.boolean(),
+});
+export type ListSurveyGuestsOutput = z.infer<typeof ListSurveyGuestsOutput>;
+
+export const ListSurveyGuestsInput = z.object({ surveyId: z.uuid() });
+export type ListSurveyGuestsInput = z.infer<typeof ListSurveyGuestsInput>;
+
+/**
+ * 부여 후보 검색 — guest active 계정.
+ *
+ * 모집단이 참여자 검색과 정반대다: 저쪽은 internal, 이쪽은 guest. 한 검색으로 합치면
+ * 「참여자 칸에서 클라이언트가 잡히는」 화면이 되고, 그 행을 추가하면 코어가 전부 거부한다.
+ */
+export const SearchGuestCandidatesInput = z.object({
+  surveyId: z.uuid(),
+  query: z.string().trim().max(100),
+});
+export type SearchGuestCandidatesInput = z.infer<typeof SearchGuestCandidatesInput>;
+
+export const GuestCandidateItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  organization: z.string().nullable(),
+});
+export type GuestCandidateItem = z.infer<typeof GuestCandidateItem>;
+
+export const SearchGuestCandidatesOutput = z.array(GuestCandidateItem);
+export type SearchGuestCandidatesOutput = z.infer<typeof SearchGuestCandidatesOutput>;
+
+/**
+ * 부여 추가 — 탭은 받지 않는다.
+ *
+ * 새 부여는 언제나 기본값(응답 현황만)으로 선다. 추가와 동시에 탭을 넘기게 두면 화면이
+ * 「추가 → 체크」 두 단계인데 계약은 한 단계라 두 경로가 생기고, 기본값의 정본도 둘이 된다.
+ */
+export const AddSurveyGuestInput = z.object({
+  surveyId: z.uuid(),
+  userId: z.uuid(),
+});
+export type AddSurveyGuestInput = z.infer<typeof AddSurveyGuestInput>;
+
+/**
+ * 탭 화이트리스트 저장 — **네 값을 통째로** 받는다.
+ *
+ * 부분 갱신(`{quota: true}`)을 받지 않는 것이 의도다. 체크박스 넷은 한 화면에서 함께
+ * 보이므로 통째로 보내는 것이 화면과 같은 단위이고, 부분 갱신을 열면 나중에 탭이 늘었을 때
+ * 「안 보낸 키는 유지」와 「안 보낸 키는 false」 중 무엇인지가 호출부마다 갈린다.
+ */
+export const SetSurveyGuestTabsInput = z.object({
+  surveyId: z.uuid(),
+  userId: z.uuid(),
+  tabs: SurveyGuestTabsSchema,
+});
+export type SetSurveyGuestTabsInput = z.infer<typeof SetSurveyGuestTabsInput>;
+
+export const RemoveSurveyGuestInput = AddSurveyGuestInput;
+export type RemoveSurveyGuestInput = z.infer<typeof RemoveSurveyGuestInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 소유권 이전 · 승계 (.pen FLOW 4-4·9-3, 티켓 19)
 // ─────────────────────────────────────────────────────────────────────────────
 //

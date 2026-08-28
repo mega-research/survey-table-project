@@ -6,9 +6,12 @@ import { db } from '@/db';
 import { surveyParticipants, surveys } from '@/db/schema';
 import type { UserType } from '@/shared/contracts/auth';
 import {
+  NO_SURVEY_GUEST_TABS,
+  normalizeSurveyGuestTabs,
   surveyCapabilityValues,
   type SurveyAssignmentStatus,
   type SurveyCapability,
+  type SurveyGuestTabs,
   type SurveyParticipantKind,
   type SurveyVisibility,
 } from '@/shared/contracts/workspace';
@@ -57,6 +60,21 @@ export interface SurveyAccessTarget {
  */
 export interface SurveyParticipation {
   kind: SurveyParticipantKind;
+  /**
+   * kind='guest' 의 현황 탭 화이트리스트 (티켓 21) — 다른 kind 에서는 무시된다.
+   *
+   * capability 집합과 **별개의 축**이다. 게스트가 갖는 capability 는 언제나 같고
+   * (survey.view + operations.view), 설문마다 다른 것은 그 안에서 어느 탭이 열리는가다.
+   * 탭을 capability 로 쪼개면 매트릭스 열이 설문마다 갈려 판정이 프리셋이 아니게 된다.
+   */
+  guestTabs?: SurveyGuestTabs | null;
+}
+
+/** 판정 결과 — capability 집합 + 게스트 전용 탭 축. */
+export interface SurveyAccess {
+  capabilities: ReadonlySet<SurveyCapability>;
+  /** 게스트의 현황 탭 화이트리스트. null = 탭 축이 없는 주체(내부·실사). */
+  guestTabs: SurveyGuestTabs | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,6 +127,16 @@ const TEAM_MEMBER_CAPS: readonly SurveyCapability[] = [
   'surveyGroup.manage',
 ];
 
+/**
+ * 게스트(클라이언트 발급 계정) — **부여된 설문 하나**에서 프리뷰와 허용된 현황 탭만 본다
+ * (스펙 §5·§8, 티켓 21).
+ *
+ * 설문마다 달라지는 것은 이 집합이 아니라 `guestTabs` 다. 그래서 여기 없는 것이 곧
+ * 「항상 차단」의 정본이다 — 분석·내보내기·응답 상세·컨택 원본·메일·편집. 탭 화이트리스트를
+ * 아무리 열어도 이 목록이 늘지 않는 것이 계약이며, 설정 실수로 새지 않는 이유이기도 하다.
+ */
+const GUEST_CAPS: readonly SurveyCapability[] = ['survey.view', 'operations.view'];
+
 const NONE: ReadonlySet<SurveyCapability> = new Set();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,13 +147,19 @@ const NONE: ReadonlySet<SurveyCapability> = new Set();
  * 이 사람이 이 설문에서 할 수 있는 일 — DB 를 만지지 않는 순수 함수.
  *
  * 순서가 곧 정책이다:
- *  1. 계정 유형 — guest·fieldwork 는 각자의 부여 모델(티켓 21·24)이 붙기 전까지 기본 거부.
+ *  1. 계정 유형 — guest 는 자기 부여 모델(티켓 21)로 갈라지고, fieldwork 는 부여 모델이
+ *     붙기 전까지(티켓 24) 기본 거부다.
  *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
  *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
  *  4. 배치 대기 설문 — 슈퍼어드민 외 차단. 팀이 정해지기 전에는 소유자도 못 연다(ADR-0006).
  *  5. 소유자(**소유 팀 소속일 때만**) → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원.
  *
  * invite_only 는 8번만 지운다 — "소유 팀 팀원에게만 숨김"이 v2 의 뜻이다(스펙 §3).
+ *
+ * **게스트는 이 사슬을 타지 않는다.** 팀 멤버십도 소유권도 없는 계정이라 4~8번이 전부
+ * 무의미하고, 자격은 「이 설문에 부여됐는가」 하나뿐이다. 배치 대기만 함께 막는다 — 팀이
+ * 정해지기 전에는 아무도 열 수 없다는 것이 ADR-0006 이고, 그 예외를 게스트에게 두면
+ * 배치 대기 설문을 여는 유일한 사람이 클라이언트가 된다.
  *
  * 5번이 소유 팀 소속을 함께 묻는 것이 이 함수의 revocation 계약이다. 예전에는 소유자 일치만
  * 보고 FULL_CAPS 를 줬는데, 그러면 A팀 설문을 소유한 사람이 A팀에서 제외돼도 다른 팀 겸직이
@@ -140,6 +174,10 @@ export function resolveSurveyCapabilities(
   participation?: SurveyParticipation | null,
 ): ReadonlySet<SurveyCapability> {
   // isSuperadmin 은 internal 전용 플래그다 — 유형 게이트가 먼저 선다.
+  if (subject.userType === 'guest') {
+    if (survey.assignmentStatus === 'assignment_pending') return NONE;
+    return participation?.kind === 'guest' ? new Set(GUEST_CAPS) : NONE;
+  }
   if (subject.userType !== 'internal') return NONE;
   if (subject.isSuperadmin) return new Set(ALL_CAPABILITIES);
   if (subject.activeTeamIds.length === 0) return NONE;
@@ -167,6 +205,31 @@ export function resolveSurveyCapabilities(
     return new Set(TEAM_MEMBER_CAPS);
   }
   return NONE;
+}
+
+/**
+ * capability + 게스트 탭 화이트리스트 — 판정의 완전한 결과 (순수).
+ *
+ * 두 축을 한 번에 돌려주는 이유는 입력이 같아서다. 탭을 따로 묻는 함수를 두면 화면 하나가
+ * 판정을 두 번 하게 되고, 그 사이 부여가 바뀌면 「capability 는 있는데 탭은 없는」 어긋난
+ * 조합을 본다.
+ *
+ * `guestTabs` 가 **null 이면 탭 축이 적용되지 않는 주체**다(내부 계정·실사). 전부 false 인
+ * 객체와 갈라 두는 것이 요점이다 — 내부 계정에게 「모든 탭이 닫혔다」를 돌려주면 콘솔이
+ * 자기 탭을 스스로 숨긴다.
+ */
+export function resolveSurveyAccess(
+  subject: SurveyAccessSubject,
+  survey: SurveyAccessTarget,
+  participation?: SurveyParticipation | null,
+): SurveyAccess {
+  const capabilities = resolveSurveyCapabilities(subject, survey, participation);
+  if (subject.userType !== 'guest') return { capabilities, guestTabs: null };
+  // 부여가 없으면 capability 도 비어 있다 — 탭만 열린 상태는 만들지 않는다.
+  const guestTabs = capabilities.has('operations.view')
+    ? normalizeSurveyGuestTabs(participation?.guestTabs)
+    : { ...NO_SURVEY_GUEST_TABS };
+  return { capabilities, guestTabs };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +265,7 @@ export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyA
 }
 
 /**
- * 설문 하나에 대한 capability 를 DB 에서 읽어 판정한다.
+ * 설문 하나에 대한 접근 판정을 DB 에서 읽어 만든다 — capability + 게스트 탭.
  *
  * 삭제된 설문(deletedAt)은 없는 것으로 본다 — 복구 경로는 티켓 17 이 자기 관문으로 연다.
  *
@@ -210,10 +273,10 @@ export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyA
  * 모든 표면에서 왕복이 하나씩 늘고, 그 비용을 아끼려 캐시를 두면 초대를 뺀 직후에도 잠깐
  * 통과하는 창이 생긴다.
  */
-export async function loadSurveyCapabilities(
+export async function loadSurveyAccess(
   user: SurveyAccessUser,
   surveyId: string,
-): Promise<ReadonlySet<SurveyCapability>> {
+): Promise<SurveyAccess> {
   const [row] = await db
     .select({
       teamId: surveys.teamId,
@@ -221,6 +284,7 @@ export async function loadSurveyCapabilities(
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
       participantKind: surveyParticipants.kind,
+      guestTabs: surveyParticipants.guestTabs,
     })
     .from(surveys)
     .leftJoin(surveyParticipants, participationJoin(user.id))
@@ -229,7 +293,15 @@ export async function loadSurveyCapabilities(
   if (!row) throw new SurveyAccessError('not_found');
 
   const subject = await loadAccessSubject(user);
-  return resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind));
+  return resolveSurveyAccess(subject, row, toParticipation(row.participantKind, row.guestTabs));
+}
+
+/** 위의 capability 축만 필요한 호출부용 — 표면 대부분이 이쪽이다. */
+export async function loadSurveyCapabilities(
+  user: SurveyAccessUser,
+  surveyId: string,
+): Promise<ReadonlySet<SurveyCapability>> {
+  return (await loadSurveyAccess(user, surveyId)).capabilities;
 }
 
 /** 설문 행에 이 사람의 참여 행을 잇는 조인 조건 — 단건·배치 로더가 같은 것을 쓴다. */
@@ -241,8 +313,11 @@ function participationJoin(userId: string) {
 }
 
 /** 조인 결과(없으면 null)를 판정 입력으로 옮긴다. */
-function toParticipation(kind: SurveyParticipantKind | null): SurveyParticipation | null {
-  return kind ? { kind } : null;
+function toParticipation(
+  kind: SurveyParticipantKind | null,
+  guestTabs: SurveyGuestTabs | null,
+): SurveyParticipation | null {
+  return kind ? { kind, guestTabs } : null;
 }
 
 /**
@@ -305,6 +380,7 @@ export async function loadSurveyCapabilitiesBatch(
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
       participantKind: surveyParticipants.kind,
+      guestTabs: surveyParticipants.guestTabs,
     })
     .from(surveys)
     .leftJoin(surveyParticipants, participationJoin(user.id))
@@ -312,7 +388,10 @@ export async function loadSurveyCapabilitiesBatch(
 
   const subject = await loadAccessSubject(user);
   for (const row of rows) {
-    result.set(row.id, resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind)));
+    result.set(
+      row.id,
+      resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind, row.guestTabs)),
+    );
   }
   return result;
 }

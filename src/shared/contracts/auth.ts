@@ -113,6 +113,20 @@ export function isInternalUser(userType: UserType | undefined): boolean {
   return userType === 'internal';
 }
 
+/**
+ * 클라이언트 발급 계정인가 — 게스트 판정의 단일 술어 (티켓 21).
+ *
+ * v1 의 env grant 모델(`GUEST_SURVEY_GRANTS`)을 대체한다. 게스트는 더 이상 설정 파일이
+ * 아니라 **계정 유형**으로 판정되며, 어느 설문을 볼 수 있는가는 `survey_participants` 의
+ * 부여 행이 정한다 — 접근 판정은 server/survey-access 코어 하나가 한다.
+ *
+ * 이 술어가 남아 있는 자리는 접근제어가 아니라 **데이터 파티션과 로그**다: 게스트 화면은
+ * 전역 테스트 모드와 무관하게 항상 실데이터를 본다(server/data-scope).
+ */
+export function isGuestAccount(userType: UserType | undefined): boolean {
+  return userType === 'guest';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // accounts.provider_id / accounts.issuer — 크리덴셜 계정 규약값 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────
