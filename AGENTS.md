@@ -4,17 +4,17 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 19 **소유권 이전 + 승계 제안** — 두 입구가 같은
-> 이동을 만든다: 공유 모달의 수동 이전(.pen 4-4)과 퇴사 처리의 승계(.pen 9-3). 계약은 나누되
-> 실행은 `transferOwnershipInTx` 한 자리다. 중심은 **소유자는 소유 팀 사람이어야 한다**
-> (티켓 13 revocation) — 타 팀 참여자에게 넘기면 설문이 그 팀으로 따라가고 그룹은 미분류가,
-> 활성 팀이 0/2+ 면 거부다. 제안 규칙은 순수 함수(참여자 초대순 → 소유 팀 팀장 → 승계 대기)이고
-> **무확인 자동 이전은 없다** — 미리보기는 아무것도 바꾸지 않고 확정 입력은 **소유 설문 전수**를
-> 요구한다. 퇴사는 재입사와 같은 워크플로 층이 잇되 **전역 전이 키를 첫 줄에서** 잡는다(재입사
-> 주석의 「전역 키를 뒤에 잡는 경로는 없다」를 지키려고). 동시 이전은 **기대 소유자 토큰**으로
-> 막는다 — FOR UPDATE 는 줄만 세워 둘 다 성공한다. 승계 대기는 재배치 인박스가 배치 대기와
-> 같은 목록에서 받는다. 소유 설문이 남은 사람은 **팀에서 제외되지 않는다**(먼저 이전).
-> 마이그레이션 없음. 0092 는 로컬·스테이징 적용 완료. 직전: 티켓 18 설문 참여자)
+> 최종 갱신: 2026-08-28 (역할 모델 v2 티켓 20 **메일 회신·문의 소유자 연동** — 회신 주소만
+> 스냅샷 밖에 두고 **발송 시점**에 해석한다. 규칙은 `server/mail/services/reply-to.ts` 의
+> **명시 → 소유자 → 발신 주소** 하나이고 캠페인 발송과 템플릿 테스트 발송이 함께 쓴다.
+> 스냅샷에 주소가 박혀 있으면 **소유자 조회 자체를 생략**하고(지연 평가), 이미 claim 된
+> 수신자는 `send_payload_snapshot` 을 써서 재시도가 회신 주소를 바꾸지 않는다. 소유자
+> 이메일은 `read-models/survey-owner-email` 이 라이브로 읽되 **계정 상태를 묻지 않는다** —
+> 승계 대기의 회신은 「이전 소유자」가 계약이라서다. 그 연동을 도달 가능하게 하려고 템플릿의
+> 회신 주소를 **선택 입력**으로 열었다(빈 값은 null 로 정규화 — 빈 문자열이면 폴백이 안 선다).
+> 응답 화면 문의 이메일도 같은 규칙이되 겹치는 것은 **pub 조회뿐**이다. 재배치 인박스는
+> 승계 대기를 배치 대기와 갈라 적고 회신 경고를 붙인다. 마이그레이션 없음.
+> 직전: 티켓 19 소유권 이전·승계)
 
 ---
 
@@ -115,7 +115,7 @@ src/
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · 팀 멤버십 · 활성 팀 목록)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -553,7 +553,8 @@ contact_attempts           # 컨택 결과 회차
 ```
 mail_templates             # 메일 템플릿
 ├── id, surveyId, name, subject, bodyHtml
-├── fromLocal, fromName, replyTo
+├── fromLocal, fromName
+├── replyTo                # nullable — NULL 이면 발송 시점 소유자로 해석 (티켓 20)
 ├── attachments (JSONB), variablesUsed (JSONB)
 ├── deletedAt
 └── createdAt, updatedAt
@@ -562,7 +563,8 @@ mail_campaigns             # 발송 회차
 ├── id, surveyId, mailTemplateId, runNumber, title
 ├── kind                   # bulk | 단건 발송 등 캠페인 종류
 ├── isTest                 # 테스트 파티션 여부
-├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 발송 시점 스냅샷
+├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 캠페인 생성 시점 스냅샷
+│                          # replyToSnapshot 만 NULL 을 허용하고, NULL 이면 발송 시점 소유자로 해석
 ├── status                 # draft|queued|sending|completed|partial|cancelled
 ├── recipientCount, queuedCount, sentCount, deliveredCount,
 │   openedCount, bouncedCount, complainedCount, failedCount,
@@ -588,6 +590,24 @@ mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열
 ├── note, createdBy
 └── createdAt, updatedAt
 ```
+
+> **회신 주소만 스냅샷 밖이다**(티켓 20). 규칙은 `server/mail/services/reply-to.ts` 의
+> `resolveSendReplyTo` 하나 — **명시 → 소유자(`read-models/survey-owner-email`) → 발신 주소**.
+> 캠페인 발송(`campaign-dispatch`)과 템플릿 테스트 발송(`preview`)이 같은 함수를 쓴다: 나누면
+> 「테스트 메일에 답장했더니 아무도 못 받는」 어긋남이 생긴다. **스냅샷에 주소가 박혀 있으면
+> 소유자 조회 자체를 하지 않는다** — `??` 의 단락 평가가 계약이라, 고정 회신 캠페인은 소유자
+> 조회 왕복이 0 이고 그 조회가 실패해도 영향을 받지 않는다. 이미 claim 된 수신자는
+> `send_payload_snapshot` 의 값을 쓰므로 **재시도가 회신 주소를 바꾸지 않는다**(이전 직전에
+> claim 된 메일은 이전 소유자에게 답장이 간다 — 의도된 동작). 그래서 **전원이 이미 claim 된
+> 재시도 청크는 조회 자체를 건너뛴다** — 쓰지도 않을 값을 읽다 실패하면 값이 이미 정해진
+> 재시도가 통째로 막힌다. 해석 단위는 **청크**다: from·제목·본문·첨부와 같은 자리에서 한 번
+> 정하므로, 청크 처리 도중의 이전은 그 청크가 끝난 뒤부터 반영된다(계약의 단위가 캠페인
+> 발송이지 개별 수신자가 아니다). 소유자 조회는 **계정 상태를 묻지
+> 않는다**: 승계 대기 설문의 `owner_user_id` 는 떠난 사람 그대로이고 그 주소가 계약이다. 상태로
+> 걸러 null 을 주면 회신이 조용히 발신 주소로 떨어져 답장이 아무도 안 읽는 사서함에 쌓인다 —
+> 그 상황을 알리는 것은 재배치 인박스의 승계 대기 경고다. 템플릿의 「답장 받을 메일」이 **선택
+> 입력**인 것이 이 연동의 입구이며(`optionalReplyToSchema`), 빈 문자열·공백은 **null 로
+> 정규화**한다: 빈 문자열이 컬럼에 들어가면 폴백이 서지 않아 회신 헤더가 빈 채로 나간다.
 
 ### R2 파일 수명주기 (r2-lifecycle.ts)
 
