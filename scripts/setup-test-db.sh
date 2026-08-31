@@ -93,4 +93,32 @@ verify "r2_deletion_candidates partial unique" \
 verify "RLS 활성 테이블" \
   "select count(*) from pg_tables where schemaname='public' and rowsecurity;" 15
 
+# 이 DB 가 "어느 레포 상태로" 만들어졌는지 남긴다.
+#
+# 로컬 supabase 도커는 워크트리 전체가 공유하는 단일 인스턴스다. 다른 브랜치가
+# db:setup-test 를 돌리면 이 DB 는 그쪽 마이그레이션 집합으로 통째 교체되는데,
+# pnpm db:drift 는 그걸 알 방법이 없어 남의 DB 를 내 레포와 대조하고 조용히
+# 틀린 결과를 낸다 (2026-08-31 실제 발생). 그래서 지문을 찍어두고 db-drift.mjs
+# 가 대조한다.
+#
+# public 이 아니라 _repo_meta 스키마에 둔다 — db:drift 는 public 만 훑으므로
+# 이 표가 드리프트 항목으로 잡히지 않는다.
+STAMP="$(node scripts/migration-order.mjs --hash)"
+docker exec -i "$CONTAINER" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 <<SQL >/dev/null
+CREATE SCHEMA IF NOT EXISTS _repo_meta;
+CREATE TABLE IF NOT EXISTS _repo_meta.migration_stamp (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  order_hash text NOT NULL,
+  tag_count integer NOT NULL,
+  stamped_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO _repo_meta.migration_stamp (singleton, order_hash, tag_count)
+VALUES (true, '${STAMP}', ${TOTAL})
+ON CONFLICT (singleton) DO UPDATE
+  SET order_hash = EXCLUDED.order_hash,
+      tag_count = EXCLUDED.tag_count,
+      stamped_at = now();
+SQL
+echo "  재생 지문: ${STAMP} (${TOTAL}건)"
+
 echo "test DB 셋업 완료."
