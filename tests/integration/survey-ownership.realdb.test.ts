@@ -11,7 +11,8 @@
  *  ④ 승계 대기가 재배치 센터에서 해소된다.
  */
 import { createRouterClient } from '@orpc/server';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
@@ -415,6 +416,183 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
       expect(user?.status).toBe('active');
       expect((await surveyRow())?.ownerUserId).toBe(OWNER_ID);
     });
+
+    /**
+     * **승계 지정은 클라이언트 입력이다.** 예전에는 "처리자가 목록에서 고른 사람" 이라며
+     * 후보 자격 재확인을 면제했는데, 그 목록을 만든 것은 서버가 아니다. 면제하면 같은 팀
+     * 사람도 참여자도 아닌 임의의 active internal 계정을 지목할 수 있고, 그 사람에게 활성
+     * 팀이 하나면 설문이 그 무관한 팀으로 **조용히** 따라간다 — 테넌트 귀속이 깨진다.
+     */
+    it('후보가 아닌 사람을 지정한 승계는 거부되고 퇴사도 롤백된다', async () => {
+      // OUTSIDER 는 B팀 사람이고 이 설문의 참여자가 **아니다** — 후보 목록에 없다.
+      await expect(
+        usersClient(SUPERADMIN_ID).users.changeStatus({
+          action: 'depart',
+          userId: OWNER_ID,
+          succession: [{ surveyId, newOwnerUserId: OUTSIDER_ID }],
+        }),
+      ).rejects.toBeTruthy();
+
+      const [user] = await db
+        .select({ status: usersTable.status })
+        .from(usersTable)
+        .where(eq(usersTable.id, OWNER_ID));
+      expect(user?.status).toBe('active');
+
+      const row = await surveyRow();
+      expect(row?.ownerUserId).toBe(OWNER_ID);
+      // 설문이 B팀으로 끌려가지 않았다는 것이 이 테스트의 요점이다.
+      expect(row?.teamId).toBe(TEAM_A);
+    });
+
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ③-b 자격 철회 경합 — 「읽고 나서 잠그는」 창을 실제로 재현한다
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 이전이 멤버십을 **읽은 뒤 잠금을 얻기 전에** 제외가 커밋되는 창.
+   *
+   * 목으로도, 순차 테스트로도 잡히지 않는다 — 순서를 만들어야 보이기 때문이다. 그래서 두
+   * 번째 커넥션이 이전과 **같은 팀 키**(`team-members-<id>`)를 먼저 쥐고, 이전이 그 잠금에서
+   * 막힌 것을 확인한 뒤 멤버십을 지우고 커밋한다.
+   *
+   * 잠금 뒤 재판정이 없으면 이전은 이미 읽어 둔 (사라진) 멤버십으로 커밋한다. 그렇게 만들어진
+   * 설문은 소유자가 소유 팀 밖이라 **소유자조차 열지 못하고**(티켓 13 revocation), 소유자가
+   * 살아 있어 승계 대기로도 잡히지 않아 재배치 인박스에도 뜨지 않는다.
+   */
+  describe('이전 ↔ 자격 철회 경합', () => {
+    /** 이전이 팀 advisory 잠금 앞에서 대기 중인가 — 허가되지 않은 advisory 잠금으로 본다. */
+    async function waitUntilBlockedOnAdvisory(budgetMs: number): Promise<void> {
+      const deadline = Date.now() + budgetMs;
+      while (Date.now() < deadline) {
+        const rows = await db.execute(
+          sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`,
+        );
+        if (Number((rows as unknown as { n: number }[])[0]?.n ?? 0) > 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error('이전이 팀 잠금에서 대기하지 않았다 — 경합 재현 실패');
+    }
+
+    it('멤버십을 읽은 뒤 잠금을 얻기 전에 제외가 커밋되면 이전이 거부된다', async () => {
+      const holder = postgres(dbUrl, { prepare: false, max: 1 });
+      let releaseHolder = (): void => {};
+      let holderReady = (): void => {};
+      const ready = new Promise<void>((resolve) => {
+        holderReady = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        releaseHolder = resolve;
+      });
+
+      // 두 번째 커넥션이 팀 키를 쥔 채 대기한다 — 이전은 이 잠금 앞에서 멈춘다.
+      const holderTx = holder.begin(async (h) => {
+        await h`select pg_advisory_xact_lock(hashtext('team-members-' || ${TEAM_A}))`;
+        holderReady();
+        await gate;
+        // 이전이 「읽기」와 「잠금」 사이에 있는 바로 그 순간에 자격을 철회한다.
+        await h`delete from team_members where team_id = ${TEAM_A} and user_id = ${TEAMMATE_ID}`;
+      });
+
+      try {
+        await ready;
+
+        const transfer = ownershipClient(OWNER_ID).ownership.transfer({
+          surveyId,
+          newOwnerUserId: TEAMMATE_ID,
+          expectedOwnerUserId: OWNER_ID,
+        });
+
+        await waitUntilBlockedOnAdvisory(10_000);
+        releaseHolder();
+        await holderTx;
+
+        await expect(transfer).rejects.toBeTruthy();
+        // 요점은 「거부됐다」가 아니라 **소유자가 팀 밖으로 나앉지 않았다** 이다.
+        expect((await surveyRow())?.ownerUserId).toBe(OWNER_ID);
+      } finally {
+        releaseHolder();
+        await holderTx.catch(() => undefined);
+        await holder.end({ timeout: 5 });
+        const [restored] = await db
+          .select({ id: teamMembersTable.id })
+          .from(teamMembersTable)
+          .where(
+            and(eq(teamMembersTable.teamId, TEAM_A), eq(teamMembersTable.userId, TEAMMATE_ID)),
+          );
+        if (!restored) {
+          await db
+            .insert(teamMembersTable)
+            .values({ teamId: TEAM_A, userId: TEAMMATE_ID, role: 'member' });
+        }
+      }
+    }, 30_000);
+
+    /**
+     * **잠금 순서 자체를 못 박는다** — 이전은 팀을 기다리는 동안 설문 행을 쥐고 있으면 안 된다.
+     *
+     * 해산(`dissolveTeam`)·재배치(`assignSurveys`)가 「팀 명부 → 팀 행 → 설문 행」으로 잠근다.
+     * 이전만 「설문 행 → 팀」이면 그 둘과 정확히 반대라 겹치는 순간 데드락이고, 운영자에게는
+     * 이유 없는 실패로 보인다. 순서는 주석으로 지켜지지 않으므로 여기서 관측한다.
+     *
+     * 관측 방법: 팀 잠금을 다른 커넥션이 쥐고 있어 이전이 멈춘 그 순간, 제3의 커넥션이 설문
+     * 행을 `FOR UPDATE NOWAIT` 로 집어 본다. 순서가 옳으면 설문은 아직 안 잠겨 있어 집히고,
+     * 뒤집혀 있으면 `55P03`(lock_not_available)으로 튕긴다.
+     */
+    it('팀 잠금을 기다리는 동안 설문 행을 쥐고 있지 않다 — 해산·재배치와 같은 순서', async () => {
+      const holder = postgres(dbUrl, { prepare: false, max: 1 });
+      const prober = postgres(dbUrl, { prepare: false, max: 1 });
+      let releaseHolder = (): void => {};
+      let holderReady = (): void => {};
+      const ready = new Promise<void>((resolve) => {
+        holderReady = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        releaseHolder = resolve;
+      });
+
+      const holderTx = holder.begin(async (h) => {
+        await h`select pg_advisory_xact_lock(hashtext('team-members-' || ${TEAM_A}))`;
+        holderReady();
+        await gate;
+      });
+
+      try {
+        await ready;
+
+        const transfer = ownershipClient(OWNER_ID).ownership.transfer({
+          surveyId,
+          newOwnerUserId: TEAMMATE_ID,
+          expectedOwnerUserId: OWNER_ID,
+        });
+        await waitUntilBlockedOnAdvisory(10_000);
+
+        // 이전이 팀 잠금 앞에 멈춘 지금, 설문 행은 비어 있어야 한다.
+        let surveyRowWasFree = false;
+        await prober
+          .begin(async (pr) => {
+            await pr`select id from surveys where id = ${surveyId} for update nowait`;
+            surveyRowWasFree = true;
+          })
+          .catch(() => {
+            surveyRowWasFree = false;
+          });
+
+        releaseHolder();
+        await holderTx;
+        await transfer;
+
+        expect(surveyRowWasFree).toBe(true);
+        expect((await surveyRow())?.ownerUserId).toBe(TEAMMATE_ID);
+      } finally {
+        releaseHolder();
+        await holderTx.catch(() => undefined);
+        await holder.end({ timeout: 5 });
+        await prober.end({ timeout: 5 });
+      }
+    }, 30_000);
   });
 
   // ───────────────────────────────────────────────────────────────────────────

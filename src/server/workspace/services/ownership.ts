@@ -105,14 +105,6 @@ export async function listTransferCandidates(
 // 이전 실행 — 수동 이전과 승계가 함께 쓰는 한 자리
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface OwnershipTargetRow {
-  id: string;
-  title: string;
-  teamId: string | null;
-  ownerUserId: string | null;
-  visibility: 'team' | 'invite_only';
-}
-
 /**
  * 새 소유자가 설 팀을 정한다 — **소유자는 소유 팀 사람이어야 한다**.
  *
@@ -125,44 +117,101 @@ interface OwnershipTargetRow {
  *  ② 타 팀 참여자이고 활성 팀이 **하나** → 설문이 그 팀으로 따라간다(+ 그룹 미분류).
  *  ③ 활성 팀이 0개이거나 둘 이상 → 거부. 시스템이 고르면 설문이 엉뚱한 팀 목록에 나타난다.
  */
-async function resolveOwningTeam(
+async function readActiveMembershipTeamIds(
   tx: DbTransaction,
-  survey: OwnershipTargetRow,
-  newOwnerUserId: string,
-): Promise<{ teamId: string; movedTeam: boolean }> {
-  const memberships = await tx
+  userId: string,
+): Promise<string[]> {
+  const rows = await tx
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
     .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.status, 'active')))
-    .where(eq(teamMembers.userId, newOwnerUserId));
+    .where(eq(teamMembers.userId, userId));
+  return rows.map((r) => r.teamId);
+}
 
-  if (survey.teamId && memberships.some((m) => m.teamId === survey.teamId)) {
-    await lockOwningTeam(tx, survey.teamId);
-    return { teamId: survey.teamId, movedTeam: false };
+type OwningTeamPick =
+  | { ok: true; teamId: string }
+  | { ok: false; reason: 'no_team' | 'ambiguous' };
+
+/**
+ * 위 세 갈래를 **값으로만** 판정한다.
+ *
+ * 던지지 않고 결과를 돌려주는 이유는 이 규칙이 두 번 돌기 때문이다 — 한 번은 잠그기 전
+ * (어느 팀을 잠글지 고르려고), 한 번은 잠근 뒤(판정하려고). 앞의 것이 던지면 잠금 밖에서
+ * 읽은 값으로 사용자에게 사유를 말하게 된다. **사유는 언제나 잠근 값에서 나와야 한다.**
+ */
+function pickOwningTeam(
+  surveyTeamId: string | null,
+  membershipTeamIds: string[],
+): OwningTeamPick {
+  if (surveyTeamId && membershipTeamIds.includes(surveyTeamId)) {
+    return { ok: true, teamId: surveyTeamId };
   }
-  if (memberships.length === 0) throw new OwnerHasNoTeamError();
-  if (memberships.length > 1) throw new AmbiguousOwnerTeamError();
-  const teamId = memberships[0]!.teamId;
-  await lockOwningTeam(tx, teamId);
-  return { teamId, movedTeam: true };
+  if (membershipTeamIds.length === 0) return { ok: false, reason: 'no_team' };
+  if (membershipTeamIds.length > 1) return { ok: false, reason: 'ambiguous' };
+  return { ok: true, teamId: membershipTeamIds[0]! };
+}
+
+function requireOwningTeam(pick: OwningTeamPick): string {
+  if (pick.ok) return pick.teamId;
+  throw pick.reason === 'no_team' ? new OwnerHasNoTeamError() : new AmbiguousOwnerTeamError();
 }
 
 /**
- * 목적지 팀이 **살아 있는지** 잠근 채로 확인한다.
+ * 잠글 팀을 고르기 위한 **사전 읽기** — 판정에 쓰지 않는다.
  *
- * 무잠금으로 읽으면 그 사이 커밋된 해산(dissolveTeam)을 못 보고 archived 팀으로 소유권을
- * 옮긴다 — 재배치(assignSurveys)·담기·새 설문 귀속이 모두 같은 창을 이 방식으로 닫는다.
- * 잠금 키·모양을 그쪽과 맞추는 것이 목적이 아니라, **해산이 진행 중이면 여기서 기다렸다가
- * archived 를 보고 거부**해야 하기 때문이다(ADR-0011).
+ * 잠금 순서를 「팀 → 설문」으로 맞추려면 설문 행을 잠그기 전에 팀 id 를 알아야 하는데, 그
+ * 값의 출처가 설문 행이라 순환이다. 그래서 잠그지 않고 한 번 읽어 **후보 집합**만 만들고,
+ * 진짜 판정은 전부 잠근 뒤에 다시 한다. 여기서 읽은 값이 틀렸어도 안전한 이유는 잠근 뒤의
+ * 재판정이 후보 집합 밖의 답을 `OwnershipChangedError` 로 접기 때문이다(재시도가 정답).
  */
-async function lockOwningTeam(tx: DbTransaction, teamId: string): Promise<void> {
-  await lockTeamMembers(tx, teamId);
-  const [team] = await tx
-    .select({ id: teams.id })
-    .from(teams)
-    .where(and(eq(teams.id, teamId), eq(teams.status, 'active')))
-    .for('share');
-  if (!team) throw new OwnerTeamNotActiveError();
+async function planTeamLocks(
+  tx: DbTransaction,
+  surveyId: string,
+  newOwnerUserId: string,
+): Promise<string[]> {
+  const [pre] = await tx
+    .select({ teamId: surveys.teamId })
+    .from(surveys)
+    .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)));
+  if (!pre) throw new OwnershipSurveyNotFoundError();
+
+  const pick = pickOwningTeam(pre.teamId, await readActiveMembershipTeamIds(tx, newOwnerUserId));
+  const ids = [pre.teamId, pick.ok ? pick.teamId : null].filter(
+    (id): id is string => id !== null,
+  );
+  // **id 오름차순** — 해산(dissolveTeam)·재배치(assignSurveys)·담기와 같은 순서다. 입력
+  // 순서로 잠그면 두 이전이 서로 반대 방향으로 겹칠 때 사이클이 생긴다.
+  return [...new Set(ids)].sort();
+}
+
+/**
+ * 팀 명부와 팀 행을 **설문보다 먼저** 잠근다 — 순서가 이 함수의 존재 이유다.
+ *
+ * 해산(`dissolveTeam`)과 재배치(`assignSurveys`)가 「팀 명부 advisory → 팀 행 → 설문 행」으로
+ * 잠근다. 이전만 「설문 행 → 팀」이면 그 둘과 정확히 반대라, 겹치는 순간 데드락이다(Postgres
+ * 가 감지해 한쪽을 중단시키므로 데이터가 깨지지는 않지만, 운영자에게는 이유 없는 실패다).
+ *
+ * 팀 행을 `FOR SHARE` 로 잡는 것은 해산의 `FOR NO KEY UPDATE` 와 충돌시키기 위해서다 —
+ * 해산이 진행 중이면 여기서 기다렸다가 archived 를 보고 거부한다(ADR-0011).
+ * **여기서는 활성 여부를 판정하지 않는다**: 어느 팀이 목적지인지는 설문을 잠근 뒤에야
+ * 확정되므로, 판정은 `assertLockedTeamActive` 가 그때 한다.
+ */
+async function lockTeamsBeforeSurvey(
+  tx: DbTransaction,
+  teamIds: readonly string[],
+): Promise<Set<string>> {
+  const active = new Set<string>();
+  for (const teamId of teamIds) {
+    await lockTeamMembers(tx, teamId);
+    const [team] = await tx
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.id, teamId), eq(teams.status, 'active')))
+      .for('share');
+    if (team) active.add(team.id);
+  }
+  return active;
 }
 
 /**
@@ -171,16 +220,31 @@ async function lockOwningTeam(tx: DbTransaction, teamId: string): Promise<void> 
  * 나누지 않는 이유는 불변식이 하나이기 때문이다: 소유자는 소유 팀 사람이어야 하고, 팀이
  * 움직이면 그룹은 미분류로 내려가야 한다(티켓 12 인계). 두 벌이면 한쪽만 조여진다.
  *
- * 설문 행을 `FOR UPDATE` 로 잠그고 **잠긴 값으로** 다시 판정한다 — 동시 이전 둘 중 하나만
- * 성공해야 한다(티켓 체크박스). 잠그지 않으면 둘 다 자기 기준으로 옳은 UPDATE 를 쓴다.
+ * **잠금 순서가 이 함수의 뼈대다 — 전역 전이 키 → 팀 명부 → 팀 행 → 설문 행.**
+ * 해산·재배치와 같은 순서이고, 자격 판정(대상 상태·후보·소속)은 **전부 마지막 잠금 뒤**에
+ * 선다. 앞에 두면 잠금 밖에서 읽은 값으로 판정하게 되고, 그 사이 커밋된 제외·퇴사·해산을
+ * 못 본다.
  */
 export async function transferOwnershipInTx(
   tx: DbTransaction,
   actorUserId: string,
   surveyId: string,
   newOwnerUserId: string,
-  options: { requireCandidate?: boolean; expectedOwnerUserId?: string | null } = {},
+  options: { expectedOwnerUserId?: string | null } = {},
 ): Promise<void> {
+  // ① 전역 전이 키. 아래에서 대상의 `users.status` 를 읽는데 그 값을 바꾸는 것은 퇴사·정지
+  //    (applyUserStatusChange)이고 그쪽은 이 키를 잡고 돈다. 키 없이 읽으면 「이전은 성공했는데
+  //    소유자가 그 순간 퇴사」가 되어, 승계 대기로도 안 잡히는 고아가 남는다.
+  //    **가장 먼저** 잡는 것이 계약이다 — 퇴사가 「전역 키 → …」 순서라, 여기서 뒤에 잡으면
+  //    반대 순서가 된다. advisory xact 락은 재진입이 안전해 이미 키를 쥔 퇴사는 그대로 통과한다.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('user-status-transition')::bigint)`);
+
+  // ② 팀 명부 · 팀 행 — 설문보다 먼저. 어느 팀을 잠글지는 잠그지 않은 사전 읽기로 고르고,
+  //    그 선택이 틀렸을 가능성은 ④의 재판정이 받는다.
+  const lockedTeamIds = await planTeamLocks(tx, surveyId, newOwnerUserId);
+  const activeTeamIds = await lockTeamsBeforeSurvey(tx, lockedTeamIds);
+
+  // ③ 설문 행.
   const [survey] = await tx
     .select({
       id: surveys.id,
@@ -205,6 +269,26 @@ export async function transferOwnershipInTx(
   }
   if (survey.ownerUserId === newOwnerUserId) throw new SelfTransferError();
 
+  // ④ 여기서부터가 판정이다 — 전부 잠긴 값으로 본다.
+  //
+  // 목적지 팀을 다시 고른다. 이것이 없으면 멤버십을 읽은 뒤 잠금을 얻기 전에 커밋된
+  // `removeMember`(같은 팀 키를 쓴다)를 못 보고, 소유 팀 밖 사람을 소유자로 앉힌다 — 그
+  // 설문은 소유자조차 못 열고(티켓 13 revocation) 소유자가 살아 있어 승계 대기로도 안 잡혀
+  // 재배치 인박스에도 안 뜬다.
+  const teamId = requireOwningTeam(
+    pickOwningTeam(survey.teamId, await readActiveMembershipTeamIds(tx, newOwnerUserId)),
+  );
+
+  // 사전 읽기가 고른 집합 밖의 팀이 답이면 **그 팀의 명부는 아직 잠겨 있지 않다** — 여기서
+  // 그대로 진행하면 잠금이 지켜주지 못하는 값으로 쓰게 된다. 재시도가 정답이다
+  // (다음 시도의 사전 읽기는 바뀐 값을 본다).
+  if (!lockedTeamIds.includes(teamId)) throw new OwnershipChangedError();
+  if (survey.teamId !== null && !lockedTeamIds.includes(survey.teamId)) {
+    throw new OwnershipChangedError();
+  }
+  // 해산이 진행 중이었다면 ②에서 기다렸다가 archived 를 봤다 — 그 결과로 판정한다.
+  if (!activeTeamIds.has(teamId)) throw new OwnerTeamNotActiveError();
+
   const [target] = await tx
     .select({ status: users.status, userType: users.userType })
     .from(users)
@@ -213,16 +297,19 @@ export async function transferOwnershipInTx(
     throw new NotATransferCandidateError();
   }
 
-  // 수동 이전만 후보 자격을 요구한다. 승계는 처리자가 목록에서 고른 사람이고, 그 목록을
-  // 만든 것이 같은 후보 규칙이라 여기서 다시 물으면 왕복만 는다.
-  if (options.requireCandidate) {
-    const candidates = await listTransferCandidates(surveyId, tx);
-    if (!candidates.some((c) => c.userId === newOwnerUserId)) {
-      throw new NotATransferCandidateError();
-    }
+  // **후보 자격은 수동 이전과 승계 양쪽 다 요구한다.**
+  //
+  // 예전에는 승계를 면제하며 "처리자가 목록에서 고른 사람이라 다시 물으면 왕복만 는다" 고
+  // 적어 뒀는데, 그 목록은 서버가 만든 것이 아니라 **클라이언트가 보내는 입력**이다. 면제하면
+  // 같은 팀 사람도 참여자도 아닌 임의의 active internal 계정을 지목할 수 있고, 그 사람에게
+  // 활성 팀이 하나면 설문이 그 무관한 팀으로 **조용히** 옮겨간다.
+  // 악의가 없어도 재현된다 — 미리보기와 확정 사이에 후보가 팀에서 빠지면 같은 일이 벌어진다.
+  const candidates = await listTransferCandidates(surveyId, tx);
+  if (!candidates.some((c) => c.userId === newOwnerUserId)) {
+    throw new NotATransferCandidateError();
   }
 
-  const { teamId, movedTeam } = await resolveOwningTeam(tx, survey, newOwnerUserId);
+  const movedTeam = teamId !== survey.teamId;
 
   await tx
     .update(surveys)
@@ -257,7 +344,6 @@ export async function transferSurveyOwnership(
 ): Promise<WorkspaceActionOutput> {
   await db.transaction((tx) =>
     transferOwnershipInTx(tx, actorUserId, input.surveyId, input.newOwnerUserId, {
-      requireCandidate: true,
       expectedOwnerUserId: input.expectedOwnerUserId,
     }),
   );
