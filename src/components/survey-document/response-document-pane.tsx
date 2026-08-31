@@ -28,11 +28,20 @@ interface Props {
   anchors: readonly SurveyAnchorSnapshot[];
   /** 지금 켤 초점. null 이면 사각형을 하나도 그리지 않는다. */
   focus: (AnchorFocus & { nonce: number }) | null;
+  /** 대상 id → 사각형 위에 얹을 이름. 없으면 라벨을 그리지 않는다. */
+  labelOf?: ((ownerId: string) => string | null) | undefined;
   /** 사각형을 누르면 오른쪽 문항 목록으로 대응된다 (양방향). */
   onOwnerSelect?: (ownerId: string) => void;
 }
 
-export function ResponseDocumentPane({ url, pageCount, anchors, focus, onOwnerSelect }: Props) {
+export function ResponseDocumentPane({
+  url,
+  pageCount,
+  anchors,
+  focus,
+  labelOf,
+  onOwnerSelect,
+}: Props) {
   const [page, setPage] = useState(1);
   const [pageBox, setPageBox] = useState<RenderedPageBox | null>(null);
   const [followedNonce, setFollowedNonce] = useState<number | null>(null);
@@ -112,7 +121,20 @@ export function ResponseDocumentPane({ url, pageCount, anchors, focus, onOwnerSe
                 width: placed.width,
                 height: placed.height,
               }}
-            />
+            >
+              {/* 테두리만으로는 무엇의 영역인지 모른다 — 이름을 위에 얹는다.
+                  맥락(그룹)은 왼쪽, 초점은 오른쪽에 붙여 서로 가리지 않게 한다. */}
+              {labelOf?.(anchor.ownerId) && (
+                <span
+                  className={cn(
+                    'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold text-white',
+                    isFocus ? 'right-1 bg-amber-500' : 'left-1 bg-blue-500/80',
+                  )}
+                >
+                  {labelOf(anchor.ownerId)}
+                </span>
+              )}
+            </button>
           );
         })}
     </>

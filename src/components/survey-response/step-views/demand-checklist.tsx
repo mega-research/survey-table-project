@@ -1,16 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { ChevronDown, Crop } from 'lucide-react';
 
 import { GroupStepItem } from '@/components/survey-response/step-views/group-step-item';
 import { StepItem } from '@/lib/group-ordering';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   resolveJudgementBulkChoices,
   resolveJudgementShape,
+  type JudgementShape,
 } from '@/lib/survey/judgement-item';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,16 @@ import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { Question, QuestionGroup } from '@/types/survey';
 
 type ResponsesMap = Record<string, unknown>;
+
+/**
+ * 선택 컨트롤 폭. 그룹 머리의 일괄 버튼과 문항 행의 버튼이 **같은 자**를 써야
+ * 세로줄이 맞는다 — 머리는 두 개뿐이라 세 번째 자리를 빈칸으로 채운다.
+ */
+const PICK_WIDTH = 'w-[312px]';
+/** 스쳐 지나가는 것과 머무는 것을 가르는 시간. 그룹을 넘어갈 때만 쓴다. */
+const HOVER_DELAY_MS = 500;
+/** 마지막 스크롤 이후 이만큼은 hover 를 받지 않는다. */
+const SCROLL_QUIET_MS = 150;
 
 /**
  * 분할 레이아웃 오른쪽의 판단 체크리스트.
@@ -39,12 +50,14 @@ interface Props {
   highlightQuestionIds: Set<string>;
   requiredMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
-  /** 클릭·포커스로 초점을 옮긴다 — 조사표가 그 영역으로 이동한다. */
+  /** 이 문항으로 초점을 옮긴다 — 조사표가 그 영역으로 따라간다. */
   onQuestionFocus?: ((questionId: string) => void) | undefined;
-  /** 훑는 동안의 미리보기 — 조사표를 움직이지 않고 해당 영역만 밝힌다. null 이면 해제. */
-  onQuestionHover?: ((questionId: string | null) => void) | undefined;
-  /** 블록 머리를 누르면 그 그룹의 영역만 밝힌다. */
+  /** 이 그룹으로 초점을 옮긴다 — 그룹 영역만 밝힌다. */
   onGroupSelect?: ((groupId: string) => void) | undefined;
+  /** 지금 초점이 놓인 그룹 (문항이 초점이면 그 문항의 소속 그룹). */
+  activeGroupId?: string | null;
+  /** 지금 초점인 문항. 그룹이 초점이면 null. */
+  focusedQuestionId?: string | null;
 }
 
 /** 한 블록(문항이 실제로 속한 그룹) 단위 묶음. 앵커가 하위그룹에도 붙으므로 root 가 아니다. */
@@ -64,11 +77,54 @@ export function DemandChecklist({
   requiredMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
-  onQuestionHover,
   onGroupSelect,
+  activeGroupId = null,
+  focusedQuestionId = null,
 }: Props) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 이 시각까지는 목록이 스크롤 중인 것으로 본다. */
+  const scrollingUntil = useRef(0);
+
+  const cancelHover = useCallback(() => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  }, []);
+
+  // 스크롤 중에는 커서가 가만히 있어도 행이 밑으로 지나가며 hover 가 발화한다.
+  // 어느 컨테이너가 스크롤될지 모르므로 캡처 단계에서 전부 받는다.
+  useEffect(() => {
+    const onAnyScroll = () => {
+      scrollingUntil.current = Date.now() + SCROLL_QUIET_MS;
+      cancelHover();
+    };
+    window.addEventListener('scroll', onAnyScroll, true);
+    return () => {
+      window.removeEventListener('scroll', onAnyScroll, true);
+      cancelHover();
+    };
+  }, [cancelHover]);
+
+  /**
+   * 머무르면 따라가고 스쳐 지나가면 무시한다.
+   * **같은 그룹 안에서는 지연이 없다** — 조사표가 쪽을 넘기지 않고 주황 테두리만
+   * 옮겨 붙으므로 기다릴 이유가 없다.
+   */
+  const hoverQuestion = useCallback(
+    (questionId: string, groupId: string | null) => {
+      cancelHover();
+      if (!onQuestionFocus) return;
+      if (Date.now() < scrollingUntil.current) return;
+      if (groupId !== null && groupId === activeGroupId) {
+        onQuestionFocus(questionId);
+        return;
+      }
+      hoverTimer.current = setTimeout(() => onQuestionFocus(questionId), HOVER_DELAY_MS);
+    },
+    [cancelHover, onQuestionFocus, activeGroupId],
+  );
 
   const blocks = useMemo<Block[]>(() => {
     const byId = new Map(groups.map((g) => [g.id, g.name]));
@@ -85,7 +141,7 @@ export function DemandChecklist({
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3" onMouseLeave={cancelHover}>
       {blocks.map((block, index) => (
         <BlockCard
           key={block.id ?? `__ungrouped__${index}`}
@@ -98,8 +154,11 @@ export function DemandChecklist({
           requiredMessageQuestionIds={requiredMessageQuestionIds}
           numericIssues={numericIssues}
           onQuestionFocus={onQuestionFocus}
-          onQuestionHover={onQuestionHover}
           onGroupSelect={onGroupSelect}
+          onQuestionHover={hoverQuestion}
+          onHoverEnd={cancelHover}
+          isActiveGroup={block.id !== null && block.id === activeGroupId}
+          focusedQuestionId={focusedQuestionId}
         />
       ))}
     </div>
@@ -116,111 +175,147 @@ function BlockCard({
   requiredMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
-  onQuestionHover,
   onGroupSelect,
+  onQuestionHover,
+  onHoverEnd,
+  isActiveGroup,
+  focusedQuestionId,
 }: {
   block: Block;
   blockName: string | null;
-} & Omit<Props, 'items' | 'groups'>) {
+  responses: ResponsesMap;
+  questions: Question[];
+  onResponse: (questionId: string, value: unknown) => void;
+  highlightQuestionIds: Set<string>;
+  requiredMessageQuestionIds: Set<string>;
+  numericIssues: Map<string, NumericIssue[]>;
+  onQuestionFocus?: ((questionId: string) => void) | undefined;
+  onGroupSelect?: ((groupId: string) => void) | undefined;
+  onQuestionHover: (questionId: string, groupId: string | null) => void;
+  onHoverEnd: () => void;
+  isActiveGroup: boolean;
+  focusedQuestionId: string | null;
+}) {
   const optionTextsAll = useSurveyResponseStore((s) => s.optionTexts);
 
-  /** 판단 항목만 일괄 선택의 대상이다 — 다른 유형에는 그 값이 없다. */
-  const judgements = block.items
-    .map((item) => ({ item, shape: resolveJudgementShape(item.question) }))
-    .filter((x): x is { item: StepItem; shape: NonNullable<typeof x.shape> } => x.shape !== null);
+  const judgements = useMemo(
+    () =>
+      block.items
+        .map((item) => ({ item, shape: resolveJudgementShape(item.question) }))
+        .filter((x): x is { item: StepItem; shape: JudgementShape } => x.shape !== null),
+    [block.items],
+  );
 
   const answeredCount = judgements.filter(({ item, shape }) => {
     const value = responses[item.question.id];
     if (value === shape.needValue || value === shape.dropValue) return true;
-    // 의견은 서술이 있어야 답으로 친다 — 집계와 같은 규칙이다
+    // 의견은 서술이 있어야 답으로 친다 — 집계와 같은 규칙이다.
     if (value !== shape.opinionValue) return false;
     return (optionTextsAll[item.question.id]?.[shape.opinionOptionId] ?? '').trim().length > 0;
   }).length;
 
   /**
-   * 블록 일괄 선택. 판정은 `resolveBulkChoices` 한 곳에 있다 — 선택지 값이 **완전히
-   * 같은** 단일선택 문항 둘 이상일 때만 나오고, 기타입력(의견)은 대상에서 빠진다.
-   * 값이 다른 문항에 남의 값을 쓰면 응답자에게 보이지 않는 오답이 되기 때문이다.
+   * 블록 일괄 선택. 문항마다 **자기 값**을 쓴다 — 선택지 값은 문항별로 발번되므로
+   * 값 하나를 전부에 쓰면 그 문항에 없는 값이 들어가 보이지 않는 오답이 된다.
    */
   const bulk = resolveJudgementBulkChoices(judgements.map(({ item }) => item.question));
-
-  const applyBulk = (choice: (typeof bulk)[number]) => {
-    for (const [questionId, value] of Object.entries(choice.valueByQuestionId)) {
-      onResponse(questionId, value);
-    }
-  };
+  const allAre = (choice: (typeof bulk)[number]) =>
+    Object.entries(choice.valueByQuestionId).every(([id, value]) => responses[id] === value);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+    <section
+      className={cn(
+        'overflow-hidden rounded-xl border bg-white',
+        isActiveGroup ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200',
+      )}
+    >
       {blockName && (
         <div
-          className={cn(
-            'flex flex-wrap items-center gap-2 border-b border-gray-200 bg-blue-50/60 px-4 py-2.5',
-            block.id && onGroupSelect && 'cursor-pointer hover:bg-blue-100/60',
-          )}
           onClick={block.id && onGroupSelect ? () => onGroupSelect(block.id!) : undefined}
-        >
-          <Crop className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-          <span className="text-sm font-semibold text-gray-900">{blockName}</span>
-          <span className="text-xs text-gray-500">
-            {judgements.length > 0
-              ? `${judgements.length}문항 · ${answeredCount} 응답`
-              : `${block.items.length}문항`}
-          </span>
-          {bulk.length > 0 && (
-            <div className="ml-auto flex items-center gap-1.5">
-              {bulk.map((choice) => (
-                <button
-                  key={choice.key}
-                  type="button"
-                  onClick={() => applyBulk(choice)}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  모두 {choice.label}
-                </button>
-              ))}
-            </div>
+          className={cn(
+            'flex items-center gap-3 border-b border-gray-200 px-4 py-2.5',
+            // 파란색은 "지금 이 그룹" 하나만 쓴다 — 전부 파랗게 두면 어디를 보는지 모른다.
+            isActiveGroup ? 'bg-blue-50' : 'bg-gray-50',
+            block.id && onGroupSelect && 'cursor-pointer',
           )}
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <Crop size={14} className={isActiveGroup ? 'text-blue-600' : 'text-gray-400'} />
+            <span
+              className={cn(
+                'truncate text-[13px] font-semibold',
+                isActiveGroup ? 'text-blue-700' : 'text-gray-800',
+              )}
+            >
+              {blockName}
+            </span>
+            <span className="shrink-0 text-[11px] text-gray-500">
+              {judgements.length > 0
+                ? `${judgements.length}문항 · ${answeredCount} 응답`
+                : `${block.items.length}문항`}
+            </span>
+          </span>
+          <div
+            className={cn('flex shrink-0 gap-1.5', PICK_WIDTH)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {bulk.map((choice) => (
+              <Seg
+                key={choice.key}
+                className="text-[10px]"
+                label={`모두 ${choice.label}`}
+                on={allAre(choice)}
+                tone={choice.key}
+                onClick={() => {
+                  for (const [questionId, value] of Object.entries(choice.valueByQuestionId)) {
+                    onResponse(questionId, value);
+                  }
+                }}
+              />
+            ))}
+            {/* 의견은 문항마다 다른 글을 받는 것이라 일괄이 성립하지 않는다 — 자리만 비운다 */}
+            <span className="flex-1" />
+          </div>
+          <span className="w-[14px] shrink-0" />
         </div>
       )}
 
-      <div className="divide-y divide-gray-100">
-        {block.items.map((item) => {
-          const shape = resolveJudgementShape(item.question);
-          return shape ? (
-            <JudgementRow
-              key={item.question.id}
-              question={item.question}
-              shape={shape}
-              value={responses[item.question.id]}
+      {block.items.map((item) => {
+        const shape = resolveJudgementShape(item.question);
+        return shape ? (
+          <JudgementRow
+            key={item.question.id}
+            question={item.question}
+            shape={shape}
+            value={responses[item.question.id]}
+            active={focusedQuestionId === item.question.id}
+            invalid={highlightQuestionIds.has(item.question.id)}
+            onPick={(value) => onResponse(item.question.id, value)}
+            onFocus={() => onQuestionFocus?.(item.question.id)}
+            onHover={() => onQuestionHover(item.question.id, item.question.groupId ?? null)}
+            onHoverEnd={onHoverEnd}
+          />
+        ) : (
+          <div
+            key={item.question.id}
+            className="border-b border-gray-100 px-4 py-4 last:border-0"
+            onClick={() => onQuestionFocus?.(item.question.id)}
+          >
+            {/* 판단 항목이 아닌 문항은 일반 렌더 그대로 — 조사표 순서를 끊지 않는다 */}
+            <GroupStepItem
+              item={item}
+              showSubgroupHeading={false}
+              responses={responses}
+              questions={questions}
               onResponse={onResponse}
               isHighlighted={highlightQuestionIds.has(item.question.id)}
-              onFocus={onQuestionFocus}
-              onHover={onQuestionHover}
+              showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
+              issues={numericIssues.get(item.question.id)}
             />
-          ) : (
-            <div
-              key={item.question.id}
-              className="px-4 py-4"
-              onFocusCapture={onQuestionFocus ? () => onQuestionFocus(item.question.id) : undefined}
-              onClickCapture={onQuestionFocus ? () => onQuestionFocus(item.question.id) : undefined}
-            >
-              {/* 판단 항목이 아닌 문항은 일반 렌더 그대로 — 조사표 순서를 끊지 않는다 */}
-              <GroupStepItem
-                item={item}
-                showSubgroupHeading={false}
-                responses={responses}
-                questions={questions}
-                onResponse={onResponse}
-                isHighlighted={highlightQuestionIds.has(item.question.id)}
-                showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
-                issues={numericIssues.get(item.question.id)}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -228,101 +323,161 @@ function JudgementRow({
   question,
   shape,
   value,
-  onResponse,
-  isHighlighted,
+  active,
+  invalid,
+  onPick,
   onFocus,
   onHover,
+  onHoverEnd,
 }: {
   question: Question;
-  shape: NonNullable<ReturnType<typeof resolveJudgementShape>>;
+  shape: JudgementShape;
   value: unknown;
-  onResponse: (questionId: string, value: unknown) => void;
-  isHighlighted: boolean;
-  onFocus?: ((questionId: string) => void) | undefined;
-  onHover?: ((questionId: string | null) => void) | undefined;
+  active: boolean;
+  invalid: boolean;
+  onPick: (value: string) => void;
+  onFocus: () => void;
+  onHover: () => void;
+  onHoverEnd: () => void;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const optionText =
+  const note =
     useSurveyResponseStore((s) => s.optionTexts[question.id]?.[shape.opinionOptionId]) ?? '';
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-  const [manuallyOpen, setManuallyOpen] = useState(false);
 
   const isOpinion = value === shape.opinionValue;
-  // 의견을 고르면 서술 칸이 열린다. 서술이 남아 있으면 접어도 다시 보여준다.
-  const showNote = isOpinion || manuallyOpen || optionText.length > 0;
+  const needsText = isOpinion && note.trim().length === 0;
 
-  const options = question.options ?? [];
+  /**
+   * 이 행의 입력칸에 커서가 있는 동안은 hover 로 따라가지 않는다.
+   * 적는 도중 마우스가 스치기만 해도 조사표가 이 문항 쪽으로 돌아와, 맥락을 보려고
+   * 넘겨둔 쪽을 빼앗는다.
+   */
+  const typing = useRef(false);
+
   const labelOf = (optionValue: string) =>
-    options.find((o) => o.value === optionValue)?.label ?? optionValue;
-
-  const choices = [
-    { value: shape.needValue, label: labelOf(shape.needValue) },
-    { value: shape.dropValue, label: labelOf(shape.dropValue) },
-    { value: shape.opinionValue, label: labelOf(shape.opinionValue) },
-  ];
+    question.options?.find((o) => o.value === optionValue)?.label ?? optionValue;
 
   return (
     <div
       data-question-id={question.id}
-      className={cn('px-4 py-2.5', isHighlighted && 'bg-amber-50')}
-      onFocusCapture={onFocus ? () => onFocus(question.id) : undefined}
-      onClickCapture={onFocus ? () => onFocus(question.id) : undefined}
-      // 훑는 동안의 미리보기 — 조사표를 움직이지 않고 이 문항의 영역만 밝힌다.
-      onMouseEnter={onHover ? () => onHover(question.id) : undefined}
-      onMouseLeave={onHover ? () => onHover(null) : undefined}
+      onClick={onFocus}
+      onMouseEnter={() => {
+        if (!typing.current) onHover();
+      }}
+      onMouseLeave={onHoverEnd}
+      className={cn(
+        'cursor-pointer border-b border-gray-100 px-4 py-2.5 last:border-0',
+        active && 'bg-amber-50',
+        invalid && 'bg-red-50 ring-1 ring-inset ring-red-300',
+      )}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {question.questionCode && (
-          <span className="w-10 shrink-0 text-xs text-gray-500 tabular-nums">
-            {question.questionCode}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 text-sm text-gray-900">
+      <div className="flex items-center gap-3">
+        <span className="w-10 shrink-0 text-[11px] font-bold text-gray-500">
+          {question.questionCode}
+        </span>
+        <span className="min-w-0 flex-1 text-[13px] text-gray-900">
           {substituteTokens(question.title ?? '', attrs, quotes)}
         </span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {choices.map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              aria-pressed={value === choice.value}
-              onClick={() => onResponse(question.id, choice.value)}
-              className={cn(
-                'rounded-md border px-2.5 py-1 text-xs transition-colors',
-                value === choice.value
-                  ? 'border-blue-500 bg-blue-500 font-medium text-white'
-                  : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700',
-              )}
-            >
-              {choice.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setManuallyOpen((v) => !v)}
-            aria-label={showNote ? '의견 칸 접기' : '의견 칸 펼치기'}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-          >
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showNote && 'rotate-180')} />
-          </button>
+        <div className={cn('flex shrink-0 gap-1.5', PICK_WIDTH)}>
+          <Seg
+            label={labelOf(shape.needValue)}
+            on={value === shape.needValue}
+            tone="need"
+            invalid={invalid}
+            onClick={() => onPick(shape.needValue)}
+          />
+          <Seg
+            label={labelOf(shape.dropValue)}
+            on={value === shape.dropValue}
+            tone="drop"
+            invalid={invalid}
+            onClick={() => onPick(shape.dropValue)}
+          />
+          <Seg
+            label={labelOf(shape.opinionValue)}
+            on={isOpinion}
+            tone="opinion"
+            invalid={invalid}
+            onClick={() => onPick(shape.opinionValue)}
+          />
         </div>
+        {/* 의견이면 서술 칸이 늘 열려 있어 접는 버튼이 없다 — 그 값의 내용물이 곧 서술이다 */}
+        <span className="flex w-[14px] shrink-0 justify-center text-gray-400">
+          {isOpinion && <ChevronDown size={14} className="rotate-180" />}
+        </span>
       </div>
 
-      {showNote && (
-        <textarea
-          value={optionText}
-          onChange={(e) => setOptionText(question.id, shape.opinionOptionId, e.target.value)}
-          rows={2}
-          placeholder="의견을 적어 주세요. 비워두면 답한 것으로 치지 않습니다."
-          className={cn(
-            'mt-2 w-full rounded-md border p-2 text-sm outline-none',
-            isOpinion && optionText.trim().length === 0
-              ? 'border-amber-300 bg-amber-50/50 focus:border-amber-400'
-              : 'border-gray-300 focus:border-blue-500',
+      {/*
+        서술 칸은 **의견을 고른 문항에만** 연다. 선택되지 않은 선택지의 텍스트는
+        제출 시 사이드카에서 버려지므로, 다른 값에서 적게 두면 조용히 사라진다.
+      */}
+      {isOpinion && (
+        <div className="mt-2">
+          <textarea
+            value={note}
+            onChange={(e) => setOptionText(question.id, shape.opinionOptionId, e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onFocus={() => (typing.current = true)}
+            onBlur={() => (typing.current = false)}
+            rows={3}
+            placeholder="이 문항에 대한 의견을 자유롭게 적어 주십시오"
+            className={cn(
+              'w-full rounded-md border p-2 text-[12px] outline-none focus:border-blue-500',
+              needsText && invalid ? 'border-red-400' : 'border-gray-300',
+            )}
+          />
+          {needsText && (
+            <p className="mt-1 text-[11px] text-gray-500">의견을 적으셔야 응답으로 처리됩니다</p>
           )}
-        />
+        </div>
       )}
     </div>
+  );
+}
+
+/** 눌린 선택지의 색. 필요함은 파랑, 필요하지 않음은 짙은 회색, 의견은 주황. */
+const SEG_ON: Record<'need' | 'drop' | 'opinion', string> = {
+  need: 'bg-blue-500 text-white',
+  drop: 'bg-[#4b4b52] text-white',
+  opinion: 'bg-amber-600 text-white',
+};
+
+function Seg({
+  label,
+  on,
+  tone,
+  invalid,
+  className,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  tone: 'need' | 'drop' | 'opinion';
+  invalid?: boolean;
+  className?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        'flex-1 rounded-md px-1 py-1.5 text-[11px] whitespace-nowrap transition-colors',
+        on
+          ? cn('font-semibold', SEG_ON[tone])
+          : invalid
+            ? 'border border-red-400 bg-white text-red-500 hover:bg-red-50'
+            : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50',
+        className,
+      )}
+    >
+      {label}
+    </button>
   );
 }

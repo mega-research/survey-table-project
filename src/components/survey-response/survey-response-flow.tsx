@@ -589,9 +589,6 @@ function SurveyResponseFlowActive({
   const [anchorSelection, setAnchorSelection] = useState<
     { kind: 'question' | 'group'; id: string; nonce: number } | null
   >(null);
-  // 훑는 동안의 미리보기. **쪽을 옮기지 않는다** — 커서가 스치는 대로 조사표가
-  // 넘어가면 읽고 있던 자리를 잃는다. 밝히기만 하고 이동은 클릭에만 맡긴다.
-  const [hoveredQuestionId, setHoveredQuestionId] = useState<string | null>(null);
   const selectAnchorQuestion = useCallback(
     (questionId: string) => {
       // 앵커가 풀리지 않는 문항은 초점을 옮기지 않는다. 옮기면 아래의 렌더 중
@@ -631,17 +628,6 @@ function SurveyResponseFlowActive({
   }
 
   const anchorFocus = useMemo(() => {
-    // 훑는 중이면 그 문항을 밝히되 nonce 는 그대로 둔다 — 쪽이 따라 움직이지 않는다.
-    if (hoveredQuestionId) {
-      const hovered = currentStepQuestions.find((q) => q.id === hoveredQuestionId);
-      const focus = hovered
-        ? resolveAnchorFocus(
-            { id: hovered.id, groupId: hovered.groupId ?? null },
-            anchorPagesOf,
-          )
-        : null;
-      if (focus) return { ...focus, nonce: anchorSelection?.nonce ?? 0 };
-    }
     if (!anchorSelection) return null;
     if (anchorSelection.kind === 'group') {
       const pages = anchorPagesOf(anchorSelection.id);
@@ -661,7 +647,27 @@ function SurveyResponseFlowActive({
       anchorPagesOf,
     );
     return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
-  }, [anchorSelection, hoveredQuestionId, currentStepQuestions, anchorPagesOf]);
+  }, [anchorSelection, currentStepQuestions, anchorPagesOf]);
+
+  // 조사표 사각형에 얹을 이름. 문항은 문항코드, 그룹은 그룹 이름.
+  const anchorLabelOf = useCallback(
+    (ownerId: string) => {
+      const question = questions.find((q) => q.id === ownerId);
+      if (question) return question.questionCode?.trim() || question.title || null;
+      return groups.find((g) => g.id === ownerId)?.name ?? null;
+    },
+    [questions, groups],
+  );
+
+  // 초점이 놓인 그룹 — 문항이 초점이면 그 문항의 소속 그룹이다. 목록의 카드가
+  // 이 기준으로 파랗게 서고, hover 지연을 "같은 그룹인가"로 가르는 기준도 이것이다.
+  const activeAnchorGroupId = useMemo(() => {
+    if (!anchorSelection) return null;
+    if (anchorSelection.kind === 'group') return anchorSelection.id;
+    return (
+      currentStepQuestions.find((q) => q.id === anchorSelection.id)?.groupId ?? null
+    );
+  }, [anchorSelection, currentStepQuestions]);
 
   // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
   const handleAnchorOwnerSelect = useCallback(
@@ -1404,6 +1410,7 @@ function SurveyResponseFlowActive({
               pageCount={documentView.pageCount}
               anchors={documentView.anchors}
               focus={anchorFocus}
+              labelOf={anchorLabelOf}
               onOwnerSelect={handleAnchorOwnerSelect}
             />
           ) : undefined
@@ -1484,8 +1491,11 @@ function SurveyResponseFlowActive({
             requiredMessageQuestionIds={requiredMessageQuestionIds}
             numericIssues={visibleNumericIssues}
             onQuestionFocus={selectAnchorQuestion}
-            onQuestionHover={setHoveredQuestionId}
             onGroupSelect={selectAnchorGroup}
+            activeGroupId={activeAnchorGroupId}
+            focusedQuestionId={
+              anchorSelection?.kind === 'question' ? anchorSelection.id : null
+            }
           />
         ) : (
         <PageStepView
