@@ -97,10 +97,7 @@ export function PdfPageView({
       })
       .catch((e: unknown) => {
         if (!alive) return;
-        setFailure({
-          url,
-          message: e instanceof Error ? e.message : '조사표를 불러오지 못했습니다.',
-        });
+        setFailure({ url, message: describeOpenFailure(e) });
       });
     return () => {
       alive = false;
@@ -261,6 +258,23 @@ export function PdfPageView({
 }
 
 type PdfDocument = Awaited<ReturnType<typeof openDoc>>;
+
+/**
+ * 문서를 여는 데 실패한 이유를 사람이 읽을 문장으로.
+ *
+ * 이 뷰어는 앱에서 **JS 로 R2 객체를 fetch 하는 첫 표면**이다. 기존 R2 사용처는
+ * 전부 `<img>` 라 CORS 가 필요 없었고, 그래서 버킷에 CORS 정책이 없어도 아무도
+ * 몰랐다. 그 상태에서 브라우저가 내는 것은 `Failed to fetch` 한 줄뿐이라 원인이
+ * 파일 문제처럼 보인다 — 새 환경(프로덕션·프리뷰)에서 같은 함정을 다시 밟았을 때
+ * 어디를 봐야 하는지 화면이 말하게 한다.
+ */
+function describeOpenFailure(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  if (/failed to fetch|networkerror|load failed/i.test(raw)) {
+    return '조사표를 불러오지 못했습니다. 파일 저장소가 이 주소에서의 읽기를 허용하지 않는 상태일 수 있습니다 (저장소 CORS 설정).';
+  }
+  return raw || '조사표를 불러오지 못했습니다.';
+}
 
 async function openDoc(url: string) {
   const pdfjs = await import('pdfjs-dist');
