@@ -4,7 +4,19 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 24 **실사 업체 + 계정 발급** — 외주 실사 인력의
+> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 25 **실사 초대 + 실사 홈** — 실사 열이 처음
+> 열렸다. 초대 열은 `survey.view · operations.view · contacts.view · contacts.writeAttempts`
+> 이고 **조사 대상 원본**에 닿는다(게스트의 마스킹 원칙과 갈리는 지점 — 대리 실사라는 업무가
+> 연락처를 전제한다, ADR-0019). **실사 팀장의 파생 시야**는 그 열에서 결과코드 쓰기 한 칸만
+> 빠진다 — 자기 업체 소속원이 초대된 설문을 초대 없이 열람하되 기록은 본인 초대 설문에서만.
+> 그 축은 참여 행 **밖**이다(`SurveyAccessRelation`): 주어가 「내 초대 행」이 아니라 「내 업체
+> 사람이 초대돼 있다」다. 로더의 EXISTS 는 팀장에게만 켜지고 조인 조건이 **업체**인 것이 그
+> 경계다. **파티션 규칙이 넓어졌다** — `isGuestViewer` 가 `isExternalViewer` 가 됐다: 실사가
+> 컨택 표면을 얻으면서, 게스트만 real 로 고정하면 테스트 모드가 켜진 설문에서 실사원이 test
+> 파티션을 읽고 쓴다. 마이그레이션 없음(0092 의 `kind='fieldwork'` 소비).
+> 직전: 티켓 24 실사 업체 + 계정 발급)
+>
+> 티켓 24 **실사 업체 + 계정 발급** — 외주 실사 인력의
 > 소속 경계가 생겼다. `fieldwork_orgs`(0093)는 **워크스페이스가 아니다**: 설문을 소유하지
 > 않고 팀 멤버십을 만들지 않으며 재배치 목적지가 될 수 없다(ADR-0019). 정합은
 > `users_fieldwork_fields_check` 가 지킨다 — 실사면 소속·역할이 둘 다 있어야 하고 아니면 둘 다
@@ -148,7 +160,7 @@ src/
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일 · 실사 홈 설문 목록)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -177,7 +189,7 @@ src/
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
-│   │   │                       # 공개 범위·참여자·클라이언트(게스트) 블록 + 소유권 이전. 실사는 티켓 24
+│   │   │                       # 공개 범위·참여자·클라이언트(게스트)·실사 네 블록 + 소유권 이전(티켓 16·18·21·25)
 │   │   │                       # PRD 맵은 workspace 로 적었지만 입구가 설문 카드라 그 배치는 불가능하다
 │   │                       # (두 묶음은 서로 import 금지 — 그룹 UI 가 survey-list/groups 에 사는 선례)
 │   │                       # 후속 블록도 workspace 표면을 RPC 로 부르므로 feature import 는 안 생긴다
@@ -241,7 +253,8 @@ src/
 │   ├── guest-console/          # 게스트 콘솔 (티켓 22) — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
 │   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
 │   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
-│   └── fieldwork-console/      # 실사 홈 (티켓 05 스텁) — 초대 설문·조사 대상은 티켓 24~27
+│   └── fieldwork-console/      # 실사 홈 (티켓 25, .pen FLOW 10-1) — fieldwork-home-view 진입점
+│                               # 초대 설문 표 + 팀장 전용 「업체 전체」 세그먼트. 조사 대상은 티켓 26
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -277,7 +290,7 @@ src/
 │                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
 │   ├── auth/ + auth.ts         # 인증 어댑터 + 가드. server.ts=Better Auth 인스턴스 · client.ts=브라우저 authClient
 │   │                           # · safe-redirect=로그인 복귀 경로 정제 · protected-paths=proxy/레이아웃 공용 AUTH_PAGES
-│   │                           # · require-admin-page · guest-viewer(계정 유형 → 데이터 파티션)
+│   │                           # · require-admin-page · external-viewer(비내부 계정 → 데이터 파티션)
 │   │                           # auth.ts=requireAuth/requireActiveAccount/getCurrentUser
 │   │                           # (구 guest-grants=env grant 게스트는 티켓 21 이 걷었다)
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
@@ -739,7 +752,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /guest/surveys/[surveyId]/preview   # 설문지 미리보기 — 화이트리스트 밖(부여됐으면 언제나)
 /guest/surveys/[surveyId]/overview  # 응답 현황  · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황
                                   # 넷은 전부 탭 화이트리스트가 연다 (.pen FLOW 5-3)
-/fieldwork                        # 실사 홈 (티켓 05 스텁 — 초대 설문 목록은 티켓 25)
+/fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)
+                                  # 실사원은 초대 설문만, 실사 팀장은 「업체 전체」 세그먼트로 소속원 초대까지
 ```
 
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
@@ -1193,7 +1207,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정·**실사 업체**) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. 실사는 티켓 24 가 자기 열을 연다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial` 두 스위트가 각각 목록으로 고정한다.
+  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial` 세 스위트가 각각 목록으로 고정한다.
 - **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
   남아 있는 이유는 하나다** — 이름이 **표면의 청중**을 적기 때문이다. 티켓 21 이 게스트 분기를
   걷으면서 셋 다 본문이 한 줄 위임으로 줄었지만, 「이 페이지는 관리 화면이다」·「이 문은 비내부
@@ -1269,7 +1283,37 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     **cross-survey 축은 `guest-cross-survey.realdb.test.ts`**(티켓 23) — scoped 전수에 미부여
     설문 id 를 넣고 **사유의 대비**를 본다: 부여=FORBIDDEN, 미부여·남의 부여=NOT_FOUND.
     갈리지 않으면 거부는 같아도 게스트 계정 하나가 조사 목록의 존재 확인 창구가 된다.
-- 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isGuestViewer` → 계정 유형).
+- 게스트·실사 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isExternalViewer` → 계정 유형).
+- **실사 초대는 개인 단위이고, 팀장의 업체 시야는 파생이다**(티켓 25, 스펙 §6, ADR-0019,
+  .pen FLOW 4-2 실사 블록·10-1). `survey_participants` 의 `kind='fieldwork'` 행 하나가 그
+  설문 하나를 연다 — 업체 단위 초대도, 업체 측 배정 UI 도 없다(MVP 무게로 기각).
+  - **초대 열**은 `survey.view` · `operations.view` · `contacts.view` · `contacts.writeAttempts`
+    넷이다. **조사 대상 원본**에 닿는 것이 게스트의 마스킹 원칙과 갈리는 지점이고, 근거는
+    대리 실사라는 업무 자체가 연락처를 전제한다는 것이다. `contacts.manage` 가 없어 명단은
+    못 고치고, 편집·메일·export·응답 상세·분석은 항상 차단이다.
+  - **팀장의 파생 시야**는 그 열에서 `contacts.writeAttempts` 하나만 뺀다. 그 한 칸이
+    「본인이 초대돼야 기록한다」의 전부이고, 두 칸 이상 갈리기 시작하면 파생 시야가 별개
+    역할이 된 것이라 열을 새로 세워야 한다. **초대 판정이 파생보다 먼저 선다** — 뒤집으면
+    본인이 초대된 팀장이 자기 설문에서 결과코드를 못 쓴다.
+  - 파생 시야의 축은 **참여 행 밖**이다(`SurveyAccessRelation.fieldworkOrgInvited`). 주어가
+    다르기 때문이다: 저쪽은 「내 초대 행」, 이쪽은 「내 업체 사람이 초대돼 있다」. 로더의
+    EXISTS 는 **팀장에게만** 켜지고(관문은 전 요청이 지나는 자리라 남의 축의 비용을 지우면
+    안 된다) 조인 조건이 **업체**인 것이 그 경계다 — 빼면 타 업체 설문이 그대로 넘어온다.
+    소속원의 `status='active'` 도 함께 본다: 초대 행은 계정 상태를 따라 지워지지 않으므로,
+    조건이 없으면 아무도 뛰지 않는 설문이 팀장 시야에 계속 선다.
+  - **관문은 두 축**이다 — 조회·검색·추가는 `survey.invite`, 해제는 `survey.manageAccess`.
+    게스트 블록과 같되 **탭 저장이 없다**: 실사에는 설문마다 고르는 화면 축이 없다.
+    검색이 관문을 지는 이유는 후보 목록이 **협력사 인력 명부**라서다.
+  - **주체의 소속·역할은 세션이 아니라 DB 에서** 읽고 **활성 업체일 때만** 채운다
+    (`loadAccessSubject`). 업체가 종료되면 판정이 통째로 닫힌다.
+  - **배치 로더는 파생 시야를 세우지 않는다** — 좁은 쪽으로 틀리고(거부), 오늘 도달 경로가
+    없다. 실사가 지나는 배치 표면이 생기면 그 자리에 축을 함께 세울 것.
+  - 음성 검증 둘: `fieldwork-account-denial.test.ts`(라우터 열거 — authed·superadmin 전수
+    FORBIDDEN, 초대 설문에서 열리는 capability 가 정확히 넷)와 `fieldwork-invites.realdb.test.ts`
+    (**업체 둘을 심는 것이 뼈대** — 업체가 하나뿐인 시드에서는 조인 조건이 있든 없든 결과가
+    같아 「타 업체는 안 보인다」를 증명하지 못한다. 대칭까지 함께 잰다).
+  - **스펙 §6 의 「메모(memo·contactMethod) 쓰기」는 아직 열려 있지 않다** — 그 두 필드가
+    명단 수정(`attrs`)과 같은 표면에 있어 좁은 표면이 필요하고, 소비할 화면은 티켓 26 이다.
 - **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
   `fieldwork_orgs`(0093)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
   테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
@@ -1341,7 +1385,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
 - 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
-- 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 `isGuestViewer`(계정 유형, 티켓 21)이며 접근제어가 아니라 **파티션** 축이다.
+- **외부 계정(게스트·실사)은 항상 real 파티션**(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 `isExternalViewer`(계정 유형)이며 접근제어가 아니라 **파티션** 축이다. 티켓 25 에서 게스트 전용이던 이 규칙이 넓어졌다: 실사가 `contacts.view`·`contacts.writeAttempts` 를 얻으면서 컨택 표면이 실제로 열렸는데, 게스트만 고정하면 담당 연구원이 테스트 모드를 켠 설문에서 **실사원이 test 파티션을 읽고 결과코드를 test 로 쓴다** — 밖에서 전화를 돌리는 사람이 실데이터를 못 본다. 술어를 「게스트인가」가 아니라 **「내부가 아닌가」**로 적는 것이 요점이다.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
 ---
