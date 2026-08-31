@@ -25,6 +25,7 @@ import { db } from '@/db';
 import {
   contactTargets as contactTargetsTable,
   questions as questionsTable,
+  surveyParticipants as participantsTable,
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
@@ -38,7 +39,11 @@ import type { ORPCContext } from '@/server/context';
 import { getQuotaConfig } from '@/server/quota/services/quota';
 import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import { getSurveyById } from '@/server/read-models/survey-structure';
-import { SurveyAccessError, loadSurveyCapabilities } from '@/server/survey-access';
+import {
+  SurveyAccessError,
+  loadSurveyAccess,
+  loadSurveyCapabilities,
+} from '@/server/survey-access';
 import { surveys as surveysProcedures } from '@/server/survey-builder/procedures/surveys';
 import * as surveyReadSvc from '@/server/survey-builder/services/survey-read';
 import { loadSurveyGateRow } from '@/server/survey-response/services/response-gate';
@@ -48,7 +53,14 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
 const SUPERADMIN_ID = crypto.randomUUID();
 const OWNER_ID = crypto.randomUUID();
+/** 타 팀 참여자 — 팀 축으로는 아무것도 없고 참여 행 하나로만 들어온다(티켓 18). */
+const PARTICIPANT_ID = crypto.randomUUID();
+/** 부여받은 게스트 — 팀도 소유권도 없이 부여 하나로만 들어온다(티켓 21). */
+const GUEST_ID = crypto.randomUUID();
 const TEAM_ID = crypto.randomUUID();
+const OTHER_TEAM_ID = crypto.randomUUID();
+
+const ALL_USER_IDS = [OWNER_ID, SUPERADMIN_ID, PARTICIPANT_ID, GUEST_ID];
 
 const SLUG = `soft-delete-${TEAM_ID.slice(0, 8)}`;
 const PRIVATE_TOKEN = crypto.randomUUID();
@@ -76,6 +88,8 @@ function contextFor(userId: string, isSuperadmin: boolean): ORPCContext {
 }
 
 const owner = { id: OWNER_ID, isSuperadmin: false, userType: 'internal' as const };
+const participant = { id: PARTICIPANT_ID, isSuperadmin: false, userType: 'internal' as const };
+const guest = { id: GUEST_ID, isSuperadmin: false, userType: 'guest' as const };
 
 const surveyClient = (userId: string, isSuperadmin: boolean) =>
   createRouterClient(
@@ -129,6 +143,12 @@ async function seedSurvey(): Promise<void> {
     inviteCode: INVITE_CODE,
     attrs: { 이름: '홍길동' },
   });
+
+  // 팀 경계를 넘는 두 통로 — 삭제가 이쪽도 닫는지가 아래 ①-b 의 질문이다.
+  await db.insert(participantsTable).values([
+    { surveyId, userId: PARTICIPANT_ID, kind: 'member', addedBy: OWNER_ID },
+    { surveyId, userId: GUEST_ID, kind: 'guest', addedBy: OWNER_ID },
+  ]);
 }
 
 async function softDelete(): Promise<void> {
@@ -138,9 +158,11 @@ async function softDelete(): Promise<void> {
 describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () => {
   beforeAll(async () => {
     if (!isLocalDb) return;
-    for (const [id, isSuperadmin] of [
-      [SUPERADMIN_ID, true],
-      [OWNER_ID, false],
+    for (const [id, isSuperadmin, userType] of [
+      [SUPERADMIN_ID, true, 'internal'],
+      [OWNER_ID, false, 'internal'],
+      [PARTICIPANT_ID, false, 'internal'],
+      [GUEST_ID, false, 'guest'],
     ] as const) {
       await db.insert(usersTable).values({
         id,
@@ -149,11 +171,19 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
         emailVerified: true,
         status: 'active',
         isSuperadmin,
-        userType: 'internal',
+        userType,
       });
     }
-    await db.insert(teamsTable).values({ id: TEAM_ID, name: `삭제팀-${TEAM_ID.slice(0, 8)}` });
-    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: OWNER_ID, role: 'member' });
+    await db.insert(teamsTable).values([
+      { id: TEAM_ID, name: `삭제팀-${TEAM_ID.slice(0, 8)}` },
+      { id: OTHER_TEAM_ID, name: `삭제타팀-${OTHER_TEAM_ID.slice(0, 8)}` },
+    ]);
+    await db.insert(teamMembersTable).values([
+      { teamId: TEAM_ID, userId: OWNER_ID, role: 'member' },
+      // 참여자는 **다른 팀** 사람이어야 한다 — 같은 팀에 두면 팀 축이 답을 내버려
+      // 참여 행이 검증되지 않는다.
+      { teamId: OTHER_TEAM_ID, userId: PARTICIPANT_ID, role: 'member' },
+    ]);
   });
 
   beforeEach(async () => {
@@ -165,11 +195,9 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
   afterAll(async () => {
     if (!isLocalDb) return;
     if (surveyId) await db.delete(surveysTable).where(eq(surveysTable.id, surveyId));
-    await db
-      .delete(teamMembersTable)
-      .where(inArray(teamMembersTable.userId, [OWNER_ID, SUPERADMIN_ID]));
-    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
-    await db.delete(usersTable).where(inArray(usersTable.id, [OWNER_ID, SUPERADMIN_ID]));
+    await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, ALL_USER_IDS));
+    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_ID, OTHER_TEAM_ID]));
+    await db.delete(usersTable).where(inArray(usersTable.id, ALL_USER_IDS));
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -212,6 +240,66 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
       expect((await getSurveyById(surveyId))?.id).toBe(surveyId);
       await softDelete();
       expect(await getSurveyById(surveyId)).toBeUndefined();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ①-b 팀 밖에서 들어오는 둘 — 참여자·게스트 (티켓 23, C 검증 게이트)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 위 블록은 **팀 축**으로 들어오는 주체만 봤다. 팀 경계를 넘는 통로는 둘 더 있고
+   * (`survey_participants` 의 member·guest), 그 둘은 판정에서 팀·소유 사슬을 타지 않는다 —
+   * 게스트는 아예 첫 분기에서 갈라진다(티켓 21).
+   *
+   * 그래서 삭제 필터가 **그 통로에도 서는가**를 따로 묻는다. 오늘은 로더가 `surveys` 에서
+   * 시작해 참여 행을 LEFT JOIN 하므로 `deleted_at IS NULL` 하나가 셋을 함께 닫지만, 게스트
+   * 홈처럼 「부여된 설문 목록」이 필요한 자리는 참여 행에서 시작하고 싶은 유혹이 있다 —
+   * 그렇게 뒤집는 순간 삭제 필터는 설문 쪽 조인 조건으로 옮겨가고, 조건 하나만 빠뜨려도
+   * 지워진 설문이 게스트에게만 계속 열린다. 그 회귀가 소유자 축 단언으로는 보이지 않는다.
+   */
+  describe('참여자·게스트 — 부여가 있어도 함께 닫힌다', () => {
+    it('삭제 전에는 둘 다 자기 열을 갖는다', async () => {
+      expect([...(await loadSurveyCapabilities(participant, surveyId))]).toContain('survey.edit');
+
+      const before = await loadSurveyAccess(guest, surveyId);
+      // 게스트 열은 둘뿐이다(스펙 §8) — 여기가 늘면 삭제와 무관하게 회귀다.
+      expect([...before.capabilities].sort()).toEqual(['operations.view', 'survey.view']);
+    });
+
+    it('삭제 후 참여자는 not_found 다 — 참여 행은 그대로 남아 있는데도', async () => {
+      await softDelete();
+
+      await expect(loadSurveyCapabilities(participant, surveyId)).rejects.toMatchObject({
+        reason: 'not_found',
+      });
+
+      // 행이 남아 있다는 것이 이 단언의 요점이다: 닫은 것은 삭제 필터이지 부여 소멸이 아니다.
+      const rows = await db
+        .select({ userId: participantsTable.userId })
+        .from(participantsTable)
+        .where(eq(participantsTable.surveyId, surveyId));
+      expect(rows.map((r) => r.userId).sort()).toEqual([PARTICIPANT_ID, GUEST_ID].sort());
+    });
+
+    it('삭제 후 게스트도 not_found 다 — 탭이 열려 있어도 마찬가지다', async () => {
+      await softDelete();
+
+      await expect(loadSurveyAccess(guest, surveyId)).rejects.toBeInstanceOf(SurveyAccessError);
+      await expect(loadSurveyAccess(guest, surveyId)).rejects.toMatchObject({
+        reason: 'not_found',
+      });
+    });
+
+    it('복구하면 둘 다 그대로 돌아온다 — 삭제는 부여를 지우지 않았다', async () => {
+      await softDelete();
+      await surveyClient(SUPERADMIN_ID, true).surveys.restore({ surveyId });
+
+      expect([...(await loadSurveyCapabilities(participant, surveyId))]).toContain('survey.edit');
+      expect([...(await loadSurveyAccess(guest, surveyId)).capabilities].sort()).toEqual([
+        'operations.view',
+        'survey.view',
+      ]);
     });
   });
 

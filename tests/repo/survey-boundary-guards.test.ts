@@ -111,11 +111,25 @@ describe('설문 스코프 REST 라우트는 관문을 진다', () => {
     ]);
   });
 
-  it('셋 다 인증 + capability 관문을 부른다', () => {
+  /**
+   * 인증 가드는 **`requireAuth` 여야 한다** — `requireActiveAccount` 는 계정 유형을 보지
+   * 않아 게스트·실사가 그대로 들어온다(lib/auth.ts 주석). 스펙 §8 의 「export 는 비내부
+   * 계정에게 **항상 차단**」이 두 겹인 것이 그 계약이고, 이것이 바깥 겹이다: 안쪽 겹인
+   * capability 열은 설문마다 달라질 수 있지만 이 문은 유형만 본다.
+   *
+   * 예전 이 가드는 둘 중 아무거나 받았다. 실물 셋은 모두 requireAuth 였지만, 프로필
+   * 표면(아바타 업로드)이 requireActiveAccount 를 쓰는 형제라 복사 한 번이면 뚫린다 —
+   * 그때 이 파일은 초록으로 남는다.
+   */
+  it('셋 다 내부 전용 인증 + capability 관문을 부른다', () => {
     for (const route of surveyRoutes) {
-      expect(route.source, `${route.rel} 에 인증 가드가 없다`).toMatch(
-        /\b(requireAuth|requireActiveAccount)\s*\(/,
+      expect(route.source, `${route.rel} 에 내부 전용 인증 가드가 없다`).toMatch(
+        /\brequireAuth\s*\(/,
       );
+      expect(
+        route.source,
+        `${route.rel} 이 requireActiveAccount 를 쓴다 — 게스트·실사가 export 로 들어온다`,
+      ).not.toMatch(/\brequireActiveAccount\s*\(/);
       expect(route.source, `${route.rel} 에 설문 관문이 없다`).toMatch(REST_CAPABILITY_GATE);
     }
   });

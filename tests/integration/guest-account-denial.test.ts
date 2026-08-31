@@ -195,4 +195,7 @@ describe('부여된 설문에서도 열리는 것은 프리뷰와 현황뿐이�
 
 // 「부여되지 않은 설문은 존재조차 알리지 않는다」는 여기서 묻지 않는다 — 목의 rowsFor 는
 // WHERE 를 모르고 어떤 id 에도 같은 행을 돌려주므로, 조인 결과가 정말 null 이 되는지는
-// 목으로 증명할 수 없다. 그 축은 `survey-guest-grants.realdb.test.ts` 가 진다.
+// 목으로 증명할 수 없다. 그 축은 실 DB 스위트 둘이 진다:
+//  - `guest-cross-survey.realdb.test.ts` — scoped 표면 전수에 미부여 설문 id 를 주입해
+//    **사유의 대비**(부여=FORBIDDEN / 미부여·남의 부여=NOT_FOUND)를 본다.
+//  - `guest-console.realdb.test.ts` — 같은 축의 화면(주소) 판이다.
