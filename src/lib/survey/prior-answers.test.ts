@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PRIOR_WAVE_LABEL,
   hasPriorAnswer,
-  mergeWithPriorAnswers,
   normalizePriorAnswers,
   resolvePriorWaveLabel,
 } from './prior-answers';
@@ -60,43 +59,6 @@ describe('hasPriorAnswer', () => {
   it('이월 응답이 없으면 항상 false', () => {
     expect(hasPriorAnswer(null, 'q1')).toBe(false);
     expect(hasPriorAnswer({}, 'q1')).toBe(false);
-  });
-});
-
-describe('mergeWithPriorAnswers', () => {
-  it('이월 응답을 바닥에 깔고 이번 회차 값이 이긴다', () => {
-    const merged = mergeWithPriorAnswers({ q1: '작년', q2: '작년2' }, { q1: '올해' });
-    expect(merged).toEqual({ q1: '올해', q2: '작년2' });
-  });
-
-  it('이번 회차 값이 비어 있어도 명시적으로 실려 왔으면 이긴다', () => {
-    const merged = mergeWithPriorAnswers({ q1: '작년' }, { q1: '' });
-    expect(merged).toEqual({ q1: '' });
-  });
-
-  it('기타 기재 사이드카는 문항 단위로 합치고 이번 회차 문항이 이긴다', () => {
-    const merged = mergeWithPriorAnswers(
-      { __optTexts__: { q1: { o1: '작년메모' }, q2: { o1: '작년메모2' } } },
-      { __optTexts__: { q1: { o1: '올해메모' } } },
-    );
-    expect(merged['__optTexts__']).toEqual({
-      q1: { o1: '올해메모' },
-      q2: { o1: '작년메모2' },
-    });
-  });
-
-  it('한쪽에만 사이드카가 있으면 그대로 남긴다', () => {
-    expect(mergeWithPriorAnswers({ __optTexts__: { q1: { o1: 'p' } } }, {})).toEqual({
-      __optTexts__: { q1: { o1: 'p' } },
-    });
-    expect(mergeWithPriorAnswers({}, { __optTexts__: { q1: { o1: 'c' } } })).toEqual({
-      __optTexts__: { q1: { o1: 'c' } },
-    });
-  });
-
-  it('이월 응답이 없으면 이번 회차 값을 그대로 돌려준다 — 익명 응답자 회귀 방지', () => {
-    expect(mergeWithPriorAnswers(null, { q1: 'x' })).toEqual({ q1: 'x' });
-    expect(mergeWithPriorAnswers(null, {})).toEqual({});
   });
 });
 

@@ -121,8 +121,8 @@ describe('useSessionRecovery invite 크로스 기기 회복', () => {
   });
 });
 
-// 이월 응답(추적조사) 프리필과 이어가기의 층위 검증.
-// 로더가 이월값을 먼저 깔고 나서 회복이 저장된 올해 답을 얹는다.
+// 이월 응답(추적조사)과 이어가기의 층위 검증.
+// 이월값은 responses 에 깔리지 않는다 — 복원은 저장된 답만 되살린다.
 describe('useSessionRecovery 이월 응답 층위', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -134,7 +134,7 @@ describe('useSessionRecovery 이월 응답 층위', () => {
     vi.clearAllMocks();
   });
 
-  it('저장된 올해 답이 이월값을 이기고, 손대지 않은 문항은 이월값이 남는다', async () => {
+  it('복원은 저장된 답만 되살린다 — 밝히지 않은 문항에 이월값을 깔지 않는다', async () => {
     resumeMock.mockResolvedValue({
       id: 'response-1',
       status: 'in_progress',
@@ -143,16 +143,11 @@ describe('useSessionRecovery 이월 응답 층위', () => {
       currentStepId: null,
     } as Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>);
 
-    const { setResponses } = renderRecovery({
-      inviteToken: 'invite-token-1',
-      priorAnswers: { q1: '작년 답', q2: '작년 답2' },
-    });
+    const { setResponses } = renderRecovery({ inviteToken: 'invite-token-1' });
 
     await waitFor(() => expect(setResponses).toHaveBeenCalled());
-    expect(setResponses).toHaveBeenCalledWith({
-      q1: '올해 고친 답',
-      q2: '작년 답2',
-    });
+    // q2 는 이월값이 있어도 응답자가 아직 밝히지 않았으므로 비어 있어야 한다.
+    expect(setResponses).toHaveBeenCalledWith({ q1: '올해 고친 답' });
   });
 
   it('지난 세션에 고친 기타 기재가 이월 텍스트로 되돌아가지 않는다', async () => {
@@ -173,13 +168,7 @@ describe('useSessionRecovery 이월 응답 층위', () => {
       currentStepId: null,
     } as Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>);
 
-    renderRecovery({
-      inviteToken: 'invite-token-1',
-      priorAnswers: {
-        q1: '작년 답',
-        __optTexts__: { q1: { o1: '작년메모' }, q2: { o1: '작년메모2' } },
-      },
-    });
+    renderRecovery({ inviteToken: 'invite-token-1' });
 
     await waitFor(() =>
       expect(useSurveyResponseStore.getState().optionTexts['q1']).toEqual({

@@ -301,16 +301,19 @@ export function useSurveyLoader({
               console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
             }
 
-            // 이월 응답 프리필 — 신규 레일이 아니라 admin-edit 초기 prefill 과 같은 경로다
-            // (setResponses + __optTexts__ 사이드카 시드). 조회 실패는 fail-open:
-            // 프리필 없이 지금과 똑같은 빈 설문으로 진행한다.
+            // 이월 응답 — 값을 responses 에 바로 넣지 **않는다**. 화면은 잠긴 입력의
+            // 표시값으로만 쓰고, 이번 회차 응답으로의 복사는 응답자가 변동 확인을
+            // 밝히는 순간에 일어난다. 그래야 응답자가 보지 못한 문항이 이월 값으로
+            // 채워진 채 제출되지 않는다(PRD: 도달하지 못한 문항은 빈칸).
+            // 기타/상세 기재 사이드카만 스토어에 시드한다 — 잠긴 표시에 텍스트가
+            // 보여야 하고, 미선택 옵션의 텍스트는 제출 경계에서 걸러진다.
+            // 조회 실패는 fail-open: 이월 값 없이 지금과 똑같은 빈 설문으로 진행한다.
             if (priorSettled.status === 'rejected') {
               console.error('이월 응답 조회 오류 (프리필 생략):', priorSettled.reason);
             } else if (priorSettled.value) {
               const prior = normalizePriorAnswers(priorSettled.value);
               if (Object.keys(prior).length > 0) {
                 setPriorAnswers(prior);
-                setResponses(prior);
                 useSurveyResponseStore.getState().seedOptionTexts(readOptTextsSidecar(prior));
               }
             }

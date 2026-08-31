@@ -2,13 +2,11 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
-import { requiresChangeConfirmation } from '@/lib/survey/change-confirmation';
 import {
   DEFAULT_PRIOR_WAVE_LABEL,
   resolvePriorWaveLabel,
   type PriorAnswers,
 } from '@/lib/survey/prior-answers';
-import type { Question } from '@/types/survey';
 
 interface PriorAnswersContextValue {
   /** 이월 응답 한 벌. 없으면 null (익명 응답자·이월 응답 미보유 대상자). */
@@ -49,16 +47,13 @@ export function PriorAnswersProvider({
 }
 
 /**
- * 이 문항에 지난 회차 값이 채워져 있는가 + 그때 쓸 회차 라벨.
- * Provider 밖(빌더 미리보기 등)에서 호출하면 항상 false — 레거시 안전.
+ * 이 응답자의 이월 응답 한 벌 + 회차 라벨.
  *
- * 판정은 진행 차단 게이트와 **같은 함수**(`requiresChangeConfirmation`)를 쓴다. 화면과
- * 게이트가 각자 판정하면 컨트롤은 뜨는데 차단은 안 되는 죽은 컨트롤이 생긴다.
+ * 판정(컨트롤 노출·잠금·확인 시 복사할 값)은 전부 `lib/survey/change-confirmation` 의
+ * 순수 함수가 한다 — 컨텍스트는 재료만 내준다. 화면과 진행 차단 게이트가 각자 판정하면
+ * 컨트롤은 뜨는데 차단은 안 되는 죽은 컨트롤이 생긴다.
+ * Provider 밖(빌더 미리보기 등)에서 호출하면 answers 가 null — 레거시 안전.
  */
-export function usePriorAnswerMark(question: Question): {
-  hasPrior: boolean;
-  waveLabel: string;
-} {
-  const { answers, waveLabel } = useContext(PriorAnswersContext);
-  return { hasPrior: requiresChangeConfirmation(question, answers), waveLabel };
+export function usePriorAnswers(): PriorAnswersContextValue {
+  return useContext(PriorAnswersContext);
 }

@@ -254,7 +254,7 @@ describe('useSurveyLoader 토큰 재판정', () => {
   });
 });
 
-describe('useSurveyLoader 이월 응답 프리필', () => {
+describe('useSurveyLoader 이월 응답 적재', () => {
   beforeEach(() => {
     forResponseMock.mockReset();
     attrsLookupMock.mockReset();
@@ -263,7 +263,7 @@ describe('useSurveyLoader 이월 응답 프리필', () => {
     vi.mocked(contactAttrsService.lookupContactAttrs).mockReset();
   });
 
-  it('이월 응답이 있으면 admin-edit 과 같은 초기 prefill 경로로 주입한다', async () => {
+  it('이월 응답을 응답값에 깔지 않고 참조로만 들고 있는다', async () => {
     forResponseMock.mockResolvedValue(responseResult());
     attrsLookupMock.mockResolvedValue({ name: '홍길동' });
     priorAnswersLookupMock.mockResolvedValue({
@@ -278,15 +278,15 @@ describe('useSurveyLoader 이월 응답 프리필', () => {
       surveyId: SURVEY_ID,
       inviteToken: INVITE_A,
     });
-    expect(setResponses).toHaveBeenCalledWith({
-      q1: '작년 답',
-      __optTexts__: { q1: { o1: '작년 기타' } },
-    });
+    // 이월 값은 responses 에 들어가지 않는다 — 응답자가 변동 확인을 밝히는 순간
+    // 문항 단위로 복사된다(보지 못한 문항이 이월 값으로 제출되는 것을 막는다).
+    expect(setResponses).not.toHaveBeenCalled();
     expect(result.current.priorAnswers).toEqual({
       q1: '작년 답',
       __optTexts__: { q1: { o1: '작년 기타' } },
     });
-    // 선택지에 딸린 기타/상세 기재도 함께 채워진다 (입력란은 스토어만 읽는다).
+    // 기타/상세 기재는 스토어에 시드한다 — 잠긴 표시에 텍스트가 보여야 하고,
+    // 미선택 옵션의 텍스트는 제출 경계에서 걸러진다.
     expect(useSurveyResponseStore.getState().optionTexts).toEqual({
       q1: { o1: '작년 기타' },
     });
