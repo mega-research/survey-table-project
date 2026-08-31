@@ -1,5 +1,65 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+/**
+ * drizzle SQL 조각을 문자열로 눌러 검증에 쓴다.
+ *
+ * `queryChunks` 만 따라간다 — 컬럼 객체를 통째로 훑으면 `.table` 역참조를 타고 들어가
+ * 그 테이블의 **모든 컬럼명**이 출력에 섞여, "이 컬럼을 쓰는가" 검증이 공허해진다.
+ */
+function sqlText(node: unknown, seen = new Set<unknown>()): string {
+  if (node == null) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
+  if (typeof node !== 'object' || seen.has(node)) return '';
+  seen.add(node);
+  if (Array.isArray(node)) return node.map((item) => sqlText(item, seen)).join(' ');
+  const record = node as Record<string, unknown>;
+  if (Array.isArray(record['queryChunks'])) return sqlText(record['queryChunks'], seen);
+  if (typeof record['value'] === 'string') return record['value'];
+  if (Array.isArray(record['value'])) return sqlText(record['value'], seen);
+  return '';
+}
+
+/**
+ * `eq(컬럼, 값)` 절에서 그 컬럼에 실제로 바인딩된 값을 꺼낸다.
+ * 컬럼 이름만 보면 `eq(isTest, false)` 로 파티션을 고정해버린 회귀를 놓친다.
+ */
+function boundValueOf(node: unknown, columnName: string): unknown {
+  const stack: unknown[] = [node];
+  const seen = new Set<unknown>();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object' || seen.has(current)) continue;
+    seen.add(current);
+    const chunks = (current as { queryChunks?: unknown[] }).queryChunks;
+    if (Array.isArray(chunks)) {
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i] as { name?: unknown } | undefined;
+        if (chunk && typeof chunk === 'object' && chunk.name === columnName) {
+          for (let j = i + 1; j < chunks.length; j++) {
+            const candidate = chunks[j] as { value?: unknown } | undefined;
+            // 연산자 조각(StringChunk)은 value 가 문자열 배열이다 — 바인딩 값만 고른다.
+            if (
+              candidate &&
+              typeof candidate === 'object' &&
+              'value' in candidate &&
+              !Array.isArray(candidate.value)
+            ) {
+              return candidate.value;
+            }
+          }
+        }
+      }
+      stack.push(...chunks);
+      continue;
+    }
+    for (const value of Object.values(current as Record<string, unknown>)) {
+      if (value && typeof value === 'object') stack.push(value);
+    }
+  }
+  return undefined;
+}
+
 const h = vi.hoisted(() => ({
   scope: 'real' as 'real' | 'test',
   headerRows: [] as string[][],
@@ -12,7 +72,22 @@ const h = vi.hoisted(() => ({
   targetWhere: null as unknown,
   surveyConfig: null as unknown,
   updatedConfig: null as unknown,
+  /** 쓰기가 어느 테이블로 갔는가 — 재업로드가 이웃을 건드리지 않는지 본다. */
+  writtenTables: [] as string[],
+  conflictSet: null as unknown,
 }));
+
+/** drizzle 테이블 객체에서 이름을 꺼낸다 (mock 검증용). */
+function tableName(table: unknown): string {
+  const symbols = Object.getOwnPropertySymbols(table ?? {});
+  for (const symbol of symbols) {
+    if (String(symbol).includes('Name')) {
+      const value = (table as Record<symbol, unknown>)[symbol];
+      if (typeof value === 'string') return value;
+    }
+  }
+  return 'unknown';
+}
 
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => h.scope),
@@ -64,19 +139,36 @@ vi.mock('@/db', () => {
     h.insertedValues = values;
     return insertChain;
   };
-  insertChain['onConflictDoUpdate'] = async () => undefined;
+  insertChain['onConflictDoUpdate'] = async (config: { set?: unknown }) => {
+    h.conflictSet = config?.set;
+  };
 
   txInsertChain['values'] = insertChain['values'];
-  txInsertChain['onConflictDoUpdate'] = async () => undefined;
+  txInsertChain['onConflictDoUpdate'] = insertChain['onConflictDoUpdate'];
 
   return {
     db: {
       query: { questions: { findMany: async () => h.questionRows } },
       select: () => selectChain,
-      update: () => updateChain,
-      insert: () => insertChain,
+      update: (table: unknown) => {
+        h.writtenTables.push(tableName(table));
+        return updateChain;
+      },
+      delete: (table: unknown) => {
+        h.writtenTables.push(`delete:${tableName(table)}`);
+        return { where: async () => undefined };
+      },
+      insert: (table: unknown) => {
+        h.writtenTables.push(tableName(table));
+        return insertChain;
+      },
       transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn({ insert: () => txInsertChain }),
+        fn({
+          insert: (table: unknown) => {
+            h.writtenTables.push(tableName(table));
+            return txInsertChain;
+          },
+        }),
     },
   };
 });
@@ -114,6 +206,8 @@ describe('importPriorAnswers', () => {
     h.targetWhere = null;
     h.surveyConfig = null;
     h.updatedConfig = null;
+    h.writtenTables = [];
+    h.conflictSet = null;
     h.questionRows = [
       { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
     ];
@@ -284,6 +378,58 @@ describe('importPriorAnswers', () => {
     const result = await importPriorAnswers(baseInput());
     // 블록 0(ID)·2(비고)는 문항에 잇지 않았다.
     expect(result.unmappedColumns).toEqual(['ID', '비고']);
+  });
+});
+
+describe('재업로드 안전성', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // 스코프를 여기서 되돌린다 — 테스트 본문 끝에서 되돌리면 실패 시 다음 describe 로 샌다.
+    h.scope = 'real';
+    h.writtenTables = [];
+    h.conflictSet = null;
+    h.surveyConfig = null;
+    h.questionRows = [
+      { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
+    ];
+    h.headerRows = [['ID', 'BQ1']];
+    h.parsedRows = [['7', '메가리서치']];
+    h.targetRows = [{ id: 'target-7', resid: 7 }];
+  });
+
+  it('조사 대상과 응답 테이블을 건드리지 않는다 — 개별 링크와 수집된 응답이 그대로다', async () => {
+    await importPriorAnswers(baseInput());
+    // 쓰기는 이월 응답 테이블 하나뿐이다.
+    expect(h.writtenTables).toEqual(['contact_prior_answers']);
+  });
+
+  it('다시 올리면 그 대상의 이월 응답이 통째로 교체된다 — 이전 임포트의 잔여 값이 남지 않는다', async () => {
+    await importPriorAnswers(baseInput());
+    // 병합(`||`)이 아니라 통째 대입이어야 지난 임포트의 문항 키가 남지 않는다.
+    // `toContain('excluded.answers')` 만 보면 `answers || excluded.answers` 도 통과한다.
+    const answersSql = sqlText((h.conflictSet as { answers?: unknown })?.answers).trim();
+    expect(answersSql).toBe('excluded.answers');
+  });
+
+  it('값이 하나도 살아남지 않으면 아무것도 쓰지 않는다 — 지난 임포트가 그대로 남는다', async () => {
+    // 매핑을 잘못 잡아 변환이 전부 실패했을 때 지난 임포트를 날려버리면 복구가 없다.
+    // 쓰기 자체가 일어나지 않는 것이 그 보장이다(빈 묶음으로 덮지도, 지우지도 않는다).
+    h.parsedRows = [['7', '']];
+    await importPriorAnswers(baseInput());
+    expect(h.writtenTables).toEqual([]);
+  });
+
+  it('테스트 모드에서는 테스트 조사 대상만 본다 — 실 대상과 섞이지 않는다', async () => {
+    h.scope = 'test';
+    await importPriorAnswers(baseInput());
+    // 컬럼 이름만 보면 `eq(isTest, false)` 로 고정해버린 회귀를 놓친다 — 값까지 본다.
+    expect(boundValueOf(h.targetWhere, 'is_test')).toBe(true);
+  });
+
+  it('실 모드에서는 실 조사 대상만 본다', async () => {
+    h.scope = 'real';
+    await importPriorAnswers(baseInput());
+    expect(boundValueOf(h.targetWhere, 'is_test')).toBe(false);
   });
 });
 

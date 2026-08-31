@@ -102,6 +102,32 @@ describe('lookupPriorAnswers PII 읽기 경계', () => {
   });
 })
 
+describe('보관기한 파기 표식', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('파기된 문항은 이월 값이 없는 것으로 본다', async () => {
+    selectChain.mockResolvedValue([
+      {
+        answers: { q1: '[개인정보 파기됨]', q2: '살아있는 답' },
+        isTest: false,
+        testModeEnabled: false,
+      },
+    ]);
+    expect(await lookupPriorAnswers({ surveyId: SURVEY_ID, inviteToken: INVITE })).toEqual({
+      q2: '살아있는 답',
+    });
+  });
+
+  it('전부 파기됐으면 이월 응답이 없는 것과 같다', async () => {
+    selectChain.mockResolvedValue([
+      { answers: { q1: '[개인정보 파기됨]' }, isTest: false, testModeEnabled: false },
+    ]);
+    expect(await lookupPriorAnswers({ surveyId: SURVEY_ID, inviteToken: INVITE })).toBeNull();
+  });
+});
+
 describe('loadChangeConfirmQuestionIds', () => {
   beforeEach(() => {
     vi.clearAllMocks();

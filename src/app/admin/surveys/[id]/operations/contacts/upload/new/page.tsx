@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { UploadWizard } from '@/components/operations/contacts/upload-wizard';
 import { Card, CardContent } from '@/components/ui/card';
 import { getExistingContactsCount } from '@/features/contacts/server/services/contact-columns.service';
+import { countPriorAnswerTargets } from '@/features/contacts/server/services/prior-answer-import.service';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
@@ -17,6 +18,9 @@ interface PageProps {
 export default async function ContactsUploadNewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   const scope = await getOperationsDataScope(surveyId);
+  // 아래 테스트 스코프 차단으로 좁혀지기 전에 잡아둔다 — 리터럴 false 로 두면 그 가드가
+  // 완화될 때 조용히 실 파티션을 읽는다.
+  const isTestScope = scope === 'test';
   if (scope === 'test') {
     return (
       <main className="mx-auto max-w-3xl px-6 py-8">
@@ -29,6 +33,8 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
     );
   }
   const existingContactsCount = await getExistingContactsCount(surveyId, scope);
+  // 명단 replace 는 조사 대상을 지워 이월 응답까지 연쇄 삭제한다 — 되돌릴 수 없으니 미리 알린다.
+  const existingPriorAnswerCount = await countPriorAnswerTargets(surveyId, isTestScope);
   const existingScheme = await getContactColumnScheme(surveyId, scope);
 
   return (
@@ -39,6 +45,7 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
       </div>
       <UploadWizard
         surveyId={surveyId}
+        existingPriorAnswerCount={existingPriorAnswerCount}
         existingContactsCount={existingContactsCount}
         existingScheme={existingScheme}
       />

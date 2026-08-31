@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { isPiiRedactedValue } from '@/lib/survey/pii-retention';
 import { normalizePriorAnswers } from '@/lib/survey/prior-answers';
 import { isValidUUID } from '@/lib/utils';
 
@@ -59,7 +60,17 @@ export async function lookupPriorAnswers(
   // 응답 PII 인라인 암호화(ADR-0012)와 같은 읽기 경계를 태운다. 이월 응답은 응답 저장
   // 형태와 동형이므로 PII 문항 값이 암호문('v1:...')으로 적재될 수 있고, 그대로 내보내면
   // 응답 화면에 암호문이 그대로 채워진다. 접두사 감지식이라 평문은 그대로 통과한다.
-  return decryptQuestionResponses(answers);
+  const decrypted = decryptQuestionResponses(answers);
+
+  // 보관기한 파기 표식은 값이 아니라 "값이 사라졌다" 는 기록이다. 그대로 내보내면
+  // 잠긴 입력에 표식이 채워지고 변동 확인까지 붙어, "같음" 이 그 표식을 올해 응답으로
+  // 복사한다. 파기된 문항은 이월 값이 없는 것으로 본다.
+  const kept: Record<string, unknown> = {};
+  for (const [questionId, value] of Object.entries(decrypted)) {
+    if (isPiiRedactedValue(value)) continue;
+    kept[questionId] = value;
+  }
+  return Object.keys(kept).length > 0 ? kept : null;
 }
 
 /**
