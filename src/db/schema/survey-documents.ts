@@ -98,7 +98,7 @@ export const surveyDocumentAnchors = pgTable(
       sql`(${table.questionId} is null) <> (${table.groupId} is null)`,
     ),
     check('survey_document_anchors_page_positive', sql`${table.page} >= 1`),
-    // 좌표는 정규화 0~1 이고 크기 0 인 사각형은 그릴 것이 없다 (0085 와 동일 술어)
+    // 좌표는 정규화 0~1 이고 크기 0 인 사각형은 그릴 것이 없다 (0098 과 동일 술어)
     check(
       'survey_document_anchors_norm_range',
       sql`${table.x} >= 0 and ${table.x} <= 1 and ${table.y} >= 0 and ${table.y} <= 1 and ${table.w} > 0 and ${table.w} <= 1 and ${table.h} > 0 and ${table.h} <= 1`,
