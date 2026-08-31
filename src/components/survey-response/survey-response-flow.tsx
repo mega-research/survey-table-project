@@ -584,44 +584,84 @@ function SurveyResponseFlowActive({
     [currentStepQuestions, anchorPagesOf],
   );
 
-  // 지금 고른 문항. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
-  const [anchorSelection, setAnchorSelection] = useState<{ questionId: string; nonce: number } | null>(
-    null,
-  );
+  // 지금 고른 대상. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
+  // 그룹을 고르면 그 그룹의 영역만 밝힌다(맥락도 자기 자신).
+  const [anchorSelection, setAnchorSelection] = useState<
+    { kind: 'question' | 'group'; id: string; nonce: number } | null
+  >(null);
+  // 훑는 동안의 미리보기. **쪽을 옮기지 않는다** — 커서가 스치는 대로 조사표가
+  // 넘어가면 읽고 있던 자리를 잃는다. 밝히기만 하고 이동은 클릭에만 맡긴다.
+  const [hoveredQuestionId, setHoveredQuestionId] = useState<string | null>(null);
   const selectAnchorQuestion = useCallback(
     (questionId: string) => {
       // 앵커가 풀리지 않는 문항은 초점을 옮기지 않는다. 옮기면 아래의 렌더 중
       // 조정이 곧바로 되돌려 클릭한 곳과 좌측 하이라이트가 어긋나 보인다.
       if (!anchoredStepQuestions.some((q) => q.id === questionId)) return;
       setAnchorSelection((prev) =>
-        prev?.questionId === questionId ? prev : { questionId, nonce: (prev?.nonce ?? 0) + 1 },
+        prev?.kind === 'question' && prev.id === questionId
+          ? prev
+          : { kind: 'question', id: questionId, nonce: (prev?.nonce ?? 0) + 1 },
       );
     },
     [anchoredStepQuestions],
   );
 
+  const selectAnchorGroup = useCallback((groupId: string) => {
+    setAnchorSelection((prev) =>
+      prev?.kind === 'group' && prev.id === groupId
+        ? prev
+        : { kind: 'group', id: groupId, nonce: (prev?.nonce ?? 0) + 1 },
+    );
+  }, []);
+
   // 페이지가 바뀌면 그 페이지의 첫 앵커 문항으로 초점을 옮긴다 (렌더 중 조정).
   const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
-  const selectionIsOnThisStep = anchorSelection
-    ? anchoredStepQuestions.some((q) => q.id === anchorSelection.questionId)
-    : false;
+  const selectionIsOnThisStep =
+    anchorSelection?.kind === 'group'
+      ? currentStepQuestions.some((q) => q.groupId === anchorSelection.id)
+      : anchorSelection
+        ? anchoredStepQuestions.some((q) => q.id === anchorSelection.id)
+        : false;
   if (defaultAnchorQuestionId && !selectionIsOnThisStep) {
     setAnchorSelection({
-      questionId: defaultAnchorQuestionId,
+      kind: 'question',
+      id: defaultAnchorQuestionId,
       nonce: (anchorSelection?.nonce ?? 0) + 1,
     });
   }
 
   const anchorFocus = useMemo(() => {
+    // 훑는 중이면 그 문항을 밝히되 nonce 는 그대로 둔다 — 쪽이 따라 움직이지 않는다.
+    if (hoveredQuestionId) {
+      const hovered = currentStepQuestions.find((q) => q.id === hoveredQuestionId);
+      const focus = hovered
+        ? resolveAnchorFocus(
+            { id: hovered.id, groupId: hovered.groupId ?? null },
+            anchorPagesOf,
+          )
+        : null;
+      if (focus) return { ...focus, nonce: anchorSelection?.nonce ?? 0 };
+    }
     if (!anchorSelection) return null;
-    const question = currentStepQuestions.find((q) => q.id === anchorSelection.questionId);
+    if (anchorSelection.kind === 'group') {
+      const pages = anchorPagesOf(anchorSelection.id);
+      if (pages.length === 0) return null;
+      // 그룹을 고르면 맥락도 자기 자신 — 그 그룹의 영역만 밝힌다.
+      return {
+        ownerId: anchorSelection.id,
+        contextId: anchorSelection.id,
+        page: Math.min(...pages),
+        nonce: anchorSelection.nonce,
+      };
+    }
+    const question = currentStepQuestions.find((q) => q.id === anchorSelection.id);
     if (!question) return null;
     const focus = resolveAnchorFocus(
       { id: question.id, groupId: question.groupId ?? null },
       anchorPagesOf,
     );
     return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
-  }, [anchorSelection, currentStepQuestions, anchorPagesOf]);
+  }, [anchorSelection, hoveredQuestionId, currentStepQuestions, anchorPagesOf]);
 
   // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
   const handleAnchorOwnerSelect = useCallback(
@@ -1444,6 +1484,8 @@ function SurveyResponseFlowActive({
             requiredMessageQuestionIds={requiredMessageQuestionIds}
             numericIssues={visibleNumericIssues}
             onQuestionFocus={selectAnchorQuestion}
+            onQuestionHover={setHoveredQuestionId}
+            onGroupSelect={selectAnchorGroup}
           />
         ) : (
         <PageStepView

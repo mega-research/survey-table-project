@@ -6,8 +6,10 @@ import { ChevronDown, Crop } from 'lucide-react';
 
 import { GroupStepItem } from '@/components/survey-response/step-views/group-step-item';
 import { StepItem } from '@/lib/group-ordering';
-import { resolveJudgementShape } from '@/lib/operations/demand-summary';
-import { resolveBulkChoices } from '@/lib/survey/bulk-choice';
+import {
+  resolveJudgementBulkChoices,
+  resolveJudgementShape,
+} from '@/lib/survey/judgement-item';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -37,7 +39,12 @@ interface Props {
   highlightQuestionIds: Set<string>;
   requiredMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
+  /** 클릭·포커스로 초점을 옮긴다 — 조사표가 그 영역으로 이동한다. */
   onQuestionFocus?: ((questionId: string) => void) | undefined;
+  /** 훑는 동안의 미리보기 — 조사표를 움직이지 않고 해당 영역만 밝힌다. null 이면 해제. */
+  onQuestionHover?: ((questionId: string | null) => void) | undefined;
+  /** 블록 머리를 누르면 그 그룹의 영역만 밝힌다. */
+  onGroupSelect?: ((groupId: string) => void) | undefined;
 }
 
 /** 한 블록(문항이 실제로 속한 그룹) 단위 묶음. 앵커가 하위그룹에도 붙으므로 root 가 아니다. */
@@ -57,6 +64,8 @@ export function DemandChecklist({
   requiredMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
+  onQuestionHover,
+  onGroupSelect,
 }: Props) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -89,6 +98,8 @@ export function DemandChecklist({
           requiredMessageQuestionIds={requiredMessageQuestionIds}
           numericIssues={numericIssues}
           onQuestionFocus={onQuestionFocus}
+          onQuestionHover={onQuestionHover}
+          onGroupSelect={onGroupSelect}
         />
       ))}
     </div>
@@ -105,6 +116,8 @@ function BlockCard({
   requiredMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
+  onQuestionHover,
+  onGroupSelect,
 }: {
   block: Block;
   blockName: string | null;
@@ -129,16 +142,24 @@ function BlockCard({
    * 같은** 단일선택 문항 둘 이상일 때만 나오고, 기타입력(의견)은 대상에서 빠진다.
    * 값이 다른 문항에 남의 값을 쓰면 응답자에게 보이지 않는 오답이 되기 때문이다.
    */
-  const bulk = resolveBulkChoices(judgements.map(({ item }) => item.question));
+  const bulk = resolveJudgementBulkChoices(judgements.map(({ item }) => item.question));
 
-  const applyBulk = (value: string) => {
-    for (const { item } of judgements) onResponse(item.question.id, value);
+  const applyBulk = (choice: (typeof bulk)[number]) => {
+    for (const [questionId, value] of Object.entries(choice.valueByQuestionId)) {
+      onResponse(questionId, value);
+    }
   };
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
       {blockName && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-blue-50/60 px-4 py-2.5">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 border-b border-gray-200 bg-blue-50/60 px-4 py-2.5',
+            block.id && onGroupSelect && 'cursor-pointer hover:bg-blue-100/60',
+          )}
+          onClick={block.id && onGroupSelect ? () => onGroupSelect(block.id!) : undefined}
+        >
           <Crop className="h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="text-sm font-semibold text-gray-900">{blockName}</span>
           <span className="text-xs text-gray-500">
@@ -150,9 +171,9 @@ function BlockCard({
             <div className="ml-auto flex items-center gap-1.5">
               {bulk.map((choice) => (
                 <button
-                  key={choice.value}
+                  key={choice.key}
                   type="button"
-                  onClick={() => applyBulk(choice.value)}
+                  onClick={() => applyBulk(choice)}
                   className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
                 >
                   모두 {choice.label}
@@ -175,6 +196,7 @@ function BlockCard({
               onResponse={onResponse}
               isHighlighted={highlightQuestionIds.has(item.question.id)}
               onFocus={onQuestionFocus}
+              onHover={onQuestionHover}
             />
           ) : (
             <div
@@ -209,6 +231,7 @@ function JudgementRow({
   onResponse,
   isHighlighted,
   onFocus,
+  onHover,
 }: {
   question: Question;
   shape: NonNullable<ReturnType<typeof resolveJudgementShape>>;
@@ -216,6 +239,7 @@ function JudgementRow({
   onResponse: (questionId: string, value: unknown) => void;
   isHighlighted: boolean;
   onFocus?: ((questionId: string) => void) | undefined;
+  onHover?: ((questionId: string | null) => void) | undefined;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -244,6 +268,9 @@ function JudgementRow({
       className={cn('px-4 py-2.5', isHighlighted && 'bg-amber-50')}
       onFocusCapture={onFocus ? () => onFocus(question.id) : undefined}
       onClickCapture={onFocus ? () => onFocus(question.id) : undefined}
+      // 훑는 동안의 미리보기 — 조사표를 움직이지 않고 이 문항의 영역만 밝힌다.
+      onMouseEnter={onHover ? () => onHover(question.id) : undefined}
+      onMouseLeave={onHover ? () => onHover(null) : undefined}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {question.questionCode && (
