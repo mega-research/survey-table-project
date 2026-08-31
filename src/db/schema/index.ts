@@ -1,4 +1,5 @@
 export * from './surveys';
+export * from './survey-documents';
 export * from './contacts';
 export * from './mail';
 export * from './mail-billing';

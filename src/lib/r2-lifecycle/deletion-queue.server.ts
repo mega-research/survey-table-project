@@ -18,6 +18,7 @@ export type R2DeletionSource =
   | 'survey-delete'
   | 'question-delete'
   | 'library-delete'
+  | 'document-delete'
   | 'template-delete'
   | 'save-diff'
   | 'version-prune';
