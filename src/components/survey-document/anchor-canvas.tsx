@@ -71,16 +71,17 @@ export function AnchorCanvas({
   onCancelDraw,
   onRegionClick,
 }: Props) {
-  // 쪽 단위 뷰어라 실측 상자는 언제나 한 개다. 좌표 모듈은 목록을 받으므로 감싸 넘긴다.
-  const [pageBox, setPageBox] = useState<RenderedPageBox | null>(null);
+  // 이어보기를 켜면 실측 상자가 여럿 온다. 좌표 모듈은 원래 목록을 받는다.
+  const [boxes, setBoxes] = useState<RenderedPageBox[]>([]);
+  const [span, setSpan] = useState(0);
   const [drag, setDrag] = useState<Drag | null>(null);
 
-  const boxes: PageBox[] = pageBox ? [pageBox] : [];
+  const pageBoxes: PageBox[] = boxes;
   const drawable = Boolean(drawingFor);
 
   function pointAt(e: React.MouseEvent<HTMLDivElement>) {
     const origin = e.currentTarget.getBoundingClientRect();
-    return locate(boxes, e.clientX - origin.left, e.clientY - origin.top);
+    return locate(pageBoxes, e.clientX - origin.left, e.clientY - origin.top);
   }
 
   const surfaceProps = {
@@ -107,13 +108,13 @@ export function AnchorCanvas({
   };
 
   const dragRect = drag ? normalizeDrag(drag.start, drag.end) : null;
-  const dragPlaced = dragRect ? place(dragRect, boxes) : null;
-  const onThisPage = regions.filter((r) => r.page === page);
+  const dragPlaced = dragRect ? place(dragRect, pageBoxes) : null;
 
   const overlay = (
     <>
-      {onThisPage.map((region) => {
-        const placed = place(region, boxes);
+      {regions.map((region) => {
+        // 그려지지 않은 쪽의 사각형은 place 가 null 을 낸다 — 그 자리에서 걸러진다.
+        const placed = place(region, pageBoxes);
         if (!placed) return null;
         const isGroup = region.kind === 'group';
         const tone =
@@ -189,7 +190,9 @@ export function AnchorCanvas({
           pageCount={pageCount}
           page={page}
           onPageChange={onPageChange}
-          onPageBox={setPageBox}
+          onPageBoxes={setBoxes}
+          span={span}
+          onSpanChange={setSpan}
           surfaceProps={surfaceProps}
           overlay={overlay}
         />

@@ -7,7 +7,7 @@ import { place, type PageBox, type ScrollBand } from '@/lib/survey-document/anch
 import type { AnchorFocus } from '@/lib/survey-document/anchor-outline';
 import { cn } from '@/lib/utils';
 
-import { PdfPageView, type RenderedPageBox } from './pdf-page-view';
+import { MAX_PAGE_SPAN, PdfPageView, type RenderedPageBox } from './pdf-page-view';
 
 /**
  * 응답 화면 왼쪽의 조사표 판.
@@ -43,14 +43,21 @@ export function ResponseDocumentPane({
   onOwnerSelect,
 }: Props) {
   const [page, setPage] = useState(1);
-  const [pageBox, setPageBox] = useState<RenderedPageBox | null>(null);
+  const [boxes, setBoxes] = useState<RenderedPageBox[]>([]);
+  // 이어 붙여 볼 다음 쪽 수. 초점이 여러 쪽에 걸치면 그 범위만큼 저절로 열린다.
+  const [span, setSpan] = useState(0);
   const [followedNonce, setFollowedNonce] = useState<number | null>(null);
 
   // 렌더 중 조정 패턴 — 초점이 바뀐 그 렌더에서 쪽을 맞춘다. effect 로 미루면
   // 이전 초점의 쪽이 한 프레임 비쳤다가 튄다.
   if (focus && focus.nonce !== followedNonce) {
     setFollowedNonce(focus.nonce);
-    if (focus.page !== page) setPage(focus.page);
+    const first = focus.pages[0] ?? page;
+    const last = focus.pages[focus.pages.length - 1] ?? first;
+    if (first !== page) setPage(first);
+    // 블록이 쪽 경계에 걸쳐 있으면 그 범위를 이어 붙인다. 한 쪽짜리를 고르면 도로 접힌다.
+    const wanted = Math.min(last - first, MAX_PAGE_SPAN);
+    if (wanted !== span) setSpan(wanted);
   }
 
   /** 초점 사각형과 맥락 사각형. 맥락이 곧 초점이면 하나로 접는다. */
@@ -63,18 +70,18 @@ export function ResponseDocumentPane({
       .map((anchor) => ({ anchor, isFocus: anchor.ownerId === focus.ownerId }));
   }, [anchors, focus]);
 
-  const boxes: PageBox[] = pageBox ? [pageBox] : [];
+  const pageBoxes: PageBox[] = boxes;
 
   /**
    * 쪽 안에서 어디를 보여줄지. 초점 사각형이 화면 밖일 때만 최소한으로 움직인다 —
    * 판정은 anchor-geometry 소관이고 여기서는 실측 배치를 재서 넘기기만 한다.
    */
   const scrollBand: (ScrollBand & { nonce: number }) | null = useMemo(() => {
-    if (!focus || boxes.length === 0) return null;
+    if (!focus || pageBoxes.length === 0) return null;
     const bandOf = (predicate: (ownerId: string) => boolean) => {
       const placed = drawn
-        .filter(({ anchor }) => anchor.page === page && predicate(anchor.ownerId))
-        .map(({ anchor }) => place(anchor, boxes))
+        .filter(({ anchor }) => predicate(anchor.ownerId))
+        .map(({ anchor }) => place(anchor, pageBoxes))
         .filter((rect): rect is NonNullable<typeof rect> => rect !== null);
       if (placed.length === 0) return null;
       return {
@@ -92,16 +99,14 @@ export function ResponseDocumentPane({
       focusBottom: target.bottom,
       nonce: focus.nonce,
     };
-    // boxes 는 pageBox 에서 매 렌더 새로 만들어지므로 pageBox 를 의존으로 둔다
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, drawn, page, pageBox]);
+  }, [focus, drawn, pageBoxes]);
 
   const overlay = (
     <>
       {drawn
-        .filter(({ anchor }) => anchor.page === page)
         .map(({ anchor, isFocus }, index) => {
-          const placed = place(anchor, boxes);
+          // 그려지지 않은 쪽의 사각형은 place 가 null 을 낸다 — 그 자리에서 걸러진다.
+          const placed = place(anchor, pageBoxes);
           if (!placed) return null;
           return (
             <button
@@ -146,7 +151,9 @@ export function ResponseDocumentPane({
       pageCount={pageCount}
       page={page}
       onPageChange={setPage}
-      onPageBox={setPageBox}
+      onPageBoxes={setBoxes}
+      span={span}
+      onSpanChange={setSpan}
       overlay={overlay}
       scrollBand={scrollBand}
     />

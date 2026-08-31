@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Rows2 } from 'lucide-react';
 
 import { scrollTarget, type ScrollBand } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
@@ -36,8 +36,14 @@ interface Props {
   pageCount: number;
   page: number;
   onPageChange: (page: number) => void;
-  /** 렌더가 끝날 때마다 실측 배치를 올려보낸다. */
-  onPageBox?: (box: RenderedPageBox | null) => void;
+  /**
+   * 렌더가 끝날 때마다 **그려진 쪽 전부**의 실측 배치를 올려보낸다.
+   * 이어보기에서는 둘 이상이 온다 — 좌표 모듈은 원래 여러 쪽을 받는 모양이다.
+   */
+  onPageBoxes?: (boxes: RenderedPageBox[]) => void;
+  /** 현재 쪽에 이어 붙여 볼 다음 쪽 수. 0 이면 한 쪽만. */
+  span?: number;
+  onSpanChange?: ((span: number) => void) | undefined;
   /** 페이지 위에 겹쳐 그릴 것 (영역 사각형 등). */
   overlay?: React.ReactNode;
   /**
@@ -62,13 +68,22 @@ interface Props {
 
 // 프로토타입과 같은 여백 — 편집 화면과 응답 화면이 같은 자를 써야 같은 영역이 같게 보인다.
 const PAD = 24;
+/** 이어 붙인 쪽 사이의 간격. */
+const PAGE_GAP = 12;
+/**
+ * 한 번에 이어 붙일 다음 쪽 수의 상한. 블록이 아무리 넓게 걸쳐도 여기서 끊는다 —
+ * 스무 쪽을 한 줄로 이으면 "지금 몇 쪽인가"를 다시 잃는다.
+ */
+export const MAX_PAGE_SPAN = 3;
 
 export function PdfPageView({
   url,
   pageCount,
   page,
   onPageChange,
-  onPageBox,
+  onPageBoxes,
+  span = 0,
+  onSpanChange,
   overlay,
   scrollBand = null,
   surfaceProps,
@@ -116,57 +131,82 @@ export function PdfPageView({
   }, [url]);
 
   const renderPage = useCallback(async () => {
-    const holder = holderRef.current;
+    const stack = holderRef.current;
     const scroller = scrollRef.current;
-    if (!doc || !holder || !scroller) return;
+    if (!doc || !stack || !scroller) return;
 
-    const target = Math.min(Math.max(1, page), doc.numPages);
+    // 이어보기: 현재 쪽에 다음 쪽들을 붙여 함께 그린다. 쪽 경계에 걸친 블록을
+    // 두 번 넘겨 가며 확인하지 않아도 된다.
+    const first = Math.min(Math.max(1, page), doc.numPages);
+    const targets = Array.from({ length: span + 1 }, (_, i) => first + i).filter(
+      (n) => n >= 1 && n <= doc.numPages,
+    );
     const token = ++renderToken.current;
     setRendering(true);
     try {
-      const pdfPage = await doc.getPage(target);
-      if (token !== renderToken.current) return;
+      const holders: HTMLDivElement[] = [];
+      const drawn: { page: number; width: number; height: number }[] = [];
 
-      const base = pdfPage.getViewport({ scale: 1 });
-      // 폭을 재는 시점이 그리기 **전**이라, 세로 스크롤바가 자리를 차지하는 환경
-      // (윈도우·리눅스의 고전 스크롤바)에서는 렌더 뒤에 clientWidth 가 줄어든다.
-      // 스크롤바 자리를 늘 비워두는 것(scrollbarGutter: stable)으로 그쪽을 막는다.
-      const avail = Math.floor(Math.max(320, scroller.clientWidth - PAD * 2) * zoom);
-      const viewport = pdfPage.getViewport({ scale: avail / base.width });
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      for (const target of targets) {
+        const pdfPage = await doc.getPage(target);
+        if (token !== renderToken.current) return;
 
-      // CSS 폭은 **내림한 정수**를 쓴다. viewport.width 는 base.width * (avail/base.width)
-      // 라 부동소수점 오차로 avail 보다 아주 조금 클 수 있고, 그 0.0000001px 이
-      // 그대로 가로 스크롤바를 만든다 (맥의 오버레이 스크롤바에서도 뜬다).
-      const cssWidth = Math.floor(viewport.width);
-      const cssHeight = Math.floor(viewport.height);
+        const base = pdfPage.getViewport({ scale: 1 });
+        // 폭을 재는 시점이 그리기 **전**이라, 세로 스크롤바가 자리를 차지하는 환경
+        // (윈도우·리눅스의 고전 스크롤바)에서는 렌더 뒤에 clientWidth 가 줄어든다.
+        // 스크롤바 자리를 늘 비워두는 것(scrollbarGutter: stable)으로 그쪽을 막는다.
+        const avail = Math.floor(Math.max(320, scroller.clientWidth - PAD * 2) * zoom);
+        const viewport = pdfPage.getViewport({ scale: avail / base.width });
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.floor(viewport.width * dpr);
-      canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${cssWidth}px`;
-      canvas.style.height = `${cssHeight}px`;
-      canvas.style.display = 'block';
+        // CSS 폭은 **내림한 정수**를 쓴다. viewport.width 는 base.width * (avail/base.width)
+        // 라 부동소수점 오차로 avail 보다 아주 조금 클 수 있고, 그 0.0000001px 이
+        // 그대로 가로 스크롤바를 만든다 (맥의 오버레이 스크롤바에서도 뜬다).
+        const cssWidth = Math.floor(viewport.width);
+        const cssHeight = Math.floor(viewport.height);
 
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.scale(dpr, dpr);
-        await pdfPage.render({ canvas, canvasContext: ctx, viewport }).promise;
+        const pageBox = document.createElement('div');
+        pageBox.style.cssText = [
+          'position:relative',
+          `width:${cssWidth}px`,
+          `height:${cssHeight}px`,
+          `margin:0 auto ${targets.length > 1 ? PAGE_GAP : 0}px`,
+          'background:#fff',
+          'box-shadow:0 4px 18px rgba(0,0,0,.35)',
+        ].join(';');
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${cssWidth}px`;
+        canvas.style.height = `${cssHeight}px`;
+        canvas.style.display = 'block';
+        pageBox.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.scale(dpr, dpr);
+          await pdfPage.render({ canvas, canvasContext: ctx, viewport }).promise;
+        }
+        if (token !== renderToken.current) return;
+
+        holders.push(pageBox);
+        drawn.push({ page: target, width: cssWidth, height: cssHeight });
       }
-      if (token !== renderToken.current) return;
 
-      holder.replaceChildren(canvas);
-      holder.style.width = `${cssWidth}px`;
-      holder.style.height = `${cssHeight}px`;
-      // 화면 좌표는 계산하지 않고 잰다 — 계산이 데모에서 버그의 원천이었다
-      onPageBox?.({
-        page: target,
-        left: holder.offsetLeft,
-        top: holder.offsetTop,
-        // 좌표 변환도 화면에 실제로 놓인 크기를 써야 사각형이 어긋나지 않는다
-        width: cssWidth,
-        height: cssHeight,
-      });
+      stack.replaceChildren(...holders);
+      // 화면 좌표는 계산하지 않고 잰다 — 계산이 데모에서 버그의 원천이었다.
+      // 쌓아 넣은 **뒤라야** 각 쪽의 실제 자리가 나온다.
+      onPageBoxes?.(
+        drawn.map((box, index) => {
+          const el = holders[index];
+          return {
+            ...box,
+            left: el?.offsetLeft ?? 0,
+            top: el?.offsetTop ?? 0,
+          };
+        }),
+      );
     } catch (e) {
       if (token === renderToken.current) {
         setFailure({
@@ -177,7 +217,7 @@ export function PdfPageView({
     } finally {
       if (token === renderToken.current) setRendering(false);
     }
-  }, [doc, page, zoom, url, onPageBox]);
+  }, [doc, page, span, zoom, url, onPageBoxes]);
 
   useEffect(() => {
     void renderPage();
@@ -239,6 +279,25 @@ export function PdfPageView({
         </div>
         <div className="flex items-center gap-2">
           {loading && <span className="text-[11px] text-[#9a9aa2]">그리는 중…</span>}
+          {onSpanChange && (
+            <button
+              type="button"
+              title={
+                span > 0
+                  ? '이어보기 끄기'
+                  : '다음 쪽을 이어 붙여 본다 — 쪽 경계에 걸친 문항을 확인할 때'
+              }
+              onClick={() => onSpanChange(span > 0 ? 0 : 1)}
+              disabled={page >= total}
+              className={cn(
+                'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors disabled:opacity-30',
+                span > 0 ? 'bg-white/25 text-white' : 'hover:bg-white/10',
+              )}
+            >
+              <Rows2 size={13} />
+              {span > 0 ? `${page}–${Math.min(page + span, total)}쪽` : '이어보기'}
+            </button>
+          )}
           <button
             type="button"
             className="px-1 hover:text-white"

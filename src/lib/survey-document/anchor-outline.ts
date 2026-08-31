@@ -108,13 +108,16 @@ export interface AnchorFocus {
   /** 함께 옅게 그릴 맥락 — 언제나 소속 그룹. ownerId 와 같으면 맥락이 곧 초점이다. */
   contextId: string | null;
   /**
-   * 이동할 쪽.
+   * 맥락이 걸친 쪽들. 오름차순·중복 없음.
    *
-   * **한 대상에 사각형이 여럿이고 서로 다른 쪽에 있을 때의 규칙**: 초점 대상의
-   * 사각형 중 **가장 앞선 쪽**으로 간다. 블록이 3쪽·4쪽에 걸쳐 있으면 3쪽으로
+   * **한 대상에 사각형이 여럿이고 서로 다른 쪽에 있을 때의 규칙**: 이동은 그중
+   * **가장 앞선 쪽**으로 간다(`pages[0]`). 블록이 3쪽·4쪽에 걸쳐 있으면 3쪽으로
    * 가서 순서대로 훑게 되고, 뒤쪽으로 보내면 앞부분을 놓친다.
+   *
+   * 여럿이면 뷰어가 그 범위를 이어 붙여 보여준다 — 쪽 경계에 걸친 블록을
+   * 두 번 넘겨 가며 확인하지 않아도 된다.
    */
-  page: number;
+  pages: number[];
 }
 
 /**
@@ -126,17 +129,26 @@ export interface AnchorFocus {
 export function resolveAnchorFocus(
   target: { id: string; groupId: string | null },
   pagesOf: (ownerId: string) => readonly number[],
+  /**
+   * 같은 그룹의 문항 id 들. 맥락의 쪽 범위를 넓히는 데만 쓴다 — 블록이 걸친 쪽은
+   * 그룹 자신의 사각형뿐 아니라 그 안 문항들의 사각형까지 합쳐야 나온다.
+   */
+  siblingQuestionIds: readonly string[] = [],
 ): AnchorFocus | null {
   const ownerId = resolveAnchorOwnerId(
     { kind: 'question', id: target.id, groupId: target.groupId },
     (id) => pagesOf(id).length > 0,
   );
   if (!ownerId) return null;
-  const pages = pagesOf(ownerId);
-  const page = pages.reduce((min, p) => (p < min ? p : min), pages[0] ?? 1);
   const contextId =
     target.groupId && pagesOf(target.groupId).length > 0 ? target.groupId : null;
-  return { ownerId, contextId, page };
+
+  const scope = contextId ? [contextId, ...siblingQuestionIds] : [ownerId];
+  const pages = [...new Set(scope.flatMap((id) => [...pagesOf(id)]))].sort((a, b) => a - b);
+  // 맥락에 쪽이 하나도 없으면(형제가 비었을 때) 초점 자신의 쪽으로 떨어진다.
+  const resolved = pages.length > 0 ? pages : [...pagesOf(ownerId)].sort((a, b) => a - b);
+  if (resolved.length === 0) return null;
+  return { ownerId, contextId, pages: resolved };
 }
 
 /**

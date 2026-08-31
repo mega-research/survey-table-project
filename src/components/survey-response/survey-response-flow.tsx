@@ -630,13 +630,20 @@ function SurveyResponseFlowActive({
   const anchorFocus = useMemo(() => {
     if (!anchorSelection) return null;
     if (anchorSelection.kind === 'group') {
-      const pages = anchorPagesOf(anchorSelection.id);
-      if (pages.length === 0) return null;
       // 그룹을 고르면 맥락도 자기 자신 — 그 그룹의 영역만 밝힌다.
+      // 쪽 범위는 그룹 자신과 그 안 문항들의 사각형을 합쳐서 잰다.
+      const scope = [
+        anchorSelection.id,
+        ...currentStepQuestions.filter((q) => q.groupId === anchorSelection.id).map((q) => q.id),
+      ];
+      const pages = [...new Set(scope.flatMap((id) => [...anchorPagesOf(id)]))].sort(
+        (a, b) => a - b,
+      );
+      if (pages.length === 0) return null;
       return {
         ownerId: anchorSelection.id,
         contextId: anchorSelection.id,
-        page: Math.min(...pages),
+        pages,
         nonce: anchorSelection.nonce,
       };
     }
@@ -645,6 +652,9 @@ function SurveyResponseFlowActive({
     const focus = resolveAnchorFocus(
       { id: question.id, groupId: question.groupId ?? null },
       anchorPagesOf,
+      question.groupId
+        ? currentStepQuestions.filter((q) => q.groupId === question.groupId).map((q) => q.id)
+        : [],
     );
     return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
   }, [anchorSelection, currentStepQuestions, anchorPagesOf]);

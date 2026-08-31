@@ -96,23 +96,33 @@ describe('resolveAnchorFocus', () => {
       { id: 'q1', groupId: 'g1' },
       pages({ q1: [5], g1: [4, 5] }),
     );
-    expect(focus).toEqual({ ownerId: 'q1', contextId: 'g1', page: 5 });
+    expect(focus).toEqual({ ownerId: 'q1', contextId: 'g1', pages: [4, 5] });
   });
 
   it('자기 영역이 없으면 소속 그룹으로 떨어진다 — 맥락도 그 그룹이다', () => {
     const focus = resolveAnchorFocus({ id: 'q1', groupId: 'g1' }, pages({ g1: [4, 5] }));
-    expect(focus).toEqual({ ownerId: 'g1', contextId: 'g1', page: 4 });
+    expect(focus).toEqual({ ownerId: 'g1', contextId: 'g1', pages: [4, 5] });
   });
 
-  it('한 대상에 사각형이 여러 쪽이면 가장 앞선 쪽으로 간다', () => {
+  it('한 대상에 사각형이 여러 쪽이면 가장 앞선 쪽이 먼저다', () => {
     // 블록이 3쪽·4쪽에 걸쳐 있으면 3쪽부터 순서대로 훑게 된다
     const focus = resolveAnchorFocus({ id: 'q1', groupId: null }, pages({ q1: [7, 3, 4] }));
-    expect(focus?.page).toBe(3);
+    expect(focus?.pages).toEqual([3, 4, 7]);
+  });
+
+  it('맥락의 쪽 범위는 그룹과 그 안 문항들의 사각형을 합쳐서 잰다', () => {
+    // 이어보기가 이 범위를 보고 쪽을 몇 장 붙일지 정한다
+    const focus = resolveAnchorFocus(
+      { id: 'q1', groupId: 'g1' },
+      pages({ g1: [3], q1: [3], q2: [4] }),
+      ['q1', 'q2'],
+    );
+    expect(focus?.pages).toEqual([3, 4]);
   });
 
   it('그룹에 영역이 없으면 맥락을 그리지 않는다', () => {
     const focus = resolveAnchorFocus({ id: 'q1', groupId: 'g1' }, pages({ q1: [2] }));
-    expect(focus).toEqual({ ownerId: 'q1', contextId: null, page: 2 });
+    expect(focus).toEqual({ ownerId: 'q1', contextId: null, pages: [2] });
   });
 
   it('자기에게도 그룹에도 영역이 없으면 켤 것이 없다', () => {
