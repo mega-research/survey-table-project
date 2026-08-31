@@ -984,3 +984,28 @@ export const FieldworkContactsPage = z.object({
   progress: z.object({ completed: z.number().int(), total: z.number().int() }),
 });
 export type FieldworkContactsPage = z.infer<typeof FieldworkContactsPage>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 대리 응답 배너 (.pen FLOW 10-3, 티켓 27)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 응답 페이지는 `pub` 이고 응답자에게는 **아무것도 달라지지 않아야 한다**. 그래서 이 모양의
+// 기본값은 `none` 이고, 화면은 그 경우 배너 자리를 아예 그리지 않는다.
+//
+// `fieldworkUserId` 는 여기 없다. 배너는 사람이 읽는 확인용이고 귀속은 서버가 세션에서
+// 파생한다 — 화면에 내려보내면 그 값을 되받아 쓰고 싶어지고, 그 순간 위조가 가능해진다.
+
+export const FieldworkProxyContext = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('none') }),
+  /** 이미 완료된 대상이다 — 화면이 안내만 그리고 응답 흐름을 열지 않는다. */
+  z.object({ mode: z.literal('blocked') }),
+  z.object({
+    mode: z.literal('proxy'),
+    fieldworkUserName: z.string(),
+    orgName: z.string(),
+    resid: z.number().int(),
+    /** 대상 이름 한 칸. 빈 문자열이면 배너가 번호만 그린다. */
+    contactLabel: z.string(),
+  }),
+]);
+export type FieldworkProxyContext = z.infer<typeof FieldworkProxyContext>;

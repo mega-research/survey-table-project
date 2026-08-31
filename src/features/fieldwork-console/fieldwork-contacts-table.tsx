@@ -258,6 +258,11 @@ function StatusPill({ status }: { status: string | null }) {
  * 귀속 기록(fieldworkUserId)과 대행 배너는 티켓 27 이 붙인다 — 링크 자체는 지금도 살아
  * 있으므로 버튼이 거짓말을 하지는 않는다.
  *
+ * `&fw=1` 은 **힌트일 뿐 권한이 아니다.** 응답 페이지가 대행 배너를 물을지 말지를 정할 뿐이고,
+ * 누가 붙여도 서버는 세션을 보고 판정한다(`resolveFieldworkProxy`). 이 힌트가 없으면 응답자
+ * 전원이 배너 조회를 한 번씩 하게 되어 「응답자 화면 diff 0」이 깨진다 — `?test=` 토큰과 같은
+ * 자리의 장치다.
+ *
  * **대행 버튼의 조건은 `canWriteAttempts` 가 아니라 토큰의 존재다.** 팀장의 파생 시야에서는
  * 서버 투영이 `inviteToken` 을 null 로 접으므로 여기서 감출 것이 애초에 없다 — 판정을 화면이
  * 다시 하면 두 곳이 갈릴 수 있고, 갈리는 쪽이 화면이면 링크가 살아난다.
@@ -291,7 +296,7 @@ function RowActions({
         <span className="px-2.5 py-1 text-[11.5px] text-[#C7C7CC]">응답 완료</span>
       ) : (
         <a
-          href={`/survey/${surveyId}?invite=${row.inviteToken}`}
+          href={`/survey/${surveyId}?invite=${row.inviteToken}&fw=1`}
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-1 rounded-[8px] bg-[#2E4FCE] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-[#2743AE]"

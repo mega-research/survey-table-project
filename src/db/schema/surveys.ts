@@ -402,6 +402,13 @@ export const surveyResponses = pgTable(
     // drizzle 에서 .references() 추가하지 말 것 — contacts.ts 와 순환 import 발생.
     contactTargetId: uuid('contact_target_id'),
 
+    // 대리 응답 귀속 — 이 응답을 대신 입력한 실사 계정 (0099, 티켓 27).
+    // **NULL 이 응답자 직접 응답이다.** 실사가 조사 대상 화면의 「응답 대행」으로 들어온
+    // 세션에서만 채워지며, 그 판정은 pub 경로가 아니라 서버가 세션·초대 토큰·capability 를
+    // 함께 보고 한다(server/fieldwork-proxy). 화면이 보내는 값이 아니라 위조할 수 없다.
+    // FK 는 0099 마이그레이션이 만든다 — auth.ts 와 순환 import 를 피한다.
+    fieldworkUserId: uuid('fieldwork_user_id'),
+
     // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL
     progressPct: smallint('progress_pct'),
 

@@ -144,6 +144,9 @@ describe('surveyResponse.response procedures', () => {
         sessionId: 'sess-1',
         questionId: QUESTION_ID,
       }),
+      // 두 번째 인자는 대리 응답 귀속이다(티켓 27). **응답자 경로는 언제나 null** —
+      // 이 자리에 값이 서면 익명 응답이 남의 이름으로 귀속된다.
+      null,
     );
   });
 
@@ -170,6 +173,7 @@ describe('surveyResponse.response procedures', () => {
 
     expect(entry.createResponseWithFirstAnswer).toHaveBeenCalledWith(
       expect.objectContaining({ attemptId }),
+      null,
     );
   });
 
@@ -209,6 +213,7 @@ describe('surveyResponse.response procedures', () => {
     expect(res).toEqual({ kind: 'created', id: RESPONSE_ID, contactTargetId: null });
     expect(entry.createBlankResponse).toHaveBeenCalledWith(
       expect.objectContaining({ surveyId: SURVEY_ID, clientSignals: null }),
+      null,
     );
   });
 
@@ -231,7 +236,10 @@ describe('surveyResponse.response procedures', () => {
       attemptId,
     } as never);
 
-    expect(entry.createBlankResponse).toHaveBeenCalledWith(expect.objectContaining({ attemptId }));
+    expect(entry.createBlankResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptId }),
+      null,
+    );
   });
 
   it('complete(pub)는 responseId + data 를 service 에 위임한다', async () => {

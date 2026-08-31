@@ -17,10 +17,14 @@ import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
 } from '@/features/question-renderer/scroll-to-issue';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
 import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 import { HoneypotField } from '@/features/survey-response/honeypot-field';
@@ -34,11 +38,23 @@ import { useSessionRecovery } from '@/features/survey-response/hooks/use-session
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
 import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
+import {
+  buildAdminEmptyRequiredWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/features/survey-response/lib/admin-edit-required-relax';
+import { isQuestionAnswered as isQuestionAnsweredPure } from '@/features/survey-response/lib/answer-validation';
+import {
+  type NumericIssue,
+  collectNumericIssues,
+  collectVisibleTableCells,
+} from '@/features/survey-response/lib/numeric-validation';
+import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
+import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
 import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
-import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   InvalidTestLinkScreen,
   SurveyCompletedScreen,
@@ -48,6 +64,24 @@ import {
 } from '@/features/survey-response/survey-response-screens';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { generateId } from '@/lib/utils';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
+import { client } from '@/shared/lib/rpc';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
+import { responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  type BranchEvalCtx,
+  collectTraversedQuestionIds,
+  collectTraversedStepPath,
+  getBranchRuleForResponse,
+  shouldDisplayQuestion,
+} from '@/utils/branch-logic';
 import {
   type RenderStep,
   buildRenderSteps,
@@ -58,40 +92,8 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
-import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
-import {
-  buildAdminEmptyRequiredWarningMessage,
-  classifyStepIssues,
-  snapshotStepResponses,
-} from '@/features/survey-response/lib/admin-edit-required-relax';
-import { collectAnswerQuotes } from '@/utils/answer-quote';
-import { isQuestionAnswered as isQuestionAnsweredPure } from '@/features/survey-response/lib/answer-validation';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
-import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
-import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
-import {
-  type NumericIssue,
-  collectNumericIssues,
-  collectVisibleTableCells,
-} from '@/features/survey-response/lib/numeric-validation';
-import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
-import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
-import { generateId } from '@/lib/utils';
-import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { client } from '@/shared/lib/rpc';
-import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
-import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import { responsesToLookupShape } from '@/utils/branch-eval';
-import {
-  type BranchEvalCtx,
-  collectTraversedQuestionIds,
-  collectTraversedStepPath,
-  getBranchRuleForResponse,
-  shouldDisplayQuestion,
-} from '@/utils/branch-logic';
+
+import { FieldworkProxyBanner } from './fieldwork-proxy-banner';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -113,6 +115,11 @@ export interface SurveyResponseFlowProps {
   inviteToken?: string | null;
   // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
   testToken?: string | null;
+  /**
+   * `?fw=1` — 대행 배너를 물을지의 **힌트**(티켓 27). 권한이 아니다: 판정은 서버가 세션으로
+   * 하고, 힌트가 거짓이면 코어가 `none` 을 준다. 응답자는 이 값이 없어 조회 자체를 하지 않는다.
+   */
+  proxyHint?: boolean;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -229,6 +236,7 @@ function SurveyResponseFlowControl({
   entrySeed,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
+  proxyHint = false,
   mode = 'public',
   adminContext,
   previewContext,
@@ -292,6 +300,7 @@ function SurveyResponseFlowControl({
         surveyIdentifier,
         inviteToken: inviteTokenProp,
         testToken: testTokenProp,
+        proxyHint,
         mode,
         ...(adminContext ? { adminContext } : {}),
         ...(previewContext ? { previewContext } : {}),
@@ -325,6 +334,7 @@ function SurveyResponseFlowActive({
   flowProps: {
     inviteToken: inviteTokenProp = null,
     testToken: testTokenProp = null,
+    proxyHint = false,
     mode = 'public',
     adminContext,
   },
@@ -1230,6 +1240,16 @@ function SurveyResponseFlowActive({
         <div className="min-h-dvh bg-gray-50">
           {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
           <HoneypotField ref={honeypotRef} />
+          {/*
+            대리 응답 배너 (.pen 10-3, 티켓 27) — 헤더보다 **위**다. 아래로 내려가면 설문
+            제목이 먼저 오고, 실사가 어느 대상을 열었는지보다 무슨 설문인지를 먼저 읽는다.
+            응답자에게는 서버가 none 을 줘서 아무것도 그리지 않는다(화면 diff 0).
+          */}
+          <FieldworkProxyBanner
+            surveyId={loadedSurvey.id}
+            inviteToken={inviteToken}
+            hinted={proxyHint}
+          />
           {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
           <div className="border-b border-gray-200 bg-white">
             <div

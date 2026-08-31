@@ -60,6 +60,10 @@ export const PUB_SURVEY_SURFACES: Record<string, PubSurveySurfaceSpec> = {
     expectation: 'empty',
     note: '초대 토큰 attrs — classifyInviteTokenOwner 가 삭제된 설문을 invalid 로 접는다',
   },
+  'surveyResponse.proxy.context': {
+    expectation: 'empty',
+    note: '대행 배너 — loadSurveyAccess 가 삭제된 설문에 not_found 를 던지고 코어가 none 으로 접는다',
+  },
   'quota.check': {
     expectation: 'empty',
     note: '쿼터 판정 — getQuotaConfig 가 null 이라 차단하지 않고 통과값을 준다',

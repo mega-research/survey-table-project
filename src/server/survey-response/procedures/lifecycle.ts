@@ -1,5 +1,7 @@
+import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
+import { resolveFieldworkProxy } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
 
 import {
@@ -50,7 +52,19 @@ const resume = pub
   .use(withRateLimit('lookup'))
   .input(ResumeOrCreateResponseInput)
   .output(ResumeOrCreateResponseOutput)
-  .handler(({ input }) => svc.resumeOrCreateResponse(input));
+  .handler(async ({ context, input }) => {
+    // 「이어서 대행」의 귀속 지점 (티켓 27). 재개는 INSERT 를 지나지 않으므로 생성 경로의
+    // 짝이 여기 있어야 한다. 완료 대상 차단도 같은 코어가 준다.
+    const proxy = await resolveFieldworkProxy(
+      context.user,
+      input.surveyId,
+      input.inviteToken ?? null,
+    );
+    if (proxy.kind === 'blocked') {
+      throw new ORPCError('FORBIDDEN', { message: '이미 응답이 완료된 대상입니다.' });
+    }
+    return svc.resumeOrCreateResponse(input, proxy.kind === 'proxy' ? proxy.fieldworkUserId : null);
+  });
 
 export const lifecycle = {
   stepVisit,

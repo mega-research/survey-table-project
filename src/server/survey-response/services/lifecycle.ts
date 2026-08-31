@@ -119,14 +119,22 @@ async function migrateResumedRowIfStale(input: {
  */
 async function touchOrReviveResponse(
   responseId: string,
-  opts: { revive: boolean; now: Date },
+  opts: { revive: boolean; now: Date; fieldworkUserId?: string | null },
 ): Promise<void> {
+  // **이어서 대행**의 귀속 지점 (티켓 27). 재개는 INSERT 를 지나지 않으므로 여기서 찍지
+  // 않으면 응답자가 시작한 행을 실사가 마저 채운 경우가 기록되지 않는다 — 배너가 「저장되는
+  // 응답은 실사 계정으로 귀속 기록됩니다」라고 말하는 이상 그 약속이 깨진다.
+  //
+  // **null 을 덮어쓰지 않는다.** 응답자 세션은 이 값을 아예 넘기지 않으므로, 실사가 시작한
+  // 행을 응답자가 이어받아도 귀속이 지워지지 않는다 — 그 응답은 실제로 일부가 대행이다.
+  const attribution =
+    opts.fieldworkUserId != null ? { fieldworkUserId: opts.fieldworkUserId } : {};
   await db
     .update(surveyResponses)
     .set(
       opts.revive
-        ? { status: 'in_progress', lastActivityAt: opts.now }
-        : { lastActivityAt: opts.now },
+        ? { status: 'in_progress', lastActivityAt: opts.now, ...attribution }
+        : { lastActivityAt: opts.now, ...attribution },
     )
     .where(eq(surveyResponses.id, responseId));
 }
@@ -288,6 +296,8 @@ export async function recordVisibilitySegment(input: RecordVisibilitySegmentInpu
  */
 export async function resumeOrCreateResponse(
   input: ResumeOrCreateResponseInput,
+  /** 대리 응답 귀속 — procedure 가 세션에서 1회 파생해 넘긴다(티켓 27). */
+  fieldworkUserId: string | null = null,
 ): Promise<ResumeOrCreateResponseOutput> {
   const { surveyId, sessionId, inviteToken, testToken } = input;
 
@@ -363,7 +373,11 @@ export async function resumeOrCreateResponse(
             // 중도 이탈 되살리기 — 아래 비-테스트 컨택 경로와 동일한 UPDATE.
             // 중단 모드 게이트는 두지 않는다: 이 분기의 행은 isTest 라 비-테스트 경로에서도
             // 게이트 예외 대상이며, 운영자 QA 를 막지 않는 것이 기존 동작이다.
-            await touchOrReviveResponse(existingByContact.id, { revive: true, now: new Date() });
+            await touchOrReviveResponse(existingByContact.id, {
+              revive: true,
+              now: new Date(),
+              fieldworkUserId,
+            });
             return { ...restored, resumed: true };
           }
           return { ...restored, resumed: false };
@@ -404,7 +418,11 @@ export async function resumeOrCreateResponse(
               })
             : null;
           if (!migration) {
-            await touchOrReviveResponse(existingByContact.id, { revive: reviveFromDrop, now });
+            await touchOrReviveResponse(existingByContact.id, {
+              revive: reviveFromDrop,
+              now,
+              fieldworkUserId,
+            });
           }
           const restorePayload =
             versionMatches || migration
@@ -487,7 +505,7 @@ export async function resumeOrCreateResponse(
     });
     if (!migration) {
       // 기존 동작: drop 회복(status 전환) 또는 stale 방지용 lastActivityAt 터치
-      await touchOrReviveResponse(existing.id, { revive: reviveFromDrop, now });
+      await touchOrReviveResponse(existing.id, { revive: reviveFromDrop, now, fieldworkUserId });
     }
     const rawResponses = migration?.survivingResponses ?? existing.questionResponses ?? {};
     return {
