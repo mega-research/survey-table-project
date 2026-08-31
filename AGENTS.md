@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-19 (features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅 반영)
+> 최종 갱신: 2026-08-31 (features/ 11개 도메인 · 문항 수요조사(조사표·앵커·분할 레이아웃) 추가 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅 반영)
 
 ---
 
@@ -38,6 +38,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 백그라운드 잡  | Inngest                                     | 4.4.0           |
 | 레이트리밋     | @upstash/ratelimit + @upstash/redis         | 2.0.8 / 1.38.0  |
 | 로깅           | pino + @axiomhq/js                          | 10.3.1 / 2.0.0  |
+| PDF 렌더       | pdfjs-dist (조사표 뷰어 + 서버 쪽 수 판독)   | 6.3.289         |
 | 엑셀 생성      | ExcelJS                                     | 4.4.0           |
 | SPSS .sav 생성 | sav-writer                                  | 1.0.0           |
 | 차트           | Recharts + Tremor                           | 2.15.4 / 3.18.7 |
@@ -75,8 +76,8 @@ src/
 │   ├── analytics/              # 분석 대시보드
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
-├── features/                   # feature 단위 백엔드 (oRPC) — 10개 도메인
-│   └── <feature>/              # survey-builder · survey-response · operations · contacts
+├── features/                   # feature 단위 백엔드 (oRPC) — 11개 도메인
+│   └── <feature>/              # survey-builder · survey-response · survey-document · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota
 │       ├── domain/             # 타입 re-export + zod 스키마 (런타임 import 0, JSONB는 z.custom)
 │       └── server/
@@ -257,6 +258,16 @@ survey_responses           # 수집된 응답
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
+survey_documents           # 조사표 — 설문에 붙는 PDF (설문당 여러 행 허용)
+├── id, surveyId, fileKey (R2 survey/document/), filename, pageCount, order
+└── createdAt, updatedAt
+
+survey_document_anchors    # 영역 앵커 — 조사표 쪽 위의 사각형 (한 대상에 여럿)
+├── id, surveyId, documentId
+├── questionId / groupId          # nullable FK 둘 + CHECK 정확히 하나 (종류는 파생)
+├── page, x, y, w, h              # 쪽 번호 + 정규화 0~1 (화면 픽셀 저장 안 함)
+└── order, createdAt
+
 test_response_attempts     # 테스트 응답 회차 (초기화·재응답 추적)
 ├── id, responseId, sessionId, status, startedAt, supersededAt
 └── UNIQUE partial(responseId) WHERE status='active'
@@ -395,7 +406,8 @@ r2_key_refs                # 파생 참조 인덱스 (사전 필터일 뿐 삭�
 ### 주요 관계
 
 ```
-surveys (1) ─┬─ (N) question_groups ── parentGroupId (self-ref)
+surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
+             ├─ (N) question_groups ── parentGroupId (self-ref)
              ├─ (N) questions
              ├─ (N) survey_responses ─┬─ (N) response_answers
              │                        ├─ (N) response_edit_logs
@@ -434,6 +446,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 ├── report                        # 전시회/그룹별 진척률 리포트 (slice 4)
 │   └── columns                   # 리포트 컬럼 픽커
 ├── quota                         # 쿼터 플랜 + 실시간 달성 현황
+├── demand                        # 문항 수요 집계 (조사표가 붙은 설문에서만 탭이 나온다)
 └── mail/                         # 메일 캠페인
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
@@ -513,9 +526,11 @@ POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query
 POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
 GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
+GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
