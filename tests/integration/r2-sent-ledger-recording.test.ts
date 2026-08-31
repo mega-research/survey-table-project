@@ -47,6 +47,7 @@ process.env['NEXT_PUBLIC_APP_URL'] = 'https://example.com';
 function makeSelect() {
   let tableName = '';
   const rowsFor = (): unknown[] => {
+    if (tableName === 'surveys') return [{ deletedAt: null }];
     if (tableName === 'mail_campaigns') return [{ ...state.campaign }];
     if (tableName === 'mail_recipients') return [{ id: 'r1' }];
     return [];

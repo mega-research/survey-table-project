@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import {
@@ -20,6 +20,7 @@ import {
   surveys,
   teams,
 } from '@/db/schema';
+import { mailCampaigns } from '@/db/schema/mail';
 import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
 import { collectSurveyContentKeys } from '@/server/storage-lifecycle/entity-collectors';
 import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-diff-collector';
@@ -276,6 +277,30 @@ export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
       .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
       .returning({ id: surveys.id });
     if (updated.length === 0) throw new SurveyAccessError('not_found');
+
+    // 예약·진행 중 캠페인을 **같은 트랜잭션에서** 접는다.
+    //
+    // 예전 hard delete 는 CASCADE 가 캠페인·수신자를 함께 지워 Inngest dispatcher 가 볼
+    // 것이 없었다. soft delete 는 그 행들을 살려두므로, 접지 않으면 삭제된 설문의 초대
+    // 메일이 계속 나가고 과금되며 수신자는 열리지 않는 링크를 받는다.
+    //
+    // `cancelCampaign`(운영자 취소)과 달리 **sending 도 접는다** — 저쪽은 "발송 시작 후에는
+    // 취소 불가" 라는 운영 규칙이지만, 여기서는 설문 자체가 사라져 남은 수신자에게 보낼
+    // 이유가 하나도 없다. 이미 lease 를 인수한 수신자 한 건은 나갈 수 있다(dispatcher 가
+    // campaign 행을 잠근 채 발송 중이면 이 UPDATE 가 그 뒤에 선다) — 그보다 좁힐 수는 없다.
+    //
+    // 파티션(isTest)을 가리지 않는다: 설문이 통째로 지워지므로 실·테스트 양쪽 다 접는다.
+    // 삭제 순서가 **설문 → 캠페인**인 것이 계약이다 — dispatch 쪽 재검증이 캠페인을 잠근 뒤
+    // 설문을 잠금 없이 읽는 것과 짝을 이뤄 데드락을 만들지 않는다.
+    await tx
+      .update(mailCampaigns)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(
+        and(
+          eq(mailCampaigns.surveyId, surveyId),
+          inArray(mailCampaigns.status, ['queued', 'sending']),
+        ),
+      );
   });
 }
 

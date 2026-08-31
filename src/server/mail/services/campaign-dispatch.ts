@@ -6,9 +6,10 @@ import { createElement } from 'react';
 import { render } from '@react-email/render';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import { contactAttempts, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { surveys } from '@/db/schema/surveys';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
@@ -59,6 +60,26 @@ function canDispatchCampaign(campaign: CampaignDispatchState): boolean {
     && (campaign.status === 'queued' || campaign.status === 'sending');
 }
 
+/**
+ * 설문이 삭제됐는가 — 발송 직전 재검증 (티켓 17 후속).
+ *
+ * 삭제가 soft delete 로 바뀌면서(구 hard delete + CASCADE) 캠페인·수신자 행이 살아남는다.
+ * `deleteSurvey` 가 queued·sending 캠페인을 같은 트랜잭션에서 취소하므로 경합의 정본은
+ * campaign 행 잠금이고, 이 검사는 그 앞의 그물이다 — 취소 이전에 이미 삭제된 설문의
+ * 잔여 캠페인, 그리고 앞으로 캠페인을 세우는 새 경로가 취소를 비켜갈 때를 받는다.
+ *
+ * **surveys 행을 잠그지 않는다.** 잠그면 이 흐름의 잠금 순서가 「campaign → survey」가 되어
+ * 「survey → campaign」으로 잠그는 `deleteSurvey` 와 정확히 반대가 되고, 그 둘이 겹치면
+ * 데드락이다. 잠금 없는 읽기로 충분한 이유는 위와 같다 — 경합은 campaign 잠금이 막는다.
+ */
+async function isSurveyDeleted(dbc: DbOrTx, surveyId: string): Promise<boolean> {
+  const [row] = await dbc
+    .select({ deletedAt: surveys.deletedAt })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId));
+  return row === undefined || row.deletedAt !== null;
+}
+
 function recipientIdempotencyKey(campaignId: string, recipientId: string): string {
   return `campaign/${campaignId}/recipient/${recipientId}`;
 }
@@ -100,6 +121,7 @@ type DeliveryClaim =
 
 async function claimRecipientDelivery(
   campaignId: string,
+  surveyId: string,
   recipientId: string,
   now: Date,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
@@ -128,6 +150,8 @@ async function claimRecipientDelivery(
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
     if (!campaign || !canDispatchCampaign(campaign)) return { kind: 'cancelled' };
+    // 삭제된 설문의 초대 메일은 열리지 않는 링크다 — 보내고 과금까지 하면 안 된다.
+    if (await isSurveyDeleted(tx, surveyId)) return { kind: 'cancelled' };
 
     const [lockedContact] = recipientRef.contactTargetId === null
       ? []
@@ -301,12 +325,14 @@ async function claimRecipientDelivery(
 
 async function claimRecipientDeliveryWithWait(
   campaignId: string,
+  surveyId: string,
   recipientId: string,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
   negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   let claim = await claimRecipientDelivery(
     campaignId,
+    surveyId,
     recipientId,
     new Date(),
     proposedPayload,
@@ -323,6 +349,7 @@ async function claimRecipientDeliveryWithWait(
     await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
     claim = await claimRecipientDelivery(
       campaignId,
+      surveyId,
       recipientId,
       new Date(),
       proposedPayload,
@@ -590,6 +617,8 @@ export async function prepareCampaignDispatch(
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
     if (!campaign) return null;
+    // 삭제된 설문이면 이 캠페인은 더 이상 발송 대상이 아니다 (티켓 17 후속).
+    if (await isSurveyDeleted(tx, campaign.surveyId)) return null;
     if (!canDispatchCampaign(campaign)) {
       const ambiguous = await tx
         .select({ id: mailRecipients.id })
@@ -677,6 +706,9 @@ export async function dispatchCampaignChunk(
 ): Promise<DispatchChunkResult> {
   const [campaign] = await db.select().from(mailCampaigns).where(eq(mailCampaigns.id, campaignId));
   if (!campaign || !canDispatchCampaign(campaign)) {
+    return { sent: 0, failed: 0, cancelled: true };
+  }
+  if (await isSurveyDeleted(db, campaign.surveyId)) {
     return { sent: 0, failed: 0, cancelled: true };
   }
 
@@ -835,6 +867,7 @@ export async function dispatchCampaignChunk(
   for (const proposed of proposedSends) {
     const claim = await claimRecipientDeliveryWithWait(
       campaignId,
+      campaign.surveyId,
       proposed.recipientId,
       proposed.payload,
       negativeResultCodes,

@@ -68,8 +68,10 @@ vi.mock('@/db', () => {
   // 호출 순서로 분기한다.
   let selectCall = 0;
   const db = {
-    select: vi.fn(() => {
-      const idx = selectCall++;
+    select: vi.fn((selection?: Record<string, unknown>) => {
+      // 설문 삭제 재검증 조회 — 호출 순서 분기에 끼지 않게 먼저 가른다 (티켓 17 후속).
+      const isSurveyProbe = Object.keys(selection ?? {}).join() === 'deletedAt';
+      const idx = isSurveyProbe ? -1 : selectCall++;
       return {
         from() {
           return this;
@@ -81,6 +83,7 @@ vi.mock('@/db', () => {
           return this;
         },
         where() {
+          if (isSurveyProbe) return Promise.resolve([{ deletedAt: null }]);
           return idx === 0 ? Promise.resolve([campaign]) : Promise.resolve(recipientRows);
         },
       };
@@ -90,7 +93,10 @@ vi.mock('@/db', () => {
         select: vi.fn((selection?: Record<string, unknown>) => {
           const keys = Object.keys(selection ?? {});
           let result: unknown[];
-          if (keys.includes('contactTargetId') && keys.length === 2) {
+          if (keys.join() === 'deletedAt') {
+            // 설문 삭제 재검증 (티켓 17 후속) — 살아 있는 설문.
+            result = [{ deletedAt: null }];
+          } else if (keys.includes('contactTargetId') && keys.length === 2) {
             result = [{ id: 'r1', contactTargetId: 'contact-r1' }];
           } else if (keys.includes('unsubscribedAt')) {
             result = [{ id: 'contact-r1', unsubscribedAt: null }];

@@ -31,6 +31,7 @@ import {
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
+import { mailCampaigns as mailCampaignsTable } from '@/db/schema/mail';
 import { lookupContactAttrs } from '@/server/contacts/services/contact-attrs';
 import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
 import type { ORPCContext } from '@/server/context';
@@ -75,6 +76,12 @@ function contextFor(userId: string, isSuperadmin: boolean): ORPCContext {
 }
 
 const owner = { id: OWNER_ID, isSuperadmin: false, userType: 'internal' as const };
+
+const surveyClient = (userId: string, isSuperadmin: boolean) =>
+  createRouterClient(
+    { surveys: surveysProcedures },
+    { context: contextFor(userId, isSuperadmin) },
+  );
 
 /** 설문 + 질문 + 응답 + 컨택을 한 벌 심는다 — 삭제가 무엇을 보존하는지 세려면 하위 행이 필요하다. */
 async function seedSurvey(): Promise<void> {
@@ -296,6 +303,69 @@ describe.skipIf(!isLocalDb)('삭제된 설문 불가시성 (real local DB)', () 
         .where(eq(surveyResponsesTable.id, responseId));
       expect(row?.id).toBe(responseId);
       await expect(loadSurveyGateRow(surveyId)).rejects.toThrow();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ②-b 예약 메일 — 삭제가 발송을 멈춘다
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * hard delete 시절에는 CASCADE 가 캠페인을 함께 지워 Inngest dispatcher 가 볼 것이 없었다.
+   * soft delete 는 그 행을 살려두므로 **삭제가 직접 접지 않으면** 지워진 설문의 초대 메일이
+   * 계속 나가고 과금되며, 수신자는 열리지 않는 링크를 받는다.
+   *
+   * 실 DB 인 이유는 이 파일의 다른 축과 같다 — 확인하려는 것이 UPDATE 의 WHERE 절
+   * (`survey_id` + status IN (queued, sending))이라 목으로는 조건 유무가 드러나지 않는다.
+   */
+  describe('예약·진행 중 메일 — 삭제가 접는다', () => {
+    async function seedCampaign(
+      status: 'draft' | 'queued' | 'sending' | 'completed',
+      runNumber: number,
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      await db.insert(mailCampaignsTable).values({
+        id,
+        surveyId,
+        runNumber,
+        title: `캠페인-${status}`,
+        kind: 'bulk',
+        status,
+        subjectSnapshot: '제목',
+        bodyHtmlSnapshot: '<p>본문</p>',
+        fromLocalSnapshot: 'noreply',
+        fromNameSnapshot: '조사',
+      });
+      return id;
+    }
+
+    async function statusOf(id: string): Promise<string | undefined> {
+      const [row] = await db
+        .select({ status: mailCampaignsTable.status })
+        .from(mailCampaignsTable)
+        .where(eq(mailCampaignsTable.id, id));
+      return row?.status;
+    }
+
+    it('queued·sending 캠페인이 삭제와 같은 트랜잭션에서 취소된다', async () => {
+      const queued = await seedCampaign('queued', 1);
+      const sending = await seedCampaign('sending', 2);
+
+      await surveyClient(OWNER_ID, false).surveys.delete({ surveyId });
+
+      expect(await statusOf(queued)).toBe('cancelled');
+      // 운영자 취소(cancelCampaign)는 sending 을 못 접지만 삭제는 접는다 — 보낼 설문이 없다.
+      expect(await statusOf(sending)).toBe('cancelled');
+    });
+
+    it('draft·completed 는 건드리지 않는다 — 발송 대기가 아닌 것까지 덮어쓰지 않는다', async () => {
+      const draft = await seedCampaign('draft', 3);
+      const completed = await seedCampaign('completed', 4);
+
+      await surveyClient(OWNER_ID, false).surveys.delete({ surveyId });
+
+      expect(await statusOf(draft)).toBe('draft');
+      expect(await statusOf(completed)).toBe('completed');
     });
   });
 
