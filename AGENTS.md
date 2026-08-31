@@ -1359,6 +1359,7 @@ pnpm test:watch       # Vitest watch
 pnpm test:coverage    # 커버리지 (spss 계열만 집계)
 pnpm test:e2e         # Playwright E2E
 pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
+                      # pretest 가드가 「이 브랜치 스키마인가」를 먼저 본다 (아래 주의사항 13)
 pnpm db:setup-test    # 테스트 DB 준비 (마이그레이션 전량 재생 = 재생 검증)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm inngest          # Inngest 로컬 dev 서버
@@ -1574,7 +1575,11 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 
-12. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
+12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.mjs` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
+
+    **마이그레이션 번호는 그보다 조용한 축이다.** 브랜치들이 같은 base 에서 갈라지면 같은 번호를 서로 다른 뜻으로 선점할 수 있고(실제로 0084·0085 가 그랬다), CI 게이트는 **태그 전체**만 보므로 접두 중복을 잡지 못한다(`0003_*`·`0009_*`·`0019_*` 가 이미 공존한다). 새 마이그레이션 번호는 **세 워크트리의 최댓값 + 1** 로 잡고, 재생 순서는 파일명이 아니라 `manual-migrations.json` **배열**이므로 **두 번째로 병합하는 쪽은 배열 끝에 append** 한다(번호순 삽입 금지).
+
+13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
 ---
 
