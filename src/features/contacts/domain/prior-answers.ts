@@ -42,14 +42,25 @@ export const SuggestPriorAnswerMappingResultSchema = z.object({
   blocks: z.array(
     z.object({
       code: z.string(),
+      /** 문항 내용 대조에 쓴 텍스트 — 담당자가 판정 근거를 볼 수 있어야 한다. */
+      label: z.string(),
       part: z.string(),
       columnIndexes: z.array(z.number()),
       detailLabels: z.array(z.string()),
       questionId: z.string().nullable(),
-      matchedBy: z.literal('code').nullable(),
+      matchedBy: z.enum(['code', 'label']).nullable(),
+      verdict: z.enum(['auto', 'code-conflict', 'label-candidate', 'unmapped']),
+      /** code-conflict 일 때 코드가 가리킨 문항 */
+      conflictQuestionId: z.string().nullable(),
+      /** 확정 설정에서 되살린 매핑인가 — 화면이 "지난 확정" 으로 표시한다. */
+      fromSavedConfig: z.boolean(),
+      /** 블록 컬럼별 배정 결과. 표 위치 폴백의 조용한 오배정을 눈으로 확인하는 자리다. */
+      slotLabels: z.array(z.string()),
       unmatchedSlots: z.number(),
     }),
   ),
+  /** 보관된 값 대응 — 화면이 이 상태로 시작해야 지난 확정이 재사용된다. */
+  savedValueAliases: z.record(z.string(), z.record(z.string(), z.string())),
   /** 화면의 수동 매핑 선택지. */
   questions: z.array(
     z.object({
@@ -57,6 +68,8 @@ export const SuggestPriorAnswerMappingResultSchema = z.object({
       questionCode: z.string().nullable(),
       title: z.string(),
       type: z.string(),
+      /** 이 문항의 선택지 — 안 맞은 원본 값을 그 자리에서 이어줄 때 쓴다. */
+      options: z.array(z.object({ value: z.string(), label: z.string() })),
     }),
   ),
 });
@@ -74,6 +87,11 @@ export const ImportPriorAnswersInput = z.object({
   residColumnIndex: z.number().int().min(0),
   /** 블록 번호(문자열) → 문항 id */
   mapping: z.record(z.string(), z.string()),
+  /**
+   * 이번 화면에서 이어준 값 대응 — 문항 id → { 원본 값 → 선택지 저장값 }.
+   * 요청에 실려 오므로 미리보기가 서버 설정을 건드리지 않고도 결과에 반영된다.
+   */
+  valueAliases: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   /** true 면 적재하지 않고 결과만 계산한다 (실행 전 미리보기). */
   dryRun: z.boolean().optional(),
 });
@@ -95,14 +113,31 @@ export const ImportPriorAnswersResultSchema = z.object({
   questionsWithoutValues: z.array(z.string()),
   /** 이 경로가 다룰 수 없는 문항으로 매핑된 것 */
   unsupportedQuestionIds: z.array(z.string()),
-  /** 문항별 선택지 변환 실패 */
+  /** 문항별 선택지 변환 실패. 실패율 내림차순 — 경고 수십 줄에 묻히지 않게. */
   optionMismatches: z.array(
     z.object({
       questionId: z.string(),
       total: z.number(),
       unmatched: z.number(),
+      /** unmatched / total (0~1) */
+      rate: z.number(),
       values: z.array(z.object({ value: z.string(), count: z.number() })),
     }),
   ),
 });
 export type ImportPriorAnswersResult = z.infer<typeof ImportPriorAnswersResultSchema>;
+
+/** 확정 매핑·값 대응 저장 — 다시 올릴 때 그대로 재사용된다. */
+export const SavePriorAnswerImportConfigInput = z.object({
+  surveyId: z.string(),
+  /** 정규화된 문항코드 → 확정 문항 id + 그때의 문항 내용 */
+  blockMappings: z.record(
+    z.string(),
+    z.object({ questionId: z.string(), label: z.string() }),
+  ),
+  /** 문항 id → { 원본 값 → 선택지 저장값 } */
+  valueAliases: z.record(z.string(), z.record(z.string(), z.string())),
+});
+export type SavePriorAnswerImportConfigInput = z.infer<
+  typeof SavePriorAnswerImportConfigInput
+>;

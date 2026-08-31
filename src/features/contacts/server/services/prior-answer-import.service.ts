@@ -4,12 +4,17 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
-import { questions as questionsTable } from '@/db/schema/surveys';
+import { questions as questionsTable, surveys } from '@/db/schema/surveys';
+import type { PriorAnswerImportConfig } from '@/db/schema/schema-types';
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
+  LABEL_SIMILAR_THRESHOLD,
+  labelSimilarity,
+  normalizeQuestionCode,
   resolveSlots,
   splitHeaderBlocks,
   suggestBlockMapping,
+  type BlockSlot,
   type HeaderBlock,
 } from '@/lib/contacts/prior-answer-blocks';
 import { buildPriorAnswerRecords } from '@/lib/contacts/prior-answer-import';
@@ -18,10 +23,13 @@ import { encryptAnswerValue } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import type { Question } from '@/types/survey';
+import { resolveChoiceOptions } from '@/utils/choice-source';
+import { resolveRankingOptions } from '@/utils/ranking-source';
 
 import type {
   ImportPriorAnswersInput,
   ImportPriorAnswersResult,
+  SavePriorAnswerImportConfigInput,
   SuggestPriorAnswerMappingInput,
   SuggestPriorAnswerMappingResult,
 } from '../../domain/prior-answers';
@@ -44,6 +52,150 @@ async function loadQuestions(surveyId: string): Promise<Question[]> {
     orderBy: [questionsTable.order],
   });
   return normalizeQuestions(rows);
+}
+
+/** 값 이어주기 드롭다운에 쓸 이 문항의 선택지. 표 문항은 칸마다 달라 여기서 내지 않는다. */
+function importableOptions(question: Question): Array<{ value: string; label: string }> {
+  // 표 문항은 칸마다 선택지가 다르다 — 값 이어주기 후보로는 모든 칸의 선택지를 합쳐 낸다.
+  // 실제 대응은 그 칸의 선택지 안에서만 성립하므로(findOptionByLabel), 합집합은 후보
+  // 목록일 뿐 잘못된 칸에 값을 넣지 않는다.
+  if (question.type === 'table') {
+    const seen = new Map<string, string>();
+    for (const row of question.tableRowsData ?? []) {
+      for (const cell of row.cells ?? []) {
+        const cellOpts =
+          cell.type === 'checkbox'
+            ? (cell.checkboxOptions ?? [])
+            : cell.type === 'radio'
+              ? (cell.radioOptions ?? [])
+              : cell.type === 'select'
+                ? (cell.selectOptions ?? [])
+                : [];
+        for (const option of cellOpts) {
+          const value = option.value ?? option.id;
+          if (!seen.has(value)) seen.set(value, option.label ?? value);
+        }
+      }
+    }
+    return [...seen.entries()].map(([value, label]) => ({ value, label }));
+  }
+  const options =
+    question.type === 'ranking' ? resolveRankingOptions(question) : resolveChoiceOptions(question);
+  return options.map((option) => ({
+    value: option.value ?? option.id,
+    label: option.label ?? option.value ?? option.id,
+  }));
+}
+
+/** 확정 설정을 읽기 경계에서 정규화한다 (JSONB 드리프트 관례). */
+function normalizeImportConfig(raw: unknown): PriorAnswerImportConfig {
+  const empty: PriorAnswerImportConfig = { blockMappings: {}, valueAliases: {} };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return empty;
+  const source = raw as Partial<PriorAnswerImportConfig>;
+  const blockMappings: PriorAnswerImportConfig['blockMappings'] = {};
+  for (const [code, entry] of Object.entries(source.blockMappings ?? {})) {
+    // 문자열만 저장하던 형태도 읽어준다 — 라벨은 비어 있는 것으로 본다.
+    if (typeof entry === 'string' && entry) {
+      blockMappings[code] = { questionId: entry, label: '' };
+      continue;
+    }
+    if (!entry || typeof entry !== 'object') continue;
+    const { questionId, label } = entry as { questionId?: unknown; label?: unknown };
+    if (typeof questionId !== 'string' || !questionId) continue;
+    blockMappings[code] = { questionId, label: typeof label === 'string' ? label : '' };
+  }
+  const valueAliases: Record<string, Record<string, string>> = {};
+  for (const [questionId, aliases] of Object.entries(source.valueAliases ?? {})) {
+    if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) continue;
+    const kept: Record<string, string> = {};
+    for (const [rawValue, stored] of Object.entries(aliases)) {
+      if (typeof stored === 'string' && stored) kept[rawValue] = stored;
+    }
+    if (Object.keys(kept).length > 0) valueAliases[questionId] = kept;
+  }
+  return { blockMappings, valueAliases };
+}
+
+/** 이 설문에 보관된 확정 설정. 없으면 빈 설정. */
+async function loadImportConfig(surveyId: string): Promise<PriorAnswerImportConfig> {
+  const [row] = await db
+    .select({ config: surveys.priorAnswerImportConfig })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+  return normalizeImportConfig(row?.config);
+}
+
+/**
+ * 확정 매핑·값 대응을 보관한다. 다시 올릴 때 그대로 재사용된다.
+ *
+ * **병합이다.** 통째로 덮으면 이번 파일에 없는 블록·문항의 확정이 함께 사라진다 —
+ * 191개 매핑을 여러 번에 걸쳐 맞추는 것이 정상 경로라 그 소실이 곧 기능 상실이다.
+ */
+export async function savePriorAnswerImportConfig(
+  input: SavePriorAnswerImportConfigInput,
+): Promise<{ ok: true }> {
+  const existing = await loadImportConfig(input.surveyId);
+  const incoming = normalizeImportConfig({
+    blockMappings: input.blockMappings,
+    valueAliases: input.valueAliases,
+  });
+
+  const merged: PriorAnswerImportConfig = {
+    blockMappings: { ...existing.blockMappings, ...incoming.blockMappings },
+    valueAliases: { ...existing.valueAliases },
+  };
+  for (const [questionId, aliases] of Object.entries(incoming.valueAliases)) {
+    merged.valueAliases[questionId] = { ...merged.valueAliases[questionId], ...aliases };
+  }
+
+  const [updated] = await db
+    .update(surveys)
+    .set({ priorAnswerImportConfig: merged, updatedAt: new Date() })
+    .where(eq(surveys.id, input.surveyId))
+    .returning({ id: surveys.id });
+  if (!updated) throw new Error('설문을 찾을 수 없습니다.');
+  return { ok: true };
+}
+
+/** 보관된 대응 위에 이번 요청의 대응을 얹는다. */
+function mergeAliases(
+  saved: Record<string, Record<string, string>>,
+  incoming: Record<string, Record<string, string>> | undefined,
+): Record<string, Record<string, string>> {
+  if (!incoming) return saved;
+  const merged: Record<string, Record<string, string>> = { ...saved };
+  for (const [questionId, aliases] of Object.entries(incoming)) {
+    merged[questionId] = { ...merged[questionId], ...aliases };
+  }
+  return merged;
+}
+
+/** 블록 컬럼 배정을 담당자가 읽을 수 있는 한 줄로 만든다. */
+function describeSlots(question: Question | undefined, slots: readonly BlockSlot[]): string[] {
+  const cellLabelById = new Map<string, string>();
+  for (const row of question?.tableRowsData ?? []) {
+    for (const cell of row.cells ?? []) {
+      cellLabelById.set(cell.id, cell.exportLabel || row.label || cell.content || cell.id);
+    }
+  }
+  const optionLabelByValue = new Map(
+    question ? importableOptions(question).map((o) => [o.value, o.label]) : [],
+  );
+  return slots.map((slot) => {
+    switch (slot.kind) {
+      case 'single':
+        return '문항 값';
+      case 'table-cell':
+        return cellLabelById.get(slot.cellId) ?? slot.cellId;
+      case 'checkbox-option':
+        return optionLabelByValue.get(slot.optionValue) ?? slot.optionValue;
+      case 'ranking-rank':
+        return `${slot.rank}순위`;
+      default:
+        return '배정 안 됨';
+    }
+  });
 }
 
 /** 이 문항 값이 저장 시 암호화되는가 — 스키마 행의 boolean 을 읽기 경계에서 정규화한다. */
@@ -69,7 +221,11 @@ export async function suggestPriorAnswerImportMapping(
     maxRows: 5,
   });
 
-  const questions = await loadQuestions(input.surveyId);
+  const [questions, config] = await Promise.all([
+    loadQuestions(input.surveyId),
+    loadImportConfig(input.surveyId),
+  ]);
+  const questionById = new Map(questions.map((q) => [q.id, q]));
   const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
   const suggestions = suggestBlockMapping(blocks, questions);
 
@@ -78,16 +234,38 @@ export async function suggestPriorAnswerImportMapping(
     headerRows: preview.headerRows,
     rows: preview.rows,
     totalRows: preview.totalRows,
-    blocks: suggestions.map((s) => ({
-      code: s.block.code,
-      part: s.block.part,
-      columnIndexes: s.block.columnIndexes,
-      detailLabels: s.block.detailLabels,
-      questionId: s.questionId,
-      matchedBy: s.matchedBy,
-      /** 자리를 정하지 못한 칸 수 — 화면이 "일부만 이어짐"을 알린다. */
-      unmatchedSlots: s.slots.filter((slot) => slot.kind === 'unmatched').length,
-    })),
+    blocks: suggestions.map((s) => {
+      // 지난 확정이 있으면 자동 제안보다 우선한다 — 담당자가 이미 판단한 것을 매번
+      // 다시 고치게 하지 않는다.
+      //
+      // 단, 확정 시점의 문항 내용과 이번 파일의 문항 내용이 어긋나면 되살리지 않는다.
+      // 코드만 보고 되살리면 파트가 재편돼 코드가 밀린 파일에서 지난 확정이 그대로
+      // 부활해 "코드는 같은데 내용이 다르다" 경고가 사라진다 — 이 티켓이 막으려는 사고다.
+      const saved = config.blockMappings[normalizeQuestionCode(s.block.code)];
+      const savedStillValid =
+        saved !== undefined &&
+        (!saved.label ||
+          !s.block.label ||
+          labelSimilarity(saved.label, s.block.label) >= LABEL_SIMILAR_THRESHOLD);
+      const savedQuestion = savedStillValid && saved ? questionById.get(saved.questionId) : undefined;
+      const questionId = savedQuestion?.id ?? s.questionId;
+      const question = savedQuestion ?? (s.questionId ? questionById.get(s.questionId) : undefined);
+      const slots = savedQuestion ? resolveSlots(savedQuestion, s.block) : s.slots;
+      return {
+        code: s.block.code,
+        label: s.block.label,
+        part: s.block.part,
+        columnIndexes: s.block.columnIndexes,
+        detailLabels: s.block.detailLabels,
+        questionId,
+        matchedBy: savedQuestion ? null : s.matchedBy,
+        verdict: savedQuestion ? ('auto' as const) : s.verdict,
+        conflictQuestionId: savedQuestion ? null : (s.conflictQuestionId ?? null),
+        fromSavedConfig: Boolean(savedQuestion),
+        slotLabels: describeSlots(question, slots),
+        unmatchedSlots: slots.filter((slot) => slot.kind === 'unmatched').length,
+      };
+    }),
     // 안내문은 답이 없는 유형이라 매핑 선택지에 두지 않는다.
     questions: questions
       .filter((q) => q.type !== 'notice')
@@ -96,7 +274,9 @@ export async function suggestPriorAnswerImportMapping(
         questionCode: q.questionCode ?? null,
         title: q.title,
         type: q.type,
+        options: importableOptions(q),
       })),
+    savedValueAliases: config.valueAliases,
   };
 }
 
@@ -124,7 +304,10 @@ export async function importPriorAnswers(
     throw new Error(`한 번에 올릴 수 있는 행은 ${MAX_UPLOAD_ROWS.toLocaleString()}건입니다.`);
   }
 
-  const questions = await loadQuestions(input.surveyId);
+  const [questions, config] = await Promise.all([
+    loadQuestions(input.surveyId),
+    loadImportConfig(input.surveyId),
+  ]);
   // 자리 배정은 서버가 다시 계산한다 — 클라이언트는 블록↔문항 확정만 보낸다.
   // 화면이 본 것과 같은 헤더에서 같은 규칙으로 뽑아야 미리보기와 적재가 어긋나지 않는다.
   const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
@@ -144,6 +327,9 @@ export async function importPriorAnswers(
     residColumnIndex: input.residColumnIndex,
     assignments,
     questions,
+    // 이번 화면에서 이어준 대응이 보관된 것보다 우선한다 — 미리보기가 저장 없이도
+    // 결과에 반영돼야 담당자가 고치고 바로 다시 볼 수 있다.
+    valueAliases: mergeAliases(config.valueAliases, input.valueAliases),
   });
 
   const scope = await loadOperationsDataScope(input.surveyId);

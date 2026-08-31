@@ -33,8 +33,15 @@ export function normalizeQuestionCode(raw: string | null | undefined): string {
 
 /** 3단 헤더에서 잘라낸 한 문항의 컬럼 블록. */
 export interface HeaderBlock {
-  /** 문항코드 행에서 읽은 원본 코드. */
+  /** 문항코드 행 원문(블록 첫 칸). 실무 파일은 `BQ1-1. 창업 기업명` 처럼 코드와 라벨이 붙어 있다. */
+  codeText: string;
+  /** codeText 의 선두 토큰 — 문항코드 후보. */
   code: string;
+  /**
+   * 문항 내용 대조용 텍스트. codeText 에서 코드를 뺀 나머지이며, 비어 있고 블록이 한 칸이면
+   * 세부 라벨을 쓴다. 코드가 밀린 파일을 잡아내는 근거라 코드와 별개로 들고 있는다.
+   */
+  label: string;
   /** 이 블록이 차지하는 컬럼 인덱스(0-based, 오름차순). */
   columnIndexes: number[];
   /** 파트 행 텍스트 — 블록 첫 칸 기준. 없으면 빈 문자열. */
@@ -56,13 +63,60 @@ export type BlockSlot =
   /** 어느 자리인지 정하지 못했다 — 값을 만들지 않는다. */
   | { kind: 'unmatched' };
 
+/**
+ * 블록↔문항 판정.
+ *
+ * - `auto` — 코드가 맞고 문항 내용도 유사하다. 그대로 제안한다.
+ * - `code-conflict` — 코드는 맞는데 **문항 내용이 다르다**. 매핑하지 않고 경고한다.
+ *   지난 회차에 파트가 재편되며 코드가 한 칸씩 밀린 실제 사례가 있어, 코드만 믿으면
+ *   지난 회차 만족도 값이 올해 창업의향 문항에 조용히 꽂힌다.
+ * - `label-candidate` — 코드는 다른데 문항 내용이 같다. 후보로 제안하되 확인을 요구한다.
+ * - `unmapped` — 그 외.
+ */
+export type BlockVerdict = 'auto' | 'code-conflict' | 'label-candidate' | 'unmapped';
+
 export interface BlockSuggestion {
   block: HeaderBlock;
   questionId: string | null;
-  matchedBy: 'code' | null;
+  matchedBy: 'code' | 'label' | null;
+  verdict: BlockVerdict;
+  /** code-conflict 일 때 코드가 가리킨 문항 — 담당자가 무엇과 충돌했는지 알아야 한다. */
+  conflictQuestionId?: string;
   /** block.columnIndexes 와 같은 순서·길이. */
   slots: BlockSlot[];
 }
+
+/**
+ * 문항 내용 유사도(0~1). 정규화 후 같으면 1, 아니면 바이그램 Dice 계수.
+ *
+ * 완전 일치만 보면 조사표를 옮겨 적으며 생긴 사소한 차이("~입니까" ↔ "~습니까")에
+ * 전부 경고가 뜨고, 아예 안 보면 코드가 밀린 사고를 못 잡는다.
+ */
+export function labelSimilarity(a: string, b: string): number {
+  const left = labelKey(a);
+  const right = labelKey(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  const bigrams = (text: string) => {
+    const grams = new Map<string, number>();
+    for (let i = 0; i < text.length - 1; i++) {
+      const gram = text.slice(i, i + 2);
+      grams.set(gram, (grams.get(gram) ?? 0) + 1);
+    }
+    return grams;
+  };
+  const leftGrams = bigrams(left);
+  const rightGrams = bigrams(right);
+  let shared = 0;
+  for (const [gram, count] of leftGrams) {
+    shared += Math.min(count, rightGrams.get(gram) ?? 0);
+  }
+  const total = left.length - 1 + (right.length - 1);
+  return total > 0 ? (2 * shared) / total : 0;
+}
+
+/** 이 값 이상이면 "문항 내용이 유사하다"고 본다. */
+export const LABEL_SIMILAR_THRESHOLD = 0.6;
 
 /** 한 칸의 텍스트로 값이 정해지는 문항 유형. 그 외는 이 경로가 값을 만들지 않는다. */
 const SINGLE_CELL_TYPES = new Set<Question['type']>(['text', 'textarea', 'radio', 'select']);
@@ -122,17 +176,28 @@ export function splitHeaderBlocks(
     if (!code) continue;
 
     const last = blocks[blocks.length - 1];
-    if (last !== undefined && last.code === code) {
+    if (last !== undefined && last.codeText === code) {
       last.columnIndexes.push(col);
       last.detailLabels.push((detailRow?.[col] ?? '').trim());
       continue;
     }
+    const [leading, ...rest] = code.split(/\s+/);
     blocks.push({
-      code,
+      codeText: code,
+      code: leading ?? code,
+      label: rest.join(' ').trim(),
       columnIndexes: [col],
       part: (partRow?.[col] ?? '').trim(),
       detailLabels: [(detailRow?.[col] ?? '').trim()],
     });
+  }
+  // 코드 칸에 라벨이 없을 때만 세부 라벨을 문항 내용으로 본다. 그것도 **한 칸짜리 블록**
+  // 에서만이다 — 여러 칸 블록의 세부 라벨은 칸 이름이지 문항 내용이 아니라서, 그대로
+  // 대조하면 표·복수응답·순위 블록마다 거짓 경고가 뜬다.
+  for (const block of blocks) {
+    if (!block.label && block.columnIndexes.length === 1) {
+      block.label = block.detailLabels.filter(Boolean).join(' ');
+    }
   }
   return blocks;
 }
@@ -183,10 +248,19 @@ function parseRankFromLabel(label: string): number | null {
   return Number.isInteger(rank) && rank > 0 ? rank : null;
 }
 
-function findOptionByLabel(options: QuestionOption[], label: string): QuestionOption | undefined {
+function findOptionByLabel(
+  options: QuestionOption[],
+  label: string,
+  valueAliases?: Readonly<Record<string, string>>,
+): QuestionOption | undefined {
   const key = labelKey(label);
   if (!key) return undefined;
-  return options.find((option) => labelKey(option.label) === key);
+  const exact = options.find((option) => labelKey(option.label) === key);
+  if (exact) return exact;
+  // 확정 대응은 라벨이 아니라 저장값을 가리킨다 — 그 저장값이 실재할 때만 쓴다.
+  const aliased = valueAliases?.[label.trim()];
+  if (!aliased) return undefined;
+  return options.find((option) => (option.value ?? option.id) === aliased);
 }
 
 /**
@@ -270,27 +344,71 @@ export function suggestBlockMapping(
     byCode.set(code, question);
   }
 
+  const eligible = questions.filter((question) => !isGroupedChoiceQuestion(question));
   const taken = new Set<string>();
-  return blocks.map((block) => {
+  const unmatchedSlots = (block: HeaderBlock): BlockSlot[] =>
+    block.columnIndexes.map(() => ({ kind: 'unmatched' as const }));
+
+  return blocks.map((block): BlockSuggestion => {
     // 실무 헤더는 `BQ1-1. 창업 기업명` 처럼 코드와 라벨이 한 칸에 붙어 있다 —
     // 전체와 선두 토큰을 둘 다 후보로 본다.
-    const question = headerCodeCandidates(block.code)
+    const byCodeMatch = headerCodeCandidates(block.codeText)
       .map((code) => byCode.get(code))
       .find((found) => found !== undefined);
-    if (!question || taken.has(question.id)) {
+
+    if (byCodeMatch && !taken.has(byCodeMatch.id)) {
+      // 대조할 문항 내용이 없으면 코드 일치만으로 간다 — 라벨 없는 파일에서 코드 일치를
+      // 경고로 뒤집으면 매핑이 전부 막힌다.
+      const similar =
+        !block.label || labelSimilarity(block.label, byCodeMatch.title) >= LABEL_SIMILAR_THRESHOLD;
+      if (similar) {
+        taken.add(byCodeMatch.id);
+        return {
+          block,
+          questionId: byCodeMatch.id,
+          matchedBy: 'code',
+          verdict: 'auto',
+          slots: resolveSlots(byCodeMatch, block),
+        };
+      }
       return {
         block,
         questionId: null,
         matchedBy: null,
-        slots: block.columnIndexes.map(() => ({ kind: 'unmatched' as const })),
+        verdict: 'code-conflict',
+        conflictQuestionId: byCodeMatch.id,
+        slots: unmatchedSlots(block),
       };
     }
-    taken.add(question.id);
+
+    // 코드가 다르다 — 문항 내용이 같으면 후보로 올린다(파트 재편으로 코드가 밀린 경우).
+    if (block.label) {
+      const byLabel = eligible
+        .filter((question) => !taken.has(question.id))
+        .map((question) => ({
+          question,
+          score: labelSimilarity(block.label, question.title),
+        }))
+        .filter((entry) => entry.score >= LABEL_SIMILAR_THRESHOLD)
+        .sort((a, b) => b.score - a.score)[0];
+      if (byLabel) {
+        taken.add(byLabel.question.id);
+        return {
+          block,
+          questionId: byLabel.question.id,
+          matchedBy: 'label',
+          verdict: 'label-candidate',
+          slots: resolveSlots(byLabel.question, block),
+        };
+      }
+    }
+
     return {
       block,
-      questionId: question.id,
-      matchedBy: 'code' as const,
-      slots: resolveSlots(question, block),
+      questionId: null,
+      matchedBy: null,
+      verdict: 'unmapped',
+      slots: unmatchedSlots(block),
     };
   });
 }
@@ -324,6 +442,11 @@ export function buildBlockAnswer(
   question: Question,
   slots: readonly BlockSlot[],
   cellValues: readonly string[],
+  /**
+   * 확정된 값 대응 — 원본 값 → 선택지 저장값. 선택지 라벨이 지난 회차와 달라진 문항에서
+   * 담당자가 화면에서 이어준 것이며, 다시 올릴 때 그대로 재사용된다.
+   */
+  valueAliases?: Readonly<Record<string, string>>,
 ): BlockAnswer {
   const unmatchedValues: string[] = [];
   let convertedCells = 0;
@@ -347,7 +470,7 @@ export function buildBlockAnswer(
       const cell = cellById.get(slot.cellId);
       const options = cell ? cellOptions(cell) : [];
       convertedCells += 1;
-      const option = findOptionByLabel(options, raw);
+      const option = findOptionByLabel(options, raw, valueAliases);
       if (!option) {
         unmatchedValues.push(raw);
         return;
@@ -381,7 +504,7 @@ export function buildBlockAnswer(
       const raw = (cellValues[idx] ?? '').trim();
       if (!raw) return;
       convertedCells += 1;
-      const option = findOptionByLabel(options, raw);
+      const option = findOptionByLabel(options, raw, valueAliases);
       if (!option) {
         unmatchedValues.push(raw);
         return;
@@ -407,7 +530,7 @@ export function buildBlockAnswer(
   // 선택지 문항은 엑셀의 라벨 텍스트를 저장값으로 바꾼다. 맞지 않으면 그 문항만 비운다.
   if (question.type === 'radio' || question.type === 'select') {
     convertedCells += 1;
-    const option = findOptionByLabel(resolveChoiceOptions(question), raw);
+    const option = findOptionByLabel(resolveChoiceOptions(question), raw, valueAliases);
     if (!option) {
       unmatchedValues.push(raw);
       return { value: undefined, unmatchedValues, convertedCells };

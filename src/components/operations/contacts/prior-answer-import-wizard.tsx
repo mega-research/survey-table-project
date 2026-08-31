@@ -19,7 +19,12 @@ import type {
   ImportPriorAnswersResult,
   SuggestPriorAnswerMappingResult,
 } from '@/features/contacts/domain/prior-answers';
-import { useImportPriorAnswers, useSuggestPriorAnswerMapping } from '@/hooks/queries';
+import {
+  useImportPriorAnswers,
+  useSavePriorAnswerImportConfig,
+  useSuggestPriorAnswerMapping,
+} from '@/hooks/queries';
+import { normalizeQuestionCode } from '@/lib/contacts/prior-answer-blocks';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
@@ -28,6 +33,17 @@ type Step = 'file' | 'mapping' | 'result';
 
 /** 문항을 고르지 않았음을 나타내는 Select 값 — 빈 문자열은 Radix Select 가 허용하지 않는다. */
 const UNMAPPED = '_unmapped';
+
+const VERDICT_BADGE: Record<string, { label: string; className: string } | undefined> = {
+  'code-conflict': {
+    label: '코드는 같은데 문항 내용이 다릅니다 — 확인 필요',
+    className: 'border-red-200 bg-red-50 text-red-700',
+  },
+  'label-candidate': {
+    label: '코드는 다른데 내용이 같습니다 — 확인 필요',
+    className: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
+};
 
 interface Props {
   surveyId: string;
@@ -56,11 +72,33 @@ export function PriorAnswerImportWizard({
 
   const suggest = useSuggestPriorAnswerMapping();
   const runImport = useImportPriorAnswers();
+  const saveConfig = useSavePriorAnswerImportConfig();
+  /** 문항 id → { 원본 값 → 선택지 저장값 }. 담당자가 그 자리에서 이어준 대응. */
+  const [valueAliases, setValueAliases] = useState<Record<string, Record<string, string>>>({});
 
   const questionById = useMemo(
     () => new Map((preview?.questions ?? []).map((q) => [q.id, q])),
     [preview],
   );
+  const questionTitle = (questionId: string) => questionById.get(questionId)?.title ?? questionId;
+  const optionsByQuestion = useMemo(() => {
+    const map: Record<string, Array<{ value: string; label: string }>> = {};
+    for (const question of preview?.questions ?? []) map[question.id] = question.options;
+    return map;
+  }, [preview]);
+
+  /** 안 맞은 원본 값을 선택지에 이어준다. 확정은 적재 시 함께 보관된다. */
+  const setAlias = (questionId: string, rawValue: string, optionValue: string | null) => {
+    setValueAliases((prev) => {
+      const forQuestion = { ...(prev[questionId] ?? {}) };
+      if (optionValue === null) delete forQuestion[rawValue];
+      else forQuestion[rawValue] = optionValue;
+      const next = { ...prev };
+      if (Object.keys(forQuestion).length === 0) delete next[questionId];
+      else next[questionId] = forQuestion;
+      return next;
+    });
+  };
 
   const mappedCount = Object.keys(mapping).length;
 
@@ -93,6 +131,9 @@ export function PriorAnswerImportWizard({
         if (block.questionId) seeded[String(index)] = block.questionId;
       });
       setMapping(seeded);
+      // 보관된 값 대응을 되살린다. 시드하지 않으면 다음 세션에서 빈 상태로 시작해
+      // "다시 올릴 때 재사용" 이 성립하지 않는다.
+      setValueAliases(res.savedValueAliases);
       // 시스템ID 열 자동 추정 — 확정은 사람이 한다.
       const codeRow = res.headerRows[res.headerRows.length - 2] ?? res.headerRows[0] ?? [];
       const guess = codeRow.findIndex((text) => /resid|시스템\s*id|아이디|번호/i.test(text));
@@ -117,9 +158,24 @@ export function PriorAnswerImportWizard({
   }
 
   async function run(dryRun: boolean) {
-    if (!file || residColumnIndex === null) return;
+    if (!file || residColumnIndex === null || !preview) return;
     setError(null);
     try {
+      // 확정 보관은 **실행할 때만** 한다. 미리보기가 서버 설정을 바꾸면, 사람이 검토하지도
+      // 않은 자동 제안이 확정으로 굳고 실행을 포기해도 남는다. 미리보기에서 이어준 값은
+      // 요청에 실어 보내 저장 없이 결과에 반영한다.
+      if (!dryRun) {
+        const blockMappings: Record<string, { questionId: string; label: string }> = {};
+        preview.blocks.forEach((block, index) => {
+          const questionId = mapping[String(index)];
+          if (!questionId) return;
+          // 확정 시점의 문항 내용을 함께 남긴다 — 다음 파일에서 같은 코드가 다른 문항을
+          // 가리키면 되살리지 않고 다시 묻기 위해서다.
+          blockMappings[normalizeQuestionCode(block.code)] = { questionId, label: block.label };
+        });
+        await saveConfig.mutateAsync({ surveyId, blockMappings, valueAliases });
+      }
+
       const res = await runImport.mutateAsync({
         surveyId,
         file,
@@ -127,6 +183,7 @@ export function PriorAnswerImportWizard({
         headerRowCount,
         residColumnIndex,
         mapping,
+        valueAliases,
         dryRun,
       });
       if (dryRun) {
@@ -316,7 +373,7 @@ export function PriorAnswerImportWizard({
                             )}
                           </td>
                           <td className="px-3 py-2 text-slate-500">
-                            {block.detailLabels.filter(Boolean).join(', ')}
+                            {block.label || block.detailLabels.filter(Boolean).join(', ')}
                           </td>
                           <td className="px-3 py-2 text-slate-500">
                             {block.columnIndexes.map((col) => firstRow[col] ?? '').join(' / ')}
@@ -346,6 +403,30 @@ export function PriorAnswerImportWizard({
                                 ))}
                               </SelectContent>
                             </Select>
+                            {VERDICT_BADGE[block.verdict] && !block.fromSavedConfig && (
+                              <p
+                                className={`mt-1 rounded border px-2 py-1 text-xs ${
+                                  VERDICT_BADGE[block.verdict]?.className ?? ''
+                                }`}
+                              >
+                                {VERDICT_BADGE[block.verdict]?.label}
+                                {block.conflictQuestionId && (
+                                  <>
+                                    {' ('}
+                                    코드가 가리킨 문항: {questionTitle(block.conflictQuestionId)}
+                                    {')'}
+                                  </>
+                                )}
+                              </p>
+                            )}
+                            {block.fromSavedConfig && (
+                              <p className="mt-1 text-xs text-slate-500">지난 확정 그대로</p>
+                            )}
+                            {mapping[key] && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                칸 배정: {block.slotLabels.join(' / ')}
+                              </p>
+                            )}
                             {mapping[key] && block.unmatchedSlots > 0 && (
                               <p className="mt-1 text-xs text-amber-700">
                                 {block.unmatchedSlots}칸은 어느 자리인지 정하지 못했습니다 —
@@ -363,7 +444,10 @@ export function PriorAnswerImportWizard({
               {dryRunResult && (
                 <ImportSummary
                   result={dryRunResult}
-                  questionLabel={(id) => questionById.get(id)?.title ?? id}
+                  questionLabel={questionTitle}
+                  aliases={valueAliases}
+                  options={optionsByQuestion}
+                  onAlias={setAlias}
                 />
               )}
 
@@ -422,9 +506,18 @@ export function PriorAnswerImportWizard({
 function ImportSummary({
   result,
   questionLabel,
+  aliases,
+  options,
+  onAlias,
 }: {
   result: ImportPriorAnswersResult;
   questionLabel: (questionId: string) => string;
+  /** 문항 id → { 원본 값 → 선택지 저장값 } */
+  aliases?: Record<string, Record<string, string>>;
+  /** 문항 id → 선택지 목록 (값 이어주기 드롭다운) */
+  options?: Record<string, Array<{ value: string; label: string }>>;
+  /** null 이면 대응을 지운다. 주지 않으면 이어주기 UI 를 띄우지 않는다(적재 결과 화면). */
+  onAlias?: (questionId: string, rawValue: string, optionValue: string | null) => void;
 }) {
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
@@ -457,13 +550,59 @@ function ImportSummary({
       )}
 
       {result.optionMismatches.length > 0 && (
-        <div className="space-y-1">
-          <p className="font-medium text-amber-800">선택지에 맞지 않아 비운 값</p>
-          <ul className="list-disc space-y-0.5 pl-5 text-slate-700">
+        <div className="space-y-2">
+          <p className="font-medium text-amber-800">
+            선택지에 맞지 않아 비운 값 — 실패율이 높은 문항이 위에 있습니다
+          </p>
+          <ul className="space-y-2">
             {result.optionMismatches.map((m) => (
-              <li key={m.questionId}>
-                {questionLabel(m.questionId)} — {m.unmatched}/{m.total}건 (
-                {m.values.map((v) => `"${v.value}" ${v.count}건`).join(', ')})
+              <li
+                key={m.questionId}
+                className={`rounded border px-3 py-2 ${
+                  m.rate >= 0.2
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-amber-200 bg-amber-50/60'
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium text-gray-900">{questionLabel(m.questionId)}</span>
+                  <span
+                    className={m.rate >= 0.2 ? 'font-semibold text-red-700' : 'text-amber-800'}
+                  >
+                    {Math.round(m.rate * 100)}% 실패 · {m.unmatched}/{m.total}건
+                  </span>
+                </div>
+                <ul className="mt-1 space-y-1">
+                  {m.values.map((v) => (
+                    <li key={v.value} className="flex flex-wrap items-center gap-2">
+                      {/* 원본 값을 그대로 보여준다 — 담당자가 "아, 다소가 붙었구나" 를 알아본다. */}
+                      <code className="rounded bg-white px-1.5 py-0.5 text-xs text-gray-900">
+                        {v.value}
+                      </code>
+                      <span className="text-xs text-slate-500">{v.count}건</span>
+                      {onAlias && (
+                        <Select
+                          value={aliases?.[m.questionId]?.[v.value] ?? UNMAPPED}
+                          onValueChange={(next) =>
+                            onAlias(m.questionId, v.value, next === UNMAPPED ? null : next)
+                          }
+                        >
+                          <SelectTrigger className="h-7 w-56 text-xs">
+                            <SelectValue placeholder="이 값을 어느 선택지로" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNMAPPED}>잇지 않음</SelectItem>
+                            {(options?.[m.questionId] ?? []).map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

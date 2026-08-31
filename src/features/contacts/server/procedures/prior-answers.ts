@@ -2,11 +2,14 @@ import { authed, pub, withRateLimit } from '@/server/orpc';
 
 import { EXCEL_UNREADABLE_ERROR, rethrowExcelError } from '../excel-errors';
 
+import * as z from 'zod';
+
 import {
   ImportPriorAnswersInput,
   ImportPriorAnswersResultSchema,
   LookupPriorAnswersInput,
   PriorAnswersOutput,
+  SavePriorAnswerImportConfigInput,
   SuggestPriorAnswerMappingInput,
   SuggestPriorAnswerMappingResultSchema,
 } from '../../domain/prior-answers';
@@ -50,8 +53,15 @@ const importSheet = authed
     }
   });
 
+/** 확정 매핑·값 대응 보관 — 다시 올릴 때 재사용된다. */
+const saveConfig = authed
+  .input(SavePriorAnswerImportConfigInput)
+  .output(z.object({ ok: z.literal(true) }))
+  .handler(async ({ input }) => importSvc.savePriorAnswerImportConfig(input));
+
 export const priorAnswers = {
   lookup,
   suggestMapping,
   import: importSheet,
+  saveConfig,
 };

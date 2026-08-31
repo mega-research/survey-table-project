@@ -69,6 +69,7 @@
     "0082_revoke_default_function_execute",
     "0083_fix_revoke_trigger_procedure_ddl",
     "0094_contact_prior_answers",
-    "0095_sweep_expired_pii_prior_answers"
+    "0095_sweep_expired_pii_prior_answers",
+    "0096_prior_answer_import_config"
   ]
 }

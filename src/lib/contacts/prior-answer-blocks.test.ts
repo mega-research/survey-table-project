@@ -255,3 +255,77 @@ describe('buildBlockAnswer', () => {
     expect(valueOf(tableQuestion, slotsFor('BQ2'), ['', '', ''])).toBeUndefined();
   });
 });
+
+describe('매핑 안전장치 — 코드·라벨 4분면', () => {
+  const 만족도 = q({ id: 'q-sat', questionCode: 'BQ7', type: 'radio', title: '창업 지원 만족도' });
+  const 창업의향 = q({ id: 'q-intent', questionCode: 'BQ8', type: 'radio', title: '창업 의향' });
+  const safety = [만족도, 창업의향];
+
+  function verdictFor(codeText: string, detail = '') {
+    const blocks = splitHeaderBlocks([[codeText], [detail]]);
+    return suggestBlockMapping(blocks, safety)[0];
+  }
+
+  it('코드가 같고 라벨이 유사하면 자동 제안한다', () => {
+    const s = verdictFor('BQ7. 창업 지원 만족도');
+    expect(s?.questionId).toBe('q-sat');
+    expect(s?.verdict).toBe('auto');
+  });
+
+  it('코드가 같고 문항 내용이 다르면 매핑하지 않고 경고한다', () => {
+    // 지난 회차에 파트가 재편되며 코드가 밀린 실제 사례 — BQ7 자리에 창업의향이 들어왔다.
+    const s = verdictFor('BQ7. 창업 의향이 있으십니까');
+    expect(s?.questionId).toBeNull();
+    expect(s?.verdict).toBe('code-conflict');
+    expect(s?.conflictQuestionId).toBe('q-sat');
+  });
+
+  it('코드가 다르고 문항 내용이 같으면 후보로 제안하며 확인이 필요하다고 표시한다', () => {
+    const s = verdictFor('ZZ9. 창업 지원 만족도');
+    expect(s?.questionId).toBe('q-sat');
+    expect(s?.verdict).toBe('label-candidate');
+  });
+
+  it('코드도 라벨도 맞지 않으면 미매핑이다', () => {
+    const s = verdictFor('ZZ9. 전혀 다른 문항');
+    expect(s?.questionId).toBeNull();
+    expect(s?.verdict).toBe('unmapped');
+  });
+
+  it('대조할 문항 내용이 없으면 코드 일치만으로 자동 제안한다', () => {
+    // 라벨이 없는 파일에서 코드 일치를 경고로 뒤집으면 매핑이 전부 막힌다.
+    const s = verdictFor('BQ7');
+    expect(s?.questionId).toBe('q-sat');
+    expect(s?.verdict).toBe('auto');
+  });
+});
+
+describe('확정된 값 대응(alias) 재사용', () => {
+  const 지원필요 = q({
+    id: 'q-need',
+    questionCode: 'BQ9',
+    type: 'radio',
+    title: '창업지원 필요여부',
+    options: [
+      { id: 'o1', value: 'very', label: '매우 필요' },
+      { id: 'o2', value: 'some', label: '어느 정도 필요' },
+    ],
+  });
+
+  const blocks = splitHeaderBlocks([['BQ9'], ['']]);
+  const slots = suggestBlockMapping(blocks, [지원필요])[0]!.slots;
+
+  it('선택지 라벨이 바뀐 값도 확정 대응이 있으면 들어간다', () => {
+    // 지난 회차 "다소 필요" → 올해 "어느 정도 필요" 로 라벨만 바뀐 실제 사례.
+    expect(buildBlockAnswer(지원필요, slots, ['다소 필요']).value).toBeUndefined();
+    expect(
+      buildBlockAnswer(지원필요, slots, ['다소 필요'], { '다소 필요': 'some' }).value,
+    ).toBe('some');
+  });
+
+  it('확정 대응이 선택지에 없는 값을 가리키면 무시한다', () => {
+    expect(
+      buildBlockAnswer(지원필요, slots, ['다소 필요'], { '다소 필요': '없는값' }).value,
+    ).toBeUndefined();
+  });
+});

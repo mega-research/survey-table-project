@@ -33,6 +33,8 @@ export interface OptionMismatch {
   total: number;
   /** 그중 어느 선택지에도 맞지 않은 행 수 */
   unmatched: number;
+  /** unmatched / total. 건수가 아니라 비율이어야 절반만 실패한 문항이 눈에 띈다. */
+  rate: number;
   /** 맞지 않은 원본 값과 그 건수 (건수 내림차순) */
   values: Array<{ value: string; count: number }>;
 }
@@ -44,6 +46,8 @@ export interface BlockAssignment {
 }
 
 export interface PriorAnswerImportInput {
+  /** 문항 id → { 원본 값 → 선택지 저장값 }. 확정된 값 대응. */
+  valueAliases?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** 데이터 행. 컬럼 인덱스 순서 그대로. */
   rows: ReadonlyArray<readonly string[]>;
   /** 조사 대상을 찾을 컬럼 인덱스 — 설문별 자동 발번 번호(시스템ID)가 들어 있다. */
@@ -112,7 +116,12 @@ export function buildPriorAnswerRecords(
     const answers: Record<string, unknown> = {};
     for (const { question, assignment } of targets) {
       const cellValues = assignment.block.columnIndexes.map((col) => row[col] ?? '');
-      const built = buildBlockAnswer(question, assignment.slots, cellValues);
+      const built = buildBlockAnswer(
+        question,
+        assignment.slots,
+        cellValues,
+        input.valueAliases?.[question.id],
+      );
 
       if (built.convertedCells > 0 || built.unmatchedValues.length > 0) {
         const stat = mismatchByQuestion.get(question.id) ?? {
@@ -144,11 +153,14 @@ export function buildPriorAnswerRecords(
       questionId,
       total: stat.total,
       unmatched: stat.unmatched,
+      rate: stat.total > 0 ? stat.unmatched / stat.total : 0,
       values: [...stat.counts.entries()]
         .map(([value, count]) => ({ value, count }))
         .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
     });
   }
+  // 실패율이 높은 문항이 위로 온다 — 경고 수십 줄에 묻히면 "절반만 실패" 를 놓친다.
+  optionMismatches.sort((a, b) => b.rate - a.rate || b.unmatched - a.unmatched);
 
   return {
     records: [...byResid.entries()].map(([resid, answers]) => ({ resid, answers })),

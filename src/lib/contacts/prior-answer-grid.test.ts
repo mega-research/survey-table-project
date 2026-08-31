@@ -185,3 +185,95 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
     expect(second?.['q-rank']).toEqual([{ rank: 2, optionValue: 'money' }]);
   });
 });
+
+/**
+ * 실제로 겪은 두 사고를 회귀로 고정한다.
+ *
+ * 1) 파트가 재편되며 문항코드가 한 칸 밀려, 지난 회차 만족도 값이 올해 창업의향 문항에
+ *    꽂힐 뻔한 사례.
+ * 2) 문항은 올바르게 매핑됐는데 선택지 다섯 중 둘의 라벨만 바뀌어 값의 절반이 조용히
+ *    사라진 사례. 전부 실패하면 눈에 띄지만 절반은 경고에 묻힌다.
+ */
+describe('실제 사고 회귀', () => {
+  const 만족도 = q({
+    id: 'q-sat',
+    questionCode: 'BQ7',
+    type: 'radio',
+    title: '창업 지원 만족도',
+    options: [
+      { id: 's1', value: 'high', label: '만족' },
+      { id: 's2', value: 'low', label: '불만족' },
+    ],
+  });
+  const 창업의향 = q({ id: 'q-intent', questionCode: 'BQ8', type: 'radio', title: '창업 의향' });
+
+  it('코드가 밀린 문항은 자동 매핑되지 않고 무엇과 충돌했는지 알려준다', () => {
+    // 지난 회차 파일의 BQ7 자리에 창업의향 문항이 들어와 있다.
+    const blocks = splitHeaderBlocks([['BQ7. 창업 의향이 있으십니까'], ['']]);
+    const [s] = suggestBlockMapping(blocks, [만족도, 창업의향]);
+    expect(s?.questionId).toBeNull();
+    expect(s?.verdict).toBe('code-conflict');
+    expect(s?.conflictQuestionId).toBe('q-sat');
+  });
+
+  const 지원필요 = q({
+    id: 'q-need',
+    questionCode: 'BQ9',
+    type: 'radio',
+    title: '창업지원 필요여부',
+    options: [
+      { id: 'n1', value: 'very', label: '매우 필요' },
+      { id: 'n2', value: 'some', label: '어느 정도 필요' },
+      { id: 'n3', value: 'none', label: '필요 없음' },
+    ],
+  });
+
+  function needImport(rows: string[][], aliases?: Record<string, Record<string, string>>) {
+    const blocks = splitHeaderBlocks([['ID', 'BQ9'], ['시스템ID', '']]);
+    const assignments = suggestBlockMapping(blocks, [지원필요])
+      .filter((s) => s.questionId !== null)
+      .map((s) => ({ block: s.block, questionId: s.questionId as string, slots: s.slots }));
+    return buildPriorAnswerRecords({
+      rows,
+      residColumnIndex: 0,
+      assignments,
+      questions: [지원필요],
+      ...(aliases ? { valueAliases: aliases } : {}),
+    });
+  }
+
+  it('선택지 라벨이 일부만 바뀌면 실패율로 드러난다 — 절반의 성공이 묻히지 않는다', () => {
+    const result = needImport([
+      ['1', '매우 필요'],
+      ['2', '다소 필요'],
+      ['3', '다소 필요'],
+      ['4', '필요 없음'],
+    ]);
+    // 값이 들어간 대상은 둘뿐이다.
+    expect(result.records.map((r) => r.resid)).toEqual(['1', '4']);
+    expect(result.optionMismatches).toEqual([
+      {
+        questionId: 'q-need',
+        total: 4,
+        unmatched: 2,
+        rate: 0.5,
+        values: [{ value: '다소 필요', count: 2 }],
+      },
+    ]);
+  });
+
+  it('안 맞은 값을 선택지에 이어주면 다시 올릴 때 그 값이 들어간다', () => {
+    const result = needImport(
+      [
+        ['1', '매우 필요'],
+        ['2', '다소 필요'],
+      ],
+      { 'q-need': { '다소 필요': 'some' } },
+    );
+    expect(result.records).toEqual([
+      { resid: '1', answers: { 'q-need': 'very' } },
+      { resid: '2', answers: { 'q-need': 'some' } },
+    ]);
+    expect(result.optionMismatches).toEqual([]);
+  });
+});

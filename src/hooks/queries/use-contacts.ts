@@ -34,6 +34,14 @@ export function useSuggestPriorAnswerMapping() {
   });
 }
 
+/** 이월 응답 임포트 확정 매핑·값 대응 보관 — 다시 올릴 때 재사용된다. */
+export function useSavePriorAnswerImportConfig() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.contacts.priorAnswers.saveConfig>[0]) =>
+      client.contacts.priorAnswers.saveConfig(input),
+  });
+}
+
 /** 이월 응답 적재 (dryRun 이면 계산만). */
 export function useImportPriorAnswers() {
   return useMutation({

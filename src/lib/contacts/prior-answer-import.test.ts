@@ -112,6 +112,7 @@ describe('buildPriorAnswerRecords', () => {
         questionId: 'q-choice',
         total: 3,
         unmatched: 2,
+        rate: 2 / 3,
         values: [{ value: '다소 그렇다', count: 2 }],
       },
     ]);
@@ -172,7 +173,14 @@ describe('buildPriorAnswerRecords', () => {
       residColumnIndex: 0,
       assignments: [
         {
-          block: { code: 'BQ2', columnIndexes: [1], part: '', detailLabels: [''] },
+          block: {
+            codeText: 'BQ2',
+            code: 'BQ2',
+            label: '',
+            columnIndexes: [1],
+            part: '',
+            detailLabels: [''],
+          },
           questionId: 'q-choice',
           slots: [{ kind: 'unmatched' }],
         },

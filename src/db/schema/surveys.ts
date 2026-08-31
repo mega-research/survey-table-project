@@ -26,6 +26,7 @@ import type {
   TableColumn,
   TableRow,
   TableValidationRule,
+  PriorAnswerImportConfig,
 } from './schema-types';
 
 // 설문 테이블
@@ -82,6 +83,10 @@ export const surveys = pgTable('surveys', {
   // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름
   // (예: 2025년 조사). NULL 이면 기본 문구. 스냅샷 밖 라이브 컬럼 (0094 마이그레이션)
   priorWaveLabel: text('prior_wave_label'),
+
+  // 추적조사 이월 응답 임포트 확정 설정 — 블록↔문항 매핑과 값 대응.
+  // 재업로드가 정상 경로라 확정을 보관해 재사용한다. 스냅샷 밖 라이브 컬럼 (0096 마이그레이션)
+  priorAnswerImportConfig: jsonb('prior_answer_import_config').$type<PriorAnswerImportConfig>(),
 
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),

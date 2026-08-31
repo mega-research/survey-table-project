@@ -65,6 +65,7 @@ export {
   useMatchContacts,
   useSuggestPriorAnswerMapping,
   useImportPriorAnswers,
+  useSavePriorAnswerImportConfig,
 } from './use-contacts';
 
 // File Cleanup Queries
