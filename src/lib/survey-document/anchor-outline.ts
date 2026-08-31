@@ -2,6 +2,8 @@
  * 앵커를 붙일 대상 목록과, "이 항목을 고르면 조사표의 어느 영역이 켜지는가" 판정.
  * 순수 모듈 — DB·React·pdf.js 를 모른다.
  */
+import { getInterleavedChildren } from '@/lib/group-ordering';
+import type { Question, QuestionGroup } from '@/types/survey';
 
 export interface AnchorOutlineQuestion {
   id: string;
@@ -14,6 +16,8 @@ export interface AnchorOutlineSection {
   /** null = 그룹에 속하지 않은 문항들. 그룹 폴백이 없다. */
   groupId: string | null;
   label: string;
+  /** 계층 깊이. 0 = 최상위 그룹. 화면이 들여쓰기에 쓴다. */
+  depth: number;
   questions: AnchorOutlineQuestion[];
 }
 
@@ -21,6 +25,7 @@ interface GroupInput {
   id: string;
   name: string;
   order: number;
+  parentGroupId?: string | null;
 }
 
 interface QuestionInput {
@@ -40,42 +45,85 @@ export function anchorQuestionLabel(question: QuestionInput): string {
 }
 
 /**
- * 그룹 순서 → 그룹 안 문항 순서로 조사표 순서를 만든다.
+ * 조사표 순서로 앵커 대상 목록을 만든다.
  *
- * 문항의 `order` 는 그룹 안에서만 매겨지므로 그룹 순서를 먼저 태우지 않으면
- * 조사표 순서와 어긋난다. 그룹 없는 문항은 마지막 구역으로 모은다.
+ * **순서의 주인은 이 파일이 아니다.** `group-ordering` 의 `getInterleavedChildren` 이
+ * 그룹 계층과 인터리브 규칙을 갖고 있고, 응답 화면의 페이지 구성도 그것으로 만들어진다.
+ * 여기서 다시 정렬하면 두 벌이 되어 어긋난다 — 실제로 `order` 를 평평하게 정렬했다가
+ * 하위그룹이 89번째 문항을 담고도 목록 네 번째로 올라왔다.
+ *
+ * 문항이 하나도 없는 그룹도 구역으로 남는다 — 문항을 만들기 전에 그룹에 영역을
+ * 먼저 붙일 수 있어야 한다.
  */
 export function buildAnchorOutline(
   groups: readonly GroupInput[],
   questions: readonly QuestionInput[],
 ): AnchorOutlineSection[] {
-  const ordered = [...groups].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-  const byGroup = new Map<string | null, AnchorOutlineQuestion[]>();
+  // getInterleavedChildren 은 앱의 Question/QuestionGroup 을 받는다. 이 모듈은 구조적
+  // 타입만 알면 되므로 정렬에 필요한 필드만 실어 넘긴다.
+  const questionRows = questions.map((q) => ({
+    id: q.id,
+    ...(q.groupId ? { groupId: q.groupId } : {}),
+    order: q.order,
+  })) as unknown as Question[];
+  const groupRows = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    order: g.order,
+    ...(g.parentGroupId ? { parentGroupId: g.parentGroupId } : {}),
+  })) as unknown as QuestionGroup[];
 
-  for (const question of [...questions].sort(
-    (a, b) => a.order - b.order || a.id.localeCompare(b.id),
-  )) {
-    const groupId = question.groupId ?? null;
-    const item: AnchorOutlineQuestion = {
-      id: question.id,
-      groupId,
-      label: anchorQuestionLabel(question),
+  const bySourceId = new Map(questions.map((q) => [q.id, q]));
+  const byGroupId = new Map(groups.map((g) => [g.id, g]));
+  const sections: AnchorOutlineSection[] = [];
+
+  const toItem = (id: string): AnchorOutlineQuestion | null => {
+    const source = bySourceId.get(id);
+    if (!source) return null;
+    return {
+      id: source.id,
+      groupId: source.groupId ?? null,
+      label: anchorQuestionLabel(source),
     };
-    const list = byGroup.get(groupId);
-    if (list) list.push(item);
-    else byGroup.set(groupId, [item]);
+  };
+
+  /** 그룹 하나를 구역으로 열고, 그 안을 인터리브 순서로 훑는다. */
+  const walkGroup = (group: GroupInput, depth: number) => {
+    const section: AnchorOutlineSection = {
+      groupId: group.id,
+      label: group.name,
+      depth,
+      questions: [],
+    };
+    sections.push(section);
+    for (const child of getInterleavedChildren(group.id, questionRows, groupRows)) {
+      if (child.kind === 'subgroup') {
+        const sub = byGroupId.get(child.data.id);
+        if (sub) walkGroup(sub, depth + 1);
+        continue;
+      }
+      const item = toItem(child.data.id);
+      if (item) section.questions.push(item);
+    }
+  };
+
+  // 최상위 그룹부터 order 순으로 — 본체의 선형화(buildLinearStepItems)와 같은 순서다.
+  for (const root of [...groups]
+    .filter((g) => !g.parentGroupId)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))) {
+    walkGroup(root, 0);
   }
 
-  const sections: AnchorOutlineSection[] = ordered.map((group) => ({
-    groupId: group.id,
-    label: group.name,
-    questions: byGroup.get(group.id) ?? [],
-  }));
-
-  const ungrouped = byGroup.get(null);
-  if (ungrouped && ungrouped.length > 0) {
-    sections.push({ groupId: null, label: '그룹 없음', questions: ungrouped });
+  // 그룹 없는 문항은 마지막 구역으로 모은다 (선형화도 이 순서다).
+  const ungrouped = [...questions]
+    .filter((q) => !q.groupId)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map((q) => toItem(q.id))
+    .filter((item): item is AnchorOutlineQuestion => item !== null);
+  if (ungrouped.length > 0) {
+    sections.push({ groupId: null, label: '그룹 없음', depth: 0, questions: ungrouped });
   }
+
   return sections;
 }
 

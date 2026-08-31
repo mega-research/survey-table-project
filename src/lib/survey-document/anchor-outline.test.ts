@@ -20,7 +20,6 @@ describe('buildAnchorOutline', () => {
   ];
 
   it('그룹 순서를 먼저 태우고 그 안에서 문항 순서로 늘어놓는다', () => {
-    // 문항 order 는 그룹 안에서만 매겨진다 — 그룹 순서를 안 태우면 조사표 순서와 어긋난다
     const outline = buildAnchorOutline(groups, questions);
     expect(outline.map((s) => s.label)).toEqual(['A. 일반', 'B. 경영']);
     expect(outline[0]!.questions.map((q) => q.id)).toEqual(['q1', 'q2']);
@@ -39,7 +38,42 @@ describe('buildAnchorOutline', () => {
 
   it('문항이 없는 그룹도 구역으로 남는다 — 그룹에 영역을 붙일 수 있어야 한다', () => {
     const outline = buildAnchorOutline([{ id: 'g0', name: '표지', order: -1 }], []);
-    expect(outline).toEqual([{ groupId: 'g0', label: '표지', questions: [] }]);
+    expect(outline).toEqual([{ groupId: 'g0', label: '표지', depth: 0, questions: [] }]);
+  });
+
+  describe('하위그룹', () => {
+    // order 는 부모 안에서만 매겨진다. 평평하게 정렬하면 뒤쪽 루트 그룹의
+    // 하위그룹(order 0)이 앞쪽 루트 그룹들보다 위로 올라온다 — 실제로 89번째
+    // 문항을 담은 하위그룹이 목록 네 번째로 나왔다.
+    const nested = [
+      { id: 'a', name: 'A. 일반', order: 0 },
+      { id: 'b', name: 'B. 경영', order: 1 },
+      { id: 'z', name: 'H. 정책 인식', order: 7 },
+      { id: 'z1', name: '지원정책별 이용 현황', order: 0, parentGroupId: 'z' },
+    ];
+    const nestedQuestions = [
+      { id: 'qa', groupId: 'a', order: 0, questionCode: 'A1', title: '업종' },
+      { id: 'qb', groupId: 'b', order: 0, questionCode: 'B1', title: '매출' },
+      { id: 'qz', groupId: 'z', order: 0, questionCode: 'H1', title: '인지도' },
+      { id: 'qz1', groupId: 'z1', order: 0, questionCode: 'H9', title: '자금지원 제도' },
+    ];
+
+    it('하위그룹은 부모 바로 뒤에 온다 — 자기 order 로 앞으로 튀지 않는다', () => {
+      const outline = buildAnchorOutline(nested, nestedQuestions);
+      expect(outline.map((s) => s.groupId)).toEqual(['a', 'b', 'z', 'z1']);
+    });
+
+    it('하위그룹은 깊이를 갖는다', () => {
+      const outline = buildAnchorOutline(nested, nestedQuestions);
+      expect(outline.map((s) => s.depth)).toEqual([0, 0, 0, 1]);
+    });
+
+    it('문항은 자기가 실제로 속한 구역에 담긴다', () => {
+      const outline = buildAnchorOutline(nested, nestedQuestions);
+      const byId = new Map(outline.map((s) => [s.groupId, s.questions.map((q) => q.id)]));
+      expect(byId.get('z')).toEqual(['qz']);
+      expect(byId.get('z1')).toEqual(['qz1']);
+    });
   });
 });
 

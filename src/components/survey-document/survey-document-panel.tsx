@@ -368,6 +368,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
                 {section.groupId ? (
                   <TargetRow
                     label={section.label}
+                    depth={section.depth}
                     isGroup
                     selected={selected?.id === section.groupId}
                     anchorPages={(anchorsByOwner.get(section.groupId) ?? []).map((a) => a.page)}
@@ -388,6 +389,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
                     key={question.id}
                     label={question.label}
                     subLabel={subLabelOf.get(question.id) ?? null}
+                    depth={section.depth}
                     isGroup={false}
                     onEdit={() => setEditingQuestionId(question.id)}
                     selected={selected?.id === question.id}
@@ -419,6 +421,8 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
 
 interface TargetRowProps {
   label: string;
+  /** 그룹 계층 깊이 — 하위그룹과 그 문항을 한 단 더 들여쓴다. */
+  depth: number;
   /** 라벨이 문항코드일 때 보조로 보여줄 문장. 없으면 null. */
   subLabel?: string | null;
   isGroup: boolean;
@@ -442,6 +446,7 @@ interface TargetRowProps {
 function TargetRow({
   label,
   subLabel = null,
+  depth,
   isGroup,
   selected,
   anchorPages,
@@ -454,10 +459,11 @@ function TargetRow({
   return (
     <div
       className={cn(
-        'flex items-start gap-1 px-3 py-1.5',
-        isGroup ? 'bg-gray-50' : 'pl-6',
+        'flex items-start gap-1 py-1.5 pr-3',
+        isGroup ? 'bg-gray-50' : '',
         selected && 'bg-blue-50',
       )}
+      style={{ paddingLeft: 12 + depth * 12 + (isGroup ? 0 : 12) }}
     >
       <button
         type="button"
