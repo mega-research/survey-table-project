@@ -4,7 +4,20 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 26 **실사 조사 대상 화면** — 초대가 실제로 여는
+> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 27 **대리 응답 귀속 + 대행 배너** — 실사가
+> 「응답 대행」으로 여는 것은 **응답자와 똑같은 응답 페이지**다(ADR-0019). 그래서 저장된
+> 응답만 놓고는 직접 응답과 구별되지 않는데 검수·정산이 그 구별을 요구한다.
+> `survey_responses.fieldwork_user_id`(0099)가 그것이고 **NULL 이 응답자 직접 응답**이다.
+> 판정 코어는 `server/fieldwork-proxy` — `data-scope`·`survey-access` 와 나란한 자리다.
+> **입력은 초대 토큰과 세션 쿠키 둘뿐**이라 화면이 위조할 것이 없고, 팀장의 파생 시야는
+> `contacts.writeAttempts` 가 없어 자동으로 걸린다. **귀속은 행 id 가 확정된 뒤 한 번**
+> 찍는다 — 진입 서비스마다 인자를 흘리면 분기가 늘 때마다 놓친다(실제로 버전 이관·행
+> 물려받기·테스트 lane 셋을 놓쳤다). **「응답자 화면 diff 0」은 `?fw=1` 힌트가 지킨다** —
+> 힌트가 없으면 배너 조회 자체를 안 하므로 초대 응답자에게 왕복이 늘지 않는다. 힌트는
+> 권한이 아니다(판정은 서버). 마이그레이션 0099.
+> 직전: 티켓 26 실사 조사 대상 화면)
+>
+> 티켓 26 **실사 조사 대상 화면** — 초대가 실제로 여는
 > 화면이 붙었다. `/fieldwork/surveys/[surveyId]` 아래 조사 대상·응답 현황 둘이고 **탭은
 > 고정**이다(게스트의 화이트리스트에 해당하는 축이 실사에는 없다). 조사 대상은 **원본 전체**
 > 다 — 암호화 PII 를 복호해 평문으로 그린다. 게스트 투영이 마스킹 힌트를 주는 자리와 정확히
@@ -546,6 +559,7 @@ survey_responses           # 수집된 응답
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
+├── fieldworkUserId               # 대리 응답을 입력한 실사 계정 (0099) — NULL 이 응답자 직접 응답
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
@@ -775,7 +789,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
                                   # assertFieldworkSurveyPageAccess 이고 leaf 마다 자기 capability 를 준다
 ```
 
-응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
+응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`.
+실사 대행은 같은 주소에 `&fw=1` 힌트가 붙는다(티켓 27) — 배너를 물을지만 정하고 **권한은 주지 않는다**. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
 > 운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
 > 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
@@ -1363,6 +1378,34 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     메일 진입점을 함께 그린다.
   - 음성 검증은 `fieldwork-contacts.realdb.test.ts` — 복호 평문·작성자·파티션 고정·파생 시야의
     토큰 null·차단 표면. 암호화·INSERT·WHERE 라 목으로는 무엇이든 통과한다.
+- **대리 응답은 응답자와 같은 페이지이고, 구별은 귀속 컬럼 하나가 진다**(티켓 27, ADR-0019,
+  .pen FLOW 10-3). 실사가 「응답 대행」으로 여는 것은 `/survey/[id]?invite=…&fw=1` 이며 그
+  화면은 응답자가 보는 것과 배너 한 줄 말고는 같다. 다르게 만들면 실사가 응답자와 다른 것을
+  보게 되어 대행의 의미가 사라진다.
+  - 판정 코어는 **`server/fieldwork-proxy`** — `data-scope`·`survey-access` 와 나란하다.
+    판정이 도메인 하나에 속하지 않아서다(응답 도메인이 묻고, 접근 코어가 답의 절반을 갖고,
+    컨택이 나머지를 갖는다). RPC 어휘로 옮기는 짝은 `rpc-fieldwork-proxy` 다.
+  - **입력은 초대 토큰과 세션 쿠키 둘뿐이다.** 화면이 `fieldworkUserId` 를 실어 보내면 누구든
+    남의 이름으로 귀속을 위조하므로 그 값은 계약에서 아예 뺐다(`FieldworkProxyContext`).
+    팀장의 파생 시야는 `contacts.writeAttempts` 가 없어 자동으로 걸린다 — ADR-0019 의
+    「본인도 초대돼야 한다」에 대한 두 번째 자물쇠다(첫 번째는 티켓 26 이 그 세션에 초대
+    토큰을 주지 않는 것).
+  - **귀속은 행 id 가 확정된 뒤 한 번 찍는다**(`stampFieldworkAttribution`). 진입 서비스마다
+    인자로 흘려보내면 분기가 늘 때마다 챙겨야 하고, 실제로 셋을 놓쳤다 — 버전 이관이 성공한
+    재개·기존 행을 물려받는 생성·대상자 테스트 lane. 셋 다 배너는 뜨는데 귀속이 NULL 이었다.
+    **컨택 일치를 함께 건다**(세션 폴백이 남의 행을 돌려줄 수 있다). **null 로 덮어쓰지
+    않는다** — 실사가 시작한 행을 응답자가 이어받아도 그 응답은 실제로 일부가 대행이다.
+  - **「응답자 화면 diff 0」은 `?fw=1` 힌트가 지킨다.** 초대 토큰만 보고 배너를 물으면 초대
+    응답자 **전원**이 왕복을 하나씩 더 하고 `lookup` 레이트리밋 예산을 재개 호출과 나눠
+    쓴다. 힌트는 `?test=` 와 같은 자리의 장치이고 권한은 아무것도 주지 않는다. 같은 이유로
+    배너는 **TanStack Query 를 쓰지 않는다** — 응답 흐름 트리에 QueryClientProvider 가 없고,
+    배너 하나 때문에 provider 를 끼우면 응답자 트리 전체가 바뀐다(dom 스위트가 그것을 잡았다).
+  - **완료된 대상의 대행 진입은 서버가 거부한다** — 화면이 버튼을 지우고 티켓 26 이 토큰을
+    안 주지만 그 둘은 화면의 약속이다. **응답자 본인에게는 적용하지 않는다**(재응답 정책
+    불변). 판정은 **삭제되지 않은** 완료 응답만 본다 — 담당 연구원이 불량 응답을 지우고
+    재실사를 지시하는 것이 정상 동선이라, 술어가 없으면 그 대상이 영구히 대행 불가가 된다.
+  - 음성 검증은 `fieldwork-proxy.realdb.test.ts` — 귀속·응답자 null 2종·자격 5종·진입 분기
+    4종(물려받기·버전 이관·컨택 불일치·삭제된 완료)·완료 거부 3종.
 - **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
   `fieldwork_orgs`(0093)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
   테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
