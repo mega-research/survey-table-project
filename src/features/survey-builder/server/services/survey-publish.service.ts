@@ -6,6 +6,7 @@ import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
 import { surveyResponses, surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
+import { supportsChangeConfirmation } from '@/lib/survey/change-confirmation';
 import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import { recordKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
@@ -47,8 +48,17 @@ export async function publishSurvey(
   // (normalizeQuestions -> hydrateQuestionsForSpss -> generateSPSSColumns -> assert)은 동일해야 한다.
   // 어느 한쪽 fetch가 질문을 필터링/변형하게 바뀌면 두 게이트가 silent하게 어긋난다.
   // normalizeQuestions(preserve)는 export route 와 동일한 읽기 경계 — 무변형 passthrough.
+  // 추적조사 변동 확인 변수는 이월 응답이 있어야 실제로 생기지만, 배포 시점엔 그 데이터를
+  // 알 수 없다. 그래서 **최악의 집합**(변동 확인을 받을 수 있는 모든 문항)으로 검사한다 —
+  // 그러지 않으면 questionCode 가 _CHG 와 충돌하거나 길이를 넘겨도 배포는 통과하고,
+  // 이월 응답이 붙은 뒤 내보내기에서만 400 으로 터진다.
+  const questionsForVarNameGate = hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions));
   assertValidSpssVarNames(
-    generateSPSSColumns(hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions))),
+    generateSPSSColumns(questionsForVarNameGate, {
+      changeConfirmQuestionIds: new Set(
+        questionsForVarNameGate.filter(supportsChangeConfirmation).map((q) => q.id),
+      ),
+    }),
   );
 
   const snapshot = buildSurveySnapshot(surveyData);

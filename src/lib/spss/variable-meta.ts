@@ -1,6 +1,7 @@
 import { VariableMeasure, VariableType } from 'sav-writer';
 
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { CHANGE_CONFIRM_LABEL_SUFFIX } from '@/lib/spss/change-confirm-variable';
 import type { Question } from '@/types/survey';
 
 // 이하 3개 함수는 sav-builder.ts 에서 이동. 모든 export 변수가
@@ -37,6 +38,7 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
     case 'choice-group':
     case 'choice-group-item':
     case 'table-cell-ranking':
+    case 'change-confirm':
       return VariableType.Numeric;
 
     case 'text':
@@ -100,6 +102,11 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
     return VariableMeasure.Nominal;
   }
 
+  // 변동 확인(추적조사) — 같음/달라짐 두 범주라 명목척도
+  if (col.type === 'change-confirm') {
+    return VariableMeasure.Nominal;
+  }
+
   // 상세 기재 텍스트(String) — option-text 와 동일하게 명목척도 (의미상 척도 없음)
   if (col.type === 'ranking-option-text' || col.type === 'table-cell-ranking-option-text') {
     return VariableMeasure.Nominal;
@@ -127,6 +134,8 @@ export function buildLabel(col: SPSSExportColumn): string {
       return `${col.questionText} - ${col.optionLabel}`;
     case 'notice-agree':
       return `${col.questionText} - 동의 여부`;
+    case 'change-confirm':
+      return `${col.questionText} - ${CHANGE_CONFIRM_LABEL_SUFFIX}`;
     case 'notice-date':
       return `${col.questionText} - 동의 일시`;
     case 'ranking-rank':

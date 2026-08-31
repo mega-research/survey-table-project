@@ -90,11 +90,22 @@ export function requiresChangeConfirmation(
   question: Question,
   prior: PriorAnswers | null | undefined,
 ): boolean {
+  return supportsChangeConfirmation(question) && hasPriorAnswer(prior, question.id);
+}
+
+/**
+ * 이 문항 **유형**이 변동 확인을 받을 수 있는가 — 이월 값 보유 여부와 무관한 절반이다.
+ *
+ * 이월 값을 손에 쥐지 않은 자리(내보내기 변수 생성)가 같은 규칙을 쓰기 위해 분리했다.
+ * 규칙이 갈라지면 응답 화면에는 컨트롤이 없는데 내보내기에만 변수가 생긴다.
+ */
+export function supportsChangeConfirmation(question: Question): boolean {
+  // 안내문은 답 자체가 없는 유형이다.
   if (question.type === 'notice') return false;
   // 본문 프리필 템플릿이 걸린 문항은 이월 요약 채널이다 — 이월 응답이 있어도 템플릿 값이
   // 이기므로(CONTEXT.md > 이월 값과 본문 프리필 토큰의 우선순위) 물을 것이 없다.
   if (question.defaultValueTemplate?.trim()) return false;
-  return hasPriorAnswer(prior, question.id);
+  return true;
 }
 
 /**

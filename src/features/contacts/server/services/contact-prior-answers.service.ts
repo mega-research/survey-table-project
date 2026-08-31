@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
@@ -60,4 +60,49 @@ export async function lookupPriorAnswers(
   // 형태와 동형이므로 PII 문항 값이 암호문('v1:...')으로 적재될 수 있고, 그대로 내보내면
   // 응답 화면에 암호문이 그대로 채워진다. 접두사 감지식이라 평문은 그대로 통과한다.
   return decryptQuestionResponses(answers);
+}
+
+/**
+ * 이 설문에서 변동 확인이 붙는 문항 id 집합.
+ *
+ * 내보내기가 "변동 확인 변수를 만들 문항"을 정하는 근거다. 응답에 남은 확인 기록이
+ * 아니라 **이월 응답의 문항 키**에서 모은다 — 응답 쪽을 보면 필터·진행 상황에 따라
+ * 같은 설문의 두 내보내기가 서로 다른 변수 집합을 내게 된다.
+ *
+ * 값이 비어 있는 키는 제외한다. 응답 화면은 `hasPriorAnswer` 로 판정해 빈 값에는
+ * 컨트롤을 띄우지 않으므로, 키만 보고 변수를 만들면 아무도 답할 수 없는 유령 변수가
+ * 남는다(191문항 rawdata 에서 빈 셀은 흔하다). SQL 의 빈 판정은 최상위 값만 보는
+ * 근사라 화면 판정보다 느슨하다 — 중첩이 전부 비어 있는 객체/배열은 통과한다.
+ *
+ * 값을 읽지 않고 키만 모으므로 PII 복호화가 필요 없다.
+ *
+ * 실/테스트 파티션은 조사 대상을 따른다 — 내보내기가 보는 파티션과 같은 값을 넘긴다.
+ */
+export async function loadChangeConfirmQuestionIds(
+  surveyId: string,
+  options: { isTest: boolean },
+): Promise<Set<string>> {
+  if (!isValidUUID(surveyId)) return new Set();
+
+  const rows = await db.execute<{ question_id: string | null }>(sql`
+    SELECT DISTINCT entry.key AS question_id
+    FROM contact_prior_answers cpa
+    JOIN contact_targets ct ON ct.id = cpa.contact_target_id
+    CROSS JOIN LATERAL jsonb_each(cpa.answers) AS entry(key, value)
+    WHERE ct.survey_id = ${surveyId}::uuid
+      AND ct.is_test = ${options.isTest}
+      AND jsonb_typeof(cpa.answers) = 'object'
+      -- 사이드카 키(밑줄 두 개 접두)는 문항이 아니다.
+      AND left(entry.key, 2) <> '__'
+      AND jsonb_typeof(entry.value) <> 'null'
+      AND entry.value <> '""'::jsonb
+      AND entry.value <> '[]'::jsonb
+      AND entry.value <> '{}'::jsonb
+  `);
+
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (row.question_id) ids.add(row.question_id);
+  }
+  return ids;
 }

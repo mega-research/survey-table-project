@@ -18,6 +18,7 @@ import {
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
+import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
 export const maxDuration = 30;
@@ -56,8 +57,16 @@ async function handleSplitPreview(
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
 
+    // 미리보기의 변수 수는 실제 워크북과 같은 집합이어야 한다 — 추적조사 변동 확인 변수 포함.
+    const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+      isTest: false,
+    });
+
     if (!basis) {
-      const totalVars = generateSPSSColumns([...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))).length;
+      const totalVars = generateSPSSColumns(
+        [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+        { changeConfirmQuestionIds },
+      ).length;
       return NextResponse.json({
         totalVars,
         softLimit: SPLIT_SOFT_LIMIT,
@@ -92,7 +101,9 @@ async function handleSplitPreview(
       }
     }
 
-    return NextResponse.json({ plan: planSplit(questions, basis, respCounts) });
+    return NextResponse.json({
+      plan: planSplit(questions, basis, respCounts, { changeConfirmQuestionIds }),
+    });
   } catch (error) {
     if (error instanceof Error && error.message === '인증이 필요합니다.') {
       return NextResponse.json({ error: '권한 없음' }, { status: 401 });

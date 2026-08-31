@@ -1,7 +1,7 @@
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 import { toSingleLineLabel } from '@/utils/label-text';
 
-import { generateSPSSColumns } from './spss-excel-export';
+import { generateSPSSColumns, type SpssColumnOptions } from './spss-excel-export';
 
 export const SPLIT_SOFT_LIMIT = 10000;
 export const SPLIT_EXCEL_LIMIT = 16384;
@@ -121,6 +121,7 @@ export function planSplit(
   questions: Question[],
   basisQuestionId: string,
   respCounts: Record<string, number> = {},
+  options?: SpssColumnOptions,
 ): SplitPlan {
   const basis = questions.find((q) => q.id === basisQuestionId);
   if (!basis) throw new Error(`기준 문항을 찾을 수 없습니다: ${basisQuestionId}`);
@@ -128,11 +129,18 @@ export function planSplit(
   const labelMap = new Map((basis.options ?? []).map((o) => [o.value, o.label]));
   const tokens = optionTokensForBasis(questions, basis);
 
-  const common = generateSPSSColumns(bucketQuestions(questions, basisQuestionId, 'common')).length;
+  // 변동 확인 변수도 변수 수에 든다 — 빠뜨리면 분할 계획이 시트 한계를 과소 계산한다.
+  const common = generateSPSSColumns(
+    bucketQuestions(questions, basisQuestionId, 'common'),
+    options,
+  ).length;
 
   const rawSheets: Array<{ token: string; rawName: string; vars: number; resp: number }> = [];
   for (const t of tokens) {
-    const vars = generateSPSSColumns(bucketQuestions(questions, basisQuestionId, t)).length;
+    const vars = generateSPSSColumns(
+      bucketQuestions(questions, basisQuestionId, t),
+      options,
+    ).length;
     if (vars === 0) continue; // 빈 버킷 제외
     rawSheets.push({ token: t, rawName: labelMap.get(t) ?? t, vars, resp: respCounts[t] ?? 0 });
   }

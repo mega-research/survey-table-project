@@ -4,6 +4,7 @@ import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/export-
 import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
 import {
   type SPSSExportColumn,
+  type SpssColumnOptions,
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
@@ -49,6 +50,21 @@ export interface RawExportContext {
    * currentStepId 미저장 구응답의 "마지막 입력 문항" 폴백 — 응답값이 존재하는 질문 중 최후순의 라벨.
    */
   questionMeta: ReadonlyMap<string, { order: number; label: string }>;
+  /**
+   * 변동 확인 변수를 붙일 문항 id (추적조사). 이월 응답이 없는 설문에서는 비어 있고,
+   * 그때 컬럼 출력은 이 기능 도입 전과 완전히 같다.
+   */
+  changeConfirmQuestionIds?: ReadonlySet<string>;
+}
+
+/**
+ * 워크북 컨텍스트에서 컬럼 생성 옵션을 뽑는다.
+ * 호출부마다 조건부 spread 를 반복하면 옵션이 하나 늘 때마다 드리프트가 생긴다.
+ */
+export function toSpssColumnOptions(ctx: RawExportContext): SpssColumnOptions {
+  return ctx.changeConfirmQuestionIds
+    ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
+    : {};
 }
 
 /** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
@@ -187,7 +203,7 @@ export function generateRawDataWorkbook(
 ): ExcelJS.Workbook {
   // 질문은 order 순으로 정렬해 컬럼/코딩북 순서를 설문 표시 순서와 일치시킨다.
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const columns = generateSPSSColumns(sortedQuestions);
+  const columns = generateSPSSColumns(sortedQuestions, toSpssColumnOptions(ctx));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();

@@ -14,6 +14,7 @@ import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   generateRawDataWorkbook,
+  toSpssColumnOptions,
   type RawExportContext,
   type RawExportResponseRow,
 } from '@/lib/analytics/raw-workbook';
@@ -21,6 +22,7 @@ import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
+import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { SurveySubmission } from '@/types/survey';
@@ -134,7 +136,15 @@ async function handleExport(
     if (type === 'sps') {
       const { generateSPSSColumns } = await import('@/lib/analytics/spss-excel-export');
       const { generateMrsetsSyntax } = await import('@/lib/spss/mrsets-syntax');
-      const syntax = generateMrsetsSyntax(generateSPSSColumns(hydratedQuestions), hydratedQuestions);
+      // 변동 확인 변수는 MRSETS·FORMATS 대상이 아니지만, 같은 설문의 변수 집합이
+      // 내보내기 형식마다 갈리지 않도록 여기서도 같은 옵션으로 만든다.
+      const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+        isTest: false,
+      });
+      const syntax = generateMrsetsSyntax(
+        generateSPSSColumns(hydratedQuestions, { changeConfirmQuestionIds }),
+        hydratedQuestions,
+      );
       if (syntax === null) {
         return NextResponse.json(
           {
@@ -196,7 +206,10 @@ async function handleExport(
         );
       }
 
-      const plan = planSplit(hydratedQuestions, basis);
+      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      // 한계 판정은 실제 워크북과 같은 변수 집합으로 해야 한다 — 변동 확인 변수를 빼고
+      // 세면 통과했다가 워크북 생성에서 열 한계를 넘는다.
+      const plan = planSplit(hydratedQuestions, basis, {}, toSpssColumnOptions(exportCtx));
       if (plan.exceedsExcelLimit) {
         return NextResponse.json(
           { error: '선택한 기준으로는 일부 시트가 Excel 열 한계를 초과합니다. 다른 기준을 선택해 주세요.' },
@@ -205,7 +218,6 @@ async function handleExport(
       }
 
       ctx.bind({ rowCount: rows.length });
-      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
       const workbook = buildSplitWorkbook(hydratedQuestions, rows, basis, exportCtx);
       const buffer = await workbook.xlsx.writeBuffer();
       const basisCode = basisQuestion.questionCode ?? 'split';
@@ -223,9 +235,14 @@ async function handleExport(
     // 4. SPSS .sav는 별도 바이너리 응답
     if (type === 'sav') {
       const { generateSavBuffer } = await import('@/lib/spss/sav-builder');
+      // 추적조사 변동 확인 변수 — .sav 모수도 실 응답이라 real 파티션을 본다.
+      const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+        isTest: false,
+      });
       const savBuffer = await generateSavBuffer(
         hydratedQuestions,
         responses as unknown as SurveySubmission[],
+        { changeConfirmQuestionIds },
       );
       return new NextResponse(new Uint8Array(savBuffer), {
         headers: {
@@ -349,6 +366,8 @@ async function buildRawExportContext(
   // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
   // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
   const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
+  // 추적조사 — raw export 모수가 실 응답이므로 이월 응답도 real 파티션만 본다.
+  const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, { isTest: false });
   const stepQs = questions.map((q) => ({
     id: q.id,
     order: q.order,
@@ -364,5 +383,6 @@ async function buildRawExportContext(
     hasContacts,
     hasContactGroups,
     questionMeta: buildQuestionMetaMap(questions),
+    changeConfirmQuestionIds,
   };
 }
