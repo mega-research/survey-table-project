@@ -10,6 +10,7 @@ import {
   CreateUserInput,
   CreateUserOutput,
   DuplicateEmailError,
+  InvalidFieldworkOrgError,
   LastActiveSuperadminError,
   ListUsersInput,
   ListUsersOutput,
@@ -32,6 +33,8 @@ function toRpcError(err: unknown): ORPCError<string, unknown> | null {
   if (
     err instanceof DuplicateEmailError ||
     err instanceof UserStatusTransitionError ||
+    // 소속 업체가 없거나 종료됐다 — 발급과 재활성화가 함께 쓴다(티켓 24).
+    err instanceof InvalidFieldworkOrgError ||
     err instanceof LastActiveSuperadminError ||
     // 재입사의 팀 배정 실패 — 전체가 롤백돼 계정은 퇴사 상태 그대로다. 사유 문구는 워크스페이스
     // 도메인이 쓴 것을 워크플로가 감싸 보존한다(경계를 넘지 않으려고 감싼다).
@@ -53,8 +56,9 @@ const list = superadmin
 /**
  * 계정 직접 발급 (슈퍼어드민 전용).
  *
- * 유형별 필드 차이는 CreateUserInput 유니온이 판정한다 — 실사 유형은 유니온에 없어
- * 여기 도달하기 전에 BAD_REQUEST 로 떨어진다(티켓 24 에서 열린다).
+ * 유형별 필드 차이는 CreateUserInput 유니온이 판정한다 — 실사는 소속 업체 id·역할이
+ * 필수라 빠뜨린 호출은 여기 도달하기 전에 BAD_REQUEST 로 떨어진다. 그 id 가 **활성 업체**
+ * 인지는 서비스가 트랜잭션 안에서 잠근 채 확인한다(티켓 24).
  */
 const create = superadmin
   .input(CreateUserInput)

@@ -3,7 +3,7 @@ import 'server-only';
 import { type SQL, and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { type DbTransaction as Tx, db } from '@/db';
-import { accounts, sessions, userStatusEvents, users } from '@/db/schema';
+import { accounts, fieldworkOrgs, sessions, userStatusEvents, users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
@@ -19,7 +19,11 @@ import {
   leavesActiveStatus,
   resolveUserStatusTransition,
 } from '../domain/user-status-transition';
-import { DuplicateEmailError, UserNotFoundError } from '../domain/users';
+import {
+  DuplicateEmailError,
+  InvalidFieldworkOrgError,
+  UserNotFoundError,
+} from '../domain/users';
 import type {
   ChangeUserStatusInput,
   ChangeUserStatusOutput,
@@ -46,21 +50,27 @@ export async function listUsers(input: ListUsersInput): Promise<ListUsersOutput>
   const byStatus = statusFilter(input.status);
   const byType = input.userType === 'all' ? undefined : eq(users.userType, input.userType);
 
-  const rows = await db.query.users.findMany({
-    where: and(byStatus, byType),
-    orderBy: [asc(users.createdAt)],
-    columns: {
-      id: true,
-      name: true,
-      email: true,
-      userType: true,
-      status: true,
-      isSuperadmin: true,
-      jobTitle: true,
-      organization: true,
-      createdAt: true,
-    },
-  });
+  // 업체 이름은 조인으로 온다 — 실사 행만 채워지고 나머지는 null 이다(LEFT JOIN).
+  // 이름을 users 에 역정규화하지 않는 이유는 업체 이름 변경이 곧 모든 행의 표시를 바꿔야
+  // 하기 때문이다(조인이 그 갱신을 공짜로 준다).
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      userType: users.userType,
+      status: users.status,
+      isSuperadmin: users.isSuperadmin,
+      jobTitle: users.jobTitle,
+      organization: users.organization,
+      fieldworkOrgName: fieldworkOrgs.name,
+      fieldworkRole: users.fieldworkRole,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .leftJoin(fieldworkOrgs, eq(fieldworkOrgs.id, users.fieldworkOrgId))
+    .where(and(byStatus, byType))
+    .orderBy(asc(users.createdAt));
 
   const countRows = await db
     .select({ userType: users.userType, value: count() })
@@ -113,6 +123,24 @@ export async function createUser(
 
   try {
     await db.transaction(async (tx) => {
+      // 실사 계정은 소속 업체가 **활성**이어야 성립한다. 업체 행을 `FOR SHARE` 로 잡고
+      // 확인하는 것이 계약이다 — 잠그지 않으면 활성으로 읽은 뒤 종료(archiveFieldworkOrg)가
+      // 커밋되는 창에서 종료된 업체 소속 계정이 태어난다. 저쪽이 같은 행을 `FOR UPDATE` 로
+      // 잡으므로 둘 중 하나가 기다렸다가 상대의 결과를 본다.
+      //
+      // 역할·업체 id 의 **존재 자체**는 경계(CreateUserInput 유니온)가 이미 강제했고 DB
+      // CHECK 가 다시 본다 — 여기서 묻는 것은 「그 id 가 정말 활성 업체인가」 하나다.
+      if (input.userType === 'fieldwork') {
+        const [org] = await tx
+          .select({ id: fieldworkOrgs.id })
+          .from(fieldworkOrgs)
+          .where(
+            and(eq(fieldworkOrgs.id, input.fieldworkOrgId), eq(fieldworkOrgs.status, 'active')),
+          )
+          .for('share');
+        if (!org) throw new InvalidFieldworkOrgError();
+      }
+
       await tx.insert(users).values({
         id,
         name: input.name,
@@ -124,6 +152,8 @@ export async function createUser(
         userType,
         jobTitle: input.userType === 'internal' ? (input.jobTitle ?? null) : null,
         organization: input.userType === 'guest' ? (input.organization ?? null) : null,
+        fieldworkOrgId: input.userType === 'fieldwork' ? input.fieldworkOrgId : null,
+        fieldworkRole: input.userType === 'fieldwork' ? input.fieldworkRole : null,
         createdAt: now,
         updatedAt: now,
       });
@@ -229,6 +259,35 @@ async function isLastActiveSuperadmin(
 }
 
 /**
+ * 실사 계정을 active 로 되돌려도 되는가 — 소속 업체가 아직 활성인가.
+ *
+ * 실사가 아니거나 결과 상태가 active 가 아니면 묻지 않는다. 업체 행을 잠그지 않는 것은
+ * 이 트랜잭션이 이미 전역 전이 키를 쥐고 있고, 그 사이 커밋될 수 있는 유일한 변화(종료)는
+ * **재직 중 계정 0명**을 요구하는데 대상이 지금 비활성이라 그 조건이 참일 수 있어서다 —
+ * 즉 경합의 결과가 「종료됐다」면 여기서 거부하는 것이 맞고, 「아직 활성」이면 통과가 맞다.
+ */
+async function assertFieldworkOrgReactivatable(
+  tx: Tx,
+  target: { userType: UserType; fieldworkOrgId: string | null },
+  nextStatus: (typeof users.$inferSelect)['status'],
+): Promise<void> {
+  if (target.userType !== 'fieldwork' || nextStatus !== 'active') return;
+  if (target.fieldworkOrgId === null) throw new InvalidFieldworkOrgError();
+
+  const [org] = await tx
+    .select({ id: fieldworkOrgs.id })
+    .from(fieldworkOrgs)
+    .where(
+      and(eq(fieldworkOrgs.id, target.fieldworkOrgId), eq(fieldworkOrgs.status, 'active')),
+    );
+  if (!org) {
+    throw new InvalidFieldworkOrgError(
+      '소속 실사 업체가 종료되어 이 계정을 되살릴 수 없습니다.',
+    );
+  }
+}
+
+/**
  * 대상 계정의 모든 세션을 끊는다 — 전이·재설정이 공유하는 마무리.
  *
  * 지우는 것만으로는 부족하다. 이미 옛 해시를 읽어둔 로그인이 이 트랜잭션 **뒤에** 세션을
@@ -283,6 +342,8 @@ export async function applyUserStatusChange(
       id: users.id,
       status: users.status,
       isSuperadmin: users.isSuperadmin,
+      userType: users.userType,
+      fieldworkOrgId: users.fieldworkOrgId,
     })
     .from(users)
     .where(eq(users.id, input.userId))
@@ -294,6 +355,13 @@ export async function applyUserStatusChange(
     input.action,
     await isLastActiveSuperadmin(tx, target, input.action),
   );
+
+  // **되살릴 수 없는 실사 계정이 있다**(티켓 24). 업체 종료는 재직 중 계정이 0명일 때만
+  // 되지만, 정지·퇴사한 소속 계정은 남는다 — 그 사람을 복귀시키면 종료된 업체 소속으로
+  // 로그인하게 되고 그 상태에는 정의가 없다(실사 계정에는 「소속 없음」이 없다).
+  // 재직 복귀와 재입사가 같은 문을 지나므로 여기 한 자리면 둘 다 막힌다.
+  await assertFieldworkOrgReactivatable(tx, target, nextStatus);
+
   const now = new Date();
 
   if (input.action === 'rehire' && passwordHash) {

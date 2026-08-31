@@ -30,6 +30,8 @@ const BASE: UserListItem = {
   isSuperadmin: false,
   jobTitle: '연구원',
   organization: null,
+  fieldworkOrgName: null,
+  fieldworkRole: null,
   createdAt: '2026-08-26T00:00:00.000Z',
 };
 

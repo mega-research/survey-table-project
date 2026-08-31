@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type {
+  FieldworkOrgStatus,
   SurveyGuestTabs,
   SurveyParticipantKind,
   TeamLifecycleAction,
@@ -164,5 +165,44 @@ export const surveyParticipants = pgTable(
     index('survey_participants_survey_kind_idx').on(t.surveyId, t.kind),
     // "내가 초대받은 설문" 을 뒤집어 읽는 목록 조회가 이 인덱스를 탄다.
     index('survey_participants_user_idx').on(t.userId),
+  ],
+);
+
+/**
+ * 실사 업체 — 외주 실사 인력의 소속 경계 (마이그레이션 0093, 티켓 24).
+ *
+ * **팀이 아니다.** 설문을 소유하지 않고(`surveys.teamId` 는 이 테이블을 가리키지 않는다)
+ * 팀 멤버십을 만들지 않으며 재배치 목적지가 될 수 없다(ADR-0019). 이름·상태만 갖는
+ * 가벼운 엔티티이고, 하는 일은 「이 실사 계정이 어느 업체 사람인가」 하나뿐이다.
+ *
+ * `users.fieldworkOrgId` 가 이 테이블을 가리키지만 그쪽에는 drizzle `.references()` 가
+ * 없다 — `auth.ts` 가 이 파일을 import 하면 순환이 된다(이 파일이 `users` 를 쓴다).
+ * FK 는 마이그레이션의 ALTER TABLE 이 만든다(`survey_responses.contactTargetId` 와 같은
+ * 선례). 이 파일 밖에서 그 컬럼에 `.references()` 를 붙이지 말 것.
+ *
+ * 종료는 팀 해산과 같은 판단이다 — 행을 지우지 않고 archived 로 내린다. 소속 계정이
+ * 계보로 남아 있어야 「누가 어느 업체 사람이었는가」를 되짚을 수 있다.
+ */
+export const fieldworkOrgs = pgTable(
+  'fieldwork_orgs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    status: text('status').$type<FieldworkOrgStatus>().notNull().default('active'),
+    /** 운영 메모 — 연락 담당자·계약 메모 등 자유 입력. 판정에 쓰지 않는다. */
+    memo: text('memo'),
+    archivedBy: uuid('archived_by').references(() => users.id, { onDelete: 'restrict' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 활성 업체 이름만 유일하다 — archived 이름은 다시 쓸 수 있다(teams 와 같은 관례).
+    uniqueIndex('fieldwork_orgs_active_name_uq')
+      .on(t.name)
+      .where(sql`${t.status} = 'active'`),
   ],
 );

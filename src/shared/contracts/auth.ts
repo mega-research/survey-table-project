@@ -127,6 +127,32 @@ export function isGuestAccount(userType: UserType | undefined): boolean {
   return userType === 'guest';
 }
 
+/** 실사 업체 소속 계정인가 — 실사 판정의 단일 술어 (티켓 24). */
+export function isFieldworkAccount(userType: UserType | undefined): boolean {
+  return userType === 'fieldwork';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// users.fieldwork_role — 실사 계정의 업체 내 역할 어휘 (SSOT, 티켓 24)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// leader 실사 팀장 — 자기 업체 소속원이 초대된 설문을 초대 없이 **열람**한다(파생 시야,
+//        티켓 25). 본인이 대리 응답·결과코드를 치려면 본인도 초대돼 있어야 한다.
+// worker 실사원 — 초대된 설문에서만 일한다.
+//
+// 팀 역할(`teamRoleValues`)과 값이 겹치지 않게 둔다. leader 는 같지만 member ↔ worker 가
+// 다르고, 그것이 의도다 — 두 축은 서로 다른 경계(팀 ↔ 업체)의 역할이라 한 어휘로 합치면
+// 「팀장인데 실사 업체 소속」 같은 조합이 타입상 가능해진다.
+
+export const fieldworkRoleValues = ['leader', 'worker'] as const;
+export type FieldworkRole = (typeof fieldworkRoleValues)[number];
+
+/** 화면 표기 SSOT — .pen FLOW 10-4 의 계정 행 필. */
+export const FIELDWORK_ROLE_LABEL: Record<FieldworkRole, string> = {
+  leader: '실사 팀장',
+  worker: '실사원',
+};
+
 /**
  * 로그에 남기는 행위자 역할 — RPC 미들웨어와 업로드 REST 가드가 **같은 어휘**를 쓴다.
  *

@@ -33,6 +33,7 @@ import { control } from '@/server/operations/procedures/control';
 import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
+import { fieldworkOrgs } from '@/server/workspace/procedures/fieldwork-orgs';
 import { guests } from '@/server/workspace/procedures/guests';
 import { members } from '@/server/workspace/procedures/members';
 import { ownership } from '@/server/workspace/procedures/ownership';
@@ -122,6 +123,8 @@ export const router = {
     guests,
     // 소유권 이전 · 승계 제안 (.pen FLOW 4-4·9-3, 티켓 19).
     ownership,
+    // 실사 업체 — 외주 실사 인력의 소속 경계 (.pen FLOW 10-4, 티켓 24). 슈퍼어드민 전용.
+    fieldworkOrgs,
   },
 };
 

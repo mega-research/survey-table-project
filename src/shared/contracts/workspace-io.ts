@@ -3,8 +3,9 @@
 // client-safe — server-only·Node·DB 의존 없음(zod 는 런타임 의존).
 import * as z from 'zod';
 
-import { userStatusValues } from './auth';
+import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
+  fieldworkOrgStatusValues,
   surveyParticipantKindValues,
   surveyVisibilityValues,
   type SurveyGuestTabs,
@@ -735,3 +736,98 @@ export const SuccessionAssignment = z.object({
   newOwnerUserId: z.uuid().nullable(),
 });
 export type SuccessionAssignment = z.infer<typeof SuccessionAssignment>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 실사 업체 관리 (.pen FLOW 10-4, 티켓 24)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 사용자 관리의 하위 탭이라 화면은 auth 쪽 표면과 나란히 서지만, 엔티티는 워크스페이스
+// 소관이다 — 팀과 같은 「소속 경계」 계열이고 관리 축도 슈퍼어드민으로 같다.
+
+/** 업체 이름. 활성 업체 안에서 유일하다(fieldwork_orgs_active_name_uq). */
+const FieldworkOrgNameField = z.string().trim().min(1, '업체 이름을 입력하세요.').max(100);
+
+/** 운영 메모 — 비우고 보낼 수 있다. 공백만 남은 값은 미입력으로 접는다(자유 입력 관례). */
+const FieldworkOrgMemoField = z
+  .string()
+  .trim()
+  .max(200)
+  .transform((value) => (value ? value : null))
+  .nullable()
+  .default(null);
+
+/** 업체 카드가 펼쳐 보여주는 소속 계정 한 줄 (.pen 10-4 계정 행). */
+export const FieldworkOrgAccountItem = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  fieldworkRole: z.enum(fieldworkRoleValues),
+  status: z.enum(userStatusValues),
+});
+export type FieldworkOrgAccountItem = z.infer<typeof FieldworkOrgAccountItem>;
+
+/**
+ * 업체 카드 한 장.
+ *
+ * 계정 목록을 **행에 실어 함께 준다** — 협력 업체는 ~5곳이고 카드가 펼쳐지면 바로 명단을
+ * 그리므로(.pen 10-4), 카드마다 두 번째 왕복을 만들 이유가 없다.
+ */
+export const FieldworkOrgListItem = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  status: z.enum(fieldworkOrgStatusValues),
+  memo: z.string().nullable(),
+  /** 재직 중 계정만 센다 — 카드 부제의 「팀장 1 · 실사원 3」이 이 값이다. */
+  leaderCount: z.number().int(),
+  workerCount: z.number().int(),
+  /**
+   * 이 업체 소속원이 초대된 설문 수 (.pen 「초대된 설문 4건」).
+   *
+   * 초대는 개인 단위지만 카드가 세는 것은 **업체 단위 distinct 설문**이다 — 한 설문에 두
+   * 사람이 초대돼 있어도 1건이다. 초대 표면은 티켓 25 라 지금은 늘 0 이지만, 자리를 지금
+   * 두는 편이 낫다(나중에 넣으면 카드 레이아웃이 한 번 더 바뀐다).
+   */
+  invitedSurveyCount: z.number().int(),
+  accounts: z.array(FieldworkOrgAccountItem),
+});
+export type FieldworkOrgListItem = z.infer<typeof FieldworkOrgListItem>;
+
+/** 목록 — 활성 업체만. archived 는 계보로 남을 뿐 화면에 서지 않는다. */
+export const ListFieldworkOrgsOutput = z.object({
+  orgs: z.array(FieldworkOrgListItem),
+});
+export type ListFieldworkOrgsOutput = z.infer<typeof ListFieldworkOrgsOutput>;
+
+export const CreateFieldworkOrgInput = z.object({
+  name: FieldworkOrgNameField,
+  memo: FieldworkOrgMemoField,
+});
+export type CreateFieldworkOrgInput = z.infer<typeof CreateFieldworkOrgInput>;
+
+export const CreateFieldworkOrgOutput = z.object({ id: z.uuid() });
+export type CreateFieldworkOrgOutput = z.infer<typeof CreateFieldworkOrgOutput>;
+
+export const UpdateFieldworkOrgInput = z.object({
+  orgId: z.uuid(),
+  name: FieldworkOrgNameField,
+  memo: FieldworkOrgMemoField,
+});
+export type UpdateFieldworkOrgInput = z.infer<typeof UpdateFieldworkOrgInput>;
+
+/**
+ * 업체 종료 — 이름 확인 문구가 **없다**(팀 해산과 다른 점).
+ *
+ * 해산은 소속 설문 전부를 배치 대기로 밀어내지만 업체 종료는 아무것도 움직이지 않는다.
+ * 대신 서버가 **재직 중 계정이 하나도 없을 것**을 요구한다 — 실사 계정에는 「미배치」에
+ * 해당하는 상태가 없어(user_type=fieldwork 면 소속이 NOT NULL 이다) 종료된 업체의 재직
+ * 계정은 정의되지 않은 상태로 계속 로그인한다. 먼저 계정을 정리하게 하는 편이 정직하다.
+ */
+export const ArchiveFieldworkOrgInput = z.object({ orgId: z.uuid() });
+export type ArchiveFieldworkOrgInput = z.infer<typeof ArchiveFieldworkOrgInput>;
+
+/** 계정 발급 모달의 소속 업체 셀렉트가 쓰는 최소 모양 — 활성 업체만. */
+export const FieldworkOrgOption = z.object({ id: z.uuid(), name: z.string() });
+export type FieldworkOrgOption = z.infer<typeof FieldworkOrgOption>;
+
+export const ListFieldworkOrgOptionsOutput = z.array(FieldworkOrgOption);
+export type ListFieldworkOrgOptionsOutput = z.infer<typeof ListFieldworkOrgOptionsOutput>;

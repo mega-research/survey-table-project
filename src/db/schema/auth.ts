@@ -8,7 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { UserStatus, UserType } from '@/shared/contracts/auth';
+import type { FieldworkRole, UserStatus, UserType } from '@/shared/contracts/auth';
 
 /**
  * Better Auth 관할 인증 테이블 4종(users/sessions/accounts/verifications)
@@ -37,6 +37,18 @@ export const users = pgTable('users', {
   organization: text('organization'),
   // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0085 마이그레이션)
   userType: text('user_type').$type<UserType>().notNull().default('internal'),
+  // 소속 실사 업체 — fieldwork 전용 (0093, 티켓 24).
+  //
+  // FK 는 0093 마이그레이션의 ALTER TABLE 이 만든다. drizzle 에서 `.references()` 를 붙이지
+  // 말 것 — `fieldwork_orgs` 는 workspace.ts 에 있고 그 파일이 이 파일의 `users` 를 쓰므로
+  // 순환 import 가 된다(`survey_responses.contactTargetId` 와 같은 선례).
+  fieldworkOrgId: uuid('fieldwork_org_id'),
+  // 업체 내 역할 — leader | worker. fieldwork 전용 (0093).
+  //
+  // 두 컬럼과 user_type 의 정합은 **DB CHECK 가 지킨다**(users_fieldwork_fields_check):
+  // fieldwork 면 둘 다 있어야 하고, 아니면 둘 다 NULL 이어야 한다. 한 행 안의 조건이라
+  // survey_participants.kind 와 달리 CHECK 로 걸 수 있다.
+  fieldworkRole: text('fieldwork_role').$type<FieldworkRole>(),
   // 세션이 마지막으로 일괄 폐기된 시각 (0087, 티켓 30). 재설정·상태 전이가 갱신한다.
   // 로그인 경합 판정에서 **값이 바뀌었는지**만 보므로 시각 자체의 정확도는 중요하지 않다.
   sessionsRevokedAt: timestamp('sessions_revoked_at', { withTimezone: true }),

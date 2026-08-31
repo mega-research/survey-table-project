@@ -62,3 +62,22 @@ export class LastActiveSuperadminError extends Error {
     this.name = 'LastActiveSuperadminError';
   }
 }
+
+/**
+ * 지목한 실사 업체가 없거나 이미 종료됐다 (티켓 24).
+ *
+ * 두 자리가 이 에러를 던진다 — 계정 발급과 **재활성화**(재직 복귀·재입사)다. 후자가 필요한
+ * 이유는 실사 계정에 「소속 없음」 상태가 없기 때문이다(0093 의 users_fieldwork_fields_check):
+ * 업체가 종료된 뒤 소속 계정을 되살리면 종료된 업체 소속으로 로그인하는 사람이 생긴다.
+ * 업체 종료는 재직 중 계정이 0명일 때만 되므로 그 경로로만 도달한다.
+ *
+ * 워크스페이스 도메인의 `FieldworkOrgNotFoundError` 와 뜻이 겹치지만 여기서 그것을 쓸 수
+ * 없다 — 서버 도메인끼리는 서로를 import 하지 않는다(테이블 직접 조회는 허용).
+ * procedure 가 CONFLICT 로 바꾼다: 입력은 옳고 지금 상태와 충돌할 뿐이다.
+ */
+export class InvalidFieldworkOrgError extends Error {
+  constructor(message = '소속 업체를 찾을 수 없습니다. 활성 업체를 선택하세요.') {
+    super(message);
+    this.name = 'InvalidFieldworkOrgError';
+  }
+}

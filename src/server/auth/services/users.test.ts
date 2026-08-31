@@ -20,11 +20,12 @@ import {
 } from '../domain/users';
 import { changeUserStatus, createUser, listUsers, resetUserPassword } from './users';
 
-const { hash, findFirst, findMany, groupByResult, insertCalls, insertBehavior, txState } =
+const { hash, findFirst, listResult, groupByResult, insertCalls, insertBehavior, txState } =
   vi.hoisted(() => ({
     hash: vi.fn(async (pw: string) => `hashed#${pw.length}`),
     findFirst: vi.fn(),
-    findMany: vi.fn(),
+    // 목록은 조인 쿼리다(티켓 24 가 업체 이름을 붙였다) — findMany 가 아니라 select 체인이다.
+    listResult: { rows: [] as unknown[] },
     groupByResult: { rows: [] as unknown[] },
     insertCalls: [] as Array<{ table: unknown; values: unknown }>,
     insertBehavior: { error: null as unknown },
@@ -37,7 +38,10 @@ const { hash, findFirst, findMany, groupByResult, insertCalls, insertBehavior, t
     },
   }));
 
+/** 카운트 쿼리의 where — 상태 필터만 타는지 보는 축이다. */
 const selectCalls: Array<{ where: unknown }> = [];
+/** 목록 쿼리의 where — 조인 경로라 위와 갈라 기록한다. */
+const listSelectCalls: Array<{ where: unknown }> = [];
 const updateCalls: Array<{ table: unknown; values: unknown }> = [];
 const deleteCalls: Array<{ table: unknown }> = [];
 
@@ -87,9 +91,16 @@ vi.mock('@/db', () => {
   };
   return {
     db: {
-      query: { users: { findFirst, findMany } },
+      query: { users: { findFirst } },
       select: () => ({
         from: () => ({
+          // 목록(조인)과 카운트(groupBy)가 같은 select 로 갈린다 — leftJoin 유무가 그 판별자다.
+          leftJoin: () => ({
+            where: (where: unknown) => {
+              listSelectCalls.push({ where });
+              return { orderBy: () => Promise.resolve(listResult.rows) };
+            },
+          }),
           where: (where: unknown) => {
             selectCalls.push({ where });
             return { groupBy: () => Promise.resolve(groupByResult.rows) };
@@ -111,6 +122,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   insertCalls.length = 0;
   selectCalls.length = 0;
+  listSelectCalls.length = 0;
   updateCalls.length = 0;
   deleteCalls.length = 0;
   insertBehavior.error = null;
@@ -118,8 +130,8 @@ beforeEach(() => {
   txState.activeSuperadmins = 0;
   txState.credentialUpdateRows = [{ id: 'account-row' }];
   groupByResult.rows = [];
+  listResult.rows = [];
   findFirst.mockResolvedValue(undefined);
-  findMany.mockResolvedValue([]);
 });
 
 /** 재입사 계약의 팀 필드 — RPC 입력이 요구하지만 auth 서비스는 쓰지 않는다. */
@@ -218,11 +230,13 @@ describe('listUsers', () => {
     isSuperadmin: false,
     jobTitle: '연구원',
     organization: null,
+    fieldworkOrgName: null,
+    fieldworkRole: null,
     createdAt: new Date('2026-08-26T00:00:00.000Z'),
   };
 
   it('가입일을 ISO 문자열로 직렬화해 넘긴다', async () => {
-    findMany.mockResolvedValue([ROW]);
+    listResult.rows = [ROW];
     const res = await listUsers({ userType: 'all', status: 'all' });
     expect(res.items[0]).toEqual({ ...ROW, createdAt: '2026-08-26T00:00:00.000Z' });
   });

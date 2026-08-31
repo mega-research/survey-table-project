@@ -4,9 +4,9 @@
 import * as z from 'zod';
 
 import {
+  fieldworkRoleValues,
   type UserStatus,
   type UserStatusAction,
-  type UserType,
   userStatusValues,
   userTypeValues,
 } from './auth';
@@ -47,8 +47,8 @@ export type UserStatusFilter = z.infer<typeof UserStatusFilter>;
  * 사용자 관리 목록 한 행.
  *
  * 「소속」 열은 유형마다 출처가 다르다 — internal 은 팀(티켓 06), guest 는 organization,
- * fieldwork 는 실사 업체(티켓 24). 이 티켓 시점에 채울 수 있는 것은 organization 뿐이라
- * 나머지 두 출처는 뒤 티켓이 이 모양에 필드를 더한다.
+ * fieldwork 는 실사 업체(티켓 24). 팀만 아직 이 모양에 없다: 겸직이 가능해 값이 하나가
+ * 아니고(team_members 는 여러 행), 팀 축의 화면은 팀 관리(.pen FLOW 7)가 따로 진다.
  */
 export const UserListItem = z.object({
   id: z.uuid(),
@@ -61,6 +61,10 @@ export const UserListItem = z.object({
   jobTitle: z.string().nullable(),
   /** 소속 기관 메모 — guest 전용 자유 입력. */
   organization: z.string().nullable(),
+  /** 소속 실사 업체 이름 — fieldwork 전용. 조인으로 채운다(티켓 24). */
+  fieldworkOrgName: z.string().nullable(),
+  /** 업체 내 역할 — fieldwork 전용. 「직책·역할」 열이 직책 대신 이 값을 그린다. */
+  fieldworkRole: z.enum(fieldworkRoleValues).nullable(),
   /** 가입일 — 직렬화 경계를 건너므로 ISO 문자열. */
   createdAt: z.string(),
 });
@@ -133,9 +137,11 @@ function optionalText(max: number) {
 /**
  * 사용자 직접 생성 입력.
  *
- * fieldwork 는 의도적으로 빠져 있다 — 실사 계정은 소속 업체(fieldwork_orgs)가 있어야
- * 성립하고 그 엔티티는 티켓 24 에서 생긴다. 모달의 실사 세그먼트도 같은 이유로 비활성이며,
- * 유니온에 없으므로 우회 호출은 zod 단계에서 BAD_REQUEST 로 떨어진다.
+ * **유형마다 소속의 출처가 다르고, 그 차이가 유니온의 존재 이유다.** internal 은 직책(팀은
+ * 팀 관리에서 붙인다), guest 는 자유 입력 기관명, fieldwork 는 **업체 id + 역할**이다.
+ * 실사만 두 칸이 필수인 것은 소속 없는 실사 계정이 성립하지 않기 때문이다(0093 의
+ * users_fieldwork_fields_check). 유니온이 그 필수성을 경계에서 이미 강제하므로, 서비스의
+ * 업체 검증은 「그 id 가 정말 활성 업체인가」만 묻는다.
  */
 export const CreateUserInput = z.discriminatedUnion('userType', [
   CreateUserCommon.extend({
@@ -146,11 +152,22 @@ export const CreateUserInput = z.discriminatedUnion('userType', [
     userType: z.literal('guest'),
     organization: optionalText(100),
   }),
+  CreateUserCommon.extend({
+    userType: z.literal('fieldwork'),
+    fieldworkOrgId: z.uuid('소속 업체를 선택하세요.'),
+    fieldworkRole: z.enum(fieldworkRoleValues),
+  }),
 ]);
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
-/** 생성 가능한 유형 — 모달 세그먼트의 활성 여부 판정에 UI 도 쓴다. */
-export const creatableUserTypes = ['internal', 'guest'] as const satisfies readonly UserType[];
+/**
+ * 생성 가능한 유형 — 모달 세그먼트의 활성 여부 판정에 UI 도 쓴다.
+ *
+ * 티켓 24 로 셋 전부가 열렸다. 값이 `userTypeValues` 와 같아졌지만 별개로 남긴다 —
+ * 「존재하는 유형」과 「이 화면에서 발급할 수 있는 유형」은 다른 질문이고, 둘이 갈리는
+ * 날(발급 경로 없는 유형이 생기는 날) 한쪽만 고쳐지면 모달이 조용히 어긋난다.
+ */
+export const creatableUserTypes = userTypeValues;
 
 export const CreateUserOutput = z.object({ id: z.uuid() });
 export type CreateUserOutput = z.infer<typeof CreateUserOutput>;

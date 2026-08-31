@@ -93,6 +93,33 @@ export function canManageTeamSettings(actor: { isSuperadmin: boolean }): boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// fieldwork_orgs.status — 실사 업체 수명 (SSOT, 티켓 24)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 업체는 **워크스페이스가 아니다**(ADR-0019) — 설문을 소유하지 않고 팀 멤버십을 만들지
+// 않으며 재배치 목적지가 될 수 없다. 이름·상태만 갖는 가벼운 경계 엔티티이고, 하는 일은
+// 「이 실사 계정이 어느 업체 사람인가」 하나뿐이다. 그 경계가 없으면 실사 팀장의 파생
+// 시야(티켓 25)가 타 업체 설문까지 넘친다.
+//
+// 종료도 팀과 같은 판단이다 — 행을 지우지 않고 archived 로 내린다. 소속 계정이 계보로
+// 남아 있어야 「누가 어느 업체 사람이었는가」를 되짚을 수 있다.
+
+export const fieldworkOrgStatusValues = ['active', 'archived'] as const;
+export type FieldworkOrgStatus = (typeof fieldworkOrgStatusValues)[number];
+
+/**
+ * 실사 업체를 관리할 수 있는가 — 슈퍼어드민만 (스펙 §6).
+ *
+ * 팀장에게도, **실사 팀장에게도** 열지 않는다. 업체 목록은 협력사 명부라 한 업체 사람에게
+ * 열면 경쟁 업체의 존재와 인원이 그대로 드러난다. `canManageTeamSettings` 와 판정이 같지만
+ * 이유가 달라(저쪽은 조직도, 이쪽은 협력사 명부) 별개 술어로 둔다 — 한쪽을 넓힐 때 다른
+ * 쪽이 조용히 따라가면 안 된다.
+ */
+export function canManageFieldworkOrgs(actor: { isSuperadmin: boolean }): boolean {
+  return actor.isSuperadmin;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // surveys.visibility — 설문 공개 범위 (SSOT, 티켓 07)
 // ─────────────────────────────────────────────────────────────────────────────
 //

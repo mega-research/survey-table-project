@@ -22,6 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  fieldworkOrgs as orgsTable,
   surveyParticipants as participantsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
@@ -50,6 +51,8 @@ const SUPERADMIN_ID = crypto.randomUUID();
 /** 초대 불가 계정 — 유형 정합 검증용. */
 const GUEST_ID = crypto.randomUUID();
 const FIELDWORK_ID = crypto.randomUUID();
+/** 실사 대조군의 소속 업체 — 실사 계정은 소속이 없으면 행이 만들어지지 않는다(티켓 24). */
+const FIELDWORK_ORG_ID = crypto.randomUUID();
 const DEPARTED_ID = crypto.randomUUID();
 
 const TEAM_A = crypto.randomUUID();
@@ -111,6 +114,12 @@ async function seedUser(
     status: over.status ?? 'active',
     isSuperadmin: over.isSuperadmin ?? false,
     userType: over.userType ?? 'internal',
+    // 실사 계정은 소속 업체·역할이 **필수**다(0093 users_fieldwork_fields_check, 티켓 24) —
+    // 이 스위트에서 실사는 「부여 대상이 아니다」를 보여주는 대조군이라 값 자체는 무의미하지만,
+    // 없으면 행이 아예 만들어지지 않는다.
+    ...(over.userType === 'fieldwork'
+      ? { fieldworkOrgId: FIELDWORK_ORG_ID, fieldworkRole: 'worker' as const }
+      : {}),
   });
 }
 
@@ -143,6 +152,11 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
   beforeAll(async () => {
     if (!isLocalDb) return;
     await seedUser(A_OWNER_ID);
+    await db.insert(orgsTable).values({
+      id: FIELDWORK_ORG_ID,
+      name: `참여대조업체-${FIELDWORK_ORG_ID.slice(0, 8)}`,
+      createdBy: A_OWNER_ID,
+    });
     await seedUser(A_LEADER_ID);
     await seedUser(A_MEMBER_ID);
     await seedUser(B_OUTSIDER_ID);
@@ -182,6 +196,10 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
       .where(inArray(surveysTable.id, [surveyId, neighbourSurveyId].filter(Boolean)));
     await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, ALL_USER_IDS));
     await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B]));
+    // 실사 계정 → 업체 → 나머지 계정 순서다. FK 가 양쪽을 서로 잡고 있다(티켓 24):
+    // 실사 계정은 업체를 가리키고(fieldwork_org_id), 업체는 만든 사람을 가리킨다(created_by).
+    await db.delete(usersTable).where(eq(usersTable.id, FIELDWORK_ID));
+    await db.delete(orgsTable).where(eq(orgsTable.id, FIELDWORK_ORG_ID));
     await db.delete(usersTable).where(inArray(usersTable.id, ALL_USER_IDS));
   });
 

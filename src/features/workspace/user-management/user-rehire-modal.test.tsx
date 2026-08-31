@@ -42,6 +42,8 @@ const USER: UserListItem = {
   isSuperadmin: false,
   jobTitle: null,
   organization: null,
+  fieldworkOrgName: null,
+  fieldworkRole: null,
   createdAt: '2026-08-26T00:00:00.000Z',
 };
 
