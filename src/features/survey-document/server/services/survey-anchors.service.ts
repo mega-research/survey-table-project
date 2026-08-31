@@ -77,7 +77,10 @@ export async function createSurveyAnchor(
       .select({ id: questions.id })
       .from(questions)
       .where(and(eq(questions.id, input.ownerId), eq(questions.surveyId, input.surveyId)));
-    if (!owner) throw new SurveyAnchorError('이 설문의 질문이 아닙니다.');
+    // 빌더에서 막 만든 질문은 저장 전까지 DB 에 없다 — 가장 흔한 원인이므로 문구에 담는다.
+    if (!owner) {
+      throw new SurveyAnchorError('아직 저장되지 않았거나 이 설문의 질문이 아닙니다.');
+    }
   } else {
     const [owner] = await db
       .select({ id: questionGroups.id })
@@ -88,7 +91,9 @@ export async function createSurveyAnchor(
           eq(questionGroups.surveyId, input.surveyId),
         ),
       );
-    if (!owner) throw new SurveyAnchorError('이 설문의 그룹이 아닙니다.');
+    if (!owner) {
+      throw new SurveyAnchorError('아직 저장되지 않았거나 이 설문의 그룹이 아닙니다.');
+    }
   }
 
   const siblings = await db

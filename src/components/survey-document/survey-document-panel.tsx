@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import { FileText, MapPin, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, FileText, MapPin, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -20,6 +20,7 @@ import {
 import { buildAnchorOutline, resolveAnchorOwnerId } from '@/lib/survey-document/anchor-outline';
 import type { NormRect } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
+import { useSurveySync } from '@/hooks/use-survey-sync';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 import { AnchorCanvas, type CanvasRegion } from './anchor-canvas';
@@ -53,6 +54,12 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
       questions: s.currentSurvey.questions,
     })),
   );
+  // 앵커는 DB 의 질문·그룹을 FK 로 가리킨다. 그룹은 만들 때 바로 저장되지만 **질문은
+  // 상단 저장을 눌러야 DB 에 들어간다** — 저장 전 질문에 영역을 붙이면 서버가 "이 설문의
+  // 질문이 아니다" 로 거절한다. 화면이 그 사정을 먼저 말하게 한다.
+  const isDirty = useSurveyBuilderStore((s) => s.isDirty);
+  const { saveSurvey } = useSurveySync();
+  const [isSavingBeforeAnchor, setIsSavingBeforeAnchor] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
@@ -181,10 +188,26 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
   };
 
   const startDrawing = (target: DrawTarget) => {
+    if (isDirty) {
+      toast.error('먼저 설문을 저장해야 영역을 지정할 수 있습니다.');
+      return;
+    }
     setSelected(target);
     setDrawTarget(target);
     const first = anchorsByOwner.get(target.id)?.[0];
     if (first) setPage(first.page);
+  };
+
+  const handleSaveBeforeAnchor = async () => {
+    setIsSavingBeforeAnchor(true);
+    try {
+      await saveSurvey();
+      toast.success('저장했습니다. 이제 영역을 지정할 수 있습니다.');
+    } catch {
+      toast.error('저장에 실패했습니다. 질문 편집 탭에서 다시 시도해 주세요.');
+    } finally {
+      setIsSavingBeforeAnchor(false);
+    }
   };
 
   const jumpTo = (target: DrawTarget) => {
@@ -292,6 +315,26 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
           </div>
 
           <div className="w-[280px] shrink-0 overflow-y-auto border-l border-gray-200 bg-white">
+            {isDirty && (
+              <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <div className="min-w-0">
+                  <p>
+                    저장하지 않은 변경이 있습니다. <b>질문은 저장해야</b> 영역을 붙일 수 있습니다
+                    (그룹은 만들 때 바로 저장됩니다).
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1.5 h-6 px-2 text-xs"
+                    disabled={isSavingBeforeAnchor}
+                    onClick={() => void handleSaveBeforeAnchor()}
+                  >
+                    {isSavingBeforeAnchor ? '저장 중…' : '설문 저장'}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
               대상을 골라 <b>영역 지정</b>을 누르고 조사표 위를 드래그하세요.
               <br />
