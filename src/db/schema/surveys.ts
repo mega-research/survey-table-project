@@ -80,7 +80,7 @@ export const surveys = pgTable('surveys', {
   testToken: text('test_token'),
 
   // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름
-  // (예: 2025년 조사). NULL 이면 기본 문구. 스냅샷 밖 라이브 컬럼 (0084 마이그레이션)
+  // (예: 2025년 조사). NULL 이면 기본 문구. 스냅샷 밖 라이브 컬럼 (0094 마이그레이션)
   priorWaveLabel: text('prior_wave_label'),
 
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)

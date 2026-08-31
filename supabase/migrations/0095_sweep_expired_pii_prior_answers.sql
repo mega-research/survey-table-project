@@ -1,7 +1,7 @@
--- 0085: 보관기한 파기 대상에 이월 응답 추가
+-- 0095: 보관기한 파기 대상에 이월 응답 추가
 --
 -- 0050 의 sweep_expired_pii 는 response_answers 와 survey_responses 만 훑는다.
--- 0084 의 contact_prior_answers 는 응답 저장 형태와 동형이라 PII 문항 값이 같은
+-- 0094 의 contact_prior_answers 는 응답 저장 형태와 동형이라 PII 문항 값이 같은
 -- 암호문('v1:...')으로 적재되는데, 파기 잡이 이 테이블을 보지 않아 보관기한이
 -- 지나도 남는다. 함수 본문을 통째로 교체해 세 번째 블록을 더한다.
 --
