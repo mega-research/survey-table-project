@@ -1,7 +1,6 @@
-import { ORPCError } from '@orpc/server';
-
-import { resolveFieldworkProxy } from '@/server/fieldwork-proxy';
+import { stampFieldworkAttribution } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
+import { resolveProxyForResponseRpc } from '@/server/rpc-fieldwork-proxy';
 
 import {
   CompleteResponseInput,
@@ -30,24 +29,28 @@ const draftRateLimited = pub.use(withRateLimit('response-draft'));
 // 빈 응답 행이 필요한 notice-only 흐름은 createBlank 가 담당한다.
 
 /**
- * 대리 응답 귀속을 세션에서 1회 파생한다 (티켓 27).
+ * 대행이면 확정된 행에 귀속을 찍는다 (티켓 27).
  *
- * **응답자 경로에는 비용이 없다** — 세션이 없거나 실사 계정이 아니면 코어가 DB 를 치지 않고
- * 곧바로 `none` 을 준다. 이 표면은 `pub` 이라 응답자 트래픽 전부가 지나므로 그 단락이 계약이다.
+ * **행 id 가 나온 뒤에 찍는 것**이 요점이다. 진입 서비스에 인자로 흘려보내면 그 안의 분기
+ * (기존 행 물려받기·버전 이관·테스트 lane)마다 챙겨야 하고, 실제로 셋을 놓쳤다. 여기서는
+ * 어떤 분기를 지나왔든 결과에 id 가 있으면 찍힌다.
  *
- * 완료된 대상의 대행 진입은 **여기서 막는다.** 화면(.pen 10-2)도 「응답 완료」로 버튼을 지우고
- * 티켓 26 이 애초에 토큰을 안 주지만, 그 둘은 화면의 약속이라 서버가 다시 물어야 한다.
+ * **응답자 경로에는 비용이 없다** — 코어가 세션 없음·비실사에서 DB 를 치지 않고 곧바로
+ * `none` 을 주고, 그러면 stamp 도 아무것도 하지 않는다.
+ *
+ * 완료된 대상의 대행 진입은 어댑터가 FORBIDDEN 으로 막는다. 화면(.pen 10-2)이 버튼을 지우고
+ * 티켓 26 이 애초에 토큰을 안 주지만 그 둘은 화면의 약속이라 서버가 다시 물어야 한다.
  * 응답자 본인에게는 적용되지 않는다 — 재응답 허용 설정은 종전 그대로다.
  */
-async function proxyAttribution(
-  user: Parameters<typeof resolveFieldworkProxy>[0],
+async function withProxyAttribution<T extends { kind: string; id?: string }>(
+  user: Parameters<typeof resolveProxyForResponseRpc>[0],
   input: { surveyId: string; inviteToken?: string | undefined },
-): Promise<string | null> {
-  const proxy = await resolveFieldworkProxy(user, input.surveyId, input.inviteToken ?? null);
-  if (proxy.kind === 'blocked') {
-    throw new ORPCError('FORBIDDEN', { message: '이미 응답이 완료된 대상입니다.' });
-  }
-  return proxy.kind === 'proxy' ? proxy.fieldworkUserId : null;
+  run: () => Promise<T>,
+): Promise<T> {
+  const proxy = await resolveProxyForResponseRpc(user, input.surveyId, input.inviteToken ?? null);
+  const result = await run();
+  if (result.id) await stampFieldworkAttribution(result.id, proxy);
+  return result;
 }
 
 /**
@@ -79,8 +82,8 @@ const saveDraft = draftRateLimited
 const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
-  .handler(async ({ context, input }) =>
-    entry.createResponseWithFirstAnswer(input, await proxyAttribution(context.user, input)),
+  .handler(({ context, input }) =>
+    withProxyAttribution(context.user, input, () => entry.createResponseWithFirstAnswer(input)),
   );
 
 /**
@@ -89,8 +92,8 @@ const createWithFirstAnswer = rateLimited
 const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
-  .handler(async ({ context, input }) =>
-    entry.createBlankResponse(input, await proxyAttribution(context.user, input)),
+  .handler(({ context, input }) =>
+    withProxyAttribution(context.user, input, () => entry.createBlankResponse(input)),
   );
 
 /**

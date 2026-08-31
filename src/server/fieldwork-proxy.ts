@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -36,13 +36,8 @@ export type FieldworkProxy =
       orgName: string;
       contactTargetId: string;
       resid: number;
-      /**
-       * 배너의 「대상 1024 **김민준**」 (.pen 10-3). 없으면 빈 문자열이고 배너는 번호만 그린다.
-       *
-       * 전화를 거는 사람이 화면의 대상과 손에 든 대상이 같은지 확인하는 칸이라 번호만으로는
-       * 부족하다 — 실사는 이미 조사 대상 표에서 이 값을 원본으로 봤으므로 새 노출이 아니다.
-       */
-      contactLabel: string;
+      /** 배너 라벨의 원재료 — 복호가 필요한 이름은 `describeProxyTarget` 이 따로 읽는다. */
+      attrs: Record<string, string> | null;
     }
   /**
    * 대행이지만 **이미 완료된 대상**이다 (.pen 10-2 「응답 완료」).
@@ -90,6 +85,9 @@ export async function resolveFieldworkProxy(
         eq(surveyResponses.contactTargetId, contactTargets.id),
         eq(surveyResponses.isCompleted, true),
         isNotNull(surveyResponses.completedAt),
+        // 삭제된 완료 응답은 차단하지 않는다 — 담당 연구원이 불량 응답을 지우고 재실사를
+        // 지시하는 것이 정상 동선인데, 술어가 없으면 그 대상이 영구히 대행 불가가 된다.
+        isNull(surveyResponses.deletedAt),
       ),
     )
     .innerJoin(users, eq(users.id, user.id))
@@ -113,7 +111,7 @@ export async function resolveFieldworkProxy(
     kind: 'proxy',
     fieldworkUserId: user.id,
     fieldworkUserName: row.userName,
-    contactLabel: await contactLabelOf(row.contactTargetId, row.attrs),
+    attrs: row.attrs,
     // 업체가 종료되면 조인이 비지만 대행 자체는 이미 capability 가 막는다(loadAccessSubject
     // 가 활성 업체일 때만 소속을 채운다). 여기 도달하면 업체는 활성이다.
     orgName: row.orgName ?? '',
@@ -123,7 +121,10 @@ export async function resolveFieldworkProxy(
 }
 
 /**
- * 배너에 적을 대상 이름 한 칸.
+ * 배너에 적을 대상 이름 한 칸 — **배너 표면만 부른다**.
+ *
+ * 코어에서 떼어낸 이유는 비용이다. 귀속만 필요한 경로(생성·재개)는 이 이름을 쓰지 않는데,
+ * 코어에 붙여 두면 그 경로들이 쓰지도 않을 PII 를 매번 복호한다 — 감사 관점에서도 나쁘다.
  *
  * **이름 PII 를 먼저 본다.** 이름 컬럼은 암호화 저장이 흔하고, 그 경우 `attrs` 에는 아예
  * 값이 없다(업로드가 평문을 남기지 않는다). 복호는 이 한 행뿐이라 비용이 미미하고, 호출자가
@@ -132,7 +133,7 @@ export async function resolveFieldworkProxy(
  * 없으면 `attrs` 의 첫 비어 있지 않은 값으로 떨어진다 — 조사 대상 표의 기록 패널이 쓰는
  * 것과 같은 근사다. 그것도 없으면 빈 문자열이고 배너는 번호만 그린다.
  */
-async function contactLabelOf(
+export async function describeProxyTarget(
   contactTargetId: string,
   attrs: Record<string, string> | null,
 ): Promise<string> {
@@ -154,4 +155,38 @@ async function contactLabelOf(
     if (value.trim()) return value.trim();
   }
   return '';
+}
+
+/**
+ * 확정된 응답 행에 귀속을 찍는다 — **대행의 유일한 쓰기 지점** (티켓 27).
+ *
+ * 처음에는 진입 서비스마다 `fieldworkUserId` 를 인자로 흘려보냈는데, 그 구조는 새 진입
+ * 경로가 생길 때마다 인자를 또 실어야 하고 **실제로 세 곳을 놓쳤다**: 버전 이관이 성공한
+ * 재개(`migrateResumedRowIfStale`), 기존 행을 물려받는 생성(`insertResponseWithContactReuse`
+ * 의 takeover), 대상자 테스트 lane. 셋 다 배너는 뜨는데 귀속이 NULL 이었다.
+ *
+ * 그래서 「어떻게 행이 생겼는가」를 묻지 않는다. **행 id 가 확정된 뒤 한 번** 찍는다 —
+ * 진입 경로가 몇 개든 전부 그 지점을 지나므로 누락이 구조적으로 불가능해진다.
+ *
+ * **컨택 일치를 함께 건다.** 세션 폴백으로 돌아온 행이 이 초대의 컨택이 아닐 수 있고, 그때
+ * 찍으면 남의 응답에 귀속이 붙는다. 조건이 안 맞으면 조용히 0행이다 — 진입 자체는 이미
+ * 성공했으므로 여기서 던지면 응답을 막게 된다.
+ *
+ * **덮어쓴다.** 한 대상을 두 실사원이 나눠 뛰면 마지막 진입자가 남는다 — 이 컬럼의 눈금은
+ * 응답 하나이지 저장 한 번이 아니다.
+ */
+export async function stampFieldworkAttribution(
+  responseId: string,
+  proxy: FieldworkProxy,
+): Promise<void> {
+  if (proxy.kind !== 'proxy') return;
+  await db
+    .update(surveyResponses)
+    .set({ fieldworkUserId: proxy.fieldworkUserId })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        eq(surveyResponses.contactTargetId, proxy.contactTargetId),
+      ),
+    );
 }

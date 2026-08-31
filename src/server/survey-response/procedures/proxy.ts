@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { resolveFieldworkProxy } from '@/server/fieldwork-proxy';
+import { describeProxyTarget, resolveFieldworkProxy } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
 import { FieldworkProxyContext } from '@/shared/contracts/workspace-io';
 
@@ -20,6 +20,14 @@ const context = pub
     z.object({
       surveyId: z.string(),
       inviteToken: z.string().nullable(),
+      /**
+       * 레이트리밋의 **클라이언트 축** (orpc.ts `extractRateLimitClientId`).
+       *
+       * 판정에는 쓰지 않는다 — 넣는 이유는 이 표면이 `lookup` 버킷을 재개 호출과 나눠 쓰고,
+       * 실사 사무실은 단일 NAT 라서다. 축이 없으면 IP 하나로 뭉뚱그려져 한 사무실의 여러
+       * 실사원이 서로의 예산을 소진한다(2026-08-10 리미터 사고와 같은 모양).
+       */
+      sessionId: z.string(),
     }),
   )
   .output(FieldworkProxyContext)
@@ -32,7 +40,9 @@ const context = pub
       fieldworkUserName: proxy.fieldworkUserName,
       orgName: proxy.orgName,
       resid: proxy.resid,
-      contactLabel: proxy.contactLabel,
+      // 이름 복호는 **배너 표면에서만** 한다 — 귀속만 필요한 경로가 쓰지도 않을 PII 를
+      // 복호하지 않게 코어에서 떼어냈다.
+      contactLabel: await describeProxyTarget(proxy.contactTargetId, proxy.attrs),
     };
   });
 

@@ -197,10 +197,9 @@ void _entryInputContract;
 async function admitAndCreateResponse(
   input: CreateBlankResponseInput,
   answer: EntryFirstAnswer | null,
-  fieldworkUserId: string | null,
 ): Promise<FirstAnswerResult> {
   try {
-    return await admitAndCreateResponseInner(input, answer, fieldworkUserId);
+    return await admitAndCreateResponseInner(input, answer);
   } catch (err) {
     const blocked = toGateBlockedResult(err);
     if (blocked) return blocked;
@@ -221,16 +220,11 @@ async function admitAndCreateResponse(
  */
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
-  fieldworkUserId: string | null = null,
 ): Promise<FirstAnswerResult> {
-  return admitAndCreateResponse(
-    input,
-    {
-      questionId: input.questionId,
-      value: input.value,
-    },
-    fieldworkUserId,
-  );
+  return admitAndCreateResponse(input, {
+    questionId: input.questionId,
+    value: input.value,
+  });
 }
 
 /**
@@ -252,12 +246,6 @@ export async function createResponseWithFirstAnswer(
 async function admitAndCreateResponseInner(
   input: CreateBlankResponseInput,
   answer: EntryFirstAnswer | null,
-  /**
-   * 대리 응답 귀속 (티켓 27). **procedure 가 세션에서 1회 파생해 넘긴다** — 서비스가 auth 를
-   * 재조회하지 않는 이 레포의 관행이고(`isExternal` 과 같은 자리), 무엇보다 화면이 보내는
-   * 값이 아니어야 위조되지 않는다. 응답자 경로는 언제나 null 이다.
-   */
-  fieldworkUserId: string | null,
 ): Promise<FirstAnswerResult> {
   const {
     surveyId,
@@ -419,7 +407,6 @@ async function admitAndCreateResponseInner(
     pageVisits: [firstVisit],
     contactTargetId,
     isTest,
-    fieldworkUserId,
   };
 
   const result =
@@ -477,7 +464,6 @@ async function admitAndCreateResponseInner(
  */
 export async function createBlankResponse(
   input: CreateBlankResponseInput,
-  fieldworkUserId: string | null = null,
 ): Promise<FirstAnswerResult> {
-  return admitAndCreateResponse(input, null, fieldworkUserId);
+  return admitAndCreateResponse(input, null);
 }

@@ -18,10 +18,13 @@ import { client } from '@/shared/lib/rpc';
 export function FieldworkProxyBanner({
   surveyId,
   inviteToken,
+  sessionId,
   hinted,
 }: {
   surveyId: string | null;
   inviteToken: string | null;
+  /** 레이트리밋 클라이언트 축 — 판정에는 쓰이지 않는다(procedures/proxy 주석). */
+  sessionId: string;
   /**
    * `?fw=1` 이 붙어 있는가 — **호출 여부만** 정한다(티켓 27).
    *
@@ -41,7 +44,7 @@ export function FieldworkProxyBanner({
     if (!hinted || surveyId === null || inviteToken === null) return;
     let cancelled = false;
     void client.surveyResponse.proxy
-      .context({ surveyId, inviteToken })
+      .context({ surveyId, inviteToken, sessionId })
       .then((result) => {
         if (!cancelled) setData(result);
       })
@@ -50,7 +53,7 @@ export function FieldworkProxyBanner({
     return () => {
       cancelled = true;
     };
-  }, [hinted, surveyId, inviteToken]);
+  }, [hinted, surveyId, inviteToken, sessionId]);
 
   if (!data || data.mode === 'none') return null;
 

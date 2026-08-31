@@ -160,15 +160,11 @@ describe('surveyResponse.lifecycle procedures', () => {
       inviteToken: INVITE_TOKEN,
     });
     expect(res).toEqual({ id: RESPONSE_ID, status: 'in_progress', resumed: true });
-    expect(svc.resumeOrCreateResponse).toHaveBeenCalledWith(
-      {
-        surveyId: SURVEY_ID,
-        sessionId: 'sess-1',
-        inviteToken: INVITE_TOKEN,
-      },
-      // 대리 응답 귀속 — 응답자 경로는 언제나 null (티켓 27).
-      null,
-    );
+    expect(svc.resumeOrCreateResponse).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-1',
+      inviteToken: INVITE_TOKEN,
+    });
   });
 
   it('resume(pub)는 매칭 행이 없으면 service 가 반환한 null 을 통과시킨다', async () => {

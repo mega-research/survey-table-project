@@ -18,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { db } from '@/db';
 import {
   contactTargets as targetsTable,
+  surveyVersions as versionsTable,
   fieldworkOrgs as orgsTable,
   surveyParticipants as participantsTable,
   surveyResponses as responsesTable,
@@ -27,7 +28,11 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
-import { resolveFieldworkProxy } from '@/server/fieldwork-proxy';
+import {
+  describeProxyTarget,
+  resolveFieldworkProxy,
+  stampFieldworkAttribution,
+} from '@/server/fieldwork-proxy';
 import { lifecycle as lifecycleProcedures } from '@/server/survey-response/procedures/lifecycle';
 import { response as responseProcedures } from '@/server/survey-response/procedures/response';
 
@@ -113,9 +118,15 @@ async function invite(userId: string): Promise<void> {
 }
 
 /** 그 컨택의 응답 행 하나 — 귀속 컬럼이 이 스위트의 관심사 전부다. */
-async function responseRow(): Promise<{ id: string; fieldworkUserId: string | null } | undefined> {
+async function responseRow(): Promise<
+  { id: string; fieldworkUserId: string | null; versionId: string | null } | undefined
+> {
   const [row] = await db
-    .select({ id: responsesTable.id, fieldworkUserId: responsesTable.fieldworkUserId })
+    .select({
+      id: responsesTable.id,
+      fieldworkUserId: responsesTable.fieldworkUserId,
+      versionId: responsesTable.versionId,
+    })
     .from(responsesTable)
     .where(eq(responsesTable.contactTargetId, targetId));
   return row;
@@ -216,9 +227,13 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
         fieldworkUserId: WORKER_ID,
         fieldworkUserName: '박현우',
         resid: 1024,
-        contactLabel: '김민준',
       });
       expect(proxy.kind === 'proxy' && proxy.orgName).toContain('그린리서치');
+      // 이름은 코어가 아니라 배너 표면이 읽는다 — 귀속만 필요한 경로가 PII 를 복호하지
+      // 않게 갈라 뒀다(리뷰 지적).
+      expect(
+        proxy.kind === 'proxy' ? await describeProxyTarget(proxy.contactTargetId, proxy.attrs) : '',
+      ).toBe('김민준');
     });
   });
 
@@ -325,6 +340,114 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // ④-2 진입 경로가 갈려도 귀속은 남는다 (리뷰가 짚은 세 구멍)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('진입 분기와 무관한 귀속', () => {
+    beforeEach(async () => {
+      if (!isLocalDb) return;
+      await invite(WORKER_ID);
+    });
+
+    it('기존 행을 물려받는 생성에도 찍힌다 — INSERT 를 지나지 않는 분기다', async () => {
+      // 응답자가 먼저 만들어 둔 활성 행이 있으면 생성 경로는 INSERT 없이 그 행을 물려받는다.
+      // 귀속을 INSERT payload 에만 실으면 이 분기에서 통째로 버려진다.
+      await responseClient(null).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await responseRow())?.fieldworkUserId).toBeNull();
+
+      await responseClient(WORKER_ID).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await responseRow())?.fieldworkUserId).toBe(WORKER_ID);
+    });
+
+    it('버전 이관이 일어난 재개에도 찍힌다 — 그 분기는 touch 를 부르지 않는다', async () => {
+      const oldVersionId = crypto.randomUUID();
+      const newVersionId = crypto.randomUUID();
+      for (const [id, versionNumber, status] of [
+        [oldVersionId, 1, 'superseded'],
+        [newVersionId, 2, 'published'],
+      ] as const) {
+        await db
+          .insert(versionsTable)
+          .values({
+            id,
+            surveyId,
+            versionNumber,
+            status,
+            snapshot: {
+              title: '2026 고객 만족도 조사',
+              groups: [],
+              questions: [],
+              settings: {
+                isPublic: true,
+                allowMultipleResponses: false,
+                showProgressBar: true,
+                shuffleQuestions: false,
+                requireLogin: false,
+                thankYouMessage: '감사합니다',
+              },
+            },
+          });
+      }
+      await db.update(surveysTable).set({ currentVersionId: newVersionId }).where(eq(surveysTable.id, surveyId));
+
+      const sessionId = crypto.randomUUID();
+      await responseClient(null).response.createBlank(entryInput(sessionId, inviteToken));
+      // 응답 행을 옛 버전으로 되돌려 재개가 이관 분기를 타게 만든다.
+      await db
+        .update(responsesTable)
+        .set({ versionId: oldVersionId })
+        .where(eq(responsesTable.contactTargetId, targetId));
+
+      await responseClient(WORKER_ID).lifecycle.resume({ surveyId, sessionId, inviteToken });
+
+      const row = await responseRow();
+      expect(row?.fieldworkUserId).toBe(WORKER_ID);
+      // 이관 자체도 일어났어야 한다 — 아니면 이 테스트가 이관 분기를 안 지난 것이다.
+      expect(row?.versionId).toBe(newVersionId);
+    });
+
+    it('초대의 컨택이 아닌 행에는 찍지 않는다', async () => {
+      // 다른 컨택의 행을 지목해도 stamp 의 컨택 조건이 0행으로 접는다.
+      const otherTargetId = crypto.randomUUID();
+      await db.insert(targetsTable).values({
+        id: otherTargetId,
+        surveyId,
+        resid: 2048,
+        isTest: false,
+        inviteToken: crypto.randomUUID(),
+        inviteCode: `fpx${RUN}${Math.floor(Math.random() * 1000)}`,
+      });
+      const [other] = await db
+        .insert(responsesTable)
+        .values({
+          surveyId,
+          sessionId: crypto.randomUUID(),
+          contactTargetId: otherTargetId,
+          status: 'in_progress',
+          questionResponses: {},
+        })
+        .returning({ id: responsesTable.id });
+
+      const proxy = await resolveFieldworkProxy(
+        contextFor(WORKER_ID, 'fieldwork').user,
+        surveyId,
+        inviteToken,
+      );
+      await stampFieldworkAttribution(other!.id, proxy);
+
+      const [row] = await db
+        .select({ fieldworkUserId: responsesTable.fieldworkUserId })
+        .from(responsesTable)
+        .where(eq(responsesTable.id, other!.id));
+      expect(row?.fieldworkUserId).toBeNull();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // ⑤ 완료 대상 거부
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -359,6 +482,17 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
           inviteToken,
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('삭제된 완료 응답은 차단하지 않는다 — 재실사 지시가 정상 동선이다', async () => {
+      await db
+        .update(responsesTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(responsesTable.contactTargetId, targetId));
+
+      expect(
+        await resolveFieldworkProxy(contextFor(WORKER_ID, 'fieldwork').user, surveyId, inviteToken),
+      ).toMatchObject({ kind: 'proxy' });
     });
 
     it('응답자 경로는 막지 않는다 — 재응답 정책은 종전 그대로다', async () => {
