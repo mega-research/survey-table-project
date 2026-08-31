@@ -57,7 +57,7 @@ export async function collectSurveyContentKeys(
     .where(eq(surveyVersions.surveyId, surveyId));
   add(versionRows.map((row) => row.snapshot));
 
-  // 조사표 PDF — file_key 는 bare 키라 추출 게이트를 그대로 통과한다 (0084)
+  // 조사표 PDF — file_key 는 bare 키라 추출 게이트를 그대로 통과한다 (0097)
   const documentRows = await dbc
     .select({ fileKey: surveyDocuments.fileKey })
     .from(surveyDocuments)

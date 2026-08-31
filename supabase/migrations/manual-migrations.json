@@ -68,7 +68,7 @@
     "0081_revoke_anon_grants_schema_wide",
     "0082_revoke_default_function_execute",
     "0083_fix_revoke_trigger_procedure_ddl",
-    "0084_survey_documents",
-    "0085_survey_document_anchors"
+    "0097_survey_documents",
+    "0098_survey_document_anchors"
   ]
 }

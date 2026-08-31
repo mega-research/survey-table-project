@@ -50,7 +50,7 @@ export interface R2ReferenceSource {
 export const REFERENCE_SURFACE: readonly R2ReferenceSource[] = [
   { name: 'surveys', table: surveys },
   { name: 'questions', table: questions },
-  // 조사표 PDF (0084). file_key 가 bare 키라 행 전체 스캔의 게이트를 그대로 통과한다.
+  // 조사표 PDF (0097). file_key 가 bare 키라 행 전체 스캔의 게이트를 그대로 통과한다.
   // 등재를 빠뜨리면 조사표가 유예 기간 뒤 삭제 큐에서 조용히 사라진다.
   { name: 'survey_documents', table: surveyDocuments },
   {

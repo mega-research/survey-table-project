@@ -602,10 +602,10 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`lib/r2-lif
 **신설된 것은 셋뿐이다** — 조사표·영역 앵커·분할 레이아웃. 질문 유형·조건부 표시·쿼터·컨택·초대·
 메일·SPSS/엑셀 export 는 전부 기존 것을 그대로 쓴다.
 
-- **조사표** `survey_documents` (0084) — 설문당 여러 행. 파일은 R2 영구 네임스페이스 `survey/document/`.
+- **조사표** `survey_documents` (0097) — 설문당 여러 행. 파일은 R2 영구 네임스페이스 `survey/document/`.
   업로드는 `tmp/survey-document/` → attach 에서 promote. 쪽 수는 서버가 파일을 열어 읽는다
   (`lib/survey-document/pdf-page-count.server.ts`). **R2 참조 표면 SSOT 등재 필수.**
-- **영역 앵커** `survey_document_anchors` (0085) — 쪽 번호 + 정규화 0~1. 한 대상에 사각형 여럿.
+- **영역 앵커** `survey_document_anchors` (0098) — 쪽 번호 + 정규화 0~1. 한 대상에 사각형 여럿.
   대상 참조는 `question_id`/`group_id` nullable FK 둘 + CHECK 정확히 하나 (종류 구분값은 파생).
 - **분할 레이아웃** — 설정이 아니라 **파생**이다. 토글 0개. 앵커를 가진 항목이 처음 나타나는
   페이지부터 끝까지 좌 조사표 / 우 질문 50:50 (sticky). 판정은 `lib/group-ordering.ts` 의

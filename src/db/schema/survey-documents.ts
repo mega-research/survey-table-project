@@ -13,7 +13,7 @@ import {
 import { questionGroups, questions, surveys } from './surveys';
 
 /**
- * 조사표 — 설문에 붙는 PDF 자료 (0084 마이그레이션).
+ * 조사표 — 설문에 붙는 PDF 자료 (0097 마이그레이션).
  *
  * 설문당 여러 행을 받는 모양이다. 지금 화면은 하나만 붙이지만 '파일럿 조사표를
  * 함께 검토받는다'는 요구가 열려 있어, 컬럼 두 개로 붙였다가 나중에 테이블로
@@ -53,7 +53,7 @@ export type SurveyDocument = typeof surveyDocuments.$inferSelect;
 export type NewSurveyDocument = typeof surveyDocuments.$inferInsert;
 
 /**
- * 영역 앵커 — 조사표 쪽 위의 사각형 (0085 마이그레이션).
+ * 영역 앵커 — 조사표 쪽 위의 사각형 (0098 마이그레이션).
  *
  * 질문 하나 또는 그룹 하나에 붙고 **한 대상에 여러 개**가 붙는다. 그룹이 3쪽과
  * 4쪽에 걸치는 일이 흔한데 좌표가 쪽 단위라 사각형 하나로는 표현할 수 없다.
