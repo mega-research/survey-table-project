@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
-import { place, type PageBox } from '@/lib/survey-document/anchor-geometry';
+import { place, type PageBox, type ScrollBand } from '@/lib/survey-document/anchor-geometry';
 import type { AnchorFocus } from '@/lib/survey-document/anchor-outline';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +55,38 @@ export function ResponseDocumentPane({ url, pageCount, anchors, focus, onOwnerSe
   }, [anchors, focus]);
 
   const boxes: PageBox[] = pageBox ? [pageBox] : [];
+
+  /**
+   * 쪽 안에서 어디를 보여줄지. 초점 사각형이 화면 밖일 때만 최소한으로 움직인다 —
+   * 판정은 anchor-geometry 소관이고 여기서는 실측 배치를 재서 넘기기만 한다.
+   */
+  const scrollBand: (ScrollBand & { nonce: number }) | null = useMemo(() => {
+    if (!focus || boxes.length === 0) return null;
+    const bandOf = (predicate: (ownerId: string) => boolean) => {
+      const placed = drawn
+        .filter(({ anchor }) => anchor.page === page && predicate(anchor.ownerId))
+        .map(({ anchor }) => place(anchor, boxes))
+        .filter((rect): rect is NonNullable<typeof rect> => rect !== null);
+      if (placed.length === 0) return null;
+      return {
+        top: Math.min(...placed.map((rect) => rect.top)),
+        bottom: Math.max(...placed.map((rect) => rect.top + rect.height)),
+      };
+    };
+    const context = bandOf((ownerId) => ownerId === (focus.contextId ?? focus.ownerId));
+    const target = bandOf((ownerId) => ownerId === focus.ownerId) ?? context;
+    if (!context || !target) return null;
+    return {
+      contextTop: context.top,
+      contextBottom: context.bottom,
+      focusTop: target.top,
+      focusBottom: target.bottom,
+      nonce: focus.nonce,
+    };
+    // boxes 는 pageBox 에서 매 렌더 새로 만들어지므로 pageBox 를 의존으로 둔다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, drawn, page, pageBox]);
+
   const overlay = (
     <>
       {drawn
@@ -94,6 +126,7 @@ export function ResponseDocumentPane({ url, pageCount, anchors, focus, onOwnerSe
       onPageChange={setPage}
       onPageBox={setPageBox}
       overlay={overlay}
+      scrollBand={scrollBand}
     />
   );
 }

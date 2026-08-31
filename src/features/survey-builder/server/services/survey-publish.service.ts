@@ -16,6 +16,7 @@ import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import { recordKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
+import { toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
 import { pruneVersionSnapshots } from '@/lib/versioning/version-prune.server';
@@ -64,18 +65,7 @@ export async function publishSurvey(
     .from(surveyDocumentAnchors)
     .where(eq(surveyDocumentAnchors.surveyId, surveyId))
     .orderBy(asc(surveyDocumentAnchors.order));
-  const snapshot = buildSurveySnapshot(
-    surveyData,
-    anchorRows.map((row) => ({
-      ownerKind: row.questionId !== null ? ('question' as const) : ('group' as const),
-      ownerId: row.questionId ?? row.groupId ?? '',
-      page: row.page,
-      x: row.x,
-      y: row.y,
-      w: row.w,
-      h: row.h,
-    })),
-  );
+  const snapshot = buildSurveySnapshot(surveyData, anchorRows.map(toAnchorSnapshot));
 
   return await db.transaction(async (tx) => {
     await tx

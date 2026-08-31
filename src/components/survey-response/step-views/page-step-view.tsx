@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { RenderStep, StepItem } from '@/lib/group-ordering';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
-import { resolveBulkChoices, type BulkChoice } from '@/lib/survey-document/bulk-choice';
+import { resolveBulkChoices, type BulkChoice } from '@/lib/survey/bulk-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionGroup } from '@/types/survey';
 import { shouldDisplayQuestion, type BranchEvalCtx } from '@/utils/branch-logic';
@@ -56,18 +56,25 @@ export function PageStepView({
     [step.items, responses, questions, groups, evalCtx],
   );
 
-  // root 그룹별 일괄 선택지. 선택지가 완전히 같은 단일선택 문항 둘 이상일 때만 나온다.
-  const bulkChoicesByRootGroup = useMemo(() => {
-    const byGroup = new Map<string | null, Question[]>();
+  /**
+   * 블록별 일괄 선택지.
+   *
+   * 묶음 축은 root 그룹이 아니라 문항이 **실제로 속한 그룹**이다 — 앵커는 하위그룹에도
+   * 붙고, 조사표의 한 블록이 곧 그 하위그룹인 경우가 흔하다. root 로 묶으면 버튼
+   * 하나가 여러 블록을 덮어 응답자가 의도하지 않은 문항까지 답하게 된다.
+   */
+  const bulkChoicesByBlock = useMemo(() => {
+    const byBlock = new Map<string | null, Question[]>();
     for (const item of visibleItems) {
-      const list = byGroup.get(item.rootGroupId);
+      const blockId = item.question.groupId ?? item.rootGroupId;
+      const list = byBlock.get(blockId);
       if (list) list.push(item.question);
-      else byGroup.set(item.rootGroupId, [item.question]);
+      else byBlock.set(blockId, [item.question]);
     }
     return new Map(
-      [...byGroup].map(([groupId, groupQuestions]) => [
-        groupId,
-        resolveBulkChoices(groupQuestions),
+      [...byBlock].map(([blockId, blockQuestions]) => [
+        blockId,
+        resolveBulkChoices(blockQuestions),
       ]),
     );
   }, [visibleItems]);
@@ -83,12 +90,12 @@ export function PageStepView({
             // root 그룹이 바뀌는 지점(또는 페이지 첫 항목)에 그룹 헤더를 표시한다.
             const showRootBadge =
               !!item.rootGroupName && (idx === 0 || prev?.rootGroupId !== item.rootGroupId);
-            // 블록 일괄 선택은 root 그룹이 시작되는 자리에 한 번만 낸다.
-            const startsRootGroup = idx === 0 || prev?.rootGroupId !== item.rootGroupId;
+            // 블록 일괄 선택은 그 블록이 시작되는 자리에 한 번만 낸다.
+            const blockId = item.question.groupId ?? item.rootGroupId;
+            const prevBlockId = prev ? (prev.question.groupId ?? prev.rootGroupId) : undefined;
+            const startsBlock = idx === 0 || prevBlockId !== blockId;
             const blockChoices =
-              showBulkChoice && startsRootGroup
-                ? (bulkChoicesByRootGroup.get(item.rootGroupId) ?? [])
-                : [];
+              showBulkChoice && startsBlock ? (bulkChoicesByBlock.get(blockId) ?? []) : [];
             return (
               <div
                 key={item.question.id}
@@ -98,18 +105,6 @@ export function PageStepView({
                 onFocusCapture={onQuestionFocus ? () => onQuestionFocus(item.question.id) : undefined}
                 onClickCapture={onQuestionFocus ? () => onQuestionFocus(item.question.id) : undefined}
               >
-                {blockChoices.length > 0 && (
-                  <BlockBulkChoice
-                    choices={blockChoices}
-                    onPick={(value) => {
-                      for (const target of visibleItems) {
-                        if (target.rootGroupId === item.rootGroupId) {
-                          onResponse(target.question.id, value);
-                        }
-                      }
-                    }}
-                  />
-                )}
                 {showRootBadge && item.rootGroupName && (
                   <div className={idx === 0 ? 'pb-5' : 'pt-2 pb-5'}>
                     <RootGroupNameBadge
@@ -117,6 +112,18 @@ export function PageStepView({
                       design={item.rootGroupNameDesign}
                     />
                   </div>
+                )}
+                {blockChoices.length > 0 && (
+                  <BlockBulkChoice
+                    choices={blockChoices}
+                    onPick={(value) => {
+                      for (const target of visibleItems) {
+                        if ((target.question.groupId ?? target.rootGroupId) === blockId) {
+                          onResponse(target.question.id, value);
+                        }
+                      }
+                    }}
+                  />
                 )}
                 <GroupStepItem
                   item={item}

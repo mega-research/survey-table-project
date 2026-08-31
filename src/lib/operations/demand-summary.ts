@@ -57,17 +57,38 @@ interface JudgementShape {
   opinionOptionId: string;
 }
 
+/**
+ * 부정 선택지의 라벨 표지. "필요하지 않음"·"불필요"·"필요없음" 계열을 잡는다.
+ *
+ * 선택지 **순서**로 필요/불필요를 정하지 않는 이유는 하나다 — 기획자가 부정을
+ * 먼저 배치하면 필요율이 조용히 뒤집힌다. 그건 ADR 0020 이 경계한 "에러 없이
+ * 잘못 나오는" 실패와 같은 종류인데, 집계는 그 값을 근거로 문항을 빼는 자리다.
+ */
+const NEGATIVE_LABEL_PATTERNS = [/필요\s*하지\s*않/, /불필요/, /필요\s*없/];
+
+function isNegativeLabel(label: string): boolean {
+  return NEGATIVE_LABEL_PATTERNS.some((pattern) => pattern.test(label));
+}
+
+/**
+ * 판단 항목의 모양을 푼다. 어느 쪽이 '필요함'인지 **가릴 수 없으면 null** 이다 —
+ * 그 문항은 행만 남고 비율 칸이 빈다. 추측해서 숫자를 내는 것보다 빈 칸이 낫다.
+ */
 export function resolveJudgementShape(question: Question): JudgementShape | null {
   if (question.type !== 'radio') return null;
   const options = question.options ?? [];
   if (options.length !== 3) return null;
-  const opinions = options.filter((o) => o.allowTextInput);
-  if (opinions.length !== 1) return null;
-  const opinion = opinions[0];
+  const opinion = options.find((o) => o.allowTextInput);
+  if (!opinion || options.filter((o) => o.allowTextInput).length !== 1) return null;
+
   const rest = options.filter((o) => !o.allowTextInput);
-  const need = rest[0];
-  const drop = rest[1];
-  if (!opinion || !need || !drop) return null;
+  const negatives = rest.filter((o) => isNegativeLabel(o.label));
+  // 정확히 하나가 부정으로 읽혀야 한다. 둘 다이거나 하나도 아니면 가릴 수 없다.
+  if (negatives.length !== 1) return null;
+  const drop = negatives[0];
+  const need = rest.find((o) => o !== drop);
+  if (!drop || !need) return null;
+
   return {
     needValue: need.value,
     dropValue: drop.value,
@@ -133,8 +154,9 @@ export function buildDemandSummary(
 
     const shape = resolveJudgementShape(question);
     if (!shape) {
-      // 3지선다 radio 가 아닌 문항 — 행은 남기고 비율 칸을 비운다.
-      // 계산되지 않는 값을 0 으로 채우면 "아무도 필요하다고 안 했다"로 오해한다.
+      // 3지선다 radio 가 아니거나 어느 쪽이 '필요함'인지 가릴 수 없는 문항 —
+      // 행은 남기고 비율 칸을 비운다. 계산되지 않는 값을 0 으로 채우면
+      // "아무도 필요하다고 안 했다"로 오해하고, 추측한 값은 반대로 읽힌다.
       return { ...base, needCount: null, dropCount: null, needRate: null, opinionCount: 0, opinions: [] };
     }
 
@@ -168,6 +190,35 @@ export function buildDemandSummary(
       opinions,
     };
   });
+}
+
+/**
+ * 화면이 지금 보여주는 상태. 엑셀이 같은 표를 내려면 같은 값을 받아야 한다.
+ */
+export type DemandSortMode = 'sheet' | 'need-asc' | 'need-desc';
+
+export interface DemandView {
+  sort: DemandSortMode;
+  /** null = 전체 그룹. */
+  groupId: string | null;
+}
+
+/** 문자열 하나를 정렬 모드로. 모르는 값은 조사표 순서로 떨어진다. */
+export function parseDemandSortMode(raw: string | null | undefined): DemandSortMode {
+  return raw === 'need-asc' || raw === 'need-desc' ? raw : 'sheet';
+}
+
+/**
+ * 필터 + 정렬을 한 번에. **화면과 엑셀이 이 함수 하나를 공유한다** — 정렬을 양쪽에
+ * 따로 적으면 한쪽만 바뀌었을 때 "화면과 다른 파일"이 조용히 나온다.
+ */
+export function applyDemandView(
+  rows: readonly DemandSummaryRow[],
+  view: DemandView,
+): DemandSummaryRow[] {
+  const filtered = view.groupId ? rows.filter((row) => row.groupId === view.groupId) : rows;
+  if (view.sort === 'sheet') return [...filtered].sort((a, b) => a.order - b.order);
+  return sortByNeedRate(filtered, view.sort === 'need-asc' ? 'asc' : 'desc');
 }
 
 /** 필요율 정렬. 비율이 없는 행(3지선다가 아닌 문항)은 언제나 뒤로 밀린다. */

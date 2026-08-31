@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { SurveyResponse } from '@/db/schema';
 import type { Question, QuestionGroup } from '@/types/survey';
 
-import { buildDemandSummary, resolveJudgementShape, sortByNeedRate } from './demand-summary';
+import {
+  applyDemandView,
+  buildDemandSummary,
+  parseDemandSortMode,
+  resolveJudgementShape,
+  sortByNeedRate,
+} from './demand-summary';
 
 const group = (id: string, name: string, order: number): QuestionGroup =>
   ({ id, surveyId: 's', name, order }) as QuestionGroup;
@@ -61,6 +67,56 @@ describe('resolveJudgementShape', () => {
   it('기타입력이 둘이면 어느 쪽이 의견인지 정할 수 없다', () => {
     const q = judgement('a1', null, 0);
     const options = (q.options ?? []).map((o) => ({ ...o, allowTextInput: true }));
+    expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
+  });
+
+  it('부정 선택지를 먼저 배치해도 필요/불필요가 뒤집히지 않는다', () => {
+    // 순서로 정하면 기획자의 배치 하나에 필요율이 조용히 반대로 나온다
+    const q = judgement('a1', null, 0);
+    const options = [
+      { id: 'x', value: '2', label: '필요하지 않음' },
+      { id: 'y', value: '1', label: '필요함' },
+      { id: 'z', value: '3', label: '의견', allowTextInput: true },
+    ];
+    expect(resolveJudgementShape({ ...q, options } as Question)).toEqual({
+      needValue: '1',
+      dropValue: '2',
+      opinionValue: '3',
+      opinionOptionId: 'z',
+    });
+  });
+
+  it.each([['불필요'], ['필요 없음'], ['필요하지않음']])(
+    '부정 표기 "%s" 도 부정으로 읽는다',
+    (label) => {
+      const q = judgement('a1', null, 0);
+      const options = [
+        { id: 'x', value: '1', label: '필요함' },
+        { id: 'y', value: '2', label },
+        { id: 'z', value: '3', label: '의견', allowTextInput: true },
+      ];
+      expect(resolveJudgementShape({ ...q, options } as Question)?.dropValue).toBe('2');
+    },
+  );
+
+  it('어느 쪽이 필요함인지 가릴 수 없으면 null 이다 — 추측하지 않는다', () => {
+    // 빈 칸이 반대로 계산된 숫자보다 낫다 (ADR 0020 이 경계하는 조용한 오류)
+    const q = judgement('a1', null, 0);
+    const options = [
+      { id: 'x', value: '1', label: '유지' },
+      { id: 'y', value: '2', label: '삭제' },
+      { id: 'z', value: '3', label: '의견', allowTextInput: true },
+    ];
+    expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
+  });
+
+  it('둘 다 부정으로 읽히면 가릴 수 없다', () => {
+    const q = judgement('a1', null, 0);
+    const options = [
+      { id: 'x', value: '1', label: '불필요' },
+      { id: 'y', value: '2', label: '필요하지 않음' },
+      { id: 'z', value: '3', label: '의견', allowTextInput: true },
+    ];
     expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
   });
 });
@@ -204,5 +260,51 @@ describe('sortByNeedRate', () => {
     const before = rows.map((r) => r.questionId);
     sortByNeedRate(rows);
     expect(rows.map((r) => r.questionId)).toEqual(before);
+  });
+});
+
+describe('applyDemandView — 화면과 엑셀이 공유하는 상태', () => {
+  const rows = buildDemandSummary(
+    [
+      judgement('a1', 'g1', 0),
+      judgement('a2', 'g1', 1),
+      judgement('b1', 'g2', 0),
+    ],
+    [group('g1', 'A. 일반', 0), group('g2', 'B. 경영', 1)],
+    [answer({ a1: '2' }), answer({ a2: '1' }), answer({ b1: '1' })],
+  );
+
+  it('조사표 순서가 기본이다', () => {
+    expect(applyDemandView(rows, { sort: 'sheet', groupId: null }).map((r) => r.questionId)).toEqual(
+      ['a1', 'a2', 'b1'],
+    );
+  });
+
+  it('그룹 필터가 걸리면 그 그룹만 남는다', () => {
+    expect(
+      applyDemandView(rows, { sort: 'sheet', groupId: 'g2' }).map((r) => r.questionId),
+    ).toEqual(['b1']);
+  });
+
+  it('필요율 낮은 순이면 뺄 후보가 위로 올라온다', () => {
+    expect(
+      applyDemandView(rows, { sort: 'need-asc', groupId: null }).map((r) => r.questionId)[0],
+    ).toBe('a1');
+  });
+
+  it('필터와 정렬이 함께 걸린다', () => {
+    expect(
+      applyDemandView(rows, { sort: 'need-asc', groupId: 'g1' }).map((r) => r.questionId),
+    ).toEqual(['a1', 'a2']);
+  });
+});
+
+describe('parseDemandSortMode', () => {
+  it('아는 값만 통과시키고 나머지는 조사표 순서로 떨어진다', () => {
+    expect(parseDemandSortMode('need-asc')).toBe('need-asc');
+    expect(parseDemandSortMode('need-desc')).toBe('need-desc');
+    expect(parseDemandSortMode('sheet')).toBe('sheet');
+    expect(parseDemandSortMode(null)).toBe('sheet');
+    expect(parseDemandSortMode('drop table')).toBe('sheet');
   });
 });

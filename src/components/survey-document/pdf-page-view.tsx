@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { scrollTarget, type ScrollBand } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
 
 /**
@@ -37,10 +38,14 @@ interface Props {
   onPageChange: (page: number) => void;
   /** 렌더가 끝날 때마다 실측 배치를 올려보낸다. */
   onPageBox?: (box: RenderedPageBox | null) => void;
-  /** 문서를 열어 실제 쪽 수를 확인했을 때. DB 값과 다르면 호출자가 안내한다. */
-  onDocumentOpened?: (numPages: number) => void;
   /** 페이지 위에 겹쳐 그릴 것 (영역 사각형 등). */
   overlay?: React.ReactNode;
+  /**
+   * 쪽 안에서 보여줄 구간. `nonce` 가 바뀔 때만 스크롤을 맞춘다 — 상태를 감시하면
+   * 응답자가 직접 스크롤한 위치를 곧바로 되돌린다. 좌표는 이 컴포넌트가 올려보낸
+   * 실측 배치(onPageBox)와 같은 원점이다.
+   */
+  scrollBand?: (ScrollBand & { nonce: number }) | null;
   /**
    * 쪽을 감싼 상자에 붙일 마우스 핸들러 — 영역 드래그용.
    * overlay 와 **같은 좌표 원점**을 갖는 요소에 붙는다(그래서 캔버스가 아니라 감싼 상자다) —
@@ -58,8 +63,8 @@ export function PdfPageView({
   page,
   onPageChange,
   onPageBox,
-  onDocumentOpened,
   overlay,
+  scrollBand = null,
   surfaceProps,
   className,
 }: Props) {
@@ -89,7 +94,6 @@ export function PdfPageView({
         if (!alive) return;
         setDoc(opened);
         setOpenedUrl(url);
-        onDocumentOpened?.(opened.numPages);
       })
       .catch((e: unknown) => {
         if (!alive) return;
@@ -102,7 +106,7 @@ export function PdfPageView({
       alive = false;
       void opening?.cleanup();
     };
-  }, [url, onDocumentOpened]);
+  }, [url]);
 
   const renderPage = useCallback(async () => {
     const holder = holderRef.current;
@@ -161,6 +165,25 @@ export function PdfPageView({
   useEffect(() => {
     void renderPage();
   }, [renderPage]);
+
+  // 쪽만 넘기고 끝내면 확대했거나 긴 쪽에서 영역이 화면 밖에 남는다.
+  // 이미 보이는 동안은 움직이지 않는 판정은 anchor-geometry 소관이다.
+  const [scrolledNonce, setScrolledNonce] = useState<number | null>(null);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !scrollBand || scrollBand.nonce === scrolledNonce || rendering) return;
+    setScrolledNonce(scrollBand.nonce);
+    const want = scrollTarget({
+      contextTop: scrollBand.contextTop,
+      contextBottom: scrollBand.contextBottom,
+      focusTop: scrollBand.focusTop,
+      focusBottom: scrollBand.focusBottom,
+      viewTop: scroller.scrollTop,
+      viewHeight: scroller.clientHeight,
+      pad: PAD,
+    });
+    if (want !== null) scroller.scrollTo({ top: want, behavior: 'smooth' });
+  }, [scrollBand, scrolledNonce, rendering]);
 
   const go = (n: number) => onPageChange(Math.min(Math.max(1, n), Math.max(1, total)));
 

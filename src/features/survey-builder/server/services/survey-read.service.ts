@@ -27,6 +27,7 @@ import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-looku
 import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { getR2PublicUrl } from '@/lib/r2-env';
+import { toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
 import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -225,17 +226,31 @@ export async function buildDocumentView(
   anchors: readonly SurveyAnchorSnapshot[],
 ): Promise<SurveyDocumentView | null> {
   if (anchors.length === 0) return null;
-  const [document] = await db
-    .select({ fileKey: surveyDocuments.fileKey, pageCount: surveyDocuments.pageCount })
+  const documents = await db
+    .select({
+      id: surveyDocuments.id,
+      fileKey: surveyDocuments.fileKey,
+      pageCount: surveyDocuments.pageCount,
+    })
     .from(surveyDocuments)
     .where(eq(surveyDocuments.surveyId, surveyId))
-    .orderBy(asc(surveyDocuments.order), asc(surveyDocuments.createdAt))
-    .limit(1);
+    .orderBy(asc(surveyDocuments.order), asc(surveyDocuments.createdAt));
+  if (documents.length === 0) return null;
+
+  // 앵커가 가리키는 조사표를 고른다. 조사표가 하나뿐이면(지금 화면이 만드는 유일한
+  // 모양) 결과가 같지만, 둘 이상 붙었을 때 두 번째 조사표의 앵커가 첫 번째 위에
+  // 조용히 그려지는 것을 막는다. documentId 가 없는 옛 발행본은 첫 조사표로 떨어진다.
+  const targetId = anchors.find((anchor) => anchor.documentId)?.documentId;
+  const document =
+    (targetId ? documents.find((row) => row.id === targetId) : undefined) ?? documents[0];
   if (!document) return null;
+  const drawable = anchors.filter(
+    (anchor) => anchor.documentId === undefined || anchor.documentId === document.id,
+  );
   return {
     url: `${getR2PublicUrl()}/${document.fileKey}`,
     pageCount: document.pageCount,
-    anchors: [...anchors],
+    anchors: drawable,
   };
 }
 
@@ -397,18 +412,7 @@ export async function getSurveyForResponse(
     .from(surveyDocumentAnchors)
     .where(eq(surveyDocumentAnchors.surveyId, surveyId))
     .orderBy(asc(surveyDocumentAnchors.order));
-  const documentView = await buildDocumentView(
-    surveyId,
-    liveAnchors.map((row) => ({
-      ownerKind: row.questionId !== null ? ('question' as const) : ('group' as const),
-      ownerId: row.questionId ?? row.groupId ?? '',
-      page: row.page,
-      x: row.x,
-      y: row.y,
-      w: row.w,
-      h: row.h,
-    })),
-  );
+  const documentView = await buildDocumentView(surveyId, liveAnchors.map(toAnchorSnapshot));
 
   return { survey: { ...surveyData, quotaGate }, versionId: null, control, documentView };
 }

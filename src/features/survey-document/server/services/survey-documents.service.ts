@@ -7,6 +7,7 @@ import { surveyDocuments } from '@/db/schema';
 import { copyR2Objects, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { nextOrderAfter } from '@/lib/survey-document/anchor-row';
 import { toPermanentSurveyDocumentKey } from '@/lib/survey-document/document-key';
 
 import type {
@@ -67,55 +68,65 @@ export async function attachSurveyDocument(
     throw new SurveyDocumentAttachError('조사표 파일을 저장하지 못했습니다. 다시 시도해 주세요.');
   }
 
-  const { document, previousKey } = await db.transaction(async (tx) => {
-    if (input.replaceDocumentId) {
-      const [existing] = await tx
-        .select()
-        .from(surveyDocuments)
-        .where(
-          and(
-            eq(surveyDocuments.id, input.replaceDocumentId),
-            eq(surveyDocuments.surveyId, input.surveyId),
-          ),
-        );
-      if (!existing) {
-        throw new SurveyDocumentAttachError('교체할 조사표를 찾을 수 없습니다.');
+  // R2 복사는 트랜잭션 밖이라 이후 트랜잭션이 던지면 참조 없는 영구 키가 남는다.
+  // 방금 만든 객체이고 아직 어디에서도 가리키지 않으므로 그 자리에서 되돌린다 —
+  // 유예 삭제 큐는 '한때 참조됐던' 키를 위한 장치라 여기 쓸 자리가 아니다.
+  let attached: { document: SurveyDocument; previousKey: string | null };
+  try {
+    attached = await db.transaction(async (tx) => {
+      if (input.replaceDocumentId) {
+        const [existing] = await tx
+          .select()
+          .from(surveyDocuments)
+          .where(
+            and(
+              eq(surveyDocuments.id, input.replaceDocumentId),
+              eq(surveyDocuments.surveyId, input.surveyId),
+            ),
+          );
+        if (!existing) {
+          throw new SurveyDocumentAttachError('교체할 조사표를 찾을 수 없습니다.');
+        }
+        const [updated] = await tx
+          .update(surveyDocuments)
+          .set({
+            fileKey: permanentKey,
+            filename: input.filename,
+            pageCount: input.pageCount,
+            updatedAt: new Date(),
+          })
+          .where(eq(surveyDocuments.id, existing.id))
+          .returning();
+        if (!updated) throw new SurveyDocumentAttachError('조사표 교체에 실패했습니다.');
+        return {
+          document: toDocument(updated),
+          previousKey: existing.fileKey === permanentKey ? null : existing.fileKey,
+        };
       }
-      const [updated] = await tx
-        .update(surveyDocuments)
-        .set({
+
+      const siblings = await tx
+        .select({ order: surveyDocuments.order })
+        .from(surveyDocuments)
+        .where(eq(surveyDocuments.surveyId, input.surveyId));
+      const nextOrder = nextOrderAfter(siblings);
+      const [inserted] = await tx
+        .insert(surveyDocuments)
+        .values({
+          surveyId: input.surveyId,
           fileKey: permanentKey,
           filename: input.filename,
           pageCount: input.pageCount,
-          updatedAt: new Date(),
+          order: nextOrder,
         })
-        .where(eq(surveyDocuments.id, existing.id))
         .returning();
-      if (!updated) throw new SurveyDocumentAttachError('조사표 교체에 실패했습니다.');
-      return {
-        document: toDocument(updated),
-        previousKey: existing.fileKey === permanentKey ? null : existing.fileKey,
-      };
-    }
-
-    const siblings = await tx
-      .select({ order: surveyDocuments.order })
-      .from(surveyDocuments)
-      .where(eq(surveyDocuments.surveyId, input.surveyId));
-    const nextOrder = siblings.reduce((max, row) => Math.max(max, row.order + 1), 0);
-    const [inserted] = await tx
-      .insert(surveyDocuments)
-      .values({
-        surveyId: input.surveyId,
-        fileKey: permanentKey,
-        filename: input.filename,
-        pageCount: input.pageCount,
-        order: nextOrder,
-      })
-      .returning();
-    if (!inserted) throw new SurveyDocumentAttachError('조사표 등록에 실패했습니다.');
-    return { document: toDocument(inserted), previousKey: null };
-  });
+      if (!inserted) throw new SurveyDocumentAttachError('조사표 등록에 실패했습니다.');
+      return { document: toDocument(inserted), previousKey: null };
+    });
+  } catch (error) {
+    await deleteR2ObjectsByKey([permanentKey]);
+    throw error;
+  }
+  const { document, previousKey } = attached;
 
   if (previousKey) {
     await registerDeletionCandidates(db, {

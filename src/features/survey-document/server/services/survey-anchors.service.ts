@@ -3,6 +3,7 @@ import 'server-only';
 import { and, asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { nextOrderAfter, toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
 import {
   questionGroups,
   questions,
@@ -24,22 +25,14 @@ export class SurveyAnchorError extends Error {
   }
 }
 
-/** 대상 종류는 저장하지 않고 questionId 유무로 파생한다. */
+/** 대상 종류 파생은 공용 매퍼(anchor-row) 하나에만 있다. */
 function toAnchor(row: typeof surveyDocumentAnchors.$inferSelect): SurveyAnchor {
-  const owner =
-    row.questionId !== null
-      ? ({ ownerKind: 'question', ownerId: row.questionId } as const)
-      : ({ ownerKind: 'group', ownerId: row.groupId ?? '' } as const);
+  const snapshot = toAnchorSnapshot(row);
   return {
     id: row.id,
-    documentId: row.documentId,
-    ...owner,
-    page: row.page,
-    x: row.x,
-    y: row.y,
-    w: row.w,
-    h: row.h,
     order: row.order,
+    ...snapshot,
+    documentId: row.documentId,
   };
 }
 
@@ -102,7 +95,7 @@ export async function createSurveyAnchor(
     .select({ order: surveyDocumentAnchors.order })
     .from(surveyDocumentAnchors)
     .where(eq(surveyDocumentAnchors.surveyId, input.surveyId));
-  const nextOrder = siblings.reduce((max, row) => Math.max(max, row.order + 1), 0);
+  const nextOrder = nextOrderAfter(siblings);
 
   const [inserted] = await db
     .insert(surveyDocumentAnchors)

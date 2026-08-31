@@ -5,7 +5,11 @@ import { useMemo, useState } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronRight, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { sortByNeedRate, type DemandSummaryRow } from '@/lib/operations/demand-summary';
+import {
+  applyDemandView,
+  type DemandSortMode,
+  type DemandSummaryRow,
+} from '@/lib/operations/demand-summary';
 import { cn } from '@/lib/utils';
 
 /**
@@ -20,10 +24,8 @@ interface Props {
   rows: DemandSummaryRow[];
 }
 
-type SortMode = 'sheet' | 'need-asc' | 'need-desc';
-
 export function DemandSummaryTable({ surveyId, rows }: Props) {
-  const [sortMode, setSortMode] = useState<SortMode>('sheet');
+  const [sortMode, setSortMode] = useState<DemandSortMode>('sheet');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
   const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(new Set());
@@ -36,13 +38,14 @@ export function DemandSummaryTable({ surveyId, rows }: Props) {
     return [...seen].map(([id, name]) => ({ id, name }));
   }, [rows]);
 
-  const visibleRows = useMemo(() => {
-    const filtered = groupFilter ? rows.filter((r) => r.groupId === groupFilter) : rows;
-    if (sortMode === 'sheet') return [...filtered].sort((a, b) => a.order - b.order);
-    return sortByNeedRate(filtered, sortMode === 'need-asc' ? 'asc' : 'desc');
-  }, [rows, groupFilter, sortMode]);
+  // 엑셀 라우트와 같은 순수 함수를 태운다 — 화면과 파일이 갈리지 않는 유일한 방법이다.
+  const visibleRows = useMemo(
+    () => applyDemandView(rows, { sort: sortMode, groupId: groupFilter }),
+    [rows, groupFilter, sortMode],
+  );
 
-  // 그룹 구분면은 조사표 순서일 때만 의미가 있다 — 필요율로 정렬하면 그룹이 섞인다.
+  // 그룹 구분면·접기는 행이 그룹별로 붙어 있을 때만 성립한다. 필요율로 정렬하면
+  // 그룹이 섞이므로 구분면을 그릴 자리가 없다 — 그때 그룹 축은 위 필터 칩이 맡는다.
   const showGroupDividers = sortMode === 'sheet' && !groupFilter;
 
   const toggle = (

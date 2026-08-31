@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
+import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
-import { sortByNeedRate } from '@/lib/operations/demand-summary';
+import { applyDemandView, parseDemandSortMode } from '@/lib/operations/demand-summary';
 import {
   buildDemandSummaryWorkbook,
   getDemandSummary,
@@ -33,7 +34,13 @@ async function handleDemandSummaryExport(
   }
 
   const { surveyId } = await params;
-  ctx.bind({ userId, role: isGuestUser(userId) ? 'guest' : 'admin', surveyId });
+  // allowlist 미설정이면 canAccessSurvey 가 fail-open 이라 일반 인증 유저도 통과한다 —
+  // 로그에는 그 사실이 보여야 하므로 'admin' 으로 뭉뚱그리지 않는다 (업로드 라우트와 동일).
+  ctx.bind({
+    userId,
+    role: isGuestUser(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
+    surveyId,
+  });
   if (!canAccessSurvey(userId, surveyId)) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
   }
@@ -41,15 +48,11 @@ async function handleDemandSummaryExport(
   const scope = await loadOperationsDataScope(surveyId);
   const all = await getDemandSummary(surveyId, scope);
 
-  const groupId = request.nextUrl.searchParams.get('groupId');
-  const sort = request.nextUrl.searchParams.get('sort');
-  const filtered = groupId ? all.filter((row) => row.groupId === groupId) : all;
-  const rows =
-    sort === 'need-asc'
-      ? sortByNeedRate(filtered, 'asc')
-      : sort === 'need-desc'
-        ? sortByNeedRate(filtered, 'desc')
-        : [...filtered].sort((a, b) => a.order - b.order);
+  // 화면과 같은 순수 함수 하나를 태운다 — 정렬을 여기 따로 적으면 갈린다.
+  const rows = applyDemandView(all, {
+    sort: parseDemandSortMode(request.nextUrl.searchParams.get('sort')),
+    groupId: request.nextUrl.searchParams.get('groupId'),
+  });
   ctx.bind({ rowCount: rows.length });
 
   const workbook = buildDemandSummaryWorkbook(rows);

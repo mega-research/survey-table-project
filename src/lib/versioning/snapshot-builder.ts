@@ -208,6 +208,7 @@ export function buildSurveySnapshot(
     },
     lookups: survey.lookups ?? [],
     anchors: anchors.map((a) => ({
+      ...(a.documentId !== undefined ? { documentId: a.documentId } : {}),
       ownerKind: a.ownerKind,
       ownerId: a.ownerId,
       page: a.page,

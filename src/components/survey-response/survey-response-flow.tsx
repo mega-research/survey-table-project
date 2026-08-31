@@ -587,11 +587,17 @@ function SurveyResponseFlowActive({
   const [anchorSelection, setAnchorSelection] = useState<{ questionId: string; nonce: number } | null>(
     null,
   );
-  const selectAnchorQuestion = useCallback((questionId: string) => {
-    setAnchorSelection((prev) =>
-      prev?.questionId === questionId ? prev : { questionId, nonce: (prev?.nonce ?? 0) + 1 },
-    );
-  }, []);
+  const selectAnchorQuestion = useCallback(
+    (questionId: string) => {
+      // 앵커가 풀리지 않는 문항은 초점을 옮기지 않는다. 옮기면 아래의 렌더 중
+      // 조정이 곧바로 되돌려 클릭한 곳과 좌측 하이라이트가 어긋나 보인다.
+      if (!anchoredStepQuestions.some((q) => q.id === questionId)) return;
+      setAnchorSelection((prev) =>
+        prev?.questionId === questionId ? prev : { questionId, nonce: (prev?.nonce ?? 0) + 1 },
+      );
+    },
+    [anchoredStepQuestions],
+  );
 
   // 페이지가 바뀌면 그 페이지의 첫 앵커 문항으로 초점을 옮긴다 (렌더 중 조정).
   const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;

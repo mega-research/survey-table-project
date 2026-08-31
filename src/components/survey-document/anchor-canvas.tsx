@@ -39,6 +39,17 @@ interface Props {
   onRegionClick?: (region: CanvasRegion) => void;
 }
 
+/**
+ * 영역 색. 대상 종류(그룹/문항) × 활성 여부 넷을 한 곳에 모은다 —
+ * 테두리와 라벨에서 중첩 삼항을 두 번 반복하면 한쪽만 어긋나도 눈에 띄지 않는다.
+ */
+const REGION_TONE = {
+  'group:active': { border: 'border-blue-500', badge: 'bg-blue-500' },
+  'group:idle': { border: 'border-blue-400/60', badge: 'bg-blue-500/70' },
+  'question:active': { border: 'border-amber-500', badge: 'bg-amber-500' },
+  'question:idle': { border: 'border-amber-400/60', badge: 'bg-amber-500/70' },
+} as const;
+
 type Drag = {
   start: { page: number; x: number; y: number };
   end: { page: number; x: number; y: number };
@@ -104,8 +115,11 @@ export function AnchorCanvas({
       {onThisPage.map((region) => {
         const placed = place(region, boxes);
         if (!placed) return null;
-        const active = region.ownerId === activeOwnerId;
         const isGroup = region.kind === 'group';
+        const tone =
+          REGION_TONE[
+            `${isGroup ? 'group' : 'question'}:${region.ownerId === activeOwnerId ? 'active' : 'idle'}`
+          ];
         return (
           <div
             key={region.id}
@@ -116,13 +130,7 @@ export function AnchorCanvas({
               // 지정 중에는 기존 영역이 드래그를 가로막지 않는다
               drawable && 'pointer-events-none opacity-40',
               // 채움 없이 테두리만 — 채우면 조사표 글씨를 덮는다
-              active
-                ? isGroup
-                  ? 'border-blue-500'
-                  : 'border-amber-500'
-                : isGroup
-                  ? 'border-blue-400/60'
-                  : 'border-amber-400/60',
+              tone.border,
               !drawable && (onRegionClick ? 'cursor-pointer' : 'pointer-events-none'),
             )}
             style={{
@@ -136,13 +144,7 @@ export function AnchorCanvas({
               className={cn(
                 'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold text-white',
                 isGroup ? 'left-1' : 'right-1',
-                active
-                  ? isGroup
-                    ? 'bg-blue-500'
-                    : 'bg-amber-500'
-                  : isGroup
-                    ? 'bg-blue-500/70'
-                    : 'bg-amber-500/70',
+                tone.badge,
               )}
             >
               {region.label}

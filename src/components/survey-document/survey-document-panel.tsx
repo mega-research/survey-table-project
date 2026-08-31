@@ -60,7 +60,8 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
   const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
   const [selected, setSelected] = useState<DrawTarget | null>(null);
 
-  const document = documents[0] ?? null;
+  // 전역 document 를 가리지 않도록 이름을 구분한다 (클라이언트 컴포넌트)
+  const surveyDocument = documents[0] ?? null;
 
   const outline = useMemo(
     () =>
@@ -164,10 +165,10 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
   };
 
   const handleDraw = async (rect: NormRect) => {
-    if (!document || !drawTarget) return;
+    if (!surveyDocument || !drawTarget) return;
     try {
       await createAnchor.mutateAsync({
-        documentId: document.id,
+        documentId: surveyDocument.id,
         ownerKind: drawTarget.kind,
         ownerId: drawTarget.id,
         rect,
@@ -217,11 +218,11 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
           <FileText className="h-4 w-4 shrink-0 text-gray-400" />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-gray-900">
-              {document ? document.filename : '조사표'}
+              {surveyDocument ? surveyDocument.filename : '조사표'}
             </p>
             <p className="text-xs text-gray-500">
-              {document
-                ? `${document.pageCount}쪽 · 영역 ${anchors.length}개`
+              {surveyDocument
+                ? `${surveyDocument.pageCount}쪽 · 영역 ${anchors.length}개`
                 : '판단 대상이 될 PDF 를 올립니다'}
             </p>
           </div>
@@ -231,17 +232,17 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
             variant="outline"
             size="sm"
             disabled={attach.isPending}
-            onClick={() => pickFile(document?.id ?? null)}
+            onClick={() => pickFile(surveyDocument?.id ?? null)}
           >
             <Upload className="mr-1 h-3 w-3" />
-            {attach.isPending ? '올리는 중…' : document ? '교체' : '올리기'}
+            {attach.isPending ? '올리는 중…' : surveyDocument ? '교체' : '올리기'}
           </Button>
-          {document && (
+          {surveyDocument && (
             <Button
               variant="ghost"
               size="sm"
               disabled={removeDocument.isPending}
-              onClick={() => void handleRemoveDocument(document.id)}
+              onClick={() => void handleRemoveDocument(surveyDocument.id)}
               aria-label="조사표 떼기"
             >
               <Trash2 className="h-3 w-3" />
@@ -254,7 +255,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
         <div className="grid min-h-0 flex-1 place-items-center text-sm text-gray-500">
           조사표를 불러오는 중…
         </div>
-      ) : !document ? (
+      ) : !surveyDocument ? (
         <div className="grid min-h-0 flex-1 place-items-center px-6 text-center">
           <div>
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
@@ -270,8 +271,8 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1">
             <AnchorCanvas
-              url={document.url}
-              pageCount={document.pageCount}
+              url={surveyDocument.url}
+              pageCount={surveyDocument.pageCount}
               page={page}
               onPageChange={setPage}
               regions={regions}

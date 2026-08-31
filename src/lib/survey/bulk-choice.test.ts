@@ -37,6 +37,24 @@ describe('resolveBulkChoices', () => {
     expect(resolveBulkChoices([judgement('a1')])).toEqual([]);
   });
 
+  it('값에 공백이 있어도 다른 선택지 집합을 같다고 보지 않는다', () => {
+    const a = judgement('a1', {
+      options: [
+        { id: 'p', value: 'a b', label: '필요함' },
+        { id: 'q', value: 'c', label: '필요하지 않음' },
+        { id: 'r', value: '3', label: '의견', allowTextInput: true },
+      ],
+    } as Partial<Question>);
+    const b = judgement('a2', {
+      options: [
+        { id: 'p', value: 'a', label: '필요함' },
+        { id: 'q', value: 'b c', label: '필요하지 않음' },
+        { id: 'r', value: '3', label: '의견', allowTextInput: true },
+      ],
+    } as Partial<Question>);
+    expect(resolveBulkChoices([a, b])).toEqual([]);
+  });
+
   it('선택지 값이 하나라도 다르면 내지 않는다', () => {
     const odd = judgement('a2', {
       options: [

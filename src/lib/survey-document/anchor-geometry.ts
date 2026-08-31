@@ -103,13 +103,16 @@ export function place(
  * 들어오지 않으면 **선택한 것이 화면 밖일 때만** 최소한으로 움직인다.
  * 이미 보이는데도 매번 맞추면 훑는 동안 화면이 계속 튄다.
  */
-export function scrollTarget(input: {
+export interface ScrollBand {
   /** 맥락(그룹) 영역 전체의 위·아래 */
   contextTop: number;
   contextBottom: number;
   /** 선택한 것의 위·아래. 자기 영역이 없으면 맥락과 같게 준다 */
   focusTop: number;
   focusBottom: number;
+}
+
+export function scrollTarget(input: ScrollBand & {
   /** 현재 스크롤 위치와 보이는 높이 */
   viewTop: number;
   viewHeight: number;
