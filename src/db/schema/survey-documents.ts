@@ -14,7 +14,7 @@ import { surveys } from './surveys';
  * 표면 SSOT 에 등재돼 있어야 파일이 유예 삭제 큐에서 사라지지 않는다
  * (lib/r2-lifecycle/reference-surface.server.ts, ADR 0015).
  *
- * 조사표는 발행 스냅샷에 넣지 않는다 — 라이브다 (ADR 0016).
+ * 조사표는 발행 스냅샷에 넣지 않는다 — 라이브다 (ADR 0020).
  */
 export const surveyDocuments = pgTable(
   'survey_documents',

@@ -51,7 +51,7 @@ export class SurveyDocumentAttachError extends Error {
  * tmp 업로드를 영구 위치로 옮기고 설문에 붙인다.
  *
  * 교체(replaceDocumentId)에 가드를 두지 않는다 — 쪽 수가 달라져 얼린 앵커가
- * 엉뚱한 곳을 가리켜도 막지 않는다. 기획자 책임이라는 결정이다 (ADR 0016).
+ * 엉뚱한 곳을 가리켜도 막지 않는다. 기획자 책임이라는 결정이다 (ADR 0020).
  * 대신 교체된 이전 파일은 유예 삭제 큐에 등록해 7일간 되돌릴 수 있게 둔다.
  */
 export async function attachSurveyDocument(

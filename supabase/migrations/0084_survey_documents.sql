@@ -14,7 +14,7 @@
 -- 조용히 사라진다 (ADR 0015).
 --
 -- 조사표는 발행 스냅샷에 넣지 않는다(라이브). 발행 뒤에도 파일을 교체할 수 있고
--- 교체 가드를 두지 않는다 — 받아들인 위험은 ADR 0016 참조.
+-- 교체 가드를 두지 않는다 — 받아들인 위험은 ADR 0020 참조.
 
 create table if not exists survey_documents (
   id uuid primary key default gen_random_uuid(),
