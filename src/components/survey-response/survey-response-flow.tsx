@@ -1317,6 +1317,39 @@ function SurveyResponseFlowActive({
   const submitLabel = '다음';
   const submittingLabel = '처리 중...';
 
+  // 진행 현황 밴드. **분할 레이아웃에서는 두지 않는다** — 조사표를 나란히 보는 화면에서
+  // 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지" 가 말한다.
+  const progressBand = isSplit ? undefined : (
+    <>
+      <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
+        {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+      </div>
+      {/* 연속형 프로그레스바 */}
+      <div className="mt-2">
+        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
+            style={{
+              width: `${(currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100}%`,
+            }}
+          />
+        </div>
+        {isMobile && (
+          <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {answeredCount}/{traversedQuestionIds.size} 응답 완료
+            </span>
+            {requiredRemaining > 0 && (
+              <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
+                필수 {requiredRemaining}개 남음
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
       <FormulaEvalProvider value={formulaCtx}>
@@ -1344,40 +1377,14 @@ function SurveyResponseFlowActive({
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
             showBranding={currentVisibleStepNumber <= 1}
+            {...(isSplit
+              ? {
+                  descriptionSuffix: `${currentVisibleStepNumber || 1} / ${Math.max(totalVisibleStepCount, 1)} 페이지`,
+                }
+              : {})}
           />
         }
-        progress={
-          <>
-            <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
-              {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-            </div>
-            {/* 연속형 프로그레스바 */}
-            <div className="mt-2">
-              <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
-                  style={{
-                    width: `${
-                      (currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100
-                    }%`,
-                  }}
-                />
-              </div>
-              {isMobile && (
-                <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-                  <span>
-                    {answeredCount}/{traversedQuestionIds.size} 응답 완료
-                  </span>
-                  {requiredRemaining > 0 && (
-                    <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
-                      필수 {requiredRemaining}개 남음
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        }
+        progress={progressBand}
         bottomNav={
           isMobile ? (
             <MobileBottomNav

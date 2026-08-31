@@ -17,6 +17,11 @@ interface SurveyResponseHeaderProps {
   description?: string | null | undefined;
   responseHeader?: SurveyResponseHeaderConfig | null | undefined;
   sideMeta?: ReactNode;
+  /**
+   * 설명 줄 끝에 `· ` 로 이어 붙일 짧은 문구 (예: `3 / 17 페이지`).
+   * 분할 레이아웃은 진행바 밴드를 두지 않으므로 위치 표시가 여기로 온다.
+   */
+  descriptionSuffix?: string | undefined;
   /** 로고/문구 밴드 노출 여부. 인트로(첫 스텝)에서만 true (기존 계약 유지) */
   showBranding?: boolean;
   /** auto = 응답 페이지(브레이크포인트 토글), desktop/mobile = 모달 미리보기 강제 */
@@ -26,7 +31,7 @@ interface SurveyResponseHeaderProps {
 const V_ALIGN_SELF = { top: 'flex-start', center: 'center', bottom: 'flex-end' } as const;
 
 export function SurveyResponseHeader({
-  title, description, responseHeader, sideMeta, showBranding = true, device = 'auto',
+  title, description, responseHeader, sideMeta, descriptionSuffix, showBranding = true, device = 'auto',
 }: SurveyResponseHeaderProps) {
   const config = normalizeResponseHeaderConfig(responseHeader);
 
@@ -58,9 +63,11 @@ export function SurveyResponseHeader({
           <div className="md:hidden">{mobile}</div>
         </>
       ) : device === 'desktop' ? desktop : mobile}
-      {!isEmptyHtml(description) && (
+      {(!isEmptyHtml(description) || descriptionSuffix) && (
         <p className={cn('text-base text-gray-600 md:text-sm', config.titleTextAlign === 'center' && 'mx-auto max-w-3xl text-center', config.titleTextAlign === 'right' && 'text-right')}>
-          {description}
+          {!isEmptyHtml(description) && description}
+          {!isEmptyHtml(description) && descriptionSuffix && ' · '}
+          {descriptionSuffix}
         </p>
       )}
       {sideMeta && <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>}

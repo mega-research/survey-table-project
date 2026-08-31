@@ -24,7 +24,11 @@ interface Props {
   /** 화면에 보이지 않는 부속(허니팟 등). 밴드 밖 최상단에 놓인다. */
   chrome?: React.ReactNode;
   header: React.ReactNode;
-  progress: React.ReactNode;
+  /**
+   * 진행 현황 밴드. 없으면 밴드 자체를 그리지 않는다 — 분할 레이아웃은 위치를
+   * 헤더 설명 줄에 접어 넣고 진행바를 두지 않는다.
+   */
+  progress?: React.ReactNode;
   children: React.ReactNode;
   /** 하단 고정 내비 — 모바일에서만 넘어온다. */
   bottomNav?: React.ReactNode;
@@ -68,11 +72,13 @@ export function SurveyResponseLayout({
       </div>
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div
-        className={`${bandWidth} mx-auto shrink-0 px-4 pt-1 transition-all duration-300 md:px-6`}
-      >
-        {progress}
-      </div>
+      {progress && (
+        <div
+          className={`${bandWidth} mx-auto shrink-0 px-4 pt-1 transition-all duration-300 md:px-6`}
+        >
+          {progress}
+        </div>
+      )}
 
       {/* 메인 콘텐츠 — 분할이면 좌 조사표 / 우 질문 50:50 */}
       {isSplit ? (
