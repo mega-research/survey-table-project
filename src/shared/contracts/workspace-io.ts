@@ -831,3 +831,99 @@ export type FieldworkOrgOption = z.infer<typeof FieldworkOrgOption>;
 
 export const ListFieldworkOrgOptionsOutput = z.array(FieldworkOrgOption);
 export type ListFieldworkOrgOptionsOutput = z.infer<typeof ListFieldworkOrgOptionsOutput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 실사 초대 (.pen FLOW 4-2 실사 블록, 티켓 25)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// **초대는 개인 단위다**(ADR-0019) — 업체 단위 초대 + 업체 측 배정 UI 는 MVP 무게 때문에
+// 기각했다. 내부가 공유 설정에서 「이 설문은 누가 뛴다」를 직접 지정한다. 실사 팀장의
+// 업체 시야는 초대가 아니라 **파생**이라 여기 행이 생기지 않는다.
+
+/** 실사 블록의 한 줄 — 업체명이 함께 온다(.pen 「그린리서치 · hwpark@…」). */
+export const SurveyFieldworkItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  /** 소속 업체 이름 — 같은 이름이 여럿일 수 있어 사람 구분의 핵심 정보다. */
+  orgName: z.string(),
+  fieldworkRole: z.enum(fieldworkRoleValues),
+  addedAt: z.date(),
+});
+export type SurveyFieldworkItem = z.infer<typeof SurveyFieldworkItem>;
+
+export const ListSurveyFieldworkInput = z.object({ surveyId: z.uuid() });
+export type ListSurveyFieldworkInput = z.infer<typeof ListSurveyFieldworkInput>;
+
+/**
+ * 목록 + 내가 이 초대들을 해제할 수 있는가.
+ *
+ * 판정은 참여자·게스트 블록과 **같은 술어**(`survey.manageAccess`)다 — 제외 권한이 초대
+ * 종류마다 갈리면 한 모달 안에서 규칙이 세 벌이 된다.
+ */
+export const ListSurveyFieldworkOutput = z.object({
+  members: z.array(SurveyFieldworkItem),
+  canManage: z.boolean(),
+});
+export type ListSurveyFieldworkOutput = z.infer<typeof ListSurveyFieldworkOutput>;
+
+export const SearchFieldworkCandidatesInput = z.object({
+  surveyId: z.uuid(),
+  query: z.string().trim().max(100).default(''),
+});
+export type SearchFieldworkCandidatesInput = z.infer<typeof SearchFieldworkCandidatesInput>;
+
+export const FieldworkCandidateItem = z.object({
+  userId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  orgName: z.string(),
+  fieldworkRole: z.enum(fieldworkRoleValues),
+});
+export type FieldworkCandidateItem = z.infer<typeof FieldworkCandidateItem>;
+
+export const SearchFieldworkCandidatesOutput = z.array(FieldworkCandidateItem);
+export type SearchFieldworkCandidatesOutput = z.infer<typeof SearchFieldworkCandidatesOutput>;
+
+export const AddSurveyFieldworkInput = z.object({ surveyId: z.uuid(), userId: z.uuid() });
+export type AddSurveyFieldworkInput = z.infer<typeof AddSurveyFieldworkInput>;
+
+export const RemoveSurveyFieldworkInput = z.object({ surveyId: z.uuid(), userId: z.uuid() });
+export type RemoveSurveyFieldworkInput = z.infer<typeof RemoveSurveyFieldworkInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 실사 홈 (.pen FLOW 10-1, 티켓 25)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 실사 홈의 범위 세그먼트.
+ *
+ * 실사원에게는 세그먼트 자체가 없다(초대뿐) — 값이 둘인 것은 팀장 화면의 사정이고,
+ * 서버는 요청한 범위를 역할로 다시 검증한다(화면 값은 언제나 편의다).
+ */
+export const fieldworkHomeScopeValues = ['invited', 'org'] as const;
+export type FieldworkHomeScope = (typeof fieldworkHomeScopeValues)[number];
+
+/** 홈 목록 한 줄 (.pen 10-1 표). */
+export const FieldworkHomeSurveyItem = z.object({
+  surveyId: z.uuid(),
+  title: z.string(),
+  /** 소유 팀 이름 — 배치 대기 설문은 홈에 오지 않으므로 언제나 있다. */
+  teamName: z.string().nullable(),
+  /** 소유자 이름 — 초대 행에는 「소유 김새로」, 업체 시야 행에는 초대받은 소속원 이름을 쓴다. */
+  ownerName: z.string().nullable(),
+  /**
+   * 이 줄이 왜 보이는가 — `invited`(내가 초대됨) / `org`(소속원이 초대됨).
+   *
+   * 화면의 「초대됨」·「업체 시야」 필이 이 값이고, 액션도 갈린다(조사 대상 / 열람).
+   * 화면이 세그먼트로 추론하지 않는 이유는 「업체 전체」에 두 종류가 섞여 있어서다.
+   */
+  reason: z.enum(fieldworkHomeScopeValues),
+  /** 업체 시야 줄에서 이 설문에 초대된 소속원 이름 — 내 초대 줄에서는 null. */
+  invitedColleagueName: z.string().nullable(),
+  completedCount: z.number().int(),
+  /** 쿼터 목표 총합. 쿼터가 없으면 null — 화면은 「117 / —」로 그린다. */
+  targetCount: z.number().int().nullable(),
+  lastActivityAt: z.date().nullable(),
+});
+export type FieldworkHomeSurveyItem = z.infer<typeof FieldworkHomeSurveyItem>;

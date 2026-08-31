@@ -636,6 +636,28 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, userId: C },
   },
 
+  // ── 실사 초대 (티켓 25) — 게스트 블록과 같은 두 축, 탭 저장만 없다 ────────────
+  'workspace.fieldwork.list': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S },
+  },
+  'workspace.fieldwork.searchCandidates': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S, query: '' },
+  },
+  'workspace.fieldwork.add': {
+    gate: 'rpc',
+    capability: 'survey.invite',
+    input: { surveyId: S, userId: C },
+  },
+  'workspace.fieldwork.remove': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, userId: C },
+  },
+
   // ── 소유권 이전 ─────────────────────────────────────────────────────────
   'workspace.ownership.candidates': {
     gate: 'rpc',
