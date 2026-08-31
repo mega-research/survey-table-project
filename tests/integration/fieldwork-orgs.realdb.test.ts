@@ -487,6 +487,10 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
         userType: 'fieldwork' as const,
         activeTeamIds: [],
         leaderTeamIds: [],
+        // 소속 업체가 있어도 초대가 없으면 아무것도 열리지 않는다 — 티켓 25 전에는
+        // 초대 자체가 없었고, 25 이후에도 「부여 없음」이 이 단언의 뜻이다.
+        fieldworkOrgId: crypto.randomUUID(),
+        fieldworkRole: 'worker' as const,
       };
       const survey = {
         teamId: TEAM_ID,

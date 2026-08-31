@@ -16,6 +16,19 @@ import {
 } from './survey-access';
 
 /**
+ * 범위 판정이 실제로 보는 것 — 유형·슈퍼어드민 플래그·팀 축뿐이다.
+ *
+ * `SurveyAccessSubject` 를 통째로 요구하지 않는 이유는 **작업 범위가 팀 축의 질문**이기
+ * 때문이다. 실사 업체(티켓 24)처럼 팀이 아닌 소속 축이 주체에 붙어도 여기는 달라질 것이
+ * 없고, 통째로 받으면 그 축이 늘 때마다 화면·테스트의 주체 리터럴이 함께 커진다.
+ * 판정 코어가 만든 주체는 이 모양을 만족하므로 그대로 넘길 수 있다.
+ */
+export type WorkScopeSubject = Pick<
+  SurveyAccessSubject,
+  'userType' | 'isSuperadmin' | 'activeTeamIds'
+>;
+
+/**
  * 작업 범위 — 이 요청이 **어느 팀의 워크스페이스를** 보고 있는가 (역할 모델 v2 티켓 07).
  *
  * data-scope.ts 의 형제다. 그쪽이 "실/테스트 어느 파티션인가" 를 정하듯 여기는 "어느 팀
@@ -42,7 +55,7 @@ export class WorkScopeError extends Error {
  * - 슈퍼어드민은 자기 소속이 아닌 팀도 지목할 수 있다(전 팀 접근).
  */
 export function resolveWorkScopeFor(
-  subject: SurveyAccessSubject,
+  subject: WorkScopeSubject,
   requested: string | null,
 ): WorkScope {
   if (subject.userType !== 'internal') return { kind: 'none' };

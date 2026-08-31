@@ -16,13 +16,15 @@
  * 스스로를 채점하면 매트릭스가 바뀌어도 GREEN 이 유지된다 — 여기 적힌 O·- 는 전부 손으로
  * 옮긴 값이어야 한다.
  *
- * 실사 세 열(실사원·실사 팀장)은 스펙에 있지만 **아직 부여 모델이 없다**(티켓 24). 그래서
- * 「전 칸 차단」이라는 오늘의 사실만 적고, 그 티켓이 열을 채울 때 여기가 함께 바뀐다.
+ * 실사 두 열은 티켓 25 가 채웠다. **실사 팀장 열은 초대가 아니라 파생 시야**라, 자기 업체
+ * 소속원이 초대된 설문을 초대 없이 본다 — 그래서 이 열의 입력은 참여 행이 아니라
+ * `fieldworkOrgInvited` 다(아래 COLUMNS 참조).
  */
 import { describe, expect, it } from 'vitest';
 
 import {
   resolveSurveyCapabilities,
+  type SurveyAccessRelation,
   type SurveyAccessSubject,
   type SurveyAccessTarget,
   type SurveyParticipation,
@@ -32,6 +34,7 @@ import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contract
 const TEAM_ID = 'team-owning';
 const OTHER_TEAM_ID = 'team-other';
 const OWNER_ID = 'user-owner';
+const ORG_ID = 'org-green';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 열 — 스펙 §8 표의 세로축
@@ -40,6 +43,21 @@ const OWNER_ID = 'user-owner';
 interface Column {
   subject: SurveyAccessSubject;
   participation: SurveyParticipation | null;
+  /** 참여 행 밖의 관계 — 실사 팀장의 파생 시야가 이 축으로 선다. */
+  relation?: SurveyAccessRelation;
+}
+
+/** 실사 주체 — 팀은 없고 업체·역할이 있다. */
+function fieldwork(role: 'leader' | 'worker'): SurveyAccessSubject {
+  return internal({
+    userType: 'fieldwork',
+    // 비내부 계정에 슈퍼어드민 플래그가 실려 와도 열리면 안 된다.
+    isSuperadmin: true,
+    activeTeamIds: [],
+    leaderTeamIds: [],
+    fieldworkOrgId: ORG_ID,
+    fieldworkRole: role,
+  });
 }
 
 function internal(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
@@ -49,6 +67,8 @@ function internal(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject 
     userType: 'internal',
     activeTeamIds: [TEAM_ID],
     leaderTeamIds: [],
+    fieldworkOrgId: null,
+    fieldworkRole: null,
     ...over,
   };
 }
@@ -93,6 +113,17 @@ const COLUMNS = {
     }),
     participation: { kind: 'guest' },
   },
+  '실사원(초대 설문)': {
+    subject: fieldwork('worker'),
+    participation: { kind: 'fieldwork' },
+  },
+  '실사 팀장(자기 업체)': {
+    // **초대되지 않았다** — 소속원이 초대된 설문을 파생 시야로 본다(ADR-0019).
+    // 본인이 초대되면 실사원 열과 같아지고, 그 차이는 아래 별도 블록이 잰다.
+    subject: fieldwork('leader'),
+    participation: null,
+    relation: { fieldworkOrgInvited: true },
+  },
 } satisfies Record<string, Column>;
 
 type ColumnName = keyof typeof COLUMNS;
@@ -116,8 +147,13 @@ interface Row {
 const O = true;
 const X = false;
 
-/** `[슈퍼어드민, 팀장, 소유자, 참여자, 팀원, 게스트]` — 표의 칸 순서 그대로 읽는다. */
-function cells(...values: [boolean, boolean, boolean, boolean, boolean, boolean]): Cells {
+/**
+ * `[슈퍼어드민, 팀장, 소유자, 참여자, 팀원, 게스트, 실사원, 실사 팀장]` —
+ * 표의 칸 순서 그대로 읽는다.
+ */
+function cells(
+  ...values: [boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean]
+): Cells {
   return Object.fromEntries(COLUMN_NAMES.map((name, i) => [name, values[i]])) as Cells;
 }
 
@@ -131,37 +167,37 @@ function cells(...values: [boolean, boolean, boolean, boolean, boolean, boolean]
 const SPEC_ROWS: readonly Row[] = [
   //                                                    슈퍼  팀장  소유  참여  팀원  게스트
   { label: 'survey.view', capabilities: ['survey.view'],
-    cells: cells(O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O) },
   { label: 'survey.edit', capabilities: ['survey.edit'],
-    cells: cells(O, O, O, O, O, X) },
+    cells: cells(O, O, O, O, O, X, X, X) },
   { label: 'survey.publish', capabilities: ['survey.publish'],
-    cells: cells(O, O, O, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X) },
   { label: 'survey.delete (soft)', capabilities: ['survey.delete'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X) },
   { label: '초대 추가(참여자·게스트·실사)', capabilities: ['survey.invite'],
-    cells: cells(O, O, O, O, O, X) },
+    cells: cells(O, O, O, O, O, X, X, X) },
   { label: '제외·공개 범위·부여 해제', capabilities: ['survey.manageAccess'],
-    cells: cells(O, O, O, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X) },
   { label: 'survey.transferOwnership', capabilities: ['survey.transferOwnership'],
-    cells: cells(O, O, O, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X) },
   { label: 'operations.view', capabilities: ['operations.view'],
-    cells: cells(O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O) },
   { label: 'responses.view (상세·수정)', capabilities: ['responses.view'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X) },
   { label: 'contacts.view 원본', capabilities: ['contacts.view'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, O, O) },
   { label: 'contacts.manage (업로드·수정)', capabilities: ['contacts.manage'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X) },
   { label: '결과코드·메모 쓰기', capabilities: ['contacts.writeAttempts'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, O, X) },
   { label: 'mail.view / mail.send', capabilities: ['mail.view', 'mail.send'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X) },
   { label: 'export.download', capabilities: ['export.download'],
-    cells: cells(O, O, O, O, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X) },
   { label: 'analytics.view', capabilities: ['analytics.view'],
-    cells: cells(O, O, O, O, O, X) },
+    cells: cells(O, O, O, O, O, X, X, X) },
   { label: 'surveyGroup.manage', capabilities: ['surveyGroup.manage'],
-    cells: cells(O, O, O, X, O, X) },
+    cells: cells(O, O, O, X, O, X, X, X) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,7 +216,7 @@ function survey(over: Partial<SurveyAccessTarget> = {}): SurveyAccessTarget {
 
 function resolveFor(name: ColumnName, target: SurveyAccessTarget): ReadonlySet<SurveyCapability> {
   const column: Column = COLUMNS[name];
-  return resolveSurveyCapabilities(column.subject, target, column.participation);
+  return resolveSurveyCapabilities(column.subject, target, column.participation, column.relation);
 }
 
 /** 표에서 그 열이 O 인 capability 전부. */
@@ -202,7 +238,7 @@ describe('표가 어휘 전체를 덮는다', () => {
     expect([...listed].sort()).toEqual([...surveyCapabilityValues].sort());
   });
 
-  it('열은 스펙 헤더 여섯 개다 — 실사 두 열은 티켓 24 가 연다', () => {
+  it('열은 스펙 헤더 여덟 개다', () => {
     expect(COLUMN_NAMES).toEqual([
       '슈퍼어드민',
       '팀장(소유 팀)',
@@ -210,6 +246,8 @@ describe('표가 어휘 전체를 덮는다', () => {
       '참여자',
       '팀원(팀 공개만)',
       '게스트(부여 설문)',
+      '실사원(초대 설문)',
+      '실사 팀장(자기 업체)',
     ]);
   });
 });
@@ -312,16 +350,92 @@ describe('스펙 §8 표 — 전 열 차단', () => {
 // ⑤ 실사 열 — 오늘의 사실을 적어 둔다
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('실사 열은 아직 비어 있다 (티켓 24)', () => {
-  const fieldwork = internal({ userType: 'fieldwork', activeTeamIds: [], leaderTeamIds: [] });
+describe('실사 두 열의 차이 — 초대와 파생 시야 (티켓 25)', () => {
+  const target = survey();
 
-  it.each([
-    ['부여 없음', null],
-    ['실사 참여 행', { kind: 'fieldwork' } as SurveyParticipation],
-    // 잘못 만든 행으로 다른 열을 훔칠 수 없다 — 유형 게이트가 kind 보다 먼저다.
-    ['참여자 행', { kind: 'member' } as SurveyParticipation],
-    ['게스트 부여 행', { kind: 'guest' } as SurveyParticipation],
-  ] as const)('%s 이어도 전 칸 차단이다', (_label, participation) => {
-    expect([...resolveSurveyCapabilities(fieldwork, survey(), participation)]).toEqual([]);
+  /**
+   * 팀장의 파생 시야는 **열람 한정**이다(ADR-0019, .pen 10-1 안내문).
+   *
+   * 초대된 실사원과 갈리는 칸이 정확히 하나여야 한다 — 결과코드·메모 쓰기. 그 하나가
+   * 「본인이 초대돼야 기록할 수 있다」는 규칙의 전부이고, 여기서 두 칸 이상 갈리기 시작하면
+   * 파생 시야가 별개 역할이 된 것이다.
+   */
+  it('초대 실사원과 팀장 시야는 결과코드 쓰기 한 칸만 다르다', () => {
+    const worker = new Set(resolveFor('실사원(초대 설문)', target));
+    const leader = new Set(resolveFor('실사 팀장(자기 업체)', target));
+    const onlyWorker = [...worker].filter((c) => !leader.has(c));
+    const onlyLeader = [...leader].filter((c) => !worker.has(c));
+    expect(onlyWorker).toEqual(['contacts.writeAttempts']);
+    expect(onlyLeader).toEqual([]);
+  });
+
+  it('본인이 초대된 팀장은 실사원 열을 그대로 갖는다 — 파생 시야가 권한을 깎지 않는다', () => {
+    const invitedLeader = resolveSurveyCapabilities(
+      COLUMNS['실사 팀장(자기 업체)'].subject,
+      target,
+      { kind: 'fieldwork' },
+      { fieldworkOrgInvited: true },
+    );
+    expect([...invitedLeader].sort()).toEqual(tableColumn('실사원(초대 설문)'));
+  });
+
+  it('실사원에게는 파생 시야가 없다 — 소속원이 초대돼도 열리지 않는다', () => {
+    const worker = resolveSurveyCapabilities(
+      COLUMNS['실사원(초대 설문)'].subject,
+      target,
+      null,
+      { fieldworkOrgInvited: true },
+    );
+    expect([...worker]).toEqual([]);
+  });
+
+  it('타 업체는 어떤 경우에도 열리지 않는다 — 파생 시야의 경계가 업체다', () => {
+    // 로더가 업체로 좁혀 `fieldworkOrgInvited: false` 를 주는 것이 그 경계이고,
+    // 코어는 그 값을 그대로 믿는다. 조인 자체는 realdb 스위트가 잰다.
+    const leader = resolveSurveyCapabilities(
+      COLUMNS['실사 팀장(자기 업체)'].subject,
+      target,
+      null,
+      { fieldworkOrgInvited: false },
+    );
+    expect([...leader]).toEqual([]);
+  });
+
+  it('소속 업체가 없는 실사 계정은 아무것도 못 본다 — 0093 CHECK 가 막지만 코어도 접는다', () => {
+    const orphan: SurveyAccessSubject = {
+      ...COLUMNS['실사원(초대 설문)'].subject,
+      fieldworkOrgId: null,
+      fieldworkRole: null,
+    };
+    expect([...resolveSurveyCapabilities(orphan, target, { kind: 'fieldwork' })]).toEqual([]);
+  });
+
+  it('잘못 만든 참여 행으로 다른 열을 훔칠 수 없다 — 유형 게이트가 kind 보다 먼저다', () => {
+    for (const kind of ['member', 'guest'] as const) {
+      expect([
+        ...resolveSurveyCapabilities(COLUMNS['실사원(초대 설문)'].subject, target, { kind }),
+      ]).toEqual([]);
+    }
+  });
+
+  it('배치 대기 설문은 초대·파생 시야 둘 다 닫는다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect([
+      ...resolveSurveyCapabilities(COLUMNS['실사원(초대 설문)'].subject, pending, {
+        kind: 'fieldwork',
+      }),
+    ]).toEqual([]);
+    expect([
+      ...resolveSurveyCapabilities(COLUMNS['실사 팀장(자기 업체)'].subject, pending, null, {
+        fieldworkOrgInvited: true,
+      }),
+    ]).toEqual([]);
+  });
+
+  it('공개 범위는 실사 판정에 관여하지 않는다 — 초대가 유일한 자격이다', () => {
+    const inviteOnly = survey({ visibility: 'invite_only' });
+    expect([...resolveFor('실사원(초대 설문)', inviteOnly)].sort()).toEqual(
+      tableColumn('실사원(초대 설문)'),
+    );
   });
 });

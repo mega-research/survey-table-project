@@ -12,6 +12,9 @@ function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
     userType: 'internal',
     activeTeamIds: ['team-1', 'team-2'],
     leaderTeamIds: [],
+    // 작업 범위는 팀 축의 질문이라 실사 축을 보지 않는다 — 모양만 맞춘다(티켓 25).
+    fieldworkOrgId: null,
+    fieldworkRole: null,
     ...over,
   };
 }

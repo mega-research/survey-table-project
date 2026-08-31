@@ -33,6 +33,9 @@ function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
     userType: 'internal',
     activeTeamIds: [TEAM_ID],
     leaderTeamIds: [],
+    // 실사 축 — 내부 주체에는 없다(티켓 25). 실사 열은 아래 전용 팩토리가 채운다.
+    fieldworkOrgId: null,
+    fieldworkRole: null,
     ...over,
   };
 }
@@ -194,15 +197,82 @@ describe('resolveSurveyCapabilities — invite_only 는 팀원에게만 숨긴�
 });
 
 describe('resolveSurveyCapabilities — 계정 유형', () => {
-  it('실사는 부여 모델이 붙기 전까지 기본 거부다', () => {
-    expect(caps(subject({ userType: 'fieldwork' }), survey())).toEqual([]);
-    // 참여 행이 있어도 아직 열리지 않는다 — 티켓 24 가 이 자리를 채운다.
-    expect(caps(subject({ userType: 'fieldwork' }), survey(), { kind: 'fieldwork' })).toEqual([]);
-  });
-
   it('유형 게이트는 슈퍼어드민 플래그보다 먼저다', () => {
     // isSuperadmin 은 internal 전용 플래그다 — 비내부 계정에 실려 와도 열지 않는다.
     expect(caps(subject({ userType: 'fieldwork', isSuperadmin: true }), survey())).toEqual([]);
+  });
+});
+
+describe('resolveSurveyCapabilities — 실사 열 (티켓 25)', () => {
+  const ORG = 'org-green';
+  const fieldwork = (role: 'leader' | 'worker', orgId: string | null = ORG) =>
+    subject({
+      userType: 'fieldwork',
+      activeTeamIds: [],
+      leaderTeamIds: [],
+      fieldworkOrgId: orgId,
+      fieldworkRole: role,
+    });
+
+  const INVITED_COLUMN: SurveyCapability[] = [
+    'survey.view',
+    'operations.view',
+    'contacts.view',
+    'contacts.writeAttempts',
+  ];
+
+  it('초대된 실사원은 조사 대상 원본과 결과코드 쓰기까지 — 편집·메일·export·분석은 없다', () => {
+    // 게스트의 마스킹 원칙과 갈리는 지점이다: 대리 실사라는 업무가 연락처를 전제한다(ADR-0019).
+    expect(caps(fieldwork('worker'), survey(), { kind: 'fieldwork' })).toEqual(
+      INVITED_COLUMN.sort(),
+    );
+  });
+
+  it('초대가 없으면 아무것도 없다 — 실사원에게는 파생 시야가 없다', () => {
+    expect(caps(fieldwork('worker'), survey())).toEqual([]);
+    expect(caps(fieldwork('worker'), survey(), null, { fieldworkOrgInvited: true })).toEqual([]);
+  });
+
+  it('팀장은 소속원이 초대된 설문을 초대 없이 본다 — 열람 한정', () => {
+    const derived = caps(fieldwork('leader'), survey(), null, { fieldworkOrgInvited: true });
+    // 「본인 초대 시」만 기록할 수 있다(스펙 §6 표) — 갈리는 칸은 결과코드 하나뿐이다.
+    expect(derived).toEqual(INVITED_COLUMN.filter((c) => c !== 'contacts.writeAttempts').sort());
+  });
+
+  it('본인이 초대된 팀장은 실사원 열을 그대로 갖는다 — 파생 시야가 권한을 깎지 않는다', () => {
+    expect(
+      caps(fieldwork('leader'), survey(), { kind: 'fieldwork' }, { fieldworkOrgInvited: true }),
+    ).toEqual(INVITED_COLUMN.sort());
+  });
+
+  it('업체 밖 설문은 팀장에게도 닫힌다 — 파생 시야의 경계가 업체다', () => {
+    expect(caps(fieldwork('leader'), survey(), null, { fieldworkOrgInvited: false })).toEqual([]);
+  });
+
+  it('소속 업체가 없으면 초대가 있어도 닫힌다 — 0093 CHECK 에만 기대지 않는다', () => {
+    expect(caps(fieldwork('worker', null), survey(), { kind: 'fieldwork' })).toEqual([]);
+  });
+
+  it('참여자·게스트 행으로는 실사 자격이 서지 않는다', () => {
+    expect(caps(fieldwork('worker'), survey(), { kind: 'member' })).toEqual([]);
+    expect(caps(fieldwork('worker'), survey(), { kind: 'guest' })).toEqual([]);
+  });
+
+  it('배치 대기 설문은 초대·파생 시야 둘 다 닫는다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect(caps(fieldwork('worker'), pending, { kind: 'fieldwork' })).toEqual([]);
+    expect(caps(fieldwork('leader'), pending, null, { fieldworkOrgInvited: true })).toEqual([]);
+  });
+
+  it('공개 범위는 실사 판정에 관여하지 않는다 — 초대가 유일한 자격이다', () => {
+    expect(
+      caps(fieldwork('worker'), survey({ visibility: 'invite_only' }), { kind: 'fieldwork' }),
+    ).toEqual(INVITED_COLUMN.sort());
+  });
+
+  it('실사에게는 탭 축이 없다 — guestTabs 는 null 이다', () => {
+    const access = resolveSurveyAccess(fieldwork('worker'), survey(), { kind: 'fieldwork' });
+    expect(access.guestTabs).toBeNull();
   });
 });
 

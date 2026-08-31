@@ -1,10 +1,10 @@
 import 'server-only';
 
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { type SQL, and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyParticipants, surveys } from '@/db/schema';
-import type { UserType } from '@/shared/contracts/auth';
+import { fieldworkOrgs, surveyParticipants, surveys, users } from '@/db/schema';
+import type { FieldworkRole, UserType } from '@/shared/contracts/auth';
 import {
   NO_SURVEY_GUEST_TABS,
   normalizeSurveyGuestTabs,
@@ -40,6 +40,16 @@ export interface SurveyAccessSubject {
   activeTeamIds: readonly string[];
   /** 위 중 role='leader' 인 teamId. */
   leaderTeamIds: readonly string[];
+  /**
+   * 소속 실사 업체 — fieldwork 전용, 그 밖에는 null (티켓 24·25).
+   *
+   * 팀 축과 **별개**다. 실사 계정은 팀 멤버십이 금지고(스펙 §1) 업체는 워크스페이스가
+   * 아니다(ADR-0019) — 두 축을 한 필드로 합치면 「업체가 소유 팀이 될 수 있다」가 타입상
+   * 표현 가능해진다.
+   */
+  fieldworkOrgId: string | null;
+  /** 업체 내 역할 — leader 만 파생 시야를 얻는다. */
+  fieldworkRole: FieldworkRole | null;
 }
 
 export interface SurveyAccessTarget {
@@ -137,7 +147,49 @@ const TEAM_MEMBER_CAPS: readonly SurveyCapability[] = [
  */
 const GUEST_CAPS: readonly SurveyCapability[] = ['survey.view', 'operations.view'];
 
+/**
+ * 실사원(초대) — 스펙 §8 의 「실사원(초대 설문)」 열 (ADR-0019).
+ *
+ * 하는 일이 대리 실사라 **조사 대상 원본**에 닿는다(게스트의 마스킹 원칙과 갈리는 지점 —
+ * 전화·방문 실사라는 업무 자체가 연락처를 전제한다). 대신 접근은 초대된 설문 하나로 한정되고,
+ * 설문 편집·메일·export·응답 상세·컨택 업로드/수정·초대는 전부 차단이다.
+ *
+ * `contacts.manage` 가 없는 것이 `contacts.view`·`contacts.writeAttempts` 와 갈리는 요점이다 —
+ * 읽고 결과코드·메모를 남기지만 명단 자체는 못 고친다.
+ */
+const FIELDWORK_INVITED_CAPS: readonly SurveyCapability[] = [
+  'survey.view',
+  'operations.view',
+  'contacts.view',
+  'contacts.writeAttempts',
+];
+
+/**
+ * 실사 팀장의 **파생 시야** — 자기 업체 소속원이 초대된 설문을 초대 없이 본다.
+ *
+ * 초대 열에서 `contacts.writeAttempts` 하나만 빠진다. 그 한 칸이 「본인이 초대돼야 기록할 수
+ * 있다」는 규칙의 전부다(스펙 §6 표의 「본인 초대 시」). 두 칸 이상 갈리기 시작하면 파생
+ * 시야가 별개 역할이 된 것이므로, 그때는 열을 새로 세워야지 이 목록을 깎을 일이 아니다.
+ *
+ * 대리 응답도 같은 규칙으로 막히지만 그 게이트는 응답 경로에 있다(티켓 27).
+ */
+const FIELDWORK_ORG_VIEW_CAPS: readonly SurveyCapability[] = FIELDWORK_INVITED_CAPS.filter(
+  (capability) => capability !== 'contacts.writeAttempts',
+);
+
 const NONE: ReadonlySet<SurveyCapability> = new Set();
+
+/**
+ * 참여 행 **밖의** 관계 — 지금은 실사 팀장의 파생 시야 하나다 (티켓 25).
+ *
+ * `SurveyParticipation` 과 갈라 두는 이유는 주어가 다르기 때문이다: 저쪽은 「내 초대 행」이고
+ * 이쪽은 「내 업체 사람이 초대돼 있다」다. 같은 객체에 합치면 `kind` 가 없는 참여 행이라는
+ * 모순된 모양이 생긴다.
+ */
+export interface SurveyAccessRelation {
+  /** 이 설문에 **내 업체 소속원**이 초대돼 있는가 — 로더가 업체로 좁혀 계산한다. */
+  fieldworkOrgInvited?: boolean;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 판정 (순수)
@@ -147,8 +199,7 @@ const NONE: ReadonlySet<SurveyCapability> = new Set();
  * 이 사람이 이 설문에서 할 수 있는 일 — DB 를 만지지 않는 순수 함수.
  *
  * 순서가 곧 정책이다:
- *  1. 계정 유형 — guest 는 자기 부여 모델(티켓 21)로 갈라지고, fieldwork 는 부여 모델이
- *     붙기 전까지(티켓 24) 기본 거부다.
+ *  1. 계정 유형 — guest(티켓 21)와 fieldwork(티켓 25)는 각자의 부여 모델로 먼저 갈라진다.
  *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
  *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
  *  4. 배치 대기 설문 — 슈퍼어드민 외 차단. 팀이 정해지기 전에는 소유자도 못 연다(ADR-0006).
@@ -172,11 +223,15 @@ export function resolveSurveyCapabilities(
   subject: SurveyAccessSubject,
   survey: SurveyAccessTarget,
   participation?: SurveyParticipation | null,
+  relation?: SurveyAccessRelation,
 ): ReadonlySet<SurveyCapability> {
   // isSuperadmin 은 internal 전용 플래그다 — 유형 게이트가 먼저 선다.
   if (subject.userType === 'guest') {
     if (survey.assignmentStatus === 'assignment_pending') return NONE;
     return participation?.kind === 'guest' ? new Set(GUEST_CAPS) : NONE;
+  }
+  if (subject.userType === 'fieldwork') {
+    return resolveFieldworkCapabilities(subject, survey, participation, relation);
   }
   if (subject.userType !== 'internal') return NONE;
   if (subject.isSuperadmin) return new Set(ALL_CAPABILITIES);
@@ -208,6 +263,37 @@ export function resolveSurveyCapabilities(
 }
 
 /**
+ * 실사 계정의 판정 — 게스트와 마찬가지로 **팀·소유 사슬을 타지 않는다** (ADR-0019, 티켓 25).
+ *
+ * 팀 멤버십도 소유권도 없는 계정이라 그 분기들이 무의미하고, 자격은 둘 중 하나다.
+ *  ① **초대됐는가**(`survey_participants` kind='fieldwork') — 실사원 열.
+ *  ② **내 업체 소속원이 초대됐는가** + 내가 팀장인가 — 파생 시야(열람 한정).
+ *
+ * ②가 ①보다 뒤에 서는 것이 중요하다. 본인이 초대된 팀장은 실사원 열을 그대로 가져야 하고
+ * (파생 시야가 권한을 **깎으면** 안 된다), 그 순서가 뒤집히면 팀장은 자기가 초대된 설문에서도
+ * 결과코드를 못 쓴다.
+ *
+ * 소속 업체가 없으면 아무것도 열지 않는다. 0093 의 CHECK 가 그런 행을 막지만, 판정이 그
+ * 제약에 기대면 제약이 느슨해지는 날 조용히 열린다 — 코어도 자기 몫을 접는다.
+ *
+ * 배치 대기는 게스트와 같은 이유로 함께 막는다: 팀이 정해지기 전에는 아무도 못 연다(ADR-0006).
+ */
+function resolveFieldworkCapabilities(
+  subject: SurveyAccessSubject,
+  survey: SurveyAccessTarget,
+  participation: SurveyParticipation | null | undefined,
+  relation: SurveyAccessRelation | undefined,
+): ReadonlySet<SurveyCapability> {
+  if (survey.assignmentStatus === 'assignment_pending') return NONE;
+  if (subject.fieldworkOrgId === null) return NONE;
+  if (participation?.kind === 'fieldwork') return new Set(FIELDWORK_INVITED_CAPS);
+  if (subject.fieldworkRole === 'leader' && relation?.fieldworkOrgInvited === true) {
+    return new Set(FIELDWORK_ORG_VIEW_CAPS);
+  }
+  return NONE;
+}
+
+/**
  * capability + 게스트 탭 화이트리스트 — 판정의 완전한 결과 (순수).
  *
  * 두 축을 한 번에 돌려주는 이유는 입력이 같아서다. 탭을 따로 묻는 함수를 두면 화면 하나가
@@ -222,8 +308,9 @@ export function resolveSurveyAccess(
   subject: SurveyAccessSubject,
   survey: SurveyAccessTarget,
   participation?: SurveyParticipation | null,
+  relation?: SurveyAccessRelation,
 ): SurveyAccess {
-  const capabilities = resolveSurveyCapabilities(subject, survey, participation);
+  const capabilities = resolveSurveyCapabilities(subject, survey, participation, relation);
   if (subject.userType !== 'guest') return { capabilities, guestTabs: null };
   // 부여가 없으면 capability 도 비어 있다 — 탭만 열린 상태는 만들지 않는다.
   const guestTabs = capabilities.has('operations.view')
@@ -250,18 +337,50 @@ export class SurveyAccessError extends Error {
   }
 }
 
-/** 이 사람의 유효 소속을 읽어 판정 주체로 만든다. */
+/**
+ * 이 사람의 유효 소속을 읽어 판정 주체로 만든다.
+ *
+ * 유형마다 소속의 출처가 다르고, **자기 유형의 것만 읽는다** — 내부는 팀 멤버십, 실사는
+ * 업체·역할, 게스트는 아무것도. 관문이 도는 모든 요청이 지나는 자리라 유형 하나가 남의
+ * 조회를 끌고 오면 그 비용이 전 표면에 퍼진다.
+ *
+ * 실사의 업체·역할을 **세션이 아니라 DB 에서** 읽는 이유는 신선도다. 업체가 종료되거나
+ * 역할이 바뀌어도 세션은 그대로라, 세션에 실으면 낡은 값으로 파생 시야가 계속 선다.
+ */
 export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyAccessSubject> {
   // 내부 계정이 아니면 멤버십 자체가 금지다(스펙 §1) — 조회를 아낀다.
   const memberships =
     user.userType === 'internal' ? await getActiveTeamMemberships(user.id) : [];
+  const fieldwork =
+    user.userType === 'fieldwork' ? await loadFieldworkAffiliation(user.id) : null;
   return {
     userId: user.id,
     isSuperadmin: user.isSuperadmin,
     userType: user.userType,
     activeTeamIds: memberships.map((m) => m.teamId),
     leaderTeamIds: memberships.filter((m) => m.role === 'leader').map((m) => m.teamId),
+    fieldworkOrgId: fieldwork?.orgId ?? null,
+    fieldworkRole: fieldwork?.role ?? null,
   };
+}
+
+/**
+ * 실사 계정의 소속 업체·역할 — **활성 업체일 때만** 돌려준다.
+ *
+ * 종료된 업체 소속이면 null 이라 판정이 전부 닫힌다. 계정 상태와 별개 축이다: 재직 중인
+ * 계정이라도 업체가 닫혔으면 그 업체의 설문을 계속 볼 이유가 없다(티켓 24 가 재활성화를
+ * 막지만, 종료 시점에 이미 재직 중이던 계정은 없어도 방어선을 하나로 두지 않는다).
+ */
+async function loadFieldworkAffiliation(
+  userId: string,
+): Promise<{ orgId: string; role: FieldworkRole } | null> {
+  const [row] = await db
+    .select({ orgId: users.fieldworkOrgId, role: users.fieldworkRole })
+    .from(users)
+    .innerJoin(fieldworkOrgs, eq(fieldworkOrgs.id, users.fieldworkOrgId))
+    .where(and(eq(users.id, userId), eq(fieldworkOrgs.status, 'active')))
+    .limit(1);
+  return row?.orgId && row.role ? { orgId: row.orgId, role: row.role } : null;
 }
 
 /**
@@ -277,6 +396,10 @@ export async function loadSurveyAccess(
   user: SurveyAccessUser,
   surveyId: string,
 ): Promise<SurveyAccess> {
+  // 주체를 **먼저** 읽는다 — 실사 팀장의 파생 시야가 소속 업체를 조건으로 삼으므로, 그 값이
+  // 있어야 아래 EXISTS 를 세울 수 있다. 왕복 수는 그대로다(내부는 멤버십, 실사는 업체·역할).
+  const subject = await loadAccessSubject(user);
+
   const [row] = await db
     .select({
       teamId: surveys.teamId,
@@ -285,6 +408,10 @@ export async function loadSurveyAccess(
       assignmentStatus: surveys.assignmentStatus,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
+      // **실사 팀장에게만 켜지는 칸.** 내부·게스트 요청에는 상수 false 라 서브쿼리가 아예
+      // 실행 계획에 들어가지 않는다 — 관문은 전 요청이 지나는 자리라 남의 축의 비용을
+      // 짊어지면 안 된다.
+      fieldworkOrgInvited: fieldworkOrgInvitedColumn(subject),
     })
     .from(surveys)
     .leftJoin(surveyParticipants, participationJoin(user.id))
@@ -292,8 +419,32 @@ export async function loadSurveyAccess(
     .limit(1);
   if (!row) throw new SurveyAccessError('not_found');
 
-  const subject = await loadAccessSubject(user);
-  return resolveSurveyAccess(subject, row, toParticipation(row.participantKind, row.guestTabs));
+  return resolveSurveyAccess(subject, row, toParticipation(row.participantKind, row.guestTabs), {
+    fieldworkOrgInvited: row.fieldworkOrgInvited,
+  });
+}
+
+/**
+ * 이 설문에 **내 업체 소속원**이 초대돼 있는가 — 실사 팀장의 파생 시야 조건 (티켓 25).
+ *
+ * 팀장이 아니거나 실사가 아니면 상수 false 를 돌려준다. 조건을 코어가 아니라 여기서 거는
+ * 이유는 비용이다 — 이 컬럼은 관문이 도는 **모든** 요청의 SELECT 에 실리므로, 서브쿼리를
+ * 무조건 세우면 내부 사용자 전원이 실사 축의 값을 치른다.
+ *
+ * 조인 조건이 **업체**인 것이 파생 시야의 경계다. 초대는 개인 단위지만 팀장이 보는 범위는
+ * 업체 단위이고(ADR-0019), 여기서 업체를 빼면 타 업체 설문이 그대로 넘어온다.
+ */
+function fieldworkOrgInvitedColumn(subject: SurveyAccessSubject): SQL<boolean> {
+  if (subject.fieldworkRole !== 'leader' || subject.fieldworkOrgId === null) {
+    return sql<boolean>`false`;
+  }
+  return sql<boolean>`exists (
+    select 1 from ${surveyParticipants} sp
+    join ${users} u on u.id = sp.user_id
+    where sp.survey_id = ${surveys.id}
+      and sp.kind = 'fieldwork'
+      and u.fieldwork_org_id = ${subject.fieldworkOrgId}
+  )`;
 }
 
 /** 위의 capability 축만 필요한 호출부용 — 표면 대부분이 이쪽이다. */
@@ -364,6 +515,13 @@ export async function assertSurveyCapability(
  *
  * 없는 설문·삭제된 설문의 id 는 맵에 담기지 않는다 — 호출부가 `?? EMPTY` 로 받으면
  * denialReasonFor 가 not_found 를 돌려주므로 "없음" 과 "볼 수 없음" 이 같은 결론이 된다.
+ *
+ * **실사 팀장의 파생 시야는 여기서 서지 않는다**(티켓 25). 단건 로더가 설문마다 세우는
+ * `fieldworkOrgInvited` 를 배치는 계산하지 않으므로 팀장은 초대된 설문만 통과한다 — 즉
+ * 결과가 **좁은 쪽으로** 틀린다(거부이지 누출이 아니다). 오늘 배치의 유일한 소비자는 설문
+ * 담기이고 그것이 요구하는 `surveyGroup.manage` 는 실사 열에 없어 도달 자체가 없다.
+ * 실사가 지나는 배치 표면이 생기면 이 자리에 축을 함께 세울 것 — 조용히 「팀장만 안 되는」
+ * 화면이 된다.
  */
 export async function loadSurveyCapabilitiesBatch(
   user: SurveyAccessUser,
