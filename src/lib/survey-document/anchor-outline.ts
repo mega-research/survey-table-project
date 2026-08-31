@@ -18,6 +18,11 @@ export interface AnchorOutlineSection {
   label: string;
   /** 계층 깊이. 0 = 최상위 그룹. 화면이 들여쓰기에 쓴다. */
   depth: number;
+  /**
+   * 이 그룹의 **첫 구간**인가. 하위그룹이 그룹의 문항 사이에 끼면 한 그룹이 여러
+   * 구간으로 쪼개진다 — 머리(그룹 행)는 첫 구간에만 그린다.
+   */
+  isFirstRun: boolean;
   questions: AnchorOutlineQuestion[];
 }
 
@@ -87,23 +92,36 @@ export function buildAnchorOutline(
     };
   };
 
-  /** 그룹 하나를 구역으로 열고, 그 안을 인터리브 순서로 훑는다. */
+  /**
+   * 그룹 하나를 구역으로 열고, 그 안을 인터리브 순서로 훑는다.
+   *
+   * 하위그룹이 그 그룹의 문항 **사이**에 오면 구역을 거기서 끊고, 하위그룹을 먼저
+   * 낸 뒤 나머지 문항을 이어지는 구역으로 담는다. 한 구역에 몰아 담으면 하위그룹이
+   * 항상 뒤로 밀려, 89~96번을 담은 하위그룹이 97번 뒤에 나오게 된다.
+   */
   const walkGroup = (group: GroupInput, depth: number) => {
-    const section: AnchorOutlineSection = {
-      groupId: group.id,
-      label: group.name,
-      depth,
-      questions: [],
+    const openRun = (isFirstRun: boolean): AnchorOutlineSection => {
+      const run: AnchorOutlineSection = {
+        groupId: group.id,
+        label: group.name,
+        depth,
+        isFirstRun,
+        questions: [],
+      };
+      sections.push(run);
+      return run;
     };
-    sections.push(section);
+
+    let run = openRun(true);
     for (const child of getInterleavedChildren(group.id, questionRows, groupRows)) {
       if (child.kind === 'subgroup') {
         const sub = byGroupId.get(child.data.id);
         if (sub) walkGroup(sub, depth + 1);
+        run = openRun(false);
         continue;
       }
       const item = toItem(child.data.id);
-      if (item) section.questions.push(item);
+      if (item) run.questions.push(item);
     }
   };
 
@@ -121,10 +139,17 @@ export function buildAnchorOutline(
     .map((q) => toItem(q.id))
     .filter((item): item is AnchorOutlineQuestion => item !== null);
   if (ungrouped.length > 0) {
-    sections.push({ groupId: null, label: '그룹 없음', depth: 0, questions: ungrouped });
+    sections.push({
+      groupId: null,
+      label: '그룹 없음',
+      depth: 0,
+      isFirstRun: true,
+      questions: ungrouped,
+    });
   }
 
-  return sections;
+  // 하위그룹 뒤에 문항이 없으면 이어지는 구역이 비어 남는다 — 머리도 없으므로 버린다.
+  return sections.filter((section) => section.isFirstRun || section.questions.length > 0);
 }
 
 /**

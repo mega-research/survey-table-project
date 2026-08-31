@@ -38,7 +38,9 @@ describe('buildAnchorOutline', () => {
 
   it('문항이 없는 그룹도 구역으로 남는다 — 그룹에 영역을 붙일 수 있어야 한다', () => {
     const outline = buildAnchorOutline([{ id: 'g0', name: '표지', order: -1 }], []);
-    expect(outline).toEqual([{ groupId: 'g0', label: '표지', depth: 0, questions: [] }]);
+    expect(outline).toEqual([
+      { groupId: 'g0', label: '표지', depth: 0, isFirstRun: true, questions: [] },
+    ]);
   });
 
   describe('하위그룹', () => {
@@ -58,14 +60,18 @@ describe('buildAnchorOutline', () => {
       { id: 'qz1', groupId: 'z1', order: 0, questionCode: 'H9', title: '자금지원 제도' },
     ];
 
-    it('하위그룹은 부모 바로 뒤에 온다 — 자기 order 로 앞으로 튀지 않는다', () => {
+    it('하위그룹은 부모 안에 온다 — 자기 order 로 목록 앞으로 튀지 않는다', () => {
+      // z1 의 order 는 0 이지만 그것은 z 안에서의 순서다. 평평하게 정렬하면
+      // a·b 보다 앞으로 올라온다.
       const outline = buildAnchorOutline(nested, nestedQuestions);
-      expect(outline.map((s) => s.groupId)).toEqual(['a', 'b', 'z', 'z1']);
+      // z 는 하위그룹 앞뒤로 쪼개진다(qz 가 z1 뒤에 온다) — 머리는 첫 구간에만.
+      expect(outline.map((s) => s.groupId)).toEqual(['a', 'b', 'z', 'z1', 'z']);
+      expect(outline.map((s) => s.isFirstRun)).toEqual([true, true, true, true, false]);
     });
 
     it('하위그룹은 깊이를 갖는다', () => {
       const outline = buildAnchorOutline(nested, nestedQuestions);
-      expect(outline.map((s) => s.depth)).toEqual([0, 0, 0, 1]);
+      expect(outline.map((s) => s.depth)).toEqual([0, 0, 0, 1, 0]);
     });
 
     it('문항은 자기가 실제로 속한 구역에 담긴다', () => {
@@ -73,6 +79,43 @@ describe('buildAnchorOutline', () => {
       const byId = new Map(outline.map((s) => [s.groupId, s.questions.map((q) => q.id)]));
       expect(byId.get('z')).toEqual(['qz']);
       expect(byId.get('z1')).toEqual(['qz1']);
+    });
+
+    describe('하위그룹이 그룹의 문항 앞에 올 때', () => {
+      // 실제 조사표가 이 모양이다 — 하위그룹이 89~96 번을 담고 그 뒤에 97·98 이 온다.
+      // 한 구역에 몰아 담으면 하위그룹이 늘 뒤로 밀린다.
+      const groupsWithSub = [
+        { id: 'h', name: 'H. 정책 인식', order: 0 },
+        { id: 'h1', name: '지원정책별 이용 현황', order: 0, parentGroupId: 'h' },
+      ];
+      const withSub = [
+        { id: 'sub1', groupId: 'h1', order: 0, questionCode: 'F_1_1', title: '자금지원' },
+        { id: 'sub2', groupId: 'h1', order: 1, questionCode: 'F_1_2', title: '인력지원' },
+        { id: 'own1', groupId: 'h', order: 1, questionCode: 'F_2', title: '가장 확충이 필요한' },
+        { id: 'own2', groupId: 'h', order: 2, questionCode: 'F_3', title: '가장 어려운 점' },
+      ];
+
+      it('하위그룹이 먼저 나오고 그룹의 문항이 뒤따른다', () => {
+        const outline = buildAnchorOutline(groupsWithSub, withSub);
+        expect(
+          outline.map((s) => [s.groupId, s.questions.map((q) => q.label)]),
+        ).toEqual([
+          ['h', []],
+          ['h1', ['F_1_1', 'F_1_2']],
+          ['h', ['F_2', 'F_3']],
+        ]);
+      });
+
+      it('그룹 머리는 첫 구간에만 그린다', () => {
+        const outline = buildAnchorOutline(groupsWithSub, withSub);
+        expect(outline.map((s) => s.isFirstRun)).toEqual([true, true, false]);
+      });
+
+      it('하위그룹 뒤에 문항이 없으면 빈 구간을 남기지 않는다', () => {
+        const onlySub = withSub.filter((q) => q.groupId === 'h1');
+        const outline = buildAnchorOutline(groupsWithSub, onlySub);
+        expect(outline.map((s) => s.groupId)).toEqual(['h', 'h1']);
+      });
     });
   });
 });

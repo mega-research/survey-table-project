@@ -357,9 +357,12 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
                 질문 편집 탭에서 그룹과 질문을 먼저 만드세요.
               </p>
             )}
-            {outline.map((section) => (
-              <div key={section.groupId ?? '__ungrouped__'} className="border-b border-gray-100">
-                {section.groupId ? (
+            {outline.map((section, sectionIndex) => (
+              <div
+                key={`${section.groupId ?? '__ungrouped__'}#${sectionIndex}`}
+                className="border-b border-gray-100"
+              >
+                {section.groupId && section.isFirstRun ? (
                   <TargetRow
                     label={section.label}
                     depth={section.depth}
@@ -375,7 +378,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
                     }
                     onRemoveAnchor={(id) => void removeAnchor.mutateAsync(id)}
                   />
-                ) : (
+                ) : section.groupId ? null : (
                   <div className="px-3 py-2 text-xs font-medium text-gray-500">{section.label}</div>
                 )}
                 {section.questions.map((question) => (
