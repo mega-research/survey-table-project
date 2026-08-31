@@ -34,6 +34,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "pretest:integration": "tsx scripts/check-test-db-schema.ts",
     "test:integration": "cross-env RUN_REALDB=1 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres vitest run"
   },
   "dependencies": {
