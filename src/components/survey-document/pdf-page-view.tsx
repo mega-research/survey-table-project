@@ -50,6 +50,11 @@ interface Props {
    * 쪽을 감싼 상자에 붙일 마우스 핸들러 — 영역 드래그용.
    * overlay 와 **같은 좌표 원점**을 갖는 요소에 붙는다(그래서 캔버스가 아니라 감싼 상자다) —
    * 드래그로 만든 사각형과 그려진 사각형이 어긋나지 않는 것이 여기에 걸려 있다.
+   *
+   * `className` 은 덮어쓰지 않고 **합쳐진다**. 이 상자의 `relative mx-auto w-fit` 은
+   * 좌표계 그 자체다 — `relative` 가 빠지면 실측 원점(offsetParent)이 스크롤 상자로
+   * 옮겨가고, `mx-auto w-fit` 이 빠지면 상자가 전폭이 되어 왼쪽 끝이 쪽의 왼쪽 끝과
+   * 달라진다. 둘 다 드래그 좌표를 조용히 어긋나게 한다.
    */
   surfaceProps?: React.HTMLAttributes<HTMLDivElement>;
   className?: string;
@@ -71,6 +76,10 @@ export function PdfPageView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const holderRef = useRef<HTMLDivElement>(null);
   const renderToken = useRef(0);
+
+  // className 은 합치고 나머지 핸들러만 펼친다 — 통째로 펼치면 좌표계를 만드는
+  // 레이아웃 클래스가 사라진다 (JSX 는 뒤에 온 prop 이 이긴다).
+  const { className: surfaceClassName, ...surfaceHandlers } = surfaceProps ?? {};
 
   // 문서는 ref 가 아니라 상태로 든다 — 렌더 콜백이 "문서가 열렸다"를
   // 의존성으로 알아야 하는데, ref 로 두면 그 신호를 가짜 의존성으로 흉내내게 된다.
@@ -240,7 +249,10 @@ export function PdfPageView({
       </div>
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto" style={{ padding: PAD }}>
-        <div className="relative mx-auto w-fit" {...surfaceProps}>
+        <div
+          {...surfaceHandlers}
+          className={cn('relative mx-auto w-fit', surfaceClassName)}
+        >
           <div
             ref={holderRef}
             className="relative bg-white shadow-[0_4px_18px_rgba(0,0,0,.35)]"
