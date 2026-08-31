@@ -89,7 +89,11 @@ import {
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
 import { resolveSplitStartIndex, isSplitStep } from '@/lib/group-ordering';
-import { resolveAnchorOwnerId } from '@/lib/survey-document/anchor-outline';
+import {
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/lib/survey-document/anchor-outline';
 import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
@@ -552,22 +556,79 @@ function SurveyResponseFlowActive({
   );
   const isSplit = isSplitStep(splitStartIndex, currentStepIndex);
 
+  // 대상별 쪽 목록 — 초점 해석의 유일한 입력. 조사표를 모르는 순수 함수가 이것만 본다.
+  const anchorPagesOf = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const anchor of documentView?.anchors ?? []) {
+      const list = map.get(anchor.ownerId);
+      if (list) list.push(anchor.page);
+      else map.set(anchor.ownerId, [anchor.page]);
+    }
+    return (ownerId: string) => map.get(ownerId) ?? [];
+  }, [documentView]);
+
   // 좌측에 **그리는** 대상은 조건부 표시로 살아남은 항목 것만이다.
   // 레이아웃은 구조에서, 표시는 조건에서 — 두 층을 섞지 않는다.
-  const anchoredOwnerIds = useMemo(
-    () => new Set((documentView?.anchors ?? []).map((a) => a.ownerId)),
-    [documentView],
+  const anchoredStepQuestions = useMemo(
+    () =>
+      currentStepQuestions.filter(
+        (q) =>
+          resolveAnchorOwnerId(
+            { kind: 'question', id: q.id, groupId: q.groupId ?? null },
+            (ownerId) => anchorPagesOf(ownerId).length > 0,
+          ) !== null,
+      ),
+    [currentStepQuestions, anchorPagesOf],
   );
-  const activeAnchorOwnerId = useMemo(() => {
-    for (const question of currentStepQuestions) {
-      const owner = resolveAnchorOwnerId(
-        { kind: 'question', id: question.id, groupId: question.groupId ?? null },
-        (ownerId) => anchoredOwnerIds.has(ownerId),
+
+  // 지금 고른 문항. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
+  const [anchorSelection, setAnchorSelection] = useState<{ questionId: string; nonce: number } | null>(
+    null,
+  );
+  const selectAnchorQuestion = useCallback((questionId: string) => {
+    setAnchorSelection((prev) =>
+      prev?.questionId === questionId ? prev : { questionId, nonce: (prev?.nonce ?? 0) + 1 },
+    );
+  }, []);
+
+  // 페이지가 바뀌면 그 페이지의 첫 앵커 문항으로 초점을 옮긴다 (렌더 중 조정).
+  const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
+  const selectionIsOnThisStep = anchorSelection
+    ? anchoredStepQuestions.some((q) => q.id === anchorSelection.questionId)
+    : false;
+  if (defaultAnchorQuestionId && !selectionIsOnThisStep) {
+    setAnchorSelection({
+      questionId: defaultAnchorQuestionId,
+      nonce: (anchorSelection?.nonce ?? 0) + 1,
+    });
+  }
+
+  const anchorFocus = useMemo(() => {
+    if (!anchorSelection) return null;
+    const question = currentStepQuestions.find((q) => q.id === anchorSelection.questionId);
+    if (!question) return null;
+    const focus = resolveAnchorFocus(
+      { id: question.id, groupId: question.groupId ?? null },
+      anchorPagesOf,
+    );
+    return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
+  }, [anchorSelection, currentStepQuestions, anchorPagesOf]);
+
+  // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
+  const handleAnchorOwnerSelect = useCallback(
+    (ownerId: string) => {
+      const questionId = resolveQuestionForOwner(
+        ownerId,
+        currentStepQuestions.map((q) => ({ id: q.id, groupId: q.groupId ?? null })),
       );
-      if (owner) return owner;
-    }
-    return null;
-  }, [currentStepQuestions, anchoredOwnerIds]);
+      if (!questionId) return;
+      selectAnchorQuestion(questionId);
+      document
+        .querySelector(`[data-question-id="${questionId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [currentStepQuestions, selectAnchorQuestion],
+  );
 
   // 모바일 화면 감지 (matchMedia — resize 루프 방지)
   const isMobile = useMediaQuery('(max-width: 767px)');
@@ -1245,7 +1306,8 @@ function SurveyResponseFlowActive({
               url={documentView.url}
               pageCount={documentView.pageCount}
               anchors={documentView.anchors}
-              activeOwnerId={activeAnchorOwnerId}
+              focus={anchorFocus}
+              onOwnerSelect={handleAnchorOwnerSelect}
             />
           ) : undefined
         }
@@ -1338,6 +1400,7 @@ function SurveyResponseFlowActive({
         )}
         <PageStepView
           step={currentStep}
+          {...(isSplit ? { onQuestionFocus: selectAnchorQuestion, showBulkChoice: true } : {})}
           responses={responses}
           questions={questions}
           groups={groups}

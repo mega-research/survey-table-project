@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { anchorQuestionLabel, buildAnchorOutline, resolveAnchorOwnerId } from './anchor-outline';
+import {
+  anchorQuestionLabel,
+  buildAnchorOutline,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from './anchor-outline';
 
 describe('buildAnchorOutline', () => {
   const groups = [
@@ -79,5 +85,57 @@ describe('resolveAnchorOwnerId', () => {
 
   it('그룹은 폴백하지 않는다 — 자기 영역이 전부다', () => {
     expect(resolveAnchorOwnerId({ kind: 'group', id: 'g1' }, has(['q1']))).toBeNull();
+  });
+});
+
+describe('resolveAnchorFocus', () => {
+  const pages = (map: Record<string, number[]>) => (id: string) => map[id] ?? [];
+
+  it('자기 영역이 있으면 자기를 켜고 소속 그룹을 맥락으로 함께 그린다', () => {
+    const focus = resolveAnchorFocus(
+      { id: 'q1', groupId: 'g1' },
+      pages({ q1: [5], g1: [4, 5] }),
+    );
+    expect(focus).toEqual({ ownerId: 'q1', contextId: 'g1', page: 5 });
+  });
+
+  it('자기 영역이 없으면 소속 그룹으로 떨어진다 — 맥락도 그 그룹이다', () => {
+    const focus = resolveAnchorFocus({ id: 'q1', groupId: 'g1' }, pages({ g1: [4, 5] }));
+    expect(focus).toEqual({ ownerId: 'g1', contextId: 'g1', page: 4 });
+  });
+
+  it('한 대상에 사각형이 여러 쪽이면 가장 앞선 쪽으로 간다', () => {
+    // 블록이 3쪽·4쪽에 걸쳐 있으면 3쪽부터 순서대로 훑게 된다
+    const focus = resolveAnchorFocus({ id: 'q1', groupId: null }, pages({ q1: [7, 3, 4] }));
+    expect(focus?.page).toBe(3);
+  });
+
+  it('그룹에 영역이 없으면 맥락을 그리지 않는다', () => {
+    const focus = resolveAnchorFocus({ id: 'q1', groupId: 'g1' }, pages({ q1: [2] }));
+    expect(focus).toEqual({ ownerId: 'q1', contextId: null, page: 2 });
+  });
+
+  it('자기에게도 그룹에도 영역이 없으면 켤 것이 없다', () => {
+    expect(resolveAnchorFocus({ id: 'q1', groupId: 'g1' }, pages({}))).toBeNull();
+  });
+});
+
+describe('resolveQuestionForOwner', () => {
+  const visible = [
+    { id: 'q1', groupId: 'g1' },
+    { id: 'q2', groupId: 'g1' },
+    { id: 'q3', groupId: 'g2' },
+  ];
+
+  it('문항 사각형이면 그 문항을 고른다', () => {
+    expect(resolveQuestionForOwner('q2', visible)).toBe('q2');
+  });
+
+  it('그룹 사각형이면 그 그룹의 표시되는 첫 문항을 고른다', () => {
+    expect(resolveQuestionForOwner('g1', visible)).toBe('q1');
+  });
+
+  it('그 그룹의 문항이 조건부로 전부 숨었으면 고를 것이 없다', () => {
+    expect(resolveQuestionForOwner('g2', [{ id: 'q1', groupId: 'g1' }])).toBeNull();
   });
 });

@@ -95,3 +95,61 @@ export function resolveAnchorOwnerId(
   }
   return null;
 }
+
+/**
+ * 지금 고른 문항 하나가 조사표에 요구하는 것 전부.
+ *
+ * 셋이 따로 다니면 어긋난다 — 어디를 켜는가(ownerId), 무엇을 맥락으로 함께
+ * 그리는가(contextId), 어느 쪽으로 이동하는가(page). 한 덩어리로 묶어 넘긴다.
+ */
+export interface AnchorFocus {
+  /** 켤 대상 — 자기 영역이 있으면 문항, 없으면 소속 그룹. */
+  ownerId: string;
+  /** 함께 옅게 그릴 맥락 — 언제나 소속 그룹. ownerId 와 같으면 맥락이 곧 초점이다. */
+  contextId: string | null;
+  /**
+   * 이동할 쪽.
+   *
+   * **한 대상에 사각형이 여럿이고 서로 다른 쪽에 있을 때의 규칙**: 초점 대상의
+   * 사각형 중 **가장 앞선 쪽**으로 간다. 블록이 3쪽·4쪽에 걸쳐 있으면 3쪽으로
+   * 가서 순서대로 훑게 되고, 뒤쪽으로 보내면 앞부분을 놓친다.
+   */
+  page: number;
+}
+
+/**
+ * 문항 하나에서 초점을 푼다. 켤 것이 아무것도 없으면 null.
+ *
+ * 문항에 자기 영역이 없으면 소속 그룹의 영역이 대신 켜진다 —
+ * [[resolveAnchorOwnerId]] 와 같은 폴백 규칙이다.
+ */
+export function resolveAnchorFocus(
+  target: { id: string; groupId: string | null },
+  pagesOf: (ownerId: string) => readonly number[],
+): AnchorFocus | null {
+  const ownerId = resolveAnchorOwnerId(
+    { kind: 'question', id: target.id, groupId: target.groupId },
+    (id) => pagesOf(id).length > 0,
+  );
+  if (!ownerId) return null;
+  const pages = pagesOf(ownerId);
+  const page = pages.reduce((min, p) => (p < min ? p : min), pages[0] ?? 1);
+  const contextId =
+    target.groupId && pagesOf(target.groupId).length > 0 ? target.groupId : null;
+  return { ownerId, contextId, page };
+}
+
+/**
+ * 조사표에서 사각형을 눌렀을 때 오른쪽에서 고를 문항. 없으면 null.
+ *
+ * 문항 사각형이면 그 문항, 그룹 사각형이면 그 그룹의 **표시되는 첫 문항**이다 —
+ * 그룹은 답하는 단위가 아니라 묶음이라 커서를 놓을 자리가 그 안에 있어야 한다.
+ */
+export function resolveQuestionForOwner(
+  ownerId: string,
+  visibleQuestions: readonly { id: string; groupId: string | null }[],
+): string | null {
+  const self = visibleQuestions.find((q) => q.id === ownerId);
+  if (self) return self.id;
+  return visibleQuestions.find((q) => q.groupId === ownerId)?.id ?? null;
+}
