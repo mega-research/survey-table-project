@@ -4,7 +4,19 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 25 **실사 초대 + 실사 홈** — 실사 열이 처음
+> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 26 **실사 조사 대상 화면** — 초대가 실제로 여는
+> 화면이 붙었다. `/fieldwork/surveys/[surveyId]` 아래 조사 대상·응답 현황 둘이고 **탭은
+> 고정**이다(게스트의 화이트리스트에 해당하는 축이 실사에는 없다). 조사 대상은 **원본 전체**
+> 다 — 암호화 PII 를 복호해 평문으로 그린다. 게스트 투영이 마스킹 힌트를 주는 자리와 정확히
+> 대칭이고 그 차이가 두 콘솔의 정의다. **초대 토큰은 본인이 초대된 실사에게만 실린다** —
+> 팀장의 파생 시야에서는 투영이 null 로 접는다: 화면에서 버튼만 감추면 토큰이 payload 로
+> 나가고 그 링크는 `pub` 경로라 서버가 다시 못 막는다(ADR-0019 「본인도 초대돼야 한다」).
+> **메모·연락 방법에 좁은 표면 하나**(`contacts.targets.setMemo`)를 세웠다 — 형제 `update` 와
+> 요구 capability 가 달라야(`contacts.writeAttempts` ↔ `contacts.manage`) 실사에게 명단 수정이
+> 함께 열리지 않는다. 마이그레이션 0096(컨택 작성자 FK 를 `auth.users` → `public.users`).
+> 직전: 티켓 25 실사 초대 + 실사 홈)
+>
+> 티켓 25 **실사 초대 + 실사 홈** — 실사 열이 처음
 > 열렸다. 초대 열은 `survey.view · operations.view · contacts.view · contacts.writeAttempts`
 > 이고 **조사 대상 원본**에 닿는다(게스트의 마스킹 원칙과 갈리는 지점 — 대리 실사라는 업무가
 > 연락처를 전제한다, ADR-0019). **실사 팀장의 파생 시야**는 그 열에서 결과코드 쓰기 한 칸만
@@ -253,8 +265,10 @@ src/
 │   ├── guest-console/          # 게스트 콘솔 (티켓 22) — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
 │   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
 │   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
-│   └── fieldwork-console/      # 실사 홈 (티켓 25, .pen FLOW 10-1) — fieldwork-home-view 진입점
-│                               # 초대 설문 표 + 팀장 전용 「업체 전체」 세그먼트. 조사 대상은 티켓 26
+│   └── fieldwork-console/      # 실사 콘솔 (티켓 25·26, .pen FLOW 10-1·10-2) — fieldwork-home-view 진입점
+│                               # 초대 설문 표 + 팀장 전용 「업체 전체」 세그먼트
+│                               # + fieldwork-header-bar(헤더)·fieldwork-survey-header(서브헤더+고정 탭 둘)
+│                               # + fieldwork-contacts-table(원본 표 — 복호 평문·결과 기록·메모 저장)
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -610,7 +624,7 @@ contact_pii                # 컨택 PII 분리 저장 (암호화)
 
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
-├── resultCode, note, createdBy
+├── resultCode, note, createdBy   # createdBy FK → public.users (0096, 티켓 26 이 채우기 시작)
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
 ```
 
@@ -754,6 +768,11 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
                                   # 넷은 전부 탭 화이트리스트가 연다 (.pen FLOW 5-3)
 /fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)
                                   # 실사원은 초대 설문만, 실사 팀장은 「업체 전체」 세그먼트로 소속원 초대까지
+/fieldwork/surveys/[surveyId]     # 탭 없는 주소 — 조사 대상으로 리다이렉트
+/fieldwork/surveys/[surveyId]/contacts   # 조사 대상 — 원본 전체(복호 PII)·결과 기록·메모 (티켓 26, .pen 10-2)
+/fieldwork/surveys/[surveyId]/overview   # 응답 현황 — 운영 위젯 그대로
+                                  # 탭은 **고정**이다(게스트의 화이트리스트 축이 없다). 관문은
+                                  # assertFieldworkSurveyPageAccess 이고 leaf 마다 자기 capability 를 준다
 ```
 
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
@@ -1312,8 +1331,38 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     FORBIDDEN, 초대 설문에서 열리는 capability 가 정확히 넷)와 `fieldwork-invites.realdb.test.ts`
     (**업체 둘을 심는 것이 뼈대** — 업체가 하나뿐인 시드에서는 조인 조건이 있든 없든 결과가
     같아 「타 업체는 안 보인다」를 증명하지 못한다. 대칭까지 함께 잰다).
-  - **스펙 §6 의 「메모(memo·contactMethod) 쓰기」는 아직 열려 있지 않다** — 그 두 필드가
-    명단 수정(`attrs`)과 같은 표면에 있어 좁은 표면이 필요하고, 소비할 화면은 티켓 26 이다.
+- **실사 콘솔은 초대가 여는 화면 둘이고 탭은 고정이다**(티켓 26, 스펙 §6, ADR-0019,
+  .pen FLOW 10-2). `/fieldwork/surveys/[surveyId]` 아래 조사 대상·응답 현황이며, 게스트의
+  탭 화이트리스트에 해당하는 축이 **없다** — 초대되면 둘 다 열린다. 관문
+  `assertFieldworkSurveyPageAccess` 가 그 짝이고 **leaf 마다 자기 capability 를 준다**
+  (조사 대상 `contacts.view` · 응답 현황 `operations.view`). 오늘은 실사 열에서 두 칸이 함께
+  켜져 결과가 같지만, 물어야 할 것을 묻지 않으면 한쪽이 닫히는 날 원본 연락처가 열린 채로
+  남는다. 거부는 전부 notFound 이고 사유를 갈라 말하지 않는다.
+  - **조사 대상은 원본 전체**다 — 암호화 PII 를 페이지 단위로 복호해 평문으로 그린다
+    (`read-models/fieldwork-contacts`). 게스트 투영이 마스킹 힌트를 주는 자리와 정확히
+    대칭이고, 그 차이가 두 콘솔의 정의다. 컬럼 스킴은 **라벨·순서에만** 쓰고 `hidden` 은
+    무시한다(「실사용 스킴 없음」은 따로 설정할 스킴을 두지 않는다는 뜻이지 담당 연구원의
+    배치를 버린다는 뜻이 아니다). 메일 열은 아예 뺀다. 스킴이 담지 못한 attrs 키는
+    **설문 전체**에서 뽑는다 — 페이지 행에서 뽑으면 표 머리가 페이지·검색어마다 흔들린다.
+  - **초대 토큰은 본인이 초대된 실사에게만 실린다**(`canProxyRespond`). 팀장의 파생 시야에서는
+    투영이 null 로 접고 화면은 판정을 다시 하지 않는다 — 버튼만 감추면 토큰이 RSC payload 로
+    나가고, 그 링크는 `pub` 경로라 서버가 다시 못 막는다. ADR-0019 의 「본인이 대리 응답·
+    결과코드를 입력하려면 본인도 초대돼야 한다」는 **투영에서만** 강제된다.
+  - **메모·연락 방법은 좁은 표면 하나**다(`contacts.targets.setMemo`, 티켓 25 가 넘긴 항목).
+    형제 `targets.update` 와 요구 capability 가 다른 것이 존재 이유다 —
+    `contacts.writeAttempts` ↔ `contacts.manage`. 두 필드를 `update` 에 옵셔널로 얹으면 한
+    표면이 두 자격을 지고 실사에게 명단 수정이 함께 열린다. 서비스도 `attrs`·PII·group_value 를
+    건드리지 않는다. 화면의 저장 버튼을 회차와 가른 것도 같은 축이다 — 회차는 누적, 메모는
+    덮어쓰기라 한 버튼이면 메모만 고치려다 회차가 쌓인다.
+  - **작성자는 이 티켓이 처음 채웠다**(0096). `contact_attempts.created_by` 와
+    `contact_uploads.uploaded_by` 의 FK 가 아직 `auth.users` 를 가리켜 **채울 수 없는
+    컬럼**이었다(티켓 01·02 가 계정을 `public.users` 로 옮긴 뒤로). 값을 넣으면 곧바로 FK
+    위반이라 `addAttempt` 는 아예 쓰지 않고 있었다.
+  - 응답 현황은 **운영 위젯을 그대로** 쓴다(실사와 담당자가 같은 숫자를 봐야 한다). 컨택 표만
+    새로 짠 이유는 게스트 콘솔과 같다 — 저쪽 표는 헤더 필터 팝오버가 RPC 를 당기고 업로드·
+    메일 진입점을 함께 그린다.
+  - 음성 검증은 `fieldwork-contacts.realdb.test.ts` — 복호 평문·작성자·파티션 고정·파생 시야의
+    토큰 null·차단 표면. 암호화·INSERT·WHERE 라 목으로는 무엇이든 통과한다.
 - **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
   `fieldwork_orgs`(0093)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
   테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
