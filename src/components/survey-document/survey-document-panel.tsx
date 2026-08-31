@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import { AlertCircle, FileText, MapPin, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, FileText, MapPin, Pencil, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -22,6 +22,8 @@ import type { NormRect } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
 import { useSurveySync } from '@/hooks/use-survey-sync';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
+
+import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
 
 import { AnchorCanvas, type CanvasRegion } from './anchor-canvas';
 
@@ -60,6 +62,9 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
   const isDirty = useSurveyBuilderStore((s) => s.isDirty);
   const { saveSurvey } = useSurveySync();
   const [isSavingBeforeAnchor, setIsSavingBeforeAnchor] = useState(false);
+  // 이름·문항코드·그룹 할당은 질문 편집기의 일이다. 조사표 탭에서 그 화면을 다시
+  // 만들지 않고 **같은 편집기를 여기서 연다** — 탭을 오가며 질문을 다시 찾게 하지 않는다.
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
@@ -84,6 +89,17 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
       ),
     [groups, questions],
   );
+
+  /** 라벨이 문항코드라 무엇인지 안 보일 때 쓸 보조 문장. 코드가 없으면 null. */
+  const subLabelOf = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const question of questions) {
+      const code = question.questionCode?.trim();
+      const title = question.title?.trim() ?? '';
+      map.set(question.id, code && title ? title : null);
+    }
+    return map;
+  }, [questions]);
 
   const labelOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -336,8 +352,10 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
               </div>
             )}
             <div className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
-              대상을 골라 <b>영역 지정</b>을 누르고 조사표 위를 드래그하세요.
+              대상 오른쪽 <b>핀</b>을 누르고 조사표 위를 드래그하면 영역이 잡힙니다.
+              쪽 칩(예: <span className="tabular-nums">3쪽 ×</span>)을 누르면 그 영역이 지워집니다.
               <br />
+              <b>연필</b>은 질문 이름·문항코드·그룹 할당을 엽니다.
               문항에 영역을 주지 않으면 소속 그룹의 영역으로 떨어집니다.
             </div>
             {outline.length === 0 && (
@@ -369,7 +387,9 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
                   <TargetRow
                     key={question.id}
                     label={question.label}
+                    subLabel={subLabelOf.get(question.id) ?? null}
                     isGroup={false}
+                    onEdit={() => setEditingQuestionId(question.id)}
                     selected={selected?.id === question.id}
                     anchorPages={(anchorsByOwner.get(question.id) ?? []).map((a) => a.page)}
                     anchorIds={(anchorsByOwner.get(question.id) ?? []).map((a) => a.id)}
@@ -387,12 +407,20 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
           </div>
         </div>
       )}
+
+      <QuestionEditModal
+        questionId={editingQuestionId}
+        isOpen={!!editingQuestionId}
+        onClose={() => setEditingQuestionId(null)}
+      />
     </div>
   );
 }
 
 interface TargetRowProps {
   label: string;
+  /** 라벨이 문항코드일 때 보조로 보여줄 문장. 없으면 null. */
+  subLabel?: string | null;
   isGroup: boolean;
   selected: boolean;
   anchorPages: number[];
@@ -400,10 +428,20 @@ interface TargetRowProps {
   onSelect: () => void;
   onDraw: () => void;
   onRemoveAnchor: (anchorId: string) => void;
+  /** 질문 행에만 있다 — 이름·문항코드·그룹 할당은 질문 편집기의 일이다. */
+  onEdit?: (() => void) | undefined;
 }
 
+/**
+ * 대상 한 줄.
+ *
+ * 버튼을 **hover 로 숨기지 않는다.** 처음에는 그렇게 만들었는데, 조사표를 처음 여는
+ * 사람에게는 없는 기능이나 마찬가지였다 — 지정·삭제 버튼이 보이지 않는다는 것이
+ * 실사용에서 가장 먼저 나온 말이다. 밀도보다 발견 가능성이 앞선다.
+ */
 function TargetRow({
   label,
+  subLabel = null,
   isGroup,
   selected,
   anchorPages,
@@ -411,11 +449,12 @@ function TargetRow({
   onSelect,
   onDraw,
   onRemoveAnchor,
+  onEdit,
 }: TargetRowProps) {
   return (
     <div
       className={cn(
-        'group flex items-start gap-1 px-3 py-1.5',
+        'flex items-start gap-1 px-3 py-1.5',
         isGroup ? 'bg-gray-50' : 'pl-6',
         selected && 'bg-blue-50',
       )}
@@ -423,40 +462,62 @@ function TargetRow({
       <button
         type="button"
         onClick={onSelect}
-        className={cn(
-          'min-w-0 flex-1 truncate text-left text-xs',
-          isGroup ? 'font-semibold text-gray-800' : 'text-gray-700',
-        )}
-        title={label}
+        className="min-w-0 flex-1 text-left"
+        title={subLabel ? `${label} — ${subLabel}` : label}
       >
-        {label}
+        <span
+          className={cn(
+            'block truncate text-xs',
+            isGroup ? 'font-semibold text-gray-800' : 'text-gray-700',
+          )}
+        >
+          {label}
+        </span>
+        {subLabel && (
+          <span className="block truncate text-[10px] text-gray-400">{subLabel}</span>
+        )}
       </button>
-      <div className="flex shrink-0 items-center gap-1">
+
+      <div className="flex shrink-0 items-center gap-0.5">
         {anchorIds.map((anchorId, index) => (
           <button
             key={anchorId}
             type="button"
             onClick={() => onRemoveAnchor(anchorId)}
             title={`${anchorPages[index]}쪽 영역 지우기`}
+            aria-label={`${anchorPages[index]}쪽 영역 지우기`}
             className={cn(
-              'flex items-center gap-0.5 rounded px-1 text-[10px] tabular-nums',
+              'flex items-center gap-0.5 rounded border px-1 text-[10px] tabular-nums transition-colors',
               isGroup
-                ? 'bg-blue-100 text-blue-700 hover:bg-red-100 hover:text-red-700'
-                : 'bg-amber-100 text-amber-700 hover:bg-red-100 hover:text-red-700',
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-amber-200 bg-amber-50 text-amber-700',
+              'hover:border-red-300 hover:bg-red-50 hover:text-red-700',
             )}
           >
-            {anchorPages[index]}
+            {anchorPages[index]}쪽
             <X className="h-2.5 w-2.5" />
           </button>
         ))}
         <button
           type="button"
           onClick={onDraw}
-          title="영역 지정"
-          className="rounded p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-700"
+          title="영역 지정 — 누른 뒤 조사표 위를 드래그"
+          aria-label="영역 지정"
+          className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
         >
           <MapPin className="h-3 w-3" />
         </button>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            title="질문 편집 — 이름·문항코드·그룹 할당"
+            aria-label="질문 편집"
+            className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </div>
   );
