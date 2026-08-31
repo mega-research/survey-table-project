@@ -16,6 +16,7 @@ import { SurveyResponseHeader } from '@/components/survey-response/survey-respon
 import { SurveyResponseLayout } from '@/components/survey-response/survey-response-layout';
 import { ResponseDocumentPane } from '@/components/survey-document/response-document-pane';
 import {
+  DesktopOnlyScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
   SurveyErrorScreen,
@@ -89,6 +90,7 @@ import {
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
 import { resolveSplitStartIndex, isSplitStep } from '@/lib/group-ordering';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
 import {
   resolveAnchorFocus,
   resolveAnchorOwnerId,
@@ -632,6 +634,10 @@ function SurveyResponseFlowActive({
 
   // 모바일 화면 감지 (matchMedia — resize 루프 방지)
   const isMobile = useMediaQuery('(max-width: 767px)');
+  // 조사표를 나란히 놓을 수 있는 최소 폭. 이보다 좁으면 좌우 각 판이 500px 도
+  // 되지 않아 조사표 한 쪽이 읽히지 않는다. UA 가 아니라 폭으로 판정하는 이유는
+  // 태블릿 오판과 데스크톱의 좁은 창 때문이다.
+  const isTooNarrowForSplit = useMediaQuery(`(max-width: ${SPLIT_MIN_VIEWPORT_WIDTH - 1}px)`);
 
   // 진행도 — step 기반
   const currentVisibleStepNumber = useMemo(() => {
@@ -1274,6 +1280,17 @@ function SurveyResponseFlowActive({
         showCompletedTime={!isPreview}
       />
     );
+  }
+
+  // 조사표가 붙은 설문의 좁은 화면 안내 — **설문 전체**를 막는다. 분할 페이지에
+  // 도달했을 때만 막으면 절반쯤 답한 시간이 버려진다.
+  // 이미 응답했거나 완료한 사람에게는 그 화면이 먼저 뜨는 것이 맞아 그 뒤에 둔다.
+  //
+  // **이 스펙이 만드는 유일한 조건 분기가 이 한 줄의 예외다.** 관리자 응답 편집
+  // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
+  // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
+  if (documentView && isTooNarrowForSplit && !isAdminEdit) {
+    return <DesktopOnlyScreen />;
   }
 
   // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)

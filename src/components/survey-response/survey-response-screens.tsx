@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock, Monitor } from 'lucide-react';
 import Link from 'next/link';
 
 import { formatLocalDateTime } from '@/lib/date-formatters';
@@ -117,6 +117,35 @@ export function InvalidTestLinkScreen() {
       title="유효하지 않은 테스트 링크입니다"
       body="테스트 모드가 종료되었거나 이 링크를 더 이상 사용할 수 없습니다."
     />
+  );
+}
+
+/**
+ * 조사표를 함께 봐야 하는 설문의 좁은 화면 안내.
+ *
+ * 판정은 **뷰포트 폭**이다. User-Agent 로 판정하지 않는다 — 태블릿을 오판하고
+ * 데스크톱의 좁은 창은 못 잡는다.
+ *
+ * 그리고 **진입 시 설문 전체를 막는다.** 분할 페이지에 도달했을 때만 막으면
+ * 절반쯤 답한 시간이 버려진다.
+ */
+export function DesktopOnlyScreen() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-8 text-center">
+          <Monitor className="mx-auto mb-4 h-12 w-12 text-blue-500" />
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">PC 에서 열어 주세요</h2>
+          <p className="text-gray-600">
+            이 설문은 조사표를 나란히 보면서 판단하는 형식이라 넓은 화면이 필요합니다.
+          </p>
+          <p className="mt-3 text-sm text-gray-500">
+            같은 링크를 PC 브라우저에서 열면 이어서 진행할 수 있습니다. 창을 넓히면
+            이 화면은 바로 사라집니다.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
