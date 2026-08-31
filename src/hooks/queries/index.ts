@@ -63,6 +63,8 @@ export {
   useParseExcelPreview,
   useIngestContacts,
   useMatchContacts,
+  useSuggestPriorAnswerMapping,
+  useImportPriorAnswers,
 } from './use-contacts';
 
 // File Cleanup Queries

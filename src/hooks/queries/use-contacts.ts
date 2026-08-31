@@ -23,6 +23,26 @@ export function useParseExcelPreview() {
 }
 
 /**
+ * 이월 응답 임포트 — 시트/헤더 행을 고른 뒤 컬럼과 문항을 잇는 자동 제안 (추적조사).
+ * 명단 업로드와 다른 경로다: 매핑은 문항이 있어야 가능하고, 명단 경로를 다시 타면
+ * 이미 발송한 개별 링크가 재발급된다.
+ */
+export function useSuggestPriorAnswerMapping() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.contacts.priorAnswers.suggestMapping>[0]) =>
+      client.contacts.priorAnswers.suggestMapping(input),
+  });
+}
+
+/** 이월 응답 적재 (dryRun 이면 계산만). */
+export function useImportPriorAnswers() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.contacts.priorAnswers.import>[0]) =>
+      client.contacts.priorAnswers.import(input),
+  });
+}
+
+/**
  * 파싱된 엑셀을 조사 대상 명단으로 적재 (ingest)
  */
 export function useIngestContacts() {
