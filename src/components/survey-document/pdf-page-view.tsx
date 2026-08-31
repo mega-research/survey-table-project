@@ -60,7 +60,8 @@ interface Props {
   className?: string;
 }
 
-const PAD = 16;
+// 프로토타입과 같은 여백 — 편집 화면과 응답 화면이 같은 자를 써야 같은 영역이 같게 보인다.
+const PAD = 24;
 
 export function PdfPageView({
   url,
@@ -127,19 +128,24 @@ export function PdfPageView({
       if (token !== renderToken.current) return;
 
       const base = pdfPage.getViewport({ scale: 1 });
-      // 세로 스크롤바가 생기면 clientWidth 가 그만큼 줄어드는데, 폭을 재는 시점은
-      // 그리기 **전**이라 렌더 뒤에 가로로 몇 px 넘쳐 가짜 가로 스크롤이 생겼다.
-      // 스크롤바 자리를 항상 비워두는 것(scrollbarGutter: stable)으로 폭을 고정하고,
-      // 소수점 올림으로 1px 넘치는 것을 막기 위해 내림한다.
-      const avail = Math.floor(Math.max(280, scroller.clientWidth - PAD * 2) * zoom);
+      // 폭을 재는 시점이 그리기 **전**이라, 세로 스크롤바가 자리를 차지하는 환경
+      // (윈도우·리눅스의 고전 스크롤바)에서는 렌더 뒤에 clientWidth 가 줄어든다.
+      // 스크롤바 자리를 늘 비워두는 것(scrollbarGutter: stable)으로 그쪽을 막는다.
+      const avail = Math.floor(Math.max(320, scroller.clientWidth - PAD * 2) * zoom);
       const viewport = pdfPage.getViewport({ scale: avail / base.width });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      // CSS 폭은 **내림한 정수**를 쓴다. viewport.width 는 base.width * (avail/base.width)
+      // 라 부동소수점 오차로 avail 보다 아주 조금 클 수 있고, 그 0.0000001px 이
+      // 그대로 가로 스크롤바를 만든다 (맥의 오버레이 스크롤바에서도 뜬다).
+      const cssWidth = Math.floor(viewport.width);
+      const cssHeight = Math.floor(viewport.height);
 
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width * dpr);
       canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
       canvas.style.display = 'block';
 
       const ctx = canvas.getContext('2d');
@@ -150,15 +156,16 @@ export function PdfPageView({
       if (token !== renderToken.current) return;
 
       holder.replaceChildren(canvas);
-      holder.style.width = `${viewport.width}px`;
-      holder.style.height = `${viewport.height}px`;
+      holder.style.width = `${cssWidth}px`;
+      holder.style.height = `${cssHeight}px`;
       // 화면 좌표는 계산하지 않고 잰다 — 계산이 데모에서 버그의 원천이었다
       onPageBox?.({
         page: target,
         left: holder.offsetLeft,
         top: holder.offsetTop,
-        width: viewport.width,
-        height: viewport.height,
+        // 좌표 변환도 화면에 실제로 놓인 크기를 써야 사각형이 어긋나지 않는다
+        width: cssWidth,
+        height: cssHeight,
       });
     } catch (e) {
       if (token === renderToken.current) {

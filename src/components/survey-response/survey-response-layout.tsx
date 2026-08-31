@@ -82,9 +82,12 @@ export function SurveyResponseLayout({
 
       {/* 메인 콘텐츠 — 분할이면 좌 조사표 / 우 질문 50:50 */}
       {isSplit ? (
+        // 좌 조사표 / 우 문항 50:50 고정. 두 판 모두 min-w-0 이라야 안쪽 내용이
+        // 컨테이너를 밀어내지 않는다 — flex 기본값(min-width:auto)이면 긴 줄 하나가
+        // 판을 넓혀 바깥에 가로 스크롤이 생긴다.
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1 border-r border-gray-200">{documentPane}</div>
-          <div className="min-w-0 flex-1 overflow-y-auto px-4 pt-2 pb-16 md:px-6">{children}</div>
+          <div className="min-w-0 flex-1 overflow-y-auto bg-gray-50/60 p-5">{children}</div>
         </div>
       ) : (
         <div
