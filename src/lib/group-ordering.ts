@@ -285,6 +285,81 @@ export function buildRenderSteps(
   return steps;
 }
 
+// ── 분할 레이아웃 시작 지점 파생 ──
+
+/**
+ * 앵커 하나에서 이 판정에 필요한 것 전부. 좌표도 조사표도 알 필요가 없다 —
+ * "무엇에 붙어 있는가"만 본다. 앵커 저장 방식과 무관하게 구조적으로 들어맞는다.
+ */
+export type AnchorOwnerRef = { ownerKind: 'question' | 'group'; ownerId: string };
+
+/** 그 질문이 속한 그룹 사슬(자기 그룹 → 상위 → 루트). 그룹이 없으면 빈 배열. */
+function groupChainOf(question: Question, parentOf: Map<string, string | null>): string[] {
+  const chain: string[] = [];
+  let cursor = question.groupId ?? null;
+  // 자기참조 사이클이 들어와도 멈추도록 방문 집합을 둔다
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    chain.push(cursor);
+    cursor = parentOf.get(cursor) ?? null;
+  }
+  return chain;
+}
+
+/**
+ * 분할 레이아웃이 시작되는 페이지 인덱스. 앵커가 하나도 걸리지 않으면 -1.
+ *
+ * **모드는 설정이 아니라 파생이다.** 앵커를 가진 항목이 처음 나타나는 페이지부터
+ * 마지막 페이지까지 분할을 유지한다(sticky) — 앞쪽 인적사항 페이지는 일반이고,
+ * 검토가 시작되면 조사표 뷰어가 끝까지 한 번만 마운트된다. 대가로 포기한 것은
+ * 뒤쪽에 다시 일반 페이지를 두는 것이다.
+ *
+ * **판정은 구조 기준이다.** 조건부 표시로 숨은 질문의 앵커도 센다 — 그래야 응답자가
+ * 앞 답을 고쳐도 시작점이 발밑에서 움직이지 않는다. 그러려면 호출자가 조건 필터를
+ * 거치지 않은 스텝 목록을 넘겨야 한다. 좌측에 사각형을 *그리는* 것은 표시되는 항목
+ * 것만이지만 그건 이 함수의 일이 아니다 — 레이아웃은 구조에서, 표시는 조건에서.
+ *
+ * 그룹에 붙은 앵커는 그 그룹의 **후손 질문**이 처음 나타나는 페이지에서 걸린다.
+ */
+export function resolveSplitStartIndex(
+  steps: readonly RenderStep[],
+  anchors: readonly AnchorOwnerRef[],
+  groups: readonly QuestionGroup[],
+): number {
+  if (anchors.length === 0) return -1;
+
+  const anchoredQuestionIds = new Set<string>();
+  const anchoredGroupIds = new Set<string>();
+  for (const anchor of anchors) {
+    if (anchor.ownerKind === 'question') anchoredQuestionIds.add(anchor.ownerId);
+    else anchoredGroupIds.add(anchor.ownerId);
+  }
+
+  const parentOf = new Map<string, string | null>(
+    groups.map((g) => [g.id, g.parentGroupId ?? null]),
+  );
+
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    if (!step) continue;
+    for (const item of step.items) {
+      if (anchoredQuestionIds.has(item.question.id)) return index;
+      if (anchoredGroupIds.size > 0) {
+        for (const groupId of groupChainOf(item.question, parentOf)) {
+          if (anchoredGroupIds.has(groupId)) return index;
+        }
+      }
+    }
+  }
+  return -1;
+}
+
+/** 이 페이지가 분할인가. sticky 라 시작점 이후는 앵커 유무와 무관하게 전부 분할이다. */
+export function isSplitStep(splitStartIndex: number, stepIndex: number): boolean {
+  return splitStartIndex >= 0 && stepIndex >= splitStartIndex;
+}
+
 // ── 스텝 단위 분기(branch) 해석 ──
 
 /**
