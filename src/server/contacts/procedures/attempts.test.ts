@@ -35,7 +35,8 @@ describe('attempts procedures', () => {
       's-1',
       'contacts.writeAttempts',
     );
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, false);
+    // 작성자는 procedure 가 인증된 컨텍스트에서 넘긴다 — 서비스가 auth 를 다시 읽지 않는다.
+    expect(svc.addAttempt).toHaveBeenCalledWith(input, false, 'admin-1');
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 
@@ -101,11 +102,28 @@ describe('attempts procedures', () => {
   // 관문(mock)이 통과시킨 뒤에도 서비스로 넘어가는 **파티션 플래그**는 계정 유형에서 나온다
   // (티켓 21 — 예전에는 env grant 목록을 다시 읽었다). 실제 게스트 계정은 이 표면의
   // capability(contacts.writeAttempts)를 갖지 못해 관문에서 막힌다.
-  it('게스트 계정이면 실데이터 파티션 플래그가 서비스로 전달된다', async () => {
+  it.each([
+    ['게스트', 'guest'],
+    // 실사도 real 고정이다(티켓 26) — 게스트만 보면 테스트 모드가 켜진 설문에서
+    // 실사원이 test 파티션에 결과코드를 쓴다.
+    ['실사', 'fieldwork'],
+  ] as const)('%s 계정이면 실데이터 파티션 플래그가 서비스로 전달된다', async (_label, userType) => {
     vi.mocked(svc.addAttempt).mockResolvedValue({ id: 'att-1', attemptNo: 1 } as never);
     const client = createRouterClient(
       { contacts: { attempts } },
-      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
+      {
+        context: {
+          db: {} as never,
+          user: {
+            id: 'external-1',
+            email: 'g@b.com',
+            name: '외부',
+            status: 'active',
+            isSuperadmin: false,
+            userType,
+          },
+        },
+      },
     );
     const input = {
       contactTargetId: 'ct-1',
@@ -113,7 +131,7 @@ describe('attempts procedures', () => {
       resultCode: '1.조사완료',
     };
     const res = await client.contacts.attempts.add(input);
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, true);
+    expect(svc.addAttempt).toHaveBeenCalledWith(input, true, 'external-1');
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 });

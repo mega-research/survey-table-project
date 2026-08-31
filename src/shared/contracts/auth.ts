@@ -127,6 +127,21 @@ export function isGuestAccount(userType: UserType | undefined): boolean {
   return userType === 'guest';
 }
 
+/**
+ * 내부가 **아닌** 계정인가 — 데이터 파티션의 단일 술어 (티켓 25·26).
+ *
+ * `isGuestAccount` 와 갈라 두는 이유는 묻는 질문이 다르기 때문이다. 저쪽은 「게스트인가」라
+ * 게스트 전용 화면 분기가 쓰고, 이쪽은 「전역 테스트 모드를 따르는가」다 — **내부 표면만
+ * 따른다.** 실사가 컨택 쓰기를 얻으면서(티켓 25) 게스트만 real 로 고정하는 규칙이 새기
+ * 시작했다: 테스트 모드가 켜진 설문에서 실사원이 test 파티션에 결과코드를 쓴다.
+ *
+ * 세션에서 판정하는 짝은 `lib/auth/external-viewer` 다(RSC·loadOperationsDataScope 용).
+ * 이쪽은 procedure 가 이미 인증한 `context.user.userType` 에서 파생할 때 쓴다.
+ */
+export function isExternalAccount(userType: UserType | undefined): boolean {
+  return !isInternalUser(userType);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // users.fieldwork_role — 실사 계정의 업체 내 역할 어휘 (SSOT, 티켓 24)
 // ─────────────────────────────────────────────────────────────────────────────

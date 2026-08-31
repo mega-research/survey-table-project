@@ -528,12 +528,15 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
       await expect(call(orgClient(MEMBER_ID, false))).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
 
-    it('업체가 하나도 없으면 선택지도 비어 있다 — 발급 모달이 빈 셀렉트를 그린다', async () => {
-      const before = await superOrgs().orgs.options();
+    it('만든 업체가 발급 모달 선택지에 뜨고, 종료하면 빠진다', async () => {
+      // **전역 개수로 재지 않는다** — 같은 로컬 DB 를 다른 realdb 스위트가 병렬로 쓰므로
+      // (티켓 25 의 실사 초대 스위트도 업체를 만든다) 개수 델타는 남의 작업에 흔들린다.
+      // 내가 만든 id 가 있는가/없는가만 본다.
       const id = await makeOrg('선택지업체');
-      const after = await superOrgs().orgs.options();
-      expect(after.length).toBe(before.length + 1);
-      expect(after.map((o) => o.id)).toContain(id);
+      expect((await superOrgs().orgs.options()).map((o) => o.id)).toContain(id);
+
+      await superOrgs().orgs.archive({ orgId: id });
+      expect((await superOrgs().orgs.options()).map((o) => o.id)).not.toContain(id);
     });
   });
 

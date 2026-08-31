@@ -89,8 +89,8 @@ function buildMigrationMetadataSql(rollback: {
  * 보존한다 — env grant 게스트 경로는 관문이 DB 를 안 보므로 여기가 유일한 확인이고,
  * 없는 설문이면 SurveyAccessError('not_found'). 캐시 갱신은 소비처 router.push 로 대체한다.
  *
- * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다(다른
- * feature 의 scoped 절차와 동일 패턴) — 게스트는 전역 테스트 모드 플래그와 무관하게
+ * isExternal 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다(다른
+ * feature 의 scoped 절차와 동일 패턴) — 외부 계정은 전역 테스트 모드 플래그와 무관하게
  * 항상 real 파티션만 읽고 쓴다. select/UPDATE 모두 resolveWriteScopeIsTest 로 확정한
  * isTest 값으로 스코프를 좁혀, 테스트 파티션 responseId 를 알아내도 편집이 닿지 않게
  * 한다 — 파티션이 안 맞으면 존재하지 않는 응답과 동일하게 response_not_found 로 처리.
@@ -98,7 +98,7 @@ function buildMigrationMetadataSql(rollback: {
 export async function saveAdminEdit(
   input: SaveAdminEditInput,
   editor: { id: string | null; email: string | null },
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<{ ok: true }> {
   const { surveyId, responseId, questionResponses } = input;
 
@@ -119,7 +119,7 @@ export async function saveAdminEdit(
     throw new ResponseEditError('version_conflict');
   }
 
-  const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isGuest);
+  const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isExternal);
 
   const existing = await db.query.surveyResponses.findFirst({
     where: and(
