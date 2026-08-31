@@ -5,48 +5,14 @@
  * 매핑 제안과 조사 대상별 값 묶음을 낸다. 임포트 사고는 대부분 이 자리에서 나므로
  * 화면·서비스와 떼어 놓고 실제 rawdata 모양으로 고정한다.
  *
- * 이 모듈은 **한 문항이 한 컬럼을 쓰는 경우만** 다룬다. 복수응답 펼침·순위 열·표 칸처럼
- * 여러 컬럼을 먹는 문항은 미매핑으로 남긴다 — 컬럼 블록 해석은 별도 소관이다.
+ * 헤더 해석과 블록↔문항 자리 배정은 `prior-answer-blocks` 가 맡고, 이 모듈은 그 배정을
+ * 받아 조사 대상별 값 묶음을 만든다.
  */
 
 import type { Question } from '@/types/survey';
-import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
-import { resolveChoiceOptions } from '@/utils/choice-source';
+import { buildBlockAnswer, type BlockSlot, type HeaderBlock } from './prior-answer-blocks';
 
-/** 한 컬럼으로 값이 정해지는 문항 유형. 그 외는 이 경로에서 다루지 않는다. */
-const SINGLE_COLUMN_TYPES = new Set<Question['type']>(['text', 'textarea', 'radio', 'select']);
-
-/** 선택지 라벨을 저장값으로 바꿔야 하는 유형. */
-const CHOICE_TYPES = new Set<Question['type']>(['radio', 'select']);
-
-/**
- * 문항코드 대조용 정규화.
- *
- * 설문지에는 `BQ1-1.` 로 적히고 문항코드에는 `BQ1_1` 로 들어간다 — SPSS 변수명 규격이
- * 대시와 마침표를 거부하기 때문이다. 그 차이를 대조 시점에 흡수한다:
- * 후행 마침표 제거, 대시를 밑줄로, 공백 제거, 대소문자 무시.
- */
-export function normalizeQuestionCode(raw: string | null | undefined): string {
-  if (!raw) return '';
-  return raw
-    .trim()
-    .replace(/\.+$/, '')
-    .replace(/-/g, '_')
-    .replace(/\s+/g, '')
-    .toLowerCase();
-}
-
-/**
- * 엑셀 헤더에서 대조할 코드 후보를 낸다.
- *
- * 실무 rawdata 헤더는 `BQ1-1. 창업 기업명` 처럼 코드와 문항 라벨이 한 칸에 붙어 있다.
- * 헤더 전체와 선두 토큰을 둘 다 후보로 내 어느 쪽이든 맞으면 잇는다.
- */
-function headerCodeCandidates(header: string): string[] {
-  const whole = normalizeQuestionCode(header);
-  const leading = normalizeQuestionCode(header.trim().split(/[\s]+/)[0] ?? '');
-  return leading && leading !== whole ? [whole, leading] : [whole];
-}
+export { normalizeQuestionCode } from './prior-answer-blocks';
 
 /**
  * 조사 대상 번호 대조 키. resid 는 정수 컬럼이라 `07` 과 `7` 이 같은 대상이다 —
@@ -60,58 +26,6 @@ export function normalizeResid(raw: string): string {
   return Number.isSafeInteger(parsed) ? String(parsed) : trimmed;
 }
 
-/**
- * 이 문항이 한 컬럼으로 값이 정해지는가.
- *
- * 보기 그룹이 있는 문항은 제외한다 — 저장형이 `{ groupKey: 값 }` 객체라 한 컬럼 값으로
- * 만들 수 없고, 문자열을 넣으면 프리필이 보이지 않는 채로 그 형태가 올해 응답에
- * 복사된다.
- */
-export function isSingleColumnQuestion(question: Question): boolean {
-  if (!SINGLE_COLUMN_TYPES.has(question.type)) return false;
-  return !isGroupedChoiceQuestion(question);
-}
-
-export interface ColumnSuggestion {
-  columnKey: string;
-  /** 제안된 문항 id. 없으면 미매핑. */
-  questionId: string | null;
-  /** 무엇으로 맞췄는가. 미매핑이면 null. */
-  matchedBy: 'code' | null;
-}
-
-/**
- * 엑셀 헤더와 문항을 잇는 자동 제안.
- *
- * 문항코드 정규화 대조만 쓴다. 한 문항에 두 컬럼이 걸리면 먼저 나온 컬럼이 가져간다 —
- * 같은 문항에 두 값을 실을 수 없고, 뒤 컬럼을 조용히 덮으면 어느 쪽이 들어갔는지 알 수 없다.
- */
-export function suggestPriorAnswerMapping(
-  headers: readonly string[],
-  questions: readonly Question[],
-): ColumnSuggestion[] {
-  const byCode = new Map<string, Question>();
-  for (const question of questions) {
-    if (!isSingleColumnQuestion(question)) continue;
-    const code = normalizeQuestionCode(question.questionCode);
-    if (!code || byCode.has(code)) continue;
-    byCode.set(code, question);
-  }
-
-  const taken = new Set<string>();
-  return headers.map((columnKey) => {
-    const question = headerCodeCandidates(columnKey)
-      .filter(Boolean)
-      .map((code) => byCode.get(code))
-      .find((found) => found !== undefined);
-    if (!question || taken.has(question.id)) {
-      return { columnKey, questionId: null, matchedBy: null };
-    }
-    taken.add(question.id);
-    return { columnKey, questionId: question.id, matchedBy: 'code' as const };
-  });
-}
-
 /** 문항별 선택지 변환 실패 집계 — 어느 값이 어느 선택지에도 안 맞았는지 그대로 남긴다. */
 export interface OptionMismatch {
   questionId: string;
@@ -123,12 +37,19 @@ export interface OptionMismatch {
   values: Array<{ value: string; count: number }>;
 }
 
+export interface BlockAssignment {
+  block: HeaderBlock;
+  questionId: string;
+  slots: BlockSlot[];
+}
+
 export interface PriorAnswerImportInput {
-  rows: ReadonlyArray<Record<string, string>>;
-  /** 조사 대상을 찾을 열 — 설문별 자동 발번 번호(시스템ID)가 들어 있다. */
-  residColumnKey: string;
-  /** 컬럼 키 → 문항 id */
-  mapping: Readonly<Record<string, string>>;
+  /** 데이터 행. 컬럼 인덱스 순서 그대로. */
+  rows: ReadonlyArray<readonly string[]>;
+  /** 조사 대상을 찾을 컬럼 인덱스 — 설문별 자동 발번 번호(시스템ID)가 들어 있다. */
+  residColumnIndex: number;
+  /** 사람이 확정한 블록↔문항 배정 */
+  assignments: readonly BlockAssignment[];
   questions: readonly Question[];
 }
 
@@ -140,13 +61,8 @@ export interface PriorAnswerImportResult {
   emptyResidRows: number;
   /** 같은 번호가 다시 나와 앞 행을 덮은 횟수 */
   duplicateResidRows: number;
-  /** 이 경로가 다룰 수 없는 문항으로 매핑돼 값을 만들지 않은 문항 id */
+  /** 이 경로가 값을 만들 수 없어 건너뛴 문항 id */
   unsupportedQuestionIds: string[];
-}
-
-/** 선택지 라벨 대조 키 — 앞뒤 공백과 대소문자를 무시한다. */
-function optionLabelKey(label: string): string {
-  return label.trim().toLowerCase();
 }
 
 /**
@@ -161,27 +77,18 @@ export function buildPriorAnswerRecords(
   input: PriorAnswerImportInput,
 ): PriorAnswerImportResult {
   const questionById = new Map(input.questions.map((q) => [q.id, q]));
-  const optionValueByLabel = new Map<string, Map<string, string>>();
   const unsupported = new Set<string>();
 
-  // 매핑된 문항만 미리 해석해 둔다 — 행마다 선택지를 다시 펴지 않는다.
-  const columnTargets: Array<{ columnKey: string; question: Question }> = [];
-  for (const [columnKey, questionId] of Object.entries(input.mapping)) {
-    const question = questionById.get(questionId);
+  const targets: Array<{ question: Question; assignment: BlockAssignment }> = [];
+  for (const assignment of input.assignments) {
+    const question = questionById.get(assignment.questionId);
     if (!question) continue;
-    if (!isSingleColumnQuestion(question)) {
-      unsupported.add(questionId);
+    // 값을 만들 자리가 하나도 없는 배정 — 화면에서 알린다.
+    if (assignment.slots.every((slot) => slot.kind === 'unmatched')) {
+      unsupported.add(assignment.questionId);
       continue;
     }
-    columnTargets.push({ columnKey, question });
-    if (CHOICE_TYPES.has(question.type)) {
-      const labels = new Map<string, string>();
-      for (const option of resolveChoiceOptions(question)) {
-        const key = optionLabelKey(option.label ?? '');
-        if (key && !labels.has(key)) labels.set(key, option.value);
-      }
-      optionValueByLabel.set(question.id, labels);
-    }
+    targets.push({ question, assignment });
   }
 
   const byResid = new Map<string, Record<string, unknown>>();
@@ -194,7 +101,7 @@ export function buildPriorAnswerRecords(
   let duplicateResidRows = 0;
 
   for (const row of input.rows) {
-    const resid = normalizeResid(row[input.residColumnKey] ?? '');
+    const resid = normalizeResid(row[input.residColumnIndex] ?? '');
     if (!resid) {
       emptyResidRows += 1;
       continue;
@@ -203,31 +110,25 @@ export function buildPriorAnswerRecords(
     seenResid.add(resid);
 
     const answers: Record<string, unknown> = {};
-    for (const { columnKey, question } of columnTargets) {
-      const raw = (row[columnKey] ?? '').trim();
-      if (!raw) continue;
+    for (const { question, assignment } of targets) {
+      const cellValues = assignment.block.columnIndexes.map((col) => row[col] ?? '');
+      const built = buildBlockAnswer(question, assignment.slots, cellValues);
 
-      const labels = optionValueByLabel.get(question.id);
-      if (!labels) {
-        answers[question.id] = raw;
-        continue;
+      if (built.convertedCells > 0 || built.unmatchedValues.length > 0) {
+        const stat = mismatchByQuestion.get(question.id) ?? {
+          total: 0,
+          unmatched: 0,
+          counts: new Map<string, number>(),
+        };
+        stat.total += built.convertedCells;
+        stat.unmatched += built.unmatchedValues.length;
+        for (const value of built.unmatchedValues) {
+          stat.counts.set(value, (stat.counts.get(value) ?? 0) + 1);
+        }
+        mismatchByQuestion.set(question.id, stat);
       }
 
-      const stat = mismatchByQuestion.get(question.id) ?? {
-        total: 0,
-        unmatched: 0,
-        counts: new Map<string, number>(),
-      };
-      stat.total += 1;
-      const value = labels.get(optionLabelKey(raw));
-      if (value === undefined) {
-        // 그 문항만 비운다 — 나머지 문항 값은 그대로 살린다.
-        stat.unmatched += 1;
-        stat.counts.set(raw, (stat.counts.get(raw) ?? 0) + 1);
-      } else {
-        answers[question.id] = value;
-      }
-      mismatchByQuestion.set(question.id, stat);
+      if (built.value !== undefined) answers[question.id] = built.value;
     }
 
     // 이 행에 살아남은 값이 없으면 아무것도 하지 않는다 — 같은 번호의 앞 행이 이미

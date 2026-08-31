@@ -46,9 +46,9 @@ export function PriorAnswerImportWizard({
   const [step, setStep] = useState<Step>('file');
   const [file, setFile] = useState<File | null>(null);
   const [sheetName, setSheetName] = useState('');
-  const [headerRow, setHeaderRow] = useState(1);
+  const [headerRowCount, setHeaderRowCount] = useState(1);
   const [preview, setPreview] = useState<SuggestPriorAnswerMappingResult | null>(null);
-  const [residColumnKey, setResidColumnKey] = useState('');
+  const [residColumnIndex, setResidColumnIndex] = useState<number | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ImportPriorAnswersResult | null>(null);
   const [dryRunResult, setDryRunResult] = useState<ImportPriorAnswersResult | null>(null);
@@ -64,26 +64,39 @@ export function PriorAnswerImportWizard({
 
   const mappedCount = Object.keys(mapping).length;
 
-  async function loadPreview(next: { file: File; sheetName?: string; headerRow?: number }) {
+  /** 컬럼 인덱스 → 화면에 보여줄 열 이름. 3단 헤더면 코드와 세부 라벨을 붙여 쓴다. */
+  const columnLabels = useMemo(() => {
+    if (!preview) return [];
+    const width = Math.max(0, ...preview.headerRows.map((row) => row.length));
+    return Array.from({ length: width }, (_, col) =>
+      preview.headerRows
+        .map((row) => (row[col] ?? '').trim())
+        .filter(Boolean)
+        .join(' · ') || `${col + 1}열`,
+    );
+  }, [preview]);
+
+  async function loadPreview(next: { file: File; sheetName?: string; headerRowCount?: number }) {
     setError(null);
     try {
       const res = await suggest.mutateAsync({
         surveyId,
         file: next.file,
         ...(next.sheetName ? { sheetName: next.sheetName } : {}),
-        ...(next.headerRow ? { headerRow: next.headerRow } : {}),
+        ...(next.headerRowCount ? { headerRowCount: next.headerRowCount } : {}),
       });
       setPreview(res);
       setSheetName(next.sheetName ?? res.sheetNames[0] ?? '');
       // 자동 제안을 초기 매핑으로 채운다 — 사람은 틀린 것만 고친다.
       const seeded: Record<string, string> = {};
-      for (const s of res.suggestions) {
-        if (s.questionId) seeded[s.columnKey] = s.questionId;
-      }
+      res.blocks.forEach((block, index) => {
+        if (block.questionId) seeded[String(index)] = block.questionId;
+      });
       setMapping(seeded);
       // 시스템ID 열 자동 추정 — 확정은 사람이 한다.
-      const residGuess = res.headers.find((h) => /resid|시스템\s*id|아이디|번호/i.test(h));
-      setResidColumnKey((prev) => (prev && res.headers.includes(prev) ? prev : (residGuess ?? '')));
+      const codeRow = res.headerRows[res.headerRows.length - 2] ?? res.headerRows[0] ?? [];
+      const guess = codeRow.findIndex((text) => /resid|시스템\s*id|아이디|번호/i.test(text));
+      setResidColumnIndex(guess >= 0 ? guess : 0);
       setDryRunResult(null);
       setStep('mapping');
     } catch (err) {
@@ -99,20 +112,20 @@ export function PriorAnswerImportWizard({
       return;
     }
     setFile(picked);
-    setHeaderRow(1);
+    setHeaderRowCount(1);
     void loadPreview({ file: picked });
   }
 
   async function run(dryRun: boolean) {
-    if (!file || !residColumnKey) return;
+    if (!file || residColumnIndex === null) return;
     setError(null);
     try {
       const res = await runImport.mutateAsync({
         surveyId,
         file,
         sheetName,
-        headerRow,
-        residColumnKey,
+        headerRowCount,
+        residColumnIndex,
         mapping,
         dryRun,
       });
@@ -207,7 +220,7 @@ export function PriorAnswerImportWizard({
                     value={sheetName}
                     onValueChange={(next) => {
                       setSheetName(next);
-                      void loadPreview({ file, sheetName: next, headerRow });
+                      void loadPreview({ file, sheetName: next, headerRowCount });
                     }}
                   >
                     <SelectTrigger id="prior-sheet">
@@ -223,31 +236,38 @@ export function PriorAnswerImportWizard({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="prior-header-row">헤더 행</Label>
+                  <Label htmlFor="prior-header-rows">헤더 행 수</Label>
                   <Input
-                    id="prior-header-row"
+                    id="prior-header-rows"
                     type="number"
                     min={1}
-                    value={headerRow}
-                    onChange={(e) => setHeaderRow(Math.max(1, Number(e.target.value) || 1))}
-                    onBlur={() => void loadPreview({ file, sheetName, headerRow })}
+                    max={3}
+                    value={headerRowCount}
+                    onChange={(e) =>
+                      setHeaderRowCount(Math.min(3, Math.max(1, Number(e.target.value) || 1)))
+                    }
+                    onBlur={() => void loadPreview({ file, sheetName, headerRowCount })}
                   />
                   <p className="text-xs text-slate-500">
-                    통계표 시트가 섞인 파일이면 rawdata 시트와 헤더 행을 직접 짚어주세요.
+                    3 을 넣으면 파트 행 / 문항코드 행 / 세부 라벨 행 3단 병합 헤더로 읽습니다.
+                    통계표 시트가 섞인 파일이면 rawdata 시트를 직접 짚어주세요.
                   </p>
                 </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="prior-resid">조사 대상을 찾을 열 (시스템ID)</Label>
-                <Select value={residColumnKey || UNMAPPED} onValueChange={(v) => setResidColumnKey(v === UNMAPPED ? '' : v)}>
+                <Select
+                  value={residColumnIndex === null ? UNMAPPED : String(residColumnIndex)}
+                  onValueChange={(v) => setResidColumnIndex(v === UNMAPPED ? null : Number(v))}
+                >
                   <SelectTrigger id="prior-resid">
                     <SelectValue placeholder="열 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={UNMAPPED}>선택 안 함</SelectItem>
-                    {preview.headers.map((h) => (
-                      <SelectItem key={h} value={h}>
-                        {h}
+                    {columnLabels.map((label, col) => (
+                      <SelectItem key={col} value={String(col)}>
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -259,58 +279,83 @@ export function PriorAnswerImportWizard({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                컬럼과 문항 잇기 · {mappedCount}/{preview.headers.length}
+                문항 블록 잇기 · {mappedCount}/{preview.blocks.length}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-slate-600">
-                문항코드가 맞는 컬럼은 자동으로 이어져 있습니다. 틀린 것만 고치세요.
-                복수응답·순위·표처럼 여러 컬럼을 먹는 문항은 이 화면에서 잇지 않습니다.
+                문항코드 행이 가로 병합된 구간이 한 문항의 컬럼 블록입니다. 코드가 맞는
+                블록은 자동으로 이어져 있고, 표 칸·복수응답 보기·순위 자리까지 한 번에
+                배정됩니다. 틀린 것만 고치세요.
               </p>
               <div className="max-h-[28rem] overflow-y-auto rounded-md border border-gray-200">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-gray-50 text-left text-xs text-slate-500">
                     <tr>
-                      <th className="px-3 py-2">엑셀 컬럼</th>
+                      <th className="px-3 py-2">문항코드</th>
+                      <th className="px-3 py-2">세부 라벨</th>
                       <th className="px-3 py-2">첫 행 값</th>
                       <th className="px-3 py-2">문항</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.headers.map((header) => (
-                      <tr key={header} className="border-t border-gray-100">
-                        <td className="px-3 py-2 font-medium text-gray-900">{header}</td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {preview.rows[0]?.[header] ?? ''}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Select
-                            value={mapping[header] ?? UNMAPPED}
-                            onValueChange={(next) =>
-                              setMapping((prev) => {
-                                const copy = { ...prev };
-                                if (next === UNMAPPED) delete copy[header];
-                                else copy[header] = next;
-                                return copy;
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue placeholder="잇지 않음" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={UNMAPPED}>잇지 않음</SelectItem>
-                              {preview.questions.map((q) => (
-                                <SelectItem key={q.id} value={q.id}>
-                                  {q.questionCode ? `${q.questionCode} · ` : ''}
-                                  {q.title}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                      </tr>
-                    ))}
+                    {preview.blocks.map((block, index) => {
+                      const key = String(index);
+                      const firstRow = preview.rows[0] ?? [];
+                      return (
+                        <tr key={key} className="border-t border-gray-100 align-top">
+                          <td className="px-3 py-2 font-medium text-gray-900">
+                            {block.code}
+                            {block.columnIndexes.length > 1 && (
+                              <span className="ml-1 text-xs font-normal text-slate-500">
+                                {block.columnIndexes.length}칸
+                              </span>
+                            )}
+                            {block.part && (
+                              <div className="text-xs font-normal text-slate-400">{block.part}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {block.detailLabels.filter(Boolean).join(', ')}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {block.columnIndexes.map((col) => firstRow[col] ?? '').join(' / ')}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Select
+                              value={mapping[key] ?? UNMAPPED}
+                              onValueChange={(next) =>
+                                setMapping((prev) => {
+                                  const copy = { ...prev };
+                                  if (next === UNMAPPED) delete copy[key];
+                                  else copy[key] = next;
+                                  return copy;
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="잇지 않음" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={UNMAPPED}>잇지 않음</SelectItem>
+                                {preview.questions.map((q) => (
+                                  <SelectItem key={q.id} value={q.id}>
+                                    {q.questionCode ? `${q.questionCode} · ` : ''}
+                                    {q.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {mapping[key] && block.unmatchedSlots > 0 && (
+                              <p className="mt-1 text-xs text-amber-700">
+                                {block.unmatchedSlots}칸은 어느 자리인지 정하지 못했습니다 —
+                                그 칸의 값은 들어가지 않습니다.
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -326,17 +371,17 @@ export function PriorAnswerImportWizard({
                 <Button
                   variant="outline"
                   onClick={() => void run(true)}
-                  disabled={!residColumnKey || runImport.isPending}
+                  disabled={residColumnIndex === null || runImport.isPending}
                 >
                   실행 전 미리보기
                 </Button>
                 <Button
                   onClick={() => void run(false)}
-                  disabled={!residColumnKey || mappedCount === 0 || runImport.isPending}
+                  disabled={residColumnIndex === null || mappedCount === 0 || runImport.isPending}
                 >
                   {runImport.isPending ? '적재 중...' : '이월 응답 넣기'}
                 </Button>
-                {!residColumnKey && (
+                {residColumnIndex === null && (
                   <span className="text-xs text-red-500">시스템ID 열을 먼저 고르세요</span>
                 )}
               </div>

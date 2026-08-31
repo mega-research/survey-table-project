@@ -26,24 +26,31 @@ export const SuggestPriorAnswerMappingInput = z.object({
   surveyId: z.string(),
   file: z.instanceof(File),
   sheetName: z.string().optional(),
-  headerRow: z.number().optional(),
+  /** 헤더로 읽을 행 수. 3 이면 파트/문항코드/세부라벨 3단 병합 헤더. */
+  headerRowCount: z.number().int().min(1).max(3).optional(),
 });
 export type SuggestPriorAnswerMappingInput = z.infer<typeof SuggestPriorAnswerMappingInput>;
 
 export const SuggestPriorAnswerMappingResultSchema = z.object({
   sheetNames: z.array(z.string()),
-  headers: z.array(z.string()),
-  rows: z.array(z.record(z.string(), z.string())),
+  /** 헤더 행 격자 — 컬럼 인덱스 순서 그대로, 병합 종속 칸은 빈 문자열. */
+  headerRows: z.array(z.array(z.string())),
+  /** 표본 데이터 행 — 컬럼 인덱스 순서 그대로. */
+  rows: z.array(z.array(z.string())),
   totalRows: z.number(),
-  /** 컬럼 키 → 제안 문항 (없으면 null) */
-  suggestions: z.array(
+  /** 문항코드 행에서 잘라낸 컬럼 블록과 자동 제안. 배열 인덱스가 곧 블록 번호다. */
+  blocks: z.array(
     z.object({
-      columnKey: z.string(),
+      code: z.string(),
+      part: z.string(),
+      columnIndexes: z.array(z.number()),
+      detailLabels: z.array(z.string()),
       questionId: z.string().nullable(),
       matchedBy: z.literal('code').nullable(),
+      unmatchedSlots: z.number(),
     }),
   ),
-  /** 이 경로가 값을 넣을 수 있는 문항 목록 — 화면의 수동 매핑 선택지. */
+  /** 화면의 수동 매핑 선택지. */
   questions: z.array(
     z.object({
       id: z.string(),
@@ -61,10 +68,11 @@ export const ImportPriorAnswersInput = z.object({
   surveyId: z.string(),
   file: z.instanceof(File),
   sheetName: z.string(),
-  headerRow: z.number(),
-  /** 조사 대상을 찾을 열 — 설문별 자동 발번 번호(시스템ID) */
-  residColumnKey: z.string(),
-  /** 컬럼 키 → 문항 id */
+  /** 헤더로 읽을 행 수 (1~3). */
+  headerRowCount: z.number().int().min(1).max(3),
+  /** 조사 대상을 찾을 컬럼 인덱스 — 설문별 자동 발번 번호(시스템ID) */
+  residColumnIndex: z.number().int().min(0),
+  /** 블록 번호(문자열) → 문항 id */
   mapping: z.record(z.string(), z.string()),
   /** true 면 적재하지 않고 결과만 계산한다 (실행 전 미리보기). */
   dryRun: z.boolean().optional(),
@@ -81,7 +89,7 @@ export const ImportPriorAnswersResultSchema = z.object({
   unmatched: z.number(),
   emptyResidRows: z.number(),
   duplicateResidRows: z.number(),
-  /** 매핑되지 않은 컬럼 키 */
+  /** 잇지 않은 블록의 문항코드 */
   unmappedColumns: z.array(z.string()),
   /** 이월 값이 하나도 들어가지 않은 문항 id */
   questionsWithoutValues: z.array(z.string()),

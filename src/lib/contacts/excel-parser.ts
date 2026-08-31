@@ -227,3 +227,133 @@ function readHeaders(ws: ExcelJS.Worksheet, headerRow: number): string[] {
 
   return headers;
 }
+
+// ── 3단 병합 헤더 (추적조사 이월 응답 임포트) ──
+
+export interface GridOptions {
+  sheetName: string;
+  /** 헤더로 읽을 행 수 (1~3). 3 이면 파트/문항코드/세부라벨. */
+  headerRowCount: number;
+}
+
+export interface GridPreviewResult {
+  sheetNames: string[];
+  /** 헤더 행들. 컬럼 인덱스 순서 그대로이며 병합 종속 칸은 빈 문자열이다. */
+  headerRows: string[][];
+  /**
+   * 문항코드 행에서 이 컬럼이 **가로 병합 종속 칸**인가.
+   * 값이 없는 칸에는 두 가지가 있다 — 앞 문항이 가로로 뻗은 칸과, 애초에 문항이 아닌
+   * 메타 열(비고·응답일시)이다. 둘을 구분하지 못하면 메타 열이 앞 블록에 흡수돼
+   * 인접한 두 문항이 한 블록으로 합쳐진다.
+   */
+  codeRowMerged: boolean[];
+  /** 데이터 행들. 컬럼 인덱스 순서 그대로. */
+  rows: string[][];
+  totalRows: number;
+}
+
+/**
+ * 병합 종속 칸을 빈 문자열로 읽는다.
+ *
+ * exceljs 는 병합 종속 칸에서 master 의 값을 되돌려준다. 그대로 두면 "값이 있는 칸부터
+ * 다음 값이 나오기 전까지"라는 컬럼 블록 규칙이 성립하지 않으므로, master 칸에만 값을
+ * 남긴다. 병합이 없는 파일은 이 처리가 무해하다.
+ */
+function headerCellText(cell: ExcelJS.Cell): string {
+  const master = (cell as { master?: ExcelJS.Cell }).master;
+  if (master && master.address !== cell.address) return '';
+  return cellNodeToString(cell);
+}
+
+function readGridRow(
+  ws: ExcelJS.Worksheet,
+  rowNumber: number,
+  columnCount: number,
+  asHeader: boolean,
+): string[] {
+  const row = ws.getRow(rowNumber);
+  const values: string[] = [];
+  for (let col = 1; col <= columnCount; col++) {
+    const cell = row.getCell(col);
+    values.push(asHeader ? headerCellText(cell) : cellNodeToString(cell));
+  }
+  return values;
+}
+
+/**
+ * 격자의 컬럼 폭.
+ *
+ * `ws.columnCount` 는 서식만 있는 후행 빈 열까지 세어, 그 열들이 마지막 블록에 흡수된다.
+ * 헤더 행들이 실제로 글자를 가진 마지막 칸까지만 본다 (기존 readHeaders 와 같은 취지).
+ */
+function resolveGridColumnCount(ws: ExcelJS.Worksheet, headerRowCount: number): number {
+  let width = 0;
+  for (let r = 1; r <= headerRowCount; r++) {
+    const row = ws.getRow(r);
+    for (let col = 1; col <= ws.columnCount; col++) {
+      if (cellNodeToString(row.getCell(col)) !== '') width = Math.max(width, col);
+    }
+  }
+  return width;
+}
+
+/** 문항코드 행에서 각 컬럼이 가로 병합 종속 칸인가. */
+function readMergedFlags(ws: ExcelJS.Worksheet, rowNumber: number, columnCount: number): boolean[] {
+  const row = ws.getRow(rowNumber);
+  const flags: boolean[] = [];
+  for (let col = 1; col <= columnCount; col++) {
+    const cell = row.getCell(col);
+    const master = (cell as { master?: ExcelJS.Cell }).master;
+    flags.push(Boolean(master && master.address !== cell.address));
+  }
+  return flags;
+}
+
+/**
+ * 3단 헤더 격자 파싱 — 헤더 행 + 병합 여부 + 데이터 행.
+ *
+ * `maxRows` 를 주면 표본만(미리보기), 주지 않으면 전량(적재) 읽는다. 한 번의 워크북
+ * 로드로 둘 다 내주는 이유는 적재 경로가 헤더와 데이터를 함께 필요로 하기 때문이다 —
+ * 나눠 부르면 같은 파일을 두 번 파싱한다.
+ */
+export async function previewExcelGrid(
+  buffer: Buffer | ArrayBuffer,
+  opts: GridOptions & { maxRows?: number },
+): Promise<GridPreviewResult> {
+  const wb = await loadWorkbook(buffer);
+  const sheetNames = wb.worksheets.map((w) => w.name);
+  const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
+  if (!ws) {
+    return { sheetNames, headerRows: [], codeRowMerged: [], rows: [], totalRows: 0 };
+  }
+
+  const columnCount = resolveGridColumnCount(ws, opts.headerRowCount);
+  const headerRows: string[][] = [];
+  for (let r = 1; r <= opts.headerRowCount; r++) {
+    headerRows.push(readGridRow(ws, r, columnCount, true));
+  }
+  // 문항코드 행은 헤더의 끝에서 두 번째(3단) 또는 유일한 행(1단)이다.
+  const codeRowNumber = opts.headerRowCount >= 2 ? opts.headerRowCount - 1 : 1;
+  const codeRowMerged = readMergedFlags(ws, codeRowNumber, columnCount);
+
+  const startRow = opts.headerRowCount + 1;
+  const endRow =
+    opts.maxRows === undefined
+      ? ws.rowCount
+      : Math.min(ws.rowCount, startRow + opts.maxRows - 1);
+  const rows: string[][] = [];
+  for (let r = startRow; r <= endRow; r++) {
+    const values = readGridRow(ws, r, columnCount, false);
+    // 전량 읽기(적재)에서는 완전히 빈 행을 버린다 — 시트 끝의 서식만 남은 행이 흔하다.
+    if (opts.maxRows !== undefined || values.some((value) => value !== '')) rows.push(values);
+  }
+
+  return {
+    sheetNames,
+    headerRows,
+    codeRowMerged,
+    rows,
+    totalRows: Math.max(0, ws.rowCount - opts.headerRowCount),
+  };
+}
+

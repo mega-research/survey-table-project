@@ -5,12 +5,14 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import { questions as questionsTable } from '@/db/schema/surveys';
-import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
+import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
-  buildPriorAnswerRecords,
-  isSingleColumnQuestion,
-  suggestPriorAnswerMapping,
-} from '@/lib/contacts/prior-answer-import';
+  resolveSlots,
+  splitHeaderBlocks,
+  suggestBlockMapping,
+  type HeaderBlock,
+} from '@/lib/contacts/prior-answer-blocks';
+import { buildPriorAnswerRecords } from '@/lib/contacts/prior-answer-import';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { encryptAnswerValue } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
@@ -60,24 +62,41 @@ export async function suggestPriorAnswerImportMapping(
 ): Promise<SuggestPriorAnswerMappingResult> {
   ensureXlsx(input.file);
   const buffer = await input.file.arrayBuffer();
-  const preview = await previewExcel(buffer, {
+  const headerRowCount = input.headerRowCount ?? 1;
+  const preview = await previewExcelGrid(buffer, {
     sheetName: input.sheetName ?? '',
-    headerRow: input.headerRow ?? 1,
+    headerRowCount,
     maxRows: 5,
   });
 
   const questions = await loadQuestions(input.surveyId);
-  const importable = questions.filter(isSingleColumnQuestion);
+  const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+  const suggestions = suggestBlockMapping(blocks, questions);
 
   return {
-    ...preview,
-    suggestions: suggestPriorAnswerMapping(preview.headers, questions),
-    questions: importable.map((q) => ({
-      id: q.id,
-      questionCode: q.questionCode ?? null,
-      title: q.title,
-      type: q.type,
+    sheetNames: preview.sheetNames,
+    headerRows: preview.headerRows,
+    rows: preview.rows,
+    totalRows: preview.totalRows,
+    blocks: suggestions.map((s) => ({
+      code: s.block.code,
+      part: s.block.part,
+      columnIndexes: s.block.columnIndexes,
+      detailLabels: s.block.detailLabels,
+      questionId: s.questionId,
+      matchedBy: s.matchedBy,
+      /** 자리를 정하지 못한 칸 수 — 화면이 "일부만 이어짐"을 알린다. */
+      unmatchedSlots: s.slots.filter((slot) => slot.kind === 'unmatched').length,
     })),
+    // 안내문은 답이 없는 유형이라 매핑 선택지에 두지 않는다.
+    questions: questions
+      .filter((q) => q.type !== 'notice')
+      .map((q) => ({
+      id: q.id,
+        questionCode: q.questionCode ?? null,
+        title: q.title,
+        type: q.type,
+      })),
   };
 }
 
@@ -95,19 +114,35 @@ export async function importPriorAnswers(
 ): Promise<ImportPriorAnswersResult> {
   ensureXlsx(input.file);
   const buffer = await input.file.arrayBuffer();
-  const rows = await parseExcelRows(buffer, {
+  // maxRows 를 주지 않으면 전량이다 — 헤더와 데이터를 한 번의 파싱으로 함께 얻는다.
+  const preview = await previewExcelGrid(buffer, {
     sheetName: input.sheetName,
-    headerRow: input.headerRow,
+    headerRowCount: input.headerRowCount,
   });
+  const rows = preview.rows;
   if (rows.length > MAX_UPLOAD_ROWS) {
     throw new Error(`한 번에 올릴 수 있는 행은 ${MAX_UPLOAD_ROWS.toLocaleString()}건입니다.`);
   }
 
   const questions = await loadQuestions(input.surveyId);
+  // 자리 배정은 서버가 다시 계산한다 — 클라이언트는 블록↔문항 확정만 보낸다.
+  // 화면이 본 것과 같은 헤더에서 같은 규칙으로 뽑아야 미리보기와 적재가 어긋나지 않는다.
+  const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+  const questionById = new Map(questions.map((q) => [q.id, q]));
+  const assignments = blocks.flatMap((block, index) => {
+    const questionId = input.mapping[String(index)];
+    if (!questionId) return [];
+    const question = questionById.get(questionId);
+    if (!question) return [];
+    // 자리 배정은 자동 제안과 같은 규칙(resolveSlots)으로 직접 계산한다.
+    // 제안 경로로 되돌리면 사람이 코드가 다른 문항을 고른 순간 전 칸이 미배정이 된다.
+    return [{ block: block as HeaderBlock, questionId, slots: resolveSlots(question, block) }];
+  });
+
   const parsed = buildPriorAnswerRecords({
     rows,
-    residColumnKey: input.residColumnKey,
-    mapping: input.mapping,
+    residColumnIndex: input.residColumnIndex,
+    assignments,
     questions,
   });
 
@@ -184,6 +219,9 @@ export async function importPriorAnswers(
   for (const record of parsed.records) {
     for (const questionId of Object.keys(record.answers)) filledQuestionIds.add(questionId);
   }
+  const unmappedColumns = blocks
+    .filter((_, index) => !input.mapping[String(index)])
+    .map((block) => block.code);
 
   return {
     parsedTargets: parsed.records.length,
@@ -192,9 +230,7 @@ export async function importPriorAnswers(
     unmatchedResids: unmatchedResids.slice(0, MAX_UNMATCHED_SAMPLES),
     emptyResidRows: parsed.emptyResidRows,
     duplicateResidRows: parsed.duplicateResidRows,
-    unmappedColumns: Object.keys(rows[0] ?? {}).filter(
-      (key) => key !== input.residColumnKey && !(key in input.mapping),
-    ),
+    unmappedColumns,
     questionsWithoutValues: [...mappedQuestionIds].filter((id) => !filledQuestionIds.has(id)),
     unsupportedQuestionIds: parsed.unsupportedQuestionIds,
     optionMismatches: parsed.optionMismatches,

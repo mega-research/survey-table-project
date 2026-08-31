@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   scope: 'real' as 'real' | 'test',
-  parsedRows: [] as Array<Record<string, string>>,
+  headerRows: [] as string[][],
+  codeRowMerged: undefined as boolean[] | undefined,
+  parsedRows: [] as string[][],
   questionRows: [] as Array<Record<string, unknown>>,
   targetRows: [] as Array<{ id: string; resid: number }>,
   insertedValues: [] as Array<Record<string, unknown>>,
@@ -15,12 +17,12 @@ vi.mock('@/lib/operations/data-scope.server', () => ({
 }));
 
 vi.mock('@/lib/contacts/excel-parser', () => ({
-  parseExcelRows: vi.fn(async () => h.parsedRows),
-  previewExcel: vi.fn(async () => ({
+  previewExcelGrid: vi.fn(async () => ({
     sheetNames: ['rawdata'],
-    headers: ['ID', 'BQ1'],
-    rows: [{ ID: '1', BQ1: '메가리서치' }],
-    totalRows: 1,
+    headerRows: h.headerRows,
+    codeRowMerged: h.codeRowMerged,
+    rows: h.parsedRows,
+    totalRows: h.parsedRows.length,
   })),
 }));
 
@@ -79,9 +81,10 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     surveyId: SURVEY_ID,
     file: file(),
     sheetName: 'rawdata',
-    headerRow: 1,
-    residColumnKey: 'ID',
-    mapping: { BQ1: 'q-text' },
+    headerRowCount: 1,
+    residColumnIndex: 0,
+    // 블록 번호 1 = 두 번째 컬럼(BQ1)
+    mapping: { '1': 'q-text' },
     ...overrides,
   } as Parameters<typeof importPriorAnswers>[0];
 }
@@ -95,7 +98,9 @@ describe('importPriorAnswers', () => {
     h.questionRows = [
       { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
     ];
-    h.parsedRows = [{ ID: '7', BQ1: '메가리서치' }];
+    h.headerRows = [['ID', 'BQ1']];
+    h.codeRowMerged = undefined;
+    h.parsedRows = [['7', '메가리서치']];
     h.targetRows = [{ id: 'target-7', resid: 7 }];
   });
 
@@ -117,7 +122,7 @@ describe('importPriorAnswers', () => {
   });
 
   it('숫자가 아닌 시스템ID 는 조회에 넣지 않고 미매칭으로 남긴다', async () => {
-    h.parsedRows = [{ ID: 'A-7', BQ1: '메가리서치' }];
+    h.parsedRows = [['A-7', '메가리서치']];
     const result = await importPriorAnswers(baseInput());
     expect(result.unmatchedResids).toEqual(['A-7']);
     expect(h.insertCalls).toBe(0);
@@ -138,7 +143,7 @@ describe('importPriorAnswers', () => {
   });
 
   it('이월 값이 하나도 들어가지 않은 문항을 알려준다', async () => {
-    h.parsedRows = [{ ID: '7', BQ1: '' }];
+    h.parsedRows = [['7', '']];
     const result = await importPriorAnswers(baseInput());
     expect(result.questionsWithoutValues).toEqual(['q-text']);
     expect(result.parsedTargets).toBe(0);
@@ -147,8 +152,8 @@ describe('importPriorAnswers', () => {
   it('앞뒤 0 이 붙은 같은 번호를 한 대상으로 접어 적재가 통째로 죽지 않는다', async () => {
     // 같은 contactTargetId 가 한 배치에 두 번 실리면 PG 가 ON CONFLICT 를 거부한다(21000).
     h.parsedRows = [
-      { ID: '07', BQ1: '먼저' },
-      { ID: '7', BQ1: '나중' },
+      ['07', '먼저'],
+      ['7', '나중'],
     ];
     const result = await importPriorAnswers(baseInput());
     expect(result.matched).toBe(1);
@@ -157,9 +162,58 @@ describe('importPriorAnswers', () => {
     ]);
   });
 
-  it('잇지 않은 컬럼을 목록으로 낸다', async () => {
-    h.parsedRows = [{ ID: '7', BQ1: '메가리서치', 비고: '아무거나' }];
+  it('3단 헤더의 표 문항 블록이 칸 단위로 한 번에 붙는다', async () => {
+    h.questionRows = [
+      {
+        id: 'q-table',
+        type: 'table',
+        title: '창업 기업 현황',
+        order: 1,
+        questionCode: 'BQ2',
+        tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '값' }],
+        tableRowsData: [
+          {
+            id: 'r1',
+            label: '대표자',
+            cells: [
+              { id: 'cell-r1c0', type: 'text', content: '대표자' },
+              { id: 'cell-r1c1', type: 'input', content: '' },
+            ],
+          },
+          {
+            id: 'r2',
+            label: '업종',
+            cells: [
+              { id: 'cell-r2c0', type: 'text', content: '업종' },
+              { id: 'cell-r2c1', type: 'input', content: '' },
+            ],
+          },
+        ],
+      },
+    ];
+    h.headerRows = [
+      ['', 'Ⅰ. 창업 현황', ''],
+      ['ID', 'BQ2', ''],
+      ['시스템ID', '대표자', '업종'],
+    ];
+    h.codeRowMerged = [false, false, true];
+    h.parsedRows = [['7', '홍길동', '제조업']];
+
+    const result = await importPriorAnswers(
+      baseInput({ headerRowCount: 3, mapping: { '1': 'q-table' } }),
+    );
+
+    expect(result.matched).toBe(1);
+    expect(h.insertedValues[0]?.['answers']).toEqual({
+      'q-table': { 'cell-r1c1': '홍길동', 'cell-r2c1': '제조업' },
+    });
+  });
+
+  it('잇지 않은 블록을 목록으로 낸다', async () => {
+    h.headerRows = [['ID', 'BQ1', '비고']];
+    h.parsedRows = [['7', '메가리서치', '아무거나']];
     const result = await importPriorAnswers(baseInput());
-    expect(result.unmappedColumns).toEqual(['비고']);
+    // 블록 0(ID)·2(비고)는 문항에 잇지 않았다.
+    expect(result.unmappedColumns).toEqual(['ID', '비고']);
   });
 });
