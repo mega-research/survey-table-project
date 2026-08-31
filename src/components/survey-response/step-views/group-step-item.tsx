@@ -2,10 +2,15 @@
 
 import { useCallback, useMemo } from 'react';
 
-import { History } from 'lucide-react';
-
+import { ChangeConfirmControl } from '@/components/survey-response/change-confirm-control';
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
+import {
+  CHANGE_CONFIRM_KEY,
+  getChangeConfirmation,
+  updateChangeConfirmations,
+  type ChangeConfirmation,
+} from '@/lib/survey/change-confirmation';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { usePriorAnswerMark } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -32,6 +37,7 @@ export function GroupStepItem({
   onResponse,
   isHighlighted,
   showRequiredMessage,
+  showChangeConfirmMessage,
   issues,
 }: {
   item: StepItem;
@@ -42,6 +48,8 @@ export function GroupStepItem({
   isHighlighted: boolean;
   /** 필수 미응답 안내 문구 표시 — 질문별 requiredMessage 또는 기본 문구. */
   showRequiredMessage: boolean;
+  /** 변동 확인 미선택 안내 문구 표시 — 응답 필수와 별개 축이다. */
+  showChangeConfirmMessage: boolean;
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
@@ -64,8 +72,18 @@ export function GroupStepItem({
   );
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시한다.
-  const { hasPrior, waveLabel } = usePriorAnswerMark(q.id);
+  // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시하고,
+  // 같은 자리에서 변동 여부를 밝히게 한다(밝히지 않으면 페이지를 넘길 수 없다).
+  const { hasPrior, waveLabel } = usePriorAnswerMark(q);
+  const changeConfirmation = getChangeConfirmation(responses, q.id);
+  const onChangeConfirm = useCallback(
+    (value: ChangeConfirmation) =>
+      onResponse(
+        CHANGE_CONFIRM_KEY,
+        updateChangeConfirmations(responses[CHANGE_CONFIRM_KEY], q.id, value),
+      ),
+    [onResponse, q.id, responses],
+  );
   const titleText = useMemo(
     () => substituteTokens(q.title ?? '', attrs, quotes),
     [q.title, attrs, quotes],
@@ -135,12 +153,13 @@ export function GroupStepItem({
           />
         )}
         {hasPrior && (
-          <div className="px-1">
-            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-              <History className="h-3.5 w-3.5" aria-hidden="true" />
-              {waveLabel} 답변이 채워져 있습니다
-            </span>
-          </div>
+          <ChangeConfirmControl
+            questionId={q.id}
+            waveLabel={waveLabel}
+            value={changeConfirmation}
+            onSelect={onChangeConfirm}
+            showRequiredMessage={showChangeConfirmMessage}
+          />
         )}
         <div
           role="group"

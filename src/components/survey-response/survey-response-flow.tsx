@@ -23,6 +23,11 @@ import {
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import {
+  CHANGE_CONFIRM_KEY,
+  collectUnconfirmedQuestionIds,
+  readChangeConfirmations,
+} from '@/lib/survey/change-confirmation';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
@@ -772,6 +777,28 @@ function SurveyResponseFlowActive({
       .map((q) => q.id),
   );
 
+  // 추적조사 변동 확인 게이트 — 이월 값이 있는데 "같음/달라짐"을 밝히지 않은 문항.
+  // 응답 필수 여부와 별개 축이라 isQuestionRequired 를 전혀 보지 않는다. 표시 조건으로
+  // 숨겨진 문항은 currentStepQuestions 단계에서 이미 빠져 있다.
+  // 이월 응답이 없는 응답자(익명·미보유 대상자)와 admin-edit/미리보기는 priorAnswers 가
+  // null 이라 이 목록이 항상 비고, 게이트 전체가 무동작이다.
+  const unconfirmedChangeQuestionIds = useMemo(
+    () => collectUnconfirmedQuestionIds(currentStepQuestions, priorAnswers, responses),
+    [currentStepQuestions, priorAnswers, responses],
+  );
+  // 안내 문구는 "다음"을 시도한 스텝에서만 띄운다(숫자 검증과 같은 방식). 목록 자체는
+  // 라이브 계산이라 응답자가 선택하는 순간 문구가 사라진다.
+  const [changeConfirmErrorStepIndex, setChangeConfirmErrorStepIndex] = useState<number | null>(
+    null,
+  );
+  const changeConfirmMessageQuestionIds = useMemo(
+    () =>
+      changeConfirmErrorStepIndex === currentStepIndex
+        ? new Set(unconfirmedChangeQuestionIds)
+        : new Set<string>(),
+    [changeConfirmErrorStepIndex, currentStepIndex, unconfirmedChangeQuestionIds],
+  );
+
   const canProceed = () => {
     if (!currentStep) return false;
     // step 내 표시되는 필수 질문 전부가 답변되어야 함
@@ -907,6 +934,22 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
+  // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
+  // 하이라이트를 여기서 대신 푼다 — 일반 답변과 같은 즉시성을 주기 위함이다.
+  const handleStepResponse = useCallback(
+    (questionId: string, value: unknown) => {
+      handleResponse(questionId, value);
+      if (questionId !== CHANGE_CONFIRM_KEY) return;
+      const confirmed = readChangeConfirmations({ [CHANGE_CONFIRM_KEY]: value });
+      setHighlightQuestionIds((prev) => {
+        const next = new Set([...prev].filter((id) => !confirmed[id]));
+        return next.size === prev.size ? prev : next;
+      });
+    },
+    [handleResponse, setHighlightQuestionIds],
+  );
+
   // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
   // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
   // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
@@ -1015,6 +1058,19 @@ function SurveyResponseFlowActive({
         });
       }
       setNumericErrorStepIndex(currentStepIndex);
+      return;
+    }
+
+    // 변동 확인 게이트(추적조사) — 이월 값이 있는 문항의 "같음/달라짐"을 밝히지 않으면
+    // 넘어갈 수 없다. 응답 필수 게이트 뒤에 두는 이유는 차단 강도 순서 때문이 아니라,
+    // 위 두 게이트가 이미 하이라이트를 잡고 있으면 그쪽을 먼저 해소하는 편이 화면에서
+    // 덜 헷갈려서다. admin-edit 완화(bypassEmptyRequired)는 빈 필수 전용이라 이 게이트를
+    // 풀지 않는다 — 애초에 admin-edit 에는 이월 응답이 실리지 않아 목록이 비어 있다.
+    const firstUnconfirmed = unconfirmedChangeQuestionIds[0];
+    if (firstUnconfirmed) {
+      setHighlightQuestionIds(new Set([firstUnconfirmed]));
+      setChangeConfirmErrorStepIndex(currentStepIndex);
+      scrollToIssue({ questionId: firstUnconfirmed });
       return;
     }
 
@@ -1290,9 +1346,10 @@ function SurveyResponseFlowActive({
           questions={questions}
           groups={groups}
           evalCtx={evalCtx}
-          onResponse={handleResponse}
+          onResponse={handleStepResponse}
           highlightQuestionIds={highlightQuestionIds}
           requiredMessageQuestionIds={requiredMessageQuestionIds}
+          changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
 
