@@ -4,6 +4,7 @@ import { type SQL, and, count, desc, eq, isNull, max, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
+  fieldworkOrgs,
   surveyParticipants,
   surveyResponses,
   surveys,
@@ -162,4 +163,22 @@ function quotaTargetTotal(config: QuotaConfig | null): number | null {
   // 셀은 sparse 다(목표가 있는 조합만) — 합이 곧 설문 전체의 목표 표본 수다.
   const total = (config.cells ?? []).reduce((sum, cell) => sum + (cell.target ?? 0), 0);
   return total > 0 ? total : null;
+}
+
+/**
+ * 소속 업체의 표시 이름 — 실사 홈 헤더의 「박현우 · 그린리서치」 (.pen 10-1).
+ *
+ * 판정 주체(`loadAccessSubject`)는 id 만 들고 다닌다 — 이름은 판정에 쓰이지 않고, 실으면
+ * 관문이 도는 모든 요청이 그 조인을 치른다. 화면이 필요할 때만 따로 읽는 것이 맞다.
+ *
+ * `status` 로 좁히지 않는다: 여기 도달했다는 것은 주체 로더가 이미 활성 업체를 확인했다는
+ * 뜻이고(그렇지 않으면 소속이 null 이라 화면이 열리지 않는다), 조건을 두 곳에 두면 한쪽만
+ * 고쳐지는 날이 온다.
+ */
+export async function getFieldworkOrgName(orgId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ name: fieldworkOrgs.name })
+    .from(fieldworkOrgs)
+    .where(eq(fieldworkOrgs.id, orgId));
+  return row?.name ?? null;
 }
