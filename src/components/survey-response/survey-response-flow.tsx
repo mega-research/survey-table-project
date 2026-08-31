@@ -23,6 +23,7 @@ import {
   InvalidTestLinkScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
+import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
@@ -1428,9 +1429,25 @@ function SurveyResponseFlowActive({
             <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
           </div>
         )}
+        {isSplit ? (
+          /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+          <DemandChecklist
+            items={currentStep.items.filter((item) =>
+              currentStepQuestions.some((q) => q.id === item.question.id),
+            )}
+            groups={groups}
+            responses={responses}
+            questions={questions}
+            onResponse={handleResponse}
+            highlightQuestionIds={highlightQuestionIds}
+            requiredMessageQuestionIds={requiredMessageQuestionIds}
+            numericIssues={visibleNumericIssues}
+            onQuestionFocus={selectAnchorQuestion}
+          />
+        ) : (
         <PageStepView
           step={currentStep}
-          {...(isSplit ? { onQuestionFocus: selectAnchorQuestion, showBulkChoice: true } : {})}
           responses={responses}
           questions={questions}
           groups={groups}
@@ -1440,6 +1457,7 @@ function SurveyResponseFlowActive({
           requiredMessageQuestionIds={requiredMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
+        )}
 
         {/* 데스크톱 네비게이션 */}
         <div className="mt-8 hidden items-center justify-between md:flex">

@@ -127,7 +127,11 @@ export function PdfPageView({
       if (token !== renderToken.current) return;
 
       const base = pdfPage.getViewport({ scale: 1 });
-      const avail = Math.max(280, scroller.clientWidth - PAD * 2) * zoom;
+      // 세로 스크롤바가 생기면 clientWidth 가 그만큼 줄어드는데, 폭을 재는 시점은
+      // 그리기 **전**이라 렌더 뒤에 가로로 몇 px 넘쳐 가짜 가로 스크롤이 생겼다.
+      // 스크롤바 자리를 항상 비워두는 것(scrollbarGutter: stable)으로 폭을 고정하고,
+      // 소수점 올림으로 1px 넘치는 것을 막기 위해 내림한다.
+      const avail = Math.floor(Math.max(280, scroller.clientWidth - PAD * 2) * zoom);
       const viewport = pdfPage.getViewport({ scale: avail / base.width });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -248,7 +252,11 @@ export function PdfPageView({
         </div>
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto" style={{ padding: PAD }}>
+      <div
+        ref={scrollRef}
+        className="relative min-h-0 flex-1 overflow-auto"
+        style={{ padding: PAD, scrollbarGutter: 'stable' }}
+      >
         <div
           {...surfaceHandlers}
           className={cn('relative mx-auto w-fit', surfaceClassName)}
