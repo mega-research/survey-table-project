@@ -76,7 +76,7 @@ export function ResponseDocumentPane({
    * 쪽 안에서 어디를 보여줄지. 초점 사각형이 화면 밖일 때만 최소한으로 움직인다 —
    * 판정은 anchor-geometry 소관이고 여기서는 실측 배치를 재서 넘기기만 한다.
    */
-  const scrollBand: (ScrollBand & { nonce: number }) | null = useMemo(() => {
+  const scrollBand: ScrollBand | null = useMemo(() => {
     if (!focus || pageBoxes.length === 0) return null;
     const bandOf = (predicate: (ownerId: string) => boolean) => {
       const placed = drawn
@@ -97,7 +97,6 @@ export function ResponseDocumentPane({
       contextBottom: context.bottom,
       focusTop: target.top,
       focusBottom: target.bottom,
-      nonce: focus.nonce,
     };
   }, [focus, drawn, pageBoxes]);
 

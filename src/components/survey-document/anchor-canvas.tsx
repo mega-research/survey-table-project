@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import {
   locate,
+  locateOnPage,
   normalizeDrag,
   place,
   type NormRect,
@@ -79,31 +80,59 @@ export function AnchorCanvas({
   const pageBoxes: PageBox[] = boxes;
   const drawable = Boolean(drawingFor);
 
-  function pointAt(e: React.MouseEvent<HTMLDivElement>) {
-    const origin = e.currentTarget.getBoundingClientRect();
-    return locate(pageBoxes, e.clientX - origin.left, e.clientY - origin.top);
-  }
+  /** 드래그가 시작된 감싼 상자. 진행 중에는 여기서 원점을 다시 잰다(스크롤돼도 맞다). */
+  const surfaceRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * 시작한 뒤에는 창 전체에서 받는다 — 감싼 상자를 벗어났다고 드래그를 버리면
+   * 쪽 아래 끝까지 끌 수 없다.
+   *
+   * 끝점은 **시작 쪽에 고정**해 읽는다. 커서가 다음 쪽이나 쪽 사이 여백으로 내려가면
+   * `locate` 는 다른 쪽을 가리키거나 null 을 내고, 그러면 만들던 사각형이 사라진다.
+   * 쪽 밖으로 나간 값은 normalizeDrag 가 잘라 그 쪽 아래 끝까지 그린 것으로 만든다.
+   * 쪽을 넘는 구간은 사각형 두 개로 나눠 잡는 것이 이 좌표 모델의 규칙이다.
+   */
+  useEffect(() => {
+    if (!drag) return;
+    const endPoint = (clientX: number, clientY: number) => {
+      const surface = surfaceRef.current;
+      if (!surface) return null;
+      const origin = surface.getBoundingClientRect();
+      return locateOnPage(
+        pageBoxes,
+        drag.start.page,
+        clientX - origin.left,
+        clientY - origin.top,
+      );
+    };
+    const move = (e: MouseEvent) => {
+      const hit = endPoint(e.clientX, e.clientY);
+      if (hit) setDrag((prev) => (prev ? { ...prev, end: hit } : prev));
+    };
+    const up = (e: MouseEvent) => {
+      const hit = endPoint(e.clientX, e.clientY) ?? drag.end;
+      setDrag(null);
+      const rect = normalizeDrag(drag.start, hit);
+      if (rect) onDraw?.(rect);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+  }, [drag, pageBoxes, onDraw]);
 
   const surfaceProps = {
     onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => {
       if (!drawable) return;
-      const hit = pointAt(e);
+      const origin = e.currentTarget.getBoundingClientRect();
+      const hit = locate(pageBoxes, e.clientX - origin.left, e.clientY - origin.top);
       if (!hit || hit.x < 0 || hit.x > 1) return;
       e.preventDefault();
+      surfaceRef.current = e.currentTarget;
       setDrag({ start: hit, end: hit });
     },
-    onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!drag) return;
-      const hit = pointAt(e);
-      if (hit) setDrag({ ...drag, end: hit });
-    },
-    onMouseUp: () => {
-      if (!drag) return;
-      const rect = normalizeDrag(drag.start, drag.end);
-      setDrag(null);
-      if (rect) onDraw?.(rect);
-    },
-    onMouseLeave: () => setDrag(null),
     className: drawable ? 'cursor-crosshair select-none' : undefined,
   };
 

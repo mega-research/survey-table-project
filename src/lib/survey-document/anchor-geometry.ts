@@ -48,6 +48,30 @@ export function locate(
 }
 
 /**
+ * 컨테이너 좌표계의 한 점을 **지정한 쪽**의 좌표로 읽는다.
+ * 그 쪽이 그려져 있지 않으면 null.
+ *
+ * `locate` 와 달리 어느 쪽인지 찾지 않는다 — 드래그 도중에는 **시작 쪽에 고정**해야
+ * 하기 때문이다. 커서가 다음 쪽이나 쪽 사이 여백으로 내려가면 `locate` 는 다른 쪽을
+ * 가리키거나 null 을 내고, 그러면 만들던 사각형이 사라진다. 값은 클램프하지 않으므로
+ * 쪽 밖이면 0 미만·1 초과가 나오고, 자르는 것은 normalizeDrag 몫이다.
+ */
+export function locateOnPage(
+  boxes: readonly PageBox[],
+  page: number,
+  localX: number,
+  localY: number,
+): { page: number; x: number; y: number } | null {
+  const box = boxes.find((b) => b.page === page);
+  if (!box || box.height <= 0 || box.width <= 0) return null;
+  return {
+    page,
+    x: (localX - box.left) / box.width,
+    y: (localY - box.top) / box.height,
+  };
+}
+
+/**
  * 드래그 시작점과 끝점을 정규화 사각형으로.
  *
  * - 시작 쪽을 벗어난 끝점은 받지 않는다(null). 좌표 모델이 쪽 단위라는 전제를

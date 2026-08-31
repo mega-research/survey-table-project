@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   locate,
+  locateOnPage,
   normalizeDrag,
   place,
   scrollTarget,
@@ -271,5 +272,36 @@ describe('scrollTarget', () => {
     expect(
       scrollTarget({ ...base, contextTop: 10, contextBottom: 200, focusTop: 10, focusBottom: 90 }),
     ).toBeNull();
+  });
+});
+
+describe('locateOnPage', () => {
+  it('커서가 다음 쪽으로 내려가도 시작 쪽 좌표로 읽는다', () => {
+    // 드래그 도중 locate 를 쓰면 쪽이 바뀌어 normalizeDrag 가 null 을 내고
+    // 만들던 사각형이 사라진다 — 그래서 시작 쪽에 고정해 읽는다.
+    const boxes = doc(1);
+    const onPage2 = pointOnPage(boxes, 2, 0.5, 0.5);
+    const hit = locateOnPage(boxes, 1, onPage2.localX, onPage2.localY);
+    expect(hit?.page).toBe(1);
+    expect(hit?.y).toBeGreaterThan(1); // 1쪽 기준으로는 아래로 벗어난 값
+  });
+
+  it('쪽 사이 여백에서도 값을 낸다 — locate 는 null 을 내는 자리다', () => {
+    const boxes = doc(1);
+    const gapY = boxes[0]!.top + boxes[0]!.height + 8;
+    expect(locate(boxes, 300, gapY)).toBeNull();
+    expect(locateOnPage(boxes, 1, 300, gapY)?.y).toBeGreaterThan(1);
+  });
+
+  it('그려지지 않은 쪽은 읽을 수 없다', () => {
+    expect(locateOnPage(doc(1, 2), 5, 0, 0)).toBeNull();
+  });
+
+  it('같은 쪽 안에서는 locate 와 같은 값을 낸다', () => {
+    const boxes = doc(1, 20, 37);
+    const p = pointOnPage(boxes, 3, 0.25, 0.4);
+    expect(locateOnPage(boxes, 3, p.localX, p.localY)).toEqual(
+      locate(boxes, p.localX, p.localY),
+    );
   });
 });

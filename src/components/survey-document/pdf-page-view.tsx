@@ -47,11 +47,14 @@ interface Props {
   /** 페이지 위에 겹쳐 그릴 것 (영역 사각형 등). */
   overlay?: React.ReactNode;
   /**
-   * 쪽 안에서 보여줄 구간. `nonce` 가 바뀔 때만 스크롤을 맞춘다 — 상태를 감시하면
-   * 응답자가 직접 스크롤한 위치를 곧바로 되돌린다. 좌표는 이 컴포넌트가 올려보낸
-   * 실측 배치(onPageBox)와 같은 원점이다.
+   * 쪽 안에서 보여줄 구간. 좌표는 이 컴포넌트가 올려보낸 실측 배치(onPageBoxes)와
+   * 같은 원점이라, 스크롤 좌표로 옮기는 안쪽 여백은 여기서 더한다.
+   *
+   * **nonce 로 가드하지 않는다.** "이미 보이면 움직이지 않는다"는 판정은
+   * `scrollTarget` 이 이미 한다. 가드를 걸면 초점이 바뀐 직후(아직 새 쪽이 그려지기
+   * 전) 한 번 소진돼, 정작 새 쪽이 그려진 뒤에는 맞추지 못하고 엉뚱한 자리에 남는다.
    */
-  scrollBand?: (ScrollBand & { nonce: number }) | null;
+  scrollBand?: ScrollBand | null;
   /**
    * 쪽을 감싼 상자에 붙일 마우스 핸들러 — 영역 드래그용.
    * overlay 와 **같은 좌표 원점**을 갖는 요소에 붙는다(그래서 캔버스가 아니라 감싼 상자다) —
@@ -224,23 +227,25 @@ export function PdfPageView({
   }, [renderPage]);
 
   // 쪽만 넘기고 끝내면 확대했거나 긴 쪽에서 영역이 화면 밖에 남는다.
-  // 이미 보이는 동안은 움직이지 않는 판정은 anchor-geometry 소관이다.
-  const [scrolledNonce, setScrolledNonce] = useState<number | null>(null);
+  // 이미 보이는 동안은 움직이지 않는 판정은 anchor-geometry(scrollTarget) 소관이라
+  // 여기서 따로 가드하지 않는다 — 그래서 응답자가 직접 스크롤한 위치를 빼앗지 않는다.
   useEffect(() => {
     const scroller = scrollRef.current;
-    if (!scroller || !scrollBand || scrollBand.nonce === scrolledNonce || rendering) return;
-    setScrolledNonce(scrollBand.nonce);
+    if (!scroller || !scrollBand || rendering) return;
     const want = scrollTarget({
-      contextTop: scrollBand.contextTop,
-      contextBottom: scrollBand.contextBottom,
-      focusTop: scrollBand.focusTop,
-      focusBottom: scrollBand.focusBottom,
+      // 실측 배치는 쪽을 감싼 상자 기준이고 scrollTop 은 스크롤 상자 기준이라,
+      // 그 사이의 안쪽 여백만큼 옮겨 놓아야 같은 자를 쓴다.
+      contextTop: scrollBand.contextTop + PAD,
+      contextBottom: scrollBand.contextBottom + PAD,
+      focusTop: scrollBand.focusTop + PAD,
+      focusBottom: scrollBand.focusBottom + PAD,
       viewTop: scroller.scrollTop,
       viewHeight: scroller.clientHeight,
-      pad: PAD,
+      // 맥락 상단에 맞출 때의 숨 쉴 자리 — 프로토타입과 같은 값
+      pad: 80,
     });
     if (want !== null) scroller.scrollTo({ top: want, behavior: 'smooth' });
-  }, [scrollBand, scrolledNonce, rendering]);
+  }, [scrollBand, rendering]);
 
   const go = (n: number) => onPageChange(Math.min(Math.max(1, n), Math.max(1, total)));
 
