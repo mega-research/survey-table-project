@@ -12,9 +12,10 @@ import type {
 } from '@/features/survey-builder/domain/survey-read';
 import type { Survey } from '@/types/survey';
 
-const { forResponseMock, attrsLookupMock } = vi.hoisted(() => ({
+const { forResponseMock, attrsLookupMock, priorAnswersLookupMock } = vi.hoisted(() => ({
   forResponseMock: vi.fn(),
   attrsLookupMock: vi.fn(),
+  priorAnswersLookupMock: vi.fn(),
 }));
 
 vi.mock('@/shared/lib/rpc', () => ({
@@ -30,6 +31,9 @@ vi.mock('@/shared/lib/rpc', () => ({
       attrs: {
         lookup: (...args: unknown[]) => attrsLookupMock(...args),
       },
+      priorAnswers: {
+        lookup: (...args: unknown[]) => priorAnswersLookupMock(...args),
+      },
     },
   },
 }));
@@ -44,6 +48,7 @@ vi.mock('@/features/contacts/server/services/contact-attrs.service', async (impo
 import * as contactAttrsService from '@/features/contacts/server/services/contact-attrs.service';
 import { attrs } from '@/features/contacts/server/procedures/attrs';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
 
 const SURVEY_ID = 'survey-loader-test';
 const INVITE_A = '11111111-2222-4333-8444-555555555555';
@@ -76,6 +81,7 @@ const noneControl: SurveyControl = {
   pausedMessage: null,
   testSession: 'none',
   testSessionKind: null,
+  priorWaveLabel: null,
 };
 
 function responseResult(control: SurveyControl = noneControl): NonNullable<SurveyForResponseResult> {
@@ -117,7 +123,7 @@ function deferred<T>() {
 
 function renderLoader(initialProps: { inviteToken: string | null; testToken: string | null }) {
   const setResponses = vi.fn();
-  return renderHook(
+  const rendered = renderHook(
     (props: typeof initialProps) =>
       useSurveyLoader({
         identifier: SURVEY_ID,
@@ -129,12 +135,16 @@ function renderLoader(initialProps: { inviteToken: string | null; testToken: str
       }),
     { initialProps },
   );
+  return Object.assign(rendered, { setResponses });
 }
 
 describe('useSurveyLoader 토큰 재판정', () => {
   beforeEach(() => {
     forResponseMock.mockReset();
     attrsLookupMock.mockReset();
+    priorAnswersLookupMock.mockReset();
+    priorAnswersLookupMock.mockResolvedValue(null);
+    useSurveyResponseStore.getState().resetResponseState();
     vi.mocked(contactAttrsService.lookupContactAttrs).mockReset();
   });
 
@@ -241,5 +251,98 @@ describe('useSurveyLoader 토큰 재판정', () => {
 
     expect(result.current.control?.testSession).toBe('invalid');
     expect(forResponseMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useSurveyLoader 이월 응답 프리필', () => {
+  beforeEach(() => {
+    forResponseMock.mockReset();
+    attrsLookupMock.mockReset();
+    priorAnswersLookupMock.mockReset();
+    useSurveyResponseStore.getState().resetResponseState();
+    vi.mocked(contactAttrsService.lookupContactAttrs).mockReset();
+  });
+
+  it('이월 응답이 있으면 admin-edit 과 같은 초기 prefill 경로로 주입한다', async () => {
+    forResponseMock.mockResolvedValue(responseResult());
+    attrsLookupMock.mockResolvedValue({ name: '홍길동' });
+    priorAnswersLookupMock.mockResolvedValue({
+      q1: '작년 답',
+      __optTexts__: { q1: { o1: '작년 기타' } },
+    });
+
+    const { result, setResponses } = renderLoader({ inviteToken: INVITE_A, testToken: null });
+
+    await waitFor(() => expect(result.current.prefillSettled).toBe(true));
+    expect(priorAnswersLookupMock).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      inviteToken: INVITE_A,
+    });
+    expect(setResponses).toHaveBeenCalledWith({
+      q1: '작년 답',
+      __optTexts__: { q1: { o1: '작년 기타' } },
+    });
+    expect(result.current.priorAnswers).toEqual({
+      q1: '작년 답',
+      __optTexts__: { q1: { o1: '작년 기타' } },
+    });
+    // 선택지에 딸린 기타/상세 기재도 함께 채워진다 (입력란은 스토어만 읽는다).
+    expect(useSurveyResponseStore.getState().optionTexts).toEqual({
+      q1: { o1: '작년 기타' },
+    });
+  });
+
+  it('이월 응답이 없는 대상자는 응답값을 건드리지 않는다', async () => {
+    forResponseMock.mockResolvedValue(responseResult());
+    attrsLookupMock.mockResolvedValue({ name: '홍길동' });
+    priorAnswersLookupMock.mockResolvedValue(null);
+
+    const { result, setResponses } = renderLoader({ inviteToken: INVITE_A, testToken: null });
+
+    await waitFor(() => expect(result.current.prefillSettled).toBe(true));
+    expect(setResponses).not.toHaveBeenCalled();
+    expect(result.current.priorAnswers).toBeNull();
+  });
+
+  it('익명 응답자는 이월 응답을 조회하지 않는다', async () => {
+    forResponseMock.mockResolvedValue(responseResult());
+
+    const { result, setResponses } = renderLoader({ inviteToken: null, testToken: null });
+
+    await waitFor(() => expect(result.current.prefillSettled).toBe(true));
+    expect(priorAnswersLookupMock).not.toHaveBeenCalled();
+    expect(setResponses).not.toHaveBeenCalled();
+    expect(result.current.priorAnswers).toBeNull();
+  });
+
+  it('이월 응답 조회가 실패해도 설문 로딩을 막지 않는다 — 프리필만 생략', async () => {
+    forResponseMock.mockResolvedValue(responseResult());
+    attrsLookupMock.mockResolvedValue({ name: '홍길동' });
+    priorAnswersLookupMock.mockRejectedValue(new Error('boom'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result, setResponses } = renderLoader({ inviteToken: INVITE_A, testToken: null });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.loadError).toBeNull();
+    expect(result.current.contactAttrs).toEqual({ name: '홍길동' });
+    expect(setResponses).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('무효 테스트 링크면 프리필하지 않는다', async () => {
+    forResponseMock.mockResolvedValue(responseResult());
+    vi.mocked(contactAttrsService.lookupContactAttrs).mockRejectedValue(
+      new contactAttrsService.InvalidTestLinkError(),
+    );
+    const boundaryClient = attrsBoundaryClient();
+    attrsLookupMock.mockImplementation((input) => boundaryClient.attrs.lookup(input));
+    priorAnswersLookupMock.mockResolvedValue({ q1: '작년 답' });
+
+    const { result, setResponses } = renderLoader({ inviteToken: INVITE_A, testToken: null });
+
+    await waitFor(() => expect(result.current.control?.testSession).toBe('invalid'));
+    expect(setResponses).not.toHaveBeenCalled();
+    expect(result.current.priorAnswers).toBeNull();
   });
 });

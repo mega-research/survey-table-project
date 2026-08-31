@@ -47,6 +47,16 @@ export function normalizeSlug(slug: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/**
+ * 추적조사 회차 라벨 정규화. 공백만 입력한 경우는 미설정(NULL)으로 본다 —
+ * 응답 화면이 기본 문구로 떨어지게 하려면 '' 이 아니라 NULL 이어야 한다.
+ */
+export function normalizePriorWaveLabel(label: string | null | undefined): string | null {
+  if (label == null) return null;
+  const trimmed = label.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // ========================
 // Diff 기반 설문 저장 (변경분만 전송)
 // ========================
@@ -129,6 +139,7 @@ export async function saveSurveyDiff(
           thankYouMessage: metadata.settings.thankYouMessage,
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
           forceWideLayout: metadata.settings.forceWideLayout ?? false,
+          priorWaveLabel: normalizePriorWaveLabel(metadata.settings.priorWaveLabel),
           responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
@@ -458,6 +469,7 @@ export async function saveSurveyWithDetails(
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
+        priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
         responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
@@ -500,6 +512,7 @@ export async function saveSurveyWithDetails(
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
+        priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
         responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });

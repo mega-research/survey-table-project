@@ -67,6 +67,7 @@
     "0080_drop_legacy_email_tables",
     "0081_revoke_anon_grants_schema_wide",
     "0082_revoke_default_function_execute",
-    "0083_fix_revoke_trigger_procedure_ddl"
+    "0083_fix_revoke_trigger_procedure_ddl",
+    "0084_contact_prior_answers"
   ]
 }

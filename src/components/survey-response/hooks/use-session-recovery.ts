@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { client } from '@/shared/lib/rpc';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { mergeWithPriorAnswers, type PriorAnswers } from '@/lib/survey/prior-answers';
 import type { Survey } from '@/types/survey';
 
 import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
@@ -31,6 +32,11 @@ interface UseSessionRecoveryArgs {
   setSessionId: (sessionId: string) => void;
   /** 같은 버전 target in_progress 응답값 복원용. */
   setResponses?: Dispatch<SetStateAction<Record<string, unknown>>>;
+  /**
+   * 이월 응답(추적조사) — 복원 응답값의 바닥에 깔린다. 응답자가 아직 손대지 않은
+   * 문항은 지난 회차 값이 그대로 보여야 하고, 저장된 답이 있는 문항은 그 답이 이긴다.
+   */
+  priorAnswers?: PriorAnswers | null;
   /**
    * 회복된 응답의 마지막 스텝으로 초기 이동 — 안정 참조(useCallback) 필수 (deps 미포함).
    * 복원 응답값을 함께 넘겨 호출측이 stepHistory(이전 버튼 경로)를 재구성할 수 있게 한다.
@@ -91,6 +97,7 @@ export function useSessionRecovery({
   sessionId,
   setSessionId,
   setResponses,
+  priorAnswers,
   onRestoreStep,
   onDraftSeqRecovered,
   setCurrentResponseId,
@@ -179,13 +186,13 @@ export function useSessionRecovery({
         if (!result) {
           // localStorage 키는 있는데 DB에 row 없음 — orphan, 정리
           window.localStorage.removeItem(key);
-          if (isTargetTestSession) setResponses?.({});
+          if (isTargetTestSession) setResponses?.(mergeWithPriorAnswers(priorAnswers, {}));
           return;
         }
         // 종결 상태(completed/screened/quotaful/bad)면 회복 안 시키고 새 응답 흐름 둔다
         if (result.status !== 'in_progress') {
           window.localStorage.removeItem(key);
-          if (isTargetTestSession) setResponses?.({});
+          if (isTargetTestSession) setResponses?.(mergeWithPriorAnswers(priorAnswers, {}));
           return;
         }
         // 응답 row 사용 — 일반 세션은 saved sessionId를 복구하고, 모든 세션은 저장 답을 복원한다.
@@ -196,7 +203,7 @@ export function useSessionRecovery({
           // 재기록이라 무해하다.
           window.localStorage.setItem(key, recoverySessionId);
         }
-        setResponses?.(result.questionResponses ?? {});
+        setResponses?.(mergeWithPriorAnswers(priorAnswers, result.questionResponses ?? {}));
         // 저장된 기타/상세 기재(__optTexts__)를 입력란 스토어로 되살린다 — 없으면
         // 재진입 화면에서 빈칸으로 보이고, 재제출 시 사이드카가 스토어 내용으로
         // 통째로 교체되며 다른 질문의 텍스트까지 소실된다.
@@ -268,7 +275,7 @@ export function useSessionRecovery({
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
     // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, terminalBlocked, isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses]);
+  }, [enabled, terminalBlocked, isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses, priorAnswers]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.

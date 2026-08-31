@@ -185,6 +185,8 @@ export type SurveyControl = {
   pausedMessage: string | null;
   testSession: 'none' | 'valid' | 'invalid';
   testSessionKind: 'anonymous' | 'target' | null;
+  /** 추적조사 회차 라벨. 스냅샷 밖 라이브 값이라 control 로 흘린다. null 이면 기본 문구. */
+  priorWaveLabel: string | null;
 };
 
 /**

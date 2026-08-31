@@ -425,6 +425,28 @@ describe('survey-read.service getSurveyForResponse control', () => {
     });
   });
 
+  it('회차 라벨은 스냅샷이 아니라 현재 surveys 행에서 control 로 실린다', async () => {
+    const surveyId = 'survey-control-prior-wave';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { priorWaveLabel: '2025년 조사' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control.priorWaveLabel).toBe('2025년 조사');
+  });
+
+  it('회차 라벨 미설정이면 control 에 null 로 실린다', async () => {
+    const surveyId = 'survey-control-prior-wave-null';
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { priorWaveLabel: null }));
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control.priorWaveLabel).toBeNull();
+  });
+
   it('유효한 testToken 이면 testSession=valid 이다', async () => {
     const surveyId = 'survey-control-valid';
     surveysFindFirst.mockResolvedValue(

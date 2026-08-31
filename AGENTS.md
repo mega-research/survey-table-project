@@ -207,6 +207,7 @@ surveys                    # 설문 설정
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
+├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── requireInviteToken            # invite token 강제 여부
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' | 'closed'
@@ -330,6 +331,11 @@ contact_pii                # 컨택 PII 분리 저장 (암호화)
 ├── maskHint
 └── createdAt  (UNIQUE contactTargetId+columnKey)
 
+contact_prior_answers      # 이월 응답 — 지난 회차 응답 한 벌 (추적조사)
+├── id, contactTargetId (UNIQUE, ON DELETE CASCADE)
+├── answers (JSONB)        # survey_responses.questionResponses 와 동형
+└── createdAt, updatedAt
+
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
 ├── resultCode, note, createdBy
@@ -407,7 +413,8 @@ surveys (1) ─┬─ (N) question_groups ── parentGroupId (self-ref)
              └─ (N) mail_campaigns ── (N) mail_recipients ── (1) contact_targets
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
-                 └─ (N) contact_attempts (결과 회차)
+                 ├─ (N) contact_attempts (결과 회차)
+                 └─ (1) contact_prior_answers (이월 응답)
 
 saved_questions / saved_lookups / saved_cells / question_categories (standalone)
 mail_billing_periods / webhook_events (standalone)

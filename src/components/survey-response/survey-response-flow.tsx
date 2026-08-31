@@ -23,6 +23,7 @@ import {
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
@@ -318,6 +319,8 @@ function SurveyResponseFlowActive({
     contactAttrs,
     versionId,
     control,
+    priorAnswers,
+    prefillSettled,
     refetchSnapshot,
   },
   responses,
@@ -625,7 +628,9 @@ function SurveyResponseFlowActive({
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
   const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
-    enabled: !isCompleted,
+    // 이월 응답 프리필 판정이 끝나기 전에 회복이 응답값을 세팅하면, 뒤늦은 프리필이
+    // 저장된 답을 지난 회차 값으로 되돌린다 — 프리필이 정착한 뒤에만 회복을 연다.
+    enabled: !isCompleted && prefillSettled,
     terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
     isPreview,
@@ -638,6 +643,7 @@ function SurveyResponseFlowActive({
     sessionId,
     setSessionId,
     setResponses,
+    priorAnswers,
     onRestoreStep: restoreStepFromRecovery,
     onDraftSeqRecovered: setRecoveredDraftSeq,
     setCurrentResponseId,
@@ -1198,6 +1204,7 @@ function SurveyResponseFlowActive({
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
+      <PriorAnswersProvider answers={priorAnswers} waveLabel={control?.priorWaveLabel}>
       <FormulaEvalProvider value={formulaCtx}>
       <div className="min-h-dvh bg-gray-50">
       {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
@@ -1366,6 +1373,7 @@ function SurveyResponseFlowActive({
       )}
       </div>
       </FormulaEvalProvider>
+      </PriorAnswersProvider>
     </ContactAttrsProvider>
   );
 }

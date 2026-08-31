@@ -2,9 +2,12 @@
 
 import { useCallback, useMemo } from 'react';
 
+import { History } from 'lucide-react';
+
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { usePriorAnswerMark } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -61,6 +64,8 @@ export function GroupStepItem({
   );
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시한다.
+  const { hasPrior, waveLabel } = usePriorAnswerMark(q.id);
   const titleText = useMemo(
     () => substituteTokens(q.title ?? '', attrs, quotes),
     [q.title, attrs, quotes],
@@ -128,6 +133,14 @@ export function GroupStepItem({
             size="sm"
             className="px-2 pb-2 md:overflow-x-auto text-sm text-gray-500 md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
           />
+        )}
+        {hasPrior && (
+          <div className="px-1">
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+              <History className="h-3.5 w-3.5" aria-hidden="true" />
+              {waveLabel} 답변이 채워져 있습니다
+            </span>
+          </div>
         )}
         <div
           role="group"

@@ -730,6 +730,9 @@ export interface SurveySettings {
   responseHeader?: SurveyResponseHeaderConfig;
   // 개인정보 보관기한 — 'YYYY-MM-DD' 날짜 문자열(해당일 포함 보유). null/미설정 = 파기하지 않음.
   piiRetentionUntil?: string | null;
+  // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름(예: 2025년 조사).
+  // 버전 스냅샷에 넣지 않는 라이브 값이라, 응답 페이지는 control 로 전달받는다 (0084 마이그레이션).
+  priorWaveLabel?: string | null;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입
