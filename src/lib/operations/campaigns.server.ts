@@ -282,6 +282,8 @@ export interface CampaignRecipientRow {
   contactTargetId: string | null;
   contactResid: number | null;
   contactGroupValue: string | null;
+  /** contact_targets.attrs — 컬럼 설정의 "메일 표시" attrs 컬럼 렌더용. 컨택 조인이 끊기면 빈 객체. */
+  contactAttrs: Record<string, string>;
   /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
   latestResultCode: string | null;
   emailMasked: string;
@@ -493,6 +495,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactAttrs: contactTargets.attrs,
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
@@ -519,6 +522,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
+      contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,

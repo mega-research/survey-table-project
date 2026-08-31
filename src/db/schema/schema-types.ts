@@ -326,6 +326,12 @@ export interface ContactColumnDef {
    * '종사자 구간' 컬럼에 2(중분류). 진척보고는 레벨 순서대로 조합 집계한다.
    */
   groupLevel?: 1 | 2 | 3 | 4;
+  /**
+   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 이 컬럼을 표시.
+   * attrs.* 소스 전용 — system/pii 컬럼은 attrs 에 값이 없어 표시할 수 없다(서비스 가드).
+   * 조사 대상 목록의 hidden 과는 독립이다.
+   */
+  showInMail?: boolean;
 }
 
 /** surveys.progress_columns — 진척률 표 (Report 탭) 그룹 메타 컬럼 픽커 */

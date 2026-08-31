@@ -20,6 +20,7 @@ import {
   parseHeaderFiltersFromUrl,
   type FilterClause,
 } from '@/lib/operations/contacts-filters.server';
+import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
 import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
@@ -209,6 +210,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         initialClauses={initialClauses}
         sort={sort}
         dir={dir}
+        mailColumns={resolveMailDisplayColumns(scheme)}
       />
     </main>
   );

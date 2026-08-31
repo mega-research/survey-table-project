@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-19 (features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅 반영)
+> 최종 갱신: 2026-08-31 (컨택 컬럼 스킴 컬럼별 플래그 showInMail 반영 · 이전: 2026-08-19 features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅)
 
 ---
 
@@ -200,6 +200,8 @@ surveys                    # 설문 설정
 ├── endDate, maxResponses, thankYouMessage, contactEmail, responseHeader (JSONB)
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
+│                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
+│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표에 attrs 컬럼 노출, attrs.* 전용)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
