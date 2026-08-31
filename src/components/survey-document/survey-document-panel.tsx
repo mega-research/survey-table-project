@@ -77,16 +77,10 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
 
   const outline = useMemo(
     () =>
-      buildAnchorOutline(
-        groups.map((g) => ({ id: g.id, name: g.name, order: g.order })),
-        questions.map((q) => ({
-          id: q.id,
-          groupId: q.groupId ?? null,
-          order: q.order,
-          questionCode: q.questionCode ?? null,
-          title: q.title,
-        })),
-      ),
+      // 스토어의 그룹·질문을 **그대로** 넘긴다. 필요한 필드만 골라 옮기면 하나만
+      // 빠뜨려도 조용히 틀린다 — parentGroupId 를 빠뜨려 모든 그룹이 루트로 보였고,
+      // 하위그룹이 자기 order(0)로 목록 앞으로 튀어 올라왔다.
+      buildAnchorOutline(groups, questions),
     [groups, questions],
   );
 
