@@ -10,7 +10,7 @@ import {
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -31,9 +31,9 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 
-  const [preview, isGuest] = await Promise.all([
+  const [preview, isExternal] = await Promise.all([
     getSurveyForResponse({ surveyId }, { requirePublished: true }),
-    isGuestViewer(),
+    isExternalViewer(),
   ]);
 
   if (!preview) {
@@ -51,7 +51,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               {survey.previewToken && (
                 <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
-              {!isGuest && (
+              {!isExternal && (
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/admin/surveys/${surveyId}/edit`}>
                     <Pencil className="mr-2 h-4 w-4" />
@@ -98,7 +98,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               </Link>
             </Button>
             {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
-            {!isGuest && (
+            {!isExternal && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/admin/surveys/${surveyId}/edit`}>
                   <Pencil className="mr-2 h-4 w-4" />

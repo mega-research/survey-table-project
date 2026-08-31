@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { fieldworkOrgs, surveyParticipants, surveys, users } from '@/db/schema';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
+import type { FieldworkRole } from '@/shared/contracts/auth';
 
 import {
   type AddSurveyFieldworkInput,
@@ -20,6 +21,21 @@ import {
 } from '../domain/fieldwork';
 
 const OK: WorkspaceActionOutput = { success: true };
+
+/**
+ * 역할 없는 행을 조용히 뺀다.
+ *
+ * `users.fieldwork_role` 은 0093 CHECK 가 보장하지만 타입은 nullable 이다 — 제약이 보장하는
+ * 것을 코드가 다시 주장하지 않고(`!` 나 기본값을 넣지 않고) 그냥 건너뛴다. 목록과 후보
+ * 검색이 같은 규칙을 봐야 해서 한 자리에 둔다.
+ */
+function withRole<T extends { fieldworkRole: FieldworkRole | null }>(
+  rows: readonly T[],
+): (Omit<T, 'fieldworkRole'> & { fieldworkRole: FieldworkRole })[] {
+  return rows.flatMap(({ fieldworkRole, ...rest }) =>
+    fieldworkRole ? [{ ...rest, fieldworkRole }] : [],
+  );
+}
 
 /**
  * 설문의 실사 초대 목록 (.pen FLOW 4-2 실사 블록).
@@ -49,11 +65,7 @@ export async function listSurveyFieldwork(surveyId: string): Promise<SurveyField
     )
     .orderBy(asc(surveyParticipants.createdAt));
 
-  // fieldworkRole 은 CHECK 가 보장하지만 타입은 nullable 이다 — 제약이 보장하는 것을 코드가
-  // 다시 주장하지 않고, 값이 없는 행은 목록에서 조용히 뺀다.
-  return rows.flatMap(({ fieldworkRole, ...rest }) =>
-    fieldworkRole ? [{ ...rest, fieldworkRole }] : [],
-  );
+  return withRole(rows);
 }
 
 /**
@@ -110,9 +122,7 @@ export async function searchFieldworkCandidates(
     .orderBy(asc(fieldworkOrgs.name), asc(users.name))
     .limit(20);
 
-  return rows.flatMap(({ fieldworkRole, ...rest }) =>
-    fieldworkRole ? [{ ...rest, fieldworkRole }] : [],
-  );
+  return withRole(rows);
 }
 
 /**

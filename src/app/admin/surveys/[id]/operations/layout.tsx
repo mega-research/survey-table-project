@@ -4,7 +4,7 @@ import { OperationsPageHeader } from '@/features/operations/operations-page-head
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,7 +22,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const [control, isGuest] = await Promise.all([getControlState(surveyId), isGuestViewer()]);
+  const [control, isExternal] = await Promise.all([getControlState(surveyId), isExternalViewer()]);
   // 위에서 설문 존재를 확인했으므로 null 은 그 사이 삭제된 극단 케이스 — 404 로 접는다.
   if (!control) notFound();
 
@@ -31,10 +31,10 @@ export default async function OperationsLayout({ children, params }: LayoutProps
       <OperationsPageHeader
         surveyId={surveyId}
         surveyTitle={survey.title}
-        isGuest={isGuest}
+        isGuest={isExternal}
         control={control}
       />
-      <OperationsTabStrip surveyId={surveyId} isGuest={isGuest} />
+      <OperationsTabStrip surveyId={surveyId} isGuest={isExternal} />
       {children}
     </div>
   );

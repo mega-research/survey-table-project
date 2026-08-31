@@ -34,7 +34,7 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
@@ -78,7 +78,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
     ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
   });
-  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
+  const [scope, isExternal] = await Promise.all([getOperationsDataScope(surveyId), isExternalViewer()]);
 
   const [contactScheme, profileScheme] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
@@ -187,7 +187,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               : `응답자별 세션 트래킹 — ${total.toLocaleString('ko-KR')}건`}
           </p>
         </div>
-        {!isGuest && (
+        {!isExternal && (
           <Button asChild variant="outline">
             <Link href={`/admin/surveys/${surveyId}/operations/profiles/columns`}>
               컬럼 설정
@@ -228,7 +228,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               surveyId={surveyId}
               view={args.view}
               hasContacts={hasContacts}
-              isGuest={isGuest}
+              isGuest={isExternal}
               columnScheme={displayColumns}
               piiByTarget={piiByTarget}
             />

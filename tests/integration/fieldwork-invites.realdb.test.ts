@@ -25,6 +25,7 @@ import { db } from '@/db';
 import {
   fieldworkOrgs as orgsTable,
   surveyParticipants as participantsTable,
+  surveyResponses as responsesTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -322,6 +323,19 @@ describe.skipIf(!isLocalDb)('실사 초대 · 실사 홈 (real local DB)', () =>
       expect(org[0]).toMatchObject({ reason: 'invited', invitedColleagueName: null });
     });
 
+    it('정지된 소속원의 초대는 팀장 시야를 열지 않는다', async () => {
+      // 초대 행은 계정 상태를 따라 지워지지 않는다(퇴사가 멤버십을 지우지 않는 것과 같다).
+      // 조건이 없으면 아무도 뛰지 않는 설문이 팀장 시야에 계속 서 있는다.
+      await invite(greenSurveyId, SUSPENDED_WORKER);
+
+      expect(await caps(GREEN_LEADER, greenSurveyId)).toEqual([]);
+      expect(await listOrgFieldworkSurveys(GREEN_LEADER, GREEN_ORG)).toEqual([]);
+
+      // 재직 중 소속원이 하나라도 있으면 다시 열린다 — 막는 것은 상태이지 초대가 아니다.
+      await invite(greenSurveyId, GREEN_WORKER);
+      expect(await caps(GREEN_LEADER, greenSurveyId)).not.toEqual([]);
+    });
+
     it('한 설문에 소속원이 여럿이어도 줄은 하나다', async () => {
       await invite(greenSurveyId, GREEN_WORKER);
       await invite(greenSurveyId, GREEN_WORKER_2);
@@ -480,6 +494,53 @@ describe.skipIf(!isLocalDb)('실사 초대 · 실사 홈 (real local DB)', () =>
   // ───────────────────────────────────────────────────────────────────────────
   // ⑥ 홈 목록이 접근 판정과 같은 조건을 건다
   // ───────────────────────────────────────────────────────────────────────────
+
+  describe('홈 목록의 진척·정렬', () => {
+    it('쿼터가 없으면 최대 응답 수가 분모다 — 「117 / —」로 남지 않는다', async () => {
+      await db
+        .update(surveysTable)
+        .set({ maxResponses: 150 })
+        .where(eq(surveysTable.id, greenSurveyId));
+      await invite(greenSurveyId, GREEN_WORKER);
+
+      const [row] = await listInvitedFieldworkSurveys(GREEN_WORKER);
+      expect(row?.targetCount).toBe(150);
+    });
+
+    it('활동이 없는 설문은 맨 아래로 간다 — DESC 기본값(NULLS FIRST)이 아니다', async () => {
+      await invite(greenSurveyId, GREEN_WORKER);
+      await invite(idleSurveyId, GREEN_WORKER);
+      // greenSurvey 에만 활동을 심는다. idleSurvey 는 응답이 없어 lastActivityAt 이 null 이다.
+      await db.insert(responsesTable).values({
+        id: crypto.randomUUID(),
+        surveyId: greenSurveyId,
+        sessionId: crypto.randomUUID(),
+        questionResponses: {},
+        status: 'in_progress',
+        lastActivityAt: new Date(),
+      });
+
+      const rows = await listInvitedFieldworkSurveys(GREEN_WORKER);
+      expect(rows.map((r) => r.surveyId)).toEqual([greenSurveyId, idleSurveyId]);
+    });
+
+    it('최근 활동은 진행 중 응답도 센다 — 완료만 보면 한창 도는 조사가 「—」가 된다', async () => {
+      await invite(greenSurveyId, GREEN_WORKER);
+      await db.insert(responsesTable).values({
+        id: crypto.randomUUID(),
+        surveyId: greenSurveyId,
+        sessionId: crypto.randomUUID(),
+        questionResponses: {},
+        status: 'in_progress',
+        lastActivityAt: new Date(),
+      });
+
+      const [row] = await listInvitedFieldworkSurveys(GREEN_WORKER);
+      expect(row?.lastActivityAt).not.toBeNull();
+      // 그래도 완료 수는 완료만 센다 — 두 값의 모집단이 다르다.
+      expect(row?.completedCount).toBe(0);
+    });
+  });
 
   describe('홈 목록은 열리지 않는 줄을 그리지 않는다', () => {
     it('삭제된 설문은 초대가 남아 있어도 목록에서 사라진다', async () => {

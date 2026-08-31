@@ -63,7 +63,7 @@ import { internalActorContext } from '@tests/helpers/rpc-context';
  * 직접 만들어 procedure 컨텍스트로 넣으므로 세션이 없다 — 게스트가 아님만 알려 준다.
  * 팀 경계 판정은 컨텍스트의 user 로 돌아가므로 이 목이 개입하지 않는다.
  */
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: async () => false }));
+vi.mock('@/lib/auth/external-viewer', () => ({ isExternalViewer: async () => false }));
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: () => undefined, getAll: () => [] }),

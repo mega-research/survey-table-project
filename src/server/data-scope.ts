@@ -6,28 +6,28 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactTargets, mailCampaigns, surveyResponses, surveys } from '@/db/schema';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 
 export type OperationsDataScope = 'real' | 'test';
 
 /**
- * 게스트 화면이 보는 파티션 — **언제나 실데이터**다 (스펙 §11-3, 티켓 21·22).
+ * 외부 계정(게스트·실사) 화면이 보는 파티션 — **언제나 실데이터**다 (스펙 §11-3, 티켓 21·22·25).
  *
  * `loadOperationsDataScope` 를 태우면 결론은 같지만 세션과 설문을 한 번씩 더 읽는다.
- * 게스트 콘솔은 전역 테스트 모드를 아예 묻지 않는 화면이라 상수로 고정하고, 그 계약을
+ * 외부 콘솔은 전역 테스트 모드를 아예 묻지 않는 화면이라 상수로 고정하고, 그 계약을
  * **여기** 적는다 — 파티션 규칙의 집이 두 곳이 되면 담당 연구원이 테스트 모드를 켰을 때
- * 클라이언트가 무엇을 보는지가 화면마다 갈린다.
+ * 외부 계정이 무엇을 보는지가 화면마다 갈린다.
  */
-export const GUEST_DATA_SCOPE: OperationsDataScope = 'real';
+export const EXTERNAL_VIEWER_DATA_SCOPE: OperationsDataScope = 'real';
 
 export function testFlagForScope(scope: OperationsDataScope): boolean {
   return scope === 'test';
 }
 
 export async function loadOperationsDataScope(surveyId: string): Promise<OperationsDataScope> {
-  // 설문 존재 검증을 건너뛰지 않도록 게스트여도 조회는 그대로 수행하고 반환값만 덮는다.
-  const [isGuest, rows] = await Promise.all([
-    isGuestViewer(),
+  // 설문 존재 검증을 건너뛰지 않도록 외부 계정이어도 조회는 그대로 수행하고 반환값만 덮는다.
+  const [isExternal, rows] = await Promise.all([
+    isExternalViewer(),
     db
       .select({ enabled: surveys.testModeEnabled })
       .from(surveys)
@@ -37,25 +37,25 @@ export async function loadOperationsDataScope(surveyId: string): Promise<Operati
 
   const row = rows[0];
   if (!row) throw new Error('설문을 찾을 수 없습니다.');
-  // 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
-  if (isGuest) return 'real';
+  // 외부 콘솔(게스트·실사)은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+  if (isExternal) return 'real';
   return row.enabled ? 'test' : 'real';
 }
 
 /**
  * 잠금 아래에서 읽은 전역 테스트 모드 플래그를 세션 기준 쓰기 파티션으로 환산한다.
  *
- * 게스트는 읽기와 동일하게 항상 real 파티션에 쓴다. read 는 real 인데 write 만 test 로
- * 가는 비대칭을 막는 것이 목적이다 — 그 비대칭은 게스트가 자기 쓴 레코드를 못 보거나,
+ * 외부 계정은 읽기와 동일하게 항상 real 파티션에 쓴다. read 는 real 인데 write 만 test 로
+ * 가는 비대칭을 막는 것이 목적이다 — 그 비대칭은 외부 계정이 자기 쓴 레코드를 못 보거나,
  * 테스트 파티션 정리 로직을 대신 트리거하는 사고로 이어진다.
  *
- * 순수 동기 함수로 유지한다. 게스트 판정(isGuest)은 호출부가 `db.transaction` 을 열고
- * `FOR UPDATE`/`FOR SHARE` 로 surveys 행을 잠그기 전에 `isGuestViewer()` 로 미리 구해
+ * 순수 동기 함수로 유지한다. 외부 계정 판정(isExternal)은 호출부가 `db.transaction` 을 열고
+ * `FOR UPDATE`/`FOR SHARE` 로 surveys 행을 잠그기 전에 `isExternalViewer()` 로 미리 구해
  * 인자로 넘긴다 — 잠금을 쥔 채로 Supabase auth 왕복(`auth/v1/user`)을 하면 그 네트워크
  * RTT 만큼 행 잠금이 유지되어 동시 요청과 pgBouncer 커넥션을 블록하기 때문이다.
  */
-export function resolveWriteScopeIsTest(flagEnabled: boolean, isGuest: boolean): boolean {
-  if (isGuest) return false;
+export function resolveWriteScopeIsTest(flagEnabled: boolean, isExternal: boolean): boolean {
+  if (isExternal) return false;
   return flagEnabled;
 }
 
@@ -82,13 +82,13 @@ export interface LockedWriteScope<K extends SurveyColumnKey = never> {
  *   보호되는 경로(예: 캠페인 취소)용.
  * - 설문이 없으면 null 을 돌려준다. 어떤 에러를 던질지(NOT_FOUND, '설문을 찾을 수 없습니다.' 등)는
  *   호출부의 기존 계약이므로 여기서 정하지 않는다.
- * - isGuest 는 호출부가 잠금 전에 미리 구해 넘긴다(위 resolveWriteScopeIsTest 주석 참조).
+ * - isExternal 은 호출부가 잠금 전에 미리 구해 넘긴다(위 resolveWriteScopeIsTest 주석 참조).
  * - 투영 키 enabled 는 기존 호출부·테스트 스텁이 공유하는 이름이라 그대로 둔다.
  */
 export async function lockWriteScope<K extends SurveyColumnKey = never>(
   executor: DbOrTx,
   surveyId: string,
-  isGuest: boolean,
+  isExternal: boolean,
   opts: { lock: WriteScopeLock; columns?: readonly K[] },
 ): Promise<LockedWriteScope<K> | null> {
   const selection: Record<string, PgColumn> = { enabled: surveys.testModeEnabled };
@@ -104,7 +104,7 @@ export async function lockWriteScope<K extends SurveyColumnKey = never>(
   // enabled + columns 로 고정했으므로 행 타입을 되돌린다.
   const row = rows[0] as LockedWriteScope<K>['row'] | undefined;
   if (!row) return null;
-  const isTest = resolveWriteScopeIsTest(row.enabled, isGuest);
+  const isTest = resolveWriteScopeIsTest(row.enabled, isExternal);
   return { isTest, scope: isTest ? 'test' : 'real', row };
 }
 

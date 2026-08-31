@@ -3,7 +3,7 @@ import { GuestEmptyState } from '@/features/guest-console/guest-empty-state';
 import { assertGuestSurveyPageAccess } from '@/server/page-guest-access';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 
-import { GUEST_DATA_SCOPE } from '@/server/data-scope';
+import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -27,7 +27,7 @@ export default async function GuestQuotaPage({ params }: Props) {
   const { surveyId } = await params;
   await assertGuestSurveyPageAccess(surveyId, 'quota');
 
-  const status = await getQuotaStatus(surveyId, GUEST_DATA_SCOPE);
+  const status = await getQuotaStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE);
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">

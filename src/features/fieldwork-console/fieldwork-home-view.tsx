@@ -113,6 +113,9 @@ export function FieldworkHomeView({ user, organization, role, invited, orgSurvey
                   <th className="px-3 py-3 font-medium">구분</th>
                   <th className="px-3 py-3 font-medium">진척 (완료/목표)</th>
                   <th className="px-3 py-3 font-medium">최근 활동</th>
+                  <th className="px-3 py-3 font-medium">
+                    <span className="sr-only">액션</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -134,6 +137,13 @@ export function FieldworkHomeView({ user, organization, role, invited, orgSurvey
                     </td>
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
                       {row.lastActivityAt ? formatLocalDateTime(row.lastActivityAt) : '—'}
+                    </td>
+                    {/* 액션 라벨 (.pen 10-1) — 무엇을 할 수 있는지는 지금 말하되 **링크는
+                        걸지 않는다**. 조사 대상·열람 화면은 티켓 26 이고, 눌러서 404 가 되는
+                        버튼을 미리 만들지 않는다. 열은 지금 세운다: 26 이 링크만 얹으면
+                        표 구조가 그때 바뀌지 않는다. */}
+                    <td className="px-3 py-3 text-right text-[12.5px] text-[#9CA3AF]">
+                      {row.reason === 'invited' ? '조사 대상' : '열람'}
                     </td>
                   </tr>
                 ))}

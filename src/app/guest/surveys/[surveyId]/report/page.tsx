@@ -23,7 +23,7 @@ import {
   getProgressTotals,
 } from '@/server/operations/services/report-progress';
 
-import { GUEST_DATA_SCOPE } from '@/server/data-scope';
+import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -60,8 +60,8 @@ export default async function GuestReportPage({ params, searchParams }: Props) {
 
   const [scheme, groupLabel, contactScheme] = await Promise.all([
     getProgressColumnScheme(surveyId),
-    getProgressGroupLabel(surveyId, GUEST_DATA_SCOPE),
-    getContactColumnScheme(surveyId, GUEST_DATA_SCOPE),
+    getProgressGroupLabel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+    getContactColumnScheme(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
   ]);
 
   const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
@@ -85,13 +85,13 @@ export default async function GuestReportPage({ params, searchParams }: Props) {
     contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
     RESID_DEFAULT_LABEL;
 
-  const isEmpty = (await countContactTargets(surveyId, GUEST_DATA_SCOPE)) === 0;
+  const isEmpty = (await countContactTargets(surveyId, EXTERNAL_VIEWER_DATA_SCOPE)) === 0;
   const { rows, totals } = isEmpty
     ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
     : await Promise.all([
         getProgressRows({
           surveyId,
-          scope: GUEST_DATA_SCOPE,
+          scope: EXTERNAL_VIEWER_DATA_SCOPE,
           condition: null,
           page,
           size: PAGE_SIZE,
@@ -100,7 +100,7 @@ export default async function GuestReportPage({ params, searchParams }: Props) {
           metaKeys,
           groupByKeys: activeKeys,
         }),
-        getProgressTotals(surveyId, GUEST_DATA_SCOPE, null, activeKeys),
+        getProgressTotals(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, null, activeKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

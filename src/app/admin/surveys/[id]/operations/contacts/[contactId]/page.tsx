@@ -14,7 +14,7 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
@@ -96,7 +96,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
         mailHistory={mailHistory}
         editLogs={editLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
-        canReset={!(await isGuestViewer())}
+        canReset={!(await isExternalViewer())}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,

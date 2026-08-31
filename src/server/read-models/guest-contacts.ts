@@ -5,7 +5,7 @@ import { mapStatusPill } from '@/lib/operations/profiles-format';
 import type { ContactColumnDef } from '@/shared/contracts/contacts';
 import type { GuestContactRow, GuestContactsPage } from '@/shared/contracts/workspace-io';
 
-import { GUEST_DATA_SCOPE } from '../data-scope';
+import { EXTERNAL_VIEWER_DATA_SCOPE } from '../data-scope';
 
 import { getContactColumnScheme, listContactsForSurvey } from './contacts';
 
@@ -33,12 +33,12 @@ export async function listGuestContacts(
   page: number,
 ): Promise<GuestContactsPage> {
   // 파티션 상수의 집은 data-scope 다 — 화면과 read-model 이 같은 값을 본다.
-  const scheme = await getContactColumnScheme(surveyId, GUEST_DATA_SCOPE);
+  const scheme = await getContactColumnScheme(surveyId, EXTERNAL_VIEWER_DATA_SCOPE);
   const columnDefs = visibleColumns(scheme?.columns ?? []);
 
   const result = await listContactsForSurvey({
     surveyId,
-    scope: GUEST_DATA_SCOPE,
+    scope: EXTERNAL_VIEWER_DATA_SCOPE,
     page,
     pageSize: CONTACTS_PAGE_SIZE,
     clauses: [],

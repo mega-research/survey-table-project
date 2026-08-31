@@ -17,7 +17,7 @@ import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
-import { GUEST_DATA_SCOPE } from '@/server/data-scope';
+import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -61,26 +61,26 @@ export default async function GuestOverviewPage({ params, searchParams }: Props)
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
-  const availableDates = await aggregateDailyAvailableDates(surveyId, GUEST_DATA_SCOPE);
+  const availableDates = await aggregateDailyAvailableDates(surveyId, EXTERNAL_VIEWER_DATA_SCOPE);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus] =
     await Promise.all([
-      aggregateStatus(surveyId, GUEST_DATA_SCOPE),
+      aggregateStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
       aggregateDaily({
         surveyId,
-        scope: GUEST_DATA_SCOPE,
+        scope: EXTERNAL_VIEWER_DATA_SCOPE,
         mode,
         ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
       }),
-      getDailyStats(surveyId, GUEST_DATA_SCOPE),
-      getResponseTime(surveyId, GUEST_DATA_SCOPE),
-      getDropFunnel(surveyId, GUEST_DATA_SCOPE),
-      getPageDwell(surveyId, GUEST_DATA_SCOPE),
+      getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
       // 쿼터 탭이 꺼져 있으면 조회 자체를 하지 않는다 — 쓰지 않을 값을 읽지 않는다.
-      tabs.quota ? getQuotaStatus(surveyId, GUEST_DATA_SCOPE) : null,
+      tabs.quota ? getQuotaStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
     ]);
 
   return (

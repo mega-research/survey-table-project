@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { type SQL, and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { type SQL, and, eq, exists, inArray, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import { db } from '@/db';
 import { fieldworkOrgs, surveyParticipants, surveys, users } from '@/db/schema';
@@ -155,7 +156,13 @@ const GUEST_CAPS: readonly SurveyCapability[] = ['survey.view', 'operations.view
  * 설문 편집·메일·export·응답 상세·컨택 업로드/수정·초대는 전부 차단이다.
  *
  * `contacts.manage` 가 없는 것이 `contacts.view`·`contacts.writeAttempts` 와 갈리는 요점이다 —
- * 읽고 결과코드·메모를 남기지만 명단 자체는 못 고친다.
+ * 읽고 **결과코드·시도 기록**을 남기지만 명단 자체는 못 고친다.
+ *
+ * **스펙 §6 의 「메모(memo·contactMethod) 쓰기」는 아직 열려 있지 않다.** 그 두 필드는
+ * `contacts.targets.update` 의 입력인데 그 표면은 `contacts.manage` 로 잠겨 있고, 같은 표면이
+ * `attrs`(명단 자체)도 고친다 — 실사에게 열면 조사 대상 명단 수정이 함께 열린다. 메모만
+ * 쓰는 좁은 표면이 필요하고, 그것을 소비할 화면은 조사 대상(티켓 26)이라 그 티켓이 함께
+ * 세운다. 여기서 미리 열지 않는 것은 소비자 없는 권한을 만들지 않기 위해서다.
  */
 const FIELDWORK_INVITED_CAPS: readonly SurveyCapability[] = [
   'survey.view',
@@ -433,18 +440,34 @@ export async function loadSurveyAccess(
  *
  * 조인 조건이 **업체**인 것이 파생 시야의 경계다. 초대는 개인 단위지만 팀장이 보는 범위는
  * 업체 단위이고(ADR-0019), 여기서 업체를 빼면 타 업체 설문이 그대로 넘어온다.
+ *
+ * 소속원의 `status='active'` 를 함께 보는 것도 계약이다 — 초대 행은 계정 상태를 따라 지워지지
+ * 않으므로(퇴사가 멤버십을 지우지 않는 것과 같다), 조건이 없으면 아무도 뛰지 않는 설문이
+ * 팀장 시야에 계속 서 있는다. 홈 목록(read-models/fieldwork-surveys)도 같은 조건을 건다.
+ *
  */
 function fieldworkOrgInvitedColumn(subject: SurveyAccessSubject): SQL<boolean> {
   if (subject.fieldworkRole !== 'leader' || subject.fieldworkOrgId === null) {
     return sql<boolean>`false`;
   }
-  return sql<boolean>`exists (
-    select 1 from ${surveyParticipants} sp
-    join ${users} u on u.id = sp.user_id
-    where sp.survey_id = ${surveys.id}
-      and sp.kind = 'fieldwork'
-      and u.fieldwork_org_id = ${subject.fieldworkOrgId}
-  )`;
+  // 별칭이 필요한 이유는 바깥 쿼리가 이미 두 테이블을 **다른 뜻으로** 쓰고 있어서다
+  // (내 초대 행 / 나). 쿼리 빌더로 세우면 컬럼이 tsc 관할로 남는다 — raw 문자열이면
+  // 컬럼 이름이 바뀌어도 런타임에야 드러난다.
+  const invite = alias(surveyParticipants, 'org_invite');
+  const colleague = alias(users, 'org_colleague');
+  const invited = db
+    .select({ one: sql`1` })
+    .from(invite)
+    .innerJoin(colleague, eq(colleague.id, invite.userId))
+    .where(
+      and(
+        eq(invite.surveyId, surveys.id),
+        eq(invite.kind, 'fieldwork'),
+        eq(colleague.fieldworkOrgId, subject.fieldworkOrgId),
+        eq(colleague.status, 'active'),
+      ),
+    );
+  return sql<boolean>`${exists(invited)}`;
 }
 
 /** 위의 capability 축만 필요한 호출부용 — 표면 대부분이 이쪽이다. */

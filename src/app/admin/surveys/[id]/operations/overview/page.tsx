@@ -21,7 +21,7 @@ import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
 import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
@@ -79,7 +79,7 @@ export default async function OperationsOverviewPage({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
+  const [scope, isExternal] = await Promise.all([getOperationsDataScope(surveyId), isExternalViewer()]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
@@ -109,7 +109,7 @@ export default async function OperationsOverviewPage({
           </p>
         </div>
         {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트에게는 숨김 */}
-        {!isGuest && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
+        {!isExternal && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
       </div>
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />

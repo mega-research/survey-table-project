@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { type SQL, and, count, desc, eq, isNull, max, sql } from 'drizzle-orm';
+import { type SQL, and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import { db } from '@/db';
 import {
@@ -11,6 +12,7 @@ import {
   teams,
   users,
 } from '@/db/schema';
+import { sumQuotaTargets } from '@/lib/quota/quota-status-calc';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { FieldworkHomeSurveyItem } from '@/shared/contracts/workspace-io';
 
@@ -69,37 +71,50 @@ export async function listOrgFieldworkSurveys(
  * 사람 수만큼 줄로 나온다.
  */
 async function selectFieldworkSurveys(
-  scope: Reason,
+  defaultReason: Reason,
   participantFilter: SQL,
   viewerUserId?: string,
 ): Promise<FieldworkHomeSurveyItem[]> {
-  // 완료 응답 수 — 진척의 분자. 응답 표를 설문 단위로 미리 접어 조인이 곱해지지 않게 한다.
-  const completed = db
+  /**
+   * 설문 단위 진척 — 완료 수와 **최근 활동**을 한 서브쿼리에서 접는다.
+   *
+   * 모집단이 서로 다른 것이 요점이다. 완료 수는 `status='completed'` 만 세지만 활동 시각은
+   * **모든 살아 있는 응답**을 본다 — 진행 중 응답뿐인 설문을 「활동 없음」으로 그리면
+   * 한창 돌고 있는 조사가 목록 맨 아래에서 멈춘 것처럼 보인다.
+   *
+   * 응답 표를 먼저 접는 이유는 조인이 곱해지지 않게 하기 위해서다(초대가 여럿인 설문에서
+   * 완료 수가 사람 수만큼 부풀어 오른다).
+   */
+  const progress = db
     .select({
       surveyId: surveyResponses.surveyId,
-      value: count().as('completed_value'),
-      lastActivityAt: max(surveyResponses.lastActivityAt).as('last_activity'),
+      completed:
+        sql<number>`count(*) filter (where ${surveyResponses.status} = 'completed')::int`.as(
+          'completed_value',
+        ),
+      lastActivityAt: sql<Date | null>`max(${surveyResponses.lastActivityAt})`.as('last_activity'),
     })
     .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.status, 'completed'),
-        eq(surveyResponses.isTest, false),
-        isNull(surveyResponses.deletedAt),
-      ),
-    )
+    // 파티션은 언제나 real 이다 — 외부 계정은 전역 테스트 모드를 따르지 않는다
+    // (EXTERNAL_VIEWER_DATA_SCOPE, 티켓 25). 홈과 콘솔의 숫자가 갈리지 않게 여기도 고정한다.
+    .where(and(eq(surveyResponses.isTest, false), isNull(surveyResponses.deletedAt)))
     .groupBy(surveyResponses.surveyId)
-    .as('completed');
+    .as('progress');
+
+  // 소유자는 users 를 두 번째로 조인해 읽는다 — 첫 조인은 **초대받은 사람**이라 별칭이 필요하다.
+  // 문자열 별칭 대신 alias() 를 쓰면 컬럼 이름이 바뀔 때 tsc 가 잡는다.
+  const owner = alias(users, 'owner');
 
   const rows = await db
     .select({
       surveyId: surveys.id,
       title: surveys.title,
       teamName: teams.name,
-      ownerName: sql<string | null>`owner.name`,
+      ownerName: owner.name,
       quotaConfig: surveys.quotaConfig,
-      completedCount: sql<number>`coalesce(${completed.value}, 0)::int`,
-      lastActivityAt: completed.lastActivityAt,
+      maxResponses: surveys.maxResponses,
+      completedCount: sql<number>`coalesce(${progress.completed}, 0)::int`,
+      lastActivityAt: progress.lastActivityAt,
       // 내가 초대된 줄인가 — 업체 시야 목록에서만 의미가 있다. 없으면 전부 'invited'.
       mine: viewerUserId
         ? sql<boolean>`bool_or(${surveyParticipants.userId} = ${viewerUserId})`
@@ -115,11 +130,15 @@ async function selectFieldworkSurveys(
     .innerJoin(surveys, eq(surveys.id, surveyParticipants.surveyId))
     .innerJoin(users, eq(users.id, surveyParticipants.userId))
     .leftJoin(teams, eq(teams.id, surveys.teamId))
-    .leftJoin(sql`users owner`, sql`owner.id = ${surveys.ownerUserId}`)
-    .leftJoin(completed, eq(completed.surveyId, surveys.id))
+    .leftJoin(owner, eq(owner.id, surveys.ownerUserId))
+    .leftJoin(progress, eq(progress.surveyId, surveys.id))
     .where(
       and(
         eq(surveyParticipants.kind, 'fieldwork'),
+        // **초대받은 사람이 재직 중일 때만** 센다. 퇴사·정지된 실사원의 초대 행은 남아 있고
+        // (초대는 계정 상태를 따라 지워지지 않는다), 그것을 세면 아무도 뛰지 않는 설문이
+        // 팀장의 업체 시야에 계속 서 있게 된다. 판정 코어의 EXISTS 도 같은 조건을 건다.
+        eq(users.status, 'active'),
         isNull(surveys.deletedAt),
         eq(surveys.assignmentStatus, 'assigned'),
         participantFilter,
@@ -129,12 +148,15 @@ async function selectFieldworkSurveys(
       surveys.id,
       surveys.title,
       teams.name,
-      sql`owner.name`,
+      owner.name,
       surveys.quotaConfig,
-      completed.value,
-      completed.lastActivityAt,
+      surveys.maxResponses,
+      progress.completed,
+      progress.lastActivityAt,
     )
-    .orderBy(desc(completed.lastActivityAt), desc(surveys.id));
+    // **NULLS LAST 가 계약이다.** Postgres 의 DESC 기본값은 NULLS FIRST 라, 그대로 두면
+    // 활동이 하나도 없는 설문이 목록 맨 위를 차지한다(.pen 10-1 은 최근순이다).
+    .orderBy(sql`${progress.lastActivityAt} desc nulls last`, desc(surveys.id));
 
   return rows.map((row) => ({
     surveyId: row.surveyId,
@@ -142,27 +164,34 @@ async function selectFieldworkSurveys(
     teamName: row.teamName,
     ownerName: row.ownerName,
     // 내 초대가 있으면 언제나 'invited' — 업체 시야 목록에서도 그렇다(위 주석 참조).
-    reason: (row.mine ? 'invited' : scope) as Reason,
+    reason: (row.mine ? 'invited' : defaultReason) as Reason,
     invitedColleagueName: row.mine ? null : row.colleagueName,
     completedCount: row.completedCount,
-    targetCount: quotaTargetTotal(row.quotaConfig),
+    targetCount: targetOf(row.quotaConfig, row.maxResponses),
     lastActivityAt: row.lastActivityAt,
   }));
 }
 
 /**
- * 쿼터 목표 총합 — 진척의 분모 (.pen 「117 / 150」).
+ * 진척의 분모 (.pen 「117 / 150」) — 쿼터 목표 합, 없으면 최대 응답 수.
  *
- * 쿼터가 없거나 꺼져 있으면 null 이고 화면이 「117 / —」로 그린다. 0 으로 접지 않는 이유는
- * 「목표가 0」과 「목표가 없다」가 다른 말이기 때문이다 — 앞은 달성률 100%, 뒤는 표시 없음이다.
+ * 두 축을 순서대로 보는 이유는 설문마다 목표를 적는 자리가 다르기 때문이다. 쿼터를 쓰는
+ * 조사는 셀 목표의 합이 곧 표본 수이고, 안 쓰는 조사는 `maxResponses` 가 그 자리다 —
+ * 쿼터만 보면 후자가 영영 「117 / —」로 남는다.
+ *
+ * `enabled=false` 는 「정의·집계만 하고 응답자를 막지 않는다」라 분모로 세우지 않는다.
+ * 목표가 집행되지 않는데 분모에 놓으면 화면이 있지도 않은 마감을 향해 달리는 것처럼 보인다.
+ *
+ * 둘 다 없으면 null 이고 화면이 「117 / —」로 그린다. 0 으로 접지 않는 것은 「목표가 0」과
+ * 「목표가 없다」가 다른 말이기 때문이다 — 앞은 달성률 100%, 뒤는 표시 없음이다.
  */
-function quotaTargetTotal(config: QuotaConfig | null): number | null {
-  // enabled=false 는 「정의·집계만 하고 응답자를 막지 않는다」다 — 목표가 집행되지 않는데
-  // 분모로 세우면 화면이 있지도 않은 마감을 향해 달리는 것처럼 보인다.
-  if (!config?.enabled) return null;
-  // 셀은 sparse 다(목표가 있는 조합만) — 합이 곧 설문 전체의 목표 표본 수다.
-  const total = (config.cells ?? []).reduce((sum, cell) => sum + (cell.target ?? 0), 0);
-  return total > 0 ? total : null;
+function targetOf(config: QuotaConfig | null, maxResponses: number | null): number | null {
+  if (config?.enabled) {
+    // 계산의 집은 lib/quota 다 — 요약 화면과 같은 셈을 봐야 목표가 화면마다 갈리지 않는다.
+    const total = sumQuotaTargets(config.cells ?? []);
+    if (total > 0) return total;
+  }
+  return maxResponses && maxResponses > 0 ? maxResponses : null;
 }
 
 /**
