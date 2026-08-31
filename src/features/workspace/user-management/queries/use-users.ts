@@ -11,11 +11,7 @@ import type {
 } from '@/shared/contracts/auth-io';
 import { client, orpc } from '@/shared/lib/rpc';
 
-export const userKeys = {
-  all: ['users'] as const,
-  list: (userType: UserTypeFilter, status: UserStatusFilter) =>
-    [...userKeys.all, 'list', userType, status] as const,
-};
+import { userKeys } from '../../account-query-keys';
 
 /** 사용자 목록 + 유형 칩 카운트 (슈퍼어드민 전용 표면). */
 export function useUsers(userType: UserTypeFilter, status: UserStatusFilter) {

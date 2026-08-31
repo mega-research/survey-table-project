@@ -107,17 +107,10 @@ export function canManageTeamSettings(actor: { isSuperadmin: boolean }): boolean
 export const fieldworkOrgStatusValues = ['active', 'archived'] as const;
 export type FieldworkOrgStatus = (typeof fieldworkOrgStatusValues)[number];
 
-/**
- * 실사 업체를 관리할 수 있는가 — 슈퍼어드민만 (스펙 §6).
- *
- * 팀장에게도, **실사 팀장에게도** 열지 않는다. 업체 목록은 협력사 명부라 한 업체 사람에게
- * 열면 경쟁 업체의 존재와 인원이 그대로 드러난다. `canManageTeamSettings` 와 판정이 같지만
- * 이유가 달라(저쪽은 조직도, 이쪽은 협력사 명부) 별개 술어로 둔다 — 한쪽을 넓힐 때 다른
- * 쪽이 조용히 따라가면 안 된다.
- */
-export function canManageFieldworkOrgs(actor: { isSuperadmin: boolean }): boolean {
-  return actor.isSuperadmin;
-}
+// 관리 권한은 술어가 아니라 **베이스**가 진다 — 표면 전수가 `superadmin` 이라 판정이 한 줄도
+// 필요 없다(팀장에게도, 실사 팀장에게도 열지 않는다: 업체 목록은 협력사 명부라 한 업체
+// 사람에게 열면 경쟁 업체의 존재와 인원이 드러난다). 팀처럼 `canManage*` 술어를 두지 않는
+// 이유가 그것이다 — 저쪽은 팀장도 지나는 표면이 있어 술어가 필요했다.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // surveys.visibility — 설문 공개 범위 (SSOT, 티켓 07)

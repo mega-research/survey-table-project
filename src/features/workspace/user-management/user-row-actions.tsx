@@ -26,7 +26,7 @@ import { type UserStatusAction, availableUserStatusActions } from '@/shared/cont
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
 import { useChangeUserStatus } from './queries/use-users';
-import { USER_STATUS_ACTION_LABEL } from './user-vocabulary';
+import { USER_STATUS_ACTION_LABEL } from '../account-vocabulary';
 
 /** 확인 다이얼로그 문구 — 되돌리기 비용이 다른 만큼 정지와 퇴사를 같은 문장으로 묻지 않는다. */
 const CONFIRM_COPY: Record<Exclude<UserStatusAction, 'rehire'>, string> = {

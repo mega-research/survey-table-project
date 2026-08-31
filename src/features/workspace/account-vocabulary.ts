@@ -1,10 +1,13 @@
 import type { UserStatus, UserStatusAction, UserType } from '@/shared/contracts/auth';
 
 /**
- * 사용자 관리 화면의 표시 어휘 — 목록과 생성 모달이 함께 쓴다.
+ * 계정 표시 어휘 — 워크스페이스의 **세 하위 묶음**이 함께 쓴다 (루트 잔류 기준 ①).
  *
- * 유형 라벨이 화면마다 따로 있으면 유형이 늘 때(실사 활성화, 티켓 24) 한쪽만 고쳐진다.
- * 값 어휘 자체의 SSOT 는 `shared/contracts/auth` 이고 여기는 그 한글 표시만 갖는다.
+ * 사용자 관리(목록·모달)·팀 관리(멤버 행)·실사 업체(계정 행)가 같은 상태 라벨과 배지를
+ * 그린다. 묶음 하나 안에 두면 나머지 둘이 그 묶음을 import 하게 되고, 실제로 티켓 24 에서
+ * 그 방향이 순환이 됐다(사용자 관리 ↔ 실사 업체). `field-styles.ts` 와 같은 자리다.
+ *
+ * 값 어휘 자체의 SSOT 는 `shared/contracts/auth` 이고 여기는 그 한글 표시와 색만 갖는다.
  */
 export const USER_TYPE_LABEL: Record<UserType, string> = {
   internal: '내부',
@@ -22,6 +25,18 @@ export const USER_STATUS_LABEL: Record<UserStatus, string> = {
   rejected: '승인 거절',
   suspended: '일시 정지',
   departed: '퇴사',
+};
+
+/**
+ * 상태 배지 색 — 라벨과 짝이라 같은 파일에 둔다.
+ * 세 화면이 같은 상태를 다른 색으로 그리면 같은 사람이 화면마다 달라 보인다.
+ */
+export const USER_STATUS_PILL: Record<UserStatus, string> = {
+  pending: 'bg-[#FEF3C7] text-[#D97706]',
+  active: 'bg-[#DCFCE7] text-[#15803D]',
+  rejected: 'bg-[#F5F5F7] text-[#6E6E73]',
+  suspended: 'bg-[#FEF3C7] text-[#D97706]',
+  departed: 'bg-[#F5F5F7] text-[#6E6E73]',
 };
 
 /**

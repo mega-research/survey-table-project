@@ -386,6 +386,44 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
         superUsers().users.changeStatus({ action: 'resume', userId: workerId }),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
     });
+
+    /**
+     * 복귀 ↔ 종료 동시 실행 — **불변식**을 잰다.
+     *
+     * 잠금이 없으면 이렇게 깨진다: 복귀가 업체를 활성으로 읽고(잠그지 않았다) 아직 커밋하기
+     * 전에, 종료가 재직 중 계정을 **0명**으로 세고(대상이 아직 정지 상태다) 커밋한다 — 둘 다
+     * 성공해 「활성 계정을 가진 archived 업체」가 남는다. 전역 전이 키는 도움이 안 된다:
+     * 업체 종료가 그 키를 잡지 않는다.
+     *
+     * 잠금 짝(복귀 FOR SHARE ↔ 종료 FOR UPDATE)이 서면 **정확히 하나만** 성공한다 — 어느
+     * 쪽이 먼저든 나중 것이 상대의 결과를 보고 거부한다. 여기서 재는 것이 그 「정확히 하나」와
+     * 끝 상태의 정합이고, 어느 쪽이 이기는지는 재지 않는다(그건 스케줄러 몫이다).
+     */
+    it('복귀와 종료를 동시에 하면 정확히 하나만 성공한다', async () => {
+      const orgId = await makeOrg('복귀경합업체');
+      const workerId = await issueFieldworkAccount(orgId, 'worker', 'racer');
+      await superUsers().users.changeStatus({ action: 'suspend', userId: workerId });
+
+      const settled = await Promise.allSettled([
+        superUsers().users.changeStatus({ action: 'resume', userId: workerId }),
+        superOrgs().orgs.archive({ orgId }),
+      ]);
+      const succeeded = settled.filter((r) => r.status === 'fulfilled').length;
+      expect(succeeded, '둘 다 성공하면 활성 계정을 가진 종료 업체가 남는다').toBe(1);
+
+      const [org] = await db
+        .select({ status: orgsTable.status })
+        .from(orgsTable)
+        .where(eq(orgsTable.id, orgId));
+      const [worker] = await db
+        .select({ status: usersTable.status })
+        .from(usersTable)
+        .where(eq(usersTable.id, workerId));
+
+      // 끝 상태의 정합 — 종료된 업체에 재직 중 계정이 남아 있으면 안 된다.
+      if (org?.status === 'archived') expect(worker?.status).not.toBe('active');
+      else expect(worker?.status).toBe('active');
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────

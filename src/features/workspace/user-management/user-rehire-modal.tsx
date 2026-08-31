@@ -23,7 +23,7 @@ import type { TeamRole } from '@/shared/contracts/workspace';
 import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useTeams } from '../team-management/queries/use-teams';
 import { useChangeUserStatus } from './queries/use-users';
-import { USER_STATUS_LABEL } from './user-vocabulary';
+import { USER_STATUS_LABEL } from '../account-vocabulary';
 
 const ROLE_LABEL: Record<TeamRole, string> = { member: '팀원', leader: '팀장' };
 

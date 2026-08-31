@@ -127,11 +127,6 @@ export function isGuestAccount(userType: UserType | undefined): boolean {
   return userType === 'guest';
 }
 
-/** 실사 업체 소속 계정인가 — 실사 판정의 단일 술어 (티켓 24). */
-export function isFieldworkAccount(userType: UserType | undefined): boolean {
-  return userType === 'fieldwork';
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // users.fieldwork_role — 실사 계정의 업체 내 역할 어휘 (SSOT, 티켓 24)
 // ─────────────────────────────────────────────────────────────────────────────

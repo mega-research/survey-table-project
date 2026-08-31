@@ -9,6 +9,7 @@ import { isUniqueViolation } from '@/lib/pg-error';
 import {
   CREDENTIAL_PROVIDER_ID,
   LOCAL_CREDENTIAL_ISSUER,
+  type UserStatus,
   type UserStatusAction,
   type UserType,
 } from '@/shared/contracts/auth';
@@ -123,22 +124,10 @@ export async function createUser(
 
   try {
     await db.transaction(async (tx) => {
-      // 실사 계정은 소속 업체가 **활성**이어야 성립한다. 업체 행을 `FOR SHARE` 로 잡고
-      // 확인하는 것이 계약이다 — 잠그지 않으면 활성으로 읽은 뒤 종료(archiveFieldworkOrg)가
-      // 커밋되는 창에서 종료된 업체 소속 계정이 태어난다. 저쪽이 같은 행을 `FOR UPDATE` 로
-      // 잡으므로 둘 중 하나가 기다렸다가 상대의 결과를 본다.
-      //
       // 역할·업체 id 의 **존재 자체**는 경계(CreateUserInput 유니온)가 이미 강제했고 DB
       // CHECK 가 다시 본다 — 여기서 묻는 것은 「그 id 가 정말 활성 업체인가」 하나다.
       if (input.userType === 'fieldwork') {
-        const [org] = await tx
-          .select({ id: fieldworkOrgs.id })
-          .from(fieldworkOrgs)
-          .where(
-            and(eq(fieldworkOrgs.id, input.fieldworkOrgId), eq(fieldworkOrgs.status, 'active')),
-          )
-          .for('share');
-        if (!org) throw new InvalidFieldworkOrgError();
+        await assertFieldworkOrgActive(tx, input.fieldworkOrgId);
       }
 
       await tx.insert(users).values({
@@ -259,32 +248,44 @@ async function isLastActiveSuperadmin(
 }
 
 /**
- * 실사 계정을 active 로 되돌려도 되는가 — 소속 업체가 아직 활성인가.
+ * 소속 업체가 **활성인가** — 발급과 재활성화가 함께 쓰는 한 자리 (티켓 24).
  *
- * 실사가 아니거나 결과 상태가 active 가 아니면 묻지 않는다. 업체 행을 잠그지 않는 것은
- * 이 트랜잭션이 이미 전역 전이 키를 쥐고 있고, 그 사이 커밋될 수 있는 유일한 변화(종료)는
- * **재직 중 계정 0명**을 요구하는데 대상이 지금 비활성이라 그 조건이 참일 수 있어서다 —
- * 즉 경합의 결과가 「종료됐다」면 여기서 거부하는 것이 맞고, 「아직 활성」이면 통과가 맞다.
+ * **업체 행을 `FOR SHARE` 로 잡는 것이 계약이다.** 잠그지 않으면 활성으로 읽은 뒤
+ * 종료(`archiveFieldworkOrg`)가 커밋되는 창에서 종료된 업체 소속 계정이 태어나거나
+ * 되살아난다 — 저쪽이 같은 행을 `FOR UPDATE` 로 잡으므로 둘 중 하나가 기다렸다가 상대의
+ * 결과를 본다.
+ *
+ * 재활성화 쪽에 전역 전이 키가 있다는 사실로는 부족하다 — **업체 종료는 그 키를 잡지 않는다.**
+ * 게다가 종료는 **재직 중** 계정만 세므로, 정지된 계정을 되살리는 트랜잭션과는 서로를 보지
+ * 못한 채 통과해 「활성 계정을 가진 archived 업체」가 남는다. 이 잠금이 그 창을 닫는다.
+ */
+async function assertFieldworkOrgActive(tx: Tx, orgId: string, message?: string): Promise<void> {
+  const [org] = await tx
+    .select({ id: fieldworkOrgs.id })
+    .from(fieldworkOrgs)
+    .where(and(eq(fieldworkOrgs.id, orgId), eq(fieldworkOrgs.status, 'active')))
+    .for('share');
+  if (!org) throw new InvalidFieldworkOrgError(message);
+}
+
+/**
+ * 실사 계정을 active 로 되돌려도 되는가.
+ *
+ * 실사가 아니거나 결과 상태가 active 가 아니면 묻지 않는다 — 정지·퇴사로 **내려가는** 전이는
+ * 업체 상태와 무관하다.
  */
 async function assertFieldworkOrgReactivatable(
   tx: Tx,
   target: { userType: UserType; fieldworkOrgId: string | null },
-  nextStatus: (typeof users.$inferSelect)['status'],
+  nextStatus: UserStatus,
 ): Promise<void> {
   if (target.userType !== 'fieldwork' || nextStatus !== 'active') return;
   if (target.fieldworkOrgId === null) throw new InvalidFieldworkOrgError();
-
-  const [org] = await tx
-    .select({ id: fieldworkOrgs.id })
-    .from(fieldworkOrgs)
-    .where(
-      and(eq(fieldworkOrgs.id, target.fieldworkOrgId), eq(fieldworkOrgs.status, 'active')),
-    );
-  if (!org) {
-    throw new InvalidFieldworkOrgError(
-      '소속 실사 업체가 종료되어 이 계정을 되살릴 수 없습니다.',
-    );
-  }
+  await assertFieldworkOrgActive(
+    tx,
+    target.fieldworkOrgId,
+    '소속 실사 업체가 종료되어 이 계정을 되살릴 수 없습니다.',
+  );
 }
 
 /**

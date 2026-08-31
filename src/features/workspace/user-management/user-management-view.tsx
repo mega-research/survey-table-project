@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { UserStatus, UserType } from '@/shared/contracts/auth';
+import type { UserType } from '@/shared/contracts/auth';
 import { FIELDWORK_ROLE_LABEL } from '@/shared/contracts/auth';
 import {
   type UserListItem,
@@ -18,14 +18,14 @@ import {
 
 import { PRIMARY_BUTTON } from '../field-styles';
 import { FieldworkOrgsView } from '../fieldwork-orgs/fieldwork-orgs-view';
-import { useFieldworkOrgs } from '../fieldwork-orgs/queries/use-fieldwork-orgs';
+import { useFieldworkOrgOptions } from '../fieldwork-orgs/queries/use-fieldwork-orgs';
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
 import { UserDepartModal } from './user-depart-modal';
 import { UserRehireModal } from './user-rehire-modal';
 import { UserResetPasswordModal } from './user-reset-password-modal';
 import { UserRowActions } from './user-row-actions';
-import { USER_STATUS_LABEL, USER_TYPE_LABEL } from './user-vocabulary';
+import { USER_STATUS_LABEL, USER_STATUS_PILL, USER_TYPE_LABEL } from '../account-vocabulary';
 
 /**
  * 화면 탭 — .pen FLOW 10-4 의 「사용자 | 실사 업체 N」.
@@ -48,14 +48,6 @@ const TYPE_PILL: Record<UserType, string> = {
   fieldwork: 'bg-[#F3F4F6] text-[#6E6E73]',
 };
 
-const STATUS_PILL: Record<UserStatus, string> = {
-  pending: 'bg-[#FEF3C7] text-[#D97706]',
-  active: 'bg-[#DCFCE7] text-[#15803D]',
-  rejected: 'bg-[#F5F5F7] text-[#6E6E73]',
-  suspended: 'bg-[#FEF3C7] text-[#D97706]',
-  departed: 'bg-[#F5F5F7] text-[#6E6E73]',
-};
-
 /** 아바타 이니셜 — 이름 첫 글자. 게스트만 유형색을 달리 준다(.pen). */
 function avatarTone(userType: UserType): string {
   return userType === 'guest' ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#E0E7FF] text-[#2743AE]';
@@ -72,13 +64,17 @@ export function UserManagementView() {
   const [rehireTarget, setRehireTarget] = useState<UserListItem | null>(null);
   const [departTarget, setDepartTarget] = useState<UserListItem | null>(null);
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
+  // 업체 카드의 「+ 계정 발급」이 지목한 업체 — 모달을 여기서 여는 이유는 실사 업체 묶음이
+  // 사용자 관리를 import 하면 두 폴더가 순환하기 때문이다(fieldwork-orgs-view 주석).
+  const [issueForOrgId, setIssueForOrgId] = useState<string | null>(null);
   const { data, isLoading, error } = useUsers(userType, status);
-  // 탭 라벨의 업체 수 — 탭이 열려 있지 않아도 보여야 한다(.pen 「실사 업체 5」).
-  const { data: orgData } = useFieldworkOrgs();
+  // 탭 라벨의 업체 수 — 탭이 닫혀 있어도 보여야 한다(.pen 「실사 업체 5」). **가벼운 쪽**을
+  // 쓴다: 카드 목록은 전 업체의 계정 명부를 실어 오므로 숫자 하나 때문에 당길 것이 아니다.
+  const { data: orgOptions } = useFieldworkOrgOptions();
 
   const items = data?.items ?? [];
   const typeCounts = data?.typeCounts;
-  const orgCount = orgData?.orgs.length;
+  const orgCount = orgOptions?.length;
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
@@ -95,7 +91,7 @@ export function UserManagementView() {
           <div className="space-y-1">
             <h1 className="text-[22px] font-semibold text-[#1C1C1E]">사용자 관리</h1>
             <p className="text-[13px] text-[#6E6E73]">
-              계정을 직접 발급하고 상태를 관리합니다. 가입 신청은 없습니다.
+              계정 발급·상태 관리와 실사 업체를 관리합니다. 가입 신청은 없습니다.
             </p>
           </div>
           {tab === 'users' ? (
@@ -139,7 +135,11 @@ export function UserManagementView() {
         </div>
 
         {tab === 'fieldwork-orgs' ? (
-          <FieldworkOrgsView createOpen={createOrgOpen} onCreateOpenChange={setCreateOrgOpen} />
+          <FieldworkOrgsView
+            createOpen={createOrgOpen}
+            onCreateOpenChange={setCreateOrgOpen}
+            onIssueAccount={setIssueForOrgId}
+          />
         ) : (
           <>
             <div className="flex items-center gap-2">
@@ -238,7 +238,7 @@ export function UserManagementView() {
                       </td>
                       <td className="px-3 py-3">
                         <span
-                          className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${STATUS_PILL[user.status]}`}
+                          className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${USER_STATUS_PILL[user.status]}`}
                         >
                           {USER_STATUS_LABEL[user.status]}
                         </span>
@@ -278,6 +278,14 @@ export function UserManagementView() {
       </div>
 
       <UserCreateModal open={createOpen} onOpenChange={setCreateOpen} />
+      {/* 업체 지정 발급 — 열릴 때만 마운트한다(대상 업체로 초기 상태를 잡으므로). */}
+      {issueForOrgId && (
+        <UserCreateModal
+          open
+          onOpenChange={(next) => (next ? undefined : setIssueForOrgId(null))}
+          presetFieldworkOrgId={issueForOrgId}
+        />
+      )}
       {/* 열릴 때만 마운트한다 — 두 모달은 대상의 현재 값(직책 등)으로 초기 상태를 잡으므로
           띄워둔 채 대상만 갈아끼우면 앞사람의 입력이 남는다. */}
       {resetTarget && (

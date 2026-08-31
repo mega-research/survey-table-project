@@ -7,6 +7,7 @@ import {
   fieldworkRoleValues,
   type UserStatus,
   type UserStatusAction,
+  type UserType,
   userStatusValues,
   userTypeValues,
 } from './auth';
@@ -163,11 +164,16 @@ export type CreateUserInput = z.infer<typeof CreateUserInput>;
 /**
  * 생성 가능한 유형 — 모달 세그먼트의 활성 여부 판정에 UI 도 쓴다.
  *
- * 티켓 24 로 셋 전부가 열렸다. 값이 `userTypeValues` 와 같아졌지만 별개로 남긴다 —
- * 「존재하는 유형」과 「이 화면에서 발급할 수 있는 유형」은 다른 질문이고, 둘이 갈리는
- * 날(발급 경로 없는 유형이 생기는 날) 한쪽만 고쳐지면 모달이 조용히 어긋난다.
+ * 티켓 24 로 셋 전부가 열렸지만 **손으로 적은 목록으로 남긴다.** `userTypeValues` 를 그대로
+ * 가리키면 새 유형이 어휘에 추가되는 순간 발급 경로가 없는데도 모달 세그먼트가 저절로
+ * 열린다 — 그때 실제로 눌러 보기 전까지 아무도 모른다. 지금은 값이 같지만 묻는 질문이 다르다:
+ * 「존재하는 유형」과 「이 화면에서 발급할 수 있는 유형」.
  */
-export const creatableUserTypes = userTypeValues;
+export const creatableUserTypes = [
+  'internal',
+  'guest',
+  'fieldwork',
+] as const satisfies readonly UserType[];
 
 export const CreateUserOutput = z.object({ id: z.uuid() });
 export type CreateUserOutput = z.infer<typeof CreateUserOutput>;

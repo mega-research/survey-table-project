@@ -22,26 +22,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { FIELDWORK_ROLE_LABEL, type UserStatus } from '@/shared/contracts/auth';
+import { FIELDWORK_ROLE_LABEL } from '@/shared/contracts/auth';
 import type { FieldworkOrgListItem } from '@/shared/contracts/workspace-io';
 
-import { USER_STATUS_LABEL } from '../user-management/user-vocabulary';
+import { USER_STATUS_LABEL, USER_STATUS_PILL } from '../account-vocabulary';
 import { useArchiveFieldworkOrg } from './queries/use-fieldwork-orgs';
-
-const STATUS_PILL: Record<UserStatus, string> = {
-  pending: 'bg-[#FEF3C7] text-[#D97706]',
-  active: 'bg-[#DCFCE7] text-[#15803D]',
-  rejected: 'bg-[#F5F5F7] text-[#6E6E73]',
-  suspended: 'bg-[#FEF3C7] text-[#D97706]',
-  departed: 'bg-[#F5F5F7] text-[#6E6E73]',
-};
 
 interface Props {
   org: FieldworkOrgListItem;
   /** 첫 카드만 펼친 채로 연다 — .pen 10-4 가 그렇게 그린다. */
   defaultExpanded?: boolean;
   onEdit: (org: FieldworkOrgListItem) => void;
-  /** 계정 발급 — 소속 업체가 미리 정해진 생성 모달을 연다. */
+  /** 계정 발급 — 소속 업체가 미리 정해진 생성 모달을 **상위가** 연다(아래 view 주석 참조). */
   onIssueAccount: (org: FieldworkOrgListItem) => void;
 }
 
@@ -90,8 +82,16 @@ export function FieldworkOrgCard({ org, defaultExpanded = false, onEdit, onIssue
               <span className="truncate text-[14.5px] font-semibold text-[#1C1C1E]">
                 {org.name}
               </span>
-              <span className="inline-flex rounded-full bg-[#DCFCE7] px-2 py-[2px] text-[10.5px] font-semibold text-[#15803D]">
-                active
+              {/* 오늘 목록은 활성 업체만 오지만 필은 행의 값을 그린다 — 리터럴로 두면
+                  archived 가 실려 오는 날 잘못된 상태를 보여준다. */}
+              <span
+                className={`inline-flex rounded-full px-2 py-[2px] text-[10.5px] font-semibold ${
+                  org.status === 'active'
+                    ? 'bg-[#DCFCE7] text-[#15803D]'
+                    : 'bg-[#F5F5F7] text-[#6E6E73]'
+                }`}
+              >
+                {org.status}
               </span>
             </span>
             <span className="text-[11.5px] text-[#9CA3AF]">
@@ -170,7 +170,7 @@ export function FieldworkOrgCard({ org, defaultExpanded = false, onEdit, onIssue
                   <span className="truncate text-[11.5px] text-[#9CA3AF]">{account.email}</span>
                 </span>
                 <span
-                  className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${STATUS_PILL[account.status]}`}
+                  className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${USER_STATUS_PILL[account.status]}`}
                 >
                   {USER_STATUS_LABEL[account.status]}
                 </span>

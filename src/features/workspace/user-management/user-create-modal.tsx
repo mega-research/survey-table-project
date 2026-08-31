@@ -21,10 +21,11 @@ import {
   creatableUserTypes,
 } from '@/shared/contracts/auth-io';
 
+import { USER_TYPE_LABEL } from '../account-vocabulary';
 import { FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useFieldworkOrgOptions } from '../fieldwork-orgs/queries/use-fieldwork-orgs';
+import { SegmentedChoice } from '../segmented-choice';
 import { useCreateUser } from './queries/use-users';
-import { USER_TYPE_LABEL } from './user-vocabulary';
 
 /**
  * 유형 세그먼트 — .pen FLOW 1-2. 티켓 24 로 셋 전부가 열렸다.
@@ -115,30 +116,15 @@ export function UserCreateModal({ open, onOpenChange, presetFieldworkOrgId }: Pr
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">
           <div className="space-y-2">
             <span className={FIELD_LABEL}>계정 유형</span>
-            <div className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]">
-              {TYPE_SEGMENTS.map((value) => {
-                const selected = value === userType;
-                // 업체 카드에서 연 발급은 유형이 실사로 못 박혀 있다 — 그 버튼의 뜻이
-                // 「이 업체에 계정을 만든다」라서 유형을 바꾸면 소속이 사라진다.
-                const locked = presetFieldworkOrgId !== undefined && value !== 'fieldwork';
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    disabled={locked}
-                    aria-pressed={selected}
-                    onClick={() => setUserType(value)}
-                    className={`h-[30px] flex-1 rounded-lg text-[12.5px] transition-colors ${
-                      selected
-                        ? 'bg-white font-semibold text-[#2743AE] shadow-sm'
-                        : 'text-[#6E6E73] hover:text-[#3A3A3C]'
-                    } ${locked ? 'cursor-not-allowed opacity-50 hover:text-[#6E6E73]' : ''}`}
-                  >
-                    {USER_TYPE_LABEL[value]}
-                  </button>
-                );
-              })}
-            </div>
+            {/* 업체 카드에서 연 발급은 유형이 실사로 못 박혀 있다 — 그 버튼의 뜻이
+                「이 업체에 계정을 만든다」라서 유형을 바꾸면 소속이 사라진다. */}
+            <SegmentedChoice
+              options={TYPE_SEGMENTS}
+              value={userType}
+              label={(value) => USER_TYPE_LABEL[value]}
+              onChange={setUserType}
+              isDisabled={(value) => presetFieldworkOrgId !== undefined && value !== 'fieldwork'}
+            />
           </div>
 
           <div className="space-y-2">
@@ -255,26 +241,12 @@ export function UserCreateModal({ open, onOpenChange, presetFieldworkOrgId }: Pr
               </div>
               <div className="space-y-2">
                 <span className={FIELD_LABEL}>역할</span>
-                <div className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]">
-                  {fieldworkRoleValues.map((role) => {
-                    const selected = role === fieldworkRole;
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setFieldworkRole(role)}
-                        className={`h-[30px] flex-1 rounded-lg text-[12.5px] transition-colors ${
-                          selected
-                            ? 'bg-white font-semibold text-[#2743AE] shadow-sm'
-                            : 'text-[#6E6E73] hover:text-[#3A3A3C]'
-                        }`}
-                      >
-                        {FIELDWORK_ROLE_LABEL[role]}
-                      </button>
-                    );
-                  })}
-                </div>
+                <SegmentedChoice
+                  options={fieldworkRoleValues}
+                  value={fieldworkRole}
+                  label={(role) => FIELDWORK_ROLE_LABEL[role]}
+                  onChange={setFieldworkRole}
+                />
               </div>
             </div>
           )}

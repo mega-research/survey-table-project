@@ -9,13 +9,7 @@ import type {
 } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
 
-import { userKeys } from '../../user-management/queries/use-users';
-
-export const fieldworkOrgKeys = {
-  all: ['fieldwork-orgs'] as const,
-  list: () => [...fieldworkOrgKeys.all, 'list'] as const,
-  options: () => [...fieldworkOrgKeys.all, 'options'] as const,
-};
+import { fieldworkOrgKeys, userKeys } from '../../account-query-keys';
 
 /** 업체 카드 목록 — 소속 계정 명단을 함께 싣고 온다 (.pen FLOW 10-4). */
 export function useFieldworkOrgs(enabled = true) {
@@ -29,10 +23,11 @@ export function useFieldworkOrgs(enabled = true) {
 }
 
 /**
- * 계정 발급 모달의 소속 업체 선택지.
+ * 활성 업체의 id·이름만 — 발급 모달의 셀렉트와 **사용자 관리 탭 라벨의 개수**가 쓴다.
  *
- * 카드 목록과 **다른 키**를 쓴다 — 모달은 id·이름만 필요한데 저쪽은 전 업체의 계정 명부를
- * 실어 오므로, 같은 키로 묶으면 모달을 열 때마다 그 무게를 끌고 온다.
+ * 카드 목록(`useFieldworkOrgs`)과 다른 키를 쓰는 것이 요점이다: 저쪽은 전 업체의 계정
+ * 명부(이름·이메일·상태)를 실어 오므로, 숫자 하나나 셀렉트 하나 때문에 그 무게를 끌고 오면
+ * 안 된다. 두 표면을 서버에서 가른 이유와 같은 이유다.
  */
 export function useFieldworkOrgOptions(enabled = true) {
   return useQuery({

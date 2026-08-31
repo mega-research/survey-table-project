@@ -6,7 +6,6 @@ import { Loader2 } from 'lucide-react';
 
 import type { FieldworkOrgListItem } from '@/shared/contracts/workspace-io';
 
-import { UserCreateModal } from '../user-management/user-create-modal';
 import { FieldworkOrgCard } from './fieldwork-org-card';
 import { FieldworkOrgFormModal } from './fieldwork-org-form-modal';
 import { useFieldworkOrgs } from './queries/use-fieldwork-orgs';
@@ -15,6 +14,14 @@ interface Props {
   /** 「+ 새 실사 업체」는 사용자 관리 헤더에 있다 — 그 버튼의 열림 상태를 위에서 받는다. */
   createOpen: boolean;
   onCreateOpenChange: (open: boolean) => void;
+  /**
+   * 카드의 「+ 계정 발급」 — 업체 id 를 위로 올리고 **모달은 상위가 연다**.
+   *
+   * 계정 발급 모달은 사용자 관리 것이고(.pen 1-2 의 「같은 모달로 진입한다」), 여기서 직접
+   * 열면 이 묶음이 사용자 관리를 import 하게 된다 — 그쪽은 이미 이 묶음을 import 하므로
+   * 두 폴더가 순환한다. 방향을 한쪽으로 눕히는 것이 이 prop 의 존재 이유다.
+   */
+  onIssueAccount: (orgId: string) => void;
 }
 
 /**
@@ -23,14 +30,12 @@ interface Props {
  * 화면은 사용자 관리 안에 있지만 엔티티는 워크스페이스 소관이다(업체는 팀과 같은 「소속
  * 경계」 계열이고 관리 축도 슈퍼어드민으로 같다). 그래서 이 묶음이 `workspace` 아래 산다.
  *
- * **계정 발급 모달은 사용자 관리 것을 그대로 쓴다.** 업체 카드에서 여는 발급도 같은 계정
+ * **계정 발급 모달은 사용자 관리 것을 그대로 쓴다** — 업체 카드에서 여는 발급도 같은 계정
  * 생성이고(.pen 1-2 의 「같은 모달로 진입한다」), 폼을 두 벌 두면 유형별 필드 규칙이 두 곳에
- * 복제된다 — 실사 계정의 필수 칸이 늘어날 때 한쪽만 고쳐진다.
+ * 복제된다. 다만 **여는 것은 상위**다: 여기서 직접 열면 두 묶음이 서로를 import 한다.
  */
-export function FieldworkOrgsView({ createOpen, onCreateOpenChange }: Props) {
+export function FieldworkOrgsView({ createOpen, onCreateOpenChange, onIssueAccount }: Props) {
   const [editTarget, setEditTarget] = useState<FieldworkOrgListItem | null>(null);
-  /** 발급 모달이 미리 고를 소속 업체. 카드의 「+ 계정 발급」이 정한다. */
-  const [issueForOrg, setIssueForOrg] = useState<FieldworkOrgListItem | null>(null);
   const { data, isLoading, error } = useFieldworkOrgs();
 
   const orgs = data?.orgs ?? [];
@@ -43,7 +48,7 @@ export function FieldworkOrgsView({ createOpen, onCreateOpenChange }: Props) {
           org={org}
           defaultExpanded={index === 0}
           onEdit={setEditTarget}
-          onIssueAccount={setIssueForOrg}
+          onIssueAccount={(target) => onIssueAccount(target.id)}
         />
       ))}
 
@@ -66,13 +71,6 @@ export function FieldworkOrgsView({ createOpen, onCreateOpenChange }: Props) {
 
       {createOpen && <FieldworkOrgFormModal onClose={() => onCreateOpenChange(false)} />}
       {editTarget && <FieldworkOrgFormModal org={editTarget} onClose={() => setEditTarget(null)} />}
-      {issueForOrg && (
-        <UserCreateModal
-          open
-          onOpenChange={(next) => (next ? undefined : setIssueForOrg(null))}
-          presetFieldworkOrgId={issueForOrg.id}
-        />
-      )}
     </div>
   );
 }

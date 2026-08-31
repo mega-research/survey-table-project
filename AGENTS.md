@@ -4,7 +4,20 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 23 **C 검증 게이트** — 페이즈 C(16~22)가 세운
+> 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 24 **실사 업체 + 계정 발급** — 외주 실사 인력의
+> 소속 경계가 생겼다. `fieldwork_orgs`(0093)는 **워크스페이스가 아니다**: 설문을 소유하지
+> 않고 팀 멤버십을 만들지 않으며 재배치 목적지가 될 수 없다(ADR-0019). 정합은
+> `users_fieldwork_fields_check` 가 지킨다 — 실사면 소속·역할이 둘 다 있어야 하고 아니면 둘 다
+> NULL 이어야 한다(`survey_participants.kind` 와 달리 **한 행 안의 조건**이라 걸 수 있다).
+> 관리 표면 5종은 전부 슈퍼어드민 — 업체 목록은 협력사 명부라 팀장에게도 실사 팀장에게도
+> 열지 않는다. **종료는 재직 중 계정이 0명일 때만** 되고, 종료된 업체의 소속 계정은 복귀·
+> 재입사도 막는다: 실사 계정에는 「미배치」에 해당하는 상태가 없어(소속이 NOT NULL) 종료된
+> 업체의 재직 계정은 정의가 없다. 발급은 업체 행을 `FOR SHARE` 로 잡고 확인하고 종료는
+> `FOR UPDATE` 로 잡는다 — 짝이 없으면 「활성 계정을 가진 종료 업체」가 남는다.
+> **capability 는 하나도 열지 않았다** — 실사 열은 여전히 전 칸 차단이고 부여는 티켓 25 다.
+> 마이그레이션 0093. 직전: 티켓 23 C 검증 게이트)
+>
+> 티켓 23 **C 검증 게이트** — 페이즈 C(16~22)가 세운
 > 공유·게스트 계약을 스위트로 못 박았다. **스펙 §8 표를 행 단위로 옮긴 게이트**가 생겼고
 > (`capability-matrix-spec.test.ts`), 셀 단언만으로는 표가 자기 누락을 모르므로 완전성 가드
 > 둘이 함께 선다 — 모든 capability 어휘가 정확히 한 행에 있고, 각 열의 판정 결과가 그 열의
@@ -205,9 +218,16 @@ src/
 │   │   │                       # + sidebar-group-tree(설문 그룹 트리 — 그룹 화면 입구, 티켓 12). 범위 전환 시 쿠키 기록
 │   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
+│   │   ├── account-vocabulary.ts # 계정 표시 어휘(유형·상태 라벨·상태 배지) — 사용자 관리·팀 관리·실사 업체 셋이 쓴다
+│   │   ├── account-query-keys.ts # 사용자·업체 쿼리 키 — 업체 mutation 이 양쪽 캐시를 접어야 해서 루트에 있다
+│   │   ├── segmented-choice.tsx  # 세그먼트 컨트롤 — 계정 생성 모달의 유형·역할 두 자리가 쓴다
+│   │   ├── fieldwork-orgs/     # 실사 업체 관리 (티켓 24, .pen FLOW 10-4) — fieldwork-orgs-view 진입점
+│   │   │                       # + fieldwork-org-card(카드·계정 명단·종료 확인) + fieldwork-org-form-modal
+│   │   │                       # + queries/use-fieldwork-orgs. **사용자 관리를 import 하지 않는다** —
+│   │   │                       # 저쪽이 이 묶음을 부르므로 방향이 한쪽이어야 한다(계정 발급 모달은 상위가 연다)
 │   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
-│   │   │                       # + user-reset-password-modal · user-rehire-modal + user-vocabulary
-│   │   │                       # + queries/use-users
+│   │   │                       # + user-reset-password-modal · user-rehire-modal
+│   │   │                       # + queries/use-users. 어휘·쿼리 키는 루트로 올라갔다(티켓 24)
 │   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
 │   │   ├── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
 │   │   │                       # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
@@ -335,6 +355,10 @@ users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
 ├── isSuperadmin, jobTitle
 ├── organization           # 게스트 소속 기관 메모 (0086, nullable) — internal 은 팀·fieldwork 는 업체에서 소속을 얻는다
 ├── userType               # internal|guest|fieldwork (0085, NOT NULL default 'internal' + CHECK)
+├── fieldworkOrgId         # 소속 실사 업체 (0093, nullable) — FK 는 마이그레이션 ALTER 가 만든다(순환 회피)
+├── fieldworkRole          # leader|worker (0093, nullable) — 팀 역할과 별개 축
+│                          # 위 둘과 userType 의 정합은 users_fieldwork_fields_check 가 지킨다:
+│                          # fieldwork 면 둘 다 있어야 하고, 아니면 둘 다 NULL 이어야 한다
 └── createdAt, updatedAt
 
 sessions                   # 세션 (30일 만기 + 하루 1회 사용 시 연장)
@@ -386,6 +410,12 @@ survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 
 ├── id, teamId (FK restrict), name, order
 ├── createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
+
+fieldwork_orgs             # 실사 업체 = 외주 실사 인력의 소속 경계 (0093, 티켓 24)
+├── id, name, status       # active | archived — 종료도 삭제가 아니라 archived (ADR-0019)
+├── memo                   # 운영 메모 (판정에 안 쓴다)
+├── archivedBy, archivedAt, createdBy (FK restrict)
+└── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
 
 survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0092, 티켓 18·21)
 ├── id, surveyId (FK **cascade**), userId (FK restrict)
@@ -695,6 +725,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 /admin/surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
 /admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
+                                  # 「실사 업체」 탭이 같은 화면 안에 있다 (.pen FLOW 10-4, 티켓 24 — 업체 카드 + 카드별 계정 발급)
 /admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
 /admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
 /admin/reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
@@ -1160,7 +1191,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - procedure 베이스 5종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
-  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정, 이후 실사 업체) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
+  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정·**실사 업체**) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
   - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. 실사는 티켓 24 가 자기 열을 연다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial` 두 스위트가 각각 목록으로 고정한다.
 - **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
@@ -1239,6 +1270,28 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     설문 id 를 넣고 **사유의 대비**를 본다: 부여=FORBIDDEN, 미부여·남의 부여=NOT_FOUND.
     갈리지 않으면 거부는 같아도 게스트 계정 하나가 조사 목록의 존재 확인 창구가 된다.
 - 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isGuestViewer` → 계정 유형).
+- **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
+  `fieldwork_orgs`(0093)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
+  테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
+  「이 실사 계정이 어느 업체 사람인가」 하나이며, 그 경계가 없으면 실사 팀장의 파생 시야(티켓 25)가
+  타 업체 설문까지 넘친다. 관리 표면 5종(`workspace.fieldworkOrgs`)은 **전부 슈퍼어드민**이다 —
+  업체 목록은 협력사 명부라 한 업체 사람에게 열면 경쟁 업체의 존재와 인원이 드러난다. 판정 술어를
+  따로 두지 않은 것도 그래서다: 베이스가 곧 정책이라 `canManage*` 가 낄 자리가 없다.
+  - **정합은 `users_fieldwork_fields_check` 가 지킨다** — 실사면 소속·역할이 둘 다 있어야 하고,
+    아니면 둘 다 NULL 이어야 한다. `survey_participants.kind` 와 달리 **한 행 안의 조건**이라
+    CHECK 로 걸 수 있다. 「업체 없는 실사 계정 생성 거부」는 세 겹이다 — 경계(`CreateUserInput`
+    유니온) · 서비스(활성 업체 확인) · CHECK.
+  - **종료는 재직 중 계정이 0명일 때만 된다.** 팀 해산과 갈리는 지점이다: 팀은 해산해도 팀원이
+    「미배치」라는 정의된 상태로 내려가지만(ADR-0011) 실사 계정에는 그런 상태가 없다(소속이
+    NOT NULL). 같은 이유로 **종료된 업체의 소속 계정은 복귀·재입사도 막는다** —
+    `applyUserStatusChange` 한 자리가 두 전이를 함께 막는다(둘이 같은 문을 지난다).
+  - **잠금이 짝을 이룬다** — 발급·재활성화는 업체 행을 `FOR SHARE` 로, 종료는 `FOR UPDATE` 로
+    잡는다. 짝이 없으면 「활성으로 읽은 뒤 종료가 커밋」되는 창에서 **활성 계정을 가진 archived
+    업체**가 남는다. 전역 전이 키는 도움이 안 된다: 업체 종료는 그 키를 잡지 않고, 종료가 세는
+    것은 **재직 중** 계정이라 정지 계정을 되살리는 트랜잭션과 서로를 보지 못한다.
+    `fieldwork-orgs.realdb.test.ts` 의 동시 실행 테스트가 그 불변식을 잰다(잠금을 빼면 빨개진다).
+  - **capability 는 하나도 열리지 않았다** — 실사 열은 여전히 전 칸 차단이고
+    `capability-matrix-spec.test.ts`(티켓 23)가 그 사실을 고정한다. 부여는 티켓 25 다.
 
 ---
 

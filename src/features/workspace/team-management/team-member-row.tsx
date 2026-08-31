@@ -17,7 +17,7 @@ import { isActiveUser } from '@/shared/contracts/auth';
 import { TEAM_ROLE_LABEL, teamRoleValues, type TeamRole } from '@/shared/contracts/workspace';
 import type { TeamMemberItem } from '@/shared/contracts/workspace-io';
 
-import { USER_STATUS_LABEL } from '../user-management/user-vocabulary';
+import { USER_STATUS_LABEL } from '../account-vocabulary';
 
 import {
   useChangeTeamMemberRole,
