@@ -48,7 +48,7 @@ export const metadata = { title: '응답 현황' };
  */
 export default async function FieldworkOverviewPage({ params, searchParams }: Props) {
   const { surveyId } = await params;
-  await assertFieldworkSurveyPageAccess(surveyId);
+  await assertFieldworkSurveyPageAccess(surveyId, 'operations.view');
 
   const {
     mode = 'day',

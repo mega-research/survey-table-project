@@ -115,25 +115,17 @@ export function isInternalUser(userType: UserType | undefined): boolean {
 
 /**
  * 클라이언트 발급 계정인가 — 게스트 판정의 단일 술어 (티켓 21).
- *
- * v1 의 env grant 모델(`GUEST_SURVEY_GRANTS`)을 대체한다. 게스트는 더 이상 설정 파일이
- * 아니라 **계정 유형**으로 판정되며, 어느 설문을 볼 수 있는가는 `survey_participants` 의
- * 부여 행이 정한다 — 접근 판정은 server/survey-access 코어 하나가 한다.
- *
- * 이 술어가 남아 있는 자리는 접근제어가 아니라 **데이터 파티션과 로그**다: 게스트 화면은
- * 전역 테스트 모드와 무관하게 항상 실데이터를 본다(server/data-scope).
- */
-export function isGuestAccount(userType: UserType | undefined): boolean {
-  return userType === 'guest';
-}
-
 /**
  * 내부가 **아닌** 계정인가 — 데이터 파티션의 단일 술어 (티켓 25·26).
  *
- * `isGuestAccount` 와 갈라 두는 이유는 묻는 질문이 다르기 때문이다. 저쪽은 「게스트인가」라
- * 게스트 전용 화면 분기가 쓰고, 이쪽은 「전역 테스트 모드를 따르는가」다 — **내부 표면만
- * 따른다.** 실사가 컨택 쓰기를 얻으면서(티켓 25) 게스트만 real 로 고정하는 규칙이 새기
- * 시작했다: 테스트 모드가 켜진 설문에서 실사원이 test 파티션에 결과코드를 쓴다.
+ * v1 의 env grant 모델(`GUEST_SURVEY_GRANTS`)이 은퇴하면서 외부 계정은 설정 파일이 아니라
+ * **계정 유형**으로 판정된다. 접근제어가 아니라 **데이터 파티션**의 술어다 — 외부 화면은
+ * 전역 테스트 모드와 무관하게 항상 실데이터를 본다(server/data-scope). 접근 판정은
+ * server/survey-access 코어 하나가 한다.
+ *
+ * 「게스트인가」를 따로 묻지 않는다. 실사가 컨택 쓰기를 얻으면서(티켓 25) 게스트만 real 로
+ * 고정하는 규칙이 샜다 — 테스트 모드가 켜진 설문에서 실사원이 test 파티션에 결과코드를
+ * 쓰고, 자기가 쓴 기록을 자기 목록에서 못 본다. 축은 「외부인가」 하나다.
  *
  * 세션에서 판정하는 짝은 `lib/auth/external-viewer` 다(RSC·loadOperationsDataScope 용).
  * 이쪽은 procedure 가 이미 인증한 `context.user.userType` 에서 파생할 때 쓴다.

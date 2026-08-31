@@ -15,6 +15,9 @@ import { loadSurveyAccess, SurveyAccessError } from './survey-access';
  * 다른 화이트리스트를 다시 물었는데(티켓 21), 실사는 초대되면 열리는 화면이 고정이라
  * 물을 것이 capability 하나다.
  *
+ * 물을 capability 는 호출부가 준다 — 조사 대상은 `contacts.view`, 응답 현황은
+ * `operations.view` 다.
+ *
  * 대신 이쪽에만 있는 축이 **쓰기 여부**다. 실사 팀장은 소속원이 초대된 설문을 초대 없이
  * 열람하되 결과코드는 못 남긴다(스펙 §6 「본인 초대 시」) — 화면이 그 차이를 그려야 하므로
  * `canWriteAttempts` 를 함께 돌려준다. 강제는 여기가 아니라 쓰기 표면의 관문이 한다:
@@ -38,6 +41,7 @@ export interface FieldworkSurveyPageViewer {
 
 export async function assertFieldworkSurveyPageAccess(
   surveyId: string,
+  capability: SurveyCapability,
 ): Promise<FieldworkSurveyPageViewer> {
   const user = await requireAccountTypePage('fieldwork');
 
@@ -51,10 +55,11 @@ export async function assertFieldworkSurveyPageAccess(
     throw error;
   }
 
-  // 조사 대상·응답 현황 둘 다 이 문을 지난다. `contacts.view` 가 아니라
-  // `operations.view` 를 묻는 이유는 후자가 실사 열의 **입구**이기 때문이다 — 초대와
-  // 파생 시야 둘 다 가지며, 없으면 그 설문이 애초에 이 사람의 것이 아니다.
-  if (!access.capabilities.has('operations.view')) notFound();
+  // **leaf 가 자기 정밀 관문을 가진다**(AGENTS 「RSC 페이지는 자기 가드를 갖는다」).
+  // 조사 대상은 복호된 연락처 화면이라 `contacts.view` 를, 응답 현황은 `operations.view` 를
+  // 묻는다. 오늘은 실사 열에서 두 칸이 함께 켜져 결과가 같지만, 물어야 할 것을 묻지 않으면
+  // 한쪽 칸이 닫히는 날 원본 연락처가 열린 채로 남는다.
+  if (!access.capabilities.has(capability)) notFound();
 
   return {
     user,

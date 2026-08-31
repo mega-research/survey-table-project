@@ -14,6 +14,7 @@ import {
   DeleteContactTargetInput,
   GenerateTestContactsInput,
   GenerateTestContactsResult,
+  SetContactTargetMemoInput,
   UpdateContactTargetInput,
 } from '../domain/contact-target';
 import * as svc from '../services/contact-targets';
@@ -52,6 +53,24 @@ const update = scoped
     return { ok: true as const };
   });
 
+/**
+ * 메모·연락 방법만 쓰는 좁은 표면 (티켓 26 — 티켓 25 가 여기로 넘겼다).
+ *
+ * 요구 capability 가 `contacts.manage` 가 아니라 **`contacts.writeAttempts`** 인 것이
+ * 이 표면의 존재 이유다. 실사는 결과 회차를 쓰지만 명단은 못 고친다(ADR-0019) — 두
+ * 필드가 `update` 와 같은 문에 있으면 그 구분이 사라진다.
+ */
+const setMemo = scoped
+  .input(SetContactTargetMemoInput)
+  .output(z.object({ ok: z.literal(true) }))
+  .handler(async ({ context, input }) => {
+    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.writeAttempts');
+    await svc
+      .setContactTargetMemo(input, isExternalAccount(context.user.userType))
+      .catch(rethrowContactNotFound);
+    return { ok: true as const };
+  });
+
 const remove = authed
   .input(DeleteContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
@@ -72,6 +91,7 @@ const generateTest = authed
 export const targets = {
   add,
   update,
+  setMemo,
   remove,
   generateTest,
 };

@@ -14,6 +14,6 @@ interface Props {
  */
 export default async function FieldworkSurveyIndexPage({ params }: Props) {
   const { surveyId } = await params;
-  await assertFieldworkSurveyPageAccess(surveyId);
+  await assertFieldworkSurveyPageAccess(surveyId, 'operations.view');
   redirect(`/fieldwork/surveys/${surveyId}/contacts`);
 }

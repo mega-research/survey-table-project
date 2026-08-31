@@ -934,8 +934,9 @@ export type FieldworkHomeSurveyItem = z.infer<typeof FieldworkHomeSurveyItem>;
 //
 // **원본 전체**를 본다 — 게스트의 마스킹본과 정반대다(스펙 §6, 결정 2026-08-25).
 // 대리 실사라는 업무가 연락처를 전제하므로 암호화 PII 를 복호해 보여주고, 대신 접근이
-// 초대된 설문 하나로 한정된다. 그래서 이 모양에는 `inviteToken` 이 실려 있다 —
-// 게스트 행에서 그것을 뺀 이유(열람이 대리 응답이 된다)가 여기서는 **목적**이다.
+// 초대된 설문 하나로 한정된다. 그래서 이 모양에는 `inviteToken` 이 실릴 수 있다 —
+// 게스트 행에서 그것을 뺀 이유(열람이 대리 응답이 된다)가 초대된 실사에게는 목적이다.
+// 다만 **팀장의 파생 시야에서는 null** 이다(ADR-0019 — 본인이 초대돼야 대리 응답한다).
 
 /** 표 헤더 한 칸 — 라벨만 건넌다(소스 문자열은 서버에 남는다). */
 export const FieldworkContactColumn = z.object({ key: z.string(), label: z.string() });
@@ -952,12 +953,20 @@ export const FieldworkContactRow = z.object({
   attemptCount: z.number().int(),
   /** 매칭 응답의 status. 없으면 null — 화면이 「미응답」으로 그린다. */
   responseStatus: z.string().nullable(),
+  /** 컨택 메모 — 실사가 덮어쓸 수 있는 한 칸(회차의 note 와 다르다). */
+  memo: z.string().nullable(),
+  /** 연락 방법 — 메모와 같은 좁은 표면으로 함께 저장된다. */
+  contactMethod: z.string().nullable(),
   /**
    * 대행 진입에 쓰는 초대 토큰 (.pen 「응답 대행」).
    *
+   * **본인이 초대된 실사에게만** 실리고 팀장의 파생 시야에서는 null 이다. 화면에서 버튼만
+   * 감추는 것으로는 부족하다 — 토큰이 payload 에 실려 나가면 그 링크는 `pub` 경로라 서버가
+   * 다시 막지 못한다.
+   *
    * 귀속 기록(fieldworkUserId)은 티켓 27 이 붙인다 — 이 티켓은 링크까지다.
    */
-  inviteToken: z.string(),
+  inviteToken: z.string().nullable(),
 });
 export type FieldworkContactRow = z.infer<typeof FieldworkContactRow>;
 

@@ -53,6 +53,7 @@ const INTERNAL_IDS = [OWNER_ID];
 
 let surveyId = '';
 let targetId = '';
+let INVITE_TOKEN = '';
 
 /** 컬럼 스킴 — 이름은 attrs, 전화번호는 PII 다(.pen 10-2 의 두 열). */
 const SCHEME: ContactColumnScheme = {
@@ -154,6 +155,7 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
     });
 
     targetId = crypto.randomUUID();
+    INVITE_TOKEN = crypto.randomUUID();
     await db.insert(targetsTable).values({
       id: targetId,
       surveyId,
@@ -161,7 +163,7 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
       isTest: false,
       groupValue: '서울',
       attrs: { 이름: '김민준', 비고: '숨긴 컬럼 값' },
-      inviteToken: crypto.randomUUID(),
+      inviteToken: INVITE_TOKEN,
       inviteCode: `fw${RUN}`,
     });
     // 전화번호는 암호화 저장이다 — 실사 화면이 이것을 **복호해서** 보여주는지가 ① 의 질문이다.
@@ -192,7 +194,7 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
 
   describe('원본 전체를 본다', () => {
     it('PII 가 마스킹이 아니라 복호된 평문으로 온다', async () => {
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       const phoneIndex = page.columns.findIndex((column) => column.label === '전화번호');
 
       expect(page.rows).toHaveLength(1);
@@ -202,7 +204,7 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
     });
 
     it('스킴이 숨긴 컬럼도 그린다 — 실사용 스킴은 따로 없다', async () => {
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       expect(page.columns.map((column) => column.label)).toContain('비고');
     });
 
@@ -220,34 +222,45 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
         })
         .where(eq(surveysTable.id, surveyId));
 
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       expect(page.columns.map((column) => column.label)).not.toContain('메일');
     });
 
     it('대행 진입에 쓸 초대 토큰이 행에 실려 온다 — 게스트 행에서 뺀 것과 정반대다', async () => {
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       expect(page.rows[0]?.inviteToken).toBeTruthy();
     });
 
+    it('팀장의 파생 시야에서는 초대 토큰이 투영에서 빠진다', async () => {
+      // ADR-0019: 「본인이 대리 응답·결과코드를 입력하려면 본인도 초대돼야 한다」.
+      // 화면에서 버튼만 감추면 토큰은 RSC payload 에 실려 나가고, 그 링크는 pub 경로라
+      // 서버가 다시 막지 못한다 — 투영에서 빼는 것이 유일한 강제다.
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: false });
+      expect(page.rows).toHaveLength(1);
+      expect(page.rows[0]?.inviteToken).toBeNull();
+      // 직렬화 결과 어디에도 토큰 문자열이 없어야 한다.
+      expect(JSON.stringify(page)).not.toContain(INVITE_TOKEN);
+    });
+
     it('진척 배지는 필터와 무관한 전체 수다', async () => {
-      const filtered = await listFieldworkContacts({ surveyId, page: 1, q: '없는이름' });
+      const filtered = await listFieldworkContacts({ surveyId, page: 1, q: '없는이름', canProxyRespond: true });
       expect(filtered.rows).toHaveLength(0);
       // 검색으로 목록이 비어도 분모는 그대로다 — 검색어가 목표를 줄이지 않는다.
       expect(filtered.progress.total).toBe(1);
     });
 
     it('그룹·결과코드 선택지는 이 설문에 실제로 있는 값이다', async () => {
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       expect(page.groups).toEqual(['서울']);
       expect(page.resultCodes).toEqual(['부재중', '통화 완료']);
     });
 
     it('그룹으로 좁힌다', async () => {
       expect(
-        (await listFieldworkContacts({ surveyId, page: 1, groupValue: '서울' })).rows,
+        (await listFieldworkContacts({ surveyId, page: 1, groupValue: '서울', canProxyRespond: true })).rows,
       ).toHaveLength(1);
       expect(
-        (await listFieldworkContacts({ surveyId, page: 1, groupValue: '부산' })).rows,
+        (await listFieldworkContacts({ surveyId, page: 1, groupValue: '부산', canProxyRespond: true })).rows,
       ).toHaveLength(0);
     });
   });
@@ -301,8 +314,52 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
         resultCode: '통화 완료',
       });
 
-      const page = await listFieldworkContacts({ surveyId, page: 1 });
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
       expect(page.rows[0]).toMatchObject({ latestResultCode: '통화 완료', attemptCount: 2 });
+    });
+
+    it('컨택 메모·연락 방법을 좁은 표면으로 덮어쓴다', async () => {
+      await targetClient(WORKER_ID).targets.setMemo({
+        surveyId,
+        id: targetId,
+        memo: '자택 부재. 직장 번호로 재시도',
+        contactMethod: 'visit',
+      });
+
+      const [row] = await db
+        .select({
+          memo: targetsTable.memo,
+          contactMethod: targetsTable.contactMethod,
+          attrs: targetsTable.attrs,
+        })
+        .from(targetsTable)
+        .where(eq(targetsTable.id, targetId));
+
+      expect(row?.memo).toBe('자택 부재. 직장 번호로 재시도');
+      expect(row?.contactMethod).toBe('visit');
+      // 명단은 그대로여야 한다 — 이 표면이 attrs 에 닿으면 실사에게 명단 수정이 열린다.
+      expect(row?.attrs).toMatchObject({ 이름: '김민준' });
+
+      // 표가 저장된 값을 되읽는다.
+      const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
+      expect(page.rows[0]).toMatchObject({
+        memo: '자택 부재. 직장 번호로 재시도',
+        contactMethod: 'visit',
+      });
+    });
+
+    it('메모 표면은 회차를 쌓지 않는다 — 덮어쓰기와 누적은 다른 축이다', async () => {
+      await targetClient(WORKER_ID).targets.setMemo({
+        surveyId,
+        id: targetId,
+        memo: '메모만',
+        contactMethod: null,
+      });
+      const rows = await db
+        .select({ id: attemptsTable.id })
+        .from(attemptsTable)
+        .where(eq(attemptsTable.contactTargetId, targetId));
+      expect(rows).toHaveLength(0);
     });
 
     it('결과코드로 좁힌다', async () => {
@@ -312,10 +369,10 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
         resultCode: '부재중',
       });
       expect(
-        (await listFieldworkContacts({ surveyId, page: 1, resultCode: '부재중' })).rows,
+        (await listFieldworkContacts({ surveyId, page: 1, resultCode: '부재중', canProxyRespond: true })).rows,
       ).toHaveLength(1);
       expect(
-        (await listFieldworkContacts({ surveyId, page: 1, resultCode: '통화 완료' })).rows,
+        (await listFieldworkContacts({ surveyId, page: 1, resultCode: '통화 완료', canProxyRespond: true })).rows,
       ).toHaveLength(0);
     });
   });
@@ -342,6 +399,18 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
           surveyId,
           contactTargetId: targetId,
           resultCode: '부재중',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('메모 쓰기도 거부된다 — writeAttempts 와 같은 자격이라 함께 닫힌다', async () => {
+      await invite(WORKER_ID);
+      await expect(
+        targetClient(LEADER_ID).targets.setMemo({
+          surveyId,
+          id: targetId,
+          memo: '팀장이 남기려 한 메모',
+          contactMethod: null,
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
@@ -381,7 +450,7 @@ describe.skipIf(!isLocalDb)('실사 조사 대상 (real local DB)', () => {
       inviteCode: `fwt${RUN}`,
     });
 
-    const page = await listFieldworkContacts({ surveyId, page: 1 });
+    const page = await listFieldworkContacts({ surveyId, page: 1, canProxyRespond: true });
     expect(page.rows.map((row) => row.contactTargetId)).toEqual([targetId]);
 
     // 쓰기도 real 이다 — read 는 real 인데 write 만 test 로 가면 자기 쓴 기록을 못 본다.

@@ -9,8 +9,12 @@ import { ExternalLink, Loader2 } from 'lucide-react';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { mapStatusPill } from '@/lib/operations/profiles-format';
 import { cn } from '@/lib/utils';
+import { CONTACT_METHOD_LABEL, type ContactMethod } from '@/shared/contracts/contacts';
 import type { FieldworkContactRow, FieldworkContactsPage } from '@/shared/contracts/workspace-io';
 import { client } from '@/shared/lib/rpc';
+
+/** 드롭다운 선택지 — 라벨 표의 키가 어휘 자체다(따로 배열을 두면 둘이 갈린다). */
+const CONTACT_METHOD_VALUES = Object.keys(CONTACT_METHOD_LABEL) as ContactMethod[];
 
 /** 주소가 들고 있는 필터 — 서버가 읽어 넘긴다(클라이언트가 location 을 다시 파싱하지 않는다). */
 export interface ContactFilters {
@@ -253,6 +257,10 @@ function StatusPill({ status }: { status: string | null }) {
  * 대행은 그 컨택의 초대 링크를 새 탭으로 연다. **완료된 대상은 비활성**이다(.pen 캡션).
  * 귀속 기록(fieldworkUserId)과 대행 배너는 티켓 27 이 붙인다 — 링크 자체는 지금도 살아
  * 있으므로 버튼이 거짓말을 하지는 않는다.
+ *
+ * **대행 버튼의 조건은 `canWriteAttempts` 가 아니라 토큰의 존재다.** 팀장의 파생 시야에서는
+ * 서버 투영이 `inviteToken` 을 null 로 접으므로 여기서 감출 것이 애초에 없다 — 판정을 화면이
+ * 다시 하면 두 곳이 갈릴 수 있고, 갈리는 쪽이 화면이면 링크가 살아난다.
  */
 function RowActions({
   surveyId,
@@ -279,7 +287,7 @@ function RowActions({
           결과 기록
         </button>
       )}
-      {completed ? (
+      {row.inviteToken === null ? null : completed ? (
         <span className="px-2.5 py-1 text-[11.5px] text-[#C7C7CC]">응답 완료</span>
       ) : (
         <a
@@ -297,11 +305,15 @@ function RowActions({
 }
 
 /**
- * 결과 기록 패널 (.pen 10-2 하단).
+ * 결과 기록 패널 (.pen 10-2 하단) — **두 개의 쓰기**가 나란히 산다.
  *
- * 결과코드와 메모가 **한 회차**로 쌓인다(`contact_attempts`) — .pen 의 안내문이 그 계약이고,
- * 컨택 행의 memo 를 고치는 것이 아니다. 작성자(실사 계정)는 서버가 인증된 컨텍스트에서
- * 남긴다: 화면이 보내지 않으므로 위조할 수 없다.
+ * 위: 결과코드와 시도 메모가 **한 회차**로 쌓인다(`contact_attempts`). 작성자(실사 계정)는
+ * 서버가 인증된 컨텍스트에서 남긴다 — 화면이 보내지 않으므로 위조할 수 없다.
+ *
+ * 아래: 컨택 행의 `memo`·`contactMethod` 를 **덮어쓴다**. 회차가 누적이라면 이쪽은 현재
+ * 상태라 저장 버튼을 갈라 뒀다 — 한 버튼으로 묶으면 「메모만 고치려다 회차가 하나 더
+ * 쌓이는」 일이 생기고, 두 표면이 서로 다른 테이블이라 부분 실패도 갈라 보여야 한다.
+ * 명단(attrs·PII)은 여기서 못 고친다: 서버의 좁은 표면이 그 두 칸만 받는다(ADR-0019).
  */
 function RecordPanel({
   surveyId,
@@ -320,6 +332,12 @@ function RecordPanel({
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [memo, setMemo] = useState(row.memo ?? '');
+  const [contactMethod, setContactMethod] = useState(row.contactMethod ?? '');
+  const [savingMemo, setSavingMemo] = useState(false);
+  const [memoError, setMemoError] = useState<string | null>(null);
+  const [memoSaved, setMemoSaved] = useState(false);
 
   async function handleSave() {
     if (!resultCode) {
@@ -340,6 +358,28 @@ function RecordPanel({
       setError(getErrorMessage(err, '결과를 기록하지 못했습니다.'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveMemo() {
+    setSavingMemo(true);
+    setMemoError(null);
+    setMemoSaved(false);
+    try {
+      await client.contacts.targets.setMemo({
+        surveyId,
+        id: row.contactTargetId,
+        // 빈 칸은 null 로 보낸다 — 빈 문자열이 컬럼에 남으면 「비웠다」와 「안 적었다」가
+        // 같은 모양이 되고, 목록의 「—」 판정이 값 유무로 서지 않는다.
+        memo: memo.trim() ? memo.trim() : null,
+        contactMethod: contactMethod ? (contactMethod as ContactMethod) : null,
+      });
+      setMemoSaved(true);
+      onSaved();
+    } catch (err) {
+      setMemoError(getErrorMessage(err, '메모를 저장하지 못했습니다.'));
+    } finally {
+      setSavingMemo(false);
     }
   }
 
@@ -398,6 +438,51 @@ function RecordPanel({
       </div>
 
       {error && <p className="mt-2 text-[12px] text-red-600">{error}</p>}
+
+      <div className="mt-3 border-t border-[#F0F0F2] pt-3">
+        <span className="text-[11.5px] text-[#9CA3AF]">
+          컨택 메모 — 누적이 아니라 현재 상태입니다. 명단 수정은 담당 연구원 몫입니다.
+        </span>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="연락 방법"
+            value={contactMethod}
+            onChange={(event) => setContactMethod(event.target.value)}
+            className="h-9 rounded-lg border border-[#D1D5DB] bg-white px-2 text-[13px] text-[#3A3A3C]"
+          >
+            <option value="">연락 방법 없음</option>
+            {CONTACT_METHOD_VALUES.map((method) => (
+              <option key={method} value={method}>
+                {CONTACT_METHOD_LABEL[method]}
+              </option>
+            ))}
+          </select>
+
+          <input
+            value={memo}
+            onChange={(event) => setMemo(event.target.value)}
+            placeholder="컨택 메모 (선택)"
+            maxLength={2000}
+            className="h-9 min-w-[240px] flex-1 rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none"
+          />
+
+          <button
+            type="button"
+            onClick={handleSaveMemo}
+            disabled={savingMemo}
+            className={cn(
+              'flex h-9 items-center gap-1.5 rounded-lg border border-[#D1D5DB] bg-white px-4',
+              'text-[13px] font-semibold text-[#374151] hover:bg-[#F5F5F7] disabled:opacity-60',
+            )}
+          >
+            {savingMemo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            메모 저장
+          </button>
+
+          {memoSaved && <span className="text-[12px] text-[#3A7D44]">저장됨</span>}
+        </div>
+        {memoError && <p className="mt-2 text-[12px] text-red-600">{memoError}</p>}
+      </div>
 
       <p className="mt-2 text-[11px] text-[#9CA3AF]">
         결과코드·메모는 시도 회차(contact_attempts)로 기록되며 작성자(실사 계정)가 남습니다.

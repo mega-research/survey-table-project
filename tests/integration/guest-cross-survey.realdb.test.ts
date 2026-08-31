@@ -110,6 +110,7 @@ const MAIL_TEMPLATE_INPUT = {
 const SCOPED_INPUTS: Record<string, Record<string, unknown>> = {
   'contacts.targets.add': { attrs: {} },
   'contacts.targets.update': { id: CHILD_ID, attrs: {} },
+  'contacts.targets.setMemo': { id: CHILD_ID, memo: null, contactMethod: null },
   'contacts.attempts.add': { contactTargetId: CHILD_ID, resultCode: 'x' },
   'contacts.attempts.update': { contactTargetId: CHILD_ID, id: CHILD_ID, resultCode: 'x' },
   'contacts.attempts.remove': { contactTargetId: CHILD_ID, id: CHILD_ID },

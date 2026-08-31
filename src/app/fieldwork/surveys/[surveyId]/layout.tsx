@@ -23,7 +23,7 @@ interface Props {
  */
 export default async function FieldworkSurveyLayout({ params, children }: Props) {
   const { surveyId } = await params;
-  const { user } = await assertFieldworkSurveyPageAccess(surveyId);
+  const { user } = await assertFieldworkSurveyPageAccess(surveyId, 'operations.view');
 
   const subject = await loadAccessSubject(user);
   const [header, orgName] = await Promise.all([

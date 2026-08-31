@@ -363,6 +363,13 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'contacts.manage',
     input: { surveyId: S, id: C, attrs: {} },
   },
+  // 메모·연락 방법만 쓰는 좁은 표면 (티켓 26). 형제 `update` 와 요구 capability 가
+  // 다르다 — 실사는 회차를 쓰지만 명단은 못 고친다(ADR-0019).
+  'contacts.targets.setMemo': {
+    gate: 'scoped',
+    capability: 'contacts.writeAttempts',
+    input: { surveyId: S, id: C, memo: null, contactMethod: null },
+  },
   'contacts.targets.remove': {
     gate: 'rpc',
     capability: 'contacts.manage',

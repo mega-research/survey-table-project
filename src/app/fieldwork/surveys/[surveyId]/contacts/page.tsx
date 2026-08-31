@@ -19,7 +19,7 @@ interface Props {
  */
 export default async function FieldworkContactsPage({ params, searchParams }: Props) {
   const { surveyId } = await params;
-  const { canWriteAttempts } = await assertFieldworkSurveyPageAccess(surveyId);
+  const { canWriteAttempts } = await assertFieldworkSurveyPageAccess(surveyId, 'contacts.view');
 
   const sp = await searchParams;
   const filters = {
@@ -34,6 +34,10 @@ export default async function FieldworkContactsPage({ params, searchParams }: Pr
     ...(filters.q ? { q: filters.q } : {}),
     ...(filters.group ? { groupValue: filters.group } : {}),
     ...(filters.result ? { resultCode: filters.result } : {}),
+    // 대행 링크는 **본인이 초대된 실사에게만** 실린다 — 팀장의 파생 시야에서는 투영이
+    // 토큰을 빼므로 화면이 버튼을 그릴 수 없다(ADR-0019). 버튼만 감추는 것으로는 부족한
+    // 이유는 `/survey/[id]?invite=` 가 pub 경로라 서버가 다시 막지 못하기 때문이다.
+    canProxyRespond: canWriteAttempts,
   });
 
   return (

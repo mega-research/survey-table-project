@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, countDistinct, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, countDistinct, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
@@ -23,8 +23,11 @@ import { getContactColumnScheme, getContactResultCodes, listContactsForSurvey } 
  *
  * **원본 전체를 본다** — 게스트의 마스킹본과 정반대다. 대리 실사라는 업무가 연락처를
  * 전제하므로 암호화 PII 를 복호해 보여주고(2026-08-25 결정), 대신 접근이 초대된 설문
- * 하나로 한정된다. `inviteToken` 이 행에 실리는 것도 같은 이유다: 게스트 행에서 그것을
- * 뺀 근거(「열람이 대리 응답이 된다」)가 여기서는 **목적**이다.
+ * `inviteToken` 은 **본인이 초대된 실사에게만** 실린다. 게스트 행에서 그것을 뺀 근거
+ * (「열람이 대리 응답이 된다」)가 초대된 실사에게는 목적이지만, 팀장의 파생 시야에는
+ * 그대로 적용된다 — ADR-0019 는 「본인이 대리 응답·결과코드를 입력하려면 본인도 초대돼야
+ * 한다」고 적었고, 그 링크는 `pub` 경로라 서버가 다시 막지 못한다. 화면에서 버튼만 감추면
+ * 토큰은 RSC payload 에 그대로 실려 나간다 — **투영에서 빼는 것이 유일한 강제**다.
  *
  * 컬럼 스킴은 **라벨과 순서에만** 쓴다. 「실사용 컬럼 스킴 없음」이 결정의 문장이고,
  * 그 뜻은 실사에게 따로 설정할 스킴을 두지 않는다는 것이지 담당 연구원이 정한 배치를
@@ -44,6 +47,14 @@ export interface FieldworkContactsArgs {
   groupValue?: string;
   /** 최신 결과코드 한 값으로 좁힘. 빈 값은 「전체」. */
   resultCode?: string;
+  /**
+   * 대행 초대 토큰을 실을 것인가 — **본인이 초대된 설문에서만** 참이다(ADR-0019).
+   *
+   * 관문의 `canWriteAttempts` 와 같은 값이지만 이름을 갈라 둔다: 저쪽은 「회차를 쓸 수
+   * 있는가」이고 이쪽은 「응답을 대신 넣을 수 있는가」다. 오늘은 같은 capability 가
+   * 둘을 함께 여닫지만, 갈라 적어야 한 축이 바뀔 때 다른 축이 조용히 따라가지 않는다.
+   */
+  canProxyRespond: boolean;
 }
 
 export async function listFieldworkContacts(
@@ -52,11 +63,12 @@ export async function listFieldworkContacts(
   const { surveyId } = args;
   const scope = EXTERNAL_VIEWER_DATA_SCOPE;
 
-  const [scheme, resultCodes, groups, progress] = await Promise.all([
+  const [scheme, resultCodes, groups, progress, attrsKeys] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     listGroupValues(surveyId),
     countProgress(surveyId),
+    listAttrsKeys(surveyId),
   ]);
 
   const result = await listContactsForSurvey({
@@ -70,17 +82,18 @@ export async function listFieldworkContacts(
     dir: 'asc',
   });
 
-  const columns = visibleColumns(scheme?.columns ?? [], result.rows);
+  const columns = visibleColumns(scheme?.columns ?? [], attrsKeys);
   // **복호는 페이지 단위로만** 한다(decryptPiiForTargets 주석) — 전량 복호는 비용도 크고
   // 화면에 그리지도 않는다. 실패한 항목은 결과에서 빠지고 칸은 「—」가 된다.
   const piiKeys = columns.flatMap((column) => {
     const key = piiKeyOf(column.source);
     return key ? [key] : [];
   });
-  const decrypted = await decryptPiiForTargets(
-    result.rows.map((row) => row.id),
-    piiKeys,
-  );
+  const ids = result.rows.map((row) => row.id);
+  const [decrypted, memos] = await Promise.all([
+    decryptPiiForTargets(ids, piiKeys),
+    listMemos(ids),
+  ]);
 
   return {
     columns: columns.map((column): FieldworkContactColumn => ({
@@ -95,7 +108,9 @@ export async function listFieldworkContacts(
       latestResultCode: row.latestResultCode,
       attemptCount: row.latestAttemptNo ?? 0,
       responseStatus: row.responseStatus,
-      inviteToken: row.inviteToken,
+      memo: memos.get(row.id)?.memo ?? null,
+      contactMethod: memos.get(row.id)?.contactMethod ?? null,
+      inviteToken: args.canProxyRespond ? row.inviteToken : null,
     })),
     total: result.total,
     page: result.page,
@@ -141,10 +156,13 @@ function buildClauses(args: FieldworkContactsArgs): FilterClause[] {
  *
  * 스킴이 없거나 attrs 를 다 담지 못한 설문에서는 실제 데이터의 키로 메운다 — 업로드만
  * 하고 컬럼을 정리하지 않은 설문에서 실사가 빈 표를 보면 안 된다.
+ *
+ * 보충 키는 **설문 전체**에서 뽑는다(`listAttrsKeys`). 현재 페이지 행에서 뽑으면 스킴 없는
+ * 설문에서 2페이지의 열 구성이 1페이지와 달라지고, 검색어 하나에 표 머리가 바뀐다.
  */
 function visibleColumns(
   columns: readonly ContactColumnDef[],
-  rows: readonly SourceRow[],
+  attrsKeys: readonly string[],
 ): ContactColumnDef[] {
   const ordered = columns
     .filter((column) => !HIDDEN_SOURCES.has(column.source))
@@ -157,9 +175,8 @@ function visibleColumns(
       return key ? [key] : [];
     }),
   );
-  const extras = [...new Set(rows.flatMap((row) => Object.keys(row.attrs)))]
+  const extras = attrsKeys
     .filter((key) => !known.has(key))
-    .sort()
     .map((key, index): ContactColumnDef => ({
       key,
       label: key,
@@ -206,6 +223,45 @@ function cellOf(
   }
 }
 
+/**
+ * 메모·연락 방법 — **페이지 행만** 읽는다.
+ *
+ * 운영 콘솔의 공용 행(`ContactsRow`)에 두 필드를 더하지 않는 이유는 소비자가 이 화면
+ * 하나뿐이기 때문이다. 공용 모양을 넓히면 콘솔의 모든 RSC payload 가 쓰지도 않는 메모를
+ * 싣는다.
+ */
+async function listMemos(
+  ids: readonly string[],
+): Promise<Map<string, { memo: string | null; contactMethod: string | null }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: contactTargets.id,
+      memo: contactTargets.memo,
+      contactMethod: contactTargets.contactMethod,
+    })
+    .from(contactTargets)
+    .where(inArray(contactTargets.id, [...ids]));
+  return new Map(rows.map((row) => [row.id, { memo: row.memo, contactMethod: row.contactMethod }]));
+}
+
+/**
+ * 스킴이 담지 못한 attrs 키 — **설문 전체**에서 한 번에 뽑는다.
+ *
+ * 페이지 행에서 뽑으면 표 머리가 페이지·검색어마다 흔들린다. 컨택 수만큼 도는 대신
+ * `jsonb_object_keys` 를 DB 에서 펼쳐 distinct 로 접는다.
+ */
+async function listAttrsKeys(surveyId: string): Promise<string[]> {
+  const rows = await db.execute<{ key: string }>(sql`
+    select distinct k as key
+    from ${contactTargets}, lateral jsonb_object_keys(${contactTargets.attrs}) as k
+    where ${contactTargets.surveyId} = ${surveyId}
+      and ${contactTargets.isTest} = false
+    order by k
+  `);
+  return [...rows].map((row) => row.key);
+}
+
 /** 그룹 드롭다운 선택지 — 이 설문에 실제로 있는 값만, 없으면 빈 배열. */
 async function listGroupValues(surveyId: string): Promise<string[]> {
   const rows = await db
@@ -231,7 +287,8 @@ async function listGroupValues(surveyId: string): Promise<string[]> {
 async function countProgress(surveyId: string): Promise<{ completed: number; total: number }> {
   const [row] = await db
     .select({
-      total: sql<number>`count(*)::int`,
+      // 조인 뒤라 `count(*)` 는 응답이 둘 이상인 컨택을 두 번 센다 — 분모는 **컨택 수**다.
+      total: countDistinct(contactTargets.id),
       completed: countDistinct(
         sql`case when ${surveyResponses.status} = 'completed' then ${contactTargets.id} end`,
       ),
