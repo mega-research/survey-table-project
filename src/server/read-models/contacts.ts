@@ -90,6 +90,15 @@ export interface ListContactsArgs {
   sort: ContactsSortKey;
   dir: ContactsSortDir;
   pageSize: number;
+  /**
+   * 그룹(업로드 시점의 `group_value`) 한 값으로 좁힌다 — 필터 DSL 밖의 축이다 (티켓 26).
+   *
+   * DSL(`FILTER_SOURCE`)에 넣지 않은 이유는 그쪽이 **컬럼 스킴 위에** 서 있기 때문이다:
+   * 소스는 `attrs.*`·`pii.*`·system 넷이고 전부 스킴이 그리는 열이다. 그룹은 열이 아니라
+   * 컨택 행 자체의 속성이라 후보 목록에도 헤더 팝오버에도 자리가 없다. 실사 화면의
+   * 「그룹 · 전체」 드롭다운(.pen 10-2)이 첫 소비자다.
+   */
+  groupValue?: string;
 }
 
 export interface ListContactsResult {
@@ -145,9 +154,11 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, clauses, sort, dir } = args;
+  const { surveyId, scope, page, pageSize, clauses, sort, dir, groupValue } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
+
+  if (groupValue !== undefined) whereParts.push(eq(contactTargets.groupValue, groupValue));
 
   whereParts.push(buildContactsFilterSql(clauses));
 

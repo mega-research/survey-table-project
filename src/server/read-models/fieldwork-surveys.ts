@@ -211,3 +211,25 @@ export async function getFieldworkOrgName(orgId: string): Promise<string | null>
     .where(eq(fieldworkOrgs.id, orgId));
   return row?.name ?? null;
 }
+
+/**
+ * 열람 화면의 서브헤더 (.pen FLOW 10-2 「2026 고객 만족도 조사 / 연구1본부 - 1팀 · 소유 김새로」).
+ *
+ * 홈 목록의 단건 짝을 만들지 **않는** 이유가 있다. 홈은 초대·업체 축으로 좁힌 목록이라,
+ * 팀장이 파생 시야로 연 설문은 「내 초대」 목록에 없다 — 단건 짝을 그 위에 세우면 팀장이
+ * 자기가 볼 수 있는 화면의 제목을 못 읽는다. 접근 판정은 관문(page-fieldwork-access)이
+ * 이미 끝냈으므로 여기는 표시값만 읽는다.
+ */
+export async function getFieldworkSurveyHeader(
+  surveyId: string,
+): Promise<{ title: string; teamName: string | null; ownerName: string | null } | null> {
+  const owner = alias(users, 'header_owner');
+  const [row] = await db
+    .select({ title: surveys.title, teamName: teams.name, ownerName: owner.name })
+    .from(surveys)
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .leftJoin(owner, eq(owner.id, surveys.ownerUserId))
+    .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
+    .limit(1);
+  return row ?? null;
+}

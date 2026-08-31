@@ -77,6 +77,7 @@
     "0090_survey_groups",
     "0091_survey_ownership_events",
     "0092_survey_participants",
-    "0093_fieldwork_orgs"
+    "0093_fieldwork_orgs",
+    "0096_contact_actor_fk_to_app_users"
   ]
 }

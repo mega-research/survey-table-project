@@ -21,7 +21,7 @@ const SERVER_DATA_IMPORT = /from '@\/(server\/read-models|server\/[a-z-]+\/servi
 
 /** 자기 가드로 인정하는 호출. 무엇을 막는지는 각 가드가 정한다(내부 전용·유형·설문 경계·탭). */
 const PAGE_GUARD =
-  /\b(requireAuth|requireAdminPage|requireSuperadminPage|requireActiveAccount|requireAccountTypePage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess)\s*\(/;
+  /\b(requireAuth|requireAdminPage|requireSuperadminPage|requireActiveAccount|requireAccountTypePage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess|assertFieldworkSurveyPageAccess)\s*\(/;
 
 /**
  * 인증 없이 열려야 하는 페이지 — 응답자 표면.

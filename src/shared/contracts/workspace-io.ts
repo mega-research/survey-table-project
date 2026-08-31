@@ -927,3 +927,51 @@ export const FieldworkHomeSurveyItem = z.object({
   lastActivityAt: z.date().nullable(),
 });
 export type FieldworkHomeSurveyItem = z.infer<typeof FieldworkHomeSurveyItem>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 실사 조사 대상 (.pen FLOW 10-2, 티켓 26)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// **원본 전체**를 본다 — 게스트의 마스킹본과 정반대다(스펙 §6, 결정 2026-08-25).
+// 대리 실사라는 업무가 연락처를 전제하므로 암호화 PII 를 복호해 보여주고, 대신 접근이
+// 초대된 설문 하나로 한정된다. 그래서 이 모양에는 `inviteToken` 이 실려 있다 —
+// 게스트 행에서 그것을 뺀 이유(열람이 대리 응답이 된다)가 여기서는 **목적**이다.
+
+/** 표 헤더 한 칸 — 라벨만 건넌다(소스 문자열은 서버에 남는다). */
+export const FieldworkContactColumn = z.object({ key: z.string(), label: z.string() });
+export type FieldworkContactColumn = z.infer<typeof FieldworkContactColumn>;
+
+export const FieldworkContactRow = z.object({
+  contactTargetId: z.uuid(),
+  resid: z.number().int(),
+  /** 컬럼 순서대로의 표시 문자열 — PII 는 **복호된 원문**이다. */
+  cells: z.array(z.string().nullable()),
+  groupValue: z.string().nullable(),
+  latestResultCode: z.string().nullable(),
+  /** 시도 횟수 — 회차가 없으면 0(.pen 「시도」 열). */
+  attemptCount: z.number().int(),
+  /** 매칭 응답의 status. 없으면 null — 화면이 「미응답」으로 그린다. */
+  responseStatus: z.string().nullable(),
+  /**
+   * 대행 진입에 쓰는 초대 토큰 (.pen 「응답 대행」).
+   *
+   * 귀속 기록(fieldworkUserId)은 티켓 27 이 붙인다 — 이 티켓은 링크까지다.
+   */
+  inviteToken: z.string(),
+});
+export type FieldworkContactRow = z.infer<typeof FieldworkContactRow>;
+
+export const FieldworkContactsPage = z.object({
+  columns: z.array(FieldworkContactColumn),
+  rows: z.array(FieldworkContactRow),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  /** 그룹 드롭다운의 선택지 — 이 설문에 실제로 있는 값만. */
+  groups: z.array(z.string()),
+  /** 결과코드 드롭다운의 선택지 — 설문이 정의한 어휘. */
+  resultCodes: z.array(z.string()),
+  /** 진척 배지 「완료 117 / 전체 142」 — 필터와 무관한 설문 전체 수다. */
+  progress: z.object({ completed: z.number().int(), total: z.number().int() }),
+});
+export type FieldworkContactsPage = z.infer<typeof FieldworkContactsPage>;

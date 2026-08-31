@@ -2,11 +2,14 @@
 
 import { useState } from 'react';
 
-import { AccountMenu } from '@/components/auth/account-menu';
+import Link from 'next/link';
+
 import { formatLocalDateTime } from '@/lib/date-formatters';
 import { cn } from '@/lib/utils';
-import { FIELDWORK_ROLE_LABEL, type AuthUser, type FieldworkRole } from '@/shared/contracts/auth';
+import type { AuthUser, FieldworkRole } from '@/shared/contracts/auth';
 import type { FieldworkHomeSurveyItem } from '@/shared/contracts/workspace-io';
+
+import { FieldworkHeaderBar } from './fieldwork-header-bar';
 
 interface Props {
   user: AuthUser;
@@ -34,8 +37,8 @@ interface Props {
  * 줄의 구분과 액션은 `reason` 이 정한다(세그먼트가 아니라). 「업체 전체」에는 두 종류가
  * 섞여 있어서다 — 내가 초대된 줄은 「조사 대상」으로, 소속원 줄은 「열람」으로 간다.
  *
- * 조사 대상·열람 화면 자체는 티켓 26 이다. 지금은 링크를 걸지 않고 **버튼을 그리지 않는다** —
- * 눌러서 404 가 되는 자리를 미리 만들지 않는 것이 공유 모달의 placeholder 규칙과 같다.
+ * 액션은 두 종류가 **같은 화면**으로 간다(조사 대상). 말이 갈리는 것은 거기서 할 수 있는
+ * 일이 다르기 때문이다 — 내 초대는 결과 기록까지, 업체 시야는 열람뿐이다(티켓 26).
  */
 export function FieldworkHomeView({ user, organization, role, invited, orgSurveys }: Props) {
   const [scope, setScope] = useState<'invited' | 'org'>('invited');
@@ -43,16 +46,7 @@ export function FieldworkHomeView({ user, organization, role, invited, orgSurvey
 
   return (
     <div className="min-h-screen bg-[#F9FAFB]">
-      <header className="flex h-[56px] items-center justify-between border-b border-[#E5E5EA] bg-white px-6">
-        <span className="text-[14px] font-semibold text-[#1C1C1E]">메가허브 실사</span>
-        <AccountMenu
-          name={user.name}
-          affiliation={organization}
-          badge={FIELDWORK_ROLE_LABEL[role]}
-          // AuthUser.image 는 optional(표시 전용) — AccountMenu 는 값 유무만 보므로 접는다.
-          image={user.image ?? null}
-        />
-      </header>
+      <FieldworkHeaderBar user={user} organization={organization} role={role} />
 
       <main className="mx-auto max-w-[1000px] px-4 py-10">
         <div className="flex items-start justify-between gap-4">
@@ -138,12 +132,16 @@ export function FieldworkHomeView({ user, organization, role, invited, orgSurvey
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
                       {row.lastActivityAt ? formatLocalDateTime(row.lastActivityAt) : '—'}
                     </td>
-                    {/* 액션 라벨 (.pen 10-1) — 무엇을 할 수 있는지는 지금 말하되 **링크는
-                        걸지 않는다**. 조사 대상·열람 화면은 티켓 26 이고, 눌러서 404 가 되는
-                        버튼을 미리 만들지 않는다. 열은 지금 세운다: 26 이 링크만 얹으면
-                        표 구조가 그때 바뀌지 않는다. */}
-                    <td className="px-3 py-3 text-right text-[12.5px] text-[#9CA3AF]">
-                      {row.reason === 'invited' ? '조사 대상' : '열람'}
+                    {/* 액션 (.pen 10-1) — 같은 화면으로 가되 말이 다르다. 내 초대 줄은
+                        기록까지 하므로 「조사 대상」, 업체 시야 줄은 열람뿐이라 「열람」이다
+                        (버튼이 할 수 있는 일을 정확히 말한다). 강제는 화면의 관문이 한다. */}
+                    <td className="px-3 py-3 text-right">
+                      <Link
+                        href={`/fieldwork/surveys/${row.surveyId}/contacts`}
+                        className="inline-flex rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11.5px] font-semibold text-[#374151] hover:bg-[#F5F5F7]"
+                      >
+                        {row.reason === 'invited' ? '조사 대상' : '열람'}
+                      </Link>
                     </td>
                   </tr>
                 ))}
