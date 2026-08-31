@@ -203,13 +203,18 @@ export function useSessionRecovery({
           // 재기록이라 무해하다.
           window.localStorage.setItem(key, recoverySessionId);
         }
-        setResponses?.(mergeWithPriorAnswers(priorAnswers, result.questionResponses ?? {}));
+        const restored = mergeWithPriorAnswers(priorAnswers, result.questionResponses ?? {});
+        setResponses?.(restored);
         // 저장된 기타/상세 기재(__optTexts__)를 입력란 스토어로 되살린다 — 없으면
         // 재진입 화면에서 빈칸으로 보이고, 재제출 시 사이드카가 스토어 내용으로
         // 통째로 교체되며 다른 질문의 텍스트까지 소실된다.
+        //
+        // 병합된 사이드카를 replace 로 넣어 스토어가 responses 와 같은 값을 갖게 한다.
+        // 기본 병합이면 로더가 먼저 시드한 이월 응답의 작년 텍스트가 이겨, 응답자가
+        // 지난 세션에 고치거나 지운 값이 되살아나 그대로 재저장된다.
         useSurveyResponseStore
           .getState()
-          .seedOptionTexts(readOptTextsSidecar(result.questionResponses));
+          .seedOptionTexts(readOptTextsSidecar(restored), { replace: true });
         // 멈춘 페이지 복원 — 스텝 id 가 현재 구조에 없으면(재배포 등) 호출측에서 무시한다.
         // 응답 버전 이관(ADR-0014) 시 affectedQuestionIds 를 함께 전달해 답이 폐기·제거된
         // 가장 앞 페이지로 재개 위치를 되돌린다.

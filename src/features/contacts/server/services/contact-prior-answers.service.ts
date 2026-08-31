@@ -5,6 +5,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizePriorAnswers } from '@/lib/survey/prior-answers';
 import { isValidUUID } from '@/lib/utils';
 
@@ -54,5 +55,9 @@ export async function lookupPriorAnswers(
   if (row.isTest && !row.testModeEnabled) return null;
 
   const answers = normalizePriorAnswers(row.answers);
-  return Object.keys(answers).length > 0 ? answers : null;
+  if (Object.keys(answers).length === 0) return null;
+  // 응답 PII 인라인 암호화(ADR-0012)와 같은 읽기 경계를 태운다. 이월 응답은 응답 저장
+  // 형태와 동형이므로 PII 문항 값이 암호문('v1:...')으로 적재될 수 있고, 그대로 내보내면
+  // 응답 화면에 암호문이 그대로 채워진다. 접두사 감지식이라 평문은 그대로 통과한다.
+  return decryptQuestionResponses(answers);
 }

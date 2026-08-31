@@ -72,3 +72,25 @@ describe('lookupPriorAnswers', () => {
     expect(await lookupPriorAnswers({ surveyId: SURVEY_ID, inviteToken: INVITE })).toBeNull();
   });
 });
+
+describe('lookupPriorAnswers PII 읽기 경계', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('암호문으로 적재된 이월 값을 평문으로 돌려준다', async () => {
+    const { encryptAnswerValue } = await import('@/lib/crypto/response-pii');
+    selectChain.mockResolvedValue([
+      {
+        answers: { q1: encryptAnswerValue('홍길동'), q2: '평문 그대로' },
+        isTest: false,
+        testModeEnabled: false,
+      },
+    ]);
+
+    expect(await lookupPriorAnswers({ surveyId: SURVEY_ID, inviteToken: INVITE })).toEqual({
+      q1: '홍길동',
+      q2: '평문 그대로',
+    });
+  });
+})
