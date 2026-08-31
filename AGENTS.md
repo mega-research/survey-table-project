@@ -581,6 +581,36 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`lib/r2-lif
 
 ---
 
+## 문항 수요조사 (조사표 + 영역 앵커 + 분할 레이아웃)
+
+지난 회차 종이 조사표(PDF)를 놓고 "이 문항을 다음 회차에도 쓸 것인가"를 묻는 설문 형식.
+**신설된 것은 셋뿐이다** — 조사표·영역 앵커·분할 레이아웃. 질문 유형·조건부 표시·쿼터·컨택·초대·
+메일·SPSS/엑셀 export 는 전부 기존 것을 그대로 쓴다.
+
+- **조사표** `survey_documents` (0084) — 설문당 여러 행. 파일은 R2 영구 네임스페이스 `survey/document/`.
+  업로드는 `tmp/survey-document/` → attach 에서 promote. 쪽 수는 서버가 파일을 열어 읽는다
+  (`lib/survey-document/pdf-page-count.server.ts`). **R2 참조 표면 SSOT 등재 필수.**
+- **영역 앵커** `survey_document_anchors` (0085) — 쪽 번호 + 정규화 0~1. 한 대상에 사각형 여럿.
+  대상 참조는 `question_id`/`group_id` nullable FK 둘 + CHECK 정확히 하나 (종류 구분값은 파생).
+- **분할 레이아웃** — 설정이 아니라 **파생**이다. 토글 0개. 앵커를 가진 항목이 처음 나타나는
+  페이지부터 끝까지 좌 조사표 / 우 질문 50:50 (sticky). 판정은 `lib/group-ordering.ts` 의
+  `resolveSplitStartIndex` — **구조 기준**이라 조건부로 숨은 질문의 앵커도 센다.
+  좌측에 *그리는* 것은 표시되는 항목 것만이다. 레이아웃은 구조에서, 표시는 조건에서.
+- **수명 분리**: 조사표 파일 참조는 라이브, 앵커는 발행 스냅샷에 freeze, 교체 가드 없음 —
+  `docs/adr/0020-survey-document-live-anchors-frozen.md`. 다른 조사표로 바꾸면 **에러 없이
+  잘못 그려진다**는 것이 받아들인 위험이다.
+- **판단 항목은 평범한 radio** — 필요함 / 필요하지 않음 / 의견(`allowTextInput`). 의견을 골라놓고
+  서술이 비면 답으로 치지 않는다(기존 `required-option-text-validation`). 의견 텍스트는
+  `__optTexts__` 사이드카에 산다 — 질문 id 로 순회하는 새 경로마다 한 번 분기할 것.
+- **운영 관례**: 이 형식은 `requireInviteToken` 을 **켜는 것을 관례로 한다**(신설 없음, 기존 설정).
+  익명 응답 한 건이 n=5 짜리 집계를 흔든다. `allowMultipleResponses` 는 켜지 않는다 —
+  같은 사람의 응답이 여러 건 쌓여 집계 분모가 이중 계산된다. 제출 후 수정은 관리자 편집 화면으로.
+- 조사표는 설문 단위라 테스트 파티션과 무관하다 — 테스트 모드도 같은 파일을 쓰고 별도 업로드가 없다.
+- 모바일은 진입 시 뷰포트 폭으로 설문 전체를 안내 화면으로 막는다. **관리자 응답 편집만 면제** —
+  이 스펙이 만드는 유일한 조건 분기다.
+
+---
+
 ## 테스트 모드
 
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.

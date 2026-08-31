@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import { client } from '@/shared/lib/rpc';
 import type { SurveyVersionSnapshot } from '@/db/schema';
+import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
 
 interface Props {
   surveyId: string;
@@ -13,6 +14,8 @@ interface Props {
   initialResponses: Record<string, unknown>;
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
+  /** 렌더 버전 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다). */
+  documentView: SurveyDocumentView | null;
   idx: number | null;
   renderedVersionId: string | null;
   migratedFromOldVersion: boolean;
@@ -31,6 +34,7 @@ export function AdminResponseEditor({
   initialResponses,
   versionSnapshot,
   initialContactAttrs,
+  documentView,
   idx,
   renderedVersionId,
   migratedFromOldVersion,
@@ -58,6 +62,7 @@ export function AdminResponseEditor({
           initialResponses,
           versionSnapshot,
           initialContactAttrs,
+          documentView,
           onSubmit: async (payload) => {
             try {
               await client.surveyResponse.edit.saveAdminEdit({

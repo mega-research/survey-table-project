@@ -35,6 +35,23 @@ export interface SurveyVersionSnapshot {
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;
   };
+  /**
+   * 발행 시점에 얼린 영역 앵커 (ADR 0020). 조사표 **파일 참조는 여기 없다** — 라이브다.
+   * 앵커가 라이브면 분할 시작점이 진행 중인 응답의 발밑에서 움직인다.
+   * 이 형식을 쓰지 않는 설문과 이 필드 도입 이전 발행본은 undefined.
+   */
+  anchors?: SurveyAnchorSnapshot[];
+}
+
+/** 스냅샷에 실리는 앵커 한 건. 대상 종류는 저장하고(파생 불가한 층이므로) 좌표만 담는다. */
+export interface SurveyAnchorSnapshot {
+  ownerKind: 'question' | 'group';
+  ownerId: string;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /**

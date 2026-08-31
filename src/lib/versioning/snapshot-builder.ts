@@ -4,6 +4,7 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
+import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
   Question,
@@ -36,6 +37,14 @@ export interface SurveySnapshot {
   };
   // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
   lookups: SurveyLookup[];
+  /**
+   * 영역 앵커 사본 — publish 시점 freeze (LUT 사본과 같은 층위). 분할 레이아웃이
+   * 앵커에서 파생되므로 앵커가 라이브면 진행 중인 응답의 페이지 구성이 발밑에서 바뀐다.
+   *
+   * **조사표 파일 참조는 여기 넣지 않는다** — 라이브다. 발행 뒤 오탈자 수정본 교체가
+   * 재발행 없이 되어야 하고, 교체 가드도 두지 않는다 (ADR 0020).
+   */
+  anchors: SurveyAnchorSnapshot[];
 }
 
 interface SnapshotQuestion {
@@ -107,8 +116,12 @@ interface SnapshotGroup {
  * - 런타임 상태(createdAt, updatedAt) 제거
  * - endDate를 ISO string으로 변환
  * - 질문/그룹 순서대로 정렬
+ * - 영역 앵커를 좌표만 남겨 복사 (조사표 파일 참조는 라이브라 실리지 않는다)
  */
-export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
+export function buildSurveySnapshot(
+  survey: Survey,
+  anchors: readonly SurveyAnchorSnapshot[] = [],
+): SurveySnapshot {
   const sortedQuestions = [...(survey.questions || [])].sort((a, b) => a.order - b.order);
   const sortedGroups = [...(survey.groups || [])].sort((a, b) => a.order - b.order);
 
@@ -194,5 +207,14 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       responseHeader: survey.settings.responseHeader,
     },
     lookups: survey.lookups ?? [],
+    anchors: anchors.map((a) => ({
+      ownerKind: a.ownerKind,
+      ownerId: a.ownerId,
+      page: a.page,
+      x: a.x,
+      y: a.y,
+      w: a.w,
+      h: a.h,
+    })),
   };
 }

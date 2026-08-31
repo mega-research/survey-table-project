@@ -14,6 +14,7 @@ import { InviteRequiredScreen } from '@/components/survey-response/invite-requir
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
 import { SurveyResponseLayout } from '@/components/survey-response/survey-response-layout';
+import { ResponseDocumentPane } from '@/components/survey-document/response-document-pane';
 import {
   SurveyCompletedScreen,
   SurveyEmptyScreen,
@@ -87,8 +88,11 @@ import {
   shouldDisplayQuestion,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
+import { resolveSplitStartIndex, isSplitStep } from '@/lib/group-ordering';
+import { resolveAnchorOwnerId } from '@/lib/survey-document/anchor-outline';
 import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
+import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -109,11 +113,14 @@ export interface SurveyResponseFlowProps {
     versionSnapshot: SurveyVersionSnapshot | null;
     // 응답자가 사용한 contact_targets.attrs — 조건/토큰 복원용.
     initialContactAttrs: Record<string, string>;
+    // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
+    documentView?: SurveyDocumentView | null;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
   previewContext?: {
     survey: Survey;
     versionId: string | null;
+    documentView?: SurveyDocumentView | null;
   };
 }
 
@@ -319,6 +326,7 @@ function SurveyResponseFlowActive({
     contactAttrs,
     versionId,
     control,
+    documentView,
     refetchSnapshot,
   },
   responses,
@@ -532,6 +540,34 @@ function SurveyResponseFlowActive({
     () => questions.filter((q) => shouldDisplayQuestion(q, responses, questions, groups, evalCtx)),
     [questions, responses, groups, evalCtx],
   );
+
+  // ── 분할 레이아웃 파생 ──
+  //
+  // 모드는 설정이 아니라 앵커에서 파생된다(토글 0개). 판정은 **구조 기준**이라
+  // 조건 필터를 거치지 않은 steps 를 넘긴다 — 응답자가 앞 답을 고쳐도 시작점이
+  // 발밑에서 움직이지 않아야 한다.
+  const splitStartIndex = useMemo(
+    () => resolveSplitStartIndex(steps, documentView?.anchors ?? [], groups),
+    [steps, documentView, groups],
+  );
+  const isSplit = isSplitStep(splitStartIndex, currentStepIndex);
+
+  // 좌측에 **그리는** 대상은 조건부 표시로 살아남은 항목 것만이다.
+  // 레이아웃은 구조에서, 표시는 조건에서 — 두 층을 섞지 않는다.
+  const anchoredOwnerIds = useMemo(
+    () => new Set((documentView?.anchors ?? []).map((a) => a.ownerId)),
+    [documentView],
+  );
+  const activeAnchorOwnerId = useMemo(() => {
+    for (const question of currentStepQuestions) {
+      const owner = resolveAnchorOwnerId(
+        { kind: 'question', id: question.id, groupId: question.groupId ?? null },
+        (ownerId) => anchoredOwnerIds.has(ownerId),
+      );
+      if (owner) return owner;
+    }
+    return null;
+  }, [currentStepQuestions, anchoredOwnerIds]);
 
   // 모바일 화면 감지 (matchMedia — resize 루프 방지)
   const isMobile = useMediaQuery('(max-width: 767px)');
@@ -1203,6 +1239,16 @@ function SurveyResponseFlowActive({
       <SurveyResponseLayout
         containerMaxWidth={containerMaxWidth}
         reserveBottomNavSpace={isMobile}
+        documentPane={
+          isSplit && documentView ? (
+            <ResponseDocumentPane
+              url={documentView.url}
+              pageCount={documentView.pageCount}
+              anchors={documentView.anchors}
+              activeOwnerId={activeAnchorOwnerId}
+            />
+          ) : undefined
+        }
         chrome={
           /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
           <HoneypotField ref={honeypotRef} />

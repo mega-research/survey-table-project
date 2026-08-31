@@ -11,7 +11,12 @@
  * 매 프레임 clientWidth 가 바뀐다. 표의 폭 측정 훅이 이를 코얼레싱하고 있으니
  * 전환 시간을 건드릴 때 그쪽(use-element-width.ts)도 함께 볼 것.
  *
- * 이 셸은 아직 분할을 모른다.
+ * **분할 레이아웃**: `documentPane` 이 오면 페이지가 좌(조사표) / 우(질문) 50:50 으로
+ * 갈라진다. 갈라진 상태에서는 페이지 전체가 뷰포트 높이에 갇히고 두 판이 각자 스크롤한다 —
+ * 조사표를 보면서 답하려면 왼쪽이 화면에 남아 있어야 한다. 밴드 폭 제한도 이때는 풀린다.
+ *
+ * 조사표 판은 셸의 **같은 자리**에 계속 놓인다. 그래서 분할이 시작된 뒤로는 페이지를
+ * 넘겨도 언마운트되지 않고 pdf.js 문서가 다시 열리지 않는다.
  */
 interface Props {
   /** 컨테이너 폭 클래스 — 밴드 셋이 같은 값을 공유해야 전환이 어긋나지 않는다. */
@@ -25,6 +30,11 @@ interface Props {
   bottomNav?: React.ReactNode;
   /** 하단 고정 내비가 본문을 가리지 않도록 본문 아래 여백을 키운다. */
   reserveBottomNavSpace: boolean;
+  /**
+   * 왼쪽 조사표 판. 있으면 분할 레이아웃이다.
+   * 모드는 앵커에서 파생되므로 이 셸에는 토글이 없다 — 넘어오면 분할, 아니면 아니다.
+   */
+  documentPane?: React.ReactNode;
 }
 
 export function SurveyResponseLayout({
@@ -35,32 +45,50 @@ export function SurveyResponseLayout({
   children,
   bottomNav,
   reserveBottomNavSpace,
+  documentPane,
 }: Props) {
+  const isSplit = Boolean(documentPane);
+  // 분할에서는 밴드 폭 제한을 푼다 — 전폭 두 판 위에 좁은 헤더만 떠 있으면 어긋나 보인다.
+  const bandWidth = isSplit ? 'max-w-none' : containerMaxWidth;
+
   return (
-    <div className="min-h-dvh bg-gray-50">
+    <div
+      className={
+        isSplit ? 'flex h-dvh flex-col overflow-hidden bg-gray-50' : 'min-h-dvh bg-gray-50'
+      }
+    >
       {chrome}
       {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="shrink-0 border-b border-gray-200 bg-white">
         <div
-          className={`${containerMaxWidth} mx-auto px-4 pt-2 pb-2 transition-all duration-300 md:px-6 md:pb-0`}
+          className={`${bandWidth} mx-auto px-4 pt-2 pb-2 transition-all duration-300 md:px-6 md:pb-0`}
         >
           {header}
         </div>
       </div>
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div className={`${containerMaxWidth} mx-auto px-4 pt-1 transition-all duration-300 md:px-6`}>
+      <div
+        className={`${bandWidth} mx-auto shrink-0 px-4 pt-1 transition-all duration-300 md:px-6`}
+      >
         {progress}
       </div>
 
-      {/* 메인 콘텐츠 */}
-      <div
-        className={`${containerMaxWidth} mx-auto px-4 pt-2 transition-all duration-300 md:px-6 md:pt-2 ${
-          reserveBottomNavSpace ? 'pb-28' : 'pb-16 md:pb-24'
-        }`}
-      >
-        {children}
-      </div>
+      {/* 메인 콘텐츠 — 분할이면 좌 조사표 / 우 질문 50:50 */}
+      {isSplit ? (
+        <div className="flex min-h-0 flex-1">
+          <div className="min-w-0 flex-1 border-r border-gray-200">{documentPane}</div>
+          <div className="min-w-0 flex-1 overflow-y-auto px-4 pt-2 pb-16 md:px-6">{children}</div>
+        </div>
+      ) : (
+        <div
+          className={`${containerMaxWidth} mx-auto px-4 pt-2 transition-all duration-300 md:px-6 md:pt-2 ${
+            reserveBottomNavSpace ? 'pb-28' : 'pb-16 md:pb-24'
+          }`}
+        >
+          {children}
+        </div>
+      )}
 
       {bottomNav}
     </div>

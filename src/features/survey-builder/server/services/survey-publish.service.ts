@@ -1,10 +1,16 @@
 import 'server-only';
 
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { surveyResponses, surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
+import {
+  surveyDocumentAnchors,
+  surveyResponses,
+  surveys,
+  surveyVersions,
+  type SurveyVersionSnapshot,
+} from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
@@ -51,7 +57,25 @@ export async function publishSurvey(
     generateSPSSColumns(hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions))),
   );
 
-  const snapshot = buildSurveySnapshot(surveyData);
+  // 앵커는 발행 시점 좌표 그대로 스냅샷에 얼린다 (ADR 0020) — 기존 LUT 사본과 같은 층위.
+  // 조사표 파일 참조는 넣지 않는다(라이브). 대상이 지워진 앵커는 FK CASCADE 로 이미 없다.
+  const anchorRows = await db
+    .select()
+    .from(surveyDocumentAnchors)
+    .where(eq(surveyDocumentAnchors.surveyId, surveyId))
+    .orderBy(asc(surveyDocumentAnchors.order));
+  const snapshot = buildSurveySnapshot(
+    surveyData,
+    anchorRows.map((row) => ({
+      ownerKind: row.questionId !== null ? ('question' as const) : ('group' as const),
+      ownerId: row.questionId ?? row.groupId ?? '',
+      page: row.page,
+      x: row.x,
+      y: row.y,
+      w: row.w,
+      h: row.h,
+    })),
+  );
 
   return await db.transaction(async (tx) => {
     await tx

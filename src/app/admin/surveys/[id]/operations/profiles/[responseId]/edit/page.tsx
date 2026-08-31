@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
+import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
+import { buildDocumentView } from '@/features/survey-builder/server/services/survey-read.service';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
 import { getResponseById } from '@/data/responses';
 import { isResponseExcluded } from '@/lib/operations/profiles.server';
@@ -112,6 +114,13 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
     }
   }
 
+  // 관리자도 조사표를 보면서 고친다 — 문항 번호만 보고는 무엇을 고치는지 알 수 없다.
+  // 앵커는 렌더 버전 스냅샷의 얼린 좌표, 파일은 현재 것(라이브).
+  const documentView = await buildDocumentView(
+    surveyId,
+    ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ?? []),
+  );
+
   return (
     <>
       {excluded && (
@@ -128,6 +137,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
         initialResponses={initialResponses}
         versionSnapshot={version?.snapshot ?? null}
         initialContactAttrs={contactAttrs}
+        documentView={documentView}
         idx={idx}
         renderedVersionId={surveyRow?.currentVersionId ?? null}
         migratedFromOldVersion={migratedFromOldVersion}
