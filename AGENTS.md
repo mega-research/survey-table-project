@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-31 (컨택 컬럼 스킴 컬럼별 플래그 showInMail 반영 · 이전: 2026-08-19 features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅)
+> 최종 갱신: 2026-08-31 (필터 ID 목록 붙여넣기 + contact_id_lists 저장 토큰 · 컨택 컬럼 스킴 showInMail 반영 · 이전: 2026-08-19 features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅)
 
 ---
 
@@ -336,6 +336,11 @@ contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
 ├── resultCode, note, createdBy
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
+
+contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
+├── id, surveyId (cascade), ids (JSONB 정수 배열, 중복 제거·오름차순), idCount
+├── createdBy, createdAt
+└── URL 에는 `list:<id>:<count>` 토큰만 실림. 캠페인 filterSnapshot 이 토큰을 보존하므로 만료·정리 없음
 ```
 
 ### 메일 도메인 (mail.ts, mail-billing.ts)
@@ -448,6 +453,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 > 운영 집계는 `lib/operations/*.server.ts` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
 > 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
+> 조사 대상·단체 메일 위저드의 시스템ID/attrs 컬럼 검색은 **엑셀 열 붙여넣기 ID 목록**을 받는다 (`lib/operations/range-list.ts` — 공백·개행·탭·콤마 구분, 중복 제거). 단일 컬럼 인라인 상한 2,000개(URL 헤더 한계), 초과분은 `contacts.idLists.create` 로 `contact_id_lists` 에 저장하고 `q=list:<uuid>:<count>` 토큰으로 검색한다. 파서는 동기라 페이지/서비스가 `loadIdListsForValues` 로 토큰을 먼저 읽어 `parseClausesFromUrl(…, { idLists })` 에 넘긴다 — 새 파싱 지점을 만들면 이 단계를 빠뜨리지 말 것. 「전체」 컬럼 검색의 200개 상한은 컬럼 곱연산 SQL 보호용으로 별개다.
 
 ---
 

@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { FilterClause, FilterCondition } from './contacts-filters.server';
+import type { NumRange } from './range-list';
 import {
   FILTER_SOURCE,
   UNSUBSCRIBE_RESULT_CODE_KEYWORD,
@@ -132,6 +133,30 @@ const CONTACT_TARGET_REFS: ClauseColumnRefs = {
 };
 
 /**
+ * 범위 목록 → 절 SQL. 단건은 IN 한 방(1개면 =), 범위 토큰만 BETWEEN, OR 결합.
+ * 붙여넣은 ID 수천 개가 `= $1 OR = $2 OR …` 로 늘어지지 않게 한다.
+ * 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
+ * 인한 cross-survey 누락/누출 방지.
+ */
+function rangesToSql(expr: SQL, ranges: NumRange[]): SQL {
+  const singles = ranges.filter((r) => r.from === r.to).map((r) => r.from);
+  const spans = ranges.filter((r) => r.from !== r.to);
+  const parts: SQL[] = [];
+  if (singles.length === 1) {
+    parts.push(sql`${expr} = ${singles[0]}`);
+  } else if (singles.length > 1) {
+    parts.push(
+      sql`${expr} IN (${sql.join(
+        singles.map((v) => sql`${v}`),
+        sql`, `,
+      )})`,
+    );
+  }
+  for (const r of spans) parts.push(sql`${expr} BETWEEN ${r.from} AND ${r.to}`);
+  return sql`(${sql.join(parts, sql` OR `)})`;
+}
+
+/**
  * 단일 절 SQL. cond.source 와 mode 별로 분기.
  *
  * SECURITY: cond.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
@@ -151,14 +176,7 @@ export function buildClauseSql(
   if (cond.source === FILTER_SOURCE.RESID) {
     if (cond.mode === 'idlist') {
       if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
-      const conds = cond.ranges.map((r) =>
-        r.from === r.to
-          ? sql`${refs.resid} = ${r.from}`
-          : sql`${refs.resid} BETWEEN ${r.from} AND ${r.to}`,
-      );
-      // 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
-      // 인한 cross-survey 누락/누출 방지.
-      return sql`(${sql.join(conds, sql` OR `)})`;
+      return rangesToSql(refs.resid, cond.ranges);
     }
     return sql`FALSE`;
   }
@@ -199,11 +217,7 @@ export function buildClauseSql(
     // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
     // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다.
     const numExpr = sql`(CASE WHEN ${refs.attrs}->>${key} ~ '^[0-9]+$' THEN (${refs.attrs}->>${key})::numeric END)`;
-    const conds = cond.ranges.map((r) =>
-      r.from === r.to
-        ? sql`${numExpr} = ${r.from}`
-        : sql`${numExpr} BETWEEN ${r.from} AND ${r.to}`,
-    );
+    const conds: SQL[] = [rangesToSql(numExpr, cond.ranges)];
     if (cond.textFallback === true && cond.value.length > 0) {
       // 값이 순수 정수가 아닌 행(numExpr IS NULL)만 부분검색으로 건진다 — 숫자 값은
       // 위 숫자 매칭이 전담하므로 "1" 이 1044 를 다시 끌고 오지 않는다.

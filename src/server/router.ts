@@ -4,6 +4,7 @@ import { attempts } from '@/features/contacts/server/procedures/attempts';
 import { attrs } from '@/features/contacts/server/procedures/attrs';
 import { attrValues } from '@/features/contacts/server/procedures/attr-values';
 import { columns } from '@/features/contacts/server/procedures/columns';
+import { idLists } from '@/features/contacts/server/procedures/id-lists';
 import { resultCodes } from '@/features/contacts/server/procedures/result-codes';
 import { targets } from '@/features/contacts/server/procedures/targets';
 import { uploads } from '@/features/contacts/server/procedures/uploads';
@@ -74,6 +75,7 @@ export const router = {
     resultCodes,
     attrs,
     attrValues,
+    idLists,
   },
   mail: {
     templates,

@@ -355,6 +355,7 @@ export async function fetchCandidateIds(
     '@/lib/operations/contacts-filters.server'
   );
   const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
+  const { loadIdListsForValues } = await import('@/lib/operations/contact-id-lists.server');
   const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
@@ -363,12 +364,18 @@ export async function fetchCandidateIds(
   ]);
   const candidates = buildColumnCandidates(scheme);
   const rawClauses = filter.clauses ?? [];
+  // 스냅샷의 `list:<uuid>` 토큰도 마법사 페이지와 같은 실체로 해석해야 같은 집합을 고른다.
+  const idLists = await loadIdListsForValues(
+    surveyId,
+    rawClauses.map((c) => c.value),
+  );
   const builderClauses = parseClausesFromUrl(
     rawClauses.map((c) => c.source),
     rawClauses.map((c) => c.value),
     rawClauses.map((c) => c.op ?? ''),
     candidates,
     resultCodes,
+    { idLists },
   );
   // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
   const headerCandidates = [

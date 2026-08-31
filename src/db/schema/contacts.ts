@@ -1,5 +1,15 @@
 import { relations } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { surveys, surveyResponses } from './surveys';
 import type { ContactUploadMapping, ContactUploadMode } from './schema-types';
@@ -92,6 +102,29 @@ export const contactAttempts = pgTable(
   },
   (table) => ({
     targetNoUnique: unique('contact_attempts_target_no_unique').on(table.contactTargetId, table.attemptNo),
+  }),
+);
+
+/**
+ * 저장된 ID 목록 — 필터 붙여넣기 대용량 경로 (0084).
+ * 시스템ID/attrs 컬럼 검색의 인라인 상한(2,000개)을 넘는 목록을 저장하고 URL 에는
+ * `list:<uuid>` 토큰만 싣는다. 캠페인 filterSnapshot 이 토큰을 보존하므로 만료·정리 없음
+ * (설문 삭제 시 cascade). ids 는 중복 제거·오름차순 정수 배열.
+ */
+export const contactIdLists = pgTable(
+  'contact_id_lists',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    ids: jsonb('ids').$type<number[]>().notNull(),
+    idCount: integer('id_count').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    surveyIdx: index('contact_id_lists_survey_idx').on(table.surveyId),
   }),
 );
 

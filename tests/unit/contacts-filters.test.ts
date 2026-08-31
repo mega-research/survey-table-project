@@ -106,7 +106,7 @@ describe('MAIL_FILTER_OPTIONS — 메일 필터 어휘', () => {
 
 describe('placeholderFor', () => {
   it('returns id range hint for system.resid', () => {
-    expect(placeholderFor('system.resid')).toBe('예: 1-30, 45');
+    expect(placeholderFor('system.resid')).toBe('예: 1-30, 45 · 엑셀 열 붙여넣기');
   });
 
   it('returns exact-match hint for pii.*', () => {
@@ -115,9 +115,9 @@ describe('placeholderFor', () => {
   });
 
   it('attrs 는 숫자 검색 힌트 포함, 나머지는 검색어 계열', () => {
-    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
-    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
-    expect(placeholderFor('system.web')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
+    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 번호 (예: 3, 1-10) · 엑셀 열 붙여넣기');
+    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 번호 (예: 3, 1-10) · 엑셀 열 붙여넣기');
+    expect(placeholderFor('system.web')).toBe('검색어 또는 번호 (예: 3, 1-10) · 엑셀 열 붙여넣기');
   });
 
   it('system.all 은 전체 검색 안내', () => {
@@ -890,5 +890,97 @@ describe('parseHeaderFiltersFromUrl', () => {
     const d0 = dup[0];
     if (!d0) throw new Error('expected dup[0]');
     expect(d0.condition.values).toEqual(['부산']);
+  });
+});
+
+describe('parseClausesFromUrl - ID 목록 붙여넣기 (단일 컬럼 상한·저장 토큰)', () => {
+  const ids500 = Array.from({ length: 500 }, (_, i) => String(i + 1));
+  const LIST_UUID = '0f3a4b5c-1111-4222-8333-444455556666';
+
+  it('system.resid + 공백 구분 500개 → idlist 500 (단일 컬럼은 전체 검색 상한 200 을 안 탄다)', () => {
+    const [clause] = parseClausesFromUrl(
+      ['system.resid'],
+      [ids500.join(' ')],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    expect(clause?.condition.mode).toBe('idlist');
+    expect(clause?.condition.ranges).toHaveLength(500);
+  });
+
+  it('attrs.* + 개행 구분 목록 → idlist, 텍스트 폴백 없음', () => {
+    const [clause] = parseClausesFromUrl(
+      ['attrs.전시회명'],
+      ['99\n292\n235'],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    expect(clause?.condition).toMatchObject({ source: 'attrs.전시회명', mode: 'idlist' });
+    expect(clause?.condition.ranges).toHaveLength(3);
+    expect(clause?.condition.textFallback).toBeUndefined();
+  });
+
+  it('system.all + 콤마 500개는 종전대로 idlist 전개 생략 — 컬럼 곱연산 상한 200 유지', () => {
+    const [clause] = parseClausesFromUrl(
+      ['system.all'],
+      [ids500.join(',')],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    const subs = clause?.condition.subConditions ?? [];
+    expect(subs.length).toBeGreaterThan(0);
+    expect(subs.some((s) => s.mode === 'idlist')).toBe(false);
+  });
+
+  it('list:<uuid>:<n> 토큰 → extra.idLists 로 해석해 idlist (URL 에는 토큰만 실린다)', () => {
+    const token = `list:${LIST_UUID}:3`;
+    const idLists = new Map([[LIST_UUID, [7, 99, 292]]]);
+    const [clause] = parseClausesFromUrl(
+      ['attrs.전시회명'],
+      [token],
+      [''],
+      candidates,
+      resultCodes,
+      { idLists },
+    );
+    expect(clause?.condition).toMatchObject({ source: 'attrs.전시회명', mode: 'idlist', value: token });
+    expect(clause?.condition.ranges).toEqual([
+      { from: 7, to: 7 },
+      { from: 99, to: 99 },
+      { from: 292, to: 292 },
+    ]);
+    expect(clause?.condition.textFallback).toBeUndefined();
+  });
+
+  it('system.resid 도 list: 토큰을 받는다 (개수 접미사 없이도)', () => {
+    const idLists = new Map([[LIST_UUID, [1, 2]]]);
+    const [clause] = parseClausesFromUrl(
+      ['system.resid'],
+      [`list:${LIST_UUID}`],
+      [''],
+      candidates,
+      resultCodes,
+      { idLists },
+    );
+    expect(clause?.condition).toMatchObject({ source: 'system.resid', mode: 'idlist' });
+    expect(clause?.condition.ranges).toEqual([
+      { from: 1, to: 1 },
+      { from: 2, to: 2 },
+    ]);
+  });
+
+  it('모르는 토큰(삭제된 목록·타 설문) → ranges 빈 배열 = 0건, 텍스트 검색으로 새지 않음', () => {
+    const [clause] = parseClausesFromUrl(
+      ['attrs.전시회명'],
+      [`list:${LIST_UUID}`],
+      [''],
+      candidates,
+      resultCodes,
+      { idLists: new Map() },
+    );
+    expect(clause?.condition).toMatchObject({ mode: 'idlist', ranges: [] });
   });
 });
