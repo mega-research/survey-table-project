@@ -12,6 +12,7 @@ import { questionCategories } from '@/features/library/server/procedures/questio
 import { savedCells } from '@/features/library/server/procedures/saved-cells';
 import { savedLookups } from '@/features/library/server/procedures/saved-lookups';
 import { savedQuestions } from '@/features/library/server/procedures/saved-questions';
+import { anchors } from '@/features/survey-document/server/procedures/anchors';
 import { documents } from '@/features/survey-document/server/procedures/documents';
 import { groups } from '@/features/survey-builder/server/procedures/groups';
 import { lookups } from '@/features/survey-builder/server/procedures/lookups';
@@ -63,6 +64,7 @@ export const router = {
   },
   surveyDocument: {
     documents,
+    anchors,
   },
   auth,
   media: {

@@ -41,7 +41,11 @@ interface Props {
   onDocumentOpened?: (numPages: number) => void;
   /** 페이지 위에 겹쳐 그릴 것 (영역 사각형 등). */
   overlay?: React.ReactNode;
-  /** 페이지 컨테이너에 붙일 마우스 핸들러 — 영역 드래그용. */
+  /**
+   * 쪽을 감싼 상자에 붙일 마우스 핸들러 — 영역 드래그용.
+   * overlay 와 **같은 좌표 원점**을 갖는 요소에 붙는다(그래서 캔버스가 아니라 감싼 상자다) —
+   * 드래그로 만든 사각형과 그려진 사각형이 어긋나지 않는 것이 여기에 걸려 있다.
+   */
   surfaceProps?: React.HTMLAttributes<HTMLDivElement>;
   className?: string;
 }
@@ -216,11 +220,10 @@ export function PdfPageView({
       </div>
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto" style={{ padding: PAD }}>
-        <div className="relative mx-auto w-fit">
+        <div className="relative mx-auto w-fit" {...surfaceProps}>
           <div
             ref={holderRef}
             className="relative bg-white shadow-[0_4px_18px_rgba(0,0,0,.35)]"
-            {...surfaceProps}
           />
           {overlay}
         </div>
