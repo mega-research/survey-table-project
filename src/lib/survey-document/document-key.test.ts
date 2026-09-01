@@ -22,10 +22,23 @@ describe('조사표 R2 키 규약', () => {
     expect(gateR2Key(`${TMP_SURVEY_DOCUMENT_PREFIX}abc.pdf`)).toBeNull();
   });
 
-  it('tmp 키를 영구 키로 옮긴다', () => {
-    expect(toPermanentSurveyDocumentKey(`${TMP_SURVEY_DOCUMENT_PREFIX}abc.pdf`)).toBe(
-      `${SURVEY_DOCUMENT_PREFIX}abc.pdf`,
+  it('tmp 키를 영구 네임스페이스의 새 키로 옮긴다', () => {
+    expect(toPermanentSurveyDocumentKey(`${TMP_SURVEY_DOCUMENT_PREFIX}abc.pdf`, () => 'new-id')).toBe(
+      `${SURVEY_DOCUMENT_PREFIX}new-id.pdf`,
     );
+  });
+
+  it('같은 tmp 키로 두 번 붙여도 서로 다른 영구 키가 나온다', () => {
+    // 파생 키였을 때는 두 요청이 같은 객체를 가리켰다. 한쪽이 커밋에 성공한 뒤
+    // 다른 쪽이 실패하면 실패한 쪽의 롤백이 성공한 행의 파일을 지웠다.
+    const tmp = `${TMP_SURVEY_DOCUMENT_PREFIX}abc.pdf`;
+    expect(toPermanentSurveyDocumentKey(tmp)).not.toBe(toPermanentSurveyDocumentKey(tmp));
+  });
+
+  it('새로 발급한 키도 영구 네임스페이스 게이트를 통과한다', () => {
+    const key = toPermanentSurveyDocumentKey(`${TMP_SURVEY_DOCUMENT_PREFIX}abc.pdf`);
+    expect(key).not.toBeNull();
+    expect(gateR2Key(key!)).toBe(key);
   });
 
   it('tmp 접두사가 아닌 키는 붙일 수 없다', () => {

@@ -559,6 +559,13 @@ function SurveyResponseFlowActive({
   );
   const isSplit = isSplitStep(splitStartIndex, currentStepIndex);
 
+  // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 초점 해석이 사슬을 타고 올라간다 —
+  // 분할 시작 판정이 이미 사슬 전체를 보므로 두 판정이 같은 사슬을 봐야 한다.
+  const anchorParentOf = useMemo(() => {
+    const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
+    return (groupId: string) => map.get(groupId) ?? null;
+  }, [groups]);
+
   // 대상별 쪽 목록 — 초점 해석의 유일한 입력. 조사표를 모르는 순수 함수가 이것만 본다.
   const anchorPagesOf = useMemo(() => {
     const map = new Map<string, number[]>();
@@ -579,9 +586,10 @@ function SurveyResponseFlowActive({
           resolveAnchorOwnerId(
             { kind: 'question', id: q.id, groupId: q.groupId ?? null },
             (ownerId) => anchorPagesOf(ownerId).length > 0,
+            anchorParentOf,
           ) !== null,
       ),
-    [currentStepQuestions, anchorPagesOf],
+    [currentStepQuestions, anchorPagesOf, anchorParentOf],
   );
 
   // 지금 고른 대상. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
@@ -655,9 +663,10 @@ function SurveyResponseFlowActive({
       question.groupId
         ? currentStepQuestions.filter((q) => q.groupId === question.groupId).map((q) => q.id)
         : [],
+      anchorParentOf,
     );
     return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
-  }, [anchorSelection, currentStepQuestions, anchorPagesOf]);
+  }, [anchorSelection, currentStepQuestions, anchorPagesOf, anchorParentOf]);
 
   // 조사표 사각형에 얹을 이름. 문항은 문항코드, 그룹은 그룹 이름.
   const anchorLabelOf = useCallback(

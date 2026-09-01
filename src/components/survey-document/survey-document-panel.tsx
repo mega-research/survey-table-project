@@ -104,6 +104,12 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
     return map;
   }, [outline]);
 
+  // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 사슬을 타고 올라간다.
+  const anchorParentOf = useMemo(() => {
+    const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
+    return (groupId: string) => map.get(groupId) ?? null;
+  }, [groups]);
+
   const anchorsByOwner = useMemo(() => {
     const map = new Map<string, typeof anchors>();
     for (const anchor of anchors) {
@@ -140,6 +146,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
               groupId: questions.find((q) => q.id === selected.id)?.groupId ?? null,
             },
         (ownerId) => (anchorsByOwner.get(ownerId)?.length ?? 0) > 0,
+        anchorParentOf,
       )
     : null;
 
@@ -231,6 +238,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
             groupId: questions.find((q) => q.id === target.id)?.groupId ?? null,
           },
       (id) => (anchorsByOwner.get(id)?.length ?? 0) > 0,
+      anchorParentOf,
     );
     const first = ownerId ? anchorsByOwner.get(ownerId)?.[0] : undefined;
     if (first) setPage(first.page);

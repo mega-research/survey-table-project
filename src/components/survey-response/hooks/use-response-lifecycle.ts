@@ -495,12 +495,19 @@ export function useResponseLifecycle({
       // - createResponseWithFirstAnswer는 (surveyId, sessionId) 멱등 — 더블 클릭 방어
       // - 후속 답변은 별도 DB 쓰기 없음 (제출 시 completeResponse가 일괄 저장)
       // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
+      //
+      // isCreatingResponse 는 React state 라 **같은 틱 안에서는 갱신되지 않는다**. 한 번의
+      // 클릭이 여러 문항을 잇달아 답하는 경로(수요조사의 블록 일괄 선택)에서는 그 사이
+      // 모든 호출이 가드를 통과해 문항 수만큼 INSERT 를 발사했다. 행은 (surveyId, sessionId)
+      // 멱등이라 늘어나지 않지만, 요청은 그대로 나가 세션 한도(response-mutation 30/분)를
+      // 태운다. 동기적으로 갱신되는 ref 를 같은 가드에 함께 둔다.
       if (
         !questionId.startsWith('__') &&
         !isAdminEdit &&
         !isPreview &&
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&
         !isCreatingResponse &&
+        responseCreationPromiseRef.current === null &&
         !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
         loadedSurvey &&
         currentStep

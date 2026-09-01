@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 /**
  * 조사표 PDF 의 R2 키 규약 — 순수 모듈.
  *
@@ -18,12 +20,20 @@ export function isTmpSurveyDocumentKey(key: string): boolean {
 }
 
 /**
- * tmp 키 → 영구 키. 파일명 부분만 옮긴다.
+ * tmp 키를 영구 위치로 옮길 때 쓸 **새 키**를 만든다.
  * tmp 키가 아니면 null (호출자가 거부한다).
+ *
+ * 이름을 tmp 키에서 **파생하지 않는다.** 파생하면 같은 업로드로 붙이기를 두 번
+ * 시도했을 때 두 요청이 같은 영구 키를 가리키고, 한쪽이 커밋에 성공한 뒤 다른 쪽이
+ * 실패하면 실패한 쪽의 롤백이 **성공한 행이 참조하는 객체를 지운다**. 발행된 설문의
+ * 조사표가 영구히 열리지 않게 되는 실패라, 붙일 때마다 새 이름을 발급한다.
  */
-export function toPermanentSurveyDocumentKey(tmpKey: string): string | null {
+export function toPermanentSurveyDocumentKey(
+  tmpKey: string,
+  newId: () => string = () => randomUUID(),
+): string | null {
   if (!isTmpSurveyDocumentKey(tmpKey)) return null;
   const basename = tmpKey.slice(TMP_SURVEY_DOCUMENT_PREFIX.length);
   if (!basename || basename.includes('/')) return null;
-  return `${SURVEY_DOCUMENT_PREFIX}${basename}`;
+  return `${SURVEY_DOCUMENT_PREFIX}${newId()}.pdf`;
 }

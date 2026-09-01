@@ -141,6 +141,22 @@ describe('buildDemandSummary', () => {
     expect(rows.map((r) => r.questionId)).toEqual(['b1', 'z1', 'a1', 'a2']);
   });
 
+  it('하위그룹이 부모 문항 앞에 오면 표 순서도 그렇다', () => {
+    // 그룹 order 는 형제 범위 값이다. 전역 정렬하면 하위그룹이 엉뚱한 자리로 가고
+    // 표·엑셀의 행 순서가 응답 화면과 갈린다.
+    const nestedGroups = [
+      group('h', 'H. 정책 인식', 0),
+      { ...group('h1', '지원정책별', 0), parentGroupId: 'h' } as QuestionGroup,
+    ];
+    const nestedQuestions = [
+      judgement('sub1', 'h1', 0),
+      judgement('own1', 'h', 1),
+      judgement('own2', 'h', 2),
+    ];
+    const rows = buildDemandSummary(nestedQuestions, nestedGroups, []);
+    expect(rows.map((r) => r.questionId)).toEqual(['sub1', 'own1', 'own2']);
+  });
+
   it('그룹은 묶음 축으로만 실린다 — 각 행이 자기 그룹 이름을 갖는다', () => {
     const rows = buildDemandSummary(questions, groups, []);
     expect(rows[0]?.groupName).toBe('A. 일반');

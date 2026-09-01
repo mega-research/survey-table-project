@@ -1,4 +1,5 @@
 import { analyzeQuestion } from '@/lib/analytics/analyzer';
+import { buildRenderSteps } from '@/lib/group-ordering';
 import { resolveJudgementShape } from '@/lib/survey/judgement-item';
 import type { SurveyResponse } from '@/db/schema';
 import type { Question, QuestionGroup } from '@/types/survey';
@@ -78,17 +79,13 @@ export function buildDemandSummary(
   responses: readonly DemandResponseInput[],
 ): DemandSummaryRow[] {
   const groupById = new Map(groups.map((g) => [g.id, g]));
-  const groupRank = new Map(
-    [...groups]
-      .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-      .map((g, index) => [g.id, index]),
-  );
 
-  const ordered = [...questions].sort((a, b) => {
-    const ra = a.groupId ? (groupRank.get(a.groupId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-    const rb = b.groupId ? (groupRank.get(b.groupId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-    return ra - rb || a.order - b.order || a.id.localeCompare(b.id);
-  });
+  // 조사표 순서의 주인은 group-ordering 이다. 그룹 order 는 형제 범위 값이라
+  // 전역 정렬하면 하위그룹이 엉뚱한 자리로 간다 — 조사표 목록에서 이미 같은 실수를
+  // 했고, 표와 엑셀의 행 순서가 응답 화면과 갈리는 것이 그 대가다.
+  const ordered = buildRenderSteps([...questions], [...groups]).flatMap((step) =>
+    step.items.map((item) => item.question),
+  );
 
   return ordered.map((question, index) => {
     const group = question.groupId ? groupById.get(question.groupId) : undefined;

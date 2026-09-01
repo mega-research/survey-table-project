@@ -161,10 +161,23 @@ export function buildAnchorOutline(
 export function resolveAnchorOwnerId(
   target: { kind: 'group'; id: string } | { kind: 'question'; id: string; groupId: string | null },
   hasAnchors: (ownerId: string) => boolean,
+  /**
+   * 그룹 → 상위 그룹. 하위그룹에 앵커가 없으면 **조상 사슬을 타고** 올라간다.
+   * 분할 시작 판정(resolveSplitStartIndex)이 이미 사슬 전체를 보므로, 여기서 직속
+   * 그룹만 보면 "분할은 시작됐는데 켤 것이 없는" 화면이 나온다.
+   */
+  parentOf: (groupId: string) => string | null = () => null,
 ): string | null {
   if (hasAnchors(target.id)) return target.id;
-  if (target.kind === 'question' && target.groupId && hasAnchors(target.groupId)) {
-    return target.groupId;
+  if (target.kind !== 'question') return null;
+
+  // 자기참조·순환이 들어와도 멈추도록 방문 집합을 둔다
+  const seen = new Set<string>();
+  let cursor = target.groupId;
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    if (hasAnchors(cursor)) return cursor;
+    cursor = parentOf(cursor);
   }
   return null;
 }
@@ -207,14 +220,26 @@ export function resolveAnchorFocus(
    * 그룹 자신의 사각형뿐 아니라 그 안 문항들의 사각형까지 합쳐야 나온다.
    */
   siblingQuestionIds: readonly string[] = [],
+  /** 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 사슬을 타고 올라간다. */
+  parentOf: (groupId: string) => string | null = () => null,
 ): AnchorFocus | null {
+  const hasAnchors = (id: string) => pagesOf(id).length > 0;
   const ownerId = resolveAnchorOwnerId(
     { kind: 'question', id: target.id, groupId: target.groupId },
-    (id) => pagesOf(id).length > 0,
+    hasAnchors,
+    parentOf,
   );
   if (!ownerId) return null;
+  // 맥락은 앵커를 실제로 가진 가장 가까운 조상 그룹이다 — 초점이 그 그룹으로
+  // 떨어졌다면 맥락도 같은 그룹이고, 문항이 자기 영역을 가졌으면 그 위 조상이다.
   const contextId =
-    target.groupId && pagesOf(target.groupId).length > 0 ? target.groupId : null;
+    ownerId !== target.id
+      ? ownerId
+      : (resolveAnchorOwnerId(
+          { kind: 'question', id: '\u0000none', groupId: target.groupId },
+          hasAnchors,
+          parentOf,
+        ) ?? null);
 
   const scope = contextId ? [contextId, ...siblingQuestionIds] : [ownerId];
   const pages = [...new Set(scope.flatMap((id) => [...pagesOf(id)]))].sort((a, b) => a - b);

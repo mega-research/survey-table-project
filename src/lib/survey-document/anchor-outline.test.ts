@@ -226,3 +226,55 @@ describe('resolveQuestionForOwner', () => {
     expect(resolveQuestionForOwner('g2', [{ id: 'q1', groupId: 'g1' }])).toBeNull();
   });
 });
+
+describe('조상 그룹 앵커 폴백', () => {
+  // 분할 시작 판정(resolveSplitStartIndex)은 조상 사슬 전체를 본다. 폴백이 직속
+  // 그룹만 보면 "분할은 시작됐는데 켤 것이 없는" 화면이 나온다.
+  const parentOf = (id: string) => (id === 'sub' ? 'root' : null);
+
+  it('하위그룹에 앵커가 없으면 상위 그룹까지 올라간다', () => {
+    expect(
+      resolveAnchorOwnerId(
+        { kind: 'question', id: 'q1', groupId: 'sub' },
+        (id) => id === 'root',
+        parentOf,
+      ),
+    ).toBe('root');
+  });
+
+  it('가장 가까운 조상이 이긴다', () => {
+    expect(
+      resolveAnchorOwnerId(
+        { kind: 'question', id: 'q1', groupId: 'sub' },
+        (id) => id === 'root' || id === 'sub',
+        parentOf,
+      ),
+    ).toBe('sub');
+  });
+
+  it('사슬 어디에도 없으면 켤 것이 없다', () => {
+    expect(
+      resolveAnchorOwnerId({ kind: 'question', id: 'q1', groupId: 'sub' }, () => false, parentOf),
+    ).toBeNull();
+  });
+
+  it('그룹 사슬이 순환해도 멈춘다', () => {
+    expect(
+      resolveAnchorOwnerId(
+        { kind: 'question', id: 'q1', groupId: 'a' },
+        () => false,
+        (id) => (id === 'a' ? 'b' : 'a'),
+      ),
+    ).toBeNull();
+  });
+
+  it('초점도 조상 앵커로 떨어지고 맥락이 그 그룹이 된다', () => {
+    const focus = resolveAnchorFocus(
+      { id: 'q1', groupId: 'sub' },
+      (id) => (id === 'root' ? [7] : []),
+      [],
+      parentOf,
+    );
+    expect(focus).toEqual({ ownerId: 'root', contextId: 'root', pages: [7] });
+  });
+});
