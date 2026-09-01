@@ -20,6 +20,8 @@ import {
   parseHeaderFiltersFromUrl,
   type FilterClause,
 } from '@/lib/operations/contacts-filters.server';
+import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import { loadIdListsForValues } from '@/lib/operations/contact-id-lists.server';
 import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
@@ -114,7 +116,11 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     getContactResultCodes(surveyId),
   ]);
   const columnCandidates = buildColumnCandidates(scheme);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
+  const idLists = await loadIdListsForValues(surveyId, sp.q);
+  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
+    idLists,
+  });
   // 미리보기 표는 고정 컬럼이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
   const headerCandidates = [
     ...columnCandidates,
@@ -209,6 +215,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         initialClauses={initialClauses}
         sort={sort}
         dir={dir}
+        mailColumns={resolveMailDisplayColumns(scheme)}
       />
     </main>
   );

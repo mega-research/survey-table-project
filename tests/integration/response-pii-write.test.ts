@@ -1118,3 +1118,35 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     expect(stored[CALC_CELL_ID]).toBe('5');
   });
 });
+
+describe('updateQuestionResponse — 표 input 셀 단위 암호화', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+    });
+    flagsMock.mockResolvedValue({ isPaused: false });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('스냅샷의 piiEncrypted input 셀만 암호문으로 저장하고 다른 셀은 평문 유지', async () => {
+    // 질문 자체는 PII 가 아니고(pii=false) 셀 c1 만 암호화 대상
+    executeMock.mockResolvedValue([{ pii: false, cells: ['c1'] }]);
+    const { updateQuestionResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await updateQuestionResponse({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: { c1: PII_PLAINTEXT, c2: '서울' },
+    });
+    const setArg = updateSetLogMock.mock.calls[0]![0] as Record<string, unknown>;
+    const serialized = extractSqlSetParams(setArg);
+    expect(serialized).not.toContain(PII_PLAINTEXT);
+    expect(serialized).toContain('서울');
+    expect(serialized).toMatch(/v\d+:/);
+  });
+});

@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/lib/operations/campaigns.server';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -14,9 +15,18 @@ interface Props {
   total: number;
   page: number;
   pageSize: number;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
-export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: Props) {
+export function UnsubscribedSegment({
+  surveyId,
+  rows,
+  total,
+  page,
+  pageSize,
+  mailColumns,
+}: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -43,6 +53,11 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                   <th className="px-4 py-3">시스템ID</th>
+                  {mailColumns.map((c) => (
+                    <th key={c.key} className="px-4 py-3">
+                      {c.label}
+                    </th>
+                  ))}
                   <th className="px-4 py-3">이메일</th>
                   <th className="px-4 py-3">그룹</th>
                   <th className="px-4 py-3">경로</th>
@@ -59,6 +74,11 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
                       className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                     >
                       <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      {mailColumns.map((c) => (
+                        <td key={c.key} className="px-4 py-3 text-slate-600">
+                          {r.attrs[c.key] || '—'}
+                        </td>
+                      ))}
                       <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
                       <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">

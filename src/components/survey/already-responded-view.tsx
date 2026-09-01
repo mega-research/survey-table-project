@@ -50,12 +50,6 @@ const MESSAGES: Record<NoticeReason, MessageDef> = {
     body: '이 기기에서 이 설문에 응답한 기록이 있습니다. 한 분당 한 번만 응답 가능합니다.',
     tone: 'info',
   },
-  excluded_from_population: {
-    // 카피는 token_already_used 와 의도적으로 유사 — PII 보안 [수신거부/콜센터 노트 추정 차단]
-    title: '이미 응답하신 설문입니다',
-    body: '이 초대 링크로는 더 이상 응답을 받지 않습니다. 운영자에게 문의해 주세요.',
-    tone: 'info',
-  },
   quota_closed: {
     // 기본 제목 멘트 없이 운영자가 입력한 마감 안내 문구만 표시 (2026-07-02 운영 피드백).
     title: null,

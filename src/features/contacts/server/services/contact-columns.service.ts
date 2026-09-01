@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
+import { canShowInMail } from '@/lib/contacts/mail-display-columns';
 import { testFlagForScope, type OperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -32,6 +33,10 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   const levels = leveled.map((c) => c.groupLevel);
   if (new Set(levels).size !== levels.length) {
     throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
+  }
+  // 메일 표시 가드 — attrs.* 전용 (system/pii 는 attrs 에 값이 없어 표시 불가)
+  if (scheme.columns.some((c) => c.showInMail === true && !canShowInMail(c))) {
+    throw new Error('메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.');
   }
   await db.transaction(async (tx) => {
     const [survey] = await tx

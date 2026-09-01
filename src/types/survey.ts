@@ -376,6 +376,9 @@ export interface TableCell {
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: 'text' | 'number';
+  // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
+  // piiEncrypted 와 같은 규칙, ADR-0012). 저장 경로는 스냅샷 ∪ 라이브 셀 플래그 합집합.
+  piiEncrypted?: boolean;
   // 숫자 input 셀(inputType==='number')의 초기 prefill 값. 정의되어 있으면 응답자 첫 진입 시
   // 자동으로 이 값이 입력란에 채워져 저장됨. 응답자가 backspace 로 지우면 빈 응답으로 저장 가능 (자동 재채움 X).
   emptyDefault?: number;
