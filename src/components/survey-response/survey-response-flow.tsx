@@ -621,7 +621,11 @@ function SurveyResponseFlowActive({
     );
   }, []);
 
-  // 페이지가 바뀌면 그 페이지의 첫 앵커 문항으로 초점을 옮긴다 (렌더 중 조정).
+  // 페이지가 바뀌면 두고 온 초점을 그 페이지의 첫 앵커 문항으로 옮긴다 (렌더 중 조정).
+  //
+  // **없던 초점을 만들지는 않는다.** 진입하자마자 첫 문항을 켜면 응답자가 아직
+  // 아무것도 고르지 않았는데 조사표가 먼저 움직여, 처음 보려던 자리를 빼앗는다.
+  // 조사표는 응답자가 고른 뒤부터 따라간다.
   const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
   // **이 페이지에 있는가**만 본다. 앵커가 풀리는가로 물으면 앵커 없는 문항을 고른
   // 순간 아래 조정이 되돌려 첫 문항으로 튕긴다.
@@ -631,11 +635,11 @@ function SurveyResponseFlowActive({
       : anchorSelection
         ? currentStepQuestions.some((q) => q.id === anchorSelection.id)
         : false;
-  if (defaultAnchorQuestionId && !selectionIsOnThisStep) {
+  if (anchorSelection && defaultAnchorQuestionId && !selectionIsOnThisStep) {
     setAnchorSelection({
       kind: 'question',
       id: defaultAnchorQuestionId,
-      nonce: (anchorSelection?.nonce ?? 0) + 1,
+      nonce: anchorSelection.nonce + 1,
     });
   }
 
