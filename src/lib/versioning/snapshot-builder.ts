@@ -85,6 +85,12 @@ interface SnapshotQuestion {
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
   questionCode?: string | undefined;
+  /**
+   * 엑셀 라벨. export 는 라이브 설정을 보므로 원래는 스냅샷에 담지 않았다.
+   * 조사표 사각형의 이름이 이 값을 먼저 쓰게 되면서 응답 화면도 알아야 한다 —
+   * 만든 화면과 답하는 화면이 같은 칸을 다른 이름으로 부르면 안 된다.
+   */
+  exportLabel?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
   inputType?: 'text' | 'number' | undefined;
   emptyDefault?: number | undefined;
@@ -168,6 +174,7 @@ export function buildSurveySnapshot(
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
       questionCode: q.questionCode,
+      exportLabel: q.exportLabel,
       defaultValueTemplate: q.defaultValueTemplate,
       inputType: q.inputType,
       emptyDefault: q.emptyDefault,

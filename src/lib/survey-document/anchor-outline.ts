@@ -37,16 +37,36 @@ interface QuestionInput {
   id: string;
   groupId?: string | null;
   order: number;
+  /** 엑셀 export 라벨. 사람이 조사표에서 찾는 이름이라 가장 먼저 본다. */
+  exportLabel?: string | null;
   questionCode?: string | null;
   title: string;
 }
 
-/** 문항 라벨 — 코드가 있으면 코드, 없으면 문장을 줄여 쓴다. */
+/** 라벨 한 줄에 들어갈 최대 글자 수. 넘으면 줄이고 말줄임표를 붙인다. */
+const LABEL_MAX = 24;
+
+/**
+ * 문항 라벨 — **엑셀 라벨 → 문항코드 → 문장** 순으로 고른다.
+ *
+ * 문항코드는 SPSS 변수명이라 발번 규칙을 따른다. `B6_1` 처럼 원본 조사표 어디에도
+ * 없는 문자열이 되기도 해서, 조사표 위의 사각형에 그것만 얹으면 종이와 화면이
+ * 서로 다른 이름으로 같은 칸을 부르게 된다. 엑셀 라벨이 있으면 그쪽이 사람이 쓰는
+ * 이름이다.
+ *
+ * 빈 문자열도 없는 것으로 본다 — 빌더가 placeholder 만 보여 주므로 저장되지 않은
+ * 칸이 `''` 로 남는 일이 흔하다.
+ */
 export function anchorQuestionLabel(question: QuestionInput): string {
+  const shorten = (text: string) =>
+    text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX)}…` : text;
+
+  const exportLabel = question.exportLabel?.trim();
+  if (exportLabel) return shorten(exportLabel);
   const code = question.questionCode?.trim();
-  if (code) return code;
+  if (code) return shorten(code);
   const title = question.title.trim();
-  return title.length > 24 ? `${title.slice(0, 24)}…` : title || '(제목 없음)';
+  return title ? shorten(title) : '(제목 없음)';
 }
 
 /**

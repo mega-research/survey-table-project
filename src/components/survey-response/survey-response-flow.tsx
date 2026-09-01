@@ -93,6 +93,7 @@ import {
 import { resolveSplitSteps } from '@/lib/group-ordering';
 import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
 import {
+  anchorQuestionLabel,
   resolveAnchorFocus,
   resolveAnchorOwnerId,
   resolveQuestionForOwner,
@@ -683,11 +684,13 @@ function SurveyResponseFlowActive({
     return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
   }, [anchorSelection, currentStepQuestions, anchorPagesOf, anchorParentOf]);
 
-  // 조사표 사각형에 얹을 이름. 문항은 문항코드, 그룹은 그룹 이름.
+  // 조사표 사각형에 얹을 이름. 그룹은 그룹 이름, 문항은 빌더의 조사표 탭과
+  // **같은 규칙**(엑셀 라벨 → 문항코드 → 문장)으로 고른다 — 만든 화면과 답하는
+  // 화면이 같은 칸을 다른 이름으로 부르면 안 된다.
   const anchorLabelOf = useCallback(
     (ownerId: string) => {
       const question = questions.find((q) => q.id === ownerId);
-      if (question) return question.questionCode?.trim() || question.title || null;
+      if (question) return anchorQuestionLabel(question);
       return groups.find((g) => g.id === ownerId)?.name ?? null;
     },
     [questions, groups],

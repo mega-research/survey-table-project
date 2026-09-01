@@ -122,8 +122,40 @@ describe('buildAnchorOutline', () => {
 });
 
 describe('anchorQuestionLabel', () => {
+  it('엑셀 라벨이 있으면 그것을 먼저 쓴다', () => {
+    // 사람이 조사표에서 찾는 이름은 엑셀 라벨 쪽이다. SPSS 변수명은 발번 규칙이라
+    // B6_1 처럼 원본 조사표에 없는 문자열이 되기도 한다.
+    expect(
+      anchorQuestionLabel({
+        id: 'q',
+        order: 0,
+        exportLabel: 'B6-가',
+        questionCode: 'B6_1',
+        title: '가. 판매 및 마케팅 활동',
+      }),
+    ).toBe('B6-가');
+  });
+
+  it('엑셀 라벨이 비었으면 문항코드로 내려간다', () => {
+    // 실제 데이터에 null 뿐 아니라 빈 문자열도 흔하다 — 빌더가 placeholder 만 보여
+    // 저장되지 않은 칸이 그렇게 남는다.
+    for (const exportLabel of [null, '', '   ']) {
+      expect(
+        anchorQuestionLabel({ id: 'q', order: 0, exportLabel, questionCode: 'A7', title: '학력' }),
+      ).toBe('A7');
+    }
+    // 필드 자체가 없는 경우
+    expect(anchorQuestionLabel({ id: 'q', order: 0, questionCode: 'A7', title: '학력' })).toBe('A7');
+  });
+
   it('문항코드가 있으면 코드를 쓴다', () => {
     expect(anchorQuestionLabel({ id: 'q', order: 0, questionCode: 'A7', title: '학력' })).toBe('A7');
+  });
+
+  it('엑셀 라벨도 길면 문장과 같은 자로 줄인다', () => {
+    expect(
+      anchorQuestionLabel({ id: 'q', order: 0, exportLabel: '나'.repeat(40), title: '학력' }),
+    ).toBe(`${'나'.repeat(24)}…`);
   });
 
   it('코드가 없으면 문장을 줄여 쓴다', () => {

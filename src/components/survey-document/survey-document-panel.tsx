@@ -18,6 +18,7 @@ import {
   useSurveyDocuments,
 } from '@/hooks/queries/use-survey-documents';
 import {
+  anchorQuestionLabel,
   buildAnchorOutline,
   resolveAnchorOwnerId,
   selectDrawableAnchors,
@@ -88,13 +89,15 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
     [groups, questions],
   );
 
-  /** 라벨이 문항코드라 무엇인지 안 보일 때 쓸 보조 문장. 코드가 없으면 null. */
+  /**
+   * 라벨이 문장이 아닐 때(엑셀 라벨·문항코드) 무엇인지 알려 줄 보조 문장.
+   * 라벨이 이미 문장이면 같은 줄을 두 번 쓰지 않는다.
+   */
   const subLabelOf = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const question of questions) {
-      const code = question.questionCode?.trim();
       const title = question.title?.trim() ?? '';
-      map.set(question.id, code && title ? title : null);
+      map.set(question.id, title && anchorQuestionLabel(question) !== title ? title : null);
     }
     return map;
   }, [questions]);
