@@ -18,8 +18,8 @@ import { MAX_PAGE_SPAN, PdfPageView, type RenderedPageBox } from './pdf-page-vie
  * 이동은 `focus.nonce` 가 바뀔 때만 일어난다. 선택은 상태고 쪽 이동은 행동이라,
  * 상태를 감시하면 응답자가 직접 넘긴 쪽을 곧바로 되돌린다.
  *
- * 분할이 시작된 뒤로는 언마운트되지 않는다. 셸의 같은 자리에 계속 놓이므로
- * 페이지를 넘겨도 pdf.js 문서가 다시 열리지 않는다.
+ * 조사표에 등록되지 않은 페이지에서는 이 판이 언마운트된다. 그때마다 문서를 다시
+ * 열지는 않는다 — 뷰어가 주소별로 열린 문서를 들고 있다.
  */
 interface Props {
   url: string;

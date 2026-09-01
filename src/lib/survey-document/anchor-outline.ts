@@ -163,8 +163,8 @@ export function resolveAnchorOwnerId(
   hasAnchors: (ownerId: string) => boolean,
   /**
    * 그룹 → 상위 그룹. 하위그룹에 앵커가 없으면 **조상 사슬을 타고** 올라간다.
-   * 분할 시작 판정(resolveSplitStartIndex)이 이미 사슬 전체를 보므로, 여기서 직속
-   * 그룹만 보면 "분할은 시작됐는데 켤 것이 없는" 화면이 나온다.
+   * 분할 판정(resolveSplitSteps)이 이미 사슬 전체를 보므로, 여기서 직속 그룹만
+   * 보면 "판은 갈라졌는데 켤 것이 없는" 화면이 나온다.
    */
   parentOf: (groupId: string) => string | null = () => null,
 ): string | null {

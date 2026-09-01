@@ -153,10 +153,8 @@ export function PdfPageView({
 
   useEffect(() => {
     let alive = true;
-    let opening: PdfDocument | null = null;
     void openDoc(url)
       .then((opened) => {
-        opening = opened;
         if (!alive) return;
         setDoc(opened);
         setOpenedUrl(url);
@@ -165,9 +163,10 @@ export function PdfPageView({
         if (!alive) return;
         setFailure({ url, message: describeOpenFailure(e) });
       });
+    // 문서는 캐시가 들고 있으므로 여기서 닫지 않는다. cleanup() 을 부르면 다시
+    // 마운트될 때 쪽 자원을 처음부터 받아 와, 캐시로 아낀 것을 도로 내놓는다.
     return () => {
       alive = false;
-      void opening?.cleanup();
     };
   }, [url]);
 
@@ -379,7 +378,7 @@ export function PdfPageView({
   );
 }
 
-type PdfDocument = Awaited<ReturnType<typeof openDoc>>;
+type PdfDocument = Awaited<ReturnType<typeof import('pdfjs-dist').getDocument>['promise']>;
 
 /**
  * 문서를 여는 데 실패한 이유를 사람이 읽을 문장으로.
@@ -398,8 +397,30 @@ function describeOpenFailure(error: unknown): string {
   return raw || '조사표를 불러오지 못했습니다.';
 }
 
-async function openDoc(url: string) {
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-  return pdfjs.getDocument({ url }).promise;
+/**
+ * 열린 문서를 주소별로 들고 있는다.
+ *
+ * 분할은 페이지마다 파생되므로 조사표에 등록되지 않은 페이지에서는 이 뷰어가
+ * 언마운트된다. 캐시가 없으면 경계를 넘나들 때마다 조사표를 다시 열게 되고,
+ * 이전/다음을 오가는 응답자는 그때마다 빈 화면을 본다.
+ *
+ * 비우지 않는다. 한 세션이 여는 조사표는 응답 화면이면 하나, 편집 화면이라도
+ * 몇 개뿐이라 남겨 두는 편이 싸다.
+ */
+const openedDocs = new Map<string, Promise<PdfDocument>>();
+
+function openDoc(url: string): Promise<PdfDocument> {
+  const cached = openedDocs.get(url);
+  if (cached) return cached;
+  const opening = (async () => {
+    const pdfjs = await import('pdfjs-dist');
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    return pdfjs.getDocument({ url }).promise;
+  })().catch((e: unknown) => {
+    // 실패한 약속을 남겨 두면 그 주소는 영영 못 연다 — 다시 시도할 수 있게 지운다.
+    openedDocs.delete(url);
+    throw e;
+  });
+  openedDocs.set(url, opening);
+  return opening;
 }

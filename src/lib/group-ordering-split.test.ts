@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRenderSteps,
-  isSplitStep,
-  resolveSplitStartIndex,
+  resolveSplitSteps,
   stepIdOf,
   type AnchorOwnerRef,
+  type RenderStep,
 } from '@/lib/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
@@ -29,53 +29,93 @@ function survey() {
   return { groups, questions, steps: buildRenderSteps(questions, groups) };
 }
 
-describe('resolveSplitStartIndex', () => {
-  it('앵커가 하나도 없으면 분할 없음', () => {
+describe('resolveSplitSteps — 페이지마다 따로 판정한다', () => {
+  it('앵커가 하나도 없으면 어느 페이지도 분할이 아니다', () => {
     const { steps, groups } = survey();
-    expect(resolveSplitStartIndex(steps, [], groups)).toBe(-1);
+    expect(resolveSplitSteps(steps, [], groups)).toEqual([false, false, false, false]);
   });
 
-  it('앵커를 가진 항목이 처음 나타나는 페이지가 시작점', () => {
+  it('앵커 걸린 항목을 담은 페이지만 분할이다', () => {
     const { steps, groups } = survey();
-    expect(resolveSplitStartIndex(steps, [onQuestion('a1')], groups)).toBe(2);
+    expect(resolveSplitSteps(steps, [onQuestion('a1')], groups)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ]);
   });
 
-  it('그룹에 붙은 앵커와 질문에 붙은 앵커가 똑같이 시작점을 만든다', () => {
-    const { steps, groups } = survey();
-    expect(resolveSplitStartIndex(steps, [onGroup('review')], groups)).toBe(2);
-    expect(resolveSplitStartIndex(steps, [onQuestion('a1')], groups)).toBe(2);
+  it('조사표에 등록되지 않은 페이지는 앞뒤 어디에 있든 일반 문항 페이지다', () => {
+    // 앞의 인적사항만이 아니라 **사이와 뒤**도 일반이다. 조사표에 없는 문항을
+    // 좁은 오른쪽 판에 밀어 넣으면 일반 문항이 조사표 판단 항목처럼 보인다.
+    const groups = [G('intro', 0), G('review', 1), G('closing', 2)];
+    const questions = [
+      Q('notice', 0, { groupId: 'intro' }),
+      Q('a1', 1, { groupId: 'review', pageBreakBefore: true }),
+      Q('note', 2, { groupId: 'closing', pageBreakBefore: true }),
+      Q('a2', 3, { groupId: 'review', pageBreakBefore: true }),
+      Q('thanks', 4, { groupId: 'closing', pageBreakBefore: true }),
+    ];
+    const steps = buildRenderSteps(questions, groups);
+    const anchored = resolveSplitSteps(steps, [onQuestion('a1'), onQuestion('a2')], groups);
+    const idOf = steps.map(stepIdOf);
+    const splitIds = idOf.filter((_, i) => anchored[i]);
+    expect(splitIds).toEqual(['page:a1', 'page:a2']);
   });
 
-  it('여러 앵커 중 가장 앞선 것이 시작점', () => {
+  it('그룹에 붙은 앵커는 그 그룹의 후손 질문이 있는 페이지를 분할로 만든다', () => {
     const { steps, groups } = survey();
-    expect(
-      resolveSplitStartIndex(steps, [onQuestion('a2'), onQuestion('a1'), onGroup('review')], groups),
-    ).toBe(2);
+    expect(resolveSplitSteps(steps, [onGroup('review')], groups)).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ]);
   });
 
   it('하위 그룹의 후손 질문도 상위 그룹 앵커에 걸린다', () => {
     const groups = [G('root', 0), G('child', 0, { parentGroupId: 'root' })];
     const questions = [Q('q1', 0, { groupId: 'child' })];
     const steps = buildRenderSteps(questions, groups);
-    expect(resolveSplitStartIndex(steps, [onGroup('root')], groups)).toBe(0);
+    expect(resolveSplitSteps(steps, [onGroup('root')], groups)).toEqual([true]);
   });
 
   it('어디에도 걸리지 않는 앵커(지워진 대상)는 분할을 만들지 않는다', () => {
     const { steps, groups } = survey();
-    expect(resolveSplitStartIndex(steps, [onQuestion('gone'), onGroup('gone')], groups)).toBe(-1);
+    expect(resolveSplitSteps(steps, [onQuestion('gone'), onGroup('gone')], groups)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 
-  it('그룹 사슬이 자기참조로 꼬여 있어도 멈춘다', () => {
-    const groups = [G('g1', 0, { parentGroupId: 'g1' })];
-    const questions = [Q('q1', 0, { groupId: 'g1' })];
-    const steps = buildRenderSteps(questions, groups);
-    expect(resolveSplitStartIndex(steps, [onGroup('없음')], groups)).toBe(-1);
+  it('그룹 사슬이 순환으로 꼬여 있어도 멈춘다', () => {
+    // buildRenderSteps 는 순환 그룹을 아예 최상위로 치지 않아 스텝이 비므로,
+    // 사슬 추적이 실제로 도는지 보려면 스텝을 손으로 세워야 한다.
+    const groups = [G('a', 0, { parentGroupId: 'b' }), G('b', 0, { parentGroupId: 'a' })];
+    const steps: RenderStep[] = [
+      {
+        kind: 'page',
+        items: [
+          {
+            question: Q('q1', 0, { groupId: 'a' }),
+            rootGroupId: 'a',
+            rootGroupName: 'A',
+            subgroupName: null,
+          },
+        ],
+      },
+    ];
+    expect(resolveSplitSteps(steps, [onGroup('없음')], groups)).toEqual([false]);
+    // 순환 안의 그룹에 앵커가 있으면 걸린다 — 멈추기만 하고 못 찾는 것이 아니다.
+    expect(resolveSplitSteps(steps, [onGroup('b')], groups)).toEqual([true]);
   });
 
-  describe('판정은 구조 기준 — 응답자의 답이 시작점을 흔들지 않는다', () => {
+  describe('판정은 구조 기준 — 응답자의 답이 레이아웃을 흔들지 않는다', () => {
     it('조건부로 숨은 질문의 앵커도 센다', () => {
-      // 조건부 표시는 스텝 구성에 관여하지 않는다. 그래서 앵커가 조건부 질문에만
-      // 붙어 있어도 시작점이 나온다 — 응답자가 앞 답을 고쳐도 페이지 구성이 안 바뀐다.
+      // 조건부 표시는 스텝 구성에 관여하지 않는다. 앵커가 조건부 질문에만 붙어
+      // 있어도 그 페이지는 분할이다 — 응답자가 앞 답을 고쳐도 판이 접혔다 펴지지 않는다.
       const groups = [G('intro', 0), G('review', 1)];
       const questions = [
         Q('name', 0, { groupId: 'intro' }),
@@ -86,31 +126,16 @@ describe('resolveSplitStartIndex', () => {
         }),
       ];
       const steps = buildRenderSteps(questions, groups);
-      expect(resolveSplitStartIndex(steps, [onQuestion('hidden')], groups)).toBe(1);
+      expect(resolveSplitSteps(steps, [onQuestion('hidden')], groups)).toEqual([false, true]);
     });
 
-    it('같은 구조를 넘기는 한 조건이 어떻든 시작 인덱스가 같다', () => {
+    it('같은 구조를 넘기는 한 조건이 어떻든 판정이 같다', () => {
       const { steps, groups } = survey();
       const anchors = [onQuestion('a1')];
-      const first = resolveSplitStartIndex(steps, anchors, groups);
-      const again = resolveSplitStartIndex(buildRenderSteps(survey().questions, groups), anchors, groups);
-      expect(again).toBe(first);
+      const first = resolveSplitSteps(steps, anchors, groups);
+      const again = resolveSplitSteps(buildRenderSteps(survey().questions, groups), anchors, groups);
+      expect(again).toEqual(first);
     });
-  });
-});
-
-describe('isSplitStep — sticky', () => {
-  it('시작 페이지 이후는 앵커 유무와 무관하게 전부 분할이다', () => {
-    // 앵커 없는 마무리 페이지도 조사표를 계속 보면서 답한다
-    expect(isSplitStep(2, 1)).toBe(false);
-    expect(isSplitStep(2, 2)).toBe(true);
-    expect(isSplitStep(2, 3)).toBe(true);
-    expect(isSplitStep(2, 99)).toBe(true);
-  });
-
-  it('분할 없음(-1)이면 어느 페이지도 분할이 아니다', () => {
-    expect(isSplitStep(-1, 0)).toBe(false);
-    expect(isSplitStep(-1, 5)).toBe(false);
   });
 });
 

@@ -228,7 +228,7 @@ describe('resolveQuestionForOwner', () => {
 });
 
 describe('조상 그룹 앵커 폴백', () => {
-  // 분할 시작 판정(resolveSplitStartIndex)은 조상 사슬 전체를 본다. 폴백이 직속
+  // 분할 판정(resolveSplitSteps)은 조상 사슬 전체를 본다. 폴백이 직속
   // 그룹만 보면 "분할은 시작됐는데 켤 것이 없는" 화면이 나온다.
   const parentOf = (id: string) => (id === 'sub' ? 'root' : null);
 

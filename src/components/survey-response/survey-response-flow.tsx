@@ -90,7 +90,7 @@ import {
   shouldDisplayQuestion,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
-import { resolveSplitStartIndex, isSplitStep } from '@/lib/group-ordering';
+import { resolveSplitSteps } from '@/lib/group-ordering';
 import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
 import {
   resolveAnchorFocus,
@@ -550,17 +550,24 @@ function SurveyResponseFlowActive({
 
   // ── 분할 레이아웃 파생 ──
   //
-  // 모드는 설정이 아니라 앵커에서 파생된다(토글 0개). 판정은 **구조 기준**이라
-  // 조건 필터를 거치지 않은 steps 를 넘긴다 — 응답자가 앞 답을 고쳐도 시작점이
-  // 발밑에서 움직이지 않아야 한다.
-  const splitStartIndex = useMemo(
-    () => resolveSplitStartIndex(steps, documentView?.anchors ?? [], groups),
+  // 모드는 설정이 아니라 앵커에서 파생된다(토글 0개). 페이지마다 따로 본다 —
+  // 조사표에 등록되지 않은 페이지는 일반 문항 페이지로 나온다. 판정은 **구조 기준**
+  // 이라 조건 필터를 거치지 않은 steps 를 넘긴다 — 응답자가 앞 답을 고쳐도 판이
+  // 접혔다 펴지지 않아야 한다.
+  const splitSteps = useMemo(
+    () => resolveSplitSteps(steps, documentView?.anchors ?? [], groups),
     [steps, documentView, groups],
   );
-  const isSplit = isSplitStep(splitStartIndex, currentStepIndex);
+  const isSplit = splitSteps[currentStepIndex] ?? false;
+  /**
+   * 이 설문이 조사표를 끼고 답하는 형식인가. **현재 페이지가 아니라 설문 전체**를
+   * 본다 — 진행바 같은 화면 요소를 페이지마다 넣었다 뺐다 하면 넘길 때마다 머리
+   * 부분이 들썩인다.
+   */
+  const isDocumentSurvey = splitSteps.some(Boolean);
 
   // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 초점 해석이 사슬을 타고 올라간다 —
-  // 분할 시작 판정이 이미 사슬 전체를 보므로 두 판정이 같은 사슬을 봐야 한다.
+  // 분할 판정이 이미 사슬 전체를 보므로 두 판정이 같은 사슬을 봐야 한다.
   const anchorParentOf = useMemo(() => {
     const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
     return (groupId: string) => map.get(groupId) ?? null;
@@ -1362,14 +1369,15 @@ function SurveyResponseFlowActive({
     );
   }
 
-  // 조사표가 붙은 설문의 좁은 화면 안내 — **설문 전체**를 막는다. 분할 페이지에
-  // 도달했을 때만 막으면 절반쯤 답한 시간이 버려진다.
+  // 조사표를 끼고 답하는 설문의 좁은 화면 안내 — **설문 전체**를 막는다. 분할 페이지에
+  // 도달했을 때만 막으면 절반쯤 답한 시간이 버려진다. 판정은 분할과 같은 술어를 쓴다 —
+  // 조사표를 올렸지만 영역을 아직 안 그린 설문은 갈라질 페이지가 없어 막을 이유도 없다.
   // 이미 응답했거나 완료한 사람에게는 그 화면이 먼저 뜨는 것이 맞아 그 뒤에 둔다.
   //
   // **이 스펙이 만드는 유일한 조건 분기가 이 한 줄의 예외다.** 관리자 응답 편집
   // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
   // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
-  if (documentView && isTooNarrowForSplit && !isAdminEdit) {
+  if (isDocumentSurvey && isTooNarrowForSplit && !isAdminEdit) {
     return <DesktopOnlyScreen />;
   }
 
@@ -1391,9 +1399,10 @@ function SurveyResponseFlowActive({
   const submitLabel = '다음';
   const submittingLabel = '처리 중...';
 
-  // 진행 현황 밴드. **분할 레이아웃에서는 두지 않는다** — 조사표를 나란히 보는 화면에서
-  // 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지" 가 말한다.
-  const progressBand = isSplit ? undefined : (
+  // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는
+  // 화면에서 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지"
+  // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
+  const progressBand = isDocumentSurvey ? undefined : (
     <>
       <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
         {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
@@ -1452,7 +1461,7 @@ function SurveyResponseFlowActive({
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
             showBranding={currentVisibleStepNumber <= 1}
-            {...(isSplit
+            {...(isDocumentSurvey
               ? {
                   descriptionSuffix: `${currentVisibleStepNumber || 1} / ${Math.max(totalVisibleStepCount, 1)} 페이지`,
                 }
