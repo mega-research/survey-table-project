@@ -395,7 +395,7 @@ function JudgementRow({
         {/* 코드 칸은 한 줄이다. B6_1_A 가 두 줄로 접히면 행 높이가 들쭉날쭉해져
             옆 문항과 눈으로 짝지을 수 없다. 넘치면 줄이고 전체는 툴팁으로 준다. */}
         <span
-          className="w-11 shrink-0 truncate text-[11px] font-bold whitespace-nowrap text-gray-500"
+          className="w-13 shrink-0 truncate text-[11px] font-bold whitespace-nowrap text-gray-500"
           title={shortCode ?? undefined}
         >
           {shortCode}
