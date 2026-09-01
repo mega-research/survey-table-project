@@ -126,6 +126,38 @@ export function GroupManager({ className }: GroupManagerProps) {
     [groupsOrEmpty],
   );
 
+  /**
+   * 하위 그룹 목록 재귀 렌더 — 하위 그룹의 하위 그룹도 같은 모양으로 들여쓴다.
+   * 최상위만 드래그 정렬 대상이라(handleDragEnd 규칙) 하위 단계는 disableDrag.
+   */
+  const renderSubGroups = (parentId: string): React.ReactNode => {
+    const subGroups = getSubGroups(parentId);
+    if (subGroups.length === 0) return null;
+    return (
+      <SortableContext items={subGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
+        <div className="mt-2 ml-6 space-y-2 border-l-2 border-gray-200 pl-3">
+          {subGroups.map((subGroup) => (
+            <div key={subGroup.id}>
+              <SortableGroupItem
+                group={subGroup}
+                questionCount={getTotalQuestionCount(subGroup.id)}
+                subGroups={getSubGroups(subGroup.id)}
+                isExpanded={expandedGroups.has(subGroup.id)}
+                onEdit={handleEditGroup}
+                onDelete={handleDeleteGroup}
+                onToggleExpand={handleToggleExpand}
+                onAddSubGroup={handleOpenCreateModal}
+                totalSubGroupCount={getTotalSubGroupCount(subGroup.id)}
+                disableDrag
+              />
+              {expandedGroups.has(subGroup.id) && renderSubGroups(subGroup.id)}
+            </div>
+          ))}
+        </div>
+      </SortableContext>
+    );
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -583,34 +615,8 @@ export function GroupManager({ className }: GroupManagerProps) {
                         totalSubGroupCount={getTotalSubGroupCount(group.id)}
                       />
 
-                      {/* 하위 그룹 렌더링 */}
-                      {isExpanded && subGroups.length > 0 && (
-                        <SortableContext
-                          items={subGroups.map((g) => g.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          <div className="mt-2 ml-6 space-y-2 border-l-2 border-gray-200 pl-3">
-                            {subGroups.map((subGroup) => {
-                              return (
-                                <div key={subGroup.id}>
-                                  <SortableGroupItem
-                                    group={subGroup}
-                                    questionCount={getTotalQuestionCount(subGroup.id)}
-                                    subGroups={[]}
-                                    isExpanded={false}
-                                    onEdit={handleEditGroup}
-                                    onDelete={handleDeleteGroup}
-                                    onToggleExpand={handleToggleExpand}
-                                    onAddSubGroup={handleOpenCreateModal}
-                                    totalSubGroupCount={getTotalSubGroupCount(subGroup.id)}
-                                    disableDrag
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </SortableContext>
-                      )}
+                      {/* 하위 그룹 렌더링 — 깊이 제한 없이 재귀 */}
+                      {isExpanded && renderSubGroups(group.id)}
                     </div>
                   );
                 })}

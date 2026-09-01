@@ -793,18 +793,8 @@ export function SortableQuestionList({
     );
   };
 
-  // 하위그룹 내부 질문 렌더링 (공통)
-  const renderSubGroupQuestions = (subGroupId: string, renderCard: (q: Question) => React.ReactNode) => {
-    const subGroupQuestions = questionsByGroup[subGroupId] || [];
-    if (subGroupQuestions.length === 0) return null;
-    return (
-      <div className="space-y-4 pl-4">
-        {subGroupQuestions.sort((a, b) => a.order - b.order).map(renderCard)}
-      </div>
-    );
-  };
-
-  // 그룹 내 인터리브된 자식 렌더링 헬퍼
+  // 그룹 내 인터리브된 자식 렌더링 헬퍼 — 하위 그룹 안도 같은 함수로 재귀한다.
+  // 직계 질문만 그리면 하위 그룹의 하위 그룹(3단계)이 화면에서 사라진다.
   const renderInterleavedChildren = (
     groupId: string,
     renderCard: (q: Question) => React.ReactNode,
@@ -827,7 +817,7 @@ export function SortableQuestionList({
                 questionCount={getTotalQuestionCount(subGroup.id)}
                 subGroupCount={getTotalSubGroupCount(subGroup.id)}
               >
-                {renderSubGroupQuestions(subGroup.id, renderCard)}
+                {renderInterleavedChildren(subGroup.id, renderCard, isEditMode)}
               </SortableSubGroup>
             );
           }
@@ -838,7 +828,7 @@ export function SortableQuestionList({
                 questionCount={getTotalQuestionCount(subGroup.id)}
                 subGroupCount={getTotalSubGroupCount(subGroup.id)}
               />
-              {!subGroup.collapsed && renderSubGroupQuestions(subGroup.id, renderCard)}
+              {!subGroup.collapsed && renderInterleavedChildren(subGroup.id, renderCard, isEditMode)}
             </div>
           );
         })}

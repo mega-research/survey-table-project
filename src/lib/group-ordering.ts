@@ -148,6 +148,37 @@ export function findParentGroupId(
   return question?.groupId ?? null;
 }
 
+export interface FlatGroupEntry {
+  group: QuestionGroup;
+  /** 최상위 0, 하위 1, 하위의 하위 2 … */
+  depth: number;
+}
+
+/**
+ * 그룹 트리 → 깊이 우선·order 순 평탄화. 셀렉트/목록처럼 계층을 한 줄씩 보여줄 때 쓴다.
+ * 깊이 제한 없음 — 2단계에서 멈추면 하위의 하위 그룹이 화면에서 사라져 질문을 옮길 수 없다.
+ * 부모가 없는 참조(고아)와 루트에 닿지 않는 순환은 순회되지 않아 자연히 빠진다.
+ */
+export function flattenGroupTree(groups: readonly QuestionGroup[]): FlatGroupEntry[] {
+  const byParent = new Map<string | null, QuestionGroup[]>();
+  for (const g of groups) {
+    const key = g.parentGroupId ?? null;
+    const bucket = byParent.get(key);
+    if (bucket) bucket.push(g);
+    else byParent.set(key, [g]);
+  }
+  const out: FlatGroupEntry[] = [];
+  const visit = (parentId: string | null, depth: number) => {
+    const children = (byParent.get(parentId) ?? []).slice().sort((a, b) => a.order - b.order);
+    for (const group of children) {
+      out.push({ group, depth });
+      visit(group.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return out;
+}
+
 // ── 응답 페이지 렌더 스텝 구성 ──
 
 export type StepItem = {

@@ -36,6 +36,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn, generateId } from '@/lib/utils';
 import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
+import { flattenGroupTree } from '@/lib/group-ordering';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
@@ -465,38 +466,13 @@ export function QuestionBasicTab({
             className="mt-2 w-full rounded-lg border border-gray-300 p-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           >
             <option value="">그룹 없음</option>
-            {(() => {
-              const groups = useSurveyBuilderStore.getState().currentSurvey.groups || [];
-              const topLevelGroups = groups
-                .filter((g) => !g.parentGroupId)
-                .sort((a, b) => a.order - b.order);
-              const getSubGroups = (parentId: string) =>
-                groups
-                  .filter((g) => g.parentGroupId === parentId)
-                  .sort((a, b) => a.order - b.order);
-
-              const options: React.ReactElement[] = [];
-
-              topLevelGroups.forEach((group) => {
-                options.push(
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>,
-                );
-
-                // 하위 그룹들 추가
-                const subGroups = getSubGroups(group.id);
-                subGroups.forEach((subGroup) => {
-                  options.push(
-                    <option key={subGroup.id} value={subGroup.id}>
-                      └─ {subGroup.name}
-                    </option>,
-                  );
-                });
-              });
-
-              return options;
-            })()}
+            {flattenGroupTree(useSurveyBuilderStore.getState().currentSurvey.groups || []).map(
+              ({ group, depth }) => (
+                <option key={group.id} value={group.id}>
+                  {depth === 0 ? group.name : `${'　'.repeat(depth - 1)}└─ ${group.name}`}
+                </option>
+              ),
+            )}
           </select>
           <p className="mt-1 text-xs text-gray-500">
             이 질문을 특정 그룹에 포함시킬 수 있습니다.
