@@ -10,6 +10,7 @@ import {
   resolveHoverAction,
   SCROLL_QUIET_MS,
 } from '@/lib/survey-document/hover-follow';
+import { questionShortCode } from '@/lib/question/label';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   resolveJudgementBulkChoices,
@@ -360,6 +361,9 @@ function JudgementRow({
     useSurveyResponseStore((s) => s.optionTexts[question.id]?.[shape.opinionOptionId]) ?? '';
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
 
+  // 조사표 사각형과 같은 규칙 — 엑셀 라벨이 있으면 그것, 없으면 문항코드.
+  const shortCode = questionShortCode(question);
+
   const isOpinion = value === shape.opinionValue;
   const needsText = isOpinion && note.trim().length === 0;
 
@@ -388,8 +392,13 @@ function JudgementRow({
       )}
     >
       <div className="flex items-center gap-3">
-        <span className="w-10 shrink-0 text-[11px] font-bold text-gray-500">
-          {question.questionCode}
+        {/* 코드 칸은 한 줄이다. B6_1_A 가 두 줄로 접히면 행 높이가 들쭉날쭉해져
+            옆 문항과 눈으로 짝지을 수 없다. 넘치면 줄이고 전체는 툴팁으로 준다. */}
+        <span
+          className="w-11 shrink-0 truncate text-[11px] font-bold whitespace-nowrap text-gray-500"
+          title={shortCode ?? undefined}
+        >
+          {shortCode}
         </span>
         <span className="min-w-0 flex-1 text-[13px] text-gray-900">
           {substituteTokens(question.title ?? '', attrs, quotes)}

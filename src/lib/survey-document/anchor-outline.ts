@@ -3,6 +3,7 @@
  * 순수 모듈 — DB·React·pdf.js 를 모른다.
  */
 import { getInterleavedChildren } from '@/lib/group-ordering';
+import { questionShortCode } from '@/lib/question/label';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 export interface AnchorOutlineQuestion {
@@ -61,9 +62,9 @@ export function anchorQuestionLabel(question: QuestionInput): string {
   const shorten = (text: string) =>
     text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX)}…` : text;
 
-  const exportLabel = question.exportLabel?.trim();
-  if (exportLabel) return shorten(exportLabel);
-  const code = question.questionCode?.trim();
+  // 엑셀 라벨 → 문항코드 순은 questionShortCode 소관이다. 조사표 사각형과 체크리스트
+  // 코드 칸이 같은 이름을 불러야 해서 규칙을 한 곳에 둔다. 문장 폴백만 여기 몫이다.
+  const code = questionShortCode(question);
   if (code) return shorten(code);
   const title = question.title.trim();
   return title ? shorten(title) : '(제목 없음)';
