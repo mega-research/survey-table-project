@@ -1464,11 +1464,6 @@ function SurveyResponseFlowActive({
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
             showBranding={currentVisibleStepNumber <= 1}
-            {...(isDocumentSurvey
-              ? {
-                  descriptionSuffix: `${currentVisibleStepNumber || 1} / ${Math.max(totalVisibleStepCount, 1)} 페이지`,
-                }
-              : {})}
           />
         }
         progress={progressBand}
