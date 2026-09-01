@@ -3,10 +3,6 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import {
-  buildNegativeCodeExists,
-  getResultCodeStatuses,
-} from '@/lib/operations/result-code-statuses.server';
 import { isValidUUID } from '@/lib/utils';
 
 import {
@@ -15,25 +11,27 @@ import {
 } from './invite-token-owner';
 
 /**
- * inviteToken 으로 컨택 lookup. 반환 케이스 4가지:
+ * inviteToken 으로 컨택 lookup. 반환 케이스 3가지:
  * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt/isTest 동봉)
- * - excluded: 부정 결과코드 OR unsubscribed_at IS NOT NULL [응답 차단]
  * - invalid_test: 테스트 대상자지만 테스트 모드 OFF [익명 폴백 금지]
  * - invalid: 토큰 자체가 무효 [익명 폴백]
+ *
+ * 수신거부(unsubscribed_at)·부정 결과코드는 여기서 보지 않는다 (2026-09-01 결정) —
+ * 수신거부는 메일 채널 해지일 뿐 응답 자격이 아니고, 초대 링크로는 어떤 경우에도 응답할
+ * 수 있어야 한다. 단체 메일 제외·응답률 모수 제외는 각자의 경로(캠페인 preflight·진척 집계)가
+ * 계속 담당한다.
  *
  * mutation 흐름에서 호출되므로 dedupe 가 의미 없어 cache 적용 안 함.
  *
  * SECURITY DEFINER PG 함수 사용 — connection role 이 anon/authenticated 라도
  * RLS 우회해서 contact_target_id 만 안전하게 조회 가능. 다른 attrs/PII 는 노출 안 됨.
  *
- * SECURITY: 차단 사유는 호출자에게 구분 노출하지 않음 [UI 는 동일 카피 — PII].
  *
  * 원위치: src/actions/response-actions.ts — oRPC 마이그레이션에서 features service 와
  * lib/duplicate-detection(checkTrackA) 양쪽이 공유하므로 lib 로 승격.
  */
 export type InviteTokenLookupResult =
   | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null; isTest: boolean }
-  | { kind: 'excluded' }
   | { kind: 'invalid_test' }
   | { kind: 'invalid' };
 
@@ -74,22 +72,6 @@ export async function findContactByInviteToken(
     };
   }
 
-  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
-  const excludedRows = (await db.execute(sql`
-    SELECT 1
-    FROM contact_targets ct
-    WHERE ct.id = ${contactTargetId}::uuid
-      AND (
-        ct.unsubscribed_at IS NOT NULL
-        ${negativeCodes.length > 0
-          ? sql`OR ${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}`
-          : sql``}
-      )
-    LIMIT 1
-  `)) as unknown as unknown[];
-  if (excludedRows.length > 0) {
-    return { kind: 'excluded' };
-  }
 
   return {
     kind: 'valid',

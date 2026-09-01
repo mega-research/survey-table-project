@@ -74,12 +74,6 @@ describe('checkTrackA (invite_token)', () => {
     });
   });
 
-  it('excluded 부정 결과코드 OR unsubscribed → excluded_from_population', async () => {
-    mockFindContact.mockResolvedValue({ kind: 'excluded' });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
-    const r = await checkTrackA('survey-1', 'excluded-token');
-    expect(r).toEqual({ blocked: true, reason: 'excluded_from_population' });
-  });
 });
 
 describe('checkTrackB (신호 기반)', () => {
