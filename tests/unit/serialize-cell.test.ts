@@ -1152,3 +1152,30 @@ describe('buildUpdatedCell — calc 셀 표시값 비교 검증 (calcValidation)
     expect(out).not.toHaveProperty('calcValidation');
   });
 });
+
+describe('input 셀 개인정보 암호화 플래그 (piiEncrypted)', () => {
+  it('폼 inputPiiEncrypted 가 켜지면 input 셀에 piiEncrypted: true 로 저장된다', () => {
+    const form: CellFormState = { ...baseForm('input'), inputPiiEncrypted: true };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.type).toBe('input');
+    expect(out.piiEncrypted).toBe(true);
+  });
+
+  it('꺼진 경우 키 자체를 남기지 않고, 기존 셀의 플래그도 제거된다', () => {
+    const form: CellFormState = { ...baseForm('input'), inputPiiEncrypted: false };
+    const out = buildUpdatedCell(form, { ...baseCell, type: 'input', piiEncrypted: true });
+    expect(out).not.toHaveProperty('piiEncrypted');
+  });
+
+  it('input 이 아닌 셀은 폼 값과 무관하게 플래그를 쓰지 않는다', () => {
+    const form: CellFormState = { ...baseForm('text'), inputPiiEncrypted: true };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('piiEncrypted');
+  });
+
+  it('cellToFormState 는 셀의 piiEncrypted 를 inputPiiEncrypted 로 복원한다', () => {
+    expect(
+      cellToFormState({ id: 'c1', type: 'input', content: '', piiEncrypted: true }).inputPiiEncrypted,
+    ).toBe(true);
+    expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputPiiEncrypted).toBe(false);
+  });
+});

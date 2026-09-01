@@ -224,6 +224,7 @@ export function CellContentModal({
     inputMaxLength,
     inputDefaultValueTemplate,
     inputType,
+    inputPiiEncrypted,
     emptyDefaultEnabled,
     emptyDefaultRaw,
     cellNumberFormat,
@@ -302,6 +303,7 @@ export function CellContentModal({
     setInputMaxLength,
     setInputDefaultValueTemplate,
     setInputType,
+    setInputPiiEncrypted,
     setEmptyDefaultEnabled,
     setEmptyDefaultRaw,
     setCellNumberFormat,
@@ -1170,6 +1172,23 @@ export function CellContentModal({
                   </label>
                 </div>
 
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="input-pii-encrypted"
+                    checked={inputPiiEncrypted}
+                    onChange={(e) => setInputPiiEncrypted(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <label htmlFor="input-pii-encrypted" className="flex-1 cursor-pointer text-sm">
+                    <span className="font-medium">개인정보 암호화</span>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
+                      후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
+                      자동으로 복호화되어 표시됩니다.
+                    </p>
+                  </label>
+                </div>
                 {inputType === 'number' && (
                   <div className="ml-7 flex items-center gap-2 text-sm">
                     <input

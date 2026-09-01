@@ -38,6 +38,8 @@ export interface CellFormState {
   inputMaxLength: number | '';
   inputDefaultValueTemplate: string;
   inputType: 'text' | 'number';
+  /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
+  inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
   cellNumberFormat: NumberFormat | undefined;
@@ -206,6 +208,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputMaxLength: cell.inputMaxLength || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
+    inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
@@ -308,6 +311,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     inputMaxLength: _inputMaxLength,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
+    piiEncrypted: _piiEncrypted,
     emptyDefault: _emptyDefault,
     numberFormat: _numberFormat,
     required: _required,
@@ -382,6 +386,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }
             : {}),
           inputType: form.inputType,
+          ...(form.inputPiiEncrypted ? { piiEncrypted: true } : {}),
           ...(form.inputType === 'number' && form.emptyDefaultEnabled
             ? { emptyDefault: parseNumericInput(form.emptyDefaultRaw) ?? 0 }
             : {}),
