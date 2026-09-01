@@ -192,7 +192,20 @@ function GroupedRow({
         <>
           <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
             <td className="px-3 py-2 font-mono text-xs text-gray-500">{row.questionCode ?? '—'}</td>
-            <td className="px-3 py-2 text-gray-900">{row.title}</td>
+            <td className="px-3 py-2 text-gray-900">
+              {row.title}
+              {/* 옛 배포판의 답인데 그 버전의 문항 모양을 찾지 못한 건수. 분자에도
+                  분모에도 없으므로 숫자가 이상할 때 여기부터 본다 — 늘 0 인 값에
+                  열을 하나 내주지는 않는다. */}
+              {row.uncountedCount > 0 && (
+                <span
+                  className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-[11px] text-amber-700"
+                  title={`이전 배포판 응답 ${row.uncountedCount}건은 그 버전의 문항을 찾지 못해 집계에서 빠졌습니다.`}
+                >
+                  해석 불가 {row.uncountedCount}
+                </span>
+              )}
+            </td>
             <td className="px-3 py-2 text-right tabular-nums">{row.needCount ?? ''}</td>
             <td className="px-3 py-2 text-right tabular-nums">{row.dropCount ?? ''}</td>
             <td

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 
 import { db } from '@/db';
@@ -57,7 +57,33 @@ export async function getDemandSummary(
       ),
     );
 
-  return buildDemandSummary(questions, groups, responses);
+  // 누적 보고서 — 각 응답을 **자기 버전의 문항 모양**으로 읽는다. 완료 응답은
+  // 재배포 뒤에도 자기 버전에 고정되므로(ADR 0014) 지금 스냅샷으로 옛 답을 읽으면
+  // 0건이 되거나 반대 의미로 집계된다. 필요한 버전만 골라 한 번에 가져온다.
+  const versionIds = [
+    ...new Set(responses.map((r) => r.versionId).filter((id): id is string => id !== null)),
+  ];
+  const versionRows =
+    versionIds.length > 0
+      ? await db
+          .select({ id: surveyVersions.id, snapshot: surveyVersions.snapshot })
+          .from(surveyVersions)
+          .where(inArray(surveyVersions.id, versionIds))
+      : [];
+
+  // versionId → (questionId → 그 버전의 문항). 스냅샷이 보존 정책으로 정리된
+  // 버전은 여기 없고, 그 응답들은 집계에서 '해석 불가'로 센다.
+  const questionsByVersion = new Map<string, Map<string, Question>>();
+  for (const row of versionRows) {
+    if (!row.snapshot) continue;
+    const asOf = normalizeQuestions(row.snapshot.questions) as Question[];
+    questionsByVersion.set(row.id, new Map(asOf.map((q) => [q.id, q])));
+  }
+
+  return buildDemandSummary(questions, groups, responses, (versionId, questionId) => {
+    if (versionId === null) return null;
+    return questionsByVersion.get(versionId)?.get(questionId) ?? null;
+  });
 }
 
 
@@ -72,7 +98,19 @@ export function buildDemandSummaryWorkbook(rows: readonly DemandSummaryRow[]): E
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('문항 수요');
 
-  const header = sheet.addRow(['그룹', '문항코드', '문항', '필요', '불필요', '필요율(%)', '의견 수', '의견']);
+  // '해석 불가' 는 옛 배포판의 답 중 그 버전의 문항 모양을 찾지 못한 건수다.
+  // 분자에도 분모에도 들어가지 않으므로 숫자를 못 믿을 때 여기부터 본다.
+  const header = sheet.addRow([
+    '그룹',
+    '문항코드',
+    '문항',
+    '필요',
+    '불필요',
+    '필요율(%)',
+    '의견 수',
+    '해석 불가',
+    '의견',
+  ]);
   header.font = { bold: true };
 
   for (const row of rows) {
@@ -84,6 +122,7 @@ export function buildDemandSummaryWorkbook(rows: readonly DemandSummaryRow[]): E
       row.dropCount ?? '',
       row.needRate === null ? '' : Number(row.needRate.toFixed(1)),
       row.opinionCount,
+      row.uncountedCount,
       row.opinions.join('\n'),
     ]);
   }
@@ -96,8 +135,9 @@ export function buildDemandSummaryWorkbook(rows: readonly DemandSummaryRow[]): E
     { width: 10 },
     { width: 12 },
     { width: 10 },
+    { width: 10 },
     { width: 60 },
   ];
-  sheet.getColumn(8).alignment = { wrapText: true, vertical: 'top' };
+  sheet.getColumn(9).alignment = { wrapText: true, vertical: 'top' };
   return workbook;
 }

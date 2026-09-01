@@ -36,6 +36,14 @@ export interface DemandSummaryRow {
   needRate: number | null;
   /** 서술이 있는 의견의 수. 3지선다가 아니면 0. */
   opinionCount: number;
+  /**
+   * 답은 했으나 **해석하지 못한** 응답 수.
+   *
+   * 그 응답이 쓰인 버전에서 이 문항이 판단 항목이 아니었거나(선택지가 달랐거나),
+   * 그 버전 스냅샷이 보존 정책으로 정리돼 없을 때다. 분자·분모 어디에도 넣지
+   * 않는다 — 대신 여기 세어서 조용히 사라지지 않게 한다.
+   */
+  uncountedCount: number;
   /** 의견 전문 — 행을 펼치면 그 자리에서 읽는다. 별도 화면을 만들지 않는다. */
   opinions: string[];
 }
@@ -46,6 +54,19 @@ export interface DemandSummaryRow {
  * 그 모듈이 요구하는 모양을 그대로 받는다.
  */
 export type DemandResponseInput = SurveyResponse;
+
+/**
+ * 응답의 버전에서 그 문항이 어떤 모양이었는지 되찾는다. 없으면 null.
+ *
+ * **누적 보고서의 핵심이다.** 완료 응답은 재배포 뒤에도 자기 버전에 고정되므로
+ * (ADR 0014), 지금 스냅샷의 선택지로 옛 답을 읽으면 0건이 되거나 반대 의미로
+ * 집계된다. 그래서 각 응답을 **그 응답이 쓰인 버전의 언어로** 읽는다.
+ * 문항 id 는 버전 간 안정적이라 같은 문항을 잇는 기준이 된다.
+ */
+export type QuestionAsOf = (
+  versionId: string | null,
+  questionId: string,
+) => Question | null;
 
 /**
  * 응답 하나에서 그 문항의 의견 서술을 읽는다.
@@ -72,11 +93,15 @@ function readOpinionText(
 
 /**
  * 문항 한 줄짜리 집계표를 만든다. 순서는 조사표 순서(그룹 순서 → 그룹 안 문항 순서).
+ *
+ * **누적 보고서다.** 행은 지금 배포판의 문항이 정하고, 각 응답은 자기 버전의 문항
+ * 모양으로 읽어 합친다. 읽지 못한 응답은 버리지 않고 `uncountedCount` 로 센다.
  */
 export function buildDemandSummary(
   questions: readonly Question[],
   groups: readonly QuestionGroup[],
   responses: readonly DemandResponseInput[],
+  questionAsOf: QuestionAsOf,
 ): DemandSummaryRow[] {
   const groupById = new Map(groups.map((g) => [g.id, g]));
 
@@ -86,6 +111,15 @@ export function buildDemandSummary(
   const ordered = buildRenderSteps([...questions], [...groups]).flatMap((step) =>
     step.items.map((item) => item.question),
   );
+
+  // 응답을 자기 버전끼리 모은다. 문항과 무관한 분류라 한 번만 한다.
+  const byVersion = new Map<string | null, DemandResponseInput[]>();
+  for (const response of responses) {
+    const key = response.versionId ?? null;
+    const bucket = byVersion.get(key);
+    if (bucket) bucket.push(response);
+    else byVersion.set(key, [response]);
+  }
 
   return ordered.map((question, index) => {
     const group = question.groupId ? groupById.get(question.groupId) : undefined;
@@ -98,32 +132,58 @@ export function buildDemandSummary(
       order: index,
     };
 
-    const shape = resolveJudgementShape(question);
-    if (!shape) {
-      // 3지선다 radio 가 아니거나 어느 쪽이 '필요함'인지 가릴 수 없는 문항 —
-      // 행은 남기고 비율 칸을 비운다. 계산되지 않는 값을 0 으로 채우면
+    if (!resolveJudgementShape(question)) {
+      // 지금 배포판에서 3지선다 radio 가 아니거나 어느 쪽이 '필요함'인지 가릴 수 없는
+      // 문항 — 행은 남기고 비율 칸을 비운다. 계산되지 않는 값을 0 으로 채우면
       // "아무도 필요하다고 안 했다"로 오해하고, 추측한 값은 반대로 읽힌다.
-      return { ...base, needCount: null, dropCount: null, needRate: null, opinionCount: 0, opinions: [] };
+      return {
+        ...base,
+        needCount: null,
+        dropCount: null,
+        needRate: null,
+        opinionCount: 0,
+        opinions: [],
+        uncountedCount: 0,
+      };
     }
 
-    // 필요 n·불필요 n 은 새로 세지 않는다 — 기존 분석 모듈의 단일선택 분포가
-    // 이미 내는 값이다. 노출 필터(exposedQuestionIds)도 그쪽 규칙을 그대로 따른다.
-    const analytics = analyzeQuestion(question, responses as SurveyResponse[]);
-    const countOf = (value: string) =>
-      analytics.type === 'single'
-        ? (analytics.distribution.find((d) => d.value === value)?.count ?? 0)
-        : 0;
-    const needCount = countOf(shape.needValue);
-    const dropCount = countOf(shape.dropValue);
-
-    // 의견만 여기서 센다. 서술은 사이드카에 있어 분석 모듈이 볼 수 없고,
-    // 서술이 비면 답으로 치지 않는다는 규칙도 이 형식 고유다.
+    let needCount = 0;
+    let dropCount = 0;
+    let uncountedCount = 0;
     const opinions: string[] = [];
-    for (const response of responses) {
-      const answer = (response.questionResponses as Record<string, unknown>)[question.id];
-      if (answer !== shape.opinionValue) continue;
-      const text = readOpinionText(response, question.id, shape.opinionOptionId);
-      if (text) opinions.push(text);
+
+    // 각 묶음은 **그 버전의 문항 모양**으로 읽는다.
+    for (const [versionId, bucket] of byVersion) {
+      const asOf = questionAsOf(versionId, question.id);
+      const shape = asOf ? resolveJudgementShape(asOf) : null;
+      if (!asOf || !shape) {
+        // 그 버전에 이 문항이 없었거나 판단 항목이 아니었거나, 스냅샷이 정리됐다.
+        // 답이 있는 것만 센다 — 애초에 답하지 않은 응답은 셀 것이 없다.
+        uncountedCount += bucket.filter((response) => {
+          const value = (response.questionResponses as Record<string, unknown>)[question.id];
+          return value !== undefined && value !== null && value !== '';
+        }).length;
+        continue;
+      }
+
+      // 필요 n·불필요 n 은 새로 세지 않는다 — 기존 분석 모듈의 단일선택 분포가
+      // 이미 내는 값이다. 노출 필터(exposedQuestionIds)도 그쪽 규칙을 그대로 따른다.
+      const analytics = analyzeQuestion(asOf, bucket);
+      const countOf = (value: string) =>
+        analytics.type === 'single'
+          ? (analytics.distribution.find((d) => d.value === value)?.count ?? 0)
+          : 0;
+      needCount += countOf(shape.needValue);
+      dropCount += countOf(shape.dropValue);
+
+      // 의견만 여기서 센다. 서술은 사이드카에 있어 분석 모듈이 볼 수 없고,
+      // 서술이 비면 답으로 치지 않는다는 규칙도 이 형식 고유다.
+      for (const response of bucket) {
+        const answer = (response.questionResponses as Record<string, unknown>)[question.id];
+        if (answer !== shape.opinionValue) continue;
+        const text = readOpinionText(response, question.id, shape.opinionOptionId);
+        if (text) opinions.push(text);
+      }
     }
 
     const answered = needCount + dropCount + opinions.length;
@@ -134,6 +194,7 @@ export function buildDemandSummary(
       needRate: answered > 0 ? (needCount / answered) * 100 : null,
       opinionCount: opinions.length,
       opinions,
+      uncountedCount,
     };
   });
 }
