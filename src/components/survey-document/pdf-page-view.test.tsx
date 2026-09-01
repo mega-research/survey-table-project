@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PdfPageView } from './pdf-page-view';
+import { fitPageWidth, PdfPageView } from './pdf-page-view';
 
 // pdf.js 는 jsdom 에서 열리지 않는다. 이 파일이 재는 것은 좌표계를 만드는 마크업이지
 // 렌더 결과가 아니므로, 문서 열기는 실패한 채로 두고 셸만 본다.
@@ -72,5 +72,38 @@ describe('PdfPageView — 쪽을 감싼 상자', () => {
     );
     const overlay = container.querySelector('[data-testid="ov"]');
     expect(overlay?.parentElement).toBe(surfaceOf(container));
+  });
+});
+
+describe('fitPageWidth', () => {
+  const PAD = 24;
+
+  it('배율 100% 에서는 판 안쪽 폭을 넘지 않는다', () => {
+    // 가로 스크롤바가 생기느냐 마느냐가 이 한 줄에 걸려 있다.
+    for (const paneWidth of [900, 901, 1024, 1279, 1440]) {
+      const availWidth = paneWidth - PAD * 2;
+      const { cssWidth } = fitPageWidth({ baseWidth: 595.276, availWidth, zoom: 1 });
+      expect(cssWidth).toBeLessThanOrEqual(availWidth);
+    }
+  });
+
+  it('부동소수점 오차로도 넘기지 않는다 — 내림한 정수를 쓴다', () => {
+    // base * (avail/base) 는 avail 보다 아주 조금 클 수 있고, 그 0.0000001px 이
+    // 그대로 스크롤바가 된다.
+    const availWidth = 787;
+    const { scale, cssWidth } = fitPageWidth({ baseWidth: 595.276, availWidth, zoom: 1 });
+    expect(595.276 * scale).toBeGreaterThanOrEqual(cssWidth);
+    expect(cssWidth).toBe(availWidth);
+    expect(Number.isInteger(cssWidth)).toBe(true);
+  });
+
+  it('배율을 올리면 판보다 넓어진다 — 그때의 가로 스크롤은 의도된 것이다', () => {
+    const { cssWidth } = fitPageWidth({ baseWidth: 595.276, availWidth: 800, zoom: 1.5 });
+    expect(cssWidth).toBeGreaterThan(800);
+  });
+
+  it('판이 아주 좁으면 더 줄이지 않는다 — 읽을 수 있는 크기가 먼저다', () => {
+    const { cssWidth } = fitPageWidth({ baseWidth: 595.276, availWidth: 120, zoom: 1 });
+    expect(cssWidth).toBe(320);
   });
 });

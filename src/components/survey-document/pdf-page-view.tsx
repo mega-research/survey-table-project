@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight, Rows2 } from 'lucide-react';
 
+import { useElementWidth } from '@/hooks/use-element-width';
 import { scrollTarget, type ScrollBand } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
 
@@ -79,6 +80,32 @@ const PAGE_GAP = 12;
  */
 export const MAX_PAGE_SPAN = 3;
 
+/** 이보다 좁은 판에서는 쪽을 더 줄이지 않는다 — 줄여봐야 읽을 수 없다. */
+const MIN_PAGE_WIDTH = 320;
+
+/**
+ * 쪽 하나를 판에 맞출 배율과 CSS 폭.
+ *
+ * **배율 100%에서는 판보다 넓어지지 않는다** — 이 한 줄이 가로 스크롤바의 유무를
+ * 정한다. `getViewport` 가 내는 폭은 `base * (avail/base)` 라 부동소수점 오차로
+ * avail 을 아주 조금 넘길 수 있고, 그 0.0000001px 이 그대로 스크롤바가 된다.
+ * 그래서 CSS 폭은 내림한 정수를 쓴다.
+ *
+ * 예외는 하나, 판이 {@link MIN_PAGE_WIDTH} 보다 좁을 때다. 그때는 읽을 수 있는
+ * 크기를 지키고 가로 스크롤을 받아들인다.
+ */
+export function fitPageWidth(input: {
+  /** 배율 1 에서의 쪽 폭 (pdf.js base viewport). */
+  baseWidth: number;
+  /** 판의 안쪽 폭 — 여백과 스크롤바 자리를 뺀 값. */
+  availWidth: number;
+  zoom: number;
+}): { scale: number; cssWidth: number } {
+  const avail = Math.floor(Math.max(MIN_PAGE_WIDTH, input.availWidth) * input.zoom);
+  const scale = avail / input.baseWidth;
+  return { scale, cssWidth: Math.floor(input.baseWidth * scale) };
+}
+
 export function PdfPageView({
   url,
   pageCount,
@@ -107,6 +134,17 @@ export function PdfPageView({
   const [failure, setFailure] = useState<{ url: string; message: string } | null>(null);
   const [rendering, setRendering] = useState(false);
   const [zoom, setZoom] = useState(1);
+  /**
+   * 쪽을 그릴 폭. **재서 상태로 든다** — 그리는 순간에 읽으면 그때의 폭이 곧
+   * 그려진 폭으로 굳어, 그 뒤에 판이 좁아져도(창 크기 변경) 다시 그리지 않는다.
+   * 그러면 쪽이 판보다 넓게 남아 가로 스크롤바가 생긴다.
+   *
+   * scrollbarGutter: stable 로 세로 스크롤바 자리를 늘 비워 두므로, 스크롤바가
+   * 생겼다 없어지는 것만으로는 이 값이 흔들리지 않는다 — 흔들리면 다시 그리기와
+   * 스크롤바 출현이 서로를 부르는 진동이 된다.
+   */
+  const scrollerWidth = useElementWidth(scrollRef);
+  const availWidth = scrollerWidth > 0 ? scrollerWidth - PAD * 2 : 0;
 
   const settled = openedUrl === url || failure?.url === url;
   const loading = !settled || rendering;
@@ -135,8 +173,7 @@ export function PdfPageView({
 
   const renderPage = useCallback(async () => {
     const stack = holderRef.current;
-    const scroller = scrollRef.current;
-    if (!doc || !stack || !scroller) return;
+    if (!doc || !stack || availWidth <= 0) return;
 
     // 이어보기: 현재 쪽에 다음 쪽들을 붙여 함께 그린다. 쪽 경계에 걸친 블록을
     // 두 번 넘겨 가며 확인하지 않아도 된다.
@@ -155,17 +192,11 @@ export function PdfPageView({
         if (token !== renderToken.current) return;
 
         const base = pdfPage.getViewport({ scale: 1 });
-        // 폭을 재는 시점이 그리기 **전**이라, 세로 스크롤바가 자리를 차지하는 환경
-        // (윈도우·리눅스의 고전 스크롤바)에서는 렌더 뒤에 clientWidth 가 줄어든다.
-        // 스크롤바 자리를 늘 비워두는 것(scrollbarGutter: stable)으로 그쪽을 막는다.
-        const avail = Math.floor(Math.max(320, scroller.clientWidth - PAD * 2) * zoom);
-        const viewport = pdfPage.getViewport({ scale: avail / base.width });
+        const fit = fitPageWidth({ baseWidth: base.width, availWidth, zoom });
+        const viewport = pdfPage.getViewport({ scale: fit.scale });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-        // CSS 폭은 **내림한 정수**를 쓴다. viewport.width 는 base.width * (avail/base.width)
-        // 라 부동소수점 오차로 avail 보다 아주 조금 클 수 있고, 그 0.0000001px 이
-        // 그대로 가로 스크롤바를 만든다 (맥의 오버레이 스크롤바에서도 뜬다).
-        const cssWidth = Math.floor(viewport.width);
+        const cssWidth = fit.cssWidth;
         const cssHeight = Math.floor(viewport.height);
 
         const pageBox = document.createElement('div');
@@ -220,7 +251,7 @@ export function PdfPageView({
     } finally {
       if (token === renderToken.current) setRendering(false);
     }
-  }, [doc, page, span, zoom, url, onPageBoxes]);
+  }, [doc, page, span, zoom, url, availWidth, onPageBoxes]);
 
   useEffect(() => {
     void renderPage();
