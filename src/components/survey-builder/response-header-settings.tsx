@@ -155,6 +155,19 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
         />
         {config.layout === 'stacked' && (
           <>
+            {/* 좌·중·우 칸은 배분을 정하는 칸이라, 로고 넷을 한 칸에 몰아넣으면
+                나머지가 통째로 빈다. 펼치면 칸 대신 간격이 자리를 정한다. */}
+            <PresetButtonGroup
+              label="가로 배분"
+              value={config.rowSpread}
+              options={[
+                ['group', '칸 배치'],
+                ['between', '양끝 정렬'],
+                ['evenly', '고르게'],
+              ]}
+              columns={3}
+              onChange={(rowSpread) => patch({ rowSpread })}
+            />
             <PresetButtonGroup
               label="로고 정렬"
               value={config.vAlignLogo}

@@ -100,6 +100,12 @@ export type ResponseHeaderBandStyle = 'band' | 'boxed' | 'rule' | 'plain';
 /** 모바일 렌더 모드 — 마지막 적용 프리셋이 겸한다 */
 export type ResponseHeaderMobileStyle = 'gov' | 'band' | 'title';
 export type ResponseHeaderLayout = 'stacked' | 'inline';
+/**
+ * 블록 행의 가로 배분. 기본 'group' 은 좌·중·우 세 칸에 묶어 놓는 지금 방식이고,
+ * 'between'·'evenly' 는 세 칸을 합쳐 한 줄에 고르게 편다 — 로고 넷을 나란히 놓을 때
+ * 좌 칸에 다 몰아넣으면 오른쪽이 통째로 빈다.
+ */
+export type ResponseHeaderRowSpread = 'group' | 'between' | 'evenly';
 
 // interface 는 암묵 인덱스 시그니처가 없어 JSONB 패스스루 타입({ [key: string]: unknown })에
 // 대입 불가하므로 type alias 로 선언한다 (promote 등 소비처 호환)
@@ -175,6 +181,7 @@ export type SurveyResponseHeaderConfig =
       style: 'composed';
       mobileStyle?: ResponseHeaderMobileStyle;
       layout?: ResponseHeaderLayout;
+      rowSpread?: ResponseHeaderRowSpread;
       blocks?: ResponseHeaderBlock[];
       subtitle?: string;
       titleAlign?: ResponseHeaderTitleAlign; // 밴드 내 제목 배치
