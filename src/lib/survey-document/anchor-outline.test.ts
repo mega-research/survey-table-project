@@ -6,6 +6,7 @@ import {
   resolveAnchorFocus,
   resolveAnchorOwnerId,
   resolveQuestionForOwner,
+  selectDrawableAnchors,
 } from './anchor-outline';
 
 describe('buildAnchorOutline', () => {
@@ -276,5 +277,38 @@ describe('조상 그룹 앵커 폴백', () => {
       parentOf,
     );
     expect(focus).toEqual({ ownerId: 'root', contextId: 'root', pages: [7] });
+  });
+});
+
+describe('selectDrawableAnchors', () => {
+  const anchor = (ownerId: string) => ({ id: `a-${ownerId}`, ownerId });
+
+  it('대상이 목록에 남아 있는 앵커만 그린다', () => {
+    // 질문을 지우면 저장 시점에 FK 가 앵커를 함께 지운다. 그전까지는 초안에만
+    // 없고 서버에는 남아 있어, 주인 없는 사각형이 조사표 위에 떠 있게 된다.
+    const result = selectDrawableAnchors(
+      [anchor('q1'), anchor('gone'), anchor('g1')],
+      new Set(['q1', 'g1']),
+    );
+    expect(result.drawn.map((a) => a.ownerId)).toEqual(['q1', 'g1']);
+    expect(result.orphaned.map((a) => a.ownerId)).toEqual(['gone']);
+  });
+
+  it('한 대상의 사각형 여럿을 한꺼번에 가른다', () => {
+    const result = selectDrawableAnchors([anchor('gone'), anchor('gone')], new Set(['q1']));
+    expect(result.drawn).toEqual([]);
+    expect(result.orphaned).toHaveLength(2);
+  });
+
+  it('목록이 아직 서지 않았으면 전부 그린다', () => {
+    // 스토어가 채워지기 전 한 프레임 동안 사각형이 사라졌다 나타나는 편이
+    // 주인 없는 사각형이 잠깐 보이는 것보다 나쁘다.
+    const result = selectDrawableAnchors([anchor('q1'), anchor('q2')], new Set());
+    expect(result.drawn).toHaveLength(2);
+    expect(result.orphaned).toEqual([]);
+  });
+
+  it('앵커가 없으면 양쪽 다 빈 배열', () => {
+    expect(selectDrawableAnchors([], new Set(['q1']))).toEqual({ drawn: [], orphaned: [] });
   });
 });

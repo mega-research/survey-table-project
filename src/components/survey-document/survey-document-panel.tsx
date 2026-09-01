@@ -17,7 +17,11 @@ import {
   useRemoveSurveyDocument,
   useSurveyDocuments,
 } from '@/hooks/queries/use-survey-documents';
-import { buildAnchorOutline, resolveAnchorOwnerId } from '@/lib/survey-document/anchor-outline';
+import {
+  buildAnchorOutline,
+  resolveAnchorOwnerId,
+  selectDrawableAnchors,
+} from '@/lib/survey-document/anchor-outline';
 import type { NormRect } from '@/lib/survey-document/anchor-geometry';
 import { cn } from '@/lib/utils';
 import { useSurveySync } from '@/hooks/use-survey-sync';
@@ -110,19 +114,28 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
     return (groupId: string) => map.get(groupId) ?? null;
   }, [groups]);
 
+  /**
+   * 대상이 살아 있는 앵커만 남긴다. 지운 문항의 영역이 조사표 위에 계속 떠 있으면
+   * 무엇이 지워졌는지 화면을 믿을 수 없다. 저장하면 FK 가 서버에서도 지운다.
+   */
+  const { drawn: liveAnchors, orphaned: orphanedAnchors } = useMemo(
+    () => selectDrawableAnchors(anchors, new Set(labelOf.keys())),
+    [anchors, labelOf],
+  );
+
   const anchorsByOwner = useMemo(() => {
-    const map = new Map<string, typeof anchors>();
-    for (const anchor of anchors) {
+    const map = new Map<string, typeof liveAnchors>();
+    for (const anchor of liveAnchors) {
       const list = map.get(anchor.ownerId);
       if (list) list.push(anchor);
       else map.set(anchor.ownerId, [anchor]);
     }
     return map;
-  }, [anchors]);
+  }, [liveAnchors]);
 
   const regions: CanvasRegion[] = useMemo(
     () =>
-      anchors.map((anchor) => ({
+      liveAnchors.map((anchor) => ({
         id: anchor.id,
         ownerId: anchor.ownerId,
         label: labelOf.get(anchor.ownerId) ?? '(삭제된 대상)',
@@ -133,7 +146,7 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
         w: anchor.w,
         h: anchor.h,
       })),
-    [anchors, labelOf],
+    [liveAnchors, labelOf],
   );
 
   const activeOwnerId = selected
@@ -263,8 +276,16 @@ export function SurveyDocumentPanel({ surveyId }: Props) {
             </p>
             <p className="text-xs text-gray-500">
               {surveyDocument
-                ? `${surveyDocument.pageCount}쪽 · 영역 ${anchors.length}개`
+                ? `${surveyDocument.pageCount}쪽 · 영역 ${liveAnchors.length}개`
                 : '판단 대상이 될 PDF 를 올립니다'}
+              {/* 지운 문항의 영역은 그리지 않지만 서버에는 저장 전까지 남아 있다.
+                  말 없이 감추면 "영역이 왜 없어졌지" 가 되므로 사정을 밝힌다. */}
+              {orphanedAnchors.length > 0 && (
+                <span className="text-amber-600">
+                  {' '}
+                  · 지운 문항의 영역 {orphanedAnchors.length}개는 저장하면 함께 사라집니다
+                </span>
+              )}
             </p>
           </div>
         </div>

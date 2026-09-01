@@ -263,3 +263,28 @@ export function resolveQuestionForOwner(
   if (self) return self.id;
   return visibleQuestions.find((q) => q.groupId === ownerId)?.id ?? null;
 }
+
+/**
+ * 앵커를 **대상이 살아 있는 것**과 주인 없는 것으로 가른다.
+ *
+ * 질문·그룹을 지우면 저장 시점에 FK 가 앵커를 함께 지운다. 문제는 그 사이다 —
+ * 질문 삭제는 초안에만 반영되고 상단 저장을 눌러야 DB 로 가므로, 그전까지 앵커는
+ * 서버에 그대로 있고 조사표 위에는 주인 없는 사각형이 떠 있다. 지운 문항의 영역이
+ * 남아 보이면 무엇이 지워졌는지 화면을 못 믿게 된다.
+ *
+ * `knownOwnerIds` 가 비면 전부 그린다. 스토어가 채워지기 전 한 프레임을 "전부
+ * 삭제됨"으로 읽어 사각형이 깜빡이는 것이 더 나쁘다.
+ */
+export function selectDrawableAnchors<T extends { ownerId: string }>(
+  anchors: readonly T[],
+  knownOwnerIds: ReadonlySet<string>,
+): { drawn: T[]; orphaned: T[] } {
+  if (knownOwnerIds.size === 0) return { drawn: [...anchors], orphaned: [] };
+  const drawn: T[] = [];
+  const orphaned: T[] = [];
+  for (const anchor of anchors) {
+    if (knownOwnerIds.has(anchor.ownerId)) drawn.push(anchor);
+    else orphaned.push(anchor);
+  }
+  return { drawn, orphaned };
+}
