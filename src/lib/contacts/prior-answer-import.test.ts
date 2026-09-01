@@ -177,6 +177,7 @@ describe('buildPriorAnswerRecords', () => {
             codeText: 'BQ2',
             code: 'BQ2',
             label: '',
+            labelSource: 'none',
             columnIndexes: [1],
             part: '',
             detailLabels: [''],

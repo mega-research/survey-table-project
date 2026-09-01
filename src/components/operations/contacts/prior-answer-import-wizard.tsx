@@ -572,6 +572,15 @@ function ImportSummary({
                     {Math.round(m.rate * 100)}% 실패 · {m.unmatched}/{m.total}건
                   </span>
                 </div>
+                {m.rate >= 1 && m.total >= 5 && (
+                  // 값이 한 건도 안 맞는 문항은 선택지 표기 차이가 아니라 **다른 문항**일 가능성이
+                  // 높다 — 코드가 같은데 파트가 재편돼 내용이 바뀐 경우(2025 HQ1 과정 도움도 →
+                  // 2026 HQ1 창업 의향). 코드 칸에 문항 내용이 없는 파일에서는 이 신호가 유일하다.
+                  <p className="mt-1 text-xs font-semibold text-red-700">
+                    한 건도 맞지 않습니다 — 코드는 같지만 다른 문항일 수 있습니다. 블록의 세부 라벨과
+                    값을 문항 제목과 비교해 보세요.
+                  </p>
+                )}
                 <ul className="mt-1 space-y-1">
                   {m.values.map((v) => (
                     <li key={v.value} className="flex flex-wrap items-center gap-2">

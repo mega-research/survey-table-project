@@ -2,8 +2,8 @@
  * 이월 응답 임포트 — 3단 병합 헤더와 컬럼 블록 (순수).
  *
  * 실무 rawdata 헤더는 세 줄이다: 파트 행 / 문항코드 행 / 세부 라벨 행.
- * 문항코드 행은 가로 병합돼 있어 **값이 있는 칸부터 다음 값이 나오기 전까지**가 한 문항의
- * 컬럼 블록이다. 그 블록 단위로 이어야 아홉 칸짜리 표 문항, 열 칸으로 펼쳐진 복수응답,
+ * 문항코드 행은 첫 칸에만 코드가 있고(병합했든 그냥 비웠든) **값이 있는 칸부터 다음 값이
+ * 나오기 전까지**가 한 문항의 컬럼 블록이다. 그 블록 단위로 이어야 아홉 칸짜리 표 문항, 열 칸으로 펼쳐진 복수응답,
  * 1순위·2순위로 나뉜 순위 문항이 통째로 붙는다.
  *
  * 파일 입출력도 데이터베이스도 모른다 — 헤더/데이터 격자와 문항 목록만 받는다.
@@ -42,6 +42,13 @@ export interface HeaderBlock {
    * 세부 라벨을 쓴다. 코드가 밀린 파일을 잡아내는 근거라 코드와 별개로 들고 있는다.
    */
   label: string;
+  /**
+   * label 의 출처. 코드 칸에 붙은 라벨(`BQ7. 창업 지원 만족도`)만 문항 내용으로 믿고
+   * 4분면 게이트에 쓴다. 세부 라벨 행에서 끌어온 것은 코드북 약칭(`(현재상태)`,
+   * `(1년 이내 이직경험)`)이라 제목과 유사도가 나오지 않는다 — 2025 파일에서 한 칸
+   * 문항 21개 중 20개가 이 이유로 code-conflict 가 됐다. 후보 제안에는 여전히 쓴다.
+   */
+  labelSource: 'code' | 'detail' | 'none';
   /** 이 블록이 차지하는 컬럼 인덱스(0-based, 오름차순). */
   columnIndexes: number[];
   /** 파트 행 텍스트 — 블록 첫 칸 기준. 없으면 빈 문자열. */
@@ -129,9 +136,65 @@ function headerCodeCandidates(header: string): string[] {
   return candidates.filter(Boolean);
 }
 
-/** 라벨 대조 키 — 앞뒤 공백·중간 공백·대소문자를 무시한다. */
+/**
+ * 엑셀 수식 오류 표식. 값이 아니라 "계산이 깨졌다"는 흔적이라 어느 판정에도 쓰면 안 된다 —
+ * 표본으로 삼으면 보기 배정이 어긋나고, 선택 표기로 읽으면 복수응답이 켜진다.
+ */
+const EXCEL_ERROR_VALUES = new Set(['#REF!', '#N/A', '#VALUE!', '#DIV/0!', '#NAME?', '#NULL!', '#NUM!']);
+
+export function isExcelErrorValue(value: string): boolean {
+  return EXCEL_ERROR_VALUES.has(value.trim().toUpperCase());
+}
+
+/**
+ * 값이 아니라 "비어 있음"의 표기. 2025 export 잔재('[object Object]'·'직접입력')와 손으로
+ * 찍은 빈칸 표기('--'·'-'·'.')가 그대로 이월되면 잠긴 입력에 그 글자가 채워지고 변동 확인이
+ * 붙는다. 'x'·'없음' 처럼 문항에 따라 뜻이 있는 것은 넣지 않는다.
+ */
+const PLACEHOLDER_VALUES = new Set(['[object object]', '직접입력', '--', '-', '.', '…', '...']);
+
+/** 셀 값을 판정에 쓰는 형태로 — 공백을 다듬고 오류 표식·빈칸 표기는 빈 값으로 본다. */
+function cleanCell(value: string | undefined): string {
+  const trimmed = (value ?? '').trim();
+  if (isExcelErrorValue(trimmed) || PLACEHOLDER_VALUES.has(trimmed.toLowerCase())) return '';
+  return trimmed;
+}
+
+/**
+ * 라벨 대조 키 — 공백·대소문자를 무시하고, 표기 차이를 흡수한다.
+ * - 가운뎃점 4종(·‧ㆍ•)을 하나로: 2025 "경제‧사회" ↔ 2026 "경제·사회"
+ * - 2026 보기 앞의 원문자 번호(①②…)와 뒤의 라우팅 꼬리("(▶ 'DQ2'로 이동)")는 보기가 아니다
+ */
 function labelKey(value: string | null | undefined): string {
-  return (value ?? '').replace(/\s+/g, '').toLowerCase();
+  return (value ?? '')
+    .replace(/[\u2027\u00b7\u318d\u2022]/g, '·')
+    .replace(/^[①-⑳㉑-㉟]\s*/, '')
+    .replace(/\(?▶[^)]*\)?/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+/** 괄호 꼬리를 뗀 키 — "기타(직접 입력 : )"·"재학/휴학(고등학교/…)" 를 "기타"·"재학/휴학" 로. */
+function labelStemKey(value: string | null | undefined): string {
+  return labelKey((value ?? '').replace(/\s*[(（][^()（）]*[)）]\s*$/, ''));
+}
+
+/** 2지 문항의 긍정/부정 동의어 — 2025 "있음/없음" 이 2026 "있다/없다"·"예/아니오" 로 바뀐 사례가 여섯 문항이다. */
+const BINARY_YES = new Set(['있음', '있다', '예', '네', '맞음', '맞다', '동의', 'o', 'y', 'yes', 'true']);
+const BINARY_NO = new Set(['없음', '없다', '아니오', '아니요', '아님', '아니다', '동의하지않음', 'x', 'n', 'no', 'false']);
+
+function binaryClass(value: string): 'yes' | 'no' | null {
+  const key = labelStemKey(value);
+  if (!key) return null;
+  if (BINARY_YES.has(key)) return 'yes';
+  if (BINARY_NO.has(key)) return 'no';
+  // 2025 코더가 서술형으로 재코딩한 값 — "창업 기업이 맞음"·"신규 창업 없음"·"매출 없음".
+  // 끝말이 극을 정한다. 긴 말부터 보아 "아니오" 가 "오" 로 잘못 잡히지 않게 한다.
+  const endsWithAny = (words: Set<string>) =>
+    [...words].sort((a, b) => b.length - a.length).some((w) => w.length >= 2 && key.endsWith(w));
+  if (endsWithAny(BINARY_NO)) return 'no';
+  if (endsWithAny(BINARY_YES)) return 'yes';
+  return null;
 }
 
 /**
@@ -141,17 +204,16 @@ function labelKey(value: string | null | undefined): string {
  * 반복된 파일도 같은 결과가 나오도록 **같은 코드가 이어지는 구간**을 한 블록으로 본다.
  * 코드가 나오기 전의 앞 칸들은 어느 문항에도 속하지 않아 블록이 되지 않는다.
  *
- * `codeRowMerged` 를 주면 빈 칸 중 **실제 가로 병합 종속 칸만** 앞 블록을 잇는다.
- * 주지 않으면(손으로 만든 격자) 빈 칸을 모두 병합으로 본다.
+ * 빈 코드 칸이 앞 문항을 잇지 **않는** 경우가 하나 있다 — 그 칸의 파트 행에 제목이 있을 때다.
+ * 실무 파일은 문항 뒤에 "비고"·"출처(2차자료)" 같은 메타 열을 파트 행에만 적고 코드 행을
+ * 비워 둔다. 이 열을 앞 문항에 붙이면 단답 문항이 세 칸짜리 블록이 돼 값을 만들지 못한다.
+ * 그런 열은 파트 행 제목을 코드 삼아 **자기 블록**이 된다 — 화면에서 보이고, 문항에는
+ * 이어지지 않는다.
  *
  * @param headerRows 헤더 행들. 길이 3이면 [파트, 코드, 세부라벨], 2면 [코드, 세부라벨],
  *   1이면 [코드] 로 읽는다.
- * @param codeRowMerged 컬럼별 가로 병합 종속 여부 (excel-parser 가 낸다)
  */
-export function splitHeaderBlocks(
-  headerRows: readonly (readonly string[])[],
-  codeRowMerged?: readonly boolean[],
-): HeaderBlock[] {
+export function splitHeaderBlocks(headerRows: readonly (readonly string[])[]): HeaderBlock[] {
   const rowCount = headerRows.length;
   const partRow = rowCount >= 3 ? headerRows[rowCount - 3] : undefined;
   const codeRow = rowCount >= 2 ? headerRows[rowCount - 2] : headerRows[0];
@@ -166,13 +228,18 @@ export function splitHeaderBlocks(
   const blocks: HeaderBlock[] = [];
   let carriedCode = '';
   for (let col = 0; col < columnCount; col++) {
-    const raw = (codeRow[col] ?? '').trim();
+    const codeCell = (codeRow[col] ?? '').trim();
+    const partCell = (partRow?.[col] ?? '').trim();
+    // 코드 칸이 비었는데 파트 행에 제목이 있다 — 앞 문항의 뻗은 칸이 아니라 메타 열이다.
+    // 파트 제목을 코드 삼아 자기 블록을 세운다(문항코드가 아니라 어느 문항에도 붙지 않는다).
+    const raw = codeCell || (partCell && !codeCell ? partCell : '');
     if (raw) carriedCode = raw;
-    // 빈 칸이 앞 문항을 잇는가. 병합 정보가 있으면 그 판정을 따르고, 없으면 빈 칸을
-    // 모두 병합으로 본다 — 병합 정보 없이는 메타 열과 뻗은 칸을 구분할 수 없다.
-    const continuesPrevious = raw === '' && (codeRowMerged ? codeRowMerged[col] === true : true);
-    const code = raw || (continuesPrevious ? carriedCode : '');
-    // 코드가 없는 칸 — 어느 문항에도 속하지 않는다(문항 사이의 메타 열 포함).
+    // 그 외의 빈 코드 칸은 **언제나** 앞 문항을 잇는다. 실무 rawdata 는 가로 병합을 쓰지
+    // 않고 코드를 첫 칸에만 적은 뒤 나머지를 비워 둔다 — 2025 AI·SW마에스트로 파일이
+    // 그렇다(병합 0건, 여러 칸 블록 20개). "병합 종속 칸일 때만 잇는다"로 두면 그 블록이
+    // 전부 한 칸으로 붕괴한다. 그래서 병합 여부는 신호로 쓰지 않는다.
+    const code = raw || carriedCode;
+    // 코드가 아직 한 번도 나오지 않은 앞 칸 — 어느 문항에도 속하지 않는다.
     if (!code) continue;
 
     const last = blocks[blocks.length - 1];
@@ -182,10 +249,12 @@ export function splitHeaderBlocks(
       continue;
     }
     const [leading, ...rest] = code.split(/\s+/);
+    const label = rest.join(' ').trim();
     blocks.push({
       codeText: code,
       code: leading ?? code,
-      label: rest.join(' ').trim(),
+      label,
+      labelSource: label ? 'code' : 'none',
       columnIndexes: [col],
       part: (partRow?.[col] ?? '').trim(),
       detailLabels: [(detailRow?.[col] ?? '').trim()],
@@ -197,6 +266,7 @@ export function splitHeaderBlocks(
   for (const block of blocks) {
     if (!block.label && block.columnIndexes.length === 1) {
       block.label = block.detailLabels.filter(Boolean).join(' ');
+      if (block.label) block.labelSource = 'detail';
     }
   }
   return blocks;
@@ -234,6 +304,24 @@ function cellOptions(cell: TableCell): QuestionOption[] {
   return [];
 }
 
+/** "2025년 1월"·"25년 5월"·"2026년1월" → { year: '2025', month: '1' }. 아니면 null. */
+export function splitYearMonth(value: string): { year: string; month: string } | null {
+  const match = value.trim().match(/^(\d{2,4})\s*년\s*(\d{1,2})\s*월$/);
+  if (!match) return null;
+  const rawYear = match[1] ?? '';
+  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  return { year, month: String(Number(match[2])) };
+}
+
+/** 이 셀이 속한 행의 input 셀 id 들(읽는 순서). 년·월 두 칸 분해의 근거. */
+function inputCellsInRowOf(question: Question, cellId: string): string[] | null {
+  for (const row of question.tableRowsData ?? []) {
+    if (!row.cells?.some((cell) => cell.id === cellId)) continue;
+    return row.cells.filter((cell) => cell.type === 'input' && !cell.isHidden).map((cell) => cell.id);
+  }
+  return null;
+}
+
 /** 표 셀의 저장 키 — 셀 컴포넌트들이 `option.value ?? option.id` 로 저장한다. */
 function cellOptionKey(option: QuestionOption): string {
   return option.value ?? option.id;
@@ -255,12 +343,29 @@ function findOptionByLabel(
 ): QuestionOption | undefined {
   const key = labelKey(label);
   if (!key) return undefined;
+  // 1) 확정 대응이 있으면 그것이 우선한다 — 담당자가 직접 정한 것이다.
+  const aliased = valueAliases?.[label.trim()];
+  if (aliased) {
+    const target = options.find((option) => (option.value ?? option.id) === aliased);
+    if (target) return target;
+  }
+  // 2) 정확 일치
   const exact = options.find((option) => labelKey(option.label) === key);
   if (exact) return exact;
-  // 확정 대응은 라벨이 아니라 저장값을 가리킨다 — 그 저장값이 실재할 때만 쓴다.
-  const aliased = valueAliases?.[label.trim()];
-  if (!aliased) return undefined;
-  return options.find((option) => (option.value ?? option.id) === aliased);
+  // 3) 괄호 꼬리를 뗀 접두 일치 — 2026 보기 "기타(직접 입력 : )"·"재학/휴학(고등학교…)" 에
+  //    2025 "기타"·"재학/휴학" 을 잇는다. 원본 쪽 꼬리는 떼지 않는다("기타(AI연구 개발)" 은
+  //    기타 텍스트 보존 대상이라 여기서 삼키면 안 된다).
+  const stem = options.filter((option) => labelStemKey(option.label) === key);
+  if (stem.length === 1) return stem[0];
+  // 4) 2지 문항의 긍정/부정 동의어 — 보기가 정확히 둘이고 양쪽이 서로 다른 극일 때만.
+  if (options.length === 2) {
+    const cls = binaryClass(label);
+    const classes = options.map((option) => binaryClass(option.label ?? ''));
+    if (cls && classes[0] && classes[1] && classes[0] !== classes[1]) {
+      return options[classes.indexOf(cls)];
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -269,7 +374,16 @@ function findOptionByLabel(
  * 자동 제안과 **사람이 화면에서 고른 문항** 이 같은 규칙을 쓰게 하려고 내보낸다 —
  * 제안 경로로만 자리를 정하면 코드가 다른 문항을 고른 순간 전 칸이 미배정이 된다.
  */
-export function resolveSlots(question: Question, block: HeaderBlock): BlockSlot[] {
+export function resolveSlots(
+  question: Question,
+  block: HeaderBlock,
+  /**
+   * 블록 컬럼별 데이터 표본 값(첫 비어 있지 않은 값). 복수응답 펼침은 세부 라벨 행이
+   * 비어 있고 **값 자체가 보기 라벨**인 파일이 흔하다(2025 DQ5-2: 라벨 없음, 값 "인건비(…)").
+   * 세부 라벨이 비면 이 값으로 보기를 정한다.
+   */
+  sampleValues?: readonly string[],
+): BlockSlot[] {
   const count = block.columnIndexes.length;
 
   if (question.type === 'table') {
@@ -285,9 +399,13 @@ export function resolveSlots(question: Question, block: HeaderBlock): BlockSlot[
           labelKey(`${entry.rowLabel}${entry.colLabel}`) === key,
       );
     });
-    // 세부 라벨로 다 맞지 않으면 읽는 순서로 채운다 — 라벨이 비어 있는 파일이 흔하다.
+    // 읽는 순서로 채우는 폴백은 **세부 라벨이 전부 비어 있을 때만** 쓴다. 라벨이 있는데
+    // 안 맞는 경우까지 순서로 덮으면, 열 순서가 바뀐 표(2025 명→기관→공개유무→구분 vs
+    // 2026 명→구분→진행상태→기관)에서 값이 조용히 엇갈려 들어간다 — 그건 unmatched 로
+    // 남겨 담당자가 칸 배정에서 보게 하는 편이 낫다.
     const allMatched = byLabel.every((entry) => entry !== undefined);
-    if (!allMatched && cells.length === count) {
+    const allBlank = block.detailLabels.every((label) => !labelKey(label));
+    if (!allMatched && allBlank && cells.length === count) {
       return cells.map((entry) => ({
         kind: 'table-cell' as const,
         cellId: entry.cell.id,
@@ -303,8 +421,12 @@ export function resolveSlots(question: Question, block: HeaderBlock): BlockSlot[
 
   if (question.type === 'checkbox') {
     const options = resolveChoiceOptions(question);
-    return block.detailLabels.map((label) => {
-      const option = findOptionByLabel(options, label);
+    return block.detailLabels.map((label, idx) => {
+      // 세부 라벨로 먼저 찾고, 안 맞으면 그 열에 실제로 들어 있는 값으로 찾는다.
+      // 펼침의 첫 열은 세부 라벨이 보기가 아니라 문항 설명("지원분야(복수응답)")인 파일이
+      // 흔하다 — 라벨이 있다고 값 폴백을 막으면 그 열만 빠진다.
+      const option =
+        findOptionByLabel(options, label) ?? findOptionByLabel(options, sampleValues?.[idx] ?? '');
       return option
         ? { kind: 'checkbox-option' as const, optionValue: option.value }
         : { kind: 'unmatched' as const };
@@ -334,7 +456,11 @@ export function resolveSlots(question: Question, block: HeaderBlock): BlockSlot[
 export function suggestBlockMapping(
   blocks: readonly HeaderBlock[],
   questions: readonly Question[],
+  /** 컬럼 인덱스 → 데이터 표본 값. resolveSlots 의 sampleValues 근거. */
+  sampleByColumn?: ReadonlyMap<number, string>,
 ): BlockSuggestion[] {
+  const samplesFor = (block: HeaderBlock) =>
+    sampleByColumn ? block.columnIndexes.map((col) => sampleByColumn.get(col) ?? '') : undefined;
   const byCode = new Map<string, Question>();
   for (const question of questions) {
     // 보기 그룹이 있는 문항은 저장형이 { groupKey: 값 } 객체라 블록 단위로도 만들 수 없다.
@@ -358,9 +484,11 @@ export function suggestBlockMapping(
 
     if (byCodeMatch && !taken.has(byCodeMatch.id)) {
       // 대조할 문항 내용이 없으면 코드 일치만으로 간다 — 라벨 없는 파일에서 코드 일치를
-      // 경고로 뒤집으면 매핑이 전부 막힌다.
+      // 경고로 뒤집으면 매핑이 전부 막힌다. 세부 라벨 유래 텍스트도 "내용 없음"으로 본다
+      // (labelSource 참조). 코드가 밀린 사고는 미리보기의 변환 실패율 100% 로 드러난다.
+      const comparable = block.labelSource === 'code' && block.label;
       const similar =
-        !block.label || labelSimilarity(block.label, byCodeMatch.title) >= LABEL_SIMILAR_THRESHOLD;
+        !comparable || labelSimilarity(block.label, byCodeMatch.title) >= LABEL_SIMILAR_THRESHOLD;
       if (similar) {
         taken.add(byCodeMatch.id);
         return {
@@ -368,7 +496,7 @@ export function suggestBlockMapping(
           questionId: byCodeMatch.id,
           matchedBy: 'code',
           verdict: 'auto',
-          slots: resolveSlots(byCodeMatch, block),
+          slots: resolveSlots(byCodeMatch, block, samplesFor(block)),
         };
       }
       return {
@@ -398,7 +526,7 @@ export function suggestBlockMapping(
           questionId: byLabel.question.id,
           matchedBy: 'label',
           verdict: 'label-candidate',
-          slots: resolveSlots(byLabel.question, block),
+          slots: resolveSlots(byLabel.question, block, samplesFor(block)),
         };
       }
     }
@@ -458,12 +586,21 @@ export function buildBlockAnswer(
     const answer: Record<string, unknown> = {};
     slots.forEach((slot, idx) => {
       if (slot.kind !== 'table-cell') return;
-      const raw = (cellValues[idx] ?? '').trim();
+      const raw = cleanCell(cellValues[idx]);
       if (!raw) return;
       // 입력 칸은 원문 그대로. 선택 칸은 라벨 텍스트를 저장 키로 바꾼다 —
       // 라벨을 그대로 넣으면 화면에서 빈칸으로 보이는데 이월 값은 있는 것으로 판정돼,
       // "같음" 이 그 오염값을 올해 응답으로 복사한다.
       if (slot.cellType === 'input') {
+        // "2025년 1월"·"25년 5월" 이 년 칸에 통째로 들어가는 것을 막는다 — 같은 행에 input 셀이
+        // 정확히 둘(년·월)이고 값이 년월 꼴이면 두 칸에 나눠 넣는다. 그 외는 원문 그대로.
+        const split = splitYearMonth(raw);
+        const rowInputs = split ? inputCellsInRowOf(question, slot.cellId) : null;
+        if (split && rowInputs && rowInputs.length === 2) {
+          answer[rowInputs[0]!] = split.year;
+          answer[rowInputs[1]!] = split.month;
+          return;
+        }
         answer[slot.cellId] = raw;
         return;
       }
@@ -486,7 +623,7 @@ export function buildBlockAnswer(
     const selected: string[] = [];
     slots.forEach((slot, idx) => {
       if (slot.kind !== 'checkbox-option') return;
-      if (!isSelectedMark(cellValues[idx] ?? '')) return;
+      if (!isSelectedMark(cleanCell(cellValues[idx]))) return;
       selected.push(slot.optionValue);
     });
     return {
@@ -501,7 +638,7 @@ export function buildBlockAnswer(
     const answers: Array<{ rank: number; optionValue: string }> = [];
     slots.forEach((slot, idx) => {
       if (slot.kind !== 'ranking-rank') return;
-      const raw = (cellValues[idx] ?? '').trim();
+      const raw = cleanCell(cellValues[idx]);
       if (!raw) return;
       convertedCells += 1;
       const option = findOptionByLabel(options, raw, valueAliases);
@@ -524,7 +661,7 @@ export function buildBlockAnswer(
   if (!SINGLE_CELL_TYPES.has(question.type)) {
     return { value: undefined, unmatchedValues, convertedCells };
   }
-  const raw = (cellValues[singleIndex] ?? '').trim();
+  const raw = cleanCell(cellValues[singleIndex]);
   if (!raw) return { value: undefined, unmatchedValues, convertedCells };
 
   // 선택지 문항은 엑셀의 라벨 텍스트를 저장값으로 바꾼다. 맞지 않으면 그 문항만 비운다.
@@ -539,4 +676,29 @@ export function buildBlockAnswer(
   }
 
   return { value: raw, unmatchedValues, convertedCells };
+}
+
+/**
+ * 데이터 행에서 컬럼별 표본 값을 뽑는다 — 각 컬럼의 첫 비어 있지 않은 값.
+ * 복수응답 펼침처럼 세부 라벨이 없는 블록의 보기를 정하는 데 쓴다.
+ */
+export function collectSampleValues(rows: ReadonlyArray<readonly string[]>): Map<number, string> {
+  // 첫 값이 아니라 **최빈값**을 쓴다. 펼침 열은 정상 값이 한 종류뿐이라 최빈값이 곧 보기
+  // 라벨이고, 첫 행에 낀 오타·오류 표식 한 건에 흔들리지 않는다.
+  const counts = new Map<number, Map<string, number>>();
+  for (const row of rows) {
+    row.forEach((value, col) => {
+      const cleaned = cleanCell(value);
+      if (!cleaned) return;
+      const perColumn = counts.get(col) ?? new Map<string, number>();
+      perColumn.set(cleaned, (perColumn.get(cleaned) ?? 0) + 1);
+      counts.set(col, perColumn);
+    });
+  }
+  const samples = new Map<number, string>();
+  for (const [col, perColumn] of counts) {
+    const top = [...perColumn.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (top) samples.set(col, top[0]);
+  }
+  return samples;
 }

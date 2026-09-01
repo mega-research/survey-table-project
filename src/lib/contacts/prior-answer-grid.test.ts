@@ -92,20 +92,16 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
     expect(preview.sheetNames).toEqual(['통계표', 'rawdata']);
   });
 
-  it('병합 종속 칸은 빈 문자열로 읽고 병합 여부를 함께 낸다', async () => {
+  it('병합 종속 칸은 빈 문자열로 읽는다', async () => {
     const { preview } = await loadGrid();
     expect(preview.headerRows[1]).toEqual([
       'ID', '비고', 'BQ2', '', '', 'BQ1', 'BQ3', '', 'BQ4', '',
-    ]);
-    // 코드 없는 메타 열(비고)은 병합이 아니다 — 앞 블록에 흡수되면 안 된다.
-    expect(preview.codeRowMerged).toEqual([
-      false, false, false, true, true, false, false, true, false, true,
     ]);
   });
 
   it('문항별 컬럼 블록이 올바르게 잘린다', async () => {
     const { preview } = await loadGrid();
-    const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+    const blocks = splitHeaderBlocks(preview.headerRows);
     expect(blocks.map((b) => [b.code, b.columnIndexes])).toEqual([
       ['ID', [0]],
       ['비고', [1]],
@@ -118,7 +114,7 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
 
   it('표·복수응답·순위 블록이 한 번에 문항과 자리까지 배정된다', async () => {
     const { preview } = await loadGrid();
-    const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+    const blocks = splitHeaderBlocks(preview.headerRows);
     const suggestions = suggestBlockMapping(blocks, questions);
     expect(
       suggestions.map((s) => [s.block.code, s.questionId, s.slots.map((slot) => slot.kind)]),
@@ -134,7 +130,7 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
 
   it('블록 값이 문항별 저장 형태로 모인다', async () => {
     const { preview, rows } = await loadGrid();
-    const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+    const blocks = splitHeaderBlocks(preview.headerRows);
     const suggestions = suggestBlockMapping(blocks, questions);
     const questionById = new Map(questions.map((question) => [question.id, question]));
 
@@ -163,7 +159,7 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
 
   it('블록 안에 빈 칸이 섞여도 나머지 칸이 정상 저장되고 대상별로 모인다', async () => {
     const { preview, rows } = await loadGrid();
-    const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+    const blocks = splitHeaderBlocks(preview.headerRows);
     const assignments = suggestBlockMapping(blocks, questions)
       .filter((s) => s.questionId !== null)
       .map((s) => ({ block: s.block, questionId: s.questionId as string, slots: s.slots }));

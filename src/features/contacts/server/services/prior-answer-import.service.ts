@@ -9,6 +9,7 @@ import type { PriorAnswerImportConfig } from '@/db/schema/schema-types';
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
   LABEL_SIMILAR_THRESHOLD,
+  collectSampleValues,
   labelSimilarity,
   normalizeQuestionCode,
   resolveSlots,
@@ -226,8 +227,9 @@ export async function suggestPriorAnswerImportMapping(
     loadImportConfig(input.surveyId),
   ]);
   const questionById = new Map(questions.map((q) => [q.id, q]));
-  const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
-  const suggestions = suggestBlockMapping(blocks, questions);
+  const blocks = splitHeaderBlocks(preview.headerRows);
+  const samples = collectSampleValues(preview.rows);
+  const suggestions = suggestBlockMapping(blocks, questions, samples);
 
   return {
     sheetNames: preview.sheetNames,
@@ -250,7 +252,9 @@ export async function suggestPriorAnswerImportMapping(
       const savedQuestion = savedStillValid && saved ? questionById.get(saved.questionId) : undefined;
       const questionId = savedQuestion?.id ?? s.questionId;
       const question = savedQuestion ?? (s.questionId ? questionById.get(s.questionId) : undefined);
-      const slots = savedQuestion ? resolveSlots(savedQuestion, s.block) : s.slots;
+      const slots = savedQuestion
+        ? resolveSlots(savedQuestion, s.block, s.block.columnIndexes.map((col) => samples.get(col) ?? ''))
+        : s.slots;
       return {
         code: s.block.code,
         label: s.block.label,
@@ -310,7 +314,9 @@ export async function importPriorAnswers(
   ]);
   // 자리 배정은 서버가 다시 계산한다 — 클라이언트는 블록↔문항 확정만 보낸다.
   // 화면이 본 것과 같은 헤더에서 같은 규칙으로 뽑아야 미리보기와 적재가 어긋나지 않는다.
-  const blocks = splitHeaderBlocks(preview.headerRows, preview.codeRowMerged);
+  const blocks = splitHeaderBlocks(preview.headerRows);
+  // 미리보기(표본 5행)와 적재(전량)가 같은 표본 규칙을 써야 자리 배정이 어긋나지 않는다.
+  const samples = collectSampleValues(rows);
   const questionById = new Map(questions.map((q) => [q.id, q]));
   const assignments = blocks.flatMap((block, index) => {
     const questionId = input.mapping[String(index)];
@@ -319,7 +325,8 @@ export async function importPriorAnswers(
     if (!question) return [];
     // 자리 배정은 자동 제안과 같은 규칙(resolveSlots)으로 직접 계산한다.
     // 제안 경로로 되돌리면 사람이 코드가 다른 문항을 고른 순간 전 칸이 미배정이 된다.
-    return [{ block: block as HeaderBlock, questionId, slots: resolveSlots(question, block) }];
+    const sampleValues = block.columnIndexes.map((col) => samples.get(col) ?? '');
+    return [{ block: block as HeaderBlock, questionId, slots: resolveSlots(question, block, sampleValues) }];
   });
 
   const parsed = buildPriorAnswerRecords({

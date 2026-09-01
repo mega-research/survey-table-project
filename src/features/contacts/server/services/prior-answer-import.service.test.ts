@@ -63,7 +63,6 @@ function boundValueOf(node: unknown, columnName: string): unknown {
 const h = vi.hoisted(() => ({
   scope: 'real' as 'real' | 'test',
   headerRows: [] as string[][],
-  codeRowMerged: undefined as boolean[] | undefined,
   parsedRows: [] as string[][],
   questionRows: [] as Array<Record<string, unknown>>,
   targetRows: [] as Array<{ id: string; resid: number }>,
@@ -97,7 +96,6 @@ vi.mock('@/lib/contacts/excel-parser', () => ({
   previewExcelGrid: vi.fn(async () => ({
     sheetNames: ['rawdata'],
     headerRows: h.headerRows,
-    codeRowMerged: h.codeRowMerged,
     rows: h.parsedRows,
     totalRows: h.parsedRows.length,
   })),
@@ -212,7 +210,6 @@ describe('importPriorAnswers', () => {
       { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
     ];
     h.headerRows = [['ID', 'BQ1']];
-    h.codeRowMerged = undefined;
     h.parsedRows = [['7', '메가리서치']];
     h.targetRows = [{ id: 'target-7', resid: 7 }];
   });
@@ -359,7 +356,6 @@ describe('importPriorAnswers', () => {
       ['ID', 'BQ2', ''],
       ['시스템ID', '대표자', '업종'],
     ];
-    h.codeRowMerged = [false, false, true];
     h.parsedRows = [['7', '홍길동', '제조업']];
 
     const result = await importPriorAnswers(
@@ -486,7 +482,6 @@ describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    h.codeRowMerged = undefined;
     h.parsedRows = [];
     h.questionRows = [
       { id: 'q-sat', type: 'radio', title: '창업 지원 만족도', order: 1, questionCode: 'BQ7' },

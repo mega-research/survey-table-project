@@ -240,13 +240,6 @@ export interface GridPreviewResult {
   sheetNames: string[];
   /** 헤더 행들. 컬럼 인덱스 순서 그대로이며 병합 종속 칸은 빈 문자열이다. */
   headerRows: string[][];
-  /**
-   * 문항코드 행에서 이 컬럼이 **가로 병합 종속 칸**인가.
-   * 값이 없는 칸에는 두 가지가 있다 — 앞 문항이 가로로 뻗은 칸과, 애초에 문항이 아닌
-   * 메타 열(비고·응답일시)이다. 둘을 구분하지 못하면 메타 열이 앞 블록에 흡수돼
-   * 인접한 두 문항이 한 블록으로 합쳐진다.
-   */
-  codeRowMerged: boolean[];
   /** 데이터 행들. 컬럼 인덱스 순서 그대로. */
   rows: string[][];
   totalRows: number;
@@ -297,18 +290,6 @@ function resolveGridColumnCount(ws: ExcelJS.Worksheet, headerRowCount: number): 
   return width;
 }
 
-/** 문항코드 행에서 각 컬럼이 가로 병합 종속 칸인가. */
-function readMergedFlags(ws: ExcelJS.Worksheet, rowNumber: number, columnCount: number): boolean[] {
-  const row = ws.getRow(rowNumber);
-  const flags: boolean[] = [];
-  for (let col = 1; col <= columnCount; col++) {
-    const cell = row.getCell(col);
-    const master = (cell as { master?: ExcelJS.Cell }).master;
-    flags.push(Boolean(master && master.address !== cell.address));
-  }
-  return flags;
-}
-
 /**
  * 3단 헤더 격자 파싱 — 헤더 행 + 병합 여부 + 데이터 행.
  *
@@ -324,7 +305,7 @@ export async function previewExcelGrid(
   const sheetNames = wb.worksheets.map((w) => w.name);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
   if (!ws) {
-    return { sheetNames, headerRows: [], codeRowMerged: [], rows: [], totalRows: 0 };
+    return { sheetNames, headerRows: [], rows: [], totalRows: 0 };
   }
 
   const columnCount = resolveGridColumnCount(ws, opts.headerRowCount);
@@ -332,9 +313,6 @@ export async function previewExcelGrid(
   for (let r = 1; r <= opts.headerRowCount; r++) {
     headerRows.push(readGridRow(ws, r, columnCount, true));
   }
-  // 문항코드 행은 헤더의 끝에서 두 번째(3단) 또는 유일한 행(1단)이다.
-  const codeRowNumber = opts.headerRowCount >= 2 ? opts.headerRowCount - 1 : 1;
-  const codeRowMerged = readMergedFlags(ws, codeRowNumber, columnCount);
 
   const startRow = opts.headerRowCount + 1;
   const endRow =
@@ -351,7 +329,6 @@ export async function previewExcelGrid(
   return {
     sheetNames,
     headerRows,
-    codeRowMerged,
     rows,
     totalRows: Math.max(0, ws.rowCount - opts.headerRowCount),
   };

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildBlockAnswer,
+  collectSampleValues,
   splitHeaderBlocks,
+  splitYearMonth,
   suggestBlockMapping,
 } from './prior-answer-blocks';
 import type { Question } from '@/types/survey';
@@ -132,6 +134,33 @@ describe('splitHeaderBlocks', () => {
     expect(blocks.map((b) => b.code)).toEqual(['BQ1']);
   });
 
+  it('코드 칸이 비었어도 파트 행에 제목이 있으면 앞 문항에 붙지 않는다', () => {
+    // 실무 파일 꼬리: IQ3 단답 뒤에 "비고"·"출처(2차자료)" 메타 열이 파트 행에만 적혀 있다.
+    // 앞 문항에 흡수되면 IQ3 가 세 칸짜리 블록이 돼 단답 값을 만들지 못한다.
+    const blocks = splitHeaderBlocks([
+      ['PART I.', '비고', '출처(2차자료)'],
+      ['IQ3.', '', ''],
+      ['개선 및 건의사항', '', ''],
+    ]);
+    expect(blocks.map((b) => [b.code, b.columnIndexes])).toEqual([
+      ['IQ3.', [0]],
+      ['비고', [1]],
+      ['출처(2차자료)', [2]],
+    ]);
+  });
+
+  it('병합 없이 빈 칸으로만 이어진 코드 행도 블록이 된다 — 실무 파일의 기본 형태', () => {
+    const blocks = splitHeaderBlocks([
+      ['PART B.', '', '', ''],
+      ['BQ1-1.', '', '', 'BQ2.'],
+      ['기업명', '입사 시기', '고용 형태', ''],
+    ]);
+    expect(blocks.map((b) => [b.code, b.columnIndexes])).toEqual([
+      ['BQ1-1.', [0, 1, 2]],
+      ['BQ2.', [3]],
+    ]);
+  });
+
   it('헤더 행이 3단이 아니어도 코드 행만 있으면 동작한다', () => {
     const blocks = splitHeaderBlocks([['BQ1', 'BQ2']]);
     expect(blocks.map((b) => [b.code, b.detailLabels])).toEqual([
@@ -167,6 +196,38 @@ describe('suggestBlockMapping', () => {
       { kind: 'checkbox-option', optionValue: 'fund' },
       { kind: 'checkbox-option', optionValue: 'mentor' },
     ]);
+  });
+
+  it('세부 라벨이 없는 복수응답 펼침은 열에 든 값으로 보기를 정한다', () => {
+    // 2025 rawdata DQ5-2: 세부 라벨 행이 비어 있고 각 열의 값 자체가 보기 라벨이다.
+    // 첫 열의 세부 라벨은 보기가 아니라 문항 설명이다 — 값 폴백이 이 열도 살려야 한다.
+    const spread = splitHeaderBlocks([
+      ['PART B.', '', ''],
+      ['BQ3', '', ''],
+      ['지원분야(복수응답)', '', ''],
+    ]);
+    const samples = collectSampleValues([
+      ['', '멘토링', ''],
+      ['자금', '', '공간'],
+    ]);
+    const s = suggestBlockMapping(spread, questions, samples)[0];
+    expect(s?.questionId).toBe('q-check');
+    expect(s?.slots).toEqual([
+      { kind: 'checkbox-option', optionValue: 'fund' },
+      { kind: 'checkbox-option', optionValue: 'mentor' },
+      { kind: 'checkbox-option', optionValue: 'space' },
+    ]);
+  });
+
+  it('표본은 오류 표식을 건너뛰고 최빈값을 쓴다', () => {
+    // 실제 파일 DQ5-2 첫 열: 첫 행이 #REF! 라 첫 값을 쓰면 보기 배정이 빠진다.
+    const samples = collectSampleValues([
+      ['#REF!'],
+      ['초기 창업 자금'],
+      ['초기 창업 자금'],
+      ['오타'],
+    ]);
+    expect(samples.get(0)).toBe('초기 창업 자금');
   });
 
   it('순위 열은 세부 라벨의 순위 번호로 자리를 정한다', () => {
@@ -228,6 +289,11 @@ describe('buildBlockAnswer', () => {
       'fund',
       'mentor',
     ]);
+  });
+
+  it('엑셀 오류 표식은 값으로 보지 않는다 — 복수응답을 켜지도, 단답에 들어가지도 않는다', () => {
+    expect(valueOf(checkboxQuestion, slotsFor('BQ3'), ['#REF!', '#N/A'])).toBeUndefined();
+    expect(valueOf(textQuestion, slotsFor('BQ1'), ['#VALUE!'])).toBeUndefined();
   });
 
   it('비선택 표기는 선택으로 보지 않는다', () => {
@@ -327,5 +393,166 @@ describe('확정된 값 대응(alias) 재사용', () => {
     expect(
       buildBlockAnswer(지원필요, slots, ['다소 필요'], { '다소 필요': '없는값' }).value,
     ).toBeUndefined();
+  });
+});
+
+describe('실제 2025 rawdata 형태 — 세부 라벨이 코드북 약칭인 한 칸 문항', () => {
+  const 이직 = q({
+    id: 'q-bq1',
+    questionCode: 'BQ1',
+    type: 'radio',
+    title: '작년(2025년 8월) 조사 이후 1년 이내 이직 경험이 있습니까?',
+    options: [
+      { id: 'y', value: '1', label: '① 있다 (▶ ‘BQ1-1’로 이동)' },
+      { id: 'n', value: '2', label: '② 없다 (▶ ‘업무분야 문항으로 이동’)' },
+    ],
+  });
+
+  it('세부 라벨 "(1년 이내 이직경험)" 은 문항 내용 대조에 쓰지 않아 코드 일치만으로 자동 제안된다', () => {
+    const blocks = splitHeaderBlocks([['PART B.'], ['BQ1.'], ['(1년 이내 이직경험)']]);
+    const s = suggestBlockMapping(blocks, [이직])[0];
+    expect(s?.verdict).toBe('auto');
+    expect(s?.questionId).toBe('q-bq1');
+    expect(blocks[0]?.labelSource).toBe('detail');
+  });
+
+  it('코드 칸에 붙은 라벨은 여전히 게이트를 탄다', () => {
+    const blocks = splitHeaderBlocks([['PART B.'], ['BQ1. 완전히 다른 문항 제목'], ['']]);
+    expect(blocks[0]?.labelSource).toBe('code');
+    expect(suggestBlockMapping(blocks, [이직])[0]?.verdict).toBe('code-conflict');
+  });
+
+  it('서술형으로 재코딩된 2지 값도 끝말로 극을 정한다', () => {
+    const 확인 = q({
+      id: 'q-dq1',
+      questionCode: 'DQ1',
+      type: 'radio',
+      title: '귀하가 창업한 기업명이 [ ] 맞습니까?',
+      options: [
+        { id: 'y', value: '1', label: '① 예 (▶ ‘DQ1-1’로 이동)' },
+        { id: 'n', value: '2', label: '② 아니오 (▶ ‘DQ2’로 이동)' },
+      ],
+    });
+    const slots = suggestBlockMapping(splitHeaderBlocks([['DQ1.'], ['']]), [확인])[0]!.slots;
+    expect(buildBlockAnswer(확인, slots, ['창업 기업이 맞음']).value).toBe('1');
+    expect(buildBlockAnswer(확인, slots, ['창업 기업이 아님']).value).toBe('2');
+    expect(buildBlockAnswer(확인, slots, ['신규 창업 없음']).value).toBe('2');
+    // 3지 이상 문항에는 동의어를 적용하지 않는다 — 극이 둘이 아니다.
+    const 셋 = q({ ...확인, id: 'q3', options: [...(확인.options ?? []), { id: 'z', value: '3', label: '③ 모름' }] });
+    expect(buildBlockAnswer(셋, slots, ['창업 기업이 맞음']).value).toBeUndefined();
+  });
+
+  it('원문자 번호와 라우팅 꼬리를 뗀 2026 보기에 2025 "있음/없음" 이 동의어로 붙는다', () => {
+    const slots = suggestBlockMapping(splitHeaderBlocks([['BQ1.'], ['']]), [이직])[0]!.slots;
+    expect(buildBlockAnswer(이직, slots, ['있음']).value).toBe('1');
+    expect(buildBlockAnswer(이직, slots, ['없음']).value).toBe('2');
+    expect(buildBlockAnswer(이직, slots, ['있다']).value).toBe('1');
+  });
+});
+
+describe('라벨 표기 차이 흡수', () => {
+  const 동기 = q({
+    id: 'q-dq3',
+    questionCode: 'DQ3',
+    type: 'radio',
+    title: '창업 동기',
+    options: [
+      { id: 'a', value: '3', label: '③ 경제·사회 발전에 이바지하기 위하여' },
+      { id: 'b', value: '9', label: '⑨ 기타(직접 입력 :                           )' },
+    ],
+  });
+  const 상태 = q({
+    id: 'q-aq1',
+    questionCode: 'AQ1',
+    type: 'radio',
+    title: '현재 상태',
+    options: [
+      { id: 'a', value: '1', label: '① 재학/휴학(고등학교/대학/대학원 재학 또는 휴학 중)' },
+      { id: 'b', value: '3', label: '③ 취업' },
+      { id: 'c', value: '10', label: '⑩ 기타(창업 준비 등 구체적으로 작성)' },
+    ],
+  });
+  const slotsOf = (question: Question) =>
+    suggestBlockMapping(splitHeaderBlocks([[question.questionCode ?? '']]), [question])[0]!.slots;
+
+  it('가운뎃점 종류가 달라도 같은 보기다', () => {
+    // 2025 값은 U+2027(‧), 2026 보기는 U+00B7(·)
+    expect(buildBlockAnswer(동기, slotsOf(동기), ['경제‧사회 발전에 이바지하기 위하여']).value).toBe('3');
+  });
+
+  it('2025 "기타" 는 2026 "기타(직접 입력 : )" 에 접두로 붙는다', () => {
+    expect(buildBlockAnswer(동기, slotsOf(동기), ['기타']).value).toBe('9');
+  });
+
+  it('괄호 설명이 붙은 보기에 설명 없는 값이 붙되, 원문 쪽 괄호는 삼키지 않는다', () => {
+    expect(buildBlockAnswer(상태, slotsOf(상태), ['재학/휴학']).value).toBe('1');
+    // "기타(AI연구 개발)" 은 기타 텍스트 보존 대상 — 여기서 ⑩ 기타로 뭉개지 않는다.
+    expect(buildBlockAnswer(상태, slotsOf(상태), ['기타(AI연구 개발)']).value).toBeUndefined();
+  });
+
+  it('빈칸 표기와 export 잔재는 값으로 보지 않는다', () => {
+    expect(buildBlockAnswer(textQuestion, slotsFor('BQ1'), ['[object Object]']).value).toBeUndefined();
+    expect(buildBlockAnswer(textQuestion, slotsFor('BQ1'), ['--']).value).toBeUndefined();
+    expect(buildBlockAnswer(textQuestion, slotsFor('BQ1'), ['.']).value).toBeUndefined();
+  });
+
+  function slotsFor(code: string) {
+    return suggestBlockMapping(splitHeaderBlocks([[code]]), [textQuestion])[0]!.slots;
+  }
+});
+
+describe('표 년월 칸 분해', () => {
+  const 취업현황 = q({
+    id: 'q-bq1-1',
+    questionCode: 'BQ1_1',
+    type: 'table',
+    title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
+    tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '년' }, { id: 'c2', label: '월' }],
+    tableRowsData: [
+      {
+        id: 'r-name',
+        label: '기업명',
+        cells: [
+          { id: 'name-label', type: 'text', content: '기업명' },
+          { id: 'name', type: 'input', content: '' },
+          { id: 'name-blank', type: 'text', content: '' },
+        ],
+      },
+      {
+        id: 'r-date',
+        label: '입사 시기',
+        cells: [
+          { id: 'date-label', type: 'text', content: '입사 시기' },
+          { id: 'year', type: 'input', content: '' },
+          { id: 'month', type: 'input', content: '' },
+        ],
+      },
+    ],
+  });
+
+  it('splitYearMonth 가 두 자리 연도를 보정하고 월의 앞 0 을 뗀다', () => {
+    expect(splitYearMonth('2025년 1월')).toEqual({ year: '2025', month: '1' });
+    expect(splitYearMonth('25년 05월')).toEqual({ year: '2025', month: '5' });
+    expect(splitYearMonth('2026년1월')).toEqual({ year: '2026', month: '1' });
+    expect(splitYearMonth('정규직')).toBeNull();
+  });
+
+  it('"2025년 1월" 이 년 칸에 통째로 들어가지 않고 년·월 두 칸으로 나뉜다', () => {
+    const blocks = splitHeaderBlocks([['PART B.', ''], ['BQ1-1.', ''], ['기업명', '입사 시기']]);
+    const s = suggestBlockMapping(blocks, [취업현황])[0]!;
+    expect(s.slots.map((x) => x.kind)).toEqual(['table-cell', 'table-cell']);
+    expect(buildBlockAnswer(취업현황, s.slots, ['네이버', '2025년 1월']).value).toEqual({
+      name: '네이버',
+      year: '2025',
+      month: '1',
+    });
+  });
+
+  it('세부 라벨이 있는데 안 맞으면 순서로 덮지 않고 그 칸만 비운다', () => {
+    // 2026 표에 없는 라벨 "메모" — 칸 수가 우연히 같아도 순서 폴백을 타면 안 된다.
+    const blocks = splitHeaderBlocks([['PART B.', ''], ['BQ1-1.', ''], ['기업명', '메모']]);
+    const s = suggestBlockMapping(blocks, [취업현황])[0]!;
+    expect(s.slots[0]?.kind).toBe('table-cell');
+    expect(s.slots[1]?.kind).toBe('unmatched');
   });
 });
