@@ -6,6 +6,10 @@ import { ChevronDown, Crop } from 'lucide-react';
 
 import { GroupStepItem } from '@/components/survey-response/step-views/group-step-item';
 import { StepItem } from '@/lib/group-ordering';
+import {
+  resolveHoverAction,
+  SCROLL_QUIET_MS,
+} from '@/lib/survey-document/hover-follow';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   resolveJudgementBulkChoices,
@@ -25,10 +29,6 @@ type ResponsesMap = Record<string, unknown>;
  * 세로줄이 맞는다 — 머리는 두 개뿐이라 세 번째 자리를 빈칸으로 채운다.
  */
 const PICK_WIDTH = 'w-[312px]';
-/** 스쳐 지나가는 것과 머무는 것을 가르는 시간. 그룹을 넘어갈 때만 쓴다. */
-const HOVER_DELAY_MS = 500;
-/** 마지막 스크롤 이후 이만큼은 hover 를 받지 않는다. */
-const SCROLL_QUIET_MS = 150;
 
 /**
  * 분할 레이아웃 오른쪽의 판단 체크리스트.
@@ -84,6 +84,7 @@ export function DemandChecklist({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 이 시각까지는 목록이 스크롤 중인 것으로 본다. */
   const scrollingUntil = useRef(0);
@@ -94,9 +95,16 @@ export function DemandChecklist({
   }, []);
 
   // 스크롤 중에는 커서가 가만히 있어도 행이 밑으로 지나가며 hover 가 발화한다.
-  // 어느 컨테이너가 스크롤될지 모르므로 캡처 단계에서 전부 받는다.
+  // 어느 컨테이너가 목록을 스크롤할지는 셸이 정하므로 캡처 단계에서 전부 받되,
+  // **이 목록을 담고 있는 스크롤러의 것만** 인정한다. 왼쪽 조사표 판이 초점을
+  // 따라 부드럽게 스크롤하는 동안에도 이벤트가 여기까지 오는데, 그것까지 세면
+  // 초점을 옮길 때마다 수백 ms 동안 hover 가 죽는다 — "가끔 안 먹는" 정체다.
   useEffect(() => {
-    const onAnyScroll = () => {
+    const onAnyScroll = (event: Event) => {
+      const root = rootRef.current;
+      const scroller = event.target as Node | null;
+      if (!root || !scroller || typeof (scroller as Node).contains !== 'function') return;
+      if (!scroller.contains(root)) return;
       scrollingUntil.current = Date.now() + SCROLL_QUIET_MS;
       cancelHover();
     };
@@ -107,21 +115,23 @@ export function DemandChecklist({
     };
   }, [cancelHover]);
 
-  /**
-   * 머무르면 따라가고 스쳐 지나가면 무시한다.
-   * **같은 그룹 안에서는 지연이 없다** — 조사표가 쪽을 넘기지 않고 주황 테두리만
-   * 옮겨 붙으므로 기다릴 이유가 없다.
-   */
+  /** 머무르면 따라가고 스쳐 지나가면 무시한다 — 판정은 hover-follow 소관이다. */
   const hoverQuestion = useCallback(
     (questionId: string, groupId: string | null) => {
       cancelHover();
       if (!onQuestionFocus) return;
-      if (Date.now() < scrollingUntil.current) return;
-      if (groupId !== null && groupId === activeGroupId) {
+      const action = resolveHoverAction({
+        groupId,
+        activeGroupId,
+        now: Date.now(),
+        scrollingUntil: scrollingUntil.current,
+      });
+      if (action.kind === 'ignore') return;
+      if (action.kind === 'now') {
         onQuestionFocus(questionId);
         return;
       }
-      hoverTimer.current = setTimeout(() => onQuestionFocus(questionId), HOVER_DELAY_MS);
+      hoverTimer.current = setTimeout(() => onQuestionFocus(questionId), action.delayMs);
     },
     [cancelHover, onQuestionFocus, activeGroupId],
   );
@@ -141,7 +151,7 @@ export function DemandChecklist({
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-3" onMouseLeave={cancelHover}>
+    <div ref={rootRef} className="space-y-3" onMouseLeave={cancelHover}>
       {blocks.map((block, index) => (
         <BlockCard
           key={block.id ?? `__ungrouped__${index}`}
@@ -296,10 +306,14 @@ function BlockCard({
             onHoverEnd={onHoverEnd}
           />
         ) : (
+          // 판단 항목이 아닌 행도 자기 영역을 가질 수 있다 — hover 를 빼면
+          // 목록 가운데 몇 줄만 반응하지 않는 것처럼 보인다.
           <div
             key={item.question.id}
             className="border-b border-gray-100 px-4 py-4 last:border-0"
             onClick={() => onQuestionFocus?.(item.question.id)}
+            onMouseEnter={() => onQuestionHover(item.question.id, item.question.groupId ?? null)}
+            onMouseLeave={onHoverEnd}
           >
             {/* 판단 항목이 아닌 문항은 일반 렌더 그대로 — 조사표 순서를 끊지 않는다 */}
             <GroupStepItem

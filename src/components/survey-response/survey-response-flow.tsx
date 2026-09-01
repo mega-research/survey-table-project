@@ -599,16 +599,18 @@ function SurveyResponseFlowActive({
   >(null);
   const selectAnchorQuestion = useCallback(
     (questionId: string) => {
-      // 앵커가 풀리지 않는 문항은 초점을 옮기지 않는다. 옮기면 아래의 렌더 중
-      // 조정이 곧바로 되돌려 클릭한 곳과 좌측 하이라이트가 어긋나 보인다.
-      if (!anchoredStepQuestions.some((q) => q.id === questionId)) return;
+      // 이 페이지의 문항이면 앵커가 풀리든 말든 초점을 옮긴다. 앵커 유무로 걸러 두면
+      // 그 행 위에서는 hover 도 클릭도 아무 반응이 없어 "가끔 안 먹는" 화면이 되고,
+      // 초점이 옛 그룹에 머물러 다음 hover 까지 지연 경로로 새는 부작용까지 따라온다.
+      // 켤 것이 없으면 사각형을 그리지 않을 뿐이다.
+      if (!currentStepQuestions.some((q) => q.id === questionId)) return;
       setAnchorSelection((prev) =>
         prev?.kind === 'question' && prev.id === questionId
           ? prev
           : { kind: 'question', id: questionId, nonce: (prev?.nonce ?? 0) + 1 },
       );
     },
-    [anchoredStepQuestions],
+    [currentStepQuestions],
   );
 
   const selectAnchorGroup = useCallback((groupId: string) => {
@@ -621,11 +623,13 @@ function SurveyResponseFlowActive({
 
   // 페이지가 바뀌면 그 페이지의 첫 앵커 문항으로 초점을 옮긴다 (렌더 중 조정).
   const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
+  // **이 페이지에 있는가**만 본다. 앵커가 풀리는가로 물으면 앵커 없는 문항을 고른
+  // 순간 아래 조정이 되돌려 첫 문항으로 튕긴다.
   const selectionIsOnThisStep =
     anchorSelection?.kind === 'group'
       ? currentStepQuestions.some((q) => q.groupId === anchorSelection.id)
       : anchorSelection
-        ? anchoredStepQuestions.some((q) => q.id === anchorSelection.id)
+        ? currentStepQuestions.some((q) => q.id === anchorSelection.id)
         : false;
   if (defaultAnchorQuestionId && !selectionIsOnThisStep) {
     setAnchorSelection({
