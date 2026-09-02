@@ -36,6 +36,10 @@ import { Switch } from '@/components/ui/switch';
 import { cn, generateId } from '@/lib/utils';
 import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
+import {
+  propagateRequiredToTableRows,
+  stripChoiceGroupRequiredOverrides,
+} from '@/utils/required-propagation';
 import { flattenGroupTree } from '@/lib/group-ordering';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -147,6 +151,10 @@ export function QuestionBasicTab({
 
   // optionCode Input의 blur 커밋 후 다른 옵션과 응답값이 중복되는 옵션 id 집합 (경고 표시용)
   const [conflictOptionIds, setConflictOptionIds] = useState<Set<string>>(new Set());
+
+  // 필수 마스터 전파(ADR 0021) 후 표 에디터 리마운트용 — useTableEditor 는 마운트
+  // 시점 formData 로만 초기화하므로 key 를 갈아 최신 tableRowsData 를 다시 읽게 한다.
+  const [tableEditorEpoch, setTableEditorEpoch] = useState(0);
 
   /**
    * "변수번호"(optionCode) Input의 blur 커밋 — commitOptionCode 로 value 동기화를 시도한다.
@@ -500,9 +508,33 @@ export function QuestionBasicTab({
           <Switch
             id="required"
             checked={formData.required || false}
-            onCheckedChange={(checked) =>
-              setFormData((prev) => ({ ...prev, required: checked }))
-            }
+            onCheckedChange={(checked) => {
+              // 필수 마스터 전파(ADR 0021) — 조작 시점 일괄 복사. 표의 인터랙티브 셀
+              // 필수를 함께 켜고/끄고, 보기 옵션 그룹은 오버라이드 제거로 상속 복귀.
+              setFormData((prev) => ({
+                ...prev,
+                required: checked,
+                ...(prev.tableRowsData?.length
+                  ? { tableRowsData: propagateRequiredToTableRows(prev.tableRowsData, checked) }
+                  : {}),
+                ...(prev.choiceGroups?.length
+                  ? { choiceGroups: stripChoiceGroupRequiredOverrides(prev.choiceGroups) }
+                  : {}),
+              }));
+              // 그룹은 저장 시 스토어 값이 formData 를 덮으므로(모달 handleSave 머지)
+              // 셀 모달과 같은 silentUpdateQuestion 경로로 스토어에도 반영한다.
+              const storeQuestion = useSurveyBuilderStore
+                .getState()
+                .currentSurvey.questions.find((q) => q.id === questionId);
+              if (storeQuestion?.choiceGroups?.length) {
+                useSurveyBuilderStore
+                  .getState()
+                  .silentUpdateQuestion(questionId, {
+                    choiceGroups: stripChoiceGroupRequiredOverrides(storeQuestion.choiceGroups),
+                  });
+              }
+              setTableEditorEpoch((e) => e + 1);
+            }}
           />
           <Label htmlFor="required" className="shrink-0">
             필수 질문
@@ -1341,6 +1373,7 @@ export function QuestionBasicTab({
           </div>
 
           <DynamicTableEditor
+            key={tableEditorEpoch}
             tableTitle={formData.tableTitle}
             columns={formData.tableColumns}
             rows={formData.tableRowsData}
