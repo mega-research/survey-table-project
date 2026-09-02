@@ -102,6 +102,7 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
     ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
     noticeContent: question.noticeContent || '',
+    ...(question.noticeBgColor !== undefined ? { noticeBgColor: question.noticeBgColor } : {}),
     requiresAcknowledgment: question.requiresAcknowledgment || false,
     placeholder: question.placeholder || '',
     piiEncrypted: question.piiEncrypted ?? false,
@@ -482,6 +483,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,
+              // null = 기본 파랑 복귀가 유효값이므로 ?? 폴백 금지
+              noticeBgColor:
+                currentFormData.noticeBgColor !== undefined
+                  ? currentFormData.noticeBgColor
+                  : question?.noticeBgColor,
               requiresAcknowledgment:
                 currentFormData.requiresAcknowledgment ?? question?.requiresAcknowledgment,
               placeholder:

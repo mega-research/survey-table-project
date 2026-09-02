@@ -268,6 +268,7 @@ export async function saveSurveyDiff(
           minSelections: question.minSelections,
           maxSelections: question.maxSelections,
           noticeContent: question.noticeContent,
+          noticeBgColor: question.noticeBgColor,
           requiresAcknowledgment: question.requiresAcknowledgment,
           placeholder: question.placeholder,
           tableValidationRules:
@@ -329,6 +330,7 @@ export async function saveSurveyDiff(
               minSelections: sql`excluded.min_selections`,
               maxSelections: sql`excluded.max_selections`,
               noticeContent: sql`excluded.notice_content`,
+              noticeBgColor: sql`excluded.notice_bg_color`,
               requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,
@@ -638,6 +640,7 @@ export async function saveSurveyWithDetails(
           minSelections: question.minSelections,
           maxSelections: question.maxSelections,
           noticeContent: question.noticeContent,
+          noticeBgColor: question.noticeBgColor,
           requiresAcknowledgment: question.requiresAcknowledgment,
           placeholder: question.placeholder,
           tableValidationRules:
@@ -699,6 +702,7 @@ export async function saveSurveyWithDetails(
               minSelections: sql`excluded.min_selections`,
               maxSelections: sql`excluded.max_selections`,
               noticeContent: sql`excluded.notice_content`,
+              noticeBgColor: sql`excluded.notice_bg_color`,
               requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,

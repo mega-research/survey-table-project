@@ -663,6 +663,7 @@ export interface Question {
   choiceGroups?: ChoiceGroup[];
   // 공지사항(notice) 타입용
   noticeContent?: string; // TipTap HTML 콘텐츠
+  noticeBgColor?: string; // 패널 배경색 — 미지정=기본 파랑, 'none'=무색(패널 제거), '#rrggbb'=커스텀
   requiresAcknowledgment?: boolean; // 이해했다는 체크 필요 여부
   // 단답형(text) 타입용
   placeholder?: string; // 입력 필드 placeholder

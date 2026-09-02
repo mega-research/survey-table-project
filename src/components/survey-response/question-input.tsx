@@ -200,6 +200,7 @@ function QuestionInputControl({
       return (
         <NoticeRenderer
           content={substituteTokens(question.noticeContent || '', attrs, quotes)}
+          bgColor={question.noticeBgColor}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
             : {})}

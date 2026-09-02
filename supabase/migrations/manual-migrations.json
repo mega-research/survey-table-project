@@ -71,6 +71,7 @@
     "0084_contact_id_lists",
     "0085_sweep_expired_pii_table_cells",
     "0097_survey_documents",
-    "0098_survey_document_anchors"
+    "0098_survey_document_anchors",
+    "0099_notice_bg_color"
   ]
 }
