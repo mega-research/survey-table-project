@@ -217,9 +217,14 @@ function cleanCell(value: string | undefined): string {
  * 라벨 대조 키 — 공백·대소문자를 무시하고, 표기 차이를 흡수한다.
  * - 가운뎃점 4종(·‧ㆍ•)을 하나로: 2025 "경제‧사회" ↔ 2026 "경제·사회"
  * - 2026 보기 앞의 원문자 번호(①②…)와 뒤의 라우팅 꼬리("(▶ 'DQ2'로 이동)")는 보기가 아니다
+ *
+ * 원문자를 떼기 **전에** 양끝 공백을 걷는다. 빌더에서 선두 공백이 붙은 채 저장된 보기
+ * (DQ5_2·EQ4_2 " ⑩ 창업 네트워킹(…)", FQ1 " ① IT/SW 관련 분야 (AI 제외)")는 선두 고정
+ * 정규식이 원문자를 못 떼어 어떤 원본 값과도 맞지 않았다.
  */
 function labelKey(value: string | null | undefined): string {
   return (value ?? '')
+    .trim()
     .replace(/[\u2027\u00b7\u318d\u2022]/g, '·')
     .replace(/^[①-⑳㉑-㉟]\s*/, '')
     .replace(/\(?▶[^)]*\)?/g, '')

@@ -502,6 +502,59 @@ describe('라벨 표기 차이 흡수', () => {
     expect(buildBlockAnswer(textQuestion, slotsFor('BQ1'), ['.']).value).toBeUndefined();
   });
 
+  // 빌더에서 선두 공백이 붙은 채 저장된 2026 보기 — DQ5_2·EQ4_2 ⑩, FQ1 ①. 원문자 제거가
+  // 선두 공백에 막히면 그 보기는 어떤 원본 값과도 맞지 않는다.
+  it('선두 공백이 붙은 보기의 원문자도 떼어 세부 라벨 없는 펼침 열의 값이 보기에 붙는다', () => {
+    const 네트워킹 = q({
+      id: 'q-dq5-2',
+      questionCode: 'DQ5_2',
+      type: 'checkbox',
+      title: '귀하가 지원받은 창업지원 분야는 무엇입니까?',
+      options: [
+        { id: 'o1', value: '1', label: '① 초기 창업 자금' },
+        { id: 'o10', value: '10', label: ' ⑩ 창업 네트워킹(VC, 동료 창업가 등)' },
+      ],
+    });
+    const blocks = splitHeaderBlocks([['DQ5-2.'], ['']]);
+    const samples = collectSampleValues([['창업 네트워킹 (VC, 동료 창업가 등)']]);
+    const s = suggestBlockMapping(blocks, [네트워킹], samples)[0];
+    expect(s?.questionId).toBe('q-dq5-2');
+    expect(s?.slots).toEqual([{ kind: 'checkbox-option', optionValue: '10' }]);
+  });
+
+  it('선두 공백이 붙은 보기에 괄호 설명 없는 값이 줄기 일치로 붙는다', () => {
+    const 프리랜서 = q({
+      id: 'q-fq1',
+      questionCode: 'FQ1',
+      type: 'radio',
+      title: '귀하는 현재 프리랜서로서 어떤 분야에서 일하고 계십니까?',
+      options: [
+        { id: 'a', value: '1', label: ' ① IT/SW 관련 분야 (AI 제외)' },
+        { id: 'b', value: '2', label: '② AI 관련 분야' },
+        { id: 'c', value: '3', label: '③ 기타' },
+      ],
+    });
+    expect(buildBlockAnswer(프리랜서, slotsOf(프리랜서), ['IT/SW 관련 분야']).value).toBe('1');
+    // 2025 값 "IT/SW분야" 는 줄기가 달라 여전히 안 붙는다 — 결정 원장대로 값 대응으로 잇는다.
+    expect(buildBlockAnswer(프리랜서, slotsOf(프리랜서), ['IT/SW분야']).value).toBeUndefined();
+  });
+
+  it('선두 공백·원문자·라우팅 꼬리가 함께 있어도 2지 동의어 "있음" 이 붙는다', () => {
+    const 이직 = q({
+      id: 'q-bq1',
+      questionCode: 'BQ1',
+      type: 'radio',
+      title: '1년 이내 이직 경험이 있습니까?',
+      options: [
+        { id: 'y', value: '1', label: ' ① 있다 (▶ ‘BQ1-1’로 이동)' },
+        { id: 'n', value: '2', label: '② 없다 (▶ ‘업무분야 문항으로 이동’)' },
+      ],
+    });
+    expect(buildBlockAnswer(이직, slotsOf(이직), ['있음']).value).toBe('1');
+    expect(buildBlockAnswer(이직, slotsOf(이직), ['있다']).value).toBe('1');
+    expect(buildBlockAnswer(이직, slotsOf(이직), ['없음']).value).toBe('2');
+  });
+
   function slotsFor(code: string) {
     return suggestBlockMapping(splitHeaderBlocks([[code]]), [textQuestion])[0]!.slots;
   }
