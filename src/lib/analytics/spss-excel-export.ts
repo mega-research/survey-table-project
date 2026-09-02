@@ -200,7 +200,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             columns.push({
               spssVarName: buildOptionTextVarName(groupVarName, varNumber),
               questionText: q.title,
-              optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'} (텍스트)`,
+              optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'}`,
               questionId: q.id,
               type: 'option-text',
               optionId: cell.id,
@@ -243,7 +243,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               columns.push({
                 spssVarName: buildOptionTextVarName(sidecarBase, String(idx + 1)),
                 questionText: q.title,
-                optionLabel: `${optLabel} (텍스트)`,
+                optionLabel: `${optLabel}`,
                 questionId: q.id,
                 type: 'option-text',
                 optionId: cell.id,
@@ -275,7 +275,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           columns.push({
             spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
             questionText: q.title,
-            optionLabel: `${opt.label} (텍스트)`,
+            optionLabel: `${opt.label}`,
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
@@ -313,7 +313,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           columns.push({
             spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
             questionText: q.title,
-            optionLabel: `${opt.label} (텍스트)`,
+            optionLabel: `${opt.label}`,
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
@@ -567,7 +567,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               columns.push({
                 spssVarName: buildOptionTextVarName(varName, varNumber),
                 questionText: q.title,
-                optionLabel: `${opt.label} (텍스트)`,
+                optionLabel: `${opt.label}`,
                 questionId: q.id,
                 type: 'table-cell-option-text',
                 tableCellId: cell.id,
@@ -611,7 +611,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 columns.push({
                   spssVarName: buildOptionTextVarName(varName, varNumber),
                   questionText: q.title,
-                  optionLabel: `${opt.label} (텍스트)`,
+                  optionLabel: `${opt.label}`,
                   questionId: q.id,
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
@@ -629,7 +629,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 columns.push({
                   spssVarName: buildOptionTextVarName(varName, varNumber),
                   questionText: q.title,
-                  optionLabel: `${opt.label} (텍스트)`,
+                  optionLabel: `${opt.label}`,
                   questionId: q.id,
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
