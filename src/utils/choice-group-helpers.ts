@@ -74,6 +74,10 @@ export interface ChoiceGroupWithCells {
   /** 그룹의 응답 동작: radio=단일 선택, checkbox=복수 선택 */
   type: 'radio' | 'checkbox';
   cells: TableCell[];
+  /** 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다 */
+  required?: boolean | undefined;
+  /** 그룹 미응답 시 안내 문구 — 없으면 질문 문구 → 기본 문구 폴백 */
+  requiredMessage?: string | undefined;
 }
 
 /**
@@ -96,7 +100,14 @@ export function collectChoiceGroups(question: Question): ChoiceGroupWithCells[] 
     // prune 을 비껴간 phantom 그룹(이미 snapshot 에 박힌 것 포함)을 무해화.
     if (cells.length === 0) continue;
     for (const c of cells) claimed.add(c.id);
-    groups.push({ groupKey: group.groupKey, label: group.label, type: group.type, cells });
+    groups.push({
+      groupKey: group.groupKey,
+      label: group.label,
+      type: group.type,
+      cells,
+      required: group.required,
+      requiredMessage: group.requiredMessage,
+    });
   }
 
   const orphans = allCells.filter((c) => !claimed.has(c.id));

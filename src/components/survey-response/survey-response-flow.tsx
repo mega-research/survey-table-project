@@ -56,7 +56,10 @@ import {
   resolveStepBranch,
   type RenderStep,
 } from '@/lib/group-ordering';
-import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/lib/survey/answer-validation';
 import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
 import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
@@ -842,7 +845,10 @@ function SurveyResponseFlowActive({
   const hasPreviousDisplayable = stepHistory.length > 0;
 
   const isQuestionRequired = (question: Question) =>
-    question.required || quotaGateIds.has(question.id);
+    question.required ||
+    quotaGateIds.has(question.id) ||
+    // 질문 필수 OFF 여도 그룹별 required:true 오버라이드가 있으면 차단 판정에 태운다
+    hasExplicitRequiredChoiceGroup(question);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
   // 상세기입 필수 옵션은 선택값만으로 충족되지 않으며, 테이블은 실제 노출 셀만 검사한다.
@@ -908,7 +914,10 @@ function SurveyResponseFlowActive({
   const requiredRemaining = useMemo(
     () =>
       visibleQuestions.filter(
-        (q) => traversedQuestionIds.has(q.id) && q.required && !isQuestionAnswered(q),
+        (q) =>
+          traversedQuestionIds.has(q.id) &&
+          (q.required || hasExplicitRequiredChoiceGroup(q)) &&
+          !isQuestionAnswered(q),
       ).length,
     [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );

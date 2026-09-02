@@ -11,6 +11,7 @@ import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
+import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
@@ -42,6 +43,8 @@ interface ChoiceOptCellTabProps {
   choiceGroupId: string;
   onChoiceGroupIdChange: (id: string) => void;
   onChoiceGroupsChange: (groups: ChoiceGroup[]) => void;
+  /** 질문 레벨 "필수 질문" 여부 — 그룹별 필수 토글의 상속 기본값 표시용 */
+  questionRequired: boolean;
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteText: string;
@@ -72,6 +75,7 @@ export function ChoiceOptCellTab({
   choiceGroupId,
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
+  questionRequired,
   answerQuoteEnabled = false,
   answerQuoteText,
   onAnswerQuoteTextChange,
@@ -198,6 +202,41 @@ export function ChoiceOptCellTab({
             : '같은 그룹의 셀들 중 하나만 선택됩니다. 그룹 라벨 수정은 그룹 전체에 반영됩니다.'}
         </p>
       </div>
+
+      {/* 그룹별 필수 응답 — 미설정 시 질문 레벨 "필수 질문" 을 상속. 토글 조작은 명시값 저장 */}
+      {currentGroup && (
+        <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center justify-between gap-4">
+            <Label className="text-sm font-medium">이 그룹 필수 응답 ({currentGroup.groupKey})</Label>
+            <Switch
+              checked={currentGroup.required ?? questionRequired}
+              onCheckedChange={(on) =>
+                onChoiceGroupsChange(
+                  choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, required: on } : g)),
+                )
+              }
+            />
+          </div>
+          {(currentGroup.required ?? questionRequired) && (
+            <Input
+              aria-label="그룹 필수 안내 문구"
+              placeholder={DEFAULT_REQUIRED_MESSAGE}
+              value={currentGroup.requiredMessage ?? ''}
+              onChange={(e) =>
+                onChoiceGroupsChange(
+                  choiceGroups.map((g) =>
+                    g.id === choiceGroupId ? { ...g, requiredMessage: e.target.value } : g,
+                  ),
+                )
+              }
+            />
+          )}
+          <p className="text-xs text-gray-500">
+            끄면 이 그룹만 선택 사항이 됩니다. 문구를 비우면 질문 문구를 따릅니다. 설정은 그룹
+            전체에 반영됩니다.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-4">
         <Label className="text-sm font-medium">선택 시 텍스트 입력 받기</Label>

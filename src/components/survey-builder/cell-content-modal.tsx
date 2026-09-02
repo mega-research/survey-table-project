@@ -1589,6 +1589,7 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              questionRequired={ownQuestion.required}
               answerQuoteEnabled={answerQuoteEnabled}
               answerQuoteText={answerQuoteText}
               onAnswerQuoteTextChange={setAnswerQuoteText}

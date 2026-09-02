@@ -449,3 +449,96 @@ describe('isQuestionAnswered — checkbox 그룹 검증', () => {
     expect(isQuestionAnswered(gq, { cb1: ['cellE'] })).toBe(false);
   });
 });
+
+// ── 그룹별 필수(required)·문구(requiredMessage) 오버라이드 ──
+
+import {
+  hasExplicitRequiredChoiceGroup,
+  resolveGroupedRequiredMessage,
+} from '@/lib/survey/answer-validation';
+
+function groupedWithOverrides(
+  questionRequired: boolean,
+  grp1: Partial<{ required: boolean; requiredMessage: string }>,
+  grp2: Partial<{ required: boolean; requiredMessage: string }>,
+): Question {
+  // groupedRadioQ 와 달리 미소속 셀(default 그룹) 없이 rad1/rad2 두 그룹만 구성
+  return {
+    id: 'qov',
+    type: 'radio',
+    title: '그룹 필수 오버라이드',
+    required: questionRequired,
+    order: 0,
+    tableColumns: [{ id: 'c1', label: '열' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'cellA', type: 'choice_opt', content: '', choiceGroupId: 'grp1' },
+          { id: 'cellC', type: 'choice_opt', content: '', choiceGroupId: 'grp2' },
+        ],
+      },
+    ],
+    choiceGroups: [
+      { id: 'grp1', type: 'radio', groupKey: 'rad1', label: '그룹1', ...grp1 },
+      { id: 'grp2', type: 'radio', groupKey: 'rad2', label: '그룹2', ...grp2 },
+    ],
+  } as unknown as Question;
+}
+
+describe('그룹별 필수 오버라이드', () => {
+  it('질문 필수 ON + 오버라이드 없음: 모든 그룹 충족 필요 (현행 유지)', () => {
+    const gq = groupedWithOverrides(true, {}, {});
+    expect(isQuestionAnswered(gq, { rad1: 'cellA' })).toBe(false);
+    expect(isQuestionAnswered(gq, { rad1: 'cellA', rad2: 'cellC' })).toBe(true);
+  });
+
+  it('질문 필수 ON + grp1 개별 해제: rad2 만 충족하면 된다', () => {
+    const gq = groupedWithOverrides(true, { required: false }, {});
+    expect(isQuestionAnswered(gq, { rad2: 'cellC' })).toBe(true);
+    expect(isQuestionAnswered(gq, { rad1: 'cellA' })).toBe(false);
+  });
+
+  it('질문 필수 OFF + grp2 개별 필수: rad2 만 충족하면 된다', () => {
+    const gq = groupedWithOverrides(false, {}, { required: true });
+    expect(isQuestionAnswered(gq, { rad2: 'cellC' })).toBe(true);
+    expect(isQuestionAnswered(gq, { rad1: 'cellA' })).toBe(false);
+  });
+
+  it('질문 필수 OFF + 오버라이드 없음: 기존 동작 유지 (모든 그룹 기준)', () => {
+    const gq = groupedWithOverrides(false, {}, {});
+    expect(isQuestionAnswered(gq, { rad1: 'cellA' })).toBe(false);
+    expect(isQuestionAnswered(gq, { rad1: 'cellA', rad2: 'cellC' })).toBe(true);
+  });
+});
+
+describe('hasExplicitRequiredChoiceGroup', () => {
+  it('그룹에 required:true 가 있으면 true, 없으면 false', () => {
+    expect(hasExplicitRequiredChoiceGroup(groupedWithOverrides(false, {}, { required: true }))).toBe(true);
+    expect(hasExplicitRequiredChoiceGroup(groupedWithOverrides(false, {}, {}))).toBe(false);
+    expect(hasExplicitRequiredChoiceGroup(q('radio'))).toBe(false);
+  });
+});
+
+describe('resolveGroupedRequiredMessage', () => {
+  it('미충족 그룹의 문구를 우선 사용한다', () => {
+    const gq = groupedWithOverrides(true, {}, { requiredMessage: '현재 상태를 선택해주세요.' });
+    expect(resolveGroupedRequiredMessage(gq, { rad1: 'cellA' })).toBe('현재 상태를 선택해주세요.');
+  });
+
+  it('미충족 그룹에 문구가 없으면 질문 문구 → 기본 문구로 폴백한다', () => {
+    const gq = groupedWithOverrides(true, {}, {});
+    expect(resolveGroupedRequiredMessage({ ...gq, requiredMessage: '질문 문구' } as Question, { rad1: 'cellA' })).toBe('질문 문구');
+    expect(resolveGroupedRequiredMessage(gq, { rad1: 'cellA' })).toBe('필수 질문에 답변해주세요.');
+  });
+
+  it('여러 그룹 미충족이면 정의 순서상 첫 미충족 그룹의 문구를 쓴다', () => {
+    const gq = groupedWithOverrides(true, { requiredMessage: '12월 기준을 선택해주세요.' }, { requiredMessage: '현재 상태를 선택해주세요.' });
+    expect(resolveGroupedRequiredMessage(gq, {})).toBe('12월 기준을 선택해주세요.');
+  });
+
+  it('비그룹 질문은 질문 문구로 폴백한다', () => {
+    expect(resolveGroupedRequiredMessage(q('radio', { requiredMessage: '골라주세요.' }), null)).toBe('골라주세요.');
+  });
+});

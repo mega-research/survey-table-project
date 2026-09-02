@@ -27,6 +27,7 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     choiceGroupId: '',
     onChoiceGroupIdChange: vi.fn(),
     onChoiceGroupsChange: vi.fn(),
+    questionRequired: false,
     answerQuoteText: '',
     onAnswerQuoteTextChange: vi.fn(),
     ...overrides,

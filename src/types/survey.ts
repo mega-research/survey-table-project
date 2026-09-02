@@ -570,6 +570,11 @@ export interface ChoiceGroup {
   label: string;                           // 그룹 제목 - SPSS 변수 라벨 접두
   minSelections?: number;
   maxSelections?: number;
+  // 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다.
+  // 질문 필수 ON 에서 false = 이 그룹만 선택 사항, 질문 필수 OFF 에서 true = 이 그룹만 필수.
+  required?: boolean;
+  // 이 그룹 미응답 시 안내 문구. 없으면 질문 requiredMessage → 기본 문구 폴백.
+  requiredMessage?: string;
 }
 
 export interface TableColumn {
