@@ -75,6 +75,7 @@
     "0096_prior_answer_import_config",
     "0097_survey_documents",
     "0098_survey_document_anchors",
-    "0099_notice_bg_color"
+    "0099_notice_bg_color",
+    "0100_sweep_expired_pii_merge_table_cells_prior_answers"
   ]
 }

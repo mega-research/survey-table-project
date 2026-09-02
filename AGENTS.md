@@ -500,7 +500,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 - `text`: 텍스트 표시 / `image`: 이미지 / `video`: 비디오 링크
 - `checkbox` / `radio` / `select`: 선택 입력
-- `input`: 텍스트 입력 (inputType `number` 시 숫자만). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085)
+- `input`: 텍스트 입력 (inputType `number` 시 숫자만). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
 - `ranking`: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
 - `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스
