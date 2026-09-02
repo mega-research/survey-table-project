@@ -141,8 +141,10 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
       'max-height': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^(none|auto)$/i],
       'min-width': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
       'min-height': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
-      // 이미지 정렬 (TipTap image float)
-      float: [/^(left|right|none)$/i],
+      // float 은 의도적으로 허용하지 않는다. 이미지 정렬은 문단 text-align 으로
+      // 통일됐고(image-context-toolbar), 저장 데이터에 잔존하는 레거시 wrapperStyle
+      // 의 float: left 가 통과되면 실제 렌더에서 text-align 정렬을 이기고 좌측으로
+      // 붙는다 — 편집기는 안전망 CSS 로 float 을 무력화하므로 편집기·렌더가 갈라진다.
       // 표시 모드 (transformTags 가 주입하는 메일 첨부 박스 inline-block 등)
       display: [/^(inline|block|inline-block|none)$/i],
       'vertical-align': [/^(baseline|top|middle|bottom|sub|super|text-top|text-bottom)$/i],

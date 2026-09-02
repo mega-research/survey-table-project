@@ -273,13 +273,34 @@ describe('createUnifiedExtensions', () => {
       const styleMatch = html.match(/<img[^>]*style="([^"]+)"/);
       expect(styleMatch).not.toBeNull();
       const style = styleMatch![1];
-      expect(style).toMatch(/float:\s*left/);
+      // float 은 편집기에서 안전망 CSS 로 항상 무력화되므로 직렬화 HTML 에서도 제거되어야
+      // 편집기 시각과 출력이 일치한다 (남기면 문단 text-align 정렬이 실제 렌더에서 깨짐)
+      expect(style).not.toMatch(/float/);
       expect(style).toMatch(/width:\s*25%/);
       expect(style).toMatch(/box-sizing:\s*border-box/);
       expect(style).toMatch(/max-width:\s*100%/);
       // wrapperStyle / containerStyle 자체 attribute 는 HTML 에 남지 않아야 함
       expect(html.toLowerCase()).not.toContain('wrapperstyle');
       expect(html.toLowerCase()).not.toContain('containerstyle');
+
+      editor.destroy();
+    });
+
+    it('기본 삽입 이미지(라이브러리 기본 wrapperStyle 의 float: left)는 float 없이 직렬화된다', () => {
+      // 크기(%) 버튼을 누르지 않은 이미지는 tiptap-extension-resize-image 의
+      // inline 기본 wrapperStyle (display: inline-block; float: left; padding-right: 8px;)
+      // 을 그대로 갖는다. float 이 직렬화되면 중앙 정렬 문단 안에서도 좌측으로 붙는다.
+      const exts = createUnifiedExtensions({ kind: 'survey' });
+      const editor = new Editor({
+        extensions: exts,
+        content: '<p style="text-align: center"><img src="x.png" /></p>',
+      });
+
+      const html = editor.getHTML();
+      const style = html.match(/<img[^>]*style="([^"]+)"/)?.[1] ?? '';
+      expect(style).not.toMatch(/float/);
+      // 문단 text-align 정렬이 동작하려면 inline-block 이 유지되어야 한다
+      expect(style).toMatch(/display:\s*inline-block/);
 
       editor.destroy();
     });

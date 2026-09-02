@@ -130,12 +130,25 @@ const ImageResizeWithProxy = ImageResize.extend({
   // 정렬과 크기 attr 가 사라진다. 여기서 wrapperStyle 을 img inline style 로 직렬화한다.
   // wrapper 의 width 는 img 의 시각 크기를 결정하므로, container width 는 redundant 가 되어 drop.
   // height 와 max-width 안전망만 보강.
+  //
+  // 라이브러리 inline 기본 wrapperStyle 의 정렬 부산물(float: left + 8px 측면 패딩)은
+  // 직렬화에서 제거한다. 편집기는 globals.css 안전망(float: none !important)이 float 을
+  // 무력화해 문단 text-align 정렬로 보이는 반면, 출력 HTML 에 float 이 남으면 응답
+  // 페이지·메일에서 text-align: center 를 이기고 좌측으로 붙는다 (편집기·실제 렌더
+  // 불일치). 메일 렌더의 stripImageAlignArtifacts(render-preview.ts)와 같은 규칙.
   renderHTML({ HTMLAttributes }) {
     const wrapperStyle = (HTMLAttributes['wrapperStyle'] ?? '') as string;
     const next: Record<string, unknown> = { ...HTMLAttributes };
     delete next['wrapperStyle'];
     delete next['containerStyle'];
-    const base = wrapperStyle.trim().replace(/;+$/, '');
+    const base = wrapperStyle
+      .split(';')
+      .map((decl) => decl.trim())
+      .filter(
+        (decl) =>
+          decl && !/^float\s*:/i.test(decl) && !/^padding-(?:left|right)\s*:\s*8px$/i.test(decl),
+      )
+      .join('; ');
     const finalStyle = base
       ? `${base}; height: auto; max-width: 100%;`
       : 'height: auto; max-width: 100%;';
