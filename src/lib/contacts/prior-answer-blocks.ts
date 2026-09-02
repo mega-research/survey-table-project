@@ -67,8 +67,11 @@ export type BlockSlot =
   | { kind: 'checkbox-option'; optionValue: string }
   /** 순위 문항의 한 순위(1-based). */
   | { kind: 'ranking-rank'; rank: number }
-  /** 어느 자리인지 정하지 못했다 — 값을 만들지 않는다. */
-  | { kind: 'unmatched' };
+  /**
+   * 어느 자리인지 정하지 못했다 — 값을 만들지 않는다.
+   * reason 은 표 칸 라벨 폴백이 후보 여럿에서 멈춘 경우의 설명 — 담당자가 칸 배정 줄에서 그대로 본다.
+   */
+  | { kind: 'unmatched'; reason?: string };
 
 /**
  * 블록↔문항 판정.
@@ -272,27 +275,34 @@ export function splitHeaderBlocks(headerRows: readonly (readonly string[])[]): H
   return blocks;
 }
 
+/** 표에서 값을 받을 수 있는 한 칸. 행 번호는 세부 라벨 후보의 유일성을 **행 단위**로 세는 근거다. */
+interface AnswerableCell {
+  cell: TableCell;
+  rowIndex: number;
+  rowLabel: string;
+  colLabel: string;
+}
+
 /**
  * 표 문항에서 값을 받을 수 있는 칸(읽는 순서).
  *
  * 표시 전용 셀과 **계산 셀(calc)** 은 제외한다 — 계산 셀은 수식 결과가 곧 값이라
  * 외부 값을 적재하면 "수식 결과와 다른 저장값" 이라는 없는 상태를 만든다.
  */
-function collectAnswerableCells(
-  question: Question,
-): Array<{ cell: TableCell; rowLabel: string; colLabel: string }> {
-  const result: Array<{ cell: TableCell; rowLabel: string; colLabel: string }> = [];
-  for (const row of question.tableRowsData ?? []) {
+function collectAnswerableCells(question: Question): AnswerableCell[] {
+  const result: AnswerableCell[] = [];
+  (question.tableRowsData ?? []).forEach((row, rowIndex) => {
     row.cells?.forEach((cell, colIdx) => {
       if (cell.isHidden) return;
       if (!['input', 'checkbox', 'radio', 'select'].includes(cell.type)) return;
       result.push({
         cell,
+        rowIndex,
         rowLabel: row.label ?? '',
         colLabel: question.tableColumns?.[colIdx]?.label ?? '',
       });
     });
-  }
+  });
   return result;
 }
 
@@ -368,6 +378,121 @@ function findOptionByLabel(
   return undefined;
 }
 
+/** 표 칸 라벨 대조 대상 4종 — exportLabel / 행 라벨 / 열 라벨 / 행+열. */
+function cellLabelVariants(entry: AnswerableCell): string[] {
+  return [entry.cell.exportLabel ?? '', entry.rowLabel, entry.colLabel, `${entry.rowLabel}${entry.colLabel}`];
+}
+
+/**
+ * 표 칸 라벨의 줄기 키 — 선두 "귀하의" 와 끝의 괄호 꼬리를 뗀다.
+ * 2025 "직책"·"업무 분야" ↔ 2026 "귀하의 직책"·"업무 분야 (중복응답)". 다른 존칭·조사는
+ * 넣지 않는다 — 실데이터에 그것뿐이다.
+ */
+function cellLabelStemKey(value: string | null | undefined): string {
+  return labelStemKey((value ?? '').replace(/^\s*귀하의\s*/, ''));
+}
+
+/**
+ * 표 칸 이름끼리의 바이그램 Dice 하한. 4분면 게이트의 LABEL_SIMILAR_THRESHOLD(문항 제목
+ * 문장끼리)와 **다른 상수**다 — 짧은 칸 이름은 바이그램이 몇 개 안 돼 같은 값이 맞지 않는다.
+ * "입사예정시기" ↔ "입사 시기" 가 정확히 0.5 다.
+ */
+const TABLE_LABEL_DICE_MIN = 0.5;
+
+/** 세부 라벨 하나의 판정 — 칸이 정해졌거나, 못 정했고(reason 은 후보 여럿에서 멈춘 경우만). */
+interface TableCellResolution {
+  entry?: AnswerableCell;
+  reason?: string;
+}
+
+/** 라벨 4종 중 하나라도 조건에 맞는 칸들 — 읽는 순서. */
+function cellsWhere(cells: AnswerableCell[], test: (variant: string) => boolean): AnswerableCell[] {
+  return cells.filter((entry) => cellLabelVariants(entry).some(test));
+}
+
+/**
+ * 후보 칸들을 **행 단위**로 접어 하나를 고른다. 후보 행이 유일하면 그 행에서 라벨이 맞은
+ * 첫 칸(읽는 순서 — 정확 일치의 find 와 같은 규칙)을 준다. 년·월 행은 두 칸이 다 후보라
+ * 첫 칸(년)이 되고, buildBlockAnswer 가 두 칸에 나눠 넣는다. 행의 첫 답 가능 칸이 아니라
+ * **맞은** 첫 칸이어야 한다 — 한 행에 이름 붙은 열이 나란한 표(EQ4_1 "지원 받은 시기_년 /
+ * 사업명(프로그램명)")에서 행의 첫 칸을 집으면 사업명이 년 칸에 들어간다.
+ *
+ * 행이 여럿이면 표본값이 각 행 첫 후보 칸의 보기에 맞는지로 가른다 — input 칸은 보기가
+ * 없으니 "맞는다" 가 성립하지 않아 0 이다. 최고점이 유일하고 0 보다 클 때만 채택하고,
+ * 동률이거나 전부 0 이면 조용히 첫 행을 집지 않고 사유를 남긴다.
+ */
+function pickTableRow(candidates: readonly AnswerableCell[], sampleValue: string): TableCellResolution {
+  const heads: AnswerableCell[] = [];
+  for (const entry of candidates) {
+    if (!heads.some((head) => head.rowIndex === entry.rowIndex)) heads.push(entry);
+  }
+  const [only] = heads;
+  if (heads.length === 1 && only) return { entry: only };
+  const scored = heads.map((entry) => ({
+    entry,
+    hit: sampleValue && findOptionByLabel(cellOptions(entry.cell), sampleValue) ? 1 : 0,
+  }));
+  const best = Math.max(...scored.map((s) => s.hit));
+  const winners = scored.filter((s) => s.hit === best);
+  const [winner] = winners;
+  if (best > 0 && winners.length === 1 && winner) return { entry: winner.entry };
+  const names = heads
+    .map((entry) => entry.rowLabel.trim() || entry.cell.exportLabel || entry.cell.id)
+    .join(' / ');
+  const verdict = sampleValue ? `표본값 "${sampleValue}" 으로 못 가름` : '표본값 없음';
+  return { reason: `후보 ${heads.length}행(${names}) — ${verdict}` };
+}
+
+/**
+ * 세부 라벨 하나를 표의 어느 칸에 붙일지 정한다.
+ *
+ * 정확 일치가 먼저다(읽는 순서 첫 칸). 실패했을 때만 ① 줄기 → ② 접두 → ③ 바이그램 Dice 를
+ * 차례로 밟되, **각 단계에서 후보 행이 유일할 때만** 채택한다. 다음 단계로 내려가는 것은 그
+ * 단계의 후보가 0개일 때뿐이다 — 후보가 여럿인 단계에서 못 가르면 거기서 미배정으로 끝낸다.
+ * 더 느슨한 단계로 내려가면 오배정 확률만 오른다.
+ *
+ * 2025 rawdata 에서 이 폴백이 살리는 칸: "업무 분야" ↔ "업무 분야 (중복응답)"(①),
+ * "직책" ↔ "귀하의 직책"(①), "창업아이템" ⊂ "창업아이템 또는 제품명_값"(②),
+ * "담당 직무" ⊂ 두 행(② → 표본값), "입사예정시기" ↔ "입사 시기"(③, 0.5).
+ */
+function resolveTableCellByLabel(
+  cells: AnswerableCell[],
+  label: string,
+  sampleValue: string,
+): TableCellResolution {
+  const key = labelKey(label);
+  if (!key) return {};
+
+  // 0) 정확 일치 — 읽는 순서 첫 칸. 이 단계는 그대로 두고 후보 수를 세지 않는다.
+  const exact = cells.find((entry) => cellLabelVariants(entry).some((variant) => labelKey(variant) === key));
+  if (exact) return { entry: exact };
+
+  // ① 줄기 일치 — 양쪽에 같은 줄기 키를 적용해 같으면 후보.
+  const stem = cellLabelStemKey(label);
+  const byStem = stem ? cellsWhere(cells, (variant) => cellLabelStemKey(variant) === stem) : [];
+  if (byStem.length > 0) return pickTableRow(byStem, sampleValue);
+
+  // ② 접두 일치 — 짧은 쪽 키가 2글자 이상일 때만. 한 글자 라벨이 전 칸에 붙는 것을 막는다.
+  if (key.length >= 2) {
+    const byPrefix = cellsWhere(cells, (variant) => {
+      const variantKey = labelKey(variant);
+      return variantKey.length >= 2 && (variantKey.startsWith(key) || key.startsWith(variantKey));
+    });
+    if (byPrefix.length > 0) return pickTableRow(byPrefix, sampleValue);
+  }
+
+  // ③ 바이그램 Dice — 라벨 4종 각각의 유사도 중 최대가 칸 점수. 하한 이상인 칸들 중 최고 점수 칸들이 후보다.
+  const scored = cells
+    .map((entry) => ({
+      entry,
+      score: Math.max(...cellLabelVariants(entry).map((variant) => labelSimilarity(label, variant))),
+    }))
+    .filter((item) => item.score >= TABLE_LABEL_DICE_MIN);
+  if (scored.length === 0) return {};
+  const top = Math.max(...scored.map((item) => item.score));
+  return pickTableRow(scored.filter((item) => item.score === top).map((item) => item.entry), sampleValue);
+}
+
 /**
  * 블록 컬럼들이 이 문항의 어느 자리인지 정한다.
  *
@@ -380,7 +505,8 @@ export function resolveSlots(
   /**
    * 블록 컬럼별 데이터 표본 값(첫 비어 있지 않은 값). 복수응답 펼침은 세부 라벨 행이
    * 비어 있고 **값 자체가 보기 라벨**인 파일이 흔하다(2025 DQ5-2: 라벨 없음, 값 "인건비(…)").
-   * 세부 라벨이 비면 이 값으로 보기를 정한다.
+   * 세부 라벨이 비면 이 값으로 보기를 정한다. 표 문항에서는 세부 라벨의 후보 행이 여럿일 때
+   * 어느 행의 보기에 맞는지로 가르는 근거다.
    */
   sampleValues?: readonly string[],
 ): BlockSlot[] {
@@ -388,22 +514,14 @@ export function resolveSlots(
 
   if (question.type === 'table') {
     const cells = collectAnswerableCells(question);
-    const byLabel = block.detailLabels.map((label) => {
-      const key = labelKey(label);
-      if (!key) return undefined;
-      return cells.find(
-        (entry) =>
-          labelKey(entry.cell.exportLabel) === key ||
-          labelKey(entry.rowLabel) === key ||
-          labelKey(entry.colLabel) === key ||
-          labelKey(`${entry.rowLabel}${entry.colLabel}`) === key,
-      );
-    });
+    const byLabel = block.detailLabels.map((label, idx) =>
+      resolveTableCellByLabel(cells, label, sampleValues?.[idx] ?? ''),
+    );
     // 읽는 순서로 채우는 폴백은 **세부 라벨이 전부 비어 있을 때만** 쓴다. 라벨이 있는데
     // 안 맞는 경우까지 순서로 덮으면, 열 순서가 바뀐 표(2025 명→기관→공개유무→구분 vs
     // 2026 명→구분→진행상태→기관)에서 값이 조용히 엇갈려 들어간다 — 그건 unmatched 로
     // 남겨 담당자가 칸 배정에서 보게 하는 편이 낫다.
-    const allMatched = byLabel.every((entry) => entry !== undefined);
+    const allMatched = byLabel.every((found) => found.entry !== undefined);
     const allBlank = block.detailLabels.every((label) => !labelKey(label));
     if (!allMatched && allBlank && cells.length === count) {
       return cells.map((entry) => ({
@@ -412,11 +530,12 @@ export function resolveSlots(
         cellType: entry.cell.type,
       }));
     }
-    return byLabel.map((entry) =>
-      entry
-        ? { kind: 'table-cell' as const, cellId: entry.cell.id, cellType: entry.cell.type }
-        : { kind: 'unmatched' as const },
-    );
+    return byLabel.map((found): BlockSlot => {
+      if (found.entry) {
+        return { kind: 'table-cell', cellId: found.entry.cell.id, cellType: found.entry.cell.type };
+      }
+      return found.reason ? { kind: 'unmatched', reason: found.reason } : { kind: 'unmatched' };
+    });
   }
 
   if (question.type === 'checkbox') {

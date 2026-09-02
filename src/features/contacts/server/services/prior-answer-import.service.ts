@@ -194,7 +194,8 @@ function describeSlots(question: Question | undefined, slots: readonly BlockSlot
       case 'ranking-rank':
         return `${slot.rank}순위`;
       default:
-        return '배정 안 됨';
+        // 표 칸 라벨 폴백이 후보 여럿에서 멈춘 사유 — 마법사의 "칸 배정" 줄에 그대로 보인다.
+        return slot.reason ? `배정 안 됨 — ${slot.reason}` : '배정 안 됨';
     }
   });
 }

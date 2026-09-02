@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBlockAnswer,
   collectSampleValues,
+  resolveSlots,
   splitHeaderBlocks,
   splitYearMonth,
   suggestBlockMapping,
@@ -554,5 +555,220 @@ describe('표 년월 칸 분해', () => {
     const s = suggestBlockMapping(blocks, [취업현황])[0]!;
     expect(s.slots[0]?.kind).toBe('table-cell');
     expect(s.slots[1]?.kind).toBe('unmatched');
+  });
+});
+
+describe('표 칸 세부 라벨 폴백', () => {
+  // 2026 BQ1_1 표의 실제 모양 — 행마다 `값`·`값2` 두 칸이 있고 대부분 `값2` 는 숨김이며,
+  // 년·월 행만 둘 다 보인다. 2025 rawdata 세부 라벨은 이 행 라벨과 정확히 같지 않다.
+  const text = (id: string, content = '', isHidden = false) => ({ id, type: 'text', content, isHidden });
+  const input = (id: string, extra: Record<string, unknown> = {}) => ({ id, type: 'input', content: '', ...extra });
+  const radio = (id: string, labels: string[], extra: Record<string, unknown> = {}) => ({
+    id,
+    type: 'radio',
+    content: '',
+    radioOptions: labels.map((label, i) => ({ id: `${id}-o${i + 1}`, value: String(i + 1), label })),
+    ...extra,
+  });
+  const 취업현황 = q({
+    id: 'q-bq1-1',
+    questionCode: 'BQ1_1',
+    type: 'table',
+    title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
+    tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }, { id: 'c2', label: '값2' }],
+    tableRowsData: [
+      {
+        id: 'r-name',
+        label: '기업명',
+        cells: [text('name-label', '기업명'), input('name'), input('name-2', { isHidden: true })],
+      },
+      {
+        id: 'r-date',
+        label: '입사 시기',
+        cells: [
+          text('date-label', '입사 시기'),
+          input('year', { inputType: 'number', exportLabel: 'BQ1_1_입사 시기_년' }),
+          input('month', { inputType: 'number', exportLabel: 'BQ1_1_입사 시기_월' }),
+        ],
+      },
+      {
+        id: 'r-field',
+        label: '업무 분야 (중복응답)',
+        cells: [
+          text('field-label', '업무 분야'),
+          radio('field', ['① IT/SW 관련 분야', '② 비 IT/SW 관련 분야']),
+          radio('field-2', ['① IT/SW 관련 분야', '② 비 IT/SW 관련 분야'], { isHidden: true }),
+        ],
+      },
+      {
+        id: 'r-job-it',
+        label: '담당 직무_① IT/SW 관련 세부분야',
+        cells: [
+          text('job-it-label', '담당 직무'),
+          radio('job-it', [
+            '① 정보기술 전략·계획(컨설팅, 기획, 제품기획, 분석 등)',
+            '② 정보기술 개발(SW아키텍처, 응용SW, 임베디드SW, DB, N/W,보안, UX/UI, 시스템SW 엔지니어링 등)',
+            '⑥ 기타',
+          ]),
+          radio('job-it-2', ['⑥ 기타'], { isHidden: true }),
+        ],
+      },
+      {
+        id: 'r-job-other',
+        label: '담당 직무_② 비 IT/SW 관련 분야',
+        cells: [text('job-other-label', '', true), input('job-other'), input('job-other-2', { isHidden: true })],
+      },
+      {
+        id: 'r-title',
+        label: '귀하의 직책',
+        cells: [
+          text('title-label', '귀하의 직책'),
+          radio('title', ['① CEO', '② CTO', '③ 기타']),
+          radio('title-2', ['① CEO', '② CTO', '③ 기타'], { isHidden: true }),
+        ],
+      },
+      {
+        id: 'r-item',
+        label: '창업아이템 또는 제품명_값',
+        cells: [
+          input('item', { exportLabel: 'BQ1_1_창업아이템 또는 제품명' }),
+          input('item-2', { isHidden: true }),
+          input('item-3', { isHidden: true }),
+        ],
+      },
+    ],
+  });
+
+  /** 세부 라벨 한 칸짜리 블록의 자리. */
+  function slotFor(question: Question, label: string, sample = '') {
+    const block = splitHeaderBlocks([['PART B.'], ['BQ1-1.'], [label]])[0]!;
+    return resolveSlots(question, block, [sample])[0]!;
+  }
+
+  it('괄호 꼬리가 붙은 행 라벨에 줄기 일치로 붙는다 — "업무 분야" → "업무 분야 (중복응답)"', () => {
+    expect(slotFor(취업현황, '업무 분야')).toEqual({ kind: 'table-cell', cellId: 'field', cellType: 'radio' });
+  });
+
+  it('선두 "귀하의" 를 뗀 줄기 일치 — "직책" → "귀하의 직책"', () => {
+    expect(slotFor(취업현황, '직책')).toEqual({ kind: 'table-cell', cellId: 'title', cellType: 'radio' });
+  });
+
+  it('접두 일치 — "창업아이템" → "창업아이템 또는 제품명_값" 행의 첫 답 가능 칸', () => {
+    // exportLabel 은 `BQ1_1_창업아이템…` 이라 접두가 아니다 — 행 라벨이 `_값` 꼬리를 달고라도 있어서 잡힌다.
+    expect(slotFor(취업현황, '창업아이템')).toEqual({ kind: 'table-cell', cellId: 'item', cellType: 'input' });
+  });
+
+  it('바이그램 Dice 경계값 0.5 — "입사예정시기" → "입사 시기" 행의 첫 칸(년), 년월 값은 두 칸으로 나뉜다', () => {
+    const slot = slotFor(취업현황, '입사예정시기');
+    expect(slot).toEqual({ kind: 'table-cell', cellId: 'year', cellType: 'input' });
+    expect(buildBlockAnswer(취업현황, [slot], ['2025년 7월']).value).toEqual({ year: '2025', month: '7' });
+  });
+
+  it('접두 후보가 두 행이면 표본값이 보기에 맞는 행을 고른다 — "담당 직무" + "정보기술 개발"', () => {
+    // 2025 최빈값 "정보기술 개발" 은 radio 행의 "② 정보기술 개발(SW아키텍처, …)" 에 줄기로 맞고, input 행은 보기가 없다.
+    expect(slotFor(취업현황, '담당 직무', '정보기술 개발')).toEqual({
+      kind: 'table-cell',
+      cellId: 'job-it',
+      cellType: 'radio',
+    });
+  });
+
+  it('표본값이 어느 후보 행의 보기에도 안 맞으면 첫 행을 집지 않고 사유를 남긴다', () => {
+    const slot = slotFor(취업현황, '담당 직무', '영업');
+    expect(slot.kind).toBe('unmatched');
+    const reason = slot.kind === 'unmatched' ? (slot.reason ?? '') : '';
+    expect(reason).toContain('담당 직무_① IT/SW 관련 세부분야');
+    expect(reason).toContain('담당 직무_② 비 IT/SW 관련 분야');
+    expect(reason).toContain('영업');
+  });
+
+  it('표본값이 두 후보 행의 보기에 모두 맞는 동률이면 미배정이다', () => {
+    const 직무둘 = q({
+      id: 'q-two',
+      questionCode: 'BQ1_1',
+      type: 'table',
+      title: '담당 직무',
+      tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }],
+      tableRowsData: [
+        { id: 'r-it', label: '담당 직무_① IT', cells: [text('it-label'), radio('it', ['① 개발', '② 기타'])] },
+        { id: 'r-non', label: '담당 직무_② 비IT', cells: [text('non-label'), radio('non', ['① 영업', '② 기타'])] },
+      ],
+    });
+    const slot = slotFor(직무둘, '담당 직무', '기타');
+    expect(slot.kind).toBe('unmatched');
+    expect(slot.kind === 'unmatched' ? slot.reason : '').toContain('담당 직무_① IT / 담당 직무_② 비IT');
+  });
+
+  it('한 행에 이름 붙은 열이 여럿인 표에서는 행의 첫 칸이 아니라 라벨이 맞은 칸을 준다', () => {
+    // 2026 EQ4_1: 행 하나에 "지원 받은 시기_년/월"·"지원 예정 시기_년/월"·"사업명(프로그램명)" 열이 나란하다.
+    // 2025 "프로그램명" 은 Dice 로 사업명 열에만 맞는다 — 행이 유일하다고 그 행의 첫 칸(년)을 집으면 오배정이다.
+    const 지원사업 = q({
+      id: 'q-eq4-1',
+      questionCode: 'EQ4_1',
+      type: 'table',
+      title: '귀하가 지원 받았거나 지원 받을 예정인 창업지원사업(프로그램)은 무엇입니까?',
+      tableColumns: [
+        { id: 'c0', label: '지원 받은 시기' },
+        { id: 'c1', label: '지원 받은 시기_년' },
+        { id: 'c2', label: '지원 받은 시기_월' },
+        { id: 'c3', label: '사업명(프로그램명)_라벨' },
+        { id: 'c4', label: '사업명(프로그램명)' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행 1',
+          cells: [
+            text('when-label', '지원 받은 시기'),
+            input('when-year', { inputType: 'number' }),
+            input('when-month', { inputType: 'number' }),
+            text('program-label', '사업명(프로그램명)'),
+            input('program'),
+          ],
+        },
+      ],
+    });
+    const block = splitHeaderBlocks([['PART E.'], ['EQ4-1.'], ['프로그램명']])[0]!;
+    expect(resolveSlots(지원사업, block, [''])[0]).toEqual({ kind: 'table-cell', cellId: 'program', cellType: 'input' });
+  });
+
+  it('어느 단계에도 안 걸리는 "메모" 는 사유 없이 미배정이다 — Dice 0 이라 ③ 도 잡지 않는다', () => {
+    expect(slotFor(취업현황, '메모')).toStrictEqual({ kind: 'unmatched' });
+  });
+
+  it('한 글자 세부 라벨은 접두 일치로 붙지 않는다', () => {
+    // "기" 는 "기업명" 의 접두지만, 한 글자를 허용하면 전 칸에 붙는다.
+    expect(slotFor(취업현황, '기')).toStrictEqual({ kind: 'unmatched' });
+  });
+
+  it('BQ1-1 블록 전체 — "메모" 한 칸만 미배정으로 남는다', () => {
+    const labels = ['기업명', '입사예정시기', '업무 분야', '담당 직무', '직책', '창업아이템', '메모'];
+    const blank = labels.map(() => '');
+    const blocks = splitHeaderBlocks([['PART B.', ...blank.slice(1)], ['BQ1-1.', ...blank.slice(1)], labels]);
+    const samples = collectSampleValues([
+      ['네이버', '2025년 7월', 'IT/SW 관련 분야', '정보기술 개발', 'CEO', '검색 앱', ''],
+      ['카카오', '2024년 12월', 'IT/SW 관련 분야', '정보기술 개발', 'CTO', '', '재직 중'],
+      ['쿠팡', '2025년 3월', '비 IT/SW 관련 분야', '영업', '기타', '물류 서비스', ''],
+    ]);
+    const s = suggestBlockMapping(blocks, [취업현황], samples)[0]!;
+    expect(s.questionId).toBe('q-bq1-1');
+    expect(s.slots).toEqual([
+      { kind: 'table-cell', cellId: 'name', cellType: 'input' },
+      { kind: 'table-cell', cellId: 'year', cellType: 'input' },
+      { kind: 'table-cell', cellId: 'field', cellType: 'radio' },
+      { kind: 'table-cell', cellId: 'job-it', cellType: 'radio' },
+      { kind: 'table-cell', cellId: 'title', cellType: 'radio' },
+      { kind: 'table-cell', cellId: 'item', cellType: 'input' },
+      { kind: 'unmatched' },
+    ]);
+    expect(buildBlockAnswer(취업현황, s.slots, ['네이버', '2025년 7월', 'IT/SW 관련 분야', '정보기술 개발', 'CEO', '검색 앱', '재직 중']).value).toEqual({
+      name: '네이버',
+      year: '2025',
+      month: '7',
+      field: '1',
+      'job-it': '2',
+      title: '1',
+      item: '검색 앱',
+    });
   });
 });

@@ -524,3 +524,68 @@ describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
     expect(res.savedValueAliases).toEqual({ 'q-sat': { '다소 필요': 'some' } });
   });
 });
+
+describe('suggestPriorAnswerImportMapping — 칸 배정 사유', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.surveyConfig = null;
+    h.questionRows = [
+      {
+        id: 'q-table',
+        type: 'table',
+        title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
+        order: 1,
+        questionCode: 'BQ1_1',
+        tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }],
+        tableRowsData: [
+          {
+            id: 'r-it',
+            label: '담당 직무_① IT/SW 관련 세부분야',
+            cells: [
+              { id: 'it-label', type: 'text', content: '' },
+              { id: 'it', type: 'radio', content: '', radioOptions: [{ id: 'o1', value: '1', label: '① 정보기술 개발' }] },
+            ],
+          },
+          {
+            id: 'r-non',
+            label: '담당 직무_② 비 IT/SW 관련 분야',
+            cells: [
+              { id: 'non-label', type: 'text', content: '' },
+              { id: 'non', type: 'input', content: '' },
+            ],
+          },
+        ],
+      },
+    ];
+    h.headerRows = [
+      ['', 'PART B.'],
+      ['ID', 'BQ1-1.'],
+      ['시스템ID', '담당 직무'],
+    ];
+  });
+
+  function suggestInput() {
+    return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 3 } as Parameters<
+      typeof suggestPriorAnswerImportMapping
+    >[0];
+  }
+
+  it('후보 행이 여럿인데 표본값으로 못 가르면 사유가 칸 배정 줄에 실린다', async () => {
+    h.parsedRows = [['7', '영업']];
+    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const block = res.blocks.find((b) => b.code === 'BQ1-1.');
+    expect(block?.questionId).toBe('q-table');
+    expect(block?.unmatchedSlots).toBe(1);
+    expect(block?.slotLabels).toEqual([
+      '배정 안 됨 — 후보 2행(담당 직무_① IT/SW 관련 세부분야 / 담당 직무_② 비 IT/SW 관련 분야) — 표본값 "영업" 으로 못 가름',
+    ]);
+  });
+
+  it('표본값이 한 행의 보기에 맞으면 그 행으로 배정된다', async () => {
+    h.parsedRows = [['7', '정보기술 개발']];
+    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const block = res.blocks.find((b) => b.code === 'BQ1-1.');
+    expect(block?.unmatchedSlots).toBe(0);
+    expect(block?.slotLabels).toEqual(['담당 직무_① IT/SW 관련 세부분야']);
+  });
+});
