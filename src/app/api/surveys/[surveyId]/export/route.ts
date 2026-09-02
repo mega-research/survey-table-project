@@ -6,7 +6,13 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import {
+  loadOperationsDataScope,
+  responseScopeCondition,
+  testFlagForScope,
+  type OperationsDataScope,
+} from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -78,6 +84,11 @@ async function handleExport(
       return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
     }
 
+    // 운영 콘솔과 같은 파티션 규칙 — 테스트 모드면 테스트 응답만, 아니면 실 응답만 내려간다
+    // (게스트는 항상 실). 테스트 검수용 다운로드에 실 응답이 섞이는 것과 그 반대를 함께 막는다.
+    const scope = await loadOperationsDataScope(surveyId);
+    ctx.bind({ scope });
+
     // strip된 셀/옵션 파생 필드 hydrate (cellCode, exportLabel, optionCode 복원)
     // 이후 일회성 export 행 제외 적용 — 등재된 설문 외에는 원본 그대로 통과
     const hydratedQuestions = applyExportRowExclusions(
@@ -98,7 +109,7 @@ async function handleExport(
             eq(surveyResponses.surveyId, surveyId),
             notDeletedResponse,
             completedResponse,
-            notTestResponse,
+            responseScopeCondition(scope),
           ),
         );
       const total = totalRows[0]?.total ?? 0;
@@ -115,7 +126,7 @@ async function handleExport(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
-          notTestResponse,
+          responseScopeCondition(scope),
         ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
@@ -138,8 +149,9 @@ async function handleExport(
       const { generateMrsetsSyntax } = await import('@/lib/spss/mrsets-syntax');
       // 변동 확인 변수는 MRSETS·FORMATS 대상이 아니지만, 같은 설문의 변수 집합이
       // 내보내기 형식마다 갈리지 않도록 여기서도 같은 옵션으로 만든다.
+      // 파티션은 다른 내보내기 형식과 동일하게 현재 스코프를 따른다.
       const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
-        isTest: false,
+        isTest: testFlagForScope(scope),
       });
       const syntax = generateMrsetsSyntax(
         generateSPSSColumns(hydratedQuestions, { changeConfirmQuestionIds }),
@@ -164,7 +176,7 @@ async function handleExport(
 
     // 3. Raw Data xlsx
     if (type === 'raw') {
-      const rows = await loadRawExportRows(surveyId);
+      const rows = await loadRawExportRows(surveyId, scope);
       if (rows === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
@@ -172,7 +184,7 @@ async function handleExport(
         );
       }
       ctx.bind({ rowCount: rows.length });
-      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const exportCtx = await buildRawExportContext(surveyId, scope, surveyData.questions);
       const workbook = generateRawDataWorkbook(hydratedQuestions, rows, exportCtx);
       // exceljs 워크북 — 셀 스타일(헤더 색상/병합) 지원을 위해 XLSX 대신 사용.
       const buffer = await workbook.xlsx.writeBuffer();
@@ -198,7 +210,7 @@ async function handleExport(
         return NextResponse.json({ error: '유효하지 않은 분할 기준 문항입니다.' }, { status: 400 });
       }
 
-      const rows = await loadRawExportRows(surveyId);
+      const rows = await loadRawExportRows(surveyId, scope);
       if (rows === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
@@ -206,7 +218,7 @@ async function handleExport(
         );
       }
 
-      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const exportCtx = await buildRawExportContext(surveyId, scope, surveyData.questions);
       // 한계 판정은 실제 워크북과 같은 변수 집합으로 해야 한다 — 변동 확인 변수를 빼고
       // 세면 통과했다가 워크북 생성에서 열 한계를 넘는다.
       const plan = planSplit(hydratedQuestions, basis, {}, toSpssColumnOptions(exportCtx));
@@ -235,9 +247,9 @@ async function handleExport(
     // 4. SPSS .sav는 별도 바이너리 응답
     if (type === 'sav') {
       const { generateSavBuffer } = await import('@/lib/spss/sav-builder');
-      // 추적조사 변동 확인 변수 — .sav 모수도 실 응답이라 real 파티션을 본다.
+      // 추적조사 변동 확인 변수 — .sav 모수와 같은 스코프 파티션의 이월 응답을 본다.
       const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
-        isTest: false,
+        isTest: testFlagForScope(scope),
       });
       const savBuffer = await generateSavBuffer(
         hydratedQuestions,
@@ -282,11 +294,12 @@ export const GET = withRouteLogging('/api/surveys/[surveyId]/export', handleExpo
  */
 async function loadRawExportRows(
   surveyId: string,
+  scope: OperationsDataScope,
 ): Promise<RawExportResponseRow[] | 'too_many'> {
   const rawWhere = and(
     eq(surveyResponses.surveyId, surveyId),
     notDeletedResponse,
-    notTestResponse,
+    responseScopeCondition(scope),
   );
 
   // 한도 초과 판정은 JSONB 페이로드를 물화하기 전에 count 로 먼저 한다 (.sav 경로와 동일).
@@ -351,6 +364,7 @@ async function loadRawExportRows(
 /** 메타 컬럼 렌더 컨텍스트 — 개별 URL 베이스와 마지막 입력 문항 라벨 맵. */
 async function buildRawExportContext(
   surveyId: string,
+  scope: OperationsDataScope,
   questions: Array<{
     id: string;
     order: number;
@@ -365,9 +379,11 @@ async function buildRawExportContext(
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
   // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
   // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
-  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
-  // 추적조사 — raw export 모수가 실 응답이므로 이월 응답도 real 파티션만 본다.
-  const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, { isTest: false });
+  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, scope);
+  // 추적조사 — 이월 응답도 raw export 모수와 같은 스코프 파티션만 본다.
+  const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+    isTest: testFlagForScope(scope),
+  });
   const stepQs = questions.map((q) => ({
     id: q.id,
     order: q.order,

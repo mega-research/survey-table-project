@@ -2,13 +2,22 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { and, desc, eq, ilike, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import * as libraryData from '@/data/library';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { db } from '@/db';
-import { contactTargets, questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
+import {
+  contactTargets,
+  questionGroups,
+  questions,
+  surveyDocumentAnchors,
+  surveyDocuments,
+  surveyVersions,
+  surveys,
+} from '@/db/schema';
+import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import {
   getVariableCatalog,
   type VariableDef,
@@ -17,6 +26,8 @@ import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { getR2PublicUrl } from '@/lib/r2-env';
+import { toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
 import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -26,6 +37,7 @@ import type {
   SurveyBySlugInput,
   SurveyByPreviewTokenInput,
   SurveyByPrivateTokenInput,
+  SurveyDocumentView,
   SurveyForResponseInput,
   SurveyForResponseResult,
   SurveyIdRow,
@@ -200,6 +212,48 @@ export async function getSurveyByPreviewToken(
   return survey;
 }
 
+/**
+ * 응답 화면이 쓸 조사표 뷰를 만든다.
+ *
+ * 파일은 **라이브**(survey_documents 현재 행), 앵커는 인자로 받은 **얼린 좌표**다
+ * (ADR 0020). 조사표가 없거나 앵커가 하나도 없으면 null — 그 설문은 분할이 아니다.
+ *
+ * 교체 가드가 없으므로 파일이 바뀌어 쪽 수가 줄면 없는 쪽을 가리키는 앵커가 생긴다.
+ * 그 앵커는 그려지지 않을 뿐 에러가 되지 않는다 — 받아들인 위험이다.
+ */
+export async function buildDocumentView(
+  surveyId: string,
+  anchors: readonly SurveyAnchorSnapshot[],
+): Promise<SurveyDocumentView | null> {
+  if (anchors.length === 0) return null;
+  const documents = await db
+    .select({
+      id: surveyDocuments.id,
+      fileKey: surveyDocuments.fileKey,
+      pageCount: surveyDocuments.pageCount,
+    })
+    .from(surveyDocuments)
+    .where(eq(surveyDocuments.surveyId, surveyId))
+    .orderBy(asc(surveyDocuments.order), asc(surveyDocuments.createdAt));
+  if (documents.length === 0) return null;
+
+  // 앵커가 가리키는 조사표를 고른다. 조사표가 하나뿐이면(지금 화면이 만드는 유일한
+  // 모양) 결과가 같지만, 둘 이상 붙었을 때 두 번째 조사표의 앵커가 첫 번째 위에
+  // 조용히 그려지는 것을 막는다. documentId 가 없는 옛 발행본은 첫 조사표로 떨어진다.
+  const targetId = anchors.find((anchor) => anchor.documentId)?.documentId;
+  const document =
+    (targetId ? documents.find((row) => row.id === targetId) : undefined) ?? documents[0];
+  if (!document) return null;
+  const drawable = anchors.filter(
+    (anchor) => anchor.documentId === undefined || anchor.documentId === document.id,
+  );
+  return {
+    url: `${getR2PublicUrl()}/${document.fileKey}`,
+    pageCount: document.pageCount,
+    anchors: drawable,
+  };
+}
+
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
   input: SurveyForResponseInput,
@@ -279,6 +333,8 @@ export async function getSurveyForResponse(
         };
         // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
         lookups?: SurveyType['lookups'];
+        // 발행 시점에 얼린 영역 앵커. 이 필드 도입 이전 발행본은 undefined = 앵커 없음.
+        anchors?: SurveyAnchorSnapshot[];
       };
 
       // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
@@ -332,7 +388,11 @@ export async function getSurveyForResponse(
         updatedAt: survey.updatedAt,
       };
 
-      return { survey: surveyData, versionId: version.id, control };
+      // 앵커는 얼린 값만 쓴다 — 라이브 앵커를 옮겨도 진행 중인 응답의 페이지 구성이
+      // 변하지 않는 것이 이 한 줄에 걸려 있다.
+      const documentView = await buildDocumentView(surveyId, snapshot.anchors ?? []);
+
+      return { survey: surveyData, versionId: version.id, control, documentView };
     }
   }
 
@@ -347,7 +407,16 @@ export async function getSurveyForResponse(
       ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
       : null;
 
-  return { survey: { ...surveyData, quotaGate }, versionId: null, control };
+  // 미배포 설문에는 얼린 앵커가 없으므로 라이브 앵커를 그대로 쓴다 — 빌더 미리보기가
+  // 발행 전에도 분할 화면을 보여줄 수 있어야 한다.
+  const liveAnchors = await db
+    .select()
+    .from(surveyDocumentAnchors)
+    .where(eq(surveyDocumentAnchors.surveyId, surveyId))
+    .orderBy(asc(surveyDocumentAnchors.order));
+  const documentView = await buildDocumentView(surveyId, liveAnchors.map(toAnchorSnapshot));
+
+  return { survey: { ...surveyData, quotaGate }, versionId: null, control, documentView };
 }
 
 // ========================

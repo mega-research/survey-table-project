@@ -21,10 +21,14 @@ import {
 } from '@/lib/operations/response-edit-diff';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
-import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import {
+  decryptQuestionResponses,
+  encryptResponsesForStorage,
+  hasPiiTargets,
+} from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import { loadPiiQuestionIds } from './response.service';
+import { loadPiiTargets } from './response.service';
 
 import type { Question, SurveyLookup } from '@/types/survey';
 import type { SaveAdminEditInput } from '../../domain/response-edit';
@@ -244,11 +248,10 @@ export async function saveAdminEdit(
   const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
 
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
-  const piiIds = await loadPiiQuestionIds(effectiveVersionId, surveyId);
-  const storedResponses =
-    piiIds.size > 0
-      ? encryptResponsesForStorage(finalResponses, piiIds)
-      : finalResponses;
+  const piiTargets = await loadPiiTargets(effectiveVersionId, surveyId);
+  const storedResponses = hasPiiTargets(piiTargets)
+    ? encryptResponsesForStorage(finalResponses, piiTargets)
+    : finalResponses;
 
   await db.transaction(async (tx) => {
     // deletedAt 검사(line 61)와 이 UPDATE 사이에 동시 softDeleteResponse 가 deletedAt 을

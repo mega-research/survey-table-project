@@ -21,6 +21,7 @@ import {
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
+import { loadIdListsForValues } from '@/lib/operations/contact-id-lists.server';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
@@ -75,7 +76,11 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const columnCandidates = buildColumnCandidates(scheme);
 
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
+  const idLists = await loadIdListsForValues(surveyId, sp.q);
+  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
+    idLists,
+  });
   const headerClauses = parseHeaderFiltersFromUrl(
     sp.hcol,
     sp.hm,

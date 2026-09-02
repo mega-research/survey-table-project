@@ -11,7 +11,10 @@ import { parsesurveyIdentifier } from '@/lib/survey-url';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { QuestionGroup, Survey } from '@/types/survey';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
-import type { SurveyControl } from '@/features/survey-builder/domain/survey-read';
+import type {
+  SurveyControl,
+  SurveyDocumentView,
+} from '@/features/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -25,12 +28,15 @@ interface AdminContext {
   initialResponses: ResponsesMap;
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
+  /** 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일. RSC 가 만들어 넘긴다. */
+  documentView?: SurveyDocumentView | null;
   onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
 }
 
 interface PreviewContext {
   survey: Survey;
   versionId: string | null;
+  documentView?: SurveyDocumentView | null;
 }
 
 interface UseSurveyLoaderArgs {
@@ -74,6 +80,12 @@ interface UseSurveyLoaderResult {
    * 답이 지난 회차 값으로 되돌아간다.
    */
   prefillSettled: boolean;
+  /**
+   * 조사표 뷰(파일은 라이브, 앵커는 발행 스냅샷의 얼린 좌표 — ADR 0020).
+   * 조사표가 없거나 앵커가 하나도 없으면 null 이고, 그 설문은 지금과 똑같이 동작한다.
+   * admin-edit 은 응답 시점 스냅샷의 앵커를 쓰되 파일은 현재 것을 본다.
+   */
+  documentView: SurveyDocumentView | null;
   /**
    * 최신 스냅샷 재취득(무중단 갈아타기 — 티켓 04). public 응답 경로에서 서버가 응답 행을
    * 현재 버전으로 재핀했을 때 호출한다. loadedSurvey/versionId state 를 갱신하고, 호출자가
@@ -119,6 +131,7 @@ export function useSurveyLoader({
   const [priorAnswers, setPriorAnswers] = useState<PriorAnswers | null>(null);
   // 초기 프리필 판정 완료 여부 — 이어가기 회복 게이트.
   const [prefillSettled, setPrefillSettled] = useState(false);
+  const [documentView, setDocumentView] = useState<SurveyDocumentView | null>(null);
 
   // URL 식별자로 설문 조회
   useEffect(() => {
@@ -132,6 +145,7 @@ export function useSurveyLoader({
       setControl(null);
       setPriorAnswers(null);
       setPrefillSettled(false);
+      setDocumentView(null);
 
       try {
         // admin-edit 분기 (1/8) — survey 로드: versionSnapshot 우선, fallback DB 조회.
@@ -172,6 +186,9 @@ export function useSurveyLoader({
             };
             setLoadedSurvey(builtSurvey);
             setVersionId(null);
+            // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 — RSC 가 만들어 넘긴다.
+            // 관리자도 조사표를 보면서 고쳐야 문항 번호만 보고 무엇을 고치는지 잃지 않는다.
+            setDocumentView(adminContext.documentView ?? null);
           } else {
             // snapshot 미존재 (published 이전 응답) → 현재 surveys 행 직접 사용.
             const result = await client.surveyBuilder.publicRead.forResponse({
@@ -184,6 +201,7 @@ export function useSurveyLoader({
             } else {
               setLoadedSurvey(result.survey);
               setVersionId(result.versionId);
+              setDocumentView(result.documentView);
             }
           }
           // 초기 응답값 prefill — DB INSERT 없이 state 만 세팅.
@@ -206,6 +224,7 @@ export function useSurveyLoader({
           }
           setLoadedSurvey(previewContext.survey);
           setVersionId(previewContext.versionId);
+          setDocumentView(previewContext.documentView ?? null);
           setResponses({});
           setContactAttrs({});
           setShowInviteRequired(false);
@@ -262,6 +281,7 @@ export function useSurveyLoader({
         } else {
           setLoadedSurvey(result.survey);
           setVersionId(result.versionId);
+          setDocumentView(result.documentView);
           // 라이브 제어값 — 렌더 게이트(중단/무효 링크) + 중복검사 skip 판정에 사용.
           setControl(result.control);
 
@@ -368,6 +388,7 @@ export function useSurveyLoader({
       if (!result) return null;
       setLoadedSurvey(result.survey);
       setVersionId(result.versionId);
+      setDocumentView(result.documentView);
       return { survey: result.survey, versionId: result.versionId };
     } catch (error) {
       // 재취득 실패는 fail-open — 기존 화면(구 스냅샷)을 유지하고 응답 흐름을 막지 않는다.
@@ -386,6 +407,7 @@ export function useSurveyLoader({
     control,
     priorAnswers,
     prefillSettled,
+    documentView,
     refetchSnapshot,
   };
 }

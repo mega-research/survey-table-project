@@ -52,6 +52,7 @@ export interface CellFormSetters {
   setInputMaxLength: (v: number | '') => void;
   setInputDefaultValueTemplate: (v: string) => void;
   setInputType: (v: 'text' | 'number') => void;
+  setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
   setEmptyDefaultEnabled: (v: boolean) => void;
   setEmptyDefaultRaw: (v: string) => void;
   setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
@@ -70,6 +71,8 @@ export interface CellFormSetters {
   setIsOtherRankingCell: (v: boolean) => void;
   setChoiceLabel: (v: string) => void;
   setChoiceAllowTextInput: (v: boolean) => void;
+  setChoiceTextInputType: (v: CellFormState['choiceTextInputType']) => void;
+  setChoiceTextInputNumberFormat: (v: CellFormState['choiceTextInputNumberFormat']) => void;
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
   setChoiceGroupId: (v: string) => void;
   setTextBold: (v: boolean) => void;
@@ -150,6 +153,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setInputMaxLength: set('inputMaxLength'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
       setInputType: set('inputType'),
+      setInputPiiEncrypted: set('inputPiiEncrypted'),
       setEmptyDefaultEnabled: set('emptyDefaultEnabled'),
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
       setCellNumberFormat: set('cellNumberFormat'),
@@ -168,6 +172,8 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setIsOtherRankingCell: set('isOtherRankingCell'),
       setChoiceLabel: set('choiceLabel'),
       setChoiceAllowTextInput: set('choiceAllowTextInput'),
+      setChoiceTextInputType: set('choiceTextInputType'),
+      setChoiceTextInputNumberFormat: set('choiceTextInputNumberFormat'),
       setChoiceBranchRule: set('choiceBranchRule'),
       setChoiceGroupId: set('choiceGroupId'),
       setTextBold: set('textBold'),

@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import {
   getHeaderBandBorders, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
-  HEADER_NOTICE_BOX_WIDTHS, normalizeResponseHeaderConfig, partitionHeaderBlocks,
+  HEADER_NOTICE_BOX_WIDTHS, normalizeResponseHeaderConfig, partitionHeaderBlocks, resolveHeaderRow,
   resolveHeaderTitlePx, resolveMobileHeaderTitlePx, resolveNoticeFontPx,
 } from '@/lib/survey/response-header-config';
 import type {
@@ -228,16 +228,28 @@ function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHe
   }
 
   const hasRow = parts.rowLeft.length + parts.rowCenter.length + parts.rowRight.length > 0;
+  const row = resolveHeaderRow(parts, config.rowSpread);
   const band = getHeaderBandBorders(config.bandStyle);
   return (
     <div>
-      {hasRow && (
-        <div data-testid="header-block-row" className="mb-1 flex items-stretch justify-between gap-6">
-          <div className="flex flex-wrap items-stretch gap-3.5">{parts.rowLeft.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
-          <div className="flex flex-wrap items-stretch justify-center gap-3.5">{parts.rowCenter.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
-          <div className="flex flex-wrap items-stretch justify-end gap-3.5">{parts.rowRight.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
-        </div>
-      )}
+      {hasRow &&
+        (row.mode === 'spread' ? (
+          // 좌·중·우 칸을 합쳐 한 줄로 편다. 칸에 몰아넣어 한쪽이 통째로 비는 것을
+          // 피하려는 배치라, 여기서는 칸이 아니라 간격이 자리를 정한다.
+          <div
+            data-testid="header-block-row"
+            className="mb-1 flex flex-wrap items-stretch gap-3.5"
+            style={{ justifyContent: row.justifyContent }}
+          >
+            {row.blocks.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}
+          </div>
+        ) : (
+          <div data-testid="header-block-row" className="mb-1 flex items-stretch justify-between gap-6">
+            <div className="flex flex-wrap items-stretch gap-3.5">{parts.rowLeft.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+            <div className="flex flex-wrap items-stretch justify-center gap-3.5">{parts.rowCenter.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+            <div className="flex flex-wrap items-stretch justify-end gap-3.5">{parts.rowRight.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+          </div>
+        ))}
       {above}
       <div
         data-testid="header-band"

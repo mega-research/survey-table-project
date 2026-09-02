@@ -4,6 +4,7 @@ import type {
   ResponseHeaderBlockSize,
   ResponseHeaderImageFrame,
   ResponseHeaderLayout,
+  ResponseHeaderRowSpread,
   ResponseHeaderLogoAlign,
   ResponseHeaderLogoSize,
   ResponseHeaderMobileStyle,
@@ -220,6 +221,7 @@ export type NormalizedResponseHeaderConfig = {
   style: 'composed';
   mobileStyle: ResponseHeaderMobileStyle;
   layout: ResponseHeaderLayout;
+  rowSpread: ResponseHeaderRowSpread;
   blocks: NormalizedResponseHeaderBlock[];
   subtitle: string;
   titleAlign: ResponseHeaderTitleAlign;
@@ -245,7 +247,7 @@ export const HEADER_NOTICE_LINE_FONT_PX = { sm: 12, md: 13.5, lg: 15.5 } as cons
 export const HEADER_NOTICE_BOX_FONT_PX = 11.5; // 박스형 문구 자동 글자 크기
 
 export const DEFAULT_COMPOSED_RESPONSE_HEADER: NormalizedResponseHeaderConfig = {
-  style: 'composed', mobileStyle: 'gov', layout: 'stacked', blocks: [], subtitle: '',
+  style: 'composed', mobileStyle: 'gov', layout: 'stacked', rowSpread: 'group', blocks: [], subtitle: '',
   titleAlign: 'left', titleTextAlign: 'left', titleVAlign: 'center',
   titleScale: 'md', titlePx: null, vAlignLogo: 'center', vAlignNotice: 'center',
   bandStyle: 'plain', bandBg: '#ffffff',
@@ -262,6 +264,7 @@ const vAligns = new Set<ResponseHeaderVAlign>(['top', 'center', 'bottom']);
 const bandStyleSet = new Set<ResponseHeaderBandStyle>(['band', 'boxed', 'rule', 'plain']);
 const mobileStyleSet = new Set<ResponseHeaderMobileStyle>(['gov', 'band', 'title']);
 const layoutSet = new Set<ResponseHeaderLayout>(['stacked', 'inline']);
+const rowSpreadSet = new Set<ResponseHeaderRowSpread>(['group', 'between', 'evenly']);
 
 function pickEnum<T extends string>(value: unknown, allowed: Set<T>, fallback: T): T {
   return typeof value === 'string' && allowed.has(value as T) ? (value as T) : fallback;
@@ -332,6 +335,7 @@ function normalizeComposedResponseHeader(rec: Record<string, unknown>): Normaliz
     style: 'composed',
     mobileStyle: pickEnum(rec['mobileStyle'], mobileStyleSet, 'gov'),
     layout, blocks,
+    rowSpread: pickEnum(rec['rowSpread'], rowSpreadSet, 'group'),
     subtitle: pickString(rec['subtitle']),
     titleAlign: normalizeTitleAlign(rec['titleAlign'], 'left'),
     titleTextAlign: normalizeTitleAlign(rec['titleTextAlign'], 'left'),
@@ -471,6 +475,31 @@ export function partitionHeaderBlocks(blocks: NormalizedResponseHeaderBlock[]) {
   };
 }
 
+/** 배분 값 → CSS justify-content. */
+const ROW_JUSTIFY = { between: 'space-between', evenly: 'space-evenly' } as const;
+
+/**
+ * 블록 행을 어떻게 늘어놓을지. 좌·중·우 세 칸 그대로 둘 것인가, 한 줄로 펴서
+ * 고르게 벌릴 것인가.
+ *
+ * 세 칸은 **배분을 정하는 칸**이지 순서를 정하는 칸이 아니다. 그래서 펼칠 때는
+ * 좌 → 중 → 우 순으로 이어 붙이면 그것이 곧 읽는 순서가 된다.
+ *
+ * 블록이 둘 미만이면 펼치지 않는다. 하나짜리에 space-between 은 왼쪽 붙임과
+ * 같아 보이면서 좌/중/우 설정만 조용히 무시하게 된다.
+ */
+export function resolveHeaderRow<T>(
+  parts: { rowLeft: T[]; rowCenter: T[]; rowRight: T[] },
+  spread: ResponseHeaderRowSpread,
+):
+  | { mode: 'group' }
+  | { mode: 'spread'; blocks: T[]; justifyContent: 'space-between' | 'space-evenly' } {
+  if (spread === 'group') return { mode: 'group' };
+  const blocks = [...parts.rowLeft, ...parts.rowCenter, ...parts.rowRight];
+  if (blocks.length < 2) return { mode: 'group' };
+  return { mode: 'spread', blocks, justifyContent: ROW_JUSTIFY[spread] };
+}
+
 // 프리셋 — 블록·배치·밴드만 교체, subtitle·titleTextAlign·titleVAlign 유지 (스펙 §5)
 export type ResponseHeaderPresetKey = 'gov' | 'band' | 'title';
 
@@ -493,10 +522,12 @@ function buildPresetBlocks(preset: ResponseHeaderPresetKey): NormalizedResponseH
   ];
 }
 
+// 프리셋은 블록 배치를 새로 짜므로 가로 배분도 기본으로 되돌린다 — 프리셋이
+// 정해 준 좌/중/우 칸이 남의 '펼치기' 설정에 눌리면 그 프리셋 모양이 안 나온다.
 const PRESET_PATCH: Record<ResponseHeaderPresetKey, Partial<NormalizedResponseHeaderConfig>> = {
-  gov: { mobileStyle: 'gov', layout: 'stacked', bandStyle: 'band', bandBg: '#f0f0f0', titleAlign: 'center', titleScale: 'md' },
-  band: { mobileStyle: 'band', layout: 'inline', bandStyle: 'band', bandBg: '#cfe0ad', titleAlign: 'center', titleScale: 'md' },
-  title: { mobileStyle: 'title', layout: 'stacked', bandStyle: 'plain', bandBg: '#ffffff', titleAlign: 'left', titleScale: 'lg' },
+  gov: { mobileStyle: 'gov', layout: 'stacked', rowSpread: 'group', bandStyle: 'band', bandBg: '#f0f0f0', titleAlign: 'center', titleScale: 'md' },
+  band: { mobileStyle: 'band', layout: 'inline', rowSpread: 'group', bandStyle: 'band', bandBg: '#cfe0ad', titleAlign: 'center', titleScale: 'md' },
+  title: { mobileStyle: 'title', layout: 'stacked', rowSpread: 'group', bandStyle: 'plain', bandBg: '#ffffff', titleAlign: 'left', titleScale: 'lg' },
 };
 
 export function applyResponseHeaderPreset(

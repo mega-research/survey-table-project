@@ -45,6 +45,11 @@ export const CreateQuestionInput = z.object({
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
   noticeContent: z.string().optional(),
+  // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
+  noticeBgColor: z
+    .union([z.literal('none'), z.string().regex(/^#[0-9a-fA-F]{6}$/)])
+    .nullable()
+    .optional(),
   requiresAcknowledgment: z.boolean().optional(),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),
@@ -104,6 +109,11 @@ export const UpdateQuestionData = z.object({
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
   noticeContent: z.string().optional(),
+  // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
+  noticeBgColor: z
+    .union([z.literal('none'), z.string().regex(/^#[0-9a-fA-F]{6}$/)])
+    .nullable()
+    .optional(),
   requiresAcknowledgment: z.boolean().optional(),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),

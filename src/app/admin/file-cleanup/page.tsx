@@ -32,6 +32,7 @@ const SOURCE_LABEL: Record<string, string> = {
   'survey-delete': '설문 삭제',
   'question-delete': '질문 삭제',
   'library-delete': '보관함 삭제',
+  'document-delete': '조사표 삭제',
   'template-delete': '템플릿 삭제',
   'save-diff': '저장 정리',
   'version-prune': '버전 정리',

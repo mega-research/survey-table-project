@@ -48,7 +48,7 @@ import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { CalcCellValidation, ChoiceGroup, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { collectChoiceOptCells } from '@/utils/choice-source';
+import { collectChoiceOptCells, isLastRemainingChoiceOptCell } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
@@ -224,6 +224,7 @@ export function CellContentModal({
     inputMaxLength,
     inputDefaultValueTemplate,
     inputType,
+    inputPiiEncrypted,
     emptyDefaultEnabled,
     emptyDefaultRaw,
     cellNumberFormat,
@@ -242,6 +243,8 @@ export function CellContentModal({
     isOtherRankingCell,
     choiceLabel,
     choiceAllowTextInput,
+    choiceTextInputType,
+    choiceTextInputNumberFormat,
     choiceBranchRule,
     choiceGroupId,
     textBold,
@@ -302,6 +305,7 @@ export function CellContentModal({
     setInputMaxLength,
     setInputDefaultValueTemplate,
     setInputType,
+    setInputPiiEncrypted,
     setEmptyDefaultEnabled,
     setEmptyDefaultRaw,
     setCellNumberFormat,
@@ -320,6 +324,8 @@ export function CellContentModal({
     setIsOtherRankingCell,
     setChoiceLabel,
     setChoiceAllowTextInput,
+    setChoiceTextInputType,
+    setChoiceTextInputNumberFormat,
     setChoiceBranchRule,
     setChoiceGroupId,
     setTextBold,
@@ -432,6 +438,21 @@ export function CellContentModal({
   }, []);
 
   const handleSave = async () => {
+    // 설명 테이블(radio/checkbox)의 마지막 보기 옵션 셀을 다른 타입으로 바꾸면 질문의
+    // 보기가 0개가 되어 질문 저장이 막힌다. 사전 차단하고 탈출 경로를 안내한다.
+    if (
+      cell.type === 'choice_opt' &&
+      contentType !== 'choice_opt' &&
+      (ownQuestion.type === 'radio' || ownQuestion.type === 'checkbox')
+    ) {
+      const latestRows = getLatestRows?.() ?? ownQuestion.tableRowsData;
+      if (isLastRemainingChoiceOptCell(latestRows, cell.id)) {
+        toast.error(
+          '마지막 "보기 옵션" 셀은 다른 타입으로 바꿀 수 없습니다. 먼저 다른 셀을 보기 옵션으로 지정하거나, 기본 설정에서 "설명 테이블로 보기 구성"을 끄세요.',
+        );
+        return;
+      }
+    }
     // 빌더 validator: ranking 셀은 옵션이 최소 1개 이상이어야 함.
     if (contentType === 'ranking' && rankingOptions.length === 0) {
       toast.error('순위형 셀은 최소 1개 이상의 옵션이 필요합니다.');
@@ -1170,6 +1191,23 @@ export function CellContentModal({
                   </label>
                 </div>
 
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="input-pii-encrypted"
+                    checked={inputPiiEncrypted}
+                    onChange={(e) => setInputPiiEncrypted(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <label htmlFor="input-pii-encrypted" className="flex-1 cursor-pointer text-sm">
+                    <span className="font-medium">개인정보 암호화</span>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
+                      후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
+                      자동으로 복호화되어 표시됩니다.
+                    </p>
+                  </label>
+                </div>
                 {inputType === 'number' && (
                   <div className="ml-7 flex items-center gap-2 text-sm">
                     <input
@@ -1553,6 +1591,10 @@ export function CellContentModal({
               onSpssNumericCodeChange={setCellSpssNumericCode}
               allowTextInput={choiceAllowTextInput}
               onAllowTextInputChange={setChoiceAllowTextInput}
+              textInputType={choiceTextInputType}
+              onTextInputTypeChange={setChoiceTextInputType}
+              textInputNumberFormat={choiceTextInputNumberFormat}
+              onTextInputNumberFormatChange={setChoiceTextInputNumberFormat}
               branchRule={choiceBranchRule}
               onBranchRuleChange={setChoiceBranchRule}
               allQuestions={questions}
@@ -1562,6 +1604,7 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              questionRequired={ownQuestion.required}
               answerQuoteEnabled={answerQuoteEnabled}
               answerQuoteText={answerQuoteText}
               onAnswerQuoteTextChange={setAnswerQuoteText}

@@ -148,6 +148,37 @@ export function findParentGroupId(
   return question?.groupId ?? null;
 }
 
+export interface FlatGroupEntry {
+  group: QuestionGroup;
+  /** 최상위 0, 하위 1, 하위의 하위 2 … */
+  depth: number;
+}
+
+/**
+ * 그룹 트리 → 깊이 우선·order 순 평탄화. 셀렉트/목록처럼 계층을 한 줄씩 보여줄 때 쓴다.
+ * 깊이 제한 없음 — 2단계에서 멈추면 하위의 하위 그룹이 화면에서 사라져 질문을 옮길 수 없다.
+ * 부모가 없는 참조(고아)와 루트에 닿지 않는 순환은 순회되지 않아 자연히 빠진다.
+ */
+export function flattenGroupTree(groups: readonly QuestionGroup[]): FlatGroupEntry[] {
+  const byParent = new Map<string | null, QuestionGroup[]>();
+  for (const g of groups) {
+    const key = g.parentGroupId ?? null;
+    const bucket = byParent.get(key);
+    if (bucket) bucket.push(g);
+    else byParent.set(key, [g]);
+  }
+  const out: FlatGroupEntry[] = [];
+  const visit = (parentId: string | null, depth: number) => {
+    const children = (byParent.get(parentId) ?? []).slice().sort((a, b) => a.order - b.order);
+    for (const group of children) {
+      out.push({ group, depth });
+      visit(group.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return out;
+}
+
 // ── 응답 페이지 렌더 스텝 구성 ──
 
 export type StepItem = {
@@ -283,6 +314,76 @@ export function buildRenderSteps(
   if (buffer.length > 0) steps.push({ kind: 'page', items: buffer });
 
   return steps;
+}
+
+// ── 분할 레이아웃 시작 지점 파생 ──
+
+/**
+ * 앵커 하나에서 이 판정에 필요한 것 전부. 좌표도 조사표도 알 필요가 없다 —
+ * "무엇에 붙어 있는가"만 본다. 앵커 저장 방식과 무관하게 구조적으로 들어맞는다.
+ */
+export type AnchorOwnerRef = { ownerKind: 'question' | 'group'; ownerId: string };
+
+/** 그 질문이 속한 그룹 사슬(자기 그룹 → 상위 → 루트). 그룹이 없으면 빈 배열. */
+function groupChainOf(question: Question, parentOf: Map<string, string | null>): string[] {
+  const chain: string[] = [];
+  let cursor = question.groupId ?? null;
+  // 자기참조 사이클이 들어와도 멈추도록 방문 집합을 둔다
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    chain.push(cursor);
+    cursor = parentOf.get(cursor) ?? null;
+  }
+  return chain;
+}
+
+/**
+ * 페이지마다 분할 레이아웃인지. 스텝 배열과 자리를 맞춘 불리언 배열이다.
+ *
+ * **모드는 설정이 아니라 파생이다** (토글 0개). 그 페이지가 앵커 걸린 항목을 담고
+ * 있으면 좌 조사표 / 우 질문으로 갈라지고, 아니면 일반 문항 페이지다.
+ *
+ * 처음엔 "첫 앵커 페이지부터 끝까지"(sticky) 였다. 조사표 뷰어를 한 번만 마운트
+ * 하려던 것인데, 대가로 조사표에 등록되지 않은 문항까지 좁은 오른쪽 판에 들어가
+ * 일반 문항이 판단 항목처럼 보였다. 지금은 페이지마다 따로 본다 — 안내문 페이지는
+ * 일반으로 나오고 다음을 누르면 조사표가 나온다. 뷰어가 경계에서 다시 마운트되는
+ * 것은 `openDoc` 의 문서 캐시가 받는다.
+ *
+ * **판정은 구조 기준이다.** 조건부 표시로 숨은 질문의 앵커도 센다 — 그래야 응답자가
+ * 앞 답을 고쳐도 판이 접혔다 펴지지 않는다. 그러려면 호출자가 조건 필터를 거치지
+ * 않은 스텝 목록을 넘겨야 한다. 좌측에 사각형을 *그리는* 것은 표시되는 항목 것만이지만
+ * 그건 이 함수의 일이 아니다 — 레이아웃은 구조에서, 표시는 조건에서.
+ *
+ * 그룹에 붙은 앵커는 그 그룹의 **후손 질문**이 있는 페이지마다 걸린다.
+ */
+export function resolveSplitSteps(
+  steps: readonly RenderStep[],
+  anchors: readonly AnchorOwnerRef[],
+  groups: readonly QuestionGroup[],
+): boolean[] {
+  if (anchors.length === 0) return steps.map(() => false);
+
+  const anchoredQuestionIds = new Set<string>();
+  const anchoredGroupIds = new Set<string>();
+  for (const anchor of anchors) {
+    if (anchor.ownerKind === 'question') anchoredQuestionIds.add(anchor.ownerId);
+    else anchoredGroupIds.add(anchor.ownerId);
+  }
+
+  const parentOf = new Map<string, string | null>(
+    groups.map((g) => [g.id, g.parentGroupId ?? null]),
+  );
+
+  return steps.map((step) =>
+    step.items.some((item) => {
+      if (anchoredQuestionIds.has(item.question.id)) return true;
+      if (anchoredGroupIds.size === 0) return false;
+      return groupChainOf(item.question, parentOf).some((groupId) =>
+        anchoredGroupIds.has(groupId),
+      );
+    }),
+  );
 }
 
 // ── 스텝 단위 분기(branch) 해석 ──

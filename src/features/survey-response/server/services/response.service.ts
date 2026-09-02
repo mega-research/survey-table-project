@@ -20,7 +20,15 @@ import {
   surveys,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
-import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import {
+  decryptQuestionResponses,
+  encryptAnswerForQuestion,
+  encryptResponsesForStorage,
+  hasPiiTargets,
+  type PiiTargets,
+  type QuestionPiiFlag,
+} from '@/lib/crypto/response-pii';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
@@ -588,25 +596,49 @@ async function loadValidatedVersionGateRow(
  *
  * 임의 키 JSONB 주입(설문에 없는 questionId 로 questionResponses 오염)을 차단한다.
  */
+/**
+ * 표 input 셀의 개인정보 암호화 플래그(TableCell.piiEncrypted) jsonpath — 스냅샷 질문 요소와
+ * 라이브 questions.table_rows_data 양쪽에서 같은 규칙으로 셀 id 를 뽑는다
+ * (TS 쪽 규칙은 lib/survey/pii-cells collectPiiCellIds).
+ */
+const PII_CELL_FILTER = '? (@.type == "input" && @.piiEncrypted == true)';
+const PII_CELL_IDS_SNAPSHOT_PATH = `$.tableRowsData[*].cells[*] ${PII_CELL_FILTER}.id`;
+const PII_CELL_EXISTS_SNAPSHOT_PATH = `$.tableRowsData[*].cells[*] ${PII_CELL_FILTER}`;
+const PII_CELL_IDS_LIVE_PATH = `$[*].cells[*] ${PII_CELL_FILTER}.id`;
+const PII_CELL_EXISTS_LIVE_PATH = `$[*].cells[*] ${PII_CELL_FILTER}`;
+
+/** jsonb_path_query_array 결과(jsonb 배열) → 셀 id 목록. 모킹·이형 값은 빈 목록으로 접는다. */
+function parsePiiCellIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((v): v is string => typeof v === 'string'))];
+}
+
 async function assertQuestionBelongsToResponse(
   versionId: string | null,
   surveyId: string,
   questionId: string,
   executor: ResponseQueryExecutor = db,
-): Promise<{ piiEncrypted: boolean }> {
+): Promise<QuestionPiiFlag> {
   if (versionId) {
-    // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합)를 한
-    // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라 uuid 형식이 아닐 수
-    // 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가 나므로, 캐스트는
-    // 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
-    const rows = await executor.execute<{ pii: boolean | null }>(sql`
+    // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합) + 표 input
+    // 셀 플래그(같은 합집합)를 한 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라
+    // uuid 형식이 아닐 수 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가
+    // 나므로, 캐스트는 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
+    const rows = await executor.execute<{ pii: boolean | null; cells: unknown }>(sql`
       SELECT
         COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
         OR COALESCE(
           (SELECT q.pii_encrypted FROM questions q
            WHERE q.id::text = ${questionId} AND q.survey_id = ${surveyId}::uuid),
           false
-        ) AS pii
+        ) AS pii,
+        COALESCE(jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath), '[]'::jsonb)
+        || COALESCE(
+          (SELECT jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath)
+           FROM questions q
+           WHERE q.id::text = ${questionId} AND q.survey_id = ${surveyId}::uuid),
+          '[]'::jsonb
+        ) AS cells
       FROM survey_versions sv,
            jsonb_array_elements(
              CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
@@ -622,18 +654,25 @@ async function assertQuestionBelongsToResponse(
     if (!row) {
       throw new Error('해당 설문에 존재하지 않는 질문입니다.');
     }
-    return { piiEncrypted: row.pii === true };
+    return { piiEncrypted: row.pii === true, piiCellIds: parsePiiCellIds(row.cells) };
   }
 
   const [hit] = await executor
-    .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+    .select({
+      id: questions.id,
+      piiEncrypted: questions.piiEncrypted,
+      tableRowsData: questions.tableRowsData,
+    })
     .from(questions)
     .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
     .limit(1);
   if (!hit) {
     throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
-  return { piiEncrypted: hit.piiEncrypted === true };
+  return {
+    piiEncrypted: hit.piiEncrypted === true,
+    piiCellIds: collectPiiCellIds(hit.tableRowsData),
+  };
 }
 
 async function applyQuestionResponseUpdate(
@@ -780,6 +819,69 @@ export async function loadPiiQuestionIds(
 }
 
 /**
+ * 표 input 셀 단위 암호화 대상 — questionId → 셀 id 집합. loadPiiQuestionIds 와 같은
+ * 스냅샷 ∪ 라이브 합집합 규칙 (과잉 암호화 방향만 허용). 대상 셀이 있는 질문만 돌려준다.
+ */
+async function loadPiiCellIds(
+  versionId: string | null,
+  surveyId: string,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const add = (id: string | null | undefined, cellIds: string[]) => {
+    if (id == null || cellIds.length === 0) return;
+    const set = out.get(id) ?? new Set<string>();
+    for (const c of cellIds) set.add(c);
+    out.set(id, set);
+  };
+
+  if (versionId) {
+    const rows = await db.execute<{ id: string | null; cells: unknown }>(sql`
+      SELECT qe.elem->>'id' AS id,
+             jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath) AS cells
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      WHERE sv.id = ${versionId}
+        AND jsonb_path_exists(qe.elem, ${PII_CELL_EXISTS_SNAPSHOT_PATH}::jsonpath)
+      UNION ALL
+      SELECT q.id::text AS id,
+             jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath) AS cells
+      FROM questions q
+      WHERE q.survey_id = ${surveyId}::uuid
+        AND q.table_rows_data IS NOT NULL
+        AND jsonb_path_exists(q.table_rows_data, ${PII_CELL_EXISTS_LIVE_PATH}::jsonpath)
+    `);
+    for (const r of Array.isArray(rows) ? rows : []) add(r.id, parsePiiCellIds(r.cells));
+    return out;
+  }
+
+  // 레거시(versionId 없음) 폴백 — 표 질문의 행 데이터를 읽어 TS 규칙(collectPiiCellIds)으로
+  // 거른다. where 는 eq 조합만 쓴다 (테스트 db 모킹이 raw sql 조각을 평가하지 못한다).
+  const rows = await db
+    .select({ id: questions.id, tableRowsData: questions.tableRowsData })
+    .from(questions)
+    .where(and(eq(questions.surveyId, surveyId), eq(questions.type, 'table')));
+  for (const r of Array.isArray(rows) ? rows : []) add(r.id, collectPiiCellIds(r.tableRowsData));
+  return out;
+}
+
+/** 질문 단위 + 표 input 셀 단위 암호화 대상을 한 번에 — completeResponse/saveAdminEdit 재료. */
+export async function loadPiiTargets(
+  versionId: string | null,
+  surveyId: string,
+): Promise<PiiTargets> {
+  const [questionIds, cellIds] = await Promise.all([
+    loadPiiQuestionIds(versionId, surveyId),
+    loadPiiCellIds(versionId, surveyId),
+  ]);
+  return { questionIds, cellIds };
+}
+
+/**
  * surveyId 의 완료 응답 수 (soft-delete 제외, 테스트 모드 응답 제외). complete 시점 정원
  * 하드체크용 — isTest 완료는 통계·쿼터 모수에서 제외되므로(스펙 4절) 정원 카운트에도 포함하지 않는다.
  */
@@ -861,13 +963,13 @@ export async function updateQuestionResponse(
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
-  const { piiEncrypted } = await assertQuestionBelongsToResponse(
+  const piiFlag = await assertQuestionBelongsToResponse(
     responseRow.versionId,
     responseRow.surveyId,
     questionId,
   );
-  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
-  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+  // PII 문항(값 전체)·PII input 셀(해당 셀만)이면 저장 직전 암호화. 이미 암호문이면 통과.
+  const storedValue = encryptAnswerForQuestion(value, piiFlag);
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
@@ -948,8 +1050,8 @@ async function loadQuestionPiiFlags(
   versionId: string | null,
   surveyId: string,
   questionIds: string[],
-): Promise<Map<string, boolean>> {
-  const flags = new Map<string, boolean>();
+): Promise<Map<string, QuestionPiiFlag>> {
+  const flags = new Map<string, QuestionPiiFlag>();
 
   if (versionId) {
     // questionId 는 pub 입력이라 uuid 형식이 아닐 수 있다 — 캐스트는 컬럼 쪽(q.id::text)에 건다.
@@ -958,11 +1060,14 @@ async function loadQuestionPiiFlags(
       questionIds.map((id) => sql`${id}`),
       sql`, `,
     );
-    const rows = await db.execute<{ id: string | null; pii: boolean | null }>(sql`
+    const rows = await db.execute<{ id: string | null; pii: boolean | null; cells: unknown }>(sql`
       SELECT
         qe.elem->>'id' AS id,
         (COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
-         OR COALESCE(q.pii_encrypted, false)) AS pii
+         OR COALESCE(q.pii_encrypted, false)) AS pii,
+        COALESCE(jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath), '[]'::jsonb)
+        || COALESCE(jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath), '[]'::jsonb)
+        AS cells
       FROM survey_versions sv,
            jsonb_array_elements(
              CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
@@ -976,15 +1081,24 @@ async function loadQuestionPiiFlags(
         AND qe.elem->>'id' IN (${idList})
     `);
     for (const row of rows) {
-      if (row.id != null) flags.set(row.id, row.pii === true);
+      if (row.id != null) {
+        flags.set(row.id, { piiEncrypted: row.pii === true, piiCellIds: parsePiiCellIds(row.cells) });
+      }
     }
   } else {
     const rows = await db
-      .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+      .select({
+        id: questions.id,
+        piiEncrypted: questions.piiEncrypted,
+        tableRowsData: questions.tableRowsData,
+      })
       .from(questions)
       .where(and(eq(questions.surveyId, surveyId), inArray(questions.id, questionIds)));
     for (const row of rows) {
-      flags.set(row.id, row.piiEncrypted === true);
+      flags.set(row.id, {
+        piiEncrypted: row.piiEncrypted === true,
+        piiCellIds: collectPiiCellIds(row.tableRowsData),
+      });
     }
   }
 
@@ -1200,15 +1314,16 @@ export async function saveDraftResponse(
           responseRow.surveyId,
           answerEntries.map(([questionId]) => questionId),
         )
-      : new Map<string, boolean>();
+      : new Map<string, QuestionPiiFlag>();
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
 
-  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
+  // PII 문항(값 전체)·PII input 셀(해당 셀만)이면 저장 직전 암호화. 이미 암호문이면 통과.
   const storedAnswers: Record<string, unknown> = {};
   for (const [questionId, value] of answerEntries) {
-    storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+    const flag = piiFlags.get(questionId);
+    storedAnswers[questionId] = flag ? encryptAnswerForQuestion(value, flag) : value;
   }
   for (const [key, value] of sidecarEntries) {
     // 빈 사이드카도 그대로 기록한다 — 응답자가 기재를 전부 지운 draft 가 서버에
@@ -1325,13 +1440,13 @@ export async function saveTestTargetFirstAnswer(
       .limit(1);
     if (!response) throw new Error('응답을 찾을 수 없습니다.');
 
-    const { piiEncrypted } = await assertQuestionBelongsToResponse(
+    const piiFlag = await assertQuestionBelongsToResponse(
       response.versionId,
       input.surveyId,
       input.questionId,
       tx,
     );
-    const storedValue = piiEncrypted ? encryptAnswerValue(input.value) : input.value;
+    const storedValue = encryptAnswerForQuestion(input.value, piiFlag);
     await applyQuestionResponseUpdate(
       tx,
       { responseId: acquired.responseId, questionId: input.questionId },
@@ -1504,12 +1619,12 @@ async function createResponseWithFirstAnswerInner(
   // 재핀된 경우 멤버십 검증도 현재 스냅샷(effectiveVersionId) 기준 — 첫 답변 질문이 현재
   // 스냅샷에 없으면(관리자가 배포 직전에 바로 그 질문을 삭제한 좁은 엣지) 기존 멤버십 에러
   // ('해당 설문에 존재하지 않는 질문입니다')가 그대로 발생한다. 허용되는 엣지로 둔다.
-  const { piiEncrypted } = await assertQuestionBelongsToResponse(
+  const piiFlag = await assertQuestionBelongsToResponse(
     effectiveVersionId,
     surveyId,
     questionId,
   );
-  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+  const storedValue = encryptAnswerForQuestion(value, piiFlag);
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -1955,7 +2070,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     questions: Question[];
     lookups: SurveyLookup[];
     contactAttrs: Record<string, string | undefined>;
-    piiIds: Set<string>;
+    piiTargets: PiiTargets;
   } | null = null;
   if (gateRow?.versionId) {
     const [versionRow] = await db
@@ -2021,7 +2136,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           questions: snapQuestions,
           lookups: snapLookups,
           contactAttrs: calcAttrs,
-          piiIds: await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId),
+          piiTargets: await loadPiiTargets(gateRow.versionId, gateRow.surveyId),
         };
       }
     }
@@ -2055,11 +2170,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     screenedOut = detectScreenOut(snapshotQuestions, validatedResponses, buildScreenOutOptions(validatedResponses));
   }
 
-  // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
+  // PII 문항·PII input 셀 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
   if (validatedResponses && gateRow) {
-    const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
-    if (piiIds.size > 0) {
-      validatedResponses = encryptResponsesForStorage(validatedResponses, piiIds);
+    const piiTargets = await loadPiiTargets(gateRow.versionId, gateRow.surveyId);
+    if (hasPiiTargets(piiTargets)) {
+      validatedResponses = encryptResponsesForStorage(validatedResponses, piiTargets);
     }
   }
 
@@ -2108,8 +2223,8 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           contactAttrs: storedRecalc.contactAttrs,
         });
         judgedResponses = recomputed;
-        if (storedRecalc.piiIds.size > 0) {
-          recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
+        if (hasPiiTargets(storedRecalc.piiTargets)) {
+          recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiTargets);
         }
         storedRecalcResponses = recomputed;
       }

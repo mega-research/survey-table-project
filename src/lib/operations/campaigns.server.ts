@@ -282,6 +282,8 @@ export interface CampaignRecipientRow {
   contactTargetId: string | null;
   contactResid: number | null;
   contactGroupValue: string | null;
+  /** contact_targets.attrs — 컬럼 설정의 "메일 표시" attrs 컬럼 렌더용. 컨택 조인이 끊기면 빈 객체. */
+  contactAttrs: Record<string, string>;
   /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
   latestResultCode: string | null;
   emailMasked: string;
@@ -493,6 +495,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactAttrs: contactTargets.attrs,
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
@@ -519,6 +522,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
+      contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
@@ -999,6 +1003,8 @@ export interface UnsubscribedContactRow {
   resid: number;
   emailMasked: string;
   groupValue: string | null;
+  /** contact_targets.attrs — 컬럼 설정의 "메일 표시" attrs 컬럼 렌더용. */
+  attrs: Record<string, string>;
   /** 메일 해지(unsubscribed_at). 컨택결과 단독 수신거부면 null */
   unsubscribedAt: Date | null;
   /** 최근 결과코드가 수신거부면 그 회차 기록 시각. 아니면 null */
@@ -1042,6 +1048,7 @@ export async function listUnsubscribedContacts(args: {
       id: contactTargets.id,
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
+      attrs: contactTargets.attrs,
       unsubscribedAt: contactTargets.unsubscribedAt,
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptAt: latestAttemptAtExpr.as('latest_attempt_at'),
@@ -1062,6 +1069,7 @@ export async function listUnsubscribedContacts(args: {
       resid: r.resid,
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
       groupValue: r.groupValue,
+      attrs: (r.attrs ?? {}) as Record<string, string>,
       unsubscribedAt: r.unsubscribedAt,
       resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
         ? r.latestAttemptAt

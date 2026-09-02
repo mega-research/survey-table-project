@@ -90,6 +90,8 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
         previewContext={{
           survey: preview.survey,
           versionId: preview.versionId,
+          // 두 미리보기 경로 모두 발행 스냅샷을 읽으므로 앵커도 발행 시점 좌표로 온다
+          documentView: preview.documentView,
         }}
       />
     </>

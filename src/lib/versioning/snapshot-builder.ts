@@ -4,6 +4,7 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
+import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
   Question,
@@ -36,6 +37,14 @@ export interface SurveySnapshot {
   };
   // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
   lookups: SurveyLookup[];
+  /**
+   * 영역 앵커 사본 — publish 시점 freeze (LUT 사본과 같은 층위). 분할 레이아웃이
+   * 앵커에서 파생되므로 앵커가 라이브면 진행 중인 응답의 페이지 구성이 발밑에서 바뀐다.
+   *
+   * **조사표 파일 참조는 여기 넣지 않는다** — 라이브다. 발행 뒤 오탈자 수정본 교체가
+   * 재발행 없이 되어야 하고, 교체 가드도 두지 않는다 (ADR 0020).
+   */
+  anchors: SurveyAnchorSnapshot[];
 }
 
 interface SnapshotQuestion {
@@ -62,6 +71,7 @@ interface SnapshotQuestion {
   minSelections?: number | undefined;
   maxSelections?: number | undefined;
   noticeContent?: string | undefined;
+  noticeBgColor?: string | undefined;
   requiresAcknowledgment?: boolean | undefined;
   placeholder?: string | undefined;
   tableValidationRules?: Question['tableValidationRules'] | undefined;
@@ -76,6 +86,12 @@ interface SnapshotQuestion {
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
   questionCode?: string | undefined;
+  /**
+   * 엑셀 라벨. export 는 라이브 설정을 보므로 원래는 스냅샷에 담지 않았다.
+   * 조사표 사각형의 이름이 이 값을 먼저 쓰게 되면서 응답 화면도 알아야 한다 —
+   * 만든 화면과 답하는 화면이 같은 칸을 다른 이름으로 부르면 안 된다.
+   */
+  exportLabel?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
   inputType?: 'text' | 'number' | undefined;
   emptyDefault?: number | undefined;
@@ -107,8 +123,12 @@ interface SnapshotGroup {
  * - 런타임 상태(createdAt, updatedAt) 제거
  * - endDate를 ISO string으로 변환
  * - 질문/그룹 순서대로 정렬
+ * - 영역 앵커를 좌표만 남겨 복사 (조사표 파일 참조는 라이브라 실리지 않는다)
  */
-export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
+export function buildSurveySnapshot(
+  survey: Survey,
+  anchors: readonly SurveyAnchorSnapshot[] = [],
+): SurveySnapshot {
   const sortedQuestions = [...(survey.questions || [])].sort((a, b) => a.order - b.order);
   const sortedGroups = [...(survey.groups || [])].sort((a, b) => a.order - b.order);
 
@@ -141,6 +161,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
       noticeContent: q.noticeContent,
+      noticeBgColor: q.noticeBgColor,
       requiresAcknowledgment: q.requiresAcknowledgment,
       placeholder: q.placeholder,
       tableValidationRules: q.tableValidationRules,
@@ -155,6 +176,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
       questionCode: q.questionCode,
+      exportLabel: q.exportLabel,
       defaultValueTemplate: q.defaultValueTemplate,
       inputType: q.inputType,
       emptyDefault: q.emptyDefault,
@@ -194,5 +216,15 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       responseHeader: survey.settings.responseHeader,
     },
     lookups: survey.lookups ?? [],
+    anchors: anchors.map((a) => ({
+      ...(a.documentId !== undefined ? { documentId: a.documentId } : {}),
+      ownerKind: a.ownerKind,
+      ownerId: a.ownerId,
+      page: a.page,
+      x: a.x,
+      y: a.y,
+      w: a.w,
+      h: a.h,
+    })),
   };
 }

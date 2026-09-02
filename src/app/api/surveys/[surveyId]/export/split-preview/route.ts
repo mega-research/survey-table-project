@@ -4,7 +4,12 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import {
+  loadOperationsDataScope,
+  responseScopeCondition,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -57,9 +62,12 @@ async function handleSplitPreview(
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
 
+    // 운영 콘솔·export 와 같은 파티션 규칙 — 응답 모수와 변동 확인 변수가 같은 스코프를 본다.
+    const scope = await loadOperationsDataScope(surveyId);
+
     // 미리보기의 변수 수는 실제 워크북과 같은 집합이어야 한다 — 추적조사 변동 확인 변수 포함.
     const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
-      isTest: false,
+      isTest: testFlagForScope(scope),
     });
 
     if (!basis) {
@@ -75,13 +83,13 @@ async function handleSplitPreview(
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 현재 스코프 파티션만)
     const rawResponses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
-        notTestResponse,
+        responseScopeCondition(scope),
       ),
       columns: { id: true, questionResponses: true },
     });

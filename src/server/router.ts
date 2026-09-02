@@ -4,6 +4,7 @@ import { attempts } from '@/features/contacts/server/procedures/attempts';
 import { attrs } from '@/features/contacts/server/procedures/attrs';
 import { attrValues } from '@/features/contacts/server/procedures/attr-values';
 import { columns } from '@/features/contacts/server/procedures/columns';
+import { idLists } from '@/features/contacts/server/procedures/id-lists';
 import { priorAnswers } from '@/features/contacts/server/procedures/prior-answers';
 import { resultCodes } from '@/features/contacts/server/procedures/result-codes';
 import { targets } from '@/features/contacts/server/procedures/targets';
@@ -13,6 +14,8 @@ import { questionCategories } from '@/features/library/server/procedures/questio
 import { savedCells } from '@/features/library/server/procedures/saved-cells';
 import { savedLookups } from '@/features/library/server/procedures/saved-lookups';
 import { savedQuestions } from '@/features/library/server/procedures/saved-questions';
+import { anchors } from '@/features/survey-document/server/procedures/anchors';
+import { documents } from '@/features/survey-document/server/procedures/documents';
 import { groups } from '@/features/survey-builder/server/procedures/groups';
 import { lookups } from '@/features/survey-builder/server/procedures/lookups';
 import { publicRead } from '@/features/survey-builder/server/procedures/public-read';
@@ -61,6 +64,10 @@ export const router = {
     lookups,
     testSample,
   },
+  surveyDocument: {
+    documents,
+    anchors,
+  },
   auth,
   media: {
     ...media,
@@ -75,6 +82,7 @@ export const router = {
     resultCodes,
     attrs,
     attrValues,
+    idLists,
     priorAnswers,
   },
   mail: {

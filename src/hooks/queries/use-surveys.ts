@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { SurveyDiffPayload } from '@/features/survey-builder/domain/survey-save';
+import { surveyAnchorKeys } from '@/hooks/queries/use-survey-anchors';
 import { client, orpc } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
@@ -105,6 +106,9 @@ export function useSaveSurvey() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(data.surveyId) });
+      // 질문·그룹이 지워지면 FK 가 그 영역 앵커도 함께 지운다. 다시 읽지 않으면
+      // 조사표 탭에 지워진 대상의 사각형이 그대로 남는다.
+      queryClient.invalidateQueries({ queryKey: surveyAnchorKeys.list(data.surveyId) });
     },
   });
 }
@@ -120,6 +124,8 @@ export function useSaveSurveyDiff() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(data.surveyId) });
+      // 삭제된 질문·그룹의 앵커는 FK 로 함께 사라진다 — 목록을 다시 읽어야 화면에서도 사라진다.
+      queryClient.invalidateQueries({ queryKey: surveyAnchorKeys.list(data.surveyId) });
     },
   });
 }

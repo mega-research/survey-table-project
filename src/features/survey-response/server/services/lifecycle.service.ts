@@ -267,8 +267,7 @@ export async function resumeOrCreateResponse(
     if (lookup.kind === 'invalid_test') {
       throw new SurveyNotAcceptingResponsesError('invalid_test_token');
     }
-    // excluded 도 valid 외 = null 로 fallback (anonymous sessionId 흐름으로 자연 처리).
-    // excluded race 차단은 saveResponse 시점의 checkTrackA 가 별도로 책임.
+    // valid 외(invalid)는 null 로 fallback (anonymous sessionId 흐름으로 자연 처리).
     const target = lookup.kind === 'valid' ? { id: lookup.contactTargetId } : null;
     const isTestTarget = lookup.kind === 'valid' && lookup.isTest;
     if (target) {

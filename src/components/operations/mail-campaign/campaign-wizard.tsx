@@ -31,6 +31,7 @@ import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
 import type { MailTemplate } from '@/db/schema/mail';
@@ -73,6 +74,8 @@ interface Props {
   initialClauses: { op: 'AND' | 'OR' | null; source: string; value: string }[];
   sort: CampaignSortKey;
   dir: CampaignSortDir;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
 export function CampaignWizard({
@@ -86,6 +89,7 @@ export function CampaignWizard({
   initialClauses,
   sort,
   dir,
+  mailColumns,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -421,6 +425,11 @@ export function CampaignWizard({
                 <th className="px-3 py-2">
                   <SortHeader label={RESID_DEFAULT_LABEL} sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
                 </th>
+                {mailColumns.map((c) => (
+                  <th key={c.key} className="px-3 py-2">
+                    {c.label}
+                  </th>
+                ))}
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
@@ -470,7 +479,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={7 + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -488,6 +497,11 @@ export function CampaignWizard({
                       />
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    {mailColumns.map((c) => (
+                      <td key={c.key} className="px-3 py-2 text-slate-600">
+                        {r.attrs[c.key] || '—'}
+                      </td>
+                    ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">

@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import type {
   Question as QuestionRow,
   QuestionGroup as QuestionGroupRow,
@@ -190,7 +191,22 @@ export type SurveyControl = {
 };
 
 /**
- * forResponse(getSurveyForResponse). 반환 { survey, versionId, control } | null.
+ * 응답 화면이 조사표를 띄우는 데 필요한 것 전부.
+ *
+ * **두 층의 수명이 다르다** (ADR 0020): 파일(url·pageCount)은 라이브라 발행 뒤
+ * 교체가 즉시 반영되고, 앵커는 발행 스냅샷에서 온 얼린 좌표다. 그래서 한 덩어리로
+ * 묶어 넘기되 출처가 다르다는 것을 여기 적어 둔다.
+ *
+ * 조사표가 없거나 앵커가 하나도 없으면 null — 그 설문은 분할이 아니다.
+ */
+export type SurveyDocumentView = {
+  url: string;
+  pageCount: number;
+  anchors: SurveyAnchorSnapshot[];
+};
+
+/**
+ * forResponse(getSurveyForResponse). 반환 { survey, versionId, control, documentView } | null.
  * survey 는 SurveyType, versionId 는 배포 버전 id 또는 null(미배포 fallback).
  * control 은 스냅샷 밖 라이브 값(중단 상태 + 테스트 링크 판정).
  */
@@ -198,5 +214,6 @@ export type SurveyForResponseResult = {
   survey: SurveyType;
   versionId: string | null;
   control: SurveyControl;
+  documentView: SurveyDocumentView | null;
 } | null;
 export const SurveyForResponseOutput = z.custom<SurveyForResponseResult>();

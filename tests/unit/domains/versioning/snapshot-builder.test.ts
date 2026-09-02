@@ -264,4 +264,40 @@ describe('buildSurveySnapshot', () => {
 
     expect(mockSurvey.questions.map((q) => q.id)).toEqual(originalOrder);
   });
+
+  describe('영역 앵커 freeze (ADR 0020)', () => {
+    const anchors = [
+      { ownerKind: 'group' as const, ownerId: 'g-1', page: 3, x: 0.1, y: 0.2, w: 0.5, h: 0.3 },
+      { ownerKind: 'question' as const, ownerId: 'q-1', page: 4, x: 0, y: 0, w: 1, h: 0.1 },
+    ];
+
+    it('발행 시점 앵커가 스냅샷에 실린다', () => {
+      // 분할 레이아웃이 앵커에서 파생되므로 앵커가 라이브면 진행 중인 응답의
+      // 페이지 구성이 발밑에서 바뀐다. 그래서 여기서 언다.
+      const snapshot = buildSurveySnapshot(mockSurvey, anchors);
+      expect(snapshot.anchors).toEqual(anchors);
+    });
+
+    it('앵커를 넘기지 않으면 빈 배열이다 — 이 형식을 쓰지 않는 설문', () => {
+      expect(buildSurveySnapshot(mockSurvey).anchors).toEqual([]);
+    });
+
+    it('조사표 파일 참조는 스냅샷에 실리지 않는다 — 라이브다', () => {
+      // 발행 뒤 오탈자 수정본 교체가 재발행 없이 되어야 한다.
+      // 앵커에는 좌표와 대상만 있고 파일 키·쪽 수가 없다.
+      const snapshot = buildSurveySnapshot(mockSurvey, anchors);
+      expect(JSON.stringify(snapshot)).not.toContain('survey/document/');
+      for (const anchor of snapshot.anchors) {
+        expect(Object.keys(anchor).sort()).toEqual(
+          ['h', 'ownerId', 'ownerKind', 'page', 'w', 'x', 'y'],
+        );
+      }
+    });
+
+    it('원본 앵커 배열을 변경하지 않는다', () => {
+      const input = [...anchors];
+      buildSurveySnapshot(mockSurvey, input);
+      expect(input).toEqual(anchors);
+    });
+  });
 });

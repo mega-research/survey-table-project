@@ -23,7 +23,6 @@ export interface ServerSignals {
  * - invalid_token: 존재하지 않는 invite_token 으로 진입
  * - token_already_used: 동일 invite_token 으로 이미 응답 완료
  * - device_already_responded: 같은 device/fp+IP 로 이미 응답 완료
- * - excluded_from_population: 부정 결과코드 마킹 / unsubscribed_at 으로 모집단 제외됨
  * - quota_closed: 쿼터 마감으로 해당 조건 모집 종료
  * - survey_paused: 설문 중단 모드 (운영자가 응답 접수를 일시 정지). 응답 클라이언트 전용 사유.
  * - invalid_test_token: 테스트 링크가 무효 (모드 OFF 또는 토큰 불일치). 응답 클라이언트 전용 사유.
@@ -34,7 +33,6 @@ export type BlockReason =
   | 'invalid_token'
   | 'token_already_used'
   | 'device_already_responded'
-  | 'excluded_from_population'
   | 'quota_closed'
   | 'survey_paused'
   | 'invalid_test_token'

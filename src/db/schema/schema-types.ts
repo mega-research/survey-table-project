@@ -35,6 +35,31 @@ export interface SurveyVersionSnapshot {
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;
   };
+  /**
+   * 발행 시점에 얼린 영역 앵커 (ADR 0020). 조사표 **파일 참조는 여기 없다** — 라이브다.
+   * 앵커가 라이브면 분할 시작점이 진행 중인 응답의 발밑에서 움직인다.
+   * 이 형식을 쓰지 않는 설문과 이 필드 도입 이전 발행본은 undefined.
+   */
+  anchors?: SurveyAnchorSnapshot[];
+}
+
+/**
+ * 스냅샷에 실리는 앵커 한 건. 대상 종류는 저장하고(파생 불가한 층이므로) 좌표만 담는다.
+ *
+ * `documentId` 는 조사표가 둘 이상 붙었을 때 이 사각형이 **어느 조사표의 것인지**를
+ * 가린다. 지금 화면은 하나만 붙이지만 테이블이 여러 행을 받는 모양이라, 이 필드가
+ * 없으면 두 번째 조사표의 앵커가 첫 번째 위에 조용히 그려진다.
+ * 이 필드 도입 이전 발행본은 undefined — 그때는 조사표가 하나뿐이었다.
+ */
+export interface SurveyAnchorSnapshot {
+  documentId?: string;
+  ownerKind: 'question' | 'group';
+  ownerId: string;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /**
@@ -75,6 +100,12 @@ export type ResponseHeaderBandStyle = 'band' | 'boxed' | 'rule' | 'plain';
 /** 모바일 렌더 모드 — 마지막 적용 프리셋이 겸한다 */
 export type ResponseHeaderMobileStyle = 'gov' | 'band' | 'title';
 export type ResponseHeaderLayout = 'stacked' | 'inline';
+/**
+ * 블록 행의 가로 배분. 기본 'group' 은 좌·중·우 세 칸에 묶어 놓는 지금 방식이고,
+ * 'between'·'evenly' 는 세 칸을 합쳐 한 줄에 고르게 편다 — 로고 넷을 나란히 놓을 때
+ * 좌 칸에 다 몰아넣으면 오른쪽이 통째로 빈다.
+ */
+export type ResponseHeaderRowSpread = 'group' | 'between' | 'evenly';
 
 // interface 는 암묵 인덱스 시그니처가 없어 JSONB 패스스루 타입({ [key: string]: unknown })에
 // 대입 불가하므로 type alias 로 선언한다 (promote 등 소비처 호환)
@@ -150,6 +181,7 @@ export type SurveyResponseHeaderConfig =
       style: 'composed';
       mobileStyle?: ResponseHeaderMobileStyle;
       layout?: ResponseHeaderLayout;
+      rowSpread?: ResponseHeaderRowSpread;
       blocks?: ResponseHeaderBlock[];
       subtitle?: string;
       titleAlign?: ResponseHeaderTitleAlign; // 밴드 내 제목 배치
@@ -326,6 +358,12 @@ export interface ContactColumnDef {
    * '종사자 구간' 컬럼에 2(중분류). 진척보고는 레벨 순서대로 조합 집계한다.
    */
   groupLevel?: 1 | 2 | 3 | 4;
+  /**
+   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 이 컬럼을 표시.
+   * attrs.* 소스 전용 — system/pii 컬럼은 attrs 에 값이 없어 표시할 수 없다(서비스 가드).
+   * 조사 대상 목록의 hidden 과는 독립이다.
+   */
+  showInMail?: boolean;
 }
 
 /** surveys.progress_columns — 진척률 표 (Report 탭) 그룹 메타 컬럼 픽커 */

@@ -85,7 +85,7 @@ const noneControl: SurveyControl = {
 };
 
 function responseResult(control: SurveyControl = noneControl): NonNullable<SurveyForResponseResult> {
-  return { survey, versionId: null, control };
+  return { survey, versionId: null, control, documentView: null };
 }
 
 function anonContext(): ORPCContext {

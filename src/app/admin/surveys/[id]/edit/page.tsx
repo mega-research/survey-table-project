@@ -39,6 +39,7 @@ import { SaveQuestionModal } from '@/components/survey-builder/save-question-mod
 import { SaveSuccessModal } from '@/components/survey-builder/save-success-modal';
 import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
 import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
+import { SurveyDocumentPanel } from '@/components/survey-document/survey-document-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { TestModeControl } from '@/components/operations/test-mode-control';
@@ -177,6 +178,8 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const [questionToSave, setQuestionToSave] = useState<Question | null>(null);
   const [showImportExportModal, setShowImportExportModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  // 가운데 열 탭 — 질문 편집 / 조사표(수요조사용 PDF)
+  const [centerTab, setCenterTab] = useState<'edit' | 'document'>('edit');
 
   // 설문 불러오기 - 초기 로드 또는 다른 설문으로 전환 시에만 로컬 입력 동기화.
   // setState 는 렌더 중 조정 패턴, 스토어 세팅(외부 시스템)은 아래 effect 가 담당한다.
@@ -631,8 +634,24 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
             </Tabs>
           </div>
 
-          {/* Center - Survey Preview/Edit */}
-          <div className="max-h-[calc(100vh-140px)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          {/* Center - Survey Preview/Edit + 조사표 */}
+          <div className="flex h-[calc(100vh-140px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <Tabs
+              value={centerTab}
+              onValueChange={(v) => setCenterTab(v as 'edit' | 'document')}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <TabsList className="mx-6 mt-4 grid w-[240px] grid-cols-2">
+                <TabsTrigger value="edit" className="text-xs">
+                  질문 편집
+                </TabsTrigger>
+                <TabsTrigger value="document" className="text-xs">
+                  <FileText className="mr-1 h-3 w-3" />
+                  조사표
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="edit" className="m-0 min-h-0 flex-1 overflow-y-auto">
             <div className="border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -690,6 +709,18 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
                 />
               )}
             </div>
+              </TabsContent>
+
+              <TabsContent value="document" className="m-0 min-h-0 flex-1 overflow-hidden">
+                {surveyId ? (
+                  <SurveyDocumentPanel surveyId={surveyId} />
+                ) : (
+                  <div className="grid h-full place-items-center text-sm text-gray-500">
+                    설문을 먼저 저장하면 조사표를 붙일 수 있습니다.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Right Sidebar - Settings */}

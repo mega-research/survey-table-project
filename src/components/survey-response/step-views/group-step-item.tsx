@@ -19,7 +19,8 @@ import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { DEFAULT_REQUIRED_CELL_MESSAGE, resolveRequiredMessage } from '@/utils/required-message';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { resolveGroupedRequiredMessage } from '@/lib/survey/answer-validation';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -125,10 +126,10 @@ export function GroupStepItem({
         issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
       if (!isDefaultRequiredIssue) return issue;
       merged = true;
-      return { ...issue, message: resolveRequiredMessage(q) };
+      return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
     });
     return { visibleIssues: next, requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q]);
+  }, [issues, showRequiredMessage, q, responses]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -219,7 +220,7 @@ export function GroupStepItem({
         </fieldset>
         {showRequiredMessage && !requiredMessageInBanner && (
           <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {resolveRequiredMessage(q)}
+            {resolveGroupedRequiredMessage(q, responses[q.id])}
           </p>
         )}
       </div>

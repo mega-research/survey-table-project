@@ -13,13 +13,17 @@ import { AlreadyRespondedView } from '@/components/survey/already-responded-view
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
+import { SurveyResponseLayout } from '@/components/survey-response/survey-response-layout';
+import { ResponseDocumentPane } from '@/components/survey-document/response-document-pane';
 import {
+  DesktopOnlyScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
   SurveyErrorScreen,
   InvalidTestLinkScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
+import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { UnmodifiedChangedDialog } from '@/components/survey-response/unmodified-changed-dialog';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
@@ -62,7 +66,10 @@ import {
   resolveStepBranch,
   type RenderStep,
 } from '@/lib/group-ordering';
-import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/lib/survey/answer-validation';
 import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
 import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
@@ -96,8 +103,17 @@ import {
   shouldDisplayQuestion,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
+import { resolveSplitSteps } from '@/lib/group-ordering';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
+import {
+  anchorQuestionLabel,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/lib/survey-document/anchor-outline';
 import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
+import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -118,11 +134,14 @@ export interface SurveyResponseFlowProps {
     versionSnapshot: SurveyVersionSnapshot | null;
     // 응답자가 사용한 contact_targets.attrs — 조건/토큰 복원용.
     initialContactAttrs: Record<string, string>;
+    // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
+    documentView?: SurveyDocumentView | null;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
   previewContext?: {
     survey: Survey;
     versionId: string | null;
+    documentView?: SurveyDocumentView | null;
   };
 }
 
@@ -330,6 +349,7 @@ function SurveyResponseFlowActive({
     control,
     priorAnswers,
     prefillSettled,
+    documentView,
     refetchSnapshot,
   },
   responses,
@@ -561,8 +581,185 @@ function SurveyResponseFlowActive({
     [questions, responses, groups, evalCtx],
   );
 
+  // ── 분할 레이아웃 파생 ──
+  //
+  // 모드는 설정이 아니라 앵커에서 파생된다(토글 0개). 페이지마다 따로 본다 —
+  // 조사표에 등록되지 않은 페이지는 일반 문항 페이지로 나온다. 판정은 **구조 기준**
+  // 이라 조건 필터를 거치지 않은 steps 를 넘긴다 — 응답자가 앞 답을 고쳐도 판이
+  // 접혔다 펴지지 않아야 한다.
+  const splitSteps = useMemo(
+    () => resolveSplitSteps(steps, documentView?.anchors ?? [], groups),
+    [steps, documentView, groups],
+  );
+  const isSplit = splitSteps[currentStepIndex] ?? false;
+  /**
+   * 이 설문이 조사표를 끼고 답하는 형식인가. **현재 페이지가 아니라 설문 전체**를
+   * 본다 — 진행바 같은 화면 요소를 페이지마다 넣었다 뺐다 하면 넘길 때마다 머리
+   * 부분이 들썩인다.
+   */
+  const isDocumentSurvey = splitSteps.some(Boolean);
+
+  // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 초점 해석이 사슬을 타고 올라간다 —
+  // 분할 판정이 이미 사슬 전체를 보므로 두 판정이 같은 사슬을 봐야 한다.
+  const anchorParentOf = useMemo(() => {
+    const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
+    return (groupId: string) => map.get(groupId) ?? null;
+  }, [groups]);
+
+  // 대상별 쪽 목록 — 초점 해석의 유일한 입력. 조사표를 모르는 순수 함수가 이것만 본다.
+  const anchorPagesOf = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const anchor of documentView?.anchors ?? []) {
+      const list = map.get(anchor.ownerId);
+      if (list) list.push(anchor.page);
+      else map.set(anchor.ownerId, [anchor.page]);
+    }
+    return (ownerId: string) => map.get(ownerId) ?? [];
+  }, [documentView]);
+
+  // 좌측에 **그리는** 대상은 조건부 표시로 살아남은 항목 것만이다.
+  // 레이아웃은 구조에서, 표시는 조건에서 — 두 층을 섞지 않는다.
+  const anchoredStepQuestions = useMemo(
+    () =>
+      currentStepQuestions.filter(
+        (q) =>
+          resolveAnchorOwnerId(
+            { kind: 'question', id: q.id, groupId: q.groupId ?? null },
+            (ownerId) => anchorPagesOf(ownerId).length > 0,
+            anchorParentOf,
+          ) !== null,
+      ),
+    [currentStepQuestions, anchorPagesOf, anchorParentOf],
+  );
+
+  // 지금 고른 대상. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
+  // 그룹을 고르면 그 그룹의 영역만 밝힌다(맥락도 자기 자신).
+  const [anchorSelection, setAnchorSelection] = useState<
+    { kind: 'question' | 'group'; id: string; nonce: number } | null
+  >(null);
+  const selectAnchorQuestion = useCallback(
+    (questionId: string) => {
+      // 이 페이지의 문항이면 앵커가 풀리든 말든 초점을 옮긴다. 앵커 유무로 걸러 두면
+      // 그 행 위에서는 hover 도 클릭도 아무 반응이 없어 "가끔 안 먹는" 화면이 되고,
+      // 초점이 옛 그룹에 머물러 다음 hover 까지 지연 경로로 새는 부작용까지 따라온다.
+      // 켤 것이 없으면 사각형을 그리지 않을 뿐이다.
+      if (!currentStepQuestions.some((q) => q.id === questionId)) return;
+      setAnchorSelection((prev) =>
+        prev?.kind === 'question' && prev.id === questionId
+          ? prev
+          : { kind: 'question', id: questionId, nonce: (prev?.nonce ?? 0) + 1 },
+      );
+    },
+    [currentStepQuestions],
+  );
+
+  const selectAnchorGroup = useCallback((groupId: string) => {
+    setAnchorSelection((prev) =>
+      prev?.kind === 'group' && prev.id === groupId
+        ? prev
+        : { kind: 'group', id: groupId, nonce: (prev?.nonce ?? 0) + 1 },
+    );
+  }, []);
+
+  // 페이지가 바뀌면 두고 온 초점을 그 페이지의 첫 앵커 문항으로 옮긴다 (렌더 중 조정).
+  //
+  // **없던 초점을 만들지는 않는다.** 진입하자마자 첫 문항을 켜면 응답자가 아직
+  // 아무것도 고르지 않았는데 조사표가 먼저 움직여, 처음 보려던 자리를 빼앗는다.
+  // 조사표는 응답자가 고른 뒤부터 따라간다.
+  const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
+  // **이 페이지에 있는가**만 본다. 앵커가 풀리는가로 물으면 앵커 없는 문항을 고른
+  // 순간 아래 조정이 되돌려 첫 문항으로 튕긴다.
+  const selectionIsOnThisStep =
+    anchorSelection?.kind === 'group'
+      ? currentStepQuestions.some((q) => q.groupId === anchorSelection.id)
+      : anchorSelection
+        ? currentStepQuestions.some((q) => q.id === anchorSelection.id)
+        : false;
+  if (anchorSelection && defaultAnchorQuestionId && !selectionIsOnThisStep) {
+    setAnchorSelection({
+      kind: 'question',
+      id: defaultAnchorQuestionId,
+      nonce: anchorSelection.nonce + 1,
+    });
+  }
+
+  const anchorFocus = useMemo(() => {
+    if (!anchorSelection) return null;
+    if (anchorSelection.kind === 'group') {
+      // 그룹을 고르면 맥락도 자기 자신 — 그 그룹의 영역만 밝힌다.
+      // 쪽 범위는 그룹 자신과 그 안 문항들의 사각형을 합쳐서 잰다.
+      const scope = [
+        anchorSelection.id,
+        ...currentStepQuestions.filter((q) => q.groupId === anchorSelection.id).map((q) => q.id),
+      ];
+      const pages = [...new Set(scope.flatMap((id) => [...anchorPagesOf(id)]))].sort(
+        (a, b) => a - b,
+      );
+      if (pages.length === 0) return null;
+      return {
+        ownerId: anchorSelection.id,
+        contextId: anchorSelection.id,
+        pages,
+        nonce: anchorSelection.nonce,
+      };
+    }
+    const question = currentStepQuestions.find((q) => q.id === anchorSelection.id);
+    if (!question) return null;
+    const focus = resolveAnchorFocus(
+      { id: question.id, groupId: question.groupId ?? null },
+      anchorPagesOf,
+      question.groupId
+        ? currentStepQuestions.filter((q) => q.groupId === question.groupId).map((q) => q.id)
+        : [],
+      anchorParentOf,
+    );
+    return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
+  }, [anchorSelection, currentStepQuestions, anchorPagesOf, anchorParentOf]);
+
+  // 조사표 사각형에 얹을 이름. 그룹은 그룹 이름, 문항은 빌더의 조사표 탭과
+  // **같은 규칙**(엑셀 라벨 → 문항코드 → 문장)으로 고른다 — 만든 화면과 답하는
+  // 화면이 같은 칸을 다른 이름으로 부르면 안 된다.
+  const anchorLabelOf = useCallback(
+    (ownerId: string) => {
+      const question = questions.find((q) => q.id === ownerId);
+      if (question) return anchorQuestionLabel(question);
+      return groups.find((g) => g.id === ownerId)?.name ?? null;
+    },
+    [questions, groups],
+  );
+
+  // 초점이 놓인 그룹 — 문항이 초점이면 그 문항의 소속 그룹이다. 목록의 카드가
+  // 이 기준으로 파랗게 서고, hover 지연을 "같은 그룹인가"로 가르는 기준도 이것이다.
+  const activeAnchorGroupId = useMemo(() => {
+    if (!anchorSelection) return null;
+    if (anchorSelection.kind === 'group') return anchorSelection.id;
+    return (
+      currentStepQuestions.find((q) => q.id === anchorSelection.id)?.groupId ?? null
+    );
+  }, [anchorSelection, currentStepQuestions]);
+
+  // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
+  const handleAnchorOwnerSelect = useCallback(
+    (ownerId: string) => {
+      const questionId = resolveQuestionForOwner(
+        ownerId,
+        currentStepQuestions.map((q) => ({ id: q.id, groupId: q.groupId ?? null })),
+      );
+      if (!questionId) return;
+      selectAnchorQuestion(questionId);
+      document
+        .querySelector(`[data-question-id="${questionId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [currentStepQuestions, selectAnchorQuestion],
+  );
+
   // 모바일 화면 감지 (matchMedia — resize 루프 방지)
   const isMobile = useMediaQuery('(max-width: 767px)');
+  // 조사표를 나란히 놓을 수 있는 최소 폭. 이보다 좁으면 좌우 각 판이 500px 도
+  // 되지 않아 조사표 한 쪽이 읽히지 않는다. UA 가 아니라 폭으로 판정하는 이유는
+  // 태블릿 오판과 데스크톱의 좁은 창 때문이다.
+  const isTooNarrowForSplit = useMediaQuery(`(max-width: ${SPLIT_MIN_VIEWPORT_WIDTH - 1}px)`);
 
   // 진행도 — step 기반
   const currentVisibleStepNumber = useMemo(() => {
@@ -679,7 +876,10 @@ function SurveyResponseFlowActive({
   const hasPreviousDisplayable = stepHistory.length > 0;
 
   const isQuestionRequired = (question: Question) =>
-    question.required || quotaGateIds.has(question.id);
+    question.required ||
+    quotaGateIds.has(question.id) ||
+    // 질문 필수 OFF 여도 그룹별 required:true 오버라이드가 있으면 차단 판정에 태운다
+    hasExplicitRequiredChoiceGroup(question);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
   // 상세기입 필수 옵션은 선택값만으로 충족되지 않으며, 테이블은 실제 노출 셀만 검사한다.
@@ -745,7 +945,10 @@ function SurveyResponseFlowActive({
   const requiredRemaining = useMemo(
     () =>
       visibleQuestions.filter(
-        (q) => traversedQuestionIds.has(q.id) && q.required && !isQuestionAnswered(q),
+        (q) =>
+          traversedQuestionIds.has(q.id) &&
+          (q.required || hasExplicitRequiredChoiceGroup(q)) &&
+          !isQuestionAnswered(q),
       ).length,
     [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );
@@ -1309,6 +1512,18 @@ function SurveyResponseFlowActive({
     );
   }
 
+  // 조사표를 끼고 답하는 설문의 좁은 화면 안내 — **설문 전체**를 막는다. 분할 페이지에
+  // 도달했을 때만 막으면 절반쯤 답한 시간이 버려진다. 판정은 분할과 같은 술어를 쓴다 —
+  // 조사표를 올렸지만 영역을 아직 안 그린 설문은 갈라질 페이지가 없어 막을 이유도 없다.
+  // 이미 응답했거나 완료한 사람에게는 그 화면이 먼저 뜨는 것이 맞아 그 뒤에 둔다.
+  //
+  // **이 스펙이 만드는 유일한 조건 분기가 이 한 줄의 예외다.** 관리자 응답 편집
+  // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
+  // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
+  if (isDocumentSurvey && isTooNarrowForSplit && !isAdminEdit) {
+    return <DesktopOnlyScreen />;
+  }
+
   // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
   // 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 도 포함한다 (rendersAsTable)
   // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
@@ -1327,6 +1542,40 @@ function SurveyResponseFlowActive({
   const submitLabel = '다음';
   const submittingLabel = '처리 중...';
 
+  // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는
+  // 화면에서 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지"
+  // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
+  const progressBand = isDocumentSurvey ? undefined : (
+    <>
+      <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
+        {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+      </div>
+      {/* 연속형 프로그레스바 */}
+      <div className="mt-2">
+        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
+            style={{
+              width: `${(currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100}%`,
+            }}
+          />
+        </div>
+        {isMobile && (
+          <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {answeredCount}/{traversedQuestionIds.size} 응답 완료
+            </span>
+            {requiredRemaining > 0 && (
+              <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
+                필수 {requiredRemaining}개 남음
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
       <PriorAnswersProvider answers={priorAnswers} waveLabel={control?.priorWaveLabel}>
@@ -1342,58 +1591,51 @@ function SurveyResponseFlowActive({
           }}
         />
       <FormulaEvalProvider value={formulaCtx}>
-      <div className="min-h-dvh bg-gray-50">
-      {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
-      <HoneypotField ref={honeypotRef} />
-      {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
-      <div className="border-b border-gray-200 bg-white">
-        <div className={`${containerMaxWidth} mx-auto px-4 pt-2 pb-2 transition-all duration-300 md:px-6 md:pb-0`}>
+      <SurveyResponseLayout
+        containerMaxWidth={containerMaxWidth}
+        reserveBottomNavSpace={isMobile}
+        documentPane={
+          isSplit && documentView ? (
+            <ResponseDocumentPane
+              url={documentView.url}
+              pageCount={documentView.pageCount}
+              anchors={documentView.anchors}
+              focus={anchorFocus}
+              labelOf={anchorLabelOf}
+              onOwnerSelect={handleAnchorOwnerSelect}
+            />
+          ) : undefined
+        }
+        chrome={
+          /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
+          <HoneypotField ref={honeypotRef} />
+        }
+        header={
           <SurveyResponseHeader
             title={loadedSurvey.title}
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
             showBranding={currentVisibleStepNumber <= 1}
           />
-        </div>
-      </div>
-
-      {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div className={`${containerMaxWidth} mx-auto px-4 pt-1 transition-all duration-300 md:px-6`}>
-        <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
-          {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-        </div>
-        {/* 연속형 프로그레스바 */}
-        <div className="mt-2">
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
-              style={{
-                width: `${
-                  (currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100
-                }%`,
-              }}
+        }
+        progress={progressBand}
+        bottomNav={
+          isMobile ? (
+            <MobileBottomNav
+              keyboardOpen={keyboardOpen}
+              currentStepNumber={currentVisibleStepNumber}
+              totalStepCount={totalVisibleStepCount}
+              canProceed={canProceed()}
+              hasPrevious={hasPreviousDisplayable}
+              isLastStep={isLastVisibleStep}
+              isSubmitting={isSubmitting}
+              submitLabel={submitLabel}
+              submittingLabel={submittingLabel}
+              onPrevious={handlePrevious}
+              onNext={handleNext}
             />
-          </div>
-          {isMobile && (
-            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-              <span>
-                {answeredCount}/{traversedQuestionIds.size} 응답 완료
-              </span>
-              {requiredRemaining > 0 && (
-                <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
-                  필수 {requiredRemaining}개 남음
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 메인 콘텐츠 */}
-      <div
-        className={`${containerMaxWidth} mx-auto px-4 pt-2 transition-all duration-300 md:px-6 md:pt-2 ${
-          isMobile ? 'pb-28' : 'pb-16 md:pb-24'
-        }`}
+          ) : undefined
+        }
       >
         {reeditNotice && (
           <div
@@ -1420,6 +1662,29 @@ function SurveyResponseFlowActive({
             <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
           </div>
         )}
+        {isSplit ? (
+          /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+          <DemandChecklist
+            items={currentStep.items.filter((item) =>
+              currentStepQuestions.some((q) => q.id === item.question.id),
+            )}
+            groups={groups}
+            responses={responses}
+            questions={questions}
+            onResponse={handleResponse}
+            highlightQuestionIds={highlightQuestionIds}
+            requiredMessageQuestionIds={requiredMessageQuestionIds}
+            changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+            numericIssues={visibleNumericIssues}
+            onQuestionFocus={selectAnchorQuestion}
+            onGroupSelect={selectAnchorGroup}
+            activeGroupId={activeAnchorGroupId}
+            focusedQuestionId={
+              anchorSelection?.kind === 'question' ? anchorSelection.id : null
+            }
+          />
+        ) : (
         <PageStepView
           step={currentStep}
           responses={responses}
@@ -1432,6 +1697,7 @@ function SurveyResponseFlowActive({
           changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
+        )}
 
         {/* 데스크톱 네비게이션 */}
         <div className="mt-8 hidden items-center justify-between md:flex">
@@ -1491,24 +1757,7 @@ function SurveyResponseFlowActive({
             </Button>
           )}
         </div>
-      </div>
-
-      {isMobile && (
-        <MobileBottomNav
-          keyboardOpen={keyboardOpen}
-          currentStepNumber={currentVisibleStepNumber}
-          totalStepCount={totalVisibleStepCount}
-          canProceed={canProceed()}
-          hasPrevious={hasPreviousDisplayable}
-          isLastStep={isLastVisibleStep}
-          isSubmitting={isSubmitting}
-          submitLabel={submitLabel}
-          submittingLabel={submittingLabel}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-        />
-      )}
-      </div>
+      </SurveyResponseLayout>
       </FormulaEvalProvider>
       </PriorAnswersProvider>
     </ContactAttrsProvider>

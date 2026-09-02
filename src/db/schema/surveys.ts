@@ -184,6 +184,8 @@ export const questions = pgTable('questions', {
 
   // 공지사항용
   noticeContent: text('notice_content'),
+  // 공지 패널 배경색 — NULL=기본 파랑 패널(현행), 'none'=무색(패널 제거), '#rrggbb'=커스텀
+  noticeBgColor: text('notice_bg_color'),
   requiresAcknowledgment: boolean('requires_acknowledgment').default(false),
 
   // 단답형(text) 타입용

@@ -10,11 +10,17 @@ import {
   HEADER_FILTER_VALUE_SEPARATOR,
   MAIL_FILTER_VALUES,
   WEB_FILTER_VALUES,
+  parseIdListToken,
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
   type HeaderFilterMode,
 } from './filter-shared';
-import { parseIdListInput, type NumRange } from './range-list';
+import {
+  hasLeadingZeroToken,
+  parseIdListInput,
+  SINGLE_COLUMN_ID_LIST_MAX,
+  type NumRange,
+} from './range-list';
 
 export type ColumnCandidate = ColumnCandidateWithPii;
 
@@ -83,6 +89,31 @@ export interface ParseExtraHooks {
   allSubConditions?: (trimmed: string) => FilterCondition[];
   /** 헤더 필터 절 — condition 반환 시 그 절로 확정, null 이면 공용 분기 진행. */
   header?: (col: string, mode: HeaderFilterMode, hv: string) => FilterCondition | null;
+  /**
+   * `list:<uuid>` 토큰 → 저장된 ID 목록. 페이지/서비스가 URL 의 q 에서 토큰을 골라
+   * loadIdListsForValues 로 미리 읽어 넘긴다 (파서는 동기). 없는 토큰은 0건으로 접힌다.
+   */
+  idLists?: ReadonlyMap<string, number[]>;
+}
+
+/**
+ * `list:<uuid>` 토큰이면 저장된 목록으로 idlist 절. 토큰이 아니면 null.
+ * 모르는 토큰(삭제된 목록·타 설문)은 빈 ranges → SQL FALSE — 텍스트 검색으로 새지 않는다.
+ */
+function idListTokenCondition(
+  col: string,
+  trimmed: string,
+  extra?: ParseExtraHooks,
+): FilterCondition | null {
+  const token = parseIdListToken(trimmed);
+  if (!token) return null;
+  const ids = extra?.idLists?.get(token.id) ?? [];
+  return {
+    source: col,
+    mode: 'idlist',
+    value: trimmed,
+    ranges: ids.map((n) => ({ from: n, to: n })),
+  };
 }
 
 export function parseClausesFromUrl(
@@ -261,10 +292,6 @@ function buildHeaderCondition(
  * 값 자체가 자릿수로 의미를 갖는 코드(휴대폰 앞자리·우편번호)라 숫자로 접으면
  * "010" 이 10 이 되어 원래 찾던 행이 사라진다 — 이런 입력은 숫자 해석을 포기한다.
  */
-function hasLeadingZeroToken(input: string): boolean {
-  return /(^|[\s,-])0\d/.test(input);
-}
-
 /**
  * attrs 검색어 해석 — 숫자 문법이면 idlist(숫자 매칭), 아니면 text(부분검색).
  *
@@ -276,16 +303,26 @@ function hasLeadingZeroToken(input: string): boolean {
  * 종전대로 부분검색으로 걸린다. 즉 바뀌는 건 "값이 숫자인 행은 숫자로 비교" 하나뿐이다.
  * 범위/목록 문법은 종전대로 숫자 값에만 걸린다 (텍스트 폴백 없음).
  */
-function attrsTextOrIdlistCondition(col: string, trimmed: string): FilterCondition {
-  const ranges = hasLeadingZeroToken(trimmed) ? null : parseIdListInput(trimmed);
+function attrsTextOrIdlistCondition(
+  col: string,
+  trimmed: string,
+  extra?: ParseExtraHooks,
+): FilterCondition {
+  const fromToken = idListTokenCondition(col, trimmed, extra);
+  if (fromToken) return fromToken;
+  // 단일 컬럼이라 전체 검색의 컬럼 곱연산 상한(200)이 아니라 인라인 상한(2,000)을 쓴다.
+  const ranges = hasLeadingZeroToken(trimmed)
+    ? null
+    : parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
   if (ranges !== null) {
-    const isRangeSyntax = /[-,]/.test(trimmed);
+    // 단일 숫자 하나만 텍스트 폴백 — 목록/범위(붙여넣기 포함)는 숫자 값에만 건다.
+    const isSingleNumber = ranges.length === 1 && ranges[0]!.from === ranges[0]!.to;
     return {
       source: col,
       mode: 'idlist',
       value: trimmed,
       ranges,
-      ...(isRangeSyntax ? {} : { textFallback: true }),
+      ...(isSingleNumber ? { textFallback: true } : {}),
     };
   }
   return { source: col, mode: 'text', value: trimmed };
@@ -360,7 +397,9 @@ function buildClause(
   if (!candidate) return null;
 
   if (col === FILTER_SOURCE.RESID) {
-    const ranges = parseIdListInput(trimmed);
+    const fromToken = idListTokenCondition(col, trimmed, extra);
+    if (fromToken) return { op, condition: fromToken };
+    const ranges = parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
     if (ranges !== null) {
       return { op, condition: { source: 'system.resid', mode: 'idlist', value: trimmed, ranges } };
     }
@@ -397,7 +436,7 @@ function buildClause(
   }
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
-    return { op, condition: attrsTextOrIdlistCondition(col, trimmed) };
+    return { op, condition: attrsTextOrIdlistCondition(col, trimmed, extra) };
   }
 
   if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {

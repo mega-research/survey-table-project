@@ -21,6 +21,7 @@ import {
   resolveGroupCriteria,
   type GroupLevel,
 } from '@/lib/contacts/group-levels';
+import { canShowInMail } from '@/lib/contacts/mail-display-columns';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
 import { client } from '@/shared/lib/rpc';
 
@@ -64,6 +65,17 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
 
   function toggleHide(index: number) {
     setColumns((prev) => prev.map((c, i) => (i === index ? { ...c, hidden: !c.hidden } : c)));
+  }
+
+  /** 메일 표시 토글 — 끄면 필드를 지워 스킴 JSON 을 깨끗하게 유지한다. */
+  function toggleShowInMail(index: number) {
+    setColumns((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        const { showInMail: _drop, ...rest } = c;
+        return c.showInMail ? rest : { ...rest, showInMail: true };
+      }),
+    );
   }
 
   /** 레벨 배정 — 같은 레벨을 쓰던 다른 컬럼에서는 해제(레벨당 1개). null = 없음. */
@@ -117,6 +129,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
               <th className="px-3 py-2 text-left">소스</th>
               <th className="px-3 py-2 text-left">개인정보 (암호화)</th>
               <th className="px-3 py-2 text-center">분류 기준</th>
+              <th className="px-3 py-2 text-center">메일 표시</th>
               <th className="px-3 py-2 text-center">표시</th>
             </tr>
           </thead>
@@ -172,6 +185,24 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                           ))}
                         </SelectContent>
                       </Select>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td
+                    className="px-3 py-2 text-center"
+                    title={
+                      !canShowInMail(col)
+                        ? '명단 속성(attrs) 컬럼만 메일 발송 표에 표시할 수 있습니다.'
+                        : undefined
+                    }
+                  >
+                    {canShowInMail(col) ? (
+                      <Switch
+                        checked={col.showInMail === true}
+                        onCheckedChange={() => toggleShowInMail(i)}
+                        aria-label={`${col.label} 메일 표시`}
+                      />
                     ) : (
                       <span className="text-slate-300">—</span>
                     )}

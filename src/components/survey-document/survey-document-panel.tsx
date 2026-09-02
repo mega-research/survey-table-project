@@ -1,0 +1,559 @@
+'use client';
+
+import { useMemo, useRef, useState } from 'react';
+
+import { AlertCircle, FileText, MapPin, Pencil, Trash2, Upload, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
+
+import { Button } from '@/components/ui/button';
+import {
+  useCreateSurveyAnchor,
+  useRemoveSurveyAnchor,
+  useSurveyAnchors,
+} from '@/hooks/queries/use-survey-anchors';
+import {
+  useAttachSurveyDocument,
+  useRemoveSurveyDocument,
+  useSurveyDocuments,
+} from '@/hooks/queries/use-survey-documents';
+import {
+  anchorQuestionLabel,
+  buildAnchorOutline,
+  resolveAnchorOwnerId,
+  selectDrawableAnchors,
+} from '@/lib/survey-document/anchor-outline';
+import type { NormRect } from '@/lib/survey-document/anchor-geometry';
+import { cn } from '@/lib/utils';
+import { useSurveySync } from '@/hooks/use-survey-sync';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
+
+import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
+
+import { AnchorCanvas, type CanvasRegion } from './anchor-canvas';
+
+/**
+ * 빌더의 조사표 화면 — 조사표를 붙이고, 그 위에 영역을 지정한다.
+ *
+ * **생성과 영역 지정을 가른다.** 그룹·질문은 질문 편집 탭에서 이름만으로 먼저
+ * 만들어지고, 여기서는 이미 있는 대상을 골라 영역만 붙인다. 평소 드래그는
+ * 아무것도 만들지 않는다 — 드래그가 곧 생성이던 데모 첫판이 오조작으로 뒤집혔다.
+ *
+ * 발행 뒤에도 파일을 교체할 수 있고 **교체 가드를 두지 않는다** (ADR 0020).
+ */
+interface Props {
+  surveyId: string;
+}
+
+type DrawTarget = { kind: 'group' | 'question'; id: string; label: string };
+
+export function SurveyDocumentPanel({ surveyId }: Props) {
+  const { data: documents = [], isLoading } = useSurveyDocuments(surveyId);
+  const { data: anchors = [] } = useSurveyAnchors(surveyId);
+  const attach = useAttachSurveyDocument(surveyId);
+  const removeDocument = useRemoveSurveyDocument(surveyId);
+  const createAnchor = useCreateSurveyAnchor(surveyId);
+  const removeAnchor = useRemoveSurveyAnchor(surveyId);
+
+  const { groups, questions } = useSurveyBuilderStore(
+    useShallow((s) => ({
+      groups: s.currentSurvey.groups ?? [],
+      questions: s.currentSurvey.questions,
+    })),
+  );
+  // 앵커는 DB 의 질문·그룹을 FK 로 가리킨다. 그룹은 만들 때 바로 저장되지만 **질문은
+  // 상단 저장을 눌러야 DB 에 들어간다** — 저장 전 질문에 영역을 붙이면 서버가 "이 설문의
+  // 질문이 아니다" 로 거절한다. 화면이 그 사정을 먼저 말하게 한다.
+  const isDirty = useSurveyBuilderStore((s) => s.isDirty);
+  const { saveSurvey } = useSurveySync();
+  const [isSavingBeforeAnchor, setIsSavingBeforeAnchor] = useState(false);
+  // 이름·문항코드·그룹 할당은 질문 편집기의 일이다. 조사표 탭에서 그 화면을 다시
+  // 만들지 않고 **같은 편집기를 여기서 연다** — 탭을 오가며 질문을 다시 찾게 하지 않는다.
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [drawTarget, setDrawTarget] = useState<DrawTarget | null>(null);
+  const [selected, setSelected] = useState<DrawTarget | null>(null);
+
+  // 전역 document 를 가리지 않도록 이름을 구분한다 (클라이언트 컴포넌트)
+  const surveyDocument = documents[0] ?? null;
+
+  const outline = useMemo(
+    () =>
+      // 스토어의 그룹·질문을 **그대로** 넘긴다. 필요한 필드만 골라 옮기면 하나만
+      // 빠뜨려도 조용히 틀린다 — parentGroupId 를 빠뜨려 모든 그룹이 루트로 보였고,
+      // 하위그룹이 자기 order(0)로 목록 앞으로 튀어 올라왔다.
+      buildAnchorOutline(groups, questions),
+    [groups, questions],
+  );
+
+  /**
+   * 라벨이 문장이 아닐 때(엑셀 라벨·문항코드) 무엇인지 알려 줄 보조 문장.
+   * 라벨이 이미 문장이면 같은 줄을 두 번 쓰지 않는다.
+   */
+  const subLabelOf = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const question of questions) {
+      const title = question.title?.trim() ?? '';
+      map.set(question.id, title && anchorQuestionLabel(question) !== title ? title : null);
+    }
+    return map;
+  }, [questions]);
+
+  const labelOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const section of outline) {
+      if (section.groupId) map.set(section.groupId, section.label);
+      for (const question of section.questions) map.set(question.id, question.label);
+    }
+    return map;
+  }, [outline]);
+
+  // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 사슬을 타고 올라간다.
+  const anchorParentOf = useMemo(() => {
+    const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
+    return (groupId: string) => map.get(groupId) ?? null;
+  }, [groups]);
+
+  /**
+   * 대상이 살아 있는 앵커만 남긴다. 지운 문항의 영역이 조사표 위에 계속 떠 있으면
+   * 무엇이 지워졌는지 화면을 믿을 수 없다. 저장하면 FK 가 서버에서도 지운다.
+   */
+  const { drawn: liveAnchors, orphaned: orphanedAnchors } = useMemo(
+    () => selectDrawableAnchors(anchors, new Set(labelOf.keys())),
+    [anchors, labelOf],
+  );
+
+  const anchorsByOwner = useMemo(() => {
+    const map = new Map<string, typeof liveAnchors>();
+    for (const anchor of liveAnchors) {
+      const list = map.get(anchor.ownerId);
+      if (list) list.push(anchor);
+      else map.set(anchor.ownerId, [anchor]);
+    }
+    return map;
+  }, [liveAnchors]);
+
+  const regions: CanvasRegion[] = useMemo(
+    () =>
+      liveAnchors.map((anchor) => ({
+        id: anchor.id,
+        ownerId: anchor.ownerId,
+        label: labelOf.get(anchor.ownerId) ?? '(삭제된 대상)',
+        kind: anchor.ownerKind === 'group' ? 'group' : 'question',
+        page: anchor.page,
+        x: anchor.x,
+        y: anchor.y,
+        w: anchor.w,
+        h: anchor.h,
+      })),
+    [liveAnchors, labelOf],
+  );
+
+  const activeOwnerId = selected
+    ? resolveAnchorOwnerId(
+        selected.kind === 'group'
+          ? { kind: 'group', id: selected.id }
+          : {
+              kind: 'question',
+              id: selected.id,
+              groupId: questions.find((q) => q.id === selected.id)?.groupId ?? null,
+            },
+        (ownerId) => (anchorsByOwner.get(ownerId)?.length ?? 0) > 0,
+        anchorParentOf,
+      )
+    : null;
+
+  const pickFile = (replaceId: string | null) => {
+    setReplaceTargetId(replaceId);
+    fileRef.current?.click();
+  };
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      await attach.mutateAsync({
+        file,
+        ...(replaceTargetId ? { replaceDocumentId: replaceTargetId } : {}),
+      });
+      setPage(1);
+      toast.success(replaceTargetId ? '조사표를 교체했습니다.' : '조사표를 붙였습니다.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '조사표 등록에 실패했습니다.');
+    } finally {
+      setReplaceTargetId(null);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleRemoveDocument = async (documentId: string) => {
+    if (
+      !window.confirm(
+        '조사표를 뗄까요? 지정한 영역도 함께 사라지고, 파일은 7일 뒤 정리됩니다.',
+      )
+    ) {
+      return;
+    }
+    try {
+      await removeDocument.mutateAsync(documentId);
+      toast.success('조사표를 뗐습니다.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '조사표 삭제에 실패했습니다.');
+    }
+  };
+
+  const handleDraw = async (rect: NormRect) => {
+    if (!surveyDocument || !drawTarget) return;
+    try {
+      await createAnchor.mutateAsync({
+        documentId: surveyDocument.id,
+        ownerKind: drawTarget.kind,
+        ownerId: drawTarget.id,
+        rect,
+      });
+      setSelected(drawTarget);
+      setDrawTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '영역을 저장하지 못했습니다.');
+    }
+  };
+
+  const startDrawing = (target: DrawTarget) => {
+    if (isDirty) {
+      toast.error('먼저 설문을 저장해야 영역을 지정할 수 있습니다.');
+      return;
+    }
+    setSelected(target);
+    setDrawTarget(target);
+    const first = anchorsByOwner.get(target.id)?.[0];
+    if (first) setPage(first.page);
+  };
+
+  const handleSaveBeforeAnchor = async () => {
+    setIsSavingBeforeAnchor(true);
+    try {
+      await saveSurvey();
+      toast.success('저장했습니다. 이제 영역을 지정할 수 있습니다.');
+    } catch {
+      toast.error('저장에 실패했습니다. 질문 편집 탭에서 다시 시도해 주세요.');
+    } finally {
+      setIsSavingBeforeAnchor(false);
+    }
+  };
+
+  const jumpTo = (target: DrawTarget) => {
+    setSelected(target);
+    const ownerId = resolveAnchorOwnerId(
+      target.kind === 'group'
+        ? { kind: 'group', id: target.id }
+        : {
+            kind: 'question',
+            id: target.id,
+            groupId: questions.find((q) => q.id === target.id)?.groupId ?? null,
+          },
+      (id) => (anchorsByOwner.get(id)?.length ?? 0) > 0,
+      anchorParentOf,
+    );
+    const first = ownerId ? anchorsByOwner.get(ownerId)?.[0] : undefined;
+    if (first) setPage(first.page);
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => void handleFile(e.target.files?.[0])}
+      />
+
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-gray-900">
+              {surveyDocument ? surveyDocument.filename : '조사표'}
+            </p>
+            <p className="text-xs text-gray-500">
+              {surveyDocument
+                ? `${surveyDocument.pageCount}쪽 · 영역 ${liveAnchors.length}개`
+                : '판단 대상이 될 PDF 를 올립니다'}
+              {/* 지운 문항의 영역은 그리지 않지만 서버에는 저장 전까지 남아 있다.
+                  말 없이 감추면 "영역이 왜 없어졌지" 가 되므로 사정을 밝힌다. */}
+              {orphanedAnchors.length > 0 && (
+                <span className="text-amber-600">
+                  {' '}
+                  · 지운 문항의 영역 {orphanedAnchors.length}개는 저장하면 함께 사라집니다
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={attach.isPending}
+            onClick={() => pickFile(surveyDocument?.id ?? null)}
+          >
+            <Upload className="mr-1 h-3 w-3" />
+            {attach.isPending ? '올리는 중…' : surveyDocument ? '교체' : '올리기'}
+          </Button>
+          {surveyDocument && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={removeDocument.isPending}
+              onClick={() => void handleRemoveDocument(surveyDocument.id)}
+              aria-label="조사표 떼기"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid min-h-0 flex-1 place-items-center text-sm text-gray-500">
+          조사표를 불러오는 중…
+        </div>
+      ) : !surveyDocument ? (
+        <div className="grid min-h-0 flex-1 place-items-center px-6 text-center">
+          <div>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+              <FileText className="h-6 w-6 text-gray-400" />
+            </div>
+            <p className="text-sm text-gray-600">아직 조사표가 없습니다.</p>
+            <p className="mt-1 text-xs text-gray-500">
+              지난 회차 조사표 PDF 를 올리면 여기서 쪽을 넘겨 보고 영역을 지정할 수 있습니다.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <div className="min-w-0 flex-1">
+            <AnchorCanvas
+              url={surveyDocument.url}
+              pageCount={surveyDocument.pageCount}
+              page={page}
+              onPageChange={setPage}
+              regions={regions}
+              activeOwnerId={activeOwnerId}
+              drawingFor={drawTarget ? { label: drawTarget.label } : null}
+              onDraw={(rect) => void handleDraw(rect)}
+              onCancelDraw={() => setDrawTarget(null)}
+              onRegionClick={(region) => {
+                setPage(region.page);
+                setSelected({
+                  kind: region.kind === 'group' ? 'group' : 'question',
+                  id: region.ownerId,
+                  label: region.label,
+                });
+              }}
+            />
+          </div>
+
+          <div className="w-[280px] shrink-0 overflow-y-auto border-l border-gray-200 bg-white">
+            {isDirty && (
+              <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <div className="min-w-0">
+                  <p>
+                    저장하지 않은 변경이 있습니다. <b>질문은 저장해야</b> 영역을 붙일 수 있습니다
+                    (그룹은 만들 때 바로 저장됩니다).
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1.5 h-6 px-2 text-xs"
+                    disabled={isSavingBeforeAnchor}
+                    onClick={() => void handleSaveBeforeAnchor()}
+                  >
+                    {isSavingBeforeAnchor ? '저장 중…' : '설문 저장'}
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
+              대상 오른쪽 <b>핀</b>을 누르고 조사표 위를 드래그하면 영역이 잡힙니다.
+              쪽 칩(예: <span className="tabular-nums">3쪽 ×</span>)을 누르면 그 영역이 지워집니다.
+              <br />
+              <b>연필</b>은 질문 이름·문항코드·그룹 할당을 엽니다.
+              문항에 영역을 주지 않으면 소속 그룹의 영역으로 떨어집니다.
+            </div>
+            {outline.length === 0 && (
+              <p className="px-3 py-4 text-xs text-gray-500">
+                질문 편집 탭에서 그룹과 질문을 먼저 만드세요.
+              </p>
+            )}
+            {outline.map((section, sectionIndex) => (
+              <div
+                key={`${section.groupId ?? '__ungrouped__'}#${sectionIndex}`}
+                className="border-b border-gray-100"
+              >
+                {section.groupId && section.isFirstRun ? (
+                  <TargetRow
+                    label={section.label}
+                    depth={section.depth}
+                    isGroup
+                    selected={selected?.id === section.groupId}
+                    anchorPages={(anchorsByOwner.get(section.groupId) ?? []).map((a) => a.page)}
+                    anchorIds={(anchorsByOwner.get(section.groupId) ?? []).map((a) => a.id)}
+                    onSelect={() =>
+                      jumpTo({ kind: 'group', id: section.groupId!, label: section.label })
+                    }
+                    onDraw={() =>
+                      startDrawing({ kind: 'group', id: section.groupId!, label: section.label })
+                    }
+                    onRemoveAnchor={(id) => void removeAnchor.mutateAsync(id)}
+                  />
+                ) : section.groupId ? null : (
+                  <div className="px-3 py-2 text-xs font-medium text-gray-500">{section.label}</div>
+                )}
+                {section.questions.map((question) => (
+                  <TargetRow
+                    key={question.id}
+                    label={question.label}
+                    subLabel={subLabelOf.get(question.id) ?? null}
+                    depth={section.depth}
+                    isGroup={false}
+                    onEdit={() => setEditingQuestionId(question.id)}
+                    selected={selected?.id === question.id}
+                    anchorPages={(anchorsByOwner.get(question.id) ?? []).map((a) => a.page)}
+                    anchorIds={(anchorsByOwner.get(question.id) ?? []).map((a) => a.id)}
+                    onSelect={() =>
+                      jumpTo({ kind: 'question', id: question.id, label: question.label })
+                    }
+                    onDraw={() =>
+                      startDrawing({ kind: 'question', id: question.id, label: question.label })
+                    }
+                    onRemoveAnchor={(id) => void removeAnchor.mutateAsync(id)}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <QuestionEditModal
+        questionId={editingQuestionId}
+        isOpen={!!editingQuestionId}
+        onClose={() => setEditingQuestionId(null)}
+      />
+    </div>
+  );
+}
+
+interface TargetRowProps {
+  label: string;
+  /** 그룹 계층 깊이 — 하위그룹과 그 문항을 한 단 더 들여쓴다. */
+  depth: number;
+  /** 라벨이 문항코드일 때 보조로 보여줄 문장. 없으면 null. */
+  subLabel?: string | null;
+  isGroup: boolean;
+  selected: boolean;
+  anchorPages: number[];
+  anchorIds: string[];
+  onSelect: () => void;
+  onDraw: () => void;
+  onRemoveAnchor: (anchorId: string) => void;
+  /** 질문 행에만 있다 — 이름·문항코드·그룹 할당은 질문 편집기의 일이다. */
+  onEdit?: (() => void) | undefined;
+}
+
+/**
+ * 대상 한 줄.
+ *
+ * 버튼을 **hover 로 숨기지 않는다.** 처음에는 그렇게 만들었는데, 조사표를 처음 여는
+ * 사람에게는 없는 기능이나 마찬가지였다 — 지정·삭제 버튼이 보이지 않는다는 것이
+ * 실사용에서 가장 먼저 나온 말이다. 밀도보다 발견 가능성이 앞선다.
+ */
+function TargetRow({
+  label,
+  subLabel = null,
+  depth,
+  isGroup,
+  selected,
+  anchorPages,
+  anchorIds,
+  onSelect,
+  onDraw,
+  onRemoveAnchor,
+  onEdit,
+}: TargetRowProps) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-1 py-1.5 pr-3',
+        isGroup ? 'bg-gray-50' : '',
+        selected && 'bg-blue-50',
+      )}
+      style={{ paddingLeft: 12 + depth * 12 + (isGroup ? 0 : 12) }}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="min-w-0 flex-1 text-left"
+        title={subLabel ? `${label} — ${subLabel}` : label}
+      >
+        <span
+          className={cn(
+            'block truncate text-xs',
+            isGroup ? 'font-semibold text-gray-800' : 'text-gray-700',
+          )}
+        >
+          {label}
+        </span>
+        {subLabel && (
+          <span className="block truncate text-[10px] text-gray-400">{subLabel}</span>
+        )}
+      </button>
+
+      <div className="flex shrink-0 items-center gap-0.5">
+        {anchorIds.map((anchorId, index) => (
+          <button
+            key={anchorId}
+            type="button"
+            onClick={() => onRemoveAnchor(anchorId)}
+            title={`${anchorPages[index]}쪽 영역 지우기`}
+            aria-label={`${anchorPages[index]}쪽 영역 지우기`}
+            className={cn(
+              'flex items-center gap-0.5 rounded border px-1 text-[10px] tabular-nums transition-colors',
+              isGroup
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-amber-200 bg-amber-50 text-amber-700',
+              'hover:border-red-300 hover:bg-red-50 hover:text-red-700',
+            )}
+          >
+            {anchorPages[index]}쪽
+            <X className="h-2.5 w-2.5" />
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={onDraw}
+          title="영역 지정 — 누른 뒤 조사표 위를 드래그"
+          aria-label="영역 지정"
+          className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+        >
+          <MapPin className="h-3 w-3" />
+        </button>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            title="질문 편집 — 이름·문항코드·그룹 할당"
+            aria-label="질문 편집"
+            className="rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

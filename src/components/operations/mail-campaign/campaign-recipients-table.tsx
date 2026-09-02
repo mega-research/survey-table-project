@@ -6,6 +6,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
 import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
 import {
   RECIPIENT_FILTER_LABEL,
@@ -34,6 +35,8 @@ interface Props {
   errorOptions: Array<{ value: string; label: string }>;
   /** 최근 결과코드 깔때기 체크박스 선택지 */
   resultOptions: Array<{ value: string; label: string }>;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
 // 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
@@ -105,6 +108,7 @@ export function CampaignRecipientsTable({
   groupOptions,
   errorOptions,
   resultOptions,
+  mailColumns,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -213,6 +217,11 @@ export function CampaignRecipientsTable({
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                 <th className="px-3 py-2">시스템ID</th>
+                {mailColumns.map((c) => (
+                  <th key={c.key} className="px-3 py-2">
+                    {c.label}
+                  </th>
+                ))}
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
@@ -269,6 +278,11 @@ export function CampaignRecipientsTable({
                     <td className="px-3 py-2 font-mono text-xs text-slate-600">
                       {r.contactResid === null ? '—' : `#${r.contactResid}`}
                     </td>
+                    {mailColumns.map((c) => (
+                      <td key={c.key} className="px-3 py-2 text-slate-600">
+                        {r.contactAttrs[c.key] || '—'}
+                      </td>
+                    ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">

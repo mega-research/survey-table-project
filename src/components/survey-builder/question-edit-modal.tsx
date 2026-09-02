@@ -102,6 +102,7 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
     ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
     noticeContent: question.noticeContent || '',
+    ...(question.noticeBgColor !== undefined ? { noticeBgColor: question.noticeBgColor } : {}),
     requiresAcknowledgment: question.requiresAcknowledgment || false,
     placeholder: question.placeholder || '',
     piiEncrypted: question.piiEncrypted ?? false,
@@ -261,6 +262,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
       // 이전 질문(또는 저장 없이 닫힌 이전 세션)의 pending value 변경이 새 세션으로 새지 않게 리셋.
       pendingOptionValueChangesRef.current = [];
+
+      // 이전 세션의 검증 에러도 리셋 — 남으면 다른 질문(멀쩡한 표 질문 포함)의
+      // 모달에 에러 배너가 넘어와 새 세션의 저장까지 막는다.
+      setValidationErrors({});
 
       // 로컬 state 동기화 (이전 질문의 pending debounce 취소)
       if (debouncedTitleRef.current) {
@@ -478,6 +483,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,
+              // null = 기본 파랑 복귀가 유효값이므로 ?? 폴백 금지
+              noticeBgColor:
+                currentFormData.noticeBgColor !== undefined
+                  ? currentFormData.noticeBgColor
+                  : question?.noticeBgColor,
               requiresAcknowledgment:
                 currentFormData.requiresAcknowledgment ?? question?.requiresAcknowledgment,
               placeholder:
@@ -832,14 +842,17 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   <span>저장 중...</span>
                 </div>
               )}
-              {Object.keys(validationErrors).length > 0 && !isSaving && (
+              {/* 해제 경로(basic-tab)가 키를 지우지 않고 '' 로 두므로 truthy 메시지만 센다 */}
+              {Object.values(validationErrors).some(Boolean) && !isSaving && (
                 <div className="space-y-0.5">
                   <div className="text-sm font-medium text-red-600">입력 정보를 확인해주세요</div>
-                  {Object.entries(validationErrors).map(([key, msg]) => (
-                    <div key={key} className="text-xs text-red-600">
-                      • {msg}
-                    </div>
-                  ))}
+                  {Object.entries(validationErrors)
+                    .filter(([, msg]) => msg)
+                    .map(([key, msg]) => (
+                      <div key={key} className="text-xs text-red-600">
+                        • {msg}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
@@ -851,7 +864,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={isSaving || Object.keys(validationErrors).length > 0}
+                // 검증 에러로는 비활성하지 않는다 — 셀 모달 등 에러 키를 지우지 않는
+                // 경로로 문제를 고친 뒤 저장 클릭 → validateForm 재실행이 회복 경로다.
+                // 비활성하면 재검증이 불가능한 데드락이 된다.
+                disabled={isSaving}
                 className="min-w-[80px]"
               >
                 {isSaving ? (
