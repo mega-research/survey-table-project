@@ -66,3 +66,16 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
   }));
 }
+
+/**
+ * 이 셀이 질문의 마지막 남은 보기 옵션(choice_opt) 셀인지 — 설명 테이블(radio/checkbox)
+ * 에서 마지막 보기 옵션 셀을 다른 타입으로 바꾸면 질문의 보기가 0개가 되어 저장이
+ * 영구 차단되므로(question-edit-modal 검증), 셀 모달이 타입 변경을 사전 차단하는 데 쓴다.
+ */
+export function isLastRemainingChoiceOptCell(
+  tableRowsData: TableRow[] | undefined,
+  cellId: string,
+): boolean {
+  const cells = collectChoiceOptCells(tableRowsData);
+  return cells.some((c) => c.id === cellId) && cells.length === 1;
+}
