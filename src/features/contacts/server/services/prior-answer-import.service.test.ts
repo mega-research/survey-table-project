@@ -93,10 +93,11 @@ vi.mock('@/lib/operations/data-scope.server', () => ({
 }));
 
 vi.mock('@/lib/contacts/excel-parser', () => ({
-  previewExcelGrid: vi.fn(async () => ({
+  previewExcelGrid: vi.fn(async (_buffer: unknown, opts: { maxRows?: number }) => ({
     sheetNames: ['rawdata'],
     headerRows: h.headerRows,
-    rows: h.parsedRows,
+    // 실제 파서처럼 maxRows 를 지킨다 — 제안 단계가 몇 행을 표본으로 읽는지가 곧 검증 대상이다.
+    rows: opts.maxRows === undefined ? h.parsedRows : h.parsedRows.slice(0, opts.maxRows),
     totalRows: h.parsedRows.length,
   })),
 }));
@@ -171,7 +172,11 @@ vi.mock('@/db', () => {
   };
 });
 
+import { previewExcelGrid } from '@/lib/contacts/excel-parser';
+
 import {
+  PREVIEW_ROWS,
+  SUGGEST_SAMPLE_ROWS,
   importPriorAnswers,
   savePriorAnswerImportConfig,
   suggestPriorAnswerImportMapping,
@@ -525,67 +530,120 @@ describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
   });
 });
 
+/** 2026 BQ1_1 의 "담당 직무" 두 행 — 세부 라벨 "담당 직무" 가 접두로 두 행에 걸려 표본값으로 갈라야 한다. */
+function jobTableQuestion(): Record<string, unknown> {
+  return {
+    id: 'q-table',
+    type: 'table',
+    title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
+    order: 1,
+    questionCode: 'BQ1_1',
+    tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }],
+    tableRowsData: [
+      {
+        id: 'r-it',
+        label: '담당 직무_① IT/SW 관련 세부분야',
+        cells: [
+          { id: 'it-label', type: 'text', content: '' },
+          { id: 'it', type: 'radio', content: '', radioOptions: [{ id: 'o1', value: '1', label: '① 정보기술 개발' }] },
+        ],
+      },
+      {
+        id: 'r-non',
+        label: '담당 직무_② 비 IT/SW 관련 분야',
+        cells: [
+          { id: 'non-label', type: 'text', content: '' },
+          { id: 'non', type: 'input', content: '' },
+        ],
+      },
+    ],
+  };
+}
+
+const JOB_HEADER_ROWS: string[][] = [
+  ['', 'PART B.'],
+  ['ID', 'BQ1-1.'],
+  ['시스템ID', '담당 직무'],
+];
+
+function suggestJobInput() {
+  return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 3 } as Parameters<
+    typeof suggestPriorAnswerImportMapping
+  >[0];
+}
+
 describe('suggestPriorAnswerImportMapping — 칸 배정 사유', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.surveyConfig = null;
-    h.questionRows = [
-      {
-        id: 'q-table',
-        type: 'table',
-        title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
-        order: 1,
-        questionCode: 'BQ1_1',
-        tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }],
-        tableRowsData: [
-          {
-            id: 'r-it',
-            label: '담당 직무_① IT/SW 관련 세부분야',
-            cells: [
-              { id: 'it-label', type: 'text', content: '' },
-              { id: 'it', type: 'radio', content: '', radioOptions: [{ id: 'o1', value: '1', label: '① 정보기술 개발' }] },
-            ],
-          },
-          {
-            id: 'r-non',
-            label: '담당 직무_② 비 IT/SW 관련 분야',
-            cells: [
-              { id: 'non-label', type: 'text', content: '' },
-              { id: 'non', type: 'input', content: '' },
-            ],
-          },
-        ],
-      },
-    ];
-    h.headerRows = [
-      ['', 'PART B.'],
-      ['ID', 'BQ1-1.'],
-      ['시스템ID', '담당 직무'],
-    ];
+    h.questionRows = [jobTableQuestion()];
+    h.headerRows = JOB_HEADER_ROWS;
   });
-
-  function suggestInput() {
-    return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 3 } as Parameters<
-      typeof suggestPriorAnswerImportMapping
-    >[0];
-  }
 
   it('후보 행이 여럿인데 표본값으로 못 가르면 사유가 칸 배정 줄에 실린다', async () => {
     h.parsedRows = [['7', '영업']];
-    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const res = await suggestPriorAnswerImportMapping(suggestJobInput());
     const block = res.blocks.find((b) => b.code === 'BQ1-1.');
     expect(block?.questionId).toBe('q-table');
     expect(block?.unmatchedSlots).toBe(1);
+    // 행 나열은 마법사의 슬롯 구분자 ' / ' 와 겹치지 않는 형태여야 "칸 배정:" 한 줄에서 읽힌다.
     expect(block?.slotLabels).toEqual([
-      '배정 안 됨 — 후보 2행(담당 직무_① IT/SW 관련 세부분야 / 담당 직무_② 비 IT/SW 관련 분야) — 표본값 "영업" 으로 못 가름',
+      '배정 안 됨 — 후보 2행("담당 직무_① IT/SW 관련 세부분야", "담당 직무_② 비 IT/SW 관련 분야") — 표본값 "영업" 으로 못 가름',
     ]);
   });
 
   it('표본값이 한 행의 보기에 맞으면 그 행으로 배정된다', async () => {
     h.parsedRows = [['7', '정보기술 개발']];
-    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const res = await suggestPriorAnswerImportMapping(suggestJobInput());
     const block = res.blocks.find((b) => b.code === 'BQ1-1.');
     expect(block?.unmatchedSlots).toBe(0);
     expect(block?.slotLabels).toEqual(['담당 직무_① IT/SW 관련 세부분야']);
+  });
+});
+
+describe('suggestPriorAnswerImportMapping — 표본 범위는 적재와 같다', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.scope = 'real';
+    h.surveyConfig = null;
+    h.insertCalls = 0;
+    h.insertedValues = [];
+    h.questionRows = [jobTableQuestion()];
+    h.headerRows = JOB_HEADER_ROWS;
+    h.targetRows = [{ id: 'target-7', resid: 7 }];
+  });
+
+  it('첫 다섯 행이 빈 열도 뒤 행의 값으로 갈라 미리보기와 적재가 같은 칸에 붙는다', async () => {
+    // 2025 CQ1 담당 직무: 비어 있지 않은 행이 1,836 중 32 뿐이라 첫 다섯 행이 전부 빈칸이다.
+    // 표본을 다섯 행만 보면 미리보기는 "표본값 없음" 미배정이라 마법사가 "그 칸의 값은 들어가지
+    // 않습니다" 라고 안내하는데, 적재는 전량 표본으로 radio 행에 32건을 넣었다 — 두 경로가 갈렸다.
+    h.parsedRows = [['', ''], ['', ''], ['', ''], ['', ''], ['', ''], ['7', '정보기술 개발']];
+
+    const res = await suggestPriorAnswerImportMapping(suggestJobInput());
+    const block = res.blocks.find((b) => b.code === 'BQ1-1.');
+    expect(block?.unmatchedSlots).toBe(0);
+    expect(block?.slotLabels).toEqual(['담당 직무_① IT/SW 관련 세부분야']);
+
+    const imported = await importPriorAnswers(baseInput({ headerRowCount: 3, mapping: { '1': 'q-table' } }));
+    expect(imported.matched).toBe(1);
+    expect(h.insertedValues[0]?.['answers']).toEqual({ 'q-table': { it: '1' } });
+  });
+
+  it('제안 단계는 적재 상한까지 표본을 읽고, 화면에는 첫 다섯 행만 돌려준다', async () => {
+    h.parsedRows = [['', ''], ['', ''], ['', ''], ['', ''], ['', ''], ['7', '정보기술 개발'], ['8', '']];
+    const res = await suggestPriorAnswerImportMapping(suggestJobInput());
+    // 숫자 리터럴이 아니라 서비스의 상수와 대조한다 — 상수가 적재 상한에서 떨어지면 여기서 드러난다.
+    expect(vi.mocked(previewExcelGrid).mock.calls[0]?.[1]).toMatchObject({ maxRows: SUGGEST_SAMPLE_ROWS });
+    expect(res.rows).toHaveLength(PREVIEW_ROWS);
+    expect(res.totalRows).toBe(7);
+    expect(res.blocks.find((b) => b.code === 'BQ1-1.')?.unmatchedSlots).toBe(0);
+  });
+
+  it('적재는 maxRows 없이 전량을 읽는다 — 기존 동작 고정', async () => {
+    h.parsedRows = [['7', '정보기술 개발']];
+    await importPriorAnswers(baseInput({ headerRowCount: 3, mapping: { '1': 'q-table' } }));
+    const opts = vi.mocked(previewExcelGrid).mock.calls[0]?.[1];
+    expect(opts).toBeDefined();
+    expect(opts).not.toHaveProperty('maxRows');
   });
 });

@@ -417,30 +417,41 @@ function cellsWhere(cells: AnswerableCell[], test: (variant: string) => boolean)
  * **맞은** 첫 칸이어야 한다 — 한 행에 이름 붙은 열이 나란한 표(EQ4_1 "지원 받은 시기_년 /
  * 사업명(프로그램명)")에서 행의 첫 칸을 집으면 사업명이 년 칸에 들어간다.
  *
- * 행이 여럿이면 표본값이 각 행 첫 후보 칸의 보기에 맞는지로 가른다 — input 칸은 보기가
- * 없으니 "맞는다" 가 성립하지 않아 0 이다. 최고점이 유일하고 0 보다 클 때만 채택하고,
- * 동률이거나 전부 0 이면 조용히 첫 행을 집지 않고 사유를 남긴다.
+ * 행이 여럿이면 표본값이 그 행 후보 칸의 보기에 맞는지로 가른다. 행의 **어느** 후보 칸이든
+ * 맞으면 그 행이고, 맞은 칸이 곧 자리다 — 첫 후보 칸만 보면 라벨이 먼저 맞은 칸이 input 이고
+ * 뒤에 radio 가 있는 행은 늘 0 점이 되고, 맞은 칸 대신 첫 칸을 주면 보기에 맞은 값이 input 에
+ * 원문으로 들어간다. input 칸은 보기가 없으니 "맞는다" 가 성립하지 않는다. 맞은 행이 정확히
+ * 하나일 때만 채택하고, 동률이거나 전부 0 이면 조용히 첫 행을 집지 않고 사유를 남긴다.
+ *
+ * 사유의 행 나열은 따옴표로 감싸 쉼표로 잇는다 — 마법사가 슬롯들을 ' / ' 로 이어 한 줄에
+ * 내므로 같은 구분자를 쓰면 후보 행과 슬롯 경계가 구분되지 않는다.
  */
 function pickTableRow(candidates: readonly AnswerableCell[], sampleValue: string): TableCellResolution {
-  const heads: AnswerableCell[] = [];
+  const byRow = new Map<number, AnswerableCell[]>();
   for (const entry of candidates) {
-    if (!heads.some((head) => head.rowIndex === entry.rowIndex)) heads.push(entry);
+    const group = byRow.get(entry.rowIndex);
+    if (group) group.push(entry);
+    else byRow.set(entry.rowIndex, [entry]);
   }
-  const [only] = heads;
-  if (heads.length === 1 && only) return { entry: only };
-  const scored = heads.map((entry) => ({
-    entry,
-    hit: sampleValue && findOptionByLabel(cellOptions(entry.cell), sampleValue) ? 1 : 0,
-  }));
-  const best = Math.max(...scored.map((s) => s.hit));
-  const winners = scored.filter((s) => s.hit === best);
-  const [winner] = winners;
-  if (best > 0 && winners.length === 1 && winner) return { entry: winner.entry };
-  const names = heads
-    .map((entry) => entry.rowLabel.trim() || entry.cell.exportLabel || entry.cell.id)
-    .join(' / ');
+  const rows = [...byRow.values()];
+  const soleFirst = rows.length === 1 ? rows[0]?.[0] : undefined;
+  if (soleFirst) return { entry: soleFirst };
+  const hits = sampleValue
+    ? rows
+        .map((group) => group.find((entry) => findOptionByLabel(cellOptions(entry.cell), sampleValue)))
+        .filter((entry): entry is AnswerableCell => entry !== undefined)
+    : [];
+  const [hit] = hits;
+  if (hits.length === 1 && hit) return { entry: hit };
+  const names = rows
+    .map((group) => {
+      const head = group[0];
+      const name = head ? head.rowLabel.trim() || head.cell.exportLabel || head.cell.id : '';
+      return `"${name}"`;
+    })
+    .join(', ');
   const verdict = sampleValue ? `표본값 "${sampleValue}" 으로 못 가름` : '표본값 없음';
-  return { reason: `후보 ${heads.length}행(${names}) — ${verdict}` };
+  return { reason: `후보 ${rows.length}행(${names}) — ${verdict}` };
 }
 
 /**

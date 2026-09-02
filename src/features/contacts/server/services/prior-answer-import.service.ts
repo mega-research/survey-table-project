@@ -38,6 +38,19 @@ import type {
 /** 찾지 못한 번호 목록 절단 — 화면은 표본만 보여주고 카운트는 전체를 쓴다. */
 const MAX_UNMATCHED_SAMPLES = 50;
 
+/**
+ * 제안 단계 표본 행 수. 적재 상한(MAX_UPLOAD_ROWS)과 같다 — 적재보다 좁게 보면 화면의 칸 배정과
+ * 적재의 칸 배정이 어긋난다. 5행일 때 2025 파일의 복수응답 열이 #REF! 뿐이라 전 칸 "배정 안 됨"
+ * 으로 보였고, 표 칸의 후보 행을 표본값으로 가르는 폴백(CQ1 담당 직무 — 비어 있지 않은 행이
+ * 1,836 중 32)은 화면에서 "표본값 없음" 미배정인데 적재는 32건을 넣었다. 500행이어도 HQ1(2025)
+ * 열의 첫 값이 1,380행이라 값 적합도가 계산되지 않는다. 파싱은 워크북 로드가 지배해 행 수로
+ * 비용이 거의 안 늘어난다(5행 1.2s, 전량 1.4s).
+ */
+export const SUGGEST_SAMPLE_ROWS = MAX_UPLOAD_ROWS;
+
+/** 화면에 돌려주는 표본 행 수. 마법사는 첫 행("첫 행 값" 열)만 쓴다. */
+export const PREVIEW_ROWS = 5;
+
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
   if (err) throw new Error(err);
@@ -220,7 +233,7 @@ export async function suggestPriorAnswerImportMapping(
   const preview = await previewExcelGrid(buffer, {
     sheetName: input.sheetName ?? '',
     headerRowCount,
-    maxRows: 5,
+    maxRows: SUGGEST_SAMPLE_ROWS,
   });
 
   const [questions, config] = await Promise.all([
@@ -229,13 +242,15 @@ export async function suggestPriorAnswerImportMapping(
   ]);
   const questionById = new Map(questions.map((q) => [q.id, q]));
   const blocks = splitHeaderBlocks(preview.headerRows);
+  // 표본은 적재와 같은 범위(전량)에서 뽑는다 — 화면이 보여준 칸 배정이 적재의 것이어야 한다.
   const samples = collectSampleValues(preview.rows);
   const suggestions = suggestBlockMapping(blocks, questions, samples);
 
   return {
     sheetNames: preview.sheetNames,
     headerRows: preview.headerRows,
-    rows: preview.rows,
+    // 화면에는 표본 몇 행만 돌려준다 — 응답 크기와 마법사 표는 그대로다.
+    rows: preview.rows.slice(0, PREVIEW_ROWS),
     totalRows: preview.totalRows,
     blocks: suggestions.map((s) => {
       // 지난 확정이 있으면 자동 제안보다 우선한다 — 담당자가 이미 판단한 것을 매번
@@ -316,7 +331,8 @@ export async function importPriorAnswers(
   // 자리 배정은 서버가 다시 계산한다 — 클라이언트는 블록↔문항 확정만 보낸다.
   // 화면이 본 것과 같은 헤더에서 같은 규칙으로 뽑아야 미리보기와 적재가 어긋나지 않는다.
   const blocks = splitHeaderBlocks(preview.headerRows);
-  // 미리보기(표본 5행)와 적재(전량)가 같은 표본 규칙을 써야 자리 배정이 어긋나지 않는다.
+  // 미리보기와 적재가 같은 표본 규칙을 **같은 범위(전량)** 에 써야 자리 배정이 어긋나지 않는다 —
+  // 규칙만 같고 범위가 다르면(5행 대 전량) 표본값으로 가르는 칸이 두 경로에서 다른 답을 낸다.
   const samples = collectSampleValues(rows);
   const questionById = new Map(questions.map((q) => [q.id, q]));
   const assignments = blocks.flatMap((block, index) => {

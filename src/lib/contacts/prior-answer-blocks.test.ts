@@ -680,6 +680,33 @@ describe('표 칸 세부 라벨 폴백', () => {
     expect(reason).toContain('담당 직무_① IT/SW 관련 세부분야');
     expect(reason).toContain('담당 직무_② 비 IT/SW 관련 분야');
     expect(reason).toContain('영업');
+    // 마법사는 슬롯들을 ' / ' 로 잇는다 — 사유 안의 행 나열이 같은 구분자를 쓰면 한 줄에서
+    // 후보 행과 슬롯 경계가 구분되지 않는다. 행 이름은 따옴표로 감싸고 쉼표로 잇는다.
+    expect(reason).not.toContain(' / ');
+    expect(reason).toContain('"담당 직무_① IT/SW 관련 세부분야", "담당 직무_② 비 IT/SW 관련 분야"');
+  });
+
+  it('한 행에서 라벨이 먼저 맞은 칸이 input 이어도 뒤 radio 칸의 보기에 표본값이 맞으면 그 행의 그 칸을 고른다', () => {
+    // 행 점수는 그 행의 첫 후보 칸이 아니라 어느 후보 칸이든 보기에 맞으면 1 이다 — 첫 칸만 보면
+    // "메모 input + 선택 radio" 가 나란한 행이 표본값이 보기에 맞아도 늘 0 점이라 미배정이 된다.
+    const 메모와선택 = q({
+      id: 'q-memo-radio',
+      questionCode: 'BQ1_1',
+      type: 'table',
+      title: '담당 직무',
+      tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '메모' }, { id: 'c2', label: '값' }],
+      tableRowsData: [
+        {
+          id: 'r-it',
+          label: '담당 직무_① IT',
+          cells: [text('it-label'), input('it-memo'), radio('it', ['① 개발', '② 기타'])],
+        },
+        { id: 'r-non', label: '담당 직무_② 비IT', cells: [text('non-label'), input('non-memo'), input('non')] },
+      ],
+    });
+    expect(slotFor(메모와선택, '담당 직무', '개발')).toEqual({ kind: 'table-cell', cellId: 'it', cellType: 'radio' });
+    // 표본값이 어느 보기에도 안 맞으면 여전히 미배정이다 — 첫 행을 집지 않는다.
+    expect(slotFor(메모와선택, '담당 직무', '영업').kind).toBe('unmatched');
   });
 
   it('표본값이 두 후보 행의 보기에 모두 맞는 동률이면 미배정이다', () => {
@@ -696,7 +723,9 @@ describe('표 칸 세부 라벨 폴백', () => {
     });
     const slot = slotFor(직무둘, '담당 직무', '기타');
     expect(slot.kind).toBe('unmatched');
-    expect(slot.kind === 'unmatched' ? slot.reason : '').toContain('담당 직무_① IT / 담당 직무_② 비IT');
+    expect(slot.kind === 'unmatched' ? slot.reason : '').toBe(
+      '후보 2행("담당 직무_① IT", "담당 직무_② 비IT") — 표본값 "기타" 으로 못 가름',
+    );
   });
 
   it('한 행에 이름 붙은 열이 여럿인 표에서는 행의 첫 칸이 아니라 라벨이 맞은 칸을 준다', () => {
@@ -741,14 +770,17 @@ describe('표 칸 세부 라벨 폴백', () => {
     expect(slotFor(취업현황, '기')).toStrictEqual({ kind: 'unmatched' });
   });
 
-  it('BQ1-1 블록 전체 — "메모" 한 칸만 미배정으로 남는다', () => {
+  it('BQ1-1 블록 전체 — "메모" 한 칸만 미배정으로 남고, 업무 분야 값은 값 대응이 있어야 들어간다', () => {
     const labels = ['기업명', '입사예정시기', '업무 분야', '담당 직무', '직책', '창업아이템', '메모'];
     const blank = labels.map(() => '');
     const blocks = splitHeaderBlocks([['PART B.', ...blank.slice(1)], ['BQ1-1.', ...blank.slice(1)], labels]);
+    // 2025 실제 값이다 — 업무 분야는 "IT/SW관련"×1,130 / "비 IT/SW관련"×14 로, 2026 보기
+    // "① IT/SW 관련 분야" 와 정확·줄기 어느 쪽으로도 맞지 않는다(드라이런 생성 0 / 실패 1,144).
+    // 칸 배정은 이 티켓, 값 대응은 결정 원장대로 매핑 화면 몫이라 둘을 따로 단언한다.
     const samples = collectSampleValues([
-      ['네이버', '2025년 7월', 'IT/SW 관련 분야', '정보기술 개발', 'CEO', '검색 앱', ''],
-      ['카카오', '2024년 12월', 'IT/SW 관련 분야', '정보기술 개발', 'CTO', '', '재직 중'],
-      ['쿠팡', '2025년 3월', '비 IT/SW 관련 분야', '영업', '기타', '물류 서비스', ''],
+      ['네이버', '2025년 7월', 'IT/SW관련', '정보기술 개발', 'CEO', '검색 앱', ''],
+      ['카카오', '2024년 12월', 'IT/SW관련', '정보기술 개발', 'CTO', '', '재직 중'],
+      ['쿠팡', '2025년 3월', '비 IT/SW관련', '영업', '기타', '물류 서비스', ''],
     ]);
     const s = suggestBlockMapping(blocks, [취업현황], samples)[0]!;
     expect(s.questionId).toBe('q-bq1-1');
@@ -761,7 +793,20 @@ describe('표 칸 세부 라벨 폴백', () => {
       { kind: 'table-cell', cellId: 'item', cellType: 'input' },
       { kind: 'unmatched' },
     ]);
-    expect(buildBlockAnswer(취업현황, s.slots, ['네이버', '2025년 7월', 'IT/SW 관련 분야', '정보기술 개발', 'CEO', '검색 앱', '재직 중']).value).toEqual({
+    const row = ['네이버', '2025년 7월', 'IT/SW관련', '정보기술 개발', 'CEO', '검색 앱', '재직 중'];
+    // 값 대응 없이는 업무 분야 칸이 비고 원본 값이 실패 목록에 남는다.
+    const bare = buildBlockAnswer(취업현황, s.slots, row);
+    expect(bare.value).toEqual({
+      name: '네이버',
+      year: '2025',
+      month: '7',
+      'job-it': '2',
+      title: '1',
+      item: '검색 앱',
+    });
+    expect(bare.unmatchedValues).toEqual(['IT/SW관련']);
+    // 값 대응을 이어주면 같은 칸에 들어간다.
+    expect(buildBlockAnswer(취업현황, s.slots, row, { 'IT/SW관련': '1' }).value).toEqual({
       name: '네이버',
       year: '2025',
       month: '7',
