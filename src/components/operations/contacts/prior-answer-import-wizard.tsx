@@ -57,14 +57,28 @@ const VERDICT_BADGE: Record<string, VerdictBadge | undefined> = {
   },
 };
 
-/** 값으로 이은 후보는 판정이 label-candidate 여도 문구가 다르다 — 코드가 가리킨 문항과 충돌한다는 뜻이다. */
+/**
+ * 값으로 이은 후보는 판정이 label-candidate 여도 문구가 다르다. 코드가 가리킨 문항이 있으면(코드 일치
+ * 분기) 그것과 충돌한다는 뜻이고, 없으면(2026 에 없는 코드 IQ1.) 값으로만 찾은 것이라 존재하지 않는
+ * "코드가 가리킨 문항" 을 말하지 않는다.
+ */
 const VALUE_CANDIDATE_BADGE: VerdictBadge = {
   label: '값이 이 문항의 보기와 맞습니다 — 코드가 가리킨 문항과 다르니 확인 필요',
   className: CANDIDATE_BADGE_CLASS,
 };
+const VALUE_ONLY_CANDIDATE_BADGE: VerdictBadge = {
+  label: '값이 이 문항의 보기와 맞습니다 — 코드로는 잇지 못해 값으로 찾은 것이니 확인 필요',
+  className: CANDIDATE_BADGE_CLASS,
+};
 
-function verdictBadge(block: { verdict: string; matchedBy: string | null }): VerdictBadge | undefined {
-  if (block.verdict === 'label-candidate' && block.matchedBy === 'value') return VALUE_CANDIDATE_BADGE;
+function verdictBadge(block: {
+  verdict: string;
+  matchedBy: string | null;
+  conflictQuestionId: string | null;
+}): VerdictBadge | undefined {
+  if (block.verdict === 'label-candidate' && block.matchedBy === 'value') {
+    return block.conflictQuestionId ? VALUE_CANDIDATE_BADGE : VALUE_ONLY_CANDIDATE_BADGE;
+  }
   return VERDICT_BADGE[block.verdict];
 }
 
@@ -439,7 +453,9 @@ export function PriorAnswerImportWizard({
                                 )}
                               </p>
                             )}
-                            {badge && block.verdictReason && (
+                            {/* 배지가 없는 unmapped 에도 사유가 실린다 — 후보 여럿을 제목으로 못 가른 블록의
+                                후보 목록이 그것이라, 배지에 묶으면 담당자가 고를 목록을 못 본다. */}
+                            {block.verdictReason && (
                               <p className="mt-1 text-xs text-slate-500">{block.verdictReason}</p>
                             )}
                             {block.fromSavedConfig && (

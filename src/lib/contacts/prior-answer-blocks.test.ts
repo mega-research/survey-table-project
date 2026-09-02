@@ -1012,6 +1012,102 @@ describe('값 기반 오매핑 방지', () => {
     expect(coded?.questionId).toBe('q-aq1-1');
   });
 
+  describe('뒤 블록의 정확 코드 일치 문항은 앞 블록의 값 후보가 되지 않는다', () => {
+    // 리뷰 지적 — 후보 풀이 eligible \ taken 전부라, 헤더 순서로 앞선 블록이 아직 처리되지 않은 뒤 블록의
+    // 정확 코드 일치 문항을 값 후보로 선점했다. 2지 문항은 긍정/부정 동의어로 서로 100% 라 특히 그렇다.
+    const 이직 = q({
+      ...창업의향,
+      id: 'q-bq1',
+      questionCode: 'BQ1',
+      title: 'BQ1. 작년 조사 이후 1년 이내 이직 경험이 있습니까?',
+    });
+    const 있음없음_예아니오 = [
+      ...Array.from({ length: 8 }, () => ['있음', '예']),
+      ...Array.from({ length: 4 }, () => ['없음', '아니오']),
+    ];
+
+    it('코드 불일치 분기 — 2026 에 없는 코드 블록이 뒤의 BQ1. 몫인 BQ1 을 가져가지 않는다', () => {
+      // 세부 라벨 "이직" 이 BQ1 제목과만 겹쳐, 뒤 블록 몫을 빼지 않으면 AQ9. 가 BQ1 을 제목 유사도로 가져가고
+      // 정확 일치인 BQ1. 은 코드 분기를 건너뛰어 HQ1 로 밀렸다.
+      const [front, coded] = suggest(
+        [['AQ9.', 'BQ1.'], ['(이직)', '(이직경험)']],
+        [이직, 창업의향],
+        있음없음_예아니오,
+      );
+      expect(coded?.verdict).toBe('auto');
+      expect(coded?.matchedBy).toBe('code');
+      expect(coded?.questionId).toBe('q-bq1');
+      // 앞 블록의 후보 풀에는 HQ1 만 남는다 — 하나라 그것이 확인 필요 후보다.
+      expect(front?.verdict).toBe('label-candidate');
+      expect(front?.matchedBy).toBe('value');
+      expect(front?.questionId).toBe('q-intent');
+    });
+
+    it('코드 일치 분기 — 값이 코드 문항에 안 맞는 앞 블록도 뒤의 BQ1. 몫을 가져가지 않는다', () => {
+      // HQ1. 의 코드 문항은 도움도인데 값은 있음/없음이라 0% — 후보 검색이 뒤 블록 몫 BQ1 을 집으면
+      // BQ1. 은 unmapped 가 됐다.
+      const 도움도HQ1 = q({ ...도움도, id: 'q-help-hq1', questionCode: 'HQ1', title: 'HQ1. 과정이 도움이 되었습니까?' });
+      const [front, coded] = suggest(
+        [['HQ1.', 'BQ1.'], ['(이직)', '(이직경험)']],
+        [도움도HQ1, 이직],
+        있음없음_예아니오,
+      );
+      expect(coded?.verdict).toBe('auto');
+      expect(coded?.questionId).toBe('q-bq1');
+      expect(front?.verdict).toBe('value-conflict');
+      expect(front?.questionId).toBeNull();
+      expect(front?.conflictQuestionId).toBe('q-help-hq1');
+      // 뒤 블록 몫은 사유의 후보 목록에도 오르지 않는다.
+      expect(front?.verdictReason).not.toContain('BQ1');
+    });
+
+    it('뒤 블록이 코드로 잇더라도 그 블록 값이 그 문항에 안 맞으면 앞 블록의 후보로 남는다', () => {
+      // 2025 #21 AQ1-A.(있음/없음) 앞에서 #22 BQ1. 은 예/아니오라 BQ1 을 잡고, #52 HQ1. 은 도움도 값이라
+      // HQ1 을 못 잡는다 — 후보 목록에는 SQ0·HQ1 이 남고 BQ1 은 빠진다. HQ1. 은 그대로 value-conflict 다.
+      const 동의 = q({ ...창업의향, id: 'q-s0', questionCode: 'SQ0', title: '동의 여부' });
+      const rows = [
+        ...Array.from({ length: 8 }, () => ['있음', '예', '매우 도움됨']),
+        ...Array.from({ length: 4 }, () => ['없음', '아니오', '보통']),
+      ];
+      const [front, bq1, hq1] = suggest(
+        [['AQ1-A.', 'BQ1.', 'HQ1.'], ['', '(이직경험)', '(과정 도움도)']],
+        [이직, 창업의향, 동의],
+        rows,
+      );
+      expect(front?.verdict).toBe('unmapped');
+      expect(front?.verdictReason).toContain('2개');
+      expect(front?.verdictReason).toContain('SQ0');
+      expect(front?.verdictReason).toContain('HQ1');
+      expect(front?.verdictReason).not.toContain('BQ1');
+      expect(bq1?.verdict).toBe('auto');
+      expect(bq1?.questionId).toBe('q-bq1');
+      expect(hq1?.verdict).toBe('value-conflict');
+      expect(hq1?.conflictQuestionId).toBe('q-intent');
+    });
+  });
+
+  it('코드 일치 블록의 값 후보를 제목으로 갈랐으면 그 사실이 사유에 남는다', () => {
+    // 코드 문항(도움도)에 0% 인 있음/없음 값. 값이 맞는 2지 문항 둘 중 라벨 "창업의향" 과 제목이 겹치는 HQ1 을
+    // 고른 것인데, 코드 불일치 분기와 달리 코드 일치 분기는 그 꼬리를 붙이지 않았다.
+    const 동의 = q({
+      id: 'q-consent',
+      questionCode: 'SQ0',
+      type: 'radio',
+      title: 'SQ0. 개인정보 수집에 동의하십니까?',
+      options: [
+        { id: 'y', value: '1', label: '① 예' },
+        { id: 'n', value: '2', label: '② 아니오' },
+      ],
+    });
+    const rows = column([...repeat('있음', 8), ...repeat('없음', 4)]);
+    const [s] = suggest([['ZZ7.'], ['창업의향']], [도움도, 동의, 창업의향], rows);
+    expect(s?.verdict).toBe('label-candidate');
+    expect(s?.matchedBy).toBe('value');
+    expect(s?.questionId).toBe('q-intent');
+    expect(s?.conflictQuestionId).toBe('q-help');
+    expect(s?.verdictReason).toContain('제목이 가장 비슷한 것');
+  });
+
   it('코드 일치 문항의 적합도가 5% 이상이면 auto 그대로다 — 절반 실패는 미리보기 실패율이 맡는다', () => {
     const rows = column([...repeat('도움됨', 10), '예', '아니오']);
     const [s] = suggest([['HQ1.'], ['']], [창업의향, 도움도], rows);

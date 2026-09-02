@@ -778,6 +778,31 @@ function findValueCandidate(
   return { ambiguous: hits.map((hit) => hit.question) };
 }
 
+/** 후보 여럿을 제목 유사도로 가른 사실 — 약한 신호라 사유 꼬리에 남긴다. 두 분기가 같은 문구를 쓴다. */
+function decidedByTitleTail(pick: ValueCandidate): string {
+  return pick.decidedByTitle ? ' — 값이 맞는 문항 여럿 중 제목이 가장 비슷한 것' : '';
+}
+
+/** 코드 일치 문항이 auto 로 붙기를 막는 적합도인가 — 판정 대상이 아니면(null) 막지 않는다. */
+function codeFitRejects(fit: SampleFit | null): fit is SampleFit {
+  return fit !== null && fitRatio(fit) < VALUE_FIT_CONFLICT_BELOW;
+}
+
+/**
+ * 블록의 코드 일치 문항과 그 문항에 대한 두 게이트(라벨·적합도) 결과.
+ *
+ * `taken` 과 무관하게 정해지므로 처리 전에 블록마다 한 번 계산해 두 곳에서 쓴다 — 코드 분기 판정과,
+ * 앞 블록의 값 후보 검색에서 **뒤 블록 몫을 빼는 것**.
+ */
+type CodeAssessment =
+  | { question: Question; similar: false }
+  | { question: Question; similar: true; slots: BlockSlot[]; fit: SampleFit | null };
+
+/** 이 블록이 코드 일치 문항을 auto 로 잡는가 — 라벨 게이트와 적합도 게이트를 다 통과할 때. */
+function holdsByCode(assessment: CodeAssessment | null): assessment is CodeAssessment {
+  return assessment !== null && assessment.similar && !codeFitRejects(assessment.fit);
+}
+
 /**
  * 블록과 문항을 잇는 자동 제안.
  *
@@ -786,6 +811,9 @@ function findValueCandidate(
  *
  * 코드가 맞아도 **표본값 적합도** 를 한 겹 더 건다(options.valueCountsByColumn 이 있을 때만).
  * 블록은 헤더 순서로 처리되고 `taken` 이 greedy 라, 값 후보로 제안된 문항은 뒤 블록이 못 가져간다.
+ * 그 반대 방향은 막는다 — 뒤 블록이 코드로 잡을 문항(두 게이트 통과)은 앞 블록의 값 후보 풀에서 뺀다.
+ * 2지 문항은 긍정/부정 동의어로 서로 100% 라, 이것이 없으면 2026 에 없는 코드 블록 하나가 뒤의 정확
+ * 일치 문항을 제목 바이그램 하나로 가져가 정확 일치 블록이 unmapped 로 밀린다.
  */
 export function suggestBlockMapping(
   blocks: readonly HeaderBlock[],
@@ -810,21 +838,50 @@ export function suggestBlockMapping(
   const unmatchedSlots = (block: HeaderBlock): BlockSlot[] =>
     block.columnIndexes.map(() => ({ kind: 'unmatched' as const }));
 
-  return blocks.map((block): BlockSuggestion => {
+  const assessCode = (block: HeaderBlock): CodeAssessment | null => {
     // 실무 헤더는 `BQ1-1. 창업 기업명` 처럼 코드와 라벨이 한 칸에 붙어 있다 —
     // 전체와 선두 토큰을 둘 다 후보로 본다.
-    const byCodeMatch = headerCodeCandidates(block.codeText)
+    const question = headerCodeCandidates(block.codeText)
       .map((code) => byCode.get(code))
       .find((found) => found !== undefined);
+    if (!question) return null;
+    // 대조할 문항 내용이 없으면 코드 일치만으로 간다 — 라벨 없는 파일에서 코드 일치를
+    // 경고로 뒤집으면 매핑이 전부 막힌다. 세부 라벨 유래 텍스트도 "내용 없음"으로 본다
+    // (labelSource 참조). 코드가 밀린 사고는 미리보기의 변환 실패율 100% 로 드러난다.
+    const comparable = block.labelSource === 'code' && block.label;
+    const similar =
+      !comparable || labelSimilarity(block.label, question.title) >= LABEL_SIMILAR_THRESHOLD;
+    if (!similar) return { question, similar: false };
+    const slots = resolveSlots(question, block, samplesFor(block));
+    return { question, similar: true, slots, fit: sampleFit(question, block, slots, options) };
+  };
+  const assessments = blocks.map(assessCode);
 
-    if (byCodeMatch && !taken.has(byCodeMatch.id)) {
-      // 대조할 문항 내용이 없으면 코드 일치만으로 간다 — 라벨 없는 파일에서 코드 일치를
-      // 경고로 뒤집으면 매핑이 전부 막힌다. 세부 라벨 유래 텍스트도 "내용 없음"으로 본다
-      // (labelSource 참조). 코드가 밀린 사고는 미리보기의 변환 실패율 100% 로 드러난다.
-      const comparable = block.labelSource === 'code' && block.label;
-      const similar =
-        !comparable || labelSimilarity(block.label, byCodeMatch.title) >= LABEL_SIMILAR_THRESHOLD;
-      if (!similar) {
+  // 1패스 — 아직 처리하지 않은 블록이 코드로 잡을 문항을 센다. 블록 순서대로 자기 몫을 빼며 내려가므로
+  // 어느 시점에든 "뒤 블록 몫" 만 남는다. 뒤 블록의 값이 그 문항에 안 맞으면(적합도 게이트 탈락) 몫이
+  // 아니다 — 2025 AQ1-2. 의 AQ1_2 적합도가 0% 라 앞 블록 AQ1-1. 이 AQ1_2 를 제안받는 것이 그 덕이다.
+  const pendingCodeHolds = new Map<string, number>();
+  const adjustHold = (assessment: CodeAssessment | null, delta: number) => {
+    if (!holdsByCode(assessment)) return;
+    const id = assessment.question.id;
+    pendingCodeHolds.set(id, (pendingCodeHolds.get(id) ?? 0) + delta);
+  };
+  for (const assessment of assessments) adjustHold(assessment, 1);
+  const reservedByLaterBlock = (question: Question) => (pendingCodeHolds.get(question.id) ?? 0) > 0;
+  /** 값 후보 검색 풀 — 미매핑이고, 코드 문항이 아니고, 뒤 블록 몫이 아닌 것. */
+  const valueCandidatePool = (exclude?: Question) =>
+    eligible.filter(
+      (question) =>
+        !taken.has(question.id) && question.id !== exclude?.id && !reservedByLaterBlock(question),
+    );
+
+  return blocks.map((block, index): BlockSuggestion => {
+    const assessment = assessments[index] ?? null;
+    adjustHold(assessment, -1);
+
+    if (assessment && !taken.has(assessment.question.id)) {
+      const byCodeMatch = assessment.question;
+      if (!assessment.similar) {
         return {
           block,
           questionId: null,
@@ -835,9 +892,8 @@ export function suggestBlockMapping(
         };
       }
 
-      const slots = resolveSlots(byCodeMatch, block, samplesFor(block));
-      const fit = sampleFit(byCodeMatch, block, slots, options);
-      if (fit === null || fitRatio(fit) >= VALUE_FIT_CONFLICT_BELOW) {
+      const { slots, fit } = assessment;
+      if (!codeFitRejects(fit)) {
         taken.add(byCodeMatch.id);
         return { block, questionId: byCodeMatch.id, matchedBy: 'code', verdict: 'auto', slots };
       }
@@ -846,11 +902,7 @@ export function suggestBlockMapping(
       // 제안하고, 아니면 멈춘다. 어느 쪽에서도 코드 문항은 `taken` 에 넣지 않는다 — 뒤 블록이
       // 그 문항을 제안받아야 한다(2025 IQ1. → HQ1, AQ1-2. → AQ1_1).
       const reason = codeFitReason(fit, byCodeMatch);
-      const search = findValueCandidate(
-        block,
-        eligible.filter((question) => !taken.has(question.id) && question.id !== byCodeMatch.id),
-        options,
-      );
+      const search = findValueCandidate(block, valueCandidatePool(byCodeMatch), options);
       if (search.pick) {
         taken.add(search.pick.question.id);
         return {
@@ -859,7 +911,7 @@ export function suggestBlockMapping(
           matchedBy: 'value',
           verdict: 'label-candidate',
           conflictQuestionId: byCodeMatch.id,
-          verdictReason: `${reason} — ${candidateFitReason(search.pick.fit)}`,
+          verdictReason: `${reason} — ${candidateFitReason(search.pick.fit)}${decidedByTitleTail(search.pick)}`,
           slots: resolveSlots(search.pick.question, block, samplesFor(block)),
         };
       }
@@ -900,21 +952,16 @@ export function suggestBlockMapping(
     // 코드로도 제목으로도 못 이었다 — 값이 어느 문항의 보기와 맞는지로 한 번 더 찾는다.
     // 문항코드 꼴의 블록만이다(2026 에 없는 코드 IQ1., 이미 가져간 코드 AQ1-2.) — 명단 메타 열은 제외.
     const search: ValueCandidateSearch = looksLikeQuestionCode(block.code)
-      ? findValueCandidate(
-          block,
-          eligible.filter((question) => !taken.has(question.id)),
-          options,
-        )
+      ? findValueCandidate(block, valueCandidatePool(), options)
       : { ambiguous: [] };
     if (search.pick) {
       taken.add(search.pick.question.id);
-      const decided = search.pick.decidedByTitle ? ' — 값이 맞는 문항 여럿 중 제목이 가장 비슷한 것' : '';
       return {
         block,
         questionId: search.pick.question.id,
         matchedBy: 'value',
         verdict: 'label-candidate',
-        verdictReason: `${candidateFitReason(search.pick.fit)}${decided}`,
+        verdictReason: `${candidateFitReason(search.pick.fit)}${decidedByTitleTail(search.pick)}`,
         slots: resolveSlots(search.pick.question, block, samplesFor(block)),
       };
     }
