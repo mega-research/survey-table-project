@@ -48,10 +48,13 @@ export const SuggestPriorAnswerMappingResultSchema = z.object({
       columnIndexes: z.array(z.number()),
       detailLabels: z.array(z.string()),
       questionId: z.string().nullable(),
-      matchedBy: z.enum(['code', 'label']).nullable(),
-      verdict: z.enum(['auto', 'code-conflict', 'label-candidate', 'unmapped']),
-      /** code-conflict 일 때 코드가 가리킨 문항 */
+      /** value 는 블록 값이 이 문항의 보기와 맞아 제안된 것 — 코드·제목이 아니라 값으로 잇는다. */
+      matchedBy: z.enum(['code', 'label', 'value']).nullable(),
+      verdict: z.enum(['auto', 'code-conflict', 'value-conflict', 'label-candidate', 'unmapped']),
+      /** code-conflict·value-conflict·value 후보일 때 코드가 가리킨 문항 */
       conflictQuestionId: z.string().nullable(),
+      /** 값 적합도 판정의 근거("표본 180건 중 보기와 맞는 값 0건 …") — 화면이 배지 아래 그대로 찍는다. */
+      verdictReason: z.string().nullable(),
       /** 확정 설정에서 되살린 매핑인가 — 화면이 "지난 확정" 으로 표시한다. */
       fromSavedConfig: z.boolean(),
       /** 블록 컬럼별 배정 결과. 표 위치 폴백의 조용한 오배정을 눈으로 확인하는 자리다. */

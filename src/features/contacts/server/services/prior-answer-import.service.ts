@@ -9,6 +9,7 @@ import type { PriorAnswerImportConfig } from '@/db/schema/schema-types';
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
   LABEL_SIMILAR_THRESHOLD,
+  collectColumnValueCounts,
   collectSampleValues,
   labelSimilarity,
   normalizeQuestionCode,
@@ -244,7 +245,12 @@ export async function suggestPriorAnswerImportMapping(
   const blocks = splitHeaderBlocks(preview.headerRows);
   // 표본은 적재와 같은 범위(전량)에서 뽑는다 — 화면이 보여준 칸 배정이 적재의 것이어야 한다.
   const samples = collectSampleValues(preview.rows);
-  const suggestions = suggestBlockMapping(blocks, questions, samples);
+  // 값 분포는 코드 일치 문항의 표본값 적합도 근거다. 보관된 값 대응은 적합도에 포함한다 —
+  // 담당자가 이미 이어준 값이 "보기와 안 맞는다" 로 다시 경고되면 안 된다.
+  const suggestions = suggestBlockMapping(blocks, questions, samples, {
+    valueCountsByColumn: collectColumnValueCounts(preview.rows),
+    valueAliases: config.valueAliases,
+  });
 
   return {
     sheetNames: preview.sheetNames,
@@ -281,6 +287,8 @@ export async function suggestPriorAnswerImportMapping(
         matchedBy: savedQuestion ? null : s.matchedBy,
         verdict: savedQuestion ? ('auto' as const) : s.verdict,
         conflictQuestionId: savedQuestion ? null : (s.conflictQuestionId ?? null),
+        // 지난 확정은 값 적합도 게이트를 타지 않는다 — 담당자가 이미 판단한 것이다.
+        verdictReason: savedQuestion ? null : (s.verdictReason ?? null),
         fromSavedConfig: Boolean(savedQuestion),
         slotLabels: describeSlots(question, slots),
         unmatchedSlots: slots.filter((slot) => slot.kind === 'unmatched').length,

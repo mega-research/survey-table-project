@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  VALUE_FIT_CANDIDATE_MIN,
+  VALUE_FIT_CONFLICT_BELOW,
+  VALUE_FIT_MIN_SAMPLES,
   buildBlockAnswer,
+  collectColumnValueCounts,
   collectSampleValues,
   resolveSlots,
+  sampleFit,
   splitHeaderBlocks,
   splitYearMonth,
   suggestBlockMapping,
@@ -814,6 +819,315 @@ describe('표 칸 세부 라벨 폴백', () => {
       'job-it': '2',
       title: '1',
       item: '검색 앱',
+    });
+  });
+});
+
+describe('collectColumnValueCounts', () => {
+  it('열별 값 분포를 건수 내림차순으로 내고 첫 항목이 collectSampleValues 의 최빈값과 같다', () => {
+    const rows = [['#REF!', 'a'], ['도움됨', ''], ['보통', 'b'], ['도움됨', '--'], ['', 'a']];
+    const counts = collectColumnValueCounts(rows);
+    expect(counts.get(0)).toEqual([
+      { value: '도움됨', count: 2 },
+      { value: '보통', count: 1 },
+    ]);
+    expect(counts.get(1)).toEqual([
+      { value: 'a', count: 2 },
+      { value: 'b', count: 1 },
+    ]);
+    expect(collectSampleValues(rows).get(0)).toBe('도움됨');
+    expect(collectSampleValues(rows).get(1)).toBe('a');
+  });
+
+  it('열당 distinct 값은 200개까지만 보존한다', () => {
+    const rows = Array.from({ length: 250 }, (_, i) => [`값${i}`]);
+    expect(collectColumnValueCounts(rows).get(0)).toHaveLength(200);
+  });
+});
+
+describe('값 기반 오매핑 방지', () => {
+  const 창업의향 = q({
+    id: 'q-intent',
+    questionCode: 'HQ1',
+    type: 'radio',
+    title: 'HQ1. 귀하는 향후 창업하실 의향이 있으신가요?',
+    options: [
+      { id: 'y', value: '1', label: '① 예' },
+      { id: 'n', value: '2', label: '② 아니오' },
+    ],
+  });
+  const 도움도 = q({
+    id: 'q-help',
+    questionCode: 'ZZ7',
+    type: 'radio',
+    title: 'ZZ7. 과정이 도움이 되었습니까?',
+    options: [
+      { id: 'a', value: '1', label: '① 매우 도움됨' },
+      { id: 'b', value: '2', label: '② 도움됨' },
+      { id: 'c', value: '3', label: '③ 보통' },
+      { id: 'd', value: '4', label: '④ 도움되지 않음' },
+    ],
+  });
+  const 진로계획 = q({
+    id: 'q-aq1-1',
+    questionCode: 'AQ1_1',
+    type: 'radio',
+    title: 'AQ1-1. 귀하의 졸업 후 진로 계획은 어떻게 되십니까?',
+    options: [
+      { id: 'a', value: '1', label: '① 진학' },
+      { id: 'b', value: '2', label: '② 취업' },
+      { id: 'c', value: '3', label: '③ 창업' },
+      { id: 'd', value: '4', label: '④ 프리랜서' },
+      { id: 'e', value: '5', label: '⑤ 기타' },
+    ],
+  });
+  const 진학예정 = q({
+    id: 'q-aq1-2',
+    questionCode: 'AQ1_2',
+    type: 'radio',
+    title: 'AQ1-2. 귀하의 진학 예정은 어떻게 되십니까?',
+    options: [
+      { id: 'a', value: '1', label: '① 학사' },
+      { id: 'b', value: '2', label: '② 석사' },
+      { id: 'c', value: '3', label: '③ 박사' },
+      { id: 'd', value: '4', label: '④ 기타' },
+    ],
+  });
+
+  /** 한 열짜리 데이터 — 값 목록을 행으로 편다. */
+  const column = (values: string[]) => values.map((value) => [value]);
+  const repeat = (value: string, n: number) => Array.from({ length: n }, () => value);
+  const 도움됨12 = column([...repeat('매우 도움됨', 7), ...repeat('도움됨', 4), '보통']);
+
+  function suggest(
+    headerRows: string[][],
+    questions: Question[],
+    rows: string[][],
+    valueAliases?: Record<string, Record<string, string>>,
+  ) {
+    const blocks = splitHeaderBlocks(headerRows);
+    return suggestBlockMapping(blocks, questions, collectSampleValues(rows), {
+      valueCountsByColumn: collectColumnValueCounts(rows),
+      ...(valueAliases ? { valueAliases } : {}),
+    });
+  }
+
+  it('상수 — 표본 3건 미만은 판정하지 않고, 5% 미만이면 충돌, 80% 이상이면 후보다', () => {
+    expect(VALUE_FIT_MIN_SAMPLES).toBe(3);
+    expect(VALUE_FIT_CONFLICT_BELOW).toBe(0.05);
+    expect(VALUE_FIT_CANDIDATE_MIN).toBe(0.8);
+  });
+
+  it('코드가 같아도 값이 그 문항의 보기와 하나도 안 맞으면 value-conflict 로 멈춘다', () => {
+    // 2025 HQ1.(과정 도움도)이 2026 HQ1(창업 의향)에 코드만 보고 auto 로 붙어 180/180 실패한 사고.
+    const [s] = suggest([['HQ1.'], ['(과정 도움도)']], [창업의향], 도움됨12);
+    expect(s?.verdict).toBe('value-conflict');
+    expect(s?.questionId).toBeNull();
+    expect(s?.matchedBy).toBeNull();
+    expect(s?.conflictQuestionId).toBe('q-intent');
+    expect(s?.verdictReason).toContain('12건');
+    expect(s?.verdictReason).toContain('0건');
+    expect(s?.verdictReason).toContain('창업하실 의향');
+    expect(s?.slots).toEqual([{ kind: 'unmatched' }]);
+  });
+
+  it('같은 상황에서 값이 맞는 다른 문항이 하나면 그것을 후보로 제안하고 코드 문항은 충돌로 남긴다', () => {
+    const [s] = suggest([['HQ1.'], ['(과정 도움도)']], [창업의향, 도움도], 도움됨12);
+    expect(s?.verdict).toBe('label-candidate');
+    expect(s?.matchedBy).toBe('value');
+    expect(s?.questionId).toBe('q-help');
+    expect(s?.conflictQuestionId).toBe('q-intent');
+    expect(s?.verdictReason).toContain('12건');
+    expect(s?.slots).toEqual([{ kind: 'single' }]);
+  });
+
+  it('AQ1-1/AQ1-2 처럼 코드가 서로 바뀐 두 블록은 각각 값이 맞는 반대 문항으로 제안된다', () => {
+    // 첫 블록이 AQ1_2 를 가져가도 코드 문항 AQ1_1 은 taken 에 넣지 않아 둘째 블록이 제안받는다.
+    const headerRows = [['AQ1-1.', 'AQ1-2.'], ['(진학계획)', '(진로계획)']];
+    const rows = [
+      ...Array.from({ length: 6 }, () => ['학사', '취업']),
+      ...Array.from({ length: 3 }, () => ['석사', '진학']),
+      ...Array.from({ length: 3 }, () => ['박사', '창업']),
+    ];
+    const [first, second] = suggest(headerRows, [진로계획, 진학예정], rows);
+    expect(first?.verdict).toBe('label-candidate');
+    expect(first?.matchedBy).toBe('value');
+    expect(first?.questionId).toBe('q-aq1-2');
+    expect(first?.conflictQuestionId).toBe('q-aq1-1');
+    expect(second?.verdict).toBe('label-candidate');
+    expect(second?.matchedBy).toBe('value');
+    expect(second?.questionId).toBe('q-aq1-1');
+    expect(second?.conflictQuestionId).toBeUndefined();
+    expect(second?.verdictReason).toContain('12건');
+  });
+
+  it('코드가 없는 2지 블록에 값이 맞는 문항이 여럿이면 제목 유사도가 유일하게 높은 것을 제안한다', () => {
+    // 2025 IQ1.(있음/없음, 라벨 "창업의향")은 2지 문항 넷과 전부 100% 다 — 제목으로 HQ1 을 가른다.
+    const 동의 = q({
+      id: 'q-consent',
+      questionCode: 'SQ0',
+      type: 'radio',
+      title: 'SQ0. 개인정보 수집에 동의하십니까?',
+      options: [
+        { id: 'y', value: '1', label: '① 예' },
+        { id: 'n', value: '2', label: '② 아니오' },
+      ],
+    });
+    const rows = column([...repeat('있음', 8), ...repeat('없음', 4)]);
+    const [s] = suggest([['IQ1.'], ['창업의향']], [동의, 창업의향], rows);
+    expect(s?.verdict).toBe('label-candidate');
+    expect(s?.matchedBy).toBe('value');
+    expect(s?.questionId).toBe('q-intent');
+    expect(s?.conflictQuestionId).toBeUndefined();
+    expect(s?.verdictReason).toContain('12건');
+  });
+
+  it('후보가 여럿인데 제목으로 못 가르면 제안하지 않고 사유에 후보 목록을 남긴다', () => {
+    const 동의1 = q({ ...창업의향, id: 'q-s0', questionCode: 'SQ0', title: '동의 여부' });
+    const 동의2 = q({ ...창업의향, id: 'q-s1', questionCode: 'SQ1', title: '참여 여부' });
+    const rows = column([...repeat('있음', 8), ...repeat('없음', 4)]);
+    const [s] = suggest([['IQ1.'], ['']], [동의1, 동의2], rows);
+    expect(s?.verdict).toBe('unmapped');
+    expect(s?.questionId).toBeNull();
+    expect(s?.verdictReason).toContain('SQ0');
+    expect(s?.verdictReason).toContain('SQ1');
+    expect(s?.verdictReason).toContain('2개');
+  });
+
+  it('문항코드 꼴이 아닌 메타 열은 값이 맞아도 후보 검색 대상이 아니다 — 뒤의 코드 블록이 그 문항을 제안받는다', () => {
+    // 2025 파일 앞머리의 "2024년 조사 결과 / 현재상태" 열(취업·창업·재학…)이 AQ1_1 보기에 80% 맞아
+    // AQ1_1 을 선점하면, 코드가 바뀐 AQ1-2. 블록이 AQ1_1 을 제안받지 못한다.
+    const headerRows = [['현재상태', 'AQ1-2.'], ['', '(졸업 후 진로계획)']];
+    const rows = [
+      ...Array.from({ length: 6 }, () => ['취업', '취업']),
+      ...Array.from({ length: 3 }, () => ['창업', '진학']),
+      ...Array.from({ length: 3 }, () => ['진학', '창업']),
+    ];
+    const [meta, coded] = suggest(headerRows, [진로계획, 진학예정], rows);
+    expect(meta?.verdict).toBe('unmapped');
+    expect(meta?.questionId).toBeNull();
+    expect(meta?.verdictReason).toBeUndefined();
+    expect(coded?.verdict).toBe('label-candidate');
+    expect(coded?.matchedBy).toBe('value');
+    expect(coded?.questionId).toBe('q-aq1-1');
+  });
+
+  it('코드 일치 문항의 적합도가 5% 이상이면 auto 그대로다 — 절반 실패는 미리보기 실패율이 맡는다', () => {
+    const rows = column([...repeat('도움됨', 10), '예', '아니오']);
+    const [s] = suggest([['HQ1.'], ['']], [창업의향, 도움도], rows);
+    expect(s?.verdict).toBe('auto');
+    expect(s?.questionId).toBe('q-intent');
+    expect(s?.verdictReason).toBeUndefined();
+  });
+
+  it('표본이 3건 미만이면 판정을 바꾸지 않는다', () => {
+    const [s] = suggest([['HQ1.'], ['']], [창업의향, 도움도], column(['도움됨', '보통']));
+    expect(s?.verdict).toBe('auto');
+    expect(s?.questionId).toBe('q-intent');
+  });
+
+  it('자유입력 문항은 값이 무엇이든 auto 다', () => {
+    const 단답 = q({ id: 'q-free', questionCode: 'HQ1', type: 'text', title: '자유 의견' });
+    const [s] = suggest([['HQ1.'], ['']], [단답, 도움도], 도움됨12);
+    expect(s?.verdict).toBe('auto');
+    expect(s?.questionId).toBe('q-free');
+  });
+
+  describe('표 블록', () => {
+    const 현황 = q({
+      id: 'q-dq2',
+      questionCode: 'DQ2',
+      type: 'table',
+      title: '창업 기업 현황',
+      tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '값' }],
+      tableRowsData: [
+        {
+          id: 'r-field',
+          label: '업종',
+          cells: [
+            { id: 'field-label', type: 'text', content: '업종' },
+            {
+              id: 'field',
+              type: 'radio',
+              content: '',
+              radioOptions: [
+                { id: 'f1', value: '1', label: '① IT/SW' },
+                { id: 'f2', value: '2', label: '② 비 IT/SW' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'r-name',
+          label: '기업명',
+          cells: [
+            { id: 'name-label', type: 'text', content: '기업명' },
+            { id: 'name', type: 'input', content: '' },
+          ],
+        },
+      ],
+    });
+
+    it('선택 칸의 절반이 실패해도 auto 다', () => {
+      const rows = [
+        ...Array.from({ length: 6 }, () => ['IT/SW', '네이버']),
+        ...Array.from({ length: 6 }, () => ['경기도', '카카오']),
+      ];
+      const [s] = suggest([['DQ2.', ''], ['업종', '기업명']], [현황], rows);
+      expect(s?.verdict).toBe('auto');
+      expect(s?.slots.map((slot) => slot.kind)).toEqual(['table-cell', 'table-cell']);
+    });
+
+    it('선택 칸이 전부 실패하면 value-conflict 다', () => {
+      const rows = Array.from({ length: 12 }, () => ['경기도', '카카오']);
+      const [s] = suggest([['DQ2.', ''], ['업종', '기업명']], [현황], rows);
+      expect(s?.verdict).toBe('value-conflict');
+      expect(s?.conflictQuestionId).toBe('q-dq2');
+      expect(s?.verdictReason).toContain('12건');
+    });
+
+    it('input 칸만 있는 표는 판정 대상이 아니다', () => {
+      const rows = Array.from({ length: 12 }, () => ['카카오']);
+      const [s] = suggest([['DQ2.'], ['기업명']], [현황], rows);
+      expect(s?.verdict).toBe('auto');
+    });
+  });
+
+  describe('복수응답 펼침', () => {
+    it('슬롯이 전부 미배정인데 표본이 있으면 value-conflict 다', () => {
+      const rows = Array.from({ length: 4 }, () => ['가', '나', '다']);
+      const [s] = suggest([['BQ3', '', ''], ['', '', '']], [checkboxQuestion], rows);
+      expect(s?.verdict).toBe('value-conflict');
+      expect(s?.conflictQuestionId).toBe('q-check');
+      expect(s?.verdictReason).toContain('3건');
+    });
+
+    it('슬롯이 잡히면 auto 다', () => {
+      const rows = Array.from({ length: 4 }, () => ['자금', '멘토링', '공간']);
+      const [s] = suggest([['BQ3', '', ''], ['', '', '']], [checkboxQuestion], rows);
+      expect(s?.verdict).toBe('auto');
+    });
+  });
+
+  it('확정된 값 대응으로 맞춘 값은 적합도에 들어간다', () => {
+    const [bare] = suggest([['HQ1.'], ['']], [창업의향], 도움됨12);
+    expect(bare?.verdict).toBe('value-conflict');
+    const [aliased] = suggest([['HQ1.'], ['']], [창업의향], 도움됨12, {
+      'q-intent': { '매우 도움됨': '1' },
+    });
+    expect(aliased?.verdict).toBe('auto');
+    expect(aliased?.questionId).toBe('q-intent');
+  });
+
+  it('sampleFit — single 슬롯이 없는 radio 블록과 3건 미만 표본은 null 이다', () => {
+    const block = splitHeaderBlocks([['HQ1.', '', ''], ['', '', '']])[0]!;
+    const options = { valueCountsByColumn: collectColumnValueCounts(Array.from({ length: 5 }, () => ['예', '예', '예'])) };
+    expect(sampleFit(창업의향, block, resolveSlots(창업의향, block), options)).toBeNull();
+    const one = splitHeaderBlocks([['HQ1.'], ['']])[0]!;
+    expect(sampleFit(창업의향, one, [{ kind: 'single' }], { valueCountsByColumn: collectColumnValueCounts([['예'], ['예']]) })).toBeNull();
+    expect(sampleFit(창업의향, one, [{ kind: 'single' }], { valueCountsByColumn: collectColumnValueCounts([['예'], ['예'], ['보통']]) })).toEqual({
+      matched: 2,
+      total: 3,
     });
   });
 });

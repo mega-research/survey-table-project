@@ -80,21 +80,58 @@ export type BlockSlot =
  * - `code-conflict` — 코드는 맞는데 **문항 내용이 다르다**. 매핑하지 않고 경고한다.
  *   지난 회차에 파트가 재편되며 코드가 한 칸씩 밀린 실제 사례가 있어, 코드만 믿으면
  *   지난 회차 만족도 값이 올해 창업의향 문항에 조용히 꽂힌다.
- * - `label-candidate` — 코드는 다른데 문항 내용이 같다. 후보로 제안하되 확인을 요구한다.
+ * - `value-conflict` — 코드는 맞는데 **블록의 실제 값이 그 문항의 보기와 맞지 않는다**.
+ *   코드 칸에 라벨이 없는 파일(2025 rawdata 전부)은 위 게이트가 한 번도 안 걸려, 2025
+ *   `HQ1.`(과정 도움도)이 2026 HQ1(창업 의향)에 auto 로 붙어 180/180 실패했다. 표본값
+ *   적합도가 그 구멍을 막는다.
+ * - `label-candidate` — 코드는 다른데 문항 내용이 같다(`matchedBy: 'label'`), 또는 값이
+ *   다른 문항의 보기와 맞는다(`matchedBy: 'value'`). 후보로 제안하되 확인을 요구한다.
  * - `unmapped` — 그 외.
  */
-export type BlockVerdict = 'auto' | 'code-conflict' | 'label-candidate' | 'unmapped';
+export type BlockVerdict = 'auto' | 'code-conflict' | 'value-conflict' | 'label-candidate' | 'unmapped';
 
 export interface BlockSuggestion {
   block: HeaderBlock;
   questionId: string | null;
-  matchedBy: 'code' | 'label' | null;
+  matchedBy: 'code' | 'label' | 'value' | null;
   verdict: BlockVerdict;
-  /** code-conflict 일 때 코드가 가리킨 문항 — 담당자가 무엇과 충돌했는지 알아야 한다. */
+  /** code-conflict·value-conflict·value 후보일 때 코드가 가리킨 문항 — 담당자가 무엇과 충돌했는지 알아야 한다. */
   conflictQuestionId?: string;
+  /** 값 적합도 판정의 근거 — 표본 건수와 대상 문항. 마법사가 배지 아래 한 줄로 그대로 찍는다. */
+  verdictReason?: string;
   /** block.columnIndexes 와 같은 순서·길이. */
   slots: BlockSlot[];
 }
+
+/** 한 열의 값 하나와 그 건수. */
+export interface ColumnValueCount {
+  value: string;
+  count: number;
+}
+
+/** suggestBlockMapping 의 값 적합도 입력. 없으면 적합도를 계산하지 않는다(기존 3인자 호출과 동일). */
+export interface SuggestOptions {
+  /** 컬럼 인덱스 → 값 분포(건수 내림차순). collectColumnValueCounts 의 결과. */
+  valueCountsByColumn?: ReadonlyMap<number, ReadonlyArray<ColumnValueCount>>;
+  /** 문항 id → { 원본 값 → 저장값 }. 보관된 값 대응은 적합도에 포함한다 — 담당자가 이미 이어준 값이다. */
+  valueAliases?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
+/** 표본값 적합도 — 블록 값 중 그 문항의 보기에 맞는 건수. */
+export interface SampleFit {
+  matched: number;
+  total: number;
+}
+
+/** 표본이 이보다 적으면 적합도로 판정을 뒤집지 않는다 — 값 한두 건에 흔들리지 않게. */
+export const VALUE_FIT_MIN_SAMPLES = 3;
+/**
+ * 코드 일치 문항의 적합도가 이 값 미만이면 auto 가 아니라 value-conflict 다.
+ * 0 이 아닌 이유: 2025 AQ1-1 열 1,804행에 `취업` 이 한 건 섞여 있어 정확히 0 이 아니다(0.6%).
+ */
+export const VALUE_FIT_CONFLICT_BELOW = 0.05;
+/** 다른 문항을 후보로 제안하려면 적합도가 이 값 이상이어야 한다. */
+export const VALUE_FIT_CANDIDATE_MIN = 0.8;
 
 /**
  * 문항 내용 유사도(0~1). 정규화 후 같으면 1, 아니면 바이그램 Dice 계수.
@@ -130,6 +167,19 @@ export const LABEL_SIMILAR_THRESHOLD = 0.6;
 
 /** 한 칸의 텍스트로 값이 정해지는 문항 유형. 그 외는 이 경로가 값을 만들지 않는다. */
 const SINGLE_CELL_TYPES = new Set<Question['type']>(['text', 'textarea', 'radio', 'select']);
+
+/**
+ * 블록 코드가 문항코드 꼴인가 — 영문으로 시작하고 숫자가 든 토큰(`AQ1-1.`·`IQ1.`·`A01`).
+ *
+ * 값 후보 검색은 "문항이라고 주장하는 블록에 어느 문항인지 찾아 주는" 것이라, 명단 메타 열
+ * (`UID`·`기수`·`현재상태`·`비고`)에는 걸지 않는다. 2025 파일 앞머리의 "2024년 조사 결과 /
+ * 현재상태" 열이 AQ1_1 보기에 80% 맞아 그 문항을 먼저 가져가면, 코드가 바뀐 AQ1-2. 블록이
+ * 제안받을 문항이 없어진다.
+ */
+function looksLikeQuestionCode(code: string): boolean {
+  const normalized = normalizeQuestionCode(code);
+  return /^[a-z][a-z0-9_]*$/.test(normalized) && /\d/.test(normalized);
+}
 
 /** 문항코드 대조 후보 — 헤더 전체와 선두 토큰. */
 function headerCodeCandidates(header: string): string[] {
@@ -577,17 +627,172 @@ export function resolveSlots(
   );
 }
 
+/** 표 칸 중 보기가 있는 셀 타입 — 적합도의 분모에 드는 칸. input 칸은 보기가 없어 "맞는다" 가 성립하지 않는다. */
+const CHOICE_CELL_TYPES = new Set<TableCell['type']>(['radio', 'checkbox', 'select']);
+
+/**
+ * 블록의 실제 값이 이 문항의 보기와 얼마나 맞는가.
+ *
+ * `null` 은 "판정 대상 아님" 이다 — 계산하지 않았으니 판정을 바꾸지 않는다. 자유입력·숫자
+ * 문항, 표본이 없거나 3건 미만인 블록, single 슬롯이 없는 radio 블록(3칸 → radio, EQ1-1.)이
+ * 그것이다. 마지막 것은 이미 unsupportedQuestionIds 로 드러나는 블록이라 판정을 덧씌우지 않는다.
+ *
+ * 유형별 분자/분모:
+ * - radio/select: single 슬롯 열의 값 분포 전부 — 보기에 맞는 건수 / 전체 건수
+ * - checkbox: 값이 보기 라벨인 파일과 선택 표기(`1`/`O`)인 파일이 둘 다 있어 값이 아니라 **슬롯** 을
+ *   본다 — 표본이 있는 열 중 checkbox-option 으로 배정된 열 수 / 표본이 있는 열 수
+ * - ranking: ranking-rank 슬롯 열의 값 — 순위 보기에 맞는 건수
+ * - table: table-cell 슬롯 중 보기가 있는 칸만 — 그 칸의 보기에 맞는 건수. input·unmatched 칸은 분모에도 없다
+ */
+export function sampleFit(
+  question: Question,
+  block: HeaderBlock,
+  slots: readonly BlockSlot[],
+  options: SuggestOptions,
+): SampleFit | null {
+  const countsByColumn = options.valueCountsByColumn;
+  if (!countsByColumn) return null;
+  const aliases = options.valueAliases?.[question.id];
+  const countsAt = (idx: number): ReadonlyArray<ColumnValueCount> => {
+    const col = block.columnIndexes[idx];
+    return col === undefined ? [] : (countsByColumn.get(col) ?? []);
+  };
+  const fit: SampleFit = { matched: 0, total: 0 };
+  const tally = (idx: number, choices: QuestionOption[]) => {
+    for (const { value, count } of countsAt(idx)) {
+      fit.total += count;
+      if (findOptionByLabel(choices, value, aliases)) fit.matched += count;
+    }
+  };
+
+  switch (question.type) {
+    case 'radio':
+    case 'select': {
+      const idx = slots.findIndex((slot) => slot.kind === 'single');
+      if (idx === -1) return null;
+      tally(idx, resolveChoiceOptions(question));
+      break;
+    }
+    case 'checkbox': {
+      slots.forEach((slot, idx) => {
+        if (countsAt(idx).length === 0) return;
+        fit.total += 1;
+        if (slot.kind === 'checkbox-option') fit.matched += 1;
+      });
+      break;
+    }
+    case 'ranking': {
+      const choices = resolveRankingOptions(question);
+      slots.forEach((slot, idx) => {
+        if (slot.kind === 'ranking-rank') tally(idx, choices);
+      });
+      break;
+    }
+    case 'table': {
+      const cellById = new Map(collectAnswerableCells(question).map((entry) => [entry.cell.id, entry.cell]));
+      slots.forEach((slot, idx) => {
+        if (slot.kind !== 'table-cell' || !CHOICE_CELL_TYPES.has(slot.cellType)) return;
+        const cell = cellById.get(slot.cellId);
+        if (cell) tally(idx, cellOptions(cell));
+      });
+      break;
+    }
+    default:
+      return null;
+  }
+  return fit.total < VALUE_FIT_MIN_SAMPLES ? null : fit;
+}
+
+function fitRatio(fit: SampleFit): number {
+  return fit.total > 0 ? fit.matched / fit.total : 0;
+}
+
+/** 사유에 넣는 문항 표기 — 제목 앞 30자. 실무 문항 제목은 코드로 시작해 코드가 함께 보인다. */
+function questionMention(question: Question): string {
+  const title = question.title.replace(/\s+/g, ' ').trim();
+  const short = title.length > 30 ? `${title.slice(0, 30)}…` : title;
+  return short || question.questionCode || question.id;
+}
+
+/** 코드 일치 문항의 적합도 사유 — 건수와 대상 문항. */
+function codeFitReason(fit: SampleFit, question: Question): string {
+  return `표본 ${fit.total}건 중 보기와 맞는 값 ${fit.matched}건 (${questionMention(question)})`;
+}
+
+/** 값 후보 문항의 적합도 사유. */
+function candidateFitReason(fit: SampleFit): string {
+  return `제안 문항 보기와 맞는 값 ${fit.matched}건 / 표본 ${fit.total}건 (${Math.round(fitRatio(fit) * 100)}%)`;
+}
+
+/** 후보가 여럿인데 못 가른 사유 — 담당자가 그 목록에서 직접 고른다. */
+function ambiguousReason(candidates: readonly Question[]): string {
+  const codes = candidates.map((question) => question.questionCode || questionMention(question)).join(', ');
+  return `값이 맞는 문항 ${candidates.length}개: ${codes} — 제목으로 못 가름`;
+}
+
+interface ValueCandidate {
+  question: Question;
+  fit: SampleFit;
+  /** 후보 여럿을 제목 유사도로 갈랐는가 — 약한 신호라 사유에 남긴다. */
+  decidedByTitle: boolean;
+}
+
+interface ValueCandidateSearch {
+  pick?: ValueCandidate;
+  /** 적합도는 넘었지만 제목으로 못 가른 후보들. pick 이 있으면 비어 있다. */
+  ambiguous: Question[];
+}
+
+/**
+ * 블록 값이 보기와 맞는 다른 문항을 찾는다 — **한 칸 블록 → radio/select** 만.
+ *
+ * 실제 사례(HQ1·AQ1-1·AQ1-2·IQ1)가 전부 그것이고, 표·복수응답·순위끼리의 값 대조는 범위 밖이다.
+ * 적합도 VALUE_FIT_CANDIDATE_MIN 이상인 문항이 정확히 하나면 그것, 여럿이면 블록 라벨과 제목의
+ * 유사도가 **유일하게 최고이고 0 보다 클 때만** 그것이다. 2지 문항은 긍정/부정 동의어로 서로
+ * 100% 가 나오기 때문이다 — 2025 IQ1.(있음/없음) 은 미매핑 2지 문항 넷에 전부 맞았고, 라벨
+ * `창업의향` 과의 제목 유사도(HQ1 0.167, 나머지 0)로만 갈렸다.
+ */
+function findValueCandidate(
+  block: HeaderBlock,
+  candidates: readonly Question[],
+  options: SuggestOptions,
+): ValueCandidateSearch {
+  if (block.columnIndexes.length !== 1 || !options.valueCountsByColumn) return { ambiguous: [] };
+  const single: BlockSlot[] = [{ kind: 'single' }];
+  const hits = candidates.flatMap((question) => {
+    if (question.type !== 'radio' && question.type !== 'select') return [];
+    const fit = sampleFit(question, block, single, options);
+    if (!fit || fitRatio(fit) < VALUE_FIT_CANDIDATE_MIN) return [];
+    return [{ question, fit }];
+  });
+  const [sole] = hits;
+  if (hits.length === 0 || !sole) return { ambiguous: [] };
+  if (hits.length === 1) return { pick: { ...sole, decidedByTitle: false }, ambiguous: [] };
+  const scored = hits.map((hit) => ({ ...hit, score: labelSimilarity(block.label, hit.question.title) }));
+  const top = Math.max(...scored.map((hit) => hit.score));
+  const winners = scored.filter((hit) => hit.score === top);
+  const [winner] = winners;
+  if (top > 0 && winners.length === 1 && winner) {
+    return { pick: { question: winner.question, fit: winner.fit, decidedByTitle: true }, ambiguous: [] };
+  }
+  return { ambiguous: hits.map((hit) => hit.question) };
+}
+
 /**
  * 블록과 문항을 잇는 자동 제안.
  *
  * 문항코드 정규화 대조로 문항을 정하고, 블록 컬럼들이 그 문항의 어느 자리인지까지
  * 한 번에 정한다 — 표 아홉 칸을 사람이 아홉 번 확정하지 않게 하는 것이 이 티켓의 요지다.
+ *
+ * 코드가 맞아도 **표본값 적합도** 를 한 겹 더 건다(options.valueCountsByColumn 이 있을 때만).
+ * 블록은 헤더 순서로 처리되고 `taken` 이 greedy 라, 값 후보로 제안된 문항은 뒤 블록이 못 가져간다.
  */
 export function suggestBlockMapping(
   blocks: readonly HeaderBlock[],
   questions: readonly Question[],
   /** 컬럼 인덱스 → 데이터 표본 값. resolveSlots 의 sampleValues 근거. */
   sampleByColumn?: ReadonlyMap<number, string>,
+  options: SuggestOptions = {},
 ): BlockSuggestion[] {
   const samplesFor = (block: HeaderBlock) =>
     sampleByColumn ? block.columnIndexes.map((col) => sampleByColumn.get(col) ?? '') : undefined;
@@ -619,22 +824,53 @@ export function suggestBlockMapping(
       const comparable = block.labelSource === 'code' && block.label;
       const similar =
         !comparable || labelSimilarity(block.label, byCodeMatch.title) >= LABEL_SIMILAR_THRESHOLD;
-      if (similar) {
-        taken.add(byCodeMatch.id);
+      if (!similar) {
         return {
           block,
-          questionId: byCodeMatch.id,
-          matchedBy: 'code',
-          verdict: 'auto',
-          slots: resolveSlots(byCodeMatch, block, samplesFor(block)),
+          questionId: null,
+          matchedBy: null,
+          verdict: 'code-conflict',
+          conflictQuestionId: byCodeMatch.id,
+          slots: unmatchedSlots(block),
+        };
+      }
+
+      const slots = resolveSlots(byCodeMatch, block, samplesFor(block));
+      const fit = sampleFit(byCodeMatch, block, slots, options);
+      if (fit === null || fitRatio(fit) >= VALUE_FIT_CONFLICT_BELOW) {
+        taken.add(byCodeMatch.id);
+        return { block, questionId: byCodeMatch.id, matchedBy: 'code', verdict: 'auto', slots };
+      }
+
+      // 코드는 맞는데 값이 그 문항의 보기와 맞지 않는다. 값이 맞는 다른 문항이 하나면 그것을
+      // 제안하고, 아니면 멈춘다. 어느 쪽에서도 코드 문항은 `taken` 에 넣지 않는다 — 뒤 블록이
+      // 그 문항을 제안받아야 한다(2025 IQ1. → HQ1, AQ1-2. → AQ1_1).
+      const reason = codeFitReason(fit, byCodeMatch);
+      const search = findValueCandidate(
+        block,
+        eligible.filter((question) => !taken.has(question.id) && question.id !== byCodeMatch.id),
+        options,
+      );
+      if (search.pick) {
+        taken.add(search.pick.question.id);
+        return {
+          block,
+          questionId: search.pick.question.id,
+          matchedBy: 'value',
+          verdict: 'label-candidate',
+          conflictQuestionId: byCodeMatch.id,
+          verdictReason: `${reason} — ${candidateFitReason(search.pick.fit)}`,
+          slots: resolveSlots(search.pick.question, block, samplesFor(block)),
         };
       }
       return {
         block,
         questionId: null,
         matchedBy: null,
-        verdict: 'code-conflict',
+        verdict: 'value-conflict',
         conflictQuestionId: byCodeMatch.id,
+        verdictReason:
+          search.ambiguous.length > 0 ? `${reason} — ${ambiguousReason(search.ambiguous)}` : reason,
         slots: unmatchedSlots(block),
       };
     }
@@ -661,11 +897,34 @@ export function suggestBlockMapping(
       }
     }
 
+    // 코드로도 제목으로도 못 이었다 — 값이 어느 문항의 보기와 맞는지로 한 번 더 찾는다.
+    // 문항코드 꼴의 블록만이다(2026 에 없는 코드 IQ1., 이미 가져간 코드 AQ1-2.) — 명단 메타 열은 제외.
+    const search: ValueCandidateSearch = looksLikeQuestionCode(block.code)
+      ? findValueCandidate(
+          block,
+          eligible.filter((question) => !taken.has(question.id)),
+          options,
+        )
+      : { ambiguous: [] };
+    if (search.pick) {
+      taken.add(search.pick.question.id);
+      const decided = search.pick.decidedByTitle ? ' — 값이 맞는 문항 여럿 중 제목이 가장 비슷한 것' : '';
+      return {
+        block,
+        questionId: search.pick.question.id,
+        matchedBy: 'value',
+        verdict: 'label-candidate',
+        verdictReason: `${candidateFitReason(search.pick.fit)}${decided}`,
+        slots: resolveSlots(search.pick.question, block, samplesFor(block)),
+      };
+    }
+
     return {
       block,
       questionId: null,
       matchedBy: null,
       verdict: 'unmapped',
+      ...(search.ambiguous.length > 0 ? { verdictReason: ambiguousReason(search.ambiguous) } : {}),
       slots: unmatchedSlots(block),
     };
   });
@@ -808,13 +1067,16 @@ export function buildBlockAnswer(
   return { value: raw, unmatchedValues, convertedCells };
 }
 
+/** 열당 보존하는 distinct 값 상한. 실측 최대는 주소지 71·창업아이템 44 — 자유입력 열이 수천 건으로 불어나는 것만 막는다. */
+const MAX_DISTINCT_VALUES_PER_COLUMN = 200;
+
 /**
- * 데이터 행에서 컬럼별 표본 값을 뽑는다 — 각 컬럼의 첫 비어 있지 않은 값.
- * 복수응답 펼침처럼 세부 라벨이 없는 블록의 보기를 정하는 데 쓴다.
+ * 데이터 행에서 컬럼별 값 분포를 뽑는다 — cleanCell 적용, 건수 내림차순(동률은 먼저 나온 값).
+ * 표본값 적합도(sampleFit)의 근거이며, collectSampleValues 의 최빈값도 이것의 첫 항목이다.
  */
-export function collectSampleValues(rows: ReadonlyArray<readonly string[]>): Map<number, string> {
-  // 첫 값이 아니라 **최빈값**을 쓴다. 펼침 열은 정상 값이 한 종류뿐이라 최빈값이 곧 보기
-  // 라벨이고, 첫 행에 낀 오타·오류 표식 한 건에 흔들리지 않는다.
+export function collectColumnValueCounts(
+  rows: ReadonlyArray<readonly string[]>,
+): Map<number, ColumnValueCount[]> {
   const counts = new Map<number, Map<string, number>>();
   for (const row of rows) {
     row.forEach((value, col) => {
@@ -825,10 +1087,30 @@ export function collectSampleValues(rows: ReadonlyArray<readonly string[]>): Map
       counts.set(col, perColumn);
     });
   }
-  const samples = new Map<number, string>();
+  const result = new Map<number, ColumnValueCount[]>();
   for (const [col, perColumn] of counts) {
-    const top = [...perColumn.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (top) samples.set(col, top[0]);
+    result.set(
+      col,
+      [...perColumn.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, MAX_DISTINCT_VALUES_PER_COLUMN),
+    );
+  }
+  return result;
+}
+
+/**
+ * 데이터 행에서 컬럼별 표본 값을 뽑는다 — 각 컬럼의 **최빈값**.
+ * 복수응답 펼침처럼 세부 라벨이 없는 블록의 보기를 정하는 데 쓴다. 첫 값이 아니라 최빈값인
+ * 이유: 펼침 열은 정상 값이 한 종류뿐이라 최빈값이 곧 보기 라벨이고, 첫 행에 낀 오타·오류
+ * 표식 한 건에 흔들리지 않는다.
+ */
+export function collectSampleValues(rows: ReadonlyArray<readonly string[]>): Map<number, string> {
+  const samples = new Map<number, string>();
+  for (const [col, values] of collectColumnValueCounts(rows)) {
+    const top = values[0];
+    if (top) samples.set(col, top.value);
   }
   return samples;
 }

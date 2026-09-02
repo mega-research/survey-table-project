@@ -34,16 +34,39 @@ type Step = 'file' | 'mapping' | 'result';
 /** 문항을 고르지 않았음을 나타내는 Select 값 — 빈 문자열은 Radix Select 가 허용하지 않는다. */
 const UNMAPPED = '_unmapped';
 
-const VERDICT_BADGE: Record<string, { label: string; className: string } | undefined> = {
+interface VerdictBadge {
+  label: string;
+  className: string;
+}
+
+const CONFLICT_BADGE_CLASS = 'border-red-200 bg-red-50 text-red-700';
+const CANDIDATE_BADGE_CLASS = 'border-amber-200 bg-amber-50 text-amber-800';
+
+const VERDICT_BADGE: Record<string, VerdictBadge | undefined> = {
   'code-conflict': {
     label: '코드는 같은데 문항 내용이 다릅니다 — 확인 필요',
-    className: 'border-red-200 bg-red-50 text-red-700',
+    className: CONFLICT_BADGE_CLASS,
+  },
+  'value-conflict': {
+    label: '코드는 같은데 값이 이 문항의 보기와 맞지 않습니다 — 확인 필요',
+    className: CONFLICT_BADGE_CLASS,
   },
   'label-candidate': {
     label: '코드는 다른데 내용이 같습니다 — 확인 필요',
-    className: 'border-amber-200 bg-amber-50 text-amber-800',
+    className: CANDIDATE_BADGE_CLASS,
   },
 };
+
+/** 값으로 이은 후보는 판정이 label-candidate 여도 문구가 다르다 — 코드가 가리킨 문항과 충돌한다는 뜻이다. */
+const VALUE_CANDIDATE_BADGE: VerdictBadge = {
+  label: '값이 이 문항의 보기와 맞습니다 — 코드가 가리킨 문항과 다르니 확인 필요',
+  className: CANDIDATE_BADGE_CLASS,
+};
+
+function verdictBadge(block: { verdict: string; matchedBy: string | null }): VerdictBadge | undefined {
+  if (block.verdict === 'label-candidate' && block.matchedBy === 'value') return VALUE_CANDIDATE_BADGE;
+  return VERDICT_BADGE[block.verdict];
+}
 
 interface Props {
   surveyId: string;
@@ -359,6 +382,7 @@ export function PriorAnswerImportWizard({
                     {preview.blocks.map((block, index) => {
                       const key = String(index);
                       const firstRow = preview.rows[0] ?? [];
+                      const badge = block.fromSavedConfig ? undefined : verdictBadge(block);
                       return (
                         <tr key={key} className="border-t border-gray-100 align-top">
                           <td className="px-3 py-2 font-medium text-gray-900">
@@ -403,13 +427,9 @@ export function PriorAnswerImportWizard({
                                 ))}
                               </SelectContent>
                             </Select>
-                            {VERDICT_BADGE[block.verdict] && !block.fromSavedConfig && (
-                              <p
-                                className={`mt-1 rounded border px-2 py-1 text-xs ${
-                                  VERDICT_BADGE[block.verdict]?.className ?? ''
-                                }`}
-                              >
-                                {VERDICT_BADGE[block.verdict]?.label}
+                            {badge && (
+                              <p className={`mt-1 rounded border px-2 py-1 text-xs ${badge.className}`}>
+                                {badge.label}
                                 {block.conflictQuestionId && (
                                   <>
                                     {' ('}
@@ -418,6 +438,9 @@ export function PriorAnswerImportWizard({
                                   </>
                                 )}
                               </p>
+                            )}
+                            {badge && block.verdictReason && (
+                              <p className="mt-1 text-xs text-slate-500">{block.verdictReason}</p>
                             )}
                             {block.fromSavedConfig && (
                               <p className="mt-1 text-xs text-slate-500">지난 확정 그대로</p>

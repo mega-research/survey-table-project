@@ -530,6 +530,62 @@ describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
   });
 });
 
+describe('suggestPriorAnswerImportMapping — 값 기반 오매핑 방지', () => {
+  function suggestInput() {
+    return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 2 } as Parameters<
+      typeof suggestPriorAnswerImportMapping
+    >[0];
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.surveyConfig = null;
+    // 2025 HQ1.(과정 도움도) 열 — 2026 HQ1 은 창업 의향(예/아니오)이다.
+    h.headerRows = [['HQ1.'], ['(과정 도움도)']];
+    h.parsedRows = [...Array.from({ length: 8 }, () => ['매우 도움됨']), ...Array.from({ length: 4 }, () => ['도움됨'])];
+    h.questionRows = [
+      {
+        id: 'q-intent',
+        type: 'radio',
+        title: 'HQ1. 귀하는 향후 창업하실 의향이 있으신가요?',
+        order: 1,
+        questionCode: 'HQ1',
+        options: [
+          { id: 'y', value: '1', label: '① 예' },
+          { id: 'n', value: '2', label: '② 아니오' },
+        ],
+      },
+    ];
+  });
+
+  it('코드는 같은데 값이 보기와 맞지 않으면 value-conflict 와 사유를 응답에 싣는다', async () => {
+    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const block = res.blocks[0];
+    expect(block?.verdict).toBe('value-conflict');
+    expect(block?.questionId).toBeNull();
+    expect(block?.conflictQuestionId).toBe('q-intent');
+    expect(block?.verdictReason).toContain('표본 12건 중 보기와 맞는 값 0건');
+  });
+
+  it('보관된 값 대응이 있으면 적합도에 들어가 auto 가 된다', async () => {
+    h.surveyConfig = { blockMappings: {}, valueAliases: { 'q-intent': { '매우 도움됨': '1' } } };
+    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    expect(res.blocks[0]?.verdict).toBe('auto');
+    expect(res.blocks[0]?.verdictReason).toBeNull();
+  });
+
+  it('지난 확정 복원은 이 게이트를 타지 않는다 — 담당자가 이미 판단한 것', async () => {
+    h.surveyConfig = { blockMappings: { hq1: { questionId: 'q-intent', label: '' } }, valueAliases: {} };
+    const res = await suggestPriorAnswerImportMapping(suggestInput());
+    const block = res.blocks[0];
+    expect(block?.fromSavedConfig).toBe(true);
+    expect(block?.verdict).toBe('auto');
+    expect(block?.questionId).toBe('q-intent');
+    expect(block?.verdictReason).toBeNull();
+    expect(block?.conflictQuestionId).toBeNull();
+  });
+});
+
 /** 2026 BQ1_1 의 "담당 직무" 두 행 — 세부 라벨 "담당 직무" 가 접두로 두 행에 걸려 표본값으로 갈라야 한다. */
 function jobTableQuestion(): Record<string, unknown> {
   return {
