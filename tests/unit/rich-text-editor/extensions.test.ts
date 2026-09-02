@@ -279,9 +279,11 @@ describe('createUnifiedExtensions', () => {
       expect(style).toMatch(/width:\s*25%/);
       expect(style).toMatch(/box-sizing:\s*border-box/);
       expect(style).toMatch(/max-width:\s*100%/);
-      // wrapperStyle / containerStyle 자체 attribute 는 HTML 에 남지 않아야 함
-      expect(html.toLowerCase()).not.toContain('wrapperstyle');
-      expect(html.toLowerCase()).not.toContain('containerstyle');
+      // wrapperstyle attribute 는 왕복 복원용으로 의도적으로 남는다 (float 은 정리된 값).
+      // 렌더 표면 제거는 sanitize allowlist 소관 — image-serialization-roundtrip.test.ts
+      const wrapperAttr = html.match(/wrapperstyle="([^"]*)"/i)?.[1] ?? '';
+      expect(wrapperAttr).toMatch(/width:\s*25%/);
+      expect(wrapperAttr).not.toMatch(/float/);
 
       editor.destroy();
     });
