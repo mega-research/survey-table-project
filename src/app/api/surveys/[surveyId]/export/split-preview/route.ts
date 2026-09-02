@@ -4,7 +4,11 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import {
+  loadOperationsDataScope,
+  responseScopeCondition,
+} from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -66,13 +70,14 @@ async function handleSplitPreview(
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 현재 스코프 파티션만)
+    const scope = await loadOperationsDataScope(surveyId);
     const rawResponses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
-        notTestResponse,
+        responseScopeCondition(scope),
       ),
       columns: { id: true, questionResponses: true },
     });

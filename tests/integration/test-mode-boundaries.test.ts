@@ -8,13 +8,22 @@ const {
   responseFindManyMock,
   responseWhereArgs,
   selectWhereArgs,
+  scopeState,
 } = vi.hoisted(() => ({
   authState: { user: { id: 'admin' } as null | { id: string } },
   surveyFindFirstMock: vi.fn(),
   responseFindManyMock: vi.fn(),
   responseWhereArgs: [] as unknown[],
   selectWhereArgs: [] as unknown[],
+  scopeState: { value: 'real' as 'real' | 'test' },
 }));
+
+// export 라우트가 운영 콘솔과 같은 스코프 결정을 타는지 검증한다 — 결정 자체(테스트 모드
+// 토글·게스트 판정)는 이 파일의 관심사가 아니라 스코프 값만 주입한다. 조건 헬퍼는 실물 유지.
+vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/operations/data-scope.server')>();
+  return { ...actual, loadOperationsDataScope: vi.fn(async () => scopeState.value) };
+});
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
@@ -83,9 +92,17 @@ function expectRealOnly(where: unknown) {
   expect(query.params).toContain(false);
 }
 
+function expectTestOnly(where: unknown) {
+  const query = dialect.sqlToQuery(where as never);
+  expect(query.sql).toContain('is_test');
+  expect(query.params).toContain(true);
+  expect(query.params).not.toContain(false);
+}
+
 beforeEach(() => {
   delete process.env['ADMIN_USER_IDS'];
   authState.user = { id: 'admin' };
+  scopeState.value = 'real';
   responseWhereArgs.length = 0;
   selectWhereArgs.length = 0;
   responseFindManyMock.mockReset();
@@ -136,6 +153,30 @@ describe('테스트 모드 최종 읽기 경계', () => {
     // 컨택 통계도 targetScopeCondition 으로 is_test 조건을 갖게 돼 전건 검증 가능.
     expect(selectWhereArgs).toHaveLength(3);
     selectWhereArgs.forEach(expectRealOnly);
+  });
+
+  it('테스트 모드 스코프면 SPSS·Excel·split preview 가 테스트 파티션만 읽는다', async () => {
+    // 테스트 모드에서 내려받은 엑셀에 실 응답이 섞이면(또는 그 반대) 검수 결과를 오염시킨다.
+    scopeState.value = 'test';
+    const sav = await exportGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/export?type=sav`),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    const raw = await exportGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/export?type=raw`),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    const preview = await splitPreviewGet(
+      new NextRequest(
+        `http://localhost/api/surveys/${surveyId}/export/split-preview?basis=basis`,
+      ),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    expect([sav.status, raw.status, preview.status]).toEqual([200, 200, 200]);
+    expect(responseWhereArgs).toHaveLength(3);
+    responseWhereArgs.forEach(expectTestOnly);
+    expect(selectWhereArgs).toHaveLength(3);
+    selectWhereArgs.forEach(expectTestOnly);
   });
 
   it('raw export 는 한도 초과 시 응답 페이로드를 물화하지 않고 413 을 반환한다', async () => {
