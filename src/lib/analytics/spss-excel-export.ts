@@ -204,6 +204,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               questionId: q.id,
               type: 'option-text',
               optionId: cell.id,
+              ...(cell.textInputType === 'number' ? { numericText: true } : {}),
             });
           });
         } else {
@@ -247,6 +248,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 questionId: q.id,
                 type: 'option-text',
                 optionId: cell.id,
+                ...(cell.textInputType === 'number' ? { numericText: true } : {}),
               });
             }
           });
@@ -279,6 +281,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.textInputType === 'number' ? { numericText: true } : {}),
             ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
@@ -317,6 +320,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.textInputType === 'number' ? { numericText: true } : {}),
             ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
@@ -1086,28 +1090,28 @@ export function buildDataRow(
       }
 
       case 'option-text': {
-        // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트.
+        // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트. 숫자 모드면 숫자로 내보낸다.
         if (!col.optionId) return null;
-        return (
+        const text =
           getOptionText(
             sub.questionResponses as Record<string, unknown>,
             col.questionId,
             col.optionId,
-          ) ?? null
-        );
+          ) ?? null;
+        return col.numericText ? transformNumericText(text) : text;
       }
 
       case 'table-cell-option-text': {
-        // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트.
+        // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트. 숫자 모드면 숫자로 내보낸다.
         // 레거시 경로(optionTexts)는 테이블 셀에 대해 지원하지 않음 (신규 패턴만 사용).
         if (!col.optionId) return null;
-        return (
+        const text =
           getOptionText(
             sub.questionResponses as Record<string, unknown>,
             col.questionId,
             col.optionId,
-          ) ?? null
-        );
+          ) ?? null;
+        return col.numericText ? transformNumericText(text) : text;
       }
 
       case 'multiselect':

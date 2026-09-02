@@ -43,6 +43,11 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
       // numericText 는 generateSPSSColumns 에서 question.inputType 기반으로 세팅된 SSOT
       return col.numericText ? VariableType.Numeric : VariableType.String;
 
+    case 'option-text':
+    case 'table-cell-option-text':
+      // 숫자 모드 자유기재(textInputType='number')는 숫자 변수로 내보낸다
+      return col.numericText ? VariableType.Numeric : VariableType.String;
+
     case 'other-text':
     case 'ranking-other':
     case 'ranking-option-text':
@@ -105,8 +110,11 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
     return VariableMeasure.Nominal;
   }
 
-  // 숫자 단답형(numericText) 은 척도(Continuous)
-  if (col.type === 'text' && col.numericText) {
+  // 숫자 단답형·숫자 모드 자유기재(numericText) 는 척도(Continuous)
+  if (
+    (col.type === 'text' || col.type === 'option-text' || col.type === 'table-cell-option-text') &&
+    col.numericText
+  ) {
     return VariableMeasure.Continuous;
   }
 

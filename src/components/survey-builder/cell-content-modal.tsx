@@ -243,6 +243,8 @@ export function CellContentModal({
     isOtherRankingCell,
     choiceLabel,
     choiceAllowTextInput,
+    choiceTextInputType,
+    choiceTextInputNumberFormat,
     choiceBranchRule,
     choiceGroupId,
     textBold,
@@ -322,6 +324,8 @@ export function CellContentModal({
     setIsOtherRankingCell,
     setChoiceLabel,
     setChoiceAllowTextInput,
+    setChoiceTextInputType,
+    setChoiceTextInputNumberFormat,
     setChoiceBranchRule,
     setChoiceGroupId,
     setTextBold,
@@ -1572,6 +1576,10 @@ export function CellContentModal({
               onSpssNumericCodeChange={setCellSpssNumericCode}
               allowTextInput={choiceAllowTextInput}
               onAllowTextInputChange={setChoiceAllowTextInput}
+              textInputType={choiceTextInputType}
+              onTextInputTypeChange={setChoiceTextInputType}
+              textInputNumberFormat={choiceTextInputNumberFormat}
+              onTextInputNumberFormatChange={setChoiceTextInputNumberFormat}
               branchRule={choiceBranchRule}
               onBranchRuleChange={setChoiceBranchRule}
               allQuestions={questions}

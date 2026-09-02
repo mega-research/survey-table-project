@@ -286,6 +286,10 @@ export interface QuestionOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -416,6 +420,10 @@ export interface TableCell {
   // 선택 시 사이드카 텍스트 입력 (radio/checkbox 옵션과 동일 의미). __optTexts__ 로 저장됨.
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   // 셀 병합 관련 속성
   rowspan?: number; // 행 병합 (세로)
   colspan?: number; // 열 병합 (가로)
@@ -488,6 +496,10 @@ export interface CheckboxOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -512,6 +524,10 @@ export interface RadioOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기

@@ -56,6 +56,10 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.branchRule !== undefined ? { branchRule: cell.branchRule } : {}),
     ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
     ...(cell.textInputPlaceholder !== undefined ? { textInputPlaceholder: cell.textInputPlaceholder } : {}),
+    ...(cell.textInputType !== undefined ? { textInputType: cell.textInputType } : {}),
+    ...(cell.textInputNumberFormat !== undefined
+      ? { textInputNumberFormat: cell.textInputNumberFormat }
+      : {}),
     ...(cell.textBold ? { textBold: true } : {}),
     ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
     ...(cell.textColor ? { textColor: cell.textColor } : {}),
