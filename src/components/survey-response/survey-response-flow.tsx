@@ -25,8 +25,18 @@ import {
 } from '@/components/survey-response/survey-response-screens';
 import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
+import { UnmodifiedChangedDialog } from '@/components/survey-response/unmodified-changed-dialog';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import {
+  CHANGE_CONFIRM_KEY,
+  collectUnconfirmedQuestionIds,
+  collectUnmodifiedChangedQuestionIds,
+  isAwaitingChangeConfirmation,
+  readChangeConfirmations,
+} from '@/lib/survey/change-confirmation';
+import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
+import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
@@ -56,7 +66,10 @@ import {
   resolveStepBranch,
   type RenderStep,
 } from '@/lib/group-ordering';
-import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/lib/survey/answer-validation';
 import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
 import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
@@ -334,6 +347,8 @@ function SurveyResponseFlowActive({
     contactAttrs,
     versionId,
     control,
+    priorAnswers,
+    prefillSettled,
     documentView,
     refetchSnapshot,
   },
@@ -541,6 +556,23 @@ function SurveyResponseFlowActive({
         ? getDisplayableItemsOfStep(currentStep, responses, questions, groups, evalCtx)
         : [],
     [currentStep, responses, questions, groups, evalCtx],
+  );
+
+  /**
+   * 아직 변동 여부를 밝히지 않아 입력이 잠겨 있는 문항(추적조사).
+   *
+   * 필수·숫자 검증에서 제외한다 — 잠긴 입력을 두고 "답변해주세요"라고 하면 응답자가
+   * 따를 수 없는 요구가 된다. 이 문항들은 변동 확인 게이트가 대신 막고, 밝히는 순간
+   * 이월 값이 복사돼 검증 대상으로 돌아온다.
+   */
+  const awaitingConfirmationIds = useMemo(
+    () =>
+      new Set(
+        currentStepQuestions
+          .filter((q) => isAwaitingChangeConfirmation(q, priorAnswers, responses))
+          .map((q) => q.id),
+      ),
+    [currentStepQuestions, priorAnswers, responses],
   );
 
   // 전역으로 표시되는 모든 질문 (노출 로깅용)
@@ -819,7 +851,9 @@ function SurveyResponseFlowActive({
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
   const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
-    enabled: !isCompleted,
+    // 이월 응답 프리필 판정이 끝나기 전에 회복이 응답값을 세팅하면, 뒤늦은 프리필이
+    // 저장된 답을 지난 회차 값으로 되돌린다 — 프리필이 정착한 뒤에만 회복을 연다.
+    enabled: !isCompleted && prefillSettled,
     terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
     isPreview,
@@ -842,7 +876,10 @@ function SurveyResponseFlowActive({
   const hasPreviousDisplayable = stepHistory.length > 0;
 
   const isQuestionRequired = (question: Question) =>
-    question.required || quotaGateIds.has(question.id);
+    question.required ||
+    quotaGateIds.has(question.id) ||
+    // 질문 필수 OFF 여도 그룹별 required:true 오버라이드가 있으면 차단 판정에 태운다
+    hasExplicitRequiredChoiceGroup(question);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
   // 상세기입 필수 옵션은 선택값만으로 충족되지 않으며, 테이블은 실제 노출 셀만 검사한다.
@@ -908,7 +945,10 @@ function SurveyResponseFlowActive({
   const requiredRemaining = useMemo(
     () =>
       visibleQuestions.filter(
-        (q) => traversedQuestionIds.has(q.id) && q.required && !isQuestionAnswered(q),
+        (q) =>
+          traversedQuestionIds.has(q.id) &&
+          (q.required || hasExplicitRequiredChoiceGroup(q)) &&
+          !isQuestionAnswered(q),
       ).length,
     [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );
@@ -917,6 +957,8 @@ function SurveyResponseFlowActive({
   const numericIssuesByQuestion = useMemo(() => {
     const map = new Map<string, NumericIssue[]>();
     for (const q of currentStepQuestions) {
+      // 잠긴 문항은 검증하지 않는다 — 값이 아직 이번 회차 응답이 아니다.
+      if (awaitingConfirmationIds.has(q.id)) continue;
       const issues = collectNumericIssues(q, responses[q.id], {
         allResponses: responses,
         allQuestions: questions,
@@ -929,6 +971,7 @@ function SurveyResponseFlowActive({
     return map;
   }, [
     currentStepQuestions,
+    awaitingConfirmationIds,
     responses,
     questions,
     effectiveOptionTextsByQuestion,
@@ -955,16 +998,66 @@ function SurveyResponseFlowActive({
     currentStepQuestions
       .filter(
         (q) =>
-          highlightQuestionIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+          highlightQuestionIds.has(q.id) &&
+          !awaitingConfirmationIds.has(q.id) &&
+          isQuestionRequired(q) &&
+          !isQuestionAnswered(q),
       )
       .map((q) => q.id),
   );
 
+  // 추적조사 변동 확인 게이트 — 이월 값이 있는데 "같음/달라짐"을 밝히지 않은 문항.
+  // 응답 필수 여부와 별개 축이라 isQuestionRequired 를 전혀 보지 않는다. 표시 조건으로
+  // 숨겨진 문항은 currentStepQuestions 단계에서 이미 빠져 있다.
+  // 이월 응답이 없는 응답자(익명·미보유 대상자)와 admin-edit/미리보기는 priorAnswers 가
+  // null 이라 이 목록이 항상 비고, 게이트 전체가 무동작이다.
+  const unconfirmedChangeQuestionIds = useMemo(
+    () => collectUnconfirmedQuestionIds(currentStepQuestions, priorAnswers, responses),
+    [currentStepQuestions, priorAnswers, responses],
+  );
+  // 안내 문구는 "다음"을 시도한 스텝에서만 띄운다(숫자 검증과 같은 방식). 목록 자체는
+  // 라이브 계산이라 응답자가 선택하는 순간 문구가 사라진다.
+  const [changeConfirmErrorStepIndex, setChangeConfirmErrorStepIndex] = useState<number | null>(
+    null,
+  );
+  const changeConfirmMessageQuestionIds = useMemo(
+    () =>
+      changeConfirmErrorStepIndex === currentStepIndex
+        ? new Set(unconfirmedChangeQuestionIds)
+        : new Set<string>(),
+    [changeConfirmErrorStepIndex, currentStepIndex, unconfirmedChangeQuestionIds],
+  );
+
+  // "달라짐"이라고 밝혔는데 값이 이월 값과 완전히 같은 문항 — 제출 직전에 한 번 되묻는다.
+  // 실제로 지나온 문항만 본다(분기로 건너뛴 페이지의 문항은 밝힌 적이 없다).
+  // 되묻기는 차단이 아니라 확인이라, 응답자가 "이대로 제출"을 고르면 그대로 통과한다.
+  // 되묻기 통과 표시는 "그때 되물었던 문항 목록"의 지문이다 (admin-edit 경고의
+  // adminWarnedSnapshot 과 같은 패턴). boolean 이면 한 번 통과한 뒤로는 응답자가
+  // 되돌아와 다른 문항을 새로 "달라짐"으로 바꿔도 영영 묻지 않는다.
+  // state 가 아니라 ref 인 이유는 "이대로 제출" 핸들러가 곧바로 handleNext 를 다시 부르는데,
+  // state 였다면 그 호출이 아직 커밋되지 않은 값을 읽어 다이얼로그가 다시 열리기 때문이다.
+  const unmodifiedChangedAcknowledgedRef = useRef<string | null>(null);
+  const [showUnmodifiedChangedDialog, setShowUnmodifiedChangedDialog] = useState(false);
+  const unmodifiedChangedQuestions = useMemo(() => {
+    const ids = new Set(
+      collectUnmodifiedChangedQuestionIds(
+        visibleQuestions.filter((q) => traversedQuestionIds.has(q.id)),
+        priorAnswers,
+        responses,
+      ),
+    );
+    return visibleQuestions.filter((q) => ids.has(q.id));
+  }, [visibleQuestions, traversedQuestionIds, priorAnswers, responses]);
+  const unmodifiedChangedFingerprint = unmodifiedChangedQuestions.map((q) => q.id).join('|');
+
   const canProceed = () => {
     if (!currentStep) return false;
-    // step 내 표시되는 필수 질문 전부가 답변되어야 함
+    // step 내 표시되는 필수 질문 전부가 답변되어야 함.
+    // 변동 확인 대기 문항은 별개 축이라 여기서 세지 않는다 — 잠긴 입력을 두고
+    // "필수 질문에 답변해주세요"를 띄우면 응답자가 따를 수 없다.
     return currentStepQuestions.every(
-      (q) => !isQuestionRequired(q) || isQuestionAnswered(q),
+      (q) =>
+        awaitingConfirmationIds.has(q.id) || !isQuestionRequired(q) || isQuestionAnswered(q),
     );
   };
 
@@ -989,7 +1082,10 @@ function SurveyResponseFlowActive({
   const adminStepClassification = useMemo(() => {
     if (!isAdminEdit) return null;
     const unansweredIds = currentStepQuestions
-      .filter((q) => isQuestionRequired(q) && !isQuestionAnswered(q))
+      .filter(
+        (q) =>
+          !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      )
       .map((q) => q.id);
     return classifyStepIssues(unansweredIds, numericIssuesByQuestion);
     // isQuestionRequired 는 quotaGateIds 를 닫는 비메모 인라인 함수라 quotaGateIds 를 직접 dep 로 둔다
@@ -1010,7 +1106,8 @@ function SurveyResponseFlowActive({
   const adminFirstEmptyRequiredTarget = useMemo(() => {
     if (!isAdminEdit) return null;
     const firstUnanswered = currentStepQuestions.find(
-      (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
+      (q) =>
+        !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
     // 비-테이블 상세기입 누락은 firstUnanswered(질문 단위)와 numericIssuesByQuestion(같은
     // 질문의 required-detail 이슈) 양쪽에 동시에 잡힌다 — 있으면 detailTargetIds 를 붙여
@@ -1095,6 +1192,22 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
+  // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
+  // 하이라이트를 여기서 대신 푼다 — 일반 답변과 같은 즉시성을 주기 위함이다.
+  const handleStepResponse = useCallback(
+    (questionId: string, value: unknown) => {
+      handleResponse(questionId, value);
+      if (questionId !== CHANGE_CONFIRM_KEY) return;
+      const confirmed = readChangeConfirmations({ [CHANGE_CONFIRM_KEY]: value });
+      setHighlightQuestionIds((prev) => {
+        const next = new Set([...prev].filter((id) => !confirmed[id]));
+        return next.size === prev.size ? prev : next;
+      });
+    },
+    [handleResponse, setHighlightQuestionIds],
+  );
+
   // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
   // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
   // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
@@ -1121,7 +1234,8 @@ function SurveyResponseFlowActive({
   const handleNext = async () => {
     blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
-      (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
+      (q) =>
+        !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
 
     // admin-edit 전용(요구 1~4/6) — 빈 필수만 있고(차단형 위반 없음) 있으면 경고 1회 후
@@ -1160,6 +1274,20 @@ function SurveyResponseFlowActive({
     } else if (isAdminEdit && adminWarnedSnapshot !== null) {
       // 차단형 위반이 새로 생겼거나 이슈가 모두 해소됨 — 경고 상태 정리.
       setAdminWarnedSnapshot(null);
+    }
+
+    // 변동 확인 게이트(추적조사) — 이월 값이 있는 문항의 "같음/달라짐"을 밝히지 않으면
+    // 넘어갈 수 없다. 필수·숫자 게이트보다 **앞**에 둔다: 그 문항들은 잠겨 있어 필수·숫자
+    // 검증이 요구하는 조작 자체가 불가능하고(위 awaitingConfirmationIds 제외 참조),
+    // 밝히는 순간 이월 값이 복사돼 두 검증의 대상으로 돌아온다.
+    // admin-edit 완화(bypassEmptyRequired)는 빈 필수 전용이라 이 게이트를 풀지 않는다 —
+    // 애초에 admin-edit 에는 이월 응답이 실리지 않아 목록이 비어 있다.
+    const firstUnconfirmed = unconfirmedChangeQuestionIds[0];
+    if (firstUnconfirmed) {
+      setHighlightQuestionIds(new Set([firstUnconfirmed]));
+      setChangeConfirmErrorStepIndex(currentStepIndex);
+      scrollToIssue({ questionId: firstUnconfirmed });
+      return;
     }
 
     if (!bypassEmptyRequired && unansweredCurrent.length > 0) {
@@ -1203,6 +1331,18 @@ function SurveyResponseFlowActive({
         });
       }
       setNumericErrorStepIndex(currentStepIndex);
+      return;
+    }
+
+
+    // 제출 직전 되묻기(추적조사) — 차단이 아니라 확인이다. 다이얼로그에서 "이대로 제출"을
+    // 고르면 acknowledged 가 서고 같은 클릭 경로가 그대로 이어진다.
+    if (
+      isLastVisibleStep &&
+      unmodifiedChangedAcknowledgedRef.current !== unmodifiedChangedFingerprint &&
+      unmodifiedChangedQuestions.length > 0
+    ) {
+      setShowUnmodifiedChangedDialog(true);
       return;
     }
 
@@ -1438,6 +1578,18 @@ function SurveyResponseFlowActive({
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
+      <PriorAnswersProvider answers={priorAnswers} waveLabel={control?.priorWaveLabel}>
+        <UnmodifiedChangedDialog
+          open={showUnmodifiedChangedDialog}
+          questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
+          waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
+          onCancel={() => setShowUnmodifiedChangedDialog(false)}
+          onConfirm={() => {
+            setShowUnmodifiedChangedDialog(false);
+            unmodifiedChangedAcknowledgedRef.current = unmodifiedChangedFingerprint;
+            void handleNext();
+          }}
+        />
       <FormulaEvalProvider value={formulaCtx}>
       <SurveyResponseLayout
         containerMaxWidth={containerMaxWidth}
@@ -1464,11 +1616,6 @@ function SurveyResponseFlowActive({
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
             showBranding={currentVisibleStepNumber <= 1}
-            {...(isDocumentSurvey
-              ? {
-                  descriptionSuffix: `${currentVisibleStepNumber || 1} / ${Math.max(totalVisibleStepCount, 1)} 페이지`,
-                }
-              : {})}
           />
         }
         progress={progressBand}
@@ -1528,6 +1675,7 @@ function SurveyResponseFlowActive({
             onResponse={handleResponse}
             highlightQuestionIds={highlightQuestionIds}
             requiredMessageQuestionIds={requiredMessageQuestionIds}
+            changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
             numericIssues={visibleNumericIssues}
             onQuestionFocus={selectAnchorQuestion}
             onGroupSelect={selectAnchorGroup}
@@ -1543,9 +1691,10 @@ function SurveyResponseFlowActive({
           questions={questions}
           groups={groups}
           evalCtx={evalCtx}
-          onResponse={handleResponse}
+          onResponse={handleStepResponse}
           highlightQuestionIds={highlightQuestionIds}
           requiredMessageQuestionIds={requiredMessageQuestionIds}
+          changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
         )}
@@ -1610,6 +1759,7 @@ function SurveyResponseFlowActive({
         </div>
       </SurveyResponseLayout>
       </FormulaEvalProvider>
+      </PriorAnswersProvider>
     </ContactAttrsProvider>
   );
 }

@@ -21,6 +21,9 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { isCellEnabled } from './cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
+import { optionTextTargetId } from './option-text-target';
+import { collectSelectedOptionIds } from '@/lib/option-text-migration';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 export interface NumericIssue {
   kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
@@ -290,6 +293,40 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
  * - table: 셀 min 미달, 합계 제약 위반, 필수 셀 미입력
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
  */
+/**
+ * 숫자 모드(textInputType='number') 옵션 텍스트의 범위 위반 — 선택된 옵션의 비어있지 않은
+ * 텍스트만 본다 (선택 해제된 옵션의 잔존 텍스트는 required-option-text-validation 과 같은
+ * 이유로 신뢰하지 않는다). max·소수·허용값은 타이핑에서 차단되므로 여기서는 min 이 실질이다.
+ */
+function collectOptionTextRangeIssues(
+  question: Question,
+  response: unknown,
+  optionTexts: Record<string, string> | undefined,
+): NumericIssue[] {
+  if (!optionTexts) return [];
+  const options = resolveChoiceOptions(question);
+  const numericOptions = options.filter(
+    (o) => o.allowTextInput === true && o.textInputType === 'number',
+  );
+  if (numericOptions.length === 0) return [];
+  const selected = collectSelectedOptionIds(response, options);
+  const issues: NumericIssue[] = [];
+  for (const opt of numericOptions) {
+    if (!selected.has(opt.id)) continue;
+    const text = (optionTexts[opt.id] ?? '').trim();
+    if (!text) continue;
+    const message = rangeViolationMessage(text, opt.textInputNumberFormat);
+    if (message) {
+      issues.push({
+        kind: 'range',
+        message,
+        detailTargetIds: [optionTextTargetId(question.id, opt.id)],
+      });
+    }
+  }
+  return issues;
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
@@ -302,16 +339,17 @@ export function collectNumericIssues(
   }
 
   if (question.type !== 'table') {
+    const issues: NumericIssue[] = [];
     const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
-    return optionTextIssues.questionMissing
-      ? [
-          {
-            kind: 'required-detail',
-            message: DEFAULT_REQUIRED_CELL_MESSAGE,
-            detailTargetIds: optionTextIssues.detailTargetIds ?? [],
-          },
-        ]
-      : [];
+    if (optionTextIssues.questionMissing) {
+      issues.push({
+        kind: 'required-detail',
+        message: DEFAULT_REQUIRED_CELL_MESSAGE,
+        detailTargetIds: optionTextIssues.detailTargetIds ?? [],
+      });
+    }
+    issues.push(...collectOptionTextRangeIssues(question, response, ctx?.optionTexts));
+    return issues;
   }
   const cellValues =
     typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {};

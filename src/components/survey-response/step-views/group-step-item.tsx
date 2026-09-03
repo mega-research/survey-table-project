@@ -2,13 +2,25 @@
 
 import { useCallback, useMemo } from 'react';
 
+import { ChangeConfirmControl } from '@/components/survey-response/change-confirm-control';
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
+import {
+  CHANGE_CONFIRM_KEY,
+  getChangeConfirmation,
+  isPriorAnswerLocked,
+  requiresChangeConfirmation,
+  resolveAnswerOnConfirmation,
+  updateChangeConfirmations,
+  type ChangeConfirmation,
+} from '@/lib/survey/change-confirmation';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { DEFAULT_REQUIRED_CELL_MESSAGE, resolveRequiredMessage } from '@/utils/required-message';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { resolveGroupedRequiredMessage } from '@/lib/survey/answer-validation';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -29,6 +41,7 @@ export function GroupStepItem({
   onResponse,
   isHighlighted,
   showRequiredMessage,
+  showChangeConfirmMessage,
   issues,
 }: {
   item: StepItem;
@@ -39,6 +52,8 @@ export function GroupStepItem({
   isHighlighted: boolean;
   /** 필수 미응답 안내 문구 표시 — 질문별 requiredMessage 또는 기본 문구. */
   showRequiredMessage: boolean;
+  /** 변동 확인 미선택 안내 문구 표시 — 응답 필수와 별개 축이다. */
+  showChangeConfirmMessage: boolean;
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
@@ -61,6 +76,29 @@ export function GroupStepItem({
   );
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시하고,
+  // 같은 자리에서 변동 여부를 밝히게 한다(밝히지 않으면 페이지를 넘길 수 없다).
+  const { answers: priorAnswers, waveLabel } = usePriorAnswers();
+  const hasPrior = requiresChangeConfirmation(q, priorAnswers);
+  const priorValue = hasPrior ? priorAnswers?.[q.id] : undefined;
+  const changeConfirmation = getChangeConfirmation(responses, q.id);
+  // 이월 값이 있는 문항의 기본 상태는 잠금이다. "달라짐"을 골라야 열린다.
+  const isLocked = isPriorAnswerLocked(q, priorAnswers, responses);
+  // 잠긴 동안에는 이월 값을 그대로 보여준다 — 응답자는 이 값을 보고 같음/달라짐을 판단한다.
+  // 이번 회차 값이 이미 들어와 있으면(밝힌 뒤) 그 값이 곧 이월 값의 사본이다.
+  const inputValue = hasPrior && responses[q.id] === undefined ? priorValue : responses[q.id];
+  const onChangeConfirm = useCallback(
+    (value: ChangeConfirmation) => {
+      onResponse(
+        CHANGE_CONFIRM_KEY,
+        updateChangeConfirmations(responses[CHANGE_CONFIRM_KEY], q.id, value),
+      );
+      // 이월 값을 이번 회차 응답으로 복사할지는 순수 함수가 정한다.
+      const next = resolveAnswerOnConfirmation(q, priorAnswers, responses, value);
+      if (next.write) onResponse(q.id, next.value);
+    },
+    [onResponse, q, responses, priorAnswers],
+  );
   const titleText = useMemo(
     () => substituteTokens(q.title ?? '', attrs, quotes),
     [q.title, attrs, quotes],
@@ -88,10 +126,10 @@ export function GroupStepItem({
         issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
       if (!isDefaultRequiredIssue) return issue;
       merged = true;
-      return { ...issue, message: resolveRequiredMessage(q) };
+      return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
     });
     return { visibleIssues: next, requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q]);
+  }, [issues, showRequiredMessage, q, responses]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -129,6 +167,26 @@ export function GroupStepItem({
             className="px-2 pb-2 md:overflow-x-auto text-sm text-gray-500 md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
           />
         )}
+        {hasPrior && (
+          <ChangeConfirmControl
+            questionId={q.id}
+            waveLabel={waveLabel}
+            value={changeConfirmation}
+            onSelect={onChangeConfirm}
+            showRequiredMessage={showChangeConfirmMessage}
+          />
+        )}
+        {/* fieldset[disabled] 은 안쪽 폼 컨트롤 전체를 브라우저가 직접 비활성화한다 —
+            타입별 disabled prop 을 9종 + 표 셀까지 흘리지 않고도 잠금이 성립하고,
+            값은 그대로 읽히며(스크린리더 포함) 탭 순서에서만 빠진다. */}
+        {/* pointer-events-none 은 쓰지 않는다 — 넓은 표의 가로 스크롤까지 죽어
+            응답자가 이월 값을 끝까지 볼 수 없게 된다. 그 대가로 폼 컨트롤이 아닌
+            div onClick(모바일 옵션 카드 토글)은 잠기지 않는데, 새어 나간 편집은
+            "같음"이 이월 값을 다시 복사하므로 값이 어긋난 채 제출되지는 않는다. */}
+        <fieldset
+          disabled={isLocked}
+          className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
+        >
         <div
           role="group"
           aria-labelledby={`q-label-${q.id}`}
@@ -150,7 +208,7 @@ export function GroupStepItem({
         >
           <QuestionInput
             question={q}
-            value={responses[q.id]}
+            value={inputValue}
             onChange={onChange}
             allResponses={responses as Record<string, unknown>}
             allQuestions={questions}
@@ -159,9 +217,10 @@ export function GroupStepItem({
             onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
+        </fieldset>
         {showRequiredMessage && !requiredMessageInBanner && (
           <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {resolveRequiredMessage(q)}
+            {resolveGroupedRequiredMessage(q, responses[q.id])}
           </p>
         )}
       </div>

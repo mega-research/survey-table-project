@@ -23,6 +23,7 @@ export function PageStepView({
   onResponse,
   highlightQuestionIds,
   requiredMessageQuestionIds,
+  changeConfirmMessageQuestionIds,
   numericIssues,
 }: {
   step: RenderStep;
@@ -34,6 +35,8 @@ export function PageStepView({
   highlightQuestionIds: Set<string>;
   /** 필수 미응답 사유로 하이라이트된 질문 — 안내 문구를 함께 표시한다. */
   requiredMessageQuestionIds: Set<string>;
+  /** 변동 확인 미선택 사유로 막힌 질문 — 컨트롤 아래 안내 문구를 표시한다. */
+  changeConfirmMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
 }) {
   const attrs = useContactAttrs();
@@ -77,6 +80,9 @@ export function PageStepView({
                   onResponse={onResponse}
                   isHighlighted={highlightQuestionIds.has(item.question.id)}
                   showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
+                  showChangeConfirmMessage={changeConfirmMessageQuestionIds.has(
+                    item.question.id,
+                  )}
                   issues={numericIssues.get(item.question.id)}
                 />
               </div>

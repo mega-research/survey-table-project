@@ -56,6 +56,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     minSelections: data.minSelections,
     maxSelections: data.maxSelections,
     noticeContent: data.noticeContent,
+    noticeBgColor: data.noticeBgColor,
     requiresAcknowledgment: data.requiresAcknowledgment,
     placeholder: data.placeholder,
     defaultValueTemplate: data.defaultValueTemplate,

@@ -1,6 +1,8 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import type { NumberFormat } from '@/types/survey';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 
@@ -14,6 +16,9 @@ interface OptionTextInputProps {
   option: {
     id: string;
     textInputPlaceholder?: string | undefined;
+    /** 'number' 면 입력 셀과 같은 숫자 타이핑 규칙 적용 */
+    textInputType?: 'text' | 'number' | undefined;
+    textInputNumberFormat?: NumberFormat | undefined;
   };
   className?: string;
   /** 시각 라벨이 별도 요소(라벨 칩 등)로 렌더될 때 입력란과의 접근성 연결용 */
@@ -40,6 +45,16 @@ export function OptionTextInput({
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  const isNumberMode = option.textInputType === 'number';
+  const rawValue = optionTexts[option.id] ?? '';
+  // 숫자 모드 — 입력 셀과 같은 타이핑 규칙(숫자만·콤마 표시·max/소수/허용값 차단).
+  // min 미달·단위 환산은 title 로만 알린다 (옵션 행 레이아웃을 흔들지 않기 위해).
+  const numeric = useFormattedNumericInput({
+    rawValue,
+    onRawChange: (v) => setOptionText(questionId, option.id, v),
+    numberFormat: option.textInputNumberFormat,
+    enabled: isNumberMode,
+  });
 
   const sharedProps = {
     'aria-label': ariaLabel,
@@ -47,9 +62,20 @@ export function OptionTextInput({
     // 마운트 시 중복될 수 있어 유일성 제약 없는 name 을 사용. 자유 기입란이라 자동완성 차단.
     name: `option-text-${option.id}`,
     autoComplete: 'off',
-    value: optionTexts[option.id] ?? '',
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setOptionText(questionId, option.id, e.target.value),
+    value: isNumberMode ? numeric.displayValue : rawValue,
+    onChange: isNumberMode
+      ? numeric.handleChange
+      : (e: React.ChangeEvent<HTMLInputElement>) =>
+          setOptionText(questionId, option.id, e.target.value),
+    ...(isNumberMode
+      ? {
+          inputMode: 'decimal' as const,
+          onFocus: numeric.handleFocus,
+          onBlur: numeric.handleBlur,
+          'aria-invalid': numeric.rangeViolation != null || undefined,
+          title: numeric.rangeViolation ?? numeric.unitReading ?? undefined,
+        }
+      : {}),
     placeholder: option.textInputPlaceholder || DEFAULT_PLACEHOLDER,
     className,
     'data-option-text-target-id': optionTextTargetId(questionId, option.id),

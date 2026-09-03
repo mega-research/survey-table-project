@@ -34,6 +34,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'minSelections',
   'maxSelections',
   'noticeContent',
+  'noticeBgColor',
   'requiresAcknowledgment',
   'placeholder',
   'defaultValueTemplate',

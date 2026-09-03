@@ -87,6 +87,25 @@ export const contactPii = pgTable(
   }),
 );
 
+export const contactPriorAnswers = pgTable(
+  'contact_prior_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    // 응답 저장 형태(surveyResponses.questionResponses)와 동형인 이월 응답 한 벌.
+    // 표·복수선택·랭킹이 별도 변환 없이 들어가고 기타/상세 기재 사이드카도 함께 담긴다.
+    answers: jsonb('answers').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // 조사 대상 하나당 한 벌 — 회차 축 없음(직전 1회차만 보관).
+    targetUnique: unique('contact_prior_answers_target_unique').on(table.contactTargetId),
+  }),
+);
+
 export const contactAttempts = pgTable(
   'contact_attempts',
   {
@@ -153,11 +172,19 @@ export const contactTargetsRelations = relations(contactTargets, ({ one, many })
   }),
   attempts: many(contactAttempts),
   pii: many(contactPii),
+  priorAnswers: many(contactPriorAnswers),
 }));
 
 export const contactPiiRelations = relations(contactPii, ({ one }) => ({
   target: one(contactTargets, {
     fields: [contactPii.contactTargetId],
+    references: [contactTargets.id],
+  }),
+}));
+
+export const contactPriorAnswersRelations = relations(contactPriorAnswers, ({ one }) => ({
+  target: one(contactTargets, {
+    fields: [contactPriorAnswers.contactTargetId],
     references: [contactTargets.id],
   }),
 }));
@@ -189,3 +216,5 @@ export type ContactAttempt = typeof contactAttempts.$inferSelect;
 export type NewContactAttempt = typeof contactAttempts.$inferInsert;
 export type ContactPii = typeof contactPii.$inferSelect;
 export type NewContactPii = typeof contactPii.$inferInsert;
+export type ContactPriorAnswers = typeof contactPriorAnswers.$inferSelect;
+export type NewContactPriorAnswers = typeof contactPriorAnswers.$inferInsert;

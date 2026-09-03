@@ -70,7 +70,12 @@
     "0083_fix_revoke_trigger_procedure_ddl",
     "0084_contact_id_lists",
     "0085_sweep_expired_pii_table_cells",
+    "0094_contact_prior_answers",
+    "0095_sweep_expired_pii_prior_answers",
+    "0096_prior_answer_import_config",
     "0097_survey_documents",
-    "0098_survey_document_anchors"
+    "0098_survey_document_anchors",
+    "0099_notice_bg_color",
+    "0100_sweep_expired_pii_merge_table_cells_prior_answers"
   ]
 }

@@ -611,3 +611,25 @@ export interface QuotaConfig {
   /** 마감 종료 화면 문구. null이면 기본 폴백. */
   closedMessage: string | null;
 }
+
+/**
+ * 이월 응답 임포트 확정 설정 (추적조사).
+ *
+ * 191개 컬럼 매핑을 한 번에 맞출 리 없어 재업로드가 정상 경로다. 사람이 화면에서 확정한
+ * 것을 보관해 다시 올릴 때 재사용한다. 버전 스냅샷 밖 라이브 컬럼이다.
+ */
+export interface PriorAnswerImportConfig {
+  /**
+   * 정규화된 문항코드 → 확정 내용. 자동 제안보다 우선한다.
+   *
+   * 확정 시점의 문항 내용(`label`)을 함께 남긴다 — 코드만 저장하면 다음 파일에서 같은
+   * 코드가 다른 문항을 가리켜도 지난 확정이 그대로 되살아나 "코드는 같은데 내용이
+   * 다르다" 경고가 사라진다. 이 티켓이 막으려는 사고가 바로 그것이다.
+   */
+  blockMappings: Record<string, { questionId: string; label: string }>;
+  /**
+   * 문항 id → { 원본 값 → 선택지 저장값 }.
+   * 지난 회차와 선택지 라벨이 달라진 문항에서 담당자가 그 자리에서 이어준 대응이다.
+   */
+  valueAliases: Record<string, Record<string, string>>;
+}

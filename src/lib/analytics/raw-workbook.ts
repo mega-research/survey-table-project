@@ -4,12 +4,17 @@ import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/export-
 import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
 import {
   type SPSSExportColumn,
+  type SpssColumnOptions,
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatExportStatusLabel, formatTotalTime } from '@/lib/operations/profiles';
+import {
+  NOT_RESPONDED_STATUS,
+  formatExportStatusLabel,
+  formatTotalTime,
+} from '@/lib/operations/profiles';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -20,7 +25,9 @@ import { Question, SurveySubmission } from '@/types/survey';
 // ============================================================
 
 export interface RawExportResponseRow {
+  /** 응답 id. 미응답 행은 contact_targets.id (파일 안에서 유일 — 미응답 대상은 응답 행이 없다) */
   id: string;
+  /** 미응답 행은 {} */
   questionResponses: Record<string, unknown>;
   groupValue: string | null;
   resid: number | null;
@@ -29,10 +36,22 @@ export interface RawExportResponseRow {
   currentStepId: string | null;
   platform: string | null;
   browser: string | null;
+  /** survey_responses.status 또는 NOT_RESPONDED_STATUS */
   status: string;
-  startedAt: Date;
+  /** 미응답 행은 null */
+  startedAt: Date | null;
   completedAt: Date | null;
   totalSeconds: number | null;
+  /**
+   * 조사 대상 명단 열 값 — source → 값 (RawExportContext.contactColumns 의 source 와 같은 키).
+   * 조사 대상이 없는 익명 응답은 키 자체가 없고, 컨택은 있으나 값이 없는 키는 ''.
+   */
+  contactValues?: Readonly<Record<string, string>>;
+}
+
+/** 미응답 조사 대상 행 — 응답이 아니므로 응답 메타(단말·소요시간 등)를 빈칸으로 그린다. */
+export function isNonRespondentRow(row: Pick<RawExportResponseRow, 'status'>): boolean {
+  return row.status === NOT_RESPONDED_STATUS;
 }
 
 export interface RawExportContext {
@@ -49,6 +68,26 @@ export interface RawExportContext {
    * currentStepId 미저장 구응답의 "마지막 입력 문항" 폴백 — 응답값이 존재하는 질문 중 최후순의 라벨.
    */
   questionMeta: ReadonlyMap<string, { order: number; label: string }>;
+  /**
+   * 변동 확인 변수를 붙일 문항 id (추적조사). 이월 응답이 없는 설문에서는 비어 있고,
+   * 그때 컬럼 출력은 이 기능 도입 전과 완전히 같다.
+   */
+  changeConfirmQuestionIds?: ReadonlySet<string>;
+  /**
+   * 조사 대상 명단 열 (다이얼로그 「조사 대상 명단 열 포함」). 응답 메타 열 바로 오른쪽·문항 열
+   * 왼쪽에 붙는다. 비어 있거나 없으면 도입 전과 같은 열 구성이다.
+   */
+  contactColumns?: readonly RawExportContactColumn[];
+}
+
+/**
+ * 워크북 컨텍스트에서 컬럼 생성 옵션을 뽑는다.
+ * 호출부마다 조건부 spread 를 반복하면 옵션이 하나 늘 때마다 드리프트가 생긴다.
+ */
+export function toSpssColumnOptions(ctx: RawExportContext): SpssColumnOptions {
+  return ctx.changeConfirmQuestionIds
+    ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
+    : {};
 }
 
 /** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
@@ -104,7 +143,8 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   {
     header: '조사 대상 그룹',
     enabled: (ctx) => ctx.hasContactGroups,
-    value: (row) => row.groupValue ?? '공개링크',
+    // '공개링크' 는 익명 응답의 표식 — 응답이 아닌 조사 대상 행에는 붙이지 않는다.
+    value: (row) => row.groupValue ?? (isNonRespondentRow(row) ? '' : '공개링크'),
   },
   {
     header: '개별 URL',
@@ -114,12 +154,29 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
-  { header: '소요시간', value: (row) => formatTotalTime(row.totalSeconds, row.status) },
-  { header: '접속 단말', value: (row) => formatPlatformKo(row.platform as Platform | null) },
+  {
+    header: '소요시간',
+    value: (row) => (isNonRespondentRow(row) ? '' : formatTotalTime(row.totalSeconds, row.status)),
+  },
+  {
+    header: '접속 단말',
+    value: (row) =>
+      isNonRespondentRow(row) ? '' : formatPlatformKo(row.platform as Platform | null),
+  },
 ];
 
+/**
+ * 활성 메타 열 = 고정 메타 열(설문 설정 조건부) + 조사 대상 명단 열.
+ * 명단 열을 RawMetaColumn 으로 흘리면 3행 세로 병합·너비·같은 질문 가로 병합 오프셋이
+ * Raw Data·분할 시트에서 같은 코드로 따라온다. 응답 내역 시트는 자기 헤더를 따로 가져 영향 없다.
+ */
 function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
-  return RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
+  const fixed = RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
+  const contact = (ctx.contactColumns ?? []).map<RawMetaColumn>((col) => ({
+    header: col.label,
+    value: (row) => row.contactValues?.[col.source] ?? '',
+  }));
+  return [...fixed, ...contact];
 }
 
 export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
@@ -157,16 +214,19 @@ export function addResponseListSheet(
   ];
   ws.addRow(headers);
   rows.forEach((row, i) => {
+    // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)와 익명 표식을 빈칸으로 둔다 —
+    // RAW_META_COLUMNS 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
+    const nonRespondent = isNonRespondentRow(row);
     ws.addRow([
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),
       i + 1,
-      ...(ctx.hasContactGroups ? [row.groupValue ?? '공개링크'] : []),
-      formatPlatformKo(row.platform as Platform | null),
-      row.browser ?? 'Other',
+      ...(ctx.hasContactGroups ? [row.groupValue ?? (nonRespondent ? '' : '공개링크')] : []),
+      nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
+      nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
-      formatTotalTime(row.totalSeconds, row.status),
+      nonRespondent ? '' : formatTotalTime(row.totalSeconds, row.status),
     ]);
   });
   styleHeaderRows(ws, [1], headers.length);
@@ -187,7 +247,7 @@ export function generateRawDataWorkbook(
 ): ExcelJS.Workbook {
   // 질문은 order 순으로 정렬해 컬럼/코딩북 순서를 설문 표시 순서와 일치시킨다.
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const columns = generateSPSSColumns(sortedQuestions);
+  const columns = generateSPSSColumns(sortedQuestions, toSpssColumnOptions(ctx));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();

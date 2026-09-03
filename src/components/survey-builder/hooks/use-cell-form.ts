@@ -71,6 +71,8 @@ export interface CellFormSetters {
   setIsOtherRankingCell: (v: boolean) => void;
   setChoiceLabel: (v: string) => void;
   setChoiceAllowTextInput: (v: boolean) => void;
+  setChoiceTextInputType: (v: CellFormState['choiceTextInputType']) => void;
+  setChoiceTextInputNumberFormat: (v: CellFormState['choiceTextInputNumberFormat']) => void;
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
   setChoiceGroupId: (v: string) => void;
   setTextBold: (v: boolean) => void;
@@ -170,6 +172,8 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setIsOtherRankingCell: set('isOtherRankingCell'),
       setChoiceLabel: set('choiceLabel'),
       setChoiceAllowTextInput: set('choiceAllowTextInput'),
+      setChoiceTextInputType: set('choiceTextInputType'),
+      setChoiceTextInputNumberFormat: set('choiceTextInputNumberFormat'),
       setChoiceBranchRule: set('choiceBranchRule'),
       setChoiceGroupId: set('choiceGroupId'),
       setTextBold: set('textBold'),

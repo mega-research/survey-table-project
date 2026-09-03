@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap } from '@/lib/operations/profiles'
+import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap, formatExportStatusLabel, NOT_RESPONDED_STATUS, STATUS_FILTERS } from '@/lib/operations/profiles'
+import { WEB_FILTER_OPTIONS } from '@/lib/operations/filter-shared'
 import type { Question, QuestionGroup } from '@/types/survey'
 
 // buildStepLocationMap 테스트용 최소 fixture — buildRenderSteps 가 읽는 필드만 의미 있다.
@@ -273,4 +274,17 @@ describe('hasActiveFilters', () => {
     expect(hasActiveFilters({ status: 'completed' })).toBe(true)
   })
 
+})
+
+describe('formatExportStatusLabel — 미응답', () => {
+  it('미응답 상태는 조사 대상 web 필터의 none 표기와 같은 문자열이다', () => {
+    const none = WEB_FILTER_OPTIONS.find((o) => o.value === 'none')
+    expect(formatExportStatusLabel(NOT_RESPONDED_STATUS)).toBe('미응답')
+    expect(formatExportStatusLabel(NOT_RESPONDED_STATUS)).toBe(none!.label)
+  })
+
+  it('미응답은 응답 상태 필터 어휘에 없다 — DB 에 저장되지 않는 내보내기 전용 값', () => {
+    expect((STATUS_FILTERS as readonly string[]).includes(NOT_RESPONDED_STATUS)).toBe(false)
+    expect(mapStatusPill({ status: 'future_status' })).toEqual({ label: '기타', tone: 'gray' })
+  })
 })

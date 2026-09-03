@@ -37,7 +37,10 @@ interface SurveyResponseUIState {
   setOptionText: (questionId: string, optionId: string, text: string) => void;
   getOptionText: (questionId: string, optionId: string) => string | undefined;
   clearOptionTexts: (questionId: string) => void;
-  seedOptionTexts: (byQuestion: Record<string, Record<string, string>>) => void;
+  seedOptionTexts: (
+    byQuestion: Record<string, Record<string, string>>,
+    options?: { replace?: boolean },
+  ) => void;
 
   // 유효성 검사
   setValidationError: (questionId: string, error: string) => void;
@@ -111,14 +114,18 @@ export const useSurveyResponseStore = create<SurveyResponseUIState>()(
         }),
 
       // 저장된 __optTexts__ 사이드카를 스토어로 되살린다 (이어가기·admin 편집 시드).
-      // 이미 타이핑 중인 현재 편집값이 저장값보다 우선하도록 질문 단위로 병합한다.
-      seedOptionTexts: (byQuestion) =>
+      // 기본은 병합이며, 이미 타이핑 중인 현재 편집값이 저장값보다 우선한다.
+      //
+      // replace:true 는 넘긴 사이드카가 그 질문의 확정본일 때 쓴다 — 이어가기 회복이
+      // 그렇다. 회복은 responses 를 통째로 갈아끼우므로 옵션 텍스트도 같은 값으로
+      // 맞춰야 한다. 병합으로 두면 먼저 시드된 이월 응답의 작년 텍스트가 "현재 편집값"
+      // 자리를 차지해 응답자가 지난 세션에 고친 값을 이기고, 그대로 재저장된다.
+      seedOptionTexts: (byQuestion, options) =>
         set((state) => {
           for (const [questionId, texts] of Object.entries(byQuestion)) {
-            state.optionTexts[questionId] = {
-              ...texts,
-              ...state.optionTexts[questionId],
-            };
+            state.optionTexts[questionId] = options?.replace
+              ? { ...texts }
+              : { ...texts, ...state.optionTexts[questionId] };
           }
         }),
 

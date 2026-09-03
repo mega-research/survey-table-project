@@ -7,14 +7,32 @@ import { sanitizeRichHtml } from '@/lib/sanitize';
 
 interface NoticeRendererProps {
   content: string;
+  /** 패널 배경색 — 미지정=기본 파랑, 'none'=무색(패널 제거), '#rrggbb'=커스텀 */
+  bgColor?: string | undefined;
   requiresAcknowledgment?: boolean | undefined;
   value?: boolean | undefined;
   onChange?: (acknowledged: boolean) => void;
   isTestMode?: boolean | undefined;
 }
 
+/** 기본 파란 패널(bg-blue-50/40 over white)의 실효색 — 토글을 켤 때 픽커 시작값 */
+export const NOTICE_BG_DEFAULT_HEX = '#f9fbff';
+
+/** 배경색에서 파생하는 패널 테두리색 — 각 채널을 12% 어둡게 */
+function deriveBorderColor(hex: string): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  const darken = (c: number) => Math.max(0, Math.round(c * 0.88));
+  const r = darken((n >> 16) & 0xff);
+  const g = darken((n >> 8) & 0xff);
+  const b = darken(n & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 export function NoticeRenderer({
   content,
+  bgColor,
   requiresAcknowledgment = false,
   value = false,
   onChange,
@@ -27,20 +45,33 @@ export function NoticeRenderer({
     onChange?.(checked);
   };
 
+  // 패널 스타일 분기 — 미지정=기본 파랑, 'none'=패널 제거, hex=지정색+파생 테두리
+  const isNoPanel = bgColor === 'none';
+  const customBg = bgColor && !isNoPanel ? bgColor : null;
+  const panelClass = isNoPanel
+    ? ''
+    : customBg
+      ? 'rounded-lg border p-6'
+      : 'rounded-lg border border-blue-100 bg-blue-50/40 p-6';
+
   return (
     <div className="space-y-4">
       {/* Rich Text Content Display */}
       <div
+        data-notice-panel
         // max-md word-break normal: 전역 keep-all(어절 보존)이 좁은 화면의 긴 문단에서
         // 줄 끝 빈 공간을 크게 남겨, 공지 본문은 모바일에서만 글자 단위 줄바꿈을 허용한다.
         // (justify 분산 정렬은 문단 인라인 text-align 에 밀려 무효 — 시도 후 기각)
-        className="tiptap-mobile-tame prose prose-sm min-w-0 max-w-none rounded-lg border border-blue-100 bg-blue-50/40 p-6 max-md:[word-break:normal] md:overflow-x-auto [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 md:[&_table]:!w-auto [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:break-words [&_table_th]:font-normal [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500"
+        className={`tiptap-mobile-tame prose prose-sm min-w-0 max-w-none ${panelClass} max-md:[word-break:normal] md:overflow-x-auto [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 md:[&_table]:!w-auto [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:break-words [&_table_th]:font-normal [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500`}
         dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
         style={{
           // TipTap 스타일 재정의
           fontSize: '14px',
           lineHeight: '1.6',
           WebkitOverflowScrolling: 'touch',
+          ...(customBg
+            ? { backgroundColor: customBg, borderColor: deriveBorderColor(customBg) }
+            : {}),
         }}
       />
 

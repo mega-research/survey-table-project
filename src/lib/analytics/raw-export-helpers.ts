@@ -1,4 +1,5 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { CHANGE_CONFIRM_CODEBOOK_VALUE_LABEL } from '@/lib/spss/change-confirm-variable';
 import {
   buildStepLocationMap,
   parseQuestionNumberFromTitle,
@@ -40,6 +41,9 @@ export function buildCodebookValueLabel(
   switch (col.type) {
     case 'notice-agree':
       return '동의=확인, 빈값=미확인';
+
+    case 'change-confirm':
+      return CHANGE_CONFIRM_CODEBOOK_VALUE_LABEL;
 
     case 'checkbox-item':
     case 'table-cell': {

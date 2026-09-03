@@ -176,10 +176,17 @@ export function ConditionCard({
                     // 질문 타입에 따라 conditionType 자동 설정
                     const autoConditionType =
                       selectedQ?.type === 'table' ? 'table-cell-check' : 'value-match';
-                    updateCondition(condition.id, {
-                      sourceQuestionId: e.target.value,
-                      conditionType: autoConditionType,
-                    });
+                    // 이전 질문 종속 설정은 전부 비운다 — rowIds·기대값·수식이 새 질문에
+                    // 없는 id 로 남으면 셀 타입 판정이 unsupported 로 오판하거나(값 비교
+                    // 버튼 비활성), 조건이 영구 미충족으로 굳는다.
+                    updateCondition(
+                      condition.id,
+                      {
+                        sourceQuestionId: e.target.value,
+                        conditionType: autoConditionType,
+                      },
+                      ['tableConditions', 'additionalConditions', 'requiredValues', 'expressionConfig'],
+                    );
                   }}
                   className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >

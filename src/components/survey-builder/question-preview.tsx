@@ -114,6 +114,7 @@ export function QuestionPreview({ question }: { question: Question }) {
       return question.noticeContent ? (
         <NoticeRenderer
           content={question.noticeContent}
+          bgColor={question.noticeBgColor}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={false}
           isTestMode={false}

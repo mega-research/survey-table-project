@@ -4,7 +4,12 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import {
+  loadOperationsDataScope,
+  responseScopeCondition,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -17,7 +22,10 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
+import { countRawExportPopulation } from '@/lib/analytics/raw-export-rows.server';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
+import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
 export const maxDuration = 30;
@@ -42,6 +50,10 @@ async function handleSplitPreview(
     }
     const basis = request.nextUrl.searchParams.get('basis');
     if (basis) ctx.bind({ basis });
+    // 「조사 대상 중 미응답자 포함」 — export 라우트와 같은 파라미터. 켜졌을 때만 모수 count 를 더한다.
+    const includeNonRespondents =
+      request.nextUrl.searchParams.get('includeNonRespondents') === '1';
+    if (includeNonRespondents) ctx.bind({ includeNonRespondents });
 
     // questions 는 order 오름차순 고정 (export/route.ts 와 동일 — 변수 순서를 문항 순서에 고정).
     const surveyData = await db.query.surveys.findFirst({
@@ -56,23 +68,38 @@ async function handleSplitPreview(
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
 
+    // 운영 콘솔·export 와 같은 파티션 규칙 — 응답 모수와 변동 확인 변수가 같은 스코프를 본다.
+    const scope = await loadOperationsDataScope(surveyId);
+
+    // 미리보기의 변수 수는 실제 워크북과 같은 집합이어야 한다 — 추적조사 변동 확인 변수 포함.
+    const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+      isTest: testFlagForScope(scope),
+    });
+
     if (!basis) {
-      const totalVars = generateSPSSColumns([...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))).length;
+      const totalVars = generateSPSSColumns(
+        [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+        { changeConfirmQuestionIds },
+      ).length;
+      // 다이얼로그가 「조사 대상 중 미응답자 포함」 영역을 그릴지 정하는 근거 —
+      // 조사 대상이 없는 설문(hasContacts=false)에서는 영역 자체가 없다.
+      const { hasContacts } = await getSurveyContactStats(surveyId, scope);
       return NextResponse.json({
         totalVars,
         softLimit: SPLIT_SOFT_LIMIT,
         excelLimit: SPLIT_EXCEL_LIMIT,
         candidates: detectSplitCandidates(questions),
+        hasContacts,
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 현재 스코프 파티션만)
     const rawResponses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
-        notTestResponse,
+        responseScopeCondition(scope),
       ),
       columns: { id: true, questionResponses: true },
     });
@@ -92,7 +119,21 @@ async function handleSplitPreview(
       }
     }
 
-    return NextResponse.json({ plan: planSplit(questions, basis, respCounts) });
+    const plan = planSplit(questions, basis, respCounts, { changeConfirmQuestionIds });
+    if (!includeNonRespondents) return NextResponse.json({ plan });
+
+    // 켜졌을 때만 모수 count 를 더한다 — 꺼진 경로의 쿼리 수를 늘리지 않기 위해서다.
+    // respCounts 는 손대지 않는다: 미응답 행은 기준 문항 값이 없어 어느 버킷에도 안 들어간다.
+    const { responseCount, nonRespondentCount } = await countRawExportPopulation(
+      surveyId,
+      scope,
+      { includeNonRespondents: true },
+    );
+    return NextResponse.json({
+      plan,
+      totalRows: responseCount + nonRespondentCount,
+      nonRespondentRows: nonRespondentCount,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === '인증이 필요합니다.') {
       return NextResponse.json({ error: '권한 없음' }, { status: 401 });

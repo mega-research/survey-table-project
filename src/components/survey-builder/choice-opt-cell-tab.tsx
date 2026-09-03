@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberFormatFields } from './number-format-fields';
+import type { NumberFormat } from '@/types/survey';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
@@ -9,6 +11,7 @@ import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
+import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
@@ -20,6 +23,11 @@ interface ChoiceOptCellTabProps {
   onSpssNumericCodeChange: (v: number | '') => void;
   allowTextInput: boolean;
   onAllowTextInputChange: (v: boolean) => void;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
+  textInputType: 'text' | 'number';
+  onTextInputTypeChange: (v: 'text' | 'number') => void;
+  textInputNumberFormat: NumberFormat | undefined;
+  onTextInputNumberFormatChange: (v: NumberFormat | undefined) => void;
   /** 이 보기 옵션 선택 시 적용할 조건부 분기 규칙 */
   branchRule: BranchRule | undefined;
   onBranchRuleChange: (v: BranchRule | undefined) => void;
@@ -35,6 +43,8 @@ interface ChoiceOptCellTabProps {
   choiceGroupId: string;
   onChoiceGroupIdChange: (id: string) => void;
   onChoiceGroupsChange: (groups: ChoiceGroup[]) => void;
+  /** 질문 레벨 "필수 질문" 여부 — 그룹별 필수 토글의 상속 기본값 표시용 */
+  questionRequired: boolean;
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteText: string;
@@ -52,6 +62,10 @@ export function ChoiceOptCellTab({
   onSpssNumericCodeChange,
   allowTextInput,
   onAllowTextInputChange,
+  textInputType,
+  onTextInputTypeChange,
+  textInputNumberFormat,
+  onTextInputNumberFormatChange,
   branchRule,
   onBranchRuleChange,
   allQuestions,
@@ -61,6 +75,7 @@ export function ChoiceOptCellTab({
   choiceGroupId,
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
+  questionRequired,
   answerQuoteEnabled = false,
   answerQuoteText,
   onAnswerQuoteTextChange,
@@ -188,10 +203,72 @@ export function ChoiceOptCellTab({
         </p>
       </div>
 
+      {/* 그룹별 필수 응답 — 미설정 시 질문 레벨 "필수 질문" 을 상속. 토글 조작은 명시값 저장 */}
+      {currentGroup && (
+        <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center justify-between gap-4">
+            <Label className="text-sm font-medium">이 그룹 필수 응답 ({currentGroup.groupKey})</Label>
+            <Switch
+              checked={currentGroup.required ?? questionRequired}
+              onCheckedChange={(on) =>
+                onChoiceGroupsChange(
+                  choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, required: on } : g)),
+                )
+              }
+            />
+          </div>
+          {(currentGroup.required ?? questionRequired) && (
+            <Input
+              aria-label="그룹 필수 안내 문구"
+              placeholder={DEFAULT_REQUIRED_MESSAGE}
+              value={currentGroup.requiredMessage ?? ''}
+              onChange={(e) =>
+                onChoiceGroupsChange(
+                  choiceGroups.map((g) =>
+                    g.id === choiceGroupId ? { ...g, requiredMessage: e.target.value } : g,
+                  ),
+                )
+              }
+            />
+          )}
+          <p className="text-xs text-gray-500">
+            끄면 이 그룹만 선택 사항이 됩니다. 문구를 비우면 질문 문구를 따릅니다. 설정은 그룹
+            전체에 반영됩니다.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-4">
         <Label className="text-sm font-medium">선택 시 텍스트 입력 받기</Label>
         <Switch checked={allowTextInput} onCheckedChange={onAllowTextInputChange} />
       </div>
+      {allowTextInput && (
+        <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              id="choice-text-number"
+              checked={textInputType === 'number'}
+              onChange={(e) => onTextInputTypeChange(e.target.checked ? 'number' : 'text')}
+              className="mt-0.5 h-4 w-4"
+            />
+            <label htmlFor="choice-text-number" className="flex-1 cursor-pointer text-sm">
+              <span className="font-medium">숫자만 입력</span>
+              <p className="mt-0.5 text-xs text-gray-500">
+                입력 셀과 같은 규칙 — 콤마 표시·단위·최소/최대·소수 자릿수·허용값을 쓸 수 있고,
+                SPSS 변수도 숫자형으로 내보냅니다.
+              </p>
+            </label>
+          </div>
+          {textInputType === 'number' && (
+            <NumberFormatFields
+              idPrefix="choice-text-nf"
+              value={textInputNumberFormat}
+              onChange={onTextInputNumberFormatChange}
+            />
+          )}
+        </div>
+      )}
 
       {/* 옵션 라벨 + 응답값 한 줄 배치 */}
       <div className="space-y-1.5">

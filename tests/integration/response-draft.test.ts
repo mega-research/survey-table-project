@@ -338,6 +338,52 @@ describe('saveDraftResponse — 배치 저장', () => {
     expect(updateCalledMock).not.toHaveBeenCalled();
   });
 
+  it('변동 확인 사이드카는 소속 검증에서 분리되어 함께 저장된다', async () => {
+    arrangeBatch();
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    // 사이드카는 질문 id 가 아니라 예약 키다 — 소속 검증에 넣으면 저장 자체가 500 이 된다.
+    expect(
+      await saveDraftResponse({
+        responseId: 'r1',
+        answers: { q1: 'a', __changeConfirm__: { q1: 'same' } },
+      }),
+    ).toEqual({ applied: true });
+    const setArg = setSpy.mock.calls.at(-1)?.[0] as { questionResponses?: unknown };
+    const raw = extractRawSql(setArg?.questionResponses);
+    expect(raw).toContain('__changeConfirm__');
+    expect(raw).toContain('same');
+  });
+
+  it('변동 확인 사이드카의 알 수 없는 값은 저장 전에 걸러진다', async () => {
+    arrangeBatch();
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await saveDraftResponse({
+      responseId: 'r1',
+      answers: { q1: 'a', __changeConfirm__: { q1: 'same', q2: 'maybe' } },
+    });
+    const setArg = setSpy.mock.calls.at(-1)?.[0] as { questionResponses?: unknown };
+    const raw = extractRawSql(setArg?.questionResponses);
+    expect(raw).not.toContain('maybe');
+  });
+
+  it('사이드카만 실려 와도 소속 검증 없이 저장된다', async () => {
+    arrangeBatch();
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(
+      await saveDraftResponse({
+        responseId: 'r1',
+        answers: { __changeConfirm__: { q1: 'changed' } },
+      }),
+    ).toEqual({ applied: true });
+    expect(updateCalledMock).toHaveBeenCalledTimes(1);
+  });
+
   it('중단된 설문이면 거부하고 아무것도 쓰지 않는다', async () => {
     arrangeBatch();
     controlFlagsMock.mockResolvedValue({ isPaused: true });

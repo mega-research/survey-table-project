@@ -301,6 +301,8 @@ export async function getSurveyForResponse(
     pausedMessage: survey.pausedMessage,
     testSession,
     testSessionKind,
+    // 회차 라벨은 스냅샷에 freeze 하지 않는다 — 운영 중 문구 교정이 publish 없이 반영돼야 한다.
+    priorWaveLabel: survey.priorWaveLabel,
   };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환

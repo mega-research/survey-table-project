@@ -63,7 +63,11 @@ import type {
   SurveyResponse,
   UpdateQuestionResponseInput,
 } from '../../domain/response';
-import { readOptTextsSidecar } from '@/lib/option-text-read';
+import {
+  isPersistedRootSidecarKey,
+  sanitizeRootSidecar,
+  splitRootSidecars,
+} from '@/lib/survey/response-sidecars';
 import { replaceResponseAnswers } from './response-answers.service';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
@@ -1294,11 +1298,10 @@ export async function saveDraftResponse(
     assertAnswerValueSize(value);
   }
 
-  // 기타/상세 기재 사이드카(__optTexts__)는 실존 질문이 아니므로 소속 검증에서 분리한다.
-  // 제출 전 이탈에도 텍스트가 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
-  // 그 외 '__' 키는 기존대로 소속 검증에서 거부된다.
-  const sidecarEntry = entries.find(([key]) => key === '__optTexts__');
-  const answerEntries = entries.filter(([key]) => key !== '__optTexts__');
+  // 루트 사이드카(기타/상세 기재·변동 확인)는 실존 질문이 아니므로 소속 검증에서
+  // 분리한다. 제출 전 이탈에도 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
+  // 등록되지 않은 '__' 키는 기존대로 소속 검증에서 거부된다.
+  const { answerEntries, sidecarEntries } = splitRootSidecars(entries);
 
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
@@ -1322,8 +1325,11 @@ export async function saveDraftResponse(
     const flag = piiFlags.get(questionId);
     storedAnswers[questionId] = flag ? encryptAnswerForQuestion(value, flag) : value;
   }
-  if (sidecarEntry) {
-    storedAnswers['__optTexts__'] = readOptTextsSidecar({ __optTexts__: sidecarEntry[1] });
+  for (const [key, value] of sidecarEntries) {
+    // 빈 사이드카도 그대로 기록한다 — 응답자가 기재를 전부 지운 draft 가 서버에
+    // 반영되어야 한다(기존 __optTexts__ 동작 유지).
+    const sanitized = sanitizeRootSidecar(key, value);
+    if (sanitized) storedAnswers[key] = sanitized;
   }
   const questionIds = answerEntries.map(([questionId]) => questionId);
 
@@ -1959,10 +1965,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
     const filtered: Record<string, unknown> = {};
     for (const [qid, value] of Object.entries(data.questionResponses)) {
-      // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
+      // 루트 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
       // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
       // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
-      if (qid === '__optTexts__') continue;
+      if (isPersistedRootSidecarKey(qid)) continue;
       // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
       if (!validIds.has(qid)) continue;
       // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
@@ -1970,16 +1976,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
       filtered[qid] = value;
     }
-    // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
-    const sidecar = readOptTextsSidecar(data.questionResponses);
-    const keptSidecar: Record<string, Record<string, string>> = {};
-    for (const [qid, texts] of Object.entries(sidecar)) {
-      if (validIds.has(qid)) keptSidecar[qid] = texts;
-    }
-    if (Object.keys(keptSidecar).length > 0) {
+    // 사이드카 정제: 형태 검증 + 실존 질문 키만 + 바이트 상한.
+    for (const [qid, raw] of Object.entries(data.questionResponses)) {
+      if (!isPersistedRootSidecarKey(qid)) continue;
+      const keptSidecar = sanitizeRootSidecar(qid, raw, (questionId) => validIds.has(questionId));
+      // 완료 저장은 빈 사이드카를 넣지 않는다(기존 동작 유지).
+      if (!keptSidecar || Object.keys(keptSidecar).length === 0) continue;
       const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
       if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
-        filtered['__optTexts__'] = keptSidecar;
+        filtered[qid] = keptSidecar;
       }
     }
     validatedResponses = filtered;

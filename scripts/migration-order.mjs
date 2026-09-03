@@ -4,6 +4,7 @@
 // 파일명 prefix 는 0003/0009/0019 에서 중복되므로 정렬 기준으로 쓸 수 없다.
 // 두 목록은 서로소이며 합집합이 supabase/migrations 의 .sql 전량과 일치해야 한다 —
 // 어긋나면 추적되지 않는 마이그레이션이 있다는 뜻이라 즉시 실패시킨다.
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -43,4 +44,12 @@ const selected = process.argv.includes('--objects-only')
   ? tags.filter((t) => OBJECT_STATEMENT.test(readFileSync(join(DIR, `${t}.sql`), 'utf8')))
   : tags;
 
-process.stdout.write(selected.join('\n') + '\n');
+// --hash: 재생 순서 전체의 지문. 로컬 테스트 DB 가 "이 레포의 마이그레이션 집합으로"
+// 만들어졌는지 확인하는 데 쓴다 (setup-test-db.sh 가 찍고 db-drift.mjs 가 대조).
+// 태그 목록과 순서가 모두 반영되므로, 다른 브랜치가 같은 도커 컨테이너를 재생하면
+// 반드시 값이 달라진다.
+if (process.argv.includes('--hash')) {
+  process.stdout.write(createHash('md5').update(tags.join('\n')).digest('hex') + '\n');
+} else {
+  process.stdout.write(selected.join('\n') + '\n');
+}

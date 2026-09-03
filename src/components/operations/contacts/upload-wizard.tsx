@@ -54,6 +54,11 @@ interface UploadWizardProps {
   surveyId: string;
   /** 마법사 진입 시점의 기존 contact_targets 행 수. 0 이면 신규, > 0 이면 통째 교체 경고 */
   existingContactsCount: number;
+  /**
+   * 이월 응답이 붙어 있는 조사 대상 수 (추적조사).
+   * replace 는 조사 대상을 지우므로 이월 응답도 함께 사라진다 — 되돌릴 방법이 없다.
+   */
+  existingPriorAnswerCount: number;
   /** 기존 컬럼 스킴 — 병합/추가 모드의 컬럼 잠금·라우팅 표시 기준 */
   existingScheme: ContactColumnScheme | null;
 }
@@ -85,6 +90,7 @@ const PII_OPTIONS: Array<{ value: PiiFieldType | '_none'; label: string }> = [
 export function UploadWizard({
   surveyId,
   existingContactsCount,
+  existingPriorAnswerCount,
   existingScheme,
 }: UploadWizardProps) {
   const router = useRouter();
@@ -782,6 +788,12 @@ export function UploadWizard({
                   <li>각 조사 대상의 회차 기록 (contact_attempts) 도 함께 삭제됨</li>
                   <li>각 조사 대상의 암호화된 개인정보도 함께 삭제됨</li>
                   <li>이미 발송된 초대 링크 모두 무효화</li>
+                  {existingPriorAnswerCount > 0 && (
+                    <li className="font-semibold">
+                      이월 응답 {existingPriorAnswerCount.toLocaleString('ko-KR')}건도 함께
+                      삭제됨 — 지난 회차 rawdata 를 다시 임포트해야 합니다
+                    </li>
+                  )}
                   <li>응답 본체는 보존되지만 조사 대상 매칭이 끊겨 익명 응답으로 표시됨</li>
                 </ul>
                 <label className="mt-3 flex items-center gap-2 text-red-800">

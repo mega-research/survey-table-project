@@ -1,26 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import { getQuestionGroupsBySurvey } from '@/data/surveys';
-import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { surveyResponses, surveys } from '@/db/schema';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import {
+  loadOperationsDataScope,
+  responseScopeCondition,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import {
-  generateRawDataWorkbook,
-  type RawExportContext,
-  type RawExportResponseRow,
-} from '@/lib/analytics/raw-workbook';
+import { generateRawDataWorkbook, toSpssColumnOptions } from '@/lib/analytics/raw-workbook';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
-import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
+import {
+  MAX_EXPORT_RESPONSES,
+  buildRawExportContext,
+  loadRawExportRows,
+  type RawExportLoadOptions,
+  type RawExportLoadResult,
+} from '@/lib/analytics/raw-export-rows.server';
+import { selectRawExportContactColumns } from '@/lib/operations/contacts';
+import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
+import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { SurveySubmission } from '@/types/survey';
@@ -32,7 +40,21 @@ const ALLOWED_EXPORT_TYPES = ['sav', 'raw', 'raw-split', 'sps'] as const;
 type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const MAX_EXPORT_RESPONSES = 10000;
+
+/**
+ * raw/raw-split 한도 초과 응답 — 토글이 켜졌으면 응답 수와 미응답 조사 대상 수를 따로 보여
+ * 어느 쪽을 줄여야 하는지 알 수 있게 한다. 꺼진 경로의 문구는 도입 전 그대로다.
+ */
+function tooManyRowsResponse(
+  result: Extract<RawExportLoadResult, { kind: 'too_many' }>,
+  includeNonRespondents: boolean,
+) {
+  const limit = MAX_EXPORT_RESPONSES.toLocaleString();
+  const error = includeNonRespondents
+    ? `응답 ${result.responseCount.toLocaleString()}건과 미응답 조사 대상 ${result.nonRespondentCount.toLocaleString()}명을 합쳐 ${limit}행을 초과하여 내보내기할 수 없습니다.`
+    : `응답이 ${limit}건을 초과하여 내보내기할 수 없습니다.`;
+  return NextResponse.json({ error }, { status: 413 });
+}
 
 async function handleExport(
   request: NextRequest,
@@ -63,6 +85,12 @@ async function handleExport(
       return NextResponse.json({ error: '지원하지 않는 내보내기 형식입니다.' }, { status: 400 });
     }
 
+    // 「조사 대상 중 미응답자 포함」 — Raw Data 계열(raw/raw-split)만 읽는다.
+    // .sav/.sps 는 완료 전용 분석 모수라 이 파라미터와 무관하다.
+    const includeNonRespondents =
+      request.nextUrl.searchParams.get('includeNonRespondents') === '1';
+    ctx.bind({ includeNonRespondents });
+
     // 1. 설문 데이터 조회
     // questions 는 반드시 order 오름차순으로 조회한다. orderBy 가 없으면 drizzle relational
     // query 가 ORDER BY 를 넣지 않아 Postgres 힙(물리) 순서를 따르고, 그 결과 SPSS/Raw
@@ -75,6 +103,31 @@ async function handleExport(
     if (!surveyData) {
       return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
     }
+
+    // 운영 콘솔과 같은 파티션 규칙 — 테스트 모드면 테스트 응답만, 아니면 실 응답만 내려간다
+    // (게스트는 항상 실). 테스트 검수용 다운로드에 실 응답이 섞이는 것과 그 반대를 함께 막는다.
+    const scope = await loadOperationsDataScope(surveyId);
+    ctx.bind({ scope });
+
+    // 「조사 대상 명단 열 포함」 — Raw Data 계열(raw/raw-split)만 읽는다.
+    // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·게스트 가드는 contacts/export 와 같고
+    // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
+    // 스킴을 읽는 것도 켜졌을 때뿐 — 꺼진 경로의 쿼리는 도입 전과 같다. 스킴이 없으면(명단
+    // 미업로드) 열 0개로 정상 진행한다 — 명단 열은 부가 옵션이라 조사 대상 엑셀과 달리 400 이 아니다.
+    // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
+    const isRawExport = type === 'raw' || type === 'raw-split';
+    const includeContactColumns =
+      isRawExport && request.nextUrl.searchParams.get('includeContactColumns') === '1';
+    const contactColumns = includeContactColumns
+      ? selectRawExportContactColumns(await getContactColumnScheme(surveyId, scope))
+      : [];
+    const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
+    ctx.bind({ includeContactColumns, contactColumnCount: contactColumns.length, piiColumnCount });
+    const rawOptions: RawExportLoadOptions = includeContactColumns
+      ? { includeNonRespondents, contactColumns }
+      : { includeNonRespondents };
+    // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
+    const piiHeaders = piiColumnCount > 0 ? { 'Cache-Control': 'no-store' } : {};
 
     // strip된 셀/옵션 파생 필드 hydrate (cellCode, exportLabel, optionCode 복원)
     // 이후 일회성 export 행 제외 적용 — 등재된 설문 외에는 원본 그대로 통과
@@ -96,7 +149,7 @@ async function handleExport(
             eq(surveyResponses.surveyId, surveyId),
             notDeletedResponse,
             completedResponse,
-            notTestResponse,
+            responseScopeCondition(scope),
           ),
         );
       const total = totalRows[0]?.total ?? 0;
@@ -113,7 +166,7 @@ async function handleExport(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
-          notTestResponse,
+          responseScopeCondition(scope),
         ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
@@ -134,7 +187,16 @@ async function handleExport(
     if (type === 'sps') {
       const { generateSPSSColumns } = await import('@/lib/analytics/spss-excel-export');
       const { generateMrsetsSyntax } = await import('@/lib/spss/mrsets-syntax');
-      const syntax = generateMrsetsSyntax(generateSPSSColumns(hydratedQuestions), hydratedQuestions);
+      // 변동 확인 변수는 MRSETS·FORMATS 대상이 아니지만, 같은 설문의 변수 집합이
+      // 내보내기 형식마다 갈리지 않도록 여기서도 같은 옵션으로 만든다.
+      // 파티션은 다른 내보내기 형식과 동일하게 현재 스코프를 따른다.
+      const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+        isTest: testFlagForScope(scope),
+      });
+      const syntax = generateMrsetsSyntax(
+        generateSPSSColumns(hydratedQuestions, { changeConfirmQuestionIds }),
+        hydratedQuestions,
+      );
       if (syntax === null) {
         return NextResponse.json(
           {
@@ -154,15 +216,16 @@ async function handleExport(
 
     // 3. Raw Data xlsx
     if (type === 'raw') {
-      const rows = await loadRawExportRows(surveyId);
-      if (rows === 'too_many') {
-        return NextResponse.json(
-          { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
-          { status: 413 },
-        );
-      }
-      ctx.bind({ rowCount: rows.length });
-      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
+      if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
+      const { rows } = loaded;
+      ctx.bind({ rowCount: rows.length, nonRespondentCount: loaded.nonRespondentCount });
+      const exportCtx = await buildRawExportContext(
+        surveyId,
+        scope,
+        surveyData.questions,
+        rawOptions,
+      );
       const workbook = generateRawDataWorkbook(hydratedQuestions, rows, exportCtx);
       // exceljs 워크북 — 셀 스타일(헤더 색상/병합) 지원을 위해 XLSX 대신 사용.
       const buffer = await workbook.xlsx.writeBuffer();
@@ -171,6 +234,7 @@ async function handleExport(
         headers: {
           'Content-Disposition': `attachment; filename="${filename}"`,
           'Content-Type': XLSX_MIME,
+          ...piiHeaders,
         },
       });
     }
@@ -188,15 +252,19 @@ async function handleExport(
         return NextResponse.json({ error: '유효하지 않은 분할 기준 문항입니다.' }, { status: 400 });
       }
 
-      const rows = await loadRawExportRows(surveyId);
-      if (rows === 'too_many') {
-        return NextResponse.json(
-          { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
-          { status: 413 },
-        );
-      }
+      const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
+      if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
+      const { rows } = loaded;
 
-      const plan = planSplit(hydratedQuestions, basis);
+      const exportCtx = await buildRawExportContext(
+        surveyId,
+        scope,
+        surveyData.questions,
+        rawOptions,
+      );
+      // 한계 판정은 실제 워크북과 같은 변수 집합으로 해야 한다 — 변동 확인 변수를 빼고
+      // 세면 통과했다가 워크북 생성에서 열 한계를 넘는다.
+      const plan = planSplit(hydratedQuestions, basis, {}, toSpssColumnOptions(exportCtx));
       if (plan.exceedsExcelLimit) {
         return NextResponse.json(
           { error: '선택한 기준으로는 일부 시트가 Excel 열 한계를 초과합니다. 다른 기준을 선택해 주세요.' },
@@ -204,8 +272,7 @@ async function handleExport(
         );
       }
 
-      ctx.bind({ rowCount: rows.length });
-      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      ctx.bind({ rowCount: rows.length, nonRespondentCount: loaded.nonRespondentCount });
       const workbook = buildSplitWorkbook(hydratedQuestions, rows, basis, exportCtx);
       const buffer = await workbook.xlsx.writeBuffer();
       const basisCode = basisQuestion.questionCode ?? 'split';
@@ -216,6 +283,7 @@ async function handleExport(
         headers: {
           'Content-Disposition': `attachment; filename="${filename}"`,
           'Content-Type': XLSX_MIME,
+          ...piiHeaders,
         },
       });
     }
@@ -223,9 +291,14 @@ async function handleExport(
     // 4. SPSS .sav는 별도 바이너리 응답
     if (type === 'sav') {
       const { generateSavBuffer } = await import('@/lib/spss/sav-builder');
+      // 추적조사 변동 확인 변수 — .sav 모수와 같은 스코프 파티션의 이월 응답을 본다.
+      const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
+        isTest: testFlagForScope(scope),
+      });
       const savBuffer = await generateSavBuffer(
         hydratedQuestions,
         responses as unknown as SurveySubmission[],
+        { changeConfirmQuestionIds },
       );
       return new NextResponse(new Uint8Array(savBuffer), {
         headers: {
@@ -257,112 +330,3 @@ async function handleExport(
 export const GET = withRouteLogging('/api/surveys/[surveyId]/export', handleExport, {
   errorMessage: '데이터 내보내기 중 오류가 발생했습니다.',
 });
-
-/**
- * raw/raw-split 공용 응답 로더.
- * 모수: 삭제·테스트 제외 전 상태 (진행중·이탈 포함 — 상태 컬럼으로 구분).
- * .sav 의 완료 전용 모수와 다름 (response-filters.ts 참조).
- */
-async function loadRawExportRows(
-  surveyId: string,
-): Promise<RawExportResponseRow[] | 'too_many'> {
-  const rawWhere = and(
-    eq(surveyResponses.surveyId, surveyId),
-    notDeletedResponse,
-    notTestResponse,
-  );
-
-  // 한도 초과 판정은 JSONB 페이로드를 물화하기 전에 count 로 먼저 한다 (.sav 경로와 동일).
-  // 전 상태 모수 확장으로 행 수가 커질 수 있어, 초과 설문에서 413 대신 서버리스
-  // 메모리 고갈/타임아웃이 나는 것을 막는다.
-  const totalRows = await db.select({ total: count() }).from(surveyResponses).where(rawWhere);
-  if ((totalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return 'too_many';
-
-  const rawResponses = await db.query.surveyResponses.findMany({
-    where: rawWhere,
-    orderBy: (r, { asc }) => [asc(r.startedAt)],
-  });
-
-  // count 와 fetch 사이 유입 경합 대비 벨트 (정상 경로에서는 no-op)
-  if (rawResponses.length > MAX_EXPORT_RESPONSES) return 'too_many';
-
-  const contactIds = rawResponses
-    .map((r) => r.contactTargetId)
-    .filter((v): v is string => !!v);
-  const contactMap = new Map<
-    string,
-    { resid: number; groupValue: string | null; inviteCode: string | null }
-  >();
-  if (contactIds.length > 0) {
-    const targets = await db
-      .select({
-        id: contactTargets.id,
-        resid: contactTargets.resid,
-        groupValue: contactTargets.groupValue,
-        inviteCode: contactTargets.inviteCode,
-      })
-      .from(contactTargets)
-      .where(inArray(contactTargets.id, contactIds));
-    for (const t of targets) {
-      contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue, inviteCode: t.inviteCode });
-    }
-  }
-
-  return rawResponses.map((r) => {
-    const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
-    return {
-      id: r.id,
-      questionResponses: decryptQuestionResponses(
-        (r.questionResponses ?? {}) as Record<string, unknown>,
-        { responseId: r.id },
-      ),
-      groupValue: c?.groupValue ?? null,
-      resid: c?.resid ?? null,
-      inviteCode: c?.inviteCode ?? null,
-      ipHash: r.ipHash,
-      currentStepId: r.currentStepId,
-      platform: r.platform,
-      browser: r.browser,
-      status: r.status,
-      startedAt: r.startedAt,
-      completedAt: r.completedAt,
-      totalSeconds: r.totalSeconds,
-    };
-  });
-}
-
-/** 메타 컬럼 렌더 컨텍스트 — 개별 URL 베이스와 마지막 입력 문항 라벨 맵. */
-async function buildRawExportContext(
-  surveyId: string,
-  questions: Array<{
-    id: string;
-    order: number;
-    title: string;
-    type: string;
-    groupId: string | null;
-    pageBreakBefore: boolean | null;
-    questionCode: string | null;
-  }>,
-): Promise<RawExportContext> {
-  const groups = await getQuestionGroupsBySurvey(surveyId);
-  // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
-  // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
-  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
-  const stepQs = questions.map((q) => ({
-    id: q.id,
-    order: q.order,
-    title: q.title,
-    type: q.type,
-    groupId: q.groupId,
-    pageBreakBefore: q.pageBreakBefore ?? false,
-    questionCode: q.questionCode,
-  }));
-  return {
-    appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
-    stepLabels: buildStepLabelMap(stepQs, groups),
-    hasContacts,
-    hasContactGroups,
-    questionMeta: buildQuestionMetaMap(questions),
-  };
-}

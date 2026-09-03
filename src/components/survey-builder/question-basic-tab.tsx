@@ -36,6 +36,11 @@ import { Switch } from '@/components/ui/switch';
 import { cn, generateId } from '@/lib/utils';
 import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
+import {
+  propagateRequiredToTableRows,
+  stripChoiceGroupRequiredOverrides,
+} from '@/utils/required-propagation';
+import { flattenGroupTree } from '@/lib/group-ordering';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
@@ -53,7 +58,7 @@ import { VariableButton } from './variable-button';
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
-import { NoticeRenderer } from './notice-renderer';
+import { NOTICE_BG_DEFAULT_HEX, NoticeRenderer } from './notice-renderer';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
@@ -146,6 +151,10 @@ export function QuestionBasicTab({
 
   // optionCode Input의 blur 커밋 후 다른 옵션과 응답값이 중복되는 옵션 id 집합 (경고 표시용)
   const [conflictOptionIds, setConflictOptionIds] = useState<Set<string>>(new Set());
+
+  // 필수 마스터 전파(ADR 0021) 후 표 에디터 리마운트용 — useTableEditor 는 마운트
+  // 시점 formData 로만 초기화하므로 key 를 갈아 최신 tableRowsData 를 다시 읽게 한다.
+  const [tableEditorEpoch, setTableEditorEpoch] = useState(0);
 
   /**
    * "변수번호"(optionCode) Input의 blur 커밋 — commitOptionCode 로 value 동기화를 시도한다.
@@ -465,38 +474,13 @@ export function QuestionBasicTab({
             className="mt-2 w-full rounded-lg border border-gray-300 p-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           >
             <option value="">그룹 없음</option>
-            {(() => {
-              const groups = useSurveyBuilderStore.getState().currentSurvey.groups || [];
-              const topLevelGroups = groups
-                .filter((g) => !g.parentGroupId)
-                .sort((a, b) => a.order - b.order);
-              const getSubGroups = (parentId: string) =>
-                groups
-                  .filter((g) => g.parentGroupId === parentId)
-                  .sort((a, b) => a.order - b.order);
-
-              const options: React.ReactElement[] = [];
-
-              topLevelGroups.forEach((group) => {
-                options.push(
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>,
-                );
-
-                // 하위 그룹들 추가
-                const subGroups = getSubGroups(group.id);
-                subGroups.forEach((subGroup) => {
-                  options.push(
-                    <option key={subGroup.id} value={subGroup.id}>
-                      └─ {subGroup.name}
-                    </option>,
-                  );
-                });
-              });
-
-              return options;
-            })()}
+            {flattenGroupTree(useSurveyBuilderStore.getState().currentSurvey.groups || []).map(
+              ({ group, depth }) => (
+                <option key={group.id} value={group.id}>
+                  {depth === 0 ? group.name : `${'　'.repeat(depth - 1)}└─ ${group.name}`}
+                </option>
+              ),
+            )}
           </select>
           <p className="mt-1 text-xs text-gray-500">
             이 질문을 특정 그룹에 포함시킬 수 있습니다.
@@ -524,9 +508,33 @@ export function QuestionBasicTab({
           <Switch
             id="required"
             checked={formData.required || false}
-            onCheckedChange={(checked) =>
-              setFormData((prev) => ({ ...prev, required: checked }))
-            }
+            onCheckedChange={(checked) => {
+              // 필수 마스터 전파(ADR 0021) — 조작 시점 일괄 복사. 표의 인터랙티브 셀
+              // 필수를 함께 켜고/끄고, 보기 옵션 그룹은 오버라이드 제거로 상속 복귀.
+              setFormData((prev) => ({
+                ...prev,
+                required: checked,
+                ...(prev.tableRowsData?.length
+                  ? { tableRowsData: propagateRequiredToTableRows(prev.tableRowsData, checked) }
+                  : {}),
+                ...(prev.choiceGroups?.length
+                  ? { choiceGroups: stripChoiceGroupRequiredOverrides(prev.choiceGroups) }
+                  : {}),
+              }));
+              // 그룹은 저장 시 스토어 값이 formData 를 덮으므로(모달 handleSave 머지)
+              // 셀 모달과 같은 silentUpdateQuestion 경로로 스토어에도 반영한다.
+              const storeQuestion = useSurveyBuilderStore
+                .getState()
+                .currentSurvey.questions.find((q) => q.id === questionId);
+              if (storeQuestion?.choiceGroups?.length) {
+                useSurveyBuilderStore
+                  .getState()
+                  .silentUpdateQuestion(questionId, {
+                    choiceGroups: stripChoiceGroupRequiredOverrides(storeQuestion.choiceGroups),
+                  });
+              }
+              setTableEditorEpoch((e) => e + 1);
+            }}
           />
           <Label htmlFor="required" className="shrink-0">
             필수 질문
@@ -1281,6 +1289,47 @@ export function QuestionBasicTab({
             />
           </div>
 
+          {/* 본문 패널 배경색 — 미설정=기본 파랑, 'none'=무색, hex=커스텀 */}
+          <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <Switch
+              id="notice-bg-toggle"
+              checked={formData.noticeBgColor !== 'none'}
+              onCheckedChange={(on) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  // 끄면 무색. 켜면 기본 파랑 실효색으로 시작해 픽커로 조정
+                  noticeBgColor: on ? NOTICE_BG_DEFAULT_HEX : 'none',
+                }))
+              }
+            />
+            <Label htmlFor="notice-bg-toggle" className="cursor-pointer">
+              본문 배경색
+            </Label>
+            {formData.noticeBgColor !== 'none' && (
+              <>
+                <input
+                  type="color"
+                  aria-label="공지 배경색 선택"
+                  value={
+                    formData.noticeBgColor && formData.noticeBgColor !== 'none'
+                      ? formData.noticeBgColor
+                      : NOTICE_BG_DEFAULT_HEX
+                  }
+                  onChange={(event) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      noticeBgColor: event.target.value.toLowerCase(),
+                    }))
+                  }
+                  className="h-9 w-12 cursor-pointer rounded border border-gray-200"
+                />
+                <span className="text-xs text-gray-500">
+                  {formData.noticeBgColor ? formData.noticeBgColor : '기본(연한 파랑)'}
+                </span>
+              </>
+            )}
+          </div>
+
           {/* 이해 확인 체크 옵션 */}
           <div className="flex items-center space-x-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <Switch
@@ -1301,6 +1350,7 @@ export function QuestionBasicTab({
               <Label className="text-base font-medium">미리보기</Label>
               <NoticeRenderer
                 content={formData.noticeContent}
+                bgColor={formData.noticeBgColor}
                 requiresAcknowledgment={formData.requiresAcknowledgment}
                 isTestMode={true}
               />
@@ -1323,6 +1373,7 @@ export function QuestionBasicTab({
           </div>
 
           <DynamicTableEditor
+            key={tableEditorEpoch}
             tableTitle={formData.tableTitle}
             columns={formData.tableColumns}
             rows={formData.tableRowsData}

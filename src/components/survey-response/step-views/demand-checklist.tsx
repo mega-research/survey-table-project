@@ -52,6 +52,8 @@ interface Props {
   onResponse: (questionId: string, value: unknown) => void;
   highlightQuestionIds: Set<string>;
   requiredMessageQuestionIds: Set<string>;
+  /** 변동 확인 미선택 사유로 막힌 질문 — 컨트롤 아래 안내 문구를 표시한다(추적조사). */
+  changeConfirmMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
   /** 이 문항으로 초점을 옮긴다 — 조사표가 그 영역으로 따라간다. */
   onQuestionFocus?: ((questionId: string) => void) | undefined;
@@ -78,6 +80,7 @@ export function DemandChecklist({
   onResponse,
   highlightQuestionIds,
   requiredMessageQuestionIds,
+  changeConfirmMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
   onGroupSelect,
@@ -168,6 +171,7 @@ export function DemandChecklist({
           onResponse={onResponse}
           highlightQuestionIds={highlightQuestionIds}
           requiredMessageQuestionIds={requiredMessageQuestionIds}
+          changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
           numericIssues={numericIssues}
           onQuestionFocus={onQuestionFocus}
           onGroupSelect={onGroupSelect}
@@ -190,6 +194,7 @@ function BlockCard({
   onResponse,
   highlightQuestionIds,
   requiredMessageQuestionIds,
+  changeConfirmMessageQuestionIds,
   numericIssues,
   onQuestionFocus,
   onGroupSelect,
@@ -206,6 +211,8 @@ function BlockCard({
   onResponse: (questionId: string, value: unknown) => void;
   highlightQuestionIds: Set<string>;
   requiredMessageQuestionIds: Set<string>;
+  /** 변동 확인 미선택 사유로 막힌 질문 — 컨트롤 아래 안내 문구를 표시한다(추적조사). */
+  changeConfirmMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
   onQuestionFocus?: ((questionId: string) => void) | undefined;
   onGroupSelect?: ((groupId: string) => void) | undefined;
@@ -335,6 +342,7 @@ function BlockCard({
               onResponse={onResponse}
               isHighlighted={highlightQuestionIds.has(item.question.id)}
               showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
+              showChangeConfirmMessage={changeConfirmMessageQuestionIds.has(item.question.id)}
               issues={numericIssues.get(item.question.id)}
             />
           </div>
@@ -420,7 +428,7 @@ function JudgementRow({
         {/* 코드 칸은 한 줄이다. B6_1_A 가 두 줄로 접히면 행 높이가 들쭉날쭉해져
             옆 문항과 눈으로 짝지을 수 없다. 넘치면 줄이고 전체는 툴팁으로 준다. */}
         <span
-          className="w-11 shrink-0 truncate text-[11px] font-bold whitespace-nowrap text-gray-500"
+          className="w-14 shrink-0 truncate text-center text-[11px] font-bold whitespace-nowrap text-gray-500"
           title={shortCode ?? undefined}
         >
           {shortCode}

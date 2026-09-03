@@ -152,6 +152,12 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             label="+ 업로드"
             disabled={scope === 'test'}
           />
+          {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/surveys/${surveyId}/operations/contacts/prior-answers`}>
+              이월 응답 임포트
+            </Link>
+          </Button>
           <Button asChild size="sm">
             <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
           </Button>

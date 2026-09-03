@@ -38,6 +38,7 @@ describe('PageStepView', () => {
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
         requiredMessageQuestionIds={new Set()}
+        changeConfirmMessageQuestionIds={new Set<string>()}
         numericIssues={new Map()}
       />,
     );
@@ -58,6 +59,7 @@ describe('PageStepView', () => {
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
         requiredMessageQuestionIds={new Set()}
+        changeConfirmMessageQuestionIds={new Set<string>()}
         numericIssues={new Map()}
       />,
     );

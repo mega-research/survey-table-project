@@ -5,6 +5,7 @@ import {
   type RawExportResponseRow,
   generateRawDataWorkbook,
 } from '@/lib/analytics/raw-workbook';
+import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 import type { Question } from '@/types/survey';
 
 const radioQ = {
@@ -483,5 +484,165 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(ws.getRow(5).getCell(4).value).toBe('공개링크');
     expect(ws.getRow(5).getCell(1).value).toBe('');
     expect(ws.getRow(5).getCell(7).value).toBe('');
+  });
+});
+
+describe('미응답 조사 대상 행', () => {
+  const nonRespondentRow = () =>
+    makeRow({
+      status: NOT_RESPONDED_STATUS,
+      questionResponses: {},
+      ipHash: null,
+      currentStepId: null,
+      platform: null,
+      browser: null,
+      startedAt: null,
+      completedAt: null,
+      totalSeconds: null,
+      groupValue: null,
+    });
+
+  it('조사 대상 값만 채우고 응답 메타·문항 열은 빈칸이며 상태는 미응답이다', () => {
+    const wb = generateRawDataWorkbook([radioQ], [nonRespondentRow()], TEST_CTX);
+    const dr = wb.getWorksheet('Raw Data')!.getRow(4);
+    expect(dr.getCell(1).value).toBe(''); // IP 해시
+    expect(dr.getCell(2).value).toBe(7); // 시스템ID
+    expect(dr.getCell(3).value).toBe(1); // 순번
+    expect(dr.getCell(4).value).toBe(''); // 조사 대상 그룹 — 익명 응답 표식(공개링크)이 아니다
+    expect(dr.getCell(5).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL
+    expect(dr.getCell(6).value).toBe('미응답');
+    expect([7, 8, 9, 10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '', '', '', '']);
+    expect(dr.getCell(12).value).toBeNull(); // Q1
+
+    const lr = wb.getWorksheet('응답 내역')!.getRow(2);
+    expect(lr.getCell(4).value).toBe(''); // 접속 단말
+    expect(lr.getCell(5).value).toBe(''); // 브라우저
+    expect(lr.getCell(6).value).toBe('미응답');
+    expect(lr.getCell(9).value).toBe(''); // 소요시간
+  });
+
+  it('미응답 행이 사이에 끼어도 순번은 이어진다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow(), nonRespondentRow(), makeRow({ status: 'in_progress' })],
+      TEST_CTX,
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(3).value)).toEqual([1, 2, 3]);
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(6).value)).toEqual(['완료', '미응답', '진행중']);
+  });
+});
+
+describe('조사 대상 명단 열', () => {
+  // 명단 열은 메타 열 바로 오른쪽·문항 열 왼쪽 — 메타 11열 뒤 12·13열, 문항은 14열부터.
+  const rosterCtx: RawExportContext = {
+    ...TEST_CTX,
+    contactColumns: [
+      { source: 'attrs.기수', label: '기수', kind: 'attrs', key: '기수' },
+      { source: 'pii.성명', label: '성명', kind: 'pii', key: '성명' },
+    ],
+  };
+
+  it('메타 열 오른쪽에 스킴 라벨 헤더가 붙고 1~3행 세로 병합되며 문항 열이 그만큼 밀린다', () => {
+    const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], rosterCtx);
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
+    expect(ws.getRow(1).getCell(12).value).toBe('기수');
+    expect(ws.getRow(1).getCell(13).value).toBe('성명');
+    expect(ws.getRow(1).getCell(14).value).toBe('Q1. 성별');
+    // 2·3행은 1행 헤더에 세로 병합된 셀 — 변수명 행이 없다 (SPSS 변수가 아니다)
+    for (const ref of ['L2', 'L3', 'M2', 'M3']) {
+      expect(ws.getCell(ref).master.address).toBe(`${ref[0]}1`);
+    }
+    const merges = ws.model.merges as string[];
+    expect(merges).toContain('L1:L3');
+    expect(merges).toContain('M1:M3');
+    // 같은 질문(Q2) 변수 열 가로 병합도 명단 열만큼 밀린다 (M:N → O:P)
+    expect(merges).toContain('O1:P1');
+    expect(merges).not.toContain('M1:N1');
+  });
+
+  it('명단 값은 source 키로 채우고 문항 코드값은 그 오른쪽에 온다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [
+        makeRow({
+          questionResponses: { q1: 'opt2' },
+          contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' },
+        }),
+      ],
+      rosterCtx,
+    );
+    const dr = wb.getWorksheet('Raw Data')!.getRow(4);
+    expect(dr.getCell(12).value).toBe('15기');
+    expect(dr.getCell(13).value).toBe('홍길동');
+    expect(dr.getCell(14).value).toBe(2);
+  });
+
+  it('조사 대상이 없는 익명 응답은 전부 빈칸, 값 없는 키만 빈칸이다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [
+        makeRow({ resid: null, inviteCode: null, groupValue: null }),
+        makeRow({ id: 'r-2', contactValues: { 'attrs.기수': '15기' } }),
+      ],
+      rosterCtx,
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect([12, 13].map((c) => ws.getRow(4).getCell(c).value)).toEqual(['', '']);
+    expect([12, 13].map((c) => ws.getRow(5).getCell(c).value)).toEqual(['15기', '']);
+  });
+
+  it('contactColumns 가 비었거나 없으면 도입 전과 같은 열 구성이고 응답 내역 시트는 불변이다', () => {
+    for (const ctx of [TEST_CTX, { ...TEST_CTX, contactColumns: [] }]) {
+      const wb = generateRawDataWorkbook([radioQ], [makeRow()], ctx);
+      expect(wb.getWorksheet('Raw Data')!.getRow(1).getCell(12).value).toBe('Q1. 성별');
+    }
+    const ws1 = generateRawDataWorkbook([radioQ], [makeRow()], rosterCtx).getWorksheet('응답 내역')!;
+    expect(ws1.getRow(1).values).toEqual([
+      undefined,
+      '시스템ID',
+      '순번',
+      '조사 대상 그룹',
+      '접속 단말',
+      '브라우저',
+      '상태',
+      '시작일시',
+      '종료일시',
+      '소요시간',
+    ]);
+  });
+
+  it('미응답 조사 대상 행에도 명단 값이 채워지고 상태는 미응답이다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [
+        makeRow({
+          status: NOT_RESPONDED_STATUS,
+          questionResponses: {},
+          ipHash: null,
+          currentStepId: null,
+          platform: null,
+          browser: null,
+          startedAt: null,
+          completedAt: null,
+          totalSeconds: null,
+          contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' },
+        }),
+      ],
+      rosterCtx,
+    );
+    const dr = wb.getWorksheet('Raw Data')!.getRow(4);
+    expect(dr.getCell(6).value).toBe('미응답');
+    expect(dr.getCell(12).value).toBe('15기');
+    expect(dr.getCell(13).value).toBe('홍길동');
+    expect(dr.getCell(14).value).toBeNull();
+  });
+
+  it('코딩북에는 명단 열이 없다', () => {
+    const wb = generateRawDataWorkbook([radioQ], [makeRow()], rosterCtx);
+    const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
+    expect(names).not.toContain('기수');
+    expect(names).not.toContain('성명');
   });
 });

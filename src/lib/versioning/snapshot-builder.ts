@@ -71,6 +71,7 @@ interface SnapshotQuestion {
   minSelections?: number | undefined;
   maxSelections?: number | undefined;
   noticeContent?: string | undefined;
+  noticeBgColor?: string | undefined;
   requiresAcknowledgment?: boolean | undefined;
   placeholder?: string | undefined;
   tableValidationRules?: Question['tableValidationRules'] | undefined;
@@ -160,6 +161,7 @@ export function buildSurveySnapshot(
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
       noticeContent: q.noticeContent,
+      noticeBgColor: q.noticeBgColor,
       requiresAcknowledgment: q.requiresAcknowledgment,
       placeholder: q.placeholder,
       tableValidationRules: q.tableValidationRules,

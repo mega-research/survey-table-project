@@ -7,7 +7,10 @@ import {
   maskPhone,
   maskBizNumber,
   attrsKeyOf,
+  normalizeContactColumnScheme,
+  selectRawExportContactColumns,
 } from '@/lib/operations/contacts';
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
 
 // normalizeContactListArgs / hasActiveContactFilters 테스트는 함수 제거와 함께 삭제됨
 // (다중 조건 필터 모델로 전환 — page.tsx 가 인라인으로 page/sort/dir 파싱).
@@ -83,5 +86,63 @@ describe('attrsKeyOf', () => {
   });
   it("빈 문자열 → null", () => {
     expect(attrsKeyOf('')).toBeNull();
+  });
+});
+
+describe('selectRawExportContactColumns', () => {
+  // 운영 명단 모양 — system 열 사이에 pii·attrs 가 섞여 있고 2025 열은 콘솔 숨김이다.
+  const scheme: ContactColumnScheme = {
+    version: 1,
+    headerRow: 1,
+    columns: [
+      { key: 'resid', label: '시스템ID', source: 'system.resid', order: 0 },
+      { key: 'web', label: '응답 상태', source: 'system.web', order: 1 },
+      { key: '성명', label: '성명', source: 'pii.성명', order: 2, hidden: true, piiType: 'name' },
+      { key: '2025_상태', label: '2025_상태', source: 'attrs.2025_상태', order: 3, hidden: true },
+      { key: '기업명', label: '기업명', source: 'attrs.기업명', order: 4 },
+      { key: '기수', label: '', source: 'attrs.기수', order: 5 },
+    ],
+  };
+
+  it('attrs·pii 열 전부를 order 순으로 고르고 system 열은 뺀다 — 숨김 열 포함', () => {
+    expect(selectRawExportContactColumns(scheme)).toEqual([
+      { source: 'pii.성명', label: '성명', kind: 'pii', key: '성명' },
+      { source: 'attrs.2025_상태', label: '2025_상태', kind: 'attrs', key: '2025_상태' },
+      { source: 'attrs.기업명', label: '기업명', kind: 'attrs', key: '기업명' },
+      { source: 'attrs.기수', label: '기수', kind: 'attrs', key: '기수' },
+    ]);
+  });
+
+  it('저장 순서가 뒤섞여 있어도 order 오름차순이다', () => {
+    const shuffled: ContactColumnScheme = {
+      ...scheme,
+      columns: [...scheme.columns].reverse(),
+    };
+    expect(selectRawExportContactColumns(shuffled).map((c) => c.source)).toEqual([
+      'pii.성명',
+      'attrs.2025_상태',
+      'attrs.기업명',
+      'attrs.기수',
+    ]);
+  });
+
+  it('스킴이 없거나 columns 가 없으면 빈 배열이다', () => {
+    expect(selectRawExportContactColumns(null)).toEqual([]);
+    expect(
+      selectRawExportContactColumns(normalizeContactColumnScheme({ version: 1, headerRow: 1 })),
+    ).toEqual([]);
+  });
+
+  it('system.contact_owner·email_count·contact_result 도 전부 제외한다', () => {
+    const systemOnly: ContactColumnScheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'contact_owner', label: '담당자', source: 'system.contact_owner', order: 0 },
+        { key: 'email_count', label: '메일', source: 'system.email_count', order: 1 },
+        { key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: 2 },
+      ],
+    };
+    expect(selectRawExportContactColumns(systemOnly)).toEqual([]);
   });
 });
