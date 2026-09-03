@@ -45,11 +45,10 @@ interface Props {
  * 테두리와 라벨에서 중첩 삼항을 두 번 반복하면 한쪽만 어긋나도 눈에 띄지 않는다.
  */
 const REGION_TONE = {
-  // 액센트는 파랑 하나 - 그룹(담는 상자)은 가는 선, 문항은 굵은 선으로 가른다.
-  'group:active': { border: 'border-blue-500', badge: 'bg-blue-100 text-blue-800' },
-  'group:idle': { border: 'border-blue-300', badge: 'bg-blue-50 text-blue-700' },
-  'question:active': { border: 'border-blue-600', badge: 'bg-blue-600 text-white' },
-  'question:idle': { border: 'border-blue-400/70', badge: 'bg-blue-500/80 text-white' },
+  'group:active': { border: 'border-blue-500', badge: 'bg-blue-500' },
+  'group:idle': { border: 'border-blue-400/60', badge: 'bg-blue-500/70' },
+  'question:active': { border: 'border-amber-500', badge: 'bg-amber-500' },
+  'question:idle': { border: 'border-amber-400/60', badge: 'bg-amber-500/70' },
 } as const;
 
 type Drag = {
@@ -157,8 +156,7 @@ export function AnchorCanvas({
             onClick={() => !drawable && onRegionClick?.(region)}
             className={cn(
               'absolute rounded-[3px] transition-colors',
-              // 그룹은 담는 상자라 가는 선, 문항은 굵은 선 - 색이 하나라 굵기가 위계다
-              isGroup ? 'border' : 'border-2',
+              isGroup ? 'border-2' : 'border',
               // 지정 중에는 기존 영역이 드래그를 가로막지 않는다
               drawable && 'pointer-events-none opacity-40',
               // 채움 없이 테두리만 — 채우면 조사표 글씨를 덮는다
@@ -174,7 +172,7 @@ export function AnchorCanvas({
           >
             <span
               className={cn(
-                'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold',
+                'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold text-white',
                 isGroup ? 'left-1' : 'right-1',
                 tone.badge,
               )}
