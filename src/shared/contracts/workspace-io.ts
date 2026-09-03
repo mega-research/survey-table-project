@@ -528,7 +528,7 @@ export const SurveyGuestItem = z.object({
   email: z.string(),
   /**
    * 소속 기관 메모 — 게스트에게는 팀이 없으므로 이 칸이 「어디 사람인가」를 말한다
-   * (users.organization, 0086). 안 적힌 계정은 null 이다.
+   * (users.organization, 0103). 안 적힌 계정은 null 이다.
    */
   organization: z.string().nullable(),
   tabs: SurveyGuestTabsSchema,
@@ -675,7 +675,7 @@ export const TransferSurveyOwnershipInput = z.object({
    * 바뀐 위에 그대로 얹힌다. 기대 소유자를 함께 보내면 잠긴 값과 대조해 뒤늦은 요청을 거부할
    * 수 있다(티켓 체크박스 「동시 요청 중 하나만 성공」).
    *
-   * 소유자를 모르는 옛 설문(0089 2단계 배포)은 null 을 보낸다.
+   * 소유자를 모르는 옛 설문(0106 2단계 배포)은 null 을 보낸다.
    */
   expectedOwnerUserId: z.uuid().nullable(),
 });

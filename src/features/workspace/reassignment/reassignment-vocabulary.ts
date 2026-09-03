@@ -10,7 +10,7 @@ type PendingSurveyKind = PendingSurveyItem['pendingKind'];
 /**
  * 소유자가 없는 설문의 표시 이름.
  *
- * 팀 도입 이전 설문은 `owner_user_id` 가 NULL 인 채 백필됐다(0089, 2단계 배포). 「소유자
+ * 팀 도입 이전 설문은 `owner_user_id` 가 NULL 인 채 백필됐다(0106, 2단계 배포). 「소유자
  * 없음」이라고 쓰면 오류처럼 읽히므로 시스템 전체 보기의 이름을 그대로 쓴다 — 실제로 그
  * 범위에서만 보이는 설문이라 사실과도 맞다.
  */

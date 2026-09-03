@@ -1,10 +1,10 @@
--- 0084: Better Auth 인증 테이블 4종(users/sessions/accounts/verifications) + 계정 상태
+-- 0101: Better Auth 인증 테이블 4종(users/sessions/accounts/verifications) + 계정 상태
 --       감사 테이블(user_status_events) 생성. (2026-08-25)
 --
 -- 프로덕션·스테이징 DB 에는 이 5테이블이 **선반영**돼 있다(2026-07-14, 참조 워크트리
 -- 0048 과 동일 내용 — 2026-08-25 실측 대조 완료: 컬럼·기본값·FK·인덱스·RLS 일치).
 -- 따라서 이 파일은 프로덕션·스테이징에 적용하지 않는다 — 빈 DB 재생(pnpm db:setup-test)과
--- 신규 환경 부트스트랩 전용이다. 선반영분과 어댑터 기대의 차이는 0085 가 해소한다.
+-- 신규 환경 부트스트랩 전용이다. 선반영분과 어댑터 기대의 차이는 0102 가 해소한다.
 --
 -- id 는 Better Auth 설정(advanced.database.generateId)이 crypto.randomUUID() 로 생성해
 -- 삽입하므로 DB default 가 없다. 시드 스크립트도 동일하게 UUID 를 직접 넣는다.

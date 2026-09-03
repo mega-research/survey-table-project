@@ -1,4 +1,4 @@
--- 0096: 컨택 작성자 FK 를 앱 users 로 되돌린다. (2026-08-31, 역할 모델 v2 티켓 26)
+-- 0111: 컨택 작성자 FK 를 앱 users 로 되돌린다. (2026-08-31, 역할 모델 v2 티켓 26)
 --
 -- `contact_attempts.created_by` 와 `contact_uploads.uploaded_by` 가 아직 **`auth.users`**
 -- (Supabase Auth 테이블)를 가리키고 있었다. 앱의 계정은 티켓 01·02 에서 Better Auth 의

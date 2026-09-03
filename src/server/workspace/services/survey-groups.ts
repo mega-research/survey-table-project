@@ -89,7 +89,7 @@ export async function isActiveTeam(teamId: string): Promise<boolean> {
  * **해산된 팀의 그룹은 없는 것으로 본다**(티켓 13). 팀이 archived 가 되면 그 그룹은 아무도
  * 도달할 수 없는 잔여물이고(설문은 이미 전부 미분류로 떨어져 나갔다), 슈퍼어드민만 멤버십
  * 검사를 건너뛰어 이름 변경·삭제가 열려 있었다. 그룹 행 자체는 감사 계보로 남긴다
- * (0090 헤더) — 여기서 막는 것은 쓰기 경로다.
+ * (0107 헤더) — 여기서 막는 것은 쓰기 경로다.
  */
 export async function getSurveyGroupTeamId(groupId: string): Promise<string | null> {
   const [row] = await db
@@ -355,7 +355,7 @@ export async function moveSurveyToGroup(
  *
  * procedure 관문(assertSurveyGroupManage)도 같은 것을 묻지만 그건 별도 왕복이라, 확인과
  * 쓰기 사이에 해산이 커밋되면 archived 팀의 그룹 행이 그대로 수정·삭제된다. 티켓 13 이
- * 그 행을 **감사 계보로 보존**하기로 한 이상(0090 헤더) 그 창을 닫아야 한다.
+ * 그 행을 **감사 계보로 보존**하기로 한 이상(0107 헤더) 그 창을 닫아야 한다.
  *
  * `FOR SHARE` 인 이유는 해산의 `FOR NO KEY UPDATE`(teams UPDATE)와 **충돌**하기 때문이다.
  * 해산이 팀 행을 먼저 잠그므로(dissolveTeam), 해산 중이면 여기서 대기하다 archived 를 보고

@@ -25,7 +25,7 @@ const OK: WorkspaceActionOutput = { success: true };
 /**
  * 역할 없는 행을 조용히 뺀다.
  *
- * `users.fieldwork_role` 은 0093 CHECK 가 보장하지만 타입은 nullable 이다 — 제약이 보장하는
+ * `users.fieldwork_role` 은 0110 CHECK 가 보장하지만 타입은 nullable 이다 — 제약이 보장하는
  * 것을 코드가 다시 주장하지 않고(`!` 나 기본값을 넣지 않고) 그냥 건너뛴다. 목록과 후보
  * 검색이 같은 규칙을 봐야 해서 한 자리에 둔다.
  */
@@ -43,7 +43,7 @@ function withRole<T extends { fieldworkRole: FieldworkRole | null }>(
  * `kind='fieldwork'` 만 본다 — 참여자·게스트는 같은 테이블에 살지만 모달의 다른 블록이고
  * 권한도 다르다(게스트 목록이 `kind='guest'` 만 보는 것과 짝).
  *
- * 업체는 **inner join** 이다. 소속이 없는 실사 계정은 존재할 수 없고(0093 CHECK), 종료된
+ * 업체는 **inner join** 이다. 소속이 없는 실사 계정은 존재할 수 없고(0110 CHECK), 종료된
  * 업체 소속이라도 이름은 그대로 보여야 한다 — 「이 사람은 어느 업체였는가」가 목록에서
  * 사라지면 해제 판단을 할 수 없다. 그래서 status 로 좁히지 않는다.
  */
@@ -80,7 +80,7 @@ export async function listSurveyFieldwork(surveyId: string): Promise<SurveyField
  * 화면이 업체로 구분하라고 말하므로 그 축으로 찾을 수 있어야 한다.
  *
  * 이미 초대된 사람은 빠진다(kind 를 가리지 않는다 — 어느 자격이든 그 설문에 서 있으면
- * 두 번째 자격을 겸할 수 없다는 것이 0092 의 계약이다).
+ * 두 번째 자격을 겸할 수 없다는 것이 0109 의 계약이다).
  */
 export async function searchFieldworkCandidates(
   input: SearchFieldworkCandidatesInput,
@@ -175,7 +175,7 @@ export async function addSurveyFieldwork(
       });
     } catch (error) {
       // UNIQUE 는 (surveyId, userId) 라 kind 를 가리지 않는다 — 같은 사람이 참여자·게스트로
-      // 이미 서 있어도 여기로 온다. 두 자격을 겸할 수 없다는 것이 0092 의 계약이다.
+      // 이미 서 있어도 여기로 온다. 두 자격을 겸할 수 없다는 것이 0109 의 계약이다.
       if (isUniqueViolation(error)) throw new FieldworkAlreadyInvitedError();
       throw error;
     }

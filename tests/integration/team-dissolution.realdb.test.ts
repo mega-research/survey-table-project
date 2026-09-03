@@ -307,7 +307,7 @@ describe.skipIf(!isLocalDb)('팀 해산 (real local DB)', () => {
 
     await admin.teams.dissolve({ teamId, confirmName: teamName });
 
-    // 그룹 행 자체는 감사 계보로 남지만(0090 헤더) 쓰기 경로는 닫힌다 —
+    // 그룹 행 자체는 감사 계보로 남지만(0107 헤더) 쓰기 경로는 닫힌다 —
     // 슈퍼어드민도 예외가 아니다.
     await expect(admin.surveyGroups.rename({ groupId, name: '되살리기' })).rejects.toMatchObject({
       code: 'NOT_FOUND',

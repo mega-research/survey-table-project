@@ -2,7 +2,7 @@
  * 사용자 생성 모달 (.pen FLOW 1-2) — 유형에 따라 필드가 바뀌고, 서버로 무엇을 보내는가.
  *
  * 티켓 24 로 실사 세그먼트가 열렸다 — 소속 업체와 역할이 **함께** 실려 나가는지가 이 파일의
- * 새 축이다. 서버(CreateUserInput 유니온 + 0093 CHECK)가 유일한 판정자이지만, 화면이 먼저
+ * 새 축이다. 서버(CreateUserInput 유니온 + 0110 CHECK)가 유일한 판정자이지만, 화면이 먼저
  * 막아야 "눌렀는데 400" 이 되지 않는다.
  */
 import { render, screen } from '@testing-library/react';

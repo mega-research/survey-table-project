@@ -1,7 +1,7 @@
 /**
  * Better Auth 서버 기반 실 DB 왕복 integration test (워크스페이스 역할 v2 티켓 01)
  *
- * 목적: Better Auth 인스턴스(lib/auth/server)가 실제 Postgres(선반영 5테이블 + 0085 정합)
+ * 목적: Better Auth 인스턴스(lib/auth/server)가 실제 Postgres(선반영 5테이블 + 0102 정합)
  * 위에서 인증 기반 계약을 지킨다는 것을 CI 에 고정한다.
  *   - email+password sign-in 이 세션을 발급한다 (UUID user id, 30일 만기)
  *   - 발급된 세션 쿠키로 서버에서 세션을 검증할 수 있다 (getSession)

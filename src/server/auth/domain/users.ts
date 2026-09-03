@@ -67,7 +67,7 @@ export class LastActiveSuperadminError extends Error {
  * 지목한 실사 업체가 없거나 이미 종료됐다 (티켓 24).
  *
  * 두 자리가 이 에러를 던진다 — 계정 발급과 **재활성화**(재직 복귀·재입사)다. 후자가 필요한
- * 이유는 실사 계정에 「소속 없음」 상태가 없기 때문이다(0093 의 users_fieldwork_fields_check):
+ * 이유는 실사 계정에 「소속 없음」 상태가 없기 때문이다(0110 의 users_fieldwork_fields_check):
  * 업체가 종료된 뒤 소속 계정을 되살리면 종료된 업체 소속으로 로그인하는 사람이 생긴다.
  * 업체 종료는 재직 중 계정이 0명일 때만 되므로 그 경로로만 도달한다.
  *

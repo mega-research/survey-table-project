@@ -50,7 +50,7 @@ export interface SurveyListItem {
   teamName: string | null;
   visibility: SurveyVisibility;
   assignmentStatus: SurveyAssignmentStatus;
-  /** 소유자. 0089 2단계 배포 중이라 옛 설문은 null 일 수 있다. */
+  /** 소유자. 0106 2단계 배포 중이라 옛 설문은 null 일 수 있다. */
   ownerUserId: string | null;
   ownerName: string | null;
   /**

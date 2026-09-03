@@ -316,7 +316,7 @@ export async function transferOwnershipInTx(
     .set({
       ownerUserId: newOwnerUserId,
       teamId,
-      // 팀이 움직이면 그룹은 미분류로 내려간다 — 그룹은 팀 소유물이다(0090 헤더의 계약).
+      // 팀이 움직이면 그룹은 미분류로 내려간다 — 그룹은 팀 소유물이다(0107 헤더의 계약).
       ...(movedTeam ? { surveyGroupId: null } : {}),
       // 이전이 끝나면 승계 대기 상태는 해소된다.
       ownershipStatus: 'normal' as const,

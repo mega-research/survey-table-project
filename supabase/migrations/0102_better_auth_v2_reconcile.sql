@@ -1,6 +1,6 @@
--- 0085: Better Auth 선반영 테이블 ↔ 1.7 어댑터 기대 정합 + users.user_type 추가. (2026-08-25)
+-- 0102: Better Auth 선반영 테이블 ↔ 1.7 어댑터 기대 정합 + users.user_type 추가. (2026-08-25)
 --
--- 적용 대상: 스테이징·프로덕션 (선반영 5테이블 위에 적용) + 빈 DB 재생(0084 직후).
+-- 적용 대상: 스테이징·프로덕션 (선반영 5테이블 위에 적용) + 빈 DB 재생(0101 직후).
 --
 -- 1) users.user_type — 계정 유형 'internal' | 'guest' | 'fieldwork' (ADR-0018).
 --    NOT NULL 2단계 배포 규칙의 형태(nullable 추가 → 백필 → SET NOT NULL)를 한 파일 안에서

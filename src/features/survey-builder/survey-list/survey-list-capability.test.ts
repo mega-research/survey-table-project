@@ -54,7 +54,7 @@ describe('canEditSurveyCard', () => {
     expect(canEditSurveyCard({ ...teamSurvey, visibility: 'invite_only' }, viewer())).toBe(false);
   });
 
-  it('소유자를 모르는 옛 설문(0089 이전)은 팀 공개 판정으로만 연다', () => {
+  it('소유자를 모르는 옛 설문(0106 이전)은 팀 공개 판정으로만 연다', () => {
     expect(
       canEditSurveyCard(
         { ...teamSurvey, ownerUserId: null },

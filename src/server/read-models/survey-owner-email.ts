@@ -22,7 +22,7 @@ import { surveys, users } from '@/db/schema';
  * 발신 주소로 떨어져, 답장이 아무도 읽지 않는 사서함에 쌓인다. 그 상황을 알리는 것은
  * 이 함수가 아니라 재배치 센터의 승계 대기 경고다.
  *
- * 소유자가 아예 없는 설문(팀 도입 이전 백필분, 0089 2단계 배포)은 null 이다.
+ * 소유자가 아예 없는 설문(팀 도입 이전 백필분, 0106 2단계 배포)은 null 이다.
  */
 export async function getSurveyOwnerEmail(
   surveyId: string,

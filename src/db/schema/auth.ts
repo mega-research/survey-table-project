@@ -17,8 +17,8 @@ import type { FieldworkRole, UserStatus, UserType } from '@/shared/contracts/aut
  * id 는 Better Auth 설정(advanced.database.generateId)이 crypto.randomUUID() 로
  * 생성해 삽입하므로 DB default 가 없다. 시드 스크립트도 동일하게 UUID 를 직접 넣는다.
  *
- * 프로덕션·스테이징 DB 에는 5테이블이 선반영돼 있다(0084 재생용 마이그레이션 참조).
- * better-auth 1.7 어댑터 기대와의 차이(accounts.issuer 등)는 0085 가 해소한다.
+ * 프로덕션·스테이징 DB 에는 5테이블이 선반영돼 있다(0101 재생용 마이그레이션 참조).
+ * better-auth 1.7 어댑터 기대와의 차이(accounts.issuer 등)는 0102 가 해소한다.
  */
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
@@ -32,24 +32,24 @@ export const users = pgTable('users', {
   isSuperadmin: boolean('is_superadmin').notNull().default(false),
   // 직책 — 슈퍼어드민이 사용자 관리에서 입력 (internal 전용, 티켓 03)
   jobTitle: text('job_title'),
-  // 소속 기관 메모 — guest 전용 자유 입력 (0086). internal 은 팀 멤버십(티켓 06),
+  // 소속 기관 메모 — guest 전용 자유 입력 (0103). internal 은 팀 멤버십(티켓 06),
   // fieldwork 는 실사 업체 엔티티(티켓 24)에서 소속을 얻으므로 이 컬럼을 쓰지 않는다.
   organization: text('organization'),
-  // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0085 마이그레이션)
+  // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0102 마이그레이션)
   userType: text('user_type').$type<UserType>().notNull().default('internal'),
-  // 소속 실사 업체 — fieldwork 전용 (0093, 티켓 24).
+  // 소속 실사 업체 — fieldwork 전용 (0110, 티켓 24).
   //
-  // FK 는 0093 마이그레이션의 ALTER TABLE 이 만든다. drizzle 에서 `.references()` 를 붙이지
+  // FK 는 0110 마이그레이션의 ALTER TABLE 이 만든다. drizzle 에서 `.references()` 를 붙이지
   // 말 것 — `fieldwork_orgs` 는 workspace.ts 에 있고 그 파일이 이 파일의 `users` 를 쓰므로
   // 순환 import 가 된다(`survey_responses.contactTargetId` 와 같은 선례).
   fieldworkOrgId: uuid('fieldwork_org_id'),
-  // 업체 내 역할 — leader | worker. fieldwork 전용 (0093).
+  // 업체 내 역할 — leader | worker. fieldwork 전용 (0110).
   //
   // 두 컬럼과 user_type 의 정합은 **DB CHECK 가 지킨다**(users_fieldwork_fields_check):
   // fieldwork 면 둘 다 있어야 하고, 아니면 둘 다 NULL 이어야 한다. 한 행 안의 조건이라
   // survey_participants.kind 와 달리 CHECK 로 걸 수 있다.
   fieldworkRole: text('fieldwork_role').$type<FieldworkRole>(),
-  // 세션이 마지막으로 일괄 폐기된 시각 (0087, 티켓 30). 재설정·상태 전이가 갱신한다.
+  // 세션이 마지막으로 일괄 폐기된 시각 (0104, 티켓 30). 재설정·상태 전이가 갱신한다.
   // 로그인 경합 판정에서 **값이 바뀌었는지**만 보므로 시각 자체의 정확도는 중요하지 않다.
   sessionsRevokedAt: timestamp('sessions_revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

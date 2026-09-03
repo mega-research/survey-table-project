@@ -401,7 +401,7 @@ describe('실사 두 열의 차이 — 초대와 파생 시야 (티켓 25)', () 
     expect([...leader]).toEqual([]);
   });
 
-  it('소속 업체가 없는 실사 계정은 아무것도 못 본다 — 0093 CHECK 가 막지만 코어도 접는다', () => {
+  it('소속 업체가 없는 실사 계정은 아무것도 못 본다 — 0110 CHECK 가 막지만 코어도 접는다', () => {
     const orphan: SurveyAccessSubject = {
       ...COLUMNS['실사원(초대 설문)'].subject,
       fieldworkOrgId: null,

@@ -7,14 +7,14 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > 최종 갱신: 2026-08-31 (역할 모델 v2 티켓 27 **대리 응답 귀속 + 대행 배너** — 실사가
 > 「응답 대행」으로 여는 것은 **응답자와 똑같은 응답 페이지**다(ADR-0019). 그래서 저장된
 > 응답만 놓고는 직접 응답과 구별되지 않는데 검수·정산이 그 구별을 요구한다.
-> `survey_responses.fieldwork_user_id`(0099)가 그것이고 **NULL 이 응답자 직접 응답**이다.
+> `survey_responses.fieldwork_user_id`(0112)가 그것이고 **NULL 이 응답자 직접 응답**이다.
 > 판정 코어는 `server/fieldwork-proxy` — `data-scope`·`survey-access` 와 나란한 자리다.
 > **입력은 초대 토큰과 세션 쿠키 둘뿐**이라 화면이 위조할 것이 없고, 팀장의 파생 시야는
 > `contacts.writeAttempts` 가 없어 자동으로 걸린다. **귀속은 행 id 가 확정된 뒤 한 번**
 > 찍는다 — 진입 서비스마다 인자를 흘리면 분기가 늘 때마다 놓친다(실제로 버전 이관·행
 > 물려받기·테스트 lane 셋을 놓쳤다). **「응답자 화면 diff 0」은 `?fw=1` 힌트가 지킨다** —
 > 힌트가 없으면 배너 조회 자체를 안 하므로 초대 응답자에게 왕복이 늘지 않는다. 힌트는
-> 권한이 아니다(판정은 서버). 마이그레이션 0099.
+> 권한이 아니다(판정은 서버). 마이그레이션 0112.
 > 직전: 티켓 26 실사 조사 대상 화면)
 >
 > 티켓 26 **실사 조사 대상 화면** — 초대가 실제로 여는
@@ -26,7 +26,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > 나가고 그 링크는 `pub` 경로라 서버가 다시 못 막는다(ADR-0019 「본인도 초대돼야 한다」).
 > **메모·연락 방법에 좁은 표면 하나**(`contacts.targets.setMemo`)를 세웠다 — 형제 `update` 와
 > 요구 capability 가 달라야(`contacts.writeAttempts` ↔ `contacts.manage`) 실사에게 명단 수정이
-> 함께 열리지 않는다. 마이그레이션 0096(컨택 작성자 FK 를 `auth.users` → `public.users`).
+> 함께 열리지 않는다. 마이그레이션 0111(컨택 작성자 FK 를 `auth.users` → `public.users`).
 > 직전: 티켓 25 실사 초대 + 실사 홈)
 >
 > 티켓 25 **실사 초대 + 실사 홈** — 실사 열이 처음
@@ -38,11 +38,11 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > 사람이 초대돼 있다」다. 로더의 EXISTS 는 팀장에게만 켜지고 조인 조건이 **업체**인 것이 그
 > 경계다. **파티션 규칙이 넓어졌다** — `isGuestViewer` 가 `isExternalViewer` 가 됐다: 실사가
 > 컨택 표면을 얻으면서, 게스트만 real 로 고정하면 테스트 모드가 켜진 설문에서 실사원이 test
-> 파티션을 읽고 쓴다. 마이그레이션 없음(0092 의 `kind='fieldwork'` 소비).
+> 파티션을 읽고 쓴다. 마이그레이션 없음(0109 의 `kind='fieldwork'` 소비).
 > 직전: 티켓 24 실사 업체 + 계정 발급)
 >
 > 티켓 24 **실사 업체 + 계정 발급** — 외주 실사 인력의
-> 소속 경계가 생겼다. `fieldwork_orgs`(0093)는 **워크스페이스가 아니다**: 설문을 소유하지
+> 소속 경계가 생겼다. `fieldwork_orgs`(0110)는 **워크스페이스가 아니다**: 설문을 소유하지
 > 않고 팀 멤버십을 만들지 않으며 재배치 목적지가 될 수 없다(ADR-0019). 정합은
 > `users_fieldwork_fields_check` 가 지킨다 — 실사면 소속·역할이 둘 다 있어야 하고 아니면 둘 다
 > NULL 이어야 한다(`survey_participants.kind` 와 달리 **한 행 안의 조건**이라 걸 수 있다).
@@ -52,7 +52,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > 업체의 재직 계정은 정의가 없다. 발급은 업체 행을 `FOR SHARE` 로 잡고 확인하고 종료는
 > `FOR UPDATE` 로 잡는다 — 짝이 없으면 「활성 계정을 가진 종료 업체」가 남는다.
 > **capability 는 하나도 열지 않았다** — 실사 열은 여전히 전 칸 차단이고 부여는 티켓 25 다.
-> 마이그레이션 0093. 직전: 티켓 23 C 검증 게이트)
+> 마이그레이션 0110. 직전: 티켓 23 C 검증 게이트)
 >
 > 티켓 23 **C 검증 게이트** — 페이즈 C(16~22)가 세운
 > 공유·게스트 계약을 스위트로 못 박았다. **스펙 §8 표를 행 단위로 옮긴 게이트**가 생겼고
@@ -83,7 +83,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > **응답 현황 하나**다. 그래서 분석·내보내기·응답 상세·컨택 원본·메일·편집은 탭을 아무리 열어도
 > 항상 차단이다 — 티켓 11 이 남겨 둔 「게스트 export 현행 유지」도 함께 뒤집혔다.
 > `GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·강제 로그아웃 라우트는 은퇴했고, scoped 어댑터
-> 3형제의 게스트 분기가 사라져 **판정은 코어 하나**가 한다. 마이그레이션 없음(0092 컬럼 소비).
+> 3형제의 게스트 분기가 사라져 **판정은 코어 하나**가 한다. 마이그레이션 없음(0109 컬럼 소비).
 > 직전: 티켓 20 메일 회신 소유자 연동)
 
 > 테스트 트리 재편(2026-08-25, ADR-0017 — staging 병합으로 들어옴): 단위 테스트 전면
@@ -399,10 +399,10 @@ users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
 ├── status                 # pending|active|rejected|suspended|departed — pending/rejected 는
 │                          # 도달 불가 어휘(공개 가입 폐기, ADR-0018). DB default 'pending' 은 안전장치
 ├── isSuperadmin, jobTitle
-├── organization           # 게스트 소속 기관 메모 (0086, nullable) — internal 은 팀·fieldwork 는 업체에서 소속을 얻는다
-├── userType               # internal|guest|fieldwork (0085, NOT NULL default 'internal' + CHECK)
-├── fieldworkOrgId         # 소속 실사 업체 (0093, nullable) — FK 는 마이그레이션 ALTER 가 만든다(순환 회피)
-├── fieldworkRole          # leader|worker (0093, nullable) — 팀 역할과 별개 축
+├── organization           # 게스트 소속 기관 메모 (0103, nullable) — internal 은 팀·fieldwork 는 업체에서 소속을 얻는다
+├── userType               # internal|guest|fieldwork (0102, NOT NULL default 'internal' + CHECK)
+├── fieldworkOrgId         # 소속 실사 업체 (0110, nullable) — FK 는 마이그레이션 ALTER 가 만든다(순환 회피)
+├── fieldworkRole          # leader|worker (0110, nullable) — 팀 역할과 별개 축
 │                          # 위 둘과 userType 의 정합은 users_fieldwork_fields_check 가 지킨다:
 │                          # fieldwork 면 둘 다 있어야 하고, 아니면 둘 다 NULL 이어야 한다
 └── createdAt, updatedAt
@@ -427,14 +427,14 @@ user_status_events         # 계정 상태 전이 감사 (append-only)
 └── createdAt
 ```
 
-> **선반영 주의**: 프로덕션·스테이징에는 5테이블이 2026-07-14 선반영돼 있다. `0084_better_auth_tables.sql` 은
-> **빈 DB 재생 전용 — 프로덕션·스테이징에 적용 금지**, 적용 대상은 `0085_better_auth_v2_reconcile.sql`
+> **선반영 주의**: 프로덕션·스테이징에는 5테이블이 2026-07-14 선반영돼 있다. `0101_better_auth_tables.sql` 은
+> **빈 DB 재생 전용 — 프로덕션·스테이징에 적용 금지**, 적용 대상은 `0102_better_auth_v2_reconcile.sql`
 > (user_type + issuer 백필 + 어댑터 기대 인덱스)뿐이다. RLS 5테이블 전부 ON(정책 0 = deny-all).
 
 ### 워크스페이스 도메인 (workspace.ts — 팀·멤버십)
 
 ```
-teams                      # 팀 = 설문 소유·접근 경계 (0088)
+teams                      # 팀 = 설문 소유·접근 경계 (0105)
 ├── id, name (전체 조직 경로 포함 표시명), order
 ├── status                 # active | archived — 해산은 삭제가 아니라 archived (ADR-0011, 티켓 13)
 ├── archivedBy, archivedAt
@@ -452,18 +452,18 @@ team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 �
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
 └── createdAt
 
-survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0090, 티켓 12)
+survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0107, 티켓 12)
 ├── id, teamId (FK restrict), name, order
 ├── createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
 
-fieldwork_orgs             # 실사 업체 = 외주 실사 인력의 소속 경계 (0093, 티켓 24)
+fieldwork_orgs             # 실사 업체 = 외주 실사 인력의 소속 경계 (0110, 티켓 24)
 ├── id, name, status       # active | archived — 종료도 삭제가 아니라 archived (ADR-0019)
 ├── memo                   # 운영 메모 (판정에 안 쓴다)
 ├── archivedBy, archivedAt, createdBy (FK restrict)
 └── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
 
-survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0092, 티켓 18·21)
+survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0109, 티켓 18·21)
 ├── id, surveyId (FK **cascade**), userId (FK restrict)
 ├── kind                   # member | guest | fieldwork — users.user_type 과의 정합은 서비스가 지킨다
 │                          # (두 테이블에 걸친 조건이라 CHECK 불가)
@@ -471,7 +471,7 @@ survey_participants        # 설문 단위 부여 — 참여자·게스트·실�
 ├── addedBy (FK restrict), createdAt
 └── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
 
-survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0091, 티켓 14 — append-only)
+survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0108, 티켓 14 — append-only)
 ├── id, surveyId (FK **cascade**)
 ├── action                 # unassign(해산) | assign(재배치 센터) | transfer(승계·티켓 19)
 ├── fromOwnerId, toOwnerId, fromTeamId, toTeamId (전부 FK restrict, nullable)
@@ -493,7 +493,7 @@ survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0091, �
 > `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이라 그룹 삭제는 설문을 미분류로
 > 되돌릴 뿐이다. 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
 > 내려야 한다** — 복합 FK 로 강제하지 못한 이유(MATCH SIMPLE 은 team_id NULL 을 건너뛰고
-> MATCH FULL 은 그룹 없는 정상 설문을 위반으로 만든다)는 0090 헤더에 있고, 지키는 것은
+> MATCH FULL 은 그룹 없는 정상 설문을 위반으로 만든다)는 0107 헤더에 있고, 지키는 것은
 > 서비스(잠긴 값 재검증)와 조회(team_id 동시 일치 조인)다. 팀 해산·재배치·승계(티켓 13·14·19)의 계약이다.
 
 ### 설문 도메인 (surveys.ts)
@@ -516,10 +516,10 @@ surveys                    # 설문 설정
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
 ├── currentVersionId              # 현재 활성 배포 버전
-├── teamId                        # 소유 팀 (0089, nullable — 배치 대기면 NULL)
+├── teamId                        # 소유 팀 (0106, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
-├── ownerUserId, createdBy        # 소유자·작성자 (0089, 2단계 배포 중이라 아직 nullable)
-├── surveyGroupId                 # 소속 그룹 (NULL = 미분류, FK ON DELETE SET NULL — 0090)
+├── ownerUserId, createdBy        # 소유자·작성자 (0106, 2단계 배포 중이라 아직 nullable)
+├── surveyGroupId                 # 소속 그룹 (NULL = 미분류, FK ON DELETE SET NULL — 0107)
 ├── ownershipStatus               # normal | succession_pending (승계 전이는 티켓 19)
 ├── assignmentStatus              # assigned | assignment_pending — teamId 와 CHECK 로 한 몸
 ├── deletedAt (soft delete)
@@ -565,7 +565,7 @@ survey_responses           # 수집된 응답
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
-├── fieldworkUserId               # 대리 응답을 입력한 실사 계정 (0099) — NULL 이 응답자 직접 응답
+├── fieldworkUserId               # 대리 응답을 입력한 실사 계정 (0112) — NULL 이 응답자 직접 응답
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
@@ -644,7 +644,7 @@ contact_pii                # 컨택 PII 분리 저장 (암호화)
 
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
-├── resultCode, note, createdBy   # createdBy FK → public.users (0096, 티켓 26 이 채우기 시작)
+├── resultCode, note, createdBy   # createdBy FK → public.users (0111, 티켓 26 이 채우기 시작)
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
 ```
 
@@ -926,7 +926,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - **소유권 이전은 소유자·팀·그룹을 한 번에 움직인다**(티켓 19, 스펙 §4·§7, .pen FLOW 4-4·9-3).
   수동 이전(`workspace.ownership.transfer`, `survey.transferOwnership`)과 퇴사 승계가 같은
   `transferOwnershipInTx` 를 쓴다 — 불변식이 하나라서다: **소유자는 소유 팀 사람이어야 하고**
-  (티켓 13 revocation), 팀이 움직이면 **그룹은 미분류로** 내려간다(0090 계약). 그래서 타 팀
+  (티켓 13 revocation), 팀이 움직이면 **그룹은 미분류로** 내려간다(0107 계약). 그래서 타 팀
   참여자에게 넘기면 설문이 그 사람 팀으로 따라가고, 활성 팀이 없거나 둘 이상이면 거부한다
   (시스템이 고르면 설문이 엉뚱한 팀 목록에 나타난다). 목적지 팀은 `lockTeamMembers` +
   `teams FOR SHARE` 로 **잠근 채** 확인한다 — 무잠금이면 그 사이 커밋된 해산을 못 보고
@@ -951,7 +951,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   **퇴사는 `team_members` 를 지우지 않는다** — 팀 상세가 비활성 멤버를 표식과 함께 보여줘야
   하고, 접근을 막는 것은 유효 소속이 아니라 계정 상태다.
 - **참여자는 팀 경계를 넘는 유일한 접근 경로다**(티켓 18, 스펙 §4·§8, .pen FLOW 4-2).
-  `survey_participants`(0092) 행 하나가 타 팀 사람을 **그 설문 하나에만** 들인다 — 팀 멤버십은
+  `survey_participants`(0109) 행 하나가 타 팀 사람을 **그 설문 하나에만** 들인다 — 팀 멤버십은
   만들지 않고 소유 팀의 다른 설문·그룹은 그대로다. 판정 코어가 참여 행을 **설문 행과 같은
   쿼리에서 LEFT JOIN** 으로 읽는다(따로 조회하면 관문이 도는 모든 표면에서 왕복이 하나씩 늘고,
   아끼려 캐시를 두면 초대를 뺀 직후에도 통과하는 창이 생긴다). 목록은 팀 조건과 **OR** 로
@@ -1182,11 +1182,11 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - 잠금 순서는 **팀 멤버 → 팀 행 `FOR SHARE` → 설문 id 오름차순**으로 해산·담기와 같다.
     맞추는 것이 목적이 아니라 배치가 해산의 **정확히 반대 방향 이동**이라 서로를 기다려야 한다.
     배치는 `survey_group_id` 를 NULL 로 둔다(그룹은 팀 소유물 — 새 팀에서는 미분류).
-  - 인박스 목록은 **200건 상한, 지표는 전체 수**다. 0089 백필이 팀 도입 이전 설문 전부를
+  - 인박스 목록은 **200건 상한, 지표는 전체 수**다. 0106 백필이 팀 도입 이전 설문 전부를
     배치 대기로 세워 초기 운영에서 수천 건일 수 있다 — 화면이 「상위 N건」임을 말한다.
   - **배치 취소 표면을 만들지 말 것.** 인박스는 처리하는 곳이지 되돌리는 곳이 아니다(해산에
     취소가 없는 것과 같은 이유). 되돌리려면 정식 이전(티켓 19)을 쓴다.
-- **배치 대기 설문의 「출신 팀」은 `survey_ownership_events` 에만 남는다**(0091, 티켓 14).
+- **배치 대기 설문의 「출신 팀」은 `survey_ownership_events` 에만 남는다**(0108, 티켓 14).
   해산이 `surveys.team_id` 를 NULL 로 내리므로 설문 행에는 출처가 없고, 팀 쪽 `dissolve`
   감사는 **규모**(surveyCount)만 적을 뿐 어느 설문인지 적지 않는다. 그래서 `dissolveTeam` 이
   설문별 `unassign` 행을 함께 쓴다 — 이 행이 없으면 .pen 8-4 의 「현재 소유 팀 · 해산됨」도,
@@ -1222,7 +1222,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   `assertSurveyCapabilityPage` 짝. 구 `assertGuestSurveyPageAccess`(guest-page-guard)는 티켓 10
   이 걷었다.
 - **세션 폐기는 표식으로 경합까지 닫는다.** 재설정·상태 전이는 세션을 지우면서
-  `users.sessions_revoked_at`(0087)을 갱신하고, 로그인은 시작 시점의 값을 읽어뒀다가 세션을
+  `users.sessions_revoked_at`(0104)을 갱신하고, 로그인은 시작 시점의 값을 읽어뒀다가 세션을
   만들기 직전에 다시 읽어 다르면 생성을 취소한다(`lib/auth/session-revocation.ts`).
   시각의 대소가 아니라 **같은 컬럼의 두 번 읽기**라 앱·DB 시계 오차와 무관하다.
   표식은 **먼저 찍힌 것이 이긴다** — 흐름 도중 다시 읽어 덮으면 막으려던 창이 그대로 열린다.
@@ -1375,7 +1375,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     표면이 두 자격을 지고 실사에게 명단 수정이 함께 열린다. 서비스도 `attrs`·PII·group_value 를
     건드리지 않는다. 화면의 저장 버튼을 회차와 가른 것도 같은 축이다 — 회차는 누적, 메모는
     덮어쓰기라 한 버튼이면 메모만 고치려다 회차가 쌓인다.
-  - **작성자는 이 티켓이 처음 채웠다**(0096). `contact_attempts.created_by` 와
+  - **작성자는 이 티켓이 처음 채웠다**(0111). `contact_attempts.created_by` 와
     `contact_uploads.uploaded_by` 의 FK 가 아직 `auth.users` 를 가리켜 **채울 수 없는
     컬럼**이었다(티켓 01·02 가 계정을 `public.users` 로 옮긴 뒤로). 값을 넣으면 곧바로 FK
     위반이라 `addAttempt` 는 아예 쓰지 않고 있었다.
@@ -1413,7 +1413,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - 음성 검증은 `fieldwork-proxy.realdb.test.ts` — 귀속·응답자 null 2종·자격 5종·진입 분기
     4종(물려받기·버전 이관·컨택 불일치·삭제된 완료)·완료 거부 3종.
 - **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
-  `fieldwork_orgs`(0093)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
+  `fieldwork_orgs`(0110)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
   테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
   「이 실사 계정이 어느 업체 사람인가」 하나이며, 그 경계가 없으면 실사 팀장의 파생 시야(티켓 25)가
   타 업체 설문까지 넘친다. 관리 표면 5종(`workspace.fieldworkOrgs`)은 **전부 슈퍼어드민**이다 —
@@ -1719,7 +1719,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.mjs` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
 
-    **마이그레이션 번호는 그보다 조용한 축이다.** 브랜치들이 같은 base 에서 갈라지면 같은 번호를 서로 다른 뜻으로 선점할 수 있고(실제로 0084·0085 가 그랬다), CI 게이트는 **태그 전체**만 보므로 접두 중복을 잡지 못한다(`0003_*`·`0009_*`·`0019_*` 가 이미 공존한다). 새 마이그레이션 번호는 **세 워크트리의 최댓값 + 1** 로 잡고, 재생 순서는 파일명이 아니라 `manual-migrations.json` **배열**이므로 **두 번째로 병합하는 쪽은 배열 끝에 append** 한다(번호순 삽입 금지).
+    **마이그레이션 번호는 그보다 조용한 축이다.** 브랜치들이 같은 base 에서 갈라지면 같은 번호를 서로 다른 뜻으로 선점할 수 있고(실제로 0101·0102 가 그랬다), CI 게이트는 **태그 전체**만 보므로 접두 중복을 잡지 못한다(`0003_*`·`0009_*`·`0019_*` 가 이미 공존한다). 새 마이그레이션 번호는 **세 워크트리의 최댓값 + 1** 로 잡고, 재생 순서는 파일명이 아니라 `manual-migrations.json` **배열**이므로 **두 번째로 병합하는 쪽은 배열 끝에 append** 한다(번호순 삽입 금지).
 
 13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 

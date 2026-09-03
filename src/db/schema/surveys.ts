@@ -128,7 +128,7 @@ export const surveys = pgTable(
 
     contactEmail: text('contact_email'),
 
-    // 워크스페이스 귀속 (0089 마이그레이션, 역할 모델 v2 티켓 07)
+    // 워크스페이스 귀속 (0106 마이그레이션, 역할 모델 v2 티켓 07)
     //
     // 설문은 팀에 속하고 팀원은 자기 팀 설문만 본다(ADR-0006·0008). 팀을 아직 못 정한
     // 설문은 가짜 기본 팀에 넣지 않고 teamId=NULL + assignmentStatus='assignment_pending'
@@ -136,11 +136,11 @@ export const surveys = pgTable(
     // 정해준다. 둘의 정합은 DB CHECK 가 강제한다.
     teamId: uuid('team_id').references(() => teams.id, { onDelete: 'restrict' }),
     visibility: text('visibility').$type<SurveyVisibility>().notNull().default('team'),
-    // ownerUserId·createdBy 는 앱이 채우는 값이라 2단계 배포다(주의사항 8) — 0089 는
+    // ownerUserId·createdBy 는 앱이 채우는 값이라 2단계 배포다(주의사항 8) — 0106 는
     // nullable 로 추가하고 백필만 한다. SET NOT NULL 은 앱 배포 후(티켓 29).
     ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'restrict' }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'restrict' }),
-    // 소속 그룹 (NULL = 미분류, 0090). 그룹은 정리용 묶음이라 접근 판정에 쓰이지 않는다.
+    // 소속 그룹 (NULL = 미분류, 0107). 그룹은 정리용 묶음이라 접근 판정에 쓰이지 않는다.
     // 그룹 삭제는 이 값을 NULL 로 되돌릴 뿐 설문을 지우지 않는다(ON DELETE SET NULL).
     surveyGroupId: uuid('survey_group_id').references(() => surveyGroups.id, {
       onDelete: 'set null',
@@ -171,7 +171,7 @@ export const surveys = pgTable(
 );
 
 /**
- * 설문 소유 팀·소유자 이동 감사 (append-only, 0091 — 티켓 14).
+ * 설문 소유 팀·소유자 이동 감사 (append-only, 0108 — 티켓 14).
  *
  * 해산은 `surveys.team_id` 를 NULL 로 내리므로 설문 행만 봐서는 **출신 팀**을 알 수 없고,
  * 팀 쪽 감사(dissolve)는 규모만 적을 뿐 어느 설문인지 적지 않는다. 배치 대기 설문이 어디서
@@ -402,11 +402,11 @@ export const surveyResponses = pgTable(
     // drizzle 에서 .references() 추가하지 말 것 — contacts.ts 와 순환 import 발생.
     contactTargetId: uuid('contact_target_id'),
 
-    // 대리 응답 귀속 — 이 응답을 대신 입력한 실사 계정 (0099, 티켓 27).
+    // 대리 응답 귀속 — 이 응답을 대신 입력한 실사 계정 (0112, 티켓 27).
     // **NULL 이 응답자 직접 응답이다.** 실사가 조사 대상 화면의 「응답 대행」으로 들어온
     // 세션에서만 채워지며, 그 판정은 pub 경로가 아니라 서버가 세션·초대 토큰·capability 를
     // 함께 보고 한다(server/fieldwork-proxy). 화면이 보내는 값이 아니라 위조할 수 없다.
-    // FK 는 0099 마이그레이션이 만든다 — auth.ts 와 순환 import 를 피한다.
+    // FK 는 0112 마이그레이션이 만든다 — auth.ts 와 순환 import 를 피한다.
     fieldworkUserId: uuid('fieldwork_user_id'),
 
     // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL

@@ -249,7 +249,7 @@ describe('resolveSurveyCapabilities — 실사 열 (티켓 25)', () => {
     expect(caps(fieldwork('leader'), survey(), null, { fieldworkOrgInvited: false })).toEqual([]);
   });
 
-  it('소속 업체가 없으면 초대가 있어도 닫힌다 — 0093 CHECK 에만 기대지 않는다', () => {
+  it('소속 업체가 없으면 초대가 있어도 닫힌다 — 0110 CHECK 에만 기대지 않는다', () => {
     expect(caps(fieldwork('worker', null), survey(), { kind: 'fieldwork' })).toEqual([]);
   });
 

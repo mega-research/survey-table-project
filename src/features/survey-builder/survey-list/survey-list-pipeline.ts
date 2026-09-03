@@ -173,7 +173,7 @@ export function paginateSurveyList<T>(
 
 /**
  * 목록 내 소유자 distinct(상세 검색 「소유자」 드롭다운용) — 이름순 정렬.
- * 소유자 없는 행(0089 2단계 배포 이전의 옛 설문)은 후보가 될 수 없어 건너뛴다.
+ * 소유자 없는 행(0106 2단계 배포 이전의 옛 설문)은 후보가 될 수 없어 건너뛴다.
  */
 export function distinctOwners(
   items: readonly SurveyListItem[],

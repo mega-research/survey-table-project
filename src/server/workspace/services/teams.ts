@@ -229,7 +229,7 @@ export async function getTeamDetail(
  *  2. 소속 설문이 전부 배치 대기가 된다(`teamId=null` + `assignmentStatus='assignment_pending'`).
  *     DB CHECK 가 둘을 한 몸으로 묶으므로 같은 SET 절에서 바꿔야 한다. `surveyGroupId` 도
  *     함께 내린다 — 그룹은 팀 소유물이라 팀을 잃은 설문이 남의 팀 폴더에 남으면 안 된다
- *     (0090 마이그레이션 헤더의 계약).
+ *     (0107 마이그레이션 헤더의 계약).
  *  3. 감사 행 하나. 규모(팀원 수·설문 수)는 **트랜잭션 안에서 잰 값**이다 — 화면이 모달에
  *     보여준 숫자는 그 사이 바뀔 수 있고, 설문은 teamId 를 잃어 사후에 되짚을 수 없다.
  *

@@ -144,7 +144,7 @@ export async function addSurveyGuest(
     } catch (error) {
       // UNIQUE 는 (surveyId, userId) 라 kind 를 가리지 않는다 — 같은 사람이 참여자로 이미
       // 서 있어도 여기로 온다. 문구를 「이미 부여됨」으로 두는 것이 맞다: 어느 자격이든
-      // 그 설문에 이미 서 있다는 뜻이고, 두 자격을 겸할 수 없다는 것이 0092 의 계약이다.
+      // 그 설문에 이미 서 있다는 뜻이고, 두 자격을 겸할 수 없다는 것이 0109 의 계약이다.
       if (isUniqueViolation(error)) throw new GuestAlreadyGrantedError();
       throw error;
     }

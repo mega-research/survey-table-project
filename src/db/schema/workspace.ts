@@ -24,7 +24,7 @@ import { users } from './auth';
 import { surveys } from './surveys';
 
 /**
- * 팀 — 설문 소유·접근의 최소 워크스페이스이자 기본 접근 경계 (마이그레이션 0088).
+ * 팀 — 설문 소유·접근의 최소 워크스페이스이자 기본 접근 경계 (마이그레이션 0105).
  *
  * 이름은 전체 조직 경로를 포함하지만(`연구1본부 - 1팀`) 권한 판정은 언제나 id 로 한다
  * (ADR-0008). 「메가리서치」(시스템 전체 보기)는 팀이 아니라 이 테이블에 행이 없다(ADR-0006).
@@ -96,7 +96,7 @@ export const teamLifecycleEvents = pgTable(
 );
 
 /**
- * 팀 공용 설문 그룹 — 정리용 묶음 (마이그레이션 0090, 티켓 12).
+ * 팀 공용 설문 그룹 — 정리용 묶음 (마이그레이션 0107, 티켓 12).
  *
  * 그룹은 **접근 권한이 아니다.** 담겼다는 사실이 설문을 누가 볼 수 있는지에 영향을 주지 않고,
  * 판정은 계속 `surveys.teamId`·`visibility`·`ownerUserId` 로만 한다. 구조 편집(생성·이름
@@ -105,7 +105,7 @@ export const teamLifecycleEvents = pgTable(
  *
  * 그룹은 팀 소유물이라 **설문이 팀을 옮기면 `surveys.surveyGroupId` 는 NULL 로 내려야 한다** —
  * 팀 해산(티켓 13)·재배치(14)·승계(19)가 지켜야 할 계약이다. DB 복합 FK 로 강제하지 않은
- * 이유는 0090 마이그레이션 헤더에 적었다.
+ * 이유는 0107 마이그레이션 헤더에 적었다.
  */
 export const surveyGroups = pgTable(
   'survey_groups',
@@ -130,7 +130,7 @@ export const surveyGroups = pgTable(
 );
 
 /**
- * 설문 단위 부여 — 참여자·게스트·실사 통합 (마이그레이션 0092, 티켓 18).
+ * 설문 단위 부여 — 참여자·게스트·실사 통합 (마이그레이션 0109, 티켓 18).
  *
  * **팀 경계를 넘는 유일한 접근 경로다.** 지금까지 설문 접근은 전부 `surveys.teamId` 를 지나
  * 판정됐는데(ADR-0006·0008) 이 테이블만 그 축 밖에 있다 — 타 팀 사람을 그 설문 하나에만
@@ -138,7 +138,7 @@ export const surveyGroups = pgTable(
  * 초대는 `team_members` 에 아무것도 쓰지 않는다.
  *
  * `kind` 와 `users.userType` 의 정합은 **서비스가 지킨다** — 두 테이블에 걸친 조건이라
- * CHECK 로 걸 수 없다(0092 헤더 참조).
+ * CHECK 로 걸 수 없다(0109 헤더 참조).
  */
 export const surveyParticipants = pgTable(
   'survey_participants',
@@ -169,7 +169,7 @@ export const surveyParticipants = pgTable(
 );
 
 /**
- * 실사 업체 — 외주 실사 인력의 소속 경계 (마이그레이션 0093, 티켓 24).
+ * 실사 업체 — 외주 실사 인력의 소속 경계 (마이그레이션 0110, 티켓 24).
  *
  * **팀이 아니다.** 설문을 소유하지 않고(`surveys.teamId` 는 이 테이블을 가리키지 않는다)
  * 팀 멤버십을 만들지 않으며 재배치 목적지가 될 수 없다(ADR-0019). 이름·상태만 갖는

@@ -114,7 +114,7 @@ async function seedUser(
     status: over.status ?? 'active',
     isSuperadmin: over.isSuperadmin ?? false,
     userType: over.userType ?? 'internal',
-    // 실사 계정은 소속 업체·역할이 **필수**다(0093 users_fieldwork_fields_check, 티켓 24) —
+    // 실사 계정은 소속 업체·역할이 **필수**다(0110 users_fieldwork_fields_check, 티켓 24) —
     // 이 스위트에서 실사는 「부여 대상이 아니다」를 보여주는 대조군이라 값 자체는 무의미하지만,
     // 없으면 행이 아예 만들어지지 않는다.
     ...(over.userType === 'fieldwork'
