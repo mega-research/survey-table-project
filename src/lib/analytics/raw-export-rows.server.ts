@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, count, eq, inArray, notExists, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
@@ -9,6 +9,8 @@ import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
+import type { RawExportContactColumn } from '@/lib/operations/contacts';
+import { decryptPiiForExport } from '@/lib/operations/contacts-export.server';
 import {
   responseScopeCondition,
   targetScopeCondition,
@@ -17,7 +19,11 @@ import {
 } from '@/lib/operations/data-scope.server';
 
 import { buildQuestionMetaMap, buildStepLabelMap } from './raw-export-helpers';
-import { buildNonRespondentRow, sortRowsForContactPopulation } from './raw-export-rows';
+import {
+  buildContactValues,
+  buildNonRespondentRow,
+  sortRowsForContactPopulation,
+} from './raw-export-rows';
 import type { RawExportContext, RawExportResponseRow } from './raw-workbook';
 
 // ============================================================
@@ -26,7 +32,15 @@ import type { RawExportContext, RawExportResponseRow } from './raw-workbook';
 
 export const MAX_EXPORT_RESPONSES = 10000;
 
-export interface RawExportLoadOptions {
+export interface RawExportContextOptions {
+  /**
+   * 「조사 대상 명단 열 포함」 — 붙일 attrs.*·pii.* 열. 비어 있거나 없으면 attrs 를 select 하지
+   * 않고 복호화도 하지 않는다 (기존 쿼리 그대로).
+   */
+  contactColumns?: readonly RawExportContactColumn[];
+}
+
+export interface RawExportLoadOptions extends RawExportContextOptions {
   /** 「조사 대상 중 미응답자 포함」 — 응답이 없는 스코프 파티션 조사 대상을 미응답 행으로 넣는다 */
   includeNonRespondents: boolean;
 }
@@ -98,12 +112,82 @@ export async function countRawExportPopulation(
   return { responseCount, nonRespondentCount: targetRows[0]?.total ?? 0 };
 }
 
+/** 조사 대상 참조 — 메타 열 값 + (명단 열이 켜졌을 때만) attrs. */
+interface ContactRef {
+  id: string;
+  resid: number;
+  groupValue: string | null;
+  inviteCode: string | null;
+  attrs?: Record<string, string>;
+}
+
+const CONTACT_REF_SELECT = {
+  id: contactTargets.id,
+  resid: contactTargets.resid,
+  groupValue: contactTargets.groupValue,
+  inviteCode: contactTargets.inviteCode,
+};
+
+/**
+ * 조사 대상 조회 — 응답의 컨택(inArray)과 미응답 조사 대상(술어 + resid 순)이 같은 열을 싣는다.
+ * attrs(JSONB, 컨택당 수백 키) 는 명단 열이 켜졌을 때만 select 목록에 넣는다 — 꺼진 경로의
+ * 쿼리는 도입 전과 같다.
+ */
+async function fetchContactRefs(
+  where: SQL | undefined,
+  opts: { withAttrs: boolean; orderByResid: boolean },
+): Promise<ContactRef[]> {
+  if (opts.withAttrs) {
+    const query = db
+      .select({ ...CONTACT_REF_SELECT, attrs: contactTargets.attrs })
+      .from(contactTargets)
+      .where(where);
+    return opts.orderByResid ? await query.orderBy(asc(contactTargets.resid)) : await query;
+  }
+  const query = db.select(CONTACT_REF_SELECT).from(contactTargets).where(where);
+  return opts.orderByResid ? await query.orderBy(asc(contactTargets.resid)) : await query;
+}
+
+/**
+ * 조사 대상 명단 열 값 — 컨택 id → contactValues. 응답 수와 무관하게 복호화 1회
+ * (decryptPiiForExport 내부 청크 제외) — N+1 없음. pii 열이 없으면 복호화를 부르지 않는다.
+ * 조사 대상 엑셀과 같은 복호화 경로라 평문이 나간다 — 호출부(라우트)가 그 사실을 책임진다.
+ */
+async function loadContactValues(
+  contacts: readonly ContactRef[],
+  columns: readonly RawExportContactColumn[],
+): Promise<Map<string, Record<string, string>>> {
+  const piiKeys = columns.filter((c) => c.kind === 'pii').map((c) => c.key);
+  const piiMap =
+    piiKeys.length > 0
+      ? await decryptPiiForExport(
+          contacts.map((c) => c.id),
+          piiKeys,
+        )
+      : new Map<string, Record<string, string>>();
+  const out = new Map<string, Record<string, string>>();
+  for (const c of contacts) {
+    out.set(c.id, buildContactValues(columns, c.attrs ?? {}, piiMap.get(c.id)));
+  }
+  return out;
+}
+
+/** 조사 대상이 있는 행에만 contactValues 를 싣는다 — 익명 응답은 키 자체를 넣지 않는다. */
+function attachContactValues(
+  row: RawExportResponseRow,
+  values: Record<string, string> | undefined,
+): RawExportResponseRow {
+  if (values) row.contactValues = values;
+  return row;
+}
+
 /**
  * raw/raw-split 공용 응답 로더.
  * 모수: 삭제·테스트 제외 전 상태 (진행중·이탈 포함 — 상태 컬럼으로 구분).
  * .sav 의 완료 전용 모수와 다름 (response-filters.ts 참조).
  * 토글이 켜지면 스코프 파티션의 미응답 조사 대상이 미응답 행으로 더해지고 시스템ID 순으로 정렬된다.
- * 꺼진 경로의 SQL 호출과 행 순서는 토글 도입 전과 같다.
+ * 명단 열이 켜지면 조사 대상이 있는 행에 contactValues 가 붙는다 (미응답 행 포함).
+ * 두 토글이 꺼진 경로의 SQL 호출과 행 순서는 도입 전과 같다.
  */
 export async function loadRawExportRows(
   surveyId: string,
@@ -125,31 +209,33 @@ export async function loadRawExportRows(
     return { kind: 'too_many', ...population };
   }
 
+  const contactColumns = options.contactColumns ?? [];
+  const withAttrs = contactColumns.length > 0;
+
   const contactIds = rawResponses
     .map((r) => r.contactTargetId)
     .filter((v): v is string => !!v);
-  const contactMap = new Map<
-    string,
-    { resid: number; groupValue: string | null; inviteCode: string | null }
-  >();
+  const contactMap = new Map<string, ContactRef>();
   if (contactIds.length > 0) {
-    const targets = await db
-      .select({
-        id: contactTargets.id,
-        resid: contactTargets.resid,
-        groupValue: contactTargets.groupValue,
-        inviteCode: contactTargets.inviteCode,
-      })
-      .from(contactTargets)
-      .where(inArray(contactTargets.id, contactIds));
-    for (const t of targets) {
-      contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue, inviteCode: t.inviteCode });
-    }
+    const targets = await fetchContactRefs(inArray(contactTargets.id, contactIds), {
+      withAttrs,
+      orderByResid: false,
+    });
+    for (const t of targets) contactMap.set(t.id, t);
   }
+
+  const nonRespondents = options.includeNonRespondents
+    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope), { withAttrs, orderByResid: true })
+    : [];
+
+  // 같은 컨택이 양쪽에 있을 수 없다 — 미응답 술어가 배제한다. 값 조립은 조사 대상 수만큼 1회.
+  const contactValues = withAttrs
+    ? await loadContactValues([...contactMap.values(), ...nonRespondents], contactColumns)
+    : null;
 
   const responseRows: RawExportResponseRow[] = rawResponses.map((r) => {
     const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
-    return {
+    const row: RawExportResponseRow = {
       id: r.id,
       questionResponses: decryptQuestionResponses(
         (r.questionResponses ?? {}) as Record<string, unknown>,
@@ -167,29 +253,24 @@ export async function loadRawExportRows(
       completedAt: r.completedAt,
       totalSeconds: r.totalSeconds,
     };
+    return attachContactValues(row, c ? contactValues?.get(c.id) : undefined);
   });
 
   if (!options.includeNonRespondents) return { kind: 'ok', rows: responseRows, ...population };
 
-  const nonRespondents = await db
-    .select({
-      id: contactTargets.id,
-      resid: contactTargets.resid,
-      groupValue: contactTargets.groupValue,
-      inviteCode: contactTargets.inviteCode,
-    })
-    .from(contactTargets)
-    .where(nonRespondentWhere(surveyId, scope))
-    .orderBy(asc(contactTargets.resid));
-
   const rows = sortRowsForContactPopulation([
     ...responseRows,
-    ...nonRespondents.map(buildNonRespondentRow),
+    ...nonRespondents.map((t) =>
+      attachContactValues(buildNonRespondentRow(t), contactValues?.get(t.id)),
+    ),
   ]);
   return { kind: 'ok', rows, ...population };
 }
 
-/** 메타 컬럼 렌더 컨텍스트 — 개별 URL 베이스와 마지막 입력 문항 라벨 맵. */
+/**
+ * 메타 컬럼 렌더 컨텍스트 — 개별 URL 베이스와 마지막 입력 문항 라벨 맵.
+ * options.contactColumns 는 로더에 넘긴 것과 같은 객체를 그대로 싣는다 (열 정의 = 값 키).
+ */
 export async function buildRawExportContext(
   surveyId: string,
   scope: OperationsDataScope,
@@ -202,6 +283,7 @@ export async function buildRawExportContext(
     pageBreakBefore: boolean | null;
     questionCode: string | null;
   }>,
+  options: RawExportContextOptions = {},
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
@@ -228,5 +310,6 @@ export async function buildRawExportContext(
     hasContactGroups,
     questionMeta: buildQuestionMetaMap(questions),
     changeConfirmQuestionIds,
+    ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),
   };
 }

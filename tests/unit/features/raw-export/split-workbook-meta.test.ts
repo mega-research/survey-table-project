@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type RawExportContext, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
-import type { Question } from '@/types/survey';
+import type { Question, QuestionConditionGroup } from '@/types/survey';
 
 const basisQ = {
   id: 'qb',
@@ -123,5 +123,59 @@ describe('분할 워크북 메타 컬럼', () => {
       expect([10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
       expect(dr.getCell(12).value).toBeNull(); // 변수 열
     }
+  });
+});
+
+describe('분할 워크북 조사 대상 명단 열', () => {
+  // A 응답자에게만 보이는 문항 — 옵션 시트가 하나 생겨 공통·옵션 시트 둘 다 검사할 수 있다.
+  const onlyA: QuestionConditionGroup = {
+    logicType: 'AND',
+    conditions: [
+      { id: 'c1', sourceQuestionId: 'qb', conditionType: 'value-match', requiredValues: ['opt1'], logicType: 'AND' },
+    ],
+  };
+  const condQ = {
+    id: 'qc',
+    type: 'text',
+    title: 'Q3. A 전용',
+    order: 3,
+    required: false,
+    questionCode: 'Q3',
+    displayCondition: onlyA,
+  } as unknown as Question;
+
+  const rosterCtx: RawExportContext = {
+    ...CTX,
+    contactColumns: [
+      { source: 'attrs.기수', label: '기수', kind: 'attrs', key: '기수' },
+      { source: 'pii.성명', label: '성명', kind: 'pii', key: '성명' },
+    ],
+  };
+
+  it('공통·옵션 시트 전부 메타 열 오른쪽에 명단 열이 붙고 세로 병합되며 코딩북에는 없다', () => {
+    const wb = buildSplitWorkbook(
+      [basisQ, textQ, condQ],
+      [{ ...row, contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' } }],
+      'qb',
+      rosterCtx,
+    );
+    const variableSheets = wb.worksheets.filter((ws) => ws.name !== '응답 내역' && ws.name !== '코딩북');
+    expect(variableSheets.map((ws) => ws.name)).toContain('공통');
+    expect(variableSheets.length).toBeGreaterThanOrEqual(2);
+    for (const ws of variableSheets) {
+      expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
+      expect(ws.getRow(1).getCell(12).value).toBe('기수');
+      expect(ws.getRow(1).getCell(13).value).toBe('성명');
+      expect(ws.getRow(4).getCell(12).value).toBe('15기');
+      expect(ws.getRow(4).getCell(13).value).toBe('홍길동');
+      const merges = ws.model.merges as string[];
+      expect(merges).toContain('L1:L3');
+      expect(merges).toContain('M1:M3');
+    }
+    const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
+    expect(names).not.toContain('기수');
+    expect(names).not.toContain('성명');
+    // 응답 내역 시트는 요약 시트 — 명단 열을 붙이지 않는다
+    expect(wb.getWorksheet('응답 내역')!.getRow(1).getCell(10).value ?? '').toBe('');
   });
 });

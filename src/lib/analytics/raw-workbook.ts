@@ -8,7 +8,7 @@ import {
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   NOT_RESPONDED_STATUS,
@@ -42,6 +42,11 @@ export interface RawExportResponseRow {
   startedAt: Date | null;
   completedAt: Date | null;
   totalSeconds: number | null;
+  /**
+   * 조사 대상 명단 열 값 — source → 값 (RawExportContext.contactColumns 의 source 와 같은 키).
+   * 조사 대상이 없는 익명 응답은 키 자체가 없고, 컨택은 있으나 값이 없는 키는 ''.
+   */
+  contactValues?: Readonly<Record<string, string>>;
 }
 
 /** 미응답 조사 대상 행 — 응답이 아니므로 응답 메타(단말·소요시간 등)를 빈칸으로 그린다. */
@@ -68,6 +73,11 @@ export interface RawExportContext {
    * 그때 컬럼 출력은 이 기능 도입 전과 완전히 같다.
    */
   changeConfirmQuestionIds?: ReadonlySet<string>;
+  /**
+   * 조사 대상 명단 열 (다이얼로그 「조사 대상 명단 열 포함」). 응답 메타 열 바로 오른쪽·문항 열
+   * 왼쪽에 붙는다. 비어 있거나 없으면 도입 전과 같은 열 구성이다.
+   */
+  contactColumns?: readonly RawExportContactColumn[];
 }
 
 /**
@@ -155,8 +165,18 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   },
 ];
 
+/**
+ * 활성 메타 열 = 고정 메타 열(설문 설정 조건부) + 조사 대상 명단 열.
+ * 명단 열을 RawMetaColumn 으로 흘리면 3행 세로 병합·너비·같은 질문 가로 병합 오프셋이
+ * Raw Data·분할 시트에서 같은 코드로 따라온다. 응답 내역 시트는 자기 헤더를 따로 가져 영향 없다.
+ */
 function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
-  return RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
+  const fixed = RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
+  const contact = (ctx.contactColumns ?? []).map<RawMetaColumn>((col) => ({
+    header: col.label,
+    value: (row) => row.contactValues?.[col.source] ?? '',
+  }));
+  return [...fixed, ...contact];
 }
 
 export function buildRawMetaHeaders(ctx: RawExportContext): string[] {

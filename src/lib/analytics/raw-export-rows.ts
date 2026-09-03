@@ -1,10 +1,11 @@
+import type { RawExportContactColumn } from '@/lib/operations/contacts';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 
 import type { RawExportResponseRow } from './raw-workbook';
 
 // ============================================================
-// Raw 내보내기 — 조사 대상 기준 모수의 순수 조각
-// (미응답 행 생성 + 정렬. DB 조회는 raw-export-rows.server.ts)
+// Raw 내보내기 — 조사 대상 기준 모수·명단 열의 순수 조각
+// (미응답 행 생성 + 정렬 + 명단 값 조립. DB 조회는 raw-export-rows.server.ts)
 // ============================================================
 
 export interface NonRespondentTarget {
@@ -51,4 +52,21 @@ export function sortRowsForContactPopulation(
     }
     return (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0);
   });
+}
+
+/**
+ * 조사 대상 한 명의 명단 열 값 — 열 정의 순서대로 source → 값.
+ * attrs 는 contact_targets.attrs 그대로, pii 는 복호화 평문. 스킴에 있으나 값이 없는 키는 ''.
+ * 값이 전부 '' 여도 객체를 돌려준다 — 컨택이 있다는 뜻이다(익명 응답과 구분).
+ */
+export function buildContactValues(
+  columns: readonly RawExportContactColumn[],
+  attrs: Readonly<Record<string, string>>,
+  piiPlain: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const col of columns) {
+    out[col.source] = col.kind === 'attrs' ? (attrs[col.key] ?? '') : (piiPlain?.[col.key] ?? '');
+  }
+  return out;
 }
