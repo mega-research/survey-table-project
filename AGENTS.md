@@ -545,8 +545,8 @@ POST   /api/upload/image                       # 이미지 업로드 (multipart,
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
-GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시)
+GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 hasContacts, 같은 파라미터로 `totalRows`·`nonRespondentRows` 반환)
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
 GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
