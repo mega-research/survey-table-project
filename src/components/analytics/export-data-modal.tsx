@@ -86,8 +86,6 @@ interface SplitPlanResponse {
 
 interface ExportQueryOptions {
   includeNonRespondents: boolean;
-  /** 「조사 대상 명단 열 포함」 — 미응답 토글과 독립 */
-  includeContactColumns: boolean;
   basis?: string;
 }
 
@@ -95,15 +93,14 @@ const fmtNum = (n: number) => n.toLocaleString('ko-KR');
 
 /**
  * 내보내기 URL 쿼리 — 한 곳에서 만든다.
- * 미응답 행·명단 열은 Raw Data 계열(raw/raw-split)에만 붙는다 — .sav/.sps 는 완료 전용 모수이고
- * 명단 열은 SPSS 변수가 아니다.
+ * 미응답 행은 Raw Data 계열(raw/raw-split)에만 붙는다 — .sav/.sps 는 완료 전용 모수다.
+ * 조사 대상 명단 열은 토글이 아니라 응답 내역 컬럼 설정을 서버가 읽어 항상 붙인다.
  */
 function buildExportQuery(type: string, opts: ExportQueryOptions): string {
   const qs = new URLSearchParams({ type });
   if (opts.basis) qs.set('basis', opts.basis);
   const isRaw = type === 'raw' || type === 'raw-split';
   if (isRaw && opts.includeNonRespondents) qs.set('includeNonRespondents', '1');
-  if (isRaw && opts.includeContactColumns) qs.set('includeContactColumns', '1');
   return qs.toString();
 }
 
@@ -132,10 +129,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   const [exportingType, setExportingType] = useState<string | null>(null);
   const [step, setStep] = useState<SplitStep>('options');
   const [basis, setBasis] = useState<string | null>(null);
-  // 「조사 대상 중 미응답자 포함」·「조사 대상 명단 열 포함」 — 다이얼로그를 닫으면 초기화.
-  // 설문 설정으로 저장되지 않는다. 둘은 독립이라 하나만 켜거나 둘 다 켤 수 있다.
+  // 「조사 대상 중 미응답자 포함」 — 다이얼로그를 닫으면 초기화. 설문 설정으로 저장되지 않는다.
   const [includeNonRespondents, setIncludeNonRespondents] = useState(false);
-  const [includeContactColumns, setIncludeContactColumns] = useState(false);
 
   const summary = useQuery({
     queryKey: ['split-summary', surveyId],
@@ -156,7 +151,6 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       setStep('options');
       setBasis(null);
       setIncludeNonRespondents(false);
-      setIncludeContactColumns(false);
     }
   };
 
@@ -165,7 +159,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       setExportingType(type);
 
       const response = await fetch(
-        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents, includeContactColumns })}`,
+        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents })}`,
       );
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -206,7 +200,6 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     try {
       const query = buildExportQuery('raw-split', {
         includeNonRespondents,
-        includeContactColumns,
         basis,
       });
       const res = await fetch(`/api/surveys/${surveyId}/export?${query}`);
@@ -268,22 +261,6 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     </span>
                     <span className="block text-xs leading-relaxed text-slate-500">
                       링크를 열지 않은 조사 대상도 행으로 넣고 상태를 미응답으로 표시합니다
-                    </span>
-                  </span>
-                </label>
-                <label className="mt-3 flex cursor-pointer items-start gap-3">
-                  <Checkbox
-                    className="mt-0.5"
-                    checked={includeContactColumns}
-                    onCheckedChange={(v) => setIncludeContactColumns(v === true)}
-                    disabled={!!exportingType}
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-slate-900">
-                      조사 대상 명단 열 포함
-                    </span>
-                    <span className="block text-xs leading-relaxed text-slate-500">
-                      컬럼 스킴의 명단 열을 메타 열 오른쪽에 붙입니다. 숨김 열도 포함
                     </span>
                   </span>
                 </label>

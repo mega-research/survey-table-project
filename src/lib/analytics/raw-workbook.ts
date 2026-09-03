@@ -54,6 +54,27 @@ export function isNonRespondentRow(row: Pick<RawExportResponseRow, 'status'>): b
   return row.status === NOT_RESPONDED_STATUS;
 }
 
+/**
+ * 순번 = 접수 순번. 모수 안의 응답 행을 시작일시 오름차순으로 1부터 매긴다 (같은 시각은 입력 순).
+ * 파일의 행 정렬(조사 대상 기준 모수는 시스템ID 순)과 무관하고, 미응답 행은 순번이 없다.
+ * 워크북의 모든 시트가 같은 맵을 써서 시트 간 순번이 정합하다. 키는 행 객체다(id 가 아니라) —
+ * 시트마다 같은 rows 배열을 돌리므로 충분하고, 픽스처의 id 중복에 흔들리지 않는다.
+ */
+export function buildRawSeqMap(
+  rows: readonly RawExportResponseRow[],
+): ReadonlyMap<RawExportResponseRow, number> {
+  const responded = rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => !isNonRespondentRow(row));
+  responded.sort(
+    (a, b) =>
+      (a.row.startedAt?.getTime() ?? 0) - (b.row.startedAt?.getTime() ?? 0) || a.index - b.index,
+  );
+  const map = new Map<RawExportResponseRow, number>();
+  responded.forEach(({ row }, i) => map.set(row, i + 1));
+  return map;
+}
+
 export interface RawExportContext {
   /** NEXT_PUBLIC_APP_URL 정리값 (trailing slash 제거). 미설정 시 '' — 상대경로 /i/{code} 출력 */
   appUrl: string;
@@ -74,8 +95,8 @@ export interface RawExportContext {
    */
   changeConfirmQuestionIds?: ReadonlySet<string>;
   /**
-   * 조사 대상 명단 열 (다이얼로그 「조사 대상 명단 열 포함」). 응답 메타 열 바로 오른쪽·문항 열
-   * 왼쪽에 붙는다. 비어 있거나 없으면 도입 전과 같은 열 구성이다.
+   * 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 표시 중인 attrs·pii 열. 순번(그룹 열이 있으면 그룹)과
+   * 개별 URL 사이에 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
    */
   contactColumns?: readonly RawExportContactColumn[];
 }
@@ -121,7 +142,8 @@ export function resolveLastEnteredLabel(row: RawExportResponseRow, ctx: RawExpor
 
 interface RawMetaColumn {
   header: string;
-  value: (row: RawExportResponseRow, seq: number, ctx: RawExportContext) => string | number;
+  /** seq 는 접수 순번(buildRawSeqMap) — 미응답 행은 null 이라 빈칸이다 */
+  value: (row: RawExportResponseRow, seq: number | null, ctx: RawExportContext) => string | number;
   /** 열 생성 조건 — false 반환 시 헤더·값 모두 생략. 미지정은 항상 생성. */
   enabled?: (ctx: RawExportContext) => boolean;
 }
@@ -139,7 +161,7 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
     enabled: (ctx) => ctx.hasContacts,
     value: (row) => row.resid ?? '',
   },
-  { header: '순번', value: (_row, seq) => seq },
+  { header: '순번', value: (_row, seq) => seq ?? '' },
   {
     header: '조사 대상 그룹',
     enabled: (ctx) => ctx.hasContactGroups,
@@ -165,10 +187,12 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   },
 ];
 
+const INVITE_URL_HEADER = '개별 URL';
+
 /**
- * 활성 메타 열 = 고정 메타 열(설문 설정 조건부) + 조사 대상 명단 열.
+ * 활성 메타 열 = 고정 메타 열(설문 설정 조건부)에 조사 대상 명단 열을 개별 URL 바로 앞에 끼운 것.
  * 명단 열을 RawMetaColumn 으로 흘리면 3행 세로 병합·너비·같은 질문 가로 병합 오프셋이
- * Raw Data·분할 시트에서 같은 코드로 따라온다. 응답 내역 시트는 자기 헤더를 따로 가져 영향 없다.
+ * Raw Data·분할 시트에서 같은 코드로 따라온다. 응답 내역 시트는 자기 헤더를 따로 가진다.
  */
 function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
   const fixed = RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
@@ -176,7 +200,8 @@ function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
     header: col.label,
     value: (row) => row.contactValues?.[col.source] ?? '',
   }));
-  return [...fixed, ...contact];
+  const at = fixed.findIndex((c) => c.header === INVITE_URL_HEADER);
+  return [...fixed.slice(0, at), ...contact, ...fixed.slice(at)];
 }
 
 export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
@@ -185,7 +210,7 @@ export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
 
 export function buildRawMetaValues(
   row: RawExportResponseRow,
-  seq: number,
+  seq: number | null,
   ctx: RawExportContext,
 ): (string | number)[] {
   return activeMetaColumns(ctx).map((c) => c.value(row, seq, ctx));
@@ -193,18 +218,22 @@ export function buildRawMetaValues(
 
 /**
  * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
- * 시스템ID·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따른다.
+ * 시스템ID·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따르고, 조사 대상 명단 열은
+ * 그룹 다음·접속 단말 앞에 같은 열이 붙는다. 순번은 seqMap(접수 순번)을 Raw Data 시트와 공유한다.
  */
 export function addResponseListSheet(
   workbook: ExcelJS.Workbook,
   rows: RawExportResponseRow[],
   ctx: RawExportContext,
+  seqMap: ReadonlyMap<RawExportResponseRow, number> = buildRawSeqMap(rows),
 ): void {
   const ws = workbook.addWorksheet('응답 내역');
+  const contactColumns = ctx.contactColumns ?? [];
   const headers = [
     ...(ctx.hasContacts ? [RESID_DEFAULT_LABEL] : []),
     '순번',
     ...(ctx.hasContactGroups ? ['조사 대상 그룹'] : []),
+    ...contactColumns.map((c) => c.label),
     '접속 단말',
     '브라우저',
     '상태',
@@ -213,14 +242,15 @@ export function addResponseListSheet(
     '소요시간',
   ];
   ws.addRow(headers);
-  rows.forEach((row, i) => {
+  rows.forEach((row) => {
     // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)와 익명 표식을 빈칸으로 둔다 —
     // RAW_META_COLUMNS 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
     const nonRespondent = isNonRespondentRow(row);
     ws.addRow([
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),
-      i + 1,
+      seqMap.get(row) ?? '',
       ...(ctx.hasContactGroups ? [row.groupValue ?? (nonRespondent ? '' : '공개링크')] : []),
+      ...contactColumns.map((c) => row.contactValues?.[c.source] ?? ''),
       nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
       nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),
@@ -251,9 +281,10 @@ export function generateRawDataWorkbook(
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();
+  const seqMap = buildRawSeqMap(rows);
 
   // 시트 1: 응답 내역
-  addResponseListSheet(workbook, rows, ctx);
+  addResponseListSheet(workbook, rows, ctx, seqMap);
 
   // 시트 2: Raw Data (헤더 3행 = 질문제목 / 셀라벨 / SPSS 변수명), 왼쪽 메타 열 + 변수 열
   const ws2 = workbook.addWorksheet('Raw Data');
@@ -263,9 +294,9 @@ export function generateRawDataWorkbook(
   ws2.addRow([...metaHeaders, ...columns.map((c) => c.questionText)]);
   ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
   ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
-  rows.forEach((row, i) => {
+  rows.forEach((row) => {
     ws2.addRow([
-      ...buildRawMetaValues(row, i + 1, ctx),
+      ...buildRawMetaValues(row, seqMap.get(row) ?? null, ctx),
       ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
     ]);
   });

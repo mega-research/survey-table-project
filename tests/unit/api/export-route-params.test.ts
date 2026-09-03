@@ -35,7 +35,7 @@ vi.mock('@/lib/operations/contact-stats.server', () => ({
   getSurveyContactStats: vi.fn(async () => ({ hasContacts: true, hasContactGroups: false })),
 }));
 
-// 컬럼 스킴 조회만 가짜로 — 「조사 대상 명단 열 포함」이 켜졌을 때만 불려야 한다.
+// 컬럼 스킴 조회만 가짜로 — Raw Data 계열에서만 불려야 한다 (명단 열은 응답 내역 컬럼 설정 기준).
 vi.mock('@/lib/operations/contacts.server', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/operations/contacts.server')>();
   return { ...actual, getContactColumnScheme: getContactColumnSchemeMock };
@@ -108,15 +108,6 @@ const ROSTER_SCHEME = normalizeContactColumnScheme({
   ],
 });
 
-const ATTRS_ONLY_SCHEME = normalizeContactColumnScheme({
-  version: 1,
-  headerRow: 1,
-  columns: [
-    { key: 'resid', label: '시스템ID', source: 'system.resid', order: 0 },
-    { key: '기수', label: '기수', source: 'attrs.기수', order: 1 },
-  ],
-});
-
 /** 로더에 넘어간 options (3번째 인자) */
 function loaderOptions(): Record<string, unknown> {
   return loadRawExportRowsMock.mock.calls[0]![2] as Record<string, unknown>;
@@ -148,23 +139,46 @@ beforeEach(() => {
   getContactColumnSchemeMock.mockResolvedValue(ROSTER_SCHEME);
   vi.mocked(buildRawExportContext).mockClear();
   surveyFindFirstMock.mockReset();
-  surveyFindFirstMock.mockResolvedValue({
-    id: surveyId,
-    title: '파라미터 설문',
-    requireInviteToken: false,
-    questions: [
-      {
-        id: 'basis',
-        surveyId,
-        type: 'radio',
-        title: '분류',
-        required: false,
-        order: 0,
-        options: [{ id: 'option-1', value: 'option-1', label: '옵션 1' }],
-      },
-    ],
-  });
+  surveyFindFirstMock.mockResolvedValue(SURVEY_FIXTURE);
 });
+
+const SURVEY_FIXTURE = {
+  id: surveyId,
+  title: '파라미터 설문',
+  requireInviteToken: false,
+  profileColumns: null,
+  questions: [
+    {
+      id: 'basis',
+      surveyId,
+      type: 'radio',
+      title: '분류',
+      required: false,
+      order: 0,
+      options: [{ id: 'option-1', value: 'option-1', label: '옵션 1' }],
+    },
+  ],
+};
+
+/** 응답 내역 컬럼 설정 — 기수·성명 표시, 2025_상태 숨김 */
+const PROFILE_SCHEME = {
+  version: 1,
+  columns: [
+    { key: 'sys.resid', label: 'UID', order: 0 },
+    { key: 'sys.idx', label: '순번', order: 1 },
+    { key: 'attrs.기수', label: '기수', order: 2 },
+    { key: 'pii.성명', label: '성명', order: 3 },
+    { key: 'sys.status', label: '상태', order: 4 },
+  ],
+};
+
+const ATTRS_ONLY_PROFILE_SCHEME = {
+  version: 1,
+  columns: [
+    { key: 'attrs.기수', label: '기수', order: 0 },
+    { key: 'pii.성명', label: '성명', order: 1, hidden: true },
+  ],
+};
 
 describe('GET /export — includeNonRespondents 파라미터', () => {
   it('raw 에 includeNonRespondents=1 이면 로더에 true 로 넘긴다', async () => {
@@ -172,6 +186,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: true,
+      contactColumns: [],
     });
   });
 
@@ -180,6 +195,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: false,
+      contactColumns: [],
     });
   });
 
@@ -191,6 +207,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: true,
+      contactColumns: [],
     });
   });
 
@@ -260,9 +277,10 @@ describe('GET /export/split-preview — includeNonRespondents 파라미터', () 
   });
 });
 
-describe('GET /export — includeContactColumns 파라미터', () => {
-  it('raw 에 includeContactColumns=1 이면 스코프 스킴을 1회 읽어 attrs·pii 열을 로더·컨텍스트에 넘기고 pii 가 있으면 no-store 다', async () => {
-    const res = await exportGet(exportRequest('type=raw&includeContactColumns=1'), params);
+describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 기준, 토글 없음)', () => {
+  it('raw 는 스코프 스킴을 1회 읽고 컬럼 설정에서 표시 중인 attrs·pii 열을 로더·컨텍스트에 넘기며 pii 가 있으면 no-store 다', async () => {
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, profileColumns: PROFILE_SCHEME });
+    const res = await exportGet(exportRequest('type=raw'), params);
     expect(res.status).toBe(200);
     expect(getContactColumnSchemeMock).toHaveBeenCalledTimes(1);
     expect(getContactColumnSchemeMock).toHaveBeenCalledWith(surveyId, 'real');
@@ -278,25 +296,34 @@ describe('GET /export — includeContactColumns 파라미터', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
-  it('attrs 열만 있으면 no-store 를 붙이지 않는다', async () => {
-    getContactColumnSchemeMock.mockResolvedValue(ATTRS_ONLY_SCHEME);
-    const res = await exportGet(exportRequest('type=raw&includeContactColumns=1'), params);
+  it('pii 열이 컬럼 설정에서 숨김이면 attrs 열만 나가고 no-store 를 붙이지 않는다', async () => {
+    surveyFindFirstMock.mockResolvedValue({
+      ...SURVEY_FIXTURE,
+      profileColumns: ATTRS_ONLY_PROFILE_SCHEME,
+    });
+    const res = await exportGet(exportRequest('type=raw'), params);
     expect(res.status).toBe(200);
     expect((loaderOptions()['contactColumns'] as unknown[]).length).toBe(1);
     expect(res.headers.get('Cache-Control')).toBeNull();
   });
 
-  it('파라미터가 없으면 스킴을 읽지 않고 로더 options 에 contactColumns 키가 없으며 헤더도 없다', async () => {
+  it('컬럼 설정이 없으면 명단 열 0개이고 헤더도 없다 — attrs·pii 는 기본 숨김', async () => {
     const res = await exportGet(exportRequest('type=raw'), params);
     expect(res.status).toBe(200);
-    expect(getContactColumnSchemeMock).not.toHaveBeenCalled();
-    expect(loaderOptions()).toEqual({ includeNonRespondents: false });
+    expect(loaderOptions()).toEqual({ includeNonRespondents: false, contactColumns: [] });
     expect(res.headers.get('Cache-Control')).toBeNull();
   });
 
-  it('raw-split 도 같은 파라미터로 로더에 넘긴다 — 미응답 토글과 독립', async () => {
+  it('옛 includeContactColumns 파라미터는 아무 효과가 없다', async () => {
+    const res = await exportGet(exportRequest('type=raw&includeContactColumns=1'), params);
+    expect(res.status).toBe(200);
+    expect(loaderOptions()['contactColumns']).toEqual([]);
+  });
+
+  it('raw-split 도 같은 열을 로더에 넘긴다 — 미응답 토글과 독립', async () => {
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, profileColumns: PROFILE_SCHEME });
     const res = await exportGet(
-      exportRequest('type=raw-split&basis=basis&includeContactColumns=1&includeNonRespondents=1'),
+      exportRequest('type=raw-split&basis=basis&includeNonRespondents=1'),
       params,
     );
     expect(res.status).toBe(200);
@@ -307,16 +334,18 @@ describe('GET /export — includeContactColumns 파라미터', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
-  it('sav 는 파라미터를 무시하고 스킴을 읽지 않는다', async () => {
-    const res = await exportGet(exportRequest('type=sav&includeContactColumns=1'), params);
+  it('sav 는 스킴을 읽지 않는다', async () => {
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, profileColumns: PROFILE_SCHEME });
+    const res = await exportGet(exportRequest('type=sav'), params);
     expect(res.status).toBe(200);
     expect(getContactColumnSchemeMock).not.toHaveBeenCalled();
     expect(res.headers.get('Cache-Control')).toBeNull();
   });
 
-  it('스킴이 없으면 열 0개로 정상 진행한다 — 400 이 아니다', async () => {
+  it('컨택 스킴이 없으면(명단 미업로드) 표시 열이 있어도 0개로 정상 진행한다 — 400 이 아니다', async () => {
     getContactColumnSchemeMock.mockResolvedValue(null);
-    const res = await exportGet(exportRequest('type=raw&includeContactColumns=1'), params);
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, profileColumns: PROFILE_SCHEME });
+    const res = await exportGet(exportRequest('type=raw'), params);
     expect(res.status).toBe(200);
     expect(loaderOptions()['contactColumns']).toEqual([]);
     expect(res.headers.get('Cache-Control')).toBeNull();

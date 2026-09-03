@@ -25,6 +25,13 @@ vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => {
   return { ...actual, loadOperationsDataScope: vi.fn(async () => scopeState.value) };
 });
 
+// 조사 대상 명단 열은 raw 경로가 항상 컬럼 스킴을 읽는다 — 이 파일은 응답 조건의 스코프가 관심사라
+// 스킴은 없는 것으로 둔다 (열 0개). 스코프 인자 자체는 route-params 테스트가 본다.
+vi.mock('@/lib/operations/contacts.server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/operations/contacts.server')>();
+  return { ...actual, getContactColumnScheme: vi.fn(async () => null) };
+});
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
     auth: {

@@ -24,8 +24,8 @@ import {
   type RawExportLoadOptions,
   type RawExportLoadResult,
 } from '@/lib/analytics/raw-export-rows.server';
-import { selectRawExportContactColumns } from '@/lib/operations/contacts';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
+import { selectRawExportContactColumns } from '@/lib/operations/profile-columns';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
 import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
@@ -109,23 +109,21 @@ async function handleExport(
     const scope = await loadOperationsDataScope(surveyId);
     ctx.bind({ scope });
 
-    // 「조사 대상 명단 열 포함」 — Raw Data 계열(raw/raw-split)만 읽는다.
+    // 조사 대상 명단 열 — Raw Data 계열(raw/raw-split)에 항상 붙는다. 열은 응답 내역 컬럼 설정에서
+    // 표시 중인 attrs·pii 열이라 토글이 없고, 설정이 없거나 명단 미업로드면 열 0개로 정상 진행한다.
     // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·게스트 가드는 contacts/export 와 같고
     // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
-    // 스킴을 읽는 것도 켜졌을 때뿐 — 꺼진 경로의 쿼리는 도입 전과 같다. 스킴이 없으면(명단
-    // 미업로드) 열 0개로 정상 진행한다 — 명단 열은 부가 옵션이라 조사 대상 엑셀과 달리 400 이 아니다.
     // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
     const isRawExport = type === 'raw' || type === 'raw-split';
-    const includeContactColumns =
-      isRawExport && request.nextUrl.searchParams.get('includeContactColumns') === '1';
-    const contactColumns = includeContactColumns
-      ? selectRawExportContactColumns(await getContactColumnScheme(surveyId, scope))
+    const contactColumns = isRawExport
+      ? selectRawExportContactColumns(
+          await getContactColumnScheme(surveyId, scope),
+          surveyData.profileColumns ?? null,
+        )
       : [];
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
-    ctx.bind({ includeContactColumns, contactColumnCount: contactColumns.length, piiColumnCount });
-    const rawOptions: RawExportLoadOptions = includeContactColumns
-      ? { includeNonRespondents, contactColumns }
-      : { includeNonRespondents };
+    ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
+    const rawOptions: RawExportLoadOptions = { includeNonRespondents, contactColumns };
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
     const piiHeaders = piiColumnCount > 0 ? { 'Cache-Control': 'no-store' } : {};
 

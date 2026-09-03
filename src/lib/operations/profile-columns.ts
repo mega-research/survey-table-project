@@ -3,8 +3,11 @@ import type {
   ProfileColumnDef,
   ProfileColumnScheme,
 } from '@/db/schema/schema-types';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL, attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
+import type {
+  NormalizedContactColumnScheme,
+  RawExportContactColumn,
+} from '@/lib/operations/contacts';
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';
@@ -89,4 +92,28 @@ export const IP_HASH_DISPLAY_LEN = 8;
 export function formatIpHash(hash: string | null): string {
   if (!hash) return '—';
   return hash.slice(0, IP_HASH_DISPLAY_LEN);
+}
+
+/**
+ * Raw 내보내기에 붙일 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 **표시 중인** attrs.*·pii.* 열만,
+ * 설정 순서대로. 숨긴 열은 엑셀에도 없고 sys.* 열은 엑셀 고정 메타 열이 이미 갖고 있어 뺀다.
+ * 컬럼 설정이 저장된 적 없으면 attrs/pii 는 기본 숨김이라 빈 배열이다. 컨택 스킴에서 사라진
+ * 고아 key 는 hydrate 가 걸러낸다.
+ */
+export function selectRawExportContactColumns(
+  contactScheme: NormalizedContactColumnScheme | null,
+  profileScheme: ProfileColumnScheme | null,
+): RawExportContactColumn[] {
+  const out: RawExportContactColumn[] = [];
+  for (const c of visibleProfileColumns(hydrateProfileColumns(contactScheme, profileScheme))) {
+    const attrsKey = attrsKeyOf(c.key);
+    const piiKey = piiKeyOf(c.key);
+    const label = c.label.trim() || (attrsKey ?? piiKey ?? c.key);
+    if (attrsKey !== null) {
+      out.push({ source: c.key, label, kind: 'attrs', key: attrsKey });
+    } else if (piiKey !== null) {
+      out.push({ source: c.key, label, kind: 'pii', key: piiKey });
+    }
+  }
+  return out;
 }

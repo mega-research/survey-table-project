@@ -5,6 +5,7 @@ import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import {
   formatIpHash,
   hydrateProfileColumns,
+  selectRawExportContactColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns';
 
@@ -99,5 +100,38 @@ describe('formatIpHash', () => {
   it('null·빈 문자열은 — 로 표시한다', () => {
     expect(formatIpHash(null)).toBe('—');
     expect(formatIpHash('')).toBe('—');
+  });
+});
+
+describe('selectRawExportContactColumns', () => {
+  it('컬럼 설정에서 표시 중인 attrs·pii 열만 설정 순서대로 고르고 sys 열은 뺀다', () => {
+    const profileScheme: ProfileColumnScheme = {
+      version: 1,
+      columns: [
+        { key: 'sys.resid', label: 'UID', order: 0 },
+        { key: 'sys.idx', label: '순번', order: 1 },
+        { key: 'pii.담당자', label: '성명', order: 2 },
+        { key: 'attrs.지역', label: '지역', order: 3, hidden: true },
+        { key: 'attrs.업체명', label: '', order: 4 },
+        { key: 'sys.status', label: '상태', order: 5 },
+      ],
+    };
+    expect(selectRawExportContactColumns(contactScheme, profileScheme)).toEqual([
+      { source: 'pii.담당자', label: '성명', kind: 'pii', key: '담당자' },
+      { source: 'attrs.업체명', label: '업체명', kind: 'attrs', key: '업체명' },
+    ]);
+  });
+
+  it('컬럼 설정이 없으면 attrs·pii 는 기본 숨김이라 빈 배열이다', () => {
+    expect(selectRawExportContactColumns(contactScheme, null)).toEqual([]);
+  });
+
+  it('컨택 스킴에서 사라진 고아 key 는 표시 중이어도 고르지 않는다', () => {
+    const profileScheme: ProfileColumnScheme = {
+      version: 1,
+      columns: [{ key: 'attrs.사라진열', label: '사라진열', order: 0 }],
+    };
+    expect(selectRawExportContactColumns(contactScheme, profileScheme)).toEqual([]);
+    expect(selectRawExportContactColumns(null, profileScheme)).toEqual([]);
   });
 });

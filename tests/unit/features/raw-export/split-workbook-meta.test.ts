@@ -118,7 +118,7 @@ describe('분할 워크북 메타 컬럼', () => {
       expect(ws.rowCount).toBe(5); // 헤더 3행 + 데이터 2행
       const dr = ws.getRow(5);
       expect(dr.getCell(2).value).toBe(5); // 시스템ID
-      expect(dr.getCell(3).value).toBe(2); // 순번
+      expect(dr.getCell(3).value).toBe(''); // 순번 — 미응답 행은 접수 순번이 없다
       expect(dr.getCell(6).value).toBe('미응답');
       expect([10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
       expect(dr.getCell(12).value).toBeNull(); // 변수 열
@@ -152,7 +152,7 @@ describe('분할 워크북 조사 대상 명단 열', () => {
     ],
   };
 
-  it('공통·옵션 시트 전부 메타 열 오른쪽에 명단 열이 붙고 세로 병합되며 코딩북에는 없다', () => {
+  it('공통·옵션 시트 전부 그룹 열 다음에 명단 열이 붙고 세로 병합되며 코딩북에는 없다', () => {
     const wb = buildSplitWorkbook(
       [basisQ, textQ, condQ],
       [{ ...row, contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' } }],
@@ -163,19 +163,28 @@ describe('분할 워크북 조사 대상 명단 열', () => {
     expect(variableSheets.map((ws) => ws.name)).toContain('공통');
     expect(variableSheets.length).toBeGreaterThanOrEqual(2);
     for (const ws of variableSheets) {
-      expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
-      expect(ws.getRow(1).getCell(12).value).toBe('기수');
-      expect(ws.getRow(1).getCell(13).value).toBe('성명');
-      expect(ws.getRow(4).getCell(12).value).toBe('15기');
-      expect(ws.getRow(4).getCell(13).value).toBe('홍길동');
+      expect(ws.getRow(1).getCell(4).value).toBe('조사 대상 그룹');
+      expect(ws.getRow(1).getCell(5).value).toBe('기수');
+      expect(ws.getRow(1).getCell(6).value).toBe('성명');
+      expect(ws.getRow(1).getCell(7).value).toBe('개별 URL');
+      expect(ws.getRow(1).getCell(13).value).toBe('접속 단말');
+      expect(ws.getRow(4).getCell(5).value).toBe('15기');
+      expect(ws.getRow(4).getCell(6).value).toBe('홍길동');
       const merges = ws.model.merges as string[];
-      expect(merges).toContain('L1:L3');
-      expect(merges).toContain('M1:M3');
+      expect(merges).toContain('E1:E3');
+      expect(merges).toContain('F1:F3');
     }
     const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
     expect(names).not.toContain('기수');
     expect(names).not.toContain('성명');
-    // 응답 내역 시트는 요약 시트 — 명단 열을 붙이지 않는다
-    expect(wb.getWorksheet('응답 내역')!.getRow(1).getCell(10).value ?? '').toBe('');
+    // 응답 내역 시트에도 그룹 다음에 같은 명단 열이 붙는다
+    const ws1 = wb.getWorksheet('응답 내역')!;
+    expect([3, 4, 5, 6].map((c) => ws1.getRow(1).getCell(c).value)).toEqual([
+      '조사 대상 그룹',
+      '기수',
+      '성명',
+      '접속 단말',
+    ]);
+    expect([4, 5].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
   });
 });
