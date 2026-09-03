@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { type RawExportContext, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
+import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 import type { Question } from '@/types/survey';
 
 const basisQ = {
@@ -93,5 +94,34 @@ describe('분할 워크북 메타 컬럼', () => {
       'F8.0',
       '',
     ]);
+  });
+
+  it('미응답 조사 대상 행은 모든 변수 시트에 상태 미응답·변수 열 빈칸으로 들어간다', () => {
+    const nonRespondent: RawExportResponseRow = {
+      id: 't-1',
+      questionResponses: {},
+      groupValue: null,
+      resid: 5,
+      inviteCode: 'c5',
+      ipHash: null,
+      currentStepId: null,
+      platform: null,
+      browser: null,
+      status: NOT_RESPONDED_STATUS,
+      startedAt: null,
+      completedAt: null,
+      totalSeconds: null,
+    };
+    const wb = buildSplitWorkbook([basisQ, textQ], [row, nonRespondent], 'qb', CTX);
+    for (const ws of wb.worksheets) {
+      if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
+      expect(ws.rowCount).toBe(5); // 헤더 3행 + 데이터 2행
+      const dr = ws.getRow(5);
+      expect(dr.getCell(2).value).toBe(5); // 시스템ID
+      expect(dr.getCell(3).value).toBe(2); // 순번
+      expect(dr.getCell(6).value).toBe('미응답');
+      expect([10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
+      expect(dr.getCell(12).value).toBeNull(); // 변수 열
+    }
   });
 });

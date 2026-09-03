@@ -5,6 +5,7 @@ import {
   type RawExportResponseRow,
   generateRawDataWorkbook,
 } from '@/lib/analytics/raw-workbook';
+import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 import type { Question } from '@/types/survey';
 
 const radioQ = {
@@ -483,5 +484,51 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(ws.getRow(5).getCell(4).value).toBe('공개링크');
     expect(ws.getRow(5).getCell(1).value).toBe('');
     expect(ws.getRow(5).getCell(7).value).toBe('');
+  });
+});
+
+describe('미응답 조사 대상 행', () => {
+  const nonRespondentRow = () =>
+    makeRow({
+      status: NOT_RESPONDED_STATUS,
+      questionResponses: {},
+      ipHash: null,
+      currentStepId: null,
+      platform: null,
+      browser: null,
+      startedAt: null,
+      completedAt: null,
+      totalSeconds: null,
+      groupValue: null,
+    });
+
+  it('조사 대상 값만 채우고 응답 메타·문항 열은 빈칸이며 상태는 미응답이다', () => {
+    const wb = generateRawDataWorkbook([radioQ], [nonRespondentRow()], TEST_CTX);
+    const dr = wb.getWorksheet('Raw Data')!.getRow(4);
+    expect(dr.getCell(1).value).toBe(''); // IP 해시
+    expect(dr.getCell(2).value).toBe(7); // 시스템ID
+    expect(dr.getCell(3).value).toBe(1); // 순번
+    expect(dr.getCell(4).value).toBe(''); // 조사 대상 그룹 — 익명 응답 표식(공개링크)이 아니다
+    expect(dr.getCell(5).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL
+    expect(dr.getCell(6).value).toBe('미응답');
+    expect([7, 8, 9, 10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '', '', '', '']);
+    expect(dr.getCell(12).value).toBeNull(); // Q1
+
+    const lr = wb.getWorksheet('응답 내역')!.getRow(2);
+    expect(lr.getCell(4).value).toBe(''); // 접속 단말
+    expect(lr.getCell(5).value).toBe(''); // 브라우저
+    expect(lr.getCell(6).value).toBe('미응답');
+    expect(lr.getCell(9).value).toBe(''); // 소요시간
+  });
+
+  it('미응답 행이 사이에 끼어도 순번은 이어진다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow(), nonRespondentRow(), makeRow({ status: 'in_progress' })],
+      TEST_CTX,
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(3).value)).toEqual([1, 2, 3]);
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(6).value)).toEqual(['완료', '미응답', '진행중']);
   });
 });

@@ -10,7 +10,11 @@ import {
 } from '@/lib/analytics/spss-excel-export';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatExportStatusLabel, formatTotalTime } from '@/lib/operations/profiles';
+import {
+  NOT_RESPONDED_STATUS,
+  formatExportStatusLabel,
+  formatTotalTime,
+} from '@/lib/operations/profiles';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -21,7 +25,9 @@ import { Question, SurveySubmission } from '@/types/survey';
 // ============================================================
 
 export interface RawExportResponseRow {
+  /** 응답 id. 미응답 행은 contact_targets.id (파일 안에서 유일 — 미응답 대상은 응답 행이 없다) */
   id: string;
+  /** 미응답 행은 {} */
   questionResponses: Record<string, unknown>;
   groupValue: string | null;
   resid: number | null;
@@ -30,10 +36,17 @@ export interface RawExportResponseRow {
   currentStepId: string | null;
   platform: string | null;
   browser: string | null;
+  /** survey_responses.status 또는 NOT_RESPONDED_STATUS */
   status: string;
-  startedAt: Date;
+  /** 미응답 행은 null */
+  startedAt: Date | null;
   completedAt: Date | null;
   totalSeconds: number | null;
+}
+
+/** 미응답 조사 대상 행 — 응답이 아니므로 응답 메타(단말·소요시간 등)를 빈칸으로 그린다. */
+export function isNonRespondentRow(row: Pick<RawExportResponseRow, 'status'>): boolean {
+  return row.status === NOT_RESPONDED_STATUS;
 }
 
 export interface RawExportContext {
@@ -120,7 +133,8 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   {
     header: '조사 대상 그룹',
     enabled: (ctx) => ctx.hasContactGroups,
-    value: (row) => row.groupValue ?? '공개링크',
+    // '공개링크' 는 익명 응답의 표식 — 응답이 아닌 조사 대상 행에는 붙이지 않는다.
+    value: (row) => row.groupValue ?? (isNonRespondentRow(row) ? '' : '공개링크'),
   },
   {
     header: '개별 URL',
@@ -130,8 +144,15 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
-  { header: '소요시간', value: (row) => formatTotalTime(row.totalSeconds, row.status) },
-  { header: '접속 단말', value: (row) => formatPlatformKo(row.platform as Platform | null) },
+  {
+    header: '소요시간',
+    value: (row) => (isNonRespondentRow(row) ? '' : formatTotalTime(row.totalSeconds, row.status)),
+  },
+  {
+    header: '접속 단말',
+    value: (row) =>
+      isNonRespondentRow(row) ? '' : formatPlatformKo(row.platform as Platform | null),
+  },
 ];
 
 function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
@@ -173,16 +194,19 @@ export function addResponseListSheet(
   ];
   ws.addRow(headers);
   rows.forEach((row, i) => {
+    // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)와 익명 표식을 빈칸으로 둔다 —
+    // RAW_META_COLUMNS 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
+    const nonRespondent = isNonRespondentRow(row);
     ws.addRow([
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),
       i + 1,
-      ...(ctx.hasContactGroups ? [row.groupValue ?? '공개링크'] : []),
-      formatPlatformKo(row.platform as Platform | null),
-      row.browser ?? 'Other',
+      ...(ctx.hasContactGroups ? [row.groupValue ?? (nonRespondent ? '' : '공개링크')] : []),
+      nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
+      nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
-      formatTotalTime(row.totalSeconds, row.status),
+      nonRespondent ? '' : formatTotalTime(row.totalSeconds, row.status),
     ]);
   });
   styleHeaderRows(ws, [1], headers.length);

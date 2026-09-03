@@ -22,7 +22,9 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
+import { countRawExportPopulation } from '@/lib/analytics/raw-export-rows.server';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
@@ -48,6 +50,10 @@ async function handleSplitPreview(
     }
     const basis = request.nextUrl.searchParams.get('basis');
     if (basis) ctx.bind({ basis });
+    // 「조사 대상 중 미응답자 포함」 — export 라우트와 같은 파라미터. 켜졌을 때만 모수 count 를 더한다.
+    const includeNonRespondents =
+      request.nextUrl.searchParams.get('includeNonRespondents') === '1';
+    if (includeNonRespondents) ctx.bind({ includeNonRespondents });
 
     // questions 는 order 오름차순 고정 (export/route.ts 와 동일 — 변수 순서를 문항 순서에 고정).
     const surveyData = await db.query.surveys.findFirst({
@@ -75,11 +81,15 @@ async function handleSplitPreview(
         [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
         { changeConfirmQuestionIds },
       ).length;
+      // 다이얼로그가 「조사 대상 중 미응답자 포함」 영역을 그릴지 정하는 근거 —
+      // 조사 대상이 없는 설문(hasContacts=false)에서는 영역 자체가 없다.
+      const { hasContacts } = await getSurveyContactStats(surveyId, scope);
       return NextResponse.json({
         totalVars,
         softLimit: SPLIT_SOFT_LIMIT,
         excelLimit: SPLIT_EXCEL_LIMIT,
         candidates: detectSplitCandidates(questions),
+        hasContacts,
       });
     }
 
@@ -109,8 +119,20 @@ async function handleSplitPreview(
       }
     }
 
+    const plan = planSplit(questions, basis, respCounts, { changeConfirmQuestionIds });
+    if (!includeNonRespondents) return NextResponse.json({ plan });
+
+    // 켜졌을 때만 모수 count 를 더한다 — 꺼진 경로의 쿼리 수를 늘리지 않기 위해서다.
+    // respCounts 는 손대지 않는다: 미응답 행은 기준 문항 값이 없어 어느 버킷에도 안 들어간다.
+    const { responseCount, nonRespondentCount } = await countRawExportPopulation(
+      surveyId,
+      scope,
+      { includeNonRespondents: true },
+    );
     return NextResponse.json({
-      plan: planSplit(questions, basis, respCounts, { changeConfirmQuestionIds }),
+      plan,
+      totalRows: responseCount + nonRespondentCount,
+      nonRespondentRows: nonRespondentCount,
     });
   } catch (error) {
     if (error instanceof Error && error.message === '인증이 필요합니다.') {
