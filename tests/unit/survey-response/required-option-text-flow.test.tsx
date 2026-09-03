@@ -284,7 +284,9 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
     vi.restoreAllMocks();
   });
 
-  it('미입력 필수 문항은 첫 번째만 표시하고 입력 후 다음 문항으로 오류 대상을 갱신한다', async () => {
+  // 티켓 14(2026-09-03) — 이전에는 첫 문항만 강조했다. 이제 미답 필수 전부를 강조하고
+  // 스크롤만 첫 문항으로 간다. 답한 문항의 강조는 그 문항만 즉시 풀린다.
+  it('미입력 필수 문항을 전부 표시하고 첫 문항으로 스크롤하며, 답한 문항만 강조가 풀린다', async () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
     renderTwoRequiredQuestionsFlow();
@@ -299,10 +301,13 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       .getByText('두 번째 필수 질문')
       .closest('[data-question-id="q-second-required"]');
     expect(firstQuestion).toHaveClass('ring-red-200');
-    expect(secondQuestion).not.toHaveClass('ring-red-200');
+    expect(secondQuestion).toHaveClass('ring-red-200');
     expect(scrollSpy.mock.contexts.at(-1)).toBe(firstQuestion);
 
     await user.click(screen.getByLabelText('예'));
+    expect(firstQuestion).not.toHaveClass('ring-red-200');
+    expect(secondQuestion).toHaveClass('ring-red-200');
+
     await user.click(screen.getByRole('button', { name: '다음' }));
 
     expect(firstQuestion).not.toHaveClass('ring-red-200');

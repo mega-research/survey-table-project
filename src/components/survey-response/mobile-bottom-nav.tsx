@@ -6,7 +6,8 @@ interface MobileBottomNavProps {
   keyboardOpen: boolean;
   currentStepNumber: number;
   totalStepCount: number;
-  canProceed: boolean;
+  /** 「필수 질문」 소표시 — 이 스텝에서 "다음"을 시도해 필수 게이트에 막힌 뒤에만 참이다. */
+  showRequiredNotice: boolean;
   hasPrevious: boolean;
   isLastStep: boolean;
   isSubmitting: boolean;
@@ -30,7 +31,7 @@ export function MobileBottomNav({
   keyboardOpen,
   currentStepNumber,
   totalStepCount,
-  canProceed,
+  showRequiredNotice,
   hasPrevious,
   isLastStep,
   isSubmitting,
@@ -60,7 +61,7 @@ export function MobileBottomNav({
           <span className="text-sm font-medium text-gray-900">
             {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
           </span>
-          {!canProceed && (
+          {showRequiredNotice && (
             <span className="text-[11px] text-red-500">필수 질문</span>
           )}
         </div>

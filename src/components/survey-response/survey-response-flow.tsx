@@ -980,6 +980,13 @@ function SurveyResponseFlowActive({
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
+  // 필수 게이트 안내는 "다음"을 시도해 막힌 스텝에서만 띄운다(숫자 검증·변동 확인과 같은 방식).
+  // 숫자 쪽과 달리 스텝을 떠나면 시도 기록을 지운다 — 돌아와도 다시 시도하기 전엔 안내가
+  // 뜨지 않게. useEffect 대신 렌더 중 상태 조정(아래 adminWarnStepIndex 와 같은 관례).
+  const [requiredErrorStepIndex, setRequiredErrorStepIndex] = useState<number | null>(null);
+  if (requiredErrorStepIndex !== null && requiredErrorStepIndex !== currentStepIndex) {
+    setRequiredErrorStepIndex(null);
+  }
   const focusedQuestionId = currentStepQuestions.find((q) =>
     highlightQuestionIds.has(q.id),
   )?.id;
@@ -1060,6 +1067,9 @@ function SurveyResponseFlowActive({
         awaitingConfirmationIds.has(q.id) || !isQuestionRequired(q) || isQuestionAnswered(q),
     );
   };
+  // 하단 안내(데스크톱 문구·모바일 소표시) — 이 스텝에서 필수 게이트에 막힌 뒤에만, 답을
+  // 다 채우면 canProceed 가 참이 되어 즉시 사라진다.
+  const showRequiredNotice = requiredErrorStepIndex === currentStepIndex && !canProceed();
 
   // admin-edit 전용 — "빈 필수" 완화(경고 1회 후 통과). 응답자/미리보기/테스트 흐름은
   // isAdminEdit=false 라 아래 값들이 전혀 쓰이지 않는다(handleNext 분기에서 무시).
@@ -1293,7 +1303,10 @@ function SurveyResponseFlowActive({
     if (!bypassEmptyRequired && unansweredCurrent.length > 0) {
       const firstUnanswered = unansweredCurrent[0];
       if (!firstUnanswered) return;
-      setHighlightQuestionIds(new Set([firstUnanswered.id]));
+      // 미답 필수 전부를 강조한다 — 첫 문항만 짚으면 답할 때마다 다음 것이 하나씩 나타나
+      // 응답자가 몇 번 더 막힐지 알 수 없다. 스크롤·숫자 이슈 판정은 첫 문항 기준 그대로.
+      setHighlightQuestionIds(new Set(unansweredCurrent.map((q) => q.id)));
+      setRequiredErrorStepIndex(currentStepIndex);
       const firstIssue = numericIssuesByQuestion.get(firstUnanswered.id)?.[0];
       if (firstIssue) {
         setNumericErrorStepIndex(currentStepIndex);
@@ -1625,7 +1638,7 @@ function SurveyResponseFlowActive({
               keyboardOpen={keyboardOpen}
               currentStepNumber={currentVisibleStepNumber}
               totalStepCount={totalVisibleStepCount}
-              canProceed={canProceed()}
+              showRequiredNotice={showRequiredNotice}
               hasPrevious={hasPreviousDisplayable}
               isLastStep={isLastVisibleStep}
               isSubmitting={isSubmitting}
@@ -1739,7 +1752,7 @@ function SurveyResponseFlowActive({
                 )}
               </span>
             ) : (
-              !canProceed() && (
+              showRequiredNotice && (
                 <span className="text-red-500">* 필수 질문에 답변해주세요</span>
               )
             )}

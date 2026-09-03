@@ -475,6 +475,7 @@ describe('필수 여부와 변동 확인은 별개 축이다', () => {
   }
 
   it('잠긴 필수 문항에 "필수 질문에 답변해주세요"를 띄우지 않는다', async () => {
+    const user = userEvent.setup();
     arrangeRequiredPriorQuestion();
     renderFlow();
     await screen.findByText('지난 회차에 답한 질문');
@@ -482,6 +483,12 @@ describe('필수 여부와 변동 확인은 별개 축이다', () => {
       expect(screen.queryByRole('radio', { name: '2025년 조사와 같음' })).not.toBeNull(),
     );
     // 입력이 잠겨 있어 응답자가 따를 수 없는 요구다 — 변동 확인 게이트가 대신 막는다.
+    expect(screen.queryByText(/필수 질문에 답변해주세요/)).toBeNull();
+
+    // 티켓 14 이후 하단 안내는 "다음"을 시도한 뒤에만 뜬다 — 그래서 진입 직후 부재는 자명하다.
+    // 시도한 뒤에도 변동 확인 게이트가 필수 게이트보다 앞이라 필수 안내가 서지 않아야 한다.
+    await user.click(screen.getByRole('button', { name: /다음/ }));
+    expect(await screen.findByText(/변동 여부를 선택해주세요/)).toBeTruthy();
     expect(screen.queryByText(/필수 질문에 답변해주세요/)).toBeNull();
   });
 
