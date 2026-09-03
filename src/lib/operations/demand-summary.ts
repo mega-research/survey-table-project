@@ -1,6 +1,10 @@
 import { analyzeQuestion } from '@/lib/analytics/analyzer';
 import { buildRenderSteps } from '@/lib/group-ordering';
-import { resolveJudgementShape } from '@/lib/survey/judgement-item';
+import {
+  hasOpinionText,
+  resolveJudgementShape,
+  resolveOpinionPairs,
+} from '@/lib/survey/judgement-item';
 import type { SurveyResponse } from '@/db/schema';
 import type { Question, QuestionGroup } from '@/types/survey';
 
@@ -18,8 +22,6 @@ export { resolveJudgementShape };
  * 그건 신설이 없다.
  */
 
-/** 응답의 옵션 텍스트 사이드카 예약 키. **실존 질문 id 가 아니다.** */
-const OPTION_TEXTS_KEY = '__optTexts__';
 
 export interface DemandSummaryRow {
   questionId: string;
@@ -69,33 +71,15 @@ export type QuestionAsOf = (
 ) => Question | null;
 
 /**
- * 응답 하나에서 그 문항의 의견 서술을 읽는다.
- *
- * 값은 질문 답과 **형제로 놓인 예약 키**(`__optTexts__`) 아래에 있고 실존 질문
- * id 가 아니다. 질문 id 로 순회하는 집계가 이 값을 조용히 건너뛰거나 예외를
- * 던지는 것이 이 형식의 알려진 지뢰라 여기서 한 번 분기한다.
- */
-function readOpinionText(
-  response: { questionResponses: unknown },
-  questionId: string,
-  optionId: string,
-): string | null {
-  const responses = response.questionResponses as Record<string, unknown> | null;
-  const sidecar = responses?.[OPTION_TEXTS_KEY];
-  if (!sidecar || typeof sidecar !== 'object' || Array.isArray(sidecar)) return null;
-  const byQuestion = (sidecar as Record<string, unknown>)[questionId];
-  if (!byQuestion || typeof byQuestion !== 'object' || Array.isArray(byQuestion)) return null;
-  const text = (byQuestion as Record<string, unknown>)[optionId];
-  if (typeof text !== 'string') return null;
-  const trimmed = text.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-/**
  * 문항 한 줄짜리 집계표를 만든다. 순서는 조사표 순서(그룹 순서 → 그룹 안 문항 순서).
  *
  * **누적 보고서다.** 행은 지금 배포판의 문항이 정하고, 각 응답은 자기 버전의 문항
  * 모양으로 읽어 합친다. 읽지 못한 응답은 버리지 않고 `uncountedCount` 로 센다.
+ *
+ * **의견은 짝 문항에서 읽는다** (ADR 0022). 판단 항목 바로 뒤의 `부모코드_T` 장문형이
+ * 그 문항의 의견이고, 자기 행을 갖지 않고 부모 행의 의견 칸으로 접힌다. 의견은
+ * 판정과 직교하므로 필요율 분모에 들어가지 않는다 — 예전엔 세 번째 판정값이라
+ * 분모에만 들어가 필요율을 끌어내렸다.
  */
 export function buildDemandSummary(
   questions: readonly Question[],
@@ -111,6 +95,9 @@ export function buildDemandSummary(
   const ordered = buildRenderSteps([...questions], [...groups]).flatMap((step) =>
     step.items.map((item) => item.question),
   );
+  // 짝은 지금 배포판 기준이다. 짝 문항 id 는 버전을 가로질러 유지되므로 옛 응답의
+  // 의견도 같은 id 로 읽힌다.
+  const pairs = resolveOpinionPairs(ordered);
 
   // 응답을 자기 버전끼리 모은다. 문항과 무관한 분류라 한 번만 한다.
   const byVersion = new Map<string | null, DemandResponseInput[]>();
@@ -121,7 +108,11 @@ export function buildDemandSummary(
     else byVersion.set(key, [response]);
   }
 
-  return ordered.map((question, index) => {
+  // 의견 짝 문항은 부모 행에 접히므로 자기 행을 만들지 않는다. 짝이 안 맞는 `_T` 는
+  // 걸러지지 않고 일반 문항 행으로 남는다 — 조용히 접지 않는다.
+  const rowQuestions = ordered.filter((question) => !pairs.opinionIds.has(question.id));
+
+  return rowQuestions.map((question, index) => {
     const group = question.groupId ? groupById.get(question.groupId) : undefined;
     const base = {
       questionId: question.id,
@@ -150,7 +141,17 @@ export function buildDemandSummary(
     let needCount = 0;
     let dropCount = 0;
     let uncountedCount = 0;
+
+    // 의견은 판정과 직교한다 — 버전 묶음과 무관하게 짝 문항의 답을 그대로 읽는다.
+    // 선택지 값처럼 버전마다 뜻이 바뀌는 것이 아니라 as-of 를 거칠 이유가 없다.
+    const opinionId = pairs.opinionOf.get(question.id)?.id;
     const opinions: string[] = [];
+    if (opinionId) {
+      for (const response of responses) {
+        const text = (response.questionResponses as Record<string, unknown>)[opinionId];
+        if (hasOpinionText(text)) opinions.push(text.trim());
+      }
+    }
 
     // 각 묶음은 **그 버전의 문항 모양**으로 읽는다.
     for (const [versionId, bucket] of byVersion) {
@@ -175,18 +176,10 @@ export function buildDemandSummary(
           : 0;
       needCount += countOf(shape.needValue);
       dropCount += countOf(shape.dropValue);
-
-      // 의견만 여기서 센다. 서술은 사이드카에 있어 분석 모듈이 볼 수 없고,
-      // 서술이 비면 답으로 치지 않는다는 규칙도 이 형식 고유다.
-      for (const response of bucket) {
-        const answer = (response.questionResponses as Record<string, unknown>)[question.id];
-        if (answer !== shape.opinionValue) continue;
-        const text = readOpinionText(response, question.id, shape.opinionOptionId);
-        if (text) opinions.push(text);
-      }
     }
 
-    const answered = needCount + dropCount + opinions.length;
+    // 분모는 판정뿐이다. 의견은 어느 판정에도 붙을 수 있으니 여기 들어가면 이중 계산이다.
+    const answered = needCount + dropCount;
     return {
       ...base,
       needCount,

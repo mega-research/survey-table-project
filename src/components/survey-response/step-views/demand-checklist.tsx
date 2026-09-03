@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChevronDown, Crop } from 'lucide-react';
 
@@ -13,14 +13,16 @@ import {
 import { questionShortCode } from '@/lib/question/label';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
+  hasOpinionText,
   resolveJudgementBulkChoices,
   resolveJudgementShape,
+  resolveOpinionPairs,
   type JudgementShape,
+  type OpinionPairs,
 } from '@/lib/survey/judgement-item';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { Question, QuestionGroup } from '@/types/survey';
 
 type ResponsesMap = Record<string, unknown>;
@@ -140,6 +142,9 @@ export function DemandChecklist({
     [cancelHover, onQuestionFocus, activeGroupId],
   );
 
+  // 의견 짝은 스텝 순서로 판정한다 — 부모 바로 다음이라는 조건이 순서에 걸려 있다.
+  const pairs = useMemo(() => resolveOpinionPairs(items.map((item) => item.question)), [items]);
+
   const blocks = useMemo<Block[]>(() => {
     const byId = new Map(groups.map((g) => [g.id, g.name]));
     const out: Block[] = [];
@@ -174,6 +179,7 @@ export function DemandChecklist({
           onHoverEnd={cancelHover}
           isActiveGroup={block.id !== null && block.id === activeGroupId}
           focusedQuestionId={focusedQuestionId}
+          pairs={pairs}
         />
       ))}
     </div>
@@ -196,6 +202,7 @@ function BlockCard({
   onHoverEnd,
   isActiveGroup,
   focusedQuestionId,
+  pairs,
 }: {
   block: Block;
   blockName: string | null;
@@ -213,9 +220,8 @@ function BlockCard({
   onHoverEnd: () => void;
   isActiveGroup: boolean;
   focusedQuestionId: string | null;
+  pairs: OpinionPairs;
 }) {
-  const optionTextsAll = useSurveyResponseStore((s) => s.optionTexts);
-
   const judgements = useMemo(
     () =>
       block.items
@@ -224,12 +230,10 @@ function BlockCard({
     [block.items],
   );
 
+  // 판정만 응답으로 센다. 의견은 판정에 딸린 것이라 있든 없든 응답 수와 무관하다.
   const answeredCount = judgements.filter(({ item, shape }) => {
     const value = responses[item.question.id];
-    if (value === shape.needValue || value === shape.dropValue) return true;
-    // 의견은 서술이 있어야 답으로 친다 — 집계와 같은 규칙이다.
-    if (value !== shape.opinionValue) return false;
-    return (optionTextsAll[item.question.id]?.[shape.opinionOptionId] ?? '').trim().length > 0;
+    return value === shape.needValue || value === shape.dropValue;
   }).length;
 
   /**
@@ -299,16 +303,22 @@ function BlockCard({
       )}
 
       {block.items.map((item) => {
+        // 의견 짝 문항은 부모 행 안에 그려진다 — 여기서 자기 행을 만들면 두 번 나온다.
+        if (pairs.opinionIds.has(item.question.id)) return null;
         const shape = resolveJudgementShape(item.question);
+        const opinionQuestion = pairs.opinionOf.get(item.question.id) ?? null;
         return shape ? (
           <JudgementRow
             key={item.question.id}
             question={item.question}
             shape={shape}
             value={responses[item.question.id]}
+            opinionQuestion={opinionQuestion}
+            opinion={opinionQuestion ? responses[opinionQuestion.id] : undefined}
             active={focusedQuestionId === item.question.id}
             invalid={highlightQuestionIds.has(item.question.id)}
             onPick={(value) => onResponse(item.question.id, value)}
+            onOpinion={(text) => opinionQuestion && onResponse(opinionQuestion.id, text)}
             onFocus={() => onQuestionFocus?.(item.question.id)}
             onHover={() => onQuestionHover(item.question.id, item.question.groupId ?? null)}
             onHoverEnd={onHoverEnd}
@@ -342,13 +352,19 @@ function BlockCard({
   );
 }
 
+/** 세 번째 버튼의 이름. 판정이 아니라 서술 칸을 여닫는 토글이지만 화면은 그대로다. */
+const OPINION_TOGGLE_LABEL = '의견 (자유기재)';
+
 function JudgementRow({
   question,
   shape,
   value,
+  opinionQuestion,
+  opinion,
   active,
   invalid,
   onPick,
+  onOpinion,
   onFocus,
   onHover,
   onHoverEnd,
@@ -356,24 +372,33 @@ function JudgementRow({
   question: Question;
   shape: JudgementShape;
   value: unknown;
+  /** 의견 짝 문항. 없으면 서술 칸도 토글도 그리지 않는다 — 담을 곳이 없다. */
+  opinionQuestion: Question | null;
+  /** 짝 문항의 답. */
+  opinion: unknown;
   active: boolean;
   invalid: boolean;
   onPick: (value: string) => void;
+  onOpinion: (text: string) => void;
   onFocus: () => void;
   onHover: () => void;
   onHoverEnd: () => void;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const note =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]?.[shape.opinionOptionId]) ?? '';
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
 
   // 조사표 사각형과 같은 규칙 — 엑셀 라벨이 있으면 그것, 없으면 문항코드.
   const shortCode = questionShortCode(question);
 
-  const isOpinion = value === shape.opinionValue;
-  const needsText = isOpinion && note.trim().length === 0;
+  const note = typeof opinion === 'string' ? opinion : '';
+  const hasNote = hasOpinionText(note);
+  /**
+   * 서술 칸을 열어 둔 상태. 글이 있으면 늘 열려 있고, 없을 때만 토글이 여닫는다 —
+   * 적어 둔 글을 접어서 숨기면 "내가 뭐라고 썼지"를 다시 눌러 봐야 한다.
+   * 의견은 판정과 직교하므로 필요함/필요하지 않음 선택과 무관하게 열린다 (ADR 0022).
+   */
+  const [opened, setOpened] = useState(false);
+  const isOpinionOpen = opinionQuestion !== null && (hasNote || opened);
 
   /**
    * 이 행의 입력칸에 커서가 있는 동안은 hover 로 따라가지 않는다.
@@ -426,42 +451,35 @@ function JudgementRow({
             invalid={invalid}
             onClick={() => onPick(shape.dropValue)}
           />
-          <Seg
-            label={labelOf(shape.opinionValue)}
-            on={isOpinion}
-            tone="opinion"
-            invalid={invalid}
-            onClick={() => onPick(shape.opinionValue)}
-          />
+          {/* 판정 버튼이 아니라 서술 칸 토글이다. 글이 있으면 켜진 색으로 남는다. */}
+          {opinionQuestion && (
+            <Seg
+              label={OPINION_TOGGLE_LABEL}
+              on={hasNote || opened}
+              tone="opinion"
+              invalid={false}
+              onClick={() => setOpened((v) => !v)}
+            />
+          )}
         </div>
-        {/* 의견이면 서술 칸이 늘 열려 있어 접는 버튼이 없다 — 그 값의 내용물이 곧 서술이다 */}
         <span className="flex w-[14px] shrink-0 justify-center text-gray-400">
-          {isOpinion && <ChevronDown size={14} className="rotate-180" />}
+          {isOpinionOpen && <ChevronDown size={14} className="rotate-180" />}
         </span>
       </div>
 
-      {/*
-        서술 칸은 **의견을 고른 문항에만** 연다. 선택되지 않은 선택지의 텍스트는
-        제출 시 사이드카에서 버려지므로, 다른 값에서 적게 두면 조용히 사라진다.
-      */}
-      {isOpinion && (
+      {/* 서술은 짝 문항의 답이다. 판정과 직교하므로 어느 판정을 골랐든 함께 남는다. */}
+      {isOpinionOpen && opinionQuestion && (
         <div className="mt-2">
           <textarea
             value={note}
-            onChange={(e) => setOptionText(question.id, shape.opinionOptionId, e.target.value)}
+            onChange={(e) => onOpinion(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             onFocus={() => (typing.current = true)}
             onBlur={() => (typing.current = false)}
             rows={3}
             placeholder="이 문항에 대한 의견을 자유롭게 적어 주십시오"
-            className={cn(
-              'w-full rounded-md border p-2 text-[12px] outline-none focus:border-blue-500',
-              needsText && invalid ? 'border-red-400' : 'border-gray-300',
-            )}
+            className="w-full rounded-md border border-gray-300 p-2 text-[12px] outline-none focus:border-blue-500"
           />
-          {needsText && (
-            <p className="mt-1 text-[11px] text-gray-500">의견을 적으셔야 응답으로 처리됩니다</p>
-          )}
         </div>
       )}
     </div>
