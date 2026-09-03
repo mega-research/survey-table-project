@@ -197,6 +197,18 @@ export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
 export const UNSUBSCRIBE_RESULT_CODE_KEYWORD = '수신거부';
 
 /**
+ * 최근 결과코드가 수신거부 판정인지 — 클라이언트 공용 판정.
+ *
+ * **오늘 소비자는 없다.** 조사 대상 표의 메일 칸이 쓰던 자리는 서버로 옮겨갔다 —
+ * `effectiveMailStatusExpr` 가 수신거부 시각과 결과코드 두 축을 SQL 에서 함께 접으므로
+ * 화면은 내려온 상태를 그대로 그린다(같은 판정을 두 곳에서 하면 갈린다). 판정 기준 자체는
+ * 여기 상수와 SQL 이 공유하므로, 클라이언트에서 다시 물어야 할 표면이 생기면 이 함수를 쓴다.
+ */
+export function isUnsubscribeResultCode(code: string | null): boolean {
+  return code != null && code.includes(UNSUBSCRIBE_RESULT_CODE_KEYWORD);
+}
+
+/**
  * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인
  * 스냅샷 재발송 경유)이 있으면 실제 서버 의미 그대로 라벨링해 함께 노출한다.
  * 레거시를 새 옵션('미응답' 등)으로 위장 표시하면 화면과 실제 대상 집합이

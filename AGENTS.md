@@ -86,6 +86,12 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > 3형제의 게스트 분기가 사라져 **판정은 코어 하나**가 한다. 마이그레이션 없음(0092 컬럼 소비).
 > 직전: 티켓 20 메일 회신 소유자 연동)
 
+> 테스트 트리 재편(2026-08-25, ADR-0017 — staging 병합으로 들어옴): 단위 테스트 전면
+> colocation, `tests/unit` 소멸, `tests/` 에는 integration·e2e·repo·helpers·fixtures·stubs 만
+> 남는다. 배치 가드 메타테스트가 그것을 지킨다. 같은 세션의 앞선 작업으로 server 트리
+> 무접미사 통일(ADR-0016)과 lib 쌍둥이 `-format` 개명이 함께 들어왔다.
+
+
 ---
 
 ## 기술 스택
@@ -1620,7 +1626,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 
 - 컴포넌트: `kebab-case.tsx` (예: `question-edit-modal.tsx`)
 - 스토어/유틸/액션/타입: `kebab-case.ts`
-- **server/ 트리는 무접미사** (ADR 0016) — `.service.ts`·`.server.ts` 금지, 폴더가 계층을 말한다. 메타테스트(`tests/unit/server-tree-naming.test.ts`)가 강제
+- **server/ 트리는 무접미사** (ADR 0016) — `.service.ts`·`.server.ts` 금지, 폴더가 계층을 말한다. 메타테스트(`tests/repo/server-tree-naming.test.ts`)가 강제
 - **`.server.ts` 는 lib 등 공유 트리 전용** — "공유 트리 속 서버 전용" 표시. 마킹은 내용물 기준(server-only·DB·서버 env 의존)이며 소비자 기준 금지
 - **서버 파일과 같은 어간의 lib 공유 계산은 역할 접미사** — `-format` 기본(예: `drop-funnel-format.ts` ↔ server `drop-funnel.ts`), 서버가 어간을 소유
 - **도메인명 접두 제거는 services 층 한정** — `domain/` 의 `mail-*`·`contact-*` 는 접두가 아니라 DB 테이블·도메인 어휘와 정합하는 개념명이라 유지한다 (예: `mail-campaign` ↔ `mail_campaigns`)
@@ -1653,8 +1659,8 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 ### 경계 스키마와 z.custom
 
 `z.custom<T>()` 은 **검증 함수를 주지 않으면 런타임에 아무것도 보지 않는다** — 타입만 붙고 값은
-그대로 흐른다. 반대로 `z.object()`(및 `.partial()`)는 unknown 키를 **버린다**(`tests/unit/
-zod-unknown-key-contract.test.ts` 가 실측으로 못 박는다).
+그대로 흐른다. 반대로 `z.object()`(및 `.partial()`)는 unknown 키를 **버린다**(`src/zod-unknown-key-contract.test.ts`
+가 실측으로 못 박는다).
 
 그래서 **요청 객체를 DB 쓰기로 넘기는 입력 스키마에는 z.custom 을 쓰지 않는다.** 실제로
 `UpdateSurveyDataSchema` 가 z.custom 이던 시절 서비스가 그 객체를 drizzle `.set()` 에 펼쳐,
@@ -1707,7 +1713,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 9. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-10. **테스트**: Vitest include는 `tests/` + `src/**/*.test.ts`(colocated procedure/service 테스트) + `workers/`. service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`의 오랜 flaky 는 2026-08-19 에 수리했다. 원인은 그 파일이 `@/db/schema` 에 `vi.mock` 을 두 번 걸고 있던 것이다 — 같은 경로에 두 번 걸면 어느 팩토리가 이기는지 보장되지 않고, `{ __table }` 만 주는 쪽이 이기면 `col.__col` 이 undefined 라 mock `eq()` 가 항상 false 를 반환해 모든 조건 조회가 빈 결과가 된다. 그 결과 14건 중 12건이 `SurveyOwnershipError:not_found` 로 무너졌다. "전체 스위트에서만 모킹 간섭으로 깨진다"·"격리하면 항상 통과" 두 진단 모두 틀렸고, 중복 제거 후 전체 스위트에 포함해도 통과해 2단 격리 구조와 `ISOLATED_FLAKY_TESTS` 를 걷어냈다. **같은 모듈에 `vi.mock` 을 두 번 걸지 말 것.**
+10. **테스트**: 단위 테스트의 집은 SUT 소스 옆이다(ADR 0017, 전면 colocation — 2026-08-25 실측 src 466파일). 명명은 소스 어간 정합 — 1:1은 `<소스>.test.ts(x)`, 한 소스의 측면 시리즈는 `<어간>-<측면>.test.ts`, 여러 소스를 가로지르는 시나리오는 주 SUT 폴더에 주제명(app 라우트는 `route.test.ts`/`route-<측면>.test.ts`, 교차 라우트는 서술명). ESLint 경계가 colocation 을 막으면 의존 방향이 허용하는 쪽 SUT 폴더에 둔다(예: branch-logic-drift 는 공용 구역→server 금지라 server 도메인 쪽, 빌더 프리뷰 스토어 배선 테스트는 renderer 의 feature import 금지라 빌더 stores 쪽). 양쪽 다 막히는 교차 feature 계약은 `tests/repo` 로(예: measurement-font). `tests/` 에는 계층·계약 스위트만 산다 — `integration/`(service 모킹 패턴: top-level `vi.mock` + `vi.mocked`, realdb 포함)·`e2e/`·`repo/`(src 밖 소스·레포 계약)·fixtures/helpers/stubs/setup. 이 배치는 메타테스트(`tests/repo/test-tree-layout.test.ts`)가 강제한다. Vitest include 는 `tests/**` + `src/**/*.test.{ts,tsx}` + `workers/`, `.tsx` 는 jsdom 프로젝트 자동 분기(DOM 이 필요한 `.ts` 만 `DOM_TS_TESTS` 등재). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`의 오랜 flaky 는 2026-08-19 에 수리했다. 원인은 그 파일이 `@/db/schema` 에 `vi.mock` 을 두 번 걸고 있던 것이다 — 같은 경로에 두 번 걸면 어느 팩토리가 이기는지 보장되지 않고, `{ __table }` 만 주는 쪽이 이기면 `col.__col` 이 undefined 라 mock `eq()` 가 항상 false 를 반환해 모든 조건 조회가 빈 결과가 된다. 그 결과 14건 중 12건이 `SurveyOwnershipError:not_found` 로 무너졌다. "전체 스위트에서만 모킹 간섭으로 깨진다"·"격리하면 항상 통과" 두 진단 모두 틀렸고, 중복 제거 후 전체 스위트에 포함해도 통과해 2단 격리 구조와 `ISOLATED_FLAKY_TESTS` 를 걷어냈다. **같은 모듈에 `vi.mock` 을 두 번 걸지 말 것.**
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 

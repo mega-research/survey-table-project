@@ -162,7 +162,7 @@ describe('설문 스코프 REST 라우트는 관문을 진다', () => {
  */
 const BEHAVIOURAL_COVERAGE: Record<string, readonly string[]> = {
   // REST export 3종의 404 존재 은닉 (티켓 11)
-  'tests/unit/api/export-route-auth.test.ts': ['타 팀 설문', '404'],
+  'src/app/api/surveys/[surveyId]/export/route-auth.test.ts': ['타 팀 설문', '404'],
   'tests/integration/contacts-export-route.test.ts': ['타 팀 설문', '404'],
   // 하위 행 주입 — 관문이 통과한 뒤의 축 (티켓 15)
   'tests/integration/cross-team-idor.realdb.test.ts': ['남의 하위 행'],

@@ -70,7 +70,7 @@ jobs:
       # `|| true` 로 (a) 를 흡수하되, (b) 의 error JSON 을 정상 보고서로 오인해
       # vacuous PASS 가 되지 않도록 평가는 .github/audit-gate.ts 로 위임한다. 이
       # 평가기는 보고서에 error 키가 있거나 advisories·metadata.vulnerabilities 가
-      # 빠져 있으면 fail-closed(exit 1) 한다(tests/unit/ci/audit-gate.test.ts 로 검증).
+      # 빠져 있으면 fail-closed(exit 1) 한다(tests/repo/audit-gate.test.ts 로 검증).
       #
       # 참고(설계 부수효과): protobufjs 7.x 라인 보존(@grpc/proto-loader 경유)으로
       # moderate 2건(GHSA-f38q-mgvj-vph7·GHSA-j3f2-48v5-ccww)이 7.6.1 에 잔존한다.

@@ -217,6 +217,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      unsubscribedAt: contactTargets.unsubscribedAt,
     })
     .from(contactTargets)
     .where(whereClause)
@@ -239,6 +240,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     progressPct: r.progressPct,
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
+    unsubscribedAt: r.unsubscribedAt,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));
