@@ -251,10 +251,11 @@ describe('필수 게이트 하단 안내와 강조', () => {
 });
 
 describe('문항 수요조사 판단 항목', () => {
+  // 판단 항목은 "필요함 / 필요하지 않음" 2지선다다. 의견은 선택지가 아니라 바로 뒤에
+  // 오는 짝 문항(장문형, 코드 `부모_T`)이 받는다 — resolveJudgementShape 규약.
   const judgementOptions = (prefix: string) => [
     { id: `${prefix}-need`, value: '1', label: '필요함' },
     { id: `${prefix}-drop`, value: '2', label: '필요하지 않음' },
-    { id: `${prefix}-opinion`, value: '3', label: '의견', allowTextInput: true },
   ];
   const groups: QuestionGroup[] = [
     { id: 'g-block', surveyId: 'survey-demand', name: '블록 A', order: 0 },
@@ -268,7 +269,19 @@ describe('문항 수요조사 판단 항목', () => {
       required: true,
       order: 0,
       groupId: 'g-block',
+      questionCode: 'J1',
       options: judgementOptions('j1'),
+    },
+    {
+      // 첫 판단 문항의 의견 짝 — 필수가 아니라 게이트와 무관하고, 부모 행 안에 그려진다.
+      id: 'q-j1-opinion',
+      type: 'textarea',
+      title: '첫 판단 문항 의견',
+      description: '',
+      required: false,
+      order: 1,
+      groupId: 'g-block',
+      questionCode: 'J1_T',
     },
     {
       id: 'q-j2',
@@ -276,8 +289,9 @@ describe('문항 수요조사 판단 항목', () => {
       title: '둘째 판단 문항',
       description: '',
       required: true,
-      order: 1,
+      order: 2,
       groupId: 'g-block',
+      questionCode: 'J2',
       options: judgementOptions('j2'),
     },
     {
@@ -286,7 +300,7 @@ describe('문항 수요조사 판단 항목', () => {
       title: '조사표 다음 질문',
       description: '',
       required: false,
-      order: 2,
+      order: 3,
       pageBreakBefore: true,
     },
   ] as Question[];
