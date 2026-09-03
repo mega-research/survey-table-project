@@ -57,7 +57,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/workflows/raw-export-rows', () => ({
+vi.mock('./raw-export-rows', () => ({
   MAX_EXPORT_RESPONSES: 10000,
   loadRawExportRows: loadRawExportRowsMock,
   countRawExportPopulation: countRawExportPopulationMock,
@@ -92,7 +92,7 @@ vi.mock('@/lib/spss/sav-builder', () => ({
 
 import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
-import { buildRawExportContext } from '@/server/workflows/raw-export-rows';
+import { buildRawExportContext } from './raw-export-rows';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 const surveyId = 'survey-params';

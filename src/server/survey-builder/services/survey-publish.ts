@@ -10,7 +10,7 @@ import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/server/storage-lifecycle/key-extract';
 import { recordKeyRefs } from '@/server/storage-lifecycle/key-ref-index';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
-import { toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
+import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 import { buildSurveySnapshot } from './versioning/snapshot-builder';
 import { pruneVersionSnapshots } from './versioning/version-prune';

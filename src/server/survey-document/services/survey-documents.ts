@@ -7,7 +7,7 @@ import { surveyDocuments } from '@/db/schema';
 import { copyR2Objects, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
-import { nextOrderAfter } from '@/lib/survey-document/anchor-row';
+import { nextOrderAfter } from '@/server/read-models/anchor-row';
 import { toPermanentSurveyDocumentKey } from './document-key';
 
 import type {

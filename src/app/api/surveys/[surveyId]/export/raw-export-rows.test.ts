@@ -63,7 +63,7 @@ import {
   MAX_EXPORT_RESPONSES,
   countRawExportPopulation,
   loadRawExportRows,
-} from '@/server/workflows/raw-export-rows';
+} from './raw-export-rows';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { decryptPiiForExport } from '@/server/operations/services/contacts-export';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';

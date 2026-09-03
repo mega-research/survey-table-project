@@ -52,7 +52,7 @@ export type RemoveSurveyDocumentInput = z.infer<typeof RemoveSurveyDocumentInput
 export const AnchorOwnerKind = z.enum(['question', 'group']);
 export type AnchorOwnerKind = z.infer<typeof AnchorOwnerKind>;
 
-/** 정규화 사각형 — lib/survey-document/anchor-geometry 의 NormRect 와 같은 모양. */
+/** 정규화 사각형 — features/question-renderer/utils/anchor-geometry 의 NormRect 와 같은 모양. */
 export const AnchorRectSchema = z.object({
   page: z.number().int().min(1),
   x: z.number().min(0).max(1),

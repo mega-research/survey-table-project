@@ -3,7 +3,7 @@ import 'server-only';
 import { and, asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { nextOrderAfter, toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
+import { nextOrderAfter, toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import {
   questionGroups,
   questions,

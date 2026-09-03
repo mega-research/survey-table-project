@@ -27,7 +27,7 @@ import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { getR2PublicUrl } from '@/lib/r2-env';
-import { toAnchorSnapshot } from '@/lib/survey-document/anchor-row';
+import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';

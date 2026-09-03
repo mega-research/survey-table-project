@@ -23,7 +23,7 @@ import {
   loadRawExportRows,
   type RawExportLoadOptions,
   type RawExportLoadResult,
-} from '@/server/workflows/raw-export-rows';
+} from './raw-export-rows';
 import { selectRawExportContactColumns } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
