@@ -8,6 +8,7 @@ import {
   getGroupTypeOfCell,
   isGroupedChoiceQuestion,
   isGroupedRankingQuestion,
+  issueGroupKey,
   nextGroupKey,
   pruneChoiceGroups,
 } from '@/utils/choice-group-helpers';
@@ -288,6 +289,68 @@ describe('nextGroupKey', () => {
 
   it('cb1 이미 있을 때 cb2를 발번한다', () => {
     expect(nextGroupKey([cb1], 'checkbox')).toBe('cb2');
+  });
+});
+
+describe('issueGroupKey', () => {
+  function radGroups(n: number): ChoiceGroup[] {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `g${i + 1}`,
+      groupKey: `rad${i + 1}`,
+      type: 'radio' as const,
+      label: '',
+    }));
+  }
+
+  it('순번 10 미만은 패딩 없이 발번하고 원본 참조를 유지한다', () => {
+    const groups = radGroups(2);
+    const result = issueGroupKey(groups, 'radio', { repadExisting: true });
+    expect(result.key).toBe('rad3');
+    expect(result.groups).toBe(groups);
+  });
+
+  it('10번째 발번 시 기존 rad1~9 를 rad01~09 로 재패딩한다', () => {
+    const groups = radGroups(9);
+    const result = issueGroupKey(groups, 'radio', { repadExisting: true });
+    expect(result.key).toBe('rad10');
+    expect(result.groups.map((g) => g.groupKey)).toEqual([
+      'rad01', 'rad02', 'rad03', 'rad04', 'rad05', 'rad06', 'rad07', 'rad08', 'rad09',
+    ]);
+    // id 등 키 외 필드는 보존.
+    expect(result.groups[0]?.id).toBe('g1');
+  });
+
+  it('이미 패딩된 키는 그대로 두고 다음 번호만 발번한다', () => {
+    const groups: ChoiceGroup[] = [
+      ...radGroups(9).map((g, i) => ({ ...g, groupKey: `rad0${i + 1}` })),
+      { id: 'g10', groupKey: 'rad10', type: 'radio', label: '' },
+    ];
+    const result = issueGroupKey(groups, 'radio', { repadExisting: true });
+    expect(result.key).toBe('rad11');
+    expect(result.groups).toBe(groups);
+  });
+
+  it('다른 종류(prefix) 키는 재패딩하지 않는다', () => {
+    const groups: ChoiceGroup[] = [...radGroups(9), cb1];
+    const result = issueGroupKey(groups, 'radio', { repadExisting: true });
+    expect(result.groups.find((g) => g.type === 'checkbox')?.groupKey).toBe('cb1');
+  });
+
+  it('repadExisting=false(게시 이력 있는 설문)면 기존 키를 건드리지 않고 발번만 한다', () => {
+    const groups = radGroups(9);
+    const result = issueGroupKey(groups, 'radio', { repadExisting: false });
+    expect(result.key).toBe('rad10');
+    expect(result.groups).toBe(groups);
+    expect(result.groups.map((g) => g.groupKey)).toContain('rad1');
+  });
+
+  it('100번째 발번 시 세 자리로 재패딩한다', () => {
+    const groups: ChoiceGroup[] = [
+      { id: 'g9', groupKey: 'rad99', type: 'radio', label: '' },
+    ];
+    const result = issueGroupKey(groups, 'radio', { repadExisting: true });
+    expect(result.key).toBe('rad100');
+    expect(result.groups.map((g) => g.groupKey)).toEqual(['rad099']);
   });
 });
 

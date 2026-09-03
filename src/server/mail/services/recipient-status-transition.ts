@@ -1,7 +1,8 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import type { DbTransaction as Tx } from '@/db';
+import { contactTargets } from '@/db/schema/contacts';
 import { mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
@@ -149,6 +150,27 @@ export async function applyRecipientTransition(
       updatedAt: new Date(),
     })
     .where(eq(mailRecipients.id, recipientId));
+
+  // 신고(complained)는 수신거부 동급 취급 (2026-08-27 결정) — 컨택의 unsubscribed_at 을
+  // 세워 이후 단체·단건 발송 제외와 수신거부자 명단에 수렴시킨다. 이미 해지된 컨택은
+  // 최초 해지 시각을 유지한다. 보관(archived) 회차의 신고도 컨택 차원 사실이므로 반영.
+  if (newStatus === 'complained') {
+    const [recipientRef] = await tx
+      .select({ contactTargetId: mailRecipients.contactTargetId })
+      .from(mailRecipients)
+      .where(eq(mailRecipients.id, recipientId));
+    if (recipientRef?.contactTargetId) {
+      await tx
+        .update(contactTargets)
+        .set({ unsubscribedAt: eventAt, updatedAt: new Date() })
+        .where(
+          and(
+            eq(contactTargets.id, recipientRef.contactTargetId),
+            isNull(contactTargets.unsubscribedAt),
+          ),
+        );
+    }
+  }
 
   if (recipientArchivedAt !== null) return true;
 

@@ -6,9 +6,11 @@ import { SavVariable, VariableAlignment, VariableType, saveToFile } from 'sav-wr
 
 import {
   SPSSExportColumn,
+  SpssColumnOptions,
   buildDataRows,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
+import { CHANGE_CONFIRM_VALUE_LABELS } from '@/lib/spss/change-confirm-variable';
 import { resolveSavNumericFormat } from '@/lib/spss/export-metadata';
 import { buildLabel, resolveMeasure, resolveVarType } from '@/lib/spss/variable-meta';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
@@ -59,6 +61,9 @@ export function buildValueLabels(
 
     case 'notice-agree':
       return [{ value: 1, label: '동의' }];
+
+    case 'change-confirm':
+      return [...CHANGE_CONFIRM_VALUE_LABELS];
 
     case 'radio-group': {
       // radio-group: generateSPSSColumns가 미리 계산한 valueLabels를 그대로 사용.
@@ -259,8 +264,9 @@ function buildSavRecords(
 export async function generateSavBuffer(
   questions: Question[],
   submissions: SurveySubmission[],
+  options?: SpssColumnOptions,
 ): Promise<Buffer> {
-  const columns = generateSPSSColumns(questions);
+  const columns = generateSPSSColumns(questions, options);
   // 변수명 가드: invalid/중복이면 명시적 에러 (silent 치환 금지 — C1 차단)
   assertValidSpssVarNames(columns);
   const dataRows = buildDataRows(columns, questions, submissions);

@@ -9,6 +9,8 @@ import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
 } from '@/server/mail/services/campaigns-read';
+import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 
 const PAGE_SIZE = 20;
@@ -31,9 +33,10 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
   const page = parsePage(sp.page);
   const unsubPage = parsePage(sp.unsubPage);
 
-  const [campaigns, unsubscribed] = await Promise.all([
+  const [campaigns, unsubscribed, scheme] = await Promise.all([
     listCampaignsForSurvey({ surveyId, scope, page, pageSize: PAGE_SIZE }),
     listUnsubscribedContacts({ surveyId, scope, page: unsubPage, pageSize: UNSUB_PAGE_SIZE }),
+    getContactColumnScheme(surveyId, scope),
   ]);
 
   return (
@@ -70,6 +73,7 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
           total={unsubscribed.total}
           page={unsubscribed.page}
           pageSize={UNSUB_PAGE_SIZE}
+          mailColumns={resolveMailDisplayColumns(scheme)}
         />
       </section>
     </main>

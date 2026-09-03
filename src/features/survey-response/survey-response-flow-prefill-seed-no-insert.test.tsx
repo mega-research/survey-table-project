@@ -29,7 +29,11 @@ vi.mock('@/shared/lib/rpc', () => ({
         forResponse: (...a: unknown[]) => forResponse(...a),
       },
     },
-    contacts: { attrs: { lookup: (...a: unknown[]) => attrsLookup(...a) } },
+    contacts: {
+      attrs: { lookup: (...a: unknown[]) => attrsLookup(...a) },
+      // 병합으로 로더가 이전 응답(추적조사)도 함께 조회한다 — 없으면 로딩 화면에 멈춘다
+      priorAnswers: { lookup: vi.fn().mockResolvedValue(null) },
+    },
     surveyResponse: {
       lifecycle: {
         stepVisit: (...a: unknown[]) => stepVisit(...a),

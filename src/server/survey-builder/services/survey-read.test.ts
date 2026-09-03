@@ -26,8 +26,24 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
+/**
+ * 조사표·앵커 조회(select 체인)는 이 파일의 관심사가 아니다 — 빈 결과로 흡수한다.
+ * then 을 가진 thenable 이라 `await ...orderBy(...)` 도, `.limit()` 도 받는다.
+ */
+function emptyDrizzleSelect() {
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    orderBy: () => chain,
+    limit: () => Promise.resolve([]),
+    then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+  };
+  return chain;
+}
+
 vi.mock('@/db', () => ({
   db: {
+    select: () => emptyDrizzleSelect(),
     query: {
       surveys: {
         findFirst: (...args: unknown[]) => surveysFindFirst(...args),
@@ -438,6 +454,28 @@ describe('survey-read.service getSurveyForResponse control', () => {
       testSession: 'none',
       testSessionKind: null,
     });
+  });
+
+  it('회차 라벨은 스냅샷이 아니라 현재 surveys 행에서 control 로 실린다', async () => {
+    const surveyId = 'survey-control-prior-wave';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { priorWaveLabel: '2025년 조사' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control.priorWaveLabel).toBe('2025년 조사');
+  });
+
+  it('회차 라벨 미설정이면 control 에 null 로 실린다', async () => {
+    const surveyId = 'survey-control-prior-wave-null';
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { priorWaveLabel: null }));
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control.priorWaveLabel).toBeNull();
   });
 
   it('유효한 testToken 이면 testSession=valid 이다', async () => {

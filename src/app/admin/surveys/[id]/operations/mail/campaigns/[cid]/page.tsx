@@ -14,6 +14,8 @@ import {
   listCampaignRecipientFacets,
   listCampaignRecipients,
 } from '@/server/mail/services/campaigns-read';
+import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
 import {
@@ -104,7 +106,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
     notFound();
   }
 
-  const [recipients, facets] = await Promise.all([
+  const [recipients, facets, scheme] = await Promise.all([
     listCampaignRecipients({
       surveyId,
       campaignId: cid,
@@ -118,6 +120,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
       resultCodes,
     }),
     listCampaignRecipientFacets({ surveyId, campaignId: cid, scope }),
+    getContactColumnScheme(surveyId, scope),
   ]);
 
   // 깔때기 체크박스 선택지 — 빈 값 항목은 실제로 그런 행이 있을 때만 내민다.
@@ -287,6 +290,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         groupOptions={groupOptions}
         errorOptions={errorOptions}
         resultOptions={resultOptions}
+        mailColumns={resolveMailDisplayColumns(scheme)}
       />
     </main>
   );

@@ -541,6 +541,7 @@ function QuestionTestInput({
       return (
         <NoticeRenderer
           content={substituteTokens(question.noticeContent || '', attrs, quotes)}
+          bgColor={question.noticeBgColor}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}

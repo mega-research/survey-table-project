@@ -5,6 +5,7 @@ import { ORPCError } from '@orpc/client';
 import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { normalizePriorAnswers, type PriorAnswers } from '@/lib/survey/prior-answers';
 import { normalizeQuestions } from '@/lib/question';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
@@ -12,6 +13,7 @@ import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { ResponseEntrySeed, SurveyControl } from '@/shared/contracts/survey-builder-io';
 import { client } from '@/shared/lib/rpc';
 import type { QuestionGroup, Survey } from '@/types/survey';
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -25,12 +27,15 @@ interface AdminContext {
   initialResponses: ResponsesMap;
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
+  /** 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일. RSC 가 만들어 넘긴다. */
+  documentView?: SurveyDocumentView | null;
   onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
 }
 
 interface PreviewContext {
   survey: Survey;
   versionId: string | null;
+  documentView?: SurveyDocumentView | null;
 }
 
 interface UseSurveyLoaderArgs {
@@ -78,6 +83,24 @@ interface UseSurveyLoaderResult {
    */
   control: SurveyControl | null;
   /**
+   * 이월 응답(추적조사) — invite 매칭 대상자에게만 채워진다. 없으면 null.
+   * 프리필 자체는 이 훅이 setResponses 로 이미 주입했고, 이 값은 "어느 문항이
+   * 지난 회차 값인가"를 화면이 표시하기 위한 참조다.
+   */
+  priorAnswers: PriorAnswers | null;
+  /**
+   * 초기 프리필 판정이 끝났는가. 이어가기 회복(use-session-recovery)이 이 플래그를
+   * 기다려야 한다 — 회복이 먼저 응답값을 세팅한 뒤 프리필이 덮으면 응답자가 저장한
+   * 답이 지난 회차 값으로 되돌아간다.
+   */
+  prefillSettled: boolean;
+  /**
+   * 조사표 뷰(파일은 라이브, 앵커는 발행 스냅샷의 얼린 좌표 — ADR 0020).
+   * 조사표가 없거나 앵커가 하나도 없으면 null 이고, 그 설문은 지금과 똑같이 동작한다.
+   * admin-edit 은 응답 시점 스냅샷의 앵커를 쓰되 파일은 현재 것을 본다.
+   */
+  documentView: SurveyDocumentView | null;
+  /**
    * 최신 스냅샷 재취득(무중단 갈아타기 — 티켓 04). public 응답 경로에서 서버가 응답 행을
    * 현재 버전으로 재핀했을 때 호출한다. loadedSurvey/versionId state 를 갱신하고, 호출자가
    * state 커밋을 기다리지 않고 즉시 신버전 질문 목록을 쓸 수 있도록 결과를 반환한다.
@@ -120,6 +143,11 @@ export function useSurveyLoader({
   const [versionId, setVersionId] = useState<string | null>(null);
   // 라이브 제어값(중단/테스트 링크) — public 경로에서만 set, 그 외 모드는 null 유지.
   const [control, setControl] = useState<SurveyControl | null>(null);
+  // 이월 응답 — invite 매칭 대상자에게만 채워진다(추적조사).
+  const [priorAnswers, setPriorAnswers] = useState<PriorAnswers | null>(null);
+  // 초기 프리필 판정 완료 여부 — 이어가기 회복 게이트.
+  const [prefillSettled, setPrefillSettled] = useState(false);
+  const [documentView, setDocumentView] = useState<SurveyDocumentView | null>(null);
 
   // URL 식별자로 설문 조회
   useEffect(() => {
@@ -131,6 +159,9 @@ export function useSurveyLoader({
       setContactAttrs({});
       setShowInviteRequired(false);
       setControl(null);
+      setPriorAnswers(null);
+      setPrefillSettled(false);
+      setDocumentView(null);
 
       try {
         // admin-edit 분기 (1/8) — survey 로드: versionSnapshot 우선, fallback DB 조회.
@@ -175,6 +206,9 @@ export function useSurveyLoader({
             };
             setLoadedSurvey(builtSurvey);
             setVersionId(null);
+            // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 — RSC 가 만들어 넘긴다.
+            // 관리자도 조사표를 보면서 고쳐야 문항 번호만 보고 무엇을 고치는지 잃지 않는다.
+            setDocumentView(adminContext.documentView ?? null);
           } else {
             // snapshot 미존재 (published 이전 응답) → 현재 surveys 행 직접 사용.
             const result = await client.surveyBuilder.publicRead.forResponse({
@@ -187,6 +221,7 @@ export function useSurveyLoader({
             } else {
               setLoadedSurvey(result.survey);
               setVersionId(result.versionId);
+              setDocumentView(result.documentView);
             }
           }
           // 초기 응답값 prefill — DB INSERT 없이 state 만 세팅.
@@ -209,6 +244,7 @@ export function useSurveyLoader({
           }
           setLoadedSurvey(previewContext.survey);
           setVersionId(previewContext.versionId);
+          setDocumentView(previewContext.documentView ?? null);
           setResponses({});
           setContactAttrs({});
           setShowInviteRequired(false);
@@ -274,6 +310,7 @@ export function useSurveyLoader({
         } else {
           setLoadedSurvey(result.survey);
           setVersionId(result.versionId);
+          setDocumentView(result.documentView);
           // 라이브 제어값 — 렌더 게이트(중단/무효 링크) + 중복검사 skip 판정에 사용.
           setControl(result.control);
 
@@ -284,7 +321,15 @@ export function useSurveyLoader({
             // attrs lookup 은 fail-open. 일시적 RPC/네트워크/복호화 오류가 throw 돼도
             // 이미 로드된 설문을 통째로 에러 화면으로 막지 않고, 빈 attrs 익명 응답으로 강등한다.
             // (service 는 무효 토큰을 null 로 흡수하지만 DB/transport 예외는 여기서 throw 될 수 있다.)
+            //
+            // 이월 응답(추적조사)도 같은 진입에서 병렬로 조회한다 — 순차로 걸면 프리필
+            // 왕복이 그대로 첫 화면 지연이 된다. 둘은 서로의 실패에 영향받지 않아야 하므로
+            // allSettled 로 각각 판정한다. 서버가 attrs 를 이미 조회해 넘긴(entrySeed) 경로는
+            // attrs 왕복만 없고, 이월 응답은 seed 에 실리지 않아 그대로 조회한다.
             let attrs: Record<string, string> | null = null;
+            let priorSettled: PromiseSettledResult<
+              Awaited<ReturnType<typeof client.contacts.priorAnswers.lookup>>
+            >;
             if (entrySeed !== undefined) {
               // 서버가 이미 조회했다. 만료 판정도 RPC 의 INVALID_TEST_LINK 와 같은 뜻으로 온다.
               if (entrySeed.attrsInvalidTest) {
@@ -296,12 +341,22 @@ export function useSurveyLoader({
                 return;
               }
               attrs = entrySeed.contactAttrs;
+              [priorSettled] = await Promise.allSettled([
+                client.contacts.priorAnswers.lookup({ surveyId, inviteToken }),
+              ]);
+              if (cancelled) return;
             } else {
-              try {
-                attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
-                if (cancelled) return;
-              } catch (attrsError) {
-                if (cancelled) return;
+              const [attrsSettled, prior] = await Promise.allSettled([
+                client.contacts.attrs.lookup({ surveyId, inviteToken }),
+                client.contacts.priorAnswers.lookup({ surveyId, inviteToken }),
+              ]);
+              if (cancelled) return;
+              priorSettled = prior;
+
+              if (attrsSettled.status === 'fulfilled') {
+                attrs = attrsSettled.value;
+              } else {
+                const attrsError: unknown = attrsSettled.reason;
                 if (attrsError instanceof ORPCError && attrsError.code === 'INVALID_TEST_LINK') {
                   setControl({
                     ...result.control,
@@ -313,6 +368,24 @@ export function useSurveyLoader({
                 console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
               }
             }
+
+            // 이월 응답 — 값을 responses 에 바로 넣지 **않는다**. 화면은 잠긴 입력의
+            // 표시값으로만 쓰고, 이번 회차 응답으로의 복사는 응답자가 변동 확인을
+            // 밝히는 순간에 일어난다. 그래야 응답자가 보지 못한 문항이 이월 값으로
+            // 채워진 채 제출되지 않는다(PRD: 도달하지 못한 문항은 빈칸).
+            // 기타/상세 기재 사이드카만 스토어에 시드한다 — 잠긴 표시에 텍스트가
+            // 보여야 하고, 미선택 옵션의 텍스트는 제출 경계에서 걸러진다.
+            // 조회 실패는 fail-open: 이월 값 없이 지금과 똑같은 빈 설문으로 진행한다.
+            if (priorSettled.status === 'rejected') {
+              console.error('이월 응답 조회 오류 (프리필 생략):', priorSettled.reason);
+            } else if (priorSettled.value) {
+              const prior = normalizePriorAnswers(priorSettled.value);
+              if (Object.keys(prior).length > 0) {
+                setPriorAnswers(prior);
+                useSurveyResponseStore.getState().seedOptionTexts(readOptTextsSidecar(prior));
+              }
+            }
+
             if (attrs) {
               setContactAttrs(attrs);
             } else if (result.survey.settings.requireInviteToken) {
@@ -329,7 +402,11 @@ export function useSurveyLoader({
         setLoadError('설문을 불러오는 중 오류가 발생했습니다.');
         setLoadedSurvey(null);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        // 어떤 경로(익명·admin·preview·에러)로 빠져나가도 프리필 판정은 끝난 것이다.
+        if (!cancelled) {
+          setPrefillSettled(true);
+          setIsLoading(false);
+        }
       }
     };
 
@@ -359,6 +436,7 @@ export function useSurveyLoader({
       if (!result) return null;
       setLoadedSurvey(result.survey);
       setVersionId(result.versionId);
+      setDocumentView(result.documentView);
       return { survey: result.survey, versionId: result.versionId };
     } catch (error) {
       // 재취득 실패는 fail-open — 기존 화면(구 스냅샷)을 유지하고 응답 흐름을 막지 않는다.
@@ -375,6 +453,9 @@ export function useSurveyLoader({
     showInviteRequired,
     versionId,
     control,
+    priorAnswers,
+    prefillSettled,
+    documentView,
     refetchSnapshot,
   };
 }

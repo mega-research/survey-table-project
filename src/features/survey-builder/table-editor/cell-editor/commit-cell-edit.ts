@@ -222,6 +222,7 @@ export async function commitCellEdit({
               maxSelections: question.maxSelections,
               noticeContent: question.noticeContent,
               requiresAcknowledgment: question.requiresAcknowledgment,
+              noticeBgColor: question.noticeBgColor,
               placeholder: question.placeholder,
               defaultValueTemplate: question.defaultValueTemplate,
               inputType: question.inputType,

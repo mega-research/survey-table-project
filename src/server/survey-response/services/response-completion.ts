@@ -6,6 +6,8 @@ import { contactTargets, surveyResponses } from '@/db/schema';
 import {
   decryptQuestionResponses,
   encryptResponsesForStorage,
+  hasPiiTargets,
+  type PiiTargets,
 } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
@@ -33,7 +35,7 @@ import {
 import {
   detectQuotaOverflow,
   encryptPiiAnswers,
-  loadPiiQuestionIds,
+  loadPiiTargets,
   restorePrefillAnswers,
   sanitizeSubmittedResponses,
 } from './submitted-answers';
@@ -155,7 +157,7 @@ export async function completeResponse(
     questions: Question[];
     lookups: SurveyLookup[];
     contactAttrs: Record<string, string | undefined>;
-    piiIds: Set<string>;
+    piiTargets: PiiTargets;
   } | null = null;
   if (gateRow?.versionId) {
     // JSONB 스키마 드리프트 방어(비배열 → 빈 배열)는 snapshot* 헬퍼가 맡는다.
@@ -213,7 +215,7 @@ export async function completeResponse(
           questions: snapQuestions,
           lookups: snapLookups,
           contactAttrs: calcAttrs,
-          piiIds: await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId),
+          piiTargets: await loadPiiTargets(gateRow.versionId, gateRow.surveyId),
         };
       }
     }
@@ -303,8 +305,8 @@ export async function completeResponse(
         // 이 경로에는 크기 가드를 두지 않는다 — 재료가 이미 저장된 행이라 새 주입 표면이
         // 아니고(모든 쓰기 경로가 저장값 기준으로 걸러진 뒤의 값이다), 복호화→재암호화 왕복은
         // 크기를 되돌릴 뿐이다. 여기서 drop 하면 이미 수집된 답변을 완료 시점에 조용히 잃는다.
-        if (storedRecalc.piiIds.size > 0) {
-          recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
+        if (hasPiiTargets(storedRecalc.piiTargets)) {
+          recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiTargets);
         }
         storedRecalcResponses = recomputed;
       }

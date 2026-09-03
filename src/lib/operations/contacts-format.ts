@@ -190,3 +190,37 @@ export function piiKeyOf(source: string): string | null {
   if (source.startsWith('pii.')) return source.slice('pii.'.length);
   return null;
 }
+
+// ─────────── Raw 내보내기 조사 대상 명단 열 ───────────
+
+/** Raw Data·분할 시트에 붙는 조사 대상 명단 열 하나 — 헤더 라벨과 값을 찾을 키. */
+export interface RawExportContactColumn {
+  /** 스킴 source 그대로 — 행 값 맵(contactValues)의 키 ('attrs.기수' / 'pii.성명') */
+  source: string;
+  /** 헤더 라벨 — 스킴 label, 비면 key */
+  label: string;
+  kind: 'attrs' | 'pii';
+  /** attrs 키 또는 contact_pii.column_key */
+  key: string;
+}
+
+/**
+ * Raw 내보내기에 붙일 조사 대상 명단 열 — attrs.*·pii.* 전부(hidden 무관), system.* 제외
+ * (시스템ID·그룹은 응답 메타 열에 이미 있고 나머지 system 열은 attrs 에 값이 없다), order 오름차순.
+ * 스킴이 없으면 빈 배열. hidden 을 포함하는 이유: 추적조사 명단의 2025 열 171개가 콘솔 숨김이다.
+ */
+export function selectRawExportContactColumns(
+  scheme: ContactColumnScheme | null,
+): RawExportContactColumn[] {
+  const out: RawExportContactColumn[] = [];
+  for (const c of [...(scheme?.columns ?? [])].sort((a, b) => a.order - b.order)) {
+    const attrsKey = attrsKeyOf(c.source);
+    const piiKey = piiKeyOf(c.source);
+    if (attrsKey !== null) {
+      out.push({ source: c.source, label: c.label || c.key, kind: 'attrs', key: attrsKey });
+    } else if (piiKey !== null) {
+      out.push({ source: c.source, label: c.label || c.key, kind: 'pii', key: piiKey });
+    }
+  }
+  return out;
+}

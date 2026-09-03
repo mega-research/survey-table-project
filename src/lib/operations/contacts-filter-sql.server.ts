@@ -1,10 +1,12 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { NumRange } from './range-list';
 import {
   FILTER_SOURCE,
   UNSUBSCRIBE_RESULT_CODE_KEYWORD,
   escapeLikePattern,
+  isUnsubscribeResultCode,
   type FilterClause,
   type FilterCondition,
 } from './filter-shared';
@@ -42,30 +44,58 @@ export const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
 )`;
 
 /**
- * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
- * 최신 수신 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ * 유효 메일 상태 — 수신거부 신호(contact_targets.unsubscribed_at 또는 최근
+ * 결과코드의 수신거부 기록)가 있으면 발송 이력과 무관하게 'skipped_unsubscribed',
+ * 없으면 최신 수신 상태(latestMailStatusExpr).
  *
- * 'skipped_unsubscribed'(수신거부)는 발송 스킵 상태만으로는 발송 후 수신거부자를
- * 놓친다 — 표의 수신거부 표시와 같은 판정이 되도록 contact_targets.unsubscribed_at
- * 과 최근 결과코드의 수신거부 기록(UNSUBSCRIBE_RESULT_CODE_KEYWORD)을 OR 로
- * 결합한다.
+ * 표시(contacts.server SELECT)·필터(mailStatusCondSql)·정렬(mailStatusRankExpr)이
+ * 반드시 이 단일 표현식을 공유해야 한다 — 갈라지면 셀에 수신거부로 보이는 행이
+ * 열람/없음 필터에 다시 잡히는 어긋남이 생긴다.
+ */
+export const effectiveMailStatusExpr = sql<MailRecipientStatus | null>`(CASE
+  WHEN "contact_targets".unsubscribed_at IS NOT NULL THEN 'skipped_unsubscribed'
+  WHEN ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%' THEN 'skipped_unsubscribed'
+  ELSE ${latestMailStatusExpr}
+END)`;
+
+/**
+ * 세 수신거부 신호(메일 해지 링크 unsubscribed_at · 발송 스킵 상태 · 최근 결과코드
+ * 수신거부)를 하나로 접은 단일 판정. 컨택결과 필터의 수신거부 코드 선택도 이 판정을
+ * OR 로 결합해, 어느 경로의 수신거부든 같은 조회로 잡히게 한다.
+ */
+export const isUnsubscribedSql = sql`${effectiveMailStatusExpr} = 'skipped_unsubscribed'`;
+
+/**
+ * 최근 결과코드가 수신거부 키워드인지 — 단체메일 배제(후보·preflight·createCampaign)와
+ * 수신거부자 명단이 공유하는 축. 결과코드의 status(negative 여부)와 무관하게 성립한다 —
+ * 수신거부는 "메일 거부" 의사라 모집단(진척률 분모)에서는 빼지 않되 단체메일에서는
+ * 항상 제외해야 하므로, neutral 수신거부 코드도 이 축이 잡는다.
+ *
+ * COALESCE 필수 — 회차가 없으면 서브쿼리·LIKE 가 NULL 이고, 호출부의 `NOT (...)` 이
+ * 3값 논리로 NULL 이 되어 회차 없는 정상 컨택 전부가 WHERE 에서 탈락한다.
+ */
+export const latestResultUnsubscribedSql = sql`COALESCE(${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%', FALSE)`;
+
+/**
+ * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
+ * 유효 메일 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ *
+ * 유효 상태 기준이므로 수신거부 판정자는 'skipped_unsubscribed' 에서만 잡히고,
+ * 원래 발송 상태(열람 등)나 'none' 필터에는 다시 잡히지 않는다.
  */
 function mailStatusCondSql(value: string): SQL {
-  if (value === 'none') return sql`${latestMailStatusExpr} IS NULL`;
-  if (value === 'skipped_unsubscribed') {
-    return sql`(${latestMailStatusExpr} = ${value}
-      OR "contact_targets".unsubscribed_at IS NOT NULL
-      OR ${latestResultCodeExpr} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%')`;
-  }
-  return sql`${latestMailStatusExpr} = ${value}`;
+  return value === 'none'
+    ? sql`${effectiveMailStatusExpr} IS NULL`
+    : sql`${effectiveMailStatusExpr} = ${value}`;
 }
 
 /**
  * 메일 컬럼 상태 순위 정렬 표현식 — MAIL_FILTER_OPTIONS 순서(잘된 순: 열람 →
  * 전달 완료 → … → 실패)와 동일 축. 발송 이력 없음은 NULL 로 축 밖 — orderExpr 의
  * NULLS LAST 가 방향과 무관하게 항상 마지막에 고정한다 (web 정렬과 같은 규칙).
+ * 축은 유효 메일 상태 — 수신거부 판정자는 원래 발송 상태가 아니라 수신거부 순위로 선다.
  */
-export const mailStatusRankExpr = sql<number | null>`(CASE ${latestMailStatusExpr}
+export const mailStatusRankExpr = sql<number | null>`(CASE ${effectiveMailStatusExpr}
   WHEN 'opened' THEN 1
   WHEN 'delivered' THEN 2
   WHEN 'sent' THEN 3
@@ -104,6 +134,30 @@ const CONTACT_TARGET_REFS: ClauseColumnRefs = {
 };
 
 /**
+ * 범위 목록 → 절 SQL. 단건은 IN 한 방(1개면 =), 범위 토큰만 BETWEEN, OR 결합.
+ * 붙여넣은 ID 수천 개가 `= $1 OR = $2 OR …` 로 늘어지지 않게 한다.
+ * 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
+ * 인한 cross-survey 누락/누출 방지.
+ */
+function rangesToSql(expr: SQL, ranges: NumRange[]): SQL {
+  const singles = ranges.filter((r) => r.from === r.to).map((r) => r.from);
+  const spans = ranges.filter((r) => r.from !== r.to);
+  const parts: SQL[] = [];
+  if (singles.length === 1) {
+    parts.push(sql`${expr} = ${singles[0]}`);
+  } else if (singles.length > 1) {
+    parts.push(
+      sql`${expr} IN (${sql.join(
+        singles.map((v) => sql`${v}`),
+        sql`, `,
+      )})`,
+    );
+  }
+  for (const r of spans) parts.push(sql`${expr} BETWEEN ${r.from} AND ${r.to}`);
+  return sql`(${sql.join(parts, sql` OR `)})`;
+}
+
+/**
  * 단일 절 SQL. cond.source 와 mode 별로 분기.
  *
  * SECURITY: cond.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
@@ -123,14 +177,7 @@ export function buildClauseSql(
   if (cond.source === FILTER_SOURCE.RESID) {
     if (cond.mode === 'idlist') {
       if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
-      const conds = cond.ranges.map((r) =>
-        r.from === r.to
-          ? sql`${refs.resid} = ${r.from}`
-          : sql`${refs.resid} BETWEEN ${r.from} AND ${r.to}`,
-      );
-      // 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
-      // 인한 cross-survey 누락/누출 방지.
-      return sql`(${sql.join(conds, sql` OR `)})`;
+      return rangesToSql(refs.resid, cond.ranges);
     }
     return sql`FALSE`;
   }
@@ -149,8 +196,10 @@ export function buildClauseSql(
   if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
     // includeNull = "결과 없음" — 회차 이력이 없거나 최신 회차 result_code 가 NULL.
     // 표(latestResultCode ?? '—')와 같은 판정이라 화면과 필터가 어긋나지 않는다.
-    return cond.includeNull === true
-      ? sql`${latestResultCodeExpr} IS NULL`
+    if (cond.includeNull === true) return sql`${latestResultCodeExpr} IS NULL`;
+    // 수신거부 코드 선택은 메일 경로 수신거부(해지 링크·발송 스킵)까지 함께 잡는다.
+    return isUnsubscribeResultCode(cond.value)
+      ? sql`(${latestResultCodeExpr} = ${cond.value} OR ${isUnsubscribedSql})`
       : sql`${latestResultCodeExpr} = ${cond.value}`;
   }
 
@@ -169,11 +218,7 @@ export function buildClauseSql(
     // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
     // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다.
     const numExpr = sql`(CASE WHEN ${refs.attrs}->>${key} ~ '^[0-9]+$' THEN (${refs.attrs}->>${key})::numeric END)`;
-    const conds = cond.ranges.map((r) =>
-      r.from === r.to
-        ? sql`${numExpr} = ${r.from}`
-        : sql`${numExpr} BETWEEN ${r.from} AND ${r.to}`,
-    );
+    const conds: SQL[] = [rangesToSql(numExpr, cond.ranges)];
     if (cond.textFallback === true && cond.value.length > 0) {
       // 값이 순수 정수가 아닌 행(numExpr IS NULL)만 부분검색으로 건진다 — 숫자 값은
       // 위 숫자 매칭이 전담하므로 "1" 이 1044 를 다시 끌고 오지 않는다.
@@ -293,6 +338,8 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
       );
     }
     if (cond.includeNull === true) parts.push(sql`${latestResultCodeExpr} IS NULL`);
+    // 수신거부 코드가 선택에 포함되면 메일 경로 수신거부(해지 링크·발송 스킵)도 함께 잡는다.
+    if (values.some((v) => isUnsubscribeResultCode(v))) parts.push(isUnsubscribedSql);
     return sql`(${sql.join(parts, sql` OR `)})`;
   }
 

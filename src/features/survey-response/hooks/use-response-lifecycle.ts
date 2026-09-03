@@ -509,6 +509,13 @@ export function useResponseLifecycle({
       // 그것으로 응답 행을 만들면 링크를 열기만 해도 진행 중 응답이 생겨 진척·이탈
       // 통계가 왜곡된다. 값은 pending 에 남아 실제 첫 답변이나 최종 complete 에 합쳐지므로
       // 유실되지 않는다 — 루트 사이드카(__ 접두사)를 다루는 원칙과 같다.
+      //
+      // 가드는 React state 가 아니라 **같은 틱 안에서 동기적으로 갱신되는 ref** 다. 한 번의
+      // 클릭이 여러 문항을 잇달아 답하는 경로(수요조사의 블록 일괄 선택)에서는 그 사이
+      // 모든 호출이 state 가드를 통과해 문항 수만큼 INSERT 를 발사했다. 행은 (surveyId, sessionId)
+      // 멱등이라 늘어나지 않지만, 요청은 그대로 나가 세션 한도(response-mutation 30/분)를
+      // 태운다. isCreatingResponseRef 와 진행 중 생성 promise(responseCreationPromiseRef)를
+      // 같은 가드에 함께 둔다.
       if (
         !questionId.startsWith('__') &&
         !isSeedWrite &&
@@ -516,6 +523,7 @@ export function useResponseLifecycle({
         !isPreview &&
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&
         !isCreatingResponseRef.current &&
+        responseCreationPromiseRef.current === null &&
         !isRecovering && // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
         loadedSurvey &&
         currentStep

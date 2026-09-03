@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -71,9 +72,39 @@ interface PreviewSummary {
   softLimit: number;
   excelLimit: number;
   candidates: SplitCandidateDTO[];
+  /** 조사 대상이 있는 설문인지 — false 면 「조사 대상 중 미응답자 포함」 영역을 그리지 않는다 */
+  hasContacts: boolean;
+}
+
+interface SplitPlanResponse {
+  plan: SplitPlanDTO;
+  /** 「조사 대상 중 미응답자 포함」이 켜졌을 때만 온다 — 응답 행 + 미응답 조사 대상 행 */
+  totalRows?: number;
+  nonRespondentRows?: number;
+}
+
+interface ExportQueryOptions {
+  includeNonRespondents: boolean;
+  /** 「조사 대상 명단 열 포함」 — 미응답 토글과 독립 */
+  includeContactColumns: boolean;
+  basis?: string;
 }
 
 const fmtNum = (n: number) => n.toLocaleString('ko-KR');
+
+/**
+ * 내보내기 URL 쿼리 — 한 곳에서 만든다.
+ * 미응답 행·명단 열은 Raw Data 계열(raw/raw-split)에만 붙는다 — .sav/.sps 는 완료 전용 모수이고
+ * 명단 열은 SPSS 변수가 아니다.
+ */
+function buildExportQuery(type: string, opts: ExportQueryOptions): string {
+  const qs = new URLSearchParams({ type });
+  if (opts.basis) qs.set('basis', opts.basis);
+  const isRaw = type === 'raw' || type === 'raw-split';
+  if (isRaw && opts.includeNonRespondents) qs.set('includeNonRespondents', '1');
+  if (isRaw && opts.includeContactColumns) qs.set('includeContactColumns', '1');
+  return qs.toString();
+}
 
 async function fetchSplitSummary(surveyId: string): Promise<PreviewSummary> {
   const res = await fetch(`/api/surveys/${surveyId}/export/split-preview`);
@@ -81,10 +112,14 @@ async function fetchSplitSummary(surveyId: string): Promise<PreviewSummary> {
   return res.json();
 }
 
-async function fetchSplitPlan(surveyId: string, basis: string): Promise<{ plan: SplitPlanDTO }> {
-  const res = await fetch(
-    `/api/surveys/${surveyId}/export/split-preview?basis=${encodeURIComponent(basis)}`,
-  );
+async function fetchSplitPlan(
+  surveyId: string,
+  basis: string,
+  includeNonRespondents: boolean,
+): Promise<SplitPlanResponse> {
+  const qs = new URLSearchParams({ basis });
+  if (includeNonRespondents) qs.set('includeNonRespondents', '1');
+  const res = await fetch(`/api/surveys/${surveyId}/export/split-preview?${qs.toString()}`);
   if (!res.ok) throw new Error('시트 미리보기를 불러오지 못했습니다.');
   return res.json();
 }
@@ -153,7 +188,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     mutationFn: (type: string) => {
       const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
       return fetchExportFile(
-        `/api/surveys/${surveyId}/export?type=${type}`,
+        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents, includeContactColumns })}`,
         buildSafeFilename(surveyTitle, 'Export', ext),
         '내보내기에 실패했습니다.',
       );
@@ -183,6 +218,10 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     : null;
   const [step, setStep] = useState<SplitStep>('options');
   const [basis, setBasis] = useState<string | null>(null);
+  // 「조사 대상 중 미응답자 포함」·「조사 대상 명단 열 포함」 — 다이얼로그를 닫으면 초기화.
+  // 설문 설정으로 저장되지 않는다. 둘은 독립이라 하나만 켜거나 둘 다 켤 수 있다.
+  const [includeNonRespondents, setIncludeNonRespondents] = useState(false);
+  const [includeContactColumns, setIncludeContactColumns] = useState(false);
 
   const summary = useQuery({
     queryKey: ['split-summary', surveyId],
@@ -192,8 +231,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   const overLimit = !!summary.data && summary.data.totalVars > summary.data.softLimit;
 
   const planQuery = useQuery({
-    queryKey: ['split-plan', surveyId, basis],
-    queryFn: () => fetchSplitPlan(surveyId, basis!),
+    queryKey: ['split-plan', surveyId, basis, includeNonRespondents],
+    queryFn: () => fetchSplitPlan(surveyId, basis!, includeNonRespondents),
     enabled: isOpen && !!basis && (step === 'preview' || step === 'downloading' || step === 'done'),
   });
 
@@ -202,6 +241,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     if (!open) {
       setStep('options');
       setBasis(null);
+      setIncludeNonRespondents(false);
+      setIncludeContactColumns(false);
     }
   };
 
@@ -212,7 +253,11 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     setStep('downloading');
     try {
       const { blob, filename } = await fetchSplitExportFile(
-        `/api/surveys/${surveyId}/export?type=raw-split&basis=${encodeURIComponent(basis)}`,
+        `/api/surveys/${surveyId}/export?${buildExportQuery('raw-split', {
+          includeNonRespondents,
+          includeContactColumns,
+          basis,
+        })}`,
         buildSafeFilename(surveyTitle, 'Split', 'xlsx'),
       );
       downloadBlob(blob, filename);
@@ -247,6 +292,44 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
               disabled={!!exportingType}
               onClick={() => handleExport('raw')}
             />
+
+            {summary.data?.hasContacts && (
+              <div className="rounded-lg border p-4">
+                <div className="mb-2 text-xs font-bold text-slate-500">Raw Data 옵션</div>
+                <label className="flex cursor-pointer items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={includeNonRespondents}
+                    onCheckedChange={(v) => setIncludeNonRespondents(v === true)}
+                    disabled={!!exportingType}
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">
+                      조사 대상 중 미응답자 포함
+                    </span>
+                    <span className="block text-xs leading-relaxed text-slate-500">
+                      링크를 열지 않은 조사 대상도 행으로 넣고 상태를 미응답으로 표시합니다
+                    </span>
+                  </span>
+                </label>
+                <label className="mt-3 flex cursor-pointer items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={includeContactColumns}
+                    onCheckedChange={(v) => setIncludeContactColumns(v === true)}
+                    disabled={!!exportingType}
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">
+                      조사 대상 명단 열 포함
+                    </span>
+                    <span className="block text-xs leading-relaxed text-slate-500">
+                      컬럼 스킴의 명단 열을 메타 열 오른쪽에 붙입니다. 숨김 열도 포함
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             <ExportCard
               title="SPSS .sav 파일"
@@ -385,7 +468,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
             )}
             {planQuery.data &&
               (() => {
-                const plan = planQuery.data.plan;
+                const { plan, totalRows, nonRespondentRows } = planQuery.data;
                 const softLimit = summary.data?.softLimit ?? 10000;
                 const excelLimit = summary.data?.excelLimit ?? 16384;
                 return (
@@ -459,6 +542,12 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                         공통 변수 <b className="text-slate-700">{fmtNum(plan.common)}</b>개는 별도
                         공통 시트로
                       </span>
+                      {totalRows != null && (
+                        <span>
+                          전체 <b className="text-slate-700">{fmtNum(totalRows)}</b>행 · 미응답{' '}
+                          {fmtNum(nonRespondentRows ?? 0)}행
+                        </span>
+                      )}
                       <span className="ml-auto">
                         최대{' '}
                         <b

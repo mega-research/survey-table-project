@@ -14,7 +14,7 @@ describe('placeholderFor', () => {
   });
 
   it('returns id range hint for system.resid', () => {
-    expect(placeholderFor('system.resid')).toBe('예: 1-30, 45');
+    expect(placeholderFor('system.resid')).toBe('예: 1-30, 45 · 엑셀 열 붙여넣기');
   });
 
   it('returns exact-match hint for pii.*', () => {

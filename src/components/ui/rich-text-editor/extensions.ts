@@ -96,10 +96,68 @@ const TableAlignDecoration = Extension.create({
   },
 });
 
+// 라이브러리 inline 기본 wrapperStyle 의 정렬 부산물(float: left + 8px 측면 패딩) 제거.
+// 메일 렌더의 stripImageAlignArtifacts(render-preview.ts)와 같은 규칙.
+function stripImageAlignArtifacts(style: string): string {
+  return style
+    .split(';')
+    .map((decl) => decl.trim())
+    .filter(
+      (decl) =>
+        decl && !/^float\s*:/i.test(decl) && !/^padding-(?:left|right)\s*:\s*8px$/i.test(decl),
+    )
+    .join('; ');
+}
+
+// renderHTML 이 style 끝에 덧붙이는 안전망 선언 — 구버전 HTML 의 style 에서
+// wrapperStyle 을 역산할 때 이 둘은 wrapper 몫이 아니므로 제외한다.
+function isSerializedSafetyDecl(decl: string): boolean {
+  return /^height\s*:\s*auto$/i.test(decl) || /^max-width\s*:\s*100%$/i.test(decl);
+}
+
 const ImageResizeWithProxy = ImageResize.extend({
   addAttributes() {
+    const parent = this.parent?.() as
+      | Record<string, { default?: unknown; parseHTML?: (el: HTMLElement) => unknown }>
+      | undefined;
     return {
-      ...this.parent?.(),
+      ...parent,
+      // 왕복 무손실 파싱: renderHTML 은 크기 % 가 사는 wrapperStyle 을 img style 로
+      // 합쳐 쓰고 wrapperstyle 속성도 함께 남긴다. 라이브러리 parseHTML 은 속성만
+      // 읽고 없으면 float: left 기본값으로 폴백해, 저장 HTML 재파싱(모달 재열기·
+      // setContent 리셋) 때마다 이미지 크기 % 가 증발했다. 속성 → (구버전) style
+      // 역산 → 라이브러리 폴백 순으로 읽어 왕복을 무손실로 만든다.
+      wrapperStyle: {
+        default: parent?.['wrapperStyle']?.default ?? null,
+        parseHTML: (el: HTMLElement) => {
+          const explicit = el.getAttribute('wrapperstyle');
+          if (explicit) return stripImageAlignArtifacts(explicit);
+          const style = el.getAttribute('style');
+          if (style) {
+            const derived = stripImageAlignArtifacts(
+              style
+                .split(';')
+                .map((d) => d.trim())
+                .filter((d) => d && !isSerializedSafetyDecl(d))
+                .join('; '),
+            );
+            if (derived) return derived;
+          }
+          return parent?.['wrapperStyle']?.parseHTML?.(el) ?? parent?.['wrapperStyle']?.default;
+        },
+      },
+      // 직렬화 img(속성·width 없음)는 style 이 wrapperStyle 로 흡수되므로, 라이브러리
+      // 폴백(style.cssText)을 그대로 두면 wrapper 와 container 에 width % 가 이중
+      // 적용된다(50% × 50%). 그 경우 컨테이너는 크기 버튼과 동일한 값으로 고정한다.
+      containerStyle: {
+        default: parent?.['containerStyle']?.default ?? null,
+        parseHTML: (el: HTMLElement) => {
+          if (el.getAttribute('containerstyle') || el.getAttribute('width')) {
+            return parent?.['containerStyle']?.parseHTML?.(el);
+          }
+          return 'width: 100%; height: auto;';
+        },
+      },
       // 이미지 클릭 영역 (메일 전용) — 0~1 상대좌표 "x,y,w,h". SoT 는 상대좌표이며
       // 밴드 슬라이스는 템플릿 저장 시 서버가 이 값으로 생성한다.
       linkRect: {
@@ -130,12 +188,24 @@ const ImageResizeWithProxy = ImageResize.extend({
   // 정렬과 크기 attr 가 사라진다. 여기서 wrapperStyle 을 img inline style 로 직렬화한다.
   // wrapper 의 width 는 img 의 시각 크기를 결정하므로, container width 는 redundant 가 되어 drop.
   // height 와 max-width 안전망만 보강.
+  //
+  // float 등 정렬 부산물은 직렬화에서 제거한다. 편집기는 globals.css 안전망
+  // (float: none !important)이 float 을 무력화해 문단 text-align 정렬로 보이는 반면,
+  // 출력 HTML 에 float 이 남으면 응답 페이지·메일에서 text-align: center 를 이기고
+  // 좌측으로 붙는다 (편집기·실제 렌더 불일치).
+  //
+  // wrapperstyle / containerstyle 속성을 출력에 함께 남긴다 — 위 parseHTML 이 이
+  // 속성으로 wrapper/container 를 복원해 왕복이 무손실이 된다. 이 속성은 에디터
+  // 전용이며 렌더 표면(응답 페이지·메일)에서는 sanitize allowlist 가 걷어낸다.
   renderHTML({ HTMLAttributes }) {
     const wrapperStyle = (HTMLAttributes['wrapperStyle'] ?? '') as string;
+    const containerStyle = (HTMLAttributes['containerStyle'] ?? '') as string;
     const next: Record<string, unknown> = { ...HTMLAttributes };
     delete next['wrapperStyle'];
     delete next['containerStyle'];
-    const base = wrapperStyle.trim().replace(/;+$/, '');
+    const base = stripImageAlignArtifacts(wrapperStyle);
+    if (base) next['wrapperstyle'] = base;
+    if (containerStyle) next['containerstyle'] = containerStyle;
     const finalStyle = base
       ? `${base}; height: auto; max-width: 100%;`
       : 'height: auto; max-width: 100%;';

@@ -127,7 +127,9 @@ function seedContact(opts: SeedContactInput = {}): { id: string; inviteToken: st
   return { id, inviteToken };
 }
 
-describe('findContactByInviteToken — excluded 분기', () => {
+// 2026-09-01 결정: 수신거부는 메일 채널 해지일 뿐 응답 자격이 아니고, 부정 결과코드도 초대 링크
+// 응답을 막지 않는다 — 초대 링크로는 어떤 경우에도 응답할 수 있어야 한다 (운영 요청).
+describe('findContactByInviteToken — 수신거부·부정 결과코드 컨택도 valid', () => {
   beforeEach(() => {
     state.contacts = [];
     state.negativeCodes = ['수신거부'];
@@ -143,16 +145,16 @@ describe('findContactByInviteToken — excluded 분기', () => {
     }
   });
 
-  it('수신거부 result_code 마킹 → excluded', async () => {
-    const { inviteToken } = seedContact({ attempts: ['수신거부'] });
+  it('부정 결과코드(수신거부) 마킹 컨택도 valid — 링크 응답은 막지 않는다', async () => {
+    const { id, inviteToken } = seedContact({ attempts: ['수신거부'] });
     const result = await findContactByInviteToken(SURVEY_ID, inviteToken);
-    expect(result.kind).toBe('excluded');
+    expect(result).toMatchObject({ kind: 'valid', contactTargetId: id });
   });
 
-  it('unsubscribed_at IS NOT NULL → excluded', async () => {
-    const { inviteToken } = seedContact({ unsubscribed: true });
+  it('unsubscribed_at IS NOT NULL(메일 해지) 컨택도 valid', async () => {
+    const { id, inviteToken } = seedContact({ unsubscribed: true });
     const result = await findContactByInviteToken(SURVEY_ID, inviteToken);
-    expect(result.kind).toBe('excluded');
+    expect(result).toMatchObject({ kind: 'valid', contactTargetId: id });
   });
 
   it('무효 토큰 → invalid', async () => {

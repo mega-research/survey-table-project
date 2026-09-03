@@ -8,8 +8,10 @@ import {
   surveyResponses,
 } from '@/db/schema';
 import {
-  encryptAnswerValue,
+  encryptAnswerForQuestion,
+  type QuestionPiiFlag,
 } from '@/lib/crypto/response-pii';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import {
   lockAndAssertResponseMutation,
@@ -26,6 +28,9 @@ import {
 } from './response-gate';
 import {
   assertAnswerValueSize,
+  PII_CELL_IDS_LIVE_PATH,
+  PII_CELL_IDS_SNAPSHOT_PATH,
+  parsePiiCellIds,
 } from './submitted-answers';
 
 type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
@@ -48,20 +53,27 @@ export async function assertQuestionBelongsToResponse(
   surveyId: string,
   questionId: string,
   executor: ResponseQueryExecutor = db,
-): Promise<{ piiEncrypted: boolean }> {
+): Promise<QuestionPiiFlag> {
   if (versionId) {
-    // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합)를 한
-    // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라 uuid 형식이 아닐 수
-    // 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가 나므로, 캐스트는
-    // 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
-    const rows = await executor.execute<{ pii: boolean | null }>(sql`
+    // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합) + 표 input
+    // 셀 플래그(같은 합집합)를 한 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라
+    // uuid 형식이 아닐 수 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가
+    // 나므로, 캐스트는 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
+    const rows = await executor.execute<{ pii: boolean | null; cells: unknown }>(sql`
       SELECT
         COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
         OR COALESCE(
           (SELECT q.pii_encrypted FROM questions q
            WHERE q.id::text = ${questionId} AND q.survey_id = ${surveyId}::uuid),
           false
-        ) AS pii
+        ) AS pii,
+        COALESCE(jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath), '[]'::jsonb)
+        || COALESCE(
+          (SELECT jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath)
+           FROM questions q
+           WHERE q.id::text = ${questionId} AND q.survey_id = ${surveyId}::uuid),
+          '[]'::jsonb
+        ) AS cells
       FROM survey_versions sv,
            jsonb_array_elements(
              CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
@@ -77,18 +89,25 @@ export async function assertQuestionBelongsToResponse(
     if (!row) {
       throw new Error('해당 설문에 존재하지 않는 질문입니다.');
     }
-    return { piiEncrypted: row.pii === true };
+    return { piiEncrypted: row.pii === true, piiCellIds: parsePiiCellIds(row.cells) };
   }
 
   const [hit] = await executor
-    .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+    .select({
+      id: questions.id,
+      piiEncrypted: questions.piiEncrypted,
+      tableRowsData: questions.tableRowsData,
+    })
     .from(questions)
     .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
     .limit(1);
   if (!hit) {
     throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
-  return { piiEncrypted: hit.piiEncrypted === true };
+  return {
+    piiEncrypted: hit.piiEncrypted === true,
+    piiCellIds: collectPiiCellIds(hit.tableRowsData),
+  };
 }
 
 /**
@@ -181,13 +200,13 @@ export async function updateQuestionResponse(
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
-  const { piiEncrypted } = await assertQuestionBelongsToResponse(
+  const piiFlag = await assertQuestionBelongsToResponse(
     responseRow.versionId,
     responseRow.surveyId,
     questionId,
   );
-  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
-  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+  // PII 문항(값 전체)·PII input 셀(해당 셀만)이면 저장 직전 암호화. 이미 암호문이면 통과.
+  const storedValue = encryptAnswerForQuestion(value, piiFlag);
   // #5 변조 가드 1(저장값 기준): 위 평문 검사는 사전 필터일 뿐이고 판정 기준은 적재되는 값이다.
   // 진입 파이프라인·대상자 테스트 lane 과 같은 기준 — 같은 값을 어느 경로로 넣든 임계가 같다.
   assertAnswerValueSize(storedValue);
@@ -273,8 +292,8 @@ export async function loadQuestionPiiFlags(
   versionId: string | null,
   surveyId: string,
   questionIds: string[],
-): Promise<Map<string, boolean>> {
-  const flags = new Map<string, boolean>();
+): Promise<Map<string, QuestionPiiFlag>> {
+  const flags = new Map<string, QuestionPiiFlag>();
 
   if (versionId) {
     // questionId 는 pub 입력이라 uuid 형식이 아닐 수 있다 — 캐스트는 컬럼 쪽(q.id::text)에 건다.
@@ -283,11 +302,14 @@ export async function loadQuestionPiiFlags(
       questionIds.map((id) => sql`${id}`),
       sql`, `,
     );
-    const rows = await db.execute<{ id: string | null; pii: boolean | null }>(sql`
+    const rows = await db.execute<{ id: string | null; pii: boolean | null; cells: unknown }>(sql`
       SELECT
         qe.elem->>'id' AS id,
         (COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
-         OR COALESCE(q.pii_encrypted, false)) AS pii
+         OR COALESCE(q.pii_encrypted, false)) AS pii,
+        COALESCE(jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath), '[]'::jsonb)
+        || COALESCE(jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath), '[]'::jsonb)
+        AS cells
       FROM survey_versions sv,
            jsonb_array_elements(
              CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
@@ -301,15 +323,24 @@ export async function loadQuestionPiiFlags(
         AND qe.elem->>'id' IN (${idList})
     `);
     for (const row of rows) {
-      if (row.id != null) flags.set(row.id, row.pii === true);
+      if (row.id != null) {
+        flags.set(row.id, { piiEncrypted: row.pii === true, piiCellIds: parsePiiCellIds(row.cells) });
+      }
     }
   } else {
     const rows = await db
-      .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+      .select({
+        id: questions.id,
+        piiEncrypted: questions.piiEncrypted,
+        tableRowsData: questions.tableRowsData,
+      })
       .from(questions)
       .where(and(eq(questions.surveyId, surveyId), inArray(questions.id, questionIds)));
     for (const row of rows) {
-      flags.set(row.id, row.piiEncrypted === true);
+      flags.set(row.id, {
+        piiEncrypted: row.piiEncrypted === true,
+        piiCellIds: collectPiiCellIds(row.tableRowsData),
+      });
     }
   }
 

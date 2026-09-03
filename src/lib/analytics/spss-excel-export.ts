@@ -49,6 +49,12 @@ import {
   generateExportLabel,
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
+import {
+  buildChangeConfirmVarName,
+  CHANGE_CONFIRM_LABEL_SUFFIX,
+  resolveChangeConfirmValue,
+} from '@/lib/spss/change-confirm-variable';
+import { supportsChangeConfirmation } from '@/lib/survey/change-confirmation';
 
 export interface SPSSExportColumn {
   spssVarName: string;
@@ -74,7 +80,9 @@ export interface SPSSExportColumn {
     | 'option-text'
     | 'table-cell-option-text'
     | 'choice-group'
-    | 'choice-group-item';
+    | 'choice-group-item'
+    // 추적조사 변동 확인 — 문항 변수 옆에 붙는 파생 변수 (질문 값이 아니라 응답자의 진술)
+    | 'change-confirm';
   optionIndex?: number;
   optionValue?: string;
   tableCellId?: string;
@@ -128,13 +136,26 @@ export interface SPSSExportColumn {
   soleRankingGroup?: boolean;
 }
 
+/** generateSPSSColumns 부가 입력 — 질문 정의만으로는 알 수 없는 런타임 사실. */
+export interface SpssColumnOptions {
+  /**
+   * 변동 확인 변수를 붙일 문항 id (추적조사). 이월 값이 실제로 존재하는 문항만 담긴다 —
+   * 호출부가 조사 대상의 이월 응답에서 모은다. 비어 있으면(대부분의 설문) 이 기능이
+   * 도입되기 전과 완전히 같은 컬럼이 나온다.
+   */
+  changeConfirmQuestionIds?: ReadonlySet<string>;
+}
+
 /**
  * 질문 목록에서 SPSS 열 정의를 생성한다.
  * - notice 제외
  * - checkbox는 옵션별 분리 (Q2M1, Q2M2...)
  * - 나머지는 열 1개
  */
-export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportColumn[] {
+export function generateSPSSColumns(
+  questions: QuestionVariant[],
+  options?: SpssColumnOptions,
+): SPSSExportColumn[] {
   const columns: SPSSExportColumn[] = [];
 
   for (const q of questions) {
@@ -200,10 +221,11 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             columns.push({
               spssVarName: buildOptionTextVarName(groupVarName, varNumber),
               questionText: q.title,
-              optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'} (텍스트)`,
+              optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'}`,
               questionId: q.id,
               type: 'option-text',
               optionId: cell.id,
+              ...(cell.textInputType === 'number' ? { numericText: true } : {}),
             });
           });
         } else {
@@ -243,10 +265,11 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               columns.push({
                 spssVarName: buildOptionTextVarName(sidecarBase, String(idx + 1)),
                 questionText: q.title,
-                optionLabel: `${optLabel} (텍스트)`,
+                optionLabel: `${optLabel}`,
                 questionId: q.id,
                 type: 'option-text',
                 optionId: cell.id,
+                ...(cell.textInputType === 'number' ? { numericText: true } : {}),
               });
             }
           });
@@ -275,10 +298,11 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           columns.push({
             spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
             questionText: q.title,
-            optionLabel: `${opt.label} (텍스트)`,
+            optionLabel: `${opt.label}`,
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.textInputType === 'number' ? { numericText: true } : {}),
             ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
@@ -313,10 +337,11 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           columns.push({
             spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
             questionText: q.title,
-            optionLabel: `${opt.label} (텍스트)`,
+            optionLabel: `${opt.label}`,
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.textInputType === 'number' ? { numericText: true } : {}),
             ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
@@ -567,7 +592,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               columns.push({
                 spssVarName: buildOptionTextVarName(varName, varNumber),
                 questionText: q.title,
-                optionLabel: `${opt.label} (텍스트)`,
+                optionLabel: `${opt.label}`,
                 questionId: q.id,
                 type: 'table-cell-option-text',
                 tableCellId: cell.id,
@@ -611,7 +636,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 columns.push({
                   spssVarName: buildOptionTextVarName(varName, varNumber),
                   questionText: q.title,
-                  optionLabel: `${opt.label} (텍스트)`,
+                  optionLabel: `${opt.label}`,
                   questionId: q.id,
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
@@ -629,7 +654,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 columns.push({
                   spssVarName: buildOptionTextVarName(varName, varNumber),
                   questionText: q.title,
-                  optionLabel: `${opt.label} (텍스트)`,
+                  optionLabel: `${opt.label}`,
                   questionId: q.id,
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
@@ -658,7 +683,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
 
   // 옵션 라벨 줄바꿈은 표시 전용 — export 라벨(엑셀 헤더/코딩북 + sav radio-group
   // value label)은 단일 행으로 정규화한다. 개별 push 지점이 아니라 여기 한 곳에서 처리.
-  return columns.map((col) => ({
+  const normalized = columns.map((col) => ({
     ...col,
     optionLabel: toSingleLineLabel(col.optionLabel),
     ...(col.radioGroupValueLabels !== undefined
@@ -680,6 +705,57 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         }
       : {}),
   }));
+
+  return insertChangeConfirmColumns(normalized, questions, options?.changeConfirmQuestionIds);
+}
+
+/**
+ * 변동 확인 변수를 각 문항의 마지막 컬럼 **바로 뒤**에 끼운다.
+ *
+ * 뒤에 몰아 붙이지 않는 이유는 코딩북에서 문항 변수와 짝이 붙어 읽혀야 하기 때문이다.
+ * 기존 변수의 이름·값·상대 순서는 그대로다. 대상 집합이 비면(이월 응답이 없는 설문)
+ * 입력 배열을 그대로 돌려주므로 이 기능 도입 전과 출력이 완전히 같다.
+ */
+function insertChangeConfirmColumns(
+  columns: SPSSExportColumn[],
+  questions: QuestionVariant[],
+  changeConfirmQuestionIds: ReadonlySet<string> | undefined,
+): SPSSExportColumn[] {
+  if (!changeConfirmQuestionIds || changeConfirmQuestionIds.size === 0) return columns;
+  // 응답 화면의 노출 규칙과 같은 판정을 태운다 — 규칙이 갈라지면 컨트롤이 없는 문항에만
+  // 변수가 생긴다. 이월 값 보유 여부는 changeConfirmQuestionIds 가 이미 담고 있다.
+  const eligibleById = new Map(
+    questions.filter(supportsChangeConfirmation).map((q) => [q.id, q.questionCode]),
+  );
+  const result: SPSSExportColumn[] = [];
+  // 한 문항당 한 번만 방출한다. 인접성 가정(아래)이 깨져도 같은 변수명을 두 번 만들어
+  // 변수명 중복 에러로 내보내기가 통째로 막히는 일이 없도록 구조로 막는다.
+  const emitted = new Set<string>();
+  for (let i = 0; i < columns.length; i++) {
+    const col = columns[i];
+    if (!col) continue;
+    result.push(col);
+    // 한 문항의 컬럼들은 연속으로 쌓이므로, 다음 컬럼의 문항이 달라지는 지점이 그 문항의 끝이다.
+    if (columns[i + 1]?.questionId === col.questionId) continue;
+    if (!changeConfirmQuestionIds.has(col.questionId)) continue;
+    if (emitted.has(col.questionId)) continue;
+    // eligibleById 는 "유형이 변동 확인을 받을 수 있고 문항 변수명도 있는" 문항만 담는다.
+    // 변수명이 없는 문항은 애초에 컬럼이 0개라 여기 도달하지 않지만, 이름을 억지로
+    // 지어내지 않는다는 뜻을 남긴다.
+    const questionCode = eligibleById.get(col.questionId);
+    if (!questionCode) continue;
+    emitted.add(col.questionId);
+    result.push({
+      spssVarName: buildChangeConfirmVarName(questionCode),
+      questionText: col.questionText,
+      optionLabel: CHANGE_CONFIRM_LABEL_SUFFIX,
+      questionId: col.questionId,
+      type: 'change-confirm',
+      // 코딩북 셀라벨 열 — 이게 없으면 문항 행과 변동 확인 행의 설명이 똑같이 보인다.
+      cellExportLabel: CHANGE_CONFIRM_LABEL_SUFFIX,
+    });
+  }
+  return result;
 }
 
 /**
@@ -897,6 +973,11 @@ export function buildDataRow(
     const rawValue = sub.questionResponses[col.questionId];
 
     switch (col.type) {
+      // 추적조사 변동 확인 — 문항 값이 아니라 사이드카에서 읽는다.
+      // 밝히지 않았거나 도달하지 못한 문항은 결측이다.
+      case 'change-confirm':
+        return resolveChangeConfirmValue(sub.questionResponses, col.questionId);
+
       case 'notice-agree': {
         // { agreed: true, agreedAt: "..." } 또는 boolean(하위 호환)
         if (rawValue && typeof rawValue === 'object' && 'agreed' in rawValue) {
@@ -1086,28 +1167,28 @@ export function buildDataRow(
       }
 
       case 'option-text': {
-        // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트.
+        // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트. 숫자 모드면 숫자로 내보낸다.
         if (!col.optionId) return null;
-        return (
+        const text =
           getOptionText(
             sub.questionResponses as Record<string, unknown>,
             col.questionId,
             col.optionId,
-          ) ?? null
-        );
+          ) ?? null;
+        return col.numericText ? transformNumericText(text) : text;
       }
 
       case 'table-cell-option-text': {
-        // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트.
+        // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트. 숫자 모드면 숫자로 내보낸다.
         // 레거시 경로(optionTexts)는 테이블 셀에 대해 지원하지 않음 (신규 패턴만 사용).
         if (!col.optionId) return null;
-        return (
+        const text =
           getOptionText(
             sub.questionResponses as Record<string, unknown>,
             col.questionId,
             col.optionId,
-          ) ?? null
-        );
+          ) ?? null;
+        return col.numericText ? transformNumericText(text) : text;
       }
 
       case 'multiselect':

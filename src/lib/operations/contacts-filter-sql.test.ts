@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sql as sqlTag } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
+import { buildContactsFilterSql, latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 
 const dialect = new PgDialect();
@@ -441,5 +441,103 @@ describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
     const textQ = dialect.sqlToQuery(text);
     expect(textQ.sql).toContain('"contact_targets".attrs');
     expect(textQ.sql).not.toContain('::numeric');
+  });
+});
+
+describe('buildContactsFilterSql — 메일 필터 (유효 메일 상태)', () => {
+  function mailClause(value: string): FilterClause {
+    return {
+      op: null,
+      condition: { source: 'system.email_count', mode: 'boolean', value },
+    };
+  }
+
+  it('수신거부 — unsubscribed_at 또는 최근 결과코드 수신거부를 유효 상태로 접어 잡는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('skipped_unsubscribed')]));
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    // 결과코드 키워드는 parameter binding 으로 진입한다.
+    expect(query.params).toContain('수신거부');
+    expect(query.params).toContain('skipped_unsubscribed');
+  });
+
+  it('열람 — 유효 상태 기준이라 수신거부 판정자는 열람 필터에 다시 잡히지 않는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('opened')]));
+    // CASE 로 수신거부 신호가 먼저 접히므로 opened 비교는 수신거부 판정자를 제외한다.
+    expect(query.sql).toContain('CASE');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    expect(query.params).toContain('opened');
+  });
+
+  it('없음(none) — 유효 상태 IS NULL 이라 발송 이력 없는 수신거부 판정자는 잡히지 않는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([mailClause('none')]));
+    expect(query.sql).toContain('IS NULL');
+    expect(query.sql).toContain('CASE');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+  });
+});
+
+describe('buildContactsFilterSql — 컨택결과 수신거부 3축 통합', () => {
+  function resultEnumClause(value: string): FilterClause {
+    return {
+      op: null,
+      condition: { source: 'system.contact_result', mode: 'enum', value },
+    };
+  }
+
+  it('수신거부 코드 선택은 메일 경로 수신거부(유효 상태)까지 OR 로 잡는다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([resultEnumClause('13.수신거부')]));
+    expect(query.sql).toContain('result_code');
+    // 유효 메일 상태 CASE 가 OR 로 결합됐는지 — unsubscribed_at 신호 포함.
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+    expect(query.params).toContain('13.수신거부');
+  });
+
+  it('일반 코드 선택은 결과코드 일치만 본다', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([resultEnumClause('6.거절')]));
+    expect(query.sql).toContain('result_code');
+    expect(query.sql).not.toContain('unsubscribed_at');
+  });
+
+  it('헤더 체크박스(in)에 수신거부 코드가 포함되면 메일 경로 수신거부도 잡는다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'in',
+            value: '',
+            values: ['1.조사완료', '13.수신거부'],
+          },
+        },
+      ]),
+    );
+    expect(query.sql).toContain(' IN ');
+    expect(query.sql).toContain('"contact_targets".unsubscribed_at IS NOT NULL');
+  });
+
+  it('헤더 체크박스(in)에 수신거부 코드가 없으면 결과코드만 본다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_result',
+            mode: 'in',
+            value: '',
+            values: ['1.조사완료'],
+          },
+        },
+      ]),
+    );
+    expect(query.sql).not.toContain('unsubscribed_at');
+  });
+});
+
+describe('latestResultUnsubscribedSql', () => {
+  it('COALESCE 로 비-NULL 판정이다 — 회차 없는 컨택이 NOT (...) 에서 탈락하지 않는다', () => {
+    const query = dialect.sqlToQuery(sqlTag`${latestResultUnsubscribedSql}`);
+    expect(query.sql.toUpperCase()).toContain('COALESCE');
+    expect(query.sql.toUpperCase()).toContain('FALSE');
   });
 });

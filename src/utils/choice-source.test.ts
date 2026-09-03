@@ -169,3 +169,27 @@ describe('choice-source', () => {
     });
   });
 });
+
+describe('choice-source — 텍스트 입력 숫자 모드 투영', () => {
+  it('셀의 textInputType·textInputNumberFormat 을 옵션으로 옮긴다', () => {
+    const question = q({
+      type: 'radio',
+      optionsSource: 'table',
+      tableRowsData: [
+        row([
+          cell({
+            id: 'c1',
+            type: 'choice_opt',
+            choiceLabel: '의견',
+            allowTextInput: true,
+            textInputType: 'number',
+            textInputNumberFormat: { thousandSeparator: true, max: 100 },
+          }),
+        ]),
+      ],
+    } as Partial<Question>);
+    const [opt] = resolveChoiceOptions(question);
+    expect(opt?.textInputType).toBe('number');
+    expect(opt?.textInputNumberFormat).toEqual({ thousandSeparator: true, max: 100 });
+  });
+});

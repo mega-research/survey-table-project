@@ -137,6 +137,10 @@ function makeSelect() {
     if (tableName === 'surveys') {
       return [{ testModeEnabled: state.surveyTestModeEnabled }];
     }
+    if (tableName === 'contact_attempts') {
+      // 수신거부/negative 재검증 조회 — 이 스위트의 관심사가 아니라 항상 빈 결과.
+      return [];
+    }
     if (tableName === 'contact_targets') {
       const params = whereQuery ? compiled(whereQuery).params : [];
       const row = state.recipients.find((candidate) => (
@@ -161,6 +165,12 @@ function makeSelect() {
     },
     where(query: unknown) {
       whereQuery = query;
+      return chain;
+    },
+    orderBy() {
+      return chain;
+    },
+    limit() {
       return chain;
     },
     for: async (mode: string) => {
@@ -259,6 +269,13 @@ vi.mock('@/db', () => ({
       }),
     })),
   },
+}));
+
+// negative 결과코드 재검증은 이 스위트의 관심사가 아니다 — 빈 목록으로 무력화해
+// db mock 에 결과코드 조회 분기를 추가하지 않는다 (전용 검증은
+// campaign-dispatch-unsubscribe.test.ts).
+vi.mock('@/server/read-models/result-code-statuses', () => ({
+  getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
 }));
 
 vi.mock('@react-email/render', () => ({

@@ -30,6 +30,12 @@ export interface ContactColumnDef {
   /** 숨김 (운영 컬럼 일부는 hide 불가 — UI 가드) */
   hidden?: boolean;
   /**
+   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 이 컬럼을 표시.
+   * attrs.* 소스 전용 — system/pii 컬럼은 attrs 에 값이 없어 표시할 수 없다(서비스 가드).
+   * 조사 대상 목록의 hidden 과는 독립이다.
+   */
+  showInMail?: boolean;
+  /**
    * PII 매핑 타입. 지정되면 해당 엑셀 컬럼 값이 contact_pii 사이드 테이블에
    * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
    */
@@ -137,7 +143,8 @@ export interface ContactResultCode {
  *
  * status 매핑:
  * - '1.조사완료' → 'positive' (응답 완료 인정)
- * - '수신거부' → 'negative' (모집단 제외)
+ * - '수신거부' → 'neutral' (2026-08-27 결정 — 조사 거절 의사일 뿐 모집단 이탈이
+ *   아니므로 분모 유지. 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당)
  * - 나머지 11개 → 필드 생략 (= 'neutral')
  */
 export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
@@ -153,5 +160,27 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '10.메일발송', label: '10.메일발송', order: 10, tone: 'blue' },
   { code: '11.기타', label: '11.기타', order: 11, tone: 'amber' },
   { code: '12.담당자퇴사', label: '12.담당자퇴사', order: 12, tone: 'rose' },
-  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'negative' },
+  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'neutral' },
 ];
+
+/**
+ * 이월 응답 임포트 확정 설정 (추적조사).
+ *
+ * 191개 컬럼 매핑을 한 번에 맞출 리 없어 재업로드가 정상 경로다. 사람이 화면에서 확정한
+ * 것을 보관해 다시 올릴 때 재사용한다. 버전 스냅샷 밖 라이브 컬럼이다.
+ */
+export interface PriorAnswerImportConfig {
+  /**
+   * 정규화된 문항코드 → 확정 내용. 자동 제안보다 우선한다.
+   *
+   * 확정 시점의 문항 내용(`label`)을 함께 남긴다 — 코드만 저장하면 다음 파일에서 같은
+   * 코드가 다른 문항을 가리켜도 지난 확정이 그대로 되살아나 "코드는 같은데 내용이
+   * 다르다" 경고가 사라진다. 이 티켓이 막으려는 사고가 바로 그것이다.
+   */
+  blockMappings: Record<string, { questionId: string; label: string }>;
+  /**
+   * 문항 id → { 원본 값 → 선택지 저장값 }.
+   * 지난 회차와 선택지 라벨이 달라진 문항에서 담당자가 그 자리에서 이어준 대응이다.
+   */
+  valueAliases: Record<string, Record<string, string>>;
+}

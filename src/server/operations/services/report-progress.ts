@@ -8,7 +8,7 @@ import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
-
+import { isUnsubscribeResultCode } from '@/lib/operations/filter-shared';
 import {
   type OperationsDataScope,
   targetScopeCondition,
@@ -60,16 +60,19 @@ function buildClosingFilter(positiveCodes: string[], isTest: boolean): SQL {
 }
 
 /**
- * 모집단 제외 정의 — negative codes OR unsubscribed_at OR 자격미달 응답.
+ * 모집단 제외 정의 — negative codes OR 자격미달 응답.
  *
  * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
- * `unsubscribed_at IS NOT NULL` 도 자동 negative 효과 (메일 푸터 unsubscribe 흐름).
+ *
+ * 수신거부(unsubscribed_at·수신거부 결과코드)는 제외하지 않는다 (2026-08-27 결정) —
+ * 조사 거절 의사 또는 메일 수신 거부일 뿐 조사 대상 자격을 벗어난 것이 아니므로
+ * 모집단(분모)에는 남는다. 단체메일 배제와는 별개 축이다.
  *
  * 자격미달(status='screened_out')은 조사 대상 조건 불충족이라 애초에 모집단이 아니다.
  * 완료 수(분자)에서는 is_completed=false 로 이미 빠지므로, 여기서 분모까지 빼면
  * 응답률 = 완료 / (전체 - 부적격) 이 된다.
  *
- * negative codes 빈 배열이면 unsubscribed_at 과 자격미달만 평가.
+ * negative codes 빈 배열이면 자격미달만 평가.
  * isTest 는 buildClosingFilter 와 같은 스코프 플래그를 받는다 — 반대 파티션의
  * 자격미달 응답이 분모를 깎지 않게 하기 위함이다.
  */
@@ -81,30 +84,36 @@ function buildScreenedOutExists(isTest: boolean): SQL {
                        AND sr.is_test = ${isTest})`;
 }
 
+/**
+ * 진척률 분모 제외용 negative 코드 — 수신거부 계열 코드는 설정이 negative 여도
+ * 분모를 깎지 않는다 (수신거부 = 분모 유지 정책의 설정 무관 강제). 기본 코드셋을
+ * 아직 저장하지 않은 기존 설문(수신거부 negative 잔존)도 이 필터가 정렬한다.
+ */
+function progressNegativeCodes(negativeCodes: string[]): string[] {
+  return negativeCodes.filter((c) => !isUnsubscribeResultCode(c));
+}
+
 function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
-  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}
-    OR ct.unsubscribed_at IS NOT NULL
+  return sql`${buildNegativeCodeExists(progressNegativeCodes(negativeCodes), sql`ct.id`)}
     OR ${buildScreenedOutExists(isTest)}`;
 }
 
 /**
  * 제외 사유별 내역 — 겹치지 않는 버킷으로 쪼갠다.
  *
- * 한 컨택이 여러 사유에 동시에 해당할 수 있으므로(예: 결과코드 `수신거부` + unsubscribed_at,
- * 또는 자격미달 응답 + 담당자가 나중에 찍은 부적격 코드) 단순 COUNT 를 나열하면 합이
- * 제외 총계를 넘는다. 푸터가 "제외 N = a + b + c" 로 읽히려면 버킷이 배타적이어야 한다.
+ * 한 컨택이 여러 사유에 동시에 해당할 수 있으므로(예: 자격미달 응답 + 담당자가 나중에
+ * 찍은 부적격 코드) 단순 COUNT 를 나열하면 합이 제외 총계를 넘는다. 푸터가
+ * "제외 N = a + b" 로 읽히려면 버킷이 배타적이어야 한다.
  *
- * 우선순위는 응답자 행동 > 담당자 판정 > 메일 수신 상태 순이다. 자격미달은 응답 내용으로
- * 확정된 사실이라 가장 구체적이고, 결과코드는 담당자 판정, 수신거부는 그중 가장 약한 신호다.
+ * 우선순위는 응답자 행동 > 담당자 판정 순이다. 자격미달은 응답 내용으로 확정된
+ * 사실이라 가장 구체적이고, 결과코드는 담당자 판정이다.
  */
 function buildExcludeBreakdownSelect(negativeCodes: string[], isTest: boolean): SQL {
   const screened = buildScreenedOutExists(isTest);
-  const negative = sql`(${buildNegativeCodeExists(negativeCodes, sql`ct.id`)})`;
+  const negative = sql`(${buildNegativeCodeExists(progressNegativeCodes(negativeCodes), sql`ct.id`)})`;
   return sql`
       COUNT(*) FILTER (WHERE ${screened})::int AS excluded_screened_out,
-      COUNT(*) FILTER (WHERE NOT (${screened}) AND ${negative})::int AS excluded_negative_code,
-      COUNT(*) FILTER (WHERE NOT (${screened}) AND NOT ${negative}
-                         AND ct.unsubscribed_at IS NOT NULL)::int AS excluded_unsubscribed`;
+      COUNT(*) FILTER (WHERE NOT (${screened}) AND ${negative})::int AS excluded_negative_code`;
 }
 
 /**
@@ -406,7 +415,6 @@ export async function getProgressTotals(
     excludedTotal: Number(r['excluded_total'] ?? 0),
     excludedScreenedOut: Number(r['excluded_screened_out'] ?? 0),
     excludedNegativeCode: Number(r['excluded_negative_code'] ?? 0),
-    excludedUnsubscribed: Number(r['excluded_unsubscribed'] ?? 0),
   };
 }
 

@@ -4,8 +4,10 @@ import {
   collectChoiceGroups,
   isGroupedRankingQuestion,
   collectRankingGroups,
+  type ChoiceGroupWithCells,
 } from '@/utils/choice-group-helpers';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
+import { resolveRequiredMessage } from '@/utils/required-message';
 
 /**
  * 질문 타입별 응답 충족 여부를 판정하는 순수 함수.
@@ -46,19 +48,14 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
     case 'radio':
     // fallthrough: checkbox 질문도 choiceGroups 가 있으면 grouped 경로를 밟는다.
     case 'checkbox':
-      // 그룹별 선택(radio 또는 checkbox 그룹 1개 이상): 모든 그룹에 선택이 있어야 충족.
+      // 그룹별 선택(radio 또는 checkbox 그룹 1개 이상):
+      // 그룹별 required 오버라이드가 있으면 유효 필수 그룹만, 없으면 기존처럼 모든 그룹.
       // 그룹 type별 검증:
       //   - radio 그룹: 비어있지 않은 string 값이 있어야 한다.
       //   - checkbox 그룹: 1개 이상의 요소를 가진 배열이어야 한다.
       if (isGroupedChoiceQuestion(question)) {
         const map = (response ?? {}) as Record<string, unknown>;
-        return collectChoiceGroups(question).every((g) => {
-          if (g.type === 'checkbox') {
-            return Array.isArray(map[g.groupKey]) && (map[g.groupKey] as unknown[]).length > 0;
-          }
-          // radio 그룹
-          return typeof map[g.groupKey] === 'string' && map[g.groupKey] !== '';
-        });
+        return checkTargetChoiceGroups(question).every((g) => isChoiceGroupFilled(g, map));
       }
       // 비그룹 checkbox — 기존 배열 + minSelections 검증
       if (question.type === 'checkbox') {
@@ -96,4 +93,48 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
     default:
       return true;
   }
+}
+
+/** 그룹 충족 판정 — radio 그룹: 비어있지 않은 string, checkbox 그룹: 비어있지 않은 배열 */
+function isChoiceGroupFilled(
+  group: ChoiceGroupWithCells,
+  map: Record<string, unknown>,
+): boolean {
+  if (group.type === 'checkbox') {
+    return Array.isArray(map[group.groupKey]) && (map[group.groupKey] as unknown[]).length > 0;
+  }
+  return typeof map[group.groupKey] === 'string' && map[group.groupKey] !== '';
+}
+
+/**
+ * 충족 검사 대상 그룹 — 그룹별 required 오버라이드를 질문 레벨 required 와 합성한다.
+ * 유효 필수 그룹(required ?? question.required === true)이 하나라도 있으면 그 그룹들만,
+ * 하나도 없으면 기존 의미론(모든 그룹)을 유지한다 — 선택형 그룹 질문의 진행률
+ * 집계(모든 그룹 채워야 "답변됨")가 바뀌지 않도록.
+ */
+function checkTargetChoiceGroups(question: Question): ChoiceGroupWithCells[] {
+  const groups = collectChoiceGroups(question);
+  const required = groups.filter((g) => (g.required ?? question.required) === true);
+  return required.length > 0 ? required : groups;
+}
+
+/** 그룹에 명시적 required:true 오버라이드가 있는지 — 질문 필수 OFF 여도 차단 판정에 태운다 */
+export function hasExplicitRequiredChoiceGroup(question: Question): boolean {
+  if (!isGroupedChoiceQuestion(question)) return false;
+  return collectChoiceGroups(question).some((g) => g.required === true);
+}
+
+/**
+ * 필수 미응답 안내 문구 해석 (그룹 인지) — 미충족 필수 그룹 중 문구가 지정된
+ * 첫 그룹의 문구를 쓰고, 없으면 질문 requiredMessage → 기본 문구로 폴백한다.
+ * 비그룹 질문은 질문 레벨 해석과 동일.
+ */
+export function resolveGroupedRequiredMessage(question: Question, response: unknown): string {
+  if (isGroupedChoiceQuestion(question)) {
+    const map = (response ?? {}) as Record<string, unknown>;
+    const unmet = checkTargetChoiceGroups(question).find((g) => !isChoiceGroupFilled(g, map));
+    const custom = unmet?.requiredMessage?.trim();
+    if (custom) return custom;
+  }
+  return resolveRequiredMessage(question);
 }

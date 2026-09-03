@@ -1152,3 +1152,68 @@ describe('buildUpdatedCell — calc 셀 표시값 비교 검증 (calcValidation)
     expect(out).not.toHaveProperty('calcValidation');
   });
 });
+
+describe('input 셀 개인정보 암호화 플래그 (piiEncrypted)', () => {
+  it('폼 inputPiiEncrypted 가 켜지면 input 셀에 piiEncrypted: true 로 저장된다', () => {
+    const form: CellFormState = { ...baseForm('input'), inputPiiEncrypted: true };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.type).toBe('input');
+    expect(out.piiEncrypted).toBe(true);
+  });
+
+  it('꺼진 경우 키 자체를 남기지 않고, 기존 셀의 플래그도 제거된다', () => {
+    const form: CellFormState = { ...baseForm('input'), inputPiiEncrypted: false };
+    const out = buildUpdatedCell(form, { ...baseCell, type: 'input', piiEncrypted: true });
+    expect(out).not.toHaveProperty('piiEncrypted');
+  });
+
+  it('input 이 아닌 셀은 폼 값과 무관하게 플래그를 쓰지 않는다', () => {
+    const form: CellFormState = { ...baseForm('text'), inputPiiEncrypted: true };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('piiEncrypted');
+  });
+
+  it('cellToFormState 는 셀의 piiEncrypted 를 inputPiiEncrypted 로 복원한다', () => {
+    expect(
+      cellToFormState({ id: 'c1', type: 'input', content: '', piiEncrypted: true }).inputPiiEncrypted,
+    ).toBe(true);
+    expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputPiiEncrypted).toBe(false);
+  });
+});
+
+describe('choice_opt 텍스트 입력 숫자 모드 (textInputType / textInputNumberFormat)', () => {
+  it('숫자 모드를 켜고 형식을 지정하면 셀에 저장된다', () => {
+    const form: CellFormState = {
+      ...baseForm('choice_opt'),
+      choiceAllowTextInput: true,
+      choiceTextInputType: 'number',
+      choiceTextInputNumberFormat: { thousandSeparator: true, min: 1 },
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.textInputType).toBe('number');
+    expect(out.textInputNumberFormat).toEqual({ thousandSeparator: true, min: 1 });
+  });
+
+  it('텍스트 입력이 꺼져 있으면 숫자 모드 키를 남기지 않는다', () => {
+    const form: CellFormState = {
+      ...baseForm('choice_opt'),
+      choiceAllowTextInput: false,
+      choiceTextInputType: 'number',
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).not.toHaveProperty('textInputType');
+    expect(out).not.toHaveProperty('textInputNumberFormat');
+  });
+
+  it('cellToFormState 는 셀의 숫자 모드를 폼으로 복원한다', () => {
+    const state = cellToFormState({
+      id: 'c1',
+      type: 'choice_opt',
+      content: '',
+      allowTextInput: true,
+      textInputType: 'number',
+      textInputNumberFormat: { max: 9 },
+    });
+    expect(state.choiceTextInputType).toBe('number');
+    expect(state.choiceTextInputNumberFormat).toEqual({ max: 9 });
+  });
+});

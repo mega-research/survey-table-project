@@ -12,6 +12,7 @@
 // 전제: 로컬 테스트 DB 가 최신 상태여야 한다. 먼저 pnpm db:setup-test 를 돌릴 것.
 //
 // 모든 조회는 READ ONLY 트랜잭션에서 수행한다. 실 DB 를 건드리지 않는다.
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 
@@ -31,6 +32,54 @@ function liveUrl() {
     .find((l) => l.startsWith('DATABASE_URL='));
   if (!line) throw new Error(`${file} 에 DATABASE_URL 이 없습니다.`);
   return line.slice('DATABASE_URL='.length).trim().replace(/^["']|["']$/g, '');
+}
+
+/**
+ * 로컬 테스트 DB 가 이 레포의 마이그레이션 집합으로 만들어졌는지 확인한다 (fail-fast).
+ *
+ * 로컬 supabase 도커는 워크트리 전체가 공유하는 단일 인스턴스다. 다른 브랜치가
+ * db:setup-test 를 돌리면 이 DB 는 그쪽 집합으로 통째 교체되는데, 그 상태로 대조하면
+ * 남의 브랜치가 넣은 객체는 "레포에만 있음", 내 브랜치 신규 객체는 아예 누락으로 나온다.
+ * 결과가 틀린 줄 모른 채 읽게 되므로 (2026-08-31 실제 발생) 여기서 멈춘다.
+ *
+ * setup-test-db.sh 가 찍는 지문은 재생 태그 목록과 순서를 모두 반영한다.
+ */
+async function assertLocalDbMatchesRepo() {
+  const expected = execFileSync('node', ['scripts/migration-order.mjs', '--hash'], {
+    encoding: 'utf8',
+  }).trim();
+
+  const sql = postgres(LOCAL_URL, { prepare: false, max: 1, idle_timeout: 5, connect_timeout: 10 });
+  let stamp;
+  try {
+    const rows = await sql.begin(async (tx) => {
+      await tx`SET TRANSACTION READ ONLY`;
+      return tx`
+        SELECT order_hash, tag_count, stamped_at
+        FROM _repo_meta.migration_stamp
+        LIMIT 1`;
+    });
+    stamp = rows[0];
+  } catch {
+    stamp = undefined; // 스키마·표가 없으면 지문 이전에 만들어진 DB
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+
+  if (!stamp) {
+    console.error('ERROR: 로컬 테스트 DB 에 재생 지문이 없습니다.');
+    console.error('  이 DB 가 어느 브랜치의 마이그레이션으로 만들어졌는지 알 수 없어 대조할 수 없습니다.');
+    console.error('  pnpm db:setup-test 를 먼저 실행하십시오.');
+    process.exit(2);
+  }
+  if (stamp.order_hash !== expected) {
+    console.error('ERROR: 로컬 테스트 DB 가 이 레포 상태로 만들어지지 않았습니다.');
+    console.error(`  DB 지문   : ${stamp.order_hash} (${stamp.tag_count}건, ${stamp.stamped_at.toISOString()})`);
+    console.error(`  레포 지문 : ${expected}`);
+    console.error('  로컬 supabase 도커는 워크트리 공용이라 다른 브랜치가 재생하면 통째로 바뀝니다.');
+    console.error('  pnpm db:setup-test 를 다시 실행한 뒤 대조하십시오.');
+    process.exit(2);
+  }
 }
 
 /** 한 DB 의 객체 목록을 수집한다. 전부 읽기 전용. */
@@ -149,6 +198,8 @@ try {
 } catch {
   console.log(`(허용 목록 ${ALLOWLIST_PATH} 없음 — 전부 신규 차이로 보고합니다)\n`);
 }
+
+await assertLocalDbMatchesRepo();
 
 console.log(`대조: ${target} ↔ 로컬 테스트 DB\n`);
 const [live, repo] = await Promise.all([inventory(liveUrl()), inventory(LOCAL_URL)]);

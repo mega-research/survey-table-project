@@ -2,6 +2,7 @@
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
+import type { SurveyAnchorSnapshot } from './survey-document';
 
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
@@ -38,6 +39,18 @@ export type SurveyControl = {
   pausedMessage: string | null;
   testSession: 'none' | 'valid' | 'invalid';
   testSessionKind: 'anonymous' | 'target' | null;
+  /** 추적조사의 이전 회차 라벨(surveys.prior_wave_label). 없으면 null */
+  priorWaveLabel: string | null;
+};
+
+/**
+ * 응답 화면이 조사표 분할로 뜰 때 필요한 것 전부 — PDF 주소·쪽 수·발행 시점에 얼린 앵커.
+ * 조사표가 없거나 앵커가 하나도 없으면 null — 그 설문은 분할이 아니다.
+ */
+export type SurveyDocumentView = {
+  url: string;
+  pageCount: number;
+  anchors: SurveyAnchorSnapshot[];
 };
 
 /**
@@ -52,7 +65,12 @@ export type SurveyControl = {
  */
 export interface ResponseEntrySeed {
   /** forResponse 조회 결과. null 이면 설문 없음(로더가 기존 에러 화면을 낸다). */
-  forResponse: { survey: Survey; versionId: string | null; control: SurveyControl } | null;
+  forResponse: {
+    survey: Survey;
+    versionId: string | null;
+    control: SurveyControl;
+    documentView: SurveyDocumentView | null;
+  } | null;
   /** attrs 조회 결과. 무효 토큰이면 null — 로더가 기존과 같이 익명 폴백한다. */
   contactAttrs: Record<string, string> | null;
   /** attrs 조회가 테스트 링크 만료로 거부됐다(RPC 의 INVALID_TEST_LINK 와 같은 뜻). */

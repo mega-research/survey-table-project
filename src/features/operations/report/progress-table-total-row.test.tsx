@@ -19,10 +19,9 @@ const totals: ProgressTotals = {
   groupCount: 5,
   listTotal: 808,
   completedTotal: 103,
-  excludedTotal: 12,
+  excludedTotal: 11,
   excludedScreenedOut: 4,
   excludedNegativeCode: 7,
-  excludedUnsubscribed: 1,
 };
 
 const rows: ProgressRow[] = [
@@ -57,9 +56,10 @@ function renderTable() {
 describe('ProgressTable 제외 내역 푸터', () => {
   it('제외 총계와 사유별 내역을 함께 보여준다', () => {
     renderTable();
-    // 사유 버킷은 배타적이라 합이 총계와 같아야 한다 (4 + 7 + 1 = 12).
+    // 사유 버킷은 배타적이라 합이 총계와 같아야 한다 (4 + 7 = 11).
+    // 수신거부는 모집단 제외 사유가 아니다 (2026-08-27 결정).
     expect(
-      screen.getByText(/제외 12 \(자격 미달 4, 결과코드 부적격 7, 수신거부 1\)/),
+      screen.getByText(/제외 11 \(자격 미달 4, 결과코드 부적격 7\)/),
     ).toBeInTheDocument();
   });
 
@@ -67,7 +67,7 @@ describe('ProgressTable 제외 내역 푸터', () => {
     render(
       <ProgressTable
         rows={rows}
-        totals={{ ...totals, excludedTotal: 4, excludedScreenedOut: 4, excludedNegativeCode: 0, excludedUnsubscribed: 0 }}
+        totals={{ ...totals, excludedTotal: 4, excludedScreenedOut: 4, excludedNegativeCode: 0 }}
         metaColumns={[]}
         residLabel="시스템ID"
         groupColumns={[{ key: 'year', label: '연도' }]}

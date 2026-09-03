@@ -30,6 +30,12 @@ export function securityHeaders() {
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
+  // pdfjs-dist 는 런타임에 기능 탐지(선택 의존성 dlopen 포함)를 하므로 서버 번들에
+  // 말아넣지 않고 node_modules 에서 그대로 require 하게 둔다. 서버에서 쓰는 곳은
+  // 조사표 업로드의 쪽 수 판독 하나다 (lib/survey-document/pdf-page-count.server.ts).
+  // 클라이언트 뷰어의 import 는 이 설정과 무관하다.
+  serverExternalPackages: ['pdfjs-dist'],
+
   // 전역 안전 보안 헤더 (전 라우트 적용). 정의는 securityHeaders() 참조.
   async headers() {
     return securityHeaders();

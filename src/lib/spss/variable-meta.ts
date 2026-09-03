@@ -1,6 +1,7 @@
 import { VariableMeasure, VariableType } from 'sav-writer';
 
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { CHANGE_CONFIRM_LABEL_SUFFIX } from '@/lib/spss/change-confirm-variable';
 import type { Question } from '@/types/survey';
 
 // 이하 3개 함수는 sav-builder.ts 에서 이동. 모든 export 변수가
@@ -37,10 +38,16 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
     case 'choice-group':
     case 'choice-group-item':
     case 'table-cell-ranking':
+    case 'change-confirm':
       return VariableType.Numeric;
 
     case 'text':
       // numericText 는 generateSPSSColumns 에서 question.inputType 기반으로 세팅된 SSOT
+      return col.numericText ? VariableType.Numeric : VariableType.String;
+
+    case 'option-text':
+    case 'table-cell-option-text':
+      // 숫자 모드 자유기재(textInputType='number')는 숫자 변수로 내보낸다
       return col.numericText ? VariableType.Numeric : VariableType.String;
 
     case 'other-text':
@@ -100,13 +107,21 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
     return VariableMeasure.Nominal;
   }
 
+  // 변동 확인(추적조사) — 같음/달라짐 두 범주라 명목척도
+  if (col.type === 'change-confirm') {
+    return VariableMeasure.Nominal;
+  }
+
   // 상세 기재 텍스트(String) — option-text 와 동일하게 명목척도 (의미상 척도 없음)
   if (col.type === 'ranking-option-text' || col.type === 'table-cell-ranking-option-text') {
     return VariableMeasure.Nominal;
   }
 
-  // 숫자 단답형(numericText) 은 척도(Continuous)
-  if (col.type === 'text' && col.numericText) {
+  // 숫자 단답형·숫자 모드 자유기재(numericText) 는 척도(Continuous)
+  if (
+    (col.type === 'text' || col.type === 'option-text' || col.type === 'table-cell-option-text') &&
+    col.numericText
+  ) {
     return VariableMeasure.Continuous;
   }
 
@@ -127,6 +142,8 @@ export function buildLabel(col: SPSSExportColumn): string {
       return `${col.questionText} - ${col.optionLabel}`;
     case 'notice-agree':
       return `${col.questionText} - 동의 여부`;
+    case 'change-confirm':
+      return `${col.questionText} - ${CHANGE_CONFIRM_LABEL_SUFFIX}`;
     case 'notice-date':
       return `${col.questionText} - 동의 일시`;
     case 'ranking-rank':

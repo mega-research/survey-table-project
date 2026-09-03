@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { surveyAnchorKeys } from '@/features/survey-builder/queries/use-survey-anchors';
 import { client, orpc } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
@@ -62,6 +63,9 @@ export function useSaveSurvey() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(data.surveyId) });
+      // 질문·그룹이 지워지면 FK 가 그 영역 앵커도 함께 지운다. 다시 읽지 않으면
+      // 조사표 탭에 지워진 대상의 사각형이 그대로 남는다.
+      queryClient.invalidateQueries({ queryKey: surveyAnchorKeys.list(data.surveyId) });
     },
   });
 }

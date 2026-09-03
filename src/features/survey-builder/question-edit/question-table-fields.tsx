@@ -15,6 +15,11 @@ interface QuestionTableFieldsProps {
   answerQuoteEnabled: boolean;
   isRankingTableSource: boolean;
   showTableEditor: boolean;
+  /**
+   * 필수 마스터 전파(ADR 0021) 후 표 에디터 리마운트용 — useTableEditor 는 마운트 시점
+   * formData 로만 초기화하므로 부모가 값을 올리면 key 가 갈려 최신 tableRowsData 를 다시 읽는다.
+   */
+  tableEditorEpoch: number;
 }
 
 /** 질문 편집의 '테이블 설정' 구획. 상태는 부모가 그대로 들고 있다. */
@@ -27,6 +32,7 @@ export function QuestionTableFields({
   answerQuoteEnabled,
   isRankingTableSource,
   showTableEditor,
+  tableEditorEpoch,
 }: QuestionTableFieldsProps) {
   return (
     <>
@@ -43,6 +49,7 @@ export function QuestionTableFields({
       </div>
 
       <DynamicTableEditor
+        key={tableEditorEpoch}
         tableTitle={formData.tableTitle}
         columns={formData.tableColumns}
         rows={formData.tableRowsData}

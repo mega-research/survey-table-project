@@ -4,7 +4,7 @@ const { sendMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
 }));
 
-vi.mock('@/server/mail/services/resend-client', () => ({
+vi.mock('./resend-client', () => ({
   getResend: () => ({ emails: { send: sendMock } }),
 }));
 

@@ -4,10 +4,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createElement } from 'react';
 
 import { render } from '@react-email/render';
-import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema/contacts';
+import { contactAttempts, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -24,6 +24,8 @@ import {
 } from './send-bulk';
 import { MailWrapper } from './template-wrapper';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
+import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
+import { isUnsubscribeResultCode } from '@/lib/operations/filter-shared';
 
 type CampaignDispatchState = Pick<
   typeof mailCampaigns.$inferSelect,
@@ -101,6 +103,7 @@ async function claimRecipientDelivery(
   recipientId: string,
   now: Date,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
+  negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   const leaseToken = randomUUID();
   const leaseExpiresAt = new Date(now.getTime() + DELIVERY_LEASE_MS);
@@ -211,6 +214,19 @@ async function claimRecipientDelivery(
       ? lockedContact
       : null;
 
+    // 최근 회차 결과코드가 수신거부인지 — 결과코드 status(negative) 무관 (수신거부 3축).
+    // queued 스킵과 sending 복구 차단이 공유한다. busy 조기 반환 뒤에만 호출해
+    // lease 대기 폴링마다 조회하지 않는다.
+    const latestResultCodeUnsubscribed = async (contactId: string): Promise<boolean> => {
+      const [latestAttempt] = await tx
+        .select({ resultCode: contactAttempts.resultCode })
+        .from(contactAttempts)
+        .where(eq(contactAttempts.contactTargetId, contactId))
+        .orderBy(desc(contactAttempts.attemptNo))
+        .limit(1);
+      return isUnsubscribeResultCode(latestAttempt?.resultCode ?? null);
+    };
+
     let sendAttemptedAt = recipient.sendAttemptedAt;
     let sendPayloadSnapshot = recipient.sendPayloadSnapshot;
     if (recipient.status === 'queued') {
@@ -222,6 +238,35 @@ async function claimRecipientDelivery(
       }
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
+      }
+      // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증.
+      if (await latestResultCodeUnsubscribed(currentContact.id)) {
+        return finishWithoutSend(
+          'skipped_unsubscribed',
+          '수신거부 결과코드가 기록되어 발송을 건너뛰었습니다.',
+        );
+      }
+      // 큐잉 → dispatch 사이에 negative(모집단 제외) 결과코드 회차가 기록된 컨택 재검증.
+      // 캠페인 생성 시점 배제(preflightRecipients·buildNegativeCodeExists)와 같은
+      // 판정(회차 이력 EXISTS)을 발송 직전에 반복한다 — unsubscribed_at 재검증과
+      // 동일한 TOCTOU 방어.
+      if (negativeResultCodes.length > 0) {
+        const [negativeAttempt] = await tx
+          .select({ attemptId: contactAttempts.id })
+          .from(contactAttempts)
+          .where(
+            and(
+              eq(contactAttempts.contactTargetId, currentContact.id),
+              inArray(contactAttempts.resultCode, negativeResultCodes),
+            ),
+          )
+          .limit(1);
+        if (negativeAttempt) {
+          return finishWithoutSend(
+            'skipped_unsubscribed',
+            '모집단 제외 결과코드가 기록되어 발송을 건너뛰었습니다.',
+          );
+        }
       }
       if (proposedPayload === null) {
         return finishWithoutSend('failed', '발송에 필요한 recipient snapshot이 없습니다.');
@@ -241,6 +286,11 @@ async function claimRecipientDelivery(
         return { kind: 'payload_missing' };
       }
       if (!currentContact || currentContact.unsubscribedAt !== null) {
+        return { kind: 'recovery_blocked' };
+      }
+      // sending 복구 재시도도 수신거부 결과코드를 차단한다 — 결과코드 수신거부는
+      // unsubscribed_at 을 세우지 않으므로 위 검사만으로는 재발송이 나갈 수 있다.
+      if (await latestResultCodeUnsubscribed(currentContact.id)) {
         return { kind: 'recovery_blocked' };
       }
     } else {
@@ -278,12 +328,14 @@ async function claimRecipientDeliveryWithWait(
   campaignId: string,
   recipientId: string,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
+  negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   let claim = await claimRecipientDelivery(
     campaignId,
     recipientId,
     new Date(),
     proposedPayload,
+    negativeResultCodes,
   );
   if (claim.kind !== 'busy') return claim;
 
@@ -299,6 +351,7 @@ async function claimRecipientDeliveryWithWait(
       recipientId,
       new Date(),
       proposedPayload,
+      negativeResultCodes,
     );
   }
   if (claim.kind === 'busy') {
@@ -652,6 +705,9 @@ export async function dispatchCampaignChunk(
     return { sent: 0, failed: 0, cancelled: true };
   }
 
+  // 발송 직전 재검증용 negative(모집단 제외) 결과코드 — 청크당 1회 로드.
+  const { negative: negativeResultCodes } = await getResultCodeStatuses(campaign.surveyId);
+
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   const fromDomain = process.env['RESEND_FROM_DOMAIN'];
 
@@ -788,6 +844,7 @@ export async function dispatchCampaignChunk(
       campaignId,
       proposed.recipientId,
       proposed.payload,
+      negativeResultCodes,
     );
     if (claim.kind === 'cancelled') return { sent, failed, cancelled: true };
     if (claim.kind === 'terminalized') {

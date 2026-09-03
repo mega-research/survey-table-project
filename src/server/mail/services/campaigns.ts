@@ -146,6 +146,8 @@ export async function createCampaign(
     //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } =
       await import('@/server/read-models/result-code-statuses');
+    const { latestResultUnsubscribedSql } =
+      await import('@/lib/operations/contacts-filter-sql.server');
     const { listBouncedContactIds } = await import('./campaigns-read');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
@@ -174,6 +176,8 @@ export async function createCampaign(
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
           isNull(contactTargets.unsubscribedAt),
+          // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
+          sql`NOT (${latestResultUnsubscribedSql})`,
           notExcludedByCode,
           ...(bouncedContactIds.length > 0
             ? [notInArray(contactTargets.id, bouncedContactIds)]
@@ -330,6 +334,7 @@ export async function fetchCandidateIds(
     '@/server/read-models/contacts-filters'
   );
   const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
+  const { loadIdListsForValues } = await import('@/server/read-models/contact-id-lists');
   const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
@@ -338,12 +343,18 @@ export async function fetchCandidateIds(
   ]);
   const candidates = buildColumnCandidates(scheme);
   const rawClauses = filter.clauses ?? [];
+  // 스냅샷의 `list:<uuid>` 토큰도 마법사 페이지와 같은 실체로 해석해야 같은 집합을 고른다.
+  const idLists = await loadIdListsForValues(
+    surveyId,
+    rawClauses.map((c) => c.value),
+  );
   const builderClauses = parseClausesFromUrl(
     rawClauses.map((c) => c.source),
     rawClauses.map((c) => c.value),
     rawClauses.map((c) => c.op ?? ''),
     candidates,
     resultCodes,
+    { idLists },
   );
   // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
   const headerCandidates = [

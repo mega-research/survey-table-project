@@ -59,6 +59,8 @@ export interface CampaignRecipientRow {
   contactTargetId: string | null;
   contactResid: number | null;
   contactGroupValue: string | null;
+  /** 조사 대상 attrs 전체 — 컬럼 스킴의 showInMail 열을 표에 띄우기 위해 실어 보낸다 */
+  contactAttrs: Record<string, string>;
   emailMasked: string;
   status: MailRecipientStatus;
   /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
@@ -115,7 +117,11 @@ export interface UnsubscribedContactRow {
   resid: number;
   emailMasked: string;
   groupValue: string | null;
-  unsubscribedAt: Date;
+  attrs: Record<string, string>;
+  /** 링크 수신거부 시각. 결과코드 축으로만 수신거부면 null */
+  unsubscribedAt: Date | null;
+  /** 최근 결과코드가 수신거부인 회차의 시각. 그 축이 아니면 null */
+  resultUnsubscribedAt: Date | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

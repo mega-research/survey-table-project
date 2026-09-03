@@ -317,6 +317,7 @@ export async function duplicateSurvey(
         rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
         choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
         noticeContent: question.noticeContent,
+        noticeBgColor: question.noticeBgColor,
         requiresAcknowledgment: question.requiresAcknowledgment,
         placeholder: question.placeholder,
         defaultValueTemplate: question.defaultValueTemplate,

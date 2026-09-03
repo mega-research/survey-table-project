@@ -81,7 +81,6 @@ export function ProgressTable({
   const excludeReasons = [
     { label: '자격 미달', count: totals.excludedScreenedOut },
     { label: '결과코드 부적격', count: totals.excludedNegativeCode },
-    { label: '수신거부', count: totals.excludedUnsubscribed },
   ].filter((r) => r.count > 0);
 
   const handleSortClick = (colKey: ProgressSortKey) => {

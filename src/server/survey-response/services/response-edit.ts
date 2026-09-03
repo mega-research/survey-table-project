@@ -9,7 +9,11 @@ import {
   surveys,
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
-import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import {
+  decryptQuestionResponses,
+  encryptResponsesForStorage,
+  hasPiiTargets,
+} from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
@@ -22,7 +26,7 @@ import type { Question, SurveyLookup } from '@/types/survey';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers';
-import { assertAnswerValueSize, loadPiiQuestionIds } from './submitted-answers';
+import { assertAnswerValueSize, loadPiiTargets } from './submitted-answers';
 
 export { SurveyOwnershipError };
 
@@ -253,9 +257,10 @@ export async function saveAdminEdit(
   const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
 
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
-  const piiIds = await loadPiiQuestionIds(effectiveVersionId, surveyId);
-  const storedResponses =
-    piiIds.size > 0 ? encryptResponsesForStorage(finalResponses, piiIds) : finalResponses;
+  const piiTargets = await loadPiiTargets(effectiveVersionId, surveyId);
+  const storedResponses = hasPiiTargets(piiTargets)
+    ? encryptResponsesForStorage(finalResponses, piiTargets)
+    : finalResponses;
 
   // 크기 가드 — 응답자 경로와 같은 임계·같은 에러(assertAnswerValueSize)를 쓴다. 종전에는
   // 이 경로에만 가드가 전무해 questionResponses 가 verbatim UPDATE 됐다(입력 zod 도 검증자

@@ -3,8 +3,8 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { encryptAnswerValue } from '@/lib/crypto/response-pii';
-import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { encryptAnswerForQuestion, type QuestionPiiFlag } from '@/lib/crypto/response-pii';
+import { sanitizeRootSidecar, splitRootSidecars } from '@/lib/survey/response-sidecars';
 
 import type { SaveDraftResponseInput } from '../domain/response';
 import {
@@ -204,11 +204,10 @@ export async function saveDraftResponse(
     assertAnswerValueSize(value);
   }
 
-  // 기타/상세 기재 사이드카(__optTexts__)는 실존 질문이 아니므로 소속 검증에서 분리한다.
-  // 제출 전 이탈에도 텍스트가 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
-  // 그 외 '__' 키는 기존대로 소속 검증에서 거부된다.
-  const sidecarEntry = entries.find(([key]) => key === '__optTexts__');
-  const answerEntries = entries.filter(([key]) => key !== '__optTexts__');
+  // 루트 사이드카(기타/상세 기재·변동 확인)는 실존 질문이 아니므로 소속 검증에서
+  // 분리한다. 제출 전 이탈에도 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
+  // 등록되지 않은 '__' 키는 기존대로 소속 검증에서 거부된다.
+  const { answerEntries, sidecarEntries } = splitRootSidecars(entries);
 
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
@@ -221,22 +220,26 @@ export async function saveDraftResponse(
           responseRow.surveyId,
           answerEntries.map(([questionId]) => questionId),
         )
-      : new Map<string, boolean>();
+      : new Map<string, QuestionPiiFlag>();
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
 
-  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
+  // PII 문항(값 전체)·PII input 셀(해당 셀만)이면 저장 직전 암호화. 이미 암호문이면 통과.
   const storedAnswers: Record<string, unknown> = {};
   for (const [questionId, value] of answerEntries) {
-    const storedValue = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+    const flag = piiFlags.get(questionId);
+    const storedValue = flag ? encryptAnswerForQuestion(value, flag) : value;
     // #5 변조 가드 1(저장값 기준): 단건 경로와 같은 기준으로 답변별로 다시 잰다. 하나라도
     // 넘으면 배치 전체를 거부한다 — 소속 검증과 동일하게 부분 저장은 하지 않는다.
     assertAnswerValueSize(storedValue);
     storedAnswers[questionId] = storedValue;
   }
-  if (sidecarEntry) {
-    storedAnswers['__optTexts__'] = readOptTextsSidecar({ __optTexts__: sidecarEntry[1] });
+  for (const [key, value] of sidecarEntries) {
+    // 빈 사이드카도 그대로 기록한다 — 응답자가 기재를 전부 지운 draft 가 서버에
+    // 반영되어야 한다(기존 __optTexts__ 동작 유지).
+    const sanitized = sanitizeRootSidecar(key, value);
+    if (sanitized) storedAnswers[key] = sanitized;
   }
   const questionIds = answerEntries.map(([questionId]) => questionId);
 

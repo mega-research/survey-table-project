@@ -42,7 +42,7 @@ import {
 import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
-  latestMailStatusExpr,
+  effectiveMailStatusExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
@@ -205,8 +205,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
-      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
-      unsubscribedAt: contactTargets.unsubscribedAt,
+      latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -229,7 +228,6 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     progressPct: r.progressPct,
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
-    unsubscribedAt: r.unsubscribedAt,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));
@@ -271,7 +269,7 @@ export async function listContactsForExport(
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
-      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
+      latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))

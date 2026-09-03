@@ -131,8 +131,6 @@ describe('createBlankResponse', () => {
       isTest: false,
       survey: { testModeEnabled: true, deletedAt: null },
     });
-    // findContactByInviteToken: 3) excluded EXISTS — 비어있음 (제외 아님)
-    dbExecuteMock.mockResolvedValueOnce([]);
     // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
     selectLimitMock.mockResolvedValueOnce([]);
     insertReturningMock.mockResolvedValueOnce([
@@ -184,8 +182,6 @@ describe('createBlankResponse', () => {
       isTest: false,
       survey: { testModeEnabled: true, deletedAt: null },
     });
-    // findContactByInviteToken: 3) excluded EXISTS — 비어있음 (제외 아님)
-    dbExecuteMock.mockResolvedValueOnce([]);
     // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
     selectLimitMock.mockResolvedValueOnce([]);
     // INSERT returning 비어있음 (conflict)

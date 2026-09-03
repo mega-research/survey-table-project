@@ -1,3 +1,5 @@
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+export type { SurveyDocumentView };
 import * as z from 'zod';
 
 import type {
@@ -179,8 +181,9 @@ export const SurveyForResponseInput = SurveyIdInput.extend({
 });
 export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
 
+
 /**
- * forResponse(getSurveyForResponse). 반환 { survey, versionId, control } | null.
+ * forResponse(getSurveyForResponse). 반환 { survey, versionId, control, documentView } | null.
  * survey 는 SurveyType, versionId 는 배포 버전 id 또는 null(미배포 fallback).
  * control 은 스냅샷 밖 라이브 값(중단 상태 + 테스트 링크 판정).
  */
@@ -188,5 +191,6 @@ export type SurveyForResponseResult = {
   survey: SurveyType;
   versionId: string | null;
   control: SurveyControl;
+  documentView: SurveyDocumentView | null;
 } | null;
 export const SurveyForResponseOutput = z.custom<SurveyForResponseResult>();

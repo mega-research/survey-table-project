@@ -3,12 +3,17 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, questions, surveyVersions, surveys } from '@/db/schema';
-import { encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import {
+  encryptResponsesForStorage,
+  hasPiiTargets,
+  type PiiTargets,
+} from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
+import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { SurveyNotAcceptingResponsesError } from './response-gate';
@@ -91,6 +96,26 @@ export async function loadValidQuestionIds(
 }
 
 /**
+ * 표 input 셀의 개인정보 암호화 플래그(TableCell.piiEncrypted) jsonpath — 스냅샷 질문 요소와
+ * 라이브 questions.table_rows_data 양쪽에서 같은 규칙으로 셀 id 를 뽑는다
+ * (TS 쪽 규칙은 lib/survey/pii-cells collectPiiCellIds).
+ *
+ * 단건·배치 플래그 조회(response-answer-write)도 같은 경로를 쓴다 — 그쪽이 이 모듈을
+ * import 하므로 상수와 파서는 여기가 집이다(역방향 import 금지).
+ */
+const PII_CELL_FILTER = '? (@.type == "input" && @.piiEncrypted == true)';
+export const PII_CELL_IDS_SNAPSHOT_PATH = `$.tableRowsData[*].cells[*] ${PII_CELL_FILTER}.id`;
+const PII_CELL_EXISTS_SNAPSHOT_PATH = `$.tableRowsData[*].cells[*] ${PII_CELL_FILTER}`;
+export const PII_CELL_IDS_LIVE_PATH = `$[*].cells[*] ${PII_CELL_FILTER}.id`;
+const PII_CELL_EXISTS_LIVE_PATH = `$[*].cells[*] ${PII_CELL_FILTER}`;
+
+/** jsonb_path_query_array 결과(jsonb 배열) → 셀 id 목록. 모킹·이형 값은 빈 목록으로 접는다. */
+export function parsePiiCellIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((v): v is string => typeof v === 'string'))];
+}
+
+/**
  * 버전 스냅샷과 현재 questions 플래그의 합집합에서 piiEncrypted=true 인 질문 id 집합을 로드한다.
  *
  * 암호화 판단은 스냅샷 단독이 아니라 스냅샷 ∪ 현재 설정 합집합이다 — 진행 중(이어하기) 세션은
@@ -133,6 +158,69 @@ export async function loadPiiQuestionIds(
     .from(questions)
     .where(and(eq(questions.surveyId, surveyId), eq(questions.piiEncrypted, true)));
   return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * 표 input 셀 단위 암호화 대상 — questionId → 셀 id 집합. loadPiiQuestionIds 와 같은
+ * 스냅샷 ∪ 라이브 합집합 규칙 (과잉 암호화 방향만 허용). 대상 셀이 있는 질문만 돌려준다.
+ */
+async function loadPiiCellIds(
+  versionId: string | null,
+  surveyId: string,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const add = (id: string | null | undefined, cellIds: string[]) => {
+    if (id == null || cellIds.length === 0) return;
+    const set = out.get(id) ?? new Set<string>();
+    for (const c of cellIds) set.add(c);
+    out.set(id, set);
+  };
+
+  if (versionId) {
+    const rows = await db.execute<{ id: string | null; cells: unknown }>(sql`
+      SELECT qe.elem->>'id' AS id,
+             jsonb_path_query_array(qe.elem, ${PII_CELL_IDS_SNAPSHOT_PATH}::jsonpath) AS cells
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      WHERE sv.id = ${versionId}
+        AND jsonb_path_exists(qe.elem, ${PII_CELL_EXISTS_SNAPSHOT_PATH}::jsonpath)
+      UNION ALL
+      SELECT q.id::text AS id,
+             jsonb_path_query_array(q.table_rows_data, ${PII_CELL_IDS_LIVE_PATH}::jsonpath) AS cells
+      FROM questions q
+      WHERE q.survey_id = ${surveyId}::uuid
+        AND q.table_rows_data IS NOT NULL
+        AND jsonb_path_exists(q.table_rows_data, ${PII_CELL_EXISTS_LIVE_PATH}::jsonpath)
+    `);
+    for (const r of Array.isArray(rows) ? rows : []) add(r.id, parsePiiCellIds(r.cells));
+    return out;
+  }
+
+  // 레거시(versionId 없음) 폴백 — 표 질문의 행 데이터를 읽어 TS 규칙(collectPiiCellIds)으로
+  // 거른다. where 는 eq 조합만 쓴다 (테스트 db 모킹이 raw sql 조각을 평가하지 못한다).
+  const rows = await db
+    .select({ id: questions.id, tableRowsData: questions.tableRowsData })
+    .from(questions)
+    .where(and(eq(questions.surveyId, surveyId), eq(questions.type, 'table')));
+  for (const r of Array.isArray(rows) ? rows : []) add(r.id, collectPiiCellIds(r.tableRowsData));
+  return out;
+}
+
+/** 질문 단위 + 표 input 셀 단위 암호화 대상을 한 번에 — completeResponse/saveAdminEdit 재료. */
+export async function loadPiiTargets(
+  versionId: string | null,
+  surveyId: string,
+): Promise<PiiTargets> {
+  const [questionIds, cellIds] = await Promise.all([
+    loadPiiQuestionIds(versionId, surveyId),
+    loadPiiCellIds(versionId, surveyId),
+  ]);
+  return { questionIds, cellIds };
 }
 
 /**
@@ -226,10 +314,10 @@ export async function sanitizeSubmittedResponses(
   }
   const filtered: Record<string, unknown> = {};
   for (const [qid, value] of Object.entries(submitted)) {
-    // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
+    // 루트 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
     // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
     // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
-    if (qid === '__optTexts__') continue;
+    if (isPersistedRootSidecarKey(qid)) continue;
     // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
     if (!validIds.has(qid)) continue;
     // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
@@ -237,16 +325,15 @@ export async function sanitizeSubmittedResponses(
     if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
     filtered[qid] = value;
   }
-  // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
-  const sidecar = readOptTextsSidecar(submitted);
-  const keptSidecar: Record<string, Record<string, string>> = {};
-  for (const [qid, texts] of Object.entries(sidecar)) {
-    if (validIds.has(qid)) keptSidecar[qid] = texts;
-  }
-  if (Object.keys(keptSidecar).length > 0) {
+  // 사이드카 정제: 형태 검증 + 실존 질문 키만 + 바이트 상한.
+  for (const [qid, raw] of Object.entries(submitted)) {
+    if (!isPersistedRootSidecarKey(qid)) continue;
+    const keptSidecar = sanitizeRootSidecar(qid, raw, (questionId) => validIds.has(questionId));
+    // 완료 저장은 빈 사이드카를 넣지 않는다(기존 동작 유지).
+    if (!keptSidecar || Object.keys(keptSidecar).length === 0) continue;
     const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
     if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
-      filtered['__optTexts__'] = keptSidecar;
+      filtered[qid] = keptSidecar;
     }
   }
   return filtered;
@@ -302,19 +389,19 @@ export async function restorePrefillAnswers(
 }
 
 /**
- * 정제 (3/3) — PII 문항 암호화. prefill 복원(평문 비교) 이후, 저장 직전이어야 한다.
+ * 정제 (3/3) — PII 문항·PII input 셀 암호화. prefill 복원(평문 비교) 이후, 저장 직전이어야 한다.
  */
 export async function encryptPiiAnswers(
   validated: Record<string, unknown>,
   gateRow: CompleteGateRow,
 ): Promise<Record<string, unknown>> {
-  const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
-  if (piiIds.size > 0) {
-    const encrypted = encryptResponsesForStorage(validated, piiIds);
+  const piiTargets = await loadPiiTargets(gateRow.versionId, gateRow.surveyId);
+  if (hasPiiTargets(piiTargets)) {
+    const encrypted = encryptResponsesForStorage(validated, piiTargets);
     // 바이트 필터 2단(저장값 기준): 위쪽 평문 필터를 통과했어도 암호문은 상한을 넘을 수
-    // 있다. 크기가 변한 키는 암호화된 것뿐이라 piiIds 만 다시 잰다. 이 경로의 의미론은
-    // 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
-    for (const qid of piiIds) {
+    // 있다. 크기가 변한 키는 암호화된 것(질문 단위·셀 단위)뿐이라 그 키만 다시 잰다. 이 경로의
+    // 의미론은 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
+    for (const qid of new Set([...piiTargets.questionIds, ...piiTargets.cellIds.keys()])) {
       if (!(qid in encrypted)) continue;
       const storedBytes = Buffer.byteLength(JSON.stringify(encrypted[qid] ?? null), 'utf8');
       if (storedBytes > MAX_ANSWER_VALUE_BYTES) delete encrypted[qid];

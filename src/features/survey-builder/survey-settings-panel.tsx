@@ -103,6 +103,25 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
           </div>
         </div>
 
+        {/* 추적조사 회차 라벨 */}
+        <div className="space-y-2">
+          <label htmlFor="prior-wave-label" className="text-sm font-medium text-gray-700">
+            지난 회차 라벨
+          </label>
+          <input
+            id="prior-wave-label"
+            type="text"
+            value={surveySettings.priorWaveLabel ?? ''}
+            onChange={(e) => updateSurveySettings({ priorWaveLabel: e.target.value })}
+            placeholder="2025년 조사"
+            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            이월 응답이 채워진 문항에 표시되는 회차 이름입니다. 비워두면 &quot;지난 회차&quot;로
+            표시됩니다. 배포 없이 즉시 반영됩니다.
+          </p>
+        </div>
+
         {/* 문의 이메일 */}
         <div className="space-y-2">
           <label htmlFor="contact-email" className="text-sm font-medium text-gray-700">

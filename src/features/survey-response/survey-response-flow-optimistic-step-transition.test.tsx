@@ -60,6 +60,10 @@ vi.mock('@/shared/lib/rpc', () => ({
       attrs: {
         lookup: (...args: unknown[]) => attrsLookup(...args),
       },
+      // 추적조사 이월 응답 조회 — 이 스위트는 이월 응답이 없는 대상자를 다룬다.
+      priorAnswers: {
+        lookup: async () => null,
+      },
     },
     surveyResponse: {
       lifecycle: {

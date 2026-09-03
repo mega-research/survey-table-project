@@ -39,6 +39,7 @@ function renderItem(question: Question, showRequiredMessage: boolean) {
       onResponse={vi.fn()}
       isHighlighted={showRequiredMessage}
       showRequiredMessage={showRequiredMessage}
+      showChangeConfirmMessage={false}
     />,
   );
 }

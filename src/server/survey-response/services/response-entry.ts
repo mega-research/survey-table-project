@@ -6,7 +6,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { NewSurveyResponse, surveyResponses } from '@/db/schema';
-import { encryptAnswerValue } from '@/lib/crypto/response-pii';
+import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import type { PageVisit } from '@/shared/contracts/survey-response';
@@ -111,13 +111,13 @@ async function acquireTestTargetEntry(
       .limit(1);
     if (!response) throw new Error('응답을 찾을 수 없습니다.');
 
-    const { piiEncrypted } = await assertQuestionBelongsToResponse(
+    const piiFlag = await assertQuestionBelongsToResponse(
       response.versionId,
       input.surveyId,
       firstAnswer.questionId,
       tx,
     );
-    const storedValue = piiEncrypted ? encryptAnswerValue(firstAnswer.value) : firstAnswer.value;
+    const storedValue = encryptAnswerForQuestion(firstAnswer.value, piiFlag);
     // 진입 파이프라인과 동일 기준(저장될 값)으로 판정한다 — 같은 lane 을 RPC 로 타든
     // export 로 타든 임계가 같아야 한다. tx 안이라 throw 시 회차 INSERT 까지 롤백된다.
     assertAnswerValueSize(storedValue);
@@ -371,12 +371,12 @@ async function admitAndCreateResponseInner(
   // 반드시 assertSurveyAcceptingResponses 뒤, firstVisit 조립 앞. 정책 가드 금지.
   let storedValue: unknown;
   if (answer) {
-    const { piiEncrypted } = await assertQuestionBelongsToResponse(
+    const piiFlag = await assertQuestionBelongsToResponse(
       effectiveVersionId,
       surveyId,
       answer.questionId,
     );
-    storedValue = piiEncrypted ? encryptAnswerValue(answer.value) : answer.value;
+    storedValue = encryptAnswerForQuestion(answer.value, piiFlag);
     // #5 변조 가드 1(현행 임계 보존): 이 경로의 판정 기준은 저장될 값이다(PII 는 암호문).
     // 종전에는 INSERT 뒤 updateQuestionResponse 안에서 같은 값에 같은 검사가 돌았다 —
     // 임계는 그대로 두고 판정 시점만 DB 쓰기 앞으로 옮긴 것이다.

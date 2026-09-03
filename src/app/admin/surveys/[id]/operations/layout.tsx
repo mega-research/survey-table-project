@@ -1,5 +1,9 @@
 import { notFound } from 'next/navigation';
 
+import { eq } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { surveyDocuments } from '@/db/schema';
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { getControlState } from '@/server/operations/services/control';
@@ -22,7 +26,16 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const [control, isGuest] = await Promise.all([getControlState(surveyId), isGuestViewer()]);
+  const [control, isGuest, documentRows] = await Promise.all([
+    getControlState(surveyId),
+    isGuestViewer(),
+    // 조사표가 붙은 설문에서만 '문항 수요' 탭을 낸다 — 다른 설문에는 쓸 일이 없다.
+    db
+      .select({ id: surveyDocuments.id })
+      .from(surveyDocuments)
+      .where(eq(surveyDocuments.surveyId, surveyId))
+      .limit(1),
+  ]);
   // 위에서 설문 존재를 확인했으므로 null 은 그 사이 삭제된 극단 케이스 — 404 로 접는다.
   if (!control) notFound();
 
@@ -34,7 +47,11 @@ export default async function OperationsLayout({ children, params }: LayoutProps
         isGuest={isGuest}
         control={control}
       />
-      <OperationsTabStrip surveyId={surveyId} isGuest={isGuest} />
+      <OperationsTabStrip
+        surveyId={surveyId}
+        isGuest={isGuest}
+        hasSurveyDocument={documentRows.length > 0}
+      />
       {children}
     </div>
   );

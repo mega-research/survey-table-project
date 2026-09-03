@@ -39,6 +39,8 @@ export interface CellFormState {
   inputMaxLength: number | '';
   inputDefaultValueTemplate: string;
   inputType: 'text' | 'number';
+  /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
+  inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
   cellNumberFormat: NumberFormat | undefined;
@@ -61,6 +63,9 @@ export interface CellFormState {
   isOtherRankingCell: boolean;
   choiceLabel: string;
   choiceAllowTextInput: boolean;
+  /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
+  choiceTextInputType: 'text' | 'number';
+  choiceTextInputNumberFormat: NumberFormat | undefined;
   choiceBranchRule: BranchRule | undefined;
   /** 이 보기 옵션 셀이 속한 ChoiceGroup.id. 빈 문자열 = 미소속. */
   choiceGroupId: string;
@@ -200,6 +205,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputMaxLength: cell.inputMaxLength || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
+    inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
@@ -223,6 +229,8 @@ export function cellToFormState(cell: TableCell): CellFormState {
     isOtherRankingCell: cell.isOtherRankingCell === true,
     choiceLabel: cell.choiceLabel || '',
     choiceAllowTextInput: cell.allowTextInput === true,
+    choiceTextInputType: cell.textInputType ?? 'text',
+    choiceTextInputNumberFormat: cell.textInputNumberFormat,
     choiceBranchRule: cell.branchRule,
     choiceGroupId: cell.choiceGroupId ?? '',
     textBold: cell.textBold === true,
@@ -302,6 +310,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     inputMaxLength: _inputMaxLength,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
+    piiEncrypted: _piiEncrypted,
     emptyDefault: _emptyDefault,
     numberFormat: _numberFormat,
     required: _required,
@@ -318,6 +327,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     choiceLabel: _choiceLabel,
     branchRule: _branchRule,
     allowTextInput: _allowTextInput,
+    textInputType: _textInputType,
+    textInputNumberFormat: _textInputNumberFormat,
     textInputPlaceholder: _textInputPlaceholder,
     textBold: _textBold,
     backgroundColor: _backgroundColor,
@@ -376,6 +387,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }
             : {}),
           inputType: form.inputType,
+          ...(form.inputPiiEncrypted ? { piiEncrypted: true } : {}),
           ...(form.inputType === 'number' && form.emptyDefaultEnabled
             ? { emptyDefault: parseNumericInput(form.emptyDefaultRaw) ?? 0 }
             : {}),
@@ -483,6 +495,14 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.choiceLabel.trim().length > 0 ? { choiceLabel: form.choiceLabel.trim() } : {}),
           ...(form.choiceAllowTextInput ? { allowTextInput: true } : {}),
+          ...(form.choiceAllowTextInput && form.choiceTextInputType === 'number'
+            ? {
+                textInputType: 'number' as const,
+                ...(form.choiceTextInputNumberFormat
+                  ? { textInputNumberFormat: form.choiceTextInputNumberFormat }
+                  : {}),
+              }
+            : {}),
           // 보기 옵션 소스 셀의 조건부 분기 규칙 (Case A). value 는 셀 id(=resolveChoiceOptions
           // 가 부여하는 옵션 value)로 강제해 응답 매칭이 일치하도록 한다.
           ...(form.choiceBranchRule

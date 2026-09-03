@@ -59,4 +59,34 @@ describe('updateContactColumns 현재 스코프', () => {
 
     expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
   });
+
+  it('메일 표시(showInMail)는 attrs 컬럼에 저장된다', async () => {
+    const scheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1 },
+        { key: '리스트ID', label: '리스트ID', source: 'attrs.리스트ID' as const, order: 2, showInMail: true },
+      ],
+    };
+
+    await updateContactColumns({ surveyId: 'sv-1', scheme });
+
+    expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
+  });
+
+  it('메일 표시는 시스템·pii 컬럼에 걸면 거부한다 — attrs 에 값이 없어 표시 불가', async () => {
+    const scheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1, showInMail: true },
+      ],
+    };
+
+    await expect(updateContactColumns({ surveyId: 'sv-1', scheme })).rejects.toThrow(
+      '메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.',
+    );
+    expect(capturedSets).toEqual([]);
+  });
 });

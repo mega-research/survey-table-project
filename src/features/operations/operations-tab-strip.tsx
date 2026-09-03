@@ -16,6 +16,8 @@ interface OperationsTabStripProps {
   surveyId: string;
   /** 게스트 세션 — 쿼터 탭을 숨긴다. */
   isGuest: boolean;
+  /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
+  hasSurveyDocument?: boolean;
 }
 
 /**
@@ -26,10 +28,15 @@ interface OperationsTabStripProps {
  * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
+ * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
-export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProps) {
+export function OperationsTabStrip({
+  surveyId,
+  isGuest,
+  hasSurveyDocument = false,
+}: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
   const operationsBase = `/admin/surveys/${surveyId}/operations`;
   const overviewHref = `${operationsBase}/overview`;
@@ -71,6 +78,9 @@ export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProp
 
   const quotaHref = `${operationsBase}/quota`;
   const isQuotaActive = pathname.startsWith(quotaHref);
+
+  const demandHref = `${operationsBase}/demand`;
+  const isDemandActive = pathname.startsWith(demandHref);
 
   return (
     <div className="border-b border-gray-200 bg-white">
@@ -165,6 +175,23 @@ export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProp
               </SubLink>
             </NavigationMenuContent>
           </NavigationMenuItem>
+
+          {hasSurveyDocument && (
+            <NavigationMenuItem>
+              <Link
+                href={demandHref}
+                aria-current={isDemandActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                  isDemandActive
+                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-900',
+                )}
+              >
+                문항 수요
+              </Link>
+            </NavigationMenuItem>
+          )}
 
           {!isGuest && (
             <NavigationMenuItem>

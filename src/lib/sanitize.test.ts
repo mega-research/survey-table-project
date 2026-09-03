@@ -249,6 +249,19 @@ describe('CSS 인젝션 차단 — TipTap 직렬화 스타일 보존(회귀 방�
     expect(out).toContain('vertical-align:middle');
     expect(out).toContain('background-color:#ff0000');
   });
+
+  it('이미지 float 은 제거된다 (레거시 wrapperStyle 잔재 — 문단 text-align 정렬을 깨뜨림)', () => {
+    // tiptap-extension-resize-image inline 모드 기본 wrapperStyle 이 직렬화된 형태.
+    // 편집기는 globals.css 안전망이 float 을 무력화해 중앙으로 보이지만,
+    // float 이 통과되면 실제 렌더에서 text-align: center 를 이기고 좌측으로 붙는다.
+    const out = sanitizeRichHtml(
+      '<p style="text-align: center"><img src="https://x.test/a.png" style="display: inline-block; float: left; padding-right: 8px; height: auto; max-width: 100%;" alt="a"></p>',
+    );
+    expect(out).not.toContain('float');
+    expect(out).toContain('display:inline-block');
+    expect(out).toContain('padding-right:8px');
+    expect(out).toContain('text-align:center');
+  });
 });
 
 describe('파일 첨부 노드 — sanitize allowlist', () => {

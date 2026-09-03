@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-08-25 (리팩터 마감 세션 B — 테스트 트리 재편(ADR 0017): 단위 테스트 전면 colocation(src 466파일)·`tests/unit` 소멸·`tests/` 는 integration·e2e·repo 만 잔류·배치 가드 메타테스트 신설. 직전 세션 A: server 트리 무접미사 통일(ADR 0016)·lib 쌍둥이 -format 계열 개명·features 루트 잔류 기준 명문화. server/=oRPC 도메인 10개 · features/=5개 묶음은 불변)
+> 최종 갱신: 2026-09-03 (origin/main 의 기능 106커밋을 8월 재편 구조로 병합 — 조사표(survey-document) 를 server 11번째 도메인으로 신설·Raw 내보내기 토글 2개(`includeNonRespondents=1`·`includeContactColumns=1`)·공지 배경색 0099·보기 옵션 그룹별 필수·필수 마스터 전파 ADR 0021·질문 읽기 매퍼 mapQuestionRow 전수 대조·export 테스트 파티션 스코프·문항 수요조사 0097·0098·piiEncrypted 셀 암호화 0085·contact_id_lists 0084. 직전: 세션 B 테스트 colocation(ADR 0017)·세션 A server 무접미사(ADR 0016). server/=oRPC 도메인 11개 · features/=5개 묶음)
 
 ---
 
@@ -36,6 +36,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 백그라운드 잡  | Inngest                                     | 4.4.0           |
 | 레이트리밋     | @upstash/ratelimit + @upstash/redis         | 2.0.8 / 1.38.0  |
 | 로깅           | pino + @axiomhq/js                          | 10.3.1 / 2.0.0  |
+| PDF 렌더       | pdfjs-dist (조사표 뷰어 + 서버 쪽 수 판독)  | 6.3.289         |
 | 엑셀 생성      | ExcelJS                                     | 4.4.0           |
 | SPSS .sav 생성 | sav-writer                                  | 1.0.0           |
 | 차트           | Recharts + Tremor                           | 2.15.4 / 3.18.7 |
@@ -74,7 +75,7 @@ src/
 │   ├── analytics/              # 분석 대시보드
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
-├── server/                     # oRPC 백엔드 — 코어 + 도메인 10개 (경량 DDD: domain 순수 · procedures 얇음 · services)
+├── server/                     # oRPC 백엔드 — 코어 + 도메인 11개 (경량 DDD: domain 순수 · procedures 얇음 · services)
 │   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
 │   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
 │   ├── router.ts               # 전체 도메인 router 합성 (AppRouter)
@@ -86,14 +87,15 @@ src/
 │   ├── health.ts               # health procedure (코어 옆)
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
-│   └── <domain>/               # survey-builder · survey-response · operations · contacts
+│   └── <domain>/               # survey-builder · survey-response · survey-document · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota
+│       │                       # survey-document = 조사표 PDF·영역 앵커 (2026-09-03 신설, 자기 테이블 2개·procedures 2·services 4)
 │       ├── domain/             # zod 계약 + 순수 규칙 (**client-safe** — server-only·Node·DB 의존 0. zod 는 런타임 의존이라 'import 0' 이 아니다)
 │       │                       # UI 도 쓰는 모양은 shared/contracts 소관 — 여기는 그것을 다시 내보내고 서버 전용 입력·규칙만 남긴다
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -101,6 +103,7 @@ src/
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
 │   │   ├── test-mail-archive.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
+│   │   ├── raw-export-rows.ts    # Raw export 행 조립 — contacts·operations·read-models 를 함께 읽는다 (읽기 조율이지만 여러 도메인을 부르는 유일한 층이라 여기)
 │   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
@@ -115,6 +118,7 @@ src/
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
 │   ├── survey-builder/         # 설문 편집기 (130개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
+│   │   ├── survey-document/    # 조사표 오서링 (survey-document-panel 진입점 + anchor-canvas 드래그) — app edit 페이지가 연다
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
 │   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
 │   │   │   └── cell-editor/    # 셀 내용 모달 (cell-content-modal → *-cell-tab·cell-choice/gating-editor) + hooks/use-cell-form·utils/serialize-cell
@@ -133,13 +137,15 @@ src/
 │   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
 │   │   ├── cells/              # 표 셀 렌더러
 │   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅
-│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts
+│   │   │                       # pdf-page-view(조사표 한 쪽 렌더, 빌더·응답 공용) 도 여기
+│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts + anchor-geometry·anchor-outline(조사표 좌표)
 │   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (28개) — 렌더러만 import
 │   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
-│   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate (순수)
+│   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate·hover-follow·split-viewport (순수)
+│   │   │                       # response-document-pane(응답 화면 좌측 조사표)·step-views/demand-checklist(판정 체크리스트) 도 이 묶음
 │   │   ├── step-views/         # 스텝 단위 화면
 │   │   └── stores/             # survey-response-store(실응답)·live-response-sources — 미리보기용 test-response-store 는 survey-builder/stores
-│   ├── operations/             # 운영 콘솔 (84개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters
+│   ├── operations/             # 운영 콘솔 (84개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters·demand(문항 수요 집계 표)
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
 │   └── analytics/              # 차트 및 리포팅 (23개)
@@ -148,6 +154,7 @@ src/
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
 │   │                           #   <domain>.ts     JSONB 문서 어휘 SoT (DB 에 저장되는 모양, DB 스키마 $type<> 가 참조, 런타임 의존 없음)
 │   │                           #   <domain>-io.ts  경계를 건너는 모양 — RPC 입출력 zod + RSC 가 props 로 넘기는 read model 행
+│   │                           #   survey-document.ts(앵커 스냅샷 어휘)·survey-document-io.ts(조사표·앵커 RPC zod) — 2026-09-03 신설
 │   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0). 구 db/schema/schema-types.ts
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
@@ -245,6 +252,8 @@ surveys                    # 설문 설정
 ├── endDate, maxResponses, thankYouMessage, contactEmail, responseHeader (JSONB)
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
+│                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
+│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표에 attrs 컬럼 노출, attrs.* 전용)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
@@ -252,6 +261,7 @@ surveys                    # 설문 설정
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
+├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── requireInviteToken            # invite token 강제 여부
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
@@ -276,14 +286,14 @@ questions                  # 개별 질문
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 숫자 입력 모드
-├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형)
+├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
 ├── mobileOriginalTable, mobileTableDisplayMode,
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
 ├── hideColumnLabels, pageBreakBefore
-├── noticeContent, requiresAcknowledgment  # 공지
+├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl
 ├── displayCondition (JSONB)      # 조건부 표시
 └── createdAt, updatedAt
@@ -301,6 +311,16 @@ survey_responses           # 수집된 응답
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
+
+survey_documents           # 조사표 — 설문에 붙는 PDF (설문당 여러 행 허용)
+├── id, surveyId, fileKey (R2 survey/document/), filename, pageCount, order
+└── createdAt, updatedAt
+
+survey_document_anchors    # 영역 앵커 — 조사표 쪽 위의 사각형 (한 대상에 여럿)
+├── id, surveyId, documentId
+├── questionId / groupId          # nullable FK 둘 + CHECK 정확히 하나 (종류는 파생)
+├── page, x, y, w, h              # 쪽 번호 + 정규화 0~1 (화면 픽셀 저장 안 함)
+└── order, createdAt
 
 test_response_attempts     # 테스트 응답 회차 (초기화·재응답 추적)
 ├── id, responseId, sessionId, status, startedAt, supersededAt
@@ -375,10 +395,20 @@ contact_pii                # 컨택 PII 분리 저장 (암호화)
 ├── maskHint
 └── createdAt  (UNIQUE contactTargetId+columnKey)
 
+contact_prior_answers      # 이월 응답 — 지난 회차 응답 한 벌 (추적조사)
+├── id, contactTargetId (UNIQUE, ON DELETE CASCADE)
+├── answers (JSONB)        # survey_responses.questionResponses 와 동형
+└── createdAt, updatedAt
+
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
 ├── resultCode, note, createdBy
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
+
+contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
+├── id, surveyId (cascade), ids (JSONB 정수 배열, 중복 제거·오름차순), idCount
+├── createdBy, createdAt
+└── URL 에는 `list:<id>:<count>` 토큰만 실림. 캠페인 filterSnapshot 이 토큰을 보존하므로 만료·정리 없음
 ```
 
 ### 메일 도메인 (mail.ts, mail-billing.ts)
@@ -440,7 +470,8 @@ r2_key_refs                # 파생 참조 인덱스 (사전 필터일 뿐 삭�
 ### 주요 관계
 
 ```
-surveys (1) ─┬─ (N) question_groups ── parentGroupId (self-ref)
+surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
+             ├─ (N) question_groups ── parentGroupId (self-ref)
              ├─ (N) questions
              ├─ (N) survey_responses ─┬─ (N) response_answers
              │                        ├─ (N) response_edit_logs
@@ -452,7 +483,8 @@ surveys (1) ─┬─ (N) question_groups ── parentGroupId (self-ref)
              └─ (N) mail_campaigns ── (N) mail_recipients ── (1) contact_targets
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
-                 └─ (N) contact_attempts (결과 회차)
+                 ├─ (N) contact_attempts (결과 회차)
+                 └─ (1) contact_prior_answers (이월 응답)
 
 saved_questions / saved_lookups / saved_cells / question_categories (standalone)
 mail_billing_periods / webhook_events (standalone)
@@ -479,6 +511,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 ├── report                        # 전시회/그룹별 진척률 리포트 (slice 4)
 │   └── columns                   # 리포트 컬럼 픽커
 ├── quota                         # 쿼터 플랜 + 실시간 달성 현황
+├── demand                        # 문항 수요 집계 (조사표가 붙은 설문에서만 탭이 나온다)
 └── mail/                         # 메일 캠페인
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
@@ -487,10 +520,11 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 ```
 
-응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
+응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
 > 운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
-> 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
+> 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 엑셀·SPSS export 라우트도 같은 스코프를 탄다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
+> 조사 대상·단체 메일 위저드의 시스템ID/attrs 컬럼 검색은 **엑셀 열 붙여넣기 ID 목록**을 받는다 (`lib/operations/range-list.ts` — 공백·개행·탭·콤마 구분, 중복 제거). 단일 컬럼 인라인 상한 2,000개(URL 헤더 한계), 초과분은 `contacts.idLists.create` 로 `contact_id_lists` 에 저장하고 `q=list:<uuid>:<count>` 토큰으로 검색한다. 파서는 동기라 페이지/서비스가 `loadIdListsForValues`(`server/read-models/contact-id-lists.ts`) 로 토큰을 먼저 읽어 `parseClausesFromUrl(…, { idLists })` 에 넘긴다 — 새 파싱 지점을 만들면 이 단계를 빠뜨리지 말 것. 「전체」 컬럼 검색의 200개 상한은 컬럼 곱연산 SQL 보호용으로 별개다.
 
 ---
 
@@ -506,15 +540,18 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 | `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                          |
 | `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                          |
 | `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, sumConstraints |
-| `notice`      | 안내문             | noticeContent, requiresAcknowledgment                                                                 |
+| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                  |
 
 공통: `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
+
+- **그룹별 필수**: `ChoiceGroup.required`/`requiredMessage` (JSONB) — 미설정이면 질문 레벨 `required` 상속. 질문 필수여도 특정 그룹만 해제하거나 그 반대가 가능하며, 문구는 그룹 → 질문 → 기본 순 폴백.
+- **필수 마스터 전파**: 질문 편집 모달의 "필수 질문" 토글 조작 시 표의 인터랙티브 셀 필수(게이팅 셀은 `requiredWhenEnabled`)와 그룹 오버라이드를 일괄 재설정한다. 상속이 아닌 조작 시점 복사 — `docs/adr/0021` · CONTEXT.md "필수 마스터 전파".
 
 ### 테이블 질문 셀 타입
 
 - `text`: 텍스트 표시 / `image`: 이미지 / `video`: 비디오 링크
 - `checkbox` / `radio` / `select`: 선택 입력
-- `input`: 텍스트 입력 (inputType `number` 시 숫자만)
+- `input`: 텍스트 입력 (inputType `number` 시 숫자만). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
 - `ranking`: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
 - `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스
@@ -546,7 +583,7 @@ RSC (서버 컴포넌트)
 - procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
 - **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon 은 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
 - 그 원칙에 따라 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
-- **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
+- **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다. **읽기 방향은 tsc 가 못 잡는다** — 발행 스냅샷·빌더 로드가 공유하는 행→Question 매퍼(`server/read-models/survey-structure.ts` `mapQuestionRow`)도 명시 나열이라, 누락 시 발행 스냅샷에서 값이 조용히 증발한다(noticeBgColor 실사고). 전수 대조는 `server/read-models/map-question-row.test.ts` 가 잡는다.
 - 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향 · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
 
 ---
@@ -559,9 +596,11 @@ POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query
 POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
-GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
+POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행, `includeContactColumns=1` 로 컬럼 스킴 명단 열(attrs·pii 전부, PII 평문 → no-store) 포함 (sav/sps 는 둘 다 무시)
+GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환, `includeContactColumns` 는 읽지 않음)
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
+GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
@@ -615,6 +654,13 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 관리 UI는 `/admin/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
 
+> **JS 로 R2 객체를 읽는 표면은 버킷 CORS 가 필요하다.** 기존 사용처는 전부 `<img>`·메일 HTML 이라
+> CORS 없이 동작했고, 그래서 버킷에 정책이 없어도 아무도 몰랐다. 조사표 뷰어(pdf.js)가 `fetch` 로
+> 읽는 첫 표면이고, 정책이 없으면 브라우저가 `Failed to fetch` 한 줄만 남긴 채 막는다 —
+> 서버에서 `curl` 하면 200 이라 파일 문제로 오해하기 쉽다. 새 버킷·새 공개 도메인을 붙일 때는
+> `AllowedMethods: GET/HEAD`, `AllowedHeaders: range`, `ExposeHeaders: content-range·accept-ranges`
+> 를 함께 넣을 것 (pdf.js 는 부분 요청을 쓴다).
+
 ---
 
 ## 쿼터
@@ -625,6 +671,44 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 - `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
 - **publish 없이 즉시 반영되는 라이브 컬럼** (`isPaused`/`pausedMessage`와 동일 취급).
 - 실시간 달성률은 완료 응답 기준 — `docs/adr/0002-quota-realtime-from-completed-answers.md`.
+
+---
+
+## 문항 수요조사 (조사표 + 영역 앵커 + 분할 레이아웃)
+
+지난 회차 종이 조사표(PDF)를 놓고 "이 문항을 다음 회차에도 쓸 것인가"를 묻는 설문 형식.
+**신설된 것은 셋뿐이다** — 조사표·영역 앵커·분할 레이아웃. 질문 유형·조건부 표시·쿼터·컨택·초대·
+메일·SPSS/엑셀 export 는 전부 기존 것을 그대로 쓴다.
+
+- **조사표** `survey_documents` (0097) — 설문당 여러 행. 파일은 R2 영구 네임스페이스 `survey/document/`.
+  업로드는 `tmp/survey-document/` → attach 에서 promote. 쪽 수는 서버가 파일을 열어 읽는다
+  (`server/survey-document/services/pdf-page-count.ts`). **R2 참조 표면 SSOT 등재 필수.**
+- **영역 앵커** `survey_document_anchors` (0098) — 쪽 번호 + 정규화 0~1. 한 대상에 사각형 여럿.
+  대상 참조는 `question_id`/`group_id` nullable FK 둘 + CHECK 정확히 하나 (종류 구분값은 파생).
+- **분할 레이아웃** — 설정이 아니라 **파생**이다. 토글 0개. **페이지마다** 판정한다: 앵커 걸린
+  항목을 담은 페이지만 좌 조사표 / 우 질문 50:50 이고, 조사표에 등록되지 않은 페이지는 일반
+  문항 페이지로 나온다(안내문 → 다음 → 조사표). 판정은 `utils/group-ordering.ts` 의
+  `resolveSplitSteps` — **구조 기준**이라 조건부로 숨은 질문의 앵커도 센다.
+  좌측에 _그리는_ 것은 표시되는 항목 것만이다. 레이아웃은 구조에서, 표시는 조건에서.
+  경계를 넘나들면 뷰어가 언마운트되므로 pdf.js 문서는 주소별로 캐시한다
+  (`pdf-page-view.tsx` 의 `openedDocs`). 진행바는 **설문 전체**에서 뺀다 — 페이지마다
+  넣었다 뺐다 하면 넘길 때 머리 부분이 들썩인다.
+- **수명 분리**: 조사표 파일 참조는 라이브, 앵커는 발행 스냅샷에 freeze, 교체 가드 없음 —
+  `docs/adr/0020-survey-document-live-anchors-frozen.md`. 다른 조사표로 바꾸면 **에러 없이
+  잘못 그려진다**는 것이 받아들인 위험이다.
+- **판단 항목은 평범한 radio** — 필요함 / 필요하지 않음 **2지선다**. 판정 없이 의견만 내는
+  것은 없다. **문항 의견은 짝 문항**이다 — 판단 항목 바로 뒤의 `textarea`, 문항코드 `부모코드_T`
+  (ADR 0022). 짝 판정은 `lib/survey/judgement-item.ts` 의 `resolveOpinionPairs` — 코드 규약과
+  "바로 다음 순서" **둘 다** 맞아야 짝이고, 어긋나면 일반 문항으로 그린다. 체크리스트는 짝을 부모
+  행에 접어 그리고(세 번째 버튼은 판정이 아니라 서술 칸 토글), 집계는 의견을 분모에서 뺀다.
+  `_T` 문항은 `isCustomSpssVarName=true` 로 두어야 export 가 자동 변수명으로 덮어쓰지 않는다.
+  선택지 사이드카(`__optTexts__`·`_text` 변수)는 **기타 상세기재**용이라 이 형식에서는 쓰지 않는다.
+- **운영 관례**: 이 형식은 `requireInviteToken` 을 **켜는 것을 관례로 한다**(신설 없음, 기존 설정).
+  익명 응답 한 건이 n=5 짜리 집계를 흔든다. `allowMultipleResponses` 는 켜지 않는다 —
+  같은 사람의 응답이 여러 건 쌓여 집계 분모가 이중 계산된다. 제출 후 수정은 관리자 편집 화면으로.
+- 조사표는 설문 단위라 테스트 파티션과 무관하다 — 테스트 모드도 같은 파일을 쓰고 별도 업로드가 없다.
+- 모바일은 진입 시 뷰포트 폭으로 설문 전체를 안내 화면으로 막는다. **관리자 응답 편집만 면제** —
+  이 스펙이 만드는 유일한 조건 분기다.
 
 ---
 
@@ -849,6 +933,8 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 12. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
+13. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 기존대로 거부된다(루트 `__dynamicRowSelections__` 가 미등록 상태 — 별도 판단 필요).
+
 ---
 
 ## CI 게이트
@@ -859,11 +945,19 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 | --------------------- | ----------------------------------- | --------------------------------------------- |
 | 공급망 보안 감사      | `.github/audit-gate.ts`             | 감사 리포트 평가 (리포트 누락 시 fail-closed) |
 | RLS 하드닝            | `.github/rls-gate.ts`               | 마이그레이션의 RLS 정책 검증                  |
-| 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | `manual-migrations.json` 미등재 `.sql` 차단   |
+| 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | 미등재 `.sql` + 접두 번호 중복 차단            |
 
 통합/E2E 잡은 로컬 supabase를 띄워 `pnpm test:integration` + `pnpm test:e2e`(Playwright chromium)를 돌린다.
 
 ---
+
+## 마이그레이션 번호
+
+파일명 접두는 재생 순서가 **아니다**. 순서는 `manual-migrations.json` 배열이 쥐고 있고 `scripts/migration-order.mjs`가 그대로 따른다 (`0003`·`0009`·`0019`는 이미 접두가 중복된다). 그래도 새 중복은 CI가 막는다 — 번호로 최신을 읽을 수 없게 되고 순서를 눈으로 확인할 수 없기 때문이다. 여러 브랜치가 같은 DB를 만지는 동안 각자 다음 번호를 집으면 이 상태가 재생산된다.
+
+- 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
+- **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
+- 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
 
 ## DB 드리프트 점검
 
@@ -871,7 +965,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 `migration-journal-gate`는 디렉터리에 있는 `.sql`이 등재됐는지만 본다. **파일로 쓰지 않고 실 DB에 직접 적용한 SQL은 그 검사에 걸리지 않는다** — 실제로 `lookup_contact_by_invite_token` 함수와 컬럼 6개가 그렇게 들어와 몇 달간 방치됐다(2026-08-19 발견·복구). 이 스크립트가 그 반대 방향을 본다.
 
-- 전제: 먼저 `pnpm db:setup-test`로 로컬 테스트 DB가 최신이어야 한다
+- 전제: 먼저 `pnpm db:setup-test`로 로컬 테스트 DB가 최신이어야 한다. **로컬 supabase 도커는 워크트리 공용 단일 인스턴스라 다른 브랜치가 재생하면 통째로 바뀐다** — `setup-test-db.sh`가 `_repo_meta.migration_stamp`에 재생 지문을 찍고 `db:drift`가 대조해, 남의 DB와 대조하려 하면 exit 2로 멈춘다 (조용히 틀린 결과를 내던 것을 2026-08-31에 잡았다)
 - 알려진 차이는 `supabase/drift-allowlist.json`에 **사유와 함께** 등재한다. 사유가 `미결`로 시작하면 결정이 남은 항목이며 매 실행 노출된다
 - 비-UNIQUE 성능 인덱스는 동작 무관이라 참고 카운트로만 센다
 - **배포 전에 돌릴 것.** 도구를 만든 것보다 정기적으로 돌리는 것이 값어치다

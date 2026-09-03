@@ -40,7 +40,6 @@ export const BlockReasonSchema = z.enum([
   'invalid_token',
   'token_already_used',
   'device_already_responded',
-  'excluded_from_population',
   'quota_closed',
   'survey_paused',
   'invalid_test_token',

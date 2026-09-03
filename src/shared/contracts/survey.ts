@@ -15,6 +15,8 @@ import type {
   TableValidationRule,
 } from '@/types/survey';
 
+import type { SurveyAnchorSnapshot } from './survey-document';
+
 // 버전 스냅샷 타입
 export interface SurveyVersionSnapshot {
   title: string;
@@ -39,6 +41,12 @@ export interface SurveyVersionSnapshot {
    * 읽는 쪽은 surveys.lookups 로 폴백한다.
    */
   lookups?: SurveyLookup[];
+  /**
+   * 발행 시점에 얼린 영역 앵커 (ADR 0020). 조사표 **파일 참조는 여기 없다** — 라이브다.
+   * 앵커가 라이브면 분할 시작점이 진행 중인 응답의 발밑에서 움직인다.
+   * 이 형식을 쓰지 않는 설문과 이 필드 도입 이전 발행본은 undefined.
+   */
+  anchors?: SurveyAnchorSnapshot[];
 }
 
 /**
@@ -119,6 +127,13 @@ export type ResponseHeaderBlock =
       fontSize?: number | null; // 직접 지정 px(9~28), null/미설정 = 자동
     });
 
+/**
+ * 블록 행의 가로 배분. 기본 'group' 은 좌·중·우 세 칸에 묶어 놓는 지금 방식이고,
+ * 'between'·'evenly' 는 세 칸을 합쳐 한 줄에 고르게 편다 — 로고 넷을 나란히 놓을 때
+ * 좌 칸에 다 몰아넣으면 오른쪽이 통째로 빈다.
+ */
+export type ResponseHeaderRowSpread = 'group' | 'between' | 'evenly';
+
 export type SurveyResponseHeaderConfig =
   | {
       style: 'plain';
@@ -162,6 +177,7 @@ export type SurveyResponseHeaderConfig =
       style: 'composed';
       mobileStyle?: ResponseHeaderMobileStyle;
       layout?: ResponseHeaderLayout;
+      rowSpread?: ResponseHeaderRowSpread;
       blocks?: ResponseHeaderBlock[];
       subtitle?: string;
       titleAlign?: ResponseHeaderTitleAlign; // 밴드 내 제목 배치

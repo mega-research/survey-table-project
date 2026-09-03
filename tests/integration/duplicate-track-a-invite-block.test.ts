@@ -12,7 +12,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type InviteTokenLookupResult =
   | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null }
-  | { kind: 'excluded' }
   | { kind: 'invalid' };
 
 const h = vi.hoisted(() => {

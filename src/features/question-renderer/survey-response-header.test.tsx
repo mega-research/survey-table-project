@@ -58,6 +58,46 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
     expect(screen.getByText('로고')).toBeInTheDocument(); // 빈 imageUrl 자리표시자
   });
 
+  it('가로 배분을 펼치면 블록 행 한 줄에 space-between 을 준다', () => {
+    // 로고를 좌 칸에 몰아넣으면 오른쪽이 통째로 빈다 — 펼치면 간격이 자리를 정한다.
+    render(
+      <SurveyResponseHeader
+        title="제목"
+        device="desktop"
+        responseHeader={composed({
+          rowSpread: 'between',
+          blocks: [
+            { id: 'm1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/mark.png' },
+            { id: 'l1', type: 'logo', pos: 'left', size: 'md', imageUrl: 'https://x/a.png' },
+            { id: 'l2', type: 'logo', pos: 'left', size: 'md', imageUrl: 'https://x/b.png' },
+          ],
+        })}
+      />,
+    );
+    const row = screen.getByTestId('header-block-row');
+    expect(row).toHaveStyle({ justifyContent: 'space-between' });
+    // 세 칸으로 나뉘지 않고 블록이 그 행의 직계로 온다
+    expect(row.querySelectorAll('img')).toHaveLength(3);
+  });
+
+  it('기본(칸 배치)은 좌·중·우 칸을 그대로 둔다', () => {
+    render(
+      <SurveyResponseHeader
+        title="제목"
+        device="desktop"
+        responseHeader={composed({
+          blocks: [
+            { id: 'm1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/mark.png' },
+            { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: 'https://x/a.png' },
+          ],
+        })}
+      />,
+    );
+    const row = screen.getByTestId('header-block-row');
+    expect(row).not.toHaveStyle({ justifyContent: 'space-evenly' });
+    expect(row.children).toHaveLength(3);
+  });
+
   it('부제목이 있으면 제목 아래 렌더하고, 비우면 렌더하지 않는다', () => {
     const { rerender } = render(
       <SurveyResponseHeader title="T" device="desktop" responseHeader={composed({ subtitle: '(본 조사)' })} />,

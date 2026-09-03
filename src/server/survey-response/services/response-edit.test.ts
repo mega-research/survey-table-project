@@ -14,6 +14,7 @@ vi.mock('./response-answers', () => ({
 vi.mock('./submitted-answers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./submitted-answers')>()),
   loadPiiQuestionIds: vi.fn(async () => new Set<string>()),
+  loadPiiTargets: vi.fn(async () => ({ questionIds: new Set<string>(), cellIds: new Map() })),
 }));
 
 // in_progress 경로의 progress 재계산이 실 snapshot 조회로 가지 않도록 고정한다.

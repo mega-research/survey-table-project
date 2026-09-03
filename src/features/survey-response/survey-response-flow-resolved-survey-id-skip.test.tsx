@@ -27,7 +27,11 @@ vi.mock('@/shared/lib/rpc', () => ({
         forResponse: (...a: unknown[]) => forResponse(...a),
       },
     },
-    contacts: { attrs: { lookup: (...a: unknown[]) => attrsLookup(...a) } },
+    contacts: {
+      attrs: { lookup: (...a: unknown[]) => attrsLookup(...a) },
+      // 병합으로 로더가 이전 응답(추적조사)도 함께 조회한다 — 없으면 로딩 화면에 멈춘다
+      priorAnswers: { lookup: vi.fn().mockResolvedValue(null) },
+    },
     surveyResponse: {
       lifecycle: { stepVisit: vi.fn(), resume: (...a: unknown[]) => resume(...a) },
       response: {
@@ -83,7 +87,7 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
     forResponse.mockResolvedValue({
       survey,
       versionId: 'version-1',
-      control: { isPaused: false, pausedMessage: null, testSession: 'none', testSessionKind: null },
+      control: { isPaused: false, pausedMessage: null, testSession: 'none', testSessionKind: null, priorWaveLabel: null },
     });
     attrsLookup.mockResolvedValue({});
     resume.mockResolvedValue(null);
@@ -120,11 +124,13 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
           forResponse: {
             survey,
             versionId: 'version-1',
+            documentView: null,
             control: {
               isPaused: false,
               pausedMessage: null,
               testSession: 'none',
               testSessionKind: null,
+      priorWaveLabel: null,
             },
           },
           contactAttrs: { 회사: '메가리서치' },

@@ -190,14 +190,14 @@ export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
 
 /**
  * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의
- * 메일 수신거부 필터(SQL)와 메일 컬럼 badge 표시가 공유하는 단일 기준.
- * 컨택 회차에서 수동 기록된 수신거부(예: "13.수신거부")를 메일
+ * 유효 메일 상태(effectiveMailStatusExpr — 표시·필터·정렬 공유)가 쓰는
+ * 단일 기준. 컨택 회차에서 수동 기록된 수신거부(예: "13.수신거부")를 메일
  * unsubscribed_at 과 같은 축으로 취급한다.
  */
 export const UNSUBSCRIBE_RESULT_CODE_KEYWORD = '수신거부';
 
-/** 최근 결과코드가 수신거부 판정인지 — badge 표시(클라이언트) 공용 판정. */
-export function isUnsubscribeResultCode(code: string | null): boolean {
+/** 결과코드가 수신거부 판정인지 — SQL 조립 분기·badge 표시가 공유하는 판정. */
+export function isUnsubscribeResultCode(code: string | null | undefined): boolean {
   return code != null && code.includes(UNSUBSCRIBE_RESULT_CODE_KEYWORD);
 }
 
@@ -249,11 +249,11 @@ export function escapeLikePattern(value: string): string {
  */
 export function placeholderFor(
   source: string | null,
-  attrsLabel = '검색어 또는 번호 (예: 3, 1-10, 12)',
+  attrsLabel = '검색어 또는 번호 (예: 3, 1-10) · 엑셀 열 붙여넣기',
 ): string {
   if (!source) return '검색어';
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';
-  if (source === FILTER_SOURCE.RESID) return '예: 1-30, 45';
+  if (source === FILTER_SOURCE.RESID) return '예: 1-30, 45 · 엑셀 열 붙여넣기';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return '정확한 값 입력 (부분 검색 불가)';
   return attrsLabel;
 }
@@ -285,4 +285,35 @@ export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
 /** 서버 모듈에서 pii blindIndex 계산을 위해 piiType 포함. */
 export interface ColumnCandidateWithPii extends ColumnCandidate {
   piiType?: PiiFieldType;
+}
+
+// ─────────── 저장된 ID 목록 참조 토큰 ───────────
+
+/**
+ * 단일 컬럼 인라인 상한(SINGLE_COLUMN_ID_LIST_MAX)을 넘는 붙여넣기 목록은 서버에 저장하고
+ * URL 에는 `list:<uuid>[:<count>]` 토큰만 싣는다. count 는 위젯 표시용이며 서버는
+ * uuid 만 본다 (검색·뒤로가기·캠페인 스냅샷 재현이 전부 URL 그대로 동작).
+ */
+const ID_LIST_TOKEN_PREFIX = 'list:';
+
+const ID_LIST_TOKEN_REGEX = new RegExp(
+  `^${ID_LIST_TOKEN_PREFIX}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::(\\d+))?$`,
+  'i',
+);
+
+export interface IdListToken {
+  /** contact_id_lists.id */
+  id: string;
+  /** 표시용 개수 (토큰에 없으면 null) */
+  count: number | null;
+}
+
+export function parseIdListToken(value: string): IdListToken | null {
+  const m = ID_LIST_TOKEN_REGEX.exec(value.trim());
+  if (!m || m[1] === undefined) return null;
+  return { id: m[1].toLowerCase(), count: m[2] !== undefined ? Number(m[2]) : null };
+}
+
+export function formatIdListToken(id: string, count: number): string {
+  return `${ID_LIST_TOKEN_PREFIX}${id}:${count}`;
 }

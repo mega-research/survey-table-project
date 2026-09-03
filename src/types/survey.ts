@@ -291,6 +291,10 @@ export interface QuestionOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -381,6 +385,9 @@ export interface TableCell {
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: 'text' | 'number';
+  // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
+  // piiEncrypted 와 같은 규칙, ADR-0012). 저장 경로는 스냅샷 ∪ 라이브 셀 플래그 합집합.
+  piiEncrypted?: boolean;
   // 숫자 input 셀(inputType==='number')의 초기 prefill 값. 정의되어 있으면 응답자 첫 진입 시
   // 자동으로 이 값이 입력란에 채워져 저장됨. 응답자가 backspace 로 지우면 빈 응답으로 저장 가능 (자동 재채움 X).
   emptyDefault?: number;
@@ -418,6 +425,10 @@ export interface TableCell {
   // 선택 시 사이드카 텍스트 입력 (radio/checkbox 옵션과 동일 의미). __optTexts__ 로 저장됨.
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   // 셀 병합 관련 속성
   rowspan?: number; // 행 병합 (세로)
   colspan?: number; // 열 병합 (가로)
@@ -490,6 +501,10 @@ export interface CheckboxOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -514,6 +529,10 @@ export interface RadioOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
+  textInputType?: 'text' | 'number';
+  /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
+  textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -556,6 +575,11 @@ export interface ChoiceGroup {
   label: string;                           // 그룹 제목 - SPSS 변수 라벨 접두
   minSelections?: number;
   maxSelections?: number;
+  // 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다.
+  // 질문 필수 ON 에서 false = 이 그룹만 선택 사항, 질문 필수 OFF 에서 true = 이 그룹만 필수.
+  required?: boolean;
+  // 이 그룹 미응답 시 안내 문구. 없으면 질문 requiredMessage → 기본 문구 폴백.
+  requiredMessage?: string;
 }
 
 export interface TableColumn {
@@ -649,6 +673,7 @@ export interface Question {
   choiceGroups?: ChoiceGroup[];
   // 공지사항(notice) 타입용
   noticeContent?: string; // TipTap HTML 콘텐츠
+  noticeBgColor?: string; // 패널 배경색 — 미지정=기본 파랑, 'none'=무색(패널 제거), '#rrggbb'=커스텀
   requiresAcknowledgment?: boolean; // 이해했다는 체크 필요 여부
   // 단답형(text) 타입용
   placeholder?: string; // 입력 필드 placeholder
@@ -735,6 +760,9 @@ export interface SurveySettings {
   responseHeader?: SurveyResponseHeaderConfig;
   // 개인정보 보관기한 — 'YYYY-MM-DD' 날짜 문자열(해당일 포함 보유). null/미설정 = 파기하지 않음.
   piiRetentionUntil?: string | null;
+  // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름(예: 2025년 조사).
+  // 버전 스냅샷에 넣지 않는 라이브 값이라, 응답 페이지는 control 로 전달받는다 (0094 마이그레이션).
+  priorWaveLabel?: string | null;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

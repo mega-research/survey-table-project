@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -14,9 +15,18 @@ interface Props {
   total: number;
   page: number;
   pageSize: number;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
-export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: Props) {
+export function UnsubscribedSegment({
+  surveyId,
+  rows,
+  total,
+  page,
+  pageSize,
+  mailColumns,
+}: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -43,33 +53,66 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                   <th className="px-4 py-3">시스템ID</th>
+                  {mailColumns.map((c) => (
+                    <th key={c.key} className="px-4 py-3">
+                      {c.label}
+                    </th>
+                  ))}
                   <th className="px-4 py-3">이메일</th>
                   <th className="px-4 py-3">그룹</th>
+                  <th className="px-4 py-3">경로</th>
                   <th className="px-4 py-3">해지 시각</th>
                   <th className="px-4 py-3 text-center">관리</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
-                    <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      <LocalDateTime value={r.unsubscribedAt} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <UnsubscribedRevertButton
-                        surveyId={surveyId}
-                        contactId={r.id}
-                        emailMasked={r.emailMasked}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const shownAt = r.unsubscribedAt ?? r.resultUnsubscribedAt;
+                  return (
+                    <tr
+                      key={r.id}
+                      className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      {mailColumns.map((c) => (
+                        <td key={c.key} className="px-4 py-3 text-slate-600">
+                          {r.attrs[c.key] || '—'}
+                        </td>
+                      ))}
+                      <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
+                      <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {[
+                          r.unsubscribedAt ? '메일 해지' : null,
+                          r.resultUnsubscribedAt ? '컨택결과' : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {shownAt ? <LocalDateTime value={shownAt} /> : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {r.unsubscribedAt ? (
+                          <UnsubscribedRevertButton
+                            surveyId={surveyId}
+                            contactId={r.id}
+                            emailMasked={r.emailMasked}
+                          />
+                        ) : (
+                          // 컨택결과 단독 수신거부는 메일 해지가 아니라 해제 대상이 없다 —
+                          // 컨택 상세의 결과 회차에서 수정한다.
+                          <span
+                            className="text-xs text-slate-400"
+                            title="컨택결과 수신거부는 컨택 상세의 결과 회차에서 수정합니다."
+                          >
+                            컨택 회차
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </Card>

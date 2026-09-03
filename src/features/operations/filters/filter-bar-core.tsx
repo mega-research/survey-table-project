@@ -23,7 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
+
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
 import {
   clearHeaderFilterParams,
@@ -33,6 +36,7 @@ import {
 import { PiiExactMarker } from '@/features/operations/filter-pii-marker';
 
 import { ClauseRow, type ClauseRowValue } from './clause-row';
+import { FilterResetButton } from './filter-reset-button';
 
 // 서버 FilterClause 와 형상 같지만 client 모듈이라 서버 import 못 함 - 인라인.
 export interface ClientFilterClause {
@@ -62,6 +66,13 @@ interface Props {
   trailing?: React.ReactNode;
   /** 검색 실행 시 URL 파라미터 추가 조작 (예: status 반영). */
   onSubmitParams?: (p: URLSearchParams) => void;
+  /** 초기화 버튼이 함께 지울 페이지 전용 필터 파라미터 (예: 응답 내역 status). */
+  resetExtraParams?: string[];
+  /**
+   * 검색 직전 절 값 변환 (예: 인라인 상한을 넘는 ID 목록 → 서버 저장 후 `list:` 토큰).
+   * throw 하면 메시지를 띄우고 검색하지 않는다 — 조용히 0건이 되는 것보다 낫다.
+   */
+  prepareClauseValue?: (source: string, value: string) => Promise<string>;
 }
 
 /**
@@ -81,6 +92,8 @@ export function FilterBarCore({
   columnsSettingsHref,
   trailing,
   onSubmitParams,
+  resetExtraParams = [],
+  prepareClauseValue,
 }: Props) {
   // ClauseRowValue.id 는 React key 안정성을 위한 식별자 — URL 의 인덱스가 아니라 행 자체의
   // 생명주기를 따라간다. 매 mount/sync 시 새로 부여하므로 영속 ID 는 아님.
@@ -101,6 +114,7 @@ export function FilterBarCore({
   );
   const [advancedOpen, setAdvancedOpen] = useState(initialClauses.length >= 2);
   const [exclusionConfirmOpen, setExclusionConfirmOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [, startTransition] = useTransition();
   const pushParams = useSearchParamsMutator();
   const searchParams = useSearchParams();
@@ -117,21 +131,32 @@ export function FilterBarCore({
     setAdvancedOpen(initialClauses.length >= 2);
   }
 
-  const runSearch = () => {
-    const cols: string[] = [];
-    const qs: string[] = [];
-    const ops: string[] = [];
+  const runSearch = async () => {
+    const pending: Array<{ source: string; value: string; op: string }> = [];
     if (firstSource && firstValue.trim().length > 0) {
-      cols.push(firstSource);
-      qs.push(firstValue.trim());
-      ops.push('');
+      pending.push({ source: firstSource, value: firstValue.trim(), op: '' });
     }
     for (const c of extraClauses) {
       if (!c.source || c.value.trim().length === 0) continue;
-      cols.push(c.source);
-      qs.push(c.value.trim());
-      ops.push(c.op);
+      pending.push({ source: c.source, value: c.value.trim(), op: c.op });
     }
+    let prepared = pending;
+    if (prepareClauseValue) {
+      setPreparing(true);
+      try {
+        prepared = await Promise.all(
+          pending.map(async (c) => ({ ...c, value: await prepareClauseValue(c.source, c.value) })),
+        );
+      } catch (err) {
+        toast.error(getErrorMessage(err, '검색 조건을 준비하지 못했습니다.'));
+        return;
+      } finally {
+        setPreparing(false);
+      }
+    }
+    const cols = prepared.map((c) => c.source);
+    const qs = prepared.map((c) => c.value);
+    const ops = prepared.map((c) => c.op);
     startTransition(() => {
       pushParams((p) => {
         p.delete('col');
@@ -155,7 +180,7 @@ export function FilterBarCore({
       setExclusionConfirmOpen(true);
       return;
     }
-    runSearch();
+    void runSearch();
   };
 
   const addClause = () => {
@@ -224,7 +249,7 @@ export function FilterBarCore({
         <Button
           type="submit"
           className="h-10"
-          disabled={columnCandidates.length === 0}
+          disabled={columnCandidates.length === 0 || preparing}
         >
           검색
         </Button>
@@ -243,6 +268,20 @@ export function FilterBarCore({
           )}
         </Button>
         {trailing}
+        {/* 페이지 전용 컨트롤(응답 내역 상태 select 등) 오른쪽에 배치 */}
+        <FilterResetButton
+          className="h-10"
+          clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'page', ...resetExtraParams]}
+          activeParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', ...resetExtraParams]}
+          onReset={() => {
+            // URL 변화가 서버 initial 로 되돌아와 동기화되지만, 검색 전 입력값은
+            // URL 에 없어 남는다 — 로컬 state 도 즉시 비운다.
+            setFirstSource(FILTER_SOURCE.ALL);
+            setFirstValue('');
+            setExtraClauses([]);
+            setAdvancedOpen(false);
+          }}
+        />
         {columnsSettingsHref && (
           <Button asChild variant="outline" className="ml-auto h-10">
             <Link href={columnsSettingsHref}>컬럼 설정</Link>
@@ -289,7 +328,7 @@ export function FilterBarCore({
             <AlertDialogAction
               onClick={() => {
                 setExclusionConfirmOpen(false);
-                runSearch();
+                void runSearch();
               }}
             >
               검색 실행

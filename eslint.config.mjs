@@ -14,6 +14,9 @@ const eslintConfig = [
       "claudedocs/**",
       ".claude/**",
       ".gstack/**",
+      // pdf.js 워커는 pdfjs-dist 에서 그대로 복사한 정적 자산이다 (pnpm pdfjs:worker).
+      // 벤더 산출물이라 우리 규칙의 대상이 아니다.
+      "public/pdf.worker.min.mjs",
     ],
   },
   ...nextCoreWebVitals,

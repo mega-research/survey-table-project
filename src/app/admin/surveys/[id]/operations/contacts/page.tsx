@@ -21,6 +21,7 @@ import {
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/server/read-models/contacts';
+import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
@@ -75,7 +76,11 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const columnCandidates = buildColumnCandidates(scheme);
 
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
+  const idLists = await loadIdListsForValues(surveyId, sp.q);
+  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
+    idLists,
+  });
   const headerClauses = parseHeaderFiltersFromUrl(
     sp.hcol,
     sp.hm,
@@ -147,6 +152,12 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             label="+ 업로드"
             disabled={scope === 'test'}
           />
+          {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/surveys/${surveyId}/operations/contacts/prior-answers`}>
+              이월 응답 임포트
+            </Link>
+          </Button>
           <Button asChild size="sm">
             <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
           </Button>

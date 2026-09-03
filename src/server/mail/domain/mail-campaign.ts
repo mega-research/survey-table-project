@@ -16,7 +16,8 @@ export const FilterSnapshotSchema = z
       .array(
         z.object({
           source: z.string().max(200),
-          value: z.string().max(500),
+          // 붙여넣기 ID 목록 인라인 상한(2,000개 ≈ 10KB)이 통과해야 한다 — 요청 헤더 한계(16KB)와 동일.
+          value: z.string().max(16_384),
           op: z.enum(['AND', 'OR']).nullable(),
         }),
       )

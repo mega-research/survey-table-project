@@ -20,9 +20,15 @@ import {
 import {
   buildContactsFilterSql,
   latestResultCodeExpr,
+  latestResultUnsubscribedSql,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql.server';
-import { FILTER_NONE_VALUE, escapeLikePattern } from '@/lib/operations/filter-shared';
+import {
+  FILTER_NONE_VALUE,
+  UNSUBSCRIBE_RESULT_CODE_KEYWORD,
+  escapeLikePattern,
+  isUnsubscribeResultCode,
+} from '@/lib/operations/filter-shared';
 import {
   type OperationsDataScope,
   campaignScopeCondition,
@@ -181,6 +187,7 @@ export async function getCampaignDetail(
   // count 쿼리는 부수 정보 — 실패해도 페이지 전체를 죽이지 않도록 0 fallback.
   // skipped_unsubscribed 상태는 발송 시도조차 없었으므로 "발송 대상 중 수신거부 응답"
   // 의미에서 제외 — 등록 시점 스킵은 skippedUnsubscribedCount(목록 카드)가 별도 표현.
+  // 수신거부 판정은 수신자 탭 필터와 같은 축(메일 해지 OR 최근 결과코드 수신거부).
   const [campaignRows, currentUnsubscribedCount] = await Promise.all([
     db
       .select({
@@ -206,7 +213,10 @@ export async function getCampaignDetail(
       .where(
         and(
           eq(mailRecipients.campaignId, cid),
-          isNotNull(contactTargets.unsubscribedAt),
+          or(
+            isNotNull(contactTargets.unsubscribedAt),
+            sql`${RECIPIENT_RESULT_EXPR} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`,
+          ),
           ne(mailRecipients.status, 'skipped_unsubscribed'),
           isNull(mailRecipients.archivedAt),
           campaignScopeCondition(scope),
@@ -405,12 +415,13 @@ export async function listCampaignRecipients(args: {
 
   if (args.statuses && args.statuses.length > 0) {
     // '수신거부' 탭(skipped_unsubscribed)은 발송 스킵 상태만으로는 발송 후
-    // 수신거부자를 놓친다 — 행의 수신거부 badge(contact_targets.unsubscribed_at)와
-    // 같은 판정이 되도록 OR 로 결합한다.
+    // 수신거부자를 놓친다 — 행의 수신거부 badge 와 같은 판정이 되도록 메일 해지
+    // (contact_targets.unsubscribed_at)와 최근 결과코드 수신거부를 OR 로 결합한다.
     const statusCond = args.statuses.includes('skipped_unsubscribed')
       ? or(
           inArray(mailRecipients.status, args.statuses),
           isNotNull(contactTargets.unsubscribedAt),
+          sql`${RECIPIENT_RESULT_EXPR} LIKE '%' || ${UNSUBSCRIBE_RESULT_CODE_KEYWORD} || '%'`,
         )!
       : inArray(mailRecipients.status, args.statuses);
     whereParts.push(statusCond);
@@ -447,6 +458,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactAttrs: contactTargets.attrs,
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
@@ -473,6 +485,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
+      contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
@@ -641,7 +654,8 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  * 발송 후보 WHERE — 다중 절 필터(조사대상목록과 동일) + 메일 발송 자동 제외 정책 결합.
  *
  * 항상 적용되는 자동 제외:
- *   - unsubscribed_at IS NULL (수신거부)
+ *   - unsubscribed_at IS NULL (수신거부 — 메일 해지)
+ *   - 최근 결과코드 수신거부 아님 (status 무관 — neutral 수신거부 코드도 메일 제외)
  *   - email PII 존재 (이메일 누락 제외)
  *   - 부정 결과코드 마킹 제외
  * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
@@ -663,6 +677,7 @@ function buildCandidateWhere(
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
     isNull(contactTargets.unsubscribedAt),
+    sql`NOT (${latestResultUnsubscribedSql})`,
     HAS_EMAIL_PII,
     buildNotExcludedByNegativeCode(negativeCodes),
     buildContactsFilterSql(clauses),
@@ -704,12 +719,14 @@ async function countCandidateExclusions(
   const bouncedCond: SQL =
     bouncedContactIds.length > 0 ? inArray(contactTargets.id, [...bouncedContactIds]) : sql`FALSE`;
 
+  // 수신거부 버킷 = 메일 해지 OR 최근 결과코드 수신거부 (buildCandidateWhere 의 배제 축과 동일).
+  const unsubCond = sql`(${contactTargets.unsubscribedAt} IS NOT NULL OR ${latestResultUnsubscribedSql})`;
   const [row] = await db
     .select({
-      unsubscribed: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NOT NULL)::int`,
-      negativeCode: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND ${negExists})::int`,
-      emailMissing: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
-      bounced: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
+      unsubscribed: sql<number>`count(*) FILTER (WHERE ${unsubCond})::int`,
+      negativeCode: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND ${negExists})::int`,
+      emailMissing: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
+      bounced: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
     })
     .from(contactTargets)
     .where(and(...baseParts)!);
@@ -882,6 +899,13 @@ export async function countCampaignCandidates(args: {
 // 수신거부자 명단 (단체 메일 페이지 하단 세그먼트)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// 최신 회차 기록 시각 — 컨택결과 수신거부 행의 해지 시각 표기용.
+const latestAttemptAtExpr = sql<Date | null>`(
+  SELECT created_at FROM contact_attempts
+  WHERE contact_target_id = "contact_targets"."id"
+  ORDER BY attempt_no DESC LIMIT 1
+)`;
+
 export async function listUnsubscribedContacts(args: {
   surveyId: string;
   scope: OperationsDataScope;
@@ -889,10 +913,12 @@ export async function listUnsubscribedContacts(args: {
   pageSize?: number;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
+  // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
+  // 최근 결과코드 수신거부. 발송 스킵 상태는 이 둘 중 하나에서 파생되므로 별도 축 없음.
   const where = and(
     eq(contactTargets.surveyId, args.surveyId),
     targetScopeCondition(args.scope),
-    isNotNull(contactTargets.unsubscribedAt),
+    or(isNotNull(contactTargets.unsubscribedAt), latestResultUnsubscribedSql),
   )!;
 
   const [countRow] = await db
@@ -909,25 +935,32 @@ export async function listUnsubscribedContacts(args: {
       id: contactTargets.id,
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
+      attrs: contactTargets.attrs,
       unsubscribedAt: contactTargets.unsubscribedAt,
+      latestResultCode: latestResultCodeExpr.as('latest_result_code'),
+      latestAttemptAt: latestAttemptAtExpr.as('latest_attempt_at'),
     })
     .from(contactTargets)
     .where(where)
-    .orderBy(desc(contactTargets.unsubscribedAt))
+    .orderBy(
+      sql`COALESCE(${contactTargets.unsubscribedAt}, ${latestAttemptAtExpr}) DESC NULLS LAST`,
+    )
     .limit(pageSize)
     .offset(offset);
 
   const maskMap = await fetchEmailMaskHints(rows.map((r) => r.id));
 
   return {
-    rows: rows
-      .filter((r): r is typeof r & { unsubscribedAt: Date } => r.unsubscribedAt !== null)
-      .map((r) => ({
-        id: r.id,
-        resid: r.resid,
-        emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-        groupValue: r.groupValue,
-        unsubscribedAt: r.unsubscribedAt,
+    rows: rows.map((r) => ({
+      id: r.id,
+      resid: r.resid,
+      emailMasked: maskMap.get(r.id) || EMAIL_DASH,
+      groupValue: r.groupValue,
+      attrs: (r.attrs ?? {}) as Record<string, string>,
+      unsubscribedAt: r.unsubscribedAt,
+      resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
+        ? r.latestAttemptAt
+        : null,
       })),
     total,
     page: clampedPage,
@@ -973,6 +1006,8 @@ export async function preflightRecipients(args: {
     .select({
       id: contactTargets.id,
       unsubscribedAt: contactTargets.unsubscribedAt,
+      // 최근 결과코드 수신거부 — status(negative) 무관하게 수신거부 버킷으로 분류.
+      resultUnsubscribed: sql<boolean>`(${latestResultUnsubscribedSql})`.as('result_unsubscribed'),
       hasEmail: sql<boolean>`EXISTS (
         SELECT 1 FROM contact_pii cp
         WHERE cp.contact_target_id = "contact_targets"."id"
@@ -1006,7 +1041,7 @@ export async function preflightRecipients(args: {
   for (const r of rows) {
     found.add(r.id);
     // 우선순위: unsubscribed → excludedByCode → !hasEmail → bounced → (복호화 검증) → valid
-    if (r.unsubscribedAt !== null) {
+    if (r.unsubscribedAt !== null || r.resultUnsubscribed) {
       unsubscribedIds.push(r.id);
     } else if (r.excludedByCode) {
       excludedByCodeIds.push(r.id);

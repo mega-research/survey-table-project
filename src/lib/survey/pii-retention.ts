@@ -17,3 +17,17 @@ export function retentionTimestampToDate(ts: Date): string {
   const shifted = new Date(ts.getTime() - KST_END_OF_DAY_UTC_HOUR * 3600 * 1000);
   return shifted.toISOString().slice(0, 10);
 }
+
+/**
+ * 보관기한이 지난 PII 를 파기할 때 값 자리에 남기는 표식.
+ *
+ * 마이그레이션(`0050`, `0095`)의 sweep 이 암호문 자리에 이 문자열을 넣는다. 값이
+ * 사라졌다는 사실은 남기되 원문은 복원할 수 없게 하는 표식이라, **응답으로 다시
+ * 흘러들어가서는 안 된다** — 읽기 경계가 이 상수로 걸러낸다.
+ */
+export const PII_REDACTED_MARKER = '[개인정보 파기됨]';
+
+/** 이 값이 파기 표식인가. */
+export function isPiiRedactedValue(value: unknown): boolean {
+  return value === PII_REDACTED_MARKER;
+}

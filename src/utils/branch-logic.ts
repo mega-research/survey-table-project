@@ -824,7 +824,11 @@ function evaluateQuestionCondition(
 
   switch (condition.conditionType) {
     case 'value-match':
-      mainConditionResult = checkValueMatch(sourceResponse, condition.requiredValues || []);
+      mainConditionResult = checkValueMatch(
+        sourceResponse,
+        condition.requiredValues || [],
+        sourceQuestion,
+      );
       break;
 
     case 'table-cell-check':
@@ -924,7 +928,11 @@ function evaluateQuestionCondition(
 /**
  * 값 일치 확인
  */
-function checkValueMatch(response: unknown, requiredValues: string[]): boolean {
+function checkValueMatch(
+  response: unknown,
+  requiredValues: string[],
+  sourceQuestion?: Question,
+): boolean {
   if (requiredValues.length === 0) {
     return false;
   }
@@ -932,6 +940,27 @@ function checkValueMatch(response: unknown, requiredValues: string[]): boolean {
   // 단일 값 (radio, select 등)
   if (typeof response === 'string') {
     return requiredValues.includes(response);
+  }
+
+  // 그룹별 선택 모드(GroupedChoiceAnswer): { groupKey: cellId | cellId[] } 맵.
+  // getBranchRuleForRadio/Checkbox 의 grouped 분기와 동일 규칙 — 맵 값을 flat 해
+  // 선택된 cellId 중 하나라도 requiredValues 와 일치하면 만족. 이 분기가 없으면
+  // 그룹 맵은 아래 selectedValue/optionId 객체 분기에 걸리지 않아 항상 false 가 된다.
+  if (
+    sourceQuestion &&
+    isGroupedChoiceQuestion(sourceQuestion) &&
+    typeof response === 'object' &&
+    response !== null &&
+    !Array.isArray(response)
+  ) {
+    const selectedValues = Object.values(response as Record<string, string | string[]>).flatMap(
+      (v): string[] => {
+        if (typeof v === 'string' && v !== '') return [v];
+        if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
+        return [];
+      },
+    );
+    return selectedValues.some((v) => requiredValues.includes(v));
   }
 
   // 객체 형태 (기타 옵션 포함)

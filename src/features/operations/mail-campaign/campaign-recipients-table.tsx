@@ -5,9 +5,14 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
-import { RECIPIENT_FILTER_LABEL, RECIPIENT_FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import {
+  RECIPIENT_FILTER_LABEL,
+  RECIPIENT_FILTER_SOURCE,
+  isUnsubscribeResultCode,
+} from '@/lib/operations/filter-shared';
 import type { HeaderFilterEntry } from '@/features/operations/filters/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
@@ -30,6 +35,8 @@ interface Props {
   errorOptions: Array<{ value: string; label: string }>;
   /** 최근 결과코드 깔때기 체크박스 선택지 */
   resultOptions: Array<{ value: string; label: string }>;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
 // 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
@@ -99,6 +106,7 @@ export function CampaignRecipientsTable({
   groupOptions,
   errorOptions,
   resultOptions,
+  mailColumns,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -123,6 +131,8 @@ export function CampaignRecipientsTable({
             전부 hidden 으로 실어야 검색 순간에 조용히 사라지지 않는다. */}
         <form className="flex items-center gap-2" action="" method="get">
           <input
+            // 초기화(Link 네비게이션) 후에도 남는 uncontrolled 입력값을 key 로 리마운트해 비운다.
+            key={currentQuery}
             type="search"
             name="rq"
             defaultValue={currentQuery}
@@ -145,6 +155,22 @@ export function CampaignRecipientsTable({
           >
             검색
           </button>
+          {/* 상태 칩·이메일 검색·헤더 깔때기 일괄 초기화 — 걸린 게 없으면 비활성 표시 */}
+          {currentStatuses.length > 0 || currentQuery.trim() !== '' || headerEntries.length > 0 ? (
+            <Link
+              href={buildHref(surveyId, campaignId, {})}
+              className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              초기화
+            </Link>
+          ) : (
+            <span
+              aria-disabled="true"
+              className="cursor-default rounded border border-slate-100 bg-white px-3 py-1.5 text-sm text-slate-300"
+            >
+              초기화
+            </span>
+          )}
         </form>
       </div>
 
@@ -189,6 +215,11 @@ export function CampaignRecipientsTable({
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                 <th className="px-3 py-2">시스템ID</th>
+                {mailColumns.map((c) => (
+                  <th key={c.key} className="px-3 py-2">
+                    {c.label}
+                  </th>
+                ))}
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
@@ -245,17 +276,27 @@ export function CampaignRecipientsTable({
                     <td className="px-3 py-2 font-mono text-xs text-slate-600">
                       {r.contactResid === null ? '—' : `#${r.contactResid}`}
                     </td>
+                    {mailColumns.map((c) => (
+                      <td key={c.key} className="px-3 py-2 text-slate-600">
+                        {r.contactAttrs[c.key] || '—'}
+                      </td>
+                    ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-1">
                         <RecipientStatusBadge status={r.status} />
                         {/* status='skipped_unsubscribed' 는 이미 status badge 가 "수신거부" 라 중복 노출 회피.
-                            발송 후 본인이 footer 링크로 해지한 경우에만 별도 badge 노출. */}
-                        {r.unsubscribedAt && r.status !== 'skipped_unsubscribed' && (
+                            발송 후 footer 링크 해지 또는 컨택결과 수신거부 기록 시 별도 badge 노출. */}
+                        {(r.unsubscribedAt || isUnsubscribeResultCode(r.latestResultCode))
+                          && r.status !== 'skipped_unsubscribed' && (
                           <span
                             className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
-                            title={`수신거부 ${r.unsubscribedAt.toISOString()}`}
+                            title={
+                              r.unsubscribedAt
+                                ? `수신거부 ${r.unsubscribedAt.toISOString()}`
+                                : `컨택결과 수신거부 (${r.latestResultCode ?? ''})`
+                            }
                           >
                             수신거부
                           </span>

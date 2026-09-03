@@ -20,6 +20,7 @@ import {
   normalizeResponseHeaderConfig,
   noticeFormatPatch,
   partitionHeaderBlocks,
+  resolveHeaderRow,
   resolveHeaderTitlePx,
   resolveMobileHeaderTitlePx,
   resolveNoticeFontPx,
@@ -357,5 +358,47 @@ describe('applyResponseHeaderPreset', () => {
       { ...(createHeaderBlock('notice') as NormalizedHeaderNoticeBlock), format: 'line' as const, pos: 'below' as const },
     ];
     expect(coerceBlocksForInlineLayout(blocks).map((b) => b.pos)).toEqual(['left', 'left', 'right', 'below']);
+  });
+});
+
+describe('resolveHeaderRow — 블록 행 배분', () => {
+  const at = (pos: 'left' | 'center' | 'right', id: string) => ({
+    ...createHeaderBlock('logo'),
+    id,
+    pos,
+  });
+  const parts = (left: string[], center: string[], right: string[]) => ({
+    rowLeft: left.map((id) => at('left', id)),
+    rowCenter: center.map((id) => at('center', id)),
+    rowRight: right.map((id) => at('right', id)),
+  });
+
+  it('기본(묶음)은 좌·중·우 세 칸을 그대로 넘긴다', () => {
+    const row = resolveHeaderRow(parts(['a', 'b'], ['c'], ['d']), 'group');
+    expect(row.mode).toBe('group');
+  });
+
+  it('양끝 정렬은 세 칸을 하나로 합치고 읽는 순서를 지킨다', () => {
+    // 좌·중·우는 배분을 정하는 칸이었으므로, 펼치면 그 순서가 곧 읽는 순서다.
+    const row = resolveHeaderRow(parts(['a', 'b'], ['c'], ['d']), 'between');
+    expect(row.mode).toBe('spread');
+    if (row.mode !== 'spread') throw new Error('unreachable');
+    expect(row.blocks.map((b) => b.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(row.justifyContent).toBe('space-between');
+  });
+
+  it('고르게는 양끝에도 같은 간격을 준다', () => {
+    const row = resolveHeaderRow(parts(['a'], [], ['b']), 'evenly');
+    expect(row.mode === 'spread' && row.justifyContent).toBe('space-evenly');
+  });
+
+  it('블록이 하나뿐이면 펼쳐도 묶음으로 둔다', () => {
+    // 하나짜리에 space-between 은 왼쪽 붙임과 같아 보이지만, 칸 배분을 버리는
+    // 부작용만 남는다 — 좌/중/우 설정이 살아 있어야 한다.
+    expect(resolveHeaderRow(parts([], ['a'], []), 'between').mode).toBe('group');
+  });
+
+  it('블록이 없으면 묶음이다', () => {
+    expect(resolveHeaderRow(parts([], [], []), 'evenly').mode).toBe('group');
   });
 });

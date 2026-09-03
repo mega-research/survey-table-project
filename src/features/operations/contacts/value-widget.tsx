@@ -16,6 +16,9 @@ import {
   placeholderFor,
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
+import { isIdListSource } from '@/lib/operations/id-list-paste';
+
+import { IdListInput } from './id-list-input';
 
 interface Props {
   source: string;
@@ -29,7 +32,8 @@ interface Props {
  * 컬럼 source 에 따라 다른 입력 위젯 렌더.
  * - system.contact_result -> 결과코드 dropdown (+ "결과 없음")
  * - system.web -> 응답 완료/미응답 dropdown
- * - 그 외 (system.resid / attrs.* / pii.*) -> text input
+ * - system.resid / attrs.* -> ID 목록 입력 (IdListInput — 엑셀 붙여넣기·인식 개수·경고)
+ * - 그 외 (pii.*) -> text input
  */
 export function ValueWidget({ source, value, onChange, resultCodeOptions, inputId }: Props) {
   if (source === FILTER_SOURCE.CONTACT_RESULT) {
@@ -82,6 +86,19 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
           ))}
         </SelectContent>
       </Select>
+    );
+  }
+
+  if (isIdListSource(source)) {
+    // 시스템ID / attrs — 엑셀 열 붙여넣기 ID 목록 입력 (인식 개수·경고 표시)
+    return (
+      <IdListInput
+        source={source}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholderFor(source)}
+        {...(inputId !== undefined ? { inputId } : {})}
+      />
     );
   }
 

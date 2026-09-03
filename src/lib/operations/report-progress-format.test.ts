@@ -90,7 +90,6 @@ describe('computeTotals', () => {
   const NO_REASONS = {
     excludedScreenedOut: 0,
     excludedNegativeCode: 0,
-    excludedUnsubscribed: 0,
   };
 
   it('빈 배열은 0 합계', () => {

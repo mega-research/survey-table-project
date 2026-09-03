@@ -17,7 +17,6 @@ const totals: ProgressTotals = {
   excludedTotal: 0,
   excludedScreenedOut: 0,
   excludedNegativeCode: 0,
-  excludedUnsubscribed: 0,
 };
 
 function renderTable(showResid?: boolean) {

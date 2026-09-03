@@ -128,6 +128,26 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     vi.clearAllMocks();
   });
 
+  it('한 틱에 여러 문항을 답해도 createWithFirstAnswer 는 1회만 발사한다', () => {
+    // 수요조사의 블록 일괄 선택이 이 경로다. isCreatingResponse 는 React state 라
+    // 같은 틱 안에서 갱신되지 않아, 가드가 그것뿐이면 문항 수만큼 INSERT 를 발사했다.
+    // 행은 (surveyId, sessionId) 멱등이라 늘지 않지만 요청이 세션 한도를 태운다.
+    const args = baseArgs();
+    args.visibleProgressRef.current = { index: 0, total: 1 };
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      for (const id of ['q1', 'q2', 'q3', 'q4', 'q5', 'q6']) {
+        result.current.handleResponse(id, 'v');
+      }
+    });
+
+    expect(createWithFirstAnswer).toHaveBeenCalledTimes(1);
+    // 나머지 문항의 답은 로컬 상태·pending 으로만 반영된다 (제출 시 일괄 저장)
+    expect(args.setResponses).toHaveBeenCalledTimes(6);
+    expect(args.setPendingResponse).toHaveBeenCalledTimes(6);
+  });
+
   it('첫 답변(currentResponseId null + 가드 통과)이면 createWithFirstAnswer 를 1회 발사한다', async () => {
     const args = baseArgs();
     // ref 에 진척 미러값 채움 (실제 컴포넌트가 매 렌더 채우는 의미론)

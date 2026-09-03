@@ -10,3 +10,14 @@ import '@testing-library/jest-dom/vitest';
 import { expect } from 'vitest';
 
 expect.extend(matchers);
+
+// jsdom 에는 ResizeObserver 가 없다. 반응형 측정 훅(useElementWidth 등)을 쓰는
+// 컴포넌트는 마운트만으로 ReferenceError 로 죽으므로 관찰하지 않는 껍데기를 둔다 —
+// 크기 변화는 jsdom 에서 어차피 일어나지 않아, 관찰해도 발화할 것이 없다.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

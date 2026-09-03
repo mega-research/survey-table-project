@@ -27,11 +27,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles-format';
 import type { MailTemplate } from '@/db/schema/mail';
@@ -73,6 +75,8 @@ interface Props {
   initialClauses: { op: 'AND' | 'OR' | null; source: string; value: string }[];
   sort: CampaignSortKey;
   dir: CampaignSortDir;
+  /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
+  mailColumns: MailDisplayColumn[];
 }
 
 export function CampaignWizard({
@@ -86,6 +90,7 @@ export function CampaignWizard({
   initialClauses,
   sort,
   dir,
+  mailColumns,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,6 +120,15 @@ export function CampaignWizard({
   const [unrespondedOnly, setUnrespondedOnly] = useState<boolean>(
     currentFilter.unrespondedOnly ?? false,
   );
+
+  // 초기화·뒤로가기로 URL 의 unresponded 가 바뀌면 서버가 새 currentFilter 를 내려준다 —
+  // 로컬 체크박스 동기화 (effect 대신 렌더 중 조정 패턴).
+  const serverUnresponded = currentFilter.unrespondedOnly ?? false;
+  const [prevServerUnresponded, setPrevServerUnresponded] = useState(serverUnresponded);
+  if (prevServerUnresponded !== serverUnresponded) {
+    setPrevServerUnresponded(serverUnresponded);
+    setUnrespondedOnly(serverUnresponded);
+  }
 
   const totalPages = Math.max(1, Math.ceil(candidates.total / candidates.pageSize));
   const selectedCount = selectedIds.size;
@@ -321,6 +335,7 @@ export function CampaignWizard({
           columnCandidates={columnCandidates}
           resultCodeOptions={resultCodeOptions}
           ariaLabel="수신자 필터"
+          resetExtraParams={['unresponded']}
         />
 
         <div className="flex items-center gap-2">
@@ -369,6 +384,13 @@ export function CampaignWizard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <FilterResetButton
+              size="sm"
+              label="필터 초기화"
+              // unresponded(미응답자만)도 수신 후보를 실제 제한하는 필터 — 초기화에 포함.
+              clearParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'unresponded', 'page']}
+              activeParams={['col', 'q', 'op', 'hcol', 'hm', 'hv', 'unresponded']}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -408,6 +430,11 @@ export function CampaignWizard({
                     onSort={changeSort}
                   />
                 </th>
+                {mailColumns.map((c) => (
+                  <th key={c.key} className="px-3 py-2">
+                    {c.label}
+                  </th>
+                ))}
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
@@ -457,7 +484,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={7 + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -475,6 +502,11 @@ export function CampaignWizard({
                       />
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    {mailColumns.map((c) => (
+                      <td key={c.key} className="px-3 py-2 text-slate-600">
+                        {r.attrs[c.key] || '—'}
+                      </td>
+                    ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">

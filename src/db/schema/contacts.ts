@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm';
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -89,6 +90,25 @@ export const contactPii = pgTable(
   }),
 );
 
+export const contactPriorAnswers = pgTable(
+  'contact_prior_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    // 응답 저장 형태(surveyResponses.questionResponses)와 동형인 이월 응답 한 벌.
+    // 표·복수선택·랭킹이 별도 변환 없이 들어가고 기타/상세 기재 사이드카도 함께 담긴다.
+    answers: jsonb('answers').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // 조사 대상 하나당 한 벌 — 회차 축 없음(직전 1회차만 보관).
+    targetUnique: unique('contact_prior_answers_target_unique').on(table.contactTargetId),
+  }),
+);
+
 export const contactAttempts = pgTable(
   'contact_attempts',
   {
@@ -107,6 +127,29 @@ export const contactAttempts = pgTable(
       table.contactTargetId,
       table.attemptNo,
     ),
+  }),
+);
+
+/**
+ * 저장된 ID 목록 — 필터 붙여넣기 대용량 경로 (0084).
+ * 시스템ID/attrs 컬럼 검색의 인라인 상한(2,000개)을 넘는 목록을 저장하고 URL 에는
+ * `list:<uuid>` 토큰만 싣는다. 캠페인 filterSnapshot 이 토큰을 보존하므로 만료·정리 없음
+ * (설문 삭제 시 cascade). ids 는 중복 제거·오름차순 정수 배열.
+ */
+export const contactIdLists = pgTable(
+  'contact_id_lists',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    ids: jsonb('ids').$type<number[]>().notNull(),
+    idCount: integer('id_count').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    surveyIdx: index('contact_id_lists_survey_idx').on(table.surveyId),
   }),
 );
 
@@ -135,11 +178,19 @@ export const contactTargetsRelations = relations(contactTargets, ({ one, many })
   }),
   attempts: many(contactAttempts),
   pii: many(contactPii),
+  priorAnswers: many(contactPriorAnswers),
 }));
 
 export const contactPiiRelations = relations(contactPii, ({ one }) => ({
   target: one(contactTargets, {
     fields: [contactPii.contactTargetId],
+    references: [contactTargets.id],
+  }),
+}));
+
+export const contactPriorAnswersRelations = relations(contactPriorAnswers, ({ one }) => ({
+  target: one(contactTargets, {
+    fields: [contactPriorAnswers.contactTargetId],
     references: [contactTargets.id],
   }),
 }));
@@ -171,3 +222,5 @@ export type ContactAttempt = typeof contactAttempts.$inferSelect;
 export type NewContactAttempt = typeof contactAttempts.$inferInsert;
 export type ContactPii = typeof contactPii.$inferSelect;
 export type NewContactPii = typeof contactPii.$inferInsert;
+export type ContactPriorAnswers = typeof contactPriorAnswers.$inferSelect;
+export type NewContactPriorAnswers = typeof contactPriorAnswers.$inferInsert;

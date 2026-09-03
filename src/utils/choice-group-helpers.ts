@@ -74,6 +74,10 @@ export interface ChoiceGroupWithCells {
   /** 그룹의 응답 동작: radio=단일 선택, checkbox=복수 선택 */
   type: 'radio' | 'checkbox';
   cells: TableCell[];
+  /** 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다 */
+  required?: boolean | undefined;
+  /** 그룹 미응답 시 안내 문구 — 없으면 질문 문구 → 기본 문구 폴백 */
+  requiredMessage?: string | undefined;
 }
 
 /**
@@ -96,7 +100,14 @@ export function collectChoiceGroups(question: Question): ChoiceGroupWithCells[] 
     // prune 을 비껴간 phantom 그룹(이미 snapshot 에 박힌 것 포함)을 무해화.
     if (cells.length === 0) continue;
     for (const c of cells) claimed.add(c.id);
-    groups.push({ groupKey: group.groupKey, label: group.label, type: group.type, cells });
+    groups.push({
+      groupKey: group.groupKey,
+      label: group.label,
+      type: group.type,
+      cells,
+      required: group.required,
+      requiredMessage: group.requiredMessage,
+    });
   }
 
   const orphans = allCells.filter((c) => !claimed.has(c.id));
@@ -152,6 +163,45 @@ export function nextGroupKey(groups: ChoiceGroup[], type: ChoiceGroup['type']): 
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `${prefix}${max + 1}`;
+}
+
+/**
+ * 그룹 생성용 발번 — 새 순번이 10 이상(자릿수 증가)이면 같은 prefix 의 짧은 키를
+ * 새 자릿수로 0 패딩해(rad1 → rad01) 사전순과 번호순을 일치시킨다.
+ *
+ * groupKey 는 SPSS 변수명이자 응답 저장 키(GroupedChoiceAnswer 의 키)다. 재패딩은
+ * 저장된 응답의 키와 어긋나므로, 호출자는 응답이 존재할 수 없는 설문(게시 이력
+ * 없는 draft — 응답은 게시 스냅샷을 통해서만 생긴다)에서만 repadExisting 을 켠다.
+ * 꺼진 경우 기존 키는 건드리지 않고 다음 순번만 발번한다.
+ *
+ * 반환 groups 는 재패딩이 일어났을 때만 새 배열, 아니면 원본 참조 그대로.
+ */
+export function issueGroupKey(
+  groups: ChoiceGroup[],
+  type: ChoiceGroup['type'],
+  { repadExisting }: { repadExisting: boolean },
+): { key: string; groups: ChoiceGroup[] } {
+  const prefix = KEY_PREFIX[type];
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  let max = 0;
+  for (const g of groups) {
+    const m = g.groupKey.match(pattern);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  const next = max + 1;
+  const width = String(next).length;
+  if (width === 1 || !repadExisting) return { key: `${prefix}${next}`, groups };
+
+  let changed = false;
+  const repadded = groups.map((g) => {
+    const m = g.groupKey.match(pattern);
+    if (!m) return g;
+    const padded = `${prefix}${String(Number(m[1])).padStart(width, '0')}`;
+    if (padded === g.groupKey) return g;
+    changed = true;
+    return { ...g, groupKey: padded };
+  });
+  return { key: `${prefix}${next}`, groups: changed ? repadded : groups };
 }
 
 /**

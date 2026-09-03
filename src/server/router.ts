@@ -4,6 +4,8 @@ import { attempts } from '@/server/contacts/procedures/attempts';
 import { attrs } from '@/server/contacts/procedures/attrs';
 import { attrValues } from '@/server/contacts/procedures/attr-values';
 import { columns } from '@/server/contacts/procedures/columns';
+import { idLists } from '@/server/contacts/procedures/id-lists';
+import { priorAnswers } from '@/server/contacts/procedures/prior-answers';
 import { resultCodes } from '@/server/contacts/procedures/result-codes';
 import { targets } from '@/server/contacts/procedures/targets';
 import { uploads } from '@/server/contacts/procedures/uploads';
@@ -12,6 +14,8 @@ import { questionCategories } from '@/server/library/procedures/question-categor
 import { savedCells } from '@/server/library/procedures/saved-cells';
 import { savedLookups } from '@/server/library/procedures/saved-lookups';
 import { savedQuestions } from '@/server/library/procedures/saved-questions';
+import { anchors } from '@/server/survey-document/procedures/anchors';
+import { documents } from '@/server/survey-document/procedures/documents';
 import { groups } from '@/server/survey-builder/procedures/groups';
 import { lookups } from '@/server/survey-builder/procedures/lookups';
 import { publicRead } from '@/server/survey-builder/procedures/public-read';
@@ -60,6 +64,10 @@ export const router = {
     lookups,
     testSample,
   },
+  surveyDocument: {
+    documents,
+    anchors,
+  },
   auth,
   media: {
     ...media,
@@ -74,6 +82,8 @@ export const router = {
     resultCodes,
     attrs,
     attrValues,
+    idLists,
+    priorAnswers,
   },
   mail: {
     templates,

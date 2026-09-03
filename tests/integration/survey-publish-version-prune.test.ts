@@ -24,7 +24,24 @@ vi.mock('@/server/storage-lifecycle/key-ref-index', () => ({
 }));
 
 vi.mock('@/server/read-models/survey-structure', () => ({ getSurveyWithDetails: vi.fn() }));
-vi.mock('@/db', () => ({ db: { transaction: vi.fn() } }));
+/**
+ * 앵커 조회(select 체인)는 이 파일의 관심사가 아니다 — 빈 결과로 흡수한다.
+ * then 을 가진 thenable 이라 `await ...orderBy(...)` 를 그대로 받는다.
+ */
+function emptyDrizzleSelect() {
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    orderBy: () => chain,
+    limit: () => Promise.resolve([]),
+    then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+  };
+  return chain;
+}
+
+vi.mock('@/db', () => ({
+  db: { transaction: vi.fn(), select: () => emptyDrizzleSelect() },
+}));
 vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi
     .fn()

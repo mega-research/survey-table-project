@@ -6,6 +6,7 @@ import {
   mailCampaigns,
   mailTemplates,
   questions,
+  surveyDocuments,
   surveys,
   surveyVersions,
 } from '@/db/schema';
@@ -25,7 +26,7 @@ export interface SurveyContentKeys {
  * 복원할 수 없다.
  *
  * 범위: 설문 responseHeader · 질문 행 전체(JSONB 포함) · 버전 스냅샷 ·
- * 소속 메일 템플릿(soft delete 포함) · 캠페인 스냅샷.
+ * 조사표(survey_documents.file_key) · 소속 메일 템플릿(soft delete 포함) · 캠페인 스냅샷.
  * mail_recipients.sendPayloadSnapshot 은 캠페인 스냅샷과 키가 동일해 생략
  * (발송분 보호는 발송 장부 소관).
  *
@@ -55,6 +56,13 @@ export async function collectSurveyContentKeys(
     .from(surveyVersions)
     .where(eq(surveyVersions.surveyId, surveyId));
   add(versionRows.map((row) => row.snapshot));
+
+  // 조사표 PDF — file_key 는 bare 키라 추출 게이트를 그대로 통과한다 (0097)
+  const documentRows = await dbc
+    .select({ fileKey: surveyDocuments.fileKey })
+    .from(surveyDocuments)
+    .where(eq(surveyDocuments.surveyId, surveyId));
+  add(documentRows);
 
   // soft delete 된 템플릿도 CASCADE 로 소멸하므로 deletedAt 무관 전수 수집
   const templateRows = await dbc

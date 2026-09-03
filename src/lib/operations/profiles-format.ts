@@ -217,11 +217,20 @@ export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
 }
 
 /**
+ * Raw 내보내기 전용 상태 — 응답이 없는 조사 대상 행. survey_responses.status 에는 절대
+ * 저장되지 않으며(STATUS_FILTERS 에도 없다) 콘솔 pill 은 이 값을 받을 일이 없다.
+ * 라벨은 조사 대상 web 필터의 'none' 표기(filter-shared.ts WEB_FILTER_OPTIONS)와 같은 문자열.
+ */
+export const NOT_RESPONDED_STATUS = 'not_responded'
+export const NOT_RESPONDED_LABEL = '미응답'
+
+/**
  * 엑셀 export 상태 라벨 — 콘솔 pill 어휘(mapStatusPill)를 따르되, 자격 미달은
  * 스크리닝으로 설문을 정상 종결한 응답이라 export 에서는 완료 계열로 표기한다.
  * rawdata 엑셀(raw-workbook)과 조사 대상 엑셀(contacts-export)이 공유한다.
  */
 export function formatExportStatusLabel(status: string): string {
+  if (status === NOT_RESPONDED_STATUS) return NOT_RESPONDED_LABEL
   if (status === 'screened_out') return '완료(자격 미달)'
   return mapStatusPill({ status }).label
 }

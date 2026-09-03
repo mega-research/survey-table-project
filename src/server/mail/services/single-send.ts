@@ -4,6 +4,7 @@ import 'server-only';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
+import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -43,6 +44,18 @@ export async function sendSingleCampaign(
   }
   if (contact.unsubscribedAt) {
     throw new Error('수신거부된 조사 대상에게는 메일을 보낼 수 없습니다.');
+  }
+
+  // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 금지 (수신거부 3축).
+  const [resultUnsubscribed] = await db
+    .select({ id: contactTargets.id })
+    .from(contactTargets)
+    .where(
+      and(eq(contactTargets.id, input.contactTargetId), latestResultUnsubscribedSql),
+    )
+    .limit(1);
+  if (resultUnsubscribed) {
+    throw new Error('수신거부 결과코드가 기록된 조사 대상에게는 메일을 보낼 수 없습니다.');
   }
 
   const { negative: negativeCodes } = await getResultCodeStatuses(input.surveyId);

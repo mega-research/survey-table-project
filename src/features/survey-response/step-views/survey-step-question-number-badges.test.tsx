@@ -39,6 +39,7 @@ describe('survey response step headings', () => {
         onResponse={vi.fn()}
         isHighlighted={false}
         showRequiredMessage={false}
+        showChangeConfirmMessage={false}
       />,
     );
     expect(screen.getByText('증상 발생 시 이용할 의료기관')).toBeInTheDocument();
@@ -65,6 +66,7 @@ describe('survey response step headings', () => {
         onResponse={vi.fn()}
         highlightQuestionIds={new Set()}
         requiredMessageQuestionIds={new Set()}
+        changeConfirmMessageQuestionIds={new Set<string>()}
         numericIssues={new Map()}
       />,
     );

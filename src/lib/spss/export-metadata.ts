@@ -21,7 +21,9 @@ function clampDecimals(value: number | undefined): number {
 }
 
 function isNumericInputColumn(col: SPSSExportColumn): boolean {
-  if (col.type === 'text') return col.numericText === true;
+  if (col.type === 'text' || col.type === 'option-text' || col.type === 'table-cell-option-text') {
+    return col.numericText === true;
+  }
   return (
     col.type === 'table-cell' && (col.tableCellType === 'input' || col.tableCellType === 'calc')
   );
