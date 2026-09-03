@@ -11,7 +11,6 @@ import type { RawExportResponseRow } from './raw-workbook';
 export interface NonRespondentTarget {
   id: string;
   resid: number;
-  groupValue: string | null;
   inviteCode: string | null;
 }
 
@@ -20,7 +19,6 @@ export function buildNonRespondentRow(target: NonRespondentTarget): RawExportRes
   return {
     id: target.id,
     questionResponses: {},
-    groupValue: target.groupValue,
     resid: target.resid,
     inviteCode: target.inviteCode,
     ipHash: null,

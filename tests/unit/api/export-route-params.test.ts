@@ -32,7 +32,7 @@ vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => {
 });
 
 vi.mock('@/lib/operations/contact-stats.server', () => ({
-  getSurveyContactStats: vi.fn(async () => ({ hasContacts: true, hasContactGroups: false })),
+  getSurveyContactStats: vi.fn(async () => ({ hasContacts: true })),
 }));
 
 // 컬럼 스킴 조회만 가짜로 — Raw Data 계열에서만 불려야 한다 (명단 열은 응답 내역 컬럼 설정 기준).
@@ -65,7 +65,6 @@ vi.mock('@/lib/analytics/raw-export-rows.server', () => ({
     appUrl: '',
     stepLabels: new Map(),
     hasContacts: true,
-    hasContactGroups: false,
     questionMeta: new Map(),
   })),
 }));

@@ -9,13 +9,12 @@ import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 
 // 조사 대상 4명(resid 1~4) 중 2·4 만 응답했고 1·3 은 미응답. 익명 응답 2건은 시스템ID 가 없다.
-const t1: NonRespondentTarget = { id: 't1', resid: 1, groupValue: 'A', inviteCode: 'c1' };
-const t3: NonRespondentTarget = { id: 't3', resid: 3, groupValue: null, inviteCode: 'c3' };
+const t1: NonRespondentTarget = { id: 't1', resid: 1, inviteCode: 'c1' };
+const t3: NonRespondentTarget = { id: 't3', resid: 3, inviteCode: 'c3' };
 
 function response(over: Partial<RawExportResponseRow> & Pick<RawExportResponseRow, 'id'>): RawExportResponseRow {
   return {
     questionResponses: { q1: 'opt1' },
-    groupValue: null,
     resid: null,
     inviteCode: null,
     ipHash: 'hash',
@@ -47,7 +46,6 @@ describe('buildNonRespondentRow', () => {
     expect(row).toEqual({
       id: 't1',
       questionResponses: {},
-      groupValue: 'A',
       resid: 1,
       inviteCode: 'c1',
       ipHash: null,

@@ -29,7 +29,6 @@ export interface RawExportResponseRow {
   id: string;
   /** 미응답 행은 {} */
   questionResponses: Record<string, unknown>;
-  groupValue: string | null;
   resid: number | null;
   inviteCode: string | null;
   ipHash: string | null;
@@ -82,8 +81,6 @@ export interface RawExportContext {
   stepLabels: ReadonlyMap<string, string>;
   /** 설문에 컨택 타겟이 존재하는지 — false 면 시스템ID 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
   hasContacts: boolean;
-  /** 컨택 타겟에 그룹값이 하나라도 설정돼 있는지 — false 면 조사 대상 그룹 열을 만들지 않는다 */
-  hasContactGroups: boolean;
   /**
    * 질문 id → { order, 표시 라벨 } (buildQuestionMetaMap 결과).
    * currentStepId 미저장 구응답의 "마지막 입력 문항" 폴백 — 응답값이 존재하는 질문 중 최후순의 라벨.
@@ -95,8 +92,8 @@ export interface RawExportContext {
    */
   changeConfirmQuestionIds?: ReadonlySet<string>;
   /**
-   * 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 표시 중인 attrs·pii 열. 순번(그룹 열이 있으면 그룹)과
-   * 개별 URL 사이에 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
+   * 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 표시 중인 attrs·pii 열. 순번과 개별 URL 사이에
+   * 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
    */
   contactColumns?: readonly RawExportContactColumn[];
 }
@@ -150,8 +147,9 @@ interface RawMetaColumn {
 
 /**
  * Raw Data·분할 시트 왼쪽 메타 열 정의 (헤더·값·생성 조건의 단일 출처).
- * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 시스템ID·조사 대상 그룹은
- * 설문 설정(컨택 존재/그룹 사용)에 따라 조건부 생성된다.
+ * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 시스템ID는 설문 설정(컨택 존재)에 따라
+ * 조건부 생성된다. 조사 대상 그룹 고정 열은 없다 — 그룹은 응답 내역 컬럼 설정의 attrs 열로
+ * 명단 열에 따라온다.
  */
 const RAW_META_COLUMNS: RawMetaColumn[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
@@ -162,12 +160,6 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
     value: (row) => row.resid ?? '',
   },
   { header: '순번', value: (_row, seq) => seq ?? '' },
-  {
-    header: '조사 대상 그룹',
-    enabled: (ctx) => ctx.hasContactGroups,
-    // '공개링크' 는 익명 응답의 표식 — 응답이 아닌 조사 대상 행에는 붙이지 않는다.
-    value: (row) => row.groupValue ?? (isNonRespondentRow(row) ? '' : '공개링크'),
-  },
   {
     header: '개별 URL',
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
@@ -218,8 +210,8 @@ export function buildRawMetaValues(
 
 /**
  * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
- * 시스템ID·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따르고, 조사 대상 명단 열은
- * 그룹 다음·접속 단말 앞에 같은 열이 붙는다. 순번은 seqMap(접수 순번)을 Raw Data 시트와 공유한다.
+ * 시스템ID 열은 메타 열과 동일한 조건부 생성 규칙을 따르고, 조사 대상 명단 열은 순번 다음·접속 단말
+ * 앞에 같은 열이 붙는다. 순번은 seqMap(접수 순번)을 Raw Data 시트와 공유한다.
  */
 export function addResponseListSheet(
   workbook: ExcelJS.Workbook,
@@ -232,7 +224,6 @@ export function addResponseListSheet(
   const headers = [
     ...(ctx.hasContacts ? [RESID_DEFAULT_LABEL] : []),
     '순번',
-    ...(ctx.hasContactGroups ? ['조사 대상 그룹'] : []),
     ...contactColumns.map((c) => c.label),
     '접속 단말',
     '브라우저',
@@ -243,13 +234,12 @@ export function addResponseListSheet(
   ];
   ws.addRow(headers);
   rows.forEach((row) => {
-    // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)와 익명 표식을 빈칸으로 둔다 —
+    // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)를 빈칸으로 둔다 —
     // RAW_META_COLUMNS 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
     const nonRespondent = isNonRespondentRow(row);
     ws.addRow([
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),
       seqMap.get(row) ?? '',
-      ...(ctx.hasContactGroups ? [row.groupValue ?? (nonRespondent ? '' : '공개링크')] : []),
       ...contactColumns.map((c) => row.contactValues?.[c.source] ?? ''),
       nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
       nonRespondent ? '' : (row.browser ?? 'Other'),

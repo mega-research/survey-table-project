@@ -116,7 +116,6 @@ export async function countRawExportPopulation(
 interface ContactRef {
   id: string;
   resid: number;
-  groupValue: string | null;
   inviteCode: string | null;
   attrs?: Record<string, string>;
 }
@@ -124,7 +123,6 @@ interface ContactRef {
 const CONTACT_REF_SELECT = {
   id: contactTargets.id,
   resid: contactTargets.resid,
-  groupValue: contactTargets.groupValue,
   inviteCode: contactTargets.inviteCode,
 };
 
@@ -241,7 +239,6 @@ export async function loadRawExportRows(
         (r.questionResponses ?? {}) as Record<string, unknown>,
         { responseId: r.id },
       ),
-      groupValue: c?.groupValue ?? null,
       resid: c?.resid ?? null,
       inviteCode: c?.inviteCode ?? null,
       ipHash: r.ipHash,
@@ -287,9 +284,8 @@ export async function buildRawExportContext(
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
-  // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
-  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, scope);
+  // 컨택 타겟이 없으면 시스템ID 열을 만들지 않는다. 컨택 통계도 같은 스코프 파티션으로 센다.
+  const { hasContacts } = await getSurveyContactStats(surveyId, scope);
   // 추적조사 — 이월 응답도 raw export 모수와 같은 스코프 파티션만 본다.
   const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
     isTest: testFlagForScope(scope),
@@ -307,7 +303,6 @@ export async function buildRawExportContext(
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
     stepLabels: buildStepLabelMap(stepQs, groups),
     hasContacts,
-    hasContactGroups,
     questionMeta: buildQuestionMetaMap(questions),
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),

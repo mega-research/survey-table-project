@@ -31,14 +31,12 @@ const CTX: RawExportContext = {
   appUrl: 'https://app.example.com',
   stepLabels: new Map(),
   hasContacts: true,
-  hasContactGroups: true,
   questionMeta: new Map(),
 };
 
 const row: RawExportResponseRow = {
   id: 'r-1',
   questionResponses: { qb: 'opt1', qt: '좋음' },
-  groupValue: null,
   resid: 3,
   inviteCode: null,
   ipHash: null,
@@ -52,13 +50,13 @@ const row: RawExportResponseRow = {
 };
 
 describe('분할 워크북 메타 컬럼', () => {
-  it('응답 내역 제외 모든 변수 시트 왼쪽에 메타 11열이 붙는다', () => {
+  it('응답 내역 제외 모든 변수 시트 왼쪽에 메타 10열이 붙는다', () => {
     const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
     for (const ws of wb.worksheets) {
       if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
       expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
       expect(ws.getRow(1).getCell(2).value).toBe('시스템ID');
-      expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
+      expect(ws.getRow(1).getCell(10).value).toBe('접속 단말');
       expect(ws.getRow(4).getCell(2).value).toBe(3); // 번호=resid
       expect(ws.getRow(4).getCell(3).value).toBe(1); // 순번
     }
@@ -100,7 +98,6 @@ describe('분할 워크북 메타 컬럼', () => {
     const nonRespondent: RawExportResponseRow = {
       id: 't-1',
       questionResponses: {},
-      groupValue: null,
       resid: 5,
       inviteCode: 'c5',
       ipHash: null,
@@ -119,9 +116,9 @@ describe('분할 워크북 메타 컬럼', () => {
       const dr = ws.getRow(5);
       expect(dr.getCell(2).value).toBe(5); // 시스템ID
       expect(dr.getCell(3).value).toBe(''); // 순번 — 미응답 행은 접수 순번이 없다
-      expect(dr.getCell(6).value).toBe('미응답');
-      expect([10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
-      expect(dr.getCell(12).value).toBeNull(); // 변수 열
+      expect(dr.getCell(5).value).toBe('미응답');
+      expect([9, 10].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
+      expect(dr.getCell(11).value).toBeNull(); // 변수 열
     }
   });
 });
@@ -152,7 +149,7 @@ describe('분할 워크북 조사 대상 명단 열', () => {
     ],
   };
 
-  it('공통·옵션 시트 전부 그룹 열 다음에 명단 열이 붙고 세로 병합되며 코딩북에는 없다', () => {
+  it('공통·옵션 시트 전부 순번 다음에 명단 열이 붙고 세로 병합되며 코딩북에는 없다', () => {
     const wb = buildSplitWorkbook(
       [basisQ, textQ, condQ],
       [{ ...row, contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' } }],
@@ -163,28 +160,28 @@ describe('분할 워크북 조사 대상 명단 열', () => {
     expect(variableSheets.map((ws) => ws.name)).toContain('공통');
     expect(variableSheets.length).toBeGreaterThanOrEqual(2);
     for (const ws of variableSheets) {
-      expect(ws.getRow(1).getCell(4).value).toBe('조사 대상 그룹');
-      expect(ws.getRow(1).getCell(5).value).toBe('기수');
-      expect(ws.getRow(1).getCell(6).value).toBe('성명');
-      expect(ws.getRow(1).getCell(7).value).toBe('개별 URL');
-      expect(ws.getRow(1).getCell(13).value).toBe('접속 단말');
-      expect(ws.getRow(4).getCell(5).value).toBe('15기');
-      expect(ws.getRow(4).getCell(6).value).toBe('홍길동');
+      expect(ws.getRow(1).getCell(3).value).toBe('순번');
+      expect(ws.getRow(1).getCell(4).value).toBe('기수');
+      expect(ws.getRow(1).getCell(5).value).toBe('성명');
+      expect(ws.getRow(1).getCell(6).value).toBe('개별 URL');
+      expect(ws.getRow(1).getCell(12).value).toBe('접속 단말');
+      expect(ws.getRow(4).getCell(4).value).toBe('15기');
+      expect(ws.getRow(4).getCell(5).value).toBe('홍길동');
       const merges = ws.model.merges as string[];
+      expect(merges).toContain('D1:D3');
       expect(merges).toContain('E1:E3');
-      expect(merges).toContain('F1:F3');
     }
     const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
     expect(names).not.toContain('기수');
     expect(names).not.toContain('성명');
-    // 응답 내역 시트에도 그룹 다음에 같은 명단 열이 붙는다
+    // 응답 내역 시트에도 순번 다음에 같은 명단 열이 붙는다
     const ws1 = wb.getWorksheet('응답 내역')!;
-    expect([3, 4, 5, 6].map((c) => ws1.getRow(1).getCell(c).value)).toEqual([
-      '조사 대상 그룹',
+    expect([2, 3, 4, 5].map((c) => ws1.getRow(1).getCell(c).value)).toEqual([
+      '순번',
       '기수',
       '성명',
       '접속 단말',
     ]);
-    expect([4, 5].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
+    expect([3, 4].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
   });
 });

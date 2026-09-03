@@ -70,7 +70,6 @@ const CTX: RawExportContext = {
   appUrl: 'https://app.example.com',
   stepLabels: new Map([['group:g1', 'Q1']]),
   hasContacts: true,
-  hasContactGroups: true,
   questionMeta: new Map([
     ['q1', { order: 1, label: 'Q1' }],
     ['q2', { order: 2, label: 'Q2' }],
@@ -81,7 +80,6 @@ const CTX: RawExportContext = {
 const completedRow: RawExportResponseRow = {
   id: 'r-1',
   questionResponses: { q1: 'opt1', q2: ['optA', 'optB'], qt: { tr: { tc: '1200' } } },
-  groupValue: '전시회A',
   resid: 7,
   inviteCode: 'abc123defg',
   ipHash: '0123456789abcdef0123456789abcdef',
@@ -97,7 +95,6 @@ const completedRow: RawExportResponseRow = {
 const inProgressRow: RawExportResponseRow = {
   id: 'r-2',
   questionResponses: { q1: 'opt2' },
-  groupValue: '전시회B',
   resid: 3,
   inviteCode: 'zzz999yyy8',
   ipHash: 'fedcba9876543210fedcba9876543210',
@@ -113,7 +110,6 @@ const inProgressRow: RawExportResponseRow = {
 const anonymousRow: RawExportResponseRow = {
   id: 'r-3',
   questionResponses: { q1: 'opt1' },
-  groupValue: null,
   resid: null,
   inviteCode: null,
   ipHash: null,

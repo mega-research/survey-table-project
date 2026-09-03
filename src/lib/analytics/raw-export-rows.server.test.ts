@@ -106,8 +106,8 @@ function responseRow(over: Record<string, unknown>) {
 }
 
 const nonRespondentTargets = [
-  { id: 't1', resid: 1, groupValue: 'A', inviteCode: 'c1' },
-  { id: 't3', resid: 3, groupValue: null, inviteCode: 'c3' },
+  { id: 't1', resid: 1, inviteCode: 'c1' },
+  { id: 't3', resid: 3, inviteCode: 'c3' },
 ];
 
 function useCounts(counts: { responses: number; nonRespondents: number }) {
@@ -119,8 +119,8 @@ function useCounts(counts: { responses: number; nonRespondents: number }) {
         return [{ total: counts.nonRespondents }];
       case 'contactsById':
         return [
-          { id: 'ct2', resid: 2, groupValue: 'B', inviteCode: 'c2' },
-          { id: 'ct4', resid: 4, groupValue: null, inviteCode: 'c4' },
+          { id: 'ct2', resid: 2, inviteCode: 'c2' },
+          { id: 'ct4', resid: 4, inviteCode: 'c4' },
         ];
       case 'nonRespondentTargets':
         return nonRespondentTargets;
@@ -157,9 +157,9 @@ describe('loadRawExportRows — 토글 꺼짐', () => {
     expect(kinds()).toEqual(['responseCount', 'contactsById']);
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.rows.map((r) => [r.id, r.resid, r.groupValue, r.inviteCode])).toEqual([
-      ['r1', 2, 'B', 'c2'],
-      ['r2', 4, null, 'c4'],
+    expect(result.rows.map((r) => [r.id, r.resid, r.inviteCode])).toEqual([
+      ['r1', 2, 'c2'],
+      ['r2', 4, 'c4'],
     ]);
     expect(result.nonRespondentCount).toBe(0);
   });
@@ -305,15 +305,14 @@ describe('loadRawExportRows — 조사 대상 명단 열', () => {
           return [{ total: 1 }];
         case 'contactsById':
           return [
-            { id: 't1', resid: 1, groupValue: 'A', inviteCode: 'c1', ...attrs({ 기수: '15기' }) },
-            { id: 't2', resid: 2, groupValue: null, inviteCode: 'c2', ...attrs({}) },
+            { id: 't1', resid: 1, inviteCode: 'c1', ...attrs({ 기수: '15기' }) },
+            { id: 't2', resid: 2, inviteCode: 'c2', ...attrs({}) },
           ];
         case 'nonRespondentTargets':
           return [
             {
               id: 't3',
               resid: 3,
-              groupValue: null,
               inviteCode: 'c3',
               ...attrs({ 기수: '16기', 스킴에없는키: 'x' }),
             },

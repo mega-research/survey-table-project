@@ -148,7 +148,6 @@ const TEST_CTX: RawExportContext = {
   appUrl: 'https://app.example.com',
   stepLabels: new Map([['group:g1', 'Q1']]),
   hasContacts: true,
-  hasContactGroups: true,
   questionMeta: new Map([['q1', { order: 1, label: 'Q1' }]]),
 };
 
@@ -156,7 +155,6 @@ function makeRow(over: Partial<RawExportResponseRow> = {}): RawExportResponseRow
   return {
     id: 'r-1',
     questionResponses: {},
-    groupValue: '전시회A',
     resid: 7,
     inviteCode: 'abc123defg',
     ipHash: '0123456789abcdef',
@@ -184,11 +182,11 @@ describe('generateRawDataWorkbook', () => {
       TEST_CTX,
     );
     const ws = wb.getWorksheet('Raw Data')!;
-    // 변수 열은 메타 11열만큼 오프셋 (구 B열=2 → 신 12열)
-    expect(ws.getRow(1).getCell(12).value).toBe('Q1. 성별'); // 행1: 질문 제목
-    expect(ws.getRow(2).getCell(12).value ?? '').toBe(''); // 행2: 셀라벨 (단일질문 → 공백)
-    expect(ws.getRow(3).getCell(12).value).toBe('Q1'); // 행3: SPSS 변수명
-    expect(ws.getRow(4).getCell(12).value).toBe(2); // 코드값 (여성=2)
+    // 변수 열은 메타 10열만큼 오프셋 (구 B열=2 → 신 11열)
+    expect(ws.getRow(1).getCell(11).value).toBe('Q1. 성별'); // 행1: 질문 제목
+    expect(ws.getRow(2).getCell(11).value ?? '').toBe(''); // 행2: 셀라벨 (단일질문 → 공백)
+    expect(ws.getRow(3).getCell(11).value).toBe('Q1'); // 행3: SPSS 변수명
+    expect(ws.getRow(4).getCell(11).value).toBe(2); // 코드값 (여성=2)
   });
 
   it('코딩북 시트는 변수번호/변수명/값라벨과 SPSS 감사 메타데이터를 담는다', () => {
@@ -239,22 +237,22 @@ describe('generateRawDataWorkbook', () => {
   });
 
   it('시트2 1행은 같은 질문 변수 열끼리 가로 병합되고 메타 열은 세로 병합된다', () => {
-    // radio(변수1) + checkbox(변수2: Q2_1, Q2_2) → 메타 11열(A~K) 후 L(Q1) M(Q2_1) N(Q2_2)
+    // radio(변수1) + checkbox(변수2: Q2_1, Q2_2) → 메타 10열(A~J) 후 K(Q1) L(Q2_1) M(Q2_2)
     const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
     const merges = ws.model.merges as string[];
     expect(merges).toContain('A1:A3'); // 메타 첫 열 세로 병합
-    expect(merges).toContain('K1:K3'); // 메타 마지막(11번째) 열 세로 병합
-    expect(merges).toContain('M1:N1'); // 같은 질문(Q2) 변수 열 가로 병합 (오프셋 +10: C,D → M,N)
-    // 단일 변수 질문(Q1, 12번째=L열)은 가로 병합 대상 아님
-    expect(merges.some((m) => m.startsWith('L1:'))).toBe(false);
+    expect(merges).toContain('J1:J3'); // 메타 마지막(10번째) 열 세로 병합
+    expect(merges).toContain('L1:M1'); // 같은 질문(Q2) 변수 열 가로 병합 (오프셋 +9: C,D → L,M)
+    // 단일 변수 질문(Q1, 11번째=K열)은 가로 병합 대상 아님
+    expect(merges.some((m) => m.startsWith('K1:'))).toBe(false);
   });
 
   it('테이블 input 셀에 exportLabel 없으면 행2를 질문코드_열_행 자동 라벨로 채운다', () => {
     const wb = generateRawDataWorkbook([tableInputQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect(ws.getRow(3).getCell(12).value).toBe('Q3_u00_2020'); // 행3: 변수명
-    expect(ws.getRow(2).getCell(12).value).toBe('Q3_2020년 매출액_기업 전체'); // 행2: 자동 셀라벨
+    expect(ws.getRow(3).getCell(11).value).toBe('Q3_u00_2020'); // 행3: 변수명
+    expect(ws.getRow(2).getCell(11).value).toBe('Q3_2020년 매출액_기업 전체'); // 행2: 자동 셀라벨
   });
 
   it('테이블 셀에 커스텀 exportLabel 있으면 자동값 대신 그대로 쓴다', () => {
@@ -271,16 +269,16 @@ describe('generateRawDataWorkbook', () => {
     } as unknown as Question;
     const wb = generateRawDataWorkbook([custom], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect(ws.getRow(2).getCell(12).value).toBe('내수매출_2020');
+    expect(ws.getRow(2).getCell(11).value).toBe('내수매출_2020');
   });
 
   it('테이블-소스 체크박스는 옵션 셀의 exportLabel을 행2에 쓴다', () => {
     const wb = generateRawDataWorkbook([tableSourceCheckboxQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    // 열 L=Q3_1, M=Q3_2 (메타 11열 오프셋)
-    expect(ws.getRow(3).getCell(12).value).toBe('Q3_1'); // 행3: 변수명
-    expect(ws.getRow(2).getCell(12).value).toBe('ⓐ 머신러닝'); // 행2: content 비어도 exportLabel 사용
-    expect(ws.getRow(2).getCell(13).value).toBe('ⓖ 에이전트');
+    // 열 K=Q3_1, L=Q3_2 (메타 10열 오프셋)
+    expect(ws.getRow(3).getCell(11).value).toBe('Q3_1'); // 행3: 변수명
+    expect(ws.getRow(2).getCell(11).value).toBe('ⓐ 머신러닝'); // 행2: content 비어도 exportLabel 사용
+    expect(ws.getRow(2).getCell(12).value).toBe('ⓖ 에이전트');
   });
 
   it('테이블-소스 체크박스의 텍스트 사이드카도 옵션 셀 exportLabel을 유지한다', () => {
@@ -288,10 +286,10 @@ describe('generateRawDataWorkbook', () => {
     const raw = wb.getWorksheet('Raw Data')!;
     const codebook = wb.getWorksheet('코딩북')!;
 
-    expect(raw.getRow(3).getCell(12).value).toBe('Q4_1');
-    expect(raw.getRow(3).getCell(13).value).toBe('Q4_1_text');
+    expect(raw.getRow(3).getCell(11).value).toBe('Q4_1');
+    expect(raw.getRow(3).getCell(12).value).toBe('Q4_1_text');
+    expect(raw.getRow(2).getCell(11).value).toBe('ⓧ 기타 분야');
     expect(raw.getRow(2).getCell(12).value).toBe('ⓧ 기타 분야');
-    expect(raw.getRow(2).getCell(13).value).toBe('ⓧ 기타 분야');
 
     const sidecar = codebook.getColumn(2).values.findIndex((v) => v === 'Q4_1_text');
     expect(sidecar).toBeGreaterThan(0);
@@ -311,14 +309,13 @@ describe('generateRawDataWorkbook', () => {
 });
 
 describe('Raw Data 시트 메타 컬럼', () => {
-  it('왼쪽 11열 헤더가 붙고 1~3행 세로 병합된다', () => {
+  it('왼쪽 10열 헤더가 붙고 1~3행 세로 병합된다 — 조사 대상 그룹 고정 열은 없다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
       'IP 해시',
       '시스템ID',
       '순번',
-      '조사 대상 그룹',
       '개별 URL',
       '상태',
       '마지막 입력 문항',
@@ -327,22 +324,21 @@ describe('Raw Data 시트 메타 컬럼', () => {
       '소요시간',
       '접속 단말',
     ]);
-    expect(ws.getRow(1).getCell(12).value).toBe('Q1. 성별');
+    expect(ws.getRow(1).getCell(11).value).toBe('Q1. 성별');
   });
 
-  it('컨택 없는 설문은 번호·그룹 열을 만들지 않는다', () => {
+  it('컨택 없는 설문은 번호 열을 만들지 않는다', () => {
     const noContactCtx: RawExportContext = {
       ...TEST_CTX,
       hasContacts: false,
-      hasContactGroups: false,
     };
     const wb = generateRawDataWorkbook(
       [radioQ],
-      [makeRow({ resid: null, groupValue: null })],
+      [makeRow({ resid: null })],
       noContactCtx,
     );
     const ws = wb.getWorksheet('Raw Data')!;
-    // 메타 9열 (번호·그룹 생략) → IP 해시/순번/개별 URL... 순, 변수 열은 10열부터
+    // 메타 9열 (번호 생략) → IP 해시/순번/개별 URL... 순, 변수 열은 10열부터
     expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
     expect(ws.getRow(1).getCell(2).value).toBe('순번');
     expect(ws.getRow(1).getCell(3).value).toBe('개별 URL');
@@ -362,11 +358,10 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(dr.getCell(1).value).toBe('0123456789abcdef'); // IP 해시 앞 16자리
     expect(dr.getCell(2).value).toBe(7); // 번호=resid
     expect(dr.getCell(3).value).toBe(1); // 순번
-    expect(dr.getCell(4).value).toBe('전시회A');
-    expect(dr.getCell(5).value).toBe('https://app.example.com/i/abc123defg');
-    expect(dr.getCell(6).value).toBe('완료');
-    expect(dr.getCell(7).value).toBe('Q1'); // 마지막 입력 문항 — 상태 바로 옆
-    expect(dr.getCell(11).value).toBe('PC');
+    expect(dr.getCell(4).value).toBe('https://app.example.com/i/abc123defg');
+    expect(dr.getCell(5).value).toBe('완료');
+    expect(dr.getCell(6).value).toBe('Q1'); // 마지막 입력 문항 — 상태 바로 옆
+    expect(dr.getCell(10).value).toBe('PC');
   });
 
   it('익명·진행중 응답은 번호/URL 공백, 상태·소요시간이 진행 표기된다', () => {
@@ -376,7 +371,6 @@ describe('Raw Data 시트 메타 컬럼', () => {
         makeRow({
           resid: null,
           inviteCode: null,
-          groupValue: null,
           status: 'in_progress',
           completedAt: null,
           totalSeconds: null,
@@ -386,10 +380,10 @@ describe('Raw Data 시트 메타 컬럼', () => {
     );
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
     expect(dr.getCell(2).value).toBe(''); // 번호
-    expect(dr.getCell(5).value).toBe(''); // 개별 URL
-    expect(dr.getCell(6).value).toBe('진행중');
-    expect(dr.getCell(9).value).toBe(''); // 종료일시
-    expect(dr.getCell(10).value).toBe('진행 중'); // 소요시간
+    expect(dr.getCell(4).value).toBe(''); // 개별 URL
+    expect(dr.getCell(5).value).toBe('진행중');
+    expect(dr.getCell(8).value).toBe(''); // 종료일시
+    expect(dr.getCell(9).value).toBe('진행 중'); // 소요시간
   });
 
   it('자격 미달 응답은 두 시트 모두 상태가 완료(자격 미달)로 표기된다', () => {
@@ -398,8 +392,8 @@ describe('Raw Data 시트 메타 컬럼', () => {
       [makeRow({ status: 'screened_out' })],
       TEST_CTX,
     );
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(6).value).toBe('완료(자격 미달)');
-    expect(wb.getWorksheet('응답 내역')!.getRow(2).getCell(6).value).toBe('완료(자격 미달)');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(5).value).toBe('완료(자격 미달)');
+    expect(wb.getWorksheet('응답 내역')!.getRow(2).getCell(5).value).toBe('완료(자격 미달)');
   });
 
   it('응답 내역 시트는 컨택 설문에서 번호+순번 두 식별자를 갖는다', () => {
@@ -409,7 +403,6 @@ describe('Raw Data 시트 메타 컬럼', () => {
       undefined,
       '시스템ID',
       '순번',
-      '조사 대상 그룹',
       '접속 단말',
       '브라우저',
       '상태',
@@ -441,7 +434,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
       ctx,
     );
     // q3 응답은 빈 객체(미입력)라 제외 → 응답값 존재 최후순은 q2 → 'Q2'
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q2');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(6).value).toBe('Q2');
   });
 
   it('진행 위치가 현재 문항 구조와 매칭 실패해도 응답값 기준이 동작한다', () => {
@@ -450,7 +443,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
       [makeRow({ currentStepId: 'group:deleted', questionResponses: { q1: 'opt2' } })],
       TEST_CTX,
     );
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q1');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(6).value).toBe('Q1');
   });
 
   it('진행 페이지 라벨보다 응답값 최후순 문항이 우선한다', () => {
@@ -467,7 +460,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
       [makeRow({ questionResponses: { q1: 'opt2', q2: '서울' } })],
       ctx,
     );
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q2');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(6).value).toBe('Q2');
   });
 
   it('다중 행에서 순번이 증가하고 null 메타는 폴백된다', () => {
@@ -476,7 +469,6 @@ describe('Raw Data 시트 메타 컬럼', () => {
       [
         makeRow(),
         makeRow({
-          groupValue: null,
           ipHash: null,
           currentStepId: 'group:unknown',
           startedAt: new Date('2026-07-01T01:00:00Z'),
@@ -488,10 +480,9 @@ describe('Raw Data 시트 메타 컬럼', () => {
     // 순번(3열): 시작일시 순 — 데이터 1행(시트 4행)=1, 데이터 2행(시트 5행)=2
     expect(ws.getRow(4).getCell(3).value).toBe(1);
     expect(ws.getRow(5).getCell(3).value).toBe(2);
-    // null 폴백: 그룹(4열) → '공개링크', IP 해시(1열) → '', 응답 없음+stepLabels 미스(7열) → ''
-    expect(ws.getRow(5).getCell(4).value).toBe('공개링크');
+    // null 폴백: IP 해시(1열) → '', 응답 없음+stepLabels 미스(6열) → ''
     expect(ws.getRow(5).getCell(1).value).toBe('');
-    expect(ws.getRow(5).getCell(7).value).toBe('');
+    expect(ws.getRow(5).getCell(6).value).toBe('');
   });
 });
 
@@ -507,7 +498,6 @@ describe('미응답 조사 대상 행', () => {
       startedAt: null,
       completedAt: null,
       totalSeconds: null,
-      groupValue: null,
     });
 
   it('조사 대상 값만 채우고 응답 메타·문항 열은 빈칸이며 상태는 미응답이다', () => {
@@ -516,18 +506,17 @@ describe('미응답 조사 대상 행', () => {
     expect(dr.getCell(1).value).toBe(''); // IP 해시
     expect(dr.getCell(2).value).toBe(7); // 시스템ID
     expect(dr.getCell(3).value).toBe(''); // 순번 — 응답이 아니므로 접수 순번이 없다
-    expect(dr.getCell(4).value).toBe(''); // 조사 대상 그룹 — 익명 응답 표식(공개링크)이 아니다
-    expect(dr.getCell(5).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL
-    expect(dr.getCell(6).value).toBe('미응답');
-    expect([7, 8, 9, 10, 11].map((c) => dr.getCell(c).value)).toEqual(['', '', '', '', '']);
-    expect(dr.getCell(12).value).toBeNull(); // Q1
+    expect(dr.getCell(4).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL
+    expect(dr.getCell(5).value).toBe('미응답');
+    expect([6, 7, 8, 9, 10].map((c) => dr.getCell(c).value)).toEqual(['', '', '', '', '']);
+    expect(dr.getCell(11).value).toBeNull(); // Q1
 
     const lr = wb.getWorksheet('응답 내역')!.getRow(2);
     expect(lr.getCell(2).value).toBe(''); // 순번
-    expect(lr.getCell(4).value).toBe(''); // 접속 단말
-    expect(lr.getCell(5).value).toBe(''); // 브라우저
-    expect(lr.getCell(6).value).toBe('미응답');
-    expect(lr.getCell(9).value).toBe(''); // 소요시간
+    expect(lr.getCell(3).value).toBe(''); // 접속 단말
+    expect(lr.getCell(4).value).toBe(''); // 브라우저
+    expect(lr.getCell(5).value).toBe('미응답');
+    expect(lr.getCell(8).value).toBe(''); // 소요시간
   });
 
   it('미응답 행은 순번이 빈칸이고 응답 행끼리만 접수 순번이 이어진다', () => {
@@ -542,7 +531,7 @@ describe('미응답 조사 대상 행', () => {
     );
     const ws = wb.getWorksheet('Raw Data')!;
     expect([4, 5, 6].map((r) => ws.getRow(r).getCell(3).value)).toEqual([1, '', 2]);
-    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(6).value)).toEqual(['완료', '미응답', '진행중']);
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(5).value)).toEqual(['완료', '미응답', '진행중']);
     const ws1 = wb.getWorksheet('응답 내역')!;
     expect([2, 3, 4].map((r) => ws1.getRow(r).getCell(2).value)).toEqual([1, '', 2]);
   });
@@ -566,7 +555,7 @@ describe('미응답 조사 대상 행', () => {
 });
 
 describe('조사 대상 명단 열', () => {
-  // 명단 열은 조사 대상 그룹(4열) 다음·개별 URL 앞 — 5·6열. 뒤 메타 열이 밀려 문항은 14열부터.
+  // 명단 열은 순번(3열) 다음·개별 URL 앞 — 4·5열. 뒤 메타 열이 밀려 문항은 13열부터.
   const rosterCtx: RawExportContext = {
     ...TEST_CTX,
     contactColumns: [
@@ -575,27 +564,27 @@ describe('조사 대상 명단 열', () => {
     ],
   };
 
-  it('그룹 열 다음·개별 URL 앞에 라벨 헤더가 붙고 1~3행 세로 병합되며 뒤 열이 그만큼 밀린다', () => {
+  it('순번 다음·개별 URL 앞에 라벨 헤더가 붙고 1~3행 세로 병합되며 뒤 열이 그만큼 밀린다', () => {
     const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], rosterCtx);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect([4, 5, 6, 7].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
-      '조사 대상 그룹',
+    expect([3, 4, 5, 6].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+      '순번',
       '기수',
       '성명',
       '개별 URL',
     ]);
-    expect(ws.getRow(1).getCell(13).value).toBe('접속 단말');
-    expect(ws.getRow(1).getCell(14).value).toBe('Q1. 성별');
+    expect(ws.getRow(1).getCell(12).value).toBe('접속 단말');
+    expect(ws.getRow(1).getCell(13).value).toBe('Q1. 성별');
     // 2·3행은 1행 헤더에 세로 병합된 셀 — 변수명 행이 없다 (SPSS 변수가 아니다)
-    for (const ref of ['E2', 'E3', 'F2', 'F3']) {
+    for (const ref of ['D2', 'D3', 'E2', 'E3']) {
       expect(ws.getCell(ref).master.address).toBe(`${ref[0]}1`);
     }
     const merges = ws.model.merges as string[];
+    expect(merges).toContain('D1:D3');
     expect(merges).toContain('E1:E3');
-    expect(merges).toContain('F1:F3');
-    // 같은 질문(Q2) 변수 열 가로 병합도 명단 열만큼 밀린다 (M:N → O:P)
-    expect(merges).toContain('O1:P1');
-    expect(merges).not.toContain('M1:N1');
+    // 같은 질문(Q2) 변수 열 가로 병합도 명단 열만큼 밀린다 (L:M → N:O)
+    expect(merges).toContain('N1:O1');
+    expect(merges).not.toContain('L1:M1');
   });
 
   it('명단 값은 source 키로 채우고 문항 코드값은 그 오른쪽에 온다', () => {
@@ -610,43 +599,42 @@ describe('조사 대상 명단 열', () => {
       rosterCtx,
     );
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
-    expect(dr.getCell(5).value).toBe('15기');
-    expect(dr.getCell(6).value).toBe('홍길동');
-    expect(dr.getCell(7).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL 은 명단 뒤
-    expect(dr.getCell(14).value).toBe(2);
+    expect(dr.getCell(4).value).toBe('15기');
+    expect(dr.getCell(5).value).toBe('홍길동');
+    expect(dr.getCell(6).value).toBe('https://app.example.com/i/abc123defg'); // 개별 URL 은 명단 뒤
+    expect(dr.getCell(13).value).toBe(2);
   });
 
   it('조사 대상이 없는 익명 응답은 전부 빈칸, 값 없는 키만 빈칸이다', () => {
     const wb = generateRawDataWorkbook(
       [radioQ],
       [
-        makeRow({ resid: null, inviteCode: null, groupValue: null }),
+        makeRow({ resid: null, inviteCode: null }),
         makeRow({ id: 'r-2', contactValues: { 'attrs.기수': '15기' } }),
       ],
       rosterCtx,
     );
     const ws = wb.getWorksheet('Raw Data')!;
-    expect([5, 6].map((c) => ws.getRow(4).getCell(c).value)).toEqual(['', '']);
-    expect([5, 6].map((c) => ws.getRow(5).getCell(c).value)).toEqual(['15기', '']);
+    expect([4, 5].map((c) => ws.getRow(4).getCell(c).value)).toEqual(['', '']);
+    expect([4, 5].map((c) => ws.getRow(5).getCell(c).value)).toEqual(['15기', '']);
   });
 
-  it('contactColumns 가 비었거나 없으면 명단 열 없는 열 구성이고, 응답 내역 시트에는 그룹 다음에 같은 열이 붙는다', () => {
+  it('contactColumns 가 비었거나 없으면 명단 열 없는 열 구성이고, 응답 내역 시트에는 순번 다음에 같은 열이 붙는다', () => {
     for (const ctx of [TEST_CTX, { ...TEST_CTX, contactColumns: [] }]) {
       const wb = generateRawDataWorkbook([radioQ], [makeRow()], ctx);
-      expect(wb.getWorksheet('Raw Data')!.getRow(1).getCell(12).value).toBe('Q1. 성별');
-      expect(wb.getWorksheet('응답 내역')!.getRow(1).getCell(4).value).toBe('접속 단말');
+      expect(wb.getWorksheet('Raw Data')!.getRow(1).getCell(11).value).toBe('Q1. 성별');
+      expect(wb.getWorksheet('응답 내역')!.getRow(1).getCell(3).value).toBe('접속 단말');
     }
     const ws1 = generateRawDataWorkbook(
       [radioQ],
       [makeRow({ contactValues: { 'attrs.기수': '15기', 'pii.성명': '홍길동' } })],
       rosterCtx,
     ).getWorksheet('응답 내역')!;
-    expect([4, 5].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
+    expect([3, 4].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
     expect(ws1.getRow(1).values).toEqual([
       undefined,
       '시스템ID',
       '순번',
-      '조사 대상 그룹',
       '기수',
       '성명',
       '접속 단말',
@@ -678,10 +666,10 @@ describe('조사 대상 명단 열', () => {
       rosterCtx,
     );
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
-    expect(dr.getCell(8).value).toBe('미응답');
-    expect(dr.getCell(5).value).toBe('15기');
-    expect(dr.getCell(6).value).toBe('홍길동');
-    expect(dr.getCell(14).value).toBeNull();
+    expect(dr.getCell(7).value).toBe('미응답');
+    expect(dr.getCell(4).value).toBe('15기');
+    expect(dr.getCell(5).value).toBe('홍길동');
+    expect(dr.getCell(13).value).toBeNull();
   });
 
   it('코딩북에는 명단 열이 없다', () => {
