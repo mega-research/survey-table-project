@@ -241,7 +241,7 @@ function BlockCard({
     <section
       className={cn(
         'overflow-hidden rounded-xl border bg-white',
-        isActiveGroup ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200',
+        isActiveGroup ? 'border-blue-500' : 'border-gray-200',
       )}
     >
       {blockName && (
@@ -412,7 +412,7 @@ function JudgementRow({
       onMouseLeave={onHoverEnd}
       className={cn(
         'cursor-pointer border-b border-gray-100 px-4 py-2.5 last:border-0',
-        active && 'bg-amber-50',
+        active && 'bg-blue-50/60',
         invalid && 'bg-red-50 ring-1 ring-inset ring-red-300',
       )}
     >
@@ -478,11 +478,15 @@ function JudgementRow({
   );
 }
 
-/** 눌린 선택지의 색. 필요함은 파랑, 필요하지 않음은 짙은 회색, 의견은 주황. */
+/**
+ * 눌린 선택지의 색. 액센트는 파랑 하나다(DESIGN.md) - 위계는 색이 아니라 채움으로 가른다.
+ * 판정(필요함·필요하지 않음)은 **채움**, 주석(의견)은 **옅은 틴트**. 회색은 토큰 밖 값을
+ * 쓰지 않는다 - 보라 끼 섞인 임의 검정 하나가 판 전체를 탁하게 만든다.
+ */
 const SEG_ON: Record<'need' | 'drop' | 'opinion', string> = {
   need: 'bg-blue-500 text-white',
-  drop: 'bg-[#4b4b52] text-white',
-  opinion: 'bg-amber-600 text-white',
+  drop: 'bg-gray-700 text-white',
+  opinion: 'border border-blue-200 bg-blue-50 text-blue-700',
 };
 
 function Seg({

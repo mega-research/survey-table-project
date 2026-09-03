@@ -114,9 +114,10 @@ export function ResponseDocumentPane({
               onClick={() => onOwnerSelect?.(anchor.ownerId)}
               aria-label="이 영역의 문항으로 이동"
               className={cn(
-                // 채움 없이 테두리만 — 채우면 조사표 글씨를 덮는다
+                // 채움 없이 테두리만 - 채우면 조사표 글씨를 덮는다.
+                // 초점과 맥락은 색이 아니라 굵기로 가른다 - 액센트는 파랑 하나다.
                 'absolute rounded-[3px] transition-colors',
-                isFocus ? 'border-2 border-amber-500' : 'border-2 border-blue-400/60',
+                isFocus ? 'border-2 border-blue-600' : 'border border-blue-300',
                 onOwnerSelect ? 'cursor-pointer' : 'pointer-events-none',
               )}
               style={{
@@ -131,8 +132,8 @@ export function ResponseDocumentPane({
               {labelOf?.(anchor.ownerId) && (
                 <span
                   className={cn(
-                    'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold text-white',
-                    isFocus ? 'right-1 bg-amber-500' : 'left-1 bg-blue-500/80',
+                    'absolute -top-[9px] max-w-[95%] truncate rounded px-1 text-[10px] leading-4 font-semibold',
+                    isFocus ? 'right-1 bg-blue-600 text-white' : 'left-1 bg-blue-100 text-blue-800',
                   )}
                 >
                   {labelOf(anchor.ownerId)}

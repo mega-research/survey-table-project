@@ -523,9 +523,10 @@ function TargetRow({
             aria-label={`${anchorPages[index]}쪽 영역 지우기`}
             className={cn(
               'flex items-center gap-0.5 rounded border px-1 text-[10px] tabular-nums transition-colors',
+              // 액센트는 파랑 하나 - 그룹은 옅게, 문항은 한 단계 진하게
               isGroup
                 ? 'border-blue-200 bg-blue-50 text-blue-700'
-                : 'border-amber-200 bg-amber-50 text-amber-700',
+                : 'border-blue-300 bg-blue-100 text-blue-800',
               'hover:border-red-300 hover:bg-red-50 hover:text-red-700',
             )}
           >
