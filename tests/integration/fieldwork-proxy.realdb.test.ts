@@ -12,7 +12,7 @@
  *  ⑤ **완료 대상 거부** — 대행 세션만 막히고 응답자 경로는 종전 그대로다.
  */
 import { createRouterClient } from '@orpc/server';
-import { eq, inArray } from 'drizzle-orm';
+import { countDistinct, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
@@ -444,6 +444,73 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
         .from(responsesTable)
         .where(eq(responsesTable.id, other!.id));
       expect(row?.fieldworkUserId).toBeNull();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ④-3 집계 — 대행과 직접이 갈린다 (티켓 28, D 검증 게이트)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('귀속 집계', () => {
+    /**
+     * 이 축이 묻는 것은 **쓰기 경로가 끝까지 둘을 가르는가**다. 검수·정산이 「이 설문의
+     * 응답 중 몇 건이 대행인가」를 물을 때 답의 근거가 이 컬럼 하나이고, 그 컬럼은 진입
+     * 분기가 여럿이라(생성·재개·물려받기·버전 이관) 한 곳만 새도 통계가 조용히 틀린다.
+     *
+     * 세는 쿼리는 여기 있지만 **검증 대상은 쿼리가 아니라 그 앞의 경로**다 — 응답을
+     * 목으로 심으면 무엇을 세든 통과하므로, 실제 procedure 로 심는다.
+     *
+     * 운영 콘솔에 이 통계를 보여주는 화면은 아직 없다(티켓 27 이 남긴 것). 그래서 이
+     * 테스트가 오늘은 **데이터가 그 화면을 지탱할 수 있는가**를 대신 지킨다.
+     */
+    it('실사 진입 3건과 응답자 직접 2건이 정확히 갈린다', async () => {
+      await invite(WORKER_ID);
+
+      const proxied: string[] = [];
+      const direct: string[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        const targetId = crypto.randomUUID();
+        const token = crypto.randomUUID();
+        await db.insert(targetsTable).values({
+          id: targetId,
+          surveyId,
+          resid: 2000 + i,
+          isTest: false,
+          attrs: { 이름: `대상${i}` },
+          inviteToken: token,
+          inviteCode: `fpa${RUN}${i}${Math.floor(Math.random() * 100)}`,
+        });
+        // 앞 셋은 실사 세션, 뒤 둘은 응답자 세션 — 같은 표면·같은 입력이고 세션만 다르다.
+        const asProxy = i < 3;
+        await responseClient(asProxy ? WORKER_ID : null).response.createBlank(
+          entryInput(crypto.randomUUID(), token),
+        );
+        (asProxy ? proxied : direct).push(targetId);
+      }
+
+      const [agg] = await db
+        .select({
+          total: countDistinct(responsesTable.id),
+          byFieldwork: sql<number>`count(*) filter (where ${responsesTable.fieldworkUserId} is not null)::int`,
+          byWorker: sql<number>`count(*) filter (where ${responsesTable.fieldworkUserId} = ${WORKER_ID})::int`,
+        })
+        .from(responsesTable)
+        .where(inArray(responsesTable.contactTargetId, [...proxied, ...direct]));
+
+      expect(agg).toEqual({ total: 5, byFieldwork: 3, byWorker: 3 });
+
+      // 어느 행이 대행인지도 정확해야 한다 — 수가 맞아도 짝이 어긋나면 정산이 틀린다.
+      const rows = await db
+        .select({
+          contactTargetId: responsesTable.contactTargetId,
+          fieldworkUserId: responsesTable.fieldworkUserId,
+        })
+        .from(responsesTable)
+        .where(inArray(responsesTable.contactTargetId, [...proxied, ...direct]));
+      for (const r of rows) {
+        const expected = proxied.includes(r.contactTargetId ?? '') ? WORKER_ID : null;
+        expect(r.fieldworkUserId).toBe(expected);
+      }
     });
   });
 
