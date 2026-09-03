@@ -7,14 +7,13 @@ import {
   applyDemandView,
   buildDemandSummary,
   parseDemandSortMode,
-  resolveJudgementShape,
   sortByNeedRate,
 } from './demand-summary';
 
 const group = (id: string, name: string, order: number): QuestionGroup =>
   ({ id, surveyId: 's', name, order }) as QuestionGroup;
 
-/** 판단 항목 — 필요함 / 필요하지 않음 / 의견(기타입력) */
+/** 판단 항목 — 필요함 / 필요하지 않음 */
 const judgement = (id: string, groupId: string | null, order: number): Question =>
   ({
     id,
@@ -27,8 +26,19 @@ const judgement = (id: string, groupId: string | null, order: number): Question 
     options: [
       { id: `${id}-need`, value: '1', label: '필요함' },
       { id: `${id}-drop`, value: '2', label: '필요하지 않음' },
-      { id: `${id}-op`, value: '3', label: '의견', allowTextInput: true },
     ],
+  }) as Question;
+
+/** 문항 의견 — 부모 바로 뒤에 오는 `부모코드_T` 장문형 (ADR 0022). id 는 `<부모>-op`. */
+const opinionQ = (parentId: string, groupId: string | null, order: number): Question =>
+  ({
+    id: `${parentId}-op`,
+    type: 'textarea',
+    title: `${parentId} 의견`,
+    questionCode: `${parentId.toUpperCase()}_T`,
+    required: false,
+    order,
+    ...(groupId ? { groupId } : {}),
   }) as Question;
 
 const freeText = (id: string, groupId: string | null, order: number): Question =>
@@ -46,102 +56,28 @@ const asCurrent =
   (pool: readonly Question[]) => (_versionId: string | null, questionId: string) =>
     pool.find((q) => q.id === questionId) ?? null;
 
-const opinion = (questionId: string, optionId: string, text: string) => ({
-  [questionId]: '3',
-  __optTexts__: { [questionId]: { [optionId]: text } },
-});
-
-describe('resolveJudgementShape', () => {
-  it('선택지 셋 중 하나가 기타입력인 단일선택을 판단 항목으로 본다', () => {
-    expect(resolveJudgementShape(judgement('a1', null, 0))).toEqual({
-      needValue: '1',
-      dropValue: '2',
-      opinionValue: '3',
-      opinionOptionId: 'a1-op',
-    });
-  });
-
-  it('장문형은 판단 항목이 아니다', () => {
-    expect(resolveJudgementShape(freeText('z1', null, 0))).toBeNull();
-  });
-
-  it('선택지가 둘이면 판단 항목이 아니다 — 의견 칸이 없다', () => {
-    const two = judgement('a1', null, 0);
-    expect(
-      resolveJudgementShape({ ...two, options: (two.options ?? []).slice(0, 2) } as Question),
-    ).toBeNull();
-  });
-
-  it('기타입력이 둘이면 어느 쪽이 의견인지 정할 수 없다', () => {
-    const q = judgement('a1', null, 0);
-    const options = (q.options ?? []).map((o) => ({ ...o, allowTextInput: true }));
-    expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
-  });
-
-  it('부정 선택지를 먼저 배치해도 필요/불필요가 뒤집히지 않는다', () => {
-    // 순서로 정하면 기획자의 배치 하나에 필요율이 조용히 반대로 나온다
-    const q = judgement('a1', null, 0);
-    const options = [
-      { id: 'x', value: '2', label: '필요하지 않음' },
-      { id: 'y', value: '1', label: '필요함' },
-      { id: 'z', value: '3', label: '의견', allowTextInput: true },
-    ];
-    expect(resolveJudgementShape({ ...q, options } as Question)).toEqual({
-      needValue: '1',
-      dropValue: '2',
-      opinionValue: '3',
-      opinionOptionId: 'z',
-    });
-  });
-
-  it.each([['불필요'], ['필요 없음'], ['필요하지않음']])(
-    '부정 표기 "%s" 도 부정으로 읽는다',
-    (label) => {
-      const q = judgement('a1', null, 0);
-      const options = [
-        { id: 'x', value: '1', label: '필요함' },
-        { id: 'y', value: '2', label },
-        { id: 'z', value: '3', label: '의견', allowTextInput: true },
-      ];
-      expect(resolveJudgementShape({ ...q, options } as Question)?.dropValue).toBe('2');
-    },
-  );
-
-  it('어느 쪽이 필요함인지 가릴 수 없으면 null 이다 — 추측하지 않는다', () => {
-    // 빈 칸이 반대로 계산된 숫자보다 낫다 (ADR 0020 이 경계하는 조용한 오류)
-    const q = judgement('a1', null, 0);
-    const options = [
-      { id: 'x', value: '1', label: '유지' },
-      { id: 'y', value: '2', label: '삭제' },
-      { id: 'z', value: '3', label: '의견', allowTextInput: true },
-    ];
-    expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
-  });
-
-  it('둘 다 부정으로 읽히면 가릴 수 없다', () => {
-    const q = judgement('a1', null, 0);
-    const options = [
-      { id: 'x', value: '1', label: '불필요' },
-      { id: 'y', value: '2', label: '필요하지 않음' },
-      { id: 'z', value: '3', label: '의견', allowTextInput: true },
-    ];
-    expect(resolveJudgementShape({ ...q, options } as Question)).toBeNull();
-  });
-});
-
 describe('buildDemandSummary', () => {
   const groups = [group('g1', 'A. 일반', 0), group('g2', 'B. 경영', 1)];
   const questions = [
     judgement('a1', 'g1', 0),
-    judgement('a2', 'g1', 1),
+    opinionQ('a1', 'g1', 1),
+    judgement('a2', 'g1', 2),
     judgement('b1', 'g2', 0),
     freeText('z1', 'g2', 1),
   ];
 
-  it('문항 하나가 한 줄이다 — 그룹 소계 행을 넣지 않는다', () => {
+  it('판단 항목 하나가 한 줄이다 — 의견 짝 문항은 자기 행을 갖지 않는다', () => {
+    // 그룹 소계 행도 넣지 않는다. 의견은 부모 행의 의견 칸으로 접힌다.
     const rows = buildDemandSummary(questions, groups, [], asCurrent(questions));
-    expect(rows).toHaveLength(questions.length);
     expect(rows.map((r) => r.questionId)).toEqual(['a1', 'a2', 'b1', 'z1']);
+  });
+
+  it('짝이 안 맞는 _T 는 일반 문항으로 자기 행에 남는다 — 조용히 접지 않는다', () => {
+    // 코드는 맞지만 부모 바로 뒤가 아니다. 관리자가 순서를 옮긴 경우다.
+    const shifted = [judgement('a1', 'g1', 0), judgement('a2', 'g1', 1), opinionQ('a1', 'g1', 2)];
+    const rows = buildDemandSummary(shifted, groups, [], asCurrent(shifted));
+    expect(rows.map((r) => r.questionId)).toEqual(['a1', 'a2', 'a1-op']);
+    expect(rows[2]?.needCount).toBeNull();
   });
 
   it('행 순서는 조사표 순서다 — 그룹 순서를 먼저 태운다', () => {
@@ -190,7 +126,7 @@ describe('buildDemandSummary', () => {
     expect(row.needRate).toBeNull();
   });
 
-  it('3지선다 radio 가 아닌 문항은 행을 남기고 비율 칸만 비운다', () => {
+  it('판단 항목이 아닌 문항은 행을 남기고 비율 칸만 비운다', () => {
     // 표에서 빼면 조사표 순서가 끊겨 어디를 보는지 잃는다
     const row = buildDemandSummary(questions, groups, [answer({ z1: '자유 서술' })], asCurrent(questions))[3]!;
     expect(row.questionId).toBe('z1');
@@ -199,11 +135,11 @@ describe('buildDemandSummary', () => {
     expect(row.needRate).toBeNull();
   });
 
-  describe('의견은 옵션 텍스트 사이드카에서 읽는다', () => {
+  describe('의견은 짝 문항의 답에서 읽는다', () => {
     it('서술이 있는 의견만 센다', () => {
       const responses = [
-        answer(opinion('a1', 'a1-op', 'B4 와 겹칩니다')),
-        answer(opinion('a1', 'a1-op', '표본이 작아 무의미')),
+        answer({ a1: '1', 'a1-op': 'B4 와 겹칩니다' }),
+        answer({ a1: '2', 'a1-op': '표본이 작아 무의미' }),
         answer({ a1: '1' }),
       ];
       const row = buildDemandSummary(questions, groups, responses, asCurrent(questions))[0]!;
@@ -211,43 +147,34 @@ describe('buildDemandSummary', () => {
       expect(row.opinions).toEqual(['B4 와 겹칩니다', '표본이 작아 무의미']);
     });
 
-    it('의견을 골라놓고 서술이 비면 답으로 치지 않는다', () => {
-      // 응답 화면의 판정과 같은 규칙 — 분모에도 들어가지 않는다
-      const responses = [
-        answer(opinion('a1', 'a1-op', '   ')),
-        answer({ a1: '3' }),
-        answer({ a1: '1' }),
-      ];
-      const row = buildDemandSummary(questions, groups, responses, asCurrent(questions))[0]!;
-      expect(row.opinionCount).toBe(0);
-      expect(row.needRate).toBeCloseTo(100, 6);
-    });
-
-    it('사이드카가 없거나 모양이 다르면 건너뛴다 — 예외를 던지지 않는다', () => {
-      const responses = [
-        answer({ a1: '3' }),
-        answer({ a1: '3', __optTexts__: 'not-an-object' }),
-        answer({ a1: '3', __optTexts__: { a1: 'not-an-object' } }),
-      ];
+    it('공백만 있는 서술은 의견이 아니다', () => {
+      const responses = [answer({ a1: '1', 'a1-op': '   ' }), answer({ a1: '1', 'a1-op': '' })];
       const row = buildDemandSummary(questions, groups, responses, asCurrent(questions))[0]!;
       expect(row.opinionCount).toBe(0);
     });
 
-    it('사이드카 예약 키는 문항 행이 되지 않는다', () => {
-      // 실존 질문 id 가 아니므로 표에 줄이 생기면 안 된다
-      const rows = buildDemandSummary(questions, groups, [answer(opinion('a1', 'a1-op', '겹침'))], asCurrent(questions));
-      expect(rows.map((r) => r.questionId)).not.toContain('__optTexts__');
-    });
-
-    it('의견도 분모에 들어간다', () => {
+    it('의견은 판정과 직교한다 — 분모에 들어가지 않는다', () => {
+      // 예전엔 의견이 세 번째 판정값이라 분모에만 들어가 필요율을 끌어내렸다.
+      // 지금은 필요함을 고른 채로 의견을 적으므로 필요율은 판정만 본다.
       const responses = [
-        answer({ a1: '1' }),
-        answer({ a1: '2' }),
-        answer(opinion('a1', 'a1-op', '겹침')),
-        answer(opinion('a1', 'a1-op', '축소 필요')),
+        answer({ a1: '1', 'a1-op': '겹침' }),
+        answer({ a1: '2', 'a1-op': '축소 필요' }),
       ];
       const row = buildDemandSummary(questions, groups, responses, asCurrent(questions))[0]!;
-      expect(row.needRate).toBeCloseTo(25, 6);
+      expect(row).toMatchObject({ needCount: 1, dropCount: 1, opinionCount: 2 });
+      expect(row.needRate).toBe(50);
+    });
+
+    it('판정 없이 의견만 적은 응답은 의견으로만 센다', () => {
+      // 화면은 판정을 필수로 막지만, 옛 데이터·관리자 편집으로 들어올 수 있다.
+      const row = buildDemandSummary(questions, groups, [answer({ 'a1-op': '의견만' })], asCurrent(questions))[0]!;
+      expect(row).toMatchObject({ needCount: 0, dropCount: 0, opinionCount: 1, needRate: null });
+    });
+
+    it('서술이 문자열이 아니면 건너뛴다 — 예외를 던지지 않는다', () => {
+      const responses = [answer({ a1: '1', 'a1-op': 12 }), answer({ a1: '1', 'a1-op': { x: 1 } })];
+      const row = buildDemandSummary(questions, groups, responses, asCurrent(questions))[0]!;
+      expect(row.opinionCount).toBe(0);
     });
   });
 });
@@ -259,21 +186,20 @@ describe('buildDemandSummary — 누적 집계 (여러 배포판)', () => {
     ({ ...answer(questionResponses), versionId }) as SurveyResponse;
 
   /** 선택지 값을 바꿔 발번한 버전. 문항 id 는 버전을 가로질러 그대로다. */
-  const revalued = (id: string, need: string, drop: string, op: string): Question =>
+  const revalued = (id: string, need: string, drop: string): Question =>
     ({
       ...judgement(id, 'g1', 0),
       options: [
         { id: `${id}-need`, value: need, label: '필요함' },
         { id: `${id}-drop`, value: drop, label: '필요하지 않음' },
-        { id: `${id}-op`, value: op, label: '의견', allowTextInput: true },
       ],
     }) as Question;
 
-  const current = [judgement('a1', 'g1', 0)];
+  const current = [judgement('a1', 'g1', 0), opinionQ('a1', 'g1', 1)];
   const groups = [group('g1', 'A. 일반', 0)];
 
   const twoVersions = (versionId: string | null, questionId: string) => {
-    if (versionId === 'v1') return revalued('a1', 'A', 'B', 'C');
+    if (versionId === 'v1') return questionId === 'a1' ? revalued('a1', 'A', 'B') : null;
     if (versionId === 'v2') return current.find((q) => q.id === questionId) ?? null;
     return null;
   };
@@ -298,7 +224,7 @@ describe('buildDemandSummary — 누적 집계 (여러 배포판)', () => {
     // 필요하지 않음 2건이 필요함으로 뒤집힌다.
     const flipped = (versionId: string | null, questionId: string) =>
       versionId === 'v1'
-        ? revalued('a1', '2', '1', '3')
+        ? revalued('a1', '2', '1')
         : (current.find((q) => q.id === questionId) ?? null);
     const [row] = buildDemandSummary(
       current,
@@ -309,18 +235,40 @@ describe('buildDemandSummary — 누적 집계 (여러 배포판)', () => {
     expect(row).toMatchObject({ needCount: 1, dropCount: 2 });
   });
 
-  it('의견 서술도 그 버전의 선택지 id 로 읽는다', () => {
+  it('의견은 버전과 무관하게 짝 문항 id 로 읽는다', () => {
+    // 짝 문항도 평범한 문항이라 id 가 버전을 가로질러 유지된다. 선택지 값처럼
+    // 버전마다 뜻이 바뀌는 것이 아니므로 as-of 를 거치지 않고 바로 읽는다.
     const [row] = buildDemandSummary(
       current,
       groups,
-      [
-        { ...withVersion('v1', { a1: 'C' }), questionResponses: { a1: 'C', __optTexts__: { a1: { 'a1-op': '옛 의견' } } } } as SurveyResponse,
-        { ...withVersion('v2', {}), questionResponses: opinion('a1', 'a1-op', '지금 의견') } as SurveyResponse,
-      ],
+      [withVersion('v1', { a1: 'A', 'a1-op': '옛 의견' }), withVersion('v2', { a1: '1', 'a1-op': '지금 의견' })],
       twoVersions,
     );
     expect(row?.opinions).toEqual(['옛 의견', '지금 의견']);
     expect(row?.opinionCount).toBe(2);
+  });
+
+  it('옛 3지선다 버전의 답은 해석 불가로 센다 — 옛 규칙으로 조용히 읽지 않는다', () => {
+    // 의견이 세 번째 판정값이던 시절의 응답. 그 모양은 더 이상 판단 항목이 아니므로
+    // 필요/불필요 어느 쪽으로도 세지 않고 uncounted 에 남긴다.
+    const legacy = (versionId: string | null, questionId: string) =>
+      versionId === 'old'
+        ? ({
+            ...judgement('a1', 'g1', 0),
+            options: [
+              { id: 'x', value: '1', label: '필요함' },
+              { id: 'y', value: '2', label: '필요하지 않음' },
+              { id: 'z', value: '3', label: '의견', allowTextInput: true },
+            ],
+          } as Question)
+        : (current.find((q) => q.id === questionId) ?? null);
+    const [row] = buildDemandSummary(
+      current,
+      groups,
+      [withVersion('old', { a1: '1' }), withVersion('old', { a1: '3' }), withVersion('v2', { a1: '1' })],
+      legacy,
+    );
+    expect(row).toMatchObject({ needCount: 1, dropCount: 0, uncountedCount: 2 });
   });
 
   it('해석할 수 없는 버전의 답은 버리지 않고 uncounted 로 센다', () => {
