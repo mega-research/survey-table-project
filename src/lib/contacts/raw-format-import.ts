@@ -21,6 +21,7 @@
  * 문항에도 변수가 생겨 내보내기가 오염된다.
  */
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 
@@ -37,7 +38,22 @@ const SKIP_BY_RULE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
 ]);
 
 /** 지금 되돌릴 수 있는 열 종류. 나머지는 보고하고 건너뛴다. */
-const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set(['single', 'text']);
+const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
+  'single',
+  'text',
+  'checkbox-item',
+  'multiselect',
+  'choice-group',
+  'choice-group-item',
+  'option-text',
+  'other-text',
+]);
+
+/**
+ * 응답 저장 형태의 루트 사이드카에 담기는 열 종류 — 문항 답이 아니다.
+ * 저장 경계가 `__` 접두 키를 따로 다루므로 여기서도 문항 답과 갈라 담는다.
+ */
+const SIDECAR_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set(['option-text', 'other-text']);
 
 export interface RawFormatImportInput {
   /** 헤더 행 격자 — 3행이어야 한다. 컬럼 인덱스 순서 그대로. */
@@ -82,17 +98,112 @@ export function looksLikeRawFormat(
   return varRow.some((text) => known.has(text.trim()));
 }
 
+/**
+ * 선택지 저장값. 응답 화면이 쓰는 것은 `option.value` 다 — 표에서 보기를 끌어오는 문항은
+ * value 가 곧 셀 id 라 같은 규칙으로 맞는다. 코드를 그대로 넣으면 영구 미스매치가 된다.
+ */
+function storedValueOf(option: { id: string; value?: string | undefined }): string {
+  return option.value || option.id;
+}
+
 /** 단일선택 코드값을 응답 저장값으로 되돌린다. 맞는 선택지가 없으면 undefined. */
 function invertSingleChoice(question: Question, raw: string): unknown {
   const options = resolveChoiceOptions(question);
   const code = Number(raw);
   if (!Number.isFinite(code)) return undefined;
-  const index = options.findIndex((option, idx) => (option.spssNumericCode ?? idx + 1) === code);
-  const found = options[index];
-  if (!found) return undefined;
-  // 응답 저장값은 option.value 다. 표에서 보기를 끌어오는 문항은 value 가 곧 셀 id 라
-  // 같은 규칙으로 맞는다 — 코드를 그대로 넣으면 영구 미스매치가 된다.
-  return found.value || found.id;
+  const found = options.find((option, idx) => (option.spssNumericCode ?? idx + 1) === code);
+  return found ? storedValueOf(found) : undefined;
+}
+
+/**
+ * 복수선택을 되돌린다. 내보내기는 보기마다 열 하나를 내고 선택된 것만 코드값을 넣으므로,
+ * **값이 있는 열이 곧 선택**이다. 코드값 자체는 보지 않는다 — 열이 이미 어느 보기인지
+ * 말하고 있고, 사람이 파일에서 1 을 다른 숫자로 바꿔 적어도 뜻은 같다.
+ */
+function invertCheckboxItems(
+  question: Question,
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+): unknown {
+  const options = resolveChoiceOptions(question);
+  const selected: string[] = [];
+  for (const { column, raw } of cells) {
+    if (!raw) continue;
+    const index = column.optionIndex;
+    if (index == null) continue;
+    const option = options[index];
+    if (!option) continue;
+    selected.push(storedValueOf(option));
+  }
+  return selected.length > 0 ? selected : undefined;
+}
+
+/** 다단계 선택. 내보내기가 밑줄로 이어 붙이므로 되돌릴 때 그대로 가른다. */
+function invertMultiselect(raw: string): unknown {
+  const parts = raw.split('_').filter((part) => part.length > 0);
+  return parts.length > 0 ? parts : undefined;
+}
+
+/**
+ * 보기 그룹 문항을 되돌린다. 저장 형태는 그룹키 → 선택(단일은 셀 id, 복수는 셀 id 배열).
+ * 코드 → 셀 id 는 내보내기가 쓴 맵을 뒤집어 얻는다.
+ */
+function invertChoiceGroups(
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+): unknown {
+  const answer: Record<string, string | string[]> = {};
+  for (const { column, raw } of cells) {
+    if (!raw) continue;
+    const groupKey = column.choiceGroupKey;
+    if (!groupKey) continue;
+    if (column.type === 'choice-group') {
+      const map = column.choiceGroupCellValueMap ?? {};
+      const code = Number(raw);
+      const cellId = Object.keys(map).find((id) => map[id] === code);
+      if (cellId) answer[groupKey] = cellId;
+      continue;
+    }
+    // choice-group-item — 값이 있는 열이 곧 선택이다 (복수선택과 같은 규칙).
+    const cellId = column.choiceGroupMemberCellId;
+    if (!cellId) continue;
+    const bucket = answer[groupKey];
+    if (Array.isArray(bucket)) bucket.push(cellId);
+    else answer[groupKey] = [cellId];
+  }
+  return Object.keys(answer).length > 0 ? answer : undefined;
+}
+
+/**
+ * 사이드카 텍스트가 어느 보기에 붙는지. `option-text` 는 열 정의가 보기 id 를 들고 있고,
+ * `other-text` 는 기타 보기 하나뿐이라 그 보기를 찾아 쓴다.
+ */
+function resolveSidecarOptionId(question: Question, column: SPSSExportColumn): string | undefined {
+  if (column.type === 'option-text') return column.optionId;
+  const options = resolveChoiceOptions(question);
+  return options.find((option) => option.id === 'other-option')?.id;
+}
+
+/** 문항 하나에 붙은 열들을 응답 저장값 하나로 되돌린다. 되돌릴 수 없으면 undefined. */
+function invertQuestion(
+  question: Question,
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+): unknown {
+  const first = cells[0];
+  if (!first) return undefined;
+  switch (first.column.type) {
+    case 'single':
+      return invertSingleChoice(question, first.raw);
+    case 'text':
+      return first.raw;
+    case 'multiselect':
+      return invertMultiselect(first.raw);
+    case 'checkbox-item':
+      return invertCheckboxItems(question, cells);
+    case 'choice-group':
+    case 'choice-group-item':
+      return invertChoiceGroups(cells);
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -136,6 +247,14 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
     mapped.push({ columnIndex, column, question });
   });
 
+  // 한 문항이 여러 열로 나가는 종류(복수선택·보기 그룹)가 있어 문항 단위로 묶어 되돌린다.
+  const byQuestion = new Map<string, typeof mapped>();
+  for (const entry of mapped) {
+    const bucket = byQuestion.get(entry.question.id);
+    if (bucket) bucket.push(entry);
+    else byQuestion.set(entry.question.id, [entry]);
+  }
+
   const byMatchValue = new Map<string, Record<string, unknown>>();
   const seenMatchValues = new Set<string>();
   const duplicateMatchValues = new Set<string>();
@@ -151,16 +270,37 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
     seenMatchValues.add(matchValue);
 
     const answers: Record<string, unknown> = {};
-    for (const { columnIndex, column, question } of mapped) {
-      const cell = (row[columnIndex] ?? '').trim();
-      // 빈칸은 키를 만들지 않는다.
-      if (!cell) continue;
-      const value = column.type === 'single' ? invertSingleChoice(question, cell) : cell;
+    const optTexts: Record<string, Record<string, string>> = {};
+
+    for (const [questionId, entries] of byQuestion) {
+      const question = entries[0]?.question;
+      if (!question) continue;
+      // 빈칸은 값이 아니다 — 여기서 한 번 걸러 아래 역변환기가 빈칸을 보지 않게 한다.
+      const cells = entries
+        .map((entry) => ({ column: entry.column, raw: (row[entry.columnIndex] ?? '').trim() }))
+        .filter((cell) => cell.raw.length > 0);
+      if (cells.length === 0) continue;
+
+      // 사이드카는 문항 답이 아니라 루트 사이드카로 간다.
+      for (const cell of cells) {
+        if (!SIDECAR_TYPES.has(cell.column.type)) continue;
+        const optionId = resolveSidecarOptionId(question, cell.column);
+        if (!optionId) continue;
+        const bucket = optTexts[questionId] ?? {};
+        bucket[optionId] = cell.raw;
+        optTexts[questionId] = bucket;
+      }
+
+      const answerCells = cells.filter((cell) => !SIDECAR_TYPES.has(cell.column.type));
+      if (answerCells.length === 0) continue;
+      const value = invertQuestion(question, answerCells);
       if (value === undefined) continue;
-      answers[question.id] = value;
+      answers[questionId] = value;
     }
 
-    if (Object.keys(answers).length === 0) continue;
+    if (Object.keys(optTexts).length > 0) answers[OPT_TEXTS_KEY] = optTexts;
+    // 사이드카만 있고 문항 답이 하나도 없으면 담지 않는다 — 붙일 답이 없다.
+    if (Object.keys(answers).filter((key) => !key.startsWith('__')).length === 0) continue;
     byMatchValue.set(matchValue, answers);
   }
 
