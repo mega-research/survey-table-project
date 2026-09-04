@@ -48,6 +48,7 @@ function question(id: string, questionCode: string, title: string) {
 /** 2025 실데이터 드라이런의 세 판정 — 제목 동률로 멈춘 unmapped, 코드 없는 값 후보, 코드 충돌 값 후보. */
 const preview: SuggestPriorAnswerMappingResult = {
   sheetNames: ['응답자만'],
+  looksLikeRawFormat: false,
   headerRows: [
     ['AQ1-A.', 'IQ1.', 'AQ1-1.'],
     ['', '(창업의향)', '(진학계획)'],

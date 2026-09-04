@@ -803,6 +803,87 @@ describe('suggestPriorAnswerImportMapping — 표본 범위는 적재와 같다'
   });
 });
 
+describe('importPriorAnswers — Raw 양식', () => {
+  beforeEach(() => {
+    h.scope = 'real';
+    h.insertCalls = 0;
+    h.insertedValues = [];
+    h.surveyConfig = null;
+    h.contactScheme = null;
+    h.questionRows = [
+      {
+        id: 'q-single',
+        type: 'radio',
+        title: '진로',
+        order: 1,
+        questionCode: 'AQ1',
+        options: [
+          { id: 'o1', value: 'v1', label: '진학' },
+          { id: 'o2', value: 'v2', label: '취업' },
+        ],
+      },
+    ];
+    // 1행 제목 / 2행 라벨 / 3행 변수명. 왼쪽 두 칸은 메타 열(3행 빈칸).
+    h.headerRows = [
+      ['시스템ID', '순번', '진로'],
+      ['', '', ''],
+      ['', '', 'AQ1'],
+    ];
+    h.parsedRows = [['7', '', '2']];
+    h.targetRows = [{ id: 'target-7', matchValue: '7' }];
+  });
+
+  function rawInput(overrides: Record<string, unknown> = {}) {
+    return baseInput({ format: 'raw', headerRowCount: 3, mapping: {}, ...overrides });
+  }
+
+  it('3행 변수명만으로 단일선택 지난 답을 붙인다 — 이어주기 없이', async () => {
+    const result = await importPriorAnswers(rawInput());
+    expect(result.matched).toBe(1);
+    expect(h.insertedValues).toEqual([
+      { contactTargetId: 'target-7', answers: { 'q-single': 'v2' } },
+    ]);
+  });
+
+  it('변동 확인 열은 값이 있어도 되읽지 않고 보고한다', async () => {
+    h.headerRows = [
+      ['시스템ID', '순번', '진로', '변동'],
+      ['', '', '', ''],
+      ['', '', 'AQ1', 'AQ1_CHG'],
+    ];
+    h.parsedRows = [['7', '', '2', '1']];
+    const result = await importPriorAnswers(rawInput());
+    expect(h.insertedValues).toEqual([
+      { contactTargetId: 'target-7', answers: { 'q-single': 'v2' } },
+    ]);
+    expect(result.skippedByRuleVarNames).toContain('AQ1_CHG');
+  });
+
+  it('이 설문의 변수명이 아닌 열은 목록으로 보고한다', async () => {
+    h.headerRows = [
+      ['시스템ID', '순번', '진로', '남의 열'],
+      ['', '', '', ''],
+      ['', '', 'AQ1', 'ZZ9'],
+    ];
+    h.parsedRows = [['7', '', '2', 'x']];
+    const result = await importPriorAnswers(rawInput());
+    expect(result.unknownVarNames).toEqual(['ZZ9']);
+  });
+
+  it('빈칸은 키를 만들지 않아 그 대상이 통째로 빠진다', async () => {
+    h.parsedRows = [['7', '', '   ']];
+    const result = await importPriorAnswers(rawInput());
+    expect(result.matched).toBe(0);
+    expect(h.insertCalls).toBe(0);
+  });
+
+  it('dryRun 이면 계산만 하고 쓰지 않는다', async () => {
+    const result = await importPriorAnswers(rawInput({ dryRun: true }));
+    expect(result.matched).toBe(1);
+    expect(h.insertCalls).toBe(0);
+  });
+});
+
 describe('listPriorAnswerMatchFields', () => {
   beforeEach(() => {
     h.scope = 'real';

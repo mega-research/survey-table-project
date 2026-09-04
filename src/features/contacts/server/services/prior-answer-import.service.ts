@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import type { PriorAnswerImportConfig } from '@/db/schema/schema-types';
 import { questions as questionsTable, surveys } from '@/db/schema/surveys';
+import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
   type BlockSlot,
@@ -19,6 +20,11 @@ import {
   suggestBlockMapping,
 } from '@/lib/contacts/prior-answer-blocks';
 import { buildPriorAnswerRecords } from '@/lib/contacts/prior-answer-import';
+import {
+  RAW_FORMAT_HEADER_ROWS,
+  buildRawFormatRecords,
+  looksLikeRawFormat,
+} from '@/lib/contacts/raw-format-import';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { encryptAnswerValue } from '@/lib/crypto/response-pii';
 import { attrsKeyOf, normalizeContactColumnScheme } from '@/lib/operations/contacts';
@@ -111,6 +117,19 @@ async function loadQuestions(surveyId: string): Promise<Question[]> {
     orderBy: [questionsTable.order],
   });
   return normalizeQuestions(rows);
+}
+
+/**
+ * 되읽기용 내보내기 열 정의. 내보낼 때와 **같은 함수**로 만들어야 왕복이 맞는다.
+ *
+ * 변동 확인 변수는 문항 전부를 대상으로 만들어 둔다 — 이 열들은 되읽지 않지만, 정의에
+ * 없으면 파일의 `_CHG` 열이 "모르는 변수명"으로 보고돼 화면이 잡음으로 덮인다.
+ * 내보내기 경로와 달리 여기서는 이 집합이 출력에 영향을 주지 않는다.
+ */
+function buildImportColumns(questions: Question[]) {
+  return generateSPSSColumns(questions, {
+    changeConfirmQuestionIds: new Set(questions.map((q) => q.id)),
+  });
 }
 
 /** 값 이어주기 드롭다운에 쓸 이 문항의 선택지. 표 문항은 칸마다 달라 여기서 내지 않는다. */
@@ -298,6 +317,12 @@ export async function suggestPriorAnswerImportMapping(
 
   return {
     sheetNames: preview.sheetNames,
+    // 우리 Raw 양식인지 추측한다. 헤더를 몇 행으로 읽었든 시트 3행을 보므로, 담당자가
+    // 헤더 1행으로 열어 둔 상태에서도 알려줄 수 있다.
+    looksLikeRawFormat: looksLikeRawFormat(
+      [...preview.headerRows, ...preview.rows].slice(0, RAW_FORMAT_HEADER_ROWS),
+      buildImportColumns(questions),
+    ),
     headerRows: preview.headerRows,
     // 화면에는 표본 몇 행만 돌려준다 — 응답 크기와 마법사 표는 그대로다.
     rows: preview.rows.slice(0, PREVIEW_ROWS),
@@ -413,15 +438,36 @@ export async function importPriorAnswers(
     ];
   });
 
-  const parsed = buildPriorAnswerRecords({
-    rows,
-    matchColumnIndex: input.matchColumnIndex,
-    assignments,
-    questions,
-    // 이번 화면에서 이어준 대응이 보관된 것보다 우선한다 — 미리보기가 저장 없이도
-    // 결과에 반영돼야 담당자가 고치고 바로 다시 볼 수 있다.
-    valueAliases: mergeAliases(config.valueAliases, input.valueAliases),
-  });
+  const isRawFormat = input.format === 'raw';
+  // raw 양식은 열 이어주기가 없다 — 3행 변수명이 곧 짝이다.
+  const rawParsed = isRawFormat
+    ? buildRawFormatRecords({
+        headerRows: preview.headerRows,
+        rows,
+        matchColumnIndex: input.matchColumnIndex,
+        columns: buildImportColumns(questions),
+        questions,
+      })
+    : null;
+  const mappedParsed = isRawFormat
+    ? null
+    : buildPriorAnswerRecords({
+        rows,
+        matchColumnIndex: input.matchColumnIndex,
+        assignments,
+        questions,
+        // 이번 화면에서 이어준 대응이 보관된 것보다 우선한다 — 미리보기가 저장 없이도
+        // 결과에 반영돼야 담당자가 고치고 바로 다시 볼 수 있다.
+        valueAliases: mergeAliases(config.valueAliases, input.valueAliases),
+      });
+  const parsed = {
+    records: rawParsed?.records ?? mappedParsed?.records ?? [],
+    emptyMatchRows: rawParsed?.emptyMatchRows ?? mappedParsed?.emptyMatchRows ?? 0,
+    duplicateMatchValues:
+      rawParsed?.duplicateMatchValues ?? mappedParsed?.duplicateMatchValues ?? [],
+    optionMismatches: mappedParsed?.optionMismatches ?? [],
+    unsupportedQuestionIds: mappedParsed?.unsupportedQuestionIds ?? [],
+  };
 
   const scope = await loadOperationsDataScope(input.surveyId);
   const isTest = scope === 'test';
@@ -530,6 +576,9 @@ export async function importPriorAnswers(
     ambiguousMatchValues: ambiguousMatchValues.slice(0, MAX_UNMATCHED_SAMPLES),
     skippedAmbiguous: parsed.duplicateMatchValues.length + ambiguousMatchValues.length,
     unmappedColumns,
+    unknownVarNames: rawParsed?.unknownVarNames.slice(0, MAX_UNMATCHED_SAMPLES) ?? [],
+    skippedByRuleVarNames: rawParsed?.skippedByRuleVarNames ?? [],
+    unsupportedVarNames: rawParsed?.unsupportedVarNames.slice(0, MAX_UNMATCHED_SAMPLES) ?? [],
     questionsWithoutValues: [...mappedQuestionIds].filter((id) => !filledQuestionIds.has(id)),
     unsupportedQuestionIds: parsed.unsupportedQuestionIds,
     optionMismatches: parsed.optionMismatches,
