@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
+import {
+  collectPriorAnswerPrefills,
+  dropHiddenUntouchedPriorAnswers,
+} from '@/lib/survey/prior-answer-prefill';
 import type { Question } from '@/types/survey';
 
 function q(id: string, overrides: Partial<Question> = {}): Question {
@@ -84,5 +87,56 @@ describe('collectPriorAnswerPrefills', () => {
       {},
     );
     expect(entries).toEqual([{ questionId: 'q1', value: 'A' }]);
+  });
+});
+
+describe('dropHiddenUntouchedPriorAnswers', () => {
+  const visible = new Set(['q1']);
+
+  it('이월 응답이 없으면 원본을 그대로 돌려준다', () => {
+    const responses = { q1: 'a' };
+    expect(dropHiddenUntouchedPriorAnswers(responses, visible, null)).toBe(responses);
+  });
+
+  it('숨겨진 문항의 손대지 않은 이월 값을 걷어낸다', () => {
+    const result = dropHiddenUntouchedPriorAnswers({ q1: '해당없음', q2: '작년 값' }, visible, {
+      q1: '해당있음',
+      q2: '작년 값',
+    });
+    expect(result).toEqual({ q1: '해당없음' });
+  });
+
+  it('숨겨졌어도 응답자가 고친 값은 남긴다', () => {
+    const result = dropHiddenUntouchedPriorAnswers(
+      { q1: '해당없음', q2: '올해 고친 값' },
+      visible,
+      { q1: '해당있음', q2: '작년 값' },
+    );
+    expect(result).toEqual({ q1: '해당없음', q2: '올해 고친 값' });
+  });
+
+  it('표시되는 문항은 이월 값과 같아도 남긴다', () => {
+    const responses = { q1: '작년 값' };
+    const result = dropHiddenUntouchedPriorAnswers(responses, visible, { q1: '작년 값' });
+    expect(result).toBe(responses);
+  });
+
+  it('키 순서가 달라도 같은 값으로 본다', () => {
+    const result = dropHiddenUntouchedPriorAnswers({ q2: { b: 2, a: 1 } }, new Set<string>(), {
+      q2: { a: 1, b: 2 },
+    });
+    expect(result).toEqual({});
+  });
+
+  it('사이드카 키는 문항이 아니라 건드리지 않는다', () => {
+    const responses = { __optTexts__: { o1: 'x' }, __changeConfirm__: { q2: 'same' } };
+    expect(dropHiddenUntouchedPriorAnswers(responses, new Set<string>(), { q2: 'v' })).toBe(
+      responses,
+    );
+  });
+
+  it('걷어낼 것이 없으면 같은 참조를 돌려준다', () => {
+    const responses = { q1: 'a', q2: '내 값' };
+    expect(dropHiddenUntouchedPriorAnswers(responses, visible, { q2: '작년' })).toBe(responses);
   });
 });

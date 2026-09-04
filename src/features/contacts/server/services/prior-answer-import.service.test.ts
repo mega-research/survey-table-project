@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 
+import { extractRawSql } from '../../../../../tests/integration/_helpers/result-code-mock';
 import {
   PREVIEW_ROWS,
   SUGGEST_SAMPLE_ROWS,
@@ -254,6 +255,13 @@ describe('importPriorAnswers', () => {
     ]);
   });
 
+  it('명단 쪽 값의 앞뒤 공백은 대조에서 무시한다', async () => {
+    // 명단 업로드는 attrs 값을 가공 없이 넣는다. 파일 쪽만 trim 하면 공백 하나로
+    // "명단에서 찾지 못한 값"이 되고 담당자가 원인을 알 단서가 없다.
+    await importPriorAnswers(baseInput());
+    expect(extractRawSql(h.targetWhere)).toContain('btrim');
+  });
+
   it('명단에 같은 대조값이 둘 이상이면 붙이지 않고 그 값을 보고한다', async () => {
     // attrs 는 유일함이 보장되지 않는다. 잘못 붙으면 응답 화면에 남의 지난 답이 보인다.
     h.targetRows = [
@@ -276,6 +284,8 @@ describe('importPriorAnswers', () => {
     expect(result.matched).toBe(0);
     expect(result.duplicateMatchValues).toEqual(['7']);
     expect(result.skippedAmbiguous).toBe(1);
+    // 집계가 같은 모집단을 센다 — 중복으로 뺀 값도 "읽은 대상"에 들어간다.
+    expect(result.parsedTargets).toBe(result.matched + result.unmatched + result.skippedAmbiguous);
     expect(h.insertCalls).toBe(0);
   });
 

@@ -10,6 +10,8 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import { hasPriorAnswer } from '@/lib/survey/prior-answers';
+import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -23,10 +25,7 @@ import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack } from './option-text-input-stack';
 import { RankingQuestion } from './ranking-question';
-import {
-  ValidationIssueBanner,
-  type ValidationBannerItem,
-} from './validation-issue-banner';
+import { type ValidationBannerItem, ValidationIssueBanner } from './validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -83,9 +82,7 @@ function buildTableValidationBannerItems(
     for (const cell of row.cells) rowKeyByCellId.set(cell.id, row.id);
     const mobileHeader = row.cells.find(
       (cell) =>
-        cell.type === 'text' &&
-        cell.mobileDisplay === 'header' &&
-        Boolean(cell.content?.trim()),
+        cell.type === 'text' && cell.mobileDisplay === 'header' && Boolean(cell.content?.trim()),
     );
     const rowLabel = mobileHeader?.content?.trim() || row.label?.trim();
     if (rowLabel) rowLabelByKey.set(row.id, rowLabel);
@@ -96,16 +93,16 @@ function buildTableValidationBannerItems(
     .flatMap((issue): ValidationBannerItem[] => {
       const cellIds = issue.cellIds ?? [];
       if (issue.kind !== 'required-cells' || cellIds.length < 2) {
-        const rowIds = new Set(
-          cellIds.map((cellId) => rowKeyByCellId.get(cellId)).filter(Boolean),
-        );
+        const rowIds = new Set(cellIds.map((cellId) => rowKeyByCellId.get(cellId)).filter(Boolean));
         const rowId = rowIds.size === 1 ? [...rowIds][0] : undefined;
-        return [{
-          message: issue.message,
-          cellIds,
-          ...(rowId ? { rowId } : {}),
-          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
-        }];
+        return [
+          {
+            message: issue.message,
+            cellIds,
+            ...(rowId ? { rowId } : {}),
+            ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+          },
+        ];
       }
 
       const cellIdsByRow = new Map<string, string[]>();
@@ -117,12 +114,14 @@ function buildTableValidationBannerItems(
       }
       if (cellIdsByRow.size <= 1) {
         const rowId = [...cellIdsByRow.keys()][0];
-        return [{
-          message: issue.message,
-          cellIds,
-          ...(rowId && !rowId.startsWith('cell:') ? { rowId } : {}),
-          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
-        }];
+        return [
+          {
+            message: issue.message,
+            cellIds,
+            ...(rowId && !rowId.startsWith('cell:') ? { rowId } : {}),
+            ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+          },
+        ];
       }
 
       // 모바일 표는 행마다 카드가 되므로 필수 오류도 행별 항목으로 나눈다.
@@ -399,7 +398,7 @@ function RadioQuestion({
                 e.preventDefault();
                 handleOptionChange(option.value);
               }}
-              className="flex-1 cursor-pointer whitespace-pre-line text-base text-gray-700"
+              className="flex-1 cursor-pointer text-base whitespace-pre-line text-gray-700"
             >
               {substituteTokens(option.label, attrs, quotes)}
             </label>
@@ -413,8 +412,7 @@ function RadioQuestion({
             {
               option: selectedTextOption,
               label:
-                substituteTokens(selectedTextOption.label, attrs, quotes).trim() ||
-                '(라벨 없음)',
+                substituteTokens(selectedTextOption.label, attrs, quotes).trim() || '(라벨 없음)',
             },
           ]}
         />
@@ -505,9 +503,7 @@ function CheckboxQuestion({
   const textInputEntries = currentValues
     .map((val) => (isOtherChoiceValue(val) ? val.selectedValue : val))
     .filter((val): val is string => typeof val === 'string')
-    .map((val) =>
-      question.options?.find((option) => option.allowTextInput && option.value === val),
-    )
+    .map((val) => question.options?.find((option) => option.allowTextInput && option.value === val))
     .filter((option): option is QuestionOption => Boolean(option))
     .map((option) => ({
       option,
@@ -536,7 +532,7 @@ function CheckboxQuestion({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 whitespace-pre-line text-base text-gray-700 ${
+                className={`flex-1 text-base whitespace-pre-line text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
@@ -694,9 +690,16 @@ function TextResponseInput({
 
   // 숫자 모드 + emptyDefault 정의 + 토큰 prefill 아님 + 값 미존재 → 첫 진입 시 자동 채움.
   // 응답자가 지워 빈 문자열이 되면 재채움하지 않음(의도 보존).
+  //
+  // **이월 값이 있는 문항은 건드리지 않는다.** 이 effect 는 자식이라 부모의 이월 값
+  // 프리필보다 먼저 돈다 — 여기서 기본값을 써 버리면 프리필이 "이미 값이 있다"고 보고
+  // 건너뛰어, 지난 회차 값이 0 으로 조용히 바뀐 채 제출된다.
+  const { answers: priorAnswersForDefault } = usePriorAnswers();
+  const hasPriorValue = hasPriorAnswer(priorAnswersForDefault, question.id);
   useEffect(() => {
     if (
       !isPrefilled &&
+      !hasPriorValue &&
       isNumberMode &&
       typeof question.emptyDefault === 'number' &&
       (value === undefined || value === null)
@@ -704,7 +707,7 @@ function TextResponseInput({
       onChange(String(question.emptyDefault));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, isPrefilled, isNumberMode, question.emptyDefault]);
+  }, [value, isPrefilled, hasPriorValue, isNumberMode, question.emptyDefault]);
 
   return (
     <div className="w-full">

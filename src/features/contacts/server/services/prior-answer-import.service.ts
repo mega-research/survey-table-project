@@ -433,6 +433,10 @@ export async function importPriorAnswers(
   if (wantedValues.length > 0) {
     // jsonb 텍스트 추출 비교. `ANY(배열)` 바인딩은 길이 1 에서 조용히 풀리므로 쓰지 않고
     // 값을 하나씩 이어 붙인다 (drizzle 함정 12).
+    //
+    // 명단 쪽 값도 `btrim` 으로 공백을 턴다. 파일 쪽만 trim 하면 명단 셀에 뒤 공백이
+    // 하나 붙은 것만으로 "명단에서 찾지 못한 값"이 되고, 담당자가 공백 때문임을 알아낼
+    // 단서가 화면에 없다. 명단 업로드는 attrs 값을 가공 없이 넣는다.
     const valueList = sql.join(
       wantedValues.map((value) => sql`${value}`),
       sql`, `,
@@ -440,14 +444,14 @@ export async function importPriorAnswers(
     const rowsFound = await db
       .select({
         id: contactTargets.id,
-        matchValue: sql<string>`${contactTargets.attrs} ->> ${input.matchAttrsKey}`,
+        matchValue: sql<string>`btrim(${contactTargets.attrs} ->> ${input.matchAttrsKey})`,
       })
       .from(contactTargets)
       .where(
         and(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
-          sql`${contactTargets.attrs} ->> ${input.matchAttrsKey} IN (${valueList})`,
+          sql`btrim(${contactTargets.attrs} ->> ${input.matchAttrsKey}) IN (${valueList})`,
         ),
       );
     for (const row of rowsFound) {
@@ -515,7 +519,9 @@ export async function importPriorAnswers(
     .map((block) => block.code);
 
   return {
-    parsedTargets: parsed.records.length,
+    // 파일에서 값이 만들어진 **서로 다른 대조값** 수. 중복으로 뺀 것도 포함해야
+    // matched + unmatched + skippedAmbiguous 와 아귀가 맞는다.
+    parsedTargets: parsed.records.length + parsed.duplicateMatchValues.length,
     matched: matchedRows.length,
     unmatched: unmatchedMatchValues.length,
     unmatchedMatchValues: unmatchedMatchValues.slice(0, MAX_UNMATCHED_SAMPLES),

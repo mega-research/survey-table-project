@@ -96,6 +96,26 @@ interface Props {
   matchFields: ReadonlyArray<{ key: string; label: string }>;
 }
 
+/**
+ * 대조 열 자동 추정 — 고른 대조 필드의 키(또는 라벨)와 같은 헤더를 찾는다. 없으면 첫 열.
+ * 확정은 사람이 한다. 파일 분석 시점에는 아직 필드를 안 골랐을 수 있어, 고른 뒤에도 다시 부른다.
+ */
+function guessMatchColumn(
+  headerRows: ReadonlyArray<ReadonlyArray<string>>,
+  attrsKey: string | null,
+  fieldLabel?: string | undefined,
+): number {
+  const codeRow = headerRows[headerRows.length - 2] ?? headerRows[0] ?? [];
+  const wanted = [attrsKey, fieldLabel]
+    .map((v) => v?.trim().toLowerCase())
+    .filter((v): v is string => Boolean(v));
+  for (const candidate of wanted) {
+    const hit = codeRow.findIndex((text) => text.trim().toLowerCase() === candidate);
+    if (hit >= 0) return hit;
+  }
+  return 0;
+}
+
 export function PriorAnswerImportWizard({
   surveyId,
   existingPriorAnswerCount,
@@ -183,12 +203,13 @@ export function PriorAnswerImportWizard({
       // 보관된 값 대응을 되살린다. 시드하지 않으면 다음 세션에서 빈 상태로 시작해
       // "다시 올릴 때 재사용" 이 성립하지 않는다.
       setValueAliases(res.savedValueAliases);
-      // 대조 열 자동 추정 — 고른 대조 필드 이름과 같은 헤더를 먼저 찾고, 없으면 첫 열.
-      // 확정은 사람이 한다.
-      const codeRow = res.headerRows[res.headerRows.length - 2] ?? res.headerRows[0] ?? [];
-      const wanted = matchAttrsKey?.trim().toLowerCase();
-      const guess = wanted ? codeRow.findIndex((text) => text.trim().toLowerCase() === wanted) : -1;
-      setMatchColumnIndex(guess >= 0 ? guess : 0);
+      setMatchColumnIndex(
+        guessMatchColumn(
+          res.headerRows,
+          matchAttrsKey,
+          matchFields.find((f) => f.key === matchAttrsKey)?.label,
+        ),
+      );
       setDryRunResult(null);
       setStep('mapping');
     } catch (err) {
@@ -390,7 +411,21 @@ export function PriorAnswerImportWizard({
                   <Label htmlFor="prior-match-field">명단에서 맞출 항목</Label>
                   <Select
                     value={matchAttrsKey ?? UNMAPPED}
-                    onValueChange={(v) => setMatchAttrsKey(v === UNMAPPED ? null : v)}
+                    onValueChange={(v) => {
+                      const key = v === UNMAPPED ? null : v;
+                      setMatchAttrsKey(key);
+                      // 항목을 고른 뒤에야 헤더 이름과 맞춰볼 수 있다 — 파일 분석 시점에는
+                      // 아직 null 이라 항상 첫 열로 떨어진다.
+                      if (key && preview) {
+                        setMatchColumnIndex(
+                          guessMatchColumn(
+                            preview.headerRows,
+                            key,
+                            matchFields.find((f) => f.key === key)?.label,
+                          ),
+                        );
+                      }
+                    }}
                     disabled={matchFields.length === 0}
                   >
                     <SelectTrigger id="prior-match-field">
@@ -614,7 +649,7 @@ function ImportSummary({
 }) {
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Stat label="시트에서 읽은 대상" value={result.parsedTargets} />
         <Stat label="명단에서 찾음" value={result.matched} />
         <Stat

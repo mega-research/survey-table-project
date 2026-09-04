@@ -91,7 +91,10 @@ import {
   collectNumericIssues,
   collectVisibleTableCells,
 } from '@/lib/survey/numeric-validation';
-import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
+import {
+  collectPriorAnswerPrefills,
+  dropHiddenUntouchedPriorAnswers,
+} from '@/lib/survey/prior-answer-prefill';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import {
@@ -386,6 +389,20 @@ function SurveyResponseFlowActive({
    * 서 있기 때문이다. 꺼진 경로에서 이월 값은 아래 프리필 effect 가 응답값으로 옮긴다.
    */
   const confirmPriorAnswers = changeConfirmEnabled ? priorAnswers : null;
+
+  /**
+   * 제출·초안 페이로드 조립. 기타 상세기재 정리에 더해, 스위치가 꺼진 설문에서는 뒤늦게
+   * 숨겨진 문항의 **손대지 않은** 이월 값을 걷어낸다 — 프리필은 채우는 시점의 표시 문항만
+   * 보므로, 그 뒤에 앞 문항이 바뀌어 하위 문항이 숨겨지면 지난 회차 값이 남는다.
+   */
+  const buildSubmissionPayload = useCallback(
+    (visible: Question[], current: ResponsesMap): Record<string, unknown> => {
+      const base = buildOptTextsPayload(visible, current);
+      if (changeConfirmEnabled) return base;
+      return dropHiddenUntouchedPriorAnswers(base, new Set(visible.map((q) => q.id)), priorAnswers);
+    },
+    [changeConfirmEnabled, priorAnswers],
+  );
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -876,43 +893,6 @@ function SurveyResponseFlowActive({
     setPausedMessage: setRefetchedPausedMessage,
   });
 
-  /**
-   * 이월 값 프리필 — 문항별 변동 확인이 **꺼진** 설문에서 지난 회차 값이 이번 회차 응답으로
-   * 넘어가는 경로다. 켜진 설문은 여기 오지 않는다(그쪽은 응답자가 밝히는 순간 복사한다).
-   *
-   * **지금 단계의 표시되는 문항만** 채운다. 숨은 문항의 값을 걸러내는 지점이 저장 경계에
-   * 없어서, 전 문항을 한꺼번에 깔면 앞 문항에서 "해당 없음"을 고른 사람에게 지난 회차
-   * 하위 답이 그대로 실려 나간다.
-   *
-   * 회복이 끝난 뒤에만 돈다 — 회복은 저장된 응답 묶음을 통째로 세팅하므로, 그 전에 채우면
-   * 채운 값이 버려지고 effect 가 한 번 더 도는 낭비가 된다. 값이 이미 있는 문항은
-   * 건너뛰므로 되돌아와 다시 도는 경우에도 응답자가 고친 값을 덮지 않는다.
-   */
-  useEffect(() => {
-    if (changeConfirmEnabled) return;
-    if (!prefillSettled || isRecovering) return;
-    const entries = collectPriorAnswerPrefills(currentStepQuestions, priorAnswers, responses);
-    if (entries.length === 0) return;
-    setResponses((prev) => {
-      const next = { ...prev };
-      for (const entry of entries) {
-        // prev 기준으로 한 번 더 본다 — 이 effect 가 값을 읽은 뒤 커밋되기까지 사이에
-        // 응답자가 입력했을 수 있다.
-        if (next[entry.questionId] !== undefined) continue;
-        next[entry.questionId] = entry.value;
-      }
-      return next;
-    });
-  }, [
-    changeConfirmEnabled,
-    prefillSettled,
-    isRecovering,
-    currentStepQuestions,
-    priorAnswers,
-    responses,
-    setResponses,
-  ]);
-
   const hasPreviousDisplayable = stepHistory.length > 0;
 
   const isQuestionRequired = (question: Question) =>
@@ -1256,7 +1236,7 @@ function SurveyResponseFlowActive({
       setIsSubmitting,
       setCurrentStepIndex,
       setIsCompleted,
-      buildOptTextsPayload,
+      buildOptTextsPayload: buildSubmissionPayload,
       setNumericErrorStepIndex,
     });
 
@@ -1281,6 +1261,38 @@ function SurveyResponseFlowActive({
   // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
   // 일반 답변과 같은 디바운스 draft·이탈 beacon 에 합류하고, '__' 키라 첫 답변
   // INSERT 트리거는 되지 않는다 (preview/admin-edit 은 flush 계층이 이미 걸러낸다).
+  /**
+   * 이월 값 프리필 — 문항별 변동 확인이 **꺼진** 설문에서 지난 회차 값이 이번 회차 응답으로
+   * 넘어가는 경로다. 켜진 설문은 여기 오지 않는다(그쪽은 응답자가 밝히는 순간 복사한다).
+   *
+   * **지금 단계의 표시되는 문항만** 채운다. 숨은 문항까지 한꺼번에 깔면 앞 문항에서
+   * "해당 없음"을 고른 사람에게 지난 회차 하위 답이 실려 나간다. 뒤늦게 숨겨진 문항의
+   * 손대지 않은 값은 제출·초안 페이로드에서 걷어낸다(dropHiddenUntouchedPriorAnswers).
+   *
+   * **`setResponses` 를 직접 부르지 않고 응답 쓰기 창구(handleResponse)를 탄다.** 직접 쓰면
+   * 초안 저장 큐에 실리지 않아 서버에 남지 않는다 — 중도 이탈 후 재진입하면 회복이 서버
+   * 값으로 응답 묶음을 통째로 갈아끼우고, 프리필은 지금 단계만 채우므로 이미 지나온
+   * 페이지의 이월 값이 통째로 사라진다. 응답 행 INSERT 도 같은 창구가 맡는다.
+   *
+   * **회복 중이라고 멈추지 않는다.** 프리필이 응답 행을 만들면 회복이 켜지는데, 거기서
+   * 멈추면 그 뒤에 조건이 풀려 드러난 문항이 영영 채워지지 않는다. 회복이 응답 묶음을
+   * 통째로 갈아끼워도 값이 없는 문항은 다음 패스가 다시 채우고, 값이 있는 문항은 건너뛰므로
+   * 응답자가 고친 값을 덮지 않는다. 회복 중 INSERT 중복은 쓰기 창구가 자체 가드로 막는다.
+   */
+  useEffect(() => {
+    if (changeConfirmEnabled) return;
+    if (!prefillSettled) return;
+    const entries = collectPriorAnswerPrefills(currentStepQuestions, priorAnswers, responses);
+    for (const entry of entries) handleResponse(entry.questionId, entry.value);
+  }, [
+    changeConfirmEnabled,
+    prefillSettled,
+    currentStepQuestions,
+    priorAnswers,
+    responses,
+    handleResponse,
+  ]);
+
   const lastSyncedOptionTextsRef = useRef(optionTexts);
   useEffect(() => {
     if (lastSyncedOptionTextsRef.current === optionTexts) return;
@@ -1642,7 +1654,11 @@ function SurveyResponseFlowActive({
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
-      <PriorAnswersProvider answers={confirmPriorAnswers} waveLabel={control?.priorWaveLabel}>
+      <PriorAnswersProvider
+        answers={priorAnswers}
+        waveLabel={control?.priorWaveLabel}
+        changeConfirmEnabled={changeConfirmEnabled}
+      >
         <UnmodifiedChangedDialog
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}

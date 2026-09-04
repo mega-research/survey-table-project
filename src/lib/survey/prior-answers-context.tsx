@@ -1,23 +1,33 @@
 'use client';
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { type ReactNode, createContext, useContext, useMemo } from 'react';
 
 import {
   DEFAULT_PRIOR_WAVE_LABEL,
-  resolvePriorWaveLabel,
   type PriorAnswers,
+  resolvePriorWaveLabel,
 } from '@/lib/survey/prior-answers';
 
 interface PriorAnswersContextValue {
-  /** 이월 응답 한 벌. 없으면 null (익명 응답자·이월 응답 미보유 대상자). */
+  /**
+   * 이월 응답 한 벌 **원본**. 없으면 null (익명 응답자·이월 응답 미보유 대상자).
+   * 스위치가 꺼져 있어도 비우지 않는다 — 프리필 값이 지난 회차 것인지 판정해야 하는
+   * 자리가 확인 컨트롤 말고도 있다(숫자 기본값 자동 채움이 프리필을 밀어내는 것을 막는다).
+   */
   answers: PriorAnswers | null;
   /** 응답 화면 문구에 쓰는 회차 라벨. 설정이 비어 있으면 기본 문구. */
   waveLabel: string;
+  /**
+   * 문항별 변동 확인 스위치. 꺼져 있으면 잠금·확인 컨트롤을 그리지 않는다.
+   * 판정에 이월 응답을 쓰는 소비자는 이 값으로 스스로 무동작이 된다.
+   */
+  changeConfirmEnabled: boolean;
 }
 
 const EMPTY_VALUE: PriorAnswersContextValue = {
   answers: null,
   waveLabel: DEFAULT_PRIOR_WAVE_LABEL,
+  changeConfirmEnabled: false,
 };
 
 const PriorAnswersContext = createContext<PriorAnswersContextValue>(EMPTY_VALUE);
@@ -32,16 +42,19 @@ const PriorAnswersContext = createContext<PriorAnswersContextValue>(EMPTY_VALUE)
 export function PriorAnswersProvider({
   answers,
   waveLabel,
+  changeConfirmEnabled,
   children,
 }: {
   answers: PriorAnswers | null;
   /** surveys.priorWaveLabel(라이브 값). null/공백이면 기본 문구로 떨어진다. */
   waveLabel: string | null | undefined;
+  /** surveys.changeConfirmEnabled(라이브 값). */
+  changeConfirmEnabled: boolean;
   children: ReactNode;
 }) {
   const value = useMemo<PriorAnswersContextValue>(
-    () => ({ answers, waveLabel: resolvePriorWaveLabel(waveLabel) }),
-    [answers, waveLabel],
+    () => ({ answers, waveLabel: resolvePriorWaveLabel(waveLabel), changeConfirmEnabled }),
+    [answers, waveLabel, changeConfirmEnabled],
   );
   return <PriorAnswersContext.Provider value={value}>{children}</PriorAnswersContext.Provider>;
 }
