@@ -4,7 +4,29 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-03 (역할 모델 v2 티켓 28 **D 검증 게이트** — 페이즈 D(24~~27)의 실사
+> 최종 갱신: 2026-09-04 (역할 모델 v2 티켓 29 **최종 통합·배포 준비** — 페이즈 A~~D 28개를
+> 한 상태로 묶었다. 스위트는 전량 GREEN(`pnpm test` 616파일 6025건 · `pnpm test:integration`
+> 51파일 589건 — 검증 게이트 15·23·28 포함)이고, CI 3게이트 중 감사만 빨간색이었다
+> (`fast-uri` high 4건 — `fast-uri@3` override 를 3.1.6 으로 올려 해소. **overrides 값에는
+> 상한을 둔다**는 기존 규칙 그대로다).
+> **실전 시드가 스크립트가 됐다** — `pnpm workspace:seed`(계획) / `:live`(적용)가 팀 5개와
+> 실사 업체를 세우고 **0106 백필을 되짚는다**. 백필의 소유자 채우기는 그 시점에 active
+> 슈퍼어드민이 있을 때만 도므로, 마이그레이션을 먼저 적용한 환경에는 소유자 없는 설문이
+> 남는다 — 시드가 그것을 메우되 **소유자 컬럼만** 건드린다(`assignment_status` 를 함께
+> 손대면 이미 배치된 설문이 배치 대기로 되돌아간다). 판정은 순수 모듈로 갈라 두어
+> (`scripts/seed-workspace-plan.ts`) DB 없이 잰다.
+> **`db:drift` 는 클린이 아니고, 그것이 결과다** — 「실 DB 에만 있음」이 staging 54건·prod
+> 56건인데 전부 `origin/main` 의 0084~~0100(contact_id_lists · contact_prior_answers ·
+> survey_documents · survey_document_anchors · notice_bg_color · prior 설정 2종)이 정의하는
+> 객체이고 **미등재 직접 적용 SQL 은 0건**이다. prod 에만 두 건 더 나오는 `auth.users` FK 는
+> 이 브랜치의 0111 이 `public.users` 로 옮기는 대상이라 적용 전이 정상이다(반대 방향
+> 「레포에만 있음」 109건도 미적용 0102~~0112 그대로다). 즉 드리프트의 정체는 브랜치 분기이며,
+> **main 을 들여오기 전에는 배포하지 않는다**.
+> 배포 절차는 `docs/runbooks/workspace-roles-v2-deploy.md` 하나로 모았다 — 0101 적용 금지·
+> 0106 백필 순서·env 등재와 은퇴·재로그인 공지·스모크 표. 마이그레이션 없음.
+> 직전: 티켓 28 D 검증 게이트)
+>
+> 티켓 28 **D 검증 게이트** — 페이즈 D(24~~27)의 실사
 > 계약을 스위트로 못 박았다. **코드 변경 0건**이고 그 사실이 결과다: 네 티켓이 각자 realdb
 > 스위트를 함께 세워 게이트가 잡을 것이 남지 않았다(티켓 23 이 코드 한 줄을 고쳤던 것과
 > 갈리는 지점). 신규 `fieldwork-cross-org.realdb.test.ts` 가 scoped 전수 × 4축을 진다 —
@@ -921,8 +943,8 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   아래에서 처리하고(마지막 슈퍼어드민 동시 정지 경합 차단), **모든 전이·재설정이 대상 세션을 전부
   끊고 `user_status_events` 에 감사 행을 남긴다**(재설정은 상태가 그대로라 from=to). 마지막 active
   슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
-  않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). **퇴사의 소유권 승계는 티켓 19 가 붙였다**(멤버십은 일부러 그대로 둔다). 재입사의 팀 배정과
-  재입사의 팀 배정은 티켓 06·14·19 소관이라 아직 없다.
+  않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). **퇴사의 소유권 승계는 티켓 19 가 붙였고**(멤버십은 일부러 그대로 둔다)
+  **재입사의 팀 배정은 티켓 14 가 붙였다**(`server/workflows/user-rehire` — 상태 전이와 배정이 한 트랜잭션).
 - **팀 멤버십은 소속의 단일 정본이다**(ADR-0008, 티켓 06). 팀 관리 표면은 `server/workspace` 가
   담당하고 관문은 두 겹이다 — procedure 의 `assertTeamManager` 가 **입력의 teamId 로** 팀장
   여부를 묻고(어딘가의 팀장이면 통과시키는 순간 A팀 팀장이 B팀 멤버를 만진다), 서비스가
@@ -1443,8 +1465,10 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     업체**가 남는다. 전역 전이 키는 도움이 안 된다: 업체 종료는 그 키를 잡지 않고, 종료가 세는
     것은 **재직 중** 계정이라 정지 계정을 되살리는 트랜잭션과 서로를 보지 못한다.
     `fieldwork-orgs.realdb.test.ts` 의 동시 실행 테스트가 그 불변식을 잰다(잠금을 빼면 빨개진다).
-  - **capability 는 하나도 열리지 않았다** — 실사 열은 여전히 전 칸 차단이고
-    `capability-matrix-spec.test.ts`(티켓 23)가 그 사실을 고정한다. 부여는 티켓 25 다.
+  - **이 티켓 자체는 capability 를 하나도 열지 않았다** — 소속 경계만 세웠고, 실사 열을 실제로
+    연 것은 티켓 25 의 초대다. **업체가 없는 실사 계정은 지금도 전 칸 차단**이며 그 사실이 여전히
+    계약이다 — 로더가 **활성 업체일 때만** 소속을 채우므로 업체가 종료되면 판정이 통째로 닫힌다.
+    `capability-matrix-spec.test.ts`(티켓 23)가 열과 파생 시야를 행 단위로 고정한다.
 
 ---
 
@@ -1523,6 +1547,8 @@ pnpm survey:restore   # 백업에서 복원
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
 pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
+pnpm workspace:seed   # 실전 시드 계획 출력 — 팀 5 + 실사 업체 + 0106 백필 검증 (DRY_RUN 기본)
+pnpm workspace:seed:live  # 위를 실제 적용 — 인자로 실사 업체 이름 지정 가능. 재실행 안전
 pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)
 pnpm spss:rollback    # SPSS 필드 롤백 (:live 동일)
 pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
