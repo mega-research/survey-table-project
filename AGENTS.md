@@ -211,6 +211,8 @@ surveys                    # 설문 설정
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
+├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
+│                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' | 'closed'
