@@ -22,8 +22,9 @@
  */
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
-import type { Question } from '@/types/survey';
+import type { Question, RankingAnswer } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 import { normalizeMatchValue } from './prior-answer-import';
 
@@ -50,6 +51,12 @@ const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
   'table-cell',
   'radio-group',
   'table-cell-option-text',
+  'ranking-rank',
+  'ranking-other',
+  'ranking-option-text',
+  'table-cell-ranking',
+  'table-cell-ranking-other',
+  'table-cell-ranking-option-text',
 ]);
 
 /**
@@ -175,6 +182,100 @@ function invertChoiceGroups(
   return Object.keys(answer).length > 0 ? answer : undefined;
 }
 
+/**
+ * 순위형을 되돌린다. 저장 형태는 `{ rank, optionValue, optionText? }` 배열이다.
+ *
+ * 순위마다 열이 하나씩 나가므로 열의 `rankIndex` 가 곧 순위다. 기타는 매직값
+ * `__other__` 로 저장되고 텍스트가 따로 열로 나간다 — 코드 열이 비어 있는데 기타
+ * 텍스트 열에만 값이 있으면 그 순위는 기타를 고른 것이다.
+ *
+ * 텍스트가 들어가는 칸이 둘이라 헷갈리기 쉽다. 기타 자유 기입은 `otherText`, 고른 보기에
+ * 딸린 상세 기재는 `optionText` 다. 내보내기도 `_etc` 와 `_text` 로 열을 따로 낸다.
+ *
+ * 보기 그룹이 걸린 순위형은 저장 형태가 그룹키 → 배열 맵이다. 열이 그룹키를 들고
+ * 있으므로 그것으로 갈라 담는다. 그룹이 없으면 평평한 배열 하나다.
+ */
+function invertRanking(cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>): unknown {
+  /** 그룹키(없으면 빈 문자열) → 순위 → 만들던 항목 */
+  const byGroup = new Map<string, Map<number, RankingAnswer>>();
+  const entryAt = (groupKey: string, rank: number): RankingAnswer => {
+    const group = byGroup.get(groupKey) ?? new Map<number, RankingAnswer>();
+    byGroup.set(groupKey, group);
+    const found = group.get(rank);
+    if (found) return found;
+    const created: RankingAnswer = { rank, optionValue: '' };
+    group.set(rank, created);
+    return created;
+  };
+
+  for (const { column, raw } of cells) {
+    const rank = column.rankIndex;
+    if (rank == null) continue;
+    const groupKey = column.choiceGroupKey ?? '';
+    const entry = entryAt(groupKey, rank);
+
+    if (column.type === 'ranking-rank') {
+      const code = Number(raw);
+      const found = column.cellOptions?.find(
+        (option, idx) => (option.spssNumericCode ?? idx + 1) === code,
+      );
+      if (found) entry.optionValue = storedValueOf(found);
+      continue;
+    }
+    if (column.type === 'ranking-other') {
+      // 기타 텍스트가 있으면 그 순위는 기타를 고른 것이다. 기타 텍스트가 담기는 자리는
+      // `otherText` 다 — `optionText` 는 고른 보기에 딸린 상세 기재라 다른 칸이다
+      // (내보내기도 두 열을 따로 낸다).
+      entry.optionValue = RANKING_OTHER_VALUE;
+      entry.otherText = raw;
+      continue;
+    }
+    // ranking-option-text — 고른 보기에 딸린 상세 기재.
+    entry.optionText = raw;
+  }
+
+  const build = (group: Map<number, RankingAnswer>): RankingAnswer[] =>
+    [...group.values()]
+      .filter((entry) => entry.optionValue.length > 0)
+      .sort((a, b) => a.rank - b.rank);
+
+  const flat = byGroup.get('');
+  if (byGroup.size === 1 && flat) {
+    const list = build(flat);
+    return list.length > 0 ? list : undefined;
+  }
+  const grouped: Record<string, RankingAnswer[]> = {};
+  for (const [groupKey, group] of byGroup) {
+    if (!groupKey) continue;
+    const list = build(group);
+    if (list.length > 0) grouped[groupKey] = list;
+  }
+  return Object.keys(grouped).length > 0 ? grouped : undefined;
+}
+
+/**
+ * 표 안 순위 셀을 되돌린다. 저장 자리는 표 응답 맵의 셀 id 이고, 그 값이 순위 배열이다 —
+ * 질문 레벨 순위형과 같은 모양이라 셀별로 갈라 담기만 하면 된다.
+ */
+function invertTableCellRanking(
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+): unknown {
+  const byCell = new Map<string, Array<{ column: SPSSExportColumn; raw: string }>>();
+  for (const cell of cells) {
+    const cellId = cell.column.tableCellId;
+    if (!cellId) continue;
+    const bucket = byCell.get(cellId);
+    if (bucket) bucket.push(cell);
+    else byCell.set(cellId, [cell]);
+  }
+  const answer: Record<string, unknown> = {};
+  for (const [cellId, group] of byCell) {
+    const value = invertRanking(group);
+    if (value !== undefined) answer[cellId] = value;
+  }
+  return Object.keys(answer).length > 0 ? answer : undefined;
+}
+
 /** 라디오 그룹 멤버 셀의 보기 하나 — 그룹은 보기 1개짜리 셀만 묶는다. */
 function firstRadioOptionId(question: Question, cellId: string): string | undefined {
   for (const row of question.tableRowsData ?? []) {
@@ -277,6 +378,14 @@ function invertQuestion(
     case 'table-cell':
     case 'radio-group':
       return invertTableCells(question, cells);
+    case 'ranking-rank':
+    case 'ranking-other':
+    case 'ranking-option-text':
+      return invertRanking(cells);
+    case 'table-cell-ranking':
+    case 'table-cell-ranking-other':
+    case 'table-cell-ranking-option-text':
+      return invertTableCellRanking(cells);
     default:
       return undefined;
   }

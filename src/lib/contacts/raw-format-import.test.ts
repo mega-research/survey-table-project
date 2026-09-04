@@ -120,6 +120,22 @@ const questions: Question[] = [
     ],
   },
   {
+    // 순위형 — 3순위까지, 기타 허용.
+    id: 'q-rank',
+    type: 'ranking',
+    title: '선호 순위',
+    questionCode: 'AQ8',
+    order: 7,
+    required: false,
+    options: [
+      { id: 'k1', value: 'kv1', label: '가' },
+      { id: 'k2', value: 'kv2', label: '나' },
+      { id: 'k3', value: 'kv3', label: '다' },
+    ],
+    allowOtherOption: true,
+    rankingConfig: { positions: 3 },
+  },
+  {
     id: 'q-other',
     type: 'radio',
     title: '기타 있는 문항',
@@ -258,11 +274,11 @@ describe('buildRawFormatRecords', () => {
     expect(result.records).toEqual([]);
   });
 
-  it('아직 되돌릴 수 없는 열 종류는 종류별로 보고한다', () => {
-    const rankingVar = columns.find((c) => c.type === 'ranking-rank')?.spssVarName;
-    if (!rankingVar) return; // 픽스처에 순위형이 없으면 이 단언은 건너뛴다
-    const result = build([['7', '', '2', '메가리서치', '1']], [SINGLE, TEXT, rankingVar]);
-    expect(result.unsupportedVarNames).toEqual([rankingVar]);
+  it('이 설문의 모든 열 종류를 되돌릴 수 있다 — 남은 미지원 종류가 없다', () => {
+    // 새 열 종류가 내보내기에 생기면 여기서 먼저 걸린다.
+    const varNames = columns.map((c) => c.spssVarName);
+    const result = build([['7', '', ...varNames.map(() => '')]], varNames);
+    expect(result.unsupportedVarNames).toEqual([]);
   });
 
   it('이 설문의 변수명이 아닌 열은 목록으로 보고하고 건너뛴다', () => {
@@ -368,6 +384,30 @@ describe('내보내기 → 임포트 왕복', () => {
         'tcell-check': ['co1'],
         'tcell-input': '메모 내용',
       },
+    });
+  });
+
+  it('순위형이 순서 그대로 돌아온다', () => {
+    const result = roundTrip({
+      'q-rank': [
+        { rank: 1, optionValue: 'kv2' },
+        { rank: 2, optionValue: 'kv1' },
+      ],
+    });
+    expect(result.records[0]?.answers).toMatchObject({
+      'q-rank': [
+        { rank: 1, optionValue: 'kv2' },
+        { rank: 2, optionValue: 'kv1' },
+      ],
+    });
+  });
+
+  it('순위형 기타가 매직값과 텍스트로 돌아온다', () => {
+    const result = roundTrip({
+      'q-rank': [{ rank: 1, optionValue: '__other__', otherText: '직접 적은 것' }],
+    });
+    expect(result.records[0]?.answers).toMatchObject({
+      'q-rank': [{ rank: 1, optionValue: '__other__', otherText: '직접 적은 것' }],
     });
   });
 
