@@ -47,6 +47,9 @@ const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
   'choice-group-item',
   'option-text',
   'other-text',
+  'table-cell',
+  'radio-group',
+  'table-cell-option-text',
 ]);
 
 /**
@@ -172,12 +175,82 @@ function invertChoiceGroups(
   return Object.keys(answer).length > 0 ? answer : undefined;
 }
 
+/** 라디오 그룹 멤버 셀의 보기 하나 — 그룹은 보기 1개짜리 셀만 묶는다. */
+function firstRadioOptionId(question: Question, cellId: string): string | undefined {
+  for (const row of question.tableRowsData ?? []) {
+    for (const cell of row.cells ?? []) {
+      if (cell.id !== cellId) continue;
+      return cell.radioOptions?.[0]?.id;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 표 문항을 되돌린다. 저장 형태는 셀 id → 값 하나의 맵이다.
+ *
+ * 셀 종류마다 규칙이 다르다.
+ * - 선택 셀(radio·select): 코드값 → 그 셀의 보기 id
+ * - 복수 선택 셀: 보기마다 열이 하나씩이고 값이 있는 열이 곧 선택 — 배열로 모은다
+ * - 입력·계산 셀: 값 그대로
+ * - 라디오 그룹: 여러 셀이 변수 하나로 합쳐진다. 코드가 가리키는 셀을 찾아 그 셀의
+ *   보기 하나를 선택으로 적는다 (옵션 1개짜리 셀만 그룹이 된다)
+ */
+function invertTableCells(
+  question: Question,
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+): unknown {
+  const answer: Record<string, unknown> = {};
+  for (const { column, raw } of cells) {
+    if (column.type === 'radio-group') {
+      const map = column.radioGroupCellValueMap ?? {};
+      const code = Number(raw);
+      const cellId = Object.keys(map).find((id) => map[id] === code);
+      // 그룹 멤버는 보기 1개짜리 셀이다 — 그 보기 id 가 곧 이 셀의 응답값이다.
+      const optionId = cellId ? firstRadioOptionId(question, cellId) : undefined;
+      if (cellId && optionId) answer[cellId] = optionId;
+      continue;
+    }
+    const cellId = column.tableCellId;
+    if (!cellId) continue;
+
+    // 복수 선택 셀 — 보기별 열이라 값이 있는 열이 곧 선택이다.
+    if (column.tableCellType === 'checkbox' && column.optionValue != null) {
+      const bucket = answer[cellId];
+      if (Array.isArray(bucket)) bucket.push(column.optionValue);
+      else answer[cellId] = [column.optionValue];
+      continue;
+    }
+
+    // 선택 셀 — 코드값을 그 셀의 보기 id 로 되돌린다.
+    if (
+      (column.tableCellType === 'radio' || column.tableCellType === 'select') &&
+      column.cellOptions &&
+      column.cellOptions.length > 0
+    ) {
+      const code = Number(raw);
+      const found = column.cellOptions.find(
+        (option, idx) => (option.spssNumericCode ?? idx + 1) === code,
+      );
+      if (found) answer[cellId] = found.id;
+      continue;
+    }
+
+    // 입력·계산 셀 — 값 그대로.
+    answer[cellId] = raw;
+  }
+  return Object.keys(answer).length > 0 ? answer : undefined;
+}
+
 /**
  * 사이드카 텍스트가 어느 보기에 붙는지. `option-text` 는 열 정의가 보기 id 를 들고 있고,
  * `other-text` 는 기타 보기 하나뿐이라 그 보기를 찾아 쓴다.
  */
 function resolveSidecarOptionId(question: Question, column: SPSSExportColumn): string | undefined {
-  if (column.type === 'option-text') return column.optionId;
+  // 표 셀 사이드카도 저장 자리가 같다 — __optTexts__[questionId][optionId].
+  if (column.type === 'option-text' || column.type === 'table-cell-option-text') {
+    return column.optionId;
+  }
   const options = resolveChoiceOptions(question);
   return options.find((option) => option.id === 'other-option')?.id;
 }
@@ -201,6 +274,9 @@ function invertQuestion(
     case 'choice-group':
     case 'choice-group-item':
       return invertChoiceGroups(cells);
+    case 'table-cell':
+    case 'radio-group':
+      return invertTableCells(question, cells);
     default:
       return undefined;
   }

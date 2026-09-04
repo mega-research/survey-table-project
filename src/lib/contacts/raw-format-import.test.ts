@@ -80,6 +80,46 @@ const questions: Question[] = [
     ],
   },
   {
+    // 표 문항 — 선택 셀·복수 선택 셀·입력 셀이 한 행에 섞여 있다.
+    id: 'q-table',
+    type: 'table',
+    title: '항목표',
+    questionCode: 'AQ7',
+    order: 6,
+    required: false,
+    tableColumns: [
+      { id: 'tc1', label: '평가' },
+      { id: 'tc2', label: '분야' },
+      { id: 'tc3', label: '메모' },
+    ],
+    tableRowsData: [
+      {
+        id: 'trow1',
+        cells: [
+          {
+            id: 'tcell-radio',
+            type: 'radio',
+            content: '',
+            radioOptions: [
+              { id: 'ro1', value: 'ro1', label: '좋음' },
+              { id: 'ro2', value: 'ro2', label: '나쁨' },
+            ],
+          },
+          {
+            id: 'tcell-check',
+            type: 'checkbox',
+            content: '',
+            checkboxOptions: [
+              { id: 'co1', value: 'co1', label: 'AI' },
+              { id: 'co2', value: 'co2', label: '보안' },
+            ],
+          },
+          { id: 'tcell-input', type: 'input', content: '' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'q-other',
     type: 'radio',
     title: '기타 있는 문항',
@@ -311,6 +351,23 @@ describe('내보내기 → 임포트 왕복', () => {
     const result = roundTrip({ 'q-group': { A: 'cellA2', B: ['cellB1', 'cellB2'] } });
     expect(result.records[0]?.answers).toMatchObject({
       'q-group': { A: 'cellA2', B: ['cellB1', 'cellB2'] },
+    });
+  });
+
+  it('표 문항의 선택·복수선택·입력 셀이 자리 그대로 돌아온다', () => {
+    const result = roundTrip({
+      'q-table': {
+        'tcell-radio': 'ro2',
+        'tcell-check': ['co1'],
+        'tcell-input': '메모 내용',
+      },
+    });
+    expect(result.records[0]?.answers).toMatchObject({
+      'q-table': {
+        'tcell-radio': 'ro2',
+        'tcell-check': ['co1'],
+        'tcell-input': '메모 내용',
+      },
     });
   });
 
