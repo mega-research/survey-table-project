@@ -3,31 +3,80 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { useSyncLatestRef } from '@/hooks/use-latest-ref';
-
 import { useRouter } from 'next/navigation';
 
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
-import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
+import { ResponseDocumentPane } from '@/components/survey-document/response-document-pane';
+import { HoneypotField } from '@/components/survey-response/honeypot-field';
+import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
+import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
+import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
+import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
+import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
+import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
+import { ResumeToast } from '@/components/survey-response/resume-toast';
+import {
+  buildRowWiseCellInstanceIds,
+  scrollToIssue,
+} from '@/components/survey-response/scroll-to-issue';
+import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
+import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
 import { SurveyResponseLayout } from '@/components/survey-response/survey-response-layout';
-import { ResponseDocumentPane } from '@/components/survey-document/response-document-pane';
 import {
   DesktopOnlyScreen,
+  InvalidTestLinkScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
   SurveyErrorScreen,
-  InvalidTestLinkScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
-import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
-import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { UnmodifiedChangedDialog } from '@/components/survey-response/unmodified-changed-dialog';
+import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
+import { Button } from '@/components/ui/button';
+import type { SurveyVersionSnapshot } from '@/db/schema';
+import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
+import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
+import { useClientSignals } from '@/hooks/use-client-signals';
+import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import {
+  type RenderStep,
+  buildRenderSteps,
+  resolveRestoreStepIndex,
+  resolveStepBranch,
+} from '@/lib/group-ordering';
+import { resolveSplitSteps } from '@/lib/group-ordering';
+import {
+  collectTableQuestionOptions,
+  filterOptionTextsForSubmission,
+} from '@/lib/option-text-migration';
+import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+import {
+  anchorQuestionLabel,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/lib/survey-document/anchor-outline';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import {
+  buildAdminEmptyRequiredWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/lib/survey/admin-edit-required-relax';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/lib/survey/answer-validation';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
   CHANGE_CONFIRM_KEY,
   collectUnconfirmedQuestionIds,
@@ -35,85 +84,34 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
-import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
-import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import {
+  type NumericIssue,
   collectNumericIssues,
   collectVisibleTableCells,
-  type NumericIssue,
 } from '@/lib/survey/numeric-validation';
-import {
-  buildAdminEmptyRequiredWarningMessage,
-  classifyStepIssues,
-  snapshotStepResponses,
-} from '@/lib/survey/admin-edit-required-relax';
+import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
+import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
+import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import {
   collectRequiredOptionTextIssues,
   resolveEffectiveOptionTextsByQuestion,
 } from '@/lib/survey/required-option-text-validation';
-import { Button } from '@/components/ui/button';
-
-import { useClientSignals } from '@/hooks/use-client-signals';
-import { HoneypotField } from '@/components/survey-response/honeypot-field';
-import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
-import { useMediaQuery } from '@/hooks/use-media-query';
-import {
-  buildRenderSteps,
-  resolveRestoreStepIndex,
-  resolveStepBranch,
-  type RenderStep,
-} from '@/lib/group-ordering';
-import {
-  hasExplicitRequiredChoiceGroup,
-  isQuestionAnswered as isQuestionAnsweredPure,
-} from '@/lib/survey/answer-validation';
-import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
-import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
-import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
-import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
-import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
-import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
-import { ResumeToast } from '@/components/survey-response/resume-toast';
-import {
-  buildRowWiseCellInstanceIds,
-  scrollToIssue,
-} from '@/components/survey-response/scroll-to-issue';
 import { generateId } from '@/lib/utils';
-import {
-  collectTableQuestionOptions,
-  filterOptionTextsForSubmission,
-} from '@/lib/option-text-migration';
-import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
-import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
-
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
-import { useShallow } from 'zustand/react/shallow';
-import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 import {
+  type BranchEvalCtx,
   collectTraversedQuestionIds,
   collectTraversedStepPath,
   getBranchRuleForResponse,
   shouldDisplayQuestion,
-  type BranchEvalCtx,
 } from '@/utils/branch-logic';
-import { resolveSplitSteps } from '@/lib/group-ordering';
-import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
-import {
-  anchorQuestionLabel,
-  resolveAnchorFocus,
-  resolveAnchorOwnerId,
-  resolveQuestionForOwner,
-} from '@/lib/survey-document/anchor-outline';
 import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
-import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
-import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -178,9 +176,7 @@ function buildOptTextsPayload(
     const qOptTexts = storeOptTexts[q.id];
     if (!qOptTexts || Object.keys(qOptTexts).length === 0) continue;
     const qValue = responses[q.id];
-    const optionsForFilter = q.type === 'table'
-      ? collectTableQuestionOptions(q)
-      : q.options;
+    const optionsForFilter = q.type === 'table' ? collectTableQuestionOptions(q) : q.options;
     const filtered = filterOptionTextsForSubmission(qValue, qOptTexts, optionsForFilter);
     if (filtered) {
       filteredOptTexts[q.id] = filtered;
@@ -188,9 +184,7 @@ function buildOptTextsPayload(
   }
   return {
     ...responses,
-    ...(Object.keys(filteredOptTexts).length > 0
-      ? { __optTexts__: filteredOptTexts }
-      : {}),
+    ...(Object.keys(filteredOptTexts).length > 0 ? { __optTexts__: filteredOptTexts } : {}),
   };
 }
 
@@ -257,9 +251,9 @@ function SurveyResponseFlowControl({
 
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
   // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
-  const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
+  const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
   // ?test=<token> — invite 와 동일하게 admin-edit/preview 에서는 무시(중단/무효 링크 게이트 비대상).
-  const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
+  const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
   const [responses, setResponses] = useState<ResponsesMap>({});
   const clearResponses = useCallback(() => setResponses({}), []);
   const loader = useSurveyLoader({
@@ -358,19 +352,18 @@ function SurveyResponseFlowActive({
   const router = useRouter();
   const isAdminEdit = mode === 'admin-edit';
   const isPreview = mode === 'preview';
-  const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
-  const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
+  const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
+  const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
-  const { setCurrentResponseId, setPendingResponse, resetResponseState } =
-    useSurveyResponseStore(
-      useShallow((s) => ({
-        setCurrentResponseId: s.setCurrentResponseId,
-        setPendingResponse: s.setPendingResponse,
-        resetResponseState: s.resetResponseState,
-      })),
-    );
+  const { setCurrentResponseId, setPendingResponse, resetResponseState } = useSurveyResponseStore(
+    useShallow((s) => ({
+      setCurrentResponseId: s.setCurrentResponseId,
+      setPendingResponse: s.setPendingResponse,
+      resetResponseState: s.resetResponseState,
+    })),
+  );
   const currentResponseId = useSurveyResponseStore((s) => s.currentResponseId);
   const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
   const effectiveOptionTextsByQuestion = useMemo(
@@ -381,6 +374,18 @@ function SurveyResponseFlowActive({
   // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
   const isTestSession = control?.testSession === 'valid';
   const isTargetTestSession = isTestSession && control?.testSessionKind === 'target';
+
+  /**
+   * 문항별 변동 확인 스위치 (스냅샷 밖 라이브 값). control 이 없는 경로
+   * (admin-edit·미리보기)는 이월 응답 자체가 null 이라 어느 쪽이든 무동작이다.
+   */
+  const changeConfirmEnabled = control?.changeConfirmEnabled ?? false;
+  /**
+   * 변동 확인 기계에 넘길 이월 응답. 스위치가 꺼져 있으면 null 을 넘겨 확인 컨트롤·잠금·
+   * 게이트·되묻기가 한꺼번에 무동작이 된다 — 판정 술어가 모두 이월 값 보유를 전제로
+   * 서 있기 때문이다. 꺼진 경로에서 이월 값은 아래 프리필 effect 가 응답값으로 옮긴다.
+   */
+  const confirmPriorAnswers = changeConfirmEnabled ? priorAnswers : null;
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -404,9 +409,7 @@ function SurveyResponseFlowActive({
 
   // 첫 답변 INSERT 진행 플래그(isCreatingResponse)는 useResponseLifecycle 이 소유한다.
   // 제출 시도 후 하이라이트할 질문 ID 집합
-  const [highlightQuestionIds, setHighlightQuestionIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [highlightQuestionIds, setHighlightQuestionIds] = useState<Set<string>>(() => new Set());
 
   // 쿼터 게이트 — 이 문항들은 런타임 필수로 취급하고, 전부 답변되면 checkQuota 1회 호출.
   const quotaGateIds = useMemo(
@@ -569,10 +572,10 @@ function SurveyResponseFlowActive({
     () =>
       new Set(
         currentStepQuestions
-          .filter((q) => isAwaitingChangeConfirmation(q, priorAnswers, responses))
+          .filter((q) => isAwaitingChangeConfirmation(q, confirmPriorAnswers, responses))
           .map((q) => q.id),
       ),
-    [currentStepQuestions, priorAnswers, responses],
+    [currentStepQuestions, confirmPriorAnswers, responses],
   );
 
   // 전역으로 표시되는 모든 질문 (노출 로깅용)
@@ -634,9 +637,11 @@ function SurveyResponseFlowActive({
 
   // 지금 고른 대상. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
   // 그룹을 고르면 그 그룹의 영역만 밝힌다(맥락도 자기 자신).
-  const [anchorSelection, setAnchorSelection] = useState<
-    { kind: 'question' | 'group'; id: string; nonce: number } | null
-  >(null);
+  const [anchorSelection, setAnchorSelection] = useState<{
+    kind: 'question' | 'group';
+    id: string;
+    nonce: number;
+  } | null>(null);
   const selectAnchorQuestion = useCallback(
     (questionId: string) => {
       // 이 페이지의 문항이면 앵커가 풀리든 말든 초점을 옮긴다. 앵커 유무로 걸러 두면
@@ -733,9 +738,7 @@ function SurveyResponseFlowActive({
   const activeAnchorGroupId = useMemo(() => {
     if (!anchorSelection) return null;
     if (anchorSelection.kind === 'group') return anchorSelection.id;
-    return (
-      currentStepQuestions.find((q) => q.id === anchorSelection.id)?.groupId ?? null
-    );
+    return currentStepQuestions.find((q) => q.id === anchorSelection.id)?.groupId ?? null;
   }, [anchorSelection, currentStepQuestions]);
 
   // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
@@ -873,6 +876,43 @@ function SurveyResponseFlowActive({
     setPausedMessage: setRefetchedPausedMessage,
   });
 
+  /**
+   * 이월 값 프리필 — 문항별 변동 확인이 **꺼진** 설문에서 지난 회차 값이 이번 회차 응답으로
+   * 넘어가는 경로다. 켜진 설문은 여기 오지 않는다(그쪽은 응답자가 밝히는 순간 복사한다).
+   *
+   * **지금 단계의 표시되는 문항만** 채운다. 숨은 문항의 값을 걸러내는 지점이 저장 경계에
+   * 없어서, 전 문항을 한꺼번에 깔면 앞 문항에서 "해당 없음"을 고른 사람에게 지난 회차
+   * 하위 답이 그대로 실려 나간다.
+   *
+   * 회복이 끝난 뒤에만 돈다 — 회복은 저장된 응답 묶음을 통째로 세팅하므로, 그 전에 채우면
+   * 채운 값이 버려지고 effect 가 한 번 더 도는 낭비가 된다. 값이 이미 있는 문항은
+   * 건너뛰므로 되돌아와 다시 도는 경우에도 응답자가 고친 값을 덮지 않는다.
+   */
+  useEffect(() => {
+    if (changeConfirmEnabled) return;
+    if (!prefillSettled || isRecovering) return;
+    const entries = collectPriorAnswerPrefills(currentStepQuestions, priorAnswers, responses);
+    if (entries.length === 0) return;
+    setResponses((prev) => {
+      const next = { ...prev };
+      for (const entry of entries) {
+        // prev 기준으로 한 번 더 본다 — 이 effect 가 값을 읽은 뒤 커밋되기까지 사이에
+        // 응답자가 입력했을 수 있다.
+        if (next[entry.questionId] !== undefined) continue;
+        next[entry.questionId] = entry.value;
+      }
+      return next;
+    });
+  }, [
+    changeConfirmEnabled,
+    prefillSettled,
+    isRecovering,
+    currentStepQuestions,
+    priorAnswers,
+    responses,
+    setResponses,
+  ]);
+
   const hasPreviousDisplayable = stepHistory.length > 0;
 
   const isQuestionRequired = (question: Question) =>
@@ -886,24 +926,27 @@ function SurveyResponseFlowActive({
   const isQuestionAnswered = useCallback(
     (question: Question) => {
       const response = responses[question.id];
-      const visibleCellIds = question.type === 'table'
-        ? new Set(
-            collectVisibleTableCells(
-              question,
-              response && typeof response === 'object'
-                ? response as Record<string, unknown>
-                : {},
-              { allResponses: responses, allQuestions: questions },
-            ).map((cell) => cell.id),
-          )
-        : undefined;
-      return isQuestionAnsweredPure(question, response) &&
+      const visibleCellIds =
+        question.type === 'table'
+          ? new Set(
+              collectVisibleTableCells(
+                question,
+                response && typeof response === 'object'
+                  ? (response as Record<string, unknown>)
+                  : {},
+                { allResponses: responses, allQuestions: questions },
+              ).map((cell) => cell.id),
+            )
+          : undefined;
+      return (
+        isQuestionAnsweredPure(question, response) &&
         !collectRequiredOptionTextIssues(
           question,
           response,
           effectiveOptionTextsByQuestion[question.id],
           visibleCellIds ? { visibleCellIds } : undefined,
-        ).questionMissing;
+        ).questionMissing
+      );
     },
     [responses, effectiveOptionTextsByQuestion, questions],
   );
@@ -915,15 +958,20 @@ function SurveyResponseFlowActive({
     // step 내 각 질문의 분기 규칙(end/goto)을 표시 순서대로 평가.
     // 같은 step(=같은 페이지) 또는 이전 step 을 가리키는 goto 는 전진 이동이 아니므로
     // resolveStepBranch 가 무시하고 fallthrough 시킨다 (제자리 no-op 트랩 방지).
-    const rules = currentStepQuestions.map((q) =>
-      getBranchRuleForResponse(q, responses[q.id]),
-    );
+    const rules = currentStepQuestions.map((q) => getBranchRuleForResponse(q, responses[q.id]));
     const outcome = resolveStepBranch(steps, currentStepIndex, rules);
     if (outcome.kind === 'end') return -1;
     if (outcome.kind === 'goto') return outcome.stepIndex;
 
     return findNextDisplayableStepIndex(currentStepIndex + 1);
-  }, [currentStep, currentStepQuestions, responses, steps, currentStepIndex, findNextDisplayableStepIndex]);
+  }, [
+    currentStep,
+    currentStepQuestions,
+    responses,
+    steps,
+    currentStepIndex,
+    findNextDisplayableStepIndex,
+  ]);
 
   const isLastVisibleStep = useMemo(() => {
     if (!currentStep) return false;
@@ -987,16 +1035,12 @@ function SurveyResponseFlowActive({
   if (requiredErrorStepIndex !== null && requiredErrorStepIndex !== currentStepIndex) {
     setRequiredErrorStepIndex(null);
   }
-  const focusedQuestionId = currentStepQuestions.find((q) =>
-    highlightQuestionIds.has(q.id),
-  )?.id;
+  const focusedQuestionId = currentStepQuestions.find((q) => highlightQuestionIds.has(q.id))?.id;
   const visibleNumericIssues = useMemo(() => {
     if (!showNumericErrors) return EMPTY_ISSUES;
     if (!focusedQuestionId) return numericIssuesByQuestion;
     const focusedIssues = numericIssuesByQuestion.get(focusedQuestionId);
-    return focusedIssues
-      ? new Map([[focusedQuestionId, focusedIssues]])
-      : EMPTY_ISSUES;
+    return focusedIssues ? new Map([[focusedQuestionId, focusedIssues]]) : EMPTY_ISSUES;
   }, [showNumericErrors, focusedQuestionId, numericIssuesByQuestion]);
 
   // 하이라이트 중 "필수 미응답" 사유인 질문만 골라 안내 문구를 붙인다 — 숫자 검증
@@ -1019,8 +1063,8 @@ function SurveyResponseFlowActive({
   // 이월 응답이 없는 응답자(익명·미보유 대상자)와 admin-edit/미리보기는 priorAnswers 가
   // null 이라 이 목록이 항상 비고, 게이트 전체가 무동작이다.
   const unconfirmedChangeQuestionIds = useMemo(
-    () => collectUnconfirmedQuestionIds(currentStepQuestions, priorAnswers, responses),
-    [currentStepQuestions, priorAnswers, responses],
+    () => collectUnconfirmedQuestionIds(currentStepQuestions, confirmPriorAnswers, responses),
+    [currentStepQuestions, confirmPriorAnswers, responses],
   );
   // 안내 문구는 "다음"을 시도한 스텝에서만 띄운다(숫자 검증과 같은 방식). 목록 자체는
   // 라이브 계산이라 응답자가 선택하는 순간 문구가 사라진다.
@@ -1049,12 +1093,12 @@ function SurveyResponseFlowActive({
     const ids = new Set(
       collectUnmodifiedChangedQuestionIds(
         visibleQuestions.filter((q) => traversedQuestionIds.has(q.id)),
-        priorAnswers,
+        confirmPriorAnswers,
         responses,
       ),
     );
     return visibleQuestions.filter((q) => ids.has(q.id));
-  }, [visibleQuestions, traversedQuestionIds, priorAnswers, responses]);
+  }, [visibleQuestions, traversedQuestionIds, confirmPriorAnswers, responses]);
   const unmodifiedChangedFingerprint = unmodifiedChangedQuestions.map((q) => q.id).join('|');
 
   const canProceed = () => {
@@ -1063,8 +1107,7 @@ function SurveyResponseFlowActive({
     // 변동 확인 대기 문항은 별개 축이라 여기서 세지 않는다 — 잠긴 입력을 두고
     // "필수 질문에 답변해주세요"를 띄우면 응답자가 따를 수 없다.
     return currentStepQuestions.every(
-      (q) =>
-        awaitingConfirmationIds.has(q.id) || !isQuestionRequired(q) || isQuestionAnswered(q),
+      (q) => awaitingConfirmationIds.has(q.id) || !isQuestionRequired(q) || isQuestionAnswered(q),
     );
   };
   // 하단 안내(데스크톱 문구·모바일 소표시) — 이 스텝에서 필수 게이트에 막힌 뒤에만, 답을
@@ -1080,7 +1123,11 @@ function SurveyResponseFlowActive({
   // 재클릭 한 번에 통과해버릴 수 있어서다. useEffect 대신 렌더 중 상태 조정(React 공식
   // 권장 "Adjusting state when a prop changes" 패턴)으로 처리 — setState-in-effect 경고 회피.
   const currentStepResponseSnapshot = useMemo(
-    () => snapshotStepResponses(currentStepQuestions.map((q) => q.id), responses),
+    () =>
+      snapshotStepResponses(
+        currentStepQuestions.map((q) => q.id),
+        responses,
+      ),
     [currentStepQuestions, responses],
   );
   const [adminWarnedSnapshot, setAdminWarnedSnapshot] = useState<string | null>(null);
@@ -1101,7 +1148,13 @@ function SurveyResponseFlowActive({
     // isQuestionRequired 는 quotaGateIds 를 닫는 비메모 인라인 함수라 quotaGateIds 를 직접 dep 로 둔다
     // (canProceed 등 기존 코드와 동일 패턴).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, numericIssuesByQuestion, currentStepQuestions, isQuestionAnswered, quotaGateIds]);
+  }, [
+    isAdminEdit,
+    numericIssuesByQuestion,
+    currentStepQuestions,
+    isQuestionAnswered,
+    quotaGateIds,
+  ]);
   // 경고 배너 표시 조건: "방금 첫 클릭으로 경고했고, 그 이후 값/스텝이 그대로인 상태"
   // — 이 조건이 참인 동안에만 다음 클릭이 통과(bypass)로 이어진다(handleNext 참고).
   const showAdminEmptyRequiredWarning =
@@ -1116,8 +1169,7 @@ function SurveyResponseFlowActive({
   const adminFirstEmptyRequiredTarget = useMemo(() => {
     if (!isAdminEdit) return null;
     const firstUnanswered = currentStepQuestions.find(
-      (q) =>
-        !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
     // 비-테이블 상세기입 누락은 firstUnanswered(질문 단위)와 numericIssuesByQuestion(같은
     // 질문의 required-detail 이슈) 양쪽에 동시에 잡힌다 — 있으면 detailTargetIds 를 붙여
@@ -1135,7 +1187,13 @@ function SurveyResponseFlowActive({
       issue: numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, numericIssuesByQuestion, currentStepQuestions, isQuestionAnswered, quotaGateIds]);
+  }, [
+    isAdminEdit,
+    numericIssuesByQuestion,
+    currentStepQuestions,
+    isQuestionAnswered,
+    quotaGateIds,
+  ]);
 
   // 무중단 갈아타기(티켓 04): create 결과의 versionId 가 알던 값과 다르면(서버 재핀) 호출된다.
   // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
@@ -1155,52 +1213,52 @@ function SurveyResponseFlowActive({
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
   const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
     useResponseLifecycle({
-    isAdminEdit,
-    isPreview,
-    isCompleted,
-    terminalBlocked: duplicateStatus.kind === 'blocked',
-    adminContext,
-    inviteToken,
-    testToken,
-    isTestSession,
-    testIdentity,
-    hasTestAttemptOwnership,
-    setHasTestAttemptOwnership,
-    loadedSurvey,
-    contactAttrs,
-    currentStep,
-    currentStepIndex,
-    steps,
-    questions,
-    groups,
-    visibleQuestions,
-    evalCtx,
-    responses,
-    setResponses,
-    sessionId,
-    versionId,
-    onVersionRebase: handleVersionRebase,
-    signals,
-    honeypotRef,
-    currentResponseId,
-    setCurrentResponseId,
-    setPendingResponse,
-    resetResponseState,
-    isRecovering,
-    recoveredDraftSeq,
-    isQuestionAnswered,
-    optionTextsByQuestion: effectiveOptionTextsByQuestion,
-    visibleProgressRef,
-    setHighlightQuestionIds,
-    setDuplicateStatus,
-    setPausedMessage: setRefetchedPausedMessage,
-    setInviteIsInvalid,
-    setIsSubmitting,
-    setCurrentStepIndex,
-    setIsCompleted,
-    buildOptTextsPayload,
-    setNumericErrorStepIndex,
-  });
+      isAdminEdit,
+      isPreview,
+      isCompleted,
+      terminalBlocked: duplicateStatus.kind === 'blocked',
+      adminContext,
+      inviteToken,
+      testToken,
+      isTestSession,
+      testIdentity,
+      hasTestAttemptOwnership,
+      setHasTestAttemptOwnership,
+      loadedSurvey,
+      contactAttrs,
+      currentStep,
+      currentStepIndex,
+      steps,
+      questions,
+      groups,
+      visibleQuestions,
+      evalCtx,
+      responses,
+      setResponses,
+      sessionId,
+      versionId,
+      onVersionRebase: handleVersionRebase,
+      signals,
+      honeypotRef,
+      currentResponseId,
+      setCurrentResponseId,
+      setPendingResponse,
+      resetResponseState,
+      isRecovering,
+      recoveredDraftSeq,
+      isQuestionAnswered,
+      optionTextsByQuestion: effectiveOptionTextsByQuestion,
+      visibleProgressRef,
+      setHighlightQuestionIds,
+      setDuplicateStatus,
+      setPausedMessage: setRefetchedPausedMessage,
+      setInviteIsInvalid,
+      setIsSubmitting,
+      setCurrentStepIndex,
+      setIsCompleted,
+      buildOptTextsPayload,
+      setNumericErrorStepIndex,
+    });
 
   // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
   // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
@@ -1244,8 +1302,7 @@ function SurveyResponseFlowActive({
   const handleNext = async () => {
     blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
-      (q) =>
-        !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
 
     // admin-edit 전용(요구 1~4/6) — 빈 필수만 있고(차단형 위반 없음) 있으면 경고 1회 후
@@ -1347,7 +1404,6 @@ function SurveyResponseFlowActive({
       return;
     }
 
-
     // 제출 직전 되묻기(추적조사) — 차단이 아니라 확인이다. 다이얼로그에서 "이대로 제출"을
     // 고르면 acknowledged 가 서고 같은 클릭 경로가 그대로 이어진다.
     if (
@@ -1367,10 +1423,7 @@ function SurveyResponseFlowActive({
     // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
     let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
       null;
-    if (
-      !quotaCheckedRef.current &&
-      allQuotaQuestionsAnswered([...quotaGateIds], responses)
-    ) {
+    if (!quotaCheckedRef.current && allQuotaQuestionsAnswered([...quotaGateIds], responses)) {
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
@@ -1479,7 +1532,7 @@ function SurveyResponseFlowActive({
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
-      <div className="mx-auto flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground mx-auto flex min-h-screen items-center justify-center text-sm">
         확인 중...
       </div>
     );
@@ -1516,9 +1569,7 @@ function SurveyResponseFlowActive({
       <SurveyCompletedScreen
         {...(isPreview ? { title: '설문 확인 완료' } : {})}
         thankYouMessage={
-          isPreview
-            ? '입력 내용은 저장되지 않았습니다.'
-            : loadedSurvey.settings.thankYouMessage
+          isPreview ? '입력 내용은 저장되지 않았습니다.' : loadedSurvey.settings.thankYouMessage
         }
         showCompletedTime={!isPreview}
       />
@@ -1591,7 +1642,7 @@ function SurveyResponseFlowActive({
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
-      <PriorAnswersProvider answers={priorAnswers} waveLabel={control?.priorWaveLabel}>
+      <PriorAnswersProvider answers={confirmPriorAnswers} waveLabel={control?.priorWaveLabel}>
         <UnmodifiedChangedDialog
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
@@ -1603,175 +1654,176 @@ function SurveyResponseFlowActive({
             void handleNext();
           }}
         />
-      <FormulaEvalProvider value={formulaCtx}>
-      <SurveyResponseLayout
-        containerMaxWidth={containerMaxWidth}
-        reserveBottomNavSpace={isMobile}
-        documentPane={
-          isSplit && documentView ? (
-            <ResponseDocumentPane
-              url={documentView.url}
-              pageCount={documentView.pageCount}
-              anchors={documentView.anchors}
-              focus={anchorFocus}
-              labelOf={anchorLabelOf}
-              onOwnerSelect={handleAnchorOwnerSelect}
-            />
-          ) : undefined
-        }
-        chrome={
-          /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
-          <HoneypotField ref={honeypotRef} />
-        }
-        header={
-          <SurveyResponseHeader
-            title={loadedSurvey.title}
-            description={loadedSurvey.description}
-            responseHeader={loadedSurvey.settings.responseHeader}
-            showBranding={currentVisibleStepNumber <= 1}
-          />
-        }
-        progress={progressBand}
-        bottomNav={
-          isMobile ? (
-            <MobileBottomNav
-              keyboardOpen={keyboardOpen}
-              currentStepNumber={currentVisibleStepNumber}
-              totalStepCount={totalVisibleStepCount}
-              showRequiredNotice={showRequiredNotice}
-              hasPrevious={hasPreviousDisplayable}
-              isLastStep={isLastVisibleStep}
-              isSubmitting={isSubmitting}
-              submitLabel={submitLabel}
-              submittingLabel={submittingLabel}
-              onPrevious={handlePrevious}
-              onNext={handleNext}
-            />
-          ) : undefined
-        }
-      >
-        {reeditNotice && (
-          <div
-            role="status"
-            className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
-          >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
-              해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
-            </div>
-          </div>
-        )}
-        {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
-        {rebaseMessage && (
-          <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
-        )}
-        {inviteIsInvalid && (
-          <div
-            role="alert"
-            className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-          >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
-          </div>
-        )}
-        {isSplit ? (
-          /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
-             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
-          <DemandChecklist
-            items={currentStep.items.filter((item) =>
-              currentStepQuestions.some((q) => q.id === item.question.id),
-            )}
-            groups={groups}
-            responses={responses}
-            questions={questions}
-            onResponse={handleResponse}
-            highlightQuestionIds={highlightQuestionIds}
-            requiredMessageQuestionIds={requiredMessageQuestionIds}
-            changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-            numericIssues={visibleNumericIssues}
-            onQuestionFocus={selectAnchorQuestion}
-            onGroupSelect={selectAnchorGroup}
-            activeGroupId={activeAnchorGroupId}
-            focusedQuestionId={
-              anchorSelection?.kind === 'question' ? anchorSelection.id : null
+        <FormulaEvalProvider value={formulaCtx}>
+          <SurveyResponseLayout
+            containerMaxWidth={containerMaxWidth}
+            reserveBottomNavSpace={isMobile}
+            documentPane={
+              isSplit && documentView ? (
+                <ResponseDocumentPane
+                  url={documentView.url}
+                  pageCount={documentView.pageCount}
+                  anchors={documentView.anchors}
+                  focus={anchorFocus}
+                  labelOf={anchorLabelOf}
+                  onOwnerSelect={handleAnchorOwnerSelect}
+                />
+              ) : undefined
             }
-          />
-        ) : (
-        <PageStepView
-          step={currentStep}
-          responses={responses}
-          questions={questions}
-          groups={groups}
-          evalCtx={evalCtx}
-          onResponse={handleStepResponse}
-          highlightQuestionIds={highlightQuestionIds}
-          requiredMessageQuestionIds={requiredMessageQuestionIds}
-          changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-          numericIssues={visibleNumericIssues}
-        />
-        )}
-
-        {/* 데스크톱 네비게이션 */}
-        <div className="mt-8 hidden items-center justify-between md:flex">
-          <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            이전
-          </Button>
-
-          {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
-              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
-          <div className="px-4 text-sm text-gray-500" role={showAdminEmptyRequiredWarning ? 'alert' : undefined}>
-            {showAdminEmptyRequiredWarning && adminStepClassification ? (
-              <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
-                <span>
-                  {buildAdminEmptyRequiredWarningMessage(
-                    adminStepClassification.emptyRequiredCount,
-                  )}
-                </span>
-                {adminFirstEmptyRequiredTarget && (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                    onClick={() => {
-                      const { questionId: targetQuestionId, issue: targetIssue } =
-                        adminFirstEmptyRequiredTarget;
-                      scrollToIssue({
-                        questionId: targetQuestionId,
-                        detailTargetIds: targetIssue?.detailTargetIds,
-                        cellInstanceIds: buildRowWiseCellInstanceIds(
-                          questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
-                          targetIssue?.cellIds,
-                        ),
-                        cellIds: targetIssue?.cellIds,
-                      });
-                    }}
-                  >
-                    위치로 이동
-                  </button>
-                )}
-              </span>
-            ) : (
-              showRequiredNotice && (
-                <span className="text-red-500">* 필수 질문에 답변해주세요</span>
-              )
+            chrome={
+              /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
+              <HoneypotField ref={honeypotRef} />
+            }
+            header={
+              <SurveyResponseHeader
+                title={loadedSurvey.title}
+                description={loadedSurvey.description}
+                responseHeader={loadedSurvey.settings.responseHeader}
+                showBranding={currentVisibleStepNumber <= 1}
+              />
+            }
+            progress={progressBand}
+            bottomNav={
+              isMobile ? (
+                <MobileBottomNav
+                  keyboardOpen={keyboardOpen}
+                  currentStepNumber={currentVisibleStepNumber}
+                  totalStepCount={totalVisibleStepCount}
+                  showRequiredNotice={showRequiredNotice}
+                  hasPrevious={hasPreviousDisplayable}
+                  isLastStep={isLastVisibleStep}
+                  isSubmitting={isSubmitting}
+                  submitLabel={submitLabel}
+                  submittingLabel={submittingLabel}
+                  onPrevious={handlePrevious}
+                  onNext={handleNext}
+                />
+              ) : undefined
+            }
+          >
+            {reeditNotice && (
+              <div
+                role="status"
+                className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+                  해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+                </div>
+              </div>
             )}
-          </div>
+            {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
+            {rebaseMessage && (
+              <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
+            )}
+            {inviteIsInvalid && (
+              <div
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
+              </div>
+            )}
+            {isSplit ? (
+              /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+              <DemandChecklist
+                items={currentStep.items.filter((item) =>
+                  currentStepQuestions.some((q) => q.id === item.question.id),
+                )}
+                groups={groups}
+                responses={responses}
+                questions={questions}
+                onResponse={handleResponse}
+                highlightQuestionIds={highlightQuestionIds}
+                requiredMessageQuestionIds={requiredMessageQuestionIds}
+                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                numericIssues={visibleNumericIssues}
+                onQuestionFocus={selectAnchorQuestion}
+                onGroupSelect={selectAnchorGroup}
+                activeGroupId={activeAnchorGroupId}
+                focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
+              />
+            ) : (
+              <PageStepView
+                step={currentStep}
+                responses={responses}
+                questions={questions}
+                groups={groups}
+                evalCtx={evalCtx}
+                onResponse={handleStepResponse}
+                highlightQuestionIds={highlightQuestionIds}
+                requiredMessageQuestionIds={requiredMessageQuestionIds}
+                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                numericIssues={visibleNumericIssues}
+              />
+            )}
 
-          {isLastVisibleStep ? (
-            <Button onClick={handleNext} disabled={isSubmitting}>
-              {isSubmitting ? submittingLabel : submitLabel}
-              {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
-            </Button>
-          ) : (
-            <Button onClick={handleNext}>
-              다음
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </SurveyResponseLayout>
-      </FormulaEvalProvider>
+            {/* 데스크톱 네비게이션 */}
+            <div className="mt-8 hidden items-center justify-between md:flex">
+              <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                이전
+              </Button>
+
+              {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+              <div
+                className="px-4 text-sm text-gray-500"
+                role={showAdminEmptyRequiredWarning ? 'alert' : undefined}
+              >
+                {showAdminEmptyRequiredWarning && adminStepClassification ? (
+                  <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                    <span>
+                      {buildAdminEmptyRequiredWarningMessage(
+                        adminStepClassification.emptyRequiredCount,
+                      )}
+                    </span>
+                    {adminFirstEmptyRequiredTarget && (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                        onClick={() => {
+                          const { questionId: targetQuestionId, issue: targetIssue } =
+                            adminFirstEmptyRequiredTarget;
+                          scrollToIssue({
+                            questionId: targetQuestionId,
+                            detailTargetIds: targetIssue?.detailTargetIds,
+                            cellInstanceIds: buildRowWiseCellInstanceIds(
+                              questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                              targetIssue?.cellIds,
+                            ),
+                            cellIds: targetIssue?.cellIds,
+                          });
+                        }}
+                      >
+                        위치로 이동
+                      </button>
+                    )}
+                  </span>
+                ) : (
+                  showRequiredNotice && (
+                    <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+                  )
+                )}
+              </div>
+
+              {isLastVisibleStep ? (
+                <Button onClick={handleNext} disabled={isSubmitting}>
+                  {isSubmitting ? submittingLabel : submitLabel}
+                  {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
+                </Button>
+              ) : (
+                <Button onClick={handleNext}>
+                  다음
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </SurveyResponseLayout>
+        </FormulaEvalProvider>
       </PriorAnswersProvider>
     </ContactAttrsProvider>
   );

@@ -148,6 +148,7 @@ beforeEach(() => {
       testSession: null,
       testSessionKind: null,
       priorWaveLabel: '2025년 조사',
+      changeConfirmEnabled: true,
     },
   });
   attrsLookup.mockResolvedValue({});
@@ -174,8 +175,7 @@ beforeEach(() => {
 /** complete 로 서버에 실제로 나간 응답 묶음. */
 function submittedResponses(): Record<string, unknown> {
   const call = complete.mock.calls.at(-1)?.[0] as
-    | { data?: { questionResponses?: Record<string, unknown> } }
-    | undefined;
+    { data?: { questionResponses?: Record<string, unknown> } } | undefined;
   return call?.data?.questionResponses ?? {};
 }
 
@@ -225,6 +225,7 @@ describe('변동 확인 컨트롤 노출', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
 
@@ -431,6 +432,7 @@ describe('이월 값 잠금과 복사', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
     priorAnswersLookup.mockResolvedValue({
@@ -470,6 +472,7 @@ describe('필수 여부와 변동 확인은 별개 축이다', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
   }
@@ -563,5 +566,103 @@ describe('완전 동일 확인', () => {
 
     await waitFor(() => expect(complete).toHaveBeenCalled());
     expect(screen.queryByText(/달라졌다고 하셨지만/)).toBeNull();
+  });
+});
+
+/**
+ * 문항별 변동 확인이 **꺼진** 설문 (기본값). 이월 값이 답으로 미리 깔리고 응답자가 고치면
+ * 덮어쓴다. 위 묶음이 기술하는 잠금·확인·되묻기는 이 경로에서 전부 사라져야 한다.
+ */
+describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
+  function renderWithSwitchOff(survey: Survey = createSurvey()) {
+    forResponse.mockResolvedValue({
+      survey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: null,
+        testSessionKind: null,
+        priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: false,
+      },
+    });
+    renderFlow();
+  }
+
+  it('확인 컨트롤이 아예 나타나지 않는다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('작년 답')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('radio', { name: '2025년 조사와 같음' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: '달라졌습니다' })).toBeNull();
+  });
+
+  it('이월 값이 답으로 깔리고 입력이 잠겨 있지 않다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    const input = await screen.findByDisplayValue('작년 답');
+    expect(input).not.toBeDisabled();
+    expect(input).not.toHaveAttribute('readonly');
+  });
+
+  it('밝히지 않아도 다음 페이지로 넘어간다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 페이지 질문')).toBeInTheDocument();
+  });
+
+  it('손대지 않은 이월 값이 그대로 제출된다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()['q-prior']).toBe('작년 답');
+  });
+
+  it('고친 값이 이월 값을 덮어쓰고, 되묻지 않고 바로 제출된다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    const input = await screen.findByDisplayValue('작년 답');
+    await user.clear(input);
+    await user.type(input, '올해 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()['q-prior']).toBe('올해 답');
+  });
+
+  it('변동 확인 사이드카가 서버로 나가지 않는다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()).not.toHaveProperty('__changeConfirm__');
+  });
+
+  it('이월 값이 없는 문항은 빈칸으로 남는다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('올해 새로 생긴 질문');
+    await screen.findByDisplayValue('작년 답');
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs.some((el) => (el as HTMLInputElement).value === '')).toBe(true);
   });
 });

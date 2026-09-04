@@ -102,6 +102,13 @@ export async function loadChangeConfirmQuestionIds(
     CROSS JOIN LATERAL jsonb_each(cpa.answers) AS entry(key, value)
     WHERE ct.survey_id = ${surveyId}::uuid
       AND ct.is_test = ${options.isTest}
+      -- 문항별 변동 확인이 꺼진 설문은 확인 자체를 받지 않으므로 변수도 만들지 않는다.
+      -- 응답 화면의 노출 규칙과 내보내기 변수 생성이 갈라지면, 컨트롤이 없는 문항에만
+      -- 변수가 생겨 전 칸 결측인 열이 나간다.
+      AND EXISTS (
+        SELECT 1 FROM surveys s
+        WHERE s.id = ct.survey_id AND s.change_confirm_enabled
+      )
       AND jsonb_typeof(cpa.answers) = 'object'
       -- 사이드카 키(밑줄 두 개 접두)는 문항이 아니다.
       AND left(entry.key, 2) <> '__'

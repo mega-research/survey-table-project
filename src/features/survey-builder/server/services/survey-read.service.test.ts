@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getResponseCountsGroupedBySurvey } from '@/data/responses';
+import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
+import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import type { Survey as SurveyType } from '@/types/survey';
+
+import {
+  getSurveyForResponse,
+  getSurveyListWithCounts,
+  getSurveyWithDetails,
+} from './survey-read.service';
 
 // data/surveys.ts 의 단일 구현(매핑 SoT)에 위임하는지 검증한다.
 // publish/analytics 와 빌더 read 가 동일 매핑을 공유하도록 강제하여
@@ -54,17 +64,6 @@ vi.mock('@/db', () => ({
     },
   },
 }));
-
-import { getResponseCountsGroupedBySurvey } from '@/data/responses';
-import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
-import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
-import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
-
-import {
-  getSurveyForResponse,
-  getSurveyListWithCounts,
-  getSurveyWithDetails,
-} from './survey-read.service';
 
 const SURVEY_ID = 'survey-1';
 
@@ -192,9 +191,7 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
       requireLogin: false,
       thankYouMessage: '감사합니다',
     };
-    return requireInviteToken === undefined
-      ? base
-      : { ...base, requireInviteToken };
+    return requireInviteToken === undefined ? base : { ...base, requireInviteToken };
   }
 
   it('published 경로는 snapshot 값을 따르고 현재 surveys 행으로 덮어쓰지 않는다', async () => {
@@ -443,9 +440,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
 
   it('회차 라벨은 스냅샷이 아니라 현재 surveys 행에서 control 로 실린다', async () => {
     const surveyId = 'survey-control-prior-wave';
-    surveysFindFirst.mockResolvedValue(
-      baseSurveyRow(surveyId, { priorWaveLabel: '2025년 조사' }),
-    );
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { priorWaveLabel: '2025년 조사' }));
     mockFallbackDetails(surveyId);
 
     const result = await getSurveyForResponse({ surveyId });
@@ -461,6 +456,17 @@ describe('survey-read.service getSurveyForResponse control', () => {
     const result = await getSurveyForResponse({ surveyId });
 
     expect(result?.control.priorWaveLabel).toBeNull();
+  });
+
+  it('변동 확인 스위치를 control 로 흘린다 — 스냅샷 밖 라이브 값이다', async () => {
+    const surveyId = 'survey-control-change-confirm';
+    mockFallbackDetails(surveyId);
+
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { changeConfirmEnabled: true }));
+    expect((await getSurveyForResponse({ surveyId }))?.control.changeConfirmEnabled).toBe(true);
+
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { changeConfirmEnabled: false }));
+    expect((await getSurveyForResponse({ surveyId }))?.control.changeConfirmEnabled).toBe(false);
   });
 
   it('유효한 testToken 이면 testSession=valid 이다', async () => {
@@ -516,9 +522,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
 
   it('ON인 테스트 대상자 inviteToken은 target 테스트 세션으로 판정한다', async () => {
     const surveyId = 'survey-control-target';
-    surveysFindFirst.mockResolvedValue(
-      baseSurveyRow(surveyId, { testModeEnabled: true }),
-    );
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { testModeEnabled: true }));
     vi.mocked(findContactByInviteToken).mockResolvedValue({
       kind: 'valid',
       contactTargetId: 'test-target-1',
@@ -537,9 +541,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
 
   it('실제 대상자 inviteToken은 테스트 모드 ON이어도 일반 세션이다', async () => {
     const surveyId = 'survey-control-real-target';
-    surveysFindFirst.mockResolvedValue(
-      baseSurveyRow(surveyId, { testModeEnabled: true }),
-    );
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { testModeEnabled: true }));
     vi.mocked(findContactByInviteToken).mockResolvedValue({
       kind: 'valid',
       contactTargetId: 'real-target-1',
@@ -558,9 +560,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
 
   it('초대 선택 설문에서도 교차 설문 테스트 토큰을 익명으로 폴백하지 않는다', async () => {
     const surveyId = 'survey-control-optional-invite';
-    surveysFindFirst.mockResolvedValue(
-      baseSurveyRow(surveyId, { requireInviteToken: false }),
-    );
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId, { requireInviteToken: false }));
     vi.mocked(findContactByInviteToken).mockResolvedValue({ kind: 'invalid_test' });
     mockFallbackDetails(surveyId);
 

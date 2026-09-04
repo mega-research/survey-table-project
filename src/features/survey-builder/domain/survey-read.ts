@@ -188,6 +188,12 @@ export type SurveyControl = {
   testSessionKind: 'anonymous' | 'target' | null;
   /** 추적조사 회차 라벨. 스냅샷 밖 라이브 값이라 control 로 흘린다. null 이면 기본 문구. */
   priorWaveLabel: string | null;
+  /**
+   * 문항별 변동 확인 사용 여부. 스냅샷 밖 라이브 값이라 control 로 흘린다.
+   * false 면 응답 화면이 이월 값을 표시되는 문항의 답으로 미리 깔고, 잠금·확인 컨트롤을
+   * 띄우지 않는다. true 면 지금까지의 동작 그대로다.
+   */
+  changeConfirmEnabled: boolean;
 };
 
 /**

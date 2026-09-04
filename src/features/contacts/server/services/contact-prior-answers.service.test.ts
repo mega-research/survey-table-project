@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from '../../../../../tests/integration/_helpers/result-code-mock';
+import { loadChangeConfirmQuestionIds, lookupPriorAnswers } from './contact-prior-answers.service';
 
 const selectChain = vi.fn();
 const executeMock = vi.fn();
@@ -19,11 +20,6 @@ vi.mock('@/db', () => ({
     execute: (...args: unknown[]) => executeMock(...args),
   },
 }));
-
-import {
-  loadChangeConfirmQuestionIds,
-  lookupPriorAnswers,
-} from './contact-prior-answers.service';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 const INVITE = '22222222-2222-4222-8222-222222222222';
@@ -100,7 +96,7 @@ describe('lookupPriorAnswers PII 읽기 경계', () => {
       q2: '평문 그대로',
     });
   });
-})
+});
 
 describe('보관기한 파기 표식', () => {
   beforeEach(() => {
@@ -162,6 +158,14 @@ describe('loadChangeConfirmQuestionIds', () => {
   it('실/테스트 파티션을 조사 대상 기준으로 가른다', async () => {
     await loadChangeConfirmQuestionIds(SURVEY_ID, { isTest: true });
     expect(extractRawSql(executeMock.mock.calls[0]?.[0])).toContain('is_test');
+  });
+
+  it('문항별 변동 확인이 꺼진 설문은 질의 단계에서 제외한다', async () => {
+    await loadChangeConfirmQuestionIds(SURVEY_ID, { isTest: false });
+    // 스위치가 꺼진 설문은 확인 자체를 받지 않으므로 변수도 만들지 않는다. 응답 화면의
+    // 노출 규칙과 갈라지면 전 칸 결측인 _CHG 열이 나간다.
+    const sql = extractRawSql(executeMock.mock.calls[0]?.[0]);
+    expect(sql).toContain('change_confirm_enabled');
   });
 
   it('이월 응답이 없으면 빈 집합 — 내보내기는 변동 확인 변수를 만들지 않는다', async () => {

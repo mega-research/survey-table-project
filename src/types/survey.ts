@@ -1,4 +1,8 @@
-import type { ContactColumnScheme, GroupNameDesign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type {
+  ContactColumnScheme,
+  GroupNameDesign,
+  SurveyResponseHeaderConfig,
+} from '@/db/schema/schema-types';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
@@ -328,7 +332,12 @@ export interface CalcCellValidation {
 export type CellEnableCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
   | { kind: 'filled'; controllerCellId: string }
-  | { kind: 'numeric'; controllerCellId: string; op: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
+  | {
+      kind: 'numeric';
+      controllerCellId: string;
+      op: '>' | '>=' | '<' | '<=' | '==' | '!=';
+      value: number;
+    };
 
 export interface TableCell {
   id: string;
@@ -565,9 +574,9 @@ export interface DynamicRowGroupConfig {
  */
 export interface ChoiceGroup {
   id: string;
-  groupKey: string;                        // 변수명 식별자: rad1/cb1/rnk1. 자동 발번 + 수동 오버라이드.
+  groupKey: string; // 변수명 식별자: rad1/cb1/rnk1. 자동 발번 + 수동 오버라이드.
   type: 'radio' | 'checkbox' | 'ranking';
-  label: string;                           // 그룹 제목 - SPSS 변수 라벨 접두
+  label: string; // 그룹 제목 - SPSS 변수 라벨 접두
   minSelections?: number;
   maxSelections?: number;
   // 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다.
@@ -758,6 +767,10 @@ export interface SurveySettings {
   // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름(예: 2025년 조사).
   // 버전 스냅샷에 넣지 않는 라이브 값이라, 응답 페이지는 control 로 전달받는다 (0094 마이그레이션).
   priorWaveLabel?: string | null;
+  // 문항별 변동 확인 사용 여부 — false(기본)면 이월 값을 표시되는 문항의 답으로 미리 깔고
+  // 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + 내보내기 _CHG 변수.
+  // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0101 마이그레이션).
+  changeConfirmEnabled?: boolean;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

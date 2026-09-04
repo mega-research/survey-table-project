@@ -80,11 +80,19 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.requiredMessage != null ? { requiredMessage: q.requiredMessage } : {}),
     ...(q.groupId != null ? { groupId: q.groupId } : {}),
     ...(q.options != null ? { options: q.options as NonNullable<QuestionType['options']> } : {}),
-    ...(q.selectLevels != null ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> } : {}),
+    ...(q.selectLevels != null
+      ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> }
+      : {}),
     ...(q.tableTitle != null ? { tableTitle: q.tableTitle } : {}),
-    ...(q.tableColumns != null ? { tableColumns: q.tableColumns as NonNullable<QuestionType['tableColumns']> } : {}),
-    ...(q.tableRowsData != null ? { tableRowsData: q.tableRowsData as NonNullable<QuestionType['tableRowsData']> } : {}),
-    ...(q.tableHeaderGrid != null ? { tableHeaderGrid: q.tableHeaderGrid as NonNullable<QuestionType['tableHeaderGrid']> } : {}),
+    ...(q.tableColumns != null
+      ? { tableColumns: q.tableColumns as NonNullable<QuestionType['tableColumns']> }
+      : {}),
+    ...(q.tableRowsData != null
+      ? { tableRowsData: q.tableRowsData as NonNullable<QuestionType['tableRowsData']> }
+      : {}),
+    ...(q.tableHeaderGrid != null
+      ? { tableHeaderGrid: q.tableHeaderGrid as NonNullable<QuestionType['tableHeaderGrid']> }
+      : {}),
     order: q.order,
     ...(q.allowOtherOption != null ? { allowOtherOption: q.allowOtherOption } : {}),
     ...(q.optionsColumns != null ? { optionsColumns: q.optionsColumns } : {}),
@@ -95,16 +103,32 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
     ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
     ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),
-  ...(q.noticeBgColor != null ? { noticeBgColor: q.noticeBgColor } : {}),
-    ...(q.requiresAcknowledgment != null ? { requiresAcknowledgment: q.requiresAcknowledgment } : {}),
+    ...(q.noticeBgColor != null ? { noticeBgColor: q.noticeBgColor } : {}),
+    ...(q.requiresAcknowledgment != null
+      ? { requiresAcknowledgment: q.requiresAcknowledgment }
+      : {}),
     ...(q.placeholder != null ? { placeholder: q.placeholder } : {}),
     ...(q.defaultValueTemplate != null ? { defaultValueTemplate: q.defaultValueTemplate } : {}),
-    ...((q.inputType as 'text' | 'number' | null) != null ? { inputType: q.inputType as 'text' | 'number' } : {}),
+    ...((q.inputType as 'text' | 'number' | null) != null
+      ? { inputType: q.inputType as 'text' | 'number' }
+      : {}),
     ...(q.emptyDefault != null ? { emptyDefault: q.emptyDefault } : {}),
-    ...(q.tableValidationRules != null ? { tableValidationRules: q.tableValidationRules as NonNullable<QuestionType['tableValidationRules']> } : {}),
-    ...(q.dynamicRowConfigs != null ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> } : {}),
-    ...(q.numberFormat != null ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> } : {}),
-    ...(q.sumConstraints != null ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> } : {}),
+    ...(q.tableValidationRules != null
+      ? {
+          tableValidationRules: q.tableValidationRules as NonNullable<
+            QuestionType['tableValidationRules']
+          >,
+        }
+      : {}),
+    ...(q.dynamicRowConfigs != null
+      ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> }
+      : {}),
+    ...(q.numberFormat != null
+      ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
+      : {}),
+    ...(q.sumConstraints != null
+      ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
+      : {}),
     ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
     ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
     ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
@@ -118,16 +142,22 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
     ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
     ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
-    ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),
+    ...(q.displayCondition != null
+      ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> }
+      : {}),
     ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
     ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
     ...(q.exportLabel != null ? { exportLabel: q.exportLabel } : {}),
-    ...(q.spssVarType != null ? { spssVarType: q.spssVarType as NonNullable<QuestionType['spssVarType']> } : {}),
-    ...(q.spssMeasure != null ? { spssMeasure: q.spssMeasure as NonNullable<QuestionType['spssMeasure']> } : {}),
-  ...(q.piiEncrypted != null ? { piiEncrypted: q.piiEncrypted } : {}),
-  ...(q.answerQuoteEnabled != null ? { answerQuoteEnabled: q.answerQuoteEnabled } : {}),
-  ...(q.answerQuoteName != null ? { answerQuoteName: q.answerQuoteName } : {}),
-  ...(q.answerQuoteText != null ? { answerQuoteText: q.answerQuoteText } : {}),
+    ...(q.spssVarType != null
+      ? { spssVarType: q.spssVarType as NonNullable<QuestionType['spssVarType']> }
+      : {}),
+    ...(q.spssMeasure != null
+      ? { spssMeasure: q.spssMeasure as NonNullable<QuestionType['spssMeasure']> }
+      : {}),
+    ...(q.piiEncrypted != null ? { piiEncrypted: q.piiEncrypted } : {}),
+    ...(q.answerQuoteEnabled != null ? { answerQuoteEnabled: q.answerQuoteEnabled } : {}),
+    ...(q.answerQuoteName != null ? { answerQuoteName: q.answerQuoteName } : {}),
+    ...(q.answerQuoteText != null ? { answerQuoteText: q.answerQuoteText } : {}),
   };
   // strip된 셀 데이터를 hydrate (cellCode, exportLabel, spssVarType 등 복원)
   if (mapped.type === 'table' && mapped.tableRowsData && mapped.tableColumns) {
@@ -169,8 +199,12 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       ...(g.color != null ? { color: g.color } : {}),
       ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
       ...(g.hideName != null ? { hideName: g.hideName } : {}),
-      ...(g.nameDesign != null ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> } : {}),
-      ...(g.displayCondition != null ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> } : {}),
+      ...(g.nameDesign != null
+        ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> }
+        : {}),
+      ...(g.displayCondition != null
+        ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> }
+        : {}),
     })),
     questions: questionList.map(mapQuestionRow),
     settings: {
@@ -188,6 +222,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       requireInviteToken: survey.requireInviteToken,
       forceWideLayout: survey.forceWideLayout,
       priorWaveLabel: survey.priorWaveLabel,
+      changeConfirmEnabled: survey.changeConfirmEnabled,
       responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),
     },
     lookups: survey.lookups ?? [],

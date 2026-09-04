@@ -303,6 +303,9 @@ export async function getSurveyForResponse(
     testSessionKind,
     // 회차 라벨은 스냅샷에 freeze 하지 않는다 — 운영 중 문구 교정이 publish 없이 반영돼야 한다.
     priorWaveLabel: survey.priorWaveLabel,
+    // 변동 확인 스위치도 같은 이유로 라이브다 — 스위치 하나 바꾸려고 재발행하면 응답 중인
+    // 사람의 구조가 rebase 된다.
+    changeConfirmEnabled: survey.changeConfirmEnabled,
   };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환

@@ -140,6 +140,7 @@ export async function saveSurveyDiff(
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
           forceWideLayout: metadata.settings.forceWideLayout ?? false,
           priorWaveLabel: normalizePriorWaveLabel(metadata.settings.priorWaveLabel),
+          changeConfirmEnabled: metadata.settings.changeConfirmEnabled ?? false,
           responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
@@ -472,6 +473,7 @@ export async function saveSurveyWithDetails(
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
+        changeConfirmEnabled: surveyData.settings.changeConfirmEnabled ?? false,
         responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
@@ -515,6 +517,7 @@ export async function saveSurveyWithDetails(
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
+        changeConfirmEnabled: surveyData.settings.changeConfirmEnabled ?? false,
         responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });
