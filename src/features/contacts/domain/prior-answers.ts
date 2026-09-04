@@ -76,9 +76,7 @@ export const SuggestPriorAnswerMappingResultSchema = z.object({
     }),
   ),
 });
-export type SuggestPriorAnswerMappingResult = z.infer<
-  typeof SuggestPriorAnswerMappingResultSchema
->;
+export type SuggestPriorAnswerMappingResult = z.infer<typeof SuggestPriorAnswerMappingResultSchema>;
 
 export const ImportPriorAnswersInput = z.object({
   surveyId: z.string(),
@@ -86,8 +84,14 @@ export const ImportPriorAnswersInput = z.object({
   sheetName: z.string(),
   /** 헤더로 읽을 행 수 (1~3). */
   headerRowCount: z.number().int().min(1).max(3),
-  /** 조사 대상을 찾을 컬럼 인덱스 — 설문별 자동 발번 번호(시스템ID) */
-  residColumnIndex: z.number().int().min(0),
+  /** 대조값이 들어 있는 엑셀 컬럼 인덱스 */
+  matchColumnIndex: z.number().int().min(0),
+  /**
+   * 그 값을 맞출 조사 대상 명단의 attrs 키 (예: `UID`).
+   * 시스템ID·pii 는 후보가 아니다 — 클라이언트 파일에는 우리 시스템ID 가 없고,
+   * pii 는 암호문이라 대조에 쓰려면 blind index 경로를 타야 한다.
+   */
+  matchAttrsKey: z.string().min(1),
   /** 블록 번호(문자열) → 문항 id */
   mapping: z.record(z.string(), z.string()),
   /**
@@ -105,11 +109,17 @@ export const ImportPriorAnswersResultSchema = z.object({
   parsedTargets: z.number(),
   /** 그중 명단에서 찾아 이월 응답을 붙인 수 */
   matched: z.number(),
-  /** 명단에서 찾지 못한 조사 대상 번호 (최대 50건 절단) */
-  unmatchedResids: z.array(z.string()),
+  /** 명단에서 찾지 못한 대조값 (최대 50건 절단) */
+  unmatchedMatchValues: z.array(z.string()),
   unmatched: z.number(),
-  emptyResidRows: z.number(),
-  duplicateResidRows: z.number(),
+  /** 대조값이 비어 버린 행 수 */
+  emptyMatchRows: z.number(),
+  /** 올린 파일 안에서 두 번 이상 나와 통째로 뺀 대조값 (최대 50건 절단) */
+  duplicateMatchValues: z.array(z.string()),
+  /** 명단 쪽에 같은 값을 가진 조사 대상이 둘 이상이라 통째로 뺀 대조값 (최대 50건 절단) */
+  ambiguousMatchValues: z.array(z.string()),
+  /** 위 둘로 빠진 대조값 총수 (절단 전) */
+  skippedAmbiguous: z.number(),
   /** 잇지 않은 블록의 문항코드 */
   unmappedColumns: z.array(z.string()),
   /** 이월 값이 하나도 들어가지 않은 문항 id */
@@ -134,13 +144,8 @@ export type ImportPriorAnswersResult = z.infer<typeof ImportPriorAnswersResultSc
 export const SavePriorAnswerImportConfigInput = z.object({
   surveyId: z.string(),
   /** 정규화된 문항코드 → 확정 문항 id + 그때의 문항 내용 */
-  blockMappings: z.record(
-    z.string(),
-    z.object({ questionId: z.string(), label: z.string() }),
-  ),
+  blockMappings: z.record(z.string(), z.object({ questionId: z.string(), label: z.string() })),
   /** 문항 id → { 원본 값 → 선택지 저장값 } */
   valueAliases: z.record(z.string(), z.record(z.string(), z.string())),
 });
-export type SavePriorAnswerImportConfigInput = z.infer<
-  typeof SavePriorAnswerImportConfigInput
->;
+export type SavePriorAnswerImportConfigInput = z.infer<typeof SavePriorAnswerImportConfigInput>;

@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 
 import { PriorAnswerImportWizard } from '@/components/operations/contacts/prior-answer-import-wizard';
-import { countPriorAnswerTargets } from '@/features/contacts/server/services/prior-answer-import.service';
+import {
+  countPriorAnswerTargets,
+  listPriorAnswerMatchFields,
+} from '@/features/contacts/server/services/prior-answer-import.service';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
@@ -26,21 +29,25 @@ interface PageProps {
 export default async function PriorAnswersImportPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   const scope = await getOperationsDataScope(surveyId);
-  const existingPriorAnswerCount = await countPriorAnswerTargets(surveyId, scope === 'test');
+  const [existingPriorAnswerCount, matchFields] = await Promise.all([
+    countPriorAnswerTargets(surveyId, scope === 'test'),
+    listPriorAnswerMatchFields(surveyId),
+  ]);
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">이월 응답 임포트</h2>
         <p className="text-sm text-slate-500">
-          지난 회차 rawdata 를 조사 대상에게 붙입니다. 조사 대상이 개별 링크로 들어오면 이
-          값이 채워져 보입니다.
+          지난 회차 rawdata 를 조사 대상에게 붙입니다. 조사 대상이 개별 링크로 들어오면 이 값이
+          채워져 보입니다.
         </p>
       </div>
       <PriorAnswerImportWizard
         surveyId={surveyId}
         existingPriorAnswerCount={existingPriorAnswerCount}
         isTestScope={scope === 'test'}
+        matchFields={matchFields}
       />
     </main>
   );

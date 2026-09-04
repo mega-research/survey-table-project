@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { previewExcelGrid } from '@/lib/contacts/excel-parser';
+
+import {
+  PREVIEW_ROWS,
+  SUGGEST_SAMPLE_ROWS,
+  importPriorAnswers,
+  listPriorAnswerMatchFields,
+  savePriorAnswerImportConfig,
+  suggestPriorAnswerImportMapping,
+} from './prior-answer-import.service';
+
 /**
  * drizzle SQL 조각을 문자열로 눌러 검증에 쓴다.
  *
@@ -65,7 +76,7 @@ const h = vi.hoisted(() => ({
   headerRows: [] as string[][],
   parsedRows: [] as string[][],
   questionRows: [] as Array<Record<string, unknown>>,
-  targetRows: [] as Array<{ id: string; resid: number }>,
+  targetRows: [] as Array<{ id: string; matchValue: string }>,
   insertedValues: [] as Array<Record<string, unknown>>,
   insertCalls: 0,
   targetWhere: null as unknown,
@@ -74,6 +85,8 @@ const h = vi.hoisted(() => ({
   /** 쓰기가 어느 테이블로 갔는가 — 재업로드가 이웃을 건드리지 않는지 본다. */
   writtenTables: [] as string[],
   conflictSet: null as unknown,
+  /** surveys.contactColumns 스킴 (대조 필드 후보 조회용) */
+  contactScheme: null as unknown,
 }));
 
 /** drizzle 테이블 객체에서 이름을 꺼낸다 (mock 검증용). */
@@ -120,8 +133,11 @@ vi.mock('@/db', () => {
     h.targetWhere = clause;
     return selectChain;
   };
-  selectChain['limit'] = async () => [{ config: h.surveyConfig }];
-  selectChain['then'] = <R,>(resolve: (v: unknown) => R) => Promise.resolve(h.targetRows).then(resolve);
+  // 한 객체에 두 조회의 컬럼을 함께 담는다 — mock 은 select 목록을 보지 않으므로
+  // 임포트 설정 조회와 컬럼 스킴 조회가 같은 체인을 나눠 쓸 수 있다.
+  selectChain['limit'] = async () => [{ config: h.surveyConfig, scheme: h.contactScheme }];
+  selectChain['then'] = <R>(resolve: (v: unknown) => R) =>
+    Promise.resolve(h.targetRows).then(resolve);
 
   const updateChain: Record<string, unknown> = {};
   updateChain['set'] = (values: Record<string, unknown>) => {
@@ -172,16 +188,6 @@ vi.mock('@/db', () => {
   };
 });
 
-import { previewExcelGrid } from '@/lib/contacts/excel-parser';
-
-import {
-  PREVIEW_ROWS,
-  SUGGEST_SAMPLE_ROWS,
-  importPriorAnswers,
-  savePriorAnswerImportConfig,
-  suggestPriorAnswerImportMapping,
-} from './prior-answer-import.service';
-
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
 function file(): File {
@@ -194,7 +200,8 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     file: file(),
     sheetName: 'rawdata',
     headerRowCount: 1,
-    residColumnIndex: 0,
+    matchColumnIndex: 0,
+    matchAttrsKey: 'UID',
     // 블록 번호 1 = 두 번째 컬럼(BQ1)
     mapping: { '1': 'q-text' },
     ...overrides,
@@ -211,15 +218,16 @@ describe('importPriorAnswers', () => {
     h.updatedConfig = null;
     h.writtenTables = [];
     h.conflictSet = null;
+    h.contactScheme = null;
     h.questionRows = [
       { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
     ];
     h.headerRows = [['ID', 'BQ1']];
     h.parsedRows = [['7', '메가리서치']];
-    h.targetRows = [{ id: 'target-7', resid: 7 }];
+    h.targetRows = [{ id: 'target-7', matchValue: '7' }];
   });
 
-  it('시스템ID 로 조사 대상을 찾아 이월 응답을 붙인다', async () => {
+  it('명단 attrs 열로 조사 대상을 찾아 이월 응답을 붙인다', async () => {
     const result = await importPriorAnswers(baseInput());
     expect(result.matched).toBe(1);
     expect(h.insertedValues).toEqual([
@@ -227,19 +235,47 @@ describe('importPriorAnswers', () => {
     ]);
   });
 
-  it('명단에서 찾지 못한 번호는 조용히 사라지지 않는다', async () => {
+  it('명단에서 찾지 못한 대조값은 조용히 사라지지 않는다', async () => {
     h.targetRows = [];
     const result = await importPriorAnswers(baseInput());
     expect(result.matched).toBe(0);
     expect(result.unmatched).toBe(1);
-    expect(result.unmatchedResids).toEqual(['7']);
+    expect(result.unmatchedMatchValues).toEqual(['7']);
     expect(h.insertCalls).toBe(0);
   });
 
-  it('숫자가 아닌 시스템ID 는 조회에 넣지 않고 미매칭으로 남긴다', async () => {
+  it('숫자가 아닌 대조값도 그대로 찾는다 — attrs 는 문자열이다', async () => {
     h.parsedRows = [['A-7', '메가리서치']];
+    h.targetRows = [{ id: 'target-a7', matchValue: 'A-7' }];
     const result = await importPriorAnswers(baseInput());
-    expect(result.unmatchedResids).toEqual(['A-7']);
+    expect(result.matched).toBe(1);
+    expect(h.insertedValues).toEqual([
+      { contactTargetId: 'target-a7', answers: { 'q-text': '메가리서치' } },
+    ]);
+  });
+
+  it('명단에 같은 대조값이 둘 이상이면 붙이지 않고 그 값을 보고한다', async () => {
+    // attrs 는 유일함이 보장되지 않는다. 잘못 붙으면 응답 화면에 남의 지난 답이 보인다.
+    h.targetRows = [
+      { id: 'target-a', matchValue: '7' },
+      { id: 'target-b', matchValue: '7' },
+    ];
+    const result = await importPriorAnswers(baseInput());
+    expect(result.matched).toBe(0);
+    expect(result.ambiguousMatchValues).toEqual(['7']);
+    expect(result.skippedAmbiguous).toBe(1);
+    expect(h.insertCalls).toBe(0);
+  });
+
+  it('파일 안에서 두 번 나온 대조값은 양쪽 다 빼고 보고한다', async () => {
+    h.parsedRows = [
+      ['7', '먼저'],
+      ['7', '나중'],
+    ];
+    const result = await importPriorAnswers(baseInput());
+    expect(result.matched).toBe(0);
+    expect(result.duplicateMatchValues).toEqual(['7']);
+    expect(result.skippedAmbiguous).toBe(1);
     expect(h.insertCalls).toBe(0);
   });
 
@@ -251,7 +287,14 @@ describe('importPriorAnswers', () => {
 
   it('PII 문항 값은 저장 직전 암호화한다', async () => {
     h.questionRows = [
-      { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1', piiEncrypted: true },
+      {
+        id: 'q-text',
+        type: 'text',
+        title: '기업명',
+        order: 1,
+        questionCode: 'BQ1',
+        piiEncrypted: true,
+      },
     ];
     await importPriorAnswers(baseInput());
     expect(h.insertedValues[0]?.['answers']).toEqual({ 'q-text': 'enc:메가리서치' });
@@ -335,7 +378,10 @@ describe('importPriorAnswers', () => {
         title: '창업 기업 현황',
         order: 1,
         questionCode: 'BQ2',
-        tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '값' }],
+        tableColumns: [
+          { id: 'c0', label: '항목' },
+          { id: 'c1', label: '값' },
+        ],
         tableRowsData: [
           {
             id: 'r1',
@@ -389,13 +435,14 @@ describe('재업로드 안전성', () => {
     h.scope = 'real';
     h.writtenTables = [];
     h.conflictSet = null;
+    h.contactScheme = null;
     h.surveyConfig = null;
     h.questionRows = [
       { id: 'q-text', type: 'text', title: '기업명', order: 1, questionCode: 'BQ1' },
     ];
     h.headerRows = [['ID', 'BQ1']];
     h.parsedRows = [['7', '메가리서치']];
-    h.targetRows = [{ id: 'target-7', resid: 7 }];
+    h.targetRows = [{ id: 'target-7', matchValue: '7' }];
   });
 
   it('조사 대상과 응답 테이블을 건드리지 않는다 — 개별 링크와 수집된 응답이 그대로다', async () => {
@@ -480,9 +527,12 @@ describe('savePriorAnswerImportConfig', () => {
 
 describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
   function suggestInput() {
-    return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 1 } as Parameters<
-      typeof suggestPriorAnswerImportMapping
-    >[0];
+    return {
+      surveyId: SURVEY_ID,
+      file: file(),
+      sheetName: 'rawdata',
+      headerRowCount: 1,
+    } as Parameters<typeof suggestPriorAnswerImportMapping>[0];
   }
 
   beforeEach(() => {
@@ -532,9 +582,12 @@ describe('suggestPriorAnswerImportMapping — 확정 복원', () => {
 
 describe('suggestPriorAnswerImportMapping — 값 기반 오매핑 방지', () => {
   function suggestInput() {
-    return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 2 } as Parameters<
-      typeof suggestPriorAnswerImportMapping
-    >[0];
+    return {
+      surveyId: SURVEY_ID,
+      file: file(),
+      sheetName: 'rawdata',
+      headerRowCount: 2,
+    } as Parameters<typeof suggestPriorAnswerImportMapping>[0];
   }
 
   beforeEach(() => {
@@ -542,7 +595,10 @@ describe('suggestPriorAnswerImportMapping — 값 기반 오매핑 방지', () =
     h.surveyConfig = null;
     // 2025 HQ1.(과정 도움도) 열 — 2026 HQ1 은 창업 의향(예/아니오)이다.
     h.headerRows = [['HQ1.'], ['(과정 도움도)']];
-    h.parsedRows = [...Array.from({ length: 8 }, () => ['매우 도움됨']), ...Array.from({ length: 4 }, () => ['도움됨'])];
+    h.parsedRows = [
+      ...Array.from({ length: 8 }, () => ['매우 도움됨']),
+      ...Array.from({ length: 4 }, () => ['도움됨']),
+    ];
     h.questionRows = [
       {
         id: 'q-intent',
@@ -575,7 +631,10 @@ describe('suggestPriorAnswerImportMapping — 값 기반 오매핑 방지', () =
   });
 
   it('지난 확정 복원은 이 게이트를 타지 않는다 — 담당자가 이미 판단한 것', async () => {
-    h.surveyConfig = { blockMappings: { hq1: { questionId: 'q-intent', label: '' } }, valueAliases: {} };
+    h.surveyConfig = {
+      blockMappings: { hq1: { questionId: 'q-intent', label: '' } },
+      valueAliases: {},
+    };
     const res = await suggestPriorAnswerImportMapping(suggestInput());
     const block = res.blocks[0];
     expect(block?.fromSavedConfig).toBe(true);
@@ -594,14 +653,22 @@ function jobTableQuestion(): Record<string, unknown> {
     title: '귀하의 현재 취업 상태에 대해 몇 가지 질문드립니다.',
     order: 1,
     questionCode: 'BQ1_1',
-    tableColumns: [{ id: 'c0', label: '라벨' }, { id: 'c1', label: '값' }],
+    tableColumns: [
+      { id: 'c0', label: '라벨' },
+      { id: 'c1', label: '값' },
+    ],
     tableRowsData: [
       {
         id: 'r-it',
         label: '담당 직무_① IT/SW 관련 세부분야',
         cells: [
           { id: 'it-label', type: 'text', content: '' },
-          { id: 'it', type: 'radio', content: '', radioOptions: [{ id: 'o1', value: '1', label: '① 정보기술 개발' }] },
+          {
+            id: 'it',
+            type: 'radio',
+            content: '',
+            radioOptions: [{ id: 'o1', value: '1', label: '① 정보기술 개발' }],
+          },
         ],
       },
       {
@@ -623,9 +690,12 @@ const JOB_HEADER_ROWS: string[][] = [
 ];
 
 function suggestJobInput() {
-  return { surveyId: SURVEY_ID, file: file(), sheetName: 'rawdata', headerRowCount: 3 } as Parameters<
-    typeof suggestPriorAnswerImportMapping
-  >[0];
+  return {
+    surveyId: SURVEY_ID,
+    file: file(),
+    sheetName: 'rawdata',
+    headerRowCount: 3,
+  } as Parameters<typeof suggestPriorAnswerImportMapping>[0];
 }
 
 describe('suggestPriorAnswerImportMapping — 칸 배정 사유', () => {
@@ -666,30 +736,49 @@ describe('suggestPriorAnswerImportMapping — 표본 범위는 적재와 같다'
     h.insertedValues = [];
     h.questionRows = [jobTableQuestion()];
     h.headerRows = JOB_HEADER_ROWS;
-    h.targetRows = [{ id: 'target-7', resid: 7 }];
+    h.targetRows = [{ id: 'target-7', matchValue: '7' }];
   });
 
   it('첫 다섯 행이 빈 열도 뒤 행의 값으로 갈라 미리보기와 적재가 같은 칸에 붙는다', async () => {
     // 2025 CQ1 담당 직무: 비어 있지 않은 행이 1,836 중 32 뿐이라 첫 다섯 행이 전부 빈칸이다.
     // 표본을 다섯 행만 보면 미리보기는 "표본값 없음" 미배정이라 마법사가 "그 칸의 값은 들어가지
     // 않습니다" 라고 안내하는데, 적재는 전량 표본으로 radio 행에 32건을 넣었다 — 두 경로가 갈렸다.
-    h.parsedRows = [['', ''], ['', ''], ['', ''], ['', ''], ['', ''], ['7', '정보기술 개발']];
+    h.parsedRows = [
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['7', '정보기술 개발'],
+    ];
 
     const res = await suggestPriorAnswerImportMapping(suggestJobInput());
     const block = res.blocks.find((b) => b.code === 'BQ1-1.');
     expect(block?.unmatchedSlots).toBe(0);
     expect(block?.slotLabels).toEqual(['담당 직무_① IT/SW 관련 세부분야']);
 
-    const imported = await importPriorAnswers(baseInput({ headerRowCount: 3, mapping: { '1': 'q-table' } }));
+    const imported = await importPriorAnswers(
+      baseInput({ headerRowCount: 3, mapping: { '1': 'q-table' } }),
+    );
     expect(imported.matched).toBe(1);
     expect(h.insertedValues[0]?.['answers']).toEqual({ 'q-table': { it: '1' } });
   });
 
   it('제안 단계는 적재 상한까지 표본을 읽고, 화면에는 첫 다섯 행만 돌려준다', async () => {
-    h.parsedRows = [['', ''], ['', ''], ['', ''], ['', ''], ['', ''], ['7', '정보기술 개발'], ['8', '']];
+    h.parsedRows = [
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['7', '정보기술 개발'],
+      ['8', ''],
+    ];
     const res = await suggestPriorAnswerImportMapping(suggestJobInput());
     // 숫자 리터럴이 아니라 서비스의 상수와 대조한다 — 상수가 적재 상한에서 떨어지면 여기서 드러난다.
-    expect(vi.mocked(previewExcelGrid).mock.calls[0]?.[1]).toMatchObject({ maxRows: SUGGEST_SAMPLE_ROWS });
+    expect(vi.mocked(previewExcelGrid).mock.calls[0]?.[1]).toMatchObject({
+      maxRows: SUGGEST_SAMPLE_ROWS,
+    });
     expect(res.rows).toHaveLength(PREVIEW_ROWS);
     expect(res.totalRows).toBe(7);
     expect(res.blocks.find((b) => b.code === 'BQ1-1.')?.unmatchedSlots).toBe(0);
@@ -701,5 +790,38 @@ describe('suggestPriorAnswerImportMapping — 표본 범위는 적재와 같다'
     const opts = vi.mocked(previewExcelGrid).mock.calls[0]?.[1];
     expect(opts).toBeDefined();
     expect(opts).not.toHaveProperty('maxRows');
+  });
+});
+
+describe('listPriorAnswerMatchFields', () => {
+  beforeEach(() => {
+    h.scope = 'real';
+    h.contactScheme = null;
+  });
+
+  it('attrs 열만 후보로 낸다 — 시스템ID·pii 는 담지 않는다', async () => {
+    h.contactScheme = {
+      columns: [
+        { key: 'sys', label: '시스템ID', source: 'system.resid', order: 0 },
+        { key: 'UID', label: 'UID', source: 'attrs.UID', order: 1 },
+        { key: '성명', label: '성명', source: 'pii.성명', order: 2 },
+        { key: '기수', label: '기수', source: 'attrs.기수', order: 3 },
+      ],
+    };
+    expect(await listPriorAnswerMatchFields(SURVEY_ID)).toEqual([
+      { key: 'UID', label: 'UID' },
+      { key: '기수', label: '기수' },
+    ]);
+  });
+
+  it('표시가 꺼진 attrs 열도 후보다 — 표시는 화면 설정이지 대조 가능 여부가 아니다', async () => {
+    h.contactScheme = {
+      columns: [{ key: '성별', label: '성별', source: 'attrs.성별', order: 0, hidden: true }],
+    };
+    expect(await listPriorAnswerMatchFields(SURVEY_ID)).toEqual([{ key: '성별', label: '성별' }]);
+  });
+
+  it('명단 스킴이 없으면 빈 목록', async () => {
+    expect(await listPriorAnswerMatchFields(SURVEY_ID)).toEqual([]);
   });
 });

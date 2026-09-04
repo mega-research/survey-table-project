@@ -1,16 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
-import { previewExcelGrid } from './excel-parser';
-import {
-  buildBlockAnswer,
-  splitHeaderBlocks,
-  suggestBlockMapping,
-} from './prior-answer-blocks';
-import { buildPriorAnswerRecords } from './prior-answer-import';
 import type { Question } from '@/types/survey';
+
+import { previewExcelGrid } from './excel-parser';
+import { buildBlockAnswer, splitHeaderBlocks, suggestBlockMapping } from './prior-answer-blocks';
+import { buildPriorAnswerRecords } from './prior-answer-import';
 
 /**
  * 지난 회차 rawdata 에서 잘라낸 소형 픽스처로 3단 병합 헤더를 고정한다.
@@ -95,7 +91,16 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
   it('병합 종속 칸은 빈 문자열로 읽는다', async () => {
     const { preview } = await loadGrid();
     expect(preview.headerRows[1]).toEqual([
-      'ID', '비고', 'BQ2', '', '', 'BQ1', 'BQ3', '', 'BQ4', '',
+      'ID',
+      '비고',
+      'BQ2',
+      '',
+      '',
+      'BQ1',
+      'BQ3',
+      '',
+      'BQ4',
+      '',
     ]);
   });
 
@@ -166,13 +171,13 @@ describe('3단 병합 헤더 rawdata 픽스처', () => {
 
     const result = buildPriorAnswerRecords({
       rows,
-      residColumnIndex: 0,
+      matchColumnIndex: 0,
       assignments,
       questions,
     });
 
-    // 08 은 앞 0 이 붙어 있어 7 과 같은 대상이 아니라 8 이다.
-    expect(result.records.map((r) => r.resid)).toEqual(['7', '8']);
+    // 08 은 앞 0 을 접지 않으므로 그대로 08 이다 — 대조 상대인 명단 attrs 값도 문자열이다.
+    expect(result.records.map((r) => r.matchValue)).toEqual(['7', '08']);
     const second = result.records[1]?.answers;
     // 업종이 비었지만 대표자·매출액은 그대로 들어간다.
     expect(second?.['q-table']).toEqual({ 'cell-r0c1': '김철수', 'cell-r2c1': '340' });
@@ -225,13 +230,16 @@ describe('실제 사고 회귀', () => {
   });
 
   function needImport(rows: string[][], aliases?: Record<string, Record<string, string>>) {
-    const blocks = splitHeaderBlocks([['ID', 'BQ9'], ['시스템ID', '']]);
+    const blocks = splitHeaderBlocks([
+      ['ID', 'BQ9'],
+      ['시스템ID', ''],
+    ]);
     const assignments = suggestBlockMapping(blocks, [지원필요])
       .filter((s) => s.questionId !== null)
       .map((s) => ({ block: s.block, questionId: s.questionId as string, slots: s.slots }));
     return buildPriorAnswerRecords({
       rows,
-      residColumnIndex: 0,
+      matchColumnIndex: 0,
       assignments,
       questions: [지원필요],
       ...(aliases ? { valueAliases: aliases } : {}),
@@ -246,7 +254,7 @@ describe('실제 사고 회귀', () => {
       ['4', '필요 없음'],
     ]);
     // 값이 들어간 대상은 둘뿐이다.
-    expect(result.records.map((r) => r.resid)).toEqual(['1', '4']);
+    expect(result.records.map((r) => r.matchValue)).toEqual(['1', '4']);
     expect(result.optionMismatches).toEqual([
       {
         questionId: 'q-need',
@@ -267,8 +275,8 @@ describe('실제 사고 회귀', () => {
       { 'q-need': { '다소 필요': 'some' } },
     );
     expect(result.records).toEqual([
-      { resid: '1', answers: { 'q-need': 'very' } },
-      { resid: '2', answers: { 'q-need': 'some' } },
+      { matchValue: '1', answers: { 'q-need': 'very' } },
+      { matchValue: '2', answers: { 'q-need': 'some' } },
     ]);
     expect(result.optionMismatches).toEqual([]);
   });

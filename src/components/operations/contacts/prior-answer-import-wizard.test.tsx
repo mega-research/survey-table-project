@@ -67,7 +67,8 @@ const preview: SuggestPriorAnswerMappingResult = {
       questionId: 'q-hq1',
       matchedBy: 'value',
       verdict: 'label-candidate',
-      verdictReason: '제안 문항 보기와 맞는 값 12건 / 표본 12건 (100%) — 값이 맞는 문항 여럿 중 제목이 가장 비슷한 것',
+      verdictReason:
+        '제안 문항 보기와 맞는 값 12건 / 표본 12건 (100%) — 값이 맞는 문항 여럿 중 제목이 가장 비슷한 것',
       slotLabels: ['단일 값'],
       unmatchedSlots: 0,
     }),
@@ -98,7 +99,12 @@ const preview: SuggestPriorAnswerMappingResult = {
 async function openMappingTable() {
   suggestMutateAsync.mockResolvedValue(preview);
   const { container } = render(
-    <PriorAnswerImportWizard surveyId="s1" existingPriorAnswerCount={0} isTestScope={false} />,
+    <PriorAnswerImportWizard
+      surveyId="s1"
+      existingPriorAnswerCount={0}
+      isTestScope={false}
+      matchFields={[{ key: 'UID', label: 'UID' }]}
+    />,
   );
   const input = container.querySelector('input[type="file"]');
   if (!(input instanceof HTMLInputElement)) throw new Error('파일 입력이 없다');
@@ -121,7 +127,9 @@ describe('PriorAnswerImportWizard — 매핑 표의 판정 사유', () => {
     // 2025 #21 AQ1-A. — 배지는 unmapped 에 없고, 사유는 배지 아래에만 그리던 것이라 담당자가 목록을 못 봤다.
     await openMappingTable();
     const row = rowOf('AQ1-A.');
-    expect(within(row).getByText('값이 맞는 문항 4개: SQ0, SQ1, AQ0, HQ1 — 제목으로 못 가름')).toBeInTheDocument();
+    expect(
+      within(row).getByText('값이 맞는 문항 4개: SQ0, SQ1, AQ0, HQ1 — 제목으로 못 가름'),
+    ).toBeInTheDocument();
   });
 
   it('코드가 가리킨 문항이 없는 값 후보는 그런 문항이 있다고 말하지 않는다', async () => {
@@ -137,7 +145,9 @@ describe('PriorAnswerImportWizard — 매핑 표의 판정 사유', () => {
     await openMappingTable();
     const row = rowOf('AQ1-1.');
     expect(within(row).getByText(/코드가 가리킨 문항과 다르니 확인 필요/)).toBeInTheDocument();
-    expect(row).toHaveTextContent('코드가 가리킨 문항: AQ1-1. 귀하의 졸업 후 진로 계획은 어떻게 되십니까?');
+    expect(row).toHaveTextContent(
+      '코드가 가리킨 문항: AQ1-1. 귀하의 졸업 후 진로 계획은 어떻게 되십니까?',
+    );
     expect(row).toHaveTextContent('표본 12건 중 보기와 맞는 값 0건');
   });
 });
