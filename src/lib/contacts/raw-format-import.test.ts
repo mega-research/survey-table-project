@@ -211,9 +211,34 @@ describe('buildRawFormatRecords', () => {
     ]);
   });
 
-  it('선택지에 없는 코드값은 그 문항만 비운다', () => {
+  it('선택지에 없는 코드값은 그 문항만 비우고 **보고한다**', () => {
+    // 대상은 통째로 교체되므로, 보고하지 않으면 같은 행의 다른 답이 살아남은 채 이
+    // 문항만 조용히 사라진다.
     const result = build([['7', '', '99', '메가리서치']]);
     expect(result.records[0]?.answers).toEqual({ 'q-text': '메가리서치' });
+    expect(result.optionMismatches).toEqual([
+      {
+        questionId: 'q-single',
+        total: 1,
+        unmatched: 1,
+        rate: 1,
+        values: [{ value: '99', count: 1 }],
+      },
+    ]);
+  });
+
+  it('맞는 코드값은 보고에 남지 않는다', () => {
+    expect(build([['7', '', '2', '메가리서치']]).optionMismatches).toEqual([]);
+  });
+
+  it('복수선택에서 0 은 고르지 않은 것으로 본다', () => {
+    // 우리 내보내기는 미선택을 빈칸으로 내지만, 사람이 채워 오는 파일은 0 으로 적어 온다.
+    // 빈칸만 미선택으로 보면 그 0 이 전부 선택으로 뒤집힌다.
+    const result = build(
+      [['7', '', '0', '0', '3']],
+      [CHECK_ITEMS[0]!, CHECK_ITEMS[1]!, CHECK_ITEMS[2]!],
+    );
+    expect(result.records[0]?.answers).toEqual({ 'q-check': ['cv3'] });
   });
 
   it('빈칸은 키를 만들지 않는다', () => {

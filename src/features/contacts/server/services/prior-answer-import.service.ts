@@ -26,10 +26,11 @@ import {
   looksLikeRawFormat,
 } from '@/lib/contacts/raw-format-import';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
-import { encryptAnswerValue } from '@/lib/crypto/response-pii';
+import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { attrsKeyOf, normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { normalizeQuestions } from '@/lib/question';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
@@ -277,9 +278,18 @@ function describeSlots(question: Question | undefined, slots: readonly BlockSlot
   });
 }
 
-/** 이 문항 값이 저장 시 암호화되는가 — 스키마 행의 boolean 을 읽기 경계에서 정규화한다. */
-function isPiiQuestion(question: Question): boolean {
-  return (question as { piiEncrypted?: boolean }).piiEncrypted === true;
+/**
+ * 이 문항의 암호화 대상 — 문항 단위 토글과 **표 셀 단위 토글을 모두** 본다.
+ *
+ * 셀 단위를 빠뜨리면 표의 PII 입력 셀 값이 평문으로 이월 응답에 들어간다. 조회·내보내기
+ * 경계는 평문을 그대로 받아들이므로 암호화 경계가 조용히 뚫린다. 응답 저장 경로가 쓰는
+ * 규칙과 같은 함수를 태워 두 경로가 갈라지지 않게 한다.
+ */
+function piiFlagOf(question: Question): { piiEncrypted: boolean; piiCellIds: string[] } {
+  return {
+    piiEncrypted: (question as { piiEncrypted?: boolean }).piiEncrypted === true,
+    piiCellIds: collectPiiCellIds(question.tableRowsData),
+  };
 }
 
 /**
@@ -465,7 +475,7 @@ export async function importPriorAnswers(
     emptyMatchRows: rawParsed?.emptyMatchRows ?? mappedParsed?.emptyMatchRows ?? 0,
     duplicateMatchValues:
       rawParsed?.duplicateMatchValues ?? mappedParsed?.duplicateMatchValues ?? [],
-    optionMismatches: mappedParsed?.optionMismatches ?? [],
+    optionMismatches: rawParsed?.optionMismatches ?? mappedParsed?.optionMismatches ?? [],
     unsupportedQuestionIds: mappedParsed?.unsupportedQuestionIds ?? [],
   };
 
@@ -508,9 +518,10 @@ export async function importPriorAnswers(
     }
   }
 
-  // PII 문항 값은 저장 직전 암호화한다 — 이월 응답은 응답 저장 형태와 동형이라
-  // 조회 경계(lookupPriorAnswers)가 같은 규칙으로 복호화한다.
-  const piiQuestionIds = new Set(questions.filter(isPiiQuestion).map((q) => q.id));
+  // PII 값은 저장 직전 암호화한다 — 이월 응답은 응답 저장 형태와 동형이라
+  // 조회 경계(lookupPriorAnswers)가 같은 규칙으로 복호화한다. 문항 단위 토글과 표 셀
+  // 단위 토글을 모두 태운다.
+  const piiFlagByQuestion = new Map(questions.map((q) => [q.id, piiFlagOf(q)]));
 
   const matchedRows: Array<{ contactTargetId: string; answers: Record<string, unknown> }> = [];
   const unmatchedMatchValues: string[] = [];
@@ -529,7 +540,8 @@ export async function importPriorAnswers(
     }
     const answers: Record<string, unknown> = {};
     for (const [questionId, value] of Object.entries(record.answers)) {
-      answers[questionId] = piiQuestionIds.has(questionId) ? encryptAnswerValue(value) : value;
+      const flag = piiFlagByQuestion.get(questionId);
+      answers[questionId] = flag ? encryptAnswerForQuestion(value, flag) : value;
     }
     matchedRows.push({ contactTargetId, answers });
   }

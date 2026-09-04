@@ -121,9 +121,28 @@ vi.mock('@/lib/contacts/upload-limits', () => ({
   validateXlsxFile: vi.fn(() => null),
 }));
 
-vi.mock('@/lib/crypto/response-pii', () => ({
-  encryptAnswerValue: vi.fn((value: unknown) => `enc:${String(value)}`),
-}));
+// 통 mock 은 import 체인이 늘면 조용히 깨진다 — 원본을 펼쳐 두고 필요한 것만 덮는다.
+vi.mock('@/lib/crypto/response-pii', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/crypto/response-pii')>();
+  const encryptAnswerValue = vi.fn((value: unknown) => `enc:${String(value)}`);
+  return {
+    ...actual,
+    encryptAnswerValue,
+    // 표 셀 단위 암호화까지 같은 규칙으로 흉내낸다 (문항 토글 → 값 전체, 셀 토글 → 그 셀만).
+    encryptAnswerForQuestion: vi.fn(
+      (value: unknown, flag: { piiEncrypted: boolean; piiCellIds: string[] }) => {
+        if (flag.piiEncrypted) return encryptAnswerValue(value);
+        if (flag.piiCellIds.length === 0) return value;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+        const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+        for (const cellId of flag.piiCellIds) {
+          if (out[cellId] !== undefined) out[cellId] = encryptAnswerValue(out[cellId]);
+        }
+        return out;
+      },
+    ),
+  };
+});
 
 vi.mock('@/db', () => {
   // surveys 설정 조회는 .limit(1) 로 끝나고, contact_targets 조회는 thenable 로 끝난다.
@@ -308,6 +327,44 @@ describe('importPriorAnswers', () => {
     ];
     await importPriorAnswers(baseInput());
     expect(h.insertedValues[0]?.['answers']).toEqual({ 'q-text': 'enc:메가리서치' });
+  });
+
+  it('표의 PII 입력 셀만 암호화하고 나머지 셀은 평문으로 둔다', async () => {
+    // 문항 단위 토글만 보면 표의 PII 셀 값이 평문으로 이월 응답에 들어간다. 조회·내보내기
+    // 경계는 평문을 그대로 받아들이므로 암호화 경계가 조용히 뚫린다.
+    h.questionRows = [
+      {
+        id: 'q-table',
+        type: 'table',
+        title: '표',
+        order: 1,
+        questionCode: 'BQ1',
+        piiEncrypted: false,
+        tableColumns: [
+          { id: 'c1', label: '비밀' },
+          { id: 'c2', label: '평범' },
+        ],
+        tableRowsData: [
+          {
+            id: 'row1',
+            cells: [
+              { id: 'cell-secret', type: 'input', content: '', piiEncrypted: true },
+              { id: 'cell-plain', type: 'input', content: '' },
+            ],
+          },
+        ],
+      },
+    ];
+    h.headerRows = [
+      ['시스템ID', '순번', '비밀', '평범'],
+      ['', '', '', ''],
+      ['', '', 'BQ1_r1_c1', 'BQ1_r1_c2'],
+    ];
+    h.parsedRows = [['7', '', '주민번호', '메모']];
+    await importPriorAnswers(baseInput({ format: 'raw', headerRowCount: 3, mapping: {} }));
+    expect(h.insertedValues[0]?.['answers']).toEqual({
+      'q-table': { 'cell-secret': 'enc:주민번호', 'cell-plain': '메모' },
+    });
   });
 
   it('이월 값이 하나도 들어가지 않은 문항을 알려준다', async () => {

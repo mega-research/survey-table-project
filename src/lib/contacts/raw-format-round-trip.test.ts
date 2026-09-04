@@ -103,9 +103,13 @@ const questions: Question[] = [
             id: 'cell-radio',
             type: 'radio',
             content: '',
+            // id 와 value 를 **다르게** 둔다. 같게 두면 저장값 규칙 위반이 가려진다 —
+            // 셀 컨트롤은 `option.value ?? option.id` 를 저장한다.
             radioOptions: [
-              { id: 'tr1', value: 'tr1', label: '좋음' },
-              { id: 'tr2', value: 'tr2', label: '나쁨' },
+              { id: 'tr-id-1', value: 'trv1', label: '좋음' },
+              // 상세 기재가 붙는 보기 — 그 텍스트는 사이드카로 가야 하고, 이 셀의 선택값을
+              // 덮어써서는 안 된다.
+              { id: 'tr-id-2', value: 'trv2', label: '나쁨', allowTextInput: true },
             ],
           },
         ],
@@ -118,9 +122,12 @@ const questions: Question[] = [
             id: 'cell-check',
             type: 'checkbox',
             content: '',
+            // 여기도 id 와 value 를 다르게 둔다. value 가 아예 없는 보기는 **내보내기 쪽이**
+            // 표현하지 못한다(선택 판정을 `opt.value` 로만 해 항상 미선택으로 나간다) —
+            // 되읽기가 고칠 수 있는 문제가 아니라 왕복 대상에서 뺀다.
             checkboxOptions: [
-              { id: 'tc1', value: 'tc1', label: '가' },
-              { id: 'tc2', value: 'tc2', label: '나' },
+              { id: 'tc-id-1', value: 'tcv1', label: '가' },
+              { id: 'tc-id-2', value: 'tcv2', label: '나' },
             ],
           },
           { id: 'cell-calc', type: 'calc', content: '' },
@@ -174,8 +181,8 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
       { rank: 2, optionValue: '__other__', otherText: '직접 적은 것' },
     ],
     'q-table': {
-      'cell-radio': 'tr2',
-      'cell-check': ['tc1'],
+      'cell-radio': 'trv2',
+      'cell-check': ['tcv2'],
       'cell-input': '입력값',
     },
   };
@@ -211,6 +218,18 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
 
   it('전 칸이 비면 그 대상은 담지 않는다', () => {
     expect(roundTrip({}).records).toEqual([]);
+  });
+
+  it('표 셀의 상세 기재가 선택값을 덮어쓰지 않고 사이드카로 간다', () => {
+    // 상세 기재를 문항 답으로 흘리면 같은 셀 자리에 덮어써져 선택과 텍스트가 함께 망가진다.
+    const result = roundTrip({
+      ...answered,
+      __optTexts__: { 'q-table': { 'tr-id-2': '직접 적은 상세' } },
+    });
+    expect(result.records[0]?.answers).toMatchObject({
+      'q-table': { 'cell-radio': 'trv2' },
+      __optTexts__: { 'q-table': { 'tr-id-2': '직접 적은 상세' } },
+    });
   });
 
   it('되돌리지 못한 열이 하나도 없다', () => {

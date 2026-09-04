@@ -21,6 +21,7 @@
  * 문항에도 변수가 생겨 내보내기가 오염된다.
  */
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import type { OptionMismatch } from '@/lib/contacts/prior-answer-import';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question, RankingAnswer } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
@@ -63,7 +64,13 @@ const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
  * 응답 저장 형태의 루트 사이드카에 담기는 열 종류 — 문항 답이 아니다.
  * 저장 경계가 `__` 접두 키를 따로 다루므로 여기서도 문항 답과 갈라 담는다.
  */
-const SIDECAR_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set(['option-text', 'other-text']);
+const SIDECAR_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
+  'option-text',
+  'other-text',
+  // 표 셀의 상세 기재도 사이드카다. 문항 답으로 흘리면 그 셀의 선택값 자리에 덮어써져
+  // 선택과 텍스트가 함께 망가진다.
+  'table-cell-option-text',
+]);
 
 export interface RawFormatImportInput {
   /** 헤더 행 격자 — 3행이어야 한다. 컬럼 인덱스 순서 그대로. */
@@ -80,6 +87,12 @@ export interface RawFormatImportInput {
 export interface RawFormatImportResult {
   /** 대조값별 값 묶음. 값이 없는 대상과 파일 안에서 중복된 대조값은 담지 않는다. */
   records: Array<{ matchValue: string; answers: Record<string, unknown> }>;
+  /**
+   * 문항별 선택지 변환 실패. 어느 보기에도 맞지 않은 코드는 그 문항만 비우고 여기 남는다 —
+   * 대상은 통째로 교체되므로, 보고하지 않으면 같은 행의 다른 답이 살아남은 채 이 문항만
+   * 조용히 사라진다.
+   */
+  optionMismatches: OptionMismatch[];
   emptyMatchRows: number;
   duplicateMatchValues: string[];
   /** 이 설문의 변수명과 맞지 않아 건너뛴 열의 3행 값 */
@@ -109,6 +122,66 @@ export function looksLikeRawFormat(
 }
 
 /**
+ * 복수 선택 열에서 "고르지 않음"으로 볼 값.
+ *
+ * 우리 내보내기는 미선택을 빈칸으로 낸다. 그런데 이 파일은 사람이 채워 돌려주는 것이라
+ * 미선택을 `0` 으로 적어 오는 경우가 있다. 빈칸만 미선택으로 보면 그 `0` 이 전부 선택으로
+ * 뒤집힌다.
+ */
+function isUnselectedCode(raw: string): boolean {
+  return raw === '' || Number(raw) === 0;
+}
+
+/** 문항별 선택지 변환 실패 집계 — 어느 값이 어느 보기에도 안 맞았는지 그대로 남긴다. */
+class MismatchCollector {
+  private readonly stats = new Map<
+    string,
+    { total: number; unmatched: number; counts: Map<string, number> }
+  >();
+
+  private statOf(questionId: string) {
+    const found = this.stats.get(questionId);
+    if (found) return found;
+    const created = { total: 0, unmatched: 0, counts: new Map<string, number>() };
+    this.stats.set(questionId, created);
+    return created;
+  }
+
+  /** 이 문항에서 코드 하나를 해석했다. `matchedValue` 가 없으면 실패다. */
+  seen(questionId: string, raw: string, matched: boolean): void {
+    const stat = this.statOf(questionId);
+    stat.total += 1;
+    if (matched) return;
+    stat.unmatched += 1;
+    stat.counts.set(raw, (stat.counts.get(raw) ?? 0) + 1);
+  }
+
+  /** 실패율이 높은 문항이 위로 온다 — 경고 수십 줄에 묻히면 "절반만 실패" 를 놓친다. */
+  build(): OptionMismatch[] {
+    const out: OptionMismatch[] = [];
+    for (const [questionId, stat] of this.stats) {
+      if (stat.unmatched === 0) continue;
+      out.push({
+        questionId,
+        total: stat.total,
+        unmatched: stat.unmatched,
+        rate: stat.total > 0 ? stat.unmatched / stat.total : 0,
+        values: [...stat.counts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+      });
+    }
+    return out.sort((a, b) => b.rate - a.rate || b.unmatched - a.unmatched);
+  }
+}
+
+/** 한 문항 안에서 코드 해석 결과를 적어 두는 손잡이. */
+interface MismatchSink {
+  record(raw: string): void;
+  ok(raw: string): void;
+}
+
+/**
  * 선택지 저장값. 응답 화면이 쓰는 것은 `option.value` 다 — 표에서 보기를 끌어오는 문항은
  * value 가 곧 셀 id 라 같은 규칙으로 맞는다. 코드를 그대로 넣으면 영구 미스매치가 된다.
  */
@@ -117,12 +190,18 @@ function storedValueOf(option: { id: string; value?: string | undefined }): stri
 }
 
 /** 단일선택 코드값을 응답 저장값으로 되돌린다. 맞는 선택지가 없으면 undefined. */
-function invertSingleChoice(question: Question, raw: string): unknown {
+function invertSingleChoice(question: Question, raw: string, mismatch: MismatchSink): unknown {
   const options = resolveChoiceOptions(question);
   const code = Number(raw);
-  if (!Number.isFinite(code)) return undefined;
-  const found = options.find((option, idx) => (option.spssNumericCode ?? idx + 1) === code);
-  return found ? storedValueOf(found) : undefined;
+  const found = Number.isFinite(code)
+    ? options.find((option, idx) => (option.spssNumericCode ?? idx + 1) === code)
+    : undefined;
+  if (!found) {
+    mismatch.record(raw);
+    return undefined;
+  }
+  mismatch.ok(raw);
+  return storedValueOf(found);
 }
 
 /**
@@ -133,15 +212,20 @@ function invertSingleChoice(question: Question, raw: string): unknown {
 function invertCheckboxItems(
   question: Question,
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
 ): unknown {
   const options = resolveChoiceOptions(question);
   const selected: string[] = [];
   for (const { column, raw } of cells) {
-    if (!raw) continue;
+    if (isUnselectedCode(raw)) continue;
     const index = column.optionIndex;
     if (index == null) continue;
     const option = options[index];
-    if (!option) continue;
+    if (!option) {
+      mismatch.record(raw);
+      continue;
+    }
+    mismatch.ok(raw);
     selected.push(storedValueOf(option));
   }
   return selected.length > 0 ? selected : undefined;
@@ -159,22 +243,32 @@ function invertMultiselect(raw: string): unknown {
  */
 function invertChoiceGroups(
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
 ): unknown {
   const answer: Record<string, string | string[]> = {};
   for (const { column, raw } of cells) {
-    if (!raw) continue;
     const groupKey = column.choiceGroupKey;
     if (!groupKey) continue;
     if (column.type === 'choice-group') {
       const map = column.choiceGroupCellValueMap ?? {};
       const code = Number(raw);
       const cellId = Object.keys(map).find((id) => map[id] === code);
-      if (cellId) answer[groupKey] = cellId;
+      if (!cellId) {
+        mismatch.record(raw);
+        continue;
+      }
+      mismatch.ok(raw);
+      answer[groupKey] = cellId;
       continue;
     }
     // choice-group-item — 값이 있는 열이 곧 선택이다 (복수선택과 같은 규칙).
+    if (isUnselectedCode(raw)) continue;
     const cellId = column.choiceGroupMemberCellId;
-    if (!cellId) continue;
+    if (!cellId) {
+      mismatch.record(raw);
+      continue;
+    }
+    mismatch.ok(raw);
     const bucket = answer[groupKey];
     if (Array.isArray(bucket)) bucket.push(cellId);
     else answer[groupKey] = [cellId];
@@ -195,7 +289,10 @@ function invertChoiceGroups(
  * 보기 그룹이 걸린 순위형은 저장 형태가 그룹키 → 배열 맵이다. 열이 그룹키를 들고
  * 있으므로 그것으로 갈라 담는다. 그룹이 없으면 평평한 배열 하나다.
  */
-function invertRanking(cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>): unknown {
+function invertRanking(
+  cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
+): unknown {
   /** 그룹키(없으면 빈 문자열) → 순위 → 만들던 항목 */
   const byGroup = new Map<string, Map<number, RankingAnswer>>();
   const entryAt = (groupKey: string, rank: number): RankingAnswer => {
@@ -219,7 +316,12 @@ function invertRanking(cells: ReadonlyArray<{ column: SPSSExportColumn; raw: str
       const found = column.cellOptions?.find(
         (option, idx) => (option.spssNumericCode ?? idx + 1) === code,
       );
-      if (found) entry.optionValue = storedValueOf(found);
+      if (!found) {
+        mismatch.record(raw);
+        continue;
+      }
+      mismatch.ok(raw);
+      entry.optionValue = storedValueOf(found);
       continue;
     }
     if (column.type === 'ranking-other') {
@@ -259,6 +361,7 @@ function invertRanking(cells: ReadonlyArray<{ column: SPSSExportColumn; raw: str
  */
 function invertTableCellRanking(
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
 ): unknown {
   const byCell = new Map<string, Array<{ column: SPSSExportColumn; raw: string }>>();
   for (const cell of cells) {
@@ -270,7 +373,7 @@ function invertTableCellRanking(
   }
   const answer: Record<string, unknown> = {};
   for (const [cellId, group] of byCell) {
-    const value = invertRanking(group);
+    const value = invertRanking(group, mismatch);
     if (value !== undefined) answer[cellId] = value;
   }
   return Object.keys(answer).length > 0 ? answer : undefined;
@@ -300,6 +403,7 @@ function firstRadioOptionId(question: Question, cellId: string): string | undefi
 function invertTableCells(
   question: Question,
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
 ): unknown {
   const answer: Record<string, unknown> = {};
   for (const { column, raw } of cells) {
@@ -309,17 +413,32 @@ function invertTableCells(
       const cellId = Object.keys(map).find((id) => map[id] === code);
       // 그룹 멤버는 보기 1개짜리 셀이다 — 그 보기 id 가 곧 이 셀의 응답값이다.
       const optionId = cellId ? firstRadioOptionId(question, cellId) : undefined;
-      if (cellId && optionId) answer[cellId] = optionId;
+      if (!cellId || !optionId) {
+        mismatch.record(raw);
+        continue;
+      }
+      mismatch.ok(raw);
+      answer[cellId] = optionId;
       continue;
     }
     const cellId = column.tableCellId;
     if (!cellId) continue;
 
     // 복수 선택 셀 — 보기별 열이라 값이 있는 열이 곧 선택이다.
-    if (column.tableCellType === 'checkbox' && column.optionValue != null) {
+    if (column.tableCellType === 'checkbox' && column.optionIndex != null) {
+      if (isUnselectedCode(raw)) continue;
+      const option = column.cellOptions?.[column.optionIndex];
+      // 셀 컨트롤이 저장하는 키는 `option.value ?? option.id` 다. 열 메타의 optionValue 는
+      // value 만 담아 값이 없는 보기에서 비므로 여기서 id 로 떨어뜨린다.
+      const stored = column.optionValue ?? option?.id;
+      if (stored == null) {
+        mismatch.record(raw);
+        continue;
+      }
+      mismatch.ok(raw);
       const bucket = answer[cellId];
-      if (Array.isArray(bucket)) bucket.push(column.optionValue);
-      else answer[cellId] = [column.optionValue];
+      if (Array.isArray(bucket)) bucket.push(stored);
+      else answer[cellId] = [stored];
       continue;
     }
 
@@ -333,7 +452,13 @@ function invertTableCells(
       const found = column.cellOptions.find(
         (option, idx) => (option.spssNumericCode ?? idx + 1) === code,
       );
-      if (found) answer[cellId] = found.id;
+      if (!found) {
+        mismatch.record(raw);
+        continue;
+      }
+      // 셀 컨트롤이 저장하는 키와 같은 규칙이다 — id 로 넣으면 값이 다른 보기에서
+      // 선택이 풀린 것처럼 보이고 표시 조건·검증이 어긋난다.
+      answer[cellId] = found.value ?? found.id;
       continue;
     }
 
@@ -360,32 +485,33 @@ function resolveSidecarOptionId(question: Question, column: SPSSExportColumn): s
 function invertQuestion(
   question: Question,
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
+  mismatch: MismatchSink,
 ): unknown {
   const first = cells[0];
   if (!first) return undefined;
   switch (first.column.type) {
     case 'single':
-      return invertSingleChoice(question, first.raw);
+      return invertSingleChoice(question, first.raw, mismatch);
     case 'text':
       return first.raw;
     case 'multiselect':
       return invertMultiselect(first.raw);
     case 'checkbox-item':
-      return invertCheckboxItems(question, cells);
+      return invertCheckboxItems(question, cells, mismatch);
     case 'choice-group':
     case 'choice-group-item':
-      return invertChoiceGroups(cells);
+      return invertChoiceGroups(cells, mismatch);
     case 'table-cell':
     case 'radio-group':
-      return invertTableCells(question, cells);
+      return invertTableCells(question, cells, mismatch);
     case 'ranking-rank':
     case 'ranking-other':
     case 'ranking-option-text':
-      return invertRanking(cells);
+      return invertRanking(cells, mismatch);
     case 'table-cell-ranking':
     case 'table-cell-ranking-other':
     case 'table-cell-ranking-option-text':
-      return invertTableCellRanking(cells);
+      return invertTableCellRanking(cells, mismatch);
     default:
       return undefined;
   }
@@ -440,6 +566,7 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
     else byQuestion.set(entry.question.id, [entry]);
   }
 
+  const mismatches = new MismatchCollector();
   const byMatchValue = new Map<string, Record<string, unknown>>();
   const seenMatchValues = new Set<string>();
   const duplicateMatchValues = new Set<string>();
@@ -478,7 +605,11 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
 
       const answerCells = cells.filter((cell) => !SIDECAR_TYPES.has(cell.column.type));
       if (answerCells.length === 0) continue;
-      const value = invertQuestion(question, answerCells);
+      const sink: MismatchSink = {
+        record: (raw) => mismatches.seen(questionId, raw, false),
+        ok: (raw) => mismatches.seen(questionId, raw, true),
+      };
+      const value = invertQuestion(question, answerCells, sink);
       if (value === undefined) continue;
       answers[questionId] = value;
     }
@@ -494,6 +625,7 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
 
   return {
     records: [...byMatchValue.entries()].map(([matchValue, answers]) => ({ matchValue, answers })),
+    optionMismatches: mismatches.build(),
     emptyMatchRows,
     duplicateMatchValues: [...duplicateMatchValues],
     unknownVarNames: [...new Set(unknownVarNames)],
