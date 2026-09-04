@@ -43,6 +43,7 @@ type EmbeddedTableFields = Pick<
   | 'tableRowsData'
   | 'tableHeaderGrid'
   | 'hideColumnLabels'
+  | 'stickyColumnCount'
   | 'exportCellOrder'
 >;
 

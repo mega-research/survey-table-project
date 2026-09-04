@@ -334,6 +334,7 @@ export async function duplicateSurvey(
         sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         hideColumnLabels: question.hideColumnLabels,
+        stickyColumnCount: question.stickyColumnCount ?? null,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,

@@ -296,6 +296,7 @@ export interface QuestionData {
   placeholder?: string;
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
+  stickyColumnCount?: number | null;
   mobileOriginalTable?: boolean;
   mobileTableDisplayMode?: MobileTableDisplayMode;
   mobileDrilldownOmitLeadingColumns?: number;

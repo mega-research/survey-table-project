@@ -46,6 +46,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'sumConstraints',
   'dynamicRowConfigs',
   'hideColumnLabels',
+  'stickyColumnCount',
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',

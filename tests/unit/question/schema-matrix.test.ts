@@ -60,6 +60,7 @@ const EMBEDDED_TABLE_KEYS = [
   'tableRowsData',
   'tableHeaderGrid',
   'hideColumnLabels',
+  'stickyColumnCount',
   'exportCellOrder',
 ];
 

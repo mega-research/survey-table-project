@@ -50,6 +50,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   sumConstraints: [],
   dynamicRowConfigs: [],
   hideColumnLabels: true,
+  stickyColumnCount: 2,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',
   mobileDrilldownOmitLeadingColumns: 1,

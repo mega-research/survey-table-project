@@ -77,6 +77,7 @@ interface SnapshotQuestion {
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   hideColumnLabels?: boolean | undefined;
+  stickyColumnCount?: number | null | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
@@ -167,6 +168,7 @@ export function buildSurveySnapshot(
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
       hideColumnLabels: q.hideColumnLabels,
+      stickyColumnCount: q.stickyColumnCount,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,

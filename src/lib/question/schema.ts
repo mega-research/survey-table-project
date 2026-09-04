@@ -51,6 +51,8 @@ const embeddedTable = z.object({
   tableRowsData: z.custom<NonNullable<Question['tableRowsData']>>().optional(),
   tableHeaderGrid: z.custom<NonNullable<Question['tableHeaderGrid']>>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  // NULL = 자동 판정, 0~3 = 명시 지정
+  stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
 });
 

@@ -242,6 +242,7 @@ questions                  # 개별 질문
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
 ├── hideColumnLabels, pageBreakBefore
+├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl
 ├── displayCondition (JSONB)      # 조건부 표시
@@ -495,6 +496,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 - **그룹별 필수**: `ChoiceGroup.required`/`requiredMessage` (JSONB) — 미설정이면 질문 레벨 `required` 상속. 질문 필수여도 특정 그룹만 해제하거나 그 반대가 가능하며, 문구는 그룹 → 질문 → 기본 순 폴백.
 - **필수 마스터 전파**: 질문 편집 모달의 "필수 질문" 토글 조작 시 표의 인터랙티브 셀 필수(게이팅 셀은 `requiredWhenEnabled`)와 그룹 오버라이드를 일괄 재설정한다. 상속이 아닌 조작 시점 복사 — `docs/adr/0021` · CONTEXT.md "필수 마스터 전파".
+- **좌측 고정 열**: `stickyColumnCount` — 표를 그리는 문항(table + 내장 테이블을 쓰는 radio/checkbox/ranking) 공용. NULL=자동 판정(왼쪽부터 연속된 정적 셀 열까지), 0=고정 안 함, 1~3=명시 지정. 기본을 0 이 아니라 NULL 로 둔 것은 회귀 방지다 — 0 이 기본이면 지금 고정된 표가 전부 풀린다. 명시 지정도 "스크롤할 열이 남는가"(지정값 ≥ 전체 열 수면 비활성)·"뷰포트 60% 를 넘지 않는가"(최소 1열 유지) 두 가드는 통과해야 한다. 또 고정 경계는 colspan 셀 한가운데를 자르지 않는다 — 본문이 `cellIndex < stickyColCount` 로 sticky 를 걸어, 여러 열을 덮는 셀이 sticky 가 되면 스크롤 시 뒤쪽 열 위를 덮으며 따라오기 때문이다(척도 응답이 colspan 으로 전 열을 덮는 표는 지정해도 라벨 열까지만 고정된다). 판정은 `utils/table-grid-utils.ts` 의 `computeStickyLeftColumns`. 가로(헤더) 고정은 옵션이 아니라 표 길이에 따른 자동 그대로다.
 
 ### 테이블 질문 셀 타입
 

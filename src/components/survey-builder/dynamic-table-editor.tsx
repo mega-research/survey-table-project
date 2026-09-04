@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { generateId } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
@@ -35,6 +35,15 @@ import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
 
 const EMPTY_DYNAMIC_ROW_CONFIGS: DynamicRowGroupConfig[] = [];
+
+/** 좌측 고정 열 개수 선택지. null = 자동 판정(기본) */
+const STICKY_COLUMN_COUNT_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: '자동' },
+  { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+];
 
 // ── Props ──
 
@@ -75,6 +84,10 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   );
   const exportCellOrder = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.exportCellOrder ?? 'row-first',
+  );
+  // null = 자동 판정. 0~3 은 명시 지정이므로 ?? 폴백으로 뭉개면 안 된다.
+  const stickyColumnCount = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.stickyColumnCount ?? null,
   );
   const mobileTableQuestion = useSurveyBuilderStore(
     (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
@@ -475,6 +488,54 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             />
             <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
           </label>
+        </div>
+      </div>
+
+      {/* 좌측 고정 열 개수 — 가로 스크롤 시 왼쪽에 붙여둘 열 수 */}
+      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+        <div>
+          <div id="sticky-column-count-label" className="text-sm font-medium">
+            좌측 고정 열
+          </div>
+          <p className="text-xs text-gray-500">
+            가로 스크롤 시 왼쪽에 붙여둘 열 수입니다. 자동은 왼쪽부터 이어지는 항목 열까지
+            고정하며, 개수를 지정하면 그만큼 고정합니다. 화면이 좁으면 지정값이라도 화면을 다
+            덮지 않는 선까지 줄어듭니다.
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby="sticky-column-count-label"
+          className="flex flex-wrap gap-2"
+        >
+          {STICKY_COLUMN_COUNT_OPTIONS.map((option) => {
+            const selected = stickyColumnCount === option.value;
+            return (
+              <label
+                key={option.label}
+                className={cn(
+                  'cursor-pointer rounded-lg border px-3 py-1.5 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-offset-2',
+                  selected
+                    ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-700',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="sticky-column-count"
+                  aria-label={option.label}
+                  checked={selected}
+                  onChange={() => {
+                    if (editingQuestionId) {
+                      silentUpdateQuestion(editingQuestionId, { stickyColumnCount: option.value });
+                    }
+                  }}
+                  className="sr-only"
+                />
+                {option.label}
+              </label>
+            );
+          })}
         </div>
       </div>
 

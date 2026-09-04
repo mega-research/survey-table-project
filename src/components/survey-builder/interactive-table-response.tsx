@@ -334,6 +334,8 @@ interface InteractiveTableResponseProps {
   ignoreDisplayConditions?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   hideColumnLabels?: boolean | undefined;
+  /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
+  stickyColumnCount?: number | null | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
@@ -418,6 +420,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   ignoreDisplayConditions = false,
   dynamicRowConfigs,
   hideColumnLabels = false,
+  stickyColumnCount,
   mobileOriginalTable = false,
   mobileTableDisplayMode,
   mobileDrilldownOmitLeadingColumns,
@@ -670,8 +673,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
-    return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
-  }, [enableSticky, mobileUsesCards, visibleColumns, displayRows, scrollViewportWidth]);
+    return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth, stickyColumnCount);
+  }, [
+    enableSticky,
+    mobileUsesCards,
+    visibleColumns,
+    displayRows,
+    scrollViewportWidth,
+    stickyColumnCount,
+  ]);
 
   // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;

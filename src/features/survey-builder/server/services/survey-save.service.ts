@@ -289,6 +289,7 @@ export async function saveSurveyDiff(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          stickyColumnCount: question.stickyColumnCount ?? null,
           exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
@@ -349,6 +350,7 @@ export async function saveSurveyDiff(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              stickyColumnCount: sql`excluded.sticky_column_count`,
               exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
@@ -663,6 +665,7 @@ export async function saveSurveyWithDetails(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          stickyColumnCount: question.stickyColumnCount ?? null,
           exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
@@ -723,6 +726,7 @@ export async function saveSurveyWithDetails(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              stickyColumnCount: sql`excluded.sticky_column_count`,
               exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,

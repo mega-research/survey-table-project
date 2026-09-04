@@ -297,6 +297,9 @@ function QuestionInputControl({
           {...(question.hideColumnLabels !== undefined
             ? { hideColumnLabels: question.hideColumnLabels }
             : {})}
+          {...(question.stickyColumnCount !== undefined
+            ? { stickyColumnCount: question.stickyColumnCount }
+            : {})}
           {...(question.mobileOriginalTable !== undefined
             ? { mobileOriginalTable: question.mobileOriginalTable }
             : {})}
