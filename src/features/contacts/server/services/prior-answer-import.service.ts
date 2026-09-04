@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import type { PriorAnswerImportConfig } from '@/db/schema/schema-types';
 import { questions as questionsTable, surveys } from '@/db/schema/surveys';
+import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
 import {
@@ -30,6 +31,7 @@ import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { attrsKeyOf, normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { normalizeQuestions } from '@/lib/question';
+import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
@@ -121,15 +123,21 @@ async function loadQuestions(surveyId: string): Promise<Question[]> {
 }
 
 /**
- * 되읽기용 내보내기 열 정의. 내보낼 때와 **같은 함수**로 만들어야 왕복이 맞는다.
+ * 되읽기용 내보내기 열 정의. 내보낼 때와 **같은 준비 단계를 그대로** 밟아야 왕복이 맞는다.
+ *
+ * `hydrateQuestionsForSpss` 를 빠뜨리면 파생 필드(셀 코드·보기 코드)가 복원되지 않아
+ * 변수명이 갈린다. 실데이터로 확인한 실제 증상: 내보내기는 `DQ5_2_01` 을 내는데 되읽기는
+ * `DQ5_2_1` 을 만들어, 복수선택 열 열여덟 개가 통째로 "모르는 변수명" 이 됐다.
+ * 행 제외도 같이 태운다 — 제외된 표 행이 뒤 행의 번호를 밀어 이름이 어긋난다.
  *
  * 변동 확인 변수는 문항 전부를 대상으로 만들어 둔다 — 이 열들은 되읽지 않지만, 정의에
  * 없으면 파일의 `_CHG` 열이 "모르는 변수명"으로 보고돼 화면이 잡음으로 덮인다.
  * 내보내기 경로와 달리 여기서는 이 집합이 출력에 영향을 주지 않는다.
  */
-function buildImportColumns(questions: Question[]) {
-  return generateSPSSColumns(questions, {
-    changeConfirmQuestionIds: new Set(questions.map((q) => q.id)),
+export function buildImportColumns(surveyId: string, questions: Question[]) {
+  const prepared = applyExportRowExclusions(surveyId, hydrateQuestionsForSpss(questions));
+  return generateSPSSColumns(prepared, {
+    changeConfirmQuestionIds: new Set(prepared.map((q) => q.id)),
   });
 }
 
@@ -331,7 +339,7 @@ export async function suggestPriorAnswerImportMapping(
     // 헤더 1행으로 열어 둔 상태에서도 알려줄 수 있다.
     looksLikeRawFormat: looksLikeRawFormat(
       [...preview.headerRows, ...preview.rows].slice(0, RAW_FORMAT_HEADER_ROWS),
-      buildImportColumns(questions),
+      buildImportColumns(input.surveyId, questions),
     ),
     headerRows: preview.headerRows,
     // 화면에는 표본 몇 행만 돌려준다 — 응답 크기와 마법사 표는 그대로다.
@@ -455,7 +463,7 @@ export async function importPriorAnswers(
         headerRows: preview.headerRows,
         rows,
         matchColumnIndex: input.matchColumnIndex,
-        columns: buildImportColumns(questions),
+        columns: buildImportColumns(input.surveyId, questions),
         questions,
       })
     : null;

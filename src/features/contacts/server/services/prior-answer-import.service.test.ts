@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { previewExcelGrid } from '@/lib/contacts/excel-parser';
+import type { Question } from '@/types/survey';
 
 import { extractRawSql } from '../../../../../tests/integration/_helpers/result-code-mock';
 import {
   PREVIEW_ROWS,
   SUGGEST_SAMPLE_ROWS,
+  buildImportColumns,
   importPriorAnswers,
   listPriorAnswerMatchFields,
   savePriorAnswerImportConfig,
@@ -971,5 +973,34 @@ describe('listPriorAnswerMatchFields', () => {
 
   it('명단 스킴이 없으면 빈 목록', async () => {
     expect(await listPriorAnswerMatchFields(SURVEY_ID)).toEqual([]);
+  });
+});
+
+describe('buildImportColumns', () => {
+  it('내보내기와 같은 준비 단계를 밟아 변수명이 갈리지 않는다', () => {
+    // hydrate 를 빠뜨리면 파생 보기 코드가 복원되지 않아 이름이 갈린다. 실데이터에서
+    // 겪은 증상: 내보내기는 DQ5_2_01 을 내는데 되읽기는 DQ5_2_1 을 만들어 복수선택 열
+    // 열여덟 개가 통째로 "모르는 변수명" 이 됐다.
+    const question = {
+      id: 'q-check',
+      type: 'checkbox',
+      title: '지원 항목',
+      questionCode: 'DQ5_2',
+      order: 0,
+      required: false,
+      // 보기 코드가 없는 상태 — 준비 단계가 복원해야 한다.
+      options: Array.from({ length: 11 }, (_, i) => ({
+        id: `o${i + 1}`,
+        value: `v${i + 1}`,
+        label: `보기 ${i + 1}`,
+      })),
+    } as unknown as Question;
+
+    const names = buildImportColumns(SURVEY_ID, [question]).map(
+      (c: { spssVarName: string }) => c.spssVarName,
+    );
+    expect(names).toContain('DQ5_2_01');
+    expect(names).toContain('DQ5_2_11');
+    expect(names).not.toContain('DQ5_2_1');
   });
 });
