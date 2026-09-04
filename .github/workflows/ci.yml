@@ -52,7 +52,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # version 고정 + standalone: npm 을 거치지 않고 pnpm 바이너리를 직접 받는다.
+      # 기본값은 npm 자기설치라 npm 레지스트리가 흔들리면 이 단계가 통째로 끌려간다
+      # (2026-09-04 실측: 평소 4~6초인 단계가 두 번 7분). 최신을 깔았다가
+      # packageManager 버전으로 되돌리는 왕복도 사라진다.
       - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+          standalone: true
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -108,7 +115,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # version 고정 + standalone: npm 을 거치지 않고 pnpm 바이너리를 직접 받는다.
+      # 기본값은 npm 자기설치라 npm 레지스트리가 흔들리면 이 단계가 통째로 끌려간다
+      # (2026-09-04 실측: 평소 4~6초인 단계가 두 번 7분). 최신을 깔았다가
+      # packageManager 버전으로 되돌리는 왕복도 사라진다.
       - uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+          standalone: true
       - uses: actions/setup-node@v5
         with:
           node-version: 22
