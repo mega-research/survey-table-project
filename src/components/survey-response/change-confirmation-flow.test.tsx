@@ -755,6 +755,47 @@ describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
     expect(submittedResponses()).not.toHaveProperty('q-dep');
   });
 
+  /**
+   * 삭제(strip Hidden Question Values)와 프리필(collectPriorAnswerPrefills)이 같은
+   * 응답 상태를 두고 반대 방향으로 움직인다 — 하나는 숨은 문항 값을 지우고, 다른 하나는
+   * 표시되는 빈 문항을 이월 값으로 채운다. 응답자가 직접 지운 값은 영영 사라지지만
+   * (hidden-question-deletion-flow.test.tsx "되돌려도 지워진 값은 살아나지 않는다"),
+   * 이월 값은 그 진짜 출처가 `contact_prior_answers`(prior 인자)에 그대로 남아 있고
+   * 프리필 규칙이 "이미 값이 있으면 덮지 않는다"이므로, 지워져 빈 문항이 되면 다시
+   * 채워진다. 두 effect 가 서로 되받아치며 무한 루프를 만들지 않는다는 것도 함께 본다 —
+   * 실제로 루프가 나면 React 가 update depth 초과를 던져 이 테스트 자체가 실패한다.
+   */
+  it('숨어서 지워진 이월 값도 다시 보이면 프리필로 되살아난다', async () => {
+    const user = userEvent.setup();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    priorAnswersLookup.mockResolvedValue({ 'q-cond': 'A', 'q-dep': '작년 하위 답' });
+    renderWithSwitchOff(conditionalSurvey());
+
+    await screen.findByText('해당 여부');
+    // 1) 상류가 이월 값 'A' 로 프리필돼 하위 문항이 보이고, 하위 문항도 이월 값으로 채워진다.
+    await waitFor(() => expect(screen.getByRole('radio', { name: '해당있음' })).toBeChecked());
+    await screen.findByText('하위 질문');
+    await screen.findByDisplayValue('작년 하위 답');
+
+    // 2) 상류를 바꿔 하위 문항을 숨기면 삭제 effect 가 값을 곧바로 지운다.
+    await user.click(screen.getByRole('radio', { name: '해당없음' }));
+    await waitFor(() => expect(screen.queryByText('하위 질문')).toBeNull());
+    await waitFor(() => expect(screen.queryByDisplayValue('작년 하위 답')).toBeNull());
+
+    // 3) 상류를 원래대로 되돌리면 하위 문항이 다시 보이고, 빈 자리에 프리필이 다시 깐다.
+    // 응답자가 직접 타이핑해 지운 값과 달리, 이월 값은 소스가 살아 있어 되살아난다.
+    await user.click(screen.getByRole('radio', { name: '해당있음' }));
+    await screen.findByText('하위 질문');
+    await screen.findByDisplayValue('작년 하위 답');
+
+    // 프리필(add)·삭제(remove) 두 effect 가 서로 되받아치지 않고 안정적으로 정착했다 —
+    // React 의 update depth 경고/에러가 한 번도 나지 않았다.
+    expect(
+      consoleErrorSpy.mock.calls.some((call) => String(call[0]).includes('Maximum update depth')),
+    ).toBe(false);
+    consoleErrorSpy.mockRestore();
+  });
+
   it('이월 값이 없는 문항은 빈칸으로 남는다', async () => {
     renderWithSwitchOff();
     await screen.findByText('올해 새로 생긴 질문');
