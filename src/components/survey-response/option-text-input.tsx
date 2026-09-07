@@ -82,14 +82,16 @@ export function OptionTextInput({
   };
 
   // 아래 줄 — 값이 있을 때만 만든다. input-cell 과 같은 순서·색(환산은 회색, 위반은 빨강).
+  // text-left 를 못 박는다 — 표 셀은 가운데/오른쪽 정렬이 흔해서 그냥 두면 안내 문구가
+  // 입력값과 따로 놀며 오른쪽에 붙는다.
   const hint =
     isNumberMode && (numeric.unitReading || numeric.rangeViolation) ? (
-      <div className="space-y-0.5">
+      <div className="space-y-0.5 text-left leading-tight">
         {numeric.unitReading && (
-          <p className="text-muted-foreground text-xs">{numeric.unitReading}</p>
+          <p className="text-muted-foreground text-[11px]">{numeric.unitReading}</p>
         )}
         {numeric.rangeViolation && (
-          <p className="text-xs text-red-500">* {numeric.rangeViolation}</p>
+          <p className="text-[11px] text-red-500">* {numeric.rangeViolation}</p>
         )}
       </div>
     ) : null;
@@ -101,7 +103,7 @@ export function OptionTextInput({
     return (
       // OptionTextRow(가로 flex 셸) 안에 들어가므로 세로로 쌓되 flex-1·min-w-0 을 넘겨받는다.
       // 힌트가 붙으면 셸이 한 줄만큼 높아질 뿐 칩·입력 정렬은 그대로다.
-      <div className={cn('flex min-w-0 flex-1 flex-col justify-center gap-0.5')}>
+      <div className={cn('flex min-w-0 flex-1 flex-col justify-center')}>
         <input type="text" {...sharedProps} />
         {hint}
       </div>

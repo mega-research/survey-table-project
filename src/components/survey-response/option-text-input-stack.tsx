@@ -35,7 +35,9 @@ export function OptionTextRow({ label, compact, className, style, children }: Op
     <label
       style={style}
       className={cn(
-        'flex min-h-10 w-full min-w-0 cursor-text items-center gap-2 rounded-[10px] border border-gray-200 bg-white pr-0.5 pl-1 transition-colors hover:border-gray-300 focus-within:border-blue-400 focus-within:hover:border-blue-400',
+        // items-center: 한 줄일 때 칩과 입력이 나란하다. 숫자 모드의 환산 안내로 두 줄이
+        // 되어도 칩이 블록 가운데에 오므로 따로 정렬을 두지 않는다.
+        'flex min-h-10 w-full min-w-0 cursor-text items-center gap-2 rounded-[10px] border border-gray-200 bg-white py-0.5 pr-0.5 pl-1 transition-colors hover:border-gray-300 focus-within:border-blue-400 focus-within:hover:border-blue-400',
         compact && 'min-h-8 gap-1.5',
         className,
       )}
