@@ -30,6 +30,7 @@ import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
+import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 
 interface ChoiceTableResponseProps {
   question: Question;
@@ -183,6 +184,39 @@ export function ChoiceTableResponse({
     };
   };
 
+  /**
+   * 표 아래 상세 기재 스택 엔트리 — 선택된 보기 중 텍스트 입력이 켜진 것만.
+   *
+   * 순서는 표의 행·열 순서를 따른다. selectedIds 는 그룹 응답 맵의 키 순서(=클릭 순서)라
+   * 그대로 쓰면 고를 때마다 칩 순서가 뒤바뀐다.
+   *
+   * 보기 그룹이 둘 이상이면 칩에 그룹 라벨을 앞에 붙인다 — AQ1 처럼 같은 "기타" 보기가
+   * 열마다 하나씩 있는 표에서는 칩 문구가 같아 어느 칸 것인지 구분되지 않는다.
+   */
+  const textInputEntries = useMemo((): OptionTextStackEntry[] => {
+    const selected = new Set(selectedIds);
+    const groups = question.choiceGroups ?? [];
+    const groupLabelById = new Map(groups.map((group) => [group.id, (group.label ?? '').trim()]));
+    const showGroupPrefix = groups.length > 1;
+
+    const entries: OptionTextStackEntry[] = [];
+    for (const row of question.tableRowsData ?? []) {
+      for (const cell of row.cells) {
+        if (cell.type !== 'choice_opt' || cell.isHidden) continue;
+        if (!selected.has(cell.id)) continue;
+        const option = optionByValue.get(cell.id);
+        if (!option?.allowTextInput) continue;
+        const base =
+          substituteTokens(option.label ?? '', attrs, quotes).trim() || '(라벨 없음)';
+        const groupLabel = showGroupPrefix
+          ? (groupLabelById.get(cell.choiceGroupId ?? '') ?? '')
+          : '';
+        entries.push({ option, label: groupLabel ? `${groupLabel} · ${base}` : base });
+      }
+    }
+    return entries;
+  }, [attrs, optionByValue, question, quotes, selectedIds]);
+
   const renderCell = (
     cell: TableCell,
     isSelectedRowDetail = false,
@@ -249,7 +283,9 @@ export function ChoiceTableResponse({
             </span>
           )}
         </label>
-        {option?.allowTextInput && checked && (
+        {/* 셀 안 입력은 모바일 상세(카드·드릴다운) 경로 전용이다. 데스크톱 표는 열 폭이
+            좁아 우겨넣어지므로 표 아래 OptionTextInputStack 한 줄로 뺀다. */}
+        {isSelectedRowDetail && option?.allowTextInput && checked && (
           <OptionTextInput questionId={question.id} option={option} className="w-full" />
         )}
       </div>
@@ -360,6 +396,7 @@ export function ChoiceTableResponse({
         applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
       {counter}
     </div>
   );
