@@ -1,5 +1,10 @@
-import type { Question, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
-import type { BranchEvalCtx } from '@/utils/branch-eval';
+import type {
+  Question,
+  QuestionCondition,
+  QuestionConditionGroup,
+  QuestionGroup,
+} from '@/types/survey';
+import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import { shouldDisplayQuestion } from '@/utils/branch-logic';
 
 import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
@@ -12,12 +17,47 @@ import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
  */
 
 /** 조건 그룹이 참조하는 문항 id 들. */
+/**
+ * operand 안에 박힌 문항 참조를 모은다.
+ *
+ * `sourceQuestionId` 는 조건이 스캔할 표를 가리킬 뿐이고, 비교의 좌·우변은 **다른 문항의
+ * 셀**을 가리킬 수 있다 (`kind: 'cell'`·`kind: 'question'`, 그리고 그 둘을 감싼 `binop`).
+ * 이것을 놓치면 그 문항이 숨어도 의존자가 재평가 큐에 오르지 않아 삭제 연쇄가 한 단계에서
+ * 멈춘다. 형태가 깨진 JSONB 는 조용히 건너뛴다 — 여기서 던지면 표시 판정이 통째로 죽는다.
+ */
+function collectOperandQuestionIds(operand: unknown, out: Set<string>): void {
+  if (!operand || typeof operand !== 'object') return;
+  const node = operand as Record<string, unknown>;
+  if (typeof node['questionId'] === 'string' && node['questionId'].length > 0) {
+    out.add(node['questionId']);
+  }
+  collectOperandQuestionIds(node['left'], out);
+  collectOperandQuestionIds(node['right'], out);
+}
+
+/** 조건 하나가 실제로 읽는 문항 id 전부 — 스캔 대상 표 + operand 안의 셀·문항 참조. */
+function questionIdsReadBy(condition: QuestionCondition, out: Set<string>): void {
+  if (typeof condition.sourceQuestionId === 'string' && condition.sourceQuestionId.length > 0) {
+    out.add(condition.sourceQuestionId);
+  }
+  collectOperandQuestionIds(condition.tableConditions?.numericComparison, out);
+  collectOperandQuestionIds(condition.additionalConditions?.numericComparison, out);
+  for (const clause of condition.expressionConfig?.clauses ?? []) {
+    if (clause.kind === 'comparison') {
+      collectOperandQuestionIds(clause.comparison?.left, out);
+      collectOperandQuestionIds(clause.comparison?.right, out);
+    }
+  }
+}
+
 function sourceIdsOf(condition: QuestionConditionGroup | undefined): string[] {
   if (!condition || !Array.isArray(condition.conditions)) return [];
-  return condition.conditions
-    .filter((c) => c.enabled !== false)
-    .map((c) => c.sourceQuestionId)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const out = new Set<string>();
+  for (const c of condition.conditions) {
+    if (c.enabled === false) continue;
+    questionIdsReadBy(c, out);
+  }
+  return [...out];
 }
 
 /**
@@ -117,6 +157,25 @@ function withoutHidden(
 }
 
 /**
+ * 평가 컨텍스트의 응답 뷰를 지워진 상태 기준으로 다시 만든다.
+ *
+ * `table-cell-check` 의 숫자 비교가 다른 문항의 셀을 가리키면 그 값은 응답 본문이 아니라
+ * `ctx.responses` 에서 풀린다 (`branch-eval` 의 `kind: 'cell'` operand). 호출부가 strip 전에
+ * 만든 뷰를 그대로 쓰면, 이미 지워진 문항의 셀 값으로 하류 조건이 만족해 한 단계 덜 지워진다.
+ * 반복마다 다시 만들어 본문과 컨텍스트가 같은 것을 보게 한다.
+ *
+ * 지운 것이 없으면 원본 ctx 를 그대로 돌려준다 — 흔한 경로에서 객체를 만들지 않는다.
+ */
+function maskedCtx(
+  evalCtx: BranchEvalCtx | undefined,
+  view: Record<string, unknown>,
+  hidden: ReadonlySet<string>,
+): BranchEvalCtx | undefined {
+  if (!evalCtx || hidden.size === 0) return evalCtx;
+  return { ...evalCtx, responses: responsesToLookupShape(view) };
+}
+
+/**
  * 표시되는 문항 id 집합. 삭제 연쇄를 고정점까지 수렴시킨다.
  *
  * "전부 표시" 에서 시작해 숨김만 늘린다 — 숨김이 단조 증가라야 종료가 보장된다. 반대
@@ -142,7 +201,8 @@ export function resolveVisibleQuestionIds(
     const question = byId.get(id);
     if (!question) continue;
     const view = withoutHidden(responses, hidden);
-    if (shouldDisplayQuestion(question, view, questions, groups, evalCtx)) continue;
+    if (shouldDisplayQuestion(question, view, questions, groups, maskedCtx(evalCtx, view, hidden)))
+      continue;
     hidden.add(id);
     visible.delete(id);
     for (const dependentId of dependents.get(id) ?? []) {
