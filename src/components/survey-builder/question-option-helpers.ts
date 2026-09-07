@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { generateId } from '@/lib/utils';
 import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { generateOtherOptionFields } from '@/lib/option-text-migration';
-import { Question, QuestionOption, SelectLevel } from '@/types/survey';
+import { NumberFormat, Question, QuestionOption, SelectLevel } from '@/types/survey';
 
 /**
  * "+ 텍스트 옵션 추가" 버튼이 호출하는 헬퍼.
@@ -22,6 +22,48 @@ export function createTextInputOption(existingOptions: QuestionOption[]): Questi
     spssNumericCode: fields.spssNumericCode,
     allowTextInput: true,
   };
+}
+
+/**
+ * 옵션 텍스트(allowTextInput) 사이드카 입력의 설정 필드 셋.
+ * QuestionOption·CheckboxOption·RadioOption 이 같은 필드를 갖고 있어 공통으로 다룬다.
+ */
+export interface OptionTextSettings {
+  textInputPlaceholder?: string;
+  textInputType?: 'text' | 'number';
+  textInputNumberFormat?: NumberFormat;
+}
+
+/**
+ * 옵션 텍스트 설정 변경을 옵션 객체에 반영한다.
+ *
+ * `next` 는 부분 패치가 아니라 **설정 전체**다 — 편집기가 세 필드를 항상 함께 넘긴다.
+ * 한 필드만 담아 부르면 나머지가 지워진다.
+ *
+ * 숫자 모드가 꺼지면 `textInputType`·`textInputNumberFormat` 키를 **남기지 않는다** —
+ * 저장 형태를 choice_opt 셀(`utils/serialize-cell`)과 맞추기 위한 것이다. 죽은
+ * `textInputType: 'text'` 가 JSONB 에 남으면 발행 스냅샷 diff 에 잡음이 끼고, 기본값과
+ * 명시값이 구분되지 않는다. placeholder 는 빈 문자열도 그대로 둔다(기존 동작).
+ */
+export function applyOptionTextSettings<T extends OptionTextSettings>(
+  option: T,
+  next: OptionTextSettings,
+): T {
+  const merged: T = { ...option };
+  delete merged.textInputPlaceholder;
+  delete merged.textInputType;
+  delete merged.textInputNumberFormat;
+
+  if (next.textInputPlaceholder !== undefined) {
+    merged.textInputPlaceholder = next.textInputPlaceholder;
+  }
+  if (next.textInputType === 'number') {
+    merged.textInputType = 'number';
+    if (next.textInputNumberFormat) {
+      merged.textInputNumberFormat = next.textInputNumberFormat;
+    }
+  }
+  return merged;
 }
 
 export const OTHER_OPTION_ID = 'other-option';

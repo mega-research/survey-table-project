@@ -52,7 +52,7 @@ import {
   supportsAnswerQuote,
 } from './answer-quote-fields';
 import { OptionLabelTextarea } from './option-label-textarea';
-import { OptionPlaceholderEditor } from './option-placeholder-editor';
+import { OptionTextSettingsEditor } from './option-text-settings-editor';
 import { VariableButton } from './variable-button';
 
 import { BranchRuleEditor } from './branch-rule-editor';
@@ -67,6 +67,7 @@ import { TablePreview } from './table-preview';
 import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 import {
   OTHER_OPTION_ID,
+  applyOptionTextSettings,
   createTextInputOption,
   getParentLevelOptions,
   type OptionalOptionKey,
@@ -1623,13 +1624,20 @@ function SortableOptionItem({
       </div>
 
       {option.allowTextInput && (
-        <OptionPlaceholderEditor
-          value={option.textInputPlaceholder}
-          onChange={(next) =>
-            updateOption(option.id, {
-              textInputPlaceholder: next,
-            } as Partial<QuestionOption>)
-          }
+        <OptionTextSettingsEditor
+          idPrefix={`question-option-${option.id}`}
+          placeholder={option.textInputPlaceholder}
+          textInputType={option.textInputType}
+          numberFormat={option.textInputNumberFormat}
+          onChange={(next) => {
+            // updateOption 은 spread 병합이라 키 삭제를 못 한다. 숫자 모드를 끄면
+            // 사라져야 하는 키를 clear 목록으로 따로 넘긴다.
+            const applied = applyOptionTextSettings(option, next);
+            const clear = (['textInputType', 'textInputNumberFormat'] as const).filter(
+              (k) => !(k in applied),
+            );
+            updateOption(option.id, applied, clear);
+          }}
         />
       )}
 
