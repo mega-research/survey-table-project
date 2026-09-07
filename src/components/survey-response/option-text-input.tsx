@@ -7,6 +7,8 @@ import type { NumberFormat } from '@/types/survey';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 
+import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
+
 // useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
@@ -29,6 +31,15 @@ interface OptionTextInputProps {
    * 안에 넣을 때 베이스 보더/포커스 링이 이중으로 겹치는 것을 원천 차단한다.
    */
   unstyled?: boolean | undefined;
+  /**
+   * 칩 셸(OptionTextRow)까지 이 컴포넌트가 그린다. 문구를 주면 그 모드다.
+   *
+   * 셸을 밖에서 두르면 숫자 안내(단위 환산·범위 위반)를 셸 **밖**에 놓을 방법이 없다.
+   * 안내를 따로 계산하려면 useFormattedNumericInput 을 한 번 더 불러야 하는데, 그러면
+   * 포커스 상태가 갈라져 "타이핑 중에는 범위 경고를 숨긴다" 규칙이 깨진다. 훅을 하나로
+   * 두려면 셸과 안내가 같은 컴포넌트 안에 있어야 한다.
+   */
+  rowLabel?: string | undefined;
 }
 
 /**
@@ -42,6 +53,7 @@ export function OptionTextInput({
   className,
   ariaLabel,
   unstyled,
+  rowLabel,
 }: OptionTextInputProps) {
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
@@ -86,12 +98,12 @@ export function OptionTextInput({
   // 입력값과 따로 놀며 오른쪽에 붙는다.
   const hint =
     isNumberMode && (numeric.unitReading || numeric.rangeViolation) ? (
-      <div className="space-y-0.5 text-left leading-tight">
+      <div className="space-y-0.5 text-left">
         {numeric.unitReading && (
-          <p className="text-muted-foreground text-[11px]">{numeric.unitReading}</p>
+          <p className="text-muted-foreground text-sm">{numeric.unitReading}</p>
         )}
         {numeric.rangeViolation && (
-          <p className="text-[11px] text-red-500">* {numeric.rangeViolation}</p>
+          <p className="text-sm text-red-500">* {numeric.rangeViolation}</p>
         )}
       </div>
     ) : null;
@@ -99,10 +111,21 @@ export function OptionTextInput({
   // 래퍼는 **힌트 유무와 무관하게 항상** 렌더한다. 조건부로 감싸면 첫 글자에 힌트가 생기는
   // 순간 input 이 트리에서 자리를 옮겨 React 가 DOM 노드를 새로 만들고, 그때 포커스가 날아가
   // 뒤 글자가 입력되지 않는다 (실제로 겪었다).
+  // 셸을 직접 그리는 모드 — 안내는 셸 **밖**, 셀 안에 놓인다. 좁은 입력칸 안에 끼워 넣으면
+  // 글자를 줄일 수밖에 없어 읽히지 않는다.
+  if (rowLabel !== undefined) {
+    return (
+      <div className="w-full space-y-1">
+        <OptionTextRow label={rowLabel}>
+          <input type="text" {...sharedProps} className={OPTION_TEXT_BARE_INPUT_CLS} />
+        </OptionTextRow>
+        {hint}
+      </div>
+    );
+  }
   if (unstyled) {
     return (
-      // OptionTextRow(가로 flex 셸) 안에 들어가므로 세로로 쌓되 flex-1·min-w-0 을 넘겨받는다.
-      // 힌트가 붙으면 셸이 한 줄만큼 높아질 뿐 칩·입력 정렬은 그대로다.
+      // 밖에서 두른 셸 안에 들어가는 경우 — 안내를 셸 밖에 놓을 수 없어 아래에 붙인다.
       <div className={cn('flex min-w-0 flex-1 flex-col justify-center')}>
         <input type="text" {...sharedProps} />
         {hint}

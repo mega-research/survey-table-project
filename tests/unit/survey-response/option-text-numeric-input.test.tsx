@@ -101,3 +101,34 @@ describe('OptionTextInput — 환산 읽기 표시', () => {
     expect(screen.queryByText(/억/)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * 스택(칩 셸) 모드에서는 안내가 셸 **밖**에 놓인다.
+ * 셸 안에 끼워 넣으면 좁은 입력칸을 나눠 쓰느라 글자를 줄일 수밖에 없어 읽히지 않는다.
+ */
+describe('OptionTextInput — 칩 셸 모드', () => {
+  beforeEach(() => useSurveyResponseStore.getState().resetResponseState());
+  afterEach(() => cleanup());
+
+  const wonOption = {
+    id: 'o1',
+    textInputType: 'number' as const,
+    textInputNumberFormat: { thousandSeparator: true, unit: 'million' as const, unitSuffix: '원' },
+  };
+
+  it('안내가 셸(label) 바깥에 렌더된다', async () => {
+    const user = userEvent.setup();
+    render(<OptionTextInput questionId="q1" option={wonOption} rowLabel="① 매출액" />);
+    await user.type(screen.getByRole('textbox'), '20');
+
+    const reading = screen.getByText('2천만원');
+    expect(reading.closest('label')).toBeNull();
+    // 입력칸은 셸 안에 남는다
+    expect(screen.getByRole('textbox').closest('label')).not.toBeNull();
+  });
+
+  it('칩 문구가 셸 안에 나온다', () => {
+    render(<OptionTextInput questionId="q1" option={wonOption} rowLabel="① 매출액" />);
+    expect(screen.getByText('① 매출액').closest('label')).not.toBeNull();
+  });
+});
