@@ -23,6 +23,10 @@ interface DetectScreenOutOptions {
  *
  * `endOutcome` 미지정은 'completed' 로 해석한다 — 기존 설문의 end 분기가 조용히
  * 자격미달로 재분류되는 것을 막는 기본값이다.
+ *
+ * 2026-09-07 이후로는 숨은 문항 값이 저장 경계에서 이미 걷힌다
+ * (lib/survey/question-visibility.ts 의 stripHiddenQuestionValues). 이 필터는 그 뒤에
+ * 돌아 사실상 no-op 이지만, 외부에서 직접 호출된 페이로드에 대한 방어로 남긴다.
  */
 export function detectScreenOut(
   questions: Question[],
