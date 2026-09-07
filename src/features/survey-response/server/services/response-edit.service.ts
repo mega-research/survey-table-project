@@ -28,9 +28,10 @@ import {
 } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { loadPiiTargets } from './response.service';
 
-import type { Question, SurveyLookup } from '@/types/survey';
+import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import type { SaveAdminEditInput } from '../../domain/response-edit';
 
 // 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
@@ -197,8 +198,9 @@ export async function saveAdminEdit(
     const rawSnapshotForCalc = versionSnapshot as unknown as {
       questions?: unknown;
       lookups?: unknown;
+      groups?: unknown;
     };
-    // JSONB 스키마 드리프트 방어 — questions/lookups 가 비배열(객체·문자열)이면
+    // JSONB 스키마 드리프트 방어 — questions/lookups/groups 가 비배열(객체·문자열)이면
     // withCalcValues 순회나 lookup find 에서 크래시해 운영자 수정 전체가 실패한다.
     // Array.isArray 로 걸러 손상 스냅샷에서도 재계산만 조용히 스킵되게 한다.
     const snapshotForCalc = {
@@ -207,6 +209,9 @@ export async function saveAdminEdit(
         : [],
       lookups: Array.isArray(rawSnapshotForCalc.lookups)
         ? (rawSnapshotForCalc.lookups as SurveyLookup[])
+        : [],
+      groups: Array.isArray(rawSnapshotForCalc.groups)
+        ? (rawSnapshotForCalc.groups as QuestionGroup[])
         : [],
     };
 
@@ -220,11 +225,18 @@ export async function saveAdminEdit(
       contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
     }
 
-    // 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와 같은 신뢰 경계:
-    // 비활성 셀에 실려온 값은 저장하지 않고, 수식은 지워진 값 기준으로 계산한다.
-    const strippedResponses = stripDisabledCellValues(
+    // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와
+    // 같은 신뢰 경계다. 문항이 통째로 사라지면 그 표의 셀 값도 함께 사라져 게이팅 판정의
+    // 입력이 달라지므로 먼저 수행한다. 비활성 셀에 실려온 값은 저장하지 않고, 수식은
+    // 지워진 값 기준으로 계산한다.
+    const hiddenStripped = stripHiddenQuestionValues(
       snapshotForCalc.questions ?? [],
       questionResponses,
+      snapshotForCalc.groups ?? [],
+    );
+    const strippedResponses = stripDisabledCellValues(
+      snapshotForCalc.questions ?? [],
+      hiddenStripped,
     );
     finalResponses = withCalcValues(strippedResponses, {
       questions: snapshotForCalc.questions ?? [],

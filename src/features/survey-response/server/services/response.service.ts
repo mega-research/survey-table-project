@@ -45,6 +45,7 @@ import {
 } from '@/lib/survey-response/test-target-attempt.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -2068,6 +2069,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   let snapshotContactAttrs: Record<string, string | undefined> = {};
   let storedRecalc: {
     questions: Question[];
+    groups: QuestionGroup[];
     lookups: SurveyLookup[];
     contactAttrs: Record<string, string | undefined>;
     piiTargets: PiiTargets;
@@ -2094,6 +2096,17 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     const hasGatedCells = snapQuestions.some((q) =>
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
     );
+
+    // 숨은 문항 값 strip — 게이팅 strip 보다 **먼저** 온다. 문항이 통째로 사라지면 그 표의
+    // 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다 (스펙 §배선).
+    // 클라이언트가 이미 지우지만, 이탈 시점 beacon 이 지움 전 값을 실어 보낼 수 있다.
+    if (validatedResponses) {
+      validatedResponses = stripHiddenQuestionValues(
+        snapQuestions,
+        validatedResponses,
+        snapshotGroups,
+      );
+    }
 
     // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
     // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
@@ -2134,6 +2147,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
         storedRecalc = {
           questions: snapQuestions,
+          groups: snapshotGroups,
           lookups: snapLookups,
           contactAttrs: calcAttrs,
           piiTargets: await loadPiiTargets(gateRow.versionId, gateRow.surveyId),
@@ -2213,9 +2227,16 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       // 저장된 값 그대로.
       let judgedResponses: Record<string, unknown> = plain;
       if (storedRecalc) {
-        // 게이팅 strip → calc 재계산 순서 — 비활성 셀 잔존 값을 지운 뒤 그 기준으로
-        // 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로 저장된 값도 여기서 봉합).
-        const stripped = stripDisabledCellValues(storedRecalc.questions, plain);
+        // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 문항이 통째로 사라지면 그
+        // 표의 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다. 그 다음 비활성 셀 잔존
+        // 값을 지운 뒤 그 기준으로 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로
+        // 저장된 값도 여기서 봉합).
+        const hiddenStripped = stripHiddenQuestionValues(
+          storedRecalc.questions,
+          plain,
+          storedRecalc.groups,
+        );
+        const stripped = stripDisabledCellValues(storedRecalc.questions, hiddenStripped);
         let recomputed = withCalcValues(stripped, {
           questions: storedRecalc.questions,
           responses: stripped,
