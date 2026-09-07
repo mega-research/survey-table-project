@@ -35,6 +35,36 @@ function q(id: string, opts: { on?: { source: string; values: string[] }; groupI
   } as unknown as Question;
 }
 
+/** 표시 조건·상위 그룹을 얹은 그룹 픽스처. */
+function group(
+  id: string,
+  opts: { on?: { source: string; values: string[] }; parentGroupId?: string } = {},
+): QuestionGroup {
+  return {
+    id,
+    name: id,
+    order: 0,
+    ...(opts.parentGroupId ? { parentGroupId: opts.parentGroupId } : {}),
+    ...(opts.on
+      ? {
+          displayCondition: {
+            logicType: 'AND' as const,
+            conditions: [
+              {
+                id: `${id}-c1`,
+                enabled: true,
+                logicType: 'AND' as const,
+                conditionType: 'value-match' as const,
+                sourceQuestionId: opts.on.source,
+                requiredValues: opts.on.values,
+              },
+            ],
+          },
+        }
+      : {}),
+  } as unknown as QuestionGroup;
+}
+
 describe('resolveVisibleQuestionIds', () => {
   it('조건이 없는 문항은 항상 표시된다', () => {
     const qs = [q('a'), q('b')];
@@ -98,6 +128,24 @@ describe('resolveVisibleQuestionIds', () => {
     ];
     const qs = [q('a'), q('b', { groupId: 'g1' }), q('c', { groupId: 'g1' })];
     expect(resolveVisibleQuestionIds(qs, { a: 'no' }, groups)).toEqual(new Set(['a']));
+  });
+
+  it('중첩 그룹 — 조건이 걸린 상위 그룹 밑의 하위 그룹 문항도 숨는다', () => {
+    // shouldDisplayGroup 은 parentGroupId 사슬을 타고 올라가므로 하위 그룹 문항도
+    // 숨는다. 직접 소속만 보면 큐에 오르지 않아 값이 살아남는다 (회귀 가드).
+    const groups = [group('g-parent', { on: { source: 'a', values: ['yes'] } }), group('g-child', { parentGroupId: 'g-parent' })];
+    const qs = [q('a'), q('b', { groupId: 'g-child' })];
+    expect(resolveVisibleQuestionIds(qs, { a: 'no' }, groups)).toEqual(new Set(['a']));
+  });
+
+  it('중첩 그룹 — 하위 그룹 문항이 숨으면 그 값에 기대던 하류도 연쇄로 숨는다', () => {
+    const groups = [group('g-parent', { on: { source: 'a', values: ['yes'] } }), group('g-child', { parentGroupId: 'g-parent' })];
+    const qs = [
+      q('a'),
+      q('b', { groupId: 'g-child' }),
+      q('c', { on: { source: 'b', values: ['x'] } }),
+    ];
+    expect(resolveVisibleQuestionIds(qs, { a: 'no', b: 'x' }, groups)).toEqual(new Set(['a']));
   });
 });
 

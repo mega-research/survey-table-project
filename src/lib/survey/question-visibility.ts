@@ -21,14 +21,47 @@ function sourceIdsOf(condition: QuestionConditionGroup | undefined): string[] {
 }
 
 /**
+ * `문항의 소속 그룹 → 그 조상 그룹들` 사슬 해석기.
+ *
+ * question_groups 는 parentGroupId 로 자기 참조하고 `shouldDisplayGroup` 은 그 사슬을
+ * 재귀로 타고 올라간다 — 상위 그룹이 숨으면 하위 그룹 문항도 숨는다. 직접 소속만 보면
+ * 중첩 그룹 안의 문항이 큐에도 역인덱스에도 오르지 않아 영영 지워지지 않는다.
+ *
+ * 사슬은 자기 자신부터 담고, 손상된 데이터의 순환 참조는 방문 집합으로 끊는다.
+ */
+function buildGroupAncestry(
+  groups: readonly QuestionGroup[] | undefined,
+): (groupId: string | null | undefined) => readonly string[] {
+  const parentOf = new Map((groups ?? []).map((group) => [group.id, group.parentGroupId ?? null]));
+  const cache = new Map<string, readonly string[]>();
+  return (groupId) => {
+    if (!groupId) return [];
+    const cached = cache.get(groupId);
+    if (cached) return cached;
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null | undefined = groupId;
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      chain.push(cursor);
+      cursor = parentOf.get(cursor) ?? null;
+    }
+    cache.set(groupId, chain);
+    return chain;
+  };
+}
+
+/**
  * `참조되는 문항 id → 그 문항이 숨으면 다시 평가해야 할 문항 id 들` 역인덱스.
  *
  * 그룹 조건도 그래프에 넣는다 — 그룹이 숨으면 소속 문항이 전부 숨으므로, 그룹 조건이
- * 참조하는 문항의 의존자는 그 그룹의 **모든 멤버**다.
+ * 참조하는 문항의 의존자는 그 그룹의 **모든 멤버**다. 멤버는 직접 소속뿐 아니라 하위
+ * 그룹 소속까지 포함한다(위 buildGroupAncestry 주석).
  */
 function buildDependents(
   questions: readonly Question[],
   groups: readonly QuestionGroup[] | undefined,
+  ancestryOf: (groupId: string | null | undefined) => readonly string[],
 ): Map<string, Set<string>> {
   const dependents = new Map<string, Set<string>>();
   const add = (sourceId: string, dependentId: string) => {
@@ -43,7 +76,9 @@ function buildDependents(
   for (const group of groups ?? []) {
     const sourceIds = sourceIdsOf(group.displayCondition);
     if (sourceIds.length === 0) continue;
-    const members = questions.filter((question) => question.groupId === group.id);
+    const members = questions.filter((question) =>
+      ancestryOf(question.groupId).includes(group.id),
+    );
     for (const sourceId of sourceIds) for (const member of members) add(sourceId, member.id);
   }
   return dependents;
@@ -53,12 +88,17 @@ function buildDependents(
 function conditionedQuestionIds(
   questions: readonly Question[],
   groups: readonly QuestionGroup[] | undefined,
+  ancestryOf: (groupId: string | null | undefined) => readonly string[],
 ): string[] {
   const groupHasCondition = new Set(
     (groups ?? []).filter((group) => group.displayCondition).map((group) => group.id),
   );
   return questions
-    .filter((q) => q.displayCondition || (q.groupId && groupHasCondition.has(q.groupId)))
+    .filter(
+      (q) =>
+        q.displayCondition ||
+        ancestryOf(q.groupId).some((groupId) => groupHasCondition.has(groupId)),
+    )
     .map((q) => q.id);
 }
 
@@ -91,10 +131,11 @@ export function resolveVisibleQuestionIds(
 ): Set<string> {
   const visible = new Set(questions.map((q) => q.id));
   const byId = new Map(questions.map((q) => [q.id, q]));
-  const dependents = buildDependents(questions, groups);
+  const ancestryOf = buildGroupAncestry(groups);
+  const dependents = buildDependents(questions, groups, ancestryOf);
   const hidden = new Set<string>();
 
-  const queue = conditionedQuestionIds(questions, groups);
+  const queue = conditionedQuestionIds(questions, groups, ancestryOf);
   while (queue.length > 0) {
     const id = queue.shift()!;
     if (hidden.has(id)) continue;
