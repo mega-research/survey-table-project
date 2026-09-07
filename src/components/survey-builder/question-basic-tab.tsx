@@ -68,6 +68,7 @@ import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 import {
   OTHER_OPTION_ID,
   applyOptionTextSettings,
+  branchRuleOptionPatch,
   createTextInputOption,
   getParentLevelOptions,
   type OptionalOptionKey,
@@ -1658,9 +1659,11 @@ function SortableOptionItem({
             branchRule={option.branchRule}
             allQuestions={questions}
             currentQuestionId={questionId || ''}
-            onChange={(branchRule) => updateOption(option.id, {
-              ...(branchRule !== undefined ? { branchRule } : {}),
-            } as Partial<QuestionOption>)}
+            // 끄기(undefined)는 빈 패치가 아니라 키 삭제여야 한다 — branchRuleOptionPatch 참조.
+            onChange={(branchRule) => {
+              const { updates, clear } = branchRuleOptionPatch(branchRule);
+              updateOption(option.id, updates, clear);
+            }}
           />
         </div>
       )}

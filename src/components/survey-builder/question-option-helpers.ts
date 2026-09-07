@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { generateId } from '@/lib/utils';
 import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { generateOtherOptionFields } from '@/lib/option-text-migration';
-import { NumberFormat, Question, QuestionOption, SelectLevel } from '@/types/survey';
+import { BranchRule, NumberFormat, Question, QuestionOption, SelectLevel } from '@/types/survey';
 
 /**
  * "+ 텍스트 옵션 추가" 버튼이 호출하는 헬퍼.
@@ -143,6 +143,23 @@ export function createUpdateOption(setFormData: SetFormData) {
       return next;
     });
   };
+}
+
+/**
+ * BranchRuleEditor 의 `onChange` 를 옵션 갱신 인자로 옮긴다.
+ *
+ * 끄기는 `onChange(undefined)` 로 온다. 이때 **키를 지워야** 한다 — 빈 패치를 보내면
+ * 기존 규칙이 그대로 남고, 모달을 다시 열 때 "옵션 중 하나라도 branchRule 이 있으면 켬"
+ * 파생이 토글을 되살려 사용자에게는 토글이 안 꺼지는 것으로 보인다. 표 셀 편집기
+ * (cell-choice-editor)는 구조분해로 이미 키를 빼고 있었고 질문 레벨만 빠져 있었다.
+ */
+export function branchRuleOptionPatch(branchRule: BranchRule | undefined): {
+  updates: Partial<QuestionOption>;
+  clear: OptionalOptionKey[];
+} {
+  return branchRule !== undefined
+    ? { updates: { branchRule }, clear: [] }
+    : { updates: {}, clear: ['branchRule'] };
 }
 
 export function createRemoveOption(setFormData: SetFormData) {
