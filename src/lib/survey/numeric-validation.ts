@@ -23,7 +23,7 @@ import { isCellEnabled } from './cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 import { optionTextTargetId } from './option-text-target';
 import { collectSelectedOptionIds } from '@/lib/option-text-migration';
-import { resolveChoiceOptions } from '@/utils/choice-source';
+import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
 
 export interface NumericIssue {
   kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
@@ -327,6 +327,60 @@ function collectOptionTextRangeIssues(
   return issues;
 }
 
+/**
+ * 보기-소스 표(choice_opt) 안에 놓인 단답형 셀의 차단형 검증 — 필수 미입력·범위 위반.
+ *
+ * 값이 `__optTexts__` 사이드카에 셀 id 로 저장돼 표 문항 경로(cellValues)를 타지 않으므로
+ * 여기서 따로 본다. **행 표시조건으로 숨은 행의 셀은 보지 않는다** — 화면에 없는 칸이
+ * "다음"을 막으면 응답자가 따를 수 있는 길이 없다 (게이팅 셀을 검증에서 빼는 것과 같은 이유).
+ */
+function collectChoiceTableInputCellIssues(
+  question: Question,
+  ctx: NumericValidationCtx | undefined,
+): NumericIssue[] {
+  if (question.type !== 'radio' && question.type !== 'checkbox') return [];
+  if (!isChoiceTableSource(question)) return [];
+  const texts = ctx?.optionTexts;
+  const issues: NumericIssue[] = [];
+  const missingTargets: string[] = [];
+
+  for (const row of question.tableRowsData ?? []) {
+    if (
+      ctx &&
+      row.displayCondition &&
+      !shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions)
+    ) {
+      continue;
+    }
+    for (const cell of row.cells) {
+      if (cell.type !== 'input' || cell.isHidden) continue;
+      const value = (texts?.[cell.id] ?? '').trim();
+      if (isRequiredCell(cell) && value === '') {
+        missingTargets.push(optionTextTargetId(question.id, cell.id));
+        continue;
+      }
+      if (value === '' || cell.inputType !== 'number') continue;
+      const message = rangeViolationMessage(value, cell.numberFormat);
+      if (message) {
+        issues.push({
+          kind: 'range',
+          message,
+          detailTargetIds: [optionTextTargetId(question.id, cell.id)],
+        });
+      }
+    }
+  }
+
+  if (missingTargets.length > 0) {
+    issues.unshift({
+      kind: 'required-detail',
+      message: DEFAULT_REQUIRED_CELL_MESSAGE,
+      detailTargetIds: missingTargets,
+    });
+  }
+  return issues;
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
@@ -349,6 +403,7 @@ export function collectNumericIssues(
       });
     }
     issues.push(...collectOptionTextRangeIssues(question, response, ctx?.optionTexts));
+    issues.push(...collectChoiceTableInputCellIssues(question, ctx));
     return issues;
   }
   const cellValues =

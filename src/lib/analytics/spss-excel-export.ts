@@ -35,7 +35,7 @@ import {
   isGroupedChoiceQuestion,
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
-import { resolveChoiceOptions } from '@/utils/choice-source';
+import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
 import { toSingleLineLabel } from '@/utils/label-text';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
 import {
@@ -678,6 +678,44 @@ export function generateSPSSColumns(
           ? { numberFormat: q.numberFormat }
           : {}),
       });
+    }
+
+    // 보기-소스 표(choice_opt)로 그려지는 radio/checkbox 문항에 놓인 단답형 셀.
+    // 값은 __optTexts__ 사이드카에 셀 id 로 저장되므로 추출은 option-text 경로를 쓰고,
+    // 변수명·라벨은 표 문항의 셀 규약(cellCode > 자동 폴백 / exportLabel)을 그대로 따른다.
+    // `_text` 접미를 붙이지 않는 이유: 이 셀은 어느 보기의 사이드카가 아니라 표의 한 칸이고,
+    // 담당자가 코딩북에 적어 둔 변수명이 셀코드다.
+    if (
+      (q.type === 'radio' || q.type === 'checkbox') &&
+      isChoiceTableSource(q) &&
+      q.tableRowsData &&
+      q.tableColumns
+    ) {
+      for (const tRow of q.tableRowsData) {
+        tRow.cells.forEach((cell, colIdx) => {
+          if (cell.type !== 'input' || cell.isHidden) return;
+          // 셀코드를 의도적으로 비운 셀은 표시용 — 표 문항 경로와 같은 규칙.
+          if (cell.isCustomCellCode === true && !cell.cellCode) return;
+          const varName =
+            cell.cellCode ||
+            buildTableCellVarName(q, tRow, colIdx, q.tableColumns!, q.tableRowsData!);
+          const autoExportLabel = buildAutoTableCellExportLabel(q, tRow, colIdx, cell);
+          columns.push({
+            spssVarName: varName,
+            questionText: q.title,
+            optionLabel: cell.exportLabel ?? autoExportLabel ?? '',
+            questionId: q.id,
+            type: 'option-text',
+            optionId: cell.id,
+            ...(cell.inputType === 'number' ? { numericText: true } : {}),
+            ...(cell.exportLabel !== undefined
+              ? { cellExportLabel: cell.exportLabel }
+              : autoExportLabel !== undefined
+                ? { cellExportLabel: autoExportLabel }
+                : {}),
+          });
+        });
+      }
     }
   }
 

@@ -222,6 +222,28 @@ export function ChoiceTableResponse({
     isSelectedRowDetail = false,
     inputIdScope?: string,
   ): ReactNode => {
+    // 표 안의 단답형 셀 — 값은 새 저장소 없이 __optTexts__ 사이드카에 **셀 id** 를 키로 넣는다.
+    // 그 맵은 이미 그룹 보기 셀도 cell.id 로 저장하고 같은 표 안에서 id 는 유일하므로 충돌이 없다.
+    // 덕분에 초안·재진입 복원·버전 rebase·관리자 편집 diff 가 그대로 동작한다.
+    if (cell.type === 'input' && !cell.isHidden) {
+      const cellLabel =
+        (cell.exportLabel ?? '').trim() || (cell.placeholder ?? '').trim() || '상세 기재';
+      return (
+        <OptionTextInput
+          questionId={question.id}
+          option={{
+            id: cell.id,
+            ...(cell.placeholder !== undefined ? { textInputPlaceholder: cell.placeholder } : {}),
+            ...(cell.inputType === 'number' ? { textInputType: 'number' as const } : {}),
+            ...(cell.numberFormat !== undefined
+              ? { textInputNumberFormat: cell.numberFormat }
+              : {}),
+          }}
+          ariaLabel={cellLabel}
+          className="w-full"
+        />
+      );
+    }
     if (cell.type !== 'choice_opt' || cell.isHidden) return undefined;
     const { checked, disabled, option } = getChoiceCellState(cell);
     // 그룹별 선택 모드: name 을 그룹 키 단위로 분리해야 브라우저가 그룹 간 선택을 지우지 않는다.
@@ -383,25 +405,18 @@ export function ChoiceTableResponse({
     </div>
   );
 
-  const renderOriginalTable = () => (
-    <div className="space-y-2">
-      <TablePreview
-        {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
-        {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
-        {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-        {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-        {...(question.hideColumnLabels !== undefined
-          ? { hideColumnLabels: question.hideColumnLabels }
-          : {})}
-        applyCellBackground={!isMobile}
-        renderCell={(cell) => renderCell(cell)}
-      />
-      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
-      {counter}
-    </div>
-  );
 
   const mobileMode = resolveMobileTableDisplayMode(question);
+  /**
+   * 표 격자 두 벌.
+   * - `conditional` — 행·열 표시조건만 적용한 것. **데스크톱 표가 쓴다.** 여태 이 계산이
+   *   모바일 분기에서만 돌아, 데스크톱은 tableRowsData 를 가공 없이 넘기며 행·열 조건을
+   *   통째로 무시했다.
+   * - 나머지 — 거기에 동적 행 선택까지 반영한 것. 모바일 경로가 쓴다.
+   *
+   * 두 벌을 한 memo 에서 낸다. 조건 투영을 별도 memo 로 떼면 React Compiler 가 이
+   * 컴포넌트의 수동 메모이제이션을 보존하지 못한다(preserve-manual-memoization 경고).
+   */
   const rowWiseLayout = useMemo(() => {
     const columns = question.tableColumns ?? [];
     const rows = question.tableRowsData ?? [];
@@ -451,6 +466,8 @@ export function ChoiceTableResponse({
         .map((row) => row.id),
     );
     return {
+      // 조건만 적용한 행 — 동적 행 선택은 반영하지 않는다. 데스크톱 표가 쓴다.
+      conditionalRows: conditionalLayout.rows,
       columns: conditionalLayout.columns,
       rows: recalculateRowspansForVisibleRows(conditionalLayout.rows, visibleRowIds),
       headerGrid: conditionalLayout.headerGrid,
@@ -511,6 +528,28 @@ export function ChoiceTableResponse({
     const otherSelections = selectedDynamicRowIds.filter((rowId) => !groupRowIds.has(rowId));
     onDynamicRowSelectionChange([...new Set([...otherSelections, ...rowIds])]);
   };
+
+  /**
+   * 데스크톱 표. rowWiseLayout 선언 **뒤에** 둔다 — 훅보다 앞에 두면 React Compiler 가
+   * 이 컴포넌트의 수동 메모이제이션을 보존하지 못해 최적화를 통째로 건너뛴다.
+   */
+  const renderOriginalTable = () => (
+    <div className="space-y-2">
+      <TablePreview
+        {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
+        columns={rowWiseLayout.columns}
+        rows={rowWiseLayout.conditionalRows}
+        {...(rowWiseLayout.headerGrid ? { tableHeaderGrid: rowWiseLayout.headerGrid } : {})}
+        {...(question.hideColumnLabels !== undefined
+          ? { hideColumnLabels: question.hideColumnLabels }
+          : {})}
+        applyCellBackground={!isMobile}
+        renderCell={(cell) => renderCell(cell)}
+      />
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
+      {counter}
+    </div>
+  );
 
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
     renderCell(
