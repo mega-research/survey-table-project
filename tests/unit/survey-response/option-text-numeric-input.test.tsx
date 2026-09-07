@@ -49,3 +49,55 @@ describe('OptionTextInput — 숫자 모드', () => {
     expect(useSurveyResponseStore.getState().optionTexts['q1']?.['o2']).toBe('자유 기재 12');
   });
 });
+
+/**
+ * 환산 읽기·범위 위반은 입력칸 **아래 한 줄**로 보인다.
+ * 여태 title 툴팁으로만 알려 왔는데, 단답형 문항(question-input)·표의 입력 셀(input-cell)은
+ * 둘 다 아래에 띄운다. 매출액처럼 자릿수 착오가 치명적인 칸에서 툴팁은 약하다.
+ */
+describe('OptionTextInput — 환산 읽기 표시', () => {
+  beforeEach(() => useSurveyResponseStore.getState().resetResponseState());
+  afterEach(() => cleanup());
+
+  const wonOption = {
+    id: 'o1',
+    textInputType: 'number' as const,
+    textInputNumberFormat: { thousandSeparator: true, unit: 'million' as const, unitSuffix: '원' },
+  };
+
+  it('값을 넣으면 단위 환산이 아래 줄에 뜬다', async () => {
+    const user = userEvent.setup();
+    render(<OptionTextInput questionId="q1" option={wonOption} />);
+    await user.type(screen.getByRole('textbox'), '11111');
+    expect(screen.getByText('1백 11억 1천 1백만원')).toBeInTheDocument();
+  });
+
+  it('값이 비면 아무 줄도 만들지 않는다', () => {
+    render(<OptionTextInput questionId="q1" option={wonOption} />);
+    expect(screen.queryByText(/억/)).not.toBeInTheDocument();
+  });
+
+  it('범위 위반은 포커스를 뗀 뒤 별도 줄로 보인다', async () => {
+    const user = userEvent.setup();
+    render(
+      <OptionTextInput
+        questionId="q1"
+        option={{ id: 'o1', textInputType: 'number', textInputNumberFormat: { min: 100 } }}
+      />,
+    );
+    await user.type(screen.getByRole('textbox'), '3');
+    // 타이핑 중에는 숨긴다 — 100 을 치려면 1 을 먼저 지나가는데 그때마다 빨간 줄이 뜨면
+    // 응답자가 자기가 뭘 잘못했다고 읽는다 (use-formatted-numeric-input 의 기존 규칙).
+    expect(screen.queryByText(/100/)).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByText(/100/)).toBeInTheDocument();
+  });
+
+  it('숫자 모드가 아니면 아래 줄이 없다', async () => {
+    const user = userEvent.setup();
+    render(<OptionTextInput questionId="q1" option={{ id: 'o1' }} />);
+    await user.type(screen.getByRole('textbox'), '11111');
+    expect(screen.queryByText(/억/)).not.toBeInTheDocument();
+  });
+});

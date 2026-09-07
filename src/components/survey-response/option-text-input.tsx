@@ -1,6 +1,7 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import type { NumberFormat } from '@/types/survey';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
@@ -48,7 +49,7 @@ export function OptionTextInput({
   const isNumberMode = option.textInputType === 'number';
   const rawValue = optionTexts[option.id] ?? '';
   // 숫자 모드 — 입력 셀과 같은 타이핑 규칙(숫자만·콤마 표시·max/소수/허용값 차단).
-  // min 미달·단위 환산은 title 로만 알린다 (옵션 행 레이아웃을 흔들지 않기 위해).
+  // 단위 환산·min 미달은 입력칸 아래 한 줄로 보인다 (input-cell·단답형과 같은 모양).
   const numeric = useFormattedNumericInput({
     rawValue,
     onRawChange: (v) => setOptionText(questionId, option.id, v),
@@ -73,7 +74,6 @@ export function OptionTextInput({
           onFocus: numeric.handleFocus,
           onBlur: numeric.handleBlur,
           'aria-invalid': numeric.rangeViolation != null || undefined,
-          title: numeric.rangeViolation ?? numeric.unitReading ?? undefined,
         }
       : {}),
     placeholder: option.textInputPlaceholder || DEFAULT_PLACEHOLDER,
@@ -81,6 +81,36 @@ export function OptionTextInput({
     'data-option-text-target-id': optionTextTargetId(questionId, option.id),
   };
 
-  if (unstyled) return <input type="text" {...sharedProps} />;
-  return <Input {...sharedProps} />;
+  // 아래 줄 — 값이 있을 때만 만든다. input-cell 과 같은 순서·색(환산은 회색, 위반은 빨강).
+  const hint =
+    isNumberMode && (numeric.unitReading || numeric.rangeViolation) ? (
+      <div className="space-y-0.5">
+        {numeric.unitReading && (
+          <p className="text-muted-foreground text-xs">{numeric.unitReading}</p>
+        )}
+        {numeric.rangeViolation && (
+          <p className="text-xs text-red-500">* {numeric.rangeViolation}</p>
+        )}
+      </div>
+    ) : null;
+
+  // 래퍼는 **힌트 유무와 무관하게 항상** 렌더한다. 조건부로 감싸면 첫 글자에 힌트가 생기는
+  // 순간 input 이 트리에서 자리를 옮겨 React 가 DOM 노드를 새로 만들고, 그때 포커스가 날아가
+  // 뒤 글자가 입력되지 않는다 (실제로 겪었다).
+  if (unstyled) {
+    return (
+      // OptionTextRow(가로 flex 셸) 안에 들어가므로 세로로 쌓되 flex-1·min-w-0 을 넘겨받는다.
+      // 힌트가 붙으면 셸이 한 줄만큼 높아질 뿐 칩·입력 정렬은 그대로다.
+      <div className={cn('flex min-w-0 flex-1 flex-col justify-center gap-0.5')}>
+        <input type="text" {...sharedProps} />
+        {hint}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <Input {...sharedProps} />
+      {hint}
+    </div>
+  );
 }
