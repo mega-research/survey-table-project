@@ -159,3 +159,14 @@ describe('보기-소스 표의 단답형 셀', () => {
     expect(screen.queryByPlaceholderText('상세기재')).not.toBeInTheDocument();
   });
 });
+
+describe('보기-소스 표 단답형 셀의 폭', () => {
+  it('입력칸이 셀 폭을 채운다', () => {
+    renderTable(questionWithDetailRow(false), { rad2: ETC_NOW_CELL });
+    const input = screen.getByPlaceholderText('상세기재');
+    // 표 셀은 flex flex-col items-start 라 래퍼가 내용 폭으로 쪼그라든다.
+    // 래퍼와 입력 둘 다 폭을 채워야 colspan 걸린 상세기재 행이 한 줄로 펴진다.
+    expect(input.className).toContain('w-full');
+    expect(input.parentElement?.className).toContain('w-full');
+  });
+});

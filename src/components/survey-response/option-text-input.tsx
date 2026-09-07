@@ -109,8 +109,10 @@ export function OptionTextInput({
       </div>
     );
   }
+  // w-full 필수 — 표 셀은 `flex flex-col items-start` 라 래퍼가 내용 폭으로 쪼그라든다.
+  // 래퍼가 생기기 전에는 Input 이 직접 자식이라 호출부의 className="w-full" 이 먹었다.
   return (
-    <div className="space-y-1">
+    <div className="w-full space-y-1">
       <Input {...sharedProps} />
       {hint}
     </div>
