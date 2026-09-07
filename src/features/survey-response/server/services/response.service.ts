@@ -2103,26 +2103,9 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
     );
 
-    // 숨은 문항 값 strip — 게이팅 strip 보다 **먼저** 온다. 문항이 통째로 사라지면 그 표의
-    // 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다 (스펙 §배선).
-    // 클라이언트가 이미 지우지만, 이탈 시점 beacon 이 지움 전 값을 실어 보낼 수 있다.
-    if (validatedResponses) {
-      validatedResponses = stripHiddenQuestionValues(
-        snapQuestions,
-        validatedResponses,
-        snapshotGroups,
-      );
-    }
-
-    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
-    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
-    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
-    if (validatedResponses && hasGatedCells) {
-      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
-    }
-
-    // 컨택 attrs 는 calc 수식뿐 아니라 표시 조건 평가(자격미달 판정)에도 쓰이므로,
-    // 둘 중 하나라도 필요하면 한 번만 읽어 공유한다.
+    // 컨택 attrs 는 calc 수식뿐 아니라 표시 조건 평가(숨은 문항 strip·자격미달 판정)에도
+    // 쓰이므로, 하나라도 필요하면 한 번만 읽어 공유한다. **숨은 문항 strip 보다 먼저**
+    // 읽어야 한다 — 그 strip 이 이 attrs 를 평가 컨텍스트로 받는다.
     const hasDisplayConditions =
       snapQuestions.some((q) => q.displayCondition) ||
       snapshotGroups.some((g) => g.displayCondition);
@@ -2133,6 +2116,31 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         .where(eq(contactTargets.id, gateRow.contactTargetId))
         .limit(1);
       snapshotContactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+    }
+
+    // 숨은 문항 값 strip — 게이팅 strip 보다 **먼저** 온다. 문항이 통째로 사라지면 그 표의
+    // 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다 (스펙 §배선).
+    // 클라이언트가 이미 지우지만, 이탈 시점 beacon 이 지움 전 값을 실어 보낼 수 있다.
+    // 평가 컨텍스트는 자격미달 재판정(buildScreenOutOptions)과 같은 재료를 넘긴다 —
+    // 안 넘기면 LUT·컨택 attrs·수식을 쓰는 조건이 서버에서만 다르게 풀려 방어가 무력해진다.
+    if (validatedResponses) {
+      validatedResponses = stripHiddenQuestionValues(
+        snapQuestions,
+        validatedResponses,
+        snapshotGroups,
+        {
+          responses: responsesToLookupShape(validatedResponses),
+          contactAttrs: snapshotContactAttrs,
+          lookups: snapLookups,
+        },
+      );
+    }
+
+    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
+    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
+    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
+    if (validatedResponses && hasGatedCells) {
+      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
     }
 
     if (hasCalcCells || hasGatedCells) {
@@ -2241,6 +2249,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           storedRecalc.questions,
           plain,
           storedRecalc.groups,
+          {
+            responses: responsesToLookupShape(plain),
+            contactAttrs: storedRecalc.contactAttrs,
+            lookups: storedRecalc.lookups,
+          },
         );
         const stripped = stripDisabledCellValues(storedRecalc.questions, hiddenStripped);
         let recomputed = withCalcValues(stripped, {

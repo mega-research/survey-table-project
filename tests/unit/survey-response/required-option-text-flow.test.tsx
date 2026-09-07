@@ -194,6 +194,7 @@ function renderAdminFlow(
         initialResponses,
         versionSnapshot,
         initialContactAttrs: {},
+        migratedFromOldVersion: false,
         onSubmit,
       }}
     />,
@@ -231,6 +232,7 @@ function renderMobileChoiceTableAdminFlow(optionText: string) {
         },
         versionSnapshot,
         initialContactAttrs: {},
+        migratedFromOldVersion: false,
         onSubmit: vi.fn().mockResolvedValue(undefined),
       }}
     />,

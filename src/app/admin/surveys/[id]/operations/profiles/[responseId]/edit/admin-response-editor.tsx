@@ -63,6 +63,8 @@ export function AdminResponseEditor({
           versionSnapshot,
           initialContactAttrs,
           documentView,
+          // 구버전 응답이면 숨은 문항 strip 을 걸지 않는다 (서버 migrating 게이트와 동일 판정).
+          migratedFromOldVersion,
           onSubmit: async (payload) => {
             try {
               await client.surveyResponse.edit.saveAdminEdit({

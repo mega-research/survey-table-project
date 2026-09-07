@@ -135,6 +135,11 @@ export interface SurveyResponseFlowProps {
     initialContactAttrs: Record<string, string>;
     // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
     documentView?: SurveyDocumentView | null;
+    /**
+     * 이 응답이 수집된 버전과 지금 렌더하는 버전이 다른가. 참이면 숨은 문항 strip 을
+     * 걸지 않는다 — 서버 saveAdminEdit 의 migrating 게이트와 같은 판정이다.
+     */
+    migratedFromOldVersion: boolean;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
   previewContext?: {
@@ -593,6 +598,16 @@ function SurveyResponseFlowActive({
   );
 
   /**
+   * 구버전 응답을 최신 형식으로 열었으면 숨은 문항 strip 을 걸지 않는다.
+   *
+   * 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된 답을 소급해 지우는 것을 막는다
+   * (스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다"). 이 화면은 숨은 문항을 그리지도
+   * 않으므로 운영자가 손실을 알아챌 방법이 없다 — 서버 saveAdminEdit 의 migrating 게이트와
+   * 같은 판정을 클라이언트에도 둔다.
+   */
+  const skipHiddenStrip = adminContext?.migratedFromOldVersion ?? false;
+
+  /**
    * 숨은 문항 값 삭제 (스펙: 2026-09-07 숨은 문항 응답 삭제).
    *
    * 「이전」을 누르는 것만으로는 아무것도 숨겨지지 않는다 — 숨김의 유일한 계기는 상류 값
@@ -601,9 +616,14 @@ function SurveyResponseFlowActive({
    * 참조가 그대로면 setState 를 부르지 않는다 — 매 렌더 상태를 갈아끼우면 무한 루프다.
    */
   useEffect(() => {
+    if (skipHiddenStrip) return;
     const next = stripHiddenQuestionValues(questions, responses, groups, evalCtx);
+    // 삭제는 응답 변경에 대한 반응이라 effect 밖에 둘 자리가 없다. 지울 것이 없으면
+    // 같은 참조가 돌아와 set 을 부르지 않으므로 렌더 루프가 생기지 않는다.
+    // (react-hooks/set-state-in-effect 는 이 조건부 set 을 보고하지 않는다 — 보고되지도
+    //  않는 규칙에 disable 을 달면 "쓰이지 않은 disable" 경고가 새로 뜬다.)
     if (next !== responses) setResponses(next as ResponsesMap);
-  }, [questions, responses, groups, evalCtx, setResponses]);
+  }, [questions, responses, groups, evalCtx, setResponses, skipHiddenStrip]);
 
   // ── 분할 레이아웃 파생 ──
   //
