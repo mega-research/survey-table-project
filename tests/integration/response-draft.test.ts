@@ -394,3 +394,50 @@ describe('saveDraftResponse — 배치 저장', () => {
     expect(updateCalledMock).not.toHaveBeenCalled();
   });
 });
+
+describe('초안 저장은 부분 패치를 걸러내지 않는다', () => {
+  beforeEach(() => {
+    findFirstMock.mockReset();
+    selectLimitMock.mockReset();
+    returningMock.mockReset();
+    updateCalledMock.mockReset();
+    controlFlagsMock.mockReset();
+    executeMock.mockReset();
+    setSpy.mockReset();
+  });
+
+  /**
+   * 초안 answers 는 더티 키만 담은 부분 패치이고 서버는 jsonb 합집합으로 병합한다.
+   * 여기에 숨은 문항 strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 조건이 거짓이
+   * 되고, 지금 저장하려던 멀쩡한 답이 지워진다. 숨은 문항 정리는 클라이언트 즉시 삭제와
+   * 제출·자격미달 재판정·관리자 편집 경계가 맡는다 (스펙 2026-09-07).
+   */
+  it('조건의 상류 문항이 패치에 없어도 패치의 답을 그대로 저장한다', async () => {
+    // q2 는 q1 이 특정 값일 때만 보이는 하류 문항이라고 가정한다. 이 패치는 q2 만 싣고
+    // 그 조건이 참조하는 q1 은 패치에 없다(더티 키만 담긴 부분 패치의 전형).
+    findFirstMock.mockResolvedValueOnce({
+      id: 'r1',
+      surveyId: 's1',
+      versionId: null,
+      isTest: false,
+      contactTargetId: null,
+    });
+    selectLimitMock.mockResolvedValue([{ id: 'q2', piiEncrypted: false }]);
+    returningMock.mockResolvedValue([{ id: 'r1' }]);
+    controlFlagsMock.mockResolvedValue({ isPaused: false });
+
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(
+      await saveDraftResponse({ responseId: 'r1', answers: { q2: 'downstream-answer' } }),
+    ).toEqual({ applied: true });
+
+    const setArg = setSpy.mock.calls.at(-1)?.[0] as { questionResponses?: unknown };
+    const raw = extractRawSql(setArg?.questionResponses);
+    // strip 이 걸렸다면 상류 문항 부재로 조건이 거짓이 되어 q2 가 병합 payload 에서
+    // 빠졌을 것이다 — 남아 있어야 이 계약이 지켜지고 있는 것이다.
+    expect(raw).toContain('q2');
+    expect(raw).toContain('downstream-answer');
+  });
+});

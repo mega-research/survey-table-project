@@ -1280,6 +1280,12 @@ async function claimDraftSeq(responseId: string, seq: number): Promise<DraftSeqC
  * seq 가 실려 있으면 요청 단위로 한 번 claim 한다(문항별 WHERE 절이 아니라 배치 단위인
  * 이유는 claimDraftSeq 주석 참조 — 0행 매치를 문항별로 두면 정상 시나리오가 500 으로 샌다).
  * 지연 도착한 stale 요청이면 답변을 전혀 쓰지 않고 applied:false 로 돌아간다.
+ *
+ * **숨은 문항 strip 은 여기서 하지 않는다** (스펙 2026-09-07 숨은 문항 응답 삭제).
+ * answers 는 더티 키만 담은 부분 패치이고 저장은 jsonb 합집합 병합이다. 여기에 strip 을
+ * 걸면 조건이 참조하는 상류 문항이 패치에 없어 조건이 거짓이 되고, 지금 저장하려던 멀쩡한
+ * 답이 지워진다. 게다가 합집합 병합이라 이미 저장된 유령값은 어차피 못 지운다.
+ * 숨은 문항 정리는 클라이언트 즉시 삭제와 제출·자격미달 재판정·관리자 편집 경계가 맡는다.
  */
 export async function saveDraftResponse(
   input: SaveDraftResponseInput,
