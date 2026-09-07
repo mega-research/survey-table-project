@@ -411,19 +411,57 @@ describe('초안 저장은 부분 패치를 걸러내지 않는다', () => {
    * 여기에 숨은 문항 strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 조건이 거짓이
    * 되고, 지금 저장하려던 멀쩡한 답이 지워진다. 숨은 문항 정리는 클라이언트 즉시 삭제와
    * 제출·자격미달 재판정·관리자 편집 경계가 맡는다 (스펙 2026-09-07).
+   *
+   * 이 계약을 실제로 위협할 수 있는 모양으로 세운다 — versionId 를 채워 제출 경로가
+   * 스냅샷을 로드하는 것과 같은 조건을 만들고, q2 문항에 q1 을 참조하는 실제
+   * displayCondition 을 달아 stripHiddenQuestionValues 가 판정할 재료를 준다. q1 은
+   * 패치에 없으므로, strip 이 걸렸다면 q2 는 반드시 사라진다.
    */
   it('조건의 상류 문항이 패치에 없어도 패치의 답을 그대로 저장한다', async () => {
-    // q2 는 q1 이 특정 값일 때만 보이는 하류 문항이라고 가정한다. 이 패치는 q2 만 싣고
-    // 그 조건이 참조하는 q1 은 패치에 없다(더티 키만 담긴 부분 패치의 전형).
     findFirstMock.mockResolvedValueOnce({
       id: 'r1',
       surveyId: 's1',
-      versionId: null,
+      versionId: 'v1',
       isTest: false,
       contactTargetId: null,
     });
-    selectLimitMock.mockResolvedValue([{ id: 'q2', piiEncrypted: false }]);
-    returningMock.mockResolvedValue([{ id: 'r1' }]);
+    // loadQuestionPiiFlags 의 versionId 분기(db.execute) — 패치에 담긴 q2 만 조회 대상이다.
+    executeMock.mockResolvedValueOnce([{ id: 'q2', pii: false, cells: null }]);
+    // 미래에 draft 저장이 제출 경로처럼 스냅샷을 로드하게 되더라도 이 한 번의 select-limit
+    // 호출로 받아갈 수 있게 준비해 둔다 — 현재 프로덕션 코드는 이 값을 소비하지 않는다
+    // (draft 경로에 select-limit 호출이 전혀 없다). call 순서로 sequence 하는 이유는 리뷰
+    // 지적대로 selectLimitMock 이 파일 전체가 공유하는 단일 mock 이기 때문이다.
+    selectLimitMock.mockResolvedValueOnce([
+      {
+        snapshot: {
+          questions: [
+            { id: 'q1', type: 'radio', title: 'q1', required: false, order: 0 },
+            {
+              id: 'q2',
+              type: 'text',
+              title: 'q2',
+              required: false,
+              order: 1,
+              displayCondition: {
+                logicType: 'AND',
+                conditions: [
+                  {
+                    id: 'q2-c1',
+                    enabled: true,
+                    logicType: 'AND',
+                    conditionType: 'value-match',
+                    sourceQuestionId: 'q1',
+                    requiredValues: ['yes'],
+                  },
+                ],
+              },
+            },
+          ],
+          groups: [],
+        },
+      },
+    ]);
+    returningMock.mockResolvedValueOnce([{ id: 'r1' }]);
     controlFlagsMock.mockResolvedValue({ isPaused: false });
 
     const { saveDraftResponse } = await import(
@@ -435,7 +473,7 @@ describe('초안 저장은 부분 패치를 걸러내지 않는다', () => {
 
     const setArg = setSpy.mock.calls.at(-1)?.[0] as { questionResponses?: unknown };
     const raw = extractRawSql(setArg?.questionResponses);
-    // strip 이 걸렸다면 상류 문항 부재로 조건이 거짓이 되어 q2 가 병합 payload 에서
+    // strip 이 걸렸다면 상류 문항(q1) 부재로 조건이 거짓이 되어 q2 가 병합 payload 에서
     // 빠졌을 것이다 — 남아 있어야 이 계약이 지켜지고 있는 것이다.
     expect(raw).toContain('q2');
     expect(raw).toContain('downstream-answer');
