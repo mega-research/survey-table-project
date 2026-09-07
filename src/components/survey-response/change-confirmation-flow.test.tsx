@@ -732,7 +732,10 @@ describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
     expect(submittedResponses()).not.toHaveProperty('q-dep');
   });
 
-  it('숨겨졌더라도 응답자가 고친 값은 제출에 남는다', async () => {
+  // 스펙 2026-09-07 숨은 문항 응답 삭제 이후 — 손댄 값도 예외 없이 지워진다. 삭제는
+  // 응답 상태(strip Hidden Question Values)에서 일어나므로 프리필 경로에서 온 값인지,
+  // 응답자가 직접 고친 값인지 더는 구분하지 않는다.
+  it('숨겨지면 응답자가 고친 값도 제출에서 지워진다', async () => {
     const user = userEvent.setup();
     priorAnswersLookup.mockResolvedValue({ 'q-cond': 'A', 'q-dep': '작년 하위 답' });
     renderWithSwitchOff(conditionalSurvey());
@@ -749,7 +752,7 @@ describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
     // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
     await user.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() => expect(complete).toHaveBeenCalled());
-    expect(submittedResponses()['q-dep']).toBe('올해 고친 하위 답');
+    expect(submittedResponses()).not.toHaveProperty('q-dep');
   });
 
   it('이월 값이 없는 문항은 빈칸으로 남는다', async () => {
