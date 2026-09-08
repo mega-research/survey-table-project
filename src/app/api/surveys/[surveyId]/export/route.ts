@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
@@ -193,26 +193,50 @@ async function handleExport(
       });
       // 행 반복의 뒤쪽 미사용 벌은 .sav 에서 열이 없다 — 여기서도 같은 판정을 써야
       // FORMATS 가 존재하지 않는 변수를 가리키지 않는다. 응답을 로드하지 않는 경로라
-      // 셀 값 판정에 필요한 questionResponses 만 따로 읽는다(복호화는 불필요 —
-      // 암호문도 "값이 있음"으로 세면 충분하다).
-      const { collectUsedRepeatCounts } = await import('@/lib/analytics/row-repeat-usage');
-      const repeatScanRows = await db
-        .select({ questionResponses: surveyResponses.questionResponses })
-        .from(surveyResponses)
-        .where(
-          and(
-            eq(surveyResponses.surveyId, surveyId),
-            notDeletedResponse,
-            completedResponse,
-            responseScopeCondition(scope),
-          ),
-        );
-      const usedRepeatCounts = collectUsedRepeatCounts(
-        hydratedQuestions,
-        repeatScanRows.map((r) => ({
-          questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
-        })),
+      // 셀 값 판정에 필요한 값만 따로 읽는다(복호화는 불필요 — 암호문도 "값이 있음"으로
+      // 세면 충분하다).
+      //
+      // 이 경로는 다른 형식과 달리 응답 수 상한 가드를 타지 않고 maxDuration 이 30초다.
+      // 그래서 (1) 반복을 쓰지 않는 설문은 질의 자체를 건너뛰고, (2) 읽는 것은 반복 문항의
+      // 응답 조각뿐이며, (3) 상한을 넘는 모수에서는 판정을 포기하고 전 벌을 낸다
+      // — 변수 목록이 넓어질 뿐 문법은 유효하다.
+      const { collectUsedRepeatCounts, repeatQuestionIds } = await import(
+        '@/lib/analytics/row-repeat-usage'
       );
+      const scanQuestionIds = repeatQuestionIds(hydratedQuestions);
+      let usedRepeatCounts = new Map<string, number>();
+      if (scanQuestionIds.length > 0) {
+        const scanScope = and(
+          eq(surveyResponses.surveyId, surveyId),
+          notDeletedResponse,
+          completedResponse,
+          responseScopeCondition(scope),
+        );
+        const scanTotalRows = await db
+          .select({ total: count() })
+          .from(surveyResponses)
+          .where(scanScope);
+        if ((scanTotalRows[0]?.total ?? 0) <= MAX_EXPORT_RESPONSES) {
+          // 문항 조각만 뽑는다 — 응답 JSONB 를 통째로 메모리에 올리지 않는다.
+          const slice = sql<Record<string, unknown>>`jsonb_build_object(${sql.join(
+            scanQuestionIds.flatMap((id) => [
+              sql`${id}`,
+              sql`${surveyResponses.questionResponses} -> ${id}`,
+            ]),
+            sql`, `,
+          )})`;
+          const repeatScanRows = await db
+            .select({ questionResponses: slice })
+            .from(surveyResponses)
+            .where(scanScope);
+          usedRepeatCounts = collectUsedRepeatCounts(
+            hydratedQuestions,
+            repeatScanRows.map((r) => ({
+              questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+            })),
+          );
+        }
+      }
       const syntax = generateMrsetsSyntax(
         generateSPSSColumns(hydratedQuestions, {
           changeConfirmQuestionIds,

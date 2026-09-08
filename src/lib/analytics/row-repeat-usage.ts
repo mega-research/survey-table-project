@@ -18,6 +18,20 @@ interface SubmissionLike {
   questionResponses: Record<string, unknown>;
 }
 
+/**
+ * 반복 행을 가진 질문 id — 사용 벌 스캔이 필요한 질문만 추린다.
+ * 이 목록이 비면 스캔 자체를 건너뛴다(반복을 쓰지 않는 설문 = 지금까지의 거의 전부).
+ */
+export function repeatQuestionIds(
+  questions: readonly Pick<Question, 'id' | 'tableRowsData'>[],
+): string[] {
+  return questions
+    .filter((question) =>
+      (question.tableRowsData ?? []).some((row) => repeatIndexOf(row) !== undefined),
+    )
+    .map((question) => question.id);
+}
+
 export function collectUsedRepeatCounts(
   questions: readonly Pick<Question, 'id' | 'tableRowsData'>[],
   submissions: readonly SubmissionLike[],

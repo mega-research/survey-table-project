@@ -5,7 +5,7 @@ import type { Question, RowRepeatConfig, SurveySubmission, TableRow } from '@/ty
 
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 
-import { collectUsedRepeatCounts } from './row-repeat-usage';
+import { collectUsedRepeatCounts, repeatQuestionIds } from './row-repeat-usage';
 import { generateSPSSColumns } from './spss-excel-export';
 
 /**
@@ -71,6 +71,18 @@ describe('collectUsedRepeatCounts', () => {
   it('반복 블록이 없는 질문은 담지 않는다', () => {
     const plain = { id: 'q2', type: 'table', title: '', order: 0, required: false } as Question;
     expect(collectUsedRepeatCounts([plain], []).has('q2')).toBe(false);
+  });
+});
+
+describe('repeatQuestionIds', () => {
+  it('반복 행을 가진 질문만 추린다', () => {
+    const plain = { id: 'q2', type: 'table', title: '', order: 0, required: false } as Question;
+    expect(repeatQuestionIds([question, plain])).toEqual(['q1']);
+  });
+
+  it('반복을 쓰지 않는 설문은 빈 목록이다 — 스캔 자체를 건너뛴다', () => {
+    const plain = { id: 'q2', type: 'table', title: '', order: 0, required: false } as Question;
+    expect(repeatQuestionIds([plain])).toEqual([]);
   });
 });
 
