@@ -49,13 +49,26 @@ export function RowRepeatSettingsCard({
   const enabled = isRowRepeatActive(config);
   // 지정 후보는 접힌 행 목록 — 2벌 이후는 사람이 고를 대상이 아니다.
   const selectableRows = useMemo(() => collapseRepeatRows(rows), [rows]);
-  const [pendingStart, setPendingStart] = useState<string>('');
-  const [pendingEnd, setPendingEnd] = useState<string>('');
 
-  const startId = enabled ? (config!.templateRowIds[0] ?? '') : pendingStart;
-  const endId = enabled
-    ? (config!.templateRowIds[config!.templateRowIds.length - 1] ?? '')
-    : pendingEnd;
+  // 범위는 켠 뒤에도 고칠 수 있어야 한다. 활성 설정을 밑그림 삼되 사람이 고르는 동안은
+  // 초안이 이긴다 — 활성 설정에서 곧장 값을 뽑으면 고른 즉시 원래 값으로 튕긴다.
+  const activeRange = enabled
+    ? {
+        start: config!.templateRowIds[0] ?? '',
+        end: config!.templateRowIds[config!.templateRowIds.length - 1] ?? '',
+      }
+    : { start: '', end: '' };
+  const activeKey = `${activeRange.start}|${activeRange.end}`;
+  const [draft, setDraft] = useState<{ start: string; end: string } | null>(null);
+  const [syncedKey, setSyncedKey] = useState(activeKey);
+  // 바깥에서 설정이 바뀌면(끄기·되돌리기·다른 질문) 초안을 버리고 새 설정을 따른다.
+  if (activeKey !== syncedKey) {
+    setSyncedKey(activeKey);
+    setDraft(null);
+  }
+
+  const startId = draft?.start ?? activeRange.start;
+  const endId = draft?.end ?? activeRange.end;
 
   const selectedRowIds = useMemo(() => {
     if (!startId || !endId) return [];
@@ -86,6 +99,7 @@ export function RowRepeatSettingsCard({
 
   const apply = (patch: Partial<RowRepeatConfig>) => {
     if (!onChange) return;
+    setDraft(null);
     onChange({
       enabled: true,
       templateRowIds: selectedRowIds,
@@ -143,8 +157,10 @@ export function RowRepeatSettingsCard({
               className="h-8 rounded-md border border-gray-300 px-2 text-sm"
               value={startId}
               onChange={(e) => {
-                setPendingStart(e.target.value);
-                if (!pendingEnd && !endId) setPendingEnd(e.target.value);
+                const start = e.target.value;
+                // 시작만 고른 상태에서는 한 행짜리 묶음으로 본다 — 끝을 따로 고르지 않아도
+                // 곧바로 켤 수 있게.
+                setDraft({ start, end: endId || start });
               }}
             >
               <option value="">선택</option>
@@ -160,7 +176,7 @@ export function RowRepeatSettingsCard({
             <select
               className="h-8 rounded-md border border-gray-300 px-2 text-sm"
               value={endId}
-              onChange={(e) => setPendingEnd(e.target.value)}
+              onChange={(e) => setDraft({ start: startId, end: e.target.value })}
             >
               <option value="">선택</option>
               {selectableRows.map((row, index) => (

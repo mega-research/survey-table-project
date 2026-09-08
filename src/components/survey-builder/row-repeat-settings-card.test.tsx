@@ -130,4 +130,45 @@ describe('행 반복 설정 카드', () => {
     render(<RowRepeatSettingsCard rows={expanded} onChange={vi.fn()} />);
     expect(screen.queryByRole('option', { name: /성과명 ②/ })).toBeNull();
   });
+
+  it('켠 뒤에도 범위를 바꿀 수 있다', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RowRepeatSettingsCard
+        rows={rows}
+        config={{ enabled: true, templateRowIds: ['a'], maxRepeats: 20 }}
+        onChange={onChange}
+      />,
+    );
+
+    // 끝 행을 b 로 넓히면 선택이 유지되고 적용 버튼이 나온다
+    await user.selectOptions(screen.getByLabelText('끝 행'), 'b');
+    expect(screen.getByLabelText('끝 행')).toHaveValue('b');
+
+    await user.click(screen.getByRole('button', { name: '범위 적용' }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ templateRowIds: ['a', 'b'] }),
+    );
+  });
+
+  it('활성 설정이 바뀌면 초안도 그 값으로 따라간다', () => {
+    const { rerender } = render(
+      <RowRepeatSettingsCard
+        rows={rows}
+        config={{ enabled: true, templateRowIds: ['a'], maxRepeats: 20 }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('끝 행')).toHaveValue('a');
+
+    rerender(
+      <RowRepeatSettingsCard
+        rows={rows}
+        config={{ enabled: true, templateRowIds: ['a', 'b'], maxRepeats: 20 }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('끝 행')).toHaveValue('b');
+  });
 });
