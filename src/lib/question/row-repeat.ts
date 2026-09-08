@@ -16,6 +16,7 @@
  */
 import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
 import { generateId } from '@/lib/utils';
+import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 /** 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다. */
 export const ROW_REPEAT_MAX = 20;
@@ -178,6 +179,62 @@ export function expandRepeatRows(
   }
 
   return out;
+}
+
+// ── 응답 화면 가시성 ──────────────────────────────────────────────
+
+/** 구조에 실제로 펼쳐진 벌 수 (반복 행이 없으면 0) */
+export function structuralRepeatCount(rows: TableRow[]): number {
+  let max = 0;
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx !== undefined && idx > max) max = idx;
+  }
+  return max;
+}
+
+/**
+ * 값에서 파생하는 열린 벌 수 — `max(1, 값이 들어 있는 마지막 벌)`.
+ *
+ * 열린 벌 수는 저장하지 않는다. `__dynamicRowSelections__` 같은 루트 사이드카를 쓰면
+ * response-sidecars 등록부에 없는 키라 저장 경계에서 거부된다(AGENTS.md 주의사항 13).
+ * 파생하면 저장할 것이 없어 그 함정을 아예 밟지 않는다. 대가는 빈 벌을 열어둔 채
+ * 이탈했다 돌아오면 그 벌이 접혀 있다는 것뿐이다 — 값 손실은 없다.
+ */
+export function deriveOpenRepeatCount(
+  rows: TableRow[],
+  values: Record<string, unknown> | undefined,
+): number {
+  const cellValues = values ?? {};
+  let open = 1;
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx === undefined || idx <= open) continue;
+    if (row.cells.some((cell) => isCellValuePresent(cellValues[cell.id]))) open = idx;
+  }
+  return open;
+}
+
+/** 열린 벌보다 뒤에 있는 반복 행 id — 렌더 파이프라인이 이 집합을 빼고 그린다. */
+export function hiddenRepeatRowIds(rows: TableRow[], openCount: number): Set<string> {
+  const hidden = new Set<string>();
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx !== undefined && idx > openCount) hidden.add(row.id);
+  }
+  return hidden;
+}
+
+/** 접을 때 비울 셀 — 지정한 벌보다 뒤에 있는 모든 반복 행의 셀 */
+export function cellIdsOfBundlesBeyond(rows: TableRow[], openCount: number): string[] {
+  const ids: string[] = [];
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx !== undefined && idx > openCount) {
+      for (const cell of row.cells) ids.push(cell.id);
+    }
+  }
+  return ids;
 }
 
 // ── 반복 블록 지정 가능성 검증 ────────────────────────────────────
