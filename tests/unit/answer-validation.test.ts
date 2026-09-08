@@ -169,11 +169,15 @@ describe('isQuestionAnswered (survey-response-flow 추출 characterization)', ()
     });
   });
 
-  describe('ranking (default 분기)', () => {
-    it('null/undefined 가 아닌 어떤 값이든 응답으로 취급', () => {
+  describe('ranking', () => {
+    // 예전에는 상단 null 가드만 통과하면 무조건 응답으로 쳐서 빈 배열도 통과했다 —
+    // 필수 순위형이 사실상 검증되지 않았다. 최소 1순위는 있어야 한다.
+    it('1순위가 있으면 응답', () => {
       expect(isQuestionAnswered(q('ranking'), [{ rank: 1, optionValue: 'a' }])).toBe(true);
-      expect(isQuestionAnswered(q('ranking'), [])).toBe(true);
-      expect(isQuestionAnswered(q('ranking'), {})).toBe(true);
+    });
+    it('빈 배열·배열 아님은 미응답', () => {
+      expect(isQuestionAnswered(q('ranking'), [])).toBe(false);
+      expect(isQuestionAnswered(q('ranking'), {})).toBe(false);
     });
   });
 
@@ -390,8 +394,8 @@ describe('isQuestionAnswered — grouped 순위형 그룹당 1순위 검증', ()
     expect(isQuestionAnswered(gq, null)).toBe(false);
   });
 
-  it('비그룹 순위형: 빈 배열도 응답으로 취급(기존 동작 불변)', () => {
-    expect(isQuestionAnswered(q('ranking'), [])).toBe(true);
+  it('비그룹 순위형: 빈 배열은 미응답', () => {
+    expect(isQuestionAnswered(q('ranking'), [])).toBe(false);
   });
 
   it('비그룹 순위형: flat RankingAnswer[] 도 응답으로 취급(기존 동작 불변)', () => {
@@ -540,5 +544,63 @@ describe('resolveGroupedRequiredMessage', () => {
 
   it('비그룹 질문은 질문 문구로 폴백한다', () => {
     expect(resolveGroupedRequiredMessage(q('radio', { requiredMessage: '골라주세요.' }), null)).toBe('골라주세요.');
+  });
+});
+
+/**
+ * 「모든 순위 입력 필수」(rankingConfig.requireAllPositions).
+ *
+ * 빌더가 값을 저장만 하고 읽는 곳이 없어 여태 아무 일도 하지 않았다 — 2순위까지
+ * 받기로 해 둔 문항에서 1순위만 골라도 제출이 통과했다.
+ */
+describe('순위형 — 모든 순위 입력 필수', () => {
+  const rankingQ = (
+    positions: number,
+    requireAllPositions: boolean,
+    optionCount = 5,
+  ): Question =>
+    ({
+      id: 'q-rank',
+      type: 'ranking',
+      title: '애로사항',
+      required: true,
+      order: 0,
+      rankingConfig: { positions, requireAllPositions },
+      options: Array.from({ length: optionCount }, (_, i) => ({
+        id: `o${i + 1}`,
+        value: `v${i + 1}`,
+        label: `보기${i + 1}`,
+      })),
+    }) as unknown as Question;
+
+  const answers = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ rank: i + 1, optionValue: `v${i + 1}` }));
+
+  it('켜져 있으면 순위를 다 채워야 통과한다', () => {
+    const question = rankingQ(2, true);
+    expect(isQuestionAnswered(question, answers(1))).toBe(false);
+    expect(isQuestionAnswered(question, answers(2))).toBe(true);
+  });
+
+  it('꺼져 있으면 1순위만으로 통과한다', () => {
+    const question = rankingQ(2, false);
+    expect(isQuestionAnswered(question, answers(1))).toBe(true);
+  });
+
+  it('보기가 순위 개수보다 적으면 보기 수만 요구한다 — 못 채우는 요구는 걸지 않는다', () => {
+    const question = rankingQ(3, true, 2);
+    expect(isQuestionAnswered(question, answers(2))).toBe(true);
+  });
+
+  it('그룹 순위형은 그룹마다 다 채워야 한다', () => {
+    const base = groupedRankingQ();
+    const question = {
+      ...base,
+      rankingConfig: { ...base.rankingConfig, positions: 2, requireAllPositions: true },
+    } as unknown as Question;
+
+    // rgrp1 은 보기 2개라 2순위까지, rgrp2 는 보기 1개라 1순위까지만 요구한다.
+    expect(isQuestionAnswered(question, { rnk1: answers(1), rnk2: answers(1) })).toBe(false);
+    expect(isQuestionAnswered(question, { rnk1: answers(2), rnk2: answers(1) })).toBe(true);
   });
 });

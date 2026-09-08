@@ -23,12 +23,28 @@ import { resolveRequiredMessage } from '@/utils/required-message';
  * - checkbox: 배열이고 길이 > 0. minSelections 가 양수면 그 이상.
  * - multiselect: 배열이고 길이 > 0.
  * - table: 비어있지 않은 object.
- * - ranking: grouped면 모든 그룹에 1개 이상의 순위 응답 (Record<groupKey, RankingAnswer[]>). 비그룹 또는 live 그룹 0개(phantom-only)는 true.
+ * - ranking: requireAllPositions 면 매길 순위 전부, 아니면 1개 이상. grouped 면 그룹마다 그만큼.
+ *   live 그룹 0개(phantom-only)는 true.
  * - default: true.
  *
  * @param question 판정 대상 질문 (type/required/minSelections/requiresAcknowledgment 사용)
  * @param response 해당 질문의 현재 응답값 (responses[question.id] 와 동일)
  */
+/**
+ * 순위형이 충족되려면 몇 개를 골라야 하는지.
+ *
+ * `rankingConfig.requireAllPositions` 가 켜져 있으면 매길 순위 전부, 아니면 1순위 하나다.
+ * 고를 수 있는 보기가 순위 개수보다 적으면 그만큼으로 낮춘다 — 채울 수 없는 개수를
+ * 요구하면 응답자가 영영 다음으로 못 넘어간다. 그룹 순위형은 그룹마다 보기 수가 다르므로
+ * 판정도 그룹 단위로 한다(`optionCount` 를 그룹의 멤버 셀 수로 넘긴다).
+ */
+function requiredRankCount(question: Question, optionCount: number): number {
+  const config = question.rankingConfig;
+  if (config?.requireAllPositions !== true) return 1;
+  const positions = Math.max(1, Math.trunc(config.positions ?? 3));
+  return optionCount > 0 ? Math.min(positions, optionCount) : positions;
+}
+
 export function isQuestionAnswered(question: Question, response: unknown): boolean {
   if (response === undefined || response === null) return false;
 
@@ -72,17 +88,27 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
     case 'multiselect':
       return Array.isArray(response) && response.length > 0;
     case 'ranking': {
-      // 비그룹 순위형: 기존 동작(상단 null 가드만 적용, 항상 true) 불변
-      if (!isGroupedRankingQuestion(question)) return true;
+      // 채워야 할 순위 개수. 「모든 순위 입력 필수」가 켜져 있으면 positions 전체,
+      // 아니면 1순위 하나. 이 토글은 빌더가 저장만 하고 읽는 곳이 없어 여태 아무 일도
+      // 하지 않았다 — 1순위만 골라도 제출이 통과했다.
+      if (!isGroupedRankingQuestion(question)) {
+        // 비그룹 순위형. needed 가 1 이어도 빈 배열은 미충족이다 — 예전에는 상단 null
+        // 가드만 통과하면 무조건 true 라 빈 배열도 응답으로 쳤다.
+        const needed = requiredRankCount(question, question.options?.length ?? 0);
+        return parseRankingAnswers(response).length >= needed;
+      }
       // phantom-only 그룹(멤버 셀 0인 ranking 그룹만 존재)은 응답 불가능한 요구이므로
       // 비그룹과 동일하게 취급하여 상단 null 가드만 적용(항상 true).
       const groups = collectRankingGroups(question);
       if (groups.length === 0) return true;
-      // grouped: 모든 그룹에 1개 이상의 순위 응답.
+      // grouped: 모든 그룹이 needed 개 이상.
       // legacy flat 배열(이식 직후 진행중 응답)은 맵이 아니므로 미충족.
       if (typeof response !== 'object' || response === null || Array.isArray(response)) return false;
       const map = response as Record<string, unknown>;
-      return groups.every((g) => parseRankingAnswers(map[g.groupKey]).length >= 1);
+      return groups.every(
+        (g) =>
+          parseRankingAnswers(map[g.groupKey]).length >= requiredRankCount(question, g.cells.length),
+      );
     }
     case 'table':
       return (
