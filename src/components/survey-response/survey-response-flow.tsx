@@ -938,7 +938,12 @@ function SurveyResponseFlowActive({
                 response && typeof response === 'object'
                   ? (response as Record<string, unknown>)
                   : {},
-                { allResponses: responses, allQuestions: questions },
+                {
+                  allResponses: responses,
+                  allQuestions: questions,
+                  lookups: loadedSurvey?.lookups ?? [],
+                  contactAttrs,
+                },
               ).map((cell) => cell.id),
             )
           : undefined;
@@ -952,7 +957,13 @@ function SurveyResponseFlowActive({
         ).questionMissing
       );
     },
-    [responses, effectiveOptionTextsByQuestion, questions],
+    [
+      responses,
+      effectiveOptionTextsByQuestion,
+      questions,
+      contactAttrs,
+      loadedSurvey?.lookups,
+    ],
   );
 
   // 다음 step 결정 (step 내 분기 규칙 평가)
@@ -1688,7 +1699,11 @@ function SurveyResponseFlowActive({
   );
 
   return (
-    <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
+    <ContactAttrsProvider
+      attrs={contactAttrs}
+      quotes={answerQuotes}
+      lookups={loadedSurvey?.lookups ?? []}
+    >
       <PriorAnswersProvider
         answers={priorAnswers}
         waveLabel={control?.priorWaveLabel}

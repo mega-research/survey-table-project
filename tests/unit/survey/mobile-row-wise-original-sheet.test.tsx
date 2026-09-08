@@ -7,7 +7,8 @@ import type {
   MobileRowWiseOriginalQuestion,
 } from '@/utils/mobile-row-wise-original';
 
-vi.mock('@/lib/survey/contact-attrs-context', () => ({
+vi.mock('@/lib/survey/contact-attrs-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/survey/contact-attrs-context')>()),
   useContactAttrs: () => ({}),
   useAnswerQuotes: () => ({}),
 }));

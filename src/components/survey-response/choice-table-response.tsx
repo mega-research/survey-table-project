@@ -8,7 +8,11 @@ import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  useAnswerQuotes,
+  useBranchEvalCtx,
+  useContactAttrs,
+} from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
@@ -71,6 +75,8 @@ export function ChoiceTableResponse({
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 조건 평가 컨텍스트 — 빠뜨리면 attr/lookup 피연산자가 undefined 로 평가된다.
+  const branchEvalCtx = useBranchEvalCtx(allResponses);
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
   const options = useMemo(() => resolveChoiceOptions(question), [question]);
   const optionByValue = useMemo(
@@ -427,6 +433,7 @@ export function ChoiceTableResponse({
       // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
       allResponses: ignoreDisplayConditions ? undefined : allResponses,
       allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
+      evalCtx: branchEvalCtx,
     });
     const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
       (config) =>
@@ -476,7 +483,14 @@ export function ChoiceTableResponse({
         (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
       ),
     };
-  }, [allQuestions, allResponses, question, selectedDynamicRowIds, ignoreDisplayConditions]);
+  }, [
+    allQuestions,
+    allResponses,
+    question,
+    selectedDynamicRowIds,
+    ignoreDisplayConditions,
+    branchEvalCtx,
+  ]);
   const rowWiseOriginalModel = useMemo(() => {
     if (mobileMode !== 'row-wise-original') return { sections: [] };
     const columns = question.tableColumns ?? [];

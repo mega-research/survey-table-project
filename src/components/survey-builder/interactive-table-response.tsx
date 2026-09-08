@@ -58,6 +58,8 @@ import {
 } from '@/utils/table-merge-helpers';
 import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
 
+import { useBranchEvalCtx } from '@/lib/survey/contact-attrs-context';
+
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
@@ -474,6 +476,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return JSON.stringify(subset);
   }, [allResponses, relevantResponseKeys]);
 
+  // 조건 평가 컨텍스트 — attr/lookup 피연산자가 실제 값을 보게 하려면 반드시 넘겨야 한다.
+  // 빠뜨리면 attr 이 undefined 가 되어 `!=` 비교가 항상 참이 된다.
+  const branchEvalCtx = useBranchEvalCtx(allResponses);
+
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
     if (ignoreDisplayConditions || !allResponses || !allQuestions || columns.length === 0) {
@@ -493,7 +499,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     }
     const visibleColumnIds = new Set<string>();
     for (const col of columns) {
-      if (shouldDisplayColumn(col, allResponses, allQuestions)) {
+      if (shouldDisplayColumn(col, allResponses, allQuestions, branchEvalCtx)) {
         visibleColumnIds.add(col.id);
       }
     }
@@ -509,7 +515,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       visibleHeaderGrid: result.headerGrid,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
+  }, [
+    columns,
+    rows,
+    tableHeaderGrid,
+    relevantResponsesJson,
+    allQuestions,
+    ignoreDisplayConditions,
+    branchEvalCtx,
+  ]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
@@ -520,13 +534,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     if (!hasConditions) return null;
     const ids = new Set<string>();
     for (const row of columnFilteredRows) {
-      if (shouldDisplayRow(row, allResponses, allQuestions)) {
+      if (shouldDisplayRow(row, allResponses, allQuestions, branchEvalCtx)) {
         ids.add(row.id);
       }
     }
     return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilteredRows, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
+  }, [
+    columnFilteredRows,
+    relevantResponsesJson,
+    allQuestions,
+    ignoreDisplayConditions,
+    branchEvalCtx,
+  ]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);

@@ -7,6 +7,7 @@
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
 import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
+import { responsesToLookupShape, type BranchEvalCtx } from '@/utils/branch-eval';
 import {
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
@@ -90,7 +91,13 @@ export function collectVisibleTableCells(
       .filter(
         (config) =>
           config.enabled &&
-          (!ctx || shouldDisplayDynamicGroup(config, ctx.allResponses, ctx.allQuestions)),
+          (!ctx ||
+            shouldDisplayDynamicGroup(
+              config,
+              ctx.allResponses,
+              ctx.allQuestions,
+              toBranchEvalCtx(ctx),
+            )),
       )
       .map((config) => config.groupId),
   );
@@ -115,7 +122,10 @@ export function collectVisibleTableCells(
   const hiddenColIndices = new Set<number>();
   if (ctx) {
     (question.tableColumns ?? []).forEach((col, idx) => {
-      if (col.displayCondition && !shouldDisplayColumn(col, ctx.allResponses, ctx.allQuestions)) {
+      if (
+        col.displayCondition &&
+        !shouldDisplayColumn(col, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
+      ) {
         hiddenColIndices.add(idx);
       }
     });
@@ -135,10 +145,27 @@ export function collectVisibleTableCells(
     )
     .filter(
       (row) =>
-        !ctx || !row.displayCondition || shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions),
+        !ctx ||
+        !row.displayCondition ||
+        shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
     )
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
     .filter((c) => !c.isHidden);
+}
+
+/**
+ * NumericValidationCtx → 조건 평가 컨텍스트.
+ *
+ * 렌더러(interactive-table-response)와 같은 ctx 로 평가해야 "화면엔 안 보이는데 검증에
+ * 걸린다"가 생기지 않는다. attr 피연산자를 빠뜨리면 `!=` 비교가 항상 참이 되어
+ * 조건이 조용히 무력화된다(2026-09-08 사고).
+ */
+function toBranchEvalCtx(ctx: NumericValidationCtx): BranchEvalCtx {
+  return {
+    responses: responsesToLookupShape(ctx.allResponses),
+    contactAttrs: ctx.contactAttrs ?? {},
+    lookups: ctx.lookups ?? [],
+  };
 }
 
 /** 비교 판정 공통 헬퍼 — 반올림 완료된 좌/우값. tolerance 는 eq/ne 에만 의미가 있다. */
@@ -348,7 +375,7 @@ function collectChoiceTableInputCellIssues(
     if (
       ctx &&
       row.displayCondition &&
-      !shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions)
+      !shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
     ) {
       continue;
     }
