@@ -14,8 +14,9 @@
  * 비반복 행 변수명이 r1 에서 r01 로 통째 바뀐다. 펼치기 이전 행 수로 계산한 코드를
  * 행에 박아 그 길이 의존을 끊는다 (설계 결정 3).
  */
-import type { CalcExpr, Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
+import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
 import { generateId } from '@/lib/utils';
+import { remapCellRefs } from '@/utils/table-cell-refs';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 /** 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다. */
@@ -144,63 +145,6 @@ function baseRowCodeOf(row: TableRow, fallback: string): string {
     return stripped.length > 0 ? stripped : fallback;
   }
   return raw;
-}
-
-/**
- * 수식 안의 셀 참조를 이 벌의 셀로 옮긴다. 블록 밖(맵에 없는 id)과 다른 질문 참조는
- * 그대로 둔다 — 모든 벌이 같은 바깥 값에 매이는 것이 옳다.
- */
-function remapCalcExpr(expr: CalcExpr, idMap: ReadonlyMap<string, string>): CalcExpr {
-  switch (expr.kind) {
-    case 'cell': {
-      if (expr.questionId) return expr;
-      const mapped = idMap.get(expr.cellId);
-      return mapped ? { ...expr, cellId: mapped } : expr;
-    }
-    case 'agg': {
-      const items = expr.items.map((item) => remapCalcExpr(item, idMap));
-      return items.every((item, i) => item === expr.items[i]) ? expr : { ...expr, items };
-    }
-    case 'group': {
-      const terms = expr.terms.map((term) => remapCalcExpr(term, idMap));
-      return terms.every((term, i) => term === expr.terms[i]) ? expr : { ...expr, terms };
-    }
-    default:
-      return expr;
-  }
-}
-
-/**
- * 복제 셀이 품고 있는 **블록 안** 셀 참조를 자기 벌의 셀로 옮긴다.
- *
- * 게이팅(enabledWhen)과 검증 수식(formula)은 셀 id 로 다른 셀을 가리킨다. 얕게 복사하면
- * 2벌 셀이 1벌 셀을 보고 열리고 닫히고 검증된다. 블록 밖을 가리키는 참조는 손대지 않는다.
- */
-function remapCellRefs(cell: TableCell, idMap: ReadonlyMap<string, string>): TableCell {
-  let next = cell;
-
-  if (cell.enabledWhen) {
-    const mapped = idMap.get(cell.enabledWhen.controllerCellId);
-    if (mapped) {
-      next = { ...next, enabledWhen: { ...cell.enabledWhen, controllerCellId: mapped } };
-    }
-  }
-
-  if (cell.formula) {
-    const formula = remapCalcExpr(cell.formula, idMap);
-    if (formula !== cell.formula) next = { ...next, formula };
-  }
-
-  // 계산 셀은 블록 안에 놓을 수 없지만(검증이 막는다) 구조가 먼저 깨진 데이터에서도
-  // 참조가 남의 벌을 가리키지는 않게 둔다.
-  if (cell.calcValidation) {
-    const target = remapCalcExpr(cell.calcValidation.target, idMap);
-    if (target !== cell.calcValidation.target) {
-      next = { ...next, calcValidation: { ...cell.calcValidation, target } };
-    }
-  }
-
-  return next;
 }
 
 function cloneCellForBundle(
