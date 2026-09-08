@@ -1,10 +1,10 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat } from '@/types/survey';
-import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 
+import { InputFormatSelect } from './input-format-select';
 import { NumberFormatFields } from './number-format-fields';
 import type { OptionTextSettings } from './question-option-helpers';
 
@@ -64,26 +64,14 @@ export function OptionTextSettingsEditor({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[10px] text-gray-400">입력 형식</span>
-        <select
-          id={`${idPrefix}-text-format`}
-          value={isInputFormat(textInputType) ? textInputType : ''}
-          // 형식을 고르면 숫자 서식은 버린다 — 형식과 숫자 모드는 배타다.
-          onChange={(e) => {
-            const next = e.target.value;
-            onChange(buildSettings(placeholder, isInputFormat(next) ? next : 'text', undefined));
-          }}
-          className="h-7 rounded-md border border-gray-300 px-2 text-xs"
-        >
-          <option value="">지정 안 함</option>
-          {INPUT_FORMATS.map((f) => (
-            <option key={f} value={f}>
-              {INPUT_FORMAT_LABEL[f]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <InputFormatSelect
+        id={`${idPrefix}-text-format`}
+        value={textInputType}
+        size="xs"
+        showHint={false}
+        // 형식을 고르면 숫자 서식은 버린다 — 형식과 숫자 모드는 배타다.
+        onChange={(next) => onChange(buildSettings(placeholder, next, undefined))}
+      />
 
       <div className="flex items-start gap-2">
         <input

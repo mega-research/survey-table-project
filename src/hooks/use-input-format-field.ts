@@ -12,6 +12,7 @@
  */
 import { useCallback, useState } from 'react';
 
+import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { InputFormat } from '@/types/input-type';
 import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
 
@@ -48,7 +49,7 @@ export function useInputFormatField({
   priorOriginal = null,
 }: Options): InputFormatField {
   const [focused, setFocused] = useState(false);
-  const untouchedPrior = priorOriginal !== null && rawValue === priorOriginal;
+  const untouchedPrior = isUntouchedPriorValue(rawValue, priorOriginal);
 
   const handleFocus = useCallback(() => setFocused(true), []);
 

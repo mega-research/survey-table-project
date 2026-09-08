@@ -7,15 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat } from '@/types/survey';
 import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
-import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
+import { InputFormatSelect } from './input-format-select';
 import { NumberFormatFields } from './number-format-fields';
 
 interface ChoiceOptCellTabProps {
@@ -245,27 +245,15 @@ export function ChoiceOptCellTab({
       </div>
       {allowTextInput && (
         <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="choice-text-format" className="text-sm font-medium">
-              입력 형식
-            </Label>
-            <select
-              id="choice-text-format"
-              value={isInputFormat(textInputType) ? textInputType : ''}
-              onChange={(e) => {
-                const next = e.target.value;
-                onTextInputTypeChange(isInputFormat(next) ? next : 'text');
-              }}
-              className="h-8 rounded-md border border-gray-300 px-2 text-sm"
-            >
-              <option value="">지정 안 함</option>
-              {INPUT_FORMATS.map((f) => (
-                <option key={f} value={f}>
-                  {INPUT_FORMAT_LABEL[f]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <InputFormatSelect
+            id="choice-text-format"
+            value={textInputType}
+            onChange={(next) => {
+              onTextInputTypeChange(next);
+              // 형식과 숫자 모드는 배타 — 숫자 서식을 남기지 않는다.
+              if (next !== 'number') onTextInputNumberFormatChange(undefined);
+            }}
+          />
           <div className="flex items-start gap-2">
             <input
               type="checkbox"

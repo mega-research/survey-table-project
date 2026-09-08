@@ -30,7 +30,12 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { isCellEnabled } from './cell-gating';
 import { optionTextTargetId } from './option-text-target';
-import { type PriorAnswers, priorAnswerText, priorOptionText } from './prior-answers';
+import {
+  type PriorAnswers,
+  isUntouchedPriorValue,
+  priorAnswerText,
+  priorOptionText,
+} from './prior-answers';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
@@ -337,7 +342,7 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
  * 텍스트만 본다 (선택 해제된 옵션의 잔존 텍스트는 required-option-text-validation 과 같은
  * 이유로 신뢰하지 않는다). max·소수·허용값은 타이핑에서 차단되므로 여기서는 min 이 실질이다.
  */
-function collectOptionTextRangeIssues(
+function collectOptionTextIssues(
   question: Question,
   response: unknown,
   optionTexts: Record<string, string> | undefined,
@@ -470,7 +475,7 @@ function formatViolationMessage(
   if (!isInputFormat(inputType)) return null;
   if (typeof value !== 'string') return null;
   // 이월 원본 그대로면 면제 — 응답자가 치지도 않은 지난 회차 값이다.
-  if (priorOriginal !== null && priorOriginal !== undefined && value === priorOriginal) return null;
+  if (isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
   const result = parseInputFormat(inputType, value);
   return result.ok ? null : formatFailureMessage(inputType, result.reason);
 }
@@ -506,7 +511,7 @@ export function collectNumericIssues(
       });
     }
     issues.push(
-      ...collectOptionTextRangeIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
+      ...collectOptionTextIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
     );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
     return issues;

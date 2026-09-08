@@ -5,8 +5,8 @@ import {
   classifyStepIssues,
   isRelaxableIssueKind,
   snapshotStepResponses,
-} from '@/lib/survey/admin-edit-required-relax';
-import type { NumericIssue } from '@/lib/survey/numeric-validation';
+} from './admin-edit-required-relax';
+import type { NumericIssue } from './numeric-validation';
 
 describe('isRelaxableIssueKind', () => {
   it('required-cells/required-detail 는 완화 대상이다', () => {

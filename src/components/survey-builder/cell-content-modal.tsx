@@ -43,11 +43,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/hooks/use-survey-sync';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-import { generateId } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import { isInputFormat } from '@/types/input-type';
 import {
   CalcCellValidation,
   ChoiceGroup,
@@ -58,7 +58,6 @@ import {
   TableRow,
 } from '@/types/survey';
 import { collectChoiceOptCells, isLastRemainingChoiceOptCell } from '@/utils/choice-source';
-import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
@@ -91,6 +90,7 @@ import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { FormulaExprEditor } from './formula/formula-expr-editor';
 import { useCellForm } from './hooks/use-cell-form';
+import { InputFormatSelect } from './input-format-select';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
@@ -1196,34 +1196,13 @@ export function CellContentModal({
 
             <div className="space-y-2">
               <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="cell-input-format" className="text-sm font-medium">
-                    입력 형식
-                  </label>
-                  <select
-                    id="cell-input-format"
-                    value={isInputFormat(inputType) ? inputType : ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      // 형식과 숫자 모드는 배타 — 숫자 전용 설정(초기값·표시 포맷)은
-                      // 직렬화에서 inputType==='number' 일 때만 실리므로 저절로 빠진다.
-                      setInputType(isInputFormat(next) ? next : 'text');
-                    }}
-                    className="h-8 rounded-md border border-gray-300 px-2 text-sm"
-                  >
-                    <option value="">지정 안 함</option>
-                    {INPUT_FORMATS.map((f) => (
-                      <option key={f} value={f}>
-                        {INPUT_FORMAT_LABEL[f]}
-                      </option>
-                    ))}
-                  </select>
-                  {isInputFormat(inputType) && (
-                    <span className="text-xs text-gray-500">
-                      형식이 맞지 않으면 응답자가 다음으로 넘어가지 못합니다
-                    </span>
-                  )}
-                </div>
+                <InputFormatSelect
+                  id="cell-input-format"
+                  value={inputType}
+                  // 숫자 전용 설정(초기값·표시 포맷·계산 검증)은 직렬화가 이미
+                  // inputType==='number' 로 잠가 두어 형식을 고르면 저절로 빠진다.
+                  onChange={setInputType}
+                />
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -2104,19 +2083,22 @@ export function CellContentModal({
               <Label className="text-sm font-medium">정렬 미리보기</Label>
               <div className="rounded-lg border bg-gray-50 p-4">
                 <div
-                  className={`flex h-32 w-full rounded border-2 border-dashed border-gray-300 ${
+                  // cn 으로 잇는다 — 템플릿 리터럴 안에서 조건 앞 공백에 기대면
+                  // 포매터가 그 공백을 지워 클래스 둘이 붙어버린다(실제로 겪었다).
+                  className={cn(
+                    'flex h-32 w-full rounded border-2 border-dashed border-gray-300',
                     horizontalAlign === 'left'
                       ? 'justify-start'
                       : horizontalAlign === 'center'
                         ? 'justify-center'
-                        : 'justify-end'
-                  } ${
+                        : 'justify-end',
                     verticalAlign === 'top'
                       ? 'items-start'
                       : verticalAlign === 'middle'
                         ? 'items-center'
-                        : 'items-end'
-                  }${textBold ? 'font-bold' : ''}`}
+                        : 'items-end',
+                    textBold && 'font-bold',
+                  )}
                   style={{
                     ...(backgroundColor ? { backgroundColor } : {}),
                     ...(textColor ? { color: textColor } : {}),

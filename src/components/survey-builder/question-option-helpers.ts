@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
-import { generateId } from '@/lib/utils';
-import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
+
 import { generateOtherOptionFields } from '@/lib/option-text-migration';
+import { generateId } from '@/lib/utils';
 import {
   BranchRule,
   InputType,
@@ -10,6 +10,7 @@ import {
   QuestionOption,
   SelectLevel,
 } from '@/types/survey';
+import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 
 /**
  * "+ 텍스트 옵션 추가" 버튼이 호출하는 헬퍼.
@@ -47,7 +48,7 @@ export interface OptionTextSettings {
  * `next` 는 부분 패치가 아니라 **설정 전체**다 — 편집기가 세 필드를 항상 함께 넘긴다.
  * 한 필드만 담아 부르면 나머지가 지워진다.
  *
- * 숫자 모드가 꺼지면 `textInputType`·`textInputNumberFormat` 키를 **남기지 않는다** —
+ * 숫자 모드·입력 형식이 꺼지면 `textInputType`·`textInputNumberFormat` 키를 **남기지 않는다** —
  * 저장 형태를 choice_opt 셀(`utils/serialize-cell`)과 맞추기 위한 것이다. 죽은
  * `textInputType: 'text'` 가 JSONB 에 남으면 발행 스냅샷 diff 에 잡음이 끼고, 기본값과
  * 명시값이 구분되지 않는다. placeholder 는 빈 문자열도 그대로 둔다(기존 동작).
@@ -64,9 +65,12 @@ export function applyOptionTextSettings<T extends OptionTextSettings>(
   if (next.textInputPlaceholder !== undefined) {
     merged.textInputPlaceholder = next.textInputPlaceholder;
   }
-  if (next.textInputType === 'number') {
-    merged.textInputType = 'number';
-    if (next.textInputNumberFormat) {
+  // 'text'(=지정 안 함)만 키를 남기지 않는다. 숫자 모드와 입력 형식 5종은 그대로 싣는다 —
+  // 여기서 'number' 만 통과시키면 빌더에서 고른 형식이 조용히 버려진다(실제로 겪었다).
+  if (next.textInputType !== undefined && next.textInputType !== 'text') {
+    merged.textInputType = next.textInputType;
+    // 숫자 서식은 숫자 모드 전용이다 — 형식과는 배타다.
+    if (next.textInputType === 'number' && next.textInputNumberFormat) {
       merged.textInputNumberFormat = next.textInputNumberFormat;
     }
   }
@@ -128,11 +132,7 @@ export type OptionalOptionKey = {
 export function createUpdateOption(setFormData: SetFormData) {
   // clear: 자동 코드 복원처럼 optionCode 등을 비워야 할 때 키 자체를 제거한다.
   // exactOptionalPropertyTypes 하에서 spread로는 optional 키를 undefined로 둘 수 없기 때문.
-  return (
-    optionId: string,
-    updates: Partial<QuestionOption>,
-    clear?: OptionalOptionKey[],
-  ) => {
+  return (optionId: string, updates: Partial<QuestionOption>, clear?: OptionalOptionKey[]) => {
     setFormData((prev) => {
       const next: Partial<Question> = { ...prev };
       if (prev.options !== undefined) {

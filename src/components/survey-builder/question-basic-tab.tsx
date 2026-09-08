@@ -25,14 +25,14 @@ import { Label } from '@/components/ui/label';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { Switch } from '@/components/ui/switch';
 import { flattenGroupTree } from '@/lib/group-ordering';
+import { applyInputTypeChange } from '@/lib/question/input-mode';
 import { cn, generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import { isInputFormat } from '@/types/input-type';
 import { isOptionListType } from '@/types/question-types';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
-import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
@@ -48,6 +48,7 @@ import {
 } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
+import { InputFormatSelect } from './input-format-select';
 import { NOTICE_BG_DEFAULT_HEX, NoticeRenderer } from './notice-renderer';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionLabelTextarea } from './option-label-textarea';
@@ -593,41 +594,11 @@ export function QuestionBasicTab({
             </div>
             <div className="space-y-2">
               <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="text-input-format" className="text-sm font-medium">
-                    입력 형식
-                  </label>
-                  <select
-                    id="text-input-format"
-                    value={isInputFormat(formData.inputType) ? formData.inputType : ''}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setFormData((prev) => {
-                        const draft: Partial<Question> = {
-                          ...prev,
-                          inputType: isInputFormat(next) ? next : 'text',
-                        };
-                        // 형식과 숫자 모드는 배타 — 숫자 전용 설정을 남기지 않는다.
-                        delete draft.emptyDefault;
-                        delete draft.numberFormat;
-                        return draft;
-                      });
-                    }}
-                    className="h-8 rounded-md border border-gray-300 px-2 text-sm"
-                  >
-                    <option value="">지정 안 함</option>
-                    {INPUT_FORMATS.map((f) => (
-                      <option key={f} value={f}>
-                        {INPUT_FORMAT_LABEL[f]}
-                      </option>
-                    ))}
-                  </select>
-                  {isInputFormat(formData.inputType) && (
-                    <span className="text-xs text-gray-500">
-                      형식이 맞지 않으면 응답자가 다음으로 넘어가지 못합니다
-                    </span>
-                  )}
-                </div>
+                <InputFormatSelect
+                  id="text-input-format"
+                  value={formData.inputType}
+                  onChange={(next) => setFormData((prev) => applyInputTypeChange(prev, next))}
+                />
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -636,17 +607,9 @@ export function QuestionBasicTab({
                     checked={formData.inputType === 'number'}
                     onChange={(e) => {
                       const checked = e.target.checked;
-                      setFormData((prev) => {
-                        const next: Partial<Question> = {
-                          ...prev,
-                          inputType: checked ? 'number' : 'text',
-                        };
-                        if (!checked) {
-                          delete next.emptyDefault;
-                          delete next.numberFormat;
-                        }
-                        return next;
-                      });
+                      setFormData((prev) =>
+                        applyInputTypeChange(prev, checked ? 'number' : 'text'),
+                      );
                     }}
                     className="mt-0.5 h-4 w-4"
                   />

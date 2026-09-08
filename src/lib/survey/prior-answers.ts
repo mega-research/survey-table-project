@@ -11,6 +11,7 @@
  * 이월 요약(조사 대상 attrs)과는 다른 것이다 — 본문 토큰 치환·표시 조건은
  * 이월 요약을 쓰고, 이월 응답은 값 표시·복사에만 쓴다.
  */
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 
 /** 이월 응답 한 벌. 질문 id → 값. 사이드카 키(`__` 접두)도 함께 들어온다. */
 export type PriorAnswers = Record<string, unknown>;
@@ -97,10 +98,20 @@ export function priorOptionText(
   optionId: string,
 ): string | null {
   if (!prior) return null;
-  const sidecar = prior['__optTexts__'];
+  const sidecar = prior[OPT_TEXTS_KEY];
   if (!sidecar || typeof sidecar !== 'object') return null;
   const byQuestion = (sidecar as Record<string, unknown>)[questionId];
   if (!byQuestion || typeof byQuestion !== 'object') return null;
   const value = (byQuestion as Record<string, unknown>)[optionId];
   return typeof value === 'string' ? value : null;
+}
+
+/**
+ * 이 값이 이월 원본과 **글자 그대로** 같은가 — 응답자가 손대지 않았다는 뜻이다.
+ *
+ * 입력 형식 검사와 blur 정돈이 함께 쓰는 단일 판정이다(CONTEXT.md "이월 면제").
+ * 화면과 검증이 각자 비교하면 "문구는 안 뜨는데 다음은 막힌다" 같은 어긋남이 난다.
+ */
+export function isUntouchedPriorValue(value: string, priorOriginal: string | null): boolean {
+  return priorOriginal !== null && value === priorOriginal;
 }
