@@ -86,3 +86,57 @@ describe('collectPriorAnswerPrefills', () => {
     expect(entries).toEqual([{ questionId: 'q1', value: 'A' }]);
   });
 });
+
+describe('이월값 불러오기 조건', () => {
+  const mover = {
+    id: 'q-move',
+    type: 'radio',
+    title: '이직 여부',
+    required: false,
+    order: 0,
+  } as unknown as Question;
+
+  /** 이직 안 함(no)일 때만 이월값을 받는 문항. */
+  function gated(): Question {
+    return {
+      id: 'q-emp',
+      type: 'table',
+      title: '취업 현황',
+      required: false,
+      order: 1,
+      priorAnswerCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: 'c1',
+            enabled: true,
+            logicType: 'AND',
+            conditionType: 'value-match',
+            sourceQuestionId: 'q-move',
+            requiredValues: ['no'],
+          },
+        ],
+      },
+    } as unknown as Question;
+  }
+
+  const prior = { 'q-emp': { cell1: '작년 회사' } };
+
+  it('조건이 맞으면 채운다', () => {
+    const q = gated();
+    const out = collectPriorAnswerPrefills([mover, q], prior, { 'q-move': 'no' }, [mover, q]);
+    expect(out.map((e) => e.questionId)).toEqual(['q-emp']);
+  });
+
+  it('조건이 어긋나면 채우지 않는다 — 이직했으면 작년 회사를 깔면 안 된다', () => {
+    const q = gated();
+    const out = collectPriorAnswerPrefills([mover, q], prior, { 'q-move': 'yes' }, [mover, q]);
+    expect(out).toEqual([]);
+  });
+
+  it('조건이 없는 문항은 종전대로 채운다', () => {
+    const { priorAnswerCondition: _drop, ...plain } = gated();
+    const out = collectPriorAnswerPrefills([plain], prior, {}, [plain]);
+    expect(out.map((e) => e.questionId)).toEqual(['q-emp']);
+  });
+});

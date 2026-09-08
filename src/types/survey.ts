@@ -715,6 +715,11 @@ export interface Question {
   pageBreakBefore?: boolean;
   // 질문 표시 조건 (이 질문을 표시하기 위한 조건)
   displayCondition?: QuestionConditionGroup;
+  /**
+   * 이월값 불러오기 조건 (추적조사). 표시 조건과 별개 축 — 표시 조건은 문항을 보일지,
+   * 이 조건은 **보이는 문항에 이월값을 깔지** 정한다. 미설정이면 불러온다.
+   */
+  priorAnswerCondition?: QuestionConditionGroup;
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';

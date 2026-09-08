@@ -85,6 +85,7 @@ interface SnapshotQuestion {
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
+  priorAnswerCondition?: Question['priorAnswerCondition'] | undefined;
   questionCode?: string | undefined;
   /**
    * 엑셀 라벨. export 는 라이브 설정을 보므로 원래는 스냅샷에 담지 않았다.
@@ -175,6 +176,7 @@ export function buildSurveySnapshot(
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
+      priorAnswerCondition: q.priorAnswerCondition,
       questionCode: q.questionCode,
       exportLabel: q.exportLabel,
       defaultValueTemplate: q.defaultValueTemplate,

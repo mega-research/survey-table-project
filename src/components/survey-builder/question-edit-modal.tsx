@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Circle,
   Eye,
+  History,
   FileText,
   Info,
   ListOrdered,
@@ -518,6 +519,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   : question?.numberFormat,
               sumConstraints: currentFormData.sumConstraints || question?.sumConstraints,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
+              priorAnswerCondition:
+                currentFormData.priorAnswerCondition || question?.priorAnswerCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
@@ -714,6 +717,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 <Eye className="h-4 w-4" />
                 표시 조건
               </TabsTrigger>
+              <TabsTrigger value="prior-answer-condition" className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                이월값 조건
+              </TabsTrigger>
             </TabsList>
 
             {/* 기본 설정 탭 */}
@@ -822,6 +829,56 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                       });
                     } catch (error) {
                       console.error('조건 저장 실패:', error);
+                    }
+                  }
+                }}
+                allQuestions={questions}
+              />
+            </TabsContent>
+
+            {/* 이월값 조건 탭 — 표시 조건과 별개 축이다. 표시 조건은 문항을 보일지,
+                이쪽은 보이는 문항에 지난 회차 값을 깔지 정한다. */}
+            <TabsContent value="prior-answer-condition" className="px-6 py-4">
+              <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                조건을 만족할 때만 이 문항에 지난 회차 응답을 미리 채웁니다. 비워 두면 항상
+                채웁니다. 이직 여부처럼 같은 문항 안에서 갈리는 경우에 씁니다 — 문항은 양쪽 다
+                보이되 한쪽만 지난 값을 받게 하려면 표시 조건이 아니라 이 조건을 쓰세요.
+              </div>
+              <QuestionConditionEditor
+                question={question}
+                {...(formData.priorAnswerCondition
+                  ? { initialCondition: formData.priorAnswerCondition }
+                  : question.priorAnswerCondition
+                    ? { initialCondition: question.priorAnswerCondition }
+                    : {})}
+                onUpdate={async (conditionGroup) => {
+                  setFormData((prev) => {
+                    const next: Partial<Question> = { ...prev };
+                    if (conditionGroup !== undefined) {
+                      next.priorAnswerCondition = conditionGroup;
+                    } else {
+                      delete next.priorAnswerCondition;
+                    }
+                    return next;
+                  });
+
+                  // 표시 조건과 같은 즉시 저장 경로 — 새 질문은 아직 DB 에 없어 건너뛴다.
+                  const store = useSurveyBuilderStore.getState();
+                  const isNewQuestion = !!store.questionChanges.added[questionId || ''];
+                  if (
+                    questionId &&
+                    store.currentSurvey.id &&
+                    isValidUUID(questionId) &&
+                    !isNewQuestion
+                  ) {
+                    try {
+                      await client.surveyBuilder.questions.update({
+                        questionId,
+                        surveyId: store.currentSurvey.id,
+                        data: { priorAnswerCondition: conditionGroup },
+                      });
+                    } catch (error) {
+                      console.error('이월값 조건 저장 실패:', error);
                     }
                   }
                 }}

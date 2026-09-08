@@ -145,6 +145,13 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.displayCondition != null
       ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> }
       : {}),
+    ...(q.priorAnswerCondition != null
+      ? {
+          priorAnswerCondition: q.priorAnswerCondition as NonNullable<
+            QuestionType['priorAnswerCondition']
+          >,
+        }
+      : {}),
     ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
     ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
     ...(q.exportLabel != null ? { exportLabel: q.exportLabel } : {}),
