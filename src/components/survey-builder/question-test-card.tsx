@@ -4,6 +4,11 @@ import { useMemo } from 'react';
 
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import {
+  OPTION_TEXT_BARE_INPUT_CLS,
+  OptionTextInputStack,
+  OptionTextRow,
+} from '@/components/survey-response/option-text-input-stack';
 import { RankingQuestion } from '@/components/survey-response/ranking-question';
 import { Input } from '@/components/ui/input';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
@@ -14,12 +19,12 @@ import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { getOptionsLayout } from '@/utils/options-layout';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
 } from '@/utils/dynamic-row-selection-sidecar';
+import { getOptionsLayout } from '@/utils/options-layout';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
@@ -99,12 +104,21 @@ function RadioTestInput({
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
+  // 기타 입력란: 응답 페이지(question-input)·표 셀과 같은 패턴 — 옵션 그리드 칸 안이 아니라
+  // 그리드 아래에 [옵션 라벨 칩 | 풀폭 입력란] 행으로 렌더한다. 칸 안에 두면 열 폭에 갇혀 좁아진다.
+  const selectedTextOption = question.options?.find(
+    (option) => option.id !== 'other-option' && option.allowTextInput && isSelected(option.value),
+  );
+  const selectedLegacyOther = question.options?.find(
+    (option) => option.id === 'other-option' && isSelected(option.value),
+  );
+
   return (
-    <div className={layout.className} style={layout.style}>
-      {question.options?.map((option) => (
-        <div key={option.id} className="space-y-2">
-          {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 */}
-          <div className="flex items-start space-x-3">
+    <div className="space-y-3">
+      <div className={layout.className} style={layout.style}>
+        {question.options?.map((option) => (
+          // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정
+          <div key={option.id} className="flex items-start space-x-3">
             <input
               type="radio"
               id={`${question.id}-${option.id}`}
@@ -121,28 +135,37 @@ function RadioTestInput({
                 e.preventDefault();
                 handleOptionChange(option.value, option.id);
               }}
-              className="flex-1 cursor-pointer whitespace-pre-line text-sm text-gray-700"
+              className="flex-1 cursor-pointer text-sm whitespace-pre-line text-gray-700"
             >
               {option.label}
             </label>
           </div>
-          {option.id === 'other-option' && isSelected(option.value) && (
-            <div className="ml-7">
-              <Input
-                placeholder="기타 내용을 입력하세요..."
-                value={otherInput}
-                onChange={(e) => handleOtherInputChange(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          )}
-          {option.id !== 'other-option' && option.allowTextInput && isSelected(option.value) && (
-            <div className="ml-7">
-              <OptionTextInput questionId={question.id} option={option} className="w-full" />
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      {selectedTextOption && (
+        <OptionTextInputStack
+          questionId={question.id}
+          entries={[
+            {
+              option: selectedTextOption,
+              label: selectedTextOption.label.trim() || '(라벨 없음)',
+            },
+          ]}
+        />
+      )}
+      {/* other-option 매직 ID 호환 경로 (@deprecated) — 같은 셸로 그린다 */}
+      {selectedLegacyOther && (
+        <OptionTextRow label={selectedLegacyOther.label.trim() || '기타'}>
+          <input
+            type="text"
+            aria-label={selectedLegacyOther.label.trim() || '기타'}
+            placeholder="기타 내용을 입력하세요..."
+            value={otherInput}
+            onChange={(e) => handleOtherInputChange(e.target.value)}
+            className={OPTION_TEXT_BARE_INPUT_CLS}
+          />
+        </OptionTextRow>
+      )}
     </div>
   );
 }
@@ -244,16 +267,35 @@ function CheckboxTestInput({
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
-  return (
-    <div className={layout.className} style={layout.style}>
-      {question.options?.map((option) => {
-        const checked = isChecked(option.value);
-        const disabled = !canSelect(option.value);
+  // 기타 입력란: 응답 페이지(question-input)·표 셀과 같은 패턴 — 선택 순서(currentValues)대로
+  // 옵션 그리드 아래에 [옵션 라벨 칩 | 풀폭 입력란] 행으로 쌓는다. 칸 안에 두면 열 폭에 갇혀 좁아진다.
+  const selectedValues = currentValues
+    .map((val) => (isOtherChoiceValue(val) ? val.selectedValue : val))
+    .filter((val): val is string => typeof val === 'string');
+  const textInputEntries = selectedValues
+    .map((val) =>
+      question.options?.find(
+        (option) => option.id !== 'other-option' && option.allowTextInput && option.value === val,
+      ),
+    )
+    .filter((option) => option !== undefined)
+    .map((option) => ({ option, label: option.label.trim() || '(라벨 없음)' }));
+  const legacyOtherOptions = selectedValues
+    .map((val) =>
+      question.options?.find((option) => option.id === 'other-option' && option.value === val),
+    )
+    .filter((option) => option !== undefined);
 
-        return (
-          <div key={option.id} className="space-y-2">
-            {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 */}
-            <div className="flex items-start space-x-3">
+  return (
+    <div className="space-y-3">
+      <div className={layout.className} style={layout.style}>
+        {question.options?.map((option) => {
+          const checked = isChecked(option.value);
+          const disabled = !canSelect(option.value);
+
+          return (
+            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정
+            <div key={option.id} className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 id={`${question.id}-${option.id}`}
@@ -266,31 +308,32 @@ function CheckboxTestInput({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 whitespace-pre-line text-sm text-gray-700 ${
+                className={`flex-1 text-sm whitespace-pre-line text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
                 {option.label}
               </label>
             </div>
-            {option.id === 'other-option' && checked && (
-              <div className="ml-7">
-                <Input
-                  placeholder="기타 내용을 입력하세요..."
-                  value={otherInputs[option.value] || ''}
-                  onChange={(e) => handleOtherInputChange(option.value, e.target.value)}
-                  className="w-full"
-                />
-              </div>
-            )}
-            {option.id !== 'other-option' && option.allowTextInput && checked && (
-              <div className="ml-7">
-                <OptionTextInput questionId={question.id} option={option} className="w-full" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
+
+      {/* other-option 매직 ID 호환 경로 (@deprecated) — 같은 셸로 그린다 */}
+      {legacyOtherOptions.map((option) => (
+        <OptionTextRow key={option.id} label={option.label.trim() || '기타'}>
+          <input
+            type="text"
+            aria-label={option.label.trim() || '기타'}
+            placeholder="기타 내용을 입력하세요..."
+            value={otherInputs[option.value] || ''}
+            onChange={(e) => handleOtherInputChange(option.value, e.target.value)}
+            className={OPTION_TEXT_BARE_INPUT_CLS}
+          />
+        </OptionTextRow>
+      ))}
 
       {/* 선택 개수 표시 */}
       {(maxSelections !== undefined || minSelections !== undefined) && (
@@ -578,11 +621,7 @@ export function QuestionTestBody({
   const handleDynamicRowSelectionChange = (rowIds: string[]) => {
     updateTestResponse(
       DYNAMIC_ROW_SELECTIONS_KEY,
-      updateDynamicRowSelections(
-        allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY],
-        question.id,
-        rowIds,
-      ),
+      updateDynamicRowSelections(allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY], question.id, rowIds),
     );
   };
   // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
