@@ -61,6 +61,28 @@ export function collapseRepeatRows(rows: TableRow[]): TableRow[] {
 }
 
 /**
+ * 구조가 설정과 아직 맞는가 — 지정된 템플릿 행이 전부 살아 있고 서로 붙어 있는가.
+ *
+ * 설정은 행 id 로 템플릿을 가리키는데 편집 화면은 그 행을 지우거나 옮길 수 있다.
+ * 낡은 설정으로 펼치면 남은 벌이 주인 없이 떠돌거나 반복 단위가 조용히 바뀐다.
+ */
+export function isRowRepeatIntact(
+  rows: TableRow[],
+  config: RowRepeatConfig | null | undefined,
+): boolean {
+  if (!isRowRepeatActive(config)) return true;
+  const collapsed = collapseRepeatRows(rows);
+  const indices: number[] = [];
+  for (const id of config!.templateRowIds) {
+    const index = collapsed.findIndex((row) => row.id === id);
+    if (index === -1) return false;
+    indices.push(index);
+  }
+  indices.sort((a, b) => a - b);
+  return indices.every((index, i) => i === 0 || index === indices[i - 1]! + 1);
+}
+
+/**
  * 반복 끄기 — 2벌 이후를 걷어내고 1벌을 반복 이전 모습으로 되돌린다.
  *
  * 표식만 남겨 두면 다음에 다시 켤 때 `_01` 로 끝나는 rowCode 를 밑동 삼아 `_01_01` 이
@@ -212,11 +234,14 @@ export function expandRepeatRows(
   const templateIds = config!.templateRowIds;
   const maxRepeats = clampMaxRepeats(config!.maxRepeats);
 
+  // 구조가 설정과 어긋났으면(템플릿 행이 지워졌거나 흩어졌으면) 펼치지 않고 되돌린다.
+  // 남은 일부로 펼치면 주인 없는 벌이 떠돌거나 반복 단위가 조용히 바뀐다.
+  if (!isRowRepeatIntact(rows, config)) return disableRowRepeat(rows);
+
   const collapsed = collapseRepeatRows(rows);
   const templateIdSet = new Set(templateIds);
   const templates = collapsed.filter((row) => templateIdSet.has(row.id));
-  // 템플릿 행이 지워졌으면 손대지 않는다 — 빌더 검증이 잡을 상태를 여기서 뭉개지 않는다.
-  if (templates.length === 0) return rows;
+  if (templates.length === 0) return disableRowRepeat(rows);
 
   // 기존 복제 벌 색인 — `<원본 행 id>#<벌 번호>`
   const existingBundles = new Map<string, TableRow>();

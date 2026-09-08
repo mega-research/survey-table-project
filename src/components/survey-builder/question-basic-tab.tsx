@@ -55,7 +55,11 @@ import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionTextSettingsEditor } from './option-text-settings-editor';
 import { VariableButton } from './variable-button';
 
-import { disableRowRepeat, expandRepeatRows } from '@/lib/question/row-repeat';
+import {
+  disableRowRepeat,
+  expandRepeatRows,
+  isRowRepeatIntact,
+} from '@/lib/question/row-repeat';
 
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
@@ -1390,6 +1394,9 @@ export function QuestionBasicTab({
             rowRepeatConfig={formData.rowRepeatConfig}
             onTableChange={(data) => {
               setFormData((prev) => {
+                // 템플릿 행을 지우거나 흩어 놓으면 설정이 낡는다. 구조를 되돌리는 것으로
+                // 끝내면 설정만 켜진 채 남아 다음에 열 때 다시 펼쳐지므로 설정도 함께 끈다.
+                const intact = isRowRepeatIntact(data.tableRowsData, prev.rowRepeatConfig);
                 const next: Partial<Question> = {
                   ...prev,
                   tableTitle: data.tableTitle,
@@ -1398,6 +1405,7 @@ export function QuestionBasicTab({
                   // 편집이 일어날 때마다 다시 불러도 기존 벌의 행·셀 id 가 그대로 살아 있고,
                   // 1벌(템플릿)의 구조 변경만 뒤 벌로 전파된다.
                   tableRowsData: expandRepeatRows(data.tableRowsData, prev.rowRepeatConfig),
+                  ...(intact ? {} : { rowRepeatConfig: null }),
                 };
                 // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
                 // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
