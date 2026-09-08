@@ -66,7 +66,7 @@ import {
 import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
-  buildAdminEmptyRequiredWarningMessage,
+  buildAdminRelaxWarningMessage,
   classifyStepIssues,
   snapshotStepResponses,
 } from '@/lib/survey/admin-edit-required-relax';
@@ -969,13 +969,7 @@ function SurveyResponseFlowActive({
         ).questionMissing
       );
     },
-    [
-      responses,
-      effectiveOptionTextsByQuestion,
-      questions,
-      contactAttrs,
-      loadedSurvey?.lookups,
-    ],
+    [responses, effectiveOptionTextsByQuestion, questions, contactAttrs, loadedSurvey?.lookups],
   );
 
   // 다음 step 결정 (step 내 분기 규칙 평가)
@@ -1141,7 +1135,7 @@ function SurveyResponseFlowActive({
   // 다 채우면 canProceed 가 참이 되어 즉시 사라진다.
   const showRequiredNotice = requiredErrorStepIndex === currentStepIndex && !canProceed();
 
-  // admin-edit 전용 — "빈 필수" 완화(경고 1회 후 통과). 응답자/미리보기/테스트 흐름은
+  // admin-edit 전용 — "빈 필수"·형식 불일치 완화(경고 1회 후 통과). 응답자/미리보기/테스트 흐름은
   // isAdminEdit=false 라 아래 값들이 전혀 쓰이지 않는다(handleNext 분기에서 무시).
   //
   // 스텝의 질문 응답값 스냅샷 — 페이지(스텝) 이동 또는 값 변경 시 자연히 달라지므로
@@ -1184,16 +1178,16 @@ function SurveyResponseFlowActive({
   ]);
   // 경고 배너 표시 조건: "방금 첫 클릭으로 경고했고, 그 이후 값/스텝이 그대로인 상태"
   // — 이 조건이 참인 동안에만 다음 클릭이 통과(bypass)로 이어진다(handleNext 참고).
-  const showAdminEmptyRequiredWarning =
+  const showAdminRelaxWarning =
     isAdminEdit &&
     adminWarnedSnapshot !== null &&
     adminWarnedSnapshot === currentStepResponseSnapshot &&
     !!adminStepClassification &&
     !adminStepClassification.hasBlockingIssue &&
-    adminStepClassification.emptyRequiredCount > 0;
-  // 경고 배너의 "위치로 이동" 대상 — 첫 미응답 질문(전무) 우선, 없으면 첫 셀/상세 이슈.
+    adminStepClassification.emptyRequiredCount + adminStepClassification.formatCount > 0;
+  // 경고 배너의 "위치로 이동" 대상 — 첫 미응답 질문(전무) 우선, 없으면 첫 셀/상세/형식 이슈.
   // handleNext 의 첫 클릭 자동 스크롤과 배너 클릭 스크롤이 같은 대상을 가리키도록 공유한다.
-  const adminFirstEmptyRequiredTarget = useMemo(() => {
+  const adminFirstRelaxTarget = useMemo(() => {
     if (!isAdminEdit) return null;
     const firstUnanswered = currentStepQuestions.find(
       (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
@@ -1387,7 +1381,15 @@ function SurveyResponseFlowActive({
       handleResponse(questionId, undefined);
       prefilledQuestionIdsRef.current.delete(questionId);
     }
-  }, [changeConfirmEnabled, prefillSettled, questions, priorAnswers, responses, evalCtx, handleResponse]);
+  }, [
+    changeConfirmEnabled,
+    prefillSettled,
+    questions,
+    priorAnswers,
+    responses,
+    evalCtx,
+    handleResponse,
+  ]);
 
   const lastSyncedOptionTextsRef = useRef(optionTexts);
   useEffect(() => {
@@ -1413,15 +1415,15 @@ function SurveyResponseFlowActive({
       (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
 
-    // admin-edit 전용(요구 1~4/6) — 빈 필수만 있고(차단형 위반 없음) 있으면 경고 1회 후
-    // 통과시킨다. isAdminEdit=false 인 응답자/미리보기/테스트 흐름은 이 블록이 항상
+    // admin-edit 전용(요구 1~4/6) — 완화 대상(빈 필수·형식 불일치)만 있고 차단형 위반이
+    // 없으면 경고 1회 후 통과시킨다. isAdminEdit=false 인 응답자/미리보기/테스트 흐름은 이 블록이 항상
     // 스킵되어 아래 기존 Gate A/B 가 그대로(무변경) 적용된다.
     let bypassEmptyRequired = false;
     if (
       isAdminEdit &&
       adminStepClassification &&
       !adminStepClassification.hasBlockingIssue &&
-      adminStepClassification.emptyRequiredCount > 0
+      adminStepClassification.emptyRequiredCount + adminStepClassification.formatCount > 0
     ) {
       if (adminWarnedSnapshot === currentStepResponseSnapshot) {
         // 같은 페이지, 값 변경 없이 연속 두 번째 클릭 — 완화하고 진행.
@@ -1430,9 +1432,8 @@ function SurveyResponseFlowActive({
       } else {
         // 첫 클릭(또는 스텝 이동·값 변경 뒤 재클릭) — 경고만 하고 막는다.
         setAdminWarnedSnapshot(currentStepResponseSnapshot);
-        if (adminFirstEmptyRequiredTarget) {
-          const { questionId: targetQuestionId, issue: targetIssue } =
-            adminFirstEmptyRequiredTarget;
+        if (adminFirstRelaxTarget) {
+          const { questionId: targetQuestionId, issue: targetIssue } = adminFirstRelaxTarget;
           setHighlightQuestionIds(new Set([targetQuestionId]));
           scrollToIssue({
             questionId: targetQuestionId,
@@ -1889,22 +1890,18 @@ function SurveyResponseFlowActive({
               상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
               <div
                 className="px-4 text-sm text-gray-500"
-                role={showAdminEmptyRequiredWarning ? 'alert' : undefined}
+                role={showAdminRelaxWarning ? 'alert' : undefined}
               >
-                {showAdminEmptyRequiredWarning && adminStepClassification ? (
+                {showAdminRelaxWarning && adminStepClassification ? (
                   <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
-                    <span>
-                      {buildAdminEmptyRequiredWarningMessage(
-                        adminStepClassification.emptyRequiredCount,
-                      )}
-                    </span>
-                    {adminFirstEmptyRequiredTarget && (
+                    <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
+                    {adminFirstRelaxTarget && (
                       <button
                         type="button"
                         className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
                         onClick={() => {
                           const { questionId: targetQuestionId, issue: targetIssue } =
-                            adminFirstEmptyRequiredTarget;
+                            adminFirstRelaxTarget;
                           scrollToIssue({
                             questionId: targetQuestionId,
                             detailTargetIds: targetIssue?.detailTargetIds,

@@ -7,7 +7,7 @@ import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
-import { isRelaxableRequiredIssueKind } from '@/lib/survey/admin-edit-required-relax';
+import { isRelaxableIssueKind } from '@/lib/survey/admin-edit-required-relax';
 import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
 import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
@@ -750,7 +750,8 @@ export function useResponseLifecycle({
 
       // 숫자 차단형 검증 — 실제 경로상 질문 전체 대상.
       // admin-edit 은 값이 들어간 칸의 차단형 위반(range/sum/formula)만 다시 확인한다 —
-      // "빈 필수"(required-cells/required-detail)는 위에서 이미 의도적으로 건너뛰었다.
+      // "빈 필수"(required-cells/required-detail)와 형식 불일치(format)는 위에서 이미
+      // 의도적으로 건너뛰었다(경고 후 통과).
       // 응답자 흐름은 collectNumericIssues 의 모든 kind 를 그대로 차단(무변경).
       const numericViolated = questions.filter((q) => {
         if (!traversedIds.has(q.id)) return false;
@@ -762,7 +763,7 @@ export function useResponseLifecycle({
           contactAttrs,
         });
         return isAdminEdit
-          ? issues.some((issue) => !isRelaxableRequiredIssueKind(issue.kind))
+          ? issues.some((issue) => !isRelaxableIssueKind(issue.kind))
           : issues.length > 0;
       });
       if (numericViolated.length > 0) {

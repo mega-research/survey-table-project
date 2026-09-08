@@ -1,23 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildAdminEmptyRequiredWarningMessage,
+  buildAdminRelaxWarningMessage,
   classifyStepIssues,
-  isRelaxableRequiredIssueKind,
+  isRelaxableIssueKind,
   snapshotStepResponses,
 } from '@/lib/survey/admin-edit-required-relax';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 
-describe('isRelaxableRequiredIssueKind', () => {
+describe('isRelaxableIssueKind', () => {
   it('required-cells/required-detail 는 완화 대상이다', () => {
-    expect(isRelaxableRequiredIssueKind('required-cells')).toBe(true);
-    expect(isRelaxableRequiredIssueKind('required-detail')).toBe(true);
+    expect(isRelaxableIssueKind('required-cells')).toBe(true);
+    expect(isRelaxableIssueKind('required-detail')).toBe(true);
+  });
+
+  it('format 도 완화 대상이다 — 외국 번호·대표번호 같은 정당한 예외를 담당자가 넣을 수 있어야 한다', () => {
+    expect(isRelaxableIssueKind('format')).toBe(true);
   });
 
   it('range/sum/formula 는 차단형이라 완화 대상이 아니다', () => {
-    expect(isRelaxableRequiredIssueKind('range')).toBe(false);
-    expect(isRelaxableRequiredIssueKind('sum')).toBe(false);
-    expect(isRelaxableRequiredIssueKind('formula')).toBe(false);
+    expect(isRelaxableIssueKind('range')).toBe(false);
+    expect(isRelaxableIssueKind('sum')).toBe(false);
+    expect(isRelaxableIssueKind('formula')).toBe(false);
   });
 });
 
@@ -26,6 +30,7 @@ describe('classifyStepIssues', () => {
     expect(classifyStepIssues([], new Map())).toEqual({
       hasBlockingIssue: false,
       emptyRequiredCount: 0,
+      formatCount: 0,
     });
   });
 
@@ -36,6 +41,7 @@ describe('classifyStepIssues', () => {
     expect(classifyStepIssues([], new Map([['q-table', issues]]))).toEqual({
       hasBlockingIssue: false,
       emptyRequiredCount: 2,
+      formatCount: 0,
     });
   });
 
@@ -44,18 +50,16 @@ describe('classifyStepIssues', () => {
     expect(classifyStepIssues([], new Map([['q1', issues]]))).toEqual({
       hasBlockingIssue: false,
       emptyRequiredCount: 1,
+      formatCount: 0,
     });
   });
 
   it('서로 다른 질문의 미응답 개수와 셀 단위 누락을 합산한다', () => {
-    const issues: NumericIssue[] = [
-      { kind: 'required-cells', message: 'm', cellIds: ['c1'] },
-    ];
-    expect(
-      classifyStepIssues(['q-a', 'q-b'], new Map([['q-table', issues]])),
-    ).toEqual({
+    const issues: NumericIssue[] = [{ kind: 'required-cells', message: 'm', cellIds: ['c1'] }];
+    expect(classifyStepIssues(['q-a', 'q-b'], new Map([['q-table', issues]]))).toEqual({
       hasBlockingIssue: false,
       emptyRequiredCount: 3,
+      formatCount: 0,
     });
   });
 
@@ -64,11 +68,10 @@ describe('classifyStepIssues', () => {
     // 상세기입이 빈 비-테이블 질문은 unansweredQuestionIds 와 numericIssuesByQuestion 양쪽에
     // 동시에 나타난다 — 실제로는 미응답 필수 "1개"일 뿐이다.
     const issues: NumericIssue[] = [{ kind: 'required-detail', message: 'm' }];
-    expect(
-      classifyStepIssues(['q-required'], new Map([['q-required', issues]])),
-    ).toEqual({
+    expect(classifyStepIssues(['q-required'], new Map([['q-required', issues]]))).toEqual({
       hasBlockingIssue: false,
       emptyRequiredCount: 1,
+      formatCount: 0,
     });
   });
 
@@ -89,10 +92,8 @@ describe('classifyStepIssues', () => {
         .hasBlockingIssue,
     ).toBe(true);
     expect(
-      classifyStepIssues(
-        [],
-        new Map([['q1', [{ kind: 'formula', message: 'm' } as NumericIssue]]]),
-      ).hasBlockingIssue,
+      classifyStepIssues([], new Map([['q1', [{ kind: 'formula', message: 'm' } as NumericIssue]]]))
+        .hasBlockingIssue,
     ).toBe(true);
   });
 });
@@ -126,10 +127,46 @@ describe('snapshotStepResponses', () => {
   });
 });
 
-describe('buildAdminEmptyRequiredWarningMessage', () => {
-  it('개수를 포함한 안내 문구를 만든다', () => {
-    expect(buildAdminEmptyRequiredWarningMessage(3)).toBe(
+describe('형식 이슈 완화', () => {
+  it('형식 위반은 차단이 아니라 형식 카운트로 잡힌다', () => {
+    const issues: NumericIssue[] = [
+      { kind: 'format', message: '휴대전화 번호가 아닙니다' },
+      { kind: 'format', message: '입력 형식이 맞지 않은 칸이 있습니다', cellIds: ['c1', 'c2'] },
+    ];
+    expect(classifyStepIssues([], new Map([['q1', issues]]))).toEqual({
+      hasBlockingIssue: false,
+      emptyRequiredCount: 0,
+      formatCount: 3,
+    });
+  });
+
+  it('미응답 질문에 형식 이슈가 함께 잡혀도 형식은 따로 센다', () => {
+    // 빈 필수는 질문 단위 이중 계산을 피하지만, 형식은 값이 들어간 칸의 이야기라 별개다.
+    const issues: NumericIssue[] = [{ kind: 'format', message: 'm' }];
+    expect(classifyStepIssues(['q1'], new Map([['q1', issues]]))).toEqual({
+      hasBlockingIssue: false,
+      emptyRequiredCount: 1,
+      formatCount: 1,
+    });
+  });
+});
+
+describe('buildAdminRelaxWarningMessage', () => {
+  it('빈 필수만 있으면 종전 문구', () => {
+    expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 3, formatCount: 0 })).toBe(
       "빈 필수 응답 3개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+    );
+  });
+
+  it('형식 불일치만 있으면 형식 문구', () => {
+    expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 0, formatCount: 2 })).toBe(
+      "형식이 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+    );
+  });
+
+  it('둘 다 있으면 함께 말한다', () => {
+    expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 1, formatCount: 2 })).toBe(
+      "빈 필수 응답 1개 · 형식이 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 });
