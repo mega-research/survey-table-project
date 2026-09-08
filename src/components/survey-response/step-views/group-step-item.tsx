@@ -71,9 +71,9 @@ export function GroupStepItem({
   const quotes = useAnswerQuotes();
   // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시하고,
   // 같은 자리에서 변동 여부를 밝히게 한다(밝히지 않으면 페이지를 넘길 수 없다).
-  const { answers: rawPriorAnswers, waveLabel, changeConfirmEnabled } = usePriorAnswers();
-  // 스위치가 꺼진 설문에서는 이월 값이 이미 응답값으로 깔려 있다 — 잠금도 확인도 없다.
-  const priorAnswers = changeConfirmEnabled ? rawPriorAnswers : null;
+  // confirmAnswers 는 이미 스위치·이월값 조건 둘 다로 걸러져 있다 — 스위치가 꺼졌거나
+  // 이 문항의 priorAnswerCondition 이 거짓이면 여기서 null/미보유로 떨어진다.
+  const { confirmAnswers: priorAnswers, waveLabel } = usePriorAnswers();
   const hasPrior = requiresChangeConfirmation(q, priorAnswers);
   const priorValue = hasPrior ? priorAnswers?.[q.id] : undefined;
   const changeConfirmation = getChangeConfirmation(responses, q.id);

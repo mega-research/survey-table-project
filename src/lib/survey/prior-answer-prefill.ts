@@ -61,3 +61,51 @@ export function collectPriorAnswerPrefills(
   }
   return entries;
 }
+
+/**
+ * 이 값이 프리필로 깔았던 이월 값과 같은가. 참조가 아니라 내용을 본다 — 응답 저장·복원을
+ * 오가며 같은 객체가 다른 참조로 재구성되는 경우가 흔하다.
+ */
+function equalsPriorValue(value: unknown, priorValue: unknown): boolean {
+  return JSON.stringify(value) === JSON.stringify(priorValue);
+}
+
+/**
+ * 조건이 거짓으로 뒤집혀 걷어내야 할 문항 id 를 낸다.
+ *
+ * **프리필로 들어온 값만 회수한다.** 조건이 처음부터 거짓인 문항은 이 함수가 애초에 채운
+ * 적이 없으므로, 그 자리의 값은 응답자가 직접 쓴 것이다 — 지우면 데이터 손실이다.
+ * 조건이 참인 동안에도 상태 기준(값이 이월값과 같음)으로만 걸면 응답자가 값을 고쳐
+ * 이월값과 달라지는 순간 회수 대상에서 빠져버려 반쪽 회수가 된다. 그래서 판정 근거를
+ * 둘로 나눈다 — 이 세션에서 실제로 프리필한 문항이면 내용을 안 보고 무조건 회수하고,
+ * (재진입으로 이력이 없어) 그 밖의 경우에만 값이 이월값과 같은지를 폴백으로 쓴다.
+ *
+ * @param questions 조건 평가 대상 문항 목록 (표시 조건과 무관 — 숨은 문항도 회수 대상)
+ * @param prior 이월 응답 한 벌. 없으면 회수할 것도 없다
+ * @param responses 현재 응답 묶음
+ * @param allQuestions 이월값 불러오기 조건 평가용 전체 문항
+ * @param prefilled 이 세션에서 실제로 프리필한 문항 id 집합
+ */
+export function collectPriorAnswerRetractions(
+  questions: readonly Question[],
+  prior: PriorAnswers | null | undefined,
+  responses: Record<string, unknown>,
+  allQuestions: readonly Question[],
+  prefilled: ReadonlySet<string>,
+  evalCtx?: BranchEvalCtx,
+): string[] {
+  if (!prior) return [];
+  const retractions: string[] = [];
+  for (const question of questions) {
+    if (!question.priorAnswerCondition) continue;
+    if (shouldLoadPriorAnswer(question, responses, allQuestions, evalCtx)) continue;
+    if (!hasPriorAnswer(prior, question.id)) continue;
+    const currentValue = responses[question.id];
+    if (currentValue === undefined) continue;
+    const isPrefillOrigin =
+      prefilled.has(question.id) || equalsPriorValue(currentValue, prior[question.id]);
+    if (!isPrefillOrigin) continue;
+    retractions.push(question.id);
+  }
+  return retractions;
+}

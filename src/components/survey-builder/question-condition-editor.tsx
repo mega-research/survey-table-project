@@ -217,22 +217,27 @@ export const QuestionConditionEditor = forwardRef<
     const sourceQuestion = previousQuestions.find((q) => q.id === condition.sourceQuestionId);
     const colIndex = condition.tableConditions?.cellColumnIndex;
 
-    // 병합된 행 ID들 가져오기
+    // 병합된 행 ID들 가져오기 — 클릭 지점을 포함한 병합 범위 전체(앵커 + 연속 행).
+    // getMergedRowIds 는 항상 앵커 행을 0번 요소로 낸다(병합 시작 행 검색이든,
+    // 위쪽 탐색이든 앵커부터 rowspan 만큼 채우는 동일 루프).
     const mergedRowIds = getMergedRowIds(rowId, sourceQuestion?.tableRowsData, colIndex);
+    const anchorRowId = mergedRowIds[0] ?? rowId;
 
     // tableConditions가 없으면 초기화
     const currentRowIds = condition.tableConditions?.rowIds || [];
 
-    // 병합된 행 중 하나라도 선택되어 있으면 모두 제거, 아니면 모두 추가
+    // 병합된 행 중 하나라도 선택되어 있으면 모두 제거, 아니면 앵커 행만 추가
     const isAnyMergedRowSelected = mergedRowIds.some((id) => currentRowIds.includes(id));
 
     let updatedRowIds: string[];
     if (isAnyMergedRowSelected) {
-      // 병합된 행들 모두 제거
+      // 병합된 행들 모두 제거 (과거에 저장된 연속 행 id 가 섞여 있어도 함께 정리된다)
       updatedRowIds = currentRowIds.filter((id) => !mergedRowIds.includes(id));
     } else {
-      // 병합된 행들 모두 추가 (중복 제거)
-      updatedRowIds = [...new Set([...currentRowIds, ...mergedRowIds])];
+      // 앵커 행 id 만 추가한다. 연속 행(isHidden 셀)은 런타임 평가(table-cell-semantics
+      // 의 isEvaluableCell)가 항상 건너뛰므로 매칭될 수 없다 — 여기서 함께 저장하면
+      // checkType 'all' 이 영원히 충족되지 않는 조건이 만들어진다.
+      updatedRowIds = [...new Set([...currentRowIds, anchorRowId])];
     }
 
     updateCondition(conditionId, {
