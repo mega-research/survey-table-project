@@ -3,10 +3,15 @@
 import React, { useEffect } from 'react';
 
 import { Input } from '@/components/ui/input';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { useInputFormatField } from '@/hooks/use-input-format-field';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { priorAnswerText } from '@/lib/survey/prior-answers';
+import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
+import { isInputFormat } from '@/types/input-type';
+import { formatSampleValue } from '@/utils/input-format';
 import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
@@ -17,6 +22,7 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  questionId,
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
@@ -44,6 +50,7 @@ export const InputCell = React.memo(function InputCell({
 
   // 숫자 모드 여부: inputType이 'number'일 때만 활성화
   const isNumberMode = cell.inputType === 'number';
+  const format = isInputFormat(cell.inputType) ? cell.inputType : null;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -52,6 +59,16 @@ export const InputCell = React.memo(function InputCell({
       numberFormat: cell.numberFormat,
       enabled: isNumberMode,
     });
+
+  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const formatField = useInputFormatField({
+    format,
+    rawValue: currentValue,
+    onRawChange: onUpdateValue,
+    enabled: !isPrefilled,
+    priorOriginal: priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+  });
 
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
@@ -70,7 +87,7 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   return (
-    // relative — 범위 위반 안내문의 절대 위치 기준점.
+    // relative — 형식·범위 위반 안내문의 절대 위치 기준점.
     <div className="relative w-full">
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
@@ -82,13 +99,24 @@ export const InputCell = React.memo(function InputCell({
           <Input
             id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
             type="text"
-            inputMode={isNumberMode ? 'decimal' : undefined}
+            inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
             value={isPrefilled ? prefilledValue : displayValue}
             onChange={handleChange}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
+            onFocus={() => {
+              handleFocus();
+              formatField.handleFocus();
+            }}
+            onBlur={() => {
+              handleBlur();
+              formatField.handleBlur();
+            }}
             placeholder={
-              cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+              cell.placeholder ||
+              (format
+                ? formatSampleValue(format)
+                : isNumberMode
+                  ? '숫자만 입력하세요...'
+                  : '답변을 입력하세요...')
             }
             maxLength={cell.inputMaxLength}
             className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
@@ -121,17 +149,27 @@ export const InputCell = React.memo(function InputCell({
       </CellContentLayout>
 
       {/*
-        범위 위반 안내문은 흐름에서 빼서 셀 위에 띄운다.
+        위반 안내문은 흐름에서 빼서 셀 위에 띄운다.
         흐름에 두면 이 셀만 키가 커져, 같은 행의 다른 입력 칸과 세로가 어긋나고
         (셀은 justify-center) 옆 라벨도 입력칸 중앙에서 밀려난다 — "2011 년 / 11 월"
         처럼 한 행에 입력 칸이 둘 있으면 눈에 띈다. 띄우면 행 높이가 안 변해 어긋나지
         않는다. 대신 아래 행에 겹치므로 불투명 배경 + z-20 으로 읽히게 만든다.
+        범위 위반과 형식 위반은 같은 blur 피드백이라 같은 셸로 그린다 — 흐름에 하나만
+        남겨두면 그쪽만 다시 줄을 밀어 어긋남이 되살아난다.
+        상시 표시인 단위 읽기는 아래 행에 영구히 겹치면 안 되므로 흐름에 그대로 둔다.
       */}
-      {rangeViolation && !isPrefilled && (
-        <div className="absolute top-full left-0 z-20 mt-1 w-max">
-          <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
-            * {rangeViolation}
-          </p>
+      {(rangeViolation || formatField.violation) && !isPrefilled && (
+        <div className="absolute top-full left-0 z-20 mt-1 w-max space-y-0.5">
+          {rangeViolation && (
+            <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
+              * {rangeViolation}
+            </p>
+          )}
+          {formatField.violation && (
+            <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
+              * {formatField.violation}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 
-import { TableCell } from '@/types/survey';
+import { InputType, TableCell } from '@/types/survey';
 import {
   CellFormState,
   ContentType,
@@ -51,7 +51,7 @@ export interface CellFormSetters {
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
   setInputDefaultValueTemplate: (v: string) => void;
-  setInputType: (v: 'text' | 'number') => void;
+  setInputType: (v: InputType) => void;
   setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
   setEmptyDefaultEnabled: (v: boolean) => void;
   setEmptyDefaultRaw: (v: string) => void;

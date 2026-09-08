@@ -7,14 +7,17 @@ import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
 import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
-import { hasPriorAnswer } from '@/lib/survey/prior-answers';
+import { hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { formatSampleValue } from '@/utils/input-format';
 import {
   applyMobileOptionsGridOverride,
   resolveMobileOptionsColumns,
@@ -144,8 +147,9 @@ export function QuestionInput({ question, numericIssues, ...controlProps }: Ques
   );
   if (question.type === 'table') return control;
 
+  // range·format 은 입력칸 바로 아래에 이미 붙는다 — 배너로 한 번 더 말하지 않는다.
   const bannerItems = (numericIssues ?? [])
-    .filter((issue) => issue.kind !== 'range')
+    .filter((issue) => issue.kind !== 'range' && issue.kind !== 'format')
     .map((issue) => ({
       message: issue.message,
       cellIds: issue.cellIds,
@@ -655,6 +659,12 @@ function SelectQuestion({
   );
 }
 
+/** 운영자가 placeholder 를 적지 않았을 때의 기본 문구. 형식 칸은 예시 값이 가장 친절하다. */
+function defaultPlaceholder(isNumberMode: boolean, format: InputFormat | null): string {
+  if (format) return formatSampleValue(format);
+  return isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...';
+}
+
 // 단답형(text) prefill 지원 컴포넌트
 function TextResponseInput({
   question,
@@ -672,6 +682,7 @@ function TextResponseInput({
   const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
   const currentValue = typeof value === 'string' ? value : '';
   const isNumberMode = question.inputType === 'number';
+  const format = isInputFormat(question.inputType) ? question.inputType : null;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -680,6 +691,17 @@ function TextResponseInput({
       numberFormat: question.numberFormat,
       enabled: isNumberMode,
     });
+
+  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니고,
+  // 이월 값을 손대지 않은 칸도 대상이 아니다(prior-answers 의 면제 규칙).
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const formatField = useInputFormatField({
+    format,
+    rawValue: currentValue,
+    onRawChange: onChange,
+    enabled: !isPrefilled,
+    priorOriginal: priorAnswerText(priorAnswersForFormat, question.id),
+  });
 
   useEffect(() => {
     if (isPrefilled && value !== prefilledValue) {
@@ -713,22 +735,29 @@ function TextResponseInput({
     <div className="w-full">
       <Input
         type="text"
-        inputMode={isNumberMode ? 'decimal' : undefined}
-        placeholder={
-          question.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
-        }
+        inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
+        placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format)}
         value={isPrefilled ? prefilledValue : displayValue}
         onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
+        onFocus={() => {
+          handleFocus();
+          formatField.handleFocus();
+        }}
+        onBlur={() => {
+          handleBlur();
+          formatField.handleBlur();
+        }}
         className="w-full text-base"
         disabled={isPrefilled}
         data-prefilled={isPrefilled || undefined}
       />
-      {(unitReading || rangeViolation) && !isPrefilled && (
+      {(unitReading || rangeViolation || formatField.violation) && !isPrefilled && (
         <div className="mt-1 space-y-0.5 px-1">
           {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
           {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+          {formatField.violation && (
+            <p className="text-xs text-red-500">* {formatField.violation}</p>
+          )}
         </div>
       )}
     </div>

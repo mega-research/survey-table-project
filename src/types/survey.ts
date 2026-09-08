@@ -3,11 +3,14 @@ import type {
   GroupNameDesign,
   SurveyResponseHeaderConfig,
 } from '@/db/schema/schema-types';
+import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
 export { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 export type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+export { INPUT_TYPES, isInputType } from '@/types/input-type';
+export type { InputType } from '@/types/input-type';
 
 export type QuestionType =
   | 'text'
@@ -291,7 +294,7 @@ export interface QuestionOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
@@ -388,7 +391,7 @@ export interface TableCell {
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
   // piiEncrypted 와 같은 규칙, ADR-0012). 저장 경로는 스냅샷 ∪ 라이브 셀 플래그 합집합.
   piiEncrypted?: boolean;
@@ -430,7 +433,7 @@ export interface TableCell {
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
   // 셀 병합 관련 속성
@@ -506,7 +509,7 @@ export interface CheckboxOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
@@ -534,7 +537,7 @@ export interface RadioOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
@@ -684,7 +687,7 @@ export interface Question {
   // 단답형 prefill 템플릿 — {{attrs_key}} 포함 가능. (0022 마이그레이션)
   defaultValueTemplate?: string | null;
   // 단답형 숫자 입력 모드 — 셀 input 과 동일 의미. 'number' 면 응답자가 숫자만 입력 가능.
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   // 숫자 모드 첫 진입 시 입력란 자동 채움 값(선택). 토큰 prefill 없을 때만 적용.
   emptyDefault?: number;
   // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)

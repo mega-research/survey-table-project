@@ -1,17 +1,18 @@
+import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 import {
   BranchRule,
   CalcCellValidation,
   CalcExpr,
   CellEnableCondition,
   CheckboxOption,
+  InputType,
   NumberFormat,
   QuestionOption,
   RadioOption,
   RankingConfig,
   TableCell,
 } from '@/types/survey';
-import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
-import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 
 import { parseNumericInput } from './numeric-input';
 import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
@@ -37,7 +38,7 @@ export interface CellFormState {
   inputPlaceholder: string;
   inputMaxLength: number | '';
   inputDefaultValueTemplate: string;
-  inputType: 'text' | 'number';
+  inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
   inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
@@ -63,7 +64,7 @@ export interface CellFormState {
   choiceLabel: string;
   choiceAllowTextInput: boolean;
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
-  choiceTextInputType: 'text' | 'number';
+  choiceTextInputType: InputType;
   choiceTextInputNumberFormat: NumberFormat | undefined;
   choiceBranchRule: BranchRule | undefined;
   /** 이 보기 옵션 셀이 속한 ChoiceGroup.id. 빈 문자열 = 미소속. */
@@ -243,7 +244,8 @@ export function cellToFormState(cell: TableCell): CellFormState {
     backgroundColor: cell.backgroundColor ?? '',
     textColor: cell.textColor ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
-    mobileDisplay: cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
+    mobileDisplay:
+      cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
     mobileLabel: cell.mobileLabel || '',
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
@@ -424,13 +426,18 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
         }
       : {}),
     // 숫자 input 셀 수식 검증
-    ...(contentType === 'input' && form.inputType === 'number' && form.formulaValidationEnabled && form.formula
+    ...(contentType === 'input' &&
+    form.inputType === 'number' &&
+    form.formulaValidationEnabled &&
+    form.formula
       ? {
           formula: form.formula,
           ...(parseNumericInput(form.formulaToleranceRaw) !== null
             ? { formulaTolerance: parseNumericInput(form.formulaToleranceRaw)! }
             : {}),
-          ...(form.formulaErrorMessage.trim() ? { formulaErrorMessage: form.formulaErrorMessage.trim() } : {}),
+          ...(form.formulaErrorMessage.trim()
+            ? { formulaErrorMessage: form.formulaErrorMessage.trim() }
+            : {}),
         }
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거).
@@ -484,7 +491,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { rankingLabel: form.rankingLabel.trim() }
       : {}),
     // ranking_opt 그룹 귀속. 빈 문자열이면 기존 셀의 choiceGroupId 를 후처리 delete 로 제거.
-    ...(contentType === 'ranking_opt' && form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
+    ...(contentType === 'ranking_opt' && form.choiceGroupId
+      ? { choiceGroupId: form.choiceGroupId }
+      : {}),
     // ranking_opt / choice_opt 전용 spssNumericCode (Case 2/A SPSS 재-export 안정성)
     // isOther 모드면 numeric 변수가 system-missing 이라 spssNumericCode 는 의미 없음 → 강제 undefined.
     ...(((contentType === 'ranking_opt' && !form.isOtherRankingCell) ||
@@ -501,10 +510,13 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.choiceLabel.trim().length > 0 ? { choiceLabel: form.choiceLabel.trim() } : {}),
           ...(form.choiceAllowTextInput ? { allowTextInput: true } : {}),
-          ...(form.choiceAllowTextInput && form.choiceTextInputType === 'number'
+          // 'text'(=지정 안 함)만 키를 남기지 않는다. 숫자 모드와 입력 형식 5종은 그대로
+          // 싣는다 — 'number' 만 통과시키면 빌더에서 고른 형식이 조용히 버려진다.
+          // 숫자 서식은 숫자 모드 전용이라 형식과는 배타다.
+          ...(form.choiceAllowTextInput && form.choiceTextInputType !== 'text'
             ? {
-                textInputType: 'number' as const,
-                ...(form.choiceTextInputNumberFormat
+                textInputType: form.choiceTextInputType,
+                ...(form.choiceTextInputType === 'number' && form.choiceTextInputNumberFormat
                   ? { textInputNumberFormat: form.choiceTextInputNumberFormat }
                   : {}),
               }

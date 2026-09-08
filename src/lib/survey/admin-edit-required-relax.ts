@@ -6,17 +6,22 @@
  * 비운다). 관리자는 그 값을 알 수 없어 채울 수 없으므로, "다음"/제출을 영구히
  * 막으면 수정 자체가 불가능해진다(v80/81 141건 실측 — 2026-08-13 재결정).
  *
- * 완화 대상은 "필수인데 비어있음"(kind: required-cells | required-detail)뿐이다.
- * 값이 들어간 칸의 차단형 검증(kind: range | sum | formula)은 admin-edit 에서도
+ * 완화 대상은 둘이다.
+ * (1) "필수인데 비어있음"(kind: required-cells | required-detail) — 위 사정.
+ * (2) 입력 형식 불일치(kind: format) — 외국 번호·대표번호처럼 형식에 맞지 않지만
+ *     정당한 값이 실제로 들어온다. 막는 것의 목적은 응답자가 오타를 흘리지 않게 하는
+ *     것이지 데이터를 봉인하는 것이 아니다(2026-09-08 결정).
+ *
+ * 값이 들어간 칸의 나머지 차단형 검증(kind: range | sum | formula)은 admin-edit 에서도
  * 계속 차단한다 — 완화가 잘못된 값의 저장을 허용해서는 안 된다.
  *
  * 응답자/미리보기/테스트 흐름은 이 모듈을 전혀 참조하지 않는다(무변경 보장).
  */
 import type { NumericIssue } from './numeric-validation';
 
-/** 이슈 kind → "빈 필수"(완화 대상) 여부. range/sum/formula 는 차단형(완화 불가). */
-export function isRelaxableRequiredIssueKind(kind: NumericIssue['kind']): boolean {
-  return kind === 'required-cells' || kind === 'required-detail';
+/** 이슈 kind → 완화(경고 후 통과) 대상 여부. range/sum/formula 는 차단형(완화 불가). */
+export function isRelaxableIssueKind(kind: NumericIssue['kind']): boolean {
+  return kind === 'required-cells' || kind === 'required-detail' || kind === 'format';
 }
 
 export interface StepRelaxClassification {
@@ -24,6 +29,8 @@ export interface StepRelaxClassification {
   hasBlockingIssue: boolean;
   /** 완화 가능한 "빈 필수" 개수 (질문 단위 미응답 + 셀/상세 단위 누락 합산). */
   emptyRequiredCount: number;
+  /** 완화 가능한 형식 불일치 개수. 빈 필수와 따로 세어 경고 문구가 뭉뚱그려지지 않게 한다. */
+  formatCount: number;
 }
 
 /**
@@ -50,17 +57,23 @@ export function classifyStepIssues(
   const unansweredSet = new Set(unansweredQuestionIds);
   let hasBlockingIssue = false;
   let relaxableCount = unansweredSet.size;
+  let formatCount = 0;
   for (const [questionId, issues] of numericIssuesByQuestion) {
     for (const issue of issues) {
-      if (!isRelaxableRequiredIssueKind(issue.kind)) {
+      if (!isRelaxableIssueKind(issue.kind)) {
         hasBlockingIssue = true;
+        continue;
+      }
+      // 형식은 값이 들어간 칸의 이야기라 "미응답 질문" 과 겹치지 않는다 — 따로 센다.
+      if (issue.kind === 'format') {
+        formatCount += issue.cellIds?.length ?? 1;
         continue;
       }
       if (unansweredSet.has(questionId)) continue; // (1)에서 이미 집계된 질문 — 중복 방지
       relaxableCount += issue.cellIds?.length ?? 1;
     }
   }
-  return { hasBlockingIssue, emptyRequiredCount: relaxableCount };
+  return { hasBlockingIssue, emptyRequiredCount: relaxableCount, formatCount };
 }
 
 /**
@@ -73,12 +86,16 @@ export function snapshotStepResponses(
   questionIds: readonly string[],
   responses: Record<string, unknown>,
 ): string {
-  return JSON.stringify(
-    [...questionIds].sort().map((id) => [id, responses[id]]),
-  );
+  return JSON.stringify([...questionIds].sort().map((id) => [id, responses[id]]));
 }
 
-/** admin-edit 경고 배너 문구. */
-export function buildAdminEmptyRequiredWarningMessage(count: number): string {
-  return `빈 필수 응답 ${count}개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다`;
+/** admin-edit 경고 배너 문구. 무엇 때문에 걸렸는지를 말해야 담당자가 판단할 수 있다. */
+export function buildAdminRelaxWarningMessage({
+  emptyRequiredCount,
+  formatCount,
+}: Pick<StepRelaxClassification, 'emptyRequiredCount' | 'formatCount'>): string {
+  const parts: string[] = [];
+  if (emptyRequiredCount > 0) parts.push(`빈 필수 응답 ${emptyRequiredCount}개`);
+  if (formatCount > 0) parts.push(`형식이 맞지 않는 값 ${formatCount}개`);
+  return `${parts.join(' · ')} — '다음 →' 한 번 더 누르면 그대로 넘어갑니다`;
 }

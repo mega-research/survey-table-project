@@ -11,6 +11,7 @@
  * 이월 요약(조사 대상 attrs)과는 다른 것이다 — 본문 토큰 치환·표시 조건은
  * 이월 요약을 쓰고, 이월 응답은 값 표시·복사에만 쓴다.
  */
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 
 /** 이월 응답 한 벌. 질문 id → 값. 사이드카 키(`__` 접두)도 함께 들어온다. */
 export type PriorAnswers = Record<string, unknown>;
@@ -65,4 +66,52 @@ export function hasPriorAnswer(
 export function resolvePriorWaveLabel(label: string | null | undefined): string {
   const trimmed = label?.trim();
   return trimmed ? trimmed : DEFAULT_PRIOR_WAVE_LABEL;
+}
+
+/**
+ * 단답형·표 셀의 이월 원본 값(문자열만). 없거나 문자열이 아니면 null.
+ *
+ * 입력 형식 검사의 면제 판정에 쓴다 — 응답자가 치지도 않은 지난 회차 값 때문에
+ * "다음"이 막히면 따를 수 있는 길이 없다. 비교는 **글자 그대로**다. 한 글자라도
+ * 고치면 그때부터 검사 대상이 된다.
+ */
+export function priorAnswerText(
+  prior: PriorAnswers | null | undefined,
+  questionId: string,
+  cellId?: string,
+): string | null {
+  if (!prior || isSidecarKey(questionId)) return null;
+  const value = prior[questionId];
+  if (cellId === undefined) return typeof value === 'string' ? value : null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const cell = (value as Record<string, unknown>)[cellId];
+  return typeof cell === 'string' ? cell : null;
+}
+
+/**
+ * 보기 상세기재(`__optTexts__` 사이드카)의 이월 원본 값. 보기-소스 표의 입력 셀도
+ * 같은 자리에 셀 id 로 들어 있어 한 함수가 둘을 덮는다.
+ */
+export function priorOptionText(
+  prior: PriorAnswers | null | undefined,
+  questionId: string,
+  optionId: string,
+): string | null {
+  if (!prior) return null;
+  const sidecar = prior[OPT_TEXTS_KEY];
+  if (!sidecar || typeof sidecar !== 'object') return null;
+  const byQuestion = (sidecar as Record<string, unknown>)[questionId];
+  if (!byQuestion || typeof byQuestion !== 'object') return null;
+  const value = (byQuestion as Record<string, unknown>)[optionId];
+  return typeof value === 'string' ? value : null;
+}
+
+/**
+ * 이 값이 이월 원본과 **글자 그대로** 같은가 — 응답자가 손대지 않았다는 뜻이다.
+ *
+ * 입력 형식 검사와 blur 정돈이 함께 쓰는 단일 판정이다(CONTEXT.md "이월 면제").
+ * 화면과 검증이 각자 비교하면 "문구는 안 뜨는데 다음은 막힌다" 같은 어긋남이 난다.
+ */
+export function isUntouchedPriorValue(value: string, priorOriginal: string | null): boolean {
+  return priorOriginal !== null && value === priorOriginal;
 }

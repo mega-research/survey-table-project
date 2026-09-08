@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyOptionTextSettings } from '@/components/survey-builder/question-option-helpers';
 import type { RadioOption } from '@/types/survey';
+
+import { applyOptionTextSettings } from './question-option-helpers';
 
 /**
  * 옵션 텍스트(allowTextInput) 설정 반영 규칙.
@@ -63,5 +64,20 @@ describe('applyOptionTextSettings', () => {
     expect(next.label).toBe('매출액');
     expect(next.value).toBe('1');
     expect(next.allowTextInput).toBe(true);
+  });
+
+  it('입력 형식도 그대로 실린다 — 숫자 모드만 통과시키면 형식이 조용히 버려진다', () => {
+    const next = applyOptionTextSettings(base, { textInputType: 'mobile' });
+    expect(next.textInputType).toBe('mobile');
+  });
+
+  it('형식을 고르면 숫자 서식은 남지 않는다 (배타)', () => {
+    const numbered = applyOptionTextSettings(base, {
+      textInputType: 'number',
+      textInputNumberFormat: { unit: 'million' },
+    });
+    const formatted = applyOptionTextSettings(numbered, { textInputType: 'email' });
+    expect(formatted.textInputType).toBe('email');
+    expect('textInputNumberFormat' in formatted).toBe(false);
   });
 });

@@ -1,8 +1,10 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import type { NumberFormat } from '@/types/survey';
+import { isInputFormat } from '@/types/input-type';
+import type { InputType, NumberFormat } from '@/types/survey';
 
+import { InputFormatSelect } from './input-format-select';
 import { NumberFormatFields } from './number-format-fields';
 import type { OptionTextSettings } from './question-option-helpers';
 
@@ -10,7 +12,7 @@ interface OptionTextSettingsEditorProps {
   /** 같은 화면에 여러 옵션이 동시에 렌더되므로 체크박스 id 충돌을 막는 접두어 (보통 옵션 id). */
   idPrefix: string;
   placeholder: string | undefined;
-  textInputType: 'text' | 'number' | undefined;
+  textInputType: InputType | undefined;
   numberFormat: NumberFormat | undefined;
   /** 세 필드를 항상 함께 넘긴다 — 받는 쪽은 `applyOptionTextSettings` 로 반영한다. */
   onChange: (next: OptionTextSettings) => void;
@@ -23,7 +25,7 @@ interface OptionTextSettingsEditorProps {
  */
 function buildSettings(
   placeholder: string | undefined,
-  textInputType: 'text' | 'number' | undefined,
+  textInputType: InputType | undefined,
   numberFormat: NumberFormat | undefined,
 ): OptionTextSettings {
   return {
@@ -62,10 +64,20 @@ export function OptionTextSettingsEditor({
         />
       </div>
 
+      <InputFormatSelect
+        id={`${idPrefix}-text-format`}
+        value={textInputType}
+        size="xs"
+        showHint={false}
+        // 형식을 고르면 숫자 서식은 버린다 — 형식과 숫자 모드는 배타다.
+        onChange={(next) => onChange(buildSettings(placeholder, next, undefined))}
+      />
+
       <div className="flex items-start gap-2">
         <input
           type="checkbox"
           id={`${idPrefix}-text-number`}
+          disabled={isInputFormat(textInputType)}
           checked={isNumber}
           // 끌 때 형식도 함께 버린다 — 다시 켰을 때 예전 단위가 되살아나면
           // "껐다 켰으니 기본값" 이라는 기대와 어긋난다.

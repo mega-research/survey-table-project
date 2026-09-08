@@ -6,32 +6,41 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
-import { responsesToLookupShape, type BranchEvalCtx } from '@/utils/branch-eval';
-import {
-  shouldDisplayColumn,
-  shouldDisplayDynamicGroup,
-  shouldDisplayRow,
-} from '@/utils/branch-logic';
-import { rangeViolationMessage } from '@/utils/number-format';
-import { parseNumericInput } from '@/utils/numeric-input';
-import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
-
-import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
-import { isCellEnabled } from './cell-gating';
-import { collectRequiredOptionTextIssues } from './required-option-text-validation';
-import { optionTextTargetId } from './option-text-target';
 import { collectSelectedOptionIds } from '@/lib/option-text-migration';
 import {
   CHOICE_TABLE_CONTROL_CELL_TYPES,
   isChoiceTableCellEmpty,
 } from '@/lib/survey/choice-table-cell-value';
+import { isInputFormat } from '@/types/input-type';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
+import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
+import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
+import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
+import { rangeViolationMessage } from '@/utils/number-format';
+import { parseNumericInput } from '@/utils/numeric-input';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { isCellValuePresent } from '@/utils/table-cell-semantics';
+
+import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
+import { isCellEnabled } from './cell-gating';
+import { optionTextTargetId } from './option-text-target';
+import {
+  type PriorAnswers,
+  isUntouchedPriorValue,
+  priorAnswerText,
+  priorOptionText,
+} from './prior-answers';
+import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
+  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula' | 'format';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -51,6 +60,11 @@ export interface NumericValidationCtx {
   /** 수식 검증(evaluateCellFormula)용 — 미주입 시 수식 검증만 스킵 */
   lookups?: SurveyLookup[];
   contactAttrs?: Record<string, string | undefined>;
+  /**
+   * 이월 응답 한 벌(원본). 입력 형식 검사의 면제 판정에만 쓴다 — 값이 이월 원본과
+   * 글자 그대로 같으면 응답자가 손대지 않은 것이므로 검사하지 않는다. 미전달 시 전부 검사.
+   */
+  priorAnswers?: PriorAnswers | null;
 }
 
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
@@ -325,27 +339,44 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
  */
 /**
- * 숫자 모드(textInputType='number') 옵션 텍스트의 범위 위반 — 선택된 옵션의 비어있지 않은
+ * 숫자 모드(textInputType='number')·형식 지정 옵션 텍스트의 위반 — 선택된 옵션의 비어있지 않은
  * 텍스트만 본다 (선택 해제된 옵션의 잔존 텍스트는 required-option-text-validation 과 같은
  * 이유로 신뢰하지 않는다). max·소수·허용값은 타이핑에서 차단되므로 여기서는 min 이 실질이다.
  */
-function collectOptionTextRangeIssues(
+function collectOptionTextIssues(
   question: Question,
   response: unknown,
   optionTexts: Record<string, string> | undefined,
+  priorAnswers?: PriorAnswers | null,
 ): NumericIssue[] {
   if (!optionTexts) return [];
   const options = resolveChoiceOptions(question);
-  const numericOptions = options.filter(
-    (o) => o.allowTextInput === true && o.textInputType === 'number',
+  const checkedOptions = options.filter(
+    (o) =>
+      o.allowTextInput === true && (o.textInputType === 'number' || isInputFormat(o.textInputType)),
   );
-  if (numericOptions.length === 0) return [];
+  if (checkedOptions.length === 0) return [];
   const selected = collectSelectedOptionIds(response, options);
   const issues: NumericIssue[] = [];
-  for (const opt of numericOptions) {
+  for (const opt of checkedOptions) {
     if (!selected.has(opt.id)) continue;
-    const text = (optionTexts[opt.id] ?? '').trim();
+    const raw = optionTexts[opt.id] ?? '';
+    const text = raw.trim();
     if (!text) continue;
+    // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교라 trim 하면 어긋난다.
+    const formatMessage = formatViolationMessage(
+      opt.textInputType,
+      raw,
+      priorOptionText(priorAnswers, question.id, opt.id),
+    );
+    if (formatMessage) {
+      issues.push({
+        kind: 'format',
+        message: formatMessage,
+        detailTargetIds: [optionTextTargetId(question.id, opt.id)],
+      });
+      continue;
+    }
     const message = rangeViolationMessage(text, opt.textInputNumberFormat);
     if (message) {
       issues.push({
@@ -375,14 +406,30 @@ function collectChoiceTableInputCellIssues(
   const issues: NumericIssue[] = [];
   const missingTargets: string[] = [];
 
-  for (const row of question.tableRowsData ?? []) {
-    if (
-      ctx &&
-      row.displayCondition &&
-      !shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
-    ) {
-      continue;
-    }
+  // 렌더러(choice-table-response)와 **같은 투영**을 쓴다 — 조건으로 숨은 열의 셀은
+  // 화면에 없으므로 검증 대상이 아니다. 행 조건만 보면 숨은 열에 남은 잔존값이
+  // "고칠 입력칸이 없는 채로" 다음을 영구 차단한다.
+  // 열 정의가 없는 표는 투영하지 않는다 — 보이는 열이 0개로 잡혀 셀이 통째로 사라지고
+  // 필수 셀 검사까지 조용히 꺼진다(레거시 데이터 방어).
+  const columns = question.tableColumns ?? [];
+  const rows = question.tableRowsData ?? [];
+  const visibleRows =
+    columns.length === 0
+      ? rows.filter(
+          (row) =>
+            !ctx ||
+            !row.displayCondition ||
+            shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
+        )
+      : projectConditionalTableLayout({
+          columns,
+          rows,
+          ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+          ...(ctx ? { allResponses: ctx.allResponses, allQuestions: ctx.allQuestions } : {}),
+          ...(ctx ? { evalCtx: toBranchEvalCtx(ctx) } : {}),
+        }).rows;
+
+  for (const row of visibleRows) {
     for (const cell of row.cells) {
       if (cell.isHidden) continue;
       // 선택형 셀(radio/checkbox/select)도 같은 사이드카에 값을 넣는다 —
@@ -394,12 +441,30 @@ function collectChoiceTableInputCellIssues(
         continue;
       }
       if (cell.type !== 'input') continue;
-      const value = (texts?.[cell.id] ?? '').trim();
+      const rawValue = texts?.[cell.id] ?? '';
+      const value = rawValue.trim();
       if (isRequiredCell(cell) && value === '') {
         missingTargets.push(optionTextTargetId(question.id, cell.id));
         continue;
       }
-      if (value === '' || cell.inputType !== 'number') continue;
+      if (value === '') continue;
+      // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교다.
+      const formatMessage = isTokenPrefilled(cell.defaultValueTemplate)
+        ? null
+        : formatViolationMessage(
+            cell.inputType,
+            rawValue,
+            priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+          );
+      if (formatMessage) {
+        issues.push({
+          kind: 'format',
+          message: formatMessage,
+          detailTargetIds: [optionTextTargetId(question.id, cell.id)],
+        });
+        continue;
+      }
+      if (cell.inputType !== 'number') continue;
       const message = rangeViolationMessage(value, cell.numberFormat);
       if (message) {
         issues.push({
@@ -421,11 +486,54 @@ function collectChoiceTableInputCellIssues(
   return issues;
 }
 
+/**
+ * 토큰 프리필로 잠긴 칸인가. 렌더러가 `disabled` 로 그리는 판정과 같은 식이다
+ * (`question-input.tsx` · `cells/input-cell.tsx`).
+ *
+ * 잠긴 칸은 형식 검사 대상이 아니다 — 응답자가 고칠 수 없는 값(명단에서 온 외국 번호 등)으로
+ * 진행을 막으면 따를 수 있는 길이 없다. 이월 면제와 같은 원칙이다. 값이 유효하면 저장 경계가
+ * 정규형으로 정돈한다(`normalizeFormatValues`).
+ */
+function isTokenPrefilled(template: string | null | undefined): boolean {
+  return (template ?? '').trim().length > 0;
+}
+
+/**
+ * 값 하나를 형식에 비추어 본다. 통과·빈 값이면 null.
+ * 형식 검사는 값이 있는 칸만 본다 — 미입력 차단은 필수 판정 소관이다.
+ *
+ * `value` 는 **가공하지 않은 원문**을 넘긴다 — 이월 면제가 글자 그대로 비교이기 때문이다.
+ * 앞뒤 공백을 미리 떼면 화면(훅)은 면제인데 검증은 아닌 상태가 되어, 손대지 않은 값에
+ * 문구도 없이 막힌다.
+ */
+function formatViolationMessage(
+  inputType: Question['inputType'] | undefined,
+  value: unknown,
+  priorOriginal?: string | null,
+): string | null {
+  if (!isInputFormat(inputType)) return null;
+  if (typeof value !== 'string') return null;
+  // 이월 원본 그대로면 면제 — 응답자가 치지도 않은 지난 회차 값이다.
+  if (isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
+  const result = parseInputFormat(inputType, value);
+  return result.ok ? null : formatFailureMessage(inputType, result.reason);
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
   ctx?: NumericValidationCtx,
 ): NumericIssue[] {
+  if (question.type === 'text' && isInputFormat(question.inputType)) {
+    if (isTokenPrefilled(question.defaultValueTemplate)) return [];
+    const message = formatViolationMessage(
+      question.inputType,
+      response,
+      priorAnswerText(ctx?.priorAnswers, question.id),
+    );
+    return message ? [{ kind: 'format', message }] : [];
+  }
+
   if (question.type === 'text' && question.inputType === 'number') {
     if (typeof response !== 'string') return [];
     const message = rangeViolationMessage(response, question.numberFormat);
@@ -442,7 +550,9 @@ export function collectNumericIssues(
         detailTargetIds: optionTextIssues.detailTargetIds ?? [],
       });
     }
-    issues.push(...collectOptionTextRangeIssues(question, response, ctx?.optionTexts));
+    issues.push(
+      ...collectOptionTextIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
+    );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
     return issues;
   }
@@ -486,6 +596,25 @@ export function collectNumericIssues(
         kind: 'range',
         message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다',
         cellIds: rangeViolations.map((c) => c.id),
+      });
+    }
+
+    // 1-2) 셀 입력 형식 위반 — 값이 있는 칸만 본다. 사유별 문구는 셀 아래에 붙으므로
+    //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
+    const formatViolations = inputCells.filter(
+      (c) =>
+        !isTokenPrefilled(c.defaultValueTemplate) &&
+        formatViolationMessage(
+          c.inputType,
+          cellValues[c.id],
+          priorAnswerText(ctx?.priorAnswers, question.id, c.id),
+        ) !== null,
+    );
+    if (formatViolations.length > 0) {
+      issues.push({
+        kind: 'format',
+        message: '입력 형식이 맞지 않은 칸이 있습니다',
+        cellIds: formatViolations.map((c) => c.id),
       });
     }
 
@@ -608,10 +737,20 @@ export function collectNumericIssues(
     if (cell.type !== 'calc' || !cell.formula || !cell.calcValidation) continue;
     if (!ctx) continue;
     const fCtx = toFormulaCtx(ctx);
-    const computed = evaluateCellFormula(cell.formula, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    const computed = evaluateCellFormula(
+      cell.formula,
+      question.id,
+      fCtx,
+      cell.numberFormat?.decimalPlaces,
+    );
     if (computed === null) continue;
     if (areAllFormulaRefsEmpty(cell.calcValidation.target, question.id, fCtx)) continue;
-    const target = evaluateCellFormula(cell.calcValidation.target, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    const target = evaluateCellFormula(
+      cell.calcValidation.target,
+      question.id,
+      fCtx,
+      cell.numberFormat?.decimalPlaces,
+    );
     if (target === null) continue;
     const v = cell.calcValidation;
     if (!compareValues(computed, target, v.operator, v.tolerance ?? 0)) {

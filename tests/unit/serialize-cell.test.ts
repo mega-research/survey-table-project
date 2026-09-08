@@ -1,14 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
 import type { BranchRule, TableCell } from '@/types/survey';
 import {
   ANSWER_QUOTE_NAMEABLE_CELL_TYPES,
-  buildUpdatedCell,
-  cellToFormState,
-  GROUPABLE_CELL_TYPES,
   type CellFormState,
   type ContentType,
+  GROUPABLE_CELL_TYPES,
+  buildUpdatedCell,
+  cellToFormState,
 } from '@/utils/serialize-cell';
 
 // 기본 폼 상태 (cellToFormState 가 빈 셀에서 만드는 값과 동일).
@@ -292,10 +292,12 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 
   it('타입별 optional 값은 폼에서 비우면 기존 셀 값도 제거한다', () => {
-    const image = buildUpdatedCell(
-      baseForm('image'),
-      { id: 'img1', type: 'image', content: '', imageUrl: 'https://x/old.png' },
-    );
+    const image = buildUpdatedCell(baseForm('image'), {
+      id: 'img1',
+      type: 'image',
+      content: '',
+      imageUrl: 'https://x/old.png',
+    });
     expect(image).not.toHaveProperty('imageUrl');
 
     const checkbox = buildUpdatedCell(
@@ -384,7 +386,12 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 
   it('ranking_opt: choiceGroupId 설정 시 저장되고 해제(빈 문자열) 시 키가 제거된다', () => {
-    const cellWithGroup: TableCell = { id: 'c1', type: 'ranking_opt', content: '', choiceGroupId: 'rg1' };
+    const cellWithGroup: TableCell = {
+      id: 'c1',
+      type: 'ranking_opt',
+      content: '',
+      choiceGroupId: 'rg1',
+    };
 
     // 그룹 설정: choiceGroupId='rg1'
     const formSet: CellFormState = { ...baseForm('ranking_opt'), choiceGroupId: 'rg1' };
@@ -399,7 +406,12 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
 
   it('choice_opt: choiceGroupId 설정·해제가 ranking_opt 경로에 영향을 주지 않는다 (회귀)', () => {
     // choice_opt 기존 케이스 불변 확인
-    const cellWithGroup: TableCell = { id: 'c1', type: 'choice_opt', content: '', choiceGroupId: 'g1' };
+    const cellWithGroup: TableCell = {
+      id: 'c1',
+      type: 'choice_opt',
+      content: '',
+      choiceGroupId: 'g1',
+    };
     const formSet: CellFormState = { ...baseForm('choice_opt'), choiceGroupId: 'g1' };
     const outSet = buildUpdatedCell(formSet, baseCell);
     expect(outSet.choiceGroupId).toBe('g1');
@@ -485,7 +497,12 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 
   it('choice_opt: choiceGroupId 설정 시 저장되고 해제(빈 문자열) 시 키가 제거된다', () => {
-    const cellWithGroup: TableCell = { id: 'c1', type: 'choice_opt', content: '', choiceGroupId: 'g1' };
+    const cellWithGroup: TableCell = {
+      id: 'c1',
+      type: 'choice_opt',
+      content: '',
+      choiceGroupId: 'g1',
+    };
 
     // 그룹 설정: choiceGroupId='g1'
     const formSet: CellFormState = { ...baseForm('choice_opt'), choiceGroupId: 'g1' };
@@ -546,20 +563,17 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 
   it('코드/엑셀라벨/병합도 기본값으로 되돌리면 기존 값을 제거한다', () => {
-    const out = buildUpdatedCell(
-      baseForm('input'),
-      {
-        id: 'c1',
-        type: 'input',
-        content: '',
-        rowspan: 2,
-        colspan: 2,
-        cellCode: 'OLD_CODE',
-        isCustomCellCode: true,
-        exportLabel: 'OLD_LABEL',
-        isCustomExportLabel: true,
-      },
-    );
+    const out = buildUpdatedCell(baseForm('input'), {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      rowspan: 2,
+      colspan: 2,
+      cellCode: 'OLD_CODE',
+      isCustomCellCode: true,
+      exportLabel: 'OLD_LABEL',
+      isCustomExportLabel: true,
+    });
 
     expect(out).not.toHaveProperty('rowspan');
     expect(out).not.toHaveProperty('colspan');
@@ -581,16 +595,10 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 
   it('mobileDisplay: text/image/video 셀이고 hidden 이 아닐 때만 새로 저장', () => {
-    const shown = buildUpdatedCell(
-      { ...baseForm('text'), mobileDisplay: 'header' },
-      baseCell,
-    );
+    const shown = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'header' }, baseCell);
     expect(shown.mobileDisplay).toBe('header');
     // input 셀의 label visible 상태는 기본값이므로 저장 대상 아님
-    const input = buildUpdatedCell(
-      { ...baseForm('input'), mobileDisplay: 'inline' },
-      baseCell,
-    );
+    const input = buildUpdatedCell({ ...baseForm('input'), mobileDisplay: 'inline' }, baseCell);
     expect(input).not.toHaveProperty('mobileDisplay');
     // hidden 은 저장 안 함
     const hidden = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'hidden' }, baseCell);
@@ -642,7 +650,16 @@ describe('GROUPABLE_CELL_TYPES', () => {
     expect(GROUPABLE_CELL_TYPES.has('choice_opt')).toBe(true);
     expect(GROUPABLE_CELL_TYPES.has('ranking_opt')).toBe(true);
 
-    const notGroupable: TableCell['type'][] = ['text', 'image', 'video', 'input', 'checkbox', 'radio', 'select', 'ranking'];
+    const notGroupable: TableCell['type'][] = [
+      'text',
+      'image',
+      'video',
+      'input',
+      'checkbox',
+      'radio',
+      'select',
+      'ranking',
+    ];
     for (const t of notGroupable) {
       expect(GROUPABLE_CELL_TYPES.has(t)).toBe(false);
     }
@@ -723,7 +740,12 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
     const out = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'legend' }, baseCell);
     expect(out.mobileDisplay).toBe('legend');
 
-    const cell: TableCell = { id: 'c1', type: 'text', content: '전혀 도움 안 됨', mobileDisplay: 'legend' };
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'text',
+      content: '전혀 도움 안 됨',
+      mobileDisplay: 'legend',
+    };
     expect(cellToFormState(cell).mobileDisplay).toBe('legend');
   });
 
@@ -763,7 +785,12 @@ describe('buildUpdatedCell — mobileOptionsColumns', () => {
   });
 
   it('cellToFormState 는 셀의 mobileOptionsColumns 를 hydrate 한다', () => {
-    const state = cellToFormState({ id: 'c1', type: 'radio', content: '', mobileOptionsColumns: 2 });
+    const state = cellToFormState({
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      mobileOptionsColumns: 2,
+    });
     expect(state.cellMobileOptionsColumns).toBe(2);
   });
 });
@@ -1174,7 +1201,8 @@ describe('input 셀 개인정보 암호화 플래그 (piiEncrypted)', () => {
 
   it('cellToFormState 는 셀의 piiEncrypted 를 inputPiiEncrypted 로 복원한다', () => {
     expect(
-      cellToFormState({ id: 'c1', type: 'input', content: '', piiEncrypted: true }).inputPiiEncrypted,
+      cellToFormState({ id: 'c1', type: 'input', content: '', piiEncrypted: true })
+        .inputPiiEncrypted,
     ).toBe(true);
     expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputPiiEncrypted).toBe(false);
   });
@@ -1201,6 +1229,28 @@ describe('choice_opt 텍스트 입력 숫자 모드 (textInputType / textInputNu
     };
     const out = buildUpdatedCell(form, baseCell);
     expect(out).not.toHaveProperty('textInputType');
+    expect(out).not.toHaveProperty('textInputNumberFormat');
+  });
+
+  it('입력 형식도 셀에 저장된다 — 숫자 모드만 통과시키면 형식이 조용히 버려진다', () => {
+    const form: CellFormState = {
+      ...baseForm('choice_opt'),
+      choiceAllowTextInput: true,
+      choiceTextInputType: 'mobile',
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.textInputType).toBe('mobile');
+  });
+
+  it('형식을 고르면 숫자 서식은 싣지 않는다 (배타)', () => {
+    const form: CellFormState = {
+      ...baseForm('choice_opt'),
+      choiceAllowTextInput: true,
+      choiceTextInputType: 'email',
+      choiceTextInputNumberFormat: { thousandSeparator: true },
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.textInputType).toBe('email');
     expect(out).not.toHaveProperty('textInputNumberFormat');
   });
 

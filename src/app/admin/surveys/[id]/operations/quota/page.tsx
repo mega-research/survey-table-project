@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { QuotaEditor } from '@/components/operations/quota/quota-editor';
 import { getQuestionsBySurvey } from '@/data/surveys';
 import { getQuotaConfig } from '@/features/quota/server/services/quota.service';
-import type { Question } from '@/types/survey';
+import type { InputType, Question } from '@/types/survey';
 
 export const metadata: Metadata = {
   title: '현황 - 쿼터 설정',
@@ -32,8 +32,8 @@ function toQuestion(row: Awaited<ReturnType<typeof getQuestionsBySurvey>>[number
     ...(row.tableRowsData != null
       ? { tableRowsData: row.tableRowsData as NonNullable<Question['tableRowsData']> }
       : {}),
-    ...((row.inputType as 'text' | 'number' | null) != null
-      ? { inputType: row.inputType as 'text' | 'number' }
+    ...((row.inputType as InputType | null) != null
+      ? { inputType: row.inputType as InputType }
       : {}),
   };
 }

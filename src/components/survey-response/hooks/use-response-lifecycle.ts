@@ -3,13 +3,16 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
 
-import { client } from '@/shared/lib/rpc';
-import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
+import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
-import { collectNumericIssues } from '@/lib/survey/numeric-validation';
-import { isRelaxableRequiredIssueKind } from '@/lib/survey/admin-edit-required-relax';
+import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/lib/group-ordering';
 import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
-import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { isRelaxableIssueKind } from '@/lib/survey/admin-edit-required-relax';
+import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
+import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
+import { client } from '@/shared/lib/rpc';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
@@ -17,14 +20,12 @@ import {
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
 } from '@/utils/branch-logic';
-import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
-import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 import { sendDraftBeacon, sessionStorageKey } from './session-helpers';
 import {
+  type DuplicateStatus,
   handleInvalidTestLinkMutationError,
   handlePausedMutationError,
-  type DuplicateStatus,
 } from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
@@ -34,7 +35,11 @@ type ResponsesMap = Record<string, unknown>;
  * 동일 내용으로 반복 발사되는 beacon 을 걸러내는 데 쓴다.
  */
 function snapshotOfAnswers(answers: Record<string, unknown>): string {
-  return JSON.stringify(Object.keys(answers).sort().map((key) => [key, answers[key]]));
+  return JSON.stringify(
+    Object.keys(answers)
+      .sort()
+      .map((key) => [key, answers[key]]),
+  );
 }
 
 /**
@@ -94,6 +99,8 @@ interface UseResponseLifecycleArgs {
   loadedSurvey: Survey | null;
   /** calc 셀 수식 평가(LUT 참조)·저장 페이로드 주입용. survey-response-flow 의 formulaCtx 와 동일 소스(병합 전 원본). */
   contactAttrs: Record<string, string | undefined>;
+  /** 이월 응답 한 벌(원본) — 입력 형식 검사의 면제 판정에만 쓴다. */
+  priorAnswers: PriorAnswers | null;
   currentStep: RenderStep | undefined;
   currentStepIndex: number;
   steps: RenderStep[];
@@ -210,6 +217,7 @@ export function useResponseLifecycle({
   setHasTestAttemptOwnership,
   loadedSurvey,
   contactAttrs,
+  priorAnswers,
   currentStep,
   currentStepIndex,
   steps,
@@ -321,8 +329,7 @@ export function useResponseLifecycle({
     // 완료·차단 전환 직후 늦게 발사된 백그라운드 저장은 스킵한다 (서버는 in_progress 행만 갱신).
     if (background && (isCompleted || terminalBlocked)) return true;
 
-    const responseId =
-      activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
+    const responseId = activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
     if (!responseId) {
       const hasOnlyRootSidecars = [...pendingAnswerSavesRef.current.keys()].every((key) =>
         key.startsWith('__'),
@@ -508,7 +515,7 @@ export function useResponseLifecycle({
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&
         !isCreatingResponse &&
         responseCreationPromiseRef.current === null &&
-        !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
+        !isRecovering && // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
         loadedSurvey &&
         currentStep
       ) {
@@ -683,14 +690,7 @@ export function useResponseLifecycle({
     };
     // activeResponseIdRef / pendingAnswerSavesRef / lastBeaconSnapshotRef 는 이벤트 발생
     // 시점에 .current 를 읽으므로 deps 에 넣지 않는다 (리스너 재등록 불필요).
-  }, [
-    isAdminEdit,
-    isPreview,
-    isCompleted,
-    terminalBlocked,
-    testIdentity,
-    hasTestAttemptOwnership,
-  ]);
+  }, [isAdminEdit, isPreview, isCompleted, terminalBlocked, testIdentity, hasTestAttemptOwnership]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
@@ -724,6 +724,7 @@ export function useResponseLifecycle({
           setHighlightQuestionIds(new Set([firstId]));
           const targetIdx = findStepIndexOfQuestion(steps, firstId);
           const hasBlockingDetailIssue = collectNumericIssues(firstRequired, responses[firstId], {
+            priorAnswers,
             allResponses: responses,
             allQuestions: questions,
             optionTexts: optionTextsByQuestion[firstId],
@@ -738,9 +739,7 @@ export function useResponseLifecycle({
             setCurrentStepIndex(targetIdx);
           } else {
             // 이미 해당 step이면 카드로 스크롤
-            const el = document.querySelector<HTMLElement>(
-              `[data-question-id="${firstId}"]`,
-            );
+            const el = document.querySelector<HTMLElement>(`[data-question-id="${firstId}"]`);
             el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
           setIsSubmitting(false);
@@ -750,11 +749,13 @@ export function useResponseLifecycle({
 
       // 숫자 차단형 검증 — 실제 경로상 질문 전체 대상.
       // admin-edit 은 값이 들어간 칸의 차단형 위반(range/sum/formula)만 다시 확인한다 —
-      // "빈 필수"(required-cells/required-detail)는 위에서 이미 의도적으로 건너뛰었다.
+      // "빈 필수"(required-cells/required-detail)와 형식 불일치(format)는 위에서 이미
+      // 의도적으로 건너뛰었다(경고 후 통과).
       // 응답자 흐름은 collectNumericIssues 의 모든 kind 를 그대로 차단(무변경).
       const numericViolated = questions.filter((q) => {
         if (!traversedIds.has(q.id)) return false;
         const issues = collectNumericIssues(q, responses[q.id], {
+          priorAnswers,
           allResponses: responses,
           allQuestions: questions,
           optionTexts: optionTextsByQuestion[q.id],
@@ -762,7 +763,7 @@ export function useResponseLifecycle({
           contactAttrs,
         });
         return isAdminEdit
-          ? issues.some((issue) => !isRelaxableRequiredIssueKind(issue.kind))
+          ? issues.some((issue) => !isRelaxableIssueKind(issue.kind))
           : issues.length > 0;
       });
       if (numericViolated.length > 0) {
@@ -879,7 +880,12 @@ export function useResponseLifecycle({
                 .filter(
                   (g) =>
                     g.enabled &&
-                    shouldDisplayDynamicGroup(g, responses as Record<string, unknown>, questions, evalCtx),
+                    shouldDisplayDynamicGroup(
+                      g,
+                      responses as Record<string, unknown>,
+                      questions,
+                      evalCtx,
+                    ),
                 )
                 .map((g) => g.groupId),
             );
@@ -895,9 +901,11 @@ export function useResponseLifecycle({
               }
             }
 
-            return q.tableRowsData!
-              .filter((row) => {
-                if (!shouldDisplayRow(row, responses as Record<string, unknown>, questions, evalCtx))
+            return q
+              .tableRowsData!.filter((row) => {
+                if (
+                  !shouldDisplayRow(row, responses as Record<string, unknown>, questions, evalCtx)
+                )
                   return false;
                 if (hasDynamic) {
                   if (row.dynamicGroupId && enabledGroupIds.has(row.dynamicGroupId)) {
@@ -987,6 +995,7 @@ export function useResponseLifecycle({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     contactAttrs,
+    priorAnswers,
     adminContext,
     currentResponseId,
     currentStep,
