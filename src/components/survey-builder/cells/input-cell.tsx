@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { priorAnswerText } from '@/lib/survey/prior-answers';
+import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
@@ -20,6 +22,7 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  questionId,
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
@@ -58,11 +61,13 @@ export const InputCell = React.memo(function InputCell({
     });
 
   // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
   const formatField = useInputFormatField({
     format,
     rawValue: currentValue,
     onRawChange: onUpdateValue,
     enabled: !isPrefilled,
+    priorOriginal: priorAnswerText(priorAnswersForFormat, questionId, cell.id),
   });
 
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.

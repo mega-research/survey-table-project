@@ -1034,6 +1034,8 @@ function SurveyResponseFlowActive({
         optionTexts: effectiveOptionTextsByQuestion[q.id],
         lookups: loadedSurvey?.lookups ?? [],
         contactAttrs,
+        // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
+        priorAnswers,
       });
       if (issues.length > 0) map.set(q.id, issues);
     }
@@ -1046,6 +1048,7 @@ function SurveyResponseFlowActive({
     effectiveOptionTextsByQuestion,
     loadedSurvey?.lookups,
     contactAttrs,
+    priorAnswers,
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
@@ -1247,6 +1250,7 @@ function SurveyResponseFlowActive({
       setHasTestAttemptOwnership,
       loadedSurvey,
       contactAttrs,
+      priorAnswers,
       currentStep,
       currentStepIndex,
       steps,

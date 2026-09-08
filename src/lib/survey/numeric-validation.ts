@@ -30,6 +30,7 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { isCellEnabled } from './cell-gating';
 import { optionTextTargetId } from './option-text-target';
+import { type PriorAnswers, priorAnswerText, priorOptionText } from './prior-answers';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
@@ -53,6 +54,11 @@ export interface NumericValidationCtx {
   /** 수식 검증(evaluateCellFormula)용 — 미주입 시 수식 검증만 스킵 */
   lookups?: SurveyLookup[];
   contactAttrs?: Record<string, string | undefined>;
+  /**
+   * 이월 응답 한 벌(원본). 입력 형식 검사의 면제 판정에만 쓴다 — 값이 이월 원본과
+   * 글자 그대로 같으면 응답자가 손대지 않은 것이므로 검사하지 않는다. 미전달 시 전부 검사.
+   */
+  priorAnswers?: PriorAnswers | null;
 }
 
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
@@ -335,6 +341,7 @@ function collectOptionTextRangeIssues(
   question: Question,
   response: unknown,
   optionTexts: Record<string, string> | undefined,
+  priorAnswers?: PriorAnswers | null,
 ): NumericIssue[] {
   if (!optionTexts) return [];
   const options = resolveChoiceOptions(question);
@@ -349,7 +356,11 @@ function collectOptionTextRangeIssues(
     if (!selected.has(opt.id)) continue;
     const text = (optionTexts[opt.id] ?? '').trim();
     if (!text) continue;
-    const formatMessage = formatViolationMessage(opt.textInputType, text);
+    const formatMessage = formatViolationMessage(
+      opt.textInputType,
+      text,
+      priorOptionText(priorAnswers, question.id, opt.id),
+    );
     if (formatMessage) {
       issues.push({
         kind: 'format',
@@ -412,7 +423,11 @@ function collectChoiceTableInputCellIssues(
         continue;
       }
       if (value === '') continue;
-      const formatMessage = formatViolationMessage(cell.inputType, value);
+      const formatMessage = formatViolationMessage(
+        cell.inputType,
+        value,
+        priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+      );
       if (formatMessage) {
         issues.push({
           kind: 'format',
@@ -450,9 +465,12 @@ function collectChoiceTableInputCellIssues(
 function formatViolationMessage(
   inputType: Question['inputType'] | undefined,
   value: unknown,
+  priorOriginal?: string | null,
 ): string | null {
   if (!isInputFormat(inputType)) return null;
   if (typeof value !== 'string') return null;
+  // 이월 원본 그대로면 면제 — 응답자가 치지도 않은 지난 회차 값이다.
+  if (priorOriginal !== null && priorOriginal !== undefined && value === priorOriginal) return null;
   const result = parseInputFormat(inputType, value);
   return result.ok ? null : formatFailureMessage(inputType, result.reason);
 }
@@ -463,7 +481,11 @@ export function collectNumericIssues(
   ctx?: NumericValidationCtx,
 ): NumericIssue[] {
   if (question.type === 'text' && isInputFormat(question.inputType)) {
-    const message = formatViolationMessage(question.inputType, response);
+    const message = formatViolationMessage(
+      question.inputType,
+      response,
+      priorAnswerText(ctx?.priorAnswers, question.id),
+    );
     return message ? [{ kind: 'format', message }] : [];
   }
 
@@ -483,7 +505,9 @@ export function collectNumericIssues(
         detailTargetIds: optionTextIssues.detailTargetIds ?? [],
       });
     }
-    issues.push(...collectOptionTextRangeIssues(question, response, ctx?.optionTexts));
+    issues.push(
+      ...collectOptionTextRangeIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
+    );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
     return issues;
   }
@@ -533,7 +557,12 @@ export function collectNumericIssues(
     // 1-2) 셀 입력 형식 위반 — 값이 있는 칸만 본다. 사유별 문구는 셀 아래에 붙으므로
     //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
     const formatViolations = inputCells.filter(
-      (c) => formatViolationMessage(c.inputType, cellValues[c.id]) !== null,
+      (c) =>
+        formatViolationMessage(
+          c.inputType,
+          cellValues[c.id],
+          priorAnswerText(ctx?.priorAnswers, question.id, c.id),
+        ) !== null,
     );
     if (formatViolations.length > 0) {
       issues.push({

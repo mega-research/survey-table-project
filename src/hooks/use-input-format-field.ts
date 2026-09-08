@@ -22,6 +22,12 @@ interface Options {
   onRawChange: (raw: string) => void;
   /** 프리필 잠금 등으로 응답자가 못 고치는 칸이면 false — 정돈도 검사도 하지 않는다. */
   enabled?: boolean;
+  /**
+   * 이 칸의 이월(지난 회차) 원본 값. 현재 값이 여기에 글자 그대로 같으면 응답자가
+   * 손대지 않은 것이므로 정돈도 검사도 하지 않는다 — 치지도 않은 값 때문에 막히면
+   * 따를 수 있는 길이 없다. 한 글자라도 고치면 그때부터 대상이다.
+   */
+  priorOriginal?: string | null;
 }
 
 export interface InputFormatField {
@@ -39,20 +45,22 @@ export function useInputFormatField({
   rawValue,
   onRawChange,
   enabled = true,
+  priorOriginal = null,
 }: Options): InputFormatField {
   const [focused, setFocused] = useState(false);
+  const untouchedPrior = priorOriginal !== null && rawValue === priorOriginal;
 
   const handleFocus = useCallback(() => setFocused(true), []);
 
   const handleBlur = useCallback(() => {
     setFocused(false);
-    if (!format || !enabled) return;
+    if (!format || !enabled || untouchedPrior) return;
     const result = parseInputFormat(format, rawValue);
     if (result.ok && result.normalized !== rawValue) onRawChange(result.normalized);
-  }, [format, enabled, rawValue, onRawChange]);
+  }, [format, enabled, untouchedPrior, rawValue, onRawChange]);
 
   let violation: string | null = null;
-  if (format && enabled && !focused && rawValue.trim() !== '') {
+  if (format && enabled && !untouchedPrior && !focused && rawValue.trim() !== '') {
     const result = parseInputFormat(format, rawValue);
     if (!result.ok) violation = formatFailureMessage(format, result.reason);
   }

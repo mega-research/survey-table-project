@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
+import { priorOptionText } from '@/lib/survey/prior-answers';
+import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { cn } from '@/lib/utils';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { isInputFormat } from '@/types/input-type';
@@ -74,10 +76,12 @@ export function OptionTextInput({
   });
 
   // 형식 모드 — blur 정돈·위반 문구. 숫자 모드와 배타이므로 훅 둘이 동시에 일하지 않는다.
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
   const formatField = useInputFormatField({
     format,
     rawValue,
     onRawChange: (v) => setOptionText(questionId, option.id, v),
+    priorOriginal: priorOptionText(priorAnswersForFormat, questionId, option.id),
   });
 
   const sharedProps = {

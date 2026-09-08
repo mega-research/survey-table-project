@@ -11,7 +11,7 @@ import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
-import { hasPriorAnswer } from '@/lib/survey/prior-answers';
+import { hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
@@ -692,12 +692,15 @@ function TextResponseInput({
       enabled: isNumberMode,
     });
 
-  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
+  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니고,
+  // 이월 값을 손대지 않은 칸도 대상이 아니다(prior-answers 의 면제 규칙).
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
   const formatField = useInputFormatField({
     format,
     rawValue: currentValue,
     onRawChange: onChange,
     enabled: !isPrefilled,
+    priorOriginal: priorAnswerText(priorAnswersForFormat, question.id),
   });
 
   useEffect(() => {

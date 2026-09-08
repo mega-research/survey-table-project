@@ -66,3 +66,41 @@ export function resolvePriorWaveLabel(label: string | null | undefined): string 
   const trimmed = label?.trim();
   return trimmed ? trimmed : DEFAULT_PRIOR_WAVE_LABEL;
 }
+
+/**
+ * 단답형·표 셀의 이월 원본 값(문자열만). 없거나 문자열이 아니면 null.
+ *
+ * 입력 형식 검사의 면제 판정에 쓴다 — 응답자가 치지도 않은 지난 회차 값 때문에
+ * "다음"이 막히면 따를 수 있는 길이 없다. 비교는 **글자 그대로**다. 한 글자라도
+ * 고치면 그때부터 검사 대상이 된다.
+ */
+export function priorAnswerText(
+  prior: PriorAnswers | null | undefined,
+  questionId: string,
+  cellId?: string,
+): string | null {
+  if (!prior || isSidecarKey(questionId)) return null;
+  const value = prior[questionId];
+  if (cellId === undefined) return typeof value === 'string' ? value : null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const cell = (value as Record<string, unknown>)[cellId];
+  return typeof cell === 'string' ? cell : null;
+}
+
+/**
+ * 보기 상세기재(`__optTexts__` 사이드카)의 이월 원본 값. 보기-소스 표의 입력 셀도
+ * 같은 자리에 셀 id 로 들어 있어 한 함수가 둘을 덮는다.
+ */
+export function priorOptionText(
+  prior: PriorAnswers | null | undefined,
+  questionId: string,
+  optionId: string,
+): string | null {
+  if (!prior) return null;
+  const sidecar = prior['__optTexts__'];
+  if (!sidecar || typeof sidecar !== 'object') return null;
+  const byQuestion = (sidecar as Record<string, unknown>)[questionId];
+  if (!byQuestion || typeof byQuestion !== 'object') return null;
+  const value = (byQuestion as Record<string, unknown>)[optionId];
+  return typeof value === 'string' ? value : null;
+}

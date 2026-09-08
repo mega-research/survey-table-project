@@ -188,3 +188,92 @@ describe('collectNumericIssues — 보기-소스 표 안의 input 셀 형식', (
     expect(collectNumericIssues(question, 'src', ctxWith({ tel: '' }))).toEqual([]);
   });
 });
+
+describe('collectNumericIssues — 이월 프리필 면제', () => {
+  const prior = {
+    q1: '02-1234-5678',
+    qt: { c1: '1544-1234' },
+    __optTexts__: { qc: { o1: 'nobody@nowhere' } },
+  };
+
+  it('단답형: 이월 원본과 글자 그대로 같으면 검사하지 않는다', () => {
+    const q = textQuestion({ inputType: 'mobile' });
+    expect(
+      collectNumericIssues(q, '02-1234-5678', {
+        allResponses: {},
+        allQuestions: [q],
+        priorAnswers: prior,
+      }),
+    ).toEqual([]);
+  });
+
+  it('단답형: 한 글자라도 고치면 그때부터 검사한다', () => {
+    const q = textQuestion({ inputType: 'mobile' });
+    const issues = collectNumericIssues(q, '02-1234-5679', {
+      allResponses: {},
+      allQuestions: [q],
+      priorAnswers: prior,
+    });
+    expect(issues[0]?.kind).toBe('format');
+  });
+
+  it('표 셀: 셀 단위로 각자 판정한다', () => {
+    const q = { ...tableQuestion([{ id: 'c1', inputType: 'phone' }]), id: 'qt' } as Question;
+    expect(
+      collectNumericIssues(
+        q,
+        { c1: '1544-1234' },
+        {
+          allResponses: {},
+          allQuestions: [q],
+          priorAnswers: prior,
+        },
+      ),
+    ).toEqual([]);
+    expect(
+      collectNumericIssues(
+        q,
+        { c1: '1544-12345' },
+        {
+          allResponses: {},
+          allQuestions: [q],
+          priorAnswers: prior,
+        },
+      )[0]?.kind,
+    ).toBe('format');
+  });
+
+  it('상세기재: 사이드카 값도 각자 판정한다', () => {
+    const q = {
+      id: 'qc',
+      type: 'checkbox',
+      title: '연락 수단',
+      required: false,
+      order: 0,
+      options: [
+        { id: 'o1', label: '이메일', value: '1', allowTextInput: true, textInputType: 'email' },
+      ],
+    } as unknown as Question;
+    expect(
+      collectNumericIssues(q, ['1'], {
+        allResponses: {},
+        allQuestions: [q],
+        optionTexts: { o1: 'nobody@nowhere' },
+        priorAnswers: prior,
+      }),
+    ).toEqual([]);
+    expect(
+      collectNumericIssues(q, ['1'], {
+        allResponses: {},
+        allQuestions: [q],
+        optionTexts: { o1: 'nobody@nowhere.' },
+        priorAnswers: prior,
+      })[0]?.kind,
+    ).toBe('format');
+  });
+
+  it('이월 응답이 없으면 종전대로 전부 검사한다', () => {
+    const q = textQuestion({ inputType: 'mobile' });
+    expect(collectNumericIssues(q, '02-1234-5678')[0]?.kind).toBe('format');
+  });
+});

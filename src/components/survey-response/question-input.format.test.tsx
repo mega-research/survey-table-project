@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
+import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import type { Question } from '@/types/survey';
 
 function textQuestion(overrides: Partial<Question> = {}): Question {
@@ -19,13 +20,26 @@ function textQuestion(overrides: Partial<Question> = {}): Question {
 }
 
 /** 응답값을 실제로 들고 있는 얇은 래퍼 — 정돈된 값이 저장으로 흘러가는지 보려면 필요하다. */
-function Harness({ question }: { question: Question }) {
-  const [value, setValue] = useState<unknown>('');
+function Harness({
+  question,
+  initialValue = '',
+  prior = null,
+}: {
+  question: Question;
+  initialValue?: string;
+  prior?: Record<string, unknown> | null;
+}) {
+  const [value, setValue] = useState<unknown>(initialValue);
   return (
-    <>
+    <PriorAnswersProvider
+      answers={prior}
+      confirmAnswers={prior}
+      waveLabel={null}
+      changeConfirmEnabled={false}
+    >
       <QuestionInput question={question} value={value} onChange={setValue} />
       <output data-testid="stored">{typeof value === 'string' ? value : ''}</output>
-    </>
+    </PriorAnswersProvider>
   );
 }
 
@@ -83,5 +97,38 @@ describe('단답형 입력 형식', () => {
   it('예시 값이 placeholder 로 보인다', () => {
     render(<Harness question={textQuestion({ inputType: 'biz_number' })} />);
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '123-45-67891');
+  });
+
+  it('이월 원본 그대로면 검사도 정돈도 하지 않는다', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        question={textQuestion({ inputType: 'mobile' })}
+        initialValue="02-1234-5678"
+        prior={{ q1: '02-1234-5678' }}
+      />,
+    );
+    const input = screen.getByRole('textbox');
+
+    await user.click(input);
+    await user.tab();
+    expect(input).toHaveValue('02-1234-5678');
+    expect(screen.queryByText(/휴대전화 번호가 아닙니다/)).not.toBeInTheDocument();
+  });
+
+  it('이월 값을 한 글자라도 고치면 그때부터 검사한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        question={textQuestion({ inputType: 'mobile' })}
+        initialValue="02-1234-5678"
+        prior={{ q1: '02-1234-5678' }}
+      />,
+    );
+    const input = screen.getByRole('textbox');
+
+    await user.type(input, '9');
+    await user.tab();
+    expect(screen.getByText(/휴대전화 번호가 아닙니다/)).toBeInTheDocument();
   });
 });
