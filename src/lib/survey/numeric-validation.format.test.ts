@@ -28,11 +28,12 @@ describe('collectNumericIssues — 입력 형식', () => {
     expect(issues[0]?.kind).toBe('format');
     expect(issues[0]?.message).toBe('휴대전화 번호가 아닙니다');
 
+    // 체크섬은 꺼져 있다(ENFORCE_CHECKSUM=false) — 자릿수 위반으로 사유를 확인한다.
     const bizIssues = collectNumericIssues(
       textQuestion({ inputType: 'biz_number' }),
-      '111-11-11111',
+      '111-11-1111',
     );
-    expect(bizIssues[0]?.message).toBe('사업자번호 확인번호가 맞지 않습니다. 다시 확인해 주세요');
+    expect(bizIssues[0]?.message).toBe('사업자번호는 10자리입니다');
   });
 
   it('빈 값은 형식 검사 대상이 아니다 — 미입력 차단은 필수 판정 소관', () => {

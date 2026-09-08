@@ -29,15 +29,22 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['phone', '07012345678', '070-1234-5678'],
   ['phone', '01012345678', '010-1234-5678'],
   ['phone', '010 1234 5678', '010-1234-5678'],
-  // 사업자번호 — 실제 유효 번호(체크섬 통과)
+  // 사업자번호 — 자릿수만 맞으면 통과한다(ENFORCE_CHECKSUM=false, 2026-09-09)
   ['biz_number', '1248100998', '124-81-00998'],
   ['biz_number', '124-81-00998', '124-81-00998'],
   ['biz_number', '124 81 00998', '124-81-00998'],
   ['biz_number', '2208162517', '220-81-62517'],
-  // 법인번호 — 실제 유효 번호(체크섬 통과)
+  // 체크섬을 끈 뒤 통과하게 된 값들 — 스위치를 다시 켜면 여기가 먼저 깨진다
+  ['biz_number', '1234567890', '123-45-67890'],
+  ['biz_number', '1248100997', '124-81-00997'],
+  ['biz_number', '1111111111', '111-11-11111'],
+  ['biz_number', '0000000000', '000-00-00000'],
+  // 법인번호 — 자릿수만 맞으면 통과한다
   ['corp_number', '1301110006246', '130111-0006246'],
   ['corp_number', '130111-0006246', '130111-0006246'],
   ['corp_number', '130111 0006246', '130111-0006246'],
+  ['corp_number', '1301110006245', '130111-0006245'],
+  ['corp_number', '1111111111111', '111111-1111111'],
   // 이메일 — 소문자 정규화
   ['email', 'a@b.co.kr', 'a@b.co.kr'],
   ['email', ' Hong.Gil-Dong@Example.CO.KR ', 'hong.gil-dong@example.co.kr'],
@@ -63,15 +70,10 @@ const FAIL: Array<[InputFormat, string, string]> = [
   // 사업자번호
   ['biz_number', '124810099', 'wrong_length'],
   ['biz_number', '12481009988', 'wrong_length'],
-  ['biz_number', '1111111111', 'checksum_mismatch'],
-  ['biz_number', '1248100997', 'checksum_mismatch'],
-  ['biz_number', '0000000000', 'checksum_mismatch'],
   ['biz_number', '124-81-0099a', 'not_a_number'],
   // 법인번호
   ['corp_number', '130111000624', 'wrong_length'],
   ['corp_number', '13011100062466', 'wrong_length'],
-  ['corp_number', '1301110006245', 'checksum_mismatch'],
-  ['corp_number', '1111111111111', 'checksum_mismatch'],
   ['corp_number', '130111-000624a', 'not_a_number'],
   // 이메일
   ['email', 'a@b', 'malformed'],

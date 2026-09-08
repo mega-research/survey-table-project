@@ -35,12 +35,13 @@ describe('표 input 셀 입력 형식', () => {
     render(<Harness cell={inputCell({ inputType: 'biz_number' })} />);
     const input = screen.getByRole('textbox');
 
-    await user.type(input, '111-11-11111');
-    expect(screen.queryByText(/확인번호가 맞지 않습니다/)).not.toBeInTheDocument();
+    // 체크섬은 꺼져 있다(ENFORCE_CHECKSUM=false) — 자릿수 위반으로 사유를 확인한다.
+    await user.type(input, '111-11-1111');
+    expect(screen.queryByText(/10자리입니다/)).not.toBeInTheDocument();
 
     await user.tab();
-    expect(screen.getByText(/사업자번호 확인번호가 맞지 않습니다/)).toBeInTheDocument();
-    expect(input).toHaveValue('111-11-11111');
+    expect(screen.getByText(/사업자번호는 10자리입니다/)).toBeInTheDocument();
+    expect(input).toHaveValue('111-11-1111');
   });
 
   it('형식 미지정 셀은 blur 해도 값이 그대로다', async () => {

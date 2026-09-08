@@ -95,6 +95,18 @@ function parsePhone(digits: string): ParseResult {
 }
 
 /**
+ * 사업자·법인번호 체크섬 검사 스위치 — **2026-09-09 실사 중 끔.**
+ *
+ * 체크섬이 실사에서 너무 자주 정당한 응답을 막았다. 지금은 **자릿수와 하이픈 정돈만** 한다
+ * (`1234567890` 처럼 형태만 맞는 값도 통과한다). 아래 체크섬 함수는 그대로 두었으니 이 상수를
+ * `true` 로 돌리면 원래 규칙으로 복귀한다 — 지우지 말 것.
+ *
+ * 끄면 `checksum_mismatch` 는 나오지 않는다. 사유·문구는 남겨 둔다(다시 켜면 필요하고,
+ * 켜고 끄는 것이 문구 표를 건드리는 일이 되면 안 된다).
+ */
+const ENFORCE_CHECKSUM: boolean = false;
+
+/**
  * 사업자등록번호 체크섬 — 앞 9자리에 가중치 [1,3,7,1,3,7,1,3,5] 를 곱해 더하고,
  * 9번째 자리(가중치 5)의 곱은 10으로 나눈 몫을 한 번 더 더한다. 10의 보수가 마지막 자리다.
  */
@@ -108,7 +120,10 @@ function bizChecksumDigit(digits: string): number {
 
 function parseBizNumber(digits: string): ParseResult {
   if (digits.length !== 10) return { ok: false, reason: 'wrong_length' };
-  if (isRepeatedDigit(digits) || bizChecksumDigit(digits) !== Number(digits[9])) {
+  if (
+    ENFORCE_CHECKSUM &&
+    (isRepeatedDigit(digits) || bizChecksumDigit(digits) !== Number(digits[9]))
+  ) {
     return { ok: false, reason: 'checksum_mismatch' };
   }
   return {
@@ -128,7 +143,10 @@ function corpChecksumDigit(digits: string): number {
 
 function parseCorpNumber(digits: string): ParseResult {
   if (digits.length !== 13) return { ok: false, reason: 'wrong_length' };
-  if (isRepeatedDigit(digits) || corpChecksumDigit(digits) !== Number(digits[12])) {
+  if (
+    ENFORCE_CHECKSUM &&
+    (isRepeatedDigit(digits) || corpChecksumDigit(digits) !== Number(digits[12]))
+  ) {
     return { ok: false, reason: 'checksum_mismatch' };
   }
   return { ok: true, normalized: `${digits.slice(0, 6)}-${digits.slice(6)}` };
