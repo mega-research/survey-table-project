@@ -15,6 +15,13 @@ interface PriorAnswersContextValue {
    * 자리가 확인 컨트롤 말고도 있다(숫자 기본값 자동 채움이 프리필을 밀어내는 것을 막는다).
    */
   answers: PriorAnswers | null;
+  /**
+   * 변동 확인 컨트롤·잠금·확인 게이트·확인 시 복사가 쓰는 이월 응답 — 문항별 이월값
+   * 불러오기 조건(`priorAnswerCondition`)으로 이미 걸러진 값이다. 스위치가 꺼져 있거나
+   * 걸러진 결과가 없으면 null. `answers`(원본)를 그대로 쓰면 조건이 거짓인 문항도
+   * 확인 대상으로 뜬다 — 변동 확인 스위치를 켜는 순간 이월값 조건이 무시되는 사고다.
+   */
+  confirmAnswers: PriorAnswers | null;
   /** 응답 화면 문구에 쓰는 회차 라벨. 설정이 비어 있으면 기본 문구. */
   waveLabel: string;
   /**
@@ -26,6 +33,7 @@ interface PriorAnswersContextValue {
 
 const EMPTY_VALUE: PriorAnswersContextValue = {
   answers: null,
+  confirmAnswers: null,
   waveLabel: DEFAULT_PRIOR_WAVE_LABEL,
   changeConfirmEnabled: false,
 };
@@ -41,11 +49,14 @@ const PriorAnswersContext = createContext<PriorAnswersContextValue>(EMPTY_VALUE)
  */
 export function PriorAnswersProvider({
   answers,
+  confirmAnswers,
   waveLabel,
   changeConfirmEnabled,
   children,
 }: {
   answers: PriorAnswers | null;
+  /** 이월값 조건으로 걸러진 이월 응답 — 변동 확인 소비자는 이 값을 써야 한다. */
+  confirmAnswers: PriorAnswers | null;
   /** surveys.priorWaveLabel(라이브 값). null/공백이면 기본 문구로 떨어진다. */
   waveLabel: string | null | undefined;
   /** surveys.changeConfirmEnabled(라이브 값). */
@@ -53,8 +64,13 @@ export function PriorAnswersProvider({
   children: ReactNode;
 }) {
   const value = useMemo<PriorAnswersContextValue>(
-    () => ({ answers, waveLabel: resolvePriorWaveLabel(waveLabel), changeConfirmEnabled }),
-    [answers, waveLabel, changeConfirmEnabled],
+    () => ({
+      answers,
+      confirmAnswers,
+      waveLabel: resolvePriorWaveLabel(waveLabel),
+      changeConfirmEnabled,
+    }),
+    [answers, confirmAnswers, waveLabel, changeConfirmEnabled],
   );
   return <PriorAnswersContext.Provider value={value}>{children}</PriorAnswersContext.Provider>;
 }

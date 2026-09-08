@@ -1,3 +1,4 @@
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 import { type BranchEvalCtx, emptyBranchEvalCtx } from '@/utils/branch-eval';
 import { evaluateQuestionConditionGroup } from '@/utils/branch-logic';
@@ -29,4 +30,29 @@ export function shouldLoadPriorAnswer(
     [...allQuestions],
     evalCtx ?? emptyBranchEvalCtx(),
   );
+}
+
+/**
+ * 이월 응답 한 벌에서 이월값 불러오기 조건이 거짓인 문항의 값을 걷어낸다.
+ *
+ * 변동 확인(체인지 컨펌) 스위치가 켜진 경로가 쓰는 필터다. 그 경로는 이 함수를 거치지
+ * 않은 원본 이월 응답을 그대로 표시·잠금·확인 게이트·확인 시 복사에 썼는데, 그러면
+ * 문항별 이월값 조건이 조용히 무시된다 — 스위치를 켜는 순간 이 기능이 죽는 셈이다.
+ * 조건이 없는 문항, 조건이 참인 문항, 문항 목록에 없는 키(사이드카 등)는 그대로 통과한다.
+ */
+export function filterPriorAnswersByCondition(
+  prior: PriorAnswers | null | undefined,
+  questions: readonly Question[],
+  responses: Record<string, unknown>,
+  evalCtx?: BranchEvalCtx,
+): PriorAnswers | null {
+  if (!prior) return null;
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const filtered: PriorAnswers = {};
+  for (const [questionId, value] of Object.entries(prior)) {
+    const question = questionById.get(questionId);
+    if (question && !shouldLoadPriorAnswer(question, responses, questions, evalCtx)) continue;
+    filtered[questionId] = value;
+  }
+  return filtered;
 }

@@ -91,7 +91,11 @@ import {
   collectNumericIssues,
   collectVisibleTableCells,
 } from '@/lib/survey/numeric-validation';
-import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
+import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
+import {
+  collectPriorAnswerPrefills,
+  collectPriorAnswerRetractions,
+} from '@/lib/survey/prior-answer-prefill';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
@@ -386,12 +390,6 @@ function SurveyResponseFlowActive({
    * (admin-edit·미리보기)는 이월 응답 자체가 null 이라 어느 쪽이든 무동작이다.
    */
   const changeConfirmEnabled = control?.changeConfirmEnabled ?? false;
-  /**
-   * 변동 확인 기계에 넘길 이월 응답. 스위치가 꺼져 있으면 null 을 넘겨 확인 컨트롤·잠금·
-   * 게이트·되묻기가 한꺼번에 무동작이 된다 — 판정 술어가 모두 이월 값 보유를 전제로
-   * 서 있기 때문이다. 꺼진 경로에서 이월 값은 아래 프리필 effect 가 응답값으로 옮긴다.
-   */
-  const confirmPriorAnswers = changeConfirmEnabled ? priorAnswers : null;
 
   /** 제출·초안 페이로드 조립 — 기타 상세기재 정리. 숨은 문항 값은 응답 상태에서 이미 지워졌다. */
   const buildSubmissionPayload = useCallback(
@@ -507,6 +505,20 @@ function SurveyResponseFlowActive({
     }),
     [calcAwareResponses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
   );
+
+  /**
+   * 변동 확인 기계에 넘길 이월 응답 — 문항별 이월값 불러오기 조건으로 걸러진 값이다.
+   * 원본 `priorAnswers` 를 그대로 넘기면 조건이 거짓인 문항도 확인 대상으로 뜬다
+   * (변동 확인 스위치를 켜는 순간 이월값 조건이 조용히 무시되는 사고).
+   * 스위치가 꺼져 있으면 null 을 넘겨 확인 컨트롤·잠금·게이트·되묻기가 한꺼번에
+   * 무동작이 된다 — 판정 술어가 모두 이월 값 보유를 전제로 서 있기 때문이다.
+   * 꺼진 경로에서 이월 값은 아래 프리필 effect 가 응답값으로 옮긴다.
+   */
+  const filteredPriorAnswers = useMemo(
+    () => filterPriorAnswersByCondition(priorAnswers, questions, responses, evalCtx),
+    [priorAnswers, questions, responses, evalCtx],
+  );
+  const confirmPriorAnswers = changeConfirmEnabled ? filteredPriorAnswers : null;
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
   const steps = useMemo<RenderStep[]>(
@@ -1303,7 +1315,12 @@ function SurveyResponseFlowActive({
    * 멈추면 그 뒤에 조건이 풀려 드러난 문항이 영영 채워지지 않는다. 회복이 응답 묶음을
    * 통째로 갈아끼워도 값이 없는 문항은 다음 패스가 다시 채우고, 값이 있는 문항은 건너뛰므로
    * 응답자가 고친 값을 덮지 않는다. 회복 중 INSERT 중복은 쓰기 창구가 자체 가드로 막는다.
+   *
+   * **이 세션에서 프리필한 문항 id 는 `prefilledQuestionIdsRef` 에 남긴다.** 조건이 다시
+   * 거짓으로 뒤집혔을 때 아래 회수 effect 가 "이 값이 프리필로 들어온 것인가"를 판정하는
+   * 근거다 — 응답자가 손댔는지 여부와 무관하게 회수해야 하므로 값 자체로는 판정할 수 없다.
    */
+  const prefilledQuestionIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (changeConfirmEnabled) return;
     if (!prefillSettled) return;
@@ -1316,7 +1333,10 @@ function SurveyResponseFlowActive({
       questions,
       evalCtx,
     );
-    for (const entry of entries) handleResponse(entry.questionId, entry.value);
+    for (const entry of entries) {
+      handleResponse(entry.questionId, entry.value);
+      prefilledQuestionIdsRef.current.add(entry.questionId);
+    }
   }, [
     changeConfirmEnabled,
     prefillSettled,
@@ -1327,6 +1347,36 @@ function SurveyResponseFlowActive({
     evalCtx,
     handleResponse,
   ]);
+
+  /**
+   * 이월 값 회수 (Finding A) — 이월값 불러오기 조건이 참이라 깔았던 값이 거짓으로
+   * 뒤집히면 걷어낸다. 프리필은 채우기만 하는 반쪽짜리라 이 effect가 없으면 "이직
+   * 안 함"으로 깔린 작년 회사가 "이직함"으로 고쳐도 그대로 제출된다 — 기능을 만든 이유
+   * 그 자체가 뚫린다.
+   *
+   * **판정 대상은 단계 제한이 없다.** 회수해야 할 문항이 지금 페이지에 없을 수 있다 —
+   * 응답자가 앞 페이지로 돌아가 BQ1을 고치면 하위 문항은 이미 지나온 뒤 페이지에 있다.
+   * 전체 문항 목록을 넘겨 판정한다.
+   *
+   * **프리필과 같은 창구(handleResponse)로 지운다.** 직접 setResponses 를 쓰면 위 프리필
+   * effect 와 같은 이유로 초안 큐에 실리지 않는다.
+   */
+  useEffect(() => {
+    if (changeConfirmEnabled) return;
+    if (!prefillSettled) return;
+    const retractions = collectPriorAnswerRetractions(
+      questions,
+      priorAnswers,
+      responses,
+      questions,
+      prefilledQuestionIdsRef.current,
+      evalCtx,
+    );
+    for (const questionId of retractions) {
+      handleResponse(questionId, undefined);
+      prefilledQuestionIdsRef.current.delete(questionId);
+    }
+  }, [changeConfirmEnabled, prefillSettled, questions, priorAnswers, responses, evalCtx, handleResponse]);
 
   const lastSyncedOptionTextsRef = useRef(optionTexts);
   useEffect(() => {
@@ -1691,6 +1741,7 @@ function SurveyResponseFlowActive({
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
       <PriorAnswersProvider
         answers={priorAnswers}
+        confirmAnswers={confirmPriorAnswers}
         waveLabel={control?.priorWaveLabel}
         changeConfirmEnabled={changeConfirmEnabled}
       >
