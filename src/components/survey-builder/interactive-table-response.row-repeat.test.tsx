@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { expandRepeatRows } from '@/lib/question/row-repeat';
-import type { RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { Question, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { InteractiveTableResponse } from './interactive-table-response';
 
@@ -161,5 +161,88 @@ describe('행 반복 — 응답 화면', () => {
     expect(screen.queryByRole('button', { name: '성과 추가' })).toBeNull();
     // 설정이 없으면 구조에 있는 3벌이 전부 그려진다
     expect(inputCount()).toBe(6);
+  });
+});
+
+describe('행 반복 — 조건으로 숨은 열이 있어도', () => {
+  /**
+   * 열 displayCondition 으로 가려진 열의 셀은 렌더 파이프라인의 columnFilteredRows 에서
+   * 아예 빠진다. 벌 판정과 접기 시 값 비우기가 그 목록을 보면 숨은 칸의 값이 남아
+   * 응답자가 지운 벌이 내보내기의 "쓰인 벌"에 잡히고 조건이 뒤집히면 되살아난다.
+   */
+  const gateQuestion: Question = {
+    id: 'gate',
+    type: 'radio',
+    title: '표시 여부',
+    order: 0,
+    required: false,
+    options: [{ id: 'g1', value: 'yes', label: '예' }],
+  } as Question;
+
+  const conditionalColumns: TableColumn[] = [
+    columns[0]!,
+    {
+      ...columns[1]!,
+      displayCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: 'cond1',
+            sourceQuestionId: 'gate',
+            conditionType: 'value-match',
+            requiredValues: ['yes'],
+          },
+        ],
+      },
+    },
+  ];
+
+  function HiddenColumnHarness({ initial }: { initial: Record<string, unknown> }) {
+    const [value, setValue] = useState<Record<string, unknown>>(initial);
+    return (
+      <>
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={conditionalColumns}
+          rows={rows}
+          rowRepeatConfig={config}
+          value={value}
+          onChange={setValue}
+          allResponses={{ gate: 'no' }}
+          allQuestions={[gateQuestion]}
+          enableSticky={false}
+        />
+        <output data-testid="value">{JSON.stringify(value)}</output>
+      </>
+    );
+  }
+
+  it('숨은 칸에만 값이 있는 벌도 열린 것으로 센다', () => {
+    const second = rows.find((r) => r.repeatIndex === 2)!;
+    render(<HiddenColumnHarness initial={{ [second.cells[1]!.id]: '숨은 값' }} />);
+    // 열이 하나 가려졌으므로 벌당 입력칸은 1개다 — 2벌이 열리면 2개.
+    expect(inputCount()).toBe(2);
+  });
+
+  it('접을 때 숨은 칸의 값도 비운다', async () => {
+    const user = userEvent.setup();
+    const first = rows.find((r) => r.repeatIndex === 1)!;
+    const second = rows.find((r) => r.repeatIndex === 2)!;
+    render(
+      <HiddenColumnHarness
+        initial={{
+          [first.cells[0]!.id]: '첫째',
+          [second.cells[0]!.id]: '둘째',
+          [second.cells[1]!.id]: '숨은 값',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '마지막 줄 삭제' }));
+
+    const value = JSON.parse(screen.getByTestId('value').textContent!);
+    expect(value[second.cells[0]!.id]).toBe('');
+    expect(value[second.cells[1]!.id]).toBe('');
+    expect(value[first.cells[0]!.id]).toBe('첫째');
   });
 });

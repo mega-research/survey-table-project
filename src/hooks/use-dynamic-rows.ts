@@ -105,9 +105,13 @@ export function useDynamicRows({
 
   // 1-b) 행 반복 가시성 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다.
   //      동적 그룹 필터·행 조건 필터와 같은 층이다 (행을 숨겼다 보였다 하는 일).
+  //      **구조 전체 행**을 넘긴다 — columnFilteredRows 는 조건으로 숨은 열의 셀이 이미
+  //      빠진 목록이라, 그걸로 판정하면 숨은 칸의 값이 벌 판정과 접기(값 비우기)에서
+  //      통째로 빠진다. 응답자가 지운 벌이 내보내기의 "쓰인 벌"로 남고, 조건이 뒤집히면
+  //      지운 값이 되살아난다. 숨기는 것은 렌더의 일이고 값의 소재는 구조가 안다.
   const rowRepeat = useRowRepeat({
     questionId,
-    rows: columnFilteredRows,
+    rows,
     rowRepeatConfig,
     isTestMode,
     value,
