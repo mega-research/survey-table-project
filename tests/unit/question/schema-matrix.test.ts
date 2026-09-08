@@ -161,6 +161,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         ...MOBILE_TABLE_DISPLAY_KEYS,
         'tableValidationRules',
         'dynamicRowConfigs',
+        'rowRepeatConfig',
       ]),
     );
   });
