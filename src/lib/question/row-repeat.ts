@@ -14,7 +14,7 @@
  * 비반복 행 변수명이 r1 에서 r01 로 통째 바뀐다. 펼치기 이전 행 수로 계산한 코드를
  * 행에 박아 그 길이 의존을 끊는다 (설계 결정 3).
  */
-import type { RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
+import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 
 /** 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다. */
@@ -178,4 +178,147 @@ export function expandRepeatRows(
   }
 
   return out;
+}
+
+// ── 반복 블록 지정 가능성 검증 ────────────────────────────────────
+
+export type RowRepeatViolationKind =
+  | 'empty'
+  | 'unknown-row'
+  | 'not-contiguous'
+  | 'cell-type'
+  | 'sum-constraint'
+  | 'validation-rule'
+  | 'display-condition'
+  | 'dynamic-row'
+  | 'already-expanded';
+
+export interface RowRepeatViolation {
+  kind: RowRepeatViolationKind;
+  message: string;
+  /** 문제가 된 행 id (해당되는 경우) */
+  rowIds?: string[];
+}
+
+/** 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀과 라벨용 표시 셀뿐이다. */
+const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'text']);
+
+/**
+ * 반복 블록으로 지정해도 되는 묶음인지 검사한다. 빌더가 지정을 막는 데 쓰고,
+ * 펼치기 함수는 이 판정을 신뢰한다(검증 실패 상태를 조용히 뭉개지 않는다).
+ *
+ * 선택·계산·랭킹 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
+ * 행은 벌마다 의미가 갈려 규칙이 얽히므로 지정 대상에서 뺀다 (스펙 제외 목록).
+ */
+export function validateRowRepeatTemplate(
+  question: Pick<Question, 'tableRowsData' | 'sumConstraints' | 'tableValidationRules'>,
+  templateRowIds: string[],
+): RowRepeatViolation[] {
+  const violations: RowRepeatViolation[] = [];
+  if (templateRowIds.length === 0) {
+    return [{ kind: 'empty', message: '반복할 행을 하나 이상 지정해야 합니다.' }];
+  }
+
+  const rows = question.tableRowsData ?? [];
+  const indexById = new Map(rows.map((row, index) => [row.id, index]));
+  const unknown = templateRowIds.filter((id) => !indexById.has(id));
+  if (unknown.length > 0) {
+    violations.push({
+      kind: 'unknown-row',
+      message: '표에 없는 행이 지정되었습니다.',
+      rowIds: unknown,
+    });
+    return violations;
+  }
+
+  const indices = templateRowIds.map((id) => indexById.get(id)!).sort((a, b) => a - b);
+  const contiguous = indices.every((idx, i) => i === 0 || idx === indices[i - 1]! + 1);
+  if (!contiguous) {
+    violations.push({
+      kind: 'not-contiguous',
+      message: '반복 단위는 붙어 있는 행 묶음이어야 합니다.',
+      rowIds: templateRowIds,
+    });
+    return violations;
+  }
+
+  const blockRows = indices.map((idx) => rows[idx]!);
+  const blockRowIds = new Set(blockRows.map((row) => row.id));
+  const blockCellIds = new Set(blockRows.flatMap((row) => row.cells.map((cell) => cell.id)));
+
+  const badCellRows = blockRows.filter((row) =>
+    row.cells.some((cell) => !REPEATABLE_CELL_TYPES.has(cell.type)),
+  );
+  if (badCellRows.length > 0) {
+    violations.push({
+      kind: 'cell-type',
+      message: '반복 블록에는 입력 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
+      rowIds: badCellRows.map((row) => row.id),
+    });
+  }
+
+  const sumRefs = (question.sumConstraints ?? []).filter((constraint) =>
+    constraint.cellIds.some((id) => blockCellIds.has(id)),
+  );
+  if (sumRefs.length > 0) {
+    violations.push({
+      kind: 'sum-constraint',
+      message: '합계 제약이 참조하는 행은 반복 블록으로 지정할 수 없습니다.',
+      rowIds: badRowIdsOf(blockRows, blockCellIds, sumRefs.flatMap((c) => c.cellIds)),
+    });
+  }
+
+  const ruleRefs = (question.tableValidationRules ?? []).filter((rule) => {
+    const ids = [...(rule.conditions?.rowIds ?? []), ...(rule.additionalConditions?.rowIds ?? [])];
+    return ids.some((id) => blockRowIds.has(id));
+  });
+  if (ruleRefs.length > 0) {
+    violations.push({
+      kind: 'validation-rule',
+      message: '분기 규칙이 참조하는 행은 반복 블록으로 지정할 수 없습니다.',
+    });
+  }
+
+  const conditionRows = blockRows.filter((row) => row.displayCondition);
+  if (conditionRows.length > 0) {
+    violations.push({
+      kind: 'display-condition',
+      message: '표시 조건이 걸린 행은 반복 블록으로 지정할 수 없습니다.',
+      rowIds: conditionRows.map((row) => row.id),
+    });
+  }
+
+  const dynamicRows = blockRows.filter(
+    (row) => row.dynamicGroupId || row.showWhenDynamicGroupId,
+  );
+  if (dynamicRows.length > 0) {
+    violations.push({
+      kind: 'dynamic-row',
+      message: '동적 행 그룹에 속한 행은 반복 블록으로 지정할 수 없습니다.',
+      rowIds: dynamicRows.map((row) => row.id),
+    });
+  }
+
+  const expandedRows = blockRows.filter((row) => (row.repeatIndex ?? 1) >= 2);
+  if (expandedRows.length > 0) {
+    violations.push({
+      kind: 'already-expanded',
+      message: '이미 펼쳐진 반복 행은 다시 템플릿으로 지정할 수 없습니다.',
+      rowIds: expandedRows.map((row) => row.id),
+    });
+  }
+
+  return violations;
+}
+
+/** 참조된 셀 id 목록에서 블록 안 행 id 를 되짚는다 (경고에 행을 짚어 주기 위해). */
+function badRowIdsOf(
+  blockRows: TableRow[],
+  blockCellIds: Set<string>,
+  referencedCellIds: string[],
+): string[] {
+  const hit = new Set(referencedCellIds.filter((id) => blockCellIds.has(id)));
+  return blockRows
+    .filter((row) => row.cells.some((cell) => hit.has(cell.id)))
+    .map((row) => row.id);
 }
