@@ -70,55 +70,70 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   return (
-    <CellContentLayout
-      content={substituteTokens(cell.content, attrs, quotes)}
-      position={cell.textPosition}
-      bold={cell.textBold}
-      textColor={cell.textColor}
-    >
-      <div className="flex w-full flex-col space-y-1.5">
-        <Input
-          id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
-          type="text"
-          inputMode={isNumberMode ? 'decimal' : undefined}
-          value={isPrefilled ? prefilledValue : displayValue}
-          onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder={
-            cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
-          }
-          maxLength={cell.inputMaxLength}
-          className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
-          disabled={isPrefilled}
-          data-prefilled={isPrefilled || undefined}
-          aria-invalid={ariaInvalid || undefined}
-          aria-describedby={ariaDescribedBy}
-        />
+    // relative — 범위 위반 안내문의 절대 위치 기준점.
+    <div className="relative w-full">
+      <CellContentLayout
+        content={substituteTokens(cell.content, attrs, quotes)}
+        position={cell.textPosition}
+        bold={cell.textBold}
+        textColor={cell.textColor}
+      >
+        <div className="flex w-full flex-col space-y-1.5">
+          <Input
+            id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+            type="text"
+            inputMode={isNumberMode ? 'decimal' : undefined}
+            value={isPrefilled ? prefilledValue : displayValue}
+            onChange={handleChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder={
+              cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+            }
+            maxLength={cell.inputMaxLength}
+            className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
+            disabled={isPrefilled}
+            data-prefilled={isPrefilled || undefined}
+            aria-invalid={ariaInvalid || undefined}
+            aria-describedby={ariaDescribedBy}
+          />
 
-        {cell.inputMaxLength && !isPrefilled && (
-          <div className="flex justify-end">
-            <p className="text-xs text-gray-500">
-              <span
-                className={
-                  textValue.length >= cell.inputMaxLength ? 'font-medium text-red-500' : ''
-                }
-              >
-                {textValue.length}
-              </span>
-              {' / '}
-              {cell.inputMaxLength}자
-            </p>
-          </div>
-        )}
+          {cell.inputMaxLength && !isPrefilled && (
+            <div className="flex justify-end">
+              <p className="text-xs text-gray-500">
+                <span
+                  className={
+                    textValue.length >= cell.inputMaxLength ? 'font-medium text-red-500' : ''
+                  }
+                >
+                  {textValue.length}
+                </span>
+                {' / '}
+                {cell.inputMaxLength}자
+              </p>
+            </div>
+          )}
 
-        {(unitReading || rangeViolation) && !isPrefilled && (
-          <div className="space-y-0.5">
-            {unitReading && <p className="text-xs text-muted-foreground">{unitReading}</p>}
-            {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
-          </div>
-        )}
-      </div>
-    </CellContentLayout>
+          {unitReading && !isPrefilled && (
+            <p className="text-muted-foreground text-xs">{unitReading}</p>
+          )}
+        </div>
+      </CellContentLayout>
+
+      {/*
+        범위 위반 안내문은 흐름에서 빼서 셀 위에 띄운다.
+        흐름에 두면 이 셀만 키가 커져, 같은 행의 다른 입력 칸과 세로가 어긋나고
+        (셀은 justify-center) 옆 라벨도 입력칸 중앙에서 밀려난다 — "2011 년 / 11 월"
+        처럼 한 행에 입력 칸이 둘 있으면 눈에 띈다. 띄우면 행 높이가 안 변해 어긋나지
+        않는다. 대신 아래 행에 겹치므로 불투명 배경 + z-20 으로 읽히게 만든다.
+      */}
+      {rangeViolation && !isPrefilled && (
+        <div className="absolute top-full left-0 z-20 mt-1 w-max">
+          <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
+            * {rangeViolation}
+          </p>
+        </div>
+      )}
+    </div>
   );
 });
