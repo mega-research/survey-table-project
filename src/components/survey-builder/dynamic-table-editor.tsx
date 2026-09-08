@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -30,6 +30,7 @@ import { HeaderBulkStyleDialog } from './header-bulk-style-dialog';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
+import { RowRepeatSettingsCard } from './row-repeat-settings-card';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
@@ -52,6 +53,8 @@ interface DynamicTableEditorProps {
    */
   answerQuoteEnabled?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
@@ -60,6 +63,8 @@ interface DynamicTableEditorProps {
     tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
+  /** null 을 주면 반복을 끈다 (뒤쪽 벌이 구조에서 걷힌다) */
+  onRowRepeatConfigChange?: (config: RowRepeatConfig | null) => void;
 }
 
 // ── 컴포넌트 ──
@@ -618,8 +623,11 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 onOpenColumnConditionModal={openColumnConditionModal}
               />
 
-              {/* 데이터 행들 */}
-              {currentRows.map((row, rowIndex) => (
+              {/* 데이터 행들 — 행 반복 2벌 이후는 그리지 않는다.
+                  원본 인덱스를 보존해야 편집기의 행 조작(병합·복사·삭제)이 어긋나지 않으므로
+                  배열을 걸러내지 않고 map 안에서 건너뛴다. */}
+              {currentRows.map((row, rowIndex) =>
+                (row.repeatIndex ?? 1) >= 2 ? null : (
                 <EditorTableRow
                   key={row.id}
                   row={row}
@@ -650,7 +658,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   onSaveCell={handleSaveCell}
                   onLoadCell={handleLoadCell}
                 />
-              ))}
+              ),
+              )}
             </div>
           </div>
         </CardContent>
@@ -684,6 +693,15 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* 행 반복 설정 — 응답자가 + 로 같은 모양의 행 묶음을 늘린다 */}
+      <RowRepeatSettingsCard
+        rows={currentRows}
+        config={props.rowRepeatConfig}
+        sumConstraints={mobileTableQuestion?.sumConstraints}
+        tableValidationRules={mobileTableQuestion?.tableValidationRules}
+        onChange={props.onRowRepeatConfigChange}
+      />
 
       {/* 동적 행 그룹 설정 */}
       <Card>

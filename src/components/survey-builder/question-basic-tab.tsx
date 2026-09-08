@@ -55,6 +55,8 @@ import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionTextSettingsEditor } from './option-text-settings-editor';
 import { VariableButton } from './variable-button';
 
+import { collapseRepeatRows, expandRepeatRows } from '@/lib/question/row-repeat';
+
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
@@ -1385,17 +1387,39 @@ export function QuestionBasicTab({
             questionTitle={formData.title}
             answerQuoteEnabled={answerQuoteEnabled}
             dynamicRowConfigs={formData.dynamicRowConfigs}
+            rowRepeatConfig={formData.rowRepeatConfig}
             onTableChange={(data) => {
               setFormData((prev) => {
                 const next: Partial<Question> = {
                   ...prev,
                   tableTitle: data.tableTitle,
                   tableColumns: data.tableColumns,
-                  tableRowsData: data.tableRowsData,
+                  // 행 반복이 켜져 있으면 저장되는 것은 늘 펼친 구조다. 펼치기는 멱등이라
+                  // 편집이 일어날 때마다 다시 불러도 기존 벌의 행·셀 id 가 그대로 살아 있고,
+                  // 1벌(템플릿)의 구조 변경만 뒤 벌로 전파된다.
+                  tableRowsData: expandRepeatRows(data.tableRowsData, prev.rowRepeatConfig),
                 };
                 // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
                 // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
                 next.tableHeaderGrid = data.tableHeaderGrid;
+                return next;
+              });
+            }}
+            onRowRepeatConfigChange={(config) => {
+              setFormData((prev) => {
+                const next: Partial<Question> = { ...prev };
+                if (config) {
+                  next.rowRepeatConfig = config;
+                  next.tableRowsData = expandRepeatRows(prev.tableRowsData ?? [], config);
+                } else {
+                  // 끄면 뒤쪽 벌을 걷어낸다 — 남겨두면 응답 화면에 늘 펼쳐진 채 나온다.
+                  delete next.rowRepeatConfig;
+                  next.tableRowsData = collapseRepeatRows(prev.tableRowsData ?? []).map((row) =>
+                    row.repeatIndex === undefined
+                      ? row
+                      : (({ repeatIndex: _i, repeatSourceRowId: _s, ...rest }) => rest)(row),
+                  );
+                }
                 return next;
               });
             }}
