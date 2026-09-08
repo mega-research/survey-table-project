@@ -24,11 +24,9 @@ import {
   Video,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { toast } from 'sonner';
-
-import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -44,26 +42,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/hooks/use-survey-sync';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { CalcCellValidation, ChoiceGroup, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import {
+  CalcCellValidation,
+  ChoiceGroup,
+  HeaderCell,
+  Question,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
 import { collectChoiceOptCells, isLastRemainingChoiceOptCell } from '@/utils/choice-source';
+import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   type ContentType,
   GROUPABLE_CELL_TYPES,
-  MOBILE_LABEL_CELL_TYPES,
+  INPUT_TEXT_ALIGN_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
+  MOBILE_LABEL_CELL_TYPES,
   REQUIRED_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
-  INPUT_TEXT_ALIGN_CELL_TYPES,
   buildUpdatedCell,
 } from '@/utils/serialize-cell';
 import type { CellFormState } from '@/utils/serialize-cell';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -72,10 +82,7 @@ import {
   inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
 
-import { useCellForm } from './hooks/use-cell-form';
 import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
-import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellGatingEditor } from './cell-gating-editor';
 import { CellImageEditor } from './cell-image-editor';
@@ -83,6 +90,7 @@ import { CellStyleFields } from './cell-style-fields';
 import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { FormulaExprEditor } from './formula/formula-expr-editor';
+import { useCellForm } from './hooks/use-cell-form';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
@@ -187,9 +195,7 @@ export function CellContentModal({
   const ensureSurvey = useEnsureSurveyInDb();
   // 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는 비가역 지점이다 — 옵션 value 가 바뀌었으면
   // 이 표 질문을 참조하는 표시조건 리매핑과 그 영속(설문 저장)도 같은 지점에서 끝내야 한다.
-  const remapOptionValueInConditions = useSurveyBuilderStore(
-    (s) => s.remapOptionValueInConditions,
-  );
+  const remapOptionValueInConditions = useSurveyBuilderStore((s) => s.remapOptionValueInConditions);
   const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
@@ -468,7 +474,9 @@ export function CellContentModal({
         videoUrl.trim()
       );
       if (!hasContent) {
-        toast.error('순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.');
+        toast.error(
+          '순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.',
+        );
         return;
       }
     }
@@ -541,7 +549,8 @@ export function CellContentModal({
 
           // 신규 판정은 dirty 추적(questionChanges.added) 기준 — 로컬 id도 randomUUID라
           // UUID 형식 검사로는 미영속 질문을 구분할 수 없다(0행 update로 저장 실패하던 버그).
-          const isNewQuestion = !!useSurveyBuilderStore.getState().questionChanges.added[currentQuestionId];
+          const isNewQuestion =
+            !!useSurveyBuilderStore.getState().questionChanges.added[currentQuestionId];
 
           try {
             await ensureSurvey();
@@ -583,7 +592,9 @@ export function CellContentModal({
                           ...q,
                           tableRowsData: updatedRowsData,
                           ...structurePatch,
-                          ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
+                          ...(prunedChoiceGroups !== undefined
+                            ? { choiceGroups: prunedChoiceGroups }
+                            : {}),
                         }
                       : q,
                   ),
@@ -597,11 +608,15 @@ export function CellContentModal({
                 ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
                 type: question.type,
                 title: question.title || '',
-                ...(question.description !== undefined ? { description: question.description } : {}),
+                ...(question.description !== undefined
+                  ? { description: question.description }
+                  : {}),
                 required: question.required ?? false,
                 order: question.order ?? 0,
                 ...(question.options !== undefined ? { options: question.options } : {}),
-                ...(question.selectLevels !== undefined ? { selectLevels: question.selectLevels } : {}),
+                ...(question.selectLevels !== undefined
+                  ? { selectLevels: question.selectLevels }
+                  : {}),
                 ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
                 ...(latestColumns !== undefined
                   ? { tableColumns: latestColumns }
@@ -614,12 +629,24 @@ export function CellContentModal({
                   return latestHeaderGrid != null ? { tableHeaderGrid: latestHeaderGrid } : {};
                 })(),
                 tableRowsData: updatedRowsData,
-                ...(question.allowOtherOption !== undefined ? { allowOtherOption: question.allowOtherOption } : {}),
-                ...(question.optionsColumns !== undefined ? { optionsColumns: question.optionsColumns } : {}),
-                ...(question.noticeContent !== undefined ? { noticeContent: question.noticeContent } : {}),
-                ...(question.requiresAcknowledgment !== undefined ? { requiresAcknowledgment: question.requiresAcknowledgment } : {}),
-                ...(question.tableValidationRules !== undefined ? { tableValidationRules: question.tableValidationRules } : {}),
-                ...(question.displayCondition !== undefined ? { displayCondition: question.displayCondition } : {}),
+                ...(question.allowOtherOption !== undefined
+                  ? { allowOtherOption: question.allowOtherOption }
+                  : {}),
+                ...(question.optionsColumns !== undefined
+                  ? { optionsColumns: question.optionsColumns }
+                  : {}),
+                ...(question.noticeContent !== undefined
+                  ? { noticeContent: question.noticeContent }
+                  : {}),
+                ...(question.requiresAcknowledgment !== undefined
+                  ? { requiresAcknowledgment: question.requiresAcknowledgment }
+                  : {}),
+                ...(question.tableValidationRules !== undefined
+                  ? { tableValidationRules: question.tableValidationRules }
+                  : {}),
+                ...(question.displayCondition !== undefined
+                  ? { displayCondition: question.displayCondition }
+                  : {}),
                 ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
               });
 
@@ -680,7 +707,9 @@ export function CellContentModal({
               // 같은 표의 다른 셀이 같은 옵션 value(자동 발번 option-N)를 쓰는 것이 일상이므로,
               // 이 셀의 행·열 좌표와 cellId 로 스코프를 좁혀 그 셀을 실제로 참조하는 조건만
               // 리매핑한다 (무관 셀을 겨냥한 조건의 expectedValues 오염 방지).
-              const cellRow = updatedRowsData.find((row) => row.cells.some((c) => c.id === cell.id));
+              const cellRow = updatedRowsData.find((row) =>
+                row.cells.some((c) => c.id === cell.id),
+              );
               const cellScope = cellRow
                 ? {
                     rowId: cellRow.id,
@@ -1032,7 +1061,9 @@ export function CellContentModal({
             }
           }}
         >
-          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}>
+          <TabsList
+            className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}
+          >
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
               텍스트
@@ -1165,10 +1196,39 @@ export function CellContentModal({
 
             <div className="space-y-2">
               <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="cell-input-format" className="text-sm font-medium">
+                    입력 형식
+                  </label>
+                  <select
+                    id="cell-input-format"
+                    value={isInputFormat(inputType) ? inputType : ''}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      // 형식과 숫자 모드는 배타 — 숫자 전용 설정(초기값·표시 포맷)은
+                      // 직렬화에서 inputType==='number' 일 때만 실리므로 저절로 빠진다.
+                      setInputType(isInputFormat(next) ? next : 'text');
+                    }}
+                    className="h-8 rounded-md border border-gray-300 px-2 text-sm"
+                  >
+                    <option value="">지정 안 함</option>
+                    {INPUT_FORMATS.map((f) => (
+                      <option key={f} value={f}>
+                        {INPUT_FORMAT_LABEL[f]}
+                      </option>
+                    ))}
+                  </select>
+                  {isInputFormat(inputType) && (
+                    <span className="text-xs text-gray-500">
+                      형식이 맞지 않으면 응답자가 다음으로 넘어가지 못합니다
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
                     id="input-type-number"
+                    disabled={isInputFormat(inputType)}
                     checked={inputType === 'number'}
                     onChange={(e) => {
                       const checked = e.target.checked;
@@ -1202,9 +1262,9 @@ export function CellContentModal({
                   <label htmlFor="input-pii-encrypted" className="flex-1 cursor-pointer text-sm">
                     <span className="font-medium">개인정보 암호화</span>
                     <p className="mt-0.5 text-xs text-gray-500">
-                      성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
-                      후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
-                      자동으로 복호화되어 표시됩니다.
+                      성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장 후
+                      새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는 자동으로
+                      복호화되어 표시됩니다.
                     </p>
                   </label>
                 </div>
@@ -1395,7 +1455,11 @@ export function CellContentModal({
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
-                <CellContentLayout content={textContent} position={textPosition} textColor={textColor}>
+                <CellContentLayout
+                  content={textContent}
+                  position={textPosition}
+                  textColor={textColor}
+                >
                   <div className="space-y-2">
                     <Input
                       placeholder={inputPlaceholder || '답변을 입력하세요...'}
@@ -1622,7 +1686,11 @@ export function CellContentModal({
               ownQuestion={ownQuestion}
               allQuestions={questions}
             />
-            <NumberFormatFields idPrefix="calc-nf" value={cellNumberFormat} onChange={setCellNumberFormat} />
+            <NumberFormatFields
+              idPrefix="calc-nf"
+              value={cellNumberFormat}
+              onChange={setCellNumberFormat}
+            />
 
             <div className="space-y-3 rounded border p-3">
               <label className="flex items-center gap-2 text-sm">
@@ -1693,55 +1761,55 @@ export function CellContentModal({
             양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
         {GATABLE_CELL_TYPES.has(contentType) &&
           !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
-          <CellGatingEditor
-            cellId={cell.id}
-            rowCells={gatingRowCells}
-            condition={gatingCondition}
-            requiredWhenEnabled={gatingRequiredWhenEnabled}
-            onConditionChange={(cond) => {
-              // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
-              // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
-              if (cond && !gatingCondition && cellRequired) {
-                setGatingRequiredWhenEnabled(true);
-              }
-              setGatingCondition(cond);
-            }}
-            onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
-          />
-        )}
+            <CellGatingEditor
+              cellId={cell.id}
+              rowCells={gatingRowCells}
+              condition={gatingCondition}
+              requiredWhenEnabled={gatingRequiredWhenEnabled}
+              onConditionChange={(cond) => {
+                // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
+                // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
+                if (cond && !gatingCondition && cellRequired) {
+                  setGatingRequiredWhenEnabled(true);
+                }
+                setGatingCondition(cond);
+              }}
+              onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
+            />
+          )}
 
         {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking).
             게이팅이 켜진 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
         {REQUIRED_CELL_TYPES.has(contentType) &&
           !(GATABLE_CELL_TYPES.has(contentType) && gatingCondition) && (
-          <div className="mt-6 border-t border-gray-200 pt-6">
-            <div className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                id="cell-required"
-                checked={cellRequired}
-                onChange={(e) => setCellRequired(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="cell-required" className="cursor-pointer shrink-0">
-                필수 응답 셀
-              </label>
-              {cellRequired ? (
-                <Input
-                  id="cell-required-message"
-                  value={cellRequiredMessage}
-                  onChange={(e) => setCellRequiredMessage(e.target.value)}
-                  placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
-                  className="ml-2 h-8 flex-1 text-sm"
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  id="cell-required"
+                  checked={cellRequired}
+                  onChange={(e) => setCellRequired(e.target.checked)}
+                  className="h-4 w-4"
                 />
-              ) : (
-                <span className="text-xs text-gray-400">
-                  지정 셀이 응답되어야 다음으로 진행됩니다
-                </span>
-              )}
+                <label htmlFor="cell-required" className="shrink-0 cursor-pointer">
+                  필수 응답 셀
+                </label>
+                {cellRequired ? (
+                  <Input
+                    id="cell-required-message"
+                    value={cellRequiredMessage}
+                    onChange={(e) => setCellRequiredMessage(e.target.value)}
+                    placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
+                    className="ml-2 h-8 flex-1 text-sm"
+                  />
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    지정 셀이 응답되어야 다음으로 진행됩니다
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* 셀 병합 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
@@ -1931,8 +1999,8 @@ export function CellContentModal({
                   className="w-full"
                 />
                 <p className="text-xs text-gray-500">
-                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도
-                  없으면 열 제목이 사용됩니다.
+                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도 없으면
+                  열 제목이 사용됩니다.
                 </p>
               </div>
             )}
@@ -2048,7 +2116,7 @@ export function CellContentModal({
                       : verticalAlign === 'middle'
                         ? 'items-center'
                         : 'items-end'
-                  }${textBold ? ' font-bold' : ''}`}
+                  }${textBold ? 'font-bold' : ''}`}
                   style={{
                     ...(backgroundColor ? { backgroundColor } : {}),
                     ...(textColor ? { color: textColor } : {}),

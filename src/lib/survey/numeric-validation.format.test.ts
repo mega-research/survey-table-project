@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Question } from '@/types/survey';
+import type { Question, TableCell, TableRow } from '@/types/survey';
 
 import { collectNumericIssues } from './numeric-validation';
 
@@ -51,5 +51,58 @@ describe('collectNumericIssues — 입력 형식', () => {
     const q = textQuestion({ inputType: 'number', numberFormat: { min: 10 } });
     expect(collectNumericIssues(q, '5')[0]?.kind).toBe('range');
     expect(collectNumericIssues(q, '50')).toEqual([]);
+  });
+});
+
+function tableQuestion(cells: Array<Partial<TableCell> & { id: string }>): Question {
+  const rows: TableRow[] = [
+    {
+      id: 'r1',
+      cells: cells.map((c) => ({ type: 'input', content: '', ...c })),
+    },
+  ] as TableRow[];
+  return {
+    id: 'qt',
+    type: 'table',
+    title: '표',
+    required: false,
+    order: 0,
+    tableRowsData: rows,
+  } as Question;
+}
+
+describe('collectNumericIssues — 표 input 셀 형식', () => {
+  const q = tableQuestion([
+    { id: 'c1', inputType: 'mobile' },
+    { id: 'c2', inputType: 'email' },
+    { id: 'c3' },
+  ]);
+
+  it('형식이 맞으면 이슈가 없다', () => {
+    expect(collectNumericIssues(q, { c1: '010-1234-5678', c2: 'a@b.com', c3: '아무 말' })).toEqual(
+      [],
+    );
+  });
+
+  it('형식이 틀린 셀을 짚어낸다', () => {
+    const issues = collectNumericIssues(q, { c1: '02-1234-5678', c2: 'a@b.com' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.kind).toBe('format');
+    expect(issues[0]?.cellIds).toEqual(['c1']);
+  });
+
+  it('여러 셀이 틀리면 한 이슈에 모아 짚는다', () => {
+    const issues = collectNumericIssues(q, { c1: '02-1234-5678', c2: '이메일아님' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.cellIds).toEqual(['c1', 'c2']);
+  });
+
+  it('빈 셀과 형식 미지정 셀은 검사하지 않는다', () => {
+    expect(collectNumericIssues(q, { c1: '', c2: '   ', c3: '010-1' })).toEqual([]);
+  });
+
+  it('숨은 셀·미선택 동적 행의 잔존값은 막지 않는다', () => {
+    const hidden = tableQuestion([{ id: 'c1', inputType: 'mobile', isHidden: true }]);
+    expect(collectNumericIssues(hidden, { c1: '틀린값' })).toEqual([]);
   });
 });

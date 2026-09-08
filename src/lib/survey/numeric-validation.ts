@@ -510,6 +510,19 @@ export function collectNumericIssues(
       });
     }
 
+    // 1-2) 셀 입력 형식 위반 — 값이 있는 칸만 본다. 사유별 문구는 셀 아래에 붙으므로
+    //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
+    const formatViolations = inputCells.filter(
+      (c) => formatViolationMessage(c.inputType, cellValues[c.id]) !== null,
+    );
+    if (formatViolations.length > 0) {
+      issues.push({
+        kind: 'format',
+        message: '입력 형식이 맞지 않은 칸이 있습니다',
+        cellIds: formatViolations.map((c) => c.id),
+      });
+    }
+
     // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
     //    숨은 열/행·비활성 게이팅 셀 제외)
     const existingIds = new Set(enabled.map((c) => c.id));

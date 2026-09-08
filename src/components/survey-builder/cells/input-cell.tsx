@@ -3,10 +3,13 @@
 import React, { useEffect } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { cn } from '@/lib/utils';
+import { isInputFormat } from '@/types/input-type';
+import { formatSampleValue } from '@/utils/input-format';
 import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
@@ -44,6 +47,7 @@ export const InputCell = React.memo(function InputCell({
 
   // 숫자 모드 여부: inputType이 'number'일 때만 활성화
   const isNumberMode = cell.inputType === 'number';
+  const format = isInputFormat(cell.inputType) ? cell.inputType : null;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -52,6 +56,14 @@ export const InputCell = React.memo(function InputCell({
       numberFormat: cell.numberFormat,
       enabled: isNumberMode,
     });
+
+  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
+  const formatField = useInputFormatField({
+    format,
+    rawValue: currentValue,
+    onRawChange: onUpdateValue,
+    enabled: !isPrefilled,
+  });
 
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
@@ -80,13 +92,24 @@ export const InputCell = React.memo(function InputCell({
         <Input
           id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
           type="text"
-          inputMode={isNumberMode ? 'decimal' : undefined}
+          inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
           value={isPrefilled ? prefilledValue : displayValue}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={() => {
+            handleFocus();
+            formatField.handleFocus();
+          }}
+          onBlur={() => {
+            handleBlur();
+            formatField.handleBlur();
+          }}
           placeholder={
-            cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+            cell.placeholder ||
+            (format
+              ? formatSampleValue(format)
+              : isNumberMode
+                ? '숫자만 입력하세요...'
+                : '답변을 입력하세요...')
           }
           maxLength={cell.inputMaxLength}
           className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
@@ -112,10 +135,13 @@ export const InputCell = React.memo(function InputCell({
           </div>
         )}
 
-        {(unitReading || rangeViolation) && !isPrefilled && (
+        {(unitReading || rangeViolation || formatField.violation) && !isPrefilled && (
           <div className="space-y-0.5">
-            {unitReading && <p className="text-xs text-muted-foreground">{unitReading}</p>}
+            {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
             {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+            {formatField.violation && (
+              <p className="text-xs text-red-500">* {formatField.violation}</p>
+            )}
           </div>
         )}
       </div>
