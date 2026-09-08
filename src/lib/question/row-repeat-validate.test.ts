@@ -79,7 +79,7 @@ describe('validateRowRepeatTemplate', () => {
           id: 'r1',
           type: 'exclusive-check',
           conditions: { checkType: 'input', rowIds: ['b'] },
-          action: 'show',
+          action: 'goto',
         },
       ],
     });
