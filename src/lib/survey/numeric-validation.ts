@@ -6,32 +6,34 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
-import { responsesToLookupShape, type BranchEvalCtx } from '@/utils/branch-eval';
-import {
-  shouldDisplayColumn,
-  shouldDisplayDynamicGroup,
-  shouldDisplayRow,
-} from '@/utils/branch-logic';
-import { rangeViolationMessage } from '@/utils/number-format';
-import { parseNumericInput } from '@/utils/numeric-input';
-import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
-
-import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
-import { isCellEnabled } from './cell-gating';
-import { collectRequiredOptionTextIssues } from './required-option-text-validation';
-import { optionTextTargetId } from './option-text-target';
 import { collectSelectedOptionIds } from '@/lib/option-text-migration';
 import {
   CHOICE_TABLE_CONTROL_CELL_TYPES,
   isChoiceTableCellEmpty,
 } from '@/lib/survey/choice-table-cell-value';
+import { isInputFormat } from '@/types/input-type';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
+import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
+import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
+import { rangeViolationMessage } from '@/utils/number-format';
+import { parseNumericInput } from '@/utils/numeric-input';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { isCellValuePresent } from '@/utils/table-cell-semantics';
+
+import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
+import { isCellEnabled } from './cell-gating';
+import { optionTextTargetId } from './option-text-target';
+import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
+  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula' | 'format';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -421,11 +423,30 @@ function collectChoiceTableInputCellIssues(
   return issues;
 }
 
+/**
+ * 값 하나를 형식에 비추어 본다. 통과·빈 값이면 null.
+ * 형식 검사는 값이 있는 칸만 본다 — 미입력 차단은 필수 판정 소관이다.
+ */
+function formatViolationMessage(
+  inputType: Question['inputType'] | undefined,
+  value: unknown,
+): string | null {
+  if (!isInputFormat(inputType)) return null;
+  if (typeof value !== 'string') return null;
+  const result = parseInputFormat(inputType, value);
+  return result.ok ? null : formatFailureMessage(inputType, result.reason);
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
   ctx?: NumericValidationCtx,
 ): NumericIssue[] {
+  if (question.type === 'text' && isInputFormat(question.inputType)) {
+    const message = formatViolationMessage(question.inputType, response);
+    return message ? [{ kind: 'format', message }] : [];
+  }
+
   if (question.type === 'text' && question.inputType === 'number') {
     if (typeof response !== 'string') return [];
     const message = rangeViolationMessage(response, question.numberFormat);
@@ -608,10 +629,20 @@ export function collectNumericIssues(
     if (cell.type !== 'calc' || !cell.formula || !cell.calcValidation) continue;
     if (!ctx) continue;
     const fCtx = toFormulaCtx(ctx);
-    const computed = evaluateCellFormula(cell.formula, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    const computed = evaluateCellFormula(
+      cell.formula,
+      question.id,
+      fCtx,
+      cell.numberFormat?.decimalPlaces,
+    );
     if (computed === null) continue;
     if (areAllFormulaRefsEmpty(cell.calcValidation.target, question.id, fCtx)) continue;
-    const target = evaluateCellFormula(cell.calcValidation.target, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    const target = evaluateCellFormula(
+      cell.calcValidation.target,
+      question.id,
+      fCtx,
+      cell.numberFormat?.decimalPlaces,
+    );
     if (target === null) continue;
     const v = cell.calcValidation;
     if (!compareValues(computed, target, v.operator, v.tolerance ?? 0)) {

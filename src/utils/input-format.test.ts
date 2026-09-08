@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { INPUT_FORMATS, type InputFormat } from '@/types/input-type';
 
-import { parseInputFormat } from './input-format';
+import { formatFailureMessage, formatSampleValue, parseInputFormat } from './input-format';
 
 /** 통과 케이스 — 넣은 값과 나와야 할 정규형. */
 const PASS: Array<[InputFormat, string, string]> = [
@@ -124,6 +124,52 @@ describe('parseInputFormat', () => {
   it('이미 정규형인 값을 다시 넣어도 같은 값이 나온다 (멱등)', () => {
     for (const [format, , normalized] of PASS) {
       expect(parseInputFormat(format, normalized)).toEqual({ ok: true, normalized });
+    }
+  });
+});
+
+describe('formatFailureMessage', () => {
+  it('형식과 실패 사유마다 다른 문구가 나온다', () => {
+    expect(formatFailureMessage('biz_number', 'wrong_length')).toBe('사업자번호는 10자리입니다');
+    expect(formatFailureMessage('corp_number', 'wrong_length')).toBe('법인번호는 13자리입니다');
+    expect(formatFailureMessage('biz_number', 'checksum_mismatch')).toBe(
+      '사업자번호 확인번호가 맞지 않습니다. 다시 확인해 주세요',
+    );
+    expect(formatFailureMessage('mobile', 'unknown_prefix')).toBe('휴대전화 번호가 아닙니다');
+    expect(formatFailureMessage('email', 'malformed')).toBe('이메일 형식이 아닙니다');
+  });
+
+  it('같은 사유라도 형식이 다르면 문구가 다르다', () => {
+    expect(formatFailureMessage('mobile', 'wrong_length')).not.toBe(
+      formatFailureMessage('phone', 'wrong_length'),
+    );
+    expect(formatFailureMessage('mobile', 'unknown_prefix')).not.toBe(
+      formatFailureMessage('phone', 'unknown_prefix'),
+    );
+  });
+
+  it('모든 형식·사유 조합에 문구가 있다', () => {
+    const reasons = [
+      'wrong_length',
+      'not_a_number',
+      'unknown_prefix',
+      'checksum_mismatch',
+      'malformed',
+    ] as const;
+    for (const format of INPUT_FORMATS) {
+      for (const reason of reasons) {
+        expect(formatFailureMessage(format, reason).length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('formatSampleValue', () => {
+  it('형식마다 예시 값이 있고, 그 값은 스스로 통과한다', () => {
+    for (const format of INPUT_FORMATS) {
+      const sample = formatSampleValue(format);
+      expect(sample.length).toBeGreaterThan(0);
+      expect(parseInputFormat(format, sample)).toEqual({ ok: true, normalized: sample });
     }
   });
 });

@@ -178,3 +178,70 @@ export function parseInputFormat(format: InputFormat, raw: string): ParseResult 
       return parseCorpNumber(digits);
   }
 }
+
+/** 형식의 화면 이름. 빌더 선택지·응답자 안내 문구가 이 한 곳을 참조한다. */
+export const INPUT_FORMAT_LABEL: Record<InputFormat, string> = {
+  mobile: '휴대전화',
+  phone: '전화번호',
+  biz_number: '사업자번호',
+  corp_number: '법인번호',
+  email: '이메일',
+};
+
+/**
+ * 입력칸 placeholder 로 쓰는 예시 값. 운영자가 placeholder 를 적지 않았을 때만 쓴다.
+ * 사업자·법인번호 예시는 **체크섬이 맞는 값**이어야 한다 — 통과하지 못하는 번호를
+ * 예시로 보여주면 그대로 따라 친 응답자가 막힌다(테스트가 이 조건을 지킨다).
+ */
+const INPUT_FORMAT_SAMPLE: Record<InputFormat, string> = {
+  mobile: '010-1234-5678',
+  phone: '02-123-4567',
+  biz_number: '123-45-67891',
+  corp_number: '110111-1234569',
+  email: 'name@example.com',
+};
+
+export function formatSampleValue(format: InputFormat): string {
+  return INPUT_FORMAT_SAMPLE[format];
+}
+
+/** 자릿수를 말할 수 있는 형식만 — 전화번호는 지역번호·국번에 따라 갈려 자릿수 하나로 못 말한다. */
+const FIXED_LENGTH: Partial<Record<InputFormat, number>> = {
+  biz_number: 10,
+  corp_number: 13,
+};
+
+/** '은/는' 결정 — 앞 글자에 받침이 있으면 '은'. (이메일은 'ㄹ' 받침이라 '이메일은') */
+function topicParticle(label: string): string {
+  const last = label.charCodeAt(label.length - 1);
+  const isHangulSyllable = last >= 0xac00 && last <= 0xd7a3;
+  if (!isHangulSyllable) return '는';
+  return (last - 0xac00) % 28 === 0 ? '는' : '은';
+}
+
+/**
+ * 형식별·실패 사유별 기본 안내 문구.
+ *
+ * 문항별 커스터마이즈를 두지 않는다 — 실패 사유가 다섯인데 문구가 하나면 안내가
+ * 뭉뚱그려지고, 운영자에게 사유마다 문구를 받게 하면 설정이 다섯 배가 된다.
+ */
+export function formatFailureMessage(format: InputFormat, reason: FormatFailure): string {
+  const label = INPUT_FORMAT_LABEL[format];
+  switch (reason) {
+    case 'not_a_number':
+      return `${label}${topicParticle(label)} 숫자로 입력해 주세요`;
+    case 'wrong_length': {
+      const length = FIXED_LENGTH[format];
+      if (length !== undefined) return `${label}${topicParticle(label)} ${length}자리입니다`;
+      return `${label} 자릿수가 맞지 않습니다`;
+    }
+    case 'unknown_prefix':
+      return format === 'mobile'
+        ? '휴대전화 번호가 아닙니다'
+        : '지역번호 또는 휴대전화 식별번호로 시작해야 합니다';
+    case 'checksum_mismatch':
+      return `${label} 확인번호가 맞지 않습니다. 다시 확인해 주세요`;
+    case 'malformed':
+      return `${label} 형식이 아닙니다`;
+  }
+}

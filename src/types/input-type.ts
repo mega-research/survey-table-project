@@ -23,9 +23,13 @@ export const INPUT_FORMATS = ['mobile', 'phone', 'biz_number', 'corp_number', 'e
 
 export type InputFormat = (typeof INPUT_FORMATS)[number];
 
-export const INPUT_TYPES = ['text', 'number'] as const;
+export const INPUT_TYPES = ['text', 'number', ...INPUT_FORMATS] as const;
 
 export type InputType = (typeof INPUT_TYPES)[number];
+
+export function isInputFormat(value: unknown): value is InputFormat {
+  return typeof value === 'string' && (INPUT_FORMATS as readonly string[]).includes(value);
+}
 
 export function isInputType(value: unknown): value is InputType {
   return typeof value === 'string' && (INPUT_TYPES as readonly string[]).includes(value);
