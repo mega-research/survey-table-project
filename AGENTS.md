@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-03 (Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084)
+> 최종 갱신: 2026-09-08 (입력 형식 검사 — 단답형·표 input 셀·보기 상세기재의 `inputType`/`textInputType` 유니온에 휴대전화·전화·사업자번호·법인번호·이메일 5종 추가(공용 타입 `@/types/input-type`, DB 마이그레이션 없음) · 파서 `@/utils/input-format` · 차단 검증 `NumericIssue.kind: 'format'`(클라이언트 전용) · 관리자 편집은 경고 후 통과 · 손대지 않은 이월 값은 면제 · ADR 0023 · 이전: Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084)
 
 ---
 
@@ -236,7 +236,7 @@ questions                  # 개별 질문
 ├── rankingConfig (JSONB)         # 순위형 전용
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
-├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 숫자 입력 모드
+├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
@@ -484,7 +484,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 | 타입          | 설명               | 주요 속성                                                                                             |
 | ------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType, emptyDefault, numberFormat                              |
+| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat               |
 | `textarea`    | 장문형 텍스트      | -                                                                                                     |
 | `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                 |
 | `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                 |
@@ -498,12 +498,13 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 - **그룹별 필수**: `ChoiceGroup.required`/`requiredMessage` (JSONB) — 미설정이면 질문 레벨 `required` 상속. 질문 필수여도 특정 그룹만 해제하거나 그 반대가 가능하며, 문구는 그룹 → 질문 → 기본 순 폴백.
 - **필수 마스터 전파**: 질문 편집 모달의 "필수 질문" 토글 조작 시 표의 인터랙티브 셀 필수(게이팅 셀은 `requiredWhenEnabled`)와 그룹 오버라이드를 일괄 재설정한다. 상속이 아닌 조작 시점 복사 — `docs/adr/0021` · CONTEXT.md "필수 마스터 전파".
+- **입력 형식**: `inputType`(단답형·표 input 셀)·`textInputType`(보기 상세기재)은 `'text' | 'number'` 에 더해 형식 5종(`mobile` · `phone` · `biz_number` · `corp_number` · `email`)을 받는다. 값 목록은 `@/types/input-type` 이 SSOT 이고 zod 두 곳(`lib/question/schema.ts`, `features/survey-builder/domain/question.ts`)이 그 상수를 쓴다. **형식과 `number` 는 배타** — 형식을 고르면 숫자 서식·초기값·계산 검증이 붙지 않는다. 판정·정규화·실패 사유는 `@/utils/input-format` 의 `parseInputFormat` 하나에서 나오고, 차단은 `NumericIssue.kind: 'format'`(클라이언트 전용)이다. **DB 마이그레이션 없음** — `input_type` 은 enum·CHECK 없는 text 컬럼이고 셀·보기 쪽은 JSONB 안이다. 자세한 규약은 CONTEXT.md "입력 형식" · `docs/adr/0023`.
 
 ### 테이블 질문 셀 타입
 
 - `text`: 텍스트 표시 / `image`: 이미지 / `video`: 비디오 링크
 - `checkbox` / `radio` / `select`: 선택 입력
-- `input`: 텍스트 입력 (inputType `number` 시 숫자만). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
+- `input`: 텍스트 입력 (inputType `number` 시 숫자만, 형식 5종 지정 시 형식 검사). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
 - `ranking`: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
 - `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스
@@ -896,7 +897,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 | --------------------- | ----------------------------------- | --------------------------------------------- |
 | 공급망 보안 감사      | `.github/audit-gate.ts`             | 감사 리포트 평가 (리포트 누락 시 fail-closed) |
 | RLS 하드닝            | `.github/rls-gate.ts`               | 마이그레이션의 RLS 정책 검증                  |
-| 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | 미등재 `.sql` + 접두 번호 중복 차단            |
+| 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | 미등재 `.sql` + 접두 번호 중복 차단           |
 
 통합/E2E 잡은 로컬 supabase를 띄워 `pnpm test:integration` + `pnpm test:e2e`(Playwright chromium)를 돌린다.
 
