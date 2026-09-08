@@ -13,6 +13,12 @@ import {
 } from '@/components/ui/select';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorRanking,
+  isPriorRankingText,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { rankingTextTargetId } from '@/lib/survey/option-text-target';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -47,6 +53,10 @@ export interface RankingDropdownStackProps {
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
+  /** 이월 표시(빨강) 판정용 문항 id. 미전달이면 칠하지 않는다(빌더 미리보기 등). */
+  questionId?: string | undefined;
+  /** 표의 ranking 셀에서 쓰는 셀 id. 질문 레벨 순위형은 미전달. */
+  cellId?: string | undefined;
 }
 
 /**
@@ -66,10 +76,13 @@ export function RankingDropdownStack({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  questionId,
+  cellId,
 }: RankingDropdownStackProps) {
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
 
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
@@ -156,7 +169,19 @@ export function RankingDropdownStack({
               autoComplete="off"
               value={otherTextAt(rank)}
               onChange={(e) => handleOtherText(rank, e.target.value)}
-              className={bareInputCls}
+              className={cn(
+                bareInputCls,
+                questionId !== undefined &&
+                  isPriorRankingText(
+                    priorHighlight,
+                    questionId,
+                    rank,
+                    'otherText',
+                    otherTextAt(rank),
+                    cellId,
+                  ) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
               data-option-text-target-id={
                 detailTargetScopeId
                   ? rankingTextTargetId(detailTargetScopeId, rank, RANKING_OTHER_VALUE)
@@ -182,7 +207,19 @@ export function RankingDropdownStack({
             autoComplete="off"
             value={optionTextAt(rank)}
             onChange={(e) => handleOptionText(rank, e.target.value)}
-            className={bareInputCls}
+            className={cn(
+              bareInputCls,
+              questionId !== undefined &&
+                isPriorRankingText(
+                  priorHighlight,
+                  questionId,
+                  rank,
+                  'optionText',
+                  optionTextAt(rank),
+                  cellId,
+                ) &&
+                PRIOR_HIGHLIGHT_TEXT_CLS,
+            )}
             data-option-text-target-id={
               detailTargetScopeId
                 ? rankingTextTargetId(detailTargetScopeId, rank, currentValue)
@@ -211,6 +248,13 @@ export function RankingDropdownStack({
             }
           : undefined;
         const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
+        // 이월 표시 — 빌더가 보기에 글자색을 지정했으면 그 인라인 색이 이기므로 칠하지 않는다.
+        const priorCls =
+          questionId !== undefined &&
+          !selectedOpt?.textColor &&
+          isPriorRanking(priorHighlight, questionId, rank, currentValue, cellId)
+            ? PRIOR_HIGHLIGHT_TEXT_CLS
+            : undefined;
         const triggerWidthStyle =
           isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined;
 
@@ -223,7 +267,7 @@ export function RankingDropdownStack({
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelect(rank, e.target.value)}
-            className={selectCls}
+            className={cn(selectCls, priorCls)}
             style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
           >
             <option value="">{compact ? '선택하세요' : '선택하세요...'}</option>
@@ -275,6 +319,7 @@ export function RankingDropdownStack({
                 // 포커스 링은 옅은 하늘색. SelectTrigger 기본 --ring(#007aff)이 진해서 덮는다.
                 'focus:border-blue-100 focus:ring-2 focus:ring-blue-100 focus:ring-offset-0',
                 selectedBold,
+                priorCls,
               )}
               style={{ ...triggerWidthStyle, ...selectedStyle }}
             >

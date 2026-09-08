@@ -2,6 +2,7 @@
 
 import { type ReactNode, createContext, useContext, useMemo } from 'react';
 
+import type { HighlightPriorAnswers } from '@/lib/survey/prior-answer-highlight';
 import {
   DEFAULT_PRIOR_WAVE_LABEL,
   type PriorAnswers,
@@ -22,6 +23,12 @@ interface PriorAnswersContextValue {
    * 확인 대상으로 뜬다 — 변동 확인 스위치를 켜는 순간 이월값 조건이 무시되는 사고다.
    */
   confirmAnswers: PriorAnswers | null;
+  /**
+   * 이월 표시(빨강)가 쓰는 이월 응답 — 프리필과 같은 술어(조건·끄기 플래그·문항 유형)로
+   * 걸러진 값이다. 변동 확인 스위치와 무관하게 채워진다(ADR 0024).
+   * `answers`(원본)를 쓰면 담당자가 감춘 이월 값이 색으로 되살아난다.
+   */
+  highlightAnswers: HighlightPriorAnswers;
   /** 응답 화면 문구에 쓰는 회차 라벨. 설정이 비어 있으면 기본 문구. */
   waveLabel: string;
   /**
@@ -34,6 +41,7 @@ interface PriorAnswersContextValue {
 const EMPTY_VALUE: PriorAnswersContextValue = {
   answers: null,
   confirmAnswers: null,
+  highlightAnswers: null,
   waveLabel: DEFAULT_PRIOR_WAVE_LABEL,
   changeConfirmEnabled: false,
 };
@@ -50,6 +58,7 @@ const PriorAnswersContext = createContext<PriorAnswersContextValue>(EMPTY_VALUE)
 export function PriorAnswersProvider({
   answers,
   confirmAnswers,
+  highlightAnswers,
   waveLabel,
   changeConfirmEnabled,
   children,
@@ -57,6 +66,8 @@ export function PriorAnswersProvider({
   answers: PriorAnswers | null;
   /** 이월값 조건으로 걸러진 이월 응답 — 변동 확인 소비자는 이 값을 써야 한다. */
   confirmAnswers: PriorAnswers | null;
+  /** 표시 자격을 통과한 이월 응답 — 이월 표시(빨강)가 쓴다. */
+  highlightAnswers: HighlightPriorAnswers;
   /** surveys.priorWaveLabel(라이브 값). null/공백이면 기본 문구로 떨어진다. */
   waveLabel: string | null | undefined;
   /** surveys.changeConfirmEnabled(라이브 값). */
@@ -67,10 +78,11 @@ export function PriorAnswersProvider({
     () => ({
       answers,
       confirmAnswers,
+      highlightAnswers,
       waveLabel: resolvePriorWaveLabel(waveLabel),
       changeConfirmEnabled,
     }),
-    [answers, confirmAnswers, waveLabel, changeConfirmEnabled],
+    [answers, confirmAnswers, highlightAnswers, waveLabel, changeConfirmEnabled],
   );
   return <PriorAnswersContext.Provider value={value}>{children}</PriorAnswersContext.Provider>;
 }
@@ -85,4 +97,15 @@ export function PriorAnswersProvider({
  */
 export function usePriorAnswers(): PriorAnswersContextValue {
   return useContext(PriorAnswersContext);
+}
+
+/**
+ * 이월 표시(빨강) 판정에 쓸 이월 응답 한 벌.
+ *
+ * 판정 자체는 `lib/survey/prior-answer-highlight` 의 순수 함수가 한다 — 렌더러는 재료만
+ * 받아 묻는다. 화면마다 각자 판정하면 같은 값이 데스크탑과 모바일에서 다른 색으로 나온다.
+ * Provider 밖(빌더 미리보기 등)에서 호출하면 null — 색이 없을 뿐 동작에는 영향이 없다.
+ */
+export function usePriorHighlight(): HighlightPriorAnswers {
+  return useContext(PriorAnswersContext).highlightAnswers;
 }

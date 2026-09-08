@@ -18,6 +18,7 @@ export const RankingCell = React.memo(function RankingCell({
   cell,
   cellResponse,
   onUpdateValue,
+  questionId,
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
@@ -69,6 +70,8 @@ export const RankingCell = React.memo(function RankingCell({
           ariaDescribedBy={ariaDescribedBy}
           {...(cell.optionsColumns !== undefined ? { columns: cell.optionsColumns } : {})}
           detailTargetScopeId={cell.id}
+          questionId={questionId}
+          cellId={cell.id}
           compact
         />
         {positions < requestedPositions && (

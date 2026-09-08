@@ -29,6 +29,11 @@ interface AdminContext {
   initialResponses: ResponsesMap;
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
+  /**
+   * 이 응답자의 이월 응답 한 벌. RSC 가 조사 대상 id 로 읽어 넘긴다 — 관리자는 초대
+   * 링크로 들어오지 않아 토큰 기반 lookup 을 탈 수 없다. 이월 표시(빨강)에만 쓰인다.
+   */
+  initialPriorAnswers?: Record<string, unknown> | null;
   /** 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일. RSC 가 만들어 넘긴다. */
   documentView?: SurveyDocumentView | null;
   onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
@@ -75,6 +80,8 @@ interface UseSurveyLoaderResult {
    * 지난 회차 값인가"를 화면이 표시하기 위한 참조다.
    */
   priorAnswers: PriorAnswers | null;
+  /** 관리자 편집의 이월 표시 전용 이월 응답. 응답자 경로에서는 항상 null. */
+  displayOnlyPriorAnswers: PriorAnswers | null;
   /**
    * 초기 프리필 판정이 끝났는가. 이어가기 회복(use-session-recovery)이 이 플래그를
    * 기다려야 한다 — 회복이 먼저 응답값을 세팅한 뒤 프리필이 덮으면 응답자가 저장한
@@ -130,6 +137,16 @@ export function useSurveyLoader({
   const [control, setControl] = useState<SurveyControl | null>(null);
   // 이월 응답 — invite 매칭 대상자에게만 채워진다(추적조사).
   const [priorAnswers, setPriorAnswers] = useState<PriorAnswers | null>(null);
+  /**
+   * 관리자 응답 편집 전용 이월 응답 — **이월 표시(빨강)에만 쓰인다.**
+   *
+   * `priorAnswers` 에 넣으면 안 된다. 그 채널은 형식 검사 면제와 숫자 초기값 자동 채움까지
+   * 먹이고 있어서, 관리자 편집의 검증 거동이 색 하나 때문에 바뀐다. 표시와 판정을 같은
+   * 통에 담으면 "표시 전용" 이라는 계약이 곧바로 깨진다(ADR 0024).
+   */
+  const [displayOnlyPriorAnswers, setDisplayOnlyPriorAnswers] = useState<PriorAnswers | null>(
+    null,
+  );
   // 초기 프리필 판정 완료 여부 — 이어가기 회복 게이트.
   const [prefillSettled, setPrefillSettled] = useState(false);
   const [documentView, setDocumentView] = useState<SurveyDocumentView | null>(null);
@@ -146,6 +163,7 @@ export function useSurveyLoader({
       setControl(null);
       setPriorAnswers(null);
       setPrefillSettled(false);
+      setDisplayOnlyPriorAnswers(null);
       setDocumentView(null);
 
       try {
@@ -214,6 +232,9 @@ export function useSurveyLoader({
             .seedOptionTexts(readOptTextsSidecar(adminContext.initialResponses));
           // 응답 당시 contact attrs 복원 — 조건/토큰 표시 평가에 사용.
           setContactAttrs(adminContext.initialContactAttrs ?? {});
+          // 이월 응답은 표시 전용 채널로만 넣는다 — 프리필·변동 확인·형식 면제는
+          // 관리자 편집에서 지금 그대로여야 한다.
+          setDisplayOnlyPriorAnswers(adminContext.initialPriorAnswers ?? null);
           return;
         }
 
@@ -414,6 +435,7 @@ export function useSurveyLoader({
     versionId,
     control,
     priorAnswers,
+    displayOnlyPriorAnswers,
     prefillSettled,
     documentView,
     refetchSnapshot,

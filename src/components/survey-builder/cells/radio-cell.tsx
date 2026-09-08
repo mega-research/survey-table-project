@@ -7,6 +7,12 @@ import { flushSync } from 'react-dom';
 
 import { OptionTextInputStack } from '@/components/survey-response/option-text-input-stack';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_CONTROL_CLS,
+  isPriorChoice,
+  matchesPriorChoice,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellOptionsContainer } from './cell-options-container';
@@ -22,9 +28,15 @@ export const RadioCell = React.memo(function RadioCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  priorChoiceValue,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
+  const isPriorOption = (optionKey: string) =>
+    priorChoiceValue !== undefined
+      ? matchesPriorChoice(priorChoiceValue, optionKey)
+      : isPriorChoice(priorHighlight, questionId, optionKey, cell.id);
   const handleRadioChange = useCallback(
     (optionId: string) => {
       const isCurrentlySelected = cellResponse === optionId;
@@ -89,7 +101,11 @@ export const RadioCell = React.memo(function RadioCell({
               checked={isSelected}
               onChange={() => {}}
               onClick={() => handleRadioChange(optionKey)}
-              className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+              className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                isSelected && isPriorOption(optionKey)
+                  ? PRIOR_HIGHLIGHT_CONTROL_CLS
+                  : ''
+              }`}
             />
             <label
               htmlFor={inputId}

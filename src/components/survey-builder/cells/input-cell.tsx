@@ -6,8 +6,12 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorText,
+} from '@/lib/survey/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
@@ -62,6 +66,7 @@ export const InputCell = React.memo(function InputCell({
 
   // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
   const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const priorHighlight = usePriorHighlight();
   const formatField = useInputFormatField({
     format,
     rawValue: currentValue,
@@ -119,7 +124,13 @@ export const InputCell = React.memo(function InputCell({
                   : '답변을 입력하세요...')
             }
             maxLength={cell.inputMaxLength}
-            className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
+            className={cn(
+              'w-full text-base',
+              getInputTextAlignClass(cell.inputTextAlign),
+              !isPrefilled &&
+                isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
+                PRIOR_HIGHLIGHT_TEXT_CLS,
+            )}
             disabled={isPrefilled}
             data-prefilled={isPrefilled || undefined}
             aria-invalid={ariaInvalid || undefined}

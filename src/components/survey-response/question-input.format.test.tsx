@@ -34,6 +34,7 @@ function Harness({
     <PriorAnswersProvider
       answers={prior}
       confirmAnswers={prior}
+      highlightAnswers={prior}
       waveLabel={null}
       changeConfirmEnabled={false}
     >

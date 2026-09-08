@@ -55,7 +55,17 @@ export async function lookupPriorAnswers(
   if (!row) return null;
   if (row.isTest && !row.testModeEnabled) return null;
 
-  const answers = normalizePriorAnswers(row.answers);
+  return readPriorAnswerRow(row.answers);
+}
+
+/**
+ * 이월 응답 JSONB 한 벌의 읽기 경계 — 복호화 + 파기 표식 제거.
+ *
+ * 조회 경로가 둘(초대 토큰 · 조사 대상 id)이라 후처리를 한 곳에 둔다. 갈라지면 관리자
+ * 편집 화면에만 암호문이나 파기 표식이 그대로 채워진다.
+ */
+function readPriorAnswerRow(raw: unknown): PriorAnswersOutput {
+  const answers = normalizePriorAnswers(raw);
   if (Object.keys(answers).length === 0) return null;
   // 응답 PII 인라인 암호화(ADR-0012)와 같은 읽기 경계를 태운다. 이월 응답은 응답 저장
   // 형태와 동형이므로 PII 문항 값이 암호문('v1:...')으로 적재될 수 있고, 그대로 내보내면
@@ -71,6 +81,43 @@ export async function lookupPriorAnswers(
     kept[questionId] = value;
   }
   return Object.keys(kept).length > 0 ? kept : null;
+}
+
+/**
+ * 조사 대상 id 로 이월 응답 조회 — 관리자 응답 편집 화면 전용.
+ *
+ * 초대 토큰 경로(`lookupPriorAnswers`)를 쓸 수 없다. 관리자 편집은 초대 링크로 들어오지
+ * 않아 토큰을 손에 쥐고 있지 않고, 응답 행이 들고 있는 것은 `contactTargetId` 뿐이다.
+ *
+ * **RSC 가 직접 부른다**(procedure 없음). 호출부는 이미 `requireSurveyOwnership` 를 통과한
+ * 관리자 화면이고, 파티션(`isTest`)도 그쪽이 결정해 넘긴다 — 콘솔의 스코프 판정을 이
+ * 서비스가 다시 하면 결정 지점이 둘로 갈린다.
+ *
+ * 이월 표시(빨강)에만 쓰인다. 관리자 편집에는 프리필도 변동 확인도 걸리지 않는다.
+ */
+export async function lookupPriorAnswersByContactTarget(args: {
+  surveyId: string;
+  contactTargetId: string;
+  isTest: boolean;
+}): Promise<PriorAnswersOutput> {
+  const { surveyId, contactTargetId, isTest } = args;
+  if (!isValidUUID(surveyId)) return null;
+
+  const [row] = await db
+    .select({ answers: contactPriorAnswers.answers })
+    .from(contactPriorAnswers)
+    .innerJoin(contactTargets, eq(contactPriorAnswers.contactTargetId, contactTargets.id))
+    .where(
+      and(
+        eq(contactPriorAnswers.contactTargetId, contactTargetId),
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, isTest),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return null;
+  return readPriorAnswerRow(row.answers);
 }
 
 /**

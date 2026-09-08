@@ -93,6 +93,7 @@ import {
   collectVisibleTableCells,
 } from '@/lib/survey/numeric-validation';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
+import { selectHighlightablePriorAnswers } from '@/lib/survey/prior-answer-highlight';
 import {
   collectPriorAnswerPrefills,
   collectPriorAnswerRetractions,
@@ -139,6 +140,8 @@ export interface SurveyResponseFlowProps {
     versionSnapshot: SurveyVersionSnapshot | null;
     // 응답자가 사용한 contact_targets.attrs — 조건/토큰 복원용.
     initialContactAttrs: Record<string, string>;
+    /** 이 응답자의 이월 응답 한 벌. 이월 표시(빨강) 전용 — 프리필·변동 확인은 걸리지 않는다. */
+    initialPriorAnswers?: Record<string, unknown> | null;
     // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
     documentView?: SurveyDocumentView | null;
     /**
@@ -214,6 +217,18 @@ interface SurveyResponseFlowActiveProps {
  * 자식 훅이 mount되기 전에 Zustand 응답 상태를 동기 정리하므로 이전 대상자의
  * currentResponseId를 새 대상자의 create/complete 경로가 관찰할 수 없다.
  */
+/**
+ * 이월 표시(빨강) 스위치 — **2026-09-09 실사 중 끔.**
+ *
+ * 현장에서 검증할 시간이 없어 색을 내리기로 했다. 렌더러·판정·테스트는 전부 그대로 두고
+ * **재료만 끊는다** — 이 상수를 `true` 로 돌리면 그날의 동작으로 통째로 돌아온다.
+ * 렌더러 15곳을 각자 주석 처리하면 되살릴 때 빠뜨리는 곳이 반드시 생긴다.
+ *
+ * 되살리기 전에 볼 것: ADR 0024 의 "받아들인 대가"(오류 빨강과 채널 공유, 안내 문구 없음,
+ * 색맹 대응 없음)와 `admin-edit-prior-highlight.test.tsx` 의 skip 표시.
+ */
+const PRIOR_HIGHLIGHT_ENABLED: boolean = false;
+
 export function SurveyResponseFlow(props: SurveyResponseFlowProps) {
   const identityKey = [
     props.mode ?? 'public',
@@ -354,6 +369,7 @@ function SurveyResponseFlowActive({
     versionId,
     control,
     priorAnswers,
+    displayOnlyPriorAnswers,
     prefillSettled,
     documentView,
     refetchSnapshot,
@@ -536,6 +552,35 @@ function SurveyResponseFlowActive({
     [priorAnswers, questions, responses, evalCtx],
   );
   const confirmPriorAnswers = changeConfirmEnabled ? filteredPriorAnswers : null;
+
+  /**
+   * 이월 표시(빨강)에 넘길 이월 응답 — 조건 필터를 통과한 값에서 표시할 수 없는 문항
+   * 유형(안내문·본문 프리필 템플릿)을 마저 걷어낸 것이다(ADR 0024).
+   *
+   * **변동 확인 스위치로 가르지 않는다.** 두 모드 모두 "이 칸에 지금 들어 있는 값이
+   * 작년과 같은가"라는 같은 사실을 표시하고, 켠 설문에서도 "달라짐"을 고른 뒤 열린 칸의
+   * 값은 여전히 작년 값이다. 모드마다 규칙이 갈리면 담당자가 스위치를 켰다 껐다 할 때
+   * 화면이 예상 밖으로 변한다.
+   */
+  /**
+   * 관리자 편집의 이월 표시 재료 — 표시 전용 채널을 같은 조건 필터에 태운다.
+   * 응답자 경로에서는 항상 null 이라 필터가 즉시 빠져나온다.
+   */
+  const filteredDisplayOnlyPriorAnswers = useMemo(
+    () => filterPriorAnswersByCondition(displayOnlyPriorAnswers, questions, responses, evalCtx),
+    [displayOnlyPriorAnswers, questions, responses, evalCtx],
+  );
+
+  const highlightPriorAnswers = useMemo(
+    () =>
+      PRIOR_HIGHLIGHT_ENABLED
+        ? selectHighlightablePriorAnswers(
+            filteredPriorAnswers ?? filteredDisplayOnlyPriorAnswers,
+            questions,
+          )
+        : null,
+    [filteredPriorAnswers, filteredDisplayOnlyPriorAnswers, questions],
+  );
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
   const steps = useMemo<RenderStep[]>(
@@ -1349,6 +1394,11 @@ function SurveyResponseFlowActive({
   const prefilledQuestionIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (changeConfirmEnabled) return;
+    // 관리자 편집은 이월 값을 **표시만** 한다. 여기서 프리필이 돌면 관리자가 응답을 열어
+    // 보기만 해도 지난 회차 값이 이번 회차 응답에 깔리고, 제출 시 그대로 저장된다.
+    // (이 화면에도 이월 응답을 싣기 시작하면서 생긴 경계다 — 그 전에는 값이 null 이라
+    // 이 effect 가 저절로 무동작이었다.)
+    if (isAdminEdit) return;
     if (!prefillSettled) return;
     // 이월값 조건은 이 단계 밖 문항을 참조할 수 있어(BQ1 이 앞 페이지에 있는 식) 전체
     // 문항과 평가 컨텍스트를 함께 넘긴다. 채울 대상은 여전히 이 단계의 표시 문항뿐이다.
@@ -1365,6 +1415,7 @@ function SurveyResponseFlowActive({
     }
   }, [
     changeConfirmEnabled,
+    isAdminEdit,
     prefillSettled,
     currentStepQuestions,
     priorAnswers,
@@ -1389,6 +1440,8 @@ function SurveyResponseFlowActive({
    */
   useEffect(() => {
     if (changeConfirmEnabled) return;
+    // 깐 적이 없으니 회수할 것도 없다 — 프리필과 같은 경계다.
+    if (isAdminEdit) return;
     if (!prefillSettled) return;
     const retractions = collectPriorAnswerRetractions(
       questions,
@@ -1404,6 +1457,7 @@ function SurveyResponseFlowActive({
     }
   }, [
     changeConfirmEnabled,
+    isAdminEdit,
     prefillSettled,
     questions,
     priorAnswers,
@@ -1779,6 +1833,7 @@ function SurveyResponseFlowActive({
       <PriorAnswersProvider
         answers={priorAnswers}
         confirmAnswers={confirmPriorAnswers}
+        highlightAnswers={highlightPriorAnswers}
         waveLabel={control?.priorWaveLabel}
         changeConfirmEnabled={changeConfirmEnabled}
       >

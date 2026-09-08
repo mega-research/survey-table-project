@@ -193,6 +193,8 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                 onChange={(next) => handleGroupChange(g.groupKey, next)}
                 columns={config?.positionsColumns}
                 detailTargetScopeId={`${question.id}:${g.groupKey}`}
+                questionId={question.id}
+                cellId={g.groupKey}
               />
               {groupPositions < requestedPositions && (
                 <p className="text-sm text-gray-500">
@@ -227,6 +229,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         onChange={onChange}
         columns={config?.positionsColumns}
         detailTargetScopeId={question.id}
+        questionId={question.id}
       />
 
       {positions < requestedPositions && (

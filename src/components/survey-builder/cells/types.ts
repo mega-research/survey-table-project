@@ -25,6 +25,14 @@ export interface InteractiveCellProps {
    * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).
    */
   content?: string | undefined;
+  /**
+   * 이월 표시(빨강) 판정에 쓸 **이월 조각 오버라이드**. 미지정이면 셀이 컨텍스트에서
+   * `questionId` + `cell.id` 로 직접 찾는다.
+   *
+   * 보기-소스 표 안의 선택형 셀만 넘긴다 — 그 값은 이월 응답의 제자리가 아니라
+   * `__optTexts__` 사이드카에 인코딩돼 있어 셀이 스스로 찾을 수 없다.
+   */
+  priorChoiceValue?: unknown;
 }
 
 /** 미리보기(읽기 전용) 셀 컴포넌트 공통 props */

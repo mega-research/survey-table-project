@@ -44,12 +44,19 @@ vi.mock('@/db', () => ({
     },
   },
 }));
+// 이월 표시(빨강)용 조회 — 이 파일이 지키는 것은 스코프이지 이월 값이 아니므로 서비스는
+// 대역으로 두고, 호출 인자만 본다(같은 종류의 누출이 이 경로로도 날 수 있다).
+vi.mock('@/features/contacts/server/services/contact-prior-answers.service', () => ({
+  lookupPriorAnswersByContactTarget: vi.fn(async () => null),
+}));
 vi.mock(
   '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/admin-response-editor',
   () => ({
     AdminResponseEditor: () => null,
   }),
 );
+
+import { lookupPriorAnswersByContactTarget } from '@/features/contacts/server/services/contact-prior-answers.service';
 
 import AdminResponseEditPage from '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/page';
 
@@ -83,5 +90,18 @@ describe('AdminResponseEditPage contact scope', () => {
     // 미배포 설문(surveys.currentVersionId=null, mock 기본값) — 이관 대상 아님.
     expect(props?.['renderedVersionId']).toBeNull();
     expect(props?.['migratedFromOldVersion']).toBe(false);
+  });
+
+  it('이월 응답 조회도 이 설문·이 파티션으로 못 박아 부른다', async () => {
+    await AdminResponseEditPage({
+      params: Promise.resolve({ id: SURVEY_ID, responseId: RESPONSE_ID }),
+      searchParams: Promise.resolve({}),
+    });
+
+    expect(vi.mocked(lookupPriorAnswersByContactTarget)).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      isTest: false,
+    });
   });
 });

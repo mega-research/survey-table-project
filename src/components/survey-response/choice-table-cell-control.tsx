@@ -7,6 +7,8 @@ import {
   decodeChoiceTableCellValue,
   encodeChoiceTableCellValue,
 } from '@/lib/survey/choice-table-cell-value';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
+import { priorOptionText } from '@/lib/survey/prior-answers';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { TableCell } from '@/types/survey';
 
@@ -34,6 +36,7 @@ export function ChoiceTableCellControl({
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  const priorHighlight = usePriorHighlight();
 
   const onUpdateValue = useCallback(
     (value: string | string[] | object) => {
@@ -43,11 +46,19 @@ export function ChoiceTableCellControl({
   );
 
   const cellResponse = decodeChoiceTableCellValue(optionTexts[cell.id] ?? '', cell.type);
+  // 이월 표시 — 이 값은 이월 응답의 제자리가 아니라 사이드카에 인코딩돼 있으므로
+  // 저장할 때와 같은 디코더로 되돌려 셀에 조각으로 넘긴다. 셀이 스스로 찾으면
+  // `prior[questionId][cell.id]` 를 보게 되어 언제나 빈손이다.
+  const priorChoiceValue = decodeChoiceTableCellValue(
+    priorOptionText(priorHighlight, questionId, cell.id) ?? '',
+    cell.type,
+  );
   const shared = {
     cell,
     cellResponse,
     onUpdateValue,
     questionId,
+    priorChoiceValue,
     ...(inputIdScope !== undefined ? { inputIdScope } : {}),
   };
 

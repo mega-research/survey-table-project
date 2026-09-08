@@ -14,6 +14,8 @@ interface Props {
   initialResponses: Record<string, unknown>;
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
+  /** 이 응답자의 이월 응답 한 벌. 익명 응답·이월 미보유면 null. 이월 표시(빨강) 전용. */
+  initialPriorAnswers: Record<string, unknown> | null;
   /** 렌더 버전 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다). */
   documentView: SurveyDocumentView | null;
   idx: number | null;
@@ -34,6 +36,7 @@ export function AdminResponseEditor({
   initialResponses,
   versionSnapshot,
   initialContactAttrs,
+  initialPriorAnswers,
   documentView,
   idx,
   renderedVersionId,
@@ -62,6 +65,7 @@ export function AdminResponseEditor({
           initialResponses,
           versionSnapshot,
           initialContactAttrs,
+          initialPriorAnswers,
           documentView,
           // 구버전 응답이면 숨은 문항 strip 을 걸지 않는다 (서버 migrating 게이트와 동일 판정).
           migratedFromOldVersion,

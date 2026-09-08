@@ -5,6 +5,11 @@ import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  type HighlightPriorAnswers,
+  isPriorMultiSelectLevel,
+} from '@/lib/survey/prior-answer-highlight';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { QuestionOption, SelectLevel } from '@/types/survey';
 
@@ -14,6 +19,9 @@ interface UserDefinedMultiLevelSelectProps {
   onChange: (values: string[]) => void;
   disabled?: boolean;
   className?: string;
+  /** 이월 표시(빨강) 판정용 — 응답 화면만 넘긴다. 빌더 미리보기·테스트 카드는 미전달. */
+  questionId?: string;
+  priorHighlight?: HighlightPriorAnswers;
 }
 
 export function UserDefinedMultiLevelSelect({
@@ -22,6 +30,8 @@ export function UserDefinedMultiLevelSelect({
   onChange,
   disabled = false,
   className = '',
+  questionId,
+  priorHighlight = null,
 }: UserDefinedMultiLevelSelectProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -94,6 +104,17 @@ export function UserDefinedMultiLevelSelect({
                   isDisabled
                     ? 'cursor-not-allowed bg-gray-50 text-gray-400'
                     : 'hover:border-gray-300'
+                } ${
+                  !isDisabled &&
+                  questionId !== undefined &&
+                  isPriorMultiSelectLevel(
+                    priorHighlight,
+                    questionId,
+                    index,
+                    currentValues[index],
+                  )
+                    ? PRIOR_HIGHLIGHT_TEXT_CLS
+                    : ''
                 }`}
               >
                 <option value="">{level.placeholder || `${level.label} 선택`}</option>

@@ -6,6 +6,12 @@ import { ChevronDown } from 'lucide-react';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorChoice,
+  matchesPriorChoice,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellContentLayout } from './cell-content-layout';
@@ -20,9 +26,11 @@ export const SelectCell = React.memo(function SelectCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  priorChoiceValue,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
   const handleSelectChange = useCallback(
     (optionId: string) => {
       onUpdateValue(optionId);
@@ -58,7 +66,15 @@ export const SelectCell = React.memo(function SelectCell({
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelectChange(e.target.value)}
-            className="w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className={`w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+              (
+                priorChoiceValue !== undefined
+                  ? matchesPriorChoice(priorChoiceValue, selectedValue)
+                  : isPriorChoice(priorHighlight, questionId, selectedValue, cell.id)
+              )
+                ? PRIOR_HIGHLIGHT_TEXT_CLS
+                : ''
+            }`}
           >
             <option value="">선택하세요</option>
             {cell.selectOptions.map((option) => (

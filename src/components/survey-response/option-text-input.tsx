@@ -4,8 +4,12 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorOptionTextValue,
+} from '@/lib/survey/prior-answer-highlight';
 import { priorOptionText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { cn } from '@/lib/utils';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { isInputFormat } from '@/types/input-type';
@@ -77,6 +81,12 @@ export function OptionTextInput({
 
   // 형식 모드 — blur 정돈·위반 문구. 숫자 모드와 배타이므로 훅 둘이 동시에 일하지 않는다.
   const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const priorHighlight = usePriorHighlight();
+  // 상세기재도 값 조각이다 — 보기 선택은 그대로 두고 텍스트만 고친 칸을 가려내려면
+  // 문항이 아니라 보기 단위로 판정해야 한다.
+  const priorTextCls = isPriorOptionTextValue(priorHighlight, questionId, option.id, rawValue)
+    ? PRIOR_HIGHLIGHT_TEXT_CLS
+    : undefined;
   const formatField = useInputFormatField({
     format,
     rawValue,
@@ -113,7 +123,7 @@ export function OptionTextInput({
       : {}),
     placeholder:
       option.textInputPlaceholder || (format ? formatSampleValue(format) : DEFAULT_PLACEHOLDER),
-    className,
+    className: cn(className, priorTextCls),
     'data-option-text-target-id': optionTextTargetId(questionId, option.id),
   };
 
@@ -142,7 +152,11 @@ export function OptionTextInput({
     return (
       <div className="w-full space-y-1">
         <OptionTextRow label={rowLabel}>
-          <input type="text" {...sharedProps} className={OPTION_TEXT_BARE_INPUT_CLS} />
+          <input
+            type="text"
+            {...sharedProps}
+            className={cn(OPTION_TEXT_BARE_INPUT_CLS, priorTextCls)}
+          />
         </OptionTextRow>
         {hint}
       </div>

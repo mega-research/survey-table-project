@@ -14,6 +14,11 @@ import {
   useBranchEvalCtx,
   useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_CONTROL_CLS,
+  isPriorChoice,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
@@ -74,6 +79,7 @@ export function ChoiceTableResponse({
   // 그룹별 선택 모드 여부 — radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
   // isCheckbox 가드를 제거하여 checkbox 질문도 grouped 경로를 밟을 수 있게 한다.
   const isGrouped = isGroupedChoiceQuestion(question);
+  const priorHighlight = usePriorHighlight();
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -164,6 +170,18 @@ export function ChoiceTableResponse({
     }
     onChange(next);
   };
+
+  /**
+   * 이 보기 셀이 이월 선택인가 — 값이 보기 셀 id 라 이월 응답도 같은 모양이다.
+   * 그룹 문항은 `{그룹키: 셀id}` 라 그룹 키를 조각 주소로 넘긴다.
+   */
+  const isPriorChoiceCell = (cellId: string) =>
+    isPriorChoice(
+      priorHighlight,
+      question.id,
+      cellId,
+      isGrouped ? getGroupKeyOfCell(question, cellId) : undefined,
+    );
 
   const getChoiceCellState = (cell: TableCell) => {
     let checked: boolean;
@@ -316,7 +334,7 @@ export function ChoiceTableResponse({
             // 그룹 radio 는 onChange 대신 onClick 으로 토글하므로 controlled checked 경고를
             // 막기 위해 readOnly 를 명시한다(onClick 동작에는 영향 없음).
             readOnly={isGrouped && cellType === 'radio'}
-            className="h-4 w-4"
+            className={cn('h-4 w-4', checked && isPriorChoiceCell(cell.id) && PRIOR_HIGHLIGHT_CONTROL_CLS)}
           />
           {labelText && (
             <span
@@ -414,7 +432,10 @@ export function ChoiceTableResponse({
                     }
                     // 그룹 radio: onClick 토글 — controlled checked 경고 방지용 readOnly
                     readOnly={isGrouped && mobileCellType === 'radio'}
-                    className="h-5 w-5"
+                    className={cn(
+                      'h-5 w-5',
+                      checked && isPriorChoiceCell(choiceCell.id) && PRIOR_HIGHLIGHT_CONTROL_CLS,
+                    )}
                   />
                 }
                 footer={

@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import { buildDocumentView } from '@/features/survey-builder/server/services/survey-read.service';
+import { lookupPriorAnswersByContactTarget } from '@/features/contacts/server/services/contact-prior-answers.service';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
 import { getResponseById } from '@/data/responses';
 import { isResponseExcluded } from '@/lib/operations/profiles.server';
@@ -72,8 +73,8 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   });
   const renderVersionId = surveyRow?.currentVersionId ?? response.versionId ?? null;
 
-  // 렌더 버전 스냅샷과 contact attrs, negative 제외 여부를 병렬로 조회.
-  const [version, contactRow, excluded] = await Promise.all([
+  // 렌더 버전 스냅샷과 contact attrs, negative 제외 여부, 이월 응답을 병렬로 조회.
+  const [version, contactRow, excluded, priorAnswers] = await Promise.all([
     renderVersionId
       ? db.query.surveyVersions.findFirst({
           where: eq(surveyVersions.id, renderVersionId),
@@ -90,6 +91,15 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
         })
       : Promise.resolve(null),
     isResponseExcluded(surveyId, responseId, scope),
+    // 이월 표시(빨강)용. 관리자 편집에는 프리필도 변동 확인도 걸리지 않고 색만 붙는다.
+    // 초대 토큰 경로를 쓸 수 없어(관리자는 링크로 들어오지 않는다) 조사 대상 id 로 읽는다.
+    response.contactTargetId
+      ? lookupPriorAnswersByContactTarget({
+          surveyId,
+          contactTargetId: response.contactTargetId,
+          isTest: testFlagForScope(scope),
+        })
+      : Promise.resolve(null),
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체.
   const contactAttrs = contactRow?.attrs ?? {};
@@ -137,6 +147,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
         initialResponses={initialResponses}
         versionSnapshot={version?.snapshot ?? null}
         initialContactAttrs={contactAttrs}
+        initialPriorAnswers={priorAnswers}
         documentView={documentView}
         idx={idx}
         renderedVersionId={surveyRow?.currentVersionId ?? null}

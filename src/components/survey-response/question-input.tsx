@@ -11,8 +11,14 @@ import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import {
+  PRIOR_HIGHLIGHT_CONTROL_CLS,
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorChoice,
+  isPriorText,
+} from '@/lib/survey/prior-answer-highlight';
 import { hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
@@ -175,6 +181,7 @@ function QuestionInputControl({
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (
@@ -224,7 +231,9 @@ function QuestionInputControl({
     case 'textarea':
       return (
         <textarea
-          className="w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+          className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
+            isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
+          }`}
           rows={4}
           placeholder="답변을 입력하세요..."
           value={typeof value === 'string' ? value : ''}
@@ -270,6 +279,8 @@ function QuestionInputControl({
           values={Array.isArray(value) ? (value as string[]) : []}
           onChange={(v) => onChange(v)}
           className="w-full"
+          questionId={question.id}
+          priorHighlight={priorHighlight}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">다단계 선택이 구성되지 않았습니다.</div>
@@ -365,6 +376,8 @@ function RadioQuestion({
     onChange(optionValue);
   };
 
+  const priorHighlight = usePriorHighlight();
+
   const isMobileView = useMobileView();
   const effectiveColumns = isMobileView
     ? resolveMobileOptionsColumns(
@@ -397,7 +410,12 @@ function RadioQuestion({
               checked={isSelected(option.value)}
               onChange={() => handleOptionChange(option.value)}
               onClick={() => handleOptionChange(option.value)}
-              className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+              className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                isSelected(option.value) &&
+                isPriorChoice(priorHighlight, question.id, option.value)
+                  ? PRIOR_HIGHLIGHT_CONTROL_CLS
+                  : ''
+              }`}
             />
             <label
               htmlFor={`${question.id}-${option.id}`}
@@ -440,6 +458,7 @@ function CheckboxQuestion({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -534,8 +553,10 @@ function CheckboxQuestion({
                 disabled={disabled}
                 onChange={(e) => handleOptionChange(option.value, e.target.checked)}
                 className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                  disabled ? 'cursor-not-allowed opacity-50' : ''
-                }`}
+                  checked && isPriorChoice(priorHighlight, question.id, option.value)
+                    ? PRIOR_HIGHLIGHT_CONTROL_CLS
+                    : ''
+                } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
@@ -583,6 +604,7 @@ function SelectQuestion({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const selectedValue = isOtherChoiceValue(value)
     ? value.selectedValue
@@ -634,7 +656,11 @@ function SelectQuestion({
       <select
         value={selectedValue}
         onChange={(e) => handleSelectChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+        className={`w-full rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
+          isPriorChoice(priorHighlight, question.id, selectedValue)
+            ? PRIOR_HIGHLIGHT_TEXT_CLS
+            : ''
+        }`}
       >
         <option value="">선택하세요...</option>
         {question.options?.map((option: QuestionOption) => (
@@ -698,6 +724,7 @@ function TextResponseInput({
   // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니고,
   // 이월 값을 손대지 않은 칸도 대상이 아니다(prior-answers 의 면제 규칙).
   const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const priorHighlight = usePriorHighlight();
   const formatField = useInputFormatField({
     format,
     rawValue: currentValue,
@@ -750,7 +777,11 @@ function TextResponseInput({
           handleBlur();
           formatField.handleBlur();
         }}
-        className="w-full text-base"
+        className={`w-full text-base ${
+          !isPrefilled && isPriorText(priorHighlight, question.id, currentValue)
+            ? PRIOR_HIGHLIGHT_TEXT_CLS
+            : ''
+        }`}
         disabled={isPrefilled}
         data-prefilled={isPrefilled || undefined}
       />

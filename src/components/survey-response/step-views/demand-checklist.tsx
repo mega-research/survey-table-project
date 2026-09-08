@@ -21,6 +21,12 @@ import {
   type OpinionPairs,
 } from '@/lib/survey/judgement-item';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorChoice,
+  isPriorText,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { Question, QuestionGroup } from '@/types/survey';
@@ -386,6 +392,7 @@ function JudgementRow({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
 
   // 조사표 사각형과 같은 규칙 — 엑셀 라벨이 있으면 그것, 없으면 문항코드.
   const shortCode = questionShortCode(question);
@@ -440,6 +447,7 @@ function JudgementRow({
           <Seg
             label={labelOf(shape.needValue)}
             on={value === shape.needValue}
+            prior={isPriorChoice(priorHighlight, question.id, shape.needValue)}
             tone="need"
             invalid={invalid}
             onClick={() => onPick(shape.needValue)}
@@ -447,6 +455,7 @@ function JudgementRow({
           <Seg
             label={labelOf(shape.dropValue)}
             on={value === shape.dropValue}
+            prior={isPriorChoice(priorHighlight, question.id, shape.dropValue)}
             tone="drop"
             invalid={invalid}
             onClick={() => onPick(shape.dropValue)}
@@ -478,13 +487,22 @@ function JudgementRow({
             onBlur={() => (typing.current = false)}
             rows={3}
             placeholder="이 문항에 대한 의견을 자유롭게 적어 주십시오"
-            className="w-full rounded-md border border-gray-300 p-2 text-[12px] outline-none focus:border-blue-500"
+            className={cn(
+              'w-full rounded-md border border-gray-300 p-2 text-[12px] outline-none focus:border-blue-500',
+              isPriorText(priorHighlight, opinionQuestion.id, note) && PRIOR_HIGHLIGHT_TEXT_CLS,
+            )}
           />
         </div>
       )}
     </div>
   );
 }
+
+/**
+ * 이월 표시로 눌린 선택지의 색 — 지금 값이 지난 회차와 같을 때 톤 색을 대신한다.
+ * 이 버튼의 채움색이 곧 "선택됨" 채널이라 라디오 컨트롤과 같은 규칙이 성립한다.
+ */
+const SEG_ON_PRIOR = 'bg-red-500 text-white';
 
 /** 눌린 선택지의 색. 필요함은 파랑, 필요하지 않음은 짙은 회색, 의견은 주황. */
 const SEG_ON: Record<'need' | 'drop' | 'opinion', string> = {
@@ -496,6 +514,7 @@ const SEG_ON: Record<'need' | 'drop' | 'opinion', string> = {
 function Seg({
   label,
   on,
+  prior = false,
   tone,
   invalid,
   className,
@@ -503,6 +522,8 @@ function Seg({
 }: {
   label: string;
   on: boolean;
+  /** 지금 값이 이월 값과 같은가 — 눌린 상태에서만 색이 갈린다. */
+  prior?: boolean;
   tone: 'need' | 'drop' | 'opinion';
   invalid?: boolean;
   className?: string;
@@ -519,7 +540,7 @@ function Seg({
       className={cn(
         'flex-1 rounded-md px-1 py-1.5 text-[11px] whitespace-nowrap transition-colors',
         on
-          ? cn('font-semibold', SEG_ON[tone])
+          ? cn('font-semibold', prior ? SEG_ON_PRIOR : SEG_ON[tone])
           : invalid
             ? 'border border-red-400 bg-white text-red-500 hover:bg-red-50'
             : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50',
