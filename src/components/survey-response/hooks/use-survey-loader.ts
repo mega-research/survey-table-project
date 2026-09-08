@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
 import { normalizePriorAnswers, type PriorAnswers } from '@/lib/survey/prior-answers';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { normalizeQuestions } from '@/lib/question';
@@ -331,7 +332,14 @@ export function useSurveyLoader({
             if (priorSettled.status === 'rejected') {
               console.error('이월 응답 조회 오류 (프리필 생략):', priorSettled.reason);
             } else if (priorSettled.value) {
-              const prior = normalizePriorAnswers(priorSettled.value);
+              // 「이월값 불러오기」를 끈 문항은 여기서 통째로 걷어낸다. 이 시드는 프리필
+              // effect 보다 먼저 돌고 문항별 게이트가 없어서, 걸러 두지 않으면 스위치를
+              // 꺼도 상세 기재 칸에 지난 회차 값이 그대로 보인다.
+              const prior =
+                omitDisabledPriorAnswers(
+                  normalizePriorAnswers(priorSettled.value),
+                  result.survey.questions ?? [],
+                ) ?? {};
               if (Object.keys(prior).length > 0) {
                 setPriorAnswers(prior);
                 useSurveyResponseStore.getState().seedOptionTexts(readOptTextsSidecar(prior));

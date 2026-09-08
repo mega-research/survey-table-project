@@ -1,3 +1,4 @@
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 import { type BranchEvalCtx, emptyBranchEvalCtx } from '@/utils/branch-eval';
@@ -59,4 +60,39 @@ export function filterPriorAnswersByCondition(
     filtered[questionId] = value;
   }
   return filtered;
+}
+
+/**
+ * 이월 응답에서 「이월값 불러오기」를 끈 문항의 값을 통째로 걷어낸다.
+ *
+ * 조건 기반 필터(`filterPriorAnswersByCondition`)와 달리 현재 응답을 보지 않는다 —
+ * 스위치는 응답과 무관한 정적 설정이라 설문 로드 시점에도 판정할 수 있다.
+ *
+ * 로더는 이월 응답의 `__optTexts__`(상세 기재 사이드카)를 입력란 스토어에 시드하는데,
+ * 그 시드는 프리필 effect 보다 먼저 돌고 문항별 게이트가 없었다. 그래서 스위치를 꺼도
+ * 상세 기재 칸에는 지난 회차 값이 그대로 보였다(2026-09-08 DQ7 매출액 10000).
+ * 사이드카는 문항 id 로 묶여 있으므로 같은 판정으로 함께 걷어낸다.
+ */
+export function omitDisabledPriorAnswers(
+  prior: PriorAnswers | null | undefined,
+  questions: readonly Question[],
+): PriorAnswers | null {
+  if (!prior) return null;
+  const disabled = new Set(
+    questions.filter((q) => q.priorAnswerDisabled === true).map((q) => q.id),
+  );
+  if (disabled.size === 0) return prior;
+  const out: PriorAnswers = {};
+  for (const [key, value] of Object.entries(prior)) {
+    if (disabled.has(key)) continue;
+    if (key === OPT_TEXTS_KEY && value && typeof value === 'object' && !Array.isArray(value)) {
+      const kept = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).filter(([qid]) => !disabled.has(qid)),
+      );
+      if (Object.keys(kept).length > 0) out[key] = kept as PriorAnswers[string];
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
 }

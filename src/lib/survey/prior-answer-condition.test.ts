@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldLoadPriorAnswer } from '@/lib/survey/prior-answer-condition';
+import {
+  omitDisabledPriorAnswers,
+  shouldLoadPriorAnswer,
+} from '@/lib/survey/prior-answer-condition';
 import type { Question } from '@/types/survey';
 
 /**
@@ -121,5 +124,45 @@ describe('priorAnswerDisabled — 이월값 불러오기 끄기', () => {
 
   it('미설정은 기존 동작 그대로 — 예전 설문이 그대로 돌아야 한다', () => {
     expect(shouldLoadPriorAnswer(question('q'), {}, [])).toBe(true);
+  });
+});
+
+/**
+ * 상세 기재 사이드카 누수.
+ *
+ * 로더는 이월 응답의 `__optTexts__` 를 입력란 스토어에 시드하는데, 그 시드는 프리필
+ * effect 보다 먼저 돌고 문항별 게이트가 없었다. 스위치를 꺼도 상세 기재 칸에 지난
+ * 회차 값이 그대로 보였다(2026-09-08 DQ7 매출액 10000).
+ */
+describe('omitDisabledPriorAnswers', () => {
+  const on = question('q-on');
+  const off = { ...question('q-off'), priorAnswerDisabled: true } as Question;
+  const prior = {
+    'q-on': { a: '켠 문항 값' },
+    'q-off': { a: '끈 문항 값' },
+    __optTexts__: {
+      'q-on': { opt1: '켠 문항 상세' },
+      'q-off': { opt1: '10000' },
+    },
+  } as never;
+
+  it('끈 문항의 값과 상세 기재를 함께 걷어낸다', () => {
+    const out = omitDisabledPriorAnswers(prior, [on, off]) as Record<string, unknown>;
+    expect(out['q-off']).toBeUndefined();
+    expect(out['q-on']).toEqual({ a: '켠 문항 값' });
+    expect(out.__optTexts__).toEqual({ 'q-on': { opt1: '켠 문항 상세' } });
+  });
+
+  it('끈 문항이 없으면 원본을 그대로 돌려준다', () => {
+    expect(omitDisabledPriorAnswers(prior, [on])).toBe(prior);
+  });
+
+  it('사이드카가 통째로 비면 키를 남기지 않는다', () => {
+    const only = { __optTexts__: { 'q-off': { opt1: '10000' } } } as never;
+    expect(omitDisabledPriorAnswers(only, [off])).toEqual({});
+  });
+
+  it('이월이 없으면 null', () => {
+    expect(omitDisabledPriorAnswers(null, [off])).toBeNull();
   });
 });
