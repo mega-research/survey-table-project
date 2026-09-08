@@ -191,8 +191,33 @@ async function handleExport(
       const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
         isTest: testFlagForScope(scope),
       });
+      // 행 반복의 뒤쪽 미사용 벌은 .sav 에서 열이 없다 — 여기서도 같은 판정을 써야
+      // FORMATS 가 존재하지 않는 변수를 가리키지 않는다. 응답을 로드하지 않는 경로라
+      // 셀 값 판정에 필요한 questionResponses 만 따로 읽는다(복호화는 불필요 —
+      // 암호문도 "값이 있음"으로 세면 충분하다).
+      const { collectUsedRepeatCounts } = await import('@/lib/analytics/row-repeat-usage');
+      const repeatScanRows = await db
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            notDeletedResponse,
+            completedResponse,
+            responseScopeCondition(scope),
+          ),
+        );
+      const usedRepeatCounts = collectUsedRepeatCounts(
+        hydratedQuestions,
+        repeatScanRows.map((r) => ({
+          questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+        })),
+      );
       const syntax = generateMrsetsSyntax(
-        generateSPSSColumns(hydratedQuestions, { changeConfirmQuestionIds }),
+        generateSPSSColumns(hydratedQuestions, {
+          changeConfirmQuestionIds,
+          ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+        }),
         hydratedQuestions,
       );
       if (syntax === null) {

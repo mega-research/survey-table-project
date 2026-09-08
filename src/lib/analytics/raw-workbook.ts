@@ -8,6 +8,7 @@ import {
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
+import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
 import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
@@ -96,6 +97,12 @@ export interface RawExportContext {
    * 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
    */
   contactColumns?: readonly RawExportContactColumn[];
+  /**
+   * 반복 블록별 "실제로 쓰인 최대 벌" — 뒤쪽 미사용 벌의 열을 빼는 판정.
+   * 워크북 빌더가 진입부에서 모수 전체를 1회 스캔해 채운다(withUsedRepeatCounts).
+   * 모든 시트가 같은 맵을 공유해야 파일 안에서 열 구성이 갈리지 않는다.
+   */
+  usedRepeatCounts?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -103,9 +110,25 @@ export interface RawExportContext {
  * 호출부마다 조건부 spread 를 반복하면 옵션이 하나 늘 때마다 드리프트가 생긴다.
  */
 export function toSpssColumnOptions(ctx: RawExportContext): SpssColumnOptions {
-  return ctx.changeConfirmQuestionIds
-    ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
-    : {};
+  return {
+    ...(ctx.changeConfirmQuestionIds
+      ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
+      : {}),
+    ...(ctx.usedRepeatCounts ? { usedRepeatCounts: ctx.usedRepeatCounts } : {}),
+  };
+}
+
+/**
+ * 반복 블록 사용 벌 스캔을 컨텍스트에 얹는다 — 워크북 빌더 진입부에서 한 번만 부른다.
+ * 파일별이 아니라 **모수 전체**를 세야 분할 내보내기의 파일 간 열 구성이 같다.
+ */
+export function withUsedRepeatCounts(
+  ctx: RawExportContext,
+  questions: Question[],
+  rows: readonly RawExportResponseRow[],
+): RawExportContext {
+  const usedRepeatCounts = collectUsedRepeatCounts(questions, rows);
+  return usedRepeatCounts.size > 0 ? { ...ctx, usedRepeatCounts } : ctx;
 }
 
 /** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
@@ -267,7 +290,8 @@ export function generateRawDataWorkbook(
 ): ExcelJS.Workbook {
   // 질문은 order 순으로 정렬해 컬럼/코딩북 순서를 설문 표시 순서와 일치시킨다.
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const columns = generateSPSSColumns(sortedQuestions, toSpssColumnOptions(ctx));
+  const exportCtx = withUsedRepeatCounts(ctx, sortedQuestions, rows);
+  const columns = generateSPSSColumns(sortedQuestions, toSpssColumnOptions(exportCtx));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();
