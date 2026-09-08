@@ -124,7 +124,7 @@ export interface TableQuestion
     QuestionBase,
     EmbeddedTableFields,
     MobileTableDisplayFields,
-    Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs'> {
+    Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig'> {
   type: 'table';
 }
 
