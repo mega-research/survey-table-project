@@ -327,7 +327,7 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
  */
 /**
- * 숫자 모드(textInputType='number') 옵션 텍스트의 범위 위반 — 선택된 옵션의 비어있지 않은
+ * 숫자 모드(textInputType='number')·형식 지정 옵션 텍스트의 위반 — 선택된 옵션의 비어있지 않은
  * 텍스트만 본다 (선택 해제된 옵션의 잔존 텍스트는 required-option-text-validation 과 같은
  * 이유로 신뢰하지 않는다). max·소수·허용값은 타이핑에서 차단되므로 여기서는 min 이 실질이다.
  */
@@ -338,16 +338,26 @@ function collectOptionTextRangeIssues(
 ): NumericIssue[] {
   if (!optionTexts) return [];
   const options = resolveChoiceOptions(question);
-  const numericOptions = options.filter(
-    (o) => o.allowTextInput === true && o.textInputType === 'number',
+  const checkedOptions = options.filter(
+    (o) =>
+      o.allowTextInput === true && (o.textInputType === 'number' || isInputFormat(o.textInputType)),
   );
-  if (numericOptions.length === 0) return [];
+  if (checkedOptions.length === 0) return [];
   const selected = collectSelectedOptionIds(response, options);
   const issues: NumericIssue[] = [];
-  for (const opt of numericOptions) {
+  for (const opt of checkedOptions) {
     if (!selected.has(opt.id)) continue;
     const text = (optionTexts[opt.id] ?? '').trim();
     if (!text) continue;
+    const formatMessage = formatViolationMessage(opt.textInputType, text);
+    if (formatMessage) {
+      issues.push({
+        kind: 'format',
+        message: formatMessage,
+        detailTargetIds: [optionTextTargetId(question.id, opt.id)],
+      });
+      continue;
+    }
     const message = rangeViolationMessage(text, opt.textInputNumberFormat);
     if (message) {
       issues.push({
@@ -401,7 +411,17 @@ function collectChoiceTableInputCellIssues(
         missingTargets.push(optionTextTargetId(question.id, cell.id));
         continue;
       }
-      if (value === '' || cell.inputType !== 'number') continue;
+      if (value === '') continue;
+      const formatMessage = formatViolationMessage(cell.inputType, value);
+      if (formatMessage) {
+        issues.push({
+          kind: 'format',
+          message: formatMessage,
+          detailTargetIds: [optionTextTargetId(question.id, cell.id)],
+        });
+        continue;
+      }
+      if (cell.inputType !== 'number') continue;
       const message = rangeViolationMessage(value, cell.numberFormat);
       if (message) {
         issues.push({

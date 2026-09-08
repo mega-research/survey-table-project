@@ -1,11 +1,14 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import type { InputType, NumberFormat } from '@/types/survey';
+import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
+import { cn } from '@/lib/utils';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { isInputFormat } from '@/types/input-type';
+import type { InputType, NumberFormat } from '@/types/survey';
+import { formatSampleValue } from '@/utils/input-format';
 
 import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
 
@@ -59,6 +62,7 @@ export function OptionTextInput({
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
   const isNumberMode = option.textInputType === 'number';
+  const format = isInputFormat(option.textInputType) ? option.textInputType : null;
   const rawValue = optionTexts[option.id] ?? '';
   // 숫자 모드 — 입력 셀과 같은 타이핑 규칙(숫자만·콤마 표시·max/소수/허용값 차단).
   // 단위 환산·min 미달은 입력칸 아래 한 줄로 보인다 (input-cell·단답형과 같은 모양).
@@ -67,6 +71,13 @@ export function OptionTextInput({
     onRawChange: (v) => setOptionText(questionId, option.id, v),
     numberFormat: option.textInputNumberFormat,
     enabled: isNumberMode,
+  });
+
+  // 형식 모드 — blur 정돈·위반 문구. 숫자 모드와 배타이므로 훅 둘이 동시에 일하지 않는다.
+  const formatField = useInputFormatField({
+    format,
+    rawValue,
+    onRawChange: (v) => setOptionText(questionId, option.id, v),
   });
 
   const sharedProps = {
@@ -88,7 +99,16 @@ export function OptionTextInput({
           'aria-invalid': numeric.rangeViolation != null || undefined,
         }
       : {}),
-    placeholder: option.textInputPlaceholder || DEFAULT_PLACEHOLDER,
+    ...(format
+      ? {
+          inputMode: formatField.inputMode,
+          onFocus: formatField.handleFocus,
+          onBlur: formatField.handleBlur,
+          'aria-invalid': formatField.violation != null || undefined,
+        }
+      : {}),
+    placeholder:
+      option.textInputPlaceholder || (format ? formatSampleValue(format) : DEFAULT_PLACEHOLDER),
     className,
     'data-option-text-target-id': optionTextTargetId(questionId, option.id),
   };
@@ -97,14 +117,15 @@ export function OptionTextInput({
   // text-left 를 못 박는다 — 표 셀은 가운데/오른쪽 정렬이 흔해서 그냥 두면 안내 문구가
   // 입력값과 따로 놀며 오른쪽에 붙는다.
   const hint =
-    isNumberMode && (numeric.unitReading || numeric.rangeViolation) ? (
+    (isNumberMode && (numeric.unitReading || numeric.rangeViolation)) || formatField.violation ? (
       <div className="space-y-0.5 text-left">
-        {numeric.unitReading && (
+        {isNumberMode && numeric.unitReading && (
           <p className="text-muted-foreground text-sm">{numeric.unitReading}</p>
         )}
-        {numeric.rangeViolation && (
+        {isNumberMode && numeric.rangeViolation && (
           <p className="text-sm text-red-500">* {numeric.rangeViolation}</p>
         )}
+        {formatField.violation && <p className="text-sm text-red-500">* {formatField.violation}</p>}
       </div>
     ) : null;
 

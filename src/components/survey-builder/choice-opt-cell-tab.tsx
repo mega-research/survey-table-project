@@ -1,20 +1,22 @@
 'use client';
 
-import { NumberFormatFields } from './number-format-fields';
-import type { InputType, NumberFormat } from '@/types/survey';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { INPUT_FORMATS, isInputFormat } from '@/types/input-type';
+import type { InputType, NumberFormat } from '@/types/survey';
+import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
+import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
+import { NumberFormatFields } from './number-format-fields';
 
 interface ChoiceOptCellTabProps {
   choiceLabel: string;
@@ -81,8 +83,7 @@ export function ChoiceOptCellTab({
   onAnswerQuoteTextChange,
 }: ChoiceOptCellTabProps) {
   // 현재 셀이 소속된 그룹의 type을 초기값으로 사용하고, 미소속이면 '라디오' 기본값
-  const currentGroupType =
-    choiceGroups.find((g) => g.id === choiceGroupId)?.type ?? 'radio';
+  const currentGroupType = choiceGroups.find((g) => g.id === choiceGroupId)?.type ?? 'radio';
   // ranking 그룹에 소속된 경우도 '라디오'로 폴백 (세그먼트에 ranking 없음)
   const initialSelectedType: 'radio' | 'checkbox' =
     currentGroupType === 'checkbox' ? 'checkbox' : 'radio';
@@ -125,9 +126,7 @@ export function ChoiceOptCellTab({
 
   function handleGroupLabelChange(label: string) {
     if (!currentGroup) return;
-    onChoiceGroupsChange(
-      choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, label } : g)),
-    );
+    onChoiceGroupsChange(choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, label } : g)));
   }
 
   return (
@@ -174,7 +173,7 @@ export function ChoiceOptCellTab({
             aria-label="그룹"
             value={choiceGroupId}
             onChange={(e) => handleGroupSelectChange(e.target.value)}
-            className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="">(그룹 없음)</option>
             {filteredGroups.map((g) => (
@@ -207,7 +206,9 @@ export function ChoiceOptCellTab({
       {currentGroup && (
         <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
           <div className="flex items-center justify-between gap-4">
-            <Label className="text-sm font-medium">이 그룹 필수 응답 ({currentGroup.groupKey})</Label>
+            <Label className="text-sm font-medium">
+              이 그룹 필수 응답 ({currentGroup.groupKey})
+            </Label>
             <Switch
               checked={currentGroup.required ?? questionRequired}
               onCheckedChange={(on) =>
@@ -244,10 +245,32 @@ export function ChoiceOptCellTab({
       </div>
       {allowTextInput && (
         <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="choice-text-format" className="text-sm font-medium">
+              입력 형식
+            </Label>
+            <select
+              id="choice-text-format"
+              value={isInputFormat(textInputType) ? textInputType : ''}
+              onChange={(e) => {
+                const next = e.target.value;
+                onTextInputTypeChange(isInputFormat(next) ? next : 'text');
+              }}
+              className="h-8 rounded-md border border-gray-300 px-2 text-sm"
+            >
+              <option value="">지정 안 함</option>
+              {INPUT_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {INPUT_FORMAT_LABEL[f]}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-start gap-2">
             <input
               type="checkbox"
               id="choice-text-number"
+              disabled={isInputFormat(textInputType)}
               checked={textInputType === 'number'}
               onChange={(e) => onTextInputTypeChange(e.target.checked ? 'number' : 'text')}
               className="mt-0.5 h-4 w-4"
@@ -255,8 +278,8 @@ export function ChoiceOptCellTab({
             <label htmlFor="choice-text-number" className="flex-1 cursor-pointer text-sm">
               <span className="font-medium">숫자만 입력</span>
               <p className="mt-0.5 text-xs text-gray-500">
-                입력 셀과 같은 규칙 — 콤마 표시·단위·최소/최대·소수 자릿수·허용값을 쓸 수 있고,
-                SPSS 변수도 숫자형으로 내보냅니다.
+                입력 셀과 같은 규칙 — 콤마 표시·단위·최소/최대·소수 자릿수·허용값을 쓸 수 있고, SPSS
+                변수도 숫자형으로 내보냅니다.
               </p>
             </label>
           </div>
@@ -282,7 +305,8 @@ export function ChoiceOptCellTab({
               placeholder="옵션 라벨 (비워두면 셀 본문 텍스트 사용)"
             />
             <p className="text-xs text-gray-500">
-              선택 열 셀은 보통 비어 있으므로(라벨이 다른 열에 있음) 분석/SPSS 라벨을 여기에 명시하세요.
+              선택 열 셀은 보통 비어 있으므로(라벨이 다른 열에 있음) 분석/SPSS 라벨을 여기에
+              명시하세요.
             </p>
           </div>
           <div className="w-44 space-y-1">

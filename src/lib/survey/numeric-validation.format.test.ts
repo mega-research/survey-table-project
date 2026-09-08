@@ -106,3 +106,85 @@ describe('collectNumericIssues — 표 input 셀 형식', () => {
     expect(collectNumericIssues(hidden, { c1: '틀린값' })).toEqual([]);
   });
 });
+
+describe('collectNumericIssues — 보기 상세기재 형식', () => {
+  const question = {
+    id: 'qc',
+    type: 'checkbox',
+    title: '연락 수단',
+    required: false,
+    order: 0,
+    options: [
+      { id: 'o1', label: '휴대전화', value: '1', allowTextInput: true, textInputType: 'mobile' },
+      { id: 'o2', label: '이메일', value: '2', allowTextInput: true, textInputType: 'email' },
+      { id: 'o3', label: '기타', value: '3', allowTextInput: true },
+    ],
+  } as unknown as Question;
+
+  const ctxWith = (optionTexts: Record<string, string>) => ({
+    allResponses: {},
+    allQuestions: [question],
+    optionTexts,
+  });
+
+  it('선택한 보기의 상세기재가 형식에 맞으면 이슈가 없다', () => {
+    const issues = collectNumericIssues(question, ['1'], ctxWith({ o1: '010-1234-5678' }));
+    expect(issues).toEqual([]);
+  });
+
+  it('선택한 보기의 상세기재가 형식에 어긋나면 막는다', () => {
+    const issues = collectNumericIssues(question, ['1'], ctxWith({ o1: '02-1234-5678' }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.kind).toBe('format');
+    expect(issues[0]?.message).toBe('휴대전화 번호가 아닙니다');
+    expect(issues[0]?.detailTargetIds).toEqual(['qc:option:o1']);
+  });
+
+  it('선택하지 않은 보기의 잔존 텍스트는 보지 않는다', () => {
+    expect(collectNumericIssues(question, ['3'], ctxWith({ o1: '02-1234-5678' }))).toEqual([]);
+  });
+
+  it('형식을 지정하지 않은 상세기재는 아무 값이나 받는다', () => {
+    expect(collectNumericIssues(question, ['3'], ctxWith({ o3: '아무 말' }))).toEqual([]);
+  });
+});
+
+describe('collectNumericIssues — 보기-소스 표 안의 input 셀 형식', () => {
+  const question = {
+    id: 'qs',
+    type: 'radio',
+    title: '보기 표',
+    required: false,
+    order: 0,
+    tableRowsData: [
+      {
+        id: 'r1',
+        cells: [
+          { id: 'src', type: 'choice_opt', content: '보기' },
+          { id: 'tel', type: 'input', content: '', inputType: 'phone' },
+        ],
+      },
+    ],
+  } as unknown as Question;
+
+  const ctxWith = (optionTexts: Record<string, string>) => ({
+    allResponses: {},
+    allQuestions: [question],
+    optionTexts,
+  });
+
+  it('형식이 맞으면 이슈가 없다', () => {
+    expect(collectNumericIssues(question, 'src', ctxWith({ tel: '02-123-4567' }))).toEqual([]);
+  });
+
+  it('형식이 어긋나면 그 칸을 짚어 막는다', () => {
+    const issues = collectNumericIssues(question, 'src', ctxWith({ tel: '1544-1234' }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.kind).toBe('format');
+    expect(issues[0]?.detailTargetIds).toEqual(['qs:option:tel']);
+  });
+
+  it('빈 칸은 검사하지 않는다', () => {
+    expect(collectNumericIssues(question, 'src', ctxWith({ tel: '' }))).toEqual([]);
+  });
+});
