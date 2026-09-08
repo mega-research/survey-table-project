@@ -55,6 +55,7 @@ import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { remapRowRepeatIds } from '@/lib/question/row-repeat';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -701,6 +702,14 @@ export function SortableQuestionList({
           })
         : undefined;
 
+      // 행 반복 참조를 새 행 id 로 옮긴다 — 옮기지 않으면 복제본의 설정이 원본 질문의
+      // 행을 가리켜 범위를 고칠 수도, 템플릿 변경을 뒤 벌에 전파할 수도 없다.
+      const remappedRepeat = remapRowRepeatIds(
+        newTableRowsData ?? [],
+        questionToDuplicate.rowRepeatConfig,
+        rowIdMap,
+      );
+
       // 기존 질문들의 최대 order를 찾아서 +1 (없으면 1부터 시작)
       const currentQuestions = questionsRef.current;
       const maxOrder = currentQuestions.length > 0 ? Math.max(...currentQuestions.map((q) => q.order), 0) : 0;
@@ -735,10 +744,13 @@ export function SortableQuestionList({
           : {}),
         // tableColumns 복사 (위에서 생성한 새 컬럼 사용)
         ...(newTableColumns !== undefined ? { tableColumns: newTableColumns } : {}),
-        ...(newTableRowsData !== undefined ? { tableRowsData: newTableRowsData } : {}),
+        ...(newTableRowsData !== undefined
+          ? { tableRowsData: remappedRepeat.config ? remappedRepeat.rows : newTableRowsData }
+          : {}),
         ...(newDynamicRowConfigs !== undefined
           ? { dynamicRowConfigs: newDynamicRowConfigs }
           : {}),
+        ...(remappedRepeat.config ? { rowRepeatConfig: remappedRepeat.config } : {}),
       };
 
       // 로컬 스토어에 추가 (DB 저장은 saveSurveyDiff에서 일괄 처리)

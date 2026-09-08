@@ -61,6 +61,31 @@ export function collapseRepeatRows(rows: TableRow[]): TableRow[] {
 }
 
 /**
+ * 행 id 가 통째로 새로 발번되는 경로(질문 복제)에서 반복 참조를 함께 옮긴다.
+ *
+ * 옮기지 않으면 복제본의 설정이 원본 질문의 행을 가리켜 범위를 고칠 수도, 템플릿 변경을
+ * 뒤 벌에 전파할 수도 없다. 대응표에 없는 id 는 건드리지 않는다.
+ */
+export function remapRowRepeatIds(
+  rows: TableRow[],
+  config: RowRepeatConfig | null | undefined,
+  rowIdMap: ReadonlyMap<string, string>,
+): { rows: TableRow[]; config: RowRepeatConfig | null } {
+  if (!isRowRepeatActive(config)) return { rows, config: null };
+  return {
+    rows: rows.map((row) =>
+      row.repeatSourceRowId && rowIdMap.has(row.repeatSourceRowId)
+        ? { ...row, repeatSourceRowId: rowIdMap.get(row.repeatSourceRowId)! }
+        : row,
+    ),
+    config: {
+      ...config!,
+      templateRowIds: config!.templateRowIds.map((id) => rowIdMap.get(id) ?? id),
+    },
+  };
+}
+
+/**
  * 구조가 설정과 아직 맞는가 — 지정된 템플릿 행이 전부 살아 있고 서로 붙어 있는가.
  *
  * 설정은 행 id 로 템플릿을 가리키는데 편집 화면은 그 행을 지우거나 옮길 수 있다.
