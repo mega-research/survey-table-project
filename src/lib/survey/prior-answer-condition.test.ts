@@ -150,7 +150,7 @@ describe('omitDisabledPriorAnswers', () => {
     const out = omitDisabledPriorAnswers(prior, [on, off]) as Record<string, unknown>;
     expect(out['q-off']).toBeUndefined();
     expect(out['q-on']).toEqual({ a: '켠 문항 값' });
-    expect(out.__optTexts__).toEqual({ 'q-on': { opt1: '켠 문항 상세' } });
+    expect(out['__optTexts__']).toEqual({ 'q-on': { opt1: '켠 문항 상세' } });
   });
 
   it('끈 문항이 없으면 원본을 그대로 돌려준다', () => {

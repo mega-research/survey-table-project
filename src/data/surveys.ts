@@ -7,7 +7,12 @@ import { questionGroups, questions, surveys } from '@/db/schema';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isCodedChoiceType } from '@/types/question-types';
-import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
+import type {
+  InputType,
+  QuestionGroup,
+  Question as QuestionType,
+  Survey as SurveyType,
+} from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
@@ -109,8 +114,8 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     ...(q.placeholder != null ? { placeholder: q.placeholder } : {}),
     ...(q.defaultValueTemplate != null ? { defaultValueTemplate: q.defaultValueTemplate } : {}),
-    ...((q.inputType as 'text' | 'number' | null) != null
-      ? { inputType: q.inputType as 'text' | 'number' }
+    ...((q.inputType as InputType | null) != null
+      ? { inputType: q.inputType as InputType }
       : {}),
     ...(q.emptyDefault != null ? { emptyDefault: q.emptyDefault } : {}),
     ...(q.tableValidationRules != null

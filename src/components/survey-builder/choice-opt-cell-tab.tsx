@@ -1,7 +1,7 @@
 'use client';
 
 import { NumberFormatFields } from './number-format-fields';
-import type { NumberFormat } from '@/types/survey';
+import type { InputType, NumberFormat } from '@/types/survey';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
@@ -24,8 +24,8 @@ interface ChoiceOptCellTabProps {
   allowTextInput: boolean;
   onAllowTextInputChange: (v: boolean) => void;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
-  textInputType: 'text' | 'number';
-  onTextInputTypeChange: (v: 'text' | 'number') => void;
+  textInputType: InputType;
+  onTextInputTypeChange: (v: InputType) => void;
   textInputNumberFormat: NumberFormat | undefined;
   onTextInputNumberFormatChange: (v: NumberFormat | undefined) => void;
   /** 이 보기 옵션 선택 시 적용할 조건부 분기 규칙 */

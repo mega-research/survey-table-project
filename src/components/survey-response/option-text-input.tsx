@@ -3,7 +3,7 @@
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import type { NumberFormat } from '@/types/survey';
+import type { InputType, NumberFormat } from '@/types/survey';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 
@@ -20,7 +20,7 @@ interface OptionTextInputProps {
     id: string;
     textInputPlaceholder?: string | undefined;
     /** 'number' 면 입력 셀과 같은 숫자 타이핑 규칙 적용 */
-    textInputType?: 'text' | 'number' | undefined;
+    textInputType?: InputType | undefined;
     textInputNumberFormat?: NumberFormat | undefined;
   };
   className?: string;

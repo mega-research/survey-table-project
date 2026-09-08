@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { INPUT_TYPES } from '@/types/input-type';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question } from '@/types/survey';
@@ -78,7 +79,7 @@ export const TextQuestionSchema = base.extend({
   type: z.literal('text'),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),
-  inputType: z.enum(['text', 'number']).optional(),
+  inputType: z.enum(INPUT_TYPES).optional(),
   emptyDefault: z.number().optional(),
   numberFormat: z.custom<NonNullable<Question['numberFormat']>>().nullable().optional(),
 });

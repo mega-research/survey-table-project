@@ -219,7 +219,7 @@ export const questions = pgTable(
     defaultValueTemplate: text('default_value_template'),
 
     // 단답형 숫자 입력 모드 — 0030 마이그레이션
-    inputType: text('input_type'), // 'text' | 'number'
+    inputType: text('input_type'), // InputType (@/types/input-type) — enum/CHECK 없는 열린 컬럼
     emptyDefault: doublePrecision('empty_default'), // 숫자 모드 초기값
     // 단답형 숫자 모드 표시 포맷·범위 (콤마/단위/min/max/소수 자릿수)
     numberFormat: jsonb('number_format').$type<NumberFormat>(),

@@ -2,7 +2,14 @@ import { nanoid } from 'nanoid';
 import { generateId } from '@/lib/utils';
 import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { generateOtherOptionFields } from '@/lib/option-text-migration';
-import { BranchRule, NumberFormat, Question, QuestionOption, SelectLevel } from '@/types/survey';
+import {
+  BranchRule,
+  InputType,
+  NumberFormat,
+  Question,
+  QuestionOption,
+  SelectLevel,
+} from '@/types/survey';
 
 /**
  * "+ 텍스트 옵션 추가" 버튼이 호출하는 헬퍼.
@@ -30,7 +37,7 @@ export function createTextInputOption(existingOptions: QuestionOption[]): Questi
  */
 export interface OptionTextSettings {
   textInputPlaceholder?: string;
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   textInputNumberFormat?: NumberFormat;
 }
 

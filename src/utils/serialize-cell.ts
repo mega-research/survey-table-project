@@ -4,6 +4,7 @@ import {
   CalcExpr,
   CellEnableCondition,
   CheckboxOption,
+  InputType,
   NumberFormat,
   QuestionOption,
   RadioOption,
@@ -37,7 +38,7 @@ export interface CellFormState {
   inputPlaceholder: string;
   inputMaxLength: number | '';
   inputDefaultValueTemplate: string;
-  inputType: 'text' | 'number';
+  inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
   inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
@@ -63,7 +64,7 @@ export interface CellFormState {
   choiceLabel: string;
   choiceAllowTextInput: boolean;
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
-  choiceTextInputType: 'text' | 'number';
+  choiceTextInputType: InputType;
   choiceTextInputNumberFormat: NumberFormat | undefined;
   choiceBranchRule: BranchRule | undefined;
   /** 이 보기 옵션 셀이 속한 ChoiceGroup.id. 빈 문자열 = 미소속. */

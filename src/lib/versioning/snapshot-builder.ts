@@ -7,6 +7,7 @@
 import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
+  InputType,
   Question,
   QuestionGroup,
   Survey,
@@ -95,7 +96,7 @@ interface SnapshotQuestion {
    */
   exportLabel?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
-  inputType?: 'text' | 'number' | undefined;
+  inputType?: InputType | undefined;
   emptyDefault?: number | undefined;
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;

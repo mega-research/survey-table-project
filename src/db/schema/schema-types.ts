@@ -226,6 +226,7 @@ import type {
   ExpressionConditionConfig,
   ExpressionOperand,
   HeaderCell,
+  InputType,
   NumberFormat,
   QuestionCondition,
   QuestionConditionGroup,
@@ -306,7 +307,7 @@ export interface QuestionData {
   displayCondition?: QuestionConditionGroup;
   rankingConfig?: RankingConfig;
   defaultValueTemplate?: string | null;
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   emptyDefault?: number;
   piiEncrypted?: boolean;
   numberFormat?: NumberFormat | null;
