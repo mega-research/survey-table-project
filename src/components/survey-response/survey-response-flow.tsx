@@ -1307,7 +1307,15 @@ function SurveyResponseFlowActive({
   useEffect(() => {
     if (changeConfirmEnabled) return;
     if (!prefillSettled) return;
-    const entries = collectPriorAnswerPrefills(currentStepQuestions, priorAnswers, responses);
+    // 이월값 조건은 이 단계 밖 문항을 참조할 수 있어(BQ1 이 앞 페이지에 있는 식) 전체
+    // 문항과 평가 컨텍스트를 함께 넘긴다. 채울 대상은 여전히 이 단계의 표시 문항뿐이다.
+    const entries = collectPriorAnswerPrefills(
+      currentStepQuestions,
+      priorAnswers,
+      responses,
+      questions,
+      evalCtx,
+    );
     for (const entry of entries) handleResponse(entry.questionId, entry.value);
   }, [
     changeConfirmEnabled,
@@ -1315,6 +1323,8 @@ function SurveyResponseFlowActive({
     currentStepQuestions,
     priorAnswers,
     responses,
+    questions,
+    evalCtx,
     handleResponse,
   ]);
 

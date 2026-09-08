@@ -56,6 +56,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'rankingConfig',
   'choiceGroups',
   'displayCondition',
+  'priorAnswerCondition',
   'questionCode',
   'isCustomSpssVarName',
   'exportLabel',

@@ -209,6 +209,7 @@ export async function saveSurveyDiff(
               hideName: sql`excluded.hide_name`,
               nameDesign: sql`excluded.name_design`,
               displayCondition: sql`excluded.display_condition`,
+              priorAnswerCondition: sql`excluded.prior_answer_condition`,
               updatedAt: sql`excluded.updated_at`,
             },
           });
@@ -298,6 +299,8 @@ export async function saveSurveyDiff(
           mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+          priorAnswerCondition:
+            question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
           exportLabel: question.exportLabel,
@@ -360,6 +363,7 @@ export async function saveSurveyDiff(
                 sql`excluded.mobile_drilldown_repeat_header_end_row`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
+              priorAnswerCondition: sql`excluded.prior_answer_condition`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
               exportLabel: sql`excluded.export_label`,
@@ -674,6 +678,8 @@ export async function saveSurveyWithDetails(
           mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+          priorAnswerCondition:
+            question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
           exportLabel: question.exportLabel,
@@ -736,6 +742,7 @@ export async function saveSurveyWithDetails(
                 sql`excluded.mobile_drilldown_repeat_header_end_row`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
+              priorAnswerCondition: sql`excluded.prior_answer_condition`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
               exportLabel: sql`excluded.export_label`,

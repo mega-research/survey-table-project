@@ -528,7 +528,7 @@ function shouldDisplayGroupWithSeen(
     return true; // 조건이 없으면 표시
   }
 
-  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -545,7 +545,7 @@ export function shouldDisplayRow(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(row.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(row.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -562,7 +562,7 @@ export function shouldDisplayColumn(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(column.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(column.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -579,7 +579,7 @@ export function shouldDisplayDynamicGroup(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -610,7 +610,7 @@ export function shouldDisplayQuestion(
     return true; // 조건이 없으면 표시
   }
 
-  return evaluateConditionGroup(question.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(question.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -618,7 +618,7 @@ export function shouldDisplayQuestion(
  * shouldDisplay{Group,Row,Column,DynamicGroup,Question} 5곳에 복제돼 있던 조합 로직의 단일 거처.
  * (조건 그룹은 표시조건 어휘 — 셀 의미론(table-cell-semantics) 범위 밖이라 이 파일에 둔다.)
  */
-function evaluateConditionGroup(
+export function evaluateQuestionConditionGroup(
   displayCondition: { conditions: QuestionCondition[]; logicType: ConditionLogicType },
   allResponses: Record<string, unknown>,
   allQuestions: Question[],

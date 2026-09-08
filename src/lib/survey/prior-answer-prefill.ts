@@ -15,8 +15,10 @@
  * 재진입 복원으로 되살아난 값도 마찬가지다.
  */
 import { supportsChangeConfirmation } from '@/lib/survey/change-confirmation';
+import { shouldLoadPriorAnswer } from '@/lib/survey/prior-answer-condition';
 import { type PriorAnswers, hasPriorAnswer } from '@/lib/survey/prior-answers';
 import type { Question } from '@/types/survey';
+import type { BranchEvalCtx } from '@/utils/branch-eval';
 
 /** 프리필로 써야 할 문항 하나. */
 export interface PriorAnswerPrefillEntry {
@@ -34,16 +36,23 @@ export interface PriorAnswerPrefillEntry {
  * @param questions **이미 표시 조건으로 걸러진** 문항 목록
  * @param prior 이월 응답 한 벌. 없으면 빈 배열
  * @param responses 현재 응답 묶음. 값이 이미 있는 문항은 건너뛴다
+ * @param allQuestions 이월값 불러오기 조건 평가용 전체 문항. 조건이 참조하는 문항은 이
+ *   단계 밖에 있을 수 있어 `questions`(이 단계의 표시 문항)와 별도로 받는다
  */
 export function collectPriorAnswerPrefills(
   questions: readonly Question[],
   prior: PriorAnswers | null | undefined,
   responses: Record<string, unknown>,
+  allQuestions: readonly Question[] = questions,
+  evalCtx?: BranchEvalCtx,
 ): PriorAnswerPrefillEntry[] {
   if (!prior) return [];
   const entries: PriorAnswerPrefillEntry[] = [];
   for (const question of questions) {
     if (!supportsChangeConfirmation(question)) continue;
+    // 문항 단위 이월값 조건 — 표시 조건과 별개 축이다. 이직처럼 같은 문항 안에서
+    // 갈리는 경우는 "보이되 안 채운다" 가 필요하고, 표시 조건으로는 표현할 수 없다.
+    if (!shouldLoadPriorAnswer(question, responses, allQuestions, evalCtx)) continue;
     // 빈 값은 이월 값이 아니다 — 키만 있고 답이 없는 문항까지 채우면 응답자가 손대지
     // 않은 빈칸이 "지난 회차 답"으로 제출된다.
     if (!hasPriorAnswer(prior, question.id)) continue;
