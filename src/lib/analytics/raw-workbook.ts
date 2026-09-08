@@ -432,6 +432,7 @@ export function row2Label(c: SPSSExportColumn): string {
     c.type === 'ranking-other' ||
     c.type === 'ranking-option-text' ||
     c.type === 'option-text' ||
+    c.type === 'choice-table-cell' ||
     c.type === 'other-text' ||
     c.type === 'table-cell-option-text' ||
     c.type === 'table-cell-ranking-other' ||

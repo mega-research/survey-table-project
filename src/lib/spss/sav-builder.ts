@@ -104,6 +104,14 @@ export function buildValueLabels(
       );
     }
 
+    case 'choice-table-cell':
+      // 보기-소스 표의 선택형 셀 — 표 문항의 radio/select 셀과 같이 셀 보기로 라벨을 만든다.
+      // checkbox 는 복수 선택을 한 칸에 이어 싣는 String 이라 값 라벨을 붙이지 않는다.
+      if (col.tableCellType === 'checkbox') return undefined;
+      return optionsToValueLabels(
+        col.cellOptions ?? findTableCellOptions(question, col.tableCellId, col.tableCellType || ''),
+      );
+
     case 'table-cell-ranking':
       // 셀의 rankingOptions 에서 value labels 구성 (컬럼 메타 우선, 폴백 findTableCellOptions)
       return optionsToValueLabels(

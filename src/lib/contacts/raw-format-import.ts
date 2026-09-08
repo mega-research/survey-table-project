@@ -24,6 +24,7 @@ import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import type { OptionMismatch } from '@/lib/contacts/prior-answer-import';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question, RankingAnswer } from '@/types/survey';
+import { encodeChoiceTableCellFromExport } from '@/lib/survey/choice-table-cell-value';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
@@ -49,6 +50,7 @@ const INVERTIBLE_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
   'choice-group-item',
   'option-text',
   'other-text',
+  'choice-table-cell',
   'table-cell',
   'radio-group',
   'table-cell-option-text',
@@ -70,6 +72,8 @@ const SIDECAR_TYPES: ReadonlySet<SPSSExportColumn['type']> = new Set([
   // 표 셀의 상세 기재도 사이드카다. 문항 답으로 흘리면 그 셀의 선택값 자리에 덮어써져
   // 선택과 텍스트가 함께 망가진다.
   'table-cell-option-text',
+  // 보기-소스 표 안의 선택형 셀도 같은 사이드카에 산다.
+  'choice-table-cell',
 ]);
 
 export interface RawFormatImportInput {
@@ -474,7 +478,11 @@ function invertTableCells(
  */
 function resolveSidecarOptionId(question: Question, column: SPSSExportColumn): string | undefined {
   // 표 셀 사이드카도 저장 자리가 같다 — __optTexts__[questionId][optionId].
-  if (column.type === 'option-text' || column.type === 'table-cell-option-text') {
+  if (
+    column.type === 'option-text' ||
+    column.type === 'table-cell-option-text' ||
+    column.type === 'choice-table-cell'
+  ) {
     return column.optionId;
   }
   const options = resolveChoiceOptions(question);
@@ -599,7 +607,12 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
         const optionId = resolveSidecarOptionId(question, cell.column);
         if (!optionId) continue;
         const bucket = optTexts[questionId] ?? {};
-        bucket[optionId] = cell.raw;
+        // 보기-소스 표의 선택형 셀은 내보내기 칸(콤마로 이은 복수 선택)을 사이드카
+        // 저장 형태(JSON 배열)로 되돌린다. 나머지 사이드카는 문자열 그대로다.
+        bucket[optionId] =
+          cell.column.type === 'choice-table-cell'
+            ? encodeChoiceTableCellFromExport(cell.raw, cell.column.tableCellType ?? '')
+            : cell.raw;
         optTexts[questionId] = bucket;
       }
 

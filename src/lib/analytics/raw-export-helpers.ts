@@ -66,6 +66,11 @@ export function buildCodebookValueLabel(
       return '';
     }
 
+    case 'choice-table-cell':
+      // 보기-소스 표의 선택형 셀 — 값은 셀 보기의 응답값 그대로(복수 선택은 콤마로 이어짐).
+      if (col.cellOptions && col.cellOptions.length > 0) return pairsFromOptions(col.cellOptions);
+      return '';
+
     case 'single': {
       const opts = q ? resolveChoiceOptions(q) : [];
       return opts.length > 0 ? pairsFromOptions(opts) : '';

@@ -136,6 +136,62 @@ const questions: Question[] = [
     ],
   },
   {
+    // 보기-소스 표(choice_opt)로 그려지는 radio 문항 — 표 안에 선택형·단답형 셀이 섞여 있다.
+    // 이 문항의 답은 {그룹키: 셀id} 라 셀 값 자리가 없어, 선택형 셀도 단답형과 같은
+    // 사이드카(__optTexts__)에 셀 id 로 산다.
+    id: 'q-choice-table',
+    type: 'radio',
+    title: '보기 표',
+    questionCode: 'Q10',
+    order: 9,
+    required: false,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', label: '현재', type: 'radio' }],
+    tableColumns: [
+      { id: 'y1', label: '항목' },
+      { id: 'y2', label: '선택' },
+    ],
+    tableRowsData: [
+      {
+        id: 'crow1',
+        cells: [
+          { id: 'ct-label', type: 'text', content: '① 군복무' },
+          { id: 'ct-opt', type: 'choice_opt', content: '', choiceGroupId: 'g1' },
+        ],
+      },
+      {
+        id: 'crow2',
+        cells: [
+          { id: 'ct-sub-label', type: 'text', content: '병역특례 여부' },
+          {
+            id: 'ct-radio',
+            type: 'radio',
+            content: '',
+            // id 와 value 를 다르게 둔다 — 셀 컨트롤은 `option.value ?? option.id` 를 저장한다.
+            radioOptions: [
+              { id: 'ctr-id-1', value: '1', label: '① 있음' },
+              { id: 'ctr-id-2', value: '2', label: '② 없음' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'crow3',
+        cells: [
+          { id: 'ct-sub2-label', type: 'text', content: '해당 분야' },
+          {
+            id: 'ct-check',
+            type: 'checkbox',
+            content: '',
+            checkboxOptions: [
+              { id: 'ctc-id-1', value: 'a', label: '가' },
+              { id: 'ctc-id-2', value: 'b', label: '나' },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'q-notice',
     type: 'notice',
     title: '안내',
@@ -184,6 +240,14 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
       'cell-radio': 'trv2',
       'cell-check': ['tcv2'],
       'cell-input': '입력값',
+    },
+    'q-choice-table': { rad1: 'ct-opt' },
+    __optTexts__: {
+      'q-choice-table': {
+        // 선택형 셀 — radio 는 보기 값 그대로, checkbox 는 JSON 배열.
+        'ct-radio': '1',
+        'ct-check': '["a","b"]',
+      },
     },
   };
 

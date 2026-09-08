@@ -35,6 +35,11 @@ import {
   isGroupedChoiceQuestion,
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
+import {
+  CHOICE_TABLE_CONTROL_CELL_TYPES,
+  CHOICE_TABLE_EXPORT_SEPARATOR,
+  decodeChoiceTableCellValue,
+} from '@/lib/survey/choice-table-cell-value';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
 import { toSingleLineLabel } from '@/utils/label-text';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
@@ -79,6 +84,8 @@ export interface SPSSExportColumn {
     | 'table-cell-ranking-option-text'
     | 'option-text'
     | 'table-cell-option-text'
+    // 보기-소스 표 안의 선택형 셀 — 값은 __optTexts__ 사이드카(셀 id), 라벨/척도는 표 셀 규약
+    | 'choice-table-cell'
     | 'choice-group'
     | 'choice-group-item'
     // 추적조사 변동 확인 — 문항 변수 옆에 붙는 파생 변수 (질문 값이 아니라 응답자의 진술)
@@ -152,6 +159,14 @@ export interface SpssColumnOptions {
  * - checkbox는 옵션별 분리 (Q2M1, Q2M2...)
  * - 나머지는 열 1개
  */
+/** 보기-소스 표 안 선택형 셀의 보기 목록 — 값 라벨·코딩북이 공유한다. */
+function choiceTableControlCellOptions(cell: TableCell): QuestionOption[] | undefined {
+  if (cell.type === 'radio') return cell.radioOptions;
+  if (cell.type === 'select') return cell.selectOptions;
+  if (cell.type === 'checkbox') return cell.checkboxOptions;
+  return undefined;
+}
+
 export function generateSPSSColumns(
   questions: QuestionVariant[],
   options?: SpssColumnOptions,
@@ -693,26 +708,43 @@ export function generateSPSSColumns(
     ) {
       for (const tRow of q.tableRowsData) {
         tRow.cells.forEach((cell, colIdx) => {
-          if (cell.type !== 'input' || cell.isHidden) return;
+          const isChoiceControl = CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type);
+          if ((cell.type !== 'input' && !isChoiceControl) || cell.isHidden) return;
           // 셀코드를 의도적으로 비운 셀은 표시용 — 표 문항 경로와 같은 규칙.
           if (cell.isCustomCellCode === true && !cell.cellCode) return;
           const varName =
             cell.cellCode ||
             buildTableCellVarName(q, tRow, colIdx, q.tableColumns!, q.tableRowsData!);
           const autoExportLabel = buildAutoTableCellExportLabel(q, tRow, colIdx, cell);
-          columns.push({
+          const shared = {
             spssVarName: varName,
             questionText: q.title,
             optionLabel: cell.exportLabel ?? autoExportLabel ?? '',
             questionId: q.id,
-            type: 'option-text',
             optionId: cell.id,
-            ...(cell.inputType === 'number' ? { numericText: true } : {}),
             ...(cell.exportLabel !== undefined
               ? { cellExportLabel: cell.exportLabel }
               : autoExportLabel !== undefined
                 ? { cellExportLabel: autoExportLabel }
                 : {}),
+          };
+          if (isChoiceControl) {
+            // 값 라벨은 표 문항의 radio/select/checkbox 셀과 같은 출처(셀 옵션)를 쓴다.
+            columns.push({
+              ...shared,
+              type: 'choice-table-cell',
+              tableCellId: cell.id,
+              tableCellType: cell.type,
+              ...(choiceTableControlCellOptions(cell) !== undefined
+                ? { cellOptions: choiceTableControlCellOptions(cell)! }
+                : {}),
+            });
+            return;
+          }
+          columns.push({
+            ...shared,
+            type: 'option-text',
+            ...(cell.inputType === 'number' ? { numericText: true } : {}),
           });
         });
       }
@@ -1214,6 +1246,24 @@ export function buildDataRow(
             col.optionId,
           ) ?? null;
         return col.numericText ? transformNumericText(text) : text;
+      }
+
+      case 'choice-table-cell': {
+        // 보기-소스 표의 선택형 셀 — 값은 __optTexts__ 에 셀 id 로 들어 있다.
+        // checkbox 는 JSON 배열이라 복수 선택을 구분자로 이어 한 칸에 싣는다
+        // (표 문항 checkbox 셀의 옵션별 분리 변수와 달리 이 경로는 변수 1개다).
+        if (!col.optionId) return null;
+        const raw =
+          getOptionText(
+            sub.questionResponses as Record<string, unknown>,
+            col.questionId,
+            col.optionId,
+          ) ?? '';
+        const picked = decodeChoiceTableCellValue(raw, col.tableCellType ?? '');
+        if (Array.isArray(picked)) {
+          return picked.length > 0 ? picked.join(CHOICE_TABLE_EXPORT_SEPARATOR) : null;
+        }
+        return picked === '' ? null : picked;
       }
 
       case 'table-cell-option-text': {

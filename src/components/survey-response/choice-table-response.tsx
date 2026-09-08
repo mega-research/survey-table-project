@@ -33,6 +33,9 @@ import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { MobileOptionCard } from './mobile-card-shared';
+import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
+
+import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 
@@ -247,6 +250,18 @@ export function ChoiceTableResponse({
           }}
           ariaLabel={cellLabel}
           className="w-full"
+        />
+      );
+    }
+    // 표 안의 선택형 셀(radio/checkbox/select) — choice_opt 가 아니므로 이 문항의 보기가
+    // 아니고, 값 둘 자리도 없어 여태 정적 미리보기로만 그려졌다(클릭해도 저장 안 됨).
+    // 단답형 셀과 같은 사이드카에 셀 id 로 저장해 인터랙티브로 만든다.
+    if (CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type) && !cell.isHidden) {
+      return (
+        <ChoiceTableCellControl
+          cell={cell}
+          questionId={question.id}
+          {...(inputIdScope !== undefined ? { inputIdScope } : {})}
         />
       );
     }

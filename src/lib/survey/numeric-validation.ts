@@ -24,6 +24,10 @@ import { isCellEnabled } from './cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 import { optionTextTargetId } from './option-text-target';
 import { collectSelectedOptionIds } from '@/lib/option-text-migration';
+import {
+  CHOICE_TABLE_CONTROL_CELL_TYPES,
+  isChoiceTableCellEmpty,
+} from '@/lib/survey/choice-table-cell-value';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
 
 export interface NumericIssue {
@@ -380,7 +384,16 @@ function collectChoiceTableInputCellIssues(
       continue;
     }
     for (const cell of row.cells) {
-      if (cell.type !== 'input' || cell.isHidden) continue;
+      if (cell.isHidden) continue;
+      // 선택형 셀(radio/checkbox/select)도 같은 사이드카에 값을 넣는다 —
+      // 필수 판정만 하고 숫자 범위 검사는 건너뛴다(입력이 아니라 선택이다).
+      if (CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type)) {
+        if (isRequiredCell(cell) && isChoiceTableCellEmpty(texts?.[cell.id] ?? '', cell.type)) {
+          missingTargets.push(optionTextTargetId(question.id, cell.id));
+        }
+        continue;
+      }
+      if (cell.type !== 'input') continue;
       const value = (texts?.[cell.id] ?? '').trim();
       if (isRequiredCell(cell) && value === '') {
         missingTargets.push(optionTextTargetId(question.id, cell.id));
