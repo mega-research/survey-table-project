@@ -92,6 +92,7 @@ function renderAdminEditFlow(initialResponses: Record<string, unknown>) {
         initialResponses,
         versionSnapshot,
         initialContactAttrs: {},
+        migratedFromOldVersion: false,
         onSubmit: vi.fn().mockResolvedValue(undefined),
       }}
     />,
@@ -187,6 +188,7 @@ function adminEditElementFor(
         initialResponses,
         versionSnapshot: buildFreeTextVersionSnapshot(survey),
         initialContactAttrs: {},
+        migratedFromOldVersion: false,
         onSubmit: vi.fn().mockResolvedValue(undefined),
       }}
     />

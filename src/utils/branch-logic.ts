@@ -489,12 +489,35 @@ export function shouldDisplayGroup(
   allGroups: QuestionGroup[],
   ctx?: BranchEvalCtx,
 ): boolean {
+  return shouldDisplayGroupWithSeen(group, allResponses, allQuestions, allGroups, ctx, new Set());
+}
+
+/**
+ * `shouldDisplayGroup` 본체 — 방문 집합을 들고 조상 사슬을 탄다.
+ *
+ * `question_groups.parent_group_id` 는 자기 참조 FK 라 손상된 데이터에서 순환이 가능하고,
+ * 가드 없이 재귀하면 스택이 넘친다. 응답 화면·자격미달 판정·숨은 문항 삭제가 전부 이 함수를
+ * 지나므로 한 번 넘치면 설문이 통째로 죽는다. 이미 본 그룹을 다시 만나면 "더 볼 조상이 없다"
+ * 로 끊고, 그 지점까지 본 조건들의 판정은 그대로 살린다 — 가드는 재방문만 자를 뿐 평가를
+ * 삼키지 않는다.
+ */
+function shouldDisplayGroupWithSeen(
+  group: QuestionGroup,
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups: QuestionGroup[],
+  ctx: BranchEvalCtx | undefined,
+  seen: Set<string>,
+): boolean {
   const evalCtx = ctx ?? emptyBranchEvalCtx();
+  seen.add(group.id);
   // 1. 상위 그룹 조건 확인 (재귀)
-  if (group.parentGroupId) {
+  if (group.parentGroupId && !seen.has(group.parentGroupId)) {
     const parentGroup = allGroups.find((g) => g.id === group.parentGroupId);
     if (parentGroup) {
-      if (!shouldDisplayGroup(parentGroup, allResponses, allQuestions, allGroups, evalCtx)) {
+      if (
+        !shouldDisplayGroupWithSeen(parentGroup, allResponses, allQuestions, allGroups, evalCtx, seen)
+      ) {
         return false; // 상위 그룹이 숨겨지면 하위 그룹도 숨김
       }
     }

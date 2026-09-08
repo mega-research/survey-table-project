@@ -28,9 +28,12 @@ import {
 } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { loadPiiTargets } from './response.service';
 
-import type { Question, SurveyLookup } from '@/types/survey';
+import { responsesToLookupShape } from '@/utils/branch-eval';
+
+import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import type { SaveAdminEditInput } from '../../domain/response-edit';
 
 // 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
@@ -197,8 +200,9 @@ export async function saveAdminEdit(
     const rawSnapshotForCalc = versionSnapshot as unknown as {
       questions?: unknown;
       lookups?: unknown;
+      groups?: unknown;
     };
-    // JSONB 스키마 드리프트 방어 — questions/lookups 가 비배열(객체·문자열)이면
+    // JSONB 스키마 드리프트 방어 — questions/lookups/groups 가 비배열(객체·문자열)이면
     // withCalcValues 순회나 lookup find 에서 크래시해 운영자 수정 전체가 실패한다.
     // Array.isArray 로 걸러 손상 스냅샷에서도 재계산만 조용히 스킵되게 한다.
     const snapshotForCalc = {
@@ -207,6 +211,9 @@ export async function saveAdminEdit(
         : [],
       lookups: Array.isArray(rawSnapshotForCalc.lookups)
         ? (rawSnapshotForCalc.lookups as SurveyLookup[])
+        : [],
+      groups: Array.isArray(rawSnapshotForCalc.groups)
+        ? (rawSnapshotForCalc.groups as QuestionGroup[])
         : [],
     };
 
@@ -220,11 +227,34 @@ export async function saveAdminEdit(
       contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
     }
 
-    // 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와 같은 신뢰 경계:
-    // 비활성 셀에 실려온 값은 저장하지 않고, 수식은 지워진 값 기준으로 계산한다.
+    // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와
+    // 같은 신뢰 경계다. 문항이 통째로 사라지면 그 표의 셀 값도 함께 사라져 게이팅 판정의
+    // 입력이 달라지므로 먼저 수행한다. 비활성 셀에 실려온 값은 저장하지 않고, 수식은
+    // 지워진 값 기준으로 계산한다.
+    //
+    // **구버전 응답 이관(migrating)에는 걸지 않는다.** 이 응답이 수집된 버전과 지금 저장
+    // 기준이 되는 버전이 다르면, 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된
+    // 답을 소급해 지운다 — 스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다" 정면 위반이고,
+    // 편집 화면도 그 문항을 그리지 않아 운영자는 손실을 볼 수조차 없다(edit log 는 값을
+    // 남기지 않아 복구 불가). 클라이언트 쪽 같은 게이트는 survey-response-flow.tsx 에 있다.
+    //
+    // 표시 조건 평가 컨텍스트는 응답 페이지가 쓰는 것과 같은 재료(스냅샷 그룹·LUT·컨택
+    // attrs)를 넘긴다 — 안 넘기면 LUT·attrs·수식 조건이 서버에서만 다르게 풀린다.
+    const hiddenStripped = migrating
+      ? questionResponses
+      : stripHiddenQuestionValues(
+          snapshotForCalc.questions,
+          questionResponses,
+          snapshotForCalc.groups,
+          {
+            responses: responsesToLookupShape(questionResponses),
+            contactAttrs,
+            lookups: snapshotForCalc.lookups,
+          },
+        );
     const strippedResponses = stripDisabledCellValues(
       snapshotForCalc.questions ?? [],
-      questionResponses,
+      hiddenStripped,
     );
     finalResponses = withCalcValues(strippedResponses, {
       questions: snapshotForCalc.questions ?? [],

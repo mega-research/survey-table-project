@@ -36,6 +36,15 @@ const SANITIZERS: Record<string, SidecarSanitizer> = {
     sanitizeChangeConfirmations(raw, isKnownQuestionId),
 };
 
+/**
+ * 저장이 허용된 루트 사이드카 키 목록.
+ *
+ * 숨은 문항 값을 지울 때 사이드카 안쪽의 그 문항 항목도 함께 지워야 한다 — 문항 값은
+ * 사라졌는데 상세 기재만 유령으로 남으면 내보내기에 뜬다. 소비자가 키를 손으로 나열하면
+ * 새 사이드카가 늘 때마다 누락되므로 등록부에서 읽게 한다.
+ */
+export const PERSISTED_ROOT_SIDECAR_KEYS: readonly string[] = Object.keys(SANITIZERS);
+
 /** 저장이 허용된 루트 사이드카 키인가. */
 export function isPersistedRootSidecarKey(key: string): boolean {
   return Object.prototype.hasOwnProperty.call(SANITIZERS, key);

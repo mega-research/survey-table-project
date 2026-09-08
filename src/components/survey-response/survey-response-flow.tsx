@@ -91,12 +91,10 @@ import {
   collectNumericIssues,
   collectVisibleTableCells,
 } from '@/lib/survey/numeric-validation';
-import {
-  collectPriorAnswerPrefills,
-  dropHiddenUntouchedPriorAnswers,
-} from '@/lib/survey/prior-answer-prefill';
+import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import {
   collectRequiredOptionTextIssues,
   resolveEffectiveOptionTextsByQuestion,
@@ -137,6 +135,11 @@ export interface SurveyResponseFlowProps {
     initialContactAttrs: Record<string, string>;
     // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
     documentView?: SurveyDocumentView | null;
+    /**
+     * 이 응답이 수집된 버전과 지금 렌더하는 버전이 다른가. 참이면 숨은 문항 strip 을
+     * 걸지 않는다 — 서버 saveAdminEdit 의 migrating 게이트와 같은 판정이다.
+     */
+    migratedFromOldVersion: boolean;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
   previewContext?: {
@@ -390,18 +393,11 @@ function SurveyResponseFlowActive({
    */
   const confirmPriorAnswers = changeConfirmEnabled ? priorAnswers : null;
 
-  /**
-   * 제출·초안 페이로드 조립. 기타 상세기재 정리에 더해, 스위치가 꺼진 설문에서는 뒤늦게
-   * 숨겨진 문항의 **손대지 않은** 이월 값을 걷어낸다 — 프리필은 채우는 시점의 표시 문항만
-   * 보므로, 그 뒤에 앞 문항이 바뀌어 하위 문항이 숨겨지면 지난 회차 값이 남는다.
-   */
+  /** 제출·초안 페이로드 조립 — 기타 상세기재 정리. 숨은 문항 값은 응답 상태에서 이미 지워졌다. */
   const buildSubmissionPayload = useCallback(
-    (visible: Question[], current: ResponsesMap): Record<string, unknown> => {
-      const base = buildOptTextsPayload(visible, current);
-      if (changeConfirmEnabled) return base;
-      return dropHiddenUntouchedPriorAnswers(base, new Set(visible.map((q) => q.id)), priorAnswers);
-    },
-    [changeConfirmEnabled, priorAnswers],
+    (visible: Question[], current: ResponsesMap): Record<string, unknown> =>
+      buildOptTextsPayload(visible, current),
+    [],
   );
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -600,6 +596,34 @@ function SurveyResponseFlowActive({
     () => questions.filter((q) => shouldDisplayQuestion(q, responses, questions, groups, evalCtx)),
     [questions, responses, groups, evalCtx],
   );
+
+  /**
+   * 구버전 응답을 최신 형식으로 열었으면 숨은 문항 strip 을 걸지 않는다.
+   *
+   * 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된 답을 소급해 지우는 것을 막는다
+   * (스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다"). 이 화면은 숨은 문항을 그리지도
+   * 않으므로 운영자가 손실을 알아챌 방법이 없다 — 서버 saveAdminEdit 의 migrating 게이트와
+   * 같은 판정을 클라이언트에도 둔다.
+   */
+  const skipHiddenStrip = adminContext?.migratedFromOldVersion ?? false;
+
+  /**
+   * 숨은 문항 값 삭제 (스펙: 2026-09-07 숨은 문항 응답 삭제).
+   *
+   * 「이전」을 누르는 것만으로는 아무것도 숨겨지지 않는다 — 숨김의 유일한 계기는 상류 값
+   * 변경이다. 그래서 응답이 바뀔 때마다 태우면 "바꿔서 숨겨지는 순간" 이 정확히 잡힌다.
+   *
+   * 참조가 그대로면 setState 를 부르지 않는다 — 매 렌더 상태를 갈아끼우면 무한 루프다.
+   */
+  useEffect(() => {
+    if (skipHiddenStrip) return;
+    const next = stripHiddenQuestionValues(questions, responses, groups, evalCtx);
+    // 삭제는 응답 변경에 대한 반응이라 effect 밖에 둘 자리가 없다. 지울 것이 없으면
+    // 같은 참조가 돌아와 set 을 부르지 않으므로 렌더 루프가 생기지 않는다.
+    // (react-hooks/set-state-in-effect 는 이 조건부 set 을 보고하지 않는다 — 보고되지도
+    //  않는 규칙에 disable 을 달면 "쓰이지 않은 disable" 경고가 새로 뜬다.)
+    if (next !== responses) setResponses(next as ResponsesMap);
+  }, [questions, responses, groups, evalCtx, setResponses, skipHiddenStrip]);
 
   // ── 분할 레이아웃 파생 ──
   //
@@ -1266,8 +1290,9 @@ function SurveyResponseFlowActive({
    * 넘어가는 경로다. 켜진 설문은 여기 오지 않는다(그쪽은 응답자가 밝히는 순간 복사한다).
    *
    * **지금 단계의 표시되는 문항만** 채운다. 숨은 문항까지 한꺼번에 깔면 앞 문항에서
-   * "해당 없음"을 고른 사람에게 지난 회차 하위 답이 실려 나간다. 뒤늦게 숨겨진 문항의
-   * 손대지 않은 값은 제출·초안 페이로드에서 걷어낸다(dropHiddenUntouchedPriorAnswers).
+   * "해당 없음"을 고른 사람에게 지난 회차 하위 답이 실려 나간다. 뒤늦게 앞 문항이 바뀌어
+   * 하위 문항이 숨겨지면 그 값은 숨은 문항 값 삭제 effect(stripHiddenQuestionValues)가
+   * 응답 상태에서 곧바로 걷어낸다.
    *
    * **`setResponses` 를 직접 부르지 않고 응답 쓰기 창구(handleResponse)를 탄다.** 직접 쓰면
    * 초안 저장 큐에 실리지 않아 서버에 남지 않는다 — 중도 이탈 후 재진입하면 회복이 서버

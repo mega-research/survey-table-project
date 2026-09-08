@@ -5,9 +5,10 @@
  * 켜진 설문은 이 모듈을 쓰지 않는다 — 그쪽은 응답자가 변동 여부를 밝히는 순간
  * 문항 단위로 복사한다(`resolveAnswerOnConfirmation`).
  *
- * **표시되는 문항에만 깐다.** 숨은 문항의 값을 걸러내는 지점이 저장 경계에 없어서,
- * 전 문항에 한꺼번에 깔면 앞 문항에서 "해당 없음"을 고른 사람에게 지난 회차 하위 답이
- * 그대로 실려 나간다. 호출부가 그 단계의 표시 가능 문항만 넘긴다
+ * **표시되는 문항에만 깐다.** 숨은 문항까지 깔아도 헛일이다 — 저장 경계의
+ * `stripHiddenQuestionValues`(`lib/survey/question-visibility.ts`)가 곧바로 지운다.
+ * 그리고 앞 문항에서 "해당 없음"을 고른 사람에게 지난 회차 하위 답이 화면에 잠시라도
+ * 실려 나가는 것은 여전히 막아야 한다. 호출부가 그 단계의 표시 가능 문항만 넘긴다
  * (`collectUnconfirmedQuestionIds` 와 같은 계약).
  *
  * **이미 값이 있으면 덮지 않는다.** 응답자가 고친 값이 프리필에 밀리면 안 되고,
@@ -50,54 +51,4 @@ export function collectPriorAnswerPrefills(
     entries.push({ questionId: question.id, value: prior[question.id] });
   }
   return entries;
-}
-
-/** 키 순서에 흔들리지 않는 값 비교용 직렬화. 응답값은 JSON 안전한 형태만 담긴다. */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
-    .join(',')}}`;
-}
-
-/**
- * 표시 조건으로 숨겨진 문항에서 **손대지 않은** 이월 값을 걷어낸 응답 묶음을 낸다.
- *
- * 프리필은 채우는 시점의 표시 문항만 보므로, 그 뒤에 응답자가 앞 문항을 바꿔 하위 문항이
- * 숨겨지면 지난 회차 값이 남는다. 앞 문항에서 "해당 없음"을 고른 사람에게 작년 하위 답이
- * 실려 나가는 것이 정확히 그 사고다.
- *
- * **손댄 값은 남긴다.** 판정 기준은 "지금 값이 이월 값과 같은가" 하나다 — 프리필 값 자체가
- * 지문이라 따로 추적할 것이 없다. 응답자가 고쳤다면 값이 달라져 있고, 그건 숨겨졌더라도
- * 응답자가 실제로 한 답이므로 기존 동작(수기 답변은 숨겨져도 남는다)과 같게 둔다.
- *
- * 스위치가 켜진 설문에는 쓰지 않는다 — 그쪽은 확인을 밝힌 문항만 값이 복사되고, 숨은 문항은
- * 확인 대상에서 빠져 애초에 값이 생기지 않는다.
- *
- * @param visibleQuestionIds 지금 표시되는 문항 id 집합
- */
-export function dropHiddenUntouchedPriorAnswers(
-  responses: Record<string, unknown>,
-  visibleQuestionIds: ReadonlySet<string>,
-  prior: PriorAnswers | null | undefined,
-): Record<string, unknown> {
-  if (!prior) return responses;
-  let dropped = false;
-  const next: Record<string, unknown> = {};
-  for (const [questionId, value] of Object.entries(responses)) {
-    if (
-      !visibleQuestionIds.has(questionId) &&
-      hasPriorAnswer(prior, questionId) &&
-      stableStringify(value) === stableStringify(prior[questionId])
-    ) {
-      dropped = true;
-      continue;
-    }
-    next[questionId] = value;
-  }
-  // 걷어낼 것이 없으면 원본 참조를 그대로 돌려준다 — 호출부의 메모 의존을 흔들지 않는다.
-  return dropped ? next : responses;
 }
