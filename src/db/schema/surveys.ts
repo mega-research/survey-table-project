@@ -147,7 +147,6 @@ export const questionGroups = pgTable('question_groups', {
   hideName: boolean('hide_name').default(false), // 응답 페이지에서 그룹 이름(배지/소제목) 숨김 여부
   nameDesign: jsonb('name_design').$type<GroupNameDesign>(), // 루트 그룹 이름 배지 디자인 (미설정 시 기본 배지)
   displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
-  priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -268,7 +267,7 @@ export const questions = pgTable(
     tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),
     dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
-  priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
+    priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
     // 숫자 셀 합계 제약 (테이블 타입 전용, 차단형 검증 — tableValidationRules 와 별개)
     sumConstraints: jsonb('sum_constraints').$type<SumConstraint[]>(),
 

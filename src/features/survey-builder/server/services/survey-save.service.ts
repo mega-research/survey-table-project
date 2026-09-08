@@ -209,7 +209,6 @@ export async function saveSurveyDiff(
               hideName: sql`excluded.hide_name`,
               nameDesign: sql`excluded.name_design`,
               displayCondition: sql`excluded.display_condition`,
-              priorAnswerCondition: sql`excluded.prior_answer_condition`,
               updatedAt: sql`excluded.updated_at`,
             },
           });
