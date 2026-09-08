@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { expandRepeatRows } from '@/lib/question/row-repeat';
 import type { Question, RowRepeatConfig, SurveySubmission, TableRow } from '@/types/survey';
 
+import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
+
 import { collectUsedRepeatCounts } from './row-repeat-usage';
 import { generateSPSSColumns } from './spss-excel-export';
 
@@ -69,6 +71,28 @@ describe('collectUsedRepeatCounts', () => {
   it('반복 블록이 없는 질문은 담지 않는다', () => {
     const plain = { id: 'q2', type: 'table', title: '', order: 0, required: false } as Question;
     expect(collectUsedRepeatCounts([plain], []).has('q2')).toBe(false);
+  });
+});
+
+describe('20벌 펼친 표의 변수명', () => {
+  it('중복 없이 유일하다 — 발행 시점 변수명 게이트를 통과한다', () => {
+    const seed: TableRow[] = [
+      { id: 'head', label: '머리', cells: [{ id: 'h1', type: 'input', content: '' }] },
+      { id: 'tpl', label: '성과', cells: [{ id: 't1', type: 'input', content: '' }] },
+    ] as TableRow[];
+    let n = 0;
+    const wide = {
+      ...question,
+      tableRowsData: expandRepeatRows(
+        seed,
+        { enabled: true, templateRowIds: ['tpl'], maxRepeats: 20 },
+        () => `w${++n}`,
+      ),
+    } as Question;
+    const names = generateSPSSColumns([wide]).map((c) => c.spssVarName);
+    expect(names).toHaveLength(21);
+    expect(new Set(names).size).toBe(names.length);
+    expect(assertValidSpssVarNames(generateSPSSColumns([wide]))).toBeUndefined();
   });
 });
 

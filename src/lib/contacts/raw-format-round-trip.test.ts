@@ -2,7 +2,28 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDataRow, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { buildRawFormatRecords } from '@/lib/contacts/raw-format-import';
-import type { Question } from '@/types/survey';
+import { expandRepeatRows } from '@/lib/question/row-repeat';
+import type { Question, TableRow } from '@/types/survey';
+
+/** 행 반복 표 — 구조에 3벌이 펼쳐진다. id 는 결정론적으로 발번해 기대값을 고정한다. */
+const repeatRows = (() => {
+  let n = 0;
+  return expandRepeatRows(
+    [
+      {
+        id: 'rp-tpl',
+        label: '성과',
+        rowCode: 'P',
+        cells: [
+          { id: 'rp-name', type: 'input', content: '' },
+          { id: 'rp-note', type: 'input', content: '' },
+        ],
+      },
+    ] as TableRow[],
+    { enabled: true, templateRowIds: ['rp-tpl'], maxRepeats: 3 },
+    () => `rp-gen${++n}`,
+  );
+})();
 
 /**
  * Raw 양식 왕복 회귀 — 전 문항 유형을 한 설문에 담아 내보내고 그대로 되읽는다.
@@ -192,6 +213,20 @@ const questions: Question[] = [
     ],
   },
   {
+    id: 'q-repeat',
+    type: 'table',
+    title: '성과 목록',
+    questionCode: 'Q10',
+    order: 9,
+    required: false,
+    tableColumns: [
+      { id: 'rc1', label: '성과명', columnCode: 'c1' },
+      { id: 'rc2', label: '비고', columnCode: 'c2' },
+    ],
+    tableRowsData: repeatRows,
+    rowRepeatConfig: { enabled: true, templateRowIds: ['rp-tpl'], maxRepeats: 3 },
+  },
+  {
     id: 'q-notice',
     type: 'notice',
     title: '안내',
@@ -242,6 +277,12 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
       'cell-input': '입력값',
     },
     'q-choice-table': { rad1: 'ct-opt' },
+    // 행 반복: 1벌과 2벌만 채운다 — 3벌은 열려 있어도 비워 둘 수 있다.
+    'q-repeat': {
+      'rp-name': '첫 성과',
+      'rp-note': '메모',
+      'rp-gen2': '둘째 성과',
+    },
     __optTexts__: {
       'q-choice-table': {
         // 선택형 셀 — radio 는 보기 값 그대로, checkbox 는 JSON 배열.
