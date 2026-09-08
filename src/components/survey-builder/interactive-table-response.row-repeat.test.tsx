@@ -190,6 +190,7 @@ describe('행 반복 — 조건으로 숨은 열이 있어도', () => {
             id: 'cond1',
             sourceQuestionId: 'gate',
             conditionType: 'value-match',
+            logicType: 'AND',
             requiredValues: ['yes'],
           },
         ],
