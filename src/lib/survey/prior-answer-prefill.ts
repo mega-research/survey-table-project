@@ -63,22 +63,20 @@ export function collectPriorAnswerPrefills(
 }
 
 /**
- * 이 값이 프리필로 깔았던 이월 값과 같은가. 참조가 아니라 내용을 본다 — 응답 저장·복원을
- * 오가며 같은 객체가 다른 참조로 재구성되는 경우가 흔하다.
- */
-function equalsPriorValue(value: unknown, priorValue: unknown): boolean {
-  return JSON.stringify(value) === JSON.stringify(priorValue);
-}
-
-/**
  * 조건이 거짓으로 뒤집혀 걷어내야 할 문항 id 를 낸다.
  *
- * **프리필로 들어온 값만 회수한다.** 조건이 처음부터 거짓인 문항은 이 함수가 애초에 채운
- * 적이 없으므로, 그 자리의 값은 응답자가 직접 쓴 것이다 — 지우면 데이터 손실이다.
- * 조건이 참인 동안에도 상태 기준(값이 이월값과 같음)으로만 걸면 응답자가 값을 고쳐
- * 이월값과 달라지는 순간 회수 대상에서 빠져버려 반쪽 회수가 된다. 그래서 판정 근거를
- * 둘로 나눈다 — 이 세션에서 실제로 프리필한 문항이면 내용을 안 보고 무조건 회수하고,
- * (재진입으로 이력이 없어) 그 밖의 경우에만 값이 이월값과 같은지를 폴백으로 쓴다.
+ * **이 세션에서 실제로 프리필한 문항만 회수한다.** 고쳤든 안 고쳤든 회수하지만, 깔지
+ * 않은 값은 절대 건드리지 않는다.
+ *
+ * 처음에는 "값이 이월값과 같으면 재진입 폴백으로 회수" 를 함께 걸었다가 실사 중에
+ * 걷어냈다(2026-09-08). 그 폴백은 프리필로 깔린 값과 **응답자가 우연히 작년과 같은
+ * 보기를 고른 것** 을 구분하지 못한다. 조건이 늘 거짓인 문항(담당자가 이월을 막으려고
+ * 도달 불가능한 조건을 걸어 두는 실제 운용 방식)에서는 프리필이 한 번도 없었는데도,
+ * 작년과 같은 답을 고르는 순간 매 렌더 지워져 라디오가 눌리지 않는 것처럼 보였다 —
+ * DQ7 매출액에서 실제로 그렇게 응답이 막혔다. 상태 기준 판정은 응답자의 입력과 싸운다.
+ *
+ * 대가는 세션 경계다. 이전 세션에서 깔린 값이 남은 채 새 세션에서 조건이 거짓이면 그
+ * 값은 살아남는다. 응답을 못 하게 막는 것보다 그쪽이 낫다.
  *
  * @param questions 조건 평가 대상 문항 목록 (표시 조건과 무관 — 숨은 문항도 회수 대상)
  * @param prior 이월 응답 한 벌. 없으면 회수할 것도 없다
@@ -100,11 +98,8 @@ export function collectPriorAnswerRetractions(
     if (!question.priorAnswerCondition) continue;
     if (shouldLoadPriorAnswer(question, responses, allQuestions, evalCtx)) continue;
     if (!hasPriorAnswer(prior, question.id)) continue;
-    const currentValue = responses[question.id];
-    if (currentValue === undefined) continue;
-    const isPrefillOrigin =
-      prefilled.has(question.id) || equalsPriorValue(currentValue, prior[question.id]);
-    if (!isPrefillOrigin) continue;
+    if (!prefilled.has(question.id)) continue;
+    if (responses[question.id] === undefined) continue;
     retractions.push(question.id);
   }
   return retractions;

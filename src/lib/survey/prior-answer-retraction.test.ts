@@ -87,7 +87,10 @@ describe('collectPriorAnswerRetractions', () => {
     expect(out).toEqual([]);
   });
 
-  it('프리필 이력이 없어도 값이 이월값과 같으면 회수한다 — 재진입 폴백', () => {
+  it('프리필 이력이 없으면 값이 이월값과 같아도 회수하지 않는다', () => {
+    // 상태 기준(값 일치)으로 걸면 응답자가 작년과 같은 보기를 고르는 순간 매 렌더
+    // 지워져 컨트롤이 눌리지 않는 것처럼 보인다 — 조건을 늘 거짓으로 막아 둔 문항에서
+    // 실제로 응답이 막혔다(2026-09-08 DQ7 매출액).
     const out = collectPriorAnswerRetractions(
       questions,
       prior,
@@ -95,7 +98,18 @@ describe('collectPriorAnswerRetractions', () => {
       questions,
       new Set(),
     );
-    expect(out).toEqual([EMPLOY]);
+    expect(out).toEqual([]);
+  });
+
+  it('조건이 처음부터 거짓이어도 응답자가 고른 값은 남는다', () => {
+    const out = collectPriorAnswerRetractions(
+      questions,
+      prior,
+      { [MOVED]: 'yes', [EMPLOY]: { company: 'SK텔레콤' } },
+      questions,
+      new Set(),
+    );
+    expect(out).toEqual([]);
   });
 
   it('프리필 이력이 없고 값도 다르면 회수하지 않는다 — 응답자가 직접 쓴 답이다', () => {
