@@ -55,7 +55,7 @@ import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionTextSettingsEditor } from './option-text-settings-editor';
 import { VariableButton } from './variable-button';
 
-import { collapseRepeatRows, expandRepeatRows } from '@/lib/question/row-repeat';
+import { disableRowRepeat, expandRepeatRows } from '@/lib/question/row-repeat';
 
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
@@ -1413,12 +1413,11 @@ export function QuestionBasicTab({
                   next.tableRowsData = expandRepeatRows(prev.tableRowsData ?? [], config);
                 } else {
                   // 끄면 뒤쪽 벌을 걷어낸다 — 남겨두면 응답 화면에 늘 펼쳐진 채 나온다.
-                  delete next.rowRepeatConfig;
-                  next.tableRowsData = collapseRepeatRows(prev.tableRowsData ?? []).map((row) =>
-                    row.repeatIndex === undefined
-                      ? row
-                      : (({ repeatIndex: _i, repeatSourceRowId: _s, ...rest }) => rest)(row),
-                  );
+                  // **명시적 null 이어야 한다.** 키를 지우면 부분 패치 저장이 undefined 를
+                  // "미변경"으로 읽어 DB 에 이전 설정이 그대로 남고, 다음에 열 때 그 설정이
+                  // 되살아나 rowCode 가 겹쳐 붙는다(_01_01).
+                  next.rowRepeatConfig = null;
+                  next.tableRowsData = disableRowRepeat(prev.tableRowsData ?? []);
                 }
                 return next;
               });

@@ -60,6 +60,23 @@ export function collapseRepeatRows(rows: TableRow[]): TableRow[] {
   return rows.filter((row) => (row.repeatIndex ?? 1) <= 1);
 }
 
+/**
+ * 반복 끄기 — 2벌 이후를 걷어내고 1벌을 반복 이전 모습으로 되돌린다.
+ *
+ * 표식만 남겨 두면 다음에 다시 켤 때 `_01` 로 끝나는 rowCode 를 밑동 삼아 `_01_01` 이
+ * 생기고, 남은 `repeatIndex` 때문에 편집 표가 행을 계속 감춘다. 되돌릴 정보가 아직
+ * 살아 있는 이 시점에 원래 코드까지 복구한다.
+ */
+export function disableRowRepeat(rows: TableRow[]): TableRow[] {
+  if (!rows.some((row) => repeatIndexOf(row) !== undefined)) return rows;
+  return collapseRepeatRows(rows).map((row) => {
+    if (repeatIndexOf(row) === undefined) return row;
+    const { repeatIndex: _index, repeatSourceRowId: _source, ...rest } = row;
+    const base = row.rowCode?.replace(BUNDLE_CODE_SUFFIX, '');
+    return base ? { ...rest, rowCode: base } : rest;
+  });
+}
+
 /** 반복 설정이 실제로 켜져 있고 템플릿이 지정돼 있는가 */
 export function isRowRepeatActive(config: RowRepeatConfig | null | undefined): boolean {
   return Boolean(config?.enabled && (config?.templateRowIds?.length ?? 0) > 0);
