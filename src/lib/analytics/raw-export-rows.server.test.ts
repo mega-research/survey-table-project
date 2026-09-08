@@ -10,17 +10,21 @@ interface SelectCall {
   orderBy: unknown[] | null;
 }
 
-const { state, responseFindManyMock } = vi.hoisted(() => ({
+const { state, responseFindManyMock, versionFindManyMock } = vi.hoisted(() => ({
   state: {
     calls: [] as SelectCall[],
     resolve: null as null | ((call: SelectCall) => unknown[]),
   },
   responseFindManyMock: vi.fn(),
+  versionFindManyMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => ({
   db: {
-    query: { surveyResponses: { findMany: responseFindManyMock } },
+    query: {
+      surveyResponses: { findMany: responseFindManyMock },
+      surveyVersions: { findMany: versionFindManyMock },
+    },
     select: vi.fn(() => {
       const call: SelectCall = { where: undefined, orderBy: null };
       const settle = () => Promise.resolve(state.resolve?.(call) ?? [{ total: 0 }]);
@@ -92,6 +96,9 @@ function responseRow(over: Record<string, unknown>) {
   return {
     id: 'r',
     contactTargetId: null,
+    isCompleted: true,
+    versionId: null,
+    lastEditedAt: null,
     questionResponses: { q1: 'opt1' },
     ipHash: 'hash',
     currentStepId: null,
@@ -133,6 +140,8 @@ beforeEach(() => {
   state.resolve = null;
   responseFindManyMock.mockReset();
   responseFindManyMock.mockResolvedValue([]);
+  versionFindManyMock.mockReset();
+  versionFindManyMock.mockResolvedValue([]);
   vi.mocked(sortRowsForContactPopulation).mockClear();
   vi.mocked(db.select).mockClear();
   vi.mocked(decryptPiiForExport).mockReset();
@@ -415,5 +424,145 @@ describe('loadRawExportRows — 조사 대상 명단 열', () => {
     if (result.kind !== 'ok') return;
     expect(result.rows).toHaveLength(10);
     expect(result.rows.every((r) => r.contactValues !== undefined)).toBe(true);
+  });
+});
+
+// ============================================================
+// 숨은 문항 값 걸러내기 — 제출도 어드민 수정도 안 거친 행만 대상
+// ============================================================
+
+/** 스위치가 'yes' 일 때만 보이는 하류 문항 하나. */
+const SWITCH_SNAPSHOT = {
+  questions: [
+    { id: 'q-switch', type: 'radio', title: '스위치', required: false, order: 0 },
+    {
+      id: 'q-dep',
+      type: 'text',
+      title: '스위치가 켜져야 보이는 문항',
+      required: false,
+      order: 1,
+      displayCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: 'c1',
+            enabled: true,
+            logicType: 'AND',
+            conditionType: 'value-match',
+            sourceQuestionId: 'q-switch',
+            requiredValues: ['yes'],
+          },
+        ],
+      },
+    },
+  ],
+  groups: [],
+  lookups: [],
+};
+
+const STALE_ANSWERS = { 'q-switch': 'no', 'q-dep': '숨은 뒤에도 남아 있던 값' };
+
+describe('숨은 문항 값 걸러내기', () => {
+  it('미완료 응답은 그 응답이 수집된 버전 스냅샷으로 판정해 숨은 문항 값을 뺀다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', isCompleted: false, versionId: 'v1', status: 'in_progress', questionResponses: STALE_ANSWERS }),
+    ]);
+    versionFindManyMock.mockResolvedValue([{ id: 'v1', snapshot: SWITCH_SNAPSHOT }]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual({ 'q-switch': 'no' });
+  });
+
+  it('완료 응답은 제출 시점에 이미 정리됐으므로 손대지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', isCompleted: true, versionId: 'v1', questionResponses: STALE_ANSWERS }),
+    ]);
+    versionFindManyMock.mockResolvedValue([{ id: 'v1', snapshot: SWITCH_SNAPSHOT }]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual(STALE_ANSWERS);
+    expect(versionFindManyMock).not.toHaveBeenCalled();
+  });
+
+  it('스냅샷이 prune 된 버전이면 판정 재료가 없으므로 원본 그대로 내보낸다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', isCompleted: false, versionId: 'v1', status: 'drop', questionResponses: STALE_ANSWERS }),
+    ]);
+    versionFindManyMock.mockResolvedValue([]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual(STALE_ANSWERS);
+  });
+});
+
+describe('숨은 문항 값 걸러내기 — 손대면 안 되는 행', () => {
+  it('자격미달은 is_completed=false 여도 제출된 종결 응답이라 손대지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', isCompleted: false, status: 'screened_out', versionId: 'v1', questionResponses: STALE_ANSWERS }),
+    ]);
+    versionFindManyMock.mockResolvedValue([{ id: 'v1', snapshot: SWITCH_SNAPSHOT }]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual(STALE_ANSWERS);
+  });
+
+  it('어드민이 수정한 행은 그 경로가 이미 판정했으므로 손대지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({
+        id: 'r1',
+        isCompleted: false,
+        status: 'in_progress',
+        versionId: 'v1',
+        lastEditedAt: new Date('2026-09-09T00:00:00Z'),
+        questionResponses: STALE_ANSWERS,
+      }),
+    ]);
+    versionFindManyMock.mockResolvedValue([{ id: 'v1', snapshot: SWITCH_SNAPSHOT }]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual(STALE_ANSWERS);
+  });
+
+  it('복호화가 안 풀린 암호문이 남아 있으면 판정 불가라 그 행은 손대지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({
+        id: 'r1',
+        isCompleted: false,
+        status: 'in_progress',
+        versionId: 'v1',
+        questionResponses: { 'q-switch': 'v1:복호화실패로남은암호문', 'q-dep': '하류 답' },
+      }),
+    ]);
+    versionFindManyMock.mockResolvedValue([{ id: 'v1', snapshot: SWITCH_SNAPSHOT }]);
+
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows[0]?.questionResponses).toEqual({
+      'q-switch': 'v1:복호화실패로남은암호문',
+      'q-dep': '하류 답',
+    });
   });
 });

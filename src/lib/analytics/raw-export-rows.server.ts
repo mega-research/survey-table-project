@@ -3,11 +3,11 @@ import 'server-only';
 import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets, surveyResponses } from '@/db/schema';
+import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { notDeletedResponse } from '@/data/response-filters';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import type { RawExportContactColumn } from '@/lib/operations/contacts';
 import { decryptPiiForExport } from '@/lib/operations/contacts-export.server';
@@ -20,9 +20,11 @@ import {
 
 import { buildQuestionMetaMap, buildStepLabelMap } from './raw-export-helpers';
 import {
+  type ExportStripContext,
   buildContactValues,
   buildNonRespondentRow,
   sortRowsForContactPopulation,
+  stripHiddenFromExportRows,
 } from './raw-export-rows';
 import type { RawExportContext, RawExportResponseRow } from './raw-workbook';
 
@@ -170,6 +172,112 @@ async function loadContactValues(
   return out;
 }
 
+/** strip 판정에 필요한 응답 행의 최소 모양 — findMany 결과의 부분집합. */
+interface StripCandidate {
+  id: string;
+  status: string;
+  versionId: string | null;
+  lastEditedAt: Date | null;
+  contactTargetId: string | null;
+}
+
+/**
+ * 숨은 문항 strip 대상 — **어떤 strip 경계도 지나지 않은 부분저장 행**뿐이다.
+ *
+ * `is_completed` 로 고르면 안 된다. 자격미달(`screened_out`)은 제출을 끝낸 종결 응답인데도
+ * `is_completed=false` 라(response.service 의 같은 지적 참조) 확정된 답을 지금 attrs 로 다시
+ * 판정하게 된다 — 명단을 재업로드해 attrs 가 바뀌었으면 멀쩡한 답이 조용히 사라진다.
+ * 그래서 종결 상태(completed/screened_out/quotaful_out/bad)를 전부 빼고 화이트리스트로 고른다.
+ *
+ * 어드민이 손댄 행(`lastEditedAt`)도 뺀다. 그 경로는 이미 strip 을 돌렸고, 구버전 이관
+ * (`migrating`)일 때는 **일부러 걸지 않은** 채 versionId 를 현재 버전으로 재핀한다
+ * (response-edit.service 스펙 결정 5). 여기서 새 스냅샷으로 다시 판정하면 이관이 보존한
+ * 답을 정면으로 지운다.
+ *
+ * versionId 가 없는 레거시 행은 판정 기준 자체가 없어 제외한다.
+ */
+const STRIPPABLE_STATUSES: ReadonlySet<string> = new Set(['in_progress', 'drop']);
+
+function stripCandidates(rows: readonly StripCandidate[]): StripCandidate[] {
+  return rows.filter(
+    (r) =>
+      STRIPPABLE_STATUSES.has(r.status) && r.versionId !== null && r.lastEditedAt === null,
+  );
+}
+
+/**
+ * 복호화가 안 풀린 값이 남았는지 — 남았으면 그 행은 판정하지 않는다.
+ *
+ * `decryptQuestionResponses` 는 키 오류 등으로 실패하면 예외를 삼키고 `vN:` 암호문을 그대로
+ * 돌려준다(export 가 죽지 않는 것이 우선). 가시성 평가기는 그 암호문을 "판정 불가"가 아니라
+ * 그냥 문자열로 비교하므로, 암호화된 문항이 표시 조건의 컨트롤러면 조건이 거짓으로 풀려
+ * 멀쩡한 하류 답까지 지워진다. 복호화 장애 한 건이 다른 답의 손실로 번지지 않게 막는다.
+ */
+function hasResidualCiphertext(answers: Record<string, unknown>): boolean {
+  for (const value of Object.values(answers)) {
+    if (isEncryptedAnswerValue(value)) return true;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      for (const cellValue of Object.values(value as Record<string, unknown>)) {
+        if (isEncryptedAnswerValue(cellValue)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * strip 대상 행별 평가 재료 — **그 응답이 수집된 버전**의 스냅샷 + 컨택 attrs.
+ * 최신 버전으로 판정하면 나중에 좁아진 조건이 이미 수집된 답을 소급해 지운다
+ * (어드민 수정이 `migrating` 을 제외하는 것과 같은 이유). 스냅샷이 prune 됐거나
+ * questions 가 배열이 아니면 그 행은 컨텍스트를 안 만들어 원본 그대로 내보낸다.
+ * 대상이 없으면 버전 조회 자체를 하지 않는다.
+ *
+ * **attrs 는 응답 시점이 아니라 현재 값이다 — 알고 받아들인 한계다(2026-09-09 결정).**
+ * `contact_targets.attrs` 는 현재 값 한 벌뿐이고 이력이 없어 응답 시점 attrs 를 되살릴
+ * 방법이 없다. 그래서 명단을 재업로드해 attrs 가 바뀌면, 응답 당시에는 보였던 문항의 답이
+ * 지금 기준으로는 숨은 것이 되어 내보내기에서 빠질 수 있다.
+ *
+ * 대상이 제출 전 초안뿐이라 대개는 문제가 아니다 — 그 응답자가 제출하면 서버도 똑같이
+ * 현재 attrs 로 지우므로 내보내기가 제출 결과를 미리 보여주는 셈이다. 손해가 남는 곳은
+ * 영영 제출하지 않는 이탈 응답 하나뿐이고, 그 경우 실제로 답한 값을 내보내기에서만 잃는다.
+ * attrs 조건이 걸린 문항을 통째로 제외하는 안은 검토 후 미채택 — 이 설문 형식에서는
+ * 이월 판정 문항 대부분이 attrs 조건이라 걸러내기 자체가 무력해진다.
+ */
+async function loadStripContexts(
+  candidates: readonly StripCandidate[],
+  contactMap: ReadonlyMap<string, ContactRef>,
+): Promise<Map<string, ExportStripContext>> {
+  const out = new Map<string, ExportStripContext>();
+  if (candidates.length === 0) return out;
+
+  const versionIds = [...new Set(candidates.map((r) => r.versionId as string))];
+  const versionRows = await db.query.surveyVersions.findMany({
+    where: inArray(surveyVersions.id, versionIds),
+    columns: { id: true, snapshot: true },
+  });
+  const snapshotById = new Map(versionRows.map((v) => [v.id, v.snapshot]));
+
+  for (const r of candidates) {
+    const snap = snapshotById.get(r.versionId as string) as
+      | { questions?: unknown; groups?: unknown; lookups?: unknown }
+      | null
+      | undefined;
+    if (!snap || !Array.isArray(snap.questions)) continue;
+    const attrs = r.contactTargetId ? contactMap.get(r.contactTargetId)?.attrs : undefined;
+    out.set(r.id, {
+      questions: snap.questions as ExportStripContext['questions'],
+      groups: Array.isArray(snap.groups)
+        ? (snap.groups as ExportStripContext['groups'])
+        : undefined,
+      lookups: Array.isArray(snap.lookups)
+        ? (snap.lookups as ExportStripContext['lookups'])
+        : undefined,
+      contactAttrs: attrs,
+    });
+  }
+  return out;
+}
+
 /** 조사 대상이 있는 행에만 contactValues 를 싣는다 — 익명 응답은 키 자체를 넣지 않는다. */
 function attachContactValues(
   row: RawExportResponseRow,
@@ -208,7 +316,25 @@ export async function loadRawExportRows(
   }
 
   const contactColumns = options.contactColumns ?? [];
-  const withAttrs = contactColumns.length > 0;
+  const withContactColumns = contactColumns.length > 0;
+
+  // 숨은 문항 판정은 attrs 를 보는 조건(`attr` 피연산자)을 풀어야 한다 — attrs 없이 판정하면
+  // 그 조건이 통째로 뒤집혀 멀쩡한 답이 지워진다. 그래서 명단 열이 꺼져 있어도 strip 대상에
+  // 컨택이 붙어 있으면 attrs 를 읽는다. 대상이 없으면 쿼리는 도입 전과 같다.
+  // 복호화를 먼저 한다 — strip 후보 판정이 "복호화가 안 풀린 값이 남았는가"를 봐야 하고,
+  // 그 판정이 attrs 를 읽을지(withAttrs) 를 정하기 때문이다. 복호화는 컨택과 무관하다.
+  const decryptedById = new Map<string, Record<string, unknown>>(
+    rawResponses.map((r) => [
+      r.id,
+      decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>, {
+        responseId: r.id,
+      }),
+    ]),
+  );
+  const candidates = stripCandidates(rawResponses).filter(
+    (r) => !hasResidualCiphertext(decryptedById.get(r.id) ?? {}),
+  );
+  const withAttrs = withContactColumns || candidates.some((r) => r.contactTargetId !== null);
 
   const contactIds = rawResponses
     .map((r) => r.contactTargetId)
@@ -223,22 +349,26 @@ export async function loadRawExportRows(
   }
 
   const nonRespondents = options.includeNonRespondents
-    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope), { withAttrs, orderByResid: true })
+    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope), {
+        withAttrs: withContactColumns,
+        orderByResid: true,
+      })
     : [];
 
   // 같은 컨택이 양쪽에 있을 수 없다 — 미응답 술어가 배제한다. 값 조립은 조사 대상 수만큼 1회.
-  const contactValues = withAttrs
+  // 명단 열이 꺼져 있으면 부르지 않는다 — 빈 열 목록으로 부르면 모든 행에 빈 contactValues 가
+  // 붙어 도입 전과 파일이 달라진다.
+  const contactValues = withContactColumns
     ? await loadContactValues([...contactMap.values(), ...nonRespondents], contactColumns)
     : null;
+
+  const stripContexts = await loadStripContexts(candidates, contactMap);
 
   const responseRows: RawExportResponseRow[] = rawResponses.map((r) => {
     const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
     const row: RawExportResponseRow = {
       id: r.id,
-      questionResponses: decryptQuestionResponses(
-        (r.questionResponses ?? {}) as Record<string, unknown>,
-        { responseId: r.id },
-      ),
+      questionResponses: decryptedById.get(r.id) ?? {},
       resid: c?.resid ?? null,
       inviteCode: c?.inviteCode ?? null,
       ipHash: r.ipHash,
@@ -253,10 +383,13 @@ export async function loadRawExportRows(
     return attachContactValues(row, c ? contactValues?.get(c.id) : undefined);
   });
 
-  if (!options.includeNonRespondents) return { kind: 'ok', rows: responseRows, ...population };
+  // 숨은 문항 값은 내보내는 값에서만 뺀다 — DB 는 건드리지 않는다.
+  const strippedRows = stripHiddenFromExportRows(responseRows, stripContexts);
+
+  if (!options.includeNonRespondents) return { kind: 'ok', rows: strippedRows, ...population };
 
   const rows = sortRowsForContactPopulation([
-    ...responseRows,
+    ...strippedRows,
     ...nonRespondents.map((t) =>
       attachContactValues(buildNonRespondentRow(t), contactValues?.get(t.id)),
     ),

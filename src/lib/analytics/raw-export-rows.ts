@@ -1,5 +1,9 @@
 import type { RawExportContactColumn } from '@/lib/operations/contacts';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
+import { responsesToLookupShape } from '@/utils/branch-eval';
 
 import type { RawExportResponseRow } from './raw-workbook';
 
@@ -67,4 +71,56 @@ export function buildContactValues(
     out[col.source] = col.kind === 'attrs' ? (attrs[col.key] ?? '') : (piiPlain?.[col.key] ?? '');
   }
   return out;
+}
+
+/**
+ * 한 행의 숨은 문항 판정에 필요한 재료 — 그 응답이 **수집된 버전**의 스냅샷 + 컨택 attrs.
+ * 응답 페이지·제출·어드민 수정이 쓰는 평가 컨텍스트와 같은 재료다. 하나라도 빠지면
+ * LUT·attrs·수식을 쓰는 조건이 여기서만 다르게 풀려 멀쩡한 답이 지워진다.
+ */
+export interface ExportStripContext {
+  questions: Question[];
+  groups?: QuestionGroup[] | undefined;
+  lookups?: SurveyLookup[] | undefined;
+  contactAttrs?: Record<string, string | undefined> | undefined;
+}
+
+/**
+ * 숨은 문항 값 걸러내기 — 제출(completeResponse)도 어드민 수정도 안 거친 행이 rawdata 로
+ * 나갈 때의 마지막 그물이다. 초안·구간 저장에는 strip 을 걸지 않으므로(AGENTS.md 주의사항
+ * 14) 진행중·이탈 응답의 DB 값에는 숨은 문항 답이 남아 있다.
+ *
+ * **DB 는 건드리지 않는다.** 내보내는 값에서만 뺀다 — 되돌릴 수 있게 두려는 것이다.
+ *
+ * 순서는 저장 경계와 같다 — **숨은 문항 strip → 게이팅 strip**. 문항이 통째로 사라지면 그
+ * 표의 셀 값도 함께 사라져 게이팅 판정의 입력이 달라지므로 순서를 바꾸면 안 된다. 저장
+ * 경계의 세 번째 단계인 calc 재계산은 **일부러 뺐다** — 앞 둘은 값을 지우기만 하지만 calc 는
+ * 저장된 적 없는 새 값을 써넣는다. 내보내기가 원본에 없던 숫자를 만들어내면 안 된다.
+ *
+ * **대상 선별은 호출부가 한다.** 컨텍스트가 없는 행은 원본 객체 그대로 통과시킨다.
+ * 로더가 미완료 행에만 컨텍스트를 만들어 넘긴다 — 완료본은 제출 시점에 이미 정리됐고,
+ * 스냅샷이 prune 된 버전은 판정 재료 자체가 없다. 그리고 컨텍스트는 **그 응답이 수집된
+ * 버전**의 것이어야 한다. 최신 버전으로 판정하면 나중에 좁아진 조건이 이미 수집된 답을
+ * 소급해 지운다 — 어드민 수정이 `migrating` 을 strip 대상에서 빼는 것과 같은 이유다.
+ */
+export function stripHiddenFromExportRows(
+  rows: readonly RawExportResponseRow[],
+  contextByRowId: ReadonlyMap<string, ExportStripContext>,
+): RawExportResponseRow[] {
+  return rows.map((row) => {
+    const ctx = contextByRowId.get(row.id);
+    if (!ctx) return row;
+    const hiddenStripped = stripHiddenQuestionValues(
+      ctx.questions,
+      row.questionResponses,
+      ctx.groups,
+      {
+        responses: responsesToLookupShape(row.questionResponses),
+        contactAttrs: ctx.contactAttrs ?? {},
+        lookups: ctx.lookups ?? [],
+      },
+    );
+    const stripped = stripDisabledCellValues(ctx.questions, hiddenStripped);
+    return stripped === row.questionResponses ? row : { ...row, questionResponses: stripped };
+  });
 }
