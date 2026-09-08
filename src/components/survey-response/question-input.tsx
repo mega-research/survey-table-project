@@ -293,6 +293,9 @@ function QuestionInputControl({
           {...(question.dynamicRowConfigs !== undefined
             ? { dynamicRowConfigs: question.dynamicRowConfigs }
             : {})}
+          {...(question.rowRepeatConfig != null
+            ? { rowRepeatConfig: question.rowRepeatConfig }
+            : {})}
           {...(question.hideColumnLabels !== undefined
             ? { hideColumnLabels: question.hideColumnLabels }
             : {})}

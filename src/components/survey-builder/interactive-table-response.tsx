@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, ListChecks, Minus, Plus } from 'lucide-react';
 
 import { scrollToIssue } from '@/components/survey-response/scroll-to-issue';
 import { ValidationIssueBanner } from '@/components/survey-response/validation-issue-banner';
@@ -20,6 +20,7 @@ import {
   HeaderCell,
   MobileTableDisplayMode,
   Question,
+  RowRepeatConfig,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -73,6 +74,55 @@ const VIRTUALIZATION_THRESHOLD = 100;
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
   'flex min-w-0 items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+
+// ── 행 반복 버튼 (표 아래) ──
+
+interface RowRepeatControlsProps {
+  addLabel: string;
+  canAdd: boolean;
+  canRemove: boolean;
+  maxCount: number;
+  onAdd: () => void;
+  onRemove: () => void;
+}
+
+/**
+ * 응답자가 벌을 늘리고 접는 버튼. 구조에는 이미 maxCount 벌이 펼쳐져 있고
+ * 여기서 바뀌는 것은 "몇 벌을 보일까"뿐이다.
+ */
+const RowRepeatControls = React.memo(function RowRepeatControls({
+  addLabel,
+  canAdd,
+  canRemove,
+  maxCount,
+  onAdd,
+  onRemove,
+}: RowRepeatControlsProps) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={!canAdd}
+        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Plus className="h-4 w-4" />
+        {addLabel}
+      </button>
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          <Minus className="h-4 w-4" />
+          마지막 줄 삭제
+        </button>
+      )}
+      {!canAdd && <span className="text-xs text-gray-500">최대 {maxCount}개까지 추가할 수 있습니다.</span>}
+    </div>
+  );
+});
 
 // ── 셀렉터 행 (동적 행 선택 버튼) ──
 
@@ -335,6 +385,8 @@ interface InteractiveTableResponseProps {
   /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
   ignoreDisplayConditions?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다 (없으면 전부 그린다) */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
@@ -419,6 +471,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   allQuestions,
   ignoreDisplayConditions = false,
   dynamicRowConfigs,
+  rowRepeatConfig,
   hideColumnLabels = false,
   mobileOriginalTable = false,
   mobileTableDisplayMode,
@@ -606,6 +659,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     closeModal,
     expandedGroupIds,
     toggleGroupExpanded,
+    rowRepeat,
   } = useDynamicRows({
     questionId,
     rows,
@@ -613,6 +667,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     conditionVisibleRowIds,
     hiddenGroupIds,
     dynamicRowConfigs,
+    rowRepeatConfig,
     isTestMode,
     value,
     onChange: mergedOnChange,
@@ -1192,6 +1247,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               renderTableView()
             )}
           </div>
+
+          {rowRepeat.isActive && (
+            <RowRepeatControls
+              addLabel={rowRepeat.addLabel}
+              canAdd={rowRepeat.canAdd}
+              canRemove={rowRepeat.canRemove}
+              maxCount={rowRepeat.maxCount}
+              onAdd={rowRepeat.addBundle}
+              onRemove={rowRepeat.removeBundle}
+            />
+          )}
 
           <ValidationIssueBanner
             items={errorItems}
