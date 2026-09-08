@@ -14,6 +14,9 @@ import { evaluateQuestionConditionGroup } from '@/utils/branch-logic';
  * **미설정은 불러온다.** 이 필드가 없던 시절에 발행된 설문이 그대로 돌아가야 한다.
  * 조건 형태가 깨진 JSONB 도 같은 쪽으로 폴백한다 — 표시 조건의 실패 방향(보이는 쪽)과
  * 같은 규약이며, 여기서 안 채우는 쪽으로 넘어지면 지난 회차 답이 조용히 사라진다.
+ *
+ * `priorAnswerDisabled` 는 조건보다 앞선다. 「이월값 불러오기」를 끈 문항은 조건이
+ * 무엇이든 안 받는다 — 이월을 막으려고 도달 불가능한 조건을 걸던 우회를 대체한다.
  */
 export function shouldLoadPriorAnswer(
   question: Question,
@@ -21,6 +24,7 @@ export function shouldLoadPriorAnswer(
   allQuestions: readonly Question[],
   evalCtx?: BranchEvalCtx,
 ): boolean {
+  if (question.priorAnswerDisabled === true) return false;
   const condition = question.priorAnswerCondition as QuestionConditionGroup | undefined;
   if (!condition) return true;
   if (!Array.isArray(condition.conditions) || condition.conditions.length === 0) return true;

@@ -345,6 +345,8 @@ export async function duplicateSurvey(
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
         priorAnswerCondition:
           question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+        priorAnswerDisabled:
+          question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
         answerQuoteEnabled: question.answerQuoteEnabled,
         answerQuoteName: question.answerQuoteName,
         answerQuoteText: question.answerQuoteText,

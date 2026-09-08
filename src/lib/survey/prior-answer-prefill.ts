@@ -95,6 +95,8 @@ export function collectPriorAnswerRetractions(
   if (!prior) return [];
   const retractions: string[] = [];
   for (const question of questions) {
+    // 「이월값 불러오기」를 끈 문항은 프리필한 적이 없으니 회수할 것도 없다.
+    if (question.priorAnswerDisabled === true) continue;
     if (!question.priorAnswerCondition) continue;
     if (shouldLoadPriorAnswer(question, responses, allQuestions, evalCtx)) continue;
     if (!hasPriorAnswer(prior, question.id)) continue;

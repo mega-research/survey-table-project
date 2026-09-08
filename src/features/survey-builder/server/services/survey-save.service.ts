@@ -300,6 +300,8 @@ export async function saveSurveyDiff(
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           priorAnswerCondition:
             question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+          priorAnswerDisabled:
+            question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
           exportLabel: question.exportLabel,
@@ -363,6 +365,7 @@ export async function saveSurveyDiff(
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               priorAnswerCondition: sql`excluded.prior_answer_condition`,
+              priorAnswerDisabled: sql`excluded.prior_answer_disabled`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
               exportLabel: sql`excluded.export_label`,
@@ -679,6 +682,8 @@ export async function saveSurveyWithDetails(
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           priorAnswerCondition:
             question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+          priorAnswerDisabled:
+            question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
           exportLabel: question.exportLabel,
@@ -742,6 +747,7 @@ export async function saveSurveyWithDetails(
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               priorAnswerCondition: sql`excluded.prior_answer_condition`,
+              priorAnswerDisabled: sql`excluded.prior_answer_disabled`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
               exportLabel: sql`excluded.export_label`,

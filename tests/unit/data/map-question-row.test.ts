@@ -61,6 +61,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   choiceGroups: [{ id: 'cg1', groupKey: 'rad1', type: 'radio', label: '그룹' }],
   displayCondition: { logicType: 'AND', conditions: [] },
   priorAnswerCondition: { logicType: 'AND', conditions: [] },
+  priorAnswerDisabled: true,
   questionCode: 'Q1',
   isCustomSpssVarName: true,
   exportLabel: '라벨',

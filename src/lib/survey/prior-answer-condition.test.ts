@@ -85,3 +85,41 @@ describe('shouldLoadPriorAnswer', () => {
     expect(shouldLoadPriorAnswer(q, { 'q-move': 'no' }, [source, q])).toBe(true);
   });
 });
+
+/**
+ * 「이월값 불러오기」 스위치.
+ *
+ * 이월을 아예 막으려면 담당자가 조건에 도달 불가능한 값을 넣어야 했다. 그 우회는
+ * "조건이 거짓으로 뒤집혔다" 와 구분되지 않아 회수가 응답자의 입력을 지웠다
+ * (2026-09-08 DQ7 매출액). 의도를 값으로 표현한다.
+ */
+describe('priorAnswerDisabled — 이월값 불러오기 끄기', () => {
+  const disabled = (extra?: Record<string, unknown>): Question =>
+    ({
+      id: 'q',
+      type: 'table',
+      title: 'q',
+      required: false,
+      order: 0,
+      priorAnswerDisabled: true,
+      ...extra,
+    }) as unknown as Question;
+
+  it('끄면 조건이 없어도 불러오지 않는다', () => {
+    expect(shouldLoadPriorAnswer(disabled(), {}, [])).toBe(false);
+  });
+
+  it('끄면 조건이 참이어도 불러오지 않는다 — 스위치가 조건보다 앞선다', () => {
+    const q = disabled({ priorAnswerCondition: matches('src', ['yes']) });
+    expect(shouldLoadPriorAnswer(q, { src: 'yes' }, [])).toBe(false);
+  });
+
+  it('false 로 명시하면 기존 동작 그대로', () => {
+    const q = { ...disabled(), priorAnswerDisabled: false } as Question;
+    expect(shouldLoadPriorAnswer(q, {}, [])).toBe(true);
+  });
+
+  it('미설정은 기존 동작 그대로 — 예전 설문이 그대로 돌아야 한다', () => {
+    expect(shouldLoadPriorAnswer(question('q'), {}, [])).toBe(true);
+  });
+});

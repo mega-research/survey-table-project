@@ -157,3 +157,23 @@ describe('collectPriorAnswerRetractions', () => {
     expect(out).toEqual([]);
   });
 });
+
+describe('collectPriorAnswerRetractions — 이월값 불러오기를 끈 문항', () => {
+  /** 스위치를 끈 문항은 프리필한 적이 없으니 회수 대상이 아니다. */
+  const off = {
+    ...employmentQuestion(),
+    priorAnswerDisabled: true,
+  } as unknown as Question;
+  const questions = [movedQuestion, off];
+
+  it('프리필 이력이 있어도 회수하지 않는다', () => {
+    const out = collectPriorAnswerRetractions(
+      questions,
+      prior,
+      { [MOVED]: 'yes', [EMPLOY]: { company: 'SK텔레콤', joined: '2016' } },
+      questions,
+      new Set([EMPLOY]),
+    );
+    expect(out).toEqual([]);
+  });
+});

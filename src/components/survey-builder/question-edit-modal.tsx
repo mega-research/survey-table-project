@@ -33,7 +33,9 @@ import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
-import { Question } from '@/types/survey';
+import { Question, type QuestionConditionGroup } from '@/types/survey';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
@@ -348,6 +350,28 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   }, [question]);
 
   // 저장 핸들러 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
+  /** 이월값 조건 탭은 표시 조건과 같은 즉시 저장 경로를 쓴다. 새 질문은 아직 DB 에 없어 건너뛴다. */
+  const savePriorAnswerField = useCallback(
+    async (data: { priorAnswerCondition?: QuestionConditionGroup | undefined; priorAnswerDisabled?: boolean }) => {
+      const store = useSurveyBuilderStore.getState();
+      const isNewQuestion = !!store.questionChanges.added[questionId || ''];
+      if (!questionId || !store.currentSurvey.id || !isValidUUID(questionId) || isNewQuestion) return;
+      try {
+        await client.surveyBuilder.questions.update({
+          questionId,
+          surveyId: store.currentSurvey.id,
+          data,
+        });
+      } catch (error) {
+        console.error('이월값 설정 저장 실패:', error);
+      }
+    },
+    [questionId],
+  );
+
+  const priorAnswerEnabled =
+    (formData.priorAnswerDisabled ?? question?.priorAnswerDisabled) !== true;
+
   const handleSave = useCallback(async () => {
     // debounce 중인 로컬 state를 formData에 flush
     if (debouncedTitleRef.current) {
@@ -521,6 +545,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               priorAnswerCondition:
                 currentFormData.priorAnswerCondition || question?.priorAnswerCondition,
+              priorAnswerDisabled:
+                currentFormData.priorAnswerDisabled ?? question?.priorAnswerDisabled,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
@@ -844,6 +870,33 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 채웁니다. 이직 여부처럼 같은 문항 안에서 갈리는 경우에 씁니다 — 문항은 양쪽 다
                 보이되 한쪽만 지난 값을 받게 하려면 표시 조건이 아니라 이 조건을 쓰세요.
               </div>
+
+              {/* 아예 안 받는 경우는 조건이 아니라 이 스위치로 표현한다. 도달 불가능한
+                  조건으로 막으면 "조건이 거짓으로 뒤집혔다" 와 구분되지 않는다. */}
+              <div className="mb-4 flex items-start justify-between gap-4 rounded-md border border-gray-200 p-3">
+                <div>
+                  <Label className="text-sm font-medium">이월값 불러오기</Label>
+                  <p className="mt-1 text-xs text-gray-500">
+                    끄면 지난 회차 응답이 있어도 이 문항에는 채우지 않습니다. 응답자가 새로
+                    입력한 값이 그대로 저장됩니다. 아래 조건은 켜져 있을 때만 적용됩니다.
+                  </p>
+                </div>
+                <Switch
+                  checked={priorAnswerEnabled}
+                  onCheckedChange={(enabled: boolean) => {
+                    const disabled = !enabled;
+                    setFormData((prev) => {
+                      const next: Partial<Question> = { ...prev };
+                      if (disabled) next.priorAnswerDisabled = true;
+                      else delete next.priorAnswerDisabled;
+                      return next;
+                    });
+                    void savePriorAnswerField({ priorAnswerDisabled: disabled });
+                  }}
+                />
+              </div>
+
+              <div className={priorAnswerEnabled ? undefined : 'pointer-events-none opacity-50'}>
               <QuestionConditionEditor
                 question={question}
                 {...(formData.priorAnswerCondition
@@ -862,28 +915,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                     return next;
                   });
 
-                  // 표시 조건과 같은 즉시 저장 경로 — 새 질문은 아직 DB 에 없어 건너뛴다.
-                  const store = useSurveyBuilderStore.getState();
-                  const isNewQuestion = !!store.questionChanges.added[questionId || ''];
-                  if (
-                    questionId &&
-                    store.currentSurvey.id &&
-                    isValidUUID(questionId) &&
-                    !isNewQuestion
-                  ) {
-                    try {
-                      await client.surveyBuilder.questions.update({
-                        questionId,
-                        surveyId: store.currentSurvey.id,
-                        data: { priorAnswerCondition: conditionGroup },
-                      });
-                    } catch (error) {
-                      console.error('이월값 조건 저장 실패:', error);
-                    }
-                  }
+                  await savePriorAnswerField({ priorAnswerCondition: conditionGroup });
                 }}
                 allQuestions={questions}
               />
+              </div>
             </TabsContent>
           </Tabs>
         </div>

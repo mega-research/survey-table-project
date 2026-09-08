@@ -68,6 +68,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     sumConstraints: data.sumConstraints as NewQuestion['sumConstraints'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     priorAnswerCondition: data.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+    priorAnswerDisabled: data.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,
     exportCellOrder: data.exportCellOrder ?? null,

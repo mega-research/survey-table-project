@@ -720,6 +720,13 @@ export interface Question {
    * 이 조건은 **보이는 문항에 이월값을 깔지** 정한다. 미설정이면 불러온다.
    */
   priorAnswerCondition?: QuestionConditionGroup;
+  /**
+   * 이 문항은 이월값을 불러오지 않는다. 조건보다 우선하고, 회수 대상도 아니다.
+   *
+   * 조건에 도달 불가능한 값을 넣어 막던 우회를 대체한다 — 그 우회는 "조건이 거짓으로
+   * 뒤집혔다" 와 구분되지 않아 회수가 응답자의 입력을 지웠다(2026-09-08 DQ7 매출액).
+   */
+  priorAnswerDisabled?: boolean;
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';

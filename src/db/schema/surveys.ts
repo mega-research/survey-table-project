@@ -268,6 +268,7 @@ export const questions = pgTable(
     dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
     priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
+    priorAnswerDisabled: boolean('prior_answer_disabled'),
     // 숫자 셀 합계 제약 (테이블 타입 전용, 차단형 검증 — tableValidationRules 와 별개)
     sumConstraints: jsonb('sum_constraints').$type<SumConstraint[]>(),
 

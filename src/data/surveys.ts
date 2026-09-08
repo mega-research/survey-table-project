@@ -152,6 +152,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
           >,
         }
       : {}),
+    ...(q.priorAnswerDisabled != null ? { priorAnswerDisabled: q.priorAnswerDisabled } : {}),
     ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
     ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
     ...(q.exportLabel != null ? { exportLabel: q.exportLabel } : {}),
