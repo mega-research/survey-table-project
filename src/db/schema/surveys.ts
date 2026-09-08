@@ -33,6 +33,7 @@ import type {
   QuotaConfig,
   RankingConfig,
   ResponseEditChange,
+  RowRepeatConfig,
   SelectLevel,
   SurveyResponseHeaderConfig,
   SurveyVersionSnapshot,
@@ -266,6 +267,9 @@ export const questions = pgTable(
     // 검증 규칙 및 조건부 표시
     tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),
     dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
+    // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다.
+    // 펼쳐진 행 자체는 table_rows_data 에 눌러앉고, 이 컬럼은 템플릿 지정과 상한만 쥔다.
+    rowRepeatConfig: jsonb('row_repeat_config').$type<RowRepeatConfig>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
     priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
     priorAnswerDisabled: boolean('prior_answer_disabled'),

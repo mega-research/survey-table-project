@@ -77,6 +77,7 @@ interface SnapshotQuestion {
   placeholder?: string | undefined;
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
+  rowRepeatConfig?: Question['rowRepeatConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
@@ -169,6 +170,7 @@ export function buildSurveySnapshot(
       placeholder: q.placeholder,
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
+      rowRepeatConfig: q.rowRepeatConfig,
       hideColumnLabels: q.hideColumnLabels,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,

@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 
 import { useDynamicRowLayout } from '@/hooks/use-dynamic-row-layout';
 import { useDynamicRowState } from '@/hooks/use-dynamic-row-state';
-import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
+import { useRowRepeat, type UseRowRepeatReturn } from '@/hooks/use-row-repeat';
+import type { DynamicRowGroupConfig, RowRepeatConfig, TableRow } from '@/types/survey';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
@@ -34,6 +35,8 @@ interface UseDynamicRowsParams {
   /** 그룹 displayCondition 으로 숨길 그룹 ID (호출자 소유) */
   hiddenGroupIds?: Set<string> | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 구조에 펼쳐진 벌 중 몇 벌을 보일지 정하는 데만 쓴다 */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
@@ -61,6 +64,8 @@ interface UseDynamicRowsReturn {
   closeModal: () => void;
   expandedGroupIds: Set<string>;
   toggleGroupExpanded: (groupId: string) => void;
+  // 행 반복 (구조에 펼쳐진 벌의 노출 제어)
+  rowRepeat: UseRowRepeatReturn;
 }
 
 export function useDynamicRows({
@@ -70,6 +75,7 @@ export function useDynamicRows({
   conditionVisibleRowIds,
   hiddenGroupIds,
   dynamicRowConfigs,
+  rowRepeatConfig,
   isTestMode,
   value,
   onChange,
@@ -97,6 +103,22 @@ export function useDynamicRows({
     onChange,
   });
 
+  // 1-b) 행 반복 가시성 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다.
+  //      동적 그룹 필터·행 조건 필터와 같은 층이다 (행을 숨겼다 보였다 하는 일).
+  //      **구조 전체 행**을 넘긴다 — columnFilteredRows 는 조건으로 숨은 열의 셀이 이미
+  //      빠진 목록이라, 그걸로 판정하면 숨은 칸의 값이 벌 판정과 접기(값 비우기)에서
+  //      통째로 빠진다. 응답자가 지운 벌이 내보내기의 "쓰인 벌"로 남고, 조건이 뒤집히면
+  //      지운 값이 되살아난다. 숨기는 것은 렌더의 일이고 값의 소재는 구조가 안다.
+  const rowRepeat = useRowRepeat({
+    questionId,
+    rows,
+    rowRepeatConfig,
+    isTestMode,
+    value,
+    onChange,
+  });
+  const hiddenRepeatRowIds = rowRepeat.hiddenRowIds;
+
   // 2) 가시 행 필터링 — 행 displayCondition 결과 적용 + 동적 그룹 행 제외 + rowspan 재계산
   const visibleRows = useMemo(() => {
     if (columnFilteredRows.length === 0) return columnFilteredRows;
@@ -104,6 +126,10 @@ export function useDynamicRows({
 
     if (conditionVisibleRowIds) {
       filtered = filtered.filter((row) => conditionVisibleRowIds.has(row.id));
+    }
+
+    if (hiddenRepeatRowIds.size > 0) {
+      filtered = filtered.filter((row) => !hiddenRepeatRowIds.has(row.id));
     }
 
     if (hasDynamicRows) {
@@ -121,7 +147,7 @@ export function useDynamicRows({
 
     const visibleRowIds = new Set(filtered.map((r) => r.id));
     return recalculateRowspansForVisibleRows(columnFilteredRows, visibleRowIds);
-  }, [columnFilteredRows, conditionVisibleRowIds, hasDynamicRows, groupConfigMap]);
+  }, [columnFilteredRows, conditionVisibleRowIds, hasDynamicRows, groupConfigMap, hiddenRepeatRowIds]);
 
   // 3) 동적 행 레이아웃 — displayRows, 셀렉터 배치, grid 좌표
   const { displayRows, rowGridMap, selectorGridMap, groupSelectedCountMap, expandedGroupRows } =
@@ -168,5 +194,6 @@ export function useDynamicRows({
     closeModal,
     expandedGroupIds,
     toggleGroupExpanded,
+    rowRepeat,
   };
 }

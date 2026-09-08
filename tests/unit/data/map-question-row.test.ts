@@ -49,6 +49,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   tableValidationRules: [],
   sumConstraints: [],
   dynamicRowConfigs: [],
+  rowRepeatConfig: { enabled: true, templateRowIds: ['r1'], maxRepeats: 20 },
   hideColumnLabels: true,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',

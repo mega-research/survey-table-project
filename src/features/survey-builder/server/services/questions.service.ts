@@ -70,6 +70,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     priorAnswerCondition: data.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
     priorAnswerDisabled: data.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+    rowRepeatConfig: data.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
     hideColumnLabels: data.hideColumnLabels,
     exportCellOrder: data.exportCellOrder ?? null,
     mobileOriginalTable: data.mobileOriginalTable,

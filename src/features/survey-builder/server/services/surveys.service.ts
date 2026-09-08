@@ -333,6 +333,7 @@ export async function duplicateSurvey(
         numberFormat: question.numberFormat as NewQuestion['numberFormat'],
         sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+        rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
         hideColumnLabels: question.hideColumnLabels,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,

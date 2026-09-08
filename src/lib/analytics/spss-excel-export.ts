@@ -151,6 +151,13 @@ export interface SpssColumnOptions {
    * 도입되기 전과 완전히 같은 컬럼이 나온다.
    */
   changeConfirmQuestionIds?: ReadonlySet<string>;
+  /**
+   * 반복 블록별 "실제로 쓰인 최대 벌" (질문 id → 벌 번호). 이 번호를 넘는 벌의 열은
+   * 내지 않는다 — 구조에는 최대 20벌이 박혀 있어도 아무도 채우지 않은 벌은 빈 열이다.
+   * 미전달이면 구조에 있는 벌을 전부 낸다(발행 시점 변수명 게이트는 최악의 집합을 봐야 한다).
+   * **설문 전체 기준**으로 계산해야 분할 내보내기의 파일 간 열 구성이 갈리지 않는다.
+   */
+  usedRepeatCounts?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -165,6 +172,21 @@ function choiceTableControlCellOptions(cell: TableCell): QuestionOption[] | unde
   if (cell.type === 'select') return cell.selectOptions;
   if (cell.type === 'checkbox') return cell.checkboxOptions;
   return undefined;
+}
+
+/**
+ * 내보낼 표 행 — 반복 블록에서 "쓰인 벌"을 넘는 행을 뺀다.
+ * 판정이 없으면(옵션 미전달) 구조 그대로 낸다. 1벌은 언제나 낸다.
+ */
+function pruneUnusedRepeatRows(
+  q: Pick<QuestionVariant, 'id'> & { tableRowsData?: TableRow[] },
+  usedRepeatCounts: ReadonlyMap<string, number> | undefined,
+): TableRow[] {
+  const rows = q.tableRowsData ?? [];
+  const used = usedRepeatCounts?.get(q.id);
+  if (used === undefined) return rows;
+  const limit = Math.max(1, used);
+  return rows.filter((row) => (row.repeatIndex ?? 1) <= limit);
 }
 
 export function generateSPSSColumns(
@@ -479,13 +501,18 @@ export function generateSPSSColumns(
       // 테이블 질문: 입력 가능한 셀마다 개별 열 생성.
       // 순회 축은 exportCellOrder — 행 우선(기본): 행 고정 후 열 순회 / 열 우선: 열 고정 후 행 순회.
       // 변수명·응답값은 불변, 열 나열 순서만 바뀐다. radio-group 사전 스캔 emit 위치는 영향 없음.
+      // 행 반복: 아무도 채우지 않은 뒤쪽 벌의 열은 내지 않는다. 앞 벌의 이름과 순서는
+      // 변하지 않고 나중에 더 쓰이면 뒤에 붙기만 한다 (설계 결정 2).
+      // 변수명 폴백에는 pruning 전 원본 행 목록을 넘긴다 — 잘린 배열을 넘기면 비반복
+      // 행의 제로패딩 자릿수가 달라져 열 이름이 흔들린다.
+      const exportRows = pruneUnusedRepeatRows(q, options?.usedRepeatCounts);
       const cellCoords: Array<{ tRow: TableRow; colIdx: number }> = [];
       if (q.exportCellOrder === 'column-first') {
         for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++) {
-          for (const tRow of q.tableRowsData) cellCoords.push({ tRow, colIdx });
+          for (const tRow of exportRows) cellCoords.push({ tRow, colIdx });
         }
       } else {
-        for (const tRow of q.tableRowsData) {
+        for (const tRow of exportRows) {
           for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++)
             cellCoords.push({ tRow, colIdx });
         }

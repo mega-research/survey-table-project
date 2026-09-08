@@ -172,6 +172,19 @@ export function collectVisibleTableCells(
 }
 
 /**
+ * 필수 판정에서 빼는 셀 — 반복 2벌 이후의 셀.
+ * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다.
+ */
+function collectRepeatOptionalCellIds(question: Question): Set<string> {
+  const ids = new Set<string>();
+  for (const row of question.tableRowsData ?? []) {
+    if ((row.repeatIndex ?? 1) < 2) continue;
+    for (const cell of row.cells) ids.add(cell.id);
+  }
+  return ids;
+}
+
+/**
  * NumericValidationCtx → 조건 평가 컨텍스트.
  *
  * 렌더러(interactive-table-response)와 같은 ctx 로 평가해야 "화면엔 안 보이는데 검증에
@@ -646,10 +659,15 @@ export function collectNumericIssues(
     //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
     //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
     //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
+    // 행 반복: 필수는 1벌만 본다. 2벌부터는 열어도 비워 둘 수 있어야 한다 —
+    // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
+    // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
+    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
+        !repeatOptionalCellIds.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —

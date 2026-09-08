@@ -289,6 +289,7 @@ export async function saveSurveyDiff(
           sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+          rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
           hideColumnLabels: question.hideColumnLabels,
           exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
@@ -353,6 +354,7 @@ export async function saveSurveyDiff(
               numberFormat: sql`excluded.number_format`,
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
+              rowRepeatConfig: sql`excluded.row_repeat_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
               exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
@@ -671,6 +673,7 @@ export async function saveSurveyWithDetails(
           sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+          rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
           hideColumnLabels: question.hideColumnLabels,
           exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
@@ -735,6 +738,7 @@ export async function saveSurveyWithDetails(
               numberFormat: sql`excluded.number_format`,
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
+              rowRepeatConfig: sql`excluded.row_repeat_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
               exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,

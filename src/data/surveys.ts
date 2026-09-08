@@ -128,6 +128,9 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.dynamicRowConfigs != null
       ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> }
       : {}),
+    ...(q.rowRepeatConfig != null
+      ? { rowRepeatConfig: q.rowRepeatConfig as NonNullable<QuestionType['rowRepeatConfig']> }
+      : {}),
     ...(q.numberFormat != null
       ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
       : {}),

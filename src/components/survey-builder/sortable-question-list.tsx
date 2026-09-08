@@ -56,6 +56,8 @@ import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
+
+import { duplicateQuestionTable } from './utils/duplicate-question-table';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -632,74 +634,9 @@ export function SortableQuestionList({
   const handleDuplicate = useCallback(async (questionId: string) => {
     const questionToDuplicate = questionsRef.current.find((q) => q.id === questionId);
     if (questionToDuplicate) {
-      // 먼저 컬럼을 복제하여 새 컬럼 ID들을 확보
-      const newTableColumns = questionToDuplicate.tableColumns
-        ? questionToDuplicate.tableColumns.map((col) => ({
-            ...col,
-            id: generateId(),
-          }))
-        : undefined;
-
-      // 행 ID 매핑 생성 (dynamicRowConfigs의 insertAfterRowId 업데이트용)
-      const rowIdMap = new Map<string, string>();
-
-      // tableRowsData 복사 (새 ID 부여 및 셀 ID 규칙 적용)
-      const newTableRowsData = questionToDuplicate.tableRowsData
-        ? questionToDuplicate.tableRowsData.map((row) => {
-            const newRowId = generateId();
-            rowIdMap.set(row.id, newRowId);
-            return {
-              ...row,
-              id: newRowId,
-              cells: row.cells.map((cell, cellIndex) => {
-                // 해당 셀의 새 컬럼 ID 찾기
-                const newColId = newTableColumns?.[cellIndex]?.id;
-                const newCellId = newColId ? `cell-${newRowId}-${newColId}` : generateId();
-
-                return {
-                  ...cell,
-                  id: newCellId,
-                  // 셀 내부의 옵션들도 복사 (없으면 키 자체를 제거)
-                  ...(cell.checkboxOptions
-                    ? {
-                        checkboxOptions: cell.checkboxOptions.map((opt) => ({
-                          ...opt,
-                          id: generateId(),
-                        })),
-                      }
-                    : {}),
-                  ...(cell.radioOptions
-                    ? {
-                        radioOptions: cell.radioOptions.map((opt) => ({
-                          ...opt,
-                          id: generateId(),
-                        })),
-                      }
-                    : {}),
-                  ...(cell.selectOptions
-                    ? {
-                        selectOptions: cell.selectOptions.map((opt) => ({
-                          ...opt,
-                          id: generateId(),
-                        })),
-                      }
-                    : {}),
-                };
-              }),
-            };
-          })
-        : undefined;
-
-      // dynamicRowConfigs 복사 (insertAfterRowId를 새 행 ID로 매핑)
-      const newDynamicRowConfigs = questionToDuplicate.dynamicRowConfigs
-        ? questionToDuplicate.dynamicRowConfigs.map((config) => {
-            const { insertAfterRowId: _old, ...rest } = config;
-            const mappedId = config.insertAfterRowId
-              ? rowIdMap.get(config.insertAfterRowId) ?? config.insertAfterRowId
-              : undefined;
-            return mappedId !== undefined ? { ...rest, insertAfterRowId: mappedId } : rest;
-          })
-        : undefined;
+      // 표 복제 — 열·행·셀 id 재발번과 그 id 를 가리키던 참조 이동(게이팅·검증 수식·
+      // 동적 행 삽입 위치·행 반복)을 한 곳이 소유한다.
+      const duplicatedTable = duplicateQuestionTable(questionToDuplicate);
 
       // 기존 질문들의 최대 order를 찾아서 +1 (없으면 1부터 시작)
       const currentQuestions = questionsRef.current;
@@ -733,12 +670,8 @@ export function SortableQuestionList({
               })),
             }
           : {}),
-        // tableColumns 복사 (위에서 생성한 새 컬럼 사용)
-        ...(newTableColumns !== undefined ? { tableColumns: newTableColumns } : {}),
-        ...(newTableRowsData !== undefined ? { tableRowsData: newTableRowsData } : {}),
-        ...(newDynamicRowConfigs !== undefined
-          ? { dynamicRowConfigs: newDynamicRowConfigs }
-          : {}),
+        // 표(열·행·셀 + 참조)는 duplicateQuestionTable 이 통째로 만든 것을 쓴다
+        ...duplicatedTable,
       };
 
       // 로컬 스토어에 추가 (DB 저장은 saveSurveyDiff에서 일괄 처리)

@@ -45,6 +45,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'tableValidationRules',
   'sumConstraints',
   'dynamicRowConfigs',
+  'rowRepeatConfig',
   'hideColumnLabels',
   'mobileOriginalTable',
   'mobileTableDisplayMode',

@@ -558,6 +558,33 @@ export interface TableRow {
   displayCondition?: QuestionConditionGroup; // 행 표시 조건
   dynamicGroupId?: string; // 소속 동적 그룹 ID (undefined = 항상 표시)
   showWhenDynamicGroupId?: string; // 이 그룹에 선택 있으면 함께 표시 (소계 행용)
+  /**
+   * 행 반복(rowRepeatConfig)으로 펼쳐진 벌 번호 (1..maxRepeats). 없으면 비반복 행.
+   * 1벌은 템플릿 행 자체다 — 펼치기가 원본 행에 1을 붙인다.
+   */
+  repeatIndex?: number;
+  /** 이 행이 복제된 원본 템플릿 행 id. 1벌은 자기 자신을 가리킨다. */
+  repeatSourceRowId?: string;
+}
+
+/**
+ * 행 반복 설정 (테이블 타입 전용) — 응답자가 `+` 로 같은 모양의 행 묶음을 늘린다.
+ *
+ * 동적 행 그룹(DynamicRowGroupConfig)과 의미가 다르다: 저쪽은 빌더가 만들어 둔 행 풀에서
+ * 응답자가 고르는 것이고, 이쪽은 같은 칸을 원하는 벌 수만큼 반복하는 것이다. 설정은
+ * 분리하고 렌더 파이프라인만 공유한다.
+ *
+ * 구조에는 저장 시점에 maxRepeats 벌까지 실제로 펼쳐 둔다 — 응답값 키가 발행 스냅샷 안의
+ * cell.id 로 유지되어 저장·검증·내보내기·이월 임포트가 전부 무변경이다.
+ */
+export interface RowRepeatConfig {
+  enabled: boolean;
+  /** 반복 단위가 되는 연속 행 묶음 — 원본 1벌의 행 id 목록 */
+  templateRowIds: string[];
+  /** 최대 반복 벌 수 (기본 20) */
+  maxRepeats: number;
+  /** 추가 버튼 문구 (기본 '행 추가') */
+  addLabel?: string;
 }
 
 // 동적 행 그룹 설정
@@ -700,6 +727,8 @@ export interface Question {
   sumConstraints?: SumConstraint[] | null;
   // 동적 행 그룹 설정 (테이블 타입 전용)
   dynamicRowConfigs?: DynamicRowGroupConfig[];
+  // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다
+  rowRepeatConfig?: RowRepeatConfig | null;
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
   /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */

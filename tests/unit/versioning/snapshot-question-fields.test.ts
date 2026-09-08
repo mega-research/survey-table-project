@@ -65,6 +65,7 @@ const SENTINEL = {
   tableValidationRules: [],
   sumConstraints: [],
   dynamicRowConfigs: [],
+  rowRepeatConfig: { enabled: true, templateRowIds: ['r1'], maxRepeats: 20 },
   hideColumnLabels: true,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',
