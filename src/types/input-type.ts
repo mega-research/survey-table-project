@@ -10,6 +10,19 @@
  * DB 는 열려 있다 — `questions.input_type` 은 enum 도 CHECK 도 없는 text 컬럼이고
  * 셀·보기의 `textInputType` 은 JSONB 안이다. 경계 검증은 zod 스키마가 한다.
  */
+/**
+ * 값의 형식을 검사하는 입력 모드. 응답자가 친 값이 형식에 맞지 않으면 "다음"/제출이
+ * 막히고, 통과한 값은 하이픈 포함 정규형으로 저장된다 (파서는 @/utils/input-format).
+ *
+ * 이름은 컨택 PII 어휘(`@/lib/crypto/pii-fields`)와 **같은 문자열**을 쓴다. 다만
+ * 정규화 규칙은 다르다 — PII 는 숫자만 남기고 이쪽은 하이픈을 넣는다. 나중에 응답값과
+ * 명단을 대조할 일이 생기면 비교 시점에 양쪽을 `normalizePii` 로 태워 숫자만 남긴다.
+ * `corp_number`(법인번호)만 PII 목록에 없는 신규 어휘다.
+ */
+export const INPUT_FORMATS = ['mobile', 'phone', 'biz_number', 'corp_number', 'email'] as const;
+
+export type InputFormat = (typeof INPUT_FORMATS)[number];
+
 export const INPUT_TYPES = ['text', 'number'] as const;
 
 export type InputType = (typeof INPUT_TYPES)[number];
