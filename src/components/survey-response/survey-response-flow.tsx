@@ -85,6 +85,7 @@ import {
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { normalizeFormatValues } from '@/lib/survey/format-normalize';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import {
   type NumericIssue,
@@ -97,6 +98,7 @@ import {
   collectPriorAnswerRetractions,
 } from '@/lib/survey/prior-answer-prefill';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import {
@@ -391,10 +393,25 @@ function SurveyResponseFlowActive({
    */
   const changeConfirmEnabled = control?.changeConfirmEnabled ?? false;
 
-  /** 제출·초안 페이로드 조립 — 기타 상세기재 정리. 숨은 문항 값은 응답 상태에서 이미 지워졌다. */
+  // 이월 응답은 형식 정규화의 면제 판정에만 쓴다 — 콜백 재생성을 막으려 ref 로 따라간다
+  // (기존 안정 콜백 관례와 같은 2줄 패턴).
+  const priorAnswersRef = useRef<PriorAnswers | null>(priorAnswers);
+  useSyncLatestRef(priorAnswersRef, priorAnswers);
+
+  /**
+   * 제출 페이로드 조립 — 기타 상세기재 정리 + 입력 형식 정규화.
+   * 숨은 문항 값은 응답 상태에서 이미 지워졌다.
+   *
+   * 형식 정규화를 여기서 한 번 더 하는 이유는 `format-normalize` 주석에 있다 —
+   * 포커스를 쥔 채 제출하면 blur 가 예약한 정돈이 같은 클릭 안에서 커밋되지 않는다.
+   */
   const buildSubmissionPayload = useCallback(
     (visible: Question[], current: ResponsesMap): Record<string, unknown> =>
-      buildOptTextsPayload(visible, current),
+      normalizeFormatValues(
+        visible,
+        buildOptTextsPayload(visible, current),
+        priorAnswersRef.current,
+      ),
     [],
   );
 

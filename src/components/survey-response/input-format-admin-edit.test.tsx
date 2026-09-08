@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,5 +104,40 @@ describe('admin-edit — 입력 형식은 경고 후 통과', () => {
     await screen.findByText('휴대전화');
     await user.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  });
+
+  it('포커스를 둔 채 다음을 눌러도 정규형으로 저장된다 (iOS 제출 경로)', async () => {
+    // handleNext 가 클릭 안에서 blur 를 부르지만 그 setState 는 같은 클릭 안에서 커밋되지
+    // 않는다 — 저장 경계가 스스로 정돈하지 않으면 비정규 원문이 그대로 실린다.
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderAdminEdit({}, onSubmit);
+    const user = userEvent.setup();
+
+    await screen.findByText('휴대전화');
+    const input = screen.getByRole('textbox');
+    await user.click(input);
+    await user.keyboard('01012345678');
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0].questionResponses['q-mobile']).toBe('010-1234-5678');
+  });
+
+  it('포커스가 남은 채 클릭이 들어와도 정규형으로 저장된다 (blur 가 클릭 핸들러 안에서 일어나는 경로)', async () => {
+    // iOS 대응으로 handleNext 가 스스로 activeElement.blur() 를 부른다. 그 blur 가 예약한
+    // setState 는 같은 클릭 안에서 커밋되지 않으므로, 저장 경계가 스스로 정돈해야 한다.
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderAdminEdit({}, onSubmit);
+    const user = userEvent.setup();
+
+    await screen.findByText('휴대전화');
+    const input = screen.getByRole('textbox');
+    await user.click(input);
+    await user.keyboard('01012345678');
+
+    // fireEvent 는 포커스를 옮기지 않는다 — 입력칸이 포커스를 쥔 채 클릭만 들어온다.
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0].questionResponses['q-mobile']).toBe('010-1234-5678');
   });
 });

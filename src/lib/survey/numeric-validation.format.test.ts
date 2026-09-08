@@ -156,6 +156,10 @@ describe('collectNumericIssues — 보기-소스 표 안의 input 셀 형식', (
     title: '보기 표',
     required: false,
     order: 0,
+    tableColumns: [
+      { id: 'col-src', label: '선택' },
+      { id: 'col-tel', label: '연락처' },
+    ],
     tableRowsData: [
       {
         id: 'r1',
@@ -275,5 +279,139 @@ describe('collectNumericIssues — 이월 프리필 면제', () => {
   it('이월 응답이 없으면 종전대로 전부 검사한다', () => {
     const q = textQuestion({ inputType: 'mobile' });
     expect(collectNumericIssues(q, '02-1234-5678')[0]?.kind).toBe('format');
+  });
+});
+
+describe('collectNumericIssues — 리뷰 지적 회귀', () => {
+  it('이월 면제는 앞뒤 공백까지 글자 그대로 본다 (상세기재)', () => {
+    const q = {
+      id: 'qc',
+      type: 'checkbox',
+      title: '연락처',
+      required: false,
+      order: 0,
+      options: [
+        { id: 'o1', label: '휴대', value: '1', allowTextInput: true, textInputType: 'mobile' },
+      ],
+    } as unknown as Question;
+    // 이월 원본에 앞뒤 공백이 있고 응답자가 손대지 않은 상태 — trim 후 비교하면 어긋난다.
+    const prior = { __optTexts__: { qc: { o1: ' 02-1234-5678 ' } } };
+    expect(
+      collectNumericIssues(q, ['1'], {
+        allResponses: {},
+        allQuestions: [q],
+        optionTexts: { o1: ' 02-1234-5678 ' },
+        priorAnswers: prior,
+      }),
+    ).toEqual([]);
+  });
+
+  it('토큰 프리필로 잠긴 단답형은 형식 검사 대상이 아니다', () => {
+    // 응답자가 고칠 수 없는 칸(disabled)이라 막으면 따를 수 있는 길이 없다.
+    const q = textQuestion({ inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' });
+    expect(collectNumericIssues(q, '+81 90 1234 5678')).toEqual([]);
+  });
+
+  it('토큰 프리필이 아닌 단답형은 종전대로 검사한다', () => {
+    const q = textQuestion({ inputType: 'mobile', defaultValueTemplate: '   ' });
+    expect(collectNumericIssues(q, '+81 90 1234 5678')[0]?.kind).toBe('format');
+  });
+
+  it('토큰 프리필로 잠긴 표 셀도 형식 검사 대상이 아니다', () => {
+    const q = tableQuestion([
+      { id: 'c1', inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' },
+      { id: 'c2', inputType: 'mobile' },
+    ]);
+    expect(collectNumericIssues(q, { c1: '+81 90 1234 5678' })).toEqual([]);
+    expect(
+      collectNumericIssues(q, { c1: '+81 90 1234 5678', c2: '02-1234-5678' })[0]?.cellIds,
+    ).toEqual(['c2']);
+  });
+
+  it('조건으로 숨은 열의 잔존값은 보기-소스 표 진행을 막지 않는다', () => {
+    const q = {
+      id: 'qs',
+      type: 'radio',
+      title: '보기 표',
+      required: false,
+      order: 0,
+      tableColumns: [
+        { id: 'col-src', label: '선택' },
+        {
+          id: 'col-tel',
+          label: '연락처',
+          displayCondition: {
+            logicType: 'AND',
+            conditions: [
+              {
+                id: 'cond-1',
+                sourceQuestionId: 'gate',
+                conditionType: 'value-match',
+                requiredValues: ['yes'],
+              },
+            ],
+          },
+        },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'src', type: 'choice_opt', content: '보기' },
+            { id: 'tel', type: 'input', content: '', inputType: 'phone' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const gate = {
+      id: 'gate',
+      type: 'radio',
+      title: '게이트',
+      required: false,
+      order: 0,
+    } as Question;
+
+    // 열이 보일 때는 막는다
+    expect(
+      collectNumericIssues(q, 'src', {
+        allResponses: { gate: 'yes' },
+        allQuestions: [q, gate],
+        optionTexts: { tel: '1544-1234' },
+      })[0]?.kind,
+    ).toBe('format');
+
+    // 열이 숨겨지면 잔존값이 있어도 막지 않는다 — 고칠 입력칸이 화면에 없다
+    expect(
+      collectNumericIssues(q, 'src', {
+        allResponses: { gate: 'no' },
+        allQuestions: [q, gate],
+        optionTexts: { tel: '1544-1234' },
+      }),
+    ).toEqual([]);
+  });
+
+  it('열 정의가 없는 레거시 보기-소스 표에서도 검사가 살아 있다', () => {
+    const q = {
+      id: 'qlegacy',
+      type: 'radio',
+      title: '열 정의 없는 표',
+      required: false,
+      order: 0,
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'src', type: 'choice_opt', content: '보기' },
+            { id: 'tel', type: 'input', content: '', inputType: 'phone' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const issues = collectNumericIssues(q, 'src', {
+      allResponses: {},
+      allQuestions: [q],
+      optionTexts: { tel: '1544-1234' },
+    });
+    expect(issues[0]?.kind).toBe('format');
   });
 });

@@ -20,6 +20,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
+import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
@@ -359,11 +360,13 @@ function collectOptionTextIssues(
   const issues: NumericIssue[] = [];
   for (const opt of checkedOptions) {
     if (!selected.has(opt.id)) continue;
-    const text = (optionTexts[opt.id] ?? '').trim();
+    const raw = optionTexts[opt.id] ?? '';
+    const text = raw.trim();
     if (!text) continue;
+    // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교라 trim 하면 어긋난다.
     const formatMessage = formatViolationMessage(
       opt.textInputType,
-      text,
+      raw,
       priorOptionText(priorAnswers, question.id, opt.id),
     );
     if (formatMessage) {
@@ -403,14 +406,30 @@ function collectChoiceTableInputCellIssues(
   const issues: NumericIssue[] = [];
   const missingTargets: string[] = [];
 
-  for (const row of question.tableRowsData ?? []) {
-    if (
-      ctx &&
-      row.displayCondition &&
-      !shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
-    ) {
-      continue;
-    }
+  // 렌더러(choice-table-response)와 **같은 투영**을 쓴다 — 조건으로 숨은 열의 셀은
+  // 화면에 없으므로 검증 대상이 아니다. 행 조건만 보면 숨은 열에 남은 잔존값이
+  // "고칠 입력칸이 없는 채로" 다음을 영구 차단한다.
+  // 열 정의가 없는 표는 투영하지 않는다 — 보이는 열이 0개로 잡혀 셀이 통째로 사라지고
+  // 필수 셀 검사까지 조용히 꺼진다(레거시 데이터 방어).
+  const columns = question.tableColumns ?? [];
+  const rows = question.tableRowsData ?? [];
+  const visibleRows =
+    columns.length === 0
+      ? rows.filter(
+          (row) =>
+            !ctx ||
+            !row.displayCondition ||
+            shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
+        )
+      : projectConditionalTableLayout({
+          columns,
+          rows,
+          ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+          ...(ctx ? { allResponses: ctx.allResponses, allQuestions: ctx.allQuestions } : {}),
+          ...(ctx ? { evalCtx: toBranchEvalCtx(ctx) } : {}),
+        }).rows;
+
+  for (const row of visibleRows) {
     for (const cell of row.cells) {
       if (cell.isHidden) continue;
       // 선택형 셀(radio/checkbox/select)도 같은 사이드카에 값을 넣는다 —
@@ -422,17 +441,21 @@ function collectChoiceTableInputCellIssues(
         continue;
       }
       if (cell.type !== 'input') continue;
-      const value = (texts?.[cell.id] ?? '').trim();
+      const rawValue = texts?.[cell.id] ?? '';
+      const value = rawValue.trim();
       if (isRequiredCell(cell) && value === '') {
         missingTargets.push(optionTextTargetId(question.id, cell.id));
         continue;
       }
       if (value === '') continue;
-      const formatMessage = formatViolationMessage(
-        cell.inputType,
-        value,
-        priorOptionText(ctx?.priorAnswers, question.id, cell.id),
-      );
+      // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교다.
+      const formatMessage = isTokenPrefilled(cell.defaultValueTemplate)
+        ? null
+        : formatViolationMessage(
+            cell.inputType,
+            rawValue,
+            priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+          );
       if (formatMessage) {
         issues.push({
           kind: 'format',
@@ -464,8 +487,24 @@ function collectChoiceTableInputCellIssues(
 }
 
 /**
+ * 토큰 프리필로 잠긴 칸인가. 렌더러가 `disabled` 로 그리는 판정과 같은 식이다
+ * (`question-input.tsx` · `cells/input-cell.tsx`).
+ *
+ * 잠긴 칸은 형식 검사 대상이 아니다 — 응답자가 고칠 수 없는 값(명단에서 온 외국 번호 등)으로
+ * 진행을 막으면 따를 수 있는 길이 없다. 이월 면제와 같은 원칙이다. 값이 유효하면 저장 경계가
+ * 정규형으로 정돈한다(`normalizeFormatValues`).
+ */
+function isTokenPrefilled(template: string | null | undefined): boolean {
+  return (template ?? '').trim().length > 0;
+}
+
+/**
  * 값 하나를 형식에 비추어 본다. 통과·빈 값이면 null.
  * 형식 검사는 값이 있는 칸만 본다 — 미입력 차단은 필수 판정 소관이다.
+ *
+ * `value` 는 **가공하지 않은 원문**을 넘긴다 — 이월 면제가 글자 그대로 비교이기 때문이다.
+ * 앞뒤 공백을 미리 떼면 화면(훅)은 면제인데 검증은 아닌 상태가 되어, 손대지 않은 값에
+ * 문구도 없이 막힌다.
  */
 function formatViolationMessage(
   inputType: Question['inputType'] | undefined,
@@ -486,6 +525,7 @@ export function collectNumericIssues(
   ctx?: NumericValidationCtx,
 ): NumericIssue[] {
   if (question.type === 'text' && isInputFormat(question.inputType)) {
+    if (isTokenPrefilled(question.defaultValueTemplate)) return [];
     const message = formatViolationMessage(
       question.inputType,
       response,
@@ -563,6 +603,7 @@ export function collectNumericIssues(
     //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
     const formatViolations = inputCells.filter(
       (c) =>
+        !isTokenPrefilled(c.defaultValueTemplate) &&
         formatViolationMessage(
           c.inputType,
           cellValues[c.id],
