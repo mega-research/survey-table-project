@@ -40,3 +40,23 @@ describe('CellText — 첫 줄만 굵게', () => {
     expect(screen.getByTestId('wrap').textContent).toBe('제목\n설명');
   });
 });
+
+/**
+ * 셀 텍스트를 그리는 자리가 여럿인데 한 곳만 빠뜨리면 같은 셀이 화면마다 다르게 보인다.
+ * 실제로 PreviewCell 의 text 폴백이 CellText 를 안 타서, 보기-소스 표에서는
+ * 「첫 줄만 굵게」가 통째로 무시됐다(2026-09-10).
+ */
+describe('셀 텍스트 렌더 경로', () => {
+  it('PreviewCell 의 text 폴백이 CellText 를 탄다', async () => {
+    const { PreviewCell } = await import('@/components/survey-builder/cells/preview-cell');
+    const cell = {
+      id: 'c1',
+      type: 'text',
+      content: '제목 줄\n설명 줄',
+      boldFirstLine: true,
+    } as never;
+    const { container } = render(<PreviewCell cell={cell} />);
+    expect(container.querySelector('.font-bold')?.textContent).toBe('제목 줄');
+    expect(container.textContent).toBe('제목 줄\n설명 줄');
+  });
+});

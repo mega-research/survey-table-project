@@ -12,6 +12,8 @@ import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
+import { CellText } from '@/components/survey/cell-text';
+
 import { CellContentLayout } from './cell-content-layout';
 import { CellOptionsContainer } from './cell-options-container';
 import { ImageCell } from './image-cell';
@@ -304,6 +306,9 @@ export const PreviewCell = React.memo(function PreviewCell({
       );
 
     default:
+      // 텍스트 셀. 굵기 처리는 CellText 한 조각으로 모은다 — 여기서 content 를 그냥
+      // 흘리면 「첫 줄만 굵게」가 이 경로에서만 조용히 빠진다(보기-소스 표는 choice_opt
+      // 이 아닌 셀을 전부 이 폴백으로 그리므로 응답 화면까지 함께 어긋난다).
       return cell.content ? (
         <div
           className={cn(
@@ -312,7 +317,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           )}
           style={getCellTextStyle(cell)}
         >
-          {cell.content}
+          <CellText text={cell.content} boldFirstLine={cell.boldFirstLine} />
         </div>
       ) : (
         <span className="text-sm text-gray-400" />
