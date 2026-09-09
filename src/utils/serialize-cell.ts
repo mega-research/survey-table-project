@@ -37,6 +37,8 @@ export interface CellFormState {
   cellMobileOptionsColumns: number | undefined;
   inputPlaceholder: string;
   inputMaxLength: number | '';
+  /** 여러 줄 입력 높이(줄 수). '' 또는 1 이면 한 줄. */
+  inputRows: number | '';
   inputDefaultValueTemplate: string;
   inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
@@ -212,6 +214,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     cellMobileOptionsColumns: cell.mobileOptionsColumns,
     inputPlaceholder: cell.placeholder || '',
     inputMaxLength: cell.inputMaxLength || '',
+    inputRows: cell.inputRows || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
@@ -319,6 +322,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     mobileOptionsColumns: _mobileOptionsColumns,
     placeholder: _placeholder,
     inputMaxLength: _inputMaxLength,
+    inputRows: _inputRows,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
     piiEncrypted: _piiEncrypted,
@@ -395,6 +399,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.inputPlaceholder ? { placeholder: form.inputPlaceholder } : {}),
           ...(typeof form.inputMaxLength === 'number'
             ? { inputMaxLength: form.inputMaxLength }
+            : {}),
+          // 1 은 한 줄(기본)이라 키를 만들지 않는다 — 저장값에 의미 없는 필드가 쌓이지 않게.
+          ...(typeof form.inputRows === 'number' && form.inputRows >= 2
+            ? { inputRows: form.inputRows }
             : {}),
           ...(form.inputDefaultValueTemplate.trim().length > 0
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }

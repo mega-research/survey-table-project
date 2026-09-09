@@ -541,22 +541,27 @@ export function QuestionBasicTab({
           )}
         </div>
 
-        {/* 단답형 질문용 placeholder 설정 */}
+        {/* 안내 문구는 단답형·장문형 공용 — 둘 다 자유 기입 칸이라 같은 설정이 필요하다.
+            아래 prefill·입력 형식은 단답형 전용이라 분리한다(장문형에는 형식이 없다). */}
+        {(question.type === 'text' || question.type === 'textarea') && (
+          <div>
+            <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
+            <Input
+              id="placeholder"
+              value={formData.placeholder || ''}
+              onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
+              placeholder="예: 이름을 입력하세요"
+              className="mt-2"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              입력 필드에 표시될 안내 문구를 입력하세요
+            </p>
+          </div>
+        )}
+
+        {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
         {question.type === 'text' && (
           <>
-            <div>
-              <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
-              <Input
-                id="placeholder"
-                value={formData.placeholder || ''}
-                onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
-                placeholder="예: 이름을 입력하세요"
-                className="mt-2"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                입력 필드에 표시될 안내 문구를 입력하세요
-              </p>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="defaultValueTemplate">
                 응답값 prefill

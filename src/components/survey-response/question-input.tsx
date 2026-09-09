@@ -239,7 +239,7 @@ function QuestionInputControl({
             isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
           }`}
           rows={4}
-          placeholder="답변을 입력하세요..."
+          placeholder={question.placeholder || '답변을 입력하세요...'}
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.target.value)}
         />

@@ -228,6 +228,7 @@ export function CellContentModal({
     cellMobileOptionsColumns,
     inputPlaceholder,
     inputMaxLength,
+    inputRows,
     inputDefaultValueTemplate,
     inputType,
     inputPiiEncrypted,
@@ -310,6 +311,7 @@ export function CellContentModal({
     setCellMobileOptionsColumns,
     setInputPlaceholder,
     setInputMaxLength,
+    setInputRows,
     setInputDefaultValueTemplate,
     setInputType,
     setInputPiiEncrypted,
@@ -1371,6 +1373,36 @@ export function CellContentModal({
               </div>
               <p className="text-xs text-gray-500">
                 변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="input-rows">입력칸 줄 수</Label>
+              <Input
+                id="input-rows"
+                type="number"
+                min={1}
+                max={20}
+                value={inputRows}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setInputRows('');
+                    return;
+                  }
+                  const num = parseInt(raw, 10);
+                  if (!isNaN(num) && num >= 1 && num <= 20) setInputRows(num);
+                }}
+                placeholder="1 (한 줄)"
+                disabled={inputType === 'number' || isInputFormat(inputType)}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                {inputType === 'number' || isInputFormat(inputType)
+                  ? '숫자·형식 칸은 한 줄로 고정입니다'
+                  : typeof inputRows === 'number' && inputRows >= 2
+                    ? `${inputRows}줄 높이의 여러 줄 입력칸으로 그려집니다`
+                    : '2 이상으로 두면 여러 줄 입력칸이 됩니다'}
               </p>
             </div>
 

@@ -52,6 +52,12 @@ export const InputCell = React.memo(function InputCell({
   // 숫자 모드 여부: inputType이 'number'일 때만 활성화
   const isNumberMode = cell.inputType === 'number';
   const format = isInputFormat(cell.inputType) ? cell.inputType : null;
+  /**
+   * 여러 줄 입력. 숫자·형식과는 배타다 — 전화번호나 계산 대상 숫자에 줄바꿈이 들어갈
+   * 자리가 없고, 숫자 서식·형식 정돈 훅이 한 줄 값을 전제로 서 있다.
+   */
+  const rows = !isNumberMode && !format ? Math.floor(cell.inputRows ?? 1) : 1;
+  const isMultiline = rows >= 2;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -99,41 +105,64 @@ export const InputCell = React.memo(function InputCell({
         textColor={cell.textColor}
       >
         <div className="flex w-full flex-col space-y-1.5">
-          <Input
-            id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
-            type="text"
-            inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
-            value={isPrefilled ? prefilledValue : displayValue}
-            onChange={handleChange}
-            onFocus={() => {
-              handleFocus();
-              formatField.handleFocus();
-            }}
-            onBlur={() => {
-              handleBlur();
-              formatField.handleBlur();
-            }}
-            placeholder={
-              cell.placeholder ||
-              (format
-                ? formatSampleValue(format)
-                : isNumberMode
-                  ? '숫자만 입력하세요...'
-                  : '답변을 입력하세요...')
-            }
-            maxLength={cell.inputMaxLength}
-            className={cn(
-              'w-full text-base',
-              getInputTextAlignClass(cell.inputTextAlign),
-              !isPrefilled &&
-                isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
-                PRIOR_HIGHLIGHT_TEXT_CLS,
-            )}
-            disabled={isPrefilled}
-            data-prefilled={isPrefilled || undefined}
-            aria-invalid={ariaInvalid || undefined}
-            aria-describedby={ariaDescribedBy}
-          />
+          {isMultiline ? (
+            <textarea
+              id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+              rows={rows}
+              value={textValue}
+              onChange={(e) => onUpdateValue(e.target.value)}
+              placeholder={cell.placeholder || '답변을 입력하세요...'}
+              maxLength={cell.inputMaxLength}
+              disabled={isPrefilled}
+              data-prefilled={isPrefilled || undefined}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
+              className={cn(
+                'w-full resize-none rounded-md border border-gray-300 p-2 text-base',
+                'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none',
+                getInputTextAlignClass(cell.inputTextAlign),
+                !isPrefilled &&
+                  isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
+            />
+          ) : (
+            <Input
+              id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+              type="text"
+              inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
+              value={isPrefilled ? prefilledValue : displayValue}
+              onChange={handleChange}
+              onFocus={() => {
+                handleFocus();
+                formatField.handleFocus();
+              }}
+              onBlur={() => {
+                handleBlur();
+                formatField.handleBlur();
+              }}
+              placeholder={
+                cell.placeholder ||
+                (format
+                  ? formatSampleValue(format)
+                  : isNumberMode
+                    ? '숫자만 입력하세요...'
+                    : '답변을 입력하세요...')
+              }
+              maxLength={cell.inputMaxLength}
+              className={cn(
+                'w-full text-base',
+                getInputTextAlignClass(cell.inputTextAlign),
+                !isPrefilled &&
+                  isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
+              disabled={isPrefilled}
+              data-prefilled={isPrefilled || undefined}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
 
           {cell.inputMaxLength && !isPrefilled && (
             <div className="flex justify-end">

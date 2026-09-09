@@ -496,7 +496,7 @@ function QuestionTestInput({
         <textarea
           className="w-full resize-none rounded-lg border border-gray-300 p-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           rows={3}
-          placeholder="답변을 입력하세요..."
+          placeholder={question.placeholder || '답변을 입력하세요...'}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
         />

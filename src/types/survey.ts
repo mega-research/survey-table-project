@@ -394,6 +394,14 @@ export interface TableCell {
   // input 관련 속성
   placeholder?: string; // 단문형 입력 필드 placeholder
   inputMaxLength?: number; // 단문형 입력 필드 최대 길이
+  /**
+   * 여러 줄 입력 높이(줄 수). 미지정·1 이면 한 줄 `<input>`, 2 이상이면 `<textarea>`.
+   *
+   * 새 셀 타입을 만들지 않고 `input` 셀의 옵션으로 둔다 — 값 저장 형태(문자열)·필수 검증·
+   * 내보내기 변수·게이팅·PII 암호화·placeholder 가 전부 같고, 다른 건 그리는 높이뿐이다.
+   * 숫자 모드·입력 형식과는 배타다(전화번호에 줄바꿈이 들어갈 자리가 없다).
+   */
+  inputRows?: number;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.

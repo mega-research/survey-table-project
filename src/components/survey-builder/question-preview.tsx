@@ -36,7 +36,7 @@ export function QuestionPreview({ question }: { question: Question }) {
         <textarea
           className="w-full resize-none rounded-md border border-gray-200 bg-white p-3"
           rows={3}
-          placeholder="답변을 입력하세요..."
+          placeholder={question.placeholder || '답변을 입력하세요...'}
           disabled
         />
       );

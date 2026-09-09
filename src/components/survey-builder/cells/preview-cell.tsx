@@ -204,16 +204,29 @@ export const PreviewCell = React.memo(function PreviewCell({
           textColor={cell.textColor}
         >
           <div className="flex flex-col space-y-2">
-            <input
-              type="text"
-              placeholder={cell.placeholder || '답변을 입력하세요...'}
-              maxLength={cell.inputMaxLength}
-              disabled
-              className={cn(
-                'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
-                getInputTextAlignClass(cell.inputTextAlign),
-              )}
-            />
+            {(cell.inputRows ?? 1) >= 2 ? (
+              <textarea
+                rows={Math.floor(cell.inputRows ?? 1)}
+                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                maxLength={cell.inputMaxLength}
+                disabled
+                className={cn(
+                  'w-full resize-none rounded border border-gray-300 bg-gray-50 p-2 text-base',
+                  getInputTextAlignClass(cell.inputTextAlign),
+                )}
+              />
+            ) : (
+              <input
+                type="text"
+                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                maxLength={cell.inputMaxLength}
+                disabled
+                className={cn(
+                  'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
+                  getInputTextAlignClass(cell.inputTextAlign),
+                )}
+              />
+            )}
             {cell.inputMaxLength && (
               <div className="mt-1 text-right text-xs text-gray-500">
                 최대 {cell.inputMaxLength}자
