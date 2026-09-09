@@ -1103,10 +1103,12 @@ async function loadQuestionPiiFlags(
     }
   }
 
-  for (const questionId of questionIds) {
-    if (!flags.has(questionId)) {
-      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
-    }
+  const missing = questionIds.filter((questionId) => !flags.has(questionId));
+  if (missing.length > 0) {
+    // 응답자에게 보이는 문구는 그대로 두고, 어떤 키가 걸렸는지는 로그로 남긴다.
+    // 거부된 값은 저장되지 않으므로 이 로그가 없으면 사후에 원인을 찾을 길이 없다.
+    logger.warn({ surveyId, versionId, missing }, '[response] 설문에 없는 문항 키가 저장 요청에 실림');
+    throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
   return flags;
 }
@@ -1308,7 +1310,15 @@ export async function saveDraftResponse(
   // 루트 사이드카(기타/상세 기재·변동 확인)는 실존 질문이 아니므로 소속 검증에서
   // 분리한다. 제출 전 이탈에도 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
   // 등록되지 않은 '__' 키는 기존대로 소속 검증에서 거부된다.
-  const { answerEntries, sidecarEntries } = splitRootSidecars(entries);
+  const { answerEntries, sidecarEntries, unknownSidecarKeys } = splitRootSidecars(entries);
+  if (unknownSidecarKeys.length > 0) {
+    // 등록부에 없는 예약 키 — 저장하지 않고 넘어가되 이름은 남긴다. 거부하면 이 키 하나가
+    // 그 응답자의 초안 저장을 통째로 막는다(부분 저장 없음).
+    logger.warn(
+      { responseId: input.responseId, keys: unknownSidecarKeys },
+      '[saveDraft] 등록되지 않은 루트 사이드카 키 — 저장에서 제외',
+    );
+  }
 
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
