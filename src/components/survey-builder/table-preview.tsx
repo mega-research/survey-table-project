@@ -11,6 +11,10 @@ import { usePageStickyThreshold } from '@/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import {
+  type CellOutlineEdges,
+  outlineBoxShadow,
+} from '@/utils/choice-group-outline';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   getCellBackgroundStyle,
@@ -51,6 +55,12 @@ interface TablePreviewProps {
   hideColumnLabels?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
+  /**
+   * 셀별 표시선(변 단위). 격자 두께를 건드리지 않도록 inset box-shadow 로 그린다.
+   * 보기 그룹 미충족 표시가 쓴다 — `errorCellIds`(칸마다 사방 ring)와 달리 덩어리
+   * 바깥 변만 낸다.
+   */
+  cellOutlineEdges?: ReadonlyMap<string, CellOutlineEdges> | undefined;
   stickyHeader?: boolean | undefined;
   preserveRowHeights?: boolean | undefined;
   /**
@@ -80,6 +90,7 @@ export const TablePreview = React.memo(function TablePreview({
   contentClassName,
   hideColumnLabels = false,
   renderCell,
+  cellOutlineEdges,
   stickyHeader = true,
   preserveRowHeights = false,
   choiceControlType = 'checkbox',
@@ -400,7 +411,12 @@ export const TablePreview = React.memo(function TablePreview({
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                             errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
                           )}
-                          style={style}
+                          style={{
+                            ...style,
+                            ...(outlineBoxShadow(cellOutlineEdges?.get(cell.id))
+                              ? { boxShadow: outlineBoxShadow(cellOutlineEdges?.get(cell.id)) }
+                              : {}),
+                          }}
                           data-row-id={row.id}
                           data-testid={`cell-${cell.id}`}
                           data-cell-id={cell.id}

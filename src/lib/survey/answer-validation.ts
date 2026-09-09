@@ -155,6 +155,30 @@ export function hasExplicitRequiredChoiceGroup(question: Question): boolean {
  * 첫 그룹의 문구를 쓰고, 없으면 질문 requiredMessage → 기본 문구로 폴백한다.
  * 비그룹 질문은 질문 레벨 해석과 동일.
  */
+/**
+ * 아직 채워지지 않은 **필수** 보기 그룹의 셀 id 집합.
+ *
+ * 응답 화면이 "어디를 채워야 하는가" 를 자리로 보여주는 데 쓴다. 문구 하나는 미충족
+ * 그룹 중 첫 번째만 알려주므로(`resolveGroupedRequiredMessage`), 열 개짜리 표에서는
+ * 글만으로 위치를 짚기 어렵다.
+ *
+ * 대상 그룹 판정은 필수 게이트와 **같은 술어**를 쓴다 — 갈라지면 "빨갛지 않은데 다음이
+ * 막힘" 또는 그 반대가 생긴다. 그룹 문항이 아니거나 다 채웠으면 빈 집합.
+ */
+export function collectUnfilledChoiceGroupCellIds(
+  question: Question,
+  response: unknown,
+): Set<string> {
+  if (!isGroupedChoiceQuestion(question)) return new Set();
+  const map = (response ?? {}) as Record<string, unknown>;
+  const out = new Set<string>();
+  for (const group of checkTargetChoiceGroups(question)) {
+    if (isChoiceGroupFilled(group, map)) continue;
+    for (const cell of group.cells) out.add(cell.id);
+  }
+  return out;
+}
+
 export function resolveGroupedRequiredMessage(question: Question, response: unknown): string {
   if (isGroupedChoiceQuestion(question)) {
     const map = (response ?? {}) as Record<string, unknown>;

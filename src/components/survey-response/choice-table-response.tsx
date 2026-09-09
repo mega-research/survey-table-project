@@ -7,6 +7,8 @@ import { ChevronRight, ListChecks } from 'lucide-react';
 import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row-selector-modal';
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
+import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
 import { useMobileView } from '@/hooks/use-media-query';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
 import {
@@ -57,6 +59,11 @@ interface ChoiceTableResponseProps {
   ignoreDisplayConditions?: boolean | undefined;
   selectedDynamicRowIds?: string[] | undefined;
   onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
+  /**
+   * 미충족 필수 보기 그룹을 표에 표시할지. 「다음」을 누른 뒤에만 켠다 —
+   * 응답 중에 미리 빨갛게 깔면 아직 답하는 사람에게 재촉하는 화면이 된다.
+   */
+  showRequiredHighlight?: boolean | undefined;
 }
 
 /**
@@ -74,12 +81,28 @@ export function ChoiceTableResponse({
   ignoreDisplayConditions = false,
   selectedDynamicRowIds = [],
   onDynamicRowSelectionChange,
+  showRequiredHighlight = false,
 }: ChoiceTableResponseProps) {
   const isCheckbox = question.type === 'checkbox';
   // 그룹별 선택 모드 여부 — radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
   // isCheckbox 가드를 제거하여 checkbox 질문도 grouped 경로를 밟을 수 있게 한다.
   const isGrouped = isGroupedChoiceQuestion(question);
   const priorHighlight = usePriorHighlight();
+
+  /**
+   * 미충족 필수 보기 그룹의 덩어리 외곽선. 판정은 필수 게이트와 같은 술어를 쓴다
+   * (`collectUnfilledChoiceGroupCellIds`) — 갈라지면 "빨갛지 않은데 다음이 막힘" 이 된다.
+   */
+  const groupOutline = useMemo(
+    () =>
+      showRequiredHighlight
+        ? buildChoiceGroupOutline(
+            question.tableRowsData,
+            collectUnfilledChoiceGroupCellIds(question, value),
+          )
+        : new Map(),
+    [showRequiredHighlight, question, value],
+  );
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -584,6 +607,7 @@ export function ChoiceTableResponse({
   const renderOriginalTable = () => (
     <div className="space-y-2">
       <TablePreview
+        cellOutlineEdges={groupOutline}
         {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
         columns={rowWiseLayout.columns}
         rows={rowWiseLayout.conditionalRows}

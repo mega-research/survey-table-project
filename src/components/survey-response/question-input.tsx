@@ -54,6 +54,8 @@ interface QuestionInputProps {
   numericIssues?: NumericIssue[] | undefined;
   selectedDynamicRowIds?: string[] | undefined;
   onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
+  /** 미충족 필수 보기 그룹을 표에 표시할지 — 「다음」을 누른 뒤에만 켠다. */
+  showRequiredHighlight?: boolean | undefined;
 }
 
 // 타입 정의
@@ -178,6 +180,7 @@ function QuestionInputControl({
   numericIssues,
   selectedDynamicRowIds,
   onDynamicRowSelectionChange,
+  showRequiredHighlight,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -197,6 +200,7 @@ function QuestionInputControl({
         allQuestions={allQuestions}
         selectedDynamicRowIds={selectedDynamicRowIds}
         onDynamicRowSelectionChange={onDynamicRowSelectionChange}
+        showRequiredHighlight={showRequiredHighlight}
       />
     );
   }

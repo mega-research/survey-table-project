@@ -208,6 +208,7 @@ export function GroupStepItem({
               numericIssues={visibleIssues}
               selectedDynamicRowIds={selectedDynamicRowIds}
               onDynamicRowSelectionChange={onDynamicRowSelectionChange}
+              showRequiredHighlight={showRequiredMessage}
             />
           </div>
         </fieldset>
