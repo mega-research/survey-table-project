@@ -14,7 +14,6 @@ import { questionShortCode } from '@/lib/question/label';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   hasOpinionText,
-  resolveJudgementBulkChoices,
   resolveJudgementShape,
   resolveOpinionPairs,
   type JudgementShape,
@@ -242,14 +241,6 @@ function BlockCard({
     return value === shape.needValue || value === shape.dropValue;
   }).length;
 
-  /**
-   * 블록 일괄 선택. 문항마다 **자기 값**을 쓴다 — 선택지 값은 문항별로 발번되므로
-   * 값 하나를 전부에 쓰면 그 문항에 없는 값이 들어가 보이지 않는 오답이 된다.
-   */
-  const bulk = resolveJudgementBulkChoices(judgements.map(({ item }) => item.question));
-  const allAre = (choice: (typeof bulk)[number]) =>
-    Object.entries(choice.valueByQuestionId).every(([id, value]) => responses[id] === value);
-
   return (
     <section
       className={cn(
@@ -283,28 +274,6 @@ function BlockCard({
                 : `${block.items.length}문항`}
             </span>
           </span>
-          <div
-            className={cn('flex shrink-0 gap-1.5', PICK_WIDTH)}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {bulk.map((choice) => (
-              <Seg
-                key={choice.key}
-                className="text-[10px]"
-                label={`모두 ${choice.label}`}
-                on={allAre(choice)}
-                tone={choice.key}
-                onClick={() => {
-                  for (const [questionId, value] of Object.entries(choice.valueByQuestionId)) {
-                    onResponse(questionId, value);
-                  }
-                }}
-              />
-            ))}
-            {/* 의견은 문항마다 다른 글을 받는 것이라 일괄이 성립하지 않는다 — 자리만 비운다 */}
-            <span className="flex-1" />
-          </div>
-          <span className="w-[14px] shrink-0" />
         </div>
       )}
 

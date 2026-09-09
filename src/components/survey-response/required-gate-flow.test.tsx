@@ -327,7 +327,7 @@ describe('문항 수요조사 판단 항목', () => {
 
   const row = (id: string) => screen.getByText(id).closest('[data-question-id]');
 
-  it('「다음」에 두 행 모두 강조되고, 「모두 필요함」 한 번에 전부 풀린다', async () => {
+  it('「다음」에 두 행 모두 강조되고, 각 행을 고르면 풀린다', async () => {
     const user = userEvent.setup();
     renderDemandFlow();
     await screen.findByText('첫 판단 문항');
@@ -340,7 +340,11 @@ describe('문항 수요조사 판단 항목', () => {
     expect(row('둘째 판단 문항')).toHaveClass('ring-red-300');
     expect(screen.getByText(BOTTOM_NOTICE)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '모두 필요함' }));
+    // 블록 머리의 일괄 선택(「모두 필요함」/「모두 필요하지 않음」)은 2026-09-09 에 뺐다.
+    // 행마다 직접 고른다.
+    for (const button of screen.getAllByRole('button', { name: '필요함' })) {
+      await user.click(button);
+    }
 
     expect(row('첫 판단 문항')).not.toHaveClass('ring-red-300');
     expect(row('둘째 판단 문항')).not.toHaveClass('ring-red-300');

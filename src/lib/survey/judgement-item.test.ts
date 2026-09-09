@@ -4,7 +4,6 @@ import type { Question } from '@/types/survey';
 
 import {
   OPINION_CODE_SUFFIX,
-  resolveJudgementBulkChoices,
   resolveJudgementShape,
   resolveOpinionPairs,
 } from './judgement-item';
@@ -139,36 +138,3 @@ describe('resolveOpinionPairs', () => {
   });
 });
 
-describe('resolveJudgementBulkChoices', () => {
-  it('선택지 값이 문항마다 달라도 일괄 선택을 낸다', () => {
-    const choices = resolveJudgementBulkChoices([judgement('sq1'), judgement('sq2')]);
-    expect(choices.map((c) => c.key)).toEqual(['need', 'drop']);
-    expect(choices[0]?.label).toBe('필요함');
-    expect(choices[1]?.label).toBe('필요하지 않음');
-  });
-
-  it('문항마다 **자기 값**을 담는다 — 옆 문항 값을 쓰면 보이지 않는 오답이 된다', () => {
-    const choices = resolveJudgementBulkChoices([judgement('sq1'), judgement('sq2')]);
-    expect(choices[0]?.valueByQuestionId).toEqual({ sq1: 'sq1_1', sq2: 'sq2_1' });
-    expect(choices[1]?.valueByQuestionId).toEqual({ sq1: 'sq1_2', sq2: 'sq2_2' });
-  });
-
-  it('의견 짝 문항은 일괄 대상이 아니다', () => {
-    const choices = resolveJudgementBulkChoices([
-      judgement('sq1'),
-      opinion('sq1'),
-      judgement('sq2'),
-      opinion('sq2'),
-    ]);
-    expect(Object.keys(choices[0]?.valueByQuestionId ?? {})).toEqual(['sq1', 'sq2']);
-  });
-
-  it('판단 항목이 하나뿐이면 내지 않는다', () => {
-    expect(resolveJudgementBulkChoices([judgement('sq1')])).toEqual([]);
-  });
-
-  it('판단 항목이 아닌 문항은 세지 않고, 남은 것이 하나면 내지 않는다', () => {
-    const free = { id: 'z', type: 'textarea', title: 'z', required: false, order: 0 } as Question;
-    expect(resolveJudgementBulkChoices([judgement('sq1'), free])).toEqual([]);
-  });
-});
