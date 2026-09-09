@@ -76,6 +76,7 @@ export interface CellFormSetters {
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
   setChoiceGroupId: (v: string) => void;
   setTextBold: (v: boolean) => void;
+  setBoldFirstLine: (v: boolean) => void;
   setBackgroundColor: (v: string) => void;
   setTextColor: (v: string) => void;
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
@@ -177,6 +178,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setChoiceBranchRule: set('choiceBranchRule'),
       setChoiceGroupId: set('choiceGroupId'),
       setTextBold: set('textBold'),
+      setBoldFirstLine: set('boldFirstLine'),
       setBackgroundColor: set('backgroundColor'),
       setTextColor: set('textColor'),
       setHorizontalAlign: set('horizontalAlign'),

@@ -47,15 +47,14 @@ export const SelectCell = React.memo(function SelectCell({
   }
 
   const selectedValue = (cellResponse as string) || '';
-  const selectedOption = cell.selectOptions.find(
-    (opt) => (opt.value ?? opt.id) === selectedValue,
-  );
+  const selectedOption = cell.selectOptions.find((opt) => (opt.value ?? opt.id) === selectedValue);
 
   return (
     <CellContentLayout
       content={substituteTokens(cell.content, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
       textColor={cell.textColor}
     >
       <div className="flex w-full flex-col space-y-2">
@@ -87,11 +86,7 @@ export const SelectCell = React.memo(function SelectCell({
         </div>
 
         {selectedOption?.allowTextInput && (
-          <OptionTextInput
-            questionId={questionId}
-            option={selectedOption}
-            className="w-full"
-          />
+          <OptionTextInput questionId={questionId} option={selectedOption} className="w-full" />
         )}
       </div>
     </CellContentLayout>

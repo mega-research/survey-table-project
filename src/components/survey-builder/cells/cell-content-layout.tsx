@@ -2,8 +2,9 @@
 
 import React from 'react';
 
-import type { TableCell } from '@/types/survey';
+import { CellText } from '@/components/survey/cell-text';
 import { cn } from '@/lib/utils';
+import type { TableCell } from '@/types/survey';
 
 interface CellContentLayoutProps {
   content: string | undefined;
@@ -13,6 +14,8 @@ interface CellContentLayoutProps {
   labelClassName?: string;
   /** 셀 콘텐츠 라벨만 굵게 표시한다. */
   bold?: boolean | undefined;
+  /** 라벨의 첫 줄만 굵게. `bold`(라벨 전체)와 배타. */
+  boldFirstLine?: boolean | undefined;
   /** 라벨 글자색. DEFAULT_LABEL_CLASS 의 text-gray-700 을 이겨야 하므로 inline style 로 얹는다. */
   textColor?: string | undefined;
 }
@@ -35,6 +38,7 @@ export function CellContentLayout({
   children,
   labelClassName,
   bold = false,
+  boldFirstLine = false,
   textColor,
 }: CellContentLayoutProps) {
   const hasContent = !!content && content.trim().length > 0;
@@ -47,7 +51,7 @@ export function CellContentLayout({
       className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}
       style={textColor ? { color: textColor } : undefined}
     >
-      {content}
+      <CellText text={content} boldFirstLine={boldFirstLine} />
     </div>
   );
 

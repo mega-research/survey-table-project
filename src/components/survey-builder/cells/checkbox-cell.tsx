@@ -59,7 +59,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
       let updated: string[];
 
       if (checked) {
-        if (maxSelections !== undefined && maxSelections > 0 && current.length >= maxSelections) return;
+        if (maxSelections !== undefined && maxSelections > 0 && current.length >= maxSelections)
+          return;
         updated = [...current, optionId];
       } else {
         updated = current.filter((item) => item !== optionId);
@@ -139,9 +140,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
               disabled={disabled}
               onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
               className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                isChecked && isPriorOption(optionKey)
-                  ? PRIOR_HIGHLIGHT_CONTROL_CLS
-                  : ''
+                isChecked && isPriorOption(optionKey) ? PRIOR_HIGHLIGHT_CONTROL_CLS : ''
               } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
             />
             <label

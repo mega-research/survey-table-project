@@ -1,7 +1,6 @@
 'use client';
 
 /* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 복수 순위 입력의 검증 그룹에 연결한다. */
-
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
@@ -31,10 +30,7 @@ export const RankingCell = React.memo(function RankingCell({
   const positions = Math.min(requestedPositions, Math.max(options.length, 1));
   const allowDuplicates = config?.allowDuplicateRanks === true;
 
-  const answers = useMemo<RankingAnswer[]>(
-    () => parseRankingAnswers(cellResponse),
-    [cellResponse],
-  );
+  const answers = useMemo<RankingAnswer[]>(() => parseRankingAnswers(cellResponse), [cellResponse]);
 
   if (options.length === 0) {
     return (
@@ -49,6 +45,7 @@ export const RankingCell = React.memo(function RankingCell({
       content={substituteTokens(cell.content, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
       textColor={cell.textColor}
     >
       <div

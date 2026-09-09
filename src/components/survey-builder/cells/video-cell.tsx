@@ -8,8 +8,8 @@ import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-con
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 
+import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
 /** 비디오 셀 (인터랙티브 / 미리보기 동일) */
@@ -31,8 +31,7 @@ export const VideoCell = React.memo(function VideoCell({
     );
   }
 
-  const isYouTube =
-    cell.videoUrl.includes('youtube.com') || cell.videoUrl.includes('youtu.be');
+  const isYouTube = cell.videoUrl.includes('youtube.com') || cell.videoUrl.includes('youtu.be');
   const isVimeo = cell.videoUrl.includes('vimeo.com');
   const isDirectVideo = /\.(mp4|webm|ogg)$/i.test(cell.videoUrl);
 

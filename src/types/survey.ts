@@ -345,6 +345,12 @@ export type CellEnableCondition =
 export interface TableCell {
   id: string;
   textBold?: boolean;
+  /**
+   * 첫 줄만 굵게 — "제목 한 줄 + 설명 여러 줄" 칸용. `textBold`(셀 전체)와 배타이며
+   * 빌더가 한쪽만 켜지도록 3지선다로 낸다. 저장값은 여전히 평문이라 내보내기·SPSS
+   * 라벨·토큰 치환은 무변경이다.
+   */
+  boldFirstLine?: boolean;
   backgroundColor?: string;
   textColor?: string;
   cellCode?: string; // ✨ 셀 코드 (예: "Q4-1_r1_c1") — 자동생성 또는 수동 입력

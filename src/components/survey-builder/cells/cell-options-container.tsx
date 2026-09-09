@@ -47,6 +47,7 @@ export function CellOptionsContainer({
       content={content ?? cell.content}
       position={cell.textPosition}
       bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
       textColor={cell.textColor}
     >
       <div className={cn('space-y-2', (isGrid || footer != null) && 'w-full min-w-0')}>

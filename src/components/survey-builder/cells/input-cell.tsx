@@ -6,10 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import {
-  PRIOR_HIGHLIGHT_TEXT_CLS,
-  isPriorText,
-} from '@/lib/survey/prior-answer-highlight';
+import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/lib/survey/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -98,6 +95,7 @@ export const InputCell = React.memo(function InputCell({
         content={substituteTokens(cell.content, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
+        boldFirstLine={cell.boldFirstLine}
         textColor={cell.textColor}
       >
         <div className="flex w-full flex-col space-y-1.5">

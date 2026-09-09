@@ -70,6 +70,8 @@ export interface CellFormState {
   /** 이 보기 옵션 셀이 속한 ChoiceGroup.id. 빈 문자열 = 미소속. */
   choiceGroupId: string;
   textBold: boolean;
+  /** 첫 줄만 굵게. textBold(전체)와 배타 — 빌더가 3지선다로 낸다. */
+  boldFirstLine: boolean;
   backgroundColor: string;
   textColor: string;
   horizontalAlign: 'left' | 'center' | 'right';
@@ -241,6 +243,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     choiceBranchRule: cell.branchRule,
     choiceGroupId: cell.choiceGroupId ?? '',
     textBold: cell.textBold === true,
+    boldFirstLine: cell.boldFirstLine === true,
     backgroundColor: cell.backgroundColor ?? '',
     textColor: cell.textColor ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
@@ -339,6 +342,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     textInputNumberFormat: _textInputNumberFormat,
     textInputPlaceholder: _textInputPlaceholder,
     textBold: _textBold,
+    boldFirstLine: _boldFirstLine,
     backgroundColor: _backgroundColor,
     textColor: _textColor,
     rowspan: _rowspan,
@@ -364,6 +368,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     // 모든 타입에서 텍스트 내용 저장 (라디오/체크박스/셀렉트에서도 설명 텍스트 표시 가능)
     content: form.textContent || '',
     ...(form.textBold ? { textBold: true } : {}),
+    ...(form.boldFirstLine ? { boldFirstLine: true } : {}),
     ...(form.backgroundColor ? { backgroundColor: form.backgroundColor } : {}),
     ...(form.textColor ? { textColor: form.textColor } : {}),
     // optional 필드: 타입이 해당하지 않으면 키 자체를 제거(조건부 spread)

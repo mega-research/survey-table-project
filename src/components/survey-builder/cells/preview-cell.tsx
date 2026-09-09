@@ -4,12 +4,12 @@ import React from 'react';
 
 import { Image as ImageIcon, Video } from 'lucide-react';
 
-import type { TableCell } from '@/types/survey';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { cn } from '@/lib/utils';
+import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getInputTextAlignClass } from '@/utils/table-grid-utils';
-import { cn } from '@/lib/utils';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import { CellContentLayout } from './cell-content-layout';
@@ -59,7 +59,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
-              <span className="whitespace-pre-line text-base">{option.label}</span>
+              <span className="text-base whitespace-pre-line">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -86,7 +86,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
-              <span className="whitespace-pre-line text-base">{option.label}</span>
+              <span className="text-base whitespace-pre-line">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -98,6 +98,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           content={cell.content}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <select className="w-full rounded border border-gray-300 p-2 text-base" disabled>
@@ -117,7 +118,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'image':
       return cell.imageUrl ? (
-        <ImageCell cell={cell} content={content} cellResponse={undefined} onUpdateValue={() => {}} />
+        <ImageCell
+          cell={cell}
+          content={content}
+          cellResponse={undefined}
+          onUpdateValue={() => {}}
+        />
       ) : (
         <div className="flex items-center gap-2 text-gray-500">
           <ImageIcon className="h-4 w-4" />
@@ -192,6 +198,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           content={cell.content}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <div className="flex flex-col space-y-2">
@@ -247,6 +254,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           content={cell.content}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <div className="text-xs text-gray-500">
@@ -288,6 +296,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           content={cell.content}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <div className="px-2 py-1.5 text-xs text-blue-600">계산 값</div>

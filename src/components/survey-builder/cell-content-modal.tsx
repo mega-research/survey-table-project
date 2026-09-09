@@ -254,6 +254,7 @@ export function CellContentModal({
     choiceBranchRule,
     choiceGroupId,
     textBold,
+    boldFirstLine,
     backgroundColor,
     textColor,
     horizontalAlign,
@@ -335,6 +336,7 @@ export function CellContentModal({
     setChoiceBranchRule,
     setChoiceGroupId,
     setTextBold,
+    setBoldFirstLine,
     setBackgroundColor,
     setTextColor,
     setHorizontalAlign,
@@ -1991,9 +1993,11 @@ export function CellContentModal({
           <CellStyleFields
             key={cell.id}
             textBold={textBold}
+            boldFirstLine={boldFirstLine}
             backgroundColor={backgroundColor}
             textColor={textColor}
             onTextBoldChange={setTextBold}
+            onBoldFirstLineChange={setBoldFirstLine}
             onBackgroundColorChange={setBackgroundColor}
             onTextColorChange={setTextColor}
           />

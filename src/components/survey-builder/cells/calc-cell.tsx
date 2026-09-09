@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
+
 import { evaluateCellFormula } from '@/lib/survey/cell-formula';
 import { useFormulaEvalCtx } from '@/lib/survey/formula-context';
-import { UNIT_LABELS, formatWithComma } from '@/utils/number-format';
-import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
+import { UNIT_LABELS, formatWithComma } from '@/utils/number-format';
+import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
 
@@ -41,12 +42,13 @@ export function CalcCell({ cell, questionId }: Props) {
       content={cell.content}
       position={cell.textPosition}
       bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
       textColor={cell.textColor}
     >
       {/* 값과 단위는 인라인이라 블록 컨테이너의 text-align 으로 정렬이 성립한다 */}
       <div
         className={cn(
-          'w-full px-2 py-1.5 text-base tabular-nums text-gray-700',
+          'w-full px-2 py-1.5 text-base text-gray-700 tabular-nums',
           getInputTextAlignClass(cell.inputTextAlign),
         )}
       >

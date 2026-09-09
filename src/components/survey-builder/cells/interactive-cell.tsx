@@ -36,26 +36,105 @@ const CellRouter = React.memo(function CellRouter({
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <CheckboxCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} {...(groupName !== undefined ? { groupName } : {})} />;
+      return (
+        <RadioCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+          {...(groupName !== undefined ? { groupName } : {})}
+        />
+      );
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <SelectCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <InputCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'image':
-      return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <ImageCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'video':
-      return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <VideoCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <RankingCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'ranking_opt':
-      return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <RankingOptCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'calc':
       return <CalcCell cell={cell} questionId={questionId} />;
     case 'text':
     default:
-      return <TextCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <TextCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
   }
 });
 
@@ -176,6 +255,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
         content={substituteTokens(cell.content, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
+        boldFirstLine={cell.boldFirstLine}
         textColor={cell.textColor}
       >
         {null}

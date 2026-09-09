@@ -1,7 +1,6 @@
 'use client';
 
 /* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 실제 검증 입력에 연결한다. */
-
 import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
@@ -71,8 +70,7 @@ export const RadioCell = React.memo(function RadioCell({
       entries={[
         {
           option: selectedTextOption,
-          label:
-            substituteTokens(selectedTextOption.label, attrs, quotes).trim() || '(라벨 없음)',
+          label: substituteTokens(selectedTextOption.label, attrs, quotes).trim() || '(라벨 없음)',
         },
       ]}
     />
@@ -102,9 +100,7 @@ export const RadioCell = React.memo(function RadioCell({
               onChange={() => {}}
               onClick={() => handleRadioChange(optionKey)}
               className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                isSelected && isPriorOption(optionKey)
-                  ? PRIOR_HIGHLIGHT_CONTROL_CLS
-                  : ''
+                isSelected && isPriorOption(optionKey) ? PRIOR_HIGHLIGHT_CONTROL_CLS : ''
               }`}
             />
             <label
