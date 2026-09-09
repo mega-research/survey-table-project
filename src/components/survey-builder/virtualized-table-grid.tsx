@@ -101,7 +101,7 @@ const VirtualizedRow = React.memo(
               key={cell.id}
               ref={isFirstVisibleCell ? sentinelRef : undefined}
               className={cn(
-                'min-w-0 border-r border-b border-gray-300 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
+                'min-w-0 border-r border-b border-gray-400 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
                 isSticky
                   ? (completed ? 'bg-green-50' : 'bg-white')
                   : (completed ? 'bg-green-50/40' : 'bg-white'),
@@ -206,7 +206,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   return (
     <div
       role="rowgroup"
-      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-base"
+      className="mx-auto rounded-b-md border-l border-r border-gray-400 bg-white text-base"
       style={{
         display: 'grid',
         gridTemplateColumns: gridTemplateCols,

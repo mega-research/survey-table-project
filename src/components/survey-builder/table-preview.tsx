@@ -36,7 +36,7 @@ import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-control
 // text-base: rowgroup 컨테이너의 text-sm 상속을 끊는다 — 척도형(라디오/체크박스/랭킹)
 // 테이블은 응답 선택지 라벨이 헤더에 실리므로 본문(14px)보다 큰 16px 로 읽혀야 한다.
 const HEADER_CELL_CLASS =
-  'flex items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-4 py-3 text-center text-base font-medium';
+  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium';
 
 const EMPTY_LABEL = <span className="text-sm text-gray-400 italic" />;
 
@@ -297,7 +297,7 @@ export const TablePreview = React.memo(function TablePreview({
                   <div ref={headerScrollRef} className={cn(HEADER_SCROLL_CLASS, 'px-0')}>
                     <div
                       role="rowgroup"
-                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                       style={gridContainerStyle}
                     >
                       {renderHeaderCells()}
@@ -346,7 +346,7 @@ export const TablePreview = React.memo(function TablePreview({
                   <div
                     key="in-scroll-header"
                     role="rowgroup"
-                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                     style={gridContainerStyle}
                   >
                     {renderHeaderCells()}
@@ -356,7 +356,7 @@ export const TablePreview = React.memo(function TablePreview({
                   key="table-body"
                   role="rowgroup"
                   className={cn(
-                    'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
+                    'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',
                     hideColumnLabels && 'rounded-t-md border-t',
                   )}
                   style={gridContainerStyle}
@@ -396,7 +396,7 @@ export const TablePreview = React.memo(function TablePreview({
                         <div
                           key={`${row.id}:${cell.id}`}
                           className={cn(
-                            'min-w-0 border-r border-b border-gray-300 bg-white p-3',
+                            'min-w-0 border-r border-b border-gray-400 bg-white p-3',
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                             errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
                           )}

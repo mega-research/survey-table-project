@@ -73,7 +73,7 @@ const VIRTUALIZATION_THRESHOLD = 100;
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
 
 // ── 행 반복 버튼 (표 아래) ──
 
@@ -149,7 +149,7 @@ const SelectorRow = React.memo(function SelectorRow({
   // buttonAlign은 가로 스크롤에서 항상 보이도록 좌측 sticky로 통일한다.
   return (
     <div
-      className="border-r border-b border-gray-300 bg-white"
+      className="border-r border-b border-gray-400 bg-white"
       style={{ gridColumn: '1 / -1', gridRow }}
     >
       <div className="sticky left-0 flex w-fit items-center gap-2 py-2 pr-3 pl-3">
@@ -249,7 +249,7 @@ function HeaderCells({
         <div
           key={column.id}
           aria-hidden="true"
-          className="border-r border-b border-gray-300 bg-gray-50"
+          className="border-r border-b border-gray-400 bg-gray-50"
           style={{
             gridRow: 1,
             gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
@@ -341,7 +341,7 @@ function renderRowCells({
       <div
         key={cell.id}
         className={cn(
-          'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+          'min-w-0 border-r border-b border-gray-400 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
           // 행 완료 초록 배경은 제거 (2026-08-06 피드백 — 입력 중 배경 변화가 거슬림).
           // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
           'bg-white',
@@ -995,7 +995,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               >
                 <div
                   role="rowgroup"
-                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                   style={gridContainerStyle}
                 >
                   {renderHeaderCells()}
@@ -1046,7 +1046,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               <div
                 key="in-scroll-header"
                 role="rowgroup"
-                className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                 style={gridContainerStyle}
               >
                 {renderHeaderCells()}
@@ -1076,7 +1076,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 key="table-body"
                 role="rowgroup"
                 className={cn(
-                  'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
+                  'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',
                   hideColumnLabels && 'rounded-t-md border-t',
                 )}
                 style={gridContainerStyle}
