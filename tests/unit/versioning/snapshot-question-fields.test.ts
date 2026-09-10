@@ -85,6 +85,7 @@ const SENTINEL = {
   spssVarType: 'Numeric',
   spssMeasure: 'Nominal',
   exportCellOrder: 'row',
+  stickyColumnCount: 2,
   answerQuoteEnabled: true,
   answerQuoteName: '인용',
   answerQuoteText: '{{Q1}}',
