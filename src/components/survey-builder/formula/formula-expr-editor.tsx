@@ -63,7 +63,14 @@ const TERM_KIND_LABELS: Record<CalcExpr['kind'], string> = {
   group: '하위 그룹',
 };
 
-/** "항 추가" 메뉴 순서 — 자주 쓰는 것부터. */
+/**
+ * "항 추가" 메뉴 순서 — 자주 쓰는 것부터.
+ *
+ * 하위 그룹은 여기 넣지 않고 옆 버튼으로 뺀다. 연산자를 섞으려면 그룹을 중첩해야 하는데
+ * (`년 × 12 + 월`), 그 방법이 메뉴 마지막 줄에 숨어 있어 곱셈 그룹에 항을 계속 더하다
+ * `년 × 12 × 월` 이 되는 일이 실제로 있었다. 값을 고르는 일과 구조를 만드는 일은 다른
+ * 동작이라 버튼도 나눈다.
+ */
 const ADD_TERM_KINDS: Array<CalcExpr['kind']> = [
   'cell',
   'question',
@@ -71,7 +78,6 @@ const ADD_TERM_KINDS: Array<CalcExpr['kind']> = [
   'lookup',
   'attr',
   'agg',
-  'group',
 ];
 
 const EMPTY_ROOT: GroupExpr = { kind: 'group', op: '+', terms: [] };
@@ -251,20 +257,34 @@ function GroupBlock({ value, onChange, depth, ownQuestion, allQuestions }: Group
         ))}
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="h-8">
-            <Plus className="mr-1 h-3.5 w-3.5" />항 추가
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {ADD_TERM_KINDS.map((kind) => (
-            <DropdownMenuItem key={kind} onSelect={() => addTerm(kind)}>
-              {TERM_KIND_LABELS[kind]}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="h-8">
+              <Plus className="mr-1 h-3.5 w-3.5" />항 추가
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {ADD_TERM_KINDS.map((kind) => (
+              <DropdownMenuItem key={kind} onSelect={() => addTerm(kind)}>
+                {TERM_KIND_LABELS[kind]}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          onClick={() => addTerm('group')}
+          title="다른 연산자를 쓰려면 하위 그룹을 넣고 그 안에서 계산합니다"
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          {TERM_KIND_LABELS.group} 추가
+        </Button>
+      </div>
     </div>
   );
 }
