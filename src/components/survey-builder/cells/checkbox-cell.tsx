@@ -3,6 +3,7 @@
 import React, { useCallback, useMemo } from 'react';
 
 import { OptionTextInputStack } from '@/components/survey-response/option-text-input-stack';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
@@ -120,6 +121,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
     <CellOptionsContainer
       cell={cell}
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       footer={footer}
     >
       {cell.checkboxOptions.map((option) => {

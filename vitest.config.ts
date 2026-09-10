@@ -14,6 +14,7 @@ const DOM_TS_TESTS = [
   // TipTap 은 document 가 있어야 스키마를 만든다
   'tests/unit/rich-text-editor/extensions.test.ts',
   'tests/unit/rich-text-editor/file-attachment-node.test.ts',
+  'tests/unit/rich-text-editor/inline-cell-extensions.test.ts',
 ];
 
 const isRealDb = process.env['RUN_REALDB'] === '1';

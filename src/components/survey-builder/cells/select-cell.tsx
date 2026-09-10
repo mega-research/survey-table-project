@@ -5,6 +5,7 @@ import React, { useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
@@ -52,6 +53,7 @@ export const SelectCell = React.memo(function SelectCell({
   return (
     <CellContentLayout
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
       boldFirstLine={cell.boldFirstLine}

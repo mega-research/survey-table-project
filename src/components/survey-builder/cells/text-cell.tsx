@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { CellText } from '@/components/survey/cell-text';
+import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export const TextCell = React.memo(function TextCell({
     >
       <CellText
         text={substituteTokens(cell.content, attrs, quotes)}
+        html={resolveCellTextHtml(cell, attrs, quotes)}
         boldFirstLine={cell.boldFirstLine}
       />
     </div>

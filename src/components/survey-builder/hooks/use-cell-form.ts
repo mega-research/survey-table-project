@@ -39,6 +39,7 @@ function reducer(state: CellFormState, action: Action): CellFormState {
 export interface CellFormSetters {
   setContentType: (v: ContentType) => void;
   setTextContent: (v: string) => void;
+  setTextContentHtml: (v: string) => void;
   setImageUrl: (v: string) => void;
   setVideoUrl: (v: string) => void;
   setCheckboxOptions: (v: CellFormState['checkboxOptions']) => void;
@@ -142,6 +143,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
     return {
       setContentType: set('contentType'),
       setTextContent: set('textContent'),
+      setTextContentHtml: set('textContentHtml'),
       setImageUrl: set('imageUrl'),
       setVideoUrl: set('videoUrl'),
       setCheckboxOptions: set('checkboxOptions'),

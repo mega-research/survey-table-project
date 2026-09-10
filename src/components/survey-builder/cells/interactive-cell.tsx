@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect } from 'react';
 
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useTestResponseStore } from '@/stores/test-response-store';
@@ -253,6 +254,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     return (
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
         boldFirstLine={cell.boldFirstLine}

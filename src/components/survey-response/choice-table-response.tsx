@@ -41,9 +41,17 @@ import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
+import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
+
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
+
+/** 모바일 상세에서 숨긴 셀 — 본문(평문·서식본)만 비운다. */
+function blankCellContent(cell: TableCell): TableCell {
+  const { contentHtml: _contentHtml, ...rest } = cell;
+  return { ...rest, content: '' };
+}
 
 interface ChoiceTableResponseProps {
   question: Question;
@@ -379,7 +387,7 @@ export function ChoiceTableResponse({
               )}
               style={getCellTextStyle(cell)}
             >
-              {labelText}
+              <CellText text={labelText} html={resolveCellTextHtml(cell, attrs, quotes)} />
             </span>
           )}
         </label>
@@ -500,7 +508,10 @@ export function ChoiceTableResponse({
                     className={getCellTextClassName(headerCell!)}
                     style={getCellTextStyle(headerCell!)}
                   >
-                    {substituteTokens(headerText, attrs, quotes)}
+                    <CellText
+                      text={substituteTokens(headerText, attrs, quotes)}
+                      html={resolveCellTextHtml(headerCell!, attrs, quotes)}
+                    />
                   </span>
                 ) : null
               }
@@ -527,7 +538,10 @@ export function ChoiceTableResponse({
                   className={getCellTextClassName(labelStyleSource)}
                   style={getCellTextStyle(labelStyleSource)}
                 >
-                  {cardLabel}
+                  <CellText
+                    text={cardLabel}
+                    html={headerText && headerCell ? resolveCellTextHtml(headerCell, attrs, quotes) : undefined}
+                  />
                 </span>
               }
               cells={row.cells}
@@ -589,7 +603,10 @@ export function ChoiceTableResponse({
                     className={getCellTextClassName(labelStyleSource)}
                     style={getCellTextStyle(labelStyleSource)}
                   >
-                    {cardLabel}
+                    <CellText
+                      text={cardLabel}
+                      html={headerText && headerCell ? resolveCellTextHtml(headerCell, attrs, quotes) : undefined}
+                    />
                   </span>
                 }
                 cells={row.cells}
@@ -771,7 +788,7 @@ export function ChoiceTableResponse({
 
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
     renderCell(
-      cell.mobileDisplay === 'hidden' ? { ...cell, content: '' } : cell,
+      cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell,
       true,
       inputIdScope,
     );

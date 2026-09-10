@@ -39,7 +39,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/hooks/use-survey-sync';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
@@ -96,6 +95,9 @@ import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
 import { getYouTubeEmbedUrl } from './table-cell-renderers';
+import { InlineRichTextEditor } from '@/components/ui/rich-text-editor/inline-rich-text-editor';
+import { plainTextToCellHtml } from '@/lib/survey/cell-rich-text';
+
 import { VariableButton } from './variable-button';
 
 const TEXT_POSITION_OPTIONS: Array<{
@@ -200,7 +202,6 @@ export function CellContentModal({
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
-  const textContentRef = useRef<HTMLTextAreaElement>(null);
   // 숫자 모드 진입 시 emptyDefault 기본 ON 을 "이 편집 세션에서 한 번만" 적용하기 위한 가드.
   // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
   // (모달 오픈/cell.id 변경 시 리셋)
@@ -217,6 +218,7 @@ export function CellContentModal({
   const {
     contentType,
     textContent,
+    textContentHtml,
     imageUrl,
     videoUrl,
     checkboxOptions,
@@ -300,6 +302,7 @@ export function CellContentModal({
   const {
     setContentType,
     setTextContent,
+    setTextContentHtml,
     setImageUrl,
     setVideoUrl,
     setCheckboxOptions,
@@ -816,25 +819,20 @@ export function CellContentModal({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="common-text-content">셀 텍스트 내용</Label>
-            <div className="flex items-start gap-2">
-              <Textarea
-                id="common-text-content"
-                ref={textContentRef}
-                value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-                placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
-                rows={3}
-                className="flex-1 resize-none"
-              />
-              {variableCatalog.length > 0 && (
-                <VariableButton
-                  catalog={variableCatalog}
-                  inputRef={textContentRef}
-                  onChange={(v) => setTextContent(v)}
-                />
-              )}
-            </div>
+            <Label>셀 텍스트 내용</Label>
+            {/* 평문이 정본이고 서식본은 글자 일부 색·굵게가 있을 때만 남는다(serialize-cell 이 판정).
+                편집기 초기값은 서식본이 있으면 그것, 없으면 평문을 문단으로 감싼 것. */}
+            <InlineRichTextEditor
+              key={cell.id}
+              initialHtml={textContentHtml || plainTextToCellHtml(textContent)}
+              onChange={({ html, text }) => {
+                setTextContent(text);
+                setTextContentHtml(html);
+              }}
+              variableCatalog={variableCatalog}
+              placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
+              ariaLabel="셀 텍스트 내용"
+            />
             {textContent && (
               <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
                 미리보기: {textContent}

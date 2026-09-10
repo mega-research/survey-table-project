@@ -4,6 +4,7 @@
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
@@ -43,6 +44,7 @@ export const RankingCell = React.memo(function RankingCell({
   return (
     <CellContentLayout
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
       boldFirstLine={cell.boldFirstLine}

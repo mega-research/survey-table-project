@@ -40,6 +40,7 @@ export function CalcCell({ cell, questionId }: Props) {
   return (
     <CellContentLayout
       content={cell.content}
+      contentHtml={cell.contentHtml}
       position={cell.textPosition}
       bold={cell.textBold}
       boldFirstLine={cell.boldFirstLine}

@@ -8,6 +8,8 @@ import type { TableCell } from '@/types/survey';
 
 interface CellContentLayoutProps {
   content: string | undefined;
+  /** 본문 서식본(토큰 치환까지 끝낸 것). 있으면 content 대신 그린다. resolveCellTextHtml 참조. */
+  contentHtml?: string | undefined;
   position?: TableCell['textPosition'];
   children: React.ReactNode;
   /** 텍스트 라벨 div 에 추가로 적용할 className (예: 빌더 미리보기 톤 변경) */
@@ -34,6 +36,7 @@ const DEFAULT_LABEL_CLASS =
  */
 export function CellContentLayout({
   content,
+  contentHtml,
   position = 'top',
   children,
   labelClassName,
@@ -41,7 +44,7 @@ export function CellContentLayout({
   boldFirstLine = false,
   textColor,
 }: CellContentLayoutProps) {
-  const hasContent = !!content && content.trim().length > 0;
+  const hasContent = (!!content && content.trim().length > 0) || !!contentHtml;
   if (!hasContent) {
     return <>{children}</>;
   }
@@ -51,7 +54,7 @@ export function CellContentLayout({
       className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}
       style={textColor ? { color: textColor } : undefined}
     >
-      <CellText text={content} boldFirstLine={boldFirstLine} />
+      <CellText text={content ?? ''} html={contentHtml} boldFirstLine={boldFirstLine} />
     </div>
   );
 

@@ -2,6 +2,7 @@
 
 import React from 'react';
 
+import { CellText } from '@/components/survey/cell-text';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
@@ -38,7 +39,7 @@ export const RankingOptCell = React.memo(function RankingOptCell({
           )}
           style={getCellTextStyle(cell)}
         >
-          {cell.content}
+          <CellText text={cell.content} html={cell.contentHtml} />
         </div>
       )}
     </div>

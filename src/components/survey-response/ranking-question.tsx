@@ -3,6 +3,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -54,7 +55,13 @@ interface RankingScope {
 }
 
 /** 순위 옵션 셀의 라벨 노드 — 이미지가 있으면 위에, 글자는 셀 스타일대로. */
-function cellLabelNode(cell: TableCell, opt: QuestionOption, label: string): ReactNode {
+function cellLabelNode(
+  cell: TableCell,
+  opt: QuestionOption,
+  label: string,
+  attrs: Record<string, string>,
+  quotes: Record<string, string>,
+): ReactNode {
   return (
     <>
       {cell.imageUrl && (
@@ -66,7 +73,7 @@ function cellLabelNode(cell: TableCell, opt: QuestionOption, label: string): Rea
         />
       )}
       <span className={getCellTextClassName(opt)} style={getCellTextStyle(opt)}>
-        {label}
+        <CellText text={label} html={resolveCellTextHtml(cell, attrs, quotes)} />
       </span>
     </>
   );
@@ -332,7 +339,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         rank={rankOfOption(scope.answers, opt.value)}
         entry={scope.answers.find((a) => a.optionValue === opt.value)}
         handle={scope.handle}
-        labelNode={cellLabelNode(cell, opt, substituteTokens(opt.label, attrs, quotes))}
+        labelNode={cellLabelNode(cell, opt, substituteTokens(opt.label, attrs, quotes), attrs, quotes)}
         detailTargetScopeId={scope.detailTargetScopeId}
         questionId={question.id}
         cellId={scope.priorCellId}
@@ -364,7 +371,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                   key={optCell.id}
                   label={
                     <span className={cn(getCellTextClassName(opt))} style={getCellTextStyle(opt)}>
-                      {label}
+                      <CellText text={label} html={resolveCellTextHtml(optCell, attrs, quotes)} />
                     </span>
                   }
                   cells={idx === 0 ? row.cells : []}
@@ -482,7 +489,10 @@ function RankingDropdown({
                     className={getCellTextClassName(opt ?? optCell)}
                     style={getCellTextStyle(opt ?? optCell)}
                   >
-                    {substituteTokens(rawLabel, attrs, quotes)}
+                    <CellText
+                      text={substituteTokens(rawLabel, attrs, quotes)}
+                      html={resolveCellTextHtml(optCell, attrs, quotes)}
+                    />
                   </span>
                 }
                 cells={idx === 0 ? row.cells : []}

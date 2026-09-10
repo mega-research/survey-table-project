@@ -51,7 +51,7 @@ interface Props {
  * 글자 색 컨트롤 — 셀 배경색 UI(CellStyleFields) 패턴 재활용:
  * 색상 스포이드 + HEX 직접 입력(blur/Enter 커밋, normalizeCellHexColor 정규화) + 제거 버튼.
  */
-function FontColorControl({ editor, fontColor }: { editor: Editor; fontColor: string }) {
+export function FontColorControl({ editor, fontColor }: { editor: Editor; fontColor: string }) {
   const [draft, setDraft] = useState(fontColor);
 
   // 커서 이동 등으로 현재 선택의 색이 바뀌면 입력칸도 동기화 (렌더 중 상태 조정 패턴)

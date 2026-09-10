@@ -219,3 +219,27 @@ export function sanitizeRichHtml(input: string | null | undefined): string {
   if (input == null) return '';
   return fillEmptyParagraphs(sanitizeHtml(input, RICH_CONFIG));
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// 표 셀 본문 서식본 (TableCell.contentHtml)
+//
+// 셀 안 글자 일부 강조용이라 허용 범위가 훨씬 좁다 — 문단·줄바꿈·굵게·글자색뿐.
+// 인라인 편집기(InlineRichTextEditor)가 내는 것과 정확히 같은 집합이고, 그 밖의
+// 태그(이미지·링크·표)는 붙여넣기로 들어와도 여기서 떨어진다.
+// ─────────────────────────────────────────────────────────────────────
+
+const CELL_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: ['p', 'br', 'strong', 'b', 'span'],
+  allowedAttributes: { span: ['style'] },
+  parseStyleAttributes: true,
+  allowedStyles: {
+    // 편집기가 낸 값은 hex 지만 브라우저 CSSOM 이 style 을 rgb() 로 다시 쓰므로 둘 다 받는다.
+    span: { color: [/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, /^rgba?\([\d.,\s%]+\)$/i] },
+  },
+  allowedSchemes: [],
+};
+
+export function sanitizeCellHtml(input: string | null | undefined): string {
+  if (input == null) return '';
+  return sanitizeHtml(input, CELL_CONFIG);
+}

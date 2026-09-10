@@ -16,6 +16,8 @@ interface CellOptionsContainerProps {
    * 두 번째 패스를 타지 않도록 opt-in 으로 둔다(mobile-original-row-table.tsx 참조).
    */
   content?: string | undefined;
+  /** 본문 서식본 오버라이드 — content 와 같은 규칙(치환을 끝낸 호출부가 넘긴다). */
+  contentHtml?: string | undefined;
   /** 옵션 리스트 — 그리드 컨테이너 안에 렌더됨 */
   children: React.ReactNode;
   /** 옵션 그리드 밖에 렌더할 추가 요소 (예: 선택 개수 제한 안내) */
@@ -32,6 +34,7 @@ interface CellOptionsContainerProps {
 export function CellOptionsContainer({
   cell,
   content,
+  contentHtml,
   children,
   footer,
 }: CellOptionsContainerProps) {
@@ -45,6 +48,7 @@ export function CellOptionsContainer({
   return (
     <CellContentLayout
       content={content ?? cell.content}
+      contentHtml={contentHtml ?? cell.contentHtml}
       position={cell.textPosition}
       bold={cell.textBold}
       boldFirstLine={cell.boldFirstLine}

@@ -5,6 +5,7 @@ import React, { useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/lib/survey/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
@@ -99,6 +100,7 @@ export const InputCell = React.memo(function InputCell({
     <div className="relative w-full">
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
         boldFirstLine={cell.boldFirstLine}

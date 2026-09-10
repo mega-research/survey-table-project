@@ -767,6 +767,14 @@ html {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* 표 셀 서식본(TableCell.contentHtml): 문단 = 평문의 한 줄. 문단 여백을 없애 평문 셀과 줄 간격을 맞춘다 */
+.cell-rich-text p {
+  margin: 0;
+}
+.cell-rich-text-bold-first p:first-child {
+  font-weight: 700;
+}
+
 /* 옵션 리스트 반응형 그리드: 모바일(< 640px) 1열, sm 이상 --options-grid-cols 적용 */
 .options-grid {
   display: grid;

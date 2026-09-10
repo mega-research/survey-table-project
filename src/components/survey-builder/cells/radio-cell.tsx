@@ -5,6 +5,7 @@ import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
 import { OptionTextInputStack } from '@/components/survey-response/option-text-input-stack';
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
@@ -80,6 +81,7 @@ export const RadioCell = React.memo(function RadioCell({
     <CellOptionsContainer
       cell={cell}
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       footer={footer}
     >
       {cell.radioOptions.map((option) => {

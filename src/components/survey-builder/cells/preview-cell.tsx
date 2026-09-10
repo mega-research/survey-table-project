@@ -98,6 +98,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return cell.selectOptions && cell.selectOptions.length > 0 ? (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
           boldFirstLine={cell.boldFirstLine}
@@ -198,6 +199,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
           boldFirstLine={cell.boldFirstLine}
@@ -256,7 +258,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               )}
               style={getCellTextStyle(cell)}
             >
-              {cell.content}
+              <CellText text={cell.content} html={cell.contentHtml} />
             </div>
           )}
         </div>
@@ -267,6 +269,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
           boldFirstLine={cell.boldFirstLine}
@@ -296,7 +299,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               className={cn('text-base text-gray-700', getCellTextClassName(cell))}
               style={getCellTextStyle(cell)}
             >
-              {choiceLabelText}
+              <CellText text={choiceLabelText} html={cell.contentHtml} />
             </span>
           )}
         </div>
@@ -309,6 +312,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
           boldFirstLine={cell.boldFirstLine}
@@ -330,7 +334,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           )}
           style={getCellTextStyle(cell)}
         >
-          <CellText text={cell.content} boldFirstLine={cell.boldFirstLine} />
+          <CellText text={cell.content} html={cell.contentHtml} boldFirstLine={cell.boldFirstLine} />
         </div>
       ) : (
         <span className="text-sm text-gray-400" />

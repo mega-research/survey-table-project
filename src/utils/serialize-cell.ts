@@ -14,6 +14,8 @@ import {
   TableCell,
 } from '@/types/survey';
 
+import { cellHtmlHasMarks } from '@/lib/survey/cell-rich-text';
+
 import { parseNumericInput } from './numeric-input';
 import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
 
@@ -26,6 +28,8 @@ import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
 export interface CellFormState {
   contentType: ContentType;
   textContent: string;
+  /** 본문 서식본(HTML). 글자 일부 색·굵게가 있을 때만 값이 있고, 아니면 ''. */
+  textContentHtml: string;
   imageUrl: string;
   videoUrl: string;
   checkboxOptions: CheckboxOption[];
@@ -203,6 +207,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
   return {
     contentType,
     textContent: cell.content || '',
+    textContentHtml: cell.contentHtml || '',
     imageUrl: cell.imageUrl || '',
     videoUrl: cell.videoUrl || '',
     checkboxOptions: cell.checkboxOptions || [],
@@ -345,6 +350,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     textInputType: _textInputType,
     textInputNumberFormat: _textInputNumberFormat,
     textInputPlaceholder: _textInputPlaceholder,
+    contentHtml: _contentHtml,
     textBold: _textBold,
     boldFirstLine: _boldFirstLine,
     backgroundColor: _backgroundColor,
@@ -371,6 +377,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     type: contentType,
     // 모든 타입에서 텍스트 내용 저장 (라디오/체크박스/셀렉트에서도 설명 텍스트 표시 가능)
     content: form.textContent || '',
+    // 서식본은 마크(색·굵게)가 있을 때만 — 평문뿐이면 키를 두지 않아 옛 셀과 같은 모양을 유지한다.
+    ...(form.textContentHtml && cellHtmlHasMarks(form.textContentHtml)
+      ? { contentHtml: form.textContentHtml }
+      : {}),
     ...(form.textBold ? { textBold: true } : {}),
     ...(form.boldFirstLine ? { boldFirstLine: true } : {}),
     ...(form.backgroundColor ? { backgroundColor: form.backgroundColor } : {}),

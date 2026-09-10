@@ -1267,3 +1267,48 @@ describe('choice_opt 텍스트 입력 숫자 모드 (textInputType / textInputNu
     expect(state.choiceTextInputNumberFormat).toEqual({ max: 9 });
   });
 });
+
+describe('buildUpdatedCell — 본문 서식본(contentHtml)', () => {
+  it('굵게·글자색 마크가 있으면 평문과 서식본을 함께 저장한다', () => {
+    const form: CellFormState = {
+      ...baseForm('text'),
+      textContent: '제목\n설명 강조',
+      textContentHtml: '<p>제목</p><p>설명 <span style="color: #ff0000">강조</span></p>',
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.content).toBe('제목\n설명 강조');
+    expect(out.contentHtml).toBe('<p>제목</p><p>설명 <span style="color: #ff0000">강조</span></p>');
+  });
+
+  it('마크가 없는 서식본은 버린다 — 평문뿐인 셀은 옛 모양 그대로', () => {
+    const form: CellFormState = {
+      ...baseForm('text'),
+      textContent: '제목\n설명',
+      textContentHtml: '<p>제목</p><p>설명</p>',
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).toEqual({ id: 'c1', type: 'text', content: '제목\n설명', ...CUSTOM_FALSE });
+  });
+
+  it('서식을 지우면 기존 셀의 contentHtml 도 사라진다', () => {
+    const cellWithHtml: TableCell = {
+      ...baseCell,
+      content: '강조',
+      contentHtml: '<p><strong>강조</strong></p>',
+    };
+    const form: CellFormState = {
+      ...cellToFormState(cellWithHtml),
+      textContent: '강조',
+      textContentHtml: '<p>강조</p>',
+    };
+    expect(buildUpdatedCell(form, cellWithHtml)).not.toHaveProperty('contentHtml');
+  });
+
+  it('cellToFormState 는 서식본을 폼으로 옮긴다', () => {
+    expect(
+      cellToFormState({ id: 'c1', type: 'text', content: 'a', contentHtml: '<p><strong>a</strong></p>' })
+        .textContentHtml,
+    ).toBe('<p><strong>a</strong></p>');
+    expect(cellToFormState(baseCell).textContentHtml).toBe('');
+  });
+});

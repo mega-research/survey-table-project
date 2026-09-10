@@ -205,6 +205,7 @@ export function useDragCopy({
                 // hidden 위치 → 내용 초기화 (recalculateHiddenCells가 isHidden 설정)
                 targetCell.type = 'text';
                 targetCell.content = '';
+                delete targetCell.contentHtml;
                 delete targetCell.rowspan;
                 delete targetCell.colspan;
                 // 타입별 잔여 속성 정리

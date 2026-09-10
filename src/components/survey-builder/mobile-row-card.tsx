@@ -22,7 +22,7 @@ import {
   resolveMobileCellLabel,
   type MobileLegendLabel,
 } from '@/utils/mobile-display-cells';
-import { CellText } from '@/components/survey/cell-text';
+import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
@@ -109,6 +109,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
         // 「첫 줄만 굵게」도 함께 옮긴다 — 데스크탑 표와 모바일 카드가 같은 셀을 다른
         // 굵기로 그리면 어느 쪽이 맞는지 알 수 없다.
         ...(headerCell?.boldFirstLine ? { boldFirstLine: true } : {}),
+        ...(headerCell?.contentHtml ? { contentHtml: headerCell.contentHtml } : {}),
       };
     }
     if (hasExplicitHiddenMobileHeaderCell(row.cells)) return { label: '' };
@@ -197,6 +198,11 @@ export const MobileRowCard = React.memo(function MobileRowCard({
               >
                 <CellText
                   text={substituteTokens(rowHeader.label, attrs, quotes)}
+                  html={
+                    'contentHtml' in rowHeader
+                      ? resolveCellTextHtml(rowHeader, attrs, quotes)
+                      : undefined
+                  }
                   boldFirstLine={'boldFirstLine' in rowHeader ? rowHeader.boldFirstLine : false}
                 />
               </p>

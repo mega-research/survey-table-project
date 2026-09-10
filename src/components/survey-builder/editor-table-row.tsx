@@ -23,6 +23,7 @@ import {
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CellText } from '@/components/survey/cell-text';
 import { cn } from '@/lib/utils';
 import { DynamicRowGroupConfig, TableCell, TableRow } from '@/types/survey';
 import { isCellSaveable } from '@/utils/cell-library-helpers';
@@ -56,7 +57,7 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
       )}
       style={getCellTextStyle(cell)}
     >
-      {cell.content}
+      <CellText text={cell.content} html={cell.contentHtml} />
     </div>
   ) : null;
 

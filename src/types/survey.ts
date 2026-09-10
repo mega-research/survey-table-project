@@ -369,6 +369,13 @@ export interface TableCell {
   // SPSS 숫자코드 (ranking_opt 셀이 Case 2 옵션 소스로 쓰일 때 사용. 비어있으면 1-based 인덱스 자동)
   spssNumericCode?: number;
   content: string;
+  /**
+   * 셀 본문의 서식본(HTML) — 글자 일부에 색·굵게를 준 경우에만 채운다. `content` 는 여전히
+   * 같은 글의 **평문**이라 내보내기·SPSS 라벨·보기 라벨·행 높이 측정·행 라벨 비교는 무변경이고,
+   * 화면 표시(CellText)만 이 서식본을 우선한다. 서식이 없으면 키를 두지 않는다.
+   * 허용 마크는 굵게(strong)·글자색(span style=color)뿐이고, 문단은 `content` 의 줄바꿈과 1:1 이다.
+   */
+  contentHtml?: string;
   imageUrl?: string;
   videoUrl?: string;
   type:
