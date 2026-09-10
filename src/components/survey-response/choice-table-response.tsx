@@ -466,10 +466,49 @@ export function ChoiceTableResponse({
    * 만들고 안에 열별 컨트롤을 나란히 둔다 — 열마다 하나씩 고르는 표에서 셀마다 카드를 내면
    * 같은 행 라벨의 카드가 열 수만큼 반복돼 어느 열 것인지 알 수 없다.
    */
-  const renderMobileOptionCards = (perRow: boolean) => (
+  const renderMobileOptionCards = (perRow: boolean, rows: readonly TableRow[]) => (
     <div className="space-y-2">
-      {(question.tableRowsData ?? []).flatMap((row) => {
+      {rows.flatMap((row) => {
         const choiceCells = row.cells.filter((c) => c.type === 'choice_opt' && !c.isHidden);
+        // 보기 셀이 아닌 인터랙티브 셀(단답 input·선택형 컨트롤) — 행 단위 카드에서만 그린다.
+        // 셀 단위 카드는 보기 셀마다 카드라 이 셀들이 설 자리가 없다(기존 동작 유지).
+        const controlCells = perRow
+          ? row.cells.filter(
+              (c) =>
+                !c.isHidden && (c.type === 'input' || CHOICE_TABLE_CONTROL_CELL_TYPES.has(c.type)),
+            )
+          : [];
+        const renderControlCells = () =>
+          controlCells.length > 0 ? (
+            <div className="space-y-2">
+              {controlCells.map((c) => (
+                <div key={c.id}>{renderCell(c, true)}</div>
+              ))}
+            </div>
+          ) : null;
+        // 보기 셀 없이 input·선택형 셀만 있는 행(기타 상세 기재, 병역특례 여부 등) — 조건이
+        // 참이 돼 보이는 행이므로 카드로 그린다. 제목은 header 지정 text 셀, 없으면 없음.
+        if (perRow && choiceCells.length === 0 && controlCells.length > 0) {
+          const headerCell = findMobileHeaderCell(row.cells);
+          const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
+          return [
+            <MobileOptionCard
+              key={row.id}
+              label={
+                headerText ? (
+                  <span
+                    className={getCellTextClassName(headerCell!)}
+                    style={getCellTextStyle(headerCell!)}
+                  >
+                    {substituteTokens(headerText, attrs, quotes)}
+                  </span>
+                ) : null
+              }
+              cells={row.cells}
+              footer={renderControlCells()}
+            />,
+          ];
+        }
         if (perRow && choiceCells.length >= 2) {
           const headerCell = findMobileHeaderCell(row.cells);
           const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
@@ -525,6 +564,7 @@ export function ChoiceTableResponse({
                       />
                     ) : null;
                   })}
+                  {renderControlCells()}
                 </div>
               }
             />,
@@ -558,8 +598,13 @@ export function ChoiceTableResponse({
                 onToggle={() => toggle(choiceCell.id, !checked)}
                 control={renderMobileChoiceInput(choiceCell, cardLabel)}
                 footer={
-                  option?.allowTextInput && checked ? (
-                    <OptionTextInput questionId={question.id} option={option} className="w-full" />
+                  (option?.allowTextInput && checked) || controlCells.length > 0 ? (
+                    <div className="space-y-2">
+                      {option?.allowTextInput && checked ? (
+                        <OptionTextInput questionId={question.id} option={option} className="w-full" />
+                      ) : null}
+                      {renderControlCells()}
+                    </div>
                   ) : null
                 }
               />
@@ -813,7 +858,12 @@ export function ChoiceTableResponse({
   }
 
   if (isMobile && (mobileMode === 'auto' || mobileMode === 'row-cards')) {
-    return renderMobileOptionCards(mobileMode === 'row-cards');
+    // 행 단위 카드는 행·열 표시 조건을 적용한 행을 쓴다 — 조건이 참이 된 행(병역특례 여부·
+    // 기타 상세 기재)이 카드로 나와야 한다. 자동 카드는 도입 전 동작(전 행) 그대로 둔다.
+    return renderMobileOptionCards(
+      mobileMode === 'row-cards',
+      mobileMode === 'row-cards' ? rowWiseLayout.conditionalRows : (question.tableRowsData ?? []),
+    );
   }
 
   return renderOriginalTable();

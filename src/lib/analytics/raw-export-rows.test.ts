@@ -270,7 +270,7 @@ describe('mergePriorAnswersIntoResponses — 「이월 응답 포함」', () => 
       { q1: 'a', __optTexts__: { q1: { o9: '이번 기타' } } },
       { q2: 'b', __optTexts__: { q1: { o9: '지난 기타' }, q2: { o5: '지난 상세' } } },
     );
-    expect(merged.__optTexts__).toEqual({ q1: { o9: '이번 기타' }, q2: { o5: '지난 상세' } });
+    expect(merged['__optTexts__']).toEqual({ q1: { o9: '이번 기타' }, q2: { o5: '지난 상세' } });
   });
 
   it('변동 확인 같은 다른 사이드카는 이월에서 가져오지 않는다', () => {
