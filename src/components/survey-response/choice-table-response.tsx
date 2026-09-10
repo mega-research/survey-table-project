@@ -549,7 +549,10 @@ export function ChoiceTableResponse({
               disabled={allDisabled}
               footer={
                 <div className="space-y-2">
-                  <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {/* 라벨이 길어 한 줄에 하나씩 접히면 줄마다 44px 높이 + 8px 간격이 쌓여 보기
+                      둘 사이가 비어 보였다. 줄 높이 36px·간격 4px 로 붙인다 — 탭 영역은 라벨
+                      전체 폭이라 충분하다. */}
+                  <div className="flex flex-wrap gap-x-5 gap-y-1">
                     {choiceCells.map((choiceCell) => {
                       const axisLabel = resolveChoiceAxisLabel(row, choiceCell);
                       const { disabled } = getChoiceCellState(choiceCell);
@@ -557,7 +560,7 @@ export function ChoiceTableResponse({
                         <label
                           key={choiceCell.id}
                           className={cn(
-                            'flex min-h-11 cursor-pointer items-center gap-2 text-[15px] text-gray-800',
+                            'flex min-h-9 cursor-pointer items-center gap-2 text-[15px] text-gray-800',
                             disabled && 'cursor-default opacity-50',
                           )}
                         >
