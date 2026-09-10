@@ -598,17 +598,8 @@ export function ChoiceTableResponse({
                       );
                     })}
                   </div>
-                  {choiceCells.map((choiceCell) => {
-                    const { checked, option } = getChoiceCellState(choiceCell);
-                    return option?.allowTextInput && checked ? (
-                      <OptionTextInput
-                        key={`${choiceCell.id}-text`}
-                        questionId={question.id}
-                        option={option}
-                        className="w-full"
-                      />
-                    ) : null;
-                  })}
+                  {/* 보기 옵션의 상세기재는 카드 안이 아니라 카드 목록 아래 스택에 —
+                      데스크톱의 "표 아래" 와 같은 자리다. 셀 게이팅 입력칸과 한곳에 섞이지 않는다. */}
                   {renderControlCells()}
                 </div>
               }
@@ -646,9 +637,11 @@ export function ChoiceTableResponse({
                 onToggle={() => toggle(choiceCell.id, !checked)}
                 control={renderMobileChoiceInput(choiceCell, cardLabel)}
                 footer={
-                  (option?.allowTextInput && checked) || controlCells.length > 0 ? (
+                  (!perRow && option?.allowTextInput && checked) || controlCells.length > 0 ? (
                     <div className="space-y-2">
-                      {option?.allowTextInput && checked ? (
+                      {/* 행 단위 카드는 상세기재를 카드 목록 아래 스택으로 뺀다(데스크톱의 표 아래와 같은 자리).
+                          셀 단위 카드는 카드가 곧 보기라 그 자리에 둔다. */}
+                      {!perRow && option?.allowTextInput && checked ? (
                         <OptionTextInput questionId={question.id} option={option} className="w-full" />
                       ) : null}
                       {renderControlCells()}
@@ -659,6 +652,7 @@ export function ChoiceTableResponse({
             );
           });
       })}
+      {perRow && <OptionTextInputStack questionId={question.id} entries={textInputEntries} />}
       {counter}
     </div>
   );

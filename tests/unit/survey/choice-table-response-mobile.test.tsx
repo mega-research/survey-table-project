@@ -170,3 +170,37 @@ describe('ChoiceTableResponse (mobile)', () => {
     expect(screen.getByText('① 컴퓨터 비전')).not.toHaveClass('font-bold');
   });
 });
+
+describe('ChoiceTableResponse (mobile) — 행 단위 카드의 보기 상세기재 자리', () => {
+  function rowCardQuestion(): Question {
+    const q = question();
+    q.mobileTableDisplayMode = 'row-cards';
+    // ① 컴퓨터 비전 보기에 상세기재 허용
+    q.tableRowsData![0]!.cells[2] = {
+      ...q.tableRowsData![0]!.cells[2]!,
+      allowTextInput: true,
+      textInputPlaceholder: '비전 상세',
+    };
+    return q;
+  }
+
+  it('선택한 보기의 상세기재는 카드 안이 아니라 카드 목록 아래 스택에 나온다', () => {
+    const { container } = render(
+      <ChoiceTableResponse question={rowCardQuestion()} value={['r1c2']} onChange={() => {}} />,
+    );
+    const input = screen.getByPlaceholderText('비전 상세');
+    // 카드(rounded-2xl) 안에 있지 않다 — 데스크톱의 "표 아래" 와 같은 자리
+    expect(input.closest('.rounded-2xl')).toBeNull();
+    // 카드 목록 컨테이너의 형제로, 카드들 뒤에 있다
+    const cards = container.querySelectorAll('.rounded-2xl');
+    expect(cards.length).toBe(2);
+    expect(cards[1]!.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('셀 단위 카드(auto)에서는 여전히 카드 안에 나온다', () => {
+    const q = rowCardQuestion();
+    q.mobileTableDisplayMode = 'auto';
+    render(<ChoiceTableResponse question={q} value={['r1c2']} onChange={() => {}} />);
+    expect(screen.getByPlaceholderText('비전 상세').closest('.rounded-2xl')).not.toBeNull();
+  });
+});
