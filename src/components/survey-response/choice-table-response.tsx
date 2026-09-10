@@ -72,6 +72,14 @@ interface ChoiceTableResponseProps {
  * - 모바일: 행마다 MobileOptionCard (라벨 + 표시 셀 + 체크/라디오 컨트롤)
  * 응답은 일반 radio/checkbox shape(radio=cell.id | null, checkbox=cell.id[])로 저장한다.
  */
+/** 행별 원본 문항 모드에서 "답할 수 있는 행"으로 치는 셀 타입 — 렌더러가 인터랙티브로
+ * 그리는 것과 같은 집합이어야 한다(보기 셀 + 단답 input + 선택형 컨트롤 셀). */
+const CHOICE_TABLE_ROW_WISE_ANSWERABLE_TYPES: readonly TableCell['type'][] = [
+  'choice_opt',
+  'input',
+  ...([...CHOICE_TABLE_CONTROL_CELL_TYPES] as TableCell['type'][]),
+];
+
 export function ChoiceTableResponse({
   question,
   value,
@@ -566,7 +574,9 @@ export function ChoiceTableResponse({
         repeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
         repeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
       },
-      answerableCellTypes: ['choice_opt'],
+      // 보기 셀만 세면 input 셀(기타 상세 기재)이나 선택형 셀만 든 행이 라벨 행으로
+      // 분류돼 통째로 빠진다 — 그 셀들은 d4212acf 이후 이 표에서도 인터랙티브다.
+      answerableCellTypes: CHOICE_TABLE_ROW_WISE_ANSWERABLE_TYPES,
       resolveChoiceLabel,
       isLabelSourceHidden: (cellId) =>
         rows.some((row) =>
