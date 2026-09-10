@@ -238,6 +238,9 @@ export const questions = pgTable(
     // 열 라벨 숨기기 (테이블 타입 전용)
     hideColumnLabels: boolean('hide_column_labels').default(false),
 
+    // 좌측 고정 열 개수 (표를 그리는 문항 전용). NULL = 자동 판정, 0~3 = 명시 지정
+    stickyColumnCount: smallint('sticky_column_count'),
+
     // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
     exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
 
@@ -283,6 +286,10 @@ export const questions = pgTable(
     check(
       'questions_mobile_table_display_mode_check',
       sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'original')`,
+    ),
+    check(
+      'questions_sticky_column_count_range',
+      sql`${table.stickyColumnCount} is null or (${table.stickyColumnCount} >= 0 and ${table.stickyColumnCount} <= 3)`,
     ),
   ],
 );

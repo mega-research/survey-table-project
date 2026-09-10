@@ -138,6 +138,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),
     ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
+    ...(q.stickyColumnCount != null ? { stickyColumnCount: q.stickyColumnCount } : {}),
     ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
     ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
     ...(q.mobileTableDisplayMode != null

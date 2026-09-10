@@ -564,6 +564,7 @@ function QuestionTestInput({
           allQuestions={allQuestions}
           ignoreDisplayConditions
           hideColumnLabels={question.hideColumnLabels}
+          stickyColumnCount={question.stickyColumnCount}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
           mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}

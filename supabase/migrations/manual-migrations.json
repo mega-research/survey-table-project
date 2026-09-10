@@ -80,6 +80,7 @@
     "0101_change_confirm_enabled",
     "0102_prior_answer_condition",
     "0103_prior_answer_disabled",
-    "0104_row_repeat_config"
+    "0104_row_repeat_config",
+    "0105_sticky_column_count"
   ]
 }

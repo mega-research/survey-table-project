@@ -51,6 +51,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   dynamicRowConfigs: [],
   rowRepeatConfig: { enabled: true, templateRowIds: ['r1'], maxRepeats: 20 },
   hideColumnLabels: true,
+  stickyColumnCount: 2,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',
   mobileDrilldownOmitLeadingColumns: 1,

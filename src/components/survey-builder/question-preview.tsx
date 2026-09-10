@@ -52,6 +52,7 @@ export function QuestionPreview({ question }: { question: Question }) {
             tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
+            stickyColumnCount={question.stickyColumnCount}
             choiceControlType={(cell) => getGroupTypeOfCell(question, cell.id)}
           />
         );
@@ -105,6 +106,7 @@ export function QuestionPreview({ question }: { question: Question }) {
           tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
+          stickyColumnCount={question.stickyColumnCount}
         />
       ) : (
         <div className="py-4 text-center text-sm text-gray-400">테이블이 구성되지 않았습니다.</div>
@@ -205,6 +207,7 @@ function RankingPreview({ question }: { question: Question }) {
             tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
+            stickyColumnCount={question.stickyColumnCount}
           />
         )}
       </div>
@@ -251,6 +254,7 @@ function RankingPreview({ question }: { question: Question }) {
           tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
+          stickyColumnCount={question.stickyColumnCount}
         />
       ) : (
         ((question.options?.length ?? 0) > 0 || allowOther) && (

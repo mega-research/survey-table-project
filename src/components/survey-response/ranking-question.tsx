@@ -82,6 +82,7 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
       {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
       {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
       {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+      {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
     />
   );
 }

@@ -615,6 +615,9 @@ export function ChoiceTableResponse({
         {...(question.hideColumnLabels !== undefined
           ? { hideColumnLabels: question.hideColumnLabels }
           : {})}
+        {...(question.stickyColumnCount !== undefined
+          ? { stickyColumnCount: question.stickyColumnCount }
+          : {})}
         applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />

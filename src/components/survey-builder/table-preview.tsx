@@ -53,6 +53,8 @@ interface TablePreviewProps {
   /** CardContent 패딩 오버라이드 — 모바일 드릴다운 상세처럼 카드 여백 없이 붙여야 하는 곳용 */
   contentClassName?: string | undefined;
   hideColumnLabels?: boolean | undefined;
+  /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
+  stickyColumnCount?: number | null | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
   /**
@@ -89,6 +91,7 @@ export const TablePreview = React.memo(function TablePreview({
   className,
   contentClassName,
   hideColumnLabels = false,
+  stickyColumnCount,
   renderCell,
   cellOutlineEdges,
   stickyHeader = true,
@@ -173,8 +176,8 @@ export const TablePreview = React.memo(function TablePreview({
     if (columns.length === 0) return undefined;
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
-    return computeStickyLeftColumns(columns, rows, maxStickyWidth);
-  }, [columns, rows, scrollViewportWidth]);
+    return computeStickyLeftColumns(columns, rows, maxStickyWidth, stickyColumnCount);
+  }, [columns, rows, scrollViewportWidth, stickyColumnCount]);
 
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({

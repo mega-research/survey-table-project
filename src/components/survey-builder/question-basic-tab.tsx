@@ -1436,6 +1436,7 @@ export function QuestionBasicTab({
                 tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
                 className="border-2 border-dashed border-gray-300"
                 hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
+                stickyColumnCount={questions.find((q) => q.id === questionId)?.stickyColumnCount}
                 choiceControlType={(cell) =>
                   getGroupTypeOfCell(
                     {

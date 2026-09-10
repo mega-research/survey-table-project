@@ -196,6 +196,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     let originalExportCellOrder: Question['exportCellOrder'];
+    let originalStickyColumnCount: Question['stickyColumnCount'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore
@@ -207,6 +208,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
       originalExportCellOrder = q?.exportCellOrder;
+      originalStickyColumnCount = q?.stickyColumnCount;
       didSaveRef.current = false;
     }
     return () => {
@@ -247,6 +249,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   delete restoredQuestion.exportCellOrder;
                 } else {
                   restoredQuestion.exportCellOrder = originalExportCellOrder;
+                }
+                if (originalStickyColumnCount === undefined) {
+                  delete restoredQuestion.stickyColumnCount;
+                } else {
+                  restoredQuestion.stickyColumnCount = originalStickyColumnCount;
                 }
                 return restoredQuestion;
               }),
@@ -413,6 +420,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.exportCellOrder !== undefined
         ? { exportCellOrder: storeQuestion.exportCellOrder }
         : {}),
+      // 좌측 고정 열 개수도 표 에디터의 silentUpdateQuestion 경로로 store 에만 쓰인다.
+      ...(storeQuestion?.stickyColumnCount !== undefined
+        ? { stickyColumnCount: storeQuestion.stickyColumnCount }
+        : {}),
       // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
         ? { mobileOriginalTable: storeQuestion.mobileOriginalTable }
@@ -562,6 +573,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
+              // null = 자동 판정 복귀가 유효값이므로 ?? 폴백 금지
+              stickyColumnCount:
+                currentFormData.stickyColumnCount !== undefined
+                  ? currentFormData.stickyColumnCount
+                  : question?.stickyColumnCount,
               exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,

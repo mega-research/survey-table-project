@@ -79,6 +79,7 @@ interface SnapshotQuestion {
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   rowRepeatConfig?: Question['rowRepeatConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
+  stickyColumnCount?: number | null | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
@@ -172,6 +173,7 @@ export function buildSurveySnapshot(
       dynamicRowConfigs: q.dynamicRowConfigs,
       rowRepeatConfig: q.rowRepeatConfig,
       hideColumnLabels: q.hideColumnLabels,
+      stickyColumnCount: q.stickyColumnCount,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
