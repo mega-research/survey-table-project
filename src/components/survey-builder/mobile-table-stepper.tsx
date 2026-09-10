@@ -10,7 +10,10 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 import { collectMobileLegendLabels } from '@/utils/mobile-display-cells';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
+
+import { useGatingTableCells } from './cells/gating-table-cells-context';
 
 import { MobileRowCard } from './mobile-row-card';
 
@@ -109,13 +112,17 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     return map;
   }, [displayRows, attrs, quotes]);
 
+  // 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — InteractiveTableResponse 가 원본 rows 로 공급한다
+  // (동적 행 선택으로 빠진 행의 컨트롤러도 정의는 찾아야 데스크톱 판정과 같다).
+  const providedTableCells = useGatingTableCells();
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
+    const tableCells = providedTableCells ?? collectTableCells(displayRows);
     for (const row of displayRows) {
-      map.set(row.id, isTableRowCompleted(row, currentResponse));
+      map.set(row.id, isTableRowCompleted(row, currentResponse, { tableCells }));
     }
     return map;
-  }, [displayRows, currentResponse]);
+  }, [providedTableCells, displayRows, currentResponse]);
 
   const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
   const [currentRowInGroup, setCurrentRowInGroup] = useState(0);

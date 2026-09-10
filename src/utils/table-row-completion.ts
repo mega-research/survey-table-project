@@ -23,11 +23,18 @@ function isCellAnswered(val: unknown, cellType?: TableCell['type']): boolean {
  * 따라서 셀 단위로 `val !== ''`를 요구하면 정상적으로 응답한 그룹도 영구 미완료가 된다.
  * 그룹은 멤버 중 하나라도 응답되면 완료로 본다.
  */
+export interface TableRowCompletionOptions {
+  answerableCellTypes?: readonly TableCell['type'][] | undefined;
+  /** 게이팅 컨트롤러 정의 탐색용 표 전체 셀. 컨트롤러가 다른 행일 수 있다. 생략 시 같은 행 셀. */
+  tableCells?: readonly TableCell[] | undefined;
+}
+
 export function isTableRowCompleted(
   row: TableRow,
   response: Record<string, unknown>,
-  answerableCellTypes: readonly TableCell['type'][] = DEFAULT_ANSWERABLE_CELL_TYPES,
+  options: TableRowCompletionOptions = {},
 ): boolean {
+  const { answerableCellTypes = DEFAULT_ANSWERABLE_CELL_TYPES, tableCells } = options;
   const answerable = new Set<TableCell['type']>(answerableCellTypes);
   const groupBuckets = buildRadioGroupBuckets(row);
 
@@ -53,7 +60,7 @@ export function isTableRowCompleted(
     if (cell.isHidden) return true;
     // 게이팅 미충족 셀은 숨겨져 응답이 불가능하다 — isHidden 과 동일하게 완료 판정에서 제외.
     // (미수행 행의 게이팅 인력 칸이 미응답으로 남아 행을 영구 미완료로 만드는 비대칭 방지)
-    if (cell.enabledWhen && !isCellEnabled(cell, response, row.cells)) return true;
+    if (cell.enabledWhen && !isCellEnabled(cell, response, tableCells ?? row.cells)) return true;
     if (!answerable.has(cell.type)) return true;
     // single-select radio 그룹 멤버는 그룹 단위로 판정
     const groupName = cellGroupName.get(cell.id);

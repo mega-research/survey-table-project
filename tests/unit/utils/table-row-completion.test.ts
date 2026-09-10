@@ -116,13 +116,13 @@ describe('isTableRowCompleted', () => {
       cell({ id: 'v', type: 'input' }),
     ]);
 
-    expect(isTableRowCompleted(r, { v: '1' }, MOBILE_TABLE_COMPLETION_TYPES)).toBe(true);
+    expect(isTableRowCompleted(r, { v: '1' }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES })).toBe(true);
   });
 
   it('모바일 원본 행 타입 집합에서는 ranking을 완료 대상으로 포함한다', () => {
     const r = row([cell({ id: 'rank', type: 'ranking' })]);
 
-    expect(isTableRowCompleted(r, {}, MOBILE_TABLE_COMPLETION_TYPES)).toBe(false);
+    expect(isTableRowCompleted(r, {}, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES })).toBe(false);
   });
 
   it('ranking은 유효 배열이 비면 미완료지만 checkbox 빈 배열의 기존 완료 의미는 보존한다', () => {
@@ -133,14 +133,14 @@ describe('isTableRowCompleted', () => {
       isTableRowCompleted(
         rankingRow,
         { rank: [{ rank: 1, optionValue: 'a' }] },
-        MOBILE_TABLE_COMPLETION_TYPES,
+        { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES },
       ),
     ).toBe(true);
     expect(
-      isTableRowCompleted(rankingRow, { rank: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+      isTableRowCompleted(rankingRow, { rank: [] }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES }),
     ).toBe(false);
     expect(
-      isTableRowCompleted(checkboxRow, { check: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+      isTableRowCompleted(checkboxRow, { check: [] }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES }),
     ).toBe(true);
   });
 

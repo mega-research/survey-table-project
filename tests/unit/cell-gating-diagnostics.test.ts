@@ -63,14 +63,12 @@ describe('collectGatingDiagnostics — 진단 5종', () => {
     expect(out[0]!.cellId).toBe('in1');
   });
 
-  it('다른 행의 컨트롤러 → gating-cross-row-ref', () => {
+  it('다른 행의 컨트롤러는 정상 참조다 — 표 안이면 어느 행이든 허용', () => {
     const q = makeQuestion([
       row('r1', [ctrl]),
       row('r2', [gatedInput('in2', 'ctrl')]),
     ]);
-    const out = collectGatingDiagnostics([q]);
-    expect(out).toHaveLength(1);
-    expect(out[0]!.kind).toBe('gating-cross-row-ref');
+    expect(collectGatingDiagnostics([q])).toEqual([]);
   });
 
   it('자기 자신 참조 → gating-self-ref', () => {

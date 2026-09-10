@@ -279,3 +279,38 @@ describe('stripDisabledCellValues — 게이팅 체인 고정점 정리', () => 
     2000,
   );
 });
+
+describe('stripDisabledCellValues — 다른 행의 컨트롤러', () => {
+  const controller: TableCell = {
+    id: 'ctrl', content: '', type: 'radio',
+    radioOptions: [
+      { id: 'o1', label: '있다', value: '1' },
+      { id: 'o2', label: '없다', value: '2' },
+    ],
+  } as TableCell;
+  const question = {
+    id: 'q',
+    type: 'table',
+    title: '',
+    required: false,
+    order: 0,
+    tableRowsData: [
+      { id: 'r1', label: '1행', cells: [controller] },
+      {
+        id: 'r2',
+        label: '2행',
+        cells: [inputCell('t', { enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] } })],
+      },
+    ],
+  } as unknown as Question;
+
+  it('다른 행 라디오의 옵션 id 저장값을 표 전체 셀 정의로 해석해 활성이면 보존한다', () => {
+    const payload = { q: { ctrl: { optionId: 'o1' }, t: '5' } };
+    expect(stripDisabledCellValues([question], payload)).toBe(payload);
+  });
+
+  it('다른 행 라디오가 미충족이면 지운다', () => {
+    const out = stripDisabledCellValues([question], { q: { ctrl: { optionId: 'o2' }, t: '5' } });
+    expect(out['q']).toEqual({ ctrl: { optionId: 'o2' } });
+  });
+});

@@ -62,6 +62,8 @@ import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-ra
 import { useBranchEvalCtx } from '@/lib/survey/contact-attrs-context';
 
 import { InteractiveCell } from './cells';
+import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
@@ -951,6 +953,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     ],
   );
 
+  // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
+  // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
+  const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
+
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
     return (
@@ -1152,7 +1158,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   };
 
   return (
-    <>
+    <GatingTableCellsProvider value={gatingTableCells}>
       <Card className={className}>
         {tableTitle && (
           <CardHeader>
@@ -1311,6 +1317,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           onConfirm={handleDynamicRowSelect}
         />
       )}
-    </>
+    </GatingTableCellsProvider>
   );
 });

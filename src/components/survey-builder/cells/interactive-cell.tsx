@@ -11,6 +11,7 @@ import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
 import { CellContentLayout } from './cell-content-layout';
+import { useGatingTableCells } from './gating-table-cells-context';
 import { CheckboxCell } from './checkbox-cell';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
@@ -161,10 +162,10 @@ interface InteractiveCellContainerProps {
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
   /**
-   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가용 — 같은 행의 셀 목록.
+   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가용 — 같은 행의 셀 목록(폴백).
    * option 조건의 {optionId} 래핑 응답을 컨트롤러 셀 정의 기준으로 해석하려면 필요하다.
-   * 미전달 시 isCellEnabled 가 flat 비교로 폴백해 오판정할 수 있다 — 호출처는 항상
-   * row.cells 를 내려줘야 한다.
+   * 컨트롤러는 다른 행일 수 있으므로 표 전체 셀은 GatingTableCellsProvider 가 공급하고,
+   * 그것이 없을 때만 이 목록을 쓴다. 둘 다 없으면 isCellEnabled 가 flat 비교로 폴백한다.
    */
   rowCells?: readonly TableCell[] | undefined;
 }
@@ -228,8 +229,10 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       : {}
     : (value ?? {});
 
+  const tableCells = useGatingTableCells();
   const gatingDisabled =
-    GATABLE_CELL_TYPES.has(cell.type) && !isCellEnabled(cell, gatingCellValues, rowCells);
+    GATABLE_CELL_TYPES.has(cell.type) &&
+    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,

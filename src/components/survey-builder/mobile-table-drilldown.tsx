@@ -21,7 +21,10 @@ import {
   projectMobileOriginalRow,
 } from '@/utils/mobile-original-row';
 import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
+
+import { useGatingTableCells } from './cells/gating-table-cells-context';
 
 import { InteractiveCell } from './cells';
 import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
@@ -116,7 +119,14 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
-  // cell.id → 같은 행의 셀 목록 (셀 게이팅 평가용 rowCells — option 조건의 {optionId}
+  // 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — InteractiveTableResponse 가 원본 rows 로 공급한다
+  // (조건부·동적 행으로 빠진 행의 컨트롤러도 정의는 찾아야 데스크톱 판정과 같다).
+  const providedTableCells = useGatingTableCells();
+  const gatingTableCells = useMemo(
+    () => providedTableCells ?? collectTableCells(displayRows),
+    [providedTableCells, displayRows],
+  );
+  // cell.id → 같은 행의 셀 목록 (셀 게이팅 평가용 rowCells 폴백 — option 조건의 {optionId}
   // 래핑 해석에 컨트롤러 셀 정의가 필요하다)
   const rowCellsByCellId = useMemo(() => {
     const m = new Map<string, TableCell[]>();
@@ -353,7 +363,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   );
   const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
   const completedRows = answerableRows.filter((row) =>
-    isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES),
+    isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells }),
   ).length;
 
   const renderOriginalRowDetail = (leaf: ClassifiedLeaf) => {
@@ -436,7 +446,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             completed: countable.filter((leaf) => {
               const row = navigationRowById.get(leaf.rowId);
               return row
-                ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+                ? isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells })
                 : false;
             }).length,
             total: countable.length,
@@ -451,7 +461,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           const row = navigationRowById.get(leaf.rowId);
           return {
             completed:
-              row && isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+              row && isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells })
                 ? 1
                 : 0,
             total: 1,

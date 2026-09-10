@@ -96,6 +96,7 @@ import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
 import { getYouTubeEmbedUrl } from './table-cell-renderers';
 import { InlineRichTextEditor } from '@/components/ui/rich-text-editor/inline-rich-text-editor';
+import { collapseRepeatRows } from '@/lib/question/row-repeat';
 import { plainTextToCellHtml } from '@/lib/survey/cell-rich-text';
 
 import { VariableButton } from './variable-button';
@@ -408,12 +409,14 @@ export function CellContentModal({
     pendingOptionValueChangesRef.current = [];
   }, [isOpen, cell?.id]);
 
-  // 게이팅 컨트롤러 픽커용 — 이 셀이 속한 행의 셀 목록.
+  // 게이팅 컨트롤러 픽커용 — 이 표의 행 전체(컨트롤러는 어느 행이든 된다).
   // 에디터의 권위 있는 최신 행(getLatestRows)을 우선한다 (store 는 구조 편집 중 stale).
-  const gatingRowCells = useMemo(() => {
-    const rows = getLatestRows?.() ?? ownQuestion.tableRowsData;
-    return rows?.find((r) => r.cells.some((c) => c.id === cell.id))?.cells ?? [];
-  }, [getLatestRows, ownQuestion.tableRowsData, cell.id]);
+  // 행 반복 2벌 이후는 뺀다 — 편집 표에 안 보이는 행이고, 템플릿 셀이 다른 벌의 셀을 컨트롤러로
+  // 고르면 벌 단위 재매핑(table-cell-refs)이 옮기지 못해 모든 벌이 그 벌을 가리키게 된다.
+  const gatingRows = useMemo(
+    () => collapseRepeatRows(getLatestRows?.() ?? ownQuestion.tableRowsData ?? []),
+    [getLatestRows, ownQuestion.tableRowsData],
+  );
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
@@ -1774,7 +1777,7 @@ export function CellContentModal({
           !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
             <CellGatingEditor
               cellId={cell.id}
-              rowCells={gatingRowCells}
+              rows={gatingRows}
               condition={gatingCondition}
               requiredWhenEnabled={gatingRequiredWhenEnabled}
               onConditionChange={(cond) => {

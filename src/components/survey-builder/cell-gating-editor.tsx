@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 
-import type { CellEnableCondition, TableCell } from '@/types/survey';
+import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 import { formatCellLabel } from '@/utils/cell-label';
 
 /** 컨트롤러가 될 수 있는 셀 타입 — 선택형(옵션 조건) + input(값 존재/숫자 비교) */
@@ -34,34 +34,57 @@ function defaultConditionFor(controller: TableCell): CellEnableCondition {
 interface CellGatingEditorProps {
   /** 편집 중인 셀 id — 컨트롤러 후보에서 자기 자신을 제외한다 */
   cellId: string;
-  /** 같은 행의 셀 전체 */
-  rowCells: TableCell[];
+  /** 이 표의 행 전체. 컨트롤러는 같은 표 안이면 어느 행이든 된다 — 같은 행을 먼저 보여준다. */
+  rows: readonly TableRow[];
   condition: CellEnableCondition | undefined;
   requiredWhenEnabled: boolean;
   onConditionChange: (condition: CellEnableCondition | undefined) => void;
   onRequiredWhenEnabledChange: (v: boolean) => void;
 }
 
+/** 컨트롤러 후보 — 표 안의 선택형·입력 셀. 같은 행이 앞, 다른 행은 행 라벨을 붙여 뒤에. */
+interface ControllerCandidate {
+  cell: TableCell;
+  label: string;
+}
+
+function collectControllerCandidates(
+  rows: readonly TableRow[],
+  cellId: string,
+): ControllerCandidate[] {
+  const ownRow = rows.find((r) => r.cells.some((c) => c.id === cellId));
+  const isCandidate = (c: TableCell) =>
+    c.id !== cellId && !c.isHidden && GATING_CONTROLLER_CELL_TYPES.has(c.type);
+  const own = (ownRow?.cells ?? []).filter(isCandidate).map((cell) => ({
+    cell,
+    label: formatCellLabel(cell),
+  }));
+  const others = rows.flatMap((r, index) => {
+      if (r === ownRow) return [];
+      const rowLabel = r.label?.trim() || `${index + 1}행`;
+      return r.cells.filter(isCandidate).map((cell) => ({
+        cell,
+        label: `${rowLabel} · ${formatCellLabel(cell)}`,
+      }));
+    });
+  return [...own, ...others];
+}
+
 /**
  * 셀 게이팅 "활성 조건" 편집 섹션 (input 셀 전용 — 스펙 5절).
- * 같은 행 컨트롤러 셀을 고르고, 컨트롤러 타입에서 조건 형태를 자동 유도한다:
+ * 표 안 컨트롤러 셀(어느 행이든)을 고르고, 컨트롤러 타입에서 조건 형태를 자동 유도한다:
  * 선택형 → 옵션 다중선택("이 중 하나 선택 시 활성"), input → 값 존재 / 숫자 비교.
  */
 export function CellGatingEditor({
   cellId,
-  rowCells,
+  rows,
   condition,
   requiredWhenEnabled,
   onConditionChange,
   onRequiredWhenEnabledChange,
 }: CellGatingEditorProps) {
-  const controllers = useMemo(
-    () =>
-      rowCells.filter(
-        (c) => c.id !== cellId && !c.isHidden && GATING_CONTROLLER_CELL_TYPES.has(c.type),
-      ),
-    [rowCells, cellId],
-  );
+  const candidates = useMemo(() => collectControllerCandidates(rows, cellId), [rows, cellId]);
+  const controllers = useMemo(() => candidates.map((c) => c.cell), [candidates]);
 
   const controller = condition
     ? controllers.find((c) => c.id === condition.controllerCellId)
@@ -111,7 +134,7 @@ export function CellGatingEditor({
 
       {condition === undefined && controllers.length === 0 && (
         <p className="mt-2 text-xs text-gray-400">
-          같은 행에 선택형(라디오·체크박스·셀렉트) 또는 입력 셀이 없어 설정할 수 없습니다.
+          이 표에 선택형(라디오·체크박스·셀렉트) 또는 입력 셀이 없어 설정할 수 없습니다.
         </p>
       )}
 
@@ -129,9 +152,9 @@ export function CellGatingEditor({
                   (삭제된 셀: {condition.controllerCellId.slice(0, 6)})
                 </option>
               )}
-              {controllers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {formatCellLabel(c)}
+              {candidates.map((c) => (
+                <option key={c.cell.id} value={c.cell.id}>
+                  {c.label}
                 </option>
               ))}
             </select>

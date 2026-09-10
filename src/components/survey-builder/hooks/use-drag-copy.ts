@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { type Patch, applyPatches, enablePatches, produceWithPatches } from 'immer';
 
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
 import {
@@ -240,7 +241,7 @@ export function useDragCopy({
             }
 
             // 셀 게이팅 컨트롤러 재해석: 영역 안이면 같은 상대 위치의 대상 셀로 리매핑,
-            // 대상 행에 있으면 유지, 그 외에는 제거 (resolvePastedGating 규약).
+            // 이 표에 보이는 셀로 있으면 유지(다른 행이어도 됨), 그 외에는 제거 (resolvePastedGating 규약).
             if (targetCell.enabledWhen) {
               // 스냅샷 셀에는 id 가 없으므로(REGION_EXCLUDED_KEYS) sourceCellIds 격자로 되짚는다.
               // 대상 셀 id 는 붙여넣기에서 보존되므로 원본 rows 기준으로 읽어도 같다.
@@ -254,7 +255,7 @@ export function useDragCopy({
               const resolved = resolvePastedGating(
                 targetCell.enabledWhen,
                 remappedControllerId,
-                rows[absRow]?.cells ?? [],
+                collectTableCells(rows),
               );
               if (resolved) {
                 targetCell.enabledWhen = resolved;

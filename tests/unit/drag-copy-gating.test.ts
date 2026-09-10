@@ -20,12 +20,12 @@ describe('resolvePastedGating — 붙여넣기/복제 시 게이팅 참조 재�
     expect(out).toEqual({ kind: 'option', controllerCellId: 'target-ctrl', values: ['1'] });
   });
 
-  it('영역 밖이지만 대상 행에 보이는 셀로 있으면(같은 행 이동) 유지된다', () => {
+  it('영역 밖이지만 대상 표에 보이는 셀로 있으면(다른 행이어도) 유지된다', () => {
     const out = resolvePastedGating(condition, undefined, [{ id: 'src-ctrl' }, { id: 'x' }]);
     expect(out).toBe(condition);
   });
 
-  it('다른 행의 컨트롤러는 제거된다 (undefined)', () => {
+  it('대상 표에 없는 컨트롤러는 제거된다 (undefined)', () => {
     const out = resolvePastedGating(condition, undefined, [{ id: 'x' }, { id: 'y' }]);
     expect(out).toBeUndefined();
   });

@@ -29,7 +29,7 @@ import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
-import { isCellEnabled } from './cell-gating';
+import { collectTableCells, isCellEnabled } from './cell-gating';
 import { optionTextTargetId } from './option-text-target';
 import {
   type PriorAnswers,
@@ -581,13 +581,10 @@ export function collectNumericIssues(
   const visible = collectVisibleTableCells(question, cellValues, ctx);
   // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
   // 영구 차단하는 것 방지). isCellEnabled 는 같은 질문의 cellValues 만 본다.
-  // rowCells(같은 행 셀 목록)를 함께 전달해야 option 조건의 {optionId} 래핑·id 저장
-  // 응답을 정확히 해석한다 — tableRowsData 에서 셀 id → row.cells 매핑을 만든다.
-  const rowOfCell = new Map<string, TableCell[]>();
-  for (const row of question.tableRowsData ?? []) {
-    for (const cell of row.cells) rowOfCell.set(cell.id, row.cells);
-  }
-  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, rowOfCell.get(c.id)));
+  // 표 전체 셀을 함께 전달해야 option 조건의 {optionId} 래핑·id 저장 응답을 컨트롤러 셀
+  // 정의로 정확히 해석한다 — 컨트롤러는 다른 행일 수 있다.
+  const tableCells = collectTableCells(question.tableRowsData);
+  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells));
   const issues: NumericIssue[] = [];
 
   // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이

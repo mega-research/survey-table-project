@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import {
@@ -1154,10 +1155,10 @@ export function useTableEditor({
       // (spread 복사라 옵션 배열 참조 공유도 여기서 끊는다)
       regenerateCellOptionIds(pastedCell, generateId);
 
-      // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
-      // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)
+      // 셀 게이팅 컨트롤러 재해석 — 이 표의 보이는 셀이면 유지(다른 행이어도 됨), 없거나
+      // 병합 숨김 셀이면 제거(응답이 없어 영구 비활성이 된다)
       if (pastedCell.enabledWhen) {
-        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRow?.cells ?? []);
+        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, collectTableCells(rows));
         if (resolved) {
           pastedCell.enabledWhen = resolved;
         } else {

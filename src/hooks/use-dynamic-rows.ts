@@ -5,6 +5,7 @@ import { useDynamicRowState } from '@/hooks/use-dynamic-row-state';
 import { useRowRepeat, type UseRowRepeatReturn } from '@/hooks/use-row-repeat';
 import type { DynamicRowGroupConfig, RowRepeatConfig, TableRow } from '@/types/survey';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 /**
@@ -166,15 +167,17 @@ export function useDynamicRows({
   // 4) 행별 완료 상태 맵 (displayRows + 펼친 그룹 행 포함)
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
+    // 게이팅 컨트롤러는 다른 행일 수 있다 — 정의 탐색용으로 원본 rows 전체 셀을 넘긴다
+    const tableCells = collectTableCells(rows);
     const checkRow = (row: TableRow) => {
-      map.set(row.id, isTableRowCompleted(row, currentResponse));
+      map.set(row.id, isTableRowCompleted(row, currentResponse, { tableCells }));
     };
     for (const row of displayRows) checkRow(row);
     for (const groupRows of expandedGroupRows.values()) {
       for (const row of groupRows) checkRow(row);
     }
     return map;
-  }, [displayRows, expandedGroupRows, currentResponse]);
+  }, [rows, displayRows, expandedGroupRows, currentResponse]);
 
   return {
     displayRows,
