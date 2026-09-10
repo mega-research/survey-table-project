@@ -314,3 +314,40 @@ describe('stripDisabledCellValues — 다른 행의 컨트롤러', () => {
     expect(out['q']).toEqual({ ctrl: { optionId: 'o2' } });
   });
 });
+
+describe('choice-selected 조건 — 보기 옵션 셀이 선택되면 활성', () => {
+  const gated = inputCell('t', {
+    enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-other' },
+  });
+
+  it('선택된 보기 id 집합에 컨트롤러가 있으면 활성, 없거나 집합이 없으면 비활성', () => {
+    expect(isCellEnabled(gated, {}, undefined, new Set(['opt-other']))).toBe(true);
+    expect(isCellEnabled(gated, {}, undefined, new Set(['opt-1']))).toBe(false);
+    expect(isCellEnabled(gated, {}, undefined, undefined)).toBe(false);
+  });
+
+  it('보기 소스 표에서는 사이드카(__optTexts__)의 그 셀 값을 지운다 — 표 문항 경로가 아니다', () => {
+    const question = {
+      id: 'q',
+      type: 'checkbox',
+      title: '',
+      required: false,
+      order: 0,
+      tableColumns: [{ id: 'c1', label: '' }, { id: 'c2', label: '' }],
+      tableRowsData: [
+        {
+          id: 'r8',
+          label: '기타',
+          cells: [gated, { id: 'opt-other', type: 'choice_opt', content: '기타' }],
+        },
+      ],
+    } as unknown as Question;
+    const unmet = { q: ['opt-1'], __optTexts__: { q: { 'opt-other': '', t: '적은 내용' } } };
+    const out = stripDisabledCellValues([question], unmet);
+    expect(out['__optTexts__']).toEqual({ q: { 'opt-other': '' } });
+    expect(out['q']).toEqual(['opt-1']);
+
+    const met = { q: ['opt-other'], __optTexts__: { q: { t: '적은 내용' } } };
+    expect(stripDisabledCellValues([question], met)).toBe(met);
+  });
+});

@@ -1,0 +1,46 @@
+'use client';
+
+import { type ReactNode, useEffect } from 'react';
+
+import { isCellEnabled } from '@/lib/survey/cell-gating';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import type { TableCell } from '@/types/survey';
+
+// useSyncExternalStore 안정 참조 — selector 안에서 `?? {}` 를 쓰면 무한 루프 경고가 난다.
+const EMPTY_OPTION_TEXTS: Record<string, string> = {};
+
+/**
+ * 보기 소스 표(ChoiceTableResponse) 안 게이팅 셀의 문지기.
+ *
+ * 이 표의 input·선택형 셀은 값이 `__optTexts__` 사이드카에 있고, 컨트롤러가 보기 옵션이면
+ * 그 값은 문항 응답(선택된 보기 id 집합)에 있다. 표 문항의 InteractiveCell 과 같은 규칙으로
+ * 미충족이면 **컨트롤만 숨기고**(자리는 `-`), 남은 값은 지운다. 저장 경계의
+ * stripDisabledCellValues 가 같은 판정으로 한 번 더 보증한다.
+ */
+export function ChoiceTableGatedCell({
+  cell,
+  questionId,
+  tableCells,
+  selectedChoiceIds,
+  children,
+}: {
+  cell: TableCell;
+  questionId: string;
+  tableCells: readonly TableCell[];
+  selectedChoiceIds: ReadonlySet<string>;
+  children: ReactNode;
+}) {
+  const texts =
+    useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
+  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  const enabled = isCellEnabled(cell, texts, tableCells, selectedChoiceIds);
+  const leftover = !enabled && (texts[cell.id] ?? '') !== '';
+
+  // 비활성인데 값이 남아 있으면 즉시 지움 — 컨트롤러가 바뀐 직후 1회.
+  useEffect(() => {
+    if (leftover) setOptionText(questionId, cell.id, '');
+  }, [leftover, questionId, cell.id, setOptionText]);
+
+  if (!enabled) return <span className="text-gray-400">-</span>;
+  return <>{children}</>;
+}

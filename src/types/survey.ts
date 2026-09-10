@@ -339,6 +339,11 @@ export interface CalcCellValidation {
 export type CellEnableCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
   | { kind: 'filled'; controllerCellId: string }
+  /**
+   * 보기 옵션(choice_opt) 셀이 선택되면 활성 — 보기 소스 표 전용. 컨트롤러 값은 셀이 아니라
+   * 문항 응답(선택된 보기 id 집합)에 있으므로 평가기에 그 집합을 따로 넘긴다.
+   */
+  | { kind: 'choice-selected'; controllerCellId: string }
   | {
       kind: 'numeric';
       controllerCellId: string;

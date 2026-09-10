@@ -30,6 +30,7 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { collectTableCells, isCellEnabled } from './cell-gating';
+import { collectSelectedChoiceCellIds } from './choice-selection';
 import { optionTextTargetId } from './option-text-target';
 import {
   type PriorAnswers,
@@ -442,9 +443,17 @@ function collectChoiceTableInputCellIssues(
           ...(ctx ? { evalCtx: toBranchEvalCtx(ctx) } : {}),
         }).rows;
 
+  // 게이팅 — 미충족 셀은 화면에 컨트롤이 없으므로(choice-table-gated-cell) 검증하지 않는다.
+  // 컨트롤러가 보기 옵션이면 선택된 보기 id 집합, 같은 표의 셀이면 사이드카 값으로 판정한다.
+  const selection = collectSelectedChoiceCellIds(question, ctx?.allResponses[question.id]);
+  const tableCells = collectTableCells(rows);
+  const isGateOpen = (cell: TableCell) =>
+    !cell.enabledWhen || isCellEnabled(cell, texts ?? {}, tableCells, selection);
+
   for (const row of visibleRows) {
     for (const cell of row.cells) {
       if (cell.isHidden) continue;
+      if (!isGateOpen(cell)) continue;
       // 선택형 셀(radio/checkbox/select)도 같은 사이드카에 값을 넣는다 —
       // 필수 판정만 하고 숫자 범위 검사는 건너뛴다(입력이 아니라 선택이다).
       if (CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type)) {

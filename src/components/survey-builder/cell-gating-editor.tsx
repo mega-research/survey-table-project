@@ -5,12 +5,16 @@ import { useMemo } from 'react';
 import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 import { formatCellLabel } from '@/utils/cell-label';
 
-/** 컨트롤러가 될 수 있는 셀 타입 — 선택형(옵션 조건) + input(값 존재/숫자 비교) */
+/**
+ * 컨트롤러가 될 수 있는 셀 타입 — 선택형(옵션 조건) + input(값 존재/숫자 비교)
+ * + 보기 옵션(choice_opt — 그 보기가 선택되면 활성, 보기 소스 표 전용).
+ */
 export const GATING_CONTROLLER_CELL_TYPES = new Set<TableCell['type']>([
   'radio',
   'checkbox',
   'select',
   'input',
+  'choice_opt',
 ]);
 
 /** 선택형 컨트롤러의 옵션 목록 (게이팅 값 = option.value ?? option.id — 응답 저장값과 동일 규약) */
@@ -23,8 +27,17 @@ function isChoiceController(cell: TableCell): boolean {
   return cell.type === 'radio' || cell.type === 'checkbox' || cell.type === 'select';
 }
 
-/** 컨트롤러 타입에 맞는 기본 조건 생성 (선택형 → option, input → filled) */
+/** 보기 옵션 셀의 표시 라벨 — 셀 텍스트 > 보기 라벨 > 셀 코드. */
+function choiceOptLabel(cell: TableCell): string {
+  const text = (cell.content ?? '').trim() || (cell.choiceLabel ?? '').trim();
+  return text ? `보기 옵션: ${text}` : formatCellLabel(cell);
+}
+
+/** 컨트롤러 타입에 맞는 기본 조건 생성 (선택형 → option, 보기 옵션 → choice-selected, input → filled) */
 function defaultConditionFor(controller: TableCell): CellEnableCondition {
+  if (controller.type === 'choice_opt') {
+    return { kind: 'choice-selected', controllerCellId: controller.id };
+  }
   if (isChoiceController(controller)) {
     return { kind: 'option', controllerCellId: controller.id, values: [] };
   }
@@ -55,16 +68,18 @@ function collectControllerCandidates(
   const ownRow = rows.find((r) => r.cells.some((c) => c.id === cellId));
   const isCandidate = (c: TableCell) =>
     c.id !== cellId && !c.isHidden && GATING_CONTROLLER_CELL_TYPES.has(c.type);
+  const labelOf = (cell: TableCell) =>
+    cell.type === 'choice_opt' ? choiceOptLabel(cell) : formatCellLabel(cell);
   const own = (ownRow?.cells ?? []).filter(isCandidate).map((cell) => ({
     cell,
-    label: formatCellLabel(cell),
+    label: labelOf(cell),
   }));
   const others = rows.flatMap((r, index) => {
       if (r === ownRow) return [];
       const rowLabel = r.label?.trim() || `${index + 1}행`;
       return r.cells.filter(isCandidate).map((cell) => ({
         cell,
-        label: `${rowLabel} · ${formatCellLabel(cell)}`,
+        label: `${rowLabel} · ${labelOf(cell)}`,
       }));
     });
   return [...own, ...others];
@@ -180,6 +195,12 @@ export function CellGatingEditor({
                 </p>
               )}
             </div>
+          )}
+
+          {controller && controller.type === 'choice_opt' && condition.kind === 'choice-selected' && (
+            <p className="text-xs text-gray-600">
+              이 보기가 선택되면 활성됩니다. 해제되면 입력칸이 사라지고 값이 지워집니다.
+            </p>
           )}
 
           {controller && controller.type === 'input' && (

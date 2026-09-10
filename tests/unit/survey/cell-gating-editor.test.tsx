@@ -127,6 +127,30 @@ describe('CellGatingEditor', () => {
     expect(labels).toEqual(['항목_수행여부', '항목 · 항목_수행여부']);
   });
 
+  it('보기 옵션 셀도 후보가 되고, 고르면 "선택 시 활성" 조건이 된다', () => {
+    const other: TableCell = { id: 'opt-other', type: 'choice_opt', content: '⑧ 기타' };
+    const { onConditionChange } = renderEditor({
+      rowCells: [self],
+      otherRows: [{ id: 'r8', label: '기타', cells: [other] }],
+    });
+    fireEvent.click(screen.getByLabelText('다른 셀 값에 따라 활성화'));
+    expect(onConditionChange).toHaveBeenCalledWith({
+      kind: 'choice-selected',
+      controllerCellId: 'opt-other',
+    });
+  });
+
+  it('보기 옵션 컨트롤러는 라벨에 보기 텍스트가 붙고 설명 문구가 보인다', () => {
+    const other: TableCell = { id: 'opt-other', type: 'choice_opt', content: '⑧ 기타' };
+    renderEditor({
+      condition: { kind: 'choice-selected', controllerCellId: 'opt-other' },
+      rowCells: [self],
+      otherRows: [{ id: 'r8', label: '기타', cells: [other] }],
+    });
+    expect(screen.getByRole('combobox')).toHaveTextContent('기타 · 보기 옵션: ⑧ 기타');
+    expect(screen.getByText(/이 보기가 선택되면 활성됩니다/)).toBeInTheDocument();
+  });
+
   it('표에 컨트롤러 후보가 없으면 토글이 비활성이고 안내가 보인다', () => {
     renderEditor({ rowCells: [self, { id: 't', type: 'text', content: '라벨' }] });
     expect(

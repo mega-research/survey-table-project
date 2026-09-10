@@ -1,3 +1,5 @@
+import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { CellEnableCondition, Question, TableCell, TableRow } from '@/types/survey';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { resolveSelectedValues } from '@/utils/table-cell-semantics';
@@ -69,9 +71,12 @@ function evaluate(
   condition: CellEnableCondition,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[] | undefined,
+  choiceSelection: ReadonlySet<string> | undefined,
 ): boolean {
   const raw = cellValues[condition.controllerCellId];
   switch (condition.kind) {
+    case 'choice-selected':
+      return choiceSelection?.has(condition.controllerCellId) === true;
     case 'option': {
       const selected = resolveOptionValueSet(condition, raw, tableCells);
       return condition.values.some((v) => selected.has(v));
@@ -104,7 +109,8 @@ export function collectTableCells(rows: readonly TableRow[] | null | undefined):
 
 /**
  * 이 셀이 현재 입력 가능한가. cellValues = 그 질문의 응답 객체({ [cellId]: value }).
- * tableCells = 컨트롤러 셀 정의 탐색용 셀 목록(option 조건 전용) — **표 전체 셀**을 넘긴다
+ * tableCells = 컨트롤러 셀 정의 탐색용 셀 목록(option 조건 전용) — **표 전체 셀**을 넘긴다.
+ * choiceSelection = 보기 소스 표에서 선택된 보기 id 집합(choice-selected 조건 전용).
  * (collectTableCells). 컨트롤러는 같은 행일 필요가 없다(2026-09-10 결정) — 값은 문항 단위
  * 응답 객체에서 id 로 찾으므로 행 경계가 없고, 정의 탐색만 표 전체면 된다. 생략 시 하위호환
  * flat 비교로 폴백한다.
@@ -113,11 +119,48 @@ export function isCellEnabled(
   cell: TableCell,
   cellValues: Record<string, unknown>,
   tableCells?: readonly TableCell[],
+  /** 보기 소스 표의 선택된 보기 id 집합(collectSelectedChoiceCellIds) — choice-selected 조건 전용. */
+  choiceSelection?: ReadonlySet<string>,
 ): boolean {
   if (!cell.enabledWhen) return true;
   // prefill 우선 — 게이팅 설정은 빌더에서 금지되지만 외부 유입 데이터를 방어한다
   if (cell.defaultValueTemplate?.trim()) return true;
-  return evaluate(cell.enabledWhen, cellValues, tableCells);
+  return evaluate(cell.enabledWhen, cellValues, tableCells, choiceSelection);
+}
+
+/**
+ * 보기 소스 표의 게이팅 셀 사이드카 정리 — 미충족 셀의 `__optTexts__[q.id][cell.id]` 를 뺀다.
+ * 지울 것이 없으면 null. 보기 선택 자체는 건드리지 않는다(보기는 게이팅 대상이 아니다).
+ */
+function stripDisabledChoiceTableSidecar(
+  q: Question,
+  payloadAnswers: Record<string, unknown>,
+  base: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const sidecar = payloadAnswers[OPT_TEXTS_KEY];
+  if (!sidecar || typeof sidecar !== 'object' || Array.isArray(sidecar)) return null;
+  const texts = (sidecar as Record<string, unknown>)[q.id];
+  if (!texts || typeof texts !== 'object' || Array.isArray(texts)) return null;
+  const textMap = texts as Record<string, unknown>;
+  const selection = collectSelectedChoiceCellIds(q, payloadAnswers[q.id]);
+  const tableCells = collectTableCells(q.tableRowsData);
+  // 사이드카 값은 셀 값이 아니지만 filled·numeric 조건의 컨트롤러가 같은 표의 input 셀일 수
+  // 있어 그 값 자리로 넘긴다.
+  const next = { ...textMap };
+  let changed = false;
+  for (const cell of tableCells) {
+    if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
+    if (!Object.hasOwn(next, cell.id)) continue;
+    if (!isCellEnabled(cell, next, tableCells, selection)) {
+      delete next[cell.id];
+      changed = true;
+    }
+  }
+  if (!changed) return null;
+  return {
+    ...base,
+    [OPT_TEXTS_KEY]: { ...(sidecar as Record<string, unknown>), [q.id]: next },
+  };
 }
 
 /**
@@ -137,6 +180,14 @@ export function stripDisabledCellValues(
       row.cells.some((c) => GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen && !c.isHidden),
     );
     if (!hasGatedCell) continue;
+
+    // 보기 소스 표(radio/checkbox 문항의 내장 표) — 게이팅 셀 값이 문항 응답이 아니라
+    // `__optTexts__[q.id][cell.id]` 사이드카에 있고, 컨트롤러는 선택된 보기 id 집합이다.
+    if (q.type === 'radio' || q.type === 'checkbox') {
+      const stripped = stripDisabledChoiceTableSidecar(q, payloadAnswers, out ?? payloadAnswers);
+      if (stripped) out = stripped;
+      continue;
+    }
 
     const payload = payloadAnswers[q.id];
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue;

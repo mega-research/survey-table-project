@@ -13,7 +13,9 @@ import type { Question } from '@/types/survey';
 const ETC_CELL = 'r1c3';
 const DETAIL = 'detail';
 
-function question(opts: { required?: boolean; numeric?: boolean; gated?: boolean } = {}): Question {
+function question(
+  opts: { required?: boolean; numeric?: boolean; gated?: boolean; choiceGated?: boolean } = {},
+): Question {
   return {
     id: 'q1',
     type: 'radio',
@@ -65,6 +67,10 @@ function question(opts: { required?: boolean; numeric?: boolean; gated?: boolean
             inputType: opts.numeric ? 'number' : 'text',
             ...(opts.numeric ? { numberFormat: { min: 10 } } : {}),
             ...(opts.required ? { required: true } : {}),
+            // 보기 옵션 선택 게이팅 — ① 기타(ETC_CELL)가 선택되면 활성
+            ...(opts.choiceGated
+              ? { enabledWhen: { kind: 'choice-selected', controllerCellId: ETC_CELL }, requiredWhenEnabled: true }
+              : {}),
           },
         ],
       },
@@ -103,5 +109,16 @@ describe('보기-소스 표 단답형 셀 검증', () => {
   it('숫자 셀의 최소값 미달은 차단한다', () => {
     const found = issues(question({ numeric: true }), { rad2: ETC_CELL }, { [DETAIL]: '3' });
     expect(found.some((i) => i.kind === 'range')).toBe(true);
+  });
+});
+
+describe('보기-소스 표 단답형 셀 — 보기 옵션 선택 게이팅', () => {
+  it('컨트롤러 보기가 선택되지 않으면 활성일 때 필수여도 막지 않는다', () => {
+    expect(issues(question({ choiceGated: true }), { rad2: 'other' }, {})).toHaveLength(0);
+  });
+
+  it('컨트롤러 보기가 선택되면 활성이라 비어 있으면 막는다', () => {
+    const found = issues(question({ choiceGated: true }), { rad2: ETC_CELL }, {});
+    expect(found.some((i) => i.kind === 'required-detail')).toBe(true);
   });
 });

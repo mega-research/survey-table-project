@@ -8,6 +8,7 @@ import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
 import { useMobileView } from '@/hooks/use-media-query';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
@@ -40,6 +41,7 @@ import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableCellControl } from './choice-table-cell-control';
+import { ChoiceTableGatedCell } from './choice-table-gated-cell';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 
@@ -285,6 +287,27 @@ export function ChoiceTableResponse({
     return entries;
   }, [attrs, optionByValue, question, quotes, selectedIds]);
 
+  // 셀 게이팅 — 이 표의 input·선택형 셀에 걸린 활성 조건은 컨트롤러가 보기 옵션(선택 여부)
+  // 이거나 같은 표의 다른 셀이다. 판정 재료는 표 전체 셀 정의 + 선택된 보기 id 집합.
+  const gatingTableCells = useMemo(
+    () => collectTableCells(question.tableRowsData),
+    [question.tableRowsData],
+  );
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const gate = (cell: TableCell, node: ReactNode): ReactNode =>
+    cell.enabledWhen ? (
+      <ChoiceTableGatedCell
+        cell={cell}
+        questionId={question.id}
+        tableCells={gatingTableCells}
+        selectedChoiceIds={selectedIdSet}
+      >
+        {node}
+      </ChoiceTableGatedCell>
+    ) : (
+      node
+    );
+
   const renderCell = (
     cell: TableCell,
     isSelectedRowDetail = false,
@@ -296,7 +319,8 @@ export function ChoiceTableResponse({
     if (cell.type === 'input' && !cell.isHidden) {
       const cellLabel =
         (cell.exportLabel ?? '').trim() || (cell.placeholder ?? '').trim() || '상세 기재';
-      return (
+      return gate(
+        cell,
         <OptionTextInput
           questionId={question.id}
           option={{
@@ -312,19 +336,20 @@ export function ChoiceTableResponse({
           }}
           ariaLabel={cellLabel}
           className="w-full"
-        />
+        />,
       );
     }
     // 표 안의 선택형 셀(radio/checkbox/select) — choice_opt 가 아니므로 이 문항의 보기가
     // 아니고, 값 둘 자리도 없어 여태 정적 미리보기로만 그려졌다(클릭해도 저장 안 됨).
     // 단답형 셀과 같은 사이드카에 셀 id 로 저장해 인터랙티브로 만든다.
     if (CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type) && !cell.isHidden) {
-      return (
+      return gate(
+        cell,
         <ChoiceTableCellControl
           cell={cell}
           questionId={question.id}
           {...(inputIdScope !== undefined ? { inputIdScope } : {})}
-        />
+        />,
       );
     }
     if (cell.type !== 'choice_opt' || cell.isHidden) return undefined;

@@ -170,3 +170,33 @@ describe('보기-소스 표 단답형 셀의 폭', () => {
     expect(input.parentElement?.className).toContain('w-full');
   });
 });
+
+describe('보기-소스 표의 단답형 셀 — 보기 옵션 선택 게이팅', () => {
+  /** 기타 행에 ② 기타(현재) 보기가 선택되면 열리는 input 셀 — 행 조건 없이 셀 게이팅만. */
+  function questionWithGatedCell(): Question {
+    const q = questionWithDetailRow(false);
+    const row3 = q.tableRowsData![2]!;
+    row3.cells[0] = {
+      ...row3.cells[0]!,
+      enabledWhen: { kind: 'choice-selected', controllerCellId: ETC_NOW_CELL },
+    };
+    return q;
+  }
+
+  it('컨트롤러 보기가 선택되지 않으면 입력칸 대신 "-" 만 보인다', () => {
+    renderTable(questionWithGatedCell(), { rad2: 'r1c3' });
+    expect(screen.queryByPlaceholderText('상세기재')).toBeNull();
+    expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('컨트롤러 보기가 선택되면 입력칸이 보인다', () => {
+    renderTable(questionWithGatedCell(), { rad2: ETC_NOW_CELL });
+    expect(screen.getByPlaceholderText('상세기재')).toBeInTheDocument();
+  });
+
+  it('해제되면 남아 있던 값을 지운다', () => {
+    useSurveyResponseStore.setState({ optionTexts: { q1: { [DETAIL_CELL]: '적은 내용' } } });
+    renderTable(questionWithGatedCell(), { rad2: 'r1c3' });
+    expect(useSurveyResponseStore.getState().optionTexts['q1']?.[DETAIL_CELL] ?? '').toBe('');
+  });
+});
