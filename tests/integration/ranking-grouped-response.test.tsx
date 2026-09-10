@@ -478,6 +478,29 @@ describe('RankingQuestion — inputMode 기본값', () => {
     expect(screen.queryByRole('button', { name: '항목A' })).not.toBeInTheDocument();
   });
 
+  it('드롭다운 방식의 모바일 참조 목록도 한 행의 순위 옵션 셀을 전부 보여준다', () => {
+    mobileFlag = true;
+    const question = flatRankingFixture();
+    const { inputMode: _omit, ...rest } = question.rankingConfig!;
+    question.rankingConfig = rest;
+    question.tableRowsData = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'cat', type: 'text', content: '기술 성능' },
+          { id: 'cellA', type: 'ranking_opt', content: '항목A', rankingLabel: '항목A' },
+          { id: 'cellB', type: 'ranking_opt', content: '항목B', rankingLabel: '항목B' },
+        ],
+      },
+    ] as unknown as TableRow[];
+    render(<RankingQuestion question={question} value={null} onChange={vi.fn()} />);
+
+    // 드롭다운(트리거 텍스트)과 카드 라벨 두 곳 — 카드 목록에 오른쪽 열 항목도 있어야 한다
+    expect(screen.getAllByText('항목B').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('항목A').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('inputMode=click 이어도 중복 순위 허용이면 드롭다운이다', () => {
     const question = flatRankingFixture();
     question.rankingConfig = { ...question.rankingConfig!, allowDuplicateRanks: true };

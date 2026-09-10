@@ -465,27 +465,30 @@ function RankingDropdown({
   const embeddedTable = hasEmbeddedTable ? (
     isMobile ? (
       <div className="space-y-2">
-        {(question.tableRowsData ?? []).map((row) => {
-          const optCell = row.cells.find(
+        {(question.tableRowsData ?? []).flatMap((row) => {
+          // 한 행에 순위 옵션 셀이 여럿일 수 있다(항목 열이 둘인 표). 셀마다 카드 하나,
+          // 행의 표시 셀(분류 라벨 등)은 첫 카드에만 붙인다. 첫 셀만 그리면 오른쪽 열이 통째로 빠진다.
+          const optCells = row.cells.filter(
             (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
           );
-          if (!optCell) return null;
-          const opt = rawOptions.find((o) => o.id === optCell.id);
-          const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
-          return (
-            <MobileOptionCard
-              key={row.id}
-              label={
-                <span
-                  className={getCellTextClassName(opt ?? optCell)}
-                  style={getCellTextStyle(opt ?? optCell)}
-                >
-                  {substituteTokens(rawLabel, attrs, quotes)}
-                </span>
-              }
-              cells={row.cells}
-            />
-          );
+          return optCells.map((optCell, idx) => {
+            const opt = rawOptions.find((o) => o.id === optCell.id);
+            const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
+            return (
+              <MobileOptionCard
+                key={optCell.id}
+                label={
+                  <span
+                    className={getCellTextClassName(opt ?? optCell)}
+                    style={getCellTextStyle(opt ?? optCell)}
+                  >
+                    {substituteTokens(rawLabel, attrs, quotes)}
+                  </span>
+                }
+                cells={idx === 0 ? row.cells : []}
+              />
+            );
+          });
         })}
       </div>
     ) : (
