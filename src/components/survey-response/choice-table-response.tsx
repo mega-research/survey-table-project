@@ -549,23 +549,26 @@ export function ChoiceTableResponse({
               disabled={allDisabled}
               footer={
                 <div className="space-y-2">
-                  {/* 라벨이 길어 한 줄에 하나씩 접히면 줄마다 44px 높이 + 8px 간격이 쌓여 보기
-                      둘 사이가 비어 보였다. 줄 높이 36px·간격 4px 로 붙인다 — 탭 영역은 라벨
-                      전체 폭이라 충분하다. */}
-                  <div className="flex flex-wrap gap-x-5 gap-y-1">
+                  {/* 답변 영역 — 설명(표시 셀)과 구분선으로 나누고, 보기마다 테두리 칸으로 그려
+                      선택하면 칠한다. 맨몸 체크박스 줄을 설명 아래에 그냥 늘어놓으면 설명의
+                      일부처럼 읽혀 어색했다. 칸 하나가 통째로 탭 영역이다. */}
+                  <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                     {choiceCells.map((choiceCell) => {
                       const axisLabel = resolveChoiceAxisLabel(row, choiceCell);
-                      const { disabled } = getChoiceCellState(choiceCell);
+                      const { checked, disabled } = getChoiceCellState(choiceCell);
                       return (
                         <label
                           key={choiceCell.id}
                           className={cn(
-                            'flex min-h-9 cursor-pointer items-center gap-2 text-[15px] text-gray-800',
+                            'flex min-h-10 min-w-0 flex-1 basis-[12rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+                            checked
+                              ? 'border-blue-300 bg-blue-50 text-blue-900'
+                              : 'border-gray-200 bg-white text-gray-800',
                             disabled && 'cursor-default opacity-50',
                           )}
                         >
                           {renderMobileChoiceInput(choiceCell, axisLabel || cardLabel)}
-                          {axisLabel && <span>{axisLabel}</span>}
+                          {axisLabel && <span className="leading-snug">{axisLabel}</span>}
                         </label>
                       );
                     })}
