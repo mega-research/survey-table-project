@@ -48,6 +48,10 @@ export function InlineRichTextEditor({
   className,
 }: InlineRichTextEditorProps) {
   const extensions = useMemo(() => createInlineCellExtensions(), []);
+  // placeholder 표시 여부는 prop 에서 바로 편다 — 호출부가 onChange 값을 되돌려 주므로
+  // initialHtml 이 곧 현재 내용이다. 편집기 상태 셀렉터의 첫 값(비어 있음)에 기대면
+  // 초기 내용이 있는데도 placeholder 가 글 위에 겹친다.
+  const isEmpty = initialHtml === '';
 
   const editor = useEditor({
     extensions,
@@ -84,12 +88,11 @@ export function InlineRichTextEditor({
       editor
         ? {
             bold: editor.isActive('bold'),
-            isEmpty: editor.isEmpty,
             canUndo: editor.can().undo(),
             canRedo: editor.can().redo(),
             fontColor: (editor.getAttributes('fontColor')['color'] as string | undefined) ?? '',
           }
-        : { bold: false, isEmpty: true, canUndo: false, canRedo: false, fontColor: '' },
+        : { bold: false, canUndo: false, canRedo: false, fontColor: '' },
   });
 
   if (!editor || !s) return null;
@@ -134,7 +137,7 @@ export function InlineRichTextEditor({
         </div>
       </div>
       <div className="relative">
-        {placeholder && s.isEmpty && (
+        {placeholder && isEmpty && (
           <span className="pointer-events-none absolute top-2 left-3 text-sm text-gray-400">
             {placeholder}
           </span>
