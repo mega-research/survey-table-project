@@ -60,8 +60,9 @@ export interface RankingDropdownStackProps {
 }
 
 /**
- * 순위형 응답의 드롭다운 스택.
- * ranking-question (Case 1/2) / cells/ranking-cell (Case 3) 가 공유.
+ * 순위형 응답의 드롭다운 스택 — 기본 입력 방식.
+ * ranking-question (inputMode 미지정·'dropdown'·중복 순위 허용) / cells/ranking-cell (표 안 셀, 항상) 이 공유.
+ * 보기 클릭 방식은 ranking-click-select 가 따로 그린다.
  */
 export function RankingDropdownStack({
   answers,

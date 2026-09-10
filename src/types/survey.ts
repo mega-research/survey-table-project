@@ -41,6 +41,10 @@ export interface RankingConfig {
   // undefined/1 = 세로 1열(기본) / 0 = 가로(wrap) / N ≥ 2 = N열 그리드.
   // 일반 options 레이아웃(question.optionsColumns) 과 분리.
   positionsColumns?: number;
+  // 응답 입력 방식 (질문 레벨 전용, 표 안 ranking 셀은 항상 드롭다운):
+  // - undefined | 'dropdown' (기본): 순위마다 드롭다운
+  // - 'click': 보기를 눌러 순위를 매김 (요약 칩 + 순위초기화). allowDuplicateRanks 와 배타 — 켜져 있으면 드롭다운
+  inputMode?: 'dropdown' | 'click';
 }
 
 // 순위형 응답 단일 항목

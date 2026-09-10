@@ -1,5 +1,12 @@
 'use client';
 
+import {
+  RANKING_OTHER_OPTION,
+  RankingRankBadge,
+  RankingSummaryBar,
+  rankingGridLayout,
+  rankingTextField,
+} from '@/components/survey-response/ranking-click-select';
 import { Input } from '@/components/ui/input';
 import { Question } from '@/types/survey';
 import {
@@ -130,7 +137,7 @@ export function QuestionPreview({ question }: { question: Question }) {
   }
 }
 
-/** 순위형 질문 미리보기: 드롭다운 스택 + (옵션 목록 | 내장 테이블) */
+/** 순위형 질문 미리보기. 기본(드롭다운)은 RankingDropdownPreview, inputMode='click' 은 요약 줄 + 보기 표. 조작 없음. */
 function RankingPreview({ question }: { question: Question }) {
   const requestedPositions = Math.max(1, question.rankingConfig?.positions ?? 3);
   // Case 2 는 options 가 비어있고 실제 옵션은 tableRowsData 의 ranking_opt 셀.
@@ -140,9 +147,7 @@ function RankingPreview({ question }: { question: Question }) {
   // (응답 UI 의 ranking-question.tsx 와 동일 규칙).
   const hasOtherCell = resolvedOptions.some((o) => o.value === RANKING_OTHER_VALUE);
   const allowOther = question.allowOtherOption === true && !hasOtherCell;
-  const columns = question.rankingConfig?.positionsColumns;
-  const layout = getOptionsLayout(columns);
-  const isHorizontal = columns === 0;
+  const allowDuplicates = question.rankingConfig?.allowDuplicateRanks === true;
   const isTableSource = question.rankingConfig?.optionsSource === 'table';
   // 그룹 여부: 테이블 소스에서만 그룹이 존재 가능 (응답 UI 와 동일 조건)
   const isGrouped = isTableSource && isGroupedRankingQuestion(question);
@@ -153,11 +158,27 @@ function RankingPreview({ question }: { question: Question }) {
     && !!question.tableRowsData
     && question.tableRowsData.length > 0;
 
-  // ── 그룹 경로: 그룹마다 헤딩 + disabled 드롭다운 스택 ──────────────────
+  if (question.rankingConfig?.inputMode !== 'click' || allowDuplicates) {
+    return <RankingDropdownPreview question={question} />;
+  }
+
+  const embeddedTable = hasEmbeddedTable ? (
+    <TablePreview
+      tableTitle={question.tableTitle}
+      columns={question.tableColumns}
+      rows={question.tableRowsData}
+      tableHeaderGrid={question.tableHeaderGrid ?? undefined}
+      className="border-0 shadow-none"
+      hideColumnLabels={question.hideColumnLabels}
+      stickyColumnCount={question.stickyColumnCount}
+    />
+  ) : null;
+
+  // ── 그룹 경로: 그룹마다 헤딩 + 요약 줄, 표는 하나 ──────────────────────
   if (isGrouped) {
     const rankingGroups = collectRankingGroups(question);
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {rankingGroups.map((g) => {
           const groupOptions = resolveRankingOptionsFromCells(g.cells);
           // cap 규칙: 응답 UI 와 동일 (min(질문 positions, 그룹 유효 옵션 수))
@@ -165,31 +186,12 @@ function RankingPreview({ question }: { question: Question }) {
           return (
             <div key={g.groupKey} className="space-y-2">
               <p className="text-sm font-medium text-gray-900">{g.label || g.groupKey}</p>
-              <div className={layout.className} style={layout.style}>
-                {Array.from({ length: groupPositions }, (_, i) => i + 1).map((rank) => (
-                  <div key={rank} className="flex items-center gap-1.5">
-                    <span
-                      className={
-                        isHorizontal
-                          ? 'shrink-0 text-sm font-medium text-gray-700'
-                          : 'w-12 shrink-0 text-sm font-medium text-gray-700'
-                      }
-                    >
-                      {rank}순위
-                    </span>
-                    <select
-                      disabled
-                      className={isHorizontal ? RANKING_SELECT_BASE_CLS : `w-full ${RANKING_SELECT_BASE_CLS}`}
-                      style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
-                    >
-                      <option>선택하세요...</option>
-                      {groupOptions.map((o) => (
-                        <option key={o.id}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
+              <RankingSummaryBar
+                answers={[]}
+                options={groupOptions}
+                positions={groupPositions}
+                onReset={() => {}}
+              />
               {groupPositions < requestedPositions && (
                 <p className="text-sm text-gray-500">
                   선택지가 {groupOptions.length}개라 최대 {groupPositions}순위까지 입력할 수 있습니다.
@@ -198,70 +200,158 @@ function RankingPreview({ question }: { question: Question }) {
             </div>
           );
         })}
-
-        {hasEmbeddedTable && (
-          <TablePreview
-            tableTitle={question.tableTitle}
-            columns={question.tableColumns}
-            rows={question.tableRowsData}
-            tableHeaderGrid={question.tableHeaderGrid ?? undefined}
-            className="border-0 shadow-none"
-            hideColumnLabels={question.hideColumnLabels}
-            stickyColumnCount={question.stickyColumnCount}
-          />
-        )}
+        {embeddedTable}
       </div>
     );
   }
 
-  // ── 비그룹 경로 (기존 단일 스택, 무수정) ───────────────────────────────
+  // ── 비그룹 경로 ─────────────────────────────────────────────────────────
   const renderPositions = Math.min(requestedPositions, Math.max(resolvedOptions.length, 1));
+  const rows = allowOther ? [...resolvedOptions, RANKING_OTHER_OPTION] : resolvedOptions;
+  const grid = rankingGridLayout(question.optionsColumns);
 
   return (
     <div className="space-y-3">
-      <div className={layout.className} style={layout.style}>
-        {Array.from({ length: renderPositions }, (_, i) => i + 1).map((rank) => (
-          <div key={rank} className="flex items-center gap-1.5">
-            <span
-              className={
-                isHorizontal
-                  ? 'shrink-0 text-sm font-medium text-gray-700'
-                  : 'w-12 shrink-0 text-sm font-medium text-gray-700'
-              }
-            >
-              {rank}순위
-            </span>
-            <select
-              disabled
-              className={isHorizontal ? RANKING_SELECT_BASE_CLS : `w-full ${RANKING_SELECT_BASE_CLS}`}
-              style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
-            >
-              <option>선택하세요...</option>
-              {resolvedOptions.map((o) => (
-                <option key={o.id}>{o.label}</option>
-              ))}
-              {allowOther && <option>기타 (직접 입력)</option>}
-            </select>
+      <RankingSummaryBar
+        answers={[]}
+        options={resolvedOptions}
+        positions={renderPositions}
+        onReset={() => {}}
+      />
+      {renderPositions < requestedPositions && (
+        <p className="text-sm text-gray-500">
+          선택지가 {resolvedOptions.length}개라 최대 {renderPositions}순위까지 입력할 수 있습니다.
+        </p>
+      )}
+      {embeddedTable ?? (
+        rows.length > 0 && (
+          <div className={grid.className} style={grid.style}>
+            {rows.map((opt) => (
+              <div
+                key={opt.id}
+                className={`flex items-start gap-2 px-3 py-2.5 text-base text-gray-800 ${grid.itemClassName}${opt.textBold ? ' font-bold' : ''}`}
+                style={{
+                  ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                  ...(opt.textColor ? { color: opt.textColor } : {}),
+                }}
+              >
+                <span className="mt-0.5 shrink-0">
+                  <RankingRankBadge rank={undefined} />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="whitespace-pre-line [overflow-wrap:anywhere]">{opt.label}</span>
+                  {rankingTextField(opt) !== null && (
+                    <input
+                      type="text"
+                      disabled
+                      placeholder={
+                        opt.value === RANKING_OTHER_VALUE
+                          ? '기타 내용 입력...'
+                          : opt.textInputPlaceholder || '상세 기재'
+                      }
+                      className="h-9 w-full min-w-0 rounded-md border border-gray-300 bg-gray-50 px-2 text-base placeholder:text-gray-400"
+                    />
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )
+      )}
+    </div>
+  );
+}
 
-      {hasEmbeddedTable ? (
-        <TablePreview
-          tableTitle={question.tableTitle}
-          columns={question.tableColumns}
-          rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
-          className="border-0 shadow-none"
-          hideColumnLabels={question.hideColumnLabels}
-          stickyColumnCount={question.stickyColumnCount}
-        />
-      ) : (
-        ((question.options?.length ?? 0) > 0 || allowOther) && (
-          <div
-            className={`rounded-md border border-gray-200 bg-gray-50/50 p-3 text-sm ${layout.className}`}
-            style={layout.style}
+/** 드롭다운 입력 방식(기본) 미리보기 — 응답 UI 의 RankingDropdown 과 같은 모양. */
+function RankingDropdownPreview({ question }: { question: Question }) {
+  const requestedPositions = Math.max(1, question.rankingConfig?.positions ?? 3);
+  const resolvedOptions = resolveRankingOptions(question);
+  const hasOtherCell = resolvedOptions.some((o) => o.value === RANKING_OTHER_VALUE);
+  const allowOther = question.allowOtherOption === true && !hasOtherCell;
+  const columns = question.rankingConfig?.positionsColumns;
+  const layout = getOptionsLayout(columns);
+  const isHorizontal = columns === 0;
+  const isTableSource = question.rankingConfig?.optionsSource === 'table';
+  const isGrouped = isTableSource && isGroupedRankingQuestion(question);
+  const hasEmbeddedTable =
+    isTableSource
+    && !!question.tableColumns
+    && question.tableColumns.length > 0
+    && !!question.tableRowsData
+    && question.tableRowsData.length > 0;
+
+  const renderStack = (options: ReturnType<typeof resolveRankingOptions>, positions: number, withOther: boolean) => (
+    <div className={layout.className} style={layout.style}>
+      {Array.from({ length: positions }, (_, i) => i + 1).map((rank) => (
+        <div key={rank} className="flex items-center gap-1.5">
+          <span
+            className={
+              isHorizontal
+                ? 'shrink-0 text-sm font-medium text-gray-700'
+                : 'w-12 shrink-0 text-sm font-medium text-gray-700'
+            }
           >
+            {rank}순위
+          </span>
+          <select
+            disabled
+            className={isHorizontal ? RANKING_SELECT_BASE_CLS : `w-full ${RANKING_SELECT_BASE_CLS}`}
+            style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+          >
+            <option>선택하세요...</option>
+            {options.map((o) => (
+              <option key={o.id}>{o.label}</option>
+            ))}
+            {withOther && <option>기타 (직접 입력)</option>}
+          </select>
+        </div>
+      ))}
+    </div>
+  );
+
+  const embeddedTable = hasEmbeddedTable ? (
+    <TablePreview
+      tableTitle={question.tableTitle}
+      columns={question.tableColumns}
+      rows={question.tableRowsData}
+      tableHeaderGrid={question.tableHeaderGrid ?? undefined}
+      className="border-0 shadow-none"
+      hideColumnLabels={question.hideColumnLabels}
+      stickyColumnCount={question.stickyColumnCount}
+    />
+  ) : null;
+
+  if (isGrouped) {
+    const rankingGroups = collectRankingGroups(question);
+    return (
+      <div className="space-y-6">
+        {rankingGroups.map((g) => {
+          const groupOptions = resolveRankingOptionsFromCells(g.cells);
+          const groupPositions = Math.min(requestedPositions, Math.max(groupOptions.length, 1));
+          return (
+            <div key={g.groupKey} className="space-y-2">
+              <p className="text-sm font-medium text-gray-900">{g.label || g.groupKey}</p>
+              {renderStack(groupOptions, groupPositions, false)}
+              {groupPositions < requestedPositions && (
+                <p className="text-sm text-gray-500">
+                  선택지가 {groupOptions.length}개라 최대 {groupPositions}순위까지 입력할 수 있습니다.
+                </p>
+              )}
+            </div>
+          );
+        })}
+        {embeddedTable}
+      </div>
+    );
+  }
+
+  const renderPositions = Math.min(requestedPositions, Math.max(resolvedOptions.length, 1));
+  return (
+    <div className="space-y-3">
+      {renderStack(resolvedOptions, renderPositions, allowOther)}
+      {embeddedTable ?? (
+        ((question.options?.length ?? 0) > 0 || allowOther) && (
+          <div className="rounded-md border border-gray-200 bg-gray-50/50 p-3 text-sm">
             {question.options?.map((opt) => (
               <div
                 key={opt.id}

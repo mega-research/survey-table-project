@@ -1,23 +1,34 @@
 'use client';
 
-import { useMemo } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { Question, RankingAnswer, TableCell } from '@/types/survey';
+import { cn } from '@/lib/utils';
+import { Question, QuestionOption, RankingAnswer, TableCell } from '@/types/survey';
 import {
   collectRankingGroups,
   GroupedRankingAnswer,
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
-import { getOptionsLayout } from '@/utils/options-layout';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { rankOfOption } from '@/utils/ranking-click';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
 import { MobileOptionCard } from './mobile-card-shared';
+import {
+  buildRankingClickHandle,
+  RankingClickHandle,
+  RankingClickList,
+  RankingFullNotice,
+  RankingOptionFace,
+  RankingOptionTextInput,
+  RankingRankBadge,
+  RankingSummaryBar,
+} from './ranking-click-select';
 import { RankingDropdownStack } from './ranking-dropdown-stack';
 
 interface RankingQuestionProps {
@@ -27,72 +38,49 @@ interface RankingQuestionProps {
 }
 
 /**
- * 순위형 테이블 소스에서 내장 테이블 참조 블록을 렌더하는 로컬 컴포넌트.
- * - 모바일: MobileOptionCard 목록
- * - 데스크탑: TablePreview (읽기 전용)
- *
- * resolveRankingOptions 는 항상 id=cell.id 를 부여(기타 셀 포함).
- * value 는 기타 셀일 때 RANKING_OTHER_VALUE 로 바뀌므로 id 로 매칭한다.
- *
- * grouped 경로와 비그룹 경로 모두 동일한 블록을 공유한다.
+ * 표 소스 순위형에서 순위 옵션 셀 하나가 속한 입력 범위.
+ * 비그룹은 범위가 하나(질문 전체), 그룹별 순위는 그룹마다 하나다.
  */
-interface EmbeddedTableReferenceProps {
-  question: Question;
-  rawOptions: ReturnType<typeof resolveRankingOptions>;
-  isMobile: boolean;
+interface RankingScope {
+  key: string;
+  options: QuestionOption[];
+  answers: RankingAnswer[];
+  positions: number;
+  handle: RankingClickHandle;
+  /** 상세기재 검증 타깃 id 의 scope. 비그룹은 질문 id, 그룹은 `질문id:그룹키`. */
+  detailTargetScopeId: string;
+  /** 이월 표시 판정용 셀 id — 그룹별 순위는 그룹키로 저장돼 있다. 비그룹은 없음. */
+  priorCellId: string | undefined;
 }
 
-function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTableReferenceProps) {
-  const attrs = useContactAttrs();
-  const quotes = useAnswerQuotes();
-
-  if (isMobile) {
-    return (
-      <div className="space-y-2">
-        {(question.tableRowsData ?? []).map((row) => {
-          const optCell = row.cells.find(
-            (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
-          );
-          if (!optCell) return null;
-          const opt = rawOptions.find((o) => o.id === optCell.id);
-          const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
-          return (
-            <MobileOptionCard
-              key={row.id}
-              label={
-                <span
-                  className={getCellTextClassName(opt ?? optCell)}
-                  style={getCellTextStyle(opt ?? optCell)}
-                >
-                  {substituteTokens(rawLabel, attrs, quotes)}
-                </span>
-              }
-              cells={row.cells}
-            />
-          );
-        })}
-      </div>
-    );
-  }
-
+/** 순위 옵션 셀의 라벨 노드 — 이미지가 있으면 위에, 글자는 셀 스타일대로. */
+function cellLabelNode(cell: TableCell, opt: QuestionOption, label: string): ReactNode {
   return (
-    <TablePreview
-      {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
-      {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
-      {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-      {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-      {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
-      {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
-    />
+    <>
+      {cell.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cell.imageUrl}
+          alt={cell.content || cell.rankingLabel || '순위 옵션 이미지'}
+          className="mb-1 h-20 w-full rounded object-cover"
+        />
+      )}
+      <span className={getCellTextClassName(opt)} style={getCellTextStyle(opt)}>
+        {label}
+      </span>
+    </>
   );
 }
 
 /**
  * 순위형(ranking) 질문 응답 컴포넌트.
- * - optionsSource='manual': question.options 로부터 드롭다운 (flat RankingAnswer[] 응답)
- * - optionsSource='table' + 비그룹: 질문 자체 tableRowsData ranking_opt 셀이 옵션 소스
- *   상단에 드롭다운 → 하단에 설명 테이블(TablePreview, 읽기 전용) (flat RankingAnswer[] 응답)
- * - optionsSource='table' + 그룹(isGroupedRankingQuestion): 그룹마다 독립 드롭다운 스택 + 헤딩
+ * 입력 방식은 rankingConfig.inputMode 로 고른다 — 기본(undefined|'dropdown')은 순위마다 드롭다운,
+ * 'click' 은 보기를 눌러 순위를 매긴다. 중복 순위 허용이면 클릭으로 표현할 수 없어 드롭다운이다.
+ *
+ * 클릭 방식:
+ * - optionsSource='manual': question.options 를 보기 표로 (flat RankingAnswer[] 응답)
+ * - optionsSource='table' + 비그룹: 내장 표의 ranking_opt 셀이 곧 누르는 보기 (flat 응답)
+ * - optionsSource='table' + 그룹(isGroupedRankingQuestion): 그룹마다 요약 줄, 표는 하나
  *   (GroupedRankingAnswer 응답)
  */
 export function RankingQuestion({ question, value, onChange }: RankingQuestionProps) {
@@ -139,6 +127,10 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
     [isGrouped, question],
   );
 
+  // "순위가 다 찼습니다" 안내를 띄울 범위 키. 표 하나를 그룹 여럿이 나눠 쓰므로 훅 대신
+  // 범위 키 하나로 든다. 비그룹은 질문 id.
+  const [fullNoticeKey, setFullNoticeKey] = useState<string | null>(null);
+
   // 그룹별 응답 변경 핸들러: 해당 그룹 키만 갱신, 전체 해제 시 키 삭제
   function handleGroupChange(groupKey: string, next: RankingAnswer[]): void {
     const updated: GroupedRankingAnswer = {};
@@ -170,7 +162,344 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
     && question.tableRowsData
     && question.tableRowsData.length > 0;
 
-  // ── 그룹 경로: 그룹마다 헤딩 + 독립 드롭다운 스택 ──────────────────────
+  // ── 드롭다운(기본) — inputMode 가 'click' 이 아니거나 중복 순위 허용이면 ─────
+  if (config?.inputMode !== 'click' || allowDuplicates) {
+    return (
+      <RankingDropdown
+        question={question}
+        rawOptions={rawOptions}
+        answers={answers}
+        groupedMap={groupedMap}
+        rankingGroups={rankingGroups}
+        isGrouped={isGrouped}
+        positions={positions}
+        requestedPositions={requestedPositions}
+        allowOther={allowOther}
+        hasEmbeddedTable={!!hasEmbeddedTable}
+        isMobile={isMobile}
+        allowDuplicates={allowDuplicates}
+        onChange={onChange}
+        onGroupChange={handleGroupChange}
+      />
+    );
+  }
+
+  // ── 수동 보기: 보기 표 자체가 입력 ────────────────────────────────────
+  if (!isTableSource) {
+    return (
+      <div className="space-y-4">
+        <RankingClickList
+          answers={answers}
+          options={rawOptions}
+          positions={positions}
+          allowOther={allowOther}
+          onChange={onChange}
+          columns={question.optionsColumns}
+          detailTargetScopeId={question.id}
+          questionId={question.id}
+        />
+        {positions < requestedPositions && (
+          <p className="text-sm text-gray-500">
+            선택지가 {rawOptions.length}개라 최대 {positions}순위까지 입력할 수 있습니다.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ── 표 소스: 순위 옵션 셀이 곧 누르는 보기 ─────────────────────────────
+  // 비그룹은 범위 하나, 그룹별 순위는 그룹마다 범위 하나. 셀 id → 범위로 찾는다.
+  const scopes: RankingScope[] = isGrouped
+    ? rankingGroups.map((g) => {
+        const options = resolveRankingOptionsFromCells(g.cells);
+        const groupPositions = Math.min(requestedPositions, Math.max(options.length, 1));
+        const groupAnswers = parseRankingAnswers(groupedMap[g.groupKey]);
+        return {
+          key: g.groupKey,
+          options,
+          answers: groupAnswers,
+          positions: groupPositions,
+          handle: buildRankingClickHandle({
+            answers: groupAnswers,
+            positions: groupPositions,
+            onChange: (next) => handleGroupChange(g.groupKey, next),
+            onFull: (full) => setFullNoticeKey(full ? g.groupKey : null),
+          }),
+          detailTargetScopeId: `${question.id}:${g.groupKey}`,
+          priorCellId: g.groupKey,
+        };
+      })
+    : [
+        {
+          key: question.id,
+          options: rawOptions,
+          answers,
+          positions,
+          handle: buildRankingClickHandle({
+            answers,
+            positions,
+            onChange,
+            onFull: (full) => setFullNoticeKey(full ? question.id : null),
+          }),
+          detailTargetScopeId: question.id,
+          priorCellId: undefined,
+        },
+      ];
+  const scopeOfCell = new Map<string, RankingScope>();
+  for (const scope of scopes) {
+    for (const opt of scope.options) scopeOfCell.set(opt.id, scope);
+  }
+
+  // 열 정의가 없는(표를 그릴 수 없는) 표 소스 — 셀에서 뽑은 보기를 수동 보기처럼 목록으로 그린다.
+  // 그룹별 순위도 그룹마다 목록 하나씩이라 응답 모양(그룹 맵)이 그대로 유지된다.
+  if (!hasEmbeddedTable) {
+    return (
+      <div className="space-y-6">
+        {scopes.map((scope) => {
+          const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
+          return (
+            <div key={scope.key} className="space-y-2">
+              {group && (
+                <p className="text-sm font-medium text-gray-900">
+                  {substituteTokens(group.label || group.groupKey, attrs, quotes)}
+                </p>
+              )}
+              <RankingClickList
+                answers={scope.answers}
+                options={scope.options}
+                positions={scope.positions}
+                allowOther={false}
+                onChange={(next) =>
+                  isGrouped ? handleGroupChange(scope.key, next) : onChange(next)
+                }
+                columns={question.optionsColumns}
+                detailTargetScopeId={scope.detailTargetScopeId}
+                questionId={question.id}
+                cellId={scope.priorCellId}
+              />
+              {scope.positions < requestedPositions && (
+                <p className="text-sm text-gray-500">
+                  선택지가 {scope.options.length}개라 최대 {scope.positions}순위까지 입력할 수 있습니다.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const summaries = (
+    <div className="space-y-4">
+      {scopes.map((scope) => {
+        const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
+        return (
+          <div key={scope.key} className="space-y-2">
+            {group && (
+              <p className="text-sm font-medium text-gray-900">
+                {substituteTokens(group.label || group.groupKey, attrs, quotes)}
+              </p>
+            )}
+            <RankingSummaryBar
+              answers={scope.answers}
+              options={scope.options}
+              positions={scope.positions}
+              onReset={scope.handle.reset}
+              questionId={question.id}
+              cellId={scope.priorCellId}
+            />
+            {fullNoticeKey === scope.key && <RankingFullNotice positions={scope.positions} />}
+            {scope.positions < requestedPositions && (
+              <p className="text-sm text-gray-500">
+                선택지가 {scope.options.length}개라 최대 {scope.positions}순위까지 입력할 수 있습니다.
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderCell = (cell: TableCell): ReactNode => {
+    if (cell.type !== 'ranking_opt' || cell.isHidden) return undefined;
+    const scope = scopeOfCell.get(cell.id);
+    const opt = scope?.options.find((o) => o.id === cell.id);
+    if (!scope || !opt) return undefined;
+    return (
+      <RankingOptionFace
+        bare
+        option={opt}
+        rank={rankOfOption(scope.answers, opt.value)}
+        entry={scope.answers.find((a) => a.optionValue === opt.value)}
+        handle={scope.handle}
+        labelNode={cellLabelNode(cell, opt, substituteTokens(opt.label, attrs, quotes))}
+        detailTargetScopeId={scope.detailTargetScopeId}
+        questionId={question.id}
+        cellId={scope.priorCellId}
+      />
+    );
+  };
+
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {summaries}
+        <div className="space-y-2">
+          {(question.tableRowsData ?? []).flatMap((row) => {
+            // 한 행에 순위 옵션 셀이 여럿일 수 있다(수집기가 행의 모든 셀을 보기로 친다).
+            // 셀마다 카드 하나. 행의 표시 셀(text/image/video)은 첫 카드에만 붙인다.
+            const optCells = row.cells.filter(
+              (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
+            );
+            return optCells.map((optCell, idx) => {
+              const scope = scopeOfCell.get(optCell.id);
+              const opt = scope?.options.find((o) => o.id === optCell.id);
+              if (!scope || !opt) return null;
+              const rank = rankOfOption(scope.answers, opt.value);
+              const entry = scope.answers.find((a) => a.optionValue === opt.value);
+              const label = substituteTokens(opt.label, attrs, quotes);
+              const toggle = () => scope.handle.toggle(opt.value);
+              return (
+                <MobileOptionCard
+                  key={optCell.id}
+                  label={
+                    <span className={cn(getCellTextClassName(opt))} style={getCellTextStyle(opt)}>
+                      {label}
+                    </span>
+                  }
+                  cells={idx === 0 ? row.cells : []}
+                  // 카드 헤더는 div 라 포커스·키보드가 없다. 배지를 진짜 버튼으로 두어
+                  // 탭·키보드·aria-pressed 를 모두 여기서 받는다(control 래퍼는 전파를 막는다).
+                  control={
+                    <button
+                      type="button"
+                      aria-label={label}
+                      aria-pressed={rank !== undefined}
+                      onClick={toggle}
+                      className="rounded focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
+                    >
+                      <RankingRankBadge rank={rank} />
+                    </button>
+                  }
+                  selected={rank !== undefined}
+                  onToggle={toggle}
+                  footer={
+                    <RankingOptionTextInput
+                      option={opt}
+                      rank={rank}
+                      entry={entry}
+                      handle={scope.handle}
+                      detailTargetScopeId={scope.detailTargetScopeId}
+                      questionId={question.id}
+                      cellId={scope.priorCellId}
+                      label={label}
+                    />
+                  }
+                />
+              );
+            });
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {summaries}
+      <TablePreview
+        {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
+        {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
+        {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
+        {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
+        {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+        {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
+        renderCell={renderCell}
+      />
+    </div>
+  );
+}
+
+// ── 드롭다운 (기본 입력 방식) ────────────────────────────────────────────────
+
+interface RankingDropdownProps {
+  question: Question;
+  rawOptions: QuestionOption[];
+  answers: RankingAnswer[];
+  groupedMap: Record<string, unknown>;
+  rankingGroups: ReturnType<typeof collectRankingGroups>;
+  isGrouped: boolean;
+  positions: number;
+  requestedPositions: number;
+  allowOther: boolean;
+  hasEmbeddedTable: boolean;
+  isMobile: boolean;
+  allowDuplicates: boolean;
+  onChange: (value: RankingAnswer[] | GroupedRankingAnswer) => void;
+  onGroupChange: (groupKey: string, next: RankingAnswer[]) => void;
+}
+
+/**
+ * 순위마다 드롭다운 — 기본 입력 방식. 드롭다운 스택 위·아래에 설명(보기 목록 | 내장 표)을 둔다.
+ */
+function RankingDropdown({
+  question,
+  rawOptions,
+  answers,
+  groupedMap,
+  rankingGroups,
+  isGrouped,
+  positions,
+  requestedPositions,
+  allowOther,
+  hasEmbeddedTable,
+  isMobile,
+  allowDuplicates,
+  onChange,
+  onGroupChange,
+}: RankingDropdownProps) {
+  const config = question.rankingConfig;
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+
+  const embeddedTable = hasEmbeddedTable ? (
+    isMobile ? (
+      <div className="space-y-2">
+        {(question.tableRowsData ?? []).map((row) => {
+          const optCell = row.cells.find(
+            (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
+          );
+          if (!optCell) return null;
+          const opt = rawOptions.find((o) => o.id === optCell.id);
+          const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
+          return (
+            <MobileOptionCard
+              key={row.id}
+              label={
+                <span
+                  className={getCellTextClassName(opt ?? optCell)}
+                  style={getCellTextStyle(opt ?? optCell)}
+                >
+                  {substituteTokens(rawLabel, attrs, quotes)}
+                </span>
+              }
+              cells={row.cells}
+            />
+          );
+        })}
+      </div>
+    ) : (
+      <TablePreview
+        {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
+        {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
+        {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
+        {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
+        {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+        {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
+      />
+    )
+  ) : null;
+
   if (isGrouped) {
     return (
       <div className="space-y-6">
@@ -188,10 +517,8 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                 options={groupOptions}
                 positions={groupPositions}
                 allowDuplicates={allowDuplicates}
-                // 질문 레벨 allowOtherOption synthetic 기타는 grouped 에서 비활성:
-                // 어느 그룹에 붙일지 모호. 기타는 셀 레벨(isOtherRankingCell)로만 — 소속 그룹 옵션에 포함됨.
                 allowOther={false}
-                onChange={(next) => handleGroupChange(g.groupKey, next)}
+                onChange={(next) => onGroupChange(g.groupKey, next)}
                 columns={config?.positionsColumns}
                 detailTargetScopeId={`${question.id}:${g.groupKey}`}
                 questionId={question.id}
@@ -205,20 +532,11 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
             </div>
           );
         })}
-
-        {/* 내장 테이블이 있으면 전체 테이블을 옵션 시각화 참조로 표시 */}
-        {hasEmbeddedTable && (
-          <EmbeddedTableReference
-            question={question}
-            rawOptions={rawOptions}
-            isMobile={isMobile}
-          />
-        )}
+        {embeddedTable}
       </div>
     );
   }
 
-  // ── 비그룹 경로 (기존 단일 스택, 무수정) ───────────────────────────────
   return (
     <div className="space-y-4">
       <RankingDropdownStack
@@ -232,39 +550,19 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         detailTargetScopeId={question.id}
         questionId={question.id}
       />
-
       {positions < requestedPositions && (
         <p className="text-sm text-gray-500">
           선택지가 {rawOptions.length}개라 최대 {positions}순위까지 입력할 수 있습니다.
         </p>
       )}
-
-      {/* 내장 테이블이 있으면 테이블이 옵션을 시각화 — 아니면 선택지 목록으로 표시 */}
-      {hasEmbeddedTable ? (
-        <EmbeddedTableReference
-          question={question}
-          rawOptions={rawOptions}
-          isMobile={isMobile}
-        />
-      ) : (
-        (() => {
-          const layout = getOptionsLayout(question.optionsColumns);
-          return (
-            <div
-              className={`rounded-md border border-gray-200 bg-gray-50/50 p-3 text-sm ${layout.className}`}
-              style={layout.style}
-            >
-              {rawOptions.map((opt) => (
-                <div
-                  key={opt.id}
-                  className="whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]"
-                >
-                  {substituteTokens(opt.label, attrs, quotes)}
-                </div>
-              ))}
+      {embeddedTable ?? (
+        <div className="rounded-md border border-gray-200 bg-gray-50/50 p-3 text-sm">
+          {rawOptions.map((opt) => (
+            <div key={opt.id} className="whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]">
+              {substituteTokens(opt.label, attrs, quotes)}
             </div>
-          );
-        })()
+          ))}
+        </div>
       )}
     </div>
   );
