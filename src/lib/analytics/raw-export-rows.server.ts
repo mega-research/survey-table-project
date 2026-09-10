@@ -20,6 +20,7 @@ import {
   testFlagForScope,
   type OperationsDataScope,
 } from '@/lib/operations/data-scope.server';
+import type { Question } from '@/types/survey';
 
 import { buildQuestionMetaMap, buildStepLabelMap } from './raw-export-helpers';
 import {
@@ -28,6 +29,7 @@ import {
   buildNonRespondentRow,
   mergePriorAnswersIntoResponses,
   mergePriorAnswersIntoRows,
+  omitDisabledPriorAnswersByContact,
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from './raw-export-rows';
@@ -56,6 +58,11 @@ export interface RawExportLoadOptions extends RawExportContextOptions {
    * 이월값이 된다. 꺼져 있으면 쿼리하지 않는다.
    */
   includePriorAnswers?: boolean;
+  /**
+   * 「이월값 불러오기」를 끈 문항 판정용 현재 문항 목록. includePriorAnswers 일 때만 쓰며,
+   * 없으면 걷어내지 않는다 (omitDisabledPriorAnswersByContact).
+   */
+  questions?: readonly Question[];
 }
 
 export interface RawExportPopulationCount {
@@ -399,12 +406,17 @@ export async function loadRawExportRows(
 
   // 이월 응답 합치기 — 숨은 문항 strip **뒤**다. 이월값은 이번 조사표의 조건과 무관하게
   // 싣기로 했으므로(다이얼로그 설명 참조) strip 이 이월값을 보면 안 된다.
-  const priorByContactId = options.includePriorAnswers
+  const loadedPrior = options.includePriorAnswers
     ? await loadPriorAnswersByContactTargets([
         ...contactMap.keys(),
         ...nonRespondents.map((t) => t.id),
       ])
     : null;
+  // 「이월값 불러오기」를 끈 문항은 응답 행·미응답 행 모두 비워 둔다.
+  const priorByContactId =
+    loadedPrior && options.questions
+      ? omitDisabledPriorAnswersByContact(loadedPrior, options.questions)
+      : loadedPrior;
   const contactIdByRowId = new Map(rawResponses.map((r) => [r.id, r.contactTargetId]));
   const mergedRows = priorByContactId
     ? mergePriorAnswersIntoRows(

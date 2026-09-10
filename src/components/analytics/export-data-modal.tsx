@@ -282,8 +282,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     </span>
                     <span className="block text-xs leading-relaxed text-slate-500">
                       이번 회차에 답이 없는 문항을 조사 대상의 지난 회차 답으로 채웁니다. 이번 회차
-                      답이 있으면 그 답이 우선합니다. 이월된 값에는 이번 조사표의 조건에 맞지 않는
-                      문항의 답도 포함됩니다.
+                      답이 있으면 그 답이 우선합니다. 문항 설정에서 「이월값 불러오기」를 끈 문항은
+                      비워 두고, 그 밖의 문항은 이번 조사표의 조건에 맞지 않아도 지난 답을 싣습니다.
                     </span>
                   </span>
                 </label>

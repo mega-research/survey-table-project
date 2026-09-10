@@ -5,6 +5,7 @@ import {
   buildNonRespondentRow,
   mergePriorAnswersIntoResponses,
   mergePriorAnswersIntoRows,
+  omitDisabledPriorAnswersByContact,
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
@@ -296,5 +297,37 @@ describe('mergePriorAnswersIntoResponses — 「이월 응답 포함」', () => 
     // 미응답 행(빈 응답)은 이월값이 통째로 실린다
     const blank = buildNonRespondentRow(t1);
     expect(mergePriorAnswersIntoResponses(blank.questionResponses, { q1: 'old' })).toEqual({ q1: 'old' });
+  });
+});
+
+describe('omitDisabledPriorAnswersByContact — 「이월값 불러오기」 스위치', () => {
+  const questions = [
+    { id: 'q1', type: 'text', title: 'Q1', required: false, order: 0 },
+    { id: 'q2', type: 'text', title: 'Q2', required: false, order: 1, priorAnswerDisabled: true },
+    { id: 'q3', type: 'radio', title: 'Q3', required: false, order: 2, priorAnswerCondition: { logicType: 'AND', conditions: [{ id: 'c', name: '', enabled: true, logicType: 'AND', conditionType: 'value-match', sourceQuestionId: 'q1', requiredValues: ['never'] }] } },
+  ] as unknown as Question[];
+
+  it('스위치를 끈 문항의 이월값과 그 상세기재 사이드카를 걷어내고, 조건만 걸린 문항은 그대로 둔다', () => {
+    const out = omitDisabledPriorAnswersByContact(
+      new Map([
+        ['t1', { q1: 'a', q2: 'b', q3: 'c', __optTexts__: { q2: { o1: '지난 상세' }, q3: { o2: 'x' } } }],
+        ['t2', { q2: 'only' }],
+      ]),
+      questions,
+    );
+    expect(out.get('t1')).toEqual({ q1: 'a', q3: 'c', __optTexts__: { q3: { o2: 'x' } } });
+    // 스위치 끈 문항뿐이던 대상은 빈 묶음 — 병합 시 아무것도 채우지 않는다
+    expect(out.get('t2')).toEqual({});
+  });
+
+  it('걷어낸 뒤 병합하면 응답 행·미응답 행 모두 그 문항이 빈다', () => {
+    const prior = omitDisabledPriorAnswersByContact(new Map([['t1', { q1: 'a', q2: 'b' }]]), questions);
+    expect(mergePriorAnswersIntoResponses({}, prior.get('t1'))).toEqual({ q1: 'a' });
+    expect(mergePriorAnswersIntoResponses({ q3: 'now' }, prior.get('t1'))).toEqual({ q3: 'now', q1: 'a' });
+  });
+
+  it('스위치를 끈 문항이 없으면 값이 같다', () => {
+    const src = new Map([['t1', { q1: 'a' }]]);
+    expect(omitDisabledPriorAnswersByContact(src, [questions[0]!]).get('t1')).toEqual({ q1: 'a' });
   });
 });

@@ -1,6 +1,7 @@
 import type { RawExportContactColumn } from '@/lib/operations/contacts';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
@@ -172,6 +173,26 @@ export function mergePriorAnswersIntoResponses(
   }
 
   return out ?? current;
+}
+
+/**
+ * 「이월값 불러오기」를 끈 문항의 값을 조사 대상별 이월 응답에서 걷어낸다 — 병합 전에 한 번.
+ *
+ * 응답 화면이 그 문항에 이월값을 깔지 않듯 내보내기도 싣지 않는다(2026-09-10 결정). 스위치는
+ * 응답과 무관한 정적 설정이라 응답 행·미응답 행을 가리지 않고 같은 판정이고, 판정 문항은
+ * **현재 빌더 설정**이다 — 이건 응답 데이터가 아니라 "내보낼 때 무엇을 채울지"의 정책이다.
+ * 문항별 이월값 **조건**(priorAnswerCondition)은 보지 않는다 — 스위치만 따르기로 했다.
+ * 보기 상세기재 사이드카도 같은 문항 판정으로 함께 걷힌다(omitDisabledPriorAnswers).
+ */
+export function omitDisabledPriorAnswersByContact(
+  priorByContactId: ReadonlyMap<string, Record<string, unknown>>,
+  questions: readonly Question[],
+): Map<string, Record<string, unknown>> {
+  const out = new Map<string, Record<string, unknown>>();
+  for (const [contactId, prior] of priorByContactId) {
+    out.set(contactId, omitDisabledPriorAnswers(prior, questions) ?? {});
+  }
+  return out;
 }
 
 /** 행 목록에 이월 응답을 합친다. 조사 대상이 없거나 이월이 없는 행은 그대로. */

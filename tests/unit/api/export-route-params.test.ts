@@ -187,6 +187,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
       includeNonRespondents: true,
       includePriorAnswers: false,
       contactColumns: [],
+      questions: expect.any(Array),
     });
   });
 
@@ -197,6 +198,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
       includeNonRespondents: false,
       includePriorAnswers: true,
       contactColumns: [],
+      questions: expect.any(Array),
     });
   });
 
@@ -207,6 +209,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
       includeNonRespondents: false,
       includePriorAnswers: false,
       contactColumns: [],
+      questions: expect.any(Array),
     });
   });
 
@@ -220,6 +223,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
       includeNonRespondents: true,
       includePriorAnswers: false,
       contactColumns: [],
+      questions: expect.any(Array),
     });
   });
 
@@ -326,6 +330,7 @@ describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 
       includeNonRespondents: false,
       includePriorAnswers: false,
       contactColumns: [],
+      questions: expect.any(Array),
     });
     expect(res.headers.get('Cache-Control')).toBeNull();
   });

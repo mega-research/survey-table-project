@@ -126,11 +126,6 @@ async function handleExport(
       : [];
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
     ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
-    const rawOptions: RawExportLoadOptions = {
-      includeNonRespondents,
-      includePriorAnswers,
-      contactColumns,
-    };
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
     const piiHeaders = piiColumnCount > 0 ? { 'Cache-Control': 'no-store' } : {};
 
@@ -140,6 +135,14 @@ async function handleExport(
       surveyId,
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
+
+    const rawOptions: RawExportLoadOptions = {
+      includeNonRespondents,
+      includePriorAnswers,
+      contactColumns,
+      // 「이월값 불러오기」를 끈 문항 판정 — 현재 빌더 설정 기준
+      questions: hydratedQuestions,
+    };
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
     // raw/raw-split는 자체 모수와 가드를 별도로 가지므로 이 블록을 건너뛴다.
