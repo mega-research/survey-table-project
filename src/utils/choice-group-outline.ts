@@ -15,9 +15,10 @@ export interface CellOutlineEdges {
  * 되는 자리인지 다섯 개를 다 채워야 하는 자리인지 읽히지 않는다. 덩어리 하나로 두르면
  * "이 묶음에서 하나" 라는 것이 모양으로 드러난다.
  *
- * 묶는 단위는 **한 행 안에서 연속한 같은 그룹 셀**이다. 그룹이 여러 행에 걸치면 행마다
- * 따로 덩어리가 생긴다 — 행을 건너뛰어 이어 그리려면 표 전체의 격자 좌표가 필요한데,
- * 실제 조사표에서 보기 그룹은 한 행 안에 놓인다.
+ * 묶는 단위는 **가로·세로로 맞닿은 같은 그룹 셀**이다. 가로 이웃은 그 행의 보이는 셀
+ * 순서로, 세로 이웃은 authored 격자의 같은 열 자리(row.cells 인덱스)로 판정한다 —
+ * 척도가 한 행에 눕는 표도, 열마다 하나씩 고르는 표(12월 기준 / 현재)처럼 그룹이 열
+ * 방향으로 서는 표도 덩어리 하나로 보인다. 위아래 자리가 숨은 셀이면 이웃이 아니다.
  *
  * @param rows 표 행 목록 (숨은 셀·연속 셀은 이웃 판정에서 건너뛴다)
  * @param highlightCellIds 표시할 셀 id
@@ -29,23 +30,33 @@ export function buildChoiceGroupOutline(
   const edges = new Map<string, CellOutlineEdges>();
   if (highlightCellIds.size === 0) return edges;
 
-  for (const row of rows ?? []) {
+  const rowList = rows ?? [];
+  for (let r = 0; r < rowList.length; r += 1) {
+    const row = rowList[r];
+    if (!row) continue;
+    const cells = row.cells ?? [];
     // 숨은 셀은 그려지지 않으므로 이웃 판정에서도 없는 것으로 본다 — 그대로 두면
     // 보이지 않는 칸 때문에 덩어리가 끊겨 중간에 선이 생긴다.
-    const visible = (row.cells ?? []).filter((c) => !c.isHidden && !c._isContinuation);
+    const visible = cells.filter((c) => !c.isHidden && !c._isContinuation);
     for (let i = 0; i < visible.length; i += 1) {
       const cell = visible[i];
       if (!cell || !highlightCellIds.has(cell.id)) continue;
-      const sameRun = (other: (typeof visible)[number] | undefined) =>
+      const sameRun = (other: TableRow['cells'][number] | undefined) =>
         Boolean(
           other &&
+            !other.isHidden &&
+            !other._isContinuation &&
             highlightCellIds.has(other.id) &&
             other.choiceGroupId !== undefined &&
             other.choiceGroupId === cell.choiceGroupId,
         );
+      // 세로 이웃 — authored 격자에서 같은 열 자리의 위·아래 셀
+      const col = cells.indexOf(cell);
+      const above = rowList[r - 1]?.cells?.[col];
+      const below = rowList[r + 1]?.cells?.[col];
       edges.set(cell.id, {
-        top: true,
-        bottom: true,
+        top: !sameRun(above),
+        bottom: !sameRun(below),
         left: !sameRun(visible[i - 1]),
         right: !sameRun(visible[i + 1]),
       });

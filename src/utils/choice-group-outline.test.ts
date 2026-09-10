@@ -49,6 +49,33 @@ describe('buildChoiceGroupOutline', () => {
   });
 
   /** 보이지 않는 칸이 이웃으로 세어지면 덩어리 중간에 선이 생긴다. */
+  it('열 방향으로 선 그룹은 위아래로 이어 덩어리 하나가 된다', () => {
+    // 열마다 하나씩 고르는 표: [라벨] [12월 기준=g1] [현재=g2] 가 세 행
+    const columnRows: TableRow[] = [
+      { id: 'r1', cells: [cell('l1', undefined, { type: 'text' }), cell('m1', 'g1'), cell('c1', 'g2')] },
+      { id: 'r2', cells: [cell('l2', undefined, { type: 'text' }), cell('m2', 'g1'), cell('c2', 'g2')] },
+      { id: 'r3', cells: [cell('l3', undefined, { type: 'text' }), cell('m3', 'g1'), cell('c3', 'g2')] },
+    ] as never;
+    const edges = buildChoiceGroupOutline(columnRows, new Set(['c1', 'c2', 'c3']));
+    expect(edges.get('c1')).toEqual({ top: true, bottom: false, left: true, right: true });
+    expect(edges.get('c2')).toEqual({ top: false, bottom: false, left: true, right: true });
+    expect(edges.get('c3')).toEqual({ top: false, bottom: true, left: true, right: true });
+    // 같은 열이라도 표시 대상이 아닌 그룹 쪽은 그대로
+    expect(edges.has('m2')).toBe(false);
+  });
+
+  it('위아래 자리가 숨은 셀이면 세로 이웃이 아니다', () => {
+    const columnRows: TableRow[] = [
+      { id: 'r1', cells: [cell('l1', undefined, { type: 'text' }), cell('c1', 'g2')] },
+      { id: 'r2', cells: [cell('l2', undefined, { type: 'text' }), cell('c2', 'g2', { isHidden: true })] },
+      { id: 'r3', cells: [cell('l3', undefined, { type: 'text' }), cell('c3', 'g2')] },
+    ] as never;
+    const edges = buildChoiceGroupOutline(columnRows, new Set(['c1', 'c2', 'c3']));
+    expect(edges.get('c1')?.bottom).toBe(true);
+    expect(edges.get('c3')?.top).toBe(true);
+    expect(edges.has('c2')).toBe(false);
+  });
+
   it('숨은 셀은 이웃 판정에서 빠진다', () => {
     const withHidden: TableRow[] = [
       {
