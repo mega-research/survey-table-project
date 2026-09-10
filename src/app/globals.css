@@ -854,15 +854,64 @@ a.notice-file-attachment:hover {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .tiptap-mobile-tame table {
-    width: auto !important;
+
+  /* 표 판정은 "직계 행"만 센다. 표 안에 표가 들면 :has(tr + tr) 가 안쪽 표의 행까지
+   * 세어 바깥 표를 오판하고, 안쪽 1행 표는 세로 스택 특례에 걸려 셀이 위아래로
+   * 쌓인다(2026-09-10 안내문 사고). 아래 두 묶음의 선택자가 그 경계다.
+   *   최상위 1행 표  = table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr))
+   *   그 밖의 모든 표 = 최상위 2행 이상 + 표 안의 표 전부 */
+
+  /* ── 최상위 행 1개짜리 표: 폭 정보를 버리고 열을 세로로 쌓는다 ──
+   * 가로 한 줄짜리 표는 좁은 화면에서 열을 세로로 쌓아 가독성 확보. 작성자 열 폭은
+   * 쌓는 순간 의미가 없으므로 colgroup 을 지운다. */
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)),
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tbody,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tbody > tr,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tr {
+    display: block;
+    width: 100% !important;
     max-width: none !important;
+    min-width: 0 !important;
     table-layout: auto !important;
   }
-  .tiptap-mobile-tame colgroup,
-  .tiptap-mobile-tame col {
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > colgroup {
     display: none !important;
   }
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tbody > tr > th,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tbody > tr > td,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tr > th,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tr > td {
+    display: block;
+    width: 100% !important;
+  }
+  /* display:block 으로 border-collapse 가 풀려 생기는 셀 간 이중 테두리 제거 */
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tbody > tr > * + *,
+  .tiptap-mobile-tame table:not(table table):not(:has(> tbody > tr + tr)):not(:has(> tr + tr)) > tr > * + * {
+    border-top: 0 !important;
+  }
+
+  /* ── 그 밖의 표(최상위 2행 이상 + 표 안의 표): 작성자 열 비율을 지킨 채 담는 폭으로
+   * 비례 축소한다 ──
+   * table-layout: fixed 는 폭이 auto 면 무시되므로 width 를 100% 로 확정해야 발동한다.
+   * 열 비율의 출처는 <colgroup> 이라 숨기지 않는다 — 숨기면 브라우저가 내용 기준으로
+   * 다시 재서, 로고·긴 이메일이 든 좁은 열이 폭을 가져가고 라벨 열이 한 글자까지
+   * 눌린다. 표 안의 표는 자기 셀 폭(100%)에 같은 규칙으로 들어간다.
+   * 셀 overflow 는 렌더러의 hidden 을 그대로 둔다 — fixed 는 열 폭을 고정하므로
+   * 풀면 안 접히는 요소가 셀 밖으로 흘러 화면을 넘긴다(이미지는 .prose td img 의
+   * max-width:100% 로 줄어들고 긴 토큰은 아래 overflow-wrap 이 끊는다).
+   * min-width 무력화 필요: sanitize 가 TipTap 의 인라인 min-width 를 통과시킨다. */
+  .tiptap-mobile-tame table:has(> tbody > tr + tr),
+  .tiptap-mobile-tame table:has(> tr + tr),
+  .tiptap-mobile-tame table table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* ── 공통 ── */
   /* 에디터에서 지정한 행 높이(tr inline height)도 해제 — 좁은 화면에서 내용이
    * 더 높게 줄바꿈되는데 고정 높이 + td overflow:hidden 이 내용을 잘라낸다 */
   .tiptap-mobile-tame tr {
@@ -870,7 +919,6 @@ a.notice-file-attachment:hover {
   }
   .tiptap-mobile-tame th,
   .tiptap-mobile-tame td {
-    width: auto !important;
     min-width: 0 !important;
     height: auto !important;
     /* body 의 keep-all 상속을 끊고 일반 줄바꿈으로 (좁은 셀에서 글자 단위 줄바꿈 허용) */
@@ -878,74 +926,9 @@ a.notice-file-attachment:hover {
     overflow-wrap: break-word;
     padding: 0.375rem 0.5rem !important;
   }
-  /* 가로 한 줄(행 1개)짜리 표는 좁은 화면에서 열을 세로로 쌓아 가독성 확보.
-   * :not(:has(tr + tr)) = 형제 tr 이 둘 이상이 아닌(= 행 하나뿐인) 표만 대상.
-   * TipTap 표는 모든 tr 이 tbody 형제라 정확히 단일 row 표만 잡힌다. */
-  .tiptap-mobile-tame table:not(:has(tr + tr)),
-  .tiptap-mobile-tame table:not(:has(tr + tr)) tbody,
-  .tiptap-mobile-tame table:not(:has(tr + tr)) tr {
-    display: block;
-    width: 100% !important;
-  }
-  .tiptap-mobile-tame table:not(:has(tr + tr)) th,
-  .tiptap-mobile-tame table:not(:has(tr + tr)) td {
-    display: block;
-    width: 100% !important;
-  }
-  /* display:block 으로 border-collapse 가 풀려 생기는 셀 간 이중 테두리 제거 */
-  .tiptap-mobile-tame table:not(:has(tr + tr)) th + td,
-  .tiptap-mobile-tame table:not(:has(tr + tr)) td + td,
-  .tiptap-mobile-tame table:not(:has(tr + tr)) td + th {
-    border-top: 0 !important;
-  }
-  /* 행이 정확히 2개인 표는 각 행을 [첫 셀 = 라벨 | 나머지 셀 = 세로 스택] 2열
-   * 그리드로 전환. :has(tr + tr):not(:has(tr + tr + tr)) = 행 2개짜리 표.
-   * 라벨 셀은 넉넉한 grid-row 스팬으로 스택 전체 높이에 걸쳐 병합된 것처럼
-   * 늘어나고, 남는 암시적 행은 높이 0으로 붕괴한다. colspan 은 grid 전환 시
-   * 무시되므로 가로 병합 셀도 스택 셀 하나로 자연스럽게 흡수된다.
-   * min-width 무력화 필요: sanitize 가 TipTap 이 표에 박는 인라인 min-width 를
-   * 허용해 통과시키므로 이를 눌러야 표가 화면 폭 안에 들어온다.
-   * 테두리는 셀 기본 테두리(sanitize 주입 인라인 포함)를 전부 끄고 외곽은
-   * table 자체 테두리, 내부 구분선만 다시 그린다 — 라벨 오버스팬 끝단의
-   * 서브픽셀 어긋남이 테두리로 드러나지 않도록. */
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)),
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tbody {
-    display: block;
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr {
-    display: grid;
-    grid-template-columns: 35% minmax(0, 1fr);
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr + tr {
-    /* 행 그룹 구분선. #d1d5db = sanitize CELL_STYLE 주입값과 동일 (gray-300) */
-    border-top: 1px solid #d1d5db;
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > th,
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > td {
-    border: 0 !important;
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :first-child {
-    grid-column: 1;
-    grid-row: 1 / span 32;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    border-right: 1px solid #d1d5db !important;
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :not(:first-child) {
-    grid-column: 2;
-  }
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :not(:first-child):not(:last-child) {
-    border-bottom: 1px solid #d1d5db !important;
-  }
-  /* 셀이 하나뿐인 행은 라벨/스택 구분 없이 전체 폭 사용 */
-  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :first-child:last-child {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    display: block;
-    border-right: 0 !important;
-  }
+
+  /* 행 2개짜리 표의 [라벨 | 스택] 2열 그리드 특례는 2026-09-10 에 걷어냈다. 위 비율
+   * 유지가 같은 표를 스크롤 없이 원래 배치대로 그려서, 그리드 전환이 오히려 작성자
+   * 레이아웃(좌우 대칭 혜택 표·표 안의 표)을 흐트러뜨렸다. */
 }
 
