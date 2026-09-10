@@ -911,6 +911,29 @@ a.notice-file-attachment:hover {
     margin-right: 0 !important;
   }
 
+  /* ── 1열 표(최상위·중첩 모두): 지킬 비율이 없으므로 폭 정보를 전부 버린다 ──
+   * 개인정보 동의 표처럼 1열 상자 속 1열 상자는 colgroup·셀 인라인 width(1173px 등)가
+   * 어느 경로로든 폭을 밀어내면 화면을 넘긴다. 열이 하나면 담는 폭을 그대로 쓰는 것이
+   * 곧 작성자 의도이므로 auto 레이아웃 + 100% 로 못 박고 폭 힌트를 모두 지운다.
+   * 위 비율 유지 규칙과 특이도가 같아 뒤에 둬서 이긴다. 여러 열 중첩 스크롤 규칙은
+   * 특이도가 높아 그대로 이긴다. */
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) > colgroup {
+    display: none !important;
+  }
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) > tbody > tr > th,
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) > tbody > tr > td,
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) > tr > th,
+  .tiptap-mobile-tame table:not(:has(> colgroup > col + col)) > tr > td {
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
   /* ── 표 안에 여러 열짜리 표가 든 표: 작성자 폭 그대로 두고 가로 스크롤 ──
    * 셀 하나가 3열 표를 품은 구조는 화면 폭으로 줄이면 그 안의 라벨 열이 두세 글자
    * 폭이 돼 읽을 수 없다(주관기관 표). 이런 표만 데스크톱 렌더 그대로 두고 감싸는
