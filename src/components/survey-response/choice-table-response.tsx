@@ -101,15 +101,19 @@ export function ChoiceTableResponse({
    * 미충족 필수 보기 그룹의 덩어리 외곽선. 판정은 필수 게이트와 같은 술어를 쓴다
    * (`collectUnfilledChoiceGroupCellIds`) — 갈라지면 "빨갛지 않은데 다음이 막힘" 이 된다.
    */
-  const groupOutline = useMemo(
+  const unfilledGroupCellIds = useMemo(
     () =>
       showRequiredHighlight
-        ? buildChoiceGroupOutline(
-            question.tableRowsData,
-            collectUnfilledChoiceGroupCellIds(question, value),
-          )
-        : new Map(),
+        ? collectUnfilledChoiceGroupCellIds(question, value)
+        : new Set<string>(),
     [showRequiredHighlight, question, value],
+  );
+  const groupOutline = useMemo(
+    () =>
+      unfilledGroupCellIds.size > 0
+        ? buildChoiceGroupOutline(question.tableRowsData, unfilledGroupCellIds)
+        : new Map(),
+    [question.tableRowsData, unfilledGroupCellIds],
   );
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
@@ -758,6 +762,10 @@ export function ChoiceTableResponse({
         ) : null}
         <MobileRowWiseOriginalSheet
           model={rowWiseOriginalModel}
+          // 데스크톱 표의 미충족 그룹 덩어리 외곽선과 같은 판정 — 행별 표에서는 그 그룹의
+          // 셀을 하나씩 붉게 두르고 행 제목도 붉힌다. 문항 전체만 붉어지면 어느 열이 비었는지
+          // 알 수 없다.
+          {...(unfilledGroupCellIds.size > 0 ? { errorCellIds: unfilledGroupCellIds } : {})}
           choiceControlType={(cell) =>
             isGrouped
               ? getGroupTypeOfCell(question, cell.id)
