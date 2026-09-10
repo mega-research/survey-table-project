@@ -185,6 +185,17 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: true,
+      includePriorAnswers: false,
+      contactColumns: [],
+    });
+  });
+
+  it('raw 에 includePriorAnswers=1 이면 로더에 true 로 넘긴다', async () => {
+    const res = await exportGet(exportRequest('type=raw&includePriorAnswers=1'), params);
+    expect(res.status).toBe(200);
+    expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
+      includeNonRespondents: false,
+      includePriorAnswers: true,
       contactColumns: [],
     });
   });
@@ -194,6 +205,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: false,
+      includePriorAnswers: false,
       contactColumns: [],
     });
   });
@@ -206,6 +218,7 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
     expect(res.status).toBe(200);
     expect(loadRawExportRowsMock).toHaveBeenCalledWith(surveyId, 'real', {
       includeNonRespondents: true,
+      includePriorAnswers: false,
       contactColumns: [],
     });
   });
@@ -309,7 +322,11 @@ describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 
   it('컬럼 설정이 없으면 명단 열 0개이고 헤더도 없다 — attrs·pii 는 기본 숨김', async () => {
     const res = await exportGet(exportRequest('type=raw'), params);
     expect(res.status).toBe(200);
-    expect(loaderOptions()).toEqual({ includeNonRespondents: false, contactColumns: [] });
+    expect(loaderOptions()).toEqual({
+      includeNonRespondents: false,
+      includePriorAnswers: false,
+      contactColumns: [],
+    });
     expect(res.headers.get('Cache-Control')).toBeNull();
   });
 

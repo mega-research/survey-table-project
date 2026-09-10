@@ -6,7 +6,10 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { notDeletedResponse } from '@/data/response-filters';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
-import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
+import {
+  loadChangeConfirmQuestionIds,
+  loadPriorAnswersByContactTargets,
+} from '@/features/contacts/server/services/contact-prior-answers.service';
 import { decryptQuestionResponses, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import type { RawExportContactColumn } from '@/lib/operations/contacts';
@@ -23,6 +26,8 @@ import {
   type ExportStripContext,
   buildContactValues,
   buildNonRespondentRow,
+  mergePriorAnswersIntoResponses,
+  mergePriorAnswersIntoRows,
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from './raw-export-rows';
@@ -45,6 +50,12 @@ export interface RawExportContextOptions {
 export interface RawExportLoadOptions extends RawExportContextOptions {
   /** 「조사 대상 중 미응답자 포함」 — 응답이 없는 스코프 파티션 조사 대상을 미응답 행으로 넣는다 */
   includeNonRespondents: boolean;
+  /**
+   * 「이월 응답 포함」 — 조사 대상에 붙은 지난 회차 답으로 빈 문항을 채운다. 이번 회차에
+   * 키가 있는 문항은 건드리지 않는다 (mergePriorAnswersIntoResponses). 미응답 행은 통째로
+   * 이월값이 된다. 꺼져 있으면 쿼리하지 않는다.
+   */
+  includePriorAnswers?: boolean;
 }
 
 export interface RawExportPopulationCount {
@@ -386,14 +397,34 @@ export async function loadRawExportRows(
   // 숨은 문항 값은 내보내는 값에서만 뺀다 — DB 는 건드리지 않는다.
   const strippedRows = stripHiddenFromExportRows(responseRows, stripContexts);
 
-  if (!options.includeNonRespondents) return { kind: 'ok', rows: strippedRows, ...population };
+  // 이월 응답 합치기 — 숨은 문항 strip **뒤**다. 이월값은 이번 조사표의 조건과 무관하게
+  // 싣기로 했으므로(다이얼로그 설명 참조) strip 이 이월값을 보면 안 된다.
+  const priorByContactId = options.includePriorAnswers
+    ? await loadPriorAnswersByContactTargets([
+        ...contactMap.keys(),
+        ...nonRespondents.map((t) => t.id),
+      ])
+    : null;
+  const contactIdByRowId = new Map(rawResponses.map((r) => [r.id, r.contactTargetId]));
+  const mergedRows = priorByContactId
+    ? mergePriorAnswersIntoRows(
+        strippedRows,
+        priorByContactId,
+        (row) => contactIdByRowId.get(row.id) ?? null,
+      )
+    : strippedRows;
 
-  const rows = sortRowsForContactPopulation([
-    ...strippedRows,
-    ...nonRespondents.map((t) =>
-      attachContactValues(buildNonRespondentRow(t), contactValues?.get(t.id)),
-    ),
-  ]);
+  if (!options.includeNonRespondents) return { kind: 'ok', rows: mergedRows, ...population };
+
+  // 미응답 행은 이번 회차 답이 없으므로 이월값이 통째로 실린다.
+  const nonRespondentRows = nonRespondents.map((t) => {
+    const base = buildNonRespondentRow(t);
+    const withPrior = priorByContactId
+      ? { ...base, questionResponses: mergePriorAnswersIntoResponses(base.questionResponses, priorByContactId.get(t.id)) }
+      : base;
+    return attachContactValues(withPrior, contactValues?.get(t.id));
+  });
+  const rows = sortRowsForContactPopulation([...mergedRows, ...nonRespondentRows]);
   return { kind: 'ok', rows, ...population };
 }
 

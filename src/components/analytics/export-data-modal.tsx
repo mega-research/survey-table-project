@@ -86,6 +86,7 @@ interface SplitPlanResponse {
 
 interface ExportQueryOptions {
   includeNonRespondents: boolean;
+  includePriorAnswers: boolean;
   basis?: string;
 }
 
@@ -101,6 +102,7 @@ function buildExportQuery(type: string, opts: ExportQueryOptions): string {
   if (opts.basis) qs.set('basis', opts.basis);
   const isRaw = type === 'raw' || type === 'raw-split';
   if (isRaw && opts.includeNonRespondents) qs.set('includeNonRespondents', '1');
+  if (isRaw && opts.includePriorAnswers) qs.set('includePriorAnswers', '1');
   return qs.toString();
 }
 
@@ -131,6 +133,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   const [basis, setBasis] = useState<string | null>(null);
   // 「조사 대상 중 미응답자 포함」 — 다이얼로그를 닫으면 초기화. 설문 설정으로 저장되지 않는다.
   const [includeNonRespondents, setIncludeNonRespondents] = useState(false);
+  // 「이월 응답 포함」 — 같은 수명. 행 수에는 영향이 없어 분할 미리보기 키에는 넣지 않는다.
+  const [includePriorAnswers, setIncludePriorAnswers] = useState(false);
 
   const summary = useQuery({
     queryKey: ['split-summary', surveyId],
@@ -159,7 +163,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       setExportingType(type);
 
       const response = await fetch(
-        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents })}`,
+        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents, includePriorAnswers })}`,
       );
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -200,6 +204,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     try {
       const query = buildExportQuery('raw-split', {
         includeNonRespondents,
+        includePriorAnswers,
         basis,
       });
       const res = await fetch(`/api/surveys/${surveyId}/export?${query}`);
@@ -261,6 +266,24 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     </span>
                     <span className="block text-xs leading-relaxed text-slate-500">
                       링크를 열지 않은 조사 대상도 행으로 넣고 상태를 미응답으로 표시합니다
+                    </span>
+                  </span>
+                </label>
+                <label className="mt-3 flex cursor-pointer items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={includePriorAnswers}
+                    onCheckedChange={(v) => setIncludePriorAnswers(v === true)}
+                    disabled={!!exportingType}
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">
+                      이월 응답 포함
+                    </span>
+                    <span className="block text-xs leading-relaxed text-slate-500">
+                      이번 회차에 답이 없는 문항을 조사 대상의 지난 회차 답으로 채웁니다. 이번 회차
+                      답이 있으면 그 답이 우선합니다. 이월된 값에는 이번 조사표의 조건에 맞지 않는
+                      문항의 답도 포함됩니다.
                     </span>
                   </span>
                 </label>

@@ -89,7 +89,10 @@ async function handleExport(
     // .sav/.sps 는 완료 전용 분석 모수라 이 파라미터와 무관하다.
     const includeNonRespondents =
       request.nextUrl.searchParams.get('includeNonRespondents') === '1';
-    ctx.bind({ includeNonRespondents });
+    // 「이월 응답 포함」 — 역시 Raw Data 계열만. 이번 회차에 키가 없는 문항을 지난 회차 답으로
+    // 채운다 (숨은 문항도 포함 — 다이얼로그 설명에 명시).
+    const includePriorAnswers = request.nextUrl.searchParams.get('includePriorAnswers') === '1';
+    ctx.bind({ includeNonRespondents, includePriorAnswers });
 
     // 1. 설문 데이터 조회
     // questions 는 반드시 order 오름차순으로 조회한다. orderBy 가 없으면 drizzle relational
@@ -123,7 +126,11 @@ async function handleExport(
       : [];
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
     ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
-    const rawOptions: RawExportLoadOptions = { includeNonRespondents, contactColumns };
+    const rawOptions: RawExportLoadOptions = {
+      includeNonRespondents,
+      includePriorAnswers,
+      contactColumns,
+    };
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
     const piiHeaders = piiColumnCount > 0 ? { 'Cache-Control': 'no-store' } : {};
 

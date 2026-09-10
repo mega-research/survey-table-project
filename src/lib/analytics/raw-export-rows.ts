@@ -2,6 +2,7 @@ import type { RawExportContactColumn } from '@/lib/operations/contacts';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 
@@ -122,5 +123,67 @@ export function stripHiddenFromExportRows(
     );
     const stripped = stripDisabledCellValues(ctx.questions, hiddenStripped);
     return stripped === row.questionResponses ? row : { ...row, questionResponses: stripped };
+  });
+}
+
+/**
+ * 이월 응답을 행에 합친다 — 「이월 응답 포함」 옵션.
+ *
+ * 규칙은 하나다: **이번 회차에 키가 있으면 이번 회차가 이긴다.** 값이 비어 있어도('' 등)
+ * 그렇다 — 프리필된 이월값을 응답자가 일부러 지운 것을 내보내기가 되살리면 조사 결과가
+ * 왜곡된다. 이월은 키 자체가 없는 문항만 채운다.
+ *
+ * 숨은 문항은 걸러내지 않는다 — 이번 조사표의 조건에 맞지 않는 문항의 지난 답도 그대로
+ * 실린다(2026-09-10 결정, 다이얼로그 설명에 명시). 그래서 호출부는 이 함수를 숨은 문항
+ * strip **뒤에** 부른다. 앞에 부르면 strip 이 이월값까지 지운다.
+ *
+ * 사이드카는 `__optTexts__`(보기 상세 기재)만, 문항 단위로 같은 규칙으로 합친다.
+ * 변동 확인·동적 행 선택은 이번 회차의 행위 기록이라 이월에서 가져오지 않는다.
+ *
+ * @returns 바뀐 것이 없으면 원본 객체 그대로 (호출부 비교용)
+ */
+export function mergePriorAnswersIntoResponses(
+  current: Record<string, unknown>,
+  prior: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!prior) return current;
+  let out: Record<string, unknown> | null = null;
+  const ensure = () => (out ??= { ...current });
+
+  for (const [key, value] of Object.entries(prior)) {
+    if (key.startsWith('__')) continue;
+    if (Object.prototype.hasOwnProperty.call(current, key)) continue;
+    ensure()[key] = value;
+  }
+
+  const priorTexts = prior[OPT_TEXTS_KEY];
+  if (priorTexts && typeof priorTexts === 'object' && !Array.isArray(priorTexts)) {
+    const currentTexts = current[OPT_TEXTS_KEY];
+    const base =
+      currentTexts && typeof currentTexts === 'object' && !Array.isArray(currentTexts)
+        ? (currentTexts as Record<string, unknown>)
+        : {};
+    let merged: Record<string, unknown> | null = null;
+    for (const [questionId, texts] of Object.entries(priorTexts as Record<string, unknown>)) {
+      if (Object.prototype.hasOwnProperty.call(base, questionId)) continue;
+      (merged ??= { ...base })[questionId] = texts;
+    }
+    if (merged) ensure()[OPT_TEXTS_KEY] = merged;
+  }
+
+  return out ?? current;
+}
+
+/** 행 목록에 이월 응답을 합친다. 조사 대상이 없거나 이월이 없는 행은 그대로. */
+export function mergePriorAnswersIntoRows(
+  rows: readonly RawExportResponseRow[],
+  priorByContactId: ReadonlyMap<string, Record<string, unknown>>,
+  contactIdOfRow: (row: RawExportResponseRow) => string | null,
+): RawExportResponseRow[] {
+  return rows.map((row) => {
+    const contactId = contactIdOfRow(row);
+    const prior = contactId ? priorByContactId.get(contactId) : undefined;
+    const merged = mergePriorAnswersIntoResponses(row.questionResponses, prior);
+    return merged === row.questionResponses ? row : { ...row, questionResponses: merged };
   });
 }

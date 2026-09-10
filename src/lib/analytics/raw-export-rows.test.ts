@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   type NonRespondentTarget,
   buildNonRespondentRow,
+  mergePriorAnswersIntoResponses,
+  mergePriorAnswersIntoRows,
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
@@ -246,5 +248,53 @@ describe('stripHiddenFromExportRows', () => {
 
     expect(input).toEqual([row]);
     expect(row.questionResponses).toEqual({ 'q-switch': 'no', 'q-dep': '값' });
+  });
+});
+
+describe('mergePriorAnswersIntoResponses — 「이월 응답 포함」', () => {
+  it('이번 회차에 키가 없는 문항만 이월값으로 채운다', () => {
+    const merged = mergePriorAnswersIntoResponses(
+      { q1: 'new' },
+      { q1: 'old', q2: 'old2', q3: ['a', 'b'] },
+    );
+    expect(merged).toEqual({ q1: 'new', q2: 'old2', q3: ['a', 'b'] });
+  });
+
+  it('응답자가 비운 값도 이번 회차 답이다 — 이월로 되살리지 않는다', () => {
+    const merged = mergePriorAnswersIntoResponses({ q1: '', q2: [] }, { q1: 'old', q2: ['x'] });
+    expect(merged).toEqual({ q1: '', q2: [] });
+  });
+
+  it('__optTexts__ 는 문항 단위로 같은 규칙이다', () => {
+    const merged = mergePriorAnswersIntoResponses(
+      { q1: 'a', __optTexts__: { q1: { o9: '이번 기타' } } },
+      { q2: 'b', __optTexts__: { q1: { o9: '지난 기타' }, q2: { o5: '지난 상세' } } },
+    );
+    expect(merged.__optTexts__).toEqual({ q1: { o9: '이번 기타' }, q2: { o5: '지난 상세' } });
+  });
+
+  it('변동 확인 같은 다른 사이드카는 이월에서 가져오지 않는다', () => {
+    const merged = mergePriorAnswersIntoResponses({}, { q1: 'old', __changeConfirm__: { q1: 'same' } });
+    expect(merged).toEqual({ q1: 'old' });
+  });
+
+  it('채울 것이 없으면 원본 객체 그대로 돌려준다', () => {
+    const current = { q1: 'a' };
+    expect(mergePriorAnswersIntoResponses(current, { q1: 'old' })).toBe(current);
+    expect(mergePriorAnswersIntoResponses(current, undefined)).toBe(current);
+  });
+
+  it('행 목록에서는 조사 대상이 붙은 행만 합치고 나머지는 원본 그대로다', () => {
+    const anon = response({ id: 'r-anon', questionResponses: { q1: 'x' } });
+    const linked = response({ id: 'r-linked', questionResponses: { q1: 'x' } });
+    const prior = new Map([['t-linked', { q1: 'old', q2: 'old2' }]]);
+    const out = mergePriorAnswersIntoRows([anon, linked], prior, (row) =>
+      row.id === 'r-linked' ? 't-linked' : null,
+    );
+    expect(out[0]).toBe(anon);
+    expect(out[1]?.questionResponses).toEqual({ q1: 'x', q2: 'old2' });
+    // 미응답 행(빈 응답)은 이월값이 통째로 실린다
+    const blank = buildNonRespondentRow(t1);
+    expect(mergePriorAnswersIntoResponses(blank.questionResponses, { q1: 'old' })).toEqual({ q1: 'old' });
   });
 });

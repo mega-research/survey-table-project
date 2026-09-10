@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
@@ -118,6 +118,32 @@ export async function lookupPriorAnswersByContactTarget(args: {
 
   if (!row) return null;
   return readPriorAnswerRow(row.answers);
+}
+
+/**
+ * 조사 대상 id 목록의 이월 응답을 한 번에 읽는다 — Raw 내보내기 「이월 응답 포함」 전용.
+ *
+ * 읽기 경계(복호화·파기 표식 제거)는 단건 조회와 같은 `readPriorAnswerRow` 다. 파티션은
+ * 호출부가 이미 스코프로 거른 조사 대상 id 를 넘기므로 여기서 다시 판정하지 않는다.
+ * 이월이 없거나 전부 파기된 대상은 맵에 없다.
+ */
+export async function loadPriorAnswersByContactTargets(
+  contactTargetIds: readonly string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  if (contactTargetIds.length === 0) return out;
+  const rows = await db
+    .select({
+      contactTargetId: contactPriorAnswers.contactTargetId,
+      answers: contactPriorAnswers.answers,
+    })
+    .from(contactPriorAnswers)
+    .where(inArray(contactPriorAnswers.contactTargetId, [...contactTargetIds]));
+  for (const row of rows) {
+    const answers = readPriorAnswerRow(row.answers);
+    if (answers) out.set(row.contactTargetId, answers);
+  }
+  return out;
 }
 
 /**
