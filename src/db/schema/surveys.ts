@@ -285,7 +285,7 @@ export const questions = pgTable(
   (table) => [
     check(
       'questions_mobile_table_display_mode_check',
-      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'original')`,
+      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-cards', 'original')`,
     ),
     check(
       'questions_sticky_column_count_range',

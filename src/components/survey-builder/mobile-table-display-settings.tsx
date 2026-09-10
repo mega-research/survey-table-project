@@ -29,6 +29,8 @@ interface MobileTableDisplaySettingsProps {
   repeatHeaderStartRow?: number | null | undefined;
   repeatHeaderEndRow?: number | null | undefined;
   onChange: (value: MobileTableDisplaySettingsValue) => void;
+  /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
+  questionType?: 'table' | 'radio' | 'checkbox' | undefined;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -48,6 +50,12 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     description: '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
   },
   {
+    value: 'row-cards',
+    label: '행 단위 카드',
+    description:
+      '행마다 카드 하나를 만들고 그 안에 열별 선택을 나란히 둡니다. 열마다 하나씩 고르는 표에 맞습니다.',
+  },
+  {
     value: 'original',
     label: '전체 원본 표',
     description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
@@ -61,7 +69,11 @@ export function MobileTableDisplaySettings({
   repeatHeaderStartRow,
   repeatHeaderEndRow,
   onChange,
+  questionType,
 }: MobileTableDisplaySettingsProps) {
+  const visibleOptions = OPTIONS.filter(
+    (option) => option.value !== 'row-cards' || questionType === 'radio' || questionType === 'checkbox',
+  );
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
   const committedRange = resolveMobileDrilldownRepeatHeaderRange({
     mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
@@ -115,7 +127,7 @@ export function MobileTableDisplaySettings({
         aria-labelledby="mobile-table-display-mode-label"
         className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
       >
-        {OPTIONS.map((option) => {
+        {visibleOptions.map((option) => {
           const selected = mode === option.value;
 
           return (

@@ -578,6 +578,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           || mobileTableQuestion.type === 'radio'
           || mobileTableQuestion.type === 'checkbox') ? (
             <MobileTableDisplaySettings
+              questionType={mobileTableQuestion.type}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}

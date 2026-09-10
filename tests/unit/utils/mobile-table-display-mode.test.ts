@@ -12,6 +12,7 @@ describe('resolveMobileTableDisplayMode', () => {
       'auto',
       'drilldown-original-row',
       'row-wise-original',
+      'row-cards',
       'original',
     ]);
   });
@@ -19,6 +20,7 @@ describe('resolveMobileTableDisplayMode', () => {
     ['auto', 'auto'],
     ['drilldown-original-row', 'drilldown-original-row'],
     ['row-wise-original', 'row-wise-original'],
+    ['row-cards', 'row-cards'],
     ['original', 'original'],
   ] as const)('유효 enum %s를 정본으로 사용', (input, expected) => {
     expect(resolveMobileTableDisplayMode({ mobileTableDisplayMode: input, mobileOriginalTable: true }))
