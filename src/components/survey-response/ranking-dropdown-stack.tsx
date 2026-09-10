@@ -61,8 +61,7 @@ export interface RankingDropdownStackProps {
 
 /**
  * 순위형 응답의 드롭다운 스택.
- * 질문 레벨 순위형은 2026-09-10 부터 보기 클릭 방식(ranking-click-select)이 기본이라,
- * 이 스택은 표 안 ranking 셀(cells/ranking-cell)과 중복 순위 허용 문항(ranking-question 폴백)만 쓴다.
+ * ranking-question (Case 1/2) / cells/ranking-cell (Case 3) 가 공유.
  */
 export function RankingDropdownStack({
   answers,
