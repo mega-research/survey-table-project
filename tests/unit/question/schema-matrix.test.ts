@@ -154,12 +154,13 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
     );
   });
 
-  it('table: 내장 테이블 + 모바일 표시 + 검증 규칙/동적 행 — choiceGroups·options 없음', () => {
+  it('table: 내장 테이블 + 모바일 표시 + choiceGroups + 검증 규칙/동적 행 — options 없음', () => {
     expect(shapeKeys(TableQuestionSchema)).toEqual(
       sorted([
         ...BASE_KEYS,
         ...EMBEDDED_TABLE_KEYS,
         ...MOBILE_TABLE_DISPLAY_KEYS,
+        'choiceGroups',
         'tableValidationRules',
         'dynamicRowConfigs',
         'rowRepeatConfig',
@@ -180,6 +181,13 @@ describe('팩토리 산출물 roundtrip', () => {
       const parsed = QuestionVariantSchema.parse(question);
       expect(parsed, `${question.type} roundtrip`).toEqual(question);
     }
+  });
+
+  it('choiceGroups 를 가진 table(보기 그룹 표)도 strict parse 가 무변형이다', () => {
+    const grouped = makeQuestion.table({
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    });
+    expect(QuestionVariantSchema.parse(grouped)).toEqual(grouped);
   });
 
   it('모든 variant 는 flat Question 에 캐스트 없이 할당 가능하다 (전환기 호환성 축)', () => {
@@ -215,7 +223,7 @@ describe('분류 가드', () => {
     });
   });
 
-  it('옵션 리스트는 radio/checkbox/select/ranking, choiceGroups 는 radio/checkbox/ranking', () => {
+  it('옵션 리스트는 radio/checkbox/select/ranking, choiceGroups 는 radio/checkbox/ranking/table', () => {
     const all = makeAllQuestionVariants();
     expect(all.filter(isOptionListQuestion).map((q) => q.type)).toEqual([
       'radio',
@@ -227,6 +235,7 @@ describe('분류 가드', () => {
       'radio',
       'checkbox',
       'ranking',
+      'table',
     ]);
   });
 

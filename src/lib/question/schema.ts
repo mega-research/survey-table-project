@@ -131,6 +131,7 @@ export const RankingQuestionSchema = base
 export const TableQuestionSchema = base
   .extend(embeddedTable.shape)
   .extend(mobileTableDisplay.shape)
+  .extend(choiceGroups.shape)
   .extend({
     type: z.literal('table'),
     tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),

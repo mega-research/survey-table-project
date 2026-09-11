@@ -44,11 +44,16 @@ export const MOBILE_TABLE_DISPLAY_TYPES = [
   'table',
 ] as const satisfies readonly QuestionType[];
 
-/** choiceGroups(테이블 레벨 옵션 그룹)를 소비하는 유형 — table 은 정의만 있고 소비 경로가 없다. */
+/**
+ * choiceGroups(테이블 레벨 옵션 그룹)를 소비하는 유형.
+ * table 은 보기 그룹 표(choice_opt 셀 + choiceGroups, 선택은 표 응답 안 `__choiceGroups`)로 소비한다 —
+ * radio/checkbox 의 내장 표(레거시 형태, 선택이 문항 레벨에 사는 것)와는 응답 모양이 다르다.
+ */
 export const CHOICE_GROUP_TYPES = [
   'radio',
   'checkbox',
   'ranking',
+  'table',
 ] as const satisfies readonly QuestionType[];
 
 /** question.options 배열을 옵션 소스로 쓰는 유형 (ranking 은 optionsSource='manual' 일 때). */

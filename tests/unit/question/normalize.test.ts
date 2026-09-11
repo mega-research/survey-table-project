@@ -277,6 +277,15 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['dynamicRowConfigs']).toEqual([]);
   });
 
+  it('table 픽스처의 choiceGroups 를 strict 정규화에서 보존한다 — 보기 그룹 표', () => {
+    const grouped = {
+      ...GEN_NEW_TABLE,
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    };
+    const parsed = normalizeQuestion(grouped, 'strict') as unknown as Record<string, unknown>;
+    expect(parsed['choiceGroups']).toEqual(grouped.choiceGroups);
+  });
+
   it('숫자 단답형의 numberFormat을 strict 정규화에서도 보존한다', () => {
     const parsed = normalizeQuestion(
       {

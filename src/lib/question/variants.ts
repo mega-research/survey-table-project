@@ -11,7 +11,8 @@ import type { Question } from '@/types/survey';
  * 필드 집합은 2026-06-12 실측 매트릭스(8방향 탐색 + 적대 검증)를 따른다:
  * - 내장 테이블 capability 는 table 전용이 아니라 radio/checkbox(choice_opt 옵션 소스)·
  *   ranking(optionsSource='table' 의 ranking_opt)·table 4유형이 공유한다.
- * - choiceGroups 는 radio/checkbox/ranking 전용 (table 은 소비 경로 없음).
+ * - choiceGroups 는 radio/checkbox/ranking + table. table 은 보기 그룹 표(choice_opt 셀 +
+ *   choiceGroups, 선택은 표 응답 안 `__choiceGroups`)로 소비한다 — 2026-09-11 추가.
  * - textarea 는 전용 필드 0 — base 만으로 구성되는 가장 얇은 variant.
  *
  * 런타임 검증은 schema.ts 의 zod discriminatedUnion 이 담당하며, 두 기술의 키셋
@@ -125,6 +126,7 @@ export interface TableQuestion
     QuestionBase,
     EmbeddedTableFields,
     MobileTableDisplayFields,
+    ChoiceGroupFields,
     Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig'> {
   type: 'table';
 }
@@ -158,7 +160,11 @@ export type EmbeddedTableQuestion =
  * choiceGroups 실재로 분기하는 grouped 응답 shape 어휘(isGroupedChoiceQuestion)와
  * 다른 개념이라 이름을 Capable 로 구분한다 (guards.ts 헤더 주의 2).
  */
-export type ChoiceGroupCapableQuestion = RadioQuestion | CheckboxQuestion | RankingQuestion;
+export type ChoiceGroupCapableQuestion =
+  | RadioQuestion
+  | CheckboxQuestion
+  | RankingQuestion
+  | TableQuestion;
 
 // ── 그룹 union 정렬 게이트 ────────────────────────────────────────
 // 위 3개 부분집합 union 의 판별자 집합이 question-types 의 그룹 상수와 동치임을
