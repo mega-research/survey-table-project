@@ -372,9 +372,8 @@ export function RankingOptionFace({
       )}
       style={customStyle}
     >
-      <span className="shrink-0">
-        <RankingRankBadge rank={rank} prior={prior} />
-      </span>
+      {/* 배지는 행의 직접 자식으로 — 인라인 span 으로 감싸면 기준선 여백이 생겨 글자보다 위로 뜬다 */}
+      <RankingRankBadge rank={rank} prior={prior} />
       <span className="min-w-0 flex-1 whitespace-pre-line [overflow-wrap:anywhere]">
         {labelNode ?? label}
       </span>

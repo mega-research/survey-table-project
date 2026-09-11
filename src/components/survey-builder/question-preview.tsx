@@ -234,9 +234,7 @@ function RankingPreview({ question }: { question: Question }) {
                   ...(opt.textColor ? { color: opt.textColor } : {}),
                 }}
               >
-                <span className="shrink-0">
-                  <RankingRankBadge rank={undefined} />
-                </span>
+                <RankingRankBadge rank={undefined} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <span className="whitespace-pre-line [overflow-wrap:anywhere]">{opt.label}</span>
                 </span>
