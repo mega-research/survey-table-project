@@ -84,6 +84,8 @@ export interface CellFormState {
   mobileDisplay: NonNullable<TableCell['mobileDisplay']>;
   /** 모바일 카드/드릴다운 입력칸 위 제목. 비우면 exportLabel → 열 제목 폴백 */
   mobileLabel: string;
+  /** 보기 소스 표 text 셀 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 그린다 */
+  optionTextSlot: boolean;
   verticalAlign: 'top' | 'middle' | 'bottom';
   textPosition: NonNullable<TableCell['textPosition']>;
   /** 입력값 가로 정렬. 'inherit' 은 미지정 상태 — horizontalAlign 을 따른다. */
@@ -258,6 +260,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     mobileDisplay:
       cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
     mobileLabel: cell.mobileLabel || '',
+    optionTextSlot: cell.optionTextSlot === true,
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
     inputTextAlign: cell.inputTextAlign ?? 'inherit',
@@ -312,6 +315,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     exportLabel: _exportLabel,
     isCustomExportLabel: _isCustomExportLabel,
     mobileLabel: _mobileLabel,
+    optionTextSlot: _optionTextSlot,
     choiceGroupId: _choiceGroupId,
     spssVarType: _spssVarType,
     spssMeasure: _spssMeasure,
@@ -568,6 +572,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { mobileDisplay: form.mobileDisplay }
       : {}),
     // 모바일 카드 셀 라벨 (입력 셀 계열만; 비어 있으면 키 자체를 저장하지 않음)
+    ...(contentType === 'text' && form.optionTextSlot ? { optionTextSlot: true } : {}),
     ...(MOBILE_LABEL_CELL_TYPES.has(contentType) && form.mobileLabel.trim()
       ? { mobileLabel: form.mobileLabel.trim() }
       : {}),

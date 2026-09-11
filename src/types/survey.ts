@@ -492,6 +492,13 @@ export interface TableCell {
   // 비어 있으면 exportLabel(엑셀 라벨) → 열 제목 순으로 폴백한다.
   // 순수 표시용 — SPSS/엑셀 export 라벨에는 관여하지 않는다.
   mobileLabel?: string;
+  /**
+   * 보기 소스 표의 text 셀 전용 — 같은 행 보기 중 상세 기재가 켜지고 **선택된** 것의 입력칸을
+   * 표 아래 스택 대신 이 셀 안에 가로로 나란히 그린다(하나면 100%, 둘이면 50:50). 아무것도
+   * 안 골랐으면 셀 텍스트를 그대로 보여준다. 값 저장은 여전히 `__optTexts__` 사이드카라
+   * 데이터·검증·내보내기 무변경. 모바일 카드는 카드 아래 스택 그대로다.
+   */
+  optionTextSlot?: boolean;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
   /**

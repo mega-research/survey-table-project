@@ -200,3 +200,44 @@ describe('보기-소스 표의 단답형 셀 — 보기 옵션 선택 게이팅'
     expect(useSurveyResponseStore.getState().optionTexts['q1']?.[DETAIL_CELL] ?? '').toBe('');
   });
 });
+
+describe('보기-소스 표의 상세 기재 자리 셀(optionTextSlot)', () => {
+  const SLOT = 'r2c1';
+  /** ② 기타 행: [자리 셀(text, colspan 없음)] [기타(과거)] [기타(현재)] — 두 보기 모두 상세 기재 허용 */
+  function questionWithSlot(): Question {
+    const q = questionWithDetailRow(false);
+    const row2 = q.tableRowsData![1]!;
+    row2.cells[0] = { id: SLOT, type: 'text', content: '-', optionTextSlot: true };
+    row2.cells[1] = { ...row2.cells[1]!, allowTextInput: true, textInputPlaceholder: '과거 기타' };
+    row2.cells[2] = { ...row2.cells[2]!, allowTextInput: true, textInputPlaceholder: '현재 기타' };
+    q.tableRowsData = [q.tableRowsData![0]!, row2];
+    return q;
+  }
+
+  it('아무 보기도 안 골랐으면 셀 텍스트가 그대로고 입력칸이 없다', () => {
+    renderTable(questionWithSlot(), {});
+    expect(screen.getByTestId(`cell-${SLOT}`)).toHaveTextContent('-');
+    expect(screen.queryByPlaceholderText('과거 기타')).toBeNull();
+    expect(screen.queryByPlaceholderText('현재 기타')).toBeNull();
+  });
+
+  it('하나만 고르면 그 입력칸이 셀 안에 전체 폭으로 나오고 표 아래에는 없다', () => {
+    renderTable(questionWithSlot(), { rad2: ETC_NOW_CELL });
+    const cell = screen.getByTestId(`cell-${SLOT}`);
+    const input = screen.getByPlaceholderText('현재 기타');
+    expect(cell.contains(input)).toBe(true);
+    expect(cell.querySelectorAll('input[type="text"]')).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText('현재 기타')).toHaveLength(1);
+    expect(cell).not.toHaveTextContent('-');
+  });
+
+  it('둘 다 고르면 두 입력칸이 셀 안에 나란히(균등 분할) 나온다', () => {
+    renderTable(questionWithSlot(), { rad1: 'r2c2', rad2: ETC_NOW_CELL });
+    const cell = screen.getByTestId(`cell-${SLOT}`);
+    const inputs = cell.querySelectorAll('input[type="text"]');
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input.closest('.flex-1')).not.toBeNull();
+    }
+  });
+});

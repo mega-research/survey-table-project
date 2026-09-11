@@ -291,6 +291,29 @@ export function ChoiceTableResponse({
     return entries;
   }, [attrs, optionByValue, question, quotes, selectedIds]);
 
+  // 상세 기재 자리 셀(optionTextSlot) — 그 행의 상세 기재는 표 아래 스택이 아니라 그 셀 안에
+  // 나란히 그린다. 데스크톱 전용 분기이고, 모바일 카드는 카드 아래 스택 그대로다.
+  const slotRowByCellId = useMemo(() => {
+    const m = new Map<string, TableRow>();
+    for (const row of question.tableRowsData ?? []) {
+      for (const cell of row.cells) {
+        if (cell.type === 'text' && cell.optionTextSlot && !cell.isHidden) m.set(cell.id, row);
+      }
+    }
+    return m;
+  }, [question.tableRowsData]);
+  const slottedOptionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of slotRowByCellId.values()) {
+      for (const cell of row.cells) if (cell.type === 'choice_opt') ids.add(cell.id);
+    }
+    return ids;
+  }, [slotRowByCellId]);
+  const tableBelowEntries = useMemo(
+    () => textInputEntries.filter((entry) => !slottedOptionIds.has(entry.option.id)),
+    [textInputEntries, slottedOptionIds],
+  );
+
   // 셀 게이팅 — 이 표의 input·선택형 셀에 걸린 활성 조건은 컨트롤러가 보기 옵션(선택 여부)
   // 이거나 같은 표의 다른 셀이다. 판정 재료는 표 전체 셀 정의 + 선택된 보기 id 집합.
   const gatingTableCells = useMemo(
@@ -320,6 +343,33 @@ export function ChoiceTableResponse({
     isSelectedRowDetail = false,
     inputIdScope?: string,
   ): ReactNode => {
+    // 상세 기재 자리 셀 — 같은 행 보기 중 선택된 상세 기재 입력칸을 가로로 나란히(균등 분할).
+    // 선택된 것이 없으면 undefined 로 떨어져 셀 텍스트가 그대로 보인다.
+    if (!isSelectedRowDetail && cell.type === 'text' && cell.optionTextSlot) {
+      const row = slotRowByCellId.get(cell.id);
+      const entries = row
+        ? textInputEntries.filter((entry) =>
+            row.cells.some((c) => c.type === 'choice_opt' && c.id === entry.option.id),
+          )
+        : [];
+      if (entries.length > 0) {
+        return (
+          <div className="flex w-full min-w-0 gap-2">
+            {entries.map(({ option, label }) => (
+              <div key={option.id} className="min-w-0 flex-1">
+                <OptionTextInput
+                  questionId={question.id}
+                  option={option}
+                  ariaLabel={label}
+                  rowLabel={label}
+                  stackedLabel
+                />
+              </div>
+            ))}
+          </div>
+        );
+      }
+    }
     // 표 안의 단답형 셀 — 값은 새 저장소 없이 __optTexts__ 사이드카에 **셀 id** 를 키로 넣는다.
     // 그 맵은 이미 그룹 보기 셀도 cell.id 로 저장하고 같은 표 안에서 id 는 유일하므로 충돌이 없다.
     // 덕분에 초안·재진입 복원·버전 rebase·관리자 편집 diff 가 그대로 동작한다.
@@ -836,7 +886,7 @@ export function ChoiceTableResponse({
         applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />
-      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
+      <OptionTextInputStack questionId={question.id} entries={tableBelowEntries} />
       {counter}
     </div>
   );

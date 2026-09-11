@@ -84,6 +84,7 @@ export interface CellFormSetters {
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
   setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
   setMobileLabel: (v: string) => void;
+  setOptionTextSlot: (v: boolean) => void;
   setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
   setTextPosition: (v: CellFormState['textPosition']) => void;
   setInputTextAlign: (v: CellFormState['inputTextAlign']) => void;
@@ -188,6 +189,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setHorizontalAlign: set('horizontalAlign'),
       setMobileDisplay: set('mobileDisplay'),
       setMobileLabel: set('mobileLabel'),
+      setOptionTextSlot: set('optionTextSlot'),
       setVerticalAlign: set('verticalAlign'),
       setTextPosition: set('textPosition'),
       setInputTextAlign: set('inputTextAlign'),

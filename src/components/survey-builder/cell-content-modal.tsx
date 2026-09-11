@@ -264,6 +264,7 @@ export function CellContentModal({
     horizontalAlign,
     mobileDisplay,
     mobileLabel,
+    optionTextSlot,
     verticalAlign,
     textPosition,
     inputTextAlign,
@@ -348,6 +349,7 @@ export function CellContentModal({
     setHorizontalAlign,
     setMobileDisplay,
     setMobileLabel,
+    setOptionTextSlot,
     setVerticalAlign,
     setTextPosition,
     setInputTextAlign,
@@ -1122,6 +1124,25 @@ export function CellContentModal({
                 상단의 &quot;셀 텍스트 내용&quot;에 입력한 텍스트만 표시됩니다.
               </p>
             </div>
+            {/* 보기 소스 표 전용 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 나란히 그린다 */}
+            {(ownQuestion.type === 'radio' || ownQuestion.type === 'checkbox') && (
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={optionTextSlot}
+                  onChange={(e) => setOptionTextSlot(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <span className="font-medium text-gray-900">이 행의 상세 기재를 이 셀에 표시</span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    같은 행의 보기 중 &quot;상세 기재 허용&quot;이 켜지고 선택된 것의 입력칸을 표 아래가
+                    아니라 이 셀 안에 가로로 나란히 그립니다. 하나면 전체 폭, 둘이면 반반입니다. 아무것도
+                    선택되지 않으면 셀 텍스트가 보입니다.
+                  </span>
+                </span>
+              </label>
+            )}
           </TabsContent>
 
           {/* 이미지 탭 */}
