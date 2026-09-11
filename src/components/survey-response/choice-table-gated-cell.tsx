@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect } from 'react';
 
+import { useMobileView } from '@/hooks/use-media-query';
 import { isCellEnabled } from '@/lib/survey/cell-gating';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { TableCell } from '@/types/survey';
@@ -14,7 +15,8 @@ const EMPTY_OPTION_TEXTS: Record<string, string> = {};
  *
  * 이 표의 input·선택형 셀은 값이 `__optTexts__` 사이드카에 있고, 컨트롤러가 보기 옵션이면
  * 그 값은 문항 응답(선택된 보기 id 집합)에 있다. 표 문항의 InteractiveCell 과 같은 규칙으로
- * 미충족이면 **컨트롤만 숨기고**(자리는 `-`), 남은 값은 지운다. 저장 경계의
+ * 미충족이면 **컨트롤만 숨기고** 남은 값은 지운다. 데스크톱 표는 칸이 비어 보이지 않게 `-` 를
+ * 두고, 모바일 카드는 자리 자체가 없으니 아무것도 그리지 않는다. 저장 경계의
  * stripDisabledCellValues 가 같은 판정으로 한 번 더 보증한다.
  */
 export function ChoiceTableGatedCell({
@@ -33,6 +35,7 @@ export function ChoiceTableGatedCell({
   const texts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
   const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  const isMobile = useMobileView();
   const enabled = isCellEnabled(cell, texts, tableCells, selectedChoiceIds);
   const leftover = !enabled && (texts[cell.id] ?? '') !== '';
 
@@ -41,6 +44,6 @@ export function ChoiceTableGatedCell({
     if (leftover) setOptionText(questionId, cell.id, '');
   }, [leftover, questionId, cell.id, setOptionText]);
 
-  if (!enabled) return <span className="text-gray-400">-</span>;
+  if (!enabled) return isMobile ? null : <span className="text-gray-400">-</span>;
   return <>{children}</>;
 }

@@ -8,7 +8,7 @@ import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
-import { collectTableCells } from '@/lib/survey/cell-gating';
+import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
 import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
 import { useMobileView } from '@/hooks/use-media-query';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
@@ -42,6 +42,10 @@ import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
+
+// useSyncExternalStore 안정 참조 — selector 안에서 `?? {}` 를 쓰면 무한 루프 경고가 난다.
+const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 
@@ -294,6 +298,9 @@ export function ChoiceTableResponse({
     [question.tableRowsData],
   );
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // 모바일 카드에서 미충족 셀을 걸러낼 때 filled·numeric 조건의 재료 — 같은 표 input 셀의 사이드카 값
+  const optionTexts =
+    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
   const gate = (cell: TableCell, node: ReactNode): ReactNode =>
     cell.enabledWhen ? (
       <ChoiceTableGatedCell
@@ -505,10 +512,15 @@ export function ChoiceTableResponse({
         const choiceCells = row.cells.filter((c) => c.type === 'choice_opt' && !c.isHidden);
         // 보기 셀이 아닌 인터랙티브 셀(단답 input·선택형 컨트롤) — 행 단위 카드에서만 그린다.
         // 셀 단위 카드는 보기 셀마다 카드라 이 셀들이 설 자리가 없다(기존 동작 유지).
+        // 게이팅 미충족 셀은 카드에서 통째로 뺀다 — 표와 달리 카드에는 빈 칸 자리가 없다.
+        // 남은 값 정리는 저장 경계의 strip 이 맡는다(데스크톱은 ChoiceTableGatedCell 이 즉시 지운다).
         const controlCells = perRow
           ? row.cells.filter(
               (c) =>
-                !c.isHidden && (c.type === 'input' || CHOICE_TABLE_CONTROL_CELL_TYPES.has(c.type)),
+                !c.isHidden &&
+                (c.type === 'input' || CHOICE_TABLE_CONTROL_CELL_TYPES.has(c.type)) &&
+                (!c.enabledWhen ||
+                  isCellEnabled(c, optionTexts, gatingTableCells, selectedIdSet)),
             )
           : [];
         const renderControlCells = () =>

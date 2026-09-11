@@ -204,3 +204,30 @@ describe('ChoiceTableResponse (mobile) — 행 단위 카드의 보기 상세기
     expect(screen.getByPlaceholderText('비전 상세').closest('.rounded-2xl')).not.toBeNull();
   });
 });
+
+describe('ChoiceTableResponse (mobile) — 행 단위 카드의 게이팅 셀', () => {
+  function gatedQuestion(): Question {
+    const q = question();
+    q.mobileTableDisplayMode = 'row-cards';
+    // ① 컴퓨터 비전 카드에 "선택하면 열리는" 입력 셀
+    q.tableRowsData![0]!.cells.push({
+      id: 'r1in',
+      type: 'input',
+      content: '',
+      placeholder: '비전 상세',
+      enabledWhen: { kind: 'choice-selected', controllerCellId: 'r1c2' },
+    });
+    return q;
+  }
+
+  it('미충족이면 입력칸도 "-" 도 없다', () => {
+    render(<ChoiceTableResponse question={gatedQuestion()} value={[]} onChange={() => {}} />);
+    expect(screen.queryByPlaceholderText('비전 상세')).toBeNull();
+    expect(screen.queryByText('-')).toBeNull();
+  });
+
+  it('보기를 고르면 입력칸이 카드 안에 나온다', () => {
+    render(<ChoiceTableResponse question={gatedQuestion()} value={['r1c2']} onChange={() => {}} />);
+    expect(screen.getByPlaceholderText('비전 상세').closest('.rounded-2xl')).not.toBeNull();
+  });
+});
