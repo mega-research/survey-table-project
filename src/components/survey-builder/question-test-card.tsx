@@ -557,6 +557,7 @@ function QuestionTestInput({
           }
           onChange={onChange}
           isTestMode={true}
+          choiceGroups={question.choiceGroups}
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
           rowRepeatConfig={question.rowRepeatConfig}

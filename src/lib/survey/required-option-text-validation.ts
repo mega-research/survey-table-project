@@ -5,6 +5,8 @@ import { resolveChoiceOptions } from '@/utils/choice-source';
 import { RANKING_OTHER_VALUE, parseRankingAnswers } from '@/utils/ranking-shared';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 
+import { hasExplicitRequiredChoiceGroup } from './answer-validation';
+import { isChoiceGroupTableQuestion, readTableChoiceGroups } from './choice-selection';
 import {
   collectVisibleTableCells as collectNumericVisibleTableCells,
   isRequiredCell,
@@ -220,6 +222,23 @@ export function collectRequiredOptionTextIssues(
     );
     detailTargetIds = blockingIssues.flatMap((issue) => issue.targetIds);
     detailCellIds = [...new Set(blockingIssues.map((issue) => issue.cell.id))];
+    // 보기 그룹 표 — 고른 보기의 상세기재는 레거시 보기 소스 표와 같은 사이드카(보기 id)에
+    // 있고, 선택은 표 응답 안 예약 키에 있다. 질문 필수이거나 명시 필수 그룹이 있을 때 막는다.
+    if (
+      isChoiceGroupTableQuestion(question) &&
+      (question.required === true || hasExplicitRequiredChoiceGroup(question))
+    ) {
+      const groupTargets = collectMissingSelectedOptionTextTargetIds(
+        question.id,
+        readTableChoiceGroups(tableResponse),
+        resolveChoiceOptions(question),
+        resolvedOptionTexts,
+      );
+      if (groupTargets.length > 0) {
+        questionMissing = true;
+        detailTargetIds = [...detailTargetIds, ...groupTargets];
+      }
+    }
   } else if (question.required === true) {
     if (question.type === 'ranking') {
       detailTargetIds = collectMissingQuestionRankingTextTargetIds(question, response);

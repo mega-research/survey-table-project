@@ -10,6 +10,8 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
@@ -169,6 +171,23 @@ export function QuestionInput({ question, numericIssues, ...controlProps }: Ques
       <ValidationIssueBanner items={bannerItems} questionId={question.id} />
     </>
   );
+}
+
+/**
+ * 표의 붉은 테두리 셀 — 차단형 검증 위반 셀에, 「다음」을 누른 뒤에는 미충족 필수 보기 그룹의
+ * 보기 셀(보기 그룹 표)을 더한다. 판정은 필수 게이트와 같은 술어(collectUnfilledChoiceGroupCellIds)다.
+ */
+function resolveTableErrorCellIds(
+  question: Question,
+  value: unknown,
+  numericIssues: NumericIssue[] | undefined,
+  showRequiredHighlight: boolean | undefined,
+): Set<string> | undefined {
+  const ids = new Set<string>(numericIssues?.flatMap((i) => i.cellIds ?? []) ?? []);
+  if (showRequiredHighlight && isChoiceGroupTableQuestion(question)) {
+    for (const id of collectUnfilledChoiceGroupCellIds(question, value)) ids.add(id);
+  }
+  return ids.size > 0 ? ids : undefined;
 }
 
 function QuestionInputControl({
@@ -340,11 +359,8 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
-          errorCellIds={
-            numericIssues && numericIssues.length > 0
-              ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))
-              : undefined
-          }
+          choiceGroups={question.choiceGroups}
+          errorCellIds={resolveTableErrorCellIds(question, value, numericIssues, showRequiredHighlight)}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />
       ) : (

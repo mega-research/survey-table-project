@@ -1,0 +1,207 @@
+import { useState } from 'react';
+
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { useTestResponseStore } from '@/stores/test-response-store';
+import type { ChoiceGroup, TableColumn, TableRow } from '@/types/survey';
+
+import { ChoiceGroupsProvider } from './cells/choice-groups-context';
+import { InteractiveCell } from './cells/interactive-cell';
+import { InteractiveTableResponse } from './interactive-table-response';
+
+/**
+ * 보기 그룹 표 — table 문항의 choice_opt 셀이 radio/checkbox 컨트롤로 그려지고,
+ * 선택은 표 응답 안 `__choiceGroups` 예약 키에 쓰인다. 같은 표의 입력 셀은 원래 자리다.
+ */
+
+beforeAll(() => {
+  if (!window.matchMedia) {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  }
+});
+
+const columns: TableColumn[] = [
+  { id: 'c1', label: '구분', width: 120 },
+  { id: 'c2', label: '보기 1', width: 120 },
+  { id: 'c3', label: '보기 2', width: 120 },
+  { id: 'c4', label: '수량', width: 120 },
+];
+
+const choiceGroups: ChoiceGroup[] = [
+  { id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' },
+  { id: 'g2', groupKey: 'cb1', type: 'checkbox', label: '구매처' },
+];
+
+const rows: TableRow[] = [
+  {
+    id: 'r1',
+    label: '보유',
+    cells: [
+      { id: 'r1-lbl', content: '보유', type: 'text' },
+      { id: 'uhd', content: 'UHD', type: 'choice_opt', choiceGroupId: 'g1' },
+      { id: 'fhd', content: 'FHD', type: 'choice_opt', choiceGroupId: 'g1' },
+      { id: 'amount', content: '', type: 'input' },
+    ],
+  },
+  {
+    id: 'r2',
+    label: '구매처',
+    cells: [
+      { id: 'r2-lbl', content: '구매처', type: 'text' },
+      { id: 'online', content: '온라인', type: 'choice_opt', choiceGroupId: 'g2' },
+      { id: 'store', content: '대리점', type: 'choice_opt', choiceGroupId: 'g2' },
+      { id: 'r2-blank', content: '', type: 'text' },
+    ],
+  },
+];
+
+function Harness({
+  initial = {},
+  withGroups = true,
+}: {
+  initial?: Record<string, unknown>;
+  withGroups?: boolean;
+}) {
+  const [value, setValue] = useState<Record<string, unknown>>(initial);
+  return (
+    <>
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={rows}
+        choiceGroups={withGroups ? choiceGroups : undefined}
+        value={value}
+        onChange={setValue}
+        enableSticky={false}
+      />
+      <output data-testid="value">{JSON.stringify(value)}</output>
+    </>
+  );
+}
+
+function readValue(): Record<string, unknown> {
+  return JSON.parse(screen.getByTestId('value').textContent ?? '{}');
+}
+
+describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
+  it('radio 그룹의 보기 셀은 라디오로 보이고, 고르면 __choiceGroups 에 셀 id 가 쓰인다', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(2);
+    await user.click(screen.getByRole('radio', { name: 'FHD' }));
+    expect(readValue()).toEqual({ __choiceGroups: { rad1: 'fhd' } });
+
+    await user.click(screen.getByRole('radio', { name: 'UHD' }));
+    expect(readValue()).toEqual({ __choiceGroups: { rad1: 'uhd' } });
+  });
+
+  it('checkbox 그룹의 보기 셀은 체크박스로 보이고, 고른 순서대로 배열에 쌓인다', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole('checkbox', { name: '대리점' }));
+    await user.click(screen.getByRole('checkbox', { name: '온라인' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb1: ['store', 'online'] } });
+
+    await user.click(screen.getByRole('checkbox', { name: '대리점' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb1: ['online'] } });
+  });
+
+  it('입력 셀 값과 그룹 선택이 같은 표 응답 객체에 나란히 산다', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ amount: '12' }} />);
+
+    await user.click(screen.getByRole('radio', { name: 'UHD' }));
+    expect(readValue()).toEqual({ amount: '12', __choiceGroups: { rad1: 'uhd' } });
+  });
+
+  it('저장된 선택은 처음부터 체크돼 있다', () => {
+    render(<Harness initial={{ __choiceGroups: { rad1: 'fhd', cb1: ['online'] } }} />);
+    expect(screen.getByRole('radio', { name: 'FHD' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'UHD' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '온라인' })).toBeChecked();
+  });
+
+  it('보기 그룹이 없는 표에서는 choice_opt 셀이 지금처럼 글자로만 보인다', () => {
+    render(<Harness withGroups={false} />);
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.getByText('UHD')).toBeInTheDocument();
+  });
+
+  it('상세기재가 켜진 보기를 고르면 그 셀 안에 입력칸이 열린다', async () => {
+    const user = userEvent.setup();
+    const withEtc: TableRow[] = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'uhd', content: 'UHD', type: 'choice_opt', choiceGroupId: 'g1' },
+          {
+            id: 'etc',
+            content: '기타',
+            type: 'choice_opt',
+            choiceGroupId: 'g1',
+            allowTextInput: true,
+            textInputPlaceholder: '직접 입력',
+          },
+        ],
+      },
+    ];
+    function EtcHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>({});
+      return (
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns.slice(0, 2)}
+          rows={withEtc}
+          choiceGroups={[choiceGroups[0]!]}
+          value={value}
+          onChange={setValue}
+          enableSticky={false}
+        />
+      );
+    }
+    render(<EtcHarness />);
+    expect(screen.queryByPlaceholderText('직접 입력')).toBeNull();
+    await user.click(screen.getByRole('radio', { name: '기타' }));
+    const cell = screen.getByRole('radio', { name: '기타' }).closest('[data-cell-id]')!;
+    expect(within(cell as HTMLElement).getByPlaceholderText('직접 입력')).toBeInTheDocument();
+  });
+});
+
+describe('보기 그룹 표 — 테스트 모드(빌더 미리보기)는 테스트 응답 스토어에 같은 모양으로 쓴다', () => {
+  beforeEach(() => {
+    useTestResponseStore.setState({ testResponses: {} });
+  });
+
+  it('보기를 고르면 스토어의 표 응답 안 __choiceGroups 가 바뀌고, 다른 셀 값은 그대로다', async () => {
+    const user = userEvent.setup();
+    useTestResponseStore.setState({ testResponses: { q1: { amount: '7' } } });
+    const cell = rows[0]!.cells[1]!;
+    render(
+      <ChoiceGroupsProvider value={choiceGroups}>
+        <InteractiveCell cell={cell} questionId="q1" isTestMode rowCells={rows[0]!.cells} />
+      </ChoiceGroupsProvider>,
+    );
+    await user.click(screen.getByRole('radio', { name: 'UHD' }));
+    expect(useTestResponseStore.getState().testResponses['q1']).toEqual({
+      amount: '7',
+      __choiceGroups: { rad1: 'uhd' },
+    });
+    expect(screen.getByRole('radio', { name: 'UHD' })).toBeChecked();
+  });
+});

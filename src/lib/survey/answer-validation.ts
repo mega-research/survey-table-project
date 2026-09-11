@@ -8,6 +8,7 @@ import {
 } from '@/utils/choice-group-helpers';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { resolveRequiredMessage } from '@/utils/required-message';
+import { isChoiceGroupTableQuestion, readTableChoiceGroups } from './choice-selection';
 
 /**
  * 질문 타입별 응답 충족 여부를 판정하는 순수 함수.
@@ -111,6 +112,12 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
       );
     }
     case 'table':
+      // 보기 그룹 표 — 필수 그룹이 다 차야 응답이다. 입력 셀의 필수는 차단형 검증(셀 단위)이
+      // 따로 본다. 선택은 표 응답 안 예약 키에 있어 정본 리더로 읽는다.
+      if (isChoiceGroupTableQuestion(question)) {
+        const map = readTableChoiceGroups(response);
+        return checkTargetChoiceGroups(question).every((g) => isChoiceGroupFilled(g, map));
+      }
       return (
         typeof response === 'object' &&
         response !== null &&
@@ -119,6 +126,15 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
     default:
       return true;
   }
+}
+
+/**
+ * 그룹 선택 맵 — 레거시 radio/checkbox 는 문항 응답 자체가 `{그룹키: ...}` 이고,
+ * 보기 그룹 표(table)는 표 응답 안 예약 키에 있다. 두 모양을 한 맵으로 편다.
+ */
+function groupSelectionMap(question: Question, response: unknown): Record<string, unknown> {
+  if (question.type === 'table') return readTableChoiceGroups(response);
+  return (response ?? {}) as Record<string, unknown>;
 }
 
 /** 그룹 충족 판정 — radio 그룹: 비어있지 않은 string, checkbox 그룹: 비어있지 않은 배열 */
@@ -170,7 +186,7 @@ export function collectUnfilledChoiceGroupCellIds(
   response: unknown,
 ): Set<string> {
   if (!isGroupedChoiceQuestion(question)) return new Set();
-  const map = (response ?? {}) as Record<string, unknown>;
+  const map = groupSelectionMap(question, response);
   const out = new Set<string>();
   for (const group of checkTargetChoiceGroups(question)) {
     if (isChoiceGroupFilled(group, map)) continue;
@@ -181,7 +197,7 @@ export function collectUnfilledChoiceGroupCellIds(
 
 export function resolveGroupedRequiredMessage(question: Question, response: unknown): string {
   if (isGroupedChoiceQuestion(question)) {
-    const map = (response ?? {}) as Record<string, unknown>;
+    const map = groupSelectionMap(question, response);
     const unmet = checkTargetChoiceGroups(question).find((g) => !isChoiceGroupFilled(g, map));
     const custom = unmet?.requiredMessage?.trim();
     if (custom) return custom;

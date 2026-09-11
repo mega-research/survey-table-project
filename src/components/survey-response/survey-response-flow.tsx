@@ -56,6 +56,8 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/lib/option-text-migration';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
 import {
   anchorQuestionLabel,
@@ -191,7 +193,14 @@ function buildOptTextsPayload(
     const qOptTexts = storeOptTexts[q.id];
     if (!qOptTexts || Object.keys(qOptTexts).length === 0) continue;
     const qValue = responses[q.id];
-    const optionsForFilter = q.type === 'table' ? collectTableQuestionOptions(q) : q.options;
+    // 보기 그룹 표는 셀 옵션(radio/checkbox/select 셀)에 더해 보기 셀(choice_opt)의 상세기재도
+    // 사이드카에 있다 — 그 보기가 선택돼 있어야 살아남는다(선택은 표 응답 안 예약 키).
+    const optionsForFilter =
+      q.type === 'table'
+        ? isChoiceGroupTableQuestion(q)
+          ? [...collectTableQuestionOptions(q), ...resolveChoiceOptions(q)]
+          : collectTableQuestionOptions(q)
+        : q.options;
     const filtered = filterOptionTextsForSubmission(qValue, qOptTexts, optionsForFilter);
     if (filtered) {
       filteredOptTexts[q.id] = filtered;

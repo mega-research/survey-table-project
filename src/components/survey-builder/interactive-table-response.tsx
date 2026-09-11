@@ -16,6 +16,7 @@ import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import { cn } from '@/lib/utils';
 import {
+  ChoiceGroup,
   DynamicRowGroupConfig,
   HeaderCell,
   MobileTableDisplayMode,
@@ -62,6 +63,7 @@ import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-ra
 import { useBranchEvalCtx } from '@/lib/survey/contact-attrs-context';
 
 import { InteractiveCell } from './cells';
+import { ChoiceGroupsProvider } from './cells/choice-groups-context';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -400,6 +402,11 @@ interface InteractiveTableResponseProps {
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
+  /**
+   * 보기 그룹 표의 그룹 정의 — 있으면 choice_opt 셀이 radio/checkbox 컨트롤로 그려지고 선택이
+   * 표 응답 안 `__choiceGroups` 에 쓰인다. 없으면 보기 셀은 글자로만 보인다.
+   */
+  choiceGroups?: ChoiceGroup[] | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
   /** 차단형 검증 에러 메시지 (테이블 아래 에러 박스) */
@@ -484,6 +491,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
   enableSticky = true,
+  choiceGroups,
   errorCellIds,
   errorItems,
 }: InteractiveTableResponseProps) {
@@ -1158,6 +1166,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   };
 
   return (
+    <ChoiceGroupsProvider value={choiceGroups ?? null}>
     <GatingTableCellsProvider value={gatingTableCells}>
       <Card className={className}>
         {tableTitle && (
@@ -1318,5 +1327,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         />
       )}
     </GatingTableCellsProvider>
+    </ChoiceGroupsProvider>
   );
 });

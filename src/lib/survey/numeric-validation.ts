@@ -30,7 +30,11 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { collectTableCells, isCellEnabled } from './cell-gating';
-import { collectSelectedChoiceCellIds, readTableChoiceGroups } from './choice-selection';
+import {
+  collectSelectedChoiceCellIds,
+  isChoiceGroupTableQuestion,
+  readTableChoiceGroups,
+} from './choice-selection';
 import { optionTextTargetId } from './option-text-target';
 import {
   type PriorAnswers,
@@ -591,6 +595,17 @@ export function collectNumericIssues(
     Object.keys(cellValues).some((k) => !k.startsWith('__')) ||
     Object.keys(readTableChoiceGroups(cellValues)).length > 0;
 
+  // 보기 그룹 표 — 고른 보기의 상세기재(숫자 모드·형식)는 레거시 보기 소스 표와 같은 규칙.
+  // 선택은 표 응답 안 예약 키에 있어 그 맵을 응답으로 넘긴다.
+  const groupOptionTextIssues = isChoiceGroupTableQuestion(question)
+    ? collectOptionTextIssues(
+        question,
+        readTableChoiceGroups(cellValues),
+        ctx?.optionTexts,
+        ctx?.priorAnswers,
+      )
+    : [];
+
   const visible = collectVisibleTableCells(question, cellValues, ctx);
   // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
   // 영구 차단하는 것 방지). isCellEnabled 는 같은 질문의 cellValues 만 본다.
@@ -598,7 +613,7 @@ export function collectNumericIssues(
   // 정의로 정확히 해석한다 — 컨트롤러는 다른 행일 수 있다.
   const tableCells = collectTableCells(question.tableRowsData);
   const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells));
-  const issues: NumericIssue[] = [];
+  const issues: NumericIssue[] = [...groupOptionTextIssues];
 
   // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이
   // 존재하므로 항상 평가한다 (미응답 데이터 참조는 group/SUM 이 0으로 접어 표시되고,

@@ -11,6 +11,8 @@ import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
 import { CellContentLayout } from './cell-content-layout';
+import { useChoiceGroups } from './choice-groups-context';
+import { ChoiceOptCell } from './choice-opt-cell';
 import { useGatingTableCells } from './gating-table-cells-context';
 import { CheckboxCell } from './checkbox-cell';
 import { ImageCell } from './image-cell';
@@ -230,6 +232,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     : (value ?? {});
 
   const tableCells = useGatingTableCells();
+  const choiceGroups = useChoiceGroups();
   const gatingDisabled =
     GATABLE_CELL_TYPES.has(cell.type) &&
     !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells);
@@ -247,6 +250,30 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       clearValue();
     }
   }, [gatingDisabled, hasLeftoverValue, clearValue]);
+
+  // 보기 그룹 표의 보기 옵션 셀 — 그룹 정의가 공급됐고 이 셀이 radio/checkbox 그룹에 속하면
+  // 컨트롤로 그린다. 아니면(보기 그룹 없는 표·빌더 편집 화면) 아래 라우터의 글자 셀 그대로다.
+  // 보기 셀 자체는 게이팅 대상이 아니다(문항 보기 집합을 바꾸는 일 — 별도 설계).
+  if (cell.type === 'choice_opt' && choiceGroups) {
+    const group = choiceGroups.find(
+      (g) => g.id === cell.choiceGroupId && (g.type === 'radio' || g.type === 'checkbox'),
+    );
+    if (group) {
+      return (
+        <ChoiceOptCell
+          cell={cell}
+          questionId={questionId}
+          group={group}
+          isTestMode={isTestMode}
+          value={value}
+          onChange={onChange}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
+    }
+  }
 
   // 게이팅 미충족 셀은 인터랙티브 컨트롤을 숨긴다 (회색 잠금 → 숨김, 2026-08-06 UX 결정).
   // 셀 텍스트(content)는 항목 설명이므로 남긴다 — 컨트롤만 사라져 빈 자리로 보인다.
