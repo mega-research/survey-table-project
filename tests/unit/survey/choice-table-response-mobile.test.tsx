@@ -307,6 +307,29 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     expect(screen.getAllByText(/네트워킹 및 행사 개최/)).toHaveLength(1);
   });
 
+  it('다음을 누른 뒤 미충족 필수 그룹의 섹션만 붉게 두른다', () => {
+    const q = groupedRowQuestion();
+    q.required = true;
+    render(
+      <ChoiceTableResponse
+        question={q}
+        value={{ rad01: 'r1c1' }}
+        onChange={() => {}}
+        showRequiredHighlight
+      />,
+    );
+    expect(screen.getByTestId('choice-group-section-g1')).not.toHaveClass('border-red-300');
+    expect(screen.getByTestId('choice-group-section-g2')).toHaveClass('border-red-300');
+    expect(screen.getByTestId('choice-group-section-g3')).toHaveClass('border-red-300');
+  });
+
+  it('다음을 누르기 전에는 미충족이어도 붉게 두르지 않는다', () => {
+    const q = groupedRowQuestion();
+    q.required = true;
+    render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
+    expect(screen.getByTestId('choice-group-section-g2')).not.toHaveClass('border-red-300');
+  });
+
   it('타일 라벨은 그룹 라벨이 아니라 보기 텍스트다', () => {
     render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />);
     expect(screen.getByLabelText('알고 있음')).toBeInTheDocument();

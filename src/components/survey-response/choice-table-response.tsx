@@ -725,10 +725,27 @@ export function ChoiceTableResponse({
                           headerText ? substituteTokens(headerText, attrs, quotes) : '',
                           resolveChoiceAxisLabel(row, cells[0]!),
                         );
+                        // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
+                        // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
+                        const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
                         return (
-                          <div key={groupId ?? '__none__'} className="space-y-1.5">
+                          <div
+                            key={groupId ?? '__none__'}
+                            data-testid={`choice-group-section-${groupId ?? 'none'}`}
+                            className={cn(
+                              'space-y-1.5',
+                              unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
+                            )}
+                          >
                             {sectionLabel && (
-                              <p className="text-[13px] font-semibold text-gray-600">{sectionLabel}</p>
+                              <p
+                                className={cn(
+                                  'text-[13px] font-semibold',
+                                  unfilled ? 'text-red-600' : 'text-gray-600',
+                                )}
+                              >
+                                {sectionLabel}
+                              </p>
                             )}
                             <div className="flex flex-wrap gap-2">
                               {cells.map((choiceCell) => {
