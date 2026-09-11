@@ -393,7 +393,9 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                       aria-label={label}
                       aria-pressed={rank !== undefined}
                       onClick={toggle}
-                      className="rounded focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
+                      // flex + leading-none: 인라인 버튼의 기준선 여백이 아래로 늘어나 배지가 글자보다
+                      // 위로 뜨는 것을 막는다
+                      className="flex items-center rounded leading-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
                     >
                       <RankingRankBadge rank={rank} />
                     </button>
