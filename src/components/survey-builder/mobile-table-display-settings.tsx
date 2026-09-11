@@ -56,6 +56,12 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
       '행마다 카드 하나를 만들고 그 안에 열별 선택을 나란히 둡니다. 열마다 하나씩 고르는 표에 맞습니다.',
   },
   {
+    value: 'row-group-cards',
+    label: '행 단위 그룹 카드',
+    description:
+      '행마다 카드 하나를 만들고 그 안을 보기 그룹(축)별 섹션으로 나눕니다. 구분 셀은 제목과 설명으로 항상 보이고, 인지 여부·필요성·참여 의향처럼 행마다 여러 축을 하나씩 고르는 표에 맞습니다.',
+  },
+  {
     value: 'original',
     label: '전체 원본 표',
     description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
@@ -72,7 +78,10 @@ export function MobileTableDisplaySettings({
   questionType,
 }: MobileTableDisplaySettingsProps) {
   const visibleOptions = OPTIONS.filter(
-    (option) => option.value !== 'row-cards' || questionType === 'radio' || questionType === 'checkbox',
+    (option) =>
+      (option.value !== 'row-cards' && option.value !== 'row-group-cards') ||
+      questionType === 'radio' ||
+      questionType === 'checkbox',
   );
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
   const committedRange = resolveMobileDrilldownRepeatHeaderRange({

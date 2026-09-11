@@ -13,6 +13,7 @@ describe('resolveMobileTableDisplayMode', () => {
       'drilldown-original-row',
       'row-wise-original',
       'row-cards',
+      'row-group-cards',
       'original',
     ]);
   });

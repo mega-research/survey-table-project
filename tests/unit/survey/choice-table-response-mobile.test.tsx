@@ -243,3 +243,73 @@ describe('ChoiceTableResponse (mobile) — 행 단위 카드의 게이팅 셀', 
     expect(screen.getByPlaceholderText('비전 상세').closest('.rounded-2xl')).not.toBeNull();
   });
 });
+
+describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
+  /** B1 축소판: 행마다 인지 여부(2)·필요성(3)·참여 의향(2) 라디오 그룹, 구분 셀은 제목+설명 */
+  function groupedRowQuestion(): Question {
+    return {
+      id: 'q1',
+      type: 'radio',
+      title: 'B1',
+      required: false,
+      order: 0,
+      mobileTableDisplayMode: 'row-group-cards',
+      choiceGroups: [
+        { id: 'g1', type: 'radio', groupKey: 'rad01', label: '1) 얼라이언스 운영 - 인지여부' },
+        { id: 'g2', type: 'radio', groupKey: 'rad02', label: '1) 얼라이언스 운영 - 필요성' },
+        { id: 'g3', type: 'radio', groupKey: 'rad03', label: '1) 얼라이언스 운영 - 참여 의향' },
+      ],
+      tableColumns: [
+        { id: 'c0', label: '구분' },
+        { id: 'c1', label: '알고있음' },
+        { id: 'c2', label: '모름' },
+        { id: 'c3', label: '필요 없음' },
+        { id: 'c4', label: '보통' },
+        { id: 'c5', label: '필요함' },
+        { id: 'c6', label: '있음' },
+        { id: 'c7', label: '없음' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'r1c0', type: 'text', content: '1) 얼라이언스 운영\n네트워킹 및 행사 개최', boldFirstLine: true },
+            { id: 'r1c1', type: 'choice_opt', content: '', choiceLabel: '알고 있음', choiceGroupId: 'g1' },
+            { id: 'r1c2', type: 'choice_opt', content: '', choiceLabel: '모름', choiceGroupId: 'g1' },
+            { id: 'r1c3', type: 'choice_opt', content: '', choiceLabel: '필요 없음', choiceGroupId: 'g2' },
+            { id: 'r1c4', type: 'choice_opt', content: '', choiceLabel: '보통', choiceGroupId: 'g2' },
+            { id: 'r1c5', type: 'choice_opt', content: '', choiceLabel: '필요함', choiceGroupId: 'g2' },
+            { id: 'r1c6', type: 'choice_opt', content: '', choiceLabel: '있음', choiceGroupId: 'g3' },
+            { id: 'r1c7', type: 'choice_opt', content: '', choiceLabel: '없음', choiceGroupId: 'g3' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('행마다 카드 하나 — 구분 셀이 제목·설명으로 보이고 그룹마다 섹션 제목(축 이름)이 붙는다', () => {
+    const { container } = render(
+      <ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />,
+    );
+    expect(container.querySelectorAll('.rounded-2xl')).toHaveLength(1);
+    expect(screen.getByText('1) 얼라이언스 운영')).toBeInTheDocument();
+    expect(screen.getByText(/네트워킹 및 행사 개최/)).toBeInTheDocument();
+    for (const section of ['인지여부', '필요성', '참여 의향']) {
+      expect(screen.getByText(section)).toBeInTheDocument();
+    }
+  });
+
+  it('타일 라벨은 그룹 라벨이 아니라 보기 텍스트다', () => {
+    render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />);
+    expect(screen.getByLabelText('알고 있음')).toBeInTheDocument();
+    expect(screen.getByLabelText('보통')).toBeInTheDocument();
+    expect(screen.queryByText('1) 얼라이언스 운영 - 인지여부')).toBeNull();
+  });
+
+  it('섹션 안에서 하나를 고르면 그 그룹 키로 onChange 한다', () => {
+    const onChange = vi.fn();
+    render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={onChange} />);
+    fireEvent.click(screen.getByLabelText('보통'));
+    expect(onChange).toHaveBeenCalledWith({ rad02: 'r1c4' });
+  });
+});

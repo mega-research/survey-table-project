@@ -241,7 +241,7 @@ questions                  # 개별 질문
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
-├── mobileOriginalTable, mobileTableDisplayMode,
+├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-cards|row-group-cards|original (0107 CHECK). row-group-cards 는 보기 소스 표 전용 — 행 카드 안을 보기 그룹(축)별 섹션으로 나누고 구분 셀을 제목·설명으로 항상 보임(섹션 제목은 utils/choice-group-section-label)
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
 ├── hideColumnLabels, pageBreakBefore

@@ -82,6 +82,7 @@
     "0103_prior_answer_disabled",
     "0104_row_repeat_config",
     "0105_sticky_column_count",
-    "0106_add_row_cards_mobile_mode"
+    "0106_add_row_cards_mobile_mode",
+    "0107_add_row_group_cards_mobile_mode"
   ]
 }
