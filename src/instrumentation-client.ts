@@ -18,6 +18,22 @@ Sentry.init({
   // Session Replay 는 기본 마스킹(maskAllText/maskAllInputs)에 의존한다.
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: false,
+
+  // 브라우저·확장 프로그램이 페이지에 심는 자기 스크립트의 오류는 우리 코드가 아니다.
+  // 스택에 우리 번들 프레임이 없고 응답 진행에도 영향이 없어 이슈만 어지럽힌다.
+  // - __firefox__: Firefox iOS 계열(Brave iOS 포함)의 읽기 모드 주입 스크립트
+  // - window.ethereum: Brave 지갑·MetaMask 등 지갑 확장 주입
+  ignoreErrors: [
+    /__firefox__/,
+    /window\.ethereum/,
+    /ResizeObserver loop (limit exceeded|completed with undelivered notifications)/,
+  ],
+  denyUrls: [
+    /^chrome-extension:\/\//i,
+    /^moz-extension:\/\//i,
+    /^safari-(web-)?extension:\/\//i,
+    /extensions\//i,
+  ],
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

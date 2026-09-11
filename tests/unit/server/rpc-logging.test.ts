@@ -9,6 +9,26 @@ const logged = vi.hoisted(() => ({
   info: vi.fn(),
   error: vi.fn(),
 }));
+const sentry = vi.hoisted(() => ({
+  captureException: vi.fn(),
+  tags: [] as Array<Record<string, string>>,
+  transactionNames: [] as string[],
+}));
+vi.mock('@sentry/nextjs', () => ({
+  withScope: (fn: (scope: unknown) => void) => {
+    const tags: Record<string, string> = {};
+    const scope = {
+      setTag: (k: string, v: string) => {
+        tags[k] = v;
+      },
+      setTransactionName: (name: string) => sentry.transactionNames.push(name),
+    };
+    fn(scope);
+    sentry.tags.push(tags);
+  },
+  captureException: sentry.captureException,
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: { info: logged.info, error: logged.error },
   scheduleLogFlush: vi.fn(),
@@ -19,10 +39,14 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { authed, base, pub } from '@/server/orpc';
+import { isSentryCaptured } from '@/server/rpc-error-policy';
 
 beforeEach(() => {
   logged.info.mockReset();
   logged.error.mockReset();
+  sentry.captureException.mockReset();
+  sentry.tags.length = 0;
+  sentry.transactionNames.length = 0;
 });
 
 afterEach(() => vi.unstubAllEnvs());
@@ -124,6 +148,25 @@ describe('rpcLoggingMiddleware', () => {
     expect(fields).toMatchObject({ rpc: 'boom', code: 'INTERNAL_SERVER_ERROR' });
     expect(fields['durationMs']).toBeTypeOf('number');
     expect(fields['err']).toBeInstanceOf(Error);
+  });
+
+  it('예기치 못한 에러는 rpc·code·role(·surveyId) 태그와 함께 Sentry 로 보내고 캡처 표식을 남긴다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    let thrown: unknown;
+    await client.boom().catch((e: unknown) => {
+      thrown = e;
+    });
+
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(sentry.tags[0]).toMatchObject({ rpc: 'boom', code: 'INTERNAL_SERVER_ERROR', role: 'anonymous' });
+    expect(sentry.transactionNames[0]).toBe('rpc boom');
+    expect(isSentryCaptured(thrown)).toBe(true);
+  });
+
+  it('코드 있는 거부(UNAUTHORIZED 등)는 예상된 경로라 Sentry 로 보내지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await expect(client.adminOnly()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('base 파생이므로 미들웨어를 다시 붙이지 않은 procedure 도 커버된다', async () => {

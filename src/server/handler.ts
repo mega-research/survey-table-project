@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { logger, scheduleLogFlush } from '@/lib/logger';
 
-import { isUnexpectedRpcError, toWireError } from './rpc-error-policy';
+import { isSentryCaptured, isSentryWorthyRpcError, isUnexpectedRpcError, toWireError } from './rpc-error-policy';
 import { router } from './router';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -31,7 +31,11 @@ export const rpcHandler = new RPCHandler(router, {
         if (isUnexpectedRpcError(error)) {
           // 클라이언트에는 마스킹되므로 서버 로그에 원문을 남긴다.
           logger.error({ err: error }, '[rpc] unhandled error');
-          Sentry.captureException(error);
+          // procedure 안 예외는 로깅 미들웨어가 태그와 함께 이미 보냈다(rpc-logging.ts).
+          // 여기는 procedure 밖(디코드·라우팅) 예외의 최후 창구다.
+          if (isSentryWorthyRpcError(error) && !isSentryCaptured(error)) {
+            Sentry.captureException(error);
+          }
         }
         throw toWireError(error, { dev: IS_DEV });
       }
