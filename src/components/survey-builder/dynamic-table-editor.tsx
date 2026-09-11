@@ -929,7 +929,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         <CellContentModal
           isOpen={!!selectedCell}
           onClose={() => setSelectedCell(null)}
-          ownQuestion={currentQuestionAsQuestion}
+          // 편집기의 문항 객체는 type 이 늘 'table' 이다 — 셀 모달의 문항 유형 판정(마지막 보기
+          // 옵션 셀 보호 등)이 라디오·체크박스 문항에서 죽지 않게 실제 유형을 덮어 넘긴다.
+          ownQuestion={
+            mobileTableQuestion
+              ? { ...currentQuestionAsQuestion, type: mobileTableQuestion.type }
+              : currentQuestionAsQuestion
+          }
           currentQuestionId={currentQuestionId}
           questionCode={questionCode}
           questionTitle={questionTitle}
