@@ -160,9 +160,11 @@ export function OptionTextInput({
             {...sharedProps}
             className={cn(
               OPTION_TEXT_BARE_INPUT_CLS,
-              // 칩을 위에 쌓는 모바일 카드에서는 입력칸이 한 줄 높이라 손가락으로 짚기 어렵다 —
-              // 눈에 보이는 입력 영역(높이·배경·글자 크기)을 키운다
-              stackedLabel && 'h-11 rounded-md bg-gray-50 px-3 text-base',
+              // 칩을 위에 쌓는 자리(모바일 카드 · 상세 기재 자리 셀)에서는 입력칸이 한 줄 높이라
+              // 짚기 어렵고, 회색 배경만으로는 위의 회색 칩과 구분되지 않아 "칩이 둘"로 읽힌다 —
+              // 흰 바탕에 테두리를 둘러 입력칸으로 보이게 하고 높이·글자 크기를 키운다
+              stackedLabel &&
+                'h-12 rounded-md border border-gray-300 bg-white px-3 text-base focus:border-blue-400',
               priorTextCls,
             )}
           />
