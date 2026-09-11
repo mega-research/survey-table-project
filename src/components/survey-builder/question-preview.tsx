@@ -5,7 +5,6 @@ import {
   RankingRankBadge,
   RankingSummaryBar,
   rankingGridLayout,
-  rankingTextField,
 } from '@/components/survey-response/ranking-click-select';
 import { Input } from '@/components/ui/input';
 import { Question } from '@/types/survey';
@@ -240,18 +239,6 @@ function RankingPreview({ question }: { question: Question }) {
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <span className="whitespace-pre-line [overflow-wrap:anywhere]">{opt.label}</span>
-                  {rankingTextField(opt) !== null && (
-                    <input
-                      type="text"
-                      disabled
-                      placeholder={
-                        opt.value === RANKING_OTHER_VALUE
-                          ? '기타 내용 입력...'
-                          : opt.textInputPlaceholder || '상세 기재'
-                      }
-                      className="h-9 w-full min-w-0 rounded-md border border-gray-300 bg-gray-50 px-2 text-base placeholder:text-gray-400"
-                    />
-                  )}
                 </span>
               </div>
             ))}

@@ -26,7 +26,7 @@ import {
   RankingClickList,
   RankingFullNotice,
   RankingOptionFace,
-  RankingOptionTextInput,
+  RankingDetailRows,
   RankingRankBadge,
   RankingSummaryBar,
 } from './ranking-click-select';
@@ -337,15 +337,26 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         bare
         option={opt}
         rank={rankOfOption(scope.answers, opt.value)}
-        entry={scope.answers.find((a) => a.optionValue === opt.value)}
         handle={scope.handle}
         labelNode={cellLabelNode(cell, opt, substituteTokens(opt.label, attrs, quotes), attrs, quotes)}
-        detailTargetScopeId={scope.detailTargetScopeId}
         questionId={question.id}
         cellId={scope.priorCellId}
       />
     );
   };
+
+  // 순위가 매겨진 기타·상세기재 보기의 입력 줄 — 범위(그룹)마다 한 묶음, 표/카드 아래.
+  const detailRows = scopes.map((scope) => (
+    <RankingDetailRows
+      key={`detail-${scope.key}`}
+      answers={scope.answers}
+      options={scope.options}
+      handle={scope.handle}
+      detailTargetScopeId={scope.detailTargetScopeId}
+      questionId={question.id}
+      cellId={scope.priorCellId}
+    />
+  ));
 
   if (isMobile) {
     return (
@@ -363,7 +374,6 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
               const opt = scope?.options.find((o) => o.id === optCell.id);
               if (!scope || !opt) return null;
               const rank = rankOfOption(scope.answers, opt.value);
-              const entry = scope.answers.find((a) => a.optionValue === opt.value);
               const label = substituteTokens(opt.label, attrs, quotes);
               const toggle = () => scope.handle.toggle(opt.value);
               return (
@@ -390,23 +400,13 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                   }
                   selected={rank !== undefined}
                   onToggle={toggle}
-                  footer={
-                    <RankingOptionTextInput
-                      option={opt}
-                      rank={rank}
-                      entry={entry}
-                      handle={scope.handle}
-                      detailTargetScopeId={scope.detailTargetScopeId}
-                      questionId={question.id}
-                      cellId={scope.priorCellId}
-                      label={label}
-                    />
-                  }
                 />
               );
             });
           })}
         </div>
+        {/* 기타·상세기재 입력 줄은 카드 목록 아래 — 표 아래에 두는 데스크톱과 같은 자리 */}
+        {detailRows}
       </div>
     );
   }
@@ -423,6 +423,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
         renderCell={renderCell}
       />
+      {detailRows}
     </div>
   );
 }

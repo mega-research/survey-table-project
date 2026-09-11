@@ -72,32 +72,32 @@ describe('RankingClickList', () => {
     expect(screen.getByRole('button', { name: '순위초기화' })).toBeDisabled();
   });
 
-  it('상세기재 보기의 입력칸은 행 안에 있고 순위가 매겨져야 활성화된다', () => {
+  it('상세기재 보기의 입력칸은 순위가 매겨지기 전엔 없다', () => {
     renderList([]);
+    expect(screen.queryByPlaceholderText('사유 입력')).toBeNull();
+  });
+
+  it('순위가 매겨지면 입력 줄이 보기 목록 아래에 라벨 칩과 함께 나온다', () => {
+    renderList([{ rank: 1, optionValue: 'c' }]);
     const input = screen.getByPlaceholderText('사유 입력');
-    expect(input).toBeDisabled();
-    expect(screen.getByRole('button', { name: '상세 사유' }).contains(input)).toBe(true);
+    // 보기 행(role=button) 안이 아니다
+    expect(screen.getByRole('button', { name: '상세 사유' }).contains(input)).toBe(false);
+    expect(input.closest('label')?.textContent).toContain('상세 사유');
   });
 
   it('순위가 매겨진 상세기재 입력은 optionText 를 그 순위 항목에 쓰고 검증 타깃 id 를 단다', () => {
     const onChange = renderList([{ rank: 1, optionValue: 'c' }]);
     const input = screen.getByPlaceholderText('사유 입력');
-    expect(input).toBeEnabled();
     expect(input).toHaveAttribute('data-option-text-target-id', 'q1:ranking:1:c');
 
     fireEvent.change(input, { target: { value: '납기' } });
     expect(onChange).toHaveBeenCalledWith([{ rank: 1, optionValue: 'c', optionText: '납기' }]);
   });
 
-  it('입력칸 클릭은 행 클릭(순위 해제)으로 번지지 않는다', () => {
-    const onChange = renderList([{ rank: 1, optionValue: 'c' }]);
-    fireEvent.click(screen.getByPlaceholderText('사유 입력'));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
   it('allowOther 면 기타 행이 마지막에 붙고 otherText 로 저장한다', () => {
     const onChange = renderList([{ rank: 1, optionValue: '__other__' }], { allowOther: true });
     const input = screen.getByPlaceholderText('기타 내용 입력...');
+    expect(input.closest('label')?.textContent).toContain('기타');
     expect(input).toHaveAttribute('data-option-text-target-id', 'q1:ranking:1:__other__');
     fireEvent.change(input, { target: { value: '직접' } });
     expect(onChange).toHaveBeenCalledWith([{ rank: 1, optionValue: '__other__', otherText: '직접' }]);

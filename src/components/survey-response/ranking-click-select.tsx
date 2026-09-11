@@ -2,6 +2,10 @@
 
 import { type CSSProperties, type KeyboardEvent, type ReactNode, useState } from 'react';
 
+import {
+  OPTION_TEXT_BARE_INPUT_CLS,
+  OptionTextRow,
+} from '@/components/survey-response/option-text-input-stack';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { rankingTextTargetId } from '@/lib/survey/option-text-target';
 import {
@@ -22,7 +26,7 @@ import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
  * 드롭다운(RankingDropdownStack)을 대신해 보기 자체를 누르면 순위가 매겨진다.
  * - 상단 요약 줄: `1순위 [n] 2순위 [-]` + 순위초기화
  * - 보기 표: 누르면 비어 있는 가장 낮은 순위, 다시 누르면 해제(뒤 순위 당김)
- * - 기타·상세기재 보기는 그 행 안에 입력칸이 있고, 순위가 매겨져야 활성화된다
+ * - 기타·상세기재 보기는 순위가 매겨졌을 때만 보기 목록 아래에 `기타 | 입력칸` 줄이 나온다
  *
  * 응답 모양은 드롭다운과 같아 저장·검증·내보내기·이월 표시가 그대로다.
  * 표 소스(내장 표의 순위 옵션 셀)·그룹별 순위는 ranking-question 이 같은 핸들과 조각을
@@ -193,11 +197,15 @@ export interface RankingOptionTextInputProps {
   detailTargetScopeId?: string | undefined;
   questionId?: string | undefined;
   cellId?: string | undefined;
-  /** aria-label 에 쓰는 치환된 보기 라벨. */
+  /** 라벨 칩에 쓰는 치환된 보기 라벨. */
   label: string;
 }
 
-/** 기타·상세기재 보기의 행 안 입력칸. 순위가 매겨져야 활성화된다. */
+/**
+ * 기타·상세기재 보기의 입력 줄 — `기타 | 입력칸` 모양(OptionTextRow). 순위가 매겨졌을 때만 그린다.
+ * 보기 행 안이 아니라 보기 목록 **아래**에 쌓는다 — 드롭다운 방식이 드롭다운 아래에 두는 것과
+ * 같은 자리다(2026-09-11 결정: 행 안에 늘 보이는 입력칸은 목록을 어지럽힌다).
+ */
 export function RankingOptionTextInput({
   option,
   rank,
@@ -210,56 +218,87 @@ export function RankingOptionTextInput({
 }: RankingOptionTextInputProps) {
   const priorHighlight = usePriorHighlight();
   const field = rankingTextField(option);
-  if (field === null) return null;
-  const selected = rank !== undefined;
+  if (field === null || rank === undefined) return null;
   const isOther = field === 'otherText';
   const text = entry?.[field] ?? '';
   const priorText =
-    selected &&
     questionId !== undefined &&
     isPriorRankingText(priorHighlight, questionId, rank, field, text, cellId);
   return (
-    <input
-      type="text"
-      disabled={!selected}
-      value={text}
-      placeholder={isOther ? '기타 내용 입력...' : option.textInputPlaceholder || '상세 기재'}
-      aria-label={
-        selected
-          ? `${rank}순위 ${isOther ? '기타 ' : ''}상세 기재`
-          : `${label} ${isOther ? '기타 ' : ''}상세 기재`
-      }
-      name={`ranking-${isOther ? 'other' : 'text'}-${option.id}`}
-      autoComplete="off"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-      onChange={(e) =>
-        isOther
-          ? handle.setOtherText(option.value, e.target.value)
-          : handle.setOptionText(option.value, e.target.value)
-      }
-      data-option-text-target-id={
-        selected && detailTargetScopeId
-          ? rankingTextTargetId(detailTargetScopeId, rank, option.value)
-          : undefined
-      }
-      className={cn(
-        'h-9 w-full min-w-0 rounded-md border border-gray-300 bg-white px-2 text-base text-gray-900 placeholder:text-gray-400',
-        'focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none',
-        'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400',
-        priorText && PRIOR_HIGHLIGHT_TEXT_CLS,
-      )}
-    />
+    <OptionTextRow label={isOther ? '기타' : label.trim() || '상세 기재'}>
+      <input
+        type="text"
+        value={text}
+        placeholder={isOther ? '기타 내용 입력...' : option.textInputPlaceholder || '상세 기재'}
+        aria-label={`${rank}순위 ${isOther ? '기타 ' : ''}상세 기재`}
+        name={`ranking-${isOther ? 'other' : 'text'}-${option.id}`}
+        autoComplete="off"
+        onChange={(e) =>
+          isOther
+            ? handle.setOtherText(option.value, e.target.value)
+            : handle.setOptionText(option.value, e.target.value)
+        }
+        data-option-text-target-id={
+          detailTargetScopeId
+            ? rankingTextTargetId(detailTargetScopeId, rank, option.value)
+            : undefined
+        }
+        className={cn(OPTION_TEXT_BARE_INPUT_CLS, priorText && PRIOR_HIGHLIGHT_TEXT_CLS)}
+      />
+    </OptionTextRow>
   );
+}
+
+export interface RankingDetailRowsProps {
+  answers: RankingAnswer[];
+  /** 기타 합성 보기까지 포함한 목록. */
+  options: QuestionOption[];
+  handle: Pick<RankingClickHandle, 'setOtherText' | 'setOptionText'>;
+  detailTargetScopeId?: string | undefined;
+  questionId?: string | undefined;
+  cellId?: string | undefined;
+}
+
+/** 순위가 매겨진 기타·상세기재 보기의 입력 줄을 순위 순으로 쌓는다. 없으면 null. */
+export function RankingDetailRows({
+  answers,
+  options,
+  handle,
+  detailTargetScopeId,
+  questionId,
+  cellId,
+}: RankingDetailRowsProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const rows = [...answers]
+    .sort((a, b) => a.rank - b.rank)
+    .map((entry) => {
+      const option = options.find((o) => o.value === entry.optionValue);
+      if (!option || rankingTextField(option) === null) return null;
+      return (
+        <RankingOptionTextInput
+          key={`detail-${entry.rank}`}
+          option={option}
+          rank={entry.rank}
+          entry={entry}
+          handle={handle}
+          detailTargetScopeId={detailTargetScopeId}
+          questionId={questionId}
+          cellId={cellId}
+          label={substituteTokens(option.label, attrs, quotes)}
+        />
+      );
+    })
+    .filter(Boolean);
+  if (rows.length === 0) return null;
+  return <div className="space-y-1.5">{rows}</div>;
 }
 
 export interface RankingOptionFaceProps {
   option: QuestionOption;
   /** 이 보기의 현재 순위. 없으면 미선택. */
   rank: number | undefined;
-  entry: RankingAnswer | undefined;
-  handle: RankingClickHandle;
-  detailTargetScopeId?: string | undefined;
+  handle: Pick<RankingClickHandle, 'toggle'>;
   questionId?: string | undefined;
   cellId?: string | undefined;
   /** 라벨 대신 그릴 노드(표 셀의 이미지 등). 미전달이면 option.label 을 치환해 그린다. */
@@ -270,15 +309,13 @@ export interface RankingOptionFaceProps {
 }
 
 /**
- * 보기 하나의 얼굴 — 순위 배지 + 라벨 + (기타·상세기재면) 행 안 입력칸.
- * 수동 보기 목록의 행과 표 소스의 셀이 쓴다. 모바일 카드는 조각(배지·입력칸)만 가져다 쓴다.
+ * 보기 하나의 얼굴 — 순위 배지 + 라벨. 기타·상세기재 입력은 여기 없고 목록 아래(RankingDetailRows)다.
+ * 수동 보기 목록의 행과 표 소스의 셀이 쓴다. 모바일 카드는 배지 조각만 가져다 쓴다.
  */
 export function RankingOptionFace({
   option,
   rank,
-  entry,
   handle,
-  detailTargetScopeId,
   questionId,
   cellId,
   labelNode,
@@ -337,18 +374,8 @@ export function RankingOptionFace({
       <span className="mt-0.5 shrink-0">
         <RankingRankBadge rank={rank} prior={prior} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="whitespace-pre-line [overflow-wrap:anywhere]">{labelNode ?? label}</span>
-        <RankingOptionTextInput
-          option={option}
-          rank={rank}
-          entry={entry}
-          handle={handle}
-          detailTargetScopeId={detailTargetScopeId}
-          questionId={questionId}
-          cellId={cellId}
-          label={label}
-        />
+      <span className="min-w-0 flex-1 whitespace-pre-line [overflow-wrap:anywhere]">
+        {labelNode ?? label}
       </span>
     </div>
   );
@@ -428,15 +455,21 @@ export function RankingClickList({
             key={opt.id}
             option={opt}
             rank={rankOfOption(answers, opt.value)}
-            entry={answers.find((a) => a.optionValue === opt.value)}
             handle={handle}
-            detailTargetScopeId={detailTargetScopeId}
             questionId={questionId}
             cellId={cellId}
             className={layout.itemClassName}
           />
         ))}
       </div>
+      <RankingDetailRows
+        answers={answers}
+        options={rows}
+        handle={handle}
+        detailTargetScopeId={detailTargetScopeId}
+        questionId={questionId}
+        cellId={cellId}
+      />
     </div>
   );
 }
