@@ -381,6 +381,26 @@ describe('collectNumericIssues — 테이블', () => {
     expect(collectNumericIssues(q, { __selectedRowIds: ['r1'] })).toHaveLength(0);
   });
 
+  it('그룹 선택(__choiceGroups)만 있는 보기 그룹 표는 접촉으로 본다 — 필수 셀 검증이 켜진다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'opt-a', type: 'choice_opt', content: 'A', choiceGroupId: 'g1' },
+          { id: 'c1', type: 'input', content: '', inputType: 'number', required: true },
+        ],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    });
+    expect(collectNumericIssues(q, { __choiceGroups: { rad1: 'opt-a' } })).toHaveLength(1);
+    // 그룹 맵이 비어 있으면 여전히 미접촉이다
+    expect(collectNumericIssues(q, { __choiceGroups: {} })).toHaveLength(0);
+  });
+
   it('미선택 동적 행의 필수 셀은 평가에서 제외한다', () => {
     const rows: TableRow[] = [
       {

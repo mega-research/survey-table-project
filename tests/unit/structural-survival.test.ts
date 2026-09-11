@@ -320,3 +320,99 @@ describe('applyStructuralSurvival — 예약 키·기타 보존', () => {
     expect(result.affectedQuestionIds).toEqual([]);
   });
 });
+
+describe('applyStructuralSurvival — 보기 그룹 표 (table + __choiceGroups)', () => {
+  const groupedTable = (over: Partial<Question> = {}) =>
+    q({
+      id: 't1',
+      type: 'table',
+      choiceGroups: [
+        { id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' },
+        { id: 'g2', groupKey: 'cb1', type: 'checkbox', label: '구매처' },
+      ],
+      tableRowsData: [
+        row('r1', [
+          cell({ id: 'a', type: 'choice_opt', choiceGroupId: 'g1' }),
+          cell({ id: 'b', type: 'choice_opt', choiceGroupId: 'g1' }),
+          cell({ id: 'c', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'd', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'amount', type: 'input' }),
+        ]),
+      ],
+      ...over,
+    });
+  const answer = {
+    amount: '12',
+    __selectedRowIds: ['r1'],
+    __choiceGroups: { rad1: 'a', cb1: ['c', 'd'] },
+  };
+
+  it('같은 구조에서는 그룹 선택·셀 값·동적 행 선택이 참조 그대로 산다', () => {
+    const result = applyStructuralSurvival({ t1: answer }, [groupedTable()]);
+    expect(result.survivingResponses['t1']).toBe(answer);
+    expect(result.affectedQuestionIds).toEqual([]);
+  });
+
+  it('사라진 그룹키의 항목만 지우고 나머지는 산다', () => {
+    const noCb = groupedTable({
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    });
+    const result = applyStructuralSurvival({ t1: answer }, [noCb]);
+    expect(result.survivingResponses['t1']).toEqual({
+      amount: '12',
+      __selectedRowIds: ['r1'],
+      __choiceGroups: { rad1: 'a' },
+    });
+    expect(result.affectedQuestionIds).toEqual(['t1']);
+  });
+
+  it('사라진 보기 셀은 radio 그룹이면 그 항목을, checkbox 그룹이면 배열에서 그 값만 지운다', () => {
+    const fewer = groupedTable({
+      tableRowsData: [
+        row('r1', [
+          cell({ id: 'b', type: 'choice_opt', choiceGroupId: 'g1' }),
+          cell({ id: 'c', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'amount', type: 'input' }),
+        ]),
+      ],
+    });
+    const result = applyStructuralSurvival({ t1: answer }, [fewer]);
+    expect(result.survivingResponses['t1']).toEqual({
+      amount: '12',
+      __selectedRowIds: ['r1'],
+      __choiceGroups: { cb1: ['c'] },
+    });
+    expect(result.affectedQuestionIds).toEqual(['t1']);
+  });
+
+  it('보기 셀이 다른 그룹으로 옮겨가면 원래 그룹의 선택으로는 살지 못한다', () => {
+    const moved = groupedTable({
+      tableRowsData: [
+        row('r1', [
+          cell({ id: 'a', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'b', type: 'choice_opt', choiceGroupId: 'g1' }),
+          cell({ id: 'c', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'd', type: 'choice_opt', choiceGroupId: 'g2' }),
+          cell({ id: 'amount', type: 'input' }),
+        ]),
+      ],
+    });
+    const result = applyStructuralSurvival({ t1: answer }, [moved]);
+    expect(result.survivingResponses['t1']).toEqual({
+      amount: '12',
+      __selectedRowIds: ['r1'],
+      __choiceGroups: { cb1: ['c', 'd'] },
+    });
+  });
+
+  it('레거시 radio/checkbox 의 그룹 응답 판정은 그대로다 — radio 그룹 객체는 무판정 유지', () => {
+    const legacy = q({
+      id: 'q1',
+      type: 'radio',
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+      tableRowsData: [row('r1', [cell({ id: 'a', type: 'choice_opt', choiceGroupId: 'g1' })])],
+    });
+    const result = applyStructuralSurvival({ q1: { rad1: 'ghost' } }, [legacy]);
+    expect(result.survivingResponses['q1']).toEqual({ rad1: 'ghost' });
+  });
+});

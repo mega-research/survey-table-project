@@ -459,3 +459,105 @@ describe('completeResponse — 숨은 문항 strip 순서', () => {
     expectOrderContract(setArg.questionResponses);
   });
 });
+
+// ─── 보기 그룹 표 — 그룹 선택 예약 키 보존 ─────────────────────────────────
+
+/**
+ * 보기 그룹 표(table + choice_opt 셀 + choiceGroups)의 표 응답 안 `__choiceGroups` 가
+ * 세 단계(숨은 문항 → 게이팅 → calc)를 지나도 남는지. 그룹 선택은 아직 게이팅이 읽지
+ * 않는다(그건 다음 티켓) — 여기서는 **보존**만 못 박는다.
+ */
+const GROUPED_TABLE_QUESTIONS = [
+  ...ORDER_QUESTIONS,
+  {
+    id: 'q-grp',
+    type: 'table',
+    title: '보기 그룹 표',
+    order: 5,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    tableRowsData: [
+      {
+        id: 'gr1',
+        label: 'gr1',
+        cells: [
+          { id: 'grp_a', content: 'A', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'grp_b', content: 'B', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'grp_ctrl', content: '', type: 'input' },
+          {
+            id: 'grp_gated',
+            content: '',
+            type: 'input',
+            enabledWhen: { kind: 'filled', controllerCellId: 'grp_ctrl' },
+          },
+          {
+            id: 'grp_calc',
+            content: '',
+            type: 'calc',
+            formula: { kind: 'cell', cellId: 'grp_ctrl' },
+          },
+        ],
+      },
+    ],
+  },
+];
+
+describe('completeResponse — 보기 그룹 표의 __choiceGroups 보존', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: null,
+      isTest: false,
+    });
+    surveyFindFirstMock.mockResolvedValue({
+      id: SURVEY_ID,
+      status: 'published',
+      endDate: null,
+      maxResponses: null,
+      isPublic: true,
+      requireInviteToken: false,
+      currentVersionId: VERSION_ID,
+      isPaused: false,
+      testModeEnabled: false,
+      testToken: null,
+    });
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    selectThenMock.mockReturnValue([{ total: 0 }]);
+    selectLimitMock.mockResolvedValue([{ snapshot: { questions: GROUPED_TABLE_QUESTIONS } }]);
+    stubExecute(GROUPED_TABLE_QUESTIONS.map((q) => q.id));
+    updateReturningMock.mockReturnValue([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null },
+    ]);
+  });
+
+  it('세 단계를 지나도 그룹 선택이 남고, 게이팅 strip 과 calc 재계산은 셀 값에만 작용한다', async () => {
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          ...orderPayload(),
+          'q-grp': {
+            grp_ctrl: '',
+            grp_gated: '지워져야 한다',
+            grp_calc: '999',
+            __choiceGroups: { rad1: 'grp_a' },
+          },
+        },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    expectOrderContract(setArg.questionResponses);
+    expect(setArg.questionResponses['q-grp']).toEqual({
+      grp_ctrl: '',
+      grp_calc: '',
+      __choiceGroups: { rad1: 'grp_a' },
+    });
+  });
+});

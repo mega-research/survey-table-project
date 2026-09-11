@@ -30,7 +30,7 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { collectTableCells, isCellEnabled } from './cell-gating';
-import { collectSelectedChoiceCellIds } from './choice-selection';
+import { collectSelectedChoiceCellIds, readTableChoiceGroups } from './choice-selection';
 import { optionTextTargetId } from './option-text-target';
 import {
   type PriorAnswers,
@@ -585,7 +585,11 @@ export function collectNumericIssues(
   // 차단은 유지돼야 한다 (아래 "보이는 열의 필수 셀" 테스트). 잔존값-only 표에서 외부 참조
   // 수식이 오차단하는 문제는 evaluateSumConstraint 의 보이는-셀 빈 값 가드가 막는다.
   // (emptyDefault 자동 채움이 있으면 셀 키가 생겨 검증 대상이 된다 — 의도됨, Q1 그릴링 확정)
-  const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
+  // 보기 그룹 표의 그룹 선택(`__choiceGroups`)은 예약 키지만 응답이다 — 보기만 고르고 입력 셀을
+  // 비운 표에서 필수 셀 차단이 "미접촉" 으로 풀리면 안 된다.
+  const hasAnyCellValue =
+    Object.keys(cellValues).some((k) => !k.startsWith('__')) ||
+    Object.keys(readTableChoiceGroups(cellValues)).length > 0;
 
   const visible = collectVisibleTableCells(question, cellValues, ctx);
   // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을

@@ -11,6 +11,7 @@
  * 이월 요약(조사 대상 attrs)과는 다른 것이다 — 본문 토큰 치환·표시 조건은
  * 이월 요약을 쓰고, 이월 응답은 값 표시·복사에만 쓴다.
  */
+import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 
 /** 이월 응답 한 벌. 질문 id → 값. 사이드카 키(`__` 접두)도 함께 들어온다. */
@@ -33,8 +34,10 @@ function isNonEmptyAnswerValue(value: unknown): boolean {
   if (typeof value === 'string') return value.length > 0;
   if (Array.isArray(value)) return value.some(isNonEmptyAnswerValue);
   if (typeof value === 'object') {
+    // 보기 그룹 표의 그룹 선택(`__choiceGroups`)은 예약 키지만 답이다 — 그 안의 선택으로 판정한다.
     return Object.entries(value as Record<string, unknown>).some(
-      ([key, entry]) => !isSidecarKey(key) && isNonEmptyAnswerValue(entry),
+      ([key, entry]) =>
+        (key === CHOICE_GROUPS_KEY || !isSidecarKey(key)) && isNonEmptyAnswerValue(entry),
     );
   }
   return true;
