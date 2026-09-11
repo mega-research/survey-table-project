@@ -360,9 +360,10 @@ export function RankingOptionFace({
       onKeyDown={onKeyDown}
       data-ranking-option={option.value}
       className={cn(
-        'flex min-w-0 cursor-pointer items-start gap-2 text-base outline-none select-none',
+        // items-center: 배지와 글자를 행 가운데에 — 위쪽 기준이면 한 줄짜리 행에서 내용이 떠 보인다
+        'flex min-w-0 cursor-pointer items-center gap-2.5 text-base leading-snug outline-none select-none',
         'rounded-md transition-colors',
-        bare ? 'w-full px-2 py-1' : 'px-3 py-2.5',
+        bare ? 'w-full px-2 py-1' : 'px-3 py-2',
         selected ? 'bg-blue-50 text-blue-900' : bare ? 'hover:bg-gray-50' : 'bg-white text-gray-800 hover:bg-gray-50',
         'focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-inset',
         option.textBold && 'font-bold',
@@ -371,7 +372,7 @@ export function RankingOptionFace({
       )}
       style={customStyle}
     >
-      <span className="mt-0.5 shrink-0">
+      <span className="shrink-0">
         <RankingRankBadge rank={rank} prior={prior} />
       </span>
       <span className="min-w-0 flex-1 whitespace-pre-line [overflow-wrap:anywhere]">

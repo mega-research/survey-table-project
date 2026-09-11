@@ -228,13 +228,13 @@ function RankingPreview({ question }: { question: Question }) {
             {rows.map((opt) => (
               <div
                 key={opt.id}
-                className={`flex items-start gap-2 px-3 py-2.5 text-base text-gray-800 ${grid.itemClassName}${opt.textBold ? ' font-bold' : ''}`}
+                className={`flex items-center gap-2.5 px-3 py-2 text-base leading-snug text-gray-800 ${grid.itemClassName}${opt.textBold ? ' font-bold' : ''}`}
                 style={{
                   ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
                   ...(opt.textColor ? { color: opt.textColor } : {}),
                 }}
               >
-                <span className="mt-0.5 shrink-0">
+                <span className="shrink-0">
                   <RankingRankBadge rank={undefined} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5">
