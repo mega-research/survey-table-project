@@ -860,14 +860,20 @@ export function ChoiceTableResponse({
                     {choiceCells.map((choiceCell) => {
                       const axisLabel = resolveChoiceAxisLabel(row, choiceCell);
                       const { checked, disabled } = getChoiceCellState(choiceCell);
+                      // 「다음」을 누른 뒤 답하지 않은 필수 그룹의 타일은 붉게 — 데스크톱 표의 보기
+                      // 그룹 외곽선·그룹 카드 섹션과 같은 판정(unfilledGroupCellIds).
+                      const unfilled = !checked && unfilledGroupCellIds.has(choiceCell.id);
                       return (
                         <label
                           key={choiceCell.id}
+                          data-unfilled={unfilled || undefined}
                           className={cn(
                             'flex min-h-10 min-w-0 flex-1 basis-[12rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
                             checked
                               ? 'border-blue-300 bg-blue-50 text-blue-900'
-                              : 'border-gray-200 bg-white text-gray-800',
+                              : unfilled
+                                ? 'border-red-300 bg-red-50/40 text-gray-800'
+                                : 'border-gray-200 bg-white text-gray-800',
                             disabled && 'cursor-default opacity-50',
                           )}
                         >

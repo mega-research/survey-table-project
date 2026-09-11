@@ -366,3 +366,54 @@ describe('ChoiceTableResponse (mobile) — 게이팅 해제 시 남은 값 정�
     expect(useSurveyResponseStore.getState().optionTexts['q1']?.['r1in'] ?? '').toBe('');
   });
 });
+
+describe('ChoiceTableResponse (mobile) — 행 단위 카드의 미충족 필수 그룹 타일', () => {
+  /** 활용 여부(g1)·활용 계획(g2) 두 체크박스 그룹이 열마다 하나씩 — A1 축소판 */
+  function twoGroupQuestion(): Question {
+    return {
+      id: 'q1',
+      type: 'checkbox',
+      title: 'A1',
+      required: true,
+      order: 0,
+      mobileTableDisplayMode: 'row-cards',
+      choiceGroups: [
+        { id: 'g1', type: 'checkbox', groupKey: 'chk1', label: '활용 여부' },
+        { id: 'g2', type: 'checkbox', groupKey: 'chk2', label: '활용 계획' },
+      ],
+      tableColumns: [
+        { id: 'c0', label: '구분' },
+        { id: 'c1', label: '활용 여부' },
+        { id: 'c2', label: '활용 계획' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'r1c0', type: 'text', content: '① 연산 및 제어', mobileDisplay: 'header' },
+            { id: 'r1c1', type: 'choice_opt', content: '', choiceLabel: '연산 - 활용 여부', choiceGroupId: 'g1' },
+            { id: 'r1c2', type: 'choice_opt', content: '', choiceLabel: '연산 - 활용 계획', choiceGroupId: 'g2' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('다음을 누른 뒤 답하지 않은 필수 그룹의 타일만 붉게 두른다', () => {
+    render(
+      <ChoiceTableResponse
+        question={twoGroupQuestion()}
+        value={{ chk1: ['r1c1'] }}
+        onChange={() => {}}
+        showRequiredHighlight
+      />,
+    );
+    expect(screen.getByLabelText('활용 여부').closest('label')).not.toHaveAttribute('data-unfilled');
+    expect(screen.getByLabelText('활용 계획').closest('label')).toHaveAttribute('data-unfilled', 'true');
+  });
+
+  it('다음을 누르기 전에는 붉게 두르지 않는다', () => {
+    render(<ChoiceTableResponse question={twoGroupQuestion()} value={{}} onChange={() => {}} />);
+    expect(screen.getByLabelText('활용 계획').closest('label')).not.toHaveAttribute('data-unfilled');
+  });
+});
