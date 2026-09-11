@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useCallback, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ChevronRight, ListChecks } from 'lucide-react';
 
@@ -311,17 +311,86 @@ export function ChoiceTableResponse({
     return entries;
   }, [attrs, optionByValue, question, quotes, selectedIds]);
 
+  const rowWiseLayout = useMemo(() => {
+    const columns = question.tableColumns ?? [];
+    const rows = question.tableRowsData ?? [];
+    const conditionalLayout = projectConditionalTableLayout({
+      columns,
+      rows,
+      ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+      // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
+      allResponses: ignoreDisplayConditions ? undefined : allResponses,
+      allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
+      evalCtx: branchEvalCtx,
+    });
+    const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
+      (config) =>
+        config.enabled &&
+        (!config.displayCondition ||
+          ignoreDisplayConditions ||
+          !allResponses ||
+          !allQuestions ||
+          shouldDisplayDynamicGroup(config, allResponses, allQuestions)),
+    );
+    const visibleGroupIds = new Set(visibleConfigs.map((config) => config.groupId));
+    const selectedSet = new Set(selectedDynamicRowIds);
+    const selectedGroupIds = new Set<string>();
+    for (const row of conditionalLayout.rows) {
+      if (
+        row.dynamicGroupId &&
+        visibleGroupIds.has(row.dynamicGroupId) &&
+        selectedSet.has(row.id)
+      ) {
+        selectedGroupIds.add(row.dynamicGroupId);
+      }
+    }
+    const visibleRowIds = new Set(
+      conditionalLayout.rows
+        .filter((row) => {
+          if (row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId)) {
+            return selectedSet.has(row.id);
+          }
+          if (row.showWhenDynamicGroupId && visibleGroupIds.has(row.showWhenDynamicGroupId)) {
+            return selectedGroupIds.has(row.showWhenDynamicGroupId);
+          }
+          return true;
+        })
+        .map((row) => row.id),
+    );
+    return {
+      // 조건만 적용한 행 — 동적 행 선택은 반영하지 않는다. 데스크톱 표가 쓴다.
+      conditionalRows: conditionalLayout.rows,
+      columns: conditionalLayout.columns,
+      rows: recalculateRowspansForVisibleRows(conditionalLayout.rows, visibleRowIds),
+      headerGrid: conditionalLayout.headerGrid,
+      configs: visibleConfigs,
+      dynamicRows: conditionalLayout.rows.filter(
+        (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
+      ),
+    };
+  }, [
+    allQuestions,
+    allResponses,
+    question,
+    selectedDynamicRowIds,
+    ignoreDisplayConditions,
+    branchEvalCtx,
+  ]);
+
   // 상세 기재 자리 셀(optionTextSlot) — 그 행의 상세 기재는 표 아래 스택이 아니라 그 셀 안에
   // 나란히 그린다. 데스크톱 전용 분기이고, 모바일 카드는 카드 아래 스택 그대로다.
+  // 판정은 원본이 아니라 **표시 조건을 투영한 행**으로 한다 — 자리 셀의 열이 조건으로 숨으면
+  // 셀이 투영에서 빠져 그 행의 입력은 표 아래 스택으로 돌아간다. 원본으로 판정하면 입력칸이
+  // 어디에도 안 그려진 채 필수 상세기재가 "다음"을 막는다.
   const slotRowByCellId = useMemo(() => {
     const m = new Map<string, TableRow>();
-    for (const row of question.tableRowsData ?? []) {
+    for (const row of rowWiseLayout.conditionalRows) {
       for (const cell of row.cells) {
         if (cell.type === 'text' && cell.optionTextSlot && !cell.isHidden) m.set(cell.id, row);
       }
     }
     return m;
-  }, [question.tableRowsData]);
+  }, [rowWiseLayout.conditionalRows]);
   const slottedOptionIds = useMemo(() => {
     const ids = new Set<string>();
     for (const row of slotRowByCellId.values()) {
@@ -344,6 +413,20 @@ export function ChoiceTableResponse({
   // 모바일 카드에서 미충족 셀을 걸러낼 때 filled·numeric 조건의 재료 — 같은 표 input 셀의 사이드카 값
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
+  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  // 게이팅 미충족 셀의 남은 값 정리 — 렌더 여부와 무관하게 표 단위로 한 번에. 모바일 카드는
+  // 미충족 셀을 아예 그리지 않아 셀 컴포넌트의 effect 가 돌지 않으므로 여기서 맡는다
+  // (선택 → 입력 → 해제 → 재선택에 이전 값이 되살아나면 안 된다). 저장 경계 strip 은 별도 보증.
+  useEffect(() => {
+    for (const cell of gatingTableCells) {
+      if (!cell.enabledWhen || cell.isHidden) continue;
+      if (cell.type !== 'input' && !CHOICE_TABLE_CONTROL_CELL_TYPES.has(cell.type)) continue;
+      if ((optionTexts[cell.id] ?? '') === '') continue;
+      if (!isCellEnabled(cell, optionTexts, gatingTableCells, selectedIdSet)) {
+        setOptionText(question.id, cell.id, '');
+      }
+    }
+  }, [gatingTableCells, optionTexts, selectedIdSet, question.id, setOptionText]);
   const gate = (cell: TableCell, node: ReactNode): ReactNode =>
     cell.enabledWhen ? (
       <ChoiceTableGatedCell
@@ -866,71 +949,6 @@ export function ChoiceTableResponse({
    * 두 벌을 한 memo 에서 낸다. 조건 투영을 별도 memo 로 떼면 React Compiler 가 이
    * 컴포넌트의 수동 메모이제이션을 보존하지 못한다(preserve-manual-memoization 경고).
    */
-  const rowWiseLayout = useMemo(() => {
-    const columns = question.tableColumns ?? [];
-    const rows = question.tableRowsData ?? [];
-    const conditionalLayout = projectConditionalTableLayout({
-      columns,
-      rows,
-      ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
-      // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
-      allResponses: ignoreDisplayConditions ? undefined : allResponses,
-      allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
-      evalCtx: branchEvalCtx,
-    });
-    const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
-      (config) =>
-        config.enabled &&
-        (!config.displayCondition ||
-          ignoreDisplayConditions ||
-          !allResponses ||
-          !allQuestions ||
-          shouldDisplayDynamicGroup(config, allResponses, allQuestions)),
-    );
-    const visibleGroupIds = new Set(visibleConfigs.map((config) => config.groupId));
-    const selectedSet = new Set(selectedDynamicRowIds);
-    const selectedGroupIds = new Set<string>();
-    for (const row of conditionalLayout.rows) {
-      if (
-        row.dynamicGroupId &&
-        visibleGroupIds.has(row.dynamicGroupId) &&
-        selectedSet.has(row.id)
-      ) {
-        selectedGroupIds.add(row.dynamicGroupId);
-      }
-    }
-    const visibleRowIds = new Set(
-      conditionalLayout.rows
-        .filter((row) => {
-          if (row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId)) {
-            return selectedSet.has(row.id);
-          }
-          if (row.showWhenDynamicGroupId && visibleGroupIds.has(row.showWhenDynamicGroupId)) {
-            return selectedGroupIds.has(row.showWhenDynamicGroupId);
-          }
-          return true;
-        })
-        .map((row) => row.id),
-    );
-    return {
-      // 조건만 적용한 행 — 동적 행 선택은 반영하지 않는다. 데스크톱 표가 쓴다.
-      conditionalRows: conditionalLayout.rows,
-      columns: conditionalLayout.columns,
-      rows: recalculateRowspansForVisibleRows(conditionalLayout.rows, visibleRowIds),
-      headerGrid: conditionalLayout.headerGrid,
-      configs: visibleConfigs,
-      dynamicRows: conditionalLayout.rows.filter(
-        (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
-      ),
-    };
-  }, [
-    allQuestions,
-    allResponses,
-    question,
-    selectedDynamicRowIds,
-    ignoreDisplayConditions,
-    branchEvalCtx,
-  ]);
   const rowWiseOriginalModel = useMemo(() => {
     if (mobileMode !== 'row-wise-original') return { sections: [] };
     const columns = question.tableColumns ?? [];

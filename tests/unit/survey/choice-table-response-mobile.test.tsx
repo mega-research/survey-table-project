@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Question } from '@/types/survey';
 
 // 모바일 뷰 강제
@@ -342,5 +343,26 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={onChange} />);
     fireEvent.click(screen.getByLabelText('보통'));
     expect(onChange).toHaveBeenCalledWith({ rad02: 'r1c4' });
+  });
+});
+
+describe('ChoiceTableResponse (mobile) — 게이팅 해제 시 남은 값 정리', () => {
+  function gatedQuestion(): Question {
+    const q = question();
+    q.mobileTableDisplayMode = 'row-cards';
+    q.tableRowsData![0]!.cells.push({
+      id: 'r1in',
+      type: 'input',
+      content: '',
+      placeholder: '비전 상세',
+      enabledWhen: { kind: 'choice-selected', controllerCellId: 'r1c2' },
+    });
+    return q;
+  }
+
+  it('보기를 해제하면 카드에 셀이 없어도 사이드카 값이 지워진다 — 재선택에 이전 값이 되살아나지 않는다', () => {
+    useSurveyResponseStore.setState({ optionTexts: { q1: { r1in: '적은 내용' } } });
+    render(<ChoiceTableResponse question={gatedQuestion()} value={[]} onChange={() => {}} />);
+    expect(useSurveyResponseStore.getState().optionTexts['q1']?.['r1in'] ?? '').toBe('');
   });
 });

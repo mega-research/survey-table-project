@@ -15,7 +15,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
-import type { Question } from '@/types/survey';
+import type { Question, TableColumn } from '@/types/survey';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => false,
@@ -239,5 +239,47 @@ describe('보기-소스 표의 상세 기재 자리 셀(optionTextSlot)', () => 
     for (const input of inputs) {
       expect(input.closest('.flex-1')).not.toBeNull();
     }
+  });
+});
+
+describe('상세 기재 자리 셀 — 열 표시 조건으로 자리 열이 숨은 경우', () => {
+  const SLOT = 'r2c1';
+  /** 자리 셀 열(c1)만 조건으로 숨고 보기 열은 남는 표. 조건은 q1 응답에 있을 수 없는 값. */
+  function questionWithHiddenSlotColumn(): Question {
+    const q = questionWithDetailRow(false);
+    q.tableColumns = [
+      {
+        id: 'c1',
+        label: '내용',
+        displayCondition: {
+          logicType: 'AND',
+          conditions: [
+            {
+              id: 'hide',
+              name: '',
+              enabled: true,
+              logicType: 'AND',
+              conditionType: 'value-match',
+              requiredValues: ['never'],
+              sourceQuestionId: 'q1',
+            },
+          ],
+        },
+      },
+      { id: 'c2', label: '2025년 12월 기준' },
+      { id: 'c3', label: '현재' },
+    ] as unknown as TableColumn[];
+    const row2 = q.tableRowsData![1]!;
+    row2.cells[0] = { id: SLOT, type: 'text', content: '-', optionTextSlot: true };
+    row2.cells[2] = { ...row2.cells[2]!, allowTextInput: true, textInputPlaceholder: '현재 기타' };
+    q.tableRowsData = [q.tableRowsData![0]!, row2];
+    return q;
+  }
+
+  it('자리 셀이 안 그려지면 그 행의 상세기재는 표 아래 스택으로 돌아온다', () => {
+    renderTable(questionWithHiddenSlotColumn(), { rad2: ETC_NOW_CELL });
+    expect(screen.queryByTestId(`cell-${SLOT}`)).toBeNull();
+    // 입력칸이 어디에도 없으면 필수 상세기재가 다음을 영구 차단한다 — 표 아래에 있어야 한다
+    expect(screen.getByPlaceholderText('현재 기타')).toBeInTheDocument();
   });
 });

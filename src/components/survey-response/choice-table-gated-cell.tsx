@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect } from 'react';
+import type { ReactNode } from 'react';
 
 import { useMobileView } from '@/hooks/use-media-query';
 import { isCellEnabled } from '@/lib/survey/cell-gating';
@@ -15,9 +15,9 @@ const EMPTY_OPTION_TEXTS: Record<string, string> = {};
  *
  * 이 표의 input·선택형 셀은 값이 `__optTexts__` 사이드카에 있고, 컨트롤러가 보기 옵션이면
  * 그 값은 문항 응답(선택된 보기 id 집합)에 있다. 표 문항의 InteractiveCell 과 같은 규칙으로
- * 미충족이면 **컨트롤만 숨기고** 남은 값은 지운다. 데스크톱 표는 칸이 비어 보이지 않게 `-` 를
- * 두고, 모바일 카드는 자리 자체가 없으니 아무것도 그리지 않는다. 저장 경계의
- * stripDisabledCellValues 가 같은 판정으로 한 번 더 보증한다.
+ * 미충족이면 **컨트롤만 숨긴다**. 데스크톱 표는 칸이 비어 보이지 않게 `-` 를 두고, 모바일
+ * 카드는 자리 자체가 없으니 아무것도 그리지 않는다. 남은 값 정리는 표 컴포넌트의 sweep 이,
+ * 저장 경계는 stripDisabledCellValues 가 같은 판정으로 보증한다.
  */
 export function ChoiceTableGatedCell({
   cell,
@@ -34,15 +34,10 @@ export function ChoiceTableGatedCell({
 }) {
   const texts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
   const isMobile = useMobileView();
   const enabled = isCellEnabled(cell, texts, tableCells, selectedChoiceIds);
-  const leftover = !enabled && (texts[cell.id] ?? '') !== '';
-
-  // 비활성인데 값이 남아 있으면 즉시 지움 — 컨트롤러가 바뀐 직후 1회.
-  useEffect(() => {
-    if (leftover) setOptionText(questionId, cell.id, '');
-  }, [leftover, questionId, cell.id, setOptionText]);
+  // 남은 값 정리는 표 컴포넌트(choice-table-response)의 표 단위 sweep 이 맡는다 — 모바일은
+  // 미충족 셀을 그리지 않아 여기 effect 가 돌지 않기 때문이다.
 
   // 표의 다른 텍스트 셀에 적은 "-" 와 같은 글자 크기·색(상속)으로 — 회색으로 빼면 그 칸만 튄다.
   if (!enabled) return isMobile ? null : <span className="text-base">-</span>;
