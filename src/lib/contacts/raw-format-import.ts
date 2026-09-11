@@ -22,6 +22,7 @@
  */
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import type { OptionMismatch } from '@/lib/contacts/prior-answer-import';
+import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { Question, RankingAnswer } from '@/types/survey';
 import { encodeChoiceTableCellFromExport } from '@/lib/survey/choice-table-cell-value';
@@ -495,6 +496,24 @@ function invertQuestion(
   cells: ReadonlyArray<{ column: SPSSExportColumn; raw: string }>,
   mismatch: MismatchSink,
 ): unknown {
+  // 보기 그룹 표 — 그룹 열(choice-group*)과 셀 열이 한 문항에 섞여 나온다. 그룹 선택은 표 응답
+  // 안 예약 키로, 셀 값은 제자리로 되돌려 한 객체에 합친다.
+  if (question.type === 'table') {
+    const isGroupColumn = (type: SPSSExportColumn['type']) =>
+      type === 'choice-group' || type === 'choice-group-item';
+    const groupCells = cells.filter((cell) => isGroupColumn(cell.column.type));
+    if (groupCells.length > 0) {
+      const rest = cells.filter((cell) => !isGroupColumn(cell.column.type));
+      const base = rest.length > 0 ? invertQuestion(question, rest, mismatch) : undefined;
+      const groups = invertChoiceGroups(groupCells, mismatch);
+      const merged =
+        base && typeof base === 'object' && !Array.isArray(base)
+          ? { ...(base as Record<string, unknown>) }
+          : {};
+      if (groups !== undefined) merged[CHOICE_GROUPS_KEY] = groups;
+      return Object.keys(merged).length > 0 ? merged : undefined;
+    }
+  }
   const first = cells[0];
   if (!first) return undefined;
   switch (first.column.type) {

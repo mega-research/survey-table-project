@@ -9,6 +9,7 @@
  * 과거 엑셀 Blob/워크북/코딩북 헬퍼는 UI에서 제거됨에 따라 함께 삭제되었다.
  */
 import { getOptionText } from '@/lib/option-text-read';
+import { isChoiceGroupTableQuestion, readTableChoiceGroups } from '@/lib/survey/choice-selection';
 import type { QuestionVariant } from '@/lib/question';
 import {
   transformMultiselect,
@@ -189,6 +190,110 @@ function pruneUnusedRepeatRows(
   return rows.filter((row) => (row.repeatIndex ?? 1) <= limit);
 }
 
+/**
+ * 보기 그룹 변수 — radio 그룹은 코드 1열(choice-group), checkbox 그룹은 보기별 counted 열
+ * (choice-group-item) + 상세기재 사이드카 열. 레거시 radio/checkbox 문항과 보기 그룹 표(table)가
+ * 같은 규칙을 쓴다 — 변수명·값 라벨·MRSET 이 유형과 무관하게 같아야 한다.
+ */
+function emitChoiceGroupColumns(
+  q: QuestionVariant,
+  questionCode: string,
+  columns: SPSSExportColumn[],
+): void {
+    // choiceGroups 가 1개 이상 정의된 radio/checkbox 질문은 이 분기에서 처리.
+    // 그룹 없는 checkbox 질문은 아래 else-if 의 기존 checkbox-item 경로를 탄다.
+    // choiceGroups 기반 radio/checkbox — 그룹별 변수 생성
+    for (const group of collectChoiceGroups(q)) {
+      if (group.type === 'radio') {
+        // radio 그룹 → 기존 'choice-group' 1변수 (무변경)
+        const cellValueMap: Record<string, number> = {};
+        const valueLabels: Array<{ value: number; label: string }> = [];
+        group.cells.forEach((cell, idx) => {
+          const code = cell.spssNumericCode ?? idx + 1;
+          cellValueMap[cell.id] = code;
+          valueLabels.push({
+            value: code,
+            label:
+              (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)',
+          });
+        });
+        const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
+        const groupVarName = isDefault ? questionCode : `${questionCode}_${group.groupKey}`;
+        columns.push({
+          spssVarName: groupVarName,
+          questionText: q.title,
+          optionLabel: group.label || q.title,
+          questionId: q.id,
+          type: 'choice-group',
+          choiceGroupKey: group.groupKey,
+          choiceGroupCellValueMap: cellValueMap,
+          choiceGroupValueLabels: valueLabels,
+        });
+        // allowTextInput 멤버 셀마다 STRING 사이드카 텍스트 변수 생성.
+        // 저장 경로는 __optTexts__[questionId][cell.id] 로 비그룹과 동일하므로
+        // optionId=cell.id 를 그대로 사용해 기존 option-text 추출 case 가 동작한다.
+        group.cells.forEach((cell, idx) => {
+          if (!cell.allowTextInput) return;
+          const varNumber =
+            cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1);
+          columns.push({
+            spssVarName: buildOptionTextVarName(groupVarName, varNumber),
+            questionText: q.title,
+            optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'}`,
+            questionId: q.id,
+            type: 'option-text',
+            optionId: cell.id,
+            ...(cell.textInputType === 'number' ? { numericText: true } : {}),
+          });
+        });
+      } else {
+        // checkbox 그룹 → 멤버 셀별 'choice-group-item' (counted value 방식)
+        const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
+        // 그룹 라벨: 명시 그룹이면 group.label, default 그룹이면 q.title 폴백
+        const groupLabel = isDefault ? q.title : group.label || q.title;
+          const qCode = questionCode;
+        group.cells.forEach((cell, idx) => {
+          const code = cell.spssNumericCode ?? idx + 1;
+          // 변수명: default 그룹이면 buildCheckboxItemVarName(질문코드, undefined, i) — 기존 checkbox 하위호환
+          //         명시 그룹이면 질문코드_groupKey_그룹내1-based
+          const varName = isDefault
+            ? buildCheckboxItemVarName(qCode, undefined, idx)
+            : `${qCode}_${group.groupKey}_${idx + 1}`;
+          // 보기 라벨: choiceLabel > content > '(라벨 없음)'
+          const optLabel =
+            (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)';
+          columns.push({
+            spssVarName: varName,
+            questionText: q.title,
+            // optionLabel 에 그룹 컨텍스트를 포함시켜 SPSS 변수 라벨로 바로 사용 가능하게 함
+            optionLabel: `${groupLabel} - ${optLabel}`,
+            questionId: q.id,
+            type: 'choice-group-item',
+            choiceGroupKey: group.groupKey,
+            choiceGroupMemberCellId: cell.id,
+            choiceGroupMemberCode: code,
+            choiceGroupMemberLabel: optLabel,
+            optionIndex: idx,
+          });
+          // allowTextInput 사이드카: base 는 그룹 변수명 접두(질문코드[_groupKey]).
+          // default 그룹은 기존 비그룹 checkbox 사이드카(Q8_1_text)와 동일해야 한다 — 하위호환.
+          if (cell.allowTextInput) {
+            const sidecarBase = isDefault ? qCode : `${qCode}_${group.groupKey}`;
+            columns.push({
+              spssVarName: buildOptionTextVarName(sidecarBase, String(idx + 1)),
+              questionText: q.title,
+              optionLabel: `${optLabel}`,
+              questionId: q.id,
+              type: 'option-text',
+              optionId: cell.id,
+              ...(cell.textInputType === 'number' ? { numericText: true } : {}),
+            });
+          }
+        });
+      }
+    }
+}
+
 export function generateSPSSColumns(
   questions: QuestionVariant[],
   options?: SpssColumnOptions,
@@ -221,97 +326,7 @@ export function generateSPSSColumns(
     if ((q.type === 'radio' || q.type === 'checkbox') && isGroupedChoiceQuestion(q)) {
       // choiceGroups 가 1개 이상 정의된 radio/checkbox 질문은 이 분기에서 처리.
       // 그룹 없는 checkbox 질문은 아래 else-if 의 기존 checkbox-item 경로를 탄다.
-      // choiceGroups 기반 radio/checkbox — 그룹별 변수 생성
-      for (const group of collectChoiceGroups(q)) {
-        if (group.type === 'radio') {
-          // radio 그룹 → 기존 'choice-group' 1변수 (무변경)
-          const cellValueMap: Record<string, number> = {};
-          const valueLabels: Array<{ value: number; label: string }> = [];
-          group.cells.forEach((cell, idx) => {
-            const code = cell.spssNumericCode ?? idx + 1;
-            cellValueMap[cell.id] = code;
-            valueLabels.push({
-              value: code,
-              label:
-                (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)',
-            });
-          });
-          const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
-          const groupVarName = isDefault ? q.questionCode : `${q.questionCode}_${group.groupKey}`;
-          columns.push({
-            spssVarName: groupVarName,
-            questionText: q.title,
-            optionLabel: group.label || q.title,
-            questionId: q.id,
-            type: 'choice-group',
-            choiceGroupKey: group.groupKey,
-            choiceGroupCellValueMap: cellValueMap,
-            choiceGroupValueLabels: valueLabels,
-          });
-          // allowTextInput 멤버 셀마다 STRING 사이드카 텍스트 변수 생성.
-          // 저장 경로는 __optTexts__[questionId][cell.id] 로 비그룹과 동일하므로
-          // optionId=cell.id 를 그대로 사용해 기존 option-text 추출 case 가 동작한다.
-          group.cells.forEach((cell, idx) => {
-            if (!cell.allowTextInput) return;
-            const varNumber =
-              cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1);
-            columns.push({
-              spssVarName: buildOptionTextVarName(groupVarName, varNumber),
-              questionText: q.title,
-              optionLabel: `${(cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)'}`,
-              questionId: q.id,
-              type: 'option-text',
-              optionId: cell.id,
-              ...(cell.textInputType === 'number' ? { numericText: true } : {}),
-            });
-          });
-        } else {
-          // checkbox 그룹 → 멤버 셀별 'choice-group-item' (counted value 방식)
-          const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
-          // 그룹 라벨: 명시 그룹이면 group.label, default 그룹이면 q.title 폴백
-          const groupLabel = isDefault ? q.title : group.label || q.title;
-          // if (!q.questionCode) continue 가드가 위에 있어 항상 string 이지만 타입을 명확히 한다
-          const qCode = q.questionCode!;
-          group.cells.forEach((cell, idx) => {
-            const code = cell.spssNumericCode ?? idx + 1;
-            // 변수명: default 그룹이면 buildCheckboxItemVarName(질문코드, undefined, i) — 기존 checkbox 하위호환
-            //         명시 그룹이면 질문코드_groupKey_그룹내1-based
-            const varName = isDefault
-              ? buildCheckboxItemVarName(qCode, undefined, idx)
-              : `${qCode}_${group.groupKey}_${idx + 1}`;
-            // 보기 라벨: choiceLabel > content > '(라벨 없음)'
-            const optLabel =
-              (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)';
-            columns.push({
-              spssVarName: varName,
-              questionText: q.title,
-              // optionLabel 에 그룹 컨텍스트를 포함시켜 SPSS 변수 라벨로 바로 사용 가능하게 함
-              optionLabel: `${groupLabel} - ${optLabel}`,
-              questionId: q.id,
-              type: 'choice-group-item',
-              choiceGroupKey: group.groupKey,
-              choiceGroupMemberCellId: cell.id,
-              choiceGroupMemberCode: code,
-              choiceGroupMemberLabel: optLabel,
-              optionIndex: idx,
-            });
-            // allowTextInput 사이드카: base 는 그룹 변수명 접두(질문코드[_groupKey]).
-            // default 그룹은 기존 비그룹 checkbox 사이드카(Q8_1_text)와 동일해야 한다 — 하위호환.
-            if (cell.allowTextInput) {
-              const sidecarBase = isDefault ? qCode : `${qCode}_${group.groupKey}`;
-              columns.push({
-                spssVarName: buildOptionTextVarName(sidecarBase, String(idx + 1)),
-                questionText: q.title,
-                optionLabel: `${optLabel}`,
-                questionId: q.id,
-                type: 'option-text',
-                optionId: cell.id,
-                ...(cell.textInputType === 'number' ? { numericText: true } : {}),
-              });
-            }
-          });
-        }
-      }
+      emitChoiceGroupColumns(q, q.questionCode, columns);
     } else if (q.type === 'checkbox') {
       // choiceGroups 없는 순수 checkbox 질문 — 기존 checkbox-item 경로 (하위호환)
       const opts = resolveChoiceOptions(q);
@@ -493,6 +508,9 @@ export function generateSPSSColumns(
         }
       }
     } else if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
+      // 보기 그룹 표 — 그룹 변수는 레거시 radio/checkbox 와 같은 규칙으로 먼저 낸다. 아래 셀 순회는
+      // choice_opt 를 건너뛰므로(입력 불가 셀 목록) 보기 셀에 table-cell 열이 생기지 않는다.
+      if (isChoiceGroupTableQuestion(q)) emitChoiceGroupColumns(q, q.questionCode, columns);
       // === Phase 5: radioGroup 사전 스캔 ===
       // 같은 radioGroupName 셀들을 묶어 변수 1개로 export.
       // 그룹 방향 자동 감지: 같은 행이면 열 단위 응답, 같은 열이면 행 단위 응답.
@@ -1034,6 +1052,22 @@ function findTableCellCheckboxOptions(question: Question, cellId: string) {
 /**
  * 응답 데이터를 SPSS 열 정의에 맞춰 2차원 배열로 변환한다.
  */
+/**
+ * 보기 그룹 응답 맵 — 레거시 radio/checkbox 는 문항 값 자체, 보기 그룹 표는 표 응답 안 예약 키.
+ * 모양이 아니면 null.
+ */
+function choiceGroupAnswerOf(
+  question: QuestionVariant,
+  rawValue: unknown,
+): Record<string, unknown> | null {
+  if (question.type === 'table') {
+    const map = readTableChoiceGroups(rawValue);
+    return Object.keys(map).length > 0 ? map : null;
+  }
+  if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue)) return null;
+  return rawValue as Record<string, unknown>;
+}
+
 export function buildDataRows(
   columns: SPSSExportColumn[],
   questions: QuestionVariant[],
@@ -1176,22 +1210,22 @@ export function buildDataRow(
       }
 
       case 'choice-group': {
-        // rawValue는 그룹별 응답 맵: { groupKey: selectedCellId, ... }
+        // rawValue는 그룹별 응답 맵: { groupKey: selectedCellId, ... } — 보기 그룹 표는 표 응답 안
+        // 예약 키(__choiceGroups) 아래에 같은 맵이 있다.
         // 해당 그룹의 선택 cellId를 꺼내 cellValueMap으로 숫자코드로 변환.
-        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue))
-          return null;
-        const groupAnswer = rawValue as Record<string, string>;
+        const groupAnswer = choiceGroupAnswerOf(question, rawValue) as Record<string, string> | null;
+        if (!groupAnswer) return null;
         const cellId = groupAnswer[col.choiceGroupKey ?? ''];
         if (!cellId) return null;
         return col.choiceGroupCellValueMap?.[cellId] ?? null;
       }
 
       case 'choice-group-item': {
-        // rawValue는 그룹별 응답 맵: { groupKey: string[] (선택 cellId 목록), ... }
+        // rawValue는 그룹별 응답 맵: { groupKey: string[] (선택 cellId 목록), ... } — 보기 그룹 표는
+        // 표 응답 안 예약 키(__choiceGroups) 아래에 같은 맵이 있다.
         // 이 보기의 그룹 응답 배열에 해당 cellId 가 포함되면 counted 코드, 아니면 null.
-        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue))
-          return null;
-        const groupAnswer = rawValue as Record<string, unknown>;
+        const groupAnswer = choiceGroupAnswerOf(question, rawValue);
+        if (!groupAnswer) return null;
         const groupVal = groupAnswer[col.choiceGroupKey ?? ''];
         if (!Array.isArray(groupVal)) return null;
         const selected = groupVal as string[];

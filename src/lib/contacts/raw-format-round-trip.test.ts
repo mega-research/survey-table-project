@@ -213,6 +213,45 @@ const questions: Question[] = [
     ],
   },
   {
+    // 보기 그룹 표 — table 문항이 보기 셀과 입력 셀을 함께 갖고, 선택은 표 응답 안 예약 키에 산다.
+    id: 'q-grp-table',
+    type: 'table',
+    title: '보유와 구매처',
+    questionCode: 'Q11',
+    order: 10,
+    required: false,
+    choiceGroups: [
+      { id: 'gt1', groupKey: 'rad1', label: '보유', type: 'radio' },
+      { id: 'gt2', groupKey: 'cb1', label: '구매처', type: 'checkbox' },
+    ],
+    tableColumns: [
+      { id: 'z1', label: '구분' },
+      { id: 'z2', label: '보기 1' },
+      { id: 'z3', label: '보기 2' },
+      { id: 'z4', label: '수량' },
+    ],
+    tableRowsData: [
+      {
+        id: 'grow1',
+        cells: [
+          { id: 'gt-lbl', type: 'text', content: '보유' },
+          { id: 'gt-uhd', type: 'choice_opt', content: 'UHD', choiceGroupId: 'gt1' },
+          { id: 'gt-etc', type: 'choice_opt', content: '기타', choiceGroupId: 'gt1', allowTextInput: true },
+          { id: 'gt-amount', type: 'input', content: '' },
+        ],
+      },
+      {
+        id: 'grow2',
+        cells: [
+          { id: 'gt-lbl2', type: 'text', content: '구매처' },
+          { id: 'gt-online', type: 'choice_opt', content: '온라인', choiceGroupId: 'gt2' },
+          { id: 'gt-store', type: 'choice_opt', content: '대리점', choiceGroupId: 'gt2' },
+          { id: 'gt-blank', type: 'text', content: '' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'q-repeat',
     type: 'table',
     title: '성과 목록',
@@ -277,6 +316,10 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
       'cell-input': '입력값',
     },
     'q-choice-table': { rad1: 'ct-opt' },
+    'q-grp-table': {
+      'gt-amount': '12',
+      __choiceGroups: { rad1: 'gt-etc', cb1: ['gt-online', 'gt-store'] },
+    },
     // 행 반복: 1벌과 2벌만 채운다 — 3벌은 열려 있어도 비워 둘 수 있다.
     'q-repeat': {
       'rp-name': '첫 성과',
@@ -289,6 +332,8 @@ describe('Raw 양식 왕복 — 전 문항 유형', () => {
         'ct-radio': '1',
         'ct-check': '["a","b"]',
       },
+      // 보기 그룹 표의 기타 상세기재 — 레거시와 같은 사이드카 자리(보기 셀 id).
+      'q-grp-table': { 'gt-etc': '벽걸이' },
     },
   };
 
