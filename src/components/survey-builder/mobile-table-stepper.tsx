@@ -8,7 +8,7 @@ import { useColumnSectionMap, useRowGroups } from '@/hooks/use-row-groups';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import type { HeaderCell, TableColumn, TableRow, TableCell } from '@/types/survey';
 import { collectMobileLegendLabels } from '@/utils/mobile-display-cells';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
@@ -43,6 +43,8 @@ interface MobileTableStepperProps {
   onSelectGroup?: (groupId: string) => void;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  /** 응답 가능한 셀 타입 — 보기 그룹 표는 choice_opt 를 더해 넘긴다. 없으면 기본 목록. */
+  answerableCellTypes?: readonly TableCell['type'][] | undefined;
 }
 
 // ── 유틸 ──
@@ -80,6 +82,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   groupConfigMap,
   onSelectGroup,
   errorCellIds,
+  answerableCellTypes,
 }: MobileTableStepperProps) {
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
   const attrs = useContactAttrs();
@@ -119,10 +122,13 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     const map = new Map<string, boolean>();
     const tableCells = providedTableCells ?? collectTableCells(displayRows);
     for (const row of displayRows) {
-      map.set(row.id, isTableRowCompleted(row, currentResponse, { tableCells }));
+      map.set(
+        row.id,
+        isTableRowCompleted(row, currentResponse, { tableCells, answerableCellTypes }),
+      );
     }
     return map;
-  }, [providedTableCells, displayRows, currentResponse]);
+  }, [providedTableCells, displayRows, currentResponse, answerableCellTypes]);
 
   const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
   const [currentRowInGroup, setCurrentRowInGroup] = useState(0);

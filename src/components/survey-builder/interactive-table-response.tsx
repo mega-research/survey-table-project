@@ -30,7 +30,7 @@ import {
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
 } from '@/utils/branch-logic';
-import { decideDrilldown } from '@/utils/classify-table';
+import { decideDrilldown, DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/utils/classify-table';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
@@ -898,14 +898,24 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 모바일: 계층/매트릭스 감지 시 드릴다운, 평면 단순 표는 기존 스테퍼
   // hooks-rules: 아래 빈 테이블 early return 이전에 호출해야 hook 순서가 보장된다
+  // 보기 그룹 표는 보기 셀도 "응답 가능한 셀" 이다 — 모바일 분류(드릴다운 리프·값 열)·행 완료·
+  // 진행률이 이 목록을 본다. 그룹 정의가 없으면 지금처럼 보기 셀을 세지 않는다.
+  const mobileAnswerableCellTypes = useMemo(
+    () =>
+      choiceGroups && choiceGroups.length > 0
+        ? ([...DEFAULT_TABLE_ANSWERABLE_CELL_TYPES, 'choice_opt'] as const)
+        : undefined,
+    [choiceGroups],
+  );
   const { useDrilldown } = useMemo(
     () =>
       decideDrilldown({
         tableColumns: visibleColumns,
         tableRowsData: displayRows,
         tableHeaderGrid: visibleHeaderGrid,
+        answerableCellTypes: mobileAnswerableCellTypes,
       }),
-    [visibleColumns, displayRows, visibleHeaderGrid],
+    [visibleColumns, displayRows, visibleHeaderGrid, mobileAnswerableCellTypes],
   );
   const displayRowById = useMemo(
     () => new Map(rowWiseDisplayRows.map((row) => [row.id, row])),
@@ -943,9 +953,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         },
         isLabelSourceHidden: (cellId) =>
           displayCellById.get(cellId)?.mobileDisplay === 'hidden',
+        answerableCellTypes: mobileAnswerableCellTypes,
       });
     },
     [
+      mobileAnswerableCellTypes,
       columns,
       displayCellById,
       hideColumnLabels,
@@ -1163,6 +1175,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     errorCellIds,
     mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow,
+    answerableCellTypes: mobileAnswerableCellTypes,
   };
 
   return (

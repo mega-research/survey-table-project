@@ -22,6 +22,7 @@ import {
 } from '@/utils/mobile-original-row';
 import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
 import { collectTableCells } from '@/lib/survey/cell-gating';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { useGatingTableCells } from './cells/gating-table-cells-context';
@@ -56,6 +57,8 @@ interface MobileTableDrilldownProps {
   > | undefined;
   detailMode: 'legacy' | 'original-row';
   omitLeadingAuthoredColumns: number;
+  /** 응답 가능한 셀 타입 — 보기 그룹 표는 choice_opt 를 더해 넘긴다. 없으면 기본 목록. */
+  answerableCellTypes?: readonly TableCell['type'][] | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
 }
@@ -78,6 +81,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   navigateToCellRef,
   detailMode,
   omitLeadingAuthoredColumns,
+  answerableCellTypes,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
 }: MobileTableDrilldownProps) {
@@ -107,10 +111,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         tableColumns: visibleColumns,
         tableRowsData: navigationRows,
         tableHeaderGrid: visibleHeaderGrid,
+        answerableCellTypes,
         // 합계 표시 등 계산 전용 행도 상세 화면에 보여야 한다 (진행률 카운트에는 불포함)
         includeCalcOnlyLeaves: true,
       }),
-    [visibleColumns, navigationRows, visibleHeaderGrid],
+    [visibleColumns, navigationRows, visibleHeaderGrid, answerableCellTypes],
   );
 
   // cell.id → TableCell (입력 셀 렌더용)
@@ -214,7 +219,20 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // ── 응답 채움 계산 ──
   // emptyDefault(숫자 셀 첫 진입 시 자동 채워지는 초기값)와 동일한 값은 사용자가
   // 실제로 입력한 게 아니므로 미입력으로 간주한다.
+  // 보기 그룹 표의 보기 셀 — 값은 셀 키가 아니라 표 응답 안 예약 키(그룹 선택)에 있고, 같은 그룹의
+  // 보기 셀들은 "그중 하나가 골라졌는가" 로 함께 채워진 것으로 본다(셀마다 요구하면 영구 미완료).
+  const choiceSelection = collectTableChoiceSelection(value);
+  const selectedChoiceGroupIds = new Set<string>();
+  for (const cell of cellById.values()) {
+    if (cell.type === 'choice_opt' && cell.choiceGroupId && choiceSelection.has(cell.id)) {
+      selectedChoiceGroupIds.add(cell.choiceGroupId);
+    }
+  }
   const hasValue = (cellId: string) => {
+    const choiceCell = cellById.get(cellId);
+    if (choiceCell?.type === 'choice_opt') {
+      return !!choiceCell.choiceGroupId && selectedChoiceGroupIds.has(choiceCell.choiceGroupId);
+    }
     const v = String(value?.[cellId] ?? '').trim();
     if (v === '') return false;
     const cell = cellById.get(cellId);
@@ -352,6 +370,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   );
   // 진행률 분모는 입력이 있는 행만 — 계산 전용 행(합계 표시)은 채울 것이 없어
   // 카운트에 넣으면 완료가 영구히 차지 않는다.
+  const completionCellTypes = answerableCellTypes ?? MOBILE_TABLE_COMPLETION_TYPES;
   const answerableRowIds = useMemo(
     () =>
       new Set(
@@ -363,7 +382,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   );
   const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
   const completedRows = answerableRows.filter((row) =>
-    isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells }),
+    isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells }),
   ).length;
 
   const renderOriginalRowDetail = (leaf: ClassifiedLeaf) => {
@@ -446,7 +465,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             completed: countable.filter((leaf) => {
               const row = navigationRowById.get(leaf.rowId);
               return row
-                ? isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells })
+                ? isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells })
                 : false;
             }).length,
             total: countable.length,
@@ -461,7 +480,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           const row = navigationRowById.get(leaf.rowId);
           return {
             completed:
-              row && isTableRowCompleted(row, currentResponse, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES, tableCells: gatingTableCells })
+              row && isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells })
                 ? 1
                 : 0,
             total: 1,

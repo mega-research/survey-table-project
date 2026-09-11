@@ -192,3 +192,36 @@ describe('isTableRowCompleted — 보기 그룹 표의 choice-selected 게이팅
     expect(isTableRowCompleted(row, { when: '내년', __choiceGroups: { rad1: 'opt-yes' } })).toBe(true);
   });
 });
+
+describe('isTableRowCompleted — 보기 그룹 표의 보기 셀은 그룹 단위로 완료를 센다', () => {
+  const groupedRow = {
+    id: 'r1',
+    label: '',
+    cells: [
+      { id: 'uhd', type: 'choice_opt', content: 'UHD', choiceGroupId: 'g1' },
+      { id: 'fhd', type: 'choice_opt', content: 'FHD', choiceGroupId: 'g1' },
+      { id: 'amount', type: 'input', content: '' },
+    ],
+  } as unknown as TableRow;
+  const withChoice = [...MOBILE_TABLE_COMPLETION_TYPES, 'choice_opt'] as const;
+
+  it('보기 셀이 완료 대상이면 그룹 중 하나가 골라지고 입력 셀이 차야 완료다', () => {
+    expect(
+      isTableRowCompleted(groupedRow, { amount: '1' }, { answerableCellTypes: withChoice }),
+    ).toBe(false);
+    expect(
+      isTableRowCompleted(
+        groupedRow,
+        { amount: '1', __choiceGroups: { rad1: 'fhd' } },
+        { answerableCellTypes: withChoice },
+      ),
+    ).toBe(true);
+    expect(
+      isTableRowCompleted(groupedRow, { __choiceGroups: { rad1: 'fhd' } }, { answerableCellTypes: withChoice }),
+    ).toBe(false);
+  });
+
+  it('보기 셀이 완료 대상이 아니면(기본) 지금처럼 입력 셀만 본다', () => {
+    expect(isTableRowCompleted(groupedRow, { amount: '1' })).toBe(true);
+  });
+});

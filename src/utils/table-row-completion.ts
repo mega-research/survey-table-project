@@ -55,6 +55,18 @@ export function isTableRowCompleted(
     for (const id of ids) cellGroupName.set(id, name);
   }
 
+  // 보기 그룹 표의 보기 셀 — 같은 행의 같은 그룹 셀은 "그중 하나가 골라졌는가" 로 한 덩어리로
+  // 판정한다(radio 그룹과 같은 이유 — 셀마다 요구하면 단일 선택 그룹이 영구 미완료다).
+  // 선택은 셀 값이 아니라 표 응답 안 예약 키에 있다. 완료 대상 타입에 choice_opt 가 있을 때만 센다.
+  const choiceGroupCompleted = new Map<string, boolean>();
+  if (answerable.has('choice_opt')) {
+    for (const cell of row.cells) {
+      if (cell.type !== 'choice_opt' || cell.isHidden || !cell.choiceGroupId) continue;
+      const prev = choiceGroupCompleted.get(cell.choiceGroupId) ?? false;
+      choiceGroupCompleted.set(cell.choiceGroupId, prev || choiceSelection.has(cell.id));
+    }
+  }
+
   return row.cells.every((cell: TableCell) => {
     if (cell._isContinuation) return true;
     // isHidden 셀은 렌더되지 않아(interactive-table-response 의 isHidden return null) 응답이 불가능하다.
@@ -69,6 +81,9 @@ export function isTableRowCompleted(
     )
       return true;
     if (!answerable.has(cell.type)) return true;
+    if (cell.type === 'choice_opt') {
+      return cell.choiceGroupId ? (choiceGroupCompleted.get(cell.choiceGroupId) ?? false) : true;
+    }
     // single-select radio 그룹 멤버는 그룹 단위로 판정
     const groupName = cellGroupName.get(cell.id);
     if (groupName) {
