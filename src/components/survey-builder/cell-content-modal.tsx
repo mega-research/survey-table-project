@@ -419,6 +419,12 @@ export function CellContentModal({
     () => collapseRepeatRows(getLatestRows?.() ?? ownQuestion.tableRowsData ?? []),
     [getLatestRows, ownQuestion.tableRowsData],
   );
+  // 보기 소스 표인가 — 보기 옵션 셀이 하나라도 있으면. (문항 type 으로 판정하면 안 된다: 표
+  // 편집기가 넘기는 ownQuestion 은 type 이 늘 'table' 이다.)
+  const isChoiceSourceTable = useMemo(
+    () => collectChoiceOptCells(gatingRows).length > 0,
+    [gatingRows],
+  );
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
@@ -1124,8 +1130,10 @@ export function CellContentModal({
                 상단의 &quot;셀 텍스트 내용&quot;에 입력한 텍스트만 표시됩니다.
               </p>
             </div>
-            {/* 보기 소스 표 전용 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 나란히 그린다 */}
-            {(ownQuestion.type === 'radio' || ownQuestion.type === 'checkbox') && (
+            {/* 보기 소스 표 전용 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 나란히 그린다.
+                판정은 ownQuestion.type 이 아니라 보기 옵션 셀 유무로 — 표 편집기가 넘기는
+                ownQuestion 은 type 이 늘 'table' 이다(use-table-editor currentQuestionAsQuestion). */}
+            {isChoiceSourceTable && (
               <label className="flex cursor-pointer items-start gap-2 text-sm">
                 <input
                   type="checkbox"
