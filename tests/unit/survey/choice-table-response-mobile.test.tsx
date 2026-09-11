@@ -299,6 +299,14 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     }
   });
 
+  it('구분 셀의 모바일 표시가 켜져 있어도 제목으로 한 번만 나온다', () => {
+    const q = groupedRowQuestion();
+    q.tableRowsData![0]!.cells[0] = { ...q.tableRowsData![0]!.cells[0]!, mobileDisplay: 'inline' };
+    render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
+    expect(screen.getAllByText('1) 얼라이언스 운영')).toHaveLength(1);
+    expect(screen.getAllByText(/네트워킹 및 행사 개최/)).toHaveLength(1);
+  });
+
   it('타일 라벨은 그룹 라벨이 아니라 보기 텍스트다', () => {
     render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />);
     expect(screen.getByLabelText('알고 있음')).toBeInTheDocument();

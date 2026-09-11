@@ -704,7 +704,9 @@ export function ChoiceTableResponse({
                 </span>
                 )
               }
-              cells={row.cells}
+              // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
+              // 제목과 본문에 같은 내용이 두 번 나온다.
+              cells={grouped && headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells}
               selected={anyChecked}
               disabled={allDisabled}
               footer={
