@@ -184,17 +184,18 @@ describe('ChoiceTableResponse (mobile) — 행 단위 카드의 보기 상세기
     return q;
   }
 
-  it('선택한 보기의 상세기재는 카드 안이 아니라 카드 목록 아래 스택에 나온다', () => {
+  it('선택한 보기의 상세기재는 카드 안이 아니라 그 카드 바로 아래에 나온다', () => {
     const { container } = render(
       <ChoiceTableResponse question={rowCardQuestion()} value={['r1c2']} onChange={() => {}} />,
     );
     const input = screen.getByPlaceholderText('비전 상세');
-    // 카드(rounded-2xl) 안에 있지 않다 — 데스크톱의 "표 아래" 와 같은 자리
+    // 카드(rounded-2xl) 안에 있지 않다
     expect(input.closest('.rounded-2xl')).toBeNull();
-    // 카드 목록 컨테이너의 형제로, 카드들 뒤에 있다
+    // 첫 카드 뒤, 둘째 카드 앞 — 어느 카드 것인지 바로 보인다
     const cards = container.querySelectorAll('.rounded-2xl');
     expect(cards.length).toBe(2);
-    expect(cards[1]!.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cards[0]!.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(input.compareDocumentPosition(cards[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('셀 단위 카드(auto)에서는 여전히 카드 안에 나온다', () => {

@@ -531,6 +531,21 @@ export function ChoiceTableResponse({
               ))}
             </div>
           ) : null;
+        // 행 단위 카드: 이 행의 보기 중 상세기재가 켜진 것이 선택되면 그 입력 줄을 **카드 바로
+        // 아래**에 둔다(카드 안도, 목록 맨 아래도 아니다 — 2026-09-11 결정). 데스크톱은 표 아래 한
+        // 묶음이지만 카드에서는 어느 카드 것인지 바로 보여야 한다.
+        const rowChoiceIds = new Set(choiceCells.map((c) => c.id));
+        const rowTextEntries = perRow
+          ? textInputEntries.filter((entry) => rowChoiceIds.has(entry.option.id))
+          : [];
+        const rowTextStack =
+          rowTextEntries.length > 0 ? (
+            <OptionTextInputStack
+              key={`${row.id}-texts`}
+              questionId={question.id}
+              entries={rowTextEntries}
+            />
+          ) : null;
         // 보기 셀 없이 input·선택형 셀만 있는 행(기타 상세 기재, 병역특례 여부 등) — 조건이
         // 참이 돼 보이는 행이므로 카드로 그린다. 제목은 header 지정 text 셀, 없으면 없음.
         if (perRow && choiceCells.length === 0 && controlCells.length > 0) {
@@ -610,15 +625,16 @@ export function ChoiceTableResponse({
                       );
                     })}
                   </div>
-                  {/* 보기 옵션의 상세기재는 카드 안이 아니라 카드 목록 아래 스택에 —
-                      데스크톱의 "표 아래" 와 같은 자리다. 셀 게이팅 입력칸과 한곳에 섞이지 않는다. */}
+                  {/* 보기 옵션의 상세기재는 카드 안이 아니라 카드 바로 아래 스택에 —
+                      셀 게이팅 입력칸과 한곳에 섞이지 않는다. */}
                   {renderControlCells()}
                 </div>
               }
             />,
+            rowTextStack,
           ];
         }
-        return choiceCells
+        const perChoiceCards = choiceCells
           .map((choiceCell) => {
             const { checked, disabled, option } = getChoiceCellState(choiceCell);
             // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
@@ -651,7 +667,7 @@ export function ChoiceTableResponse({
                 footer={
                   (!perRow && option?.allowTextInput && checked) || controlCells.length > 0 ? (
                     <div className="space-y-2">
-                      {/* 행 단위 카드는 상세기재를 카드 목록 아래 스택으로 뺀다(데스크톱의 표 아래와 같은 자리).
+                      {/* 행 단위 카드는 상세기재를 카드 바로 아래 스택으로 뺀다.
                           셀 단위 카드는 카드가 곧 보기라 그 자리에 둔다. */}
                       {!perRow && option?.allowTextInput && checked ? (
                         <OptionTextInput questionId={question.id} option={option} className="w-full" />
@@ -663,8 +679,8 @@ export function ChoiceTableResponse({
               />
             );
           });
+        return [...perChoiceCards, rowTextStack];
       })}
-      {perRow && <OptionTextInputStack questionId={question.id} entries={textInputEntries} />}
       {counter}
     </div>
   );
