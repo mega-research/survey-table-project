@@ -22,8 +22,12 @@ const TABLE_STYLE = 'border-collapse:collapse;border:1px solid #d1d5db;';
 const CELL_STYLE = 'border:1px solid #d1d5db;padding:8px 12px;';
 const TH_STYLE = `${CELL_STYLE}background-color:#f9fafb;`;
 // inline-flex 는 Outlook 미지원 → inline-block 으로 fallback (modern 클라이언트도 정상 표시)
+// max-width + border-box: 파일명이 길어도 상자가 화면 폭을 넘지 않는다 — 넘기면 모바일에 가로
+// 스크롤이 생긴다. 안쪽 텍스트는 말줄임(globals.css .notice-file-attachment-label/meta)이 받는다.
 const FILE_LINK_STYLE = [
   'display:inline-block',
+  'max-width:100%',
+  'box-sizing:border-box',
   'padding:10px 14px 10px 38px',
   `background:#f3f4f6 ${PAPERCLIP_SVG_URL} no-repeat 10px center`,
   'background-size:18px 18px',
@@ -34,9 +38,11 @@ const FILE_LINK_STYLE = [
   'font-size:14px',
   'line-height:1.3',
 ].join(';');
-const FILE_TEXT_STYLE = 'display:inline-block;vertical-align:middle;';
-const FILE_LABEL_STYLE = 'display:block;color:#1f2937;font-weight:500;font-size:14px;';
-const FILE_META_STYLE = 'display:block;color:#6b7280;font-size:12px;margin-top:2px;';
+const FILE_TEXT_STYLE = 'display:inline-block;vertical-align:middle;max-width:100%;';
+const FILE_LABEL_STYLE =
+  'display:block;color:#1f2937;font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+const FILE_META_STYLE =
+  'display:block;color:#6b7280;font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
 
 // 주입 스타일은 "기본값" 역할 — 사용자가 에디터에서 지정한 인라인 스타일
 // (셀 테두리 색·배경색 등)이 이겨야 하므로 injected 를 앞에, existing 을 뒤에 둔다.

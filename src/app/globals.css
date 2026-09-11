@@ -809,6 +809,9 @@ a.notice-file-attachment {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  /* 파일명이 길어도 화면 폭을 넘지 않는다 — 넘기면 모바일에 가로 스크롤이 생긴다 */
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0.625rem 0.875rem;
   padding-left: 2.5rem;
   background-color: #f3f4f6;
@@ -832,6 +835,7 @@ a.notice-file-attachment:hover {
   display: inline-flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 100%;
 }
 .notice-file-attachment-label {
   color: #1f2937;
