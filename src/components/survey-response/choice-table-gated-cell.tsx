@@ -44,6 +44,7 @@ export function ChoiceTableGatedCell({
     if (leftover) setOptionText(questionId, cell.id, '');
   }, [leftover, questionId, cell.id, setOptionText]);
 
-  if (!enabled) return isMobile ? null : <span className="text-gray-400">-</span>;
+  // 표의 다른 텍스트 셀에 적은 "-" 와 같은 글자 크기·색(상속)으로 — 회색으로 빼면 그 칸만 튄다.
+  if (!enabled) return isMobile ? null : <span className="text-base">-</span>;
   return <>{children}</>;
 }
