@@ -544,6 +544,8 @@ export function ChoiceTableResponse({
               key={`${row.id}-texts`}
               questionId={question.id}
               entries={rowTextEntries}
+              // 카드는 좁아 "그룹 라벨 · 보기" 칩이 잘린다 — 칩을 위에, 입력칸을 아래에
+              stackedLabel
             />
           ) : null;
         // 보기 셀 없이 input·선택형 셀만 있는 행(기타 상세 기재, 병역특례 여부 등) — 조건이

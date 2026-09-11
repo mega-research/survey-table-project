@@ -49,6 +49,8 @@ interface OptionTextInputProps {
    * 두려면 셸과 안내가 같은 컴포넌트 안에 있어야 한다.
    */
   rowLabel?: string | undefined;
+  /** rowLabel 모드에서 칩을 입력칸 위에 쌓는다(OptionTextRow stacked). */
+  stackedLabel?: boolean | undefined;
 }
 
 /**
@@ -63,6 +65,7 @@ export function OptionTextInput({
   ariaLabel,
   unstyled,
   rowLabel,
+  stackedLabel,
 }: OptionTextInputProps) {
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
@@ -151,7 +154,7 @@ export function OptionTextInput({
   if (rowLabel !== undefined) {
     return (
       <div className="w-full space-y-1">
-        <OptionTextRow label={rowLabel}>
+        <OptionTextRow label={rowLabel} stacked={stackedLabel}>
           <input
             type="text"
             {...sharedProps}

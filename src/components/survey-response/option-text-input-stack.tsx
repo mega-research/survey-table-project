@@ -16,6 +16,8 @@ interface OptionTextInputStackProps {
   questionId: string;
   entries: OptionTextStackEntry[];
   className?: string | undefined;
+  /** 칩을 입력칸 위에 쌓는다 — 모바일 카드처럼 좁아 긴 라벨이 잘리는 자리용. */
+  stackedLabel?: boolean | undefined;
 }
 
 /**
@@ -24,7 +26,12 @@ interface OptionTextInputStackProps {
  * (radio/checkbox 셀의 CellOptionsContainer footer 슬롯, 일반 radio/checkbox 질문 공용).
  * 입력값 저장은 인라인과 동일한 optionTexts 사이드카(OptionTextInput)라 데이터 영향 없음.
  */
-export function OptionTextInputStack({ questionId, entries, className }: OptionTextInputStackProps) {
+export function OptionTextInputStack({
+  questionId,
+  entries,
+  className,
+  stackedLabel,
+}: OptionTextInputStackProps) {
   if (entries.length === 0) return null;
 
   return (
@@ -36,6 +43,7 @@ export function OptionTextInputStack({ questionId, entries, className }: OptionT
           option={option}
           ariaLabel={label}
           rowLabel={label}
+          stackedLabel={stackedLabel}
         />
       ))}
     </div>

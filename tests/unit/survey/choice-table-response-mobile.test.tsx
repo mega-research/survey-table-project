@@ -198,6 +198,17 @@ describe('ChoiceTableResponse (mobile) — 행 단위 카드의 보기 상세기
     expect(input.compareDocumentPosition(cards[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('카드 아래 입력 줄의 라벨 칩은 잘리지 않고 입력칸 위에 줄바꿈으로 놓인다', () => {
+    render(
+      <ChoiceTableResponse question={rowCardQuestion()} value={['r1c2']} onChange={() => {}} />,
+    );
+    const shell = screen.getByPlaceholderText('비전 상세').closest('label')!;
+    expect(shell).toHaveClass('flex-col');
+    const chip = shell.querySelector('span')!;
+    expect(chip).toHaveClass('whitespace-normal');
+    expect(chip).not.toHaveClass('truncate');
+  });
+
   it('셀 단위 카드(auto)에서는 여전히 카드 안에 나온다', () => {
     const q = rowCardQuestion();
     q.mobileTableDisplayMode = 'auto';

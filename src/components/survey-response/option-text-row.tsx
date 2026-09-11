@@ -13,6 +13,11 @@ interface OptionTextRowProps {
   label: string;
   /** 테이블 셀 등 좁은 컨텍스트용 축소 스타일 */
   compact?: boolean | undefined;
+  /**
+   * 칩을 입력칸 **위**에 한 줄로 두고 줄바꿈을 허용한다 — 모바일 카드처럼 폭이 좁아
+   * 긴 라벨(그룹 라벨 · 보기)이 잘리는 자리용. 기본(한 줄 나란히)에서는 칩이 truncate 된다.
+   */
+  stacked?: boolean | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
   /** 맨몸 input (OPTION_TEXT_BARE_INPUT_CLS 적용 권장) */
@@ -26,7 +31,14 @@ interface OptionTextRowProps {
  * rounded-[10px]: UA 포커스 링(입력란 6px 모서리 + 바깥쪽 ~3px 두께 ≈ 외경 9px)과
  * 바깥 보더가 거의 동심원으로 맞물리는 값. 링 자체는 브라우저가 그려 CSS 제어 불가.
  */
-export function OptionTextRow({ label, compact, className, style, children }: OptionTextRowProps) {
+export function OptionTextRow({
+  label,
+  compact,
+  stacked,
+  className,
+  style,
+  children,
+}: OptionTextRowProps) {
   return (
     // w-full min-w-0: 표 셀처럼 좁고 고정된 컨테이너 안에서 행이 셀 폭을 넘지 않게
     // 부모 폭에 맞춘다 — 넘치는 몫은 아래 라벨 칩이 truncate 로 흡수한다.
@@ -37,6 +49,7 @@ export function OptionTextRow({ label, compact, className, style, children }: Op
         // 되어도 칩이 블록 가운데에 오므로 따로 정렬을 두지 않는다.
         'flex min-h-10 w-full min-w-0 cursor-text items-center gap-2 rounded-[10px] border border-gray-200 bg-white py-0.5 pr-0.5 pl-1 transition-colors hover:border-gray-300 focus-within:border-blue-400 focus-within:hover:border-blue-400',
         compact && 'min-h-8 gap-1.5',
+        stacked && 'flex-col items-stretch gap-1 px-1.5 pt-1.5 pb-1',
         className,
       )}
     >
@@ -47,7 +60,10 @@ export function OptionTextRow({ label, compact, className, style, children }: Op
       <span
         title={label}
         className={cn(
-          'min-w-8 max-w-[40%] truncate rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600',
+          'min-w-8 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600',
+          stacked
+            ? 'self-start whitespace-normal [overflow-wrap:anywhere]'
+            : 'max-w-[40%] truncate',
           compact && 'px-1.5 py-0.5 text-[11px]',
         )}
       >
