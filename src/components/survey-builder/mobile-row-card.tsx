@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 
-import { CheckCircle2 } from 'lucide-react';
 
 import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,6 +36,7 @@ interface MobileRowCardProps {
   row: TableRow;
   visibleColumns: TableColumn[];
   columnSectionMap: ReturnType<typeof useColumnSectionMap>;
+  /** 행 완료 여부 — 스테퍼 카운트용으로 호스트가 넘긴다. 카드 자체는 더 이상 초록으로 표시하지 않는다. */
   completed: boolean;
   hideColumnLabels: boolean;
   questionId: string;
@@ -66,7 +66,6 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   row,
   visibleColumns,
   columnSectionMap,
-  completed,
   hideColumnLabels,
   questionId,
   isTestMode,
@@ -178,14 +177,11 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     <Card
       data-row-id={row.id}
       {...(firstErrorCellId ? { 'data-cell-id': firstErrorCellId } : {})}
-      className={cn(
-        'mobile-row-card overflow-hidden transition-all duration-200',
-        completed
-          ? 'border-green-400 bg-green-50/30 ring-1 ring-green-400'
-          : 'border-gray-200',
-      )}
+      // 완료 초록 강조(테두리·헤더·배지)는 2026-09-11 에 걷어냈다 — 마지막 카드까지 채우면 화면이
+      // 초록으로 물들어 "잘못됐나" 로 읽혔다. 완료 여부는 스테퍼 카운트가 알린다.
+      className="mobile-row-card overflow-hidden border-gray-200 transition-all duration-200"
     >
-      <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
+      <div className="border-b bg-gray-50/80 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
             {rowHeader.label && (
@@ -208,12 +204,6 @@ export const MobileRowCard = React.memo(function MobileRowCard({
               </p>
             )}
           </div>
-          {completed && (
-            <div className="ml-2 flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              완료
-            </div>
-          )}
         </div>
       </div>
 

@@ -158,7 +158,13 @@ export function OptionTextInput({
           <input
             type="text"
             {...sharedProps}
-            className={cn(OPTION_TEXT_BARE_INPUT_CLS, priorTextCls)}
+            className={cn(
+              OPTION_TEXT_BARE_INPUT_CLS,
+              // 칩을 위에 쌓는 모바일 카드에서는 입력칸이 한 줄 높이라 손가락으로 짚기 어렵다 —
+              // 눈에 보이는 입력 영역(높이·배경·글자 크기)을 키운다
+              stackedLabel && 'h-11 rounded-md bg-gray-50 px-3 text-base',
+              priorTextCls,
+            )}
           />
         </OptionTextRow>
         {hint}
