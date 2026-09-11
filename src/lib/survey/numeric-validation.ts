@@ -612,7 +612,9 @@ export function collectNumericIssues(
   // 표 전체 셀을 함께 전달해야 option 조건의 {optionId} 래핑·id 저장 응답을 컨트롤러 셀
   // 정의로 정확히 해석한다 — 컨트롤러는 다른 행일 수 있다.
   const tableCells = collectTableCells(question.tableRowsData);
-  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells));
+  // 보기 그룹 표의 choice-selected 컨트롤러는 표 응답 안 예약 키의 선택으로 판정한다.
+  const choiceSelection = collectSelectedChoiceCellIds(question, cellValues);
+  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells, choiceSelection));
   const issues: NumericIssue[] = [...groupOptionTextIssues];
 
   // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이

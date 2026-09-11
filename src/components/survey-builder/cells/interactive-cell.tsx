@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect } from 'react';
 
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
+import { CHOICE_GROUPS_KEY, collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -209,17 +210,22 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ? cell.enabledWhen.controllerCellId
       : undefined;
 
+  // choice-selected 조건의 컨트롤러는 셀 값이 아니라 표 응답 안 예약 키(그룹 선택 맵)에 있다.
+  // 테스트 모드는 그 맵 하나만 구독한다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
+  const wantsChoiceSelection = cell.enabledWhen?.kind === 'choice-selected';
   const testControllerValue = useTestResponseStore(
     useCallback(
       (state) => {
         if (!isTestMode || !controllerCellId) return undefined;
         const qr = state.testResponses[questionId];
         if (typeof qr === 'object' && qr !== null) {
-          return (qr as Record<string, unknown>)[controllerCellId];
+          return (qr as Record<string, unknown>)[
+            wantsChoiceSelection ? CHOICE_GROUPS_KEY : controllerCellId
+          ];
         }
         return undefined;
       },
-      [isTestMode, questionId, controllerCellId],
+      [isTestMode, questionId, controllerCellId, wantsChoiceSelection],
     ),
   );
 
@@ -227,15 +233,18 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
   const gatingCellValues: Record<string, unknown> = isTestMode
     ? controllerCellId
-      ? { [controllerCellId]: testControllerValue }
+      ? { [wantsChoiceSelection ? CHOICE_GROUPS_KEY : controllerCellId]: testControllerValue }
       : {}
     : (value ?? {});
 
   const tableCells = useGatingTableCells();
   const choiceGroups = useChoiceGroups();
+  const choiceSelection = wantsChoiceSelection
+    ? collectTableChoiceSelection(gatingCellValues)
+    : undefined;
   const gatingDisabled =
     GATABLE_CELL_TYPES.has(cell.type) &&
-    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells);
+    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells, choiceSelection);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,

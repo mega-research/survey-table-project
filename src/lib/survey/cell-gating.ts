@@ -196,6 +196,9 @@ export function stripDisabledCellValues(
     // 컨트롤러 옵션 id/value 래핑 해석용 셀 정의는 표 전체에서 찾는다 — 컨트롤러가 다른 행에
     // 있을 수 있다.
     const tableCells = collectTableCells(rows);
+    // 보기 그룹 표의 choice-selected 컨트롤러 — 선택은 표 응답 안 예약 키에 있다. 보기 셀은
+    // 게이팅 대상이 아니라 아래 루프가 지우지 않으므로 집합은 pass 사이에 변하지 않는다.
+    const choiceSelection = collectSelectedChoiceCellIds(q, cellValues);
     //
     // 게이팅 체인(A→B→C) 정리는 고정점 수렴으로 — 한 pass 는 상류 셀의 잔존 값으로
     // 하류를 활성으로 오판할 수 있다(B 가 지워지기 전 값으로 C 의 filled 조건이 참).
@@ -223,7 +226,7 @@ export function stripDisabledCellValues(
         for (const cell of row.cells) {
           if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
           if (!Object.hasOwn(next, cell.id)) continue;
-          if (!isCellEnabled(cell, next, tableCells)) {
+          if (!isCellEnabled(cell, next, tableCells, choiceSelection)) {
             delete next[cell.id];
             removedInPass = true;
             changed = true;

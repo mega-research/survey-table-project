@@ -107,11 +107,15 @@ function checkTable(question: Question, out: GatingDiagnostic[]): void {
   }
 }
 
-/** 설문 전체의 게이팅 진단 수집 (경고 패널 전용) */
+/**
+ * 설문 전체의 게이팅 진단 수집 (경고 패널 전용).
+ * 내장 표가 있는 문항 전부 — table 뿐 아니라 레거시 보기 소스 표(radio/checkbox 문항)도
+ * 게이팅 셀을 가질 수 있는데, 유형으로 걸러 그쪽 진단이 0건이던 사각지대를 2026-09-11 에 없앴다.
+ */
 export function collectGatingDiagnostics(questions: Question[]): GatingDiagnostic[] {
   const out: GatingDiagnostic[] = [];
   for (const question of questions) {
-    if (question.type !== 'table') continue;
+    if (!question.tableRowsData || question.tableRowsData.length === 0) continue;
     checkTable(question, out);
   }
   return out;

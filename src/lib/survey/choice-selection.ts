@@ -41,6 +41,7 @@ export function readTableChoiceGroups(tableValue: unknown): GroupedChoiceAnswer 
  * 파헤치지 않는다. 기타 상세기재의 `{selectedValue}` 래핑도 id 로 푼다.
  */
 export function collectSelectedChoiceCellIds(question: Question, value: unknown): Set<string> {
+  if (question.type === 'table') return collectTableChoiceSelection(value);
   const out = new Set<string>();
   const add = (v: unknown) => {
     if (typeof v === 'string') {
@@ -51,15 +52,28 @@ export function collectSelectedChoiceCellIds(question: Question, value: unknown)
       add((v as { selectedValue?: unknown }).selectedValue);
     }
   };
-  if (question.type === 'table') {
-    for (const v of Object.values(readTableChoiceGroups(value))) add(v);
-    return out;
-  }
   if (isGroupedChoiceQuestion(question)) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
     for (const v of Object.values(value as GroupedChoiceAnswer)) add(v);
     return out;
   }
   add(value);
+  return out;
+}
+
+/**
+ * 보기 그룹 표의 **표 응답 객체**에서 선택된 보기 셀 id 집합 — 문항 정의 없이 값만으로 읽는
+ * 변종. 셀 렌더러(문항 id 만 아는 자리)와 행 완료 판정이 쓴다. 문항이 있으면
+ * `collectSelectedChoiceCellIds` 를 쓴다 — 두 함수는 table 모양에서 같은 집합을 낸다.
+ */
+export function collectTableChoiceSelection(tableValue: unknown): Set<string> {
+  const out = new Set<string>();
+  for (const v of Object.values(readTableChoiceGroups(tableValue))) {
+    if (typeof v === 'string') {
+      if (v) out.add(v);
+    } else if (Array.isArray(v)) {
+      for (const item of v) if (typeof item === 'string' && item) out.add(item);
+    }
+  }
   return out;
 }

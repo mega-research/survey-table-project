@@ -169,3 +169,26 @@ describe('isTableRowCompleted', () => {
     expect(isTableRowCompleted(gatedRow, { perf: '1', men: '3' })).toBe(true);
   });
 });
+
+describe('isTableRowCompleted — 보기 그룹 표의 choice-selected 게이팅', () => {
+  const row = {
+    id: 'r1',
+    label: '',
+    cells: [
+      { id: 'opt-yes', type: 'choice_opt', content: '있음', choiceGroupId: 'g1' },
+      { id: 'opt-no', type: 'choice_opt', content: '없음', choiceGroupId: 'g1' },
+      {
+        id: 'when',
+        type: 'input',
+        content: '',
+        enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' },
+      },
+    ],
+  } as unknown as TableRow;
+
+  it('보기를 고르지 않아 비활성이면 완료 판정에서 빠지고, 고르면 값이 있어야 완료다', () => {
+    expect(isTableRowCompleted(row, { __choiceGroups: { rad1: 'opt-no' } })).toBe(true);
+    expect(isTableRowCompleted(row, { __choiceGroups: { rad1: 'opt-yes' } })).toBe(false);
+    expect(isTableRowCompleted(row, { when: '내년', __choiceGroups: { rad1: 'opt-yes' } })).toBe(true);
+  });
+});

@@ -351,3 +351,36 @@ describe('choice-selected 조건 — 보기 옵션 셀이 선택되면 활성', 
     expect(stripDisabledCellValues([question], met)).toBe(met);
   });
 });
+
+describe('choice-selected 조건 — 보기 그룹 표 (table + __choiceGroups)', () => {
+  const groupedTable = {
+    id: 't',
+    type: 'table',
+    title: '',
+    required: false,
+    order: 0,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    tableColumns: [{ id: 'c1', label: '' }, { id: 'c2', label: '' }, { id: 'c3', label: '' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'opt-yes', type: 'choice_opt', content: '있음', choiceGroupId: 'g1' },
+          { id: 'opt-no', type: 'choice_opt', content: '없음', choiceGroupId: 'g1' },
+          inputCell('when', { enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' } }),
+        ],
+      },
+    ],
+  } as unknown as Question;
+
+  it('저장 strip 이 표 응답 안 예약 키의 선택으로 게이팅 셀을 판정한다 — 표 문항 경로', () => {
+    const unmet = { t: { when: '지워져야 한다', __choiceGroups: { rad1: 'opt-no' } } };
+    expect(stripDisabledCellValues([groupedTable], unmet)['t']).toEqual({
+      __choiceGroups: { rad1: 'opt-no' },
+    });
+
+    const met = { t: { when: '내년', __choiceGroups: { rad1: 'opt-yes' } } };
+    expect(stripDisabledCellValues([groupedTable], met)).toBe(met);
+  });
+});

@@ -205,3 +205,65 @@ describe('보기 그룹 표 — 테스트 모드(빌더 미리보기)는 테스�
     expect(screen.getByRole('radio', { name: 'UHD' })).toBeChecked();
   });
 });
+
+describe('보기 그룹 표 — choice-selected 게이팅', () => {
+  const gatedRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '',
+      cells: [
+        { id: 'opt-yes', content: '있음', type: 'choice_opt', choiceGroupId: 'g1' },
+        { id: 'opt-no', content: '없음', type: 'choice_opt', choiceGroupId: 'g1' },
+        {
+          id: 'when',
+          content: '',
+          type: 'input',
+          placeholder: '구매 시기',
+          enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' },
+        },
+      ],
+    },
+  ];
+  function GatedHarness({ initial = {} }: { initial?: Record<string, unknown> }) {
+    const [value, setValue] = useState<Record<string, unknown>>(initial);
+    return (
+      <>
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns.slice(0, 3)}
+          rows={gatedRows}
+          choiceGroups={[choiceGroups[0]!]}
+          value={value}
+          onChange={setValue}
+          enableSticky={false}
+        />
+        <output data-testid="value">{JSON.stringify(value)}</output>
+      </>
+    );
+  }
+
+  it('그 보기를 고르면 입력칸이 열리고, 다른 보기로 바꾸면 닫히며 값이 지워진다', async () => {
+    const user = userEvent.setup();
+    render(<GatedHarness />);
+    expect(screen.queryByPlaceholderText('구매 시기')).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: '있음' }));
+    await user.type(screen.getByPlaceholderText('구매 시기'), '내년');
+    expect(readValue()).toEqual({ when: '내년', __choiceGroups: { rad1: 'opt-yes' } });
+
+    await user.click(screen.getByRole('radio', { name: '없음' }));
+    expect(screen.queryByPlaceholderText('구매 시기')).toBeNull();
+    expect(readValue()).toEqual({ __choiceGroups: { rad1: 'opt-no' } });
+  });
+
+  it('테스트 모드에서도 스토어의 그룹 선택으로 열리고 닫힌다', () => {
+    useTestResponseStore.setState({ testResponses: { q1: { __choiceGroups: { rad1: 'opt-yes' } } } });
+    const gated = gatedRows[0]!.cells[2]!;
+    render(
+      <ChoiceGroupsProvider value={[choiceGroups[0]!]}>
+        <InteractiveCell cell={gated} questionId="q1" isTestMode rowCells={gatedRows[0]!.cells} />
+      </ChoiceGroupsProvider>,
+    );
+    expect(screen.getByPlaceholderText('구매 시기')).toBeInTheDocument();
+  });
+});
