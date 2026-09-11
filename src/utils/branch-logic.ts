@@ -16,6 +16,7 @@ import {
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
 import { resolveStepBranch, type RenderStep } from '@/lib/group-ordering';
+import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';
@@ -969,6 +970,13 @@ function checkValueMatch(
   // 단일 값 (radio, select 등)
   if (typeof response === 'string') {
     return requiredValues.includes(response);
+  }
+
+  // 보기 그룹 표(table + choice_opt 셀) — 선택은 표 응답 안 예약 키(__choiceGroups)에 있다.
+  // 정본 리더로 선택 집합을 얻는다. 셀 값 키(셀 id)는 보기 선택이 아니라 여기서 걸리지 않는다.
+  if (sourceQuestion?.type === 'table') {
+    const selected = collectSelectedChoiceCellIds(sourceQuestion, response);
+    return requiredValues.some((v) => selected.has(v));
   }
 
   // 그룹별 선택 모드(GroupedChoiceAnswer): { groupKey: cellId | cellId[] } 맵.
