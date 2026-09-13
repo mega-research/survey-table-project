@@ -283,12 +283,12 @@ describe('collectNumericIssues — 테이블', () => {
     expect(issues[0]!.message).toContain('100');
   });
 
-  it('errorMessage 지정 시 그 메시지를 사용한다', () => {
+  it('errorMessage 지정 시 그 메시지를 그대로 쓰고 현재 합을 덧붙이지 않는다', () => {
     const q = tableQuestion({
       sumConstraints: [{ ...eq100, errorMessage: '비중 합은 100이어야 합니다' }],
     });
     const issues = collectNumericIssues(q, { c1: '60', c2: '30' });
-    expect(issues[0]!.message).toContain('비중 합은 100이어야 합니다');
+    expect(issues[0]!.message).toBe('비중 합은 100이어야 합니다');
   });
 
   it('테이블 미접촉이면 합계·필수 셀 검증을 스킵한다', () => {

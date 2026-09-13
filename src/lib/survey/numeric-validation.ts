@@ -341,13 +341,15 @@ const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
 
 // 우변이 수식(targetExpr)이면 값을 노출하지 않는다 — 이전 응답·attrs 기반 기준값은
 // 응답자에게 힌트가 되므로 "기준값" 으로만 지칭 (셀 수식 검증의 계산값 미노출 원칙과 동일).
+// 저작자가 문구를 직접 썼으면 그대로 보여 준다 — "(현재 24324)" 같은 꼬리는 달력 환산값처럼
+// 응답자에게 의미 없는 수를 노출하고, 문구를 쓴 사람이 고를 방법이 없었다(셀 수식 검증과 동일).
+// 기본 문구에만 현재 합을 붙인다 — 퍼센트 합계 100 맞추기처럼 합을 알아야 고칠 수 있어서다.
 function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
+  const custom = constraint.errorMessage?.trim();
+  if (custom) return custom;
   const subject = constraint.leftExpr ? '계산 값' : '선택된 셀 합계';
   const target = constraint.targetExpr ? '기준값' : String(constraint.target);
-  const base =
-    constraint.errorMessage?.trim() ||
-    `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]}`;
-  return `${base} (현재 ${sum})`;
+  return `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]} (현재 ${sum})`;
 }
 
 /**
