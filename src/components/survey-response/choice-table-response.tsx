@@ -446,8 +446,9 @@ export function ChoiceTableResponse({
     isSelectedRowDetail = false,
     inputIdScope?: string,
   ): ReactNode => {
-    // 상세 기재 자리 셀 — 같은 행 보기 중 선택된 상세 기재 입력칸을 가로로 나란히(균등 분할).
-    // 선택된 것이 없으면 undefined 로 떨어져 셀 텍스트가 그대로 보인다.
+    // 상세 기재 자리 셀 — 같은 행 보기 중 선택된 상세 기재 입력칸을 세로로 쌓는다.
+    // 가로로 나란히 두면 칩 문구(그룹 라벨 · 보기)가 반폭에서 두세 줄로 꺾여 읽기 어렵고
+    // 입력칸도 반폭이라 좁다. 선택된 것이 없으면 undefined 로 떨어져 셀 텍스트가 그대로 보인다.
     if (!isSelectedRowDetail && cell.type === 'text' && cell.optionTextSlot) {
       const row = slotRowByCellId.get(cell.id);
       const entries = row
@@ -457,9 +458,9 @@ export function ChoiceTableResponse({
         : [];
       if (entries.length > 0) {
         return (
-          <div className="flex w-full min-w-0 gap-2">
+          <div className="flex w-full min-w-0 flex-col gap-2">
             {entries.map(({ option, label }) => (
-              <div key={option.id} className="min-w-0 flex-1">
+              <div key={option.id} className="min-w-0">
                 <OptionTextInput
                   questionId={question.id}
                   option={option}

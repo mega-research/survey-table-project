@@ -163,8 +163,9 @@ export function OptionTextInput({
               // 칩을 위에 쌓는 자리(모바일 카드 · 상세 기재 자리 셀)에서는 입력칸이 한 줄 높이라
               // 짚기 어렵고, 회색 배경만으로는 위의 회색 칩과 구분되지 않아 "칩이 둘"로 읽힌다 —
               // 흰 바탕에 테두리를 둘러 입력칸으로 보이게 하고 높이·글자 크기를 키운다
+              // (h-14 — 칩이 두 줄이면 h-12 는 칩보다 낮아 보조 요소처럼 읽혔다)
               stackedLabel &&
-                'h-12 rounded-md border border-gray-300 bg-white px-3 text-base focus:border-blue-400',
+                'h-14 rounded-md border border-gray-300 bg-white px-3 text-base focus:border-blue-400',
               priorTextCls,
             )}
           />

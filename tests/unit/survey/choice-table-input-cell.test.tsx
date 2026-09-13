@@ -231,13 +231,21 @@ describe('보기-소스 표의 상세 기재 자리 셀(optionTextSlot)', () => 
     expect(cell).not.toHaveTextContent('-');
   });
 
-  it('둘 다 고르면 두 입력칸이 셀 안에 나란히(균등 분할) 나온다', () => {
+  it('둘 다 고르면 두 입력칸이 셀 안에 세로로 쌓여 나온다', () => {
     renderTable(questionWithSlot(), { rad1: 'r2c2', rad2: ETC_NOW_CELL });
     const cell = screen.getByTestId(`cell-${SLOT}`);
     const inputs = cell.querySelectorAll('input[type="text"]');
     expect(inputs).toHaveLength(2);
+    // 두 입력칸이 같은 세로 스택(div.flex-col)에 들어 있어야 한다.
+    // 셸(label) 자체도 stacked 모드라 flex-col 이므로 div 로 한정한다.
+    const stack = inputs[0]!.closest('div.flex-col');
+    expect(stack).not.toBeNull();
+    expect(stack).toBe(inputs[1]!.closest('div.flex-col'));
+    // 가로 균등 분할 흔적이 없어야 한다 — 입력칸 셸을 감싼 래퍼가 flex-1 이 아니다
     for (const input of inputs) {
-      expect(input.closest('.flex-1')).not.toBeNull();
+      expect(input.closest('label')!.parentElement!.parentElement!.className).not.toContain(
+        'flex-1',
+      );
     }
   });
 });
