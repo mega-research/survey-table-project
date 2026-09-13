@@ -246,6 +246,9 @@ describe('보기-소스 표의 상세 기재 자리 셀(optionTextSlot)', () => 
       expect(input.closest('label')!.parentElement!.parentElement!.className).not.toContain(
         'flex-1',
       );
+      // 세로 셸 안의 입력칸은 flex-1(basis 0)을 벗어야 h-* 가 실제 높이가 된다
+      expect(input.className).toContain('flex-none');
+      expect(input.className).not.toContain('flex-1');
     }
   });
 });
