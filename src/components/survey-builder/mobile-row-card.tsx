@@ -266,13 +266,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     </div>
                   );
                 })()}
-                {/* pl-3: 위 라벨(점 6px+간격 6px)과 입력을 같은 선상으로 들여쓰는 값.
-                    라벨이 안 보이면 들여쓸 기준이 없어 좌우 여백만 비대칭이 되므로 라벨 표시 시에만 적용 */}
+                {/* ml-3: 위 라벨(점 6px+간격 6px)과 입력을 같은 선상으로 들여쓰는 값.
+                    라벨이 안 보이면 들여쓸 기준이 없어 좌우 여백만 비대칭이 되므로 라벨 표시 시에만 적용.
+                    padding 이 아니라 margin 인 이유 — 오류 ring 이 이 래퍼에 걸리는데 padding 이면
+                    ring 이 들여쓴 빈 칸까지 감싸 입력칸 왼쪽으로 튀어나온다. */}
                 {(() => {
                   const labelShown =
                     cell.mobileDisplay !== 'hidden' &&
                     Boolean(hideColumnLabels ? cellLabel : shortLabel);
-                  const labelIndent = labelShown ? 'pl-3' : '';
+                  const labelIndent = labelShown ? 'ml-3' : '';
                   return isUnitPairStart && nextEntry ? (
                     <div className={cn('flex items-end gap-2', labelIndent)}>
                     <div
