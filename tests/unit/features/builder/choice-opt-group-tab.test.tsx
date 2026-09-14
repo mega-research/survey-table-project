@@ -20,6 +20,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     onAllowTextInputChange: vi.fn(),
     exclusiveChoice: false,
     onExclusiveChoiceChange: vi.fn(),
+    exclusiveScope: 'group' as const,
+    onExclusiveScopeChange: vi.fn(),
     parentQuestionType: undefined,
     branchRule: undefined,
     onBranchRuleChange: vi.fn(),
@@ -291,5 +293,35 @@ describe('ChoiceOptCellTab — 단독 선택 보기 토글', () => {
     unmount();
     render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'radio' })} />);
     expect(screen.queryByRole('switch', { name: '단독 선택 보기' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ChoiceOptCellTab — 단독 선택 범위', () => {
+  const cb1: ChoiceGroup = { id: 'g3', groupKey: 'cb1', type: 'checkbox', label: '활용 여부' };
+  const cb2: ChoiceGroup = { id: 'g4', groupKey: 'cb2', type: 'checkbox', label: '활용 계획' };
+
+  it('단독 선택이 켜져 있고 그룹이 둘 이상이면 범위 선택이 보이고 표 전체를 고를 수 있다', async () => {
+    const onExclusiveScopeChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [cb1, cb2],
+          choiceGroupId: 'g4',
+          exclusiveChoice: true,
+          onExclusiveScopeChange,
+        })}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '표 전체' }));
+    expect(onExclusiveScopeChange).toHaveBeenCalledWith('table');
+  });
+
+  it('그룹이 하나뿐이면 범위 선택이 보이지 않는다', () => {
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({ choiceGroups: [cb1], choiceGroupId: 'g3', exclusiveChoice: true })}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: '표 전체' })).not.toBeInTheDocument();
   });
 });

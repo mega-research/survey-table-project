@@ -1,5 +1,6 @@
 import { isCellEnabled } from '@/lib/survey/cell-gating';
 import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
+import { collectTableExclusiveChoiceCellIds } from '@/lib/survey/exclusive-choice';
 import type { TableCell, TableRow } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { buildRadioGroupBuckets } from '@/utils/table-radio-groups';
@@ -60,10 +61,17 @@ export function isTableRowCompleted(
   // 선택은 셀 값이 아니라 표 응답 안 예약 키에 있다. 완료 대상 타입에 choice_opt 가 있을 때만 센다.
   const choiceGroupCompleted = new Map<string, boolean>();
   if (answerable.has('choice_opt')) {
+    // 표 전체 범위 단독 보기(「없음」)가 골라졌으면 이 표의 보기 그룹은 전부 완료다 — 그 보기가
+    // 다른 행·그룹을 비우므로 행마다 요구하면 영구 미완료가 된다.
+    const tableExclusiveIds = collectTableExclusiveChoiceCellIds(tableCells ?? row.cells);
+    const allDone = [...tableExclusiveIds].some((id) => choiceSelection.has(id));
     for (const cell of row.cells) {
       if (cell.type !== 'choice_opt' || cell.isHidden || !cell.choiceGroupId) continue;
       const prev = choiceGroupCompleted.get(cell.choiceGroupId) ?? false;
-      choiceGroupCompleted.set(cell.choiceGroupId, prev || choiceSelection.has(cell.id));
+      choiceGroupCompleted.set(
+        cell.choiceGroupId,
+        allDone || prev || choiceSelection.has(cell.id),
+      );
     }
   }
 

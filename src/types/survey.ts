@@ -383,6 +383,12 @@ export interface TableCell {
    * QuestionOption.exclusiveChoice 와 같은 규칙(`lib/survey/exclusive-choice.ts`)을 탄다.
    */
   exclusiveChoice?: boolean;
+  /**
+   * 단독 선택 보기의 범위 — 미지정·'group' 이면 속한 그룹만, 'table' 이면 이 표의 모든 그룹.
+   * 「없음」 열이 하나뿐인 표에서 한 번에 두 열을 비울 때 쓴다. 표 전체면 필수 판정도 표의 그룹
+   * 전부를 충족한 것으로 본다(다른 그룹이 비어 있어도 「다음」이 막히지 않는다).
+   */
+  exclusiveScope?: 'group' | 'table';
   // SPSS 변수 타입 / 측정 수준 (셀 단위)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';

@@ -165,6 +165,63 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
     expect(screen.getByRole('checkbox', { name: '없음' })).not.toBeChecked();
   });
 
+  it('표 전체 범위 단독 선택 보기는 다른 그룹까지 비우고, 어느 열에서든 다른 보기를 고르면 풀린다', async () => {
+    const user = userEvent.setup();
+    const twoCheckboxGroups: ChoiceGroup[] = [
+      { id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '활용 여부' },
+      { id: 'g2', groupKey: 'cb2', type: 'checkbox', label: '활용 계획' },
+    ];
+    const rowsWithTableNone: TableRow[] = [
+      {
+        id: 'r1',
+        label: 'TV',
+        cells: [
+          { id: 'r1-lbl', content: 'TV', type: 'text' },
+          { id: 'tv-now', content: 'TV 현재', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'tv-plan', content: 'TV 계획', type: 'choice_opt', choiceGroupId: 'g2' },
+          { id: 'r1-blank', content: '', type: 'text' },
+        ],
+      },
+      {
+        id: 'r9',
+        label: '없음',
+        cells: [
+          { id: 'r9-lbl', content: '없음', type: 'text' },
+          { id: 'r9-blank', content: '', type: 'text' },
+          { id: 'none', content: '없음', type: 'choice_opt', choiceGroupId: 'g2', exclusiveChoice: true, exclusiveScope: 'table' },
+          { id: 'r9-blank2', content: '', type: 'text' },
+        ],
+      },
+    ];
+    function TableNoneHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>({});
+      return (
+        <>
+          <InteractiveTableResponse
+            questionId="q1"
+            columns={columns}
+            rows={rowsWithTableNone}
+            choiceGroups={twoCheckboxGroups}
+            value={value}
+            onChange={setValue}
+            enableSticky={false}
+          />
+          <output data-testid="value">{JSON.stringify(value)}</output>
+        </>
+      );
+    }
+    render(<TableNoneHarness />);
+
+    await user.click(screen.getByRole('checkbox', { name: 'TV 현재' }));
+    await user.click(screen.getByRole('checkbox', { name: 'TV 계획' }));
+    await user.click(screen.getByRole('checkbox', { name: '없음' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb2: ['none'] } });
+
+    // 다른 그룹(활용 여부)에서 골라도 표 전체 「없음」이 풀린다
+    await user.click(screen.getByRole('checkbox', { name: 'TV 현재' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb1: ['tv-now'] } });
+  });
+
   it('입력 셀 값과 그룹 선택이 같은 표 응답 객체에 나란히 산다', async () => {
     const user = userEvent.setup();
     render(<Harness initial={{ amount: '12' }} />);

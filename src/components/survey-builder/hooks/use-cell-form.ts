@@ -76,6 +76,7 @@ export interface CellFormSetters {
   setChoiceLabel: (v: string) => void;
   setChoiceAllowTextInput: (v: boolean) => void;
   setChoiceExclusive: (v: boolean) => void;
+  setChoiceExclusiveScope: (v: 'group' | 'table') => void;
   setChoiceTextInputType: (v: CellFormState['choiceTextInputType']) => void;
   setChoiceTextInputNumberFormat: (v: CellFormState['choiceTextInputNumberFormat']) => void;
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
@@ -184,6 +185,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setChoiceLabel: set('choiceLabel'),
       setChoiceAllowTextInput: set('choiceAllowTextInput'),
       setChoiceExclusive: set('choiceExclusive'),
+      setChoiceExclusiveScope: set('choiceExclusiveScope'),
       setChoiceTextInputType: set('choiceTextInputType'),
       setChoiceTextInputNumberFormat: set('choiceTextInputNumberFormat'),
       setChoiceBranchRule: set('choiceBranchRule'),

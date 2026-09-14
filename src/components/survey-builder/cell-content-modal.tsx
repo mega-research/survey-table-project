@@ -256,6 +256,7 @@ export function CellContentModal({
     choiceLabel,
     choiceAllowTextInput,
     choiceExclusive,
+    choiceExclusiveScope,
     choiceTextInputType,
     choiceTextInputNumberFormat,
     choiceBranchRule,
@@ -344,6 +345,7 @@ export function CellContentModal({
     setChoiceLabel,
     setChoiceAllowTextInput,
     setChoiceExclusive,
+    setChoiceExclusiveScope,
     setChoiceTextInputType,
     setChoiceTextInputNumberFormat,
     setChoiceBranchRule,
@@ -1735,6 +1737,8 @@ export function CellContentModal({
               onAllowTextInputChange={setChoiceAllowTextInput}
               exclusiveChoice={choiceExclusive}
               onExclusiveChoiceChange={setChoiceExclusive}
+              exclusiveScope={choiceExclusiveScope}
+              onExclusiveScopeChange={setChoiceExclusiveScope}
               parentQuestionType={parentQuestionType}
               textInputType={choiceTextInputType}
               onTextInputTypeChange={setChoiceTextInputType}

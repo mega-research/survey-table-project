@@ -87,3 +87,66 @@ export function satisfiesMinSelections<T>(
   if (selected.some((item) => isExclusive(item))) return true;
   return selected.length >= minSelections;
 }
+
+/** 범위가 표 전체인 단독 선택 보기 셀 id — 어느 그룹에서 고르든 이 표의 모든 그룹을 비운다 */
+export function collectTableExclusiveChoiceCellIds(cells: readonly TableCell[]): Set<string> {
+  const ids = new Set<string>();
+  for (const cell of cells) {
+    if (isExclusiveChoiceCell(cell) && cell.exclusiveScope === 'table') ids.add(cell.id);
+  }
+  return ids;
+}
+
+/** 그룹 선택 맵 — 레거시 그룹 문항의 응답 자체, 보기 그룹 표의 `__choiceGroups` 값 */
+export type GroupSelectionMap = Record<string, string | string[]>;
+
+function selectionIncludes(sel: string | string[] | undefined, id: string): boolean {
+  return Array.isArray(sel) ? sel.includes(id) : sel === id;
+}
+
+/**
+ * 표 전체 범위 단독 선택을 그룹 선택 맵에 적용한다 — 한 그룹의 선택이 바뀐 **뒤** 호출한다.
+ * 고른 것이 표 전체 단독 보기면 그 그룹만 남기고 나머지 그룹을 전부 비운다. 일반 보기면 다른
+ * 그룹에 들어 있던 표 전체 단독 보기를 뺀다(라디오 그룹이면 키 삭제). 그룹 범위 단독 보기는
+ * 여기서 다루지 않는다 — 그건 그룹 배열 안에서 applyExclusiveSelection 이 끝낸다.
+ */
+export function applyTableExclusiveToGroups(
+  map: GroupSelectionMap,
+  pickedGroupKey: string,
+  pickedId: string,
+  tableExclusiveIds: ReadonlySet<string>,
+): GroupSelectionMap {
+  if (tableExclusiveIds.size === 0) return map;
+  if (tableExclusiveIds.has(pickedId)) {
+    const own = map[pickedGroupKey];
+    return own === undefined ? {} : { [pickedGroupKey]: own };
+  }
+  const next: GroupSelectionMap = {};
+  for (const [key, sel] of Object.entries(map)) {
+    if (key === pickedGroupKey) {
+      next[key] = sel;
+      continue;
+    }
+    if (Array.isArray(sel)) {
+      const kept = sel.filter((id) => !tableExclusiveIds.has(id));
+      if (kept.length > 0) next[key] = kept;
+    } else if (!tableExclusiveIds.has(sel)) {
+      next[key] = sel;
+    }
+  }
+  return next;
+}
+
+/** 선택 맵 어딘가에 표 전체 단독 보기가 골라져 있는가 — 그러면 이 표의 그룹 전부를 충족으로 본다 */
+export function hasTableExclusiveSelected(
+  map: Record<string, unknown>,
+  tableExclusiveIds: ReadonlySet<string>,
+): boolean {
+  if (tableExclusiveIds.size === 0) return false;
+  for (const id of tableExclusiveIds) {
+    for (const sel of Object.values(map)) {
+      if (selectionIncludes(sel as string | string[] | undefined, id)) return true;
+    }
+  }
+  return false;
+}

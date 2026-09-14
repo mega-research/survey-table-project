@@ -18,8 +18,11 @@ import {
   useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
 import {
+  type GroupSelectionMap,
   applyExclusiveSelection,
+  applyTableExclusiveToGroups,
   collectExclusiveChoiceCellIdsFromRows,
+  collectTableExclusiveChoiceCellIds,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
 import {
@@ -39,7 +42,7 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceGroupSectionLabel } from '@/utils/choice-group-section-label';
-import { resolveChoiceOptions } from '@/utils/choice-source';
+import { resolveChoiceOptions, collectChoiceOptCells } from '@/utils/choice-source';
 import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
@@ -198,6 +201,11 @@ export function ChoiceTableResponse({
     [question.tableRowsData],
   );
   const isExclusiveChoiceCell = (cellId: string) => exclusiveChoiceCellIds.has(cellId);
+  // 표 전체 범위 단독 보기 — 그룹 문항에서 다른 그룹까지 비운다
+  const tableExclusiveIds = useMemo(
+    () => collectTableExclusiveChoiceCellIds(collectChoiceOptCells(question.tableRowsData)),
+    [question.tableRowsData],
+  );
 
   const toggle = (cellId: string, checked: boolean) => {
     if (isGrouped) {
@@ -224,7 +232,17 @@ export function ChoiceTableResponse({
           const { [groupKey]: _removed, ...rest } = map;
           onChange(rest as GroupedChoiceAnswer);
         } else {
-          onChange({ ...map, [groupKey]: next });
+          const merged = { ...map, [groupKey]: next } as GroupSelectionMap;
+          onChange(
+            (arr.includes(cellId)
+              ? merged
+              : applyTableExclusiveToGroups(
+                  merged,
+                  groupKey,
+                  cellId,
+                  tableExclusiveIds,
+                )) as GroupedChoiceAnswer,
+          );
         }
         return;
       }
@@ -235,7 +253,15 @@ export function ChoiceTableResponse({
         const { [groupKey]: _removed, ...rest } = map;
         onChange(rest as GroupedChoiceAnswer);
       } else {
-        onChange({ ...map, [groupKey]: cellId });
+        const merged = { ...map, [groupKey]: cellId } as GroupSelectionMap;
+        onChange(
+          applyTableExclusiveToGroups(
+            merged,
+            groupKey,
+            cellId,
+            tableExclusiveIds,
+          ) as GroupedChoiceAnswer,
+        );
       }
       return;
     }

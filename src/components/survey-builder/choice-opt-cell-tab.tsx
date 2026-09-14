@@ -28,6 +28,9 @@ interface ChoiceOptCellTabProps {
   /** 단독 선택 보기 (CONTEXT.md) — 체크박스 그룹(또는 그룹 없는 checkbox 문항)에서만 노출 */
   exclusiveChoice: boolean;
   onExclusiveChoiceChange: (v: boolean) => void;
+  /** 단독 선택 범위 — 그룹이 여럿인 표에서만 노출 */
+  exclusiveScope: 'group' | 'table';
+  onExclusiveScopeChange: (v: 'group' | 'table') => void;
   /** 이 셀을 품은 문항의 유형 — 그룹 없는 보기 셀이 체크박스로 그려지는지 판단한다 */
   parentQuestionType: QuestionType | undefined;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
@@ -71,6 +74,8 @@ export function ChoiceOptCellTab({
   onAllowTextInputChange,
   exclusiveChoice,
   onExclusiveChoiceChange,
+  exclusiveScope,
+  onExclusiveScopeChange,
   parentQuestionType,
   textInputType,
   onTextInputTypeChange,
@@ -265,6 +270,35 @@ export function ChoiceOptCellTab({
             「없음 · 해당 없음 · 모름」용. 이 보기를 고르면 같은 그룹의 다른 선택이 풀리고, 다른
             보기를 고르면 이 보기가 풀립니다. 이 보기 하나로 최소 선택 수를 충족한 것으로 봅니다.
           </p>
+          {/* 범위 — 그룹이 둘 이상인 표에서만 의미가 있다(하나면 둘이 같다) */}
+          {exclusiveChoice && currentGroup && choiceGroups.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs text-gray-600">범위</span>
+              <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                <button
+                  type="button"
+                  aria-pressed={exclusiveScope === 'group'}
+                  onClick={() => onExclusiveScopeChange('group')}
+                  className={`px-3 py-1 text-xs font-medium ${exclusiveScope === 'group' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                >
+                  이 그룹만
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={exclusiveScope === 'table'}
+                  onClick={() => onExclusiveScopeChange('table')}
+                  className={`border-l border-gray-200 px-3 py-1 text-xs font-medium ${exclusiveScope === 'table' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                >
+                  표 전체
+                </button>
+              </div>
+              <span className="text-xs text-gray-500">
+                {exclusiveScope === 'table'
+                  ? '이 표의 모든 그룹 선택이 풀리고, 필수 그룹도 전부 충족한 것으로 봅니다'
+                  : '이 보기가 속한 그룹만 비웁니다'}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -719,3 +719,35 @@ describe('isQuestionAnswered — 단독 선택 보기와 최소 선택 수', () 
     expect(isQuestionAnswered(tableQ, ['tv'])).toBe(false);
   });
 });
+
+describe('isQuestionAnswered — 표 전체 범위 단독 선택 보기', () => {
+  const tableQ = (): Question =>
+    q('table', {
+      required: true,
+      choiceGroups: [
+        { id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '활용 여부' },
+        { id: 'g2', groupKey: 'cb2', type: 'checkbox', label: '활용 계획' },
+      ],
+      tableColumns: [{ id: 'c1', label: '열' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'tv-now', type: 'choice_opt', content: '', choiceGroupId: 'g1' },
+            { id: 'tv-plan', type: 'choice_opt', content: '', choiceGroupId: 'g2' },
+            { id: 'none', type: 'choice_opt', content: '', choiceGroupId: 'g2', exclusiveChoice: true, exclusiveScope: 'table' },
+          ],
+        },
+      ],
+    });
+
+  it('표 전체 「없음」 하나면 비어 있는 다른 필수 그룹도 충족으로 본다', () => {
+    expect(isQuestionAnswered(tableQ(), { __choiceGroups: { cb2: ['none'] } })).toBe(true);
+    expect(collectUnfilledChoiceGroupCellIds(tableQ(), { __choiceGroups: { cb2: ['none'] } }).size).toBe(0);
+  });
+
+  it('일반 보기만 한 그룹에 있으면 다른 그룹은 여전히 미충족이다', () => {
+    expect(isQuestionAnswered(tableQ(), { __choiceGroups: { cb2: ['tv-plan'] } })).toBe(false);
+  });
+});

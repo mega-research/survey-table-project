@@ -10,7 +10,9 @@ import { CHOICE_GROUPS_KEY, readTableChoiceGroups } from '@/lib/survey/choice-se
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   applyExclusiveSelection,
+  applyTableExclusiveToGroups,
   collectExclusiveChoiceCellIds,
+  collectTableExclusiveChoiceCellIds,
 } from '@/lib/survey/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -76,19 +78,6 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
     ? Array.isArray(selection) && selection.includes(cell.id)
     : selection === cell.id;
 
-  const commit = useCallback(
-    (next: string | string[] | undefined) => {
-      const latest = isTestMode
-        ? readTableChoiceGroups(useTestResponseStore.getState().testResponses[questionId])
-        : readTableChoiceGroups(value);
-      const map: Record<string, string | string[]> = { ...latest };
-      if (next === undefined) delete map[groupKey];
-      else map[groupKey] = next;
-      mergePatch({ [CHOICE_GROUPS_KEY]: map });
-    },
-    [groupKey, isTestMode, mergePatch, questionId, value],
-  );
-
   // 단독 선택 보기 판정 재료 — 같은 그룹의 보기 셀 중 exclusiveChoice 가 켜진 것. 다른 행의 셀이라
   // 표 전체 셀 공급자에서 받는다(게이팅과 같은 공급자 — 응답 표 호스트는 전부 그 아래 있다).
   // 공급자가 없는 자리(빌더 편집 화면)에서는 이 셀 자신만 판정한다 — 거기서는 보기 셀이
@@ -103,19 +92,40 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
     (id: string) => exclusiveCellIds.has(id),
     [exclusiveCellIds],
   );
+  // 표 전체 범위 단독 보기 — 그룹을 가리지 않고 이 표의 모든 보기 셀에서 모은다
+  const tableExclusiveIds = useMemo(() => {
+    const ids = collectTableExclusiveChoiceCellIds(tableCells ?? []);
+    if (cell.exclusiveChoice === true && cell.exclusiveScope === 'table') ids.add(cell.id);
+    return ids;
+  }, [cell.exclusiveChoice, cell.exclusiveScope, cell.id, tableCells]);
+
+  const commit = useCallback(
+    (next: string | string[] | undefined, pickedId?: string) => {
+      const latest = isTestMode
+        ? readTableChoiceGroups(useTestResponseStore.getState().testResponses[questionId])
+        : readTableChoiceGroups(value);
+      let map: Record<string, string | string[]> = { ...latest };
+      if (next === undefined) delete map[groupKey];
+      else map[groupKey] = next;
+      // 고른 것이 있을 때만 표 전체 규칙을 돌린다 — 해제는 다른 그룹에 영향이 없다
+      if (pickedId !== undefined) {
+        map = applyTableExclusiveToGroups(map, groupKey, pickedId, tableExclusiveIds);
+      }
+      mergePatch({ [CHOICE_GROUPS_KEY]: map });
+    },
+    [groupKey, isTestMode, mergePatch, questionId, tableExclusiveIds, value],
+  );
 
   const toggle = useCallback(() => {
     if (isCheckbox) {
       const current = Array.isArray(selection) ? (selection as string[]) : [];
-      commit(
-        current.includes(cell.id)
-          ? current.filter((id) => id !== cell.id)
-          : applyExclusiveSelection(current, cell.id, isExclusiveCellId).next,
-      );
+      if (current.includes(cell.id)) commit(current.filter((id) => id !== cell.id));
+      else commit(applyExclusiveSelection(current, cell.id, isExclusiveCellId).next, cell.id);
       return;
     }
     // 라디오는 고른 것을 다시 누르면 푼다 — 표 안 radio 셀과 같은 동작
-    commit(selection === cell.id ? undefined : cell.id);
+    if (selection === cell.id) commit(undefined);
+    else commit(cell.id, cell.id);
   }, [cell.id, commit, isCheckbox, isExclusiveCellId, selection]);
 
   const rawLabel = (cell.choiceLabel ?? '').trim() || cell.content || '';

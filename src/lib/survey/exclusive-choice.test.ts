@@ -4,9 +4,12 @@ import type { TableCell } from '@/types/survey';
 
 import {
   applyExclusiveSelection,
+  applyTableExclusiveToGroups,
   choiceValueKey,
   collectExclusiveChoiceCellIds,
   collectExclusiveChoiceCellIdsFromRows,
+  collectTableExclusiveChoiceCellIds,
+  hasTableExclusiveSelected,
   satisfiesMinSelections,
 } from './exclusive-choice';
 
@@ -93,5 +96,65 @@ describe('단독 선택 보기 — 셀 수집과 값 키', () => {
     expect(choiceValueKey('9')).toBe('9');
     expect(choiceValueKey({ selectedValue: '9', text: '메모' })).toBe('9');
     expect(choiceValueKey(3)).toBeUndefined();
+  });
+});
+
+describe('단독 선택 보기 — 표 전체 범위', () => {
+  const cells: TableCell[] = [
+    { id: 'tv-now', type: 'choice_opt', content: '', choiceGroupId: 'g1' },
+    { id: 'tv-plan', type: 'choice_opt', content: '', choiceGroupId: 'g2' },
+    { id: 'none-plan', type: 'choice_opt', content: '', choiceGroupId: 'g2', exclusiveChoice: true, exclusiveScope: 'table' },
+    { id: 'none-group', type: 'choice_opt', content: '', choiceGroupId: 'g1', exclusiveChoice: true },
+  ];
+  const tableIds = collectTableExclusiveChoiceCellIds(cells);
+
+  it('범위가 표 전체인 단독 선택 보기만 모은다', () => {
+    expect([...tableIds]).toEqual(['none-plan']);
+  });
+
+  it('표 전체 단독 보기를 고르면 다른 그룹의 선택이 전부 풀린다', () => {
+    const next = applyTableExclusiveToGroups(
+      { cb1: ['tv-now'], rad1: 'x', cb2: ['none-plan'] },
+      'cb2',
+      'none-plan',
+      tableIds,
+    );
+    expect(next).toEqual({ cb2: ['none-plan'] });
+  });
+
+  it('다른 그룹에서 일반 보기를 고르면 표 전체 단독 보기가 풀린다', () => {
+    const next = applyTableExclusiveToGroups(
+      { cb1: ['tv-now'], cb2: ['none-plan'] },
+      'cb1',
+      'tv-now',
+      tableIds,
+    );
+    expect(next).toEqual({ cb1: ['tv-now'] });
+  });
+
+  it('라디오 그룹에 있는 표 전체 단독 보기도 풀린다', () => {
+    const next = applyTableExclusiveToGroups(
+      { cb1: ['tv-now'], rad2: 'none-plan' },
+      'cb1',
+      'tv-now',
+      new Set(['none-plan']),
+    );
+    expect(next).toEqual({ cb1: ['tv-now'] });
+  });
+
+  it('그룹 범위 단독 보기는 다른 그룹을 건드리지 않는다', () => {
+    const next = applyTableExclusiveToGroups(
+      { cb1: ['none-group'], cb2: ['tv-plan'] },
+      'cb1',
+      'none-group',
+      tableIds,
+    );
+    expect(next).toEqual({ cb1: ['none-group'], cb2: ['tv-plan'] });
+  });
+
+  it('선택 맵에 표 전체 단독 보기가 들어 있는지 판정한다', () => {
+    expect(hasTableExclusiveSelected({ cb2: ['none-plan'] }, tableIds)).toBe(true);
+    expect(hasTableExclusiveSelected({ rad1: 'none-plan' }, tableIds)).toBe(true);
+    expect(hasTableExclusiveSelected({ cb1: ['tv-now'] }, tableIds)).toBe(false);
   });
 });

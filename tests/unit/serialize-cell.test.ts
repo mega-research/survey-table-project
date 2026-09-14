@@ -476,6 +476,28 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(off).not.toHaveProperty('hideRightBorder');
   });
 
+  it('choice_opt: 단독 선택 범위는 표 전체일 때만 exclusiveScope 키를 남긴다', () => {
+    const table = buildUpdatedCell(
+      { ...baseForm('choice_opt'), choiceExclusive: true, choiceExclusiveScope: 'table' },
+      baseCell,
+    );
+    expect(table.exclusiveScope).toBe('table');
+    expect(cellToFormState(table).choiceExclusiveScope).toBe('table');
+
+    const group = buildUpdatedCell(
+      { ...baseForm('choice_opt'), choiceExclusive: true, choiceExclusiveScope: 'group' },
+      { id: 'c1', type: 'choice_opt', content: '', exclusiveChoice: true, exclusiveScope: 'table' },
+    );
+    expect(group).not.toHaveProperty('exclusiveScope');
+
+    // 단독 선택을 끄면 범위도 같이 사라진다
+    const off = buildUpdatedCell(
+      { ...baseForm('choice_opt'), choiceExclusive: false, choiceExclusiveScope: 'table' },
+      baseCell,
+    );
+    expect(off).not.toHaveProperty('exclusiveScope');
+  });
+
   it('choice_opt: 단독 선택 보기 플래그는 켰을 때만 exclusiveChoice 키를 남기고, 끄면 기존 값도 지운다', () => {
     const on = buildUpdatedCell({ ...baseForm('choice_opt'), choiceExclusive: true }, baseCell);
     expect(on.exclusiveChoice).toBe(true);
