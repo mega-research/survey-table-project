@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { getHorizontalJustifyClass } from '@/utils/table-grid-utils';
 
 import { useGatingTableCells } from './gating-table-cells-context';
 
@@ -136,8 +137,11 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5">
-      {/* items-start + mt-1: 라벨이 두 줄로 감겨도 컨트롤이 첫 줄에 고정된다 */}
-      <div className="flex items-start gap-2">
+      {/* items-start + mt-1: 라벨이 두 줄로 감겨도 컨트롤이 첫 줄에 고정된다.
+          가로 정렬은 이 행이 직접 — 뿌리가 w-full 이라 셀 래퍼의 items-* 가 닿지 않는다. */}
+      <div
+        className={cn('flex items-start gap-2', getHorizontalJustifyClass(cell.horizontalAlign))}
+      >
         {isCheckbox ? (
           <input
             type="checkbox"

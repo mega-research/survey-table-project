@@ -89,6 +89,20 @@ export function getHorizontalItemsClass(horizontalAlign?: 'left' | 'center' | 'r
   return H_ITEMS_ONLY_MAP[horizontalAlign || 'left'];
 }
 
+const H_JUSTIFY_MAP = {
+  left: 'justify-start',
+  center: 'justify-center',
+  right: 'justify-end',
+} as const;
+
+/**
+ * 가로 정렬의 justify-* — 셀 안에서 폭을 꽉 채우는(w-full) 가로 행이 [컨트롤+라벨] 묶음을
+ * 어디에 둘지. 셀 래퍼의 items-* 는 w-full 인 자식에 닿지 않아 행이 스스로 정렬해야 한다.
+ */
+export function getHorizontalJustifyClass(horizontalAlign?: 'left' | 'center' | 'right'): string {
+  return H_JUSTIFY_MAP[horizontalAlign || 'left'];
+}
+
 /**
  * 본문 셀의 격자선 — 오른쪽·아래. `hideRightBorder` 셀은 오른쪽 선을 빼서 다음 셀과 한 칸처럼
  * 이어 보인다(응답 화면·미리보기 공용. 빌더 편집 격자는 경계를 보여야 해서 이 헬퍼를 쓰지 않는다).

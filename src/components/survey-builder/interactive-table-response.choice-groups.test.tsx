@@ -95,6 +95,60 @@ function readValue(): Record<string, unknown> {
 }
 
 describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
+  it('보기 셀의 가로 정렬을 따른다 — 셀 래퍼의 items-* 는 w-full 인 이 행에 닿지 않아 행이 스스로 정렬한다', () => {
+    const alignedRows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '보유',
+        cells: [
+          { id: 'r1-lbl', content: '보유', type: 'text' },
+          {
+            id: 'uhd',
+            content: 'UHD',
+            type: 'choice_opt',
+            choiceGroupId: 'g1',
+            horizontalAlign: 'center',
+          },
+          {
+            id: 'fhd',
+            content: 'FHD',
+            type: 'choice_opt',
+            choiceGroupId: 'g1',
+            horizontalAlign: 'right',
+          },
+          { id: 'amount', content: '', type: 'input' },
+        ],
+      },
+      {
+        id: 'r2',
+        label: '구매처',
+        cells: [
+          { id: 'r2-lbl', content: '구매처', type: 'text' },
+          { id: 'online', content: '온라인', type: 'choice_opt', choiceGroupId: 'g2' },
+          { id: 'store', content: '대리점', type: 'choice_opt', choiceGroupId: 'g2' },
+          { id: 'r2-blank', content: '', type: 'text' },
+        ],
+      },
+    ];
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={alignedRows}
+        choiceGroups={choiceGroups}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'UHD' }).parentElement).toHaveClass('justify-center');
+    expect(screen.getByRole('radio', { name: 'FHD' }).parentElement).toHaveClass('justify-end');
+    // 미지정은 왼쪽 — 기존 화면 그대로
+    expect(screen.getByRole('checkbox', { name: '온라인' }).parentElement).toHaveClass(
+      'justify-start',
+    );
+  });
+
   it('radio 그룹의 보기 셀은 라디오로 보이고, 고르면 __choiceGroups 에 셀 id 가 쓰인다', async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -130,7 +184,13 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
         cells: [
           { id: 'r3-lbl', content: '없음', type: 'text' },
           { id: 'r3-blank', content: '', type: 'text' },
-          { id: 'none', content: '없음', type: 'choice_opt', choiceGroupId: 'g2', exclusiveChoice: true },
+          {
+            id: 'none',
+            content: '없음',
+            type: 'choice_opt',
+            choiceGroupId: 'g2',
+            exclusiveChoice: true,
+          },
           { id: 'r3-blank2', content: '', type: 'text' },
         ],
       },
@@ -188,7 +248,14 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
         cells: [
           { id: 'r9-lbl', content: '없음', type: 'text' },
           { id: 'r9-blank', content: '', type: 'text' },
-          { id: 'none', content: '없음', type: 'choice_opt', choiceGroupId: 'g2', exclusiveChoice: true, exclusiveScope: 'table' },
+          {
+            id: 'none',
+            content: '없음',
+            type: 'choice_opt',
+            choiceGroupId: 'g2',
+            exclusiveChoice: true,
+            exclusiveScope: 'table',
+          },
           { id: 'r9-blank2', content: '', type: 'text' },
         ],
       },
@@ -359,7 +426,9 @@ describe('보기 그룹 표 — choice-selected 게이팅', () => {
   });
 
   it('테스트 모드에서도 스토어의 그룹 선택으로 열리고 닫힌다', () => {
-    useTestResponseStore.setState({ testResponses: { q1: { __choiceGroups: { rad1: 'opt-yes' } } } });
+    useTestResponseStore.setState({
+      testResponses: { q1: { __choiceGroups: { rad1: 'opt-yes' } } },
+    });
     const gated = gatedRows[0]!.cells[2]!;
     render(
       <ChoiceGroupsProvider value={[choiceGroups[0]!]}>
