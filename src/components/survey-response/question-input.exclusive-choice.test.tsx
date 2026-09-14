@@ -76,4 +76,16 @@ describe('일반 체크박스 문항 — 단독 선택 보기', () => {
     await user.click(screen.getByRole('checkbox', { name: '없음' }));
     expect(readValue()).toEqual(['9']);
   });
+
+  it('최대 1개일 때 「없음」이 골라져 있어도 일반 보기를 누르면 「없음」이 풀리고 그것이 들어간다', async () => {
+    const user = userEvent.setup();
+    render(<Harness q={{ ...checkbox, maxSelections: 1 } as Question} />);
+    await user.click(screen.getByRole('checkbox', { name: '없음' }));
+    expect(readValue()).toEqual(['9']);
+    expect(screen.getByRole('checkbox', { name: 'TV' })).not.toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox', { name: 'TV' }));
+    expect(readValue()).toEqual(['1']);
+    expect(screen.getByRole('checkbox', { name: '냉장고' })).toBeDisabled();
+  });
 });

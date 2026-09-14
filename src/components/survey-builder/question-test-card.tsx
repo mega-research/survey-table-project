@@ -16,6 +16,7 @@ import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-con
 import {
   applyExclusiveSelection,
   choiceValueKey,
+  countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -219,12 +220,13 @@ function CheckboxTestInput({
 
     if (isChecked) {
       // 최대 선택 개수 체크 — 단독 선택 보기는 예외(고르면 그것 하나만 남는다)
+      // 개수는 단독 보기를 뺀 것으로 센다 — 「없음」이 골라진 상태에서 일반 보기를 누르면 「없음」이 풀린다
       const maxSelections = question.maxSelections;
       if (
         !isExclusiveChoiceValue(optionValue) &&
         maxSelections !== undefined &&
         maxSelections > 0 &&
-        newValues.length >= maxSelections
+        countSelectionsTowardMax(newValues, isExclusiveChoiceValue) >= maxSelections
       ) {
         return;
       }
@@ -277,7 +279,9 @@ function CheckboxTestInput({
   const maxSelections = question.maxSelections;
   const minSelections = question.minSelections;
   const isMaxReached =
-    maxSelections !== undefined && maxSelections > 0 && currentCount >= maxSelections;
+    maxSelections !== undefined &&
+    maxSelections > 0 &&
+    countSelectionsTowardMax(currentValues, isExclusiveChoiceValue) >= maxSelections;
   const isMinNotMet = !satisfiesMinSelections(
     currentValues,
     minSelections,

@@ -88,6 +88,18 @@ export function satisfiesMinSelections<T>(
   return selected.length >= minSelections;
 }
 
+/**
+ * 최대 선택 수에 세는 개수 — 단독 선택 보기는 뺀다. 「없음」이 골라진 채로 일반 보기를 누르면
+ * 「없음」이 풀리고 그것 하나만 남으니, 상한 검사·비활성 판정 둘 다 이 개수로 본다.
+ * 그렇지 않으면 최대 1개 설정에서 「없음」을 고른 뒤 일반 보기로 되돌아갈 길이 막힌다.
+ */
+export function countSelectionsTowardMax<T>(
+  selected: readonly T[],
+  isExclusive: (item: T) => boolean,
+): number {
+  return selected.filter((item) => !isExclusive(item)).length;
+}
+
 /** 범위가 표 전체인 단독 선택 보기 셀 id — 어느 그룹에서 고르든 이 표의 모든 그룹을 비운다 */
 export function collectTableExclusiveChoiceCellIds(cells: readonly TableCell[]): Set<string> {
   const ids = new Set<string>();

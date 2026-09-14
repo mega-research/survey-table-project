@@ -9,6 +9,7 @@ import {
   collectExclusiveChoiceCellIds,
   collectExclusiveChoiceCellIdsFromRows,
   collectTableExclusiveChoiceCellIds,
+  countSelectionsTowardMax,
   hasTableExclusiveSelected,
   satisfiesMinSelections,
 } from './exclusive-choice';
@@ -156,5 +157,14 @@ describe('단독 선택 보기 — 표 전체 범위', () => {
     expect(hasTableExclusiveSelected({ cb2: ['none-plan'] }, tableIds)).toBe(true);
     expect(hasTableExclusiveSelected({ rad1: 'none-plan' }, tableIds)).toBe(true);
     expect(hasTableExclusiveSelected({ cb1: ['tv-now'] }, tableIds)).toBe(false);
+  });
+});
+
+describe('countSelectionsTowardMax', () => {
+  const isExclusive = (v: string) => v === 'none';
+  it('단독 선택 보기는 상한에 세지 않는다', () => {
+    expect(countSelectionsTowardMax(['none'], isExclusive)).toBe(0);
+    expect(countSelectionsTowardMax(['a', 'b'], isExclusive)).toBe(2);
+    expect(countSelectionsTowardMax([], isExclusive)).toBe(0);
   });
 });

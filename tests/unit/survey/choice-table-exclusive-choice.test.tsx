@@ -131,4 +131,17 @@ describe('레거시 보기 소스 표 — 단독 선택 보기', () => {
     await user.click(boxes[2]!);
     expect(readValue()).toEqual(['none']);
   });
+
+  it('비그룹 checkbox: 최대 1개일 때 「없음」이 골라져 있어도 일반 보기를 누르면 「없음」이 풀린다', async () => {
+    const user = userEvent.setup();
+    render(<Harness question={{ ...ungroupedQuestion(), maxSelections: 1 } as Question} />);
+    const boxes = screen.getAllByRole('checkbox');
+    await user.click(boxes[2]!);
+    expect(readValue()).toEqual(['none']);
+    expect(boxes[0]).not.toBeDisabled();
+
+    await user.click(boxes[0]!);
+    expect(readValue()).toEqual(['tv']);
+    expect(boxes[1]).toBeDisabled();
+  });
 });

@@ -13,6 +13,7 @@ import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-con
 import {
   applyExclusiveSelection,
   choiceValueKey,
+  countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
 import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
@@ -511,12 +512,13 @@ function CheckboxQuestion({
     if (isChecked) {
       // 최대 선택 가드는 단독 선택 보기에는 걸지 않는다 — 고르면 그것 하나만 남아 상한 안이고,
       // "나중에 누른 쪽이 이긴다"는 규칙상 꽉 찬 상태에서도 「없음」은 들어가야 한다.
+      // 개수도 단독 보기를 뺀 것으로 센다 — 「없음」이 골라진 상태에서 일반 보기를 누르면 「없음」이 풀린다.
       const maxSelections = question.maxSelections;
       if (
         !isExclusiveChoiceValue(optionValue) &&
         maxSelections !== undefined &&
         maxSelections > 0 &&
-        newValues.length >= maxSelections
+        countSelectionsTowardMax(newValues, isExclusiveChoiceValue) >= maxSelections
       ) {
         return;
       }
@@ -552,7 +554,9 @@ function CheckboxQuestion({
   const maxSelections = question.maxSelections;
   const minSelections = question.minSelections;
   const isMaxReached =
-    maxSelections !== undefined && maxSelections > 0 && currentCount >= maxSelections;
+    maxSelections !== undefined &&
+    maxSelections > 0 &&
+    countSelectionsTowardMax(currentValues, isExclusiveChoiceValue) >= maxSelections;
   const isMinNotMet = !satisfiesMinSelections(
     currentValues,
     minSelections,

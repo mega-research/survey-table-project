@@ -23,6 +23,7 @@ import {
   applyTableExclusiveToGroups,
   collectExclusiveChoiceCellIdsFromRows,
   collectTableExclusiveChoiceCellIds,
+  countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
 import {
@@ -191,9 +192,6 @@ export function ChoiceTableResponse({
 
   const minSel = question.minSelections;
   const maxSel = question.maxSelections;
-  const isMaxSelectionReached =
-    isCheckbox && maxSel !== undefined && maxSel > 0 && selectedIds.length >= maxSel;
-
   // 단독 선택 보기 판정 — choice_opt 셀의 exclusiveChoice. 그룹 문항은 호출부가 같은 그룹의
   // 배열만 넘기므로 여기서 그룹을 따로 가리지 않는다.
   const exclusiveChoiceCellIds = useMemo(
@@ -201,6 +199,12 @@ export function ChoiceTableResponse({
     [question.tableRowsData],
   );
   const isExclusiveChoiceCell = (cellId: string) => exclusiveChoiceCellIds.has(cellId);
+  // 상한에 세는 개수는 단독 보기를 뺀 것 — 「없음」이 골라진 상태에서 일반 보기를 누르면 「없음」이 풀린다
+  const isMaxSelectionReached =
+    isCheckbox &&
+    maxSel !== undefined &&
+    maxSel > 0 &&
+    countSelectionsTowardMax(selectedIds, isExclusiveChoiceCell) >= maxSel;
   // 표 전체 범위 단독 보기 — 그룹 문항에서 다른 그룹까지 비운다
   const tableExclusiveIds = useMemo(
     () => collectTableExclusiveChoiceCellIds(collectChoiceOptCells(question.tableRowsData)),
@@ -277,7 +281,7 @@ export function ChoiceTableResponse({
         !isExclusiveChoiceCell(cellId) &&
         maxSel !== undefined &&
         maxSel > 0 &&
-        next.length >= maxSel
+        countSelectionsTowardMax(next, isExclusiveChoiceCell) >= maxSel
       )
         return;
       // 단독 선택 보기 규칙 — 비그룹 문항은 문항 전체가 한 그룹이다

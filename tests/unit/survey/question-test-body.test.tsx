@@ -70,4 +70,17 @@ describe('QuestionTestBody — 체크박스 단독 선택 보기', () => {
     fireEvent.click(screen.getByLabelText('TV'));
     expect(useTestResponseStore.getState().testResponses['q2']).toEqual(['1']);
   });
+
+  it('최대 1개일 때 「없음」이 골라져 있어도 일반 보기를 누르면 「없음」이 풀린다', () => {
+    render(
+      <QuestionTestBody question={{ ...checkboxQuestion, maxSelections: 1 } as unknown as Question} />,
+    );
+    fireEvent.click(screen.getByLabelText('없음'));
+    expect(useTestResponseStore.getState().testResponses['q2']).toEqual(['9']);
+    expect(screen.getByLabelText('TV')).not.toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText('TV'));
+    expect(useTestResponseStore.getState().testResponses['q2']).toEqual(['1']);
+    expect(screen.getByLabelText('냉장고')).toBeDisabled();
+  });
 });
