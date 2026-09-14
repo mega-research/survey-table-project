@@ -40,3 +40,34 @@ describe('QuestionTestBody', () => {
     expect(useTestResponseStore.getState().testResponses['q1']).toBeTruthy();
   });
 });
+
+describe('QuestionTestBody — 체크박스 단독 선택 보기', () => {
+  const checkboxQuestion = {
+    id: 'q2',
+    type: 'checkbox',
+    title: '보유 제품',
+    required: false,
+    order: 0,
+    maxSelections: 2,
+    options: [
+      { id: 'o1', label: 'TV', value: '1' },
+      { id: 'o2', label: '냉장고', value: '2' },
+      { id: 'o9', label: '없음', value: '9', exclusiveChoice: true },
+    ],
+  } as unknown as Question;
+
+  beforeEach(() => {
+    useTestResponseStore.getState().clearTestResponses();
+  });
+
+  it('빌더 테스트 모드도 같은 규칙 — 꽉 찬 상태에서 「없음」을 고르면 그것만 남고, 다시 일반 보기를 고르면 「없음」이 풀린다', () => {
+    render(<QuestionTestBody question={checkboxQuestion} />);
+    fireEvent.click(screen.getByLabelText('TV'));
+    fireEvent.click(screen.getByLabelText('냉장고'));
+    fireEvent.click(screen.getByLabelText('없음'));
+    expect(useTestResponseStore.getState().testResponses['q2']).toEqual(['9']);
+
+    fireEvent.click(screen.getByLabelText('TV'));
+    expect(useTestResponseStore.getState().testResponses['q2']).toEqual(['1']);
+  });
+});

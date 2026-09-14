@@ -13,6 +13,11 @@ import { RankingQuestion } from '@/components/survey-response/ranking-question';
 import { Input } from '@/components/ui/input';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  applyExclusiveSelection,
+  choiceValueKey,
+  satisfiesMinSelections,
+} from '@/lib/survey/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useTestResponseStore } from '@/stores/test-response-store';
@@ -195,30 +200,47 @@ function CheckboxTestInput({
     return newOtherInputs;
   }, [currentValues]);
 
+  // 단독 선택 보기 판정 — 응답 페이지(question-input CheckboxQuestion)와 같은 규칙
+  const exclusiveChoiceValues = useMemo(
+    () =>
+      new Set(
+        (question.options ?? []).filter((o) => o.exclusiveChoice === true).map((o) => o.value),
+      ),
+    [question.options],
+  );
+  const isExclusiveChoiceValue = (val: MultiChoiceResponse[number]) => {
+    const key = choiceValueKey(val);
+    return key !== undefined && exclusiveChoiceValues.has(key);
+  };
+
   const handleOptionChange = (optionValue: string, optionId: string, isChecked: boolean) => {
     let newValues = [...currentValues];
     const isOtherOption = optionId === 'other-option';
 
     if (isChecked) {
-      // 최대 선택 개수 체크
+      // 최대 선택 개수 체크 — 단독 선택 보기는 예외(고르면 그것 하나만 남는다)
       const maxSelections = question.maxSelections;
-      if (maxSelections !== undefined && maxSelections > 0) {
-        const currentCount = newValues.length;
-        if (currentCount >= maxSelections) {
-          // 최대 개수 도달 시 추가 선택 불가
-          return;
-        }
+      if (
+        !isExclusiveChoiceValue(optionValue) &&
+        maxSelections !== undefined &&
+        maxSelections > 0 &&
+        newValues.length >= maxSelections
+      ) {
+        return;
       }
 
-      if (isOtherOption) {
-        newValues.push({
-          selectedValue: optionValue,
-          otherValue: otherInputs[optionValue] || '',
-          hasOther: true,
-        });
-      } else {
-        newValues.push(optionValue);
-      }
+      const picked: MultiChoiceResponse[number] = isOtherOption
+        ? {
+            selectedValue: optionValue,
+            otherValue: otherInputs[optionValue] || '',
+            hasOther: true,
+          }
+        : optionValue;
+      newValues = applyExclusiveSelection<MultiChoiceResponse[number]>(
+        newValues,
+        picked,
+        isExclusiveChoiceValue,
+      ).next;
     } else {
       newValues = newValues.filter((val) => {
         if (isOtherChoiceValue(val)) {
@@ -256,12 +278,15 @@ function CheckboxTestInput({
   const minSelections = question.minSelections;
   const isMaxReached =
     maxSelections !== undefined && maxSelections > 0 && currentCount >= maxSelections;
-  const isMinNotMet =
-    minSelections !== undefined && minSelections > 0 && currentCount < minSelections;
+  const isMinNotMet = !satisfiesMinSelections(
+    currentValues,
+    minSelections,
+    isExclusiveChoiceValue,
+  );
 
   const canSelect = (optionValue: string) => {
     if (isChecked(optionValue)) return true; // 이미 선택된 것은 해제 가능
-    if (isMaxReached) return false; // 최대 개수 도달 시 추가 선택 불가
+    if (isMaxReached) return isExclusiveChoiceValue(optionValue); // 단독 선택 보기만 예외
     return true;
   };
 

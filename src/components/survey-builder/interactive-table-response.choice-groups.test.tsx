@@ -120,6 +120,51 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
     expect(readValue()).toEqual({ __choiceGroups: { cb1: ['online'] } });
   });
 
+  it('단독 선택 보기를 고르면 같은 그룹의 나머지가 풀리고, 일반 보기를 고르면 단독 선택 보기가 풀린다', async () => {
+    const user = userEvent.setup();
+    const rowsWithNone: TableRow[] = [
+      ...rows,
+      {
+        id: 'r3',
+        label: '없음',
+        cells: [
+          { id: 'r3-lbl', content: '없음', type: 'text' },
+          { id: 'r3-blank', content: '', type: 'text' },
+          { id: 'none', content: '없음', type: 'choice_opt', choiceGroupId: 'g2', exclusiveChoice: true },
+          { id: 'r3-blank2', content: '', type: 'text' },
+        ],
+      },
+    ];
+    function NoneHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>({});
+      return (
+        <>
+          <InteractiveTableResponse
+            questionId="q1"
+            columns={columns}
+            rows={rowsWithNone}
+            choiceGroups={choiceGroups}
+            value={value}
+            onChange={setValue}
+            enableSticky={false}
+          />
+          <output data-testid="value">{JSON.stringify(value)}</output>
+        </>
+      );
+    }
+    render(<NoneHarness />);
+
+    await user.click(screen.getByRole('checkbox', { name: '온라인' }));
+    await user.click(screen.getByRole('checkbox', { name: '대리점' }));
+    await user.click(screen.getByRole('checkbox', { name: '없음' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb1: ['none'] } });
+    expect(screen.getByRole('checkbox', { name: '온라인' })).not.toBeChecked();
+
+    await user.click(screen.getByRole('checkbox', { name: '온라인' }));
+    expect(readValue()).toEqual({ __choiceGroups: { cb1: ['online'] } });
+    expect(screen.getByRole('checkbox', { name: '없음' })).not.toBeChecked();
+  });
+
   it('입력 셀 값과 그룹 선택이 같은 표 응답 객체에 나란히 산다', async () => {
     const user = userEvent.setup();
     render(<Harness initial={{ amount: '12' }} />);

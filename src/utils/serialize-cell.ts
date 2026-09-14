@@ -69,6 +69,8 @@ export interface CellFormState {
   isOtherRankingCell: boolean;
   choiceLabel: string;
   choiceAllowTextInput: boolean;
+  /** 단독 선택 보기 (TableCell.exclusiveChoice) — 체크박스 그룹의 choice_opt 셀 전용 */
+  choiceExclusive: boolean;
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
   choiceTextInputType: InputType;
   choiceTextInputNumberFormat: NumberFormat | undefined;
@@ -248,6 +250,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     isOtherRankingCell: cell.isOtherRankingCell === true,
     choiceLabel: cell.choiceLabel || '',
     choiceAllowTextInput: cell.allowTextInput === true,
+    choiceExclusive: cell.exclusiveChoice === true,
     choiceTextInputType: cell.textInputType ?? 'text',
     choiceTextInputNumberFormat: cell.textInputNumberFormat,
     choiceBranchRule: cell.branchRule,
@@ -349,6 +352,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     rankingLabel: _rankingLabel,
     isOtherRankingCell: _isOtherRankingCell,
     choiceLabel: _choiceLabel,
+    exclusiveChoice: _exclusiveChoice,
     branchRule: _branchRule,
     allowTextInput: _allowTextInput,
     textInputType: _textInputType,
@@ -537,6 +541,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.choiceLabel.trim().length > 0 ? { choiceLabel: form.choiceLabel.trim() } : {}),
           ...(form.choiceAllowTextInput ? { allowTextInput: true } : {}),
+          ...(form.choiceExclusive ? { exclusiveChoice: true } : {}),
           // 'text'(=지정 안 함)만 키를 남기지 않는다. 숫자 모드와 입력 형식 5종은 그대로
           // 싣는다 — 'number' 만 통과시키면 빌더에서 고른 형식이 조용히 버려진다.
           // 숫자 서식은 숫자 모드 전용이라 형식과는 배타다.

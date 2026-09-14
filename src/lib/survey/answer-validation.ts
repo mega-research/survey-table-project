@@ -1,5 +1,10 @@
 import type { Question } from '@/types/survey';
 import {
+  choiceValueKey,
+  collectExclusiveChoiceCellIdsFromRows,
+  satisfiesMinSelections,
+} from '@/lib/survey/exclusive-choice';
+import {
   isGroupedChoiceQuestion,
   collectChoiceGroups,
   isGroupedRankingQuestion,
@@ -21,7 +26,8 @@ import { isChoiceGroupTableQuestion, readTableChoiceGroups } from './choice-sele
  * - notice: requiresAcknowledgment=false 면 항상 true. true 면 agreed 플래그 또는 response===true.
  * - text/textarea: 공백 제거 후 길이 > 0.
  * - radio/select: null/undefined/'' 가 아니면 true.
- * - checkbox: 배열이고 길이 > 0. minSelections 가 양수면 그 이상.
+ * - checkbox: 배열이고 길이 > 0. minSelections 가 양수면 그 이상 — 단, 단독 선택 보기(「없음」)가
+ *   하나라도 들어 있으면 개수와 무관하게 충족(CONTEXT.md "단독 선택 보기").
  * - multiselect: 배열이고 길이 > 0.
  * - table: 비어있지 않은 object.
  * - ranking: requireAllPositions 면 매길 순위 전부, 아니면 1개 이상. grouped 면 그룹마다 그만큼.
@@ -44,6 +50,17 @@ function requiredRankCount(question: Question, optionCount: number): number {
   if (config?.requireAllPositions !== true) return 1;
   const positions = Math.max(1, Math.trunc(config.positions ?? 3));
   return optionCount > 0 ? Math.min(positions, optionCount) : positions;
+}
+
+/**
+ * 비그룹 checkbox 응답값 하나가 단독 선택 보기인가. 값은 옵션 value(일반 문항) 또는
+ * 보기 셀 id(보기 소스 표)이고, 기타 상세기재는 `{selectedValue}` 객체다.
+ */
+function isExclusiveChoiceValue(question: Question, val: unknown): boolean {
+  const key = choiceValueKey(val);
+  if (key === undefined) return false;
+  if (question.options?.some((o) => o.exclusiveChoice === true && o.value === key)) return true;
+  return collectExclusiveChoiceCellIdsFromRows(question.tableRowsData).has(key);
 }
 
 export function isQuestionAnswered(question: Question, response: unknown): boolean {
@@ -74,13 +91,13 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
         const map = (response ?? {}) as Record<string, unknown>;
         return checkTargetChoiceGroups(question).every((g) => isChoiceGroupFilled(g, map));
       }
-      // 비그룹 checkbox — 기존 배열 + minSelections 검증
+      // 비그룹 checkbox — 기존 배열 + minSelections 검증. 단독 선택 보기(「없음」) 하나면
+      // 완결된 답이라 최소 선택 수를 충족한 것으로 본다 (CONTEXT.md "단독 선택 보기").
       if (question.type === 'checkbox') {
         if (!Array.isArray(response) || response.length === 0) return false;
-        if (question.minSelections !== undefined && question.minSelections > 0) {
-          return response.length >= question.minSelections;
-        }
-        return true;
+        return satisfiesMinSelections(response, question.minSelections, (val) =>
+          isExclusiveChoiceValue(question, val),
+        );
       }
       // 비그룹 radio
       return response !== null && response !== undefined && response !== '';
@@ -137,7 +154,11 @@ function groupSelectionMap(question: Question, response: unknown): Record<string
   return (response ?? {}) as Record<string, unknown>;
 }
 
-/** 그룹 충족 판정 — radio 그룹: 비어있지 않은 string, checkbox 그룹: 비어있지 않은 배열 */
+/**
+ * 그룹 충족 판정 — radio 그룹: 비어있지 않은 string, checkbox 그룹: 비어있지 않은 배열.
+ * `ChoiceGroup.minSelections` 는 타입에만 있고 아직 어디서도 읽지 않는다 — 살릴 때는 개수 비교
+ * 대신 `satisfiesMinSelections` 를 끼워 단독 선택 보기 면제를 같이 태울 것.
+ */
 function isChoiceGroupFilled(
   group: ChoiceGroupWithCells,
   map: Record<string, unknown>,

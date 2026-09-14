@@ -451,6 +451,18 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out.branchRule).toEqual({ ...branch, value: 'c1' });
   });
 
+  it('choice_opt: 단독 선택 보기 플래그는 켰을 때만 exclusiveChoice 키를 남기고, 끄면 기존 값도 지운다', () => {
+    const on = buildUpdatedCell({ ...baseForm('choice_opt'), choiceExclusive: true }, baseCell);
+    expect(on.exclusiveChoice).toBe(true);
+    expect(cellToFormState(on).choiceExclusive).toBe(true);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('choice_opt'), choiceExclusive: false },
+      { id: 'c1', type: 'choice_opt', content: '', exclusiveChoice: true },
+    );
+    expect(off).not.toHaveProperty('exclusiveChoice');
+  });
+
   it('옵션 소스 optional 값은 폼에서 비우면 기존 셀 값도 제거한다', () => {
     const choice = buildUpdatedCell(
       {

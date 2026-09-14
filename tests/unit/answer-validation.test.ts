@@ -680,3 +680,42 @@ describe('collectUnfilledChoiceGroupCellIds · resolveGroupedRequiredMessage —
     );
   });
 });
+
+describe('isQuestionAnswered — 단독 선택 보기와 최소 선택 수', () => {
+  const withNone = (overrides: Partial<Question> = {}) =>
+    q('checkbox', {
+      minSelections: 2,
+      options: [
+        { id: 'o1', label: 'TV', value: '1' },
+        { id: 'o9', label: '없음', value: '9', exclusiveChoice: true },
+      ],
+      ...overrides,
+    });
+
+  it('「없음」 하나면 최소 2개 요구를 충족한 것으로 본다', () => {
+    expect(isQuestionAnswered(withNone(), ['9'])).toBe(true);
+  });
+
+  it('일반 보기 하나는 여전히 미달이다', () => {
+    expect(isQuestionAnswered(withNone(), ['1'])).toBe(false);
+  });
+
+  it('보기 소스 표는 셀 id 로 판정한다', () => {
+    const tableQ = q('checkbox', {
+      minSelections: 2,
+      tableColumns: [{ id: 'c1', label: '열' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'tv', type: 'choice_opt', content: '' },
+            { id: 'none', type: 'choice_opt', content: '', exclusiveChoice: true },
+          ],
+        },
+      ],
+    });
+    expect(isQuestionAnswered(tableQ, ['none'])).toBe(true);
+    expect(isQuestionAnswered(tableQ, ['tv'])).toBe(false);
+  });
+});

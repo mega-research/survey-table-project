@@ -18,6 +18,9 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     textInputNumberFormat: undefined,
     onTextInputNumberFormatChange: vi.fn(),
     onAllowTextInputChange: vi.fn(),
+    exclusiveChoice: false,
+    onExclusiveChoiceChange: vi.fn(),
+    parentQuestionType: undefined,
     branchRule: undefined,
     onBranchRuleChange: vi.fn(),
     allQuestions: [],
@@ -259,5 +262,34 @@ describe('ChoiceOptCellTab — 옵션 그룹 지정 UI', () => {
 
     expect(screen.getByText(/여러 개를 선택할 수 있습니다/)).toBeInTheDocument();
     expect(screen.queryByText(/하나만 선택됩니다/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ChoiceOptCellTab — 단독 선택 보기 토글', () => {
+  const cb1: ChoiceGroup = { id: 'g3', groupKey: 'cb1', type: 'checkbox', label: '구매처' };
+
+  it('체크박스 그룹에 속한 셀에서 보이고, 켜면 콜백이 true 로 불린다', async () => {
+    const onExclusiveChoiceChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({ choiceGroups: [cb1], choiceGroupId: 'g3', onExclusiveChoiceChange })}
+      />,
+    );
+    const toggle = screen.getByRole('switch', { name: '단독 선택 보기' });
+    await userEvent.click(toggle);
+    expect(onExclusiveChoiceChange).toHaveBeenCalledWith(true);
+  });
+
+  it('라디오 그룹에 속한 셀에서는 보이지 않는다', () => {
+    render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1], choiceGroupId: 'g1' })} />);
+    expect(screen.queryByRole('switch', { name: '단독 선택 보기' })).not.toBeInTheDocument();
+  });
+
+  it('그룹이 없으면 문항 유형이 checkbox 일 때만 보인다', () => {
+    const { unmount } = render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'checkbox' })} />);
+    expect(screen.getByRole('switch', { name: '단독 선택 보기' })).toBeInTheDocument();
+    unmount();
+    render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'radio' })} />);
+    expect(screen.queryByRole('switch', { name: '단독 선택 보기' })).not.toBeInTheDocument();
   });
 });

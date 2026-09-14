@@ -18,6 +18,11 @@ import {
   useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
 import {
+  applyExclusiveSelection,
+  collectExclusiveChoiceCellIdsFromRows,
+  satisfiesMinSelections,
+} from '@/lib/survey/exclusive-choice';
+import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   isPriorChoice,
 } from '@/lib/survey/prior-answer-highlight';
@@ -186,6 +191,14 @@ export function ChoiceTableResponse({
   const isMaxSelectionReached =
     isCheckbox && maxSel !== undefined && maxSel > 0 && selectedIds.length >= maxSel;
 
+  // 단독 선택 보기 판정 — choice_opt 셀의 exclusiveChoice. 그룹 문항은 호출부가 같은 그룹의
+  // 배열만 넘기므로 여기서 그룹을 따로 가리지 않는다.
+  const exclusiveChoiceCellIds = useMemo(
+    () => collectExclusiveChoiceCellIdsFromRows(question.tableRowsData),
+    [question.tableRowsData],
+  );
+  const isExclusiveChoiceCell = (cellId: string) => exclusiveChoiceCellIds.has(cellId);
+
   const toggle = (cellId: string, checked: boolean) => {
     if (isGrouped) {
       const groupKey = getGroupKeyOfCell(question, cellId);
@@ -204,8 +217,8 @@ export function ChoiceTableResponse({
           // 체크 해제
           next = arr.filter((id) => id !== cellId);
         } else {
-          // 체크 추가
-          next = [...arr, cellId];
+          // 체크 추가 — 단독 선택 보기 규칙(같은 그룹 안에서만)
+          next = applyExclusiveSelection(arr, cellId, isExclusiveChoiceCell).next;
         }
         if (next.length === 0) {
           const { [groupKey]: _removed, ...rest } = map;
@@ -232,8 +245,17 @@ export function ChoiceTableResponse({
     }
     let next = selectedIds.slice();
     if (checked) {
-      if (maxSel !== undefined && maxSel > 0 && next.length >= maxSel) return;
-      next.push(cellId);
+      // 최대 선택 가드는 단독 선택 보기에는 걸지 않는다 — 고르면 그것 하나만 남아 상한 안이고,
+      // "나중에 누른 쪽이 이긴다"는 규칙상 꽉 찬 상태에서도 「없음」은 들어가야 한다.
+      if (
+        !isExclusiveChoiceCell(cellId) &&
+        maxSel !== undefined &&
+        maxSel > 0 &&
+        next.length >= maxSel
+      )
+        return;
+      // 단독 선택 보기 규칙 — 비그룹 문항은 문항 전체가 한 그룹이다
+      next = applyExclusiveSelection(next, cellId, isExclusiveChoiceCell).next;
     } else {
       next = next.filter((id) => id !== cellId);
     }
@@ -274,7 +296,8 @@ export function ChoiceTableResponse({
     }
     return {
       checked,
-      disabled: isMaxSelectionReached && !checked,
+      // 단독 선택 보기는 꽉 찬 상태에서도 누를 수 있다 — 고르면 그것 하나만 남는다
+      disabled: isMaxSelectionReached && !checked && !isExclusiveChoiceCell(cell.id),
       option: optionByValue.get(cell.id),
     };
   };
@@ -595,7 +618,7 @@ export function ChoiceTableResponse({
           ? `${selectedIds.length}/${maxSel}개 선택됨`
           : `${selectedIds.length}개 선택됨`}
       </span>
-      {minSel !== undefined && minSel > 0 && selectedIds.length < minSel && (
+      {!satisfiesMinSelections(selectedIds, minSel, isExclusiveChoiceCell) && (
         <span className="text-orange-600">최소 {minSel}개 이상 선택해주세요</span>
       )}
     </div>

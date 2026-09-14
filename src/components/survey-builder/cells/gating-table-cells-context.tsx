@@ -13,6 +13,10 @@ import type { TableCell } from '@/types/survey';
  * 가상화 격자·모바일 스테퍼·드릴다운·행 단위 카드)이고 전부 InteractiveTableResponse 아래
  * 있으므로, 거기서 한 번 공급하고 InteractiveCell 이 읽는다. 없으면 같은 행 셀(rowCells prop)로
  * 폴백한다 — 응답 표 밖에서 행 카드를 그리는 빌더 편집 화면(dynamic-table-editor) 이 그 경로다.
+ *
+ * 두 번째 용도: 보기 그룹 표의 단독 선택 보기 판정(choice-opt-cell) — 같은 그룹의 다른 행에 있는
+ * 「없음」 셀을 찾아야 해서 역시 표 전체 셀이 필요하다. 이름은 첫 용도에서 왔지만 공급하는 것은
+ * "표 전체 셀 정의" 하나다.
  */
 const GatingTableCellsContext = createContext<readonly TableCell[] | null>(null);
 

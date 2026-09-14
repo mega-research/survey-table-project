@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { isInputFormat } from '@/types/input-type';
-import type { InputType, NumberFormat } from '@/types/survey';
+import type { InputType, NumberFormat, QuestionType } from '@/types/survey';
 import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
@@ -25,6 +25,11 @@ interface ChoiceOptCellTabProps {
   onSpssNumericCodeChange: (v: number | '') => void;
   allowTextInput: boolean;
   onAllowTextInputChange: (v: boolean) => void;
+  /** 단독 선택 보기 (CONTEXT.md) — 체크박스 그룹(또는 그룹 없는 checkbox 문항)에서만 노출 */
+  exclusiveChoice: boolean;
+  onExclusiveChoiceChange: (v: boolean) => void;
+  /** 이 셀을 품은 문항의 유형 — 그룹 없는 보기 셀이 체크박스로 그려지는지 판단한다 */
+  parentQuestionType: QuestionType | undefined;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
   textInputType: InputType;
   onTextInputTypeChange: (v: InputType) => void;
@@ -64,6 +69,9 @@ export function ChoiceOptCellTab({
   onSpssNumericCodeChange,
   allowTextInput,
   onAllowTextInputChange,
+  exclusiveChoice,
+  onExclusiveChoiceChange,
+  parentQuestionType,
   textInputType,
   onTextInputTypeChange,
   textInputNumberFormat,
@@ -235,6 +243,27 @@ export function ChoiceOptCellTab({
           <p className="text-xs text-gray-500">
             끄면 이 그룹만 선택 사항이 됩니다. 문구를 비우면 질문 문구를 따릅니다. 설정은 그룹
             전체에 반영됩니다.
+          </p>
+        </div>
+      )}
+
+      {/* 단독 선택 보기 — 체크박스에서만 의미가 있다. 그룹이 있으면 그룹 종류, 없으면(레거시 보기
+          소스 표) 문항 유형으로 판단한다. 라디오는 원래 하나만 남으니 노출하지 않는다. */}
+      {(currentGroup ? currentGroup.type === 'checkbox' : parentQuestionType === 'checkbox') && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="choice-opt-exclusive" className="text-sm font-medium">
+              단독 선택 보기
+            </Label>
+            <Switch
+              id="choice-opt-exclusive"
+              checked={exclusiveChoice}
+              onCheckedChange={onExclusiveChoiceChange}
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            「없음 · 해당 없음 · 모름」용. 이 보기를 고르면 같은 그룹의 다른 선택이 풀리고, 다른
+            보기를 고르면 이 보기가 풀립니다. 이 보기 하나로 최소 선택 수를 충족한 것으로 봅니다.
           </p>
         </div>
       )}

@@ -301,6 +301,11 @@ export interface QuestionOption {
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -368,6 +373,11 @@ export interface TableCell {
   isCustomExportLabel?: boolean; // 사용자가 수동 편집한 라벨인지 여부
   // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
   choiceGroupId?: string;
+  /**
+   * 단독 선택 보기 (choice_opt 셀, 체크박스 그룹 전용 — CONTEXT.md). 범위는 이 셀이 속한 그룹이다.
+   * QuestionOption.exclusiveChoice 와 같은 규칙(`lib/survey/exclusive-choice.ts`)을 탄다.
+   */
+  exclusiveChoice?: boolean;
   // SPSS 변수 타입 / 측정 수준 (셀 단위)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
@@ -549,6 +559,11 @@ export interface CheckboxOption {
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -577,6 +592,11 @@ export interface RadioOption {
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기

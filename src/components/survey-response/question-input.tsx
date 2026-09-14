@@ -10,6 +10,11 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  applyExclusiveSelection,
+  choiceValueKey,
+  satisfiesMinSelections,
+} from '@/lib/survey/exclusive-choice';
 import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -487,19 +492,41 @@ function CheckboxQuestion({
     [value],
   );
 
+  // 단독 선택 보기 판정 — 값은 문자열 또는 기타 상세기재 객체({selectedValue})다
+  const exclusiveChoiceValues = useMemo(
+    () =>
+      new Set(
+        (question.options ?? []).filter((o) => o.exclusiveChoice === true).map((o) => o.value),
+      ),
+    [question.options],
+  );
+  const isExclusiveChoiceValue = (val: MultiChoiceResponse[number]) => {
+    const key = choiceValueKey(val);
+    return key !== undefined && exclusiveChoiceValues.has(key);
+  };
+
   const handleOptionChange = (optionValue: string, isChecked: boolean) => {
     let newValues = [...currentValues];
 
     if (isChecked) {
+      // 최대 선택 가드는 단독 선택 보기에는 걸지 않는다 — 고르면 그것 하나만 남아 상한 안이고,
+      // "나중에 누른 쪽이 이긴다"는 규칙상 꽉 찬 상태에서도 「없음」은 들어가야 한다.
       const maxSelections = question.maxSelections;
-      if (maxSelections !== undefined && maxSelections > 0) {
-        const currentCount = newValues.length;
-        if (currentCount >= maxSelections) {
-          return;
-        }
+      if (
+        !isExclusiveChoiceValue(optionValue) &&
+        maxSelections !== undefined &&
+        maxSelections > 0 &&
+        newValues.length >= maxSelections
+      ) {
+        return;
       }
 
-      newValues.push(optionValue);
+      // 단독 선택 보기 규칙 — 「없음」을 고르면 나머지가 풀리고, 일반 보기를 고르면 「없음」이 풀린다
+      newValues = applyExclusiveSelection<MultiChoiceResponse[number]>(
+        newValues,
+        optionValue,
+        isExclusiveChoiceValue,
+      ).next;
     } else {
       newValues = newValues.filter((val) => {
         if (isOtherChoiceValue(val)) {
@@ -526,12 +553,16 @@ function CheckboxQuestion({
   const minSelections = question.minSelections;
   const isMaxReached =
     maxSelections !== undefined && maxSelections > 0 && currentCount >= maxSelections;
-  const isMinNotMet =
-    minSelections !== undefined && minSelections > 0 && currentCount < minSelections;
+  const isMinNotMet = !satisfiesMinSelections(
+    currentValues,
+    minSelections,
+    isExclusiveChoiceValue,
+  );
 
   const canSelect = (optionValue: string) => {
     if (isChecked(optionValue)) return true;
-    if (isMaxReached) return false;
+    // 단독 선택 보기는 꽉 찬 상태에서도 누를 수 있어야 한다 — 고르면 그것 하나만 남는다
+    if (isMaxReached) return isExclusiveChoiceValue(optionValue);
     return true;
   };
 

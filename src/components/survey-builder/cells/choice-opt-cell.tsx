@@ -1,18 +1,24 @@
 'use client';
 
 /* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 실제 검증 입력에 연결한다. */
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import { OptionTextInputStack } from '@/components/survey-response/option-text-input-stack';
 import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useQuestionResponseWriter } from '@/hooks/use-question-response-writer';
 import { CHOICE_GROUPS_KEY, readTableChoiceGroups } from '@/lib/survey/choice-selection';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  applyExclusiveSelection,
+  collectExclusiveChoiceCellIds,
+} from '@/lib/survey/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+
+import { useGatingTableCells } from './gating-table-cells-context';
 
 interface ChoiceOptCellProps {
   cell: TableCell;
@@ -83,19 +89,34 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
     [groupKey, isTestMode, mergePatch, questionId, value],
   );
 
+  // 단독 선택 보기 판정 재료 — 같은 그룹의 보기 셀 중 exclusiveChoice 가 켜진 것. 다른 행의 셀이라
+  // 표 전체 셀 공급자에서 받는다(게이팅과 같은 공급자 — 응답 표 호스트는 전부 그 아래 있다).
+  // 공급자가 없는 자리(빌더 편집 화면)에서는 이 셀 자신만 판정한다 — 거기서는 보기 셀이
+  // 컨트롤로 그려지지 않으므로 실제로 도달하지 않는다.
+  const tableCells = useGatingTableCells();
+  const exclusiveCellIds = useMemo(() => {
+    const ids = collectExclusiveChoiceCellIds(tableCells ?? [], group.id);
+    if (cell.exclusiveChoice === true) ids.add(cell.id);
+    return ids;
+  }, [cell.exclusiveChoice, cell.id, group.id, tableCells]);
+  const isExclusiveCellId = useCallback(
+    (id: string) => exclusiveCellIds.has(id),
+    [exclusiveCellIds],
+  );
+
   const toggle = useCallback(() => {
     if (isCheckbox) {
       const current = Array.isArray(selection) ? (selection as string[]) : [];
       commit(
         current.includes(cell.id)
           ? current.filter((id) => id !== cell.id)
-          : [...current, cell.id],
+          : applyExclusiveSelection(current, cell.id, isExclusiveCellId).next,
       );
       return;
     }
     // 라디오는 고른 것을 다시 누르면 푼다 — 표 안 radio 셀과 같은 동작
     commit(selection === cell.id ? undefined : cell.id);
-  }, [cell.id, commit, isCheckbox, selection]);
+  }, [cell.id, commit, isCheckbox, isExclusiveCellId, selection]);
 
   const rawLabel = (cell.choiceLabel ?? '').trim() || cell.content || '';
   const label = substituteTokens(rawLabel, attrs, quotes);
