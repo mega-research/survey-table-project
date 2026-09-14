@@ -30,6 +30,7 @@ import {
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
 } from '@/utils/branch-logic';
+import { buildChoiceGroupOutline, type CellOutlineEdges, outlineBoxShadow } from '@/utils/choice-group-outline';
 import { decideDrilldown, DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/utils/classify-table';
 import {
   getCellBackgroundStyle,
@@ -298,6 +299,8 @@ interface RenderRowCellsProps {
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
   errorCellIds?: Set<string> | undefined;
+  /** 미충족 필수 보기 그룹의 덩어리 외곽선 — 이 셀들은 칸 링 대신 변 표시선을 그린다 */
+  cellOutlineEdges?: ReadonlyMap<string, CellOutlineEdges> | undefined;
   applyCellBackground: boolean;
 }
 
@@ -310,6 +313,7 @@ function renderRowCells({
   onChange,
   stickyInfo,
   errorCellIds,
+  cellOutlineEdges,
   applyCellBackground,
 }: RenderRowCellsProps) {
   const stickyCount = stickyInfo?.stickyColCount ?? 0;
@@ -342,6 +346,12 @@ function renderRowCells({
     if (applyCellBackground) {
       Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
     }
+    // 보기 그룹 외곽선 — 칸마다 링을 두르면 다섯 칸짜리 척도가 다섯 상자로 보여 "하나만
+    // 고르면 되는 자리"가 읽히지 않는다. 덩어리 바깥 변만 inset 그림자로 낸다(레이아웃 무변경).
+    const outline = outlineBoxShadow(cellOutlineEdges?.get(cell.id));
+    if (outline) {
+      style.boxShadow = style.boxShadow ? `${style.boxShadow}, ${outline}` : outline;
+    }
 
     return (
       <div
@@ -353,7 +363,7 @@ function renderRowCells({
           // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
           'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-          errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
+          errorCellIds?.has(cell.id) && !outline && 'ring-2 ring-red-300 ring-inset',
         )}
         style={style}
         data-row-id={row.id}
@@ -517,6 +527,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
+  // 위반 셀 중 보기 셀은 그룹 덩어리 외곽선으로 — 보기 소스 표(choice-table-response)와 같은
+  // 판정·같은 그림. 입력 셀 등 나머지 위반 셀은 그대로 칸 링이다.
+  const choiceGroupOutline = useMemo(() => {
+    if (!hasChoiceGroupDefs || !errorCellIds || errorCellIds.size === 0) return undefined;
+    const ids = new Set<string>();
+    for (const row of rows) {
+      for (const cell of row.cells) {
+        if (cell.type === 'choice_opt' && errorCellIds.has(cell.id)) ids.add(cell.id);
+      }
+    }
+    return ids.size > 0 ? buildChoiceGroupOutline(rows, ids) : undefined;
+  }, [errorCellIds, hasChoiceGroupDefs, rows]);
   const rendersFullOriginalTable = mobileMode === 'original';
   const applyCellBackground = !(isMobileView && mobileMode === 'original');
 
@@ -872,6 +894,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   onChange: mergedOnChange,
                   stickyInfo,
                   errorCellIds,
+                  cellOutlineEdges: choiceGroupOutline,
                   applyCellBackground,
                 })}
               </React.Fragment>,
@@ -882,6 +905,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         return elements;
       }),
     [
+      choiceGroupOutline,
       selectorGridMap,
       groupConfigMap,
       groupSelectedCountMap,
@@ -1134,6 +1158,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       onChange: mergedOnChange,
                       stickyInfo,
                       errorCellIds,
+                      cellOutlineEdges: choiceGroupOutline,
                       applyCellBackground,
                     })}
                   </React.Fragment>

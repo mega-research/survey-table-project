@@ -181,6 +181,32 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
     expect(screen.getByRole('radio', { name: '기대 안함' })).toBeInTheDocument();
   });
 
+  it('미충족 그룹의 보기 셀은 칸마다 링이 아니라 그룹 덩어리 하나로 두른다 — 보기 소스 표와 같은 외곽선', () => {
+    const { container } = render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={rows}
+        choiceGroups={choiceGroups}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+        errorCellIds={new Set(['uhd', 'fhd', 'amount'])}
+      />,
+    );
+    const cellOf = (id: string) => container.querySelector(`[data-cell-id="${id}"]`) as HTMLElement;
+    // 가로로 맞닿은 같은 그룹 두 칸 — 왼쪽 칸은 왼쪽 변, 오른쪽 칸은 오른쪽 변만, 둘 다 위아래
+    expect(cellOf('uhd').style.boxShadow).toContain('inset 2px 0');
+    expect(cellOf('uhd').style.boxShadow).not.toContain('inset -2px 0');
+    expect(cellOf('fhd').style.boxShadow).toContain('inset -2px 0');
+    expect(cellOf('fhd').style.boxShadow).not.toContain('inset 2px 0');
+    expect(cellOf('uhd')).not.toHaveClass('ring-2');
+    expect(cellOf('fhd')).not.toHaveClass('ring-2');
+    // 보기 셀이 아닌 위반 셀(숫자 검증 등)은 전처럼 칸 링이다
+    expect(cellOf('amount')).toHaveClass('ring-2');
+    expect(cellOf('amount').style.boxShadow).toBe('');
+  });
+
   it('radio 그룹의 보기 셀은 라디오로 보이고, 고르면 __choiceGroups 에 셀 id 가 쓰인다', async () => {
     const user = userEvent.setup();
     render(<Harness />);
