@@ -129,8 +129,13 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
     else commit(cell.id, cell.id);
   }, [cell.id, commit, isCheckbox, isExclusiveCellId, selection]);
 
+  // 접근성 이름·상세기재 칩·모바일 카드는 옵션 라벨(choiceLabel), 없으면 셀 텍스트.
   const rawLabel = (cell.choiceLabel ?? '').trim() || cell.content || '';
   const label = substituteTokens(rawLabel, attrs, quotes);
+  // 데스크톱 셀에 보이는 글자는 셀 텍스트(content)만 — 옵션 라벨은 데이터로만 저장된다.
+  // 레거시 보기 소스 표·셀 편집 모달 미리보기와 같은 규칙이라, 「①」을 셀 텍스트로 두고 라벨을
+  // 「전혀 기대 안함」으로 둔 척도 표가 세 화면에서 같은 얼굴이다. 비어 있으면 컨트롤만 그린다.
+  const visibleText = substituteTokens((cell.content ?? '').trim(), attrs, quotes);
   const inputId = `${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${cell.id}`;
   const controlCls =
     'mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500';
@@ -148,6 +153,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
             id={inputId}
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
+            aria-label={label}
             checked={checked}
             onChange={toggle}
             className={cn(controlCls, 'rounded')}
@@ -159,26 +165,29 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
             name={`${questionId}-${groupKey}`}
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
+            aria-label={label}
             checked={checked}
             onChange={() => {}}
             onClick={toggle}
             className={controlCls}
           />
         )}
-        <label
-          htmlFor={inputId}
-          className={cn(
-            'cursor-pointer text-base leading-relaxed whitespace-pre-line select-none [overflow-wrap:anywhere]',
-            getCellTextClassName(cell),
-          )}
-          style={getCellTextStyle(cell)}
-        >
-          <CellText
-            text={label}
-            html={cell.choiceLabel ? undefined : resolveCellTextHtml(cell, attrs, quotes)}
-            boldFirstLine={cell.boldFirstLine}
-          />
-        </label>
+        {visibleText && (
+          <label
+            htmlFor={inputId}
+            className={cn(
+              'cursor-pointer text-base leading-relaxed whitespace-pre-line select-none [overflow-wrap:anywhere]',
+              getCellTextClassName(cell),
+            )}
+            style={getCellTextStyle(cell)}
+          >
+            <CellText
+              text={visibleText}
+              html={resolveCellTextHtml(cell, attrs, quotes)}
+              boldFirstLine={cell.boldFirstLine}
+            />
+          </label>
+        )}
       </div>
       {/* 기타 상세기재 — 레거시 보기 소스 표와 같은 사이드카(보기 id) 입력칸. 고른 동안만 연다. */}
       {checked && cell.allowTextInput && (

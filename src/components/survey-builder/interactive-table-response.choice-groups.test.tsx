@@ -149,6 +149,38 @@ describe('보기 그룹 표 — 데스크톱 표 렌더', () => {
     );
   });
 
+  it('보기 셀은 셀 텍스트만 보인다 — 옵션 라벨은 접근성 이름·데이터로만 쓴다(셀 편집 모달 미리보기와 같은 규칙)', () => {
+    const labeledRows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '보유',
+        cells: [
+          { id: 'r1-lbl', content: '보유', type: 'text' },
+          { id: 'uhd', content: '①', choiceLabel: '전혀 기대 안함', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'fhd', content: '', choiceLabel: '기대 안함', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'amount', content: '', type: 'input' },
+        ],
+      },
+    ];
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={labeledRows}
+        choiceGroups={choiceGroups}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+      />,
+    );
+    expect(screen.getByText('①')).toBeInTheDocument();
+    expect(screen.queryByText('전혀 기대 안함')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '전혀 기대 안함' })).toBeInTheDocument();
+    // 셀 텍스트가 비면 컨트롤만 — 라벨 글자를 대신 넣지 않는다
+    expect(screen.queryByText('기대 안함')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '기대 안함' })).toBeInTheDocument();
+  });
+
   it('radio 그룹의 보기 셀은 라디오로 보이고, 고르면 __choiceGroups 에 셀 id 가 쓰인다', async () => {
     const user = userEvent.setup();
     render(<Harness />);
