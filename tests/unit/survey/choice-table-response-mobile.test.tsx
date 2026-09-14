@@ -300,6 +300,15 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     }
   });
 
+  it('섹션 안 보기 타일은 세로로 한 줄씩 쌓인다 — 휴대폰 폭에서 2열로 접히지 않는다', () => {
+    render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />);
+    const tiles = screen.getByTestId('choice-group-section-g2').querySelectorAll('label');
+    expect(tiles).toHaveLength(3);
+    expect(tiles[0]!.parentElement).toHaveClass('flex-col');
+    expect(tiles[0]!.parentElement).not.toHaveClass('flex-wrap');
+    expect(tiles[0]).not.toHaveClass('flex-1');
+  });
+
   it('구분 셀의 모바일 표시가 켜져 있어도 제목으로 한 번만 나온다', () => {
     const q = groupedRowQuestion();
     q.tableRowsData![0]!.cells[0] = { ...q.tableRowsData![0]!.cells[0]!, mobileDisplay: 'inline' };

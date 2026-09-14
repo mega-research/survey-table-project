@@ -886,7 +886,9 @@ export function ChoiceTableResponse({
                                 {sectionLabel}
                               </p>
                             )}
-                            <div className="flex flex-wrap gap-2">
+                            {/* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
+                                순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */}
+                            <div className="flex flex-col gap-2">
                               {cells.map((choiceCell) => {
                                 const { checked, disabled, option } = getChoiceCellState(choiceCell);
                                 const tileLabel = option?.label ?? '';
@@ -894,7 +896,7 @@ export function ChoiceTableResponse({
                                   <label
                                     key={choiceCell.id}
                                     className={cn(
-                                      'flex min-h-10 min-w-0 flex-1 basis-[7rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+                                      'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
                                       checked
                                         ? 'border-blue-300 bg-blue-50 text-blue-900'
                                         : 'border-gray-200 bg-white text-gray-800',
