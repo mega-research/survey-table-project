@@ -451,6 +451,31 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out.branchRule).toEqual({ ...branch, value: 'c1' });
   });
 
+  it('input: 입력칸 너비는 양수일 때만 inputWidth 키를 남기고, 비우면 기존 값도 지운다', () => {
+    const on = buildUpdatedCell({ ...baseForm('input'), inputWidth: 60 }, baseCell);
+    expect(on.inputWidth).toBe(60);
+    expect(cellToFormState(on).inputWidth).toBe(60);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('input'), inputWidth: '' },
+      { id: 'c1', type: 'input', content: '', inputWidth: 60 },
+    );
+    expect(off).not.toHaveProperty('inputWidth');
+    expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputWidth).toBe('');
+  });
+
+  it('오른쪽 세로선 숨김은 켰을 때만 hideRightBorder 키를 남기고, 끄면 기존 값도 지운다', () => {
+    const on = buildUpdatedCell({ ...baseForm('text'), hideRightBorder: true }, baseCell);
+    expect(on.hideRightBorder).toBe(true);
+    expect(cellToFormState(on).hideRightBorder).toBe(true);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('input'), hideRightBorder: false },
+      { id: 'c1', type: 'input', content: '', hideRightBorder: true },
+    );
+    expect(off).not.toHaveProperty('hideRightBorder');
+  });
+
   it('choice_opt: 단독 선택 보기 플래그는 켰을 때만 exclusiveChoice 키를 남기고, 끄면 기존 값도 지운다', () => {
     const on = buildUpdatedCell({ ...baseForm('choice_opt'), choiceExclusive: true }, baseCell);
     expect(on.exclusiveChoice).toBe(true);

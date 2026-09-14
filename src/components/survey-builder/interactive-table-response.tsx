@@ -53,6 +53,7 @@ import {
   getAlignmentClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  getCellBorderClasses,
 } from '@/utils/table-grid-utils';
 import {
   recalculateColspansForVisibleColumns,
@@ -345,7 +346,8 @@ function renderRowCells({
       <div
         key={cell.id}
         className={cn(
-          'min-w-0 border-r border-b border-gray-400 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+          'min-w-0 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+          getCellBorderClasses(cell),
           // 행 완료 초록 배경은 제거 (2026-08-06 피드백 — 입력 중 배경 변화가 거슬림).
           // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
           'bg-white',

@@ -21,6 +21,7 @@ import {
   getAlignmentClasses,
   getGridCellAria,
   type StickyLeftInfo,
+  getCellBorderClasses,
 } from '@/utils/table-grid-utils';
 
 const STICKY_BODY_Z = 10;
@@ -101,7 +102,8 @@ const VirtualizedRow = React.memo(
               key={cell.id}
               ref={isFirstVisibleCell ? sentinelRef : undefined}
               className={cn(
-                'min-w-0 border-r border-b border-gray-400 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
+                'min-w-0 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
+                getCellBorderClasses(cell),
                 isSticky
                   ? (completed ? 'bg-green-50' : 'bg-white')
                   : (completed ? 'bg-green-50/40' : 'bg-white'),

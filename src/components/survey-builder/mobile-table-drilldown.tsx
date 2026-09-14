@@ -270,6 +270,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           onChange={onChange}
           rowCells={rowCellsByCellId.get(cellId)}
           hintInFlow
+          ignoreInputWidth
         />
       </div>
     );
@@ -445,6 +446,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               value={value}
               onChange={onChange}
               rowCells={rowCellsByCellId.get(cell.id)}
+              // 원본 행 표는 px 격자라 너비 고정은 적용하고, overflow-hidden 셸이라 안내만 흐름에 둔다
               hintInFlow
               {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
             />

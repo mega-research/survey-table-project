@@ -294,3 +294,14 @@ describe('상세 기재 자리 셀 — 열 표시 조건으로 자리 열이 숨
     expect(screen.getByPlaceholderText('현재 기타')).toBeInTheDocument();
   });
 });
+
+describe('보기-소스 표 input 셀 — 입력칸 너비', () => {
+  it('inputWidth 를 주면 입력칸이 그 너비로 고정된다', () => {
+    const q = questionWithDetailRow(false);
+    const inputCell = q.tableRowsData!.flatMap((r) => r.cells).find((c) => c.type === 'input')!;
+    inputCell.inputWidth = 60;
+    renderTable(q, {});
+    const input = screen.getAllByRole('textbox')[0] as HTMLInputElement;
+    expect(input.style.width).toBe('60px');
+  });
+});

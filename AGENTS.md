@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-14 (단독 선택 보기 `exclusiveChoice` — 체크박스 「없음」류, 세 표면 공용 규칙 `lib/survey/exclusive-choice.ts`, 최소 선택 면제, 마이그레이션 없음 · 이전: 표 문항 행 반복 rowRepeatConfig — 구조에 최대 20벌 선펼침·멱등·rowCode 명시 발번·내보내기 뒤쪽 미사용 벌 pruning 0104 · 입력 형식 검사 — 단답형·표 input 셀·보기 상세기재의 `inputType`/`textInputType` 유니온에 휴대전화·전화·사업자번호·법인번호·이메일 5종 추가(공용 타입 `@/types/input-type`, DB 마이그레이션 없음) · 파서 `@/utils/input-format` · 차단 검증 `NumericIssue.kind: 'format'`(클라이언트 전용) · 관리자 편집은 경고 후 통과 · 손대지 않은 이월 값은 면제 · ADR 0023 · Raw 내보내기 숨은 문항 값 제외(제출·어드민 수정 전 행 한정) · 이전: Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084)
+> 최종 갱신: 2026-09-14 (표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` — 넓은 셀 안 작은 입력칸과 이어 보이는 두 칸, 마이그레이션 없음 · 단독 선택 보기 `exclusiveChoice` — 체크박스 「없음」류, 세 표면 공용 규칙 `lib/survey/exclusive-choice.ts`, 최소 선택 면제, 마이그레이션 없음 · 이전: 표 문항 행 반복 rowRepeatConfig — 구조에 최대 20벌 선펼침·멱등·rowCode 명시 발번·내보내기 뒤쪽 미사용 벌 pruning 0104 · 입력 형식 검사 — 단답형·표 input 셀·보기 상세기재의 `inputType`/`textInputType` 유니온에 휴대전화·전화·사업자번호·법인번호·이메일 5종 추가(공용 타입 `@/types/input-type`, DB 마이그레이션 없음) · 파서 `@/utils/input-format` · 차단 검증 `NumericIssue.kind: 'format'`(클라이언트 전용) · 관리자 편집은 경고 후 통과 · 손대지 않은 이월 값은 면제 · ADR 0023 · Raw 내보내기 숨은 문항 값 제외(제출·어드민 수정 전 행 한정) · 이전: Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084)
 
 ---
 
@@ -509,7 +509,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 - `text`: 텍스트 표시 / `image`: 이미지 / `video`: 비디오 링크
 - `checkbox` / `radio` / `select`: 선택 입력
-- `input`: 텍스트 입력 (inputType `number` 시 숫자만, 형식 5종 지정 시 형식 검사). `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
+- `input`: 텍스트 입력 (inputType `number` 시 숫자만, 형식 5종 지정 시 형식 검사). `inputWidth`(px)를 주면 셀 폭을 채우지 않고 그 너비로 고정되며 셀 가로 정렬을 따르고 오른쪽 단위 글자가 바로 뒤에 붙는다(레거시 보기 소스 표의 input 셀도 같음. 세로 카드 — 모바일 행 카드·드릴다운 카드 목록 — 만 `ignoreInputWidth` 로 무시하고, 드릴다운 안 원본 행 표·행별 원본 같은 px 격자는 적용). 셀 공통 `hideRightBorder` 는 응답 화면·미리보기에서 오른쪽 세로선을 안 그려 다음 셀과 한 칸처럼 이어 보이게 한다(빌더 편집 격자는 그대로) — 년 칸 | 월 칸 같은 "한 셀에 입력 둘" 요구는 이 둘로 푼다. 좌측 고정 열의 마지막 셀에 켜면 고정 영역과 스크롤 영역 사이 선도 사라지니 거기엔 쓰지 말 것. 격자선 클래스는 `utils/table-grid-utils.ts` 의 `getCellBorderClasses` 하나다. `piiEncrypted` 셀 플래그로 그 셀 응답값만 암호화 저장 (질문 단위 토글과 같은 규칙, 파기 스윕은 0085 — 이월 응답 파기 0095 와 합본한 현행 본문은 0100)
 - `ranking`: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
 - `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스

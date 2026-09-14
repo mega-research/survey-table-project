@@ -43,6 +43,8 @@ export interface CellFormState {
   inputMaxLength: number | '';
   /** 여러 줄 입력 높이(줄 수). '' 또는 1 이면 한 줄. */
   inputRows: number | '';
+  /** 입력칸 너비(px). '' 이면 셀 폭 전체 (TableCell.inputWidth) */
+  inputWidth: number | '';
   inputDefaultValueTemplate: string;
   inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
@@ -92,6 +94,8 @@ export interface CellFormState {
   textPosition: NonNullable<TableCell['textPosition']>;
   /** 입력값 가로 정렬. 'inherit' 은 미지정 상태 — horizontalAlign 을 따른다. */
   inputTextAlign: NonNullable<TableCell['inputTextAlign']> | 'inherit';
+  /** 오른쪽 세로선 숨김 (TableCell.hideRightBorder) */
+  hideRightBorder: boolean;
   isMergeEnabled: boolean;
   rowspan: number | '';
   colspan: number | '';
@@ -224,6 +228,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputPlaceholder: cell.placeholder || '',
     inputMaxLength: cell.inputMaxLength || '',
     inputRows: cell.inputRows || '',
+    inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
@@ -267,6 +272,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
     inputTextAlign: cell.inputTextAlign ?? 'inherit',
+    hideRightBorder: cell.hideRightBorder === true,
     isMergeEnabled:
       (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
     rowspan: cell.rowspan || 1,
@@ -335,6 +341,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     placeholder: _placeholder,
     inputMaxLength: _inputMaxLength,
     inputRows: _inputRows,
+    inputWidth: _inputWidth,
+    hideRightBorder: _hideRightBorder,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
     piiEncrypted: _piiEncrypted,
@@ -421,6 +429,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           // 1 은 한 줄(기본)이라 키를 만들지 않는다 — 저장값에 의미 없는 필드가 쌓이지 않게.
           ...(typeof form.inputRows === 'number' && form.inputRows >= 2
             ? { inputRows: form.inputRows }
+            : {}),
+          ...(typeof form.inputWidth === 'number' && form.inputWidth > 0
+            ? { inputWidth: form.inputWidth }
             : {}),
           ...(form.inputDefaultValueTemplate.trim().length > 0
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }
@@ -565,6 +576,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
         }
       : {}),
+    // 오른쪽 세로선 숨김 — 셀 종류 무관. 끄면 키를 남기지 않는다.
+    ...(form.hideRightBorder ? { hideRightBorder: true } : {}),
     // 셀 병합 속성 추가
     ...(form.isMergeEnabled && typeof form.rowspan === 'number' && form.rowspan > 1
       ? { rowspan: form.rowspan }

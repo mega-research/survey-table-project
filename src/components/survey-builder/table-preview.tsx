@@ -32,6 +32,7 @@ import {
   getAlignmentClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  getCellBorderClasses,
 } from '@/utils/table-grid-utils';
 
 import { PreviewCell } from './cells';
@@ -410,7 +411,8 @@ export const TablePreview = React.memo(function TablePreview({
                         <div
                           key={`${row.id}:${cell.id}`}
                           className={cn(
-                            'min-w-0 border-r border-b border-gray-400 bg-white p-3',
+                            'min-w-0 bg-white p-3',
+                            getCellBorderClasses(cell),
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                             errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
                           )}

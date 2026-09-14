@@ -14,7 +14,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import { formatSampleValue } from '@/utils/input-format';
-import { getInputTextAlignClass } from '@/utils/table-grid-utils';
+import { getInputTextAlignClass, getHorizontalItemsClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
 import type { InteractiveCellProps } from './types';
@@ -29,6 +29,7 @@ export const InputCell = React.memo(function InputCell({
   ariaInvalid,
   ariaDescribedBy,
   hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -98,6 +99,14 @@ export const InputCell = React.memo(function InputCell({
 
   const hasViolation = Boolean(rangeViolation || formatField.violation) && !isPrefilled;
 
+  // 입력칸 너비 고정 — 세로 카드(ignoreInputWidth)는 무시한다. 좁은 화면에서 60px 입력칸은 불편하다.
+  const fixedWidth =
+    !ignoreInputWidth && typeof cell.inputWidth === 'number' && cell.inputWidth > 0
+      ? cell.inputWidth
+      : undefined;
+  const fixedWidthStyle =
+    fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
+
   return (
     // relative — 형식·범위 위반 안내문의 절대 위치 기준점.
     <div className="relative w-full">
@@ -108,8 +117,16 @@ export const InputCell = React.memo(function InputCell({
         bold={cell.textBold}
         boldFirstLine={cell.boldFirstLine}
         textColor={cell.textColor}
+        fillWidth={fixedWidth === undefined}
+        horizontalAlign={cell.horizontalAlign}
       >
-        <div className="flex w-full flex-col space-y-1.5">
+        <div
+          className={cn(
+            'flex w-full flex-col space-y-1.5',
+            // 너비를 고정한 입력칸은 셀의 가로 정렬을 따른다(기본 왼쪽)
+            fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
+          )}
+        >
           {isMultiline ? (
             <textarea
               id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
@@ -122,6 +139,7 @@ export const InputCell = React.memo(function InputCell({
               data-prefilled={isPrefilled || undefined}
               aria-invalid={ariaInvalid || undefined}
               aria-describedby={ariaDescribedBy}
+              style={fixedWidthStyle}
               className={cn(
                 'w-full resize-none rounded-md border border-gray-300 p-2 text-base',
                 'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none',
@@ -155,6 +173,7 @@ export const InputCell = React.memo(function InputCell({
                     : '답변을 입력하세요...')
               }
               maxLength={cell.inputMaxLength}
+              style={fixedWidthStyle}
               className={cn(
                 'w-full text-base',
                 getInputTextAlignClass(cell.inputTextAlign),

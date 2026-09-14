@@ -15,6 +15,7 @@ import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat } from '@/types/survey';
 import { formatSampleValue } from '@/utils/input-format';
+import { getHorizontalItemsClass } from '@/utils/table-grid-utils';
 
 import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
 
@@ -51,6 +52,12 @@ interface OptionTextInputProps {
   rowLabel?: string | undefined;
   /** rowLabel 모드에서 칩을 입력칸 위에 쌓는다(OptionTextRow stacked). */
   stackedLabel?: boolean | undefined;
+  /**
+   * 입력칸 너비 고정(px) — 레거시 보기 소스 표의 input 셀(TableCell.inputWidth)용. 기본 모드에서만
+   * 쓰고, 지정하면 입력칸이 셀 폭을 채우지 않고 horizontalAlign 을 따라 놓인다.
+   */
+  fixedWidth?: number | undefined;
+  horizontalAlign?: 'left' | 'center' | 'right' | undefined;
 }
 
 /**
@@ -66,6 +73,8 @@ export function OptionTextInput({
   unstyled,
   rowLabel,
   stackedLabel,
+  fixedWidth,
+  horizontalAlign,
 }: OptionTextInputProps) {
   const optionTexts =
     useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
@@ -189,9 +198,18 @@ export function OptionTextInput({
   }
   // w-full 필수 — 표 셀은 `flex flex-col items-start` 라 래퍼가 내용 폭으로 쪼그라든다.
   // 래퍼가 생기기 전에는 Input 이 직접 자식이라 호출부의 className="w-full" 이 먹었다.
+  const hasFixedWidth = typeof fixedWidth === 'number' && fixedWidth > 0;
   return (
-    <div className="w-full space-y-1">
-      <Input {...sharedProps} />
+    <div
+      className={cn(
+        'w-full space-y-1',
+        hasFixedWidth && cn('flex flex-col', getHorizontalItemsClass(horizontalAlign)),
+      )}
+    >
+      <Input
+        {...sharedProps}
+        style={hasFixedWidth ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined}
+      />
       {hint}
     </div>
   );

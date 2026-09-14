@@ -232,6 +232,8 @@ export function CellContentModal({
     inputPlaceholder,
     inputMaxLength,
     inputRows,
+    inputWidth,
+    hideRightBorder,
     inputDefaultValueTemplate,
     inputType,
     inputPiiEncrypted,
@@ -317,6 +319,8 @@ export function CellContentModal({
     setCellMobileOptionsColumns,
     setInputPlaceholder,
     setInputMaxLength,
+    setInputWidth,
+    setHideRightBorder,
     setInputRows,
     setInputDefaultValueTemplate,
     setInputType,
@@ -1439,6 +1443,35 @@ export function CellContentModal({
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="input-width" className="text-sm font-medium">
+                입력칸 너비(px) <span className="font-normal text-gray-500">(선택사항)</span>
+              </Label>
+              <Input
+                id="input-width"
+                type="number"
+                min={1}
+                max={2000}
+                value={inputWidth}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '') {
+                    setInputWidth('');
+                  } else {
+                    const num = parseInt(value);
+                    if (!isNaN(num) && num >= 1 && num <= 2000) setInputWidth(num);
+                  }
+                }}
+                placeholder="셀 폭 전체"
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                비우면 입력칸이 셀 폭 전체를 씁니다. 년·월처럼 짧은 값을 넓은 셀에 작게 두려면
+                지정하세요. 셀의 가로 정렬을 따르고, 오른쪽 단위 글자가 입력칸 바로 뒤에 붙습니다.
+                모바일 카드는 폭 전체를 씁니다.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="input-max-length" className="text-sm font-medium">
                 최대 글자 수 <span className="font-normal text-gray-500">(선택사항)</span>
               </Label>
@@ -1858,6 +1891,26 @@ export function CellContentModal({
               </div>
             </div>
           )}
+
+        {/* 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 다음 셀과 한 칸처럼 이어 보인다 */}
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="hide-right-border" className="text-sm font-medium text-gray-900">
+                오른쪽 세로선 숨김
+              </Label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                응답 화면에서 이 셀과 오른쪽 셀 사이 선을 그리지 않습니다. 년 칸 | 월 칸처럼 입력칸
+                둘을 한 칸처럼 보이게 할 때 씁니다. 편집 화면에서는 선이 그대로 보입니다.
+              </p>
+            </div>
+            <Switch
+              id="hide-right-border"
+              checked={hideRightBorder}
+              onCheckedChange={setHideRightBorder}
+            />
+          </div>
+        </div>
 
         {/* 셀 병합 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">

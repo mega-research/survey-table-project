@@ -52,6 +52,8 @@ export interface CellFormSetters {
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
   setInputRows: (v: number | '') => void;
+  setInputWidth: (v: number | '') => void;
+  setHideRightBorder: (v: boolean) => void;
   setInputDefaultValueTemplate: (v: string) => void;
   setInputType: (v: InputType) => void;
   setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
@@ -158,6 +160,8 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setInputPlaceholder: set('inputPlaceholder'),
       setInputMaxLength: set('inputMaxLength'),
       setInputRows: set('inputRows'),
+      setInputWidth: set('inputWidth'),
+      setHideRightBorder: set('hideRightBorder'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
       setInputType: set('inputType'),
       setInputPiiEncrypted: set('inputPiiEncrypted'),

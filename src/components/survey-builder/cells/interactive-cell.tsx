@@ -39,6 +39,7 @@ const CellRouter = React.memo(function CellRouter({
   ariaInvalid,
   ariaDescribedBy,
   hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -89,6 +90,7 @@ const CellRouter = React.memo(function CellRouter({
           ariaInvalid={ariaInvalid}
           ariaDescribedBy={ariaDescribedBy}
           hintInFlow={hintInFlow}
+          ignoreInputWidth={ignoreInputWidth}
         />
       );
     case 'image':
@@ -175,6 +177,8 @@ interface InteractiveCellContainerProps {
   rowCells?: readonly TableCell[] | undefined;
   /** input 셀 위반 안내를 흐름에 그린다 (InteractiveCellProps.hintInFlow 참조). */
   hintInFlow?: boolean | undefined;
+  /** input 셀 너비 고정을 무시한다 (InteractiveCellProps.ignoreInputWidth 참조). */
+  ignoreInputWidth?: boolean | undefined;
 }
 
 export const InteractiveCell = React.memo(function InteractiveCell({
@@ -190,6 +194,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   ariaDescribedBy,
   rowCells,
   hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellContainerProps) {
   // 게이팅 숨김 상태에서도 셀 텍스트(content)는 남기므로 치환 컨텍스트가 필요하다
   const attrs = useContactAttrs();
@@ -319,6 +324,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ariaInvalid={ariaInvalid}
       ariaDescribedBy={ariaDescribedBy}
       hintInFlow={hintInFlow}
+      ignoreInputWidth={ignoreInputWidth}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

@@ -520,6 +520,8 @@ export function ChoiceTableResponse({
           }}
           ariaLabel={cellLabel}
           className="w-full"
+          fixedWidth={cell.inputWidth}
+          horizontalAlign={cell.horizontalAlign}
         />,
       );
     }

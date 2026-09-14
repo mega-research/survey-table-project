@@ -371,6 +371,11 @@ export interface TableCell {
   isCustomCellCode?: boolean; // 사용자가 수동 편집한 셀코드인지 여부
   exportLabel?: string; // ✨ 엑셀 열 이름 (예: "가구TV보유_TV종류_UHD")
   isCustomExportLabel?: boolean; // 사용자가 수동 편집한 라벨인지 여부
+  /**
+   * 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 셀과 다음 셀이 한 칸처럼 이어져 보인다
+   * (년 칸 | 월 칸 처럼 입력칸 둘을 나란히 둘 때). 빌더 편집 격자는 셀 경계를 보여야 해서 그대로 그린다.
+   */
+  hideRightBorder?: boolean;
   // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
   choiceGroupId?: string;
   /**
@@ -428,6 +433,11 @@ export interface TableCell {
    * 숫자 모드·입력 형식과는 배타다(전화번호에 줄바꿈이 들어갈 자리가 없다).
    */
   inputRows?: number;
+  /**
+   * 입력칸 너비(px). 미지정이면 셀 폭 전체. 지정하면 그 너비로 고정되고 셀의 가로 정렬을 따르며,
+   * 오른쪽 단위 글자(년·월)가 입력칸 바로 뒤에 붙는다. 모바일 카드는 무시하고 폭 전체를 쓴다.
+   */
+  inputWidth?: number;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.

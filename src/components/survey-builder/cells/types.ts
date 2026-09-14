@@ -21,10 +21,16 @@ export interface InteractiveCellProps {
   ariaDescribedBy?: string | undefined;
   /**
    * input 셀의 범위·형식 위반 안내를 흐름 안(입력칸 아래)에 그린다. 기본은 absolute 로 띄운다 —
-   * 표 행에서는 이 셀만 키가 커져 옆 칸과 어긋나기 때문이다. 모바일 카드는 셀이 세로로 쌓여
-   * 어긋날 옆 칸이 없고 카드가 overflow-hidden 이라 띄우면 잘리므로 흐름에 둔다.
+   * 표 행에서는 이 셀만 키가 커져 옆 칸과 어긋나기 때문이다. overflow-hidden 컨테이너(모바일 카드,
+   * 드릴다운 안의 원본 행 표)에서는 띄우면 잘리므로 흐름에 둔다.
    */
   hintInFlow?: boolean | undefined;
+  /**
+   * 입력칸 너비 고정(TableCell.inputWidth)을 무시하고 폭 전체를 쓴다 — 세로로 쌓인 카드(모바일 행
+   * 카드·드릴다운 카드 목록)용. 좁은 화면에서 60px 입력칸은 불편하다. px 격자로 그리는 표(데스크톱,
+   * 드릴다운 안의 원본 행 표, 행별 원본)는 너비를 그대로 적용한다.
+   */
+  ignoreInputWidth?: boolean | undefined;
   /**
    * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
    * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한

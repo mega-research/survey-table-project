@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 import { cn } from '@/lib/utils';
-import type { TableColumn, TableRow } from '@/types/survey';
+import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { type TableRenderableQuestion, rendersAsTable } from './renders-as-table';
 
@@ -69,11 +69,33 @@ export function getGridSpanStyle(
 //   세로 정렬 → justify-start/center/end (main axis)
 //   가로 정렬 → items-start/center/end (cross axis) + text-left/center/right (텍스트용)
 
-const H_ITEMS_MAP = {
-  left: 'items-start text-left',
-  center: 'items-center text-center',
-  right: 'items-end text-right',
+const H_ITEMS_ONLY_MAP = {
+  left: 'items-start',
+  center: 'items-center',
+  right: 'items-end',
 } as const;
+
+const H_ITEMS_MAP = {
+  left: `${H_ITEMS_ONLY_MAP.left} text-left`,
+  center: `${H_ITEMS_ONLY_MAP.center} text-center`,
+  right: `${H_ITEMS_ONLY_MAP.right} text-right`,
+} as const;
+
+/**
+ * 가로 정렬의 items-* 만 — 너비를 고정한 입력칸처럼 텍스트 정렬은 따로 정하는(입력값 정렬 상속)
+ * 자리용. getAlignmentClasses 는 text-* 까지 붙여 그쪽을 덮는다.
+ */
+export function getHorizontalItemsClass(horizontalAlign?: 'left' | 'center' | 'right'): string {
+  return H_ITEMS_ONLY_MAP[horizontalAlign || 'left'];
+}
+
+/**
+ * 본문 셀의 격자선 — 오른쪽·아래. `hideRightBorder` 셀은 오른쪽 선을 빼서 다음 셀과 한 칸처럼
+ * 이어 보인다(응답 화면·미리보기 공용. 빌더 편집 격자는 경계를 보여야 해서 이 헬퍼를 쓰지 않는다).
+ */
+export function getCellBorderClasses(cell: Pick<TableCell, 'hideRightBorder'>): string {
+  return cn('border-b border-gray-400', !cell.hideRightBorder && 'border-r');
+}
 
 const V_JUSTIFY_MAP = {
   top: 'justify-start',
