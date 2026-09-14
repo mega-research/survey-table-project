@@ -81,9 +81,10 @@ function cellLabelNode(
 }
 
 /**
- * 표 소스 순위형의 모바일 카드 목록 — 「헤더」 지정 text 셀이 있는 구간은 카드 하나로 묶는다.
- * 데스크톱 표의 첫 열 분류(rowspan)가 카드 목록에서 사라지는 것을 막는다. 묶음 카드는 위에
- * 회색 제목 띠, 아래에 보기 행들(구분선)이다. 헤더 지정이 없는 구간은 낱장 카드 그대로라
+ * 표 소스 순위형의 모바일 카드 목록 — 「헤더」 지정 text 셀이 하나라도 있으면 표 전체를 카드
+ * 하나로 그리고, 헤더는 그 안의 연회색 제목 띠로 구간을 나눈다. 분류마다 카드를 닫으면 "카드마다
+ * 순위를 매기는 것"처럼 읽혀 한 목록으로 묶는다(2026-09-14). 데스크톱 표의 첫 열 분류(rowspan)가
+ * 카드 목록에서 사라지는 것을 막는 것이 출발점이다. 헤더 지정이 없는 표는 낱장 카드 그대로라
  * 기존 화면이 변하지 않는다. 구간 나누기는 `buildRankingMobileSections`, 행 조각은
  * `MobileOptionRow`. 호출부는 카드 내용(props)만 만들고 카드·행 선택은 여기서 한다.
  */
@@ -97,29 +98,53 @@ function RankingMobileCardList({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const sections = buildRankingMobileSections(rows);
+  const headerTextOf = (section: (typeof sections)[number]) =>
+    section.headerCell ? (section.headerCell.content ?? '').trim() : '';
+  const hasAnyHeader = sections.some((section) => headerTextOf(section) !== '');
+
+  if (!hasAnyHeader) {
+    return (
+      <div className="space-y-2">
+        {sections.flatMap((section) =>
+          section.items.map((item) => {
+            const props = renderItem(item);
+            return props ? <MobileOptionCard key={item.optCell.id} {...props} /> : null;
+          }),
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
       {sections.map((section, sectionIdx) => {
         const header = section.headerCell;
-        const headerText = header ? (header.content ?? '').trim() : '';
+        const headerText = headerTextOf(section);
+        const rowsNode = (
+          <div className="divide-y divide-gray-100">
+            {section.items.map((item) => {
+              const props = renderItem(item);
+              return props ? <MobileOptionRow key={item.optCell.id} {...props} /> : null;
+            })}
+          </div>
+        );
         if (!header || !headerText) {
+          // 헤더 없는 구간 — 띠 없이 행만. 앞 구간과는 위쪽 선으로 나눈다.
           return (
-            <div key={`section-${sectionIdx}`} className="space-y-2">
-              {section.items.map((item) => {
-                const props = renderItem(item);
-                return props ? <MobileOptionCard key={item.optCell.id} {...props} /> : null;
-              })}
+            <div
+              key={`section-${sectionIdx}`}
+              className={cn(sectionIdx > 0 && 'border-t border-gray-200')}
+            >
+              {rowsNode}
             </div>
           );
         }
         return (
-          <section
-            key={header.id}
-            className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
-          >
+          <section key={header.id}>
             <h4
               className={cn(
                 'border-b border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-semibold whitespace-pre-line text-gray-700',
+                sectionIdx > 0 && 'border-t',
                 getCellTextClassName(header),
               )}
               style={getCellTextStyle(header)}
@@ -129,12 +154,7 @@ function RankingMobileCardList({
                 html={resolveCellTextHtml(header, attrs, quotes)}
               />
             </h4>
-            <div className="divide-y divide-gray-100">
-              {section.items.map((item) => {
-                const props = renderItem(item);
-                return props ? <MobileOptionRow key={item.optCell.id} {...props} /> : null;
-              })}
-            </div>
+            {rowsNode}
           </section>
         );
       })}

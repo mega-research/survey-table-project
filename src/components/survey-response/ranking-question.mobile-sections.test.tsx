@@ -61,11 +61,11 @@ function tableRankingQuestion(inputMode: 'click' | 'dropdown'): Question {
   } as unknown as Question;
 }
 
-describe('모바일 순위형 카드 — 헤더 셀 구간을 카드 하나로 묶는다', () => {
+describe('모바일 순위형 카드 — 헤더 셀 구간을 카드 하나 안의 띠로 나눈다', () => {
   it.each(['click', 'dropdown'] as const)(
-    '%s 방식: 헤더 셀이 묶음 카드의 제목 띠로 한 번 나오고 rowspan 으로 덮인 행의 보기도 그 카드 안 행이다',
+    '%s 방식: 표 전체가 카드 하나이고, 헤더 셀은 그 안의 제목 띠로 한 번씩 나오며 rowspan 으로 덮인 행의 보기도 같은 띠 아래 행이다',
     (mode) => {
-      render(
+      const { container } = render(
         <RankingQuestion
           question={tableRankingQuestion(mode)}
           value={undefined}
@@ -77,20 +77,26 @@ describe('모바일 순위형 카드 — 헤더 셀 구간을 카드 하나로 �
       const econ = screen.getByRole('heading', { name: '경제성' });
       expect(screen.getAllByRole('heading', { name: '기술 성능' })).toHaveLength(1);
 
-      // 묶음 카드(section) 하나가 제목과 보기 넷을 담고, 다른 구간의 보기는 없다
-      const techCard = tech.closest('section')!;
-      expect(techCard).toHaveClass('rounded-2xl', 'border');
-      expect(within(techCard).getByText('연산 성능')).toBeInTheDocument();
-      expect(within(techCard).getByText('전력 효율')).toBeInTheDocument();
-      expect(within(techCard).getByText('품질 신뢰성')).toBeInTheDocument();
-      expect(within(techCard).getByText('보안성')).toBeInTheDocument();
-      expect(within(techCard).queryByText('가격')).not.toBeInTheDocument();
+      // 바깥 카드는 하나뿐이고 두 띠가 모두 그 안에 있다 — 분류마다 카드가 닫히지 않는다
+      const cards = container.querySelectorAll('.rounded-2xl');
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.contains(tech)).toBe(true);
+      expect(cards[0]!.contains(econ)).toBe(true);
 
-      // 카드 안 보기는 낱장 카드가 아니라 행이다 — 테두리 카드가 카드 안에 또 있으면 안 된다
-      expect(techCard.querySelectorAll('.rounded-2xl')).toHaveLength(0);
+      // 띠마다 구간(section) 하나 — 그 구간 안에 그 분류의 보기만 있다
+      const techSection = tech.closest('section')!;
+      expect(techSection).not.toHaveClass('rounded-2xl');
+      expect(within(techSection).getByText('연산 성능')).toBeInTheDocument();
+      expect(within(techSection).getByText('전력 효율')).toBeInTheDocument();
+      expect(within(techSection).getByText('품질 신뢰성')).toBeInTheDocument();
+      expect(within(techSection).getByText('보안성')).toBeInTheDocument();
+      expect(within(techSection).queryByText('가격')).not.toBeInTheDocument();
 
-      const econCard = econ.closest('section')!;
-      expect(within(econCard).getByText('가격')).toBeInTheDocument();
+      const econSection = econ.closest('section')!;
+      expect(within(econSection).getByText('가격')).toBeInTheDocument();
+      // 두 번째 띠부터는 위쪽 구분선으로 앞 구간과 나뉜다
+      expect(econ).toHaveClass('border-t');
+      expect(tech).not.toHaveClass('border-t');
     },
   );
 
