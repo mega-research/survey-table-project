@@ -34,6 +34,12 @@ interface ChoiceOptCellProps {
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
+  /**
+   * 그리는 모양. 'cell'(기본)은 표 셀 안 [컨트롤 + 셀 텍스트]. 'tile' 은 모바일 행 단위 그룹
+   * 카드의 세로 타일 — 테두리 칸 하나가 통째로 탭 영역이고 글자는 옵션 라벨이며 고르면 파랗게
+   * 칠한다(보기 소스 표의 같은 모드와 같은 얼굴). 선택 읽기·쓰기는 두 모양이 같다.
+   */
+  variant?: 'cell' | 'tile' | undefined;
 }
 
 /**
@@ -56,6 +62,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  variant = 'cell',
 }: ChoiceOptCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -137,8 +144,76 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   // 「전혀 기대 안함」으로 둔 척도 표가 세 화면에서 같은 얼굴이다. 비어 있으면 컨트롤만 그린다.
   const visibleText = substituteTokens((cell.content ?? '').trim(), attrs, quotes);
   const inputId = `${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${cell.id}`;
+  const textInputStack = (
+    <OptionTextInputStack
+      questionId={questionId}
+      entries={[
+        {
+          option: {
+            id: cell.id,
+            ...(cell.textInputPlaceholder !== undefined
+              ? { textInputPlaceholder: cell.textInputPlaceholder }
+              : {}),
+            ...(cell.textInputType !== undefined ? { textInputType: cell.textInputType } : {}),
+            ...(cell.textInputNumberFormat !== undefined
+              ? { textInputNumberFormat: cell.textInputNumberFormat }
+              : {}),
+          },
+          label: label.trim() || '(라벨 없음)',
+        },
+      ]}
+    />
+  );
+
   const controlCls =
-    'mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500';
+    variant === 'tile'
+      ? 'h-5 w-5 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500'
+      : 'mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500';
+  const control = isCheckbox ? (
+    <input
+      type="checkbox"
+      id={inputId}
+      aria-invalid={ariaInvalid || undefined}
+      aria-describedby={ariaDescribedBy}
+      aria-label={label}
+      checked={checked}
+      onChange={toggle}
+      className={cn(controlCls, 'rounded')}
+    />
+  ) : (
+    <input
+      type="radio"
+      id={inputId}
+      name={`${questionId}-${groupKey}`}
+      aria-invalid={ariaInvalid || undefined}
+      aria-describedby={ariaDescribedBy}
+      aria-label={label}
+      checked={checked}
+      onChange={() => {}}
+      onClick={toggle}
+      className={controlCls}
+    />
+  );
+
+  if (variant === 'tile') {
+    return (
+      <div className="flex min-w-0 flex-col gap-2">
+        <label
+          htmlFor={inputId}
+          className={cn(
+            'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+            checked
+              ? 'border-blue-300 bg-blue-50 text-blue-900'
+              : 'border-gray-200 bg-white text-gray-800',
+          )}
+        >
+          {control}
+          {label && <span className="leading-snug">{label}</span>}
+        </label>
+        {checked && cell.allowTextInput && textInputStack}
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5">
@@ -147,36 +222,12 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       <div
         className={cn('flex items-start gap-2', getHorizontalJustifyClass(cell.horizontalAlign))}
       >
-        {isCheckbox ? (
-          <input
-            type="checkbox"
-            id={inputId}
-            aria-invalid={ariaInvalid || undefined}
-            aria-describedby={ariaDescribedBy}
-            aria-label={label}
-            checked={checked}
-            onChange={toggle}
-            className={cn(controlCls, 'rounded')}
-          />
-        ) : (
-          <input
-            type="radio"
-            id={inputId}
-            name={`${questionId}-${groupKey}`}
-            aria-invalid={ariaInvalid || undefined}
-            aria-describedby={ariaDescribedBy}
-            aria-label={label}
-            checked={checked}
-            onChange={() => {}}
-            onClick={toggle}
-            className={controlCls}
-          />
-        )}
+        {control}
         {visibleText && (
           <label
             htmlFor={inputId}
             className={cn(
-              'cursor-pointer text-base leading-relaxed whitespace-pre-line select-none [overflow-wrap:anywhere]',
+              'cursor-pointer text-base leading-relaxed [overflow-wrap:anywhere] whitespace-pre-line select-none',
               getCellTextClassName(cell),
             )}
             style={getCellTextStyle(cell)}
@@ -190,26 +241,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
         )}
       </div>
       {/* 기타 상세기재 — 레거시 보기 소스 표와 같은 사이드카(보기 id) 입력칸. 고른 동안만 연다. */}
-      {checked && cell.allowTextInput && (
-        <OptionTextInputStack
-          questionId={questionId}
-          entries={[
-            {
-              option: {
-                id: cell.id,
-                ...(cell.textInputPlaceholder !== undefined
-                  ? { textInputPlaceholder: cell.textInputPlaceholder }
-                  : {}),
-                ...(cell.textInputType !== undefined ? { textInputType: cell.textInputType } : {}),
-                ...(cell.textInputNumberFormat !== undefined
-                  ? { textInputNumberFormat: cell.textInputNumberFormat }
-                  : {}),
-              },
-              label: label.trim() || '(라벨 없음)',
-            },
-          ]}
-        />
-      )}
+      {checked && cell.allowTextInput && textInputStack}
     </div>
   );
 });

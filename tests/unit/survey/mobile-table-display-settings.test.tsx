@@ -46,6 +46,34 @@ describe('MobileTableDisplaySettings', () => {
     expect(screen.getByLabelText('상세에서 제외할 앞쪽 열 수')).toHaveAttribute('max', '10');
   });
 
+  it('행 단위 그룹 카드는 보기 그룹이 있는 테이블 유형에도 보인다 — 행 단위 카드는 여전히 보기 소스 표 전용', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <MobileTableDisplaySettings
+        mode="auto"
+        omitLeadingColumns={0}
+        columnCount={3}
+        onChange={onChange}
+        questionType="table"
+      />,
+    );
+    expect(screen.queryByRole('radio', { name: /행 단위 그룹 카드/ })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /^행 단위 카드/ })).toBeNull();
+
+    rerender(
+      <MobileTableDisplaySettings
+        mode="auto"
+        omitLeadingColumns={0}
+        columnCount={3}
+        onChange={onChange}
+        questionType="table"
+        hasChoiceGroups
+      />,
+    );
+    expect(screen.getByRole('radio', { name: /행 단위 그룹 카드/ })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /^행 단위 카드/ })).toBeNull();
+  });
+
   it('모드와 clamp된 숫자를 부모로 전달한다', () => {
     const onChange = vi.fn();
     render(

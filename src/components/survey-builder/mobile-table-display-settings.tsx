@@ -31,6 +31,8 @@ interface MobileTableDisplaySettingsProps {
   onChange: (value: MobileTableDisplaySettingsValue) => void;
   /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
   questionType?: 'table' | 'radio' | 'checkbox' | undefined;
+  /** 테이블 유형에 보기 그룹이 있는가 — 있으면 행 단위 그룹 카드를 테이블 유형에도 노출 */
+  hasChoiceGroups?: boolean | undefined;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -76,13 +78,17 @@ export function MobileTableDisplaySettings({
   repeatHeaderEndRow,
   onChange,
   questionType,
+  hasChoiceGroups = false,
 }: MobileTableDisplaySettingsProps) {
-  const visibleOptions = OPTIONS.filter(
-    (option) =>
-      (option.value !== 'row-cards' && option.value !== 'row-group-cards') ||
-      questionType === 'radio' ||
-      questionType === 'checkbox',
-  );
+  const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
+  const visibleOptions = OPTIONS.filter((option) => {
+    if (option.value === 'row-cards') return isChoiceSourceTable;
+    // 행 단위 그룹 카드는 보기 그룹이 있는 테이블 유형도 그린다(interactive-table-response 이식)
+    if (option.value === 'row-group-cards') {
+      return isChoiceSourceTable || (questionType === 'table' && hasChoiceGroups);
+    }
+    return true;
+  });
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
   const committedRange = resolveMobileDrilldownRepeatHeaderRange({
     mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,

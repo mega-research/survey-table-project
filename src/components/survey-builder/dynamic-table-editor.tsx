@@ -579,6 +579,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           || mobileTableQuestion.type === 'checkbox') ? (
             <MobileTableDisplaySettings
               questionType={mobileTableQuestion.type}
+              hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}

@@ -68,6 +68,7 @@ import { ChoiceGroupsProvider } from './cells/choice-groups-context';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
@@ -514,6 +515,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   });
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
+  const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
   const rendersFullOriginalTable = mobileMode === 'original';
   const applyCellBackground = !(isMobileView && mobileMode === 'original');
 
@@ -1180,6 +1183,35 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     answerableCellTypes: mobileAnswerableCellTypes,
   };
 
+  // 동적 행 그룹 선택 버튼 목록 — 행별 원본 문항·행 단위 그룹 카드가 카드 목록 위에 같이 둔다
+  const dynamicGroupPicker = hasDynamicRows ? (
+    <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {[...groupConfigMap.entries()]
+        .filter(
+          ([groupId]) =>
+            !hiddenGroupIds?.has(groupId) &&
+            dynamicRows.some((row) => row.dynamicGroupId === groupId),
+        )
+        .map(([groupId, config]) => (
+          <button
+            key={groupId}
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
+            onClick={() => handleSelectGroup(groupId)}
+          >
+            <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
+            <span className="flex-1 text-sm font-medium text-gray-700">
+              {config.label || '항목 선택'}
+            </span>
+            <span className="text-xs text-gray-500">
+              {groupSelectedCountMap.get(groupId) ?? 0}개 선택
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+          </button>
+        ))}
+    </div>
+  ) : null;
+
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
     <GatingTableCellsProvider value={gatingTableCells}>
@@ -1205,33 +1237,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {isMobileView && mobileMode === 'row-wise-original' ? (
               <div className="space-y-3">
-                {hasDynamicRows ? (
-                  <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
-                    {[...groupConfigMap.entries()]
-                      .filter(
-                        ([groupId]) =>
-                          !hiddenGroupIds?.has(groupId) &&
-                          dynamicRows.some((row) => row.dynamicGroupId === groupId),
-                      )
-                      .map(([groupId, config]) => (
-                        <button
-                          key={groupId}
-                          type="button"
-                          className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
-                          onClick={() => handleSelectGroup(groupId)}
-                        >
-                          <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
-                          <span className="flex-1 text-sm font-medium text-gray-700">
-                            {config.label || '항목 선택'}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {groupSelectedCountMap.get(groupId) ?? 0}개 선택
-                          </span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                        </button>
-                      ))}
-                  </div>
-                ) : null}
+                {dynamicGroupPicker}
                 <MobileRowWiseOriginalSheet
                   model={rowWiseOriginalModel}
                   errorCellIds={errorCellIds}
@@ -1268,6 +1274,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   }}
                 />
               </div>
+            ) : isMobileView && mobileMode === 'row-group-cards' && hasChoiceGroupDefs ? (
+              <MobileRowGroupCards
+                questionId={questionId}
+                displayRows={displayRows}
+                visibleColumns={visibleColumns}
+                choiceGroups={choiceGroups ?? []}
+                hideColumnLabels={hideColumnLabels}
+                isTestMode={isTestMode}
+                value={value}
+                onChange={mergedOnChange}
+                errorCellIds={errorCellIds}
+                dynamicGroupPicker={dynamicGroupPicker}
+              />
             ) : mobileUsesCards ? (
               useOriginalRowDetail || useDrilldown ? (
                 <MobileTableDrilldown

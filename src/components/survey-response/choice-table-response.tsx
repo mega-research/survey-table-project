@@ -41,6 +41,7 @@ import {
   getGroupKeyOfCell,
   getGroupTypeOfCell,
   isGroupedChoiceQuestion,
+  groupChoiceCellsByGroup,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceGroupSectionLabel } from '@/utils/choice-group-section-label';
 import { resolveChoiceOptions, collectChoiceOptCells } from '@/utils/choice-source';
@@ -62,25 +63,6 @@ import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
-
-/** 보기 셀을 보기 그룹별로 묶는다(첫 등장 순). 미소속 셀은 groupId null 로 마지막에. */
-function groupChoiceCellsByGroup(
-  cells: readonly TableCell[],
-): Array<{ groupId: string | null; cells: TableCell[] }> {
-  const order: Array<string | null> = [];
-  const byGroup = new Map<string | null, TableCell[]>();
-  for (const cell of cells) {
-    const key = cell.choiceGroupId ?? null;
-    if (!byGroup.has(key)) {
-      byGroup.set(key, []);
-      order.push(key);
-    }
-    byGroup.get(key)!.push(cell);
-  }
-  const groups: Array<string | null> = order.filter((k): k is string => k !== null);
-  if (byGroup.has(null)) groups.push(null);
-  return groups.map((groupId) => ({ groupId, cells: byGroup.get(groupId)! }));
-}
 
 /** 모바일 상세에서 숨긴 셀 — 본문(평문·서식본)만 비운다. */
 function blankCellContent(cell: TableCell): TableCell {

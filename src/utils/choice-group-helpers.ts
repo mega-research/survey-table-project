@@ -222,3 +222,22 @@ export function pruneChoiceGroups(question: Question): ChoiceGroup[] | undefined
   const pruned = groups.filter((g) => memberIds.has(g.id));
   return pruned.length === groups.length ? groups : pruned;
 }
+
+/** 보기 셀을 보기 그룹별로 묶는다(첫 등장 순). 미소속 셀은 groupId null 로 마지막에. */
+export function groupChoiceCellsByGroup(
+  cells: readonly TableCell[],
+): Array<{ groupId: string | null; cells: TableCell[] }> {
+  const order: Array<string | null> = [];
+  const byGroup = new Map<string | null, TableCell[]>();
+  for (const cell of cells) {
+    const key = cell.choiceGroupId ?? null;
+    if (!byGroup.has(key)) {
+      byGroup.set(key, []);
+      order.push(key);
+    }
+    byGroup.get(key)!.push(cell);
+  }
+  const groups: Array<string | null> = order.filter((k): k is string => k !== null);
+  if (byGroup.has(null)) groups.push(null);
+  return groups.map((groupId) => ({ groupId, cells: byGroup.get(groupId)! }));
+}
