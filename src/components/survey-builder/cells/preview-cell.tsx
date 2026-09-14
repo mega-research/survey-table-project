@@ -9,7 +9,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { getInputTextAlignClass } from '@/utils/table-grid-utils';
+import { getHorizontalItemsClass, getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import { CellText } from '@/components/survey/cell-text';
@@ -195,7 +195,12 @@ export const PreviewCell = React.memo(function PreviewCell({
       );
     }
 
-    case 'input':
+    case 'input': {
+      // 입력칸 너비 고정 — 응답 렌더러(input-cell)와 같은 규칙. 미리보기는 px 격자라 그대로 적용한다.
+      const fixedWidth =
+        typeof cell.inputWidth === 'number' && cell.inputWidth > 0 ? cell.inputWidth : undefined;
+      const fixedWidthStyle =
+        fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
       return (
         <CellContentLayout
           content={cell.content}
@@ -204,14 +209,22 @@ export const PreviewCell = React.memo(function PreviewCell({
           bold={cell.textBold}
           boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
+          fillWidth={fixedWidth === undefined}
+          horizontalAlign={cell.horizontalAlign}
         >
-          <div className="flex flex-col space-y-2">
+          <div
+            className={cn(
+              'flex flex-col space-y-2',
+              fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
+            )}
+          >
             {(cell.inputRows ?? 1) >= 2 ? (
               <textarea
                 rows={Math.floor(cell.inputRows ?? 1)}
                 placeholder={cell.placeholder || '답변을 입력하세요...'}
                 maxLength={cell.inputMaxLength}
                 disabled
+                style={fixedWidthStyle}
                 className={cn(
                   'w-full resize-none rounded border border-gray-300 bg-gray-50 p-2 text-base',
                   getInputTextAlignClass(cell.inputTextAlign),
@@ -223,6 +236,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 placeholder={cell.placeholder || '답변을 입력하세요...'}
                 maxLength={cell.inputMaxLength}
                 disabled
+                style={fixedWidthStyle}
                 className={cn(
                   'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
                   getInputTextAlignClass(cell.inputTextAlign),
@@ -237,6 +251,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           </div>
         </CellContentLayout>
       );
+    }
 
     case 'ranking_opt':
       // 랭킹 옵션 소스 셀 — 읽기 전용으로 이미지 + 라벨 표시
