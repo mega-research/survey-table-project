@@ -20,7 +20,8 @@ export type FormatFailure =
   | 'not_a_number'
   | 'unknown_prefix' // 휴대전화 식별번호·지역번호가 아님
   | 'checksum_mismatch'
-  | 'malformed'; // 이메일 구조 불량
+  | 'malformed' // 이메일 구조 불량
+  | 'non_ascii'; // 이메일에 한글·전각 등 ASCII 밖 글자
 
 export type ParseResult = { ok: true; normalized: string } | { ok: false; reason: FormatFailure };
 
@@ -159,7 +160,11 @@ function parseCorpNumber(digits: string): ParseResult {
  */
 function parseEmail(raw: string): ParseResult {
   const value = raw.trim().toLowerCase();
+  // 한글·전각 글자는 구조를 보기 전에 따로 잡는다 — "형식이 아닙니다"보다 "영문·숫자로"가
+  // 고칠 방향을 알려 준다. 타이핑은 막지 않는다(한글 조합 중 글자를 떨어뜨리면 자판이 고장
+  // 난 것처럼 보이고, 붙여넣기에서 조용히 다른 주소가 된다) — blur·다음에서 문구로 막는다.
   if (/\s/.test(value)) return { ok: false, reason: 'malformed' };
+  if (/[^\x21-\x7e]/.test(value)) return { ok: false, reason: 'non_ascii' };
   const at = value.indexOf('@');
   if (at <= 0 || at !== value.lastIndexOf('@') || at === value.length - 1) {
     return { ok: false, reason: 'malformed' };
@@ -261,6 +266,8 @@ export function formatFailureMessage(format: InputFormat, reason: FormatFailure)
       return `${label} 확인번호가 맞지 않습니다. 다시 확인해 주세요`;
     case 'malformed':
       return `${label} 형식이 아닙니다`;
+    case 'non_ascii':
+      return `${label}은 영문·숫자로만 입력해 주세요`;
   }
 }
 

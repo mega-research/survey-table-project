@@ -81,6 +81,9 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['corp_number', '13011100062466', 'wrong_length'],
   ['corp_number', '130111-000624a', 'not_a_number'],
   // 이메일
+  ['email', '홍길동@example.com', 'non_ascii'],
+  ['email', 'hong@회사.kr', 'non_ascii'],
+  ['email', 'ｈｏｎｇ@example.com', 'non_ascii'],
   ['email', 'a@b', 'malformed'],
   ['email', 'a@b.', 'malformed'],
   ['email', '@example.com', 'malformed'],
@@ -144,6 +147,7 @@ describe('formatFailureMessage', () => {
     );
     expect(formatFailureMessage('mobile', 'unknown_prefix')).toBe('휴대전화 번호가 아닙니다');
     expect(formatFailureMessage('email', 'malformed')).toBe('이메일 형식이 아닙니다');
+    expect(formatFailureMessage('email', 'non_ascii')).toBe('이메일은 영문·숫자로만 입력해 주세요');
   });
 
   it('같은 사유라도 형식이 다르면 문구가 다르다', () => {
