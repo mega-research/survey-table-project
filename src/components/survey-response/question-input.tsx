@@ -822,7 +822,7 @@ function TextResponseInput({
         inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
         placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format)}
         value={isPrefilled ? prefilledValue : displayValue}
-        onChange={handleChange}
+        onChange={format ? formatField.handleChange : handleChange}
         onFocus={() => {
           handleFocus();
           formatField.handleFocus();

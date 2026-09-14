@@ -137,7 +137,7 @@ export const InputCell = React.memo(function InputCell({
               type="text"
               inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
               value={isPrefilled ? prefilledValue : displayValue}
-              onChange={handleChange}
+              onChange={format ? formatField.handleChange : handleChange}
               onFocus={() => {
                 handleFocus();
                 formatField.handleFocus();

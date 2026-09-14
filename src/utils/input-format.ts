@@ -263,3 +263,15 @@ export function formatFailureMessage(format: InputFormat, reason: FormatFailure)
       return `${label} 형식이 아닙니다`;
   }
 }
+
+/**
+ * 형식 칸 타이핑 필터 — 번호 형식은 숫자와 하이픈만 통과시킨다(글자·공백·괄호·점은 떨어뜨린다).
+ * 검사(`parseInputFormat`)는 공백·괄호·점도 구분 문자로 받아 주지만, 타이핑 단계에서는
+ * "숫자만 받는 칸"으로 보이는 것이 목적이라 하이픈 하나만 남긴다. 붙여넣기도 같은 필터를
+ * 타므로 `(02) 123-4567` 을 붙이면 `02123-4567` 이 되고 blur 정돈이 `02-123-4567` 로 맞춘다.
+ * 이메일은 글자가 본문이라 손대지 않는다.
+ */
+export function filterFormatTyping(format: InputFormat, raw: string): string {
+  if (format === 'email') return raw;
+  return raw.replace(/[^0-9-]/g, '');
+}

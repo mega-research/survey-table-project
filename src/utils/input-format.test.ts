@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { INPUT_FORMATS, type InputFormat } from '@/types/input-type';
 
-import { formatFailureMessage, formatSampleValue, parseInputFormat } from './input-format';
+import {
+  filterFormatTyping,
+  formatFailureMessage,
+  formatSampleValue,
+  parseInputFormat,
+} from './input-format';
 
 /** 통과 케이스 — 넣은 값과 나와야 할 정규형. */
 const PASS: Array<[InputFormat, string, string]> = [
@@ -173,5 +178,18 @@ describe('formatSampleValue', () => {
       expect(sample.length).toBeGreaterThan(0);
       expect(parseInputFormat(format, sample)).toEqual({ ok: true, normalized: sample });
     }
+  });
+});
+
+describe('filterFormatTyping — 형식 칸 타이핑 필터', () => {
+  it('번호 형식은 숫자와 하이픈만 남기고 글자·공백·괄호는 떨어뜨린다', () => {
+    expect(filterFormatTyping('mobile', '010abc-1234 5678')).toBe('010-12345678');
+    expect(filterFormatTyping('biz_number', '(123)45-67890')).toBe('12345-67890');
+    expect(filterFormatTyping('corp_number', '110111-1234567')).toBe('110111-1234567');
+    expect(filterFormatTyping('phone', '')).toBe('');
+  });
+
+  it('이메일 형식은 손대지 않는다', () => {
+    expect(filterFormatTyping('email', 'a.b+c@x.co')).toBe('a.b+c@x.co');
   });
 });

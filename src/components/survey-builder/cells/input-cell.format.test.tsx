@@ -70,6 +70,14 @@ describe('표 input 셀 입력 형식', () => {
     expect(inFlow.closest('.flex-col')).toContainElement(screen.getByRole('textbox'));
   });
 
+  it('번호 형식 칸은 글자가 쳐지지 않고 숫자와 하이픈만 들어간다', async () => {
+    const user = userEvent.setup();
+    render(<Harness cell={inputCell({ inputType: 'mobile' })} />);
+    const input = screen.getByRole('textbox');
+    await user.type(input, '010ab-1234 5678');
+    expect(input).toHaveValue('010-12345678');
+  });
+
   it('형식 미지정 셀은 blur 해도 값이 그대로다', async () => {
     const user = userEvent.setup();
     render(<Harness cell={inputCell()} />);

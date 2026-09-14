@@ -4,17 +4,20 @@
  * 입력 형식(휴대전화·전화·사업자번호·법인번호·이메일) 칸의 화면 동작 공용 훅.
  * 단답형 문항 · 표 input 셀 · 보기 상세기재가 공유한다.
  *
- * **타이핑 중에는 아무것도 하지 않는다.** 자동 하이픈은 백스페이스·중간 수정·붙여넣기에서
+ * **타이핑 중에는 정돈하지 않는다.** 자동 하이픈은 백스페이스·중간 수정·붙여넣기에서
  * 커서를 튀게 하는 고전적인 버그를 부른다. 정돈은 칸을 벗어날 때 한 번만 한다.
+ * 타이핑 단계에서 하는 것은 **문자 필터** 하나다 — 번호 형식은 숫자와 하이픈만 들어간다
+ * (`filterFormatTyping`). 숫자 모드가 글자를 튕기는 것과 같은 경험을 형식 칸에도 준다.
  *
  * 위반 문구도 포커스 중에는 숨긴다 — 치는 도중에 계속 빨간 글씨가 스치면 방해만 된다
  * (숫자 모드의 min 힌트와 같은 규칙).
  */
 import { useCallback, useState } from 'react';
+import type React from 'react';
 
 import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { InputFormat } from '@/types/input-type';
-import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
+import { filterFormatTyping, formatFailureMessage, parseInputFormat } from '@/utils/input-format';
 
 interface Options {
   /** 형식 미지정이면 null — 훅은 무동작이 된다. */
@@ -32,6 +35,8 @@ interface Options {
 }
 
 export interface InputFormatField {
+  /** onChange 에 그대로 건다 — 번호 형식은 숫자·하이픈 외 문자를 떨어뜨리고 나서 올린다 */
+  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleFocus: () => void;
   /** blur 시 정규형으로 정돈한다. 형식이 틀린 값은 손대지 않는다(고칠 수 있게 남긴다). */
   handleBlur: () => void;
@@ -50,6 +55,14 @@ export function useInputFormatField({
 }: Options): InputFormatField {
   const [focused, setFocused] = useState(false);
   const untouchedPrior = isUntouchedPriorValue(rawValue, priorOriginal);
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      onRawChange(format ? filterFormatTyping(format, raw) : raw);
+    },
+    [format, onRawChange],
+  );
 
   const handleFocus = useCallback(() => setFocused(true), []);
 
@@ -72,5 +85,5 @@ export function useInputFormatField({
       : ('tel' as const)
     : undefined;
 
-  return { handleFocus, handleBlur, violation, inputMode };
+  return { handleChange, handleFocus, handleBlur, violation, inputMode };
 }

@@ -45,14 +45,14 @@ function Harness({
 }
 
 describe('단답형 입력 형식', () => {
-  it('타이핑 중에는 건드리지 않고 blur 시 정돈한다', async () => {
+  it('타이핑 중에는 숫자·하이픈만 받고(공백·글자는 떨어뜨림) blur 시 정돈한다', async () => {
     const user = userEvent.setup();
     render(<Harness question={textQuestion({ inputType: 'mobile' })} />);
     const input = screen.getByRole('textbox');
 
-    await user.type(input, '010 1234 5678');
-    expect(input).toHaveValue('010 1234 5678');
-    expect(screen.getByTestId('stored')).toHaveTextContent('010 1234 5678');
+    await user.type(input, '010 12a34 5678');
+    expect(input).toHaveValue('01012345678');
+    expect(screen.getByTestId('stored')).toHaveTextContent('01012345678');
 
     await user.tab();
     expect(input).toHaveValue('010-1234-5678');

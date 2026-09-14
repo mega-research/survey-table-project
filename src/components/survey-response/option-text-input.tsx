@@ -106,8 +106,10 @@ export function OptionTextInput({
     value: isNumberMode ? numeric.displayValue : rawValue,
     onChange: isNumberMode
       ? numeric.handleChange
-      : (e: React.ChangeEvent<HTMLInputElement>) =>
-          setOptionText(questionId, option.id, e.target.value),
+      : format
+        ? formatField.handleChange
+        : (e: React.ChangeEvent<HTMLInputElement>) =>
+            setOptionText(questionId, option.id, e.target.value),
     ...(isNumberMode
       ? {
           inputMode: 'decimal' as const,
