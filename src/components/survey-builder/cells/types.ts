@@ -20,6 +20,12 @@ export interface InteractiveCellProps {
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
   /**
+   * input 셀의 범위·형식 위반 안내를 흐름 안(입력칸 아래)에 그린다. 기본은 absolute 로 띄운다 —
+   * 표 행에서는 이 셀만 키가 커져 옆 칸과 어긋나기 때문이다. 모바일 카드는 셀이 세로로 쌓여
+   * 어긋날 옆 칸이 없고 카드가 overflow-hidden 이라 띄우면 잘리므로 흐름에 둔다.
+   */
+  hintInFlow?: boolean | undefined;
+  /**
    * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
    * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한
    * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).

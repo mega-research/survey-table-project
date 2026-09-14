@@ -288,6 +288,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         value={value}
                         onChange={onChange}
                         rowCells={row.cells}
+                        hintInFlow
                       />
                     </div>
                     <div
@@ -303,6 +304,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         value={value}
                         onChange={onChange}
                         rowCells={row.cells}
+                        hintInFlow
                       />
                     </div>
                   </div>
@@ -321,6 +323,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                       value={value}
                       onChange={onChange}
                       rowCells={row.cells}
+                      hintInFlow
                     />
                   </div>
                 );

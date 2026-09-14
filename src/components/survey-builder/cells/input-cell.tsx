@@ -28,6 +28,7 @@ export const InputCell = React.memo(function InputCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  hintInFlow,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -94,6 +95,8 @@ export const InputCell = React.memo(function InputCell({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
+
+  const hasViolation = Boolean(rangeViolation || formatField.violation) && !isPrefilled;
 
   return (
     // relative — 형식·범위 위반 안내문의 절대 위치 기준점.
@@ -185,6 +188,17 @@ export const InputCell = React.memo(function InputCell({
           {unitReading && !isPrefilled && (
             <p className="text-muted-foreground text-xs">{unitReading}</p>
           )}
+
+          {/* 카드 모드 — 위반 안내를 흐름에 둔다. 카드는 셀이 세로로 쌓여 옆 칸이 없고
+              overflow-hidden 이라 아래 띄우면 잘리거나(마지막 셀) 다음 셀 라벨을 덮는다. */}
+          {hintInFlow && hasViolation && (
+            <div className="space-y-0.5 text-left">
+              {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+              {formatField.violation && (
+                <p className="text-xs text-red-500">* {formatField.violation}</p>
+              )}
+            </div>
+          )}
         </div>
       </CellContentLayout>
 
@@ -198,7 +212,7 @@ export const InputCell = React.memo(function InputCell({
         남겨두면 그쪽만 다시 줄을 밀어 어긋남이 되살아난다.
         상시 표시인 단위 읽기는 아래 행에 영구히 겹치면 안 되므로 흐름에 그대로 둔다.
       */}
-      {(rangeViolation || formatField.violation) && !isPrefilled && (
+      {!hintInFlow && hasViolation && (
         <div className="absolute top-full left-0 z-20 mt-1 w-max space-y-0.5">
           {rangeViolation && (
             <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">

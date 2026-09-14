@@ -269,6 +269,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           value={value}
           onChange={onChange}
           rowCells={rowCellsByCellId.get(cellId)}
+          hintInFlow
         />
       </div>
     );
@@ -444,6 +445,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               value={value}
               onChange={onChange}
               rowCells={rowCellsByCellId.get(cell.id)}
+              hintInFlow
               {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
             />
           );

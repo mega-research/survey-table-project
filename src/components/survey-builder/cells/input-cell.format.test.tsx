@@ -8,9 +8,17 @@ import type { TableCell } from '@/types/survey';
 
 import { InputCell } from './input-cell';
 
-function Harness({ cell }: { cell: TableCell }) {
+function Harness({ cell, hintInFlow }: { cell: TableCell; hintInFlow?: boolean }) {
   const [value, setValue] = useState<unknown>('');
-  return <InputCell cell={cell} cellResponse={value} onUpdateValue={setValue} questionId="q1" />;
+  return (
+    <InputCell
+      cell={cell}
+      cellResponse={value}
+      onUpdateValue={setValue}
+      questionId="q1"
+      hintInFlow={hintInFlow}
+    />
+  );
 }
 
 function inputCell(overrides: Partial<TableCell> = {}): TableCell {
@@ -42,6 +50,24 @@ describe('표 input 셀 입력 형식', () => {
     await user.tab();
     expect(screen.getByText(/사업자번호는 10자리입니다/)).toBeInTheDocument();
     expect(input).toHaveValue('111-11-1111');
+  });
+
+  it('기본은 사유 문구를 셀 밖에 띄우고, hintInFlow 면 흐름 안(입력칸 아래)에 둔다', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness cell={inputCell({ inputType: 'biz_number' })} />);
+    await user.type(screen.getByRole('textbox'), '111-11-1111');
+    await user.tab();
+    const floated = screen.getByText(/사업자번호는 10자리입니다/);
+    expect(floated.parentElement!.className).toContain('absolute');
+    unmount();
+
+    render(<Harness cell={inputCell({ inputType: 'biz_number' })} hintInFlow />);
+    await user.type(screen.getByRole('textbox'), '111-11-1111');
+    await user.tab();
+    const inFlow = screen.getByText(/사업자번호는 10자리입니다/);
+    expect(inFlow.closest('.absolute')).toBeNull();
+    // 카드 안에서 잘리지 않도록 입력칸과 같은 흐름 컨테이너에 들어 있다
+    expect(inFlow.closest('.flex-col')).toContainElement(screen.getByRole('textbox'));
   });
 
   it('형식 미지정 셀은 blur 해도 값이 그대로다', async () => {
