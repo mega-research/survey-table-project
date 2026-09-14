@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
@@ -17,6 +17,7 @@ import { formatSampleValue } from '@/utils/input-format';
 import { getInputTextAlignClass, getHorizontalItemsClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
+import { FloatingHint } from './floating-hint';
 import type { InteractiveCellProps } from './types';
 
 /** 텍스트 입력 셀 (인터랙티브) */
@@ -98,6 +99,8 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   const hasViolation = Boolean(rangeViolation || formatField.violation) && !isPrefilled;
+  // 띄우는 안내의 앵커 — 입력칸 자체. 셀이 아니라 입력칸 아래에 붙어야 단위 글자 옆에서도 맞는다.
+  const anchorRef = useRef<HTMLElement | null>(null);
 
   // 입력칸 너비 고정 — 세로 카드(ignoreInputWidth)는 무시한다. 좁은 화면에서 60px 입력칸은 불편하다.
   const fixedWidth =
@@ -108,7 +111,7 @@ export const InputCell = React.memo(function InputCell({
     fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
 
   return (
-    // relative — 형식·범위 위반 안내문의 절대 위치 기준점.
+    // 위반 안내는 body 포털이라 여기에 위치 기준점은 없다 — relative 는 다른 오버레이용으로 남긴다.
     <div className="relative w-full">
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
@@ -129,6 +132,7 @@ export const InputCell = React.memo(function InputCell({
         >
           {isMultiline ? (
             <textarea
+              ref={anchorRef as React.RefObject<HTMLTextAreaElement>}
               id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
               rows={rows}
               value={textValue}
@@ -151,6 +155,7 @@ export const InputCell = React.memo(function InputCell({
             />
           ) : (
             <Input
+              ref={anchorRef as React.RefObject<HTMLInputElement>}
               id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
               type="text"
               inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
@@ -222,17 +227,18 @@ export const InputCell = React.memo(function InputCell({
       </CellContentLayout>
 
       {/*
-        위반 안내문은 흐름에서 빼서 셀 위에 띄운다.
+        위반 안내문은 흐름에서 빼서 입력칸 아래에 띄운다.
         흐름에 두면 이 셀만 키가 커져, 같은 행의 다른 입력 칸과 세로가 어긋나고
         (셀은 justify-center) 옆 라벨도 입력칸 중앙에서 밀려난다 — "2011 년 / 11 월"
         처럼 한 행에 입력 칸이 둘 있으면 눈에 띈다. 띄우면 행 높이가 안 변해 어긋나지
-        않는다. 대신 아래 행에 겹치므로 불투명 배경 + z-20 으로 읽히게 만든다.
+        않는다. 셀 안 absolute 가 아니라 body 포털(FloatingHint)인 이유는 그 파일에 —
+        표 스크롤 컨테이너가 마지막 행의 안내를 잘라 스크롤바를 만들었다.
         범위 위반과 형식 위반은 같은 blur 피드백이라 같은 셸로 그린다 — 흐름에 하나만
         남겨두면 그쪽만 다시 줄을 밀어 어긋남이 되살아난다.
         상시 표시인 단위 읽기는 아래 행에 영구히 겹치면 안 되므로 흐름에 그대로 둔다.
       */}
       {!hintInFlow && hasViolation && (
-        <div className="absolute top-full left-0 z-20 mt-1 w-max space-y-0.5">
+        <FloatingHint anchorRef={anchorRef}>
           {rangeViolation && (
             <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
               * {rangeViolation}
@@ -243,7 +249,7 @@ export const InputCell = React.memo(function InputCell({
               * {formatField.violation}
             </p>
           )}
-        </div>
+        </FloatingHint>
       )}
     </div>
   );

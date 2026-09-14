@@ -57,8 +57,11 @@ describe('표 input 셀 입력 형식', () => {
     const { unmount } = render(<Harness cell={inputCell({ inputType: 'biz_number' })} />);
     await user.type(screen.getByRole('textbox'), '111-11-1111');
     await user.tab();
+    // body 로 포털돼 셀 컨테이너 밖(fixed)에 뜬다 — 표 스크롤 컨테이너가 잘라내지 못한다
     const floated = screen.getByText(/사업자번호는 10자리입니다/);
-    expect(floated.parentElement!.className).toContain('absolute');
+    const shell = floated.closest('[data-floating-hint]') as HTMLElement;
+    expect(shell.className).toContain('fixed');
+    expect(shell.parentElement).toBe(document.body);
     unmount();
 
     render(<Harness cell={inputCell({ inputType: 'biz_number' })} hintInFlow />);
