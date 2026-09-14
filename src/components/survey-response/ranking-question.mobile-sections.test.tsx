@@ -61,9 +61,9 @@ function tableRankingQuestion(inputMode: 'click' | 'dropdown'): Question {
   } as unknown as Question;
 }
 
-describe('모바일 순위형 카드 — 헤더 셀 구간 제목', () => {
+describe('모바일 순위형 카드 — 헤더 셀 구간을 카드 하나로 묶는다', () => {
   it.each(['click', 'dropdown'] as const)(
-    '%s 방식: 헤더 셀이 구간 제목으로 한 번 나오고 rowspan 으로 덮인 행의 보기도 그 아래 온다',
+    '%s 방식: 헤더 셀이 묶음 카드의 제목 띠로 한 번 나오고 rowspan 으로 덮인 행의 보기도 그 카드 안 행이다',
     (mode) => {
       render(
         <RankingQuestion
@@ -77,24 +77,32 @@ describe('모바일 순위형 카드 — 헤더 셀 구간 제목', () => {
       const econ = screen.getByRole('heading', { name: '경제성' });
       expect(screen.getAllByRole('heading', { name: '기술 성능' })).toHaveLength(1);
 
-      // 구간 컨테이너 안에 그 구간의 보기 넷이 있고 다른 구간의 보기는 없다
-      const techSection = tech.closest('section')!;
-      expect(within(techSection).getByText('연산 성능')).toBeInTheDocument();
-      expect(within(techSection).getByText('전력 효율')).toBeInTheDocument();
-      expect(within(techSection).getByText('품질 신뢰성')).toBeInTheDocument();
-      expect(within(techSection).getByText('보안성')).toBeInTheDocument();
-      expect(within(techSection).queryByText('가격')).not.toBeInTheDocument();
+      // 묶음 카드(section) 하나가 제목과 보기 넷을 담고, 다른 구간의 보기는 없다
+      const techCard = tech.closest('section')!;
+      expect(techCard).toHaveClass('rounded-2xl', 'border');
+      expect(within(techCard).getByText('연산 성능')).toBeInTheDocument();
+      expect(within(techCard).getByText('전력 효율')).toBeInTheDocument();
+      expect(within(techCard).getByText('품질 신뢰성')).toBeInTheDocument();
+      expect(within(techCard).getByText('보안성')).toBeInTheDocument();
+      expect(within(techCard).queryByText('가격')).not.toBeInTheDocument();
 
-      const econSection = econ.closest('section')!;
-      expect(within(econSection).getByText('가격')).toBeInTheDocument();
+      // 카드 안 보기는 낱장 카드가 아니라 행이다 — 테두리 카드가 카드 안에 또 있으면 안 된다
+      expect(techCard.querySelectorAll('.rounded-2xl')).toHaveLength(0);
+
+      const econCard = econ.closest('section')!;
+      expect(within(econCard).getByText('가격')).toBeInTheDocument();
     },
   );
 
-  it('헤더 지정이 없으면 구간 제목을 만들지 않는다 — 기존 카드 목록 그대로', () => {
+  it('헤더 지정이 없으면 묶지 않는다 — 낱장 카드 목록 그대로', () => {
     const q = tableRankingQuestion('click');
     for (const row of q.tableRowsData ?? []) for (const c of row.cells) delete c.mobileDisplay;
-    render(<RankingQuestion question={q} value={undefined} onChange={vi.fn()} />);
+    const { container } = render(
+      <RankingQuestion question={q} value={undefined} onChange={vi.fn()} />,
+    );
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.queryByText('기술 성능')).not.toBeInTheDocument();
+    // 보기 다섯이 각각 낱장 카드다
+    expect(container.querySelectorAll('.rounded-2xl')).toHaveLength(5);
   });
 });
