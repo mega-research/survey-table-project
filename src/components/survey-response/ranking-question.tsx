@@ -8,7 +8,7 @@ import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { Question, QuestionOption, RankingAnswer, TableCell } from '@/types/survey';
+import { Question, QuestionOption, RankingAnswer, TableCell, TableRow } from '@/types/survey';
 import {
   collectRankingGroups,
   GroupedRankingAnswer,
@@ -16,6 +16,7 @@ import {
 } from '@/utils/choice-group-helpers';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { rankOfOption } from '@/utils/ranking-click';
+import { buildRankingMobileSections, RankingMobileSectionItem } from '@/utils/ranking-mobile-sections';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
@@ -76,6 +77,52 @@ function cellLabelNode(
         <CellText text={label} html={resolveCellTextHtml(cell, attrs, quotes)} />
       </span>
     </>
+  );
+}
+
+/**
+ * 표 소스 순위형의 모바일 카드 목록 — 「헤더」 지정 text 셀을 구간 제목으로 올린다.
+ * 데스크톱 표의 첫 열 분류(rowspan)가 카드 목록에서 사라지는 것을 막는다. 헤더 지정이 없으면
+ * 구간 제목 없이 카드만 나열해 기존 화면과 같다. 구간 나누기는 `buildRankingMobileSections`.
+ */
+function RankingMobileCardList({
+  rows,
+  renderCard,
+}: {
+  rows: TableRow[];
+  renderCard: (item: RankingMobileSectionItem) => ReactNode;
+}) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const sections = buildRankingMobileSections(rows);
+  return (
+    <div className="space-y-4">
+      {sections.map((section, sectionIdx) => {
+        const cards = <div className="space-y-2">{section.items.map(renderCard)}</div>;
+        const header = section.headerCell;
+        const headerText = header ? (header.content ?? '').trim() : '';
+        if (!header || !headerText) {
+          return <div key={`section-${sectionIdx}`}>{cards}</div>;
+        }
+        return (
+          <section key={header.id} className="space-y-2">
+            <h4
+              className={cn(
+                'px-1 text-sm font-semibold whitespace-pre-line text-gray-900',
+                getCellTextClassName(header),
+              )}
+              style={getCellTextStyle(header)}
+            >
+              <CellText
+                text={substituteTokens(headerText, attrs, quotes)}
+                html={resolveCellTextHtml(header, attrs, quotes)}
+              />
+            </h4>
+            {cards}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -362,51 +409,47 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
     return (
       <div className="space-y-4">
         {summaries}
-        <div className="space-y-2">
-          {(question.tableRowsData ?? []).flatMap((row) => {
+        <RankingMobileCardList
+          rows={question.tableRowsData ?? []}
+          renderCard={({ row, optCell, isFirstInRow }) => {
             // 한 행에 순위 옵션 셀이 여럿일 수 있다(수집기가 행의 모든 셀을 보기로 친다).
             // 셀마다 카드 하나. 행의 표시 셀(text/image/video)은 첫 카드에만 붙인다.
-            const optCells = row.cells.filter(
-              (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
+            const scope = scopeOfCell.get(optCell.id);
+            const opt = scope?.options.find((o) => o.id === optCell.id);
+            if (!scope || !opt) return null;
+            const rank = rankOfOption(scope.answers, opt.value);
+            const label = substituteTokens(opt.label, attrs, quotes);
+            const toggle = () => scope.handle.toggle(opt.value);
+            return (
+              <MobileOptionCard
+                key={optCell.id}
+                label={
+                  <span className={cn(getCellTextClassName(opt))} style={getCellTextStyle(opt)}>
+                    <CellText text={label} html={resolveCellTextHtml(optCell, attrs, quotes)} />
+                  </span>
+                }
+                cells={isFirstInRow ? row.cells : []}
+                // 카드 헤더는 div 라 포커스·키보드가 없다. 배지를 진짜 버튼으로 두어
+                // 탭·키보드·aria-pressed 를 모두 여기서 받는다(control 래퍼는 전파를 막는다).
+                control={
+                  <button
+                    type="button"
+                    aria-label={label}
+                    aria-pressed={rank !== undefined}
+                    onClick={toggle}
+                    // flex + leading-none: 인라인 버튼의 기준선 여백이 아래로 늘어나 배지가 글자보다
+                    // 위로 뜨는 것을 막는다
+                    className="flex items-center rounded leading-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
+                  >
+                    <RankingRankBadge rank={rank} />
+                  </button>
+                }
+                selected={rank !== undefined}
+                onToggle={toggle}
+              />
             );
-            return optCells.map((optCell, idx) => {
-              const scope = scopeOfCell.get(optCell.id);
-              const opt = scope?.options.find((o) => o.id === optCell.id);
-              if (!scope || !opt) return null;
-              const rank = rankOfOption(scope.answers, opt.value);
-              const label = substituteTokens(opt.label, attrs, quotes);
-              const toggle = () => scope.handle.toggle(opt.value);
-              return (
-                <MobileOptionCard
-                  key={optCell.id}
-                  label={
-                    <span className={cn(getCellTextClassName(opt))} style={getCellTextStyle(opt)}>
-                      <CellText text={label} html={resolveCellTextHtml(optCell, attrs, quotes)} />
-                    </span>
-                  }
-                  cells={idx === 0 ? row.cells : []}
-                  // 카드 헤더는 div 라 포커스·키보드가 없다. 배지를 진짜 버튼으로 두어
-                  // 탭·키보드·aria-pressed 를 모두 여기서 받는다(control 래퍼는 전파를 막는다).
-                  control={
-                    <button
-                      type="button"
-                      aria-label={label}
-                      aria-pressed={rank !== undefined}
-                      onClick={toggle}
-                      // flex + leading-none: 인라인 버튼의 기준선 여백이 아래로 늘어나 배지가 글자보다
-                      // 위로 뜨는 것을 막는다
-                      className="flex items-center rounded leading-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
-                    >
-                      <RankingRankBadge rank={rank} />
-                    </button>
-                  }
-                  selected={rank !== undefined}
-                  onToggle={toggle}
-                />
-              );
-            });
-          })}
-        </div>
+          }}
+        />
         {/* 기타·상세기재 입력 줄은 카드 목록 아래 — 표 아래에 두는 데스크톱과 같은 자리 */}
         {detailRows}
       </div>
@@ -474,36 +517,32 @@ function RankingDropdown({
 
   const embeddedTable = hasEmbeddedTable ? (
     isMobile ? (
-      <div className="space-y-2">
-        {(question.tableRowsData ?? []).flatMap((row) => {
+      <RankingMobileCardList
+        rows={question.tableRowsData ?? []}
+        renderCard={({ row, optCell, isFirstInRow }) => {
           // 한 행에 순위 옵션 셀이 여럿일 수 있다(항목 열이 둘인 표). 셀마다 카드 하나,
           // 행의 표시 셀(분류 라벨 등)은 첫 카드에만 붙인다. 첫 셀만 그리면 오른쪽 열이 통째로 빠진다.
-          const optCells = row.cells.filter(
-            (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
+          const opt = rawOptions.find((o) => o.id === optCell.id);
+          const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
+          return (
+            <MobileOptionCard
+              key={optCell.id}
+              label={
+                <span
+                  className={getCellTextClassName(opt ?? optCell)}
+                  style={getCellTextStyle(opt ?? optCell)}
+                >
+                  <CellText
+                    text={substituteTokens(rawLabel, attrs, quotes)}
+                    html={resolveCellTextHtml(optCell, attrs, quotes)}
+                  />
+                </span>
+              }
+              cells={isFirstInRow ? row.cells : []}
+            />
           );
-          return optCells.map((optCell, idx) => {
-            const opt = rawOptions.find((o) => o.id === optCell.id);
-            const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
-            return (
-              <MobileOptionCard
-                key={optCell.id}
-                label={
-                  <span
-                    className={getCellTextClassName(opt ?? optCell)}
-                    style={getCellTextStyle(opt ?? optCell)}
-                  >
-                    <CellText
-                      text={substituteTokens(rawLabel, attrs, quotes)}
-                      html={resolveCellTextHtml(optCell, attrs, quotes)}
-                    />
-                  </span>
-                }
-                cells={idx === 0 ? row.cells : []}
-              />
-            );
-          });
-        })}
-      </div>
+        }}
+      />
     ) : (
       <TablePreview
         {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
