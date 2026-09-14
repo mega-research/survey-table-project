@@ -165,9 +165,9 @@ export function OptionTextInput({
               // 흰 바탕에 테두리를 둘러 입력칸으로 보이게 하고 높이·글자 크기를 키운다.
               // flex-none 이 핵심이다 — 셸이 세로 flex 라 기본 클래스의 flex-1(basis 0)이
               // 세로 축에 걸리면 h-* 가 무시되고 입력칸이 한 줄 내용 높이로 쪼그라든다
-              // (h-12 로 두고도 작아 보이던 원인).
+              // (h-12 로 두고도 작아 보이던 원인). 높이는 h-10 — 실제 적용되면 그 정도가 알맞다.
               stackedLabel &&
-                'h-14 flex-none rounded-md border border-gray-300 bg-white px-3 text-base focus:border-blue-400',
+                'h-10 flex-none rounded-md border border-gray-300 bg-white px-3 text-base focus:border-blue-400',
               priorTextCls,
             )}
           />
