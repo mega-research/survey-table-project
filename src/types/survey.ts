@@ -895,6 +895,8 @@ export interface SurveySettings {
   endDate?: Date;
   maxResponses?: number;
   thankYouMessage: string;
+  // 자격미달 종료 문구 — 종료 결과가 screened_out 일 때 완료 화면 문구. 비어 있으면 thankYouMessage 로 폴백 (0110)
+  screenedOutMessage?: string | null;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
   // 화면 너비 — true 면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl).

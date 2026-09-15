@@ -195,6 +195,7 @@ export function useSurveyLoader({
                   : {}),
                 ...(snapshot.settings.maxResponses !== undefined ? { maxResponses: snapshot.settings.maxResponses } : {}),
                 thankYouMessage: snapshot.settings.thankYouMessage,
+                screenedOutMessage: snapshot.settings.screenedOutMessage ?? null,
                 ...(snapshot.settings.requireInviteToken !== undefined ? { requireInviteToken: snapshot.settings.requireInviteToken } : {}),
                 ...(snapshot.settings.forceWideLayout !== undefined ? { forceWideLayout: snapshot.settings.forceWideLayout } : {}),
                 responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),

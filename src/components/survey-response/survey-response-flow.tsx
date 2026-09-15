@@ -57,8 +57,6 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/lib/option-text-migration';
-import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
-import { resolveChoiceOptions } from '@/utils/choice-source';
 import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
 import {
   anchorQuestionLabel,
@@ -67,6 +65,10 @@ import {
   resolveQuestionForOwner,
 } from '@/lib/survey-document/anchor-outline';
 import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/lib/survey-document/split-viewport';
+import {
+  type CompletionOutcome,
+  resolveCompletionScreen,
+} from '@/lib/survey-response/completion-screen';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   buildAdminRelaxWarningMessage,
@@ -87,6 +89,7 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import { normalizeFormatValues } from '@/lib/survey/format-normalize';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
@@ -122,6 +125,7 @@ import {
   getBranchRuleForResponse,
   shouldDisplayQuestion,
 } from '@/utils/branch-logic';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
 
 type ResponsesMap = Record<string, unknown>;
@@ -444,6 +448,7 @@ function SurveyResponseFlowActive({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [completionOutcome, setCompletionOutcome] = useState<CompletionOutcome>('completed');
   const [stepHistory, setStepHistory] = useState<number[]>([]);
 
   // 페이지 진입 시 1회 생성된 세션 식별자. 컴포넌트 수명 동안 안정적.
@@ -1353,6 +1358,7 @@ function SurveyResponseFlowActive({
       setIsSubmitting,
       setCurrentStepIndex,
       setIsCompleted,
+      setCompletionOutcome,
       buildOptTextsPayload: buildSubmissionPayload,
       setNumericErrorStepIndex,
     });
@@ -1750,12 +1756,12 @@ function SurveyResponseFlowActive({
 
   // 완료 화면
   if (isCompleted) {
+    // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
+    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome);
     return (
       <SurveyCompletedScreen
-        {...(isPreview ? { title: '설문 확인 완료' } : {})}
-        thankYouMessage={
-          isPreview ? '입력 내용은 저장되지 않았습니다.' : loadedSurvey.settings.thankYouMessage
-        }
+        title={isPreview ? '설문 확인 완료' : screen.title}
+        thankYouMessage={isPreview ? '입력 내용은 저장되지 않았습니다.' : screen.message}
         showCompletedTime={!isPreview}
       />
     );

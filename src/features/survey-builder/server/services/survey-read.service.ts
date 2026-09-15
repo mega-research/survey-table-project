@@ -329,6 +329,8 @@ export async function getSurveyForResponse(
           endDate?: string;
           maxResponses?: number;
           thankYouMessage: string;
+          // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
+          screenedOutMessage?: string | null;
           // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
           requireInviteToken?: boolean;
           forceWideLayout?: boolean;

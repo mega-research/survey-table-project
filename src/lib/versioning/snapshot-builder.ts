@@ -30,6 +30,7 @@ export interface SurveySnapshot {
     endDate?: string | undefined;
     maxResponses?: number | undefined;
     thankYouMessage: string;
+    screenedOutMessage?: string | null | undefined;
     // 컨택 attrs invite token 강제 — 스냅샷에 freeze (schema-types.ts SurveyVersionSnapshot.settings 와 정렬)
     requireInviteToken?: boolean | undefined;
     // 화면 너비 강제 — 스냅샷에 freeze
@@ -222,6 +223,7 @@ export function buildSurveySnapshot(
         : undefined,
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
+      screenedOutMessage: survey.settings.screenedOutMessage ?? null,
       requireInviteToken: survey.settings.requireInviteToken,
       forceWideLayout: survey.settings.forceWideLayout,
       responseHeader: survey.settings.responseHeader,

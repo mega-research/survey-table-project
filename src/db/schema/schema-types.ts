@@ -31,6 +31,8 @@ export interface SurveyVersionSnapshot {
     endDate?: string;
     maxResponses?: number;
     thankYouMessage: string;
+    /** 자격미달 종료 문구 — 발행 시점 freeze. 이 필드 도입 이전 발행본은 undefined = 폴백 */
+    screenedOutMessage?: string | null;
     requireInviteToken?: boolean;
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;

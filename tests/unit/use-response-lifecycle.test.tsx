@@ -461,6 +461,31 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(createBlank).toHaveBeenCalledWith(expect.objectContaining({ clientSignals: collected }));
   });
 
+  it('서버가 돌려준 상태가 screened_out 이면 종료 결과를 자격미달로 세운다 — 완료 화면 문구가 갈린다', async () => {
+    complete.mockResolvedValue({ id: 'resp-existing', status: 'screened_out' });
+    const setCompletionOutcome = vi.fn();
+    const args = baseArgs({ currentResponseId: 'resp-existing', setCompletionOutcome });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(setCompletionOutcome).toHaveBeenCalledWith('screened_out');
+    expect(args.setIsCompleted).toHaveBeenCalledWith(true);
+  });
+
+  it('상태가 completed 거나 결과가 비어 있으면 종료 결과는 완료다', async () => {
+    complete.mockResolvedValue({ id: 'resp-existing', status: 'completed' });
+    const setCompletionOutcome = vi.fn();
+    const args = baseArgs({ currentResponseId: 'resp-existing', setCompletionOutcome });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(setCompletionOutcome).toHaveBeenCalledWith('completed');
+  });
+
   it('currentResponseId 가 이미 있으면 blank INSERT 없이 바로 complete 한다', async () => {
     const args = baseArgs({ currentResponseId: 'resp-existing' });
     const { result } = renderHook(() => useResponseLifecycle(args));

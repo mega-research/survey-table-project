@@ -170,6 +170,7 @@ const defaultSurveySettings: SurveySettings = {
   shuffleQuestions: false,
   requireLogin: false,
   thankYouMessage: '응답해주셔서 감사합니다!',
+  screenedOutMessage: null,
   responseHeader: DEFAULT_RESPONSE_HEADER_CONFIG,
 };
 

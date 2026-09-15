@@ -73,6 +73,8 @@ export const surveys = pgTable(
     piiRetentionUntil: timestamp('pii_retention_until', { withTimezone: true }),
     maxResponses: integer('max_responses'),
     thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
+    // 자격미달 종료 문구 — NULL/빈 값이면 thankYouMessage 로 폴백 (0110, CONTEXT.md 「자격미달 종료 문구」)
+    screenedOutMessage: text('screened_out_message'),
 
     // 응답 페이지 헤더 프리셋 (0041 마이그레이션) — NULL = 기본형 폴백
     responseHeader: jsonb('response_header').$type<SurveyResponseHeaderConfig>(),

@@ -239,6 +239,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ? { piiRetentionUntil: retentionTimestampToDate(survey.piiRetentionUntil) }
         : {}),
       thankYouMessage: survey.thankYouMessage,
+      screenedOutMessage: survey.screenedOutMessage ?? null,
       requireInviteToken: survey.requireInviteToken,
       forceWideLayout: survey.forceWideLayout,
       priorWaveLabel: survey.priorWaveLabel,

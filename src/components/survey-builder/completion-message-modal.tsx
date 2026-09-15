@@ -21,20 +21,29 @@ export function CompletionMessageModal() {
   const [open, setOpen] = useState(false);
 
   const thankYouMessage = useSurveyBuilderStore((s) => s.currentSurvey.settings.thankYouMessage);
+  const screenedOutMessage = useSurveyBuilderStore(
+    (s) => s.currentSurvey.settings.screenedOutMessage ?? '',
+  );
   const updateSurveySettings = useSurveyBuilderStore((s) => s.updateSurveySettings);
 
   const [draftMessage, setDraftMessage] = useState(thankYouMessage);
+  const [draftScreenedOut, setDraftScreenedOut] = useState(screenedOutMessage);
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       // 열릴 때마다 최신 store 기준으로 재시드 — 이전 초안(취소로 폐기된 편집분 포함)은 버린다
       setDraftMessage(thankYouMessage);
+      setDraftScreenedOut(screenedOutMessage);
     }
     setOpen(next);
   };
 
   const handleSave = () => {
-    updateSurveySettings({ thankYouMessage: draftMessage });
+    updateSurveySettings({
+      thankYouMessage: draftMessage,
+      // 비우면 null — 완료 문구로 폴백한다(CONTEXT.md 「자격미달 종료 문구」)
+      screenedOutMessage: draftScreenedOut.trim() === '' ? null : draftScreenedOut,
+    });
     setOpen(false);
   };
 
@@ -74,6 +83,22 @@ export function CompletionMessageModal() {
             />
             <p className="text-xs text-gray-400">
               응답을 마친 참여자에게 보여지는 완료 화면의 문구입니다.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="screened-out-message">자격 미달 종료 멘트</Label>
+            <Textarea
+              id="screened-out-message"
+              value={draftScreenedOut}
+              onChange={(e) => setDraftScreenedOut(e.target.value)}
+              placeholder="본 조사 대상자가 아닙니다. 참여해주셔서 감사합니다."
+              rows={3}
+              className="resize-none"
+            />
+            <p className="text-xs text-gray-400">
+              분기 규칙의 「설문 종료 · 자격 미달」로 끝난 참여자에게 보여지는 문구입니다. 비워 두면
+              위 종료 멘트가 그대로 나옵니다. 제목은 「설문 종료」로 바뀝니다.
             </p>
           </div>
 

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/lib/group-ordering';
+import { type CompletionOutcome, outcomeFromStatus } from '@/lib/survey-response/completion-screen';
 import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
 import { isRelaxableIssueKind } from '@/lib/survey/admin-edit-required-relax';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
@@ -156,6 +157,8 @@ interface UseResponseLifecycleArgs {
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
   setIsCompleted: Dispatch<SetStateAction<boolean>>;
+  /** 종료 결과(완료·자격미달) — 완료 화면의 제목·문구가 갈린다. 서버가 돌려준 상태로 세운다. */
+  setCompletionOutcome?: Dispatch<SetStateAction<CompletionOutcome>>;
   /** 숫자 차단형 검증 위반 시 에러를 표시할 step index (컴포넌트 소유). */
   setNumericErrorStepIndex: (idx: number | null) => void;
 
@@ -248,6 +251,7 @@ export function useResponseLifecycle({
   setIsSubmitting,
   setCurrentStepIndex,
   setIsCompleted,
+  setCompletionOutcome,
   setNumericErrorStepIndex,
   buildOptTextsPayload,
 }: UseResponseLifecycleArgs): UseResponseLifecycleResult {
@@ -801,6 +805,7 @@ export function useResponseLifecycle({
 
       if (isPreview) {
         resetResponseState();
+        setCompletionOutcome?.('completed');
         setIsCompleted(true);
         return;
       }
@@ -809,6 +814,7 @@ export function useResponseLifecycle({
       // notice-only / optional-only / 분기로 visible 질문 0 인 설문은
       // handleResponse 가 한 번도 트리거되지 않아 응답 row 가 만들어지지 않는다.
       // 그 상태로 제출이 통과하면 silent data loss 가 되므로 여기서 빈 응답을 INSERT 한다.
+      let completionOutcome: CompletionOutcome = 'completed';
       let effectiveResponseId = currentResponseId;
       if (
         (!effectiveResponseId || (testIdentity !== null && !hasTestAttemptOwnership)) &&
@@ -950,9 +956,12 @@ export function useResponseLifecycle({
           setDuplicateStatus({ kind: 'blocked', reason: 'response_concluded' });
           return;
         }
+        // 서버가 분기 규칙을 재평가해 정한 종료 결과 — 자격미달이면 완료 화면 문구가 갈린다.
+        completionOutcome = outcomeFromStatus(completed?.status);
       }
 
       resetResponseState();
+      setCompletionOutcome?.(completionOutcome);
       setIsCompleted(true);
     } catch (error) {
       if (
