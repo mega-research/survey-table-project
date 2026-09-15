@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import type {
   ImportPriorAnswersResult,
+  PriorAnswerSheetFormat,
   SuggestPriorAnswerMappingResult,
 } from '@/shared/contracts/contacts-io';
 import {
@@ -25,6 +26,7 @@ import {
   useSuggestPriorAnswerMapping,
 } from '@/features/operations/queries/use-contacts';
 import { normalizeQuestionCode } from '@/lib/contacts/prior-answer-blocks';
+import { RAW_FORMAT_HEADER_ROWS } from '@/lib/contacts/raw-format-import';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
@@ -88,12 +90,39 @@ interface Props {
   existingPriorAnswerCount: number;
   /** 지금 쓰기가 향하는 파티션이 테스트인가. 명단 업로드와 달리 막지 않고 알린다. */
   isTestScope: boolean;
+  /**
+   * 대조 필드 후보 — 명단 컬럼 스킴의 attrs 열. 시스템ID·pii 는 담기지 않는다.
+   * 표시가 꺼진 열도 담는다: 표시는 화면에 보일지의 설정이지 대조에 쓸 수 있는지가 아니고,
+   * 클라이언트가 자기 파일을 만들어 오면 표시와 무관하게 그 값이 실려 온다.
+   */
+  matchFields: ReadonlyArray<{ key: string; label: string }>;
+}
+
+/**
+ * 대조 열 자동 추정 — 고른 대조 필드의 키(또는 라벨)와 같은 헤더를 찾는다. 없으면 첫 열.
+ * 확정은 사람이 한다. 파일 분석 시점에는 아직 필드를 안 골랐을 수 있어, 고른 뒤에도 다시 부른다.
+ */
+function guessMatchColumn(
+  headerRows: ReadonlyArray<ReadonlyArray<string>>,
+  attrsKey: string | null,
+  fieldLabel?: string | undefined,
+): number {
+  const codeRow = headerRows[headerRows.length - 2] ?? headerRows[0] ?? [];
+  const wanted = [attrsKey, fieldLabel]
+    .map((v) => v?.trim().toLowerCase())
+    .filter((v): v is string => Boolean(v));
+  for (const candidate of wanted) {
+    const hit = codeRow.findIndex((text) => text.trim().toLowerCase() === candidate);
+    if (hit >= 0) return hit;
+  }
+  return 0;
 }
 
 export function PriorAnswerImportWizard({
   surveyId,
   existingPriorAnswerCount,
   isTestScope,
+  matchFields,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('file');
@@ -101,7 +130,11 @@ export function PriorAnswerImportWizard({
   const [sheetName, setSheetName] = useState('');
   const [headerRowCount, setHeaderRowCount] = useState(1);
   const [preview, setPreview] = useState<SuggestPriorAnswerMappingResult | null>(null);
-  const [residColumnIndex, setResidColumnIndex] = useState<number | null>(null);
+  const [format, setFormat] = useState<PriorAnswerSheetFormat>('mapped');
+  const [matchColumnIndex, setMatchColumnIndex] = useState<number | null>(null);
+  const [matchAttrsKey, setMatchAttrsKey] = useState<string | null>(
+    matchFields.length === 1 ? (matchFields[0]?.key ?? null) : null,
+  );
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ImportPriorAnswersResult | null>(null);
   const [dryRunResult, setDryRunResult] = useState<ImportPriorAnswersResult | null>(null);
@@ -143,11 +176,13 @@ export function PriorAnswerImportWizard({
   const columnLabels = useMemo(() => {
     if (!preview) return [];
     const width = Math.max(0, ...preview.headerRows.map((row) => row.length));
-    return Array.from({ length: width }, (_, col) =>
-      preview.headerRows
-        .map((row) => (row[col] ?? '').trim())
-        .filter(Boolean)
-        .join(' · ') || `${col + 1}열`,
+    return Array.from(
+      { length: width },
+      (_, col) =>
+        preview.headerRows
+          .map((row) => (row[col] ?? '').trim())
+          .filter(Boolean)
+          .join(' · ') || `${col + 1}열`,
     );
   }, [preview]);
 
@@ -171,10 +206,18 @@ export function PriorAnswerImportWizard({
       // 보관된 값 대응을 되살린다. 시드하지 않으면 다음 세션에서 빈 상태로 시작해
       // "다시 올릴 때 재사용" 이 성립하지 않는다.
       setValueAliases(res.savedValueAliases);
-      // 시스템ID 열 자동 추정 — 확정은 사람이 한다.
-      const codeRow = res.headerRows[res.headerRows.length - 2] ?? res.headerRows[0] ?? [];
-      const guess = codeRow.findIndex((text) => /resid|시스템\s*id|아이디|번호/i.test(text));
-      setResidColumnIndex(guess >= 0 ? guess : 0);
+      // 3행에 이 설문의 SPSS 변수명이 보이면 우리 Raw 양식으로 추측한다. 확정은 사람이 한다.
+      if (res.looksLikeRawFormat) {
+        setFormat('raw');
+        setHeaderRowCount(RAW_FORMAT_HEADER_ROWS);
+      }
+      setMatchColumnIndex(
+        guessMatchColumn(
+          res.headerRows,
+          matchAttrsKey,
+          matchFields.find((f) => f.key === matchAttrsKey)?.label,
+        ),
+      );
       setDryRunResult(null);
       setStep('mapping');
     } catch (err) {
@@ -195,13 +238,14 @@ export function PriorAnswerImportWizard({
   }
 
   async function run(dryRun: boolean) {
-    if (!file || residColumnIndex === null || !preview) return;
+    if (!file || matchColumnIndex === null || !matchAttrsKey || !preview) return;
     setError(null);
     try {
       // 확정 보관은 **실행할 때만** 한다. 미리보기가 서버 설정을 바꾸면, 사람이 검토하지도
       // 않은 자동 제안이 확정으로 굳고 실행을 포기해도 남는다. 미리보기에서 이어준 값은
       // 요청에 실어 보내 저장 없이 결과에 반영한다.
-      if (!dryRun) {
+      // raw 양식은 사람이 이은 것이 없다 — 보관할 확정도 없다.
+      if (!dryRun && format === 'mapped') {
         const blockMappings: Record<string, { questionId: string; label: string }> = {};
         preview.blocks.forEach((block, index) => {
           const questionId = mapping[String(index)];
@@ -218,7 +262,9 @@ export function PriorAnswerImportWizard({
         file,
         sheetName,
         headerRowCount,
-        residColumnIndex,
+        format,
+        matchColumnIndex,
+        matchAttrsKey,
         mapping,
         valueAliases,
         dryRun,
@@ -244,8 +290,8 @@ export function PriorAnswerImportWizard({
 
       {isTestScope && (
         <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-          테스트 모드입니다 — 이월 응답이 <strong>테스트 조사 대상</strong>에게 붙습니다.
-          실제 조사 대상에게 붙이려면 테스트 모드를 끄고 다시 오세요.
+          테스트 모드입니다 — 이월 응답이 <strong>테스트 조사 대상</strong>에게 붙습니다. 실제 조사
+          대상에게 붙이려면 테스트 모드를 끄고 다시 오세요.
         </div>
       )}
 
@@ -256,14 +302,14 @@ export function PriorAnswerImportWizard({
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-slate-600">
-              지난 회차 응답 rawdata 엑셀(.xlsx)을 그대로 올립니다. 조사 대상 명단은 이미
-              올라와 있어야 하며, 이 화면은 명단을 건드리지 않습니다 — 개별 링크와 이미
-              수집된 응답은 그대로입니다.
+              지난 회차 응답 rawdata 엑셀(.xlsx)을 그대로 올립니다. 조사 대상 명단은 이미 올라와
+              있어야 하며, 이 화면은 명단을 건드리지 않습니다 — 개별 링크와 이미 수집된 응답은
+              그대로입니다.
             </p>
             {existingPriorAnswerCount > 0 && (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                이미 {existingPriorAnswerCount.toLocaleString()}명에게 이월 응답이 붙어
-                있습니다. 다시 올리면 이번 파일에서 값이 만들어진 대상만 통째로 교체됩니다.
+                이미 {existingPriorAnswerCount.toLocaleString()}명에게 이월 응답이 붙어 있습니다.
+                다시 올리면 이번 파일에서 값이 만들어진 대상만 통째로 교체됩니다.
               </p>
             )}
             <input
@@ -307,6 +353,34 @@ export function PriorAnswerImportWizard({
                   <X className="h-4 w-4" />
                 </button>
               </div>
+              <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <Label htmlFor="prior-format">파일 양식</Label>
+                <Select
+                  value={format}
+                  onValueChange={(v) => {
+                    const next = v as PriorAnswerSheetFormat;
+                    setFormat(next);
+                    // Raw 양식은 헤더가 3행으로 고정이다 (제목 / 셀·옵션 라벨 / 변수명).
+                    if (next === 'raw') setHeaderRowCount(RAW_FORMAT_HEADER_ROWS);
+                  }}
+                >
+                  <SelectTrigger id="prior-format">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="raw">우리 Raw Data 양식</SelectItem>
+                    <SelectItem value="mapped">임의 엑셀 (문항 잇기)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">
+                  {format === 'raw'
+                    ? '3행의 변수명으로 열을 알아봅니다. 문항을 이어줄 필요가 없습니다.'
+                    : '헤더의 문항코드로 블록을 나눠 아래에서 사람이 문항에 이어줍니다.'}
+                  {preview.looksLikeRawFormat
+                    ? ' 이 파일 3행에서 이 설문의 변수명이 보입니다.'
+                    : ' 이 파일 3행에서는 이 설문의 변수명을 찾지 못했습니다.'}
+                </p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="prior-sheet">시트</Label>
@@ -348,24 +422,68 @@ export function PriorAnswerImportWizard({
                   </p>
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="prior-resid">조사 대상을 찾을 열 (시스템ID)</Label>
-                <Select
-                  value={residColumnIndex === null ? UNMAPPED : String(residColumnIndex)}
-                  onValueChange={(v) => setResidColumnIndex(v === UNMAPPED ? null : Number(v))}
-                >
-                  <SelectTrigger id="prior-resid">
-                    <SelectValue placeholder="열 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UNMAPPED}>선택 안 함</SelectItem>
-                    {columnLabels.map((label, col) => (
-                      <SelectItem key={col} value={String(col)}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="prior-match-column">조사 대상을 찾을 열</Label>
+                  <Select
+                    value={matchColumnIndex === null ? UNMAPPED : String(matchColumnIndex)}
+                    onValueChange={(v) => setMatchColumnIndex(v === UNMAPPED ? null : Number(v))}
+                  >
+                    <SelectTrigger id="prior-match-column">
+                      <SelectValue placeholder="열 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNMAPPED}>선택 안 함</SelectItem>
+                      {columnLabels.map((label, col) => (
+                        <SelectItem key={col} value={String(col)}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    올린 파일에서 대조값이 들어 있는 열입니다.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="prior-match-field">명단에서 맞출 항목</Label>
+                  <Select
+                    value={matchAttrsKey ?? UNMAPPED}
+                    onValueChange={(v) => {
+                      const key = v === UNMAPPED ? null : v;
+                      setMatchAttrsKey(key);
+                      // 항목을 고른 뒤에야 헤더 이름과 맞춰볼 수 있다 — 파일 분석 시점에는
+                      // 아직 null 이라 항상 첫 열로 떨어진다.
+                      if (key && preview) {
+                        setMatchColumnIndex(
+                          guessMatchColumn(
+                            preview.headerRows,
+                            key,
+                            matchFields.find((f) => f.key === key)?.label,
+                          ),
+                        );
+                      }
+                    }}
+                    disabled={matchFields.length === 0}
+                  >
+                    <SelectTrigger id="prior-match-field">
+                      <SelectValue placeholder="항목 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNMAPPED}>선택 안 함</SelectItem>
+                      {matchFields.map((field) => (
+                        <SelectItem key={field.key} value={field.key}>
+                          {field.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    {matchFields.length === 0
+                      ? '명단에 대조에 쓸 항목이 없습니다. 조사 대상을 먼저 올리세요.'
+                      : '같은 값이 명단에 둘 이상 있는 대상은 붙이지 않고 결과에 나열합니다.'}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -373,112 +491,132 @@ export function PriorAnswerImportWizard({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                문항 블록 잇기 · {mappedCount}/{preview.blocks.length}
+                {format === 'raw'
+                  ? '적재'
+                  : `문항 블록 잇기 · ${mappedCount}/${preview.blocks.length}`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-slate-600">
-                문항코드 행이 가로 병합된 구간이 한 문항의 컬럼 블록입니다. 코드가 맞는
-                블록은 자동으로 이어져 있고, 표 칸·복수응답 보기·순위 자리까지 한 번에
-                배정됩니다. 틀린 것만 고치세요.
-              </p>
-              <div className="max-h-[28rem] overflow-y-auto rounded-md border border-gray-200">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-gray-50 text-left text-xs text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2">문항코드</th>
-                      <th className="px-3 py-2">세부 라벨</th>
-                      <th className="px-3 py-2">첫 행 값</th>
-                      <th className="px-3 py-2">문항</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.blocks.map((block, index) => {
-                      const key = String(index);
-                      const firstRow = preview.rows[0] ?? [];
-                      const badge = block.fromSavedConfig ? undefined : verdictBadge(block);
-                      return (
-                        <tr key={key} className="border-t border-gray-100 align-top">
-                          <td className="px-3 py-2 font-medium text-gray-900">
-                            {block.code}
-                            {block.columnIndexes.length > 1 && (
-                              <span className="ml-1 text-xs font-normal text-slate-500">
-                                {block.columnIndexes.length}칸
-                              </span>
-                            )}
-                            {block.part && (
-                              <div className="text-xs font-normal text-slate-400">{block.part}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {block.label || block.detailLabels.filter(Boolean).join(', ')}
-                          </td>
-                          <td className="px-3 py-2 text-slate-500">
-                            {block.columnIndexes.map((col) => firstRow[col] ?? '').join(' / ')}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Select
-                              value={mapping[key] ?? UNMAPPED}
-                              onValueChange={(next) =>
-                                setMapping((prev) => {
-                                  const copy = { ...prev };
-                                  if (next === UNMAPPED) delete copy[key];
-                                  else copy[key] = next;
-                                  return copy;
-                                })
-                              }
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="잇지 않음" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={UNMAPPED}>잇지 않음</SelectItem>
-                                {preview.questions.map((q) => (
-                                  <SelectItem key={q.id} value={q.id}>
-                                    {q.questionCode ? `${q.questionCode} · ` : ''}
-                                    {q.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {badge && (
-                              <p className={`mt-1 rounded border px-2 py-1 text-xs ${badge.className}`}>
-                                {badge.label}
-                                {block.conflictQuestionId && (
-                                  <>
-                                    {' ('}
-                                    코드가 가리킨 문항: {questionTitle(block.conflictQuestionId)}
-                                    {')'}
-                                  </>
-                                )}
-                              </p>
-                            )}
-                            {/* 배지가 없는 unmapped 에도 사유가 실린다 — 후보 여럿을 제목으로 못 가른 블록의
-                                후보 목록이 그것이라, 배지에 묶으면 담당자가 고를 목록을 못 본다. */}
-                            {block.verdictReason && (
-                              <p className="mt-1 text-xs text-slate-500">{block.verdictReason}</p>
-                            )}
-                            {block.fromSavedConfig && (
-                              <p className="mt-1 text-xs text-slate-500">지난 확정 그대로</p>
-                            )}
-                            {mapping[key] && (
-                              <p className="mt-1 text-xs text-slate-500">
-                                칸 배정: {block.slotLabels.join(' / ')}
-                              </p>
-                            )}
-                            {mapping[key] && block.unmatchedSlots > 0 && (
-                              <p className="mt-1 text-xs text-amber-700">
-                                {block.unmatchedSlots}칸은 어느 자리인지 정하지 못했습니다 —
-                                그 칸의 값은 들어가지 않습니다.
-                              </p>
-                            )}
-                          </td>
+              {format === 'raw' && (
+                <p className="text-sm text-slate-600">
+                  3행의 SPSS 변수명으로 열을 알아봅니다. 이어줄 것이 없으니 바로 미리보기를 돌려
+                  보세요. 이 설문의 변수명과 맞지 않는 열, 규칙상 되읽지 않는 열(변동 확인·공지
+                  동의), 아직 되돌릴 수 없는 열은 결과에 목록으로 나옵니다.
+                </p>
+              )}
+              {format === 'mapped' && (
+                <>
+                  <p className="text-sm text-slate-600">
+                    문항코드 행이 가로 병합된 구간이 한 문항의 컬럼 블록입니다. 코드가 맞는 블록은
+                    자동으로 이어져 있고, 표 칸·복수응답 보기·순위 자리까지 한 번에 배정됩니다. 틀린
+                    것만 고치세요.
+                  </p>
+                  <div className="max-h-[28rem] overflow-y-auto rounded-md border border-gray-200">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-50 text-left text-xs text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">문항코드</th>
+                          <th className="px-3 py-2">세부 라벨</th>
+                          <th className="px-3 py-2">첫 행 값</th>
+                          <th className="px-3 py-2">문항</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {preview.blocks.map((block, index) => {
+                          const key = String(index);
+                          const firstRow = preview.rows[0] ?? [];
+                          const badge = block.fromSavedConfig ? undefined : verdictBadge(block);
+                          return (
+                            <tr key={key} className="border-t border-gray-100 align-top">
+                              <td className="px-3 py-2 font-medium text-gray-900">
+                                {block.code}
+                                {block.columnIndexes.length > 1 && (
+                                  <span className="ml-1 text-xs font-normal text-slate-500">
+                                    {block.columnIndexes.length}칸
+                                  </span>
+                                )}
+                                {block.part && (
+                                  <div className="text-xs font-normal text-slate-400">
+                                    {block.part}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-slate-500">
+                                {block.label || block.detailLabels.filter(Boolean).join(', ')}
+                              </td>
+                              <td className="px-3 py-2 text-slate-500">
+                                {block.columnIndexes.map((col) => firstRow[col] ?? '').join(' / ')}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Select
+                                  value={mapping[key] ?? UNMAPPED}
+                                  onValueChange={(next) =>
+                                    setMapping((prev) => {
+                                      const copy = { ...prev };
+                                      if (next === UNMAPPED) delete copy[key];
+                                      else copy[key] = next;
+                                      return copy;
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue placeholder="잇지 않음" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={UNMAPPED}>잇지 않음</SelectItem>
+                                    {preview.questions.map((q) => (
+                                      <SelectItem key={q.id} value={q.id}>
+                                        {q.questionCode ? `${q.questionCode} · ` : ''}
+                                        {q.title}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {badge && (
+                                  <p
+                                    className={`mt-1 rounded border px-2 py-1 text-xs ${badge.className}`}
+                                  >
+                                    {badge.label}
+                                    {block.conflictQuestionId && (
+                                      <>
+                                        {' ('}
+                                        코드가 가리킨 문항:{' '}
+                                        {questionTitle(block.conflictQuestionId)}
+                                        {')'}
+                                      </>
+                                    )}
+                                  </p>
+                                )}
+                                {/* 배지가 없는 unmapped 에도 사유가 실린다 — 후보 여럿을 제목으로 못 가른 블록의
+                                후보 목록이 그것이라, 배지에 묶으면 담당자가 고를 목록을 못 본다. */}
+                                {block.verdictReason && (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {block.verdictReason}
+                                  </p>
+                                )}
+                                {block.fromSavedConfig && (
+                                  <p className="mt-1 text-xs text-slate-500">지난 확정 그대로</p>
+                                )}
+                                {mapping[key] && (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    칸 배정: {block.slotLabels.join(' / ')}
+                                  </p>
+                                )}
+                                {mapping[key] && block.unmatchedSlots > 0 && (
+                                  <p className="mt-1 text-xs text-amber-700">
+                                    {block.unmatchedSlots}칸은 어느 자리인지 정하지 못했습니다 — 그
+                                    칸의 값은 들어가지 않습니다.
+                                  </p>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
 
               {dryRunResult && (
                 <ImportSummary
@@ -494,18 +632,25 @@ export function PriorAnswerImportWizard({
                 <Button
                   variant="outline"
                   onClick={() => void run(true)}
-                  disabled={residColumnIndex === null || runImport.isPending}
+                  disabled={matchColumnIndex === null || !matchAttrsKey || runImport.isPending}
                 >
                   실행 전 미리보기
                 </Button>
                 <Button
                   onClick={() => void run(false)}
-                  disabled={residColumnIndex === null || mappedCount === 0 || runImport.isPending}
+                  disabled={
+                    matchColumnIndex === null ||
+                    !matchAttrsKey ||
+                    (format === 'mapped' && mappedCount === 0) ||
+                    runImport.isPending
+                  }
                 >
                   {runImport.isPending ? '적재 중...' : '이월 응답 넣기'}
                 </Button>
-                {residColumnIndex === null && (
-                  <span className="text-xs text-red-500">시스템ID 열을 먼저 고르세요</span>
+                {(matchColumnIndex === null || !matchAttrsKey) && (
+                  <span className="text-xs text-red-500">
+                    대조할 열과 명단 항목을 먼저 고르세요
+                  </span>
                 )}
               </div>
             </CardContent>
@@ -560,17 +705,58 @@ function ImportSummary({
 }) {
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Stat label="시트에서 읽은 대상" value={result.parsedTargets} />
         <Stat label="명단에서 찾음" value={result.matched} />
-        <Stat label="명단에 없음" value={result.unmatched} tone={result.unmatched > 0 ? 'warn' : 'plain'} />
-        <Stat label="시스템ID 빈 행" value={result.emptyResidRows} tone={result.emptyResidRows > 0 ? 'warn' : 'plain'} />
+        <Stat
+          label="명단에 없음"
+          value={result.unmatched}
+          tone={result.unmatched > 0 ? 'warn' : 'plain'}
+        />
+        <Stat
+          label="모호해서 뺌"
+          value={result.skippedAmbiguous}
+          tone={result.skippedAmbiguous > 0 ? 'warn' : 'plain'}
+        />
+        <Stat
+          label="대조값 빈 행"
+          value={result.emptyMatchRows}
+          tone={result.emptyMatchRows > 0 ? 'warn' : 'plain'}
+        />
       </div>
 
-      {result.duplicateResidRows > 0 && (
+      {result.duplicateMatchValues.length > 0 && (
         <p className="text-amber-800">
-          같은 시스템ID 가 {result.duplicateResidRows.toLocaleString()}번 다시 나와 뒤 행이
-          앞 행을 덮었습니다.
+          올린 파일에 두 번 이상 나와 붙이지 않은 값: {result.duplicateMatchValues.join(', ')}
+          {' — '}어느 행이 맞는지 알 수 없어 양쪽 다 뺐습니다.
+        </p>
+      )}
+
+      {result.ambiguousMatchValues.length > 0 && (
+        <p className="text-amber-800">
+          명단에 같은 값을 가진 조사 대상이 둘 이상이라 붙이지 않은 값:{' '}
+          {result.ambiguousMatchValues.join(', ')}
+          {' — '}명단을 고치거나 다른 항목으로 대조하세요.
+        </p>
+      )}
+
+      {result.unknownVarNames.length > 0 && (
+        <p className="text-amber-800">
+          이 설문의 변수명과 맞지 않아 건너뛴 열: {result.unknownVarNames.join(', ')}
+          {' — '}지난 회차 설문에서 뽑은 파일이거나 문항 변수명이 바뀐 경우입니다.
+        </p>
+      )}
+
+      {result.unsupportedVarNames.length > 0 && (
+        <p className="text-amber-800">
+          아직 되돌릴 수 없는 열 종류라 건너뛴 열: {result.unsupportedVarNames.join(', ')}
+        </p>
+      )}
+
+      {result.skippedByRuleVarNames.length > 0 && (
+        <p className="text-slate-600">
+          규칙상 되읽지 않은 열: {result.skippedByRuleVarNames.join(', ')}
+          {' — '}변동 확인은 이번 회차 행위 기록이고, 공지 동의는 이번 회차에 다시 받습니다.
         </p>
       )}
 
@@ -581,10 +767,10 @@ function ImportSummary({
         </p>
       )}
 
-      {result.unmatchedResids.length > 0 && (
+      {result.unmatchedMatchValues.length > 0 && (
         <p className="text-slate-600">
-          명단에서 찾지 못한 번호: {result.unmatchedResids.join(', ')}
-          {result.unmatched > result.unmatchedResids.length && ' 외'}
+          명단에서 찾지 못한 값: {result.unmatchedMatchValues.join(', ')}
+          {result.unmatched > result.unmatchedMatchValues.length && ' 외'}
         </p>
       )}
 
@@ -598,16 +784,12 @@ function ImportSummary({
               <li
                 key={m.questionId}
                 className={`rounded border px-3 py-2 ${
-                  m.rate >= 0.2
-                    ? 'border-red-200 bg-red-50'
-                    : 'border-amber-200 bg-amber-50/60'
+                  m.rate >= 0.2 ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50/60'
                 }`}
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-medium text-gray-900">{questionLabel(m.questionId)}</span>
-                  <span
-                    className={m.rate >= 0.2 ? 'font-semibold text-red-700' : 'text-amber-800'}
-                  >
+                  <span className={m.rate >= 0.2 ? 'font-semibold text-red-700' : 'text-amber-800'}>
                     {Math.round(m.rate * 100)}% 실패 · {m.unmatched}/{m.total}건
                   </span>
                 </div>
@@ -616,8 +798,8 @@ function ImportSummary({
                   // 높다 — 코드가 같은데 파트가 재편돼 내용이 바뀐 경우(2025 HQ1 과정 도움도 →
                   // 2026 HQ1 창업 의향). 코드 칸에 문항 내용이 없는 파일에서는 이 신호가 유일하다.
                   <p className="mt-1 text-xs font-semibold text-red-700">
-                    한 건도 맞지 않습니다 — 코드는 같지만 다른 문항일 수 있습니다. 블록의 세부 라벨과
-                    값을 문항 제목과 비교해 보세요.
+                    한 건도 맞지 않습니다 — 코드는 같지만 다른 문항일 수 있습니다. 블록의 세부
+                    라벨과 값을 문항 제목과 비교해 보세요.
                   </p>
                 )}
                 <ul className="mt-1 space-y-1">
@@ -683,7 +865,9 @@ function Stat({
   return (
     <div>
       <div className="text-xs text-slate-500">{label}</div>
-      <div className={tone === 'warn' ? 'font-semibold text-amber-700' : 'font-semibold text-gray-900'}>
+      <div
+        className={tone === 'warn' ? 'font-semibold text-amber-700' : 'font-semibold text-gray-900'}
+      >
         {value.toLocaleString()}
       </div>
     </div>

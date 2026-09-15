@@ -19,6 +19,31 @@ export function isUnexpectedRpcError(error: unknown): boolean {
   return !isDefinedError(error);
 }
 
+/**
+ * Sentry 로 보낼 가치가 있는 RPC 에러인지 — 코드가 있는 ORPCError(UNAUTHORIZED·FORBIDDEN·
+ * TOO_MANY_REQUESTS·BAD_REQUEST 등)는 예상된 거부라 로그로 충분하고, Sentry 에 쌓이면
+ * 진짜 장애(INTERNAL_SERVER_ERROR·비-ORPCError 예외)가 묻힌다.
+ */
+export function isSentryWorthyRpcError(error: unknown): boolean {
+  if (!isUnexpectedRpcError(error)) return false;
+  return !(error instanceof ORPCError) || error.code === 'INTERNAL_SERVER_ERROR';
+}
+
+/**
+ * Sentry 캡처 표식 — 로깅 미들웨어(procedure 안, 태그 있음)와 핸들러 인터셉터(procedure 밖,
+ * 디코드·라우팅 예외까지)가 같은 예외를 두 번 보내지 않게 한다. 객체가 아닌 throw 값은 표식을
+ * 못 남기므로 인터셉터가 한 번 더 보낼 수 있다 — 드물고 무해하다.
+ */
+const sentryCaptured = new WeakSet<object>();
+
+export function markSentryCaptured(error: unknown): void {
+  if (error !== null && typeof error === 'object') sentryCaptured.add(error);
+}
+
+export function isSentryCaptured(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && sentryCaptured.has(error);
+}
+
 /** 에러의 사람이 읽을 수 있는 요약. name 을 붙여 어떤 예외인지 바로 드러낸다. */
 function describe(error: unknown): string {
   if (error instanceof Error) return `${error.name}: ${error.message}`;

@@ -1,5 +1,6 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
+import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 // contracts 정의를 그대로 되내보낸다 — 정의는 shared/contracts 한 곳뿐이라 드리프트가
@@ -9,6 +10,8 @@ import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
 export { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 export type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+export { INPUT_TYPES, isInputType } from '@/types/input-type';
+export type { InputType } from '@/types/input-type';
 
 export type QuestionType =
   | 'text'
@@ -39,6 +42,10 @@ export interface RankingConfig {
   // undefined/1 = 세로 1열(기본) / 0 = 가로(wrap) / N ≥ 2 = N열 그리드.
   // 일반 options 레이아웃(question.optionsColumns) 과 분리.
   positionsColumns?: number;
+  // 응답 입력 방식 (질문 레벨 전용, 표 안 ranking 셀은 항상 드롭다운):
+  // - undefined | 'dropdown' (기본): 순위마다 드롭다운
+  // - 'click': 보기를 눌러 순위를 매김 (요약 칩 + 순위초기화). allowDuplicateRanks 와 배타 — 켜져 있으면 드롭다운
+  inputMode?: 'dropdown' | 'click';
 }
 
 // 순위형 응답 단일 항목
@@ -112,6 +119,18 @@ export type NumberUnit =
   | 'tenMillion' // 천만 (1e7)
   | 'hundredMillion' // 억 (1e8)
   | 'percent'; // % — 배수·환산 표시 없음. 빌더에서 max=100 프리셋
+
+/**
+ * 단답형·장문형 응답 품질 검사 설정 (questions.text_validation JSONB).
+ * - minLength: 공백을 뺀 최소 글자 수. 양의 정수만 뜻이 있다.
+ * - maxLength: 입력 상한(공백 포함, 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시).
+ * - rejectMeaningless: 자음·모음·숫자만인 입력(ㅋㅋㅋ · 123124) 거부.
+ */
+export interface TextValidation {
+  minLength?: number;
+  maxLength?: number;
+  rejectMeaningless?: boolean;
+}
 
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
@@ -292,9 +311,14 @@ export interface QuestionOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -333,25 +357,64 @@ export interface CalcCellValidation {
 export type CellEnableCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
   | { kind: 'filled'; controllerCellId: string }
-  | { kind: 'numeric'; controllerCellId: string; op: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
+  /**
+   * 보기 옵션(choice_opt) 셀이 선택되면 활성 — 보기 소스 표 전용. 컨트롤러 값은 셀이 아니라
+   * 문항 응답(선택된 보기 id 집합)에 있으므로 평가기에 그 집합을 따로 넘긴다.
+   */
+  | { kind: 'choice-selected'; controllerCellId: string }
+  | {
+      kind: 'numeric';
+      controllerCellId: string;
+      op: '>' | '>=' | '<' | '<=' | '==' | '!=';
+      value: number;
+    };
 
 export interface TableCell {
   id: string;
   textBold?: boolean;
+  /**
+   * 첫 줄만 굵게 — "제목 한 줄 + 설명 여러 줄" 칸용. `textBold`(셀 전체)와 배타이며
+   * 빌더가 한쪽만 켜지도록 3지선다로 낸다. 저장값은 여전히 평문이라 내보내기·SPSS
+   * 라벨·토큰 치환은 무변경이다.
+   */
+  boldFirstLine?: boolean;
   backgroundColor?: string;
   textColor?: string;
   cellCode?: string; // ✨ 셀 코드 (예: "Q4-1_r1_c1") — 자동생성 또는 수동 입력
   isCustomCellCode?: boolean; // 사용자가 수동 편집한 셀코드인지 여부
   exportLabel?: string; // ✨ 엑셀 열 이름 (예: "가구TV보유_TV종류_UHD")
   isCustomExportLabel?: boolean; // 사용자가 수동 편집한 라벨인지 여부
+  /**
+   * 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 셀과 다음 셀이 한 칸처럼 이어져 보인다
+   * (년 칸 | 월 칸 처럼 입력칸 둘을 나란히 둘 때). 빌더 편집 격자는 셀 경계를 보여야 해서 그대로 그린다.
+   */
+  hideRightBorder?: boolean;
   // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
   choiceGroupId?: string;
+  /**
+   * 단독 선택 보기 (choice_opt 셀, 체크박스 그룹 전용 — CONTEXT.md). 범위는 이 셀이 속한 그룹이다.
+   * QuestionOption.exclusiveChoice 와 같은 규칙(`lib/survey/exclusive-choice.ts`)을 탄다.
+   */
+  exclusiveChoice?: boolean;
+  /**
+   * 단독 선택 보기의 범위 — 미지정·'group' 이면 속한 그룹만, 'table' 이면 이 표의 모든 그룹.
+   * 「없음」 열이 하나뿐인 표에서 한 번에 두 열을 비울 때 쓴다. 표 전체면 필수 판정도 표의 그룹
+   * 전부를 충족한 것으로 본다(다른 그룹이 비어 있어도 「다음」이 막히지 않는다).
+   */
+  exclusiveScope?: 'group' | 'table';
   // SPSS 변수 타입 / 측정 수준 (셀 단위)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
   // SPSS 숫자코드 (ranking_opt 셀이 Case 2 옵션 소스로 쓰일 때 사용. 비어있으면 1-based 인덱스 자동)
   spssNumericCode?: number;
   content: string;
+  /**
+   * 셀 본문의 서식본(HTML) — 글자 일부에 색·굵게를 준 경우에만 채운다. `content` 는 여전히
+   * 같은 글의 **평문**이라 내보내기·SPSS 라벨·보기 라벨·행 높이 측정·행 라벨 비교는 무변경이고,
+   * 화면 표시(CellText)만 이 서식본을 우선한다. 서식이 없으면 키를 두지 않는다.
+   * 허용 마크는 굵게(strong)·글자색(span style=color)뿐이고, 문단은 `content` 의 줄바꿈과 1:1 이다.
+   */
+  contentHtml?: string;
   imageUrl?: string;
   videoUrl?: string;
   type:
@@ -381,10 +444,23 @@ export interface TableCell {
   // input 관련 속성
   placeholder?: string; // 단문형 입력 필드 placeholder
   inputMaxLength?: number; // 단문형 입력 필드 최대 길이
+  /**
+   * 여러 줄 입력 높이(줄 수). 미지정·1 이면 한 줄 `<input>`, 2 이상이면 `<textarea>`.
+   *
+   * 새 셀 타입을 만들지 않고 `input` 셀의 옵션으로 둔다 — 값 저장 형태(문자열)·필수 검증·
+   * 내보내기 변수·게이팅·PII 암호화·placeholder 가 전부 같고, 다른 건 그리는 높이뿐이다.
+   * 숫자 모드·입력 형식과는 배타다(전화번호에 줄바꿈이 들어갈 자리가 없다).
+   */
+  inputRows?: number;
+  /**
+   * 입력칸 너비(px). 미지정이면 셀 폭 전체. 지정하면 그 너비로 고정되고 셀의 가로 정렬을 따르며,
+   * 오른쪽 단위 글자(년·월)가 입력칸 바로 뒤에 붙는다. 모바일 카드는 무시하고 폭 전체를 쓴다.
+   */
+  inputWidth?: number;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
   // piiEncrypted 와 같은 규칙, ADR-0012). 저장 경로는 스냅샷 ∪ 라이브 셀 플래그 합집합.
   piiEncrypted?: boolean;
@@ -393,6 +469,8 @@ export interface TableCell {
   emptyDefault?: number;
   // 숫자 input 셀 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat;
+  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, utils/text-quality)
+  textValidation?: TextValidation | null;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
   // 필수 셀 미응답 안내 문구 — 미지정 시 기본 문구 사용
@@ -426,7 +504,7 @@ export interface TableCell {
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
   // 셀 병합 관련 속성
@@ -455,6 +533,13 @@ export interface TableCell {
   // 비어 있으면 exportLabel(엑셀 라벨) → 열 제목 순으로 폴백한다.
   // 순수 표시용 — SPSS/엑셀 export 라벨에는 관여하지 않는다.
   mobileLabel?: string;
+  /**
+   * 보기 소스 표의 text 셀 전용 — 같은 행 보기 중 상세 기재가 켜지고 **선택된** 것의 입력칸을
+   * 표 아래 스택 대신 이 셀 안에 가로로 나란히 그린다(하나면 100%, 둘이면 50:50). 아무것도
+   * 안 골랐으면 셀 텍스트를 그대로 보여준다. 값 저장은 여전히 `__optTexts__` 사이드카라
+   * 데이터·검증·내보내기 무변경. 모바일 카드는 카드 아래 스택 그대로다.
+   */
+  optionTextSlot?: boolean;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
   /**
@@ -502,9 +587,14 @@ export interface CheckboxOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -530,9 +620,14 @@ export interface RadioOption {
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
-  textInputType?: 'text' | 'number';
+  textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
   textInputNumberFormat?: NumberFormat;
+  /**
+   * 단독 선택 보기 (CONTEXT.md) — 체크박스 문항에서 이것을 고르면 나머지가 풀리고, 다른 보기를
+   * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
+   */
+  exclusiveChoice?: boolean;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기
@@ -551,6 +646,33 @@ export interface TableRow {
   displayCondition?: QuestionConditionGroup; // 행 표시 조건
   dynamicGroupId?: string; // 소속 동적 그룹 ID (undefined = 항상 표시)
   showWhenDynamicGroupId?: string; // 이 그룹에 선택 있으면 함께 표시 (소계 행용)
+  /**
+   * 행 반복(rowRepeatConfig)으로 펼쳐진 벌 번호 (1..maxRepeats). 없으면 비반복 행.
+   * 1벌은 템플릿 행 자체다 — 펼치기가 원본 행에 1을 붙인다.
+   */
+  repeatIndex?: number;
+  /** 이 행이 복제된 원본 템플릿 행 id. 1벌은 자기 자신을 가리킨다. */
+  repeatSourceRowId?: string;
+}
+
+/**
+ * 행 반복 설정 (테이블 타입 전용) — 응답자가 `+` 로 같은 모양의 행 묶음을 늘린다.
+ *
+ * 동적 행 그룹(DynamicRowGroupConfig)과 의미가 다르다: 저쪽은 빌더가 만들어 둔 행 풀에서
+ * 응답자가 고르는 것이고, 이쪽은 같은 칸을 원하는 벌 수만큼 반복하는 것이다. 설정은
+ * 분리하고 렌더 파이프라인만 공유한다.
+ *
+ * 구조에는 저장 시점에 maxRepeats 벌까지 실제로 펼쳐 둔다 — 응답값 키가 발행 스냅샷 안의
+ * cell.id 로 유지되어 저장·검증·내보내기·이월 임포트가 전부 무변경이다.
+ */
+export interface RowRepeatConfig {
+  enabled: boolean;
+  /** 반복 단위가 되는 연속 행 묶음 — 원본 1벌의 행 id 목록 */
+  templateRowIds: string[];
+  /** 최대 반복 벌 수 (기본 20) */
+  maxRepeats: number;
+  /** 추가 버튼 문구 (기본 '행 추가') */
+  addLabel?: string;
 }
 
 // 동적 행 그룹 설정
@@ -570,9 +692,9 @@ export interface DynamicRowGroupConfig {
  */
 export interface ChoiceGroup {
   id: string;
-  groupKey: string;                        // 변수명 식별자: rad1/cb1/rnk1. 자동 발번 + 수동 오버라이드.
+  groupKey: string; // 변수명 식별자: rad1/cb1/rnk1. 자동 발번 + 수동 오버라이드.
   type: 'radio' | 'checkbox' | 'ranking';
-  label: string;                           // 그룹 제목 - SPSS 변수 라벨 접두
+  label: string; // 그룹 제목 - SPSS 변수 라벨 접두
   minSelections?: number;
   maxSelections?: number;
   // 그룹별 필수 오버라이드 — 미설정이면 질문 레벨 required 를 따른다.
@@ -680,11 +802,14 @@ export interface Question {
   // 단답형 prefill 템플릿 — {{attrs_key}} 포함 가능. (0022 마이그레이션)
   defaultValueTemplate?: string | null;
   // 단답형 숫자 입력 모드 — 셀 input 과 동일 의미. 'number' 면 응답자가 숫자만 입력 가능.
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   // 숫자 모드 첫 진입 시 입력란 자동 채움 값(선택). 토큰 prefill 없을 때만 적용.
   emptyDefault?: number;
   // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat | null;
+  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (utils/text-quality).
+  // 숫자 모드·입력 형식과 배타(그쪽은 자기 검사가 있다). NULL = 검사 없음(기존 전부).
+  textValidation?: TextValidation | null;
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
   piiEncrypted?: boolean;
   // 테이블 검증 규칙 (테이블 타입 전용)
@@ -693,8 +818,15 @@ export interface Question {
   sumConstraints?: SumConstraint[] | null;
   // 동적 행 그룹 설정 (테이블 타입 전용)
   dynamicRowConfigs?: DynamicRowGroupConfig[];
+  // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다
+  rowRepeatConfig?: RowRepeatConfig | null;
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
+  /**
+   * 좌측 고정 열 개수 (표를 그리는 문항 전용). null/undefined = 자동 판정(기존 동작),
+   * 0 = 고정 안 함, 1~3 = 앞에서 그 개수만큼 강제 고정.
+   */
+  stickyColumnCount?: number | null;
   /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */
   exportCellOrder?: 'row-first' | 'column-first';
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
@@ -711,6 +843,18 @@ export interface Question {
   pageBreakBefore?: boolean;
   // 질문 표시 조건 (이 질문을 표시하기 위한 조건)
   displayCondition?: QuestionConditionGroup;
+  /**
+   * 이월값 불러오기 조건 (추적조사). 표시 조건과 별개 축 — 표시 조건은 문항을 보일지,
+   * 이 조건은 **보이는 문항에 이월값을 깔지** 정한다. 미설정이면 불러온다.
+   */
+  priorAnswerCondition?: QuestionConditionGroup;
+  /**
+   * 이 문항은 이월값을 불러오지 않는다. 조건보다 우선하고, 회수 대상도 아니다.
+   *
+   * 조건에 도달 불가능한 값을 넣어 막던 우회를 대체한다 — 그 우회는 "조건이 거짓으로
+   * 뒤집혔다" 와 구분되지 않아 회수가 응답자의 입력을 지웠다(2026-09-08 DQ7 매출액).
+   */
+  priorAnswerDisabled?: boolean;
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
@@ -752,6 +896,8 @@ export interface SurveySettings {
   endDate?: Date;
   maxResponses?: number;
   thankYouMessage: string;
+  // 자격미달 종료 문구 — 종료 결과가 screened_out 일 때 완료 화면 문구. 비어 있으면 thankYouMessage 로 폴백 (0110)
+  screenedOutMessage?: string | null;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
   // 화면 너비 — true 면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl).
@@ -763,6 +909,10 @@ export interface SurveySettings {
   // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름(예: 2025년 조사).
   // 버전 스냅샷에 넣지 않는 라이브 값이라, 응답 페이지는 control 로 전달받는다 (0094 마이그레이션).
   priorWaveLabel?: string | null;
+  // 문항별 변동 확인 사용 여부 — false(기본)면 이월 값을 표시되는 문항의 답으로 미리 깔고
+  // 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + 내보내기 _CHG 변수.
+  // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0101 마이그레이션).
+  changeConfirmEnabled?: boolean;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

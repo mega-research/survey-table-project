@@ -13,8 +13,10 @@ import { isTableRowCompleted } from '@/features/question-renderer/utils/table-ro
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import { collectTableCells } from '@/lib/survey/cell-gating';
+import type { HeaderCell, TableColumn, TableRow, TableCell } from '@/types/survey';
 
+import { useGatingTableCells } from './cells/gating-table-cells-context';
 import { MobileRowCard } from './mobile-row-card';
 
 // ── 상수 ──
@@ -42,6 +44,8 @@ interface MobileTableStepperProps {
   onSelectGroup?: (groupId: string) => void;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  /** 응답 가능한 셀 타입 — 보기 그룹 표는 choice_opt 를 더해 넘긴다. 없으면 기본 목록. */
+  answerableCellTypes?: readonly TableCell['type'][] | undefined;
 }
 
 // ── 유틸 ──
@@ -78,6 +82,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   groupConfigMap,
   onSelectGroup,
   errorCellIds,
+  answerableCellTypes,
 }: MobileTableStepperProps) {
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
   const attrs = useContactAttrs();
@@ -110,13 +115,20 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     return map;
   }, [displayRows, attrs, quotes]);
 
+  // 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — InteractiveTableResponse 가 원본 rows 로 공급한다
+  // (동적 행 선택으로 빠진 행의 컨트롤러도 정의는 찾아야 데스크톱 판정과 같다).
+  const providedTableCells = useGatingTableCells();
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
+    const tableCells = providedTableCells ?? collectTableCells(displayRows);
     for (const row of displayRows) {
-      map.set(row.id, isTableRowCompleted(row, currentResponse));
+      map.set(
+        row.id,
+        isTableRowCompleted(row, currentResponse, { tableCells, answerableCellTypes }),
+      );
     }
     return map;
-  }, [displayRows, currentResponse]);
+  }, [providedTableCells, displayRows, currentResponse, answerableCellTypes]);
 
   const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
   const [currentRowInGroup, setCurrentRowInGroup] = useState(0);

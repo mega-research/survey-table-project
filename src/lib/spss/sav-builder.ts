@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { SavVariable, VariableAlignment, VariableType, saveToFile } from 'sav-writer';
 
+import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
 import {
   SPSSExportColumn,
   SpssColumnOptions,
@@ -103,6 +104,14 @@ export function buildValueLabels(
         findTableCellOptions(question, col.tableCellId, col.tableCellType || ''),
       );
     }
+
+    case 'choice-table-cell':
+      // 보기-소스 표의 선택형 셀 — 표 문항의 radio/select 셀과 같이 셀 보기로 라벨을 만든다.
+      // checkbox 는 복수 선택을 한 칸에 이어 싣는 String 이라 값 라벨을 붙이지 않는다.
+      if (col.tableCellType === 'checkbox') return undefined;
+      return optionsToValueLabels(
+        col.cellOptions ?? findTableCellOptions(question, col.tableCellId, col.tableCellType || ''),
+      );
 
     case 'table-cell-ranking':
       // 셀의 rankingOptions 에서 value labels 구성 (컬럼 메타 우선, 폴백 findTableCellOptions)
@@ -266,7 +275,13 @@ export async function generateSavBuffer(
   submissions: SurveySubmission[],
   options?: SpssColumnOptions,
 ): Promise<Buffer> {
-  const columns = generateSPSSColumns(questions, options);
+  // 반복 블록의 뒤쪽 미사용 벌은 빈 열이다 — 모수 전체를 1회 스캔해 잘라낸다.
+  // 호출부가 이미 판정을 넘겼으면 그것을 존중한다(설문 전체 기준 판정 보존).
+  const usedRepeatCounts = options?.usedRepeatCounts ?? collectUsedRepeatCounts(questions, submissions);
+  const columns = generateSPSSColumns(questions, {
+    ...options,
+    ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+  });
   // 변수명 가드: invalid/중복이면 명시적 에러 (silent 치환 금지 — C1 차단)
   assertValidSpssVarNames(columns);
   const dataRows = buildDataRows(columns, questions, submissions);

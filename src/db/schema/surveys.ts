@@ -37,6 +37,7 @@ import type {
   QuestionConditionGroup,
   QuestionOption,
   RankingConfig,
+  RowRepeatConfig,
   SelectLevel,
   SumConstraint,
   SurveyLookup,
@@ -44,6 +45,7 @@ import type {
   TableColumn,
   TableRow,
   TableValidationRule,
+  TextValidation,
 } from '@/types/survey';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 
@@ -71,6 +73,8 @@ export const surveys = pgTable(
     piiRetentionUntil: timestamp('pii_retention_until', { withTimezone: true }),
     maxResponses: integer('max_responses'),
     thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
+    // 자격미달 종료 문구 — NULL/빈 값이면 thankYouMessage 로 폴백 (0110, CONTEXT.md 「자격미달 종료 문구」)
+    screenedOutMessage: text('screened_out_message'),
 
     // 응답 페이지 헤더 프리셋 (0041 마이그레이션) — NULL = 기본형 폴백
     responseHeader: jsonb('response_header').$type<SurveyResponseHeaderConfig>(),
@@ -103,6 +107,11 @@ export const surveys = pgTable(
     // 추적조사 회차 라벨 — 응답 화면의 이월 응답 문구에 쓰는 지난 회차 이름
     // (예: 2025년 조사). NULL 이면 기본 문구. 스냅샷 밖 라이브 컬럼 (0094 마이그레이션)
     priorWaveLabel: text('prior_wave_label'),
+
+    // 문항별 변동 확인 사용 여부 (추적조사). false 면 이월 값을 표시되는 문항의 답으로
+    // 미리 깔고 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + _CHG 변수.
+    // 스냅샷 밖 라이브 컬럼 (0101 마이그레이션)
+    changeConfirmEnabled: boolean('change_confirm_enabled').default(false).notNull(),
 
     // 추적조사 이월 응답 임포트 확정 설정 — 블록↔문항 매핑과 값 대응.
     // 재업로드가 정상 경로라 확정을 보관해 재사용한다. 스냅샷 밖 라이브 컬럼 (0096 마이그레이션)
@@ -222,10 +231,12 @@ export const questions = pgTable(
     defaultValueTemplate: text('default_value_template'),
 
     // 단답형 숫자 입력 모드 — 0030 마이그레이션
-    inputType: text('input_type'), // 'text' | 'number'
+    inputType: text('input_type'), // InputType (@/types/input-type) — enum/CHECK 없는 열린 컬럼
     emptyDefault: doublePrecision('empty_default'), // 숫자 모드 초기값
     // 단답형 숫자 모드 표시 포맷·범위 (콤마/단위/min/max/소수 자릿수)
     numberFormat: jsonb('number_format').$type<NumberFormat>(),
+    // 단답형·장문형 응답 품질 검사 {minLength, rejectMeaningless} — NULL = 검사 없음 (0109)
+    textValidation: jsonb('text_validation').$type<TextValidation>(),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
@@ -239,6 +250,9 @@ export const questions = pgTable(
 
     // 열 라벨 숨기기 (테이블 타입 전용)
     hideColumnLabels: boolean('hide_column_labels').default(false),
+
+    // 좌측 고정 열 개수 (표를 그리는 문항 전용). NULL = 자동 판정, 0~3 = 명시 지정
+    stickyColumnCount: smallint('sticky_column_count'),
 
     // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
     exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
@@ -269,7 +283,12 @@ export const questions = pgTable(
     // 검증 규칙 및 조건부 표시
     tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),
     dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
+    // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다.
+    // 펼쳐진 행 자체는 table_rows_data 에 눌러앉고, 이 컬럼은 템플릿 지정과 상한만 쥔다.
+    rowRepeatConfig: jsonb('row_repeat_config').$type<RowRepeatConfig>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
+    priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
+    priorAnswerDisabled: boolean('prior_answer_disabled'),
     // 숫자 셀 합계 제약 (테이블 타입 전용, 차단형 검증 — tableValidationRules 와 별개)
     sumConstraints: jsonb('sum_constraints').$type<SumConstraint[]>(),
 
@@ -279,7 +298,11 @@ export const questions = pgTable(
   (table) => [
     check(
       'questions_mobile_table_display_mode_check',
-      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'original')`,
+      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-cards', 'row-group-cards', 'axis-cards', 'original')`,
+    ),
+    check(
+      'questions_sticky_column_count_range',
+      sql`${table.stickyColumnCount} is null or (${table.stickyColumnCount} >= 0 and ${table.stickyColumnCount} <= 3)`,
     ),
   ],
 );

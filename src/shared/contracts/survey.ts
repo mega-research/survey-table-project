@@ -3,6 +3,7 @@
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
   HeaderCell,
+  InputType,
   NumberFormat,
   QuestionConditionGroup,
   QuestionOption,
@@ -13,6 +14,7 @@ import type {
   TableColumn,
   TableRow,
   TableValidationRule,
+  TextValidation,
 } from '@/types/survey';
 
 import type { SurveyAnchorSnapshot } from './survey-document';
@@ -32,6 +34,8 @@ export interface SurveyVersionSnapshot {
     endDate?: string;
     maxResponses?: number;
     thankYouMessage: string;
+    /** 자격미달 종료 문구 — 발행 시점 freeze. 이 필드 도입 이전 발행본은 undefined = 폴백 */
+    screenedOutMessage?: string | null;
     requireInviteToken?: boolean;
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;
@@ -231,6 +235,7 @@ export interface QuestionData {
   placeholder?: string;
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
+  stickyColumnCount?: number | null;
   mobileOriginalTable?: boolean;
   mobileTableDisplayMode?: MobileTableDisplayMode;
   mobileDrilldownOmitLeadingColumns?: number;
@@ -241,9 +246,10 @@ export interface QuestionData {
   displayCondition?: QuestionConditionGroup;
   rankingConfig?: RankingConfig;
   defaultValueTemplate?: string | null;
-  inputType?: 'text' | 'number';
+  inputType?: InputType;
   emptyDefault?: number;
   piiEncrypted?: boolean;
   numberFormat?: NumberFormat | null;
+  textValidation?: TextValidation | null;
   sumConstraints?: SumConstraint[] | null;
 }

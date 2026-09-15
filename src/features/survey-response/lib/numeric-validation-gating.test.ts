@@ -143,3 +143,41 @@ describe('게이팅 검증', () => {
     expect(issues.filter((i) => i.kind === 'required-cells')).toEqual([]);
   });
 });
+
+describe('보기 그룹 표 — choice-selected 게이팅 셀은 그룹 선택으로 활성이 정해진다', () => {
+  const groupedTable = {
+    id: 'q1',
+    type: 'table',
+    title: 'T',
+    required: false,
+    order: 1,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: 'r1',
+        cells: [
+          { id: 'opt-yes', content: '있음', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'opt-no', content: '없음', type: 'choice_opt', choiceGroupId: 'g1' },
+          {
+            id: 'when',
+            content: '',
+            type: 'input',
+            enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' },
+            requiredWhenEnabled: true,
+          },
+        ],
+      },
+    ],
+  } as unknown as Question;
+
+  it('그 보기를 고르면 활성 — 비어 있으면 required-cells issue', () => {
+    const issues = collectNumericIssues(groupedTable, { __choiceGroups: { rad1: 'opt-yes' } });
+    expect(issues.some((i) => i.kind === 'required-cells' && i.cellIds?.includes('when'))).toBe(true);
+  });
+
+  it('다른 보기를 고르면 비활성 — 필수 검사 없음', () => {
+    const issues = collectNumericIssues(groupedTable, { __choiceGroups: { rad1: 'opt-no' } });
+    expect(issues.filter((i) => i.kind === 'required-cells')).toEqual([]);
+  });
+});

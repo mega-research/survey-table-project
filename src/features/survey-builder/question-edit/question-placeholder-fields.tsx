@@ -5,9 +5,14 @@ import type { RefObject } from 'react';
 import type { VariableDef } from '@/components/ui/rich-text-editor/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
+import { applyInputTypeChange } from '@/lib/question/input-mode';
+import { isInputFormat } from '@/types/input-type';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { isPlainTextInput } from '@/utils/text-quality';
 import type { Question } from '@/types/survey';
 
 interface QuestionPlaceholderFieldsProps {
@@ -21,7 +26,7 @@ interface QuestionPlaceholderFieldsProps {
   variableCatalog: VariableDef[];
 }
 
-/** 질문 편집의 '단답형 안내 문구·prefill' 구획. 상태는 부모가 그대로 들고 있다. */
+/** 질문 편집의 '안내 문구·응답 품질 검사·prefill·입력 형식' 구획. 상태는 부모가 그대로 들고 있다. */
 export function QuestionPlaceholderFields({
   question,
   formData,
@@ -32,21 +37,36 @@ export function QuestionPlaceholderFields({
 }: QuestionPlaceholderFieldsProps) {
   return (
     <>
+  {/* 안내 문구는 단답형·장문형 공용 — 둘 다 자유 기입 칸이라 같은 설정이 필요하다.
+      아래 prefill·입력 형식은 단답형 전용이라 분리한다(장문형에는 형식이 없다). */}
+  {(question.type === 'text' || question.type === 'textarea') && (
+    <div>
+      <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
+      <Input
+        id="placeholder"
+        value={formData.placeholder || ''}
+        onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
+        placeholder="예: 이름을 입력하세요"
+        className="mt-2"
+      />
+      <p className="mt-1 text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
+    </div>
+  )}
+
+  {/* 단답형·장문형 응답 품질 검사 — 최소·최대 글자 수·의미 없는 입력 거부.
+      숫자 모드·입력 형식 칸은 자기 검사가 있어 잠근다(배타). 셀 모달과 같은 묶음. */}
+  {(question.type === 'text' || question.type === 'textarea') && (
+    <TextValidationFields
+      idPrefix="question"
+      value={formData.textValidation}
+      locked={!isPlainTextInput({ type: question.type, inputType: formData.inputType })}
+      onChange={(next) => setFormData((prev) => ({ ...prev, textValidation: next }))}
+    />
+  )}
+
+  {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
   {question.type === 'text' && (
     <>
-      <div>
-        <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
-        <Input
-          id="placeholder"
-          value={formData.placeholder || ''}
-          onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
-          placeholder="예: 이름을 입력하세요"
-          className="mt-2"
-        />
-        <p className="mt-1 text-xs text-gray-500">
-          입력 필드에 표시될 안내 문구를 입력하세요
-        </p>
-      </div>
       <div className="space-y-2">
         <Label htmlFor="defaultValueTemplate">
           응답값 prefill
@@ -85,24 +105,20 @@ export function QuestionPlaceholderFields({
       </div>
       <div className="space-y-2">
         <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <InputFormatSelect
+            id="text-input-format"
+            value={formData.inputType}
+            onChange={(next) => setFormData((prev) => applyInputTypeChange(prev, next))}
+          />
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
               id="text-input-type-number"
+              disabled={isInputFormat(formData.inputType)}
               checked={formData.inputType === 'number'}
               onChange={(e) => {
                 const checked = e.target.checked;
-                setFormData((prev) => {
-                  const next: Partial<Question> = {
-                    ...prev,
-                    inputType: checked ? 'number' : 'text',
-                  };
-                  if (!checked) {
-                    delete next.emptyDefault;
-                    delete next.numberFormat;
-                  }
-                  return next;
-                });
+                setFormData((prev) => applyInputTypeChange(prev, checked ? 'number' : 'text'));
               }}
               className="mt-0.5 h-4 w-4"
             />
@@ -111,6 +127,7 @@ export function QuestionPlaceholderFields({
               <p className="mt-0.5 text-xs text-gray-500">
                 체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건(expression)에서 비교 연산자
                 (=, ≠, ≥, ≤, &gt;, &lt;) 를 사용할 수 있습니다.
+                {isInputFormat(formData.inputType) && ' 입력 형식을 지정한 칸에는 쓸 수 없습니다.'}
               </p>
             </label>
           </div>

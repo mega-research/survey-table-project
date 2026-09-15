@@ -11,6 +11,7 @@ import {
   encryptAnswerForQuestion,
   type QuestionPiiFlag,
 } from '@/lib/crypto/response-pii';
+import { logger } from '@/lib/logger';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import {
@@ -344,10 +345,12 @@ export async function loadQuestionPiiFlags(
     }
   }
 
-  for (const questionId of questionIds) {
-    if (!flags.has(questionId)) {
-      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
-    }
+  const missing = questionIds.filter((questionId) => !flags.has(questionId));
+  if (missing.length > 0) {
+    // 응답자에게 보이는 문구는 그대로 두고, 어떤 키가 걸렸는지는 로그로 남긴다.
+    // 거부된 값은 저장되지 않으므로 이 로그가 없으면 사후에 원인을 찾을 길이 없다.
+    logger.warn({ surveyId, versionId, missing }, '[response] 설문에 없는 문항 키가 저장 요청에 실림');
+    throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
   return flags;
 }

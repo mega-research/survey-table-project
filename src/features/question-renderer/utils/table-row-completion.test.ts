@@ -116,13 +116,13 @@ describe('isTableRowCompleted', () => {
       cell({ id: 'v', type: 'input' }),
     ]);
 
-    expect(isTableRowCompleted(r, { v: '1' }, MOBILE_TABLE_COMPLETION_TYPES)).toBe(true);
+    expect(isTableRowCompleted(r, { v: '1' }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES })).toBe(true);
   });
 
   it('모바일 원본 행 타입 집합에서는 ranking을 완료 대상으로 포함한다', () => {
     const r = row([cell({ id: 'rank', type: 'ranking' })]);
 
-    expect(isTableRowCompleted(r, {}, MOBILE_TABLE_COMPLETION_TYPES)).toBe(false);
+    expect(isTableRowCompleted(r, {}, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES })).toBe(false);
   });
 
   it('ranking은 유효 배열이 비면 미완료지만 checkbox 빈 배열의 기존 완료 의미는 보존한다', () => {
@@ -133,14 +133,14 @@ describe('isTableRowCompleted', () => {
       isTableRowCompleted(
         rankingRow,
         { rank: [{ rank: 1, optionValue: 'a' }] },
-        MOBILE_TABLE_COMPLETION_TYPES,
+        { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES },
       ),
     ).toBe(true);
     expect(
-      isTableRowCompleted(rankingRow, { rank: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+      isTableRowCompleted(rankingRow, { rank: [] }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES }),
     ).toBe(false);
     expect(
-      isTableRowCompleted(checkboxRow, { check: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+      isTableRowCompleted(checkboxRow, { check: [] }, { answerableCellTypes: MOBILE_TABLE_COMPLETION_TYPES }),
     ).toBe(true);
   });
 
@@ -167,5 +167,61 @@ describe('isTableRowCompleted', () => {
     expect(isTableRowCompleted(gatedRow, { perf: '1' })).toBe(false);
     // 수행 선택 + men 입력 → 완료
     expect(isTableRowCompleted(gatedRow, { perf: '1', men: '3' })).toBe(true);
+  });
+});
+
+describe('isTableRowCompleted — 보기 그룹 표의 choice-selected 게이팅', () => {
+  const row = {
+    id: 'r1',
+    label: '',
+    cells: [
+      { id: 'opt-yes', type: 'choice_opt', content: '있음', choiceGroupId: 'g1' },
+      { id: 'opt-no', type: 'choice_opt', content: '없음', choiceGroupId: 'g1' },
+      {
+        id: 'when',
+        type: 'input',
+        content: '',
+        enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' },
+      },
+    ],
+  } as unknown as TableRow;
+
+  it('보기를 고르지 않아 비활성이면 완료 판정에서 빠지고, 고르면 값이 있어야 완료다', () => {
+    expect(isTableRowCompleted(row, { __choiceGroups: { rad1: 'opt-no' } })).toBe(true);
+    expect(isTableRowCompleted(row, { __choiceGroups: { rad1: 'opt-yes' } })).toBe(false);
+    expect(isTableRowCompleted(row, { when: '내년', __choiceGroups: { rad1: 'opt-yes' } })).toBe(true);
+  });
+});
+
+describe('isTableRowCompleted — 보기 그룹 표의 보기 셀은 그룹 단위로 완료를 센다', () => {
+  const groupedRow = {
+    id: 'r1',
+    label: '',
+    cells: [
+      { id: 'uhd', type: 'choice_opt', content: 'UHD', choiceGroupId: 'g1' },
+      { id: 'fhd', type: 'choice_opt', content: 'FHD', choiceGroupId: 'g1' },
+      { id: 'amount', type: 'input', content: '' },
+    ],
+  } as unknown as TableRow;
+  const withChoice = [...MOBILE_TABLE_COMPLETION_TYPES, 'choice_opt'] as const;
+
+  it('보기 셀이 완료 대상이면 그룹 중 하나가 골라지고 입력 셀이 차야 완료다', () => {
+    expect(
+      isTableRowCompleted(groupedRow, { amount: '1' }, { answerableCellTypes: withChoice }),
+    ).toBe(false);
+    expect(
+      isTableRowCompleted(
+        groupedRow,
+        { amount: '1', __choiceGroups: { rad1: 'fhd' } },
+        { answerableCellTypes: withChoice },
+      ),
+    ).toBe(true);
+    expect(
+      isTableRowCompleted(groupedRow, { __choiceGroups: { rad1: 'fhd' } }, { answerableCellTypes: withChoice }),
+    ).toBe(false);
+  });
+
+  it('보기 셀이 완료 대상이 아니면(기본) 지금처럼 입력 셀만 본다', () => {
+    expect(isTableRowCompleted(groupedRow, { amount: '1' })).toBe(true);
   });
 });

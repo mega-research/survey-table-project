@@ -12,11 +12,13 @@ import {
   autoFitRawColumnRange,
   buildRawMetaHeaders,
   buildRawMetaValues,
+  buildRawSeqMap,
   clampRawWidth,
   estimateTextWidth,
   row2Label,
   styleHeaderRows,
   toSpssColumnOptions,
+  withUsedRepeatCounts,
 } from './raw-workbook';
 
 /** 분할 내보내기 워크북: 응답내역 + 공통 + 옵션별 + 코딩북 (열만 분할, 행 전체 공통) */
@@ -28,17 +30,21 @@ export function buildSplitWorkbook(
 ): ExcelJS.Workbook {
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
+  // 반복 블록 사용 벌은 파일 전체가 같은 판정을 쓴다 — 시트마다 열 구성이 갈리면 안 된다.
+  const exportCtx = withUsedRepeatCounts(ctx, sortedQuestions, rows);
 
   // planSplit이 assignSplitSheetNames 적용 후 최종 시트명을 s.name에 보관한다.
   // buildSplitWorkbook은 plan.sheets를 그대로 따라 옵션 시트를 생성해 이름 일관성을 보장한다.
-  const plan = planSplit(sortedQuestions, basisQuestionId, {}, toSpssColumnOptions(ctx));
+  const plan = planSplit(sortedQuestions, basisQuestionId, {}, toSpssColumnOptions(exportCtx));
 
   const workbook = new ExcelJS.Workbook();
+  // 순번(접수 순번)은 응답 내역·공통·옵션 시트가 같은 맵을 쓴다
+  const seqMap = buildRawSeqMap(rows);
 
   // 변수 시트(공통/옵션) — bucketQuestions 결과로 헤더 3행 + 전체 응답자 데이터
   // 옵션 시트명 유일성은 assignSplitSheetNames(reserved 시드 포함)가 보장하므로 중복 방어 불필요.
   const addVariableSheet = (name: string, bucketQs: Question[]) => {
-    const columns = generateSPSSColumns(bucketQs, toSpssColumnOptions(ctx));
+    const columns = generateSPSSColumns(bucketQs, toSpssColumnOptions(exportCtx));
     const ws = workbook.addWorksheet(name);
     const metaHeaders = buildRawMetaHeaders(ctx);
     const metaCount = metaHeaders.length;
@@ -47,9 +53,9 @@ export function buildSplitWorkbook(
     ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
     ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
     // 데이터는 전체 응답자 + 이 버킷 컬럼만 (열만 분할)
-    rows.forEach((row, i) => {
+    rows.forEach((row) => {
       ws.addRow([
-        ...buildRawMetaValues(row, i + 1, ctx),
+        ...buildRawMetaValues(row, seqMap.get(row) ?? null, ctx),
         ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
       ]);
     });
@@ -74,7 +80,7 @@ export function buildSplitWorkbook(
   };
 
   // 시트 1: 응답 내역 (전체 응답자) — Raw 워크북과 공용 빌더, 조건부 열 규칙 동일
-  addResponseListSheet(workbook, rows, ctx);
+  addResponseListSheet(workbook, rows, ctx, seqMap);
 
   // 시트 2: 공통 — 고정 이름
   addVariableSheet('공통', bucketQuestions(sortedQuestions, basisQuestionId, 'common'));
@@ -87,7 +93,7 @@ export function buildSplitWorkbook(
   // 마지막 시트: 코딩북 (전체 변수) — 고정 이름
   appendCodebookSheet(
     workbook,
-    generateSPSSColumns(sortedQuestions, toSpssColumnOptions(ctx)),
+    generateSPSSColumns(sortedQuestions, toSpssColumnOptions(exportCtx)),
     sortedQuestions,
   );
 

@@ -10,7 +10,6 @@ const CTX: RawExportContext = {
   appUrl: '',
   stepLabels: new Map(),
   hasContacts: true,
-  hasContactGroups: true,
   questionMeta: new Map(),
 };
 const META_COUNT = buildRawMetaHeaders(CTX).length;
@@ -189,7 +188,7 @@ describe('buildSplitWorkbook ↔ planSplit 일관성', () => {
   const questions = [basis, commonQ, only1, only2];
 
   const rows: RawExportResponseRow[] = [
-    { id: 'r1', questionResponses: { Q2: 'opt1', A: 'x', B: 'y' }, groupValue: null, resid: null,
+    { id: 'r1', questionResponses: { Q2: 'opt1', A: 'x', B: 'y' }, resid: null,
       inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T01:00:00Z'),
       completedAt: new Date('2026-06-04T01:05:00Z'), totalSeconds: 300 },
@@ -301,7 +300,7 @@ describe('buildSplitWorkbook ↔ planSplit 일관성 (금지문자/장이름/중
 
   const edgeQuestions = [basisEdge, eOnly1, eOnly2, eOnly3, eOnly4, tableQ];
   const edgeRows: RawExportResponseRow[] = [
-    { id: 'r1', questionResponses: { QE: 'tok1', E1: 'v' }, groupValue: null, resid: null,
+    { id: 'r1', questionResponses: { QE: 'tok1', E1: 'v' }, resid: null,
       inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T02:00:00Z'),
       completedAt: new Date('2026-06-04T02:05:00Z'), totalSeconds: 300 },
@@ -368,7 +367,7 @@ describe('buildSplitWorkbook 예약 시트명 충돌 방지', () => {
     displayCondition: vm('QC', ['val3']) });
   const collideQuestions = [basisCollide, cOnly1, cOnly2, cOnly3];
   const collideRows: RawExportResponseRow[] = [
-    { id: 'r1', questionResponses: { QC: 'val1', C1: 'v' }, groupValue: null, resid: null,
+    { id: 'r1', questionResponses: { QC: 'val1', C1: 'v' }, resid: null,
       inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T03:00:00Z'),
       completedAt: new Date('2026-06-04T03:05:00Z'), totalSeconds: 300 },

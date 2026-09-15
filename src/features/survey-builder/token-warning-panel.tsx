@@ -407,7 +407,7 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
     () => collectGatingDiagnostics(questions),
     [questions],
   );
-  // tone 배분: 참조 오류 3종(broken/cross-row/self)은 red, 순환·prefill 충돌은 amber.
+  // tone 배분: 참조 오류 2종(broken/self)과 숨김 컨트롤러는 red, 순환·prefill 충돌은 amber.
   const gatingErrors = useMemo(
     () =>
       gatingDiagnostics.filter(

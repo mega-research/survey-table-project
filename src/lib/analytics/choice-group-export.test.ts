@@ -905,3 +905,97 @@ describe('checkbox 그룹 allowTextInput 사이드카 — 변수명 하위호환
     expect(names).not.toContain('Q10_cb1_1_9_text');
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// 보기 그룹 표 — table 문항 + choice_opt 셀 + choiceGroups, 선택은 표 응답 안 __choiceGroups
+// ────────────────────────────────────────────────────────────
+
+const choiceGroupTable = {
+  id: 'q10',
+  type: 'table',
+  title: '보유와 구매처',
+  required: false,
+  order: 4,
+  questionCode: 'Q10',
+  choiceGroups: [
+    { id: 'gt1', groupKey: 'rad1', type: 'radio', label: '보유' },
+    { id: 'gt2', groupKey: 'cb1', type: 'checkbox', label: '구매처' },
+  ],
+  tableColumns: [
+    { id: 'c1', label: '구분' },
+    { id: 'c2', label: '보기 1' },
+    { id: 'c3', label: '보기 2' },
+    { id: 'c4', label: '수량' },
+  ],
+  tableRowsData: [
+    {
+      id: 'r1',
+      label: '보유',
+      cells: [
+        { id: 'r1-lbl', content: '보유', type: 'text' },
+        { id: 'gt-uhd', content: 'UHD', type: 'choice_opt', choiceGroupId: 'gt1', spssNumericCode: 1 },
+        {
+          id: 'gt-etc',
+          content: '기타',
+          type: 'choice_opt',
+          choiceGroupId: 'gt1',
+          spssNumericCode: 2,
+          allowTextInput: true,
+        },
+        { id: 'gt-amount', content: '', type: 'input', inputType: 'number' },
+      ],
+    },
+    {
+      id: 'r2',
+      label: '구매처',
+      cells: [
+        { id: 'r2-lbl', content: '구매처', type: 'text' },
+        { id: 'gt-online', content: '온라인', type: 'choice_opt', choiceGroupId: 'gt2', spssNumericCode: 1 },
+        { id: 'gt-store', content: '대리점', type: 'choice_opt', choiceGroupId: 'gt2', spssNumericCode: 2 },
+        { id: 'r2-blank', content: '', type: 'text' },
+      ],
+    },
+  ],
+} as unknown as Question;
+
+describe('보기 그룹 표 export — generateSPSSColumns', () => {
+  it('그룹 변수는 레거시 규칙 그대로, 입력 셀은 표 규칙 그대로 나오고 보기 셀은 셀 변수를 만들지 않는다', () => {
+    const cols = generateSPSSColumns([choiceGroupTable]);
+    const byName = Object.fromEntries(cols.map((c) => [c.spssVarName, c.type]));
+    expect(byName).toEqual({
+      Q10_rad1: 'choice-group',
+      Q10_rad1_2_text: 'option-text',
+      Q10_cb1_1: 'choice-group-item',
+      Q10_cb1_2: 'choice-group-item',
+      Q10_r1_c4: 'table-cell',
+    });
+    expect(cols.find((c) => c.spssVarName === 'Q10_rad1')?.choiceGroupCellValueMap).toEqual({
+      'gt-uhd': 1,
+      'gt-etc': 2,
+    });
+  });
+
+  it('값은 표 응답 안 __choiceGroups 에서 읽고, 입력 셀 값·상세기재는 제자리에서 읽는다', () => {
+    const cols = generateSPSSColumns([choiceGroupTable]);
+    const rows = buildDataRows(cols, [choiceGroupTable], [
+      makeSubmission({
+        q10: { 'gt-amount': '12', __choiceGroups: { rad1: 'gt-etc', cb1: ['gt-store'] } },
+        __optTexts__: { q10: { 'gt-etc': '벽걸이' } },
+      }),
+    ]);
+    const named = Object.fromEntries(cols.map((c, i) => [c.spssVarName, rows[0]![i]]));
+    expect(named).toEqual({
+      Q10_rad1: 2,
+      Q10_rad1_2_text: '벽걸이',
+      Q10_cb1_1: null,
+      Q10_cb1_2: 2,
+      Q10_r1_c4: '12',
+    });
+  });
+
+  it('MRSET 은 레거시와 같은 세트명으로 묶인다', () => {
+    const cols = generateSPSSColumns([choiceGroupTable]);
+    const syntax = generateMrsetsSyntax(cols, [choiceGroupTable]) ?? '';
+    expect(syntax).toContain('/MCGROUP NAME=$Q10_cb1 LABEL=\'구매처\' VARIABLES=Q10_cb1_1 Q10_cb1_2.');
+  });
+});

@@ -446,3 +446,42 @@ describe('resolveEffectiveOptionTextsByQuestion', () => {
     });
   });
 });
+
+describe('collectRequiredOptionTextIssues — 보기 그룹 표', () => {
+  const groupedTable = makeQuestion({
+    type: 'table',
+    required: true,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'a', content: 'A', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'etc', content: '기타', type: 'choice_opt', choiceGroupId: 'g1', allowTextInput: true },
+          { id: 'amount', content: '', type: 'input' },
+        ],
+      },
+    ],
+  });
+
+  it('선택한 상세기재 보기의 텍스트가 비면 질문 누락이고 입력 타깃을 돌려준다', () => {
+    const result = collectRequiredOptionTextIssues(
+      groupedTable,
+      { amount: '1', __choiceGroups: { rad1: 'etc' } },
+      {},
+    );
+    expect(result.questionMissing).toBe(true);
+    expect(result.detailTargetIds).toEqual(['q1:option:etc']);
+  });
+
+  it('텍스트가 있거나 그 보기를 고르지 않았으면 누락이 아니다', () => {
+    expect(
+      collectRequiredOptionTextIssues(groupedTable, { __choiceGroups: { rad1: 'etc' } }, { etc: '직접' })
+        .questionMissing,
+    ).toBe(false);
+    expect(
+      collectRequiredOptionTextIssues(groupedTable, { __choiceGroups: { rad1: 'a' } }, {}).questionMissing,
+    ).toBe(false);
+  });
+});

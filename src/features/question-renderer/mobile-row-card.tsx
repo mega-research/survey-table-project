@@ -2,8 +2,6 @@
 
 import React, { useMemo } from 'react';
 
-import { CheckCircle2 } from 'lucide-react';
-
 import { Card, CardContent } from '@/components/ui/card';
 import type { useColumnSectionMap } from '@/features/question-renderer/hooks/use-row-groups';
 import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
@@ -25,6 +23,7 @@ import { cn } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
+import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 
 /** 라디오 옵션 1개짜리 셀은 입력이 아닌 라벨 */
@@ -36,6 +35,7 @@ interface MobileRowCardProps {
   row: TableRow;
   visibleColumns: TableColumn[];
   columnSectionMap: ReturnType<typeof useColumnSectionMap>;
+  /** 행 완료 여부 — 스테퍼 카운트용으로 호스트가 넘긴다. 카드 자체는 더 이상 초록으로 표시하지 않는다. */
   completed: boolean;
   hideColumnLabels: boolean;
   questionId: string;
@@ -64,7 +64,6 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   row,
   visibleColumns,
   columnSectionMap,
-  completed,
   hideColumnLabels,
   questionId,
   value,
@@ -103,6 +102,10 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       return {
         label: headerText,
         ...(headerCell?.textBold ? { textBold: true } : {}),
+        // 「첫 줄만 굵게」도 함께 옮긴다 — 데스크탑 표와 모바일 카드가 같은 셀을 다른
+        // 굵기로 그리면 어느 쪽이 맞는지 알 수 없다.
+        ...(headerCell?.boldFirstLine ? { boldFirstLine: true } : {}),
+        ...(headerCell?.contentHtml ? { contentHtml: headerCell.contentHtml } : {}),
       };
     }
     if (hasExplicitHiddenMobileHeaderCell(row.cells)) return { label: '' };
@@ -171,12 +174,11 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     <Card
       data-row-id={row.id}
       {...(firstErrorCellId ? { 'data-cell-id': firstErrorCellId } : {})}
-      className={cn(
-        'mobile-row-card overflow-hidden transition-all duration-200',
-        completed ? 'border-green-400 bg-green-50/30 ring-1 ring-green-400' : 'border-gray-200',
-      )}
+      // 완료 초록 강조(테두리·헤더·배지)는 2026-09-11 에 걷어냈다 — 마지막 카드까지 채우면 화면이
+      // 초록으로 물들어 "잘못됐나" 로 읽혔다. 완료 여부는 스테퍼 카운트가 알린다.
+      className="mobile-row-card overflow-hidden border-gray-200 transition-all duration-200"
     >
-      <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
+      <div className="border-b bg-gray-50/80 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
             {rowHeader.label && (
@@ -187,16 +189,18 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 )}
                 style={getCellTextStyle(rowHeader)}
               >
-                {substituteTokens(rowHeader.label, attrs, quotes)}
+                <CellText
+                  text={substituteTokens(rowHeader.label, attrs, quotes)}
+                  html={
+                    'contentHtml' in rowHeader
+                      ? resolveCellTextHtml(rowHeader, attrs, quotes)
+                      : undefined
+                  }
+                  boldFirstLine={'boldFirstLine' in rowHeader ? rowHeader.boldFirstLine : false}
+                />
               </p>
             )}
           </div>
-          {completed && (
-            <div className="ml-2 flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              완료
-            </div>
-          )}
         </div>
       </div>
 
@@ -259,13 +263,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     </div>
                   );
                 })()}
-                {/* pl-3: 위 라벨(점 6px+간격 6px)과 입력을 같은 선상으로 들여쓰는 값.
-                    라벨이 안 보이면 들여쓸 기준이 없어 좌우 여백만 비대칭이 되므로 라벨 표시 시에만 적용 */}
+                {/* ml-3: 위 라벨(점 6px+간격 6px)과 입력을 같은 선상으로 들여쓰는 값.
+                    라벨이 안 보이면 들여쓸 기준이 없어 좌우 여백만 비대칭이 되므로 라벨 표시 시에만 적용.
+                    padding 이 아니라 margin 인 이유 — 오류 ring 이 이 래퍼에 걸리는데 padding 이면
+                    ring 이 들여쓴 빈 칸까지 감싸 입력칸 왼쪽으로 튀어나온다. */}
                 {(() => {
                   const labelShown =
                     cell.mobileDisplay !== 'hidden' &&
                     Boolean(hideColumnLabels ? cellLabel : shortLabel);
-                  const labelIndent = labelShown ? 'pl-3' : '';
+                  const labelIndent = labelShown ? 'ml-3' : '';
                   return isUnitPairStart && nextEntry ? (
                     <div className={cn('flex items-end gap-2', labelIndent)}>
                       <div
@@ -280,6 +286,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                           value={value}
                           onChange={onChange}
                           rowCells={row.cells}
+                          hintInFlow
+                          ignoreInputWidth
                         />
                       </div>
                       <div
@@ -294,6 +302,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                           value={value}
                           onChange={onChange}
                           rowCells={row.cells}
+                          hintInFlow
+                          ignoreInputWidth
                         />
                       </div>
                     </div>
@@ -311,6 +321,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         value={value}
                         onChange={onChange}
                         rowCells={row.cells}
+                        hintInFlow
+                        ignoreInputWidth
                       />
                     </div>
                   );

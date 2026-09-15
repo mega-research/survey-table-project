@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, ListChecks, Minus, Plus } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useBranchEvalCtx } from '@/features/question-renderer/contact-attrs-context';
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
@@ -13,7 +14,10 @@ import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
-import { decideDrilldown } from '@/features/question-renderer/utils/classify-table';
+import {
+  DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
+  decideDrilldown,
+} from '@/features/question-renderer/utils/classify-table';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import {
@@ -25,6 +29,7 @@ import {
   calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
+  getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
 } from '@/features/question-renderer/utils/table-grid-utils';
@@ -34,12 +39,15 @@ import {
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { ValidationIssueBanner } from '@/features/question-renderer/validation-issue-banner';
 import { useMobileView } from '@/hooks/use-media-query';
+import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
 import {
+  ChoiceGroup,
   DynamicRowGroupConfig,
   HeaderCell,
   MobileTableDisplayMode,
   Question,
+  RowRepeatConfig,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -50,6 +58,11 @@ import {
 } from '@/utils/branch-logic';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
+  type CellOutlineEdges,
+  buildChoiceGroupOutline,
+  outlineBoxShadow,
+} from '@/utils/choice-group-outline';
+import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
@@ -59,7 +72,10 @@ import {
 } from '@/utils/table-merge-helpers';
 
 import { InteractiveCell } from './cells';
+import { ChoiceGroupsProvider } from './cells/choice-groups-context';
+import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
@@ -70,7 +86,58 @@ const VIRTUALIZATION_THRESHOLD = 100;
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+
+// ── 행 반복 버튼 (표 아래) ──
+
+interface RowRepeatControlsProps {
+  addLabel: string;
+  canAdd: boolean;
+  canRemove: boolean;
+  maxCount: number;
+  onAdd: () => void;
+  onRemove: () => void;
+}
+
+/**
+ * 응답자가 벌을 늘리고 접는 버튼. 구조에는 이미 maxCount 벌이 펼쳐져 있고
+ * 여기서 바뀌는 것은 "몇 벌을 보일까"뿐이다.
+ */
+const RowRepeatControls = React.memo(function RowRepeatControls({
+  addLabel,
+  canAdd,
+  canRemove,
+  maxCount,
+  onAdd,
+  onRemove,
+}: RowRepeatControlsProps) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={!canAdd}
+        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Plus className="h-4 w-4" />
+        {addLabel}
+      </button>
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          <Minus className="h-4 w-4" />
+          마지막 줄 삭제
+        </button>
+      )}
+      {!canAdd && (
+        <span className="text-xs text-gray-500">최대 {maxCount}개까지 추가할 수 있습니다.</span>
+      )}
+    </div>
+  );
+});
 
 // ── 셀렉터 행 (동적 행 선택 버튼) ──
 
@@ -97,7 +164,7 @@ const SelectorRow = React.memo(function SelectorRow({
   // buttonAlign은 가로 스크롤에서 항상 보이도록 좌측 sticky로 통일한다.
   return (
     <div
-      className="border-r border-b border-gray-300 bg-white"
+      className="border-r border-b border-gray-400 bg-white"
       style={{ gridColumn: '1 / -1', gridRow }}
     >
       <div className="sticky left-0 flex w-fit items-center gap-2 py-2 pr-3 pl-3">
@@ -197,7 +264,7 @@ function HeaderCells({
         <div
           key={column.id}
           aria-hidden="true"
-          className="border-r border-b border-gray-300 bg-gray-50"
+          className="border-r border-b border-gray-400 bg-gray-50"
           style={{
             gridRow: 1,
             gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
@@ -239,6 +306,8 @@ interface RenderRowCellsProps {
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
   errorCellIds?: Set<string> | undefined;
+  /** 미충족 필수 보기 그룹의 덩어리 외곽선 — 이 셀들은 칸 링 대신 변 표시선을 그린다 */
+  cellOutlineEdges?: ReadonlyMap<string, CellOutlineEdges> | undefined;
   applyCellBackground: boolean;
 }
 
@@ -250,6 +319,7 @@ function renderRowCells({
   onChange,
   stickyInfo,
   errorCellIds,
+  cellOutlineEdges,
   applyCellBackground,
 }: RenderRowCellsProps) {
   const stickyCount = stickyInfo?.stickyColCount ?? 0;
@@ -282,17 +352,24 @@ function renderRowCells({
     if (applyCellBackground) {
       Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
     }
+    // 보기 그룹 외곽선 — 칸마다 링을 두르면 다섯 칸짜리 척도가 다섯 상자로 보여 "하나만
+    // 고르면 되는 자리"가 읽히지 않는다. 덩어리 바깥 변만 inset 그림자로 낸다(레이아웃 무변경).
+    const outline = outlineBoxShadow(cellOutlineEdges?.get(cell.id));
+    if (outline) {
+      style.boxShadow = style.boxShadow ? `${style.boxShadow}, ${outline}` : outline;
+    }
 
     return (
       <div
         key={cell.id}
         className={cn(
-          'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+          'min-w-0 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+          getCellBorderClasses(cell),
           // 행 완료 초록 배경은 제거 (2026-08-06 피드백 — 입력 중 배경 변화가 거슬림).
           // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
           'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-          errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
+          errorCellIds?.has(cell.id) && !outline && 'ring-2 ring-red-300 ring-inset',
         )}
         style={style}
         data-row-id={row.id}
@@ -329,7 +406,11 @@ interface InteractiveTableResponseProps {
   /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
   ignoreDisplayConditions?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다 (없으면 전부 그린다) */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   hideColumnLabels?: boolean | undefined;
+  /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
+  stickyColumnCount?: number | null | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
@@ -338,6 +419,11 @@ interface InteractiveTableResponseProps {
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
+  /**
+   * 보기 그룹 표의 그룹 정의 — 있으면 choice_opt 셀이 radio/checkbox 컨트롤로 그려지고 선택이
+   * 표 응답 안 `__choiceGroups` 에 쓰인다. 없으면 보기 셀은 글자로만 보인다.
+   */
+  choiceGroups?: ChoiceGroup[] | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
   /** 차단형 검증 에러 메시지 (테이블 아래 에러 박스) */
@@ -413,13 +499,16 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   allQuestions,
   ignoreDisplayConditions = false,
   dynamicRowConfigs,
+  rowRepeatConfig,
   hideColumnLabels = false,
+  stickyColumnCount,
   mobileOriginalTable = false,
   mobileTableDisplayMode,
   mobileDrilldownOmitLeadingColumns,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
   enableSticky = true,
+  choiceGroups,
   errorCellIds,
   errorItems,
 }: InteractiveTableResponseProps) {
@@ -440,6 +529,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   });
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
+  const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
+  // 위반 셀 중 보기 셀은 그룹 덩어리 외곽선으로 — 보기 소스 표(choice-table-response)와 같은
+  // 판정·같은 그림. 입력 셀 등 나머지 위반 셀은 그대로 칸 링이다.
+  const choiceGroupOutline = useMemo(() => {
+    if (!hasChoiceGroupDefs || !errorCellIds || errorCellIds.size === 0) return undefined;
+    const ids = new Set<string>();
+    for (const row of rows) {
+      for (const cell of row.cells) {
+        if (cell.type === 'choice_opt' && errorCellIds.has(cell.id)) ids.add(cell.id);
+      }
+    }
+    return ids.size > 0 ? buildChoiceGroupOutline(rows, ids) : undefined;
+  }, [errorCellIds, hasChoiceGroupDefs, rows]);
   const rendersFullOriginalTable = mobileMode === 'original';
   const applyCellBackground = !(isMobileView && mobileMode === 'original');
 
@@ -448,6 +551,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 키로 썼지만, expression 조건의 피연산자({kind:'question'|'cell'})는 sourceQuestionId 가
   // 아닌 질문을 가리킬 수 있어 그 질문의 답이 바뀌어도 키가 그대로였다. 재계산 빈도가 늘더라도
   // 정직한 의존으로 둔다 — 같은 파일의 hiddenGroupIds 는 원래부터 allResponses 를 의존한다.
+
+  // 조건 평가 컨텍스트 — attr/lookup 피연산자가 실제 값을 보게 하려면 반드시 넘겨야 한다.
+  // 빠뜨리면 attr 이 undefined 가 되어 `!=` 비교가 항상 참이 된다.
+  const branchEvalCtx = useBranchEvalCtx(allResponses);
 
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
@@ -468,7 +575,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     }
     const visibleColumnIds = new Set<string>();
     for (const col of columns) {
-      if (shouldDisplayColumn(col, allResponses, allQuestions)) {
+      if (shouldDisplayColumn(col, allResponses, allQuestions, branchEvalCtx)) {
         visibleColumnIds.add(col.id);
       }
     }
@@ -483,7 +590,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       columnFilteredRows: result.rows,
       visibleHeaderGrid: result.headerGrid,
     };
-  }, [columns, rows, tableHeaderGrid, allResponses, allQuestions, ignoreDisplayConditions]);
+  }, [
+    columns,
+    rows,
+    tableHeaderGrid,
+    allResponses,
+    allQuestions,
+    ignoreDisplayConditions,
+    branchEvalCtx,
+  ]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
@@ -494,12 +609,12 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     if (!hasConditions) return null;
     const ids = new Set<string>();
     for (const row of columnFilteredRows) {
-      if (shouldDisplayRow(row, allResponses, allQuestions)) {
+      if (shouldDisplayRow(row, allResponses, allQuestions, branchEvalCtx)) {
         ids.add(row.id);
       }
     }
     return ids;
-  }, [columnFilteredRows, allResponses, allQuestions, ignoreDisplayConditions]);
+  }, [columnFilteredRows, allResponses, allQuestions, ignoreDisplayConditions, branchEvalCtx]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
@@ -559,6 +674,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     closeModal,
     expandedGroupIds,
     toggleGroupExpanded,
+    rowRepeat,
   } = useDynamicRows({
     questionId,
     rows,
@@ -566,6 +682,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     conditionVisibleRowIds,
     hiddenGroupIds,
     dynamicRowConfigs,
+    rowRepeatConfig,
     value,
     onChange: mergedOnChange,
     headerRowCount,
@@ -642,8 +759,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
-    return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
-  }, [enableSticky, mobileUsesCards, visibleColumns, displayRows, scrollViewportWidth]);
+    return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth, stickyColumnCount);
+  }, [
+    enableSticky,
+    mobileUsesCards,
+    visibleColumns,
+    displayRows,
+    scrollViewportWidth,
+    stickyColumnCount,
+  ]);
 
   // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
@@ -743,6 +867,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   onChange: mergedOnChange,
                   stickyInfo,
                   errorCellIds,
+                  cellOutlineEdges: choiceGroupOutline,
                   applyCellBackground,
                 })}
               </React.Fragment>,
@@ -753,6 +878,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         return elements;
       }),
     [
+      choiceGroupOutline,
       selectorGridMap,
       groupConfigMap,
       groupSelectedCountMap,
@@ -773,14 +899,24 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 모바일: 계층/매트릭스 감지 시 드릴다운, 평면 단순 표는 기존 스테퍼
   // hooks-rules: 아래 빈 테이블 early return 이전에 호출해야 hook 순서가 보장된다
+  // 보기 그룹 표는 보기 셀도 "응답 가능한 셀" 이다 — 모바일 분류(드릴다운 리프·값 열)·행 완료·
+  // 진행률이 이 목록을 본다. 그룹 정의가 없으면 지금처럼 보기 셀을 세지 않는다.
+  const mobileAnswerableCellTypes = useMemo(
+    () =>
+      choiceGroups && choiceGroups.length > 0
+        ? ([...DEFAULT_TABLE_ANSWERABLE_CELL_TYPES, 'choice_opt'] as const)
+        : undefined,
+    [choiceGroups],
+  );
   const { useDrilldown } = useMemo(
     () =>
       decideDrilldown({
         tableColumns: visibleColumns,
         tableRowsData: displayRows,
         tableHeaderGrid: visibleHeaderGrid,
+        answerableCellTypes: mobileAnswerableCellTypes,
       }),
-    [visibleColumns, displayRows, visibleHeaderGrid],
+    [visibleColumns, displayRows, visibleHeaderGrid, mobileAnswerableCellTypes],
   );
   const displayRowById = useMemo(
     () => new Map(rowWiseDisplayRows.map((row) => [row.id, row])),
@@ -814,8 +950,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
       },
       isLabelSourceHidden: (cellId) => displayCellById.get(cellId)?.mobileDisplay === 'hidden',
+      answerableCellTypes: mobileAnswerableCellTypes,
     });
   }, [
+    mobileAnswerableCellTypes,
     columns,
     displayCellById,
     hideColumnLabels,
@@ -829,6 +967,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     visibleColumns,
     visibleHeaderGrid,
   ]);
+
+  // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
+  // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
+  const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
@@ -884,7 +1026,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               >
                 <div
                   role="rowgroup"
-                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                   style={gridContainerStyle}
                 >
                   {renderHeaderCells()}
@@ -935,7 +1077,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               <div
                 key="in-scroll-header"
                 role="rowgroup"
-                className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                 style={gridContainerStyle}
               >
                 {renderHeaderCells()}
@@ -964,7 +1106,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 key="table-body"
                 role="rowgroup"
                 className={cn(
-                  'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
+                  'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',
                   hideColumnLabels && 'rounded-t-md border-t',
                 )}
                 style={gridContainerStyle}
@@ -980,6 +1122,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       onChange: mergedOnChange,
                       stickyInfo,
                       errorCellIds,
+                      cellOutlineEdges: choiceGroupOutline,
                       applyCellBackground,
                     })}
                   </React.Fragment>
@@ -1025,142 +1168,178 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     errorCellIds,
     mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow,
+    answerableCellTypes: mobileAnswerableCellTypes,
   };
 
+  // 동적 행 그룹 선택 버튼 목록 — 행별 원본 문항·행 단위 그룹 카드가 카드 목록 위에 같이 둔다
+  const dynamicGroupPicker = hasDynamicRows ? (
+    <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {[...groupConfigMap.entries()]
+        .filter(
+          ([groupId]) =>
+            !hiddenGroupIds?.has(groupId) &&
+            dynamicRows.some((row) => row.dynamicGroupId === groupId),
+        )
+        .map(([groupId, config]) => (
+          <button
+            key={groupId}
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
+            onClick={() => handleSelectGroup(groupId)}
+          >
+            <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
+            <span className="flex-1 text-sm font-medium text-gray-700">
+              {config.label || '항목 선택'}
+            </span>
+            <span className="text-xs text-gray-500">
+              {groupSelectedCountMap.get(groupId) ?? 0}개 선택
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+          </button>
+        ))}
+    </div>
+  ) : null;
+
   return (
-    <>
-      <Card className={className}>
-        {tableTitle && (
-          <CardHeader>
-            <CardTitle className="text-lg font-medium">{tableTitle}</CardTitle>
-          </CardHeader>
-        )}
-        {/* 모바일은 질문 제목 바로 아래에 카드가 오므로 상단 패딩을 제거해 제목과 붙인다
+    <ChoiceGroupsProvider value={choiceGroups ?? null}>
+      <GatingTableCellsProvider value={gatingTableCells}>
+        <Card className={className}>
+          {tableTitle && (
+            <CardHeader>
+              <CardTitle className="text-lg font-medium">{tableTitle}</CardTitle>
+            </CardHeader>
+          )}
+          {/* 모바일은 질문 제목 바로 아래에 카드가 오므로 상단 패딩을 제거해 제목과 붙인다
             (좌우/하단 패딩은 유지). 단 tableTitle 이 있으면 CardHeader 에 하단 패딩이
             없으므로 그 간격 역할을 하는 상단 패딩을 유지한다. 데스크탑은 기존 여백 그대로. */}
-        <CardContent
-          className={cn(
-            isMobileView ? (tableTitle ? 'p-3 sm:p-4' : 'p-3 pt-0 sm:p-4 sm:pt-1') : 'p-0 sm:px-6',
-          )}
-        >
-          <div className="w-full">
-            {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
-            {isMobileView && mobileMode === 'row-wise-original' ? (
-              <div className="space-y-3">
-                {hasDynamicRows ? (
-                  <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
-                    {[...groupConfigMap.entries()]
-                      .filter(
-                        ([groupId]) =>
-                          !hiddenGroupIds?.has(groupId) &&
-                          dynamicRows.some((row) => row.dynamicGroupId === groupId),
-                      )
-                      .map(([groupId, config]) => (
-                        <button
-                          key={groupId}
-                          type="button"
-                          className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
-                          onClick={() => handleSelectGroup(groupId)}
-                        >
-                          <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
-                          <span className="flex-1 text-sm font-medium text-gray-700">
-                            {config.label || '항목 선택'}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {groupSelectedCountMap.get(groupId) ?? 0}개 선택
-                          </span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                        </button>
-                      ))}
-                  </div>
-                ) : null}
-                <MobileRowWiseOriginalSheet
-                  model={rowWiseOriginalModel}
-                  errorCellIds={errorCellIds}
-                  renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
-                    const sourceRowId =
-                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ?? rowQuestion.rowId;
-                    const sourceRow = displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
-                    return (
-                      <InteractiveCell
-                        cell={cell}
-                        questionId={questionId}
-                        value={value}
-                        onChange={mergedOnChange}
-                        inputIdScope={inputIdScope}
-                        ariaInvalid={invalid}
-                        ariaDescribedBy={errorDescriptionId}
-                        rowCells={sourceRow.cells}
-                        {...resolveRadioGroupProps(
-                          cell,
-                          sourceRowId,
-                          buildRadioGroupBuckets(sourceRow),
-                        )}
-                      />
-                    );
-                  }}
-                />
-              </div>
-            ) : mobileUsesCards ? (
-              useOriginalRowDetail || useDrilldown ? (
-                <MobileTableDrilldown
-                  {...mobileTableProps}
-                  authoredColumns={columns}
-                  navigateToCellRef={drilldownNavigateRef}
-                  detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
-                  omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
-                    mobileDrilldownOmitLeadingColumns,
-                    columns.length,
-                  )}
-                />
-              ) : (
-                <MobileTableStepper {...mobileTableProps} />
-              )
-            ) : (
-              renderTableView()
+          <CardContent
+            className={cn(
+              isMobileView
+                ? tableTitle
+                  ? 'p-3 sm:p-4'
+                  : 'p-3 pt-0 sm:p-4 sm:pt-1'
+                : 'p-0 sm:px-6',
             )}
-          </div>
+          >
+            <div className="w-full">
+              {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
+              {isMobileView && mobileMode === 'row-wise-original' ? (
+                <div className="space-y-3">
+                  {dynamicGroupPicker}
+                  <MobileRowWiseOriginalSheet
+                    model={rowWiseOriginalModel}
+                    errorCellIds={errorCellIds}
+                    renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
+                      const sourceRowId =
+                        rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
+                        rowQuestion.rowId;
+                      const sourceRow =
+                        displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
+                      return (
+                        <InteractiveCell
+                          cell={cell}
+                          questionId={questionId}
+                          value={value}
+                          onChange={mergedOnChange}
+                          inputIdScope={inputIdScope}
+                          ariaInvalid={invalid}
+                          ariaDescribedBy={errorDescriptionId}
+                          rowCells={sourceRow.cells}
+                          {...resolveRadioGroupProps(
+                            cell,
+                            sourceRowId,
+                            buildRadioGroupBuckets(sourceRow),
+                          )}
+                        />
+                      );
+                    }}
+                  />
+                </div>
+              ) : isMobileView && mobileMode === 'row-group-cards' && hasChoiceGroupDefs ? (
+                <MobileRowGroupCards
+                  questionId={questionId}
+                  displayRows={displayRows}
+                  visibleColumns={visibleColumns}
+                  choiceGroups={choiceGroups ?? []}
+                  hideColumnLabels={hideColumnLabels}
+                  value={value}
+                  onChange={mergedOnChange}
+                  errorCellIds={errorCellIds}
+                  dynamicGroupPicker={dynamicGroupPicker}
+                />
+              ) : mobileUsesCards ? (
+                useOriginalRowDetail || useDrilldown ? (
+                  <MobileTableDrilldown
+                    {...mobileTableProps}
+                    authoredColumns={columns}
+                    navigateToCellRef={drilldownNavigateRef}
+                    detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
+                    omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
+                      mobileDrilldownOmitLeadingColumns,
+                      columns.length,
+                    )}
+                  />
+                ) : (
+                  <MobileTableStepper {...mobileTableProps} />
+                )
+              ) : (
+                renderTableView()
+              )}
+            </div>
 
-          <ValidationIssueBanner
-            items={errorItems}
-            onNavigate={(item) => {
-              const cellIds = item.cellIds ?? [];
-              const scroll = () =>
-                scrollToIssue({
-                  detailTargetIds: item.detailTargetIds,
-                  cellInstanceIds: item.rowId
-                    ? cellIds.map((cellId) => `${item.rowId}:${item.rowId}:${cellId}`)
-                    : undefined,
-                  cellIds,
-                  questionId,
-                });
-              // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
-              // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.
-              if (drilldownNavigateRef.current && cellIds.length > 0) {
-                drilldownNavigateRef.current(cellIds);
-                window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
-              } else {
-                scroll();
-              }
+            {rowRepeat.isActive && (
+              <RowRepeatControls
+                addLabel={rowRepeat.addLabel}
+                canAdd={rowRepeat.canAdd}
+                canRemove={rowRepeat.canRemove}
+                maxCount={rowRepeat.maxCount}
+                onAdd={rowRepeat.addBundle}
+                onRemove={rowRepeat.removeBundle}
+              />
+            )}
+
+            <ValidationIssueBanner
+              items={errorItems}
+              questionId={questionId}
+              onNavigate={(item) => {
+                const cellIds = item.cellIds ?? [];
+                const scroll = () =>
+                  scrollToIssue({
+                    detailTargetIds: item.detailTargetIds,
+                    cellInstanceIds: item.rowId
+                      ? cellIds.map((cellId) => `${item.rowId}:${item.rowId}:${cellId}`)
+                      : undefined,
+                    cellIds,
+                    questionId,
+                  });
+                // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
+                // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.
+                if (drilldownNavigateRef.current && cellIds.length > 0) {
+                  drilldownNavigateRef.current(cellIds);
+                  window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
+                } else {
+                  scroll();
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {activeGroupId && (
+          <DynamicRowSelectorModal
+            open={!!activeGroupId}
+            onOpenChange={(open) => {
+              if (!open) closeModal();
             }}
+            dynamicRows={dynamicRows.filter((r) => r.dynamicGroupId === activeGroupId)}
+            selectedRowIds={selectedRowIds.filter((id) =>
+              dynamicRows.some((r) => r.id === id && r.dynamicGroupId === activeGroupId),
+            )}
+            label={groupConfigMap.get(activeGroupId)?.label}
+            onConfirm={handleDynamicRowSelect}
           />
-        </CardContent>
-      </Card>
-
-      {activeGroupId && (
-        <DynamicRowSelectorModal
-          open={!!activeGroupId}
-          onOpenChange={(open) => {
-            if (!open) closeModal();
-          }}
-          dynamicRows={dynamicRows.filter((r) => r.dynamicGroupId === activeGroupId)}
-          selectedRowIds={selectedRowIds.filter((id) =>
-            dynamicRows.some((r) => r.id === id && r.dynamicGroupId === activeGroupId),
-          )}
-          label={groupConfigMap.get(activeGroupId)?.label}
-          onConfirm={handleDynamicRowSelect}
-        />
-      )}
-    </>
+        )}
+      </GatingTableCellsProvider>
+    </ChoiceGroupsProvider>
   );
 });

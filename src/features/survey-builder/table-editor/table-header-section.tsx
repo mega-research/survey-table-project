@@ -121,7 +121,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
 
   return (
     <div
-      className="relative min-h-[40px] min-w-0 overflow-hidden border-r border-b border-gray-300 bg-gray-50 p-2 [overflow-wrap:anywhere]"
+      className="relative min-h-[40px] min-w-0 overflow-hidden border-r border-b border-gray-400 bg-gray-50 p-2 [overflow-wrap:anywhere]"
       style={{
         ...getGridSpanStyle(headerColspan),
         ...getCellBackgroundStyle(column),
@@ -327,7 +327,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
   return (
     <>
       {/* 행 라벨 헤더 (첫 번째 열) */}
-      <div className="sticky left-0 z-10 border-r border-b border-gray-300 bg-gray-100 p-2">
+      <div className="sticky left-0 z-10 border-r border-b border-gray-400 bg-gray-100 p-2">
         <div className="truncate text-center text-xs font-semibold text-gray-600" title="행 라벨/코드">
           행
         </div>

@@ -17,6 +17,7 @@ import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf'
 import {
   type StickyLeftInfo,
   getAlignmentClasses,
+  getCellBorderClasses,
   getGridCellAria,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
@@ -99,7 +100,8 @@ const VirtualizedRow = React.memo(
               key={cell.id}
               ref={isFirstVisibleCell ? sentinelRef : undefined}
               className={cn(
-                'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+                'min-w-0 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
+                getCellBorderClasses(cell),
                 isSticky
                   ? completed
                     ? 'bg-green-50'
@@ -205,7 +207,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   return (
     <div
       role="rowgroup"
-      className="mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base"
+      className="mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base"
       style={{
         display: 'grid',
         gridTemplateColumns: gridTemplateCols,

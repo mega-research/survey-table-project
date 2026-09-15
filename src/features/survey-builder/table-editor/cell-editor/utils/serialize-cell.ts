@@ -1,21 +1,24 @@
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
+import { cellHtmlHasMarks } from '@/lib/survey/cell-rich-text';
 import {
   BranchRule,
   CalcCellValidation,
   CalcExpr,
   CellEnableCondition,
   CheckboxOption,
+  InputType,
   NumberFormat,
   QuestionOption,
   RadioOption,
   RankingConfig,
   TableCell,
+  TextValidation,
 } from '@/types/survey';
 import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
-import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-
 import { parseNumericInput } from '@/utils/numeric-input';
 import { INTERACTIVE_CELL_TYPES } from '@/utils/table-cell-code-generator';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
+import { isPlainTextInput } from '@/utils/text-quality';
 
 /**
  * 셀 편집 모달의 폼 상태.
@@ -26,6 +29,8 @@ import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 export interface CellFormState {
   contentType: ContentType;
   textContent: string;
+  /** 본문 서식본(HTML). 글자 일부 색·굵게가 있을 때만 값이 있고, 아니면 ''. */
+  textContentHtml: string;
   imageUrl: string;
   videoUrl: string;
   checkboxOptions: CheckboxOption[];
@@ -37,13 +42,19 @@ export interface CellFormState {
   cellMobileOptionsColumns: number | undefined;
   inputPlaceholder: string;
   inputMaxLength: number | '';
+  /** 여러 줄 입력 높이(줄 수). '' 또는 1 이면 한 줄. */
+  inputRows: number | '';
+  /** 입력칸 너비(px). '' 이면 셀 폭 전체 (TableCell.inputWidth) */
+  inputWidth: number | '';
   inputDefaultValueTemplate: string;
-  inputType: 'text' | 'number';
+  inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
   inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
   cellNumberFormat: NumberFormat | undefined;
+  /** input 셀 응답 품질 검사 (TableCell.textValidation). null = 없음 */
+  cellTextValidation: TextValidation | null;
   /** 필수 응답 셀 (REQUIRED_CELL_TYPES 공용 — TableCell.required 로 직렬화) */
   cellRequired: boolean;
   /** 필수 셀 미응답 안내 문구 — 빈 문자열이면 기본 문구 (TableCell.requiredMessage) */
@@ -63,23 +74,33 @@ export interface CellFormState {
   isOtherRankingCell: boolean;
   choiceLabel: string;
   choiceAllowTextInput: boolean;
+  /** 단독 선택 보기 (TableCell.exclusiveChoice) — 체크박스 그룹의 choice_opt 셀 전용 */
+  choiceExclusive: boolean;
+  /** 단독 선택 범위 (TableCell.exclusiveScope). 'group' 이 기본이라 저장 시 키를 만들지 않는다 */
+  choiceExclusiveScope: 'group' | 'table';
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
-  choiceTextInputType: 'text' | 'number';
+  choiceTextInputType: InputType;
   choiceTextInputNumberFormat: NumberFormat | undefined;
   choiceBranchRule: BranchRule | undefined;
   /** 이 보기 옵션 셀이 속한 ChoiceGroup.id. 빈 문자열 = 미소속. */
   choiceGroupId: string;
   textBold: boolean;
+  /** 첫 줄만 굵게. textBold(전체)와 배타 — 빌더가 3지선다로 낸다. */
+  boldFirstLine: boolean;
   backgroundColor: string;
   textColor: string;
   horizontalAlign: 'left' | 'center' | 'right';
   mobileDisplay: NonNullable<TableCell['mobileDisplay']>;
   /** 모바일 카드/드릴다운 입력칸 위 제목. 비우면 exportLabel → 열 제목 폴백 */
   mobileLabel: string;
+  /** 보기 소스 표 text 셀 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 그린다 */
+  optionTextSlot: boolean;
   verticalAlign: 'top' | 'middle' | 'bottom';
   textPosition: NonNullable<TableCell['textPosition']>;
   /** 입력값 가로 정렬. 'inherit' 은 미지정 상태 — horizontalAlign 을 따른다. */
   inputTextAlign: NonNullable<TableCell['inputTextAlign']> | 'inherit';
+  /** 오른쪽 세로선 숨김 (TableCell.hideRightBorder) */
+  hideRightBorder: boolean;
   isMergeEnabled: boolean;
   rowspan: number | '';
   colspan: number | '';
@@ -192,6 +213,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
   return {
     contentType,
     textContent: cell.content || '',
+    textContentHtml: cell.contentHtml || '',
     imageUrl: cell.imageUrl || '',
     videoUrl: cell.videoUrl || '',
     checkboxOptions: cell.checkboxOptions || [],
@@ -203,12 +225,15 @@ export function cellToFormState(cell: TableCell): CellFormState {
     cellMobileOptionsColumns: cell.mobileOptionsColumns,
     inputPlaceholder: cell.placeholder || '',
     inputMaxLength: cell.inputMaxLength || '',
+    inputRows: cell.inputRows || '',
+    inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
+    cellTextValidation: cell.textValidation ?? null,
     cellRequired: cell.required ?? false,
     cellRequiredMessage: cell.requiredMessage ?? '',
     gatingCondition: cell.enabledWhen,
@@ -229,19 +254,25 @@ export function cellToFormState(cell: TableCell): CellFormState {
     isOtherRankingCell: cell.isOtherRankingCell === true,
     choiceLabel: cell.choiceLabel || '',
     choiceAllowTextInput: cell.allowTextInput === true,
+    choiceExclusive: cell.exclusiveChoice === true,
+    choiceExclusiveScope: cell.exclusiveScope === 'table' ? 'table' : 'group',
     choiceTextInputType: cell.textInputType ?? 'text',
     choiceTextInputNumberFormat: cell.textInputNumberFormat,
     choiceBranchRule: cell.branchRule,
     choiceGroupId: cell.choiceGroupId ?? '',
     textBold: cell.textBold === true,
+    boldFirstLine: cell.boldFirstLine === true,
     backgroundColor: cell.backgroundColor ?? '',
     textColor: cell.textColor ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
-    mobileDisplay: cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
+    mobileDisplay:
+      cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
     mobileLabel: cell.mobileLabel || '',
+    optionTextSlot: cell.optionTextSlot === true,
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
     inputTextAlign: cell.inputTextAlign ?? 'inherit',
+    hideRightBorder: cell.hideRightBorder === true,
     isMergeEnabled:
       (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
     rowspan: cell.rowspan || 1,
@@ -293,6 +324,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     exportLabel: _exportLabel,
     isCustomExportLabel: _isCustomExportLabel,
     mobileLabel: _mobileLabel,
+    optionTextSlot: _optionTextSlot,
     choiceGroupId: _choiceGroupId,
     spssVarType: _spssVarType,
     spssMeasure: _spssMeasure,
@@ -308,11 +340,15 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     mobileOptionsColumns: _mobileOptionsColumns,
     placeholder: _placeholder,
     inputMaxLength: _inputMaxLength,
+    inputRows: _inputRows,
+    inputWidth: _inputWidth,
+    hideRightBorder: _hideRightBorder,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
     piiEncrypted: _piiEncrypted,
     emptyDefault: _emptyDefault,
     numberFormat: _numberFormat,
+    textValidation: _textValidation,
     required: _required,
     enabledWhen: _enabledWhen,
     requiredWhenEnabled: _requiredWhenEnabled,
@@ -325,12 +361,16 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     rankingLabel: _rankingLabel,
     isOtherRankingCell: _isOtherRankingCell,
     choiceLabel: _choiceLabel,
+    exclusiveChoice: _exclusiveChoice,
+    exclusiveScope: _exclusiveScope,
     branchRule: _branchRule,
     allowTextInput: _allowTextInput,
     textInputType: _textInputType,
     textInputNumberFormat: _textInputNumberFormat,
     textInputPlaceholder: _textInputPlaceholder,
+    contentHtml: _contentHtml,
     textBold: _textBold,
+    boldFirstLine: _boldFirstLine,
     backgroundColor: _backgroundColor,
     textColor: _textColor,
     rowspan: _rowspan,
@@ -355,7 +395,12 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     type: contentType,
     // 모든 타입에서 텍스트 내용 저장 (라디오/체크박스/셀렉트에서도 설명 텍스트 표시 가능)
     content: form.textContent || '',
+    // 서식본은 마크(색·굵게)가 있을 때만 — 평문뿐이면 키를 두지 않아 옛 셀과 같은 모양을 유지한다.
+    ...(form.textContentHtml && cellHtmlHasMarks(form.textContentHtml)
+      ? { contentHtml: form.textContentHtml }
+      : {}),
     ...(form.textBold ? { textBold: true } : {}),
+    ...(form.boldFirstLine ? { boldFirstLine: true } : {}),
     ...(form.backgroundColor ? { backgroundColor: form.backgroundColor } : {}),
     ...(form.textColor ? { textColor: form.textColor } : {}),
     // optional 필드: 타입이 해당하지 않으면 키 자체를 제거(조건부 spread)
@@ -383,6 +428,13 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(typeof form.inputMaxLength === 'number'
             ? { inputMaxLength: form.inputMaxLength }
             : {}),
+          // 1 은 한 줄(기본)이라 키를 만들지 않는다 — 저장값에 의미 없는 필드가 쌓이지 않게.
+          ...(typeof form.inputRows === 'number' && form.inputRows >= 2
+            ? { inputRows: form.inputRows }
+            : {}),
+          ...(typeof form.inputWidth === 'number' && form.inputWidth > 0
+            ? { inputWidth: form.inputWidth }
+            : {}),
           ...(form.inputDefaultValueTemplate.trim().length > 0
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }
             : {}),
@@ -393,6 +445,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             : {}),
           ...(form.inputType === 'number' && form.cellNumberFormat
             ? { numberFormat: form.cellNumberFormat }
+            : {}),
+          // 응답 품질 검사는 평문 모드에서만 — 숫자·형식 모드로 바꾸면 저장에서 빠진다(배타)
+          ...(form.cellTextValidation &&
+          isPlainTextInput({ type: 'text', inputType: form.inputType })
+            ? { textValidation: form.cellTextValidation }
             : {}),
         }
       : {}),
@@ -418,13 +475,18 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
         }
       : {}),
     // 숫자 input 셀 수식 검증
-    ...(contentType === 'input' && form.inputType === 'number' && form.formulaValidationEnabled && form.formula
+    ...(contentType === 'input' &&
+    form.inputType === 'number' &&
+    form.formulaValidationEnabled &&
+    form.formula
       ? {
           formula: form.formula,
           ...(parseNumericInput(form.formulaToleranceRaw) !== null
             ? { formulaTolerance: parseNumericInput(form.formulaToleranceRaw)! }
             : {}),
-          ...(form.formulaErrorMessage.trim() ? { formulaErrorMessage: form.formulaErrorMessage.trim() } : {}),
+          ...(form.formulaErrorMessage.trim()
+            ? { formulaErrorMessage: form.formulaErrorMessage.trim() }
+            : {}),
         }
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거).
@@ -478,7 +540,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { rankingLabel: form.rankingLabel.trim() }
       : {}),
     // ranking_opt 그룹 귀속. 빈 문자열이면 기존 셀의 choiceGroupId 를 후처리 delete 로 제거.
-    ...(contentType === 'ranking_opt' && form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
+    ...(contentType === 'ranking_opt' && form.choiceGroupId
+      ? { choiceGroupId: form.choiceGroupId }
+      : {}),
     // ranking_opt / choice_opt 전용 spssNumericCode (Case 2/A SPSS 재-export 안정성)
     // isOther 모드면 numeric 변수가 system-missing 이라 spssNumericCode 는 의미 없음 → 강제 undefined.
     ...(((contentType === 'ranking_opt' && !form.isOtherRankingCell) ||
@@ -495,10 +559,17 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.choiceLabel.trim().length > 0 ? { choiceLabel: form.choiceLabel.trim() } : {}),
           ...(form.choiceAllowTextInput ? { allowTextInput: true } : {}),
-          ...(form.choiceAllowTextInput && form.choiceTextInputType === 'number'
+          ...(form.choiceExclusive ? { exclusiveChoice: true } : {}),
+          ...(form.choiceExclusive && form.choiceExclusiveScope === 'table'
+            ? { exclusiveScope: 'table' as const }
+            : {}),
+          // 'text'(=지정 안 함)만 키를 남기지 않는다. 숫자 모드와 입력 형식 5종은 그대로
+          // 싣는다 — 'number' 만 통과시키면 빌더에서 고른 형식이 조용히 버려진다.
+          // 숫자 서식은 숫자 모드 전용이라 형식과는 배타다.
+          ...(form.choiceAllowTextInput && form.choiceTextInputType !== 'text'
             ? {
-                textInputType: 'number' as const,
-                ...(form.choiceTextInputNumberFormat
+                textInputType: form.choiceTextInputType,
+                ...(form.choiceTextInputType === 'number' && form.choiceTextInputNumberFormat
                   ? { textInputNumberFormat: form.choiceTextInputNumberFormat }
                   : {}),
               }
@@ -515,6 +586,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
         }
       : {}),
+    // 오른쪽 세로선 숨김 — 셀 종류 무관. 끄면 키를 남기지 않는다.
+    ...(form.hideRightBorder ? { hideRightBorder: true } : {}),
     // 셀 병합 속성 추가
     ...(form.isMergeEnabled && typeof form.rowspan === 'number' && form.rowspan > 1
       ? { rowspan: form.rowspan }
@@ -527,6 +600,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { mobileDisplay: form.mobileDisplay }
       : {}),
     // 모바일 카드 셀 라벨 (입력 셀 계열만; 비어 있으면 키 자체를 저장하지 않음)
+    ...(contentType === 'text' && form.optionTextSlot ? { optionTextSlot: true } : {}),
     ...(MOBILE_LABEL_CELL_TYPES.has(contentType) && form.mobileLabel.trim()
       ? { mobileLabel: form.mobileLabel.trim() }
       : {}),

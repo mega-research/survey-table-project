@@ -279,3 +279,108 @@ describe('stripDisabledCellValues — 게이팅 체인 고정점 정리', () => 
     2000,
   );
 });
+
+describe('stripDisabledCellValues — 다른 행의 컨트롤러', () => {
+  const controller: TableCell = {
+    id: 'ctrl', content: '', type: 'radio',
+    radioOptions: [
+      { id: 'o1', label: '있다', value: '1' },
+      { id: 'o2', label: '없다', value: '2' },
+    ],
+  } as TableCell;
+  const question = {
+    id: 'q',
+    type: 'table',
+    title: '',
+    required: false,
+    order: 0,
+    tableRowsData: [
+      { id: 'r1', label: '1행', cells: [controller] },
+      {
+        id: 'r2',
+        label: '2행',
+        cells: [inputCell('t', { enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] } })],
+      },
+    ],
+  } as unknown as Question;
+
+  it('다른 행 라디오의 옵션 id 저장값을 표 전체 셀 정의로 해석해 활성이면 보존한다', () => {
+    const payload = { q: { ctrl: { optionId: 'o1' }, t: '5' } };
+    expect(stripDisabledCellValues([question], payload)).toBe(payload);
+  });
+
+  it('다른 행 라디오가 미충족이면 지운다', () => {
+    const out = stripDisabledCellValues([question], { q: { ctrl: { optionId: 'o2' }, t: '5' } });
+    expect(out['q']).toEqual({ ctrl: { optionId: 'o2' } });
+  });
+});
+
+describe('choice-selected 조건 — 보기 옵션 셀이 선택되면 활성', () => {
+  const gated = inputCell('t', {
+    enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-other' },
+  });
+
+  it('선택된 보기 id 집합에 컨트롤러가 있으면 활성, 없거나 집합이 없으면 비활성', () => {
+    expect(isCellEnabled(gated, {}, undefined, new Set(['opt-other']))).toBe(true);
+    expect(isCellEnabled(gated, {}, undefined, new Set(['opt-1']))).toBe(false);
+    expect(isCellEnabled(gated, {}, undefined, undefined)).toBe(false);
+  });
+
+  it('보기 소스 표에서는 사이드카(__optTexts__)의 그 셀 값을 지운다 — 표 문항 경로가 아니다', () => {
+    const question = {
+      id: 'q',
+      type: 'checkbox',
+      title: '',
+      required: false,
+      order: 0,
+      tableColumns: [{ id: 'c1', label: '' }, { id: 'c2', label: '' }],
+      tableRowsData: [
+        {
+          id: 'r8',
+          label: '기타',
+          cells: [gated, { id: 'opt-other', type: 'choice_opt', content: '기타' }],
+        },
+      ],
+    } as unknown as Question;
+    const unmet = { q: ['opt-1'], __optTexts__: { q: { 'opt-other': '', t: '적은 내용' } } };
+    const out = stripDisabledCellValues([question], unmet);
+    expect(out['__optTexts__']).toEqual({ q: { 'opt-other': '' } });
+    expect(out['q']).toEqual(['opt-1']);
+
+    const met = { q: ['opt-other'], __optTexts__: { q: { t: '적은 내용' } } };
+    expect(stripDisabledCellValues([question], met)).toBe(met);
+  });
+});
+
+describe('choice-selected 조건 — 보기 그룹 표 (table + __choiceGroups)', () => {
+  const groupedTable = {
+    id: 't',
+    type: 'table',
+    title: '',
+    required: false,
+    order: 0,
+    choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    tableColumns: [{ id: 'c1', label: '' }, { id: 'c2', label: '' }, { id: 'c3', label: '' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'opt-yes', type: 'choice_opt', content: '있음', choiceGroupId: 'g1' },
+          { id: 'opt-no', type: 'choice_opt', content: '없음', choiceGroupId: 'g1' },
+          inputCell('when', { enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt-yes' } }),
+        ],
+      },
+    ],
+  } as unknown as Question;
+
+  it('저장 strip 이 표 응답 안 예약 키의 선택으로 게이팅 셀을 판정한다 — 표 문항 경로', () => {
+    const unmet = { t: { when: '지워져야 한다', __choiceGroups: { rad1: 'opt-no' } } };
+    expect(stripDisabledCellValues([groupedTable], unmet)['t']).toEqual({
+      __choiceGroups: { rad1: 'opt-no' },
+    });
+
+    const met = { t: { when: '내년', __choiceGroups: { rad1: 'opt-yes' } } };
+    expect(stripDisabledCellValues([groupedTable], met)).toBe(met);
+  });
+});

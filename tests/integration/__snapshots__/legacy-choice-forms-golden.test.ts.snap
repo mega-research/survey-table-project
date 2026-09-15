@@ -1,0 +1,500 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`레거시 골든 — 구조 생존 판정 > 같은 구조에서는 값이 그대로 산다 1`] = `
+{
+  "affectedQuestionIds": [
+    "q-grp-cb",
+  ],
+  "survivingResponses": {
+    "__optTexts__": {
+      "q-choice-src": {
+        "src-amount": "12",
+      },
+      "q-grp-radio": {
+        "r1-etc": "벽걸이",
+        "r2-when": "지워져야 한다",
+      },
+    },
+    "q-choice-src": "src-b",
+    "q-grp-radio": {
+      "rad1": "r1-etc",
+      "rad2": "r2-no",
+    },
+    "q-hidden-text": "숨은 답",
+    "q-shown-text": "보이는 답",
+    "q-table": {
+      "t-r1-a": "10",
+      "t-r1-b": "20",
+      "t-r1-sum": "999",
+      "t-r2-detail": "지워져야 한다",
+      "t-r2-mode": "no",
+    },
+  },
+}
+`;
+
+exports[`레거시 골든 — 구조 생존 판정 > 그룹·보기·행이 사라진 구조에서의 판정 결과 1`] = `
+{
+  "affectedQuestionIds": [
+    "q-grp-cb",
+    "q-choice-src",
+    "q-table",
+  ],
+  "survivingResponses": {
+    "__optTexts__": {
+      "q-choice-src": {
+        "src-amount": "12",
+      },
+      "q-grp-radio": {
+        "r1-etc": "벽걸이",
+        "r2-when": "지워져야 한다",
+      },
+    },
+    "q-grp-radio": {
+      "rad1": "r1-etc",
+      "rad2": "r2-no",
+    },
+    "q-hidden-text": "숨은 답",
+    "q-shown-text": "보이는 답",
+    "q-table": {
+      "t-r1-a": "10",
+      "t-r1-b": "20",
+      "t-r1-sum": "999",
+    },
+  },
+}
+`;
+
+exports[`레거시 골든 — 내보내기 열 · 값 · MRSET > MRSET 구문 1`] = `
+"* SPSS 표시 형식·복수응답 값 라벨·세트 정의 - .sav 파일을 연 뒤 실행하세요.
+VALUE LABELS Q2_cb1_1 Q2_cb1_2 Q2_cb1_3
+  1 '온라인'
+  2 '대리점'
+  3 '양판점'.
+MRSETS
+  /MCGROUP NAME=$Q2_cb1 LABEL='구매처' VARIABLES=Q2_cb1_1 Q2_cb1_2 Q2_cb1_3.
+"
+`;
+
+exports[`레거시 골든 — 내보내기 열 · 값 · MRSET > 열 구성 (변수명 · 타입 · 셀/그룹 매핑) 1`] = `
+[
+  {
+    "choiceGroupCellValueMap": {
+      "r1-etc": 3,
+      "r1-fhd": 2,
+      "r1-uhd": 1,
+    },
+    "choiceGroupKey": "rad1",
+    "choiceGroupValueLabels": [
+      {
+        "label": "UHD",
+        "value": 1,
+      },
+      {
+        "label": "FHD",
+        "value": 2,
+      },
+      {
+        "label": "기타",
+        "value": 3,
+      },
+    ],
+    "optionLabel": "TV보유",
+    "questionId": "q-grp-radio",
+    "spssVarName": "Q1_rad1",
+    "type": "choice-group",
+  },
+  {
+    "optionLabel": "기타",
+    "questionId": "q-grp-radio",
+    "spssVarName": "Q1_rad1_3_text",
+    "type": "option-text",
+  },
+  {
+    "choiceGroupCellValueMap": {
+      "r2-no": 2,
+      "r2-yes": 1,
+    },
+    "choiceGroupKey": "rad2",
+    "choiceGroupValueLabels": [
+      {
+        "label": "있음",
+        "value": 1,
+      },
+      {
+        "label": "없음",
+        "value": 2,
+      },
+    ],
+    "optionLabel": "구매의향",
+    "questionId": "q-grp-radio",
+    "spssVarName": "Q1_rad2",
+    "type": "choice-group",
+  },
+  {
+    "optionLabel": "구매 시기",
+    "questionId": "q-grp-radio",
+    "spssVarName": "Q1_r2_c4",
+    "type": "option-text",
+  },
+  {
+    "choiceGroupKey": "cb1",
+    "choiceGroupMemberCellId": "cb-a",
+    "optionIndex": 0,
+    "optionLabel": "구매처 - 온라인",
+    "questionId": "q-grp-cb",
+    "spssVarName": "Q2_cb1_1",
+    "type": "choice-group-item",
+  },
+  {
+    "choiceGroupKey": "cb1",
+    "choiceGroupMemberCellId": "cb-b",
+    "optionIndex": 1,
+    "optionLabel": "구매처 - 대리점",
+    "questionId": "q-grp-cb",
+    "spssVarName": "Q2_cb1_2",
+    "type": "choice-group-item",
+  },
+  {
+    "choiceGroupKey": "cb1",
+    "choiceGroupMemberCellId": "cb-c",
+    "optionIndex": 2,
+    "optionLabel": "구매처 - 양판점",
+    "questionId": "q-grp-cb",
+    "spssVarName": "Q2_cb1_3",
+    "type": "choice-group-item",
+  },
+  {
+    "optionLabel": "DDI / AP",
+    "questionId": "q-choice-src",
+    "spssVarName": "Q3",
+    "type": "single",
+  },
+  {
+    "optionLabel": "수량",
+    "questionId": "q-choice-src",
+    "spssVarName": "Q3_r1_c3",
+    "type": "option-text",
+  },
+  {
+    "optionLabel": "실적 - 상반기",
+    "questionId": "q-table",
+    "spssVarName": "Q4_r1_c2",
+    "tableCellId": "t-r1-a",
+    "type": "table-cell",
+  },
+  {
+    "optionLabel": "실적 - 하반기",
+    "questionId": "q-table",
+    "spssVarName": "Q4_r1_c3",
+    "tableCellId": "t-r1-b",
+    "type": "table-cell",
+  },
+  {
+    "optionLabel": "실적 - 합계",
+    "questionId": "q-table",
+    "spssVarName": "Q4_r1_c4",
+    "tableCellId": "t-r1-sum",
+    "type": "table-cell",
+  },
+  {
+    "optionLabel": "함 / 안 함",
+    "questionId": "q-table",
+    "spssVarName": "Q4_r2_c2",
+    "tableCellId": "t-r2-mode",
+    "type": "table-cell",
+  },
+  {
+    "optionLabel": "수출 - 하반기",
+    "questionId": "q-table",
+    "spssVarName": "Q4_r2_c3",
+    "tableCellId": "t-r2-detail",
+    "type": "table-cell",
+  },
+  {
+    "optionLabel": "",
+    "questionId": "q-hidden-text",
+    "spssVarName": "Q5",
+    "type": "text",
+  },
+  {
+    "optionLabel": "",
+    "questionId": "q-shown-text",
+    "spssVarName": "Q6",
+    "type": "text",
+  },
+]
+`;
+
+exports[`레거시 골든 — 내보내기 열 · 값 · MRSET > 제출 응답 한 건의 값 행 1`] = `
+[
+  [
+    "Q1_rad1",
+    3,
+  ],
+  [
+    "Q1_rad1_3_text",
+    "벽걸이",
+  ],
+  [
+    "Q1_rad2",
+    2,
+  ],
+  [
+    "Q1_r2_c4",
+    "지워져야 한다",
+  ],
+  [
+    "Q2_cb1_1",
+    1,
+  ],
+  [
+    "Q2_cb1_2",
+    null,
+  ],
+  [
+    "Q2_cb1_3",
+    3,
+  ],
+  [
+    "Q3",
+    2,
+  ],
+  [
+    "Q3_r1_c3",
+    12,
+  ],
+  [
+    "Q4_r1_c2",
+    "10",
+  ],
+  [
+    "Q4_r1_c3",
+    "20",
+  ],
+  [
+    "Q4_r1_c4",
+    999,
+  ],
+  [
+    "Q4_r2_c2",
+    2,
+  ],
+  [
+    "Q4_r2_c3",
+    "지워져야 한다",
+  ],
+  [
+    "Q5",
+    "숨은 답",
+  ],
+  [
+    "Q6",
+    "보이는 답",
+  ],
+]
+`;
+
+exports[`레거시 골든 — 저장 strip (숨은 문항 → 게이팅 → calc) > 제출 직전 응답을 세 단계로 정리한 결과 1`] = `
+{
+  "afterCalc": {
+    "__optTexts__": {
+      "q-choice-src": {
+        "src-amount": "12",
+      },
+      "q-grp-radio": {
+        "r1-etc": "벽걸이",
+      },
+    },
+    "q-choice-src": "src-b",
+    "q-grp-cb": {
+      "cb1": [
+        "cb-a",
+        "cb-c",
+      ],
+    },
+    "q-grp-radio": {
+      "rad1": "r1-etc",
+      "rad2": "r2-no",
+    },
+    "q-shown-text": "보이는 답",
+    "q-table": {
+      "t-r1-a": "10",
+      "t-r1-b": "20",
+      "t-r1-sum": "30",
+      "t-r2-mode": "no",
+    },
+  },
+  "afterGating": {
+    "__optTexts__": {
+      "q-choice-src": {
+        "src-amount": "12",
+      },
+      "q-grp-radio": {
+        "r1-etc": "벽걸이",
+      },
+    },
+    "q-choice-src": "src-b",
+    "q-grp-cb": {
+      "cb1": [
+        "cb-a",
+        "cb-c",
+      ],
+    },
+    "q-grp-radio": {
+      "rad1": "r1-etc",
+      "rad2": "r2-no",
+    },
+    "q-shown-text": "보이는 답",
+    "q-table": {
+      "t-r1-a": "10",
+      "t-r1-b": "20",
+      "t-r1-sum": "999",
+      "t-r2-mode": "no",
+    },
+  },
+  "afterHidden": {
+    "__optTexts__": {
+      "q-choice-src": {
+        "src-amount": "12",
+      },
+      "q-grp-radio": {
+        "r1-etc": "벽걸이",
+        "r2-when": "지워져야 한다",
+      },
+    },
+    "q-choice-src": "src-b",
+    "q-grp-cb": {
+      "cb1": [
+        "cb-a",
+        "cb-c",
+      ],
+    },
+    "q-grp-radio": {
+      "rad1": "r1-etc",
+      "rad2": "r2-no",
+    },
+    "q-shown-text": "보이는 답",
+    "q-table": {
+      "t-r1-a": "10",
+      "t-r1-b": "20",
+      "t-r1-sum": "999",
+      "t-r2-detail": "지워져야 한다",
+      "t-r2-mode": "no",
+    },
+  },
+}
+`;
+
+exports[`레거시 골든 — 필수 검증 > 문항별 응답됨 · 미충족 그룹 셀 · 필수 문구 1`] = `
+{
+  "그룹 하나만": {
+    "q-choice-src": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-grp-cb": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [
+        "cb-a",
+        "cb-b",
+        "cb-c",
+      ],
+    },
+    "q-grp-radio": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-hidden-text": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-shown-text": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-table": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+  },
+  "빈응답": {
+    "q-choice-src": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-grp-cb": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [
+        "cb-a",
+        "cb-b",
+        "cb-c",
+      ],
+    },
+    "q-grp-radio": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [
+        "r1-etc",
+        "r1-fhd",
+        "r1-uhd",
+      ],
+    },
+    "q-hidden-text": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-shown-text": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-table": {
+      "answered": false,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+  },
+  "채움": {
+    "q-choice-src": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-grp-cb": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-grp-radio": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-hidden-text": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-shown-text": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+    "q-table": {
+      "answered": true,
+      "message": "필수 질문에 답변해주세요.",
+      "unfilledCells": [],
+    },
+  },
+}
+`;

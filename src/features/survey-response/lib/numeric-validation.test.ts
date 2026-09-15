@@ -282,12 +282,12 @@ describe('collectNumericIssues — 테이블', () => {
     expect(issues[0]!.message).toContain('100');
   });
 
-  it('errorMessage 지정 시 그 메시지를 사용한다', () => {
+  it('errorMessage 지정 시 그 메시지를 그대로 쓰고 현재 합을 덧붙이지 않는다', () => {
     const q = tableQuestion({
       sumConstraints: [{ ...eq100, errorMessage: '비중 합은 100이어야 합니다' }],
     });
     const issues = collectNumericIssues(q, { c1: '60', c2: '30' });
-    expect(issues[0]!.message).toContain('비중 합은 100이어야 합니다');
+    expect(issues[0]!.message).toBe('비중 합은 100이어야 합니다');
   });
 
   it('테이블 미접촉이면 합계·필수 셀 검증을 스킵한다', () => {
@@ -378,6 +378,26 @@ describe('collectNumericIssues — 테이블', () => {
     const q = tableQuestion({ tableRowsData: rows, sumConstraints: [eq100] });
     // 동적 행만 선택하고 값은 미입력 — __selectedRowIds 는 셀 값이 아니다
     expect(collectNumericIssues(q, { __selectedRowIds: ['r1'] })).toHaveLength(0);
+  });
+
+  it('그룹 선택(__choiceGroups)만 있는 보기 그룹 표는 접촉으로 본다 — 필수 셀 검증이 켜진다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'opt-a', type: 'choice_opt', content: 'A', choiceGroupId: 'g1' },
+          { id: 'c1', type: 'input', content: '', inputType: 'number', required: true },
+        ],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+    });
+    expect(collectNumericIssues(q, { __choiceGroups: { rad1: 'opt-a' } })).toHaveLength(1);
+    // 그룹 맵이 비어 있으면 여전히 미접촉이다
+    expect(collectNumericIssues(q, { __choiceGroups: {} })).toHaveLength(0);
   });
 
   it('미선택 동적 행의 필수 셀은 평가에서 제외한다', () => {

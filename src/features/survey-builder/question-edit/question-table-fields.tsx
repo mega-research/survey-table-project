@@ -3,6 +3,7 @@
 import { Label } from '@/components/ui/label';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
+import { disableRowRepeat, expandRepeatRows, isRowRepeatIntact } from '@/lib/question/row-repeat';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 import type { Question } from '@/types/survey';
 
@@ -59,17 +60,42 @@ export function QuestionTableFields({
         questionTitle={formData.title}
         answerQuoteEnabled={answerQuoteEnabled}
         dynamicRowConfigs={formData.dynamicRowConfigs}
+        rowRepeatConfig={formData.rowRepeatConfig}
         onTableChange={(data) => {
           setFormData((prev) => {
+            // 템플릿 행을 지우거나 흩어 놓으면 설정이 낡는다. 구조를 되돌리는 것으로
+            // 끝내면 설정만 켜진 채 남아 다음에 열 때 다시 펼쳐지므로 설정도 함께 끈다.
+            const intact = isRowRepeatIntact(data.tableRowsData, prev.rowRepeatConfig);
             const next: Partial<Question> = {
               ...prev,
               tableTitle: data.tableTitle,
               tableColumns: data.tableColumns,
-              tableRowsData: data.tableRowsData,
+              // 행 반복이 켜져 있으면 저장되는 것은 늘 펼친 구조다. 펼치기는 멱등이라
+              // 편집이 일어날 때마다 다시 불러도 기존 벌의 행·셀 id 가 그대로 살아 있고,
+              // 1벌(템플릿)의 구조 변경만 뒤 벌로 전파된다.
+              tableRowsData: expandRepeatRows(data.tableRowsData, prev.rowRepeatConfig),
+              ...(intact ? {} : { rowRepeatConfig: null }),
             };
             // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
             // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
             next.tableHeaderGrid = data.tableHeaderGrid;
+            return next;
+          });
+        }}
+        onRowRepeatConfigChange={(config) => {
+          setFormData((prev) => {
+            const next: Partial<Question> = { ...prev };
+            if (config) {
+              next.rowRepeatConfig = config;
+              next.tableRowsData = expandRepeatRows(prev.tableRowsData ?? [], config);
+            } else {
+              // 끄면 뒤쪽 벌을 걷어낸다 — 남겨두면 응답 화면에 늘 펼쳐진 채 나온다.
+              // **명시적 null 이어야 한다.** 키를 지우면 부분 패치 저장이 undefined 를
+              // "미변경"으로 읽어 DB 에 이전 설정이 그대로 남고, 다음에 열 때 그 설정이
+              // 되살아나 rowCode 가 겹쳐 붙는다(_01_01).
+              next.rowRepeatConfig = null;
+              next.tableRowsData = disableRowRepeat(prev.tableRowsData ?? []);
+            }
             return next;
           });
         }}
@@ -97,6 +123,7 @@ export function QuestionTableFields({
             tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
             className="border-2 border-dashed border-gray-300"
             hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
+            stickyColumnCount={questions.find((q) => q.id === questionId)?.stickyColumnCount}
             choiceControlType={(cell) =>
               getGroupTypeOfCell(
                 {

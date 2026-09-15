@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
@@ -24,7 +24,7 @@ import {
   type RawExportLoadOptions,
   type RawExportLoadResult,
 } from './raw-export-rows';
-import { selectRawExportContactColumns } from '@/lib/operations/contacts-format';
+import { selectRawExportContactColumns } from '@/lib/operations/profile-columns-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
@@ -89,7 +89,10 @@ async function handleExport(
     // .sav/.sps 는 완료 전용 분석 모수라 이 파라미터와 무관하다.
     const includeNonRespondents =
       request.nextUrl.searchParams.get('includeNonRespondents') === '1';
-    ctx.bind({ includeNonRespondents });
+    // 「이월 응답 포함」 — 역시 Raw Data 계열만. 이번 회차에 키가 없는 문항을 지난 회차 답으로
+    // 채운다 (숨은 문항도 포함 — 다이얼로그 설명에 명시).
+    const includePriorAnswers = request.nextUrl.searchParams.get('includePriorAnswers') === '1';
+    ctx.bind({ includeNonRespondents, includePriorAnswers });
 
     // 1. 설문 데이터 조회
     // questions 는 반드시 order 오름차순으로 조회한다. orderBy 가 없으면 drizzle relational
@@ -109,23 +112,20 @@ async function handleExport(
     const scope = await loadOperationsDataScope(surveyId);
     ctx.bind({ scope });
 
-    // 「조사 대상 명단 열 포함」 — Raw Data 계열(raw/raw-split)만 읽는다.
+    // 조사 대상 명단 열 — Raw Data 계열(raw/raw-split)에 항상 붙는다. 열은 응답 내역 컬럼 설정에서
+    // 표시 중인 attrs·pii 열이라 토글이 없고, 설정이 없거나 명단 미업로드면 열 0개로 정상 진행한다.
     // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·게스트 가드는 contacts/export 와 같고
     // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
-    // 스킴을 읽는 것도 켜졌을 때뿐 — 꺼진 경로의 쿼리는 도입 전과 같다. 스킴이 없으면(명단
-    // 미업로드) 열 0개로 정상 진행한다 — 명단 열은 부가 옵션이라 조사 대상 엑셀과 달리 400 이 아니다.
     // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
     const isRawExport = type === 'raw' || type === 'raw-split';
-    const includeContactColumns =
-      isRawExport && request.nextUrl.searchParams.get('includeContactColumns') === '1';
-    const contactColumns = includeContactColumns
-      ? selectRawExportContactColumns(await getContactColumnScheme(surveyId, scope))
+    const contactColumns = isRawExport
+      ? selectRawExportContactColumns(
+          await getContactColumnScheme(surveyId, scope),
+          surveyData.profileColumns ?? null,
+        )
       : [];
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
-    ctx.bind({ includeContactColumns, contactColumnCount: contactColumns.length, piiColumnCount });
-    const rawOptions: RawExportLoadOptions = includeContactColumns
-      ? { includeNonRespondents, contactColumns }
-      : { includeNonRespondents };
+    ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
     const piiHeaders = piiColumnCount > 0 ? { 'Cache-Control': 'no-store' } : {};
 
@@ -135,6 +135,14 @@ async function handleExport(
       surveyId,
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
+
+    const rawOptions: RawExportLoadOptions = {
+      includeNonRespondents,
+      includePriorAnswers,
+      contactColumns,
+      // 「이월값 불러오기」를 끈 문항 판정 — 현재 빌더 설정 기준
+      questions: hydratedQuestions,
+    };
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
     // raw/raw-split는 자체 모수와 가드를 별도로 가지므로 이 블록을 건너뛴다.
@@ -193,8 +201,57 @@ async function handleExport(
       const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
         isTest: testFlagForScope(scope),
       });
+      // 행 반복의 뒤쪽 미사용 벌은 .sav 에서 열이 없다 — 여기서도 같은 판정을 써야
+      // FORMATS 가 존재하지 않는 변수를 가리키지 않는다. 응답을 로드하지 않는 경로라
+      // 셀 값 판정에 필요한 값만 따로 읽는다(복호화는 불필요 — 암호문도 "값이 있음"으로
+      // 세면 충분하다).
+      //
+      // 이 경로는 다른 형식과 달리 응답 수 상한 가드를 타지 않고 maxDuration 이 30초다.
+      // 그래서 (1) 반복을 쓰지 않는 설문은 질의 자체를 건너뛰고, (2) 읽는 것은 반복 문항의
+      // 응답 조각뿐이며, (3) 상한을 넘는 모수에서는 판정을 포기하고 전 벌을 낸다
+      // — 변수 목록이 넓어질 뿐 문법은 유효하다.
+      const { collectUsedRepeatCounts, repeatQuestionIds } = await import(
+        '@/lib/analytics/row-repeat-usage'
+      );
+      const scanQuestionIds = repeatQuestionIds(hydratedQuestions);
+      let usedRepeatCounts = new Map<string, number>();
+      if (scanQuestionIds.length > 0) {
+        const scanScope = and(
+          eq(surveyResponses.surveyId, surveyId),
+          notDeletedResponse,
+          completedResponse,
+          responseScopeCondition(scope),
+        );
+        const scanTotalRows = await db
+          .select({ total: count() })
+          .from(surveyResponses)
+          .where(scanScope);
+        if ((scanTotalRows[0]?.total ?? 0) <= MAX_EXPORT_RESPONSES) {
+          // 문항 조각만 뽑는다 — 응답 JSONB 를 통째로 메모리에 올리지 않는다.
+          const slice = sql<Record<string, unknown>>`jsonb_build_object(${sql.join(
+            scanQuestionIds.flatMap((id) => [
+              sql`${id}`,
+              sql`${surveyResponses.questionResponses} -> ${id}`,
+            ]),
+            sql`, `,
+          )})`;
+          const repeatScanRows = await db
+            .select({ questionResponses: slice })
+            .from(surveyResponses)
+            .where(scanScope);
+          usedRepeatCounts = collectUsedRepeatCounts(
+            hydratedQuestions,
+            repeatScanRows.map((r) => ({
+              questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+            })),
+          );
+        }
+      }
       const syntax = generateMrsetsSyntax(
-        generateSPSSColumns(hydratedQuestions, { changeConfirmQuestionIds }),
+        generateSPSSColumns(hydratedQuestions, {
+          changeConfirmQuestionIds,
+          ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+        }),
         hydratedQuestions,
       );
       if (syntax === null) {

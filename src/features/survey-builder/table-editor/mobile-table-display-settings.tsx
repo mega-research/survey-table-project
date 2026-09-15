@@ -29,6 +29,10 @@ interface MobileTableDisplaySettingsProps {
   repeatHeaderStartRow?: number | null | undefined;
   repeatHeaderEndRow?: number | null | undefined;
   onChange: (value: MobileTableDisplaySettingsValue) => void;
+  /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
+  questionType?: 'table' | 'radio' | 'checkbox' | undefined;
+  /** 테이블 유형에 보기 그룹이 있는가 — 있으면 행 단위 그룹 카드를 테이블 유형에도 노출 */
+  hasChoiceGroups?: boolean | undefined;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -48,6 +52,24 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     description: '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
   },
   {
+    value: 'row-cards',
+    label: '행 단위 카드',
+    description:
+      '행마다 카드 하나를 만들고 그 안에 열별 선택을 나란히 둡니다. 열마다 하나씩 고르는 표에 맞습니다.',
+  },
+  {
+    value: 'row-group-cards',
+    label: '행 단위 그룹 카드',
+    description:
+      '행마다 카드 하나를 만들고 그 안을 보기 그룹(축)별 섹션으로 나눕니다. 구분 셀은 제목과 설명으로 항상 보이고, 인지 여부·필요성·참여 의향처럼 행마다 여러 축을 하나씩 고르는 표에 맞습니다.',
+  },
+  {
+    value: 'axis-cards',
+    label: '축 단위 카드',
+    description:
+      '보기 그룹(축)마다 카드 하나를 만들고 그 안에 행을 보기로 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 현재 활용·활용 계획처럼 축마다 독립된 선택인데 행 목록만 같은 표에 맞습니다.',
+  },
+  {
     value: 'original',
     label: '전체 원본 표',
     description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
@@ -61,7 +83,20 @@ export function MobileTableDisplaySettings({
   repeatHeaderStartRow,
   repeatHeaderEndRow,
   onChange,
+  questionType,
+  hasChoiceGroups = false,
 }: MobileTableDisplaySettingsProps) {
+  const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
+  const visibleOptions = OPTIONS.filter((option) => {
+    if (option.value === 'row-cards') return isChoiceSourceTable;
+    // 행 단위 그룹 카드는 보기 그룹이 있는 테이블 유형도 그린다(interactive-table-response 이식)
+    if (option.value === 'row-group-cards') {
+      return isChoiceSourceTable || (questionType === 'table' && hasChoiceGroups);
+    }
+    // 축 단위 카드는 축(보기 그룹)이 있어야 세울 수 있다 — 그룹 없는 표는 자동 카드가 같은 모양
+    if (option.value === 'axis-cards') return isChoiceSourceTable && hasChoiceGroups;
+    return true;
+  });
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
   const committedRange = resolveMobileDrilldownRepeatHeaderRange({
     mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
@@ -115,7 +150,7 @@ export function MobileTableDisplaySettings({
         aria-labelledby="mobile-table-display-mode-label"
         className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
       >
-        {OPTIONS.map((option) => {
+        {visibleOptions.map((option) => {
           const selected = mode === option.value;
 
           return (

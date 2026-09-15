@@ -13,10 +13,14 @@ import {
   AnswerQuoteTextField,
 } from '@/features/survey-builder/answer-quote-fields';
 import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
+import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
+import { isInputFormat } from '@/types/input-type';
 import type { Question } from '@/types/survey';
 import { isPartialNumericInput } from '@/utils/numeric-input';
+import { isPlainTextInput } from '@/utils/text-quality';
 
 import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
@@ -56,6 +60,7 @@ export function InputCellTab({
     emptyDefaultEnabled,
     emptyDefaultRaw,
     cellNumberFormat,
+    cellTextValidation,
     formulaValidationEnabled,
     formula,
     formulaToleranceRaw,
@@ -63,6 +68,8 @@ export function InputCellTab({
     inputPlaceholder,
     inputDefaultValueTemplate,
     inputMaxLength,
+    inputRows,
+    inputWidth,
     answerQuoteEnabled: cellAnswerQuoteEnabled,
     answerQuoteName: cellAnswerQuoteName,
     answerQuoteText,
@@ -76,6 +83,7 @@ export function InputCellTab({
     setEmptyDefaultEnabled,
     setEmptyDefaultRaw,
     setCellNumberFormat,
+    setCellTextValidation,
     setFormulaValidationEnabled,
     setFormula,
     setFormulaToleranceRaw,
@@ -83,6 +91,8 @@ export function InputCellTab({
     setInputPlaceholder,
     setInputDefaultValueTemplate,
     setInputMaxLength,
+    setInputRows,
+    setInputWidth,
     setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
     setAnswerQuoteName: setCellAnswerQuoteName,
     setAnswerQuoteText,
@@ -105,10 +115,18 @@ export function InputCellTab({
 
       <div className="space-y-2">
         <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <InputFormatSelect
+            id="cell-input-format"
+            value={inputType}
+            // 숫자 전용 설정(초기값·표시 포맷·계산 검증)은 직렬화가 이미
+            // inputType==='number' 로 잠가 두어 형식을 고르면 저절로 빠진다.
+            onChange={setInputType}
+          />
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
               id="input-type-number"
+              disabled={isInputFormat(inputType)}
               checked={inputType === 'number'}
               onChange={(e) => {
                 const checked = e.target.checked;
@@ -142,13 +160,19 @@ export function InputCellTab({
             <label htmlFor="input-pii-encrypted" className="flex-1 cursor-pointer text-sm">
               <span className="font-medium">개인정보 암호화</span>
               <p className="mt-0.5 text-xs text-gray-500">
-                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
-                후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
-                자동으로 복호화되어 표시됩니다.
+                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장 후
+                새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는 자동으로
+                복호화되어 표시됩니다.
               </p>
             </label>
           </div>
-
+          {/* 응답 품질 검사 — 단답형 문항과 같은 묶음. 숫자·형식 모드에서는 잠근다(배타). */}
+          <TextValidationFields
+            idPrefix="cell"
+            value={cellTextValidation}
+            locked={!isPlainTextInput({ type: 'text', inputType })}
+            onChange={setCellTextValidation}
+          />
           {inputType === 'number' && (
             <div className="ml-7 flex items-center gap-2 text-sm">
               <input
@@ -271,6 +295,65 @@ export function InputCellTab({
         </div>
         <p className="text-xs text-gray-500">
           변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="input-rows">입력칸 줄 수</Label>
+        <Input
+          id="input-rows"
+          type="number"
+          min={1}
+          max={20}
+          value={inputRows}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === '') {
+              setInputRows('');
+              return;
+            }
+            const num = parseInt(raw, 10);
+            if (!isNaN(num) && num >= 1 && num <= 20) setInputRows(num);
+          }}
+          placeholder="1 (한 줄)"
+          disabled={inputType === 'number' || isInputFormat(inputType)}
+          className="w-full"
+        />
+        <p className="text-xs text-gray-500">
+          {inputType === 'number' || isInputFormat(inputType)
+            ? '숫자·형식 칸은 한 줄로 고정입니다'
+            : typeof inputRows === 'number' && inputRows >= 2
+              ? `${inputRows}줄 높이의 여러 줄 입력칸으로 그려집니다`
+              : '2 이상으로 두면 여러 줄 입력칸이 됩니다'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="input-width" className="text-sm font-medium">
+          입력칸 너비(px) <span className="font-normal text-gray-500">(선택사항)</span>
+        </Label>
+        <Input
+          id="input-width"
+          type="number"
+          min={1}
+          max={2000}
+          value={inputWidth}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === '') {
+              setInputWidth('');
+            } else {
+              const num = parseInt(value);
+              if (!isNaN(num) && num >= 1 && num <= 2000) setInputWidth(num);
+            }
+          }}
+          placeholder="셀 폭 전체"
+          className="w-full"
+        />
+        <p className="text-xs text-gray-500">
+          비우면 입력칸이 셀 폭 전체를 씁니다. 년·월처럼 짧은 값을 넓은 셀에 작게 두려면
+          지정하세요. 셀의 가로 정렬을 따르고, 오른쪽 단위 글자가 입력칸 바로 뒤에 붙습니다.
+          모바일 카드는 폭 전체를 씁니다.
         </p>
       </div>
 

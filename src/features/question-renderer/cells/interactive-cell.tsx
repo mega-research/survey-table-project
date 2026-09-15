@@ -2,18 +2,26 @@
 
 import React, { useCallback, useEffect } from 'react';
 
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import {
   useQuestionResponseSelector,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { CHOICE_GROUPS_KEY, collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
 import { CellContentLayout } from './cell-content-layout';
 import { CheckboxCell } from './checkbox-cell';
+import { useChoiceGroups } from './choice-groups-context';
+import { ChoiceOptCell } from './choice-opt-cell';
+import { useGatingTableCells } from './gating-table-cells-context';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
 import { RadioCell } from './radio-cell';
@@ -36,6 +44,8 @@ const CellRouter = React.memo(function CellRouter({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -85,6 +95,8 @@ const CellRouter = React.memo(function CellRouter({
           inputIdScope={inputIdScope}
           ariaInvalid={ariaInvalid}
           ariaDescribedBy={ariaDescribedBy}
+          hintInFlow={hintInFlow}
+          ignoreInputWidth={ignoreInputWidth}
         />
       );
     case 'image':
@@ -162,12 +174,16 @@ interface InteractiveCellContainerProps {
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
   /**
-   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가용 — 같은 행의 셀 목록.
+   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가용 — 같은 행의 셀 목록(폴백).
    * option 조건의 {optionId} 래핑 응답을 컨트롤러 셀 정의 기준으로 해석하려면 필요하다.
-   * 미전달 시 isCellEnabled 가 flat 비교로 폴백해 오판정할 수 있다 — 호출처는 항상
-   * row.cells 를 내려줘야 한다.
+   * 컨트롤러는 다른 행일 수 있으므로 표 전체 셀은 GatingTableCellsProvider 가 공급하고,
+   * 그것이 없을 때만 이 목록을 쓴다. 둘 다 없으면 isCellEnabled 가 flat 비교로 폴백한다.
    */
   rowCells?: readonly TableCell[] | undefined;
+  /** input 셀 위반 안내를 흐름에 그린다 (InteractiveCellProps.hintInFlow 참조). */
+  hintInFlow?: boolean | undefined;
+  /** input 셀 너비 고정을 무시한다 (InteractiveCellProps.ignoreInputWidth 참조). */
+  ignoreInputWidth?: boolean | undefined;
 }
 
 export const InteractiveCell = React.memo(function InteractiveCell({
@@ -181,6 +197,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   ariaInvalid,
   ariaDescribedBy,
   rowCells,
+  hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellContainerProps) {
   // 게이팅 숨김 상태에서도 셀 텍스트(content)는 남기므로 치환 컨텍스트가 필요하다
   const attrs = useContactAttrs();
@@ -206,15 +224,23 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ? cell.enabledWhen.controllerCellId
       : undefined;
 
+  // choice-selected 조건의 컨트롤러는 셀 값이 아니라 표 응답 안 예약 키(그룹 선택 맵)에 있다.
+  // 주입 원본은 그 맵 하나만 구독한다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
+  const wantsChoiceSelection = cell.enabledWhen?.kind === 'choice-selected';
+  const controllerKey = controllerCellId
+    ? wantsChoiceSelection
+      ? CHOICE_GROUPS_KEY
+      : controllerCellId
+    : undefined;
   const selectController = useCallback(
     (questionResponse: unknown) => {
-      if (!controllerCellId) return undefined;
+      if (!controllerKey) return undefined;
       if (typeof questionResponse === 'object' && questionResponse !== null) {
-        return (questionResponse as Record<string, unknown>)[controllerCellId];
+        return (questionResponse as Record<string, unknown>)[controllerKey];
       }
       return undefined;
     },
-    [controllerCellId],
+    [controllerKey],
   );
   const sourceControllerValue = useQuestionResponseSelector(source, questionId, selectController);
 
@@ -222,12 +248,18 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
   const gatingCellValues: Record<string, unknown> = source
     ? controllerCellId
-      ? { [controllerCellId]: sourceControllerValue }
+      ? { [wantsChoiceSelection ? CHOICE_GROUPS_KEY : controllerCellId]: sourceControllerValue }
       : {}
     : (value ?? {});
 
+  const tableCells = useGatingTableCells();
+  const choiceGroups = useChoiceGroups();
+  const choiceSelection = wantsChoiceSelection
+    ? collectTableChoiceSelection(gatingCellValues)
+    : undefined;
   const gatingDisabled =
-    GATABLE_CELL_TYPES.has(cell.type) && !isCellEnabled(cell, gatingCellValues, rowCells);
+    GATABLE_CELL_TYPES.has(cell.type) &&
+    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells, choiceSelection);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,
@@ -243,6 +275,29 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     }
   }, [gatingDisabled, hasLeftoverValue, clearValue]);
 
+  // 보기 그룹 표의 보기 옵션 셀 — 그룹 정의가 공급됐고 이 셀이 radio/checkbox 그룹에 속하면
+  // 컨트롤로 그린다. 아니면(보기 그룹 없는 표·빌더 편집 화면) 아래 라우터의 글자 셀 그대로다.
+  // 보기 셀 자체는 게이팅 대상이 아니다(문항 보기 집합을 바꾸는 일 — 별도 설계).
+  if (cell.type === 'choice_opt' && choiceGroups) {
+    const group = choiceGroups.find(
+      (g) => g.id === cell.choiceGroupId && (g.type === 'radio' || g.type === 'checkbox'),
+    );
+    if (group) {
+      return (
+        <ChoiceOptCell
+          cell={cell}
+          questionId={questionId}
+          group={group}
+          value={value}
+          onChange={onChange}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
+    }
+  }
+
   // 게이팅 미충족 셀은 인터랙티브 컨트롤을 숨긴다 (회색 잠금 → 숨김, 2026-08-06 UX 결정).
   // 셀 텍스트(content)는 항목 설명이므로 남긴다 — 컨트롤만 사라져 빈 자리로 보인다.
   // 조건 충족 순간 컨트롤이 제자리에 나타나고, 값 지움 effect 는 위에서 이미 동작한다.
@@ -252,8 +307,10 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     return (
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
+        contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
+        boldFirstLine={cell.boldFirstLine}
         textColor={cell.textColor}
       >
         {null}
@@ -270,6 +327,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       inputIdScope={inputIdScope}
       ariaInvalid={ariaInvalid}
       ariaDescribedBy={ariaDescribedBy}
+      hintInFlow={hintInFlow}
+      ignoreInputWidth={ignoreInputWidth}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Circle,
   Eye,
+  History,
   FileText,
   Info,
   ListOrdered,
@@ -21,6 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { QuestionConditionEditor } from '@/features/survey-builder/condition/question-condition-editor';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
@@ -47,7 +50,7 @@ import { runAsyncAction } from '@/utils/run-async-action';
 import { isValidUUID } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { isOptionListType } from '@/types/question-types';
-import { Question } from '@/types/survey';
+import { Question, type QuestionConditionGroup } from '@/types/survey';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
@@ -110,7 +113,11 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     inputType: question.inputType ?? 'text',
     ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
     ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
+    ...(question.textValidation !== undefined ? { textValidation: question.textValidation } : {}),
     tableValidationRules: question.tableValidationRules || [],
+    ...(question.rowRepeatConfig !== undefined
+      ? { rowRepeatConfig: question.rowRepeatConfig }
+      : {}),
     ...(question.dynamicRowConfigs !== undefined
       ? { dynamicRowConfigs: question.dynamicRowConfigs }
       : {}),
@@ -187,6 +194,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     let originalExportCellOrder: Question['exportCellOrder'];
+    let originalStickyColumnCount: Question['stickyColumnCount'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore
@@ -198,6 +206,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
       originalExportCellOrder = q?.exportCellOrder;
+      originalStickyColumnCount = q?.stickyColumnCount;
       didSaveRef.current = false;
     }
     return () => {
@@ -238,6 +247,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   delete restoredQuestion.exportCellOrder;
                 } else {
                   restoredQuestion.exportCellOrder = originalExportCellOrder;
+                }
+                if (originalStickyColumnCount === undefined) {
+                  delete restoredQuestion.stickyColumnCount;
+                } else {
+                  restoredQuestion.stickyColumnCount = originalStickyColumnCount;
                 }
                 return restoredQuestion;
               }),
@@ -346,6 +360,28 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   }, [question]);
 
   // 저장 핸들러 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
+  /** 이월값 조건 탭은 표시 조건과 같은 즉시 저장 경로를 쓴다. 새 질문은 아직 DB 에 없어 건너뛴다. */
+  const savePriorAnswerField = useCallback(
+    async (data: { priorAnswerCondition?: QuestionConditionGroup | undefined; priorAnswerDisabled?: boolean }) => {
+      const store = useSurveyBuilderStore.getState();
+      const isNewQuestion = !!store.questionChanges.added[questionId || ''];
+      if (!questionId || !store.currentSurvey.id || !isValidUUID(questionId) || isNewQuestion) return;
+      try {
+        await client.surveyBuilder.questions.update({
+          questionId,
+          surveyId: store.currentSurvey.id,
+          data,
+        });
+      } catch (error) {
+        console.error('이월값 설정 저장 실패:', error);
+      }
+    },
+    [questionId],
+  );
+
+  const priorAnswerEnabled =
+    (formData.priorAnswerDisabled ?? question?.priorAnswerDisabled) !== true;
+
   const handleSave = useCallback(async () => {
     // debounce 중인 로컬 state를 formData에 flush
     if (debouncedTitleRef.current) {
@@ -383,6 +419,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         : {}),
       ...(storeQuestion?.exportCellOrder !== undefined
         ? { exportCellOrder: storeQuestion.exportCellOrder }
+        : {}),
+      // 좌측 고정 열 개수도 표 에디터의 silentUpdateQuestion 경로로 store 에만 쓰인다.
+      ...(storeQuestion?.stickyColumnCount !== undefined
+        ? { stickyColumnCount: storeQuestion.stickyColumnCount }
         : {}),
       // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
@@ -517,9 +557,18 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.numberFormat !== undefined
                   ? currentFormData.numberFormat
                   : question?.numberFormat,
+              textValidation:
+                currentFormData.textValidation !== undefined
+                  ? currentFormData.textValidation
+                  : question?.textValidation,
               sumConstraints: currentFormData.sumConstraints || question?.sumConstraints,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
+              priorAnswerCondition:
+                currentFormData.priorAnswerCondition || question?.priorAnswerCondition,
+              priorAnswerDisabled:
+                currentFormData.priorAnswerDisabled ?? question?.priorAnswerDisabled,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
+              rowRepeatConfig: currentFormData.rowRepeatConfig ?? question?.rowRepeatConfig,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
               // 소유하지 않는다 — hideColumnLabels 와 동일한 silent drop 방지 머지.
@@ -530,6 +579,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
+              // null = 자동 판정 복귀가 유효값이므로 ?? 폴백 금지
+              stickyColumnCount:
+                currentFormData.stickyColumnCount !== undefined
+                  ? currentFormData.stickyColumnCount
+                  : question?.stickyColumnCount,
               exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
@@ -666,6 +720,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 <Eye className="h-4 w-4" />
                 표시 조건
               </TabsTrigger>
+              <TabsTrigger value="prior-answer-condition" className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                이월값 조건
+              </TabsTrigger>
             </TabsList>
 
             {/* 기본 설정 탭 */}
@@ -779,6 +837,66 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 }}
                 allQuestions={questions}
               />
+            </TabsContent>
+
+            {/* 이월값 조건 탭 — 표시 조건과 별개 축이다. 표시 조건은 문항을 보일지,
+                이쪽은 보이는 문항에 지난 회차 값을 깔지 정한다. */}
+            <TabsContent value="prior-answer-condition" className="px-6 py-4">
+              <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                조건을 만족할 때만 이 문항에 지난 회차 응답을 미리 채웁니다. 비워 두면 항상
+                채웁니다. 이직 여부처럼 같은 문항 안에서 갈리는 경우에 씁니다 — 문항은 양쪽 다
+                보이되 한쪽만 지난 값을 받게 하려면 표시 조건이 아니라 이 조건을 쓰세요.
+              </div>
+
+              {/* 아예 안 받는 경우는 조건이 아니라 이 스위치로 표현한다. 도달 불가능한
+                  조건으로 막으면 "조건이 거짓으로 뒤집혔다" 와 구분되지 않는다. */}
+              <div className="mb-4 flex items-start justify-between gap-4 rounded-md border border-gray-200 p-3">
+                <div>
+                  <Label className="text-sm font-medium">이월값 불러오기</Label>
+                  <p className="mt-1 text-xs text-gray-500">
+                    끄면 지난 회차 응답이 있어도 이 문항에는 채우지 않습니다. 응답자가 새로
+                    입력한 값이 그대로 저장됩니다. 아래 조건은 켜져 있을 때만 적용됩니다.
+                  </p>
+                </div>
+                <Switch
+                  checked={priorAnswerEnabled}
+                  onCheckedChange={(enabled: boolean) => {
+                    const disabled = !enabled;
+                    setFormData((prev) => {
+                      const next: Partial<Question> = { ...prev };
+                      if (disabled) next.priorAnswerDisabled = true;
+                      else delete next.priorAnswerDisabled;
+                      return next;
+                    });
+                    void savePriorAnswerField({ priorAnswerDisabled: disabled });
+                  }}
+                />
+              </div>
+
+              <div className={priorAnswerEnabled ? undefined : 'pointer-events-none opacity-50'}>
+              <QuestionConditionEditor
+                question={question}
+                {...(formData.priorAnswerCondition
+                  ? { initialCondition: formData.priorAnswerCondition }
+                  : question.priorAnswerCondition
+                    ? { initialCondition: question.priorAnswerCondition }
+                    : {})}
+                onUpdate={async (conditionGroup) => {
+                  setFormData((prev) => {
+                    const next: Partial<Question> = { ...prev };
+                    if (conditionGroup !== undefined) {
+                      next.priorAnswerCondition = conditionGroup;
+                    } else {
+                      delete next.priorAnswerCondition;
+                    }
+                    return next;
+                  });
+
+                  await savePriorAnswerField({ priorAnswerCondition: conditionGroup });
+                }}
+                allQuestions={questions}
+              />
+              </div>
             </TabsContent>
           </Tabs>
         </div>

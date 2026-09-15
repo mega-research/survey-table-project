@@ -8,10 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { generateId } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -30,11 +30,21 @@ import { HeaderBulkStyleDialog } from './header-bulk-style-dialog';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
+import { RowRepeatSettingsCard } from './row-repeat-settings-card';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
 
 const EMPTY_DYNAMIC_ROW_CONFIGS: DynamicRowGroupConfig[] = [];
+
+/** 좌측 고정 열 개수 선택지. null = 자동 판정(기본) */
+const STICKY_COLUMN_COUNT_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: '자동' },
+  { value: 0, label: '0' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+];
 
 // ── Props ──
 
@@ -52,6 +62,8 @@ interface DynamicTableEditorProps {
    */
   answerQuoteEnabled?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
@@ -60,6 +72,8 @@ interface DynamicTableEditorProps {
     tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
+  /** null 을 주면 반복을 끈다 (뒤쪽 벌이 구조에서 걷힌다) */
+  onRowRepeatConfigChange?: (config: RowRepeatConfig | null) => void;
 }
 
 // ── 컴포넌트 ──
@@ -75,6 +89,10 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   );
   const exportCellOrder = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.exportCellOrder ?? 'row-first',
+  );
+  // null = 자동 판정. 0~3 은 명시 지정이므로 ?? 폴백으로 뭉개면 안 된다.
+  const stickyColumnCount = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.stickyColumnCount ?? null,
   );
   const mobileTableQuestion = useSurveyBuilderStore(
     (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
@@ -478,6 +496,54 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         </div>
       </div>
 
+      {/* 좌측 고정 열 개수 — 가로 스크롤 시 왼쪽에 붙여둘 열 수 */}
+      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+        <div>
+          <div id="sticky-column-count-label" className="text-sm font-medium">
+            좌측 고정 열
+          </div>
+          <p className="text-xs text-gray-500">
+            가로 스크롤 시 왼쪽에 붙여둘 열 수입니다. 자동은 왼쪽부터 이어지는 항목 열까지
+            고정하며, 개수를 지정하면 그만큼 고정합니다. 화면이 좁으면 지정값이라도 화면을 다
+            덮지 않는 선까지 줄어듭니다.
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby="sticky-column-count-label"
+          className="flex flex-wrap gap-2"
+        >
+          {STICKY_COLUMN_COUNT_OPTIONS.map((option) => {
+            const selected = stickyColumnCount === option.value;
+            return (
+              <label
+                key={option.label}
+                className={cn(
+                  'cursor-pointer rounded-lg border px-3 py-1.5 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-offset-2',
+                  selected
+                    ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-700',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="sticky-column-count"
+                  aria-label={option.label}
+                  checked={selected}
+                  onChange={() => {
+                    if (editingQuestionId) {
+                      silentUpdateQuestion(editingQuestionId, { stickyColumnCount: option.value });
+                    }
+                  }}
+                  className="sr-only"
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 내보내기 셀 순서 설정 — table 유형 전용 (다운로드 열 나열 축) */}
       {mobileTableQuestion?.type === 'table' && (
         <div className="space-y-3 rounded-lg border border-gray-200 p-4">
@@ -512,6 +578,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           || mobileTableQuestion.type === 'radio'
           || mobileTableQuestion.type === 'checkbox') ? (
             <MobileTableDisplaySettings
+              questionType={mobileTableQuestion.type}
+              hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}
@@ -618,8 +686,11 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 onOpenColumnConditionModal={openColumnConditionModal}
               />
 
-              {/* 데이터 행들 */}
-              {currentRows.map((row, rowIndex) => (
+              {/* 데이터 행들 — 행 반복 2벌 이후는 그리지 않는다.
+                  원본 인덱스를 보존해야 편집기의 행 조작(병합·복사·삭제)이 어긋나지 않으므로
+                  배열을 걸러내지 않고 map 안에서 건너뛴다. */}
+              {currentRows.map((row, rowIndex) =>
+                (row.repeatIndex ?? 1) >= 2 ? null : (
                 <EditorTableRow
                   key={row.id}
                   row={row}
@@ -650,7 +721,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   onSaveCell={handleSaveCell}
                   onLoadCell={handleLoadCell}
                 />
-              ))}
+              ),
+              )}
             </div>
           </div>
         </CardContent>
@@ -684,6 +756,15 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* 행 반복 설정 — 응답자가 + 로 같은 모양의 행 묶음을 늘린다 */}
+      <RowRepeatSettingsCard
+        rows={currentRows}
+        config={props.rowRepeatConfig}
+        sumConstraints={mobileTableQuestion?.sumConstraints}
+        tableValidationRules={mobileTableQuestion?.tableValidationRules}
+        onChange={props.onRowRepeatConfigChange}
+      />
 
       {/* 동적 행 그룹 설정 */}
       <Card>
@@ -849,7 +930,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         <CellContentModal
           isOpen={!!selectedCell}
           onClose={() => setSelectedCell(null)}
-          ownQuestion={currentQuestionAsQuestion}
+          // 편집기의 문항 객체는 type 이 늘 'table' 이다 — 셀 모달의 문항 유형 판정(마지막 보기
+          // 옵션 셀 보호 등)이 라디오·체크박스 문항에서 죽지 않게 실제 유형을 덮어 넘긴다.
+          ownQuestion={
+            mobileTableQuestion
+              ? { ...currentQuestionAsQuestion, type: mobileTableQuestion.type }
+              : currentQuestionAsQuestion
+          }
           currentQuestionId={currentQuestionId}
           questionCode={questionCode}
           questionTitle={questionTitle}

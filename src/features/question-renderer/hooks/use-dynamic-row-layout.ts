@@ -140,6 +140,7 @@ export function useDynamicRowLayout({
             isHidden: false,
             type: isInteractive ? 'text' : cell.type,
             content: isInteractive ? '' : cell.content,
+            ...(!isInteractive && cell.contentHtml ? { contentHtml: cell.contentHtml } : {}),
             ...(cell.colspan !== undefined ? { colspan: cell.colspan } : {}),
             ...(cell.horizontalAlign !== undefined
               ? { horizontalAlign: cell.horizontalAlign }

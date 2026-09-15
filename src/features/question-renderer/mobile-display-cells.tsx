@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
+import { CellText, resolveCellTextHtml } from './cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -45,7 +46,11 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
       )}
       style={getCellTextStyle(cell)}
     >
-      {substituteTokens(text, attrs, quotes)}
+      <CellText
+        text={substituteTokens(text, attrs, quotes)}
+        html={resolveCellTextHtml(cell, attrs, quotes)}
+        boldFirstLine={cell.boldFirstLine}
+      />
     </div>
   );
 }

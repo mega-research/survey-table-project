@@ -1,16 +1,32 @@
 'use client';
 
-import React, { useEffect, useEffectEvent } from 'react';
+import React, { useEffect, useEffectEvent, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
+import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
+import {
+  getHorizontalItemsClass,
+  getInputTextAlignClass,
+} from '@/features/question-renderer/utils/table-grid-utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { resolveCellTextQualityViolation } from '@/lib/survey/cell-text-quality';
+import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/lib/survey/prior-answer-highlight';
+import { priorAnswerText } from '@/lib/survey/prior-answers';
+import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { useResponseSources } from '@/features/question-renderer/response-sources';
-import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';
+import { isInputFormat } from '@/types/input-type';
+import { formatSampleValue } from '@/utils/input-format';
 
 import { CellContentLayout } from './cell-content-layout';
+import { FloatingHint } from './floating-hint';
 import type { InteractiveCellProps } from './types';
 
 /** 텍스트 입력 셀 (인터랙티브) */
@@ -22,6 +38,8 @@ export const InputCell = React.memo(function InputCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  hintInFlow,
+  ignoreInputWidth,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -54,6 +72,13 @@ export const InputCell = React.memo(function InputCell({
 
   // 숫자 모드 여부: inputType이 'number'일 때만 활성화
   const isNumberMode = cell.inputType === 'number';
+  const format = isInputFormat(cell.inputType) ? cell.inputType : null;
+  /**
+   * 여러 줄 입력. 숫자·형식과는 배타다 — 전화번호나 계산 대상 숫자에 줄바꿈이 들어갈
+   * 자리가 없고, 숫자 서식·형식 정돈 훅이 한 줄 값을 전제로 서 있다.
+   */
+  const rows = !isNumberMode && !format ? Math.floor(cell.inputRows ?? 1) : 1;
+  const isMultiline = rows >= 2;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -62,6 +87,17 @@ export const InputCell = React.memo(function InputCell({
       numberFormat: cell.numberFormat,
       enabled: isNumberMode,
     });
+
+  // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
+  const { answers: priorAnswersForFormat } = usePriorAnswers();
+  const priorHighlight = usePriorHighlight();
+  const formatField = useInputFormatField({
+    format,
+    rawValue: currentValue,
+    onRawChange: onUpdateValue,
+    enabled: !isPrefilled,
+    priorOriginal: priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+  });
 
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
@@ -82,56 +118,187 @@ export const InputCell = React.memo(function InputCell({
     applyEmptyDefault();
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
+  // 응답 품질 위반 — 평문 모드·prefill·이월 면제 판정은 검증 쪽 함수가 쥔다(표·보기 표 공용)
+  // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
+  const focus = useFieldFocus();
+  const qualityViolation = focus.focused
+    ? null
+    : resolveCellTextQualityViolation(
+        cell,
+        currentValue,
+        priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+      );
+  const hasViolation =
+    Boolean(rangeViolation || formatField.violation || qualityViolation) && !isPrefilled;
+  // 띄우는 안내의 앵커 — 입력칸 자체. 셀이 아니라 입력칸 아래에 붙어야 단위 글자 옆에서도 맞는다.
+  const anchorRef = useRef<HTMLElement | null>(null);
+
+  // 입력칸 너비 고정 — 세로 카드(ignoreInputWidth)는 무시한다. 좁은 화면에서 60px 입력칸은 불편하다.
+  const fixedWidth =
+    !ignoreInputWidth && typeof cell.inputWidth === 'number' && cell.inputWidth > 0
+      ? cell.inputWidth
+      : undefined;
+  const fixedWidthStyle =
+    fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
+
   return (
-    <CellContentLayout
-      content={substituteTokens(cell.content, attrs, quotes)}
-      position={cell.textPosition}
-      bold={cell.textBold}
-      textColor={cell.textColor}
-    >
-      <div className="flex w-full flex-col space-y-1.5">
-        <Input
-          id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
-          type="text"
-          inputMode={isNumberMode ? 'decimal' : undefined}
-          value={isPrefilled ? prefilledValue : displayValue}
-          onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder={
-            cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
-          }
-          maxLength={cell.inputMaxLength}
-          className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
-          disabled={isPrefilled}
-          data-prefilled={isPrefilled || undefined}
-          aria-invalid={ariaInvalid || undefined}
-          aria-describedby={ariaDescribedBy}
-        />
+    // 위반 안내는 body 포털이라 여기에 위치 기준점은 없다 — relative 는 다른 오버레이용으로 남긴다.
+    <div className="relative w-full">
+      <CellContentLayout
+        content={substituteTokens(cell.content, attrs, quotes)}
+        contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
+        position={cell.textPosition}
+        bold={cell.textBold}
+        boldFirstLine={cell.boldFirstLine}
+        textColor={cell.textColor}
+        fillWidth={fixedWidth === undefined}
+        horizontalAlign={cell.horizontalAlign}
+      >
+        <div
+          className={cn(
+            'flex w-full flex-col space-y-1.5',
+            // 너비를 고정한 입력칸은 셀의 가로 정렬을 따른다(기본 왼쪽)
+            fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
+          )}
+        >
+          {isMultiline ? (
+            <textarea
+              ref={anchorRef as React.RefObject<HTMLTextAreaElement>}
+              id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+              rows={rows}
+              value={textValue}
+              onChange={(e) => onUpdateValue(e.target.value)}
+              onFocus={focus.onFocus}
+              onBlur={focus.onBlur}
+              placeholder={cell.placeholder || '답변을 입력하세요...'}
+              maxLength={cell.inputMaxLength}
+              disabled={isPrefilled}
+              data-prefilled={isPrefilled || undefined}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
+              style={fixedWidthStyle}
+              className={cn(
+                'w-full resize-none rounded-md border border-gray-300 p-2 text-base',
+                'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none',
+                getInputTextAlignClass(cell.inputTextAlign),
+                !isPrefilled &&
+                  isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
+            />
+          ) : (
+            <Input
+              ref={anchorRef as React.RefObject<HTMLInputElement>}
+              id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+              type="text"
+              inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
+              value={isPrefilled ? prefilledValue : displayValue}
+              onChange={format ? formatField.handleChange : handleChange}
+              onFocus={() => {
+                handleFocus();
+                formatField.handleFocus();
+                focus.onFocus();
+              }}
+              onBlur={() => {
+                handleBlur();
+                formatField.handleBlur();
+                focus.onBlur();
+              }}
+              placeholder={
+                cell.placeholder ||
+                (format
+                  ? formatSampleValue(format)
+                  : isNumberMode
+                    ? '숫자만 입력하세요...'
+                    : '답변을 입력하세요...')
+              }
+              maxLength={cell.inputMaxLength}
+              style={fixedWidthStyle}
+              className={cn(
+                'w-full text-base',
+                getInputTextAlignClass(cell.inputTextAlign),
+                !isPrefilled &&
+                  isPriorText(priorHighlight, questionId, currentValue, cell.id) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
+              disabled={isPrefilled}
+              data-prefilled={isPrefilled || undefined}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
+            />
+          )}
 
-        {cell.inputMaxLength && !isPrefilled && (
-          <div className="flex justify-end">
-            <p className="text-xs text-gray-500">
-              <span
-                className={
-                  textValue.length >= cell.inputMaxLength ? 'font-medium text-red-500' : ''
-                }
-              >
-                {textValue.length}
-              </span>
-              {' / '}
-              {cell.inputMaxLength}자
+          {cell.inputMaxLength && !isPrefilled && (
+            <div className="flex justify-end">
+              <p className="text-xs text-gray-500">
+                <span
+                  className={
+                    textValue.length >= cell.inputMaxLength ? 'font-medium text-red-500' : ''
+                  }
+                >
+                  {textValue.length}
+                </span>
+                {' / '}
+                {cell.inputMaxLength}자
+              </p>
+            </div>
+          )}
+
+          {unitReading && !isPrefilled && (
+            <p className="text-muted-foreground text-xs">{unitReading}</p>
+          )}
+
+          {/* 카드 모드 — 위반 안내를 흐름에 둔다. 카드는 셀이 세로로 쌓여 옆 칸이 없고
+              overflow-hidden 이라 아래 띄우면 잘리거나(마지막 셀) 다음 셀 라벨을 덮는다. */}
+          {hintInFlow && hasViolation && (
+            <div className="space-y-0.5 text-left">
+              {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+              {formatField.violation && (
+                <p className="text-xs text-red-500">* {formatField.violation}</p>
+              )}
+              {qualityViolation && (
+                <p className="text-xs text-red-500" data-testid="cell-text-quality-violation">
+                  * {qualityViolation.message}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </CellContentLayout>
+
+      {/*
+        위반 안내문은 흐름에서 빼서 입력칸 아래에 띄운다.
+        흐름에 두면 이 셀만 키가 커져, 같은 행의 다른 입력 칸과 세로가 어긋나고
+        (셀은 justify-center) 옆 라벨도 입력칸 중앙에서 밀려난다 — "2011 년 / 11 월"
+        처럼 한 행에 입력 칸이 둘 있으면 눈에 띈다. 띄우면 행 높이가 안 변해 어긋나지
+        않는다. 셀 안 absolute 가 아니라 body 포털(FloatingHint)인 이유는 그 파일에 —
+        표 스크롤 컨테이너가 마지막 행의 안내를 잘라 스크롤바를 만들었다.
+        범위 위반과 형식 위반은 같은 blur 피드백이라 같은 셸로 그린다 — 흐름에 하나만
+        남겨두면 그쪽만 다시 줄을 밀어 어긋남이 되살아난다.
+        상시 표시인 단위 읽기는 아래 행에 영구히 겹치면 안 되므로 흐름에 그대로 둔다.
+      */}
+      {!hintInFlow && hasViolation && (
+        <FloatingHint anchorRef={anchorRef}>
+          {rangeViolation && (
+            <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
+              * {rangeViolation}
             </p>
-          </div>
-        )}
-
-        {(unitReading || rangeViolation) && !isPrefilled && (
-          <div className="space-y-0.5">
-            {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
-            {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
-          </div>
-        )}
-      </div>
-    </CellContentLayout>
+          )}
+          {formatField.violation && (
+            <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
+              * {formatField.violation}
+            </p>
+          )}
+          {qualityViolation && (
+            <p
+              className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm"
+              data-testid="cell-text-quality-violation"
+            >
+              * {qualityViolation.message}
+            </p>
+          )}
+        </FloatingHint>
+      )}
+    </div>
   );
 });

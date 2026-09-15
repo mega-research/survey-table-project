@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { isQuestionAnswered } from '@/features/survey-response/lib/answer-validation';
+import {
+  collectUnfilledChoiceGroupCellIds,
+  collectUnfilledChoiceGroupIssues,
+  isQuestionAnswered,
+} from '@/features/survey-response/lib/answer-validation';
 import type { Question, QuestionType } from '@/types/survey';
 
 // ── 최소 Question 빌더 ──
@@ -169,11 +173,15 @@ describe('isQuestionAnswered (survey-response-flow 추출 characterization)', ()
     });
   });
 
-  describe('ranking (default 분기)', () => {
-    it('null/undefined 가 아닌 어떤 값이든 응답으로 취급', () => {
+  describe('ranking', () => {
+    // 예전에는 상단 null 가드만 통과하면 무조건 응답으로 쳐서 빈 배열도 통과했다 —
+    // 필수 순위형이 사실상 검증되지 않았다. 최소 1순위는 있어야 한다.
+    it('1순위가 있으면 응답', () => {
       expect(isQuestionAnswered(q('ranking'), [{ rank: 1, optionValue: 'a' }])).toBe(true);
-      expect(isQuestionAnswered(q('ranking'), [])).toBe(true);
-      expect(isQuestionAnswered(q('ranking'), {})).toBe(true);
+    });
+    it('빈 배열·배열 아님은 미응답', () => {
+      expect(isQuestionAnswered(q('ranking'), [])).toBe(false);
+      expect(isQuestionAnswered(q('ranking'), {})).toBe(false);
     });
   });
 
@@ -390,8 +398,8 @@ describe('isQuestionAnswered — grouped 순위형 그룹당 1순위 검증', ()
     expect(isQuestionAnswered(gq, null)).toBe(false);
   });
 
-  it('비그룹 순위형: 빈 배열도 응답으로 취급(기존 동작 불변)', () => {
-    expect(isQuestionAnswered(q('ranking'), [])).toBe(true);
+  it('비그룹 순위형: 빈 배열은 미응답', () => {
+    expect(isQuestionAnswered(q('ranking'), [])).toBe(false);
   });
 
   it('비그룹 순위형: flat RankingAnswer[] 도 응답으로 취급(기존 동작 불변)', () => {
@@ -540,5 +548,232 @@ describe('resolveGroupedRequiredMessage', () => {
 
   it('비그룹 질문은 질문 문구로 폴백한다', () => {
     expect(resolveGroupedRequiredMessage(q('radio', { requiredMessage: '골라주세요.' }), null)).toBe('골라주세요.');
+  });
+});
+
+/**
+ * 「모든 순위 입력 필수」(rankingConfig.requireAllPositions).
+ *
+ * 빌더가 값을 저장만 하고 읽는 곳이 없어 여태 아무 일도 하지 않았다 — 2순위까지
+ * 받기로 해 둔 문항에서 1순위만 골라도 제출이 통과했다.
+ */
+describe('순위형 — 모든 순위 입력 필수', () => {
+  const rankingQ = (
+    positions: number,
+    requireAllPositions: boolean,
+    optionCount = 5,
+  ): Question =>
+    ({
+      id: 'q-rank',
+      type: 'ranking',
+      title: '애로사항',
+      required: true,
+      order: 0,
+      rankingConfig: { positions, requireAllPositions },
+      options: Array.from({ length: optionCount }, (_, i) => ({
+        id: `o${i + 1}`,
+        value: `v${i + 1}`,
+        label: `보기${i + 1}`,
+      })),
+    }) as unknown as Question;
+
+  const answers = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ rank: i + 1, optionValue: `v${i + 1}` }));
+
+  it('켜져 있으면 순위를 다 채워야 통과한다', () => {
+    const question = rankingQ(2, true);
+    expect(isQuestionAnswered(question, answers(1))).toBe(false);
+    expect(isQuestionAnswered(question, answers(2))).toBe(true);
+  });
+
+  it('꺼져 있으면 1순위만으로 통과한다', () => {
+    const question = rankingQ(2, false);
+    expect(isQuestionAnswered(question, answers(1))).toBe(true);
+  });
+
+  it('보기가 순위 개수보다 적으면 보기 수만 요구한다 — 못 채우는 요구는 걸지 않는다', () => {
+    const question = rankingQ(3, true, 2);
+    expect(isQuestionAnswered(question, answers(2))).toBe(true);
+  });
+
+  it('그룹 순위형은 그룹마다 다 채워야 한다', () => {
+    const base = groupedRankingQ();
+    const question = {
+      ...base,
+      rankingConfig: { ...base.rankingConfig, positions: 2, requireAllPositions: true },
+    } as unknown as Question;
+
+    // rgrp1 은 보기 2개라 2순위까지, rgrp2 는 보기 1개라 1순위까지만 요구한다.
+    expect(isQuestionAnswered(question, { rnk1: answers(1), rnk2: answers(1) })).toBe(false);
+    expect(isQuestionAnswered(question, { rnk1: answers(2), rnk2: answers(1) })).toBe(true);
+  });
+});
+
+// ── 보기 그룹 표 (table + choice_opt 셀 + choiceGroups, 선택은 표 응답 안 __choiceGroups) ──
+
+function choiceGroupTableQ(overrides: Partial<Question> = {}): Question {
+  return {
+    id: 'qt',
+    type: 'table',
+    title: '보기 그룹 표',
+    required: true,
+    order: 0,
+    choiceGroups: [
+      { id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' },
+      { id: 'g2', groupKey: 'cb1', type: 'checkbox', label: '구매처', requiredMessage: '구매처를 고르세요' },
+    ],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'a', content: 'A', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'b', content: 'B', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'c', content: 'C', type: 'choice_opt', choiceGroupId: 'g2' },
+          { id: 'amount', content: '', type: 'input' },
+        ],
+      },
+    ],
+    ...overrides,
+  } as Question;
+}
+
+describe('isQuestionAnswered — 보기 그룹 표', () => {
+  it('필수 그룹이 다 차야 응답이다 — 입력 셀 값만으로는 미응답', () => {
+    const q = choiceGroupTableQ();
+    expect(isQuestionAnswered(q, { amount: '12' })).toBe(false);
+    expect(isQuestionAnswered(q, { __choiceGroups: { rad1: 'a' } })).toBe(false);
+    expect(isQuestionAnswered(q, { __choiceGroups: { rad1: 'a', cb1: ['c'] } })).toBe(true);
+    expect(isQuestionAnswered(q, { __choiceGroups: { rad1: 'a', cb1: [] } })).toBe(false);
+  });
+
+  it('그룹별 필수 오버라이드 — 필수 그룹만 본다', () => {
+    const q = choiceGroupTableQ({
+      required: false,
+      choiceGroups: [
+        { id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유', required: true },
+        { id: 'g2', groupKey: 'cb1', type: 'checkbox', label: '구매처' },
+      ],
+    });
+    expect(isQuestionAnswered(q, { __choiceGroups: { rad1: 'a' } })).toBe(true);
+    expect(isQuestionAnswered(q, { __choiceGroups: { cb1: ['c'] } })).toBe(false);
+  });
+
+  it('보기 그룹이 없는 table 은 지금처럼 키가 하나라도 있으면 응답이다', () => {
+    const { choiceGroups: _groups, ...plain } = choiceGroupTableQ();
+    expect(isQuestionAnswered(plain as Question, { amount: '12' })).toBe(true);
+  });
+});
+
+describe('collectUnfilledChoiceGroupCellIds · resolveGroupedRequiredMessage — 보기 그룹 표', () => {
+  it('미충족 그룹의 보기 셀 id 를 표 응답 안 예약 키로 판정한다', () => {
+    const q = choiceGroupTableQ();
+    expect([...collectUnfilledChoiceGroupCellIds(q, { __choiceGroups: { rad1: 'a' } })]).toEqual(['c']);
+    expect(collectUnfilledChoiceGroupCellIds(q, { __choiceGroups: { rad1: 'a', cb1: ['c'] } }).size).toBe(0);
+    expect([...collectUnfilledChoiceGroupCellIds(q, { amount: '1' })].sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('필수 문구는 미충족 그룹의 문구 → 질문 → 기본 순이다', () => {
+    const q = choiceGroupTableQ();
+    expect(resolveGroupedRequiredMessage(q, { __choiceGroups: { rad1: 'a' } })).toBe('구매처를 고르세요');
+    expect(resolveGroupedRequiredMessage(q, { __choiceGroups: { rad1: 'a', cb1: ['c'] } })).toBe(
+      '필수 질문에 답변해주세요.',
+    );
+  });
+});
+
+describe('collectUnfilledChoiceGroupIssues — 검증 안내 배너 항목', () => {
+  it('미충족 필수 그룹을 문구별로 묶어 그룹 순서의 셀 id 로 낸다', () => {
+    const q = groupedRadioQ();
+    expect(collectUnfilledChoiceGroupIssues(q, {})).toEqual([
+      { message: '필수 질문에 답변해주세요.', cellIds: ['cellA', 'cellB', 'cellC', 'cellD'] },
+    ]);
+    expect(collectUnfilledChoiceGroupIssues(q, { rad1: 'cellA' })).toEqual([
+      { message: '필수 질문에 답변해주세요.', cellIds: ['cellC', 'cellD'] },
+    ]);
+  });
+
+  it('그룹 지정 문구는 따로 한 줄이 되고, 문항 문구가 나머지의 폴백이다', () => {
+    const q = choiceGroupTableQ({ requiredMessage: '항목마다 골라 주세요' });
+    expect(collectUnfilledChoiceGroupIssues(q, {})).toEqual([
+      { message: '항목마다 골라 주세요', cellIds: ['a', 'b'] },
+      { message: '구매처를 고르세요', cellIds: ['c'] },
+    ]);
+  });
+
+  it('다 채웠거나 그룹 문항이 아니면 빈 배열', () => {
+    expect(collectUnfilledChoiceGroupIssues(groupedRadioQ(), { rad1: 'cellA', rad2: 'cellC', default: 'cellD' })).toEqual([]);
+    expect(collectUnfilledChoiceGroupIssues(q('text'), '')).toEqual([]);
+  });
+});
+
+describe('isQuestionAnswered — 단독 선택 보기와 최소 선택 수', () => {
+  const withNone = (overrides: Partial<Question> = {}) =>
+    q('checkbox', {
+      minSelections: 2,
+      options: [
+        { id: 'o1', label: 'TV', value: '1' },
+        { id: 'o9', label: '없음', value: '9', exclusiveChoice: true },
+      ],
+      ...overrides,
+    });
+
+  it('「없음」 하나면 최소 2개 요구를 충족한 것으로 본다', () => {
+    expect(isQuestionAnswered(withNone(), ['9'])).toBe(true);
+  });
+
+  it('일반 보기 하나는 여전히 미달이다', () => {
+    expect(isQuestionAnswered(withNone(), ['1'])).toBe(false);
+  });
+
+  it('보기 소스 표는 셀 id 로 판정한다', () => {
+    const tableQ = q('checkbox', {
+      minSelections: 2,
+      tableColumns: [{ id: 'c1', label: '열' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'tv', type: 'choice_opt', content: '' },
+            { id: 'none', type: 'choice_opt', content: '', exclusiveChoice: true },
+          ],
+        },
+      ],
+    });
+    expect(isQuestionAnswered(tableQ, ['none'])).toBe(true);
+    expect(isQuestionAnswered(tableQ, ['tv'])).toBe(false);
+  });
+});
+
+describe('isQuestionAnswered — 표 전체 범위 단독 선택 보기', () => {
+  const tableQ = (): Question =>
+    q('table', {
+      required: true,
+      choiceGroups: [
+        { id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '활용 여부' },
+        { id: 'g2', groupKey: 'cb2', type: 'checkbox', label: '활용 계획' },
+      ],
+      tableColumns: [{ id: 'c1', label: '열' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'tv-now', type: 'choice_opt', content: '', choiceGroupId: 'g1' },
+            { id: 'tv-plan', type: 'choice_opt', content: '', choiceGroupId: 'g2' },
+            { id: 'none', type: 'choice_opt', content: '', choiceGroupId: 'g2', exclusiveChoice: true, exclusiveScope: 'table' },
+          ],
+        },
+      ],
+    });
+
+  it('표 전체 「없음」 하나면 비어 있는 다른 필수 그룹도 충족으로 본다', () => {
+    expect(isQuestionAnswered(tableQ(), { __choiceGroups: { cb2: ['none'] } })).toBe(true);
+    expect(collectUnfilledChoiceGroupCellIds(tableQ(), { __choiceGroups: { cb2: ['none'] } }).size).toBe(0);
+  });
+
+  it('일반 보기만 한 그룹에 있으면 다른 그룹은 여전히 미충족이다', () => {
+    expect(isQuestionAnswered(tableQ(), { __choiceGroups: { cb2: ['tv-plan'] } })).toBe(false);
   });
 });

@@ -230,6 +230,8 @@ function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHe
   const hasRow = parts.rowLeft.length + parts.rowCenter.length + parts.rowRight.length > 0;
   const row = resolveHeaderRow(parts, config.rowSpread);
   const band = getHeaderBandBorders(config.bandStyle);
+  const symmetricBand =
+    config.titleAlign === 'center' && parts.titleLeft.length + parts.titleRight.length > 0;
   return (
     <div>
       {hasRow &&
@@ -251,17 +253,43 @@ function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHe
           </div>
         ))}
       {above}
-      <div
-        data-testid="header-band"
-        className="flex items-center gap-7 px-7 pt-3"
-        style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side }}
-      >
-        {parts.titleLeft.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
-        <div className="min-w-0 flex-1" style={{ textAlign: config.titleAlign, alignSelf: V_ALIGN_SELF[config.titleVAlign] }}>
-          <TitleBandText config={config} title={title} />
+      {symmetricBand ? (
+        // 가운데 제목 + 제목 옆 블록: 좌·우 칸을 같은 폭(1fr)으로 두어 제목이 **밴드 전체**의
+        // 가운데에 선다. flex 로 남은 폭 안에서 가운데를 잡으면 한쪽에만 블록이 있을 때 제목이
+        // 반대쪽으로 밀리고, 다음 쪽(블록 없음)으로 넘어가면 제자리로 돌아와 들썩인다.
+        // 칸 하한을 max-content 로 두어 좁은 폭에서도 블록이 잘리지 않는다.
+        <div
+          data-testid="header-band"
+          data-symmetric="true"
+          className="grid items-center gap-7 px-7 pt-3"
+          style={{
+            gridTemplateColumns: 'minmax(max-content, 1fr) auto minmax(max-content, 1fr)',
+            backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side,
+          }}
+        >
+          <div className="flex items-center justify-start gap-7">
+            {parts.titleLeft.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}
+          </div>
+          <div className="min-w-0 text-center" style={{ alignSelf: V_ALIGN_SELF[config.titleVAlign] }}>
+            <TitleBandText config={config} title={title} />
+          </div>
+          <div className="flex items-center justify-end gap-7">
+            {parts.titleRight.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}
+          </div>
         </div>
-        {parts.titleRight.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
-      </div>
+      ) : (
+        <div
+          data-testid="header-band"
+          className="flex items-center gap-7 px-7 pt-3"
+          style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side }}
+        >
+          {parts.titleLeft.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
+          <div className="min-w-0 flex-1" style={{ textAlign: config.titleAlign, alignSelf: V_ALIGN_SELF[config.titleVAlign] }}>
+            <TitleBandText config={config} title={title} />
+          </div>
+          {parts.titleRight.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
+        </div>
+      )}
       {below}
     </div>
   );

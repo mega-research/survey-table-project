@@ -11,6 +11,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
@@ -111,19 +112,22 @@ export function CellAlignFields({ form, setters }: CellAlignFieldsProps) {
         <Label className="text-sm font-medium">정렬 미리보기</Label>
         <div className="rounded-lg border bg-gray-50 p-4">
           <div
-            className={`flex h-32 w-full rounded border-2 border-dashed border-gray-300 ${
+            // cn 으로 잇는다 — 템플릿 리터럴 안에서 조건 앞 공백에 기대면
+            // 포매터가 그 공백을 지워 클래스 둘이 붙어버린다(실제로 겪었다).
+            className={cn(
+              'flex h-32 w-full rounded border-2 border-dashed border-gray-300',
               horizontalAlign === 'left'
                 ? 'justify-start'
                 : horizontalAlign === 'center'
                   ? 'justify-center'
-                  : 'justify-end'
-            } ${
+                  : 'justify-end',
               verticalAlign === 'top'
                 ? 'items-start'
                 : verticalAlign === 'middle'
                   ? 'items-center'
-                  : 'items-end'
-            }${textBold ? 'font-bold' : ''}`}
+                  : 'items-end',
+              textBold && 'font-bold',
+            )}
             style={{
               ...(backgroundColor ? { backgroundColor } : {}),
               ...(textColor ? { color: textColor } : {}),

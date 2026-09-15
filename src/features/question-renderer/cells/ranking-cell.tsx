@@ -1,16 +1,19 @@
 'use client';
 
 /* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 복수 순위 입력의 검증 그룹에 연결한다. */
-
 import React, { useMemo } from 'react';
 
-import { RankingDropdownStack } from './ranking-dropdown-stack';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 
 import { CellContentLayout } from './cell-content-layout';
+import { RankingDropdownStack } from './ranking-dropdown-stack';
 import type { InteractiveCellProps } from './types';
 
 /** 순위형 셀 (인터랙티브) — Case 3: 테이블 셀 내부 랭킹. RankingDropdownStack 재사용. */
@@ -18,6 +21,7 @@ export const RankingCell = React.memo(function RankingCell({
   cell,
   cellResponse,
   onUpdateValue,
+  questionId,
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
@@ -30,10 +34,7 @@ export const RankingCell = React.memo(function RankingCell({
   const positions = Math.min(requestedPositions, Math.max(options.length, 1));
   const allowDuplicates = config?.allowDuplicateRanks === true;
 
-  const answers = useMemo<RankingAnswer[]>(
-    () => parseRankingAnswers(cellResponse),
-    [cellResponse],
-  );
+  const answers = useMemo<RankingAnswer[]>(() => parseRankingAnswers(cellResponse), [cellResponse]);
 
   if (options.length === 0) {
     return (
@@ -46,8 +47,10 @@ export const RankingCell = React.memo(function RankingCell({
   return (
     <CellContentLayout
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
       textColor={cell.textColor}
     >
       <div
@@ -69,6 +72,8 @@ export const RankingCell = React.memo(function RankingCell({
           ariaDescribedBy={ariaDescribedBy}
           {...(cell.optionsColumns !== undefined ? { columns: cell.optionsColumns } : {})}
           detailTargetScopeId={cell.id}
+          questionId={questionId}
+          cellId={cell.id}
           compact
         />
         {positions < requestedPositions && (

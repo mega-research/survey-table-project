@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
 import {
@@ -47,6 +48,7 @@ import {
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
 import { runAsyncAction } from '@/utils/run-async-action';
+import { collapseRepeatRows } from '@/lib/question/row-repeat';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
 import {
@@ -167,7 +169,6 @@ export function CellContentModal({
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
-  const textContentRef = useRef<HTMLTextAreaElement>(null);
   // 숫자 모드 진입 시 emptyDefault 기본 ON 을 "이 편집 세션에서 한 번만" 적용하기 위한 가드.
   // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
   // (모달 오픈/cell.id 변경 시 리셋)
@@ -194,6 +195,7 @@ export function CellContentModal({
     cellOptionsColumns,
     cellMobileOptionsColumns,
     inputDefaultValueTemplate,
+    hideRightBorder,
     cellNumberFormat,
     cellRequired,
     cellRequiredMessage,
@@ -210,14 +212,18 @@ export function CellContentModal({
     isOtherRankingCell,
     choiceLabel,
     choiceAllowTextInput,
+    choiceExclusive,
+    choiceExclusiveScope,
     choiceTextInputType,
     choiceTextInputNumberFormat,
     choiceBranchRule,
     choiceGroupId,
     textBold,
+    boldFirstLine,
     backgroundColor,
     textColor,
     horizontalAlign,
+    optionTextSlot,
     cellCode,
     isCustomCellCode,
     exportLabel,
@@ -256,6 +262,7 @@ export function CellContentModal({
     setAllowOtherOption,
     setCellOptionsColumns,
     setCellMobileOptionsColumns,
+    setHideRightBorder,
     setCellNumberFormat,
     setCellRequired,
     setCellRequiredMessage,
@@ -272,14 +279,18 @@ export function CellContentModal({
     setIsOtherRankingCell,
     setChoiceLabel,
     setChoiceAllowTextInput,
+    setChoiceExclusive,
+    setChoiceExclusiveScope,
     setChoiceTextInputType,
     setChoiceTextInputNumberFormat,
     setChoiceBranchRule,
     setChoiceGroupId,
     setTextBold,
+    setBoldFirstLine,
     setBackgroundColor,
     setTextColor,
     setHorizontalAlign,
+    setOptionTextSlot,
     setCellCode,
     setExportLabel,
     setSpssVarType,
@@ -330,12 +341,20 @@ export function CellContentModal({
     pendingOptionValueChangesRef.current = [];
   }, [isOpen, cell?.id]);
 
-  // 게이팅 컨트롤러 픽커용 — 이 셀이 속한 행의 셀 목록.
+  // 게이팅 컨트롤러 픽커용 — 이 표의 행 전체(컨트롤러는 어느 행이든 된다).
   // 에디터의 권위 있는 최신 행(getLatestRows)을 우선한다 (store 는 구조 편집 중 stale).
-  const gatingRowCells = useMemo(() => {
-    const rows = getLatestRows?.() ?? ownQuestion.tableRowsData;
-    return rows?.find((r) => r.cells.some((c) => c.id === cell.id))?.cells ?? [];
-  }, [getLatestRows, ownQuestion.tableRowsData, cell.id]);
+  // 행 반복 2벌 이후는 뺀다 — 편집 표에 안 보이는 행이고, 템플릿 셀이 다른 벌의 셀을 컨트롤러로
+  // 고르면 벌 단위 재매핑(table-cell-refs)이 옮기지 못해 모든 벌이 그 벌을 가리키게 된다.
+  const gatingRows = useMemo(
+    () => collapseRepeatRows(getLatestRows?.() ?? ownQuestion.tableRowsData ?? []),
+    [getLatestRows, ownQuestion.tableRowsData],
+  );
+  // 보기 소스 표인가 — 보기 옵션 셀이 하나라도 있으면. (문항 type 으로 판정하면 안 된다: 표
+  // 편집기가 넘기는 ownQuestion 은 type 이 늘 'table' 이다.)
+  const isChoiceSourceTable = useMemo(
+    () => collectChoiceOptCells(gatingRows).length > 0,
+    [gatingRows],
+  );
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
@@ -448,7 +467,6 @@ export function CellContentModal({
           form={form}
           setters={setters}
           cell={cell}
-          textContentRef={textContentRef}
           autoCellCode={autoCellCode}
           autoExportLabel={autoExportLabel}
           variableCatalog={variableCatalog}
@@ -556,6 +574,29 @@ export function CellContentModal({
                 상단의 &quot;셀 텍스트 내용&quot;에 입력한 텍스트만 표시됩니다.
               </p>
             </div>
+            {/* 보기 소스 표 전용 — 이 행 보기의 상세 기재 입력칸을 이 셀 안에 나란히 그린다.
+                판정은 ownQuestion.type 이 아니라 보기 옵션 셀 유무로 — 표 편집기가 넘기는
+                ownQuestion 은 type 이 늘 'table' 이다(use-table-editor currentQuestionAsQuestion). */}
+            {isChoiceSourceTable && (
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={optionTextSlot}
+                  onChange={(e) => setOptionTextSlot(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <span className="font-medium text-gray-900">
+                    이 행의 상세 기재를 이 셀에 표시
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    같은 행의 보기 중 &quot;상세 기재 허용&quot;이 켜지고 선택된 것의 입력칸을 표
+                    아래가 아니라 이 셀 안에 가로로 나란히 그립니다. 하나면 전체 폭, 둘이면
+                    반반입니다. 아무것도 선택되지 않으면 셀 텍스트가 보입니다.
+                  </span>
+                </span>
+              </label>
+            )}
           </TabsContent>
 
           {/* 이미지 탭 */}
@@ -810,6 +851,11 @@ export function CellContentModal({
               onSpssNumericCodeChange={setCellSpssNumericCode}
               allowTextInput={choiceAllowTextInput}
               onAllowTextInputChange={setChoiceAllowTextInput}
+              exclusiveChoice={choiceExclusive}
+              onExclusiveChoiceChange={setChoiceExclusive}
+              exclusiveScope={choiceExclusiveScope}
+              onExclusiveScopeChange={setChoiceExclusiveScope}
+              parentQuestionType={parentQuestionType}
               textInputType={choiceTextInputType}
               onTextInputTypeChange={setChoiceTextInputType}
               textInputNumberFormat={choiceTextInputNumberFormat}
@@ -918,7 +964,7 @@ export function CellContentModal({
           !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
             <CellGatingEditor
               cellId={cell.id}
-              rowCells={gatingRowCells}
+              rows={gatingRows}
               condition={gatingCondition}
               requiredWhenEnabled={gatingRequiredWhenEnabled}
               onConditionChange={(cond) => {
@@ -966,6 +1012,26 @@ export function CellContentModal({
             </div>
           )}
 
+        {/* 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 다음 셀과 한 칸처럼 이어 보인다 */}
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="hide-right-border" className="text-sm font-medium text-gray-900">
+                오른쪽 세로선 숨김
+              </Label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                응답 화면에서 이 셀과 오른쪽 셀 사이 선을 그리지 않습니다. 년 칸 | 월 칸처럼 입력칸
+                둘을 한 칸처럼 보이게 할 때 씁니다. 편집 화면에서는 선이 그대로 보입니다.
+              </p>
+            </div>
+            <Switch
+              id="hide-right-border"
+              checked={hideRightBorder}
+              onCheckedChange={setHideRightBorder}
+            />
+          </div>
+        </div>
+
         {/* 셀 병합 설정 */}
         <CellMergeFields form={form} setters={setters} />
 
@@ -983,9 +1049,11 @@ export function CellContentModal({
           <CellStyleFields
             key={cell.id}
             textBold={textBold}
+            boldFirstLine={boldFirstLine}
             backgroundColor={backgroundColor}
             textColor={textColor}
             onTextBoldChange={setTextBold}
+            onBoldFirstLineChange={setBoldFirstLine}
             onBackgroundColorChange={setBackgroundColor}
             onTextColorChange={setTextColor}
           />

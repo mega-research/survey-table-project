@@ -9,14 +9,7 @@ import { useElementWidth } from '@/features/question-renderer/hooks/use-element-
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
-import { cn } from '@/lib/utils';
-import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
-import {
-  getCellBackgroundStyle,
-  getCellTextClassName,
-  getCellTextStyle,
-} from '@/utils/cell-style';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -26,9 +19,14 @@ import {
   calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
+  getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
 } from '@/features/question-renderer/utils/table-grid-utils';
+import { cn } from '@/lib/utils';
+import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { type CellOutlineEdges, outlineBoxShadow } from '@/utils/choice-group-outline';
 
 import { PreviewCell } from './cells';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
@@ -36,7 +34,7 @@ import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-control
 // text-base: rowgroup 컨테이너의 text-sm 상속을 끊는다 — 척도형(라디오/체크박스/랭킹)
 // 테이블은 응답 선택지 라벨이 헤더에 실리므로 본문(14px)보다 큰 16px 로 읽혀야 한다.
 const HEADER_CELL_CLASS =
-  'flex items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-4 py-3 text-center text-base font-medium';
+  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium';
 
 const EMPTY_LABEL = <span className="text-sm text-gray-400 italic" />;
 
@@ -49,8 +47,16 @@ interface TablePreviewProps {
   /** CardContent 패딩 오버라이드 — 모바일 드릴다운 상세처럼 카드 여백 없이 붙여야 하는 곳용 */
   contentClassName?: string | undefined;
   hideColumnLabels?: boolean | undefined;
+  /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
+  stickyColumnCount?: number | null | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
+  /**
+   * 셀별 표시선(변 단위). 격자 두께를 건드리지 않도록 inset box-shadow 로 그린다.
+   * 보기 그룹 미충족 표시가 쓴다 — `errorCellIds`(칸마다 사방 ring)와 달리 덩어리
+   * 바깥 변만 낸다.
+   */
+  cellOutlineEdges?: ReadonlyMap<string, CellOutlineEdges> | undefined;
   stickyHeader?: boolean | undefined;
   preserveRowHeights?: boolean | undefined;
   /**
@@ -59,10 +65,7 @@ interface TablePreviewProps {
    * - (cell) => 'radio' | 'checkbox': 셀별 해석(그룹 혼합 — getGroupTypeOfCell 등)
    */
   choiceControlType?:
-    | 'radio'
-    | 'checkbox'
-    | ((cell: TableCell) => 'radio' | 'checkbox')
-    | undefined;
+    'radio' | 'checkbox' | ((cell: TableCell) => 'radio' | 'checkbox') | undefined;
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
@@ -79,7 +82,9 @@ export const TablePreview = React.memo(function TablePreview({
   className,
   contentClassName,
   hideColumnLabels = false,
+  stickyColumnCount,
   renderCell,
+  cellOutlineEdges,
   stickyHeader = true,
   preserveRowHeights = false,
   choiceControlType = 'checkbox',
@@ -135,11 +140,9 @@ export const TablePreview = React.memo(function TablePreview({
   // 세로 스크롤 중 헤더 고정 턱 걸림과 가로 스크롤 헤더/본문 동기화 지연을 없앤다.
   // (interactive-table-response 와 동일 정책 — 표-소스 radio/checkbox 응답도
   //  이 컴포넌트로 렌더되므로 응답 페이지 UX 에 직접 영향)
-  const pageSticky = usePageStickyThreshold(
-    tableContainerRef,
-    { disabled: !stickyHeader },
-    [columns.length === 0 || rows.length === 0],
-  );
+  const pageSticky = usePageStickyThreshold(tableContainerRef, { disabled: !stickyHeader }, [
+    columns.length === 0 || rows.length === 0,
+  ]);
 
   // 헤더가 null이거나 단일 컨테이너 모드면 동기화 불필요
   useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels || !pageSticky);
@@ -162,8 +165,8 @@ export const TablePreview = React.memo(function TablePreview({
     if (columns.length === 0) return undefined;
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
-    return computeStickyLeftColumns(columns, rows, maxStickyWidth);
-  }, [columns, rows, scrollViewportWidth]);
+    return computeStickyLeftColumns(columns, rows, maxStickyWidth, stickyColumnCount);
+  }, [columns, rows, scrollViewportWidth, stickyColumnCount]);
 
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -297,7 +300,7 @@ export const TablePreview = React.memo(function TablePreview({
                   <div ref={headerScrollRef} className={cn(HEADER_SCROLL_CLASS, 'px-0')}>
                     <div
                       role="rowgroup"
-                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                       style={gridContainerStyle}
                     >
                       {renderHeaderCells()}
@@ -336,7 +339,7 @@ export const TablePreview = React.memo(function TablePreview({
                 }}
                 // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
                 // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
-                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
+                className="overflow-x-auto max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
               >
                 {/* 단일 컨테이너 모드(짧은 표): 헤더를 본문과 같은 스크롤 컨테이너에
                     넣어 가로 스크롤이 native 로 완전 동기된다 (sync 훅 미사용).
@@ -346,7 +349,7 @@ export const TablePreview = React.memo(function TablePreview({
                   <div
                     key="in-scroll-header"
                     role="rowgroup"
-                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
                     style={gridContainerStyle}
                   >
                     {renderHeaderCells()}
@@ -356,7 +359,7 @@ export const TablePreview = React.memo(function TablePreview({
                   key="table-body"
                   role="rowgroup"
                   className={cn(
-                    'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
+                    'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',
                     hideColumnLabels && 'rounded-t-md border-t',
                   )}
                   style={gridContainerStyle}
@@ -396,11 +399,17 @@ export const TablePreview = React.memo(function TablePreview({
                         <div
                           key={`${row.id}:${cell.id}`}
                           className={cn(
-                            'min-w-0 border-r border-b border-gray-300 bg-white p-3',
+                            'min-w-0 bg-white p-3',
+                            getCellBorderClasses(cell),
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                             errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
                           )}
-                          style={style}
+                          style={{
+                            ...style,
+                            ...(outlineBoxShadow(cellOutlineEdges?.get(cell.id))
+                              ? { boxShadow: outlineBoxShadow(cellOutlineEdges?.get(cell.id)) }
+                              : {}),
+                          }}
                           data-row-id={row.id}
                           data-testid={`cell-${cell.id}`}
                           data-cell-id={cell.id}

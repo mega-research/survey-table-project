@@ -57,3 +57,45 @@ export function MobileOptionCard({
     </div>
   );
 }
+
+/**
+ * 묶음 카드의 행 — 카드와 같은 내용(라벨·컨트롤·표시 셀·footer)을 테두리 없는 한 줄로 그린다.
+ * 분류 헤더 아래 보기 여럿을 카드 하나에 담을 때 쓴다. 선택 강조는 테두리 대신 행 바탕색이다.
+ * 부모가 `divide-y` 로 행 사이 구분선을 긋는다.
+ */
+export function MobileOptionRow({
+  label,
+  cells,
+  control,
+  footer,
+  selected,
+  disabled,
+  onToggle,
+}: MobileOptionCardProps) {
+  const interactive = Boolean(onToggle) && !disabled;
+  return (
+    <div
+      className={cn(
+        'px-4 py-3 transition-colors',
+        selected ? 'bg-blue-50/70' : 'bg-white',
+        disabled && 'opacity-50',
+      )}
+    >
+      <div
+        className={cn('flex items-center gap-3', interactive && 'cursor-pointer')}
+        onClick={interactive ? onToggle : undefined}
+      >
+        {control != null && (
+          <span onClick={(e) => e.stopPropagation()} className="flex shrink-0 items-center">
+            {control}
+          </span>
+        )}
+        <div className="min-w-0 flex-1 text-[15px] leading-snug font-medium whitespace-pre-line text-gray-900">
+          {label}
+        </div>
+      </div>
+      <MobileDisplayCells cells={cells} className="mt-2" />
+      {footer != null && <div className="mt-2">{footer}</div>}
+    </div>
+  );
+}

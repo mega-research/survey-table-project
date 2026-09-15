@@ -19,8 +19,11 @@ import {
 } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
 import { OptionLabelTextarea } from '@/features/survey-builder/option-label-textarea';
-import { OptionPlaceholderEditor } from '@/features/survey-builder/option-placeholder-editor';
-import { createTextInputOption } from '@/features/survey-builder/question-option-helpers';
+import { OptionTextSettingsEditor } from '@/features/survey-builder/option-text-settings-editor';
+import {
+  applyOptionTextSettings,
+  createTextInputOption,
+} from '@/features/survey-builder/question-option-helpers';
 
 // OTHER_OPTION_ID: 미리보기에서 기존 기타 옵션 구별용 (읽기 전용, Phase 7 cleanup 대상)
 const OTHER_OPTION_ID = 'other-option';
@@ -256,11 +259,14 @@ export function CellChoiceEditor({
                 </div>
 
                 {option.allowTextInput && (
-                  <OptionPlaceholderEditor
-                    value={option.textInputPlaceholder}
+                  <OptionTextSettingsEditor
+                    idPrefix={`checkbox-${option.id}`}
+                    placeholder={option.textInputPlaceholder}
+                    textInputType={option.textInputType}
+                    numberFormat={option.textInputNumberFormat}
                     onChange={(next) => {
                       const updated = [...checkboxOptions];
-                      updated[index] = { ...option, textInputPlaceholder: next };
+                      updated[index] = applyOptionTextSettings(option, next);
                       onCheckboxOptionsChange(updated);
                     }}
                   />
@@ -577,11 +583,14 @@ export function CellChoiceEditor({
                 </div>
 
                 {option.allowTextInput && (
-                  <OptionPlaceholderEditor
-                    value={option.textInputPlaceholder}
+                  <OptionTextSettingsEditor
+                    idPrefix={`radio-${option.id}`}
+                    placeholder={option.textInputPlaceholder}
+                    textInputType={option.textInputType}
+                    numberFormat={option.textInputNumberFormat}
                     onChange={(next) => {
                       const updated = [...radioOptions];
-                      updated[index] = { ...option, textInputPlaceholder: next };
+                      updated[index] = applyOptionTextSettings(option, next);
                       onRadioOptionsChange(updated);
                     }}
                   />
@@ -799,11 +808,14 @@ export function CellChoiceEditor({
               </div>
 
               {option.allowTextInput && (
-                <OptionPlaceholderEditor
-                  value={option.textInputPlaceholder}
+                <OptionTextSettingsEditor
+                  idPrefix={`select-${option.id}`}
+                  placeholder={option.textInputPlaceholder}
+                  textInputType={option.textInputType}
+                  numberFormat={option.textInputNumberFormat}
                   onChange={(next) => {
                     const updated = [...selectOptions];
-                    updated[index] = { ...option, textInputPlaceholder: next };
+                    updated[index] = applyOptionTextSettings(option, next);
                     onSelectOptionsChange(updated);
                   }}
                 />

@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { INPUT_TYPES } from '@/types/input-type';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question } from '@/types/survey';
@@ -51,6 +52,8 @@ const embeddedTable = z.object({
   tableRowsData: z.custom<NonNullable<Question['tableRowsData']>>().optional(),
   tableHeaderGrid: z.custom<NonNullable<Question['tableHeaderGrid']>>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  // NULL = 자동 판정, 0~3 = 명시 지정
+  stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
 });
 
@@ -78,13 +81,15 @@ export const TextQuestionSchema = base.extend({
   type: z.literal('text'),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),
-  inputType: z.enum(['text', 'number']).optional(),
+  inputType: z.enum(INPUT_TYPES).optional(),
   emptyDefault: z.number().optional(),
   numberFormat: z.custom<NonNullable<Question['numberFormat']>>().nullable().optional(),
+  textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
 });
 
 export const TextareaQuestionSchema = base.extend({
   type: z.literal('textarea'),
+  textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
 });
 
 export const RadioQuestionSchema = base
@@ -128,10 +133,12 @@ export const RankingQuestionSchema = base
 export const TableQuestionSchema = base
   .extend(embeddedTable.shape)
   .extend(mobileTableDisplay.shape)
+  .extend(choiceGroups.shape)
   .extend({
     type: z.literal('table'),
     tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),
     dynamicRowConfigs: z.custom<NonNullable<Question['dynamicRowConfigs']>>().optional(),
+    rowRepeatConfig: z.custom<NonNullable<Question['rowRepeatConfig']>>().optional(),
   });
 
 export const NoticeQuestionSchema = base.extend({

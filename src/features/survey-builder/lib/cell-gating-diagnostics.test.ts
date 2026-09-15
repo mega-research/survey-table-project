@@ -63,14 +63,12 @@ describe('collectGatingDiagnostics — 진단 5종', () => {
     expect(out[0]!.cellId).toBe('in1');
   });
 
-  it('다른 행의 컨트롤러 → gating-cross-row-ref', () => {
+  it('다른 행의 컨트롤러는 정상 참조다 — 표 안이면 어느 행이든 허용', () => {
     const q = makeQuestion([
       row('r1', [ctrl]),
       row('r2', [gatedInput('in2', 'ctrl')]),
     ]);
-    const out = collectGatingDiagnostics([q]);
-    expect(out).toHaveLength(1);
-    expect(out[0]!.kind).toBe('gating-cross-row-ref');
+    expect(collectGatingDiagnostics([q])).toEqual([]);
   });
 
   it('자기 자신 참조 → gating-self-ref', () => {
@@ -123,5 +121,35 @@ describe('collectGatingDiagnostics — 진단 5종', () => {
     } as TableCell;
     const q = makeQuestion([row('r1', [a, b, c])]);
     expect(collectGatingDiagnostics([q])).toEqual([]);
+  });
+});
+
+describe('collectGatingDiagnostics — 내장 표가 있는 문항 전부', () => {
+  it('레거시 보기 소스 표(radio 문항)의 끊긴 컨트롤러 참조도 진단한다', () => {
+    const legacy = {
+      ...makeQuestion([row('r1', [gatedInput('a', 'ghost')])]),
+      type: 'radio',
+    } as unknown as Question;
+    expect(collectGatingDiagnostics([legacy]).map((d) => d.kind)).toEqual(['gating-broken-ref']);
+  });
+
+  it('보기 그룹 표의 choice-selected 컨트롤러가 보기 셀이면 정상 참조다', () => {
+    const q = makeQuestion([
+      row('r1', [
+        { id: 'opt', type: 'choice_opt', content: '있음', choiceGroupId: 'g1' },
+        {
+          id: 'when',
+          type: 'input',
+          content: '',
+          enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt' },
+        } as TableCell,
+      ]),
+    ]);
+    expect(collectGatingDiagnostics([q])).toEqual([]);
+  });
+
+  it('내장 표가 없는 문항은 건너뛴다', () => {
+    const plain = { id: 'x', type: 'text', title: '', required: false, order: 0 } as Question;
+    expect(collectGatingDiagnostics([plain])).toEqual([]);
   });
 });

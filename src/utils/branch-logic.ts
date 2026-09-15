@@ -16,6 +16,7 @@ import {
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
 import { resolveStepBranch, type RenderStep } from '@/utils/group-ordering';
+import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';
@@ -489,12 +490,35 @@ export function shouldDisplayGroup(
   allGroups: QuestionGroup[],
   ctx?: BranchEvalCtx,
 ): boolean {
+  return shouldDisplayGroupWithSeen(group, allResponses, allQuestions, allGroups, ctx, new Set());
+}
+
+/**
+ * `shouldDisplayGroup` 본체 — 방문 집합을 들고 조상 사슬을 탄다.
+ *
+ * `question_groups.parent_group_id` 는 자기 참조 FK 라 손상된 데이터에서 순환이 가능하고,
+ * 가드 없이 재귀하면 스택이 넘친다. 응답 화면·자격미달 판정·숨은 문항 삭제가 전부 이 함수를
+ * 지나므로 한 번 넘치면 설문이 통째로 죽는다. 이미 본 그룹을 다시 만나면 "더 볼 조상이 없다"
+ * 로 끊고, 그 지점까지 본 조건들의 판정은 그대로 살린다 — 가드는 재방문만 자를 뿐 평가를
+ * 삼키지 않는다.
+ */
+function shouldDisplayGroupWithSeen(
+  group: QuestionGroup,
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups: QuestionGroup[],
+  ctx: BranchEvalCtx | undefined,
+  seen: Set<string>,
+): boolean {
   const evalCtx = ctx ?? emptyBranchEvalCtx();
+  seen.add(group.id);
   // 1. 상위 그룹 조건 확인 (재귀)
-  if (group.parentGroupId) {
+  if (group.parentGroupId && !seen.has(group.parentGroupId)) {
     const parentGroup = allGroups.find((g) => g.id === group.parentGroupId);
     if (parentGroup) {
-      if (!shouldDisplayGroup(parentGroup, allResponses, allQuestions, allGroups, evalCtx)) {
+      if (
+        !shouldDisplayGroupWithSeen(parentGroup, allResponses, allQuestions, allGroups, evalCtx, seen)
+      ) {
         return false; // 상위 그룹이 숨겨지면 하위 그룹도 숨김
       }
     }
@@ -505,7 +529,7 @@ export function shouldDisplayGroup(
     return true; // 조건이 없으면 표시
   }
 
-  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -522,7 +546,7 @@ export function shouldDisplayRow(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(row.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(row.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -539,7 +563,7 @@ export function shouldDisplayColumn(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(column.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(column.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -556,7 +580,7 @@ export function shouldDisplayDynamicGroup(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -587,7 +611,7 @@ export function shouldDisplayQuestion(
     return true; // 조건이 없으면 표시
   }
 
-  return evaluateConditionGroup(question.displayCondition, allResponses, allQuestions, evalCtx);
+  return evaluateQuestionConditionGroup(question.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -595,7 +619,7 @@ export function shouldDisplayQuestion(
  * shouldDisplay{Group,Row,Column,DynamicGroup,Question} 5곳에 복제돼 있던 조합 로직의 단일 거처.
  * (조건 그룹은 표시조건 어휘 — 셀 의미론(table-cell-semantics) 범위 밖이라 이 파일에 둔다.)
  */
-function evaluateConditionGroup(
+export function evaluateQuestionConditionGroup(
   displayCondition: { conditions: QuestionCondition[]; logicType: ConditionLogicType },
   allResponses: Record<string, unknown>,
   allQuestions: Question[],
@@ -612,6 +636,12 @@ function evaluateConditionGroup(
   const results = displayCondition.conditions
     .filter((condition) => condition.enabled !== false)
     .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, ctx));
+
+  // 살아있는 조건이 하나도 없으면 "조건 없음" 과 같다 — logicType 과 무관하게 표시한다.
+  // 빼먹으면 OR 이 some([]) === false 로 무조건 숨김이 된다: 빌더에서 조건을 지우고
+  // 결합만 OR 로 남은 문항이 아무에게도 안 나오는 사고(2026-09-08 DQ2)가 그 경로다.
+  // AND 는 every([]) === true 라 우연히 맞았을 뿐이라, 세 결합을 여기서 한 번에 맞춘다.
+  if (results.length === 0) return true;
 
   // 논리 타입에 따라 결과 결합
   switch (displayCondition.logicType) {
@@ -940,6 +970,13 @@ function checkValueMatch(
   // 단일 값 (radio, select 등)
   if (typeof response === 'string') {
     return requiredValues.includes(response);
+  }
+
+  // 보기 그룹 표(table + choice_opt 셀) — 선택은 표 응답 안 예약 키(__choiceGroups)에 있다.
+  // 정본 리더로 선택 집합을 얻는다. 셀 값 키(셀 id)는 보기 선택이 아니라 여기서 걸리지 않는다.
+  if (sourceQuestion?.type === 'table') {
+    const selected = collectSelectedChoiceCellIds(sourceQuestion, response);
+    return requiredValues.some((v) => selected.has(v));
   }
 
   // 그룹별 선택 모드(GroupedChoiceAnswer): { groupKey: cellId | cellId[] } 맵.

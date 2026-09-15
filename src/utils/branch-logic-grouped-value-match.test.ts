@@ -138,3 +138,35 @@ describe('value-match 표시 조건 — 그룹형 choice 응답 맵', () => {
     ).toBe(false);
   });
 });
+
+describe('value-match 표시 조건 — 보기 그룹 표 (table + __choiceGroups)', () => {
+  const tableSource = {
+    ...makeGroupedSourceQuestion(),
+    type: 'table',
+  } as Question;
+  const target = makeTargetQuestion([TARGET_CELL]);
+  const allQuestions = [tableSource, target];
+
+  it('표 응답 안 예약 키의 선택이 requiredValues 와 일치하면 표시한다', () => {
+    const responses = { [SOURCE_ID]: { amount: '1', __choiceGroups: { rad2: TARGET_CELL } } };
+    expect(shouldDisplayQuestion(target, responses, allQuestions)).toBe(true);
+  });
+
+  it('다른 보기를 골랐거나 예약 키가 없으면 숨긴다 — 셀 값 키는 보기 선택이 아니다', () => {
+    expect(
+      shouldDisplayQuestion(target, { [SOURCE_ID]: { __choiceGroups: { rad2: OTHER_CELL } } }, allQuestions),
+    ).toBe(false);
+    expect(
+      shouldDisplayQuestion(target, { [SOURCE_ID]: { [TARGET_CELL]: '값' } }, allQuestions),
+    ).toBe(false);
+  });
+
+  it('checkbox 그룹의 배열 선택도 매칭한다', () => {
+    const checkboxTable = {
+      ...tableSource,
+      choiceGroups: [{ id: 'g2', type: 'checkbox' as const, label: '현재', groupKey: 'chk1' }],
+    } as Question;
+    const responses = { [SOURCE_ID]: { __choiceGroups: { chk1: [OTHER_CELL, TARGET_CELL] } } };
+    expect(shouldDisplayQuestion(target, responses, [checkboxTable, target])).toBe(true);
+  });
+});

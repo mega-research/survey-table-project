@@ -4,6 +4,7 @@ import 'server-only';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { encryptAnswerForQuestion, type QuestionPiiFlag } from '@/lib/crypto/response-pii';
+import { logger } from '@/lib/logger';
 import { sanitizeRootSidecar, splitRootSidecars } from '@/lib/survey/response-sidecars';
 
 import type { SaveDraftResponseInput } from '../domain/response';
@@ -185,6 +186,12 @@ async function claimDraftSeq(responseId: string, seq: number): Promise<DraftSeqC
  * seq 가 실려 있으면 요청 단위로 한 번 claim 한다(문항별 WHERE 절이 아니라 배치 단위인
  * 이유는 claimDraftSeq 주석 참조 — 0행 매치를 문항별로 두면 정상 시나리오가 500 으로 샌다).
  * 지연 도착한 stale 요청이면 답변을 전혀 쓰지 않고 applied:false 로 돌아간다.
+ *
+ * **숨은 문항 strip 은 여기서 하지 않는다** (스펙 2026-09-07 숨은 문항 응답 삭제).
+ * answers 는 더티 키만 담은 부분 패치이고 저장은 jsonb 합집합 병합이다. 여기에 strip 을
+ * 걸면 조건이 참조하는 상류 문항이 패치에 없어 조건이 거짓이 되고, 지금 저장하려던 멀쩡한
+ * 답이 지워진다. 게다가 합집합 병합이라 이미 저장된 유령값은 어차피 못 지운다.
+ * 숨은 문항 정리는 클라이언트 즉시 삭제와 제출·자격미달 재판정·관리자 편집 경계가 맡는다.
  */
 export async function saveDraftResponse(
   input: SaveDraftResponseInput,
@@ -207,7 +214,15 @@ export async function saveDraftResponse(
   // 루트 사이드카(기타/상세 기재·변동 확인)는 실존 질문이 아니므로 소속 검증에서
   // 분리한다. 제출 전 이탈에도 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
   // 등록되지 않은 '__' 키는 기존대로 소속 검증에서 거부된다.
-  const { answerEntries, sidecarEntries } = splitRootSidecars(entries);
+  const { answerEntries, sidecarEntries, unknownSidecarKeys } = splitRootSidecars(entries);
+  if (unknownSidecarKeys.length > 0) {
+    // 등록부에 없는 예약 키 — 저장하지 않고 넘어가되 이름은 남긴다. 거부하면 이 키 하나가
+    // 그 응답자의 초안 저장을 통째로 막는다(부분 저장 없음).
+    logger.warn(
+      { responseId: input.responseId, keys: unknownSidecarKeys },
+      '[saveDraft] 등록되지 않은 루트 사이드카 키 — 저장에서 제외',
+    );
+  }
 
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);

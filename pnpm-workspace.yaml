@@ -71,7 +71,9 @@ overrides:
   'brace-expansion@5': '>=5.0.9 <6'
   'js-yaml@4': '>=4.3.0 <5'
   '@opentelemetry/propagator-jaeger@2': '>=2.9.0 <3'
-  'fast-uri@3': '>=3.1.4 <4'
+  # fast-uri 3.x: GHSA-5jgf-p345-68v8·GHSA-f65p-4m7j-42xc·GHSA-fph4-wmhf-6fwf·
+  # GHSA-jqff-g426-hqxp (SSRF·host confusion, 모두 <3.1.6). 2026-09-04 하한 상향.
+  'fast-uri@3': '>=3.1.6 <4'
   'fast-uri@4': '>=4.1.2 <5'
   'postcss@8': '>=8.5.18 <9'
   # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(선언은 ^0.34.5, docs 주석 참조)

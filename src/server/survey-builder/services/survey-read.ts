@@ -260,6 +260,9 @@ export async function getSurveyForResponse(
     testSessionKind,
     // 회차 라벨은 스냅샷에 freeze 하지 않는다 — 운영 중 문구 교정이 publish 없이 반영돼야 한다.
     priorWaveLabel: survey.priorWaveLabel,
+    // 변동 확인 스위치도 같은 이유로 라이브다 — 스위치 하나 바꾸려고 재발행하면 응답 중인
+    // 사람의 구조가 rebase 된다.
+    changeConfirmEnabled: survey.changeConfirmEnabled,
   };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환
@@ -283,6 +286,8 @@ export async function getSurveyForResponse(
           endDate?: string;
           maxResponses?: number;
           thankYouMessage: string;
+          // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
+          screenedOutMessage?: string | null;
           // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
           requireInviteToken?: boolean;
           forceWideLayout?: boolean;

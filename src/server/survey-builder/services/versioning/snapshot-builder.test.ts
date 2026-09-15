@@ -68,6 +68,7 @@ const mockSurvey: Survey = {
     endDate: new Date('2026-12-31T23:59:59Z'),
     maxResponses: 100,
     thankYouMessage: '감사합니다!',
+    screenedOutMessage: '본 조사 대상자가 아닙니다.',
   },
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -132,6 +133,7 @@ describe('buildSurveySnapshot', () => {
     expect(snapshot.settings.endDate).toBe('2026-12-31T23:59:59.000Z');
     expect(snapshot.settings.maxResponses).toBe(100);
     expect(snapshot.settings.thankYouMessage).toBe('감사합니다!');
+    expect(snapshot.settings.screenedOutMessage).toBe('본 조사 대상자가 아닙니다.');
   });
 
   it('forceWideLayout=true 를 스냅샷 settings 에 보존', () => {

@@ -76,6 +76,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     setHasTestAttemptOwnership: vi.fn(),
     loadedSurvey: survey,
     contactAttrs: {} as Record<string, string | undefined>,
+    priorAnswers: null,
     currentStep: step,
     currentStepIndex: 0,
     steps: [step] as RenderStep[],
@@ -293,10 +294,9 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     });
 
     expect(args.setResponses).toHaveBeenCalledTimes(1);
-    expect(args.setPendingResponse).toHaveBeenCalledWith(
-      '__dynamicRowSelections__',
-      { q1: ['dynamic-row'] },
-    );
+    expect(args.setPendingResponse).toHaveBeenCalledWith('__dynamicRowSelections__', {
+      q1: ['dynamic-row'],
+    });
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
     await expect(result.current.flushPendingAnswers()).resolves.toBe(true);
     expect(saveDraft).not.toHaveBeenCalled();
@@ -547,9 +547,32 @@ describe('useResponseLifecycle - handleSubmit', () => {
       await result.current.handleSubmit();
     });
 
-    expect(createBlank).toHaveBeenCalledWith(
-      expect.objectContaining({ clientSignals: collected }),
-    );
+    expect(createBlank).toHaveBeenCalledWith(expect.objectContaining({ clientSignals: collected }));
+  });
+
+  it('서버가 돌려준 상태가 screened_out 이면 종료 결과를 자격미달로 세운다 — 완료 화면 문구가 갈린다', async () => {
+    complete.mockResolvedValue({ id: 'resp-existing', status: 'screened_out' });
+    const setCompletionOutcome = vi.fn();
+    const args = baseArgs({ currentResponseId: 'resp-existing', setCompletionOutcome });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(setCompletionOutcome).toHaveBeenCalledWith('screened_out');
+    expect(args.setIsCompleted).toHaveBeenCalledWith(true);
+  });
+
+  it('상태가 completed 거나 결과가 비어 있으면 종료 결과는 완료다', async () => {
+    complete.mockResolvedValue({ id: 'resp-existing', status: 'completed' });
+    const setCompletionOutcome = vi.fn();
+    const args = baseArgs({ currentResponseId: 'resp-existing', setCompletionOutcome });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(setCompletionOutcome).toHaveBeenCalledWith('completed');
   });
 
   it('currentResponseId 가 이미 있으면 blank INSERT 없이 바로 complete 한다', async () => {
@@ -779,7 +802,9 @@ describe('useResponseLifecycle - handleSubmit', () => {
       } as unknown as Question;
       const requiredStep: RenderStep = {
         kind: 'page',
-        items: [{ question: requiredQ, rootGroupId: null, rootGroupName: null, subgroupName: null }],
+        items: [
+          { question: requiredQ, rootGroupId: null, rootGroupName: null, subgroupName: null },
+        ],
       } as unknown as RenderStep;
       const { args, onSubmit } = adminArgs({
         questions: [requiredQ],
@@ -1356,7 +1381,12 @@ function calcTableQuestion(id: string): Question {
         label: 'r1',
         cells: [
           { id: `${id}-a`, content: '', type: 'input', inputType: 'number' },
-          { id: `${id}-c`, content: '', type: 'calc', formula: { kind: 'cell', cellId: `${id}-a` } },
+          {
+            id: `${id}-c`,
+            content: '',
+            type: 'calc',
+            formula: { kind: 'cell', cellId: `${id}-a` },
+          },
         ],
       },
     ],
@@ -1480,9 +1510,9 @@ describe('디바운스 백그라운드 자동 저장', () => {
       await vi.advanceTimersByTimeAsync(16000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
-    expect(
-      (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers,
-    ).toEqual({ q1: '안녕' });
+    expect((saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers).toEqual({
+      q1: '안녕',
+    });
   });
 
   it('입력이 계속 이어져도 maxWait 15초에 한 번은 발사한다', async () => {
@@ -1509,9 +1539,9 @@ describe('디바운스 백그라운드 자동 저장', () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
-    expect(
-      (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers,
-    ).toEqual({ q1: '1234' });
+    expect((saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers).toEqual({
+      q1: '1234',
+    });
   });
 
   it('백그라운드 저장 성공 후 다음 클릭 flush 는 추가 왕복 없이 통과한다', async () => {
@@ -1554,9 +1584,9 @@ describe('디바운스 백그라운드 자동 저장', () => {
     });
     expect(flushResult).toBe(true);
     expect(saveDraft).toHaveBeenCalledTimes(2);
-    expect(
-      (saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers,
-    ).toEqual({ q1: '답' });
+    expect((saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers).toEqual({
+      q1: '답',
+    });
   });
 
   it('preview 모드는 백그라운드 발사를 하지 않는다', async () => {
@@ -1638,8 +1668,8 @@ describe('디바운스 백그라운드 자동 저장', () => {
     });
     expect(flushResult).toBe(true);
     expect(saveDraft).toHaveBeenCalledTimes(2);
-    expect(
-      (saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers,
-    ).toEqual({ q2: 'b' });
+    expect((saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers).toEqual({
+      q2: 'b',
+    });
   });
 });

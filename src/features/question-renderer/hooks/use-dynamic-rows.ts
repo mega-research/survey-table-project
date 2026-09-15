@@ -2,8 +2,13 @@ import { useMemo } from 'react';
 
 import { useDynamicRowLayout } from '@/features/question-renderer/hooks/use-dynamic-row-layout';
 import { useDynamicRowState } from '@/features/question-renderer/hooks/use-dynamic-row-state';
+import {
+  type UseRowRepeatReturn,
+  useRowRepeat,
+} from '@/features/question-renderer/hooks/use-row-repeat';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
-import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
+import { collectTableCells } from '@/lib/survey/cell-gating';
+import type { DynamicRowGroupConfig, RowRepeatConfig, TableRow } from '@/types/survey';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 /**
@@ -34,6 +39,8 @@ interface UseDynamicRowsParams {
   /** 그룹 displayCondition 으로 숨길 그룹 ID (호출자 소유) */
   hiddenGroupIds?: Set<string> | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
+  /** 행 반복 설정 — 구조에 펼쳐진 벌 중 몇 벌을 보일지 정하는 데만 쓴다 */
+  rowRepeatConfig?: RowRepeatConfig | null | undefined;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   headerRowCount: number;
@@ -60,6 +67,8 @@ interface UseDynamicRowsReturn {
   closeModal: () => void;
   expandedGroupIds: Set<string>;
   toggleGroupExpanded: (groupId: string) => void;
+  // 행 반복 (구조에 펼쳐진 벌의 노출 제어)
+  rowRepeat: UseRowRepeatReturn;
 }
 
 export function useDynamicRows({
@@ -69,6 +78,7 @@ export function useDynamicRows({
   conditionVisibleRowIds,
   hiddenGroupIds,
   dynamicRowConfigs,
+  rowRepeatConfig,
   value,
   onChange,
   headerRowCount,
@@ -94,6 +104,21 @@ export function useDynamicRows({
     onChange,
   });
 
+  // 1-b) 행 반복 가시성 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다.
+  //      동적 그룹 필터·행 조건 필터와 같은 층이다 (행을 숨겼다 보였다 하는 일).
+  //      **구조 전체 행**을 넘긴다 — columnFilteredRows 는 조건으로 숨은 열의 셀이 이미
+  //      빠진 목록이라, 그걸로 판정하면 숨은 칸의 값이 벌 판정과 접기(값 비우기)에서
+  //      통째로 빠진다. 응답자가 지운 벌이 내보내기의 "쓰인 벌"로 남고, 조건이 뒤집히면
+  //      지운 값이 되살아난다. 숨기는 것은 렌더의 일이고 값의 소재는 구조가 안다.
+  const rowRepeat = useRowRepeat({
+    questionId,
+    rows,
+    rowRepeatConfig,
+    value,
+    onChange,
+  });
+  const hiddenRepeatRowIds = rowRepeat.hiddenRowIds;
+
   // 2) 가시 행 필터링 — 행 displayCondition 결과 적용 + 동적 그룹 행 제외 + rowspan 재계산
   const visibleRows = useMemo(() => {
     if (columnFilteredRows.length === 0) return columnFilteredRows;
@@ -101,6 +126,10 @@ export function useDynamicRows({
 
     if (conditionVisibleRowIds) {
       filtered = filtered.filter((row) => conditionVisibleRowIds.has(row.id));
+    }
+
+    if (hiddenRepeatRowIds.size > 0) {
+      filtered = filtered.filter((row) => !hiddenRepeatRowIds.has(row.id));
     }
 
     if (hasDynamicRows) {
@@ -118,7 +147,13 @@ export function useDynamicRows({
 
     const visibleRowIds = new Set(filtered.map((r) => r.id));
     return recalculateRowspansForVisibleRows(columnFilteredRows, visibleRowIds);
-  }, [columnFilteredRows, conditionVisibleRowIds, hasDynamicRows, groupConfigMap]);
+  }, [
+    columnFilteredRows,
+    conditionVisibleRowIds,
+    hasDynamicRows,
+    groupConfigMap,
+    hiddenRepeatRowIds,
+  ]);
 
   // 3) 동적 행 레이아웃 — displayRows, 셀렉터 배치, grid 좌표
   const { displayRows, rowGridMap, selectorGridMap, groupSelectedCountMap, expandedGroupRows } =
@@ -137,15 +172,17 @@ export function useDynamicRows({
   // 4) 행별 완료 상태 맵 (displayRows + 펼친 그룹 행 포함)
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
+    // 게이팅 컨트롤러는 다른 행일 수 있다 — 정의 탐색용으로 원본 rows 전체 셀을 넘긴다
+    const tableCells = collectTableCells(rows);
     const checkRow = (row: TableRow) => {
-      map.set(row.id, isTableRowCompleted(row, currentResponse));
+      map.set(row.id, isTableRowCompleted(row, currentResponse, { tableCells }));
     };
     for (const row of displayRows) checkRow(row);
     for (const groupRows of expandedGroupRows.values()) {
       for (const row of groupRows) checkRow(row);
     }
     return map;
-  }, [displayRows, expandedGroupRows, currentResponse]);
+  }, [rows, displayRows, expandedGroupRows, currentResponse]);
 
   return {
     displayRows,
@@ -165,5 +202,6 @@ export function useDynamicRows({
     closeModal,
     expandedGroupIds,
     toggleGroupExpanded,
+    rowRepeat,
   };
 }

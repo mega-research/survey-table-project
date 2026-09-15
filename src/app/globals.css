@@ -767,6 +767,14 @@ html {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* 표 셀 서식본(TableCell.contentHtml): 문단 = 평문의 한 줄. 문단 여백을 없애 평문 셀과 줄 간격을 맞춘다 */
+.cell-rich-text p {
+  margin: 0;
+}
+.cell-rich-text-bold-first p:first-child {
+  font-weight: 700;
+}
+
 /* 옵션 리스트 반응형 그리드: 모바일(< 640px) 1열, sm 이상 --options-grid-cols 적용 */
 .options-grid {
   display: grid;
@@ -801,6 +809,9 @@ a.notice-file-attachment {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  /* 파일명이 길어도 화면 폭을 넘지 않는다 — 넘기면 모바일에 가로 스크롤이 생긴다 */
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0.625rem 0.875rem;
   padding-left: 2.5rem;
   background-color: #f3f4f6;
@@ -824,6 +835,7 @@ a.notice-file-attachment:hover {
   display: inline-flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 100%;
 }
 .notice-file-attachment-label {
   color: #1f2937;

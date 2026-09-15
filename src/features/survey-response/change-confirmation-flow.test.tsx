@@ -148,6 +148,7 @@ beforeEach(() => {
       testSession: null,
       testSessionKind: null,
       priorWaveLabel: '2025년 조사',
+      changeConfirmEnabled: true,
     },
   });
   attrsLookup.mockResolvedValue({});
@@ -174,8 +175,7 @@ beforeEach(() => {
 /** complete 로 서버에 실제로 나간 응답 묶음. */
 function submittedResponses(): Record<string, unknown> {
   const call = complete.mock.calls.at(-1)?.[0] as
-    | { data?: { questionResponses?: Record<string, unknown> } }
-    | undefined;
+    { data?: { questionResponses?: Record<string, unknown> } } | undefined;
   return call?.data?.questionResponses ?? {};
 }
 
@@ -225,6 +225,7 @@ describe('변동 확인 컨트롤 노출', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
 
@@ -431,6 +432,7 @@ describe('이월 값 잠금과 복사', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
     priorAnswersLookup.mockResolvedValue({
@@ -470,11 +472,13 @@ describe('필수 여부와 변동 확인은 별개 축이다', () => {
         testSession: null,
         testSessionKind: null,
         priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: true,
       },
     });
   }
 
   it('잠긴 필수 문항에 "필수 질문에 답변해주세요"를 띄우지 않는다', async () => {
+    const user = userEvent.setup();
     arrangeRequiredPriorQuestion();
     renderFlow();
     await screen.findByText('지난 회차에 답한 질문');
@@ -482,6 +486,12 @@ describe('필수 여부와 변동 확인은 별개 축이다', () => {
       expect(screen.queryByRole('radio', { name: '2025년 조사와 같음' })).not.toBeNull(),
     );
     // 입력이 잠겨 있어 응답자가 따를 수 없는 요구다 — 변동 확인 게이트가 대신 막는다.
+    expect(screen.queryByText(/필수 질문에 답변해주세요/)).toBeNull();
+
+    // 티켓 14 이후 하단 안내는 "다음"을 시도한 뒤에만 뜬다 — 그래서 진입 직후 부재는 자명하다.
+    // 시도한 뒤에도 변동 확인 게이트가 필수 게이트보다 앞이라 필수 안내가 서지 않아야 한다.
+    await user.click(screen.getByRole('button', { name: /다음/ }));
+    expect(await screen.findByText(/변동 여부를 선택해주세요/)).toBeTruthy();
     expect(screen.queryByText(/필수 질문에 답변해주세요/)).toBeNull();
   });
 
@@ -556,5 +566,241 @@ describe('완전 동일 확인', () => {
 
     await waitFor(() => expect(complete).toHaveBeenCalled());
     expect(screen.queryByText(/달라졌다고 하셨지만/)).toBeNull();
+  });
+});
+
+/**
+ * 문항별 변동 확인이 **꺼진** 설문 (기본값). 이월 값이 답으로 미리 깔리고 응답자가 고치면
+ * 덮어쓴다. 위 묶음이 기술하는 잠금·확인·되묻기는 이 경로에서 전부 사라져야 한다.
+ */
+describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
+  function renderWithSwitchOff(survey: Survey = createSurvey()) {
+    forResponse.mockResolvedValue({
+      survey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: null,
+        testSessionKind: null,
+        priorWaveLabel: '2025년 조사',
+        changeConfirmEnabled: false,
+      },
+    });
+    renderFlow();
+  }
+
+  it('확인 컨트롤이 아예 나타나지 않는다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('작년 답')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('radio', { name: '2025년 조사와 같음' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: '달라졌습니다' })).toBeNull();
+  });
+
+  it('이월 값이 답으로 깔리고 입력이 잠겨 있지 않다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    const input = await screen.findByDisplayValue('작년 답');
+    expect(input).not.toBeDisabled();
+    expect(input).not.toHaveAttribute('readonly');
+  });
+
+  it('밝히지 않아도 다음 페이지로 넘어간다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 페이지 질문')).toBeInTheDocument();
+  });
+
+  it('손대지 않은 이월 값이 그대로 제출된다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()['q-prior']).toBe('작년 답');
+  });
+
+  it('고친 값이 이월 값을 덮어쓰고, 되묻지 않고 바로 제출된다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    const input = await screen.findByDisplayValue('작년 답');
+    await user.clear(input);
+    await user.type(input, '올해 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()['q-prior']).toBe('올해 답');
+  });
+
+  it('변동 확인 사이드카가 서버로 나가지 않는다', async () => {
+    const user = userEvent.setup();
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()).not.toHaveProperty('__changeConfirm__');
+  });
+
+  it('프리필이 응답 쓰기 창구를 타 초안·응답 행에 남는다', async () => {
+    // 직접 setResponses 로 쓰면 초안 큐에 실리지 않아 서버에 남지 않는다. 그러면 중도
+    // 이탈 후 재진입에서 회복이 응답 묶음을 갈아끼워 이미 지나온 페이지의 이월 값이
+    // 통째로 사라진다. 응답 행 INSERT 가 나가는 것이 창구를 탔다는 증거다.
+    renderWithSwitchOff();
+    await screen.findByText('지난 회차에 답한 질문');
+    await screen.findByDisplayValue('작년 답');
+    await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalled());
+  });
+
+  /** 라디오 q-cond 가 '해당있음'(코드 A) 일 때만 q-dep 이 보이는 설문. */
+  function conditionalSurvey() {
+    return createSurvey({
+      questions: [
+        {
+          id: 'q-cond',
+          type: 'radio',
+          title: '해당 여부',
+          description: '',
+          required: false,
+          order: 0,
+          options: [
+            { id: 'o-a', label: '해당있음', value: 'A' },
+            { id: 'o-b', label: '해당없음', value: 'B' },
+          ],
+        },
+        {
+          id: 'q-dep',
+          type: 'text',
+          title: '하위 질문',
+          description: '',
+          required: false,
+          order: 1,
+          displayCondition: {
+            logicType: 'AND',
+            conditions: [
+              {
+                id: 'cond-1',
+                sourceQuestionId: 'q-cond',
+                conditionType: 'value-match',
+                requiredValues: ['A'],
+              },
+            ],
+          },
+        },
+        questions[2],
+      ] as Question[],
+    });
+  }
+
+  it('뒤늦게 숨겨진 문항의 손대지 않은 이월 값은 제출에서 빠진다', async () => {
+    const user = userEvent.setup();
+    priorAnswersLookup.mockResolvedValue({ 'q-cond': 'A', 'q-dep': '작년 하위 답' });
+    renderWithSwitchOff(conditionalSurvey());
+
+    await screen.findByText('해당 여부');
+    await waitFor(() => expect(screen.getByRole('radio', { name: '해당있음' })).toBeChecked());
+    await screen.findByText('하위 질문');
+    // 라디오가 지난 회차 답으로 채워지고, 그 덕에 하위 문항이 보이며 함께 채워진다.
+    await screen.findByDisplayValue('작년 하위 답');
+
+    // 앞 문항을 바꿔 하위 문항을 숨긴다.
+    await user.click(screen.getByRole('radio', { name: '해당없음' }));
+    await waitFor(() => expect(screen.queryByDisplayValue('작년 하위 답')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()['q-cond']).toBe('B');
+    expect(submittedResponses()).not.toHaveProperty('q-dep');
+  });
+
+  // 스펙 2026-09-07 숨은 문항 응답 삭제 이후 — 손댄 값도 예외 없이 지워진다. 삭제는
+  // 응답 상태(strip Hidden Question Values)에서 일어나므로 프리필 경로에서 온 값인지,
+  // 응답자가 직접 고친 값인지 더는 구분하지 않는다.
+  it('숨겨지면 응답자가 고친 값도 제출에서 지워진다', async () => {
+    const user = userEvent.setup();
+    priorAnswersLookup.mockResolvedValue({ 'q-cond': 'A', 'q-dep': '작년 하위 답' });
+    renderWithSwitchOff(conditionalSurvey());
+
+    await screen.findByText('해당 여부');
+    const sub = await screen.findByDisplayValue('작년 하위 답');
+    await user.clear(sub);
+    await user.type(sub, '올해 고친 하위 답');
+    await user.click(screen.getByRole('radio', { name: '해당없음' }));
+    await waitFor(() => expect(screen.queryByDisplayValue('올해 고친 하위 답')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('두 번째 페이지 질문');
+    // 마지막 스텝의 제출 버튼도 라벨은 "다음" 이다.
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    expect(submittedResponses()).not.toHaveProperty('q-dep');
+  });
+
+  /**
+   * 삭제(strip Hidden Question Values)와 프리필(collectPriorAnswerPrefills)이 같은
+   * 응답 상태를 두고 반대 방향으로 움직인다 — 하나는 숨은 문항 값을 지우고, 다른 하나는
+   * 표시되는 빈 문항을 이월 값으로 채운다. 응답자가 직접 지운 값은 영영 사라지지만
+   * (hidden-question-deletion-flow.test.tsx "되돌려도 지워진 값은 살아나지 않는다"),
+   * 이월 값은 그 진짜 출처가 `contact_prior_answers`(prior 인자)에 그대로 남아 있고
+   * 프리필 규칙이 "이미 값이 있으면 덮지 않는다"이므로, 지워져 빈 문항이 되면 다시
+   * 채워진다. 두 effect 가 서로 되받아치며 무한 루프를 만들지 않는다는 것도 함께 본다 —
+   * 실제로 루프가 나면 React 가 update depth 초과를 던져 이 테스트 자체가 실패한다.
+   */
+  it('숨어서 지워진 이월 값도 다시 보이면 프리필로 되살아난다', async () => {
+    const user = userEvent.setup();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    priorAnswersLookup.mockResolvedValue({ 'q-cond': 'A', 'q-dep': '작년 하위 답' });
+    renderWithSwitchOff(conditionalSurvey());
+
+    await screen.findByText('해당 여부');
+    // 1) 상류가 이월 값 'A' 로 프리필돼 하위 문항이 보이고, 하위 문항도 이월 값으로 채워진다.
+    await waitFor(() => expect(screen.getByRole('radio', { name: '해당있음' })).toBeChecked());
+    await screen.findByText('하위 질문');
+    await screen.findByDisplayValue('작년 하위 답');
+
+    // 2) 상류를 바꿔 하위 문항을 숨기면 삭제 effect 가 값을 곧바로 지운다.
+    await user.click(screen.getByRole('radio', { name: '해당없음' }));
+    await waitFor(() => expect(screen.queryByText('하위 질문')).toBeNull());
+    await waitFor(() => expect(screen.queryByDisplayValue('작년 하위 답')).toBeNull());
+
+    // 3) 상류를 원래대로 되돌리면 하위 문항이 다시 보이고, 빈 자리에 프리필이 다시 깐다.
+    // 응답자가 직접 타이핑해 지운 값과 달리, 이월 값은 소스가 살아 있어 되살아난다.
+    await user.click(screen.getByRole('radio', { name: '해당있음' }));
+    await screen.findByText('하위 질문');
+    await screen.findByDisplayValue('작년 하위 답');
+
+    // 프리필(add)·삭제(remove) 두 effect 가 서로 되받아치지 않고 안정적으로 정착했다 —
+    // React 의 update depth 경고/에러가 한 번도 나지 않았다.
+    expect(
+      consoleErrorSpy.mock.calls.some((call) => String(call[0]).includes('Maximum update depth')),
+    ).toBe(false);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('이월 값이 없는 문항은 빈칸으로 남는다', async () => {
+    renderWithSwitchOff();
+    await screen.findByText('올해 새로 생긴 질문');
+    await screen.findByDisplayValue('작년 답');
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs.some((el) => (el as HTMLInputElement).value === '')).toBe(true);
   });
 });

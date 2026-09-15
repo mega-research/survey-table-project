@@ -2,34 +2,40 @@
 
 import { useCallback, useMemo } from 'react';
 
+import { useMobileView } from '@/hooks/use-media-query';
+
 import { QuestionInput } from '@/features/survey-response/question-input';
 import { ChangeConfirmControl } from '@/features/survey-response/change-confirm-control';
 import { RichDescription } from '@/features/survey-response/step-views/rich-description';
+import { StepItem } from '@/utils/group-ordering';
+import { sanitizeRichHtml } from '@/lib/sanitize';
+import {
+  collectUnfilledChoiceGroupIssues,
+  resolveGroupedRequiredMessage,
+} from '@/features/survey-response/lib/answer-validation';
 import {
   CHANGE_CONFIRM_KEY,
+  type ChangeConfirmation,
   getChangeConfirmation,
   isPriorAnswerLocked,
   requiresChangeConfirmation,
   resolveAnswerOnConfirmation,
   updateChangeConfirmations,
-  type ChangeConfirmation,
 } from '@/lib/survey/change-confirmation';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
-import { isChoiceTableSource } from '@/utils/choice-source';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
-import { resolveGroupedRequiredMessage } from '@/features/survey-response/lib/answer-validation';
-import { sanitizeRichHtml } from '@/lib/sanitize';
-import { StepItem } from '@/utils/group-ordering';
-import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import { Question } from '@/types/survey';
+import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
-} from '@/features/question-renderer/utils/dynamic-row-selection-sidecar';
+} from '@/utils/dynamic-row-selection-sidecar';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { VALIDATION_NOTICE_ATTRIBUTE } from '@/features/question-renderer/scroll-to-issue';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -57,20 +63,13 @@ export function GroupStepItem({
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
-  const onChange = useCallback(
-    (value: unknown) => onResponse(q.id, value),
-    [onResponse, q.id],
-  );
+  const onChange = useCallback((value: unknown) => onResponse(q.id, value), [onResponse, q.id]);
   const selectedDynamicRowIds = getDynamicRowSelections(responses, q.id);
   const onDynamicRowSelectionChange = useCallback(
     (rowIds: string[]) =>
       onResponse(
         DYNAMIC_ROW_SELECTIONS_KEY,
-        updateDynamicRowSelections(
-          responses[DYNAMIC_ROW_SELECTIONS_KEY],
-          q.id,
-          rowIds,
-        ),
+        updateDynamicRowSelections(responses[DYNAMIC_ROW_SELECTIONS_KEY], q.id, rowIds),
       ),
     [onResponse, q.id, responses],
   );
@@ -78,7 +77,9 @@ export function GroupStepItem({
   const quotes = useAnswerQuotes();
   // 추적조사 — 이 문항 값이 지난 회차에서 넘어온 것이면 응답자가 구분할 수 있게 표시하고,
   // 같은 자리에서 변동 여부를 밝히게 한다(밝히지 않으면 페이지를 넘길 수 없다).
-  const { answers: priorAnswers, waveLabel } = usePriorAnswers();
+  // confirmAnswers 는 이미 스위치·이월값 조건 둘 다로 걸러져 있다 — 스위치가 꺼졌거나
+  // 이 문항의 priorAnswerCondition 이 거짓이면 여기서 null/미보유로 떨어진다.
+  const { confirmAnswers: priorAnswers, waveLabel } = usePriorAnswers();
   const hasPrior = requiresChangeConfirmation(q, priorAnswers);
   const priorValue = hasPrior ? priorAnswers?.[q.id] : undefined;
   const changeConfirmation = getChangeConfirmation(responses, q.id);
@@ -115,12 +116,26 @@ export function GroupStepItem({
   // 두 번 알리므로 문구를 필수 안내 하나로 합친다 — 배너의 "위치로 이동"(셀/상세 타깃)은
   // 유지하고, 아래 별도 필수 문구 <p> 를 생략한다 (2026-08-13 결정).
   // 셀별 지정 문구와 범위/합계/수식 위반은 별개 정보이므로 그대로 둔다.
+  // 보기 그룹 표(radio/checkbox 그룹)의 필수 미충족은 배너 항목이 따로 없어 이동 버튼이 안 달렸다 —
+  // 미충족 그룹을 셀 id 가 있는 required-cells 이슈로 배너에 넣고 아래 <p> 는 생략한다(2026-09-15).
+  // 모바일 축 단위 카드는 미충족 카드마다 자기 아래에 같은 상자를 그린다 — 여기서 또 내면
+  // 마지막 카드 아래에 둘이 겹친다. 문구는 여전히 그 상자 몫이라 아래 <p> 는 생략한다.
+  const isMobile = useMobileView();
+  const axisCardsOnMobile = isMobile && q.mobileTableDisplayMode === 'axis-cards';
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
-    if (!showRequiredMessage || !issues?.length) {
+    const groupIssues: NumericIssue[] = showRequiredMessage
+      ? collectUnfilledChoiceGroupIssues(q, responses[q.id]).map((issue) => ({
+          kind: 'required-cells' as const,
+          message: issue.message,
+          cellIds: issue.cellIds,
+        }))
+      : [];
+    if (!showRequiredMessage || (!issues?.length && groupIssues.length === 0)) {
       return { visibleIssues: issues, requiredMessageInBanner: false };
     }
-    let merged = false;
-    const next = issues.map((issue) => {
+    let merged = groupIssues.length > 0;
+    if (axisCardsOnMobile) groupIssues.length = 0;
+    const next = (issues ?? []).map((issue) => {
       const isDefaultRequiredIssue =
         (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
         issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
@@ -128,8 +143,8 @@ export function GroupStepItem({
       merged = true;
       return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
     });
-    return { visibleIssues: next, requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q, responses]);
+    return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
+  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -164,7 +179,7 @@ export function GroupStepItem({
           <RichDescription
             html={descriptionHtml}
             size="sm"
-            className="px-2 pb-2 md:overflow-x-auto text-sm text-gray-500 md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
+            className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
           />
         )}
         {hasPrior && (
@@ -187,39 +202,41 @@ export function GroupStepItem({
           disabled={isLocked}
           className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
         >
-        <div
-          role="group"
-          aria-labelledby={`q-label-${q.id}`}
-          // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
-          // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
-          // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
-          // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
-          // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
-          // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
-          // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
-          className={
-            q.type === 'table' ||
-            ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
-              ? `mt-2 md:m-2 ${
-                  !q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''
-                }`
-              : 'm-2'
-          }
-        >
-          <QuestionInput
-            question={q}
-            value={inputValue}
-            onChange={onChange}
-            allResponses={responses as Record<string, unknown>}
-            allQuestions={questions}
-            numericIssues={visibleIssues}
-            selectedDynamicRowIds={selectedDynamicRowIds}
-            onDynamicRowSelectionChange={onDynamicRowSelectionChange}
-          />
-        </div>
+          <div
+            role="group"
+            aria-labelledby={`q-label-${q.id}`}
+            // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
+            // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
+            // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
+            // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
+            // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
+            // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
+            // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
+            className={
+              q.type === 'table' ||
+              ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
+                ? `mt-2 md:m-2 ${!q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''}`
+                : 'm-2'
+            }
+          >
+            <QuestionInput
+              question={q}
+              value={inputValue}
+              onChange={onChange}
+              allResponses={responses as Record<string, unknown>}
+              allQuestions={questions}
+              numericIssues={visibleIssues}
+              selectedDynamicRowIds={selectedDynamicRowIds}
+              onDynamicRowSelectionChange={onDynamicRowSelectionChange}
+              showRequiredHighlight={showRequiredMessage}
+            />
+          </div>
         </fieldset>
         {showRequiredMessage && !requiredMessageInBanner && (
-          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
+            className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
             {resolveGroupedRequiredMessage(q, responses[q.id])}
           </p>
         )}

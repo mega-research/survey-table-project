@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import type { NewQuestion, Question } from '@/db/schema';
 import type { PersistedQuestionField } from '@/db/schema/question-persisted-fields';
+import { INPUT_TYPES } from '@/types/input-type';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question as QuestionType } from '@/types/survey';
@@ -53,15 +54,20 @@ export const CreateQuestionInput = z.object({
   requiresAcknowledgment: z.boolean().optional(),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),
-  inputType: z.enum(['text', 'number']).optional(),
+  inputType: z.enum(INPUT_TYPES).optional(),
   emptyDefault: z.number().nullable().optional(),
   piiEncrypted: z.boolean().optional(),
   tableValidationRules: z.custom<QuestionType['tableValidationRules']>().optional(),
   numberFormat: z.custom<QuestionType['numberFormat']>().optional(),
+  textValidation: z.custom<QuestionType['textValidation']>().optional(),
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
+  priorAnswerCondition: z.custom<QuestionType['priorAnswerCondition']>().optional(),
+  priorAnswerDisabled: z.boolean().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
+  rowRepeatConfig: z.custom<QuestionType['rowRepeatConfig']>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
   mobileOriginalTable: z.boolean().optional(),
   mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
@@ -117,14 +123,17 @@ export const UpdateQuestionData = z.object({
   requiresAcknowledgment: z.boolean().optional(),
   placeholder: z.string().optional(),
   defaultValueTemplate: z.string().nullable().optional(),
-  inputType: z.enum(['text', 'number']).optional(),
+  inputType: z.enum(INPUT_TYPES).optional(),
   emptyDefault: z.number().nullable().optional(),
   piiEncrypted: z.boolean().optional(),
   tableValidationRules: z.custom<QuestionType['tableValidationRules']>().optional(),
   numberFormat: z.custom<QuestionType['numberFormat']>().optional(),
+  textValidation: z.custom<QuestionType['textValidation']>().optional(),
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
+  rowRepeatConfig: z.custom<QuestionType['rowRepeatConfig']>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
   mobileOriginalTable: z.boolean().optional(),
   mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
@@ -136,6 +145,8 @@ export const UpdateQuestionData = z.object({
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
   choiceGroups: z.custom<QuestionType['choiceGroups']>().optional(),
   displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
+  priorAnswerCondition: z.custom<QuestionType['priorAnswerCondition']>().optional(),
+  priorAnswerDisabled: z.boolean().optional(),
   questionCode: z.string().optional(),
   isCustomSpssVarName: z.boolean().optional(),
   exportLabel: z.string().optional(),

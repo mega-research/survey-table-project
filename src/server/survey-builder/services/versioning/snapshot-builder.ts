@@ -7,6 +7,7 @@
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
+  InputType,
   Question,
   QuestionGroup,
   Survey,
@@ -29,6 +30,7 @@ export interface SurveySnapshot {
     endDate?: string | undefined;
     maxResponses?: number | undefined;
     thankYouMessage: string;
+    screenedOutMessage?: string | null | undefined;
     // 컨택 attrs invite token 강제 — 스냅샷에 freeze (shared/contracts/survey 의 SurveyVersionSnapshot.settings 와 정렬)
     requireInviteToken?: boolean | undefined;
     // 화면 너비 강제 — 스냅샷에 freeze
@@ -76,7 +78,9 @@ interface SnapshotQuestion {
   placeholder?: string | undefined;
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
+  rowRepeatConfig?: Question['rowRepeatConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
+  stickyColumnCount?: number | null | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
@@ -85,6 +89,8 @@ interface SnapshotQuestion {
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
+  priorAnswerCondition?: Question['priorAnswerCondition'] | undefined;
+  priorAnswerDisabled?: boolean | undefined;
   questionCode?: string | undefined;
   /**
    * 엑셀 라벨. export 는 라이브 설정을 보므로 원래는 스냅샷에 담지 않았다.
@@ -93,10 +99,11 @@ interface SnapshotQuestion {
    */
   exportLabel?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
-  inputType?: 'text' | 'number' | undefined;
+  inputType?: InputType | undefined;
   emptyDefault?: number | undefined;
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;
+  textValidation?: Question['textValidation'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -166,7 +173,9 @@ export function buildSurveySnapshot(
       placeholder: q.placeholder,
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
+      rowRepeatConfig: q.rowRepeatConfig,
       hideColumnLabels: q.hideColumnLabels,
+      stickyColumnCount: q.stickyColumnCount,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
@@ -175,6 +184,8 @@ export function buildSurveySnapshot(
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
+      priorAnswerCondition: q.priorAnswerCondition,
+      priorAnswerDisabled: q.priorAnswerDisabled,
       questionCode: q.questionCode,
       exportLabel: q.exportLabel,
       defaultValueTemplate: q.defaultValueTemplate,
@@ -182,6 +193,7 @@ export function buildSurveySnapshot(
       emptyDefault: q.emptyDefault,
       piiEncrypted: q.piiEncrypted,
       numberFormat: q.numberFormat,
+      textValidation: q.textValidation,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,
@@ -211,6 +223,7 @@ export function buildSurveySnapshot(
         : undefined,
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
+      screenedOutMessage: survey.settings.screenedOutMessage ?? null,
       requireInviteToken: survey.settings.requireInviteToken,
       forceWideLayout: survey.settings.forceWideLayout,
       responseHeader: survey.settings.responseHeader,

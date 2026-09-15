@@ -1,23 +1,32 @@
 'use client';
 
 import {
-  OPTION_TEXT_BARE_INPUT_CLS,
-  OptionTextRow,
-} from '@/features/question-renderer/option-text-input-stack';
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import {
+  OPTION_TEXT_BARE_INPUT_CLS,
+  OptionTextRow,
+} from '@/features/question-renderer/option-text-input-stack';
 import { rankingTextTargetId } from '@/features/question-renderer/utils/option-text-target';
+import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
+import { useMobileView } from '@/hooks/use-media-query';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorRanking,
+  isPriorRankingText,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
-import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
 import {
   RANKING_HORIZONTAL_ITEM_WIDTH,
   RANKING_OTHER_VALUE,
@@ -47,11 +56,16 @@ export interface RankingDropdownStackProps {
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
+  /** 이월 표시(빨강) 판정용 문항 id. 미전달이면 칠하지 않는다(빌더 미리보기 등). */
+  questionId?: string | undefined;
+  /** 표의 ranking 셀에서 쓰는 셀 id. 질문 레벨 순위형은 미전달. */
+  cellId?: string | undefined;
 }
 
 /**
- * 순위형 응답의 드롭다운 스택.
- * ranking-question (Case 1/2) / cells/ranking-cell (Case 3) 가 공유.
+ * 순위형 응답의 드롭다운 스택 — 기본 입력 방식.
+ * ranking-question (inputMode 미지정·'dropdown'·중복 순위 허용) / cells/ranking-cell (표 안 셀, 항상) 이 공유.
+ * 보기 클릭 방식은 ranking-click-select 가 따로 그린다.
  */
 export function RankingDropdownStack({
   answers,
@@ -66,10 +80,13 @@ export function RankingDropdownStack({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  questionId,
+  cellId,
 }: RankingDropdownStackProps) {
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
 
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
@@ -156,7 +173,19 @@ export function RankingDropdownStack({
               autoComplete="off"
               value={otherTextAt(rank)}
               onChange={(e) => handleOtherText(rank, e.target.value)}
-              className={bareInputCls}
+              className={cn(
+                bareInputCls,
+                questionId !== undefined &&
+                  isPriorRankingText(
+                    priorHighlight,
+                    questionId,
+                    rank,
+                    'otherText',
+                    otherTextAt(rank),
+                    cellId,
+                  ) &&
+                  PRIOR_HIGHLIGHT_TEXT_CLS,
+              )}
               data-option-text-target-id={
                 detailTargetScopeId
                   ? rankingTextTargetId(detailTargetScopeId, rank, RANKING_OTHER_VALUE)
@@ -182,7 +211,19 @@ export function RankingDropdownStack({
             autoComplete="off"
             value={optionTextAt(rank)}
             onChange={(e) => handleOptionText(rank, e.target.value)}
-            className={bareInputCls}
+            className={cn(
+              bareInputCls,
+              questionId !== undefined &&
+                isPriorRankingText(
+                  priorHighlight,
+                  questionId,
+                  rank,
+                  'optionText',
+                  optionTextAt(rank),
+                  cellId,
+                ) &&
+                PRIOR_HIGHLIGHT_TEXT_CLS,
+            )}
             data-option-text-target-id={
               detailTargetScopeId
                 ? rankingTextTargetId(detailTargetScopeId, rank, currentValue)
@@ -199,129 +240,136 @@ export function RankingDropdownStack({
       <div className={layout.className} style={layout.style}>
         {Array.from({ length: positions }, (_, i) => i + 1).map((rank) => {
           const currentValue = selectedValueAt(rank);
-          const selectedOpt = currentValue && currentValue !== RANKING_OTHER_VALUE
-            ? options.find((o) => o.value === currentValue)
-            : undefined;
-        const selectedStyle = selectedOpt?.backgroundColor || selectedOpt?.textColor
-          ? {
-              ...(selectedOpt.backgroundColor
-                ? { backgroundColor: selectedOpt.backgroundColor }
-                : {}),
-              ...(selectedOpt.textColor ? { color: selectedOpt.textColor } : {}),
-            }
-          : undefined;
-        const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
-        const triggerWidthStyle =
-          isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined;
+          const selectedOpt =
+            currentValue && currentValue !== RANKING_OTHER_VALUE
+              ? options.find((o) => o.value === currentValue)
+              : undefined;
+          const selectedStyle =
+            selectedOpt?.backgroundColor || selectedOpt?.textColor
+              ? {
+                  ...(selectedOpt.backgroundColor
+                    ? { backgroundColor: selectedOpt.backgroundColor }
+                    : {}),
+                  ...(selectedOpt.textColor ? { color: selectedOpt.textColor } : {}),
+                }
+              : undefined;
+          const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
+          // 이월 표시 — 빌더가 보기에 글자색을 지정했으면 그 인라인 색이 이기므로 칠하지 않는다.
+          const priorCls =
+            questionId !== undefined &&
+            !selectedOpt?.textColor &&
+            isPriorRanking(priorHighlight, questionId, rank, currentValue, cellId)
+              ? PRIOR_HIGHLIGHT_TEXT_CLS
+              : undefined;
+          const triggerWidthStyle =
+            isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined;
 
-        // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Radix Select 로
-        // 교체해 모바일에서 트리거를 키우고, 열린 목록에 max-height + 스크롤을 적용한다.
-        const nativeSelectEl = (
-          <select
-            id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
-            value={currentValue}
-            aria-invalid={ariaInvalid || undefined}
-            aria-describedby={ariaDescribedBy}
-            onChange={(e) => handleSelect(rank, e.target.value)}
-            className={selectCls}
-            style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
-          >
-            <option value="">{compact ? '선택하세요' : '선택하세요...'}</option>
-            {options.map((opt) => (
-              <option
-                key={opt.id}
-                value={opt.value}
-                disabled={isTakenElsewhere(rank, opt.value)}
-                className={opt.textBold ? 'font-bold' : undefined}
-                style={{
-                  ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
-                  ...(opt.textColor ? { color: opt.textColor } : {}),
-                }}
-              >
-                {substituteTokens(opt.label, attrs, quotes)}
-              </option>
-            ))}
-            {allowOther && <option value={RANKING_OTHER_VALUE}>기타 (직접 입력)</option>}
-          </select>
-        );
-
-        // 옵션은 트리거 고정 너비 안에서 줄바꿈(긴 라벨이 화면 밖으로 넘치지 않게).
-        const itemCls = cn(
-          'whitespace-normal [overflow-wrap:anywhere]',
-          // 체크 표시 자리(pl-8, 32px)를 없앤다. 순위형은 선택값이 트리거에도 보여 체크가
-          // 없어도 무엇을 골랐는지 알 수 있고, 긴 라벨이 여러 줄로 접힐 때 들여쓰기가 크다.
-          'pl-3 [&>span:first-child]:hidden',
-          // 하이라이트는 링만. 옵션에 커스텀 배경색이 깔리면 인라인 스타일이 배경을 덮어
-          // 어느 항목에 커서가 있는지 안 보인다(c7134ac4 회귀).
-          'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-100 data-[highlighted]:ring-inset',
-          isMobile && 'py-3 text-base',
-        );
-        const radixSelectEl = (
-          <Select
-            value={currentValue}
-            onValueChange={(v) => handleSelect(rank, v)}
-          >
-            <SelectTrigger
+          // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Radix Select 로
+          // 교체해 모바일에서 트리거를 키우고, 열린 목록에 max-height + 스크롤을 적용한다.
+          const nativeSelectEl = (
+            <select
               id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
-              aria-label={`${rank}순위 선택`}
+              value={currentValue}
               aria-invalid={ariaInvalid || undefined}
               aria-describedby={ariaDescribedBy}
-              className={cn(
-                // 모바일은 행 가득(균일 고정). 데스크톱 가로 레이아웃은 고정 px(아래 style).
-                isHorizontal && !isMobile ? '' : 'w-full',
-                'min-w-0',
-                // 모바일 트리거 크게(iOS 확대 방지 위해 16px 이상), 높이는 h-12.
-                isMobile ? 'h-12 text-base' : 'h-11 text-sm',
-                // 포커스 링은 옅은 하늘색. SelectTrigger 기본 --ring(#007aff)이 진해서 덮는다.
-                'focus:border-blue-100 focus:ring-2 focus:ring-blue-100 focus:ring-offset-0',
-                selectedBold,
-              )}
-              style={{ ...triggerWidthStyle, ...selectedStyle }}
+              onChange={(e) => handleSelect(rank, e.target.value)}
+              className={cn(selectCls, priorCls)}
+              style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
             >
-              <SelectValue placeholder="선택하세요..." />
-            </SelectTrigger>
-            {/* Radix SelectContent 는 max-h(가용 높이) + overflow-y-auto + 스크롤 버튼 내장.
-                높이는 320px(max-h-80)로 캡해 컴팩트하게, 너비는 트리거 너비에 고정해
-                옵션이 화면 밖으로 넘치지 않게 한다. */}
-            <SelectContent className="max-h-80 w-[var(--radix-select-trigger-width)]">
+              <option value="">{compact ? '선택하세요' : '선택하세요...'}</option>
               {options.map((opt) => (
-                <SelectItem
+                <option
                   key={opt.id}
                   value={opt.value}
                   disabled={isTakenElsewhere(rank, opt.value)}
-                  className={cn(itemCls, opt.textBold && 'font-bold')}
+                  className={opt.textBold ? 'font-bold' : undefined}
                   style={{
                     ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
                     ...(opt.textColor ? { color: opt.textColor } : {}),
                   }}
                 >
                   {substituteTokens(opt.label, attrs, quotes)}
-                </SelectItem>
+                </option>
               ))}
-              {allowOther && (
-                <SelectItem value={RANKING_OTHER_VALUE} className={itemCls}>
-                  기타 (직접 입력)
-                </SelectItem>
+              {allowOther && <option value={RANKING_OTHER_VALUE}>기타 (직접 입력)</option>}
+            </select>
+          );
+
+          // 옵션은 트리거 고정 너비 안에서 줄바꿈(긴 라벨이 화면 밖으로 넘치지 않게).
+          const itemCls = cn(
+            'whitespace-normal [overflow-wrap:anywhere]',
+            // 체크 표시 자리(pl-8, 32px)를 없앤다. 순위형은 선택값이 트리거에도 보여 체크가
+            // 없어도 무엇을 골랐는지 알 수 있고, 긴 라벨이 여러 줄로 접힐 때 들여쓰기가 크다.
+            'pl-3 [&>span:first-child]:hidden',
+            // 하이라이트는 링만. 옵션에 커스텀 배경색이 깔리면 인라인 스타일이 배경을 덮어
+            // 어느 항목에 커서가 있는지 안 보인다(c7134ac4 회귀).
+            'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-100 data-[highlighted]:ring-inset',
+            isMobile && 'py-3 text-base',
+          );
+          const radixSelectEl = (
+            <Select value={currentValue} onValueChange={(v) => handleSelect(rank, v)}>
+              <SelectTrigger
+                id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
+                aria-label={`${rank}순위 선택`}
+                aria-invalid={ariaInvalid || undefined}
+                aria-describedby={ariaDescribedBy}
+                className={cn(
+                  // 모바일은 행 가득(균일 고정). 데스크톱 가로 레이아웃은 고정 px(아래 style).
+                  isHorizontal && !isMobile ? '' : 'w-full',
+                  'min-w-0',
+                  // 모바일 트리거 크게(iOS 확대 방지 위해 16px 이상), 높이는 h-12.
+                  isMobile ? 'h-12 text-base' : 'h-11 text-sm',
+                  // 포커스 링은 옅은 하늘색. SelectTrigger 기본 --ring(#007aff)이 진해서 덮는다.
+                  'focus:border-blue-100 focus:ring-2 focus:ring-blue-100 focus:ring-offset-0',
+                  selectedBold,
+                  priorCls,
+                )}
+                style={{ ...triggerWidthStyle, ...selectedStyle }}
+              >
+                <SelectValue placeholder="선택하세요..." />
+              </SelectTrigger>
+              {/* Radix SelectContent 는 max-h(가용 높이) + overflow-y-auto + 스크롤 버튼 내장.
+                높이는 320px(max-h-80)로 캡해 컴팩트하게, 너비는 트리거 너비에 고정해
+                옵션이 화면 밖으로 넘치지 않게 한다. */}
+              <SelectContent className="max-h-80 w-[var(--radix-select-trigger-width)]">
+                {options.map((opt) => (
+                  <SelectItem
+                    key={opt.id}
+                    value={opt.value}
+                    disabled={isTakenElsewhere(rank, opt.value)}
+                    className={cn(itemCls, opt.textBold && 'font-bold')}
+                    style={{
+                      ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                      ...(opt.textColor ? { color: opt.textColor } : {}),
+                    }}
+                  >
+                    {substituteTokens(opt.label, attrs, quotes)}
+                  </SelectItem>
+                ))}
+                {allowOther && (
+                  <SelectItem value={RANKING_OTHER_VALUE} className={itemCls}>
+                    기타 (직접 입력)
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          );
+
+          const selectEl = compact ? nativeSelectEl : radixSelectEl;
+
+          return (
+            <div
+              key={rank}
+              className={cn(
+                'flex items-center',
+                compact ? 'gap-2' : 'gap-1.5',
+                isMobile && 'w-full min-w-0',
               )}
-            </SelectContent>
-          </Select>
-        );
-
-        const selectEl = compact ? nativeSelectEl : radixSelectEl;
-
-        return (
-          <div
-            key={rank}
-            className={cn(
-              'flex items-center',
-              compact ? 'gap-2' : 'gap-1.5',
-              isMobile && 'w-full min-w-0',
-            )}
-          >
-            <span className={rankLabelCls}>{rank}순위</span>
-            {selectEl}
-          </div>
-        );
+            >
+              <span className={rankLabelCls}>{rank}순위</span>
+              {selectEl}
+            </div>
+          );
         })}
       </div>
       {detailRowEls.length > 0 && (

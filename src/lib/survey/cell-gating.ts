@@ -1,9 +1,15 @@
-import type { CellEnableCondition, Question, TableCell } from '@/types/survey';
+import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import type { CellEnableCondition, Question, TableCell, TableRow } from '@/types/survey';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { resolveSelectedValues } from '@/utils/table-cell-semantics';
 
 /**
  * 셀 게이팅 평가기 (CONTEXT.md "셀 게이팅").
+ *
+ * 컨트롤러는 **같은 표 안이면 어느 행이든** 된다(2026-09-10 — 처음엔 같은 행만이었다). 값은
+ * 문항 단위 응답 객체에서 셀 id 로 찾으므로 행 경계가 원래 없고, 옵션 조건의 컨트롤러 정의
+ * 탐색만 표 전체 셀로 넓혔다.
  *
  * 응답 페이지·테스트 모드·차단형 검증·저장 strip 이 전부 이 모듈을 부른다 —
  * 판정이 갈리면 "화면에선 비활성인데 검증은 필수라 함"이 생기므로 복제 금지
@@ -18,7 +24,7 @@ import { resolveSelectedValues } from '@/utils/table-cell-semantics';
  * - option 조건은 컨트롤러 셀의 실제 응답 형태(flat string | `{optionId}` 래핑 | 그 배열)를
  *   `table-cell-semantics.ts` 의 정본 규칙(resolveSelectedValues, 내부적으로 unwrapOptionId/
  *   findOptionByStored 사용)으로 옵션 value 로 해석한 뒤 condition.values 와 비교한다.
- *   컨트롤러 셀 정의(rowCells)를 못 구하면 raw 값을 문자열로만 취급하는 flat 비교로 폴백한다
+ *   컨트롤러 셀 정의(tableCells)를 못 구하면 raw 값을 문자열로만 취급하는 flat 비교로 폴백한다
  *   (예: 컨트롤러가 이미 value 그대로 저장하는 legacy/테스트 데이터).
  */
 
@@ -54,9 +60,9 @@ function toValueSet(raw: unknown): Set<string> {
 function resolveOptionValueSet(
   condition: Extract<CellEnableCondition, { kind: 'option' }>,
   raw: unknown,
-  rowCells: readonly TableCell[] | undefined,
+  tableCells: readonly TableCell[] | undefined,
 ): Set<string> {
-  const controller = rowCells?.find((c) => c.id === condition.controllerCellId);
+  const controller = tableCells?.find((c) => c.id === condition.controllerCellId);
   if (!controller) return toValueSet(raw);
   return new Set(resolveSelectedValues(controller, raw));
 }
@@ -64,12 +70,15 @@ function resolveOptionValueSet(
 function evaluate(
   condition: CellEnableCondition,
   cellValues: Record<string, unknown>,
-  rowCells: readonly TableCell[] | undefined,
+  tableCells: readonly TableCell[] | undefined,
+  choiceSelection: ReadonlySet<string> | undefined,
 ): boolean {
   const raw = cellValues[condition.controllerCellId];
   switch (condition.kind) {
+    case 'choice-selected':
+      return choiceSelection?.has(condition.controllerCellId) === true;
     case 'option': {
-      const selected = resolveOptionValueSet(condition, raw, rowCells);
+      const selected = resolveOptionValueSet(condition, raw, tableCells);
       return condition.values.some((v) => selected.has(v));
     }
     case 'filled':
@@ -91,20 +100,67 @@ function evaluate(
 }
 
 /**
+ * 표의 모든 셀(행 순서). 컨트롤러 셀 정의 탐색용 — 컨트롤러는 같은 표 안이면 어느 행이든 된다.
+ * 호출부마다 `rows.flatMap(r => r.cells)` 를 쓰지 말고 이것을 쓴다.
+ */
+export function collectTableCells(rows: readonly TableRow[] | null | undefined): TableCell[] {
+  return (rows ?? []).flatMap((row) => row.cells);
+}
+
+/**
  * 이 셀이 현재 입력 가능한가. cellValues = 그 질문의 응답 객체({ [cellId]: value }).
- * rowCells = 같은 행의 셀 목록(컨트롤러 셀 정의 탐색용, option 조건 전용). 생략 시 하위호환
- * flat 비교로 폴백한다 — 새 호출부는 항상 그 행의 row.cells 를 넘겨야 옵션 id/value 래핑을
- * 정확히 해석한다.
+ * tableCells = 컨트롤러 셀 정의 탐색용 셀 목록(option 조건 전용) — **표 전체 셀**을 넘긴다.
+ * choiceSelection = 보기 소스 표에서 선택된 보기 id 집합(choice-selected 조건 전용).
+ * (collectTableCells). 컨트롤러는 같은 행일 필요가 없다(2026-09-10 결정) — 값은 문항 단위
+ * 응답 객체에서 id 로 찾으므로 행 경계가 없고, 정의 탐색만 표 전체면 된다. 생략 시 하위호환
+ * flat 비교로 폴백한다.
  */
 export function isCellEnabled(
   cell: TableCell,
   cellValues: Record<string, unknown>,
-  rowCells?: readonly TableCell[],
+  tableCells?: readonly TableCell[],
+  /** 보기 소스 표의 선택된 보기 id 집합(collectSelectedChoiceCellIds) — choice-selected 조건 전용. */
+  choiceSelection?: ReadonlySet<string>,
 ): boolean {
   if (!cell.enabledWhen) return true;
   // prefill 우선 — 게이팅 설정은 빌더에서 금지되지만 외부 유입 데이터를 방어한다
   if (cell.defaultValueTemplate?.trim()) return true;
-  return evaluate(cell.enabledWhen, cellValues, rowCells);
+  return evaluate(cell.enabledWhen, cellValues, tableCells, choiceSelection);
+}
+
+/**
+ * 보기 소스 표의 게이팅 셀 사이드카 정리 — 미충족 셀의 `__optTexts__[q.id][cell.id]` 를 뺀다.
+ * 지울 것이 없으면 null. 보기 선택 자체는 건드리지 않는다(보기는 게이팅 대상이 아니다).
+ */
+function stripDisabledChoiceTableSidecar(
+  q: Question,
+  payloadAnswers: Record<string, unknown>,
+  base: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const sidecar = payloadAnswers[OPT_TEXTS_KEY];
+  if (!sidecar || typeof sidecar !== 'object' || Array.isArray(sidecar)) return null;
+  const texts = (sidecar as Record<string, unknown>)[q.id];
+  if (!texts || typeof texts !== 'object' || Array.isArray(texts)) return null;
+  const textMap = texts as Record<string, unknown>;
+  const selection = collectSelectedChoiceCellIds(q, payloadAnswers[q.id]);
+  const tableCells = collectTableCells(q.tableRowsData);
+  // 사이드카 값은 셀 값이 아니지만 filled·numeric 조건의 컨트롤러가 같은 표의 input 셀일 수
+  // 있어 그 값 자리로 넘긴다.
+  const next = { ...textMap };
+  let changed = false;
+  for (const cell of tableCells) {
+    if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
+    if (!Object.hasOwn(next, cell.id)) continue;
+    if (!isCellEnabled(cell, next, tableCells, selection)) {
+      delete next[cell.id];
+      changed = true;
+    }
+  }
+  if (!changed) return null;
+  return {
+    ...base,
+    [OPT_TEXTS_KEY]: { ...(sidecar as Record<string, unknown>), [q.id]: next },
+  };
 }
 
 /**
@@ -125,12 +181,24 @@ export function stripDisabledCellValues(
     );
     if (!hasGatedCell) continue;
 
+    // 보기 소스 표(radio/checkbox 문항의 내장 표) — 게이팅 셀 값이 문항 응답이 아니라
+    // `__optTexts__[q.id][cell.id]` 사이드카에 있고, 컨트롤러는 선택된 보기 id 집합이다.
+    if (q.type === 'radio' || q.type === 'checkbox') {
+      const stripped = stripDisabledChoiceTableSidecar(q, payloadAnswers, out ?? payloadAnswers);
+      if (stripped) out = stripped;
+      continue;
+    }
+
     const payload = payloadAnswers[q.id];
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue;
     const cellValues = payload as Record<string, unknown>;
 
-    // 컨트롤러 옵션 id/value 래핑을 정확히 해석하려면 같은 행의 셀 목록(row.cells)이
-    // 필요하다 — 행을 벗어나 통짜로 flatMap 하면 그 컨텍스트를 잃는다.
+    // 컨트롤러 옵션 id/value 래핑 해석용 셀 정의는 표 전체에서 찾는다 — 컨트롤러가 다른 행에
+    // 있을 수 있다.
+    const tableCells = collectTableCells(rows);
+    // 보기 그룹 표의 choice-selected 컨트롤러 — 선택은 표 응답 안 예약 키에 있다. 보기 셀은
+    // 게이팅 대상이 아니라 아래 루프가 지우지 않으므로 집합은 pass 사이에 변하지 않는다.
+    const choiceSelection = collectSelectedChoiceCellIds(q, cellValues);
     //
     // 게이팅 체인(A→B→C) 정리는 고정점 수렴으로 — 한 pass 는 상류 셀의 잔존 값으로
     // 하류를 활성으로 오판할 수 있다(B 가 지워지기 전 값으로 C 의 filled 조건이 참).
@@ -158,7 +226,7 @@ export function stripDisabledCellValues(
         for (const cell of row.cells) {
           if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
           if (!Object.hasOwn(next, cell.id)) continue;
-          if (!isCellEnabled(cell, next, row.cells)) {
+          if (!isCellEnabled(cell, next, tableCells, choiceSelection)) {
             delete next[cell.id];
             removedInPass = true;
             changed = true;

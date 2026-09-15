@@ -50,6 +50,15 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
       // 숫자 모드 자유기재(textInputType='number')는 숫자 변수로 내보낸다
       return col.numericText ? VariableType.Numeric : VariableType.String;
 
+    case 'choice-table-cell':
+      // 보기-소스 표의 선택형 셀. 응답값이 전부 숫자면 표 문항 선택 셀과 같이 Numeric,
+      // 아니면 String — checkbox 는 복수 선택을 콤마로 이어 싣으므로 항상 String.
+      return col.tableCellType !== 'checkbox' &&
+        (col.cellOptions ?? []).length > 0 &&
+        (col.cellOptions ?? []).every((o) => /^-?\d+(\.\d+)?$/.test(String(o.value ?? '')))
+        ? VariableType.Numeric
+        : VariableType.String;
+
     case 'other-text':
     case 'ranking-other':
     case 'ranking-option-text':
@@ -139,6 +148,7 @@ export function buildLabel(col: SPSSExportColumn): string {
       return `${col.questionText} - 기타 입력`;
     case 'option-text':
     case 'table-cell-option-text':
+    case 'choice-table-cell':
       return `${col.questionText} - ${col.optionLabel}`;
     case 'notice-agree':
       return `${col.questionText} - 동의 여부`;

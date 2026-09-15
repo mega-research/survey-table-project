@@ -23,6 +23,7 @@ import {
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CellText } from '@/features/question-renderer/cell-text';
 import { cn } from '@/lib/utils';
 import { DynamicRowGroupConfig, TableCell, TableRow } from '@/types/survey';
 import { isCellSaveable } from '@/utils/cell-library-helpers';
@@ -56,7 +57,7 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
       )}
       style={getCellTextStyle(cell)}
     >
-      {cell.content}
+      <CellText text={cell.content} html={cell.contentHtml} />
     </div>
   ) : null;
 
@@ -187,7 +188,7 @@ export const EditorTableRow = React.memo(function EditorTableRow({
     <>
       {/* 행 라벨 셀 (sticky) */}
       <div
-        className="sticky left-0 z-10 border-r border-b border-gray-300 bg-gray-50 p-1"
+        className="sticky left-0 z-10 border-r border-b border-gray-400 bg-gray-50 p-1"
         style={{ minHeight: rowHeight }}
       >
         <div className="space-y-1">
@@ -357,7 +358,7 @@ export const EditorTableRow = React.memo(function EditorTableRow({
             data-row-index={rowIndex}
             data-cell-index={cellIndex}
             className={cn(
-              'relative min-w-0 border-r border-b border-gray-300 bg-white p-2',
+              'relative min-w-0 border-r border-b border-gray-400 bg-white p-2',
               isSelected && 'ring-2 ring-inset ring-blue-500',
               isSelected && !cell.backgroundColor && 'bg-blue-50',
             )}

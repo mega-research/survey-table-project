@@ -42,6 +42,7 @@ export function RankingConfigEditor({
 }: RankingConfigEditorProps) {
   const config: RankingConfig = value ?? { positions: DEFAULT_POSITIONS };
   const isTableSource = config.optionsSource === 'table';
+  const isClickMode = showQuestionLevelOptions && config.inputMode === 'click';
   const effectiveOptionsCount = isTableSource ? tableOptionsCount : optionsCount;
   const exceedsOptions = !config.allowDuplicateRanks && config.positions > effectiveOptionsCount;
 
@@ -105,7 +106,41 @@ export function RankingConfigEditor({
         )}
       </div>
 
-      {config.positions >= 2 && (
+      {/* 응답 입력 방식 — 질문 레벨 전용. 셀 안 순위형은 좁아서 항상 드롭다운. */}
+      {showQuestionLevelOptions && (
+        <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
+          <Label className="text-sm font-medium">응답 입력 방식</Label>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="ranking-input-mode"
+                checked={!isClickMode}
+                onChange={() => updateConfig({ inputMode: 'dropdown' })}
+                className="h-4 w-4"
+              />
+              <span>순위마다 드롭다운</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="ranking-input-mode"
+                checked={isClickMode}
+                onChange={() => updateConfig({ inputMode: 'click' })}
+                className="h-4 w-4"
+              />
+              <span>보기 클릭으로 순위 매기기</span>
+            </label>
+          </div>
+          <p className="text-xs text-gray-500">
+            보기 클릭: 누르는 순서대로 1순위부터 매겨지고, 다시 누르면 해제됩니다. 순위초기화 버튼과
+            순위 요약이 위에 표시됩니다.
+            {config.allowDuplicateRanks === true && ' 중복 선택 허용이 켜져 있으면 드롭다운으로 표시됩니다.'}
+          </p>
+        </div>
+      )}
+
+      {config.positions >= 2 && !isClickMode && (
         <OptionsLayoutSelector
           value={config.positionsColumns}
           onChange={(next) => updateConfig({ positionsColumns: next })}

@@ -16,11 +16,13 @@ import { Switch } from '@/components/ui/switch';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
 import {
   OTHER_OPTION_ID,
+  applyOptionTextSettings,
+  branchRuleOptionPatch,
   createTextInputOption,
 } from '@/features/survey-builder/question-option-helpers';
 
 import { OptionLabelTextarea } from '@/features/survey-builder/option-label-textarea';
-import { OptionPlaceholderEditor } from '@/features/survey-builder/option-placeholder-editor';
+import { OptionTextSettingsEditor } from '@/features/survey-builder/option-text-settings-editor';
 import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
 import { cn } from '@/lib/utils';
@@ -171,6 +173,7 @@ export function QuestionOptionsFields({
                 answerQuoteEnabled={answerQuoteEnabled}
                 questions={questions}
                 questionId={questionId}
+                isCheckboxQuestion={question.type === 'checkbox'}
               />
             ))}
           </div>
@@ -210,6 +213,8 @@ interface SortableOptionItemProps {
   answerQuoteEnabled: boolean;
   questions: Question[];
   questionId: string;
+  /** 체크박스 문항일 때만 「단독 선택 보기」 토글을 보인다 (라디오는 의미 없음) */
+  isCheckboxQuestion: boolean;
 }
 
 function SortableOptionItem({
@@ -224,6 +229,7 @@ function SortableOptionItem({
   answerQuoteEnabled,
   questions,
   questionId,
+  isCheckboxQuestion,
 }: SortableOptionItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: option.id,
@@ -263,11 +269,34 @@ function SortableOptionItem({
                 주관식
               </span>
             )}
+            {option.exclusiveChoice && (
+              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                단독
+              </span>
+            )}
           </div>
           {option.id === OTHER_OPTION_ID && (
             <p className="mt-0.5 px-0 text-xs text-blue-600">기타 선택지 (수정 가능)</p>
           )}
         </div>
+
+        {/* 단독 선택 보기 (CONTEXT.md) — 「없음 · 모름」류. 끄면 키를 지워 죽은 false 를 남기지 않는다 */}
+        {isCheckboxQuestion && (
+          <label className="flex shrink-0 cursor-pointer flex-col items-center gap-0.5">
+            <span className="text-[10px] text-gray-400">단독 선택</span>
+            <input
+              type="checkbox"
+              aria-label="단독 선택 보기"
+              checked={option.exclusiveChoice === true}
+              onChange={(e) =>
+                e.target.checked
+                  ? updateOption(option.id, { exclusiveChoice: true })
+                  : updateOption(option.id, {}, ['exclusiveChoice'])
+              }
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+          </label>
+        )}
 
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-[10px] text-gray-400">응답값</span>
@@ -338,13 +367,20 @@ function SortableOptionItem({
       </div>
 
       {option.allowTextInput && (
-        <OptionPlaceholderEditor
-          value={option.textInputPlaceholder}
-          onChange={(next) =>
-            updateOption(option.id, {
-              textInputPlaceholder: next,
-            } as Partial<QuestionOption>)
-          }
+        <OptionTextSettingsEditor
+          idPrefix={`question-option-${option.id}`}
+          placeholder={option.textInputPlaceholder}
+          textInputType={option.textInputType}
+          numberFormat={option.textInputNumberFormat}
+          onChange={(next) => {
+            // updateOption 은 spread 병합이라 키 삭제를 못 한다. 숫자 모드를 끄면
+            // 사라져야 하는 키를 clear 목록으로 따로 넘긴다.
+            const applied = applyOptionTextSettings(option, next);
+            const clear = (['textInputType', 'textInputNumberFormat'] as const).filter(
+              (k) => !(k in applied),
+            );
+            updateOption(option.id, applied, clear);
+          }}
         />
       )}
 
@@ -365,11 +401,11 @@ function SortableOptionItem({
             branchRule={option.branchRule}
             allQuestions={questions}
             currentQuestionId={questionId || ''}
-            onChange={(branchRule) =>
-              updateOption(option.id, {
-                ...(branchRule !== undefined ? { branchRule } : {}),
-              } as Partial<QuestionOption>)
-            }
+            // 끄기(undefined)는 빈 패치가 아니라 키 삭제여야 한다 — branchRuleOptionPatch 참조.
+            onChange={(branchRule) => {
+              const { updates, clear } = branchRuleOptionPatch(branchRule);
+              updateOption(option.id, updates, clear);
+            }}
           />
         </div>
       )}

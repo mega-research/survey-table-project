@@ -8,14 +8,19 @@ import { useSyncExternalStore } from 'react';
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
     (onStoreChange) => {
-      if (typeof window === 'undefined') return () => undefined;
+      if (!hasMatchMedia()) return () => undefined;
       const mql = window.matchMedia(query);
       mql.addEventListener('change', onStoreChange);
       return () => mql.removeEventListener('change', onStoreChange);
     },
-    () => (typeof window === 'undefined' ? false : window.matchMedia(query).matches),
+    () => (hasMatchMedia() ? window.matchMedia(query).matches : false),
     () => false,
   );
+}
+
+/** SSR·jsdom(matchMedia 없음)에서는 데스크톱(false)으로 본다 — 브라우저에는 항상 있다. */
+function hasMatchMedia(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function';
 }
 
 /** 768px 미만 = 모바일 (md 브레이크포인트). 태블릿은 데스크탑과 동일 취급 */

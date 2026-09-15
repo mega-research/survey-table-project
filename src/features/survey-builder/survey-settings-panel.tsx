@@ -27,12 +27,8 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
       updateContactEmail: s.updateContactEmail,
     })),
   );
-  const surveySettings = useSurveyBuilderStore(
-    useShallow((s) => s.currentSurvey.settings),
-  );
-  const contactEmail = useSurveyBuilderStore(
-    useShallow((s) => s.currentSurvey.contactEmail),
-  );
+  const surveySettings = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.settings));
+  const contactEmail = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.contactEmail));
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const groups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.groups ?? []));
   const lookups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.lookups ?? []));
@@ -114,11 +110,32 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             value={surveySettings.priorWaveLabel ?? ''}
             onChange={(e) => updateSurveySettings({ priorWaveLabel: e.target.value })}
             placeholder="2025년 조사"
-            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+            className="border-input bg-background w-full rounded border px-3 py-2 text-sm"
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             이월 응답이 채워진 문항에 표시되는 회차 이름입니다. 비워두면 &quot;지난 회차&quot;로
             표시됩니다. 배포 없이 즉시 반영됩니다.
+          </p>
+        </div>
+
+        {/* 문항별 변동 확인 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="change-confirm-enabled" className="text-sm font-medium text-gray-700">
+              문항별 변동 확인
+            </label>
+            <input
+              id="change-confirm-enabled"
+              type="checkbox"
+              checked={surveySettings.changeConfirmEnabled ?? false}
+              onChange={(e) => updateSurveySettings({ changeConfirmEnabled: e.target.checked })}
+              className="rounded"
+            />
+          </div>
+          <p className="text-muted-foreground text-xs">
+            켜면 이월 응답이 있는 문항이 잠긴 채 표시되고, 응답자가 문항마다 지난 회차와 같은지
+            달라졌는지 밝혀야 다음으로 넘어갑니다. 끄면 지난 회차 값이 답으로 미리 채워지고 응답자가
+            고친 값이 이깁니다. 배포 없이 즉시 반영됩니다.
           </p>
         </div>
 
@@ -133,9 +150,9 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             value={contactEmail ?? ''}
             onChange={(e) => updateContactEmail(e.target.value || null)}
             placeholder="admin@example.com"
-            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+            className="border-input bg-background w-full rounded border px-3 py-2 text-sm"
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             중복 응답 차단 화면에 표시되는 문의 이메일 주소입니다. 비워두면 메시지만 표시됩니다.
           </p>
         </div>
@@ -149,10 +166,8 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             id="pii-retention"
             type="date"
             value={surveySettings.piiRetentionUntil ?? ''}
-            onChange={(e) =>
-              updateSurveySettings({ piiRetentionUntil: e.target.value || null })
-            }
-            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+            onChange={(e) => updateSurveySettings({ piiRetentionUntil: e.target.value || null })}
+            className="border-input bg-background w-full rounded border px-3 py-2 text-sm"
           />
         </div>
 

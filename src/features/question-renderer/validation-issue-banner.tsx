@@ -1,6 +1,6 @@
 'use client';
 
-import { scrollToIssue } from './scroll-to-issue';
+import { scrollToIssue, VALIDATION_NOTICE_ATTRIBUTE } from './scroll-to-issue';
 
 export interface ValidationBannerItem {
   message: string;
@@ -46,13 +46,16 @@ export function ValidationIssueBanner({
   return (
     <div
       role="alert"
+      {...(questionId ? { [VALIDATION_NOTICE_ATTRIBUTE]: questionId } : {})}
       className={`mt-2 space-y-1 rounded-md border px-3 py-2 text-sm ${toneClasses.container}`}
     >
       {items.map((item, index) => {
+        // 문항 카드 폴백 이동은 배너가 스스로 이동할 때만 — 호스트가 onNavigate 로 이동을
+        // 맡는 표 배너(questionId 는 검증 안내 표식용)는 셀·상세 타깃이 있어야 버튼을 단다.
         const canNavigate =
           (item.detailTargetIds?.length ?? 0) > 0 ||
           (item.cellIds?.length ?? 0) > 0 ||
-          Boolean(questionId);
+          (Boolean(questionId) && !onNavigate);
         return (
           <div key={index} className="flex items-center justify-between gap-3">
             <p className="min-w-0">

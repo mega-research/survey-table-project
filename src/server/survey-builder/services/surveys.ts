@@ -58,6 +58,7 @@ export async function ensureSurveyInDb(
     shuffleQuestions: input.settings.shuffleQuestions ?? false,
     requireLogin: input.settings.requireLogin ?? false,
     thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
+    screenedOutMessage: input.settings.screenedOutMessage ?? null,
     responseHeader: (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null,
   });
 
@@ -78,6 +79,7 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
     endDate: data.settings?.endDate ? new Date(data.settings.endDate) : null,
     maxResponses: data.settings?.maxResponses ?? null,
     thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
+    screenedOutMessage: data.settings?.screenedOutMessage ?? null,
     responseHeader: (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null,
   };
 
@@ -221,6 +223,7 @@ export async function duplicateSurvey(
         piiRetentionUntil: original.piiRetentionUntil,
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
+        screenedOutMessage: original.screenedOutMessage,
         responseHeader: original.responseHeader ?? null,
         // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.
         lookups: original.lookups ?? [],
@@ -331,9 +334,12 @@ export async function duplicateSurvey(
         spssMeasure: question.spssMeasure,
         tableValidationRules: question.tableValidationRules as NewQuestion['tableValidationRules'],
         numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+        textValidation: question.textValidation as NewQuestion['textValidation'],
         sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+        rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
         hideColumnLabels: question.hideColumnLabels,
+        stickyColumnCount: question.stickyColumnCount ?? null,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,
@@ -343,6 +349,10 @@ export async function duplicateSurvey(
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+        priorAnswerCondition:
+          question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+        priorAnswerDisabled:
+          question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
         answerQuoteEnabled: question.answerQuoteEnabled,
         answerQuoteName: question.answerQuoteName,
         answerQuoteText: question.answerQuoteText,

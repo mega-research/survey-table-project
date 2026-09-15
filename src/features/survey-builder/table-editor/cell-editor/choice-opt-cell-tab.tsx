@@ -1,20 +1,22 @@
 'use client';
 
-import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
-import type { NumberFormat } from '@/types/survey';
 import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
-import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { generateId } from '@/lib/utils';
+import { isInputFormat } from '@/types/input-type';
+import type { InputType, NumberFormat, QuestionType } from '@/types/survey';
+import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
 import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
+import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
+import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 
 interface ChoiceOptCellTabProps {
   choiceLabel: string;
@@ -23,9 +25,17 @@ interface ChoiceOptCellTabProps {
   onSpssNumericCodeChange: (v: number | '') => void;
   allowTextInput: boolean;
   onAllowTextInputChange: (v: boolean) => void;
+  /** 단독 선택 보기 (CONTEXT.md) — 체크박스 그룹(또는 그룹 없는 checkbox 문항)에서만 노출 */
+  exclusiveChoice: boolean;
+  onExclusiveChoiceChange: (v: boolean) => void;
+  /** 단독 선택 범위 — 그룹이 여럿인 표에서만 노출 */
+  exclusiveScope: 'group' | 'table';
+  onExclusiveScopeChange: (v: 'group' | 'table') => void;
+  /** 이 셀을 품은 문항의 유형 — 그룹 없는 보기 셀이 체크박스로 그려지는지 판단한다 */
+  parentQuestionType: QuestionType | undefined;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
-  textInputType: 'text' | 'number';
-  onTextInputTypeChange: (v: 'text' | 'number') => void;
+  textInputType: InputType;
+  onTextInputTypeChange: (v: InputType) => void;
   textInputNumberFormat: NumberFormat | undefined;
   onTextInputNumberFormatChange: (v: NumberFormat | undefined) => void;
   /** 이 보기 옵션 선택 시 적용할 조건부 분기 규칙 */
@@ -62,6 +72,11 @@ export function ChoiceOptCellTab({
   onSpssNumericCodeChange,
   allowTextInput,
   onAllowTextInputChange,
+  exclusiveChoice,
+  onExclusiveChoiceChange,
+  exclusiveScope,
+  onExclusiveScopeChange,
+  parentQuestionType,
   textInputType,
   onTextInputTypeChange,
   textInputNumberFormat,
@@ -81,8 +96,7 @@ export function ChoiceOptCellTab({
   onAnswerQuoteTextChange,
 }: ChoiceOptCellTabProps) {
   // 현재 셀이 소속된 그룹의 type을 초기값으로 사용하고, 미소속이면 '라디오' 기본값
-  const currentGroupType =
-    choiceGroups.find((g) => g.id === choiceGroupId)?.type ?? 'radio';
+  const currentGroupType = choiceGroups.find((g) => g.id === choiceGroupId)?.type ?? 'radio';
   // ranking 그룹에 소속된 경우도 '라디오'로 폴백 (세그먼트에 ranking 없음)
   const initialSelectedType: 'radio' | 'checkbox' =
     currentGroupType === 'checkbox' ? 'checkbox' : 'radio';
@@ -125,9 +139,7 @@ export function ChoiceOptCellTab({
 
   function handleGroupLabelChange(label: string) {
     if (!currentGroup) return;
-    onChoiceGroupsChange(
-      choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, label } : g)),
-    );
+    onChoiceGroupsChange(choiceGroups.map((g) => (g.id === choiceGroupId ? { ...g, label } : g)));
   }
 
   return (
@@ -174,7 +186,7 @@ export function ChoiceOptCellTab({
             aria-label="그룹"
             value={choiceGroupId}
             onChange={(e) => handleGroupSelectChange(e.target.value)}
-            className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="">(그룹 없음)</option>
             {filteredGroups.map((g) => (
@@ -207,7 +219,9 @@ export function ChoiceOptCellTab({
       {currentGroup && (
         <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
           <div className="flex items-center justify-between gap-4">
-            <Label className="text-sm font-medium">이 그룹 필수 응답 ({currentGroup.groupKey})</Label>
+            <Label className="text-sm font-medium">
+              이 그룹 필수 응답 ({currentGroup.groupKey})
+            </Label>
             <Switch
               checked={currentGroup.required ?? questionRequired}
               onCheckedChange={(on) =>
@@ -238,16 +252,76 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
+      {/* 단독 선택 보기 — 체크박스에서만 의미가 있다. 그룹이 있으면 그룹 종류, 없으면(레거시 보기
+          소스 표) 문항 유형으로 판단한다. 라디오는 원래 하나만 남으니 노출하지 않는다. */}
+      {(currentGroup ? currentGroup.type === 'checkbox' : parentQuestionType === 'checkbox') && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="choice-opt-exclusive" className="text-sm font-medium">
+              단독 선택 보기
+            </Label>
+            <Switch
+              id="choice-opt-exclusive"
+              checked={exclusiveChoice}
+              onCheckedChange={onExclusiveChoiceChange}
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            「없음 · 해당 없음 · 모름」용. 이 보기를 고르면 같은 그룹의 다른 선택이 풀리고, 다른
+            보기를 고르면 이 보기가 풀립니다. 이 보기 하나로 최소 선택 수를 충족한 것으로 봅니다.
+          </p>
+          {/* 범위 — 그룹이 둘 이상인 표에서만 의미가 있다(하나면 둘이 같다) */}
+          {exclusiveChoice && currentGroup && choiceGroups.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs text-gray-600">범위</span>
+              <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                <button
+                  type="button"
+                  aria-pressed={exclusiveScope === 'group'}
+                  onClick={() => onExclusiveScopeChange('group')}
+                  className={`px-3 py-1 text-xs font-medium ${exclusiveScope === 'group' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                >
+                  이 그룹만
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={exclusiveScope === 'table'}
+                  onClick={() => onExclusiveScopeChange('table')}
+                  className={`border-l border-gray-200 px-3 py-1 text-xs font-medium ${exclusiveScope === 'table' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                >
+                  표 전체
+                </button>
+              </div>
+              <span className="text-xs text-gray-500">
+                {exclusiveScope === 'table'
+                  ? '이 표의 모든 그룹 선택이 풀리고, 필수 그룹도 전부 충족한 것으로 봅니다'
+                  : '이 보기가 속한 그룹만 비웁니다'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-4">
         <Label className="text-sm font-medium">선택 시 텍스트 입력 받기</Label>
         <Switch checked={allowTextInput} onCheckedChange={onAllowTextInputChange} />
       </div>
       {allowTextInput && (
         <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <InputFormatSelect
+            id="choice-text-format"
+            value={textInputType}
+            onChange={(next) => {
+              onTextInputTypeChange(next);
+              // 형식과 숫자 모드는 배타 — 숫자 서식을 남기지 않는다.
+              if (next !== 'number') onTextInputNumberFormatChange(undefined);
+            }}
+          />
           <div className="flex items-start gap-2">
             <input
               type="checkbox"
               id="choice-text-number"
+              disabled={isInputFormat(textInputType)}
               checked={textInputType === 'number'}
               onChange={(e) => onTextInputTypeChange(e.target.checked ? 'number' : 'text')}
               className="mt-0.5 h-4 w-4"
@@ -255,8 +329,8 @@ export function ChoiceOptCellTab({
             <label htmlFor="choice-text-number" className="flex-1 cursor-pointer text-sm">
               <span className="font-medium">숫자만 입력</span>
               <p className="mt-0.5 text-xs text-gray-500">
-                입력 셀과 같은 규칙 — 콤마 표시·단위·최소/최대·소수 자릿수·허용값을 쓸 수 있고,
-                SPSS 변수도 숫자형으로 내보냅니다.
+                입력 셀과 같은 규칙 — 콤마 표시·단위·최소/최대·소수 자릿수·허용값을 쓸 수 있고, SPSS
+                변수도 숫자형으로 내보냅니다.
               </p>
             </label>
           </div>
@@ -282,7 +356,8 @@ export function ChoiceOptCellTab({
               placeholder="옵션 라벨 (비워두면 셀 본문 텍스트 사용)"
             />
             <p className="text-xs text-gray-500">
-              선택 열 셀은 보통 비어 있으므로(라벨이 다른 열에 있음) 분석/SPSS 라벨을 여기에 명시하세요.
+              선택 열 셀은 보통 비어 있으므로(라벨이 다른 열에 있음) 분석/SPSS 라벨을 여기에
+              명시하세요.
             </p>
           </div>
           <div className="w-44 space-y-1">

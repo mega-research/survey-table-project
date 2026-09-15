@@ -4,12 +4,19 @@ import React from 'react';
 
 import { Image as ImageIcon, Video } from 'lucide-react';
 
-import type { TableCell } from '@/types/survey';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { CellText } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import {
+  getHorizontalItemsClass,
+  getInputTextAlignClass,
+} from '@/features/question-renderer/utils/table-grid-utils';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
+import type { TableCell } from '@/types/survey';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import { CellContentLayout } from './cell-content-layout';
@@ -59,7 +66,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
-              <span className="whitespace-pre-line text-base">{option.label}</span>
+              <span className="text-base whitespace-pre-line">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -86,7 +93,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
-              <span className="whitespace-pre-line text-base">{option.label}</span>
+              <span className="text-base whitespace-pre-line">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -96,8 +103,10 @@ export const PreviewCell = React.memo(function PreviewCell({
       return cell.selectOptions && cell.selectOptions.length > 0 ? (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <select className="w-full rounded border border-gray-300 p-2 text-base" disabled>
@@ -117,7 +126,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'image':
       return cell.imageUrl ? (
-        <ImageCell cell={cell} content={content} cellResponse={undefined} onUpdateValue={() => {}} />
+        <ImageCell
+          cell={cell}
+          content={content}
+          cellResponse={undefined}
+          onUpdateValue={() => {}}
+        />
       ) : (
         <div className="flex items-center gap-2 text-gray-500">
           <ImageIcon className="h-4 w-4" />
@@ -186,25 +200,54 @@ export const PreviewCell = React.memo(function PreviewCell({
       );
     }
 
-    case 'input':
+    case 'input': {
+      // 입력칸 너비 고정 — 응답 렌더러(input-cell)와 같은 규칙. 미리보기는 px 격자라 그대로 적용한다.
+      const fixedWidth =
+        typeof cell.inputWidth === 'number' && cell.inputWidth > 0 ? cell.inputWidth : undefined;
+      const fixedWidthStyle =
+        fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
+          fillWidth={fixedWidth === undefined}
+          horizontalAlign={cell.horizontalAlign}
         >
-          <div className="flex flex-col space-y-2">
-            <input
-              type="text"
-              placeholder={cell.placeholder || '답변을 입력하세요...'}
-              maxLength={cell.inputMaxLength}
-              disabled
-              className={cn(
-                'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
-                getInputTextAlignClass(cell.inputTextAlign),
-              )}
-            />
+          <div
+            className={cn(
+              'flex flex-col space-y-2',
+              fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
+            )}
+          >
+            {(cell.inputRows ?? 1) >= 2 ? (
+              <textarea
+                rows={Math.floor(cell.inputRows ?? 1)}
+                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                maxLength={cell.inputMaxLength}
+                disabled
+                style={fixedWidthStyle}
+                className={cn(
+                  'w-full resize-none rounded border border-gray-300 bg-gray-50 p-2 text-base',
+                  getInputTextAlignClass(cell.inputTextAlign),
+                )}
+              />
+            ) : (
+              <input
+                type="text"
+                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                maxLength={cell.inputMaxLength}
+                disabled
+                style={fixedWidthStyle}
+                className={cn(
+                  'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
+                  getInputTextAlignClass(cell.inputTextAlign),
+                )}
+              />
+            )}
             {cell.inputMaxLength && (
               <div className="mt-1 text-right text-xs text-gray-500">
                 최대 {cell.inputMaxLength}자
@@ -213,6 +256,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           </div>
         </CellContentLayout>
       );
+    }
 
     case 'ranking_opt':
       // 랭킹 옵션 소스 셀 — 읽기 전용으로 이미지 + 라벨 표시
@@ -234,7 +278,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               )}
               style={getCellTextStyle(cell)}
             >
-              {cell.content}
+              <CellText text={cell.content} html={cell.contentHtml} />
             </div>
           )}
         </div>
@@ -245,8 +289,10 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <div className="text-xs text-gray-500">
@@ -273,7 +319,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               className={cn('text-base text-gray-700', getCellTextClassName(cell))}
               style={getCellTextStyle(cell)}
             >
-              {choiceLabelText}
+              <CellText text={choiceLabelText} html={cell.contentHtml} />
             </span>
           )}
         </div>
@@ -286,8 +332,10 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellContentLayout
           content={cell.content}
+          contentHtml={cell.contentHtml}
           position={cell.textPosition}
           bold={cell.textBold}
+          boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
           <div className="px-2 py-1.5 text-xs text-blue-600">계산 값</div>
@@ -295,6 +343,9 @@ export const PreviewCell = React.memo(function PreviewCell({
       );
 
     default:
+      // 텍스트 셀. 굵기 처리는 CellText 한 조각으로 모은다 — 여기서 content 를 그냥
+      // 흘리면 「첫 줄만 굵게」가 이 경로에서만 조용히 빠진다(보기-소스 표는 choice_opt
+      // 이 아닌 셀을 전부 이 폴백으로 그리므로 응답 화면까지 함께 어긋난다).
       return cell.content ? (
         <div
           className={cn(
@@ -303,7 +354,11 @@ export const PreviewCell = React.memo(function PreviewCell({
           )}
           style={getCellTextStyle(cell)}
         >
-          {cell.content}
+          <CellText
+            text={cell.content}
+            html={cell.contentHtml}
+            boldFirstLine={cell.boldFirstLine}
+          />
         </div>
       ) : (
         <span className="text-sm text-gray-400" />

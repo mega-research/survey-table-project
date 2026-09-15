@@ -76,6 +76,16 @@
     "0097_survey_documents",
     "0098_survey_document_anchors",
     "0099_notice_bg_color",
-    "0100_sweep_expired_pii_merge_table_cells_prior_answers"
+    "0100_sweep_expired_pii_merge_table_cells_prior_answers",
+    "0101_change_confirm_enabled",
+    "0102_prior_answer_condition",
+    "0103_prior_answer_disabled",
+    "0104_row_repeat_config",
+    "0105_sticky_column_count",
+    "0106_add_row_cards_mobile_mode",
+    "0107_add_row_group_cards_mobile_mode",
+    "0108_add_axis_cards_mobile_mode",
+    "0109_text_validation",
+    "0110_screened_out_message"
   ]
 }

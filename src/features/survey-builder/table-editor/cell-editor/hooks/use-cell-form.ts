@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
-import { TableCell } from '@/types/survey';
+import { InputType, TableCell } from '@/types/survey';
 import { CellFormState, ContentType, cellToFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 
 /**
@@ -35,6 +35,7 @@ function reducer(state: CellFormState, action: Action): CellFormState {
 export interface CellFormSetters {
   setContentType: (v: ContentType) => void;
   setTextContent: (v: string) => void;
+  setTextContentHtml: (v: string) => void;
   setImageUrl: (v: string) => void;
   setVideoUrl: (v: string) => void;
   setCheckboxOptions: (v: CellFormState['checkboxOptions']) => void;
@@ -46,12 +47,16 @@ export interface CellFormSetters {
   setCellMobileOptionsColumns: (v: number | undefined) => void;
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
+  setInputRows: (v: number | '') => void;
+  setInputWidth: (v: number | '') => void;
+  setHideRightBorder: (v: boolean) => void;
   setInputDefaultValueTemplate: (v: string) => void;
-  setInputType: (v: 'text' | 'number') => void;
+  setInputType: (v: InputType) => void;
   setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
   setEmptyDefaultEnabled: (v: boolean) => void;
   setEmptyDefaultRaw: (v: string) => void;
   setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
+  setCellTextValidation: (v: CellFormState['cellTextValidation']) => void;
   setCellRequired: (v: boolean) => void;
   setCellRequiredMessage: (v: string) => void;
   setGatingCondition: (v: CellFormState['gatingCondition']) => void;
@@ -67,16 +72,20 @@ export interface CellFormSetters {
   setIsOtherRankingCell: (v: boolean) => void;
   setChoiceLabel: (v: string) => void;
   setChoiceAllowTextInput: (v: boolean) => void;
+  setChoiceExclusive: (v: boolean) => void;
+  setChoiceExclusiveScope: (v: 'group' | 'table') => void;
   setChoiceTextInputType: (v: CellFormState['choiceTextInputType']) => void;
   setChoiceTextInputNumberFormat: (v: CellFormState['choiceTextInputNumberFormat']) => void;
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
   setChoiceGroupId: (v: string) => void;
   setTextBold: (v: boolean) => void;
+  setBoldFirstLine: (v: boolean) => void;
   setBackgroundColor: (v: string) => void;
   setTextColor: (v: string) => void;
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
   setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
   setMobileLabel: (v: string) => void;
+  setOptionTextSlot: (v: boolean) => void;
   setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
   setTextPosition: (v: CellFormState['textPosition']) => void;
   setInputTextAlign: (v: CellFormState['inputTextAlign']) => void;
@@ -139,6 +148,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
     return {
       setContentType: set('contentType'),
       setTextContent: set('textContent'),
+      setTextContentHtml: set('textContentHtml'),
       setImageUrl: set('imageUrl'),
       setVideoUrl: set('videoUrl'),
       setCheckboxOptions: set('checkboxOptions'),
@@ -150,12 +160,16 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setCellMobileOptionsColumns: set('cellMobileOptionsColumns'),
       setInputPlaceholder: set('inputPlaceholder'),
       setInputMaxLength: set('inputMaxLength'),
+      setInputRows: set('inputRows'),
+      setInputWidth: set('inputWidth'),
+      setHideRightBorder: set('hideRightBorder'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
       setInputType: set('inputType'),
       setInputPiiEncrypted: set('inputPiiEncrypted'),
       setEmptyDefaultEnabled: set('emptyDefaultEnabled'),
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
       setCellNumberFormat: set('cellNumberFormat'),
+      setCellTextValidation: set('cellTextValidation'),
       setCellRequired: set('cellRequired'),
       setCellRequiredMessage: set('cellRequiredMessage'),
       setGatingCondition: set('gatingCondition'),
@@ -171,16 +185,20 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setIsOtherRankingCell: set('isOtherRankingCell'),
       setChoiceLabel: set('choiceLabel'),
       setChoiceAllowTextInput: set('choiceAllowTextInput'),
+      setChoiceExclusive: set('choiceExclusive'),
+      setChoiceExclusiveScope: set('choiceExclusiveScope'),
       setChoiceTextInputType: set('choiceTextInputType'),
       setChoiceTextInputNumberFormat: set('choiceTextInputNumberFormat'),
       setChoiceBranchRule: set('choiceBranchRule'),
       setChoiceGroupId: set('choiceGroupId'),
       setTextBold: set('textBold'),
+      setBoldFirstLine: set('boldFirstLine'),
       setBackgroundColor: set('backgroundColor'),
       setTextColor: set('textColor'),
       setHorizontalAlign: set('horizontalAlign'),
       setMobileDisplay: set('mobileDisplay'),
       setMobileLabel: set('mobileLabel'),
+      setOptionTextSlot: set('optionTextSlot'),
       setVerticalAlign: set('verticalAlign'),
       setTextPosition: set('textPosition'),
       setInputTextAlign: set('inputTextAlign'),

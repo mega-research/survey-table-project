@@ -2,8 +2,18 @@
 
 import React, { useCallback, useMemo } from 'react';
 
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_CONTROL_CLS,
+  isPriorChoice,
+  matchesPriorChoice,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { CheckboxOption } from '@/types/survey';
 
@@ -19,9 +29,15 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  priorChoiceValue,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
+  const isPriorOption = (optionKey: string) =>
+    priorChoiceValue !== undefined
+      ? matchesPriorChoice(priorChoiceValue, optionKey)
+      : isPriorChoice(priorHighlight, questionId, optionKey, cell.id);
   const cellResponseArray = useMemo(
     () => (Array.isArray(cellResponse) ? cellResponse : []),
     [cellResponse],
@@ -47,7 +63,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
       let updated: string[];
 
       if (checked) {
-        if (maxSelections !== undefined && maxSelections > 0 && current.length >= maxSelections) return;
+        if (maxSelections !== undefined && maxSelections > 0 && current.length >= maxSelections)
+          return;
         updated = [...current, optionId];
       } else {
         updated = current.filter((item) => item !== optionId);
@@ -107,6 +124,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
     <CellOptionsContainer
       cell={cell}
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       footer={footer}
     >
       {cell.checkboxOptions.map((option) => {
@@ -127,8 +145,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
               disabled={disabled}
               onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
               className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                disabled ? 'cursor-not-allowed opacity-50' : ''
-              }`}
+                isChecked && isPriorOption(optionKey) ? PRIOR_HIGHLIGHT_CONTROL_CLS : ''
+              } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
             />
             <label
               htmlFor={inputId}

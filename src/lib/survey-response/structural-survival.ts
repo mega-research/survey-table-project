@@ -1,4 +1,6 @@
+import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import type { Question, QuestionOption, TableCell } from '@/types/survey';
+import { collectChoiceGroups } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { findOptionByStored, unwrapOptionId } from '@/utils/table-cell-semantics';
 
@@ -152,6 +154,44 @@ function judgeCellValue(cellDef: TableCell, value: unknown): CellVerdict {
   }
 }
 
+/**
+ * 보기 그룹 표의 그룹 선택 맵(`__choiceGroups`) 판정 — 그룹키가 현재 그룹에 없으면 그 항목을,
+ * 보기 셀 id 가 그 그룹의 choice_opt 셀에 없으면 그 값을 지운다(radio 는 항목째, checkbox 는
+ * 배열에서 값만). 표의 입력 셀 값에 적용되는 규칙과 같은 층위다. 판별 불능 모양은 유지.
+ *
+ * 레거시 radio/checkbox 문항의 그룹 응답(문항 레벨 `{그룹키: ...}`)에는 닿지 않는다 —
+ * 그쪽은 judgeQuestionAnswer 의 radio/checkbox 가지가 지금 규칙대로 본다.
+ */
+function judgeChoiceGroupSelections(
+  question: Question,
+  raw: unknown,
+): { value: unknown; changed: boolean } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { value: raw, changed: false };
+  const groups = new Map(collectChoiceGroups(question).map((g) => [g.groupKey, g]));
+  const surviving: Record<string, unknown> = {};
+  let changed = false;
+  for (const [groupKey, selected] of Object.entries(raw as Record<string, unknown>)) {
+    const group = groups.get(groupKey);
+    if (!group) {
+      changed = true;
+      continue;
+    }
+    const memberIds = new Set(group.cells.map((c) => c.id));
+    if (Array.isArray(selected)) {
+      const filtered = selected.filter((id) => typeof id !== 'string' || memberIds.has(id));
+      if (filtered.length !== selected.length) changed = true;
+      surviving[groupKey] = filtered;
+      continue;
+    }
+    if (isJudgeableString(selected) && !memberIds.has(selected)) {
+      changed = true;
+      continue;
+    }
+    surviving[groupKey] = selected;
+  }
+  return { value: surviving, changed };
+}
+
 /** 테이블 질문 답(Record<cellId, value>) 판정 */
 function judgeTableAnswer(
   question: Question,
@@ -161,6 +201,13 @@ function judgeTableAnswer(
   const surviving: Record<string, unknown> = {};
   let changed = false;
   for (const [key, cellValue] of Object.entries(value)) {
+    // 보기 그룹 표의 그룹 선택 — 다른 `__` 키와 달리 판정한다 (사라진 그룹·보기만 정리)
+    if (key === CHOICE_GROUPS_KEY) {
+      const verdict = judgeChoiceGroupSelections(question, cellValue);
+      if (verdict.changed) changed = true;
+      surviving[key] = verdict.value;
+      continue;
+    }
     // 사이드카는 셀 키가 아니다 — __selectedRowIds(동적 행)·레거시 optionTexts 통과
     if (isSidecarKey(key) || key === 'optionTexts') {
       surviving[key] = cellValue;

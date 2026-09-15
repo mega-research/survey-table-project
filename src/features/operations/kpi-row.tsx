@@ -19,15 +19,15 @@ interface KpiCellSpec {
   field: keyof StatusCounts;
   /**
    * 비율 텍스트(△n%)에 적용할 색상 — 'drop'은 의미상 부정적이므로 rose 톤.
-   * total 셀은 '100%'를 보여주는 것이 어색하므로 숨김 처리.
    * 'live'는 진행중 셀 전용 — 펄스 인디케이터 + "live" 텍스트로 렌더된다.
    * 'excluded'는 자격 미달 셀 전용 — 부적격이라 total 대비 비율이 의미 없어 제외 안내를 쓴다.
+   * 'formula'는 전체 셀 전용 — '100%' 표기가 어색하므로 대신 분모 구성식을 안내한다.
    */
-  deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded';
+  deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded' | 'formula';
 }
 
 const CELLS: KpiCellSpec[] = [
-  { label: '전체', field: 'total', deltaTone: 'hidden' },
+  { label: '전체', field: 'total', deltaTone: 'formula' },
   { label: '진행중', field: 'inProgress', deltaTone: 'live' },
   { label: '완료', field: 'completed', deltaTone: 'slate' },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
@@ -38,6 +38,14 @@ const CELLS: KpiCellSpec[] = [
 /** 자격 미달 셀 전용 문구 — 카드에는 짧게, 전체 문장은 title 툴팁으로 노출한다. */
 const EXCLUDED_SHORT = '전체·완료에서 제외';
 const EXCLUDED_FULL = '자격미달인 사람은 전체응답(분모), 완료(분자)에서 제외됩니다.';
+
+/**
+ * 전체 셀 전용 문구 — 카드에는 제외 항목만 짧게, 정확한 구성식은 title 툴팁으로 노출한다.
+ * 식의 "쿼터마감"은 쿼터마감으로 종료된 응답 수(quotaful_out)로, 쿼터 달성률 카드와는 다른 값이다
+ * — 카드 짧은 문구에 식을 쓰면 옆 쿼터 카드의 달성률을 더하는 것처럼 읽혀 툴팁으로 내렸다.
+ */
+const FORMULA_SHORT = '진행중·자격미달 제외';
+const FORMULA_FULL = '전체는 종결된 응답의 합계(완료+쿼터마감+불량+이탈)입니다. 진행중·자격미달은 포함되지 않습니다.';
 
 function formatValue(value: number, isEmpty: boolean): string {
   if (isEmpty) return '—';
@@ -53,6 +61,7 @@ function formatDelta(
   if (tone === 'hidden') return '';
   if (tone === 'live') return 'live';
   if (tone === 'excluded') return EXCLUDED_SHORT;
+  if (tone === 'formula') return FORMULA_SHORT;
   if (isEmpty || total === 0) return '—';
   const pct = (value / total) * 100;
   // 소수 첫째 자리 — 분석 페이지와 동일한 표기 정책
@@ -79,13 +88,15 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
             deltaTone === 'live' && 'text-blue-600',
             deltaTone === 'slate' && 'text-slate-400',
             deltaTone === 'excluded' && 'text-slate-500',
+            deltaTone === 'formula' && 'text-slate-400',
           )}>
             {deltaTone === 'live' && (
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             )}
             <span
-              className={cn(deltaTone === 'excluded' && 'cursor-help')}
+              className={cn((deltaTone === 'excluded' || deltaTone === 'formula') && 'cursor-help')}
               {...(deltaTone === 'excluded' ? { title: EXCLUDED_FULL } : {})}
+              {...(deltaTone === 'formula' ? { title: FORMULA_FULL } : {})}
             >
               {delta}
             </span>
@@ -140,8 +151,8 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {CELLS.map((cell) => {
         const value = counts[cell.field];
-        // 진행중 셀과 자격 미달 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
-        // (live 가시성 / 제외 안내가 존재 이유)
+        // 진행중·자격 미달·전체 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
+        // (live 가시성 / 제외 안내 / 분모 구성식 안내가 존재 이유)
         const cellIsEmpty =
           cell.deltaTone === 'live' || cell.deltaTone === 'excluded' ? false : isEmpty;
         const kpiCell = (

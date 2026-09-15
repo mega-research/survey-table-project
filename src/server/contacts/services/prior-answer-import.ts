@@ -1,13 +1,16 @@
+import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
-
-import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPriorAnswers, contactTargets } from '@/db/schema/contacts';
 import { questions as questionsTable, surveys } from '@/db/schema/surveys';
+import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
+import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 import { previewExcelGrid } from './excel-parser';
 import {
+  type BlockSlot,
+  type HeaderBlock,
   LABEL_SIMILAR_THRESHOLD,
   collectColumnValueCounts,
   collectSampleValues,
@@ -16,13 +19,19 @@ import {
   resolveSlots,
   splitHeaderBlocks,
   suggestBlockMapping,
-  type BlockSlot,
-  type HeaderBlock,
 } from '@/lib/contacts/prior-answer-blocks';
 import { buildPriorAnswerRecords } from '@/lib/contacts/prior-answer-import';
+import {
+  RAW_FORMAT_HEADER_ROWS,
+  buildRawFormatRecords,
+  looksLikeRawFormat,
+} from '@/lib/contacts/raw-format-import';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
-import { encryptAnswerValue } from '@/lib/crypto/response-pii';
+import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
+import { attrsKeyOf, normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import { normalizeQuestions } from '@/lib/question';
+import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
@@ -52,6 +61,50 @@ export const SUGGEST_SAMPLE_ROWS = MAX_UPLOAD_ROWS;
 /** 화면에 돌려주는 표본 행 수. 마법사는 첫 행("첫 행 값" 열)만 쓴다. */
 export const PREVIEW_ROWS = 5;
 
+/** 대조 필드 후보 하나 — 명단 컬럼 스킴의 attrs 열. */
+export interface PriorAnswerMatchField {
+  /** attrs 키 */
+  key: string;
+  /** 화면 라벨 */
+  label: string;
+}
+
+/**
+ * 대조 필드 후보 목록. 명단 컬럼 스킴의 **attrs 열만** 낸다.
+ *
+ * 시스템ID 를 빼는 이유: 클라이언트가 자기 파일을 만들어 오면 우리 시스템ID 가 없다.
+ * pii 를 빼는 이유: 암호문이라 대조하려면 blind index 경로를 타야 하고, 평문 이름으로
+ * 맞추는 경로를 열면 동명이인 오배정이 개인정보 노출로 이어진다.
+ *
+ * 표시(hidden)가 꺼진 열도 담는다 — 표시는 화면에 보일지의 설정이지 대조에 쓸 수 있는지가
+ * 아니다. 내보낸 파일에는 실리지 않지만 클라이언트가 만든 파일에는 그 값이 있을 수 있다.
+ *
+ * 순서는 명단 컬럼 설정의 순서 그대로다. 가나다로 다시 줄 세우면 담당자가 컬럼 화면에서
+ * 본 차례와 어긋난다.
+ */
+export async function listPriorAnswerMatchFields(
+  surveyId: string,
+): Promise<PriorAnswerMatchField[]> {
+  const scope = await loadOperationsDataScope(surveyId);
+  const [row] = await db
+    .select({
+      scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
+    })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+
+  const scheme = normalizeContactColumnScheme(row?.scheme ?? null);
+  const fields: PriorAnswerMatchField[] = [];
+  const ordered = [...(scheme?.columns ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  for (const column of ordered) {
+    const key = attrsKeyOf(column.source);
+    if (!key) continue;
+    fields.push({ key, label: column.label || key });
+  }
+  return fields;
+}
+
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
   if (err) throw new Error(err);
@@ -67,6 +120,25 @@ async function loadQuestions(surveyId: string): Promise<Question[]> {
     orderBy: [questionsTable.order],
   });
   return normalizeQuestions(rows);
+}
+
+/**
+ * 되읽기용 내보내기 열 정의. 내보낼 때와 **같은 준비 단계를 그대로** 밟아야 왕복이 맞는다.
+ *
+ * `hydrateQuestionsForSpss` 를 빠뜨리면 파생 필드(셀 코드·보기 코드)가 복원되지 않아
+ * 변수명이 갈린다. 실데이터로 확인한 실제 증상: 내보내기는 `DQ5_2_01` 을 내는데 되읽기는
+ * `DQ5_2_1` 을 만들어, 복수선택 열 열여덟 개가 통째로 "모르는 변수명" 이 됐다.
+ * 행 제외도 같이 태운다 — 제외된 표 행이 뒤 행의 번호를 밀어 이름이 어긋난다.
+ *
+ * 변동 확인 변수는 문항 전부를 대상으로 만들어 둔다 — 이 열들은 되읽지 않지만, 정의에
+ * 없으면 파일의 `_CHG` 열이 "모르는 변수명"으로 보고돼 화면이 잡음으로 덮인다.
+ * 내보내기 경로와 달리 여기서는 이 집합이 출력에 영향을 주지 않는다.
+ */
+export function buildImportColumns(surveyId: string, questions: Question[]) {
+  const prepared = applyExportRowExclusions(surveyId, hydrateQuestionsForSpss(questions));
+  return generateSPSSColumns(prepared, {
+    changeConfirmQuestionIds: new Set(prepared.map((q) => q.id)),
+  });
 }
 
 /** 값 이어주기 드롭다운에 쓸 이 문항의 선택지. 표 문항은 칸마다 달라 여기서 내지 않는다. */
@@ -214,9 +286,18 @@ function describeSlots(question: Question | undefined, slots: readonly BlockSlot
   });
 }
 
-/** 이 문항 값이 저장 시 암호화되는가 — 스키마 행의 boolean 을 읽기 경계에서 정규화한다. */
-function isPiiQuestion(question: Question): boolean {
-  return (question as { piiEncrypted?: boolean }).piiEncrypted === true;
+/**
+ * 이 문항의 암호화 대상 — 문항 단위 토글과 **표 셀 단위 토글을 모두** 본다.
+ *
+ * 셀 단위를 빠뜨리면 표의 PII 입력 셀 값이 평문으로 이월 응답에 들어간다. 조회·내보내기
+ * 경계는 평문을 그대로 받아들이므로 암호화 경계가 조용히 뚫린다. 응답 저장 경로가 쓰는
+ * 규칙과 같은 함수를 태워 두 경로가 갈라지지 않게 한다.
+ */
+function piiFlagOf(question: Question): { piiEncrypted: boolean; piiCellIds: string[] } {
+  return {
+    piiEncrypted: (question as { piiEncrypted?: boolean }).piiEncrypted === true,
+    piiCellIds: collectPiiCellIds(question.tableRowsData),
+  };
 }
 
 /**
@@ -254,6 +335,12 @@ export async function suggestPriorAnswerImportMapping(
 
   return {
     sheetNames: preview.sheetNames,
+    // 우리 Raw 양식인지 추측한다. 헤더를 몇 행으로 읽었든 시트 3행을 보므로, 담당자가
+    // 헤더 1행으로 열어 둔 상태에서도 알려줄 수 있다.
+    looksLikeRawFormat: looksLikeRawFormat(
+      [...preview.headerRows, ...preview.rows].slice(0, RAW_FORMAT_HEADER_ROWS),
+      buildImportColumns(input.surveyId, questions),
+    ),
     headerRows: preview.headerRows,
     // 화면에는 표본 몇 행만 돌려준다 — 응답 크기와 마법사 표는 그대로다.
     rows: preview.rows.slice(0, PREVIEW_ROWS),
@@ -271,11 +358,16 @@ export async function suggestPriorAnswerImportMapping(
         (!saved.label ||
           !s.block.label ||
           labelSimilarity(saved.label, s.block.label) >= LABEL_SIMILAR_THRESHOLD);
-      const savedQuestion = savedStillValid && saved ? questionById.get(saved.questionId) : undefined;
+      const savedQuestion =
+        savedStillValid && saved ? questionById.get(saved.questionId) : undefined;
       const questionId = savedQuestion?.id ?? s.questionId;
       const question = savedQuestion ?? (s.questionId ? questionById.get(s.questionId) : undefined);
       const slots = savedQuestion
-        ? resolveSlots(savedQuestion, s.block, s.block.columnIndexes.map((col) => samples.get(col) ?? ''))
+        ? resolveSlots(
+            savedQuestion,
+            s.block,
+            s.block.columnIndexes.map((col) => samples.get(col) ?? ''),
+          )
         : s.slots;
       return {
         code: s.block.code,
@@ -298,7 +390,7 @@ export async function suggestPriorAnswerImportMapping(
     questions: questions
       .filter((q) => q.type !== 'notice')
       .map((q) => ({
-      id: q.id,
+        id: q.id,
         questionCode: q.questionCode ?? null,
         title: q.title,
         type: q.type,
@@ -311,8 +403,12 @@ export async function suggestPriorAnswerImportMapping(
 /**
  * 이월 응답 적재. `dryRun` 이면 계산만 하고 쓰지 않는다 (실행 전 미리보기).
  *
- * 조사 대상은 설문별 자동 발번 번호(resid)로 찾고, 파티션은 조사 대상의 것을 따른다 —
- * 이월 응답에 별도 파티션 축을 만들지 않는다.
+ * 조사 대상은 명단의 **attrs 열 하나**(담당자가 고른 대조 필드)로 찾고, 파티션은 조사
+ * 대상의 것을 따른다 — 이월 응답에 별도 파티션 축을 만들지 않는다.
+ *
+ * **모호한 대조값은 붙이지 않는다.** 파일 안에서 두 번 나온 값과 명단 쪽에 같은 값을 가진
+ * 대상이 둘 이상인 값은 양쪽 다 건드리지 않고 화면에 나열한다. attrs 는 유일함이 보장되지
+ * 않아 동명이인이 반드시 나오고, 잘못 붙은 이월 응답은 응답 화면에서 남의 지난 답으로 보인다.
  *
  * 재업로드는 정상 경로다. 조사 대상당 한 행이므로 통째로 교체하고(onConflict update),
  * 개별 링크와 이미 수집된 응답은 건드리지 않는다.
@@ -351,62 +447,109 @@ export async function importPriorAnswers(
     // 자리 배정은 자동 제안과 같은 규칙(resolveSlots)으로 직접 계산한다.
     // 제안 경로로 되돌리면 사람이 코드가 다른 문항을 고른 순간 전 칸이 미배정이 된다.
     const sampleValues = block.columnIndexes.map((col) => samples.get(col) ?? '');
-    return [{ block: block as HeaderBlock, questionId, slots: resolveSlots(question, block, sampleValues) }];
+    return [
+      {
+        block: block as HeaderBlock,
+        questionId,
+        slots: resolveSlots(question, block, sampleValues),
+      },
+    ];
   });
 
-  const parsed = buildPriorAnswerRecords({
-    rows,
-    residColumnIndex: input.residColumnIndex,
-    assignments,
-    questions,
-    // 이번 화면에서 이어준 대응이 보관된 것보다 우선한다 — 미리보기가 저장 없이도
-    // 결과에 반영돼야 담당자가 고치고 바로 다시 볼 수 있다.
-    valueAliases: mergeAliases(config.valueAliases, input.valueAliases),
-  });
+  const isRawFormat = input.format === 'raw';
+  // raw 양식은 열 이어주기가 없다 — 3행 변수명이 곧 짝이다.
+  const rawParsed = isRawFormat
+    ? buildRawFormatRecords({
+        headerRows: preview.headerRows,
+        rows,
+        matchColumnIndex: input.matchColumnIndex,
+        columns: buildImportColumns(input.surveyId, questions),
+        questions,
+      })
+    : null;
+  const mappedParsed = isRawFormat
+    ? null
+    : buildPriorAnswerRecords({
+        rows,
+        matchColumnIndex: input.matchColumnIndex,
+        assignments,
+        questions,
+        // 이번 화면에서 이어준 대응이 보관된 것보다 우선한다 — 미리보기가 저장 없이도
+        // 결과에 반영돼야 담당자가 고치고 바로 다시 볼 수 있다.
+        valueAliases: mergeAliases(config.valueAliases, input.valueAliases),
+      });
+  const parsed = {
+    records: rawParsed?.records ?? mappedParsed?.records ?? [],
+    emptyMatchRows: rawParsed?.emptyMatchRows ?? mappedParsed?.emptyMatchRows ?? 0,
+    duplicateMatchValues:
+      rawParsed?.duplicateMatchValues ?? mappedParsed?.duplicateMatchValues ?? [],
+    optionMismatches: rawParsed?.optionMismatches ?? mappedParsed?.optionMismatches ?? [],
+    unsupportedQuestionIds: mappedParsed?.unsupportedQuestionIds ?? [],
+  };
 
   const scope = await loadOperationsDataScope(input.surveyId);
   const isTest = scope === 'test';
 
-  // resid 는 정수 컬럼이다. 숫자가 아닌 값은 조회에 넣지 않고 미매칭으로 남긴다.
-  // buildPriorAnswerRecords 가 이미 정수 문자열로 정규화했으므로 여기서는 형태만 본다.
-  const residNumbers = new Map<string, number>();
-  for (const record of parsed.records) {
-    if (!/^[+-]?\d+$/.test(record.resid)) continue;
-    const n = Number(record.resid);
-    if (Number.isSafeInteger(n)) residNumbers.set(record.resid, n);
-  }
-
-  const targetIdByResid = new Map<number, string>();
-  if (residNumbers.size > 0) {
-    const targets = await db
-      .select({ id: contactTargets.id, resid: contactTargets.resid })
+  // 명단에서 대조값 → 조사 대상. attrs 는 유일함이 보장되지 않으므로 값마다 몇 건이
+  // 걸렸는지를 함께 들고 있다가, 둘 이상이면 그 값을 통째로 뺀다.
+  const wantedValues = [...new Set(parsed.records.map((record) => record.matchValue))];
+  const targetIdsByValue = new Map<string, string[]>();
+  if (wantedValues.length > 0) {
+    // jsonb 텍스트 추출 비교. `ANY(배열)` 바인딩은 길이 1 에서 조용히 풀리므로 쓰지 않고
+    // 값을 하나씩 이어 붙인다 (drizzle 함정 12).
+    //
+    // 명단 쪽 값도 `btrim` 으로 공백을 턴다. 파일 쪽만 trim 하면 명단 셀에 뒤 공백이
+    // 하나 붙은 것만으로 "명단에서 찾지 못한 값"이 되고, 담당자가 공백 때문임을 알아낼
+    // 단서가 화면에 없다. 명단 업로드는 attrs 값을 가공 없이 넣는다.
+    const valueList = sql.join(
+      wantedValues.map((value) => sql`${value}`),
+      sql`, `,
+    );
+    const rowsFound = await db
+      .select({
+        id: contactTargets.id,
+        matchValue: sql<string>`btrim(${contactTargets.attrs} ->> ${input.matchAttrsKey})`,
+      })
       .from(contactTargets)
       .where(
         and(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
-          inArray(contactTargets.resid, [...residNumbers.values()]),
+          sql`btrim(${contactTargets.attrs} ->> ${input.matchAttrsKey}) IN (${valueList})`,
         ),
       );
-    for (const target of targets) targetIdByResid.set(target.resid, target.id);
+    for (const row of rowsFound) {
+      if (row.matchValue == null) continue;
+      const bucket = targetIdsByValue.get(row.matchValue);
+      if (bucket) bucket.push(row.id);
+      else targetIdsByValue.set(row.matchValue, [row.id]);
+    }
   }
 
-  // PII 문항 값은 저장 직전 암호화한다 — 이월 응답은 응답 저장 형태와 동형이라
-  // 조회 경계(lookupPriorAnswers)가 같은 규칙으로 복호화한다.
-  const piiQuestionIds = new Set(questions.filter(isPiiQuestion).map((q) => q.id));
+  // PII 값은 저장 직전 암호화한다 — 이월 응답은 응답 저장 형태와 동형이라
+  // 조회 경계(lookupPriorAnswers)가 같은 규칙으로 복호화한다. 문항 단위 토글과 표 셀
+  // 단위 토글을 모두 태운다.
+  const piiFlagByQuestion = new Map(questions.map((q) => [q.id, piiFlagOf(q)]));
 
   const matchedRows: Array<{ contactTargetId: string; answers: Record<string, unknown> }> = [];
-  const unmatchedResids: string[] = [];
+  const unmatchedMatchValues: string[] = [];
+  const ambiguousMatchValues: string[] = [];
   for (const record of parsed.records) {
-    const n = residNumbers.get(record.resid);
-    const contactTargetId = n === undefined ? undefined : targetIdByResid.get(n);
+    const candidates = targetIdsByValue.get(record.matchValue) ?? [];
+    if (candidates.length > 1) {
+      // 명단 쪽이 모호하다 — 어느 대상에 붙일지 고르는 규칙이 없다.
+      ambiguousMatchValues.push(record.matchValue);
+      continue;
+    }
+    const contactTargetId = candidates[0];
     if (!contactTargetId) {
-      unmatchedResids.push(record.resid);
+      unmatchedMatchValues.push(record.matchValue);
       continue;
     }
     const answers: Record<string, unknown> = {};
     for (const [questionId, value] of Object.entries(record.answers)) {
-      answers[questionId] = piiQuestionIds.has(questionId) ? encryptAnswerValue(value) : value;
+      const flag = piiFlagByQuestion.get(questionId);
+      answers[questionId] = flag ? encryptAnswerForQuestion(value, flag) : value;
     }
     matchedRows.push({ contactTargetId, answers });
   }
@@ -415,8 +558,8 @@ export async function importPriorAnswers(
     // 조사 대상당 한 행 — 다시 올리면 통째로 교체된다. 이전 임포트의 잔여 값이 남지 않는다.
     //
     // 한 배치에 같은 contactTargetId 가 두 번 실리면 PG 가 ON CONFLICT DO UPDATE 를
-    // 거부해(21000) 적재 전체가 죽는다. resid 는 buildPriorAnswerRecords 가 이미 정수로
-    // 정규화해 한 대상당 한 행이지만, 조회 결과가 뒤틀려도 살아남도록 여기서 한 번 더 접는다.
+    // 거부해(21000) 적재 전체가 죽는다. 중복·모호 대조값을 이미 걸렀으므로 한 대상당
+    // 한 행이지만, 조회 결과가 뒤틀려도 살아남도록 여기서 한 번 더 접는다.
     const byTarget = new Map(matchedRows.map((row) => [row.contactTargetId, row]));
     await db.transaction(async (tx) => {
       await tx
@@ -442,13 +585,20 @@ export async function importPriorAnswers(
     .map((block) => block.code);
 
   return {
-    parsedTargets: parsed.records.length,
+    // 파일에서 값이 만들어진 **서로 다른 대조값** 수. 중복으로 뺀 것도 포함해야
+    // matched + unmatched + skippedAmbiguous 와 아귀가 맞는다.
+    parsedTargets: parsed.records.length + parsed.duplicateMatchValues.length,
     matched: matchedRows.length,
-    unmatched: unmatchedResids.length,
-    unmatchedResids: unmatchedResids.slice(0, MAX_UNMATCHED_SAMPLES),
-    emptyResidRows: parsed.emptyResidRows,
-    duplicateResidRows: parsed.duplicateResidRows,
+    unmatched: unmatchedMatchValues.length,
+    unmatchedMatchValues: unmatchedMatchValues.slice(0, MAX_UNMATCHED_SAMPLES),
+    emptyMatchRows: parsed.emptyMatchRows,
+    duplicateMatchValues: parsed.duplicateMatchValues.slice(0, MAX_UNMATCHED_SAMPLES),
+    ambiguousMatchValues: ambiguousMatchValues.slice(0, MAX_UNMATCHED_SAMPLES),
+    skippedAmbiguous: parsed.duplicateMatchValues.length + ambiguousMatchValues.length,
     unmappedColumns,
+    unknownVarNames: rawParsed?.unknownVarNames.slice(0, MAX_UNMATCHED_SAMPLES) ?? [],
+    skippedByRuleVarNames: rawParsed?.skippedByRuleVarNames ?? [],
+    unsupportedVarNames: rawParsed?.unsupportedVarNames.slice(0, MAX_UNMATCHED_SAMPLES) ?? [],
     questionsWithoutValues: [...mappedQuestionIds].filter((id) => !filledQuestionIds.has(id)),
     unsupportedQuestionIds: parsed.unsupportedQuestionIds,
     optionMismatches: parsed.optionMismatches,
@@ -456,10 +606,7 @@ export async function importPriorAnswers(
 }
 
 /** 이월 응답이 이미 붙어 있는 조사 대상 수 — 재업로드 안내용. */
-export async function countPriorAnswerTargets(
-  surveyId: string,
-  isTest: boolean,
-): Promise<number> {
+export async function countPriorAnswerTargets(surveyId: string, isTest: boolean): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(contactPriorAnswers)

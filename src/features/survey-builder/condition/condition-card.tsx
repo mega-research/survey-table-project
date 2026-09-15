@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { Question, QuestionCondition } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 
@@ -64,12 +65,15 @@ export function ConditionCard({
   // value 가 cell.id 인 table-source 응답과 매칭되도록 체크박스 picker 의 저장값을 일치시킨다.
   // value-match 조건일 때만 계산 — 다른 타입(table-cell-check/expression)에선 미사용이라
   // resolveChoiceOptions 의 tableRowsData 전체 스캔을 건너뛴다.
+  // 보기 그룹 표(table + choice_opt 셀 + choiceGroups)도 후보다 — 보기는 같은 함수가 셀에서 뽑고,
+  // 저장값이 셀 id 인 것도 같다(선택은 표 응답 안 예약 키에 있지만 조건 값은 셀 id 다).
   const valueMatchOptions =
     condition.conditionType === 'value-match' &&
     sourceQuestion &&
     (sourceQuestion.type === 'radio' ||
       sourceQuestion.type === 'checkbox' ||
-      sourceQuestion.type === 'select')
+      sourceQuestion.type === 'select' ||
+      isChoiceGroupTableQuestion(sourceQuestion))
       ? resolveChoiceOptions(sourceQuestion)
       : [];
 
@@ -224,7 +228,7 @@ export function ConditionCard({
                     }}
                     className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   >
-                    <option value="value-match">값 일치 (radio, select, checkbox)</option>
+                    <option value="value-match">값 일치 (radio, select, checkbox, 보기 그룹 표)</option>
                     <option value="table-cell-check">테이블 셀 체크 확인</option>
                     <option value="expression">장기 계산식</option>
                   </select>

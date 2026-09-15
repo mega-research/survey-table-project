@@ -2,8 +2,10 @@
 
 import React from 'react';
 
+import { CellText } from '@/features/question-renderer/cell-text';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
 /**
@@ -32,12 +34,12 @@ export const RankingOptCell = React.memo(function RankingOptCell({
       {cell.content && (
         <div
           className={cn(
-            'text-base whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]',
+            'text-base [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-800',
             getCellTextClassName(cell),
           )}
           style={getCellTextStyle(cell)}
         >
-          {cell.content}
+          <CellText text={cell.content} html={cell.contentHtml} />
         </div>
       )}
     </div>

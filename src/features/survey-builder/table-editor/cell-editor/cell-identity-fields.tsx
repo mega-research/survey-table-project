@@ -1,7 +1,5 @@
 'use client';
 
-import type { RefObject } from 'react';
-
 import {
   AlignCenter,
   AlignLeft,
@@ -16,9 +14,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { InlineRichTextEditor } from '@/components/ui/rich-text-editor/inline-rich-text-editor';
 import type { VariableDef } from '@/components/ui/rich-text-editor/types';
-import { Textarea } from '@/components/ui/textarea';
-import { VariableButton } from '@/features/survey-builder/variable-button';
+import { plainTextToCellHtml } from '@/lib/survey/cell-rich-text';
 import type { TableCell } from '@/types/survey';
 
 import type { CellFormState } from './utils/serialize-cell';
@@ -59,8 +57,6 @@ interface CellIdentityFieldsProps {
   form: UseCellFormResult['form'];
   setters: CellFormSetters;
   cell: TableCell;
-  /** 셀 텍스트 입력칸 — 변수 버튼이 커서 위치에 토큰을 꽂는다. */
-  textContentRef: RefObject<HTMLTextAreaElement | null>;
   /** 사용자가 코드를 직접 쓰지 않았을 때 보여줄 자동 발번 값. */
   autoCellCode: string | undefined;
   autoExportLabel: string | undefined;
@@ -74,7 +70,7 @@ interface CellIdentityFieldsProps {
 export function CellIdentityFields({
   form,
   setters,
-  textContentRef,
+  cell,
   autoCellCode,
   autoExportLabel,
   variableCatalog,
@@ -82,6 +78,7 @@ export function CellIdentityFields({
   const {
     contentType,
     textContent,
+    textContentHtml,
     textPosition,
     inputTextAlign,
     cellCode,
@@ -93,6 +90,7 @@ export function CellIdentityFields({
   } = form;
   const {
     setTextContent,
+    setTextContentHtml,
     setTextPosition,
     setInputTextAlign,
     setCellCode,
@@ -106,25 +104,20 @@ export function CellIdentityFields({
   return (
   <div className="space-y-4 py-4">
     <div className="space-y-2">
-      <Label htmlFor="common-text-content">셀 텍스트 내용</Label>
-      <div className="flex items-start gap-2">
-        <Textarea
-          id="common-text-content"
-          ref={textContentRef}
-          value={textContent}
-          onChange={(e) => setTextContent(e.target.value)}
-          placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
-          rows={3}
-          className="flex-1 resize-none"
-        />
-        {variableCatalog.length > 0 && (
-          <VariableButton
-            catalog={variableCatalog}
-            inputRef={textContentRef}
-            onChange={(v) => setTextContent(v)}
-          />
-        )}
-      </div>
+      <Label>셀 텍스트 내용</Label>
+      {/* 평문이 정본이고 서식본은 글자 일부 색·굵게가 있을 때만 남는다(serialize-cell 이 판정).
+          편집기 초기값은 서식본이 있으면 그것, 없으면 평문을 문단으로 감싼 것. */}
+      <InlineRichTextEditor
+        key={cell.id}
+        initialHtml={textContentHtml || plainTextToCellHtml(textContent)}
+        onChange={({ html, text }) => {
+          setTextContent(text);
+          setTextContentHtml(html);
+        }}
+        variableCatalog={variableCatalog}
+        placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
+        ariaLabel="셀 텍스트 내용"
+      />
       {textContent && (
         <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
           미리보기: {textContent}

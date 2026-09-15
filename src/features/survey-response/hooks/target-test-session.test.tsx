@@ -1,7 +1,15 @@
-import { createRef, StrictMode } from 'react';
+import { StrictMode, createRef } from 'react';
 import type { RefObject } from 'react';
 
-import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  configure,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -178,6 +186,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+// 전체 스위트 부하에서 첫 입력 → telemetry 왕복이 기본 1초를 넘겨 간헐 실패했다(단독 실행은 항상 통과).
+// 대기 한도만 늘린다 — 판정은 그대로다.
+configure({ asyncUtilTimeout: 5000 });
+
 describe('대상자 테스트 응답 세션', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
@@ -230,10 +242,7 @@ describe('대상자 테스트 응답 세션', () => {
       },
     });
     attrsLookup.mockResolvedValue({});
-    window.localStorage.setItem(
-      'survey-session:survey-1:invite:invite-invalid',
-      'stale-session',
-    );
+    window.localStorage.setItem('survey-session:survey-1:invite:invite-invalid', 'stale-session');
     useSurveyResponseStore.getState().setCurrentResponseId('stale-response');
     useSurveyResponseStore.getState().setPendingResponse('q1', 'stale-answer');
 
@@ -596,10 +605,7 @@ describe('대상자 테스트 응답 세션', () => {
       setDuplicateStatus: vi.fn(),
     };
 
-    const view = renderHook(
-      () => useSessionRecovery(args),
-      { wrapper: StrictMode },
-    );
+    const view = renderHook(() => useSessionRecovery(args), { wrapper: StrictMode });
 
     expect(resume).toHaveBeenCalledTimes(1);
     await act(async () => {

@@ -56,6 +56,13 @@ describe('hasPriorAnswer', () => {
     expect(hasPriorAnswer(prior, '__optTexts__')).toBe(false);
   });
 
+  it('보기 그룹 표의 그룹 선택(__choiceGroups)만 있어도 이월 값 보유로 본다', () => {
+    expect(hasPriorAnswer({ t1: { __choiceGroups: { rad1: 'a' } } }, 't1')).toBe(true);
+    expect(hasPriorAnswer({ t1: { __choiceGroups: {} } }, 't1')).toBe(false);
+    // 다른 __ 하위 키(동적 행 선택)는 여전히 답이 아니다
+    expect(hasPriorAnswer({ t1: { __selectedRowIds: ['r1'] } }, 't1')).toBe(false);
+  });
+
   it('이월 응답이 없으면 항상 false', () => {
     expect(hasPriorAnswer(null, 'q1')).toBe(false);
     expect(hasPriorAnswer({}, 'q1')).toBe(false);

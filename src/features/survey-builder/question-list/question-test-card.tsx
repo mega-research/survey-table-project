@@ -8,6 +8,11 @@ import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
+import {
+  OPTION_TEXT_BARE_INPUT_CLS,
+  OptionTextInputStack,
+  OptionTextRow,
+} from '@/features/question-renderer/option-text-input-stack';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
@@ -15,12 +20,18 @@ import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
-} from '@/features/question-renderer/utils/dynamic-row-selection-sidecar';
+} from '@/utils/dynamic-row-selection-sidecar';
 import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
 import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  applyExclusiveSelection,
+  choiceValueKey,
+  countSelectionsTowardMax,
+  satisfiesMinSelections,
+} from '@/lib/survey/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
@@ -101,12 +112,21 @@ function RadioTestInput({
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
+  // 기타 입력란: 응답 페이지(question-input)·표 셀과 같은 패턴 — 옵션 그리드 칸 안이 아니라
+  // 그리드 아래에 [옵션 라벨 칩 | 풀폭 입력란] 행으로 렌더한다. 칸 안에 두면 열 폭에 갇혀 좁아진다.
+  const selectedTextOption = question.options?.find(
+    (option) => option.id !== 'other-option' && option.allowTextInput && isSelected(option.value),
+  );
+  const selectedLegacyOther = question.options?.find(
+    (option) => option.id === 'other-option' && isSelected(option.value),
+  );
+
   return (
-    <div className={layout.className} style={layout.style}>
-      {question.options?.map((option) => (
-        <div key={option.id} className="space-y-2">
-          {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 */}
-          <div className="flex items-start space-x-3">
+    <div className="space-y-3">
+      <div className={layout.className} style={layout.style}>
+        {question.options?.map((option) => (
+          // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정
+          <div key={option.id} className="flex items-start space-x-3">
             <input
               type="radio"
               id={`${question.id}-${option.id}`}
@@ -128,23 +148,32 @@ function RadioTestInput({
               {option.label}
             </label>
           </div>
-          {option.id === 'other-option' && isSelected(option.value) && (
-            <div className="ml-7">
-              <Input
-                placeholder="기타 내용을 입력하세요..."
-                value={otherInput}
-                onChange={(e) => handleOtherInputChange(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          )}
-          {option.id !== 'other-option' && option.allowTextInput && isSelected(option.value) && (
-            <div className="ml-7">
-              <OptionTextInput questionId={question.id} option={option} className="w-full" />
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      {selectedTextOption && (
+        <OptionTextInputStack
+          questionId={question.id}
+          entries={[
+            {
+              option: selectedTextOption,
+              label: selectedTextOption.label.trim() || '(라벨 없음)',
+            },
+          ]}
+        />
+      )}
+      {/* other-option 매직 ID 호환 경로 (@deprecated) — 같은 셸로 그린다 */}
+      {selectedLegacyOther && (
+        <OptionTextRow label={selectedLegacyOther.label.trim() || '기타'}>
+          <input
+            type="text"
+            aria-label={selectedLegacyOther.label.trim() || '기타'}
+            placeholder="기타 내용을 입력하세요..."
+            value={otherInput}
+            onChange={(e) => handleOtherInputChange(e.target.value)}
+            className={OPTION_TEXT_BARE_INPUT_CLS}
+          />
+        </OptionTextRow>
+      )}
     </div>
   );
 }
@@ -174,30 +203,48 @@ function CheckboxTestInput({
     return newOtherInputs;
   }, [currentValues]);
 
+  // 단독 선택 보기 판정 — 응답 페이지(question-input CheckboxQuestion)와 같은 규칙
+  const exclusiveChoiceValues = useMemo(
+    () =>
+      new Set(
+        (question.options ?? []).filter((o) => o.exclusiveChoice === true).map((o) => o.value),
+      ),
+    [question.options],
+  );
+  const isExclusiveChoiceValue = (val: MultiChoiceResponse[number]) => {
+    const key = choiceValueKey(val);
+    return key !== undefined && exclusiveChoiceValues.has(key);
+  };
+
   const handleOptionChange = (optionValue: string, optionId: string, isChecked: boolean) => {
     let newValues = [...currentValues];
     const isOtherOption = optionId === 'other-option';
 
     if (isChecked) {
-      // 최대 선택 개수 체크
+      // 최대 선택 개수 체크 — 단독 선택 보기는 예외(고르면 그것 하나만 남는다)
+      // 개수는 단독 보기를 뺀 것으로 센다 — 「없음」이 골라진 상태에서 일반 보기를 누르면 「없음」이 풀린다
       const maxSelections = question.maxSelections;
-      if (maxSelections !== undefined && maxSelections > 0) {
-        const currentCount = newValues.length;
-        if (currentCount >= maxSelections) {
-          // 최대 개수 도달 시 추가 선택 불가
-          return;
-        }
+      if (
+        !isExclusiveChoiceValue(optionValue) &&
+        maxSelections !== undefined &&
+        maxSelections > 0 &&
+        countSelectionsTowardMax(newValues, isExclusiveChoiceValue) >= maxSelections
+      ) {
+        return;
       }
 
-      if (isOtherOption) {
-        newValues.push({
-          selectedValue: optionValue,
-          otherValue: otherInputs[optionValue] || '',
-          hasOther: true,
-        });
-      } else {
-        newValues.push(optionValue);
-      }
+      const picked: MultiChoiceResponse[number] = isOtherOption
+        ? {
+            selectedValue: optionValue,
+            otherValue: otherInputs[optionValue] || '',
+            hasOther: true,
+          }
+        : optionValue;
+      newValues = applyExclusiveSelection<MultiChoiceResponse[number]>(
+        newValues,
+        picked,
+        isExclusiveChoiceValue,
+      ).next;
     } else {
       newValues = newValues.filter((val) => {
         if (isOtherChoiceValue(val)) {
@@ -234,28 +281,52 @@ function CheckboxTestInput({
   const maxSelections = question.maxSelections;
   const minSelections = question.minSelections;
   const isMaxReached =
-    maxSelections !== undefined && maxSelections > 0 && currentCount >= maxSelections;
-  const isMinNotMet =
-    minSelections !== undefined && minSelections > 0 && currentCount < minSelections;
+    maxSelections !== undefined &&
+    maxSelections > 0 &&
+    countSelectionsTowardMax(currentValues, isExclusiveChoiceValue) >= maxSelections;
+  const isMinNotMet = !satisfiesMinSelections(
+    currentValues,
+    minSelections,
+    isExclusiveChoiceValue,
+  );
 
   const canSelect = (optionValue: string) => {
     if (isChecked(optionValue)) return true; // 이미 선택된 것은 해제 가능
-    if (isMaxReached) return false; // 최대 개수 도달 시 추가 선택 불가
+    if (isMaxReached) return isExclusiveChoiceValue(optionValue); // 단독 선택 보기만 예외
     return true;
   };
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
-  return (
-    <div className={layout.className} style={layout.style}>
-      {question.options?.map((option) => {
-        const checked = isChecked(option.value);
-        const disabled = !canSelect(option.value);
+  // 기타 입력란: 응답 페이지(question-input)·표 셀과 같은 패턴 — 선택 순서(currentValues)대로
+  // 옵션 그리드 아래에 [옵션 라벨 칩 | 풀폭 입력란] 행으로 쌓는다. 칸 안에 두면 열 폭에 갇혀 좁아진다.
+  const selectedValues = currentValues
+    .map((val) => (isOtherChoiceValue(val) ? val.selectedValue : val))
+    .filter((val): val is string => typeof val === 'string');
+  const textInputEntries = selectedValues
+    .map((val) =>
+      question.options?.find(
+        (option) => option.id !== 'other-option' && option.allowTextInput && option.value === val,
+      ),
+    )
+    .filter((option) => option !== undefined)
+    .map((option) => ({ option, label: option.label.trim() || '(라벨 없음)' }));
+  const legacyOtherOptions = selectedValues
+    .map((val) =>
+      question.options?.find((option) => option.id === 'other-option' && option.value === val),
+    )
+    .filter((option) => option !== undefined);
 
-        return (
-          <div key={option.id} className="space-y-2">
-            {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 */}
-            <div className="flex items-start space-x-3">
+  return (
+    <div className="space-y-3">
+      <div className={layout.className} style={layout.style}>
+        {question.options?.map((option) => {
+          const checked = isChecked(option.value);
+          const disabled = !canSelect(option.value);
+
+          return (
+            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정
+            <div key={option.id} className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 id={`${question.id}-${option.id}`}
@@ -275,24 +346,25 @@ function CheckboxTestInput({
                 {option.label}
               </label>
             </div>
-            {option.id === 'other-option' && checked && (
-              <div className="ml-7">
-                <Input
-                  placeholder="기타 내용을 입력하세요..."
-                  value={otherInputs[option.value] || ''}
-                  onChange={(e) => handleOtherInputChange(option.value, e.target.value)}
-                  className="w-full"
-                />
-              </div>
-            )}
-            {option.id !== 'other-option' && option.allowTextInput && checked && (
-              <div className="ml-7">
-                <OptionTextInput questionId={question.id} option={option} className="w-full" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
+
+      {/* other-option 매직 ID 호환 경로 (@deprecated) — 같은 셸로 그린다 */}
+      {legacyOtherOptions.map((option) => (
+        <OptionTextRow key={option.id} label={option.label.trim() || '기타'}>
+          <input
+            type="text"
+            aria-label={option.label.trim() || '기타'}
+            placeholder="기타 내용을 입력하세요..."
+            value={otherInputs[option.value] || ''}
+            onChange={(e) => handleOtherInputChange(option.value, e.target.value)}
+            className={OPTION_TEXT_BARE_INPUT_CLS}
+          />
+        </OptionTextRow>
+      ))}
 
       {/* 선택 개수 표시 */}
       {(maxSelections !== undefined || minSelections !== undefined) && (
@@ -455,7 +527,7 @@ function QuestionTestInput({
         <textarea
           className="w-full resize-none rounded-lg border border-gray-300 p-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           rows={3}
-          placeholder="답변을 입력하세요..."
+          placeholder={question.placeholder || '답변을 입력하세요...'}
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -515,12 +587,15 @@ function QuestionTestInput({
               : undefined
           }
           onChange={onChange}
+          choiceGroups={question.choiceGroups}
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
+          rowRepeatConfig={question.rowRepeatConfig}
           allResponses={allResponses}
           allQuestions={allQuestions}
           ignoreDisplayConditions
           hideColumnLabels={question.hideColumnLabels}
+          stickyColumnCount={question.stickyColumnCount}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
           mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}

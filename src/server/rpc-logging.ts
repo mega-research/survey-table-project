@@ -1,4 +1,5 @@
 import { ORPCError, os } from '@orpc/server';
+import * as Sentry from '@sentry/nextjs';
 
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { isGuestUser } from '@/lib/auth/guest-grants';
@@ -6,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import type { ORPCContext } from './context';
+import { isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
 
 /**
  * 전 RPC 구조화 로깅 미들웨어.
@@ -71,15 +73,26 @@ export const rpcLoggingMiddleware = os
     } catch (error) {
       // 비-ORPCError 는 wire 에서 INTERNAL_SERVER_ERROR 로 마스킹된다(rpc-error-policy)
       // — 로그 code 도 같은 값으로 맞춰 클라이언트 관측과 대조 가능하게 한다.
+      const code = error instanceof ORPCError ? error.code : 'INTERNAL_SERVER_ERROR';
       logger.error(
-        {
-          ...fields,
-          durationMs: Date.now() - startedAt,
-          code: error instanceof ORPCError ? error.code : 'INTERNAL_SERVER_ERROR',
-          err: error,
-        },
+        { ...fields, durationMs: Date.now() - startedAt, code, err: error },
         '[rpc] 실패',
       );
+      // 진짜 장애만 Sentry 로 — typed domain error 와 코드 있는 거부(인증·권한·한도)는 정상 경로다.
+      // 여기서 보내는 이유는 태그 때문이다: procedure 이름·코드·역할·설문 id 가 붙어야 이슈가
+      // "Error" 로 뭉치지 않고 procedure 단위로 묶이고 검색된다. 핸들러 인터셉터는 표식을 보고
+      // 건너뛴다(procedure 밖 예외만 그쪽이 맡는다).
+      if (isSentryWorthyRpcError(error)) {
+        Sentry.withScope((scope) => {
+          scope.setTransactionName(`rpc ${fields.rpc}`);
+          scope.setTag('rpc', fields.rpc);
+          scope.setTag('code', code);
+          scope.setTag('role', fields.role);
+          if (fields.surveyId) scope.setTag('surveyId', fields.surveyId);
+          Sentry.captureException(error);
+        });
+        markSentryCaptured(error);
+      }
       throw error;
     }
   });

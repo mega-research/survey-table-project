@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Question } from '@/types/survey';
+
+import { splitHeaderBlocks, suggestBlockMapping } from './prior-answer-blocks';
 import {
   buildPriorAnswerRecords,
+  normalizeMatchValue,
   normalizeQuestionCode,
-  normalizeResid,
 } from './prior-answer-import';
-import { splitHeaderBlocks, suggestBlockMapping } from './prior-answer-blocks';
-import type { Question } from '@/types/survey';
 
 function q(overrides: Record<string, unknown>): Question {
   return {
@@ -44,7 +45,7 @@ function assignmentsFor(headerRows: string[][] = HEADER_ROWS) {
 function build(rows: string[][], headerRows: string[][] = HEADER_ROWS) {
   return buildPriorAnswerRecords({
     rows,
-    residColumnIndex: 0,
+    matchColumnIndex: 0,
     assignments: assignmentsFor(headerRows),
     questions,
   });
@@ -73,22 +74,22 @@ describe('normalizeQuestionCode', () => {
   });
 });
 
-describe('normalizeResid', () => {
-  it('앞 0 을 없애 07 과 7 을 같은 대상으로 만든다', () => {
-    expect(normalizeResid('07')).toBe('7');
-    expect(normalizeResid(' 7 ')).toBe('7');
+describe('normalizeMatchValue', () => {
+  it('앞뒤 공백만 턴다', () => {
+    expect(normalizeMatchValue(' 7 ')).toBe('7');
+    expect(normalizeMatchValue('A-7')).toBe('A-7');
   });
 
-  it('정수가 아니면 원래 문자열 그대로 둔다', () => {
-    expect(normalizeResid('A-7')).toBe('A-7');
+  it('앞 0 을 접지 않는다 — 앞 0 이 의미 있는 식별자를 남의 대상에 붙이지 않는다', () => {
+    expect(normalizeMatchValue('007')).toBe('007');
   });
 });
 
 describe('buildPriorAnswerRecords', () => {
-  it('조사 대상 번호별로 문항 값 묶음을 만든다', () => {
+  it('대조값별로 문항 값 묶음을 만든다', () => {
     const result = build([['101', '메가리서치', '예, 창업했습니다']]);
     expect(result.records).toEqual([
-      { resid: '101', answers: { 'q-text': '메가리서치', 'q-choice': 'yes' } },
+      { matchValue: '101', answers: { 'q-text': '메가리서치', 'q-choice': 'yes' } },
     ]);
   });
 
@@ -122,43 +123,49 @@ describe('buildPriorAnswerRecords', () => {
     expect(build([['1', '', '   ']]).records).toEqual([]);
   });
 
-  it('조사 대상 번호가 비면 그 행을 버리고 세어둔다', () => {
+  it('대조값이 비면 그 행을 버리고 세어둔다', () => {
     const result = build([['', '메가리서치', '']]);
     expect(result.records).toEqual([]);
-    expect(result.emptyResidRows).toBe(1);
+    expect(result.emptyMatchRows).toBe(1);
   });
 
-  it('같은 번호가 두 번 나오면 뒤 행이 앞 행을 덮는다', () => {
+  it('같은 대조값이 두 번 나오면 양쪽 다 빼고 그 값을 보고한다', () => {
+    // 어느 행이 맞는지 고르는 규칙이 없다. 잘못 붙은 이월 응답은 응답 화면에서 남의
+    // 지난 답으로 보이므로 모호하면 붙이지 않는다.
     const result = build([
       ['1', '먼저', ''],
       ['1', '나중', ''],
     ]);
-    expect(result.records).toEqual([{ resid: '1', answers: { 'q-text': '나중' } }]);
-    expect(result.duplicateResidRows).toBe(1);
+    expect(result.records).toEqual([]);
+    expect(result.duplicateMatchValues).toEqual(['1']);
   });
 
-  it('앞뒤 0 이 붙은 같은 번호는 한 대상으로 모은다', () => {
-    // 접지 않으면 적재가 같은 대상을 한 배치에 두 번 실어 통째로 실패한다.
+  it('앞 0 이 붙은 값은 다른 대조값이다 — 접어서 억지로 모으지 않는다', () => {
     const result = build([
       ['07', '먼저', ''],
       ['7', '나중', ''],
     ]);
-    expect(result.records).toEqual([{ resid: '7', answers: { 'q-text': '나중' } }]);
-    expect(result.duplicateResidRows).toBe(1);
+    expect(result.records).toEqual([
+      { matchValue: '07', answers: { 'q-text': '먼저' } },
+      { matchValue: '7', answers: { 'q-text': '나중' } },
+    ]);
+    expect(result.duplicateMatchValues).toEqual([]);
   });
 
-  it('정수가 아닌 번호는 원래 문자열 그대로 남긴다', () => {
+  it('숫자가 아닌 대조값도 그대로 쓴다', () => {
     expect(build([['A-7', '메가리서치', '']]).records).toEqual([
-      { resid: 'A-7', answers: { 'q-text': '메가리서치' } },
+      { matchValue: 'A-7', answers: { 'q-text': '메가리서치' } },
     ]);
   });
 
-  it('값이 하나도 살아남지 않은 행이 같은 번호의 앞 행을 지우지 않는다', () => {
+  it('값이 비어 있는 중복 행도 모호함을 만들어 그 대조값을 통째로 뺀다', () => {
+    // 두 번째 행에 값이 없다고 해서 첫 행이 옳다는 근거가 되지는 않는다.
     const result = build([
       ['1', '메가리서치', ''],
       ['1', '', ''],
     ]);
-    expect(result.records).toEqual([{ resid: '1', answers: { 'q-text': '메가리서치' } }]);
+    expect(result.records).toEqual([]);
+    expect(result.duplicateMatchValues).toEqual(['1']);
   });
 
   it('매핑되지 않은 컬럼은 값에 실리지 않는다', () => {
@@ -170,7 +177,7 @@ describe('buildPriorAnswerRecords', () => {
   it('값을 만들 자리가 하나도 없는 배정은 건너뛰고 알린다', () => {
     const result = buildPriorAnswerRecords({
       rows: [['1', '아무거나']],
-      residColumnIndex: 0,
+      matchColumnIndex: 0,
       assignments: [
         {
           block: {

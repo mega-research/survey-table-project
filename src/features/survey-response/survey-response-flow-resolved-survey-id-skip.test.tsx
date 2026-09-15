@@ -87,7 +87,14 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
     forResponse.mockResolvedValue({
       survey,
       versionId: 'version-1',
-      control: { isPaused: false, pausedMessage: null, testSession: 'none', testSessionKind: null, priorWaveLabel: null },
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'none',
+        testSessionKind: null,
+        priorWaveLabel: null,
+        changeConfirmEnabled: false,
+      },
     });
     attrsLookup.mockResolvedValue({});
     resume.mockResolvedValue(null);
@@ -130,7 +137,8 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
               pausedMessage: null,
               testSession: 'none',
               testSessionKind: null,
-      priorWaveLabel: null,
+              priorWaveLabel: null,
+              changeConfirmEnabled: false,
             },
           },
           contactAttrs: { 회사: '메가리서치' },

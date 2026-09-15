@@ -1,12 +1,21 @@
 'use client';
 
 /* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 실제 검증 입력에 연결한다. */
-
 import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  PRIOR_HIGHLIGHT_CONTROL_CLS,
+  isPriorChoice,
+  matchesPriorChoice,
+} from '@/lib/survey/prior-answer-highlight';
+import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellOptionsContainer } from './cell-options-container';
@@ -22,9 +31,15 @@ export const RadioCell = React.memo(function RadioCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  priorChoiceValue,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
+  const isPriorOption = (optionKey: string) =>
+    priorChoiceValue !== undefined
+      ? matchesPriorChoice(priorChoiceValue, optionKey)
+      : isPriorChoice(priorHighlight, questionId, optionKey, cell.id);
   const handleRadioChange = useCallback(
     (optionId: string) => {
       const isCurrentlySelected = cellResponse === optionId;
@@ -59,8 +74,7 @@ export const RadioCell = React.memo(function RadioCell({
       entries={[
         {
           option: selectedTextOption,
-          label:
-            substituteTokens(selectedTextOption.label, attrs, quotes).trim() || '(라벨 없음)',
+          label: substituteTokens(selectedTextOption.label, attrs, quotes).trim() || '(라벨 없음)',
         },
       ]}
     />
@@ -70,6 +84,7 @@ export const RadioCell = React.memo(function RadioCell({
     <CellOptionsContainer
       cell={cell}
       content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
       footer={footer}
     >
       {cell.radioOptions.map((option) => {
@@ -89,7 +104,9 @@ export const RadioCell = React.memo(function RadioCell({
               checked={isSelected}
               onChange={() => {}}
               onClick={() => handleRadioChange(optionKey)}
-              className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+              className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                isSelected && isPriorOption(optionKey) ? PRIOR_HIGHLIGHT_CONTROL_CLS : ''
+              }`}
             />
             <label
               htmlFor={inputId}

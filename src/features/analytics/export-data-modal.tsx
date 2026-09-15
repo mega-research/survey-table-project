@@ -85,8 +85,7 @@ interface SplitPlanResponse {
 
 interface ExportQueryOptions {
   includeNonRespondents: boolean;
-  /** 「조사 대상 명단 열 포함」 — 미응답 토글과 독립 */
-  includeContactColumns: boolean;
+  includePriorAnswers: boolean;
   basis?: string;
 }
 
@@ -94,15 +93,15 @@ const fmtNum = (n: number) => n.toLocaleString('ko-KR');
 
 /**
  * 내보내기 URL 쿼리 — 한 곳에서 만든다.
- * 미응답 행·명단 열은 Raw Data 계열(raw/raw-split)에만 붙는다 — .sav/.sps 는 완료 전용 모수이고
- * 명단 열은 SPSS 변수가 아니다.
+ * 미응답 행은 Raw Data 계열(raw/raw-split)에만 붙는다 — .sav/.sps 는 완료 전용 모수다.
+ * 조사 대상 명단 열은 토글이 아니라 응답 내역 컬럼 설정을 서버가 읽어 항상 붙인다.
  */
 function buildExportQuery(type: string, opts: ExportQueryOptions): string {
   const qs = new URLSearchParams({ type });
   if (opts.basis) qs.set('basis', opts.basis);
   const isRaw = type === 'raw' || type === 'raw-split';
   if (isRaw && opts.includeNonRespondents) qs.set('includeNonRespondents', '1');
-  if (isRaw && opts.includeContactColumns) qs.set('includeContactColumns', '1');
+  if (isRaw && opts.includePriorAnswers) qs.set('includePriorAnswers', '1');
   return qs.toString();
 }
 
@@ -188,7 +187,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     mutationFn: (type: string) => {
       const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
       return fetchExportFile(
-        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents, includeContactColumns })}`,
+        `/api/surveys/${surveyId}/export?${buildExportQuery(type, { includeNonRespondents, includePriorAnswers })}`,
         buildSafeFilename(surveyTitle, 'Export', ext),
         '내보내기에 실패했습니다.',
       );
@@ -218,10 +217,10 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     : null;
   const [step, setStep] = useState<SplitStep>('options');
   const [basis, setBasis] = useState<string | null>(null);
-  // 「조사 대상 중 미응답자 포함」·「조사 대상 명단 열 포함」 — 다이얼로그를 닫으면 초기화.
-  // 설문 설정으로 저장되지 않는다. 둘은 독립이라 하나만 켜거나 둘 다 켤 수 있다.
+  // 「조사 대상 중 미응답자 포함」 — 다이얼로그를 닫으면 초기화. 설문 설정으로 저장되지 않는다.
   const [includeNonRespondents, setIncludeNonRespondents] = useState(false);
-  const [includeContactColumns, setIncludeContactColumns] = useState(false);
+  // 「이월 응답 포함」 — 같은 수명. 행 수에는 영향이 없어 분할 미리보기 키에는 넣지 않는다.
+  const [includePriorAnswers, setIncludePriorAnswers] = useState(false);
 
   const summary = useQuery({
     queryKey: ['split-summary', surveyId],
@@ -242,7 +241,6 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       setStep('options');
       setBasis(null);
       setIncludeNonRespondents(false);
-      setIncludeContactColumns(false);
     }
   };
 
@@ -255,7 +253,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       const { blob, filename } = await fetchSplitExportFile(
         `/api/surveys/${surveyId}/export?${buildExportQuery('raw-split', {
           includeNonRespondents,
-          includeContactColumns,
+          includePriorAnswers,
           basis,
         })}`,
         buildSafeFilename(surveyTitle, 'Split', 'xlsx'),
@@ -315,16 +313,18 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                 <label className="mt-3 flex cursor-pointer items-start gap-3">
                   <Checkbox
                     className="mt-0.5"
-                    checked={includeContactColumns}
-                    onCheckedChange={(v) => setIncludeContactColumns(v === true)}
+                    checked={includePriorAnswers}
+                    onCheckedChange={(v) => setIncludePriorAnswers(v === true)}
                     disabled={!!exportingType}
                   />
                   <span>
                     <span className="block text-sm font-semibold text-slate-900">
-                      조사 대상 명단 열 포함
+                      이월 응답 포함
                     </span>
                     <span className="block text-xs leading-relaxed text-slate-500">
-                      컬럼 스킴의 명단 열을 메타 열 오른쪽에 붙입니다. 숨김 열도 포함
+                      이번 회차에 답이 없는 문항을 조사 대상의 지난 회차 답으로 채웁니다. 이번 회차
+                      답이 있으면 그 답이 우선합니다. 문항 설정에서 「이월값 불러오기」를 끈 문항은
+                      비워 두고, 그 밖의 문항은 이번 조사표의 조건에 맞지 않아도 지난 답을 싣습니다.
                     </span>
                   </span>
                 </label>
