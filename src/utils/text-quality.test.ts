@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { countAnswerChars, isMeaninglessText, textQualityViolation } from './text-quality';
+import {
+  countAnswerChars,
+  isMeaninglessText,
+  isPlainTextInput,
+  normalizeTextValidation,
+  textQualityViolation,
+} from './text-quality';
 
 describe('countAnswerChars — 공백을 뺀 글자 수', () => {
   it('앞뒤·사이 공백과 줄바꿈을 세지 않는다', () => {
@@ -10,17 +16,25 @@ describe('countAnswerChars — 공백을 뺀 글자 수', () => {
   });
 
   it('코드 포인트 단위로 센다 — 이모지 하나는 1자', () => {
-    expect(countAnswerChars('좋아요👍')).toBe(4);
+    expect(countAnswerChars('좋아요\u{1F44D}')).toBe(4);
   });
 });
 
 describe('isMeaninglessText — 자음·모음·숫자만인 입력', () => {
-  it.each(['ㅋㅋㅋ', 'ㅎㅎㅎㅎ', 'ㅇㅇ', 'ㅏㅏㅏ', '123124', '1 2 3', 'ㅋㅋ 123', '...', '---', '!!!'])(
-    '%j 는 의미 없는 입력이다',
-    (value) => {
-      expect(isMeaninglessText(value)).toBe(true);
-    },
-  );
+  it.each([
+    'ㅋㅋㅋ',
+    'ㅎㅎㅎㅎ',
+    'ㅇㅇ',
+    'ㅏㅏㅏ',
+    '123124',
+    '1 2 3',
+    'ㅋㅋ 123',
+    '...',
+    '---',
+    '!!!',
+  ])('%j 는 의미 없는 입력이다', (value) => {
+    expect(isMeaninglessText(value)).toBe(true);
+  });
 
   it.each(['없음', '아 진짜 ㅋㅋㅋ', 'ok', 'N/A', '10명', '漢字', '2024년 도입 예정'])(
     '%j 는 내용이 있는 입력이다',
@@ -75,5 +89,36 @@ describe('textQualityViolation — 문항 설정에 비춘 위반', () => {
     expect(textQualityViolation({ minLength: 0 }, '가')).toBeNull();
     expect(textQualityViolation({ minLength: -3 }, '가')).toBeNull();
     expect(textQualityViolation({ minLength: 2.5 }, '가')).toBeNull();
+  });
+});
+
+describe('isPlainTextInput — 품질 검사가 붙는 입력', () => {
+  it('장문형과 평문 단답형만 대상이고 숫자·형식 단답형은 배타', () => {
+    expect(isPlainTextInput({ type: 'textarea' })).toBe(true);
+    expect(isPlainTextInput({ type: 'text' })).toBe(true);
+    expect(isPlainTextInput({ type: 'text', inputType: 'text' })).toBe(true);
+    expect(isPlainTextInput({ type: 'text', inputType: 'number' })).toBe(false);
+    expect(isPlainTextInput({ type: 'text', inputType: 'email' })).toBe(false);
+    expect(isPlainTextInput({ type: 'radio' })).toBe(false);
+  });
+});
+
+describe('normalizeTextValidation — 빌더 저장 정리', () => {
+  it('양의 정수 최소 글자 수와 켜진 토글만 남긴다', () => {
+    expect(normalizeTextValidation({ minLength: 10, rejectMeaningless: true })).toEqual({
+      minLength: 10,
+      rejectMeaningless: true,
+    });
+    expect(normalizeTextValidation({ minLength: 0, rejectMeaningless: false })).toBeNull();
+    expect(normalizeTextValidation({ minLength: -1 })).toBeNull();
+    expect(normalizeTextValidation({ rejectMeaningless: true })).toEqual({
+      rejectMeaningless: true,
+    });
+  });
+
+  it('둘 다 없으면 null — 패치에서 undefined 는 손대지 않음이라 지우려면 null 이어야 한다', () => {
+    expect(normalizeTextValidation({})).toBeNull();
+    expect(normalizeTextValidation(null)).toBeNull();
+    expect(normalizeTextValidation(undefined)).toBeNull();
   });
 });

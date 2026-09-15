@@ -27,6 +27,11 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import {
+  type TextQualityViolation,
+  isPlainTextInput,
+  textQualityViolation,
+} from '@/utils/text-quality';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { collectTableCells, isCellEnabled } from './cell-gating';
@@ -43,7 +48,6 @@ import {
   priorOptionText,
 } from './prior-answers';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
-import { textQualityViolation } from '@/utils/text-quality';
 
 export interface NumericIssue {
   kind:
@@ -531,6 +535,27 @@ function collectChoiceTableInputCellIssues(
  * 진행을 막으면 따를 수 있는 길이 없다. 이월 면제와 같은 원칙이다. 값이 유효하면 저장 경계가
  * 정규형으로 정돈한다(`normalizeFormatValues`).
  */
+/**
+ * 문항 하나의 응답 품질 위반 — 응답 화면(입력칸 아래 문구)과 차단 검증이 같은 판정을 쓴다.
+ * 평문 모드 단답형·장문형만 대상이고, 토큰 prefill 칸(응답자가 못 고침)과 **손대지 않은
+ * 이월 값**(형식 검사와 같은 면제, ADR 0023)은 보지 않는다.
+ */
+export function resolveTextQualityViolation(
+  question: Question,
+  value: unknown,
+  priorAnswers?: PriorAnswers | null,
+): TextQualityViolation | null {
+  if (!question.textValidation || !isPlainTextInput(question)) return null;
+  if (question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate)) return null;
+  if (
+    typeof value === 'string' &&
+    isUntouchedPriorValue(value, priorAnswerText(priorAnswers, question.id) ?? null)
+  ) {
+    return null;
+  }
+  return textQualityViolation(question.textValidation, value);
+}
+
 function isTokenPrefilled(template: string | null | undefined): boolean {
   return (template ?? '').trim().length > 0;
 }
@@ -579,16 +604,8 @@ export function collectNumericIssues(
 
   if (question.type !== 'table') {
     const issues: NumericIssue[] = [];
-    // 단답형(평문 모드)·장문형 응답 품질 — 숫자 모드·형식 칸은 위에서 이미 돌아갔다.
-    // 토큰 prefill 칸은 응답자가 못 고치므로 대상이 아니다.
-    if (
-      (question.type === 'text' || question.type === 'textarea') &&
-      question.textValidation &&
-      !(question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate))
-    ) {
-      const violation = textQualityViolation(question.textValidation, response);
-      if (violation) issues.push({ kind: 'text-quality', message: violation.message });
-    }
+    const quality = resolveTextQualityViolation(question, response, ctx?.priorAnswers);
+    if (quality) issues.push({ kind: 'text-quality', message: quality.message });
     const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
     if (optionTextIssues.questionMissing) {
       issues.push({

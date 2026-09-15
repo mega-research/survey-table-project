@@ -16,6 +16,8 @@ describe('isRelaxableIssueKind', () => {
 
   it('format 도 완화 대상이다 — 외국 번호·대표번호 같은 정당한 예외를 담당자가 넣을 수 있어야 한다', () => {
     expect(isRelaxableIssueKind('format')).toBe(true);
+    // 응답 품질(글자 수·의미 없는 입력)도 값이 들어간 칸의 이야기 — 형식과 같은 완화
+    expect(isRelaxableIssueKind('text-quality')).toBe(true);
   });
 
   it('range/sum/formula 는 차단형이라 완화 대상이 아니다', () => {
@@ -160,13 +162,13 @@ describe('buildAdminRelaxWarningMessage', () => {
 
   it('형식 불일치만 있으면 형식 문구', () => {
     expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 0, formatCount: 2 })).toBe(
-      "형식·글자 수가 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+      "형식·품질 조건에 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 
   it('둘 다 있으면 함께 말한다', () => {
     expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 1, formatCount: 2 })).toBe(
-      "빈 필수 응답 1개 · 형식·글자 수가 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+      "빈 필수 응답 1개 · 형식·품질 조건에 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 });

@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
+import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import {
   applyExclusiveSelection,
@@ -16,9 +18,8 @@ import {
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
-import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
-import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import { resolveTextQualityViolation } from '@/lib/survey/numeric-validation';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   PRIOR_HIGHLIGHT_TEXT_CLS,
@@ -42,8 +43,6 @@ import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack } from './option-text-input-stack';
 import { RankingQuestion } from './ranking-question';
-import { textQualityViolation } from '@/utils/text-quality';
-
 import { type ValidationBannerItem, ValidationIssueBanner } from './validation-issue-banner';
 
 /**
@@ -214,6 +213,7 @@ function QuestionInputControl({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const { answers: priorAnswersForQuality } = usePriorAnswers();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (
@@ -264,7 +264,7 @@ function QuestionInputControl({
     case 'textarea': {
       // 응답 품질 위반(최소 글자 수·의미 없는 입력)은 치는 동안 입력칸 아래에 바로 보인다 —
       // 「다음」에서 처음 알면 이미 쓴 글을 다시 고쳐야 하는 자리가 어딘지 찾게 된다.
-      const quality = textQualityViolation(question.textValidation, value);
+      const quality = resolveTextQualityViolation(question, value, priorAnswersForQuality);
       return (
         <div className="w-full">
           <textarea
@@ -381,7 +381,12 @@ function QuestionInputControl({
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
           choiceGroups={question.choiceGroups}
-          errorCellIds={resolveTableErrorCellIds(question, value, numericIssues, showRequiredHighlight)}
+          errorCellIds={resolveTableErrorCellIds(
+            question,
+            value,
+            numericIssues,
+            showRequiredHighlight,
+          )}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />
       ) : (
@@ -455,8 +460,7 @@ function RadioQuestion({
               onChange={() => handleOptionChange(option.value)}
               onClick={() => handleOptionChange(option.value)}
               className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                isSelected(option.value) &&
-                isPriorChoice(priorHighlight, question.id, option.value)
+                isSelected(option.value) && isPriorChoice(priorHighlight, question.id, option.value)
                   ? PRIOR_HIGHLIGHT_CONTROL_CLS
                   : ''
               }`}
@@ -572,11 +576,7 @@ function CheckboxQuestion({
     maxSelections !== undefined &&
     maxSelections > 0 &&
     countSelectionsTowardMax(currentValues, isExclusiveChoiceValue) >= maxSelections;
-  const isMinNotMet = !satisfiesMinSelections(
-    currentValues,
-    minSelections,
-    isExclusiveChoiceValue,
-  );
+  const isMinNotMet = !satisfiesMinSelections(currentValues, minSelections, isExclusiveChoiceValue);
 
   const canSelect = (optionValue: string) => {
     if (isChecked(optionValue)) return true;
@@ -730,9 +730,7 @@ function SelectQuestion({
         value={selectedValue}
         onChange={(e) => handleSelectChange(e.target.value)}
         className={`w-full rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
-          isPriorChoice(priorHighlight, question.id, selectedValue)
-            ? PRIOR_HIGHLIGHT_TEXT_CLS
-            : ''
+          isPriorChoice(priorHighlight, question.id, selectedValue) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
         }`}
       >
         <option value="">선택하세요...</option>
@@ -785,9 +783,13 @@ function TextResponseInput({
   const currentValue = typeof value === 'string' ? value : '';
   const isNumberMode = question.inputType === 'number';
   const format = isInputFormat(question.inputType) ? question.inputType : null;
-  // 응답 품질 검사는 평문 모드에서만 — 숫자·형식 칸은 자기 검사가 있다.
-  const qualityViolation =
-    !isNumberMode && !format ? textQualityViolation(question.textValidation, currentValue) : null;
+  // 응답 품질 검사 — 평문 모드·손대지 않은 이월 값 면제 판정은 검증 쪽 함수가 쥔다.
+  const { answers: priorAnswersForQuality } = usePriorAnswers();
+  const qualityViolation = resolveTextQualityViolation(
+    question,
+    currentValue,
+    priorAnswersForQuality,
+  );
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({

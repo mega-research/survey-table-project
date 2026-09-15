@@ -27,8 +27,12 @@ describe('collectNumericIssues — 응답 품질 검사', () => {
 
   it('설정이 없거나 빈 값이면 막지 않는다 — 미입력 차단은 필수 판정 소관', () => {
     expect(collectNumericIssues(q('textarea'), 'ㅋㅋㅋ')).toEqual([]);
-    expect(collectNumericIssues(q('textarea', { textValidation: { minLength: 10 } }), '')).toEqual([]);
-    expect(collectNumericIssues(q('textarea', { textValidation: { minLength: 10 } }), undefined)).toEqual([]);
+    expect(collectNumericIssues(q('textarea', { textValidation: { minLength: 10 } }), '')).toEqual(
+      [],
+    );
+    expect(
+      collectNumericIssues(q('textarea', { textValidation: { minLength: 10 } }), undefined),
+    ).toEqual([]);
   });
 
   it('숫자 모드·입력 형식 단답형은 품질 검사를 타지 않는다 — 배타', () => {
@@ -44,5 +48,14 @@ describe('collectNumericIssues — 응답 품질 검사', () => {
       textValidation: { minLength: 10 },
     });
     expect(collectNumericIssues(prefilled, '메가')).toEqual([]);
+  });
+});
+
+describe('collectNumericIssues — 응답 품질 검사의 이월 값 면제', () => {
+  it('손대지 않은 지난 회차 값은 막지 않고, 고친 값은 다시 본다 — 형식 검사와 같은 면제', () => {
+    const question = q('textarea', { textValidation: { minLength: 10, rejectMeaningless: true } });
+    const ctx = { allResponses: {}, allQuestions: [], priorAnswers: { q1: 'ㅋㅋ' } };
+    expect(collectNumericIssues(question, 'ㅋㅋ', ctx)).toEqual([]);
+    expect(collectNumericIssues(question, 'ㅋㅋㅋ', ctx)[0]?.kind).toBe('text-quality');
   });
 });

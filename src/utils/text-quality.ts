@@ -1,4 +1,5 @@
-import type { TextValidation } from '@/types/survey';
+import { isInputFormat } from '@/types/input-type';
+import type { InputType, TextValidation } from '@/types/survey';
 
 /**
  * 단답형·장문형 응답 품질 검사 — 최소 글자 수와 "의미 없는 입력" 거부.
@@ -9,6 +10,40 @@ import type { TextValidation } from '@/types/survey';
  */
 
 export type TextQualityReason = 'min_length' | 'meaningless';
+
+/**
+ * 응답 품질 검사가 붙는 입력인가 — 장문형, 그리고 평문 모드 단답형.
+ * 숫자 모드·입력 형식 단답형은 자기 검사가 있어 배타다. 빌더(설정 잠금)·응답 화면·검증이 같이 쓴다.
+ */
+export function isPlainTextInput(question: {
+  type: string;
+  inputType?: InputType | null | undefined;
+}): boolean {
+  if (question.type === 'textarea') return true;
+  if (question.type !== 'text') return false;
+  return question.inputType !== 'number' && !isInputFormat(question.inputType);
+}
+
+/**
+ * 빌더가 저장할 설정으로 정리한다 — 양의 정수 최소 글자 수와 켜진 토글만 남기고,
+ * 둘 다 없으면 null(패치에서 undefined 는 "손대지 않음" 이라 지우려면 null 이어야 한다).
+ */
+export function normalizeTextValidation(
+  config:
+    | { minLength?: number | null | undefined; rejectMeaningless?: boolean | null | undefined }
+    | null
+    | undefined,
+): TextValidation | null {
+  const out: TextValidation = {};
+  const min = effectiveMinLength(
+    config
+      ? { ...(typeof config.minLength === 'number' ? { minLength: config.minLength } : {}) }
+      : null,
+  );
+  if (min !== null) out.minLength = min;
+  if (config?.rejectMeaningless === true) out.rejectMeaningless = true;
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 export interface TextQualityViolation {
   reason: TextQualityReason;

@@ -60,7 +60,9 @@ describe('단답형·장문형 응답 품질 문구', () => {
         question={q('textarea', { textValidation: { minLength: 10 } })}
         value="짧다"
         onChange={() => {}}
-        numericIssues={[{ kind: 'text-quality', message: '10자 이상 입력해 주세요. (현재 2자, 공백 제외)' }]}
+        numericIssues={[
+          { kind: 'text-quality', message: '10자 이상 입력해 주세요. (현재 2자, 공백 제외)' },
+        ]}
       />,
     );
     expect(screen.queryByRole('alert')).toBeNull();

@@ -102,6 +102,6 @@ export function buildAdminRelaxWarningMessage({
 }: Pick<StepRelaxClassification, 'emptyRequiredCount' | 'formatCount'>): string {
   const parts: string[] = [];
   if (emptyRequiredCount > 0) parts.push(`빈 필수 응답 ${emptyRequiredCount}개`);
-  if (formatCount > 0) parts.push(`형식·글자 수가 맞지 않는 값 ${formatCount}개`);
+  if (formatCount > 0) parts.push(`형식·품질 조건에 맞지 않는 값 ${formatCount}개`);
   return `${parts.join(' · ')} — '다음 →' 한 번 더 누르면 그대로 넘어갑니다`;
 }
