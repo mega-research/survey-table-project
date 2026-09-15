@@ -240,6 +240,7 @@ import type {
   TableColumn,
   TableRow,
   TableValidationRule,
+  TextValidation,
 } from '@/types/survey';
 
 export type {
@@ -264,6 +265,7 @@ export type {
   TableColumn,
   TableRow,
   TableValidationRule,
+  TextValidation,
 };
 
 // 운영 현황 콘솔 — 응답 페이지 방문 기록
@@ -314,6 +316,7 @@ export interface QuestionData {
   emptyDefault?: number;
   piiEncrypted?: boolean;
   numberFormat?: NumberFormat | null;
+  textValidation?: TextValidation | null;
   sumConstraints?: SumConstraint[] | null;
 }
 

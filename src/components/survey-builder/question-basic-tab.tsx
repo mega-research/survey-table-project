@@ -31,6 +31,7 @@ import { cn, generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isInputFormat } from '@/types/input-type';
+import type { TextValidation } from '@/types/survey';
 import { isOptionListType } from '@/types/question-types';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
@@ -558,6 +559,79 @@ export function QuestionBasicTab({
             </p>
           </div>
         )}
+
+        {/* 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부.
+            숫자 모드·입력 형식 칸은 자기 검사가 있어 여기서는 잠근다(배타). */}
+        {(question.type === 'text' || question.type === 'textarea') && (() => {
+          const lockedByMode =
+            question.type === 'text' &&
+            (formData.inputType === 'number' || isInputFormat(formData.inputType));
+          const config = formData.textValidation ?? {};
+          const setConfig = (next: {
+            minLength?: number | undefined;
+            rejectMeaningless?: boolean | undefined;
+          }) => {
+            const merged = { ...config, ...next };
+            const hasMin = typeof merged.minLength === 'number' && merged.minLength > 0;
+            const cleaned: TextValidation = {};
+            if (hasMin && typeof merged.minLength === 'number') cleaned.minLength = merged.minLength;
+            if (merged.rejectMeaningless) cleaned.rejectMeaningless = true;
+            setFormData((prev) => ({
+              ...prev,
+              // 둘 다 꺼지면 null 로 지운다 — undefined 는 저장 패치에서 "손대지 않음" 이다
+              textValidation: Object.keys(cleaned).length > 0 ? cleaned : null,
+            }));
+          };
+          return (
+            <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+              <div>
+                <Label className="text-sm font-medium">응답 품질 검사</Label>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {lockedByMode
+                    ? '숫자 모드·입력 형식 칸은 자기 검사를 씁니다. 평문 모드에서만 설정할 수 있습니다.'
+                    : '조건에 맞지 않으면 응답자가 「다음」으로 넘어갈 수 없습니다. 관리자 응답 수정에서는 경고 후 통과합니다.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Label htmlFor="text-min-length" className="w-28 shrink-0 text-sm">
+                  최소 글자 수
+                </Label>
+                <Input
+                  id="text-min-length"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  className="w-28"
+                  disabled={lockedByMode}
+                  value={typeof config.minLength === 'number' ? String(config.minLength) : ''}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    setConfig({ minLength: Number.isFinite(n) && n > 0 ? n : undefined });
+                  }}
+                  placeholder="없음"
+                />
+                <span className="text-xs text-gray-500">자 이상 (공백 제외)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Switch
+                  id="text-reject-meaningless"
+                  disabled={lockedByMode}
+                  checked={config.rejectMeaningless === true}
+                  onCheckedChange={(checked) => setConfig({ rejectMeaningless: checked })}
+                />
+                <div className="space-y-0.5">
+                  <Label htmlFor="text-reject-meaningless" className="text-sm">
+                    자음·모음·숫자만 입력하면 막기
+                  </Label>
+                  <p className="text-xs text-gray-500">
+                    ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 하나도 없는 답을 받지 않습니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
         {question.type === 'text' && (

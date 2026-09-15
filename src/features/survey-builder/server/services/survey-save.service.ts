@@ -286,6 +286,7 @@ export async function saveSurveyDiff(
           tableValidationRules:
             question.tableValidationRules as NewQuestion['tableValidationRules'],
           numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+          textValidation: question.textValidation as NewQuestion['textValidation'],
           sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -353,6 +354,7 @@ export async function saveSurveyDiff(
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,
               numberFormat: sql`excluded.number_format`,
+              textValidation: sql`excluded.text_validation`,
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               rowRepeatConfig: sql`excluded.row_repeat_config`,
@@ -672,6 +674,7 @@ export async function saveSurveyWithDetails(
           tableValidationRules:
             question.tableValidationRules as NewQuestion['tableValidationRules'],
           numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+          textValidation: question.textValidation as NewQuestion['textValidation'],
           sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -739,6 +742,7 @@ export async function saveSurveyWithDetails(
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,
               numberFormat: sql`excluded.number_format`,
+              textValidation: sql`excluded.text_validation`,
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               rowRepeatConfig: sql`excluded.row_repeat_config`,

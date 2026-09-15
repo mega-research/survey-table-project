@@ -119,6 +119,16 @@ export type NumberUnit =
   | 'hundredMillion' // 억 (1e8)
   | 'percent'; // % — 배수·환산 표시 없음. 빌더에서 max=100 프리셋
 
+/**
+ * 단답형·장문형 응답 품질 검사 설정 (questions.text_validation JSONB).
+ * - minLength: 공백을 뺀 최소 글자 수. 양의 정수만 뜻이 있다.
+ * - rejectMeaningless: 자음·모음·숫자만인 입력(ㅋㅋㅋ · 123124) 거부.
+ */
+export interface TextValidation {
+  minLength?: number;
+  rejectMeaningless?: boolean;
+}
+
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
   unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
@@ -792,6 +802,9 @@ export interface Question {
   emptyDefault?: number;
   // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat | null;
+  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (utils/text-quality).
+  // 숫자 모드·입력 형식과 배타(그쪽은 자기 검사가 있다). NULL = 검사 없음(기존 전부).
+  textValidation?: TextValidation | null;
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
   piiEncrypted?: boolean;
   // 테이블 검증 규칙 (테이블 타입 전용)

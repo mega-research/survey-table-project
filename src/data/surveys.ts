@@ -134,6 +134,9 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.numberFormat != null
       ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
       : {}),
+    ...(q.textValidation != null
+      ? { textValidation: q.textValidation as NonNullable<QuestionType['textValidation']> }
+      : {}),
     ...(q.sumConstraints != null
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),

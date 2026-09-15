@@ -21,7 +21,12 @@ import type { NumericIssue } from './numeric-validation';
 
 /** 이슈 kind → 완화(경고 후 통과) 대상 여부. range/sum/formula 는 차단형(완화 불가). */
 export function isRelaxableIssueKind(kind: NumericIssue['kind']): boolean {
-  return kind === 'required-cells' || kind === 'required-detail' || kind === 'format';
+  return (
+    kind === 'required-cells' ||
+    kind === 'required-detail' ||
+    kind === 'format' ||
+    kind === 'text-quality'
+  );
 }
 
 export interface StepRelaxClassification {
@@ -65,7 +70,8 @@ export function classifyStepIssues(
         continue;
       }
       // 형식은 값이 들어간 칸의 이야기라 "미응답 질문" 과 겹치지 않는다 — 따로 센다.
-      if (issue.kind === 'format') {
+      // 응답 품질(글자 수·의미 없는 입력)도 값이 들어간 칸의 이야기 — 형식과 같이 센다.
+      if (issue.kind === 'format' || issue.kind === 'text-quality') {
         formatCount += issue.cellIds?.length ?? 1;
         continue;
       }
@@ -96,6 +102,6 @@ export function buildAdminRelaxWarningMessage({
 }: Pick<StepRelaxClassification, 'emptyRequiredCount' | 'formatCount'>): string {
   const parts: string[] = [];
   if (emptyRequiredCount > 0) parts.push(`빈 필수 응답 ${emptyRequiredCount}개`);
-  if (formatCount > 0) parts.push(`형식이 맞지 않는 값 ${formatCount}개`);
+  if (formatCount > 0) parts.push(`형식·글자 수가 맞지 않는 값 ${formatCount}개`);
   return `${parts.join(' · ')} — '다음 →' 한 번 더 누르면 그대로 넘어갑니다`;
 }

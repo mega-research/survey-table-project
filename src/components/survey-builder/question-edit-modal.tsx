@@ -113,6 +113,7 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     inputType: question.inputType ?? 'text',
     ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
     ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
+    ...(question.textValidation !== undefined ? { textValidation: question.textValidation } : {}),
     tableValidationRules: question.tableValidationRules || [],
     ...(question.rowRepeatConfig !== undefined
       ? { rowRepeatConfig: question.rowRepeatConfig }
@@ -555,6 +556,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.numberFormat !== undefined
                   ? currentFormData.numberFormat
                   : question?.numberFormat,
+              textValidation:
+                currentFormData.textValidation !== undefined
+                  ? currentFormData.textValidation
+                  : question?.textValidation,
               sumConstraints: currentFormData.sumConstraints || question?.sumConstraints,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               priorAnswerCondition:

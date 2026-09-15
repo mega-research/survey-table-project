@@ -43,9 +43,18 @@ import {
   priorOptionText,
 } from './prior-answers';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
+import { textQualityViolation } from '@/utils/text-quality';
 
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula' | 'format';
+  kind:
+    | 'range'
+    | 'sum'
+    | 'required-cells'
+    | 'required-detail'
+    | 'formula'
+    | 'format'
+    /** 단답형·장문형 응답 품질(최소 글자 수·의미 없는 입력) — 입력칸 아래에 문구가 붙는다 */
+    | 'text-quality';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -570,6 +579,16 @@ export function collectNumericIssues(
 
   if (question.type !== 'table') {
     const issues: NumericIssue[] = [];
+    // 단답형(평문 모드)·장문형 응답 품질 — 숫자 모드·형식 칸은 위에서 이미 돌아갔다.
+    // 토큰 prefill 칸은 응답자가 못 고치므로 대상이 아니다.
+    if (
+      (question.type === 'text' || question.type === 'textarea') &&
+      question.textValidation &&
+      !(question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate))
+    ) {
+      const violation = textQualityViolation(question.textValidation, response);
+      if (violation) issues.push({ kind: 'text-quality', message: violation.message });
+    }
     const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
     if (optionTextIssues.questionMissing) {
       issues.push({

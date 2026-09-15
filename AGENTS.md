@@ -238,6 +238,7 @@ questions                  # 개별 질문
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
+├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, utils/text-quality)
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
@@ -486,8 +487,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 | 타입          | 설명               | 주요 속성                                                                                             |
 | ------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat               |
-| `textarea`    | 장문형 텍스트      | -                                                                                                     |
+| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation |
+| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부)                                                        |
 | `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                 |
 | `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                 |
 | `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                             |

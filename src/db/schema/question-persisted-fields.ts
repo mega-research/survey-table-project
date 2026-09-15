@@ -41,6 +41,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'inputType',
   'emptyDefault',
   'numberFormat',
+  'textValidation',
   'piiEncrypted',
   'tableValidationRules',
   'sumConstraints',

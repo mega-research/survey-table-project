@@ -160,13 +160,13 @@ describe('buildAdminRelaxWarningMessage', () => {
 
   it('형식 불일치만 있으면 형식 문구', () => {
     expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 0, formatCount: 2 })).toBe(
-      "형식이 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+      "형식·글자 수가 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 
   it('둘 다 있으면 함께 말한다', () => {
     expect(buildAdminRelaxWarningMessage({ emptyRequiredCount: 1, formatCount: 2 })).toBe(
-      "빈 필수 응답 1개 · 형식이 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+      "빈 필수 응답 1개 · 형식·글자 수가 맞지 않는 값 2개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 });

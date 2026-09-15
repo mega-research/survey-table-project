@@ -84,10 +84,12 @@ export const TextQuestionSchema = base.extend({
   inputType: z.enum(INPUT_TYPES).optional(),
   emptyDefault: z.number().optional(),
   numberFormat: z.custom<NonNullable<Question['numberFormat']>>().nullable().optional(),
+  textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
 });
 
 export const TextareaQuestionSchema = base.extend({
   type: z.literal('textarea'),
+  textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
 });
 
 export const RadioQuestionSchema = base

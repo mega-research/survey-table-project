@@ -61,6 +61,7 @@ const SENTINEL = {
   inputType: 'number',
   emptyDefault: 0,
   numberFormat: { thousands: true },
+  textValidation: { minLength: 10, rejectMeaningless: true },
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],

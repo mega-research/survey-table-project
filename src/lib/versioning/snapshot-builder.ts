@@ -102,6 +102,7 @@ interface SnapshotQuestion {
   emptyDefault?: number | undefined;
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;
+  textValidation?: Question['textValidation'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -191,6 +192,7 @@ export function buildSurveySnapshot(
       emptyDefault: q.emptyDefault,
       piiEncrypted: q.piiEncrypted,
       numberFormat: q.numberFormat,
+      textValidation: q.textValidation,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

@@ -15,7 +15,13 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
-import type { ChoiceGroup, NumberFormat, SumConstraint, SurveyLookup } from '@/types/survey';
+import type {
+  ChoiceGroup,
+  NumberFormat,
+  SumConstraint,
+  SurveyLookup,
+  TextValidation,
+} from '@/types/survey';
 
 import type {
   ContactColumnScheme,
@@ -224,6 +230,8 @@ export const questions = pgTable(
     emptyDefault: doublePrecision('empty_default'), // 숫자 모드 초기값
     // 단답형 숫자 모드 표시 포맷·범위 (콤마/단위/min/max/소수 자릿수)
     numberFormat: jsonb('number_format').$type<NumberFormat>(),
+    // 단답형·장문형 응답 품질 검사 {minLength, rejectMeaningless} — NULL = 검사 없음 (0109)
+    textValidation: jsonb('text_validation').$type<TextValidation>(),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),

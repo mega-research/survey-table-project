@@ -42,6 +42,8 @@ import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack } from './option-text-input-stack';
 import { RankingQuestion } from './ranking-question';
+import { textQualityViolation } from '@/utils/text-quality';
+
 import { type ValidationBannerItem, ValidationIssueBanner } from './validation-issue-banner';
 
 /**
@@ -163,9 +165,11 @@ export function QuestionInput({ question, numericIssues, ...controlProps }: Ques
   );
   if (question.type === 'table') return control;
 
-  // range·format 은 입력칸 바로 아래에 이미 붙는다 — 배너로 한 번 더 말하지 않는다.
+  // range·format·text-quality 는 입력칸 바로 아래에 이미 붙는다 — 배너로 한 번 더 말하지 않는다.
   const bannerItems = (numericIssues ?? [])
-    .filter((issue) => issue.kind !== 'range' && issue.kind !== 'format')
+    .filter(
+      (issue) => issue.kind !== 'range' && issue.kind !== 'format' && issue.kind !== 'text-quality',
+    )
     .map((issue) => ({
       message: issue.message,
       cellIds: issue.cellIds,
@@ -257,18 +261,29 @@ function QuestionInputControl({
         <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />
       );
 
-    case 'textarea':
+    case 'textarea': {
+      // 응답 품질 위반(최소 글자 수·의미 없는 입력)은 치는 동안 입력칸 아래에 바로 보인다 —
+      // 「다음」에서 처음 알면 이미 쓴 글을 다시 고쳐야 하는 자리가 어딘지 찾게 된다.
+      const quality = textQualityViolation(question.textValidation, value);
       return (
-        <textarea
-          className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
-            isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
-          }`}
-          rows={4}
-          placeholder={question.placeholder || '답변을 입력하세요...'}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <div className="w-full">
+          <textarea
+            className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
+              isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
+            }`}
+            rows={4}
+            placeholder={question.placeholder || '답변을 입력하세요...'}
+            value={typeof value === 'string' ? value : ''}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {quality && (
+            <p className="mt-1 px-1 text-xs text-red-500" data-testid="text-quality-violation">
+              * {quality.message}
+            </p>
+          )}
+        </div>
       );
+    }
 
     case 'radio':
       return (
@@ -770,6 +785,9 @@ function TextResponseInput({
   const currentValue = typeof value === 'string' ? value : '';
   const isNumberMode = question.inputType === 'number';
   const format = isInputFormat(question.inputType) ? question.inputType : null;
+  // 응답 품질 검사는 평문 모드에서만 — 숫자·형식 칸은 자기 검사가 있다.
+  const qualityViolation =
+    !isNumberMode && !format ? textQualityViolation(question.textValidation, currentValue) : null;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -843,15 +861,21 @@ function TextResponseInput({
         disabled={isPrefilled}
         data-prefilled={isPrefilled || undefined}
       />
-      {(unitReading || rangeViolation || formatField.violation) && !isPrefilled && (
-        <div className="mt-1 space-y-0.5 px-1">
-          {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
-          {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
-          {formatField.violation && (
-            <p className="text-xs text-red-500">* {formatField.violation}</p>
-          )}
-        </div>
-      )}
+      {(unitReading || rangeViolation || formatField.violation || qualityViolation) &&
+        !isPrefilled && (
+          <div className="mt-1 space-y-0.5 px-1">
+            {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
+            {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+            {formatField.violation && (
+              <p className="text-xs text-red-500">* {formatField.violation}</p>
+            )}
+            {qualityViolation && (
+              <p className="text-xs text-red-500" data-testid="text-quality-violation">
+                * {qualityViolation.message}
+              </p>
+            )}
+          </div>
+        )}
     </div>
   );
 }

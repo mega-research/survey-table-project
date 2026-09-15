@@ -84,6 +84,7 @@
     "0105_sticky_column_count",
     "0106_add_row_cards_mobile_mode",
     "0107_add_row_group_cards_mobile_mode",
-    "0108_add_axis_cards_mobile_mode"
+    "0108_add_axis_cards_mobile_mode",
+    "0109_text_validation"
   ]
 }

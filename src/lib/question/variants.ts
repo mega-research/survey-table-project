@@ -72,12 +72,17 @@ export interface TextQuestion
     QuestionBase,
     Pick<
       Question,
-      'placeholder' | 'defaultValueTemplate' | 'inputType' | 'emptyDefault' | 'numberFormat'
+      | 'placeholder'
+      | 'defaultValueTemplate'
+      | 'inputType'
+      | 'emptyDefault'
+      | 'numberFormat'
+      | 'textValidation'
     > {
   type: 'text';
 }
 
-export interface TextareaQuestion extends QuestionBase {
+export interface TextareaQuestion extends QuestionBase, Pick<Question, 'textValidation'> {
   type: 'textarea';
 }
 

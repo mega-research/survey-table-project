@@ -65,6 +65,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     piiEncrypted: data.piiEncrypted,
     tableValidationRules: data.tableValidationRules as NewQuestion['tableValidationRules'],
     numberFormat: data.numberFormat as NewQuestion['numberFormat'],
+    textValidation: data.textValidation as NewQuestion['textValidation'],
     sumConstraints: data.sumConstraints as NewQuestion['sumConstraints'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     priorAnswerCondition: data.priorAnswerCondition as NewQuestion['priorAnswerCondition'],

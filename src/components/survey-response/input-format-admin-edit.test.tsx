@@ -88,7 +88,7 @@ describe('admin-edit — 입력 형식은 경고 후 통과', () => {
     await user.click(nextButton());
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "형식이 맞지 않는 값 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+      "형식·글자 수가 맞지 않는 값 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
 
     await user.click(nextButton());
