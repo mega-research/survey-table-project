@@ -27,7 +27,6 @@ vi.mock('@/components/survey-document/response-document-pane', () => ({
 
 const BOTTOM_NOTICE = '* 필수 질문에 답변해주세요';
 const PER_QUESTION_MESSAGE = '필수 질문에 답변해주세요.';
-const MOBILE_NOTICE = '필수 질문';
 
 /** 1쪽 선택 문항 / 2쪽 필수 radio 둘 / 3쪽 마무리 문항. */
 const questions: Question[] = [
@@ -234,7 +233,7 @@ describe('필수 게이트 하단 안내와 강조', () => {
     expect(screen.getByText(BOTTOM_NOTICE)).toBeInTheDocument();
   });
 
-  it('모바일 하단 바의 「필수 질문」 소표시도 시도 뒤에만 뜨고 답을 채우면 사라진다', async () => {
+  it('모바일에서도 「다음」이 막히면 문항 안내만 뜨고 하단 바에는 쪽수만 남으며, 답을 채우면 넘어간다', async () => {
     setMobileViewport(true);
     const user = userEvent.setup();
     renderFlow();
@@ -242,15 +241,16 @@ describe('필수 게이트 하단 안내와 강조', () => {
     await user.click(getMobileActionButton('다음'));
     await screen.findByText('첫 번째 필수 질문');
 
-    expect(screen.queryByText(MOBILE_NOTICE)).toBeNull();
-
     await user.click(getMobileActionButton('다음'));
-    expect(screen.getByText(MOBILE_NOTICE)).toBeInTheDocument();
+    // 하단 바에는 쪽수만 — 「필수 질문」 소표시는 뺐다. 막힘은 문항 아래 안내와 진행 여부로 드러난다.
+    expect(screen.queryByText('필수 질문')).toBeNull();
+    expect(screen.getAllByText(PER_QUESTION_MESSAGE).length).toBeGreaterThan(0);
     expect(screen.queryByText('마무리 질문')).toBeNull();
 
     await user.click(screen.getByLabelText('예'));
     await user.click(screen.getByLabelText('동의'));
-    expect(screen.queryByText(MOBILE_NOTICE)).toBeNull();
+    await user.click(getMobileActionButton('다음'));
+    expect(await screen.findByText('마무리 질문')).toBeInTheDocument();
   });
 });
 
@@ -320,9 +320,7 @@ describe('문항 수요조사 판단 항목', () => {
           documentView: {
             url: 'https://example.test/doc.pdf',
             pageCount: 1,
-            anchors: [
-              { ownerKind: 'question', ownerId: 'q-j1', page: 1, x: 0, y: 0, w: 1, h: 1 },
-            ],
+            anchors: [{ ownerKind: 'question', ownerId: 'q-j1', page: 1, x: 0, y: 0, w: 1, h: 1 }],
           },
         }}
       />,

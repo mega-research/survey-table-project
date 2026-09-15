@@ -1077,7 +1077,7 @@ function SurveyResponseFlowActive({
   }, [currentStep, resolveNextStepIndex]);
 
   // 응답 완료 카운트 (피드백) — 실제 경로(분기 시뮬레이션) 기준.
-  // 분기 규칙으로 건너뛰는 스텝의 질문을 세면 "필수 N개 남음"이 제출 버튼과 모순된다.
+  // 분기 규칙으로 건너뛰는 스텝의 질문을 세면 카운트가 제출 버튼과 모순된다.
   const traversedQuestionIds = useMemo(
     () => collectTraversedQuestionIds(steps, responses, questions, groups, evalCtx),
     [steps, responses, questions, groups, evalCtx],
@@ -1088,17 +1088,6 @@ function SurveyResponseFlowActive({
         .length,
     [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );
-  const requiredRemaining = useMemo(
-    () =>
-      visibleQuestions.filter(
-        (q) =>
-          traversedQuestionIds.has(q.id) &&
-          (q.required || hasExplicitRequiredChoiceGroup(q)) &&
-          !isQuestionAnswered(q),
-      ).length,
-    [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
-  );
-
   // 숫자 차단형 검증 (min/합계/필수 셀) — 라이브 계산, 표시는 "다음"을 시도한 step 에서만
   const numericIssuesByQuestion = useMemo(() => {
     const map = new Map<string, NumericIssue[]>();
@@ -1791,7 +1780,6 @@ function SurveyResponseFlowActive({
     currentStep.items.map((i) => i.question),
     { forceWide: loadedSurvey.settings.forceWideLayout },
   );
-  const showRequiredHighlight = highlightQuestionIds.size > 0;
   // 미리보기도 '다음'으로 통일 — '확인 완료' 라벨은 마지막 페이지에서만 나타나
   // 버튼이 바뀐 것처럼 보이는 혼란만 줬다 (2026-08-12 피드백).
   const submitLabel = '다음';
@@ -1815,16 +1803,13 @@ function SurveyResponseFlowActive({
             }}
           />
         </div>
+        {/* 「필수 N개 남음」은 2026-09-15 에 뺐다 — 어느 문항인지 알려주지 않는 숫자라 응답자를
+            조급하게만 만들었고, 미충족은 「다음」 뒤 문항 아래 검증 안내가 짚는다. */}
         {isMobile && (
           <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
             <span>
               {answeredCount}/{traversedQuestionIds.size} 응답 완료
             </span>
-            {requiredRemaining > 0 && (
-              <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
-                필수 {requiredRemaining}개 남음
-              </span>
-            )}
           </div>
         )}
       </div>
@@ -1890,7 +1875,6 @@ function SurveyResponseFlowActive({
                   keyboardOpen={keyboardOpen}
                   currentStepNumber={currentVisibleStepNumber}
                   totalStepCount={totalVisibleStepCount}
-                  showRequiredNotice={showRequiredNotice}
                   hasPrevious={hasPreviousDisplayable}
                   isLastStep={isLastVisibleStep}
                   isSubmitting={isSubmitting}

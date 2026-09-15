@@ -6,8 +6,6 @@ interface MobileBottomNavProps {
   keyboardOpen: boolean;
   currentStepNumber: number;
   totalStepCount: number;
-  /** 「필수 질문」 소표시 — 이 스텝에서 "다음"을 시도해 필수 게이트에 막힌 뒤에만 참이다. */
-  showRequiredNotice: boolean;
   hasPrevious: boolean;
   isLastStep: boolean;
   isSubmitting: boolean;
@@ -31,7 +29,6 @@ export function MobileBottomNav({
   keyboardOpen,
   currentStepNumber,
   totalStepCount,
-  showRequiredNotice,
   hasPrevious,
   isLastStep,
   isSubmitting,
@@ -57,30 +54,19 @@ export function MobileBottomNav({
           이전
         </button>
 
-        <div className="flex flex-col items-center">
-          <span className="text-sm font-medium text-gray-900">
-            {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
-          </span>
-          {showRequiredNotice && (
-            <span className="text-[11px] text-red-500">필수 질문</span>
-          )}
-        </div>
+        {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
+            소표시는 2026-09-15 에 뺐다: 어느 문항인지 알려주지 않는 중복 신호였다). */}
+        <span className="text-sm font-medium text-gray-900">
+          {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
+        </span>
 
         {isLastStep ? (
-          <button
-            onClick={onNext}
-            disabled={isSubmitting}
-            className={primaryButtonCls}
-          >
+          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
             {isSubmitting ? submittingLabel : submitLabel}
             {!isSubmitting && <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
-          <button
-            onClick={onNext}
-            disabled={isSubmitting}
-            className={primaryButtonCls}
-          >
+          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
             다음
             <ChevronRight className="h-4 w-4" />
           </button>
