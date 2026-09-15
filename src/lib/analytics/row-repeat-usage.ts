@@ -12,7 +12,6 @@ import type { Question } from '@/types/survey';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 /** 질문 id → 실제로 값이 들어간 최대 벌 번호 (반복 블록이 있는 질문만 담긴다) */
-export type UsedRepeatCounts = ReadonlyMap<string, number>;
 
 interface SubmissionLike {
   questionResponses: Record<string, unknown>;

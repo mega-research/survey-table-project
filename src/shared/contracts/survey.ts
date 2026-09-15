@@ -63,8 +63,6 @@ export interface GroupNameDesign {
   textColor?: string; // 폰트색 hex (미설정 시 text-blue-700)
 }
 
-export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band' | 'composed';
-
 export type ResponseHeaderLogoSize = 'sm' | 'md' | 'lg';
 
 export type ResponseHeaderTitleSize = 'auto' | 'md' | 'lg';

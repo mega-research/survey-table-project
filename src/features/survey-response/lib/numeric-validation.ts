@@ -15,6 +15,7 @@ import {
 } from '@/lib/survey/cell-formula';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
 import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
+import { isTokenPrefilled } from '@/features/question-renderer/utils/token-prefill';
 import {
   collectSelectedChoiceCellIds,
   isChoiceGroupTableQuestion,
@@ -559,18 +560,6 @@ export function resolveTextQualityViolation(
     return null;
   }
   return textQualityViolation(question.textValidation, value);
-}
-
-/**
- * 토큰 프리필로 잠긴 칸인가. 렌더러가 `disabled` 로 그리는 판정과 같은 식이다
- * (`question-input.tsx` · `cells/input-cell.tsx`).
- *
- * 잠긴 칸은 형식 검사 대상이 아니다 — 응답자가 고칠 수 없는 값(명단에서 온 외국 번호 등)으로
- * 진행을 막으면 따를 수 있는 길이 없다. 이월 면제와 같은 원칙이다. 값이 유효하면 저장 경계가
- * 정규형으로 정돈한다(`normalizeFormatValues`).
- */
-function isTokenPrefilled(template: string | null | undefined): boolean {
-  return (template ?? '').trim().length > 0;
 }
 
 /**

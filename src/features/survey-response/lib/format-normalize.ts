@@ -16,6 +16,7 @@ import { isInputFormat } from '@/types/input-type';
 import type { Question, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { parseInputFormat } from '@/features/question-renderer/utils/input-format';
+import { isTokenPrefilled } from '@/features/question-renderer/utils/token-prefill';
 
 import {
   type PriorAnswers,
@@ -34,7 +35,7 @@ function normalizeOne(
 ): unknown {
   if (!isInputFormat(inputType)) return value;
   if (typeof value !== 'string') return value;
-  if ((defaultValueTemplate ?? '').trim().length > 0) return value;
+  if (isTokenPrefilled(defaultValueTemplate)) return value;
   if (isUntouchedPriorValue(value, priorOriginal)) return value;
   const result = parseInputFormat(inputType, value);
   return result.ok && result.normalized !== '' ? result.normalized : value;
