@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
@@ -424,5 +424,119 @@ describe('ChoiceTableResponse (mobile) — 행 단위 카드의 미충족 필수
   it('다음을 누르기 전에는 붉게 두르지 않는다', () => {
     render(<ChoiceTableResponse question={twoGroupQuestion()} value={{}} onChange={() => {}} />);
     expect(screen.getByLabelText('활용 계획').closest('label')).not.toHaveAttribute('data-unfilled');
+  });
+});
+
+describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
+  /** A1 축소판: 활용 여부(g1)·활용 계획(g2) 체크박스 그룹이 열마다 하나씩, 「없음」은 g2 에만 */
+  function axisQuestion(): Question {
+    return {
+      id: 'q1',
+      type: 'checkbox',
+      title: 'A1',
+      required: true,
+      order: 0,
+      mobileTableDisplayMode: 'axis-cards',
+      choiceGroups: [
+        { id: 'g1', type: 'checkbox', groupKey: 'cb1', label: '향후 시스템 반도체 제품 - 활용 여부' },
+        { id: 'g2', type: 'checkbox', groupKey: 'cb2', label: '향후 시스템반도체 제품 - 활용 계획', requiredMessage: '계획을 하나 이상 고르세요' },
+      ],
+      tableColumns: [
+        { id: 'c0', label: '시스템반도체 제품' },
+        { id: 'c1', label: '설명' },
+        { id: 'c2', label: '활용 여부' },
+        { id: 'c3', label: '활용 계획' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'r1c0', type: 'text', content: '① 연산 및 제어' },
+            { id: 'r1c1', type: 'text', content: '총괄 연산 칩', mobileDisplay: 'inline' },
+            { id: 'r1c2', type: 'choice_opt', content: '', choiceGroupId: 'g1', mobileDisplay: 'hidden' },
+            { id: 'r1c3', type: 'choice_opt', content: '', choiceGroupId: 'g2', mobileDisplay: 'hidden' },
+          ],
+        },
+        {
+          id: 'r2',
+          cells: [
+            { id: 'r2c0', type: 'text', content: '② 기타' },
+            { id: 'r2c1', type: 'text', content: '-', mobileDisplay: 'hidden' },
+            { id: 'r2c2', type: 'choice_opt', content: '', choiceGroupId: 'g1', mobileDisplay: 'hidden' },
+            { id: 'r2c3', type: 'choice_opt', content: '', choiceGroupId: 'g2', mobileDisplay: 'hidden' },
+          ],
+        },
+        {
+          id: 'r3',
+          cells: [
+            { id: 'r3c0', type: 'text', content: '③ 없음' },
+            { id: 'r3c1', type: 'text', content: '-', colspan: 2, mobileDisplay: 'hidden' },
+            { id: 'r3c2', type: 'text', content: '', _isContinuation: true },
+            { id: 'r3c3', type: 'choice_opt', content: '', choiceGroupId: 'g2', exclusiveChoice: true },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('보기 그룹마다 카드 하나 — 제목은 열 헤더이고 그룹 라벨은 나오지 않는다', () => {
+    render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={() => {}} />);
+    const cards = screen.getAllByTestId(/^axis-card-(?!header)/);
+    expect(cards).toHaveLength(2);
+    expect(screen.getByText('활용 여부')).toBeInTheDocument();
+    expect(screen.getByText('활용 계획')).toBeInTheDocument();
+    expect(screen.queryByText(/향후 시스템/)).toBeNull();
+  });
+
+  it('카드 안 타일은 행 제목이고, 그 축에 셀이 없는 행은 그 카드에 나오지 않는다', () => {
+    render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={() => {}} />);
+    const first = screen.getByTestId('axis-card-g1');
+    const second = screen.getByTestId('axis-card-g2');
+    expect(first.querySelectorAll('label')).toHaveLength(2);
+    expect(second.querySelectorAll('label')).toHaveLength(3);
+    expect(first).not.toHaveTextContent('③ 없음');
+    expect(second).toHaveTextContent('③ 없음');
+  });
+
+  it('설명 셀은 모바일 셀 표시 설정을 따라 두 카드 모두에 붙는다', () => {
+    render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={() => {}} />);
+    expect(screen.getAllByText('총괄 연산 칩')).toHaveLength(2);
+    expect(screen.queryByText('-')).toBeNull();
+  });
+
+  it('카드 머리는 화면 위에 고정된다', () => {
+    render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={() => {}} />);
+    const header = screen.getByText('활용 여부').closest('[data-testid="axis-card-header"]');
+    expect(header).toHaveClass('sticky');
+  });
+
+  it('타일을 고르면 그 그룹 키로 onChange 한다', () => {
+    const onChange = vi.fn();
+    render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={onChange} />);
+    const second = screen.getByTestId('axis-card-g2');
+    fireEvent.click(within(second).getByLabelText('① 연산 및 제어'));
+    expect(onChange).toHaveBeenCalledWith({ cb2: ['r1c3'] });
+  });
+
+  it('다음을 누른 뒤 미충족 필수 그룹의 카드만 붉게 두르고 그 그룹의 필수 문구를 머리에 붙인다', () => {
+    render(
+      <ChoiceTableResponse
+        question={axisQuestion()}
+        value={{ cb1: ['r1c2'] }}
+        onChange={() => {}}
+        showRequiredHighlight
+      />,
+    );
+    expect(screen.getByTestId('axis-card-g1')).not.toHaveClass('border-red-300');
+    expect(screen.getByTestId('axis-card-g2')).toHaveClass('border-red-300');
+    expect(screen.getByText('계획을 하나 이상 고르세요')).toBeInTheDocument();
+  });
+
+  it('그룹 문구가 없으면 기본 필수 문구로 폴백하고, 다음을 누르기 전에는 붙지 않는다', () => {
+    const q = axisQuestion();
+    render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
+    expect(screen.queryByText('필수 질문에 답변해주세요.')).toBeNull();
+    render(<ChoiceTableResponse question={q} value={{ cb2: ['r3c3'] }} onChange={() => {}} showRequiredHighlight />);
+    expect(screen.getByText('필수 질문에 답변해주세요.')).toBeInTheDocument();
   });
 });

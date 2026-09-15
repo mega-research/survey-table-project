@@ -38,6 +38,7 @@ import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
   type GroupedChoiceAnswer,
+  collectChoiceGroups,
   getGroupKeyOfCell,
   getGroupTypeOfCell,
   isGroupedChoiceQuestion,
@@ -49,6 +50,7 @@ import { projectConditionalTableLayout } from '@/utils/conditional-table-layout'
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableCellControl } from './choice-table-cell-control';
@@ -59,6 +61,7 @@ import { useSurveyResponseStore } from '@/stores/survey-response-store';
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
+import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
 
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
@@ -984,6 +987,156 @@ export function ChoiceTableResponse({
     </div>
   );
 
+  /**
+   * 축 단위 카드 — 보기 그룹(축)마다 카드 하나, 카드 안에 그 축에 셀이 있는 행을 타일로 나열한다.
+   *
+   * 행 단위 카드는 "행마다 여러 축을 하나씩 고르는 표"용이라, 축마다 독립된 다중 선택인데 행
+   * 목록만 공유하는 표(현재 활용 / 활용 계획)에서는 행마다 모든 축에 답해야 하는 것처럼 읽힌다.
+   * 여기서는 축이 곧 카드라 "이 카드에서 하나 이상" 으로 읽힌다 (CONTEXT.md "축 단위 카드").
+   *
+   * - 카드 제목은 그 그룹의 셀이 놓인 열의 헤더(비면 그룹 라벨). 데스크톱 표와 같은 글자다.
+   *   그룹 라벨은 SPSS 변수 라벨 접두를 겸해 길게 짓는 일이 많아 제목으로 쓰지 않는다.
+   * - 카드 머리는 그 카드를 지나는 동안 화면 위에 고정된다 — 카드 하나가 화면 몇 장 길이라
+   *   중간에서는 지금 어느 축을 고르는지 놓친다. 타일에 축 이름을 접미로 붙이지는 않는다
+   *   (긴 라벨 반복이 행 카드의 어색함을 되살린다).
+   * - 타일 라벨은 행 제목 셀(header 지정 → 첫 텍스트 셀), 나머지 표시 셀은 모바일 셀 표시 설정
+   *   그대로다. 설명이 두 카드에 반복되는 것은 빌더가 그 셀을 숨겨서 조절한다.
+   * - 미충족 필수 그룹은 카드째 붉게 두르고 그 그룹의 필수 문구(→ 문항 → 기본)를 머리에 붙인다.
+   * - 보기 셀이 아닌 인터랙티브 셀(input·선택형)은 축이 없어 이 모드에서는 그리지 않는다.
+   */
+  const renderAxisCards = () => {
+    const columnLabelByCellId = new Map<string, string>();
+    for (const row of question.tableRowsData ?? []) {
+      row.cells.forEach((cell, idx) => {
+        const label = (question.tableColumns?.[idx]?.label ?? '').trim();
+        if (label) columnLabelByCellId.set(cell.id, label);
+      });
+    }
+    const visibleRows = rowWiseLayout.conditionalRows;
+    const resolveRowTitleCell = (row: TableRow): TableCell | undefined =>
+      findMobileHeaderCell(row.cells) ??
+      row.cells.find(
+        (c) =>
+          c.type === 'text' &&
+          !c.isHidden &&
+          !c._isContinuation &&
+          c.mobileDisplay !== 'hidden' &&
+          (c.content ?? '').trim() !== '',
+      );
+
+    return (
+      <div className="space-y-3">
+        {collectChoiceGroups(question).map((group) => {
+          const groupId = group.cells[0]?.choiceGroupId ?? 'none';
+          const columnLabel = group.cells
+            .map((c) => columnLabelByCellId.get(c.id) ?? '')
+            .find((label) => label !== '');
+          const rawTitle = columnLabel || group.label.trim();
+          const title = rawTitle ? substituteTokens(rawTitle, attrs, quotes) : '';
+          const unfilled = group.cells.some((c) => unfilledGroupCellIds.has(c.id));
+          const requiredMessage = group.requiredMessage?.trim() || resolveRequiredMessage(question);
+          const memberIds = new Set(group.cells.map((c) => c.id));
+          return (
+            <div
+              key={groupId}
+              data-testid={`axis-card-${groupId}`}
+              className={cn(
+                'rounded-2xl border bg-white',
+                unfilled ? 'border-red-300' : 'border-gray-200',
+              )}
+            >
+              {/* 카드 머리 — sticky 는 부모(카드) 상자 안에서만 붙어, 다음 카드에 닿으면
+                  자연히 그 카드의 머리로 교체된다. 응답 페이지 위쪽에 고정 요소가 없어 top-0. */}
+              {(title || unfilled) && (
+                <div
+                  data-testid="axis-card-header"
+                  className={cn(
+                    'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
+                    unfilled ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white',
+                  )}
+                >
+                  {title && (
+                    <p className={cn('text-[17px] font-bold leading-snug', unfilled ? 'text-red-600' : 'text-gray-900')}>
+                      {title}
+                    </p>
+                  )}
+                  {unfilled && (
+                    <p className="mt-0.5 text-[13px] text-red-600">{requiredMessage}</p>
+                  )}
+                </div>
+              )}
+              <div className="space-y-2 p-3">
+                {visibleRows.flatMap((row) => {
+                  const cellsInGroup = row.cells.filter(
+                    (c) => c.type === 'choice_opt' && !c.isHidden && memberIds.has(c.id),
+                  );
+                  if (cellsInGroup.length === 0) return [];
+                  const titleCell = resolveRowTitleCell(row);
+                  const rowTitle = titleCell
+                    ? substituteTokens((titleCell.content ?? '').trim(), attrs, quotes)
+                    : '';
+                  const displayCells = row.cells.filter((c) => c !== titleCell);
+                  return cellsInGroup.map((choiceCell) => {
+                    const { checked, disabled, option } = getChoiceCellState(choiceCell);
+                    const optionLabel = option?.label ?? '';
+                    // 한 행에 같은 축의 셀이 둘 이상이면(그룹이 여러 열에 걸침) 보기 텍스트로 구분
+                    const tileLabel =
+                      rowTitle && cellsInGroup.length > 1 && optionLabel
+                        ? `${rowTitle} · ${optionLabel}`
+                        : rowTitle || optionLabel || '(라벨 없음)';
+                    const labelStyleSource = titleCell ?? option ?? choiceCell;
+                    return (
+                      <div key={choiceCell.id}>
+                        <label
+                          className={cn(
+                            'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors',
+                            checked
+                              ? 'border-blue-300 bg-blue-50 text-blue-900'
+                              : 'border-gray-200 bg-white text-gray-800',
+                            disabled && 'cursor-default opacity-50',
+                          )}
+                        >
+                          <span className="mt-0.5 flex shrink-0 items-center">
+                            {renderMobileChoiceInput(choiceCell, tileLabel)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span
+                              className={cn(
+                                'block whitespace-pre-line text-[15px] font-semibold leading-snug',
+                                getCellTextClassName(labelStyleSource),
+                              )}
+                              style={getCellTextStyle(labelStyleSource)}
+                            >
+                              <CellText
+                                text={tileLabel}
+                                html={
+                                  titleCell && cellsInGroup.length === 1
+                                    ? resolveCellTextHtml(titleCell, attrs, quotes)
+                                    : undefined
+                                }
+                              />
+                            </span>
+                            <MobileDisplayCells cells={displayCells} className="mt-1" />
+                          </span>
+                        </label>
+                        {option?.allowTextInput && checked && (
+                          <div className="mt-2">
+                            <OptionTextInput questionId={question.id} option={option} className="w-full" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {counter}
+      </div>
+    );
+  };
+
   const mobileMode = resolveMobileTableDisplayMode(question);
   /**
    * 표 격자 두 벌.
@@ -1159,6 +1312,10 @@ export function ChoiceTableResponse({
         counter={counter}
       />
     );
+  }
+
+  if (isMobile && mobileMode === 'axis-cards') {
+    return renderAxisCards();
   }
 
   if (
