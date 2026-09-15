@@ -12,8 +12,20 @@ import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { splitMobileDisplayCells } from '@/utils/mobile-display-cells';
 
+/**
+ * 표시 셀 글자 크기. `dense` 는 축 단위 카드 타일용 — 타일이 많이 반복되는 곳에서 설명이
+ * 제목과 위계를 다투지 않도록 13px·연한 회색·촘촘한 줄간격으로 내린다.
+ */
+export type MobileDisplayCellSize = 'default' | 'dense';
+
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
-function DisplayCellContent({ cell }: { cell: TableCell }) {
+function DisplayCellContent({
+  cell,
+  size = 'default',
+}: {
+  cell: TableCell;
+  size?: MobileDisplayCellSize;
+}) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
 
@@ -41,7 +53,10 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
   return (
     <div
       className={cn(
-        'whitespace-pre-wrap text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]',
+        'whitespace-pre-wrap [overflow-wrap:anywhere]',
+        size === 'dense'
+          ? 'text-[13px] leading-[1.45] text-gray-500'
+          : 'text-sm leading-relaxed text-gray-600',
         getCellTextClassName(cell),
       )}
       style={getCellTextStyle(cell)}
@@ -59,9 +74,11 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
 export function MobileDisplayCells({
   cells,
   className,
+  size = 'default',
 }: {
   cells: TableCell[];
   className?: string;
+  size?: MobileDisplayCellSize;
 }) {
   const { inline, collapsed } = splitMobileDisplayCells(cells);
   const [open, setOpen] = useState(false);
@@ -71,7 +88,7 @@ export function MobileDisplayCells({
   return (
     <div className={cn('space-y-2', className)}>
       {inline.map((cell) => (
-        <DisplayCellContent key={cell.id} cell={cell} />
+        <DisplayCellContent key={cell.id} cell={cell} size={size} />
       ))}
       {collapsed.length > 0 && (
         <div>
@@ -87,7 +104,7 @@ export function MobileDisplayCells({
           {open && (
             <div className="mt-2 space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
               {collapsed.map((cell) => (
-                <DisplayCellContent key={cell.id} cell={cell} />
+                <DisplayCellContent key={cell.id} cell={cell} size={size} />
               ))}
             </div>
           )}
