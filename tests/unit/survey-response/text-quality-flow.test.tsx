@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe('응답 품질 검사 — 「다음」 차단 흐름', () => {
-  it('자음만 쓰면 문구가 뜨고 「다음」이 막히며, 내용을 채우면 넘어간다', async () => {
+  it('자음만 쓰면 칸을 벗어난 뒤 문구가 뜨고 「다음」이 막히며, 내용을 채우면 넘어간다', async () => {
     const user = userEvent.setup();
     render(
       <SurveyResponseFlow
@@ -86,6 +86,8 @@ describe('응답 품질 검사 — 「다음」 차단 흐름', () => {
     const textarea = await screen.findByPlaceholderText('답변을 입력하세요...');
 
     await user.type(textarea, 'ㅋㅋㅋ');
+    expect(screen.queryByTestId('text-quality-violation')).toBeNull();
+    await user.tab();
     expect(screen.getByTestId('text-quality-violation')).toHaveTextContent(
       '자음·모음이나 숫자만으로는 답할 수 없습니다.',
     );
@@ -94,6 +96,7 @@ describe('응답 품질 검사 — 「다음」 차단 흐름', () => {
 
     await user.clear(textarea);
     await user.type(textarea, '너무 짧음');
+    await user.tab();
     expect(screen.getByTestId('text-quality-violation')).toHaveTextContent(
       '10자 이상 입력해 주세요.',
     );
@@ -102,6 +105,7 @@ describe('응답 품질 검사 — 「다음」 차단 흐름', () => {
 
     await user.clear(textarea);
     await user.type(textarea, '응답 화면이 느려서 개선이 필요합니다');
+    await user.tab();
     expect(screen.queryByTestId('text-quality-violation')).toBeNull();
     await user.click(screen.getByRole('button', { name: '다음' }));
     expect(await screen.findByText('마무리 질문')).toBeInTheDocument();

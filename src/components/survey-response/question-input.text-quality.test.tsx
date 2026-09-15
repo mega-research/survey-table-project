@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
@@ -52,6 +53,22 @@ describe('단답형·장문형 응답 품질 문구', () => {
       />,
     );
     expect(screen.queryByTestId('text-quality-violation')).toBeNull();
+  });
+
+  it('포커스 중에는 문구를 숨긴다 — 한글 조합 중 첫 자모(ㅇ)에 반응하지 않게', async () => {
+    const user = userEvent.setup();
+    render(
+      <QuestionInput
+        question={q('textarea', { textValidation: { rejectMeaningless: true } })}
+        value="ㅇ"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('text-quality-violation')).toBeInTheDocument();
+    await user.click(screen.getByRole('textbox'));
+    expect(screen.queryByTestId('text-quality-violation')).toBeNull();
+    await user.tab();
+    expect(screen.getByTestId('text-quality-violation')).toBeInTheDocument();
   });
 
   it('입력 상한이 있으면 단답형·장문형 모두 maxLength 로 막고 「현재 / 최대자」를 보인다', () => {

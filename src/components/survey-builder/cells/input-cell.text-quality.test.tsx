@@ -26,7 +26,7 @@ function inputCell(overrides: Partial<TableCell> = {}): TableCell {
 }
 
 describe('표 input 셀 응답 품질', () => {
-  it('치는 동안 셀 아래에 최소 글자 수·의미 없는 입력 문구가 뜬다', async () => {
+  it('칸을 벗어나면 셀 아래에 최소 글자 수·의미 없는 입력 문구가 뜬다', async () => {
     const user = userEvent.setup();
     render(
       <Harness cell={inputCell({ textValidation: { minLength: 5, rejectMeaningless: true } })} />,
@@ -34,18 +34,23 @@ describe('표 input 셀 응답 품질', () => {
     const input = screen.getByRole('textbox');
 
     await user.type(input, 'ㅋㅋ');
+    // 치는 동안에는 숨긴다 — 한글 조합 중 첫 자모에 반응하지 않게
+    expect(screen.queryByTestId('cell-text-quality-violation')).toBeNull();
+    await user.tab();
     expect(screen.getByTestId('cell-text-quality-violation')).toHaveTextContent(
       '자음·모음이나 숫자만으로는 답할 수 없습니다.',
     );
 
     await user.clear(input);
     await user.type(input, '짧다');
+    await user.tab();
     expect(screen.getByTestId('cell-text-quality-violation')).toHaveTextContent(
       '5자 이상 입력해 주세요. (현재 2자, 공백 제외)',
     );
 
     await user.clear(input);
     await user.type(input, '충분히 긴 답변');
+    await user.tab();
     expect(screen.queryByTestId('cell-text-quality-violation')).toBeNull();
   });
 

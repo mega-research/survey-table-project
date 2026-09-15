@@ -6,6 +6,7 @@ import { InteractiveTableResponse } from '@/components/survey-builder/interactiv
 import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
 import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
+import { useFieldFocus } from '@/hooks/use-field-focus';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useMobileView } from '@/hooks/use-media-query';
@@ -26,7 +27,7 @@ import {
   isPriorChoice,
   isPriorText,
 } from '@/lib/survey/prior-answer-highlight';
-import { hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
+import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
@@ -262,35 +263,18 @@ function QuestionInputControl({
         <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />
       );
 
-    case 'textarea': {
-      // 응답 품질 위반(최소 글자 수·의미 없는 입력)은 치는 동안 입력칸 아래에 바로 보인다 —
-      // 「다음」에서 처음 알면 이미 쓴 글을 다시 고쳐야 하는 자리가 어딘지 찾게 된다.
-      const quality = resolveTextQualityViolation(question, value, priorAnswersForQuality);
-      const textareaMax = effectiveMaxLength(question.textValidation);
-      const textareaValue = typeof value === 'string' ? value : '';
+    case 'textarea':
       return (
-        <div className="w-full">
-          <textarea
-            className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
-              isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
-            }`}
-            rows={4}
-            placeholder={question.placeholder || '답변을 입력하세요...'}
-            value={textareaValue}
-            onChange={(e) => onChange(e.target.value)}
-            {...(textareaMax !== null ? { maxLength: textareaMax } : {})}
-          />
-          {textareaMax !== null && (
-            <TextLengthCounter current={textareaValue.length} max={textareaMax} />
-          )}
-          {quality && (
-            <p className="mt-1 px-1 text-xs text-red-500" data-testid="text-quality-violation">
-              * {quality.message}
-            </p>
-          )}
-        </div>
+        <TextareaResponseInput
+          question={question}
+          value={value}
+          onChange={onChange}
+          priorAnswers={priorAnswersForQuality}
+          priorHighlightCls={
+            isPriorText(priorHighlight, question.id, value) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
+          }
+        />
       );
-    }
 
     case 'radio':
       return (
@@ -773,6 +757,49 @@ function defaultPlaceholder(isNumberMode: boolean, format: InputFormat | null): 
 }
 
 // 단답형(text) prefill 지원 컴포넌트
+/**
+ * 장문형 입력 — 응답 품질 위반(최소·최대 글자 수·의미 없는 입력)은 칸을 벗어난 뒤 입력칸 아래에
+ * 보인다. 치는 동안 띄우면 한글 조합 중 첫 자모(ㅇ)에 "자음만으로는 답할 수 없다" 가 스친다.
+ */
+function TextareaResponseInput({
+  question,
+  value,
+  onChange,
+  priorAnswers,
+  priorHighlightCls,
+}: {
+  question: Question;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  priorAnswers: PriorAnswers | null;
+  priorHighlightCls: string;
+}) {
+  const focus = useFieldFocus();
+  const quality = focus.focused ? null : resolveTextQualityViolation(question, value, priorAnswers);
+  const max = effectiveMaxLength(question.textValidation);
+  const text = typeof value === 'string' ? value : '';
+  return (
+    <div className="w-full">
+      <textarea
+        className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${priorHighlightCls}`}
+        rows={4}
+        placeholder={question.placeholder || '답변을 입력하세요...'}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={focus.onFocus}
+        onBlur={focus.onBlur}
+        {...(max !== null ? { maxLength: max } : {})}
+      />
+      {max !== null && <TextLengthCounter current={text.length} max={max} />}
+      {quality && (
+        <p className="mt-1 px-1 text-xs text-red-500" data-testid="text-quality-violation">
+          * {quality.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** 「현재 / 최대자」 글자 수 표시 — 표 input 셀과 같은 모양. 상한에 닿으면 붉게. */
 function TextLengthCounter({ current, max }: { current: number; max: number }) {
   return (
@@ -804,12 +831,12 @@ function TextResponseInput({
   const isNumberMode = question.inputType === 'number';
   const format = isInputFormat(question.inputType) ? question.inputType : null;
   // 응답 품질 검사 — 평문 모드·손대지 않은 이월 값 면제 판정은 검증 쪽 함수가 쥔다.
+  // 문구는 포커스가 빠진 뒤에만(형식 검사와 같은 규칙 — 한글 조합 중 자모에 반응하지 않게).
   const { answers: priorAnswersForQuality } = usePriorAnswers();
-  const qualityViolation = resolveTextQualityViolation(
-    question,
-    currentValue,
-    priorAnswersForQuality,
-  );
+  const focus = useFieldFocus();
+  const qualityViolation = focus.focused
+    ? null
+    : resolveTextQualityViolation(question, currentValue, priorAnswersForQuality);
   // 입력 상한 — 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시. 평문 모드에서만.
   const maxLength =
     isPlainTextInput(question) && !isPrefilled ? effectiveMaxLength(question.textValidation) : null;
@@ -873,10 +900,12 @@ function TextResponseInput({
         onFocus={() => {
           handleFocus();
           formatField.handleFocus();
+          focus.onFocus();
         }}
         onBlur={() => {
           handleBlur();
           formatField.handleBlur();
+          focus.onBlur();
         }}
         className={`w-full text-base ${
           !isPrefilled && isPriorText(priorHighlight, question.id, currentValue)

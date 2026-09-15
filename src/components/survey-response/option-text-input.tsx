@@ -1,6 +1,7 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { useFieldFocus } from '@/hooks/use-field-focus';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { resolveCellTextQualityViolation } from '@/lib/survey/numeric-validation';
@@ -110,15 +111,19 @@ export function OptionTextInput({
     priorOriginal: priorOptionText(priorAnswersForFormat, questionId, option.id),
   });
   // 응답 품질 위반(표 input 셀 전용) — 평문 모드·이월 면제 판정은 검증 쪽 함수가 쥔다
-  const qualityViolation = resolveCellTextQualityViolation(
-    {
-      inputType: option.textInputType,
-      defaultValueTemplate: option.defaultValueTemplate,
-      textValidation: option.textValidation,
-    },
-    rawValue,
-    priorOptionText(priorAnswersForFormat, questionId, option.id),
-  );
+  // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
+  const focus = useFieldFocus();
+  const qualityViolation = focus.focused
+    ? null
+    : resolveCellTextQualityViolation(
+        {
+          inputType: option.textInputType,
+          defaultValueTemplate: option.defaultValueTemplate,
+          textValidation: option.textValidation,
+        },
+        rawValue,
+        priorOptionText(priorAnswersForFormat, questionId, option.id),
+      );
 
   const sharedProps = {
     'aria-label': ariaLabel,
@@ -136,19 +141,26 @@ export function OptionTextInput({
     ...(isNumberMode
       ? {
           inputMode: 'decimal' as const,
-          onFocus: numeric.handleFocus,
-          onBlur: numeric.handleBlur,
           'aria-invalid': numeric.rangeViolation != null || undefined,
         }
       : {}),
     ...(format
       ? {
           inputMode: formatField.inputMode,
-          onFocus: formatField.handleFocus,
-          onBlur: formatField.handleBlur,
           'aria-invalid': formatField.violation != null || undefined,
         }
       : {}),
+    // 모드별 포커스 처리(숫자 힌트·형식 정돈)에 품질 문구용 포커스 추적을 얹는다
+    onFocus: () => {
+      if (isNumberMode) numeric.handleFocus();
+      if (format) formatField.handleFocus();
+      focus.onFocus();
+    },
+    onBlur: () => {
+      if (isNumberMode) numeric.handleBlur();
+      if (format) formatField.handleBlur();
+      focus.onBlur();
+    },
     placeholder:
       option.textInputPlaceholder || (format ? formatSampleValue(format) : DEFAULT_PLACEHOLDER),
     className: cn(className, priorTextCls),

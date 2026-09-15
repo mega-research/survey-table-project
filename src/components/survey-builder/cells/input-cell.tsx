@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 
 import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { Input } from '@/components/ui/input';
+import { useFieldFocus } from '@/hooks/use-field-focus';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
@@ -100,11 +101,15 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   // 응답 품질 위반 — 평문 모드·prefill·이월 면제 판정은 검증 쪽 함수가 쥔다(표·보기 표 공용)
-  const qualityViolation = resolveCellTextQualityViolation(
-    cell,
-    currentValue,
-    priorAnswerText(priorAnswersForFormat, questionId, cell.id),
-  );
+  // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
+  const focus = useFieldFocus();
+  const qualityViolation = focus.focused
+    ? null
+    : resolveCellTextQualityViolation(
+        cell,
+        currentValue,
+        priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+      );
   const hasViolation =
     Boolean(rangeViolation || formatField.violation || qualityViolation) && !isPrefilled;
   // 띄우는 안내의 앵커 — 입력칸 자체. 셀이 아니라 입력칸 아래에 붙어야 단위 글자 옆에서도 맞는다.
@@ -145,6 +150,8 @@ export const InputCell = React.memo(function InputCell({
               rows={rows}
               value={textValue}
               onChange={(e) => onUpdateValue(e.target.value)}
+              onFocus={focus.onFocus}
+              onBlur={focus.onBlur}
               placeholder={cell.placeholder || '답변을 입력하세요...'}
               maxLength={cell.inputMaxLength}
               disabled={isPrefilled}
@@ -172,10 +179,12 @@ export const InputCell = React.memo(function InputCell({
               onFocus={() => {
                 handleFocus();
                 formatField.handleFocus();
+                focus.onFocus();
               }}
               onBlur={() => {
                 handleBlur();
                 formatField.handleBlur();
+                focus.onBlur();
               }}
               placeholder={
                 cell.placeholder ||
