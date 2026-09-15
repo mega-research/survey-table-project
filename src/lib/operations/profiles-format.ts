@@ -5,7 +5,7 @@
  * (`profiles-filter-bar.tsx` 등) 가 import 해도 안전하도록 본 모듈은 DB/server-only
  * 의존을 일체 갖지 않는다.
  *
- * 단위 테스트: `tests/unit/domains/operations/profiles.test.ts`.
+ * 단위 테스트: `곁의 profiles-format.test.ts`.
  */
 
 import { buildRenderSteps, stepIdOf } from '@/utils/group-ordering';

@@ -201,9 +201,9 @@ export async function saveAdminEdit(
     // contracts/survey 의 SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
     // 보장이 타입 레벨엔 없다(questions 는 필수로 선언돼 있지만 손상된 스냅샷 행이 들어오면
     // undefined/비배열일 수 있음, lookups 는 아예 타입에 없음) — buildChangedQuestions
-    // (response-edit-diff.ts:40, `snapshot?.questions ?? []`)와 동일하게 방어적으로 읽는다.
-    // lookups 는 buildSurveySnapshot(lib/versioning/snapshot-builder.ts) 이 publish 시 항상
-    // 함께 freeze 해 넣지만(survey-read.service.ts 의 snapshot.lookups 사용과 동일 근거)
+    // (lib/operations/response-edit-diff.ts 의 `snapshot?.questions ?? []`)와 동일하게 방어적으로 읽는다.
+    // lookups 는 buildSurveySnapshot(server/survey-builder/services/versioning/snapshot-builder.ts) 이 publish 시 항상
+    // 함께 freeze 해 넣지만(survey-builder/services/survey-read.ts 의 snapshot.lookups 사용과 동일 근거)
     // 타입에 없으므로 안전 단언 캐스팅.
     const rawSnapshotForCalc = versionSnapshot as unknown as {
       questions?: unknown;

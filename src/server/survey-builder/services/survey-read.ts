@@ -50,7 +50,7 @@ import type {
 //
 // 코드 복원(generateAllOptionCodes/generateAllCellCodes)·snapshot 우선+fallback·React.cache
 // 불변식(E·G)은 유지한다. getSurveyWithDetails 본문은 publish/analytics 가 공유하는
-// data/surveys.ts 단일 구현에 위임해 매핑 로직 중복(신규 컬럼 누락 위험)을 제거한다.
+// server/read-models/survey-structure.ts 단일 구현에 위임해 매핑 로직 중복(신규 컬럼 누락 위험)을 제거한다.
 
 // 설문·그룹·질문 조회와 보관함 태그는 read-models 가 단일 구현을 소유한다.
 // 이 service 는 그것을 자기 도메인 표면으로 다시 내보낼 뿐이다 —

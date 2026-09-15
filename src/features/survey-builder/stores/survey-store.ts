@@ -64,7 +64,7 @@ import {
   TableRow,
 } from '@/types/survey';
 
-// 질문 변경 추적용 changeset 타입/헬퍼는 @/lib/survey-builder/changeset 로 추출됨.
+// 질문 변경 추적용 changeset 타입/헬퍼는 @/features/survey-builder/lib/changeset 로 추출됨.
 // 기존 import 호환을 위해 타입은 store 에서도 re-export 한다.
 export type { QuestionChangeset };
 

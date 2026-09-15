@@ -5,7 +5,7 @@ import { TokenWarningPanel } from '@/features/survey-builder/token-warning-panel
 import type { Question, QuestionGroup } from '@/types/survey';
 
 /**
- * 최소 필드만 채운 Question 팩토리. tests/unit/answer-quote.test.ts 와 동일한
+ * 최소 필드만 채운 Question 팩토리. src/utils/answer-quote.test.ts 와 동일한
  * `as unknown as Question` 캐스팅 관례를 따른다 — 타입 전체를 채우지 않아도
  * 컴포넌트가 실제로 읽는 필드만 있으면 충분하다.
  */

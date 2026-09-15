@@ -52,7 +52,7 @@ export const InputCell = React.memo(function InputCell({
   // "저장되지 않는 파생값"이 불변식이다(utils/answer-quote.ts).
   // 게다가 표 셀 답변은 셀에 piiEncrypted 를 켠 경우에만 암호화되므로, 인용을 허용하면
   // 암호화 단답형의 원문이 인용값을 타고 평문 셀 답변으로 새는 경로가 열린다.
-  // 질문 레벨 prefill(question-input.tsx)·서버 재검증(response.service.ts)도 attrs 기준이다.
+  // 질문 레벨 prefill(question-input.tsx)·서버 재검증(server/survey-response/services/submitted-answers.ts)도 attrs 기준이다.
   const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
   const currentValue = (cellResponse as string) || '';
   const textValue = isPrefilled ? prefilledValue : currentValue;

@@ -116,7 +116,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/server/shared/survey-control)
+// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/server/read-models/survey-control)
 vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => flagsMock(...a),
   isValidTestToken: vi.fn(() => false),

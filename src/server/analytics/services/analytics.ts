@@ -17,7 +17,7 @@ import type {
 } from '../domain/analytics';
 
 // ========================
-// 내부 조회 헬퍼 (data/responses.ts 로직 인라인 — service 자기완결)
+// 내부 조회 헬퍼 (server/read-models/responses.ts 로직 인라인 — service 자기완결)
 // ========================
 
 /** 설문별 응답 조회 (삭제·테스트 제외, 시작시간 내림차순) — 통계 모수 */

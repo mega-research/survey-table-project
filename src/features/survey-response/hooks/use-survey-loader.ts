@@ -444,7 +444,8 @@ export function useSurveyLoader({
     return () => {
       cancelled = true;
     };
-    // adminContext/previewContext 는 페이지 수명 동안 안정적 (부모에서 한 번만 생성) — deps 미포함
+    // adminContext/previewContext/entrySeed/resolvedSurveyId 는 페이지 수명 동안 안정적인 RSC
+    // props 이고 setResponses 는 안정 세터다 (부모에서 한 번만 생성) — deps 미포함
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identifier, isAdminEdit, isPreview, inviteToken, testToken]);
 

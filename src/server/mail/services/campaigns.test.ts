@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // eq()/and() 가 만드는 SQL 트리를 걷어 Param 인스턴스(encoder.name = 컬럼 SQL 명)만
 // 추출한다 — where 절에 is_test 조건이 실제로 실렸는지를 (모킹이 아니라) 검증하는
 // 유일한 방법이라, 이 select/update 체인은 shallow stub 이 아니라 파라미터 파싱기다.
-// (src/features/survey-response/server/services/response-edit.service.test.ts 와 동일 패턴.)
+// (src/server/survey-response/services/response-edit.test.ts 와 동일 패턴.)
 function extractParams(
   node: unknown,
   out: Record<string, unknown> = {},

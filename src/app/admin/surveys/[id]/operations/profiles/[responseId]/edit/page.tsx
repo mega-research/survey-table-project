@@ -111,7 +111,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   let initialResponses = response.questionResponses as Record<string, unknown>;
   if (migratedFromOldVersion) {
     // SurveyVersionSnapshot.questions 는 타입상 필수지만 손상된 스냅샷 행은 방어적으로
-    // 읽는다(response-edit.service.ts 161-175행과 동일 캐스팅 패턴).
+    // 읽는다(server/survey-response/services/response-edit.ts 의 같은 캐스팅 패턴).
     const rawSnapshot = version?.snapshot as unknown as { questions?: unknown } | null;
     if (Array.isArray(rawSnapshot?.questions)) {
       const snapshotQuestions = normalizeQuestions(rawSnapshot.questions, 'preserve').map(

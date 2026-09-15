@@ -4,7 +4,7 @@ import type { Question, QuestionGroup } from '@/types/survey';
 
 // 최소 표 질문 헬퍼 — 숫자 input(num) + 텍스트 input(txt) + calc(c) 셀, calc 의 formula 는
 // 인자로 받은 셀 참조를 가리킨다. Task 2 의 tableQuestion 헬퍼 패턴을 복제(테스트 파일 간
-// import 공유하지 않는 tests/unit 관례).
+// import 공유하지 않는 단위 테스트 관례).
 function calcQuestion(order: number, id: string, formulaCellRef: { questionId?: string; cellId: string }): Question {
   return {
     id, type: 'table', title: id, required: false, order,

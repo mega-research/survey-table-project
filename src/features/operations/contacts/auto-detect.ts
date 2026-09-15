@@ -2,7 +2,7 @@
  * 엑셀 헤더 (정규화된 한국어) → 시스템 필드 + PII 타입 자동 매칭.
  * 우선순위: 정확 매칭 > 부분 포함.
  *
- * 단위 테스트: tests/unit/domains/contacts/auto-detect.test.ts.
+ * 단위 테스트: 곁의 auto-detect.test.ts.
  */
 
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';

@@ -393,7 +393,7 @@ export interface TableCell {
   choiceGroupId?: string;
   /**
    * 단독 선택 보기 (choice_opt 셀, 체크박스 그룹 전용 — CONTEXT.md). 범위는 이 셀이 속한 그룹이다.
-   * QuestionOption.exclusiveChoice 와 같은 규칙(`lib/survey/exclusive-choice.ts`)을 탄다.
+   * QuestionOption.exclusiveChoice 와 같은 규칙(`features/question-renderer/utils/exclusive-choice.ts`)을 탄다.
    */
   exclusiveChoice?: boolean;
   /**
@@ -469,7 +469,7 @@ export interface TableCell {
   emptyDefault?: number;
   // 숫자 input 셀 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat;
-  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, utils/text-quality)
+  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, features/question-renderer/utils/text-quality)
   textValidation?: TextValidation | null;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
@@ -807,7 +807,7 @@ export interface Question {
   emptyDefault?: number;
   // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat | null;
-  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (utils/text-quality).
+  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (features/question-renderer/utils/text-quality).
   // 숫자 모드·입력 형식과 배타(그쪽은 자기 검사가 있다). NULL = 검사 없음(기존 전부).
   textValidation?: TextValidation | null;
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)

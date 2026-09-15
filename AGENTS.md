@@ -127,18 +127,18 @@ src/
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
 │   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library — 구 src/hooks/queries
-│   │   ├── lib/                # changeset·diff-payload — 구 src/lib/survey-builder
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
+│   │   ├── lib/                # changeset·diff-payload·persist-question·variable-generator·saved-question-branch-logic·cell-formula/gating-diagnostics — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap·prune-sum-constraints·input-mode(숫자 모드↔입력 형식 전환)
 │   │   └── (루트 26개)          # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields 등) + app 이 직접 여는 모달·패널
 │   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
 │   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (92개) — 어떤 feature 도 import 하지 않는다
 │   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
 │   │   │                       # 셀 본문 cell-text·순위형 클릭 ranking-click-select·보기 소스 표 셀 컨트롤 choice-table-cell-control/gated-cell·상세기재 줄 option-text-row·행 단위 그룹 카드 mobile-row-group-cards 도 여기 (2026-09-15 병합 — 스토어 직접 구독 대신 response-sources 주입 계약으로 옮겨 적었다)
+│   │   │                       # pdf-page-view(조사표 한 쪽 렌더, 빌더·응답 공용) 도 루트
 │   │   ├── cells/              # 표 셀 렌더러
 │   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅 + 행 반복 use-row-repeat·입력 형식 use-input-format-field·포커스 use-field-focus
-│   │   │                       # pdf-page-view(조사표 한 쪽 렌더, 빌더·응답 공용) 도 여기
-│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts + anchor-geometry·anchor-outline(조사표 좌표) + ranking-mobile-sections(순위형 모바일 구간) + 입력 형식 파서 input-format·응답 품질 text-quality/cell-text-quality·단독 선택 exclusive-choice·순위 클릭 ranking-click·보기 그룹 외곽선/섹션 라벨 choice-group-outline/section-label (builder·response 도 소비 — 여러 feature 가 쓰는 순수 규칙은 방향상 가장 낮은 renderer 가 소유, 2026-09-15)
+│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts + anchor-geometry·anchor-outline(조사표 좌표) + ranking-mobile-sections(순위형 모바일 구간) + 입력 형식 파서 input-format·응답 품질 text-quality/cell-text-quality·단독 선택 exclusive-choice·순위 클릭 ranking-click·보기 그룹 외곽선/섹션 라벨 choice-group-outline/section-label (input-format·text-quality/cell-text-quality·exclusive-choice 는 builder·response 도 소비하고 나머지는 렌더러 전용 — 여러 feature 가 쓰는 순수 규칙은 방향상 가장 낮은 renderer 가 소유, 2026-09-15)
 │   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (35개) — 렌더러만 import
 │   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
 │   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate·hover-follow·split-viewport·format-normalize(제출 전 형식 정규화)·prior-answer-prefill(이월값 프리필·회수)·completion-screen(완료 화면 문구) (순수)
@@ -184,7 +184,7 @@ src/
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
 │   ├── contacts/               # 그룹 레벨·업로드 병합 매칭·업로드 제한·결과코드 정규화(result-code-statuses-normalize)·Raw 양식 이월 응답 되읽기 raw-format-import 순수 공용
 │   │                           # (엑셀 파서·스킴 헬퍼는 server/contacts, 컬럼 자동감지는 features/operations)
-│   ├── operations/             # 운영 콘솔 공유 계산 19파일 — format 짝 11개는 *-format.ts(서버 쌍이 동일 어간 소유) + 공유 판정·필터 8개. UI 도 소비하므로 여기가 정답 (ADR 0016)
+│   ├── operations/             # 운영 콘솔 공유 계산 21파일 — format 짝 12개는 *-format.ts(서버 쌍이 동일 어간 소유) + 공유 판정·필터 9개. UI 도 소비하므로 여기가 정답 (ADR 0016)
 │   │                           # contacts-filter-sql.server.ts 는 drizzle 의존 서버 전용 — lib 안 .server.ts 마킹의 예
 │   ├── mail/                   # 렌더 미리보기·변수 추출·이미지 클릭영역·상수 4파일 (발송·dispatch·reconcile·빌링은 server/mail)
 │   ├── quota/                  # 쿼터 응답 매칭·정규화·달성 상태 계산 quota-status-calc (쿼터 게이트는 features/survey-response/lib/quota-gate)
@@ -230,7 +230,7 @@ src/
 │   └── schema/                 # Drizzle ORM 스키마 (아래 DB 섹션 참조)
 │
 ├── types/                      # 전역 타입·어휘 4파일
-│   ├── survey.ts               # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (808줄, 소비 237파일)
+│   ├── survey.ts               # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (986줄, 비테스트 소비 282파일)
 │   │                           # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
 │   ├── question-types.ts       # 질문 유형 어휘 런타임 SoT — QUESTION_TYPES 배열 ↔ QuestionType 동치를 tsc 로 강제
 │   ├── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
@@ -244,7 +244,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
+스키마 파일은 도메인별로 분리: `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
 
 ### 설문 도메인 (surveys.ts)
 
@@ -265,6 +265,7 @@ surveys                    # 설문 설정
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
+├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
 │                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부
@@ -292,7 +293,7 @@ questions                  # 개별 질문
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
-├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, features/question-renderer/utils/text-quality)
+├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, maxLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, features/question-renderer/utils/text-quality)
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
@@ -321,7 +322,7 @@ survey_responses           # 수집된 응답
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
-survey_documents           # 조사표 — 설문에 붙는 PDF (설문당 여러 행 허용)
+survey_documents           # 조사표 — 설문에 붙는 PDF (설문당 여러 행 허용). 이 표와 아래 앵커 표는 survey-documents.ts
 ├── id, surveyId, fileKey (R2 survey/document/), filename, pageCount, order
 └── createdAt, updatedAt
 
@@ -682,7 +683,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 ## 쿼터
 
-`surveys.quota_config` (JSONB, NULL = 쿼터 없음) + `features/quota` + `lib/quota/`.
+`surveys.quota_config` (JSONB, NULL = 쿼터 없음) + `features/operations/quota` + `lib/quota/`.
 
 - 차원(`questionId` 바인딩, `choice` | `numeric`) × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만.
 - `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
@@ -815,7 +816,7 @@ pnpm worker:sentry-jandi:deploy  # 워커 배포 (Cloudflare)
 
 // 사용 예시
 import { cn } from "@/lib/utils";
-import { useSurveyStore } from "@/stores/survey-store";
+import { useSurveyStore } from "@/features/survey-builder/stores/survey-store";
 import { Button } from "@/components/ui/button";
 ```
 
@@ -920,7 +921,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 ```typescript
 // 1. 임포트
 import { useState } from "react";
-import { useSurveyStore } from "@/stores/survey-store";
+import { useSurveyStore } from "@/features/survey-builder/stores/survey-store";
 import { Button } from "@/components/ui/button";
 
 // 2. 타입 정의

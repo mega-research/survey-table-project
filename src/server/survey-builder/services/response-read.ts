@@ -11,7 +11,7 @@ import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import type { ResponsesWithAnswersInput } from '../domain/survey-read';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다(authed 미들웨어가 대체).
-// data/responses.ts 의 조회·export 로직을 byte 보존으로 흡수한다. notDeletedResponse 필터는
+// server/read-models/responses.ts 의 조회·export 로직을 byte 보존으로 흡수한다. notDeletedResponse 필터는
 // data/response-filters 에서 제자리 import. drizzle: ANY/timestamptz lock 미사용(eq/and/isNull).
 
 // ========================
@@ -58,9 +58,9 @@ export async function getCompletedResponses(surveyId: string) {
 
 // 응답 단일 조회(소프트삭제 제외). WS-2 IDOR 봉인: responseId 단독 조회는 다른 설문
 // 소속 응답까지 끄집어낼 수 있으므로 surveyId 를 WHERE 스코프에 추가해 봉인한다.
-// (data/responses 의 includeDeleted 경로는 다른 호출자 전용 — 본 service 미노출.)
+// (server/read-models/responses.ts 의 includeDeleted 경로는 다른 호출자 전용 — 본 service 미노출.)
 // notTestResponse 의도적 미적용: 단건 조회는 모수 통계가 아니고, 관리자가 테스트 응답
-// 상세를 열람할 수 있어야 한다 (data/responses.ts getResponseById 와 동일 예외).
+// 상세를 열람할 수 있어야 한다 (server/read-models/responses.ts getResponseById 와 동일 예외).
 export async function getResponseById(responseId: string, surveyId: string) {
   const where = and(
     eq(surveyResponses.id, responseId),

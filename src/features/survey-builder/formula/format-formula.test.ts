@@ -4,7 +4,7 @@ import { formatFormulaPreview } from '@/features/survey-builder/formula/format-f
 import type { CalcExpr, Question } from '@/types/survey';
 
 // 최소 표 질문 헬퍼 — 숫자 input 셀 2개(exportLabel 로 라벨 확정).
-// tests/unit 관례를 따라 다른 테스트 파일과 fixture 를 공유하지 않는다.
+// 단위 테스트 관례를 따라 다른 테스트 파일과 fixture 를 공유하지 않는다.
 function tableQuestion(): Question {
   return {
     id: 'q1',

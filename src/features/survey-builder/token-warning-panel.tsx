@@ -436,7 +436,7 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
       const label = q.title || '(제목 없음)';
       // prefill 템플릿은 질문 레벨(question-input.tsx)·표 셀(cells/input-cell.tsx) 모두
       // attrs 만 치환한다. prefill 결과는 응답으로 저장되는 값이고 응답 인용은 저장되지
-      // 않는 파생값이라, 두 채널을 섞지 않는다(서버 재검증도 attrs 기준 — response.service.ts).
+      // 않는 파생값이라, 두 채널을 섞지 않는다(서버 재검증도 attrs 기준 — server/survey-response/services/submitted-answers.ts).
       for (const name of extractQuoteTokens([q.defaultValueTemplate ?? undefined])) {
         out.push({ location: `단답형 prefill 템플릿 (${label})`, name });
       }

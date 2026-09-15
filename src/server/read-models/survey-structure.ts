@@ -87,7 +87,7 @@ type QuestionRow = typeof questions.$inferSelect;
 
 /**
  * DB 행 → 클라이언트 Question 변환 — 발행 스냅샷·빌더 로드가 공유하는 유일한 읽기 매퍼.
- * 신규 영속 컬럼은 여기 명시 등재가 필요하며, 누락은 tests/unit/data/map-question-row.test.ts
+ * 신규 영속 컬럼은 여기 명시 등재가 필요하며, 누락은 곁의 map-question-row.test.ts
  * 가 PERSISTED_QUESTION_FIELDS 전수 대조로 잡는다 (쓰기 채널 SSOT 의 읽기 방향 거울).
  */
 export function mapQuestionRow(q: QuestionRow): QuestionType {
