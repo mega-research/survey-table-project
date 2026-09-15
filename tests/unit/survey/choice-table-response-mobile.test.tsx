@@ -498,21 +498,10 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
     expect(second).toHaveTextContent('③ 없음');
   });
 
-  it('설명 셀은 모바일 셀 표시 설정을 따라 두 카드 모두에 붙고, 제목보다 작은 글자다', () => {
+  it('설명 셀은 모바일 셀 표시 설정을 따라 두 카드 모두에 붙는다', () => {
     render(<ChoiceTableResponse question={axisQuestion()} value={{}} onChange={() => {}} />);
-    const descs = screen.getAllByText('총괄 연산 칩');
-    expect(descs).toHaveLength(2);
-    expect(descs[0]!.closest('.text-\\[13px\\]')).not.toBeNull();
+    expect(screen.getAllByText('총괄 연산 칩')).toHaveLength(2);
     expect(screen.queryByText('-')).toBeNull();
-  });
-
-  it('타일의 선택 상자는 커스텀 상자이고 네이티브 input 은 투명하게 겹쳐 있다', () => {
-    render(<ChoiceTableResponse question={axisQuestion()} value={{ cb1: ['r1c2'] }} onChange={() => {}} />);
-    const input = within(screen.getByTestId('axis-card-g1')).getByLabelText('① 연산 및 제어');
-    expect(input.parentElement).toHaveClass('[&>input]:opacity-0');
-    const box = input.parentElement!.nextElementSibling!;
-    expect(box).toHaveClass('bg-blue-500');
-    expect(box.querySelector('svg')).not.toBeNull();
   });
 
   it('카드 머리는 화면 위에 고정된다', () => {

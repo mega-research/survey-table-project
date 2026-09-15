@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Check, ChevronRight, ListChecks } from 'lucide-react';
+import { ChevronRight, ListChecks } from 'lucide-react';
 
 import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row-selector-modal';
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
@@ -1027,7 +1027,7 @@ export function ChoiceTableResponse({
       );
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {collectChoiceGroups(question).map((group) => {
           const groupId = group.cells[0]?.choiceGroupId ?? 'none';
           const columnLabel = group.cells
@@ -1053,7 +1053,7 @@ export function ChoiceTableResponse({
                 <div
                   data-testid="axis-card-header"
                   className={cn(
-                    'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3.5',
+                    'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
                     unfilled ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white',
                   )}
                 >
@@ -1067,7 +1067,7 @@ export function ChoiceTableResponse({
                   )}
                 </div>
               )}
-              <div className="space-y-2 p-4">
+              <div className="space-y-2 p-3">
                 {visibleRows.flatMap((row) => {
                   const cellsInGroup = row.cells.filter(
                     (c) => c.type === 'choice_opt' && !c.isHidden && memberIds.has(c.id),
@@ -1087,44 +1087,20 @@ export function ChoiceTableResponse({
                         ? `${rowTitle} · ${optionLabel}`
                         : rowTitle || optionLabel || '(라벨 없음)';
                     const labelStyleSource = titleCell ?? option ?? choiceCell;
-                    const isRadioTile =
-                      (isGrouped ? getGroupTypeOfCell(question, choiceCell.id) : isCheckbox ? 'checkbox' : 'radio') ===
-                      'radio';
                     return (
                       <div key={choiceCell.id}>
                         <label
                           data-cell-id={choiceCell.id}
                           className={cn(
-                            'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-[10px] border px-3 py-2.5 transition-colors',
+                            'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors',
                             checked
                               ? 'border-blue-300 bg-blue-50 text-blue-900'
                               : 'border-gray-200 bg-white text-gray-800',
                             disabled && 'cursor-default opacity-50',
                           )}
                         >
-                          {/* 커스텀 선택 상자 — 네이티브 input 은 투명하게 위에 겹쳐 두어 탭·포커스·
-                              aria 는 그대로 받고, 모양은 아래 상자(peer 상태)가 그린다. iOS·Android 가
-                              각자 그리는 기본 체크박스가 타일마다 반복되면 카드 전체가 거칠어 보였다. */}
-                          <span className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded focus-within:ring-2 focus-within:ring-blue-500/30">
-                            <span className="absolute inset-0 [&>input]:absolute [&>input]:inset-0 [&>input]:z-10 [&>input]:m-0 [&>input]:h-full [&>input]:w-full [&>input]:cursor-pointer [&>input]:opacity-0">
-                              {renderMobileChoiceInput(choiceCell, tileLabel)}
-                            </span>
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'pointer-events-none flex h-5 w-5 items-center justify-center border-[1.5px] bg-white transition-colors',
-                                isRadioTile ? 'rounded-full' : 'rounded',
-                                checked ? 'border-blue-500 bg-blue-500' : 'border-gray-400',
-                                checked && isPriorChoiceCell(choiceCell.id) && 'border-red-500 bg-red-500',
-                              )}
-                            >
-                              {checked &&
-                                (isRadioTile ? (
-                                  <span className="h-2 w-2 rounded-full bg-white" />
-                                ) : (
-                                  <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
-                                ))}
-                            </span>
+                          <span className="mt-0.5 flex shrink-0 items-center">
+                            {renderMobileChoiceInput(choiceCell, tileLabel)}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span
@@ -1143,7 +1119,7 @@ export function ChoiceTableResponse({
                                 }
                               />
                             </span>
-                            <MobileDisplayCells cells={displayCells} className="mt-1" size="dense" />
+                            <MobileDisplayCells cells={displayCells} className="mt-1" />
                           </span>
                         </label>
                         {option?.allowTextInput && checked && (
