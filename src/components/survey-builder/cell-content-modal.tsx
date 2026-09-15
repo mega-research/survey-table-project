@@ -82,7 +82,7 @@ import {
   inferSpssMeasure,
   inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
-import { isPlainTextInput, normalizeTextValidation } from '@/utils/text-quality';
+import { isPlainTextInput } from '@/utils/text-quality';
 
 import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
 import { CellChoiceEditor } from './cell-choice-editor';
@@ -99,6 +99,7 @@ import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
 import { getYouTubeEmbedUrl } from './table-cell-renderers';
+import { TextValidationFields } from './text-validation-fields';
 import { VariableButton } from './variable-button';
 
 const TEXT_POSITION_OPTIONS: Array<{
@@ -1293,68 +1294,13 @@ export function CellContentModal({
                     </p>
                   </label>
                 </div>
-                {/* 응답 품질 검사 — 단답형 문항과 같은 규칙. 숫자·형식 모드에서는 잠근다(배타). */}
-                {(() => {
-                  const locked = !isPlainTextInput({ type: 'text', inputType });
-                  const config = cellTextValidation ?? {};
-                  const update = (next: {
-                    minLength?: number | undefined;
-                    rejectMeaningless?: boolean | undefined;
-                  }) => setCellTextValidation(normalizeTextValidation({ ...config, ...next }));
-                  return (
-                    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
-                      <p className="text-sm font-medium">응답 품질 검사</p>
-                      <p className="text-xs text-gray-500">
-                        {locked
-                          ? '숫자 모드·입력 형식 칸은 자기 검사를 씁니다. 평문 모드에서만 설정할 수 있습니다.'
-                          : '조건에 맞지 않으면 응답자가 「다음」으로 넘어갈 수 없습니다. 관리자 응답 수정에서는 경고 후 통과합니다.'}
-                      </p>
-                      <div className="flex items-center gap-2 text-sm">
-                        <label htmlFor="cell-text-min-length" className="w-24 shrink-0">
-                          최소 글자 수
-                        </label>
-                        <input
-                          id="cell-text-min-length"
-                          type="number"
-                          min={1}
-                          step={1}
-                          inputMode="numeric"
-                          disabled={locked}
-                          className="w-24 rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100"
-                          value={
-                            typeof config.minLength === 'number' ? String(config.minLength) : ''
-                          }
-                          onChange={(e) => {
-                            const n = parseInt(e.target.value, 10);
-                            update({ minLength: Number.isFinite(n) && n > 0 ? n : undefined });
-                          }}
-                          placeholder="없음"
-                        />
-                        <span className="text-xs text-gray-500">자 이상 (공백 제외)</span>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          id="cell-text-reject-meaningless"
-                          disabled={locked}
-                          checked={config.rejectMeaningless === true}
-                          onChange={(e) => update({ rejectMeaningless: e.target.checked })}
-                          className="mt-0.5 h-4 w-4"
-                        />
-                        <label
-                          htmlFor="cell-text-reject-meaningless"
-                          className="flex-1 cursor-pointer text-sm"
-                        >
-                          <span className="font-medium">자음·모음·숫자만 입력하면 막기</span>
-                          <p className="mt-0.5 text-xs text-gray-500">
-                            ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 없거나, aaaaa · 하하하하 ·
-                            네네네 처럼 한두 글자만 되풀이한 답을 받지 않습니다.
-                          </p>
-                        </label>
-                      </div>
-                    </div>
-                  );
-                })()}
+                {/* 응답 품질 검사 — 단답형 문항과 같은 묶음. 숫자·형식 모드에서는 잠근다(배타). */}
+                <TextValidationFields
+                  idPrefix="cell"
+                  value={cellTextValidation}
+                  locked={!isPlainTextInput({ type: 'text', inputType })}
+                  onChange={setCellTextValidation}
+                />
                 {inputType === 'number' && (
                   <div className="ml-7 flex items-center gap-2 text-sm">
                     <input

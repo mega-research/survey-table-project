@@ -41,7 +41,7 @@ import {
   propagateRequiredToTableRows,
   stripChoiceGroupRequiredOverrides,
 } from '@/utils/required-propagation';
-import { isPlainTextInput, normalizeTextValidation } from '@/utils/text-quality';
+import { isPlainTextInput } from '@/utils/text-quality';
 
 import {
   AnswerQuoteQuestionControl,
@@ -67,6 +67,7 @@ import {
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
 import { SpssVariableEditor } from './spss-variable-editor';
 import { TablePreview } from './table-preview';
+import { TextValidationFields } from './text-validation-fields';
 import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 import { VariableButton } from './variable-button';
 
@@ -558,97 +559,16 @@ export function QuestionBasicTab({
           </div>
         )}
 
-        {/* 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부.
-            숫자 모드·입력 형식 칸은 자기 검사가 있어 여기서는 잠근다(배타). */}
-        {(question.type === 'text' || question.type === 'textarea') &&
-          (() => {
-            const lockedByMode = !isPlainTextInput({
-              type: question.type,
-              inputType: formData.inputType,
-            });
-            const config = formData.textValidation ?? {};
-            const setConfig = (next: {
-              minLength?: number | undefined;
-              maxLength?: number | undefined;
-              rejectMeaningless?: boolean | undefined;
-            }) =>
-              setFormData((prev) => ({
-                ...prev,
-                // 둘 다 꺼지면 null 로 지운다 — undefined 는 저장 패치에서 "손대지 않음" 이다
-                textValidation: normalizeTextValidation({ ...config, ...next }),
-              }));
-            return (
-              <div className="space-y-3 rounded-lg border border-gray-200 p-3">
-                <div>
-                  <Label className="text-sm font-medium">응답 품질 검사</Label>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {lockedByMode
-                      ? '숫자 모드·입력 형식 칸은 자기 검사를 씁니다. 평문 모드에서만 설정할 수 있습니다.'
-                      : '조건에 맞지 않으면 응답자가 「다음」으로 넘어갈 수 없습니다. 관리자 응답 수정에서는 경고 후 통과합니다.'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="text-min-length" className="w-28 shrink-0 text-sm">
-                    최소 글자 수
-                  </Label>
-                  <Input
-                    id="text-min-length"
-                    type="number"
-                    min={1}
-                    step={1}
-                    inputMode="numeric"
-                    className="w-28"
-                    disabled={lockedByMode}
-                    value={typeof config.minLength === 'number' ? String(config.minLength) : ''}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value, 10);
-                      setConfig({ minLength: Number.isFinite(n) && n > 0 ? n : undefined });
-                    }}
-                    placeholder="없음"
-                  />
-                  <span className="text-xs text-gray-500">자 이상 (공백 제외)</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="text-max-length" className="w-28 shrink-0 text-sm">
-                    최대 글자 수
-                  </Label>
-                  <Input
-                    id="text-max-length"
-                    type="number"
-                    min={1}
-                    step={1}
-                    inputMode="numeric"
-                    className="w-28"
-                    disabled={lockedByMode}
-                    value={typeof config.maxLength === 'number' ? String(config.maxLength) : ''}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value, 10);
-                      setConfig({ maxLength: Number.isFinite(n) && n > 0 ? n : undefined });
-                    }}
-                    placeholder="없음"
-                  />
-                  <span className="text-xs text-gray-500">자까지 입력 가능 (공백 포함)</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Switch
-                    id="text-reject-meaningless"
-                    disabled={lockedByMode}
-                    checked={config.rejectMeaningless === true}
-                    onCheckedChange={(checked) => setConfig({ rejectMeaningless: checked })}
-                  />
-                  <div className="space-y-0.5">
-                    <Label htmlFor="text-reject-meaningless" className="text-sm">
-                      자음·모음·숫자만 입력하면 막기
-                    </Label>
-                    <p className="text-xs text-gray-500">
-                      ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 없거나, aaaaa · 하하하하 · 네네네
-                      처럼 한두 글자만 되풀이한 답을 받지 않습니다.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+        {/* 단답형·장문형 응답 품질 검사 — 최소·최대 글자 수·의미 없는 입력 거부.
+            숫자 모드·입력 형식 칸은 자기 검사가 있어 잠근다(배타). 셀 모달과 같은 묶음. */}
+        {(question.type === 'text' || question.type === 'textarea') && (
+          <TextValidationFields
+            idPrefix="question"
+            value={formData.textValidation}
+            locked={!isPlainTextInput({ type: question.type, inputType: formData.inputType })}
+            onChange={(next) => setFormData((prev) => ({ ...prev, textValidation: next }))}
+          />
+        )}
 
         {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
         {question.type === 'text' && (
