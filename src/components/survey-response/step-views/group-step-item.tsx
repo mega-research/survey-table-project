@@ -7,7 +7,10 @@ import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
 import { StepItem } from '@/lib/group-ordering';
 import { sanitizeRichHtml } from '@/lib/sanitize';
-import { resolveGroupedRequiredMessage } from '@/lib/survey/answer-validation';
+import {
+  collectUnfilledChoiceGroupIssues,
+  resolveGroupedRequiredMessage,
+} from '@/lib/survey/answer-validation';
 import {
   CHANGE_CONFIRM_KEY,
   type ChangeConfirmation,
@@ -111,12 +114,21 @@ export function GroupStepItem({
   // 두 번 알리므로 문구를 필수 안내 하나로 합친다 — 배너의 "위치로 이동"(셀/상세 타깃)은
   // 유지하고, 아래 별도 필수 문구 <p> 를 생략한다 (2026-08-13 결정).
   // 셀별 지정 문구와 범위/합계/수식 위반은 별개 정보이므로 그대로 둔다.
+  // 보기 그룹 표(radio/checkbox 그룹)의 필수 미충족은 배너 항목이 따로 없어 이동 버튼이 안 달렸다 —
+  // 미충족 그룹을 셀 id 가 있는 required-cells 이슈로 배너에 넣고 아래 <p> 는 생략한다(2026-09-15).
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
-    if (!showRequiredMessage || !issues?.length) {
+    const groupIssues: NumericIssue[] = showRequiredMessage
+      ? collectUnfilledChoiceGroupIssues(q, responses[q.id]).map((issue) => ({
+          kind: 'required-cells' as const,
+          message: issue.message,
+          cellIds: issue.cellIds,
+        }))
+      : [];
+    if (!showRequiredMessage || (!issues?.length && groupIssues.length === 0)) {
       return { visibleIssues: issues, requiredMessageInBanner: false };
     }
-    let merged = false;
-    const next = issues.map((issue) => {
+    let merged = groupIssues.length > 0;
+    const next = (issues ?? []).map((issue) => {
       const isDefaultRequiredIssue =
         (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
         issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
@@ -124,7 +136,7 @@ export function GroupStepItem({
       merged = true;
       return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
     });
-    return { visibleIssues: next, requiredMessageInBanner: merged };
+    return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
   }, [issues, showRequiredMessage, q, responses]);
 
   return (

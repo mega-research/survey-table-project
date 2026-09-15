@@ -880,6 +880,7 @@ export function ChoiceTableResponse({
                                 return (
                                   <label
                                     key={choiceCell.id}
+                                    data-cell-id={choiceCell.id}
                                     className={cn(
                                       'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
                                       checked
@@ -909,6 +910,7 @@ export function ChoiceTableResponse({
                       return (
                         <label
                           key={choiceCell.id}
+                          data-cell-id={choiceCell.id}
                           data-unfilled={unfilled || undefined}
                           className={cn(
                             'flex min-h-10 min-w-0 flex-1 basis-[12rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
@@ -1091,6 +1093,7 @@ export function ChoiceTableResponse({
                     return (
                       <div key={choiceCell.id}>
                         <label
+                          data-cell-id={choiceCell.id}
                           className={cn(
                             'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-[10px] border px-3 py-2.5 transition-colors',
                             checked

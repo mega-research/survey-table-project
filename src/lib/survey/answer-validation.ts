@@ -231,6 +231,40 @@ export function collectUnfilledChoiceGroupCellIds(
   return out;
 }
 
+/** 검증 안내 배너 한 줄 — 문구 하나에 그 문구를 쓰는 미충족 그룹들의 보기 셀 id (그룹 정의 순) */
+export interface UnfilledChoiceGroupIssue {
+  message: string;
+  cellIds: string[];
+}
+
+/**
+ * 미충족 **필수** 보기 그룹을 검증 안내 배너 항목으로 — 「위치로 이동」이 달릴 수 있게 셀 id 를 붙인다.
+ *
+ * 그룹 표의 필수 미충족은 여태 문항 아래 한 줄 문구로만 나와 이동 버튼이 없었다(배너 항목은
+ * 테이블 유형의 필수 셀·상세기재만 만들었다). 그룹이 열 개를 넘는 표에서 줄이 그룹 수만큼
+ * 늘지 않도록 **같은 문구는 한 줄로 묶고**, 셀 id 는 그룹 순서를 지켜 첫 미충족 그룹의 첫
+ * 셀이 이동 대상이 되게 한다. 문구는 그룹 지정 → 문항 → 기본 순 폴백. 대상 그룹 판정은
+ * 필수 게이트·붉은 외곽선과 같은 술어다.
+ */
+export function collectUnfilledChoiceGroupIssues(
+  question: Question,
+  response: unknown,
+): UnfilledChoiceGroupIssue[] {
+  if (!isGroupedChoiceQuestion(question)) return [];
+  const map = groupSelectionMap(question, response);
+  if (isTableExclusiveSelected(question, map)) return [];
+  const fallback = resolveRequiredMessage(question);
+  const byMessage = new Map<string, string[]>();
+  for (const group of checkTargetChoiceGroups(question)) {
+    if (isChoiceGroupFilled(group, map)) continue;
+    const message = group.requiredMessage?.trim() || fallback;
+    const ids = byMessage.get(message) ?? [];
+    for (const cell of group.cells) ids.push(cell.id);
+    byMessage.set(message, ids);
+  }
+  return [...byMessage.entries()].map(([message, cellIds]) => ({ message, cellIds }));
+}
+
 export function resolveGroupedRequiredMessage(question: Question, response: unknown): string {
   if (isGroupedChoiceQuestion(question)) {
     const map = groupSelectionMap(question, response);

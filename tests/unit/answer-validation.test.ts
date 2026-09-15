@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   collectUnfilledChoiceGroupCellIds,
+  collectUnfilledChoiceGroupIssues,
   isQuestionAnswered,
 } from '@/lib/survey/answer-validation';
 import type { Question, QuestionType } from '@/types/survey';
@@ -678,6 +679,31 @@ describe('collectUnfilledChoiceGroupCellIds · resolveGroupedRequiredMessage —
     expect(resolveGroupedRequiredMessage(q, { __choiceGroups: { rad1: 'a', cb1: ['c'] } })).toBe(
       '필수 질문에 답변해주세요.',
     );
+  });
+});
+
+describe('collectUnfilledChoiceGroupIssues — 검증 안내 배너 항목', () => {
+  it('미충족 필수 그룹을 문구별로 묶어 그룹 순서의 셀 id 로 낸다', () => {
+    const q = groupedRadioQ();
+    expect(collectUnfilledChoiceGroupIssues(q, {})).toEqual([
+      { message: '필수 질문에 답변해주세요.', cellIds: ['cellA', 'cellB', 'cellC', 'cellD'] },
+    ]);
+    expect(collectUnfilledChoiceGroupIssues(q, { rad1: 'cellA' })).toEqual([
+      { message: '필수 질문에 답변해주세요.', cellIds: ['cellC', 'cellD'] },
+    ]);
+  });
+
+  it('그룹 지정 문구는 따로 한 줄이 되고, 문항 문구가 나머지의 폴백이다', () => {
+    const q = choiceGroupTableQ({ requiredMessage: '항목마다 골라 주세요' });
+    expect(collectUnfilledChoiceGroupIssues(q, {})).toEqual([
+      { message: '항목마다 골라 주세요', cellIds: ['a', 'b'] },
+      { message: '구매처를 고르세요', cellIds: ['c'] },
+    ]);
+  });
+
+  it('다 채웠거나 그룹 문항이 아니면 빈 배열', () => {
+    expect(collectUnfilledChoiceGroupIssues(groupedRadioQ(), { rad1: 'cellA', rad2: 'cellC', default: 'cellD' })).toEqual([]);
+    expect(collectUnfilledChoiceGroupIssues(q('text'), '')).toEqual([]);
   });
 });
 
