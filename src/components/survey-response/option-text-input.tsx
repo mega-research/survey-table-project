@@ -3,6 +3,7 @@
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
+import { resolveCellTextQualityViolation } from '@/lib/survey/numeric-validation';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
@@ -13,7 +14,7 @@ import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-c
 import { cn } from '@/lib/utils';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { isInputFormat } from '@/types/input-type';
-import type { InputType, NumberFormat } from '@/types/survey';
+import type { InputType, NumberFormat, TextValidation } from '@/types/survey';
 import { formatSampleValue } from '@/utils/input-format';
 import { getHorizontalItemsClass } from '@/utils/table-grid-utils';
 
@@ -32,6 +33,9 @@ interface OptionTextInputProps {
     /** 'number' 면 입력 셀과 같은 숫자 타이핑 규칙 적용 */
     textInputType?: InputType | undefined;
     textInputNumberFormat?: NumberFormat | undefined;
+    /** 표 input 셀의 응답 품질 검사 — 보기 상세기재에는 아직 없다 */
+    textValidation?: TextValidation | null | undefined;
+    defaultValueTemplate?: string | undefined;
   };
   className?: string;
   /** 시각 라벨이 별도 요소(라벨 칩 등)로 렌더될 때 입력란과의 접근성 연결용 */
@@ -105,6 +109,16 @@ export function OptionTextInput({
     onRawChange: (v) => setOptionText(questionId, option.id, v),
     priorOriginal: priorOptionText(priorAnswersForFormat, questionId, option.id),
   });
+  // 응답 품질 위반(표 input 셀 전용) — 평문 모드·이월 면제 판정은 검증 쪽 함수가 쥔다
+  const qualityViolation = resolveCellTextQualityViolation(
+    {
+      inputType: option.textInputType,
+      defaultValueTemplate: option.defaultValueTemplate,
+      textValidation: option.textValidation,
+    },
+    rawValue,
+    priorOptionText(priorAnswersForFormat, questionId, option.id),
+  );
 
   const sharedProps = {
     'aria-label': ariaLabel,
@@ -145,7 +159,9 @@ export function OptionTextInput({
   // text-left 를 못 박는다 — 표 셀은 가운데/오른쪽 정렬이 흔해서 그냥 두면 안내 문구가
   // 입력값과 따로 놀며 오른쪽에 붙는다.
   const hint =
-    (isNumberMode && (numeric.unitReading || numeric.rangeViolation)) || formatField.violation ? (
+    (isNumberMode && (numeric.unitReading || numeric.rangeViolation)) ||
+    formatField.violation ||
+    qualityViolation ? (
       <div className="space-y-0.5 text-left">
         {isNumberMode && numeric.unitReading && (
           <p className="text-muted-foreground text-sm">{numeric.unitReading}</p>
@@ -154,6 +170,11 @@ export function OptionTextInput({
           <p className="text-sm text-red-500">* {numeric.rangeViolation}</p>
         )}
         {formatField.violation && <p className="text-sm text-red-500">* {formatField.violation}</p>}
+        {qualityViolation && (
+          <p className="text-sm text-red-500" data-testid="cell-text-quality-violation">
+            * {qualityViolation.message}
+          </p>
+        )}
       </div>
     ) : null;
 

@@ -7,10 +7,11 @@ import { ChevronRight, ListChecks } from 'lucide-react';
 import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row-selector-modal';
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
+import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
+import { useMobileView } from '@/hooks/use-media-query';
 import { collectUnfilledChoiceGroupCellIds } from '@/lib/survey/answer-validation';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
-import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
-import { useMobileView } from '@/hooks/use-media-query';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
 import {
   useAnswerQuotes,
@@ -26,13 +27,11 @@ import {
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/lib/survey/exclusive-choice';
-import {
-  PRIOR_HIGHLIGHT_CONTROL_CLS,
-  isPriorChoice,
-} from '@/lib/survey/prior-answer-highlight';
+import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/lib/survey/prior-answer-highlight';
 import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
@@ -41,11 +40,12 @@ import {
   collectChoiceGroups,
   getGroupKeyOfCell,
   getGroupTypeOfCell,
-  isGroupedChoiceQuestion,
   groupChoiceCellsByGroup,
+  isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
+import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
 import { resolveChoiceGroupSectionLabel } from '@/utils/choice-group-section-label';
-import { resolveChoiceOptions, collectChoiceOptCells } from '@/utils/choice-source';
+import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
@@ -54,19 +54,15 @@ import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableCellControl } from './choice-table-cell-control';
+import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { MobileOptionCard } from './mobile-card-shared';
+import { OptionTextInput } from './option-text-input';
+import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
+import { ValidationIssueBanner } from './validation-issue-banner';
 
 // useSyncExternalStore 안정 참조 — selector 안에서 `?? {}` 를 쓰면 무한 루프 경고가 난다.
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};
-import { ChoiceTableDrilldown } from './choice-table-drilldown';
-import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
-import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
-
-import { MobileOptionCard } from './mobile-card-shared';
-import { ValidationIssueBanner } from './validation-issue-banner';
-import { OptionTextInput } from './option-text-input';
-import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 
 /** 모바일 상세에서 숨긴 셀 — 본문(평문·서식본)만 비운다. */
 function blankCellContent(cell: TableCell): TableCell {
@@ -530,6 +526,10 @@ export function ChoiceTableResponse({
             ...(cell.inputType !== undefined && cell.inputType !== 'text'
               ? { textInputType: cell.inputType }
               : {}),
+            ...(cell.textValidation ? { textValidation: cell.textValidation } : {}),
+            ...(cell.defaultValueTemplate !== undefined
+              ? { defaultValueTemplate: cell.defaultValueTemplate }
+              : {}),
             ...(cell.numberFormat !== undefined
               ? { textInputNumberFormat: cell.numberFormat }
               : {}),
@@ -604,7 +604,10 @@ export function ChoiceTableResponse({
             // 그룹 radio 는 onChange 대신 onClick 으로 토글하므로 controlled checked 경고를
             // 막기 위해 readOnly 를 명시한다(onClick 동작에는 영향 없음).
             readOnly={isGrouped && cellType === 'radio'}
-            className={cn('h-4 w-4', checked && isPriorChoiceCell(cell.id) && PRIOR_HIGHLIGHT_CONTROL_CLS)}
+            className={cn(
+              'h-4 w-4',
+              checked && isPriorChoiceCell(cell.id) && PRIOR_HIGHLIGHT_CONTROL_CLS,
+            )}
           />
           {labelText && (
             <span
@@ -719,8 +722,7 @@ export function ChoiceTableResponse({
               (c) =>
                 !c.isHidden &&
                 (c.type === 'input' || CHOICE_TABLE_CONTROL_CELL_TYPES.has(c.type)) &&
-                (!c.enabledWhen ||
-                  isCellEnabled(c, optionTexts, gatingTableCells, selectedIdSet)),
+                (!c.enabledWhen || isCellEnabled(c, optionTexts, gatingTableCells, selectedIdSet)),
             )
           : [];
         const renderControlCells = () =>
@@ -794,7 +796,8 @@ export function ChoiceTableResponse({
           const cardLabel = headerText
             ? substituteTokens(headerText, attrs, quotes)
             : (firstOption?.label ?? '(라벨 없음)');
-          const labelStyleSource = headerText && headerCell ? headerCell : (firstOption ?? choiceCells[0]!);
+          const labelStyleSource =
+            headerText && headerCell ? headerCell : (firstOption ?? choiceCells[0]!);
           const anyChecked = choiceCells.some((c) => getChoiceCellState(c).checked);
           const allDisabled = choiceCells.every((c) => getChoiceCellState(c).disabled);
           // 그룹 카드의 제목 — 구분 셀 첫 줄은 제목, 나머지 줄은 설명(작은 회색)으로 항상 보인다.
@@ -812,21 +815,25 @@ export function ChoiceTableResponse({
                   >
                     <span>{groupedTitle}</span>
                     {groupedDesc && (
-                      <span className="mt-1 block text-[13px] font-normal leading-snug whitespace-pre-line text-gray-500">
+                      <span className="mt-1 block text-[13px] leading-snug font-normal whitespace-pre-line text-gray-500">
                         {groupedDesc}
                       </span>
                     )}
                   </span>
                 ) : (
-                <span
-                  className={getCellTextClassName(labelStyleSource)}
-                  style={getCellTextStyle(labelStyleSource)}
-                >
-                  <CellText
-                    text={cardLabel}
-                    html={headerText && headerCell ? resolveCellTextHtml(headerCell, attrs, quotes) : undefined}
-                  />
-                </span>
+                  <span
+                    className={getCellTextClassName(labelStyleSource)}
+                    style={getCellTextStyle(labelStyleSource)}
+                  >
+                    <CellText
+                      text={cardLabel}
+                      html={
+                        headerText && headerCell
+                          ? resolveCellTextHtml(headerCell, attrs, quotes)
+                          : undefined
+                      }
+                    />
+                  </span>
                 )
               }
               // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
@@ -876,7 +883,8 @@ export function ChoiceTableResponse({
                                 순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */}
                             <div className="flex flex-col gap-2">
                               {cells.map((choiceCell) => {
-                                const { checked, disabled, option } = getChoiceCellState(choiceCell);
+                                const { checked, disabled, option } =
+                                  getChoiceCellState(choiceCell);
                                 const tileLabel = option?.label ?? '';
                                 return (
                                   <label
@@ -901,34 +909,34 @@ export function ChoiceTableResponse({
                       })}
                     </div>
                   ) : (
-                  <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-                    {choiceCells.map((choiceCell) => {
-                      const axisLabel = resolveChoiceAxisLabel(row, choiceCell);
-                      const { checked, disabled } = getChoiceCellState(choiceCell);
-                      // 「다음」을 누른 뒤 답하지 않은 필수 그룹의 타일은 붉게 — 데스크톱 표의 보기
-                      // 그룹 외곽선·그룹 카드 섹션과 같은 판정(unfilledGroupCellIds).
-                      const unfilled = !checked && unfilledGroupCellIds.has(choiceCell.id);
-                      return (
-                        <label
-                          key={choiceCell.id}
-                          data-cell-id={choiceCell.id}
-                          data-unfilled={unfilled || undefined}
-                          className={cn(
-                            'flex min-h-10 min-w-0 flex-1 basis-[12rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
-                            checked
-                              ? 'border-blue-300 bg-blue-50 text-blue-900'
-                              : unfilled
-                                ? 'border-red-300 bg-red-50/40 text-gray-800'
-                                : 'border-gray-200 bg-white text-gray-800',
-                            disabled && 'cursor-default opacity-50',
-                          )}
-                        >
-                          {renderMobileChoiceInput(choiceCell, axisLabel || cardLabel)}
-                          {axisLabel && <span className="leading-snug">{axisLabel}</span>}
-                        </label>
-                      );
-                    })}
-                  </div>
+                    <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                      {choiceCells.map((choiceCell) => {
+                        const axisLabel = resolveChoiceAxisLabel(row, choiceCell);
+                        const { checked, disabled } = getChoiceCellState(choiceCell);
+                        // 「다음」을 누른 뒤 답하지 않은 필수 그룹의 타일은 붉게 — 데스크톱 표의 보기
+                        // 그룹 외곽선·그룹 카드 섹션과 같은 판정(unfilledGroupCellIds).
+                        const unfilled = !checked && unfilledGroupCellIds.has(choiceCell.id);
+                        return (
+                          <label
+                            key={choiceCell.id}
+                            data-cell-id={choiceCell.id}
+                            data-unfilled={unfilled || undefined}
+                            className={cn(
+                              'flex min-h-10 min-w-0 flex-1 basis-[12rem] cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+                              checked
+                                ? 'border-blue-300 bg-blue-50 text-blue-900'
+                                : unfilled
+                                  ? 'border-red-300 bg-red-50/40 text-gray-800'
+                                  : 'border-gray-200 bg-white text-gray-800',
+                              disabled && 'cursor-default opacity-50',
+                            )}
+                          >
+                            {renderMobileChoiceInput(choiceCell, axisLabel || cardLabel)}
+                            {axisLabel && <span className="leading-snug">{axisLabel}</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
                   )}
                   {/* 보기 옵션의 상세기재는 카드 안이 아니라 카드 바로 아래 스택에 —
                       셀 게이팅 입력칸과 한곳에 섞이지 않는다. */}
@@ -939,51 +947,58 @@ export function ChoiceTableResponse({
             rowTextStack,
           ];
         }
-        const perChoiceCards = choiceCells
-          .map((choiceCell) => {
-            const { checked, disabled, option } = getChoiceCellState(choiceCell);
-            // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
-            // 없으면 선택지 라벨(choiceLabel > content)로 폴백한다. exportLabel 은 제목으로 쓰지 않는다.
-            const headerCell = findMobileHeaderCell(row.cells);
-            const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
-            const cardLabel = headerText
-              ? substituteTokens(headerText, attrs, quotes)
-              : (option?.label ?? '(라벨 없음)');
-            const labelStyleSource = headerText && headerCell ? headerCell : (option ?? choiceCell);
-            return (
-              <MobileOptionCard
-                key={choiceCell.id}
-                label={
-                  <span
-                    className={getCellTextClassName(labelStyleSource)}
-                    style={getCellTextStyle(labelStyleSource)}
-                  >
-                    <CellText
-                      text={cardLabel}
-                      html={headerText && headerCell ? resolveCellTextHtml(headerCell, attrs, quotes) : undefined}
-                    />
-                  </span>
-                }
-                cells={row.cells}
-                selected={checked}
-                disabled={disabled}
-                onToggle={() => toggle(choiceCell.id, !checked)}
-                control={renderMobileChoiceInput(choiceCell, cardLabel)}
-                footer={
-                  (!perRow && option?.allowTextInput && checked) || controlCells.length > 0 ? (
-                    <div className="space-y-2">
-                      {/* 행 단위 카드는 상세기재를 카드 바로 아래 스택으로 뺀다.
+        const perChoiceCards = choiceCells.map((choiceCell) => {
+          const { checked, disabled, option } = getChoiceCellState(choiceCell);
+          // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
+          // 없으면 선택지 라벨(choiceLabel > content)로 폴백한다. exportLabel 은 제목으로 쓰지 않는다.
+          const headerCell = findMobileHeaderCell(row.cells);
+          const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
+          const cardLabel = headerText
+            ? substituteTokens(headerText, attrs, quotes)
+            : (option?.label ?? '(라벨 없음)');
+          const labelStyleSource = headerText && headerCell ? headerCell : (option ?? choiceCell);
+          return (
+            <MobileOptionCard
+              key={choiceCell.id}
+              label={
+                <span
+                  className={getCellTextClassName(labelStyleSource)}
+                  style={getCellTextStyle(labelStyleSource)}
+                >
+                  <CellText
+                    text={cardLabel}
+                    html={
+                      headerText && headerCell
+                        ? resolveCellTextHtml(headerCell, attrs, quotes)
+                        : undefined
+                    }
+                  />
+                </span>
+              }
+              cells={row.cells}
+              selected={checked}
+              disabled={disabled}
+              onToggle={() => toggle(choiceCell.id, !checked)}
+              control={renderMobileChoiceInput(choiceCell, cardLabel)}
+              footer={
+                (!perRow && option?.allowTextInput && checked) || controlCells.length > 0 ? (
+                  <div className="space-y-2">
+                    {/* 행 단위 카드는 상세기재를 카드 바로 아래 스택으로 뺀다.
                           셀 단위 카드는 카드가 곧 보기라 그 자리에 둔다. */}
-                      {!perRow && option?.allowTextInput && checked ? (
-                        <OptionTextInput questionId={question.id} option={option} className="w-full" />
-                      ) : null}
-                      {renderControlCells()}
-                    </div>
-                  ) : null
-                }
-              />
-            );
-          });
+                    {!perRow && option?.allowTextInput && checked ? (
+                      <OptionTextInput
+                        questionId={question.id}
+                        option={option}
+                        className="w-full"
+                      />
+                    ) : null}
+                    {renderControlCells()}
+                  </div>
+                ) : null
+              }
+            />
+          );
+        });
         return [...perChoiceCards, rowTextStack];
       })}
       {counter}
@@ -1041,108 +1056,117 @@ export function ChoiceTableResponse({
           const memberIds = new Set(group.cells.map((c) => c.id));
           return (
             <div key={groupId}>
-            <div
-              data-testid={`axis-card-${groupId}`}
-              className={cn(
-                'rounded-2xl border bg-white',
-                unfilled ? 'border-red-300' : 'border-gray-200',
-              )}
-            >
-              {/* 카드 머리 — sticky 는 부모(카드) 상자 안에서만 붙어, 다음 카드에 닿으면
+              <div
+                data-testid={`axis-card-${groupId}`}
+                className={cn(
+                  'rounded-2xl border bg-white',
+                  unfilled ? 'border-red-300' : 'border-gray-200',
+                )}
+              >
+                {/* 카드 머리 — sticky 는 부모(카드) 상자 안에서만 붙어, 다음 카드에 닿으면
                   자연히 그 카드의 머리로 교체된다. 응답 페이지 위쪽에 고정 요소가 없어 top-0. */}
-              {(title || unfilled) && (
-                <div
-                  data-testid="axis-card-header"
-                  className={cn(
-                    'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
-                    unfilled ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white',
-                  )}
-                >
-                  {title && (
-                    <p className={cn('text-[17px] font-bold leading-snug', unfilled ? 'text-red-600' : 'text-gray-900')}>
-                      {title}
-                    </p>
-                  )}
-                  {unfilled && (
-                    <p className="mt-0.5 text-[13px] text-red-600">{requiredMessage}</p>
-                  )}
-                </div>
-              )}
-              <div className="space-y-2 p-3">
-                {visibleRows.flatMap((row) => {
-                  const cellsInGroup = row.cells.filter(
-                    (c) => c.type === 'choice_opt' && !c.isHidden && memberIds.has(c.id),
-                  );
-                  if (cellsInGroup.length === 0) return [];
-                  const titleCell = resolveRowTitleCell(row);
-                  const rowTitle = titleCell
-                    ? substituteTokens((titleCell.content ?? '').trim(), attrs, quotes)
-                    : '';
-                  const displayCells = row.cells.filter((c) => c !== titleCell);
-                  return cellsInGroup.map((choiceCell) => {
-                    const { checked, disabled, option } = getChoiceCellState(choiceCell);
-                    const optionLabel = option?.label ?? '';
-                    // 한 행에 같은 축의 셀이 둘 이상이면(그룹이 여러 열에 걸침) 보기 텍스트로 구분
-                    const tileLabel =
-                      rowTitle && cellsInGroup.length > 1 && optionLabel
-                        ? `${rowTitle} · ${optionLabel}`
-                        : rowTitle || optionLabel || '(라벨 없음)';
-                    const labelStyleSource = titleCell ?? option ?? choiceCell;
-                    return (
-                      <div key={choiceCell.id}>
-                        <label
-                          data-cell-id={choiceCell.id}
-                          className={cn(
-                            'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors',
-                            checked
-                              ? 'border-blue-300 bg-blue-50 text-blue-900'
-                              : 'border-gray-200 bg-white text-gray-800',
-                            disabled && 'cursor-default opacity-50',
-                          )}
-                        >
-                          <span className="mt-0.5 flex shrink-0 items-center">
-                            {renderMobileChoiceInput(choiceCell, tileLabel)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span
-                              className={cn(
-                                'block whitespace-pre-line text-[15px] font-semibold leading-snug',
-                                getCellTextClassName(labelStyleSource),
-                              )}
-                              style={getCellTextStyle(labelStyleSource)}
-                            >
-                              <CellText
-                                text={tileLabel}
-                                html={
-                                  titleCell && cellsInGroup.length === 1
-                                    ? resolveCellTextHtml(titleCell, attrs, quotes)
-                                    : undefined
-                                }
-                              />
-                            </span>
-                            <MobileDisplayCells cells={displayCells} className="mt-1" />
-                          </span>
-                        </label>
-                        {option?.allowTextInput && checked && (
-                          <div className="mt-2">
-                            <OptionTextInput questionId={question.id} option={option} className="w-full" />
-                          </div>
+                {(title || unfilled) && (
+                  <div
+                    data-testid="axis-card-header"
+                    className={cn(
+                      'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
+                      unfilled ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white',
+                    )}
+                  >
+                    {title && (
+                      <p
+                        className={cn(
+                          'text-[17px] leading-snug font-bold',
+                          unfilled ? 'text-red-600' : 'text-gray-900',
                         )}
-                      </div>
+                      >
+                        {title}
+                      </p>
+                    )}
+                    {unfilled && (
+                      <p className="mt-0.5 text-[13px] text-red-600">{requiredMessage}</p>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-2 p-3">
+                  {visibleRows.flatMap((row) => {
+                    const cellsInGroup = row.cells.filter(
+                      (c) => c.type === 'choice_opt' && !c.isHidden && memberIds.has(c.id),
                     );
-                  });
-                })}
+                    if (cellsInGroup.length === 0) return [];
+                    const titleCell = resolveRowTitleCell(row);
+                    const rowTitle = titleCell
+                      ? substituteTokens((titleCell.content ?? '').trim(), attrs, quotes)
+                      : '';
+                    const displayCells = row.cells.filter((c) => c !== titleCell);
+                    return cellsInGroup.map((choiceCell) => {
+                      const { checked, disabled, option } = getChoiceCellState(choiceCell);
+                      const optionLabel = option?.label ?? '';
+                      // 한 행에 같은 축의 셀이 둘 이상이면(그룹이 여러 열에 걸침) 보기 텍스트로 구분
+                      const tileLabel =
+                        rowTitle && cellsInGroup.length > 1 && optionLabel
+                          ? `${rowTitle} · ${optionLabel}`
+                          : rowTitle || optionLabel || '(라벨 없음)';
+                      const labelStyleSource = titleCell ?? option ?? choiceCell;
+                      return (
+                        <div key={choiceCell.id}>
+                          <label
+                            data-cell-id={choiceCell.id}
+                            className={cn(
+                              'flex min-w-0 cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors',
+                              checked
+                                ? 'border-blue-300 bg-blue-50 text-blue-900'
+                                : 'border-gray-200 bg-white text-gray-800',
+                              disabled && 'cursor-default opacity-50',
+                            )}
+                          >
+                            <span className="mt-0.5 flex shrink-0 items-center">
+                              {renderMobileChoiceInput(choiceCell, tileLabel)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className={cn(
+                                  'block text-[15px] leading-snug font-semibold whitespace-pre-line',
+                                  getCellTextClassName(labelStyleSource),
+                                )}
+                                style={getCellTextStyle(labelStyleSource)}
+                              >
+                                <CellText
+                                  text={tileLabel}
+                                  html={
+                                    titleCell && cellsInGroup.length === 1
+                                      ? resolveCellTextHtml(titleCell, attrs, quotes)
+                                      : undefined
+                                  }
+                                />
+                              </span>
+                              <MobileDisplayCells cells={displayCells} className="mt-1" />
+                            </span>
+                          </label>
+                          {option?.allowTextInput && checked && (
+                            <div className="mt-2">
+                              <OptionTextInput
+                                questionId={question.id}
+                                option={option}
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })}
+                </div>
               </div>
-            </div>
-            {/* 미충족 카드 바로 아래에 검증 안내 상자 — 문항 아래 상자와 같은 컴포넌트라 모양·이동
+              {/* 미충족 카드 바로 아래에 검증 안내 상자 — 문항 아래 상자와 같은 컴포넌트라 모양·이동
                 규칙이 같고, 「다음」의 착지 표식(data-validation-notice)도 여기 붙는다. 이 모드에서는
                 문항 아래 상자를 내지 않는다(group-step-item) — 마지막 카드 아래에 둘이 겹친다. */}
-            {unfilled && (
-              <ValidationIssueBanner
-                items={[{ message: requiredMessage, cellIds: group.cells.map((c) => c.id) }]}
-                questionId={question.id}
-              />
-            )}
+              {unfilled && (
+                <ValidationIssueBanner
+                  items={[{ message: requiredMessage, cellIds: group.cells.map((c) => c.id) }]}
+                  questionId={question.id}
+                />
+              )}
             </div>
           );
         })}
@@ -1241,11 +1265,7 @@ export function ChoiceTableResponse({
   );
 
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
-    renderCell(
-      cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell,
-      true,
-      inputIdScope,
-    );
+    renderCell(cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell, true, inputIdScope);
 
   if (isMobile && mobileMode === 'row-wise-original') {
     return (

@@ -1,5 +1,6 @@
 import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
+import { cellHtmlHasMarks } from '@/lib/survey/cell-rich-text';
 import {
   BranchRule,
   CalcCellValidation,
@@ -12,12 +13,12 @@ import {
   RadioOption,
   RankingConfig,
   TableCell,
+  TextValidation,
 } from '@/types/survey';
-
-import { cellHtmlHasMarks } from '@/lib/survey/cell-rich-text';
 
 import { parseNumericInput } from './numeric-input';
 import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
+import { isPlainTextInput } from './text-quality';
 
 /**
  * 셀 편집 모달의 폼 상태.
@@ -52,6 +53,8 @@ export interface CellFormState {
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
   cellNumberFormat: NumberFormat | undefined;
+  /** input 셀 응답 품질 검사 (TableCell.textValidation). null = 없음 */
+  cellTextValidation: TextValidation | null;
   /** 필수 응답 셀 (REQUIRED_CELL_TYPES 공용 — TableCell.required 로 직렬화) */
   cellRequired: boolean;
   /** 필수 셀 미응답 안내 문구 — 빈 문자열이면 기본 문구 (TableCell.requiredMessage) */
@@ -237,6 +240,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
+    cellTextValidation: cell.textValidation ?? null,
     cellRequired: cell.required ?? false,
     cellRequiredMessage: cell.requiredMessage ?? '',
     gatingCondition: cell.enabledWhen,
@@ -351,6 +355,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     piiEncrypted: _piiEncrypted,
     emptyDefault: _emptyDefault,
     numberFormat: _numberFormat,
+    textValidation: _textValidation,
     required: _required,
     enabledWhen: _enabledWhen,
     requiredWhenEnabled: _requiredWhenEnabled,
@@ -447,6 +452,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             : {}),
           ...(form.inputType === 'number' && form.cellNumberFormat
             ? { numberFormat: form.cellNumberFormat }
+            : {}),
+          // 응답 품질 검사는 평문 모드에서만 — 숫자·형식 모드로 바꾸면 저장에서 빠진다(배타)
+          ...(form.cellTextValidation &&
+          isPlainTextInput({ type: 'text', inputType: form.inputType })
+            ? { textValidation: form.cellTextValidation }
             : {}),
         }
       : {}),

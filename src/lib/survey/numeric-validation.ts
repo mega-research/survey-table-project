@@ -505,6 +505,19 @@ function collectChoiceTableInputCellIssues(
         });
         continue;
       }
+      const quality = resolveCellTextQualityViolation(
+        cell,
+        rawValue,
+        priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+      );
+      if (quality) {
+        issues.push({
+          kind: 'text-quality',
+          message: quality.message,
+          detailTargetIds: [optionTextTargetId(question.id, cell.id)],
+        });
+        continue;
+      }
       if (cell.inputType !== 'number') continue;
       const message = rangeViolationMessage(value, cell.numberFormat);
       if (message) {
@@ -535,6 +548,27 @@ function collectChoiceTableInputCellIssues(
  * 진행을 막으면 따를 수 있는 길이 없다. 이월 면제와 같은 원칙이다. 값이 유효하면 저장 경계가
  * 정규형으로 정돈한다(`normalizeFormatValues`).
  */
+/**
+ * 표 input 셀 하나의 응답 품질 위반 — 셀 렌더러(표·보기 표 사이드카)와 차단 검증이 같은 판정을 쓴다.
+ * 평문 모드 셀만 대상이고, 토큰 prefill 셀과 손대지 않은 이월 값은 보지 않는다(문항과 같은 규칙).
+ */
+export function resolveCellTextQualityViolation(
+  cell: {
+    inputType?: TableCell['inputType'] | undefined;
+    defaultValueTemplate?: string | null | undefined;
+    textValidation?: TableCell['textValidation'] | undefined;
+  },
+  value: unknown,
+  priorOriginal?: string | null,
+): TextQualityViolation | null {
+  if (!cell.textValidation || !isPlainTextInput({ type: 'text', inputType: cell.inputType })) {
+    return null;
+  }
+  if (isTokenPrefilled(cell.defaultValueTemplate)) return null;
+  if (typeof value === 'string' && isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
+  return textQualityViolation(cell.textValidation, value);
+}
+
 /**
  * 문항 하나의 응답 품질 위반 — 응답 화면(입력칸 아래 문구)과 차단 검증이 같은 판정을 쓴다.
  * 평문 모드 단답형·장문형만 대상이고, 토큰 prefill 칸(응답자가 못 고침)과 **손대지 않은
@@ -693,6 +727,23 @@ export function collectNumericIssues(
         kind: 'format',
         message: '입력 형식이 맞지 않은 칸이 있습니다',
         cellIds: formatViolations.map((c) => c.id),
+      });
+    }
+
+    // 1-3) 셀 응답 품질 위반(최소 글자 수·의미 없는 입력) — 형식과 같은 모양으로 어느 칸인지만 짚는다.
+    const qualityViolations = inputCells.filter(
+      (c) =>
+        resolveCellTextQualityViolation(
+          c,
+          cellValues[c.id],
+          priorAnswerText(ctx?.priorAnswers, question.id, c.id),
+        ) !== null,
+    );
+    if (qualityViolations.length > 0) {
+      issues.push({
+        kind: 'text-quality',
+        message: '응답 조건(글자 수·내용)에 맞지 않는 칸이 있습니다',
+        cellIds: qualityViolations.map((c) => c.id),
       });
     }
 

@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 
 import { InputType, TableCell } from '@/types/survey';
-import {
-  CellFormState,
-  ContentType,
-  cellToFormState,
-} from '@/utils/serialize-cell';
+import { CellFormState, ContentType, cellToFormState } from '@/utils/serialize-cell';
 
 /**
  * 셀 편집 폼 상태를 단일 소스로 관리하는 훅.
@@ -60,6 +56,7 @@ export interface CellFormSetters {
   setEmptyDefaultEnabled: (v: boolean) => void;
   setEmptyDefaultRaw: (v: string) => void;
   setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
+  setCellTextValidation: (v: CellFormState['cellTextValidation']) => void;
   setCellRequired: (v: boolean) => void;
   setCellRequiredMessage: (v: string) => void;
   setGatingCondition: (v: CellFormState['gatingCondition']) => void;
@@ -169,6 +166,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setEmptyDefaultEnabled: set('emptyDefaultEnabled'),
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
       setCellNumberFormat: set('cellNumberFormat'),
+      setCellTextValidation: set('cellTextValidation'),
       setCellRequired: set('cellRequired'),
       setCellRequiredMessage: set('cellRequiredMessage'),
       setGatingCondition: set('gatingCondition'),

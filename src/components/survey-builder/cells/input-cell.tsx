@@ -2,11 +2,12 @@
 
 import React, { useEffect, useRef } from 'react';
 
+import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
-import { resolveCellTextHtml } from '@/components/survey/cell-text';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { resolveCellTextQualityViolation } from '@/lib/survey/numeric-validation';
 import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/lib/survey/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
@@ -14,7 +15,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import { formatSampleValue } from '@/utils/input-format';
-import { getInputTextAlignClass, getHorizontalItemsClass } from '@/utils/table-grid-utils';
+import { getHorizontalItemsClass, getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
 import { FloatingHint } from './floating-hint';
@@ -98,7 +99,14 @@ export const InputCell = React.memo(function InputCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
-  const hasViolation = Boolean(rangeViolation || formatField.violation) && !isPrefilled;
+  // 응답 품질 위반 — 평문 모드·prefill·이월 면제 판정은 검증 쪽 함수가 쥔다(표·보기 표 공용)
+  const qualityViolation = resolveCellTextQualityViolation(
+    cell,
+    currentValue,
+    priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+  );
+  const hasViolation =
+    Boolean(rangeViolation || formatField.violation || qualityViolation) && !isPrefilled;
   // 띄우는 안내의 앵커 — 입력칸 자체. 셀이 아니라 입력칸 아래에 붙어야 단위 글자 옆에서도 맞는다.
   const anchorRef = useRef<HTMLElement | null>(null);
 
@@ -115,7 +123,7 @@ export const InputCell = React.memo(function InputCell({
     <div className="relative w-full">
       <CellContentLayout
         content={substituteTokens(cell.content, attrs, quotes)}
-      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
+        contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
         position={cell.textPosition}
         bold={cell.textBold}
         boldFirstLine={cell.boldFirstLine}
@@ -221,6 +229,11 @@ export const InputCell = React.memo(function InputCell({
               {formatField.violation && (
                 <p className="text-xs text-red-500">* {formatField.violation}</p>
               )}
+              {qualityViolation && (
+                <p className="text-xs text-red-500" data-testid="cell-text-quality-violation">
+                  * {qualityViolation.message}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -247,6 +260,14 @@ export const InputCell = React.memo(function InputCell({
           {formatField.violation && (
             <p className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm">
               * {formatField.violation}
+            </p>
+          )}
+          {qualityViolation && (
+            <p
+              className="rounded-md border border-red-200 bg-white px-2 py-0.5 text-xs whitespace-nowrap text-red-500 shadow-sm"
+              data-testid="cell-text-quality-violation"
+            >
+              * {qualityViolation.message}
             </p>
           )}
         </FloatingHint>

@@ -466,6 +466,8 @@ export interface TableCell {
   emptyDefault?: number;
   // 숫자 input 셀 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat;
+  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, utils/text-quality)
+  textValidation?: TextValidation | null;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
   // 필수 셀 미응답 안내 문구 — 미지정 시 기본 문구 사용
