@@ -1132,6 +1132,16 @@ export function ChoiceTableResponse({
                   });
                 })}
               </div>
+              {/* 카드 아래에도 같은 문구 — 카드 끝까지 내려온 응답자가 머리로 돌아가지 않아도
+                  "이 카드에서 하나 이상" 을 그 자리에서 읽는다(2026-09-15 요청). */}
+              {unfilled && (
+                <p
+                  data-testid="axis-card-footer-notice"
+                  className="border-t border-red-100 px-4 py-2.5 text-[13px] text-red-600"
+                >
+                  {requiredMessage}
+                </p>
+              )}
             </div>
           );
         })}

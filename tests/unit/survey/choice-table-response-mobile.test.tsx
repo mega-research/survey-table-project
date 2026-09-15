@@ -529,7 +529,10 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
     );
     expect(screen.getByTestId('axis-card-g1')).not.toHaveClass('border-red-300');
     expect(screen.getByTestId('axis-card-g2')).toHaveClass('border-red-300');
-    expect(screen.getByText('계획을 하나 이상 고르세요')).toBeInTheDocument();
+    // 문구는 카드 머리와 카드 아래 두 곳 — 긴 카드의 끝에서도 읽힌다
+    expect(screen.getAllByText('계획을 하나 이상 고르세요')).toHaveLength(2);
+    expect(screen.getByTestId('axis-card-g2').querySelector('[data-testid="axis-card-footer-notice"]')).not.toBeNull();
+    expect(screen.getByTestId('axis-card-g1').querySelector('[data-testid="axis-card-footer-notice"]')).toBeNull();
   });
 
   it('그룹 문구가 없으면 기본 필수 문구로 폴백하고, 다음을 누르기 전에는 붙지 않는다', () => {
@@ -537,6 +540,6 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
     render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
     expect(screen.queryByText('필수 질문에 답변해주세요.')).toBeNull();
     render(<ChoiceTableResponse question={q} value={{ cb2: ['r3c3'] }} onChange={() => {}} showRequiredHighlight />);
-    expect(screen.getByText('필수 질문에 답변해주세요.')).toBeInTheDocument();
+    expect(screen.getAllByText('필수 질문에 답변해주세요.')).toHaveLength(2);
   });
 });
