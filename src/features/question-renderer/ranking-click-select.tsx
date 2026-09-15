@@ -393,14 +393,14 @@ export interface RankingClickListProps {
   cellId?: string | undefined;
 }
 
-export const RANKING_OTHER_OPTION: QuestionOption = {
+const RANKING_OTHER_OPTION: QuestionOption = {
   id: RANKING_OTHER_VALUE,
   value: RANKING_OTHER_VALUE,
   label: '기타 (직접 입력)',
 };
 
 /** 보기 표의 격자 클래스/스타일 — 응답 UI 와 빌더 미리보기가 같은 모양을 쓴다. */
-export function rankingGridLayout(columns: number | undefined): {
+function rankingGridLayout(columns: number | undefined): {
   className: string;
   style: CSSProperties | undefined;
   itemClassName: string;

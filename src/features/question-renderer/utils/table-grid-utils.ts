@@ -11,13 +11,6 @@ export function buildGridTemplateCols(columns: TableColumn[]): string {
   return columns.map((col) => `${col.width || 150}px`).join(' ');
 }
 
-export function buildGridTemplateColsWithRowHeader(
-  rowHeaderWidth: number,
-  columns: TableColumn[],
-): string {
-  return `${rowHeaderWidth}px ${buildGridTemplateCols(columns)}`;
-}
-
 // ── 전체 테이블 너비 계산 ──
 
 export function calcTotalWidth(columns: TableColumn[]): number {
@@ -155,23 +148,6 @@ export function getGridCellAria(
   if (colspan && colspan > 1) attrs['aria-colspan'] = colspan;
   if (rowspan && rowspan > 1) attrs['aria-rowspan'] = rowspan;
   return attrs;
-}
-
-// ── Grid 컨테이너 공통 스타일 ──
-
-export function getGridContainerStyle(
-  columns: TableColumn[],
-  extraWidth?: number,
-): CSSProperties {
-  const totalWidth = calcTotalWidth(columns) + (extraWidth || 0);
-  return {
-    display: 'grid',
-    gridTemplateColumns: extraWidth
-      ? buildGridTemplateColsWithRowHeader(extraWidth, columns)
-      : buildGridTemplateCols(columns),
-    width: `${totalWidth}px`,
-    minWidth: `${totalWidth}px`,
-  };
 }
 
 // ── Sticky 좌측 열 판정 ──
@@ -374,24 +350,4 @@ export function getHeaderCellStickyStyle(
     style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
   }
   return style;
-}
-
-// ── 행 hover/완료 상태 클래스 ──
-
-export function getRowCellClasses(completed: boolean): string {
-  return completed ? 'bg-green-50/40' : 'bg-white';
-}
-
-export function getHeaderCellClasses(): string {
-  return 'bg-gray-50 px-4 py-3 text-center font-semibold text-gray-800';
-}
-
-export function getBodyCellClasses(
-  horizontalAlign?: 'left' | 'center' | 'right',
-  verticalAlign?: 'top' | 'middle' | 'bottom',
-): string {
-  return cn(
-    'min-w-0 p-3',
-    getAlignmentClasses(horizontalAlign, verticalAlign),
-  );
 }

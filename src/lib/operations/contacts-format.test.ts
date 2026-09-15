@@ -4,8 +4,6 @@ import {
   CONTACTS_QFIELDS,
   CONTACTS_PAGE_SIZE,
   maskEmail,
-  maskPhone,
-  maskBizNumber,
   attrsKeyOf,
 } from '@/lib/operations/contacts-format';
 
@@ -25,33 +23,6 @@ describe('maskEmail', () => {
   });
   it('@ 없는 잘못된 입력 → "—"', () => {
     expect(maskEmail('not-an-email')).toBe('—');
-  });
-});
-
-describe('maskPhone', () => {
-  it('010 11자리', () => {
-    expect(maskPhone('01012345678')).toBe('010-****-5678');
-  });
-  it('010 하이픈 포함', () => {
-    expect(maskPhone('010-1234-5678')).toBe('010-****-5678');
-  });
-  it('숫자 4자 미만 → "—"', () => {
-    expect(maskPhone('123')).toBe('—');
-  });
-  it('null → "—"', () => {
-    expect(maskPhone(null)).toBe('—');
-  });
-});
-
-describe('maskBizNumber', () => {
-  it('10자리 사업자번호', () => {
-    expect(maskBizNumber('1234567890')).toBe('123-**-*7890');
-  });
-  it('하이픈 포함 정규화', () => {
-    expect(maskBizNumber('123-45-67890')).toBe('123-**-*7890');
-  });
-  it('자리수 부족 → "—"', () => {
-    expect(maskBizNumber('123')).toBe('—');
   });
 });
 

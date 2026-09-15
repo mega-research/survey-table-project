@@ -943,7 +943,6 @@ export interface SurveySubmission {
   startedAt: Date;
   completedAt?: Date | null;
   isCompleted: boolean;
-  currentGroupOrder: number;
   questionResponses: Record<string, unknown>; // JSON 저장된 응답들 (questionId -> value)
   userAgent?: string | null;
   updatedAt: Date;

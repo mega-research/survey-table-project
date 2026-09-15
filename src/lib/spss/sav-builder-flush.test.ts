@@ -25,7 +25,6 @@ function makeSubmission(id: string, responses: Record<string, unknown>): SurveyS
     surveyId: 's1',
     startedAt: new Date(),
     isCompleted: true,
-    currentGroupOrder: 0,
     questionResponses: responses,
     updatedAt: new Date(),
   } as unknown as SurveySubmission;

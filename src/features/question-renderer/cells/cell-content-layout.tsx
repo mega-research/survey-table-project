@@ -13,7 +13,6 @@ interface CellContentLayoutProps {
   position?: TableCell['textPosition'];
   children: React.ReactNode;
   /** 텍스트 라벨 div 에 추가로 적용할 className (예: 빌더 미리보기 톤 변경) */
-  labelClassName?: string;
   /** 셀 콘텐츠 라벨만 굵게 표시한다. */
   bold?: boolean | undefined;
   /** 라벨의 첫 줄만 굵게. `bold`(라벨 전체)와 배타. */
@@ -55,7 +54,6 @@ export function CellContentLayout({
   contentHtml,
   position = 'top',
   children,
-  labelClassName,
   bold = false,
   boldFirstLine = false,
   textColor,
@@ -74,7 +72,7 @@ export function CellContentLayout({
 
   const label = (
     <div
-      className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}
+      className={cn(DEFAULT_LABEL_CLASS, bold && 'font-bold')}
       style={textColor ? { color: textColor } : undefined}
     >
       <CellText text={content ?? ''} html={contentHtml} boldFirstLine={boldFirstLine} />

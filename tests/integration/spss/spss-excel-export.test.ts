@@ -27,7 +27,6 @@ function makeSubmission(
     startedAt: new Date('2025-01-01T09:00:00'),
     completedAt: new Date('2025-01-01T09:10:00'),
     isCompleted: true,
-    currentGroupOrder: 0,
     questionResponses,
     updatedAt: new Date('2025-01-01T09:10:00'),
     ...overrides,

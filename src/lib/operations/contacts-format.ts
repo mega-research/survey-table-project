@@ -103,19 +103,7 @@ export function effectiveSortKey(
 export const CONTACTS_QFIELDS = ['all', 'resid', 'email', 'group', 'biz'] as const;
 export type ContactsQField = (typeof CONTACTS_QFIELDS)[number];
 
-/** 결과코드 enum 은 후속 슬라이스에서 정의. 본 슬라이스는 자유 텍스트. */
-export type ContactsResultCodeFilter = 'all' | string;
-
 export const CONTACTS_PAGE_SIZE = 20;
-
-export interface NormalizedContactListArgs {
-  page: number;
-  q: string;
-  qfield: ContactsQField;
-  resultCode: ContactsResultCodeFilter;
-  sort: ContactsSortKey;
-  dir: ContactsSortDir;
-}
 
 /**
  * sort 파라미터 normalize — 시스템 키 화이트리스트 OR 'attrs.<key>' 형식.
@@ -145,30 +133,6 @@ export function maskEmail(value: string | null | undefined): string {
   const tld = dot > 0 ? domain.slice(dot) : '';
   const localShown = local.slice(0, Math.min(2, local.length));
   return `${localShown}***@***${tld}`;
-}
-
-export function maskPhone(value: string | null | undefined): string {
-  if (!value) return DASH;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length < 4) return DASH;
-  const tail = digits.slice(-4);
-  if (digits.length === 11 && digits.startsWith('010')) {
-    return `010-****-${tail}`;
-  }
-  if (digits.length >= 10) {
-    const head = digits.slice(0, 3);
-    return `${head}-****-${tail}`;
-  }
-  return `****-${tail}`;
-}
-
-export function maskBizNumber(value: string | null | undefined): string {
-  if (!value) return DASH;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length < 10) return DASH;
-  const head = digits.slice(0, 3);
-  const tail4 = digits.slice(-4);
-  return `${head}-**-*${tail4}`;
 }
 
 // ─────────── attrs 표시 helper ───────────

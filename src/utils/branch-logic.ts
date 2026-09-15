@@ -304,21 +304,6 @@ export function getNextQuestionIndex(
 }
 
 /**
- * 질문 번호를 ID로 변환 (예: 10번 → question-10)
- */
-export function questionNumberToId(questionNumber: number): string {
-  return `question-${questionNumber}`;
-}
-
-/**
- * 질문 ID를 번호로 변환 (예: question-10 → 10)
- */
-export function questionIdToNumber(questionId: string): number | null {
-  const match = questionId.match(/question-(\d+)/);
-  return match && match[1] !== undefined ? parseInt(match[1], 10) : null;
-}
-
-/**
  * 테이블 검증 규칙 확인
  * 테이블 응답이 특정 검증 규칙을 만족하는지 확인
  */

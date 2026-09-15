@@ -40,7 +40,6 @@ function makeSubmission(questionResponses: Record<string, unknown>): SurveySubmi
     startedAt: new Date('2025-01-01T00:00:00Z'),
     completedAt: new Date('2025-01-01T00:01:00Z'),
     isCompleted: true,
-    currentGroupOrder: 0,
     questionResponses,
     updatedAt: new Date('2025-01-01T00:01:00Z'),
   } as unknown as SurveySubmission;

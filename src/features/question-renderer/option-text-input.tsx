@@ -11,7 +11,6 @@ import { useOptionTexts, useResponseSources } from '@/features/question-renderer
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { getHorizontalItemsClass } from '@/features/question-renderer/utils/table-grid-utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { resolveCellTextQualityViolation } from './utils/cell-text-quality';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorOptionTextValue,
@@ -21,6 +20,8 @@ import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-c
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, TextValidation } from '@/types/survey';
+
+import { resolveCellTextQualityViolation } from './utils/cell-text-quality';
 import { formatSampleValue } from './utils/input-format';
 
 // useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
@@ -43,11 +44,6 @@ interface OptionTextInputProps {
   className?: string;
   /** 시각 라벨이 별도 요소(라벨 칩 등)로 렌더될 때 입력란과의 접근성 연결용 */
   ariaLabel?: string | undefined;
-  /**
-   * ui Input 베이스 클래스 없이 맨몸 <input> 렌더. 스타일드 컨테이너(라벨 스택 등)
-   * 안에 넣을 때 베이스 보더/포커스 링이 이중으로 겹치는 것을 원천 차단한다.
-   */
-  unstyled?: boolean | undefined;
   /**
    * 칩 셸(OptionTextRow)까지 이 컴포넌트가 그린다. 문구를 주면 그 모드다.
    *
@@ -77,7 +73,6 @@ export function OptionTextInput({
   option,
   className,
   ariaLabel,
-  unstyled,
   rowLabel,
   stackedLabel,
   fixedWidth,
@@ -218,15 +213,6 @@ export function OptionTextInput({
             )}
           />
         </OptionTextRow>
-        {hint}
-      </div>
-    );
-  }
-  if (unstyled) {
-    return (
-      // 밖에서 두른 셸 안에 들어가는 경우 — 안내를 셸 밖에 놓을 수 없어 아래에 붙인다.
-      <div className={cn('flex min-w-0 flex-1 flex-col justify-center')}>
-        <input type="text" {...sharedProps} />
         {hint}
       </div>
     );

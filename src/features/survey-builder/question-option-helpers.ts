@@ -77,28 +77,6 @@ export function applyOptionTextSettings<T extends OptionTextSettings>(
 }
 
 export const OTHER_OPTION_ID = 'other-option';
-export const OTHER_OPTION_LABEL = '기타';
-
-export function addOtherOptionIfNeeded(options: QuestionOption[]): QuestionOption[] {
-  const hasOtherOption = options.some((option) => option.id === OTHER_OPTION_ID);
-  if (!hasOtherOption) {
-    return [
-      ...options,
-      {
-        id: OTHER_OPTION_ID,
-        label: OTHER_OPTION_LABEL,
-        value: 'other',
-        hasOther: true,
-        spssNumericCode: getMaxSpssCode(options) + 1,
-      },
-    ];
-  }
-  return options;
-}
-
-export function removeOtherOption(options: QuestionOption[]): QuestionOption[] {
-  return options.filter((option) => option.id !== OTHER_OPTION_ID);
-}
 
 // --- 아래 함수들은 setFormData를 인자로 받아 상태를 업데이트하는 헬퍼 ---
 
@@ -176,23 +154,6 @@ export function createRemoveOption(setFormData: SetFormData) {
         next.options = prev.options.filter((option) => option.id !== optionId);
       }
       return next;
-    });
-  };
-}
-
-export function createHandleOtherOptionToggle(setFormData: SetFormData) {
-  return (enabled: boolean) => {
-    setFormData((prev) => {
-      const currentOptions = prev.options || [];
-      const updatedOptions = enabled
-        ? addOtherOptionIfNeeded(currentOptions)
-        : removeOtherOption(currentOptions);
-
-      return {
-        ...prev,
-        allowOtherOption: enabled,
-        options: updatedOptions,
-      };
     });
   };
 }
