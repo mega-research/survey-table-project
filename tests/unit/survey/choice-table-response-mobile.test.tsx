@@ -535,6 +535,23 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
     expect(screen.getByTestId('axis-card-g1').querySelector('[data-testid="axis-card-footer-notice"]')).toBeNull();
   });
 
+  it('카드 아래 문구의 「위치로 이동」은 그 카드의 첫 보기 타일로 스크롤한다', () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    render(
+      <ChoiceTableResponse
+        question={axisQuestion()}
+        value={{ cb1: ['r1c2'] }}
+        onChange={() => {}}
+        showRequiredHighlight
+      />,
+    );
+    const footer = screen.getByTestId('axis-card-g2').querySelector('[data-testid="axis-card-footer-notice"]')!;
+    fireEvent.click(within(footer as HTMLElement).getByRole('button', { name: '위치로 이동' }));
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+    expect(scrollSpy.mock.contexts[0]).toHaveAttribute('data-cell-id', 'r1c3');
+  });
+
   it('그룹 문구가 없으면 기본 필수 문구로 폴백하고, 다음을 누르기 전에는 붙지 않는다', () => {
     const q = axisQuestion();
     render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
