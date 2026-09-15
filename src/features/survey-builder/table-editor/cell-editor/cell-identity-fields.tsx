@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InlineRichTextEditor } from '@/components/ui/rich-text-editor/inline-rich-text-editor';
 import type { VariableDef } from '@/components/ui/rich-text-editor/types';
-import { plainTextToCellHtml } from '@/lib/survey/cell-rich-text';
+import { plainTextToCellHtml } from './utils/cell-rich-text';
 import type { TableCell } from '@/types/survey';
 
 import type { CellFormState } from './utils/serialize-cell';

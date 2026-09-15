@@ -15,7 +15,7 @@ import {
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { rankOfOption } from '@/utils/ranking-click';
+import { rankOfOption } from './utils/ranking-click';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 

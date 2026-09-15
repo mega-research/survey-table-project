@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
-import { resolveChoiceGroupSectionLabel } from '@/utils/choice-group-section-label';
+import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';

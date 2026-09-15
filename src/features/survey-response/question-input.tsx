@@ -38,7 +38,7 @@ import {
   choiceValueKey,
   countSelectionsTowardMax,
   satisfiesMinSelections,
-} from '@/lib/survey/exclusive-choice';
+} from '@/features/question-renderer/utils/exclusive-choice';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   PRIOR_HIGHLIGHT_TEXT_CLS,
@@ -51,8 +51,8 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { formatSampleValue } from '@/utils/input-format';
-import { effectiveMaxLength, isPlainTextInput } from '@/utils/text-quality';
+import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
+import { effectiveMaxLength, isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.

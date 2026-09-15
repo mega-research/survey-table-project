@@ -21,7 +21,7 @@ import {
   applyTableExclusiveToGroups,
   collectExclusiveChoiceCellIds,
   collectTableExclusiveChoiceCellIds,
-} from '@/lib/survey/exclusive-choice';
+} from '@/features/question-renderer/utils/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';

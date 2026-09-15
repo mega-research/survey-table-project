@@ -13,7 +13,7 @@ import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
-import { rankOfOption, toggleRankingOption } from '@/utils/ranking-click';
+import { rankOfOption, toggleRankingOption } from './utils/ranking-click';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-input-stack';

@@ -20,7 +20,7 @@ import { VariableButton } from '@/features/survey-builder/variable-button';
 import { isInputFormat } from '@/types/input-type';
 import type { Question } from '@/types/survey';
 import { isPartialNumericInput } from '@/utils/numeric-input';
-import { isPlainTextInput } from '@/utils/text-quality';
+import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
 import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 

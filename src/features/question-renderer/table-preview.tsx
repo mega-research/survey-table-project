@@ -26,7 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { type CellOutlineEdges, outlineBoxShadow } from '@/utils/choice-group-outline';
+import { type CellOutlineEdges, outlineBoxShadow } from './utils/choice-group-outline';
 
 import { PreviewCell } from './cells';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';

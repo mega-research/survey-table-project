@@ -1,5 +1,5 @@
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-import { cellHtmlHasMarks } from '@/lib/survey/cell-rich-text';
+import { cellHtmlHasMarks } from './cell-rich-text';
 import {
   BranchRule,
   CalcCellValidation,
@@ -18,7 +18,7 @@ import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { INTERACTIVE_CELL_TYPES } from '@/utils/table-cell-code-generator';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
-import { isPlainTextInput } from '@/utils/text-quality';
+import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
 /**
  * 셀 편집 모달의 폼 상태.

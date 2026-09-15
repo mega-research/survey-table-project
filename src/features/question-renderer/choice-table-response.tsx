@@ -29,7 +29,7 @@ import {
   collectTableExclusiveChoiceCellIds,
   countSelectionsTowardMax,
   satisfiesMinSelections,
-} from '@/lib/survey/exclusive-choice';
+} from './utils/exclusive-choice';
 import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/lib/survey/prior-answer-highlight';
 import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -45,8 +45,8 @@ import {
   groupChoiceCellsByGroup,
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
-import { buildChoiceGroupOutline } from '@/utils/choice-group-outline';
-import { resolveChoiceGroupSectionLabel } from '@/utils/choice-group-section-label';
+import { buildChoiceGroupOutline } from './utils/choice-group-outline';
+import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';

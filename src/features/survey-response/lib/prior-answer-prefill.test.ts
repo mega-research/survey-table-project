@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectPriorAnswerPrefills } from '@/lib/survey/prior-answer-prefill';
+import { collectPriorAnswerPrefills } from './prior-answer-prefill';
 import type { Question } from '@/types/survey';
 
 function q(id: string, overrides: Partial<Question> = {}): Question {

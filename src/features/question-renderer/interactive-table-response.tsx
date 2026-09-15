@@ -61,7 +61,7 @@ import {
   type CellOutlineEdges,
   buildChoiceGroupOutline,
   outlineBoxShadow,
-} from '@/utils/choice-group-outline';
+} from './utils/choice-group-outline';
 import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,

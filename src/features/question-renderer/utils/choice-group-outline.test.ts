@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildChoiceGroupOutline, outlineBoxShadow } from '@/utils/choice-group-outline';
+import { buildChoiceGroupOutline, outlineBoxShadow } from './choice-group-outline';
 import type { TableRow } from '@/types/survey';
 
 const cell = (id: string, groupId?: string, extra: Record<string, unknown> = {}) =>

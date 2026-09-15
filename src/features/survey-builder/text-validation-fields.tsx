@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { TextValidation } from '@/types/survey';
-import { normalizeTextValidation } from '@/utils/text-quality';
+import { normalizeTextValidation } from '@/features/question-renderer/utils/text-quality';
 
 interface TextValidationFieldsProps {
   value: TextValidation | null | undefined;

@@ -14,7 +14,7 @@ import {
   roundFormulaValue,
 } from '@/lib/survey/cell-formula';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
-import { resolveCellTextQualityViolation } from '@/lib/survey/cell-text-quality';
+import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
 import {
   collectSelectedChoiceCellIds,
   isChoiceGroupTableQuestion,
@@ -39,7 +39,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
-import { formatFailureMessage, parseInputFormat } from '@/utils/input-format';
+import { formatFailureMessage, parseInputFormat } from '@/features/question-renderer/utils/input-format';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
@@ -49,7 +49,7 @@ import {
   type TextQualityViolation,
   isPlainTextInput,
   textQualityViolation,
-} from '@/utils/text-quality';
+} from '@/features/question-renderer/utils/text-quality';
 
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 

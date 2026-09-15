@@ -16,14 +16,14 @@ import {
   getInputTextAlignClass,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { resolveCellTextQualityViolation } from '@/lib/survey/cell-text-quality';
+import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
 import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/lib/survey/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
-import { formatSampleValue } from '@/utils/input-format';
+import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
 
 import { CellContentLayout } from './cell-content-layout';
 import { FloatingHint } from './floating-hint';

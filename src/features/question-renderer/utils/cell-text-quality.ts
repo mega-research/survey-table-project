@@ -4,7 +4,7 @@ import {
   type TextQualityViolation,
   isPlainTextInput,
   textQualityViolation,
-} from '@/utils/text-quality';
+} from './text-quality';
 
 /**
  * 표 input 셀 하나의 응답 품질 위반 — 셀 렌더러(표·보기 표 사이드카)와 차단 검증이 같은 판정을 쓴다.

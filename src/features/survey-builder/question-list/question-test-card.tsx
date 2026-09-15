@@ -31,7 +31,7 @@ import {
   choiceValueKey,
   countSelectionsTowardMax,
   satisfiesMinSelections,
-} from '@/lib/survey/exclusive-choice';
+} from '@/features/question-renderer/utils/exclusive-choice';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';

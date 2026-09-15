@@ -17,7 +17,7 @@ import type React from 'react';
 
 import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { InputFormat } from '@/types/input-type';
-import { filterFormatTyping, formatFailureMessage, parseInputFormat } from '@/utils/input-format';
+import { filterFormatTyping, formatFailureMessage, parseInputFormat } from '@/features/question-renderer/utils/input-format';
 
 interface Options {
   /** 형식 미지정이면 null — 훅은 무동작이 된다. */

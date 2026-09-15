@@ -5,7 +5,7 @@ import {
   collectTableExclusiveChoiceCellIds,
   hasTableExclusiveSelected,
   satisfiesMinSelections,
-} from '@/lib/survey/exclusive-choice';
+} from '@/features/question-renderer/utils/exclusive-choice';
 import {
   isGroupedChoiceQuestion,
   collectChoiceGroups,

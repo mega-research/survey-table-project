@@ -11,7 +11,7 @@ import { useOptionTexts, useResponseSources } from '@/features/question-renderer
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { getHorizontalItemsClass } from '@/features/question-renderer/utils/table-grid-utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { resolveCellTextQualityViolation } from '@/lib/survey/cell-text-quality';
+import { resolveCellTextQualityViolation } from './utils/cell-text-quality';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorOptionTextValue,
@@ -21,7 +21,7 @@ import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-c
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, TextValidation } from '@/types/survey';
-import { formatSampleValue } from '@/utils/input-format';
+import { formatSampleValue } from './utils/input-format';
 
 // useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};

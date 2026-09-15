@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectPriorAnswerRetractions } from '@/lib/survey/prior-answer-prefill';
+import { collectPriorAnswerRetractions } from './prior-answer-prefill';
 import type { Question } from '@/types/survey';
 
 /**

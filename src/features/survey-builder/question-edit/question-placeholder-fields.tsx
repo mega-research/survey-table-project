@@ -9,10 +9,10 @@ import { InputFormatSelect } from '@/features/survey-builder/input-format-select
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
-import { applyInputTypeChange } from '@/lib/question/input-mode';
+import { applyInputTypeChange } from '@/features/survey-builder/utils/input-mode';
 import { isInputFormat } from '@/types/input-type';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
-import { isPlainTextInput } from '@/utils/text-quality';
+import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 import type { Question } from '@/types/survey';
 
 interface QuestionPlaceholderFieldsProps {

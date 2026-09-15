@@ -1,6 +1,6 @@
 import { isCellEnabled } from '@/lib/survey/cell-gating';
 import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
-import { collectTableExclusiveChoiceCellIds } from '@/lib/survey/exclusive-choice';
+import { collectTableExclusiveChoiceCellIds } from './exclusive-choice';
 import type { TableCell, TableRow } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { buildRadioGroupBuckets } from '@/features/question-renderer/utils/table-radio-groups';

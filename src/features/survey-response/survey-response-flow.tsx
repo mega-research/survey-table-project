@@ -57,7 +57,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   type CompletionOutcome,
   resolveCompletionScreen,
-} from '@/lib/survey-response/completion-screen';
+} from './lib/completion-screen';
 import {
   CHANGE_CONFIRM_KEY,
   collectUnconfirmedQuestionIds,
@@ -68,7 +68,7 @@ import {
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
-import { normalizeFormatValues } from '@/lib/survey/format-normalize';
+import { normalizeFormatValues } from './lib/format-normalize';
 import {
   type RenderStep,
   buildRenderSteps,
@@ -108,7 +108,7 @@ import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/
 import {
   collectPriorAnswerPrefills,
   collectPriorAnswerRetractions,
-} from '@/lib/survey/prior-answer-prefill';
+} from './lib/prior-answer-prefill';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { generateId } from '@/lib/utils';

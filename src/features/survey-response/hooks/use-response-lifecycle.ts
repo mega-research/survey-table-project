@@ -9,7 +9,7 @@ import { collectNumericIssues } from '@/features/survey-response/lib/numeric-val
 import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-rebase';
 import { consumeSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
-import { type CompletionOutcome, outcomeFromStatus } from '@/lib/survey-response/completion-screen';
+import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';

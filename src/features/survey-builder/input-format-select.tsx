@@ -7,7 +7,7 @@
  * 형식이 하나 늘 때 네 파일을 만져야 하고, 그중 하나를 빠뜨려도 아무도 모른다.
  */
 import { INPUT_FORMATS, type InputType, isInputFormat } from '@/types/input-type';
-import { INPUT_FORMAT_LABEL } from '@/utils/input-format';
+import { INPUT_FORMAT_LABEL } from '@/features/question-renderer/utils/input-format';
 
 interface Props {
   /** 같은 화면에 여러 개가 동시에 렌더되므로 id 충돌을 막는 접두어. */

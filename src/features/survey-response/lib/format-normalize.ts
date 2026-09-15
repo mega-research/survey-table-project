@@ -15,15 +15,15 @@
 import { isInputFormat } from '@/types/input-type';
 import type { Question, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
-import { parseInputFormat } from '@/utils/input-format';
+import { parseInputFormat } from '@/features/question-renderer/utils/input-format';
 
 import {
   type PriorAnswers,
   isUntouchedPriorValue,
   priorAnswerText,
   priorOptionText,
-} from './prior-answers';
-import { OPT_TEXTS_KEY } from './response-sidecars';
+} from '@/lib/survey/prior-answers';
+import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 
 /** 한 칸의 형식 정돈 — 대상이 아니거나 형식이 틀리면 원문 그대로. */
 function normalizeOne(
