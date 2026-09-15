@@ -143,8 +143,8 @@ function RankingMobileCardList({
           <section key={header.id}>
             <h4
               className={cn(
-                // 띠 글자는 가운데 — 행의 보기 글자와 같은 왼쪽 시작이면 띠가 목록의 한 줄처럼 읽힌다
-                'border-b border-gray-200 bg-gray-50 px-4 py-2.5 text-center text-sm font-semibold whitespace-pre-line text-gray-700',
+                // 띠 글자는 왼쪽 — 카드 헤더 관례(2026-09-15, 가운데에서 되돌림)
+                'border-b border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-semibold whitespace-pre-line text-gray-700',
                 sectionIdx > 0 && 'border-t',
                 getCellTextClassName(header),
               )}

@@ -97,9 +97,9 @@ describe('모바일 순위형 카드 — 헤더 셀 구간을 카드 하나 안�
       // 두 번째 띠부터는 위쪽 구분선으로 앞 구간과 나뉜다
       expect(econ).toHaveClass('border-t');
       expect(tech).not.toHaveClass('border-t');
-      // 띠 글자는 가운데 정렬
-      expect(tech).toHaveClass('text-center');
-      expect(econ).toHaveClass('text-center');
+      // 띠 글자는 왼쪽 정렬(카드 헤더 관례)
+      expect(tech).not.toHaveClass('text-center');
+      expect(econ).not.toHaveClass('text-center');
     },
   );
 
