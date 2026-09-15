@@ -38,6 +38,7 @@ import {
   resolveMobileOptionsColumns,
 } from '@/utils/mobile-card-options';
 import { getOptionsLayout } from '@/utils/options-layout';
+import { effectiveMaxLength, isPlainTextInput } from '@/utils/text-quality';
 
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
@@ -265,6 +266,8 @@ function QuestionInputControl({
       // 응답 품질 위반(최소 글자 수·의미 없는 입력)은 치는 동안 입력칸 아래에 바로 보인다 —
       // 「다음」에서 처음 알면 이미 쓴 글을 다시 고쳐야 하는 자리가 어딘지 찾게 된다.
       const quality = resolveTextQualityViolation(question, value, priorAnswersForQuality);
+      const textareaMax = effectiveMaxLength(question.textValidation);
+      const textareaValue = typeof value === 'string' ? value : '';
       return (
         <div className="w-full">
           <textarea
@@ -273,9 +276,13 @@ function QuestionInputControl({
             }`}
             rows={4}
             placeholder={question.placeholder || '답변을 입력하세요...'}
-            value={typeof value === 'string' ? value : ''}
+            value={textareaValue}
             onChange={(e) => onChange(e.target.value)}
+            {...(textareaMax !== null ? { maxLength: textareaMax } : {})}
           />
+          {textareaMax !== null && (
+            <TextLengthCounter current={textareaValue.length} max={textareaMax} />
+          )}
           {quality && (
             <p className="mt-1 px-1 text-xs text-red-500" data-testid="text-quality-violation">
               * {quality.message}
@@ -766,6 +773,19 @@ function defaultPlaceholder(isNumberMode: boolean, format: InputFormat | null): 
 }
 
 // 단답형(text) prefill 지원 컴포넌트
+/** 「현재 / 최대자」 글자 수 표시 — 표 input 셀과 같은 모양. 상한에 닿으면 붉게. */
+function TextLengthCounter({ current, max }: { current: number; max: number }) {
+  return (
+    <div className="mt-1 flex justify-end px-1" data-testid="text-length-counter">
+      <p className="text-xs text-gray-500">
+        <span className={current >= max ? 'font-medium text-red-500' : ''}>{current}</span>
+        {' / '}
+        {max}자
+      </p>
+    </div>
+  );
+}
+
 function TextResponseInput({
   question,
   value,
@@ -790,6 +810,9 @@ function TextResponseInput({
     currentValue,
     priorAnswersForQuality,
   );
+  // 입력 상한 — 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시. 평문 모드에서만.
+  const maxLength =
+    isPlainTextInput(question) && !isPrefilled ? effectiveMaxLength(question.textValidation) : null;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -862,7 +885,9 @@ function TextResponseInput({
         }`}
         disabled={isPrefilled}
         data-prefilled={isPrefilled || undefined}
+        {...(maxLength !== null ? { maxLength } : {})}
       />
+      {maxLength !== null && <TextLengthCounter current={currentValue.length} max={maxLength} />}
       {(unitReading || rangeViolation || formatField.violation || qualityViolation) &&
         !isPrefilled && (
           <div className="mt-1 space-y-0.5 px-1">

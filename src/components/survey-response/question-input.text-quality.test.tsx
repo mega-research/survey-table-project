@@ -54,6 +54,30 @@ describe('단답형·장문형 응답 품질 문구', () => {
     expect(screen.queryByTestId('text-quality-violation')).toBeNull();
   });
 
+  it('입력 상한이 있으면 단답형·장문형 모두 maxLength 로 막고 「현재 / 최대자」를 보인다', () => {
+    render(
+      <QuestionInput
+        question={q('textarea', { textValidation: { maxLength: 20 } })}
+        value="다섯 글자"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('textbox')).toHaveAttribute('maxlength', '20');
+    expect(screen.getByTestId('text-length-counter')).toHaveTextContent('5 / 20자');
+  });
+
+  it('숫자 모드 단답형에는 상한을 걸지 않는다 — 자기 규칙이 있다', () => {
+    render(
+      <QuestionInput
+        question={q('text', { inputType: 'number', textValidation: { maxLength: 3 } })}
+        value="12"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('maxlength');
+    expect(screen.queryByTestId('text-length-counter')).toBeNull();
+  });
+
   it('배너에는 품질 이슈를 다시 싣지 않는다 — 입력칸 아래 문구 하나로 충분하다', () => {
     render(
       <QuestionInput

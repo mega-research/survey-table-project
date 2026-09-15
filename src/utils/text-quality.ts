@@ -9,7 +9,7 @@ import type { InputType, TextValidation } from '@/types/survey';
  * 정규식 사용자 정의는 두지 않는다(잘못 쓴 정규식 하나가 응답을 통째로 막는다).
  */
 
-export type TextQualityReason = 'min_length' | 'meaningless';
+export type TextQualityReason = 'min_length' | 'max_length' | 'meaningless';
 
 /**
  * 응답 품질 검사가 붙는 입력인가 — 장문형, 그리고 평문 모드 단답형.
@@ -30,19 +30,25 @@ export function isPlainTextInput(question: {
  */
 export function normalizeTextValidation(
   config:
-    | { minLength?: number | null | undefined; rejectMeaningless?: boolean | null | undefined }
+    | {
+        minLength?: number | null | undefined;
+        maxLength?: number | null | undefined;
+        rejectMeaningless?: boolean | null | undefined;
+      }
     | null
     | undefined,
 ): TextValidation | null {
   const out: TextValidation = {};
-  const min = effectiveMinLength(
-    config
-      ? { ...(typeof config.minLength === 'number' ? { minLength: config.minLength } : {}) }
-      : null,
-  );
+  const min = positiveInt(config?.minLength);
+  const max = positiveInt(config?.maxLength);
   if (min !== null) out.minLength = min;
+  if (max !== null) out.maxLength = max;
   if (config?.rejectMeaningless === true) out.rejectMeaningless = true;
   return Object.keys(out).length > 0 ? out : null;
+}
+
+function positiveInt(n: unknown): number | null {
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
 }
 
 export interface TextQualityViolation {
@@ -59,16 +65,37 @@ export function countAnswerChars(value: string): number {
 const JAMO_OR_DIGIT_ONLY = /^[ㄱ-ㆎᄀ-ᇿꥠ-꥿ힰ-퟿0-9]*$/u;
 
 /**
- * 자음·모음·숫자만인 입력인가 — ㅋㅋㅋ · ㅎㅎ · ㅇㅇ · 123124 · "..." 류.
- *
- * 공백과 문장부호·기호를 걷어낸 뒤 남은 글자가 전부 자모·숫자이거나 아무것도 남지 않으면
- * 참이다. 완성형 한글·영문·한자가 하나라도 있으면 거짓 — "아 진짜 ㅋㅋㅋ" 는 내용이 있다.
+ * 의미 없는 입력인가 — 두 가지 모양을 잡는다.
+ * 1. 자음·모음·숫자만: ㅋㅋㅋ · ㅎㅎ · ㅇㅇ · 123124 · "..." (공백·문장부호·기호를 걷어낸 뒤
+ *    남은 글자가 전부 자모·숫자이거나 아무것도 남지 않음).
+ * 2. 짧은 단위 반복: 한두 글자짜리 단위가 두 번 이상 되풀이됨 — aaaaa · 하하하하 · 네네네 · abab.
+ * 완성형 한글·영문·한자가 섞인 보통 문장은 거짓 — "아 진짜 ㅋㅋㅋ" 는 내용이 있다.
  * 빈 값은 거짓(미입력 차단은 필수 판정 소관).
  */
 export function isMeaninglessText(value: string): boolean {
   if (value.trim() === '') return false;
   const stripped = value.replace(/[\s\p{P}\p{S}]+/gu, '');
-  return JAMO_OR_DIGIT_ONLY.test(stripped);
+  if (JAMO_OR_DIGIT_ONLY.test(stripped)) return true;
+  // 짧은 단위 반복 — 한두 글자짜리 단위가 두 번 이상 되풀이됨(aaaaa · 하하하하 · 네네네 · abab).
+  // 완성형 글자라도 성의 있는 답이 아니다. 자판 훑기(qwer)까지 판정하지는 않는 휴리스틱이다.
+  return isShortUnitRepetition([...stripped]);
+}
+
+/** 길이 1~2 단위가 두 번 이상 되풀이된 글자열인가 — aaaa · 하하하 · abab. 세 글자 이상 단위는 보지 않는다. */
+function isShortUnitRepetition(chars: string[]): boolean {
+  for (const unit of [1, 2]) {
+    if (chars.length < unit * 2 || chars.length % unit !== 0) continue;
+    const head = chars.slice(0, unit).join('');
+    let repeated = true;
+    for (let i = unit; i < chars.length; i += unit) {
+      if (chars.slice(i, i + unit).join('') !== head) {
+        repeated = false;
+        break;
+      }
+    }
+    if (repeated) return true;
+  }
+  return false;
 }
 
 export const MEANINGLESS_TEXT_MESSAGE =
@@ -80,8 +107,16 @@ export function minLengthMessage(minLength: number, current: number): string {
 
 /** 빌더가 저장한 최소 글자 수 — 양의 정수일 때만 뜻이 있다. */
 export function effectiveMinLength(config: TextValidation | null | undefined): number | null {
-  const n = config?.minLength;
-  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
+  return positiveInt(config?.minLength);
+}
+
+/** 입력 상한(공백 포함) — 표 input 셀의 inputMaxLength 와 같은 하드 캡. 양의 정수일 때만. */
+export function effectiveMaxLength(config: TextValidation | null | undefined): number | null {
+  return positiveInt(config?.maxLength);
+}
+
+export function maxLengthMessage(maxLength: number, current: number): string {
+  return `${maxLength}자 이하로 입력해 주세요. (현재 ${current}자)`;
 }
 
 /**
@@ -102,6 +137,12 @@ export function textQualityViolation(
     if (current < min) {
       return { reason: 'min_length', message: minLengthMessage(min, current) };
     }
+  }
+  // 상한은 입력칸이 이미 막지만, 붙여넣기·설정 전 값·이월 값이 넘어올 수 있어 여기서도 본다.
+  // 입력칸의 maxLength 와 같은 단위(공백 포함 길이)로 센다.
+  const max = effectiveMaxLength(config);
+  if (max !== null && value.length > max) {
+    return { reason: 'max_length', message: maxLengthMessage(max, value.length) };
   }
   return null;
 }

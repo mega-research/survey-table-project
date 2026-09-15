@@ -36,12 +36,26 @@ describe('isMeaninglessText — 자음·모음·숫자만인 입력', () => {
     expect(isMeaninglessText(value)).toBe(true);
   });
 
-  it.each(['없음', '아 진짜 ㅋㅋㅋ', 'ok', 'N/A', '10명', '漢字', '2024년 도입 예정'])(
-    '%j 는 내용이 있는 입력이다',
+  it.each(['aaaaa', '하하하하', '네네네', 'abab', 'ㅋ하ㅋ하', '하 하 하', 'AAAA'])(
+    '%j 는 한두 글자만 되풀이한 값이라 의미 없는 입력이다',
     (value) => {
-      expect(isMeaninglessText(value)).toBe(false);
+      expect(isMeaninglessText(value)).toBe(true);
     },
   );
+
+  it.each([
+    '없음',
+    '아 진짜 ㅋㅋㅋ',
+    'ok',
+    'N/A',
+    '10명',
+    '漢字',
+    '2024년 도입 예정',
+    '하하 진짜 웃김',
+    '가나가',
+  ])('%j 는 내용이 있는 입력이다', (value) => {
+    expect(isMeaninglessText(value)).toBe(false);
+  });
 
   it('빈 값은 판정 대상이 아니다 — 미입력 차단은 필수 판정 소관', () => {
     expect(isMeaninglessText('')).toBe(false);
@@ -71,6 +85,14 @@ describe('textQualityViolation — 문항 설정에 비춘 위반', () => {
     });
     expect(textQualityViolation({ rejectMeaningless: true }, '특별히 없음')).toBeNull();
     expect(textQualityViolation({ rejectMeaningless: false }, 'ㅋㅋㅋ')).toBeNull();
+  });
+
+  it('입력 상한을 넘으면 공백 포함 길이로 알린다 — 입력칸의 maxLength 와 같은 단위', () => {
+    expect(textQualityViolation({ maxLength: 5 }, '여섯 글자야')).toEqual({
+      reason: 'max_length',
+      message: '5자 이하로 입력해 주세요. (현재 6자)',
+    });
+    expect(textQualityViolation({ maxLength: 5 }, '다섯글자')).toBeNull();
   });
 
   it('둘 다 걸리면 의미 없는 입력을 먼저 알린다 — 글자 수를 채워도 통과하지 못하는 값이라서', () => {
@@ -110,6 +132,8 @@ describe('normalizeTextValidation — 빌더 저장 정리', () => {
       rejectMeaningless: true,
     });
     expect(normalizeTextValidation({ minLength: 0, rejectMeaningless: false })).toBeNull();
+    expect(normalizeTextValidation({ maxLength: 200 })).toEqual({ maxLength: 200 });
+    expect(normalizeTextValidation({ maxLength: 0 })).toBeNull();
     expect(normalizeTextValidation({ minLength: -1 })).toBeNull();
     expect(normalizeTextValidation({ rejectMeaningless: true })).toEqual({
       rejectMeaningless: true,

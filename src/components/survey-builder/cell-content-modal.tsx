@@ -1347,8 +1347,8 @@ export function CellContentModal({
                         >
                           <span className="font-medium">자음·모음·숫자만 입력하면 막기</span>
                           <p className="mt-0.5 text-xs text-gray-500">
-                            ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 하나도 없는 답을 받지
-                            않습니다.
+                            ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 없거나, aaaaa · 하하하하 ·
+                            네네네 처럼 한두 글자만 되풀이한 답을 받지 않습니다.
                           </p>
                         </label>
                       </div>

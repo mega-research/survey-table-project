@@ -569,6 +569,7 @@ export function QuestionBasicTab({
             const config = formData.textValidation ?? {};
             const setConfig = (next: {
               minLength?: number | undefined;
+              maxLength?: number | undefined;
               rejectMeaningless?: boolean | undefined;
             }) =>
               setFormData((prev) => ({
@@ -607,6 +608,27 @@ export function QuestionBasicTab({
                   />
                   <span className="text-xs text-gray-500">자 이상 (공백 제외)</span>
                 </div>
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="text-max-length" className="w-28 shrink-0 text-sm">
+                    최대 글자 수
+                  </Label>
+                  <Input
+                    id="text-max-length"
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    className="w-28"
+                    disabled={lockedByMode}
+                    value={typeof config.maxLength === 'number' ? String(config.maxLength) : ''}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setConfig({ maxLength: Number.isFinite(n) && n > 0 ? n : undefined });
+                    }}
+                    placeholder="없음"
+                  />
+                  <span className="text-xs text-gray-500">자까지 입력 가능 (공백 포함)</span>
+                </div>
                 <div className="flex items-start gap-2">
                   <Switch
                     id="text-reject-meaningless"
@@ -619,7 +641,8 @@ export function QuestionBasicTab({
                       자음·모음·숫자만 입력하면 막기
                     </Label>
                     <p className="text-xs text-gray-500">
-                      ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 하나도 없는 답을 받지 않습니다.
+                      ㅋㅋㅋ · ㅎㅎ · 123124 처럼 완성된 글자가 없거나, aaaaa · 하하하하 · 네네네
+                      처럼 한두 글자만 되풀이한 답을 받지 않습니다.
                     </p>
                   </div>
                 </div>

@@ -122,10 +122,12 @@ export type NumberUnit =
 /**
  * 단답형·장문형 응답 품질 검사 설정 (questions.text_validation JSONB).
  * - minLength: 공백을 뺀 최소 글자 수. 양의 정수만 뜻이 있다.
+ * - maxLength: 입력 상한(공백 포함, 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시).
  * - rejectMeaningless: 자음·모음·숫자만인 입력(ㅋㅋㅋ · 123124) 거부.
  */
 export interface TextValidation {
   minLength?: number;
+  maxLength?: number;
   rejectMeaningless?: boolean;
 }
 
