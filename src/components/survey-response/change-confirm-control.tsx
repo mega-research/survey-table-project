@@ -3,6 +3,7 @@
 import { History } from 'lucide-react';
 
 import { CHANGE_CONFIRM_VALUES, type ChangeConfirmation } from '@/lib/survey/change-confirmation';
+import { VALIDATION_NOTICE_ATTRIBUTE } from './scroll-to-issue';
 
 /** 변동 확인을 밝히지 않은 채 다음을 눌렀을 때 문항에 붙는 안내. */
 export const CHANGE_CONFIRM_REQUIRED_MESSAGE = '이 문항의 변동 여부를 선택해주세요';
@@ -71,7 +72,10 @@ export function ChangeConfirmControl({
         </fieldset>
       </div>
       {showRequiredMessage && (
-        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          {...{ [VALIDATION_NOTICE_ATTRIBUTE]: questionId }}
+          className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {CHANGE_CONFIRM_REQUIRED_MESSAGE}
         </p>
       )}

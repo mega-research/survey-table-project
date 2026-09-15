@@ -1345,6 +1345,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
           <ValidationIssueBanner
             items={errorItems}
+            questionId={questionId}
             onNavigate={(item) => {
               const cellIds = item.cellIds ?? [];
               const scroll = () =>

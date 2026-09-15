@@ -78,3 +78,25 @@ export function scrollToIssue({
 export function scrollToCell(cellIds: readonly string[]): void {
   scrollToIssue({ cellIds });
 }
+
+/** 검증 안내(CONTEXT.md) 요소의 표식 — 값은 그 안내가 속한 문항 id */
+export const VALIDATION_NOTICE_ATTRIBUTE = 'data-validation-notice';
+
+/**
+ * 「다음」이 막혔을 때의 착지 — 그 문항의 검증 안내로 간다. 위반 셀이나 문항 카드로 뛰어들지
+ * 않는다: 표 문항은 카드 가운데가 표 한복판이라 어디가 문제인지 보이지 않았고, 셀 이동은
+ * 안내의 「위치로 이동」이 맡는다(2026-09-15 결정). 화면 가운데에 세우고 첫 이동 버튼에
+ * 포커스를 둔다 — 버튼 없는 한 줄 안내는 포커스를 옮기지 않는다. 안내가 아직 없으면 문항 카드.
+ */
+export function scrollToValidationNotice(questionId: string): void {
+  const notice = findDataTarget(VALIDATION_NOTICE_ATTRIBUTE, [questionId]);
+  if (!notice) {
+    scrollToIssue({ questionId });
+    return;
+  }
+  const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
+  notice.scrollIntoView({ behavior, block: 'center' });
+  notice.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true });
+}

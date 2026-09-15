@@ -69,6 +69,11 @@ describe('GroupStepItem 필수 안내 문구', () => {
     expect(screen.getByText(DEFAULT_REQUIRED_MESSAGE)).toBeInTheDocument();
   });
 
+  it('필수 안내 한 줄은 그 문항의 검증 안내 표식을 단다 — 「다음」이 막힌 뒤 스크롤 착지 지점', () => {
+    renderItem(textQuestion(), true);
+    expect(screen.getByText(DEFAULT_REQUIRED_MESSAGE)).toHaveAttribute('data-validation-notice', 'q1');
+  });
+
   it('showRequiredMessage=false 이면 문구를 렌더하지 않는다', () => {
     renderItem(textQuestion({ requiredMessage: '연락처는 꼭 남겨주세요' }), false);
     expect(screen.queryByText('연락처는 꼭 남겨주세요')).not.toBeInTheDocument();

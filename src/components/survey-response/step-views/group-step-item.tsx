@@ -30,6 +30,7 @@ import {
   updateDynamicRowSelections,
 } from '@/utils/dynamic-row-selection-sidecar';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { VALIDATION_NOTICE_ATTRIBUTE } from '@/components/survey-response/scroll-to-issue';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -213,7 +214,10 @@ export function GroupStepItem({
           </div>
         </fieldset>
         {showRequiredMessage && !requiredMessageInBanner && (
-          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
+            className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
             {resolveGroupedRequiredMessage(q, responses[q.id])}
           </p>
         )}

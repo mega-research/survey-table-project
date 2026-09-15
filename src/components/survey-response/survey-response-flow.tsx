@@ -22,6 +22,7 @@ import { ResumeToast } from '@/components/survey-response/resume-toast';
 import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
+  scrollToValidationNotice,
 } from '@/components/survey-response/scroll-to-issue';
 import { DemandChecklist } from '@/components/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
@@ -1493,6 +1494,17 @@ function SurveyResponseFlowActive({
     if (active instanceof HTMLElement) active.blur();
   };
 
+  /**
+   * 「다음」이 막혔을 때의 착지 — 그 문항의 검증 안내(CONTEXT.md)로 간다. 안내는 방금 세운
+   * 상태(필수·숫자·변동 확인 오류 스텝)로 그려지므로 이번 렌더에는 아직 없다 — 두 프레임 뒤에
+   * 찾는다. 위반 셀·문항 카드로 뛰어들지 않는다(셀 이동은 안내의 「위치로 이동」 몫).
+   */
+  const landOnValidationNotice = (questionId: string) => {
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => scrollToValidationNotice(questionId)),
+    );
+  };
+
   const handleNext = async () => {
     blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
@@ -1546,7 +1558,7 @@ function SurveyResponseFlowActive({
     if (firstUnconfirmed) {
       setHighlightQuestionIds(new Set([firstUnconfirmed]));
       setChangeConfirmErrorStepIndex(currentStepIndex);
-      scrollToIssue({ questionId: firstUnconfirmed });
+      landOnValidationNotice(firstUnconfirmed);
       return;
     }
 
@@ -1561,15 +1573,7 @@ function SurveyResponseFlowActive({
       if (firstIssue) {
         setNumericErrorStepIndex(currentStepIndex);
       }
-      scrollToIssue({
-        questionId: firstUnanswered.id,
-        detailTargetIds: firstIssue?.detailTargetIds,
-        cellInstanceIds: buildRowWiseCellInstanceIds(
-          firstUnanswered.tableRowsData,
-          firstIssue?.cellIds,
-        ),
-        cellIds: firstIssue?.cellIds,
-      });
+      landOnValidationNotice(firstUnanswered.id);
       return;
     }
 
@@ -1579,19 +1583,7 @@ function SurveyResponseFlowActive({
       const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
       if (firstViolatedQuestionId) {
         setHighlightQuestionIds(new Set([firstViolatedQuestionId]));
-        const firstIssue = numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0];
-        const violatedQuestion = questions.find(
-          (question) => question.id === firstViolatedQuestionId,
-        );
-        scrollToIssue({
-          questionId: firstViolatedQuestionId,
-          detailTargetIds: firstIssue?.detailTargetIds,
-          cellInstanceIds: buildRowWiseCellInstanceIds(
-            violatedQuestion?.tableRowsData,
-            firstIssue?.cellIds,
-          ),
-          cellIds: firstIssue?.cellIds,
-        });
+        landOnValidationNotice(firstViolatedQuestionId);
       }
       setNumericErrorStepIndex(currentStepIndex);
       return;
