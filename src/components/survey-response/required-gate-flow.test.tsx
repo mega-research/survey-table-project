@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -175,9 +175,13 @@ describe('필수 게이트 하단 안내와 강조', () => {
     expect(questionCard('q-b')).toHaveClass('ring-red-200');
     expect(screen.getAllByText(PER_QUESTION_MESSAGE)).toHaveLength(2);
     expect(screen.getByText(BOTTOM_NOTICE)).toBeInTheDocument();
-    // 스크롤은 첫 문항으로만 간다
+    // 스크롤은 첫 문항의 검증 안내로만 간다 — 안내가 그려진 뒤(두 프레임 뒤)에 일어난다
+    // (CONTEXT.md 「검증 안내」, 2026-09-15).
     const scrollSpy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
-    expect(scrollSpy.mock.contexts.at(-1)).toBe(questionCard('q-a'));
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledTimes(1));
+    expect(scrollSpy.mock.contexts.at(-1)).toBe(
+      document.querySelector('[data-validation-notice="q-a"]'),
+    );
   });
 
   it('한 문항을 답하면 그 문항의 강조·문구만 풀리고 나머지와 하단 안내는 남는다', async () => {

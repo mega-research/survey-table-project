@@ -288,7 +288,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
   // 티켓 14(2026-09-03) — 이전에는 첫 문항만 강조했다. 이제 미답 필수 전부를 강조하고
   // 스크롤만 첫 문항으로 간다. 답한 문항의 강조는 그 문항만 즉시 풀린다.
-  it('미입력 필수 문항을 전부 표시하고 첫 문항으로 스크롤하며, 답한 문항만 강조가 풀린다', async () => {
+  it('미입력 필수 문항을 전부 표시하고 첫 문항의 검증 안내로 스크롤하며, 답한 문항만 강조가 풀린다', async () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
     renderTwoRequiredQuestionsFlow();
@@ -304,7 +304,12 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       .closest('[data-question-id="q-second-required"]');
     expect(firstQuestion).toHaveClass('ring-red-200');
     expect(secondQuestion).toHaveClass('ring-red-200');
-    expect(scrollSpy.mock.contexts.at(-1)).toBe(firstQuestion);
+    // 착지는 문항 카드가 아니라 그 문항의 검증 안내이고, 안내가 그려진 뒤(두 프레임 뒤)에
+    // 일어난다 — CONTEXT.md 「검증 안내」(2026-09-15).
+    const firstNotice = document.querySelector('[data-validation-notice="q-first-required"]');
+    expect(firstNotice).not.toBeNull();
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledTimes(1));
+    expect(scrollSpy.mock.contexts.at(-1)).toBe(firstNotice);
 
     await user.click(screen.getByLabelText('예'));
     expect(firstQuestion).not.toHaveClass('ring-red-200');
@@ -314,7 +319,10 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(firstQuestion).not.toHaveClass('ring-red-200');
     expect(secondQuestion).toHaveClass('ring-red-200');
-    expect(scrollSpy.mock.contexts.at(-1)).toBe(secondQuestion);
+    const secondNotice = document.querySelector('[data-validation-notice="q-second-required"]');
+    expect(secondNotice).not.toBeNull();
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledTimes(2));
+    expect(scrollSpy.mock.contexts.at(-1)).toBe(secondNotice);
     expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
   });
 
