@@ -2,11 +2,14 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
-import { getHeaderBandBorders } from '@/lib/survey/response-header-config';
 import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import { getHeaderBandBorders } from '@/lib/survey/response-header-config';
 
-const composed = (over: Partial<Extract<SurveyResponseHeaderConfig, { style: 'composed' }>> = {}): SurveyResponseHeaderConfig => ({
-  style: 'composed', ...over,
+const composed = (
+  over: Partial<Extract<SurveyResponseHeaderConfig, { style: 'composed' }>> = {},
+): SurveyResponseHeaderConfig => ({
+  style: 'composed',
+  ...over,
 });
 
 describe('SurveyResponseHeader (composed 데스크톱)', () => {
@@ -17,10 +20,20 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
         device="desktop"
         showBranding={false}
         responseHeader={composed({
-          bandStyle: 'band', bandBg: '#f0f0f0',
+          bandStyle: 'band',
+          bandBg: '#f0f0f0',
           blocks: [
             { id: 'l1', type: 'logo', pos: 'right', size: 'lg', imageUrl: 'https://x/logo.png' },
-            { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '통계법', boxBody: '보호', lineBody: '' },
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'left',
+              size: 'md',
+              format: 'box',
+              title: '통계법',
+              boxBody: '보호',
+              lineBody: '',
+            },
           ],
         })}
       />,
@@ -35,13 +48,79 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
     expect(screen.queryByTestId('header-notice-card')).not.toBeInTheDocument();
   });
 
+  it('가운데 제목 옆에 블록이 있으면 좌·우 칸을 같은 폭으로 두어 제목이 밴드 전체의 가운데에 선다', () => {
+    render(
+      <SurveyResponseHeader
+        title="이용자 만족도 조사"
+        device="desktop"
+        responseHeader={composed({
+          titleAlign: 'center',
+          blocks: [
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'title-left',
+              size: 'md',
+              format: 'box',
+              title: '통계법',
+              boxBody: '보호',
+              lineBody: '',
+            },
+          ],
+        })}
+      />,
+    );
+    const band = screen.getByTestId('header-band');
+    expect(band).toHaveAttribute('data-symmetric', 'true');
+    expect(band).toHaveStyle({
+      gridTemplateColumns: 'minmax(max-content, 1fr) auto minmax(max-content, 1fr)',
+    });
+    expect(screen.getByText('통계법')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '이용자 만족도 조사' })).toBeInTheDocument();
+  });
+
+  it('제목 왼쪽 정렬이거나 제목 옆 블록이 없으면 종전 flex 밴드 그대로다', () => {
+    const { unmount } = render(
+      <SurveyResponseHeader
+        title="제목"
+        device="desktop"
+        responseHeader={composed({
+          titleAlign: 'left',
+          blocks: [
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'title-left',
+              size: 'md',
+              format: 'box',
+              title: '통계법',
+              boxBody: '보호',
+              lineBody: '',
+            },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('header-band')).not.toHaveAttribute('data-symmetric');
+    unmount();
+    render(
+      <SurveyResponseHeader
+        title="제목"
+        device="desktop"
+        responseHeader={composed({ titleAlign: 'center', blocks: [] })}
+      />,
+    );
+    expect(screen.getByTestId('header-band')).not.toHaveAttribute('data-symmetric');
+  });
+
   it('stacked — 블록 행과 제목 밴드를 렌더하고 밴드 스타일 괘선을 적용한다', () => {
     render(
       <SurveyResponseHeader
         title="2026 신문산업 실태조사"
         device="desktop"
         responseHeader={composed({
-          bandStyle: 'band', bandBg: '#f0f0f0',
+          bandStyle: 'band',
+          bandBg: '#f0f0f0',
           blocks: [
             { id: 'm1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/mark.png' },
             { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: '' },
@@ -52,9 +131,16 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
     expect(screen.getByTestId('header-block-row')).toBeInTheDocument();
     const band = screen.getByTestId('header-band');
     const bandBorders = getHeaderBandBorders('band');
-    expect(band).toHaveStyle({ backgroundColor: '#f0f0f0', borderTop: bandBorders.top, borderBottom: bandBorders.bottom });
+    expect(band).toHaveStyle({
+      backgroundColor: '#f0f0f0',
+      borderTop: bandBorders.top,
+      borderBottom: bandBorders.bottom,
+    });
     expect(screen.getByRole('heading', { name: '2026 신문산업 실태조사' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '국가통계 마크' })).toHaveAttribute('src', 'https://x/mark.png');
+    expect(screen.getByRole('img', { name: '국가통계 마크' })).toHaveAttribute(
+      'src',
+      'https://x/mark.png',
+    );
     expect(screen.getByText('로고')).toBeInTheDocument(); // 빈 imageUrl 자리표시자
   });
 
@@ -100,21 +186,50 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
 
   it('부제목이 있으면 제목 아래 렌더하고, 비우면 렌더하지 않는다', () => {
     const { rerender } = render(
-      <SurveyResponseHeader title="T" device="desktop" responseHeader={composed({ subtitle: '(본 조사)' })} />,
+      <SurveyResponseHeader
+        title="T"
+        device="desktop"
+        responseHeader={composed({ subtitle: '(본 조사)' })}
+      />,
     );
     expect(screen.getByText('(본 조사)')).toBeInTheDocument();
-    rerender(<SurveyResponseHeader title="T" device="desktop" responseHeader={composed({ subtitle: '' })} />);
+    rerender(
+      <SurveyResponseHeader
+        title="T"
+        device="desktop"
+        responseHeader={composed({ subtitle: '' })}
+      />,
+    );
     expect(screen.queryByText('(본 조사)')).not.toBeInTheDocument();
   });
 
   it('한줄형 문구를 제목 위/아래에 렌더한다', () => {
     render(
       <SurveyResponseHeader
-        title="T" device="desktop"
+        title="T"
+        device="desktop"
         responseHeader={composed({
           blocks: [
-            { id: 'n1', type: 'notice', pos: 'above', size: 'md', format: 'line', title: '', boxBody: '', lineBody: '위 문구' },
-            { id: 'n2', type: 'notice', pos: 'below', size: 'md', format: 'line', title: '', boxBody: '', lineBody: '아래 문구' },
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'above',
+              size: 'md',
+              format: 'line',
+              title: '',
+              boxBody: '',
+              lineBody: '위 문구',
+            },
+            {
+              id: 'n2',
+              type: 'notice',
+              pos: 'below',
+              size: 'md',
+              format: 'line',
+              title: '',
+              boxBody: '',
+              lineBody: '아래 문구',
+            },
           ],
         })}
       />,
@@ -126,10 +241,14 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
   it('inline — 표 셀 구조로 렌더한다', () => {
     render(
       <SurveyResponseHeader
-        title="목재이용실태조사" device="desktop"
+        title="목재이용실태조사"
+        device="desktop"
         responseHeader={composed({
-          layout: 'inline', bandBg: '#cfe0ad',
-          blocks: [{ id: 'm1', type: 'mark', pos: 'left', size: 'md', imageUrl: 'https://x/m.png' }],
+          layout: 'inline',
+          bandBg: '#cfe0ad',
+          blocks: [
+            { id: 'm1', type: 'mark', pos: 'left', size: 'md', imageUrl: 'https://x/m.png' },
+          ],
         })}
       />,
     );
@@ -140,9 +259,21 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
   it('박스형 문구 — 검정 타이틀바와 본문을 렌더한다', () => {
     render(
       <SurveyResponseHeader
-        title="T" device="desktop"
+        title="T"
+        device="desktop"
         responseHeader={composed({
-          blocks: [{ id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '통계법 제33조(비밀의 보호)', boxBody: '본문입니다', lineBody: '' }],
+          blocks: [
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'left',
+              size: 'md',
+              format: 'box',
+              title: '통계법 제33조(비밀의 보호)',
+              boxBody: '본문입니다',
+              lineBody: '',
+            },
+          ],
         })}
       />,
     );
@@ -153,9 +284,11 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
   it('v1 official-band 입력도 composed로 마이그레이션되어 렌더된다', () => {
     render(
       <SurveyResponseHeader
-        title="T" device="desktop"
+        title="T"
+        device="desktop"
         responseHeader={{
-          style: 'official-band', titleSize: 'auto',
+          style: 'official-band',
+          titleSize: 'auto',
           logo: { imageUrl: 'https://x/l.png', size: 'md' },
           officialBand: {
             arrangement: 'stat-left-logo-right',
@@ -171,10 +304,21 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
 
 describe('SurveyResponseHeader (composed 모바일)', () => {
   const blocks: SurveyResponseHeaderConfig = composed({
-    mobileStyle: 'gov', bandStyle: 'band', bandBg: '#f0f0f0',
+    mobileStyle: 'gov',
+    bandStyle: 'band',
+    bandBg: '#f0f0f0',
     blocks: [
       { id: 'm1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/mark.png' },
-      { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '통계법 제33조(비밀의 보호)', boxBody: '박스 본문', lineBody: '한줄 요약' },
+      {
+        id: 'n1',
+        type: 'notice',
+        pos: 'left',
+        size: 'md',
+        format: 'box',
+        title: '통계법 제33조(비밀의 보호)',
+        boxBody: '박스 본문',
+        lineBody: '한줄 요약',
+      },
       { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: 'https://x/logo.png' },
     ],
   });
@@ -192,11 +336,18 @@ describe('SurveyResponseHeader (composed 모바일)', () => {
   it('title — 제목+마크, 로고 행, 하단 밑줄을 렌더한다 (로고도 표시 결정)', () => {
     render(
       <SurveyResponseHeader
-        title="2025년 인공지능산업 실태조사" device="mobile"
+        title="2025년 인공지능산업 실태조사"
+        device="mobile"
         responseHeader={composed({
           mobileStyle: 'title',
           blocks: [
-            { id: 'm1', type: 'mark', pos: 'title-right', size: 'md', imageUrl: 'https://x/mark.png' },
+            {
+              id: 'm1',
+              type: 'mark',
+              pos: 'title-right',
+              size: 'md',
+              imageUrl: 'https://x/mark.png',
+            },
             { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: 'https://x/logo.png' },
           ],
         })}
@@ -210,12 +361,25 @@ describe('SurveyResponseHeader (composed 모바일)', () => {
   it('band — 인라인 밴드와 박스형 문구의 한줄 텍스트를 렌더하고 부제를 표시한다', () => {
     render(
       <SurveyResponseHeader
-        title="목재이용실태조사" device="mobile"
+        title="목재이용실태조사"
+        device="mobile"
         responseHeader={composed({
-          mobileStyle: 'band', layout: 'inline', subtitle: '(본 조사)', bandBg: '#cfe0ad',
+          mobileStyle: 'band',
+          layout: 'inline',
+          subtitle: '(본 조사)',
+          bandBg: '#cfe0ad',
           blocks: [
             { id: 'm1', type: 'mark', pos: 'left', size: 'md', imageUrl: 'https://x/m.png' },
-            { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '제목', boxBody: '박스', lineBody: '모바일 한줄 문구' },
+            {
+              id: 'n1',
+              type: 'notice',
+              pos: 'left',
+              size: 'md',
+              format: 'box',
+              title: '제목',
+              boxBody: '박스',
+              lineBody: '모바일 한줄 문구',
+            },
           ],
         })}
       />,
