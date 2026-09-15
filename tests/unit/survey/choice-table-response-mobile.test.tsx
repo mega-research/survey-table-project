@@ -529,13 +529,16 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
     );
     expect(screen.getByTestId('axis-card-g1')).not.toHaveClass('border-red-300');
     expect(screen.getByTestId('axis-card-g2')).toHaveClass('border-red-300');
-    // 문구는 카드 머리와 카드 아래 두 곳 — 긴 카드의 끝에서도 읽힌다
+    // 문구는 카드 머리와 카드 바로 아래 검증 안내 상자 두 곳 — 상자에는 「위치로 이동」이 있다
     expect(screen.getAllByText('계획을 하나 이상 고르세요')).toHaveLength(2);
-    expect(screen.getByTestId('axis-card-g2').querySelector('[data-testid="axis-card-footer-notice"]')).not.toBeNull();
-    expect(screen.getByTestId('axis-card-g1').querySelector('[data-testid="axis-card-footer-notice"]')).toBeNull();
+    const box = screen.getByTestId('axis-card-g2').nextElementSibling!;
+    expect(box).toHaveAttribute('role', 'alert');
+    expect(box).toHaveAttribute('data-validation-notice', 'q1');
+    expect(within(box as HTMLElement).getByRole('button', { name: '위치로 이동' })).toBeInTheDocument();
+    expect(screen.getByTestId('axis-card-g1').nextElementSibling).toBeNull();
   });
 
-  it('카드 아래 문구의 「위치로 이동」은 그 카드의 첫 보기 타일로 스크롤한다', () => {
+  it('카드 아래 상자의 「위치로 이동」은 그 카드의 첫 보기 타일로 스크롤한다', () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
     render(
@@ -546,8 +549,8 @@ describe('ChoiceTableResponse (mobile) — 축 단위 카드', () => {
         showRequiredHighlight
       />,
     );
-    const footer = screen.getByTestId('axis-card-g2').querySelector('[data-testid="axis-card-footer-notice"]')!;
-    fireEvent.click(within(footer as HTMLElement).getByRole('button', { name: '위치로 이동' }));
+    const box = screen.getByTestId('axis-card-g2').nextElementSibling!;
+    fireEvent.click(within(box as HTMLElement).getByRole('button', { name: '위치로 이동' }));
     expect(scrollSpy).toHaveBeenCalledTimes(1);
     expect(scrollSpy.mock.contexts[0]).toHaveAttribute('data-cell-id', 'r1c3');
   });

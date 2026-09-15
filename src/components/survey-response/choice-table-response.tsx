@@ -64,7 +64,7 @@ import { CellText, resolveCellTextHtml } from '@/components/survey/cell-text';
 import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
 
 import { MobileOptionCard } from './mobile-card-shared';
-import { scrollToIssue } from './scroll-to-issue';
+import { ValidationIssueBanner } from './validation-issue-banner';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 
@@ -1040,8 +1040,8 @@ export function ChoiceTableResponse({
           const requiredMessage = group.requiredMessage?.trim() || resolveRequiredMessage(question);
           const memberIds = new Set(group.cells.map((c) => c.id));
           return (
+            <div key={groupId}>
             <div
-              key={groupId}
               data-testid={`axis-card-${groupId}`}
               className={cn(
                 'rounded-2xl border bg-white',
@@ -1133,25 +1133,16 @@ export function ChoiceTableResponse({
                   });
                 })}
               </div>
-              {/* 카드 아래에도 같은 문구 — 카드 끝까지 내려온 응답자가 머리로 돌아가지 않아도
-                  "이 카드에서 하나 이상" 을 그 자리에서 읽는다(2026-09-15 요청). */}
-              {unfilled && (
-                <div
-                  data-testid="axis-card-footer-notice"
-                  className="flex items-center justify-between gap-3 border-t border-red-100 px-4 py-2.5 text-[13px] text-red-600"
-                >
-                  <p className="min-w-0">{requiredMessage}</p>
-                  {/* 이 카드의 첫 보기 타일로 — 긴 카드 끝에서 답할 자리로 바로 올라간다.
-                      문항 아래 검증 안내의 버튼과 같은 이동 규칙(scrollToIssue, data-cell-id). */}
-                  <button
-                    type="button"
-                    onClick={() => scrollToIssue({ cellIds: group.cells.map((c) => c.id) })}
-                    className="shrink-0 rounded border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-                  >
-                    위치로 이동
-                  </button>
-                </div>
-              )}
+            </div>
+            {/* 미충족 카드 바로 아래에 검증 안내 상자 — 문항 아래 상자와 같은 컴포넌트라 모양·이동
+                규칙이 같고, 「다음」의 착지 표식(data-validation-notice)도 여기 붙는다. 이 모드에서는
+                문항 아래 상자를 내지 않는다(group-step-item) — 마지막 카드 아래에 둘이 겹친다. */}
+            {unfilled && (
+              <ValidationIssueBanner
+                items={[{ message: requiredMessage, cellIds: group.cells.map((c) => c.id) }]}
+                questionId={question.id}
+              />
+            )}
             </div>
           );
         })}

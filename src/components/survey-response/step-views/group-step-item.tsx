@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo } from 'react';
 
+import { useMobileView } from '@/hooks/use-media-query';
+
 import { ChangeConfirmControl } from '@/components/survey-response/change-confirm-control';
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
@@ -116,6 +118,10 @@ export function GroupStepItem({
   // 셀별 지정 문구와 범위/합계/수식 위반은 별개 정보이므로 그대로 둔다.
   // 보기 그룹 표(radio/checkbox 그룹)의 필수 미충족은 배너 항목이 따로 없어 이동 버튼이 안 달렸다 —
   // 미충족 그룹을 셀 id 가 있는 required-cells 이슈로 배너에 넣고 아래 <p> 는 생략한다(2026-09-15).
+  // 모바일 축 단위 카드는 미충족 카드마다 자기 아래에 같은 상자를 그린다 — 여기서 또 내면
+  // 마지막 카드 아래에 둘이 겹친다. 문구는 여전히 그 상자 몫이라 아래 <p> 는 생략한다.
+  const isMobile = useMobileView();
+  const axisCardsOnMobile = isMobile && q.mobileTableDisplayMode === 'axis-cards';
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
       ? collectUnfilledChoiceGroupIssues(q, responses[q.id]).map((issue) => ({
@@ -128,6 +134,7 @@ export function GroupStepItem({
       return { visibleIssues: issues, requiredMessageInBanner: false };
     }
     let merged = groupIssues.length > 0;
+    if (axisCardsOnMobile) groupIssues.length = 0;
     const next = (issues ?? []).map((issue) => {
       const isDefaultRequiredIssue =
         (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
@@ -137,7 +144,7 @@ export function GroupStepItem({
       return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
     });
     return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q, responses]);
+  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
