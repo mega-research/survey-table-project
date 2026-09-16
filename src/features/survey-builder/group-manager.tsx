@@ -82,7 +82,6 @@ export function GroupManager({ className }: GroupManagerProps) {
   const surveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
   const ensureSurvey = useEnsureSurveyInDb();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -111,6 +110,10 @@ export function GroupManager({ className }: GroupManagerProps) {
   // 편집 대상도 store 파생값이다 — 로컬 state 로 객체를 복제하면 groups 갱신마다 이펙트가
   // 되맞춰야 하고(동기화를 빠뜨린 필드는 모달에서 조용히 stale 이 된다), 그 setState 가
   // 렌더 중 연쇄를 부른다. 펼침(expandedGroups)과 같은 꼴로 id 만 들고 파생한다.
+  //
+  // 편집 모달의 열림 여부도 이 값이 겸한다. GroupEditModal 은 editingGroup 이 null 이면
+  // Dialog 를 만들기 전에 null 을 돌려주므로(그쪽 early return), 열림을 나타내는 boolean 을
+  // 따로 들어도 화면에 보이는 것은 달라지지 않고 손으로 맞춰야 할 출처만 하나 늘어난다.
   const editingGroup = useMemo(
     () => groupsOrEmpty.find((g) => g.id === editingGroupId) ?? null,
     [groupsOrEmpty, editingGroupId],
@@ -263,7 +266,6 @@ export function GroupManager({ className }: GroupManagerProps) {
               toast.error('그룹 생성에 실패했습니다. 다시 시도해주세요.');
               return null;
             },
-            onSettled: () => {},
           },
         );
         if (!outcome) return;
@@ -317,16 +319,16 @@ export function GroupManager({ className }: GroupManagerProps) {
     toggleGroupCollapse(groupId);
   };
 
+  // 호출부는 두 곳(최상위 목록·renderSubGroups)뿐이고 둘 다 groupsOrEmpty 에서 파생한 목록의
+  // 원소를 넘기므로, 여기서 같은 목록을 id 로 다시 뒤질 이유가 없다. 폼에 담지 않는 필드
+  // (displayCondition 등)는 editingGroup 파생값 쪽에서 읽는다.
   const handleEditGroup = (group: QuestionGroup) => {
-    // groups에서 최신 그룹 정보 가져오기 (displayCondition 포함)
-    const latestGroup = groupsOrEmpty.find((g) => g.id === group.id) || group;
-    setEditingGroupId(latestGroup.id);
-    setGroupName(latestGroup.name);
-    setGroupDescription(latestGroup.description || '');
-    setParentGroupIdForEdit(latestGroup.parentGroupId);
-    setHideNameForEdit(latestGroup.hideName ?? false);
-    setNameDesignForEdit(latestGroup.nameDesign);
-    setIsEditModalOpen(true);
+    setEditingGroupId(group.id);
+    setGroupName(group.name);
+    setGroupDescription(group.description || '');
+    setParentGroupIdForEdit(group.parentGroupId);
+    setHideNameForEdit(group.hideName ?? false);
+    setNameDesignForEdit(group.nameDesign);
   };
 
   const handleGroupConditionUpdate = (conditionGroup: QuestionConditionGroup | undefined) => {
@@ -355,154 +357,156 @@ export function GroupManager({ className }: GroupManagerProps) {
   };
 
   const handleUpdateGroup = async () => {
-    if (editingGroup && groupName.trim()) {
-      const oldParentGroupId = editingGroup.parentGroupId;
-      const newParentGroupId = parentGroupIdForEdit;
+    // editingGroup 이 null 이면 모달이 그려지지 않아 이 핸들러를 부를 화면이 없다 — 타입 좁히기다.
+    // 이름은 다르다: 저장 버튼은 빈 이름에서 비활성이지만 이름 입력칸의 Enter 가 곧장 제출하므로
+    // 여기가 실제 가드다.
+    if (!editingGroup || !groupName.trim()) return;
 
-      // groups에서 최신 그룹 정보 확인
-      const latestGroup = groupsOrEmpty.find((g) => g.id === editingGroup.id);
-      const finalDisplayCondition = latestGroup?.displayCondition;
+    const oldParentGroupId = editingGroup.parentGroupId;
+    const newParentGroupId = parentGroupIdForEdit;
 
-      // 상위 그룹이 변경된 경우
-      if (oldParentGroupId !== newParentGroupId) {
-        // 순환 참조 체크: newParentGroupId가 editingGroup의 하위 그룹이 될 수 있는지 확인
-        if (newParentGroupId && !canBeParentOf(newParentGroupId, editingGroup.id, groupsOrEmpty)) {
-          toast.error('순환 참조 방지: 선택한 그룹을 상위 그룹으로 설정할 수 없습니다.');
-          return;
-        }
+    // 표시 조건은 폼 state 에 없다 — 모달 안 조건 편집기가 handleGroupConditionUpdate 로
+    // store 에 바로 쓴다. editingGroup 이 그 store 의 파생값이라 여기서 읽으면 편집 결과가
+    // 이미 들어 있고, 아래 payload 가 그대로 함께 실어 보낸다.
+    const finalDisplayCondition = editingGroup.displayCondition;
 
-        // 새로운 상위 그룹의 하위 그룹들 중 마지막 순서 계산
-        let newOrder = 0;
-        if (newParentGroupId) {
-          const newSiblings = groupsOrEmpty.filter(
-            (g) => g.parentGroupId === newParentGroupId && g.id !== editingGroup.id,
-          );
-          newOrder = newSiblings.length > 0 ? Math.max(...newSiblings.map((g) => g.order)) + 1 : 0;
-        } else {
-          // 최상위로 이동하는 경우
-          const topLevelSiblings = groupsOrEmpty.filter(
-            (g) => !g.parentGroupId && g.id !== editingGroup.id,
-          );
-          newOrder =
-            topLevelSiblings.length > 0 ? Math.max(...topLevelSiblings.map((g) => g.order)) + 1 : 0;
-        }
+    // 상위 그룹이 변경된 경우
+    if (oldParentGroupId !== newParentGroupId) {
+      // 순환 참조 체크: newParentGroupId가 editingGroup의 하위 그룹이 될 수 있는지 확인
+      if (newParentGroupId && !canBeParentOf(newParentGroupId, editingGroup.id, groupsOrEmpty)) {
+        toast.error('순환 참조 방지: 선택한 그룹을 상위 그룹으로 설정할 수 없습니다.');
+        return;
+      }
 
-        // 최상위로 이동(newParentGroupId === undefined) 시 parentGroupId 를 명시적으로 해제한다.
-        // 키를 누락하면 store 의 Object.assign 이 옛 parentGroupId 를 그대로 둬 로컬 트리만
-        // 중첩 상태로 남고 DB(top-level)와 desync 된다. exactOptionalPropertyTypes 때문에
-        // undefined 값을 직접 전달할 수 없어 별도 partial 로 분기한다.
-        if (newParentGroupId !== undefined) {
-          updateGroup(editingGroup.id, {
-            name: groupName.trim(),
-            ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-            parentGroupId: newParentGroupId,
-            order: newOrder,
-            hideName: hideNameForEdit,
-          });
-        } else {
-          updateGroup(editingGroup.id, {
-            name: groupName.trim(),
-            ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-            order: newOrder,
-            hideName: hideNameForEdit,
-          });
-          clearGroupParent(editingGroup.id);
-        }
-
-        // DB에 저장 (그룹 ID가 UUID인 경우에만)
-        if (
-          surveyId &&
-          isUUID(surveyId) &&
-          isUUID(editingGroup.id) &&
-          (!newParentGroupId || isUUID(newParentGroupId))
-        ) {
-          await runAsyncAction<void>(
-            async () => {
-              await ensureSurvey();
-              await client.surveyBuilder.groups.update({
-                groupId: editingGroup.id,
-                surveyId,
-                data: {
-                  name: groupName.trim(),
-                  ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-                  parentGroupId: newParentGroupId ?? null,
-                  order: newOrder,
-                  hideName: hideNameForEdit,
-                  nameDesign: nameDesignForEdit ?? null,
-                  ...(finalDisplayCondition !== undefined
-                    ? { displayCondition: finalDisplayCondition }
-                    : {}),
-                },
-              });
-            },
-            {
-              onError: (error) => {
-                console.error('그룹 업데이트 저장 실패:', error);
-              },
-              onSettled: () => {},
-            },
-          );
-        }
-
-        // 상위 그룹이 변경되면 해당 그룹을 펼침. store 를 직접 펼쳐야 유지된다 —
-        // 로컬 state 만 바꾸던 때는 groups 갱신 이펙트가 곧바로 덮어써 접혔다.
-        if (newParentGroupId) {
-          updateGroup(newParentGroupId, { collapsed: false });
-        }
+      // 새로운 상위 그룹의 하위 그룹들 중 마지막 순서 계산
+      let newOrder = 0;
+      if (newParentGroupId) {
+        const newSiblings = groupsOrEmpty.filter(
+          (g) => g.parentGroupId === newParentGroupId && g.id !== editingGroup.id,
+        );
+        newOrder = newSiblings.length > 0 ? Math.max(...newSiblings.map((g) => g.order)) + 1 : 0;
       } else {
-        // 이름/설명/표시 옵션만 변경된 경우
+        // 최상위로 이동하는 경우
+        const topLevelSiblings = groupsOrEmpty.filter(
+          (g) => !g.parentGroupId && g.id !== editingGroup.id,
+        );
+        newOrder =
+          topLevelSiblings.length > 0 ? Math.max(...topLevelSiblings.map((g) => g.order)) + 1 : 0;
+      }
+
+      // 최상위로 이동(newParentGroupId === undefined) 시 parentGroupId 를 명시적으로 해제한다.
+      // 키를 누락하면 store 의 Object.assign 이 옛 parentGroupId 를 그대로 둬 로컬 트리만
+      // 중첩 상태로 남고 DB(top-level)와 desync 된다. exactOptionalPropertyTypes 때문에
+      // undefined 값을 직접 전달할 수 없어 별도 partial 로 분기한다.
+      if (newParentGroupId !== undefined) {
         updateGroup(editingGroup.id, {
           name: groupName.trim(),
           ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+          parentGroupId: newParentGroupId,
+          order: newOrder,
           hideName: hideNameForEdit,
         });
-
-        // DB에 저장 (그룹 ID가 UUID인 경우에만)
-        if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
-          await runAsyncAction<void>(
-            async () => {
-              await ensureSurvey();
-              await client.surveyBuilder.groups.update({
-                groupId: editingGroup.id,
-                surveyId,
-                data: {
-                  name: groupName.trim(),
-                  ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-                  hideName: hideNameForEdit,
-                  nameDesign: nameDesignForEdit ?? null,
-                  ...(finalDisplayCondition !== undefined
-                    ? { displayCondition: finalDisplayCondition }
-                    : {}),
-                },
-              });
-            },
-            {
-              onError: (error) => {
-                console.error('그룹 업데이트 저장 실패:', error);
-              },
-              onSettled: () => {},
-            },
-          );
-        }
-      }
-
-      // 이름 디자인 로컬 반영: 값이 있으면 set, 없으면 기본값으로 초기화(키 삭제).
-      // Object.assign 기반 updateGroup 으로는 undefined 전달/키 삭제가 불가하므로 분기한다.
-      if (nameDesignForEdit) {
-        updateGroup(editingGroup.id, { nameDesign: nameDesignForEdit });
       } else {
-        clearGroupNameDesign(editingGroup.id);
+        updateGroup(editingGroup.id, {
+          name: groupName.trim(),
+          ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+          order: newOrder,
+          hideName: hideNameForEdit,
+        });
+        clearGroupParent(editingGroup.id);
       }
 
-      setEditingGroupId(null);
-      setGroupName('');
-      setGroupDescription('');
-      setParentGroupIdForEdit(undefined);
-      setHideNameForEdit(false);
-      setNameDesignForEdit(undefined);
-      setIsEditModalOpen(false);
-      // 그룹 수정은 이미 updateQuestionGroup API로 저장됨
+      // DB에 저장 (그룹 ID가 UUID인 경우에만)
+      if (
+        surveyId &&
+        isUUID(surveyId) &&
+        isUUID(editingGroup.id) &&
+        (!newParentGroupId || isUUID(newParentGroupId))
+      ) {
+        await runAsyncAction<void>(
+          async () => {
+            await ensureSurvey();
+            await client.surveyBuilder.groups.update({
+              groupId: editingGroup.id,
+              surveyId,
+              data: {
+                name: groupName.trim(),
+                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                parentGroupId: newParentGroupId ?? null,
+                order: newOrder,
+                hideName: hideNameForEdit,
+                nameDesign: nameDesignForEdit ?? null,
+                ...(finalDisplayCondition !== undefined
+                  ? { displayCondition: finalDisplayCondition }
+                  : {}),
+              },
+            });
+          },
+          {
+            onError: (error) => {
+              console.error('그룹 업데이트 저장 실패:', error);
+            },
+          },
+        );
+      }
+
+      // 상위 그룹이 변경되면 해당 그룹을 펼침. store 를 직접 펼쳐야 유지된다 —
+      // 로컬 state 만 바꾸던 때는 groups 갱신 이펙트가 곧바로 덮어써 접혔다.
+      if (newParentGroupId) {
+        updateGroup(newParentGroupId, { collapsed: false });
+      }
+    } else {
+      // 이름/설명/표시 옵션만 변경된 경우
+      updateGroup(editingGroup.id, {
+        name: groupName.trim(),
+        ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+        hideName: hideNameForEdit,
+      });
+
+      // DB에 저장 (그룹 ID가 UUID인 경우에만)
+      if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
+        await runAsyncAction<void>(
+          async () => {
+            await ensureSurvey();
+            await client.surveyBuilder.groups.update({
+              groupId: editingGroup.id,
+              surveyId,
+              data: {
+                name: groupName.trim(),
+                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                hideName: hideNameForEdit,
+                nameDesign: nameDesignForEdit ?? null,
+                ...(finalDisplayCondition !== undefined
+                  ? { displayCondition: finalDisplayCondition }
+                  : {}),
+              },
+            });
+          },
+          {
+            onError: (error) => {
+              console.error('그룹 업데이트 저장 실패:', error);
+            },
+          },
+        );
+      }
     }
+
+    // 이름 디자인 로컬 반영: 값이 있으면 set, 없으면 기본값으로 초기화(키 삭제).
+    // Object.assign 기반 updateGroup 으로는 undefined 전달/키 삭제가 불가하므로 분기한다.
+    if (nameDesignForEdit) {
+      updateGroup(editingGroup.id, { nameDesign: nameDesignForEdit });
+    } else {
+      clearGroupNameDesign(editingGroup.id);
+    }
+
+    // editingGroupId 를 비우면 editingGroup 이 null 이 되어 모달이 닫힌다.
+    setEditingGroupId(null);
+    setGroupName('');
+    setGroupDescription('');
+    setParentGroupIdForEdit(undefined);
+    setHideNameForEdit(false);
+    setNameDesignForEdit(undefined);
+    // 그룹 수정은 이미 updateQuestionGroup API로 저장됨
   };
 
   const handleDeleteGroup = (groupId: string) => {
@@ -571,7 +575,6 @@ export function GroupManager({ className }: GroupManagerProps) {
               onError: (error) => {
                 console.error('그룹 순서 저장 실패:', error);
               },
-              onSettled: () => {},
             },
           );
         }
@@ -672,9 +675,7 @@ export function GroupManager({ className }: GroupManagerProps) {
 
       {/* 그룹 편집 모달 */}
       <GroupEditModal
-        isOpen={isEditModalOpen}
         onClose={() => {
-          setIsEditModalOpen(false);
           setEditingGroupId(null);
           setGroupName('');
           setGroupDescription('');

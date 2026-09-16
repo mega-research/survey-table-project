@@ -24,7 +24,6 @@ import { getAvailableParentGroups } from './group-helpers';
 import { GroupNameDesignSettings } from './group-name-design-settings';
 
 interface GroupEditModalProps {
-  isOpen: boolean;
   onClose: () => void;
   onSubmit: () => void;
   editingGroup: QuestionGroup | null;
@@ -45,7 +44,6 @@ interface GroupEditModalProps {
 }
 
 export function GroupEditModal({
-  isOpen,
   onClose,
   onSubmit,
   editingGroup,
@@ -70,9 +68,15 @@ export function GroupEditModal({
 
   const availableParents = getAvailableParentGroups(editingGroup.id, topLevelGroups, allGroups);
 
+  // 열림 여부를 받지 않는다. 위 early return 때문에 여기까지 오는 경우는 editingGroup 이
+  // 있을 때뿐이라, open 을 prop 으로 받으면 false 로 내려올 수 없는 값을 계약처럼 적게 된다.
+  // 닫힘은 전부 editingGroup 이 null 이 되어 이 아래 Dialog 서브트리가 사라지는 것으로 일어난다
+  // (컴포넌트 자체는 부모가 조건 없이 렌더하므로 마운트된 채다). 그 경로는 하나가 아니다 —
+  // 취소·바깥 클릭은 onClose 를 거치고, 저장은 부모가 직접 editingGroupId 를 비우며,
+  // 모달이 열린 채 그룹을 지우면 파생값이 저절로 null 이 된다.
   return (
     <Dialog
-      open={isOpen}
+      open
       onOpenChange={(open) => {
         if (!open) {
           onClose();
