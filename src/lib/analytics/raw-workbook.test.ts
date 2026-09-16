@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type RawExportContext,
   type RawExportResponseRow,
+  buildRawMetaHeaders,
   generateRawDataWorkbook,
 } from '@/lib/analytics/raw-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
@@ -585,6 +586,40 @@ describe('조사 대상 명단 열', () => {
     // 같은 질문(Q2) 변수 열 가로 병합도 명단 열만큼 밀린다 (L:M → N:O)
     expect(merges).toContain('N1:O1');
     expect(merges).not.toContain('L1:M1');
+  });
+
+  // 자리를 헤더 문자열로 찾던 시절에는 못 찾은 findIndex(-1) 가 slice(0, -1) 로 흘러
+  // 명단 열이 메타 마지막 열(접속 단말) 바로 앞에 조용히 생겼다. 앞뒤 고정 열을 통째로
+  // 못박아, 그 오배치가 되살아나면 병합 좌표가 아니라 여기서 먼저 걸리게 한다.
+  it('메타 열 순서 전체가 못박히고, 시스템ID 열이 빠져도 명단 열은 순번과 개별 URL 사이다', () => {
+    expect(buildRawMetaHeaders(rosterCtx)).toEqual([
+      'IP 해시',
+      '시스템ID',
+      '순번',
+      '기수',
+      '성명',
+      '개별 URL',
+      '상태',
+      '마지막 입력 문항',
+      '시작일시',
+      '종료일시',
+      '소요시간',
+      '접속 단말',
+    ]);
+    // 앞쪽 고정 열이 하나 빠져도 자리는 그대로 — 슬롯이 인덱스가 아니라 위치라는 확인
+    expect(buildRawMetaHeaders({ ...rosterCtx, hasContacts: false })).toEqual([
+      'IP 해시',
+      '순번',
+      '기수',
+      '성명',
+      '개별 URL',
+      '상태',
+      '마지막 입력 문항',
+      '시작일시',
+      '종료일시',
+      '소요시간',
+      '접속 단말',
+    ]);
   });
 
   it('명단 값은 source 키로 채우고 문항 코드값은 그 오른쪽에 온다', () => {
