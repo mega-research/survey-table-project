@@ -188,7 +188,13 @@ function deferred<T>() {
 
 // 전체 스위트 부하에서 첫 입력 → telemetry 왕복이 기본 1초를 넘겨 간헐 실패했다(단독 실행은 항상 통과).
 // 대기 한도만 늘린다 — 판정은 그대로다.
+//
+// **대기 한도는 테스트 한도보다 반드시 작아야 한다.** asyncUtilTimeout 만 5000 으로 올리면
+// vitest 기본 testTimeout(5000)과 같아져, 부하가 걸린 waitFor 하나가 테스트 예산을 전부 먹고
+// `Test timed out in 5000ms` 로 죽는다(실패 지점이 매 실행 바뀌는 그 flake의 정체 — 5007ms).
+// 그래서 테스트 한도를 대기 한도의 세 배로 벌려 둔다.
 configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 15_000 });
 
 describe('대상자 테스트 응답 세션', () => {
   beforeEach(() => {

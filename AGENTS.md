@@ -12,7 +12,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 영역           | 기술                                        | 버전            |
 | -------------- | ------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)             | 16.2.11         |
+| 프레임워크     | Next.js (App Router, Turbopack)             | 16.3.5          |
 | UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
 | 스타일링       | TailwindCSS                                 | 4.x             |
 | 컴포넌트       | shadcn/ui (Radix UI)                        | -               |
@@ -22,14 +22,14 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 스키마 검증    | Zod                                         | 4.4.3           |
 | 테이블         | TanStack Table                              | 8.21.3          |
 | 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
-| 리치 에디터    | TipTap                                      | 3.15.3          |
+| 리치 에디터    | TipTap                                      | 3.30.6          |
 | 드래그앤드롭   | @dnd-kit                                    | -               |
 | ID 생성        | NanoID                                      | 5.1.11          |
 | ORM            | Drizzle ORM                                 | 0.45.2          |
 | DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
 | 데이터베이스   | PostgreSQL (Supabase)                       | -               |
 | 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
-| 이미지 처리    | sharp                                       | 0.35.3          |
+| 이미지 처리    | sharp                                       | 0.35.4          |
 | HTML sanitize  | sanitize-html                               | 2.17.0          |
 | 이메일 발송    | Resend + React Email                        | 6.12.3          |
 | 이메일 webhook | svix                                        | 1.93.0          |
