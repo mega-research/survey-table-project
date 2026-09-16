@@ -102,4 +102,74 @@ describe('runAsyncAction', () => {
     ).resolves.toBeUndefined();
     expect(onSettled).toHaveBeenCalledOnce();
   });
+
+  // --- onSettled 생략 계약 ---
+  // 뒤처리가 없는 호출부는 이 인자를 빼고 부른다. 생략이 바꾸는 것은 "마지막에 부를 것이
+  // 없다" 뿐이고, 반환값과 에러 전파는 준 경우와 같아야 한다.
+
+  it('onSettled 를 생략해도 성공 경로는 그대로다 — 뒤처리 없는 호출부', async () => {
+    const onError = vi.fn();
+
+    await expect(runAsyncAction(async () => 'ok', { onError })).resolves.toBe('ok');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('onSettled 를 생략해도 onError 가 만든 값을 그대로 돌려준다', async () => {
+    await expect(
+      runAsyncAction<string>(
+        async () => {
+          throw new Error('boom');
+        },
+        { onError: (e) => `handled:${(e as Error).message}` },
+      ),
+    ).resolves.toBe('handled:boom');
+  });
+
+  it('onSettled 를 생략하고 onError 가 다시 던져도 그 에러가 그대로 전파된다', async () => {
+    // 구현이 `handlers.onSettled?.()` 의 `?.` 를 잃으면 finally 에서 TypeError 가 나
+    // 원래 에러를 덮는다. 상위 catch 가 엉뚱한 에러를 보게 되므로 동일성까지 못박는다.
+    //
+    // action 과 onError 가 **다른** 에러를 던진다 — 같은 객체를 쓰면 전파된 것이 onError 가
+    // 던진 것인지 action 의 것이 그대로 새어나온 것인지 구별되지 않아, onError 를 부르지 않는
+    // 구현도 통과한다.
+    const fromAction = new Error('from-action');
+    const fromOnError = new Error('rethrown');
+    const onError = vi.fn(() => {
+      throw fromOnError;
+    });
+
+    await expect(
+      runAsyncAction(
+        async () => {
+          throw fromAction;
+        },
+        { onError },
+      ),
+    ).rejects.toBe(fromOnError);
+    expect(onError).toHaveBeenCalledWith(fromAction);
+  });
+
+  it('onSettled 유무가 반환·전파를 바꾸지 않는다 — 생략은 뒤처리만 없앤다', async () => {
+    const onSettled = vi.fn();
+    const failing = async (): Promise<string> => {
+      throw new Error('boom');
+    };
+
+    // 값 경로 — 준 쪽과 뺀 쪽이 같은 값을 돌려준다. onError 가 async 여도 같다.
+    const onError = async (e: unknown) => `handled:${(e as Error).message}`;
+    await expect(runAsyncAction(failing, { onError, onSettled })).resolves.toBe('handled:boom');
+    await expect(runAsyncAction(failing, { onError })).resolves.toBe('handled:boom');
+    expect(onSettled).toHaveBeenCalledOnce();
+
+    // 전파 경로 — onError 가 다시 던지는 호출부(contact-attempt-add-card)가 이 형태다.
+    const err = new Error('rethrown');
+    const rethrowing = () => {
+      throw err;
+    };
+    await expect(runAsyncAction<string>(failing, { onError: rethrowing, onSettled })).rejects.toBe(
+      err,
+    );
+    await expect(runAsyncAction<string>(failing, { onError: rethrowing })).rejects.toBe(err);
+    expect(onSettled).toHaveBeenCalledTimes(2);
+  });
 });

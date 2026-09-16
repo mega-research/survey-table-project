@@ -227,7 +227,6 @@ export function PriorAnswerImportWizard({
         onError: (err) => {
           setError(getErrorMessage(err, '엑셀을 읽지 못했습니다.'));
         },
-        onSettled: () => {},
       },
     );
   }
@@ -288,7 +287,6 @@ export function PriorAnswerImportWizard({
         onError: (err) => {
           setError(getErrorMessage(err, '이월 응답 적재에 실패했습니다.'));
         },
-        onSettled: () => {},
       },
     );
   }

@@ -8,12 +8,16 @@
  *
  * 실행 순서는 원래 try/catch/finally 와 같다 — action → (예외 시) onError → onSettled.
  * onError 가 다시 throw 하면 onSettled 실행 후 그대로 호출부로 전파된다(rethrow 보존).
+ *
+ * onSettled 는 선택이다. 필수로 두면 뒤처리가 없는 호출부까지 빈 함수를 적게 되고,
+ * 그 빈 함수는 계약이 아니라 잡음이다. 생략해도 위 순서 계약은 그대로다 — 마지막에
+ * 부를 것이 없을 뿐이라 rethrow 경로도 에러를 그대로 올려보낸다.
  */
 export async function runAsyncAction<T>(
   action: () => Promise<T>,
   handlers: {
     onError: (error: unknown) => T | Promise<T>;
-    onSettled: () => void;
+    onSettled?: () => void;
   },
 ): Promise<T> {
   try {
@@ -24,6 +28,6 @@ export async function runAsyncAction<T>(
     // onSettled 가 마이크로태스크 하나만큼 밀려 원래 finally 순서와 달라진다.
     return handled instanceof Promise ? ((await handled) as T) : (handled as T);
   } finally {
-    handlers.onSettled();
+    handlers.onSettled?.();
   }
 }

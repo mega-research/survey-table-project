@@ -60,7 +60,6 @@ export const ContactAttemptAddCard = forwardRef<
           setError((e as Error).message);
           throw e; // 부모 save 의 try/catch 에서도 잡히게
         },
-        onSettled: () => {},
       },
     );
   }
