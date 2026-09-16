@@ -39,9 +39,9 @@ async function main() {
 
   const { db } = await import('../src/db');
   const { findPrunableVersionIds } = await import(
-    '@/server/survey-builder/services/versioning/version-retention.server'
+    '@/server/survey-builder/services/versioning/version-retention-sql'
   );
-  const { pruneVersionSnapshots } = await import('@/server/survey-builder/services/versioning/version-prune.server');
+  const { pruneVersionSnapshots } = await import('@/server/survey-builder/services/versioning/version-prune');
 
   const targets = await findPrunableVersionIds(db);
   console.log(`정리 대상 버전: ${targets.length}건`);
