@@ -11,9 +11,9 @@ nodeLinker: isolated
 hoist: true
 
 overrides:
-  # tiptap 전 패키지 3.30.6 고정 — core/pm 만 고정하면 extension 이 딴 마이너로 드리프트해
-  # API 불일치 빌드 실패. 그래서 상향도 전 패키지를 한 번에 옮긴다.
-  # 하한 근거: GHSA-j95f-988m-3j2f (>=3.7.0 <3.30.5) 마크다운 속성 파싱의 2차 ReDoS
+  # tiptap 전 패키지 3.31.3 고정 — core/pm 만 고정하면 extension 이 드리프트해 API 불일치 빌드 실패.
+  # @tiptap/react 는 core·pm 을 정확히 같은 버전으로 요구하므로 36개를 함께 올린다.
+  # 2026-09-16 GHSA-j95f-988m-3j2f(ReDoS, <3.30.5) 대응으로 3.15.3 에서 상향.
   '@tiptap/core': '3.31.3'
   '@tiptap/extension-blockquote': '3.31.3'
   '@tiptap/extension-bold': '3.31.3'
@@ -50,6 +50,10 @@ overrides:
   '@tiptap/pm': '3.31.3'
   '@tiptap/react': '3.31.3'
   '@tiptap/starter-kit': '3.31.3'
+  # prosemirror-view 는 @tiptap/pm 이 정확한 버전을 못박는데(3.31.3 → 1.42.3) 형제
+  # prosemirror-* 는 '^1.x' 라 예전 1.42.2 가 함께 남는다. 두 벌이 되면 DecorationSet 의
+  # private 필드가 서로 다른 선언이 되어 tsc 가 var-token-plugin.ts 에서 TS2322 를 낸다.
+  'prosemirror-view@1': '>=1.42.3 <2'
   # --- 보안 패치 강제 overrides ---
   # 규칙: 값에 반드시 상한을 둔다. pnpm 은 override 값을 그대로 범위로 써서 최고
   # 매칭 버전을 고르므로, 상한 없는 '>=x' 는 요구자가 선언한 메이저를 넘어 드리프트한다.
@@ -64,10 +68,6 @@ overrides:
   'protobufjs@8': '>=8.6.3 <9'
   'undici@7': '>=7.29.0 <8'
   '@chenglou/pretext': '^0.0.5'
-  # prosemirror-view 는 @tiptap/pm 이 정확한 버전을 못박는데(3.31.3 → 1.42.3) 형제
-  # prosemirror-* 는 '^1.x' 라 예전 1.42.2 가 함께 남는다. 두 벌이 되면 DecorationSet 의
-  # private 필드가 서로 다른 선언이 되어 tsc 가 var-token-plugin.ts 에서 TS2322 를 낸다.
-  'prosemirror-view@1': '>=1.42.3 <2'
   'linkify-it@5': '>=5.0.2 <6'
   # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
   adm-zip: '>=0.6.0 <0.7'
