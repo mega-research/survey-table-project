@@ -4,7 +4,7 @@ import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
-import { notDeletedResponse } from '@/server/response-filters';
+import { completedResponse, notDeletedResponse } from '@/server/response-filters';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import {
   loadChangeConfirmQuestionIds,
@@ -483,4 +483,61 @@ export async function buildRawExportContext(
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),
   };
+}
+
+// ============================================================
+// 행 반복 사용 벌 스캔 — .sps 라우트 전용
+// ============================================================
+
+/**
+ * 반복 블록별 "실제로 쓰인 벌" — 모수는 .sav 와 같은 완료 전용이라 raw 모수와 다르다.
+ * 응답을 로드하지 않는 .sps 경로가 부르므로 셀 값 판정에 필요한 조각만 따로 읽는다
+ * (복호화는 불필요 — 암호문도 "값이 있음"으로 세면 충분하다).
+ *
+ * 이 경로는 다른 내보내기 형식과 달리 응답 수 상한 가드를 타지 않고 maxDuration 이 30초다.
+ * 그래서 (1) 반복을 쓰지 않는 설문은 질의 자체를 건너뛰고, (2) 읽는 것은 반복 문항의
+ * 응답 조각뿐이며, (3) 상한을 넘는 모수에서는 판정을 포기하고 빈 맵을 준다 — 호출측이
+ * 전 벌을 내게 되어 변수 목록이 넓어질 뿐 문법은 유효하다.
+ */
+export async function loadUsedRepeatCounts(
+  surveyId: string,
+  scope: OperationsDataScope,
+  questions: readonly Question[],
+): Promise<Map<string, number>> {
+  const { collectUsedRepeatCounts, repeatQuestionIds } = await import(
+    '@/lib/analytics/row-repeat-usage'
+  );
+  const scanQuestionIds = repeatQuestionIds(questions);
+  if (scanQuestionIds.length === 0) return new Map();
+
+  const scanScope = and(
+    eq(surveyResponses.surveyId, surveyId),
+    notDeletedResponse,
+    completedResponse,
+    responseScopeCondition(scope),
+  );
+  const scanTotalRows = await db
+    .select({ total: count() })
+    .from(surveyResponses)
+    .where(scanScope);
+  if ((scanTotalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return new Map();
+
+  // 문항 조각만 뽑는다 — 응답 JSONB 를 통째로 메모리에 올리지 않는다.
+  const slice = sql<Record<string, unknown>>`jsonb_build_object(${sql.join(
+    scanQuestionIds.flatMap((id) => [
+      sql`${id}`,
+      sql`${surveyResponses.questionResponses} -> ${id}`,
+    ]),
+    sql`, `,
+  )})`;
+  const repeatScanRows = await db
+    .select({ questionResponses: slice })
+    .from(surveyResponses)
+    .where(scanScope);
+  return collectUsedRepeatCounts(
+    questions,
+    repeatScanRows.map((r) => ({
+      questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+    })),
+  );
 }

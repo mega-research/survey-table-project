@@ -11,7 +11,7 @@ import type { RawExportResponseRow } from './raw-workbook';
 
 // ============================================================
 // Raw 내보내기 — 조사 대상 기준 모수·명단 열의 순수 조각
-// (미응답 행 생성 + 정렬 + 명단 값 조립. DB 조회는 app/api/surveys/[surveyId]/export/raw-export-rows.ts)
+// (미응답 행 생성 + 정렬 + 명단 값 조립. DB 조회는 app/api/surveys/[surveyId]/export/raw-export-load.ts)
 // ============================================================
 
 export interface NonRespondentTarget {

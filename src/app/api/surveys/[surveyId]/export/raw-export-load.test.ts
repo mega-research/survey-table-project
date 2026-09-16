@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Raw 내보내기 로더의 SQL 경계 — 토글이 꺼지면 도입 전과 같은 쿼리만 나가고,
 // 켜지면 미응답 조사 대상 count·조회가 스코프 파티션 안에서만 붙는지 본다.
-// test-mode-boundaries 와 같은 모양으로 db 체인을 가짜로 두고 where 를 캡처한다.
+// 같은 모듈의 .sps 전용 행 반복 사용 벌 스캔(loadUsedRepeatCounts)도 여기서 고정한다.
+// tests/integration/test-mode-boundaries.test.ts 와 같은 모양으로 db 체인을 가짜로 두고
+// where 를 캡처한다.
 
 interface SelectCall {
+  /** db.select(...) 에 넘어간 필드 객체 — attrs 를 실었는지 보고, where 가 같은 두 질의를 가른다. */
+  fields: Record<string, unknown> | undefined;
   where: unknown;
   orderBy: unknown[] | null;
 }
@@ -13,7 +17,8 @@ interface SelectCall {
 const { state, responseFindManyMock, versionFindManyMock } = vi.hoisted(() => ({
   state: {
     calls: [] as SelectCall[],
-    resolve: null as null | ((call: SelectCall) => unknown[]),
+    // 종류를 다 덮지 않는 헬퍼도 쓸 수 있게 undefined 를 허용한다 — 그때는 아래 기본값이 나간다.
+    resolve: null as null | ((call: SelectCall) => unknown[] | undefined),
   },
   responseFindManyMock: vi.fn(),
   versionFindManyMock: vi.fn(),
@@ -25,8 +30,12 @@ vi.mock('@/db', () => ({
       surveyResponses: { findMany: responseFindManyMock },
       surveyVersions: { findMany: versionFindManyMock },
     },
-    select: vi.fn(() => {
-      const call: SelectCall = { where: undefined, orderBy: null };
+    select: vi.fn((fields?: unknown) => {
+      const call: SelectCall = {
+        fields: fields as Record<string, unknown> | undefined,
+        where: undefined,
+        orderBy: null,
+      };
       const settle = () => Promise.resolve(state.resolve?.(call) ?? [{ total: 0 }]);
       const afterWhere = {
         orderBy: (...args: unknown[]) => {
@@ -61,16 +70,17 @@ vi.mock('@/server/operations/services/contacts-export', async (importOriginal) =
   return { ...actual, decryptPiiForExport: vi.fn(async () => new Map()) };
 });
 
-import { db } from '@/db';
 import { sortRowsForContactPopulation } from '@/lib/analytics/raw-export-rows';
 import {
   MAX_EXPORT_RESPONSES,
   countRawExportPopulation,
   loadRawExportRows,
-} from './raw-export-rows';
+  loadUsedRepeatCounts,
+} from './raw-export-load';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { decryptPiiForExport } from '@/server/operations/services/contacts-export';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
+import type { Question } from '@/types/survey';
 
 const dialect = new PgDialect();
 const surveyId = 'survey-loader';
@@ -79,17 +89,41 @@ function render(value: unknown): { sql: string; params: unknown[] } {
   return dialect.sqlToQuery(value as never);
 }
 
-type SelectKind = 'responseCount' | 'nonRespondentCount' | 'contactsById' | 'nonRespondentTargets';
+type SelectKind =
+  | 'responseCount'
+  | 'nonRespondentCount'
+  | 'contactsById'
+  | 'nonRespondentTargets'
+  | 'repeatScanCount'
+  | 'repeatScanRows';
 
+/**
+ * 나가는 select 를 종류로 가른다.
+ *
+ * 이 스위트가 잡는 select 중 status 술어를 쓰는 것은 행 반복 스캔뿐이다(완료 전용 모수 —
+ * 나머지는 삭제·파티션만 건다). 술어의 존재만 보고 상태 값은 보지 않으므로 그 값이
+ * completed 인지는 테스트가 따로 단언한다. 그 스캔의 count 와 조각 조회는 where 가 같은
+ * 객체라 select 필드로 가른다.
+ */
 function classify(call: SelectCall): SelectKind {
   const { sql } = render(call.where);
   if (sql.includes('not exists')) return call.orderBy ? 'nonRespondentTargets' : 'nonRespondentCount';
   if (sql.includes(' in (')) return 'contactsById';
+  if (sql.includes('"status" =')) {
+    return call.fields && 'questionResponses' in call.fields
+      ? 'repeatScanRows'
+      : 'repeatScanCount';
+  }
   return 'responseCount';
 }
 
 function kinds(): SelectKind[] {
   return state.calls.map(classify);
+}
+
+/** 그 종류의 select() 에 넘긴 필드 객체. */
+function selectFields(kind: SelectKind): Record<string, unknown> | undefined {
+  return state.calls.find((c) => classify(c) === kind)?.fields;
 }
 
 function responseRow(over: Record<string, unknown>) {
@@ -143,7 +177,6 @@ beforeEach(() => {
   versionFindManyMock.mockReset();
   versionFindManyMock.mockResolvedValue([]);
   vi.mocked(sortRowsForContactPopulation).mockClear();
-  vi.mocked(db.select).mockClear();
   vi.mocked(decryptPiiForExport).mockReset();
   vi.mocked(decryptPiiForExport).mockResolvedValue(new Map());
 });
@@ -296,13 +329,6 @@ describe('loadRawExportRows — 조사 대상 명단 열', () => {
     { source: 'pii.성명', label: '성명', kind: 'pii', key: '성명' },
   ];
   const attrsOnly: RawExportContactColumn[] = [rosterColumns[0]!];
-
-  /** select() 에 넘긴 필드 객체 — state.calls 와 같은 순서로 기록된다 (모든 select 가 where 까지 간다). */
-  function selectFields(kind: SelectKind): Record<string, unknown> | undefined {
-    const idx = state.calls.findIndex((c) => classify(c) === kind);
-    if (idx < 0) return undefined;
-    return vi.mocked(db.select).mock.calls[idx]![0] as Record<string, unknown>;
-  }
 
   function useRoster(opts: { withAttrs: boolean }) {
     const attrs = (v: Record<string, string>) => (opts.withAttrs ? { attrs: v } : {});
@@ -565,4 +591,131 @@ describe('숨은 문항 값 걸러내기 — 손대면 안 되는 행', () => {
       'q-dep': '하류 답',
     });
   });
+});
+
+// ============================================================
+// 행 반복 사용 벌 스캔 — .sps 라우트만 부르는 경로
+// ============================================================
+
+/** 3벌까지 펼쳐진 반복 표 — 벌마다 input 셀 하나. */
+const REPEAT_QUESTION = {
+  id: 'q-rep',
+  type: 'table',
+  title: '성과 표',
+  required: false,
+  order: 0,
+  tableRowsData: [1, 2, 3].map((bundle) => ({
+    id: `rep-row${bundle}`,
+    label: '성과',
+    repeatIndex: bundle,
+    cells: [{ id: `rep-cell${bundle}`, type: 'input', content: '' }],
+  })),
+} as unknown as Question;
+
+/** 반복 행이 없는 표 — 스캔 대상이 아니다. */
+const PLAIN_QUESTION = {
+  id: 'q-plain',
+  type: 'table',
+  title: '평범한 표',
+  required: false,
+  order: 0,
+  tableRowsData: [
+    { id: 'plain-row', label: '행', cells: [{ id: 'plain-cell', type: 'input', content: '' }] },
+  ],
+} as unknown as Question;
+
+/** count 는 모수 크기를, 조각 조회는 준 행을 돌려준다. */
+function useScan(opts: { total: number; rows?: unknown[] }) {
+  state.resolve = (call) =>
+    classify(call) === 'repeatScanRows' ? (opts.rows ?? []) : [{ total: opts.total }];
+}
+
+describe('loadUsedRepeatCounts', () => {
+  it('반복 행이 없는 설문은 질의를 아예 하지 않는다', async () => {
+    const result = await loadUsedRepeatCounts(surveyId, 'real', [PLAIN_QUESTION]);
+
+    expect(result.size).toBe(0);
+    expect(state.calls).toHaveLength(0);
+  });
+
+  it('모수를 센 뒤 조각을 읽어 설문 전체의 최대 사용 벌을 돌려준다', async () => {
+    useScan({
+      total: 2,
+      rows: [
+        { questionResponses: { 'q-rep': { 'rep-cell1': '가' } } },
+        { questionResponses: { 'q-rep': { 'rep-cell3': '다' } } },
+      ],
+    });
+
+    const result = await loadUsedRepeatCounts(surveyId, 'real', [REPEAT_QUESTION, PLAIN_QUESTION]);
+
+    expect(kinds()).toEqual(['repeatScanCount', 'repeatScanRows']);
+    // 반복 블록이 없는 문항은 맵에 담기지 않는다.
+    expect([...result]).toEqual([['q-rep', 3]]);
+  });
+
+  it('조각 select 는 반복 문항의 응답만 뽑는다 — JSONB 를 통째로 올리지 않는다', async () => {
+    useScan({ total: 1 });
+
+    await loadUsedRepeatCounts(surveyId, 'real', [REPEAT_QUESTION, PLAIN_QUESTION]);
+
+    const slice = selectFields('repeatScanRows')?.['questionResponses'];
+    expect(slice).toBeDefined();
+    const { sql, params } = render(slice);
+    expect(sql).toContain('jsonb_build_object');
+    expect(sql).toContain('"question_responses"');
+    // 반복 문항 id 만 키와 경로 두 자리에 실린다 — 반복이 없는 문항은 뽑지 않는다.
+    expect(params).toEqual(['q-rep', 'q-rep']);
+  });
+
+  it('모수가 정확히 상한이면 조각까지 읽는다', async () => {
+    useScan({
+      total: MAX_EXPORT_RESPONSES,
+      rows: [{ questionResponses: { 'q-rep': { 'rep-cell2': '나' } } }],
+    });
+
+    const result = await loadUsedRepeatCounts(surveyId, 'real', [REPEAT_QUESTION]);
+
+    expect(kinds()).toEqual(['repeatScanCount', 'repeatScanRows']);
+    expect(result.get('q-rep')).toBe(2);
+  });
+
+  it('상한을 넘으면 조각을 읽지 않고 빈 맵을 준다 — 호출측이 전 벌을 낸다', async () => {
+    useScan({
+      total: MAX_EXPORT_RESPONSES + 1,
+      rows: [{ questionResponses: { 'q-rep': { 'rep-cell3': '다' } } }],
+    });
+
+    const result = await loadUsedRepeatCounts(surveyId, 'real', [REPEAT_QUESTION]);
+
+    expect(kinds()).toEqual(['repeatScanCount']);
+    // 기본값 1 조차 담기지 않는다 — 판정을 포기한 것과 "1벌만 쓰였다" 는 다른 결과다.
+    expect(result.size).toBe(0);
+  });
+
+  it.each([
+    ['real', false, true],
+    ['test', true, false],
+  ] as const)(
+    '%s 스코프의 완료 응답만 모수로 삼는다 — raw 모수와 다르다',
+    async (scope, expected, forbidden) => {
+      useScan({ total: 1 });
+
+      await loadUsedRepeatCounts(surveyId, scope, [REPEAT_QUESTION]);
+
+      const countCall = state.calls.find((c) => classify(c) === 'repeatScanCount');
+      expect(countCall).toBeDefined();
+      const { sql, params } = render(countCall!.where);
+      expect(sql).toContain('deleted_at" is null');
+      // classify 는 status 술어의 존재만 보므로 값이 completed 인지는 여기서 본다.
+      expect(params).toContain('completed');
+      expect(params).toContain(expected);
+      expect(params).not.toContain(forbidden);
+
+      // 조각 조회가 count 와 다른 모수를 보면 상한 판정이 헛돈다.
+      const sliceCall = state.calls.find((c) => classify(c) === 'repeatScanRows');
+      expect(sliceCall).toBeDefined();
+      expect(render(sliceCall!.where).params).toEqual(params);
+    },
+  );
 });

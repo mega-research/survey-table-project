@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // export·split-preview 라우트가 includeNonRespondents 파라미터를 로더에 그대로 넘기는지,
-// 그리고 .sav 경로는 그 파라미터를 읽지 않는지 본다. 로더 자체는 raw-export-rows.server.test 몫.
+// 그리고 .sav 경로는 그 파라미터를 읽지 않는지 본다. 로더 자체는 raw-export-load.test.ts 몫.
 
 const {
   authState,
@@ -57,10 +57,13 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('./raw-export-rows', () => ({
+vi.mock('./raw-export-load', () => ({
   MAX_EXPORT_RESPONSES: 10000,
   loadRawExportRows: loadRawExportRowsMock,
   countRawExportPopulation: countRawExportPopulationMock,
+  // .sps 경로는 이 스위트가 보지 않지만, 모듈에 있는 export 를 빠뜨리면 그 경로를
+  // 건드리는 순간 "mock 에 없는 export" 로 엉뚱하게 깨진다.
+  loadUsedRepeatCounts: vi.fn(async () => new Map<string, number>()),
   buildRawExportContext: vi.fn(async () => ({
     appUrl: '',
     stepLabels: new Map(),
@@ -91,7 +94,7 @@ vi.mock('@/lib/spss/sav-builder', () => ({
 
 import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
-import { buildRawExportContext } from './raw-export-rows';
+import { buildRawExportContext } from './raw-export-load';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 
 const surveyId = 'survey-params';

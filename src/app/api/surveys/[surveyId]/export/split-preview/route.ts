@@ -22,7 +22,7 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
-import { countRawExportPopulation } from '../raw-export-rows';
+import { countRawExportPopulation } from '../raw-export-load';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadChangeConfirmQuestionIds } from '@/server/contacts/services/contact-prior-answers';
