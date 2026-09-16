@@ -22,7 +22,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 스키마 검증    | Zod                                         | 4.4.3           |
 | 테이블         | TanStack Table                              | 8.21.3          |
 | 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
-| 리치 에디터    | TipTap                                      | 3.30.6          |
+| 리치 에디터    | TipTap                                      | 3.31.3          |
 | 드래그앤드롭   | @dnd-kit                                    | -               |
 | ID 생성        | NanoID                                      | 5.1.11          |
 | ORM            | Drizzle ORM                                 | 0.45.2          |
