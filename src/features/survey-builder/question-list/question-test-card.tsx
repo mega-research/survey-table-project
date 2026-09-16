@@ -8,11 +8,11 @@ import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
+import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
 import {
   OPTION_TEXT_BARE_INPUT_CLS,
-  OptionTextInputStack,
   OptionTextRow,
-} from '@/features/question-renderer/option-text-input-stack';
+} from '@/features/question-renderer/option-text-row';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';

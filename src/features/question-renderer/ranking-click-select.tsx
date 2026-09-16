@@ -16,7 +16,7 @@ import type { QuestionOption, RankingAnswer } from '@/types/survey';
 import { rankOfOption, toggleRankingOption } from './utils/ranking-click';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
-import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-input-stack';
+import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
 
 /**
  * 순위형 "보기 클릭" 입력 UI.

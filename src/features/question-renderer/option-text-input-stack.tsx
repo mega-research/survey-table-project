@@ -4,9 +4,6 @@ import type { InputType, NumberFormat } from '@/types/survey';
 
 import { OptionTextInput } from './option-text-input';
 
-// 기존 소비자(ranking-dropdown-stack, question-test-card)의 import 경로를 보존한다.
-export { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
-
 export interface OptionTextStackEntry {
   /** OptionTextInput 저장 키(option.id) + placeholder·입력 모드 소스 */
   option: {

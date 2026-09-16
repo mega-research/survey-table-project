@@ -14,7 +14,7 @@ import {
 import {
   OPTION_TEXT_BARE_INPUT_CLS,
   OptionTextRow,
-} from '@/features/question-renderer/option-text-input-stack';
+} from '@/features/question-renderer/option-text-row';
 import { rankingTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
 import { useMobileView } from '@/hooks/use-media-query';
