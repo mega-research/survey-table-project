@@ -23,10 +23,11 @@ import { OptionTextSettingsEditor } from '@/features/survey-builder/option-text-
 import {
   applyOptionTextSettings,
   createTextInputOption,
+  OTHER_OPTION_ID,
 } from '@/features/survey-builder/question-option-helpers';
 
-// OTHER_OPTION_ID: 미리보기에서 기존 기타 옵션 구별용 (읽기 전용, Phase 7 cleanup 대상)
-const OTHER_OPTION_ID = 'other-option';
+// OTHER_OPTION_ID 는 이 파일에서 읽기 전용이다 — 기존 기타 옵션을 목록·미리보기에서
+// 표식할 때만 비교하고, 새로 만드는 옵션에는 이 id 를 붙이지 않는다.
 
 // --- Props ---
 

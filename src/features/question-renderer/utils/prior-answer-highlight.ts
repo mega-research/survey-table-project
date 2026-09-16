@@ -33,11 +33,19 @@ import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, RankingAnswer } from '@/types/survey';
 
 /**
- * 표시 자격을 통과한 이월 응답 묶음.
+ * 이월 표시가 읽는 이월 응답 묶음 — **실체는 `PriorAnswers | null` 이고, 이름만 다르다.**
  *
- * 원본 이월 응답이 아니라 **프리필과 같은 술어로 걸러진** 값이다. 호출부가 원본을 넘기지
- * 않도록 이름을 구분한다 — 담당자가 「이월값 불러오기」를 끄거나 도달 불가능한 조건을 걸어
- * 감춘 값이 색으로 되살아나면 그 설정이 반쪽만 듣는 것이 된다.
+ * "표시 자격을 통과한 값"은 관례지 타입 보장이 아니다. 원본을 그대로 넘겨도 tsc 는
+ * 통과한다. 그러면 담당자가 「이월값 불러오기」를 끄거나 도달 불가능한 조건을 걸어 감춘 값이
+ * 색으로 되살아나 그 설정이 반쪽만 듣는 것이 된다. 그래서 지키는 것은 타입이 아니라
+ * 관례다 — **제품 코드에서 이 값을 만드는 자리는 `survey-response/survey-response-flow.tsx`
+ * 한 곳이고, 거기서 `selectHighlightablePriorAnswers` 를 거친다.** 두 번째 자리를 만들지 말 것.
+ *
+ * 브랜디드 타입(`NormalizedQuotaConfig` 방식)으로 올리면 강제할 수 있으나, 그러려면 이 타입이
+ * 나타나는 자리가 전부 이 모듈을 거쳐야 한다. 걸리는 것은 Provider 에 이월 값을 직접 꽂는
+ * 테스트 둘만이 아니다 — 이 모듈이 내보내는 술어 6종이 첫 인자로 이 타입을 받고, 코로케이트
+ * 테스트가 거기에 날 객체를 수십 곳에서 넘긴다. 브랜드를 씌우면 그쪽이 함께 깨지므로,
+ * 승격은 그 테스트들을 팩토리 경유로 바꾸는 작업과 함께 해야 한다.
  */
 export type HighlightPriorAnswers = PriorAnswers | null;
 
