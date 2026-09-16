@@ -1,3 +1,4 @@
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import {
   Question,
   QuestionOption,
@@ -13,13 +14,6 @@ import {
  * 주어진 설문에 대한 가짜(Mock) 응답 데이터를 생성합니다.
  * 설문의 분기 로직(Branch Logic)과 표시 조건(Display Condition)을 준수합니다.
  */
-/**
- * 옵션 텍스트 입력(기타 등) 사이드카 키 — 실제 제출 payload 와 동일한 키.
- * 저장 구조: questionResponses.__optTexts__[questionId][optionId] = text
- * (읽기 정본: lib/option-text-read.getOptionText)
- */
-export const OPT_TEXTS_KEY = '__optTexts__';
-
 /** 표 radio/select/checkbox 셀 응답의 정본 형태 — table-cell-semantics.unwrapOptionId 가 인정하는 { optionId } */
 interface FakeOptionRef {
   optionId: string;

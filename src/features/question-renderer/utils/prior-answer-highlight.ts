@@ -29,7 +29,7 @@ import {
   type PriorAnswers,
 } from '@/lib/survey/prior-answers';
 import { supportsChangeConfirmation } from '@/lib/survey/change-confirmation';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, RankingAnswer } from '@/types/survey';
 
 /**

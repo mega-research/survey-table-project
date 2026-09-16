@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import {
-  OPT_TEXTS_KEY,
   PERSISTED_ROOT_SIDECAR_KEYS,
   isPersistedRootSidecarKey,
   sanitizeRootSidecar,

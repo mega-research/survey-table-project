@@ -24,7 +24,7 @@ import {
   priorAnswerText,
   priorOptionText,
 } from '@/lib/survey/prior-answers';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 
 /** 한 칸의 형식 정돈 — 대상이 아니거나 형식이 틀리면 원문 그대로. */
 function normalizeOne(

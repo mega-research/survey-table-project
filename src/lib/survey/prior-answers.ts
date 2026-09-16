@@ -12,7 +12,7 @@
  * 이월 요약을 쓰고, 이월 응답은 값 표시·복사에만 쓴다.
  */
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 
 /** 이월 응답 한 벌. 질문 id → 값. 사이드카 키(`__` 접두)도 함께 들어온다. */
 export type PriorAnswers = Record<string, unknown>;

@@ -3,7 +3,7 @@ import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 
