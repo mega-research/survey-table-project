@@ -2,9 +2,7 @@
 
 exports[`레거시 골든 — 구조 생존 판정 > 같은 구조에서는 값이 그대로 산다 1`] = `
 {
-  "affectedQuestionIds": [
-    "q-grp-cb",
-  ],
+  "affectedQuestionIds": [],
   "survivingResponses": {
     "__optTexts__": {
       "q-choice-src": {
@@ -16,6 +14,12 @@ exports[`레거시 골든 — 구조 생존 판정 > 같은 구조에서는 값�
       },
     },
     "q-choice-src": "src-b",
+    "q-grp-cb": {
+      "cb1": [
+        "cb-a",
+        "cb-c",
+      ],
+    },
     "q-grp-radio": {
       "rad1": "r1-etc",
       "rad2": "r2-no",
@@ -36,7 +40,6 @@ exports[`레거시 골든 — 구조 생존 판정 > 같은 구조에서는 값�
 exports[`레거시 골든 — 구조 생존 판정 > 그룹·보기·행이 사라진 구조에서의 판정 결과 1`] = `
 {
   "affectedQuestionIds": [
-    "q-grp-cb",
     "q-choice-src",
     "q-table",
   ],
@@ -49,6 +52,12 @@ exports[`레거시 골든 — 구조 생존 판정 > 그룹·보기·행이 사�
         "r1-etc": "벽걸이",
         "r2-when": "지워져야 한다",
       },
+    },
+    "q-grp-cb": {
+      "cb1": [
+        "cb-a",
+        "cb-c",
+      ],
     },
     "q-grp-radio": {
       "rad1": "r1-etc",

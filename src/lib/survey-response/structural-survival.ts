@@ -1,6 +1,6 @@
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import type { Question, QuestionOption, TableCell } from '@/types/survey';
-import { collectChoiceGroups } from '@/utils/choice-group-helpers';
+import { collectChoiceGroups, isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { findOptionByStored, unwrapOptionId } from '@/utils/table-cell-semantics';
 
@@ -36,6 +36,11 @@ function isSidecarKey(key: string): boolean {
 /** 저장값이 옵션 실존 판정 가능한 plain string 인가 (빈 문자열은 미응답 취급 — 판정 제외) */
 function isJudgeableString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
+}
+
+/** 그룹 맵 같은 plain object 모양인가 (배열·null 제외) */
+function isPlainObjectValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -261,6 +266,12 @@ function judgeQuestionAnswer(question: Question, value: unknown): QuestionVerdic
       return { kind: 'keep' };
     }
     case 'checkbox': {
+      // 보기 그룹(choiceGroups)이 붙은 문항의 답은 배열이 아니라 그룹 맵
+      // ({그룹키: cellId[]}) 이다 — 위 radio 가지와 같이 무판정 유지한다.
+      // 배열이 아니라는 이유로 버리면 이 모듈의 원칙("긍정적 증거가 있을 때만 폐기")을
+      // 어기고 grouped checkbox 의 답이 통째로 사라지며, 그 결과가 DB 에 되쓰인다
+      // (server/survey-response/services/lifecycle.ts 의 migrateResumedRowIfStale).
+      if (isGroupedChoiceQuestion(question) && isPlainObjectValue(value)) return { kind: 'keep' };
       if (!Array.isArray(value)) return { kind: 'drop' };
       const { filtered, removed } = filterStringArray(
         value,

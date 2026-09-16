@@ -415,4 +415,34 @@ describe('applyStructuralSurvival — 보기 그룹 표 (table + __choiceGroups)
     const result = applyStructuralSurvival({ q1: { rad1: 'ghost' } }, [legacy]);
     expect(result.survivingResponses['q1']).toEqual({ rad1: 'ghost' });
   });
+
+  // 재개 이관은 결과를 DB 에 되쓰므로(lifecycle.ts migrateResumedRowIfStale) 여기서 버리면
+  // 응답자가 링크를 다시 여는 순간 답이 영구 삭제된다. radio 와 같은 규칙이어야 한다.
+  it('checkbox 유형이어도 보기 그룹이 붙었으면 그룹 맵은 무판정 유지한다', () => {
+    const legacy = q({
+      id: 'q1',
+      type: 'checkbox',
+      choiceGroups: [{ id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '활용' }],
+      tableRowsData: [
+        row('r1', [
+          cell({ id: 'a', type: 'choice_opt', choiceGroupId: 'g1' }),
+          cell({ id: 'b', type: 'choice_opt', choiceGroupId: 'g1' }),
+        ]),
+      ],
+    });
+    const result = applyStructuralSurvival({ q1: { cb1: ['a', 'ghost'] } }, [legacy]);
+    expect(result.survivingResponses['q1']).toEqual({ cb1: ['a', 'ghost'] });
+    expect(result.affectedQuestionIds).toEqual([]);
+  });
+
+  it('보기 그룹이 없는 checkbox 의 비배열 값은 그대로 폐기한다 — 유지 범위를 넓히지 않는다', () => {
+    const plain = q({
+      id: 'q1',
+      type: 'checkbox',
+      options: [{ id: 'o1', value: 'a', label: 'A' }],
+    });
+    const result = applyStructuralSurvival({ q1: { cb1: ['a'] } }, [plain]);
+    expect(result.survivingResponses['q1']).toBeUndefined();
+    expect(result.affectedQuestionIds).toEqual(['q1']);
+  });
 });
