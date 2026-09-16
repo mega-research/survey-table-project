@@ -2,7 +2,7 @@
 
 import { type ReactNode, createContext, useContext, useMemo } from 'react';
 
-import type { HighlightPriorAnswers } from '@/lib/survey/prior-answer-highlight';
+import type { HighlightPriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
 import {
   DEFAULT_PRIOR_WAVE_LABEL,
   type PriorAnswers,
@@ -102,7 +102,7 @@ export function usePriorAnswers(): PriorAnswersContextValue {
 /**
  * 이월 표시(빨강) 판정에 쓸 이월 응답 한 벌.
  *
- * 판정 자체는 `lib/survey/prior-answer-highlight` 의 순수 함수가 한다 — 렌더러는 재료만
+ * 판정 자체는 `question-renderer/utils/prior-answer-highlight` 의 순수 함수가 한다 — 렌더러는 재료만
  * 받아 묻는다. 화면마다 각자 판정하면 같은 값이 데스크탑과 모바일에서 다른 색으로 나온다.
  * Provider 밖(빌더 미리보기 등)에서 호출하면 null — 색이 없을 뿐 동작에는 영향이 없다.
  */

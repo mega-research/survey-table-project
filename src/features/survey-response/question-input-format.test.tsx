@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { QuestionInput } from '@/features/survey-response/question-input';
-import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import type { Question } from '@/types/survey';
 
 function textQuestion(overrides: Partial<Question> = {}): Question {

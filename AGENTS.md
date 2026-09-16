@@ -195,7 +195,7 @@ src/
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
 │   ├── inngest/                # Inngest 클라이언트 어댑터만 (client.ts) — 함수는 server/workflows/jobs
 │   ├── question/               # 질문 스키마/정규화/가드/변형 + row-repeat(행 반복 펼치기·판정·참조 재배선 — analytics 가 import 해 lib 잔류)
-│   ├── survey/                 # 토큰 치환, 수식·셀 게이팅, 이미지/첨부 promote, PII 보관기한, 응답 헤더 설정, 숨은 문항 판정·strip question-visibility, 이월값 조건·강조 prior-answer-condition·prior-answer-highlight, 보기 선택 판독 choice-selection·choice-table-cell-value — 전부 서버·lib 가 소비해 잔류 (컨택 attrs context 는 features/question-renderer, 프리필·형식 정규화는 features/survey-response/lib, 셀 리치텍스트는 table-editor/cell-editor/utils)
+│   ├── survey/                 # 토큰 치환, 수식·셀 게이팅, 이미지/첨부 promote, PII 보관기한, 응답 헤더 설정, 숨은 문항 판정·strip question-visibility, 이월값 조건 prior-answer-condition, 보기 선택 판독 choice-selection·choice-table-cell-value — 전부 서버·lib 가 소비해 잔류 (컨택 attrs·이월 응답 context 와 이월값 강조는 features/question-renderer, 프리필·형식 정규화는 features/survey-response/lib, 셀 리치텍스트는 table-editor/cell-editor/utils)
 │   ├── survey-response/        # 구조 생존 판정 1파일 (테스트 응답 초기화는 server/survey-response, version-rebase 는 features/survey-response/lib)
 │   ├── analytics/              # 통계 analyzer + 엑셀/SPSS export 워크북 계산 + row-repeat-usage(내보내기에서 쓰이지 않은 뒤쪽 벌 pruning) (교차분석·필터는 features/analytics)
 │   ├── duplicate-detection/    # 중복 감지 신호 타입 1파일 (판정 로직은 server/survey-response)

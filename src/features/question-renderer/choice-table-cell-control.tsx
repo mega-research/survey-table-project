@@ -7,7 +7,7 @@ import {
   decodeChoiceTableCellValue,
   encodeChoiceTableCellValue,
 } from '@/lib/survey/choice-table-cell-value';
-import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { priorOptionText } from '@/lib/survey/prior-answers';
 import type { TableCell } from '@/types/survey';
 

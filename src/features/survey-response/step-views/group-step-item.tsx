@@ -24,7 +24,7 @@ import {
 } from '@/lib/survey/change-confirmation';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
-import { usePriorAnswers } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { Question } from '@/types/survey';

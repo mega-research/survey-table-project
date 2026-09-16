@@ -12,7 +12,7 @@ import {
   type HighlightPriorAnswers,
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorMultiSelectLevel,
-} from '@/lib/survey/prior-answer-highlight';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { QuestionOption, SelectLevel } from '@/types/survey';
 

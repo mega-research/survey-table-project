@@ -5,8 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QuestionInput } from '@/features/survey-response/question-input';
-import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
-import { selectHighlightablePriorAnswers } from '@/lib/survey/prior-answer-highlight';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
+import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
 import type { Question } from '@/types/survey';
 
 // 선택형 렌더러가 useMobileView 를 탄다 — jsdom 에는 matchMedia 가 없다.

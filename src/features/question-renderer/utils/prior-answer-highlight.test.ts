@@ -10,7 +10,7 @@ import {
   isPriorText,
   matchesPriorChoice,
   selectHighlightablePriorAnswers,
-} from '@/lib/survey/prior-answer-highlight';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
 import type { Question } from '@/types/survey';
 
 function q(id: string, overrides: Partial<Question> = {}): Question {

@@ -4,7 +4,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
 
 import { RankingClickList } from './ranking-click-select';

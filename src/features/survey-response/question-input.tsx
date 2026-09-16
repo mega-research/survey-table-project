@@ -44,9 +44,9 @@ import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorChoice,
   isPriorText,
-} from '@/lib/survey/prior-answer-highlight';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
 import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';

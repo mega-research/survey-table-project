@@ -12,8 +12,8 @@ import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   isPriorChoice,
   matchesPriorChoice,
-} from '@/lib/survey/prior-answer-highlight';
-import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { CheckboxOption } from '@/types/survey';
 

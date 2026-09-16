@@ -14,9 +14,9 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorOptionTextValue,
-} from '@/lib/survey/prior-answer-highlight';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
 import { priorOptionText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers, usePriorHighlight } from '@/lib/survey/prior-answers-context';
+import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, TextValidation } from '@/types/survey';

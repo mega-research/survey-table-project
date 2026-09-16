@@ -66,7 +66,7 @@ import {
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import { PriorAnswersProvider } from '@/lib/survey/prior-answers-context';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { normalizeFormatValues } from './lib/format-normalize';
 import {
@@ -83,7 +83,7 @@ import {
 import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
-import { selectHighlightablePriorAnswers } from '@/lib/survey/prior-answer-highlight';
+import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
 import {
   buildAdminRelaxWarningMessage,
   classifyStepIssues,

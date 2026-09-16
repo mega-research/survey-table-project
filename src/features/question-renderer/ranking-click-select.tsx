@@ -8,8 +8,8 @@ import {
   isPriorRanking,
   isPriorRankingText,
   PRIOR_HIGHLIGHT_TEXT_CLS,
-} from '@/lib/survey/prior-answer-highlight';
-import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
+} from '@/features/question-renderer/utils/prior-answer-highlight';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';

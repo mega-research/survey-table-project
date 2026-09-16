@@ -30,8 +30,8 @@ import {
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from './utils/exclusive-choice';
-import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/lib/survey/prior-answer-highlight';
-import { usePriorHighlight } from '@/lib/survey/prior-answers-context';
+import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/features/question-renderer/utils/prior-answer-highlight';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell, TableRow } from '@/types/survey';
