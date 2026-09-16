@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-15 (자격미달 종료 문구 `screenedOutMessage` — 종료 결과가 `screened_out` 이면 완료 화면 제목 「설문 종료」+ 이 문구, 비면 완료 문구 폴백, 발행 스냅샷 포함, 0110 · 단답형·장문형 응답 품질 검사 `textValidation` — 최소 글자 수(공백 제외)·자음·모음·숫자만인 입력 거부, 평문 모드 전용, 클라이언트 차단(ADR 0023 과 같은 자리), 손대지 않은 이월 값 면제, 판정 `utils/text-quality`, 마이그레이션 0109 · 모바일 표시 방식 「축 단위 카드」 `axis-cards` — 보기 그룹(축)마다 카드, 제목은 열 헤더(sticky), 미충족 카드 아래 검증 안내 상자, 0108 · 보기 그룹 표의 필수 미충족도 검증 안내 상자에 「위치로 이동」 · 이전: 2026-09-14 (표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` — 넓은 셀 안 작은 입력칸과 이어 보이는 두 칸, 마이그레이션 없음 · 단독 선택 보기 `exclusiveChoice` — 체크박스 「없음」류, 세 표면 공용 규칙 `lib/survey/exclusive-choice.ts`, 최소 선택 면제, 마이그레이션 없음 · 이전: 표 문항 행 반복 rowRepeatConfig — 구조에 최대 20벌 선펼침·멱등·rowCode 명시 발번·내보내기 뒤쪽 미사용 벌 pruning 0104 · 입력 형식 검사 — 단답형·표 input 셀·보기 상세기재의 `inputType`/`textInputType` 유니온에 휴대전화·전화·사업자번호·법인번호·이메일 5종 추가(공용 타입 `@/types/input-type`, DB 마이그레이션 없음) · 파서 `@/utils/input-format` · 차단 검증 `NumericIssue.kind: 'format'`(클라이언트 전용) · 관리자 편집은 경고 후 통과 · 손대지 않은 이월 값은 면제 · ADR 0023 · Raw 내보내기 숨은 문항 값 제외(제출·어드민 수정 전 행 한정) · 이전: Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084)
+> 최종 갱신: 2026-09-16 (공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정 — 지정이 없으면 `.cjs` 처럼 eslint-config-next 가 플러그인을 등록하지 않는 확장자가 검사 대상에 들어올 때 ESLint 가 실행 전체를 중단한다. `.cjs` 는 `@typescript-eslint/no-require-imports` 해제 · 이전: 2026-09-15 (자격미달 종료 문구 `screenedOutMessage` — 종료 결과가 `screened_out` 이면 완료 화면 제목 「설문 종료」+ 이 문구, 비면 완료 문구 폴백, 발행 스냅샷 포함, 0110 · 단답형·장문형 응답 품질 검사 `textValidation` — 최소 글자 수(공백 제외)·자음·모음·숫자만인 입력 거부, 평문 모드 전용, 클라이언트 차단(ADR 0023 과 같은 자리), 손대지 않은 이월 값 면제, 판정 `utils/text-quality`, 마이그레이션 0109 · 모바일 표시 방식 「축 단위 카드」 `axis-cards` — 보기 그룹(축)마다 카드, 제목은 열 헤더(sticky), 미충족 카드 아래 검증 안내 상자, 0108 · 보기 그룹 표의 필수 미충족도 검증 안내 상자에 「위치로 이동」 · 이전: 2026-09-14 (표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` — 넓은 셀 안 작은 입력칸과 이어 보이는 두 칸, 마이그레이션 없음 · 단독 선택 보기 `exclusiveChoice` — 체크박스 「없음」류, 세 표면 공용 규칙 `lib/survey/exclusive-choice.ts`, 최소 선택 면제, 마이그레이션 없음 · 이전: 표 문항 행 반복 rowRepeatConfig — 구조에 최대 20벌 선펼침·멱등·rowCode 명시 발번·내보내기 뒤쪽 미사용 벌 pruning 0104 · 입력 형식 검사 — 단답형·표 input 셀·보기 상세기재의 `inputType`/`textInputType` 유니온에 휴대전화·전화·사업자번호·법인번호·이메일 5종 추가(공용 타입 `@/types/input-type`, DB 마이그레이션 없음) · 파서 `@/utils/input-format` · 차단 검증 `NumericIssue.kind: 'format'`(클라이언트 전용) · 관리자 편집은 경고 후 통과 · 손대지 않은 이월 값은 면제 · ADR 0023 · Raw 내보내기 숨은 문항 값 제외(제출·어드민 수정 전 행 한정) · 이전: Raw 내보내기 — 순번은 접수 순번(미응답 행 빈칸) · 조사 대상 명단 열은 토글 없이 응답 내역 컬럼 설정의 표시 attrs·pii 열을 순번 다음에 상시 부착(`includeContactColumns` 폐기) · 고정 조사 대상 그룹 열 폐기 · 미응답자 포함 `includeNonRespondents=1` 은 유지 · 이전: 공지 배경색 notice_bg_color 0099 · 보기 옵션 그룹별 필수(ChoiceGroup.required, 상속) · 필수 마스터 전파 ADR 0021 · 질문 읽기 매퍼 mapQuestionRow + 전수 대조 테스트 · export 테스트 파티션 스코프 · 문항 수요조사 0097·0098 · piiEncrypted 셀 암호화 0085 · contact_id_lists 0084))
 
 ---
 
@@ -12,7 +12,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 영역           | 기술                                        | 버전            |
 | -------------- | ------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)             | 16.2.11         |
+| 프레임워크     | Next.js (App Router, Turbopack)             | 16.3.5          |
 | UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
 | 스타일링       | TailwindCSS                                 | 4.x             |
 | 컴포넌트       | shadcn/ui (Radix UI)                        | -               |
@@ -24,14 +24,14 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 테이블         | TanStack Table                              | 8.21.3          |
 | 가상화         | TanStack Virtual                            | 3.13.23         |
 | 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
-| 리치 에디터    | TipTap                                      | 3.15.3          |
+| 리치 에디터    | TipTap                                      | 3.31.3          |
 | 드래그앤드롭   | @dnd-kit                                    | -               |
 | ID 생성        | NanoID                                      | 5.1.11          |
 | ORM            | Drizzle ORM                                 | 0.45.2          |
 | DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
 | 데이터베이스   | PostgreSQL (Supabase)                       | -               |
 | 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
-| 이미지 처리    | sharp                                       | 0.35.3          |
+| 이미지 처리    | sharp                                       | 0.35.4          |
 | HTML sanitize  | sanitize-html                               | 2.17.0          |
 | 이메일 발송    | Resend + React Email                        | 6.12.3          |
 | 이메일 webhook | svix                                        | 1.93.0          |
@@ -48,6 +48,8 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
+> TipTap 36개 패키지는 `pnpm-workspace.yaml` overrides 로 한 버전에 묶는다 — `@tiptap/react` 가 `@tiptap/core`·`@tiptap/pm` 을 정확히 같은 버전으로 요구해 일부만 올리면 설치가 갈린다.
+> 같은 자리에 `prosemirror-view` 도 묶여 있다. `@tiptap/pm` 은 정확한 버전을 못박는데 형제 `prosemirror-*` 는 `^1.x` 라, 풀어 두면 두 벌이 설치되어 `DecorationSet` 의 private 필드가 서로 다른 선언이 되고 tsc 가 TS2322 를 낸다.
 
 ---
 
@@ -485,17 +487,17 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 ## 질문 유형
 
-| 타입          | 설명               | 주요 속성                                                                                             |
-| ------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation |
-| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부)                                                        |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                 |
-| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                 |
-| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                             |
-| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                          |
-| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                          |
+| 타입          | 설명               | 주요 속성                                                                                                              |
+| ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation                |
+| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부)                                                                       |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                  |
+| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                  |
+| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                              |
+| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                           |
+| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                           |
 | `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints |
-| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                  |
+| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                   |
 
 공통: `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 

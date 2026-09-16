@@ -22,6 +22,11 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
+    // eslint-config-next 가 react-hooks·@typescript-eslint 플러그인을 등록하는 블록과
+    // 같은 확장자로 한정한다. 대상을 비워 두면 그 목록에 없는 확장자(.cjs)가 검사 대상에
+    // 들어올 때 "규칙은 켜져 있는데 플러그인이 없는" 조합이 되고, ESLint 는 그 파일만
+    // 실패시키지 않고 설정 오류로 실행 전체를 중단한다.
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     rules: {
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
@@ -36,6 +41,14 @@ const eslintConfig = [
       "react-hooks/set-state-in-render": "warn",
       "react-hooks/purity": "warn",
       "react-hooks/immutability": "warn",
+    },
+  },
+  {
+    // .cjs 는 CommonJS 라 require() 가 정본이다. 위 블록이 대상으로 삼지 않는 확장자이지만
+    // nextTypescript 가 규칙을 걸어 정상 코드가 오류로 잡힌다.
+    files: ["**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
   {

@@ -11,43 +11,49 @@ nodeLinker: isolated
 hoist: true
 
 overrides:
-  # tiptap 전 패키지 3.15.3 고정 — core/pm 만 고정하면 extension 이 3.29 로 드리프트해 API 불일치 빌드 실패
-  '@tiptap/core': '3.15.3'
-  '@tiptap/extension-blockquote': '3.15.3'
-  '@tiptap/extension-bold': '3.15.3'
-  '@tiptap/extension-bubble-menu': '3.15.3'
-  '@tiptap/extension-bullet-list': '3.15.3'
-  '@tiptap/extension-code-block': '3.15.3'
-  '@tiptap/extension-code': '3.15.3'
-  '@tiptap/extension-document': '3.15.3'
-  '@tiptap/extension-dropcursor': '3.15.3'
-  '@tiptap/extension-floating-menu': '3.15.3'
-  '@tiptap/extension-gapcursor': '3.15.3'
-  '@tiptap/extension-hard-break': '3.15.3'
-  '@tiptap/extension-heading': '3.15.3'
-  '@tiptap/extension-history': '3.15.3'
-  '@tiptap/extension-horizontal-rule': '3.15.3'
-  '@tiptap/extension-image': '3.15.3'
-  '@tiptap/extension-italic': '3.15.3'
-  '@tiptap/extension-link': '3.15.3'
-  '@tiptap/extension-list-item': '3.15.3'
-  '@tiptap/extension-list-keymap': '3.15.3'
-  '@tiptap/extension-list': '3.15.3'
-  '@tiptap/extension-ordered-list': '3.15.3'
-  '@tiptap/extension-paragraph': '3.15.3'
-  '@tiptap/extension-strike': '3.15.3'
-  '@tiptap/extension-table-cell': '3.15.3'
-  '@tiptap/extension-table-header': '3.15.3'
-  '@tiptap/extension-table-row': '3.15.3'
-  '@tiptap/extension-table': '3.15.3'
-  '@tiptap/extension-text-align': '3.15.3'
-  '@tiptap/extension-text-style': '3.15.3'
-  '@tiptap/extension-text': '3.15.3'
-  '@tiptap/extension-underline': '3.15.3'
-  '@tiptap/extensions': '3.15.3'
-  '@tiptap/pm': '3.15.3'
-  '@tiptap/react': '3.15.3'
-  '@tiptap/starter-kit': '3.15.3'
+  # tiptap 전 패키지 3.31.3 고정 — core/pm 만 고정하면 extension 이 드리프트해 API 불일치 빌드 실패.
+  # @tiptap/react 는 core·pm 을 정확히 같은 버전으로 요구하므로 36개를 함께 올린다.
+  # 2026-09-16 GHSA-j95f-988m-3j2f(ReDoS, <3.30.5) 대응으로 3.15.3 에서 상향.
+  '@tiptap/core': '3.31.3'
+  '@tiptap/extension-blockquote': '3.31.3'
+  '@tiptap/extension-bold': '3.31.3'
+  '@tiptap/extension-bubble-menu': '3.31.3'
+  '@tiptap/extension-bullet-list': '3.31.3'
+  '@tiptap/extension-code-block': '3.31.3'
+  '@tiptap/extension-code': '3.31.3'
+  '@tiptap/extension-document': '3.31.3'
+  '@tiptap/extension-dropcursor': '3.31.3'
+  '@tiptap/extension-floating-menu': '3.31.3'
+  '@tiptap/extension-gapcursor': '3.31.3'
+  '@tiptap/extension-hard-break': '3.31.3'
+  '@tiptap/extension-heading': '3.31.3'
+  '@tiptap/extension-history': '3.31.3'
+  '@tiptap/extension-horizontal-rule': '3.31.3'
+  '@tiptap/extension-image': '3.31.3'
+  '@tiptap/extension-italic': '3.31.3'
+  '@tiptap/extension-link': '3.31.3'
+  '@tiptap/extension-list-item': '3.31.3'
+  '@tiptap/extension-list-keymap': '3.31.3'
+  '@tiptap/extension-list': '3.31.3'
+  '@tiptap/extension-ordered-list': '3.31.3'
+  '@tiptap/extension-paragraph': '3.31.3'
+  '@tiptap/extension-strike': '3.31.3'
+  '@tiptap/extension-table-cell': '3.31.3'
+  '@tiptap/extension-table-header': '3.31.3'
+  '@tiptap/extension-table-row': '3.31.3'
+  '@tiptap/extension-table': '3.31.3'
+  '@tiptap/extension-text-align': '3.31.3'
+  '@tiptap/extension-text-style': '3.31.3'
+  '@tiptap/extension-text': '3.31.3'
+  '@tiptap/extension-underline': '3.31.3'
+  '@tiptap/extensions': '3.31.3'
+  '@tiptap/pm': '3.31.3'
+  '@tiptap/react': '3.31.3'
+  '@tiptap/starter-kit': '3.31.3'
+  # prosemirror-view 는 @tiptap/pm 이 정확한 버전을 못박는데(3.31.3 → 1.42.3) 형제
+  # prosemirror-* 는 '^1.x' 라 예전 1.42.2 가 함께 남는다. 두 벌이 되면 DecorationSet 의
+  # private 필드가 서로 다른 선언이 되어 tsc 가 var-token-plugin.ts 에서 TS2322 를 낸다.
+  'prosemirror-view@1': '>=1.42.3 <2'
   # --- 보안 패치 강제 overrides ---
   # 규칙: 값에 반드시 상한을 둔다. pnpm 은 override 값을 그대로 범위로 써서 최고
   # 매칭 버전을 고르므로, 상한 없는 '>=x' 는 요구자가 선언한 메이저를 넘어 드리프트한다.
@@ -69,15 +75,18 @@ overrides:
   'brace-expansion@1': '>=1.1.18 <2'
   'brace-expansion@2': '>=2.1.4 <3'
   'brace-expansion@5': '>=5.0.9 <6'
-  'js-yaml@4': '>=4.3.0 <5'
+  # js-yaml 4.x: GHSA-2883-xcg3-v3hh (<4.3.2) maxTotalMergeKeys 가 빈 merge 소스의 CPU 를
+  # 제한하지 못한다. eslint 툴체인 경유 transitive(dev 전용)지만 하한만 올리면 끝난다.
+  'js-yaml@4': '>=4.3.2 <5'
   '@opentelemetry/propagator-jaeger@2': '>=2.9.0 <3'
   # fast-uri 3.x: GHSA-5jgf-p345-68v8·GHSA-f65p-4m7j-42xc·GHSA-fph4-wmhf-6fwf·
   # GHSA-jqff-g426-hqxp (SSRF·host confusion, 모두 <3.1.6). 2026-09-04 하한 상향.
   'fast-uri@3': '>=3.1.6 <4'
   'fast-uri@4': '>=4.1.2 <5'
   'postcss@8': '>=8.5.18 <9'
-  # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(선언은 ^0.34.5, docs 주석 참조)
-  sharp: '>=0.35.3 <0.36'
+  # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(docs 주석 참조).
+  # 하한은 GHSA-rgj7-g3m4-5g8c(<0.35.4, 번들 libheif 의 heap overflow) 때문에 0.35.4.
+  sharp: '>=0.35.4 <0.36'
   # nanoid 3.x(postcss 경유 transitive): GHSA-2v37-7h3g-55p8 (<3.3.17). 직접 의존 5.x 는 비해당.
   'nanoid@3': '>=3.3.17 <4'
   'minimatch@3': '>=3.1.4 <4'
