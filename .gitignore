@@ -69,3 +69,6 @@ docs
 .claude/settings.local.json
 .scratch/
 pencil
+
+# 공급망 감사 게이트가 CI 와 로컬에서 생성하는 보고서 (커밋 대상 아님)
+audit-report.json
