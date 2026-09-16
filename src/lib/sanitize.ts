@@ -22,7 +22,7 @@ const TABLE_STYLE = 'border-collapse:collapse;border:1px solid #d1d5db;';
 const CELL_STYLE = 'border:1px solid #d1d5db;padding:8px 12px;';
 const TH_STYLE = `${CELL_STYLE}background-color:#f9fafb;`;
 // inline-flex 는 Outlook 미지원 → inline-block 으로 fallback (modern 클라이언트도 정상 표시)
-// max-width + border-box: 파일명이 길어도 상자가 화면 폭을 넘지 않는다 — 넘기면 모바일에 가로
+// max-width + border-box: 라벨이 길어도 상자가 화면 폭을 넘지 않는다 — 넘기면 모바일에 가로
 // 스크롤이 생긴다. 안쪽 텍스트는 말줄임(globals.css .notice-file-attachment-label/meta)이 받는다.
 const FILE_LINK_STYLE = [
   'display:inline-block',

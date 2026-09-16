@@ -65,7 +65,7 @@ export const FileAttachment = Node.create({
   renderHTML({ HTMLAttributes, node }) {
     const attrs = node.attrs as FileAttachmentAttrs;
     const label = attrs.label || attrs.filename || FILE_ATTACHMENT_DEFAULT_LABEL;
-    const meta = buildAttachmentMetaText(attrs.filename, attrs.size);
+    const meta = buildAttachmentMetaText(attrs.filename, attrs.size, attrs.mime);
 
     const textChildren: Array<unknown> = [
       ['span', { class: 'notice-file-attachment-label' }, label],

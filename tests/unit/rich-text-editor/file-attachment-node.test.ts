@@ -60,7 +60,8 @@ describe('FileAttachment node', () => {
     expect(html).toContain('class="notice-file-attachment"');
     expect(html).toContain('<span class="notice-file-attachment-text">');
     expect(html).toContain('<span class="notice-file-attachment-label">협조 공문</span>');
-    expect(html).toContain('<span class="notice-file-attachment-meta">공문.pdf · 1 KB</span>');
+    // 메타 줄은 타입 · 크기 — 원본 파일명은 data-filename·download 에만 남고 표시에서 빠진다
+    expect(html).toContain('<span class="notice-file-attachment-meta">PDF · 1 KB</span>');
     editor.destroy();
   });
 
@@ -84,7 +85,9 @@ describe('FileAttachment node', () => {
     editor.destroy();
   });
 
-  it('parseHTML ↔ renderHTML round-trip lossless', () => {
+  // 메타 줄은 저장된 텍스트를 되쓰지 않고 data-* 속성에서 다시 만든다. 그래서 파일명이
+  // 박힌 채 저장된 옛 공지도 편집기에서 열었다 저장하면 새 표시로 갱신된다.
+  it('round-trip: attr 은 보존하고 메타 줄은 새 형식으로 다시 만든다', () => {
     const original =
       '<p><a data-file-attachment="true" data-key="notice-attachment/x.pdf" ' +
       'data-filename="공문.pdf" data-size="1234" data-mime="application/pdf" ' +
@@ -110,7 +113,7 @@ describe('FileAttachment node', () => {
       'href="https://cdn.test/notice-attachment/x.pdf"',
       'download="공문.pdf"',
       '<span class="notice-file-attachment-label">협조 공문</span>',
-      '<span class="notice-file-attachment-meta">공문.pdf · 1 KB</span>',
+      '<span class="notice-file-attachment-meta">PDF · 1 KB</span>',
     ]) {
       expect(out).toContain(fragment);
     }

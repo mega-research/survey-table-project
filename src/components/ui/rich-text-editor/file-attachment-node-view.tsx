@@ -9,8 +9,8 @@ import {
 } from 'lucide-react';
 
 import {
+  buildAttachmentMetaText,
   FILE_ATTACHMENT_DEFAULT_LABEL,
-  formatFileSize,
 } from './file-attachment-format';
 
 interface IconConfig {
@@ -70,7 +70,9 @@ export function FileAttachmentNodeView({ node, selected }: NodeViewProps) {
     mime: string | null;
   };
   const { Icon, color } = pickIcon(mime);
-  const sizeText = formatFileSize(size);
+  // 메타 줄은 renderHTML 직렬화와 같은 빌더를 통과시킨다 — 편집기에서 보이는 것과
+  // 저장돼 응답 화면에 나가는 것이 갈리지 않아야 한다.
+  const metaText = buildAttachmentMetaText(filename, size, mime);
 
   return (
     <NodeViewWrapper
@@ -85,10 +87,8 @@ export function FileAttachmentNodeView({ node, selected }: NodeViewProps) {
         <span className="truncate text-sm font-medium text-gray-800">
           {label || filename || FILE_ATTACHMENT_DEFAULT_LABEL}
         </span>
-        {(filename || sizeText) && (
-          <span className="truncate text-xs text-gray-500">
-            {[filename, sizeText].filter(Boolean).join(' · ')}
-          </span>
+        {metaText && (
+          <span className="truncate text-xs text-gray-500">{metaText}</span>
         )}
       </span>
     </NodeViewWrapper>
