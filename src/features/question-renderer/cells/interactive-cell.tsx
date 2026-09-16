@@ -246,9 +246,11 @@ export const InteractiveCell = React.memo(function InteractiveCell({
 
   // 주입 원본이 없으면(controlled 렌더) 상위에서 이미 질문 단위 value prop 으로 내려오므로
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
+  // 키는 위에서 계산한 controllerKey 를 그대로 쓴다 — 객체 리터럴에 조건식 계산 키를 두면
+  // React Compiler 가 이 컴포넌트를 통째로 최적화에서 제외한다(표 셀마다 그려지는 핫 패스다).
   const gatingCellValues: Record<string, unknown> = source
-    ? controllerCellId
-      ? { [wantsChoiceSelection ? CHOICE_GROUPS_KEY : controllerCellId]: sourceControllerValue }
+    ? controllerKey
+      ? { [controllerKey]: sourceControllerValue }
       : {}
     : (value ?? {});
 

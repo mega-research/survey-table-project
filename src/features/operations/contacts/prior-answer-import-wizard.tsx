@@ -30,6 +30,7 @@ import { RAW_FORMAT_HEADER_ROWS } from '@/lib/contacts/raw-format-import';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
+import { runAsyncAction } from '@/utils/run-async-action';
 
 type Step = 'file' | 'mapping' | 'result';
 
@@ -188,41 +189,47 @@ export function PriorAnswerImportWizard({
 
   async function loadPreview(next: { file: File; sheetName?: string; headerRowCount?: number }) {
     setError(null);
-    try {
-      const res = await suggest.mutateAsync({
-        surveyId,
-        file: next.file,
-        ...(next.sheetName ? { sheetName: next.sheetName } : {}),
-        ...(next.headerRowCount ? { headerRowCount: next.headerRowCount } : {}),
-      });
-      setPreview(res);
-      setSheetName(next.sheetName ?? res.sheetNames[0] ?? '');
-      // 자동 제안을 초기 매핑으로 채운다 — 사람은 틀린 것만 고친다.
-      const seeded: Record<string, string> = {};
-      res.blocks.forEach((block, index) => {
-        if (block.questionId) seeded[String(index)] = block.questionId;
-      });
-      setMapping(seeded);
-      // 보관된 값 대응을 되살린다. 시드하지 않으면 다음 세션에서 빈 상태로 시작해
-      // "다시 올릴 때 재사용" 이 성립하지 않는다.
-      setValueAliases(res.savedValueAliases);
-      // 3행에 이 설문의 SPSS 변수명이 보이면 우리 Raw 양식으로 추측한다. 확정은 사람이 한다.
-      if (res.looksLikeRawFormat) {
-        setFormat('raw');
-        setHeaderRowCount(RAW_FORMAT_HEADER_ROWS);
-      }
-      setMatchColumnIndex(
-        guessMatchColumn(
-          res.headerRows,
-          matchAttrsKey,
-          matchFields.find((f) => f.key === matchAttrsKey)?.label,
-        ),
-      );
-      setDryRunResult(null);
-      setStep('mapping');
-    } catch (err) {
-      setError(getErrorMessage(err, '엑셀을 읽지 못했습니다.'));
-    }
+    await runAsyncAction(
+      async () => {
+        const res = await suggest.mutateAsync({
+          surveyId,
+          file: next.file,
+          ...(next.sheetName ? { sheetName: next.sheetName } : {}),
+          ...(next.headerRowCount ? { headerRowCount: next.headerRowCount } : {}),
+        });
+        setPreview(res);
+        setSheetName(next.sheetName ?? res.sheetNames[0] ?? '');
+        // 자동 제안을 초기 매핑으로 채운다 — 사람은 틀린 것만 고친다.
+        const seeded: Record<string, string> = {};
+        res.blocks.forEach((block, index) => {
+          if (block.questionId) seeded[String(index)] = block.questionId;
+        });
+        setMapping(seeded);
+        // 보관된 값 대응을 되살린다. 시드하지 않으면 다음 세션에서 빈 상태로 시작해
+        // "다시 올릴 때 재사용" 이 성립하지 않는다.
+        setValueAliases(res.savedValueAliases);
+        // 3행에 이 설문의 SPSS 변수명이 보이면 우리 Raw 양식으로 추측한다. 확정은 사람이 한다.
+        if (res.looksLikeRawFormat) {
+          setFormat('raw');
+          setHeaderRowCount(RAW_FORMAT_HEADER_ROWS);
+        }
+        setMatchColumnIndex(
+          guessMatchColumn(
+            res.headerRows,
+            matchAttrsKey,
+            matchFields.find((f) => f.key === matchAttrsKey)?.label,
+          ),
+        );
+        setDryRunResult(null);
+        setStep('mapping');
+      },
+      {
+        onError: (err) => {
+          setError(getErrorMessage(err, '엑셀을 읽지 못했습니다.'));
+        },
+        onSettled: () => {},
+      },
+    );
   }
 
   function handleFile(picked: File | null) {
@@ -240,44 +247,50 @@ export function PriorAnswerImportWizard({
   async function run(dryRun: boolean) {
     if (!file || matchColumnIndex === null || !matchAttrsKey || !preview) return;
     setError(null);
-    try {
-      // 확정 보관은 **실행할 때만** 한다. 미리보기가 서버 설정을 바꾸면, 사람이 검토하지도
-      // 않은 자동 제안이 확정으로 굳고 실행을 포기해도 남는다. 미리보기에서 이어준 값은
-      // 요청에 실어 보내 저장 없이 결과에 반영한다.
-      // raw 양식은 사람이 이은 것이 없다 — 보관할 확정도 없다.
-      if (!dryRun && format === 'mapped') {
-        const blockMappings: Record<string, { questionId: string; label: string }> = {};
-        preview.blocks.forEach((block, index) => {
-          const questionId = mapping[String(index)];
-          if (!questionId) return;
-          // 확정 시점의 문항 내용을 함께 남긴다 — 다음 파일에서 같은 코드가 다른 문항을
-          // 가리키면 되살리지 않고 다시 묻기 위해서다.
-          blockMappings[normalizeQuestionCode(block.code)] = { questionId, label: block.label };
-        });
-        await saveConfig.mutateAsync({ surveyId, blockMappings, valueAliases });
-      }
+    await runAsyncAction(
+      async () => {
+        // 확정 보관은 **실행할 때만** 한다. 미리보기가 서버 설정을 바꾸면, 사람이 검토하지도
+        // 않은 자동 제안이 확정으로 굳고 실행을 포기해도 남는다. 미리보기에서 이어준 값은
+        // 요청에 실어 보내 저장 없이 결과에 반영한다.
+        // raw 양식은 사람이 이은 것이 없다 — 보관할 확정도 없다.
+        if (!dryRun && format === 'mapped') {
+          const blockMappings: Record<string, { questionId: string; label: string }> = {};
+          preview.blocks.forEach((block, index) => {
+            const questionId = mapping[String(index)];
+            if (!questionId) return;
+            // 확정 시점의 문항 내용을 함께 남긴다 — 다음 파일에서 같은 코드가 다른 문항을
+            // 가리키면 되살리지 않고 다시 묻기 위해서다.
+            blockMappings[normalizeQuestionCode(block.code)] = { questionId, label: block.label };
+          });
+          await saveConfig.mutateAsync({ surveyId, blockMappings, valueAliases });
+        }
 
-      const res = await runImport.mutateAsync({
-        surveyId,
-        file,
-        sheetName,
-        headerRowCount,
-        format,
-        matchColumnIndex,
-        matchAttrsKey,
-        mapping,
-        valueAliases,
-        dryRun,
-      });
-      if (dryRun) {
-        setDryRunResult(res);
-      } else {
-        setResult(res);
-        setStep('result');
-      }
-    } catch (err) {
-      setError(getErrorMessage(err, '이월 응답 적재에 실패했습니다.'));
-    }
+        const res = await runImport.mutateAsync({
+          surveyId,
+          file,
+          sheetName,
+          headerRowCount,
+          format,
+          matchColumnIndex,
+          matchAttrsKey,
+          mapping,
+          valueAliases,
+          dryRun,
+        });
+        if (dryRun) {
+          setDryRunResult(res);
+        } else {
+          setResult(res);
+          setStep('result');
+        }
+      },
+      {
+        onError: (err) => {
+          setError(getErrorMessage(err, '이월 응답 적재에 실패했습니다.'));
+        },
+        onSettled: () => {},
+      },
+    );
   }
 
   return (

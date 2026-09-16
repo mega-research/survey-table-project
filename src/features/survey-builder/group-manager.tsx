@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   DndContext,
@@ -83,7 +83,7 @@ export function GroupManager({ className }: GroupManagerProps) {
   const ensureSurvey = useEnsureSurveyInDb();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<QuestionGroup | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [parentGroupIdForNew, setParentGroupIdForNew] = useState<string | undefined>(undefined);
@@ -108,29 +108,13 @@ export function GroupManager({ className }: GroupManagerProps) {
     return next;
   }, [groupsOrEmpty]);
 
-  // 모달이 열려있는 동안 groups가 업데이트되면 editingGroup도 업데이트.
-  // editingGroup 객체 자체는 effect event 로 실행 시점의 최신값을 읽는다 — deps 에 올리면
-  // 본문의 setEditingGroup 이 곧바로 재발화를 부른다. 트리거는 모달 개폐·대상 그룹·목록에만 둔다.
-  const syncEditingGroup = useEffectEvent(() => {
-    if (isEditModalOpen && editingGroup?.id) {
-      const latestGroup = groupsOrEmpty.find((g) => g.id === editingGroup.id);
-      if (latestGroup) {
-        // displayCondition이 다르거나 다른 필드가 업데이트된 경우
-        const hasChanges =
-          latestGroup.displayCondition !== editingGroup.displayCondition ||
-          latestGroup.name !== editingGroup.name ||
-          latestGroup.description !== editingGroup.description ||
-          latestGroup.parentGroupId !== editingGroup.parentGroupId;
-
-        if (hasChanges) {
-          setEditingGroup(latestGroup);
-        }
-      }
-    }
-  });
-  useEffect(() => {
-    syncEditingGroup();
-  }, [isEditModalOpen, editingGroup?.id, groupsOrEmpty]);
+  // 편집 대상도 store 파생값이다 — 로컬 state 로 객체를 복제하면 groups 갱신마다 이펙트가
+  // 되맞춰야 하고(동기화를 빠뜨린 필드는 모달에서 조용히 stale 이 된다), 그 setState 가
+  // 렌더 중 연쇄를 부른다. 펼침(expandedGroups)과 같은 꼴로 id 만 들고 파생한다.
+  const editingGroup = useMemo(
+    () => groupsOrEmpty.find((g) => g.id === editingGroupId) ?? null,
+    [groupsOrEmpty, editingGroupId],
+  );
 
   // 최상위 그룹만 필터링 (parentGroupId가 없는 것들)
   const topLevelGroups = useMemo(
@@ -336,7 +320,7 @@ export function GroupManager({ className }: GroupManagerProps) {
   const handleEditGroup = (group: QuestionGroup) => {
     // groups에서 최신 그룹 정보 가져오기 (displayCondition 포함)
     const latestGroup = groupsOrEmpty.find((g) => g.id === group.id) || group;
-    setEditingGroup(latestGroup);
+    setEditingGroupId(latestGroup.id);
     setGroupName(latestGroup.name);
     setGroupDescription(latestGroup.description || '');
     setParentGroupIdForEdit(latestGroup.parentGroupId);
@@ -510,7 +494,7 @@ export function GroupManager({ className }: GroupManagerProps) {
         clearGroupNameDesign(editingGroup.id);
       }
 
-      setEditingGroup(null);
+      setEditingGroupId(null);
       setGroupName('');
       setGroupDescription('');
       setParentGroupIdForEdit(undefined);
@@ -691,7 +675,7 @@ export function GroupManager({ className }: GroupManagerProps) {
         isOpen={isEditModalOpen}
         onClose={() => {
           setIsEditModalOpen(false);
-          setEditingGroup(null);
+          setEditingGroupId(null);
           setGroupName('');
           setGroupDescription('');
           setParentGroupIdForEdit(undefined);
