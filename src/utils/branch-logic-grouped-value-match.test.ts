@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Question } from '@/types/survey';
-import { shouldDisplayQuestion } from '@/utils/branch-logic';
+import type { BranchRule, Question } from '@/types/survey';
+import { getBranchRuleForResponse, shouldDisplayQuestion } from '@/utils/branch-logic';
 
 /**
  * 회귀 테스트: value-match 표시 조건 × 그룹형 choice 응답(GroupedChoiceAnswer)
@@ -168,5 +168,151 @@ describe('value-match 표시 조건 — 보기 그룹 표 (table + __choiceGroup
     } as Question;
     const responses = { [SOURCE_ID]: { __choiceGroups: { chk1: [OTHER_CELL, TARGET_CELL] } } };
     expect(shouldDisplayQuestion(target, responses, [checkboxTable, target])).toBe(true);
+  });
+});
+
+/**
+ * 정본 리더 위임 고정 — 문항 레벨 그룹 맵을 읽는 자리 셋이 같은 판정을 내는가.
+ *
+ * 읽는 자리는 표시 조건의 checkValueMatch 와 분기 규칙의 getBranchRuleForRadio·
+ * getBranchRuleForCheckbox 셋이고, 셋 다 lib/survey/choice-selection.ts 의
+ * collectSelectedChoiceCellIds 를 부른다. 전에는 세 곳이 같은 flatMap 을 각자 갖고 있었다.
+ *
+ * 아래 세 모양은 옛 인라인 flatMap 과 정본이 갈리던 자리다 — 인라인은 (1) 배열 속 빈
+ * 문자열을 선택으로 세고 (2) 중첩 배열을 버리고 (3) `{selectedValue}` 래핑을 버렸다.
+ * 셋 중 어느 자리든 사본으로 되돌리면 여기서 걸린다.
+ *
+ * 저장 경로가 실제로 만드는 모양은 아니다 — 그룹 맵을 쓰는 곳(그룹 렌더러의 toggle,
+ * Raw 양식 이월 임포트의 invertChoiceGroups)은 빈 문자열이 아닌 cell.id 와 그 배열만 넣는다.
+ * 이 블록의 목적은 세 자리가 갈리지 않게 붙들어 두는 것이다.
+ */
+describe('그룹 맵 판독 — 세 자리(표시 조건 · radio 분기 · checkbox 분기) 일치', () => {
+  const BRANCH_RULE: BranchRule = {
+    id: 'br-target',
+    value: TARGET_CELL,
+    action: 'goto',
+    targetQuestionId: 'q-after',
+  };
+
+  /** TARGET_CELL 셀에만 분기 규칙을 붙인다 — 분기가 나오면 그 셀이 선택으로 읽혔다는 뜻 */
+  function withTargetBranchRule(question: Question): Question {
+    return {
+      ...question,
+      tableRowsData: (question.tableRowsData ?? []).map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) =>
+          cell.id === TARGET_CELL ? { ...cell, branchRule: BRANCH_RULE } : cell,
+        ),
+      })),
+    } as Question;
+  }
+
+  /** 같은 응답을 세 자리에 흘려 넣은 결과 */
+  function readAtThreeSites(response: unknown) {
+    const radio = withTargetBranchRule(makeGroupedSourceQuestion());
+    const checkbox = { ...radio, type: 'checkbox' } as Question;
+    const target = makeTargetQuestion([TARGET_CELL]);
+    return {
+      displayRadio: shouldDisplayQuestion(target, { [SOURCE_ID]: response }, [radio, target]),
+      displayCheckbox: shouldDisplayQuestion(target, { [SOURCE_ID]: response }, [checkbox, target]),
+      radioRule: getBranchRuleForResponse(radio, response),
+      checkboxRule: getBranchRuleForResponse(checkbox, response),
+    };
+  }
+
+  it('기준선 — 정상 모양은 세 자리 모두 TARGET_CELL 을 선택으로 읽는다', () => {
+    expect(readAtThreeSites({ rad2: TARGET_CELL })).toEqual({
+      displayRadio: true,
+      displayCheckbox: true,
+      radioRule: BRANCH_RULE,
+      checkboxRule: BRANCH_RULE,
+    });
+  });
+
+  it('기준선 — 다른 보기를 고르면 세 자리 모두 미선택이다', () => {
+    expect(readAtThreeSites({ rad2: OTHER_CELL })).toEqual({
+      displayRadio: false,
+      displayCheckbox: false,
+      radioRule: null,
+      checkboxRule: null,
+    });
+  });
+
+  it('중첩 배열은 펴서 읽는다 — 세 자리 모두', () => {
+    expect(readAtThreeSites({ rad2: [[TARGET_CELL]] })).toEqual({
+      displayRadio: true,
+      displayCheckbox: true,
+      radioRule: BRANCH_RULE,
+      checkboxRule: BRANCH_RULE,
+    });
+  });
+
+  it('`{selectedValue}` 래핑은 풀어서 읽는다 — 세 자리 모두', () => {
+    expect(readAtThreeSites({ rad2: { selectedValue: TARGET_CELL } })).toEqual({
+      displayRadio: true,
+      displayCheckbox: true,
+      radioRule: BRANCH_RULE,
+      checkboxRule: BRANCH_RULE,
+    });
+  });
+
+  /**
+   * 빈 문자열은 선택이 아니다.
+   *
+   * 보기 값이 cell.id 라 정상 구조에서는 빈 값이 후보가 될 수 없다 — 규칙을 세 자리에서
+   * 관찰하려면 빈 id 를 가진 보기 셀이 있어야 해서 이 케이스만 퇴화 구조를 쓴다.
+   * 저장 경로가 만드는 모양이 아니라, "빈 문자열을 선택으로 세지 않는다" 를 못박는 자리다.
+   */
+  const EMPTY_ID_RULE: BranchRule = {
+    id: 'br-empty',
+    value: '',
+    action: 'goto',
+    targetQuestionId: 'q-after',
+  };
+
+  function makeEmptyIdSource(type: 'radio' | 'checkbox'): Question {
+    return {
+      id: SOURCE_ID,
+      surveyId: 's1',
+      type,
+      title: 'AQ2. 빈 id 보기',
+      required: false,
+      order: 0,
+      options: [],
+      choiceGroups: [
+        { id: 'g2', type: type === 'checkbox' ? 'checkbox' : 'radio', label: '현재', groupKey: 'rad2' },
+      ],
+      tableColumns: [
+        { id: 'col-label', label: '내용' },
+        { id: 'col-now', label: '현재' },
+      ],
+      tableRowsData: [
+        {
+          id: 'row-1',
+          label: '① 재학/휴학',
+          cells: [
+            { id: 'cell-label-1', content: '① 재학/휴학', type: 'text' as const },
+            {
+              id: '',
+              content: '',
+              type: 'choice_opt' as const,
+              choiceGroupId: 'g2',
+              branchRule: EMPTY_ID_RULE,
+            },
+          ],
+        },
+      ],
+    } as Question;
+  }
+
+  it('배열 속 빈 문자열은 선택이 아니다 — 세 자리 모두', () => {
+    const response = { rad2: [''] };
+    const radio = makeEmptyIdSource('radio');
+    const checkbox = makeEmptyIdSource('checkbox');
+    const target = makeTargetQuestion(['']);
+
+    expect(shouldDisplayQuestion(target, { [SOURCE_ID]: response }, [radio, target])).toBe(false);
+    expect(getBranchRuleForResponse(radio, response)).toBeNull();
+    expect(getBranchRuleForResponse(checkbox, response)).toBeNull();
   });
 });
