@@ -228,7 +228,7 @@ export function SurveyCard({
         </div>
       </div>
 
-      {/* 액션 순서는 .pen 설문 카드 컴포넌트를 따른다 — 수정 · 현황 · 문의 · 분석. 구분선은 없다. */}
+      {/* 액션 순서 — 수정 · 현황 · 분석 · 문의(.pen 설문 카드의 문의·분석 순서를 바꿨다). 구분선은 없다. */}
       <div className="flex gap-1.5 pt-1.5">
         <CardActionLink
           href={`/admin/surveys/${survey.id}/edit`}
@@ -241,17 +241,17 @@ export function SurveyCard({
           icon={<Activity className="h-3.5 w-3.5" />}
           label="현황"
         />
-        <CardActionLink
-          icon={<MessageCircle className="h-3.5 w-3.5" />}
-          label="문의"
-          disabledReason="문의 기능은 준비 중입니다"
-        />
         {/* 분석은 당분간 막아 둔다. 다시 열 때는 href 를 되돌리고 canViewSurveyAnalyticsCard 로
             비활성을 정한다(분석 화면이 responses.view 를 요구해 팀원에게는 404 다). */}
         <CardActionLink
           icon={<ChartColumn className="h-3.5 w-3.5" />}
           label="분석"
           disabledReason="분석 기능은 준비 중입니다"
+        />
+        <CardActionLink
+          icon={<MessageCircle className="h-3.5 w-3.5" />}
+          label="문의"
+          disabledReason="문의 기능은 준비 중입니다"
         />
       </div>
 
