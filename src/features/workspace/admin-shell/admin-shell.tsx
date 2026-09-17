@@ -3,13 +3,14 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { SYSTEM_SCOPE, type TeamRole, type WorkScope } from '@/shared/contracts/workspace';
 import { writeWorkScopeCookie } from '@/shared/lib/work-scope-cookie';
 import { WorkScopeContext } from '@/shared/lib/work-scope-context';
 
 import { Sidebar } from './sidebar';
+import { isSidebarHiddenPath } from './sidebar-menu';
 
 const COLLAPSE_STORAGE_KEY = 'admin-sidebar-collapsed';
 
@@ -58,6 +59,8 @@ export function AdminShell({ user, memberships, teams, initialScope, children }:
   const [scope, setScopeState] = useState<WorkScope>(initialScope);
   const queryClient = useQueryClient();
   const router = useRouter();
+  // 편집기·운영 콘솔은 화면 폭을 전부 쓴다 — 셸이 클라이언트라 소프트 내비게이션에도 즉시 따라간다.
+  const sidebarHidden = isSidebarHiddenPath(usePathname());
 
   const toggleCollapsed = useCallback(() => {
     persistCollapsed(!readCollapsed());
@@ -99,12 +102,14 @@ export function AdminShell({ user, memberships, teams, initialScope, children }:
   return (
     <WorkScopeContext.Provider value={contextValue}>
       <div className="flex min-h-screen">
-        <Sidebar
-          user={user}
-          memberships={memberships}
-          collapsed={collapsed}
-          onToggle={toggleCollapsed}
-        />
+        {!sidebarHidden && (
+          <Sidebar
+            user={user}
+            memberships={memberships}
+            collapsed={collapsed}
+            onToggle={toggleCollapsed}
+          />
+        )}
         <main className="min-w-0 flex-1 bg-[#F9FAFB]">{children}</main>
       </div>
     </WorkScopeContext.Provider>
