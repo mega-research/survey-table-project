@@ -89,7 +89,7 @@ function sorted(keys: string[]): string[] {
 }
 
 describe('유형별 필드 매트릭스 (실측 박제)', () => {
-  it('text: base + 단답형 전용 6종', () => {
+  it('text: base + 단답형 전용 8종', () => {
     expect(shapeKeys(TextQuestionSchema)).toEqual(
       sorted([
         ...BASE_KEYS,
@@ -99,12 +99,16 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         'emptyDefault',
         'numberFormat',
         'textValidation',
+        'inputRows',
+        'inputAutoGrow',
       ]),
     );
   });
 
-  it('textarea: base + 응답 품질 검사(textValidation) 하나 — 가장 얇은 variant', () => {
-    expect(shapeKeys(TextareaQuestionSchema)).toEqual(sorted([...BASE_KEYS, 'textValidation']));
+  it('textarea: base + 응답 품질 검사·입력칸 높이 — 가장 얇은 variant', () => {
+    expect(shapeKeys(TextareaQuestionSchema)).toEqual(
+      sorted([...BASE_KEYS, 'textValidation', 'inputRows', 'inputAutoGrow']),
+    );
   });
 
   it('radio: base + 옵션 리스트 + 내장 테이블 + 모바일 표시 + choiceGroups', () => {

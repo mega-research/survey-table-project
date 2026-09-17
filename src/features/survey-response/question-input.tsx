@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useEffectEvent, useMemo } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
@@ -762,6 +763,15 @@ function SelectQuestion({
   );
 }
 
+/** 장문형 입력칸의 기본 줄 수 — inputRows 미지정 문항의 기존 높이. */
+const TEXTAREA_DEFAULT_ROWS = 4;
+
+/** 1~20 줄 수로 접는다. 범위 밖·비정수는 기본값. */
+function clampInputRows(rows: number | null | undefined, fallback: number): number {
+  if (typeof rows !== 'number' || !Number.isFinite(rows)) return fallback;
+  return Math.min(20, Math.max(1, Math.floor(rows)));
+}
+
 /** 운영자가 placeholder 를 적지 않았을 때의 기본 문구. 형식 칸은 예시 값이 가장 친절하다. */
 function defaultPlaceholder(isNumberMode: boolean, format: InputFormat | null): string {
   if (format) return formatSampleValue(format);
@@ -790,11 +800,17 @@ function TextareaResponseInput({
   const quality = focus.focused ? null : resolveTextQualityViolation(question, value, priorAnswers);
   const max = effectiveMaxLength(question.textValidation);
   const text = typeof value === 'string' ? value : '';
+  // 줄 수 미지정이면 기존 4줄. 높이 늘리기를 켜면 줄 수가 최소 높이다.
+  const rows = clampInputRows(question.inputRows, TEXTAREA_DEFAULT_ROWS);
+  const autoGrow = question.inputAutoGrow === true;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutoGrowTextarea(textareaRef, text, autoGrow);
   return (
     <div className="w-full">
       <textarea
-        className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${priorHighlightCls}`}
-        rows={4}
+        ref={textareaRef}
+        className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${autoGrow ? 'overflow-hidden' : ''} ${priorHighlightCls}`}
+        rows={rows}
         placeholder={question.placeholder || '답변을 입력하세요...'}
         value={text}
         onChange={(e) => onChange(e.target.value)}
@@ -854,6 +870,18 @@ function TextResponseInput({
   // 입력 상한 — 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시. 평문 모드에서만.
   const maxLength =
     isPlainTextInput(question) && !isPrefilled ? effectiveMaxLength(question.textValidation) : null;
+  // 여러 줄 — 평문 모드에서만. 숫자·형식 칸은 한 줄 값을 전제로 한 서식·정돈 훅이 붙어 있다.
+  // 줄 수 2 이상이거나 높이 늘리기를 켜면 textarea 로 그리고, 줄 수는 최소 높이가 된다.
+  const isFreeText = !isNumberMode && !format;
+  const multilineRows = isFreeText ? clampInputRows(question.inputRows, 1) : 1;
+  const autoGrow = isFreeText && question.inputAutoGrow === true;
+  const isMultiline = multilineRows >= 2 || autoGrow;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutoGrowTextarea(
+    textareaRef,
+    isPrefilled ? prefilledValue : currentValue,
+    isMultiline && autoGrow,
+  );
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -911,33 +939,50 @@ function TextResponseInput({
     applyEmptyDefault();
   }, [value, isPrefilled, hasPriorValue, isNumberMode, question.emptyDefault]);
 
+  const priorCls =
+    !isPrefilled && isPriorText(priorHighlight, question.id, currentValue)
+      ? PRIOR_HIGHLIGHT_TEXT_CLS
+      : '';
+
   return (
     <div className="w-full">
-      <Input
-        type="text"
-        inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
-        placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format)}
-        value={isPrefilled ? prefilledValue : displayValue}
-        onChange={format ? formatField.handleChange : handleChange}
-        onFocus={() => {
-          handleFocus();
-          formatField.handleFocus();
-          focus.onFocus();
-        }}
-        onBlur={() => {
-          handleBlur();
-          formatField.handleBlur();
-          focus.onBlur();
-        }}
-        className={`w-full text-base ${
-          !isPrefilled && isPriorText(priorHighlight, question.id, currentValue)
-            ? PRIOR_HIGHLIGHT_TEXT_CLS
-            : ''
-        }`}
-        disabled={isPrefilled}
-        data-prefilled={isPrefilled || undefined}
-        {...(maxLength !== null ? { maxLength } : {})}
-      />
+      {isMultiline ? (
+        <textarea
+          ref={textareaRef}
+          rows={multilineRows}
+          placeholder={question.placeholder || defaultPlaceholder(false, null)}
+          value={isPrefilled ? prefilledValue : currentValue}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={focus.onFocus}
+          onBlur={focus.onBlur}
+          className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${autoGrow ? 'overflow-hidden' : ''} ${priorCls}`}
+          disabled={isPrefilled}
+          data-prefilled={isPrefilled || undefined}
+          {...(maxLength !== null ? { maxLength } : {})}
+        />
+      ) : (
+        <Input
+          type="text"
+          inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
+          placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format)}
+          value={isPrefilled ? prefilledValue : displayValue}
+          onChange={format ? formatField.handleChange : handleChange}
+          onFocus={() => {
+            handleFocus();
+            formatField.handleFocus();
+            focus.onFocus();
+          }}
+          onBlur={() => {
+            handleBlur();
+            formatField.handleBlur();
+            focus.onBlur();
+          }}
+          className={`w-full text-base ${priorCls}`}
+          disabled={isPrefilled}
+          data-prefilled={isPrefilled || undefined}
+          {...(maxLength !== null ? { maxLength } : {})}
+        />
+      )}
       {maxLength !== null && <TextLengthCounter current={currentValue.length} max={maxLength} />}
       {(unitReading || rangeViolation || formatField.violation || qualityViolation) &&
         !isPrefilled && (

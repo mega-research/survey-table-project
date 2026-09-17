@@ -104,6 +104,8 @@ interface SnapshotQuestion {
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;
   textValidation?: Question['textValidation'] | undefined;
+  inputRows?: Question['inputRows'] | undefined;
+  inputAutoGrow?: Question['inputAutoGrow'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -194,6 +196,8 @@ export function buildSurveySnapshot(
       piiEncrypted: q.piiEncrypted,
       numberFormat: q.numberFormat,
       textValidation: q.textValidation,
+      inputRows: q.inputRows,
+      inputAutoGrow: q.inputAutoGrow,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

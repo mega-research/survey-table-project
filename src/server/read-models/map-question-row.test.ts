@@ -46,6 +46,8 @@ const SENTINEL_ROW: Record<string, unknown> = {
   emptyDefault: 0,
   numberFormat: { thousands: true },
   textValidation: { minLength: 10, rejectMeaningless: true },
+  inputRows: 5,
+  inputAutoGrow: true,
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],

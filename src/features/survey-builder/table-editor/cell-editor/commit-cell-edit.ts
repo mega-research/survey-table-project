@@ -230,6 +230,8 @@ export async function commitCellEdit({
               numberFormat: question.numberFormat,
               piiEncrypted: question.piiEncrypted,
               textValidation: question.textValidation,
+              inputRows: question.inputRows,
+              inputAutoGrow: question.inputAutoGrow,
               tableValidationRules: question.tableValidationRules,
               sumConstraints: question.sumConstraints,
               dynamicRowConfigs: question.dynamicRowConfigs,
