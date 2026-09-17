@@ -4,6 +4,7 @@ import 'server-only';
 import { type DbOrTx, db } from '@/db';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
 import { allocateContactResid } from './contact-resid';
+import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import {
@@ -17,7 +18,7 @@ import {
   appendNewColumnsToScheme,
   getSchemeRouting,
 } from './scheme-helpers';
-import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
+import { validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
   type PiiInput,
   buildPiiRows,
@@ -89,11 +90,7 @@ export async function parseExcelPreview(
     maxRows: 5,
   });
 
-  if (result.totalRows > MAX_UPLOAD_ROWS) {
-    throw new Error(
-      `최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다 (현재 ${result.totalRows.toLocaleString('ko-KR')} 행).`,
-    );
-  }
+  assertUploadRowLimit(result.totalRows, { operation: 'contact_upload_preview' });
 
   return {
     sheetNames: result.sheetNames,
@@ -145,9 +142,7 @@ export async function ingestContactUpload(
     headerRow: mapping.headerRow,
   });
 
-  if (allRows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
-  }
+  assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];
@@ -714,9 +709,7 @@ export async function matchContactUpload(
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
   });
-  if (allRows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
-  }
+  assertUploadRowLimit(allRows.length, { operation: 'contact_upload_match', surveyId });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];

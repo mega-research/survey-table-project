@@ -187,7 +187,7 @@ export interface ParseRowsOptions {
   headerRow: number;
 }
 
-/** 풀 파싱 — 적재용. 5,000행 한계는 호출자가 가드. */
+/** 풀 파싱 — 적재용. 행 수 한계(MAX_UPLOAD_ROWS)는 호출자가 가드. */
 export async function parseExcelRows(
   buffer: Buffer | ArrayBuffer,
   opts: ParseRowsOptions,

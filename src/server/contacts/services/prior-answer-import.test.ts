@@ -119,7 +119,7 @@ vi.mock('./excel-parser', () => ({
 }));
 
 vi.mock('@/lib/contacts/upload-limits', () => ({
-  MAX_UPLOAD_ROWS: 5000,
+  MAX_UPLOAD_ROWS: 20_000,
   validateXlsxFile: vi.fn(() => null),
 }));
 

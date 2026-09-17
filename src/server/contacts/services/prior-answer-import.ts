@@ -8,6 +8,7 @@ import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 import { previewExcelGrid } from './excel-parser';
+import { assertUploadRowLimit } from './upload-row-limit';
 import {
   type BlockSlot,
   type HeaderBlock,
@@ -424,9 +425,10 @@ export async function importPriorAnswers(
     headerRowCount: input.headerRowCount,
   });
   const rows = preview.rows;
-  if (rows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(`한 번에 올릴 수 있는 행은 ${MAX_UPLOAD_ROWS.toLocaleString()}건입니다.`);
-  }
+  assertUploadRowLimit(rows.length, {
+    operation: 'prior_answer_import',
+    surveyId: input.surveyId,
+  });
 
   const [questions, config] = await Promise.all([
     loadQuestions(input.surveyId),
