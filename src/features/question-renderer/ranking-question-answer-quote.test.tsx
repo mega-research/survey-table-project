@@ -97,6 +97,46 @@ describe('RankingQuestion — 그룹 헤딩 인용 치환', () => {
   });
 });
 
+describe('RankingQuestion — 그룹 라벨을 비우면 제목 줄이 없다', () => {
+  function groupedFixture(label: string, inputMode?: 'click'): Question {
+    return {
+      id: 'qg2',
+      type: 'ranking',
+      title: '순위형 그룹',
+      required: false,
+      order: 0,
+      rankingConfig: { optionsSource: 'table', positions: 2, ...(inputMode ? { inputMode } : {}) },
+      tableColumns: [{ id: 'c1', label: '열' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'cellA', type: 'ranking_opt', content: '항목A', choiceGroupId: 'grp1' },
+            { id: 'cellB', type: 'ranking_opt', content: '항목B', choiceGroupId: 'grp1' },
+          ],
+        },
+      ],
+      choiceGroups: [{ id: 'grp1', type: 'ranking', groupKey: 'rnk1', label }],
+    } as unknown as Question;
+  }
+
+  it.each([
+    ['드롭다운', undefined],
+    ['클릭', 'click' as const],
+  ])('%s 방식 — 라벨이 있으면 보이고, 비우면 그룹 키 대신 아무것도 없다', (_, mode) => {
+    mobileFlag = false;
+    const { unmount } = render(
+      <RankingQuestion question={groupedFixture('중요한 점', mode)} value={null} onChange={vi.fn()} />,
+    );
+    expect(screen.getByText('중요한 점')).toBeInTheDocument();
+    unmount();
+
+    render(<RankingQuestion question={groupedFixture('', mode)} value={null} onChange={vi.fn()} />);
+    expect(screen.queryByText('rnk1')).not.toBeInTheDocument();
+  });
+});
+
 describe('RankingQuestion — 내장 테이블 모바일 카드 인용 치환', () => {
   it('모바일 카드 라벨(opt?.label 체인)의 인용 토큰을 치환한다', () => {
     mobileFlag = true;
