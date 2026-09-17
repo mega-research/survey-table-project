@@ -34,6 +34,8 @@ import type {
 const base = z.object({
   id: z.string(),
   title: z.string(),
+  // 제목 서식본 — 정본은 평문 title (0125)
+  titleHtml: z.string().nullable().optional(),
   description: z.string().optional(),
   required: z.boolean(),
   groupId: z.string().optional(),
@@ -85,11 +87,15 @@ export const TextQuestionSchema = base.extend({
   emptyDefault: z.number().optional(),
   numberFormat: z.custom<NonNullable<Question['numberFormat']>>().nullable().optional(),
   textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
+  inputRows: z.number().int().min(1).max(20).nullable().optional(),
+  inputAutoGrow: z.boolean().nullable().optional(),
 });
 
 export const TextareaQuestionSchema = base.extend({
   type: z.literal('textarea'),
   textValidation: z.custom<NonNullable<Question['textValidation']>>().nullable().optional(),
+  inputRows: z.number().int().min(1).max(20).nullable().optional(),
+  inputAutoGrow: z.boolean().nullable().optional(),
 });
 
 export const RadioQuestionSchema = base

@@ -3,9 +3,11 @@
 import { useEffect, useEffectEvent, useMemo } from 'react';
 
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
-import { Bold as BoldIcon, Redo, Undo } from 'lucide-react';
+import { Bold as BoldIcon, Redo, Underline as UnderlineIcon, Undo } from 'lucide-react';
 
-import { createInlineCellExtensions } from './inline-cell-extensions';
+import { TITLE_DEFAULT_FONT_SIZE, TITLE_FONT_SIZES } from '@/lib/survey/question-title-html';
+
+import { createInlineCellExtensions, createInlineTitleExtensions } from './inline-cell-extensions';
 import { PopoverVariableMenu } from './popover-variable-menu';
 import { FontColorControl } from './toolbar';
 import { Sep, ToolBtn } from './toolbar-primitives';
@@ -24,11 +26,22 @@ export interface InlineRichTextEditorProps {
   /** aria-label. 모달에서 Label 과 연결할 때 쓴다. */
   ariaLabel?: string | undefined;
   className?: string | undefined;
+  /**
+   * 'cell'(기본) = 셀 본문 — 굵게·글자색, 여러 줄.
+   * 'title' = 문항 제목 — 굵게·밑줄·글자색·글자 크기, 한 줄(Enter 를 막고 평문은 공백으로 편다).
+   */
+  variant?: 'cell' | 'title' | undefined;
 }
 
 const EDITOR_CLASS =
   'min-h-[76px] px-3 py-2 text-sm text-gray-900 whitespace-pre-wrap [overflow-wrap:anywhere] outline-none ' +
   '[&_p]:m-0 [&_p]:min-h-[1.25rem] ' +
+  '[&_.mail-var-token]:rounded [&_.mail-var-token]:bg-blue-50 [&_.mail-var-token]:px-0.5 [&_.mail-var-token]:text-blue-700';
+
+/** 제목 모드 — 한 줄 높이, 응답 화면 제목과 비슷한 글자 크기. */
+const TITLE_EDITOR_CLASS =
+  'min-h-[40px] px-3 py-2 text-base text-gray-900 [overflow-wrap:anywhere] outline-none ' +
+  '[&_p]:m-0 ' +
   '[&_.mail-var-token]:rounded [&_.mail-var-token]:bg-blue-50 [&_.mail-var-token]:px-0.5 [&_.mail-var-token]:text-blue-700';
 
 /**
@@ -46,27 +59,38 @@ export function InlineRichTextEditor({
   placeholder,
   ariaLabel,
   className,
+  variant = 'cell',
 }: InlineRichTextEditorProps) {
-  const extensions = useMemo(() => createInlineCellExtensions(), []);
+  const isTitle = variant === 'title';
+  const extensions = useMemo(
+    () => (isTitle ? createInlineTitleExtensions() : createInlineCellExtensions()),
+    [isTitle],
+  );
   // placeholder 표시 여부는 prop 에서 바로 편다 — 호출부가 onChange 값을 되돌려 주므로
   // initialHtml 이 곧 현재 내용이다. 편집기 상태 셀렉터의 첫 값(비어 있음)에 기대면
   // 초기 내용이 있는데도 placeholder 가 글 위에 겹친다.
   const isEmpty = initialHtml === '';
 
+  // 제목은 평문 정본의 공백을 그대로 지켜야 한다 — 기본 파싱은 연속 공백을 한 칸으로 합쳐,
+  // 두 칸 공백이 있던 기존 제목을 고치는 순간 평문(SPSS·엑셀 라벨)이 조용히 바뀐다.
+  const parseOptions = isTitle ? ({ preserveWhitespace: 'full' } as const) : undefined;
+
   const editor = useEditor({
     extensions,
     content: initialHtml,
+    ...(parseOptions ? { parseOptions } : {}),
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: EDITOR_CLASS,
+        class: isTitle ? TITLE_EDITOR_CLASS : EDITOR_CLASS,
         ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
       },
     },
     onUpdate: ({ editor }) => {
       onChange({
         html: editor.isEmpty ? '' : editor.getHTML(),
-        text: editor.getText({ blockSeparator: '\n' }),
+        // 제목은 한 줄 — 붙여넣기로 문단이 여럿 들어와도 평문은 공백으로 잇는다.
+        text: editor.getText({ blockSeparator: isTitle ? ' ' : '\n' }),
       });
     },
   });
@@ -79,7 +103,10 @@ export function InlineRichTextEditor({
     if (!editor) return;
     const current = editor.isEmpty ? '' : editor.getHTML();
     if (initialHtml !== current) {
-      editor.commands.setContent(initialHtml, { emitUpdate: false });
+      editor.commands.setContent(initialHtml, {
+        emitUpdate: false,
+        ...(parseOptions ? { parseOptions } : {}),
+      });
     }
   });
   useEffect(() => {
@@ -92,11 +119,22 @@ export function InlineRichTextEditor({
       editor
         ? {
             bold: editor.isActive('bold'),
+            underline: isTitle && editor.isActive('underline'),
+            fontSize: isTitle
+              ? ((editor.getAttributes('fontSize')['size'] as string | undefined) ?? '')
+              : '',
             canUndo: editor.can().undo(),
             canRedo: editor.can().redo(),
             fontColor: (editor.getAttributes('fontColor')['color'] as string | undefined) ?? '',
           }
-        : { bold: false, canUndo: false, canRedo: false, fontColor: '' },
+        : {
+            bold: false,
+            underline: false,
+            fontSize: '',
+            canUndo: false,
+            canRedo: false,
+            fontColor: '',
+          },
   });
 
   if (!editor || !s) return null;
@@ -113,6 +151,35 @@ export function InlineRichTextEditor({
         >
           <BoldIcon className="h-4 w-4" />
         </ToolBtn>
+        {isTitle && (
+          <>
+            <ToolBtn
+              active={s.underline}
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+              title="밑줄"
+            >
+              <UnderlineIcon className="h-4 w-4" />
+            </ToolBtn>
+            <select
+              className="h-8 rounded-md border border-gray-200 bg-white px-1.5 text-xs"
+              value={s.fontSize}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '') editor.chain().focus().unsetFontSize().run();
+                else editor.chain().focus().setFontSize(v).run();
+              }}
+              aria-label="글자 크기"
+              title="글자 크기"
+            >
+              <option value="">{TITLE_DEFAULT_FONT_SIZE}px (기본)</option>
+              {TITLE_FONT_SIZES.filter((sz) => sz !== TITLE_DEFAULT_FONT_SIZE).map((sz) => (
+                <option key={sz} value={`${sz}px`}>
+                  {sz}px
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <FontColorControl editor={editor} fontColor={s.fontColor} />
         {variableCatalog && variableCatalog.length > 0 && (
           <>
@@ -142,7 +209,11 @@ export function InlineRichTextEditor({
       </div>
       <div className="relative">
         {placeholder && isEmpty && (
-          <span className="pointer-events-none absolute top-2 left-3 text-sm text-gray-400">
+          <span
+            className={`pointer-events-none absolute left-3 text-gray-400 ${
+              isTitle ? 'top-2 text-base' : 'top-2 text-sm'
+            }`}
+          >
             {placeholder}
           </span>
         )}

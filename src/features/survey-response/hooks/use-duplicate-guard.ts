@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/client';
 import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -150,6 +151,26 @@ export async function handleInvalidTestLinkMutationError(args: {
   if (!invalid) return false;
   onInvalid();
   setDuplicateStatus({ kind: 'blocked', reason: 'invalid_test_token' });
+  return true;
+}
+
+/**
+ * mutation 실패가 "테스트 도중 재발행으로 응답 버전 스냅샷이 비워짐" 때문인지 판정하고,
+ * 맞으면 blocked 로 전환한다.
+ *
+ * 서버가 코드 있는 거부(TEST_VERSION_REPUBLISHED)로 접어 보내므로 코드만 보면 된다.
+ * 이 응답은 어떤 재시도로도 저장될 수 없어 안내 화면으로 멈추는 것이 맞다 — 계속 두면
+ * 입력마다 초안 저장이 실패한다. 실응답은 버전 정리가 보존해 이 코드를 받지 않는다.
+ */
+export function handleTestVersionRepublishedError(args: {
+  err: unknown;
+  setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  onRepublished?: () => void;
+}): boolean {
+  const { err, setDuplicateStatus, onRepublished } = args;
+  if (!(err instanceof ORPCError) || err.code !== 'TEST_VERSION_REPUBLISHED') return false;
+  onRepublished?.();
+  setDuplicateStatus({ kind: 'blocked', reason: 'test_version_republished' });
   return true;
 }
 

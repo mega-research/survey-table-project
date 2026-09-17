@@ -8,7 +8,7 @@ import { QuestionInput } from '@/features/survey-response/question-input';
 import { ChangeConfirmControl } from '@/features/survey-response/change-confirm-control';
 import { RichDescription } from '@/features/survey-response/step-views/rich-description';
 import { StepItem } from '@/utils/group-ordering';
-import { sanitizeRichHtml } from '@/lib/sanitize';
+import { sanitizeRichHtml, sanitizeTitleHtml } from '@/lib/sanitize';
 import {
   collectUnfilledChoiceGroupIssues,
   resolveGroupedRequiredMessage,
@@ -25,6 +25,7 @@ import {
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
+import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { Question } from '@/types/survey';
@@ -104,6 +105,11 @@ export function GroupStepItem({
     () => substituteTokens(q.title ?? '', attrs, quotes),
     [q.title, attrs, quotes],
   );
+  // 제목 서식본(굵게·밑줄·색·크기) — 평문과 글자가 같을 때만 쓴다. sanitize 는 치환 뒤에.
+  const titleHtml = useMemo(() => {
+    const resolved = resolveQuestionTitleHtml(q, attrs, quotes);
+    return resolved !== undefined ? sanitizeTitleHtml(resolved) : null;
+  }, [q, attrs, quotes]);
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
     [q.description, attrs, quotes],
@@ -166,7 +172,16 @@ export function GroupStepItem({
               id={`q-label-${q.id}`}
               className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
             >
-              {titleText}
+              {titleHtml ? (
+                // 제목은 한 줄 편집기라 문단 하나 — 필수 표시(*)가 같은 줄에 붙게 문단을 인라인으로 편다.
+                <span
+                  className="[&_p]:m-0 [&_p]:inline"
+                  data-testid="question-title-rich"
+                  dangerouslySetInnerHTML={{ __html: titleHtml }}
+                />
+              ) : (
+                titleText
+              )}
               {q.required && (
                 <span className="ml-1 text-red-500" aria-label="필수 질문">
                   *

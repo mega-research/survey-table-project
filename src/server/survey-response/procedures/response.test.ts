@@ -54,6 +54,31 @@ const CLIENT_SIGNALS = {
 describe('surveyResponse.response procedures', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('재발행으로 버전 스냅샷이 비워진 테스트 응답은 코드 있는 거부로 접는다 (saveDraft·complete·updateAnswer)', async () => {
+    const { TestResponseVersionPrunedError } = await import('../services/response-version-snapshot');
+    vi.mocked(draft.saveDraftResponse).mockRejectedValue(new TestResponseVersionPrunedError());
+    vi.mocked(completion.completeResponse).mockRejectedValue(new TestResponseVersionPrunedError());
+    vi.mocked(core.updateQuestionResponse).mockRejectedValue(new TestResponseVersionPrunedError());
+    const client = createRouterClient({ response }, { context: anonContext() });
+    const expected = { code: 'TEST_VERSION_REPUBLISHED', status: 409 };
+
+    await expect(
+      client.response.saveDraft({ responseId: RESPONSE_ID, answers: { [QUESTION_ID]: 'a' } }),
+    ).rejects.toMatchObject(expected);
+    await expect(client.response.complete({ responseId: RESPONSE_ID })).rejects.toMatchObject(expected);
+    await expect(
+      client.response.updateAnswer({ responseId: RESPONSE_ID, questionId: QUESTION_ID, value: 'a' }),
+    ).rejects.toMatchObject(expected);
+  });
+
+  it('그 밖의 서비스 에러는 그대로 흘려보낸다', async () => {
+    vi.mocked(draft.saveDraftResponse).mockRejectedValue(new Error('db down'));
+    const client = createRouterClient({ response }, { context: anonContext() });
+    await expect(
+      client.response.saveDraft({ responseId: RESPONSE_ID, answers: { [QUESTION_ID]: 'a' } }),
+    ).rejects.toThrow('db down');
+  });
+
   it('updateAnswer(pub)는 객체 input 을 service 에 그대로 위임한다', async () => {
     vi.mocked(core.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ response }, { context: anonContext() });

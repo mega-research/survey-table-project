@@ -36,6 +36,7 @@ function Harness({ question }: { question: Question }) {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showBranchSettings, setShowBranchSettings] = useState(false);
   const [localTitle, setLocalTitle] = useState(question.title);
+  const [localTitleHtml, setLocalTitleHtml] = useState('');
   const [localExportLabel, setLocalExportLabel] = useState('');
   const debouncedTitleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedExportLabelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +53,8 @@ function Harness({ question }: { question: Question }) {
       setShowBranchSettings={setShowBranchSettings}
       localTitle={localTitle}
       setLocalTitle={setLocalTitle}
+      localTitleHtml={localTitleHtml}
+      setLocalTitleHtml={setLocalTitleHtml}
       localExportLabel={localExportLabel}
       setLocalExportLabel={setLocalExportLabel}
       debouncedTitleRef={debouncedTitleRef}

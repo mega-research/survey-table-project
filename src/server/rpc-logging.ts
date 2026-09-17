@@ -6,7 +6,7 @@ import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { logRoleForUserType, type UserType } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
-import { isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
+import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
 
 /**
  * 전 RPC 구조화 로깅 미들웨어.
@@ -81,6 +81,8 @@ export const rpcLoggingMiddleware = os
           scope.setTag('code', code);
           scope.setTag('role', fields.role);
           if (fields.surveyId) scope.setTag('surveyId', fields.surveyId);
+          const detail = getSentryContext(error);
+          if (detail) scope.setContext('detail', detail);
           Sentry.captureException(error);
         });
         markSentryCaptured(error);

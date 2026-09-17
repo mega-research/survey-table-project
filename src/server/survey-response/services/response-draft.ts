@@ -14,6 +14,7 @@ import {
   loadResponseRowForMutation,
 } from './response-answer-write';
 import { SurveyNotAcceptingResponsesError } from './response-gate';
+import { classifyQuestionMembershipError } from './response-version-snapshot';
 import { assertAnswerValueSize } from './submitted-answers';
 import { lockAndAssertResponseMutation } from './test-target-attempt';
 
@@ -228,13 +229,16 @@ export async function saveDraftResponse(
   const responseRow = await loadResponseRowForMutation(input.responseId);
 
   // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
+  // 거부되면 원인을 가른다 — 재발행으로 스냅샷이 비워진 테스트 응답은 안내로 접힌다.
   const piiFlags =
     answerEntries.length > 0
       ? await loadQuestionPiiFlags(
           responseRow.versionId,
           responseRow.surveyId,
           answerEntries.map(([questionId]) => questionId),
-        )
+        ).catch(async (err: unknown) => {
+          throw await classifyQuestionMembershipError(err, responseRow);
+        })
       : new Map<string, QuestionPiiFlag>();
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.

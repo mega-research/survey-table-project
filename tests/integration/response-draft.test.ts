@@ -338,6 +338,64 @@ describe('saveDraftResponse — 배치 저장', () => {
     expect(updateCalledMock).not.toHaveBeenCalled();
   });
 
+  describe('버전 스냅샷이 재발행 정리로 비워진 경우', () => {
+    function arrangePrunedVersion(isTest: boolean, snapshot: unknown) {
+      findFirstMock.mockResolvedValue({
+        id: 'r1',
+        surveyId: 's1',
+        versionId: 'v1',
+        isTest,
+        contactTargetId: null,
+      });
+      // 스냅샷 소속 검증은 execute — 비워진 스냅샷이라 어느 문항도 매치되지 않는다.
+      executeMock.mockResolvedValue([]);
+      // 스냅샷 상태 조회(select … limit)
+      selectLimitMock.mockResolvedValue([{ id: 'v1', snapshot }]);
+      controlFlagsMock.mockResolvedValue({ isPaused: false });
+    }
+
+    it('테스트 응답이면 재발행 안내용 에러로 접는다', async () => {
+      arrangePrunedVersion(true, null);
+      const { saveDraftResponse } = await import(
+        '@/server/survey-response/services/response-draft'
+      );
+      const { TestResponseVersionPrunedError } = await import(
+        '@/server/survey-response/services/response-version-snapshot'
+      );
+      await expect(saveDraftResponse(THREE)).rejects.toBeInstanceOf(TestResponseVersionPrunedError);
+      expect(updateCalledMock).not.toHaveBeenCalled();
+    });
+
+    it('실응답이면 원래 거부를 유지하고 Sentry 용 진단 정보를 싣는다', async () => {
+      arrangePrunedVersion(false, null);
+      const { saveDraftResponse } = await import(
+        '@/server/survey-response/services/response-draft'
+      );
+      const err = await saveDraftResponse(THREE).catch((e: unknown) => e);
+      expect((err as Error).message).toBe('해당 설문에 존재하지 않는 질문입니다.');
+      expect((err as { sentryContext: unknown }).sentryContext).toEqual({
+        surveyId: 's1',
+        versionId: 'v1',
+        missingCount: 3,
+        missingQuestionIds: ['q1', 'q2', 'q3'],
+        responseId: 'r1',
+        isTest: false,
+        versionSnapshotPruned: true,
+      });
+    });
+
+    it('스냅샷이 살아 있으면 테스트 응답이어도 원래 거부 그대로다', async () => {
+      arrangePrunedVersion(true, { questions: [] });
+      const { saveDraftResponse } = await import(
+        '@/server/survey-response/services/response-draft'
+      );
+      const err = await saveDraftResponse(THREE).catch((e: unknown) => e);
+      expect((err as Error).name).toBe('QuestionNotInResponseVersionError');
+      const ctx = (err as { sentryContext: Record<string, unknown> }).sentryContext;
+      expect(ctx['versionSnapshotPruned']).toBe(false);
+    });
+  });
+
   it('변동 확인 사이드카는 소속 검증에서 분리되어 함께 저장된다', async () => {
     arrangeBatch();
     const { saveDraftResponse } = await import(

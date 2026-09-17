@@ -312,6 +312,11 @@ export const questions = pgTable(
     numberFormat: jsonb('number_format').$type<NumberFormat>(),
     // 단답형·장문형 응답 품질 검사 {minLength, rejectMeaningless} — NULL = 검사 없음 (0109)
     textValidation: jsonb('text_validation').$type<TextValidation>(),
+    // 단답형·장문형 입력칸 줄 수(1~20, NULL=유형 기본)·입력한 만큼 높이 늘리기 (0124)
+    inputRows: smallint('input_rows'),
+    inputAutoGrow: boolean('input_auto_grow'),
+    // 문항 제목 서식본 — 정본은 평문 title (0125)
+    titleHtml: text('title_html'),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
@@ -374,6 +379,10 @@ export const questions = pgTable(
     check(
       'questions_mobile_table_display_mode_check',
       sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-cards', 'row-group-cards', 'axis-cards', 'original')`,
+    ),
+    check(
+      'questions_input_rows_range',
+      sql`${table.inputRows} is null or (${table.inputRows} >= 1 and ${table.inputRows} <= 20)`,
     ),
     check(
       'questions_sticky_column_count_range',

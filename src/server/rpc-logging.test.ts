@@ -12,6 +12,7 @@ const logged = vi.hoisted(() => ({
 const sentry = vi.hoisted(() => ({
   captureException: vi.fn(),
   tags: [] as Array<Record<string, string>>,
+  contexts: [] as Array<Record<string, unknown>>,
   transactionNames: [] as string[],
 }));
 vi.mock('@sentry/nextjs', () => ({
@@ -22,6 +23,7 @@ vi.mock('@sentry/nextjs', () => ({
         tags[k] = v;
       },
       setTransactionName: (name: string) => sentry.transactionNames.push(name),
+      setContext: (k: string, v: unknown) => sentry.contexts.push({ [k]: v }),
     };
     fn(scope);
     sentry.tags.push(tags);
@@ -46,6 +48,7 @@ beforeEach(() => {
   logged.error.mockReset();
   sentry.captureException.mockReset();
   sentry.tags.length = 0;
+  sentry.contexts.length = 0;
   sentry.transactionNames.length = 0;
 });
 
@@ -74,6 +77,11 @@ const testRouter = {
     throw new Error('db down');
   }),
   adminOnly: authed.handler(() => 'ok'),
+  boomWithDetail: pub.handler(() => {
+    throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
+      sentryContext: { versionId: 'v1', missingQuestionIds: ['q1'] },
+    });
+  }),
 };
 
 describe('rpcLoggingMiddleware', () => {
@@ -163,6 +171,19 @@ describe('rpcLoggingMiddleware', () => {
     expect(sentry.tags[0]).toMatchObject({ rpc: 'boom', code: 'INTERNAL_SERVER_ERROR', role: 'anonymous' });
     expect(sentry.transactionNames[0]).toBe('rpc boom');
     expect(isSentryCaptured(thrown)).toBe(true);
+  });
+
+  it('에러가 들고 온 sentryContext 는 이벤트 context(detail)로 붙는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.boomWithDetail().catch(() => undefined);
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(sentry.contexts).toEqual([{ detail: { versionId: 'v1', missingQuestionIds: ['q1'] } }]);
+  });
+
+  it('sentryContext 가 없으면 context 를 붙이지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.boom().catch(() => undefined);
+    expect(sentry.contexts).toEqual([]);
   });
 
   it('코드 있는 거부(UNAUTHORIZED 등)는 예상된 경로라 Sentry 로 보내지 않는다', async () => {

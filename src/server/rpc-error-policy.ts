@@ -30,6 +30,19 @@ export function isSentryWorthyRpcError(error: unknown): boolean {
 }
 
 /**
+ * 에러가 들고 온 진단 정보 — 서비스가 `sentryContext` 에 식별자(설문·버전·응답 id 등)를 실어
+ * 던지면 Sentry 이벤트의 context 로 붙인다. 로그(Axiom)를 따로 열지 않아도 이벤트만으로
+ * 원인을 가릴 수 있게 하려는 것이다. 평문 응답값·PII 는 싣지 않는다.
+ */
+export function getSentryContext(error: unknown): Record<string, unknown> | null {
+  if (error === null || typeof error !== 'object' || !('sentryContext' in error)) return null;
+  const ctx = (error as { sentryContext: unknown }).sentryContext;
+  return ctx !== null && typeof ctx === 'object' && !Array.isArray(ctx)
+    ? (ctx as Record<string, unknown>)
+    : null;
+}
+
+/**
  * Sentry 캡처 표식 — 로깅 미들웨어(procedure 안, 태그 있음)와 핸들러 인터셉터(procedure 밖,
  * 디코드·라우팅 예외까지)가 같은 예외를 두 번 보내지 않게 한다. 객체가 아닌 throw 값은 표식을
  * 못 남기므로 인터셉터가 한 번 더 보낼 수 있다 — 드물고 무해하다.

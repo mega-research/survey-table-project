@@ -24,6 +24,7 @@ type QuestionBase = Pick<
   Question,
   | 'id'
   | 'title'
+  | 'titleHtml'
   | 'description'
   | 'required'
   | 'groupId'
@@ -78,11 +79,15 @@ export interface TextQuestion
       | 'emptyDefault'
       | 'numberFormat'
       | 'textValidation'
+      | 'inputRows'
+      | 'inputAutoGrow'
     > {
   type: 'text';
 }
 
-export interface TextareaQuestion extends QuestionBase, Pick<Question, 'textValidation'> {
+export interface TextareaQuestion
+  extends QuestionBase,
+    Pick<Question, 'textValidation' | 'inputRows' | 'inputAutoGrow'> {
   type: 'textarea';
 }
 

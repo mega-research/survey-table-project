@@ -350,9 +350,9 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
           const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
           return (
             <div key={scope.key} className="space-y-2">
-              {group && (
+              {group?.label.trim() && (
                 <p className="text-sm font-medium text-gray-900">
-                  {substituteTokens(group.label || group.groupKey, attrs, quotes)}
+                  {substituteTokens(group.label, attrs, quotes)}
                 </p>
               )}
               <RankingClickList
@@ -380,15 +380,17 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
     );
   }
 
+  // 그룹 제목은 빌더에서 적은 라벨만 보인다. 비워 두면 제목 줄이 없다 — 그룹 키(rnk1)는
+  // 응답자에게 뜻 없는 내부 식별자라 대신 보이지 않는다.
   const summaries = (
     <div className="space-y-4">
       {scopes.map((scope) => {
         const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
         return (
           <div key={scope.key} className="space-y-2">
-            {group && (
+            {group?.label.trim() && (
               <p className="text-sm font-medium text-gray-900">
-                {substituteTokens(group.label || group.groupKey, attrs, quotes)}
+                {substituteTokens(group.label, attrs, quotes)}
               </p>
             )}
             <RankingSummaryBar
@@ -595,9 +597,11 @@ function RankingDropdown({
           const groupAnswers = parseRankingAnswers(groupedMap[g.groupKey]);
           return (
             <div key={g.groupKey} className="space-y-2">
-              <p className="text-sm font-medium text-gray-900">
-                {substituteTokens(g.label || g.groupKey, attrs, quotes)}
-              </p>
+              {g.label.trim() && (
+                <p className="text-sm font-medium text-gray-900">
+                  {substituteTokens(g.label, attrs, quotes)}
+                </p>
+              )}
               <RankingDropdownStack
                 answers={groupAnswers}
                 options={groupOptions}

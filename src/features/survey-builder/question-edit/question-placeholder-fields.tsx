@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
+import { QuestionInputHeightFields } from '@/features/survey-builder/question-edit/question-input-height-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
 import { applyInputTypeChange } from '@/features/survey-builder/utils/input-mode';
 import { isInputFormat } from '@/types/input-type';
@@ -51,6 +52,15 @@ export function QuestionPlaceholderFields({
       />
       <p className="mt-1 text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
     </div>
+  )}
+
+  {/* 입력칸 높이 — 줄 수 · 입력한 만큼 높이 늘리기 (단답형·장문형 공용, 표 input 셀과 같은 규칙) */}
+  {(question.type === 'text' || question.type === 'textarea') && (
+    <QuestionInputHeightFields
+      questionType={question.type}
+      formData={formData}
+      setFormData={setFormData}
+    />
   )}
 
   {/* 단답형·장문형 응답 품질 검사 — 최소·최대 글자 수·의미 없는 입력 거부.

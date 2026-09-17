@@ -249,5 +249,8 @@ export interface QuestionData {
   piiEncrypted?: boolean;
   numberFormat?: NumberFormat | null;
   textValidation?: TextValidation | null;
+  inputRows?: number | null;
+  inputAutoGrow?: boolean | null;
+  titleHtml?: string | null;
   sumConstraints?: SumConstraint[] | null;
 }

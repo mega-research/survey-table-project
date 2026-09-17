@@ -1,3 +1,5 @@
+import { ORPCError } from '@orpc/server';
+
 import { stampFieldworkAttribution } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
 import { resolveProxyForResponseRpc } from '@/server/rpc-fieldwork-proxy';
@@ -17,12 +19,26 @@ import * as core from '../services/response-answer-write';
 import * as completion from '../services/response-completion';
 import * as draft from '../services/response-draft';
 import * as entry from '../services/response-entry';
+import { TestResponseVersionPrunedError } from '../services/response-version-snapshot';
 
 // 회당 소수 호출 쓰기(생성/완료/updateAnswer)는 response-mutation 그룹으로 IP 당 rate limit 한다.
 // saveDraft 는 고빈도 체크포인트라 별도 response-draft 버킷을 쓴다 — 같은 버킷이면
 // 표 문항 연속 입력의 draft 폭주가 complete 예산을 소진해 제출까지 429 로 전멸한다.
 const rateLimited = pub.use(withRateLimit('response-mutation'));
 const draftRateLimited = pub.use(withRateLimit('response-draft'));
+
+/**
+ * 테스트 도중 재발행으로 응답 버전 스냅샷이 비워진 경우 — 500 대신 코드 있는 거부로 접어
+ * 응답 화면이 "새로 시작" 안내를 띄우게 한다. 코드 있는 ORPCError 라 Sentry 로 가지 않는다.
+ */
+const TEST_VERSION_REPUBLISHED_CODE = 'TEST_VERSION_REPUBLISHED';
+
+function mapTestVersionPruned(err: unknown): never {
+  if (err instanceof TestResponseVersionPrunedError) {
+    throw new ORPCError(TEST_VERSION_REPUBLISHED_CODE, { status: 409, message: err.message });
+  }
+  throw err;
+}
 
 // 주의: response.start 는 제거됨(봇 방어). clientSignals/honeypot 을 받지 않는 무인증 빈 행
 // 생성 경로라 봇 우회 표면이었고, 정상 클라이언트는 createWithFirstAnswer/createBlank 만 쓴다.
@@ -59,7 +75,7 @@ async function withProxyAttribution<T extends { kind: string; id?: string }>(
 const updateAnswer = rateLimited
   .input(UpdateQuestionResponseInput)
   .output(SurveyResponseRowSchema)
-  .handler(({ input }) => core.updateQuestionResponse(input));
+  .handler(({ input }) => core.updateQuestionResponse(input).catch(mapTestVersionPruned));
 
 /**
  * 페이지 이동 전 변경 답변을 한 요청으로 저장한다.
@@ -68,7 +84,7 @@ const saveDraft = draftRateLimited
   .input(SaveDraftResponseInput)
   .output(SaveDraftResponseOutput)
   .handler(async ({ input }) => {
-    const result = await draft.saveDraftResponse(input);
+    const result = await draft.saveDraftResponse(input).catch(mapTestVersionPruned);
     return {
       ok: true as const,
       applied: result.applied,
@@ -102,7 +118,7 @@ const createBlank = rateLimited
 const complete = rateLimited
   .input(CompleteResponseInput)
   .output(CompleteResponseOutput)
-  .handler(({ input }) => completion.completeResponse(input));
+  .handler(({ input }) => completion.completeResponse(input).catch(mapTestVersionPruned));
 
 export const response = {
   updateAnswer,
