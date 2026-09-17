@@ -44,7 +44,7 @@ export class QuestionNotInResponseVersionError extends Error implements SentryCo
 /** 테스트 응답이 묶인 버전의 스냅샷이 재발행 정리로 비워졌다 — procedure 가 안내 코드로 접는다. */
 export class TestResponseVersionPrunedError extends Error {
   constructor() {
-    super('테스트 도중 설문이 다시 발행되어 이 테스트 응답을 이어서 저장할 수 없습니다.');
+    super('테스트 도중 설문이 다시 발행되었습니다. 새로고침 후 다시 시작해주세요.');
     this.name = 'TestResponseVersionPrunedError';
   }
 }

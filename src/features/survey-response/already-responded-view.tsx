@@ -32,8 +32,9 @@ interface MessageDef {
 const MESSAGES: Record<NoticeReason, MessageDef> = {
   test_version_republished: {
     // 테스트 응답 전용 — 실응답은 버전 정리가 보존해 이 사유에 오지 않는다.
-    title: '설문이 다시 발행되었습니다',
-    body: '테스트 도중 설문이 다시 발행되어 이 테스트 응답은 이어서 저장할 수 없습니다. 운영 콘솔에서 테스트 링크를 다시 열어 새로 시작해 주세요.',
+    // 새로고침하면 재개 이관(ADR-0014)이 응답을 현재 버전으로 옮겨 이어서 진행된다.
+    title: '테스트 도중 설문이 다시 발행되었습니다',
+    body: '새로고침 후 다시 시작해주세요.',
     tone: 'info',
   },
   response_concluded: {
