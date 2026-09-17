@@ -29,22 +29,22 @@ export function DeletedSurveyCard({ survey, onRestore, isRestoring }: DeletedSur
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#F1F1F3]">
           <FileText className="h-[21px] w-[21px] text-[#9CA3AF]" />
         </span>
-        <h3 className="min-w-0 truncate text-[14.5px] font-semibold text-[#6E6E73]">
+        <h3 className="min-w-0 truncate text-[16px] font-semibold text-[#6E6E73]">
           {survey.title}
         </h3>
       </div>
 
-      <p className="truncate text-[12.5px] text-[#6E6E73]">
+      <p className="truncate text-[14px] text-[#6E6E73]">
         전체 응답 {survey.responseCount.toLocaleString('ko-KR')}건 · 완료{' '}
         {survey.completedResponseCount.toLocaleString('ko-KR')}건
       </p>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 truncate text-[11.5px] text-[#9CA3AF]">
+        <span className="flex items-center gap-1 truncate text-[13px] text-[#9CA3AF]">
           <Clock className="h-3 w-3 shrink-0" />
           삭제일: {survey.deletedAt ? formatLocalDate(survey.deletedAt) : '—'}
         </span>
-        <span className="shrink-0 truncate text-[11.5px] text-[#9CA3AF]">
+        <span className="shrink-0 truncate text-[13px] text-[#9CA3AF]">
           {/* 소유 팀은 복구 뒤 이 설문이 어디로 돌아가는지를 말한다 — 해산된 팀이면 비어 있고,
               그 경우 복구된 설문은 배치 대기로 남아 재배치 센터가 받는다(티켓 14). */}
           {survey.teamName ?? '배치 대기'}
@@ -57,7 +57,7 @@ export function DeletedSurveyCard({ survey, onRestore, isRestoring }: DeletedSur
           type="button"
           disabled={isRestoring}
           onClick={() => onRestore(survey.id)}
-          className="flex h-8 w-full items-center justify-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white text-[12px] font-medium text-[#374151] transition-colors hover:bg-[#F5F5F7] disabled:cursor-not-allowed disabled:text-[#C7C7CC]"
+          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#F5F5F7] disabled:cursor-not-allowed disabled:text-[#C7C7CC]"
         >
           {isRestoring ? (
             <Loader2 className="h-3 w-3 animate-spin" />

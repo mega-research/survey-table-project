@@ -125,7 +125,7 @@ export function SurveyCard({
             <FileText className="h-[21px] w-[21px] text-[#2743AE]" />
           </span>
           {/* 목업은 긴 제목을 두 줄로 보여준다 — 한 줄 말줄임이면 비슷한 제목끼리 구별이 안 된다. */}
-          <h3 className="line-clamp-2 min-w-0 text-[14.5px] leading-[1.35] font-semibold break-keep text-[#1C1C1E]">
+          <h3 className="line-clamp-2 min-w-0 text-[16px] leading-[1.35] font-semibold break-keep text-[#1C1C1E]">
             {survey.title}
           </h3>
         </div>
@@ -195,33 +195,33 @@ export function SurveyCard({
         </DropdownMenu>
       </div>
 
-      <p className="truncate text-[12.5px] text-[#6E6E73]">{responseLine(survey, scope)}</p>
+      <p className="truncate text-[14px] text-[#6E6E73]">{responseLine(survey, scope)}</p>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[11.5px] text-[#9CA3AF]">
+        <span className="truncate text-[13px] text-[#9CA3AF]">
           수정일: {formatLocalDate(survey.updatedAt)}
           {modifiedDateSuffix(survey, scope, currentUserId)}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
           {survey.isPublic ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#E8F6EE] px-[11px] py-1 text-[12px] font-medium text-[#1D8A4E]">
-              <Globe className="h-[11px] w-[11px]" />
+            <span className="flex items-center gap-[5px] rounded-full bg-[#E8F6EE] px-[11px] py-1 text-[13px] font-medium text-[#1D8A4E]">
+              <Globe className="h-3 w-3" />
               공개
             </span>
           ) : (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[12px] font-medium text-[#D97706]">
-              <Lock className="h-[11px] w-[11px]" />
+            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
+              <Lock className="h-3 w-3" />
               비공개
             </span>
           )}
           {isPending ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[12px] font-medium text-[#D97706]">
-              <Clock className="h-[11px] w-[11px]" />
+            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
+              <Clock className="h-3 w-3" />
               배치 대기
             </span>
           ) : survey.visibility === 'invite_only' ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#F5F5F7] px-[11px] py-1 text-[12px] font-medium text-[#6E6E73]">
-              <Lock className="h-[11px] w-[11px]" />
+            <span className="flex items-center gap-[5px] rounded-full bg-[#F5F5F7] px-[11px] py-1 text-[13px] font-medium text-[#6E6E73]">
+              <Lock className="h-3 w-3" />
               {SURVEY_VISIBILITY_LABEL.invite_only}
             </span>
           ) : null}
@@ -232,24 +232,24 @@ export function SurveyCard({
       <div className="flex gap-1.5 pt-1.5">
         <CardActionLink
           href={`/admin/surveys/${survey.id}/edit`}
-          icon={<Pencil className="h-[13px] w-[13px]" />}
+          icon={<Pencil className="h-3.5 w-3.5" />}
           label="수정"
           disabled={!canEdit}
         />
         <CardActionLink
           href={`/admin/surveys/${survey.id}/operations/overview`}
-          icon={<Activity className="h-[13px] w-[13px]" />}
+          icon={<Activity className="h-3.5 w-3.5" />}
           label="현황"
         />
         <CardActionLink
-          icon={<MessageCircle className="h-[13px] w-[13px]" />}
+          icon={<MessageCircle className="h-3.5 w-3.5" />}
           label="문의"
           disabledReason="문의 기능은 준비 중입니다"
         />
         {/* 분석은 당분간 막아 둔다. 다시 열 때는 href 를 되돌리고 canViewSurveyAnalyticsCard 로
             비활성을 정한다(분석 화면이 responses.view 를 요구해 팀원에게는 404 다). */}
         <CardActionLink
-          icon={<ChartColumn className="h-[13px] w-[13px]" />}
+          icon={<ChartColumn className="h-3.5 w-3.5" />}
           label="분석"
           disabledReason="분석 기능은 준비 중입니다"
         />
@@ -288,7 +288,7 @@ function CardActionLink({
   if (disabled || href === undefined) {
     return (
       <span
-        className="flex h-8 flex-1 cursor-not-allowed items-center justify-center gap-[5px] rounded-[9px] border border-[#E5E5EA] text-[12px] text-[#C7C7CC]"
+        className="flex h-9 flex-1 cursor-not-allowed items-center justify-center gap-[5px] rounded-[9px] border border-[#E5E5EA] text-[13px] text-[#C7C7CC]"
         aria-disabled
         title={disabledReason}
       >
@@ -301,7 +301,7 @@ function CardActionLink({
     <Link
       href={href}
       className={cn(
-        'flex h-8 flex-1 items-center justify-center gap-[5px] rounded-[9px] border border-[#E5E5EA] text-[12px] text-[#374151] transition-colors',
+        'flex h-9 flex-1 items-center justify-center gap-[5px] rounded-[9px] border border-[#E5E5EA] text-[13px] text-[#374151] transition-colors',
         'hover:bg-[#F5F5F7]',
       )}
     >
