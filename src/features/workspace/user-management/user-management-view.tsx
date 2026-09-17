@@ -91,7 +91,7 @@ export function UserManagementView() {
           <div className="space-y-1">
             <h1 className="text-[22px] font-semibold text-[#1C1C1E]">사용자 관리</h1>
             <p className="text-[13px] text-[#6E6E73]">
-              계정 발급·상태 관리와 실사 업체를 관리합니다. 가입 신청은 없습니다.
+              계정 발급·상태 관리와 협력 업체를 관리합니다. 가입 신청은 없습니다.
             </p>
           </div>
           {tab === 'users' ? (
@@ -101,7 +101,7 @@ export function UserManagementView() {
             </Button>
           ) : (
             <Button onClick={() => setCreateOrgOpen(true)} className={PRIMARY_BUTTON}>
-              <Plus className="mr-1 h-4 w-4" />새 실사 업체
+              <Plus className="mr-1 h-4 w-4" />새 협력 업체
             </Button>
           )}
         </div>
@@ -110,7 +110,7 @@ export function UserManagementView() {
           {(
             [
               ['users', '사용자', undefined],
-              ['fieldwork-orgs', '실사 업체', orgCount],
+              ['fieldwork-orgs', '협력 업체', orgCount],
             ] as const
           ).map(([value, label, count]) => {
             const selected = value === tab;

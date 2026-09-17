@@ -55,17 +55,17 @@ export function FieldworkOrgsView({ createOpen, onCreateOpenChange, onIssueAccou
       {isLoading && (
         <div className="flex items-center justify-center gap-2 rounded-[11px] border border-[#E5E5EA] bg-white py-10 text-[13px] text-[#6E6E73]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          실사 업체를 불러오는 중...
+          협력 업체를 불러오는 중...
         </div>
       )}
       {error && (
         <p className="rounded-[11px] border border-[#E5E5EA] bg-white py-10 text-center text-[13px] text-red-600">
-          실사 업체를 불러오지 못했습니다.
+          협력 업체를 불러오지 못했습니다.
         </p>
       )}
       {!isLoading && !error && orgs.length === 0 && (
         <p className="rounded-[11px] border border-[#E5E5EA] bg-white py-10 text-center text-[13px] text-[#9CA3AF]">
-          등록된 실사 업체가 없습니다. 「+ 새 실사 업체」로 먼저 업체를 만드세요.
+          등록된 협력 업체가 없습니다. 「+ 새 협력 업체」로 먼저 업체를 만드세요.
         </p>
       )}
 

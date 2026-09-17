@@ -284,7 +284,7 @@ async function assertFieldworkOrgReactivatable(
   await assertFieldworkOrgActive(
     tx,
     target.fieldworkOrgId,
-    '소속 실사 업체가 종료되어 이 계정을 되살릴 수 없습니다.',
+    '소속 협력 업체가 종료되어 이 계정을 되살릴 수 없습니다.',
   );
 }
 

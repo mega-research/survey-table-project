@@ -56,7 +56,7 @@ export function FieldworkOrgFormModal({ org, onClose }: Props) {
       onClose();
     } catch (err) {
       // 같은 이름의 활성 업체는 서버가 CONFLICT 로 막는다 — 문구를 그대로 보여준다.
-      setError(getErrorMessage(err, '실사 업체를 저장하지 못했습니다.'));
+      setError(getErrorMessage(err, '협력 업체를 저장하지 못했습니다.'));
     }
   }
 
@@ -64,7 +64,7 @@ export function FieldworkOrgFormModal({ org, onClose }: Props) {
     <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <DialogContent className="max-w-[480px] gap-0 rounded-2xl p-7">
         <DialogTitle className="text-[16.5px] font-semibold text-[#1C1C1E]">
-          {org ? '실사 업체 설정' : '새 실사 업체'}
+          {org ? '협력 업체 설정' : '새 협력 업체'}
         </DialogTitle>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">

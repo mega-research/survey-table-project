@@ -21,7 +21,7 @@ export {
 /** 대상 업체가 없거나 이미 종료됐다(archived). procedure 가 NOT_FOUND 로 바꾼다. */
 export class FieldworkOrgNotFoundError extends Error {
   constructor() {
-    super('실사 업체를 찾을 수 없습니다.');
+    super('협력 업체를 찾을 수 없습니다.');
     this.name = 'FieldworkOrgNotFoundError';
   }
 }
@@ -29,7 +29,7 @@ export class FieldworkOrgNotFoundError extends Error {
 /** 같은 이름의 활성 업체가 이미 있다 (fieldwork_orgs_active_name_uq). */
 export class DuplicateFieldworkOrgNameError extends Error {
   constructor() {
-    super('같은 이름의 실사 업체가 이미 있습니다.');
+    super('같은 이름의 협력 업체가 이미 있습니다.');
     this.name = 'DuplicateFieldworkOrgNameError';
   }
 }
