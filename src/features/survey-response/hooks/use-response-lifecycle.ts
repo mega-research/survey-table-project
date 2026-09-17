@@ -28,6 +28,7 @@ import {
   type DuplicateStatus,
   handleInvalidTestLinkMutationError,
   handlePausedMutationError,
+  handleTestVersionRepublishedError,
 } from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
@@ -389,6 +390,17 @@ export function useResponseLifecycle({
       lastBeaconSnapshotRef.current = null;
       return true;
     } catch (err) {
+      // 재발행으로 버전 스냅샷이 비워진 테스트 응답 — 어떤 재시도로도 저장될 수 없으므로
+      // pending 을 비워 이탈 beacon 재발사도 멈춘다(response_concluded 와 같은 처리).
+      if (
+        handleTestVersionRepublishedError({
+          err,
+          setDuplicateStatus,
+          onRepublished: () => pendingAnswerSavesRef.current.clear(),
+        })
+      ) {
+        return false;
+      }
       if (
         await handleInvalidTestLinkMutationError({
           err,
@@ -991,6 +1003,9 @@ export function useResponseLifecycle({
       setCompletionOutcome?.(completionOutcome);
       setIsCompleted(true);
     } catch (error) {
+      if (handleTestVersionRepublishedError({ err: error, setDuplicateStatus })) {
+        return;
+      }
       if (
         await handleInvalidTestLinkMutationError({
           err: error,

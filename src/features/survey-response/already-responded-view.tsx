@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
  * 세션 도중 이 응답이 (다른 화면 또는 재시도로) 이미 완료된 것을 발견했을 때의 안내 —
  * 서버 BlockReason 에는 없는 클라이언트 전용 사유라 여기서 union 을 넓힌다.
  */
-export type NoticeReason = BlockReason | 'response_concluded';
+export type NoticeReason = BlockReason | 'response_concluded' | 'test_version_republished';
 
 interface Props {
   reason: NoticeReason;
@@ -30,6 +30,12 @@ interface MessageDef {
 }
 
 const MESSAGES: Record<NoticeReason, MessageDef> = {
+  test_version_republished: {
+    // 테스트 응답 전용 — 실응답은 버전 정리가 보존해 이 사유에 오지 않는다.
+    title: '설문이 다시 발행되었습니다',
+    body: '테스트 도중 설문이 다시 발행되어 이 테스트 응답은 이어서 저장할 수 없습니다. 운영 콘솔에서 테스트 링크를 다시 열어 새로 시작해 주세요.',
+    tone: 'info',
+  },
   response_concluded: {
     title: '이미 완료된 설문입니다',
     body: '이 응답은 이미 제출이 완료되었습니다. 참여해 주셔서 감사합니다.',

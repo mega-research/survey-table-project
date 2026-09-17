@@ -17,6 +17,7 @@ import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/res
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { SurveyNotAcceptingResponsesError } from './response-gate';
+import { TestResponseVersionPrunedError } from './response-version-snapshot';
 
 /**
  * 제출된 답변을 저장 가능한 형태로 만드는 단계들 — 유효 질문 선별 · 값 크기 가드 ·
@@ -309,7 +310,18 @@ export async function sanitizeSubmittedResponses(
       .where(eq(surveyVersions.id, gateRow.versionId))
       .limit(1);
     if (versionRow?.questionsState !== 'empty') {
-      throw new Error('응답 버전의 설문 스냅샷이 유실되어 완료할 수 없습니다.');
+      // 테스트 응답의 버전이 재발행 정리로 비워진 것이면 안내로 접는다(실응답 버전은 정리가 보존한다).
+      if (gateRow.isTest && versionRow?.questionsState === 'missing') {
+        throw new TestResponseVersionPrunedError();
+      }
+      throw Object.assign(new Error('응답 버전의 설문 스냅샷이 유실되어 완료할 수 없습니다.'), {
+        sentryContext: {
+          surveyId: gateRow.surveyId,
+          versionId: gateRow.versionId,
+          isTest: gateRow.isTest,
+          questionsState: versionRow?.questionsState ?? 'version-row-missing',
+        },
+      });
     }
   }
   const filtered: Record<string, unknown> = {};

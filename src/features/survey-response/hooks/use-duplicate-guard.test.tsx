@@ -1,8 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ORPCError } from '@orpc/client';
+
 import {
   handlePausedMutationError,
+  handleTestVersionRepublishedError,
   useDuplicateGuard,
 } from '@/features/survey-response/hooks/use-duplicate-guard';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
@@ -393,5 +396,40 @@ describe('handlePausedMutationError', () => {
 
     await expect(handlePausedMutationError(args)).resolves.toBe(true);
     expect(forResponse).toHaveBeenCalledWith({ surveyId: 'survey-1', testToken: 'tok-1' });
+  });
+});
+
+describe('handleTestVersionRepublishedError', () => {
+  it('TEST_VERSION_REPUBLISHED 코드면 안내 화면으로 전환하고 정리 콜백을 부른다', () => {
+    const setDuplicateStatus = vi.fn();
+    const onRepublished = vi.fn();
+    const handled = handleTestVersionRepublishedError({
+      err: new ORPCError('TEST_VERSION_REPUBLISHED', { status: 409 }),
+      setDuplicateStatus,
+      onRepublished,
+    });
+    expect(handled).toBe(true);
+    expect(onRepublished).toHaveBeenCalledTimes(1);
+    expect(setDuplicateStatus).toHaveBeenCalledWith({
+      kind: 'blocked',
+      reason: 'test_version_republished',
+    });
+  });
+
+  it('다른 에러는 건드리지 않는다', () => {
+    const setDuplicateStatus = vi.fn();
+    expect(
+      handleTestVersionRepublishedError({
+        err: new ORPCError('INTERNAL_SERVER_ERROR'),
+        setDuplicateStatus,
+      }),
+    ).toBe(false);
+    expect(
+      handleTestVersionRepublishedError({
+        err: new Error('TEST_VERSION_REPUBLISHED'),
+        setDuplicateStatus,
+      }),
+    ).toBe(false);
+    expect(setDuplicateStatus).not.toHaveBeenCalled();
   });
 });

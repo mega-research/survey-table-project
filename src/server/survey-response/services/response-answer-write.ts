@@ -28,6 +28,10 @@ import {
   SurveyNotAcceptingResponsesError,
 } from './response-gate';
 import {
+  classifyQuestionMembershipError,
+  QuestionNotInResponseVersionError,
+} from './response-version-snapshot';
+import {
   assertAnswerValueSize,
   PII_CELL_IDS_LIVE_PATH,
   PII_CELL_IDS_SNAPSHOT_PATH,
@@ -88,7 +92,11 @@ export async function assertQuestionBelongsToResponse(
     `);
     const row = rows[0];
     if (!row) {
-      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+      throw new QuestionNotInResponseVersionError({
+        surveyId,
+        versionId,
+        missingQuestionIds: [questionId],
+      });
     }
     return { piiEncrypted: row.pii === true, piiCellIds: parsePiiCellIds(row.cells) };
   }
@@ -103,7 +111,11 @@ export async function assertQuestionBelongsToResponse(
     .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
     .limit(1);
   if (!hit) {
-    throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+    throw new QuestionNotInResponseVersionError({
+      surveyId,
+      versionId: null,
+      missingQuestionIds: [questionId],
+    });
   }
   return {
     piiEncrypted: hit.piiEncrypted === true,
@@ -205,7 +217,9 @@ export async function updateQuestionResponse(
     responseRow.versionId,
     responseRow.surveyId,
     questionId,
-  );
+  ).catch(async (err: unknown) => {
+    throw await classifyQuestionMembershipError(err, responseRow);
+  });
   // PII 문항(값 전체)·PII input 셀(해당 셀만)이면 저장 직전 암호화. 이미 암호문이면 통과.
   const storedValue = encryptAnswerForQuestion(value, piiFlag);
   // #5 변조 가드 1(저장값 기준): 위 평문 검사는 사전 필터일 뿐이고 판정 기준은 적재되는 값이다.
@@ -350,7 +364,7 @@ export async function loadQuestionPiiFlags(
     // 응답자에게 보이는 문구는 그대로 두고, 어떤 키가 걸렸는지는 로그로 남긴다.
     // 거부된 값은 저장되지 않으므로 이 로그가 없으면 사후에 원인을 찾을 길이 없다.
     logger.warn({ surveyId, versionId, missing }, '[response] 설문에 없는 문항 키가 저장 요청에 실림');
-    throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+    throw new QuestionNotInResponseVersionError({ surveyId, versionId, missingQuestionIds: missing });
   }
   return flags;
 }
