@@ -75,11 +75,14 @@ describe('RankingQuestion — 그룹 헤딩 인용 치환', () => {
               rankingLabel: '항목A',
               choiceGroupId: 'grp1',
             },
+            { id: 'cellB', type: 'ranking_opt', content: '항목B', choiceGroupId: 'grp2' },
           ],
         },
       ],
+      // 그룹 이름 줄은 그룹이 둘 이상일 때만 그려진다 — 헤딩 치환을 보려면 둘을 둔다.
       choiceGroups: [
         { id: 'grp1', type: 'ranking', groupKey: 'grp1key', label: '{{{이름}}}님 그룹' },
+        { id: 'grp2', type: 'ranking', groupKey: 'grp2key', label: '다른 그룹' },
       ],
     } as unknown as Question;
   }
@@ -97,8 +100,8 @@ describe('RankingQuestion — 그룹 헤딩 인용 치환', () => {
   });
 });
 
-describe('RankingQuestion — 그룹 라벨을 비우면 제목 줄이 없다', () => {
-  function groupedFixture(label: string, inputMode?: 'click'): Question {
+describe('RankingQuestion — 표 위 그룹 이름 줄', () => {
+  function groupedFixture(labels: string[], inputMode?: 'click'): Question {
     return {
       id: 'qg2',
       type: 'ranking',
@@ -111,29 +114,47 @@ describe('RankingQuestion — 그룹 라벨을 비우면 제목 줄이 없다', 
         {
           id: 'r1',
           label: '',
-          cells: [
-            { id: 'cellA', type: 'ranking_opt', content: '항목A', choiceGroupId: 'grp1' },
-            { id: 'cellB', type: 'ranking_opt', content: '항목B', choiceGroupId: 'grp1' },
-          ],
+          cells: labels.flatMap((_, i) => [
+            { id: `cellA${i}`, type: 'ranking_opt', content: `항목A${i}`, choiceGroupId: `grp${i}` },
+            { id: `cellB${i}`, type: 'ranking_opt', content: `항목B${i}`, choiceGroupId: `grp${i}` },
+          ]),
         },
       ],
-      choiceGroups: [{ id: 'grp1', type: 'ranking', groupKey: 'rnk1', label }],
+      choiceGroups: labels.map((label, i) => ({
+        id: `grp${i}`,
+        type: 'ranking',
+        groupKey: `rnk${i + 1}`,
+        label,
+      })),
     } as unknown as Question;
   }
 
   it.each([
     ['드롭다운', undefined],
     ['클릭', 'click' as const],
-  ])('%s 방식 — 라벨이 있으면 보이고, 비우면 그룹 키 대신 아무것도 없다', (_, mode) => {
+  ])('%s 방식 — 그룹이 하나면 라벨이 있어도 표 위에 아무것도 없다', (_, mode) => {
     mobileFlag = false;
-    const { unmount } = render(
-      <RankingQuestion question={groupedFixture('중요한 점', mode)} value={null} onChange={vi.fn()} />,
+    render(
+      <RankingQuestion question={groupedFixture(['중요한 점'], mode)} value={null} onChange={vi.fn()} />,
+    );
+    expect(screen.queryByText('중요한 점')).not.toBeInTheDocument();
+    expect(screen.queryByText('rnk1')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['드롭다운', undefined],
+    ['클릭', 'click' as const],
+  ])('%s 방식 — 그룹이 둘 이상이면 라벨을 보이고, 비운 그룹은 그룹 키 대신 아무것도 없다', (_, mode) => {
+    mobileFlag = false;
+    render(
+      <RankingQuestion
+        question={groupedFixture(['중요한 점', ''], mode)}
+        value={null}
+        onChange={vi.fn()}
+      />,
     );
     expect(screen.getByText('중요한 점')).toBeInTheDocument();
-    unmount();
-
-    render(<RankingQuestion question={groupedFixture('', mode)} value={null} onChange={vi.fn()} />);
-    expect(screen.queryByText('rnk1')).not.toBeInTheDocument();
+    expect(screen.queryByText('rnk2')).not.toBeInTheDocument();
   });
 });
 

@@ -43,7 +43,8 @@ import {
   toGroupDndId,
 } from '@/utils/group-ordering';
 import { buildFlatOrderedQuestions } from '@/utils/group-ordering';
-import { sanitizeRichHtml } from '@/lib/sanitize';
+import { sanitizeRichHtml, sanitizeTitleHtml } from '@/lib/sanitize';
+import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
 import { collectAnswerQuotes } from '@/utils/answer-quote';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
@@ -158,6 +159,10 @@ const SortableQuestion = React.memo(function SortableQuestion({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const displayTitle = substituteTokens(question.title, attrs, quotes);
+  // 제목 서식본 — 응답 화면(group-step-item)과 같은 규칙. 평문과 글자가 어긋나면 평문을 그린다.
+  const resolvedTitleHtml = resolveQuestionTitleHtml(question, attrs, quotes);
+  const displayTitleHtml =
+    resolvedTitleHtml !== undefined ? sanitizeTitleHtml(resolvedTitleHtml) : null;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -279,7 +284,15 @@ const SortableQuestion = React.memo(function SortableQuestion({
 
         {/* Question content */}
         <div className="mb-4">
-          <h4 className="mb-2 text-base font-medium text-gray-900">{displayTitle}</h4>
+          {displayTitleHtml ? (
+            <h4
+              className="mb-2 text-base font-medium text-gray-900 [&_p]:m-0 [&_p]:inline"
+              data-testid="builder-question-title-rich"
+              dangerouslySetInnerHTML={{ __html: displayTitleHtml }}
+            />
+          ) : (
+            <h4 className="mb-2 text-base font-medium text-gray-900">{displayTitle}</h4>
+          )}
           {!isEmptyHtml(question.description) && (
             <div
               className="prose prose-sm mb-3 max-w-none overflow-x-auto text-sm text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:border-2 [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:font-normal"

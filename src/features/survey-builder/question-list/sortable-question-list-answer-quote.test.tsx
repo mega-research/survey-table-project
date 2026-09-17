@@ -201,3 +201,53 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
     expect(await screen.findByText('설명시작[마케팅유형오타]설명끝')).toBeInTheDocument();
   });
 });
+
+describe('SortableQuestionList — 카드 제목 서식', () => {
+  beforeEach(() => {
+    useSurveyBuilderStore.getState().resetSurvey();
+    useTestResponseStore.getState().clearTestResponses();
+    useSurveyResponseStore.getState().resetResponseState();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('제목 서식본(밑줄·굵게)이 있으면 빌더 카드에도 응답 화면과 같이 그린다', async () => {
+    seedSurvey([
+      {
+        id: 'q1',
+        type: 'text',
+        title: 'A1. 활용 중인 제품',
+        titleHtml: '<p>A1. <u>활용 중인</u> <strong>제품</strong></p>',
+        required: false,
+        order: 0,
+      } as unknown as Question,
+    ]);
+
+    render(<SortableQuestionList selectedQuestionId={null} />);
+
+    const title = await screen.findByTestId('builder-question-title-rich');
+    expect(title.querySelector('u')).toHaveTextContent('활용 중인');
+    expect(title.querySelector('strong')).toHaveTextContent('제품');
+  });
+
+  it('평문과 어긋난 옛 서식본은 무시하고 평문 제목을 그린다', async () => {
+    seedSurvey([
+      {
+        id: 'q1',
+        type: 'text',
+        title: '새 제목',
+        titleHtml: '<p><u>옛 제목</u></p>',
+        required: false,
+        order: 0,
+      } as unknown as Question,
+    ]);
+
+    render(<SortableQuestionList selectedQuestionId={null} />);
+
+    expect(await screen.findByRole('heading', { level: 4, name: '새 제목' })).toBeInTheDocument();
+    expect(screen.queryByTestId('builder-question-title-rich')).toBeNull();
+  });
+});

@@ -300,6 +300,8 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
 
   // ── 표 소스: 순위 옵션 셀이 곧 누르는 보기 ─────────────────────────────
   // 비그룹은 범위 하나, 그룹별 순위는 그룹마다 범위 하나. 셀 id → 범위로 찾는다.
+  // 그룹 이름 줄은 그룹이 둘 이상일 때만 그린다(아래 summaries 주석).
+  const showGroupHeading = rankingGroups.length > 1;
   const scopes: RankingScope[] = isGrouped
     ? rankingGroups.map((g) => {
         const options = resolveRankingOptionsFromCells(g.cells);
@@ -350,7 +352,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
           const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
           return (
             <div key={scope.key} className="space-y-2">
-              {group?.label.trim() && (
+              {showGroupHeading && group?.label.trim() && (
                 <p className="text-sm font-medium text-gray-900">
                   {substituteTokens(group.label, attrs, quotes)}
                 </p>
@@ -380,15 +382,16 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
     );
   }
 
-  // 그룹 제목은 빌더에서 적은 라벨만 보인다. 비워 두면 제목 줄이 없다 — 그룹 키(rnk1)는
-  // 응답자에게 뜻 없는 내부 식별자라 대신 보이지 않는다.
+  // 그룹 제목은 그룹이 둘 이상일 때만 — 어느 그룹의 순위인지 가려야 할 때다. 하나뿐이면 문항
+  // 제목이 이미 설명하고 있어 표 위에 아무것도 두지 않는다(라벨은 빌더·내보내기용으로 남는다).
+  // 라벨을 비운 그룹도 제목 줄이 없다 — 그룹 키(rnk1)는 응답자에게 뜻 없는 내부 식별자다.
   const summaries = (
     <div className="space-y-4">
       {scopes.map((scope) => {
         const group = isGrouped ? rankingGroups.find((g) => g.groupKey === scope.key) : undefined;
         return (
           <div key={scope.key} className="space-y-2">
-            {group?.label.trim() && (
+            {showGroupHeading && group?.label.trim() && (
               <p className="text-sm font-medium text-gray-900">
                 {substituteTokens(group.label, attrs, quotes)}
               </p>
@@ -597,7 +600,7 @@ function RankingDropdown({
           const groupAnswers = parseRankingAnswers(groupedMap[g.groupKey]);
           return (
             <div key={g.groupKey} className="space-y-2">
-              {g.label.trim() && (
+              {rankingGroups.length > 1 && g.label.trim() && (
                 <p className="text-sm font-medium text-gray-900">
                   {substituteTokens(g.label, attrs, quotes)}
                 </p>
