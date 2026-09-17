@@ -311,4 +311,86 @@ describe.skipIf(!isLocalDb)('ingestContactUpload 모드별 실 DB 왕복', () =>
       );
     expect(piiRows).toHaveLength(1);
   });
+
+  // ── 묶음 적재 (500행 단위) — 묶음 경계를 넘어도 행 단위 적재와 같은 결과여야 한다 ──
+
+  it('replace: 묶음 경계를 넘는 행 수도 시스템ID 가 1 부터 끊김 없이 이어지고 attrs 는 jsonb 객체다', async () => {
+    const surveyId = await createSurvey();
+    const N = 1201; // 500 · 500 · 201
+    const rows = Array.from({ length: N }, (_, i) => [String(i + 1), `회사${i + 1}`, `u${i + 1}@ex.com`]);
+    const file = await makeXlsx(['idx', '회사', '이메일'], rows);
+    const result = await ingestContactUpload({
+      surveyId,
+      file,
+      mapping: mapping({ selectedAttrsKeys: ['idx', '회사', '이메일'], piiMapping: { 이메일: 'email' } }),
+    });
+    expect(result).toMatchObject({ uploadedRows: N, errorRows: 0 });
+
+    const [stats] = (await db.execute(sql`
+      SELECT count(*)::int AS n, min(resid)::int AS mn, max(resid)::int AS mx,
+             count(DISTINCT invite_code)::int AS codes,
+             count(*) FILTER (WHERE jsonb_typeof(attrs) <> 'object')::int AS bad_attrs
+      FROM contact_targets WHERE survey_id = ${surveyId}
+    `)) as unknown as [{ n: number; mn: number; mx: number; codes: number; bad_attrs: number }];
+    expect(stats).toEqual({ n: N, mn: 1, mx: N, codes: N, bad_attrs: 0 });
+
+    // 파일 행 순서와 시스템ID 순서가 같아야 한다 (idx = resid)
+    const [mismatch] = (await db.execute(sql`
+      SELECT count(*)::int AS n FROM contact_targets
+      WHERE survey_id = ${surveyId} AND attrs->>'idx' <> resid::text
+    `)) as unknown as [{ n: number }];
+    expect(mismatch?.n).toBe(0);
+
+    // PII 는 대상마다 1행, 평문은 attrs 에 없다
+    const [pii] = (await db.execute(sql`
+      SELECT count(*)::int AS n FROM contact_pii cp
+      JOIN contact_targets t ON t.id = cp.contact_target_id
+      WHERE t.survey_id = ${surveyId} AND cp.column_key = '이메일'
+    `)) as unknown as [{ n: number }];
+    expect(pii?.n).toBe(N);
+  });
+
+  it('merge: 묶음 병합도 attrs 를 얕게 병합하고 PII 는 갱신·빈 값이면 삭제한다', async () => {
+    const surveyId = await createSurvey();
+    const N = 601;
+    const base = Array.from({ length: N }, (_, i) => [String(i + 1), 'A', '원본', `u${i + 1}@ex.com`]);
+    await ingestContactUpload({
+      surveyId,
+      file: await makeXlsx(['idx', '회사', '메모', '이메일'], base),
+      mapping: mapping({
+        selectedAttrsKeys: ['idx', '회사', '메모', '이메일'],
+        piiMapping: { 이메일: 'email' },
+      }),
+    });
+
+    // 짝수 idx 는 이메일을 비워(→ PII 삭제), 홀수는 새 주소로. 메모 열은 파일에 없다(보존).
+    const patch = Array.from({ length: N }, (_, i) => [
+      String(i + 1),
+      'B',
+      (i + 1) % 2 === 0 ? '' : `new${i + 1}@ex.com`,
+    ]);
+    const result = await ingestContactUpload({
+      surveyId,
+      file: await makeXlsx(['idx', '회사', '이메일'], patch),
+      mapping: mapping({ selectedAttrsKeys: ['idx', '회사'], mode: 'merge', mergeKeys: ['idx'], unmatchedPolicy: 'skip' }),
+    });
+    expect(result).toMatchObject({ mergedRows: N, errorRows: 0 });
+
+    const [stats] = (await db.execute(sql`
+      SELECT count(*) FILTER (WHERE attrs->>'회사' = 'B')::int AS company_b,
+             count(*) FILTER (WHERE attrs->>'메모' = '원본')::int AS memo_kept,
+             count(*) FILTER (WHERE jsonb_typeof(attrs) <> 'object')::int AS bad_attrs,
+             count(*) FILTER (WHERE attrs ? '이메일')::int AS plain_email,
+             min(resid)::int AS mn, max(resid)::int AS mx
+      FROM contact_targets WHERE survey_id = ${surveyId}
+    `)) as unknown as [Record<string, number>];
+    expect(stats).toEqual({ company_b: N, memo_kept: N, bad_attrs: 0, plain_email: 0, mn: 1, mx: N });
+
+    const [pii] = (await db.execute(sql`
+      SELECT count(*)::int AS n FROM contact_pii cp
+      JOIN contact_targets t ON t.id = cp.contact_target_id
+      WHERE t.survey_id = ${surveyId} AND cp.column_key = '이메일'
+    `)) as unknown as [{ n: number }];
+    expect(pii?.n).toBe(Math.ceil(N / 2)); // 홀수 idx 만 남는다
+  });
 });

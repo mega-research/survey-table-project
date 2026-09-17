@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { type DbOrTx, type DbTransaction as Tx, db } from '@/db';
 import { type NewContactPii, contactPii } from '@/db/schema';
@@ -38,6 +38,69 @@ export function buildPiiRows(
     });
   }
   return rows;
+}
+
+/**
+ * 기존 컨택 PII 한 칸의 갱신 계획 — upsertPiiValue 와 같은 규칙을 DB 호출 없이 낸다.
+ * 빈 값·정규화 후 빈 값이면 `null`(= 그 칸을 지운다), 아니면 upsert 할 행.
+ * 업로드 병합처럼 여러 대상을 한 번에 갱신할 때 upsertPiiRowsBatch·deletePiiPairsBatch 와 함께 쓴다.
+ */
+export function planPiiValue(
+  contactTargetId: string,
+  columnKey: string,
+  fieldType: PiiFieldType,
+  plain: string,
+): NewContactPii | null {
+  const trimmed = plain.trim();
+  if (!trimmed) return null;
+  const blind = blindIndex(fieldType, trimmed);
+  if (!blind) return null;
+  return {
+    contactTargetId,
+    fieldType,
+    columnKey,
+    cipher: encryptPii(trimmed),
+    blindIndex: blind,
+    maskHint: maskHint(fieldType, trimmed),
+  };
+}
+
+/** 한 INSERT 에 싣는 PII 행 수 상한 — 6열 × 2,000행 = 12,000 파라미터로 PG 한도(65,535) 안쪽. */
+const PII_BATCH_ROWS = 2000;
+
+/** planPiiValue 가 낸 행을 묶어 upsert. 같은 (대상, 컬럼) 이 한 묶음에 두 번 오면 안 된다. */
+export async function upsertPiiRowsBatch(tx: Tx, rows: readonly NewContactPii[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += PII_BATCH_ROWS) {
+    await tx
+      .insert(contactPii)
+      .values(rows.slice(i, i + PII_BATCH_ROWS))
+      .onConflictDoUpdate({
+        target: [contactPii.contactTargetId, contactPii.columnKey],
+        set: {
+          fieldType: sql`excluded.field_type`,
+          cipher: sql`excluded.cipher`,
+          blindIndex: sql`excluded.blind_index`,
+          maskHint: sql`excluded.mask_hint`,
+        },
+      });
+  }
+}
+
+/** (대상, 컬럼) 짝을 묶어 삭제. 배열 바인딩 대신 jsonb 레코드셋으로 넘긴다(길이 1 배열 풀림 함정 회피). */
+export async function deletePiiPairsBatch(
+  tx: Tx,
+  pairs: readonly { contactTargetId: string; columnKey: string }[],
+): Promise<void> {
+  for (let i = 0; i < pairs.length; i += PII_BATCH_ROWS) {
+    const payload = JSON.stringify(
+      pairs.slice(i, i + PII_BATCH_ROWS).map((p) => ({ t: p.contactTargetId, c: p.columnKey })),
+    );
+    await tx.execute(sql`
+      DELETE FROM contact_pii cp
+      USING jsonb_to_recordset(${payload}::jsonb) AS v(t uuid, c text)
+      WHERE cp.contact_target_id = v.t AND cp.column_key = v.c
+    `);
+  }
 }
 
 /**
