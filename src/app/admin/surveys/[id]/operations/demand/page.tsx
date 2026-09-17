@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 
 import { DemandSummaryTable } from '@/features/operations/demand/demand-summary-table';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { redactDemandOpinions } from '@/lib/operations/demand-summary-format';
 import { getDemandSummary } from '@/server/operations/services/demand-summary';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { loadSurveyCapabilities } from '@/server/survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 문항 수요',
@@ -27,9 +29,15 @@ export default async function DemandSummaryPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 집계는 응답 현황과 같은 축이라
   // operations.view 를 여기서 다시 묻는다.
-  await assertSurveyConsolePageAccess(surveyId, 'operations.view');
+  const viewer = await assertSurveyConsolePageAccess(surveyId, 'operations.view');
   const scope = await getOperationsDataScope(surveyId);
-  const rows = await getDemandSummary(surveyId, scope);
+  const [summary, capabilities] = await Promise.all([
+    getDemandSummary(surveyId, scope),
+    loadSurveyCapabilities(viewer, surveyId),
+  ]);
+  // 집계는 현황 권한으로 보지만 의견 전문은 응답 원문이다 — responses.view 가 없으면
+  // (팀 공개 설문의 팀원 등) 서버에서 비운 뒤 넘긴다.
+  const rows = capabilities.has('responses.view') ? summary : redactDemandOpinions(summary);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-6">

@@ -203,6 +203,17 @@ export interface DemandView {
   groupId: string | null;
 }
 
+/**
+ * 의견 전문을 뺀 행 — 응답 열람 권한(`responses.view`)이 없는 열람자에게 넘길 모양.
+ *
+ * 의견은 응답자가 쓴 자유 서술이라 응답 상세와 같은 무게다. 집계(필요 n·필요율)와 의견
+ * **건수**는 현황 권한으로 보되, 전문은 서버에서 비운 뒤 직렬화한다 — 화면에서 감추기만
+ * 하면 RSC props 로 원문이 그대로 내려간다.
+ */
+export function redactDemandOpinions(rows: readonly DemandSummaryRow[]): DemandSummaryRow[] {
+  return rows.map((row) => ({ ...row, opinions: [] }));
+}
+
 /** 문자열 하나를 정렬 모드로. 모르는 값은 조사표 순서로 떨어진다. */
 export function parseDemandSortMode(raw: string | null | undefined): DemandSortMode {
   return raw === 'need-asc' || raw === 'need-desc' ? raw : 'sheet';

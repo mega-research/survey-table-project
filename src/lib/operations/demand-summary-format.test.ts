@@ -7,6 +7,7 @@ import {
   applyDemandView,
   buildDemandSummary,
   parseDemandSortMode,
+  redactDemandOpinions,
   sortByNeedRate,
 } from './demand-summary-format';
 
@@ -374,5 +375,21 @@ describe('parseDemandSortMode', () => {
     expect(parseDemandSortMode('sheet')).toBe('sheet');
     expect(parseDemandSortMode(null)).toBe('sheet');
     expect(parseDemandSortMode('drop table')).toBe('sheet');
+  });
+});
+
+describe('redactDemandOpinions', () => {
+  it('의견 전문만 비우고 건수·집계는 남긴다 — 응답 열람 권한이 없는 열람자용', () => {
+    const questions = [judgement('q1', null, 0)];
+    const [row] = buildDemandSummary(questions, [], [], asCurrent(questions));
+    const withOpinion = { ...row!, opinionCount: 2, opinions: ['의견 하나', '의견 둘'] };
+
+    const [redacted] = redactDemandOpinions([withOpinion]);
+
+    expect(redacted!.opinions).toEqual([]);
+    expect(redacted!.opinionCount).toBe(2);
+    expect(redacted!.needRate).toBe(withOpinion.needRate);
+    // 원본 행을 건드리지 않는다 — 엑셀 경로와 같은 배열을 공유할 수 있다.
+    expect(withOpinion.opinions).toHaveLength(2);
   });
 });

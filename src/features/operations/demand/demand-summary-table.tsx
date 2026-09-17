@@ -218,7 +218,8 @@ function GroupedRow({
               {row.needRate === null ? '' : `${row.needRate.toFixed(0)}%`}
             </td>
             <td className="px-3 py-2 text-right tabular-nums">
-              {row.opinionCount > 0 ? (
+              {/* 전문이 비어 내려온 행(응답 열람 권한 없음)은 건수만 보인다 — 펼쳐도 읽을 것이 없다 */}
+              {row.opinions.length > 0 ? (
                 <button
                   type="button"
                   onClick={onToggleRow}
@@ -227,7 +228,9 @@ function GroupedRow({
                   {row.opinionCount}
                 </button>
               ) : (
-                <span className="text-gray-400">0</span>
+                <span className={row.opinionCount > 0 ? 'text-gray-700' : 'text-gray-400'}>
+                  {row.opinionCount}
+                </span>
               )}
             </td>
           </tr>
