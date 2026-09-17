@@ -15,6 +15,7 @@ const teamSurvey: SurveyCardCapabilitySubject = {
   visibility: 'team',
   teamId: 'team-1',
   isParticipant: false,
+  isFullParticipant: false,
 };
 
 const teamScope: WorkScope = { kind: 'team', teamId: 'team-1' };
@@ -130,6 +131,7 @@ describe('참여자 — 팀 축 밖의 접근', () => {
     // 남의 팀 설문이다 — 지금 보고 있는 범위(team-1)와 소유 팀이 다르다.
     teamId: 'team-9',
     isParticipant: true,
+    isFullParticipant: true,
   };
 
   it('타 팀 초대 설문을 편집·분석할 수 있다 — 팀도 공개 범위도 묻지 않는다', () => {
@@ -144,8 +146,15 @@ describe('참여자 — 팀 축 밖의 접근', () => {
     expect(canManageSurveyAccessCard(invited, v)).toBe(false);
   });
 
+  it('제한 참여자는 편집은 되고 분석은 안 된다 — responses.view 가 없다 (0123)', () => {
+    const limited = { ...invited, isFullParticipant: false };
+    const v = viewer();
+    expect(canEditSurveyCard(limited, v)).toBe(true);
+    expect(canViewSurveyAnalyticsCard(limited, v)).toBe(false);
+  });
+
   it('초대가 없으면 같은 행이 전부 닫힌다 — 열어준 것은 참여 행 하나다', () => {
-    const notInvited = { ...invited, isParticipant: false };
+    const notInvited = { ...invited, isParticipant: false, isFullParticipant: false };
     const v = viewer();
     expect(canEditSurveyCard(notInvited, v)).toBe(false);
     expect(canViewSurveyAnalyticsCard(notInvited, v)).toBe(false);

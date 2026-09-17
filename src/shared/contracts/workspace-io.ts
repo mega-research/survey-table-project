@@ -6,6 +6,7 @@ import * as z from 'zod';
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
   fieldworkOrgStatusValues,
+  surveyParticipantAccessLevelValues,
   surveyParticipantKindValues,
   surveyVisibilityValues,
   type SurveyGuestTabs,
@@ -441,6 +442,8 @@ export const SurveyParticipantItem = z.object({
   name: z.string(),
   email: z.string(),
   kind: SurveyParticipantKindSchema,
+  /** 권한 등급 (0123) — limited 는 응답 상세·컨택·메일·export·삭제가 없다. 화면이 필로 구별한다. */
+  accessLevel: z.enum(surveyParticipantAccessLevelValues),
   /**
    * 소속 표기 — 내부 계정은 활성 팀 이름이 온다. 팀 미배치면 null.
    *

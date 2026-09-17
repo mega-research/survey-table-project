@@ -13,6 +13,7 @@ import {
   type SurveyAssignmentStatus,
   type SurveyCapability,
   type SurveyGuestTabs,
+  type SurveyParticipantAccessLevel,
   type SurveyParticipantKind,
   type SurveyVisibility,
 } from '@/shared/contracts/workspace';
@@ -79,6 +80,11 @@ export interface SurveyParticipation {
    * 탭을 capability 로 쪼개면 매트릭스 열이 설문마다 갈려 판정이 프리셋이 아니게 된다.
    */
   guestTabs?: SurveyGuestTabs | null;
+  /**
+   * kind='member' 의 권한 등급 (0123) — 다른 kind 에서는 무시된다. 없으면 full 이다
+   * (0123 이전 행과 같은 의미). limited 는 참여자 열과 팀원 열의 교집합만 선다.
+   */
+  accessLevel?: SurveyParticipantAccessLevel | null;
 }
 
 /** 판정 결과 — capability 집합 + 게스트 전용 탭 축. */
@@ -137,6 +143,32 @@ const TEAM_MEMBER_CAPS: readonly SurveyCapability[] = [
   'analytics.view',
   'surveyGroup.manage',
 ];
+
+/**
+ * 제한 참여자 (0123) — 참여자 열과 팀원 열의 **교집합**이다.
+ *
+ * 팀 공개 설문의 팀원도 초대할 수 있는데(survey.invite) 참여자 열이 팀원 열보다 넓어, 팀원이
+ * 자기 자신이나 동료를 초대하는 것만으로 응답 상세·컨택·메일·export·삭제를 얻었다(Codex 적대적
+ * 리뷰). 초대를 막는 대신 초대의 결과를 좁힌다 — 초대받은 사람이 초대한 사람보다 넓어지지 않게.
+ * 교집합으로 두는 이유는 두 열 중 하나를 고치면 이 열이 따라오게 하려는 것이다(사본을 두지 않는다).
+ */
+const LIMITED_PARTICIPANT_CAPS: readonly SurveyCapability[] = PARTICIPANT_CAPS.filter(
+  (capability) => TEAM_MEMBER_CAPS.includes(capability),
+);
+
+/**
+ * 새 참여자의 권한 등급 — **초대자가 가진 권한**으로 정한다 (0123).
+ *
+ * 참여자 열 전부를 가진 초대자(슈퍼어드민·소유자·소유 팀 팀장·full 참여자)만 full 을 만든다.
+ * 그 밖(팀원·limited 참여자)은 limited 다 — limited 끼리 서로 초대해도 넓어질 수 없다.
+ */
+export function participantAccessLevelFor(
+  inviterCapabilities: ReadonlySet<SurveyCapability>,
+): SurveyParticipantAccessLevel {
+  return PARTICIPANT_CAPS.every((capability) => inviterCapabilities.has(capability))
+    ? 'full'
+    : 'limited';
+}
 
 /**
  * 게스트(클라이언트 발급 계정) — **부여된 설문 하나**에서 프리뷰와 허용된 현황 탭만 본다
@@ -256,16 +288,20 @@ export function resolveSurveyCapabilities(
   if (survey.teamId !== null && subject.leaderTeamIds.includes(survey.teamId)) {
     return new Set(FULL_CAPS);
   }
-  // 참여자는 팀 경계를 넘는다 — 소유 팀 소속이 아니어도 선다(스펙 §4).
-  if (participation?.kind === 'member') return new Set(PARTICIPANT_CAPS);
-
-  if (
+  const isTeamMember =
     survey.visibility === 'team' &&
     survey.teamId !== null &&
-    subject.activeTeamIds.includes(survey.teamId)
-  ) {
-    return new Set(TEAM_MEMBER_CAPS);
+    subject.activeTeamIds.includes(survey.teamId);
+
+  // 참여자는 팀 경계를 넘는다 — 소유 팀 소속이 아니어도 선다(스펙 §4).
+  if (participation?.kind === 'member') {
+    if (participation.accessLevel !== 'limited') return new Set(PARTICIPANT_CAPS);
+    // 제한 참여자가 그 설문 팀의 팀원이기도 하면(자기 초대) 팀원 열을 잃지 않는다 —
+    // 교집합이 팀원 열의 부분집합이라 합집합은 곧 팀원 열이다.
+    return new Set(isTeamMember ? TEAM_MEMBER_CAPS : LIMITED_PARTICIPANT_CAPS);
   }
+
+  if (isTeamMember) return new Set(TEAM_MEMBER_CAPS);
   return NONE;
 }
 
@@ -415,6 +451,7 @@ export async function loadSurveyAccess(
       assignmentStatus: surveys.assignmentStatus,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
+      participantAccessLevel: surveyParticipants.accessLevel,
       // **실사 팀장에게만 켜지는 칸.** 내부·게스트 요청에는 상수 false 라 서브쿼리가 아예
       // 실행 계획에 들어가지 않는다 — 관문은 전 요청이 지나는 자리라 남의 축의 비용을
       // 짊어지면 안 된다.
@@ -426,7 +463,12 @@ export async function loadSurveyAccess(
     .limit(1);
   if (!row) throw new SurveyAccessError('not_found');
 
-  return resolveSurveyAccess(subject, row, toParticipation(row.participantKind, row.guestTabs), {
+  const participation = toParticipation(
+    row.participantKind,
+    row.guestTabs,
+    row.participantAccessLevel,
+  );
+  return resolveSurveyAccess(subject, row, participation, {
     fieldworkOrgInvited: row.fieldworkOrgInvited,
   });
 }
@@ -490,8 +532,9 @@ function participationJoin(userId: string) {
 function toParticipation(
   kind: SurveyParticipantKind | null,
   guestTabs: SurveyGuestTabs | null,
+  accessLevel: SurveyParticipantAccessLevel | null,
 ): SurveyParticipation | null {
-  return kind ? { kind, guestTabs } : null;
+  return kind ? { kind, guestTabs, accessLevel } : null;
 }
 
 /**
@@ -562,6 +605,7 @@ export async function loadSurveyCapabilitiesBatch(
       assignmentStatus: surveys.assignmentStatus,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
+      participantAccessLevel: surveyParticipants.accessLevel,
     })
     .from(surveys)
     .leftJoin(surveyParticipants, participationJoin(user.id))
@@ -571,7 +615,11 @@ export async function loadSurveyCapabilitiesBatch(
   for (const row of rows) {
     result.set(
       row.id,
-      resolveSurveyCapabilities(subject, row, toParticipation(row.participantKind, row.guestTabs)),
+      resolveSurveyCapabilities(
+        subject,
+        row,
+        toParticipation(row.participantKind, row.guestTabs, row.participantAccessLevel),
+      ),
     );
   }
   return result;

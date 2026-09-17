@@ -323,9 +323,37 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
   // ───────────────────────────────────────────────────────────────────────────
 
   describe('추가는 접근자 누구나, 제외는 소유자·팀장·슈퍼어드민', () => {
-    it('팀 공개 설문의 팀원도 초대할 수 있다', async () => {
+    it('팀 공개 설문의 팀원도 초대할 수 있다 — 다만 제한 참여자로 선다 (0123)', async () => {
       await clientFor(A_MEMBER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
-      expect(await caps(B_OUTSIDER_ID)).toContain('survey.edit');
+      const granted = await caps(B_OUTSIDER_ID);
+      expect(granted).toContain('survey.edit');
+      // 초대받은 사람이 초대한 팀원보다 넓어지지 않는다.
+      for (const capability of [
+        'responses.view',
+        'contacts.manage',
+        'mail.send',
+        'export.download',
+        'survey.delete',
+      ]) {
+        expect(granted, `제한 참여자가 ${capability} 를 가지면 안 된다`).not.toContain(capability);
+      }
+      const list = await clientFor(A_OWNER_ID).participants.list({ surveyId });
+      expect(list.participants.find((p) => p.userId === B_OUTSIDER_ID)?.accessLevel).toBe(
+        'limited',
+      );
+    });
+
+    it('팀원이 자기 자신을 초대해도 응답 원문·export 를 얻지 못한다 (Codex 적대적 리뷰)', async () => {
+      const before = await caps(A_MEMBER_ID);
+      await clientFor(A_MEMBER_ID).participants.add({ surveyId, userId: A_MEMBER_ID });
+      expect((await caps(A_MEMBER_ID)).sort()).toEqual(before.sort());
+      expect(await caps(A_MEMBER_ID)).not.toContain('responses.view');
+    });
+
+    it('제한 참여자가 초대한 사람도 제한이다 — 상호 초대로 넓어지지 않는다', async () => {
+      await clientFor(A_MEMBER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+      await clientFor(B_OUTSIDER_ID).participants.add({ surveyId, userId: A_MEMBER_ID });
+      expect(await caps(A_MEMBER_ID)).not.toContain('responses.view');
     });
 
     it('참여자 본인도 다른 사람을 초대할 수 있다 — 접근자 누구나(스펙 §4)', async () => {

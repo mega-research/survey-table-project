@@ -98,6 +98,7 @@
     "0119_survey_participants",
     "0120_fieldwork_orgs",
     "0121_contact_actor_fk_to_app_users",
-    "0122_response_fieldwork_attribution"
+    "0122_response_fieldwork_attribution",
+    "0123_survey_participant_access_level"
   ]
 }

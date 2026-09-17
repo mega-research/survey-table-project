@@ -44,7 +44,7 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
  * 분기보다 **먼저** 차단하므로(팀이 정해지기 전에는 아무도 못 연다, ADR-0006), 목록·투영이
  * 그것보다 넓으면 열리지 않는 카드가 그려지고 버튼도 열린 것처럼 보인다.
  */
-function participatesInSurvey(viewerId: string): SQL {
+function participatesInSurvey(viewerId: string, options: { fullOnly?: boolean } = {}): SQL {
   return and(
     eq(surveys.assignmentStatus, 'assigned'),
     exists(
@@ -56,6 +56,8 @@ function participatesInSurvey(viewerId: string): SQL {
             eq(surveyParticipants.surveyId, surveys.id),
             eq(surveyParticipants.userId, viewerId),
             eq(surveyParticipants.kind, 'member'),
+            // 등급(0123)은 투영에만 쓴다 — 목록 조건은 등급과 무관하게 참여 사실만 본다.
+            options.fullOnly ? eq(surveyParticipants.accessLevel, 'full') : undefined,
           ),
         ),
     ),
@@ -91,6 +93,11 @@ function surveyListColumns(viewerId: string | null) {
      */
     isParticipant:
       viewerId === null ? sql<boolean>`false` : participatesInSurvey(viewerId).mapWith(Boolean),
+    /** 그 참여가 full 등급인가 (0123) — 제한 참여자에게 「분석」이 잠긴 채 열리지 않게 한다. */
+    isFullParticipant:
+      viewerId === null
+        ? sql<boolean>`false`
+        : participatesInSurvey(viewerId, { fullOnly: true }).mapWith(Boolean),
     id: surveys.id,
     title: surveys.title,
     description: surveys.description,

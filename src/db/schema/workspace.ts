@@ -13,6 +13,7 @@ import {
 import type {
   FieldworkOrgStatus,
   SurveyGuestTabs,
+  SurveyParticipantAccessLevel,
   SurveyParticipantKind,
   TeamLifecycleAction,
   TeamLifecycleMetadata,
@@ -154,6 +155,11 @@ export const surveyParticipants = pgTable(
     kind: text('kind').$type<SurveyParticipantKind>().notNull(),
     /** kind='guest' 전용 현황 탭 화이트리스트 — 티켓 21 이 소비한다. */
     guestTabs: jsonb('guest_tabs').$type<SurveyGuestTabs>(),
+    /**
+     * kind='member' 전용 권한 등급 (0123). 초대자가 참여자 열 전부를 갖지 않았으면 limited —
+     * 참여자 열과 팀원 열의 교집합만 선다. 다른 kind 에서는 판정이 읽지 않는다.
+     */
+    accessLevel: text('access_level').$type<SurveyParticipantAccessLevel>().notNull().default('full'),
     addedBy: uuid('added_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

@@ -396,6 +396,8 @@ survey_participants        # 설문 단위 부여 — 참여자·게스트·실�
 ├── kind                   # member | guest | fieldwork — users.user_type 과의 정합은 서비스가 지킨다
 │                          # (두 테이블에 걸친 조건이라 CHECK 불가)
 ├── guestTabs (JSONB)      # kind=guest 전용 현황 탭 화이트리스트 (티켓 21) — NULL 이면 기본값(응답 현황만)
+├── accessLevel            # kind=member 전용 full|limited (0123) — 초대자가 참여자 열 전부를 갖지 않으면 limited.
+│                          # limited = 참여자 열 ∩ 팀원 열(열람·편집·초대·현황·분석). 팀원이 자기·동료를 초대해 응답 원문을 얻던 우회 차단
 ├── addedBy (FK restrict), createdAt
 └── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
 

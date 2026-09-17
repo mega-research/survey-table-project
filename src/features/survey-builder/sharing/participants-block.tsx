@@ -120,7 +120,7 @@ export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
 
       <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
         열람·편집·운영·삭제 가능 · 발행·공유 관리·소유권 이전은 소유자·팀장·슈퍼어드민 전용 · 초대
-        추가는 접근자 누구나.
+        추가는 접근자 누구나 · 팀원이 초대하면 「제한」(응답 상세·조사 대상·메일·내보내기·삭제 제외).
       </p>
     </div>
   );
@@ -161,6 +161,15 @@ function ParticipantRow({
         <span className="shrink-0 rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10.5px] font-semibold text-[#1D4ED8]">
           {SURVEY_PARTICIPANT_KIND_LABEL[participant.kind]}
         </span>
+        {/* 제한 참여자(0123) — 초대자가 참여자 권한 전부를 갖지 않아 열람·편집·현황·분석만 선다. */}
+        {participant.accessLevel === 'limited' && (
+          <span
+            className="shrink-0 rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[10.5px] font-semibold text-[#4B5563]"
+            title="응답 상세·조사 대상·메일·내보내기·삭제는 할 수 없습니다. 소유자·팀장이 다시 초대하면 전체 권한이 됩니다."
+          >
+            제한
+          </span>
+        )}
         <span className="truncate text-[11px] text-[#9CA3AF]">
           {metaLine(participant.teamName, participant.email)}
         </span>

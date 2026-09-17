@@ -40,6 +40,7 @@ export const SCOPED_INPUTS: Record<string, Record<string, unknown>> = {
   'contacts.attempts.update': { contactTargetId: CHILD_ID, id: CHILD_ID, resultCode: 'x' },
   'contacts.attempts.remove': { contactTargetId: CHILD_ID, id: CHILD_ID },
   'contacts.attrValues.list': { attrsKey: 'k' },
+  'contacts.idLists.create': { ids: [1] },
   'mail.templates.create': { input: MAIL_TEMPLATE_INPUT },
   'mail.templates.update': { templateId: CHILD_ID, input: MAIL_TEMPLATE_INPUT },
   'mail.templates.remove': { templateId: CHILD_ID },

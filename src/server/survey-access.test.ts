@@ -9,6 +9,7 @@ import {
 
 import {
   denialReasonFor,
+  participantAccessLevelFor,
   resolveSurveyAccess,
   resolveSurveyCapabilities,
   type SurveyAccessSubject,
@@ -193,6 +194,55 @@ describe('resolveSurveyCapabilities — invite_only 는 팀원에게만 숨긴�
     expect(caps(subject(), inviteOnly, { kind: 'member' })).toEqual(
       caps(subject(), survey(), { kind: 'member' }),
     );
+  });
+});
+
+/** 제한 참여자 열 — 참여자 열과 팀원 열의 교집합 (0123). */
+const LIMITED_PARTICIPANT_COLUMN: SurveyCapability[] = PARTICIPANT_COLUMN.filter((c) =>
+  TEAM_MEMBER_COLUMN.includes(c),
+);
+
+describe('참여자 권한 등급 — 초대가 초대자보다 넓은 권한을 만들지 않는다 (0123)', () => {
+  const otherTeam = subject({ activeTeamIds: ['99999999-0000-4000-8000-000000000000'] });
+
+  it('limited 참여자는 열람·편집·초대·현황·분석만 — 응답·컨택·메일·export·삭제가 없다', () => {
+    expect(caps(otherTeam, survey(), { kind: 'member', accessLevel: 'limited' })).toEqual(
+      LIMITED_PARTICIPANT_COLUMN.sort(),
+    );
+    expect(LIMITED_PARTICIPANT_COLUMN).not.toContain('responses.view');
+    expect(LIMITED_PARTICIPANT_COLUMN).not.toContain('export.download');
+    expect(LIMITED_PARTICIPANT_COLUMN).not.toContain('survey.delete');
+  });
+
+  it('등급이 없는 참여 행은 full 이다 — 0123 이전 행의 권한을 줄이지 않는다', () => {
+    expect(caps(otherTeam, survey(), { kind: 'member' })).toEqual(PARTICIPANT_COLUMN.sort());
+  });
+
+  it('팀원이 자기 자신을 limited 로 초대해도 팀원 열보다 넓어지지 않는다 — 그룹 관리도 잃지 않는다', () => {
+    expect(caps(subject(), survey(), { kind: 'member', accessLevel: 'limited' })).toEqual(
+      TEAM_MEMBER_COLUMN.sort(),
+    );
+  });
+
+  it('초대 전용 설문의 limited 참여자도 교집합만 갖는다', () => {
+    expect(
+      caps(subject(), survey({ visibility: 'invite_only' }), {
+        kind: 'member',
+        accessLevel: 'limited',
+      }),
+    ).toEqual(LIMITED_PARTICIPANT_COLUMN.sort());
+  });
+});
+
+describe('participantAccessLevelFor — 등급은 초대자의 권한이 정한다', () => {
+  it('참여자 열 전부를 가진 초대자(소유자·팀장·슈퍼어드민·full 참여자)는 full 로 초대한다', () => {
+    expect(participantAccessLevelFor(new Set(OWNER_COLUMN))).toBe('full');
+    expect(participantAccessLevelFor(new Set(PARTICIPANT_COLUMN))).toBe('full');
+  });
+
+  it('팀원·limited 참여자는 limited 로만 초대한다 — 상호 초대로도 넓어지지 않는다', () => {
+    expect(participantAccessLevelFor(new Set(TEAM_MEMBER_COLUMN))).toBe('limited');
+    expect(participantAccessLevelFor(new Set(LIMITED_PARTICIPANT_COLUMN))).toBe('limited');
   });
 });
 

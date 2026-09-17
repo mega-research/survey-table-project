@@ -5,6 +5,8 @@
  *
  * - 조회·검색·추가는 `survey.invite` : 그 설문에 접근 가능한 내부인이면 누구나 초대할 수
  *   있다(소유자·팀장·참여자·팀 공개면 팀원). 좁히면 「같이 일하자」가 관리 행위가 된다.
+ *   대신 **초대의 결과가 초대자를 넘지 않는다** — 참여자 열 전부를 갖지 않은 초대자(팀원·
+ *   제한 참여자)가 들인 사람은 제한 참여자다(0123, 서비스가 판정).
  * - 제외는 `survey.manageAccess` : 소유자·소유 팀 팀장·슈퍼어드민만. 공개 범위 변경과 같은
  *   축이다 — 들이는 것과 내보내는 것은 무게가 다르다.
  *
@@ -89,7 +91,7 @@ const add = authed
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.invite');
-    return svc.addSurveyParticipant(context.user.id, input).catch(rethrowParticipantError);
+    return svc.addSurveyParticipant(context.user, input).catch(rethrowParticipantError);
   });
 
 const remove = authed

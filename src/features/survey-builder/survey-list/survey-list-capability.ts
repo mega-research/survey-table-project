@@ -13,6 +13,11 @@ export interface SurveyCardCapabilitySubject {
    * 이 값이 근사 셋을 처음으로 갈라놓는다: 참여자는 편집·분석은 되고 공개 범위는 안 된다.
    */
   isParticipant: boolean;
+  /**
+   * 그 참여가 full 등급인가 (0123). 제한 참여자는 편집은 되지만 `responses.view` 가 없어
+   * 분석 화면이 404 다 — 분석 근사는 이 값을 본다.
+   */
+  isFullParticipant: boolean;
 }
 
 /**
@@ -76,7 +81,7 @@ export function canViewSurveyAnalyticsCard(
   survey: SurveyCardCapabilitySubject,
   viewer: SurveyCardViewer,
 ): boolean {
-  return hasFullSurveyControl(survey, viewer) || survey.isParticipant;
+  return hasFullSurveyControl(survey, viewer) || survey.isFullParticipant;
 }
 
 /**

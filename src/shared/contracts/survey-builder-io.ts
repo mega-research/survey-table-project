@@ -76,6 +76,8 @@ export interface SurveyListItem {
    * 이 값이 없으면 초대받은 사람에게 「분석」이 잠긴 채로 보인다. 판정은 언제나 서버가 한다.
    */
   isParticipant: boolean;
+  /** 그 참여가 full 등급인가 (0123) — 제한 참여자는 분석(responses.view)이 없다. */
+  isFullParticipant: boolean;
 }
 
 /**

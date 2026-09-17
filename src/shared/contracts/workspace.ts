@@ -164,6 +164,18 @@ export const SURVEY_PARTICIPANT_KIND_LABEL: Record<SurveyParticipantKind, string
 };
 
 /**
+ * 참여자(kind='member') 권한 등급 — 0123.
+ *
+ * - full    참여자 열 전부(열람·편집·운영·응답 상세·컨택·메일·export·삭제).
+ * - limited 참여자 열과 팀원 열의 교집합(열람·편집·초대·현황·분석).
+ *
+ * 등급은 **초대한 사람**이 정한다 — 초대자가 참여자 열 전부를 갖고 있지 않으면 limited 다.
+ * 팀 공개 설문의 팀원이 자기 자신이나 동료를 초대해 응답 원문·export 를 얻던 우회를 막는다.
+ */
+export const surveyParticipantAccessLevelValues = ['full', 'limited'] as const;
+export type SurveyParticipantAccessLevel = (typeof surveyParticipantAccessLevelValues)[number];
+
+/**
  * 게스트에게 열리는 현황 탭 화이트리스트 (kind='guest' 전용, 티켓 21).
  *
  * 어휘가 컬럼과 같은 자리에 사는 이유는 `survey_participants.guest_tabs` 가 이 모양을

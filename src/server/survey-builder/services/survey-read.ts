@@ -166,6 +166,7 @@ export async function getSurveyListWithCounts(
       // 「휴지통을 보고 있는가」를 판정한다.
       deletedAt: survey.deletedAt,
       isParticipant: survey.isParticipant,
+      isFullParticipant: survey.isFullParticipant,
     })),
   };
 }
