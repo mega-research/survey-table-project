@@ -44,6 +44,8 @@ export interface CellFormState {
   inputMaxLength: number | '';
   /** 여러 줄 입력 높이(줄 수). '' 또는 1 이면 한 줄. */
   inputRows: number | '';
+  /** 입력한 만큼 높이 늘리기 (TableCell.inputAutoGrow) */
+  inputAutoGrow: boolean;
   /** 입력칸 너비(px). '' 이면 셀 폭 전체 (TableCell.inputWidth) */
   inputWidth: number | '';
   inputDefaultValueTemplate: string;
@@ -233,6 +235,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputPlaceholder: cell.placeholder || '',
     inputMaxLength: cell.inputMaxLength || '',
     inputRows: cell.inputRows || '',
+    inputAutoGrow: cell.inputAutoGrow === true,
     inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputType: cell.inputType ?? 'text',
@@ -348,6 +351,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     placeholder: _placeholder,
     inputMaxLength: _inputMaxLength,
     inputRows: _inputRows,
+    inputAutoGrow: _inputAutoGrow,
     inputWidth: _inputWidth,
     hideRightBorder: _hideRightBorder,
     defaultValueTemplate: _defaultValueTemplate,
@@ -438,6 +442,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           // 1 은 한 줄(기본)이라 키를 만들지 않는다 — 저장값에 의미 없는 필드가 쌓이지 않게.
           ...(typeof form.inputRows === 'number' && form.inputRows >= 2
             ? { inputRows: form.inputRows }
+            : {}),
+          // 숫자·형식 칸은 한 줄 고정이라 켜 두었던 값도 저장하지 않는다
+          ...(form.inputAutoGrow && isPlainTextInput({ type: 'text', inputType: form.inputType })
+            ? { inputAutoGrow: true }
             : {}),
           ...(typeof form.inputWidth === 'number' && form.inputWidth > 0
             ? { inputWidth: form.inputWidth }

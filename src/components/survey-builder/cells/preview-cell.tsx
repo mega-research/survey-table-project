@@ -218,9 +218,9 @@ export const PreviewCell = React.memo(function PreviewCell({
               fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
             )}
           >
-            {(cell.inputRows ?? 1) >= 2 ? (
+            {(cell.inputRows ?? 1) >= 2 || cell.inputAutoGrow === true ? (
               <textarea
-                rows={Math.floor(cell.inputRows ?? 1)}
+                rows={Math.max(1, Math.floor(cell.inputRows ?? 1))}
                 placeholder={cell.placeholder || '답변을 입력하세요...'}
                 maxLength={cell.inputMaxLength}
                 disabled
