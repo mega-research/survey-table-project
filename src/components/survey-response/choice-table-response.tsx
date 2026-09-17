@@ -1070,7 +1070,7 @@ export function ChoiceTableResponse({
                     data-testid="axis-card-header"
                     className={cn(
                       'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
-                      unfilled ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white',
+                      unfilled ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-100',
                     )}
                   >
                     {title && (
