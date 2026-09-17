@@ -384,3 +384,76 @@ describe('choice-selected 조건 — 보기 그룹 표 (table + __choiceGroups)'
     expect(stripDisabledCellValues([groupedTable], met)).toBe(met);
   });
 });
+
+describe('보기 소스 표 사이드카 게이팅', () => {
+  const checkboxController = (): TableCell =>
+    ({
+      id: 'cb', content: '', type: 'checkbox',
+      checkboxOptions: [
+        { id: 'o1', label: '해당', value: '1' },
+        { id: 'o2', label: '비해당', value: '2' },
+      ],
+    }) as TableCell;
+  const inputText = (id: string, over: Partial<TableCell> = {}): TableCell =>
+    ({ id, content: '', type: 'input', ...over }) as TableCell;
+
+  const choiceTable = (id: string, cells: TableCell[]): Question =>
+    ({
+      id,
+      type: 'checkbox',
+      title: '',
+      required: false,
+      order: 0,
+      tableColumns: cells.map((_, i) => ({ id: `c${i}`, label: '' })),
+      tableRowsData: [{ id: 'r1', label: '', cells }],
+    }) as unknown as Question;
+
+  it('체크박스 셀의 JSON 배열 문자열 값으로 option 조건을 판정한다', () => {
+    const controller = checkboxController();
+    const target = inputText('t', {
+      enabledWhen: { kind: 'option', controllerCellId: 'cb', values: ['1'] },
+    });
+    const cells = [controller, target];
+    expect(isCellEnabled(target, { cb: '["o1"]' }, cells)).toBe(true);
+    expect(isCellEnabled(target, { cb: '["1"]' }, cells)).toBe(true);
+    expect(isCellEnabled(target, { cb: '["o2"]' }, cells)).toBe(false);
+    expect(isCellEnabled(target, { cb: '' }, cells)).toBe(false);
+    // JSON 이 아닌 옛 단일 값은 한 개짜리 선택으로 읽는다
+    expect(isCellEnabled(target, { cb: 'o1' }, cells)).toBe(true);
+  });
+
+  it('조건을 충족한 체크박스 종속 값은 저장 정리에서 지우지 않는다', () => {
+    const target = inputText('t', {
+      enabledWhen: { kind: 'option', controllerCellId: 'cb', values: ['1'] },
+    });
+    const question = choiceTable('q', [checkboxController(), target]);
+    const payload = { q: [], __optTexts__: { q: { cb: '["o1"]', t: '적은 내용' } } };
+    expect(stripDisabledCellValues([question], payload)).toBe(payload);
+  });
+
+  it('두 표를 정리해도 앞 표에서 지운 값이 되살아나지 않는다', () => {
+    const gated = (id: string) =>
+      inputText(id, { enabledWhen: { kind: 'filled', controllerCellId: 'ctl' } });
+    const q1 = choiceTable('q1', [inputText('ctl'), gated('t')]);
+    const q2 = choiceTable('q2', [inputText('ctl'), gated('t')]);
+    const payload = {
+      __optTexts__: {
+        q1: { ctl: '', t: '남으면 안 됨' },
+        q2: { ctl: '', t: '이것도' },
+      },
+    };
+    const out = stripDisabledCellValues([q1, q2], payload);
+    expect(out['__optTexts__']).toEqual({ q1: { ctl: '' }, q2: { ctl: '' } });
+  });
+
+  it('종속 셀이 컨트롤러보다 앞에 있어도 체인 끝까지 지운다', () => {
+    // A 비움 → B 비활성 → C 비활성. 셀 순서는 C, B, A.
+    const c = inputText('C', { enabledWhen: { kind: 'filled', controllerCellId: 'B' } });
+    const b = inputText('B', { enabledWhen: { kind: 'filled', controllerCellId: 'A' } });
+    const a = inputText('A');
+    const question = choiceTable('q', [c, b, a]);
+    const payload = { __optTexts__: { q: { A: '', B: '남은 값', C: '남은 값' } } };
+    const out = stripDisabledCellValues([question], payload);
+    expect(out['__optTexts__']).toEqual({ q: { A: '' } });
+  });
+});
