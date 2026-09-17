@@ -186,7 +186,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-// 전체 스위트 부하에서 첫 입력 → telemetry 왕복이 기본 1초를 넘겨 간헐 실패했다(단독 실행은 항상 통과).
+// 전체 스위트 부하에서 첫 입력 → telemetry 왕복이 기본 1초를 넘겨 간헐 실패했다.
 // 대기 한도만 늘린다 — 판정은 그대로다.
 //
 // **대기 한도는 테스트 한도보다 반드시 작아야 한다.** asyncUtilTimeout 만 5000 으로 올리면
@@ -195,6 +195,18 @@ function deferred<T>() {
 // 그래서 테스트 한도를 대기 한도의 세 배로 벌려 둔다.
 configure({ asyncUtilTimeout: 5000 });
 vi.setConfig({ testTimeout: 15_000 });
+
+// 입력칸은 회복(resume)이 끝나기 전에 그려진다. 그 사이의 입력은 handleResponse 의
+// `!isRecovering` 가드에 걸려 응답 행 생성을 발사하지 않고, 회복이 끝나도 다시 쏘지 않는다.
+// 입력칸이 보이자마자 입력하던 테스트는 회복과 경합해 단독 실행에서도 간헐 실패했다
+// (resume 을 300ms 늦추면 매번 재현). 첫 입력 전에 회복이 정착할 때까지 기다린다.
+async function settleRecovery(expectedResumeCalls: number) {
+  await waitFor(() => expect(resume).toHaveBeenCalledTimes(expectedResumeCalls));
+  await act(async () => {
+    await Promise.allSettled(resume.mock.results.map((result) => result.value));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
 
 describe('대상자 테스트 응답 세션', () => {
   beforeEach(() => {
@@ -730,6 +742,7 @@ describe('대상자 테스트 응답 세션', () => {
       />,
     );
 
+    await settleRecovery(1);
     fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
       target: { value: '응답' },
     });
@@ -1058,6 +1071,7 @@ describe('대상자 테스트 응답 세션', () => {
         testToken={null}
       />,
     );
+    await settleRecovery(1);
     fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
       target: { value: '첫 화면' },
     });
@@ -1073,7 +1087,7 @@ describe('대상자 테스트 응답 세션', () => {
         testToken={null}
       />,
     );
-    await waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
+    await settleRecovery(2);
     fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
       target: { value: '새 화면' },
     });
@@ -1112,6 +1126,7 @@ describe('대상자 테스트 응답 세션', () => {
         testToken={null}
       />,
     );
+    await settleRecovery(1);
     fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
       target: { value: 'A 응답' },
     });
@@ -1130,10 +1145,7 @@ describe('대상자 테스트 응답 세션', () => {
     );
 
     expect(await screen.findByPlaceholderText('첫 답변')).toHaveValue('');
-    await waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await settleRecovery(2);
     fireEvent.change(screen.getByPlaceholderText('첫 답변'), {
       target: { value: 'B 응답' },
     });
@@ -1187,6 +1199,7 @@ describe('대상자 테스트 응답 세션', () => {
         testToken={null}
       />,
     );
+    await settleRecovery(1);
     fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
       target: { value: '응답' },
     });
