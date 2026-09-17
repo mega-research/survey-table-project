@@ -5,6 +5,7 @@ import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import {
   assertSurveyCapability,
+  loadAccessSubject,
   SurveyAccessError,
   type SurveyAccessUser,
 } from '@/server/survey-access';
@@ -28,7 +29,7 @@ import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 
-import { SurveyOwnershipRequiredError } from '../domain/survey';
+import { copyKeepsOriginalTeam, SurveyOwnershipRequiredError } from '../domain/survey';
 import type {
   CreateSurveyInput,
   EnsureSurveyInDbInput,
@@ -378,6 +379,8 @@ export async function duplicateSurvey(
 
   const original = await getSurveyById(surveyId);
   if (!original) return null;
+  const subject = await loadAccessSubject(actor);
+  const keepsOriginalTeam = copyKeepsOriginalTeam(subject, original.teamId);
 
   return await db.transaction(async (tx) => {
     const originalGroups = await tx.query.questionGroups.findMany({
@@ -390,32 +393,45 @@ export async function duplicateSurvey(
       orderBy: [questions.order],
     });
 
-    // 복제는 resolveNewSurveyOwnership 을 지나지 않고 원본의 귀속을 잇는다 — 그래서 해산
-    // 가드도 여기서 따로 진다. 원본을 읽은 뒤 복제 트랜잭션이 도는 동안(질문·그룹 수십 ms)
-    // 그 팀이 해산되면 사본만 archived 팀에 붙어 만든 사람도 못 여는 유령이 된다.
-    // 팀이 이미 해산됐으면 원본이 그랬듯 배치 대기로 떨어뜨린다.
-    const ownedTeam =
-      original.teamId === null
-        ? null
-        : (
-            await tx
-              .select({ id: teams.id })
-              .from(teams)
-              .where(and(eq(teams.id, original.teamId), eq(teams.status, 'active')))
-              .for('share')
-          )[0] ?? null;
-    const copyTeamId = ownedTeam ? original.teamId : null;
+    // 원본 팀 소속(또는 슈퍼어드민)이면 원본의 귀속을 잇고, 원본 팀 밖의 참여자면 새 설문
+    // 만들기와 같은 귀속을 받는다(copyKeepsOriginalTeam 참조). 잇는 쪽은
+    // resolveNewSurveyOwnership 을 지나지 않으므로 해산 가드도 여기서 따로 진다 — 원본을 읽은 뒤
+    // 복제 트랜잭션이 도는 동안(질문·그룹 수십 ms) 그 팀이 해산되면 사본만 archived 팀에 붙어
+    // 만든 사람도 못 여는 유령이 된다. 팀이 이미 해산됐으면 원본이 그랬듯 배치 대기로 떨어뜨린다.
+    let ownership: {
+      teamId: string | null;
+      assignmentStatus: 'assigned' | 'assignment_pending';
+      ownerUserId: string;
+      createdBy: string;
+    };
+    if (keepsOriginalTeam) {
+      const ownedTeam =
+        original.teamId === null
+          ? null
+          : (
+              await tx
+                .select({ id: teams.id })
+                .from(teams)
+                .where(and(eq(teams.id, original.teamId), eq(teams.status, 'active')))
+                .for('share')
+            )[0] ?? null;
+      const copyTeamId = ownedTeam ? original.teamId : null;
+      ownership = {
+        teamId: copyTeamId,
+        assignmentStatus: copyTeamId === null ? 'assignment_pending' : 'assigned',
+        ownerUserId: actor.id,
+        createdBy: actor.id,
+      };
+    } else {
+      ownership = await resolveNewSurveyOwnership(actor, null, tx);
+    }
 
     const newSurveyRows = await tx
       .insert(surveys)
       .values({
-        // 복제본은 원본의 팀·공개 범위를 잇고 소유자만 복제한 사람이 된다. 팀을 잇지 않으면
-        // 복제본이 배치 대기로 떨어져 만든 사람조차 목록에서 볼 수 없다.
-        teamId: copyTeamId,
-        assignmentStatus: copyTeamId === null ? 'assignment_pending' : 'assigned',
+        // 공개 범위는 원본을 잇는다 — invite_only 설문의 사본이 팀 공개로 풀리면 안 된다.
+        ...ownership,
         visibility: original.visibility,
-        ownerUserId: actor.id,
-        createdBy: actor.id,
         title: `${original.title} (복사본)`,
         description: original.description,
         isPublic: original.isPublic,

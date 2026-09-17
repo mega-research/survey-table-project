@@ -134,6 +134,26 @@ export const DuplicateResultSchema = SurveyRowSchema.nullable();
  * 에러가 도메인에 사는 이유는 이걸 던지는 곳(services)과 RPC 어휘로 옮기는 곳(procedures)이
  * 달라서다. 서비스가 소유하면 procedure 가 에러 하나 때문에 남의 서비스 파일을 import 한다.
  */
+/**
+ * 복제본이 원본의 팀을 잇는가.
+ *
+ * 복제본은 복제한 사람이 소유자가 되는데, 접근 판정의 소유자 분기는 **소유 팀 소속일 때만**
+ * 전권을 준다(티켓 13 하드닝). 그래서 원본 팀 밖의 참여자가 만든 사본이 원본 팀을 이으면
+ * 만든 사람이 자기 사본을 못 연다. 그런 경우는 새 설문 만들기와 같은 귀속
+ * (resolveNewSurveyOwnership — 지금 작업 범위의 팀)을 따른다.
+ *
+ * 원본이 배치 대기(팀 없음)이면 판정할 팀이 없으므로 기존대로 잇는다 — 그 설문을 복제할 수 있는
+ * 주체는 애초에 슈퍼어드민뿐이다.
+ */
+export function copyKeepsOriginalTeam(
+  subject: { isSuperadmin: boolean; activeTeamIds: readonly string[] },
+  originalTeamId: string | null,
+): boolean {
+  if (originalTeamId === null) return true;
+  if (subject.isSuperadmin) return true;
+  return subject.activeTeamIds.includes(originalTeamId);
+}
+
 export class SurveyOwnershipRequiredError extends Error {
   constructor() {
     super('설문을 만들려면 소유 팀을 먼저 선택해야 합니다.');

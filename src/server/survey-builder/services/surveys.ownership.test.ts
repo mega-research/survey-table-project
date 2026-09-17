@@ -47,6 +47,7 @@ vi.mock('@/server/work-scope', () => ({ resolveWorkScope: vi.fn() }));
 
 vi.mock('@/server/survey-access', () => ({
   assertSurveyCapability: vi.fn(),
+  loadAccessSubject: vi.fn(async () => ({ isSuperadmin: false, activeTeamIds: ['team-1'] })),
   SurveyAccessError: class extends Error {},
 }));
 

@@ -100,6 +100,7 @@ const restore = superadmin
   );
 
 // 복제는 원본 읽기 권한 검사가 서비스 안(원본 조회 직전)에 있다 — 사유만 RPC 어휘로 옮긴다.
+// 원본 팀 밖에서 복제하면 소유 팀 해석도 서비스가 하므로 생성 경로와 같은 매퍼를 쓴다.
 const duplicate = authed
   .input(SurveyIdInput)
   .output(DuplicateResultSchema)
@@ -107,7 +108,9 @@ const duplicate = authed
     try {
       return await svc.duplicateSurvey(context.user, input);
     } catch (error) {
-      throw toRpcSurveyAccessError(error);
+      // 원본 팀 밖의 참여자가 복제하면 새 설문과 같은 귀속을 받으므로(작업 범위의 팀) 생성
+      // 경로와 같은 거부 어휘를 쓴다.
+      rethrowCreateError(error);
     }
   });
 
