@@ -6,6 +6,7 @@ import { PenLine } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import type { VariableDef } from '@/components/ui/rich-text-editor/types';
 import { CellContentLayout } from '@/features/question-renderer/cells/cell-content-layout';
 import {
@@ -69,6 +70,7 @@ export function InputCellTab({
     inputDefaultValueTemplate,
     inputMaxLength,
     inputRows,
+    inputAutoGrow,
     inputWidth,
     answerQuoteEnabled: cellAnswerQuoteEnabled,
     answerQuoteName: cellAnswerQuoteName,
@@ -92,6 +94,7 @@ export function InputCellTab({
     setInputDefaultValueTemplate,
     setInputMaxLength,
     setInputRows,
+    setInputAutoGrow,
     setInputWidth,
     setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
     setAnswerQuoteName: setCellAnswerQuoteName,
@@ -326,6 +329,25 @@ export function InputCellTab({
               ? `${inputRows}줄 높이의 여러 줄 입력칸으로 그려집니다`
               : '2 이상으로 두면 여러 줄 입력칸이 됩니다'}
         </p>
+      </div>
+
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Label htmlFor="input-auto-grow" className="text-sm font-medium">
+            입력한 만큼 높이 늘리기
+          </Label>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {inputType === 'number' || isInputFormat(inputType)
+              ? '숫자·형식 칸은 한 줄로 고정입니다'
+              : '응답자가 글을 쓰면 입력칸과 표 행이 함께 커집니다. 줄 수는 처음 높이가 됩니다'}
+          </p>
+        </div>
+        <Switch
+          id="input-auto-grow"
+          checked={inputAutoGrow}
+          onCheckedChange={setInputAutoGrow}
+          disabled={inputType === 'number' || isInputFormat(inputType)}
+        />
       </div>
 
       <div className="space-y-2">

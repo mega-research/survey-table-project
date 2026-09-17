@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildAttachmentDisposition,
+  buildNoticeAttachmentDisposition,
   EXT_TO_MIME,
   getFileExt,
   isAllowedMime,
@@ -79,6 +80,25 @@ describe('buildAttachmentDisposition', () => {
   it("RFC 5987 reserved 문자 (' ( ) *) 도 percent-encode", () => {
     expect(buildAttachmentDisposition("a'b(c)*.pdf")).toBe(
       "attachment; filename*=UTF-8''a%27b%28c%29%2A.pdf",
+    );
+  });
+});
+
+describe('buildNoticeAttachmentDisposition', () => {
+  it('PDF 는 새 탭에서 열리도록 inline', () => {
+    expect(buildNoticeAttachmentDisposition('협조 공문.pdf', 'application/pdf')).toBe(
+      "inline; filename*=UTF-8''%ED%98%91%EC%A1%B0%20%EA%B3%B5%EB%AC%B8.pdf",
+    );
+  });
+  it('래스터 이미지는 inline', () => {
+    expect(buildNoticeAttachmentDisposition('a.png', 'image/png')).toMatch(/^inline;/);
+  });
+  it('SVG 는 스크립트 실행을 막으려 attachment', () => {
+    expect(buildNoticeAttachmentDisposition('a.svg', 'image/svg+xml')).toMatch(/^attachment;/);
+  });
+  it('브라우저가 못 여는 한글 파일은 attachment', () => {
+    expect(buildNoticeAttachmentDisposition('a.hwp', 'application/vnd.hancom.hwp')).toMatch(
+      /^attachment;/,
     );
   });
 });

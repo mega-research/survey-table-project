@@ -1,5 +1,6 @@
 import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
+import { decodeChoiceTableCellValue } from '@/lib/survey/choice-table-cell-value';
 import type { CellEnableCondition, Question, TableCell, TableRow } from '@/types/survey';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { resolveSelectedValues } from '@/utils/table-cell-semantics';
@@ -64,7 +65,14 @@ function resolveOptionValueSet(
 ): Set<string> {
   const controller = tableCells?.find((c) => c.id === condition.controllerCellId);
   if (!controller) return toValueSet(raw);
-  return new Set(resolveSelectedValues(controller, raw));
+  // 보기 소스 표의 체크박스 셀은 사이드카 한 칸에 JSON 배열 문자열('["1"]')로 저장된다.
+  // 표 문항의 체크박스는 배열이라 문자열이 올 일이 없고, JSON 이 아닌 옛 단일 값은
+  // 한 개짜리 선택으로 풀리므로 체크박스 문자열은 항상 풀어서 본다.
+  const value =
+    controller.type === 'checkbox' && typeof raw === 'string'
+      ? decodeChoiceTableCellValue(raw, 'checkbox')
+      : raw;
+  return new Set(resolveSelectedValues(controller, value));
 }
 
 function evaluate(
@@ -146,20 +154,37 @@ function stripDisabledChoiceTableSidecar(
   const tableCells = collectTableCells(q.tableRowsData);
   // 사이드카 값은 셀 값이 아니지만 filled·numeric 조건의 컨트롤러가 같은 표의 input 셀일 수
   // 있어 그 값 자리로 넘긴다.
+  // 체인(A→B→C)은 표 문항 경로와 같이 고정점까지 돈다 — 종속 셀이 컨트롤러보다 앞에 있으면
+  // 한 pass 는 아직 안 지운 상류 값으로 하류를 활성으로 오판한다. 매 pass 가 키를 하나 이상
+  // 지우므로 게이팅 셀 수 이내에 끝난다.
+  const gatedCells = tableCells.filter(
+    (cell) => GATABLE_CELL_TYPES.has(cell.type) && cell.enabledWhen && !cell.isHidden,
+  );
   const next = { ...textMap };
   let changed = false;
-  for (const cell of tableCells) {
-    if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
-    if (!Object.hasOwn(next, cell.id)) continue;
-    if (!isCellEnabled(cell, next, tableCells, selection)) {
-      delete next[cell.id];
-      changed = true;
+  let removedInPass = true;
+  for (let pass = 0; pass <= gatedCells.length && removedInPass; pass++) {
+    removedInPass = false;
+    for (const cell of gatedCells) {
+      if (!Object.hasOwn(next, cell.id)) continue;
+      if (!isCellEnabled(cell, next, tableCells, selection)) {
+        delete next[cell.id];
+        removedInPass = true;
+        changed = true;
+      }
     }
   }
   if (!changed) return null;
+  // 사이드카 맵은 누적 결과(base)에서 이어 쓴다. 원본(payloadAnswers)을 펼치면 앞 문항에서
+  // 지운 값이 이 문항을 처리하며 되살아난다.
+  const baseSidecar = base[OPT_TEXTS_KEY];
+  const accumulated =
+    baseSidecar && typeof baseSidecar === 'object' && !Array.isArray(baseSidecar)
+      ? (baseSidecar as Record<string, unknown>)
+      : (sidecar as Record<string, unknown>);
   return {
     ...base,
-    [OPT_TEXTS_KEY]: { ...(sidecar as Record<string, unknown>), [q.id]: next },
+    [OPT_TEXTS_KEY]: { ...accumulated, [q.id]: next },
   };
 }
 

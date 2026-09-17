@@ -10,7 +10,7 @@ import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { allowAdminOnly, guardUploadRoute } from '@/lib/upload/route-guard';
 import { MAX_ATTACHMENT_FILE_BYTES } from '@/lib/mail/constants';
 import {
-  buildAttachmentDisposition,
+  buildNoticeAttachmentDisposition,
   getFileExt,
   MIN_FILE_BYTES,
   resolveAttachmentType,
@@ -123,7 +123,7 @@ async function handleNoticeAttachmentUpload(request: NextRequest, ctx: RouteLogC
         Body: buffer,
         ContentType: resolvedMime,
         ContentLength: buffer.byteLength,
-        ContentDisposition: buildAttachmentDisposition(file.name),
+        ContentDisposition: buildNoticeAttachmentDisposition(file.name, resolvedMime),
       }),
     );
   } catch (error) {

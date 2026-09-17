@@ -309,3 +309,41 @@ describe('보기-소스 표 input 셀 — 입력칸 너비', () => {
     expect(input.style.width).toBe('60px');
   });
 });
+
+describe('보기-소스 표 input 셀 — 여러 줄·높이 늘리기', () => {
+  function withInputCell(patch: Record<string, unknown>): Question {
+    const q = questionWithDetailRow(false);
+    const inputCell = q.tableRowsData!.flatMap((r) => r.cells).find((c) => c.type === 'input')!;
+    Object.assign(inputCell, patch);
+    return q;
+  }
+
+  it('설정이 없으면 한 줄 입력칸 그대로다', () => {
+    renderTable(withInputCell({}), {});
+    expect(screen.getAllByRole('textbox')[0]!.tagName).toBe('INPUT');
+  });
+
+  it('줄 수 2 이상이면 그 높이의 여러 줄 칸이다', () => {
+    renderTable(withInputCell({ inputRows: 4 }), {});
+    const box = screen.getAllByRole('textbox')[0]!;
+    expect(box.tagName).toBe('TEXTAREA');
+    expect(box).toHaveAttribute('rows', '4');
+  });
+
+  it('높이 늘리기를 켜면 줄 수 1 이어도 여러 줄 칸이고 내용 높이를 따른다', async () => {
+    const scrollHeight = vi
+      .spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(96);
+    renderTable(withInputCell({ inputAutoGrow: true }), {});
+    const box = screen.getAllByRole('textbox')[0]!;
+    expect(box.tagName).toBe('TEXTAREA');
+    await userEvent.type(box, '가');
+    expect(box.style.height).toBe('96px');
+    scrollHeight.mockRestore();
+  });
+
+  it('숫자 칸은 켜져 있어도 한 줄이다', () => {
+    renderTable(withInputCell({ inputAutoGrow: true, inputType: 'number' }), {});
+    expect(screen.getAllByRole('textbox')[0]!.tagName).toBe('INPUT');
+  });
+});

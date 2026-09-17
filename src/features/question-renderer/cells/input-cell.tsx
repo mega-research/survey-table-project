@@ -8,6 +8,7 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
+import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
@@ -77,8 +78,11 @@ export const InputCell = React.memo(function InputCell({
    * 여러 줄 입력. 숫자·형식과는 배타다 — 전화번호나 계산 대상 숫자에 줄바꿈이 들어갈
    * 자리가 없고, 숫자 서식·형식 정돈 훅이 한 줄 값을 전제로 서 있다.
    */
-  const rows = !isNumberMode && !format ? Math.floor(cell.inputRows ?? 1) : 1;
-  const isMultiline = rows >= 2;
+  const isFreeText = !isNumberMode && !format;
+  const rows = isFreeText ? Math.max(1, Math.floor(cell.inputRows ?? 1)) : 1;
+  // 높이 늘리기를 켜면 줄 수가 1 이어도 여러 줄 칸이다 — 줄 수는 처음(최소) 높이가 된다
+  const autoGrow = isFreeText && cell.inputAutoGrow === true;
+  const isMultiline = rows >= 2 || autoGrow;
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -132,6 +136,11 @@ export const InputCell = React.memo(function InputCell({
     Boolean(rangeViolation || formatField.violation || qualityViolation) && !isPrefilled;
   // 띄우는 안내의 앵커 — 입력칸 자체. 셀이 아니라 입력칸 아래에 붙어야 단위 글자 옆에서도 맞는다.
   const anchorRef = useRef<HTMLElement | null>(null);
+  useAutoGrowTextarea(
+    anchorRef as React.RefObject<HTMLTextAreaElement | null>,
+    textValue,
+    isMultiline && autoGrow,
+  );
 
   // 입력칸 너비 고정 — 세로 카드(ignoreInputWidth)는 무시한다. 좁은 화면에서 60px 입력칸은 불편하다.
   const fixedWidth =
@@ -179,6 +188,8 @@ export const InputCell = React.memo(function InputCell({
               style={fixedWidthStyle}
               className={cn(
                 'w-full resize-none rounded-md border border-gray-300 p-2 text-base',
+                // 높이를 내용에 맞추므로 안쪽 스크롤바가 생기지 않게 한다
+                autoGrow && 'overflow-hidden',
                 'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none',
                 getInputTextAlignClass(cell.inputTextAlign),
                 !isPrefilled &&

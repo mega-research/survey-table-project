@@ -59,3 +59,39 @@ describe('표 input 셀 — 여러 줄', () => {
     expect(screen.getByRole('textbox').tagName).toBe('INPUT');
   });
 });
+
+describe('표 input 셀 — 입력한 만큼 높이 늘리기', () => {
+  it('켜면 줄 수가 1 이어도 여러 줄 칸이다', () => {
+    renderCell(cell({ inputAutoGrow: true }));
+    const box = screen.getByRole('textbox');
+    expect(box.tagName).toBe('TEXTAREA');
+    expect(box).toHaveAttribute('rows', '1');
+  });
+
+  it('줄 수는 처음 높이로 남는다', () => {
+    renderCell(cell({ inputAutoGrow: true, inputRows: 3 }));
+    expect(screen.getByRole('textbox')).toHaveAttribute('rows', '3');
+  });
+
+  it('내용 높이에 맞춰 칸 높이를 잡는다', () => {
+    const scrollHeight = vi
+      .spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(120);
+    renderCell(cell({ inputAutoGrow: true }), '긴 글');
+    const box = screen.getByRole('textbox');
+    // jsdom 은 테두리 폭을 계산하지 않아 0 으로 보고 scrollHeight 그대로다
+    expect(box.style.height).toBe('120px');
+    expect(box.className).toContain('overflow-hidden');
+    scrollHeight.mockRestore();
+  });
+
+  it('끄면 고정 높이 그대로다', () => {
+    renderCell(cell({ inputRows: 3 }), '긴 글');
+    expect(screen.getByRole('textbox').style.height).toBe('');
+  });
+
+  it('숫자 칸에서는 켜져 있어도 한 줄이다', () => {
+    renderCell(cell({ inputAutoGrow: true, inputType: 'number' }));
+    expect(screen.getByRole('textbox').tagName).toBe('INPUT');
+  });
+});

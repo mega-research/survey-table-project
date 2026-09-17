@@ -108,8 +108,32 @@ export function validateFilename(name: string): string | null {
  * `encodeURIComponent` 는 RFC 3986 기준이라 RFC 5987 reserved 문자 (' ( ) *) 를 별도로 변환한다.
  */
 export function buildAttachmentDisposition(filename: string): string {
-  const encoded = encodeURIComponent(filename).replace(/['()*]/g, (c) =>
+  return `attachment; filename*=UTF-8''${encodeRfc5987(filename)}`;
+}
+
+// 브라우저가 새 탭에서 바로 보여 주는 형식 — SVG 는 스크립트를 실어 나를 수 있어 제외한다
+const INLINE_VIEWABLE_MIME = new Set<string>([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+]);
+
+/**
+ * 공지 첨부용 Content-Disposition — 응답자가 첨부를 누르면 새 탭에서 열려야 한다.
+ * PDF·이미지는 `inline` 으로 두어 브라우저가 띄우게 하고, 브라우저가 못 여는 형식
+ * (한글·오피스·압축 등)과 SVG 는 기존처럼 내려받기를 강제한다.
+ * 메일 첨부는 수신함에서 파일로 받는 것이라 `buildAttachmentDisposition` 을 그대로 쓴다.
+ */
+export function buildNoticeAttachmentDisposition(filename: string, mime: string): string {
+  if (!INLINE_VIEWABLE_MIME.has(mime)) return buildAttachmentDisposition(filename);
+  return `inline; filename*=UTF-8''${encodeRfc5987(filename)}`;
+}
+
+function encodeRfc5987(filename: string): string {
+  return encodeURIComponent(filename).replace(/['()*]/g, (c) =>
     `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-  return `attachment; filename*=UTF-8''${encoded}`;
 }

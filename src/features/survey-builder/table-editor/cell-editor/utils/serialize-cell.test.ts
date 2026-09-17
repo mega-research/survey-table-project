@@ -476,6 +476,24 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(off).not.toHaveProperty('hideRightBorder');
   });
 
+  it('입력한 만큼 높이 늘리기는 평문 칸에서 켰을 때만 inputAutoGrow 키를 남긴다', () => {
+    const on = buildUpdatedCell({ ...baseForm('input'), inputAutoGrow: true }, baseCell);
+    expect(on.inputAutoGrow).toBe(true);
+    expect(cellToFormState(on).inputAutoGrow).toBe(true);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('input'), inputAutoGrow: false },
+      { id: 'c1', type: 'input', content: '', inputAutoGrow: true },
+    );
+    expect(off).not.toHaveProperty('inputAutoGrow');
+
+    const number = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'number', inputAutoGrow: true },
+      baseCell,
+    );
+    expect(number).not.toHaveProperty('inputAutoGrow');
+  });
+
   it('choice_opt: 단독 선택 범위는 표 전체일 때만 exclusiveScope 키를 남긴다', () => {
     const table = buildUpdatedCell(
       { ...baseForm('choice_opt'), choiceExclusive: true, choiceExclusiveScope: 'table' },

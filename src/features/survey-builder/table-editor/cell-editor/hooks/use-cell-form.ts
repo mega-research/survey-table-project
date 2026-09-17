@@ -48,6 +48,7 @@ export interface CellFormSetters {
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
   setInputRows: (v: number | '') => void;
+  setInputAutoGrow: (v: boolean) => void;
   setInputWidth: (v: number | '') => void;
   setHideRightBorder: (v: boolean) => void;
   setInputDefaultValueTemplate: (v: string) => void;
@@ -161,6 +162,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setInputPlaceholder: set('inputPlaceholder'),
       setInputMaxLength: set('inputMaxLength'),
       setInputRows: set('inputRows'),
+      setInputAutoGrow: set('inputAutoGrow'),
       setInputWidth: set('inputWidth'),
       setHideRightBorder: set('hideRightBorder'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
