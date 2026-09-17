@@ -71,9 +71,14 @@ export function InlineRichTextEditor({
   // 초기 내용이 있는데도 placeholder 가 글 위에 겹친다.
   const isEmpty = initialHtml === '';
 
+  // 제목은 평문 정본의 공백을 그대로 지켜야 한다 — 기본 파싱은 연속 공백을 한 칸으로 합쳐,
+  // 두 칸 공백이 있던 기존 제목을 고치는 순간 평문(SPSS·엑셀 라벨)이 조용히 바뀐다.
+  const parseOptions = isTitle ? ({ preserveWhitespace: 'full' } as const) : undefined;
+
   const editor = useEditor({
     extensions,
     content: initialHtml,
+    ...(parseOptions ? { parseOptions } : {}),
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -98,7 +103,10 @@ export function InlineRichTextEditor({
     if (!editor) return;
     const current = editor.isEmpty ? '' : editor.getHTML();
     if (initialHtml !== current) {
-      editor.commands.setContent(initialHtml, { emitUpdate: false });
+      editor.commands.setContent(initialHtml, {
+        emitUpdate: false,
+        ...(parseOptions ? { parseOptions } : {}),
+      });
     }
   });
   useEffect(() => {
