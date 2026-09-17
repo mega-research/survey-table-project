@@ -232,9 +232,9 @@ export function SurveyListView() {
   const leaderTeamIds = workScope?.leaderTeamIds ?? [];
 
   return (
-    // 목록 영역 폭 상한 — .pen FLOW 6-2 의 본문 폭(976px + 좌우 36px)이다. 큰 모니터에서 3열
-    // 카드가 가로로만 늘어나지 않게 하고, 카드 한 장이 목업과 같은 316px 가 된다.
-    <div className="mx-auto flex w-full max-w-[1048px] flex-col gap-[18px] px-9 py-[30px]">
+    // 목록 영역 폭 상한 — .pen FLOW 6-2 본문(976px)보다 조금 넓혀 카드 한 장이 약 360px 가 된다.
+    // 큰 모니터에서 3열 카드가 가로로만 늘어나지 않게 막는 것이 목적이다.
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-[18px] px-9 py-[30px]">
       <div className="flex items-center justify-between">
         {activeGroup ? (
           <GroupViewHeader groupName={activeGroup.name} />

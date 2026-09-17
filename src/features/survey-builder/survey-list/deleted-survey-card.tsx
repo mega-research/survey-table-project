@@ -24,7 +24,7 @@ interface DeletedSurveyCardProps {
  */
 export function DeletedSurveyCard({ survey, onRestore, isRestoring }: DeletedSurveyCardProps) {
   return (
-    <div className="flex w-full flex-col gap-[9px] rounded-[14px] border border-[#E5E5EA] bg-[#FAFAFA] p-[18px]">
+    <div className="flex w-full flex-col gap-[11px] rounded-[14px] border border-[#E5E5EA] bg-[#FAFAFA] p-5">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#F1F1F3]">
           <FileText className="h-[21px] w-[21px] text-[#9CA3AF]" />

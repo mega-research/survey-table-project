@@ -118,7 +118,7 @@ export function SurveyCard({
   );
 
   return (
-    <div className="flex w-full flex-col gap-[9px] rounded-[14px] border border-[#E5E5EA] bg-white p-[18px]">
+    <div className="flex w-full flex-col gap-[11px] rounded-[14px] border border-[#E5E5EA] bg-white p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#E0E7FF]">
@@ -229,7 +229,7 @@ export function SurveyCard({
       </div>
 
       {/* 액션 순서는 .pen 설문 카드 컴포넌트를 따른다 — 수정 · 현황 · 문의 · 분석. 구분선은 없다. */}
-      <div className="flex gap-1.5 pt-1">
+      <div className="flex gap-1.5 pt-1.5">
         <CardActionLink
           href={`/admin/surveys/${survey.id}/edit`}
           icon={<Pencil className="h-[13px] w-[13px]" />}
