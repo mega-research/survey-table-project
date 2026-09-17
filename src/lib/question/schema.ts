@@ -34,7 +34,7 @@ import type {
 const base = z.object({
   id: z.string(),
   title: z.string(),
-  // 제목 서식본 — 정본은 평문 title (0112)
+  // 제목 서식본 — 정본은 평문 title (0125)
   titleHtml: z.string().nullable().optional(),
   description: z.string().optional(),
   required: z.boolean(),

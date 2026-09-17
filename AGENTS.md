@@ -287,7 +287,7 @@ questions                  # 개별 질문
 ├── id, surveyId, groupId
 ├── type                   # text|textarea|radio|checkbox|select|multiselect|ranking|table|notice
 ├── title, description, required, requiredMessage, order, hideTitle
-├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0112). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
+├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0125). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
 ├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
 ├── tableValidationRules, dynamicRowConfigs, sumConstraints (JSONB)   # 검증/합계 제약
@@ -296,7 +296,7 @@ questions                  # 개별 질문
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
-├── inputRows, inputAutoGrow      # 단답형·장문형 입력칸 줄 수(1~20, NULL=유형 기본: 단답형 1줄·장문형 4줄)·입력한 만큼 높이 늘리기. 숫자·형식 칸은 한 줄 고정 (0111)
+├── inputRows, inputAutoGrow      # 단답형·장문형 입력칸 줄 수(1~20, NULL=유형 기본: 단답형 1줄·장문형 4줄)·입력한 만큼 높이 늘리기. 숫자·형식 칸은 한 줄 고정 (0124)
 ├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, maxLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, features/question-renderer/utils/text-quality)
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
@@ -1024,6 +1024,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- **0111~0123 은 역할 모델 v2(staging 브랜치)가 쓰고 있어 main 에서 비워 둔다** (2026-09-17). main 이 같은 날 0111·0112 로 만든 입력칸 높이·제목 서식본은 staging 병합 전에 0124·0125 로 옮겼다 — 번호 기록 표가 DB 에 없어 파일 이름만 바뀌고 이미 적용한 DB 는 그대로다
 
 ## DB 드리프트 점검
 
