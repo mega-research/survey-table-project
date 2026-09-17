@@ -232,9 +232,9 @@ export function SurveyListView() {
   const leaderTeamIds = workScope?.leaderTeamIds ?? [];
 
   return (
-    // 목록 영역 폭 상한 — .pen FLOW 6-2 본문(976px)보다 넓혀 카드 한 장이 약 440px 가 된다.
+    // 목록 영역 폭 상한 — .pen FLOW 6-2 본문(976px)보다 넓혀 카드 한 장이 약 410px 가 된다.
     // 큰 모니터에서 3열 카드가 가로로만 늘어나지 않게 막는 것이 목적이다.
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-[18px] px-9 py-[30px]">
+    <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-[18px] px-9 py-[30px]">
       <div className="flex items-center justify-between">
         {activeGroup ? (
           <GroupViewHeader groupName={activeGroup.name} />
@@ -349,7 +349,7 @@ export function SurveyListView() {
           ) : (
             <>
               {/* 넓은 화면에서도 3열이 상한이다 — 폭에 맞춰 열을 늘리면(4~5열) 카드가 촘촘해 읽기 어렵다. */}
-              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {pageItems.map((survey) =>
                   // 휴지통은 카드가 다르다 — 삭제된 설문에서 할 수 있는 일은 복구뿐이라
                   // 케밥·수정·현황·분석이 전부 없다(티켓 17). 서버가 목록을 갈라 주므로
