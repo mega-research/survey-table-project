@@ -7,13 +7,15 @@ vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
-  searchSurveys: vi.fn(),
   isSlugAvailable: vi.fn(),
   getQuestionGroupsBySurvey: vi.fn(),
   getQuestionsBySurvey: vi.fn(),
   getAllTags: vi.fn(),
   getVariableCatalogForSurvey: vi.fn(),
 }));
+
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
 
 vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
@@ -25,6 +27,10 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+
 import * as responseSvc from '../services/response-read';
 import * as surveySvc from '../services/survey-read';
 import { read } from './read';
@@ -35,23 +41,42 @@ const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 const VERSION_ID = '33333333-4444-4555-8666-777777777777';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function anonContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 describe('surveyBuilder.read procedures', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllEnvs());
 
-  it('list는 인자 없이 getSurveyListWithCounts에 위임한다', async () => {
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue([] as never);
-    const client = createRouterClient({ read }, { context: authedContext() });
-    const res = await client.read.list();
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith();
-    expect(res).toEqual([]);
+  it('list는 세션 사용자와 요청 범위를 그대로 넘긴다', async () => {
+    const result = { scope: { kind: 'system' }, teams: [], canSeeSystemScope: true, surveys: [] };
+    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue(result as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const res = await client.read.list({ scope: 'team-1' });
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1', {
+      deleted: false,
+    });
+    expect(res).toEqual(result);
+  });
+
+  it('list 는 범위 미지정을 null 로 넘긴다 — 서버가 기본 범위를 정한다', async () => {
+    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue({
+      scope: { kind: 'none' },
+      teams: [],
+      canSeeSystemScope: false,
+      surveys: [],
+    } as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    await client.read.list({});
+    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null, {
+      deleted: false,
+    });
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {
@@ -68,13 +93,6 @@ describe('surveyBuilder.read procedures', () => {
     const res = await client.read.withDetails({ surveyId: SURVEY_ID });
     expect(surveySvc.getSurveyWithDetails).toHaveBeenCalledWith(SURVEY_ID);
     expect(res).toBeNull();
-  });
-
-  it('search는 query를 풀어 searchSurveys에 위임한다', async () => {
-    vi.mocked(surveySvc.searchSurveys).mockResolvedValue([] as never);
-    const client = createRouterClient({ read }, { context: authedContext() });
-    await client.read.search({ query: 'foo' });
-    expect(surveySvc.searchSurveys).toHaveBeenCalledWith('foo');
   });
 
   it('slugAvailable는 input 객체를 그대로 isSlugAvailable에 위임한다', async () => {
@@ -196,15 +214,20 @@ describe('surveyBuilder.read procedures', () => {
     expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
   });
 
-  it('allowlist 밖 세션은 exportJson이 FORBIDDEN으로 막힌다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+  it('비활성 계정 세션은 exportJson이 FORBIDDEN으로 막힌다', async () => {
     const client = createRouterClient(
       { read },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'intruder-1', email: 'x@y.com' },
+          user: {
+            id: 'suspended-1',
+            email: 'x@y.com',
+            name: '정지계정',
+            status: 'suspended',
+            isSuperadmin: false,
+            userType: 'internal',
+          },
         },
       },
     );
@@ -214,19 +237,63 @@ describe('surveyBuilder.read procedures', () => {
     expect(responseSvc.exportResponsesAsJson).not.toHaveBeenCalled();
   });
 
-  it('게스트 grant 보유자는 exportCsv가 FORBIDDEN으로 막힌다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정은 exportCsv가 FORBIDDEN으로 막힌다', async () => {
     const client = createRouterClient(
       { read },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
+    await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
+  });
+});
+
+describe('surveyBuilder.read — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ['byId', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['withDetails', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['questionGroups', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['questions', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['surveyVersions', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['variableCatalog', 'survey.view', () => ({ surveyId: SURVEY_ID })],
+    ['responsesBySurvey', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['completedResponses', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['responseById', 'responses.view', () => ({ responseId: RESPONSE_ID, surveyId: SURVEY_ID })],
+    ['responsesWithAnswers', 'responses.view', () => ({ surveyId: SURVEY_ID })],
+    ['exportJson', 'export.download', () => ({ surveyId: SURVEY_ID })],
+    ['exportCsv', 'export.download', () => ({ surveyId: SURVEY_ID })],
+  ] as const)('%s 는 %s 관문을 지난다', async (name, capability, makeInput) => {
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const call = client.read[name] as (input: unknown) => Promise<unknown>;
+    await call(makeInput());
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, capability);
+  });
+
+  it('타 팀 설문 id 는 NOT_FOUND — 조회 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(client.read.withDetails({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(surveySvc.getSurveyWithDetails).not.toHaveBeenCalled();
+  });
+
+  it('응답 열람 권한이 없으면 export 계열도 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
     await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });

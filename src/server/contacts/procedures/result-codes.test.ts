@@ -1,4 +1,4 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactResultCode } from '@/shared/contracts/contacts';
@@ -8,11 +8,15 @@ vi.mock('../services/contact-result-codes', () => ({
   updateResultCodes: vi.fn(),
 }));
 
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+
 import * as svc from '../services/contact-result-codes';
 import { resultCodes } from './result-codes';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 describe('resultCodes procedures', () => {
@@ -20,13 +24,26 @@ describe('resultCodes procedures', () => {
 
   it('update는 surveyId와 codes를 service.updateResultCodes에 위임한다', async () => {
     vi.mocked(svc.updateResultCodes).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ contacts: { resultCodes } }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ contacts: { resultCodes } }, { context });
     const codes: ContactResultCode[] = [
       { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green', status: 'positive' },
     ];
     const res = await client.contacts.resultCodes.update({ surveyId: 's-1', codes });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, 's-1', 'contacts.manage');
     expect(svc.updateResultCodes).toHaveBeenCalledWith('s-1', codes);
     expect(res).toEqual({ ok: true });
+  });
+
+  it('타 팀 설문 id 로 update 하면 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ contacts: { resultCodes } }, { context: authedContext() });
+    await expect(
+      client.contacts.resultCodes.update({ surveyId: 's-1', codes: null }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.updateResultCodes).not.toHaveBeenCalled();
   });
 
   it('update는 codes=null(기본 코드셋 복귀)도 그대로 전달한다', async () => {
@@ -50,7 +67,7 @@ describe('resultCodes procedures', () => {
   it('인증 없으면 update가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { contacts: { resultCodes } },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.contacts.resultCodes.update({ surveyId: 's-1', codes: null }),

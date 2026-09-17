@@ -8,7 +8,7 @@ import { OperationsPageHeader } from '@/features/operations/operations-page-head
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,9 +26,9 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const [control, isGuest, documentRows] = await Promise.all([
+  const [control, isExternal, documentRows] = await Promise.all([
     getControlState(surveyId),
-    isGuestViewer(),
+    isExternalViewer(),
     // 조사표가 붙은 설문에서만 '문항 수요' 탭을 낸다 — 다른 설문에는 쓸 일이 없다.
     db
       .select({ id: surveyDocuments.id })
@@ -44,12 +44,12 @@ export default async function OperationsLayout({ children, params }: LayoutProps
       <OperationsPageHeader
         surveyId={surveyId}
         surveyTitle={survey.title}
-        isGuest={isGuest}
+        isGuest={isExternal}
         control={control}
       />
       <OperationsTabStrip
         surveyId={surveyId}
-        isGuest={isGuest}
+        isGuest={isExternal}
         hasSurveyDocument={documentRows.length > 0}
       />
       {children}

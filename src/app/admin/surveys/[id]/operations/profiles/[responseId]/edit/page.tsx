@@ -6,7 +6,7 @@ import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
 import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
-import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { getResponseById } from '@/server/read-models/responses';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
@@ -28,7 +28,8 @@ export const metadata = { title: '응답 수정' };
 /**
  * 어드민 응답 수정 라우트.
  *
- * - requireSurveyOwnership 가 인증 + 설문 존재 가드.
+ * - 인증 + 설문 단위 capability 가드(responses.view). 없는 설문과 권한 없는 설문을
+ *   똑같이 notFound 로 접는다 — 콘솔에서 남의 팀 설문의 **존재**를 알려줄 이유가 없다.
  * - getResponseById 로 응답 조회 (soft delete 포함).
  *   - 삭제된 응답이면 안내 화면 (복원 안내).
  *   - 응답 surveyId 가 path 와 다르면 notFound.
@@ -39,18 +40,20 @@ export const metadata = { title: '응답 수정' };
  */
 export default async function AdminResponseEditPage({ params, searchParams }: PageProps) {
   const { id: surveyId, responseId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  // env grant 게스트의 접근을 의도적으로 복원한다 — 종전에는 capability 판정에 게스트
+  // 우회가 없어 grant 설문에서도 404 였지만, saveAdminEdit RPC 는 게스트를 허용해 왔다.
+  await assertSurveyConsolePageAccess(surveyId, 'responses.view');
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
-  await requireSurveyOwnership(surveyId);
   const scope = await getOperationsDataScope(surveyId);
 
-  const response = await getResponseById(responseId, { includeDeleted: true });
-  if (
-    !response ||
-    response.surveyId !== surveyId ||
-    response.isTest !== testFlagForScope(scope)
-  ) {
+  // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
+  // 이미 복호화된 뒤에 접히게 된다(티켓 15).
+  const response = await getResponseById(responseId, { surveyId, includeDeleted: true });
+  if (!response || response.isTest !== testFlagForScope(scope)) {
     notFound();
   }
 

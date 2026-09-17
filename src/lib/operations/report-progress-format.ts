@@ -135,6 +135,52 @@ export interface ProgressTotals {
 }
 
 /** 조사 대상 0건 등 집계를 돌릴 필요가 없을 때 쓰는 빈 합계. */
+/** 고정 정렬 키 5종 — meta:·group: 접두 키는 호출부가 후보 목록으로 넘긴다. */
+const FIXED_SORT_KEYS: readonly ProgressSortKey[] = [
+  'firstResid',
+  'groupLabel',
+  'listCount',
+  'completedCount',
+  'responseRate',
+];
+
+/**
+ * `?sort=` 해석 — 알 수 없는 값은 응답률로 접는다 (운영 콘솔·게스트 콘솔 공용).
+ *
+ * 두 화면이 같은 표를 그리므로 해석도 하나여야 한다. 갈리면 한쪽에서만 통하는 정렬 키가
+ * 생기고, 그 표의 헤더는 눌러도 아무 일이 없는 죽은 컨트롤이 된다.
+ */
+export function parseProgressSort(
+  raw: string | undefined,
+  metaKeys: readonly string[],
+  groupKeys: readonly string[],
+): ProgressSortKey {
+  if (!raw) return 'responseRate';
+  if (FIXED_SORT_KEYS.includes(raw as ProgressSortKey)) return raw as ProgressSortKey;
+  if (raw.startsWith('meta:') && metaKeys.includes(raw.slice(5))) return raw as ProgressSortKey;
+  if (raw.startsWith('group:') && groupKeys.includes(raw.slice(6))) return raw as ProgressSortKey;
+  return 'responseRate';
+}
+
+/**
+ * `?groupBy=` 해석 — 미지정이면 지정된 분류 기준 **전체**, 콤마 목록이면 그중 유효한 것만.
+ *
+ * 유효 키가 하나도 없으면 전체로 되돌린다(칩이 전부 꺼진 화면을 만들지 않는다).
+ * 순서는 언제나 기준 목록 순서다 — URL 이 클릭 순서에 좌우되지 않게 한다.
+ */
+export function resolveActiveGroupKeys<T extends { key: string }>(
+  criteria: readonly T[],
+  raw: string | undefined,
+): T[] {
+  if (typeof raw !== 'string') return [...criteria];
+  const requested = raw
+    .split(',')
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0);
+  const matched = criteria.filter((c) => requested.includes(c.key));
+  return matched.length > 0 ? matched : [...criteria];
+}
+
 export const EMPTY_PROGRESS_TOTALS: ProgressTotals = {
   groupCount: 0,
   listTotal: 0,

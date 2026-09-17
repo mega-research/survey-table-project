@@ -53,6 +53,16 @@ function labelForCategory(config: NormalizedQuotaConfig, dimensionIndex: number,
   return cat?.label ?? categoryId;
 }
 
+/**
+ * 목표 표본 총합 — 셀은 sparse 라(목표가 있는 조합만) 합이 곧 설문 전체의 목표다.
+ *
+ * 쿼터 요약과 **실사 홈의 진척 분모**가 같은 셈을 봐야 해서 내보낸다(티켓 25). 사본을 두면
+ * 한쪽만 고쳐져 같은 설문이 화면마다 다른 목표를 갖는다.
+ */
+export function sumQuotaTargets(cells: readonly { target: number }[]): number {
+  return cells.reduce((sum, cell) => sum + cell.target, 0);
+}
+
 /** 완료 응답 answers 목록 → 셀별 현황 + 요약. */
 export function buildQuotaStatus(
   config: NormalizedQuotaConfig,
@@ -74,7 +84,7 @@ export function buildQuotaStatus(
     };
   });
 
-  const targetTotal = cells.reduce((s, c) => s + c.target, 0);
+  const targetTotal = sumQuotaTargets(cells);
   const currentTotal = cells.reduce((s, c) => s + c.current, 0);
   const closedCells = cells.filter((c) => c.current >= c.target && c.target > 0).length;
 

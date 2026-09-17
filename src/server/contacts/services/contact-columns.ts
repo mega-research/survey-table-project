@@ -42,7 +42,7 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
     throw new Error('메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.');
   }
   await db.transaction(async (tx) => {
-    // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
+    // authed 전용 경로라 외부 계정 세션이 없다 — isExternal=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });
     if (!locked) throw new Error('NOT_FOUND');
 
@@ -71,7 +71,7 @@ export async function updateContactGroupLevels(
     throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
   }
   await db.transaction(async (tx) => {
-    // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
+    // authed 전용 경로라 외부 계정 세션이 없다 — isExternal=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, {
       lock: 'update',
       columns: ['contactColumns', 'testContactColumns'],

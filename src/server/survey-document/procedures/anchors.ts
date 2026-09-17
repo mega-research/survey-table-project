@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   CreateSurveyAnchorInput,
@@ -10,27 +11,27 @@ import {
 } from '../domain/survey-anchor';
 import * as svc from '../services/survey-anchors';
 
-const list = scoped
+const list = authed
   .input(ListSurveyAnchorsInput)
   .output(z.array(SurveyAnchorSchema))
-  .handler(({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.view');
     return svc.listSurveyAnchors(input);
   });
 
-const create = scoped
+const create = authed
   .input(CreateSurveyAnchorInput)
   .output(SurveyAnchorSchema)
-  .handler(({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
     return svc.createSurveyAnchor(input);
   });
 
-const remove = scoped
+const remove = authed
   .input(RemoveSurveyAnchorInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
     await svc.removeSurveyAnchor(input);
     return { ok: true as const };
   });

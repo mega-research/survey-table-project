@@ -10,6 +10,7 @@ import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
 import { renderForTestSend } from './render-for-send';
+import { resolveSendReplyTo } from './reply-to';
 import { sendTestMail } from './send';
 import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -105,6 +106,17 @@ export async function sendTestTemplateMail(
     extractMailContentKeys({ bodyHtml, attachments: input.attachments }),
   );
 
+  // 캠페인 발송과 같은 해석기를 쓴다(티켓 20) — 비워 둔 템플릿의 테스트 메일에 답장하면
+  // 실제 캠페인과 같은 사람에게 가야 한다. fromDomain 이 이미 확인돼 있어 null 이 나올 수
+  // 없지만 계약상 nullable 이라 발신 주소로 한 번 더 접는다.
+  const replyTo =
+    (await resolveSendReplyTo({
+      surveyId: input.surveyId,
+      replyTo: input.replyTo,
+      fromLocal: input.fromLocal,
+      fromDomain,
+    })) ?? `${input.fromLocal}@${fromDomain}`;
+
   const rendered = renderForTestSend({
     surveyId: input.surveyId,
     subject: input.subject,
@@ -131,7 +143,7 @@ export async function sendTestTemplateMail(
       fromName: rendered.fromName,
       fromLocal: input.fromLocal,
       fromDomain,
-      replyTo: input.replyTo,
+      replyTo,
       html,
       attachments: input.attachments,
     });

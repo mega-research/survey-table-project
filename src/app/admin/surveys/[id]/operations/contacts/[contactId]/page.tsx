@@ -14,7 +14,8 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -26,10 +27,15 @@ interface PageProps {
 
 export default async function ContactDetailPage({ params }: PageProps) {
   const { id: surveyId, contactId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
   const scope = await getOperationsDataScope(surveyId);
 
-  const detail = await getContactDetailById(contactId, scope);
-  if (!detail || detail.contact.surveyId !== surveyId) notFound();
+  // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
+  // 이미 복호화된 뒤에 접히게 된다(티켓 15).
+  const detail = await getContactDetailById(contactId, surveyId, scope);
+  if (!detail) notFound();
 
   // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
   // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는
@@ -90,7 +96,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
         mailHistory={mailHistory}
         editLogs={editLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
-        canReset={!(await isGuestViewer())}
+        canReset={!(await isExternalViewer())}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,

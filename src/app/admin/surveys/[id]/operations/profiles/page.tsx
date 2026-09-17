@@ -34,7 +34,8 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 응답 내역',
@@ -65,6 +66,9 @@ interface PageProps {
  */
 export default async function ProfilesPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'responses.view');
   const sp = await searchParams;
 
   // col/q 는 다중 조건 필터로 전환돼 배열일 수 있다 — normalize 는 스칼라 파라미터만 받는다.
@@ -74,7 +78,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
     ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
   });
-  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
+  const [scope, isExternal] = await Promise.all([getOperationsDataScope(surveyId), isExternalViewer()]);
 
   const [contactScheme, profileScheme] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
@@ -183,7 +187,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               : `응답자별 세션 트래킹 — ${total.toLocaleString('ko-KR')}건`}
           </p>
         </div>
-        {!isGuest && (
+        {!isExternal && (
           <Button asChild variant="outline">
             <Link href={`/admin/surveys/${surveyId}/operations/profiles/columns`}>
               컬럼 설정
@@ -224,7 +228,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               surveyId={surveyId}
               view={args.view}
               hasContacts={hasContacts}
-              isGuest={isGuest}
+              isGuest={isExternal}
               columnScheme={displayColumns}
               piiByTarget={piiByTarget}
             />

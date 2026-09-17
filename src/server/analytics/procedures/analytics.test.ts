@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
 vi.mock('../services/analytics', () => ({
   getResponseSummary: vi.fn(),
   getQuestionStatistics: vi.fn(),
@@ -10,13 +13,16 @@ vi.mock('../services/analytics', () => ({
 }));
 
 import * as svc from '../services/analytics';
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { analytics } from './analytics';
 
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com' },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'},
   };
 }
 
@@ -69,10 +75,39 @@ describe('analytics procedures', () => {
   it('인증 없으면 stats.survey 가 UNAUTHORIZED 로 막힌다', async () => {
     const client = createRouterClient(
       { analytics },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.analytics.stats.survey({ surveyId: 's1' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+});
+
+describe('analytics — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('stats·analyze 는 analytics.view 관문을 지난다', async () => {
+    vi.mocked(svc.getResponseSummary).mockResolvedValue({} as never);
+    vi.mocked(svc.getQuestionStatistics).mockResolvedValue({} as never);
+    vi.mocked(svc.analyzeSurveyById).mockResolvedValue({} as never);
+    const context = authedContext();
+    const client = createRouterClient({ analytics }, { context });
+
+    await client.analytics.stats.survey({ surveyId: 's1' });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, 's1', 'analytics.view');
+    await client.analytics.stats.question({ surveyId: 's1', questionId: 'q1' });
+    await client.analytics.analyze.survey({ surveyId: 's1' });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledTimes(3);
+  });
+
+  it('타 팀 설문 id 로 분석을 요청하면 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ analytics }, { context: authedContext() });
+    await expect(client.analytics.analyze.survey({ surveyId: 's1' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(svc.analyzeSurveyById).not.toHaveBeenCalled();
   });
 });

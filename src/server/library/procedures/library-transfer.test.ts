@@ -13,7 +13,7 @@ import * as svc from '../services/library-transfer';
 import { transfer } from './library-transfer';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 describe('library transfer procedures', () => {
@@ -48,7 +48,7 @@ describe('library transfer procedures', () => {
   it('인증 없으면 export가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { transfer },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.transfer.export()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });

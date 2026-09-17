@@ -2,7 +2,7 @@ import * as z from 'zod';
 
 import { type MailPreviewSample, MailPreviewSampleSchema } from '@/shared/contracts/mail-io';
 
-import { mailAttachmentSchema } from './schema';
+import { mailAttachmentSchema, optionalReplyToSchema } from './schema';
 
 // 미리보기 샘플 모양은 계약(@/shared/contracts/mail-io) 소관 — 여기서 다시 내보낸다.
 export { MailPreviewSampleSchema };
@@ -30,7 +30,9 @@ export const SendTestTemplateMailInput = z.object({
   bodyHtml: z.string(),
   fromName: z.string().min(1, '발신자 이름이 비어있습니다.'),
   fromLocal: z.string().min(1, '발신자 이메일 local 이 비어있습니다.'),
-  replyTo: z.string().email('Reply-To 이메일 형식이 올바르지 않습니다.'),
+  // 템플릿과 같은 계약이다 — 비우면 발송 시점 소유자로 해석한다(티켓 20). 테스트 발송만
+  // 명시 주소를 강제하면 「비워 둔 템플릿은 테스트 발송이 안 되는」 화면이 된다.
+  replyTo: optionalReplyToSchema,
   attachments: z.array(mailAttachmentSchema).default([]),
 });
 export type SendTestTemplateMailInput = z.infer<typeof SendTestTemplateMailInput>;

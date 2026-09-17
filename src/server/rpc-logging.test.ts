@@ -51,11 +51,14 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-function ctx(userId: string | null, headers?: Headers): ORPCContext {
+function ctx(
+  userId: string | null,
+  headers?: Headers,
+  userType: 'internal' | 'guest' | 'fieldwork' = 'internal',
+): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
-    user: userId ? ({ id: userId, email: 'x@y.z' } as never) : null,
+    user: userId ? ({ id: userId, email: 'x@y.z', userType } as never) : null,
     ...(headers ? { headers } : {}),
   };
 }
@@ -75,7 +78,6 @@ const testRouter = {
 
 describe('rpcLoggingMiddleware', () => {
   it('성공 시 rpc 경로·role·durationMs 를 info 1줄로 남긴다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     const client = createRouterClient(testRouter, { context: ctx('admin-1') });
     await expect(client.ping()).resolves.toBe('ok');
 
@@ -88,7 +90,6 @@ describe('rpcLoggingMiddleware', () => {
   });
 
   it('중첩 라우터는 점 구분 경로(contacts.list)로 기록하고 surveyId 만 추출한다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     const client = createRouterClient(testRouter, { context: ctx('admin-1') });
     await client.contacts.list({ surveyId: 'svy-1', attrs: { secret: 'pii' } });
 
@@ -109,23 +110,24 @@ describe('rpcLoggingMiddleware', () => {
     expect(fields['userId']).toBeUndefined();
   });
 
-  it('게스트 grant 보유자는 role=guest 로 기록한다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:svy-1');
-    const client = createRouterClient(testRouter, { context: ctx('guest-1') });
+  // 로그 role 의 출처가 티켓 21 에서 env 목록에서 계정 유형으로 바뀌었다 — 그 덕에
+  // 실사도 admin 으로 뭉개지지 않고 자기 이름으로 남는다.
+  it.each(['guest', 'fieldwork'] as const)('%s 계정은 같은 이름으로 기록한다', async (userType) => {
+    const client = createRouterClient(testRouter, {
+      context: ctx(`${userType}-1`, undefined, userType),
+    });
     await client.ping();
 
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
-    expect(fields).toMatchObject({ userId: 'guest-1', role: 'guest' });
+    expect(fields).toMatchObject({ userId: `${userType}-1`, role: userType });
   });
 
-  it('세션은 있으나 allowlist 밖 + grant 없음은 role=user 로 기록한다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+  it('내부 계정은 role=admin 으로 기록한다 - authed 판정과 같은 축', async () => {
     const client = createRouterClient(testRouter, { context: ctx('nobody') });
     await client.ping();
 
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
-    expect(fields).toMatchObject({ userId: 'nobody', role: 'user' });
+    expect(fields).toMatchObject({ userId: 'nobody', role: 'admin' });
   });
 
   it('인증 미들웨어 거부(UNAUTHORIZED)도 code 와 함께 error 로 기록한다', async () => {

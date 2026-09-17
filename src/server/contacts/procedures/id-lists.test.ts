@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+
 import * as svc from '../services/contact-id-lists';
 import { idLists } from './id-lists';
+
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
 
 vi.mock('../services/contact-id-lists', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/contact-id-lists')>();
@@ -15,7 +19,17 @@ vi.mock('../services/contact-id-lists', async (importOriginal) => {
 });
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return {
+    db: {} as never,
+    user: {
+      id: 'admin-1',
+      email: 'a@b.com',
+      name: '관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
 }
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
@@ -33,6 +47,11 @@ describe('contacts.idLists procedures', () => {
     const res = await client.idLists.create({ surveyId: SURVEY_ID, ids: [99, 292] });
 
     expect(res).toEqual({ id: '0f3a4b5c-1111-4222-8333-444455556666', count: 2 });
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'admin-1' }),
+      SURVEY_ID,
+      'contacts.view',
+    );
     expect(svc.createContactIdList).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,
       ids: [99, 292],

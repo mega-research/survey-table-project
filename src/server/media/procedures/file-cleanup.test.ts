@@ -16,13 +16,12 @@ import { fileCleanup } from './file-cleanup';
 function authedContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
-    user: { id: 'admin-1', email: 'a@b.com' },
+    user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'},
   };
 }
 
 function anonContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: null };
+  return { db: {} as never, user: null };
 }
 
 function candidateRow(overrides: Partial<R2DeletionCandidate> = {}): R2DeletionCandidate {
@@ -110,16 +109,13 @@ describe('media fileCleanup procedures', () => {
     expect(svc.listPending).not.toHaveBeenCalled();
   });
 
-  it('게스트 grant 보유자는 cancel이 FORBIDDEN으로 막힌다 (admin 전용 표면)', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+  it('게스트 계정은 cancel이 FORBIDDEN으로 막힌다 (admin 전용 표면)', async () => {
     const client = createRouterClient(
       { fileCleanup },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );

@@ -28,10 +28,10 @@ export async function prepareContactInsertScope(
     surveyId: string;
     requestedCount: number;
     requireEmptyTestScope: boolean;
-    isGuest: boolean;
+    isExternal: boolean;
   },
 ): Promise<PreparedContactInsertScope> {
-  const locked = await lockWriteScope(tx, input.surveyId, input.isGuest, {
+  const locked = await lockWriteScope(tx, input.surveyId, input.isExternal, {
     lock: 'update',
     columns: ['contactColumns', 'testContactColumns'],
   });

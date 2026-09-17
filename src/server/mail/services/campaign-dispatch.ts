@@ -6,15 +6,17 @@ import { createElement } from 'react';
 import { render } from '@react-email/render';
 import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import { contactAttempts, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { surveys } from '@/db/schema/surveys';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from './recipient-status-transition';
+import { resolveSendReplyTo } from './reply-to';
 import { renderForCampaignSend } from './render-for-send';
 import {
   RetryableCampaignSendError,
@@ -59,6 +61,26 @@ function canDispatchCampaign(campaign: CampaignDispatchState): boolean {
     && (campaign.status === 'queued' || campaign.status === 'sending');
 }
 
+/**
+ * 설문이 삭제됐는가 — 발송 직전 재검증 (티켓 17 후속).
+ *
+ * 삭제가 soft delete 로 바뀌면서(구 hard delete + CASCADE) 캠페인·수신자 행이 살아남는다.
+ * `deleteSurvey` 가 queued·sending 캠페인을 같은 트랜잭션에서 취소하므로 경합의 정본은
+ * campaign 행 잠금이고, 이 검사는 그 앞의 그물이다 — 취소 이전에 이미 삭제된 설문의
+ * 잔여 캠페인, 그리고 앞으로 캠페인을 세우는 새 경로가 취소를 비켜갈 때를 받는다.
+ *
+ * **surveys 행을 잠그지 않는다.** 잠그면 이 흐름의 잠금 순서가 「campaign → survey」가 되어
+ * 「survey → campaign」으로 잠그는 `deleteSurvey` 와 정확히 반대가 되고, 그 둘이 겹치면
+ * 데드락이다. 잠금 없는 읽기로 충분한 이유는 위와 같다 — 경합은 campaign 잠금이 막는다.
+ */
+async function isSurveyDeleted(dbc: DbOrTx, surveyId: string): Promise<boolean> {
+  const [row] = await dbc
+    .select({ deletedAt: surveys.deletedAt })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId));
+  return row === undefined || row.deletedAt !== null;
+}
+
 function recipientIdempotencyKey(campaignId: string, recipientId: string): string {
   return `campaign/${campaignId}/recipient/${recipientId}`;
 }
@@ -100,6 +122,7 @@ type DeliveryClaim =
 
 async function claimRecipientDelivery(
   campaignId: string,
+  surveyId: string,
   recipientId: string,
   now: Date,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
@@ -128,6 +151,8 @@ async function claimRecipientDelivery(
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
     if (!campaign || !canDispatchCampaign(campaign)) return { kind: 'cancelled' };
+    // 삭제된 설문의 초대 메일은 열리지 않는 링크다 — 보내고 과금까지 하면 안 된다.
+    if (await isSurveyDeleted(tx, surveyId)) return { kind: 'cancelled' };
 
     const [lockedContact] = recipientRef.contactTargetId === null
       ? []
@@ -326,12 +351,14 @@ async function claimRecipientDelivery(
 
 async function claimRecipientDeliveryWithWait(
   campaignId: string,
+  surveyId: string,
   recipientId: string,
   proposedPayload: MailRecipientSendPayloadSnapshot | null,
   negativeResultCodes: string[],
 ): Promise<DeliveryClaim> {
   let claim = await claimRecipientDelivery(
     campaignId,
+    surveyId,
     recipientId,
     new Date(),
     proposedPayload,
@@ -348,6 +375,7 @@ async function claimRecipientDeliveryWithWait(
     await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
     claim = await claimRecipientDelivery(
       campaignId,
+      surveyId,
       recipientId,
       new Date(),
       proposedPayload,
@@ -615,6 +643,8 @@ export async function prepareCampaignDispatch(
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
     if (!campaign) return null;
+    // 삭제된 설문이면 이 캠페인은 더 이상 발송 대상이 아니다 (티켓 17 후속).
+    if (await isSurveyDeleted(tx, campaign.surveyId)) return null;
     if (!canDispatchCampaign(campaign)) {
       const ambiguous = await tx
         .select({ id: mailRecipients.id })
@@ -704,6 +734,9 @@ export async function dispatchCampaignChunk(
   if (!campaign || !canDispatchCampaign(campaign)) {
     return { sent: 0, failed: 0, cancelled: true };
   }
+  if (await isSurveyDeleted(db, campaign.surveyId)) {
+    return { sent: 0, failed: 0, cancelled: true };
+  }
 
   // 발송 직전 재검증용 negative(모집단 제외) 결과코드 — 청크당 1회 로드.
   const { negative: negativeResultCodes } = await getResultCodeStatuses(campaign.surveyId);
@@ -767,9 +800,27 @@ export async function dispatchCampaignChunk(
   const from = fromDomain
     ? `${campaign.fromNameSnapshot} <${campaign.fromLocalSnapshot}@${fromDomain}>`
     : null;
-  const replyTo =
-    campaign.replyToSnapshot
-    ?? (fromDomain ? `${campaign.fromLocalSnapshot}@${fromDomain}` : null);
+  // 회신 주소만 스냅샷이 아니라 **발송 시점**에 해석된다(티켓 20) — 소유권이 이전되면
+  // 그 다음 발송분부터 새 소유자에게 답장이 간다. 발신 주소(from)·제목·본문은 종전대로
+  // 스냅샷 그대로다.
+  //
+  // 해석 단위는 **청크**다 — from·제목·본문·첨부와 같은 자리에서 한 번 정한다. 청크를
+  // 처리하는 도중에 소유권이 이전되면 그 청크의 나머지 수신자까지 이전 소유자 주소로
+  // 나가지만, 계약의 단위가 캠페인 발송이지 개별 수신자가 아니라 그것이 경계다. 수신자마다
+  // 다시 읽으면 왕복이 수신자 수만큼 늘고, 한 청크 안에서 회신 주소가 갈리는 편이 더 나쁘다.
+  //
+  // **새 payload 를 만들 수신자가 있을 때만 조회한다.** 전원이 이미 claim 돼 있는 재시도
+  // 청크는 sendPayloadSnapshot 의 값을 그대로 쓰므로 이 값을 쓰지 않는데, 그때도 조회하면
+  // 소유자 조회 한 번의 실패가 「값이 이미 정해진」 재시도를 통째로 막는다.
+  const needsFreshPayload = activeRows.some((row) => row.sendPayloadSnapshot === null);
+  const replyTo = needsFreshPayload
+    ? await resolveSendReplyTo({
+        surveyId: campaign.surveyId,
+        replyTo: campaign.replyToSnapshot,
+        fromLocal: campaign.fromLocalSnapshot,
+        fromDomain,
+      })
+    : null;
 
   const proposedSends = await Promise.all(
     activeRows.map(async (row): Promise<{
@@ -842,6 +893,7 @@ export async function dispatchCampaignChunk(
   for (const proposed of proposedSends) {
     const claim = await claimRecipientDeliveryWithWait(
       campaignId,
+      campaign.surveyId,
       proposed.recipientId,
       proposed.payload,
       negativeResultCodes,

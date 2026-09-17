@@ -13,7 +13,7 @@ vi.mock('@/db', () => ({
 }));
 
 // data-scope.server 가 끌고 오는 세션 판정은 이 helper 와 무관 — 모듈 로드만 막는다.
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn() }));
+vi.mock('@/lib/auth/external-viewer', () => ({ isExternalViewer: vi.fn() }));
 
 const dialect = new PgDialect();
 

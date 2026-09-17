@@ -56,6 +56,9 @@ export const RATE_LIMIT_PRESETS = {
   // 주의: RSC 가 서비스를 직접 호출하는 경로(/i/[code], /preview/[token])는 procedure 를
   // 타지 않아 이 버킷에 계측되지 않는다.
   'public-read': { tokens: 300, window: '1 m' },
+  // 로그인 등 인증 민감 경로(/api/auth). IP 당 10회/10분 — 크리덴셜 대입 억제.
+  // 클라이언트 축이 없는 IP 단일 버킷이므로 IP_WIDE_GROUPS 에 등재하지 않는다.
+  'auth-sensitive': { tokens: 10, window: '10 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitGroup = keyof typeof RATE_LIMIT_PRESETS;

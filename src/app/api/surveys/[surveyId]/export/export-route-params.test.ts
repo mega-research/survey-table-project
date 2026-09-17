@@ -18,12 +18,23 @@ const {
   getContactColumnSchemeMock: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    };
+  }),
+}));
+
+// 설문 관문은 통과로 둔다 — 이 파일의 관심사는 파라미터 전달이다. 관문 자체는 route-auth.test.ts 가 본다.
+vi.mock('@/server/rest-survey-access', () => ({
+  checkScopedSurveyCapabilityRest: vi.fn(async () => null),
 }));
 
 vi.mock('@/server/data-scope', async (importOriginal) => {

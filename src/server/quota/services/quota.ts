@@ -9,10 +9,16 @@ import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { normalizeQuotaConfig, type NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 
-/** 설문의 쿼터 플랜 조회. 미설정이면 null. */
+/**
+ * 설문의 쿼터 플랜 조회. 미설정이면 null.
+ *
+ * 삭제된 설문은 플랜이 없는 것과 같다(티켓 17). 이 함수는 pub 표면(quota.check)도 지나므로
+ * 관문에 기대지 않고 직접 건다 — 삭제 뒤 남아 있던 응답 세션이 쿼터 판정을 계속 받으면,
+ * 「응답을 못 받는 설문」이 마감 계산만 조용히 이어간다.
+ */
 export async function getQuotaConfig(surveyId: string): Promise<NormalizedQuotaConfig | null> {
   const row = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
+    where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
     columns: { quotaConfig: true },
   });
   // JSONB 드리프트 보정 — 소비처는 dimensions·cells·categories 를 배열로 순회한다.

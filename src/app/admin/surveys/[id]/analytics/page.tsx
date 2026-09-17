@@ -1,3 +1,5 @@
+import { cache } from 'react';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -8,17 +10,32 @@ import { ExportDataModal } from '@/features/analytics/export-data-modal';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AdminAnalyticsPageProps {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
+ * 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
+ *
+ * `/analytics/[surveyId]` 와 같은 이유로 **responses.view 도 요구한다** — 이 페이지도
+ * `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
+ * 직렬화한다. 분석 화면이 둘이라 한쪽만 조이면 다른 쪽이 그대로 뒷문이 된다.
+ */
+const assertAnalyticsPageAccess = cache(async (surveyId: string): Promise<void> => {
+  const viewer = await requireAdminPage();
+  await assertSurveyCapabilityPage(viewer, surveyId, 'analytics.view');
+  await assertSurveyCapabilityPage(viewer, surveyId, 'responses.view');
+});
+
 export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalyticsPageProps) {
   const { id } = await params;
 
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
-  await requireAdminPage();
+  await assertAnalyticsPageAccess(id);
 
   // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
   const [survey, responses, versions] = await Promise.all([
@@ -86,9 +103,11 @@ export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalytic
   );
 }
 
-// 메타데이터 생성
+// 메타데이터 생성 — 페이지와 같은 관문을 지난다. 여기서 새면 404 응답의 <title> 로
+// 타 팀 설문 제목이 실린다.
 export async function generateMetadata({ params }: AdminAnalyticsPageProps) {
   const { id } = await params;
+  await assertAnalyticsPageAccess(id);
   const survey = await getSurveyWithDetails(id);
 
   if (!survey) {

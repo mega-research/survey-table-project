@@ -4,7 +4,7 @@ import { lockWriteScope } from './data-scope';
 
 // lockWriteScope 는 주입된 executor(tx 또는 db)만 쓴다 — 전역 db 는 로드만 막는다.
 vi.mock('@/db', () => ({ db: {} }));
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn() }));
+vi.mock('@/lib/auth/external-viewer', () => ({ isExternalViewer: vi.fn() }));
 
 interface Captured {
   selection: Record<string, unknown> | null;

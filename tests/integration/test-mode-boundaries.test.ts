@@ -32,12 +32,23 @@ vi.mock('@/server/read-models/contacts', async (importOriginal) => {
   return { ...actual, getContactColumnScheme: vi.fn(async () => null) };
 });
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    if (!authState.user) throw new Error('인증이 필요합니다.');
+    return {
+      id: authState.user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+    };
+  }),
+}));
+
+// 설문 관문(티켓 11)은 통과로 둔다 — 이 파일의 관심사가 아니다. 관문 자체는
+// src/server/rest-survey-access.test.ts 와 export-route-auth.test.ts 가 본다.
+vi.mock('@/server/rest-survey-access', () => ({
+  checkScopedSurveyCapabilityRest: vi.fn(async () => null),
 }));
 
 vi.mock('@/db', () => ({
@@ -107,7 +118,6 @@ function expectTestOnly(where: unknown) {
 }
 
 beforeEach(() => {
-  delete process.env['ADMIN_USER_IDS'];
   authState.user = { id: 'admin' };
   scopeState.value = 'real';
   responseWhereArgs.length = 0;

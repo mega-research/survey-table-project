@@ -1,4 +1,5 @@
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { scoped } from '@/server/orpc';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   GetMailPreviewSampleInput,
@@ -12,8 +13,8 @@ import * as svc from '../services/preview';
 const sample = scoped
   .input(GetMailPreviewSampleInput)
   .output(GetMailPreviewSampleOutput)
-  .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+  .handler(async ({ context, input }) => {
+    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.view');
     return svc.getMailPreviewSample(input);
   });
 
@@ -25,8 +26,9 @@ const sample = scoped
 const testSend = scoped
   .input(SendTestTemplateMailInput)
   .output(SendTestTemplateMailOutput)
-  .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+  .handler(async ({ context, input }) => {
+    // 테스트 발송도 실제 메일이 나간다 — 열람(mail.view)이 아니라 발송 권한을 요구한다.
+    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
     return svc.sendTestTemplateMail(input);
   });
 

@@ -9,7 +9,8 @@ import {
   getSurveyById,
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -23,12 +24,16 @@ export const metadata = { title: '설문 보기' };
 
 export default async function SurveyPreviewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다.
+  // 게스트 grant 일치와 내부 계정 capability 판정을 한 관문으로 본다(티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'survey.view');
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 
-  const [preview, isGuest] = await Promise.all([
+  const [preview, isExternal] = await Promise.all([
     getSurveyForResponse({ surveyId }, { requirePublished: true }),
-    isGuestViewer(),
+    isExternalViewer(),
   ]);
 
   if (!preview) {
@@ -46,7 +51,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               {survey.previewToken && (
                 <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
-              {!isGuest && (
+              {!isExternal && (
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/admin/surveys/${surveyId}/edit`}>
                     <Pencil className="mr-2 h-4 w-4" />
@@ -93,7 +98,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               </Link>
             </Button>
             {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
-            {!isGuest && (
+            {!isExternal && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/admin/surveys/${surveyId}/edit`}>
                   <Pencil className="mr-2 h-4 w-4" />

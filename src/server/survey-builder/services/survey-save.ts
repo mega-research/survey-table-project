@@ -2,7 +2,12 @@ import 'server-only';
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import { db } from '@/db';
+import {
+  assertSurveyCapability,
+  SurveyAccessError,
+  type SurveyAccessUser,
+} from '@/server/survey-access';
+import { db, type DbTransaction } from '@/db';
 import {
   NewQuestion,
   NewQuestionGroup,
@@ -23,11 +28,13 @@ import type { Survey as SurveyType } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
-import type {
-  SaveResult,
-  SurveyDiffPayload,
-  SurveyDiffPayloadInput,
+import {
+  CrossSurveyRowError,
+  type SaveResult,
+  type SurveyDiffPayload,
+  type SurveyDiffPayloadInput,
 } from '../domain/survey-save';
+import { resolveNewSurveyOwnership } from './surveys';
 
 // 원본 interface SurveyDiffPayload 를 re-export(소비처 use-survey-sync 가 import type).
 export type { SurveyDiffPayload };
@@ -79,6 +86,86 @@ const addKeys = (set: Set<string>, value: unknown): void => {
  * duplicateSurvey 의 행 조립은 여기 합치지 않는다 — 그쪽은 stripOptionCodes 와
  * stripTableRowsData 를 걸지 않고 updatedAt 도 두지 않아 의미가 다르다.
  */
+/**
+ * payload 가 지목한 하위 행이 **이 설문 것인지** 확인한다 (Codex 리뷰).
+ *
+ * 질문·그룹은 전역 PK 라 `where id in (...)` 한 줄이면 남의 설문 행에도 닿는다. 저장 관문은
+ * 부모 surveyId 하나만 보므로, 이 확인이 없으면 편집 권한이 있는 설문의 payload 에 타 팀
+ * 질문 id 를 섞어 그 질문을 지우거나 내용을 덮어쓸 수 있다.
+ *
+ * 존재하지 않는 id 는 통과시킨다 — 새 행의 삽입이 정상 동선이다. 잠그는 이유는 확인과 쓰기
+ * 사이에 그 행이 다른 설문으로 옮겨가는 창을 닫기 위해서다(현재 그런 경로는 없지만, 확인의
+ * 근거가 잠기지 않은 값이면 확인이 아니다).
+ */
+async function assertQuestionsBelongToSurvey(
+  tx: DbTransaction,
+  ids: readonly string[],
+  surveyId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const rows = await tx
+    .select({ id: questions.id, surveyId: questions.surveyId })
+    .from(questions)
+    .where(inArray(questions.id, [...new Set(ids)]))
+    .for('update');
+  if (rows.some((row) => row.surveyId !== surveyId)) throw new CrossSurveyRowError('question');
+}
+
+async function assertGroupsBelongToSurvey(
+  tx: DbTransaction,
+  ids: readonly string[],
+  surveyId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const rows = await tx
+    .select({ id: questionGroups.id, surveyId: questionGroups.surveyId })
+    .from(questionGroups)
+    .where(inArray(questionGroups.id, [...new Set(ids)]))
+    .for('update');
+  if (rows.some((row) => row.surveyId !== surveyId)) throw new CrossSurveyRowError('group');
+}
+
+/**
+ * payload 가 **참조하는** 그룹이 이 설문 것인지 확인한다 (Codex 2차 리뷰).
+ *
+ * 위 두 함수는 upsert 되는 **행 자신의 id** 만 본다. 그런데 행이 들고 오는 부모 참조
+ * — `question.groupId` 와 `group.parentGroupId` — 는 그대로 쓰이고, DB FK 는 설문 경계를
+ * 모르는 전역 참조라 타 설문 그룹 id 를 그대로 받아준다. 그러면 내 설문의 질문이 남의 설문
+ * 그룹에 매달린 채 영속되고, 어느 화면으로도 고칠 수 없다(로더가 설문별로 그룹을 읽어 그
+ * 참조를 보여주지도 않는다).
+ *
+ * **없는 id 도 같은 사유로 접는다.** 갈라 두면 FK 오류(500)와 거부(FORBIDDEN)의 차이가
+ * 「그 그룹 id 가 존재하는가」를 알려주는 오라클이 된다 — 관문이 존재를 숨기려고 애쓰는
+ * 것과 같은 정보다.
+ *
+ * `knownIds` 는 같은 payload 가 새로 만드는 그룹이다. 그것들은 `surveyId` 를 명시해 쓰므로
+ * 정의상 이 설문 것이고, DB 에는 아직 없을 수 있어 조회로는 확인되지 않는다.
+ *
+ * 잠금이 `FOR SHARE` 인 것은 부모를 **읽기만** 하기 때문이다 — 같은 트랜잭션이 이미
+ * `FOR UPDATE` 로 잡은 행과도 충돌하지 않는다.
+ */
+const EMPTY_GROUP_IDS: ReadonlySet<string> = new Set();
+
+async function assertGroupRefsBelongToSurvey(
+  tx: DbTransaction,
+  refs: readonly (string | null | undefined)[],
+  surveyId: string,
+  knownIds: ReadonlySet<string>,
+): Promise<void> {
+  const ids = [...new Set(refs.filter((id): id is string => Boolean(id)))].filter(
+    (id) => !knownIds.has(id),
+  );
+  if (ids.length === 0) return;
+
+  const rows = await tx
+    .select({ id: questionGroups.id, surveyId: questionGroups.surveyId })
+    .from(questionGroups)
+    .where(inArray(questionGroups.id, ids))
+    .for('share');
+  const ownerBy = new Map(rows.map((row) => [row.id, row.surveyId]));
+  if (ids.some((id) => ownerBy.get(id) !== surveyId)) throw new CrossSurveyRowError('group');
+}
+
 function toQuestionRow(question: SurveyType['questions'][number], surveyId: string) {
   return ({
     id: question.id,
@@ -322,10 +409,30 @@ export async function saveSurveyDiff(
         .map((g) => g.id);
 
       if (groupIdsToRemove.length > 0) {
-        await tx.delete(questionGroups).where(inArray(questionGroups.id, groupIdsToRemove));
+        await tx
+          .delete(questionGroups)
+          .where(
+            and(
+              inArray(questionGroups.id, groupIdsToRemove),
+              eq(questionGroups.surveyId, surveyId),
+            ),
+          );
       }
 
       if (preservedGroups.length > 0) {
+        // 전역 PK upsert 라 타 설문 그룹 id 가 섞이면 그 그룹의 내용이 덮어써진다.
+        await assertGroupsBelongToSurvey(
+          tx,
+          preservedGroups.map((g) => g.id),
+          surveyId,
+        );
+        // 부모 참조도 같은 경계를 진다 — 쓰기 **전에** 본다(FK 오류로 갈리면 존재 오라클이 된다).
+        await assertGroupRefsBelongToSurvey(
+          tx,
+          preservedGroups.map((g) => g.parentGroupId),
+          surveyId,
+          newGroupIds,
+        );
         const groupValues = preservedGroups.map((group) => ({
           id: group.id,
           surveyId,
@@ -368,14 +475,22 @@ export async function saveSurveyDiff(
       // (survey_versions, 불변·응답 페이지 서빙 중)·복제 설문·보관함(saved_questions/
       // saved_cells)이 같은 URL·키를 참조할 수 있어 무확인 삭제가 그쪽 콘텐츠를 파괴한다.
       if (questionChanges.deleted.length > 0) {
+        // 삭제 id 는 payload 가 그대로 준 값이다 — 이 설문 것인지 먼저 묻는다.
+        await assertQuestionsBelongToSurvey(tx, questionChanges.deleted, surveyId);
         // 삭제 전 행 콘텐츠를 읽어 diff 의 old 측에 넣는다 — 빠진 키는 큐 후보로만
         // 등록되고, 집행 시 전역 재확인이 공유 참조를 거른다.
         const deletedRows = await tx
           .select()
           .from(questions)
-          .where(inArray(questions.id, questionChanges.deleted));
+          .where(
+            and(inArray(questions.id, questionChanges.deleted), eq(questions.surveyId, surveyId)),
+          );
         addKeys(oldContentKeys, deletedRows);
-        await tx.delete(questions).where(inArray(questions.id, questionChanges.deleted));
+        await tx
+          .delete(questions)
+          .where(
+            and(inArray(questions.id, questionChanges.deleted), eq(questions.surveyId, surveyId)),
+          );
       }
 
       // 3b. Upsert (추가 + 수정)
@@ -387,14 +502,33 @@ export async function saveSurveyDiff(
           await promoteSurveyImages(questionChanges.upserted),
         );
 
+        // 전역 PK upsert 라 타 설문 질문 id 가 섞이면 그 질문의 내용이 덮어써진다.
+        await assertQuestionsBelongToSurvey(
+          tx,
+          promotedQuestions.map((q) => q.id),
+          surveyId,
+        );
+        // 질문이 매달릴 그룹도 이 설문 것이어야 한다 — FK 는 설문 경계를 모른다.
+        // 이 시점에는 payload 의 새 그룹이 위에서 이미 삽입돼 있으므로 조회만으로 충분하다
+        // (그룹 블록이 아예 없는 diff 라면 참조 대상은 원래부터 DB 에 있던 그룹이다).
+        await assertGroupRefsBelongToSurvey(
+          tx,
+          promotedQuestions.map((q) => q.groupId),
+          surveyId,
+          EMPTY_GROUP_IDS,
+        );
+
         // 업서트 대상의 이전 행을 읽어 old 측에, 새 콘텐츠를 new 측에 넣는다
         const oldUpsertedRows = await tx
           .select()
           .from(questions)
           .where(
-            inArray(
-              questions.id,
-              promotedQuestions.map((q) => q.id),
+            and(
+              inArray(
+                questions.id,
+                promotedQuestions.map((q) => q.id),
+              ),
+              eq(questions.surveyId, surveyId),
             ),
           );
         addKeys(oldContentKeys, oldUpsertedRows);
@@ -420,11 +554,17 @@ export async function saveSurveyDiff(
           .map((id, index) => ({ id, order: index + 1 }))
           .filter(({ id }) => !upsertedIds.has(id)); // upsert된 질문은 이미 order 포함
 
+        // 순서만 바꾸는 경로도 전역 PK 였다 — 타 설문 질문의 order 가 흔들렸다.
+        await assertQuestionsBelongToSurvey(
+          tx,
+          orderUpdates.map(({ id }) => id),
+          surveyId,
+        );
         for (const { id, order } of orderUpdates) {
           await tx
             .update(questions)
             .set({ order, updatedAt: new Date() })
-            .where(eq(questions.id, id));
+            .where(and(eq(questions.id, id), eq(questions.surveyId, surveyId)));
         }
       }
     }
@@ -441,10 +581,23 @@ export async function saveSurveyDiff(
 }
 
 // ========================
-// 전체 설문 저장 (설문 + 그룹 + 질문 일괄) — 신규 생성 전용
+// 전체 설문 저장 (설문 + 그룹 + 질문 일괄)
 // ========================
 
+/**
+ * 신규 생성(create 페이지)과 기존 갱신이 한 입구로 들어온다 — 모드 분기가 관문이다(티켓 09).
+ *
+ * 존재 확인과 쓰기를 같은 트랜잭션에 둔다. procedure 층에서 "행이 없으면 생성 모드" 를
+ * 미리 정하면 판정과 쓰기 사이에 끼어든 생성이 남의 행 덮어쓰기가 되고, 삭제된 설문
+ * id 로는 tombstone 이 조용히 되살아난다.
+ *
+ * - 기존 행: survey.edit capability 요구. 삭제된 행은 loadSurveyCapabilities 가 없는
+ *   것으로 보므로 not_found — 저장 경로로는 tombstone 을 만질 수 없다.
+ * - 새 행: 생성이므로 소유·배치를 스탬프한다. 범위는 요청 쿠키(work_scope)를 서버가
+ *   다시 해석하며, 시스템 전체 보기·팀 미배치는 SurveyOwnershipRequiredError 로 막힌다.
+ */
 export async function saveSurveyWithDetails(
+  actor: SurveyAccessUser,
   surveyData: SurveyType,
 ): Promise<SaveResult> {
   // slug 정규화: '' -> null (UNIQUE 컬럼에 빈 문자열을 쓰면 두 번째부터 충돌)
@@ -466,6 +619,15 @@ export async function saveSurveyWithDetails(
       where: eq(surveys.id, surveyData.id),
     });
     const surveyId = surveyData.id;
+
+    // 관문 — 기존 행이면 편집 권한을 묻는다. 삭제된 행은 capability 로더도 없는 것으로
+    // 보지만(로더의 deletedAt 필터), 티켓 17 이 복구 경로를 열며 그 필터를 손대도 저장
+    // 경로가 tombstone 을 되살리지 않도록 여기서도 명시적으로 거른다.
+    if (existingSurvey) {
+      if (existingSurvey.deletedAt !== null) throw new SurveyAccessError('not_found');
+      await assertSurveyCapability(actor, surveyId, 'survey.edit');
+    }
+
     const promotedResponseHeader = await promoteSurveyResponseHeader(
       surveyData.settings.responseHeader,
     );
@@ -531,8 +693,13 @@ export async function saveSurveyWithDetails(
         .set(updateSet)
         .where(eq(surveys.id, surveyData.id));
     } else {
+      // 생성 모드 — 소유·배치 스탬프는 다른 생성 경로(ensure·create·duplicate)와 같은
+      // 판정을 지난다. 범위는 요청 쿠키를 서버가 재해석한다(티켓 07·09).
+      // 이미 트랜잭션 안이라 tx 를 넘긴다 — 팀 행 FOR SHARE 가 그때만 해산을 막는다.
+      const ownership = await resolveNewSurveyOwnership(actor, undefined, tx);
       // INSERT 시점은 새 설문이라 lookups 가 비어있는 게 정상. surveyData.lookups 가 있으면 그대로, 없으면 빈 배열.
       await tx.insert(surveys).values({
+        ...ownership,
         id: surveyData.id,
         title: surveyData.title,
         description: surveyData.description,
@@ -599,8 +766,30 @@ export async function saveSurveyWithDetails(
         .map((g) => g.id);
 
       if (groupIdsToRemove.length > 0) {
-        await tx.delete(questionGroups).where(inArray(questionGroups.id, groupIdsToRemove));
+        await tx
+          .delete(questionGroups)
+          .where(
+            and(
+              inArray(questionGroups.id, groupIdsToRemove),
+              eq(questionGroups.surveyId, surveyId),
+            ),
+          );
       }
+
+      // 삭제 대상은 이 설문에서 읽은 것이라 안전하지만, upsert 는 전역 PK 라 payload 가
+      // 들고 온 타 설문 그룹 id 가 그대로 그 그룹을 덮어쓴다.
+      await assertGroupsBelongToSurvey(
+        tx,
+        surveyData.groups.map((g) => g.id),
+        surveyId,
+      );
+      // 부모 참조도 같은 경계를 진다 — 쓰기 **전에** 본다(FK 오류로 갈리면 존재 오라클이 된다).
+      await assertGroupRefsBelongToSurvey(
+        tx,
+        surveyData.groups.map((g) => g.parentGroupId),
+        surveyId,
+        newGroupIds,
+      );
 
       const groupValues = surveyData.groups.map((group) => ({
         id: group.id,
@@ -654,8 +843,27 @@ export async function saveSurveyWithDetails(
 
       if (questionIdsToRemove.length > 0) {
         // 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다(사유는 saveSurveyDiff 3a 참조).
-        await tx.delete(questions).where(inArray(questions.id, questionIdsToRemove));
+        await tx
+          .delete(questions)
+          .where(
+            and(inArray(questions.id, questionIdsToRemove), eq(questions.surveyId, surveyId)),
+          );
       }
+
+      // upsert 는 전역 PK 라 타 설문 질문 id 가 섞이면 그 질문의 내용이 덮어써진다.
+      await assertQuestionsBelongToSurvey(
+        tx,
+        surveyData.questions.map((q) => q.id),
+        surveyId,
+      );
+      // 질문이 매달릴 그룹도 이 설문 것이어야 한다 — 위에서 payload 그룹을 이미 삽입했으므로
+      // 조회만으로 충분하다.
+      await assertGroupRefsBelongToSurvey(
+        tx,
+        surveyData.questions.map((q) => q.groupId),
+        surveyId,
+        EMPTY_GROUP_IDS,
+      );
 
       if (surveyData.questions.length > 0) {
         // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)

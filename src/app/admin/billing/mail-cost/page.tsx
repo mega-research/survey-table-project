@@ -10,12 +10,16 @@ import { CycleSelector } from '@/features/operations/mail-cost/cycle-selector';
 import { CycleSummaryTable } from '@/features/operations/mail-cost/cycle-summary-table';
 import { Card } from '@/components/ui/card';
 import { computeCycleBreakdown } from '@/server/mail/services/billing-cycle-summary';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface Props {
   searchParams: Promise<{ cycle?: string }>;
 }
 
 export default async function GlobalMailCostPage({ searchParams }: Props) {
+  // 게스트 차단 화면 — admin 레이아웃의 경로 가드는 소프트 내비게이션에서 재실행되지 않으므로
+  // 페이지가 스스로 막는다(페이지는 내비게이션마다 반드시 다시 렌더된다).
+  await requireAdminPage();
   const { cycle: cycleKey } = await searchParams;
   const { periods, usingFallbackPeriod, cycles } = await computeCycleBreakdown();
 

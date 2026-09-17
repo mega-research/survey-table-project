@@ -5,10 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
-import { getCurrentUser } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { allowAdminOnly, guardUploadRoute } from '@/lib/upload/route-guard';
 import { readPdfPageCount } from '@/server/survey-document/services/pdf-page-count';
 import { TMP_SURVEY_DOCUMENT_PREFIX } from '@/server/survey-document/services/document-key';
 import { MIN_FILE_BYTES, validateFilename } from '@/lib/upload/attachment-policy';
@@ -37,19 +35,11 @@ function looksLikePdf(buf: Buffer): boolean {
  * 쪽 수는 여기서 파일을 열어 읽는다 — 클라이언트가 보낸 값을 믿지 않는다.
  */
 async function handleSurveyDocumentUpload(request: NextRequest, ctx: RouteLogContext) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-  ctx.bind({
-    userId: user.id,
-    role: isGuestUser(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
-  });
-  // 게스트도 자기 설문 빌더에서 조사표를 올린다 — image 라우트와 동일 정책.
-  // 설문 일치는 attach 프로시저의 assertSurveyAccess 가 강제한다.
-  if (!isAdminOrGuestGrantHolder(user.id)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  // 조사표는 빌더 오서링이라 내부 계정 전용이다. 설문 capability 는 여기서 묻지 않는다 —
+  // 업로드는 tmp 네임스페이스에 갇히고, 설문에 닿는 attach 프로시저가 survey.edit 을 진다
+  // (route-guard 의 업로드 면제 원칙).
+  const guard = await guardUploadRoute(ctx, allowAdminOnly);
+  if (!guard.ok) return guard.response;
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {

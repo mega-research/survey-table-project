@@ -14,7 +14,7 @@ import * as svc from '../services/saved-lookups';
 import { savedLookups } from './saved-lookups';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 describe('savedLookups procedures', () => {
@@ -46,7 +46,7 @@ describe('savedLookups procedures', () => {
   it('인증 없으면 list가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { savedLookups },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(client.savedLookups.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });

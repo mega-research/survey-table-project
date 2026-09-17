@@ -4,6 +4,103 @@
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
 import type { SurveyAnchorSnapshot } from './survey-document';
 
+import type { SurveyAssignmentStatus, SurveyVisibility, WorkScope } from './workspace';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// surveys.status — 설문 수명 상태 (컬럼 어휘)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 'closed' 는 미구현 어휘다 — 쓰는 경로가 없고 프로덕션에도 0건이다(조사 종료는 endDate·
+// isPaused 로 한다). 목록 상태 칩(.pen FLOW 6)이 세 값을 다 그리므로 어휘에는 남긴다.
+
+export const surveyStatusValues = ['draft', 'published', 'closed'] as const;
+export type SurveyStatus = (typeof surveyStatusValues)[number];
+
+/** DB text 컬럼 값을 어휘로 접는다 — 모르는 값은 draft 로(로더 정규화 관례, 캐스트 금지). */
+export function normalizeSurveyStatus(value: string): SurveyStatus {
+  return value === 'published' || value === 'closed' ? value : 'draft';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 목록 (surveyBuilder.read.list) — 티켓 07 도입, 티켓 08 확장
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
+ *
+ * owner 두 필드는 화면 편의다 — 카드의 「작성자」 표기와 상세 검색 소유자 필터,
+ * 그리고 수정·삭제 버튼의 노출 근사(canEditSurveyCard)에 쓴다. 실제 판정은 언제나
+ * 서버 capability 엔진이 한다(티켓 07).
+ */
+export interface SurveyListItem {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string | null;
+  privateToken: string | null;
+  responseCount: number;
+  completedResponseCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  /** 마감일 — 상세 검색 기간 필터의 「마감일」 기준. */
+  endDate: Date | null;
+  isPublic: boolean;
+  status: SurveyStatus;
+  /** 소속 팀. 배치 대기 설문은 null 이다(티켓 07). */
+  teamId: string | null;
+  teamName: string | null;
+  visibility: SurveyVisibility;
+  assignmentStatus: SurveyAssignmentStatus;
+  /** 소유자. 0116 2단계 배포 중이라 옛 설문은 null 일 수 있다. */
+  ownerUserId: string | null;
+  ownerName: string | null;
+  /**
+   * 소속 그룹 (null = 미분류, 티켓 12).
+   *
+   * 그룹은 접근이 아니라 정리용 묶음이라 목록 조회 조건이 아니다 — 화면이 이 값으로
+   * 그룹 화면(`?group=<id>`)을 좁히고 카드 케밥의 현재 그룹을 표시한다. 소속 팀이 다른
+   * 그룹 id 는 서버가 null 로 접어 보낸다.
+   */
+  surveyGroupId: string | null;
+  /**
+   * 삭제 시각 — **삭제됨 목록에서만** 채워진다(티켓 17).
+   *
+   * 일반 목록의 행은 언제나 null 이다(조회 조건이 `deleted_at IS NULL`). 그래서 화면은
+   * 이 값 하나로 「지금 휴지통을 보고 있는가」를 알 수 있고, 카드가 복구 액션으로 갈린다.
+   */
+  deletedAt: Date | null;
+  /**
+   * 내가 이 설문의 참여자인가 (티켓 18).
+   *
+   * 카드의 버튼 노출 근사가 본다 — 참여자는 `responses.view` 를 갖지만 팀원은 못 가지므로,
+   * 이 값이 없으면 초대받은 사람에게 「분석」이 잠긴 채로 보인다. 판정은 언제나 서버가 한다.
+   */
+  isParticipant: boolean;
+}
+
+/**
+ * 목록 응답 — 설문뿐 아니라 **어느 범위로 해석됐는지**와 고를 수 있는 범위를 함께 준다.
+ *
+ * 화면이 요청한 범위와 서버가 해석한 범위는 다를 수 있다(해산된 팀 쿠키 등). 해석 결과를
+ * 돌려주지 않으면 스위처가 실제로 보고 있는 것과 다른 팀을 가리킨 채로 남는다.
+ */
+export interface SurveyListResult {
+  scope: WorkScope;
+  /** 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀. */
+  teams: { id: string; name: string }[];
+  /** 「메가리서치」(시스템 전체 보기)를 고를 수 있는가. */
+  canSeeSystemScope: boolean;
+  surveys: SurveyListItem[];
+  /**
+   * 삭제된 설문 건수 — **null 이면 이 화면에 휴지통이 없다**(티켓 17).
+   *
+   * 숫자가 아니라 null 로 부재를 말하는 것은, 화면이 「0건짜리 휴지통 칩」과 「휴지통을 볼 수
+   * 없는 사람」을 갈라야 하기 때문이다. 채워지는 것은 슈퍼어드민의 시스템 전체 보기뿐이다 —
+   * 삭제된 설문은 팀 경계로 좁힐 수 없어(해산된 팀의 것일 수도 있다) 팀 화면에 둘 자리가 없다.
+   */
+  deletedCount: number | null;
+}
+
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
  *

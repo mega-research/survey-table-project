@@ -3,11 +3,17 @@ import { NextRequest } from 'next/server';
 
 vi.mock('@/db', () => ({ db: {} }));
 vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }));
-// 통 mock 은 import 체인 확장에 깨지므로 원본 spread 위에 필요한 것만 덮는다.
-vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/auth/guest-grants')>()),
-  canAccessSurvey: vi.fn(),
-}));
+// 코어 capability 판정만 대체한다 — 어댑터(rest-survey-access)는 실물이 돌아
+// 사유→HTTP 매핑(404 존재 은닉 / 403)까지 관통 검증된다 (티켓 11).
+vi.mock('@/server/survey-access', () => {
+  class SurveyAccessError extends Error {
+    constructor(public readonly reason: 'not_found' | 'forbidden') {
+      super(reason);
+      this.name = 'SurveyAccessError';
+    }
+  }
+  return { SurveyAccessError, assertSurveyCapability: vi.fn() };
+});
 vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
@@ -23,7 +29,7 @@ vi.mock('@/server/operations/services/contacts-export', async (importOriginal) =
 });
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey } from '@/lib/auth/guest-grants';
+import { SurveyAccessError, assertSurveyCapability } from '@/server/survey-access';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import {
   getContactColumnScheme,
@@ -50,7 +56,7 @@ const params = { params: Promise.resolve({ surveyId: 's1' }) };
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireAuth).mockResolvedValue({ id: 'u1' } as never);
-  vi.mocked(canAccessSurvey).mockReturnValue(true);
+  vi.mocked(assertSurveyCapability).mockResolvedValue(undefined);
   vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
   vi.mocked(getContactColumnScheme).mockResolvedValue(SCHEME);
   vi.mocked(listContactsForExport).mockResolvedValue([
@@ -75,10 +81,23 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
     expect(res.status).toBe(401);
   });
 
-  it('접근 권한 없으면 403', async () => {
-    vi.mocked(canAccessSurvey).mockReturnValue(false);
+  it('보이는 설문의 export 권한만 없으면 403', async () => {
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('forbidden'));
     const res = await GET(makeRequest('?cols=system.resid'), params);
     expect(res.status).toBe(403);
+  });
+
+  it('타 팀 설문(볼 수 없음)이면 404 — 존재 은닉, 데이터 조회 미도달 (티켓 11)', async () => {
+    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('not_found'));
+    const res = await GET(makeRequest('?cols=system.resid'), params);
+    expect(res.status).toBe(404);
+    expect(assertSurveyCapability).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'u1' }),
+      's1',
+      'export.download',
+    );
+    expect(loadOperationsDataScope).not.toHaveBeenCalled();
+    expect(listContactsForExport).not.toHaveBeenCalled();
   });
 
   it('유효 컬럼 0개면 400', async () => {

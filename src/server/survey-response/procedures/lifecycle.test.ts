@@ -37,7 +37,6 @@ const TRUSTED_HEADERS = new Headers({ 'x-real-ip': '203.0.113.7' });
 function anonContext(headers: Headers = TRUSTED_HEADERS): ORPCContext {
   return {
     db: {} as never,
-    supabase: { tag: 'anon-supabase' } as never,
     user: null,
     headers,
   };

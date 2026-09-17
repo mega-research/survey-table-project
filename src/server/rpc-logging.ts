@@ -1,10 +1,9 @@
 import { ORPCError, os } from '@orpc/server';
 import * as Sentry from '@sentry/nextjs';
 
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { isGuestUser } from '@/lib/auth/guest-grants';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
+import { logRoleForUserType, type UserType } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
@@ -22,21 +21,14 @@ import { isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
  */
 
 /**
- * 로그용 role 판정 — 접근제어와 같은 헬퍼(guest-grants/admin-allowlist)를 재사용한다.
+ * 로그용 role 판정 — **계정 유형**이 곧 역할이다 (티켓 21).
  *
- * grant-first: 게스트 grant 보유자는 항상 guest. 그 외 allowlist 통과는 admin
- * (ADMIN_USER_IDS 미설정 fail-open 포함 — 접근제어 판정과 동일하게 기록한다).
- * 둘 다 아니면 user (세션은 있으나 admin 표면 권한이 없는 계정 — pub 표면에서 관측 가능).
- * 비인증은 anonymous.
- *
- * 향후 superadmin/admin/user/guest RBAC 확장 시 이 함수만 교체한다 — 소비처는
- * 열린 string 으로 취급 (LogContext.role 참조).
+ * 예전에는 env grant 목록(guest-grants)을 다시 읽어 게스트를 가렸다. 계정 모델로 바뀌면서
+ * 그 출처가 세션 자신이 됐고, 어휘는 `logRoleForUserType` 하나가 소유한다(업로드 REST
+ * 가드와 공유 — 표면마다 다른 이름으로 남으면 로그 분석이 갈린다). 비인증만 여기서 정한다.
  */
-function resolveLogRole(userId: string | undefined): string {
-  if (!userId) return 'anonymous';
-  if (isGuestUser(userId)) return 'guest';
-  if (isAdminUserAllowed(userId)) return 'admin';
-  return 'user';
+function resolveLogRole(user: { userType: UserType } | null | undefined): string {
+  return user ? logRoleForUserType(user.userType) : 'anonymous';
 }
 
 /**
@@ -61,7 +53,7 @@ export const rpcLoggingMiddleware = os
     const fields = {
       rpc: path.join('.'),
       userId: context.user?.id,
-      role: resolveLogRole(context.user?.id),
+      role: resolveLogRole(context.user),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
       surveyId: extractSurveyIdOrUndefined(input),
     };

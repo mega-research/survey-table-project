@@ -1,13 +1,8 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import {
-  canAccessSurvey,
-  isAdminOrGuestGrantHolder,
-  isGuestUser,
-} from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
+import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
+import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { rpcLoggingMiddleware } from './rpc-logging';
@@ -77,55 +72,86 @@ export function withRateLimit(group: RateLimitGroup) {
 }
 
 /**
- * 관리자 베이스 — supabase 세션 필수 + allowlist 런타임 가드.
+ * 세션·계정 상태 공통 가드 — authed/scoped 가 함께 쓴다.
+ * 미인증은 UNAUTHORIZED, 비활성 계정은 FORBIDDEN. 통과하면 non-null 로 좁혀진다.
+ */
+function requireActiveUser(user: ORPCContext['user']): NonNullable<ORPCContext['user']> {
+  if (!user) {
+    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
+  }
+  if (!isActiveUser(user.status)) {
+    throw new ORPCError('FORBIDDEN', { message: '활성 계정만 접근할 수 있습니다.' });
+  }
+  return user;
+}
+
+/**
+ * 관리자 베이스 — Better Auth 세션 필수 + 계정 상태·유형 가드.
  *
  * 1) context.user non-null 검사(미인증이면 UNAUTHORIZED).
- * 2) grant-first: 게스트 grant 보유자는 항상 게스트 — allowlist fail-open 여부와
- *    무관하게 admin 전용 표면에서 거부한다(FORBIDDEN). 게스트 허용 표면은 scoped 담당.
- * 3) ADMIN_USER_IDS allowlist 검사(미포함이면 FORBIDDEN).
- *    allowlist 미설정이면 fail-open(통과) — isAdminUserAllowed 참조.
+ * 2) status === 'active' 검사 — 비활성 계정(suspended/departed 등)은 FORBIDDEN.
+ *    세션 발급 자체를 lib/auth/server.ts 훅이 막지만, 발급 뒤 상태가 바뀐 세션도
+ *    있으므로 요청 시점에 다시 본다.
+ * 3) userType === 'internal' 검사 — guest/fieldwork 계정은 내부 표면 전체에서 거부한다.
+ *    각자의 콘솔(티켓 22·25)은 scoped 등 자기 가드로 열린다. 유형별 라우팅은 티켓 05.
+ *
+ * 게스트 판정이 여기서 한 줄 사라진 것이 티켓 21 의 자국이다 — 예전에는 env grant 보유자를
+ * userId 로 따로 걸렀다. 지금은 계정 유형이 곧 게스트라 위의 3)이 그 일을 함께 한다.
  *
  * 통과하면 context.user가 non-null로 좁혀진다.
  */
 export const authed = base.use(({ context, next }) => {
-  if (!context.user) {
-    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
-  }
-  if (isGuestUser(context.user.id)) {
+  const user = requireActiveUser(context.user);
+  if (!isInternalUser(user.userType)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
-  if (!isAdminUserAllowed(context.user.id)) {
-    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
+  return next({ context: { user } });
+});
+
+/**
+ * 슈퍼어드민 베이스 — authed(세션 + active + 내부 계정) + isSuperadmin.
+ *
+ * 전역 관리 표면(사용자 관리·계정 상태 전이·실사 업체 관리) 전용이다. 슈퍼어드민이
+ * 아닌 내부 계정은 FORBIDDEN — 권한 없음과 존재 여부를 구분하지 않는다(authed 와 같은 코드).
+ * authed 파생이라 게스트 차단·비활성 계정 차단은 한 번만 쓰여 있다.
+ */
+export const superadmin = authed.use(({ context, next }) => {
+  if (!context.user.isSuperadmin) {
+    throw new ORPCError('FORBIDDEN', { message: '슈퍼어드민만 접근할 수 있습니다.' });
   }
   return next({ context: { user: context.user } });
 });
 
 /**
- * 설문 스코프 베이스 — 세션 필수 + (admin allowlist ∨ 게스트 grant 보유).
+ * 자기 계정 베이스 — 세션 + active. **계정 유형을 보지 않는다.**
  *
- * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
- * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
- * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
- * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
- * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
+ * 프로필처럼 "누구든 자기 것만 만지는" 표면 전용이다. authed 는 내부 전용이라 게스트·실사가
+ * 자기 이름·비밀번호조차 바꿀 수 없고, scoped 는 설문 스코프를 강제하는 자리라 surveyId 가
+ * 없는 이 표면에는 맞지 않는다.
  *
- * grant-first: grant 보유자는 admin allowlist 검사 없이 통과시킨다. 이후
- * assertSurveyAccess 가 설문 일치를 강제하므로 allowlist fail-open 여부와
- * 무관하게 게스트는 자기 설문 밖으로 나갈 수 없어 안전하다.
+ * 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고
+ * context.user.id 를 쓸 것. 남의 계정을 지목할 수 있는 표면은 superadmin 소관이다(티켓 04).
  */
-export const scoped = base.use(({ context, next }) => {
-  if (!context.user) {
-    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
-  }
-  if (!isAdminOrGuestGrantHolder(context.user.id)) {
-    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
-  }
-  return next({ context: { user: context.user } });
+export const account = base.use(({ context, next }) => {
+  return next({ context: { user: requireActiveUser(context.user) } });
 });
 
-/** 설문 접근 강제 — admin 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
-export function assertSurveyAccess(userId: string, surveyId: string): void {
-  if (!canAccessSurvey(userId, surveyId)) {
-    throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
-  }
-}
+/**
+ * 설문 스코프 베이스 — 세션 + active 계정. 게스트도 통과한다.
+ *
+ * 지금은 인증 가드가 account 와 글자까지 같지만 **별개의 베이스로 둔다**. 두 베이스가 지는
+ * 계약이 다르기 때문이다 — 이쪽은 "설문 일치를 handler 가 강제한다", 저쪽은 "자기 것만
+ * 만진다". 별칭으로 묶으면 한쪽을 조일 때(예: account 에 자기 id 강제) 다른 쪽 전 표면이
+ * 조용히 따라 바뀐다.
+ *
+ * 이 베이스를 쓰는 procedure 는 반드시 handler 첫 줄에서
+ * assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<capability>')
+ * (server/rpc-survey-access.ts)를 호출해 설문 접근을 강제해야 한다 — env grant 게스트는
+ * grant 일치로, 내부 계정은 capability 로 판정한다(티켓 10). 유일한 예외는 입력에
+ * surveyId 가 없는 media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존.
+ * 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
+ */
+export const scoped = base.use(({ context, next }) => {
+  return next({ context: { user: requireActiveUser(context.user) } });
+});
+

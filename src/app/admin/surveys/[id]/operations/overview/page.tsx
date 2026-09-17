@@ -19,9 +19,11 @@ import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
+import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.
@@ -51,22 +53,6 @@ interface OperationsOverviewPageProps {
 }
 
 /**
- * KST(Asia/Seoul) 기준 오늘 일자를 'YYYY-MM-DD' 로 반환.
- * `availableDates` 가 비어 있는 hour 모드 진입 시 fallback 으로 사용한다.
- */
-function todayKst(): string {
-  const now = new Date();
-  // ko-KR 로케일은 'YYYY. MM. DD.' 형태로 반환되므로 정규화해서 'YYYY-MM-DD' 로 만든다.
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(now); // en-CA → 'YYYY-MM-DD'
-}
-
-/**
  * 현황 콘솔 — Fieldwork report 진입 페이지.
  *
  * 슬라이스 1 의 7개 위젯을 모두 마운트한다 (A1 KPI → A2 일자별 차트 →
@@ -84,18 +70,21 @@ export default async function OperationsOverviewPage({
   searchParams,
 }: OperationsOverviewPageProps) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'operations.view');
   const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = await searchParams;
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
+  const [scope, isExternal] = await Promise.all([getOperationsDataScope(surveyId), isExternalViewer()]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate =
-    mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
+    mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
     await Promise.all([
@@ -120,7 +109,7 @@ export default async function OperationsOverviewPage({
           </p>
         </div>
         {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트에게는 숨김 */}
-        {!isGuest && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
+        {!isExternal && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
       </div>
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />

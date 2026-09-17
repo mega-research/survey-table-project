@@ -95,8 +95,10 @@ let claimIndex = 0;
 
 vi.mock('@/db', () => {
   const db = {
-    select: vi.fn(() => {
-      const idx = selectState.call++;
+    select: vi.fn((selection?: Record<string, unknown>) => {
+      // 설문 삭제 재검증 조회 — 호출 순서 분기에 끼지 않게 먼저 가른다 (티켓 17 후속).
+      const isSurveyProbe = Object.keys(selection ?? {}).join() === 'deletedAt';
+      const idx = isSurveyProbe ? -1 : selectState.call++;
       return {
         from() {
           return this;
@@ -108,6 +110,7 @@ vi.mock('@/db', () => {
           return this;
         },
         where() {
+          if (isSurveyProbe) return Promise.resolve([{ deletedAt: null }]);
           return idx === 0 ? Promise.resolve([campaign]) : Promise.resolve(recipientRows);
         },
       };
@@ -118,7 +121,10 @@ vi.mock('@/db', () => {
         select: vi.fn((selection?: Record<string, unknown>) => {
           const keys = Object.keys(selection ?? {});
           let result: unknown[];
-          if (keys.includes('contactTargetId') && keys.length === 2) {
+          if (keys.join() === 'deletedAt') {
+            // 설문 삭제 재검증 (티켓 17 후속) — 살아 있는 설문.
+            result = [{ deletedAt: null }];
+          } else if (keys.includes('contactTargetId') && keys.length === 2) {
             claimedRecipient = recipientRows[claimIndex++] ?? null;
             result = claimedRecipient
               ? [{ id: claimedRecipient.recipientId, contactTargetId: claimedRecipient.contactTargetId }]
@@ -212,6 +218,13 @@ vi.mock('@/db', () => {
   };
   return { db };
 });
+
+// 회신 주소는 발송 시점에 소유자를 조인해 해석한다(티켓 20) — 이 스위트의 @/db mock 은
+// select 체인을 발송 경로 모양으로만 흉내내므로 read-model 을 모듈 단위로 고정한다.
+// null 이면 fromLocal@domain 폴백이라 이 파일들이 검증하던 발송 동작은 그대로다.
+vi.mock('@/server/read-models/survey-owner-email', () => ({
+  getSurveyOwnerEmail: vi.fn(async () => null),
+}));
 
 vi.mock('@react-email/render', () => ({
   render: vi.fn(async () => '<html></html>'),

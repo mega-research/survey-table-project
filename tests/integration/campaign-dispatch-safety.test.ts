@@ -58,6 +58,7 @@ const {
     },
     campaignExists: true,
     surveyTestModeEnabled: false,
+    surveyDeletedAt: null as Date | null,
     recipients: [] as RecipientState[],
     events: [] as string[],
     selectLocks: [] as string[],
@@ -135,7 +136,7 @@ function makeSelect() {
       return state.campaignExists ? [{ ...state.campaign }] : [];
     }
     if (tableName === 'surveys') {
-      return [{ testModeEnabled: state.surveyTestModeEnabled }];
+      return [{ testModeEnabled: state.surveyTestModeEnabled, deletedAt: state.surveyDeletedAt }];
     }
     if (tableName === 'contact_attempts') {
       // 수신거부/negative 재검증 조회 — 이 스위트의 관심사가 아니라 항상 빈 결과.
@@ -278,6 +279,13 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
 }));
 
+// 회신 주소는 발송 시점에 소유자를 조인해 해석한다(티켓 20) — 이 스위트의 @/db mock 은
+// select 체인을 발송 경로 모양으로만 흉내내므로 read-model 을 모듈 단위로 고정한다.
+// null 이면 fromLocal@domain 폴백이라 이 파일들이 검증하던 발송 동작은 그대로다.
+vi.mock('@/server/read-models/survey-owner-email', () => ({
+  getSurveyOwnerEmail: vi.fn(async () => null),
+}));
+
 vi.mock('@react-email/render', () => ({
   render: renderMock,
 }));
@@ -340,6 +348,7 @@ beforeEach(() => {
   state.campaign.attachmentsSnapshot = [];
   state.campaignExists = true;
   state.surveyTestModeEnabled = false;
+  state.surveyDeletedAt = null;
   state.recipients = [makeRecipient('r1')];
   state.events = [];
   state.selectLocks = [];
@@ -932,6 +941,49 @@ describe('dispatchCampaignChunk 안전 발송', () => {
     expect(html).toContain('/unsubscribe/unsubscribe-r1');
     expect(html).toContain('"testFooterKind":null');
     expect(html).not.toContain('/unsubscribe/__test__');
+  });
+
+  it('삭제된 설문의 캠페인은 청크가 통째로 발송을 접는다', async () => {
+    // soft delete(티켓 17)는 캠페인·수신자 행을 살려둔다 — 지워진 설문의 초대 메일이
+    // 계속 나가면 수신자는 열리지 않는 링크를 받고 발송 비용만 든다.
+    state.surveyDeletedAt = new Date('2026-08-30T00:00:00Z');
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).resolves.toEqual({
+      sent: 0,
+      failed: 0,
+      cancelled: true,
+    });
+
+    expect(sendRecipientMock).not.toHaveBeenCalled();
+    expect(state.recipients[0]).toMatchObject({ status: 'queued' });
+  });
+
+  it('삭제된 설문이면 prepare 가 recipient 를 하나도 내주지 않는다', async () => {
+    state.surveyDeletedAt = new Date('2026-08-30T00:00:00Z');
+
+    await expect(prepareCampaignDispatch('c1')).resolves.toBeNull();
+  });
+
+  it('청크 도중 설문이 삭제되면 남은 recipient 의 claim 이 막힌다', async () => {
+    // 청크 시작 시점에는 살아 있었으므로 chunk 초입 가드는 통과한다. 남은 방어선은
+    // recipient claim 안의 재검증뿐이고, 그것이 실제로 서는지를 본다.
+    state.recipients.push(makeRecipient('r2'));
+    sendRecipientMock.mockImplementationOnce(async (input: {
+      recipient: { recipientId: string };
+    }) => {
+      state.events.push('send');
+      state.surveyDeletedAt = new Date('2026-08-30T00:00:00Z');
+      return {
+        kind: 'accepted',
+        resendMessageId: `message-${input.recipient.recipientId}`,
+      };
+    });
+
+    const result = await dispatchCampaignChunk('c1', ['r1', 'r2']);
+
+    expect(result).toEqual({ sent: 1, failed: 0, cancelled: true });
+    expect(sendRecipientMock).toHaveBeenCalledOnce();
+    expect(state.recipients[1]).toMatchObject({ id: 'r2', status: 'queued' });
   });
 
   it('테스트 모드 ON 중에도 기존 실제 캠페인은 발송과 상태 갱신을 계속한다', async () => {

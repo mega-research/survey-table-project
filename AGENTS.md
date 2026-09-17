@@ -5,6 +5,8 @@
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
 > 최종 갱신: 2026-09-16 (공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+>
+> 2026-09-17 역할 모델 v2(`workspace-roles-v2`) 병합 — Better Auth 인증 · 팀·멤버십 · 설문 capability 접근 엔진(`server/survey-access`) · 작업 범위 · 설문 그룹 · 재배치 센터 · 공유(invite_only·참여자·게스트·실사) · soft delete 복구 · 실사 업체·대리 응답 귀속. 코드 배치·명명 규칙은 staging 기준으로 맞췄고, v2 마이그레이션 12개는 staging 의 0101~0110 과 번호가 겹쳐 **0111~0122** 로 밀었다(상대 순서 유지, 매핑은 아래 "마이그레이션 번호"). 배포 절차는 `docs/runbooks/workspace-roles-v2-deploy.md`.
 
 ---
 
@@ -20,6 +22,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 데이터 페칭    | TanStack Query                              | 5.90.11         |
 | RPC            | oRPC (server/client/tanstack-query/openapi) | 1.14.4          |
 | 스키마 검증    | Zod                                         | 4.4.3           |
+| 인증           | Better Auth (email+password, drizzle 어댑터) | 1.7.1          |
 | 테이블         | TanStack Table                              | 8.21.3          |
 | 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
 | 리치 에디터    | TipTap                                      | 3.31.3          |
@@ -50,6 +53,8 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
 > TipTap 36개 패키지는 `pnpm-workspace.yaml` overrides 로 한 버전에 묶는다 — `@tiptap/react` 가 `@tiptap/core`·`@tiptap/pm` 을 정확히 같은 버전으로 요구해 일부만 올리면 설치가 갈린다.
 > 같은 자리에 `prosemirror-view` 도 묶여 있다. `@tiptap/pm` 은 정확한 버전을 못박는데 형제 `prosemirror-*` 는 `^1.x` 라, 풀어 두면 두 벌이 설치되어 `DecorationSet` 의 private 필드가 서로 다른 선언이 되고 tsc 가 TS2322 를 낸다.
+> Better Auth 가 세션의 유일한 출처다 (티켓 02). Supabase 는 DB 호스팅으로만 남고 `@supabase/ssr` 은 제거됐다 —
+> `@supabase/supabase-js` 는 유지보수 스크립트(`scripts/*.ts`) 전용으로 남아 있다.
 
 ---
 
@@ -78,8 +83,8 @@ src/
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
 ├── server/                     # oRPC 백엔드 — 코어 + 도메인 11개 (경량 DDD: domain 순수 · procedures 얇음 · services)
-│   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
-│   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
+│   ├── context.ts              # createContext (Better Auth 세션 사용자 + db + headers — RSC·procedure 공용)
+│   ├── orpc.ts                 # base + pub / authed(내부) / superadmin / account / scoped + withRateLimit
 │   ├── router.ts               # 전체 도메인 router 합성 (AppRouter)
 │   ├── handler.ts              # RPCHandler (+ Sentry onError)
 │   ├── openapi.ts              # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트)
@@ -88,16 +93,25 @@ src/
 │   ├── rpc-timeout.ts          # 타임아웃 가드
 │   ├── health.ts               # health procedure (코어 옆)
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
+│   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
+│   ├── rpc-work-scope.ts       # 위 거부의 RPC 어댑터 — toRpcWorkScopeError(WorkScopeError→FORBIDDEN, 티켓 15)
+│   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
+│   │                           # + assertSurveyCapabilityBatch(여러 설문·여러 capability 를 한 왕복으로 — 담기 200건용, 티켓 12)
+│   ├── rpc-survey-access.ts    # 관문의 RPC 어댑터 — assertSurveyCapabilityRpc(not_found→NOT_FOUND 존재 은닉 / forbidden→FORBIDDEN) + toRpcSurveyAccessError
+│   │                           # + assertSurveyCapabilityBatchRpc(배치 짝)
+│   │                           # + assertScopedSurveyCapabilityRpc(비내부 계정도 지나는 표면 표시 — 판정은 코어 하나, 티켓 21 이 게스트 분기를 걷었다)
+│   ├── page-survey-access.ts   # 관문의 RSC 페이지 어댑터 — assertSurveyCapabilityPage(사유 불문 notFound 접기)
+│   │                           # + assertSurveyConsolePageAccess(게스트 허용 콘솔 페이지용 — requireAuth 포함, viewer 반환)
 │   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
 │   └── <domain>/               # survey-builder · survey-response · survey-document · operations · contacts
-│       │                       # · mail · analytics · library · auth · media · quota
+│       │                       # · mail · analytics · library · auth · media · quota · workspace
 │       │                       # survey-document = 조사표 PDF·영역 앵커 (2026-09-03 신설, 자기 테이블 2개·procedures 2·services 4)
 │       ├── domain/             # zod 계약 + 순수 규칙 (**client-safe** — server-only·Node·DB 의존 0. zod 는 런타임 의존이라 'import 0' 이 아니다)
 │       │                       # UI 도 쓰는 모양은 shared/contracts 소관 — 여기는 그것을 다시 내보내고 서버 전용 입력·규칙만 남긴다
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists · 앵커 행→스냅샷 매퍼 anchor-row)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists · 앵커 행→스냅샷 매퍼 anchor-row · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일 · 실사 홈 설문 목록)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -105,19 +119,31 @@ src/
 │   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
 │   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
 │   │   ├── test-mail-archive.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
+│   │   ├── user-rehire.ts        # 재입사 — 상태 전이(auth)와 팀 배정(workspace)을 한 트랜잭션으로 (티켓 14)
 │   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
 │   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
 │
 │   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
 │
-├── features/                   # 프론트 기능 묶음 5개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
-│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
+├── features/                   # 프론트 기능 묶음 8개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
+│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향
+│   │                           # operations·analytics·workspace·guest-console·fieldwork-console 은 각각 독립(서로 import 0)
 │   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
 │   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
-│   ├── survey-builder/         # 설문 편집기 (140개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (150개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
+│   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·페이지네이션·카드 + 순수 파이프라인
+│   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
+│   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
+│   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
+│   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
+│   │   │                       # 공개 범위·참여자·클라이언트(게스트)·실사 네 블록 + 소유권 이전(티켓 16·18·21·25)
+│   │   │                       # PRD 맵은 workspace 로 적었지만 입구가 설문 카드라 그 배치는 불가능하다
+│   │                       # (두 묶음은 서로 import 금지 — 그룹 UI 가 survey-list/groups 에 사는 선례)
+│   │                       # 후속 블록도 workspace 표면을 RPC 로 부르므로 feature import 는 안 생긴다
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header·duplicate-question-table(질문 복제 시 셀 참조·행 반복 참조 재배선))
 │   │   ├── survey-document/    # 조사표 오서링 (survey-document-panel 진입점 + anchor-canvas 드래그) — app edit 페이지가 연다
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
@@ -128,11 +154,11 @@ src/
 │   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
-│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
+│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-survey-participants·use-survey-guests·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload·persist-question·variable-generator·saved-question-branch-logic·cell-formula/gating-diagnostics — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap·prune-sum-constraints·input-mode(숫자 모드↔입력 형식 전환)
-│   │   └── (루트 26개)          # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields 등) + app 이 직접 여는 모달·패널
+│   │   └── (루트)               # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields 등) + app 이 직접 여는 모달·패널
 │   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
 │   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (102개) — 어떤 feature 도 import 하지 않는다
 │   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
@@ -150,7 +176,42 @@ src/
 │   ├── operations/             # 운영 콘솔 (88개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters·demand(문항 수요 집계 표)
 │   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
 │   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
-│   └── analytics/              # 차트 및 리포팅 (23개)
+│   ├── analytics/              # 차트 및 리포팅 (23개)
+│   ├── workspace/              # 워크스페이스 관리 (21개, 티켓 03 신설) — 사용자 관리 + 내 프로필 + 팀 관리 + admin 셸
+│   │   │                       # + 재배치 센터. 진입점은 폴더 안
+│   │   ├── admin-shell/        # admin 공통 셸 (티켓 08, .pen FLOW 6-1) — admin-shell 진입점(레이아웃이 연다)
+│   │   │                       # + sidebar(로고·메뉴)·team-switcher(팀 전환+메가리서치)·sidebar-profile(프로필·로그아웃)
+│   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만)
+│   │   │                       # + sidebar-group-tree(설문 그룹 트리 — 그룹 화면 입구, 티켓 12). 범위 전환 시 쿠키 기록
+│   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
+│   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
+│   │   ├── account-vocabulary.ts # 계정 표시 어휘(유형·상태 라벨·상태 배지) — 사용자 관리·팀 관리·실사 업체 셋이 쓴다
+│   │   ├── account-query-keys.ts # 사용자·업체 쿼리 키 — 업체 mutation 이 양쪽 캐시를 접어야 해서 루트에 있다
+│   │   ├── segmented-choice.tsx  # 세그먼트 컨트롤 — 계정 생성 모달의 유형·역할 두 자리가 쓴다
+│   │   ├── fieldwork-orgs/     # 실사 업체 관리 (티켓 24, .pen FLOW 10-4) — fieldwork-orgs-view 진입점
+│   │   │                       # + fieldwork-org-card(카드·계정 명단·종료 확인) + fieldwork-org-form-modal
+│   │   │                       # + queries/use-fieldwork-orgs. **사용자 관리를 import 하지 않는다** —
+│   │   │                       # 저쪽이 이 묶음을 부르므로 방향이 한쪽이어야 한다(계정 발급 모달은 상위가 연다)
+│   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
+│   │   │                       # + user-reset-password-modal · user-rehire-modal
+│   │   │                       # + queries/use-users. 어휘·쿼리 키는 루트로 올라갔다(티켓 24)
+│   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
+│   │   ├── profile/            # profile-view 진입점 + queries/use-profile — **세 계정 유형 공통 화면**(.pen FLOW 3-2)
+│   │   │                       # 게스트·실사도 여기로 들어오며 이름·아바타·비밀번호만 보인다(이메일·직책은 내부만)
+│   │   ├── reassignment/       # 재배치 센터 (티켓 14 — .pen FLOW 8-2~8-4·9-2): reassignment-view 진입점
+│   │                       # + survey-reassign-view(단건 8-4) + user-assign-modal(8-3) + survey-assign-bar(9-2)
+│   │                       # + assignment-fields(목적지·소유자·공개 범위 공유 필드) + reassignment-vocabulary
+│   │                       # + queries/use-reassignment
+│   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
+│   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
+│   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
+│   ├── guest-console/          # 게스트 콘솔 (티켓 22) — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
+│   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
+│   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
+│   └── fieldwork-console/      # 실사 콘솔 (티켓 25·26, .pen FLOW 10-1·10-2) — fieldwork-home-view 진입점
+│                               # 초대 설문 표 + 팀장 전용 「업체 전체」 세그먼트
+│                               # + fieldwork-header-bar(헤더)·fieldwork-survey-header(서브헤더+고정 탭 둘)
+│                               # + fieldwork-contacts-table(원본 표 — 복호 평문·결과 기록·메모 저장)
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -159,17 +220,23 @@ src/
 │   │                           #   survey-document.ts(앵커 스냅샷 어휘)·survey-document-io.ts(조사표·앵커 RPC zod) — 2026-09-03 신설
 │   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0). 구 db/schema/schema-types.ts
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
+│   ├── lib/work-scope-cookie.ts   # 작업 범위 쿠키 R/W (브라우저 편의값 — 판정은 server/work-scope)
+│   ├── lib/work-scope-context.tsx # 작업 범위 React 컨텍스트 — 공급은 workspace(AdminShell), 소비는 survey-builder(목록)
+│   │                              # feature 간 직접 import 금지의 탈출구라 모양이 여기 산다 (티켓 08)
+│   ├── lib/survey-group-queries.ts # 설문 그룹 쿼리 키 + 목록 조회 옵션 (티켓 12) — 사이드바 트리(workspace)와
+│   │                              # 목록·모달(survey-builder)이 같은 캐시를 봐야 해서 여기 산다. mutation 은
+│   │                              # 설문 목록 키까지 접어야 해 survey-builder/queries 소유(공유→feature 역전 금지)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts
 │
-├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
-│   ├── auth-actions.ts         # login/logout (redirect+쿠키 의미론이 server action 특화)
+├── actions/                    # 잔존 서버 액션 — 1파일 (의도적 유지)
 │   ├── unsubscribe-actions.ts  # 수신거부 POST form (메일 클라 JS 비활성 환경 + redirect)
-│   └── index.ts                # 잔존 사유 주석 포함 배럴
+│   └── index.ts                # 잔존 사유 주석 배럴 (auth 는 Better Auth 로 이관 완료)
 │
 ├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
 │   ├── ui/                     # shadcn/ui 기반 컴포넌트 (23개 + rich-text-editor/)
+│   ├── auth/                   # logout-button (authClient.signOut 공용 버튼)
 │   └── providers/              # Context providers
 │
 ├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
@@ -179,8 +246,11 @@ src/
 │
 ├── lib/                        # 인프라 어댑터 + 프론트·서버가 함께 쓰는 계산 (도메인 로직 흡수 완료 — 트래커 E-1)
 │                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
-│   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
-│   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
+│   ├── auth/ + auth.ts         # 인증 어댑터 + 가드. server.ts=Better Auth 인스턴스 · client.ts=브라우저 authClient
+│   │                           # · safe-redirect=로그인 복귀 경로 정제 · protected-paths=proxy/레이아웃 공용 AUTH_PAGES
+│   │                           # · require-admin-page · external-viewer(비내부 계정 → 데이터 파티션)
+│   │                           # auth.ts=requireAuth/requireActiveAccount/getCurrentUser
+│   │                           # (구 guest-grants=env grant 게스트는 티켓 21 이 걷었다)
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
 │   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
@@ -239,14 +309,120 @@ src/
 │   └── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
-└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
+└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 쿠키 1차 게이트 + x-pathname 전달)
 ```
 
 ---
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`)는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
+
+### 인증 도메인 (auth.ts — Better Auth 관할)
+
+```
+users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
+├── id (uuid PK — 앱이 crypto.randomUUID() 생성, DB default 없음)
+├── name, email (UNIQUE), emailVerified, image
+├── status                 # pending|active|rejected|suspended|departed — pending/rejected 는
+│                          # 도달 불가 어휘(공개 가입 폐기, ADR-0018). DB default 'pending' 은 안전장치
+├── isSuperadmin, jobTitle
+├── organization           # 게스트 소속 기관 메모 (0113, nullable) — internal 은 팀·fieldwork 는 업체에서 소속을 얻는다
+├── userType               # internal|guest|fieldwork (0112, NOT NULL default 'internal' + CHECK)
+├── fieldworkOrgId         # 소속 실사 업체 (0120, nullable) — FK 는 마이그레이션 ALTER 가 만든다(순환 회피)
+├── fieldworkRole          # leader|worker (0120, nullable) — 팀 역할과 별개 축
+│                          # 위 둘과 userType 의 정합은 users_fieldwork_fields_check 가 지킨다:
+│                          # fieldwork 면 둘 다 있어야 하고, 아니면 둘 다 NULL 이어야 한다
+└── createdAt, updatedAt
+
+sessions                   # 세션 (30일 만기 + 하루 1회 사용 시 연장)
+├── id, token (UNIQUE), userId (FK cascade)
+├── expiresAt, ipAddress, userAgent
+└── createdAt, updatedAt
+
+accounts                   # 크리덴셜 (비밀번호 해시 보유)
+├── id, userId (FK cascade), accountId, providerId
+├── issuer                 # better-auth 1.7 필수 — 이메일+비밀번호는 'local:credential'
+│                          # UNIQUE(issuer, accountId)
+├── password (해시), OAuth 토큰류(미사용 nullable)
+└── createdAt, updatedAt
+
+verifications              # 토큰 검증 (identifier 인덱스) — 현재 미사용(이메일 재설정 없음)
+
+user_status_events         # 계정 상태 전이 감사 (append-only)
+├── id, userId (FK restrict), fromStatus, toStatus
+├── changedBy (FK restrict), reason
+└── createdAt
+```
+
+> **선반영 주의**: 프로덕션·스테이징에는 5테이블이 2026-07-14 선반영돼 있다. `0111_better_auth_tables.sql` 은
+> **빈 DB 재생 전용 — 프로덕션·스테이징에 적용 금지**, 적용 대상은 `0112_better_auth_v2_reconcile.sql`
+> (user_type + issuer 백필 + 어댑터 기대 인덱스)뿐이다. RLS 5테이블 전부 ON(정책 0 = deny-all).
+
+### 워크스페이스 도메인 (workspace.ts — 팀·멤버십)
+
+```
+teams                      # 팀 = 설문 소유·접근 경계 (0115)
+├── id, name (전체 조직 경로 포함 표시명), order
+├── status                 # active | archived — 해산은 삭제가 아니라 archived (ADR-0011, 티켓 13)
+├── archivedBy, archivedAt
+└── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
+
+team_members               # 소속의 단일 정본 (ADR-0008)
+├── id, teamId (FK restrict), userId (FK restrict)
+├── role                   # leader | member
+└── createdAt              (UNIQUE(teamId, userId) — 서로 다른 팀 겸직은 허용)
+
+team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 구성
+├── id, teamId (FK restrict)
+├── action                 # create|rename|dissolve | member_add|member_role|member_remove
+├── targetUserId           # 멤버 사건의 대상 (팀 자체 사건은 NULL)
+├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
+└── createdAt
+
+survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0117, 티켓 12)
+├── id, teamId (FK restrict), name, order
+├── createdBy (FK restrict)
+└── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
+
+fieldwork_orgs             # 실사 업체 = 외주 실사 인력의 소속 경계 (0120, 티켓 24)
+├── id, name, status       # active | archived — 종료도 삭제가 아니라 archived (ADR-0019)
+├── memo                   # 운영 메모 (판정에 안 쓴다)
+├── archivedBy, archivedAt, createdBy (FK restrict)
+└── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
+
+survey_participants        # 설문 단위 부여 — 참여자·게스트·실사 통합 (0119, 티켓 18·21)
+├── id, surveyId (FK **cascade**), userId (FK restrict)
+├── kind                   # member | guest | fieldwork — users.user_type 과의 정합은 서비스가 지킨다
+│                          # (두 테이블에 걸친 조건이라 CHECK 불가)
+├── guestTabs (JSONB)      # kind=guest 전용 현황 탭 화이트리스트 (티켓 21) — NULL 이면 기본값(응답 현황만)
+├── addedBy (FK restrict), createdAt
+└── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
+
+survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, 티켓 14 — append-only)
+├── id, surveyId (FK **cascade**)
+├── action                 # unassign(해산) | assign(재배치 센터) | transfer(승계·티켓 19)
+├── fromOwnerId, toOwnerId, fromTeamId, toTeamId (전부 FK restrict, nullable)
+├── changedBy (FK restrict), metadata (JSONB — 사건 시점 설문 제목·팀 이름·공개 범위)
+└── createdAt              (INDEX (surveyId, createdAt DESC))
+```
+
+> `survey_id` 만 CASCADE 인 이유: 현행 설문 삭제가 하드 삭제라(`deleteSurvey` → `tx.delete`)
+> RESTRICT 로 걸면 감사 행 하나가 설문 삭제를 영구히 막는다. 형제 감사인 `response_edit_logs`
+> 도 같은 이유로 CASCADE 다. 나머지 FK 는 RESTRICT — 사람과 팀은 하드 삭제되지 않는다.
+
+> 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
+> 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
+> archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/read-models/team-memberships.ts`
+> 의 `getActiveTeamMemberships` 하나로 모은다(팀 관리와 설문 접근 판정이 함께 보므로 도메인이 아니라 read-model 이다).
+> `surveys.team_id` 는 티켓 07 이, `survey_groups` 는 티켓 12 가, `survey_participants` 는 티켓 18 이 붙였다.
+> **`survey_participants` 만 팀 축 밖이다** — 초대는 `team_members` 에 아무것도 쓰지 않고 그 설문 하나만 연다.
+> **그룹은 접근 권한이 아니라 정리용 묶음이다** — 담겼다는 사실이 판정에 들어가지 않는다.
+> `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이라 그룹 삭제는 설문을 미분류로
+> 되돌릴 뿐이다. 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
+> 내려야 한다** — 복합 FK 로 강제하지 못한 이유(MATCH SIMPLE 은 team_id NULL 을 건너뛰고
+> MATCH FULL 은 그룹 없는 정상 설문을 위반으로 만든다)는 0117 헤더에 있고, 지키는 것은
+> 서비스(잠긴 값 재검증)와 조회(team_id 동시 일치 조인)다. 팀 해산·재배치·승계(티켓 13·14·19)의 계약이다.
 
 ### 설문 도메인 (surveys.ts)
 
@@ -274,6 +450,12 @@ surveys                    # 설문 설정
 ├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
 ├── currentVersionId              # 현재 활성 배포 버전
+├── teamId                        # 소유 팀 (0116, nullable — 배치 대기면 NULL)
+├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
+├── ownerUserId, createdBy        # 소유자·작성자 (0116, 2단계 배포 중이라 아직 nullable)
+├── surveyGroupId                 # 소속 그룹 (NULL = 미분류, FK ON DELETE SET NULL — 0117)
+├── ownershipStatus               # normal | succession_pending (승계 전이는 티켓 19)
+├── assignmentStatus              # assigned | assignment_pending — teamId 와 CHECK 로 한 몸
 ├── deletedAt (soft delete)
 └── createdAt, updatedAt
 
@@ -321,6 +503,7 @@ survey_responses           # 수집된 응답
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
+├── fieldworkUserId               # 대리 응답을 입력한 실사 계정 (0122) — NULL 이 응답자 직접 응답
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
@@ -414,7 +597,7 @@ contact_prior_answers      # 이월 응답 — 지난 회차 응답 한 벌 (추
 
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
-├── resultCode, note, createdBy
+├── resultCode, note, createdBy   # createdBy FK → public.users (0121, 티켓 26 이 채우기 시작)
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
 
 contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
@@ -428,7 +611,8 @@ contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인
 ```
 mail_templates             # 메일 템플릿
 ├── id, surveyId, name, subject, bodyHtml
-├── fromLocal, fromName, replyTo
+├── fromLocal, fromName
+├── replyTo                # nullable — NULL 이면 발송 시점 소유자로 해석 (티켓 20)
 ├── attachments (JSONB), variablesUsed (JSONB)
 ├── deletedAt
 └── createdAt, updatedAt
@@ -437,7 +621,8 @@ mail_campaigns             # 발송 회차
 ├── id, surveyId, mailTemplateId, runNumber, title
 ├── kind                   # bulk | 단건 발송 등 캠페인 종류
 ├── isTest                 # 테스트 파티션 여부
-├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 발송 시점 스냅샷
+├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 캠페인 생성 시점 스냅샷
+│                          # replyToSnapshot 만 NULL 을 허용하고, NULL 이면 발송 시점 소유자로 해석
 ├── status                 # draft|queued|sending|completed|partial|cancelled
 ├── recipientCount, queuedCount, sentCount, deliveredCount,
 │   openedCount, bouncedCount, complainedCount, failedCount,
@@ -463,6 +648,24 @@ mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열
 ├── note, createdBy
 └── createdAt, updatedAt
 ```
+
+> **회신 주소만 스냅샷 밖이다**(티켓 20). 규칙은 `server/mail/services/reply-to.ts` 의
+> `resolveSendReplyTo` 하나 — **명시 → 소유자(`read-models/survey-owner-email`) → 발신 주소**.
+> 캠페인 발송(`campaign-dispatch`)과 템플릿 테스트 발송(`preview`)이 같은 함수를 쓴다: 나누면
+> 「테스트 메일에 답장했더니 아무도 못 받는」 어긋남이 생긴다. **스냅샷에 주소가 박혀 있으면
+> 소유자 조회 자체를 하지 않는다** — `??` 의 단락 평가가 계약이라, 고정 회신 캠페인은 소유자
+> 조회 왕복이 0 이고 그 조회가 실패해도 영향을 받지 않는다. 이미 claim 된 수신자는
+> `send_payload_snapshot` 의 값을 쓰므로 **재시도가 회신 주소를 바꾸지 않는다**(이전 직전에
+> claim 된 메일은 이전 소유자에게 답장이 간다 — 의도된 동작). 그래서 **전원이 이미 claim 된
+> 재시도 청크는 조회 자체를 건너뛴다** — 쓰지도 않을 값을 읽다 실패하면 값이 이미 정해진
+> 재시도가 통째로 막힌다. 해석 단위는 **청크**다: from·제목·본문·첨부와 같은 자리에서 한 번
+> 정하므로, 청크 처리 도중의 이전은 그 청크가 끝난 뒤부터 반영된다(계약의 단위가 캠페인
+> 발송이지 개별 수신자가 아니다). 소유자 조회는 **계정 상태를 묻지
+> 않는다**: 승계 대기 설문의 `owner_user_id` 는 떠난 사람 그대로이고 그 주소가 계약이다. 상태로
+> 걸러 null 을 주면 회신이 조용히 발신 주소로 떨어져 답장이 아무도 안 읽는 사서함에 쌓인다 —
+> 그 상황을 알리는 것은 재배치 인박스의 승계 대기 경고다. 템플릿의 「답장 받을 메일」이 **선택
+> 입력**인 것이 이 연동의 입구이며(`optionalReplyToSchema`), 빈 문자열·공백은 **null 로
+> 정규화**한다: 빈 문자열이 컬럼에 들어가면 폴백이 서지 않아 회신 헤더가 빈 채로 나간다.
 
 ### R2 파일 수명주기 (r2-lifecycle.ts)
 
@@ -529,11 +732,32 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
+/admin/surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
+/admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
+                                  # 「실사 업체」 탭이 같은 화면 안에 있다 (.pen FLOW 10-4, 티켓 24 — 업체 카드 + 카드별 계정 발급)
+/admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
+/admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
+/admin/reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
+/admin/reassignment/surveys/[surveyId]  # 단건 설문 재배치 (새 소유자·목적지 팀·공개 범위 원자 확정)
+/admin/profile                    # 내 프로필 — **세 계정 유형 공통**. /admin 아래지만 내부 전용이 아니다(ACCOUNT_PAGES)
 /admin/billing/mail-cost          # 메일 비용 정산
 /admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
+
+/guest                            # 게스트 홈 — 부여 설문 카드 (티켓 22, .pen FLOW 5-2)
+/guest/surveys/[surveyId]         # 탭 없는 주소 — 첫 화면으로 리다이렉트(허용 탭 없으면 미리보기)
+/guest/surveys/[surveyId]/preview   # 설문지 미리보기 — 화이트리스트 밖(부여됐으면 언제나)
+/guest/surveys/[surveyId]/overview  # 응답 현황  · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황
+                                  # 넷은 전부 탭 화이트리스트가 연다 (.pen FLOW 5-3)
+/fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)
+                                  # 실사원은 초대 설문만, 실사 팀장은 「업체 전체」 세그먼트로 소속원 초대까지
+/fieldwork/surveys/[surveyId]     # 탭 없는 주소 — 조사 대상으로 리다이렉트
+/fieldwork/surveys/[surveyId]/contacts   # 조사 대상 — 원본 전체(복호 PII)·결과 기록·메모 (티켓 26, .pen 10-2)
+/fieldwork/surveys/[surveyId]/overview   # 응답 현황 — 운영 위젯 그대로
+                                  # 탭은 **고정**이다(게스트의 화이트리스트 축이 없다). 관문은
+                                  # assertFieldworkSurveyPageAccess 이고 leaf 마다 자기 capability 를 준다
 ```
 
-응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
+응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. 실사 대행은 같은 주소에 `&fw=1` 힌트가 붙는다(티켓 27) — 배너를 물을지만 정하고 **권한은 주지 않는다**. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
 > 운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
 > 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 엑셀·SPSS export 라우트도 같은 스코프를 탄다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
@@ -599,11 +823,11 @@ RSC (서버 컴포넌트)
 ```
 
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
-- procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
-- **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon 은 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
-- 그 원칙에 따라 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
+- procedure 베이스 5종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
+- **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon·외부 프레임워크 핸들러 마운트(`/api/inngest`·`/api/auth`)는 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
+- 그 원칙에 따라 잔존 서버 액션은 `actions/` 1파일뿐 (unsubscribe form — 의도적 유지).
 - **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다. **읽기 방향은 tsc 가 못 잡는다** — 발행 스냅샷·빌더 로드가 공유하는 행→Question 매퍼(`server/read-models/survey-structure.ts` `mapQuestionRow`)도 명시 나열이라, 누락 시 발행 스냅샷에서 값이 조용히 증발한다(noticeBgColor 실사고). 전수 대조는 `server/read-models/map-question-row.test.ts` 가 잡는다.
-- 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향 · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
+- 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향(operations·analytics·workspace 는 독립) · 공용 구역(components/hooks/stores/utils/lib/types/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server` 전면 금지(타입 포함, 모양은 `@/shared/contracts`) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
 
 ---
 
@@ -612,11 +836,12 @@ RSC (서버 컴포넌트)
 ```
 POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
 *      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
-POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
+POST   /api/upload/image                       # 이미지 업로드 (multipart, 내부 전용, 삭제는 media.deleteImages RPC)
+POST   /api/upload/avatar                      # 아바타 업로드 (세 계정 유형 공통, 정사각 WebP 로 깎아 저장)
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store) — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts — 이름이 같아 헷갈리던 것을 로더 쪽 개명으로 갈랐다)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store) — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts — 이름이 같아 헷갈리던 것을 로더 쪽 개명으로 갈랐다)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
 GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
@@ -624,6 +849,7 @@ POST   /api/response/segment                   # 구간 응답 저장 (sendBeaco
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+*      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
 ```
 
 ---
@@ -646,13 +872,543 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## 인증과 권한
 
-- 세션은 Supabase Auth (`lib/supabase/*`), `proxy.ts` 미들웨어가 `/admin`·`/analytics`에서 세션을 갱신한다.
-- procedure 베이스 3종 (`server/orpc.ts`):
+- **세션은 Better Auth**(ADR-0018). 인스턴스는 `lib/auth/server.ts` — email+password, UUID user id,
+  30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·이메일 비밀번호
+  재설정 없음(분실은 슈퍼어드민이 새 임시 비밀번호를 지정). sign-in 전 비활성 상태(active 외)를 차단하며
+  실패 응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
+- **계정 수명주기**는 `server/auth`(도메인 규칙 + 서비스)와 `/admin/users` 행 케밥이 담당한다.
+  허용 전이는 `shared/contracts/auth.ts` 의 `USER_STATUS_TRANSITIONS` 하나가 정하고, 서버 강제
+  (`resolveUserStatusTransition`)와 화면 메뉴(`availableUserStatusActions`)가 같은 표를 본다 —
+  화면이 표를 따로 들면 "메뉴엔 있는데 누르면 CONFLICT" 가 된다. 전이는 advisory lock + 행 잠금
+  아래에서 처리하고(마지막 슈퍼어드민 동시 정지 경합 차단), **모든 전이·재설정이 대상 세션을 전부
+  끊고 `user_status_events` 에 감사 행을 남긴다**(재설정은 상태가 그대로라 from=to). 마지막 active
+  슈퍼어드민 가드는 "이 전이로 active 가 0명이 되는가"만 묻는다 — 대상이 이미 비활성이면 적용하지
+  않는다(그러지 않으면 정지된 슈퍼어드민을 영영 정리할 수 없다). **퇴사의 소유권 승계는 티켓 19 가 붙였고**(멤버십은 일부러 그대로 둔다)
+  **재입사의 팀 배정은 티켓 14 가 붙였다**(`server/workflows/user-rehire` — 상태 전이와 배정이 한 트랜잭션).
+- **팀 멤버십은 소속의 단일 정본이다**(ADR-0008, 티켓 06). 팀 관리 표면은 `server/workspace` 가
+  담당하고 관문은 두 겹이다 — procedure 의 `assertTeamManager` 가 **입력의 teamId 로** 팀장
+  여부를 묻고(어딘가의 팀장이면 통과시키는 순간 A팀 팀장이 B팀 멤버를 만진다), 서비스가
+  대상의 소속·상태·유형을 다시 본다. 특히 직책 수정은 **대상이 그 팀 소속인지** 확인해야
+  한다 — 확인이 빠지면 팀장이 userId 만 갈아끼워 타 팀·미배치·슈퍼어드민의 직책을 바꾼다.
+  팀 목록·생성·이름 변경은 조직 구조를 다루므로 `superadmin` 전용이고, 상세는 `authed` 로
+  열되 **슈퍼어드민·그 팀 팀장**이 아니면 NOT_FOUND(존재를 알려주지 않는다). 팀원 추가는
+  **pull 모델**이라 미배치 internal active 만 검색·추가되며, 타 팀 active 멤버를 당기는
+  겸직 생성은 슈퍼어드민만 할 수 있다. 판정 경합은 팀 키 advisory lock(같은 사람을 두
+  팀에서 동시에 당기는 경합은 사용자 키)으로 직렬화하고, 멤버 추가·역할 변경·제외는
+  `team_lifecycle_events` 에 감사 행을 남긴다.
+- **소유권 이전은 소유자·팀·그룹을 한 번에 움직인다**(티켓 19, 스펙 §4·§7, .pen FLOW 4-4·9-3).
+  수동 이전(`workspace.ownership.transfer`, `survey.transferOwnership`)과 퇴사 승계가 같은
+  `transferOwnershipInTx` 를 쓴다 — 불변식이 하나라서다: **소유자는 소유 팀 사람이어야 하고**
+  (티켓 13 revocation), 팀이 움직이면 **그룹은 미분류로** 내려간다(0117 계약). 그래서 타 팀
+  참여자에게 넘기면 설문이 그 사람 팀으로 따라가고, 활성 팀이 없거나 둘 이상이면 거부한다
+  (시스템이 고르면 설문이 엉뚱한 팀 목록에 나타난다). 목적지 팀은 `lockTeamMembers` +
+  `teams FOR SHARE` 로 **잠근 채** 확인한다 — 무잠금이면 그 사이 커밋된 해산을 못 보고
+  archived 팀으로 옮긴다.
+  **동시 이전은 기대 소유자 토큰(`expectedOwnerUserId`)이 막는다.** `FOR UPDATE` 는 두 요청을
+  줄 세울 뿐이라 서로 다른 후임을 지목한 둘이 모두 성공하고 나중 것이 이긴다 — 잠긴 값과
+  대조해야 「하나만 성공」이 참이 된다.
+  **제안 규칙은 순수 함수다**(`proposeSuccessor`) — 참여자 **초대순** → 소유 팀 팀장 → 없으면
+  승계 대기. 초대 시각이 같으면 userId 로 갈라 답이 흔들리지 않게 한다. **무확인 자동 이전은
+  없다**: 미리보기는 아무것도 바꾸지 않고, 확정 입력은 **소유 설문 전수**를 요구한다(빠뜨린
+  설문을 조용히 승계 대기로 흘려보내면 화면이 보여준 것과 결과가 달라진다).
+  퇴사는 재입사와 같은 워크플로 층(`server/workflows/user-departure`)이 잇는다 — 상태 전이
+  (auth)와 승계(workspace)가 한 트랜잭션이어야 하고 도메인끼리는 서로를 못 부른다. **전역 전이
+  키를 트랜잭션 첫 줄에서 잡는다** — 재입사가 적어둔 「전역 키를 뒤에 잡는 경로는 없다」를
+  지키기 위해서다(advisory xact 락은 재진입이 안전하다). 승계 루프는 **id 오름차순**으로 돈다
+  (재배치·해산·담기와 같은 순서 — 입력 순서로 잠그면 사이클이 생긴다).
+  **승계 대기는 재배치 인박스가 배치 대기와 같은 목록에서 받는다** — 처리자가 하는 일이 같다
+  (새 소유자 지정). 해소할 때 그룹은 **팀이 실제로 바뀐 설문만** 미분류가 된다.
+  **소유 설문이 남은 사람은 팀에서 제외되지 않는다**(`MemberOwnsSurveysError`). 그냥 빼면 그
+  설문은 소유자조차 못 열고, 소유자가 살아 있어 승계 대기로도 안 잡혀 인박스에도 안 뜬다.
+  스펙 §4 의 「팀 이탈 처리 모달 자동 제안」 화면은 아직 없어 **막고 안내하는** 쪽을 골랐다.
+  **퇴사는 `team_members` 를 지우지 않는다** — 팀 상세가 비활성 멤버를 표식과 함께 보여줘야
+  하고, 접근을 막는 것은 유효 소속이 아니라 계정 상태다.
+- **참여자는 팀 경계를 넘는 유일한 접근 경로다**(티켓 18, 스펙 §4·§8, .pen FLOW 4-2).
+  `survey_participants`(0119) 행 하나가 타 팀 사람을 **그 설문 하나에만** 들인다 — 팀 멤버십은
+  만들지 않고 소유 팀의 다른 설문·그룹은 그대로다. 판정 코어가 참여 행을 **설문 행과 같은
+  쿼리에서 LEFT JOIN** 으로 읽는다(따로 조회하면 관문이 도는 모든 표면에서 왕복이 하나씩 늘고,
+  아끼려 캐시를 두면 초대를 뺀 직후에도 통과하는 창이 생긴다). 목록은 팀 조건과 **OR** 로
+  잇되 **배치 대기를 함께 뺀다** — 코어가 `assignment_pending` 을 참여자 분기보다 먼저 막으므로
+  목록만 넓히면 열리지 않는 카드가 그려진다.
+  **관문이 표면마다 다르다**(스펙 §7·§11-5) — 조회·검색·추가는 `survey.invite`(그 설문에
+  접근 가능한 내부인 누구나: 소유자·팀장·참여자·팀 공개면 팀원), 제외는 `survey.manageAccess`
+  (소유자·소유 팀 팀장·슈퍼어드민). **검색이 관문을 지는 것이 특히 중요하다** — 후보 목록은
+  조직의 내부 계정 명부라 관문 없이 열면 설문 id 하나로 전사 사용자 검색이 된다.
+  대상 자격은 서비스가 본다: **internal + active 만**(guest·fieldwork 를 member 로 초대하면
+  코어가 어차피 거부하지만 「추가는 됐는데 아무것도 안 되는」 유령 행이 남는다), 그리고
+  **소유자는 참여자로 추가 불가**(이미 전권이라 행만 유령이고 목록에 「제외」 버튼이 생긴다 —
+  티켓의 「소유자는 누구도 제외 불가」를 입구에서 지킨다). `kind` 와 `users.userType` 의 정합을
+  DB CHECK 로 못 거는 이유는 두 테이블에 걸친 조건이라서다.
+  화면은 공유 설정 모달의 참여자 블록이고 **제외 버튼만 서버가 준 `canRemove` 로 잠근다**.
+  카드 노출 근사 셋이 여기서 처음 갈렸다 — 참여자는 `canEditSurveyCard`·
+  `canViewSurveyAnalyticsCard` 는 통과하고 `canManageSurveyAccessCard` 는 못 넘는다(티켓 16 이
+  예고한 분기점). 목록 행의 `isParticipant` 가 그 입력이다.
+  음성 검증은 `tests/integration/survey-participants.realdb.test.ts` — 판정 입력을 조인으로
+  읽고 목록은 exists 서브쿼리라 목으로는 무엇이든 통과한다.
+- **설문 삭제는 soft delete 다**(티켓 17, 스펙 §4 「삭제 전제」). `deleteSurvey` 가 `deleted_at`
+  을 찍을 뿐이라 질문·응답·컨택·메일이 전부 남는다 — 예전 `tx.delete` + CASCADE 는 참여자
+  (티켓 18)에게 삭제권이 넓어지는 전제와 맞지 않았다. **복구(`surveyBuilder.surveys.restore`)는
+  슈퍼어드민 전용이고 capability 관문을 쓰지 않는다** — 코어가 삭제된 설문을
+  `deleted_at IS NULL` 로 걸러 언제나 not_found 를 주기 때문이고, 그 필터를 느슨하게 하면
+  「삭제는 안 보인다」가 통째로 무너진다. 소유자·팀장에게 열지 않는 것도 의도다: 되돌리는 일이
+  흔해지면 삭제가 실질적인 아카이브가 된다. 복구가 팀·소유자·상태를 **되돌리지 않는 것**이
+  요점이다 — 삭제가 애초에 건드리지 않으므로 되살릴 것은 `deleted_at` 하나다.
+  **조회는 두 갈래로 닫힌다.** 관문이 있는 내부 표면은 capability 코어 하나가 닫으므로
+  티켓 09~11 이 배선한 전 표면이 자동이고, **관문이 없는 응답자(pub) 경로는 각자 조건을
+  건다** — `getSurveyBySlug`·`getSurveyByPrivateToken`·`getSurveyByPreviewToken`·
+  `getQuotaConfig`. 토큰은 삭제된 설문을 여는 마지막 열쇠라 특히 그렇다. read-model 의
+  `getSurveyById` 한 줄이 빌더 상세·운영 RSC·미리보기·`getSurveyForResponse`·변수 카탈로그·
+  복제를 한꺼번에 닫는다(삭제된 행을 일부러 읽어야 하는 곳은 자기 쿼리를 따로 쓴다 —
+  플래그를 달면 기본값이 호출부마다 갈리고 React cache 키도 함께 깨진다).
+  **R2 는 관행 그대로 후보를 등록하되 실제로는 지워지지 않는다** — `REFERENCE_SURFACE` 의
+  `surveys`·`questions` 에 deletedAt 술어가 **없어** 살아남은 행이 참조를 계속 주장하기
+  때문이다. 바로 옆 `mail_templates` 가 반대 선례라 「일관성」을 이유로 술어를 달기 쉬운데,
+  달면 삭제 7일 뒤 파일이 지워지고 그 뒤의 복구는 이미지·첨부가 빠진 설문을 되살린다
+  (`reference-surface.test.ts` 가 이 자리를 못 박는다). 옛 `deleteKeyRefsBySourceIds` 는
+  뺐다 — 「행이 소멸하는데 인덱스만 남는다」는 전제가 사라졌다.
+  화면은 **시스템 전체 보기 툴바의 「삭제됨 N」 칩**이다. 상태 칩의 다섯 번째 값이 아니라
+  별개의 모드다(칩은 받아온 목록을 접고 이쪽은 조회를 바꾼다). `deletedCount` 가 **null 이면
+  이 화면에 휴지통이 없다** — 「비어 있는 휴지통」과 「볼 수 없는 사람」이 같은 그림이 되면
+  안 되기 때문이다. 휴지통 카드(`DeletedSurveyCard`)도 별개 컴포넌트다.
+  검증은 둘로 나뉜다 — `tests/integration/soft-delete-surface-inventory.test.ts`(기본 게이트,
+  새 pub 표면이 붙으면 등재를 강요)와 `soft-delete-invisibility.realdb.test.ts`(등재된 표면이
+  실제로 거부하는지). 목이 돌려주는 행은 언제나 테스트가 정한 행이라 WHERE 절은 실 DB 로만
+  보인다.
+- **공개 범위를 바꾸는 유일한 경로는 `workspace.sharing.setVisibility` 다**(티켓 16, .pen FLOW 4-2).
+  요구는 `survey.edit` 이 아니라 **`survey.manageAccess`** — 편집은 팀 공개 설문의 팀원도 갖지만
+  범위 변경은 소유자·소유 팀 팀장·슈퍼어드민뿐이다(스펙 §7). 같은 이유로 `UpdateSurveyDataSchema`
+  의 allowlist 에 `visibility` 가 없다: 두 표면 중 하나만 조이면 다른 쪽이 우회로가 된다. 서비스는
+  `updatedAt` 을 건드리지 않는다 — 공개 범위는 설문 내용이 아니고, 건드리면 「최신 수정순」 기본
+  정렬이 공유 한 번에 뒤집힌다(그룹 이동과 같은 계약). 감사 행도 남기지 않는다:
+  `survey_ownership_events` 의 어휘는 소유 **이동**이라 이 축이 아니다. 화면은
+  `features/survey-builder/sharing` 의 공유 설정 모달이고, 여는 것은 막지 않고 **범위 세그먼트만**
+  잠근다(추가는 접근 내부인 누구나가 스펙 §7). 노출 근사는 `canManageSurveyAccessCard` —
+  오늘은 `canViewSurveyAnalyticsCard` 와 판정이 같지만 이유가 달라(참여자는 responses.view 는
+  갖고 manageAccess 는 못 갖는다) 티켓 18 에서 갈린다. 음성 검증 둘:
+  `tests/integration/invite-only-visibility.test.ts`(전환 전 열려 있었음 ↔ 전환 후 전 표면
+  NOT_FOUND — 짝으로 물어야 관문 유무를 갈라낸다)와 `survey-sharing.realdb.test.ts`(목록 SQL·
+  updatedAt 보존은 목으로는 증명되지 않는다).
+- **설문 그룹은 접근 권한이 아니라 정리용 묶음이다**(티켓 12, .pen FLOW 2). 그래서 관문이
+  두 갈래다 — **그룹 구조**(목록·생성·이름 변경·정렬·삭제·담기 후보 조회)는 팀 공용이라
+  슈퍼어드민 또는 그 팀 active 멤버면 팀장·팀원을 가리지 않고, **설문을 넣고 빼는 것**만
+  그 설문의 `survey.edit` + `surveyGroup.manage` 를 함께 요구한다. 전자만 보면 참여자
+  (티켓 18)가 남의 팀 폴더를 재배치하고, 후자만 보면 팀원이 못 고치는 설문을 옮긴다.
+  **그룹 mutation 은 트랜잭션 안에서 `teams` 행을 `FOR SHARE` 로 잡고 active 를 다시 본다** —
+  관문의 확인은 별도 왕복이라 그 사이 해산이 커밋되면 감사 계보로 남겨야 할 archived 팀의 그룹
+  행이 수정·삭제된다(`collect`·`move` 는 잠근 설문 행의 `teamId` 로 이미 잡힌다).
+  판정은 `assertSurveyCapabilityBatchRpc` 로 한 왕복에 끝낸다(담기는 최대 200건이고
+  하나라도 막히면 트랜잭션 하나라 전부 거부다). `groupId` 만 받는 표면(이름 변경·삭제)은
+  **타 팀 그룹을 없는 그룹과 같은 NOT_FOUND 로 접는다** — 사유가 갈리면 id 스캔으로 타 팀
+  그룹의 존재가 확인된다. 담기 후보의 `canMove` 는 근사가 아니라 서버 판정 그대로다
+  (주체 한 번 + `resolveSurveyCapabilities` 를 행마다). 담기·이동은 그룹 행 → 설문 행
+  순서로 `FOR UPDATE` 를 잡고 **잠긴 값으로** 팀 일치·미분류 여부를 다시 본다. 그룹 이동은
+  `surveys.updatedAt` 을 건드리지 않는다 — 폴더에 넣는 일은 내용 수정이 아니고, 건드리면
+  「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다. 화면 쪽은 그룹 화면이 목록의
+  다른 상태가 아니라 **주소**(`/admin/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
+  입구다. 지목한 그룹이 목록에 없으면(삭제됨·타 팀 id) 좁힘 자체를 하지 않아 빈 화면에
+  갇히지 않는다.
+- **설문 접근 판정은 `server/survey-access.ts` 하나가 한다**(티켓 07, 스펙 §8). `data-scope` 가
+  "어느 파티션을 보는가" 를 정하듯 이쪽이 "무엇을 할 수 있는가" 를 정하는 코어다. 순수 함수
+  `resolveSurveyCapabilities` 의 **순서가 곧 정책**이다 — 계정 유형 → 슈퍼어드민 → 팀 미배치 →
+  배치 대기 → **소유자(소유 팀 소속일 때만)** → 소유 팀 팀장 → 참여자 → 팀 공개 설문의 팀원.
+  소유자 분기가 소유 팀 소속을 함께 묻는 것이 이 코어의 **revocation 계약**이다 — 소유자
+  일치만 보면 A팀 설문 소유자가 A팀에서 제외돼도 다른 팀 겸직이 남아 있는 한(팀 미배치 가드는
+  "아무 팀에나 속했는가"만 묻는다) 그 설문 전권을 계속 행사한다. 팀을 접근 경계로 삼는 계약이
+  제외로 끊기지 않으면 경계가 아니다(Codex 적대적 리뷰). 설문이 고아가 되지는 않는다 — 소유 팀
+  팀장과 슈퍼어드민이 언제나 남고 정식 이전은 티켓 19 다. `invite_only` 는 마지막
+  하나(팀원)만 지운다: v2 에서 그 뜻이 "소유 팀 **팀원에게만** 숨김" 으로 바뀌었고, 팀장까지 막으면
+  팀장이 자기 팀 설문을 관리할 수 없어 승계·해산이 잠긴다. 팀 미배치 사용자는 **초대 설문을 포함해**
+  전부 차단이고(CONTEXT.md 「팀 미배치 사용자」), 배치 대기 설문은 소유자에게도 닫힌다 — 팀이 정해지기
+  전에는 아무도 열 수 없다(ADR-0006). **게스트는 이 사슬을 타지 않는다** — 팀도 소유권도 없어
+  4~8번이 무의미하고 자격은 「이 설문에 부여됐는가」 하나뿐이다(아래 게스트 절). 실사는 부여
+  모델이 붙기 전까지 기본 거부다(티켓 24).
+  **매트릭스 검증은 두 파일이 방향을 나눠 진다.** `src/server/survey-access.test.ts` 는 분기를
+  **열 단위**로 서술하고(왜 그렇게 되는가), `tests/integration/capability-matrix-spec.test.ts`
+  는 스펙 §8 표를 **행 단위**로 옮긴다(티켓 23 C 검증 게이트). 어긋나면 표가 이긴다. 둘 다
+  프리셋 상수를 다시 읽어 비교하지 않는다 — 그러면 구현이 스스로를 채점해 매트릭스가 바뀌어도
+  GREEN 이 유지된다. 표 쪽에는 **완전성 가드 둘**이 함께 있다: 모든 capability 어휘가 정확히
+  한 행에 있고(어휘가 늘면 행을 강요받는다), 각 열의 판정 결과가 그 열의 O 칸과 **정확히
+  같다**(판정이 표에 없는 것을 더 줘도 잡힌다). 셀 단언만으로는 표가 자기 누락을 모른다.
+- **작업 범위는 `server/work-scope.ts` 가 정한다.** 팀 | 시스템 전체 보기(메가리서치) | 없음 셋이며,
+  폴백은 마지막 유효 팀 → 첫 active 팀 → 없음이다(.pen FLOW 6-1). 화면이 보내는 값은 편의일 뿐이라
+  서버가 멤버십으로 다시 해석한다 — 내 팀이 아닌 teamId 는 **접고**(쿠키에 남은 해산 팀으로 화면이
+  잠기지 않게), 일반 사용자의 `system` 요청은 **거부한다**(조용히 접으면 부분 목록을 전체로 착각한다).
+  요청이 범위를 지목하지 않으면 `work_scope` 쿠키를 읽는다(이름 SSOT 는 `shared/contracts/workspace.ts`).
+  설문 목록 응답은 **해석된 범위**를 함께 돌려준다 — 요청과 다를 수 있어 화면이 그것을 정답으로 삼는다.
+  화면 쪽은 사이드바 팀 스위처(티켓 08)가 담당한다 — `app/admin/layout.tsx` 가 같은 판정 코어로 초기
+  범위를 해석해 `AdminShell` 에 넘기고(무효 쿠키는 거부가 아니라 기본 범위로 접는다 — 쿠키는 편의값),
+  전환은 쿠키 기록 + 전체 쿼리 캐시 무효화 + `router.refresh` 로 처리한다. 목록 쿼리 키에는 항상
+  해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
+  **거부는 `server/rpc-work-scope.ts` 의 `toRpcWorkScopeError` 가 FORBIDDEN 으로 옮긴다**(티켓 15) —
+  매핑이 없던 동안 그 「거부」는 실제로 500 이었다(rpc-error-policy 가 미지의 예외를 마스킹한다).
+  지는 표면은 설문 목록과 생성 경로 넷이다. **거부와 접기를 가르는 것은 값의 출처다** —
+  입력이 명시한 범위는 거부하고, **쿠키에서 온 범위는 `resolveWorkScope` 가 접는다**(티켓 15).
+  화면(admin 셸·분석 목록)이 이미 접고 있었는데 쓰기 경로만 거부해서, 강등된 슈퍼어드민에게
+  「스위처엔 팀이 보이는데 설문 생성만 막힌다」가 생겼다. 접는 쪽은 언제나 더 좁아 새지 않는다.
+- **설문을 만드는 경로 넷(빌더 자동 생성·명시 생성·복제·전체 저장 생성 모드)은 전부
+  `resolveNewSurveyOwnership` 로 소유·배치 컬럼을 채운다.** 시스템 전체 보기는 teams 행이 아니라
+  조회 범위라 소유 목적지가 될 수 없고(.pen 6-2), 팀 미배치도 만들 수 없다 — 서버가
+  `SurveyOwnershipRequiredError` 로 막고 화면은 버튼을 비활성으로 둔다. 복제본은 원본의
+  팀·공개 범위를 잇는다(팀을 잇지 않으면 배치 대기로 떨어져 만든 사람조차 목록에서 못 본다).
+  복제·기존 행 ensure 는 원본에 **survey.edit** 을 요구한다 — 열람만 가진 주체가 사본의 전권을
+  얻거나 타 팀 설문의 존재를 확인하는 우회를 막는다.
+- **관문 배선(티켓 09·10 완료분)**: 빌더·분석·운영 콘솔 도메인의 surveyId procedure 전수가
+  handler 첫 줄에서 capability 관문을 지난다. 매핑 — 조회 survey.view · 운영 제어·현황 조회
+  operations.view · 응답 조회·응답 관리 4종·응답 상세 편집 responses.view · 컨택 열람
+  contacts.view · 컨택 관리·업로드·결과코드 어휘·수신거부 해제 contacts.manage · 결과코드
+  회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·발송 mail.send ·
+  내보내기 export.download · mutation(운영 제어·쿼터 저장·컬럼 픽커 저장 포함) survey.edit ·
+  발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. **단 분석 RSC 화면 둘
+  (`/analytics/[surveyId]`·`/admin/surveys/[id]/analytics`)은 `responses.view` 도 요구한다** —
+  `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
+  직렬화하므로 RSC payload 에 그대로 실린다(analytics **RPC** 는 집계 스키마로만 나가 종전대로
+  analytics.view 다). 두 화면이 갈리지 않게 `tests/repo/analytics-page-guards.test.ts` 가 묶는다.
+  거부 사유의 정본은 코어
+  `denialReasonFor` 하나다 — **survey.view 가 없으면 forbidden 이 아니라 not_found**(id 스캔으로
+  타 팀 설문 존재 확인 차단), 보이는 설문의 권한 부족만 forbidden. authed 표면은
+  `assertSurveyCapabilityRpc`, **scoped 표면(비내부 계정도 지나는 문)은 `assertScopedSurveyCapabilityRpc`**
+  — 티켓 21 이 게스트 분기를 걷어 지금은 코어 판정에 그대로 위임한다. 이름을 남기는 이유는
+  **표면의 청중을 코드에 적어 두기 위해서**이고, tests/repo 의 정적 가드도 그 구분을 본다.
+  `control.get` 만 관문 NOT_FOUND 를 null 로 접는다(미저장 설문의 빌더 헤더 10초 폴링 OFF 폴백
+  규약). `saveWithDetails` 만 관문이 procedure 가 아니라 **서비스 트랜잭션 안**에 있다 — 생성/갱신
+  한 입구라 존재 판정과 쓰기를 갈라놓으면 tombstone 부활·생성 레이스가 된다. 무관문 예외는
+  **둘뿐**이고 전부 사유가 주석에 있다 — 보관함(library, surveyId 없는 조직 공용)·
+  `uploads.parsePreview`(무상태 엑셀 파싱). 둘 다 `authed` 라 내부 계정만 지난다.
+  `media.deleteMailAttachmentTmp` 는 셋째였는데 티켓 21 이 `scoped`→`authed` 로 옮겼다 —
+  메일은 게스트에게 항상 차단이라, 관문을 달 수 없는 문(입력에 surveyId 가 없다)을 비내부
+  계정에 열어 둘 이유가 사라졌다. **그래서 scoped 베이스에는 무관문 표면이 하나도 없다.**
+  billing 은 설문 스코프가 아닌 전역 정산이라 범위 밖. 옛 `assertSurveyAccess`(orpc.ts)·
+  `SurveyOwnershipError`(require-survey-ownership)는 걷었다. **REST 표면(티켓 11)**: export 3종
+  (export·split-preview·contacts export)은 `server/rest-survey-access.ts` 의
+  `checkScopedSurveyCapabilityRest`(not_found→404 존재 은닉·forbidden→403)로 `export.download` 를
+  진다. **게스트·실사에게 export 는 항상 차단**이다(티켓 21) — `requireAuth` 가 비내부 계정을
+  들이지 않고, 설령 들어와도 게스트 열에 `export.download` 가 없다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
+  (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
+- **관문 배선의 검증은 라우터 열거가 진다**(티켓 15, B 검증 게이트). 손으로 적은 목록만 도는
+  음성 스위트는 새로 붙은 표면을 영원히 초록으로 두므로, `tests/helpers/rpc-surface.ts` 가
+  `@/server/router` 를 런타임에 훑어 표면 목록을 만든다 — 베이스는 **미들웨어 동일성**으로
+  (authed·account·scoped 는 길이가 같지만 두 번째 미들웨어가 서로 다른 객체다), 입력 키는
+  zod object 의 shape 으로 읽는다. **`surveyId`·`surveyIds` 를 받는 authed·scoped procedure 를
+  새로 만들면 `tests/integration/cross-team-idor-rpc.test.ts` 의 인벤토리에 등재해야 한다** —
+  등재하지 않으면 그 파일이 즉시 빨개진다(그것이 「누락 표면 없음」의 증명이다). 키 이름이
+  다르거나(`id`) 입력이 zod object 가 아닌 표면은 자동 탐지가 못 보므로 별칭 목록에 적는다.
+  음성 스위트는 두 축이다 — **타 팀 설문 id 주입**(전 표면 NOT_FOUND + 요구 capability 고정,
+  db mock 이 서비스 도달을 사고로 만든다)과 **내 설문 + 남의 하위 행**
+  (`cross-team-idor.realdb.test.ts` — 관문이 통과한 뒤 남는 축이라 실 DB 로만 보인다).
+  같은 열거 위에 **게스트 축 둘**이 더 서 있다(티켓 21·23) — `guest-account-denial.test.ts`
+  가 authed·superadmin 전수를, `guest-cross-survey.realdb.test.ts` 가 **scoped 전수**를 각각
+  인벤토리로 고정한다. 후자가 실 DB 인 이유는 팀 축과 다르다: 게스트의 자격은 참여 행 조인의
+  결과라, 목의 `rowsFor` 가 어떤 id 에도 같은 행을 주는 한 「부여됐는가」가 검증되지 않는다.
+  후자에서 **거부와 「조용한 무동작」을 갈라 적는다**: 응답 관리 4종·질문 삭제·문항 그룹 삭제는
+  WHERE 에 surveyId 가 함께 걸려 0행이 영향받고 표면은 그대로 `{ok:true}` 를 준다. 보안상으로는
+  거부와 같지만 부류를 적어 두지 않으면, 나중에 누가 `surveyId` 조건을 빼도 「원래 ok 를 주던
+  표면」으로 보여 리뷰를 통과한다. RSC 콘솔 페이지·REST export 라우트는 라우터가 없어
+  파일 시스템을 훑는다(`tests/repo/survey-boundary-guards.test.ts` — `rsc-page-guards`(인증)·
+  `analytics-page-guards`(렌더 내용)와 분담이 갈린다: 이쪽은 **어느 설문인가**를 본다).
+  **정적 가드는 「관문 이름이 파일에 있다」까지만 증명한다** — 그 호출이 민감 조회보다 먼저
+  서는지는 못 본다. 실제로 티켓 15 에서 컨택·응답 상세 RSC 가 관문을 지난 뒤 하위 행을
+  **설문 경계 없이 읽어 복호화**하고 있었다.
+- **관문이 통과한 뒤에도 남는 축이 있다 — 「내 설문 + 남의 하위 행」**(티켓 15). 관문은 경로의
+  설문만 보므로, 서비스의 WHERE 에 `surveyId` 가 함께 들어 있지 않으면 남의 팀 컨택·응답·
+  템플릿·캠페인이 그대로 움직인다. **하위 행 id 는 전역 PK 라 FK 도 설문 경계를 모른다.**
+  세 가지가 이 축의 규칙이다.
+  ① **조회는 조건이지 사후 확인이 아니다** — `getContactDetailById`·`getResponseById` 는
+  `surveyId` 를 WHERE 로 받는다. 사후 비교로 두면 그 사이에 PII·응답 원문이 이미 복호화된다.
+  ② **payload 가 들고 오는 참조도 검사한다** — `question.groupId`·`group.parentGroupId` 는
+  `assertGroupReferenceBelongsToSurvey`(단건)와 survey-save 의 배치 판이 본다. **없는 id 도
+  같은 사유로 접는다**(갈라 두면 FK 오류 500 과 거부의 차이가 존재 오라클이 된다).
+  ③ **거부는 RPC 어휘로 나가야 한다** — 문자열 `Error` 로 던지면 rpc-error-policy 가 500 으로
+  마스킹해, 정확히 거부된 요청이 화면에는 「내부 오류」로 보인다. 컨택·회차·캠페인·단건 발송·
+  reorder 가 그랬다(티켓 15 가 매핑). 이 축의 음성 검증은 목으로는 못 한다 — 목이 돌려주는 행은
+  언제나 테스트가 정한 행이라 WHERE 절이 무엇이든 통과하므로 `*.realdb` 로 간다.
+- **팀 해산은 확정 즉시, 한 트랜잭션, 되돌릴 수 없다**(ADR-0011, 티켓 13, .pen FLOW 8-1).
+  `workspace.teams.dissolve`(superadmin 전용, 팀 관리 목록의 카드 케밥이 유일한 진입점)가
+  팀 `archived` + 소속 설문 배치 대기(`teamId=null`·`assignment_pending`·`surveyGroupId=null`)
+  - 감사 행을 함께 쓴다. **`team_members` 행은 지우지 않는다** — 유효 소속 판정
+    (`getActiveTeamMemberships`)이 active 팀만 조인하므로 팀원은 그 순간 자동으로 미배치가 되고,
+    행을 지우면 "해산 시점 명부" 가 어디에도 안 남는다. 확인 문구(팀 이름 재입력) 대조는 화면과
+    **서버 양쪽**에 있다 — 화면만 검사하면 raw RPC 한 번으로 팀이 사라진다. 잠금은 멤버 변경과
+    **같은 팀 키**(`lockTeamMembers`)를 쓰고 최종 UPDATE 에 `status='active'` 조건을 함께 건다:
+    잠금만으로는 앞선 해산 뒤에 락을 받은 두 번째가 감사 행을 더 쓰고 archivedBy 를 덮는다.
+    **해산 취소 procedure 를 만들지 말 것** — 확인 모달의 "되돌릴 수 없습니다" 가 거짓이 되고
+    정식 복구 경로는 재배치 센터(티켓 14)다. 해산 뒤에도 **공개 응답·예약 메일·Inngest 잡·
+    게스트 콘솔은 계속 돈다**(그 경로들이 팀 컬럼을 읽지 않는 것이 근거다 — 새 응답 게이트를
+    만들 때 `teamId`·`assignmentStatus` 를 끌어들이면 그 약속이 깨진다). 「해산이 끝이어야
+    하는데 열려 있던」 경로 셋도 함께 닫혔다 — 슈퍼어드민은 관문을 소속 조회 없이 통과하므로
+    archived 팀의 **멤버 명부**(members 3종에 `requireActiveTeam`)·**그룹 쓰기**
+    (`getSurveyGroupTeamId` 가 active 팀만)·**새 설문 귀속**(`resolveNewSurveyOwnership` 이
+    쓰기 직전 재확인)에 계속 닿을 수 있었다.
+- **재배치 센터는 팀 경계로 좁힐 수 없는 목록이라 슈퍼어드민 전용이다**(티켓 14, .pen FLOW
+  8-2~8-4·9-2). `/admin/reassignment` 는 팀 관리의 「메가리서치」 카드가 유일한 입구고
+  사이드바 항목도 `teamId` 딥링크도 없다 — 여기 있는 사람과 설문은 **어느 팀에도 속하지
+  않아** 팀장에게 하나라도 열면 그 순간 전사 열람이 된다. `workspace.reassignment` 5종
+  (`inbox`·`pendingSurvey`·`ownerCandidates`·`assignUser`·`assignSurveys`)이 전부 superadmin
+  베이스이며, 페이지도 `requireSuperadminPage` 라 두 경로의 권한 축이 같다.
+  - **새 소유자는 목적지 팀의 활성 멤버여야 한다**(`OwnerNotInTeamError`). 이것이 이 티켓의
+    핵심 불변식이다 — `resolveSurveyCapabilities` 의 소유자 분기는 **소유 팀 소속일 때만**
+    전권을 주므로(티켓 13 하드닝), 팀 밖 사람을 앉히면 배치는 성공하는데 그 소유자가 자기
+    설문을 못 여는 설문이 만들어지고 화면에는 아무 경고도 뜨지 않는다. 후보 목록
+    (`listOwnerCandidates`)과 서버 검증이 **같은 모집단**을 보는 것이 그 계약이다.
+  - **단건(8-4)과 일괄(9-2)은 같은 RPC** 다. 단건은 목록 길이가 1 인 경우일 뿐이라 나누면
+    「전부 아니면 전무」 규칙이 두 벌이 된다. 없는 id 와 「배치 대기가 아닌」 id 는 **같은
+    사유**로 접는다 — 갈라 말하면 재배치 주소가 전체 설문의 존재 확인 창구가 된다.
+  - 잠금 순서는 **팀 멤버 → 팀 행 `FOR SHARE` → 설문 id 오름차순**으로 해산·담기와 같다.
+    맞추는 것이 목적이 아니라 배치가 해산의 **정확히 반대 방향 이동**이라 서로를 기다려야 한다.
+    배치는 `survey_group_id` 를 NULL 로 둔다(그룹은 팀 소유물 — 새 팀에서는 미분류).
+  - 인박스 목록은 **200건 상한, 지표는 전체 수**다. 0116 백필이 팀 도입 이전 설문 전부를
+    배치 대기로 세워 초기 운영에서 수천 건일 수 있다 — 화면이 「상위 N건」임을 말한다.
+  - **배치 취소 표면을 만들지 말 것.** 인박스는 처리하는 곳이지 되돌리는 곳이 아니다(해산에
+    취소가 없는 것과 같은 이유). 되돌리려면 정식 이전(티켓 19)을 쓴다.
+- **배치 대기 설문의 「출신 팀」은 `survey_ownership_events` 에만 남는다**(0118, 티켓 14).
+  해산이 `surveys.team_id` 를 NULL 로 내리므로 설문 행에는 출처가 없고, 팀 쪽 `dissolve`
+  감사는 **규모**(surveyCount)만 적을 뿐 어느 설문인지 적지 않는다. 그래서 `dissolveTeam` 이
+  설문별 `unassign` 행을 함께 쓴다 — 이 행이 없으면 .pen 8-4 의 「현재 소유 팀 · 해산됨」도,
+  "누가 이 설문을 저 팀으로 옮겼는가" 도 답할 수 없다. 티켓 19 승계가 `transfer` 로 이어 쓴다.
+- **재입사는 상태 전이와 팀 배정이 한 트랜잭션이다**(티켓 14, .pen FLOW 9-4). 퇴사가 유효
+  소속을 끊어놓았으므로 상태만 되돌리면 로그인만 되는 미배치로 되살아나 재배치 센터로 다시
+  흘러간다 — 「새 소속으로 다시 시작합니다」라고 말하는 화면이 목적지를 안 받으면 그 문장이
+  거짓이 된다. 두 도메인의 쓰기라 `server/workflows/user-rehire` 가 묶는다(도메인끼리는 서로를
+  못 부른다). **순서가 계약이다** — ① 상태 전이 ② **옛 활성 소속 정리** ③ 새 소속 배정.
+  - ①이 먼저인 이유: 배정의 `assertMemberAssignable` 이 대상의 재직 여부를 본다. 뒤집으면
+    재입사가 자기 자신의 재직 검사(퇴사 상태)에 걸린다.
+  - ②가 **없으면 기능이 통째로 죽는다**: 퇴사는 `team_members` 행을 지우지 않으므로(팀 상세가
+    비활성 멤버를 표식과 함께 계속 보여줘야 한다) 팀이 있던 사람은 전원 「이미 다른 팀에
+    소속됨」으로 막힌다. 정리는 `clearActiveMembershipsInTx` 가 `member_remove` 감사와 함께
+    한다. **마지막 팀장 가드는 부르지 않는다** — 세는 것이 활성 팀장인데 대상은 이미 퇴사라,
+    부르면 유일한 팀장이 퇴사한 팀에서 재입사가 영구히 막힌다.
+  - `teamId`·`teamRole` 은 계약상 **nullable** 이고 **유형별로** 강제된다. guest·fieldwork 는
+    멤버십이 금지고(스펙 §1) 슈퍼어드민은 팀 소속과 무관하므로, 필수로 두면 그 계정들은 한 번
+    퇴사한 뒤 영영 돌아올 수 없다. 화면도 그 계정에는 두 칸을 아예 감춘다.
+  - 배정 실패는 워크플로가 `RehireTeamAssignmentError` 로 **사유 문구만 보존해** 감싼다 —
+    워크스페이스 도메인 에러를 그대로 올리면 auth procedure 가 그 도메인을 import 해야 한다.
+- **마지막 팀장 가드가 지키는 것은 "관리자가 남는가" 이지 "leader 행이 남는가" 가 아니다.**
+  세는 것은 **활성** 팀장이고, **대상이 비활성이면 아예 묻지 않는다** — 그러지 않으면 유일한
+  팀장이 퇴사한 순간 강등도 제외도 거부되어(활성 팀장 0명) 팀이 유령 팀장에 잠긴다.
+- **RSC 페이지는 자기 가드를 갖는다.** App Router 는 소프트 내비게이션에서 상위 레이아웃을
+  다시 돌리지 않는다 — 콘솔 RSC 는 procedure 가 아니라 service 를 직접 부르므로 레이아웃만
+  믿으면 세션이 폐기된 뒤에도 데이터를 읽는다. 서버 데이터를 부르는 `page.tsx` 는 전부
+  `requireAuth`·`requireAdminPage`·`assertSurveyConsolePageAccess` 중 하나를 부르고,
+  `tests/repo/rsc-page-guards.test.ts` 가 빠뜨림을 잡는다(무인증 응답자 표면만 허용 목록).
+  설문 콘솔 페이지의 capability 는 `[id]` 레이아웃이 survey.view 를 한 번 접고 leaf 가 자기
+  정밀 관문을 가진다 — 게스트 허용 화면은 `assertSurveyConsolePageAccess(surveyId, cap)`,
+  게스트 차단 화면(컬럼 스킴·결과코드·업로드·쿼터)은 `requireAdminPage` +
+  `assertSurveyCapabilityPage` 짝. 구 `assertGuestSurveyPageAccess`(guest-page-guard)는 티켓 10
+  이 걷었다.
+- **세션 폐기는 표식으로 경합까지 닫는다.** 재설정·상태 전이는 세션을 지우면서
+  `users.sessions_revoked_at`(0114)을 갱신하고, 로그인은 시작 시점의 값을 읽어뒀다가 세션을
+  만들기 직전에 다시 읽어 다르면 생성을 취소한다(`lib/auth/session-revocation.ts`).
+  시각의 대소가 아니라 **같은 컬럼의 두 번 읽기**라 앱·DB 시계 오차와 무관하다.
+  표식은 **먼저 찍힌 것이 이긴다** — 흐름 도중 다시 읽어 덮으면 막으려던 창이 그대로 열린다.
+- **`/api/auth` POST 는 허용목록이다**(`sign-in/email`·`sign-out`). catch-all 이 전 엔드포인트를
+  열어두면 `update-user` 로 아바타 URL 검증을, `change-password` 로 다른 기기 로그아웃을
+  우회할 수 있다. 서버는 `auth.api.*` 를 직접 부르므로 목록을 좁혀도 앱 동작은 그대로다.
+- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로
+  `/admin`·`/analytics`·`/guest`·`/fieldwork` 진입을 거르고 `x-pathname` 요청 헤더를 넘긴다.
+  쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/admin/layout.tsx`·
+  `app/analytics/layout.tsx` 가 서버에서 재검증한다. 유형 구역(`/guest`·`/fieldwork`)은 페이지의
+  `requireAccountTypePage` 가 본다. 비로그인 접근을 허용하는 경로 목록은
+  `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있고(현재 `/admin/login` 뿐), 유형과 무관하게
+  열리는 admin 경로는 같은 파일의 `ACCOUNT_PAGES`(현재 `/admin/profile` 뿐)다.
+- **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/admin/login` 으로 되돌아오고,
+  목적지 해석은 그 페이지(RSC)가 한다 — 계정 유형이 세션에만 있어 클라이언트가 결정할 수 없다.
+  복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
+  로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
+- REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active' + userType='internal')를 쓴다 — oRPC `authed` 와
+  같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막고, 전역 관리 RSC 는 `requireSuperadminPage` 가 슈퍼어드민만 통과시킨다(둘 다 거부는 notFound).
+- procedure 베이스 5종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
-  - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
-  - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
-- 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
-- allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+  - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
+  - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정·**실사 업체**) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
+  - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
+  - **`scoped`** — 세션 + active (비내부 계정 포함). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드는 `account` 와 글자까지 같지만 **별개의 베이스로 둔다** — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial` 세 스위트가 각각 목록으로 고정한다.
+- **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
+  남아 있는 이유는 하나다** — 이름이 **표면의 청중**을 적기 때문이다. 티켓 21 이 게스트 분기를
+  걷으면서 셋 다 본문이 한 줄 위임으로 줄었지만, 「이 페이지는 관리 화면이다」·「이 문은 비내부
+  계정도 지난다」는 사실은 호출부에서 읽혀야 하고 `tests/repo` 의 정적 가드도 그 이름으로 목록을
+  만든다. 합치면 어느 문이 누구에게 열려 있는지가 코드에서 사라진다. 실사(티켓 24)가 코어에
+  자기 열을 얻으면 이 셋의 본문은 그대로 둔 채 판정만 늘어난다.
+- **계정 유형 게이트**: `authed`·`requireAuth` 는 `userType === 'internal'` 만 통과시킨다(`isInternalUser`,
+  세션에 실려 오는 값). 사용자 관리에서 발급한 guest·fieldwork 계정은 로그인은 되지만 내부 표면
+  (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
+  `readSessionUser` 의 안전 기본값은 'guest' — 값이 없으면 내부를 열지 않는 쪽으로 접는다.
+- **유형별 목적지**(티켓 05): 홈 표의 SSOT 는 `lib/auth/account-home.ts` 의 `ACCOUNT_HOME_PATH`
+  (internal→`/admin/surveys` · guest→`/guest` · fieldwork→`/fieldwork`). 로그인 직후 목적지는
+  `resolvePostLoginDestination` 이 정한다 — 게스트·실사가 요청한 내부 경로는 자기 홈으로 접는다
+  (그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가는 루프가 된다). admin·analytics
+  레이아웃은 비내부 계정을 자기 홈으로 **리다이렉트**하고(존재를 감출 이유가 없어 notFound 가 아니다),
+  `ACCOUNT_PAGES`(현재 `/admin/profile`)만 비켜준다. **목적지 축은 하나다**(티켓 21) — 예전에는
+  설문 단위 env grant 게스트가 먼저 갈라져 grant 설문 콘솔로 갔고 담당 아닌 설문을 향한 로그인은
+  강제 로그아웃까지 했는데, 그 동선이 통째로 사라졌다.
+- **프로필은 세 유형 공통**(.pen FLOW 3-2, `/admin/profile`). 본인이 바꾸는 것은 이름·아바타·비밀번호
+  뿐이다 — `UpdateProfileInput` 에 이메일·직책·소속이 없는 것이 이 표면의 정의다. 내부 계정은
+  이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
+  것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
+  서비스가 그 URL 이 우리 R2 공개 URL 인지 확인한다(외부 주소면 남의 서버가 우리 화면에 그림을 그린다).
+- **게스트(클라이언트)는 계정이고, 자격은 설문 단위 부여 하나다**(티켓 21, 스펙 §5·§8, .pen FLOW 4-2).
+  `survey_participants` 의 `kind='guest'` 행이 그 설문 **하나만** 열고 팀 멤버십은 만들지 않는다.
+  판정은 코어의 게스트 분기이며 **팀·소유권 사슬을 타지 않는다** — 팀도 소유권도 없는 계정이라
+  그 분기들이 무의미하고, 함께 막는 것은 배치 대기뿐이다(팀이 정해지기 전에는 아무도 못 연다).
+  공개 범위도 관여하지 않는다: 부여가 유일한 자격이다.
+  - **열리는 것은 둘뿐**이다 — `survey.view`(프리뷰) + `operations.view`(허용 탭). 게스트 열에
+    없는 것이 곧 **「항상 차단」의 정본**이다: 분석·내보내기·응답 상세·컨택 원본·메일·편집.
+    설문마다 달라지는 것은 이 집합이 아니라 `guest_tabs` 라, **탭을 전부 켜도 capability 는
+    늘지 않는다**. 탭을 capability 로 쪼개면 매트릭스 열이 설문마다 갈려 판정이 프리셋이 아니게 된다.
+  - **탭 화이트리스트**(`overview`·`progressReport`·`contactsMasked`·`quota`)는 설문마다 독립이고
+    기본값은 **응답 현황 하나**다. 어휘·기본값·정규화 SSOT 는 `shared/contracts/workspace.ts`
+    (`surveyGuestTabValues`·`DEFAULT_SURVEY_GUEST_TABS`·`normalizeSurveyGuestTabs`). 컬럼이 비어
+    있으면 기본값, 객체인데 키가 없으면 false — 나중에 탭이 늘어도 옛 부여가 새 탭을 자동으로 얻지
+    않는다. 판정은 `resolveSurveyAccess`/`loadSurveyAccess` 가 capability 와 **함께** 돌려주며
+    `guestTabs === null` 은 「탭 축이 없는 주체」(내부·실사)다 — 전부 false 인 객체와 갈라 둔 이유는
+    내부 계정에게 「모든 탭이 닫혔다」를 주면 콘솔이 자기 탭을 스스로 숨기기 때문이다.
+  - **관문은 두 축**이다(스펙 §7·§11-5). 조회·검색·추가는 `survey.invite`, **해제와 탭 저장**은
+    `survey.manageAccess`. 탭이 관리 쪽에 서는 것은 §11-5 의 「**초대** 제거·범위 변경」이 이
+    둘이기 때문이다 — 새 부여는 언제나 기본 탭으로 서므로 「추가는 누구나」와 어긋나지 않지만,
+    이미 선 부여를 넓히면 조사 대상(마스킹)·쿼터가 외부인에게 열린다. 화면도 같은 값
+    (`canManage`)으로 칩과 「제외」를 함께 잠그되 칩은 **보여준다**(지금 무엇이 열려 있는지는
+    초대한 사람도 알아야 한다). 검색이 관문을 지는 것이
+    특히 중요하다 — 후보 목록은 발급된 클라이언트 계정 명부라 관문 없이 열면 설문 id 하나로 전
+    고객사 계정을 훑을 수 있다. 대상 자격은 서비스가 본다: **guest + active 만**.
+  - 서비스의 WHERE 에 `kind='guest'` 를 함께 거는 것이 칸막이다 — 참여자·게스트가 같은 테이블에
+    살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
+  - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/admin/logout`).
+    그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
+  - 부여 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
+    **게스트가 보는 콘솔은 `/guest` 다**(티켓 22). 그 관문이 `server/page-guest-access.ts` 의
+    `assertGuestSurveyPageAccess` — capability(`operations.view`)를 지난 뒤 **탭 축을 다시 묻는다**.
+    `tab` 을 생략하면 탭을 묻지 않는다(미리보기는 화이트리스트 밖). **거부는 전부 notFound 이고
+    사유를 갈라 말하지 않는다** — 「부여 안 됨」과 「탭 안 열림」이 다른 응답을 주면 주소 조작으로
+    부여 사실과 탭 구성이 확인된다. 화면도 같은 판정을 하되(탭 바가 허용 탭만 그린다) 강제는
+    서버가 한다.
+  - **게스트 콘솔의 조사 대상은 서버에서 투영을 끝낸다**(`read-models/guest-contacts`). 운영 콘솔의
+    `ContactsRow` 에는 `inviteToken`(그 사람의 응답 링크)과 컨택 id 가 실려 있어, 게스트에게 가면
+    **열람이 대리 응답**이 된다 — 표시 문자열만 남긴 새 행을 만든다. 마스킹 단위는 컬럼 스킴의
+    `piiType` 이고 **PII 로 매핑하지 않은 attrs 컬럼은 마스킹 대상이 아니다**(업로드 시점의 결정이
+    곧 무엇이 개인정보인가의 정의다). 메일 컬럼은 아예 뺀다.
+  - 현황·진척·쿼터는 **운영 콘솔 위젯을 그대로** 쓴다(게스트와 담당자가 같은 숫자를 봐야 한다).
+    조립은 app 층이 한다 — 기능 묶음끼리는 서로 import 하지 않지만 라우트는 어느 묶음이든 쓴다.
+    컨택 표만 새로 짠 이유는 저쪽 표의 헤더 필터 팝오버가 RPC 를 당기고(게스트에게 닫힌 표면)
+    PII 컬럼 필터가 마스킹본 위에서도 오라클이 되기 때문이다.
+  - 음성 검증 넷: `tests/integration/guest-account-denial.test.ts`(라우터를 열거해 authed·superadmin
+    전수가 게스트에게 FORBIDDEN, 부여 설문에서 열리는 capability 가 정확히 둘 — 나머지 어휘 전수는
+    관문 거부)와 `survey-guests.realdb.test.ts`(부여 왕복·설문별 탭 독립·대상 자격·권한 축 —
+    조인과 WHERE 는 목으로 증명되지 않는다). 콘솔 축은 `guest-console.realdb.test.ts`
+    (홈 목록·탭 관문·마스킹 투영 — 「초대 토큰과 컨택 id 가 직렬화 결과에 없다」를 직접 본다).
+    **cross-survey 축은 `guest-cross-survey.realdb.test.ts`**(티켓 23) — scoped 전수에 미부여
+    설문 id 를 넣고 **사유의 대비**를 본다: 부여=FORBIDDEN, 미부여·남의 부여=NOT_FOUND.
+    갈리지 않으면 거부는 같아도 게스트 계정 하나가 조사 목록의 존재 확인 창구가 된다.
+- 게스트·실사 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다(`isExternalViewer` → 계정 유형).
+- **실사 초대는 개인 단위이고, 팀장의 업체 시야는 파생이다**(티켓 25, 스펙 §6, ADR-0019,
+  .pen FLOW 4-2 실사 블록·10-1). `survey_participants` 의 `kind='fieldwork'` 행 하나가 그
+  설문 하나를 연다 — 업체 단위 초대도, 업체 측 배정 UI 도 없다(MVP 무게로 기각).
+  - **초대 열**은 `survey.view` · `operations.view` · `contacts.view` · `contacts.writeAttempts`
+    넷이다. **조사 대상 원본**에 닿는 것이 게스트의 마스킹 원칙과 갈리는 지점이고, 근거는
+    대리 실사라는 업무 자체가 연락처를 전제한다는 것이다. `contacts.manage` 가 없어 명단은
+    못 고치고, 편집·메일·export·응답 상세·분석은 항상 차단이다.
+  - **팀장의 파생 시야**는 그 열에서 `contacts.writeAttempts` 하나만 뺀다. 그 한 칸이
+    「본인이 초대돼야 기록한다」의 전부이고, 두 칸 이상 갈리기 시작하면 파생 시야가 별개
+    역할이 된 것이라 열을 새로 세워야 한다. **초대 판정이 파생보다 먼저 선다** — 뒤집으면
+    본인이 초대된 팀장이 자기 설문에서 결과코드를 못 쓴다.
+  - 파생 시야의 축은 **참여 행 밖**이다(`SurveyAccessRelation.fieldworkOrgInvited`). 주어가
+    다르기 때문이다: 저쪽은 「내 초대 행」, 이쪽은 「내 업체 사람이 초대돼 있다」. 로더의
+    EXISTS 는 **팀장에게만** 켜지고(관문은 전 요청이 지나는 자리라 남의 축의 비용을 지우면
+    안 된다) 조인 조건이 **업체**인 것이 그 경계다 — 빼면 타 업체 설문이 그대로 넘어온다.
+    소속원의 `status='active'` 도 함께 본다: 초대 행은 계정 상태를 따라 지워지지 않으므로,
+    조건이 없으면 아무도 뛰지 않는 설문이 팀장 시야에 계속 선다.
+  - **관문은 두 축**이다 — 조회·검색·추가는 `survey.invite`, 해제는 `survey.manageAccess`.
+    게스트 블록과 같되 **탭 저장이 없다**: 실사에는 설문마다 고르는 화면 축이 없다.
+    검색이 관문을 지는 이유는 후보 목록이 **협력사 인력 명부**라서다.
+  - **주체의 소속·역할은 세션이 아니라 DB 에서** 읽고 **활성 업체일 때만** 채운다
+    (`loadAccessSubject`). 업체가 종료되면 판정이 통째로 닫힌다.
+  - **배치 로더는 파생 시야를 세우지 않는다** — 좁은 쪽으로 틀리고(거부), 오늘 도달 경로가
+    없다. 실사가 지나는 배치 표면이 생기면 그 자리에 축을 함께 세울 것.
+  - 음성 검증 둘: `fieldwork-account-denial.test.ts`(라우터 열거 — authed·superadmin 전수
+    FORBIDDEN, 초대 설문에서 열리는 capability 가 정확히 넷)와 `fieldwork-invites.realdb.test.ts`
+    (**업체 둘을 심는 것이 뼈대** — 업체가 하나뿐인 시드에서는 조인 조건이 있든 없든 결과가
+    같아 「타 업체는 안 보인다」를 증명하지 못한다. 대칭까지 함께 잰다).
+- **실사 콘솔은 초대가 여는 화면 둘이고 탭은 고정이다**(티켓 26, 스펙 §6, ADR-0019,
+  .pen FLOW 10-2). `/fieldwork/surveys/[surveyId]` 아래 조사 대상·응답 현황이며, 게스트의
+  탭 화이트리스트에 해당하는 축이 **없다** — 초대되면 둘 다 열린다. 관문
+  `assertFieldworkSurveyPageAccess` 가 그 짝이고 **leaf 마다 자기 capability 를 준다**
+  (조사 대상 `contacts.view` · 응답 현황 `operations.view`). 오늘은 실사 열에서 두 칸이 함께
+  켜져 결과가 같지만, 물어야 할 것을 묻지 않으면 한쪽이 닫히는 날 원본 연락처가 열린 채로
+  남는다. 거부는 전부 notFound 이고 사유를 갈라 말하지 않는다.
+  - **조사 대상은 원본 전체**다 — 암호화 PII 를 페이지 단위로 복호해 평문으로 그린다
+    (`read-models/fieldwork-contacts`). 게스트 투영이 마스킹 힌트를 주는 자리와 정확히
+    대칭이고, 그 차이가 두 콘솔의 정의다. 컬럼 스킴은 **라벨·순서에만** 쓰고 `hidden` 은
+    무시한다(「실사용 스킴 없음」은 따로 설정할 스킴을 두지 않는다는 뜻이지 담당 연구원의
+    배치를 버린다는 뜻이 아니다). 메일 열은 아예 뺀다. 스킴이 담지 못한 attrs 키는
+    **설문 전체**에서 뽑는다 — 페이지 행에서 뽑으면 표 머리가 페이지·검색어마다 흔들린다.
+  - **초대 토큰은 본인이 초대된 실사에게만 실린다**(`canProxyRespond`). 팀장의 파생 시야에서는
+    투영이 null 로 접고 화면은 판정을 다시 하지 않는다 — 버튼만 감추면 토큰이 RSC payload 로
+    나가고, 그 링크는 `pub` 경로라 서버가 다시 못 막는다. ADR-0019 의 「본인이 대리 응답·
+    결과코드를 입력하려면 본인도 초대돼야 한다」는 **투영에서만** 강제된다.
+  - **메모·연락 방법은 좁은 표면 하나**다(`contacts.targets.setMemo`, 티켓 25 가 넘긴 항목).
+    형제 `targets.update` 와 요구 capability 가 다른 것이 존재 이유다 —
+    `contacts.writeAttempts` ↔ `contacts.manage`. 두 필드를 `update` 에 옵셔널로 얹으면 한
+    표면이 두 자격을 지고 실사에게 명단 수정이 함께 열린다. 서비스도 `attrs`·PII·group_value 를
+    건드리지 않는다. 화면의 저장 버튼을 회차와 가른 것도 같은 축이다 — 회차는 누적, 메모는
+    덮어쓰기라 한 버튼이면 메모만 고치려다 회차가 쌓인다.
+  - **작성자는 이 티켓이 처음 채웠다**(0121). `contact_attempts.created_by` 와
+    `contact_uploads.uploaded_by` 의 FK 가 아직 `auth.users` 를 가리켜 **채울 수 없는
+    컬럼**이었다(티켓 01·02 가 계정을 `public.users` 로 옮긴 뒤로). 값을 넣으면 곧바로 FK
+    위반이라 `addAttempt` 는 아예 쓰지 않고 있었다.
+  - 응답 현황은 **운영 위젯을 그대로** 쓴다(실사와 담당자가 같은 숫자를 봐야 한다). 컨택 표만
+    새로 짠 이유는 게스트 콘솔과 같다 — 저쪽 표는 헤더 필터 팝오버가 RPC 를 당기고 업로드·
+    메일 진입점을 함께 그린다.
+  - 음성 검증은 `fieldwork-contacts.realdb.test.ts` — 복호 평문·작성자·파티션 고정·파생 시야의
+    토큰 null·차단 표면. 암호화·INSERT·WHERE 라 목으로는 무엇이든 통과한다.
+- **대리 응답은 응답자와 같은 페이지이고, 구별은 귀속 컬럼 하나가 진다**(티켓 27, ADR-0019,
+  .pen FLOW 10-3). 실사가 「응답 대행」으로 여는 것은 `/survey/[id]?invite=…&fw=1` 이며 그
+  화면은 응답자가 보는 것과 배너 한 줄 말고는 같다. 다르게 만들면 실사가 응답자와 다른 것을
+  보게 되어 대행의 의미가 사라진다.
+  - 판정 코어는 **`server/fieldwork-proxy`** — `data-scope`·`survey-access` 와 나란하다.
+    판정이 도메인 하나에 속하지 않아서다(응답 도메인이 묻고, 접근 코어가 답의 절반을 갖고,
+    컨택이 나머지를 갖는다). RPC 어휘로 옮기는 짝은 `rpc-fieldwork-proxy` 다.
+  - **입력은 초대 토큰과 세션 쿠키 둘뿐이다.** 화면이 `fieldworkUserId` 를 실어 보내면 누구든
+    남의 이름으로 귀속을 위조하므로 그 값은 계약에서 아예 뺐다(`FieldworkProxyContext`).
+    팀장의 파생 시야는 `contacts.writeAttempts` 가 없어 자동으로 걸린다 — ADR-0019 의
+    「본인도 초대돼야 한다」에 대한 두 번째 자물쇠다(첫 번째는 티켓 26 이 그 세션에 초대
+    토큰을 주지 않는 것).
+  - **귀속은 행 id 가 확정된 뒤 한 번 찍는다**(`stampFieldworkAttribution`). 진입 서비스마다
+    인자로 흘려보내면 분기가 늘 때마다 챙겨야 하고, 실제로 셋을 놓쳤다 — 버전 이관이 성공한
+    재개·기존 행을 물려받는 생성·대상자 테스트 lane. 셋 다 배너는 뜨는데 귀속이 NULL 이었다.
+    **컨택 일치를 함께 건다**(세션 폴백이 남의 행을 돌려줄 수 있다). **null 로 덮어쓰지
+    않는다** — 실사가 시작한 행을 응답자가 이어받아도 그 응답은 실제로 일부가 대행이다.
+  - **「응답자 화면 diff 0」은 `?fw=1` 힌트가 지킨다.** 초대 토큰만 보고 배너를 물으면 초대
+    응답자 **전원**이 왕복을 하나씩 더 하고 `lookup` 레이트리밋 예산을 재개 호출과 나눠
+    쓴다. 힌트는 `?test=` 와 같은 자리의 장치이고 권한은 아무것도 주지 않는다. 같은 이유로
+    배너는 **TanStack Query 를 쓰지 않는다** — 응답 흐름 트리에 QueryClientProvider 가 없고,
+    배너 하나 때문에 provider 를 끼우면 응답자 트리 전체가 바뀐다(dom 스위트가 그것을 잡았다).
+  - **완료된 대상의 대행 진입은 서버가 거부한다** — 화면이 버튼을 지우고 티켓 26 이 토큰을
+    안 주지만 그 둘은 화면의 약속이다. **응답자 본인에게는 적용하지 않는다**(재응답 정책
+    불변). 판정은 **삭제되지 않은** 완료 응답만 본다 — 담당 연구원이 불량 응답을 지우고
+    재실사를 지시하는 것이 정상 동선이라, 술어가 없으면 그 대상이 영구히 대행 불가가 된다.
+  - 음성 검증은 `fieldwork-proxy.realdb.test.ts` — 귀속·응답자 null 2종·자격 5종·진입 분기
+    4종(물려받기·버전 이관·컨택 불일치·삭제된 완료)·완료 거부 3종.
+- **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
+  `fieldwork_orgs`(0120)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
+  테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
+  「이 실사 계정이 어느 업체 사람인가」 하나이며, 그 경계가 없으면 실사 팀장의 파생 시야(티켓 25)가
+  타 업체 설문까지 넘친다. 관리 표면 5종(`workspace.fieldworkOrgs`)은 **전부 슈퍼어드민**이다 —
+  업체 목록은 협력사 명부라 한 업체 사람에게 열면 경쟁 업체의 존재와 인원이 드러난다. 판정 술어를
+  따로 두지 않은 것도 그래서다: 베이스가 곧 정책이라 `canManage*` 가 낄 자리가 없다.
+  - **정합은 `users_fieldwork_fields_check` 가 지킨다** — 실사면 소속·역할이 둘 다 있어야 하고,
+    아니면 둘 다 NULL 이어야 한다. `survey_participants.kind` 와 달리 **한 행 안의 조건**이라
+    CHECK 로 걸 수 있다. 「업체 없는 실사 계정 생성 거부」는 세 겹이다 — 경계(`CreateUserInput`
+    유니온) · 서비스(활성 업체 확인) · CHECK.
+  - **종료는 재직 중 계정이 0명일 때만 된다.** 팀 해산과 갈리는 지점이다: 팀은 해산해도 팀원이
+    「미배치」라는 정의된 상태로 내려가지만(ADR-0011) 실사 계정에는 그런 상태가 없다(소속이
+    NOT NULL). 같은 이유로 **종료된 업체의 소속 계정은 복귀·재입사도 막는다** —
+    `applyUserStatusChange` 한 자리가 두 전이를 함께 막는다(둘이 같은 문을 지난다).
+  - **잠금이 짝을 이룬다** — 발급·재활성화는 업체 행을 `FOR SHARE` 로, 종료는 `FOR UPDATE` 로
+    잡는다. 짝이 없으면 「활성으로 읽은 뒤 종료가 커밋」되는 창에서 **활성 계정을 가진 archived
+    업체**가 남는다. 전역 전이 키는 도움이 안 된다: 업체 종료는 그 키를 잡지 않고, 종료가 세는
+    것은 **재직 중** 계정이라 정지 계정을 되살리는 트랜잭션과 서로를 보지 못한다.
+    `fieldwork-orgs.realdb.test.ts` 의 동시 실행 테스트가 그 불변식을 잰다(잠금을 빼면 빨개진다).
+  - **이 티켓 자체는 capability 를 하나도 열지 않았다** — 소속 경계만 세웠고, 실사 열을 실제로
+    연 것은 티켓 25 의 초대다. **업체가 없는 실사 계정은 지금도 전 칸 차단**이며 그 사실이 여전히
+    계약이다 — 로더가 **활성 업체일 때만** 소속을 채우므로 업체가 종료되면 판정이 통째로 닫힌다.
+    `capability-matrix-spec.test.ts`(티켓 23)가 열과 파생 시야를 행 단위로 고정한다.
 
 ---
 
@@ -671,6 +1427,17 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 - `r2_deletion_candidates` — 등록 후 7일 유예, cron 집행자가 장부·전역 참조를 재확인한 키만 삭제.
 - `r2_sent_keys` — 발송된 메일 콘텐츠에서 추출한 키의 append-only 장부. **장부에 오른 키는 참조 유무와 무관하게 영구 보존** (수신함 참조는 DB로 복원 불가).
 - `r2_key_refs` — 참조 인덱스. 유지가 아니라 **재생성** 구조(불변 소스는 삽입 시 1회, 가변 소스는 주기 전량 재추출)이며 집행 판정에서 삭제 권한이 없는 사전 필터다.
+
+- **설문 삭제가 등록하는 후보는 사실상 전부 '보존됨' 으로 닫힌다**(티켓 17). soft delete 라
+  소멸하는 행이 없어 참조 재확인이 언제나 히트하기 때문이다. 등록 자체는 관행으로 남겼으므로
+  `/admin/file-cleanup` 대기 큐에 「지워지지 않을 후보」가 쌓이는 것이 정상이다 — 큐의 길이를
+  「지워질 파일 수」로 읽지 말 것.
+- **참조 표면(`REFERENCE_SURFACE`)의 `surveys`·`questions` 에는 deletedAt 술어를 달지 말 것**
+  (티켓 17). 설문 삭제가 soft delete 라 그 행들은 살아남고, 살아남은 행이 키의 참조를 계속
+  주장하는 것이 「설문을 지워도 R2 파일은 지우지 않는다」를 지탱한다. 바로 옆
+  `mail_templates` 가 반대 선례(soft delete 된 템플릿은 참조 자격을 잃는다 — 의도된 정책)라
+  일관성을 이유로 같은 줄을 달기 쉬운데, 달면 삭제 7일 뒤 집행자가 파일을 지우고 그 뒤의
+  복구는 이미지·첨부가 빠진 설문을 되살린다. `reference-surface.test.ts` 가 못 박는다.
 
 관리 UI는 `/admin/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
 
@@ -773,7 +1540,7 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
 - 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
-- 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
+- **외부 계정(게스트·실사)은 항상 real 파티션**(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 `isExternalViewer`(계정 유형)이며 접근제어가 아니라 **파티션** 축이다. 티켓 25 에서 게스트 전용이던 이 규칙이 넓어졌다: 실사가 `contacts.view`·`contacts.writeAttempts` 를 얻으면서 컨택 표면이 실제로 열렸는데, 게스트만 고정하면 담당 연구원이 테스트 모드를 켠 설문에서 **실사원이 test 파티션을 읽고 결과코드를 test 로 쓴다** — 밖에서 전화를 돌리는 사람이 실데이터를 못 본다. 술어를 「게스트인가」가 아니라 **「내부가 아닌가」**로 적는 것이 요점이다.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
 ---
@@ -791,6 +1558,7 @@ pnpm test:watch       # Vitest watch
 pnpm test:coverage    # 커버리지 (spss 계열만 집계)
 pnpm test:e2e         # Playwright E2E
 pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
+                      # pretest 가드가 「이 브랜치 스키마인가」를 먼저 본다 (아래 주의사항 13)
 pnpm db:setup-test    # 테스트 DB 준비 (마이그레이션 전량 재생 = 재생 검증)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm inngest          # Inngest 로컬 dev 서버
@@ -800,6 +1568,9 @@ pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
+pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
+pnpm workspace:seed   # 실전 시드 계획 출력 — 팀 5 + 실사 업체 + 0116 백필 검증 (DRY_RUN 기본)
+pnpm workspace:seed:live  # 위를 실제 적용 — 인자로 실사 업체 이름 지정 가능. 재실행 안전
 pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)
 pnpm spss:rollback    # SPSS 필드 롤백 (:live 동일)
 pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
@@ -827,7 +1598,7 @@ import { Button } from "@/components/ui/button";
 ## 환경 변수
 
 ```env
-# Supabase
+# Supabase (DB 호스팅 전용 — 아래 3키는 앱 런타임 미사용, 유지보수 스크립트만 쓴다)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -851,14 +1622,15 @@ NEXT_PUBLIC_APP_URL=
 INNGEST_*=
 SENTRY_*=  NEXT_PUBLIC_SENTRY_DSN=
 
+# Better Auth (lib/auth/server.ts)
+BETTER_AUTH_SECRET=             # 세션 서명 비밀키 (openssl rand -base64 32)
+BETTER_AUTH_URL=                # baseURL (로컬 http://localhost:3000)
+BETTER_AUTH_TRUSTED_ORIGINS=    # 콤마 목록 (baseURL 은 자동 포함)
+
 # PII 암호화
 CONTACT_PII_AES_KEY=            # cipher 키 (환경별 분리 필수)
 CONTACT_PII_HMAC_KEY=           # blind index 키
 DUPLICATE_DETECTION_SALT=       # 중복 감지 해시 솔트
-
-# 권한
-ADMIN_USER_IDS=                 # admin 표면 허용 supabase user.id 콤마 목록. 미설정 시 fail-open + 경고
-GUEST_SURVEY_GRANTS=            # "<userId>:<surveyId>[,...]" 게스트 설문 위임
 
 # 레이트리밋 (미설정이면 limiter no-op)
 UPSTASH_REDIS_REST_URL=
@@ -870,7 +1642,7 @@ ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비�
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
-> `.env.example`의 `BETTER_AUTH_*` 와 `EMAIL_SEND_MODE` 는 코드 참조 0건이다 — 전자는 미착수 전환 계획의 잔재, 후자는 발송 모드 분기가 구현되지 않은 자리다.
+> `.env.example`의 `EMAIL_SEND_MODE` 는 코드 참조 0건이다 — 발송 모드 분기가 구현되지 않은 자리다. (`BETTER_AUTH_*` 는 2026-08-25 티켓 01부터 실사용.)
 
 ---
 
@@ -943,6 +1715,23 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 }
 ```
 
+### 경계 스키마와 z.custom
+
+`z.custom<T>()` 은 **검증 함수를 주지 않으면 런타임에 아무것도 보지 않는다** — 타입만 붙고 값은
+그대로 흐른다. 반대로 `z.object()`(및 `.partial()`)는 unknown 키를 **버린다**(`src/zod-unknown-key-contract.test.ts`
+가 실측으로 못 박는다).
+
+그래서 **요청 객체를 DB 쓰기로 넘기는 입력 스키마에는 z.custom 을 쓰지 않는다.** 실제로
+`UpdateSurveyDataSchema` 가 z.custom 이던 시절 서비스가 그 객체를 drizzle `.set()` 에 펼쳐,
+`survey.edit` 만 가진 팀원이 `ownerUserId` 를 실어 소유자 전권으로 승격하고 `deletedAt` 으로
+삭제 관문까지 우회했다(2026-08-27). 지금은 `.strict()` allowlist + 서비스의 명시 필드 대입 두
+겹이다.
+
+z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요청자가 못 만진다)와 **JSONB 리프
+필드**(`options`·`displayCondition`·`attachments`·`scheme` 등. 값이 JSONB 컬럼으로만 가고 권한
+컬럼에 닿지 않으며, 형태 드리프트는 로더 정규화가 받는다). 그 경우에도 **쓰기는 명시 필드
+대입**이어야 한다 — 스프레드 한 줄이면 위 사고가 재현된다.
+
 ### 언어/스타일
 
 - 문서/주석은 한국어, 변수명/함수명은 영어.
@@ -991,7 +1780,11 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 
-12. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
+12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.mjs` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
+
+    **마이그레이션 번호는 그보다 조용한 축이다.** 브랜치들이 같은 base 에서 갈라지면 같은 번호를 서로 다른 뜻으로 선점할 수 있고(실제로 0101·0102 가 그랬다), CI 게이트는 **태그 전체**만 보므로 접두 중복을 잡지 못한다(`0003_*`·`0009_*`·`0019_*` 가 이미 공존한다). 새 마이그레이션 번호는 **세 워크트리의 최댓값 + 1** 로 잡고, 재생 순서는 파일명이 아니라 `manual-migrations.json` **배열**이므로 **두 번째로 병합하는 쪽은 배열 끝에 append** 한다(번호순 삽입 금지).
+
+13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
 13. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 **저장에서 빠지고 경고 로그만 남는다** — 거부하면 등록을 빠뜨린 키 하나가 그 응답자의 초안 저장을 통째로 막는다(부분 저장이 없다). 문항 id 는 UUID 라 `__` 접두를 가질 수 없어 진짜 답변이 이 분기로 새지 않는다. `__dynamicRowSelections__` 는 2026-09-09 에 등재했다.
 
@@ -1022,6 +1815,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- **역할 모델 v2 번호 재배치 (2026-09-17)**: v2 의 12개가 staging 의 0101~0110(main 계열)과 같은 숫자라 **0111~0122** 로 밀었다(상대 순서 유지). 매핑 — 0101→0111 better_auth_tables · 0102→0112 better_auth_v2_reconcile · 0103→0113 users_organization · 0104→0114 users_sessions_revoked_at · 0105→0115 teams_and_memberships · 0106→0116 surveys_team_scoping · 0107→0117 survey_groups · 0108→0118 survey_ownership_events · 0109→0119 survey_participants · 0110→0120 fieldwork_orgs · 0111→0121 contact_actor_fk_to_app_users · 0112→0122 response_fieldwork_attribution. 적용 이력 테이블이 없어 DB 작업은 없다 — 스테이징 DB 에는 이미 옛 번호로 적용돼 있고, 프로덕션 적용 대상은 **0112~0122**(0111 은 선반영 재현용이라 적용 금지)
 
 ## DB 드리프트 점검
 

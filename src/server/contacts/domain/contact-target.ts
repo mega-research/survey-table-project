@@ -38,6 +38,22 @@ export const UpdateContactTargetInput = z.object({
 });
 export type UpdateContactTargetInput = z.infer<typeof UpdateContactTargetInput>;
 
+/**
+ * 메모·연락 방법만 쓰는 좁은 입력 (티켓 26).
+ *
+ * `UpdateContactTargetInput` 과 갈라 두는 이유는 **capability 가 다르기 때문**이다. 저쪽은
+ * `attrs`·PII 를 함께 받아 명단 수정(`contacts.manage`)이고, 이쪽은 실사의 회차 쓰기
+ * (`contacts.writeAttempts`)와 같은 자격으로 연다. 필드를 옵셔널로 합치면 한 표면이 두
+ * 자격을 지게 되고, 그 순간 실사에게 명단 수정이 함께 열린다(티켓 25 가 남긴 이유).
+ */
+export const SetContactTargetMemoInput = z.object({
+  surveyId: z.string(),
+  id: z.string(),
+  memo: z.string().max(2000).nullable(),
+  contactMethod: z.custom<ContactMethod>().nullable(),
+});
+export type SetContactTargetMemoInput = z.infer<typeof SetContactTargetMemoInput>;
+
 export const DeleteContactTargetInput = z.object({
   surveyId: z.string(),
   id: z.string(),

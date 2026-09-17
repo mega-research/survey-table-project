@@ -44,6 +44,7 @@ import { useSurveyResponseStore } from '@/features/survey-response/stores/survey
 import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
 import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
 import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
+import { FieldworkProxyBanner } from '@/features/survey-response/fieldwork-proxy-banner';
 import {
   DesktopOnlyScreen,
   InvalidTestLinkScreen,
@@ -155,6 +156,11 @@ export interface SurveyResponseFlowProps {
   inviteToken?: string | null;
   // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
   testToken?: string | null;
+  /**
+   * `?fw=1` — 대행 배너를 물을지의 **힌트**(티켓 27). 권한이 아니다: 판정은 서버가 세션으로
+   * 하고, 힌트가 거짓이면 코어가 none 을 준다. 응답자는 이 값이 없어 조회 자체를 하지 않는다.
+   */
+  proxyHint?: boolean;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -300,6 +306,7 @@ function SurveyResponseFlowControl({
   entrySeed,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
+  proxyHint = false,
   mode = 'public',
   adminContext,
   previewContext,
@@ -363,6 +370,7 @@ function SurveyResponseFlowControl({
         surveyIdentifier,
         inviteToken: inviteTokenProp,
         testToken: testTokenProp,
+        proxyHint,
         mode,
         ...(adminContext ? { adminContext } : {}),
         ...(previewContext ? { previewContext } : {}),
@@ -396,6 +404,7 @@ function SurveyResponseFlowActive({
   flowProps: {
     inviteToken: inviteTokenProp = null,
     testToken: testTokenProp = null,
+    proxyHint = false,
     mode = 'public',
     adminContext,
   },
@@ -1892,8 +1901,21 @@ function SurveyResponseFlowActive({
               ) : undefined
             }
             chrome={
-              /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
-              <HoneypotField ref={honeypotRef} />
+              <>
+                {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
+                <HoneypotField ref={honeypotRef} />
+                {/*
+                  대리 응답 배너 (.pen 10-3, 티켓 27) — 헤더보다 **위**다. 아래로 내려가면 설문
+                  제목이 먼저 오고, 실사가 어느 대상을 열었는지보다 무슨 설문인지를 먼저 읽는다.
+                  응답자에게는 힌트가 없어 조회조차 하지 않는다(화면 diff 0).
+                */}
+                <FieldworkProxyBanner
+                  surveyId={loadedSurvey.id}
+                  inviteToken={inviteToken}
+                  sessionId={sessionId}
+                  hinted={proxyHint}
+                />
+              </>
             }
             header={
               <SurveyResponseHeader

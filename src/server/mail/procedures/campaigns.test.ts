@@ -1,7 +1,8 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 vi.mock('../services/campaigns', () => ({
   createCampaign: vi.fn(),
@@ -15,12 +16,14 @@ vi.mock('../services/single-send', () => ({
   sendSingleCampaign: vi.fn(),
 }));
 
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
+
 import * as svc from '../services/campaigns';
 import * as singleSvc from '../services/single-send';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -38,7 +41,8 @@ describe('mail.campaigns procedures', () => {
       queuedCount: 1,
       skippedCount: 0,
     } as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = {
       surveyId: SURVEY_ID,
       mailTemplateId: TEMPLATE_ID,
@@ -46,24 +50,41 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
   it('cancel은 service.cancelCampaign에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.cancelCampaign).mockResolvedValue(undefined as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
     const res = await client.campaigns.cancel(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(svc.cancelCampaign).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
   it('resync는 service.resyncCampaign에 위임하고 checked/updated를 반환한다', async () => {
     vi.mocked(svc.resyncCampaign).mockResolvedValue({ checked: 11, updated: 9 } as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
     const res = await client.campaigns.resync(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(svc.resyncCampaign).toHaveBeenCalledWith(input);
     expect(res).toEqual({ checked: 11, updated: 9 });
   });
@@ -74,9 +95,15 @@ describe('mail.campaigns procedures', () => {
       total: 1,
       truncated: false,
     } as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = { surveyId: SURVEY_ID, filter: { unrespondedOnly: true } };
     const res = await client.campaigns.fetchCandidateIds(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ids: [CONTACT_ID], total: 1, truncated: false });
   });
@@ -90,9 +117,15 @@ describe('mail.campaigns procedures', () => {
       bouncedCount: 0,
       notFoundCount: 0,
     } as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = { surveyId: SURVEY_ID, selectedContactIds: [CONTACT_ID] };
     const res = await client.campaigns.previewPreflight(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(svc.previewPreflight).toHaveBeenCalledWith(input);
     expect(res).toEqual({
       validCount: 1,
@@ -110,13 +143,19 @@ describe('mail.campaigns procedures', () => {
       queuedCount: 1,
       skippedCount: 0,
     } as never);
-    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ campaigns }, { context });
     const input = {
       surveyId: SURVEY_ID,
       contactTargetId: CONTACT_ID,
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'mail.send',
+    );
     expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
@@ -124,7 +163,7 @@ describe('mail.campaigns procedures', () => {
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.campaigns.create({
@@ -136,9 +175,8 @@ describe('mail.campaigns procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  // 관문(mock)이 통과시킨 뒤 서비스로 넘어가는 파티션 플래그가 계정 유형에서 나온다(티켓 21).
+  it('게스트 계정이면 sendSingle 이 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
       queuedCount: 1,
@@ -146,7 +184,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -158,9 +196,7 @@ describe('mail.campaigns procedures', () => {
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
-  it('게스트는 grant 설문이면 create 가 isGuest=true 로 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  it('게스트 계정이면 create 가 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(svc.createCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,
       queuedCount: 1,
@@ -168,7 +204,7 @@ describe('mail.campaigns procedures', () => {
     } as never);
     const client = createRouterClient(
       { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -181,16 +217,30 @@ describe('mail.campaigns procedures', () => {
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
-  it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    const client = createRouterClient(
-      { campaigns },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+  it('타 팀 설문 id 로 create 하면 관문 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
     );
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    await expect(
+      client.campaigns.create({
+        surveyId: SURVEY_ID,
+        mailTemplateId: TEMPLATE_ID,
+        title: '제목',
+        contactTargetIds: [CONTACT_ID],
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it('발송 권한 없는 설문에 sendSingle 하면 관문 FORBIDDEN — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
     await expect(
       client.campaigns.sendSingle({
-        surveyId: '55555555-5555-4555-8555-555555555555',
+        surveyId: SURVEY_ID,
         contactTargetId: CONTACT_ID,
         mailTemplateId: TEMPLATE_ID,
       }),

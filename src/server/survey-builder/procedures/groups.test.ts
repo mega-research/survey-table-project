@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
+vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+
 vi.mock('../services/question-groups', async () => {
   const actual = await vi.importActual<
     typeof import('../services/question-groups')
@@ -17,10 +20,14 @@ vi.mock('../services/question-groups', async () => {
 });
 
 import * as svc from '../services/question-groups';
+
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { groups } from './groups';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
@@ -76,10 +83,33 @@ describe('surveyBuilder.groups procedures', () => {
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { groups },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.groups.create({ surveyId: SURVEY_ID, name: 'G1' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+});
+
+describe('surveyBuilder.groups — capability 관문 (티켓 09)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('그룹 mutation 은 survey.edit 관문을 지난다', async () => {
+    vi.mocked(svc.reorderGroups).mockResolvedValue({ ok: true } as never);
+    const context = authedContext();
+    const client = createRouterClient({ groups }, { context });
+    await client.groups.reorder({ surveyId: SURVEY_ID, groupIds: [GROUP_ID, GROUP_ID_2] });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, 'survey.edit');
+  });
+
+  it('편집 권한이 없으면 그룹 삭제가 service 에 닿지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValue(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ groups }, { context: authedContext() });
+    await expect(
+      client.groups.remove({ groupId: GROUP_ID, surveyId: SURVEY_ID }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.deleteQuestionGroup).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,5 @@
+export * from './auth';
+export * from './workspace';
 export * from './surveys';
 export * from './survey-documents';
 export * from './contacts';

@@ -104,10 +104,14 @@ describe('운영 응답 범위', () => {
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
     const { getContactDetailById } = await import('@/server/read-models/contacts');
 
-    const result = await getContactDetailById(`contact-${scope}`, scope);
+    const result = await getContactDetailById(`contact-${scope}`, 'survey-1', scope);
 
     expect(result).toBeNull();
-    expect(whereQuery().params).toContain(isTest);
+    const query = whereQuery();
+    expect(query.params).toContain(isTest);
+    // 설문 경계도 같은 WHERE 에 함께 실린다 — 사후 비교로 두면 타 팀 컨택 PII 가 먼저
+    // 복호화된다(티켓 15).
+    expect(query.params).toContain('survey-1');
   });
 
   it.each(SCOPE_CASES)('contact 메일 이력은 %s scope와 보관 상태를 제한한다', async (scope, isTest) => {

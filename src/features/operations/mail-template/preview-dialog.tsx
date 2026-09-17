@@ -195,7 +195,9 @@ export function MailPreviewDialog({
     subject.trim().length > 0 &&
     fromLocal.trim().length > 0 &&
     fromName.trim().length > 0 &&
-    EMAIL_RE.test(replyTo.trim()) &&
+    // 회신 주소는 선택 입력이다(티켓 20) — 비면 발송 시점 소유자로 해석되므로
+    // 적었을 때만 형식을 본다. 필수로 두면 비워 둔 템플릿이 테스트 발송을 못 한다.
+    (replyTo.trim().length === 0 || EMAIL_RE.test(replyTo.trim())) &&
     !hasUnpromotedAttachment &&
     !sampleFetchFailed &&
     sendState.status !== 'sending';

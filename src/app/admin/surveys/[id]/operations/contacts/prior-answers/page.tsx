@@ -6,6 +6,8 @@ import {
   listPriorAnswerMatchFields,
 } from '@/server/contacts/services/prior-answer-import';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 이월 응답 임포트',
@@ -28,6 +30,9 @@ interface PageProps {
  */
 export default async function PriorAnswersImportPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 조사 대상 행에 쓰는 관리 화면이라 명단 업로드와 같은 requireAdminPage + contacts.manage 짝이다.
+  const viewer = await requireAdminPage();
+  await assertSurveyCapabilityPage(viewer, surveyId, 'contacts.manage');
   const scope = await getOperationsDataScope(surveyId);
   const [existingPriorAnswerCount, matchFields] = await Promise.all([
     countPriorAnswerTargets(surveyId, scope === 'test'),

@@ -6,53 +6,14 @@ import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
+import { allowActiveUser, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
+  detectImageKind,
   imageKindToExt,
   sanitizeImageExt,
   svgBodyHasScript,
 } from '@/lib/upload/image-policy';
 import { getFileExt, validateFilename } from '@/lib/upload/attachment-policy';
-
-/**
- * 파일 첫 16바이트로 실제 이미지 형식을 감지 (defense in depth).
- * MIME 헤더가 위조되어도 magic byte 로 차단.
- */
-function detectImageKind(buf: Buffer): string | null {
-  // JPEG: FF D8 FF
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    buf[0] === 0x89 &&
-    buf[1] === 0x50 &&
-    buf[2] === 0x4e &&
-    buf[3] === 0x47 &&
-    buf[4] === 0x0d &&
-    buf[5] === 0x0a &&
-    buf[6] === 0x1a &&
-    buf[7] === 0x0a
-  )
-    return 'image/png';
-  // GIF: 47 49 46 38
-  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif';
-  // WebP: 52 49 46 46 .. .. .. .. 57 45 42 50
-  if (
-    buf[0] === 0x52 &&
-    buf[1] === 0x49 &&
-    buf[2] === 0x46 &&
-    buf[3] === 0x46 &&
-    buf[8] === 0x57 &&
-    buf[9] === 0x45 &&
-    buf[10] === 0x42 &&
-    buf[11] === 0x50
-  )
-    return 'image/webp';
-  // BMP: 42 4D
-  if (buf[0] === 0x42 && buf[1] === 0x4d) return 'image/bmp';
-  // SVG: starts with '<'
-  if (buf[0] === 0x3c) return 'image/svg+xml';
-  return null;
-}
 
 // 설문(kind=survey): WebP 로 변환할 타입.
 // SVG/GIF 는 애니메이션/벡터라 원본 유지, PNG 는 로고처럼 투명 배경/무손실이 필요한
@@ -72,7 +33,7 @@ const MAIL_CONVERTIBLE_TYPES = [
 // 예기치 못한 에러의 err 로깅·Sentry 캡처·500 응답은 로깅 래퍼(withRouteLogging)가 담당한다.
 async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
   // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
-  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  const guard = await guardUploadRoute(ctx, allowActiveUser);
   if (!guard.ok) return guard.response;
 
   const formData = await request.formData();

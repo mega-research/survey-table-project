@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { DemandSummaryTable } from '@/features/operations/demand/demand-summary-table';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { getDemandSummary } from '@/server/operations/services/demand-summary';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 문항 수요',
@@ -24,6 +25,9 @@ interface PageProps {
  */
 export default async function DemandSummaryPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 집계는 응답 현황과 같은 축이라
+  // operations.view 를 여기서 다시 묻는다.
+  await assertSurveyConsolePageAccess(surveyId, 'operations.view');
   const scope = await getOperationsDataScope(surveyId);
   const rows = await getDemandSummary(surveyId, scope);
 

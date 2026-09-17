@@ -22,6 +22,7 @@ import {
   parseHeaderFilterEntries,
   splitHeaderValues,
 } from '@/features/operations/filters/header-filter-url';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 const PAGE_SIZE = 25;
 
@@ -77,6 +78,9 @@ function parseStatuses(value: string | undefined): MailRecipientStatus[] {
 
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
   const { id: surveyId, cid } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다 (티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'mail.view');
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
   const recipPage = parsePage(sp.recipPage);

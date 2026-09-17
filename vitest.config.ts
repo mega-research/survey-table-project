@@ -42,6 +42,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // 테스트 헬퍼 — colocated 테스트(src/**/*.test.tsx)가 tests/ 를 상대경로로 거슬러
+      // 올라가지 않도록. 앱 코드는 이 별칭을 쓰지 않는다(tsconfig 에도 두어 tsc 가 본다).
+      '@tests': path.resolve(__dirname, './tests'),
       // Next.js `server-only` 마커 stub — vitest 환경에서 resolve 불가하므로 빈 모듈로 대체.
       'server-only': path.resolve(__dirname, './tests/stubs/server-only.ts'),
     },

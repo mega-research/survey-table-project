@@ -37,6 +37,12 @@ export interface R2ReferenceSource {
    * - mail_templates: soft delete 된 행은 파일 참조 자격을 잃는다 (CONTEXT.md)
    * - survey_versions: 보존 정책으로 정리된 행(snapshot IS NULL)은 참조를
    *   주장하지 않는다. 정리 시점에 그 키들을 이미 유예 큐에 등록했다.
+   *
+   * **`surveys`·`questions` 에는 절대 `deleted_at` 술어를 달지 말 것**(티켓 17). 설문
+   * 삭제가 soft delete 로 바뀌면서 그 행들은 살아남고, 살아남은 행이 키의 참조를 계속
+   * 주장하는 것이 「삭제해도 R2 파일은 지우지 않는다」를 지탱한다. mail_templates 를 따라
+   * 술어를 달면 삭제 7일 뒤 집행자가 그 파일들을 지우고, 그 시점 이후의 복구는 이미지·
+   * 첨부가 빠진 설문을 되살린다. reference-surface.test.ts 가 이 자리를 못 박는다.
    */
   extraWhere?: SQL;
   /**

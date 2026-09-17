@@ -28,9 +28,9 @@ import type { ListProfilesResult } from '@/server/operations/services/profiles';
 //   - @/db/schema : surveyResponses, contactTargets, surveys, responseAnswers, questions
 //   - next/cache : revalidatePath (소비처에서만 호출 — service 는 미사용이나 안전망 mock)
 //
-// service 는 인증을 더 이상 내부에서 하지 않는다(authed 미들웨어가 담당). 소유권 검증
-// (surveys row 존재 → SurveyOwnershipError) 만 service 안에 보존되므로
-// db.query.surveys.findFirst 로 검증한다.
+// service 는 인증을 더 이상 내부에서 하지 않는다(관문은 procedure 몫). 존재 확인
+// (surveys row 없으면 SurveyAccessError('not_found') — 관문·서비스 사이 레이스 방어)만
+// service 안에 보존되므로 db.query.surveys.findFirst 로 검증한다.
 //
 // vi.mock 는 hoist 되므로 mock 안에서 참조하는 state 는 vi.hoisted 로 끌어올린다.
 // in-memory map 으로 CRUD 흐름을 통합 검증한다.
@@ -93,15 +93,11 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-// manage procedure import 가 @/server/context → @/lib/supabase/server 를 끌어오므로
+// manage procedure import 가 @/server/context → @/lib/auth/server 를 끌어오므로
 // 모듈 resolve 안전망으로 stub. service 직접 호출 경로는 인증을 쓰지 않고,
-// procedure 인증 가드는 context.user(null) 로만 판정하므로 getUser 응답값은 무의미.
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
-    },
-  })),
+// procedure 인증 가드는 context.user(null) 로만 판정하므로 세션 응답값은 무의미.
+vi.mock('@/lib/auth/server', () => ({
+  auth: { api: { getSession: vi.fn(async () => null) } },
 }));
 
 // drizzle-orm 은 실제 eq/and 를 사용 (not mocked)
@@ -485,6 +481,23 @@ describe('profiles-row-actions', () => {
       expect(contactAfter?.responseId).toBeNull();
       expect(contactAfter?.respondedAt).toBeNull();
     });
+
+    it('타 설문의 responseId 로는 그 설문의 컨택 매칭을 풀지 않는다 (교차 unlink 차단)', async () => {
+      // unlink UPDATE 가 responseId 만으로 걸리면, A 설문 관점의 호출로 B 설문의
+      // 컨택 링크가 풀린다 — surveyId 조건이 함께 걸려 있어야 한다.
+      const surveyA = createTestSurvey();
+      const surveyB = createTestSurvey();
+      const responseId = createTestResponse(surveyB);
+      const contactId = linkContactToResponse(surveyB, responseId);
+
+      await hardResetResponse({ surveyId: surveyA, responseId });
+
+      const contact = h.contactStore.get(contactId);
+      expect(contact?.responseId).toBe(responseId);
+      expect(contact?.respondedAt).not.toBeNull();
+      // 응답 행 삭제도 (surveyId, responseId) 2중 조건이라 B 의 행은 남는다.
+      expect(h.responseStore.get(responseId)).toBeDefined();
+    });
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -771,8 +784,8 @@ describe('profiles-row-actions', () => {
   //
   // oRPC 마이그레이션으로 인증은 service 가 아니라 authed 미들웨어(procedure 레벨)가
   // 담당한다. 미인증 차단 검증은 procedure 레벨로 이동 — context.user 가 null 이면
-  // service/db 호출 전에 UNAUTHORIZED 로 막힌다. service 의 소유권 검증
-  // (SurveyOwnershipError) 은 인증과 별개이므로 service 직접 호출로 그대로 검증한다.
+  // service/db 호출 전에 UNAUTHORIZED 로 막힌다. service 의 존재 확인
+  // (SurveyAccessError) 은 관문과 별개의 레이스 방어이므로 service 직접 호출로 검증한다.
   // (procedure UNAUTHORIZED 매핑은 src/features/.../procedures/manage.test.ts 와 중복 커버.)
   // ─────────────────────────────────────────────────────────────
 
@@ -783,7 +796,6 @@ describe('profiles-row-actions', () => {
 
       const noUserContext: ORPCContext = {
         db: {} as never,
-        supabase: {} as never,
         user: null,
       };
       const client = createRouterClient({ manage }, { context: noUserContext });
@@ -793,7 +805,7 @@ describe('profiles-row-actions', () => {
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 
-    it('존재하지 않는 surveyId 로 호출하면 SurveyOwnershipError 를 throw 한다', async () => {
+    it('존재하지 않는 surveyId 로 호출하면 SurveyAccessError 를 throw 한다', async () => {
       // survey 를 store 에 넣지 않음 — findFirst 가 undefined 반환
       const nonExistentSurveyId = 'does-not-exist';
       const responseId = createTestResponse('some-survey');

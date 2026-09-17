@@ -1,7 +1,9 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
 
 import * as svc from '../services/response-edit';
 import { SurveyNotAcceptingResponsesError } from '../services/response-gate';
@@ -17,8 +19,14 @@ vi.mock('../services/response-edit', async () => {
   };
 });
 
+// toRpcSurveyAccessError(순수 매핑)는 실물 유지 — 관문만 vi.fn 으로 대체한다.
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  assertScopedSurveyCapabilityRpc: vi.fn(),
+}));
+
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 // 픽스처 UUID 는 v4 형태(...-4xxx-8xxx-...). input 이 z.string() 이라 엄격 강제는 아님.
@@ -31,7 +39,8 @@ describe('surveyResponse.edit procedures', () => {
 
   it('saveAdminEdit는 입력을 service에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
-    const client = createRouterClient({ edit }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ edit }, { context });
     const input = {
       surveyId: SURVEY_ID,
       responseId: RESPONSE_ID,
@@ -39,6 +48,11 @@ describe('surveyResponse.edit procedures', () => {
       versionId: null,
     };
     const res = await client.edit.saveAdminEdit(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      SURVEY_ID,
+      'responses.view',
+    );
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
       input,
       { id: 'admin-1', email: 'a@b.com' },
@@ -47,9 +61,25 @@ describe('surveyResponse.edit procedures', () => {
     expect(res).toEqual({ ok: true });
   });
 
-  it('SurveyOwnershipError는 NOT_FOUND로 매핑된다', async () => {
+  it('관문 NOT_FOUND 는 그대로 던지고 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
+    );
+    const client = createRouterClient({ edit }, { context: authedContext() });
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {},
+        versionId: null,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
+  });
+
+  it('서비스 안 존재 확인의 SurveyAccessError 는 NOT_FOUND 로 매핑된다', async () => {
     vi.mocked(svc.saveAdminEdit).mockRejectedValue(
-      new svc.SurveyOwnershipError('not_found') as never,
+      new SurveyAccessError('not_found') as never,
     );
     const client = createRouterClient({ edit }, { context: authedContext() });
     await expect(
@@ -111,7 +141,7 @@ describe('surveyResponse.edit procedures', () => {
   it('인증 없으면 saveAdminEdit가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { edit },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.edit.saveAdminEdit({
@@ -123,17 +153,15 @@ describe('surveyResponse.edit procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 saveAdminEdit 가 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+  // 관문(mock)이 통과시킨 뒤 서비스로 넘어가는 파티션 플래그가 계정 유형에서 나온다(티켓 21).
+  it('게스트 계정이면 saveAdminEdit 가 실데이터 파티션으로 위임된다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -155,16 +183,13 @@ describe('surveyResponse.edit procedures', () => {
   it('게스트도 이관 versionId 를 실어 saveAdminEdit 가 동일하게 위임된다', async () => {
     // 관리자 수정의 최신 버전 이관·빈 필수 완화는 역할이 아니라 admin-edit 표면에
     // 걸려 있다 — 게스트 grant 사용자도 같은 경로를 그대로 쓴다는 계약을 잠근다.
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
       {
         context: {
           db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );
@@ -181,30 +206,6 @@ describe('surveyResponse.edit procedures', () => {
       true,
     );
     expect(res).toEqual({ ok: true });
-  });
-
-  it('게스트가 다른 설문 surveyId 로 saveAdminEdit 하면 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    const client = createRouterClient(
-      { edit },
-      {
-        context: {
-          db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
-        },
-      },
-    );
-    await expect(
-      client.edit.saveAdminEdit({
-        surveyId: 'other-survey',
-        responseId: RESPONSE_ID,
-        questionResponses: {},
-        versionId: null,
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 
   it('versionId 를 service 입력으로 그대로 전달한다', async () => {

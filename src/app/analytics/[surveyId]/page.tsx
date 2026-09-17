@@ -1,3 +1,5 @@
+import { cache } from 'react';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -7,17 +9,38 @@ import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
+import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AnalyticsPageProps {
   params: Promise<{ surveyId: string }>;
 }
 
+/**
+ * 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
+ * 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
+ *
+ * **analytics.view 만으로는 열리지 않는다** — 이 페이지는 `getResponsesWithAnswers` 로
+ * 복호화된 원문 응답과 응답 행 전체(contactTargetId·sessionId·ipHash·fpHash·deviceId·
+ * userAgent·metadata)를 읽어 클라이언트 컴포넌트 props 로 직렬화한다. 즉 RSC payload 에
+ * 응답 원문과 응답자 추적 데이터가 그대로 실린다. 매트릭스가 팀원에게 `responses.view` 를
+ * 주지 않는 것은 바로 그 데이터를 막으려는 것이므로, 분석 화면도 같은 권한을 요구해야
+ * capability 분리가 성립한다(Codex 적대적 리뷰, 사용자 확정 2026-08-27).
+ *
+ * 두 관문을 순서대로 지나면 사유가 정확해진다 — 볼 수 없는 설문은 analytics.view 에서
+ * not_found 로, 볼 수는 있지만 응답 열람 권한이 없는 팀원은 responses.view 에서 걸린다.
+ */
+const assertAnalyticsPageAccess = cache(async (surveyId: string): Promise<void> => {
+  const viewer = await requireAdminPage();
+  await assertSurveyCapabilityPage(viewer, surveyId, 'analytics.view');
+  await assertSurveyCapabilityPage(viewer, surveyId, 'responses.view');
+});
+
 export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps) {
   const { surveyId } = await params;
 
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
-  await requireAdminPage();
+  await assertAnalyticsPageAccess(surveyId);
 
   // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
   const [survey, responses, versions] = await Promise.all([
@@ -78,9 +101,11 @@ export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps
   );
 }
 
-// 메타데이터 생성
+// 메타데이터 생성 — 페이지와 같은 관문을 지난다. 여기서 새면 404 응답의 <title> 로
+// 타 팀 설문 제목이 실린다.
 export async function generateMetadata({ params }: AnalyticsPageProps) {
   const { surveyId } = await params;
+  await assertAnalyticsPageAccess(surveyId);
   const survey = await getSurveyWithDetails(surveyId);
 
   if (!survey) {

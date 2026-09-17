@@ -42,3 +42,8 @@ process.env['DATABASE_URL'] ??= 'postgres://test:test@localhost:5432/test';
 
 // signals.ts 가 module-level 에서 salt 부재 시 throw 하므로 dummy 부여.
 process.env['DUPLICATE_DETECTION_SALT'] ??= 'test-salt-do-not-use-in-prod';
+
+// Better Auth 인스턴스(lib/auth/server)가 module-level 에서 읽는다. secret 부재 시
+// 프로덕션 밖에서는 경고 후 기본값을 쓰지만, 테스트를 결정적으로 만들기 위해 고정한다.
+process.env['BETTER_AUTH_SECRET'] ??= 'test-better-auth-secret-do-not-use-in-prod';
+process.env['BETTER_AUTH_URL'] ??= 'http://localhost:3000';

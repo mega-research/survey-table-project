@@ -39,7 +39,6 @@ const VERSION_ID = '33333333-4444-4555-8666-777777777777';
 function anonContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
     user: null,
     headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
   };

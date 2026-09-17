@@ -1,18 +1,21 @@
-import { createRouterClient } from '@orpc/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRouterClient, ORPCError } from '@orpc/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 vi.mock('../services/preview', () => ({
   getMailPreviewSample: vi.fn(),
   sendTestTemplateMail: vi.fn(),
 }));
 
+vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: vi.fn() }));
+
 import * as svc from '../services/preview';
 import { preview } from './preview';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function validSendInput() {
@@ -30,7 +33,6 @@ function validSendInput() {
 
 describe('mail.preview procedures', () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllEnvs());
 
   it('sample은 service.getMailPreviewSample에 위임하고 결과를 반환한다', async () => {
     const sampleData = {
@@ -40,8 +42,14 @@ describe('mail.preview procedures', () => {
       resid: 1,
     };
     vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
-    const client = createRouterClient({ preview }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ preview }, { context });
     const res = await client.preview.sample({ surveyId: 'sv-1' });
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'mail.view',
+    );
     expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });
     expect(res).toEqual(sampleData);
   });
@@ -55,9 +63,15 @@ describe('mail.preview procedures', () => {
 
   it('testSend는 service.sendTestTemplateMail에 위임하고 결과객체를 반환한다', async () => {
     vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({ ok: true, id: 'msg-1' } as never);
-    const client = createRouterClient({ preview }, { context: authedContext() });
+    const context = authedContext();
+    const client = createRouterClient({ preview }, { context });
     const input = validSendInput();
     const res = await client.preview.testSend(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      input.surveyId,
+      'mail.send',
+    );
     expect(svc.sendTestTemplateMail).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true, id: 'msg-1' });
   });
@@ -78,29 +92,32 @@ describe('mail.preview procedures', () => {
   it('인증 없으면 sample이 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { preview },
-      { context: { db: {} as never, supabase: {} as never, user: null } },
+      { context: { db: {} as never, user: null } },
     );
     await expect(
       client.preview.sample({ surveyId: 'sv-1' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('게스트는 grant 설문이면 sample 이 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    const sampleData = {
-      attrs: { name: '홍길동' },
-      inviteUrl: 'https://x/survey/sv-1?invite=tok',
-      email: 'h@example.com',
-      resid: 1,
-    };
-    vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
-    const client = createRouterClient(
-      { preview },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+  it('타 팀 설문 id 로 sample 하면 관문 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' }),
     );
-    const res = await client.preview.sample({ surveyId: 'sv-1' });
-    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });
-    expect(res).toEqual(sampleData);
+    const client = createRouterClient({ preview }, { context: authedContext() });
+    await expect(client.preview.sample({ surveyId: 'sv-1' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(svc.getMailPreviewSample).not.toHaveBeenCalled();
+  });
+
+  it('발송 권한 없는 설문에 testSend 하면 관문 FORBIDDEN — 서비스에 닿지 않는다', async () => {
+    vi.mocked(assertScopedSurveyCapabilityRpc).mockRejectedValueOnce(
+      new ORPCError('FORBIDDEN', { message: '이 작업을 수행할 권한이 없습니다.' }),
+    );
+    const client = createRouterClient({ preview }, { context: authedContext() });
+    await expect(client.preview.testSend(validSendInput())).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.sendTestTemplateMail).not.toHaveBeenCalled();
   });
 });

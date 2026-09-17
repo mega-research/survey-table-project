@@ -1,5 +1,6 @@
 import { analytics } from '@/server/analytics/procedures/analytics';
 import { auth } from '@/server/auth/procedures/auth';
+import { users } from '@/server/auth/procedures/users';
 import { attempts } from '@/server/contacts/procedures/attempts';
 import { attrs } from '@/server/contacts/procedures/attrs';
 import { attrValues } from '@/server/contacts/procedures/attr-values';
@@ -36,10 +37,21 @@ import { control } from '@/server/operations/procedures/control';
 import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
+import { fieldwork } from '@/server/workspace/procedures/fieldwork';
+import { fieldworkOrgs } from '@/server/workspace/procedures/fieldwork-orgs';
+import { guests } from '@/server/workspace/procedures/guests';
+import { members } from '@/server/workspace/procedures/members';
+import { ownership } from '@/server/workspace/procedures/ownership';
+import { participants } from '@/server/workspace/procedures/participants';
+import { reassignment } from '@/server/workspace/procedures/reassignment';
+import { sharing } from '@/server/workspace/procedures/sharing';
+import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
+import { teams } from '@/server/workspace/procedures/teams';
 import { duplicate } from '@/server/survey-response/procedures/duplicate';
 import { edit } from '@/server/survey-response/procedures/edit';
 import { lifecycle } from '@/server/survey-response/procedures/lifecycle';
 import { manage } from '@/server/survey-response/procedures/manage';
+import { proxy } from '@/server/survey-response/procedures/proxy';
 import { response } from '@/server/survey-response/procedures/response';
 
 import { health } from '@/server/health';
@@ -68,7 +80,10 @@ export const router = {
     documents,
     anchors,
   },
-  auth,
+  auth: {
+    ...auth,
+    users,
+  },
   media: {
     ...media,
     fileCleanup,
@@ -98,6 +113,7 @@ export const router = {
     duplicate,
     edit,
     manage,
+    proxy,
   },
   operations: {
     progress,
@@ -105,6 +121,26 @@ export const router = {
     control,
   },
   quota,
+  workspace: {
+    teams,
+    members,
+    // 설문 그룹. surveyBuilder.groups(문항 그룹)와 이름이 겹치지 않게 키를 길게 쓴다.
+    surveyGroups,
+    // 재배치 센터 — 팀을 잃은 사람·설문의 인박스 (슈퍼어드민 전용).
+    reassignment,
+    // 공유 설정 — 공개 범위 (.pen FLOW 4-2). 실사 블록은 티켓 24.
+    sharing,
+    // 설문 참여자 — 팀 경계를 넘는 유일한 접근 경로 (.pen FLOW 4-2, 티켓 18).
+    participants,
+    // 클라이언트(게스트) 부여 + 현황 탭 화이트리스트 (.pen FLOW 4-2, 티켓 21).
+    guests,
+    // 소유권 이전 · 승계 제안 (.pen FLOW 4-4·9-3, 티켓 19).
+    ownership,
+    // 실사 업체 — 외주 실사 인력의 소속 경계 (.pen FLOW 10-4, 티켓 24). 슈퍼어드민 전용.
+    fieldworkOrgs,
+    // 설문 실사 초대 — 개인 단위 (.pen FLOW 4-2 실사 블록, 티켓 25).
+    fieldwork,
+  },
 };
 
 export type AppRouter = typeof router;

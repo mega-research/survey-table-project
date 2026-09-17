@@ -9,7 +9,11 @@ import type {
   Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
-import type { SurveyControl } from '@/shared/contracts/survey-builder-io';
+import type {
+  SurveyControl,
+  SurveyListItem,
+  SurveyListResult,
+} from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
 
@@ -37,23 +41,25 @@ export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 // list (getSurveyListWithCounts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
- */
-export type SurveyListItem = {
-  id: string;
-  title: string;
-  description: string | null;
-  slug: string | null;
-  privateToken: string | null;
-  responseCount: number;
-  completedResponseCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-  isPublic: boolean;
-};
+// 행·응답 모양은 UI(목록 화면·상세 검색)도 쓰므로 계약 소관 — 여기서 다시 내보낸다(티켓 08).
+export type { SurveyListItem, SurveyListResult };
 export const SurveyListItemSchema = z.custom<SurveyListItem>();
-export const SurveyListOutput = z.array(SurveyListItemSchema);
+
+/** 목록 조회 입력 — 화면이 기억하는 작업 범위. 유효성은 서버가 다시 판정한다. */
+export const SurveyListInput = z.object({
+  scope: z.string().nullish(),
+  /**
+   * 휴지통 조회 (티켓 17) — 슈퍼어드민의 시스템 전체 보기에서만 통과한다.
+   *
+   * 별도 표면이 아니라 같은 목록의 모드인 이유는 화면이 하나이기 때문이다. 카드·정렬·검색·
+   * 페이지네이션이 전부 같고 다른 것은 조회 조건과 카드 액션뿐이라, 표면을 가르면 목록
+   * 파이프라인이 두 벌이 된다.
+   */
+  deleted: z.boolean().optional(),
+});
+export type SurveyListInput = z.infer<typeof SurveyListInput>;
+
+export const SurveyListOutput = z.custom<SurveyListResult>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // byId (getSurveyById) — surveys.$inferSelect | undefined
@@ -68,12 +74,6 @@ export const SurveyRowOutput = z.custom<SurveyRow | null | undefined>();
 
 /** 설문+그룹+질문 복합 조회. 컴포넌트 기대 타입 SurveyType. */
 export const SurveyWithDetailsOutput = z.custom<SurveyType | null>();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// search (searchSurveys) — SurveyRow[]
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const SurveyRowArrayOutput = z.custom<SurveyRow[]>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // slugAvailable (isSlugAvailable)

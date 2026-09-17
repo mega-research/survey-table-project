@@ -21,9 +21,9 @@ async function lockTargetInCurrentScope(
   tx: DbTransaction,
   contactTargetId: string,
   surveyId: string,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<void> {
-  const locked = await lockWriteScope(tx, surveyId, isGuest, { lock: 'update' });
+  const locked = await lockWriteScope(tx, surveyId, isExternal, { lock: 'update' });
   if (!locked) throw new Error('NOT_FOUND');
   const { isTest } = locked;
 
@@ -50,12 +50,17 @@ async function lockTargetInCurrentScope(
  *
  * surveyId 는 input 으로 받되 service 로직에서는 사용하지 않는다(revalidate 제거).
  *
- * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * isExternal 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
  * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ *
+ * `actorUserId` 도 같은 이유로 procedure 가 넘긴다. **누가 남겼는가가 회차의 절반이다**
+ * (티켓 26) — 실사가 결과코드를 쓰기 시작하면서 담당 연구원이 「이 부재중은 누가 찍었나」를
+ * 물을 수 있어야 한다. 컬럼(`created_by`)은 처음부터 있었지만 채우는 경로가 없었다.
  */
 export async function addAttempt(
   input: AddContactAttemptInput,
-  isGuest: boolean,
+  isExternal: boolean,
+  actorUserId: string,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
@@ -66,7 +71,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
-        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest);
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isExternal);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -80,6 +85,7 @@ export async function addAttempt(
             attemptNo: nextNo,
             resultCode,
             note: note ?? null,
+            createdBy: actorUserId,
           })
           .returning({ id: contactAttempts.id, attemptNo: contactAttempts.attemptNo });
         if (!row) throw new Error('contact_attempts INSERT 실패');
@@ -108,11 +114,11 @@ export async function addAttempt(
  */
 export async function updateAttempt(
   input: UpdateContactAttemptInput,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode, note } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal);
     const updated = await tx
       .update(contactAttempts)
       .set({ resultCode, note: note ?? null })
@@ -129,11 +135,11 @@ export async function updateAttempt(
  */
 export async function deleteAttempt(
   input: DeleteContactAttemptInput,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal);
     const deleted = await tx
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))

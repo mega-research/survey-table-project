@@ -16,7 +16,7 @@ function normalizeIds(ids: number[]): number[] {
 /**
  * 붙여넣은 ID 목록 저장 — 인라인 상한(2,000)을 넘는 검색이 URL 대신 참조할 토큰의 실체.
  * 만료·정리 없음: 캠페인 filterSnapshot 이 토큰을 보존하므로 "미응답자 재발송" 재현에 필요하다.
- * 인증은 procedure(scoped + assertSurveyAccess)가 담당.
+ * 인증은 procedure(scoped + contacts.view 관문)가 담당.
  */
 export async function createContactIdList(input: {
   surveyId: string;

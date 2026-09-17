@@ -17,12 +17,12 @@ const h = vi.hoisted(() => ({
   updates: [] as unknown[],
 }));
 
-// requireAuth 체인(next/headers·supabase)을 끌고 오지 않도록 에러 클래스만 대체한다.
-vi.mock('@/lib/auth/require-survey-ownership', () => ({
-  SurveyOwnershipError: class SurveyOwnershipError extends Error {
-    constructor(public readonly reason: 'not_found') {
+// 코어 관문 모듈의 DB import 체인을 끌고 오지 않도록 에러 클래스만 대체한다.
+vi.mock('@/server/survey-access', () => ({
+  SurveyAccessError: class SurveyAccessError extends Error {
+    constructor(public readonly reason: 'not_found' | 'forbidden') {
       super(reason);
-      this.name = 'SurveyOwnershipError';
+      this.name = 'SurveyAccessError';
     }
   },
 }));

@@ -16,11 +16,21 @@ import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 // 테스트 응답도 열람·수정할 수 있어야 한다(단건 조회는 "모수" 통계가 아님).
 export async function getResponseById(
   responseId: string,
-  options: { includeDeleted?: boolean } = {},
+  /**
+   * `surveyId` 는 **조회 조건이다** — 호출측의 사후 확인이 아니다 (티켓 15).
+   *
+   * 예전에는 id 로만 찾고 호출측이 `response.surveyId !== surveyId` 를 봤는데, 그
+   * 사이에 `decryptQuestionResponses` 가 이미 돌아 **타 팀 응답 원문이 복호화**됐다.
+   * 화면에는 안 나가지만 서버 안에서 팀 경계를 넘는다. 필수 인자로 두어 다음 호출자가
+   * 빠뜨릴 수 없게 한다.
+   */
+  options: { surveyId: string; includeDeleted?: boolean },
 ) {
-  const where = options.includeDeleted
-    ? eq(surveyResponses.id, responseId)
-    : and(eq(surveyResponses.id, responseId), notDeletedResponse);
+  const scoped = and(
+    eq(surveyResponses.id, responseId),
+    eq(surveyResponses.surveyId, options.surveyId),
+  );
+  const where = options.includeDeleted ? scoped : and(scoped, notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });
   if (!response) return response;
   return {

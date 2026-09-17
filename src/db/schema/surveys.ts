@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -15,6 +16,13 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
+import type {
+  SurveyAssignmentStatus,
+  SurveyOwnershipAction,
+  SurveyOwnershipEventMetadata,
+  SurveyOwnershipStatus,
+  SurveyVisibility,
+} from '@/shared/contracts/workspace';
 import type { ProfileColumnScheme, ProgressColumnScheme } from '@/shared/contracts/operations';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type {
@@ -48,6 +56,9 @@ import type {
   TextValidation,
 } from '@/types/survey';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
+
+import { users } from './auth';
+import { surveyGroups, teams } from './workspace';
 
 // 설문 테이블
 export const surveys = pgTable(
@@ -134,6 +145,33 @@ export const surveys = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
 
     contactEmail: text('contact_email'),
+
+    // 워크스페이스 귀속 (0116 마이그레이션, 역할 모델 v2 티켓 07)
+    //
+    // 설문은 팀에 속하고 팀원은 자기 팀 설문만 본다(ADR-0006·0008). 팀을 아직 못 정한
+    // 설문은 가짜 기본 팀에 넣지 않고 teamId=NULL + assignmentStatus='assignment_pending'
+    // 으로 세운다 — 그 상태에서는 슈퍼어드민만 닿을 수 있고 재배치 센터(티켓 14)가 팀을
+    // 정해준다. 둘의 정합은 DB CHECK 가 강제한다.
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    visibility: text('visibility').$type<SurveyVisibility>().notNull().default('team'),
+    // ownerUserId·createdBy 는 앱이 채우는 값이라 2단계 배포다(주의사항 8) — 0116 는
+    // nullable 로 추가하고 백필만 한다. SET NOT NULL 은 앱 배포 후(티켓 29).
+    ownerUserId: uuid('owner_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'restrict' }),
+    // 소속 그룹 (NULL = 미분류, 0117). 그룹은 정리용 묶음이라 접근 판정에 쓰이지 않는다.
+    // 그룹 삭제는 이 값을 NULL 로 되돌릴 뿐 설문을 지우지 않는다(ON DELETE SET NULL).
+    surveyGroupId: uuid('survey_group_id').references(() => surveyGroups.id, {
+      onDelete: 'set null',
+    }),
+    ownershipStatus: text('ownership_status')
+      .$type<SurveyOwnershipStatus>()
+      .notNull()
+      .default('normal'),
+    assignmentStatus: text('assignment_status')
+      .$type<SurveyAssignmentStatus>()
+      .notNull()
+      .default('assignment_pending'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -141,7 +179,44 @@ export const surveys = pgTable(
     // 0069 마이그레이션의 surveys_preview_token_unique 와 이름을 맞춘다. nullable 컬럼이라
     // NULL 행은 제약에서 제외(다중 NULL 허용) — contact_targets.invite_code(0054)와 동일 패턴.
     unique('surveys_preview_token_unique').on(table.previewToken),
+    // 배치 상태와 팀은 한 몸이다 — 한쪽만 바꾸는 쓰기를 DB 가 거부한다.
+    check(
+      'surveys_assignment_check',
+      sql`(${table.assignmentStatus} = 'assigned' AND ${table.teamId} IS NOT NULL)
+        OR (${table.assignmentStatus} = 'assignment_pending' AND ${table.teamId} IS NULL)`,
+    ),
   ],
+);
+
+/**
+ * 설문 소유 팀·소유자 이동 감사 (append-only, 0118 — 티켓 14).
+ *
+ * 해산은 `surveys.team_id` 를 NULL 로 내리므로 설문 행만 봐서는 **출신 팀**을 알 수 없고,
+ * 팀 쪽 감사(dissolve)는 규모만 적을 뿐 어느 설문인지 적지 않는다. 배치 대기 설문이 어디서
+ * 왔는지 아는 유일한 경로가 이 테이블이다(.pen FLOW 8-4 의 「현재 소유 팀 · 해산됨」).
+ *
+ * survey_id 만 CASCADE 다 — 현행 설문 삭제가 하드 삭제라 RESTRICT 로 걸면 감사 행 하나가
+ * 설문 삭제를 영구히 막는다. 사람·팀은 하드 삭제되지 않으므로 RESTRICT 로 계보를 지킨다.
+ */
+export const surveyOwnershipEvents = pgTable(
+  'survey_ownership_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    action: text('action').$type<SurveyOwnershipAction>().notNull(),
+    fromOwnerId: uuid('from_owner_id').references(() => users.id, { onDelete: 'restrict' }),
+    toOwnerId: uuid('to_owner_id').references(() => users.id, { onDelete: 'restrict' }),
+    fromTeamId: uuid('from_team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    toTeamId: uuid('to_team_id').references(() => teams.id, { onDelete: 'restrict' }),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    metadata: jsonb('metadata').$type<SurveyOwnershipEventMetadata>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('survey_ownership_events_survey_idx').on(table.surveyId, table.createdAt)],
 );
 
 // 질문 그룹 테이블
@@ -360,6 +435,13 @@ export const surveyResponses = pgTable(
     // FK 는 0014 마이그레이션의 ALTER TABLE 로 생성됨 (순환 참조 회피).
     // drizzle 에서 .references() 추가하지 말 것 — contacts.ts 와 순환 import 발생.
     contactTargetId: uuid('contact_target_id'),
+
+    // 대리 응답 귀속 — 이 응답을 대신 입력한 실사 계정 (0122, 티켓 27).
+    // **NULL 이 응답자 직접 응답이다.** 실사가 조사 대상 화면의 「응답 대행」으로 들어온
+    // 세션에서만 채워지며, 그 판정은 pub 경로가 아니라 서버가 세션·초대 토큰·capability 를
+    // 함께 보고 한다(server/fieldwork-proxy). 화면이 보내는 값이 아니라 위조할 수 없다.
+    // FK 는 0122 마이그레이션이 만든다 — auth.ts 와 순환 import 를 피한다.
+    fieldworkUserId: uuid('fieldwork_user_id'),
 
     // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL
     progressPct: smallint('progress_pct'),

@@ -105,7 +105,7 @@ export interface ContactsRow {
   /**
    * 유효 메일 상태 — 수신거부 판정(unsubscribed_at 또는 최근 결과코드 수신거부)이면 발송 이력과
    * 무관하게 'skipped_unsubscribed', 아니면 최신(created_at DESC) 수신 상태. 발송 이력 없으면 null.
-   * 필터의 수신거부 판정과 같은 축(effectiveMailStatusExpr).
+   * 필터·정렬과 같은 표현식(effectiveMailStatusExpr) 기준.
    */
   latestMailStatus: MailRecipientStatus | null;
   inviteToken: string;

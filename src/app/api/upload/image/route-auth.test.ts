@@ -1,15 +1,25 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const { authState } = vi.hoisted(() => ({
-  authState: { user: null as null | { id: string } },
+  authState: { user: null as null | { id: string; userType?: 'internal' | 'guest' | 'fieldwork' } },
 }));
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({
-    auth: {
-      getUser: vi.fn(async () => ({ data: { user: authState.user }, error: null })),
-    },
-  })),
+// 실물 requireAuth 와 같은 정책 — 세션 + active + **내부 계정**.
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => {
+    const user = authState.user;
+    if (!user) throw new Error('인증이 필요합니다.');
+    const userType = user.userType ?? 'internal';
+    if (userType !== 'internal') throw new Error('인증이 필요합니다.');
+    return {
+      id: user.id,
+      email: 'a@b.com',
+      name: '테스트',
+      status: 'active',
+      isSuperadmin: false,
+      userType,
+    };
+  }),
 }));
 
 // withRouteLogging 의 로그 컨텍스트 캡처 — 403 거부 로그에 행위자가 남는지 검증용.
@@ -38,13 +48,13 @@ function buildRequest() {
   });
 }
 
-describe('POST /api/upload/image requires admin', () => {
+describe('POST /api/upload/image requires auth', () => {
   beforeEach(() => {
     authState.user = null;
   });
 
   afterEach(() => {
-    delete process.env['ADMIN_USER_IDS'];
+    vi.unstubAllEnvs();
   });
 
   it('returns 401 without auth', async () => {
@@ -52,26 +62,24 @@ describe('POST /api/upload/image requires admin', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns 403 for authenticated user not in ADMIN_USER_IDS allowlist', async () => {
-    authState.user = { id: 'intruder-id' };
-    process.env['ADMIN_USER_IDS'] = 'real-admin-id';
+  // 티켓 21 부터 업로드 라우트의 청중은 내부 계정뿐이다 — 게스트는 requireAuth 에서 막힌다.
+  it('게스트 계정은 401 이다', async () => {
+    authState.user = { id: 'guest-1', userType: 'guest' };
 
     const response = await POST(buildRequest() as never);
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
   });
 
-  it('403 거부 access 로그에도 행위자(userId·role)가 바인딩된다', async () => {
-    authState.user = { id: 'intruder-id' };
-    process.env['ADMIN_USER_IDS'] = 'real-admin-id';
+  it('access 로그에 행위자(userId·role)가 바인딩된다', async () => {
+    authState.user = { id: 'admin-1' };
     captured.contexts.length = 0;
 
-    const response = await POST(buildRequest() as never);
-    expect(response.status).toBe(403);
+    await POST(buildRequest() as never);
 
     // 래퍼의 access 로그 시점(ctx.log 접근)에 병합된 컨텍스트가 캡처된다
     const last = captured.contexts[captured.contexts.length - 1];
     expect(last).toBeDefined();
-    expect(last?.['userId']).toBe('intruder-id');
-    expect(last?.['role']).toBe('user');
+    expect(last?.['userId']).toBe('admin-1');
+    expect(last?.['role']).toBe('admin');
   });
 });

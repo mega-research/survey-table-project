@@ -149,11 +149,12 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             type="email"
             value={contactEmail ?? ''}
             onChange={(e) => updateContactEmail(e.target.value || null)}
-            placeholder="admin@example.com"
+            placeholder="비워 두면 설문 소유자"
             className="border-input bg-background w-full rounded border px-3 py-2 text-sm"
           />
           <p className="text-muted-foreground text-xs">
-            중복 응답 차단 화면에 표시되는 문의 이메일 주소입니다. 비워두면 메시지만 표시됩니다.
+            중복 응답 차단 화면에 표시되는 문의 이메일 주소입니다. 비워 두면 그 시점의 설문
+            소유자 이메일이 표시됩니다.
           </p>
         </div>
 

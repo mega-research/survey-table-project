@@ -62,7 +62,7 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
       surveyId: SURVEY_ID,
       requestedCount: 1,
       requireEmptyTestScope: false,
-      isGuest: true,
+      isExternal: true,
     });
 
     expect(prepared.isTest).toBe(false);
@@ -79,7 +79,7 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
       surveyId: SURVEY_ID,
       requestedCount: 1,
       requireEmptyTestScope: false,
-      isGuest: false,
+      isExternal: false,
     });
 
     expect(prepared.isTest).toBe(true);
@@ -95,7 +95,7 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
       surveyId: SURVEY_ID,
       requestedCount: 1,
       requireEmptyTestScope: false,
-      isGuest: false,
+      isExternal: false,
     });
 
     expect(lockModes).toEqual(['update']);

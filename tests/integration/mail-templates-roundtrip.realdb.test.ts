@@ -16,11 +16,16 @@
 
 import { createRouterClient } from '@orpc/server';
 import { and, eq, isNull } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { mailTemplates as mailTemplatesTable } from '@/db/schema/mail';
-import { surveys as surveysTable } from '@/db/schema';
+import {
+  surveys as surveysTable,
+  teamMembers as teamMembersTable,
+  teams as teamsTable,
+  users as usersTable,
+} from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
 import { templates } from '@/server/mail/procedures/templates';
@@ -33,11 +38,34 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 // bodyHtml 에 tmp URL 이 없어 실제 R2 호출은 발생하지 않으므로 더미 값으로 충분하다.
 process.env['CLOUDFLARE_R2_PUBLIC_URL'] ??= 'https://r2-test.invalid';
 
+// 역할 모델 v2(티켓 10): 템플릿 procedure 가 capability(mail.send)를 요구하므로
+// 실사용자·팀·멤버십 픽스처와 소유 컬럼이 채워진 설문이 있어야 왕복이 성립한다.
+const ACTOR_ID = crypto.randomUUID();
+const TEAM_ID = crypto.randomUUID();
+
 function adminContext(): ORPCContext {
   return {
     db,
-    supabase: {} as never,
-    user: { id: 'test-admin', email: 'test@local' },
+    user: {
+      id: ACTOR_ID,
+      email: `mail-roundtrip-${ACTOR_ID}@example.com`,
+      name: '테스트관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
+}
+
+/** 액터가 소유자인 배치 완료 설문 — 관문(mail.send)을 통과하는 최소 소유 구성. */
+function ownedSurveyValues(title: string) {
+  return {
+    title,
+    teamId: TEAM_ID,
+    assignmentStatus: 'assigned' as const,
+    visibility: 'team' as const,
+    ownerUserId: ACTOR_ID,
+    createdBy: ACTOR_ID,
   };
 }
 
@@ -57,18 +85,35 @@ describe.skipIf(!isLocalDb)('mail.templates procedure round-trip (real local DB)
   const client = createRouterClient({ templates }, { context: adminContext() });
   const createdSurveyIds: string[] = [];
 
+  beforeAll(async () => {
+    await db.insert(usersTable).values({
+      id: ACTOR_ID,
+      name: '테스트관리자',
+      email: `mail-roundtrip-${ACTOR_ID}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({ id: TEAM_ID, name: `메일왕복팀-${TEAM_ID.slice(0, 8)}` });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: ACTOR_ID, role: 'member' });
+  });
+
   afterAll(async () => {
     // survey 삭제 시 mail_templates 는 FK cascade로 함께 정리되지만 명시적으로도 비운다.
     for (const id of createdSurveyIds) {
       await db.delete(mailTemplatesTable).where(eq(mailTemplatesTable.surveyId, id));
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
+    await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, ACTOR_ID));
+    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_ID));
   });
 
   it('create -> update -> remove 왕복: 템플릿 생성/수정/소프트삭제가 DB에 반영된다', async () => {
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '메일템플릿-왕복-테스트-설문' })
+      .values(ownedSurveyValues('메일템플릿-왕복-테스트-설문'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -135,7 +180,7 @@ describe.skipIf(!isLocalDb)('mail.templates procedure round-trip (real local DB)
   it('다른 설문의 템플릿 update는 NOT_FOUND로 거부된다', async () => {
     const [survey] = await db
       .insert(surveysTable)
-      .values({ title: '메일템플릿-가드-테스트-설문' })
+      .values(ownedSurveyValues('메일템플릿-가드-테스트-설문'))
       .returning({ id: surveysTable.id });
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
@@ -153,5 +198,67 @@ describe.skipIf(!isLocalDb)('mail.templates procedure round-trip (real local DB)
         input: templateInput(),
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('타 팀 사용자는 남의 설문 템플릿에 NOT_FOUND — 관문이 쓰기 전에 거부한다 (티켓 10)', async () => {
+    const [survey] = await db
+      .insert(surveysTable)
+      .values(ownedSurveyValues('메일템플릿-타팀-차단-설문'))
+      .returning({ id: surveysTable.id });
+    if (!survey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(survey.id);
+
+    const outsiderId = crypto.randomUUID();
+    const outsiderTeamId = crypto.randomUUID();
+    await db.insert(usersTable).values({
+      id: outsiderId,
+      name: '타팀사용자',
+      email: `mail-roundtrip-outsider-${outsiderId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({
+      id: outsiderTeamId,
+      name: `메일왕복-타팀-${outsiderTeamId.slice(0, 8)}`,
+    });
+    await db
+      .insert(teamMembersTable)
+      .values({ teamId: outsiderTeamId, userId: outsiderId, role: 'leader' });
+
+    try {
+      const outsiderClient = createRouterClient(
+        { templates },
+        {
+          context: {
+            db,
+            user: {
+              id: outsiderId,
+              email: `mail-roundtrip-outsider-${outsiderId}@example.com`,
+              name: '타팀사용자',
+              status: 'active',
+              isSuperadmin: false,
+              userType: 'internal',
+            },
+          },
+        },
+      );
+
+      await expect(
+        outsiderClient.templates.create({ surveyId: survey.id, input: templateInput() }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      // 원본 설문에 템플릿이 생기지 않았다 — 거부가 쓰기 전에 일어났음을 확인한다.
+      const rows = await db
+        .select({ id: mailTemplatesTable.id })
+        .from(mailTemplatesTable)
+        .where(eq(mailTemplatesTable.surveyId, survey.id));
+      expect(rows.length).toBe(0);
+    } finally {
+      await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, outsiderId));
+      await db.delete(teamsTable).where(eq(teamsTable.id, outsiderTeamId));
+      await db.delete(usersTable).where(eq(usersTable.id, outsiderId));
+    }
   });
 });

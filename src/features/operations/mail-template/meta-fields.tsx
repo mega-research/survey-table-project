@@ -67,12 +67,15 @@ export function MetaFields({ values, onChange, fromDomain }: Props) {
           </div>
         </Field>
 
-        <Field label="답장 받을 메일" required>
+        <Field
+          label="답장 받을 메일"
+          hint="비워 두면 발송 시점의 설문 소유자 이메일로 회신됩니다"
+        >
           <Input
             type="email"
             value={values.replyTo}
             onChange={(e) => set('replyTo', e.target.value)}
-            placeholder="info@example.kr"
+            placeholder="비워 두면 설문 소유자"
           />
         </Field>
       </div>
@@ -83,10 +86,12 @@ export function MetaFields({ values, onChange, fromDomain }: Props) {
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -96,6 +101,7 @@ function Field({
         {required && <span className="ml-0.5 text-red-500">*</span>}
       </Label>
       {children}
+      {hint && <p className="text-xs text-gray-500">{hint}</p>}
     </div>
   );
 }

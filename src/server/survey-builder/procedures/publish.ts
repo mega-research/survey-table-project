@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/server';
 
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { authed } from '@/server/orpc';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
   MigratableCountInput,
@@ -20,7 +21,8 @@ import * as svc from '../services/survey-publish';
 const publishSurvey = authed
   .input(PublishSurveyInput)
   .output(SurveyVersionRowSchema)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.publish');
     try {
       return await svc.publishSurvey(input);
     } catch (error) {
@@ -37,11 +39,15 @@ const publishSurvey = authed
 /**
  * 배포 확인 안내용 이관 대상 응답 수 (ADR-0014).
  * "진행 중 응답 N건이 새 버전으로 이어집니다" 문구의 N.
+ * 배포 확인 대화상자에서만 쓰이므로 배포와 같은 capability 를 요구한다.
  */
 const migratableCount = authed
   .input(MigratableCountInput)
   .output(MigratableCountOutput)
-  .handler(({ input }) => svc.countMigratableResponses(input));
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.publish');
+    return svc.countMigratableResponses(input);
+  });
 
 export const publish = {
   publish: publishSurvey,

@@ -92,7 +92,6 @@ function responseResult(control: SurveyControl = noneControl): NonNullable<Surve
 function anonContext(): ORPCContext {
   return {
     db: {} as never,
-    supabase: {} as never,
     user: null,
     headers: new Headers({ 'x-real-ip': '203.0.113.9' }),
   };

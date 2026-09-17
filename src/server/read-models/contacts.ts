@@ -90,6 +90,15 @@ export interface ListContactsArgs {
   sort: ContactsSortKey;
   dir: ContactsSortDir;
   pageSize: number;
+  /**
+   * 그룹(업로드 시점의 `group_value`) 한 값으로 좁힌다 — 필터 DSL 밖의 축이다 (티켓 26).
+   *
+   * DSL(`FILTER_SOURCE`)에 넣지 않은 이유는 그쪽이 **컬럼 스킴 위에** 서 있기 때문이다:
+   * 소스는 `attrs.*`·`pii.*`·system 넷이고 전부 스킴이 그리는 열이다. 그룹은 열이 아니라
+   * 컨택 행 자체의 속성이라 후보 목록에도 헤더 팝오버에도 자리가 없다. 실사 화면의
+   * 「그룹 · 전체」 드롭다운(.pen 10-2)이 첫 소비자다.
+   */
+  groupValue?: string;
 }
 
 export interface ListContactsResult {
@@ -145,9 +154,11 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, clauses, sort, dir } = args;
+  const { surveyId, scope, page, pageSize, clauses, sort, dir, groupValue } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
+
+  if (groupValue !== undefined) whereParts.push(eq(contactTargets.groupValue, groupValue));
 
   whereParts.push(buildContactsFilterSql(clauses));
 
@@ -206,6 +217,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      unsubscribedAt: contactTargets.unsubscribedAt,
     })
     .from(contactTargets)
     .where(whereClause)
@@ -228,6 +240,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     progressPct: r.progressPct,
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
+    unsubscribedAt: r.unsubscribedAt,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));
@@ -384,6 +397,15 @@ export interface ContactDetailResult {
  */
 export async function getContactDetailById(
   id: string,
+  /**
+   * 이 컨택이 속해야 하는 설문 — **조회 조건이지 사후 확인이 아니다** (티켓 15).
+   *
+   * 예전에는 id 로만 찾은 뒤 호출측이 `detail.contact.surveyId !== surveyId` 를 봤다.
+   * 그 사이에 `decryptForTarget` 이 이미 돌아 **타 팀 컨택의 PII 가 복호화**됐다 —
+   * 화면에는 안 나가지만 서버 안에서 팀 경계를 넘은 것이고, "권한 확인 후에만 복호화"
+   * 라는 contact-pii-repo 의 전제가 깨진다. 조건을 WHERE 로 내려 아예 못 찾게 한다.
+   */
+  surveyId: string,
   scope: OperationsDataScope,
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
@@ -404,7 +426,13 @@ export async function getContactDetailById(
       updatedAt: contactTargets.updatedAt,
     })
     .from(contactTargets)
-    .where(and(eq(contactTargets.id, id), targetScopeCondition(scope)))
+    .where(
+      and(
+        eq(contactTargets.id, id),
+        eq(contactTargets.surveyId, surveyId),
+        targetScopeCondition(scope),
+      ),
+    )
     .limit(1);
 
   if (!contact) return null;

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 import { applyDemandView, parseDemandSortMode } from '@/lib/operations/demand-summary-format';
 import {
   buildDemandSummaryWorkbook,
@@ -25,25 +24,19 @@ async function handleDemandSummaryExport(
   ctx: RouteLogContext,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
-  let userId: string;
+  // 인증 + 설문 관문 — 원자료 export 라우트와 같은 정책이다. requireAuth 가 내부 계정만
+  // 들이고 capability(export.download)로 판정하므로, 이 문을 지난 사람은 언제나 내부 계정이다.
+  let user: Awaited<ReturnType<typeof requireAuth>>;
   try {
-    const user = await requireAuth();
-    userId = user.id;
+    user = await requireAuth();
   } catch {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
   const { surveyId } = await params;
-  // allowlist 미설정이면 canAccessSurvey 가 fail-open 이라 일반 인증 유저도 통과한다 —
-  // 로그에는 그 사실이 보여야 하므로 'admin' 으로 뭉뚱그리지 않는다 (업로드 라우트와 동일).
-  ctx.bind({
-    userId,
-    role: isGuestUser(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
-    surveyId,
-  });
-  if (!canAccessSurvey(userId, surveyId)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  ctx.bind({ userId: user.id, role: 'admin', surveyId });
+  const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
+  if (denied) return denied;
 
   const scope = await loadOperationsDataScope(surveyId);
   const all = await getDemandSummary(surveyId, scope);

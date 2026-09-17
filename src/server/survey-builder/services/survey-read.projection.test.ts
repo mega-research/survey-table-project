@@ -124,21 +124,35 @@ describe('previewToken / privateToken 컬럼 분리 — 답변 크레덴셜 겸�
 
   type SqlLike = { queryChunks?: unknown[] };
 
+  /**
+   * WHERE 트리를 평탄화한다 — `and(eq(...), isNull(...))` 은 자식 SQL 을 통째로 chunk 로
+   * 품기 때문에 한 겹만 보면 컬럼 chunk 가 잡히지 않는다(티켓 17 이 deletedAt 조건을
+   * 더하면서 드러났다). 재귀로 내려가면 조건이 몇 개든 같은 방식으로 읽힌다.
+   */
+  function flattenChunks(node: unknown): unknown[] {
+    const chunks = (node as SqlLike | undefined)?.queryChunks;
+    if (!Array.isArray(chunks)) return [];
+    return chunks.flatMap((chunk) => [chunk, ...flattenChunks(chunk)]);
+  }
+
+  function columnNamesOf(where: unknown): string[] {
+    return flattenChunks(where)
+      .filter(
+        (c): c is { name: string } =>
+          typeof c === 'object' &&
+          c !== null &&
+          'name' in c &&
+          typeof (c as { name?: unknown }).name === 'string',
+      )
+      .map((c) => c.name);
+  }
+
   function columnNameOf(where: unknown): string | undefined {
-    const chunks = (where as SqlLike | undefined)?.queryChunks ?? [];
-    const columnChunk = chunks.find(
-      (c): c is { name: string } =>
-        typeof c === 'object' &&
-        c !== null &&
-        'name' in c &&
-        typeof (c as { name?: unknown }).name === 'string',
-    );
-    return columnChunk?.name;
+    return columnNamesOf(where)[0];
   }
 
   function paramValueOf(where: unknown): unknown {
-    const chunks = (where as SqlLike | undefined)?.queryChunks ?? [];
-    const paramChunk = chunks.find(
+    const paramChunk = flattenChunks(where).find(
       (c) => (c as { constructor?: { name?: string } } | null)?.constructor?.name === 'Param',
     ) as { value?: unknown } | undefined;
     return paramChunk?.value;
@@ -153,6 +167,22 @@ describe('previewToken / privateToken 컬럼 분리 — 답변 크레덴셜 겸�
       if (column === 'preview_token' && value === PREVIEW_TOKEN) return { id: SURVEY_ID };
       return undefined;
     });
+  });
+
+  /**
+   * 삭제된 설문은 토큰을 알아도 열리지 않는다(티켓 17). 이 세 함수는 관문을 지나지 않는
+   * 응답자 표면이라 조회 조건에 `deleted_at` 을 직접 걸어야 하고, 빠지면 soft delete 가
+   * 「목록에서만 사라지는 것」이 된다.
+   */
+  it('세 공개 조회 모두 deleted_at 조건을 함께 건다', async () => {
+    await surveySvc.getSurveyByPreviewToken({ token: PREVIEW_TOKEN });
+    await surveySvc.getSurveyByPrivateToken({ token: PRIVATE_TOKEN });
+    await surveySvc.getSurveyBySlug({ slug: 'first' });
+
+    for (const call of findFirstMock.mock.calls) {
+      const where = (call[0] as { where?: unknown } | undefined)?.where;
+      expect(columnNamesOf(where)).toContain('deleted_at');
+    }
   });
 
   it('getSurveyByPreviewToken 은 preview_token 컬럼을 조회해 자신의 토큰으로 resolve 된다', async () => {

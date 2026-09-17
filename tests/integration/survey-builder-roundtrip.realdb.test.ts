@@ -18,7 +18,7 @@
 
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
@@ -26,6 +26,9 @@ import {
   questions as questionsTable,
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
+  teamMembers as teamMembersTable,
+  teams as teamsTable,
+  users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
@@ -37,11 +40,22 @@ import { isSlugAvailable } from '@/server/survey-builder/services/survey-read';
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
+// 역할 모델 v2(티켓 07·09): 생성은 팀 범위를, 저장·발행은 capability 를 요구하므로
+// 실사용자·팀·멤버십 픽스처가 있어야 왕복이 성립한다. id 는 실제 uuid 컬럼과 맞춘다.
+const ACTOR_ID = crypto.randomUUID();
+const TEAM_ID = crypto.randomUUID();
+
 function authedContext(): ORPCContext {
   return {
     db,
-    supabase: {} as never,
-    user: { id: 'admin-roundtrip', email: 'admin@example.com' },
+    user: {
+      id: ACTOR_ID,
+      email: `builder-roundtrip-${ACTOR_ID}@example.com`,
+      name: '테스트관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
   };
 }
 
@@ -49,11 +63,255 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
   const client = createRouterClient({ surveys, save, publish }, { context: authedContext() });
   const createdSurveyIds: string[] = [];
 
+  beforeAll(async () => {
+    await db.insert(usersTable).values({
+      id: ACTOR_ID,
+      name: '테스트관리자',
+      email: `builder-roundtrip-${ACTOR_ID}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({ id: TEAM_ID, name: `빌더왕복팀-${TEAM_ID.slice(0, 8)}` });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_ID, userId: ACTOR_ID, role: 'member' });
+  });
+
   afterAll(async () => {
     for (const id of createdSurveyIds) {
       // survey 삭제 시 questions/survey_versions 는 FK cascade 로 정리된다.
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
+    await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, ACTOR_ID));
+    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_ID));
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_ID));
+  });
+
+  // 저장 관문은 부모 surveyId 의 survey.edit 하나만 본다. 그 뒤 하위 행은 전역 PK 로
+  // 지워지고 덮어써졌기 때문에, 편집 권한이 있는 설문의 payload 에 남의 설문 질문 id 를
+  // 섞으면 그 질문이 삭제·변조됐다(Codex 적대적 리뷰). 여기서 그 경로 전부를 막는다.
+  describe('교차 설문 하위 ID 쓰기 차단', () => {
+    async function seedSurveyWithQuestion(title: string) {
+      const created = await client.surveys.create({ title });
+      createdSurveyIds.push(created.id);
+      const questionId = crypto.randomUUID();
+      await client.save.saveDiff({
+        surveyId: created.id,
+        questionChanges: {
+          upserted: [
+            { id: questionId, type: 'text', title: '원본 질문', required: false, order: 1 },
+          ] as never,
+          deleted: [],
+        },
+      });
+      return { surveyId: created.id, questionId };
+    }
+
+    it('타 설문 질문은 삭제·덮어쓰기·순서변경 어느 쪽으로도 건드릴 수 없다', async () => {
+      const victim = await seedSurveyWithQuestion('교차쓰기-피해자');
+      const attacker = await client.surveys.create({ title: '교차쓰기-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      // 1) 삭제
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: { upserted: [], deleted: [victim.questionId] },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 2) 내용 덮어쓰기
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: victim.questionId,
+                type: 'text',
+                title: '가로챈 제목',
+                required: false,
+                order: 1,
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 3) 순서 변경
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [],
+            deleted: [],
+            reorderedIds: [victim.questionId],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 피해자 질문은 그대로 살아 있고 제목도 안 바뀌었다.
+      const [row] = await db
+        .select({ id: questionsTable.id, title: questionsTable.title })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, victim.questionId));
+      expect(row).toBeDefined();
+      expect(row?.title).toBe('원본 질문');
+    });
+
+    it('전체 저장도 타 설문 질문 id 를 거부한다', async () => {
+      const victim = await seedSurveyWithQuestion('교차쓰기-전체저장-피해자');
+      const attacker = await client.surveys.create({ title: '교차쓰기-전체저장-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveWithDetails({
+          id: attacker.id,
+          title: '교차쓰기-전체저장-공격자',
+          settings: {
+            isPublic: false,
+            allowMultipleResponses: false,
+            showProgressBar: true,
+            shuffleQuestions: false,
+            requireLogin: false,
+            thankYouMessage: '',
+          },
+          questions: [
+            {
+              id: victim.questionId,
+              type: 'text',
+              title: '전체저장으로 가로채기',
+              required: false,
+              order: 1,
+            },
+          ],
+          groups: [],
+        } as never),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      const [row] = await db
+        .select({ title: questionsTable.title })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, victim.questionId));
+      expect(row?.title).toBe('원본 질문');
+    });
+
+    /**
+     * 행 자신의 id 가 아니라 **부모 참조**로 경계를 넘는 경로 (Codex 2차 리뷰).
+     *
+     * 질문의 `groupId` 와 그룹의 `parentGroupId` 는 DB FK 가 전역이라 타 설문 그룹 id 를
+     * 그대로 받아준다. 그러면 내 설문의 질문이 남의 설문 그룹에 매달린 채 영속되고 어느
+     * 화면으로도 고칠 수 없다. 없는 id 도 같은 사유로 접어야 한다 — 갈라 두면 FK 오류와
+     * 거부의 차이가 「그 그룹이 존재하는가」를 알려주는 오라클이 된다.
+     */
+    async function seedSurveyWithGroup(title: string) {
+      const created = await client.surveys.create({ title });
+      createdSurveyIds.push(created.id);
+      const groupId = crypto.randomUUID();
+      await client.save.saveDiff({
+        surveyId: created.id,
+        groups: [{ id: groupId, name: '원본 그룹', order: 0 }] as never,
+      });
+      return { surveyId: created.id, groupId };
+    }
+
+    it('타 설문 그룹을 질문의 groupId 로 매달 수 없다', async () => {
+      const victim = await seedSurveyWithGroup('교차참조-피해자');
+      const attacker = await client.surveys.create({ title: '교차참조-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: crypto.randomUUID(),
+                type: 'text',
+                title: '남의 그룹에 매달기',
+                required: false,
+                order: 1,
+                groupId: victim.groupId,
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      // 공격자 설문에는 아무 질문도 남지 않는다(트랜잭션 전체 롤백).
+      const rows = await db
+        .select({ id: questionsTable.id })
+        .from(questionsTable)
+        .where(eq(questionsTable.surveyId, attacker.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    it('타 설문 그룹을 parentGroupId 로 매달 수 없다', async () => {
+      const victim = await seedSurveyWithGroup('교차부모-피해자');
+      const attacker = await client.surveys.create({ title: '교차부모-공격자' });
+      createdSurveyIds.push(attacker.id);
+
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          groups: [
+            { id: crypto.randomUUID(), name: '자식', order: 0, parentGroupId: victim.groupId },
+          ] as never,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('없는 그룹 id 도 같은 사유로 접는다 — 존재 오라클을 만들지 않는다', async () => {
+      const attacker = await client.surveys.create({ title: '존재오라클' });
+      createdSurveyIds.push(attacker.id);
+
+      // 타 설문 그룹(FORBIDDEN)과 없는 id(FK 500)가 갈리면 그 차이가 곧 존재 확인이 된다.
+      await expect(
+        client.save.saveDiff({
+          surveyId: attacker.id,
+          questionChanges: {
+            upserted: [
+              {
+                id: crypto.randomUUID(),
+                type: 'text',
+                title: '유령 그룹',
+                required: false,
+                order: 1,
+                groupId: crypto.randomUUID(),
+              },
+            ] as never,
+            deleted: [],
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('자기 설문 그룹에는 정상적으로 매달린다', async () => {
+      // 위 셋이 과잉 차단이 아님을 고정한다 — 같은 payload 의 새 그룹도 통과해야 한다.
+      const own = await client.surveys.create({ title: '정상매달기' });
+      createdSurveyIds.push(own.id);
+      const groupId = crypto.randomUUID();
+      const questionId = crypto.randomUUID();
+
+      await client.save.saveDiff({
+        surveyId: own.id,
+        groups: [{ id: groupId, name: '내 그룹', order: 0 }] as never,
+        questionChanges: {
+          upserted: [
+            { id: questionId, type: 'text', title: 'Q', required: false, order: 1, groupId },
+          ] as never,
+          deleted: [],
+        },
+      });
+
+      const [row] = await db
+        .select({ groupId: questionsTable.groupId })
+        .from(questionsTable)
+        .where(eq(questionsTable.id, questionId));
+      expect(row?.groupId).toBe(groupId);
+    });
   });
 
   it('create -> saveDiff(질문 1개 upsert) -> publish 왕복: 버전/스냅샷/currentVersionId가 DB에 반영된다', async () => {
@@ -462,5 +720,73 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       .from(questionGroupsTable)
       .where(eq(questionGroupsTable.surveyId, copy.id));
     expect(copiedGroup?.displayCondition?.conditions[0]?.sourceQuestionId).toBe(copiedQ1.id);
+  });
+  // 관문 음성 케이스(티켓 09) — 타 팀 사용자는 이 팀의 설문을 만질 수 없다. 실 DB 로
+  // capability 로더(멤버십·소유 컬럼 조회)까지 통째로 검증하는 유일한 자리다.
+  it('타 팀 사용자의 saveDiff·publish·duplicate 는 NOT_FOUND 로 거부된다', async () => {
+    const created = await client.surveys.create({ title: '빌더-왕복-타팀-차단' });
+    createdSurveyIds.push(created.id);
+
+    const outsiderId = crypto.randomUUID();
+    const outsiderTeamId = crypto.randomUUID();
+    await db.insert(usersTable).values({
+      id: outsiderId,
+      name: '타팀사용자',
+      email: `builder-roundtrip-outsider-${outsiderId}@example.com`,
+      emailVerified: true,
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    });
+    await db.insert(teamsTable).values({
+      id: outsiderTeamId,
+      name: `빌더왕복-타팀-${outsiderTeamId.slice(0, 8)}`,
+    });
+    await db
+      .insert(teamMembersTable)
+      .values({ teamId: outsiderTeamId, userId: outsiderId, role: 'leader' });
+
+    try {
+      const outsiderClient = createRouterClient(
+        { surveys, save, publish },
+        {
+          context: {
+            db,
+            user: {
+              id: outsiderId,
+              email: `builder-roundtrip-outsider-${outsiderId}@example.com`,
+              name: '타팀사용자',
+              status: 'active',
+              isSuperadmin: false,
+              userType: 'internal',
+            },
+          },
+        },
+      );
+
+      await expect(
+        outsiderClient.save.saveDiff({
+          surveyId: created.id,
+          metadata: { title: '탈취 시도', settings: { isPublic: true } },
+        } as never),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.publish.publish({ surveyId: created.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        outsiderClient.surveys.duplicate({ surveyId: created.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      // 원본은 그대로다 — 거부가 쓰기 전에 일어났음을 확인한다.
+      const [row] = await db
+        .select({ title: surveysTable.title })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, created.id));
+      expect(row?.title).toBe('빌더-왕복-타팀-차단');
+    } finally {
+      await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, outsiderId));
+      await db.delete(teamsTable).where(eq(teamsTable.id, outsiderTeamId));
+      await db.delete(usersTable).where(eq(usersTable.id, outsiderId));
+    }
   });
 });

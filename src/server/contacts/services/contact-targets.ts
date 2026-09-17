@@ -16,6 +16,7 @@ import type {
   AddContactTargetInput,
   ContactTargetRow,
   DeleteContactTargetInput,
+  SetContactTargetMemoInput,
   UpdateContactTargetInput,
 } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope';
@@ -35,9 +36,9 @@ import { allocateContactResid } from './contact-resid';
 async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
-  const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
+  const scope = await lockCurrentSurveyScope(tx, input.surveyId, isExternal);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -58,9 +59,9 @@ async function lockTargetInCurrentScope(
 async function lockCurrentSurveyScope(
   tx: DbTransaction,
   surveyId: string,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
-  const locked = await lockWriteScope(tx, surveyId, isGuest, {
+  const locked = await lockWriteScope(tx, surveyId, isExternal, {
     lock: 'update',
     columns: ['contactColumns', 'testContactColumns'],
   });
@@ -81,12 +82,12 @@ async function lockCurrentSurveyScope(
  *
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh 로 대체.
  *
- * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * isExternal 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
  * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
  */
 export async function addContactTarget(
   input: AddContactTargetInput,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
@@ -95,7 +96,7 @@ export async function addContactTarget(
       surveyId,
       requestedCount: 1,
       requireEmptyTestScope: false,
-      isGuest,
+      isExternal,
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
@@ -133,16 +134,49 @@ export async function addContactTarget(
 }
 
 /**
+ * 메모·연락 방법만 덮어쓴다 (티켓 26 — 실사의 좁은 쓰기 표면).
+ *
+ * `updateContactTarget` 과 나란하지만 `attrs`·PII·group_value 를 **건드리지 않는다**.
+ * 실사에게 열리는 유일한 컨택 쓰기라(ADR-0019 「컨택 업로드/수정은 차단」) 명단에 닿는
+ * 필드가 이 함수의 `set` 에 들어가서는 안 된다.
+ *
+ * 잠금은 같은 헬퍼를 쓴다 — 파티션 확정과 대상 소속 확인이 같은 스냅샷이어야 한다.
+ */
+export async function setContactTargetMemo(
+  input: SetContactTargetMemoInput,
+  isExternal: boolean,
+): Promise<void> {
+  const { id, surveyId, memo, contactMethod } = input;
+
+  await db.transaction(async (tx) => {
+    const { isTest } = await lockTargetInCurrentScope(tx, { id, surveyId }, isExternal);
+
+    const updated = await tx
+      .update(contactTargets)
+      .set({ memo, contactMethod, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contactTargets.id, id),
+          eq(contactTargets.surveyId, surveyId),
+          eq(contactTargets.isTest, isTest),
+        ),
+      )
+      .returning({ id: contactTargets.id });
+    if (updated.length === 0) throw new Error('NOT_FOUND');
+  });
+}
+
+/**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
  */
 export async function updateContactTarget(
   input: UpdateContactTargetInput,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
   await db.transaction(async (tx) => {
-    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
+    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isExternal);
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
 
@@ -191,11 +225,11 @@ export async function updateContactTarget(
  */
 export async function deleteContactTarget(
   input: DeleteContactTargetInput,
-  isGuest: boolean,
+  isExternal: boolean,
 ): Promise<void> {
   const { id, surveyId } = input;
   await db.transaction(async (tx) => {
-    const { isTest } = await lockCurrentSurveyScope(tx, surveyId, isGuest);
+    const { isTest } = await lockCurrentSurveyScope(tx, surveyId, isExternal);
     const [target] = await tx
       .select({ id: contactTargets.id })
       .from(contactTargets)

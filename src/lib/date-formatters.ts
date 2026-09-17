@@ -47,6 +47,17 @@ export function formatLocalDateTime(d: Date | string | number | null | undefined
   return toDate(d).toLocaleString(undefined, DATETIME_OPTIONS);
 }
 
+/**
+ * 'YYYY-MM-DD' — **KST 기준 오늘**.
+ *
+ * 시간 모드 차트가 날짜를 지목하지 않았을 때의 폴백이라 표시용이 아니라 **질의 인자**다.
+ * en-CA 로케일의 출력이 곧 ISO 날짜라 별도 조립이 필요 없다. 운영 콘솔과 게스트 콘솔이
+ * 같은 함수를 쓴다 — 두 화면이 서로 다른 「오늘」을 보면 같은 설문의 시간 축이 갈린다.
+ */
+export function kstTodayIsoDate(): string {
+  return new Intl.DateTimeFormat('en-CA', DATE_OPTIONS).format(new Date());
+}
+
 /** 'YYYY. MM. DD.' — KST 고정. */
 export function formatLocalDate(d: Date | string | number | null | undefined): string {
   if (d === null || d === undefined) return '—';

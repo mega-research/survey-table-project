@@ -1,6 +1,8 @@
 import * as z from 'zod';
 
+import { stampFieldworkAttribution } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
+import { resolveProxyForResponseRpc } from '@/server/rpc-fieldwork-proxy';
 
 import {
   RecordStepVisitInput,
@@ -50,7 +52,19 @@ const resume = pub
   .use(withRateLimit('lookup'))
   .input(ResumeOrCreateResponseInput)
   .output(ResumeOrCreateResponseOutput)
-  .handler(({ input }) => svc.resumeOrCreateResponse(input));
+  .handler(async ({ context, input }) => {
+    // 「이어서 대행」의 귀속 지점 (티켓 27). 재개는 INSERT 를 지나지 않으므로 생성 경로의
+    // 짝이 여기 있어야 하고, **행 id 가 나온 뒤에** 찍어야 버전 이관이 성공한 분기도 함께
+    // 잡힌다(그 분기는 touch 를 부르지 않는다).
+    const proxy = await resolveProxyForResponseRpc(
+      context.user,
+      input.surveyId,
+      input.inviteToken ?? null,
+    );
+    const result = await svc.resumeOrCreateResponse(input);
+    if (result) await stampFieldworkAttribution(result.id, proxy);
+    return result;
+  });
 
 export const lifecycle = {
   stepVisit,
