@@ -1,6 +1,9 @@
 'use client';
 
+import { useRef } from 'react';
+
 import { Input } from '@/components/ui/input';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/hooks/use-field-focus';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useInputFormatField } from '@/hooks/use-input-format-field';
@@ -37,6 +40,12 @@ interface OptionTextInputProps {
     /** 표 input 셀의 응답 품질 검사 — 보기 상세기재에는 아직 없다 */
     textValidation?: TextValidation | null | undefined;
     defaultValueTemplate?: string | undefined;
+    /**
+     * 여러 줄 입력 — 표 input 셀의 inputRows·inputAutoGrow 를 그대로 받는다. 평문 모드의
+     * 기본 렌더에서만 textarea 로 그리고, 숫자·형식·칩 셸·unstyled 모드는 한 줄 그대로다.
+     */
+    textInputRows?: number | undefined;
+    textInputAutoGrow?: boolean | undefined;
   };
   className?: string;
   /** 시각 라벨이 별도 요소(라벨 칩 등)로 렌더될 때 입력란과의 접근성 연결용 */
@@ -87,6 +96,13 @@ export function OptionTextInput({
   const isNumberMode = option.textInputType === 'number';
   const format = isInputFormat(option.textInputType) ? option.textInputType : null;
   const rawValue = optionTexts[option.id] ?? '';
+  // 여러 줄 — input-cell 과 같은 규칙(숫자·형식과 배타, 높이 늘리기를 켜면 줄 수는 최소 높이)
+  const isFreeText = !isNumberMode && !format;
+  const textareaRows = isFreeText ? Math.max(1, Math.floor(option.textInputRows ?? 1)) : 1;
+  const autoGrow = isFreeText && option.textInputAutoGrow === true;
+  const isMultiline = rowLabel === undefined && !unstyled && (textareaRows >= 2 || autoGrow);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutoGrowTextarea(textareaRef, rawValue, isMultiline && autoGrow);
   // 숫자 모드 — 입력 셀과 같은 타이핑 규칙(숫자만·콤마 표시·max/소수/허용값 차단).
   // 단위 환산·min 미달은 입력칸 아래 한 줄로 보인다 (input-cell·단답형과 같은 모양).
   const numeric = useFormattedNumericInput({
@@ -232,6 +248,43 @@ export function OptionTextInput({
   // w-full 필수 — 표 셀은 `flex flex-col items-start` 라 래퍼가 내용 폭으로 쪼그라든다.
   // 래퍼가 생기기 전에는 Input 이 직접 자식이라 호출부의 className="w-full" 이 먹었다.
   const hasFixedWidth = typeof fixedWidth === 'number' && fixedWidth > 0;
+  const fixedWidthStyle = hasFixedWidth
+    ? { width: `${fixedWidth}px`, maxWidth: '100%' }
+    : undefined;
+  if (isMultiline) {
+    return (
+      <div
+        className={cn(
+          'w-full space-y-1',
+          hasFixedWidth && cn('flex flex-col', getHorizontalItemsClass(horizontalAlign)),
+        )}
+      >
+        <textarea
+          ref={textareaRef}
+          rows={textareaRows}
+          aria-label={sharedProps['aria-label']}
+          name={sharedProps.name}
+          autoComplete="off"
+          value={rawValue}
+          onChange={(e) => setOptionText(questionId, option.id, e.target.value)}
+          onFocus={focus.onFocus}
+          onBlur={focus.onBlur}
+          placeholder={sharedProps.placeholder}
+          data-option-text-target-id={sharedProps['data-option-text-target-id']}
+          style={fixedWidthStyle}
+          className={cn(
+            'w-full resize-none rounded-md border border-gray-300 bg-white p-2 text-base',
+            'focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none',
+            // 높이를 내용에 맞추므로 안쪽 스크롤바가 생기지 않게 한다
+            autoGrow && 'overflow-hidden',
+            className,
+            priorTextCls,
+          )}
+        />
+        {hint}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -239,10 +292,7 @@ export function OptionTextInput({
         hasFixedWidth && cn('flex flex-col', getHorizontalItemsClass(horizontalAlign)),
       )}
     >
-      <Input
-        {...sharedProps}
-        style={hasFixedWidth ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined}
-      />
+      <Input {...sharedProps} style={fixedWidthStyle} />
       {hint}
     </div>
   );

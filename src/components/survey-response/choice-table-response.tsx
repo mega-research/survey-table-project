@@ -533,6 +533,8 @@ export function ChoiceTableResponse({
             ...(cell.numberFormat !== undefined
               ? { textInputNumberFormat: cell.numberFormat }
               : {}),
+            ...(cell.inputRows !== undefined ? { textInputRows: cell.inputRows } : {}),
+            ...(cell.inputAutoGrow ? { textInputAutoGrow: true } : {}),
           }}
           ariaLabel={cellLabel}
           className="w-full"
