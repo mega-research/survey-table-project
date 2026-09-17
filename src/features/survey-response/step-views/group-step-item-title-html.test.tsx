@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
 import type { Question } from '@/types/survey';
 import type { StepItem } from '@/utils/group-ordering';
@@ -35,6 +36,25 @@ function renderTitle(partial: Partial<Question>) {
   );
 }
 
+function renderTitleWithAttrs(partial: Partial<Question>, attrs: Record<string, string>) {
+  const question = { id: 'q1', type: 'text', title: '', required: false, order: 1, ...partial } as Question;
+  const item: StepItem = { question, rootGroupId: null, rootGroupName: null, subgroupName: null };
+  return render(
+    <ContactAttrsProvider attrs={attrs} quotes={{}}>
+      <GroupStepItem
+        item={item}
+        showSubgroupHeading={false}
+        responses={{}}
+        questions={[question]}
+        onResponse={vi.fn()}
+        isHighlighted={false}
+        showRequiredMessage={false}
+        showChangeConfirmMessage={false}
+      />
+    </ContactAttrsProvider>,
+  );
+}
+
 describe('GroupStepItem 제목 서식', () => {
   it('서식본이 있으면 굵게·밑줄·색·크기를 그리고 필수 표시는 같은 줄에 남는다', () => {
     renderTitle({
@@ -62,6 +82,16 @@ describe('GroupStepItem 제목 서식', () => {
     expect(screen.queryByTestId('question-title-rich')).toBeNull();
     expect(screen.queryByText('옛 제목')).toBeNull();
     expect(screen.getByText('A4. 공급처')).toBeInTheDocument();
+  });
+
+  it('변수 키 일부에만 서식을 걸어도 명단 값이 서식과 함께 보인다', () => {
+    renderTitleWithAttrs(
+      { title: '{{회사}}의 매출', titleHtml: '<p>{{<strong>회사</strong>}}의 매출</p>' },
+      { 회사: '메가리서치' },
+    );
+    const rich = screen.getByTestId('question-title-rich');
+    expect(rich.querySelector('strong')).toHaveTextContent('메가리서치');
+    expect(rich).toHaveTextContent('메가리서치의 매출');
   });
 
   it('스크립트·허용 밖 태그는 걸러진다', () => {

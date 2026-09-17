@@ -1,4 +1,4 @@
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import type { Question } from '@/types/survey';
 
 /**
@@ -58,5 +58,6 @@ export function resolveQuestionTitleHtml(
   if (normalizeSpaces(titleHtmlToText(html)) !== normalizeSpaces(question.title ?? '')) {
     return undefined;
   }
-  return substituteTokens(html, attrs, quotes);
+  // 서식이 토큰 안쪽·경계에 걸칠 수 있어 HTML 을 아는 치환을 쓴다(평문 치환은 키에 태그가 섞인다).
+  return substituteTokensInHtml(html, attrs, quotes);
 }

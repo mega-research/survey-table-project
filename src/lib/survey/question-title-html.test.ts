@@ -56,3 +56,38 @@ describe('sanitizeTitleHtml', () => {
     expect(out).not.toContain('<a');
   });
 });
+
+describe('제목 서식본 토큰 치환 — 서식이 토큰에 걸친 경우', () => {
+  const resolve = (title: string, titleHtml: string, attrs: Record<string, string>, quotes = {}) =>
+    resolveQuestionTitleHtml({ title, titleHtml }, attrs, quotes);
+
+  it('토큰 키 글자만 굵게 해도 원래 키로 치환하고 서식은 값에 입힌다', () => {
+    expect(
+      resolve('{{회사}}의 매출', '<p>{{<strong>회사</strong>}}의 매출</p>', { 회사: '메가' }),
+    ).toBe('<p><strong>메가</strong>의 매출</p>');
+  });
+
+  it('서식이 토큰 경계를 가로질러도 치환하고 태그 짝이 유지된다', () => {
+    expect(
+      resolve('{{회사}}의 매출', '<p><strong>{{회</strong>사}}의 매출</p>', { 회사: '메가' }),
+    ).toBe('<p><strong>메가</strong>의 매출</p>');
+  });
+
+  it('키에 & 가 있어도(서식본에선 &amp;) 치환한다', () => {
+    expect(resolve('{{R&D}} 비중', '<p><u>{{R&amp;D}}</u> 비중</p>', { 'R&D': '30%' })).toBe(
+      '<p><u>30%</u> 비중</p>',
+    );
+  });
+
+  it('응답 인용 토큰도 같은 규칙이다', () => {
+    expect(
+      resolve('{{{유형}}} 선택', '<p>{{{<u>유형</u>}}} 선택</p>', {}, { 유형: '전기차' }),
+    ).toBe('<p><u>전기차</u> 선택</p>');
+  });
+
+  it('값의 HTML 특수문자는 이스케이프한다', () => {
+    expect(resolve('{{a}} x', '<p><strong>{{a}}</strong> x</p>', { a: '<b>&' })).toBe(
+      '<p><strong>&lt;b&gt;&amp;</strong> x</p>',
+    );
+  });
+});
