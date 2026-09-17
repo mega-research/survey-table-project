@@ -76,6 +76,9 @@ export interface SurveyBuilderState {
 
   // DB 저장 여부 (CREATE 페이지에서 서버 액션 호출 전 설문 존재 보장용)
   isSavedToDb: boolean;
+  // 새 설문이 붙을 팀을 생성 화면이 명시한 경우(시스템 전체 보기에서 팀을 골라 진입) — 없으면
+  // 작업 범위 쿠키를 따른다. 저장된 설문에는 쓰이지 않는다.
+  createTeamId: string | null;
 
   // Diff 기반 저장을 위한 changeset
   questionChanges: QuestionChangeset;
@@ -120,6 +123,7 @@ export interface SurveyBuilderState {
   resetSurvey: () => void;
   markClean: () => void; // 저장 후 dirty 플래그 초기화
   markSavedToDb: () => void; // DB에 설문 레코드 생성 완료 마킹
+  setCreateTeamId: (teamId: string | null) => void;
 
   // Diff 저장용 changeset 관리
   snapshotChanges: () => { questionChanges: QuestionChangeset; isMetadataDirty: boolean };
@@ -193,6 +197,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
       currentSurvey: createDefaultSurvey(),
       isDirty: false,
       isSavedToDb: false,
+      createTeamId: null,
       isModifiedSincePublish: false,
       questionChanges: emptyChangeset(),
       isMetadataDirty: false,
@@ -704,6 +709,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           state.currentSurvey = createDefaultSurvey();
           state.isDirty = false;
           state.isSavedToDb = false;
+          state.createTeamId = null;
           state.isModifiedSincePublish = false;
           state.questionChanges = emptyChangeset();
           state.isMetadataDirty = false;
@@ -719,6 +725,11 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
       markSavedToDb: () =>
         set((state) => {
           state.isSavedToDb = true;
+        }),
+
+      setCreateTeamId: (teamId) =>
+        set((state) => {
+          state.createTeamId = teamId;
         }),
 
       // 저장 시작 시 changeset 스냅샷 후 초기화 (저장 중 새 변경은 새 changeset에 쌓임)

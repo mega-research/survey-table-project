@@ -21,6 +21,7 @@ import {
 } from '../queries/use-surveys';
 import { useSurveyListStore } from '../stores/survey-list-ui-store';
 import { AdvancedSearchPanel } from './advanced-search-panel';
+import { CreateTeamPickDialog } from './create-team-pick-dialog';
 import { DeletedSurveyCard } from './deleted-survey-card';
 import {
   EmptyDeletedState,
@@ -118,6 +119,7 @@ export function SurveyListView() {
   const router = useRouter();
   const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+  const [teamPickOpen, setTeamPickOpen] = useState(false);
 
   // 팀이나 그룹을 바꾸면 필터·페이지를 전부 되돌린다 — 이전 화면에서 남은 검색어·페이지가
   // 새 목록을 조용히 0건/빈 페이지로 만들지 않게(새 워크스페이스에서 시작하는 것과 동일 취급).
@@ -221,6 +223,8 @@ export function SurveyListView() {
   const scope = resolvedScope ?? { kind: 'none' as const };
   const isSystemScope = scope.kind === 'system';
   const canCreate = scope.kind === 'team';
+  // 시스템 전체 보기에서는 팀을 골라 만든다 — 범위를 바꾸지 않고 생성 화면에 팀을 넘긴다.
+  const canCreateByPickingTeam = isSystemScope && (workScope?.isSuperadmin ?? false);
   // 그룹은 팀 소유물이라 팀 범위에서만 존재한다 — 시스템 전체 보기에는 그룹 개념이 없다(.pen 6-2).
   const canManageGroups = teamScopeId !== null;
   // 그룹 화면 주소로 들어왔으면 그룹 목록이 올 때까지 기다린다 — 먼저 그리면 「설문 목록」
@@ -261,6 +265,14 @@ export function SurveyListView() {
             >
               <Plus className="h-4 w-4" />새 설문 만들기
             </Link>
+          ) : canCreateByPickingTeam ? (
+            <button
+              type="button"
+              onClick={() => setTeamPickOpen(true)}
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[14px] font-semibold text-white hover:bg-[#2743AE]"
+            >
+              <Plus className="h-4 w-4" />새 설문 만들기
+            </button>
           ) : (
             // 시스템 전체 보기는 조회 범위라 소유 목적지가 될 수 없다 (.pen 6-2 노트).
             <span
@@ -382,6 +394,14 @@ export function SurveyListView() {
 
           {activeGroup && <GroupViewFooterNote />}
         </>
+      )}
+
+      {canCreateByPickingTeam && (
+        <CreateTeamPickDialog
+          open={teamPickOpen}
+          onOpenChange={setTeamPickOpen}
+          teams={workScope?.teams ?? []}
+        />
       )}
 
       {groupManagerOpen && teamScopeId && (

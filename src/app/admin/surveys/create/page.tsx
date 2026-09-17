@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import {
   AlertCircle,
@@ -43,6 +43,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSaveSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { generateSlugFromTitle, getSurveyAccessUrl, validateSlug } from '@/lib/survey-url';
@@ -63,6 +64,7 @@ export default function CreateSurveyPage() {
     updateSurveySlug,
     regeneratePrivateToken,
     resetSurvey,
+    setCreateTeamId,
   } = useSurveyBuilderStore(
     useShallow((s) => ({
       updateSurveyTitle: s.updateSurveyTitle,
@@ -72,6 +74,7 @@ export default function CreateSurveyPage() {
       updateSurveySlug: s.updateSurveySlug,
       regeneratePrivateToken: s.regeneratePrivateToken,
       resetSurvey: s.resetSurvey,
+      setCreateTeamId: s.setCreateTeamId,
     })),
   );
   const currentSurvey = useSurveyBuilderStore((s) => s.currentSurvey);
@@ -92,6 +95,9 @@ export default function CreateSurveyPage() {
   } = useBuilderScroll(selectQuestion);
 
   const { mutateAsync: saveSurvey } = useSaveSurvey();
+  const ensureSurvey = useEnsureSurveyInDb();
+  // 시스템 전체 보기에서 팀을 골라 들어온 경우 — 작업 범위 대신 이 팀 소유로 만든다.
+  const createTeamParam = useSearchParams().get('team');
 
   const [titleInput, setTitleInput] = useState('새 설문조사');
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -110,7 +116,8 @@ export default function CreateSurveyPage() {
   // 새 설문 생성 시 초기화
   useEffect(() => {
     resetSurvey();
-  }, [resetSurvey]);
+    setCreateTeamId(createTeamParam);
+  }, [resetSurvey, setCreateTeamId, createTeamParam]);
 
   // 헤더 모달이 updateSurveyTitle로 store.title을 직접 바꿀 수 있어(설문 헤더 설정 등),
   // 툴바 로컬 titleInput이 stale해지지 않도록 store 값으로 동기화한다.
@@ -250,6 +257,11 @@ export default function CreateSurveyPage() {
     }
 
     try {
+      // 아직 DB 에 없으면 생성부터 한다 — 생성은 소유 팀을 정하는 입구(ensure)가 맡고, 전체 저장은
+      // 갱신으로 지나간다. 전체 저장의 생성 모드는 작업 범위 쿠키만 보므로 고른 팀을 모른다.
+      if (!useSurveyBuilderStore.getState().isSavedToDb && currentSurvey.id) {
+        await ensureSurvey();
+      }
       await saveSurvey(surveyToSave);
       setShowSaveModal(true);
       setCopySuccess(false);

@@ -28,9 +28,9 @@ export function useEnsureSurveyInDb() {
       title: store.currentSurvey.title,
       ...(store.currentSurvey.privateToken !== undefined ? { privateToken: store.currentSurvey.privateToken } : {}),
       settings: store.currentSurvey.settings,
-      // 새 설문이 붙을 팀 — 화면이 보고 있던 범위를 그대로 넘긴다. 서버가 다시 판정하며,
-      // 시스템 전체 보기·미배치면 거부한다(티켓 07).
-      scope: readWorkScopeCookie(),
+      // 새 설문이 붙을 팀 — 생성 화면이 팀을 명시했으면 그 팀, 아니면 화면이 보고 있던 범위를
+      // 그대로 넘긴다. 서버가 다시 판정하며, 시스템 전체 보기·미배치면 거부한다(티켓 07).
+      scope: store.createTeamId ?? readWorkScopeCookie(),
     })
       .then(() => {
         useSurveyBuilderStore.getState().markSavedToDb();
