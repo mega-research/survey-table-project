@@ -16,8 +16,11 @@ import {
   ListUsersOutput,
   ResetUserPasswordInput,
   ResetUserPasswordOutput,
+  UpdateUserInput,
+  UpdateUserOutput,
   UserNotFoundError,
   UserStatusTransitionError,
+  UserTypeMismatchError,
 } from '../domain/users';
 import * as svc from '../services/users';
 
@@ -32,6 +35,7 @@ function toRpcError(err: unknown): ORPCError<string, unknown> | null {
   if (err instanceof UserNotFoundError) return new ORPCError('NOT_FOUND', { message: err.message });
   if (
     err instanceof DuplicateEmailError ||
+    err instanceof UserTypeMismatchError ||
     err instanceof UserStatusTransitionError ||
     // 소속 업체가 없거나 종료됐다 — 발급과 재활성화가 함께 쓴다(티켓 24).
     err instanceof InvalidFieldworkOrgError ||
@@ -107,9 +111,22 @@ const resetPassword = superadmin
     }
   });
 
+/** 사용자 정보 편집 — 이름·이메일·유형별 소속 칸 (슈퍼어드민 전용). 유형·상태는 바꾸지 않는다. */
+const update = superadmin
+  .input(UpdateUserInput)
+  .output(UpdateUserOutput)
+  .handler(async ({ input }) => {
+    try {
+      return await svc.updateUser(input);
+    } catch (err) {
+      throw toRpcError(err) ?? err;
+    }
+  });
+
 export const users = {
   list,
   create,
+  update,
   changeStatus,
   resetPassword,
 };

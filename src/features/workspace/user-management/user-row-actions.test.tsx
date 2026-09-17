@@ -20,6 +20,7 @@ vi.mock('./queries/use-users', () => ({
 
 const onRehire = vi.fn();
 const onResetPassword = vi.fn();
+const onEdit = vi.fn();
 
 const BASE: UserListItem = {
   id: '55555555-5555-4555-8555-555555555555',
@@ -30,6 +31,7 @@ const BASE: UserListItem = {
   isSuperadmin: false,
   jobTitle: '연구원',
   organization: null,
+  fieldworkOrgId: null,
   fieldworkOrgName: null,
   fieldworkRole: null,
   createdAt: '2026-08-26T00:00:00.000Z',
@@ -42,6 +44,7 @@ function renderActions(status: UserListItem['status'] = 'active') {
       onRehire={onRehire}
       onDepart={vi.fn()}
       onResetPassword={onResetPassword}
+      onEdit={onEdit}
     />,
   );
 }
@@ -134,6 +137,7 @@ describe('UserRowActions — 실행', () => {
         onRehire={vi.fn()}
         onDepart={onDepart}
         onResetPassword={vi.fn()}
+        onEdit={vi.fn()}
       />,
     );
     await openMenu(user);
@@ -175,5 +179,14 @@ describe('UserRowActions — 실행', () => {
     await user.click(screen.getByRole('menuitem', { name: '비밀번호 재설정' }));
 
     expect(onResetPassword).toHaveBeenCalledWith(expect.objectContaining({ id: BASE.id }));
+  });
+
+  it('정보 편집은 편집 모달로 넘긴다', async () => {
+    const user = userEvent.setup();
+    renderActions('active');
+    await openMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: '정보 편집' }));
+
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: BASE.id }));
   });
 });

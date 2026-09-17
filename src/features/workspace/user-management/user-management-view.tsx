@@ -23,6 +23,7 @@ import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
 import { UserDepartModal } from './user-depart-modal';
 import { UserRehireModal } from './user-rehire-modal';
+import { UserEditModal } from './user-edit-modal';
 import { UserResetPasswordModal } from './user-reset-password-modal';
 import { UserRowActions } from './user-row-actions';
 import { USER_STATUS_LABEL, USER_STATUS_PILL, USER_TYPE_LABEL } from '../account-vocabulary';
@@ -61,6 +62,7 @@ export function UserManagementView() {
   // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
   // 사이 목록이 새로고침돼도 보고 있던 사람이 바뀌지 않는다.
   const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
+  const [editTarget, setEditTarget] = useState<UserListItem | null>(null);
   const [rehireTarget, setRehireTarget] = useState<UserListItem | null>(null);
   const [departTarget, setDepartTarget] = useState<UserListItem | null>(null);
   const [createOrgOpen, setCreateOrgOpen] = useState(false);
@@ -249,6 +251,7 @@ export function UserManagementView() {
                           onRehire={setRehireTarget}
                           onDepart={setDepartTarget}
                           onResetPassword={setResetTarget}
+                          onEdit={setEditTarget}
                         />
                       </td>
                     </tr>
@@ -288,6 +291,7 @@ export function UserManagementView() {
       )}
       {/* 열릴 때만 마운트한다 — 두 모달은 대상의 현재 값(직책 등)으로 초기 상태를 잡으므로
           띄워둔 채 대상만 갈아끼우면 앞사람의 입력이 남는다. */}
+      {editTarget && <UserEditModal user={editTarget} onClose={() => setEditTarget(null)} />}
       {resetTarget && (
         <UserResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
       )}

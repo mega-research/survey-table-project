@@ -24,6 +24,7 @@ import {
   DuplicateEmailError,
   InvalidFieldworkOrgError,
   UserNotFoundError,
+  UserTypeMismatchError,
 } from '../domain/users';
 import type {
   ChangeUserStatusInput,
@@ -34,6 +35,8 @@ import type {
   ListUsersOutput,
   ResetUserPasswordInput,
   ResetUserPasswordOutput,
+  UpdateUserInput,
+  UpdateUserOutput,
 } from '../domain/users';
 
 /** 목록/카운트 공용 — 'all' 이면 좁히지 않는다(undefined 는 drizzle 이 무시한다). */
@@ -64,6 +67,7 @@ export async function listUsers(input: ListUsersInput): Promise<ListUsersOutput>
       isSuperadmin: users.isSuperadmin,
       jobTitle: users.jobTitle,
       organization: users.organization,
+      fieldworkOrgId: users.fieldworkOrgId,
       fieldworkOrgName: fieldworkOrgs.name,
       fieldworkRole: users.fieldworkRole,
       createdAt: users.createdAt,
@@ -175,6 +179,58 @@ export async function createUser(
   }
 
   return { id };
+}
+
+/**
+ * 사용자 정보 편집 — 이름·이메일·유형별 소속 칸 (슈퍼어드민 전용).
+ *
+ * 쓰기는 명시 필드 대입이다(입력 스프레드 금지). 유형이 아닌 칸은 NULL 로 둬
+ * users_fieldwork_fields_check 와 발급 규칙을 그대로 지킨다. 실사 업체를 옮기면 새 업체를
+ * 발급과 같은 `FOR SHARE` 로 잠가 종료와의 경합을 막는다. 세션은 끊지 않는다 — 로그인
+ * 자격(비밀번호·상태)이 바뀌는 일이 아니다.
+ */
+export async function updateUser(input: UpdateUserInput): Promise<UpdateUserOutput> {
+  // 선검사는 UI 문구를 위한 것이고, 동시 변경 경합은 아래 UNIQUE 위반이 잡는다.
+  // 대소문자를 접어 보는 이유는 createUser 와 같다.
+  const duplicate = await db.query.users.findFirst({
+    where: sql`lower(${users.email}) = ${input.email} and ${users.id} <> ${input.userId}`,
+    columns: { id: true },
+  });
+  if (duplicate) throw new DuplicateEmailError();
+
+  try {
+    await db.transaction(async (tx) => {
+      const [target] = await tx
+        .select({ userType: users.userType, fieldworkOrgId: users.fieldworkOrgId })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .for('update');
+      if (!target) throw new UserNotFoundError();
+      if (target.userType !== input.userType) throw new UserTypeMismatchError();
+
+      if (input.userType === 'fieldwork' && input.fieldworkOrgId !== target.fieldworkOrgId) {
+        await assertFieldworkOrgActive(tx, input.fieldworkOrgId);
+      }
+
+      await tx
+        .update(users)
+        .set({
+          name: input.name,
+          email: input.email,
+          jobTitle: input.userType === 'internal' ? (input.jobTitle ?? null) : null,
+          organization: input.userType === 'guest' ? (input.organization ?? null) : null,
+          fieldworkOrgId: input.userType === 'fieldwork' ? input.fieldworkOrgId : null,
+          fieldworkRole: input.userType === 'fieldwork' ? input.fieldworkRole : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, input.userId));
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new DuplicateEmailError();
+    throw err;
+  }
+
+  return { success: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

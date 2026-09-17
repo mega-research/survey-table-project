@@ -9,6 +9,8 @@ export {
   ListUsersOutput,
   ResetUserPasswordInput,
   ResetUserPasswordOutput,
+  UpdateUserInput,
+  UpdateUserOutput,
   UserListItem,
 } from '@/shared/contracts/auth-io';
 
@@ -79,5 +81,18 @@ export class InvalidFieldworkOrgError extends Error {
   constructor(message = '소속 업체를 찾을 수 없습니다. 활성 업체를 선택하세요.') {
     super(message);
     this.name = 'InvalidFieldworkOrgError';
+  }
+}
+
+/**
+ * 편집 입력의 유형이 대상 계정의 현재 유형과 다르다.
+ *
+ * 편집은 유형을 바꾸지 않는다 — 목록을 띄워둔 사이 계정이 바뀌었거나 입력을 손으로 만든
+ * 경우다. procedure 가 CONFLICT 로 바꾼다.
+ */
+export class UserTypeMismatchError extends Error {
+  constructor() {
+    super('계정 유형이 바뀌었습니다. 목록을 새로 고친 뒤 다시 시도하세요.');
+    this.name = 'UserTypeMismatchError';
   }
 }

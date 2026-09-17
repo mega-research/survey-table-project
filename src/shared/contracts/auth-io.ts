@@ -62,6 +62,8 @@ export const UserListItem = z.object({
   jobTitle: z.string().nullable(),
   /** 소속 기관 메모 — guest 전용 자유 입력. */
   organization: z.string().nullable(),
+  /** 소속 실사 업체 id — fieldwork 전용. 편집 모달의 업체 선택 초기값이다. */
+  fieldworkOrgId: z.uuid().nullable(),
   /** 소속 실사 업체 이름 — fieldwork 전용. 조인으로 채운다(티켓 24). */
   fieldworkOrgName: z.string().nullable(),
   /** 업체 내 역할 — fieldwork 전용. 「직책·역할」 열이 직책 대신 이 값을 그린다. */
@@ -177,6 +179,44 @@ export const creatableUserTypes = [
 
 export const CreateUserOutput = z.object({ id: z.uuid() });
 export type CreateUserOutput = z.infer<typeof CreateUserOutput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 정보 편집
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UpdateUserCommon = z.object({
+  userId: z.uuid(),
+  name: CreateUserCommon.shape.name,
+  email: CreateUserCommon.shape.email,
+});
+
+/**
+ * 사용자 정보 편집 입력 — 이름·이메일과 유형별 소속 칸.
+ *
+ * **유형은 바꾸지 않는다.** `userType` 은 대상의 현재 유형을 그대로 싣는 판별자이고, 서버가
+ * 대상 행과 대조해 다르면 거부한다 — 유형 전환은 멤버십·참여 행·파티션 규칙이 함께 움직이는
+ * 일이라 칸 하나로 열 수 없다. 상태·슈퍼어드민 여부·비밀번호도 이 표면 밖이다(각자 입구가 있다).
+ * 선택 칸을 비워 보내면 값이 지워진다(null).
+ */
+export const UpdateUserInput = z.discriminatedUnion('userType', [
+  UpdateUserCommon.extend({
+    userType: z.literal('internal'),
+    jobTitle: optionalText(50),
+  }),
+  UpdateUserCommon.extend({
+    userType: z.literal('guest'),
+    organization: optionalText(100),
+  }),
+  UpdateUserCommon.extend({
+    userType: z.literal('fieldwork'),
+    fieldworkOrgId: z.uuid('소속 업체를 선택하세요.'),
+    fieldworkRole: z.enum(fieldworkRoleValues),
+  }),
+]);
+export type UpdateUserInput = z.infer<typeof UpdateUserInput>;
+
+export const UpdateUserOutput = z.object({ success: z.literal(true) });
+export type UpdateUserOutput = z.infer<typeof UpdateUserOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 상태 전이 · 비밀번호 재설정

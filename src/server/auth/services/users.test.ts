@@ -17,8 +17,9 @@ import {
   LastActiveSuperadminError,
   UserNotFoundError,
   UserStatusTransitionError,
+  UserTypeMismatchError,
 } from '../domain/users';
-import { changeUserStatus, createUser, listUsers, resetUserPassword } from './users';
+import { changeUserStatus, createUser, listUsers, resetUserPassword, updateUser } from './users';
 
 const { hash, findFirst, listResult, groupByResult, insertCalls, insertBehavior, txState } =
   vi.hoisted(() => ({
@@ -230,6 +231,7 @@ describe('listUsers', () => {
     isSuperadmin: false,
     jobTitle: '연구원',
     organization: null,
+    fieldworkOrgId: null,
     fieldworkOrgName: null,
     fieldworkRole: null,
     createdAt: new Date('2026-08-26T00:00:00.000Z'),
@@ -460,6 +462,66 @@ describe('resetUserPassword', () => {
     await expect(
       resetUserPassword(ACTOR, { userId: TARGET, password: 'temp-pw-1234' }),
     ).rejects.toBeInstanceOf(UserNotFoundError);
+    expect(updateCalls).toHaveLength(0);
+  });
+});
+
+describe('updateUser', () => {
+  const EDIT = {
+    userId: TARGET,
+    name: '김바뀜',
+    email: 'changed@megaresearch.co.kr',
+  };
+
+  it('이름·이메일·직책을 명시 필드로 쓰고 다른 유형 칸은 비운다', async () => {
+    txState.targetRows = [{ userType: 'internal', fieldworkOrgId: null }];
+
+    const res = await updateUser({ ...EDIT, userType: 'internal', jobTitle: '책임연구원' });
+
+    expect(res).toEqual({ success: true });
+    const values = updatedValues(users);
+    expect(values).toMatchObject({
+      name: '김바뀜',
+      email: 'changed@megaresearch.co.kr',
+      jobTitle: '책임연구원',
+      organization: null,
+      fieldworkOrgId: null,
+      fieldworkRole: null,
+    });
+    // 상태·권한·유형·세션은 이 표면이 건드리지 않는다.
+    expect(values).not.toHaveProperty('status');
+    expect(values).not.toHaveProperty('isSuperadmin');
+    expect(values).not.toHaveProperty('userType');
+    expect(deleteCalls).toHaveLength(0);
+  });
+
+  it('비운 직책은 null 로 지운다', async () => {
+    txState.targetRows = [{ userType: 'internal', fieldworkOrgId: null }];
+    await updateUser({ ...EDIT, userType: 'internal' });
+    expect(updatedValues(users)).toMatchObject({ jobTitle: null });
+  });
+
+  it('다른 계정이 쓰는 이메일이면 DuplicateEmailError', async () => {
+    findFirst.mockResolvedValue({ id: 'someone-else' });
+    await expect(updateUser({ ...EDIT, userType: 'internal' })).rejects.toBeInstanceOf(
+      DuplicateEmailError,
+    );
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('대상 유형과 입력 유형이 다르면 UserTypeMismatchError', async () => {
+    txState.targetRows = [{ userType: 'guest', fieldworkOrgId: null }];
+    await expect(updateUser({ ...EDIT, userType: 'internal' })).rejects.toBeInstanceOf(
+      UserTypeMismatchError,
+    );
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('없는 사용자는 UserNotFoundError', async () => {
+    txState.targetRows = [];
+    await expect(updateUser({ ...EDIT, userType: 'internal' })).rejects.toBeInstanceOf(
+      UserNotFoundError,
+    );
     expect(updateCalls).toHaveLength(0);
   });
 });

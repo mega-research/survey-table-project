@@ -6,6 +6,7 @@ import type {
   ChangeUserStatusInput,
   CreateUserInput,
   ResetUserPasswordInput,
+  UpdateUserInput,
   UserStatusFilter,
   UserTypeFilter,
 } from '@/shared/contracts/auth-io';
@@ -31,6 +32,15 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateUserInput) => client.auth.users.create(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),
+  });
+}
+
+/** 사용자 정보 편집 — 목록 행의 이름·이메일·소속·직책이 바뀌므로 목록을 무효화한다. */
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateUserInput) => client.auth.users.update(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),
   });
 }

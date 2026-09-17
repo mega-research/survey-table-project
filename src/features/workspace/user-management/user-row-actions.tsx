@@ -44,6 +44,8 @@ interface Props {
   /** 퇴사 — 승계 지정 모달을 연다(.pen 9-3, 티켓 19). */
   onDepart: (user: UserListItem) => void;
   onResetPassword: (user: UserListItem) => void;
+  /** 정보 편집 — 이름·이메일·소속 칸 모달을 연다. */
+  onEdit: (user: UserListItem) => void;
 }
 
 /**
@@ -53,7 +55,7 @@ interface Props {
  * 화면에 뜬 액션이 서버에서 거부되는 어긋남이 생기지 않는다. 그래도 판정자는 서버다:
  * 목록을 띄워둔 사이 상태가 바뀌면 열려 있던 메뉴가 낡은 것이라, 실패 문구를 그대로 띄운다.
  */
-export function UserRowActions({ user, onRehire, onDepart, onResetPassword }: Props) {
+export function UserRowActions({ user, onRehire, onDepart, onResetPassword, onEdit }: Props) {
   const [confirming, setConfirming] = useState<Exclude<UserStatusAction, 'rehire'> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: changeStatus, isPending } = useChangeUserStatus();
@@ -107,6 +109,7 @@ export function UserRowActions({ user, onRehire, onDepart, onResetPassword }: Pr
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => onEdit(user)}>정보 편집</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onResetPassword(user)}>
             비밀번호 재설정
           </DropdownMenuItem>
