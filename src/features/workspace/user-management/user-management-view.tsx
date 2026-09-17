@@ -35,7 +35,7 @@ import { USER_STATUS_LABEL, USER_STATUS_PILL, USER_TYPE_LABEL } from '../account
  */
 type ManagementTab = 'users' | 'fieldwork-orgs';
 
-/** 유형 칩 — .pen FLOW 1-1 의 전체/내부/게스트/실사 순서. 라벨은 유형 어휘에서 온다. */
+/** 유형 칩 — .pen FLOW 1-1 의 전체/내부/게스트/실사 순서(화면 표기는 「직원」). 라벨은 유형 어휘에서 온다. */
 const TYPE_TABS: UserTypeFilter[] = ['all', 'internal', 'guest', 'fieldwork'];
 
 function typeTabLabel(filter: UserTypeFilter): string {

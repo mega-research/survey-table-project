@@ -144,7 +144,7 @@ export function assertMemberAssignable(input: {
   const { actor, target, teamId, activeTeamIds } = input;
 
   if (target.userType !== 'internal') {
-    throw new UnassignableUserError('내부 계정만 팀에 소속될 수 있습니다.');
+    throw new UnassignableUserError('직원 계정만 팀에 소속될 수 있습니다.');
   }
   if (target.status !== 'active') {
     throw new UnassignableUserError('재직 중 사용자만 팀에 추가할 수 있습니다.');

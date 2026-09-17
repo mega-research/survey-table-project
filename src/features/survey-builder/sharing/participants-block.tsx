@@ -74,7 +74,7 @@ export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-semibold text-[#374151]">참여자 — 내부 멤버</span>
+      <span className="text-[13px] font-semibold text-[#374151]">참여자 — 직원</span>
 
       <div className="relative">
         <div className="flex h-8 items-center gap-2 rounded-[8px] border border-[#D1D5DB] bg-white px-3">
@@ -85,7 +85,7 @@ export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
               setQuery(e.target.value);
               setError(null);
             }}
-            placeholder="이름·이메일 검색 · 내부 active 사용자 (팀 무관)"
+            placeholder="이름·이메일 검색 · 재직 중인 직원 (팀 무관)"
             className="h-full w-full bg-transparent text-[12px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none"
           />
           {candidates.isFetching && (

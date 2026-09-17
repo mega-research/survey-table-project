@@ -24,7 +24,7 @@ export {
  * 아무것도 안 되는」 유령 행이 목록에 남는 일이다 — 그 행을 본 다음 사람은 권한 버그로 읽는다.
  */
 export class ParticipantNotInvitableError extends Error {
-  constructor(message = '내부 활성 계정만 참여자로 초대할 수 있습니다.') {
+  constructor(message = '재직 중인 직원 계정만 참여자로 초대할 수 있습니다.') {
     super(message);
     this.name = 'ParticipantNotInvitableError';
   }

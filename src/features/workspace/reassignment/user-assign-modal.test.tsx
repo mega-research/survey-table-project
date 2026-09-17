@@ -48,7 +48,7 @@ describe('UserAssignModal', () => {
   it('누구를 어디서 옮기는지 먼저 말한다', () => {
     render(<UserAssignModal user={USER} onClose={onClose} />);
     expect(screen.getByText('박도윤 · 이전 연구1본부 - 1팀 (해산)')).toBeInTheDocument();
-    expect(screen.getByText(/배정 즉시 active 멤버십이 생기고/)).toBeInTheDocument();
+    expect(screen.getByText(/배정 즉시 팀 멤버십이 생기고/)).toBeInTheDocument();
   });
 
   it('목적지 팀을 고르기 전에는 배정할 수 없다', () => {

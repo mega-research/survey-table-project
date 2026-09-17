@@ -128,7 +128,7 @@ export function UserAssignModal({ user, onClose }: Props) {
           </div>
 
           <p className="text-[11.5px] text-[#6E6E73]">
-            배정 즉시 active 멤버십이 생기고 내부 설문 경로가 열립니다.
+            배정 즉시 팀 멤버십이 생기고 그 팀의 설문을 열 수 있습니다.
           </p>
 
           {error && <p className="text-[12.5px] text-red-600">{error}</p>}

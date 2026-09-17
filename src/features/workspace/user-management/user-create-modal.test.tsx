@@ -49,7 +49,7 @@ beforeEach(() => {
 describe('UserCreateModal', () => {
   it('세 유형 세그먼트가 모두 열려 있다 (티켓 24)', () => {
     renderModal();
-    for (const label of ['내부', '게스트', '실사']) {
+    for (const label of ['직원', '게스트', '실사']) {
       expect(screen.getByRole('button', { name: label })).toBeEnabled();
     }
   });
@@ -152,7 +152,7 @@ describe('UserCreateModal', () => {
     renderModal({ presetFieldworkOrgId: GREEN_ORG_ID });
 
     // 「이 업체에 계정을 만든다」가 그 버튼의 뜻이라 유형을 바꿀 수 없어야 한다.
-    expect(screen.getByRole('button', { name: '내부' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '직원' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '게스트' })).toBeDisabled();
     expect(screen.getByLabelText('소속 업체')).toBeDisabled();
 

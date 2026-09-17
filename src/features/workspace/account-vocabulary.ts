@@ -10,7 +10,7 @@ import type { UserStatus, UserStatusAction, UserType } from '@/shared/contracts/
  * 값 어휘 자체의 SSOT 는 `shared/contracts/auth` 이고 여기는 그 한글 표시와 색만 갖는다.
  */
 export const USER_TYPE_LABEL: Record<UserType, string> = {
-  internal: '내부',
+  internal: '직원',
   guest: '게스트',
   fieldwork: '실사',
 };
