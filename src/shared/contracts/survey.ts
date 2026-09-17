@@ -251,5 +251,6 @@ export interface QuestionData {
   textValidation?: TextValidation | null;
   inputRows?: number | null;
   inputAutoGrow?: boolean | null;
+  titleHtml?: string | null;
   sumConstraints?: SumConstraint[] | null;
 }

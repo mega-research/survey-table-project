@@ -817,6 +817,9 @@ export interface Question {
   // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (features/question-renderer/utils/text-quality).
   // 숫자 모드·입력 형식과 배타(그쪽은 자기 검사가 있다). NULL = 검사 없음(기존 전부).
   textValidation?: TextValidation | null;
+  // 문항 제목 서식본 (0112) — 굵게·밑줄·글자색·글자 크기. 정본은 평문 title 이고 응답 화면 표시만
+  // 이것을 우선한다(표 셀 contentHtml 과 같은 규칙). 서식이 없으면 두지 않는다.
+  titleHtml?: string | null;
   // 단답형·장문형 입력칸 줄 수 (0111). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

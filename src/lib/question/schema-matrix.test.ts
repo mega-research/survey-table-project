@@ -41,6 +41,7 @@ import { makeAllQuestionVariants, makeQuestion } from '../../../tests/helpers/qu
 const BASE_KEYS = [
   'id',
   'title',
+  'titleHtml',
   'description',
   'required',
   'groupId',

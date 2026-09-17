@@ -48,6 +48,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   textValidation: { minLength: 10, rejectMeaningless: true },
   inputRows: 5,
   inputAutoGrow: true,
+  titleHtml: '<p><strong>질문</strong></p>',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],

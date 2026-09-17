@@ -116,6 +116,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     textValidation: question.textValidation as NewQuestion['textValidation'],
     inputRows: question.inputRows ?? null,
     inputAutoGrow: question.inputAutoGrow ?? null,
+    titleHtml: question.titleHtml ?? null,
     sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -186,6 +187,7 @@ const QUESTION_UPSERT_SET = {
   textValidation: sql`excluded.text_validation`,
   inputRows: sql`excluded.input_rows`,
   inputAutoGrow: sql`excluded.input_auto_grow`,
+  titleHtml: sql`excluded.title_html`,
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,

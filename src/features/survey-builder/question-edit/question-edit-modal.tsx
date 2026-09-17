@@ -48,6 +48,10 @@ import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { runAsyncAction } from '@/utils/run-async-action';
 import { isValidUUID } from '@/lib/utils';
+import {
+  resolveQuestionTitleHtml,
+  titleHtmlHasMarks,
+} from '@/lib/survey/question-title-html';
 import { client } from '@/shared/lib/rpc';
 import { isOptionListType } from '@/types/question-types';
 import { Question, type QuestionConditionGroup } from '@/types/survey';
@@ -158,11 +162,15 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
   // ── 로컬 state: 타이핑 성능을 위해 formData와 분리 ──
   const [localTitle, setLocalTitle] = useState('');
+  // 제목 편집기의 서식본 — 평문 localTitle 과 짝이다. 저장 직전 flush 도 둘을 함께 한다.
+  const [localTitleHtml, setLocalTitleHtml] = useState('');
   const [localExportLabel, setLocalExportLabel] = useState('');
   const debouncedTitleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedExportLabelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localTitleRef = useRef(localTitle);
   useSyncLatestRef(localTitleRef, localTitle);
+  const localTitleHtmlRef = useRef(localTitleHtml);
+  useSyncLatestRef(localTitleHtmlRef, localTitleHtml);
   const localExportLabelRef = useRef(localExportLabel);
   useSyncLatestRef(localExportLabelRef, localExportLabel);
 
@@ -291,6 +299,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         debouncedExportLabelRef.current = null;
       }
       setLocalTitle(question.title || '');
+      // 서식본이 평문과 어긋나면(다른 경로가 평문만 고침) 버리고 평문에서 다시 시작한다.
+      setLocalTitleHtml(
+        resolveQuestionTitleHtml(question, {}, {}) !== undefined ? (question.titleHtml ?? '') : '',
+      );
       setLocalExportLabel(question.exportLabel || '');
       // 옵션들 중 하나라도 branchRule이 있으면 조건부 분기 설정 표시
       // resolveChoiceOptions 는 manual 은 question.options, table-source 는 choice_opt 셀 파생
@@ -396,12 +408,21 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     }
     // 로컬 state의 최신 값을 formData에 즉시 반영 (ref로 읽어 deps 분리)
     const currentTitle = localTitleRef.current;
+    const currentTitleHtml = titleHtmlHasMarks(localTitleHtmlRef.current)
+      ? localTitleHtmlRef.current
+      : null;
     const currentExportLabel = localExportLabelRef.current;
-    setFormData((prev) => ({ ...prev, title: currentTitle, exportLabel: currentExportLabel }));
+    setFormData((prev) => ({
+      ...prev,
+      title: currentTitle,
+      titleHtml: currentTitleHtml,
+      exportLabel: currentExportLabel,
+    }));
     // formDataRef를 직접 업데이트하여 아래 로직에서 최신 값 사용
     formDataRef.current = {
       ...formDataRef.current,
       title: currentTitle,
+      titleHtml: currentTitleHtml,
       exportLabel: currentExportLabel,
     };
 
@@ -502,6 +523,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               groupId: currentFormData.groupId ?? question?.groupId,
               type: currentFormData.type || question?.type || 'text',
               title: currentFormData.title || question?.title || '',
+              titleHtml:
+                currentFormData.titleHtml !== undefined
+                  ? currentFormData.titleHtml
+                  : question?.titleHtml,
               description: currentFormData.description || question?.description,
               required: currentFormData.required ?? question?.required ?? false,
               requiredMessage: currentFormData.requiredMessage ?? question?.requiredMessage ?? null,
@@ -750,6 +775,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 setShowBranchSettings={setShowBranchSettings}
                 localTitle={localTitle}
                 setLocalTitle={setLocalTitle}
+                localTitleHtml={localTitleHtml}
+                setLocalTitleHtml={setLocalTitleHtml}
                 localExportLabel={localExportLabel}
                 setLocalExportLabel={setLocalExportLabel}
                 debouncedTitleRef={debouncedTitleRef}

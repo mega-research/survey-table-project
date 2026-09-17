@@ -24,6 +24,7 @@ type QuestionBase = Pick<
   Question,
   | 'id'
   | 'title'
+  | 'titleHtml'
   | 'description'
   | 'required'
   | 'groupId'

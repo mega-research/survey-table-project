@@ -1,4 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
+import { TITLE_FONT_SIZES } from '@/lib/survey/question-title-html';
 
 // jsdom 의존을 끌어오는 isomorphic-dompurify 대신 sanitize-html 사용.
 // 서버(Lambda) 런타임에서 ESM 모듈 require 충돌이 발생하던 문제 회피.
@@ -248,4 +249,30 @@ const CELL_CONFIG: sanitizeHtml.IOptions = {
 export function sanitizeCellHtml(input: string | null | undefined): string {
   if (input == null) return '';
   return sanitizeHtml(input, CELL_CONFIG);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 문항 제목 서식본 (Question.titleHtml)
+//
+// 셀 본문 허용 집합에 밑줄과 글자 크기를 더한 것. 제목 편집기(InlineRichTextEditor 의 제목 모드)가
+// 내는 것과 같은 집합이고, 글자 크기는 편집기가 고르는 몇 단계만 받는다 — 붙여넣은 HTML 로
+// 화면을 덮는 큰 글씨가 들어오지 않게.
+// ─────────────────────────────────────────────────────────────────────
+
+const TITLE_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: ['p', 'br', 'strong', 'b', 'u', 'span'],
+  allowedAttributes: { span: ['style'] },
+  parseStyleAttributes: true,
+  allowedStyles: {
+    span: {
+      color: [/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, /^rgba?\([\d.,\s%]+\)$/i],
+      'font-size': [new RegExp(`^(?:${TITLE_FONT_SIZES.join('|')})px$`)],
+    },
+  },
+  allowedSchemes: [],
+};
+
+export function sanitizeTitleHtml(input: string | null | undefined): string {
+  if (input == null) return '';
+  return sanitizeHtml(input, TITLE_CONFIG);
 }

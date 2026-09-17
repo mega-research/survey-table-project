@@ -68,6 +68,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     textValidation: data.textValidation as NewQuestion['textValidation'],
     inputRows: data.inputRows ?? null,
     inputAutoGrow: data.inputAutoGrow ?? null,
+    titleHtml: data.titleHtml ?? null,
     sumConstraints: data.sumConstraints as NewQuestion['sumConstraints'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     priorAnswerCondition: data.priorAnswerCondition as NewQuestion['priorAnswerCondition'],

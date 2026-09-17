@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
+import { InlineRichTextEditor } from '@/components/ui/rich-text-editor/inline-rich-text-editor';
 import { Switch } from '@/components/ui/switch';
 import { NOTICE_BG_DEFAULT_HEX, NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import {
@@ -35,7 +36,8 @@ import { QuestionTableFields } from './question-table-fields';
 import { RankingConfigEditorForQuestion } from '@/features/survey-builder/ranking-config-editor';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { VariableButton } from '@/features/survey-builder/variable-button';
+import { plainTextToCellHtml } from '@/features/survey-builder/table-editor/cell-editor/utils/cell-rich-text';
+import { titleHtmlHasMarks } from '@/lib/survey/question-title-html';
 import { generateId } from '@/lib/utils';
 import { flattenGroupTree } from '@/utils/group-ordering';
 import { isOptionListType } from '@/types/question-types';
@@ -60,6 +62,9 @@ interface QuestionBasicTabProps {
   // 로컬 title/exportLabel state (debounce 용)
   localTitle: string;
   setLocalTitle: React.Dispatch<React.SetStateAction<string>>;
+  /** 제목 편집기의 서식본 — 평문(localTitle)과 함께 오간다. 마크가 없어도 편집기 HTML 그대로다. */
+  localTitleHtml: string;
+  setLocalTitleHtml: React.Dispatch<React.SetStateAction<string>>;
   localExportLabel: string;
   setLocalExportLabel: React.Dispatch<React.SetStateAction<string>>;
   debouncedTitleRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -113,6 +118,8 @@ export function QuestionBasicTab({
   setShowBranchSettings,
   localTitle,
   setLocalTitle,
+  localTitleHtml,
+  setLocalTitleHtml,
   localExportLabel,
   setLocalExportLabel,
   debouncedTitleRef,
@@ -132,7 +139,6 @@ export function QuestionBasicTab({
   // 변수 카탈로그 (prefill 토큰용)
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
   const defaultTemplateRef = useRef<HTMLInputElement>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
   // 공지사항 RichTextEditor ref — unmount 시 미사용 첨부·이미지 정리에 사용
   const noticeEditorRef = useRef<RichTextEditorHandle>(null);
 
@@ -227,47 +233,34 @@ export function QuestionBasicTab({
           <Label htmlFor="title">
             질문 제목 <span className="text-red-500">*</span>
           </Label>
-          <div className="mt-2 flex items-start gap-2">
-            <Input
-              id="title"
-              ref={titleRef}
-              value={localTitle}
-              onChange={(e) => {
-                const value = e.target.value;
-                setLocalTitle(value);
+          {/* 제목 서식(굵게·밑줄·색·크기) — 평문 title 이 정본이고 서식이 있을 때만 titleHtml 을 둔다.
+              둘은 한 번에 formData 로 가야 한다: 따로 debounce 하면 저장 직전 한쪽만 옛 값으로 남는다. */}
+          <div className="mt-2" data-testid="question-title-editor">
+            <InlineRichTextEditor
+              variant="title"
+              ariaLabel="질문 제목"
+              initialHtml={localTitleHtml || plainTextToCellHtml(localTitle)}
+              variableCatalog={variableCatalog}
+              placeholder="질문을 입력하세요"
+              className={validationErrors['title'] ? 'border-red-500 focus-within:border-red-500' : ''}
+              onChange={({ html, text }) => {
+                setLocalTitle(text);
+                setLocalTitleHtml(html);
                 if (validationErrors['title']) {
                   setValidationErrors((prev) => ({ ...prev, title: '' }));
                 }
                 // 300ms debounce 후 formData에 반영
                 if (debouncedTitleRef.current) clearTimeout(debouncedTitleRef.current);
                 debouncedTitleRef.current = setTimeout(() => {
-                  setFormData((prev) => ({ ...prev, title: value }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    title: text,
+                    titleHtml: titleHtmlHasMarks(html) ? html : null,
+                  }));
                   debouncedTitleRef.current = null;
                 }, 300);
               }}
-              placeholder="질문을 입력하세요"
-              className={`flex-1 ${
-                validationErrors['title'] ? 'border-red-500 focus:border-red-500' : ''
-              }`}
             />
-            {variableCatalog.length > 0 && (
-              <VariableButton
-                catalog={variableCatalog}
-                inputRef={titleRef}
-                onChange={(v) => {
-                  setLocalTitle(v);
-                  if (validationErrors['title']) {
-                    setValidationErrors((prev) => ({ ...prev, title: '' }));
-                  }
-                  // 토큰 삽입은 명시적 액션이므로 debounce 우회 — 즉시 반영
-                  if (debouncedTitleRef.current) {
-                    clearTimeout(debouncedTitleRef.current);
-                    debouncedTitleRef.current = null;
-                  }
-                  setFormData((prev) => ({ ...prev, title: v }));
-                }}
-              />
-            )}
           </div>
           {validationErrors['title'] && (
             <p className="mt-1 text-sm text-red-500">{validationErrors['title']}</p>

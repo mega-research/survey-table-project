@@ -154,6 +154,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     ...(q.inputRows != null ? { inputRows: q.inputRows } : {}),
     ...(q.inputAutoGrow != null ? { inputAutoGrow: q.inputAutoGrow } : {}),
+    ...(q.titleHtml != null ? { titleHtml: q.titleHtml } : {}),
     ...(q.sumConstraints != null
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),

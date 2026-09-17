@@ -232,6 +232,7 @@ export async function commitCellEdit({
               textValidation: question.textValidation,
               inputRows: question.inputRows,
               inputAutoGrow: question.inputAutoGrow,
+              titleHtml: question.titleHtml,
               tableValidationRules: question.tableValidationRules,
               sumConstraints: question.sumConstraints,
               dynamicRowConfigs: question.dynamicRowConfigs,

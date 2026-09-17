@@ -87,6 +87,7 @@
     "0108_add_axis_cards_mobile_mode",
     "0109_text_validation",
     "0110_screened_out_message",
-    "0111_question_input_rows"
+    "0111_question_input_rows",
+    "0112_question_title_html"
   ]
 }
