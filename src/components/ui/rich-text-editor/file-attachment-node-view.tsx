@@ -77,18 +77,19 @@ export function FileAttachmentNodeView({ node, selected }: NodeViewProps) {
   return (
     <NodeViewWrapper
       as="span"
-      className={`inline-flex max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-2 align-top shadow-sm ${
+      className={`inline-flex max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-1.5 align-middle shadow-sm ${
         selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
       }`}
       data-drag-handle
     >
       <Icon className={`h-5 w-5 flex-shrink-0 ${color}`} aria-hidden />
-      <span className="flex min-w-0 flex-col">
+      {/* 응답 화면과 같은 한 줄 — 제목만 말줄임으로 줄고 메타는 항상 보인다 */}
+      <span className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-sm font-medium text-gray-800">
           {label || filename || FILE_ATTACHMENT_DEFAULT_LABEL}
         </span>
         {metaText && (
-          <span className="truncate text-xs text-gray-500">{metaText}</span>
+          <span className="flex-none text-xs whitespace-nowrap text-gray-400">{metaText}</span>
         )}
       </span>
     </NodeViewWrapper>
