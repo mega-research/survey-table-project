@@ -30,26 +30,22 @@ export function securityHeaders() {
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
+  // Next 16.3 부터 `next dev` 가 AGENTS.md·CLAUDE.md 끝에 영어 안내 블록을 스스로 써넣는다
+  // (start-server.ts 의 `agentRules !== false` 게이트 → lib/generate-agent-files).
+  // 이 레포의 AGENTS.md 는 한국어 에이전트 문서의 SSOT 이고 CLAUDE.md 는 그것을 가리키는
+  // 심볼릭 링크다. 남의 손이 끼면 문서 성격이 갈리고, 지워도 dev 를 띄울 때마다 되살아나
+  // git status 에 설명 없는 변경이 남는다. 그래서 끈다.
+  agentRules: false,
+
   // pdfjs-dist 는 런타임에 기능 탐지(선택 의존성 dlopen 포함)를 하므로 서버 번들에
   // 말아넣지 않고 node_modules 에서 그대로 require 하게 둔다. 서버에서 쓰는 곳은
-  // 조사표 업로드의 쪽 수 판독 하나다 (lib/survey-document/pdf-page-count.server.ts).
+  // 조사표 업로드의 쪽 수 판독 하나다 (server/survey-document/services/pdf-page-count.ts).
   // 클라이언트 뷰어의 import 는 이 설정과 무관하다.
   serverExternalPackages: ['pdfjs-dist'],
 
   // 전역 안전 보안 헤더 (전 라우트 적용). 정의는 securityHeaders() 참조.
   async headers() {
     return securityHeaders();
-  },
-
-  // Server Actions body 크기 제한 (기본값 1MB → 30MB)
-  // saveSurveyWithDetails에서 설문 전체 데이터를 전송하므로 제한 확대 필요
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '30mb',
-    },
-    // 미들웨어/프록시 요청 본문 크기 제한 (기본값 10MB → 30MB)
-    // /admin/:path* 미들웨어가 서버 액션 요청을 먼저 처리하므로 이 제한도 확대 필요
-    proxyClientMaxBodySize: '30mb',
   },
 
   // 2. 타입스크립트 에러 확인 (빌드 시 타입 검증)

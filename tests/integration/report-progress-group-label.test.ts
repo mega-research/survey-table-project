@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // ========================
 // 회귀: getProgressGroupLabel 그룹 헤더 라벨 결정성
@@ -62,7 +62,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { getProgressGroupLabel } from '@/lib/operations/report-progress.server';
+import { getProgressGroupLabel } from '@/server/operations/services/report-progress';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000010';
 

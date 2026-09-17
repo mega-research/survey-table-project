@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Question } from '@/types/survey';
 
-import { previewExcelGrid } from './excel-parser';
+import { previewExcelGrid } from '@/server/contacts/services/excel-parser';
 import { buildBlockAnswer, splitHeaderBlocks, suggestBlockMapping } from './prior-answer-blocks';
 import { buildPriorAnswerRecords } from './prior-answer-import';
 

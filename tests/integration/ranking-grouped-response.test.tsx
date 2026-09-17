@@ -13,7 +13,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Question, RankingAnswer, TableCell, TableRow } from '@/types/survey';
-import { RankingQuestion } from '@/components/survey-response/ranking-question';
+import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 
 // 기본은 데스크탑 — 표 소스는 데스크탑에서 TablePreview renderCell 로 셀을 그린다.
 // 모바일 카드 경로 테스트만 플래그를 올린다.
@@ -25,7 +25,7 @@ vi.mock('@/hooks/use-media-query', () => ({
 
 // TablePreview 는 ResizeObserver 를 쓰므로 jsdom 에서 모킹. renderCell 오버라이드만
 // 그대로 호출해 순위 옵션 셀이 클릭 가능한 보기로 나오게 한다.
-vi.mock('@/components/survey-builder/table-preview', () => ({
+vi.mock('@/features/question-renderer/table-preview', () => ({
   TablePreview: ({
     rows = [],
     renderCell,
@@ -44,7 +44,6 @@ vi.mock('@/components/survey-builder/table-preview', () => ({
     </div>
   ),
 }));
-
 
 afterEach(() => {
   mobileFlag = false;

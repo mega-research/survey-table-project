@@ -3,29 +3,25 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { CancelCampaignButton } from '@/components/operations/mail-campaign/cancel-campaign-button';
-import { CampaignRecipientsTable } from '@/components/operations/mail-campaign/campaign-recipients-table';
-import { ResyncCampaignButton } from '@/components/operations/mail-campaign/resync-campaign-button';
+import { CancelCampaignButton } from '@/features/operations/mail-campaign/cancel-campaign-button';
+import { CampaignRecipientsTable } from '@/features/operations/mail-campaign/campaign-recipients-table';
+import { ResyncCampaignButton } from '@/features/operations/mail-campaign/resync-campaign-button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import {
-  mailRecipientStatusValues,
-  type MailCampaignStatus,
-  type MailRecipientStatus,
-} from '@/db/schema/mail';
+import { mailRecipientStatusValues, type MailCampaignStatus, type MailRecipientStatus } from '@/shared/contracts/mail';
 import {
   getCampaignDetail,
   listCampaignRecipientFacets,
   listCampaignRecipients,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
-import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
   splitHeaderValues,
-} from '@/lib/operations/header-filter-url';
+} from '@/features/operations/filters/header-filter-url';
 
 const PAGE_SIZE = 25;
 

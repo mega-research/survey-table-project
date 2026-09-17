@@ -9,13 +9,13 @@ import {
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
 import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
-import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts';
+import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   NOT_RESPONDED_STATUS,
   formatExportStatusLabel,
   formatTotalTime,
-} from '@/lib/operations/profiles';
+} from '@/lib/operations/profiles-format';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -169,12 +169,23 @@ interface RawMetaColumn {
 }
 
 /**
- * Raw Data·분할 시트 왼쪽 메타 열 정의 (헤더·값·생성 조건의 단일 출처).
+ * 조사 대상 명단 열이 들어갈 자리 표식 — 레이아웃 배열 안에 고정 열과 나란히 놓는다.
+ * 자리를 헤더 문자열로 되찾지 않는 이유: 예전에는 findIndex(header === '개별 URL') 결과를
+ * 그대로 slice 에 넘겨, 헤더를 고치거나 그 열을 빼면 -1 → slice(0, -1) 로 흘러 아무 신호 없이
+ * 메타 마지막 열 바로 앞에 명단 열이 생겼다. 자리를 배열 위치로 못박으면 그 경로 자체가 없다.
+ */
+const CONTACT_COLUMNS_SLOT = 'contact-columns';
+
+/** 메타 열 하나 또는 명단 열 슬롯 — 슬롯 이름은 리터럴 타입이라 오타를 tsc 가 잡는다. */
+type RawMetaLayoutItem = RawMetaColumn | typeof CONTACT_COLUMNS_SLOT;
+
+/**
+ * Raw Data·분할 시트 왼쪽 메타 열 레이아웃 (헤더·값·생성 조건·명단 열 자리의 단일 출처).
  * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 시스템ID는 설문 설정(컨택 존재)에 따라
  * 조건부 생성된다. 조사 대상 그룹 고정 열은 없다 — 그룹은 응답 내역 컬럼 설정의 attrs 열로
  * 명단 열에 따라온다.
  */
-const RAW_META_COLUMNS: RawMetaColumn[] = [
+const RAW_META_LAYOUT: readonly RawMetaLayoutItem[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
   { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
   {
@@ -183,6 +194,7 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
     value: (row) => row.resid ?? '',
   },
   { header: '순번', value: (_row, seq) => seq ?? '' },
+  CONTACT_COLUMNS_SLOT,
   {
     header: '개별 URL',
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
@@ -202,21 +214,22 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   },
 ];
 
-const INVITE_URL_HEADER = '개별 URL';
-
 /**
- * 활성 메타 열 = 고정 메타 열(설문 설정 조건부)에 조사 대상 명단 열을 개별 URL 바로 앞에 끼운 것.
+ * 활성 메타 열 = 레이아웃을 펼친 것. 고정 열은 설문 설정 조건(enabled)으로 걸러지고,
+ * 슬롯 자리에는 조사 대상 명단 열이 들어간다 (명단 열이 없으면 슬롯은 0열로 사라진다).
  * 명단 열을 RawMetaColumn 으로 흘리면 3행 세로 병합·너비·같은 질문 가로 병합 오프셋이
  * Raw Data·분할 시트에서 같은 코드로 따라온다. 응답 내역 시트는 자기 헤더를 따로 가진다.
  */
 function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
-  const fixed = RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
-  const contact = (ctx.contactColumns ?? []).map<RawMetaColumn>((col) => ({
-    header: col.label,
-    value: (row) => row.contactValues?.[col.source] ?? '',
-  }));
-  const at = fixed.findIndex((c) => c.header === INVITE_URL_HEADER);
-  return [...fixed.slice(0, at), ...contact, ...fixed.slice(at)];
+  return RAW_META_LAYOUT.flatMap<RawMetaColumn>((item) => {
+    if (item === CONTACT_COLUMNS_SLOT) {
+      return (ctx.contactColumns ?? []).map<RawMetaColumn>((col) => ({
+        header: col.label,
+        value: (row) => row.contactValues?.[col.source] ?? '',
+      }));
+    }
+    return (item.enabled?.(ctx) ?? true) ? [item] : [];
+  });
 }
 
 export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
@@ -258,7 +271,7 @@ export function addResponseListSheet(
   ws.addRow(headers);
   rows.forEach((row) => {
     // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)를 빈칸으로 둔다 —
-    // RAW_META_COLUMNS 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
+    // RAW_META_LAYOUT 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
     const nonRespondent = isNonRespondentRow(row);
     ws.addRow([
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),

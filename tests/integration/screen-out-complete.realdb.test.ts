@@ -13,8 +13,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { surveys, surveyVersions, surveyResponses } from '@/db/schema';
-import type { QuestionData, SurveyVersionSnapshot } from '@/db/schema/schema-types';
-import { completeResponse } from '@/features/survey-response/server/services/response.service';
+import type { QuestionData, SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { completeResponse } from '@/server/survey-response/services/response-completion';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

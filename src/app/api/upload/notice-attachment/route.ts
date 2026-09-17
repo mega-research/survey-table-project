@@ -2,17 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
-import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { allowAdminOnly, guardUploadRoute } from '@/lib/upload/route-guard';
 import { MAX_ATTACHMENT_FILE_BYTES } from '@/lib/mail/constants';
 import {
   buildNoticeAttachmentDisposition,
@@ -23,31 +18,10 @@ import {
   validateFilename,
 } from '@/lib/upload/attachment-policy';
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
-
 async function handleNoticeAttachmentUpload(request: NextRequest, ctx: RouteLogContext) {
-  let userId: string;
-  try {
-    const user = await requireAuth();
-    userId = user.id;
-  } catch {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
-  // 한다. admin allowlist 전용 라우트라 통과자는 admin, 거부자는 'user'.
-  ctx.bind({ userId, role: isAdminUserAllowed(userId) ? 'admin' : 'user' });
-  // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
-  // 잠갔을 때 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
-  if (!isAdminUserAllowed(userId)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  // 공지 첨부는 admin allowlist 전용 — 게스트 grant 로는 열리지 않는다.
+  const guard = await guardUploadRoute(ctx, allowAdminOnly);
+  if (!guard.ok) return guard.response;
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {

@@ -14,7 +14,7 @@ import type {
   ResponseHeaderTitleSize,
   ResponseHeaderVAlign,
   SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
+} from '@/shared/contracts/survey';
 import { cn, generateId } from '@/lib/utils';
 
 type StatisticNoticeConfig = Extract<

@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-const { selectLimitMock, setMock, whereMock } = vi.hoisted(() => ({
+const { selectLimitMock, setMock, whereMock, controlFlagsMock } = vi.hoisted(() => ({
   selectLimitMock: vi.fn(),
   setMock: vi.fn(),
   whereMock: vi.fn(),
+  controlFlagsMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -41,6 +42,13 @@ vi.mock('@/db', () => {
   };
 });
 
+// recordStepVisit 이 중단 판정을 위해 제어 플래그를 읽는다. mock db 에는 .query 가 없으므로
+// response-draft.test.ts 와 동일하게 survey-control 을 통째로 모킹한다.
+vi.mock('@/server/read-models/survey-control', () => ({
+  getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
+  isValidTestToken: vi.fn(),
+}));
+
 describe('recordVisibilitySegment — SQL 분기', () => {
   beforeEach(() => {
     selectLimitMock.mockReset();
@@ -53,7 +61,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('hide: pageVisits set에 jsonb_set + leftAt 백필, lastActivityAt 미갱신', async () => {
     const { recordVisibilitySegment } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'hide' });
 
     const hideSetCall = setMock.mock.calls[0];
@@ -67,7 +75,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('show: pageVisits set에 append(||), lastActivityAt 갱신', async () => {
     const { recordVisibilitySegment } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'show' });
 
     const showSetCall = setMock.mock.calls[0];
@@ -81,7 +89,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('hide: where 가드에 status in_progress + leftAt NULL 조건이 포함된다', async () => {
     const { recordVisibilitySegment } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'hide' });
     expect(whereMock).toHaveBeenCalledTimes(1); // 단일 UPDATE + WHERE 가드
     const hideWhereCall = whereMock.mock.calls[0];
@@ -92,7 +100,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
 
   it('show: where 가드에 멱등 조건(leftAt IS NOT NULL)이 포함된다', async () => {
     const { recordVisibilitySegment } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
     await recordVisibilitySegment({ responseId: 'r1', action: 'show' });
     expect(whereMock).toHaveBeenCalledTimes(1);
     const showWhereCall = whereMock.mock.calls[0];
@@ -113,7 +121,7 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
   it('응답 행이 없으면 다시 throw 한다', async () => {
     selectLimitMock.mockResolvedValue([]);
     const { recordStepVisit } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
     await expect(
       recordStepVisit({ responseId: 'missing', nextStepId: 'group:next' }),
@@ -126,11 +134,43 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
       { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
     ]);
     const { recordStepVisit } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle');
 
+    controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null });
     await expect(
       recordStepVisit({ responseId: 'r1', nextStepId: 'group:same' }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ denial: null, pausedMessage: null });
+  });
+
+  it('중단된 설문이면 denial 과 문구를 돌려주되 pageVisits UPDATE 는 그대로 나간다', async () => {
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
+    controlFlagsMock.mockResolvedValue({ isPaused: true, pausedMessage: '점검 중입니다' });
+    const { recordStepVisit } =
+      await import('@/server/survey-response/services/lifecycle');
+
+    await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
+      denial: 'survey_paused',
+      pausedMessage: '점검 중입니다',
+    });
+    // 중단 이외 동작 불변 pin — 기록은 계속된다.
+    expect(setMock).toHaveBeenCalled();
+  });
+
+
+  it('제어 플래그를 못 읽으면 fail-open 한다', async () => {
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
+    controlFlagsMock.mockResolvedValue(null);
+    const { recordStepVisit } =
+      await import('@/server/survey-response/services/lifecycle');
+
+    await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
+      denial: null,
+      pausedMessage: null,
+    });
   });
 });
 

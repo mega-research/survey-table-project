@@ -1,0 +1,99 @@
+'use client';
+
+import React, { useCallback } from 'react';
+
+import { ChevronDown } from 'lucide-react';
+
+import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import { OptionTextInput } from '@/features/question-renderer/option-text-input';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorChoice,
+  matchesPriorChoice,
+} from '@/features/question-renderer/utils/prior-answer-highlight';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
+
+import { CellContentLayout } from './cell-content-layout';
+import type { InteractiveCellProps } from './types';
+
+/** 드롭다운 셀 (인터랙티브) */
+export const SelectCell = React.memo(function SelectCell({
+  cell,
+  cellResponse,
+  onUpdateValue,
+  questionId,
+  inputIdScope,
+  ariaInvalid,
+  ariaDescribedBy,
+  priorChoiceValue,
+}: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const priorHighlight = usePriorHighlight();
+  const handleSelectChange = useCallback(
+    (optionId: string) => {
+      onUpdateValue(optionId);
+    },
+    [onUpdateValue],
+  );
+
+  if (!cell.selectOptions || cell.selectOptions.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-gray-500">
+        <span className="text-sm">선택 옵션 없음</span>
+      </div>
+    );
+  }
+
+  const selectedValue = (cellResponse as string) || '';
+  const selectedOption = cell.selectOptions.find((opt) => (opt.value ?? opt.id) === selectedValue);
+
+  return (
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      contentHtml={resolveCellTextHtml(cell, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+      boldFirstLine={cell.boldFirstLine}
+      textColor={cell.textColor}
+    >
+      <div className="flex w-full flex-col space-y-2">
+        <div className="relative w-full">
+          <select
+            id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+            value={selectedValue}
+            aria-invalid={ariaInvalid || undefined}
+            aria-describedby={ariaDescribedBy}
+            onChange={(e) => handleSelectChange(e.target.value)}
+            className={`w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+              (
+                priorChoiceValue !== undefined
+                  ? matchesPriorChoice(priorChoiceValue, selectedValue)
+                  : isPriorChoice(priorHighlight, questionId, selectedValue, cell.id)
+              )
+                ? PRIOR_HIGHLIGHT_TEXT_CLS
+                : ''
+            }`}
+          >
+            <option value="">선택하세요</option>
+            {cell.selectOptions.map((option) => (
+              <option key={option.id} value={option.value ?? option.id}>
+                {substituteTokens(option.label, attrs, quotes)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        </div>
+
+        {selectedOption?.allowTextInput && (
+          <OptionTextInput questionId={questionId} option={selectedOption} className="w-full" />
+        )}
+      </div>
+    </CellContentLayout>
+  );
+});

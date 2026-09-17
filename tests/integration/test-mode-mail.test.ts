@@ -163,13 +163,13 @@ vi.mock('@/lib/inngest/client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
 }));
 
-vi.mock('@/lib/operations/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
   buildNegativeCodeExists: vi.fn(() => ({ queryChunks: [] })),
 }));
 
-import { createCampaign } from '@/features/mail/server/services/mail-campaigns.service';
-import { CampaignsList } from '@/components/operations/mail-campaign/campaigns-list';
+import { createCampaign } from '@/server/mail/services/campaigns';
+import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';

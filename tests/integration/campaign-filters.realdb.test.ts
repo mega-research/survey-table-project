@@ -16,9 +16,9 @@ import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
 import {
   listCampaignRecipients,
   previewCampaignCandidates,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
-import { parseHeaderFiltersFromUrl } from '@/lib/operations/contacts-filters.server';
+import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

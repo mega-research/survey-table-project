@@ -31,8 +31,8 @@ const {
 
 const upsertPiiValueMock = vi.fn(async () => undefined);
 
-vi.mock('@/lib/contacts/scheme-helpers', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/contacts/scheme-helpers')>();
+vi.mock('@/server/contacts/services/scheme-helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/contacts/services/scheme-helpers')>();
   return {
     ...actual,
     sanitizeAttrsAgainstPii: vi.fn(
@@ -109,8 +109,8 @@ vi.mock('@/db', () => {
   };
 });
 
-import { deleteContactTarget, updateContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { deleteAttempt, updateAttempt } from '@/features/contacts/server/services/contact-attempts.service';
+import { deleteContactTarget, updateContactTarget } from '@/server/contacts/services/contact-targets';
+import { deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
 
 beforeEach(() => {
   updateReturningQueue.length = 0;

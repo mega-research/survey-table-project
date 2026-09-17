@@ -1,5 +1,5 @@
 /**
- * Integration test 공통 헬퍼 — result-code-statuses.server mock + drizzle SQL 직조용.
+ * Integration test 공통 헬퍼 — result-code-statuses mock + drizzle SQL 직조용.
  *
  * 다음 5 integration test 가 동일 구현을 각자 들고 있어 통합:
  *   - blank-response-fallback.test.ts
@@ -19,7 +19,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 /**
- * `@/lib/operations/result-code-statuses.server` 의 `buildNegativeCodeExists` mirror.
+ * `@/server/read-models/result-code-statuses` 의 `buildNegativeCodeExists` mirror.
  *
  * 실 헬퍼는 server-only import 가 묶여 있어 `vi.importActual` 로 가져올 수 없다
  * (B1 commit 16096ca 참조). 따라서 mock factory 마다 동일 EXISTS subquery 를 다시

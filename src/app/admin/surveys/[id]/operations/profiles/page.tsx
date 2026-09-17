@@ -5,35 +5,35 @@ import { asc, eq } from 'drizzle-orm';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/operations/empty-state';
-import { ProfilesFilterBar } from '@/components/operations/profiles/profiles-filter-bar';
-import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
-import { getQuestionGroupsBySurvey } from '@/data/surveys';
+import { EmptyState } from '@/features/operations/empty-state';
+import { ProfilesFilterBar } from '@/features/operations/profiles/profiles-filter-bar';
+import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
+import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
-import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
+import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
   hasActiveFilters,
   normalizeListArgs,
-} from '@/lib/operations/profiles';
-import { listResponsesForProfiles } from '@/lib/operations/profiles.server';
+} from '@/lib/operations/profiles-format';
+import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import {
   hydrateProfileColumns,
   visibleProfileColumns,
-} from '@/lib/operations/profile-columns';
-import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
+} from '@/lib/operations/profile-columns-format';
+import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
-import { getContactColumnScheme, buildColumnCandidates } from '@/lib/operations/contacts.server';
+import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts';
 import {
   parseProfilesClausesFromUrl,
   parseProfilesHeaderFiltersFromUrl,
   PROFILES_EXTRA_CANDIDATES,
-} from '@/lib/operations/profiles-filters.server';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+} from '@/server/operations/services/profiles-filters';
+import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

@@ -1,0 +1,179 @@
+import { Fragment } from 'react';
+
+import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
+import { numberFormatter } from '@/features/operations/format';
+import type { QuotaSummary } from '@/lib/quota/quota-status-calc';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+interface KpiRowProps {
+  counts: StatusCounts;
+  /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 카드 값만 '-'로 표시한다. */
+  quota?: QuotaSummary | null;
+}
+
+interface KpiCellSpec {
+  /** 셀 라벨 (목업 기준 한국어). */
+  label: string;
+  /** counts에서 이 셀이 보여줄 값 키 */
+  field: keyof StatusCounts;
+  /**
+   * 비율 텍스트(△n%)에 적용할 색상 — 'drop'은 의미상 부정적이므로 rose 톤.
+   * 'live'는 진행중 셀 전용 — 펄스 인디케이터 + "live" 텍스트로 렌더된다.
+   * 'excluded'는 자격 미달 셀 전용 — 부적격이라 total 대비 비율이 의미 없어 제외 안내를 쓴다.
+   * 'formula'는 전체 셀 전용 — '100%' 표기가 어색하므로 대신 분모 구성식을 안내한다.
+   */
+  deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded' | 'formula';
+}
+
+const CELLS: KpiCellSpec[] = [
+  { label: '전체', field: 'total', deltaTone: 'formula' },
+  { label: '진행중', field: 'inProgress', deltaTone: 'live' },
+  { label: '완료', field: 'completed', deltaTone: 'slate' },
+  { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
+  { label: '불량', field: 'bad', deltaTone: 'slate' },
+  { label: '이탈', field: 'drop', deltaTone: 'rose' },
+];
+
+/** 자격 미달 셀 전용 문구 — 카드에는 짧게, 전체 문장은 title 툴팁으로 노출한다. */
+const EXCLUDED_SHORT = '전체·완료에서 제외';
+const EXCLUDED_FULL = '자격미달인 사람은 전체응답(분모), 완료(분자)에서 제외됩니다.';
+
+/**
+ * 전체 셀 전용 문구 — 카드에는 제외 항목만 짧게, 정확한 구성식은 title 툴팁으로 노출한다.
+ * 식의 "쿼터마감"은 쿼터마감으로 종료된 응답 수(quotaful_out)로, 쿼터 달성률 카드와는 다른 값이다
+ * — 카드 짧은 문구에 식을 쓰면 옆 쿼터 카드의 달성률을 더하는 것처럼 읽혀 툴팁으로 내렸다.
+ */
+const FORMULA_SHORT = '진행중·자격미달 제외';
+const FORMULA_FULL = '전체는 종결된 응답의 합계(완료+쿼터마감+불량+이탈)입니다. 진행중·자격미달은 포함되지 않습니다.';
+
+function formatValue(value: number, isEmpty: boolean): string {
+  if (isEmpty) return '—';
+  return numberFormatter.format(value);
+}
+
+function formatDelta(
+  value: number,
+  total: number,
+  tone: KpiCellSpec['deltaTone'],
+  isEmpty: boolean,
+): string {
+  if (tone === 'hidden') return '';
+  if (tone === 'live') return 'live';
+  if (tone === 'excluded') return EXCLUDED_SHORT;
+  if (tone === 'formula') return FORMULA_SHORT;
+  if (isEmpty || total === 0) return '—';
+  const pct = (value / total) * 100;
+  // 소수 첫째 자리 — 분석 페이지와 동일한 표기 정책
+  return `${pct.toFixed(1)}%`;
+}
+
+interface KpiCellProps {
+  label: string;
+  value: string;
+  delta: string;
+  deltaTone: KpiCellSpec['deltaTone'];
+}
+
+function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
+  return (
+    <Card>
+      <CardContent className="px-4 py-3 pt-3">
+        <p className="text-xs text-slate-500">{label}</p>
+        <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+        {deltaTone !== 'hidden' && (
+          <div className={cn(
+            'mt-0.5 flex items-center gap-1 text-xs',
+            deltaTone === 'rose' && 'text-rose-600',
+            deltaTone === 'live' && 'text-blue-600',
+            deltaTone === 'slate' && 'text-slate-400',
+            deltaTone === 'excluded' && 'text-slate-500',
+            deltaTone === 'formula' && 'text-slate-400',
+          )}>
+            {deltaTone === 'live' && (
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+            )}
+            <span
+              className={cn((deltaTone === 'excluded' || deltaTone === 'formula') && 'cursor-help')}
+              {...(deltaTone === 'excluded' ? { title: EXCLUDED_FULL } : {})}
+              {...(deltaTone === 'formula' ? { title: FORMULA_FULL } : {})}
+            >
+              {delta}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * 쿼터 진행 카드 — 예전 "쿼터마감" 단일 카운트 셀을 대체한다.
+ * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
+ * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
+ */
+function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
+  const hasQuota = quota != null;
+  const value = hasQuota ? `${quota.pct}%` : '-';
+  const detail = hasQuota
+    ? `${numberFormatter.format(quota.currentTotal)}/${numberFormatter.format(quota.targetTotal)} · ${quota.closedCells} 마감`
+    : '-';
+
+  return (
+    <Card>
+      <CardContent className="px-4 py-3 pt-3">
+        <p className="text-xs text-slate-500">쿼터</p>
+        <p className={cn(
+          'mt-1 text-2xl font-semibold',
+          hasQuota ? 'text-blue-600' : 'text-slate-900',
+        )}>{value}</p>
+        <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * 운영 현황 콘솔 — A1 KPI Row.
+ * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
+ * 가로로 나열한다. 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
+ * 흡수됐다 — 미설정이면 '-'로 표시하고, 셀별 상세는 QuotaStatusPanel 참조.
+ *
+ * total === 0 (종결 응답 없음)일 때:
+ *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/불량/이탈)
+ *   - 진행중 셀(deltaTone === 'live')은 in_progress 가시성이 존재 이유라 항상 실수 노출
+ *   - 페이지 단위 EmptyState는 상위 컴포지션에서 처리한다 (plan §9).
+ */
+export function KpiRow({ counts, quota }: KpiRowProps) {
+  const isEmpty = counts.total === 0;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      {CELLS.map((cell) => {
+        const value = counts[cell.field];
+        // 진행중·자격 미달·전체 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
+        // (live 가시성 / 제외 안내 / 분모 구성식 안내가 존재 이유)
+        const cellIsEmpty =
+          cell.deltaTone === 'live' || cell.deltaTone === 'excluded' ? false : isEmpty;
+        const kpiCell = (
+          <KpiCell
+            key={cell.field}
+            label={cell.label}
+            value={formatValue(value, cellIsEmpty)}
+            delta={formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
+            deltaTone={cell.deltaTone}
+          />
+        );
+
+        if (cell.field !== 'completed') return kpiCell;
+
+        return (
+          <Fragment key={cell.field}>
+            {kpiCell}
+            <QuotaKpiCell quota={quota ?? null} />
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}

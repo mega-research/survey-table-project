@@ -14,8 +14,8 @@ import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import ImageResize from 'tiptap-extension-resize-image';
 
-import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
-import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
+import { ImageTextIsolation } from '@/components/ui/rich-text-editor/tiptap/image-text-isolation';
+import { TableSelectOnBackspace } from '@/components/ui/rich-text-editor/tiptap/table-select-on-backspace';
 
 import { FileAttachment } from './file-attachment-node';
 import { FontColor } from './font-color-mark';
@@ -38,7 +38,7 @@ import {
   type HAlign,
   type VAlign,
 } from './table-attrs-helpers';
-import { TrailingNode } from './trailing-node';
+import { TrailingNode } from './tiptap/trailing-node';
 import { createVarTokenPlugin } from './var-token-plugin';
 import type { RichTextEditorKind } from './types';
 
@@ -381,7 +381,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
       // StarterKit 3.x 에 bundled된 ext를 끄고 아래에서 별도 configure
       underline: false,
       link: false,
-      // StarterKit 의 trailingNode 끄고 @/lib/tiptap/trailing-node 사용
+      // StarterKit 의 trailingNode 끄고 ./tiptap/trailing-node 사용
       trailingNode: false,
     }),
     Underline,

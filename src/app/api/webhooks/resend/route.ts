@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { processResendWebhookEvent } from '@/lib/mail/resend-webhook';
+import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
 
 /**
  * Resend webhook handler.

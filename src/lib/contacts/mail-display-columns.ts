@@ -1,5 +1,5 @@
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
-import { attrsKeyOf } from '@/lib/operations/contacts';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
+import { attrsKeyOf } from '@/lib/operations/contacts-format';
 
 /**
  * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 얹을 attrs 컬럼.

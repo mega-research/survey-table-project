@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 
 export default function SurveyResponsePage() {
   const params = useParams();

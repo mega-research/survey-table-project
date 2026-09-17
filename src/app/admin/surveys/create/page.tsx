@@ -7,41 +7,32 @@ import { useRouter } from 'next/navigation';
 
 import {
   AlertCircle,
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   Check,
-  CheckSquare,
-  ChevronDown,
-  Circle,
   Copy,
   Download,
-  FileText,
   Globe,
-  Info,
   Library,
-  List,
-  ListOrdered,
   Lock,
   Pencil,
   Plus,
   RefreshCw,
   Save,
   Share2,
-  Table,
-  Type,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { GroupManager } from '@/components/survey-builder/group-manager';
-import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
-import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
-import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
-import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
-import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
+import { GroupManager } from '@/features/survey-builder/group-manager';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { useBuilderScroll } from '@/features/survey-builder/hooks/use-builder-scroll';
+import { QuestionTypePalette } from '@/features/survey-builder/question-type-palette';
+import { ScrollEdgeButtons } from '@/features/survey-builder/scroll-edge-buttons';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -52,80 +43,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSaveSurvey } from '@/hooks/queries/use-surveys';
+import { useSaveSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { generateSlugFromTitle, getSurveyAccessUrl, validateSlug } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { useSurveyUIStore } from '@/stores/ui-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { Question } from '@/types/survey';
 
-const questionTypes = [
-  {
-    type: 'notice' as const,
-    label: '공지사항',
-    icon: Info,
-    description: '설명 및 안내 문구',
-    color: 'bg-blue-100 text-blue-600',
-  },
-  {
-    type: 'text' as const,
-    label: '단답형',
-    icon: Type,
-    description: '짧은 텍스트 입력',
-    color: 'bg-sky-100 text-sky-600',
-  },
-  {
-    type: 'textarea' as const,
-    label: '장문형',
-    icon: FileText,
-    description: '긴 텍스트 입력',
-    color: 'bg-green-100 text-green-600',
-  },
-  {
-    type: 'radio' as const,
-    label: '단일선택',
-    icon: Circle,
-    description: '하나만 선택 가능',
-    color: 'bg-purple-100 text-purple-600',
-  },
-  {
-    type: 'checkbox' as const,
-    label: '다중선택',
-    icon: CheckSquare,
-    description: '여러 개 선택 가능',
-    color: 'bg-orange-100 text-orange-600',
-  },
-  {
-    type: 'select' as const,
-    label: '드롭다운',
-    icon: ChevronDown,
-    description: '드롭다운 메뉴',
-    color: 'bg-pink-100 text-pink-600',
-  },
-  {
-    type: 'multiselect' as const,
-    label: '다단계선택',
-    icon: List,
-    description: '다중 드롭다운',
-    color: 'bg-teal-100 text-teal-600',
-  },
-  {
-    type: 'ranking' as const,
-    label: '순위형',
-    icon: ListOrdered,
-    description: '순위 매기기 (1순위, 2순위...)',
-    color: 'bg-amber-100 text-amber-600',
-  },
-  {
-    type: 'table' as const,
-    label: '테이블',
-    icon: Table,
-    description: '표 형태 질문',
-    color: 'bg-indigo-100 text-indigo-600',
-  },
-];
 
 export default function CreateSurveyPage() {
   const router = useRouter();
@@ -150,14 +76,25 @@ export default function CreateSurveyPage() {
   );
   const currentSurvey = useSurveyBuilderStore((s) => s.currentSurvey);
 
-  const { selectedQuestionId, selectQuestion } = useSurveyUIStore();
+  const { selectedQuestionId, selectQuestion } = useSurveyUIStore(
+    useShallow((s) => ({
+      selectedQuestionId: s.selectedQuestionId,
+      selectQuestion: s.selectQuestion,
+    })),
+  );
+  const {
+    showScrollButtons,
+    questionNumberInput,
+    setQuestionNumberInput,
+    scrollToTop,
+    scrollToBottom,
+    handleQuestionNumberKeyPress,
+  } = useBuilderScroll(selectQuestion);
 
   const { mutateAsync: saveSurvey } = useSaveSurvey();
 
   const [titleInput, setTitleInput] = useState('새 설문조사');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [questionNumberInput, setQuestionNumberInput] = useState('');
-  const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
   const [slugError, setSlugError] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -223,11 +160,12 @@ export default function CreateSurveyPage() {
     }
 
     // 500ms 후에 서버 검사 수행
+    const excludePatch = currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {};
     const timer = setTimeout(async () => {
       try {
         const available = await client.surveyBuilder.read.slugAvailable({
           slug: slugInput,
-          ...(currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {}),
+          ...excludePatch,
         });
         if (!available) {
           setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
@@ -296,23 +234,6 @@ export default function CreateSurveyPage() {
     }
   };
 
-  // 스크롤 감지 (성능 최적화: requestAnimationFrame 사용)
-  useEffect(() => {
-    let ticking = false;
-
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setShowScrollButtons(window.scrollY > 200);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // 설문 저장
   const handleSaveSurvey = async () => {
@@ -347,39 +268,6 @@ export default function CreateSurveyPage() {
     }
   };
 
-  // 맨 위로 스크롤
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // 맨 아래로 스크롤
-  const scrollToBottom = () => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-  };
-
-  // 특정 질문으로 스크롤
-  const scrollToQuestion = (questionNumber: number) => {
-    const questionIndex = questionNumber - 1;
-    if (questionIndex >= 0 && questionIndex < currentSurvey.questions.length) {
-      const targetQuestion = currentSurvey.questions[questionIndex];
-      const questionElement = document.querySelector(`[data-question-index="${questionIndex}"]`);
-      if (questionElement && targetQuestion) {
-        questionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        selectQuestion(targetQuestion.id);
-      }
-    }
-  };
-
-  // 질문 번호 입력 핸들러
-  const handleQuestionNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const questionNumber = parseInt(questionNumberInput, 10);
-      if (!isNaN(questionNumber) && questionNumber > 0) {
-        scrollToQuestion(questionNumber);
-        setQuestionNumberInput('');
-      }
-    }
-  };
 
   // 질문 라이브러리에 저장
   const handleSaveToLibrary = (question: Question) => {
@@ -455,30 +343,7 @@ export default function CreateSurveyPage() {
               <TabsContent value="types" className="m-0 flex-1 overflow-y-auto p-4 pt-2">
                 <div className="space-y-3">
                   <ResponseHeaderSettingsModal />
-                  {questionTypes.map((questionType) => {
-                    const IconComponent = questionType.icon;
-                    return (
-                      <Card
-                        key={questionType.type}
-                        className="hover-lift cursor-pointer border-gray-200 p-4 transition-all duration-200 hover:border-blue-200"
-                        onClick={() => addQuestion(questionType.type)}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg ${questionType.color}`}
-                          >
-                            <IconComponent className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-medium text-gray-900">
-                              {questionType.label}
-                            </h4>
-                            <p className="mt-1 text-xs text-gray-500">{questionType.description}</p>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
+                  <QuestionTypePalette onSelect={addQuestion} />
                 </div>
 
                 <div className="mt-6 border-t border-gray-200 pt-6">
@@ -623,24 +488,7 @@ export default function CreateSurveyPage() {
 
       {/* Floating Scroll Buttons */}
       {showScrollButtons && (
-        <div className="fixed right-6 bottom-6 z-50 flex flex-col space-y-2">
-          <Button
-            onClick={scrollToTop}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 위로"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={scrollToBottom}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 아래로"
-          >
-            <ArrowDown className="h-5 w-5" />
-          </Button>
-        </div>
+        <ScrollEdgeButtons onScrollTop={scrollToTop} onScrollBottom={scrollToBottom} />
       )}
 
       {/* 저장 완료 모달 */}

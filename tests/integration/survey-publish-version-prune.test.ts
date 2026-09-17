@@ -13,17 +13,17 @@ const { findPrunableMock, pruneMock, recordRefsMock } = vi.hoisted(() => ({
   recordRefsMock: vi.fn(async () => 0),
 }));
 
-vi.mock('@/lib/versioning/version-retention.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-retention-sql', () => ({
   findPrunableVersionIds: findPrunableMock,
 }));
-vi.mock('@/lib/versioning/version-prune.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-prune', () => ({
   pruneVersionSnapshots: pruneMock,
 }));
-vi.mock('@/lib/r2-lifecycle/key-ref-index.server', () => ({
+vi.mock('@/server/storage-lifecycle/key-ref-index', () => ({
   recordKeyRefs: recordRefsMock,
 }));
 
-vi.mock('@/data/surveys', () => ({ getSurveyWithDetails: vi.fn() }));
+vi.mock('@/server/read-models/survey-structure', () => ({ getSurveyWithDetails: vi.fn() }));
 /**
  * 앵커 조회(select 체인)는 이 파일의 관심사가 아니다 — 빈 결과로 흡수한다.
  * then 을 가진 thenable 이라 `await ...orderBy(...)` 를 그대로 받는다.
@@ -42,15 +42,15 @@ function emptyDrizzleSelect() {
 vi.mock('@/db', () => ({
   db: { transaction: vi.fn(), select: () => emptyDrizzleSelect() },
 }));
-vi.mock('@/lib/versioning/snapshot-builder', () => ({
+vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi
     .fn()
     .mockReturnValue({ questions: [{ imageUrl: 'https://cdn-dev.megaresearch.co.kr/survey/a.png' }] }),
 }));
 
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
-import { publishSurvey } from '@/features/survey-builder/server/services/survey-publish.service';
+import { publishSurvey } from '@/server/survey-builder/services/survey-publish';
 import type { Question, Survey } from '@/types/survey';
 
 const SURVEY_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';

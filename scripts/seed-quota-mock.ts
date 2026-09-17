@@ -32,7 +32,9 @@ import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { questions, responseAnswers, surveyResponses, surveyVersions, surveys } from '@/db/schema';
-import type { PageVisit, QuotaConfig, SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 import {
   generateFakeSurveyResponse,
   OPT_TEXTS_KEY,
@@ -40,7 +42,7 @@ import {
 } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
 import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 import type { Question, Survey as SurveyClientType } from '@/types/survey';
 
 // === 분포 상수 (total 에 비례 스케일) ===

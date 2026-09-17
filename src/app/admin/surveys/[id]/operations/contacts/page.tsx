@@ -3,31 +3,31 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/operations/empty-state';
-import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
-import { ContactsDownloadDialog } from '@/components/operations/contacts/contacts-download-dialog';
-import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
-import { ContactsPageClient } from '@/components/operations/contacts/contacts-page-client';
+import { EmptyState } from '@/features/operations/empty-state';
+import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
+import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-download-dialog';
+import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { ContactsPageClient } from '@/features/operations/contacts/contacts-page-client';
 import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,
   effectiveSortKey,
   normalizeSortKey,
-} from '@/lib/operations/contacts';
-import { buildDownloadCandidates } from '@/lib/operations/contacts-export';
+} from '@/lib/operations/contacts-format';
+import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
 import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
   listContactsForSurvey,
-} from '@/lib/operations/contacts.server';
-import { loadIdListsForValues } from '@/lib/operations/contact-id-lists.server';
+} from '@/server/read-models/contacts';
+import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
-  type FilterClause,
-} from '@/lib/operations/contacts-filters.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/read-models/contacts-filters';
+import type { FilterClause } from '@/lib/operations/filter-shared';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',

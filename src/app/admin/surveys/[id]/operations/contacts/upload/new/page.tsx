@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
-import { UploadWizard } from '@/components/operations/contacts/upload-wizard';
+import { UploadWizard } from '@/features/operations/contacts/upload-wizard';
 import { Card, CardContent } from '@/components/ui/card';
-import { getExistingContactsCount } from '@/features/contacts/server/services/contact-columns.service';
-import { countPriorAnswerTargets } from '@/features/contacts/server/services/prior-answer-import.service';
-import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getExistingContactsCount } from '@/server/contacts/services/contact-columns';
+import { countPriorAnswerTargets } from '@/server/contacts/services/prior-answer-import';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 엑셀 업로드',

@@ -1,5 +1,5 @@
 import type { ChoiceGroup, TableRow } from '@/types/survey';
-import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 
 /**
  * 필수 마스터 전파 (ADR 0021) — 질문 레벨 "필수 질문" 토글 조작 시점의 일괄 복사.

@@ -35,9 +35,9 @@ import {
 import type { SurveyLookup } from '@/types/survey';
 import type { ORPCContext } from '@/server/context';
 
-import { savedCells } from '@/features/library/server/procedures/saved-cells';
-import { questionCategories } from '@/features/library/server/procedures/question-categories';
-import { savedLookups } from '@/features/library/server/procedures/saved-lookups';
+import { savedCells } from '@/server/library/procedures/saved-cells';
+import { questionCategories } from '@/server/library/procedures/question-categories';
+import { savedLookups } from '@/server/library/procedures/saved-lookups';
 
 // prod 방어선: DATABASE_URL이 로컬이 아니면 전체 suite 스킵
 const dbUrl = process.env['DATABASE_URL'] ?? '';

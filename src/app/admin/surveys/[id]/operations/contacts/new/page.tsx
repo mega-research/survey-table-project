@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { ContactDetailForm } from '@/components/operations/contacts/contact-detail-form';
+import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',

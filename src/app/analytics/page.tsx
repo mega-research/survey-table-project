@@ -5,8 +5,8 @@ import { ArrowRight, BarChart3, Calendar, FileText, Plus, Users } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import { getResponseCountsGroupedBySurvey } from '@/data/responses';
-import { getSurveys } from '@/data/surveys';
+import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { getSurveys } from '@/server/read-models/survey-structure';
 
 // 라이브 응답 수를 보여주는 대시보드. 빌드 타임 prerender(static) 대상이 되면
 // 프로덕션 DB에 카운트 쿼리를 실행하다 statement_timeout 으로 빌드가 실패한다.

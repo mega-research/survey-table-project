@@ -1,0 +1,2046 @@
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+
+import { useRouter } from 'next/navigation';
+
+import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
+
+import { ResponseDocumentPane } from '@/features/survey-response/response-document-pane';
+import { Button } from '@/components/ui/button';
+import {
+  buildRowWiseCellInstanceIds,
+  scrollToIssue,
+  scrollToValidationNotice,
+} from '@/features/question-renderer/scroll-to-issue';
+import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
+import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
+import { HoneypotField } from '@/features/survey-response/honeypot-field';
+import { sessionStorageKey } from '@/features/survey-response/hooks/session-helpers';
+import { useClientSignals } from '@/features/survey-response/hooks/use-client-signals';
+import { useDuplicateGuard } from '@/features/survey-response/hooks/use-duplicate-guard';
+import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
+import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
+import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
+import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
+import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
+import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
+import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
+import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
+import { ResumeToast } from '@/features/survey-response/resume-toast';
+import { DemandChecklist } from '@/features/survey-response/step-views/demand-checklist';
+import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
+import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
+import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
+import {
+  DesktopOnlyScreen,
+  InvalidTestLinkScreen,
+  SurveyCompletedScreen,
+  SurveyEmptyScreen,
+  SurveyErrorScreen,
+  SurveyLoadingScreen,
+} from '@/features/survey-response/survey-response-screens';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import {
+  type CompletionOutcome,
+  resolveCompletionScreen,
+} from './lib/completion-screen';
+import {
+  CHANGE_CONFIRM_KEY,
+  collectUnconfirmedQuestionIds,
+  collectUnmodifiedChangedQuestionIds,
+  isAwaitingChangeConfirmation,
+  readChangeConfirmations,
+} from '@/lib/survey/change-confirmation';
+import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
+import { normalizeFormatValues } from './lib/format-normalize';
+import {
+  type RenderStep,
+  buildRenderSteps,
+  resolveRestoreStepIndex,
+  resolveSplitSteps,
+  resolveStepBranch,
+} from '@/utils/group-ordering';
+import {
+  collectTableQuestionOptions,
+  filterOptionTextsForSubmission,
+} from '@/utils/option-text-migration';
+import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
+import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
+import {
+  buildAdminRelaxWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/features/survey-response/lib/admin-edit-required-relax';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/features/survey-response/lib/answer-validation';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
+import {
+  type NumericIssue,
+  collectNumericIssues,
+  collectVisibleTableCells,
+} from '@/features/survey-response/lib/numeric-validation';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
+import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
+import {
+  collectPriorAnswerPrefills,
+  collectPriorAnswerRetractions,
+} from './lib/prior-answer-prefill';
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { generateId } from '@/lib/utils';
+import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { client } from '@/shared/lib/rpc';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  type BranchEvalCtx,
+  collectTraversedQuestionIds,
+  collectTraversedStepPath,
+  getBranchRuleForResponse,
+  shouldDisplayQuestion,
+} from '@/utils/branch-logic';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/features/survey-response/lib/split-viewport';
+import {
+  anchorQuestionLabel,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/features/question-renderer/utils/anchor-outline';
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+import { resolveChoiceOptions } from '@/utils/choice-source';
+
+type ResponsesMap = Record<string, unknown>;
+
+const EMPTY_ISSUES = new Map<string, NumericIssue[]>();
+
+export interface SurveyResponseFlowProps {
+  mode?: 'public' | 'admin-edit' | 'preview';
+  surveyIdentifier: string; // slug | uuid | privateToken (이미 decodeURIComponent 된 값)
+  /**
+   * 라우트가 서버에서 이미 알아낸 설문 id. 짧은 초대 링크(/i/<code>)가 초대 코드를 풀며
+   * 확보한 값을 넘긴다 — 없으면 클라이언트가 같은 답을 한 번 더 묻는다.
+   */
+  resolvedSurveyId?: string | undefined;
+  /**
+   * 라우트가 서버에서 미리 조회해 넘긴 진입 자료. 있으면 로더가 설문·attrs 조회를 건너뛴다.
+   * 판정 분기는 로더가 그대로 하므로 두 진입 경로의 동작이 갈리지 않는다.
+   */
+  entrySeed?: ResponseEntrySeed | undefined;
+  inviteToken?: string | null;
+  // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
+  testToken?: string | null;
+  // admin-edit 모드 전용 — Task 15 에서 활성화.
+  adminContext?: {
+    responseId: string;
+    surveyId: string; // UUID
+    initialResponses: ResponsesMap;
+    // 응답이 작성된 시점의 설문 스냅샷. 응답이 published 이전이면 null.
+    versionSnapshot: SurveyVersionSnapshot | null;
+    // 응답자가 사용한 contact_targets.attrs — 조건/토큰 복원용.
+    initialContactAttrs: Record<string, string>;
+    /** 이 응답자의 이월 응답 한 벌. 이월 표시(빨강) 전용 — 프리필·변동 확인은 걸리지 않는다. */
+    initialPriorAnswers?: Record<string, unknown> | null;
+    // 응답 시점 스냅샷의 얼린 앵커 + 현재 조사표 파일 (RSC 가 만들어 넘긴다).
+    documentView?: SurveyDocumentView | null;
+    /**
+     * 이 응답이 수집된 버전과 지금 렌더하는 버전이 다른가. 참이면 숨은 문항 strip 을
+     * 걸지 않는다 — 서버 saveAdminEdit 의 migrating 게이트와 같은 판정이다.
+     */
+    migratedFromOldVersion: boolean;
+    onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
+  };
+  previewContext?: {
+    survey: Survey;
+    versionId: string | null;
+    documentView?: SurveyDocumentView | null;
+  };
+}
+
+// step 내에서 표시 가능한 질문만 추린다.
+function getDisplayableItemsOfStep(
+  step: RenderStep,
+  responses: ResponsesMap,
+  allQuestions: Question[],
+  allGroups: QuestionGroup[],
+  evalCtx?: BranchEvalCtx,
+): Question[] {
+  return step.items
+    .filter((i) => shouldDisplayQuestion(i.question, responses, allQuestions, allGroups, evalCtx))
+    .map((i) => i.question);
+}
+
+/**
+ * visibleQuestions 에서 미선택 옵션 텍스트를 drop 한 뒤 responses 와 병합한다.
+ *
+ * store.optionTexts(key=option.id)와 responses value(=option.value)가 다르므로
+ * question.options 배열을 통해 value→id 변환 후 필터링.
+ * 기존 분석 파이프라인(value가 string/array라는 가정)을 보존하기 위해
+ * optionTexts는 "__optTexts__" 사이드카 key에 저장한다.
+ *
+ * admin-edit 경로와 public 제출 경로 양쪽에서 공유한다.
+ */
+function buildOptTextsPayload(
+  visibleQuestions: Question[],
+  responses: ResponsesMap,
+): Record<string, unknown> {
+  const storeOptTexts = useSurveyResponseStore.getState().optionTexts;
+  const filteredOptTexts: Record<string, Record<string, string>> = {};
+  for (const q of visibleQuestions) {
+    const qOptTexts = storeOptTexts[q.id];
+    if (!qOptTexts || Object.keys(qOptTexts).length === 0) continue;
+    const qValue = responses[q.id];
+    // 보기 그룹 표는 셀 옵션(radio/checkbox/select 셀)에 더해 보기 셀(choice_opt)의 상세기재도
+    // 사이드카에 있다 — 그 보기가 선택돼 있어야 살아남는다(선택은 표 응답 안 예약 키).
+    const optionsForFilter =
+      q.type === 'table'
+        ? isChoiceGroupTableQuestion(q)
+          ? [...collectTableQuestionOptions(q), ...resolveChoiceOptions(q)]
+          : collectTableQuestionOptions(q)
+        : q.options;
+    const filtered = filterOptionTextsForSubmission(qValue, qOptTexts, optionsForFilter);
+    if (filtered) {
+      filteredOptTexts[q.id] = filtered;
+    }
+  }
+  return {
+    ...responses,
+    ...(Object.keys(filteredOptTexts).length > 0 ? { __optTexts__: filteredOptTexts } : {}),
+  };
+}
+
+interface SurveyResponseFlowActiveProps {
+  flowProps: SurveyResponseFlowProps;
+  loader: Omit<ReturnType<typeof useSurveyLoader>, 'loadedSurvey'> & { loadedSurvey: Survey };
+  responses: ResponsesMap;
+  setResponses: Dispatch<SetStateAction<ResponsesMap>>;
+}
+
+/**
+ * URL 응답 identity 경계.
+ *
+ * 같은 React 인스턴스에서 invite/test token이 바뀌어도 key로 전체 응답 세션을 교체한다.
+ * 자식 훅이 mount되기 전에 Zustand 응답 상태를 동기 정리하므로 이전 대상자의
+ * currentResponseId를 새 대상자의 create/complete 경로가 관찰할 수 없다.
+ */
+/**
+ * 이월 표시(빨강) 스위치 — **2026-09-09 실사 중 끔.**
+ *
+ * 현장에서 검증할 시간이 없어 색을 내리기로 했다. 렌더러·판정·테스트는 전부 그대로 두고
+ * **재료만 끊는다** — 이 상수를 `true` 로 돌리면 그날의 동작으로 통째로 돌아온다.
+ * 렌더러 15곳을 각자 주석 처리하면 되살릴 때 빠뜨리는 곳이 반드시 생긴다.
+ *
+ * 되살리기 전에 볼 것: ADR 0024 의 "받아들인 대가"(오류 빨강과 채널 공유, 안내 문구 없음,
+ * 색맹 대응 없음)와 `admin-edit-prior-highlight.test.tsx` 의 skip 표시.
+ */
+const PRIOR_HIGHLIGHT_ENABLED: boolean = false;
+
+export function SurveyResponseFlow(props: SurveyResponseFlowProps) {
+  const identityKey = [
+    props.mode ?? 'public',
+    props.surveyIdentifier,
+    props.inviteToken ?? '',
+    props.testToken ?? '',
+    // admin-edit 은 surveyIdentifier(=surveyId)가 같은 설문의 모든 응답에서 동일하므로
+    // responseId 를 별도 축으로 포함한다. 이게 없으면 같은 마운트 트리에서 responseId 만
+    // 바뀌는 경로(예: 응답 상세의 "다음 응답" 이동)가 optionTexts/currentStepIndex 를
+    // 리셋하지 못해, 이전 응답자가 입력한 텍스트가 다음 응답자의 인용 재현에 새어 들어간다.
+    // public/preview 는 adminContext 가 항상 없어 이 항목이 상수 ''로 고정되므로 기존
+    // 키 계산에 영향이 없다.
+    props.adminContext?.responseId ?? '',
+  ].join('\u0000');
+
+  return <SurveyResponseIdentityBoundary key={identityKey} flowProps={props} />;
+}
+
+function SurveyResponseIdentityBoundary({ flowProps }: { flowProps: SurveyResponseFlowProps }) {
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    useSurveyResponseStore.getState().resetResponseState();
+    // identity 전환 commit에서 store 정리가 끝난 뒤에만 실제 응답 훅 트리를 mount한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReady(true);
+    return () => {
+      useSurveyResponseStore.getState().resetResponseState();
+    };
+  }, []);
+
+  return ready ? <SurveyResponseFlowControl {...flowProps} /> : <SurveyLoadingScreen />;
+}
+
+function SurveyResponseFlowControl({
+  surveyIdentifier,
+  resolvedSurveyId,
+  entrySeed,
+  inviteToken: inviteTokenProp = null,
+  testToken: testTokenProp = null,
+  mode = 'public',
+  adminContext,
+  previewContext,
+}: SurveyResponseFlowProps) {
+  const router = useRouter();
+  const identifier = surveyIdentifier;
+  const isAdminEdit = mode === 'admin-edit';
+  const isPreview = mode === 'preview';
+
+  // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
+  // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
+  const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
+  // ?test=<token> — invite 와 동일하게 admin-edit/preview 에서는 무시(중단/무효 링크 게이트 비대상).
+  const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
+  const [responses, setResponses] = useState<ResponsesMap>({});
+  const clearResponses = useCallback(() => setResponses({}), []);
+  const loader = useSurveyLoader({
+    identifier,
+    // admin-edit·preview 는 자체 컨텍스트로 조회를 건너뛰므로 seed 가 의미 없다.
+    ...(!isAdminEdit && !isPreview && resolvedSurveyId ? { resolvedSurveyId } : {}),
+    ...(!isAdminEdit && !isPreview && entrySeed ? { entrySeed } : {}),
+    isAdminEdit,
+    isPreview,
+    adminContext,
+    previewContext,
+    inviteToken,
+    testToken,
+    setResponses,
+  });
+
+  if (loader.isLoading) return <SurveyLoadingScreen />;
+  if (loader.showInviteRequired) return <InviteRequiredScreen />;
+  if (loader.control?.testSession === 'invalid') {
+    return (
+      <InvalidTestLinkGate
+        surveyId={loader.loadedSurvey?.id}
+        inviteToken={inviteToken}
+        clearResponses={clearResponses}
+      />
+    );
+  }
+
+  const isTestSession = loader.control?.testSession === 'valid';
+  if (loader.control?.isPaused && !isTestSession) {
+    return (
+      <AlreadyRespondedView
+        reason="survey_paused"
+        surveyTitle={loader.loadedSurvey?.title ?? ''}
+        contactEmail={loader.loadedSurvey?.contactEmail ?? null}
+        customBody={loader.control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
+      />
+    );
+  }
+  if (loader.loadError || !loader.loadedSurvey) {
+    return <SurveyErrorScreen loadError={loader.loadError} onGoHome={() => router.push('/')} />;
+  }
+
+  return (
+    <SurveyResponseFlowActive
+      flowProps={{
+        surveyIdentifier,
+        inviteToken: inviteTokenProp,
+        testToken: testTokenProp,
+        mode,
+        ...(adminContext ? { adminContext } : {}),
+        ...(previewContext ? { previewContext } : {}),
+      }}
+      loader={{ ...loader, loadedSurvey: loader.loadedSurvey }}
+      responses={responses}
+      setResponses={setResponses}
+    />
+  );
+}
+
+function InvalidTestLinkGate({
+  surveyId,
+  inviteToken,
+  clearResponses,
+}: {
+  surveyId: string | undefined;
+  inviteToken: string | null;
+  clearResponses: () => void;
+}) {
+  useLayoutEffect(() => {
+    if (surveyId) window.localStorage.removeItem(sessionStorageKey(surveyId, inviteToken));
+    useSurveyResponseStore.getState().resetResponseState();
+    clearResponses();
+  }, [surveyId, inviteToken, clearResponses]);
+
+  return <InvalidTestLinkScreen />;
+}
+
+function SurveyResponseFlowActive({
+  flowProps: {
+    inviteToken: inviteTokenProp = null,
+    testToken: testTokenProp = null,
+    mode = 'public',
+    adminContext,
+  },
+  loader: {
+    loadedSurvey,
+    contactAttrs,
+    versionId,
+    control,
+    priorAnswers,
+    displayOnlyPriorAnswers,
+    prefillSettled,
+    documentView,
+    refetchSnapshot,
+  },
+  responses,
+  setResponses,
+}: SurveyResponseFlowActiveProps) {
+  const router = useRouter();
+  const isAdminEdit = mode === 'admin-edit';
+  const isPreview = mode === 'preview';
+  const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
+  const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
+  const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
+
+  // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
+  const { setCurrentResponseId, setPendingResponse, resetResponseState } = useSurveyResponseStore(
+    useShallow((s) => ({
+      setCurrentResponseId: s.setCurrentResponseId,
+      setPendingResponse: s.setPendingResponse,
+      resetResponseState: s.resetResponseState,
+    })),
+  );
+  const currentResponseId = useSurveyResponseStore((s) => s.currentResponseId);
+  const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
+  const effectiveOptionTextsByQuestion = useMemo(
+    () => resolveEffectiveOptionTextsByQuestion(responses, optionTexts),
+    [responses, optionTexts],
+  );
+
+  // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
+  const isTestSession = control?.testSession === 'valid';
+  const isTargetTestSession = isTestSession && control?.testSessionKind === 'target';
+
+  /**
+   * 문항별 변동 확인 스위치 (스냅샷 밖 라이브 값). control 이 없는 경로
+   * (admin-edit·미리보기)는 이월 응답 자체가 null 이라 어느 쪽이든 무동작이다.
+   */
+  const changeConfirmEnabled = control?.changeConfirmEnabled ?? false;
+
+  // 이월 응답은 형식 정규화의 면제 판정에만 쓴다 — 콜백 재생성을 막으려 ref 로 따라간다
+  // (기존 안정 콜백 관례와 같은 2줄 패턴).
+  const priorAnswersRef = useRef<PriorAnswers | null>(priorAnswers);
+  useSyncLatestRef(priorAnswersRef, priorAnswers);
+
+  /**
+   * 제출 페이로드 조립 — 기타 상세기재 정리 + 입력 형식 정규화.
+   * 숨은 문항 값은 응답 상태에서 이미 지워졌다.
+   *
+   * 형식 정규화를 여기서 한 번 더 하는 이유는 `format-normalize` 주석에 있다 —
+   * 포커스를 쥔 채 제출하면 blur 가 예약한 정돈이 같은 클릭 안에서 커밋되지 않는다.
+   */
+  const buildSubmissionPayload = useCallback(
+    (visible: Question[], current: ResponsesMap): Record<string, unknown> =>
+      normalizeFormatValues(
+        visible,
+        buildOptTextsPayload(visible, current),
+        priorAnswersRef.current,
+      ),
+    [],
+  );
+
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [completionOutcome, setCompletionOutcome] = useState<CompletionOutcome>('completed');
+  const [stepHistory, setStepHistory] = useState<number[]>([]);
+
+  // 페이지 진입 시 1회 생성된 세션 식별자. 컴포넌트 수명 동안 안정적.
+  // - createResponseWithFirstAnswer의 멱등성 키 (surveyId, sessionId)
+  // - 새 응답 행은 첫 답변 시점에만 INSERT (페이지 진입 시 X)
+  // crypto.randomUUID 기반(generateId) — 예측 가능한 session-<Date.now()> 는
+  // resume→updateQuestionResponse 의 in_progress 응답 변조 윈도를 열어준다.
+  const [sessionId, setSessionId] = useState<string>(() => generateId());
+  // 대상자 테스트 쓰기 소유권은 화면 마운트마다 새 attempt로 시작한다.
+  // 리렌더 동안은 안정적이고, 새 탭/새로고침은 새 attempt가 이전 화면을 supersede할 수 있다.
+  const [testAttemptId] = useState(() => crypto.randomUUID());
+  const [hasTestAttemptOwnership, setHasTestAttemptOwnership] = useState(false);
+  const testIdentity = useMemo(
+    () => (isTargetTestSession ? { attemptId: testAttemptId, sessionId } : null),
+    [isTargetTestSession, testAttemptId, sessionId],
+  );
+
+  // 제출 시도 후 하이라이트할 질문 ID 집합
+  const [highlightQuestionIds, setHighlightQuestionIds] = useState<Set<string>>(() => new Set());
+
+  // 쿼터 게이트 — 이 문항들은 런타임 필수로 취급하고, 전부 답변되면 checkQuota 1회 호출.
+  const quotaGateIds = useMemo(
+    () => new Set(loadedSurvey?.quotaGate?.questionIds ?? []),
+    [loadedSurvey],
+  );
+  const quotaCheckedRef = useRef(false);
+  const [quotaClosedMessage, setQuotaClosedMessage] = useState<string | null>(null);
+  // 세션 도중 중단 감지 시 재조회한 최신 중단 문구 (handlePausedMutationError 가 승격).
+  // 화면 폴백 체인: 재조회 문구 → 로드 시점 control.pausedMessage → DEFAULT_PAUSED_MESSAGE.
+  const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
+  // 무중단 갈아타기(티켓 04) 안내 문구 — 서버가 응답 행을 현재 버전으로 재핀한 것을 감지해
+  // 최신 스냅샷 재취득이 끝난 뒤 한 줄 표시한다 (resume 토스트와 동일 패턴).
+  const [rebaseMessage, setRebaseMessage] = useState<string | null>(null);
+
+  const keyboardOpen = useKeyboardOpen();
+
+  // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
+  // null 이면 아직 수집 전. 수집 완료 후 듀얼 effect (duplicate check, callsite) 재트리거
+  const signals = useClientSignals();
+  // 봇 방어 허니팟 입력 ref — create 시점에 값을 읽어 서버로 전달.
+  const honeypotRef = useRef<HTMLInputElement>(null);
+
+  // 진입 시 중복 감지 가드 — duplicateStatus state 초기화 + checkOnEntry effect 를
+  // useDuplicateGuard 로 추출 (초기값 admin-edit 분기·effect 가드/페이로드/cleanup·deps 동일).
+  // signals 는 컴포넌트가 소유(useResponseLifecycle 도 사용)하고 양쪽 훅에 인자로 전달한다.
+  // 반환 setDuplicateStatus 는 useResponseLifecycle 에도 그대로 넘겨 INSERT blocked 결과를 set 한다.
+  const { duplicateStatus, setDuplicateStatus } = useDuplicateGuard({
+    isAdminEdit,
+    isPreview,
+    loadedSurvey,
+    inviteToken,
+    signals,
+    // 유효 테스트 세션은 같은 브라우저로 반복 응답이 정상 → 진입 시 중복검사 skip.
+    skip: isTestSession,
+  });
+
+  // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
+  // 첫 답변 시점에 createResponseWithFirstAnswer로 행을 생성한다 (handleResponse 참고).
+  // currentResponseId는 행 생성 후에만 set된다.
+
+  // 현재 설문의 질문들
+  const questions = useMemo(() => loadedSurvey?.questions || [], [loadedSurvey]);
+  const groups = useMemo(() => loadedSurvey?.groups || [], [loadedSurvey]);
+
+  // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
+  const answerQuotes = useMemo(
+    () => collectAnswerQuotes(questions, responses, effectiveOptionTextsByQuestion),
+    [questions, responses, effectiveOptionTextsByQuestion],
+  );
+
+  // calc 셀 수식 평가 컨텍스트 — responses 는 원본(cell-id 미평탄화) 형태를 그대로 넘긴다
+  // (cell-formula.ts 가 questionId → cellId 중첩 객체 형태를 직접 기대함).
+  const formulaCtx = useMemo<FormulaEvalCtx>(
+    () => ({
+      questions,
+      responses,
+      lookups: loadedSurvey?.lookups ?? [],
+      contactAttrs,
+    }),
+    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+  );
+
+  // calc 값이 주입된 응답 맵 — 분기/표시 조건 평가 전용 파생값.
+  // calc 값은 저장 경계에서만 페이로드에 주입되고 로컬 responses 상태에는 없으므로,
+  // 이것 없이 evalCtx 를 만들면 calc 셀을 참조하는 분기 조건이 항상 빈 값을 본다
+  // (스펙 §4 가 보장한 "앞 페이지 calc 셀 참조"가 깨짐). 파생 주입이므로 같은 페이지
+  // 참조도 라이브로 동작하지만, 보장 범위는 스펙대로 앞 페이지 참조다.
+  const calcAwareResponses = useMemo(
+    () => withCalcValues(responses, formulaCtx),
+    [responses, formulaCtx],
+  );
+
+  // 분기/표시 평가 컨텍스트 — 우변 LUT 룩업 비교가 작동하려면 lookups + contactAttrs 가 필요.
+  // responses 는 cell-id 평탄화 형태로 변환 (table 응답만 의미 있음, 비-table 은 LUT 좌변이 될 수 없음).
+  // 인용값은 조건식의 attrsKey 피연산자가 채널을 구분하지 못하므로 여기서만 병합한다 (인용 우선).
+  const evalCtx = useMemo<BranchEvalCtx>(
+    () => ({
+      responses: responsesToLookupShape(calcAwareResponses),
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
+      lookups: loadedSurvey?.lookups ?? [],
+    }),
+    [calcAwareResponses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
+  );
+
+  /**
+   * 변동 확인 기계에 넘길 이월 응답 — 문항별 이월값 불러오기 조건으로 걸러진 값이다.
+   * 원본 `priorAnswers` 를 그대로 넘기면 조건이 거짓인 문항도 확인 대상으로 뜬다
+   * (변동 확인 스위치를 켜는 순간 이월값 조건이 조용히 무시되는 사고).
+   * 스위치가 꺼져 있으면 null 을 넘겨 확인 컨트롤·잠금·게이트·되묻기가 한꺼번에
+   * 무동작이 된다 — 판정 술어가 모두 이월 값 보유를 전제로 서 있기 때문이다.
+   * 꺼진 경로에서 이월 값은 아래 프리필 effect 가 응답값으로 옮긴다.
+   */
+  const filteredPriorAnswers = useMemo(
+    () => filterPriorAnswersByCondition(priorAnswers, questions, responses, evalCtx),
+    [priorAnswers, questions, responses, evalCtx],
+  );
+  const confirmPriorAnswers = changeConfirmEnabled ? filteredPriorAnswers : null;
+
+  /**
+   * 이월 표시(빨강)에 넘길 이월 응답 — 조건 필터를 통과한 값에서 표시할 수 없는 문항
+   * 유형(안내문·본문 프리필 템플릿)을 마저 걷어낸 것이다(ADR 0024).
+   *
+   * **변동 확인 스위치로 가르지 않는다.** 두 모드 모두 "이 칸에 지금 들어 있는 값이
+   * 작년과 같은가"라는 같은 사실을 표시하고, 켠 설문에서도 "달라짐"을 고른 뒤 열린 칸의
+   * 값은 여전히 작년 값이다. 모드마다 규칙이 갈리면 담당자가 스위치를 켰다 껐다 할 때
+   * 화면이 예상 밖으로 변한다.
+   */
+  /**
+   * 관리자 편집의 이월 표시 재료 — 표시 전용 채널을 같은 조건 필터에 태운다.
+   * 응답자 경로에서는 항상 null 이라 필터가 즉시 빠져나온다.
+   */
+  const filteredDisplayOnlyPriorAnswers = useMemo(
+    () => filterPriorAnswersByCondition(displayOnlyPriorAnswers, questions, responses, evalCtx),
+    [displayOnlyPriorAnswers, questions, responses, evalCtx],
+  );
+
+  const highlightPriorAnswers = useMemo(
+    () =>
+      PRIOR_HIGHLIGHT_ENABLED
+        ? selectHighlightablePriorAnswers(
+            filteredPriorAnswers ?? filteredDisplayOnlyPriorAnswers,
+            questions,
+          )
+        : null,
+    [filteredPriorAnswers, filteredDisplayOnlyPriorAnswers, questions],
+  );
+
+  // 상위그룹 단위 + 테이블 분리 렌더 스텝
+  const steps = useMemo<RenderStep[]>(
+    () => buildRenderSteps(questions, groups),
+    [questions, groups],
+  );
+
+  // step 내 표시 가능한 질문이 하나라도 있는 step만 유지
+  const visibleSteps = useMemo<RenderStep[]>(
+    () =>
+      steps.filter(
+        (s) => getDisplayableItemsOfStep(s, responses, questions, groups, evalCtx).length > 0,
+      ),
+    [steps, responses, questions, groups, evalCtx],
+  );
+
+  const currentStep: RenderStep | undefined = steps[currentStepIndex];
+
+  // 재접속 회복 시 멈춘 스텝으로 초기 이동.
+  // useSessionRecovery 가 deps 미포함 안정 참조를 요구하므로 최신 값은 ref 로 읽는다.
+  // 재배포 등으로 스텝 id 가 현재 구조에 없으면 못 찾고(-1) 1페이지 유지.
+  const restoreCtxRef = useRef({
+    steps,
+    questions,
+    groups,
+    contactAttrs: { ...contactAttrs, ...answerQuotes },
+    lookups: loadedSurvey?.lookups ?? [],
+  });
+  useEffect(() => {
+    restoreCtxRef.current = {
+      steps,
+      questions,
+      groups,
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
+      lookups: loadedSurvey?.lookups ?? [],
+    };
+  }, [steps, questions, groups, contactAttrs, answerQuotes, loadedSurvey?.lookups]);
+  const restoreStepFromRecovery = useCallback(
+    (stepId: string, restoredResponses: ResponsesMap, affectedQuestionIds?: string[]) => {
+      const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
+      // 응답 버전 이관(ADR-0014): 답이 폐기·제거된 질문이 있으면 그 가장 앞 페이지로 되돌린다
+      const idx = resolveRestoreStepIndex(steps, stepId, affectedQuestionIds ?? []);
+      if (idx <= 0) return;
+      setCurrentStepIndex(idx);
+      // 이전 버튼/브라우저 뒤로가기용 stepHistory 재구성 — 복원 응답 기준으로
+      // 1페이지부터 실제 경로를 시뮬레이션한다 (handleNext 가 쌓는 스택과 동일 의미).
+      // 경로상에 목표 스텝이 없으면(재배포로 구조 변경 등) 빈 스택 유지가 안전하다.
+      setStepHistory(
+        collectTraversedStepPath(steps, idx, restoredResponses, questions, groups, {
+          responses: responsesToLookupShape(restoredResponses),
+          contactAttrs,
+          lookups,
+        }),
+      );
+    },
+    [],
+  );
+
+  // 현재 step 내 표시 가능한 질문들
+  const currentStepQuestions = useMemo<Question[]>(
+    () =>
+      currentStep
+        ? getDisplayableItemsOfStep(currentStep, responses, questions, groups, evalCtx)
+        : [],
+    [currentStep, responses, questions, groups, evalCtx],
+  );
+
+  /**
+   * 아직 변동 여부를 밝히지 않아 입력이 잠겨 있는 문항(추적조사).
+   *
+   * 필수·숫자 검증에서 제외한다 — 잠긴 입력을 두고 "답변해주세요"라고 하면 응답자가
+   * 따를 수 없는 요구가 된다. 이 문항들은 변동 확인 게이트가 대신 막고, 밝히는 순간
+   * 이월 값이 복사돼 검증 대상으로 돌아온다.
+   */
+  const awaitingConfirmationIds = useMemo(
+    () =>
+      new Set(
+        currentStepQuestions
+          .filter((q) => isAwaitingChangeConfirmation(q, confirmPriorAnswers, responses))
+          .map((q) => q.id),
+      ),
+    [currentStepQuestions, confirmPriorAnswers, responses],
+  );
+
+  // 전역으로 표시되는 모든 질문 (노출 로깅용)
+  const visibleQuestions = useMemo(
+    () => questions.filter((q) => shouldDisplayQuestion(q, responses, questions, groups, evalCtx)),
+    [questions, responses, groups, evalCtx],
+  );
+
+  /**
+   * 구버전 응답을 최신 형식으로 열었으면 숨은 문항 strip 을 걸지 않는다.
+   *
+   * 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된 답을 소급해 지우는 것을 막는다
+   * (스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다"). 이 화면은 숨은 문항을 그리지도
+   * 않으므로 운영자가 손실을 알아챌 방법이 없다 — 서버 saveAdminEdit 의 migrating 게이트와
+   * 같은 판정을 클라이언트에도 둔다.
+   */
+  const skipHiddenStrip = adminContext?.migratedFromOldVersion ?? false;
+
+  /**
+   * 숨은 문항 값 삭제 (스펙: 2026-09-07 숨은 문항 응답 삭제).
+   *
+   * 「이전」을 누르는 것만으로는 아무것도 숨겨지지 않는다 — 숨김의 유일한 계기는 상류 값
+   * 변경이다. 그래서 응답이 바뀔 때마다 태우면 "바꿔서 숨겨지는 순간" 이 정확히 잡힌다.
+   *
+   * 참조가 그대로면 setState 를 부르지 않는다 — 매 렌더 상태를 갈아끼우면 무한 루프다.
+   */
+  useEffect(() => {
+    if (skipHiddenStrip) return;
+    const next = stripHiddenQuestionValues(questions, responses, groups, evalCtx);
+    // 삭제는 응답 변경에 대한 반응이라 effect 밖에 둘 자리가 없다. 지울 것이 없으면
+    // 같은 참조가 돌아와 set 을 부르지 않으므로 렌더 루프가 생기지 않는다.
+    // (react-hooks/set-state-in-effect 는 이 조건부 set 을 보고하지 않는다 — 보고되지도
+    //  않는 규칙에 disable 을 달면 "쓰이지 않은 disable" 경고가 새로 뜬다.)
+    if (next !== responses) setResponses(next as ResponsesMap);
+  }, [questions, responses, groups, evalCtx, setResponses, skipHiddenStrip]);
+
+  // ── 분할 레이아웃 파생 ──
+  //
+  // 모드는 설정이 아니라 앵커에서 파생된다(토글 0개). 페이지마다 따로 본다 —
+  // 조사표에 등록되지 않은 페이지는 일반 문항 페이지로 나온다. 판정은 **구조 기준**
+  // 이라 조건 필터를 거치지 않은 steps 를 넘긴다 — 응답자가 앞 답을 고쳐도 판이
+  // 접혔다 펴지지 않아야 한다.
+  const splitSteps = useMemo(
+    () => resolveSplitSteps(steps, documentView?.anchors ?? [], groups),
+    [steps, documentView, groups],
+  );
+  const isSplit = splitSteps[currentStepIndex] ?? false;
+  /**
+   * 이 설문이 조사표를 끼고 답하는 형식인가. **현재 페이지가 아니라 설문 전체**를
+   * 본다 — 진행바 같은 화면 요소를 페이지마다 넣었다 뺐다 하면 넘길 때마다 머리
+   * 부분이 들썩인다.
+   */
+  const isDocumentSurvey = splitSteps.some(Boolean);
+
+  // 그룹 → 상위 그룹. 앵커가 상위 그룹에만 있을 때 초점 해석이 사슬을 타고 올라간다 —
+  // 분할 판정이 이미 사슬 전체를 보므로 두 판정이 같은 사슬을 봐야 한다.
+  const anchorParentOf = useMemo(() => {
+    const map = new Map(groups.map((g) => [g.id, g.parentGroupId ?? null]));
+    return (groupId: string) => map.get(groupId) ?? null;
+  }, [groups]);
+
+  // 대상별 쪽 목록 — 초점 해석의 유일한 입력. 조사표를 모르는 순수 함수가 이것만 본다.
+  const anchorPagesOf = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const anchor of documentView?.anchors ?? []) {
+      const list = map.get(anchor.ownerId);
+      if (list) list.push(anchor.page);
+      else map.set(anchor.ownerId, [anchor.page]);
+    }
+    return (ownerId: string) => map.get(ownerId) ?? [];
+  }, [documentView]);
+
+  // 좌측에 **그리는** 대상은 조건부 표시로 살아남은 항목 것만이다.
+  // 레이아웃은 구조에서, 표시는 조건에서 — 두 층을 섞지 않는다.
+  const anchoredStepQuestions = useMemo(
+    () =>
+      currentStepQuestions.filter(
+        (q) =>
+          resolveAnchorOwnerId(
+            { kind: 'question', id: q.id, groupId: q.groupId ?? null },
+            (ownerId) => anchorPagesOf(ownerId).length > 0,
+            anchorParentOf,
+          ) !== null,
+      ),
+    [currentStepQuestions, anchorPagesOf, anchorParentOf],
+  );
+
+  // 지금 고른 대상. 이동은 nonce 가 바뀔 때만 — 선택은 상태고 쪽 이동은 행동이다.
+  // 그룹을 고르면 그 그룹의 영역만 밝힌다(맥락도 자기 자신).
+  const [anchorSelection, setAnchorSelection] = useState<{
+    kind: 'question' | 'group';
+    id: string;
+    nonce: number;
+  } | null>(null);
+  const selectAnchorQuestion = useCallback(
+    (questionId: string) => {
+      // 이 페이지의 문항이면 앵커가 풀리든 말든 초점을 옮긴다. 앵커 유무로 걸러 두면
+      // 그 행 위에서는 hover 도 클릭도 아무 반응이 없어 "가끔 안 먹는" 화면이 되고,
+      // 초점이 옛 그룹에 머물러 다음 hover 까지 지연 경로로 새는 부작용까지 따라온다.
+      // 켤 것이 없으면 사각형을 그리지 않을 뿐이다.
+      if (!currentStepQuestions.some((q) => q.id === questionId)) return;
+      setAnchorSelection((prev) =>
+        prev?.kind === 'question' && prev.id === questionId
+          ? prev
+          : { kind: 'question', id: questionId, nonce: (prev?.nonce ?? 0) + 1 },
+      );
+    },
+    [currentStepQuestions],
+  );
+
+  const selectAnchorGroup = useCallback((groupId: string) => {
+    setAnchorSelection((prev) =>
+      prev?.kind === 'group' && prev.id === groupId
+        ? prev
+        : { kind: 'group', id: groupId, nonce: (prev?.nonce ?? 0) + 1 },
+    );
+  }, []);
+
+  // 페이지가 바뀌면 두고 온 초점을 그 페이지의 첫 앵커 문항으로 옮긴다 (렌더 중 조정).
+  //
+  // **없던 초점을 만들지는 않는다.** 진입하자마자 첫 문항을 켜면 응답자가 아직
+  // 아무것도 고르지 않았는데 조사표가 먼저 움직여, 처음 보려던 자리를 빼앗는다.
+  // 조사표는 응답자가 고른 뒤부터 따라간다.
+  const defaultAnchorQuestionId = anchoredStepQuestions[0]?.id ?? null;
+  // **이 페이지에 있는가**만 본다. 앵커가 풀리는가로 물으면 앵커 없는 문항을 고른
+  // 순간 아래 조정이 되돌려 첫 문항으로 튕긴다.
+  const selectionIsOnThisStep =
+    anchorSelection?.kind === 'group'
+      ? currentStepQuestions.some((q) => q.groupId === anchorSelection.id)
+      : anchorSelection
+        ? currentStepQuestions.some((q) => q.id === anchorSelection.id)
+        : false;
+  if (anchorSelection && defaultAnchorQuestionId && !selectionIsOnThisStep) {
+    setAnchorSelection({
+      kind: 'question',
+      id: defaultAnchorQuestionId,
+      nonce: anchorSelection.nonce + 1,
+    });
+  }
+
+  const anchorFocus = useMemo(() => {
+    if (!anchorSelection) return null;
+    if (anchorSelection.kind === 'group') {
+      // 그룹을 고르면 맥락도 자기 자신 — 그 그룹의 영역만 밝힌다.
+      // 쪽 범위는 그룹 자신과 그 안 문항들의 사각형을 합쳐서 잰다.
+      const scope = [
+        anchorSelection.id,
+        ...currentStepQuestions.filter((q) => q.groupId === anchorSelection.id).map((q) => q.id),
+      ];
+      const pages = [...new Set(scope.flatMap((id) => [...anchorPagesOf(id)]))].sort(
+        (a, b) => a - b,
+      );
+      if (pages.length === 0) return null;
+      return {
+        ownerId: anchorSelection.id,
+        contextId: anchorSelection.id,
+        pages,
+        nonce: anchorSelection.nonce,
+      };
+    }
+    const question = currentStepQuestions.find((q) => q.id === anchorSelection.id);
+    if (!question) return null;
+    const focus = resolveAnchorFocus(
+      { id: question.id, groupId: question.groupId ?? null },
+      anchorPagesOf,
+      question.groupId
+        ? currentStepQuestions.filter((q) => q.groupId === question.groupId).map((q) => q.id)
+        : [],
+      anchorParentOf,
+    );
+    return focus ? { ...focus, nonce: anchorSelection.nonce } : null;
+  }, [anchorSelection, currentStepQuestions, anchorPagesOf, anchorParentOf]);
+
+  // 조사표 사각형에 얹을 이름. 그룹은 그룹 이름, 문항은 빌더의 조사표 탭과
+  // **같은 규칙**(엑셀 라벨 → 문항코드 → 문장)으로 고른다 — 만든 화면과 답하는
+  // 화면이 같은 칸을 다른 이름으로 부르면 안 된다.
+  const anchorLabelOf = useCallback(
+    (ownerId: string) => {
+      const question = questions.find((q) => q.id === ownerId);
+      if (question) return anchorQuestionLabel(question);
+      return groups.find((g) => g.id === ownerId)?.name ?? null;
+    },
+    [questions, groups],
+  );
+
+  // 초점이 놓인 그룹 — 문항이 초점이면 그 문항의 소속 그룹이다. 목록의 카드가
+  // 이 기준으로 파랗게 서고, hover 지연을 "같은 그룹인가"로 가르는 기준도 이것이다.
+  const activeAnchorGroupId = useMemo(() => {
+    if (!anchorSelection) return null;
+    if (anchorSelection.kind === 'group') return anchorSelection.id;
+    return currentStepQuestions.find((q) => q.id === anchorSelection.id)?.groupId ?? null;
+  }, [anchorSelection, currentStepQuestions]);
+
+  // 조사표에서 사각형을 누르면 오른쪽 문항으로 대응된다 (양방향).
+  const handleAnchorOwnerSelect = useCallback(
+    (ownerId: string) => {
+      const questionId = resolveQuestionForOwner(
+        ownerId,
+        currentStepQuestions.map((q) => ({ id: q.id, groupId: q.groupId ?? null })),
+      );
+      if (!questionId) return;
+      selectAnchorQuestion(questionId);
+      document
+        .querySelector(`[data-question-id="${questionId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [currentStepQuestions, selectAnchorQuestion],
+  );
+
+  // 모바일 화면 감지 (matchMedia — resize 루프 방지)
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  // 조사표를 나란히 놓을 수 있는 최소 폭. 이보다 좁으면 좌우 각 판이 500px 도
+  // 되지 않아 조사표 한 쪽이 읽히지 않는다. UA 가 아니라 폭으로 판정하는 이유는
+  // 태블릿 오판과 데스크톱의 좁은 창 때문이다.
+  const isTooNarrowForSplit = useMediaQuery(`(max-width: ${SPLIT_MIN_VIEWPORT_WIDTH - 1}px)`);
+
+  // 진행도 — step 기반
+  const currentVisibleStepNumber = useMemo(() => {
+    if (!currentStep) return 0;
+    const idx = visibleSteps.findIndex((s) => s === currentStep);
+    return idx === -1 ? 0 : idx + 1;
+  }, [currentStep, visibleSteps]);
+
+  const totalVisibleStepCount = visibleSteps.length;
+
+  // 운영 콘솔 진척 저장용 visible 진척 최신값. 콜백/effect 에서 stale 없이 참조하기 위해
+  // ref 로 미러링한다 (deps/exhaustive-deps 영향 없음). 응답 페이지 헤더 26/28 과 동일 값.
+  const visibleProgressRef = useRef({ index: 0, total: 0 });
+  useSyncLatestRef(visibleProgressRef, {
+    index: currentVisibleStepNumber,
+    total: totalVisibleStepCount,
+  });
+
+  const findNextDisplayableStepIndex = useCallback(
+    (startIndex: number): number => {
+      if (steps.length === 0) return -1;
+      if (startIndex < 0) return -1;
+
+      for (let i = startIndex; i < steps.length; i += 1) {
+        const s = steps[i];
+        if (!s) continue;
+        if (getDisplayableItemsOfStep(s, responses, questions, groups, evalCtx).length > 0) {
+          return i;
+        }
+      }
+
+      return -1;
+    },
+    // evalCtx 누락 시 contactAttrs/lookups 가 비동기로 채워져도 콜백이 재생성되지 않아
+    // stale 컨텍스트로 step 표시 여부를 계산한다 (visibleSteps 등 다른 소비자와 deps 정합).
+    [steps, responses, questions, groups, evalCtx],
+  );
+
+  // 스텝이 바뀌면 페이지 상단으로 이동한다.
+  //
+  // 스텝 전환 지점마다 scrollTo 를 부르지 않고 여기 한 곳으로 모은 이유:
+  // (1) 전환 지점이 handleNext·handlePrevious·자동 스킵·재접속 복원·검증 점프로 5곳인데
+  //     자동 스킵과 복원에는 호출이 아예 없어 페이지만 바뀌고 스크롤이 남아 있었다.
+  // (2) 호출 지점에서 부르면 새 페이지가 커밋되기 전에 예약되는데, iOS WebKit 계열
+  //     브라우저는 직후 DOM 이 통째로 교체되면 그 스크롤을 폐기한다. effect 는 커밋
+  //     이후에 실행되므로 새 페이지 레이아웃 기준으로 확정 적용된다.
+  //
+  // behavior 는 'instant' 여야 한다 — globals.css 의 html { scroll-behavior: smooth }
+  // 때문에 'auto' 는 즉시 이동이 아니라 스무스 애니메이션이 되고, 긴 페이지에서
+  // 출발하면 다시 같은 취소 문제에 노출된다.
+  const previousStepIndexRef = useRef(currentStepIndex);
+  useEffect(() => {
+    if (previousStepIndexRef.current === currentStepIndex) return;
+    previousStepIndexRef.current = currentStepIndex;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentStepIndex]);
+
+  // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동.
+  // effect 대신 렌더 중 조정 — 커밋 후 이동하면 빈 스텝이 한 프레임 노출된다.
+  // 인덱스가 단조 증가(currentStepIndex + 1 이후 탐색)하므로 재렌더 루프는 유한하다.
+  if (loadedSurvey && currentStep && currentStepQuestions.length === 0) {
+    const nextDisplayable = findNextDisplayableStepIndex(currentStepIndex + 1);
+    if (nextDisplayable !== -1) {
+      setCurrentStepIndex(nextDisplayable);
+    }
+  }
+
+  // 운영 현황 콘솔(T5/세그먼트): 스텝 전환 추적 + Page Visibility 세그먼트.
+  // 두 effect 를 useResponseTelemetry 로 추출 (등록 순서·deps 동일, 상태 미소유).
+  useResponseTelemetry({
+    enabled: !isTargetTestSession || hasTestAttemptOwnership,
+    isAdminEdit,
+    isPreview,
+    currentResponseId,
+    currentStep,
+    isCompleted,
+    visibleProgressRef,
+    testIdentity,
+    onPausedDetected: (pausedMessage) => {
+      // 세션 도중 중단 — 운영자 최신 문구를 폴백 체인 최우선 값으로 승격한다
+      // (handlePausedMutationError 재조회 경로와 동일 의미론, 왕복은 없다).
+      if (pausedMessage !== null) setRefetchedPausedMessage(pausedMessage);
+      // 이미 다른 사유로 차단됐다면 그 사유를 유지한다.
+      setDuplicateStatus((prev) =>
+        prev.kind === 'blocked' ? prev : { kind: 'blocked', reason: 'survey_paused' },
+      );
+    },
+  });
+
+  // 이어하기 회복이 내려준 draftSeq — useResponseLifecycle 의 draftSeqRef seed 용.
+  // onRestoreStep 과 동일하게 useSessionRecovery 콜백(onDraftSeqRecovered)으로 전달받아,
+  // useResponseLifecycle 호출 시점(아래)에 prop 으로 넘긴다. 훅 호출 순서상 useSessionRecovery
+  // 가 먼저이므로 콜백은 useResponseLifecycle 내부 값을 직접 참조하지 않고 이 state 를 경유한다.
+  const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
+
+  // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
+  // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
+  // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
+  // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
+  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
+    // 이월 응답 프리필 판정이 끝나기 전에 회복이 응답값을 세팅하면, 뒤늦은 프리필이
+    // 저장된 답을 지난 회차 값으로 되돌린다 — 프리필이 정착한 뒤에만 회복을 연다.
+    enabled: !isCompleted && prefillSettled,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
+    isAdminEdit,
+    isPreview,
+    loadedSurvey,
+    currentResponseId,
+    inviteToken,
+    testToken,
+    isTestSession,
+    isTargetTestSession,
+    sessionId,
+    setSessionId,
+    setResponses,
+    onRestoreStep: restoreStepFromRecovery,
+    onDraftSeqRecovered: setRecoveredDraftSeq,
+    setCurrentResponseId,
+    setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
+  });
+
+  const hasPreviousDisplayable = stepHistory.length > 0;
+
+  const isQuestionRequired = useCallback(
+    (question: Question) =>
+      question.required ||
+      quotaGateIds.has(question.id) ||
+      // 질문 필수 OFF 여도 그룹별 required:true 오버라이드가 있으면 차단 판정에 태운다
+      hasExplicitRequiredChoiceGroup(question),
+    [quotaGateIds],
+  );
+
+  // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
+  // 상세기입 필수 옵션은 선택값만으로 충족되지 않으며, 테이블은 실제 노출 셀만 검사한다.
+  const isQuestionAnswered = useCallback(
+    (question: Question) => {
+      const response = responses[question.id];
+      const visibleCellIds =
+        question.type === 'table'
+          ? new Set(
+              collectVisibleTableCells(
+                question,
+                response && typeof response === 'object'
+                  ? (response as Record<string, unknown>)
+                  : {},
+                {
+                  allResponses: responses,
+                  allQuestions: questions,
+                  lookups: loadedSurvey?.lookups ?? [],
+                  contactAttrs,
+                },
+              ).map((cell) => cell.id),
+            )
+          : undefined;
+      return (
+        isQuestionAnsweredPure(question, response) &&
+        !collectRequiredOptionTextIssues(
+          question,
+          response,
+          effectiveOptionTextsByQuestion[question.id],
+          visibleCellIds ? { visibleCellIds } : undefined,
+        ).questionMissing
+      );
+    },
+    [responses, effectiveOptionTextsByQuestion, questions, contactAttrs, loadedSurvey?.lookups],
+  );
+
+  // 다음 step 결정 (step 내 분기 규칙 평가)
+  const resolveNextStepIndex = useCallback((): number => {
+    if (!currentStep) return -1;
+
+    // step 내 각 질문의 분기 규칙(end/goto)을 표시 순서대로 평가.
+    // 같은 step(=같은 페이지) 또는 이전 step 을 가리키는 goto 는 전진 이동이 아니므로
+    // resolveStepBranch 가 무시하고 fallthrough 시킨다 (제자리 no-op 트랩 방지).
+    const rules = currentStepQuestions.map((q) => getBranchRuleForResponse(q, responses[q.id]));
+    const outcome = resolveStepBranch(steps, currentStepIndex, rules);
+    if (outcome.kind === 'end') return -1;
+    if (outcome.kind === 'goto') return outcome.stepIndex;
+
+    return findNextDisplayableStepIndex(currentStepIndex + 1);
+  }, [
+    currentStep,
+    currentStepQuestions,
+    responses,
+    steps,
+    currentStepIndex,
+    findNextDisplayableStepIndex,
+  ]);
+
+  const isLastVisibleStep = useMemo(() => {
+    if (!currentStep) return false;
+    return resolveNextStepIndex() === -1;
+  }, [currentStep, resolveNextStepIndex]);
+
+  // 응답 완료 카운트 (피드백) — 실제 경로(분기 시뮬레이션) 기준.
+  // 분기 규칙으로 건너뛰는 스텝의 질문을 세면 카운트가 제출 버튼과 모순된다.
+  const traversedQuestionIds = useMemo(
+    () => collectTraversedQuestionIds(steps, responses, questions, groups, evalCtx),
+    [steps, responses, questions, groups, evalCtx],
+  );
+  const answeredCount = useMemo(
+    () =>
+      visibleQuestions.filter((q) => traversedQuestionIds.has(q.id) && isQuestionAnswered(q))
+        .length,
+    [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
+  );
+  // 숫자 차단형 검증 (min/합계/필수 셀) — 라이브 계산, 표시는 "다음"을 시도한 step 에서만
+  const numericIssuesByQuestion = useMemo(() => {
+    const map = new Map<string, NumericIssue[]>();
+    for (const q of currentStepQuestions) {
+      // 잠긴 문항은 검증하지 않는다 — 값이 아직 이번 회차 응답이 아니다.
+      if (awaitingConfirmationIds.has(q.id)) continue;
+      const issues = collectNumericIssues(q, responses[q.id], {
+        allResponses: responses,
+        allQuestions: questions,
+        optionTexts: effectiveOptionTextsByQuestion[q.id],
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
+        // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
+        priorAnswers,
+      });
+      if (issues.length > 0) map.set(q.id, issues);
+    }
+    return map;
+  }, [
+    currentStepQuestions,
+    awaitingConfirmationIds,
+    responses,
+    questions,
+    effectiveOptionTextsByQuestion,
+    loadedSurvey?.lookups,
+    contactAttrs,
+    priorAnswers,
+  ]);
+  const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
+  const showNumericErrors = numericErrorStepIndex === currentStepIndex;
+  // 필수 게이트 안내는 "다음"을 시도해 막힌 스텝에서만 띄운다(숫자 검증·변동 확인과 같은 방식).
+  // 숫자 쪽과 달리 스텝을 떠나면 시도 기록을 지운다 — 돌아와도 다시 시도하기 전엔 안내가
+  // 뜨지 않게. useEffect 대신 렌더 중 상태 조정(아래 adminWarnStepIndex 와 같은 관례).
+  const [requiredErrorStepIndex, setRequiredErrorStepIndex] = useState<number | null>(null);
+  if (requiredErrorStepIndex !== null && requiredErrorStepIndex !== currentStepIndex) {
+    setRequiredErrorStepIndex(null);
+  }
+  const focusedQuestionId = currentStepQuestions.find((q) => highlightQuestionIds.has(q.id))?.id;
+  const visibleNumericIssues = useMemo(() => {
+    if (!showNumericErrors) return EMPTY_ISSUES;
+    if (!focusedQuestionId) return numericIssuesByQuestion;
+    const focusedIssues = numericIssuesByQuestion.get(focusedQuestionId);
+    return focusedIssues ? new Map([[focusedQuestionId, focusedIssues]]) : EMPTY_ISSUES;
+  }, [showNumericErrors, focusedQuestionId, numericIssuesByQuestion]);
+
+  // 하이라이트 중 "필수 미응답" 사유인 질문만 골라 안내 문구를 붙인다 — 숫자 검증
+  // 위반 하이라이트에는 필수 문구를 섞지 않고, 응답이 채워지면 문구도 즉시 사라진다.
+  const requiredMessageQuestionIds = new Set(
+    currentStepQuestions
+      .filter(
+        (q) =>
+          highlightQuestionIds.has(q.id) &&
+          !awaitingConfirmationIds.has(q.id) &&
+          isQuestionRequired(q) &&
+          !isQuestionAnswered(q),
+      )
+      .map((q) => q.id),
+  );
+
+  // 추적조사 변동 확인 게이트 — 이월 값이 있는데 "같음/달라짐"을 밝히지 않은 문항.
+  // 응답 필수 여부와 별개 축이라 isQuestionRequired 를 전혀 보지 않는다. 표시 조건으로
+  // 숨겨진 문항은 currentStepQuestions 단계에서 이미 빠져 있다.
+  // 이월 응답이 없는 응답자(익명·미보유 대상자)와 admin-edit/미리보기는 priorAnswers 가
+  // null 이라 이 목록이 항상 비고, 게이트 전체가 무동작이다.
+  const unconfirmedChangeQuestionIds = useMemo(
+    () => collectUnconfirmedQuestionIds(currentStepQuestions, confirmPriorAnswers, responses),
+    [currentStepQuestions, confirmPriorAnswers, responses],
+  );
+  // 안내 문구는 "다음"을 시도한 스텝에서만 띄운다(숫자 검증과 같은 방식). 목록 자체는
+  // 라이브 계산이라 응답자가 선택하는 순간 문구가 사라진다.
+  const [changeConfirmErrorStepIndex, setChangeConfirmErrorStepIndex] = useState<number | null>(
+    null,
+  );
+  const changeConfirmMessageQuestionIds = useMemo(
+    () =>
+      changeConfirmErrorStepIndex === currentStepIndex
+        ? new Set(unconfirmedChangeQuestionIds)
+        : new Set<string>(),
+    [changeConfirmErrorStepIndex, currentStepIndex, unconfirmedChangeQuestionIds],
+  );
+
+  // "달라짐"이라고 밝혔는데 값이 이월 값과 완전히 같은 문항 — 제출 직전에 한 번 되묻는다.
+  // 실제로 지나온 문항만 본다(분기로 건너뛴 페이지의 문항은 밝힌 적이 없다).
+  // 되묻기는 차단이 아니라 확인이라, 응답자가 "이대로 제출"을 고르면 그대로 통과한다.
+  // 되묻기 통과 표시는 "그때 되물었던 문항 목록"의 지문이다 (admin-edit 경고의
+  // adminWarnedSnapshot 과 같은 패턴). boolean 이면 한 번 통과한 뒤로는 응답자가
+  // 되돌아와 다른 문항을 새로 "달라짐"으로 바꿔도 영영 묻지 않는다.
+  // state 가 아니라 ref 인 이유는 "이대로 제출" 핸들러가 곧바로 handleNext 를 다시 부르는데,
+  // state 였다면 그 호출이 아직 커밋되지 않은 값을 읽어 다이얼로그가 다시 열리기 때문이다.
+  const unmodifiedChangedAcknowledgedRef = useRef<string | null>(null);
+  const [showUnmodifiedChangedDialog, setShowUnmodifiedChangedDialog] = useState(false);
+  const unmodifiedChangedQuestions = useMemo(() => {
+    const ids = new Set(
+      collectUnmodifiedChangedQuestionIds(
+        visibleQuestions.filter((q) => traversedQuestionIds.has(q.id)),
+        confirmPriorAnswers,
+        responses,
+      ),
+    );
+    return visibleQuestions.filter((q) => ids.has(q.id));
+  }, [visibleQuestions, traversedQuestionIds, confirmPriorAnswers, responses]);
+  const unmodifiedChangedFingerprint = unmodifiedChangedQuestions.map((q) => q.id).join('|');
+
+  const canProceed = () => {
+    if (!currentStep) return false;
+    // step 내 표시되는 필수 질문 전부가 답변되어야 함.
+    // 변동 확인 대기 문항은 별개 축이라 여기서 세지 않는다 — 잠긴 입력을 두고
+    // "필수 질문에 답변해주세요"를 띄우면 응답자가 따를 수 없다.
+    return currentStepQuestions.every(
+      (q) => awaitingConfirmationIds.has(q.id) || !isQuestionRequired(q) || isQuestionAnswered(q),
+    );
+  };
+  // 하단 안내(데스크톱 문구·모바일 소표시) — 이 스텝에서 필수 게이트에 막힌 뒤에만, 답을
+  // 다 채우면 canProceed 가 참이 되어 즉시 사라진다.
+  const showRequiredNotice = requiredErrorStepIndex === currentStepIndex && !canProceed();
+
+  // admin-edit 전용 — "빈 필수"·형식 불일치 완화(경고 1회 후 통과). 응답자/미리보기/테스트 흐름은
+  // isAdminEdit=false 라 아래 값들이 전혀 쓰이지 않는다(handleNext 분기에서 무시).
+  //
+  // 스텝의 질문 응답값 스냅샷 — 페이지(스텝) 이동 또는 값 변경 시 자연히 달라지므로
+  // "경고 상태 리셋"(요구 4)은 이 스냅샷 불일치 자체로 성립한다. "스텝 이동" 케이스만
+  // 별도 처리가 필요하다 — 같은 스텝으로 되돌아오면 스냅샷이 우연히 같아져 리셋 없이
+  // 재클릭 한 번에 통과해버릴 수 있어서다. useEffect 대신 렌더 중 상태 조정(React 공식
+  // 권장 "Adjusting state when a prop changes" 패턴)으로 처리 — setState-in-effect 경고 회피.
+  const currentStepResponseSnapshot = useMemo(
+    () =>
+      snapshotStepResponses(
+        currentStepQuestions.map((q) => q.id),
+        responses,
+      ),
+    [currentStepQuestions, responses],
+  );
+  const [adminWarnedSnapshot, setAdminWarnedSnapshot] = useState<string | null>(null);
+  const [adminWarnStepIndex, setAdminWarnStepIndex] = useState<number | null>(null);
+  if (isAdminEdit && adminWarnStepIndex !== currentStepIndex) {
+    setAdminWarnStepIndex(currentStepIndex);
+    if (adminWarnedSnapshot !== null) setAdminWarnedSnapshot(null);
+  }
+  const adminStepClassification = useMemo(() => {
+    if (!isAdminEdit) return null;
+    const unansweredIds = currentStepQuestions
+      .filter(
+        (q) =>
+          !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      )
+      .map((q) => q.id);
+    return classifyStepIssues(unansweredIds, numericIssuesByQuestion);
+  }, [
+    isAdminEdit,
+    numericIssuesByQuestion,
+    currentStepQuestions,
+    isQuestionAnswered,
+    isQuestionRequired,
+    awaitingConfirmationIds,
+  ]);
+  // 경고 배너 표시 조건: "방금 첫 클릭으로 경고했고, 그 이후 값/스텝이 그대로인 상태"
+  // — 이 조건이 참인 동안에만 다음 클릭이 통과(bypass)로 이어진다(handleNext 참고).
+  const showAdminRelaxWarning =
+    isAdminEdit &&
+    adminWarnedSnapshot !== null &&
+    adminWarnedSnapshot === currentStepResponseSnapshot &&
+    !!adminStepClassification &&
+    !adminStepClassification.hasBlockingIssue &&
+    adminStepClassification.emptyRequiredCount + adminStepClassification.formatCount > 0;
+  // 경고 배너의 "위치로 이동" 대상 — 첫 미응답 질문(전무) 우선, 없으면 첫 셀/상세/형식 이슈.
+  // handleNext 의 첫 클릭 자동 스크롤과 배너 클릭 스크롤이 같은 대상을 가리키도록 공유한다.
+  const adminFirstRelaxTarget = useMemo(() => {
+    if (!isAdminEdit) return null;
+    const firstUnanswered = currentStepQuestions.find(
+      (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+    );
+    // 비-테이블 상세기입 누락은 firstUnanswered(질문 단위)와 numericIssuesByQuestion(같은
+    // 질문의 required-detail 이슈) 양쪽에 동시에 잡힌다 — 있으면 detailTargetIds 를 붙여
+    // 질문 카드가 아니라 실제 입력란으로 정확히 스크롤한다(기존 Gate A 의 firstIssue 동일 패턴).
+    if (firstUnanswered) {
+      return {
+        questionId: firstUnanswered.id,
+        issue: numericIssuesByQuestion.get(firstUnanswered.id)?.[0],
+      };
+    }
+    const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
+    if (!firstViolatedQuestionId) return null;
+    return {
+      questionId: firstViolatedQuestionId,
+      issue: numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0],
+    };
+  }, [
+    isAdminEdit,
+    numericIssuesByQuestion,
+    currentStepQuestions,
+    isQuestionAnswered,
+    isQuestionRequired,
+    awaitingConfirmationIds,
+  ]);
+
+  // 무중단 갈아타기(티켓 04): create 결과의 versionId 가 알던 값과 다르면(서버 재핀) 호출된다.
+  // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
+  // 구조 생존 판정(티켓 01)으로 걸러 신버전 구조와 비양립인 답만 버린 뒤 안내 문구를 띄운다.
+  // 신버전 질문 목록은 state 커밋을 기다리지 않고 refetchSnapshot 의 반환값을 직접 쓴다.
+  const handleVersionRebase = useCallback(() => {
+    void (async () => {
+      const refetched = await refetchSnapshot();
+      if (!refetched) return; // 재취득 실패 — 기존 화면 유지 (fail-open, refetchSnapshot 이 로깅)
+      setResponses(
+        (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
+      );
+      setRebaseMessage('설문이 업데이트되어 최신 버전으로 이어집니다');
+    })();
+  }, [refetchSnapshot, setResponses]);
+
+  // 첫 답변 INSERT 가드는 훅 내부 동기 ref 전용이라 컴포넌트가 볼 값이 없다(반환하지 않는다).
+  const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
+    useResponseLifecycle({
+      isAdminEdit,
+      isPreview,
+      isCompleted,
+      terminalBlocked: duplicateStatus.kind === 'blocked',
+      adminContext,
+      inviteToken,
+      testToken,
+      isTestSession,
+      testIdentity,
+      hasTestAttemptOwnership,
+      setHasTestAttemptOwnership,
+      loadedSurvey,
+      contactAttrs,
+      priorAnswers,
+      currentStep,
+      currentStepIndex,
+      steps,
+      questions,
+      groups,
+      visibleQuestions,
+      evalCtx,
+      responses,
+      setResponses,
+      sessionId,
+      versionId,
+      onVersionRebase: handleVersionRebase,
+      signals,
+      honeypotRef,
+      currentResponseId,
+      setCurrentResponseId,
+      setPendingResponse,
+      resetResponseState,
+      isRecovering,
+      recoveredDraftSeq,
+      isQuestionAnswered,
+      optionTextsByQuestion: effectiveOptionTextsByQuestion,
+      visibleProgressRef,
+      setHighlightQuestionIds,
+      setDuplicateStatus,
+      setPausedMessage: setRefetchedPausedMessage,
+      setInviteIsInvalid,
+      setIsSubmitting,
+      setCurrentStepIndex,
+      setIsCompleted,
+      setCompletionOutcome,
+      buildOptTextsPayload: buildSubmissionPayload,
+      setNumericErrorStepIndex,
+    });
+
+  // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
+  // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
+  // 하이라이트를 여기서 대신 푼다 — 일반 답변과 같은 즉시성을 주기 위함이다.
+  const handleStepResponse = useCallback(
+    (questionId: string, value: unknown) => {
+      handleResponse(questionId, value);
+      if (questionId !== CHANGE_CONFIRM_KEY) return;
+      const confirmed = readChangeConfirmations({ [CHANGE_CONFIRM_KEY]: value });
+      setHighlightQuestionIds((prev) => {
+        const next = new Set([...prev].filter((id) => !confirmed[id]));
+        return next.size === prev.size ? prev : next;
+      });
+    },
+    [handleResponse, setHighlightQuestionIds],
+  );
+
+  // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
+  // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
+  // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
+  // 일반 답변과 같은 디바운스 draft·이탈 beacon 에 합류하고, '__' 키라 첫 답변
+  // INSERT 트리거는 되지 않는다 (preview/admin-edit 은 flush 계층이 이미 걸러낸다).
+  /**
+   * 이월 값 프리필 — 문항별 변동 확인이 **꺼진** 설문에서 지난 회차 값이 이번 회차 응답으로
+   * 넘어가는 경로다. 켜진 설문은 여기 오지 않는다(그쪽은 응답자가 밝히는 순간 복사한다).
+   *
+   * **지금 단계의 표시되는 문항만** 채운다. 숨은 문항까지 한꺼번에 깔면 앞 문항에서
+   * "해당 없음"을 고른 사람에게 지난 회차 하위 답이 실려 나간다. 뒤늦게 앞 문항이 바뀌어
+   * 하위 문항이 숨겨지면 그 값은 숨은 문항 값 삭제 effect(stripHiddenQuestionValues)가
+   * 응답 상태에서 곧바로 걷어낸다.
+   *
+   * **`setResponses` 를 직접 부르지 않고 응답 쓰기 창구(handleResponse)를 탄다.** 직접 쓰면
+   * 초안 저장 큐에 실리지 않아 서버에 남지 않는다 — 중도 이탈 후 재진입하면 회복이 서버
+   * 값으로 응답 묶음을 통째로 갈아끼우고, 프리필은 지금 단계만 채우므로 이미 지나온
+   * 페이지의 이월 값이 통째로 사라진다. 응답 행 INSERT 도 같은 창구가 맡는다.
+   *
+   * **회복 중이라고 멈추지 않는다.** 프리필이 응답 행을 만들면 회복이 켜지는데, 거기서
+   * 멈추면 그 뒤에 조건이 풀려 드러난 문항이 영영 채워지지 않는다. 회복이 응답 묶음을
+   * 통째로 갈아끼워도 값이 없는 문항은 다음 패스가 다시 채우고, 값이 있는 문항은 건너뛰므로
+   * 응답자가 고친 값을 덮지 않는다. 회복 중 INSERT 중복은 쓰기 창구가 자체 가드로 막는다.
+   *
+   * **이 세션에서 프리필한 문항 id 는 `prefilledQuestionIdsRef` 에 남긴다.** 조건이 다시
+   * 거짓으로 뒤집혔을 때 아래 회수 effect 가 "이 값이 프리필로 들어온 것인가"를 판정하는
+   * 근거다 — 응답자가 손댔는지 여부와 무관하게 회수해야 하므로 값 자체로는 판정할 수 없다.
+   */
+  const prefilledQuestionIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (changeConfirmEnabled) return;
+    // 관리자 편집은 이월 값을 **표시만** 한다. 여기서 프리필이 돌면 관리자가 응답을 열어
+    // 보기만 해도 지난 회차 값이 이번 회차 응답에 깔리고, 제출 시 그대로 저장된다.
+    // (이 화면에도 이월 응답을 싣기 시작하면서 생긴 경계다 — 그 전에는 값이 null 이라
+    // 이 effect 가 저절로 무동작이었다.)
+    if (isAdminEdit) return;
+    if (!prefillSettled) return;
+    // 이월값 조건은 이 단계 밖 문항을 참조할 수 있어(BQ1 이 앞 페이지에 있는 식) 전체
+    // 문항과 평가 컨텍스트를 함께 넘긴다. 채울 대상은 여전히 이 단계의 표시 문항뿐이다.
+    const entries = collectPriorAnswerPrefills(
+      currentStepQuestions,
+      priorAnswers,
+      responses,
+      questions,
+      evalCtx,
+    );
+    for (const entry of entries) {
+      handleResponse(entry.questionId, entry.value);
+      prefilledQuestionIdsRef.current.add(entry.questionId);
+    }
+  }, [
+    changeConfirmEnabled,
+    isAdminEdit,
+    prefillSettled,
+    currentStepQuestions,
+    priorAnswers,
+    responses,
+    questions,
+    evalCtx,
+    handleResponse,
+  ]);
+
+  /**
+   * 이월 값 회수 (Finding A) — 이월값 불러오기 조건이 참이라 깔았던 값이 거짓으로
+   * 뒤집히면 걷어낸다. 프리필은 채우기만 하는 반쪽짜리라 이 effect가 없으면 "이직
+   * 안 함"으로 깔린 작년 회사가 "이직함"으로 고쳐도 그대로 제출된다 — 기능을 만든 이유
+   * 그 자체가 뚫린다.
+   *
+   * **판정 대상은 단계 제한이 없다.** 회수해야 할 문항이 지금 페이지에 없을 수 있다 —
+   * 응답자가 앞 페이지로 돌아가 BQ1을 고치면 하위 문항은 이미 지나온 뒤 페이지에 있다.
+   * 전체 문항 목록을 넘겨 판정한다.
+   *
+   * **프리필과 같은 창구(handleResponse)로 지운다.** 직접 setResponses 를 쓰면 위 프리필
+   * effect 와 같은 이유로 초안 큐에 실리지 않는다.
+   */
+  useEffect(() => {
+    if (changeConfirmEnabled) return;
+    // 깐 적이 없으니 회수할 것도 없다 — 프리필과 같은 경계다.
+    if (isAdminEdit) return;
+    if (!prefillSettled) return;
+    const retractions = collectPriorAnswerRetractions(
+      questions,
+      priorAnswers,
+      responses,
+      questions,
+      prefilledQuestionIdsRef.current,
+      evalCtx,
+    );
+    for (const questionId of retractions) {
+      handleResponse(questionId, undefined);
+      prefilledQuestionIdsRef.current.delete(questionId);
+    }
+  }, [
+    changeConfirmEnabled,
+    isAdminEdit,
+    prefillSettled,
+    questions,
+    priorAnswers,
+    responses,
+    evalCtx,
+    handleResponse,
+  ]);
+
+  const lastSyncedOptionTextsRef = useRef(optionTexts);
+  useEffect(() => {
+    if (lastSyncedOptionTextsRef.current === optionTexts) return;
+    lastSyncedOptionTextsRef.current = optionTexts;
+    if (Object.keys(optionTexts).length === 0) return;
+    handleResponse('__optTexts__', optionTexts);
+  }, [optionTexts, handleResponse]);
+
+  // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
+  // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
+  // 키보드가 닫히지 못하고 빈 패널로 고착된다 (레이아웃이 화면 절반에 갇히고
+  // 아래가 빈 화면으로 남는 증상). 전환 전에 명시적으로 blur 해 키보드를
+  // 정리한다 — 입력이 아직 DOM 에 있는 시점이어야 효과가 있다.
+  const blurActiveInput = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  };
+
+  /**
+   * 「다음」이 막혔을 때의 착지 — 그 문항의 검증 안내(CONTEXT.md)로 간다. 안내는 방금 세운
+   * 상태(필수·숫자·변동 확인 오류 스텝)로 그려지므로 이번 렌더에는 아직 없다 — 두 프레임 뒤에
+   * 찾는다. 위반 셀·문항 카드로 뛰어들지 않는다(셀 이동은 안내의 「위치로 이동」 몫).
+   */
+  const landOnValidationNotice = (questionId: string) => {
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => scrollToValidationNotice(questionId)),
+    );
+  };
+
+  const handleNext = async () => {
+    blurActiveInput();
+    const unansweredCurrent = currentStepQuestions.filter(
+      (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+    );
+
+    // admin-edit 전용(요구 1~4/6) — 완화 대상(빈 필수·형식 불일치)만 있고 차단형 위반이
+    // 없으면 경고 1회 후 통과시킨다. isAdminEdit=false 인 응답자/미리보기/테스트 흐름은 이 블록이 항상
+    // 스킵되어 아래 기존 Gate A/B 가 그대로(무변경) 적용된다.
+    let bypassEmptyRequired = false;
+    if (
+      isAdminEdit &&
+      adminStepClassification &&
+      !adminStepClassification.hasBlockingIssue &&
+      adminStepClassification.emptyRequiredCount + adminStepClassification.formatCount > 0
+    ) {
+      if (adminWarnedSnapshot === currentStepResponseSnapshot) {
+        // 같은 페이지, 값 변경 없이 연속 두 번째 클릭 — 완화하고 진행.
+        bypassEmptyRequired = true;
+        setAdminWarnedSnapshot(null);
+      } else {
+        // 첫 클릭(또는 스텝 이동·값 변경 뒤 재클릭) — 경고만 하고 막는다.
+        setAdminWarnedSnapshot(currentStepResponseSnapshot);
+        if (adminFirstRelaxTarget) {
+          const { questionId: targetQuestionId, issue: targetIssue } = adminFirstRelaxTarget;
+          setHighlightQuestionIds(new Set([targetQuestionId]));
+          scrollToIssue({
+            questionId: targetQuestionId,
+            detailTargetIds: targetIssue?.detailTargetIds,
+            cellInstanceIds: buildRowWiseCellInstanceIds(
+              questions.find((question) => question.id === targetQuestionId)?.tableRowsData,
+              targetIssue?.cellIds,
+            ),
+            cellIds: targetIssue?.cellIds,
+          });
+        }
+        return;
+      }
+    } else if (isAdminEdit && adminWarnedSnapshot !== null) {
+      // 차단형 위반이 새로 생겼거나 이슈가 모두 해소됨 — 경고 상태 정리.
+      setAdminWarnedSnapshot(null);
+    }
+
+    // 변동 확인 게이트(추적조사) — 이월 값이 있는 문항의 "같음/달라짐"을 밝히지 않으면
+    // 넘어갈 수 없다. 필수·숫자 게이트보다 **앞**에 둔다: 그 문항들은 잠겨 있어 필수·숫자
+    // 검증이 요구하는 조작 자체가 불가능하고(위 awaitingConfirmationIds 제외 참조),
+    // 밝히는 순간 이월 값이 복사돼 두 검증의 대상으로 돌아온다.
+    // admin-edit 완화(bypassEmptyRequired)는 빈 필수 전용이라 이 게이트를 풀지 않는다 —
+    // 애초에 admin-edit 에는 이월 응답이 실리지 않아 목록이 비어 있다.
+    const firstUnconfirmed = unconfirmedChangeQuestionIds[0];
+    if (firstUnconfirmed) {
+      setHighlightQuestionIds(new Set([firstUnconfirmed]));
+      setChangeConfirmErrorStepIndex(currentStepIndex);
+      landOnValidationNotice(firstUnconfirmed);
+      return;
+    }
+
+    if (!bypassEmptyRequired && unansweredCurrent.length > 0) {
+      const firstUnanswered = unansweredCurrent[0];
+      if (!firstUnanswered) return;
+      // 미답 필수 전부를 강조한다 — 첫 문항만 짚으면 답할 때마다 다음 것이 하나씩 나타나
+      // 응답자가 몇 번 더 막힐지 알 수 없다. 스크롤·숫자 이슈 판정은 첫 문항 기준 그대로.
+      setHighlightQuestionIds(new Set(unansweredCurrent.map((q) => q.id)));
+      setRequiredErrorStepIndex(currentStepIndex);
+      const firstIssue = numericIssuesByQuestion.get(firstUnanswered.id)?.[0];
+      if (firstIssue) {
+        setNumericErrorStepIndex(currentStepIndex);
+      }
+      landOnValidationNotice(firstUnanswered.id);
+      return;
+    }
+
+    // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 배너만 표시한다.
+    // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당(자동 스크롤은 표가 커서 어중간하게 멈침).
+    if (!bypassEmptyRequired && numericIssuesByQuestion.size > 0) {
+      const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
+      if (firstViolatedQuestionId) {
+        setHighlightQuestionIds(new Set([firstViolatedQuestionId]));
+        landOnValidationNotice(firstViolatedQuestionId);
+      }
+      setNumericErrorStepIndex(currentStepIndex);
+      return;
+    }
+
+    // 제출 직전 되묻기(추적조사) — 차단이 아니라 확인이다. 다이얼로그에서 "이대로 제출"을
+    // 고르면 acknowledged 가 서고 같은 클릭 경로가 그대로 이어진다.
+    if (
+      isLastVisibleStep &&
+      unmodifiedChangedAcknowledgedRef.current !== unmodifiedChangedFingerprint &&
+      unmodifiedChangedQuestions.length > 0
+    ) {
+      setShowUnmodifiedChangedDialog(true);
+      return;
+    }
+
+    const nextIndex = resolveNextStepIndex();
+
+    // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
+    // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.
+    // 아래 flush 와 병렬로 왕복시켜 전환 대기 시간이 직렬 2왕복이 되지 않게 한다 —
+    // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
+    let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
+      null;
+    if (!quotaCheckedRef.current && allQuotaQuestionsAnswered([...quotaGateIds], responses)) {
+      // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
+      // 서버 확인은 최대 1회만 시도된다.
+      quotaCheckedRef.current = true;
+      quotaPromise = (async () => {
+        // 낙관 전환으로 응답 행 생성(첫 답변 시 백그라운드 시작)보다 먼저 이 클릭에
+        // 도달할 수 있다 — id 가 없다고 판정을 건너뛰면 하드 쿼터가 우회되므로,
+        // 응답당 최대 1회뿐인 이 판정 클릭에서만 생성 완료를 기다려 id 를 확보한다.
+        const responseId = currentResponseId ?? (await waitForResponseId());
+        if (!responseId) {
+          // 생성이 시작조차 안 됐다(첫 답변 전) — 판정을 보류하고 플래그를 되돌려
+          // 다음 클릭에서 재시도한다.
+          quotaCheckedRef.current = false;
+          return null;
+        }
+        // try 밖에서 계산 — React Compiler 는 try 블록 안의 값 블록(?. / ??)을 다루지 못한다.
+        const quotaSurveyId = loadedSurvey?.id ?? '';
+        try {
+          return await client.quota.check({
+            responseId,
+            surveyId: quotaSurveyId,
+            answers: responses,
+          });
+        } catch (err) {
+          console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+          return null;
+        }
+      })();
+    }
+
+    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
+    // 백그라운드 체크포인트로 발사만 하고 전환은 기다리지 않는다(낙관 전환) —
+    // 답변 직후 5초 디바운스 안에 "다음"을 누르는 지배적 패턴에서 매 스텝이
+    // 저장 왕복만큼 느려지던 것을 없앤다. 실패해도 pending 이 유지되어 다음
+    // flush/이탈 beacon/최종 complete 에 합류하므로 유실 경로가 없고,
+    // enqueueFlush 직렬화 체인 + 서버 seq 가드가 순서/중복을 방어한다.
+    if (nextIndex !== -1) void flushPendingAnswersInBackground();
+
+    if (quotaPromise) {
+      // 쿼터 판정(응답당 최대 1회)만은 기다린다 — 낙관 전환하면 마감 응답자에게
+      // 다음 문항을 보여줬다가 차단 화면으로 갈아치우는 어색한 상태가 생긴다.
+      const res = await quotaPromise;
+      if (res?.blocked) {
+        setQuotaClosedMessage(res.closedMessage);
+        setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+        return;
+      }
+    }
+
+    setStepHistory((prev) => [...prev, currentStepIndex]);
+
+    if (nextIndex === -1) {
+      handleSubmit();
+      return;
+    }
+
+    setCurrentStepIndex(nextIndex);
+  };
+
+  const handlePrevious = useCallback(() => {
+    if (stepHistory.length === 0) return;
+    // handleNext 의 blurActiveInput 과 동일 사유 — 포커스 잔류 입력의 키보드 정리
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+    const lastIndex = stepHistory.length - 1;
+    const previousStepIndex = stepHistory[lastIndex];
+    if (previousStepIndex !== undefined && steps[previousStepIndex]) {
+      setCurrentStepIndex(previousStepIndex);
+      setStepHistory((prev) => prev.slice(0, lastIndex));
+    }
+  }, [stepHistory, steps]);
+
+  // 브라우저 뒤로가기 → 이전 step 이동
+  const hasResponses = Object.keys(responses).length > 0;
+  // popstate 시점의 최신 stepHistory/handlePrevious 를 읽는다 — deps 에 넣으면 stepHistory/steps
+  // 변경마다 리스너가 재등록되고 pushState 가드가 재평가되므로 effect event 로 분리한다.
+  const onPopState = useEffectEvent(() => {
+    if (stepHistory.length > 0) {
+      handlePrevious();
+    }
+  });
+  useEffect(() => {
+    if (!loadedSurvey || isCompleted) return;
+
+    // 현재 엔트리가 이미 이 스텝이면 push 생략 — StrictMode(dev) 이중 실행이 같은 스텝
+    // 엔트리를 2개 쌓아 첫 뒤로가기가 무반응이 되는 것과, popstate 복귀 직후 재실행이
+    // 중복 엔트리를 다시 쌓는 것을 함께 막는다 (실행 횟수와 무관하게 스텝당 1개 보장).
+    const currentState = window.history.state as { stepIndex?: number } | null;
+    if (currentState?.stepIndex !== currentStepIndex) {
+      window.history.pushState({ stepIndex: currentStepIndex }, '');
+    }
+
+    const handlePopState = () => onPopState();
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [loadedSurvey, currentStepIndex, isCompleted]);
+
+  // 페이지 이탈 시 경고
+  useEffect(() => {
+    if (isPreview || !hasResponses || isCompleted) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Chrome/Edge/Firefox 는 returnValue 를 요구
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isPreview, hasResponses, isCompleted]);
+
+  // 중복 검사 진행 중
+  if (duplicateStatus.kind === 'checking') {
+    return (
+      <div className="text-muted-foreground mx-auto flex min-h-screen items-center justify-center text-sm">
+        확인 중...
+      </div>
+    );
+  }
+
+  // 중복 응답 차단 화면
+  if (duplicateStatus.kind === 'blocked') {
+    if (duplicateStatus.reason === 'invalid_test_token') {
+      return <InvalidTestLinkScreen />;
+    }
+    return (
+      <AlreadyRespondedView
+        reason={duplicateStatus.reason}
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={
+          duplicateStatus.reason === 'quota_closed'
+            ? quotaClosedMessage
+            : duplicateStatus.reason === 'survey_paused'
+              ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
+              : null
+        }
+      />
+    );
+  }
+
+  if (questions.length === 0 || steps.length === 0 || !currentStep) {
+    return <SurveyEmptyScreen onGoHome={() => router.push('/')} />;
+  }
+
+  // 완료 화면
+  if (isCompleted) {
+    // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
+    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome);
+    return (
+      <SurveyCompletedScreen
+        title={isPreview ? '설문 확인 완료' : screen.title}
+        thankYouMessage={isPreview ? '입력 내용은 저장되지 않았습니다.' : screen.message}
+        showCompletedTime={!isPreview}
+      />
+    );
+  }
+
+  // 조사표를 끼고 답하는 설문의 좁은 화면 안내 — **설문 전체**를 막는다. 분할 페이지에
+  // 도달했을 때만 막으면 절반쯤 답한 시간이 버려진다. 판정은 분할과 같은 술어를 쓴다 —
+  // 조사표를 올렸지만 영역을 아직 안 그린 설문은 갈라질 페이지가 없어 막을 이유도 없다.
+  // 이미 응답했거나 완료한 사람에게는 그 화면이 먼저 뜨는 것이 맞아 그 뒤에 둔다.
+  //
+  // **이 스펙이 만드는 유일한 조건 분기가 이 한 줄의 예외다.** 관리자 응답 편집
+  // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
+  // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
+  if (isDocumentSurvey && isTooNarrowForSplit && !isAdminEdit) {
+    return <DesktopOnlyScreen />;
+  }
+
+  // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
+  // 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 도 포함한다 (rendersAsTable)
+  // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
+  //
+  // 아래 컨테이너의 폭 전환(300ms)은 max-width 를 애니메이션하므로 매 프레임 clientWidth 가
+  // 바뀐다. 표의 useElementWidth 가 이를 그대로 setState 로 흘리면 표가 프레임마다 리렌더되어
+  // 다음 버튼이 눌린 뒤 화면이 늦게 잡힌다. 그래서 그 훅에서 측정을 코얼레싱한다
+  // (use-element-width.ts). 전환 시간을 늘릴 때 그쪽 창 크기도 함께 보라.
+  const containerMaxWidth = resolveResponseContainerWidth(
+    currentStep.items.map((i) => i.question),
+    { forceWide: loadedSurvey.settings.forceWideLayout },
+  );
+  // 미리보기도 '다음'으로 통일 — '확인 완료' 라벨은 마지막 페이지에서만 나타나
+  // 버튼이 바뀐 것처럼 보이는 혼란만 줬다 (2026-08-12 피드백).
+  const submitLabel = '다음';
+  const submittingLabel = '처리 중...';
+
+  // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는
+  // 화면에서 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지"
+  // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
+  const progressBand = isDocumentSurvey ? undefined : (
+    <>
+      <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
+        {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+      </div>
+      {/* 연속형 프로그레스바 */}
+      <div className="mt-2">
+        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
+            style={{
+              width: `${(currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100}%`,
+            }}
+          />
+        </div>
+        {/* 「필수 N개 남음」은 2026-09-15 에 뺐다 — 어느 문항인지 알려주지 않는 숫자라 응답자를
+            조급하게만 만들었고, 미충족은 「다음」 뒤 문항 아래 검증 안내가 짚는다. */}
+        {isMobile && (
+          <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {answeredCount}/{traversedQuestionIds.size} 응답 완료
+            </span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <ContactAttrsProvider
+      attrs={contactAttrs}
+      quotes={answerQuotes}
+      lookups={loadedSurvey?.lookups ?? []}
+    >
+      <PriorAnswersProvider
+        answers={priorAnswers}
+        confirmAnswers={confirmPriorAnswers}
+        highlightAnswers={highlightPriorAnswers}
+        waveLabel={control?.priorWaveLabel}
+        changeConfirmEnabled={changeConfirmEnabled}
+      >
+        <UnmodifiedChangedDialog
+          open={showUnmodifiedChangedDialog}
+          questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
+          waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
+          onCancel={() => setShowUnmodifiedChangedDialog(false)}
+          onConfirm={() => {
+            setShowUnmodifiedChangedDialog(false);
+            unmodifiedChangedAcknowledgedRef.current = unmodifiedChangedFingerprint;
+            void handleNext();
+          }}
+        />
+        <FormulaEvalProvider value={formulaCtx}>
+          <SurveyResponseLayout
+            containerMaxWidth={containerMaxWidth}
+            reserveBottomNavSpace={isMobile}
+            documentPane={
+              isSplit && documentView ? (
+                <ResponseDocumentPane
+                  url={documentView.url}
+                  pageCount={documentView.pageCount}
+                  anchors={documentView.anchors}
+                  focus={anchorFocus}
+                  labelOf={anchorLabelOf}
+                  onOwnerSelect={handleAnchorOwnerSelect}
+                />
+              ) : undefined
+            }
+            chrome={
+              /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
+              <HoneypotField ref={honeypotRef} />
+            }
+            header={
+              <SurveyResponseHeader
+                title={loadedSurvey.title}
+                description={loadedSurvey.description}
+                responseHeader={loadedSurvey.settings.responseHeader}
+                showBranding={currentVisibleStepNumber <= 1}
+              />
+            }
+            progress={progressBand}
+            bottomNav={
+              isMobile ? (
+                <MobileBottomNav
+                  keyboardOpen={keyboardOpen}
+                  currentStepNumber={currentVisibleStepNumber}
+                  totalStepCount={totalVisibleStepCount}
+                  hasPrevious={hasPreviousDisplayable}
+                  isLastStep={isLastVisibleStep}
+                  isSubmitting={isSubmitting}
+                  submitLabel={submitLabel}
+                  submittingLabel={submittingLabel}
+                  onPrevious={handlePrevious}
+                  onNext={handleNext}
+                />
+              ) : undefined
+            }
+          >
+            {reeditNotice && (
+              <div
+                role="status"
+                className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+                  해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+                </div>
+              </div>
+            )}
+            {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
+            {rebaseMessage && (
+              <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
+            )}
+            {inviteIsInvalid && (
+              <div
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
+              </div>
+            )}
+            {isSplit ? (
+              /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+              <DemandChecklist
+                items={currentStep.items.filter((item) =>
+                  currentStepQuestions.some((q) => q.id === item.question.id),
+                )}
+                groups={groups}
+                responses={responses}
+                questions={questions}
+                onResponse={handleResponse}
+                highlightQuestionIds={highlightQuestionIds}
+                requiredMessageQuestionIds={requiredMessageQuestionIds}
+                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                numericIssues={visibleNumericIssues}
+                onQuestionFocus={selectAnchorQuestion}
+                onGroupSelect={selectAnchorGroup}
+                activeGroupId={activeAnchorGroupId}
+                focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
+              />
+            ) : (
+              <PageStepView
+                step={currentStep}
+                responses={responses}
+                questions={questions}
+                groups={groups}
+                evalCtx={evalCtx}
+                onResponse={handleStepResponse}
+                highlightQuestionIds={highlightQuestionIds}
+                requiredMessageQuestionIds={requiredMessageQuestionIds}
+                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                numericIssues={visibleNumericIssues}
+              />
+            )}
+
+            {/* 데스크톱 네비게이션 */}
+            <div className="mt-8 hidden items-center justify-between md:flex">
+              <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                이전
+              </Button>
+
+              {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+              <div
+                className="px-4 text-sm text-gray-500"
+                role={showAdminRelaxWarning ? 'alert' : undefined}
+              >
+                {showAdminRelaxWarning && adminStepClassification ? (
+                  <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                    <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
+                    {adminFirstRelaxTarget && (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                        onClick={() => {
+                          const { questionId: targetQuestionId, issue: targetIssue } =
+                            adminFirstRelaxTarget;
+                          scrollToIssue({
+                            questionId: targetQuestionId,
+                            detailTargetIds: targetIssue?.detailTargetIds,
+                            cellInstanceIds: buildRowWiseCellInstanceIds(
+                              questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                              targetIssue?.cellIds,
+                            ),
+                            cellIds: targetIssue?.cellIds,
+                          });
+                        }}
+                      >
+                        위치로 이동
+                      </button>
+                    )}
+                  </span>
+                ) : (
+                  showRequiredNotice && (
+                    <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+                  )
+                )}
+              </div>
+
+              {isLastVisibleStep ? (
+                <Button onClick={handleNext} disabled={isSubmitting}>
+                  {isSubmitting ? submittingLabel : submitLabel}
+                  {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
+                </Button>
+              ) : (
+                <Button onClick={handleNext}>
+                  다음
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </SurveyResponseLayout>
+        </FormulaEvalProvider>
+      </PriorAnswersProvider>
+    </ContactAttrsProvider>
+  );
+}

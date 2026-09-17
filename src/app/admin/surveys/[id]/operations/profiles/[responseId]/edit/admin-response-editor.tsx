@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { client } from '@/shared/lib/rpc';
-import type { SurveyVersionSnapshot } from '@/db/schema';
-import type { SurveyDocumentView } from '@/features/survey-builder/domain/survey-read';
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 interface Props {
   surveyId: string;

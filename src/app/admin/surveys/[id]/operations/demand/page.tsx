@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
-import { DemandSummaryTable } from '@/components/operations/demand/demand-summary-table';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
-import { getDemandSummary } from '@/lib/operations/demand-summary.server';
+import { DemandSummaryTable } from '@/features/operations/demand/demand-summary-table';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { getDemandSummary } from '@/server/operations/services/demand-summary';
 
 export const metadata: Metadata = {
   title: '현황 - 문항 수요',

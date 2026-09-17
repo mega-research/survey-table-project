@@ -11,9 +11,14 @@ import { repeatIndexOf } from '@/lib/question/row-repeat';
 import type { Question } from '@/types/survey';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
-/** 질문 id → 실제로 값이 들어간 최대 벌 번호 (반복 블록이 있는 질문만 담긴다) */
-export type UsedRepeatCounts = ReadonlyMap<string, number>;
-
+/**
+ * 응답 한 건에서 이 스캔이 보는 부분만 추린 모양 — 이름이 아니라 구조만 요구한다.
+ * 제품 코드 호출부 세 곳의 행 타입이 서로 다르기 때문이다(전수):
+ * 엑셀 워크북의 `RawExportResponseRow`(`raw-workbook.ts`), sav 빌더의
+ * `SurveySubmission`(`lib/spss/sav-builder.ts`), 그리고 Raw 내보내기 라우트가 SQL 결과로
+ * 그 자리에서 만드는 리터럴(`app/api/surveys/[surveyId]/export/raw-export-load.ts` —
+ * 도메인 타입이 아예 없다).
+ */
 interface SubmissionLike {
   questionResponses: Record<string, unknown>;
 }
@@ -32,6 +37,11 @@ export function repeatQuestionIds(
     .map((question) => question.id);
 }
 
+/**
+ * 질문 id → 내보낼 마지막 벌 번호 (반복 블록이 있는 질문만 담긴다).
+ * 값이 들어간 최대 벌 번호이되 **하한이 1** 이다 — 아무도 채우지 않은 표라도 1벌은 열을 낸다.
+ * 아예 빈 표가 열 없이 사라지면 그 문항이 내보내기에서 통째로 증발한 것처럼 보이기 때문이다.
+ */
 export function collectUsedRepeatCounts(
   questions: readonly Pick<Question, 'id' | 'tableRowsData'>[],
   submissions: readonly SubmissionLike[],

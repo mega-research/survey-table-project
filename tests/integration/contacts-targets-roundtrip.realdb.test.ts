@@ -23,12 +23,12 @@ import {
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
 } from '@/db/schema';
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
-import { listContactsForSurvey } from '@/lib/operations/contacts.server';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ORPCContext } from '@/server/context';
 
-import { columns } from '@/features/contacts/server/procedures/columns';
-import { targets } from '@/features/contacts/server/procedures/targets';
+import { columns } from '@/server/contacts/procedures/columns';
+import { targets } from '@/server/contacts/procedures/targets';
 
 // prod 방어선: DATABASE_URL이 로컬이 아니면 전체 suite 스킵
 const dbUrl = process.env['DATABASE_URL'] ?? '';

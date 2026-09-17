@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { findTableAtSelection } from '@/lib/tiptap/find-table';
+import { findTableAtSelection } from '@/components/ui/rich-text-editor/tiptap/find-table';
 import { normalizeCellHexColor } from '@/utils/cell-style';
 
 import { FileAttachmentContextToolbar } from './file-attachment-context-toolbar';

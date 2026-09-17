@@ -1,0 +1,415 @@
+import 'server-only';
+
+import { blindIndex } from '@/lib/crypto/blind';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
+import {
+  FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
+  FILTER_SOURCE,
+  HEADER_FILTER_MODES,
+  HEADER_FILTER_VALUE_SEPARATOR,
+  MAIL_FILTER_VALUES,
+  WEB_FILTER_VALUES,
+  parseIdListToken,
+  placeholderFor as sharedPlaceholderFor,
+  type ColumnCandidateWithPii,
+  type CombineOp,
+  type FilterClause,
+  type FilterCondition,
+  type HeaderFilterMode,
+} from '@/lib/operations/filter-shared';
+import {
+  hasLeadingZeroToken,
+  parseIdListInput,
+  SINGLE_COLUMN_ID_LIST_MAX,
+} from '@/lib/operations/range-list';
+
+export type ColumnCandidate = ColumnCandidateWithPii;
+
+/** 조사 대상용 — attrs.* fallback 은 '검색어' (위젯 분기 있어 일반화). */
+export function placeholderFor(source: string): string {
+  return sharedPlaceholderFor(source);
+}
+
+/**
+ * 전체 검색 idlist 전개 상한 — 범위 토큰 수 × 표시 attrs 컬럼 수.
+ * 조건당 바인드 파라미터 ~4개 기준으로 65,535 한계 대비 충분한 여유.
+ */
+const MAX_ALL_RANGE_EXPANSION = 5000;
+
+function toArray(v: string[] | string | undefined): string[] {
+  if (v === undefined) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+/**
+ * 페이지 전용 source 확장 훅 — 응답 내역(idx/browser/status)처럼 컨택 밖 컬럼을
+ * 같은 절 파이프라인에 태우기 위한 이음새. SQL 쪽 짝은 ClauseColumnRefs.extra.
+ */
+export interface ParseExtraHooks {
+  /** 검색바 절 — condition 반환 시 그 절로 확정, null 이면 공용 분기 진행. */
+  clause?: (col: string, trimmed: string) => FilterCondition | null;
+  /** 전체(system.all) 전개에 덧붙일 페이지 전용 하위 조건. */
+  allSubConditions?: (trimmed: string) => FilterCondition[];
+  /** 헤더 필터 절 — condition 반환 시 그 절로 확정, null 이면 공용 분기 진행. */
+  header?: (col: string, mode: HeaderFilterMode, hv: string) => FilterCondition | null;
+  /**
+   * `list:<uuid>` 토큰 → 저장된 ID 목록. 페이지/서비스가 URL 의 q 에서 토큰을 골라
+   * loadIdListsForValues 로 미리 읽어 넘긴다 (파서는 동기). 없는 토큰은 0건으로 접힌다.
+   */
+  idLists?: ReadonlyMap<string, number[]>;
+}
+
+/**
+ * `list:<uuid>` 토큰이면 저장된 목록으로 idlist 절. 토큰이 아니면 null.
+ * 모르는 토큰(삭제된 목록·타 설문)은 빈 ranges → SQL FALSE — 텍스트 검색으로 새지 않는다.
+ */
+function idListTokenCondition(
+  col: string,
+  trimmed: string,
+  extra?: ParseExtraHooks,
+): FilterCondition | null {
+  const token = parseIdListToken(trimmed);
+  if (!token) return null;
+  const ids = extra?.idLists?.get(token.id) ?? [];
+  return {
+    source: col,
+    mode: 'idlist',
+    value: trimmed,
+    ranges: ids.map((n) => ({ from: n, to: n })),
+  };
+}
+
+export function parseClausesFromUrl(
+  cols: string[] | string | undefined,
+  qs: string[] | string | undefined,
+  ops: string[] | string | undefined,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
+): FilterClause[] {
+  const colsArr = toArray(cols);
+  const qsArr = toArray(qs);
+  const opsArr = toArray(ops);
+  const len = Math.min(colsArr.length, qsArr.length);
+  if (len === 0) return [];
+  const clauses: FilterClause[] = [];
+  for (let i = 0; i < len; i++) {
+    const col = colsArr[i];
+    const q = qsArr[i];
+    if (col === undefined || q === undefined) continue;
+    const clause = buildClause(col, q, opsArr[i] ?? '', candidates, resultCodes, extra);
+    if (!clause) continue;
+    // 출력 첫 절은 항상 op=null (URL 첫 절이 drop 되어도 invariant 보장).
+    clauses.push({
+      condition: clause.condition,
+      op: clauses.length === 0 ? null : clause.op,
+    });
+  }
+  return clauses;
+}
+
+/**
+ * 헤더 필터 URL(hcol[]/hm[]/hv[]) → FilterClause[]. 전부 AND 결합 (첫 절만 op=null).
+ *
+ * 엑셀 오토필터 시맨틱: 컬럼 내 OR(in 값 목록), 컬럼 간 AND.
+ * - attrs.*: in(구분자 조인 값 목록) 또는 text(고카디널리티 부분검색 폴백)
+ * - pii.*: exact 만 (blind index 전문 일치)
+ * - system.contact_result: in — 유효 결과코드 + "결과 없음" 센티널만 통과
+ * - system.web: in — 'true'/'false' 만 통과
+ * 같은 컬럼이 중복 등장하면 마지막 항목이 이긴다 (드롭다운 재적용 시나리오).
+ * 검증 실패 절은 silent drop (URL 직접 조작 가드).
+ */
+export function parseHeaderFiltersFromUrl(
+  hcols: string[] | string | undefined,
+  hms: string[] | string | undefined,
+  hvs: string[] | string | undefined,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
+): FilterClause[] {
+  const colsArr = toArray(hcols);
+  const modesArr = toArray(hms);
+  const valuesArr = toArray(hvs);
+  const len = Math.min(colsArr.length, modesArr.length, valuesArr.length);
+  if (len === 0) return [];
+
+  // 같은 컬럼 중복 → 마지막이 이김.
+  const bySource = new Map<string, FilterCondition>();
+  for (let i = 0; i < len; i++) {
+    const col = colsArr[i];
+    const modeRaw = modesArr[i];
+    const hv = valuesArr[i];
+    if (col === undefined || modeRaw === undefined || hv === undefined) continue;
+    if (!(HEADER_FILTER_MODES as readonly string[]).includes(modeRaw)) continue;
+    const mode = modeRaw as HeaderFilterMode;
+    const condition =
+      extra?.header?.(col, mode, hv) ??
+      buildHeaderCondition(col, mode, hv, candidates, resultCodes);
+    if (!condition) continue;
+    bySource.set(col, condition);
+  }
+
+  return [...bySource.values()].map((condition, idx) => ({
+    condition,
+    op: idx === 0 ? null : ('AND' as const),
+  }));
+}
+
+function buildHeaderCondition(
+  col: string,
+  mode: HeaderFilterMode,
+  hv: string,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+): FilterCondition | null {
+  const candidate = candidates.find((c) => c.source === col);
+  if (!candidate) return null;
+
+  if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
+    if (mode === 'in') {
+      const raw = splitHeaderValues(hv);
+      // 빈 값 제외 센티널은 토글이 단독으로만 만든다 — 다른 값과 섞여 오면 값으로 본다.
+      if (raw.length === 1 && raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
+      // 센티널은 값이 아니라 플래그로 승격. 같은 문자열의 실제 값은 distinct 조회가
+      // 선택지에서 빼두므로 여기서 예외를 둘 필요가 없다 (FILTER_NONE_VALUE 주석 참조).
+      const distinct = raw.filter((v) => v !== FILTER_NONE_VALUE);
+      const includeNull = distinct.length !== raw.length;
+      if (distinct.length === 0 && !includeNull) return null;
+      return {
+        source: col,
+        mode: 'in',
+        value: '',
+        values: distinct,
+        ...(includeNull ? { includeNull: true } : {}),
+      };
+    }
+    if (mode === 'text') {
+      const trimmed = hv.trim();
+      if (trimmed.length === 0) return null;
+      // 헤더 필터 텍스트 폴백에서도 범위 문법은 숫자 범위 검색으로 승격.
+      return attrsTextOrIdlistCondition(col, trimmed);
+    }
+    return null;
+  }
+
+  if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
+    // pii 는 blind index 라 distinct 열거가 불가능해 체크박스가 없다. 유일한 예외가
+    // "값 없음"/"값 있음" 으로, 값 비교 없이 행 부재만 보면 되므로 in 모드 + 센티널로 들어온다.
+    if (mode === 'in') {
+      const raw = splitHeaderValues(hv);
+      if (raw.length !== 1) return null;
+      if (raw[0] === FILTER_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], includeNull: true };
+      }
+      if (raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
+      return null;
+    }
+    if (mode !== 'exact' || !candidate.piiType) return null;
+    const trimmed = hv.trim();
+    if (trimmed.length === 0) return null;
+    const bi = blindIndex(candidate.piiType, trimmed);
+    if (!bi) return null;
+    return { source: col, mode: 'exact', value: trimmed, blindIndex: bi };
+  }
+
+  if (col === FILTER_SOURCE.CONTACT_RESULT) {
+    if (mode !== 'in') return null;
+    const valid = new Set(resultCodes.map((rc) => rc.code));
+    const raw = splitHeaderValues(hv);
+    // 센티널이 항상 이긴다 — 같은 이름의 코드는 UI 가 선택지에서 빼둔다.
+    const includeNull = raw.includes(FILTER_NONE_VALUE);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE && valid.has(v));
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
+  }
+
+  if (col === FILTER_SOURCE.WEB) {
+    if (mode !== 'in') return null;
+    const values = splitHeaderValues(hv).filter((v) => WEB_FILTER_VALUES.has(v));
+    if (values.length === 0) return null;
+    return { source: col, mode: 'in', value: '', values };
+  }
+
+  if (col === FILTER_SOURCE.EMAIL) {
+    if (mode !== 'in') return null;
+    const values = splitHeaderValues(hv).filter((v) => MAIL_FILTER_VALUES.has(v));
+    if (values.length === 0) return null;
+    return { source: col, mode: 'in', value: '', values };
+  }
+
+  return null;
+}
+
+/**
+ * 선행 0 이 붙은 숫자 토큰("010", "007-010")이 하나라도 있는 입력.
+ * 값 자체가 자릿수로 의미를 갖는 코드(휴대폰 앞자리·우편번호)라 숫자로 접으면
+ * "010" 이 10 이 되어 원래 찾던 행이 사라진다 — 이런 입력은 숫자 해석을 포기한다.
+ */
+/**
+ * attrs 검색어 해석 — 숫자 문법이면 idlist(숫자 매칭), 아니면 text(부분검색).
+ *
+ * 숫자 문법 판정: parseIdListInput 통과 + 선행 0 토큰 없음.
+ * - "1-10, 12" → 범위/목록 숫자 매칭
+ * - "1" → 숫자 1 인 값만 (부분검색이면 1044 까지 걸려 연번 검색이 무의미해진다)
+ *
+ * 단일 숫자에는 textFallback 을 붙인다 — 값이 순수 정수가 아닌 컬럼("A1", "서울1")은
+ * 종전대로 부분검색으로 걸린다. 즉 바뀌는 건 "값이 숫자인 행은 숫자로 비교" 하나뿐이다.
+ * 범위/목록 문법은 종전대로 숫자 값에만 걸린다 (텍스트 폴백 없음).
+ */
+function attrsTextOrIdlistCondition(
+  col: string,
+  trimmed: string,
+  extra?: ParseExtraHooks,
+): FilterCondition {
+  const fromToken = idListTokenCondition(col, trimmed, extra);
+  if (fromToken) return fromToken;
+  // 단일 컬럼이라 전체 검색의 컬럼 곱연산 상한(200)이 아니라 인라인 상한(2,000)을 쓴다.
+  const ranges = hasLeadingZeroToken(trimmed)
+    ? null
+    : parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
+  if (ranges !== null) {
+    // 단일 숫자 하나만 텍스트 폴백 — 목록/범위(붙여넣기 포함)는 숫자 값에만 건다.
+    const isSingleNumber = ranges.length === 1 && ranges[0]!.from === ranges[0]!.to;
+    return {
+      source: col,
+      mode: 'idlist',
+      value: trimmed,
+      ranges,
+      ...(isSingleNumber ? { textFallback: true } : {}),
+    };
+  }
+  return { source: col, mode: 'text', value: trimmed };
+}
+
+/**
+ * 구분자 조인 값 목록 → 공백뿐인 토큰만 제거, 값은 원형 보존.
+ * 엑셀 적재가 셀 값을 trim 하지 않으므로 "서울 " 같은 값이 DB 에 실존한다 —
+ * distinct 가 보여준 원형을 trim 하면 IN 비교가 0건이 되는 왕복 불일치가 생긴다.
+ */
+export function splitHeaderValues(hv: string): string[] {
+  return hv.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
+}
+
+function buildClause(
+  col: string,
+  q: string,
+  opRaw: string,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
+): FilterClause | null {
+  const trimmed = q.trim();
+  if (trimmed.length === 0) return null;
+  // op 는 AND/OR 만 결정 — 출력 첫 절 null 강제는 호출자가 담당 (통과 절 순서 기준).
+  const op: CombineOp = opRaw === 'OR' ? 'OR' : 'AND';
+
+  const extraCondition = extra?.clause?.(col, trimmed) ?? null;
+  if (extraCondition) return { op, condition: extraCondition };
+
+  // 전체 컬럼 검색 — candidates 화이트리스트 안의 attrs/pii 로만 전개하므로
+  // whitelist 조회 없이 자체 처리 (전개 자체가 화이트리스트 검증).
+  if (col === FILTER_SOURCE.ALL) {
+    // 전체가 기본값이라 범위 입력(1-10)도 여기로 들어온다 — 범위 문법이면
+    // attrs 컬럼별 숫자 범위 매칭(idlist)을 텍스트 부분검색과 함께 OR 로 건다.
+    let allRanges = /[-,]/.test(trimmed) ? parseIdListInput(trimmed) : null;
+    // 안전밸브: 범위 × 표시 attrs 컬럼 총량 상한 — postgres 바인드 파라미터
+    // 한계(65,535) 보호. 초과하는 병리적 입력은 idlist 전개만 생략(텍스트 유지).
+    if (allRanges !== null) {
+      const attrsColCount = candidates.filter(
+        (c) => !c.hidden && c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX),
+      ).length;
+      if (allRanges.length * attrsColCount > MAX_ALL_RANGE_EXPANSION) {
+        allRanges = null;
+      }
+    }
+    const subConditions: FilterCondition[] = [];
+    for (const c of candidates) {
+      // 숨긴 컬럼 제외 — 보이지 않는 컬럼의 매칭은 결과를 설명 불가능하게 만든다.
+      if (c.hidden) continue;
+      if (c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
+        subConditions.push({ source: c.source, mode: 'text', value: trimmed });
+        if (allRanges !== null) {
+          subConditions.push({ source: c.source, mode: 'idlist', value: trimmed, ranges: allRanges });
+        }
+      } else if (c.source.startsWith(FILTER_SOURCE.PII_PREFIX) && c.piiType) {
+        const bi = blindIndex(c.piiType, trimmed);
+        if (bi) {
+          subConditions.push({ source: c.source, mode: 'exact', value: trimmed, blindIndex: bi });
+        }
+      }
+    }
+    subConditions.push(...(extra?.allSubConditions?.(trimmed) ?? []));
+    if (subConditions.length === 0) return null;
+    return {
+      op,
+      condition: { source: FILTER_SOURCE.ALL, mode: 'any', value: trimmed, subConditions },
+    };
+  }
+
+  const candidate = candidates.find((c) => c.source === col);
+  if (!candidate) return null;
+
+  if (col === FILTER_SOURCE.RESID) {
+    const fromToken = idListTokenCondition(col, trimmed, extra);
+    if (fromToken) return { op, condition: fromToken };
+    const ranges = parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
+    if (ranges !== null) {
+      return { op, condition: { source: 'system.resid', mode: 'idlist', value: trimmed, ranges } };
+    }
+    // 비숫자 입력 → text 폴백. resid 가 정수 컬럼이라 buildClauseSql 에서 FALSE 로 평가.
+    return { op, condition: { source: 'system.resid', mode: 'text', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.CONTACT_RESULT) {
+    // 센티널이 항상 이긴다. value 는 URL·스냅샷 왕복용으로 보존한다.
+    if (trimmed === FILTER_NONE_VALUE) {
+      return {
+        op,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'enum',
+          value: FILTER_NONE_VALUE,
+          includeNull: true,
+        },
+      };
+    }
+    const code = resultCodes.find((rc) => rc.code === trimmed);
+    if (!code) return null;
+    return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.WEB) {
+    if (!WEB_FILTER_VALUES.has(trimmed)) return null;
+    return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.EMAIL) {
+    if (!MAIL_FILTER_VALUES.has(trimmed)) return null;
+    return { op, condition: { source: FILTER_SOURCE.EMAIL, mode: 'boolean', value: trimmed } };
+  }
+
+  if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
+    return { op, condition: attrsTextOrIdlistCondition(col, trimmed, extra) };
+  }
+
+  if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
+    if (!candidate.piiType) return null;
+    // blindIndex 내부에서 normalizePii 호출 — 정규화 실패는 빈 문자열 반환으로 감지.
+    const bi = blindIndex(candidate.piiType, trimmed);
+    if (!bi) return null;
+    return { op, condition: { source: col, mode: 'exact', value: trimmed, blindIndex: bi } };
+  }
+
+  return null;
+}

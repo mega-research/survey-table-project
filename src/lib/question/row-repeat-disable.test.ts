@@ -60,7 +60,7 @@ describe('disableRowRepeat', () => {
 
 describe('끄기 값이 저장 경계를 통과한다', () => {
   it('부분 패치 스키마가 명시적 null 을 받아 넘긴다 — 키 삭제는 미변경으로 읽힌다', async () => {
-    const { UpdateQuestionData } = await import('@/features/survey-builder/domain/question');
+    const { UpdateQuestionData } = await import('@/server/survey-builder/domain/question');
     const parsed = UpdateQuestionData.parse({ rowRepeatConfig: null });
     expect(parsed).toHaveProperty('rowRepeatConfig', null);
     expect('rowRepeatConfig' in UpdateQuestionData.parse({})).toBe(false);

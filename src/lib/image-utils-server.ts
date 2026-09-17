@@ -2,20 +2,11 @@
  * 서버 사이드 이미지/파일 삭제 유틸리티
  * 서버 액션에서 R2에 직접 접근하여 이미지 및 파일을 삭제합니다.
  */
-import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
 import { logger } from '@/lib/logger';
-
-// Cloudflare R2는 S3 호환 API를 사용합니다
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
 
 /**
  * 서버에서 R2의 이미지를 삭제합니다.

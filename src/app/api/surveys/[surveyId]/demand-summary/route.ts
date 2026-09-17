@@ -4,12 +4,12 @@ import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
-import { applyDemandView, parseDemandSortMode } from '@/lib/operations/demand-summary';
+import { loadOperationsDataScope } from '@/server/data-scope';
+import { applyDemandView, parseDemandSortMode } from '@/lib/operations/demand-summary-format';
 import {
   buildDemandSummaryWorkbook,
   getDemandSummary,
-} from '@/lib/operations/demand-summary.server';
+} from '@/server/operations/services/demand-summary';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 

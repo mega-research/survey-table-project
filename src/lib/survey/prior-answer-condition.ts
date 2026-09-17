@@ -1,4 +1,4 @@
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 import { type BranchEvalCtx, emptyBranchEvalCtx } from '@/utils/branch-eval';

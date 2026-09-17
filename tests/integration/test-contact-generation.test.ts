@@ -1,10 +1,10 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
-import { addContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
-import { generateTestContacts } from '@/features/contacts/server/services/test-contacts.service';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { addContactTarget } from '@/server/contacts/services/contact-targets';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
+import { generateTestContacts } from '@/server/contacts/services/test-contacts';
 
 type TargetRow = {
   id: string;
@@ -58,13 +58,13 @@ const h = vi.hoisted(() => ({
 
 const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
 
-vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/operations/data-scope.server')>()),
+vi.mock('@/server/data-scope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/data-scope')>()),
   loadOperationsDataScope: vi.fn(async () => h.scope),
   // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));
 
-vi.mock('@/lib/contacts/excel-parser', () => ({
+vi.mock('@/server/contacts/services/excel-parser', () => ({
   parseExcelRows: (...args: unknown[]) => parseExcelRowsMock(...(args as [])),
   previewExcel: vi.fn(),
 }));
@@ -99,19 +99,32 @@ vi.mock('@/db', () => {
 
   function createTx(releaseRef: { current: (() => void) | null }) {
     let activeIsTest = false;
+
+    /** 설문 행 잠금 — 트랜잭션들을 도착 순서대로 직렬화한다. */
+    async function acquireSurveyLock() {
+      const previous = lockTail;
+      let release!: () => void;
+      lockTail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      releaseRef.current = release;
+      h.lockCount += 1;
+      activeIsTest = h.survey.testModeEnabled;
+    }
+
+    function countTargets() {
+      return h.targets.filter(
+        (target) => target.surveyId === h.survey.id && target.isTest === activeIsTest,
+      ).length;
+    }
+
     return {
       execute: vi.fn(async (query: unknown) => {
         const text = sqlText(query).toLowerCase();
+        // 원시 SQL 잠금은 업로드 경로에만 남아 있다 — 대상자 생성은 lockWriteScope 를 쓴다.
         if (text.includes('for update')) {
-          const previous = lockTail;
-          let release!: () => void;
-          lockTail = new Promise<void>((resolve) => {
-            release = resolve;
-          });
-          await previous;
-          releaseRef.current = release;
-          h.lockCount += 1;
-          activeIsTest = h.survey.testModeEnabled;
+          await acquireSurveyLock();
           return [
             {
               id: h.survey.id,
@@ -132,16 +145,24 @@ vi.mock('@/db', () => {
       select: vi.fn(() => {
         const chain = {
           from: () => chain,
-          where: (where: unknown) => {
-            h.countWheres.push(where);
-            return thenable([
-              {
-                total: h.targets.filter(
-                  (target) => target.surveyId === h.survey.id && target.isTest === activeIsTest,
-                ).length,
-              },
-            ]);
-          },
+          where: (where: unknown) => ({
+            // 잠금 조회 — lockWriteScope 가 .for('update') 로 소비한다.
+            for: async () => {
+              await acquireSurveyLock();
+              return [
+                {
+                  enabled: h.survey.testModeEnabled,
+                  contactColumns: h.survey.contactColumns,
+                  testContactColumns: h.survey.testContactColumns,
+                },
+              ];
+            },
+            // 대상자 count — await 로 바로 소비된다. 잠금 조회의 where 는 여기 쌓이지 않는다.
+            then: <R,>(resolve: (rows: Array<{ total: number }>) => R) => {
+              h.countWheres.push(where);
+              return Promise.resolve([{ total: countTargets() }]).then(resolve);
+            },
+          }),
         };
         return chain;
       }),

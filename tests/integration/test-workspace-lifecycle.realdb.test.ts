@@ -11,13 +11,13 @@ import {
   surveys,
   testResponseAttempts,
 } from '@/db/schema';
-import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { getControlState } from '@/features/operations/server/services/control.service';
-import { disableTestWorkspace } from '@/features/operations/server/services/test-workspace.service';
-import { terminalizeUnresolvedCampaignDispatch } from '@/lib/mail/campaign-dispatch';
-import { processResendEvent } from '@/lib/mail/resend-webhook';
-import { archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';
-import { computeCycleBreakdown } from '@/lib/operations/mail-billing.server';
+import { deleteContactTarget } from '@/server/contacts/services/contact-targets';
+import { getControlState } from '@/server/operations/services/control';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
+import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
+import { processResendEvent } from '@/server/mail/services/resend-webhook';
+import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive';
+import { computeCycleBreakdown } from '@/server/mail/services/billing-cycle-summary';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

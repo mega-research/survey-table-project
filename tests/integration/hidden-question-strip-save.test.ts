@@ -84,14 +84,14 @@ vi.mock('@/db', () => {
 
 vi.mock('@sentry/nextjs', () => ({ captureMessage: vi.fn(), captureException: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/lib/survey-control', () => ({
+vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: vi.fn(async () => ({ isPaused: false })),
   isValidTestToken: vi.fn(() => false),
 }));
-vi.mock('@/lib/operations/response-progress.server', () => ({
+vi.mock('@/server/survey-response/services/response-progress', () => ({
   getProgressSnapshot: vi.fn(async () => ({ positionMap: new Map(), totalQuestions: 0 })),
 }));
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: (...a: unknown[]) => replaceResponseAnswersMock(...a),
 }));
 
@@ -311,7 +311,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
     selectLimitMock.mockResolvedValue([laterConditionSnapshot()]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -344,7 +344,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
     selectLimitMock.mockResolvedValue([laterConditionSnapshot()]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -377,7 +377,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: ORDER_QUESTIONS } }]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -431,7 +431,7 @@ describe('completeResponse — 숨은 문항 strip 순서', () => {
 
   it('숨은 문항 strip → 게이팅 strip → calc 재계산 순서로 저장한다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -449,7 +449,7 @@ describe('completeResponse — 숨은 문항 strip 순서', () => {
     selectForUpdateMock.mockReturnValue([{ questionResponses: orderPayload() }]);
 
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({ responseId: RESPONSE_ID });
 
@@ -533,7 +533,7 @@ describe('completeResponse — 보기 그룹 표의 __choiceGroups 보존', () =
 
   it('세 단계를 지나도 그룹 선택이 남고, 게이팅 strip 과 calc 재계산은 셀 값에만 작용한다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,

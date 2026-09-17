@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ProfileColumnEditor } from '@/components/operations/profiles/profile-column-editor';
+import { ProfileColumnEditor } from '@/features/operations/profiles/profile-column-editor';
 import { Button } from '@/components/ui/button';
-import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const dynamic = 'force-dynamic';
 

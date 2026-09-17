@@ -41,7 +41,6 @@ overrides:
   '@tiptap/pm': 3.31.3
   '@tiptap/react': 3.31.3
   '@tiptap/starter-kit': 3.31.3
-  prosemirror-view@1: '>=1.42.3 <2'
   fast-xml-parser@5: '>=5.8.0 <6'
   ws@8: '>=8.21.0 <9'
   tar@7: '>=7.5.19 <8'
@@ -49,6 +48,7 @@ overrides:
   protobufjs@8: '>=8.6.3 <9'
   undici@7: '>=7.29.0 <8'
   '@chenglou/pretext': ^0.0.5
+  prosemirror-view@1: '>=1.42.3 <2'
   linkify-it@5: '>=5.0.2 <6'
   adm-zip: '>=0.6.0 <0.7'
   brace-expansion@1: '>=1.1.18 <2'
@@ -176,9 +176,6 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      '@tanstack/react-virtual':
-        specifier: ^3.13.23
-        version: 3.14.8(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@tiptap/core':
         specifier: 3.31.3
         version: 3.31.3(@tiptap/pm@3.31.3)
@@ -332,9 +329,6 @@ importers:
       react-dom:
         specifier: 19.2.3
         version: 19.2.3(react@19.2.3)
-      react-hook-form:
-        specifier: ^7.63.0
-        version: 7.83.0(react@19.2.3)
       recharts:
         specifier: 2.15.4
         version: 2.15.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -6586,12 +6580,6 @@ packages:
     resolution: {integrity: sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg==}
     peerDependencies:
       react: ^19.2.3
-
-  react-hook-form@7.83.0:
-    resolution: {integrity: sha512-AXt8cMCmx5a7u4uvpb2uRFVrWQhllI4pV+LSykxIac/hjt44TnQkmX9BKuQi2i+LDC62esmiLpilkav+kjVf/A==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      react: ^16.8.0 || ^17 || ^18 || ^19
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -13765,10 +13753,6 @@ snapshots:
     dependencies:
       react: 19.2.3
       scheduler: 0.27.0
-
-  react-hook-form@7.83.0(react@19.2.3):
-    dependencies:
-      react: 19.2.3
 
   react-is@16.13.1: {}
 

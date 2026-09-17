@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { ContactDetailForm } from '@/components/operations/contacts/contact-detail-form';
-import { getMailTemplatesBySurvey } from '@/features/mail/server/services/mail-templates.service';
-import { attrsKeyOf } from '@/lib/operations/contacts';
+import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
+import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
@@ -12,8 +12,8 @@ import {
   getEditableResponseIdForTarget,
   getMailRecipientsForTarget,
   getResponseEditLogs,
-} from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

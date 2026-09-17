@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listCampaignRecipients } from '@/lib/operations/campaigns.server';
+import { listCampaignRecipients } from '@/server/mail/services/campaigns-read';
 
 /**
  * listCampaignRecipients 가 컨택 attrs 를 행에 실어 나르는지 검증.

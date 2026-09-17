@@ -29,8 +29,8 @@ import {
   contactTargets as contactTargetsTable,
   surveys as surveysTable,
 } from '@/db/schema';
-import type { ContactUploadMapping } from '@/db/schema/schema-types';
-import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
+import type { ContactUploadMapping } from '@/shared/contracts/contacts';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

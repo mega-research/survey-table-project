@@ -70,6 +70,8 @@ export function isValidId(n: number): boolean {
  * - 값은 양의 정수 (1 ≤ n ≤ INT32_MAX) — 0/음수/소수/초과/텍스트는 invalid 토큰
  * - 역방향 (50-10) 은 자동 swap (10-50)
  * - 같은 값·같은 범위는 하나로 접고 duplicates 로 센다
+ *
+ * server 의 operations/progress-filters 와 read-models/contacts-filters 양쪽에서 공유.
  */
 export function parseIdListDetailed(
   input: string,

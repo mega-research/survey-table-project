@@ -4,17 +4,17 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 
 // DOM 이 필요한 .ts 테스트. 나머지 .ts 는 node 환경에서 돌린다 —
-// 529개 중 DOM 을 쓰는 것은 .tsx 컴포넌트 테스트와 아래 목록뿐인데, 예전에는 전역
+// 전 스위트에서 DOM 을 쓰는 것은 .tsx 컴포넌트 테스트와 아래 목록뿐인데, 예전에는 전역
 // environment:'jsdom' 이라 400여 파일이 쓰지도 않는 jsdom 을 매번 띄웠다(2026-08-19 측정:
 // 같은 57파일이 12.8초 → 6.5초, environment 비용 36.5초 → 3밀리초).
 // node 프로젝트에서 DOM 부재로 실패하는 테스트가 나오면 여기에 추가할 것.
 const DOM_TS_TESTS = [
-  'tests/unit/mail-template/table-attrs-helpers.test.ts',
+  'src/components/ui/rich-text-editor/table-attrs-helpers.test.ts',
   'tests/integration/contacts-export-route.test.ts',
   // TipTap 은 document 가 있어야 스키마를 만든다
-  'tests/unit/rich-text-editor/extensions.test.ts',
-  'tests/unit/rich-text-editor/file-attachment-node.test.ts',
-  'tests/unit/rich-text-editor/inline-cell-extensions.test.ts',
+  'src/components/ui/rich-text-editor/extensions.test.ts',
+  'src/components/ui/rich-text-editor/file-attachment-node.test.ts',
+  'src/components/ui/rich-text-editor/inline-cell-extensions.test.ts',
 ];
 
 const isRealDb = process.env['RUN_REALDB'] === '1';
@@ -50,7 +50,12 @@ export default defineConfig({
     globals: true,
     coverage: {
       provider: 'v8',
-      include: ['src/lib/spss/**', 'src/lib/analytics/spss-*'],
+      include: [
+        'src/lib/spss/**',
+        'src/lib/analytics/spss-*',
+        // SPSS 변수명 발번 규칙 — lib 흡수로 빌더 feature 로 이동했다.
+        'src/features/survey-builder/lib/variable-generator.ts',
+      ],
     },
     projects: [
       {

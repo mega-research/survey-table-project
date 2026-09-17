@@ -1,6 +1,6 @@
 ---
 name: update-docs
-description: This skill should be used when the user asks to "update documentation for my changes", "check docs for this PR", "what docs need updating", "sync docs with code", "문서 최신화", "문서 갱신", "docs 업데이트", "review docs completeness", "what documentation is affected", or when a change lands that touches package.json, src/features/, src/db/schema/, src/app/ routes, supabase/migrations/, or src/lib/inngest/. Guides updating this repo's agent-facing docs (AGENTS.md, CONTEXT.md, docs/adr/) from actual code state.
+description: This skill should be used when the user asks to "update documentation for my changes", "check docs for this PR", "what docs need updating", "sync docs with code", "문서 최신화", "문서 갱신", "docs 업데이트", "review docs completeness", "what documentation is affected", or when a change lands that touches package.json, src/server/, src/features/, src/shared/contracts/, src/db/schema/, src/app/ routes, supabase/migrations/, or src/lib/inngest/. Guides updating this repo's agent-facing docs (AGENTS.md, CONTEXT.md, docs/adr/) from actual code state.
 ---
 
 # Survey Table Project 문서 최신화

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listUnsubscribedContacts } from '@/lib/operations/campaigns.server';
+import { listUnsubscribedContacts } from '@/server/mail/services/campaigns-read';
 
 /**
  * listUnsubscribedContacts 가 컨택 attrs 를 행에 싣는지 — 수신거부자 명단이 컬럼 설정의

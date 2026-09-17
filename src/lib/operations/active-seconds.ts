@@ -1,4 +1,4 @@
-import type { PageVisit } from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 
 /**
  * visit이 체류시간 계산에 유효하면 파싱된 enteredAt/leftAt(ms)을 반환한다.

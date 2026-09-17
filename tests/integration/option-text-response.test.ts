@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterOptionTextsForSubmission } from '@/lib/option-text-migration';
+import { filterOptionTextsForSubmission } from '@/utils/option-text-migration';
 
 describe('filterOptionTextsForSubmission', () => {
   it('drops text for unselected options', () => {

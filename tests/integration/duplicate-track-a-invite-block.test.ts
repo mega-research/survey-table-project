@@ -21,7 +21,7 @@ const h = vi.hoisted(() => {
   return { findContactMock };
 });
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: h.findContactMock,
 }));
 
@@ -43,11 +43,11 @@ vi.mock('next/headers', () => ({
 }));
 
 // signals.ts 가 import 하는 내부 모듈 stub
-vi.mock('@/lib/duplicate-detection/signals', () => ({
+vi.mock('@/server/survey-response/services/signals', () => ({
   computeSignals: vi.fn(() => ({ ipHash: null, fpHash: null, deviceId: null })),
 }));
 
-import { checkDuplicateOnEntry } from '@/features/survey-response/server/services/duplicate.service';
+import { checkDuplicateOnEntry } from '@/server/survey-response/services/duplicate';
 
 const TEST_SURVEY_ID = 'aaaaaaaa-0001-0001-0001-000000000001';
 

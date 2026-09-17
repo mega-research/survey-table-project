@@ -1,4 +1,4 @@
-import type { QuotaCell, QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaCell, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 
 declare const NORMALIZED_QUOTA: unique symbol;
 

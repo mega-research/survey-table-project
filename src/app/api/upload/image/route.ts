@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
-import { getCurrentUser } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
   imageKindToExt,
   sanitizeImageExt,
@@ -55,16 +54,6 @@ function detectImageKind(buf: Buffer): string | null {
   return null;
 }
 
-// Cloudflare R2는 S3 호환 API를 사용합니다
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
-
 // 설문(kind=survey): WebP 로 변환할 타입.
 // SVG/GIF 는 애니메이션/벡터라 원본 유지, PNG 는 로고처럼 투명 배경/무손실이 필요한
 // 케이스가 많아 원본 유지.
@@ -82,22 +71,9 @@ const MAIL_CONVERTIBLE_TYPES = [
 
 // 예기치 못한 에러의 err 로깅·Sentry 캡처·500 응답은 로깅 래퍼(withRouteLogging)가 담당한다.
 async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
-  // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
-  ctx.bind({
-    userId: user.id,
-    role: isGuestUser(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
-  });
-  // admin 또는 게스트 grant 보유 가드 — mail-attachment 라우트와 동일 정책.
   // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
-  // ADMIN_USER_IDS 로 잠갔을 때 임의 인증사용자의 R2 업로드 남용은 계속 차단.
-  if (!isAdminOrGuestGrantHolder(user.id)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  if (!guard.ok) return guard.response;
 
   const formData = await request.formData();
   const file = formData.get('file') as File;

@@ -1,0 +1,113 @@
+import { describe, it, expect } from 'vitest';
+import {
+  computeRate,
+  toneFromRate,
+  sortGroupRows,
+  computeTotals,
+  type ProgressRow,
+} from '@/lib/operations/report-progress-format';
+
+describe('computeRate', () => {
+  it('completed/list * 100 백분율을 반환', () => {
+    expect(computeRate(5, 10)).toBe(50);
+    expect(computeRate(0, 100)).toBe(0);
+    expect(computeRate(100, 100)).toBe(100);
+  });
+  // 라벨(.toFixed(2))과 색상(toneFromRate)이 동일 산식을 공유함을 고정.
+  it('toneFromRate 의 임계값 분기는 computeRate 기준과 일치', () => {
+    expect(toneFromRate(24, 100)).toBe(computeRate(24, 100) < 25 ? 'rose' : 'amber');
+    expect(toneFromRate(25, 100)).toBe(computeRate(25, 100) < 50 ? 'amber' : 'green');
+  });
+});
+
+describe('toneFromRate', () => {
+  it('listCount=0 일 때 gray', () => {
+    expect(toneFromRate(0, 0)).toBe('gray');
+  });
+  it('completedCount=0 일 때 gray', () => {
+    expect(toneFromRate(0, 100)).toBe('gray');
+  });
+  it('1 <= rate < 25 일 때 rose', () => {
+    expect(toneFromRate(1, 100)).toBe('rose');   // 1%
+    expect(toneFromRate(24, 100)).toBe('rose');  // 24%
+  });
+  it('25 <= rate < 50 일 때 amber', () => {
+    expect(toneFromRate(25, 100)).toBe('amber'); // 25%
+    expect(toneFromRate(49, 100)).toBe('amber'); // 49%
+  });
+  it('50 <= rate <= 100 일 때 green', () => {
+    expect(toneFromRate(50, 100)).toBe('green');  // 50%
+    expect(toneFromRate(100, 100)).toBe('green'); // 100%
+  });
+});
+
+const fixture: ProgressRow[] = [
+  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', groupValues: ['A 전시회'], firstResid: 1, listCount: 10, completedCount: 5, excludedCount: 0, meta: { '월': '03' } },
+  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', groupValues: ['B 전시회'], firstResid: 11, listCount: 20, completedCount: 18, excludedCount: 0, meta: { '월': '01' } },
+  { groupLabel: '(미분류)', groupValueRaw: null, groupValues: [null], firstResid: null, listCount: 5, completedCount: 0, excludedCount: 0, meta: { '월': null } },
+  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', groupValues: ['C 전시회'], firstResid: 31, listCount: 0, completedCount: 0, excludedCount: 0, meta: { '월': '04' } },
+];
+
+describe('sortGroupRows', () => {
+  it('responseRate desc 는 90% > 50% > 0% > NULL(listCount=0) NULLS LAST', () => {
+    const sorted = sortGroupRows(fixture, 'responseRate', 'desc');
+    expect(sorted.map((r) => r.groupLabel)).toEqual(['B 전시회', 'A 전시회', '(미분류)', 'C 전시회']);
+  });
+  it('responseRate asc 는 0% < 50% < 90%, NULL 마지막', () => {
+    const sorted = sortGroupRows(fixture, 'responseRate', 'asc');
+    expect(sorted.map((r) => r.groupLabel)).toEqual(['(미분류)', 'A 전시회', 'B 전시회', 'C 전시회']);
+  });
+  it('groupLabel asc 는 한글 자모 순 (localeCompare ko)', () => {
+    const sorted = sortGroupRows(fixture, 'groupLabel', 'asc');
+    const first = sorted[0];
+    if (!first) throw new Error('expected sorted[0]');
+    expect(first.groupLabel).toBe('(미분류)'); // '(' 가 한글 앞
+  });
+  it('listCount desc', () => {
+    const sorted = sortGroupRows(fixture, 'listCount', 'desc');
+    expect(sorted.map((r) => r.listCount)).toEqual([20, 10, 5, 0]);
+  });
+  it('meta:월 desc 는 04 > 03 > 01 > NULL', () => {
+    const sorted = sortGroupRows(fixture, 'meta:월', 'desc');
+    expect(sorted.map((r) => r.meta['월'])).toEqual(['04', '03', '01', null]);
+  });
+  it('group:<attrs키> 정렬은 groupKeys 순서로 인덱스를 해석한다', () => {
+    const rows: ProgressRow[] = [
+      { groupLabel: 'A / x', groupValueRaw: 'A', groupValues: ['A', 'x'], firstResid: 1, listCount: 1, completedCount: 0, excludedCount: 0, meta: {} },
+      { groupLabel: 'B / y', groupValueRaw: 'B', groupValues: ['B', 'y'], firstResid: 2, listCount: 1, completedCount: 0, excludedCount: 0, meta: {} },
+    ];
+    const sorted = sortGroupRows(rows, 'group:종사자', 'desc', ['대분류', '종사자']);
+    expect(sorted.map((r) => r.groupValues[1])).toEqual(['y', 'x']);
+    // 활성 키 목록에 없는 키는 null 취급 — 순서 유지
+    const unknown = sortGroupRows(rows, 'group:없는키', 'asc', ['대분류', '종사자']);
+    expect(unknown.map((r) => r.groupLabel)).toEqual(['A / x', 'B / y']);
+  });
+});
+
+describe('computeTotals', () => {
+  // 제외 사유 내역은 행 단위 집계에 정보가 없어 항상 0 이다 — 사유별 수치는
+  // getProgressTotals 만 채운다 (report-progress-breakdown.realdb.test.ts).
+  const NO_REASONS = {
+    excludedScreenedOut: 0,
+    excludedNegativeCode: 0,
+  };
+
+  it('빈 배열은 0 합계', () => {
+    expect(computeTotals([])).toEqual({
+      groupCount: 0,
+      listTotal: 0,
+      completedTotal: 0,
+      excludedTotal: 0,
+      ...NO_REASONS,
+    });
+  });
+  it('fixture 합계 검증', () => {
+    expect(computeTotals(fixture)).toEqual({
+      groupCount: 4,
+      listTotal: 10 + 20 + 5 + 0,
+      completedTotal: 5 + 18 + 0 + 0,
+      excludedTotal: 0,
+      ...NO_REASONS,
+    });
+  });
+});

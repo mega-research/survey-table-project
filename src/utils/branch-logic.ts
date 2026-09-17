@@ -15,7 +15,7 @@ import {
   TableValidationRule,
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
-import { resolveStepBranch, type RenderStep } from '@/lib/group-ordering';
+import { resolveStepBranch, type RenderStep } from '@/utils/group-ordering';
 import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
@@ -99,22 +99,30 @@ function getBranchRuleForRadio(question: Question, response: unknown): BranchRul
   const options = resolveChoiceOptions(question);
   if (!options.length) return null;
 
-  // 그룹별 선택 모드: 응답 맵의 값들을 flat 해서 선택된 모든 cell.id 를 추출.
-  // radio 그룹 값 = string, checkbox 그룹 값 = string[] — .flat() 으로 통합.
+  // 그룹별 선택 모드: 선택된 cell.id 집합을 정본 리더(collectSelectedChoiceCellIds)로 읽는다.
+  // radio 그룹 값 = string, checkbox 그룹 값 = string[] 을 정본이 한 집합으로 편다.
+  //
+  // 이 파일에서 문항 레벨 그룹 맵을 읽는 자리는 여기·getBranchRuleForCheckbox·checkValueMatch
+  // 셋이고 셋 다 이 리더를 부른다. tsc 가 막아 주지 않으니 관례로 지킬 것 — 사본을 따로 두면
+  // "화면엔 선택인데 분기는 미선택" 이 조용히 생긴다.
+  //
+  // 정본은 예전 인라인 사본과 세 모양에서 갈린다: 배열 속 빈 문자열은 버리고, 중첩 배열은
+  // 펴고, `{selectedValue}` 래핑은 푼다. 그룹 맵에는 셋 다 나오지 않아 위임이 동작을 바꾸지 않는다 —
+  // 이 맵을 쓰는 자리가 그룹 렌더러(features/question-renderer/choice-table-response.tsx 의
+  // toggle, 그것이 부르는 utils/exclusive-choice.ts 의 applyTableExclusiveToGroups)와 Raw 양식
+  // 이월 임포트(lib/contacts/raw-format-import.ts 의 invertChoiceGroups) 뿐이고, 셋 다 빈
+  // 문자열이 아닌 cell.id 나 그 배열만 넣는다(임의 엑셀 임포트는 그룹 문항을 건너뛴다 —
+  // lib/contacts/prior-answer-blocks.ts). 세 자리의 등가는
+  // branch-logic-grouped-value-match.test.ts 가 같은 입력을 셋에 넣어 지킨다.
   if (
     isGroupedChoiceQuestion(question) &&
     typeof response === 'object' &&
     response !== null &&
     !Array.isArray(response)
   ) {
-    const selectedValues = Object.values(response as Record<string, string | string[]>)
-      .flatMap((v): string[] => {
-        if (typeof v === 'string' && v !== '') return [v];
-        if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
-        return [];
-      });
+    const selected = collectSelectedChoiceCellIds(question, response);
     const selectedOption = options.find(
-      (opt) => selectedValues.includes(opt.value as string) && opt.branchRule,
+      (opt) => selected.has(opt.value as string) && opt.branchRule,
     );
     return selectedOption?.branchRule ?? null;
   }
@@ -141,21 +149,16 @@ function getBranchRuleForCheckbox(question: Question, response: unknown): Branch
   if (!options.length) return null;
 
   // 그룹별 선택 모드: checkbox 질문도 choiceGroups 가 있으면 grouped 맵일 수 있다.
+  // 선택 집합은 정본 리더로 읽는다 — 근거와 등가 조건은 getBranchRuleForRadio 의 같은 분기 주석.
   if (
     isGroupedChoiceQuestion(question) &&
     typeof response === 'object' &&
     response !== null &&
     !Array.isArray(response)
   ) {
-    // 맵 값 flat — checkbox 그룹 값은 string[], radio 그룹 값은 string
-    const selectedValues = Object.values(response as Record<string, string | string[]>)
-      .flatMap((v): string[] => {
-        if (typeof v === 'string' && v !== '') return [v];
-        if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
-        return [];
-      });
+    const selected = collectSelectedChoiceCellIds(question, response);
     for (const option of options) {
-      if (selectedValues.includes(option.value as string) && option.branchRule) {
+      if (selected.has(option.value as string) && option.branchRule) {
         return option.branchRule;
       }
     }
@@ -301,21 +304,6 @@ export function getNextQuestionIndex(
 
   // 분기 규칙이 없으면 순차적으로 다음 질문
   return currentIndex + 1 < questions.length ? currentIndex + 1 : -1;
-}
-
-/**
- * 질문 번호를 ID로 변환 (예: 10번 → question-10)
- */
-export function questionNumberToId(questionNumber: number): string {
-  return `question-${questionNumber}`;
-}
-
-/**
- * 질문 ID를 번호로 변환 (예: question-10 → 10)
- */
-export function questionIdToNumber(questionId: string): number | null {
-  const match = questionId.match(/question-(\d+)/);
-  return match && match[1] !== undefined ? parseInt(match[1], 10) : null;
 }
 
 /**
@@ -967,22 +955,35 @@ function checkValueMatch(
     return false;
   }
 
-  // 단일 값 (radio, select 등)
+  // 단일 값 (radio, select 등). 바로 아래 **표 갈래보다 앞**이어야 한다 — 표 갈래에는 응답
+  // 모양 가드가 없어 sourceQuestion.type 만 보고 문자열까지 삼키고, 정본 리더는 표 응답이
+  // 아닌 문자열에서 빈 집합을 주므로 순서를 바꾸면 그 응답이 조용히 미일치가 된다.
+  // (그룹 갈래와는 무관하다 — 저쪽은 자기 가드에 객체·비배열 조건이 있어 문자열이 닿지 않는다.)
   if (typeof response === 'string') {
     return requiredValues.includes(response);
   }
 
-  // 보기 그룹 표(table + choice_opt 셀) — 선택은 표 응답 안 예약 키(__choiceGroups)에 있다.
-  // 정본 리더로 선택 집합을 얻는다. 셀 값 키(셀 id)는 보기 선택이 아니라 여기서 걸리지 않는다.
+  // 소스가 표 문항이면 선택 집합 판독을 정본 리더에 맡긴다. 표 응답에서 "고른 보기"가 어디
+  // 있는지 아는 곳은 lib/survey/choice-selection.ts 다 — 예약 키 CHOICE_GROUPS_KEY 를 그 모듈이
+  // 소유하고 비테스트 소비자는 전부 거기서 받아 쓴다. 셀 값 키(셀 id)는 보기 선택이 아니다.
+  // 가드를 isChoiceGroupTableQuestion 으로 좁히지 않는 것은 의도다 — 표 응답은 여기서 전부
+  // 끊어 판독 지점을 하나로 둔다. 좁히면 보기 그룹이 없는 표의 응답이 아래
+  // selectedValue/optionId·배열 갈래를 지나가게 된다.
   if (sourceQuestion?.type === 'table') {
     const selected = collectSelectedChoiceCellIds(sourceQuestion, response);
     return requiredValues.some((v) => selected.has(v));
   }
 
   // 그룹별 선택 모드(GroupedChoiceAnswer): { groupKey: cellId | cellId[] } 맵.
-  // getBranchRuleForRadio/Checkbox 의 grouped 분기와 동일 규칙 — 맵 값을 flat 해
-  // 선택된 cellId 중 하나라도 requiredValues 와 일치하면 만족. 이 분기가 없으면
-  // 그룹 맵은 아래 selectedValue/optionId 객체 분기에 걸리지 않아 항상 false 가 된다.
+  // 이 분기가 없으면 그룹 맵은 아래 selectedValue/optionId 객체 분기에 걸리지 않아 항상 false 다.
+  // 맵을 펴는 규칙은 정본 리더에 맡긴다 — 같은 규칙의 사본이 이 파일에만 셋이었고
+  // (여기·getBranchRuleForRadio·getBranchRuleForCheckbox) 그것을 한 자리로 모은 것이다.
+  // 비-table 그룹 문항의 렌더(features/question-renderer/choice-table-response.tsx 의
+  // selectedIds)와 필수 검증(features/survey-response/lib/answer-validation.ts 의
+  // groupSelectionMap)은 아직 각자 읽는다 — 저쪽까지 정본으로 모으는 것은 별개 작업이다.
+  // 가드의 !Array.isArray 가 정본 안의 판정과 겹치는 것은 의도다: 그룹 문항이라도 응답이
+  // 배열이면 그룹 도입 전의 평면 응답이라 아래 배열 갈래로 흘려야 하는데, 정본은 빈 집합을 준다.
+  // (문자열은 위 단일 값 갈래에서 이미 return 되어 여기 닿지 않는다.)
   if (
     sourceQuestion &&
     isGroupedChoiceQuestion(sourceQuestion) &&
@@ -990,17 +991,14 @@ function checkValueMatch(
     response !== null &&
     !Array.isArray(response)
   ) {
-    const selectedValues = Object.values(response as Record<string, string | string[]>).flatMap(
-      (v): string[] => {
-        if (typeof v === 'string' && v !== '') return [v];
-        if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
-        return [];
-      },
-    );
-    return selectedValues.some((v) => requiredValues.includes(v));
+    const selected = collectSelectedChoiceCellIds(sourceQuestion, response);
+    return requiredValues.some((v) => selected.has(v));
   }
 
-  // 객체 형태 (기타 옵션 포함)
+  // 객체 형태 (기타 옵션 포함). 정본 리더로 합치지 않는다 — 저쪽은 `{selectedValue}` 만 풀고
+  // `{optionId}`(types/survey.ts 의 OtherInputValue 모양) 는 모르기 때문에, 위임하면 그 모양의
+  // 응답이 조용히 미일치가 된다. 같은 파일 evaluateExpressionOperand 의 'question' 갈래도
+  // 이 두 모양을 같이 읽는다.
   if (typeof response === 'object' && response !== null) {
     if ('selectedValue' in response) {
       return requiredValues.includes((response as { selectedValue: string }).selectedValue);
@@ -1010,7 +1008,7 @@ function checkValueMatch(
     }
   }
 
-  // 배열 (checkbox 등)
+  // 배열 (checkbox 등). 위 객체 갈래와 같은 이유로 인라인 유지 — 항목별 `{optionId}` 를 읽는다.
   if (Array.isArray(response)) {
     return response.some((val) => {
       if (typeof val === 'string') {

@@ -1,0 +1,58 @@
+import { describe, expect, it } from 'vitest';
+import {
+  CONTACTS_SORT_KEYS,
+  CONTACTS_QFIELDS,
+  CONTACTS_PAGE_SIZE,
+  maskEmail,
+  attrsKeyOf,
+} from '@/lib/operations/contacts-format';
+
+// normalizeContactListArgs / hasActiveContactFilters 테스트는 함수 제거와 함께 삭제됨
+// (다중 조건 필터 모델로 전환 — page.tsx 가 인라인으로 page/sort/dir 파싱).
+
+describe('maskEmail', () => {
+  it('일반 이메일', () => {
+    expect(maskEmail('hong.gildong@example.com')).toBe('ho***@***.com');
+  });
+  it('한 글자 로컬', () => {
+    expect(maskEmail('a@example.com')).toBe('a***@***.com');
+  });
+  it('null/빈 문자 → "—"', () => {
+    expect(maskEmail(null)).toBe('—');
+    expect(maskEmail('')).toBe('—');
+  });
+  it('@ 없는 잘못된 입력 → "—"', () => {
+    expect(maskEmail('not-an-email')).toBe('—');
+  });
+});
+
+describe('whitelist exports', () => {
+  it('CONTACTS_SORT_KEYS contains resid + respondedAt', () => {
+    expect(CONTACTS_SORT_KEYS).toContain('resid');
+    expect(CONTACTS_SORT_KEYS).toContain('respondedAt');
+  });
+  it("web 컬럼 정렬용 'webActivity' 키 — 매칭 응답 활동 시각 기준 (respondedAt 만으론 미완료 행이 정렬 안 됨)", () => {
+    expect(CONTACTS_SORT_KEYS).toContain('webActivity');
+  });
+  it("메일 컬럼 정렬용 'mailStatus' 키 — 최신 수신 상태 순위 기준", () => {
+    expect(CONTACTS_SORT_KEYS).toContain('mailStatus');
+  });
+  it('CONTACTS_PAGE_SIZE = 20', () => {
+    expect(CONTACTS_PAGE_SIZE).toBe(20);
+  });
+  it('CONTACTS_QFIELDS contains all/resid/email/group', () => {
+    expect(CONTACTS_QFIELDS).toEqual(expect.arrayContaining(['all', 'resid', 'email', 'group']));
+  });
+});
+
+describe('attrsKeyOf', () => {
+  it("'attrs.전시회명' → '전시회명'", () => {
+    expect(attrsKeyOf('attrs.전시회명')).toBe('전시회명');
+  });
+  it("'system.resid' → null", () => {
+    expect(attrsKeyOf('system.resid')).toBeNull();
+  });
+  it("빈 문자열 → null", () => {
+    expect(attrsKeyOf('')).toBeNull();
+  });
+});

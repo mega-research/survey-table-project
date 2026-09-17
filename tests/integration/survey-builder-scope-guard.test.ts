@@ -35,7 +35,7 @@ vi.mock('@/lib/image-extractor', () => ({
 vi.mock('@/lib/image-utils-server', () => ({
   deleteImagesFromR2Server: vi.fn(async () => undefined),
 }));
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getQuestionsBySurvey: vi.fn(async () => []),
   getQuestionGroupsBySurvey: vi.fn(async () => []),
 }));
@@ -111,12 +111,12 @@ import {
   deleteQuestion,
   reorderQuestions,
   updateQuestion,
-} from '@/features/survey-builder/server/services/questions.service';
+} from '@/server/survey-builder/services/questions';
 import {
   deleteQuestionGroup,
   reorderGroups,
   updateQuestionGroup,
-} from '@/features/survey-builder/server/services/question-groups.service';
+} from '@/server/survey-builder/services/question-groups';
 
 const QID = '11111111-1111-4111-8111-111111111111';
 const QID_2 = '22222222-2222-4222-8222-222222222222';

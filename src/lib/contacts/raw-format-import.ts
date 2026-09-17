@@ -23,7 +23,7 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import type { OptionMismatch } from '@/lib/contacts/prior-answer-import';
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, RankingAnswer } from '@/types/survey';
 import { encodeChoiceTableCellFromExport } from '@/lib/survey/choice-table-cell-value';
 import { resolveChoiceOptions } from '@/utils/choice-source';

@@ -1,4 +1,4 @@
-import type { QuotaCategory, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaCategory, QuotaDimension } from '@/shared/contracts/quota';
 import type { NormalizedQuotaConfig } from './normalize';
 
 /**

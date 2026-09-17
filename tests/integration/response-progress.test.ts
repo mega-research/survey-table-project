@@ -74,7 +74,7 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -104,7 +104,7 @@ describe('updateQuestionResponse — progress_pct SET', () => {
   });
 
   it('set() 인자에 progressPct SQL 이 포함된다', async () => {
-    const { updateQuestionResponse } = await import('@/features/survey-response/server/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await updateQuestionResponse({ responseId: 'r1', questionId: 'q3', value: 'value' });
 
     expect(updateSetMock).toHaveBeenCalledTimes(1);
@@ -119,7 +119,7 @@ describe('updateQuestionResponse — progress_pct SET', () => {
   it('응답 행 없음 → throw (응답을 찾을 수 없습니다.)', async () => {
     // 변조 가드(#5): 응답 행 조회가 비면 곧장 거부.
     findFirstMock.mockResolvedValue(undefined);
-    const { updateQuestionResponse } = await import('@/features/survey-response/server/services/response.service');
+    const { updateQuestionResponse } = await import('@/server/survey-response/services/response-answer-write');
     await expect(
       updateQuestionResponse({ responseId: 'missing', questionId: 'q1', value: 'v' }),
     ).rejects.toThrow('응답을 찾을 수 없습니다.');
@@ -154,7 +154,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       versionId: 'v1',
       deletedAt: null,
     });
-    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
@@ -179,7 +179,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     });
     // snapshot 로더가 호출되면 빈 questions 배열 반환
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: [] } }]);
-    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
@@ -206,7 +206,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         },
       },
     ]);
-    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       {
         surveyId: 's1',
@@ -225,6 +225,33 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     expect(setArg['progressPct']).toBe(75);
   });
 
+  // 정책 정렬(A-6b 리뷰): 손상된 스냅샷(questions 가 배열이 아님)은 진척률만 비우고
+  // 저장을 진행한다. 이전에는 forEach 에서 TypeError 가 나 관리자 수정이 통째로 실패했고,
+  // 그건 같은 파일이 스냅샷 미확보에 대해 선언한 fail-safe 와 어긋났다.
+  it('snapshot.questions 가 배열이 아니면 progressPct=null 로 저장을 진행한다', async () => {
+    findFirstMock.mockResolvedValue({
+      id: 'r1',
+      status: 'in_progress',
+      versionId: 'v1',
+      deletedAt: null,
+    });
+    selectLimitMock.mockResolvedValue([{ snapshot: { questions: '깨진 JSONB' } }]);
+
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
+    await expect(
+      saveAdminEdit(
+        { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const brokenSnapshotCall = updateSetMock.mock.calls[0];
+    if (!brokenSnapshotCall) throw new Error('updateSetMock 호출 없음');
+    const setArg = brokenSnapshotCall[0] as Record<string, unknown>;
+    expect(setArg['progressPct']).toBeNull();
+  });
+
   it('versionId=null → progressPct=null', async () => {
     findFirstMock.mockResolvedValue({
       id: 'r1',
@@ -232,7 +259,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       versionId: null,
       deletedAt: null,
     });
-    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       {
         surveyId: 's1',
@@ -265,18 +292,18 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     updateReturningMock.mockResolvedValue([]);
 
     const { replaceResponseAnswers } = await import(
-      '@/features/survey-response/server/services/response-answers.service'
+      '@/server/survey-response/services/response-answers'
     );
     vi.mocked(replaceResponseAnswers).mockClear();
 
-    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await expect(
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { id: 'admin-1', email: 'a@b.com' },
         false,
       ),
-    ).rejects.toThrow('Cannot edit deleted response');
+    ).rejects.toMatchObject({ reason: 'response_deleted' });
 
     // 경합에서 졌으면 정규화 응답 재작성은 하지 않아야 한다 (롤백 의도).
     expect(replaceResponseAnswers).not.toHaveBeenCalled();

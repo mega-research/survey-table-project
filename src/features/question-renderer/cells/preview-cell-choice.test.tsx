@@ -1,0 +1,178 @@
+import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import { PreviewCell } from '@/features/question-renderer/cells/preview-cell';
+import { TablePreview } from '@/features/question-renderer/table-preview';
+import type { Question, TableCell, TableRow } from '@/types/survey';
+import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
+
+const choiceCell: TableCell = {
+  id: 'cell-1',
+  type: 'choice_opt',
+  content: '매우 나쁨',
+  choiceLabel: '매우 나쁨',
+};
+
+describe('PreviewCell 보기 옵션 컨트롤 종류', () => {
+  afterEach(cleanup);
+
+  it('choiceControlType=radio 면 라디오로 렌더한다', () => {
+    render(<PreviewCell cell={choiceCell} choiceControlType="radio" />);
+    expect(screen.getByRole('radio')).toBeTruthy();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.getByText('매우 나쁨')).toBeTruthy();
+  });
+
+  it('choiceControlType=checkbox 면 체크박스로 렌더한다', () => {
+    render(<PreviewCell cell={choiceCell} choiceControlType="checkbox" />);
+    expect(screen.getByRole('checkbox')).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
+  });
+
+  it('미지정 시 checkbox 로 폴백한다', () => {
+    render(<PreviewCell cell={choiceCell} />);
+    expect(screen.getByRole('checkbox')).toBeTruthy();
+  });
+
+  it('choiceLabel 만 있는 셀은 미리보기에 라벨을 렌더하지 않는다 (응답 렌더와 동일 규칙)', () => {
+    const cell: TableCell = {
+      id: 'cell-2',
+      type: 'choice_opt',
+      content: '',
+      choiceLabel: '저장만 되는 옵션 라벨',
+    };
+    render(<PreviewCell cell={cell} choiceControlType="radio" />);
+    expect(screen.getByRole('radio')).toBeTruthy();
+    expect(screen.queryByText('저장만 되는 옵션 라벨')).toBeNull();
+  });
+
+  it('choiceLabel 과 content 둘 다 있으면 content 만 렌더한다', () => {
+    const cell: TableCell = {
+      id: 'cell-3',
+      type: 'choice_opt',
+      content: '셀 텍스트',
+      choiceLabel: '옵션 라벨',
+    };
+    render(<PreviewCell cell={cell} choiceControlType="radio" />);
+    expect(screen.getByText('셀 텍스트')).toBeTruthy();
+    expect(screen.queryByText('옵션 라벨')).toBeNull();
+  });
+
+  it('disableControls를 지정한 경우에만 기본 radio/checkbox를 비활성화한다', () => {
+    const radioCell: TableCell = {
+      id: 'preview-radio',
+      type: 'radio',
+      content: '',
+      radioOptions: [{ id: 'r1', label: '라디오', value: 'r1', selected: true }],
+    };
+    const checkboxCell: TableCell = {
+      id: 'preview-checkbox',
+      type: 'checkbox',
+      content: '',
+      checkboxOptions: [{ id: 'c1', label: '체크박스', value: 'c1', checked: true }],
+    };
+    const { rerender } = render(
+      <>
+        <PreviewCell cell={radioCell} />
+        <PreviewCell cell={checkboxCell} />
+      </>,
+    );
+    expect(screen.getByRole('radio')).not.toBeDisabled();
+    expect(screen.getByRole('radio')).toBeChecked();
+    expect(screen.getByRole('checkbox')).not.toBeDisabled();
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    rerender(
+      <>
+        <PreviewCell cell={radioCell} disableControls />
+        <PreviewCell cell={checkboxCell} disableControls />
+      </>,
+    );
+    expect(screen.getByRole('radio')).toBeDisabled();
+    expect(screen.getByRole('radio')).not.toBeChecked();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+});
+
+// 그룹 혼합: radio 질문이지만 일부 셀이 checkbox 그룹에 속하면 셀별로 다르게 렌더되어야 한다.
+describe('TablePreview 셀별 choiceControlType 리졸버 (그룹 혼합)', () => {
+  beforeAll(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+  afterEach(cleanup);
+
+  function mixedGroupedQuestion(): Question {
+    return {
+      id: 'q1',
+      type: 'radio', // 질문 기본 타입은 radio
+      title: 'Q',
+      required: false,
+      order: 0,
+      choiceGroups: [{ id: 'g-cb', groupKey: 'cb1', type: 'checkbox', label: '복수' }],
+      tableColumns: [
+        { id: 'c1', label: '①' },
+        { id: 'c2', label: '②' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            // 비그룹 → 질문 타입(radio)
+            { id: 'cellRadio', type: 'choice_opt', content: '단일', choiceLabel: '단일' },
+            // checkbox 그룹 소속 → checkbox
+            {
+              id: 'cellCheck',
+              type: 'choice_opt',
+              content: '복수',
+              choiceLabel: '복수',
+              choiceGroupId: 'g-cb',
+            },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('비그룹 셀은 radio, checkbox 그룹 셀은 checkbox 로 렌더한다', () => {
+    const q = mixedGroupedQuestion();
+    const { container } = render(
+      <TablePreview
+        columns={q.tableColumns}
+        rows={q.tableRowsData}
+        choiceControlType={(cell) => getGroupTypeOfCell(q, cell.id)}
+      />,
+    );
+    const radios = container.querySelectorAll('input[type="radio"]');
+    const checks = container.querySelectorAll('input[type="checkbox"]');
+    expect(radios.length).toBe(1);
+    expect(checks.length).toBe(1);
+    // 라벨도 함께 표시
+    expect(within(container).getByText('단일')).toBeTruthy();
+    expect(within(container).getByText('복수')).toBeTruthy();
+  });
+
+  it('renderCell의 두 번째 인자로 현재 행을 함수 arity와 무관하게 전달한다', () => {
+    const row: TableRow = { id: 'row-aware', label: '', cells: [choiceCell] };
+    const renderCell = (cell: TableCell, currentRow: TableRow | undefined = undefined) => (
+      <span>{`${currentRow?.id ?? '행 없음'}:${cell.id}`}</span>
+    );
+
+    render(
+      <TablePreview
+        columns={[{ id: 'c1', label: '열' }]}
+        rows={[row]}
+        renderCell={renderCell}
+      />,
+    );
+
+    expect(screen.getByText('row-aware:cell-1')).toBeInTheDocument();
+  });
+});

@@ -7,7 +7,7 @@ import {
   collectSelectedOptionIds,
   type LegacyQuestionShape,
   type LegacyResponseShape,
-} from '@/lib/option-text-migration';
+} from '@/utils/option-text-migration';
 
 describe('collectSelectedOptionIds', () => {
   it('응답 value를 옵션 id로 변환하고 그룹 응답도 펼친다', () => {

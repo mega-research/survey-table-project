@@ -1,9 +1,9 @@
-import type { RawExportContactColumn } from '@/lib/operations/contacts';
-import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
+import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
+import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 
@@ -11,7 +11,7 @@ import type { RawExportResponseRow } from './raw-workbook';
 
 // ============================================================
 // Raw 내보내기 — 조사 대상 기준 모수·명단 열의 순수 조각
-// (미응답 행 생성 + 정렬 + 명단 값 조립. DB 조회는 raw-export-rows.server.ts)
+// (미응답 행 생성 + 정렬 + 명단 값 조립. DB 조회는 app/api/surveys/[surveyId]/export/raw-export-load.ts)
 // ============================================================
 
 export interface NonRespondentTarget {

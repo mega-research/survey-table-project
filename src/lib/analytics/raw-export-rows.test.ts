@@ -10,7 +10,7 @@ import {
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
 import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
-import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles';
+import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
 import type { Question } from '@/types/survey';
 
 // 조사 대상 4명(resid 1~4) 중 2·4 만 응답했고 1·3 은 미응답. 익명 응답 2건은 시스템ID 가 없다.

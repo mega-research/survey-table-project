@@ -3,17 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { resolveExportColumns } from '@/lib/operations/contacts-export';
+import { resolveExportColumns } from '@/lib/operations/contacts-export-format';
 import {
   buildContactsExportWorkbook,
   decryptPiiForExport,
-} from '@/lib/operations/contacts-export.server';
+} from '@/server/operations/services/contacts-export';
 import {
   getContactColumnScheme,
   listContactsForExport,
   MAX_CONTACT_EXPORT_ROWS,
-} from '@/lib/operations/contacts.server';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/read-models/contacts';
+import { loadOperationsDataScope } from '@/server/data-scope';
 
 // 대형 명단 + PII 복호화 대비 (기본 10초 → 30초)
 export const maxDuration = 30;

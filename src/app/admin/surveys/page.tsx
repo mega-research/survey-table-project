@@ -29,7 +29,7 @@ import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/hooks/queries';
+import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 

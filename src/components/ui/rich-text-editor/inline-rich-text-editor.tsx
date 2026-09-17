@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useEffectEvent, useMemo } from 'react';
 
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { Bold as BoldIcon, Redo, Undo } from 'lucide-react';
@@ -73,13 +73,17 @@ export function InlineRichTextEditor({
 
   // 바깥에서 초기값이 바뀌면(모달이 다른 셀로 다시 열림) 편집기 내용을 맞춘다.
   // 우리가 낸 값이 되돌아온 경우는 같아서 건너뛰므로 커서가 튀지 않는다.
-  useEffect(() => {
+  // editor 는 effect event 로 최신 참조를 읽는다 — 트리거는 initialHtml 하나로 둔다
+  // (옆 파일 rich-text-editor.tsx 와 같은 관례. disable 주석은 컴파일러 skip 을 부른다).
+  const syncContentFromProp = useEffectEvent(() => {
     if (!editor) return;
     const current = editor.isEmpty ? '' : editor.getHTML();
     if (initialHtml !== current) {
       editor.commands.setContent(initialHtml, { emitUpdate: false });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    syncContentFromProp();
   }, [initialHtml]);
 
   const s = useEditorState({

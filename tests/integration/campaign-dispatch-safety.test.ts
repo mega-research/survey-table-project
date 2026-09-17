@@ -274,7 +274,7 @@ vi.mock('@/db', () => ({
 // negative 결과코드 재검증은 이 스위트의 관심사가 아니다 — 빈 목록으로 무력화해
 // db mock 에 결과코드 조회 분기를 추가하지 않는다 (전용 검증은
 // campaign-dispatch-unsubscribe.test.ts).
-vi.mock('@/lib/operations/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
 }));
 
@@ -282,26 +282,26 @@ vi.mock('@react-email/render', () => ({
   render: renderMock,
 }));
 
-vi.mock('@/lib/mail/render-for-send', () => ({
+vi.mock('@/server/mail/services/render-for-send', () => ({
   renderForCampaignSend: (input: { subject: string; inviteUrl: string }) => ({
     subject: input.subject,
     bodyHtml: input.inviteUrl,
   }),
 }));
 
-vi.mock('@/lib/mail/campaign-send-rate-limit', () => ({
+vi.mock('@/server/mail/services/campaign-send-rate-limit', () => ({
   createCampaignProviderRateLimiter: () => ({
     waitForTurn: waitForTurnMock,
   }),
 }));
 
-vi.mock('@/lib/mail/send-bulk', () => ({
+vi.mock('@/server/mail/services/send-bulk', () => ({
   resolveCampaignAttachments: resolveAttachmentsMock,
   sendCampaignRecipient: sendRecipientMock,
   RetryableCampaignSendError: class RetryableCampaignSendError extends Error {},
 }));
 
-vi.mock('@/lib/mail/template-wrapper', () => ({
+vi.mock('@/server/mail/services/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
@@ -309,7 +309,7 @@ import {
   dispatchCampaignChunk,
   prepareCampaignDispatch,
   terminalizeUnresolvedCampaignDispatch,
-} from '@/lib/mail/campaign-dispatch';
+} from '@/server/mail/services/campaign-dispatch';
 
 function makeRecipient(id: string, overrides: Partial<RecipientState> = {}): RecipientState {
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyRecipientTransition } from '@/lib/mail/recipient-status-transition';
+import { applyRecipientTransition } from '@/server/mail/services/recipient-status-transition';
 
 function makeTx(opts?: { contactTargetId?: string | null }) {
   const updateWhere = vi.fn(async () => undefined);

@@ -8,7 +8,7 @@ import {
   collectUnfilledChoiceGroupCellIds,
   isQuestionAnswered,
   resolveGroupedRequiredMessage,
-} from '@/lib/survey/answer-validation';
+} from '@/features/survey-response/lib/answer-validation';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
@@ -290,7 +290,6 @@ function makeSubmission(questionResponses: Record<string, unknown>): SurveySubmi
     startedAt: new Date('2026-01-01T00:00:00Z'),
     completedAt: new Date('2026-01-01T00:01:00Z'),
     isCompleted: true,
-    currentGroupOrder: 0,
     questionResponses,
     updatedAt: new Date('2026-01-01T00:01:00Z'),
   };

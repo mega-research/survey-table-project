@@ -4,20 +4,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { prepareContactInsertScope } from '@/features/contacts/server/services/contact-insert-scope.service';
+import { prepareContactInsertScope } from '@/server/contacts/services/contact-insert-scope';
 import {
   recordStepVisit,
   recordVisibilitySegment,
-} from '@/features/survey-response/server/services/lifecycle.service';
-import {
-  completeResponse,
-  saveTestTargetFirstAnswer,
-} from '@/features/survey-response/server/services/response.service';
+} from '@/server/survey-response/services/lifecycle';
+import { completeResponse } from '@/server/survey-response/services/response-completion';
+import { saveTestTargetFirstAnswer } from '@/server/survey-response/services/response-entry';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
   assertTestTargetAttemptOwner,
-} from '@/lib/survey-response/test-target-attempt.server';
+} from '@/server/survey-response/services/test-target-attempt';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -197,7 +195,6 @@ run('기존 attempt 재사용 식별자 검증', () => {
             contactTargetId: targetId,
             sessionId: 'forged-session',
             attemptId,
-            versionId: null,
             currentStepId: 'forged-step',
           }),
         ),
@@ -270,7 +267,6 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
           contactTargetId: targetId,
           sessionId: 'null-version-session',
           attemptId: firstAttemptId,
-          versionId: null,
           currentStepId: 'first-step',
         }),
       );
@@ -279,13 +275,12 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
       );
       expect(versionRows[0]?.version_id).toBe(currentVersionId);
 
-      await db.transaction((tx) =>
+      const acquired = await db.transaction((tx) =>
         acquireTestTargetResponse(tx, {
           surveyId,
           contactTargetId: targetId,
           sessionId: 'old-version-session',
           attemptId: secondAttemptId,
-          versionId: oldVersionId,
           currentStepId: 'second-step',
         }),
       );
@@ -293,6 +288,9 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
         sql`SELECT version_id FROM survey_responses WHERE id=${responseId}`,
       );
       expect(versionRows[0]?.version_id).toBe(currentVersionId);
+      // 반환값이 행과 같아야 클라이언트가 재핀을 감지한다. 예전에는 입력을 그대로
+      // 돌려주어 이 lane 에서만 무중단 갈아타기 재핀 감지가 죽어 있었다.
+      expect(acquired.versionId).toBe(currentVersionId);
     } finally {
       await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
     }
@@ -368,7 +366,6 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
         surveyId,
         contactTargetId: targetId,
         sessionId: 'new-current-session',
-        versionId: oldVersionId,
         questionId: newPiiQuestionId,
         value: '암호화할 답변',
         currentStepId: 'new-current-step',
@@ -456,7 +453,6 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
           contactTargetId: targetId,
           sessionId: 'next-session',
           attemptId: nextAttemptId,
-          versionId: null,
           currentStepId: 'next-step',
         }),
       );
@@ -597,12 +593,11 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
         contactTargetId: dropTargetId,
         sessionId: 'resumed-session',
         attemptId: revivedAttemptId,
-        versionId: null,
         currentStepId: 'step-3',
       }),
     );
 
-    expect(acquired).toEqual({ responseId: dropResponseId, reset: false });
+    expect(acquired).toEqual({ responseId: dropResponseId, reset: false, versionId: null });
     expect(await readRow(dropResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: { q1: '이탈 전 답' },
@@ -653,12 +648,11 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
         contactTargetId: sameTabTargetId,
         sessionId: 'same-tab-session',
         attemptId: sameTabAttemptId,
-        versionId: null,
         currentStepId: 'step-3',
       }),
     );
 
-    expect(acquired).toEqual({ responseId: sameTabResponseId, reset: false });
+    expect(acquired).toEqual({ responseId: sameTabResponseId, reset: false, versionId: null });
     expect(await readRow(sameTabResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: { q1: '이탈 전 답' },
@@ -673,12 +667,11 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
         contactTargetId: staleVersionTargetId,
         sessionId: 'stale-version-session',
         attemptId: randomUUID(),
-        versionId: null,
         currentStepId: 'step-3',
       }),
     );
 
-    expect(acquired).toEqual({ responseId: staleVersionResponseId, reset: true });
+    expect(acquired).toEqual({ responseId: staleVersionResponseId, reset: true, versionId: null });
     expect(await readRow(staleVersionResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: {},
@@ -695,12 +688,11 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
         contactTargetId: concludedTargetId,
         sessionId: 'restart-session',
         attemptId: randomUUID(),
-        versionId: null,
         currentStepId: 'step-3',
       }),
     );
 
-    expect(acquired).toEqual({ responseId: concludedResponseId, reset: true });
+    expect(acquired).toEqual({ responseId: concludedResponseId, reset: true, versionId: null });
     expect(await readRow(concludedResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: {},
@@ -762,7 +754,6 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
         contactTargetId: targetId,
         sessionId: 'first-session',
         attemptId: firstAttemptId,
-        versionId: null,
         currentStepId: 'new-step',
         userAgent: 'test-agent',
         platform: 'desktop',
@@ -770,7 +761,7 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
       }),
     );
 
-    expect(acquired).toEqual({ responseId, reset: true });
+    expect(acquired).toEqual({ responseId, reset: true, versionId: null });
     const rows = await db.execute<{
       id: string;
       question_responses: Record<string, unknown>;
@@ -818,7 +809,6 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
         contactTargetId: targetId,
         sessionId: 'second-session',
         attemptId: secondAttemptId,
-        versionId: null,
         currentStepId: 'new-step',
       }),
     );
@@ -895,7 +885,6 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
           contactTargetId: concurrentTargetId,
           sessionId: 'concurrent-a',
           attemptId: attemptA,
-          versionId: null,
           currentStepId: 'step-a',
         }),
       ),
@@ -905,7 +894,6 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
           contactTargetId: concurrentTargetId,
           sessionId: 'concurrent-b',
           attemptId: attemptB,
-          versionId: null,
           currentStepId: 'step-b',
         }),
       ),

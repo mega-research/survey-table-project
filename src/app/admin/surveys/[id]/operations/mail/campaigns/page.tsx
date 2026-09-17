@@ -2,16 +2,16 @@ import Link from 'next/link';
 
 import { Plus } from 'lucide-react';
 
-import { CampaignsList } from '@/components/operations/mail-campaign/campaigns-list';
-import { UnsubscribedSegment } from '@/components/operations/mail-campaign/unsubscribed-segment';
+import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
+import { UnsubscribedSegment } from '@/features/operations/mail-campaign/unsubscribed-segment';
 import { Button } from '@/components/ui/button';
 import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
-import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 const PAGE_SIZE = 20;
 const UNSUB_PAGE_SIZE = 10;

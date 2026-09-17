@@ -4,119 +4,47 @@ import { use, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
+import { useMutation } from '@tanstack/react-query';
 import {
   AlertCircle,
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
-  CheckSquare,
-  ChevronDown,
-  Circle,
   Download,
   FileText,
-  Info,
   Library,
-  List,
-  ListOrdered,
   Plus,
   Rocket,
   Save,
   Share2,
-  Table,
-  Type,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { client } from '@/shared/lib/rpc';
-import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
-import { useErrorDialogStore } from '@/stores/error-dialog-store';
-import { CompletionMessageModal } from '@/components/survey-builder/completion-message-modal';
-import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
-import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
-import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
-import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
-import { SaveSuccessModal } from '@/components/survey-builder/save-success-modal';
-import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
-import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
-import { SurveyDocumentPanel } from '@/components/survey-document/survey-document-panel';
+import { SurveyDocumentPanel } from '@/features/survey-builder/survey-document/survey-document-panel';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { TestModeControl } from '@/components/operations/test-mode-control';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSurvey } from '@/hooks/queries/use-surveys';
-import { useSurveySync } from '@/hooks/use-survey-sync';
+import { TestModeControl } from '@/features/operations/test-mode-control';
+import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
+import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { useBuilderScroll } from '@/features/survey-builder/hooks/use-builder-scroll';
+import { QuestionTypePalette } from '@/features/survey-builder/question-type-palette';
+import { ScrollEdgeButtons } from '@/features/survey-builder/scroll-edge-buttons';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SaveSuccessModal } from '@/features/survey-builder/save-success-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { SurveySettingsPanel } from '@/features/survey-builder/survey-settings-panel';
+import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { useSurveyUIStore } from '@/stores/ui-store';
+import { client } from '@/shared/lib/rpc';
+import { useErrorDialogStore } from '@/stores/error-dialog-store';
 import { Question } from '@/types/survey';
 
-const questionTypes = [
-  {
-    type: 'notice' as const,
-    label: '공지사항',
-    icon: Info,
-    description: '설명 및 안내 문구',
-    color: 'bg-blue-100 text-blue-600',
-  },
-  {
-    type: 'text' as const,
-    label: '단답형',
-    icon: Type,
-    description: '짧은 텍스트 입력',
-    color: 'bg-sky-100 text-sky-600',
-  },
-  {
-    type: 'textarea' as const,
-    label: '장문형',
-    icon: FileText,
-    description: '긴 텍스트 입력',
-    color: 'bg-green-100 text-green-600',
-  },
-  {
-    type: 'radio' as const,
-    label: '단일선택',
-    icon: Circle,
-    description: '하나만 선택 가능',
-    color: 'bg-purple-100 text-purple-600',
-  },
-  {
-    type: 'checkbox' as const,
-    label: '다중선택',
-    icon: CheckSquare,
-    description: '여러 개 선택 가능',
-    color: 'bg-orange-100 text-orange-600',
-  },
-  {
-    type: 'select' as const,
-    label: '드롭다운',
-    icon: ChevronDown,
-    description: '드롭다운 메뉴',
-    color: 'bg-pink-100 text-pink-600',
-  },
-  {
-    type: 'multiselect' as const,
-    label: '다단계선택',
-    icon: List,
-    description: '다중 드롭다운',
-    color: 'bg-teal-100 text-teal-600',
-  },
-  {
-    type: 'ranking' as const,
-    label: '순위형',
-    icon: ListOrdered,
-    description: '순위 매기기 (1순위, 2순위...)',
-    color: 'bg-amber-100 text-amber-600',
-  },
-  {
-    type: 'table' as const,
-    label: '테이블',
-    icon: Table,
-    description: '표 형태 질문',
-    color: 'bg-indigo-100 text-indigo-600',
-  },
-];
 
 interface EditSurveyPageProps {
   params: Promise<{ id: string }>;
@@ -159,14 +87,20 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setVariableCatalog: s.setVariableCatalog,
     })),
   );
+  const {
+    showScrollButtons,
+    questionNumberInput,
+    setQuestionNumberInput,
+    scrollToTop,
+    scrollToBottom,
+    handleQuestionNumberKeyPress,
+  } = useBuilderScroll(selectQuestion);
   // TanStack Query 훅 사용
   const { data: survey, isLoading: isSurveyLoading, isError } = useSurvey(id);
   const { saveSurvey } = useSurveySync();
 
   const [titleInput, setTitleInput] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [questionNumberInput, setQuestionNumberInput] = useState('');
-  const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
   const [slugError, setSlugError] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -177,7 +111,32 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const [showSaveQuestionModal, setShowSaveQuestionModal] = useState(false);
   const [questionToSave, setQuestionToSave] = useState<Question | null>(null);
   const [showImportExportModal, setShowImportExportModal] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      // 배포 전 저장
+      await saveSurvey();
+      return client.surveyBuilder.publish.publish({ surveyId });
+    },
+    onSuccess: (version) => {
+      markPublished();
+      toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
+    },
+    onError: (error) => {
+      const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
+      if (issues && issues.length > 0) {
+        useErrorDialogStore.getState().show({
+          title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
+          description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
+          issues,
+        });
+      } else {
+        toast.error(
+          `배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+        );
+      }
+    },
+  });
+  const isPublishing = publishMutation.isPending;
   // 가운데 열 탭 — 질문 편집 / 조사표(수요조사용 PDF)
   const [centerTab, setCenterTab] = useState<'edit' | 'document'>('edit');
 
@@ -209,11 +168,14 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
 
   // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
   useEffect(() => {
-    client.surveyBuilder.read.variableCatalog({ surveyId: id }).then((catalog) => {
-      setVariableCatalog(catalog);
-    }).catch(() => {
-      // 컨택 없는 설문이면 빈 배열 — 정상 케이스
-    });
+    client.surveyBuilder.read
+      .variableCatalog({ surveyId: id })
+      .then((catalog) => {
+        setVariableCatalog(catalog);
+      })
+      .catch(() => {
+        // 컨택 없는 설문이면 빈 배열 — 정상 케이스
+      });
   }, [id, setVariableCatalog]);
 
   // 저장되지 않은 변경이 있을 때 페이지 이탈 경고
@@ -264,11 +226,12 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     let cancelled = false;
 
     // 500ms 후에 서버 검사 수행
+    const excludePatch = surveyId ? { excludeSurveyId: surveyId } : {};
     const timer = setTimeout(async () => {
       try {
         const isAvailable = await client.surveyBuilder.read.slugAvailable({
           slug: slugInput,
-          ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+          ...excludePatch,
         });
         if (cancelled) return;
         if (!isAvailable) {
@@ -315,23 +278,6 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     }
   };
 
-  // 스크롤 감지 (성능 최적화: requestAnimationFrame 사용)
-  useEffect(() => {
-    let ticking = false;
-
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setShowScrollButtons(window.scrollY > 200);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // 설문 저장 (diff 기반)
   const handleSaveSurvey = async () => {
@@ -346,7 +292,11 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setShowSaveModal(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('이미 사용 중인 URL') || message.includes('slug_unique') || message.includes('23505')) {
+      if (
+        message.includes('이미 사용 중인 URL') ||
+        message.includes('slug_unique') ||
+        message.includes('23505')
+      ) {
         setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
       } else {
         toast.error('설문 저장에 실패했습니다. 다시 시도해주세요.');
@@ -371,68 +321,13 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     }
 
     const confirmed = window.confirm(
-      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`
+      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`,
     );
     if (!confirmed) return;
 
-    setIsPublishing(true);
-    try {
-      // 배포 전 저장
-      await saveSurvey();
-
-      const version = await client.surveyBuilder.publish.publish({ surveyId });
-      markPublished();
-      toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
-    } catch (error) {
-      const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
-      if (issues && issues.length > 0) {
-        useErrorDialogStore.getState().show({
-          title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
-          description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
-          issues,
-        });
-      } else {
-        toast.error(`배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-      }
-    } finally {
-      setIsPublishing(false);
-    }
+    publishMutation.mutate();
   };
 
-  // 맨 위로 스크롤
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // 맨 아래로 스크롤
-  const scrollToBottom = () => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-  };
-
-  // 특정 질문으로 스크롤
-  const scrollToQuestion = (questionNumber: number) => {
-    const questions = useSurveyBuilderStore.getState().currentSurvey.questions;
-    const questionIndex = questionNumber - 1;
-    if (questionIndex >= 0 && questionIndex < questions.length) {
-      const targetQuestion = questions[questionIndex];
-      const questionElement = document.querySelector(`[data-question-index="${questionIndex}"]`);
-      if (questionElement && targetQuestion) {
-        questionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        selectQuestion(targetQuestion.id);
-      }
-    }
-  };
-
-  // 질문 번호 입력 핸들러
-  const handleQuestionNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const questionNumber = parseInt(questionNumberInput, 10);
-      if (!isNaN(questionNumber) && questionNumber > 0) {
-        scrollToQuestion(questionNumber);
-        setQuestionNumberInput('');
-      }
-    }
-  };
 
   // 질문 라이브러리에 저장
   const handleSaveToLibrary = (question: Question) => {
@@ -572,32 +467,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
               <TabsContent value="types" className="m-0 flex-1 overflow-y-auto p-4 pt-2">
                 <div className="space-y-3">
                   <ResponseHeaderSettingsModal />
-                  {questionTypes.map((questionType) => {
-                    const IconComponent = questionType.icon;
-                    return (
-                      <Card
-                        key={questionType.type}
-                        className="hover-lift cursor-pointer border-gray-200 p-4 transition-all duration-200 hover:border-blue-200"
-                        onClick={() => {
-                          addQuestion(questionType.type);
-                        }}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg ${questionType.color}`}
-                          >
-                            <IconComponent className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-medium text-gray-900">
-                              {questionType.label}
-                            </h4>
-                            <p className="mt-1 text-xs text-gray-500">{questionType.description}</p>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
+                  <QuestionTypePalette onSelect={addQuestion} />
                   <CompletionMessageModal />
                 </div>
 
@@ -668,9 +538,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
                         placeholder="질문 번호"
                         className="h-8 w-24 text-sm"
                       />
-                      <span className="text-xs text-gray-500">
-                        / {questionCount}
-                      </span>
+                      <span className="text-xs text-gray-500">/ {questionCount}</span>
                     </div>
                   )}
                 </div>
@@ -724,33 +592,13 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
           </div>
 
           {/* Right Sidebar - Settings */}
-          <SurveySettingsPanel
-            slugInput={slugInput}
-            onAutoGenerateSlug={handleAutoGenerateSlug}
-          />
+          <SurveySettingsPanel slugInput={slugInput} onAutoGenerateSlug={handleAutoGenerateSlug} />
         </div>
       </div>
 
       {/* Floating Scroll Buttons */}
       {showScrollButtons && (
-        <div className="fixed right-6 bottom-6 z-50 flex flex-col space-y-2">
-          <Button
-            onClick={scrollToTop}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 위로"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={scrollToBottom}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 아래로"
-          >
-            <ArrowDown className="h-5 w-5" />
-          </Button>
-        </div>
+        <ScrollEdgeButtons onScrollTop={scrollToTop} onScrollBottom={scrollToBottom} />
       )}
 
       {/* 저장 완료 모달 */}

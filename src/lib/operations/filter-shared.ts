@@ -1,4 +1,43 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import type { NumRange } from './range-list';
+
+export type CombineOp = 'AND' | 'OR';
+export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
+
+export interface FilterCondition {
+  source: string;
+  mode: ConditionMode;
+  value: string;
+  ranges?: NumRange[];
+  /** mode === 'exact' (pii.*) 일 때만 populated. 그 외는 undefined. 소비자는 null-check 필수. */
+  blindIndex?: string;
+  /** mode === 'in' (헤더 체크박스 필터) 일 때만 populated. 컬럼 내 OR 값 목록. */
+  values?: string[];
+  /**
+   * system.contact_result 전용 — "결과 없음"(최신 회차 result_code IS NULL) 을 OR 로 포함.
+   * UI 센티널(FILTER_NONE_VALUE)을 파서가 여기로 승격시키므로 SQL 은 값 공간을 보지 않는다.
+   * enum 모드에서는 이 플래그만으로 조건이 성립하고 value 는 URL 왕복용으로만 남는다.
+   */
+  includeNull?: boolean;
+  /**
+   * includeNull 의 여집합 — 값이 있는 행만 (빈 값 제외). 입력형 컬럼(pii·고카디널리티
+   * attrs)의 "— 제외하고 보기" 토글이 단독 절로 만든다. includeNull 과 동시에 서지 않는다.
+   */
+  excludeNull?: boolean;
+  /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
+  subConditions?: FilterCondition[];
+  /**
+   * attrs.* + mode === 'idlist' 전용 — 값이 순수 정수가 아닌 행에 한해 부분검색(ILIKE)도
+   * OR 로 함께 건다. 단일 숫자 입력("1")이 숫자 컬럼에서는 정확 매칭이면서
+   * 텍스트 컬럼("A1")에서는 종전 부분검색으로 남게 하는 이음새.
+   */
+  textFallback?: boolean;
+}
+
+export interface FilterClause {
+  condition: FilterCondition;
+  op: CombineOp | null;
+}
 
 /**
  * 필터 source 문자열 상수 — 진척 보고/조사 대상 모듈 모두 공유.
@@ -195,7 +234,7 @@ export type HeaderFilterMode = (typeof HEADER_FILTER_MODES)[number];
 
 /**
  * ILIKE wildcard escape — `%` `_` `\` 를 리터럴로 처리.
- * profiles.server.ts / report-progress.server.ts / contacts.server.ts 가 공유.
+ * server 의 operations/profiles·operations/report-progress·read-models/contacts 가 공유.
  */
 export function escapeLikePattern(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');

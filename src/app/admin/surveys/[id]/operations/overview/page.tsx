@@ -1,27 +1,27 @@
 import type { Metadata } from 'next';
 
-import { ExportDataModal } from '@/components/analytics/export-data-modal';
-import { DailyParticipationChart } from '@/components/operations/daily-participation-chart';
-import { DailyStatsTable } from '@/components/operations/daily-stats-table';
-import { DropFunnel } from '@/components/operations/drop-funnel';
-import { InquiriesEmptyCard } from '@/components/operations/inquiries-empty-card';
-import { KpiRow } from '@/components/operations/kpi-row';
-import { PageDwellDistribution } from '@/components/operations/page-dwell-distribution';
-import { QuotaStatusPanel } from '@/components/operations/quota/quota-status-panel';
-import { ResponseTimeStats } from '@/components/operations/response-time-stats';
+import { ExportDataModal } from '@/features/analytics/export-data-modal';
+import { DailyParticipationChart } from '@/features/operations/daily-participation-chart';
+import { DailyStatsTable } from '@/features/operations/daily-stats-table';
+import { DropFunnel } from '@/features/operations/drop-funnel';
+import { InquiriesEmptyCard } from '@/features/operations/inquiries-empty-card';
+import { KpiRow } from '@/features/operations/kpi-row';
+import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
+import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
+import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
-} from '@/lib/operations/aggregate-daily.server';
-import { aggregateStatus } from '@/lib/operations/aggregate-status.server';
-import { getDailyStats } from '@/lib/operations/daily-stats.server';
-import { getDropFunnel } from '@/lib/operations/drop-funnel.server';
-import { getPageDwell } from '@/lib/operations/page-dwell.server';
-import { getQuotaStatus } from '@/lib/operations/quota-status.server';
-import { getResponseTime } from '@/lib/operations/response-time.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/operations/services/aggregate-daily';
+import { aggregateStatus } from '@/server/operations/services/aggregate-status';
+import { getDailyStats } from '@/server/operations/services/daily-stats';
+import { getDropFunnel } from '@/server/operations/services/drop-funnel';
+import { getPageDwell } from '@/server/operations/services/page-dwell';
+import { getQuotaStatus } from '@/server/quota/services/quota-status';
+import { getResponseTime } from '@/server/operations/services/response-time';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.

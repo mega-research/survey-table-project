@@ -1,34 +1,34 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { CampaignWizard } from '@/components/operations/mail-campaign/campaign-wizard';
-import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
-import { getMailTemplatesBySurvey } from '@/features/mail/server/services/mail-templates.service';
+import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   CAMPAIGN_SORT_KEYS,
   previewCampaignCandidates,
   type CampaignSortDir,
   type CampaignSortKey,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns-read';
 import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/lib/operations/contacts.server';
+} from '@/server/read-models/contacts';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
-  type FilterClause,
-} from '@/lib/operations/contacts-filters.server';
+} from '@/server/read-models/contacts-filters';
+import { getOperationsDataScope } from '@/server/data-scope';
+import type { FilterClause } from '@/lib/operations/filter-shared';
 import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
-import { loadIdListsForValues } from '@/lib/operations/contact-id-lists.server';
-import { buildTemplateRedirectQuery } from '@/lib/operations/campaign-wizard-url';
+import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
+import { buildTemplateRedirectQuery } from '@/features/operations/mail-campaign/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
   type HeaderFilterEntry,
-} from '@/lib/operations/header-filter-url';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/features/operations/filters/header-filter-url';
 
 const PAGE_SIZE = 20;
 

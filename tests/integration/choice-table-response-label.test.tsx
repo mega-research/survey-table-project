@@ -8,7 +8,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 
 // 데스크톱 강제
@@ -17,13 +17,13 @@ vi.mock('@/hooks/use-media-query', () => ({
   useMediaQuery: () => false,
 }));
 // 컨택 토큰 컨텍스트 (provider 없이)
-vi.mock('@/lib/survey/contact-attrs-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/survey/contact-attrs-context')>()),
+vi.mock('@/features/question-renderer/contact-attrs-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/question-renderer/contact-attrs-context')>()),
   useContactAttrs: () => ({}),
   useAnswerQuotes: () => ({}),
 }));
 // TablePreview 더블: renderCell 을 각 셀에 호출해 결과만 렌더한다.
-vi.mock('@/components/survey-builder/table-preview', () => ({
+vi.mock('@/features/question-renderer/table-preview', () => ({
   TablePreview: ({
     rows,
     renderCell,

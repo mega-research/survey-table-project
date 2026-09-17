@@ -4,12 +4,12 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/server/response-filters';
 import {
   loadOperationsDataScope,
   responseScopeCondition,
   testFlagForScope,
-} from '@/lib/operations/data-scope.server';
+} from '@/server/data-scope';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -22,10 +22,10 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
-import { countRawExportPopulation } from '@/lib/analytics/raw-export-rows.server';
+import { countRawExportPopulation } from '../raw-export-load';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
-import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
-import { loadChangeConfirmQuestionIds } from '@/features/contacts/server/services/contact-prior-answers.service';
+import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
+import { loadChangeConfirmQuestionIds } from '@/server/contacts/services/contact-prior-answers';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
 export const maxDuration = 30;

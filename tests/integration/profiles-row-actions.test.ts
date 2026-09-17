@@ -10,14 +10,14 @@ import {
   hardResetResponse,
   restoreResponse,
   softDeleteResponse,
-} from '@/features/survey-response/server/services/response-manage.service';
-import { saveAdminEdit } from '@/features/survey-response/server/services/response-edit.service';
-import { manage } from '@/features/survey-response/server/procedures/manage';
+} from '@/server/survey-response/services/response-manage';
+import { saveAdminEdit } from '@/server/survey-response/services/response-edit';
+import { manage } from '@/server/survey-response/procedures/manage';
 import type { ORPCContext } from '@/server/context';
-import type { StatusCounts } from '@/lib/operations/aggregate-status';
-import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';
-import * as profilesServer from '@/lib/operations/profiles.server';
-import type { ListProfilesResult } from '@/lib/operations/profiles.server';
+import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
+import * as aggregateStatusServer from '@/server/operations/services/aggregate-status';
+import * as profilesServer from '@/server/operations/services/profiles';
+import type { ListProfilesResult } from '@/server/operations/services/profiles';
 
 // ========================
 // 모듈 모킹
@@ -698,7 +698,7 @@ describe('profiles-row-actions', () => {
       expect(after?.startedAt.getTime()).toBe(before?.startedAt.getTime());
     });
 
-    it('삭제된 응답은 수정 거부 — Cannot edit deleted response throw', async () => {
+    it('삭제된 응답은 수정 거부 — response_deleted throw', async () => {
       const surveyId = createTestSurvey();
       const responseId = createTestResponse(surveyId);
       await softDeleteResponse({ surveyId, responseId });
@@ -709,7 +709,7 @@ describe('profiles-row-actions', () => {
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),
-      ).rejects.toThrow('Cannot edit deleted response');
+      ).rejects.toMatchObject({ reason: 'response_deleted' });
     });
 
     it('response_answers 를 새 응답으로 재기록한다 (옛 답 제거 + 새 답 INSERT)', async () => {
@@ -751,7 +751,7 @@ describe('profiles-row-actions', () => {
       expect(remaining0.questionId).toBe(newQid);
     });
 
-    it('존재하지 않는 응답은 Response not found throw', async () => {
+    it('존재하지 않는 응답은 response_not_found throw', async () => {
       const surveyId = createTestSurvey();
       await expect(
         saveAdminEdit(
@@ -759,7 +759,7 @@ describe('profiles-row-actions', () => {
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),
-      ).rejects.toThrow('Response not found');
+      ).rejects.toMatchObject({ reason: 'response_not_found' });
     });
   });
 

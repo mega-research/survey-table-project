@@ -1,0 +1,353 @@
+import type { CSSProperties } from 'react';
+
+import { cn } from '@/lib/utils';
+import type { TableCell, TableColumn, TableRow } from '@/types/survey';
+
+import { type TableRenderableQuestion, rendersAsTable } from '@/features/question-renderer/utils/renders-as-table';
+
+// ── grid-template-columns 생성 ──
+
+export function buildGridTemplateCols(columns: TableColumn[]): string {
+  return columns.map((col) => `${col.width || 150}px`).join(' ');
+}
+
+// ── 전체 테이블 너비 계산 ──
+
+export function calcTotalWidth(columns: TableColumn[]): number {
+  return columns.reduce((sum, col) => sum + (col.width || 150), 0);
+}
+
+// ── 응답 페이지 컨테이너 폭 판정 ──
+
+/** 표 총폭이 이 값(px)을 넘으면 응답 페이지 컨테이너를 넓게(1280px) 편다. */
+export const RESPONSE_WIDE_TABLE_THRESHOLD_PX = 718;
+
+/**
+ * 응답 페이지 현재 스텝의 컨테이너 max-width 클래스 결정.
+ * - forceWide(설문 설정 "화면 너비" 토글)가 켜져 있으면 표 유무와 무관하게 항상 max-w-7xl
+ * - 표가 그려지는 문항이 없으면 좁은 폭(896px)
+ * - 있으면 가장 넓은 표 기준: 718px 초과 → max-w-7xl(1280px), 이하 → max-w-4xl(896px)
+ *
+ * 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 을 포함한다 (rendersAsTable).
+ */
+export function resolveResponseContainerWidth(
+  questions: ReadonlyArray<TableRenderableQuestion>,
+  opts?: { forceWide?: boolean | undefined },
+): 'max-w-7xl' | 'max-w-4xl' {
+  if (opts?.forceWide) return 'max-w-7xl';
+  const tableWidths = questions
+    .filter(rendersAsTable)
+    .map((q) => calcTotalWidth(q.tableColumns ?? []));
+  if (tableWidths.length === 0) return 'max-w-4xl';
+  return Math.max(...tableWidths) > RESPONSE_WIDE_TABLE_THRESHOLD_PX ? 'max-w-7xl' : 'max-w-4xl';
+}
+
+// ── 셀 grid span 스타일 ──
+
+export function getGridSpanStyle(
+  colspan?: number,
+  rowspan?: number,
+): CSSProperties | undefined {
+  const cs = colspan && colspan > 1 ? `span ${colspan}` : undefined;
+  const rs = rowspan && rowspan > 1 ? `span ${rowspan}` : undefined;
+  if (!cs && !rs) return undefined;
+  return {
+    ...(cs && { gridColumn: cs }),
+    ...(rs && { gridRow: rs }),
+  };
+}
+
+// ── 셀 정렬 Tailwind 클래스 ──
+// flex-col 기반:
+//   세로 정렬 → justify-start/center/end (main axis)
+//   가로 정렬 → items-start/center/end (cross axis) + text-left/center/right (텍스트용)
+
+const H_ITEMS_ONLY_MAP = {
+  left: 'items-start',
+  center: 'items-center',
+  right: 'items-end',
+} as const;
+
+const H_ITEMS_MAP = {
+  left: `${H_ITEMS_ONLY_MAP.left} text-left`,
+  center: `${H_ITEMS_ONLY_MAP.center} text-center`,
+  right: `${H_ITEMS_ONLY_MAP.right} text-right`,
+} as const;
+
+/**
+ * 가로 정렬의 items-* 만 — 너비를 고정한 입력칸처럼 텍스트 정렬은 따로 정하는(입력값 정렬 상속)
+ * 자리용. getAlignmentClasses 는 text-* 까지 붙여 그쪽을 덮는다.
+ */
+export function getHorizontalItemsClass(horizontalAlign?: 'left' | 'center' | 'right'): string {
+  return H_ITEMS_ONLY_MAP[horizontalAlign || 'left'];
+}
+
+const H_JUSTIFY_MAP = {
+  left: 'justify-start',
+  center: 'justify-center',
+  right: 'justify-end',
+} as const;
+
+/**
+ * 가로 정렬의 justify-* — 셀 안에서 폭을 꽉 채우는(w-full) 가로 행이 [컨트롤+라벨] 묶음을
+ * 어디에 둘지. 셀 래퍼의 items-* 는 w-full 인 자식에 닿지 않아 행이 스스로 정렬해야 한다.
+ */
+export function getHorizontalJustifyClass(horizontalAlign?: 'left' | 'center' | 'right'): string {
+  return H_JUSTIFY_MAP[horizontalAlign || 'left'];
+}
+
+/**
+ * 본문 셀의 격자선 — 오른쪽·아래. `hideRightBorder` 셀은 오른쪽 선을 빼서 다음 셀과 한 칸처럼
+ * 이어 보인다(응답 화면·미리보기 공용. 빌더 편집 격자는 경계를 보여야 해서 이 헬퍼를 쓰지 않는다).
+ */
+export function getCellBorderClasses(cell: Pick<TableCell, 'hideRightBorder'>): string {
+  return cn('border-b border-gray-400', !cell.hideRightBorder && 'border-r');
+}
+
+const V_JUSTIFY_MAP = {
+  top: 'justify-start',
+  middle: 'justify-center',
+  bottom: 'justify-end',
+} as const;
+
+export function getAlignmentClasses(
+  horizontalAlign?: 'left' | 'center' | 'right',
+  verticalAlign?: 'top' | 'middle' | 'bottom',
+): string {
+  return cn(
+    'flex flex-col',
+    V_JUSTIFY_MAP[verticalAlign || 'top'],
+    H_ITEMS_MAP[horizontalAlign || 'left'],
+  );
+}
+
+const INPUT_TEXT_ALIGN_MAP = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+} as const;
+
+/**
+ * 입력값(input 셀의 입력 텍스트, calc 셀의 계산값) 가로 정렬 클래스.
+ *
+ * 미지정이면 빈 문자열을 반환한다 — 셀 래퍼의 horizontalAlign 이 만드는 text-align 상속을
+ * 그대로 두기 위함이다(기존 설문 동작 보존). 값이 있으면 그 상속을 덮어쓴다.
+ */
+export function getInputTextAlignClass(align?: 'left' | 'center' | 'right'): string {
+  return align ? INPUT_TEXT_ALIGN_MAP[align] : '';
+}
+
+// ── ARIA 속성 ──
+
+export function getGridCellAria(
+  role: 'gridcell' | 'columnheader' | 'rowheader' = 'gridcell',
+  colspan?: number,
+  rowspan?: number,
+): Record<string, string | number> {
+  const attrs: Record<string, string | number> = { role };
+  if (colspan && colspan > 1) attrs['aria-colspan'] = colspan;
+  if (rowspan && rowspan > 1) attrs['aria-rowspan'] = rowspan;
+  return attrs;
+}
+
+// ── Sticky 좌측 열 판정 ──
+
+// 좌측 sticky 대상 셀 타입: 정적 셀 + 라벨 전용 radio
+const STICKY_ELIGIBLE_CELL_TYPES = new Set(['text', 'image', 'video']);
+
+/**
+ * 셀이 좌측 sticky 후보인지. radio 는 "라디오 1개짜리 라벨 셀"(행 라벨 용도)만
+ * 허용한다 — 응답용 radio(옵션 여러 개)까지 후보로 인정하면 colspan 점유 열
+ * (판정 스킵)과 결합해 sticky 범위가 척도 영역까지 번지고, 태블릿 폭에서
+ * 너비 클램프에 걸리면 "몇 열만 고정 + 다음 열 겹침" 깨짐이 생긴다.
+ */
+function isStickyEligibleCell(cell: TableRow['cells'][number]): boolean {
+  if (STICKY_ELIGIBLE_CELL_TYPES.has(cell.type)) return true;
+  return cell.type === 'radio' && (cell.radioOptions?.length ?? 0) <= 1;
+}
+// 2 = [라벨 열 + 응답 colspan 열] 구조도 라벨 고정 대상 (스크롤 열 1개 이상만 남으면 됨)
+const MIN_COLUMNS_FOR_STICKY = 2;
+
+/** 헤더 행의 최소 높이(px). sticky 활성 시 grid row가 contents 높이로 붕괴되는 것을 방지 */
+export const HEADER_ROW_MIN_HEIGHT = 40;
+/** 바디 sticky 셀의 z-index (페이지 sticky 헤더보다 낮게) */
+export const STICKY_BODY_Z = 10;
+/**
+ * 좌측 sticky 열이 차지할 수 있는 스크롤 뷰포트 너비의 최대 비율.
+ * 누적 sticky 너비가 (뷰포트 폭 × 이 비율)을 넘으면 뒤쪽 sticky 후보 열부터
+ * 일반 스크롤 열로 돌린다. 좁은 화면(태블릿 등)에서 넓은 텍스트 열이 sticky로
+ * 화면을 거의 다 덮어 가로 스크롤 영역이 사라지는 것을 방지한다. 최소 1열은 유지.
+ * 데스크톱처럼 넓은 뷰포트에서는 임계가 커져 기존 동작(다열 sticky)이 유지된다.
+ * 체감이 안 맞으면 이 값만 조정한다.
+ */
+export const STICKY_MAX_VIEWPORT_RATIO = 0.6;
+
+export interface StickyLeftInfo {
+  stickyColCount: number;
+  leftOffsets: number[];
+}
+
+/**
+ * 좌측부터 연속된 정적(text/image/video) 셀로만 이루어진 열의 개수를 계산한다.
+ * 인터랙티브 셀(radio/checkbox/select/input)이 나오면 경계. colspan으로 경계를 가로지르는 셀도 경계로 간주.
+ *
+ * 가드:
+ * - 열이 MIN_COLUMNS_FOR_STICKY 미만이면 비활성 (가로 스크롤이 없거나 적음)
+ * - 전체 열이 sticky 대상이 되어 가로 스크롤 의미가 없어지면 비활성
+ * - 누적 sticky 너비가 maxStickyWidth를 넘으면 뒤쪽 열부터 sticky 제외 (최소 1열 유지)
+ *
+ * @param maxStickyWidth sticky 열 누적 너비 상한(px). 좁은 뷰포트에서 넓은 텍스트 열이
+ *   화면을 다 가리는 것을 막는다. undefined면 너비 제한 없음(미측정 시점 fallback).
+ * @param stickyColumnCount 질문에 명시된 고정 열 개수. undefined/null 이면 위 자동 판정을
+ *   그대로 쓴다. 0 이면 고정하지 않고, 1 이상이면 정적 셀 경계 판정을 건너뛰고 앞에서 그
+ *   개수만큼 고정한다. 자동이 기본인 이유는 회귀 방지다 — 0 을 기본으로 두면 지금 붙어 있는
+ *   표가 전부 풀린다. 명시 지정도 "스크롤할 열이 남는가"·"화면을 다 덮지 않는가" 두 가드는
+ *   그대로 통과해야 한다.
+ */
+export function computeStickyLeftColumns(
+  visibleColumns: TableColumn[],
+  visibleRows: TableRow[],
+  maxStickyWidth?: number,
+  stickyColumnCount?: number | null,
+): StickyLeftInfo {
+  const leftOffsets: number[] = [];
+  let acc = 0;
+  for (const col of visibleColumns) {
+    leftOffsets.push(acc);
+    acc += col.width || 150;
+  }
+
+  if (visibleColumns.length < MIN_COLUMNS_FOR_STICKY) {
+    return { stickyColCount: 0, leftOffsets };
+  }
+
+  // 명시 지정: 음수·소수는 방어적으로 다듬는다 (범위 상한은 스키마가 강제).
+  const explicitCount =
+    stickyColumnCount == null ? undefined : Math.max(0, Math.floor(stickyColumnCount));
+  if (explicitCount === 0) {
+    return { stickyColCount: 0, leftOffsets };
+  }
+
+  let stickyColCount = 0;
+  let stickyWidth = 0;
+  for (let colIdx = 0; colIdx < visibleColumns.length; colIdx++) {
+    // 명시 지정 시에는 셀 타입 경계를 보지 않고 지정 개수에서 끊는다.
+    if (explicitCount !== undefined) {
+      if (colIdx >= explicitCount) break;
+    } else {
+      let ok = true;
+      for (const row of visibleRows) {
+        const cell = row.cells[colIdx];
+        if (!cell) continue;
+        // colspan으로 점유돼 숨겨진 셀은 건너뜀 (colspan 자체는 경계 위반 아님 — 각 열 독립 판정)
+        if (cell.isHidden) continue;
+        if (cell._isContinuation) continue;
+        if (!isStickyEligibleCell(cell)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) break;
+    }
+
+    // 너비 컷: 이미 1열 이상 확보했고 이 열을 더하면 상한을 넘으면 중단한다.
+    // 좁은 화면에서 넓은 텍스트 열(예: "직업 설명 및 예시")이 sticky로 뷰포트를
+    // 거의 다 덮어 가로 스크롤 공간이 사라지는 것을 방지. 최소 1열은 항상 sticky.
+    const colWidth = visibleColumns[colIdx]?.width || 150;
+    if (
+      maxStickyWidth !== undefined &&
+      stickyColCount >= 1 &&
+      stickyWidth + colWidth > maxStickyWidth
+    ) {
+      break;
+    }
+    stickyWidth += colWidth;
+    stickyColCount++;
+  }
+
+  // 경계가 colspan 셀 한가운데를 지나면 그 셀 앞까지 물러난다. 본문은
+  // `cellIndex < stickyColCount` 로 sticky 를 걸기 때문에, 여러 열을 덮는 셀이
+  // sticky 가 되면 스크롤 시 뒤쪽 열 위를 덮으며 따라온다.
+  stickyColCount = retreatFromColspanBoundary(stickyColCount, visibleRows);
+
+  // 스크롤할 열이 하나도 안 남으면(전 열 고정) 비활성
+  if (stickyColCount >= visibleColumns.length) {
+    return { stickyColCount: 0, leftOffsets };
+  }
+
+  return { stickyColCount, leftOffsets };
+}
+
+/**
+ * 고정 경계(= 앞에서 count 개 열까지)가 colspan 셀 내부를 가르지 않도록 count 를 줄인다.
+ * 자를 수 없는 경계뿐이면 0 (고정 없음).
+ */
+function retreatFromColspanBoundary(count: number, visibleRows: TableRow[]): number {
+  if (count <= 0) return 0;
+
+  // 경계로 삼을 수 없는 위치 — colspan 셀이 걸쳐 있는 내부 지점
+  const forbidden = new Set<number>();
+  for (const row of visibleRows) {
+    for (let colIdx = 0; colIdx < row.cells.length; colIdx++) {
+      const cell = row.cells[colIdx];
+      if (!cell) continue;
+      if (cell.isHidden) continue;
+      if (cell._isContinuation) continue;
+      const span = cell.colspan || 1;
+      for (let inner = colIdx + 1; inner < colIdx + span; inner++) {
+        forbidden.add(inner);
+      }
+    }
+  }
+
+  let next = count;
+  while (next > 0 && forbidden.has(next)) next--;
+  return next;
+}
+
+// ── 헤더 셀 sticky 스타일 ──
+//
+// 좌측 sticky 영역에 들어가는 헤더 셀에 left sticky + z-index + 경계 그림자를
+// 부여한다. 페이지 기준 sticky 헤더 래퍼 내부에서 동작하므로 top은 적용하지 않는다.
+
+const STICKY_CORNER_Z = 30;
+
+/** 좌측 sticky 영역에 속하는 헤더 셀인지 판정 */
+export function isHeaderCellInStickyLeft(
+  startCol: number,
+  stickyColCount: number,
+): boolean {
+  return startCol <= stickyColCount;
+}
+
+/** 좌측 sticky 영역의 **마지막** 열을 차지하는 셀인지 (경계 그림자용) */
+export function isHeaderCellAtStickyBoundary(
+  startCol: number,
+  colspan: number,
+  stickyColCount: number,
+): boolean {
+  return startCol + colspan - 1 === stickyColCount;
+}
+
+/**
+ * 헤더 셀의 sticky 스타일을 생성한다 (left sticky 전용).
+ * - 좌측 sticky 영역 바깥이면 undefined 반환
+ * - 마지막 sticky 열이면 우측에 경계 그림자 적용
+ */
+export function getHeaderCellStickyStyle(
+  startCol: number,
+  colspan: number,
+  stickyInfo: StickyLeftInfo | undefined,
+): CSSProperties | undefined {
+  if (!stickyInfo || stickyInfo.stickyColCount === 0) return undefined;
+  if (!isHeaderCellInStickyLeft(startCol, stickyInfo.stickyColCount)) return undefined;
+  const style: CSSProperties = {
+    position: 'sticky',
+    left: stickyInfo.leftOffsets[startCol - 1],
+    zIndex: STICKY_CORNER_Z,
+  };
+  if (isHeaderCellAtStickyBoundary(startCol, colspan, stickyInfo.stickyColCount)) {
+    style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
+  }
+  return style;
+}

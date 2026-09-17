@@ -91,7 +91,7 @@ vi.mock('@/db', () => ({
 }));
 
 // findContactByInviteToken 내부에서 negative codes 조회
-vi.mock('@/lib/operations/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
@@ -99,7 +99,7 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { createBlankResponse } from '@/features/survey-response/server/services/response.service';
+import { createBlankResponse } from '@/server/survey-response/services/response-entry';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 const PLACEHOLDER_SIGNALS: ClientSignals = {

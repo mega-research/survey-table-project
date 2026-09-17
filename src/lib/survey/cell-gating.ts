@@ -1,6 +1,6 @@
 import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
+import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import { decodeChoiceTableCellValue } from '@/lib/survey/choice-table-cell-value';
-import { OPT_TEXTS_KEY } from '@/lib/survey/response-sidecars';
 import type { CellEnableCondition, Question, TableCell, TableRow } from '@/types/survey';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { resolveSelectedValues } from '@/utils/table-cell-semantics';

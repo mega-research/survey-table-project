@@ -11,14 +11,12 @@
  * (요청을 거부하지 않는다 — `splitRootSidecars` 주석 참조).
  */
 
-import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { OPT_TEXTS_KEY, readOptTextsSidecar } from '@/lib/option-text-read';
 import { CHANGE_CONFIRM_KEY, sanitizeChangeConfirmations } from '@/lib/survey/change-confirmation';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   sanitizeDynamicRowSelections,
 } from '@/utils/dynamic-row-selection-sidecar';
-
-export const OPT_TEXTS_KEY = '__optTexts__';
 
 /**
  * 사이드카 정제 함수. 형태 검증을 수행하고, 실존 문항 판정이 주어지면 그 문항의

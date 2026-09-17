@@ -30,6 +30,16 @@ import { Redis } from '@upstash/redis';
  *   fail-open 으로 조용히 스킵되는 품질 문제가 있어 전용 예산을 준다.
  * - lookup: 토큰/attrs/중복 조회 등 읽기. IP 당 60회/1분 (클라이언트 축 없음 —
  *   IP 가드 없이 축을 주면 회전 우회 표면만 생긴다).
+ * - public-read: 응답 페이지 진입 시 설문 조회(bySlug/byPrivateToken/forResponse).
+ *   IP 당 300회/1분. lookup 과 분리하는 이유는 잠식 방지다 — 진입 1회가 이미 lookup 을
+ *   3회(resume/attrs/duplicate) 쓰는데 여기까지 얹으면 5회가 되어 같은 NAT 뒤 동시
+ *   진입 인원이 20명/분에서 12명/분으로 떨어진다. 초과 시 응답자는 재시도 여지 없이
+ *   설문 로딩 에러 화면을 본다(use-survey-loader 초기 로딩 catch).
+ *   입력(slug/token/surveyId)에 sessionId·responseId 가 없어 클라이언트 축이 잡히지
+ *   않으므로 키는 `public-read:ip` 단일 IP 버킷 — 사실상 IP 전체 가드다. 그래서 한도도
+ *   세션 단위 fine 버킷이 아니라 다른 `-ip` 가드와 같은 스케일로 잡았다.
+ *   IP_WIDE_GROUPS 에는 등재하지 않는다 — 클라이언트 축이 없으면 fine 키가 `group:ip`
+ *   로 떨어져 가드 키와 축이 같아지고, 같은 IP 를 두 번 세는 왕복만 늘어난다.
  */
 export const RATE_LIMIT_PRESETS = {
   'response-mutation': { tokens: 30, window: '1 m' },
@@ -41,6 +51,11 @@ export const RATE_LIMIT_PRESETS = {
   'quota-check': { tokens: 30, window: '1 m' },
   'quota-check-ip': { tokens: 300, window: '1 m' },
   lookup: { tokens: 60, window: '1 m' },
+  // 공개 설문 조회. 진입 1회당 2회 소비(bySlug|byPrivateToken + forResponse)라 같은 IP 뒤
+  // 약 150명/분까지 통과한다 — 실사 사무실 공용 IP 를 염두에 둔 여유값이다.
+  // 주의: RSC 가 서비스를 직접 호출하는 경로(/i/[code], /preview/[token])는 procedure 를
+  // 타지 않아 이 버킷에 계측되지 않는다.
+  'public-read': { tokens: 300, window: '1 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitGroup = keyof typeof RATE_LIMIT_PRESETS;

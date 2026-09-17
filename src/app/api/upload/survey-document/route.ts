@@ -9,8 +9,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { readPdfPageCount } from '@/lib/survey-document/pdf-page-count.server';
-import { TMP_SURVEY_DOCUMENT_PREFIX } from '@/lib/survey-document/document-key';
+import { readPdfPageCount } from '@/server/survey-document/services/pdf-page-count';
+import { TMP_SURVEY_DOCUMENT_PREFIX } from '@/server/survey-document/services/document-key';
 import { MIN_FILE_BYTES, validateFilename } from '@/lib/upload/attachment-policy';
 
 const r2Client = new S3Client({

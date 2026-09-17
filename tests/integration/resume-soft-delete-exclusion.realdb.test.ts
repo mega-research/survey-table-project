@@ -24,7 +24,7 @@ const { mockFindContactByInviteToken } = vi.hoisted(() => ({
   mockFindContactByInviteToken: vi.fn(),
 }));
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: mockFindContactByInviteToken,
 }));
 
@@ -35,7 +35,7 @@ import {
   surveys as surveysTable,
 } from '@/db/schema';
 
-import { resumeOrCreateResponse } from '@/features/survey-response/server/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle';
 import { generateInviteCode } from '@/lib/survey-url';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

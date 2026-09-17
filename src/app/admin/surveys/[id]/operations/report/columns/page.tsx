@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ProgressColumnEditor } from '@/components/operations/report/progress-column-editor';
+import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
 import { Button } from '@/components/ui/button';
-import { getContactColumnScheme } from '@/lib/operations/contacts.server';
-import { getProgressColumnScheme } from '@/lib/operations/report-progress.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getProgressColumnScheme } from '@/server/operations/services/report-progress';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const dynamic = 'force-dynamic';
 

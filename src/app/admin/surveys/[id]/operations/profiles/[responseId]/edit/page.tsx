@@ -3,13 +3,13 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
-import type { SurveyAnchorSnapshot } from '@/db/schema/schema-types';
-import { buildDocumentView } from '@/features/survey-builder/server/services/survey-read.service';
-import { lookupPriorAnswersByContactTarget } from '@/features/contacts/server/services/contact-prior-answers.service';
+import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
+import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
+import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
-import { getResponseById } from '@/data/responses';
-import { isResponseExcluded } from '@/lib/operations/profiles.server';
-import { getOperationsDataScope, testFlagForScope } from '@/lib/operations/data-scope.server';
+import { getResponseById } from '@/server/read-models/responses';
+import { isResponseExcluded } from '@/server/operations/services/profiles';
+import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
@@ -111,7 +111,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   let initialResponses = response.questionResponses as Record<string, unknown>;
   if (migratedFromOldVersion) {
     // SurveyVersionSnapshot.questions 는 타입상 필수지만 손상된 스냅샷 행은 방어적으로
-    // 읽는다(response-edit.service.ts 161-175행과 동일 캐스팅 패턴).
+    // 읽는다(server/survey-response/services/response-edit.ts 의 같은 캐스팅 패턴).
     const rawSnapshot = version?.snapshot as unknown as { questions?: unknown } | null;
     if (Array.isArray(rawSnapshot?.questions)) {
       const snapshotQuestions = normalizeQuestions(rawSnapshot.questions, 'preserve').map(

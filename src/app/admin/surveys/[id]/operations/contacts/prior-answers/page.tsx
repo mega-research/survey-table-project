@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
-import { PriorAnswerImportWizard } from '@/components/operations/contacts/prior-answer-import-wizard';
+import { PriorAnswerImportWizard } from '@/features/operations/contacts/prior-answer-import-wizard';
 import {
   countPriorAnswerTargets,
   listPriorAnswerMatchFields,
-} from '@/features/contacts/server/services/prior-answer-import.service';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/contacts/services/prior-answer-import';
+import { getOperationsDataScope } from '@/server/data-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 이월 응답 임포트',

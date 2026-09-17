@@ -116,24 +116,24 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/lib/survey-control)
-vi.mock('@/lib/survey-control', () => ({
+// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/server/read-models/survey-control)
+vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => flagsMock(...a),
   isValidTestToken: vi.fn(() => false),
 }));
 
 // createResponseWithFirstAnswer 의 UA 파싱(next/headers) + 중복 감지 신호/검사 목.
 vi.mock('next/headers', () => ({ headers: (...a: unknown[]) => headersMock(...a) }));
-vi.mock('@/lib/duplicate-detection/signals', () => ({
+vi.mock('@/server/survey-response/services/signals', () => ({
   computeSignals: (...a: unknown[]) => computeSignalsMock(...a),
 }));
-vi.mock('@/lib/duplicate-detection/check', () => ({
+vi.mock('@/server/survey-response/services/check', () => ({
   checkTrackA: (...a: unknown[]) => checkTrackAMock(...a),
   checkTrackB: (...a: unknown[]) => checkTrackBMock(...a),
 }));
 
 // completeResponse / saveAdminEdit 이 공유하는 정규화 저장 — 전달된 맵의 암호화 여부를 검증한다.
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers', () => ({
   replaceResponseAnswers: (...a: unknown[]) => replaceResponseAnswersMock(...a),
 }));
 
@@ -233,7 +233,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('스냅샷에서 piiEncrypted=true 면 jsonb_set 값이 v1: 암호문이다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -248,10 +248,41 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
     expect(serialized).toMatch(/v\d+:/);
   });
 
+  // A-2f-5: 임계 기준은 저장값(PII 는 암호문). 평문이 상한 이하여도 암호문이 넘으면 막힌다.
+  it('PII 문항: 평문은 상한 이하지만 암호문이 넘으면 UPDATE 이전에 거부한다', async () => {
+    executeMock.mockResolvedValue([{ pii: true }]);
+    const { updateQuestionResponse } = await import(
+      '@/server/survey-response/services/response-answer-write'
+    );
+    await expect(
+      updateQuestionResponse({
+        responseId: RESPONSE_ID,
+        questionId: QUESTION_ID,
+        // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB).
+        value: 'a'.repeat(220 * 1024),
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  // 회귀 가드: 비PII 문항의 임계는 종전 그대로 256KB 평문이다(가드가 과하게 조여지지 않았다).
+  it('비PII 문항: 평문 220KB 는 종전대로 저장된다', async () => {
+    executeMock.mockResolvedValue([{ pii: false }]);
+    const { updateQuestionResponse } = await import(
+      '@/server/survey-response/services/response-answer-write'
+    );
+    await updateQuestionResponse({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: 'a'.repeat(220 * 1024),
+    });
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
+  });
+
   it('piiEncrypted=false 면 평문 그대로 저장한다', async () => {
     executeMock.mockResolvedValue([{ pii: false }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -270,7 +301,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('assert 쿼리 SQL 텍스트에 live 합집합 조각(FROM questions 서브셀렉트 + OR COALESCE)이 포함된다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -311,7 +342,7 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
 
   it('INSERT values 의 questionResponses 값이 평문이 아닌 v1: 암호문이다', async () => {
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-entry'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -345,6 +376,32 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
     const serialized = extractSqlSetParams(setArg);
     expect(serialized).not.toContain(PII_PLAINTEXT);
     expect(serialized).toContain(String(storedValue));
+  });
+
+  it('평문이 상한 이하라도 암호문이 상한을 넘으면 INSERT 이전에 거부한다', async () => {
+    const { createResponseWithFirstAnswer } = await import(
+      '@/server/survey-response/services/response-entry'
+    );
+    // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB). 이 경로의 판정 기준은 저장될 값이다.
+    await expect(
+      createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-1',
+        versionId: VERSION_ID,
+        questionId: QUESTION_ID,
+        value: 'a'.repeat(220 * 1024),
+        currentStepId: 'step-1',
+        clientSignals: {
+          deviceId: 'dev-1',
+          screen: '1440x900',
+          tz: 'Asia/Seoul',
+          lang: 'ko',
+          platform: 'MacIntel',
+        },
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+    expect(updateSetLogMock).not.toHaveBeenCalled();
   });
 });
 
@@ -387,7 +444,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-entry'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -425,7 +482,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-entry'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -464,7 +521,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-entry'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -499,7 +556,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-entry'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -558,7 +615,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('트랜잭션 set 의 questionResponses 에서 PII 값만 암호문이고 비PII 는 평문이다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -581,7 +638,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('replaceResponseAnswers 도 동일하게 암호화된 맵을 받는다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -605,7 +662,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
   it('loadPiiQuestionIds 쿼리 텍스트에 UNION 과 live pii_encrypted 조각이 포함된다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -661,7 +718,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -713,7 +770,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({ responseId: RESPONSE_ID });
 
@@ -730,7 +787,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
     // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-completion'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -745,6 +802,234 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
       '평문 답변',
     );
+  });
+});
+
+// ============================================================================
+// A-2f-5 — 크기 가드의 임계 기준을 저장값(PII 는 암호문)으로 통일한다.
+// 평문 220KB 는 상한(256KB) 이하지만 암호문은 약 293KB 로 넘는다.
+// ============================================================================
+const OVER_WHEN_ENCRYPTED = 'a'.repeat(220 * 1024);
+
+describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+    });
+    flagsMock.mockResolvedValue({ isPaused: false });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('PII 문항: 평문이 상한 이하여도 암호문이 넘으면 배치 전체가 거부되고 UPDATE 가 없다', async () => {
+    // loadQuestionPiiFlags (versionId 분기) — 두 문항 모두 PII.
+    executeMock.mockResolvedValue([
+      { id: QUESTION_ID, pii: true },
+      { id: PLAIN_QUESTION_ID, pii: true },
+    ]);
+    const { saveDraftResponse } = await import(
+      '@/server/survey-response/services/response-draft'
+    );
+    await expect(
+      saveDraftResponse({
+        responseId: RESPONSE_ID,
+        answers: {
+          [PLAIN_QUESTION_ID]: '정상 답변',
+          [QUESTION_ID]: OVER_WHEN_ENCRYPTED,
+        },
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    // 부분 저장 금지 — 정상 답변까지 포함해 아무것도 쓰지 않는다.
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  it('비PII 문항이면 같은 평문 220KB 가 종전대로 저장된다', async () => {
+    executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: false }]);
+    const { saveDraftResponse } = await import(
+      '@/server/survey-response/services/response-draft'
+    );
+    const result = await saveDraftResponse({
+      responseId: RESPONSE_ID,
+      answers: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+    });
+    expect(result.applied).toBe(true);
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('beacon 래퍼는 같은 거부를 500 이 아니라 skipped 로 접는다', async () => {
+    executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: true }]);
+    const { saveDraftResponseIfActive } = await import(
+      '@/server/survey-response/services/response-draft'
+    );
+    // judgeRowGate 용 사전 조회 — in_progress 활성 행.
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+      status: 'in_progress',
+      deletedAt: null,
+    });
+    const result = await saveDraftResponseIfActive({
+      responseId: RESPONSE_ID,
+      answers: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+    });
+    expect(result).toEqual({ saved: false, skipped: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('completeResponse — 저장값(암호문) 기준 바이트 필터', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: null,
+      isTest: false,
+    });
+    surveyFindFirstMock.mockResolvedValue(publishedSurveyRow());
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    selectThenMock.mockReturnValue([{ total: 0 }]);
+    selectLimitMock.mockResolvedValue([]);
+    executeMock.mockImplementation((query: unknown) => {
+      if (sqlText(query).includes('IS TRUE')) {
+        return Promise.resolve([{ id: QUESTION_ID }]);
+      }
+      return Promise.resolve([{ id: QUESTION_ID }, { id: PLAIN_QUESTION_ID }]);
+    });
+    updateReturningMock.mockReturnValue([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null },
+    ]);
+  });
+
+  it('평문 필터는 통과하지만 암호문이 상한을 넘는 PII 키를 drop 하고 완료는 계속한다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          [QUESTION_ID]: OVER_WHEN_ENCRYPTED,
+          [PLAIN_QUESTION_ID]: '평문 답변',
+        },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedMap = setArg.questionResponses as Record<string, unknown>;
+    // 이 경로의 의미론은 silent drop — 완료 자체는 성공하고 초과 키만 사라진다.
+    expect(QUESTION_ID in storedMap).toBe(false);
+    expect(storedMap[PLAIN_QUESTION_ID]).toBe('평문 답변');
+    expect(replaceResponseAnswersMock).toHaveBeenCalledTimes(1);
+    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
+    expect(QUESTION_ID in answersMap).toBe(false);
+  });
+
+  it('비PII 문항의 같은 평문 220KB 는 종전대로 저장된다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { [PLAIN_QUESTION_ID]: OVER_WHEN_ENCRYPTED } },
+    });
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
+      OVER_WHEN_ENCRYPTED,
+    );
+  });
+});
+
+describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      questionResponses: { [PLAIN_QUESTION_ID]: '기존 답변' },
+    });
+    executeMock.mockResolvedValue([{ id: QUESTION_ID }]);
+    selectLimitMock.mockResolvedValue([
+      {
+        snapshot: {
+          questions: [
+            { id: QUESTION_ID, title: '연락처' },
+            { id: PLAIN_QUESTION_ID, title: '일반 질문' },
+          ],
+        },
+      },
+    ]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('비PII 문항이라도 저장값이 상한을 넘으면 UPDATE 이전에 거부한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: { [PLAIN_QUESTION_ID]: 'a'.repeat(300 * 1024) },
+          versionId: VERSION_ID,
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
+  });
+
+  it('PII 문항은 평문이 상한 이하여도 암호문이 넘으면 거부한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+          versionId: VERSION_ID,
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  it('상한 이하 값은 종전대로 저장된다 — 정상 편집이 새로 막히지 않는다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        // 실 DB 최대 응답값은 약 11KB — 실사용 여유를 확인하는 대푯값으로 100KB 를 쓴다.
+        questionResponses: { [QUESTION_ID]: 'a'.repeat(100 * 1024) },
+        versionId: VERSION_ID,
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -789,7 +1074,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
 
   it('동일 평문 재제출이면 edit log 를 만들지 않고, 저장 맵의 PII 는 다시 암호문이다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -820,7 +1105,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
 
   it('비PII 문항만 변경하면 edit log 에 그 문항만 기록되고 PII 값은 암호문으로 저장된다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -916,7 +1201,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
 
   it('source 셀 값을 바꾸면 클라가 제출한 calc 값을 무시하고 서버가 재계산한 값을 저장한다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -965,7 +1250,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     });
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -1042,7 +1327,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await saveAdminEdit(
       {
@@ -1091,7 +1376,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit'
     );
     await expect(
       saveAdminEdit(
@@ -1136,7 +1421,7 @@ describe('updateQuestionResponse — 표 input 셀 단위 암호화', () => {
     // 질문 자체는 PII 가 아니고(pii=false) 셀 c1 만 암호화 대상
     executeMock.mockResolvedValue([{ pii: false, cells: ['c1'] }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response-answer-write'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,

@@ -2,18 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
-import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
@@ -26,35 +20,10 @@ import {
   validateFilename,
 } from '@/lib/upload/attachment-policy';
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
-
 async function handleMailAttachmentUpload(request: NextRequest, ctx: RouteLogContext) {
-  let userId: string;
-  try {
-    const user = await requireAuth();
-    userId = user.id;
-  } catch {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
-  // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
-  ctx.bind({
-    userId,
-    role: isGuestUser(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
-  });
-  // admin 또는 게스트 grant 보유 가드 — ADMIN_USER_IDS 로 어드민을 잠갔을 때
-  // 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
-  // 게스트도 메일 첨부 업로드 필요 — tmp 네임스페이스 한정이라 설문 스코프 없이 허용
-  if (!isAdminOrGuestGrantHolder(userId)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  // 게스트도 메일 첨부 업로드가 필요하다.
+  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  if (!guard.ok) return guard.response;
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {

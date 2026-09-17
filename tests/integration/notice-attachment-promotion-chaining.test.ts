@@ -154,23 +154,23 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getQuestionsBySurvey: vi.fn(async () => []),
 }));
 
-vi.mock('@/data/library', () => ({
+vi.mock('@/server/read-models/library-taxonomy', () => ({
   getAllCategories: vi.fn(async () => []),
 }));
 
-import { importLibrary } from '@/features/library/server/services/library-transfer.service';
+import { importLibrary } from '@/server/library/services/library-transfer';
 import {
   createSavedQuestion,
   updateSavedQuestion,
-} from '@/features/library/server/services/saved-questions.service';
+} from '@/server/library/services/saved-questions';
 import {
   createQuestion,
   updateQuestion,
-} from '@/features/survey-builder/server/services/questions.service';
+} from '@/server/survey-builder/services/questions';
 import { NoticeAttachmentPromoteError } from '@/lib/survey/notice-attachment-promote';
 import type { Question } from '@/types/survey';
 

@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
-import { createCampaign } from '@/features/mail/server/services/mail-campaigns.service';
+import { createCampaign } from '@/server/mail/services/campaigns';
 
 const resultCodeGate = vi.hoisted(() => ({
   entered: null as (() => void) | null,
@@ -20,7 +20,7 @@ vi.mock('@/lib/inngest/client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
 }));
 
-vi.mock('@/lib/operations/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => {

@@ -217,28 +217,28 @@ vi.mock('@react-email/render', () => ({
   render: vi.fn(async () => '<html></html>'),
 }));
 
-vi.mock('@/lib/mail/render-for-send', () => ({
+vi.mock('@/server/mail/services/render-for-send', () => ({
   renderForCampaignSend: () => ({ subject: 'subject', bodyHtml: '<p>body</p>' }),
 }));
 
-vi.mock('@/lib/mail/send-bulk', () => ({
+vi.mock('@/server/mail/services/send-bulk', () => ({
   RetryableCampaignSendError: class RetryableCampaignSendError extends Error {},
   resolveCampaignAttachments: vi.fn(async () => undefined),
   sendCampaignRecipient: sendRecipientMock,
 }));
 
-vi.mock('@/lib/mail/template-wrapper', () => ({
+vi.mock('@/server/mail/services/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
-vi.mock('@/lib/operations/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses', () => ({
   getResultCodeStatuses: vi.fn(async () => ({
     positive: [],
     negative: negativeCodesState.codes,
   })),
 }));
 
-import { dispatchCampaignChunk } from '@/lib/mail/campaign-dispatch';
+import { dispatchCampaignChunk } from '@/server/mail/services/campaign-dispatch';
 
 beforeEach(() => {
   setPayloads.length = 0;

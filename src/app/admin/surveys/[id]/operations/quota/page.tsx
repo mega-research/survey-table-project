@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
-import { QuotaEditor } from '@/components/operations/quota/quota-editor';
-import { getQuestionsBySurvey } from '@/data/surveys';
-import { getQuotaConfig } from '@/features/quota/server/services/quota.service';
+import { QuotaEditor } from '@/features/operations/quota/quota-editor';
+import { getQuestionsBySurvey } from '@/server/read-models/survey-structure';
+import { getQuotaConfig } from '@/server/quota/services/quota';
 import type { InputType, Question } from '@/types/survey';
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ interface PageProps {
  * nullable(`string | null`)인 반면 Question 은 optional(`string | undefined`)이라
  * strict + exactOptionalPropertyTypes 하에서 그대로 대입 불가.
  * QuotaEditor 가 실제로 읽는 필드만 null-coalescing 으로 옮긴다
- * (data/surveys.ts `getSurveyWithDetails` 의 매핑 관행과 동일 — `as unknown as` 금지).
+ * (server/survey-builder/services/survey-read.ts `getSurveyWithDetails` 의 매핑 관행과 동일 — `as unknown as` 금지).
  */
 function toQuestion(row: Awaited<ReturnType<typeof getQuestionsBySurvey>>[number]): Question {
   return {

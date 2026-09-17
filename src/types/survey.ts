@@ -1,15 +1,17 @@
-import type {
-  ContactColumnScheme,
-  GroupNameDesign,
-  SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
+// 타입 정의만 그대로 되내보낸다 — 정의는 각각 한 곳뿐이라 드리프트가 생길 수 없고,
+// 소비자 대부분이 Question·QuestionGroup 과 같은 문장에서 함께 받는다.
+// 질문 구조 옆에서 쓰이는 타입이라 import 를 한 자리에 두는 편이 읽기에 낫다.
+// (얕은 모듈을 만드는 호환 재수출과는 다르다 — src/lib 잔류 기준 아래 재수출 원칙 참조)
+// 같은 모듈의 런타임 값(MOBILE_TABLE_DISPLAY_MODES·INPUT_TYPES·isInputType)은 들이지
+// 않는다 — 타입 모듈에 런타임 의존이 생기고, 실제 소비자(zod 스키마·DB 스키마)는 전부
+// 어휘 SSOT 에서 직접 받는다.
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
-export { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 export type { MobileTableDisplayMode } from '@/types/mobile-table-display';
-export { INPUT_TYPES, isInputType } from '@/types/input-type';
 export type { InputType } from '@/types/input-type';
 
 export type QuestionType =
@@ -392,7 +394,7 @@ export interface TableCell {
   choiceGroupId?: string;
   /**
    * 단독 선택 보기 (choice_opt 셀, 체크박스 그룹 전용 — CONTEXT.md). 범위는 이 셀이 속한 그룹이다.
-   * QuestionOption.exclusiveChoice 와 같은 규칙(`lib/survey/exclusive-choice.ts`)을 탄다.
+   * QuestionOption.exclusiveChoice 와 같은 규칙(`features/question-renderer/utils/exclusive-choice.ts`)을 탄다.
    */
   exclusiveChoice?: boolean;
   /**
@@ -474,7 +476,7 @@ export interface TableCell {
   emptyDefault?: number;
   // 숫자 input 셀 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat;
-  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, utils/text-quality)
+  // input 셀 응답 품질 검사 — 단답형 문항의 textValidation 과 같은 규칙(평문 모드 전용, features/question-renderer/utils/text-quality)
   textValidation?: TextValidation | null;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
@@ -812,7 +814,7 @@ export interface Question {
   emptyDefault?: number;
   // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)
   numberFormat?: NumberFormat | null;
-  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (utils/text-quality).
+  // 단답형·장문형 응답 품질 검사 — 최소 글자 수·의미 없는 입력 거부 (features/question-renderer/utils/text-quality).
   // 숫자 모드·입력 형식과 배타(그쪽은 자기 검사가 있다). NULL = 검사 없음(기존 전부).
   textValidation?: TextValidation | null;
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
@@ -948,7 +950,6 @@ export interface SurveySubmission {
   startedAt: Date;
   completedAt?: Date | null;
   isCompleted: boolean;
-  currentGroupOrder: number;
   questionResponses: Record<string, unknown>; // JSON 저장된 응답들 (questionId -> value)
   userAgent?: string | null;
   updatedAt: Date;
@@ -989,35 +990,3 @@ export interface QuestionCategory {
 }
 
 // 기본 카테고리 목록
-export const DEFAULT_CATEGORIES: QuestionCategory[] = [
-  {
-    id: 'demographics',
-    name: '인구통계',
-    color: 'bg-blue-100 text-blue-600',
-    icon: 'Users',
-    order: 0,
-  },
-  {
-    id: 'satisfaction',
-    name: '만족도',
-    color: 'bg-green-100 text-green-600',
-    icon: 'ThumbsUp',
-    order: 1,
-  },
-  { id: 'nps', name: 'NPS', color: 'bg-purple-100 text-purple-600', icon: 'TrendingUp', order: 2 },
-  {
-    id: 'feedback',
-    name: '피드백',
-    color: 'bg-orange-100 text-orange-600',
-    icon: 'MessageSquare',
-    order: 3,
-  },
-  { id: 'preference', name: '선호도', color: 'bg-pink-100 text-pink-600', icon: 'Heart', order: 4 },
-  {
-    id: 'custom',
-    name: '사용자 정의',
-    color: 'bg-gray-100 text-gray-600',
-    icon: 'Folder',
-    order: 5,
-  },
-];

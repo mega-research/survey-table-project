@@ -1,0 +1,290 @@
+import { describe, expect, it } from 'vitest'
+import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap, formatExportStatusLabel, NOT_RESPONDED_STATUS, STATUS_FILTERS } from '@/lib/operations/profiles-format'
+import { WEB_FILTER_OPTIONS } from '@/lib/operations/filter-shared'
+import type { Question, QuestionGroup } from '@/types/survey'
+
+// buildStepLocationMap 테스트용 최소 fixture — buildRenderSteps 가 읽는 필드만 의미 있다.
+function q(partial: Partial<Question> & Pick<Question, 'id' | 'order' | 'title'>): Question {
+  return { type: 'radio', required: false, ...partial }
+}
+function g(partial: Partial<QuestionGroup> & Pick<QuestionGroup, 'id' | 'order' | 'name'>): QuestionGroup {
+  return { surveyId: 's', ...partial }
+}
+
+describe('formatTotalTime', () => {
+  it('completed + 300초 → "5분"', () => {
+    expect(formatTotalTime(300, 'completed')).toBe('5분')
+  })
+
+  it('completed + 0초 → "0분"', () => {
+    expect(formatTotalTime(0, 'completed')).toBe('0분')
+  })
+
+  it('completed + 13080초 → "218분" (큰 값)', () => {
+    expect(formatTotalTime(13080, 'completed')).toBe('218분')
+  })
+
+  it('completed + null → "—"', () => {
+    expect(formatTotalTime(null, 'completed')).toBe('—')
+  })
+
+  it('in_progress + 임의 값 → "진행 중"', () => {
+    expect(formatTotalTime(120, 'in_progress')).toBe('진행 중')
+  })
+
+  it('drop + null → "—"', () => {
+    expect(formatTotalTime(null, 'drop')).toBe('—')
+  })
+
+  it('completed + 음수 (시계 역행) → "0분" 클램프', () => {
+    expect(formatTotalTime(-5, 'completed')).toBe('0분')
+  })
+})
+
+describe('parseQuestionNumberFromTitle', () => {
+  it('"Q3. 인공지능 부문…" → "Q3"', () => {
+    expect(parseQuestionNumberFromTitle('Q3. 인공지능 부문 귀사의 주력 사업 분야는?')).toBe('Q3')
+  })
+
+  it('"Q5-1. 귀사가 사용 중이신…" → "Q5-1"', () => {
+    expect(parseQuestionNumberFromTitle('Q5-1. 귀사가 사용 중이신 인공지능 오픈소스')).toBe('Q5-1')
+  })
+
+  it('"Q33-1. 인공지능 사업운영…" → "Q33-1"', () => {
+    expect(parseQuestionNumberFromTitle('Q33-1. 인공지능 사업운영 애로사항 영역')).toBe('Q33-1')
+  })
+
+  it('"공지사항" (Q 없음) → null', () => {
+    expect(parseQuestionNumberFromTitle('공지사항')).toBeNull()
+  })
+
+  it('"기업 소개" (Q 없음) → null', () => {
+    expect(parseQuestionNumberFromTitle('기업 소개')).toBeNull()
+  })
+
+  it('빈 문자열 → null', () => {
+    expect(parseQuestionNumberFromTitle('')).toBeNull()
+  })
+
+  it('null → null', () => {
+    expect(parseQuestionNumberFromTitle(null as unknown as string)).toBeNull()
+  })
+})
+
+describe('mapStatusPill', () => {
+  it("status='completed' → { label:'완료', tone:'green' }", () => {
+    expect(mapStatusPill({ status: 'completed' })).toEqual({ label: '완료', tone: 'green' })
+  })
+
+  it("status='drop' → 이탈 + 진행중과 동일한 위치 부속 표기", () => {
+    expect(
+      mapStatusPill({
+        status: 'drop',
+        visibleStepIndex: 2,
+        visibleStepTotal: 3,
+        totalQuestions: 11,
+        qNumber: 'Q3_1',
+      }),
+    ).toEqual({ label: '이탈', tone: 'gray', sub: '2/3(11) · Q3_1' })
+  })
+
+  it("status='drop' + 위치 정보 전무 → sub 생략 (구응답 노이즈 방지)", () => {
+    expect(mapStatusPill({ status: 'drop' })).toEqual({ label: '이탈', tone: 'gray' })
+  })
+
+  it("status='screened_out' → { label:'자격 미달', tone:'amber' }", () => {
+    expect(mapStatusPill({ status: 'screened_out' })).toEqual({ label: '자격 미달', tone: 'amber' })
+  })
+
+  it("status='quotaful_out' → { label:'쿼터마감', tone:'amber' }", () => {
+    expect(mapStatusPill({ status: 'quotaful_out' })).toEqual({ label: '쿼터마감', tone: 'amber' })
+  })
+
+  it("status='bad' → { label:'불량', tone:'red' }", () => {
+    expect(mapStatusPill({ status: 'bad' })).toEqual({ label: '불량', tone: 'red' })
+  })
+
+  it("알 수 없는 status → { label:'기타', tone:'gray' } (default fallback)", () => {
+    expect(mapStatusPill({ status: 'future_status' })).toEqual({ label: '기타', tone: 'gray' })
+  })
+
+  it("in_progress + visible 26/28, 전체 50, qNumber='Q33' → '26/28(50) · Q33'", () => {
+    expect(
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: 26,
+        visibleStepTotal: 28,
+        totalQuestions: 50,
+        qNumber: 'Q33',
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '26/28(50) · Q33' })
+  })
+
+  it('in_progress + visible null (구 데이터) → ?/?(50) · Q33 폴백 (Q번호는 유지)', () => {
+    expect(
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: null,
+        visibleStepTotal: null,
+        totalQuestions: 50,
+        qNumber: 'Q33',
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '?/?(50) · Q33' })
+  })
+
+  it('in_progress + qNumber null → 26/28(50) · ?', () => {
+    expect(
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: 26,
+        visibleStepTotal: 28,
+        totalQuestions: 50,
+        qNumber: null,
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '26/28(50) · ?' })
+  })
+
+  it('in_progress + 전부 누락 → ?/?(?) · ?', () => {
+    expect(mapStatusPill({ status: 'in_progress' })).toEqual({
+      label: '진행중',
+      tone: 'blue',
+      sub: '?/?(?) · ?',
+    })
+  })
+})
+
+describe('buildStepLocationMap', () => {
+  it('신모델: 키 "page:<첫 질문 id>", 첫 질문의 order/qNumber', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 'q2', groupId: 'g1', order: 1, title: 'Q2. 두번째' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
+  })
+
+  it('질문코드가 있으면 제목 파싱보다 우선하고, 제목이 Q로 시작 안 해도 코드가 나온다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: '귀하의 성별은?', questionCode: 'SQ2' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'SQ2' })
+  })
+
+  it('페이지 첫 항목이 코드 없는 공지면 같은 페이지의 코드 있는 문항으로 라벨을 잡는다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'n1', groupId: 'g1', order: 0, type: 'notice', title: '개인정보 수집 안내' }),
+      q({ id: 'q1', groupId: 'g1', order: 1, title: '귀하의 성별은?', questionCode: 'SQ1' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    // order 는 여전히 페이지 첫 항목(공지) 기준, 라벨만 코드 있는 문항으로
+    expect(map.get('page:n1')).toEqual({ order: 0, qNumber: 'SQ1' })
+  })
+
+  it('table 포함 단일 페이지 — pageBreakBefore 없으면 나뉘지 않음', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 't1', groupId: 'g1', order: 1, type: 'table', title: 'Q2. 표질문' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    // pageBreakBefore 없으면 단일 페이지 page:q1 로 묶인다 (table 단독 분리 없음)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.has('page:t1')).toBe(false)
+  })
+
+  it('pageBreakBefore로 나뉜 페이지 각각이 독립 키', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 'q2', groupId: 'g1', order: 1, type: 'table', title: 'Q2. 표질문', pageBreakBefore: true }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.get('page:q2')).toEqual({ order: 1, qNumber: 'Q2' })
+  })
+
+  it('ungrouped 질문 → 키 "page:<첫 질문 id>", 첫 질문', () => {
+    const questions = [q({ id: 'u1', order: 0, title: 'Q1. 무그룹' })]
+    const map = buildStepLocationMap(questions, [])
+    expect(map.get('page:u1')).toEqual({ order: 0, qNumber: 'Q1' })
+  })
+
+  it('Q번호 없는 title → qNumber null (order 는 그대로)', () => {
+    const questions = [q({ id: 'u1', order: 0, title: '안내문' })]
+    const map = buildStepLocationMap(questions, [])
+    expect(map.get('page:u1')).toEqual({ order: 0, qNumber: null })
+  })
+
+  it('빈 입력 → 빈 맵', () => {
+    expect(buildStepLocationMap([], []).size).toBe(0)
+  })
+})
+
+describe('normalizeListArgs', () => {
+  it('기본값 — col 빈 문자열, status all, sort idx, dir desc', () => {
+    const r = normalizeListArgs({})
+    expect(r.col).toBe('')
+    expect(r.q).toBe('')
+    expect(r.status).toBe('all')
+    expect(r.sort).toBe('idx')
+    expect(r.dir).toBe('desc')
+    expect(r.view).toBe('active')
+  })
+
+  it('col 원시 문자열 보존 (화이트리스트 검증 안 함)', () => {
+    expect(normalizeListArgs({ col: 'attrs.전시회명' }).col).toBe('attrs.전시회명')
+    expect(normalizeListArgs({ col: 'idx' }).col).toBe('idx')
+  })
+
+  it('status=deleted → view deleted', () => {
+    expect(normalizeListArgs({ status: 'deleted' }).view).toBe('deleted')
+  })
+
+  it('신규 정렬 키 resid/group 은 화이트리스트 통과, 미지 키는 idx 폴백', () => {
+    expect(normalizeListArgs({ sort: 'resid' }).sort).toBe('resid')
+    expect(normalizeListArgs({ sort: 'group' }).sort).toBe('group')
+    expect(normalizeListArgs({ sort: 'evil' }).sort).toBe('idx')
+  })
+
+  it('attrs.<key> 정렬은 형태 수용 (표시 스킴 검증은 page 가드) — 조사 대상과 같은 자연 정렬 축', () => {
+    expect(normalizeListArgs({ sort: 'attrs.NO' }).sort).toBe('attrs.NO')
+    // 과도한 길이는 폴백
+    expect(normalizeListArgs({ sort: `attrs.${'x'.repeat(300)}` }).sort).toBe('idx')
+  })
+})
+
+describe('hasActiveFilters', () => {
+  it('전부 기본값 → false', () => {
+    expect(hasActiveFilters({})).toBe(false)
+  })
+
+  it('col+q 둘 다 있으면 → true', () => {
+    expect(hasActiveFilters({ col: 'browser', q: 'Chrome' })).toBe(true)
+  })
+
+  it('col 만 있고 q 없으면 → false (검색 미발생)', () => {
+    expect(hasActiveFilters({ col: 'browser', q: '' })).toBe(false)
+  })
+
+  it('status != all → true', () => {
+    expect(hasActiveFilters({ status: 'completed' })).toBe(true)
+  })
+
+})
+
+describe('formatExportStatusLabel — 미응답', () => {
+  it('미응답 상태는 조사 대상 web 필터의 none 표기와 같은 문자열이다', () => {
+    const none = WEB_FILTER_OPTIONS.find((o) => o.value === 'none')
+    expect(formatExportStatusLabel(NOT_RESPONDED_STATUS)).toBe('미응답')
+    expect(formatExportStatusLabel(NOT_RESPONDED_STATUS)).toBe(none!.label)
+  })
+
+  it('미응답은 응답 상태 필터 어휘에 없다 — DB 에 저장되지 않는 내보내기 전용 값', () => {
+    expect((STATUS_FILTERS as readonly string[]).includes(NOT_RESPONDED_STATUS)).toBe(false)
+    expect(mapStatusPill({ status: 'future_status' })).toEqual({ label: '기타', tone: 'gray' })
+  })
+})

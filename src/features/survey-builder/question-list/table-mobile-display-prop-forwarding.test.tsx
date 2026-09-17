@@ -1,0 +1,110 @@
+import type { ReactNode } from 'react';
+
+import { render } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { QuestionTestBody } from '@/features/survey-builder/question-list/question-test-card';
+import { QuestionInput } from '@/features/survey-response/question-input';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
+import type { Question } from '@/types/survey';
+
+const { capturedTableProps } = vi.hoisted(() => ({
+  capturedTableProps: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock('@/features/question-renderer/interactive-table-response', () => ({
+  InteractiveTableResponse: (props: Record<string, unknown>) => {
+    // 주입된 질문 응답 원본 유무 = 미리보기/실응답 배선 판정 (구 isTestMode prop 대체)
+    const { questionResponses } = useResponseSources();
+    capturedTableProps.push({ ...props, hasQuestionResponseSource: questionResponses !== null });
+    return <div data-testid="interactive-table-response" />;
+  },
+}));
+
+vi.mock('@/features/survey-builder/question-list/sortable-question-list', () => ({
+  LazyMount: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/features/question-renderer/hooks/use-row-heights', () => ({
+  computeTableEstimatedHeight: () => 320,
+}));
+
+const tableQuestion = {
+  id: 'table-question',
+  type: 'table',
+  title: '테이블',
+  required: false,
+  order: 0,
+  tableColumns: [
+    { id: 'label', label: '항목' },
+    { id: 'value', label: '선택' },
+  ],
+  tableRowsData: [
+    {
+      id: 'row-1',
+      label: '항목 1',
+      cells: [
+        { id: 'label-cell', type: 'text', content: '항목 1' },
+        {
+          id: 'value-cell',
+          type: 'radio',
+          content: '',
+          radioOptions: [{ id: 'yes', label: '예', value: 'yes' }],
+        },
+      ],
+    },
+  ],
+  mobileOriginalTable: true,
+  mobileTableDisplayMode: 'row-wise-original',
+  mobileDrilldownOmitLeadingColumns: 2,
+  mobileDrilldownRepeatHeaderStartRow: 0,
+  mobileDrilldownRepeatHeaderEndRow: 2,
+} as unknown as Question;
+
+function lastCapturedProps(): Record<string, unknown> {
+  const props = capturedTableProps.at(-1);
+  if (!props) throw new Error('InteractiveTableResponse props가 캡처되지 않았습니다.');
+  return props;
+}
+
+describe('모바일 테이블 표시 설정 prop 전달', () => {
+  beforeEach(() => {
+    capturedTableProps.length = 0;
+    useTestResponseStore.getState().clearTestResponses();
+  });
+
+  it('공개 QuestionInput이 canonical 두 필드와 legacy boolean을 전달한다', () => {
+    render(
+      <QuestionInput
+        question={tableQuestion}
+        value={{}}
+        onChange={() => {}}
+        allResponses={{}}
+        allQuestions={[tableQuestion]}
+      />,
+    );
+
+    expect(lastCapturedProps()).toMatchObject({
+      mobileOriginalTable: true,
+      mobileTableDisplayMode: 'row-wise-original',
+      mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 0,
+      mobileDrilldownRepeatHeaderEndRow: 2,
+      hasQuestionResponseSource: false,
+    });
+  });
+
+  it('빌더 QuestionTestBody가 canonical 두 필드와 legacy boolean을 전달한다', () => {
+    render(<QuestionTestBody question={tableQuestion} />);
+
+    expect(lastCapturedProps()).toMatchObject({
+      mobileOriginalTable: true,
+      mobileTableDisplayMode: 'row-wise-original',
+      mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 0,
+      mobileDrilldownRepeatHeaderEndRow: 2,
+      hasQuestionResponseSource: true,
+    });
+  });
+});

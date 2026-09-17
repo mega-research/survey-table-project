@@ -26,7 +26,7 @@ export default function Home() {
                 로그인
               </Button>
               <Button size="sm" asChild>
-                <Link href="/create">시작하기</Link>
+                <Link href="/admin/surveys/create">시작하기</Link>
               </Button>
             </div>
           </div>
@@ -52,7 +52,7 @@ export default function Home() {
 
           <div className="mb-12 flex flex-col items-center justify-center space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
             <Button size="lg" className="hover-lift px-8 py-4 text-lg" asChild>
-              <Link href="/create">
+              <Link href="/admin/surveys/create">
                 무료로 시작하기
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
@@ -197,7 +197,7 @@ export default function Home() {
               className="bg-white px-8 py-4 text-lg text-blue-500 hover:bg-gray-100"
               asChild
             >
-              <Link href="/create">
+              <Link href="/admin/surveys/create">
                 무료로 시작하기
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>

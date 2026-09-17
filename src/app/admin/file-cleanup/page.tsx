@@ -14,7 +14,7 @@ import {
   useDeletionHistory,
   useDeletionPending,
   type FileCleanupHistoryStatus,
-} from '@/hooks/queries';
+} from '@/features/operations/queries/use-file-cleanup';
 import { formatLocalDateTime } from '@/lib/date-formatters';
 import { cn } from '@/lib/utils';
 

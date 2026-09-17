@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { resolveInviteCode } from '@/features/contacts/server/services/contact-invite.service';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -42,8 +42,10 @@ describe.skipIf(!isLocalDb)('resolveInviteCode round-trip (real local DB)', () =
     });
 
     const resolved = await resolveInviteCode(inviteCode);
+    // surveyId 는 짧은 링크가 이미 알아낸 값을 버리지 않도록 함께 돌려준다(B-7).
     expect(resolved).toEqual({
       kind: 'valid',
+      surveyId: survey.id,
       accessIdentifier: '11111111-1111-1111-1111-111111111111',
       inviteToken: '22222222-2222-2222-2222-222222222222',
     });

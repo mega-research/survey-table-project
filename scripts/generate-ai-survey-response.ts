@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
-import { normalizeToAnswers } from '../src/lib/response-normalizer';
+import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 
 dotenv.config({ path: '.env.local' });
 
