@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
+import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
@@ -215,7 +216,7 @@ function resolveTableErrorCellIds(
 function QuestionInputControl({
   question,
   value,
-  onChange,
+  onChange: onChangeProp,
   allResponses,
   allQuestions,
   numericIssues,
@@ -227,6 +228,8 @@ function QuestionInputControl({
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
+  // 선택형 문항은 답이 바뀔 때 선택이 풀린 기타·상세 기재 입력값을 비운다(순위형과 같은 동작).
+  const onChange = useClearDeselectedOptionTexts(question, onChangeProp);
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (

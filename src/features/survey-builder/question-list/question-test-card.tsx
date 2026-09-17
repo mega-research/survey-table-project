@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
@@ -475,7 +476,7 @@ function SelectTestInput({
 function QuestionTestInput({
   question,
   value,
-  onChange,
+  onChange: onChangeProp,
   allResponses,
   allQuestions,
   selectedDynamicRowIds,
@@ -491,6 +492,8 @@ function QuestionTestInput({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 응답 화면(QuestionInput)과 같이 — 답이 바뀌면 선택이 풀린 기타·상세 기재 입력값을 비운다.
+  const onChange = useClearDeselectedOptionTexts(question, onChangeProp);
 
   // choice_opt 테이블 소스 라디오/체크박스는 switch 진입 전에 단일 가드로 분기
   if (
