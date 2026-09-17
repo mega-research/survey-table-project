@@ -16,6 +16,7 @@ import {
   Link as LinkIcon,
   Loader2,
   Lock,
+  MessageCircle,
   Pencil,
   Share2,
   Trash2,
@@ -88,7 +89,7 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  * 케밥 순서는 .pen 4-1 노트를 따른다 — 공유 설정 · 링크 복사 · 그룹 이동 · 삭제.
  * 「그룹 이동」은 콜백 게이트라 팀 범위가 아니면(시스템 전체 보기·미배치) onMoveToGroup 이
  * null 로 와서 항목 자체가 사라진다(핸들러 없는 자리는 안 만든다).
- * 문의 액션은 Plan 3 게이트로 미노출.
+ * 문의 버튼은 자리만 잡아 둔다 — 문의 기능이 아직 없어 언제나 비활성이다.
  * 수정·삭제·분석의 비활성은 근사(canEditSurveyCard·canViewSurveyAnalyticsCard)일 뿐이고
  * 강제는 서버 관문이 한다.
  */
@@ -247,6 +248,11 @@ export function SurveyCard({
           label="분석"
           disabled={!canViewAnalytics}
         />
+        <CardActionLink
+          icon={<MessageCircle className="h-3 w-3" />}
+          label="문의"
+          disabledReason="문의 기능은 준비 중입니다"
+        />
       </div>
 
       {sharingOpen && (
@@ -269,17 +275,22 @@ function CardActionLink({
   icon,
   label,
   disabled,
+  disabledReason,
 }: {
-  href: string;
+  /** 없으면 갈 곳이 아직 없는 버튼이다 — 비활성으로 그린다. */
+  href?: string;
   icon: React.ReactNode;
   label: string;
   disabled?: boolean;
+  /** 비활성 이유 — 마우스를 올리면 보인다. */
+  disabledReason?: string;
 }) {
-  if (disabled) {
+  if (disabled || href === undefined) {
     return (
       <span
         className="flex h-8 flex-1 cursor-not-allowed items-center justify-center gap-1 rounded-[9px] border border-[#E5E5EA] text-[12px] text-[#C7C7CC]"
         aria-disabled
+        title={disabledReason}
       >
         {icon}
         {label}

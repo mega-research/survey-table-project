@@ -346,7 +346,9 @@ export function SurveyListView() {
             <NoResultsEmptyState onReset={resetAll} />
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              {/* 열 수를 브레이크포인트로 고정하면 넓은 화면에서 카드가 가로로만 늘어난다 — 카드 폭(최소 320px)이
+                  열 수를 정한다. min(100%, …) 은 좁은 화면에서 한 열이 화면 밖으로 넘치지 않게 한다. */}
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-3.5">
                 {pageItems.map((survey) =>
                   // 휴지통은 카드가 다르다 — 삭제된 설문에서 할 수 있는 일은 복구뿐이라
                   // 케밥·수정·현황·분석이 전부 없다(티켓 17). 서버가 목록을 갈라 주므로
