@@ -191,18 +191,20 @@ describe('RankingQuestion — 그룹 헤딩 렌더', () => {
     expect(screen.getByText('그룹 하나')).toBeInTheDocument();
   });
 
-  it('label이 빈 그룹은 groupKey를 헤딩으로 표시한다', () => {
+  // 그룹 키(rnk2)·default 는 응답자에게 뜻 없는 내부 식별자라 제목으로 쓰지 않는다 —
+  // 라벨을 비우면 제목 줄이 없다(2026-09-17, 단일 그룹 문항의 중복 제목을 지우는 수단).
+  it('label이 빈 그룹은 헤딩을 그리지 않는다 — groupKey 로 대신하지 않는다', () => {
     render(
       <RankingQuestion question={groupedRankingFixture()} value={null} onChange={vi.fn()} />,
     );
-    expect(screen.getByText('rnk2')).toBeInTheDocument();
+    expect(screen.queryByText('rnk2')).not.toBeInTheDocument();
   });
 
-  it('미소속 셀은 default 그룹으로 분류되어 "default" 헤딩이 표시된다', () => {
+  it('미소속 셀은 default 그룹으로 분류되지만 "default" 헤딩은 그리지 않는다', () => {
     render(
       <RankingQuestion question={groupedRankingFixture()} value={null} onChange={vi.fn()} />,
     );
-    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
   it('3개 그룹(rnk1, rnk2, default) 각각에 요약 줄(순위초기화 버튼)이 렌더되고 표는 하나다', () => {
