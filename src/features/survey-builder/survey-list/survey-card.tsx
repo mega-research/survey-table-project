@@ -43,7 +43,6 @@ import {
   type SurveyCardViewer,
   canEditSurveyCard,
   canManageSurveyAccessCard,
-  canViewSurveyAnalyticsCard,
 } from './survey-list-capability';
 
 interface SurveyCardProps {
@@ -90,7 +89,7 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  * 「그룹 이동」은 콜백 게이트라 팀 범위가 아니면(시스템 전체 보기·미배치) onMoveToGroup 이
  * null 로 와서 항목 자체가 사라진다(핸들러 없는 자리는 안 만든다).
  * 문의 버튼은 자리만 잡아 둔다 — 문의 기능이 아직 없어 언제나 비활성이다.
- * 수정·삭제·분석의 비활성은 근사(canEditSurveyCard·canViewSurveyAnalyticsCard)일 뿐이고
+ * 분석·문의는 당분간 언제나 비활성이다. 수정·삭제의 비활성은 근사(canEditSurveyCard)일 뿐이고
  * 강제는 서버 관문이 한다.
  */
 export function SurveyCard({
@@ -104,8 +103,6 @@ export function SurveyCard({
 }: SurveyCardProps) {
   const { scope, currentUserId } = viewer;
   const canEdit = canEditSurveyCard(survey, viewer);
-  // 분석 화면은 responses.view 까지 요구한다 — 팀원은 못 들어가므로 버튼도 잠근다.
-  const canViewAnalytics = canViewSurveyAnalyticsCard(survey, viewer);
   // 공개 범위 변경은 survey.manageAccess — 팀원은 편집은 되지만 여기는 잠긴다.
   const canManageAccess = canManageSurveyAccessCard(survey, viewer);
   const [sharingOpen, setSharingOpen] = useState(false);
@@ -242,11 +239,12 @@ export function SurveyCard({
           icon={<Activity className="h-3 w-3" />}
           label="현황"
         />
+        {/* 분석은 당분간 막아 둔다. 다시 열 때는 href 를 되돌리고 canViewSurveyAnalyticsCard 로
+            비활성을 정한다(분석 화면이 responses.view 를 요구해 팀원에게는 404 다). */}
         <CardActionLink
-          href={`/admin/surveys/${survey.id}/analytics`}
           icon={<ChartColumn className="h-3 w-3" />}
           label="분석"
-          disabled={!canViewAnalytics}
+          disabledReason="분석 기능은 준비 중입니다"
         />
         <CardActionLink
           icon={<MessageCircle className="h-3 w-3" />}

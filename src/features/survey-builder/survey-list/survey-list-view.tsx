@@ -232,7 +232,8 @@ export function SurveyListView() {
   const leaderTeamIds = workScope?.leaderTeamIds ?? [];
 
   return (
-    <div className="flex flex-col gap-5 p-10">
+    // 목록 영역 폭 상한 — 큰 모니터에서 3열 카드가 가로로만 늘어나지 않게 한다.
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 p-10">
       <div className="flex items-center justify-between">
         {activeGroup ? (
           <GroupViewHeader groupName={activeGroup.name} />
