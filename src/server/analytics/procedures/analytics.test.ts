@@ -97,7 +97,32 @@ describe('analytics — capability 관문 (티켓 09)', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, 's1', 'analytics.view');
     await client.analytics.stats.question({ surveyId: 's1', questionId: 'q1' });
     await client.analytics.analyze.survey({ surveyId: 's1' });
-    expect(assertSurveyCapabilityRpc).toHaveBeenCalledTimes(3);
+    // 원문을 싣는 두 표면은 analytics.view 에 더해 responses.view 를 한 번씩 더 묻는다.
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledTimes(5);
+  });
+
+  it('응답 원문을 싣는 stats.question·analyze.survey 는 responses.view 도 요구한다', async () => {
+    // 팀원 열은 analytics.view 만 있고 responses.view 가 없다 — 분석 RSC 화면이 이미 그 둘을
+    // 함께 요구하는데 RPC 가 analytics.view 만 보면 직접 호출로 복호화된 원문이 샌다.
+    vi.mocked(assertSurveyCapabilityRpc).mockImplementation(async (_user, _surveyId, capability) => {
+      if (capability === 'responses.view') {
+        throw new ORPCError('FORBIDDEN', { message: '권한이 없습니다.' });
+      }
+    });
+    const client = createRouterClient({ analytics }, { context: authedContext() });
+
+    await expect(
+      client.analytics.stats.question({ surveyId: 's1', questionId: 'q1' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(client.analytics.analyze.survey({ surveyId: 's1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.getQuestionStatistics).not.toHaveBeenCalled();
+    expect(svc.analyzeSurveyById).not.toHaveBeenCalled();
+
+    // 응답 수만 주는 요약은 원문이 없어 analytics.view 로 충분하다.
+    vi.mocked(svc.getResponseSummary).mockResolvedValue({} as never);
+    await expect(client.analytics.stats.survey({ surveyId: 's1' })).resolves.toBeDefined();
   });
 
   it('타 팀 설문 id 로 분석을 요청하면 service 에 닿지 않는다', async () => {

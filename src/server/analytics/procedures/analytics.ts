@@ -11,6 +11,9 @@ import {
 import * as svc from '../services/analytics';
 
 // 분석 procedure 는 전부 analytics.view 관문을 지난다 (역할 모델 v2 티켓 09, 스펙 §8).
+// 복호화한 응답값을 그대로 싣는 표면(문항 통계의 responses·응답별 키, 전체 분석의 textResponses)은
+// responses.view 도 함께 묻는다 — 분석 RSC 화면 둘이 이미 그 짝을 요구하므로, RPC 가
+// analytics.view 만 보면 팀원 열(responses.view 없음)이 직접 호출로 원문을 읽는다.
 
 // ========================
 // stats — 응답 통계
@@ -29,6 +32,7 @@ const statsQuestion = authed
   .output(QuestionStatisticsSchema)
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'analytics.view');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     return svc.getQuestionStatistics(input.surveyId, input.questionId);
   });
 
@@ -41,6 +45,7 @@ const analyzeSurvey = authed
   .output(SurveyAnalyticsSchema)
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'analytics.view');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
     return svc.analyzeSurveyById(input.surveyId);
   });
 
