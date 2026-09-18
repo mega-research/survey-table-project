@@ -272,6 +272,7 @@ export function SurveyCard({
           canManageAccess={canManageAccess}
           currentOwnerName={survey.ownerName}
           currentOwnerUserId={survey.ownerUserId}
+          ownerTeamName={survey.teamName}
           onClose={() => setSharingOpen(false)}
         />
       )}

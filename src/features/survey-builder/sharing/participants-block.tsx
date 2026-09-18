@@ -21,6 +21,10 @@ import {
 
 interface ParticipantsBlockProps {
   surveyId: string;
+  /** 설문 소유자 이름 — 목록 맨 위에 고정으로 그린다. 없으면(옛 설문) 행을 만들지 않는다. */
+  ownerName: string | null;
+  /** 소유 팀 이름 — 소유자는 소유 팀 사람이어야 하므로(revocation 계약) 그 팀이 곧 소속이다. */
+  ownerTeamName: string | null;
 }
 
 /**
@@ -32,8 +36,18 @@ interface ParticipantsBlockProps {
  *
  * 후보 검색은 **팀으로 좁히지 않는다**. 참여자는 팀 경계를 넘고 팀 멤버십을 만들지 않으므로
  * (스펙 §4) 소속 표기는 「어디 사람인가」를 알려주는 정보일 뿐 필터가 아니다.
+ *
+ * **소유자를 맨 위에 고정으로 그린다.** 참여 행이 아니라 `surveys.owner_user_id` 라 목록에
+ * 섞이지 않는데, 그러면 이 화면이 「이 설문에 누가 닿는가」를 다 보여준다고 해 놓고 정작
+ * 전권을 가진 한 사람만 빠진다 — 참여자 셋이 있는 설문에서 주인이 누구인지 물어볼 데가 없다.
+ * 제외 버튼을 달지 않는 것이 이 행의 계약이다(소유자는 누구도 제외할 수 없다 — 바꾸려면
+ * 아래 「소유권 이전」).
  */
-export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
+export function ParticipantsBlock({
+  surveyId,
+  ownerName,
+  ownerTeamName,
+}: ParticipantsBlockProps) {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +117,8 @@ export function ParticipantsBlock({ surveyId }: ParticipantsBlockProps) {
         )}
       </div>
 
+      {ownerName && <OwnerRow name={ownerName} teamName={ownerTeamName} />}
+
       {isPending && <p className="py-2 text-[11.5px] text-[#9CA3AF]">불러오는 중…</p>}
       {isError && <p className="py-2 text-[11.5px] text-red-600">참여자를 불러올 수 없습니다.</p>}
 
@@ -146,6 +162,28 @@ function Avatar({ name }: { name: string }) {
 /** 소속 · 이메일 — .pen 의 「부가」. 팀 미배치면 이메일만 남는다. */
 function metaLine(teamName: string | null, email: string): string {
   return teamName ? `${teamName} · ${email}` : email;
+}
+
+/**
+ * 소유자 행 — 참여자 목록 맨 위 고정.
+ *
+ * 이메일을 적지 않는 것은 목록이 그 값을 들고 있지 않아서다(참여 행이 아니다). 이름과 소속
+ * 팀이면 「누구인가」에는 답하고, 더 필요하면 팀 관리 화면이 있다. 배지 색을 참여자와 달리
+ * 두는 것은 같은 색이면 소유자가 참여자 중 하나로 읽히기 때문이다.
+ */
+function OwnerRow({ name, teamName }: { name: string; teamName: string | null }) {
+  return (
+    <div className="flex items-center gap-[9px] rounded-[9px] border border-[#E5E5EA] bg-[#FAFAFC] px-2.5 py-[7px]">
+      <Avatar name={name} />
+      <div className="flex min-w-0 flex-1 items-center gap-[7px]">
+        <span className="shrink-0 text-[12.5px] font-semibold text-[#1C1C1E]">{name}</span>
+        <span className="shrink-0 rounded-full bg-[#FDEBD0] px-2 py-0.5 text-[10.5px] font-semibold text-[#9A5B00]">
+          소유자
+        </span>
+        {teamName && <span className="truncate text-[11px] text-[#9CA3AF]">{teamName}</span>}
+      </div>
+    </div>
+  );
 }
 
 function ParticipantRow({

@@ -30,6 +30,8 @@ interface ShareSettingsModalProps {
   canManageAccess: boolean;
   /** 「현재 소유자」 표기 (.pen 4-4 부제). 소유자를 모르는 옛 설문은 null 이다. */
   currentOwnerName: string | null;
+  /** 소유 팀 이름 — 소유자 행의 소속 표기. */
+  ownerTeamName: string | null;
   /** 이전 요청이 되돌려 보낼 낙관적 동시성 토큰. */
   currentOwnerUserId: string | null;
   onClose: () => void;
@@ -77,6 +79,7 @@ export function ShareSettingsModal({
   canManageAccess,
   currentOwnerName,
   currentOwnerUserId,
+  ownerTeamName,
   onClose,
 }: ShareSettingsModalProps) {
   const [selected, setSelected] = useState<SurveyVisibility>(visibility);
@@ -158,7 +161,11 @@ export function ShareSettingsModal({
             들이고 빼는 일은 되돌릴 확인이 필요 없고, 한 모달의 저장 버튼에 묶으면 검색·추가
             도중 취소를 누른 사람이 초대까지 되돌아간 줄로 읽는다. */}
         <div className="mt-4 border-t border-[#F0F0F2] pt-4">
-          <ParticipantsBlock surveyId={surveyId} />
+          <ParticipantsBlock
+            surveyId={surveyId}
+            ownerName={currentOwnerName}
+            ownerTeamName={ownerTeamName}
+          />
         </div>
 
         {/* 클라이언트 블록도 같은 축이다 — 부여·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
