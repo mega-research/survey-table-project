@@ -18,6 +18,13 @@ export interface SurveyCardCapabilitySubject {
    * 분석 화면이 404 다 — 분석 근사는 이 값을 본다.
    */
   isFullParticipant: boolean;
+  /**
+   * 내 팀원이 이 설문에 초대돼 있는가 — 초대의 **팀장 전파**.
+   *
+   * 전파는 내 이름으로 된 참여 행을 만들지 않아 `isParticipant` 로는 보이지 않는다. 목록이
+   * 따로 실어 보내지 않으면 서버가 편집을 허락한 전파 팀장에게 「수정」이 잠긴다.
+   */
+  isLedParticipant: boolean;
 }
 
 /**
@@ -45,8 +52,14 @@ export interface SurveyCardViewer {
  *
  * - 슈퍼어드민: 항상 true.
  * - 본인 소유 설문: 항상 true.
+ * - 참여자 · 초대를 전파받은 팀장: true (둘 다 `survey.edit` 을 갖는다).
  * - 팀 공개(visibility='team') + 지금 보고 있는 팀 범위와 설문 teamId 일치: true.
  * - 그 외(초대 전용 설문의 비소유자, 시스템 전체 보기의 남의 설문 등): false.
+ *
+ * **삭제·그룹 이동은 이 판정으로 갈리지 않는다.** 서버 열에서 셋이 서로 다르기 때문이다 —
+ * 참여자는 편집은 되고 그룹 정리는 안 되며(surveyGroup.manage 없음), 팀원·제한 참여자·전파
+ * 팀장은 편집은 되고 삭제는 안 된다(survey.delete 없음). 하나로 묶으면 눌렀을 때 거부되는
+ * 버튼이 열린 채로 보인다.
  */
 export function canEditSurveyCard(
   survey: SurveyCardCapabilitySubject,
@@ -57,10 +70,47 @@ export function canEditSurveyCard(
   if (currentUserId !== null && survey.ownerUserId === currentUserId) return true;
   // 참여자는 팀과 무관하게 편집한다(스펙 §4·§8) — 초대받은 타 팀 설문이 여기로 들어온다.
   if (survey.isParticipant) return true;
+  // 초대를 전파받은 팀장도 같은 열(LIMITED_PARTICIPANT_CAPS)에 survey.edit 을 갖는다.
+  if (survey.isLedParticipant) return true;
   if (survey.visibility === 'team' && scope.kind === 'team' && survey.teamId === scope.teamId) {
     return true;
   }
   return false;
+}
+
+/**
+ * 카드 케밥의 **삭제** 노출 여부 **근사치**.
+ *
+ * `survey.delete` 를 주는 열은 전권 셋과 **full 참여자**뿐이다. 팀 공개 설문의 팀원·제한
+ * 참여자·전파 팀장은 편집은 하되 삭제는 못 한다(TEAM_MEMBER_CAPS·LIMITED_PARTICIPANT_CAPS
+ * 에 survey.delete 가 없다). 편집 근사를 그대로 쓰면 그 사람들에게 「삭제」가 열린 채로
+ * 보이고, 누르면 서버가 거부해 에러 토스트가 뜬다.
+ *
+ * 판정 결과가 `canViewSurveyAnalyticsCard` 와 같지만 **이유가 다르다**(저쪽은 responses.view).
+ * 이름을 하나로 합치면 한쪽 열이 바뀌는 날 다른 쪽이 조용히 따라 움직인다 — 분석 근사와
+ * 공개 범위 근사를 갈라 둔 것과 같은 이유다.
+ */
+export function canDeleteSurveyCard(
+  survey: SurveyCardCapabilitySubject,
+  viewer: SurveyCardViewer,
+): boolean {
+  return hasFullSurveyControl(survey, viewer) || survey.isFullParticipant;
+}
+
+/**
+ * 카드 케밥의 **그룹 이동** 노출 여부 **근사치**.
+ *
+ * 요구는 `surveyGroup.manage` + `survey.edit` 짝이다(procedures/survey-groups). 그룹은 팀
+ * 소유 구조라 참여자·전파 팀장에게는 manage 가 없다 — 편집 근사를 쓰면 타 팀 설문을 내 팀
+ * 폴더로 옮기려다 CONFLICT 를 받는다. 통과하는 것은 전권 셋과 **그 팀 팀원**이다.
+ */
+export function canManageSurveyGroupCard(
+  survey: SurveyCardCapabilitySubject,
+  viewer: SurveyCardViewer,
+): boolean {
+  if (hasFullSurveyControl(survey, viewer)) return true;
+  const { scope } = viewer;
+  return survey.visibility === 'team' && scope.kind === 'team' && survey.teamId === scope.teamId;
 }
 
 /**

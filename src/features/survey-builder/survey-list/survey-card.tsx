@@ -41,7 +41,9 @@ import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
 import {
   type SurveyCardViewer,
+  canDeleteSurveyCard,
   canEditSurveyCard,
+  canManageSurveyGroupCard,
   canManageSurveyAccessCard,
 } from './survey-list-capability';
 
@@ -92,7 +94,8 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  * 「그룹 이동」은 콜백 게이트라 팀 범위가 아니면(시스템 전체 보기·미배치) onMoveToGroup 이
  * null 로 와서 항목 자체가 사라진다(핸들러 없는 자리는 안 만든다).
  * 문의 버튼은 자리만 잡아 둔다 — 문의 기능이 아직 없어 언제나 비활성이다.
- * 분석·문의는 당분간 언제나 비활성이다. 수정·삭제의 비활성은 근사(canEditSurveyCard)일 뿐이고
+ * 분석·문의는 당분간 언제나 비활성이다. 수정·삭제·그룹 이동의 비활성은 근사(canEditSurveyCard·
+ * canDeleteSurveyCard·canManageSurveyGroupCard — 서버 열이 셋 다 달라 근사도 셋이다)일 뿐이고
  * 강제는 서버 관문이 한다.
  */
 export function SurveyCard({
@@ -106,6 +109,9 @@ export function SurveyCard({
 }: SurveyCardProps) {
   const { scope, currentUserId } = viewer;
   const canEdit = canEditSurveyCard(survey, viewer);
+  // 삭제·그룹 이동은 편집과 열이 다르다 — 한 값으로 묶으면 눌렀을 때 거부되는 버튼이 열린다.
+  const canDelete = canDeleteSurveyCard(survey, viewer);
+  const canMoveGroup = canManageSurveyGroupCard(survey, viewer);
   // 공개 범위 변경은 survey.manageAccess — 팀원은 편집은 되지만 여기는 잠긴다.
   const canManageAccess = canManageSurveyAccessCard(survey, viewer);
   const [sharingOpen, setSharingOpen] = useState(false);
@@ -181,13 +187,13 @@ export function SurveyCard({
               <GroupMoveSubmenu
                 groups={groups}
                 currentGroupId={survey.surveyGroupId}
-                disabled={!canEdit}
+                disabled={!canMoveGroup}
                 onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
               />
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              disabled={!canEdit}
+              disabled={!canDelete}
               className="text-red-600 focus:text-red-600"
               onSelect={() => onDelete(survey.id)}
             >

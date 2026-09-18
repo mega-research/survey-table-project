@@ -37,6 +37,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
   deletedAt: null,
   isParticipant: false,
   isFullParticipant: false,
+  isLedParticipant: false,
     ...over,
   };
 }

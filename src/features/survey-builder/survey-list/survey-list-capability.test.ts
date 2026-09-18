@@ -5,8 +5,10 @@ import type { WorkScope } from '@/shared/contracts/workspace';
 import {
   type SurveyCardCapabilitySubject,
   type SurveyCardViewer,
+  canDeleteSurveyCard,
   canEditSurveyCard,
   canManageSurveyAccessCard,
+  canManageSurveyGroupCard,
   canViewSurveyAnalyticsCard,
 } from './survey-list-capability';
 
@@ -16,6 +18,7 @@ const teamSurvey: SurveyCardCapabilitySubject = {
   teamId: 'team-1',
   isParticipant: false,
   isFullParticipant: false,
+  isLedParticipant: false,
 };
 
 const teamScope: WorkScope = { kind: 'team', teamId: 'team-1' };
@@ -132,6 +135,7 @@ describe('참여자 — 팀 축 밖의 접근', () => {
     teamId: 'team-9',
     isParticipant: true,
     isFullParticipant: true,
+    isLedParticipant: false,
   };
 
   it('타 팀 초대 설문을 편집·분석할 수 있다 — 팀도 공개 범위도 묻지 않는다', () => {
@@ -159,5 +163,82 @@ describe('참여자 — 팀 축 밖의 접근', () => {
     expect(canEditSurveyCard(notInvited, v)).toBe(false);
     expect(canViewSurveyAnalyticsCard(notInvited, v)).toBe(false);
     expect(canManageSurveyAccessCard(notInvited, v)).toBe(false);
+  });
+});
+
+/**
+ * 수정·삭제·그룹 이동은 **서로 다른 열**이다. 근사 하나로 셋을 판정하면 눌렀을 때 서버가
+ * 거부하는 버튼이 열린 채로 보인다 — 그 어긋남을 여기서 못 박는다.
+ */
+describe('수정 · 삭제 · 그룹 이동은 갈린다', () => {
+  it('팀 공개 설문의 팀원 — 수정·그룹 이동은 되고 삭제는 안 된다', () => {
+    const v = viewer();
+    expect(canEditSurveyCard(teamSurvey, v)).toBe(true);
+    // 그룹은 팀 공용 구조라 팀원도 정리한다(TEAM_MEMBER_CAPS 의 surveyGroup.manage).
+    expect(canManageSurveyGroupCard(teamSurvey, v)).toBe(true);
+    // survey.delete 는 팀원 열에 없다 — 열어 두면 눌렀을 때 서버가 거부한다.
+    expect(canDeleteSurveyCard(teamSurvey, v)).toBe(false);
+  });
+
+  it('full 참여자 — 삭제까지 되지만 그룹 이동은 안 된다', () => {
+    const invited: SurveyCardCapabilitySubject = {
+      ownerUserId: 'owner-1',
+      visibility: 'invite_only',
+      teamId: 'team-9',
+      isParticipant: true,
+      isFullParticipant: true,
+      isLedParticipant: false,
+    };
+    const v = viewer();
+    expect(canDeleteSurveyCard(invited, v)).toBe(true);
+    // 그룹은 팀 소유 구조라 참여자에게는 surveyGroup.manage 가 없다.
+    expect(canManageSurveyGroupCard(invited, v)).toBe(false);
+  });
+
+  it('제한 참여자 — 삭제가 닫힌다 (survey.delete 없음)', () => {
+    const limited: SurveyCardCapabilitySubject = {
+      ownerUserId: 'owner-1',
+      visibility: 'invite_only',
+      teamId: 'team-9',
+      isParticipant: true,
+      isFullParticipant: false,
+      isLedParticipant: false,
+    };
+    expect(canEditSurveyCard(limited, viewer())).toBe(true);
+    expect(canDeleteSurveyCard(limited, viewer())).toBe(false);
+  });
+});
+
+/**
+ * 초대의 **팀장 전파** — 내 팀원이 초대된 설문. 참여 행이 내 이름으로 서지 않으므로
+ * `isParticipant` 로는 보이지 않는다. 목록이 이 사실을 싣지 않으면 서버가 `survey.edit` 을
+ * 주는데 카드의 「수정」만 잠긴다.
+ */
+describe('전파 팀장 — 참여 행 없이 편집만 열린다', () => {
+  const ledSurvey: SurveyCardCapabilitySubject = {
+    ownerUserId: 'owner-1',
+    visibility: 'invite_only',
+    // 내 팀원이 초대된 타 팀 설문 — 내 범위(team-1)와 소유 팀이 다르다.
+    teamId: 'team-9',
+    isParticipant: false,
+    isFullParticipant: false,
+    isLedParticipant: true,
+  };
+
+  it('수정은 열린다 — 서버 열(LIMITED_PARTICIPANT_CAPS)에 survey.edit 이 있다', () => {
+    expect(canEditSurveyCard(ledSurvey, viewer())).toBe(true);
+  });
+
+  it('삭제·분석·공개 범위·그룹 이동은 닫힌다 — 파생이 본인보다 넓어지지 않는다', () => {
+    const v = viewer();
+    expect(canDeleteSurveyCard(ledSurvey, v)).toBe(false);
+    expect(canViewSurveyAnalyticsCard(ledSurvey, v)).toBe(false);
+    expect(canManageSurveyAccessCard(ledSurvey, v)).toBe(false);
+    expect(canManageSurveyGroupCard(ledSurvey, v)).toBe(false);
+  });
+
+  it('전파가 없으면 같은 행이 전부 닫힌다', () => {
+    const plain = { ...ledSurvey, isLedParticipant: false };
+    expect(canEditSurveyCard(plain, viewer())).toBe(false);
   });
 });

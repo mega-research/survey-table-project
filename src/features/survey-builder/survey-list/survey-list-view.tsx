@@ -137,6 +137,15 @@ export function SurveyListView() {
 
   const allSurveys = useMemo(() => data?.surveys ?? [], [data]);
   const groupList = useMemo(() => groups ?? [], [groups]);
+  // **관리 표면은 내 팀 그룹만 받는다.** 목록에는 협업 그룹(타 팀 폴더)이 함께 오는데, 그것은
+  // 「보이는 폴더」일 뿐 내가 고칠 수 있는 폴더가 아니다 — 이름 변경·정렬·삭제는 그 팀 멤버만
+  // 하고(procedures 의 관문), 담기는 팀이 같아야 한다(SurveyTeamMismatchError). 그대로 넘기면
+  // 그룹 관리 모달에 남의 팀 폴더가 서고 케밥의 「그룹 이동」이 CONFLICT 나는 목적지를 준다.
+  // 좁힘·활성 그룹 판정은 협업 그룹도 봐야 하므로 groupList 를 그대로 쓴다.
+  const manageableGroups = useMemo(
+    () => groupList.filter((g) => g.foreignTeamName === null),
+    [groupList],
+  );
   // 지목한 그룹이 목록에 없으면(삭제됐거나 남의 팀 id) 그룹 좁힘 자체를 하지 않는다 —
   // 유령 그룹 주소로 빈 화면에 갇히지 않게.
   const activeGroup = groupList.find((g) => g.id === requestedGroupId) ?? null;
@@ -241,7 +250,10 @@ export function SurveyListView() {
     <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-[18px] px-9 py-[30px]">
       <div className="flex items-center justify-between">
         {activeGroup ? (
-          <GroupViewHeader groupName={activeGroup.name} />
+          <GroupViewHeader
+            groupName={activeGroup.name}
+            foreignTeamName={activeGroup.foreignTeamName}
+          />
         ) : (
           <h1 className="text-2xl font-semibold text-[#1C1C1E]">
             {isSystemScope ? '설문 목록 — 시스템 전체 보기' : '설문 목록'}
@@ -381,7 +393,7 @@ export function SurveyListView() {
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}
                       isDuplicating={isDuplicating}
-                      groups={groupList}
+                      groups={manageableGroups}
                       onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
                     />
                   ),
@@ -407,7 +419,7 @@ export function SurveyListView() {
       {groupManagerOpen && teamScopeId && (
         <GroupManageModal
           teamId={teamScopeId}
-          groups={groupList}
+          groups={manageableGroups}
           onClose={() => setGroupManagerOpen(false)}
         />
       )}
