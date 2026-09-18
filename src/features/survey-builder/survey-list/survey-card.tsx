@@ -18,7 +18,7 @@ import {
   Lock,
   MessageCircle,
   Pencil,
-  Share2,
+  UserPlus,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -85,7 +85,10 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
 /**
  * 설문 카드 (.pen FLOW 6 설문 카드 컴포넌트).
  *
- * 케밥 순서는 .pen 4-1 노트를 따른다 — 공유 설정 · 링크 복사 · 그룹 이동 · 삭제.
+ * 케밥 순서는 .pen 4-1 노트를 따른다 — 초대 · 링크 복사 · 그룹 이동 · 삭제.
+ * 「초대」의 화면 용어만 그것이고 코드·도메인 어휘는 그대로 sharing 이다 — 모달 네 블록 중
+ * 셋이 사람을 들이는 일이라 「공유 설정」이 실제 내용보다 좁게 읽혔다. 아이콘을 편지로 두지
+ * 않는 것이 이 라벨의 계약이다: 이 초대는 **메일을 보내지 않는다**(계정에 자격을 부여할 뿐).
  * 「그룹 이동」은 콜백 게이트라 팀 범위가 아니면(시스템 전체 보기·미배치) onMoveToGroup 이
  * null 로 와서 항목 자체가 사라진다(핸들러 없는 자리는 안 만든다).
  * 문의 버튼은 자리만 잡아 둔다 — 문의 기능이 아직 없어 언제나 비활성이다.
@@ -148,8 +151,8 @@ export function SurveyCard({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
-              <Share2 className="h-3.5 w-3.5" />
-              공유 설정
+              <UserPlus className="h-3.5 w-3.5" />
+              초대
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {

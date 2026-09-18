@@ -104,7 +104,7 @@ export function ShareSettingsModal({
     <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <DialogContent className="max-h-[85vh] max-w-[560px] gap-0 overflow-y-auto rounded-2xl p-[22px]">
         <DialogTitle className="truncate text-[16.5px] font-semibold text-[#1C1C1E]">
-          공유 설정 — {surveyTitle}
+          초대와 공개 범위 — {surveyTitle}
         </DialogTitle>
 
         <div className="mt-4 flex flex-col gap-1.5">
