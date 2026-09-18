@@ -53,12 +53,14 @@ async function seedUser(
     status?: 'active' | 'suspended';
     isSuperadmin?: boolean;
     jobTitle?: string | null;
+    /** 정렬 검증용 — 이름순이면 어느 쪽이 먼저인지를 테스트가 정해야 한다. */
+    name?: string;
   } = {},
 ): Promise<string> {
   const id = crypto.randomUUID();
   await db.insert(users).values({
     id,
-    name: `사용자-${id.slice(0, 4)}`,
+    name: overrides.name ?? `사용자-${id.slice(0, 4)}`,
     email: `ticket06-${id}@example.com`,
     emailVerified: true,
     status: overrides.status ?? 'active',
@@ -126,7 +128,7 @@ describe.skipIf(!isLocalDb)('팀 생성 (real local DB)', () => {
 });
 
 describe.skipIf(!isLocalDb)('팀원 추가 (real local DB)', () => {
-  it('미배치 internal 만 검색된다', async () => {
+  it('팀장에게는 미배치 internal 만 검색된다', async () => {
     const teamId = await seedTeam(actorId);
     const unassigned = await seedUser();
     const guest = await seedUser({ userType: 'guest' });
@@ -135,12 +137,66 @@ describe.skipIf(!isLocalDb)('팀원 추가 (real local DB)', () => {
     const assigned = await seedUser();
     await addMember(SUPERADMIN, { teamId, userId: assigned, role: 'member' });
 
-    const found = (await searchAssignableUsers({ teamId, query: 'ticket06' })).map((u) => u.userId);
+    const found = (await searchAssignableUsers(LEADER, { teamId, query: 'ticket06' })).map(
+      (u) => u.userId,
+    );
 
     expect(found).toContain(unassigned);
     for (const excluded of [guest, suspended, superadmin, assigned]) {
       expect(found).not.toContain(excluded);
     }
+  });
+
+  /**
+   * 검색이 주체를 보지 않던 동안 슈퍼어드민은 **서버가 허용하는 겸직에 화면에서 도달할 수
+   * 없었다** — 바로 아래 테스트가 `addMember(SUPERADMIN, ...)` 로 겸직을 만드는데, 그 후보가
+   * 검색에 나오지 않았다. 규칙과 후보 목록이 갈린 자리다.
+   */
+  it('슈퍼어드민에게는 타 팀 소속자도 검색되고 소속 팀 이름이 함께 온다', async () => {
+    const teamA = await seedTeam(actorId, 'A');
+    const teamB = await seedTeam(actorId, 'B');
+    const [nameA] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamA));
+    const assigned = await seedUser();
+    await addMember(SUPERADMIN, { teamId: teamA, userId: assigned, role: 'member' });
+
+    const found = await searchAssignableUsers(SUPERADMIN, { teamId: teamB, query: 'ticket06' });
+    const row = found.find((u) => u.userId === assigned);
+
+    expect(row).toBeDefined();
+    expect(row?.teamNames).toEqual([nameA!.name]);
+
+    // 같은 후보가 팀장에게는 여전히 보이지 않는다 — 경계는 주체별로만 갈린다.
+    const asLeader = await searchAssignableUsers(LEADER, { teamId: teamB, query: 'ticket06' });
+    expect(asLeader.map((u) => u.userId)).not.toContain(assigned);
+  });
+
+  it('그 팀 소속자는 주체와 무관하게 후보에서 빠진다', async () => {
+    const teamId = await seedTeam(actorId);
+    const member = await seedUser();
+    await addMember(SUPERADMIN, { teamId, userId: member, role: 'member' });
+
+    // 누르면 AlreadyTeamMemberError 가 될 후보를 목록에 두면 안 된다.
+    for (const actor of [SUPERADMIN, LEADER]) {
+      const found = await searchAssignableUsers(actor, { teamId, query: 'ticket06' });
+      expect(found.map((u) => u.userId)).not.toContain(member);
+    }
+  });
+
+  it('슈퍼어드민 후보는 미배치가 먼저 온다', async () => {
+    const teamA = await seedTeam(actorId, 'A');
+    const teamB = await seedTeam(actorId, 'B');
+    const suffix = crypto.randomUUID().slice(0, 8);
+    // 이름순이면 소속자가 먼저다 — 그래도 미배치가 앞서야 한다(상한 20건에서 밀리지 않게).
+    const assigned = await seedUser({ name: `가소속-${suffix}` });
+    const unassigned = await seedUser({ name: `하미배치-${suffix}` });
+    await addMember(SUPERADMIN, { teamId: teamA, userId: assigned, role: 'member' });
+
+    const found = await searchAssignableUsers(SUPERADMIN, { teamId: teamB, query: 'ticket06' });
+    const order = found
+      .map((u) => u.userId)
+      .filter((id) => id === assigned || id === unassigned);
+
+    expect(order).toEqual([unassigned, assigned]);
   });
 
   it('팀장은 타 팀 active 멤버를 당겨올 수 없고, 슈퍼어드민은 겸직을 만들 수 있다', async () => {

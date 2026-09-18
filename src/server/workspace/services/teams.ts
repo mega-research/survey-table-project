@@ -12,7 +12,11 @@ import {
 } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { getTeamRole } from '@/server/read-models/team-memberships';
-import { canManageTeamMembers, canManageTeamSettings } from '@/shared/contracts/workspace';
+import {
+  canManageTeamMembers,
+  canManageTeamSettings,
+  canPullCrossTeamMember,
+} from '@/shared/contracts/workspace';
 
 import {
   type CreateTeamInput,
@@ -217,6 +221,7 @@ export async function getTeamDetail(
     members,
     canManageMembers: canManageTeamMembers(actor, myRole),
     canManageSettings: canManageTeamSettings(actor),
+    canPullCrossTeam: canPullCrossTeamMember(actor),
   };
 }
 

@@ -126,7 +126,13 @@ export function TeamDetailView({ teamId }: Props) {
         </p>
       </div>
 
-      {addOpen && <MemberAddModal teamId={teamId} onClose={() => setAddOpen(false)} />}
+      {addOpen && (
+        <MemberAddModal
+          teamId={teamId}
+          canPullCrossTeam={team.canPullCrossTeam}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
       {settingsOpen && (
         <TeamFormModal team={{ id: team.id, name: team.name }} onClose={() => setSettingsOpen(false)} />
       )}

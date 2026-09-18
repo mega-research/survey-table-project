@@ -92,6 +92,21 @@ export function canManageTeamSettings(actor: { isSuperadmin: boolean }): boolean
   return actor.isSuperadmin;
 }
 
+/**
+ * 타 팀 active 멤버를 이 팀에 **겸직으로** 들일 수 있는가 — 슈퍼어드민만.
+ *
+ * 팀장의 pull 은 미배치 사용자 전용이다(`CrossTeamAssignmentError`) — 열어 주면 팀장이 남의
+ * 팀 사람을 마음대로 데려간다. 강제의 정본은 `assertMemberAssignable` 이고 이 술어는 **검색
+ * 후보와 화면 문구**가 그 경계를 같은 값으로 보게 하는 자리다. 셋이 갈리면 「검색은 되는데
+ * 추가하면 거부」 또는 그 반대가 된다.
+ *
+ * 겸직은 **이동이 아니다** — 기존 멤버십을 지우지 않는다. 이동이 필요하면 「제외」 → 「추가」
+ * 두 걸음이고, 그 경로에만 마지막 팀장·소유 설문 가드가 붙어 있다.
+ */
+export function canPullCrossTeamMember(actor: { isSuperadmin: boolean }): boolean {
+  return actor.isSuperadmin;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // fieldwork_orgs.status — 실사 업체 수명 (SSOT, 티켓 24)
 // ─────────────────────────────────────────────────────────────────────────────

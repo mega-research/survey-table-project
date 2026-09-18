@@ -93,6 +93,14 @@ export const TeamDetailOutput = z.object({
   members: z.array(TeamMemberItem),
   canManageMembers: z.boolean(),
   canManageSettings: z.boolean(),
+  /**
+   * 타 팀 소속자를 이 팀에 **겸직으로** 추가할 수 있는가 — 슈퍼어드민만.
+   *
+   * `canManageMembers` 와 나눠 두는 이유는 팀장도 사람은 다루지만 타 팀 멤버는 못 건드리기
+   * 때문이다(`CrossTeamAssignmentError`). 모달이 이 값으로 검색 안내 문구를 가른다 — 두 주체가
+   * 같은 문구를 보면 한쪽에게는 거짓이 된다.
+   */
+  canPullCrossTeam: z.boolean(),
 });
 export type TeamDetailOutput = z.infer<typeof TeamDetailOutput>;
 
@@ -133,10 +141,12 @@ export type DissolveTeamInput = z.infer<typeof DissolveTeamInput>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 팀원 추가 검색 (.pen FLOW 7-3) — **미배치 internal 사용자만** 잡힌다.
+ * 팀원 추가 검색 (.pen FLOW 7-3) — 팀장에게는 **미배치 internal 사용자만** 잡힌다.
  *
- * 타 팀 active 멤버는 검색되지 않는다("이동이 필요하면 슈퍼어드민에게 요청하세요"),
- * guest·fieldwork 는 팀 멤버십 자체가 금지다(스펙 §1), 슈퍼어드민은 팀 소속과 무관하다.
+ * 슈퍼어드민에게는 **타 팀 active 멤버도** 잡힌다 — 겸직 생성이 슈퍼어드민 몫이기 때문이다
+ * (`assertMemberAssignable`). 양쪽 공통으로 **그 팀 소속자는 제외**한다: 추가하면
+ * `AlreadyTeamMemberError` 가 될 후보를 목록에 두면 안 된다. guest·fieldwork 는 팀 멤버십
+ * 자체가 금지고(스펙 §1), 슈퍼어드민은 팀 소속과 무관하다.
  */
 export const SearchAssignableUsersInput = z.object({
   teamId: z.uuid(),
@@ -149,6 +159,14 @@ export const AssignableUserItem = z.object({
   name: z.string(),
   email: z.string(),
   jobTitle: z.string().nullable(),
+  /**
+   * 이 후보가 지금 속한 **활성** 팀 이름들 — 화면이 `안부장 · 연구 3본부 - 5팀` 으로 쓴다.
+   *
+   * 팀장이 부르면 언제나 빈 배열이다(후보 자체가 미배치뿐이다). 슈퍼어드민에게만 값이
+   * 차는데, 그때 이 값이 없으면 **모르고 남의 팀 사람을 당긴다** — 팀장의 pull 을 막아 둔
+   * 이유가 슈퍼어드민 화면에서 그대로 재현된다.
+   */
+  teamNames: z.array(z.string()),
 });
 export type AssignableUserItem = z.infer<typeof AssignableUserItem>;
 

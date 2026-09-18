@@ -56,6 +56,7 @@ beforeEach(() => {
     members: [],
     canManageMembers: true,
     canManageSettings: false,
+    canPullCrossTeam: false,
   });
 });
 

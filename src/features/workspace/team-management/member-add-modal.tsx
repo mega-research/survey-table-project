@@ -13,17 +13,29 @@ import { useAddTeamMember, useAssignableUsers } from './queries/use-teams';
 
 interface Props {
   teamId: string;
+  /**
+   * 타 팀 소속자를 겸직으로 추가할 수 있는가 — 서버가 준 `canPullCrossTeam` 그대로.
+   *
+   * 화면이 주체를 다시 판정하지 않는다. 검색 후보도 서버가 같은 경계로 좁히므로 이 값은
+   * **문구만** 가른다 — 두 주체에게 같은 문구를 보이면 한쪽에게는 거짓이 된다.
+   */
+  canPullCrossTeam: boolean;
   onClose: () => void;
 }
 
 /**
  * 팀원 추가 모달 (.pen FLOW 7-3) — pull 모델.
  *
- * 검색에는 **미배치 internal 사용자만** 잡힌다. 타 팀 소속 멤버를 여기서 빼올 수 없고,
- * 이동이 필요하면 슈퍼어드민이 재배치 센터(티켓 14)에서 처리한다. 이 제한은 화면이 아니라
- * 서버가 지키지만, 화면이 먼저 알려줘야 "검색해도 안 나온다" 가 버그로 읽히지 않는다.
+ * 팀장에게는 **미배치 internal 사용자만** 잡힌다. 타 팀 소속 멤버를 여기서 빼올 수 없고,
+ * 이동이 필요하면 슈퍼어드민이 처리한다. 이 제한은 화면이 아니라 서버가 지키지만, 화면이
+ * 먼저 알려줘야 "검색해도 안 나온다" 가 버그로 읽히지 않는다.
+ *
+ * 슈퍼어드민에게는 타 팀 소속자도 잡히고 **겸직**으로 추가된다(기존 소속을 지우지 않는다).
+ * 본부 차원에서 여러 팀을 관장하는 사람이 각 팀 팀장 멤버십을 갖는 경로다(CONTEXT.md 「팀」).
+ * 후보 행에 현재 소속을 함께 적는 것이 이 화면의 계약이다 — 없으면 모르고 남의 팀 사람을
+ * 당기게 되어, 팀장의 pull 을 막아 둔 이유가 여기서 재현된다.
  */
-export function MemberAddModal({ teamId, onClose }: Props) {
+export function MemberAddModal({ teamId, canPullCrossTeam, onClose }: Props) {
   const [keyword, setKeyword] = useState('');
   const [debounced, setDebounced] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +66,9 @@ export function MemberAddModal({ teamId, onClose }: Props) {
       <DialogContent className="max-w-[480px] gap-0 rounded-[14px] p-[22px]">
         <DialogTitle className="text-[17px] font-semibold text-[#1C1C1E]">팀원 추가</DialogTitle>
         <p className="mt-[3px] text-[12.5px] text-[#6E6E73]">
-          미배치 사용자만 검색해 추가할 수 있습니다.
+          {canPullCrossTeam
+            ? '이름 또는 이메일로 검색해 추가합니다. 타 팀 소속자는 겸직으로 추가됩니다.'
+            : '미배치 사용자만 검색해 추가할 수 있습니다.'}
         </p>
 
         <div className="mt-[14px] flex items-center gap-2 rounded-[9px] border border-[#E5E5EA] px-3">
@@ -87,7 +101,10 @@ export function MemberAddModal({ teamId, onClose }: Props) {
                 </span>
                 <span className="truncate text-[11.5px] text-[#6E6E73]">
                   {candidate.email}
-                  {candidate.jobTitle ? ` · ${candidate.jobTitle}` : ''} · 팀 미배치
+                  {candidate.jobTitle ? ` · ${candidate.jobTitle}` : ''} ·{' '}
+                  {candidate.teamNames.length > 0
+                    ? candidate.teamNames.join(', ')
+                    : '팀 미배치'}
                 </span>
               </span>
               <Button
@@ -109,7 +126,9 @@ export function MemberAddModal({ teamId, onClose }: Props) {
           )}
           {!isLoading && candidates.length === 0 && (
             <p className="py-6 text-center text-[12.5px] text-[#9CA3AF]">
-              추가할 수 있는 미배치 사용자가 없습니다.
+              {canPullCrossTeam
+                ? '추가할 수 있는 사용자가 없습니다.'
+                : '추가할 수 있는 미배치 사용자가 없습니다.'}
             </p>
           )}
         </div>
@@ -117,7 +136,9 @@ export function MemberAddModal({ teamId, onClose }: Props) {
         {error && <p className="mt-3 text-[12.5px] text-red-600">{error}</p>}
 
         <p className="mt-[14px] text-[11.5px] leading-relaxed text-[#9CA3AF]">
-          타 팀 소속 멤버는 검색되지 않습니다. 이동이 필요하면 슈퍼어드민에게 요청하세요.
+          {canPullCrossTeam
+            ? '타 팀 소속자를 추가해도 기존 소속은 그대로 남습니다(겸직). 옮기려면 그 팀에서 먼저 제외하세요. 팀장으로 세우려면 추가한 뒤 역할을 바꿉니다.'
+            : '타 팀 소속 멤버는 검색되지 않습니다. 이동이 필요하면 슈퍼어드민에게 요청하세요.'}
         </p>
       </DialogContent>
     </Dialog>

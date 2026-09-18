@@ -4,7 +4,11 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { surveys, teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
-import type { TeamLifecycleAction, TeamLifecycleMetadata } from '@/shared/contracts/workspace';
+import {
+  type TeamLifecycleAction,
+  type TeamLifecycleMetadata,
+  canPullCrossTeamMember,
+} from '@/shared/contracts/workspace';
 
 import {
   type AddTeamMemberInput,
@@ -84,39 +88,88 @@ export async function activeTeamIdsOf(tx: DbTransaction, userId: string): Promis
 }
 
 /**
- * 팀원 추가 검색 (.pen FLOW 7-3) — **미배치 internal active 사용자만**.
+ * 팀원 추가 검색 (.pen FLOW 7-3) — 후보 모집단이 **주체에 따라 갈린다**.
  *
- * 타 팀 active 멤버는 잡히지 않는다("이동이 필요하면 슈퍼어드민에게 요청하세요"). 슈퍼어드민은
- * 팀 소속과 무관하고, guest·fieldwork 는 팀 멤버십 자체가 금지다(스펙 §1).
+ * - 팀장: **미배치 internal active 사용자만**. 타 팀 멤버는 잡히지 않는다
+ *   ("이동이 필요하면 슈퍼어드민에게 요청하세요") — 열어 주면 팀장이 남의 팀 사람을
+ *   마음대로 데려간다(`CrossTeamAssignmentError` 의 존재 이유).
+ * - 슈퍼어드민: **타 팀 active 멤버까지**. 겸직 생성이 슈퍼어드민 몫이라
+ *   (`assertMemberAssignable`) 검색이 그 후보를 감추면 서버가 허용하는 일에 화면에서
+ *   도달할 방법이 없다. 본부 차원에서 여러 팀을 관장하는 사람이 각 팀 팀장 멤버십을 겸직으로
+ *   갖는 것이 이 경로다(CONTEXT.md 「팀」).
  *
- * teamId 는 결과를 좁히는 데 쓰이지 않는다 — 조건이 "어느 팀에도 없을 것" 이라 이미 이 팀
- * 멤버도 제외된다. 권한 판정(그 팀 관리자인가)에만 쓰인다.
+ * **양쪽 공통으로 그 팀 소속자는 제외한다** — 추가해 봐야 `AlreadyTeamMemberError` 가 될
+ * 후보이므로 목록에 두면 누르는 것이 곧 실패다. 그래서 `teamId` 는 팀장 경로에서는 결과를
+ * 좁히지 않고(조건이 "어느 팀에도 없을 것" 이라 이미 포함된다) 슈퍼어드민 경로에서는
+ * **유일한** 제외 조건이 된다.
+ *
+ * 나머지 자격은 주체와 무관하다 — guest·fieldwork 는 팀 멤버십 자체가 금지고(스펙 §1),
+ * 슈퍼어드민은 팀 소속과 무관하다(`isSuperadmin=false` 만 후보).
+ *
+ * **판정의 정본은 이 함수가 아니다.** 입력의 userId 는 손으로 갈아끼울 수 있어
+ * `assertMemberAssignable` 이 같은 경계를 다시 세운다. 여기는 화면이 고를 수 있는 것을
+ * 정하는 자리다.
  */
 export async function searchAssignableUsers(
+  actor: { isSuperadmin: boolean },
   input: SearchAssignableUsersInput,
 ): Promise<SearchAssignableUsersOutput> {
-  const hasActiveMembership = db
-    .select({ one: sql`1` })
-    .from(teamMembers)
-    .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-    .where(and(eq(teamMembers.userId, users.id), eq(teams.status, 'active')));
+  const membershipOf = (teamFilter?: ReturnType<typeof eq>) =>
+    db
+      .select({ one: sql`1` })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+      .where(and(eq(teamMembers.userId, users.id), eq(teams.status, 'active'), teamFilter));
+
+  // 슈퍼어드민은 이 팀 소속만, 팀장은 어느 팀 소속이든 제외한다.
+  const excluded = canPullCrossTeamMember(actor)
+    ? membershipOf(eq(teamMembers.teamId, input.teamId))
+    : membershipOf();
+
+  /**
+   * 후보의 현재 소속 팀 이름들. 팀장 경로에서는 언제나 빈 배열이지만 **분기하지 않는다** —
+   * 두 경로가 다른 모양을 돌려주면 화면이 주체를 다시 판정해야 한다.
+   *
+   * 외부 참조는 `${users}.id` 로 쓴다. `${users.id}` 는 **select 절에서 테이블 접두가 빠져**
+   * `"id"` 로만 나가고, 서브쿼리의 `m`·`t` 와 부딪혀 `column reference "id" is ambiguous`
+   * 가 된다(order by 절에서는 접두가 붙어 같은 식이 통과한다 — 그래서 한쪽만 고치면 모른다).
+   */
+  const teamNames = sql<string[]>`coalesce(
+    (select array_agg(t.name order by t.name)
+       from ${teamMembers} m
+       join ${teams} t on t.id = m.team_id and t.status = 'active'
+      where m.user_id = ${users}.id),
+    '{}'
+  )`;
+
+  // 미배치 우선 → 이름순. 상한이 20건이라, 섞어 정렬하면 소속자가 미배치 후보를 밀어낸다.
+  const membershipCount = sql`(select count(*)
+       from ${teamMembers} m
+       join ${teams} t on t.id = m.team_id and t.status = 'active'
+      where m.user_id = ${users}.id)`;
 
   const keyword = input.query;
   return db
-    .select({ userId: users.id, name: users.name, email: users.email, jobTitle: users.jobTitle })
+    .select({
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+      jobTitle: users.jobTitle,
+      teamNames,
+    })
     .from(users)
     .where(
       and(
         eq(users.status, 'active'),
         eq(users.userType, 'internal'),
         eq(users.isSuperadmin, false),
-        notExists(hasActiveMembership),
+        notExists(excluded),
         keyword.length > 0
           ? or(ilike(users.name, `%${keyword}%`), ilike(users.email, `%${keyword}%`))
           : undefined,
       ),
     )
-    .orderBy(asc(users.name))
+    .orderBy(asc(membershipCount), asc(users.name))
     .limit(20);
 }
 

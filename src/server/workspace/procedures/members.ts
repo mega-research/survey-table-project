@@ -69,7 +69,8 @@ const searchAssignable = authed
   .output(SearchAssignableUsersOutput)
   .handler(async ({ input, context }) => {
     await assertTeamManager(context.user, input.teamId);
-    return svc.searchAssignableUsers(input);
+    // 후보 모집단이 주체에 따라 갈린다 — 슈퍼어드민만 타 팀 멤버를 겸직으로 당길 수 있다.
+    return svc.searchAssignableUsers({ isSuperadmin: context.user.isSuperadmin }, input);
   });
 
 /** 팀원 추가 — 타 팀 active 멤버를 당겨오는 것은 슈퍼어드민만 할 수 있다. */
