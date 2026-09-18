@@ -23,6 +23,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import {
   fieldworkOrgs as orgsTable,
+  surveyGroups as surveyGroupsTable,
   surveyParticipants as participantsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
@@ -149,6 +150,17 @@ async function visibleIds(userId: string, teamId: string): Promise<string[]> {
   const subject = await loadAccessSubject(subjectOf(userId));
   const rows = await getScopedSurveys(buildSurveyScopeFilter(subject, { kind: 'team', teamId }));
   return rows.map((row) => row.id);
+}
+
+/** 목록이 이 설문에 실어 보내는 그룹 id — 화면이 폴더를 열 수 있는지가 이 값에 달렸다. */
+async function visibleGroupIdOf(
+  userId: string,
+  teamId: string,
+  id = surveyId,
+): Promise<string | null | undefined> {
+  const subject = await loadAccessSubject(subjectOf(userId));
+  const rows = await getScopedSurveys(buildSurveyScopeFilter(subject, { kind: 'team', teamId }));
+  return rows.find((row) => row.id === id)?.surveyGroupId;
 }
 
 async function caps(userId: string, id = surveyId): Promise<string[]> {
@@ -659,6 +671,33 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
 
       expect(await caps(B_LEADER_ID)).toEqual([]);
       expect(await visibleIds(B_LEADER_ID, TEAM_B)).not.toContain(surveyId);
+    });
+
+    /**
+     * 협업 폴더는 **열려야 한다.** 사이드바가 「협업 폴더 1」이라 말하는데 눌러서 열면 빈
+     * 화면이면 그 목록은 거짓이다. 그룹 화면은 목록 행의 `surveyGroupId` 로 좁히므로
+     * (narrowToGroup), 투영이 타 팀 설문의 그룹 id 를 null 로 접으면 언제나 0건이 된다.
+     */
+    it('초대·전파로 보이는 타 팀 설문은 그룹 id 를 그대로 싣는다', async () => {
+      const groupId = crypto.randomUUID();
+      await db.insert(surveyGroupsTable).values({
+        id: groupId,
+        teamId: TEAM_A,
+        name: `협업 폴더-${groupId.slice(0, 8)}`,
+        createdBy: A_OWNER_ID,
+      });
+      await db
+        .update(surveysTable)
+        .set({ surveyGroupId: groupId })
+        .where(eq(surveysTable.id, surveyId));
+
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      // 초대받은 본인과 전파받은 팀장 둘 다 — 사이드바의 협업 폴더와 짝이 맞아야 한다.
+      expect(await visibleGroupIdOf(B_OUTSIDER_ID, TEAM_B)).toBe(groupId);
+      expect(await visibleGroupIdOf(B_LEADER_ID, TEAM_B)).toBe(groupId);
+
+      await db.delete(surveyGroupsTable).where(eq(surveyGroupsTable.id, groupId));
     });
 
     it('초대를 빼면 전파도 사라진다', async () => {

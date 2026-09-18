@@ -167,6 +167,7 @@ export async function getSurveyListWithCounts(
       deletedAt: survey.deletedAt,
       isParticipant: survey.isParticipant,
       isFullParticipant: survey.isFullParticipant,
+      isLedParticipant: survey.isLedParticipant,
     })),
   };
 }

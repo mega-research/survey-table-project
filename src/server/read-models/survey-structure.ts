@@ -132,7 +132,7 @@ export function participatesInSurvey(viewerId: string, options: { fullOnly?: boo
  * import 시점에 스키마가 필요해져, `@/db/schema` 를 부분 모킹하는 테스트가 이 모듈을
  * 체인에 들이는 순간 「No "teams" export」로 깨진다. 쿼리를 만들 때 부르면 종전과 같다.
  */
-function surveyListColumns(viewerId: string | null) {
+function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly string[] = []) {
   return {
     /**
      * 내가 이 설문의 참여자인가 (티켓 18) — 카드의 버튼 노출 근사가 본다.
@@ -149,6 +149,18 @@ function surveyListColumns(viewerId: string | null) {
       viewerId === null
         ? sql<boolean>`false`
         : participatesInSurvey(viewerId, { fullOnly: true }).mapWith(Boolean),
+    /**
+     * 내 팀원이 이 설문에 초대돼 있는가 — 초대의 **팀장 전파**(코어의 9번 분기).
+     *
+     * 참여 행과 달리 전파는 **내 이름으로 된 행이 없다**. 그래서 `isParticipant` 만으로는
+     * 전파 팀장을 팀 밖 구경꾼과 구별할 수 없고, 서버가 `survey.edit` 을 주는데 카드의
+     * 「수정」은 잠긴 채로 보인다. 목록 조건과 **같은 술어**를 쓴다(participatesInSurvey 와
+     * 같은 이유) — 따로 쓰면 목록에 선 카드와 버튼 판정이 갈린다.
+     */
+    isLedParticipant:
+      leaderTeamIds.length === 0
+        ? sql<boolean>`false`
+        : leadsParticipantTeam(leaderTeamIds).mapWith(Boolean),
     id: surveys.id,
     title: surveys.title,
     description: surveys.description,
@@ -215,15 +227,14 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 
   return db
     .select({
-      ...surveyListColumns(filter.viewerId),
+      ...surveyListColumns(
+        filter.viewerId,
+        filter.kind === 'team' ? filter.leaderTeamIds : [],
+      ),
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
-      //
-      // **초대받은 타 팀 설문도 여기서 미분류로 접힌다**(티켓 18). 그 설문은 소유 팀의 그룹에
-      // 담겨 있지만 그 그룹은 보는 사람의 사이드바에 없다 — id 를 그대로 실어 보내면 어느
-      // 화면에서도 열 수 없는 폴더를 가리키게 된다.
-      surveyGroupId: visibleGroupId(filter),
+      surveyGroupId: visibleGroupId(),
     })
     .from(surveys)
     .leftJoin(teams, eq(teams.id, surveys.teamId))
@@ -236,16 +247,22 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 /**
  * 화면이 열 수 있는 그룹 id 만 남긴다.
  *
- * 두 가지를 접는다 — 깨진 상태(설문 팀 ≠ 그룹 팀)와 **보는 범위 밖의 그룹**. 뒤의 것이
- * 티켓 18 이 더한 축이다: 초대받은 타 팀 설문은 소유 팀 그룹에 담겨 있고 그 그룹은 이
- * 사람의 사이드바에 없다. 시스템 전체 보기에는 그룹 개념이 없으므로 좁힐 범위도 없다.
+ * 접는 것은 **깨진 상태 하나**다(설문 팀 ≠ 그룹 팀 — 팀을 옮기는 흐름이 surveyGroupId 를
+ * 안 내린 경우). 그 행을 그대로 실어 보내면 없는 폴더를 가리키게 된다.
+ *
+ * 티켓 18 은 여기에 「보는 범위 밖」도 함께 접었다 — 초대받은 타 팀 설문의 그룹은 그 사람의
+ * 사이드바에 없어 열 수 없는 폴더였기 때문이다. **협업 그룹이 생기면서 그 전제가 사라졌다**:
+ * 내가 볼 수 있는 설문이 담긴 타 팀 그룹은 이제 사이드바에 선다(listCollaboratingGroups).
+ * 범위로 계속 접으면 사이드바가 「협업 폴더 1」이라 말하는데 눌러서 열면 언제나 빈 화면이다
+ * (그룹 화면은 이 값으로 좁힌다 — survey-list-pipeline 의 narrowToGroup).
+ *
+ * 두 조회가 **같은 술어**를 쓰는 것이 이 결합의 근거다: 목록에 보이는 타 팀 설문은
+ * `participatesInSurvey`·`leadsParticipantTeam` 로 들어온 것이고, 협업 그룹 조회도 같은
+ * 조각으로 그 설문이 담긴 그룹을 세운다. 그래서 여기서 남긴 id 는 갈 곳이 있다.
  */
-function visibleGroupId(filter: SurveyScopeFilter): SQL<string | null> {
+function visibleGroupId(): SQL<string | null> {
   const sameTeam = sql`${surveys.teamId} is not distinct from ${surveyGroups.teamId}`;
-  const inScope = filter.kind === 'team' ? sql`${surveys.teamId} = ${filter.teamId}` : sql`true`;
-  return sql<
-    string | null
-  >`case when ${sameTeam} and ${inScope} then ${surveys.surveyGroupId} else null end`;
+  return sql<string | null>`case when ${sameTeam} then ${surveys.surveyGroupId} else null end`;
 }
 
 /**

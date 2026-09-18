@@ -156,6 +156,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       deletedAt: null,
       isParticipant: false,
       isFullParticipant: false,
+      isLedParticipant: false,
       ...over,
     };
   }
@@ -221,6 +222,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         // 참여자 여부는 카드 버튼 노출 근사가 본다(티켓 18).
         isParticipant: false,
         isFullParticipant: false,
+        isLedParticipant: false,
       },
     ]);
   });

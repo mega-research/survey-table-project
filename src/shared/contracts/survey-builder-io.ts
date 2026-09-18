@@ -78,6 +78,13 @@ export interface SurveyListItem {
   isParticipant: boolean;
   /** 그 참여가 full 등급인가 (0123) — 제한 참여자는 분석(responses.view)이 없다. */
   isFullParticipant: boolean;
+  /**
+   * 내 팀원이 이 설문에 초대돼 있는가 — 초대의 **팀장 전파**.
+   *
+   * 전파는 내 이름으로 된 참여 행을 만들지 않으므로 `isParticipant` 로는 알 수 없다. 이 값이
+   * 없으면 서버가 `survey.edit` 을 준 전파 팀장에게 카드의 「수정」이 잠긴 채로 보인다.
+   */
+  isLedParticipant: boolean;
 }
 
 /**
