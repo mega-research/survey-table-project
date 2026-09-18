@@ -1,4 +1,17 @@
-import { and, asc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  type SQL,
+  and,
+  asc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
@@ -42,6 +55,15 @@ const OK: WorkspaceActionOutput = { success: true };
  * 1장만 나온다 — 뺄셈 한 번으로 "내게 숨겨진 설문이 2건 있다" 가 드러난다. 그래서 조인 조건이
  * 목록 조회(`buildSurveyScopeFilter` 의 seesInviteOnly)와 같은 술어를 쓴다.
  *
+ * **카운트를 0 으로 만드는 것으로는 부족하다** — 폴더가 목록에 서 있으면 이름 자체가 정보이고
+ * (「임원 조사」), 「0건인데 왜 있지」로 숨겨진 설문의 존재가 드러난다. 그래서 담긴 설문을
+ * 하나도 볼 수 없는 그룹은 **행이 나오지 않는다**(having). 협업 그룹이 inner join 으로 같은
+ * 규칙을 얻는 것과 짝이다.
+ *
+ * **빈 그룹은 예외다.** 감출 설문이 없고, 「그룹 관리」에서 폴더를 먼저 만들고 나중에 담는
+ * 동선이라 안 보이면 방금 만든 폴더가 즉시 사라진다. 그래서 조건이 「보이는 설문이 있거나,
+ * 담긴 설문이 아예 없다」 둘이다.
+ *
  * 조인에 `surveys.teamId = surveyGroups.teamId` 도 함께 건다. 그룹은 팀 소유물이라 팀이 다른
  * 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이 surveyGroupId 를 안 내린
  * 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
@@ -81,10 +103,33 @@ export async function listSurveyGroups(
         )
         .where(eq(surveyGroups.teamId, teamId))
         .groupBy(surveyGroups.id)
+        .having(or(sql`count(${surveys.id}) > 0`, sql`not ${groupHoldsAnySurvey()}`))
         .orderBy(asc(surveyGroups.order), asc(surveyGroups.name))
     : [];
 
   return [...own, ...(await listCollaboratingGroups(subject, teamId))];
+}
+
+/**
+ * 이 그룹에 (내가 볼 수 있는지와 무관하게) 설문이 담겨 있는가 — 빈 그룹만 가려내는 술어.
+ *
+ * 가시성 조건을 **일부러 걸지 않는다**. 이 값이 묻는 것은 「감출 것이 있는가」이고, 조건을
+ * 걸면 바깥 카운트와 같아져 빈 그룹과 「전부 숨은 그룹」을 구별하지 못한다.
+ */
+function groupHoldsAnySurvey(): SQL<boolean> {
+  const held = alias(surveys, 'group_survey');
+  return sql<boolean>`${exists(
+    db
+      .select({ one: sql`1` })
+      .from(held)
+      .where(
+        and(
+          eq(held.surveyGroupId, surveyGroups.id),
+          eq(held.teamId, surveyGroups.teamId),
+          isNull(held.deletedAt),
+        ),
+      ),
+  )}`;
 }
 
 /**

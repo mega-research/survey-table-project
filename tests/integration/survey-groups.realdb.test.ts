@@ -31,6 +31,10 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 
 const MEMBER_ID = crypto.randomUUID();
 const OUTSIDER_ID = crypto.randomUUID();
+/** A팀 소유자 — `invite_only` 설문의 주인. MEMBER 가 소유하면 그 설문이 숨지 않는다. */
+const A_OWNER_ID = crypto.randomUUID();
+/** A팀 팀장 — invite_only 까지 보는 주체(seesInviteOnly). */
+const A_LEADER_ID = crypto.randomUUID();
 const TEAM_A = crypto.randomUUID();
 const TEAM_B = crypto.randomUUID();
 
@@ -101,12 +105,18 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     if (!isLocalDb) return;
     await seedUser(MEMBER_ID);
     await seedUser(OUTSIDER_ID);
+    await seedUser(A_OWNER_ID);
+    await seedUser(A_LEADER_ID);
     await db.insert(teamsTable).values([
       { id: TEAM_A, name: `그룹팀A-${TEAM_A.slice(0, 8)}` },
       { id: TEAM_B, name: `그룹팀B-${TEAM_B.slice(0, 8)}` },
     ]);
     // MEMBER 는 팀 A 의 **팀원**(팀장 아님) — 그룹 구조는 팀 공용이라 이걸로 충분해야 한다.
-    await db.insert(teamMembersTable).values({ teamId: TEAM_A, userId: MEMBER_ID, role: 'member' });
+    await db.insert(teamMembersTable).values([
+      { teamId: TEAM_A, userId: MEMBER_ID, role: 'member' },
+      { teamId: TEAM_A, userId: A_OWNER_ID, role: 'member' },
+      { teamId: TEAM_A, userId: A_LEADER_ID, role: 'leader' },
+    ]);
     // OUTSIDER 는 팀 B 소속이라 팀 A 의 그룹을 볼 수도 만질 수도 없어야 한다.
     await db
       .insert(teamMembersTable)
@@ -139,13 +149,29 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     }
     await db
       .delete(teamMembersTable)
-      .where(inArray(teamMembersTable.userId, [MEMBER_ID, OUTSIDER_ID]));
+      .where(
+        inArray(teamMembersTable.userId, [
+          MEMBER_ID,
+          OUTSIDER_ID,
+          A_OWNER_ID,
+          A_LEADER_ID,
+          ...createdUserIds,
+        ]),
+      );
     await db
       .delete(teamsTable)
       .where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
     await db
       .delete(usersTable)
-      .where(inArray(usersTable.id, [MEMBER_ID, OUTSIDER_ID, ...createdUserIds]));
+      .where(
+        inArray(usersTable.id, [
+          MEMBER_ID,
+          OUTSIDER_ID,
+          A_OWNER_ID,
+          A_LEADER_ID,
+          ...createdUserIds,
+        ]),
+      );
   });
 
   it('팀원이 그룹을 만들고 미분류 설문을 담고 케밥으로 옮기는 전 과정', async () => {
@@ -524,6 +550,86 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       await expect(outsider.surveyGroups.remove({ groupId: shared })).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 「초대된 멤버만」 설문이 담긴 그룹 — 폴더 이름도 새지 않는다
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 카운트를 0 으로 만드는 것으로는 부족하다. 폴더가 목록에 서 있으면 **이름 자체가 정보**이고
+   * (「임원 조사」), 「0건인데 왜 있지」로 숨겨진 설문의 존재가 드러난다. 그래서 담긴 설문을
+   * 하나도 볼 수 없는 그룹은 **행이 나오지 않는다**.
+   *
+   * 빈 그룹은 예외다 — 감출 설문이 없고, 「그룹 관리」에서 폴더를 먼저 만들고 나중에 담는
+   * 동선이라 안 보이면 방금 만든 폴더가 즉시 사라진다.
+   */
+  describe('볼 수 없는 설문만 담긴 그룹은 이름도 보이지 않는다', () => {
+    async function seedHiddenGroup() {
+      const groupId = await seedGroup(clientFor(A_OWNER_ID), TEAM_A, '임원 조사');
+      const surveyId = crypto.randomUUID();
+      await db.insert(surveysTable).values({
+        id: surveyId,
+        title: '초대된 멤버만 조사',
+        teamId: TEAM_A,
+        visibility: 'invite_only',
+        assignmentStatus: 'assigned',
+        ownerUserId: A_OWNER_ID,
+        createdBy: A_OWNER_ID,
+        surveyGroupId: groupId,
+      });
+      createdSurveyIds.push(surveyId);
+      return { groupId, surveyId };
+    }
+
+    it('초대 안 된 같은 팀 팀원에게는 그룹이 보이지 않는다', async () => {
+      const { groupId } = await seedHiddenGroup();
+
+      const rows = await member.surveyGroups.list({ teamId: TEAM_A });
+
+      expect(rows.map((g) => g.id)).not.toContain(groupId);
+      expect(rows.map((g) => g.name)).not.toContain('임원 조사');
+    });
+
+    it('빈 그룹은 그 팀 사람에게 보인다', async () => {
+      const emptyId = await seedGroup(clientFor(A_OWNER_ID), TEAM_A, '빈 폴더');
+
+      const rows = await member.surveyGroups.list({ teamId: TEAM_A });
+
+      expect(rows.map((g) => g.id)).toContain(emptyId);
+      expect(rows.find((g) => g.id === emptyId)?.surveyCount).toBe(0);
+    });
+
+    it('소유자와 팀장에게는 보인다', async () => {
+      const { groupId } = await seedHiddenGroup();
+
+      // 소유자 — invite_only 는 소유 팀 팀원에게만 숨기고 자기 설문은 남는다(스펙 §3).
+      const asOwner = await clientFor(A_OWNER_ID).surveyGroups.list({ teamId: TEAM_A });
+      expect(asOwner.find((g) => g.id === groupId)?.surveyCount).toBe(1);
+
+      // 팀장 — seesInviteOnly 라 팀의 숨은 설문까지 센다.
+      const asLeader = await clientFor(A_LEADER_ID).surveyGroups.list({ teamId: TEAM_A });
+      expect(asLeader.find((g) => g.id === groupId)?.surveyCount).toBe(1);
+    });
+
+    it('초대받으면 그 사람과 그 팀장에게 보인다', async () => {
+      const { groupId, surveyId } = await seedHiddenGroup();
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: A_OWNER_ID,
+      });
+
+      // 초대받은 타 팀 사람 — 협업 그룹으로 붙는다.
+      const asParticipant = await outsider.surveyGroups.list({ teamId: TEAM_B });
+      expect(asParticipant.map((g) => g.id)).toContain(groupId);
+
+      // 같은 팀의 초대 안 된 팀원에게는 여전히 보이지 않는다.
+      expect((await member.surveyGroups.list({ teamId: TEAM_A })).map((g) => g.id)).not.toContain(
+        groupId,
+      );
     });
   });
 
