@@ -551,6 +551,44 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
         code: 'NOT_FOUND',
       });
     });
+
+    /**
+     * **팀 미배치는 초대 설문을 포함해 전부 차단이다**(코어의 3번 분기). 이 표면은 관문을
+     * 걷어내고 조회 조건으로 좁히므로, 그 차단도 조회가 져야 한다 — 참여 행은 팀에서
+     * 빠져도 남기 때문에 마지막 팀에서 제외된 사람이 협업 폴더 이름·소유 팀·설문 수를
+     * 계속 읽을 수 있었다. 설문 목록은 work-scope 가 'none' 으로 접어 이미 닫혀 있다.
+     */
+    it('마지막 팀에서 빠지면 참여 행이 남아 있어도 아무것도 보이지 않는다', async () => {
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId, groupId: shared });
+
+      const exMemberId = crypto.randomUUID();
+      await seedUser(exMemberId);
+      createdUserIds.push(exMemberId);
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: exMemberId,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+
+      // 소속이 있는 동안에는 협업 폴더가 보인다.
+      await db.insert(teamMembersTable).values({
+        teamId: TEAM_B,
+        userId: exMemberId,
+        role: 'member',
+      });
+      expect(
+        (await clientFor(exMemberId).surveyGroups.list({ teamId: TEAM_B })).map((g) => g.id),
+      ).toEqual([shared]);
+
+      // 팀에서 빠지는 순간 닫힌다 — 참여 행은 그대로다.
+      await db.delete(teamMembersTable).where(eq(teamMembersTable.userId, exMemberId));
+
+      expect(await clientFor(exMemberId).surveyGroups.list({ teamId: TEAM_B })).toEqual([]);
+      expect(await clientFor(exMemberId).surveyGroups.list({ teamId: TEAM_A })).toEqual([]);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -630,6 +668,76 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       expect((await member.surveyGroups.list({ teamId: TEAM_A })).map((g) => g.id)).not.toContain(
         groupId,
       );
+    });
+
+    /**
+     * **같은 팀 사람을 초대한 경우가 사각지대였다.** 협업 조회는 내 범위 팀을 빼므로 이
+     * 그룹을 복구해 주지 못하고, 내 팀 그룹 조회가 「팀 공개거나 내 소유」만 세면 그 설문은
+     * 세어지지 않는다 — 목록에는 설문이 보이는데 폴더만 사라진다. 규칙은 하나여야 한다:
+     * 내가 볼 수 있는 설문이 담긴 그룹은 내게도 보인다.
+     */
+    it('같은 팀 사람이 초대받으면 그 그룹이 자기 팀 목록에 선다', async () => {
+      const { groupId, surveyId } = await seedHiddenGroup();
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: MEMBER_ID,
+        kind: 'member',
+        addedBy: A_OWNER_ID,
+      });
+
+      const rows = await member.surveyGroups.list({ teamId: TEAM_A });
+
+      const row = rows.find((g) => g.id === groupId);
+      expect(row?.surveyCount).toBe(1);
+      // 내 팀 폴더다 — 협업 그룹으로 붙은 것이 아니므로 소유 팀 표기가 없다.
+      expect(row?.foreignTeamName).toBeNull();
+    });
+
+    /**
+     * 팀장 전파도 같은 축이다. 협업 조회가 아니라 **내 팀 그룹 조회**가 이것을 봐야 하는
+     * 경우가 있다 — A팀 팀원이면서 C팀 팀장인 겸직자다. A팀 팀장이 아니라 `seesInviteOnly`
+     * 가 거짓이고, 그룹은 A팀 것이라 협업 조회(`ne(teamId, scope)`)에서도 빠진다. 그
+     * 사이에 낀 이 한 칸이 비어 있으면 「내 팀원이 초대된 설문」이 목록에는 있는데 폴더가
+     * 없는 상태가 된다.
+     */
+    it('겸직 팀장 — 내 C팀 팀원이 초대되면 A팀 폴더가 내 A팀 목록에 선다', async () => {
+      const { groupId, surveyId } = await seedHiddenGroup();
+
+      const teamC = crypto.randomUUID();
+      await db.insert(teamsTable).values({ id: teamC, name: `겸직팀C-${teamC.slice(0, 8)}` });
+      createdTeamIds.push(teamC);
+
+      // 겸직자 — A팀 **팀원**(팀장 아님) + C팀 팀장.
+      const dualId = crypto.randomUUID();
+      await seedUser(dualId);
+      createdUserIds.push(dualId);
+      await db.insert(teamMembersTable).values([
+        { teamId: TEAM_A, userId: dualId, role: 'member' },
+        { teamId: teamC, userId: dualId, role: 'leader' },
+      ]);
+
+      // 초대 전 — A팀 팀원일 뿐이라 숨은 설문의 폴더가 보이지 않는다.
+      expect(
+        (await clientFor(dualId).surveyGroups.list({ teamId: TEAM_A })).map((g) => g.id),
+      ).not.toContain(groupId);
+
+      const workerId = crypto.randomUUID();
+      await seedUser(workerId);
+      createdUserIds.push(workerId);
+      await db.insert(teamMembersTable).values({ teamId: teamC, userId: workerId, role: 'member' });
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: workerId,
+        kind: 'member',
+        addedBy: A_OWNER_ID,
+      });
+
+      const rows = await clientFor(dualId).surveyGroups.list({ teamId: TEAM_A });
+
+      const row = rows.find((g) => g.id === groupId);
+      expect(row?.surveyCount).toBe(1);
+      // 내 팀(A) 폴더로 선다 — 협업 그룹이 아니다.
+      expect(row?.foreignTeamName).toBeNull();
     });
   });
 

@@ -73,8 +73,28 @@ export async function listSurveyGroups(
   teamId: string,
 ): Promise<ListSurveyGroupsOutput> {
   const subject = await loadAccessSubject(user);
+  // **팀 미배치는 초대 설문을 포함해 전부 차단이다**(판정 코어의 3번 분기). 관문이 이 표면에서
+  // 빠졌으므로(위 procedure 주석) 그 차단을 여기서 대신 진다 — 없으면 마지막 팀에서 제외된
+  // 사람이 참여 행만으로 협업 그룹 이름·소유 팀 이름·설문 수를 계속 읽는다. 설문 목록은
+  // work-scope 가 'none' 으로 접어 이미 닫혀 있는데 이 문만 열려 있었다.
+  if (!subject.isSuperadmin && subject.activeTeamIds.length === 0) return [];
+
   const isTeamMember = subject.isSuperadmin || subject.activeTeamIds.includes(teamId);
   const seesInviteOnly = subject.isSuperadmin || subject.leaderTeamIds.includes(teamId);
+  // 내 팀 그룹의 카운트도 **설문 목록과 같은 술어**를 봐야 한다. 팀 공개·내 소유만 세면,
+  // 같은 팀의 남의 `invite_only` 설문에 **초대받아** 볼 수 있는 사람에게 그 설문만 담긴
+  // 그룹이 사라진다 — 목록에는 설문이 보이는데 폴더는 없는 상태다. 협업 조회는 내 범위 팀을
+  // 빼므로 이걸 복구해 주지 못한다.
+  const visibleHere = seesInviteOnly
+    ? undefined
+    : or(
+        eq(surveys.visibility, 'team'),
+        eq(surveys.ownerUserId, subject.userId),
+        participatesInSurvey(subject.userId),
+        subject.leaderTeamIds.length > 0
+          ? leadsParticipantTeam(subject.leaderTeamIds)
+          : undefined,
+      );
 
   const own = isTeamMember
     ? await db
@@ -96,9 +116,7 @@ export async function listSurveyGroups(
             eq(surveys.surveyGroupId, surveyGroups.id),
             eq(surveys.teamId, surveyGroups.teamId),
             isNull(surveys.deletedAt),
-            seesInviteOnly
-              ? undefined
-              : or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, subject.userId)),
+            visibleHere,
           ),
         )
         .where(eq(surveyGroups.teamId, teamId))
