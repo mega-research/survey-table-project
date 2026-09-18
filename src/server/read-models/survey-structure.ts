@@ -1,6 +1,19 @@
 import { cache } from 'react';
 
-import { type SQL, and, count, desc, eq, exists, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  type SQL,
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { db } from '@/db';
@@ -10,6 +23,7 @@ import {
   surveyGroups,
   surveyParticipants,
   surveys,
+  teamMembers,
   teams,
   users,
 } from '@/db/schema';
@@ -44,7 +58,44 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
  * 분기보다 **먼저** 차단하므로(팀이 정해지기 전에는 아무도 못 연다, ADR-0006), 목록·투영이
  * 그것보다 넓으면 열리지 않는 카드가 그려지고 버튼도 열린 것처럼 보인다.
  */
-function participatesInSurvey(viewerId: string, options: { fullOnly?: boolean } = {}): SQL {
+/**
+ * 「내 팀원이 이 설문에 초대돼 있는가」 — 초대의 **팀장 전파**가 목록에 붙는 조건.
+ *
+ * 판정 코어의 전파 분기(`participantTeamLed`)와 **같은 사실**을 SQL 로 말한다. 조건 셋도
+ * 그쪽과 같다 — `kind='member'` · 팀원 `status='active'` · 소속 팀 `status='active'`.
+ * 하나라도 어긋나면 목록과 판정이 갈려 「열리지 않는 카드」나 「보이지 않는데 열리는 설문」이
+ * 생긴다.
+ *
+ * 배치 대기를 함께 빼는 것도 participatesInSurvey 와 같은 이유다 — 코어가 그것을 전파보다
+ * 먼저 막으므로, 목록만 넓히면 열리지 않는 카드가 그려진다.
+ */
+export function leadsParticipantTeam(leaderTeamIds: readonly string[]): SQL {
+  const invite = alias(surveyParticipants, 'led_invite');
+  const teammate = alias(users, 'led_invitee');
+  const membership = alias(teamMembers, 'led_membership');
+  const team = alias(teams, 'led_team');
+  return and(
+    eq(surveys.assignmentStatus, 'assigned'),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(invite)
+        .innerJoin(teammate, eq(teammate.id, invite.userId))
+        .innerJoin(membership, eq(membership.userId, invite.userId))
+        .innerJoin(team, and(eq(team.id, membership.teamId), eq(team.status, 'active')))
+        .where(
+          and(
+            eq(invite.surveyId, surveys.id),
+            eq(invite.kind, 'member'),
+            eq(teammate.status, 'active'),
+            inArray(membership.teamId, [...leaderTeamIds]),
+          ),
+        ),
+    ),
+  )!;
+}
+
+export function participatesInSurvey(viewerId: string, options: { fullOnly?: boolean } = {}): SQL {
   return and(
     eq(surveys.assignmentStatus, 'assigned'),
     exists(
@@ -148,7 +199,18 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
           or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, filter.viewerId)),
         )!;
 
-    conditions.push(or(inTeam, participatesInSurvey(filter.viewerId))!);
+    // 내 팀원이 초대된 설문도 팀장에게 보인다 — 코어의 전파 분기와 같은 사실이다.
+    // 팀장이 아니면 조건을 세우지 않는다(빈 IN 은 언제나 거짓이라 무해하지만, 없는 축의
+    // 서브쿼리를 실행 계획에 들이지 않는 편이 낫다).
+    const visible =
+      filter.leaderTeamIds.length > 0
+        ? or(
+            inTeam,
+            participatesInSurvey(filter.viewerId),
+            leadsParticipantTeam(filter.leaderTeamIds),
+          )!
+        : or(inTeam, participatesInSurvey(filter.viewerId))!;
+    conditions.push(visible);
   }
 
   return db

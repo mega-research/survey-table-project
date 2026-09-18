@@ -107,11 +107,25 @@ function rethrowSurveyGroupError(err: unknown): never {
   throw toWorkspaceRpcError(err) ?? err;
 }
 
+/**
+ * 그룹 목록 — **관문 대신 조회 조건이 좁힌다.**
+ *
+ * 형제 표면들과 달리 `assertSurveyGroupManage` 를 부르지 않는다. 이 목록이 돌려주는 것이
+ * 「그 팀의 그룹」이 아니라 「**내게 보이는** 그룹」으로 바뀌었기 때문이다 — 내 팀 그룹(멤버일
+ * 때)과 내가 볼 수 있는 설문이 담긴 타 팀 협업 그룹이 함께 온다. 관문을 그대로 두면 타 팀
+ * 참여자·전파 팀장이 FORBIDDEN 을 받아 자기 협업 폴더를 볼 수 없다.
+ *
+ * 안전한 이유는 서비스가 주체로 좁히기 때문이다: 멤버가 아닌 팀의 그룹은 협업 조건(inner
+ * join)을 통과한 것만 나오고, 그 조건은 설문 목록과 같은 조각을 쓴다. 남의 팀 그룹 이름을
+ * 얻으려면 그 그룹에 **내가 볼 수 있는 설문이 실제로 담겨 있어야** 한다.
+ *
+ * **쓰기 표면은 관문을 그대로 진다** — 이름 변경·정렬·삭제·담기는 여전히 그 팀 멤버만 한다
+ * (참여자·전파 팀장에게는 `surveyGroup.manage` 가 없다). 보는 문만 넓혔다.
+ */
 const list = authed
   .input(ListSurveyGroupsInput)
   .output(ListSurveyGroupsOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyGroupManage(context.user, input.teamId);
     return svc.listSurveyGroups(context.user, input.teamId);
   });
 

@@ -21,6 +21,11 @@ import { surveyGroupListQueryOptions } from '@/shared/lib/survey-group-queries';
  *
  * 팀 범위가 아니면(시스템 전체 보기·팀 미배치) 아무것도 그리지 않는다. 그룹은 팀 소유물이고
  * 시스템 전체 보기는 조회 범위일 뿐이라 그룹 개념 자체가 없다(.pen 6-2).
+ *
+ * **협업 그룹**(`foreignTeamName` 이 있는 행)은 타 팀 폴더다 — 내가 참여자로 초대됐거나 내
+ * 팀원이 초대된 설문이 그 안에 있어서 보인다. 소유 팀을 함께 적는 것이 이 표시의 계약이다:
+ * 밝히지 않으면 내 팀 폴더와 구별되지 않아, 이름을 고칠 수 없는 폴더가 내 것처럼 보인다
+ * (설문 카드가 「… 소유」를 적는 것과 같은 이유).
  */
 export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
   const pathname = usePathname();
@@ -41,7 +46,7 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
           <Link
             key={group.id}
             href={`/admin/surveys?group=${group.id}`}
-            title={group.name}
+            title={group.foreignTeamName ? `${group.name} · ${group.foreignTeamName}` : group.name}
             className={cn(
               'flex items-center gap-[7px] rounded-[7px] py-[7px] pr-2.5 pl-6 text-[12.5px] transition-colors',
               active
@@ -50,7 +55,14 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
             )}
           >
             <Folder className={cn('h-[13px] w-[13px] shrink-0', !active && 'text-white/60')} />
-            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">{group.name}</span>
+              {group.foreignTeamName && (
+                <span className="truncate text-[10.5px] font-normal text-white/45">
+                  {group.foreignTeamName}
+                </span>
+              )}
+            </span>
             <span className="shrink-0 text-[11px] text-white/45">{group.surveyCount}</span>
           </Link>
         );

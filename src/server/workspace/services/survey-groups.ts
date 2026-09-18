@@ -1,10 +1,14 @@
-import { and, asc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { surveyGroups, surveys, teams } from '@/db/schema';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
+import {
+  leadsParticipantTeam,
+  participatesInSurvey,
+} from '@/server/read-models/survey-structure';
 import {
   type SurveyAccessUser,
   loadAccessSubject,
@@ -47,7 +51,73 @@ export async function listSurveyGroups(
   teamId: string,
 ): Promise<ListSurveyGroupsOutput> {
   const subject = await loadAccessSubject(user);
+  const isTeamMember = subject.isSuperadmin || subject.activeTeamIds.includes(teamId);
   const seesInviteOnly = subject.isSuperadmin || subject.leaderTeamIds.includes(teamId);
+
+  const own = isTeamMember
+    ? await db
+        .select({
+          id: surveyGroups.id,
+          name: surveyGroups.name,
+          order: surveyGroups.order,
+          surveyCount: sql<number>`count(${surveys.id})::int`,
+          foreignTeamName: sql<string | null>`null`,
+        })
+        .from(surveyGroups)
+        // **해산된 팀의 그룹은 없는 것으로 본다**(티켓 13). 관문이 목록에서 빠졌으므로
+        // (조회 조건이 좁힌다) 이 조인이 그 계약을 대신 진다 — 없으면 슈퍼어드민이 archived
+        // 팀 그룹을 계속 본다(멤버십 축과 달리 슈퍼어드민은 소속 검사를 지나지 않는다).
+        .innerJoin(teams, and(eq(teams.id, surveyGroups.teamId), eq(teams.status, 'active')))
+        .leftJoin(
+          surveys,
+          and(
+            eq(surveys.surveyGroupId, surveyGroups.id),
+            eq(surveys.teamId, surveyGroups.teamId),
+            isNull(surveys.deletedAt),
+            seesInviteOnly
+              ? undefined
+              : or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, subject.userId)),
+          ),
+        )
+        .where(eq(surveyGroups.teamId, teamId))
+        .groupBy(surveyGroups.id)
+        .orderBy(asc(surveyGroups.order), asc(surveyGroups.name))
+    : [];
+
+  return [...own, ...(await listCollaboratingGroups(subject, teamId))];
+}
+
+/**
+ * 협업 그룹 — **내가 볼 수 있는 설문이 담긴 타 팀 그룹** (초대·팀장 전파).
+ *
+ * 규칙이 하나라는 것이 이 함수의 요점이다: 접근 가능한 설문이 담겼으면 보이고, 그 설문을
+ * 빼면 사라진다. 그래서 `survey_groups` 에 「협업 그룹」 플래그를 두지 않는다 — 플래그를 두면
+ * 담기와 별개로 그것을 관리하는 화면이 필요하고, 둘이 어긋나는 상태가 표현 가능해진다.
+ *
+ * 조인이 **inner** 인 것이 그 규칙을 강제한다. 접근 가능 설문이 0건인 그룹은 행 자체가 나오지
+ * 않아, 「2026년」처럼 내가 초대받지 않은 설문만 담긴 폴더는 **이름조차 노출되지 않는다**.
+ * 카운트 0으로 보여주면 뺄셈 한 번에 "내게 숨겨진 설문이 있다" 가 드러난다(위 listSurveyGroups
+ * 주석이 같은 이유로 피해 둔 자리다).
+ *
+ * 보이는 조건은 목록 read-model 과 **같은 조각**을 쓴다(`participatesInSurvey`·
+ * `leadsParticipantTeam`). 사본을 두면 그룹 트리와 설문 목록이 갈려 「그룹은 보이는데 안이
+ * 비었거나, 설문은 보이는데 폴더가 없는」 상태가 된다.
+ *
+ * 내 범위 팀은 제외한다 — 그 팀 그룹은 위에서 이미 전부 나왔고(멤버라면), 멤버가 아니라면
+ * 협업 조건으로 여기서 잡힌다. 그래서 `ne` 가 아니라 **멤버 여부에 따라** 갈라야 할 것 같지만,
+ * 멤버가 아닌 팀의 teamId 가 범위로 들어오는 경로가 없다(work-scope 가 내 팀으로 접는다).
+ */
+async function listCollaboratingGroups(
+  subject: Awaited<ReturnType<typeof loadAccessSubject>>,
+  scopeTeamId: string,
+): Promise<ListSurveyGroupsOutput> {
+  const accessible =
+    subject.leaderTeamIds.length > 0
+      ? or(
+          participatesInSurvey(subject.userId),
+          leadsParticipantTeam(subject.leaderTeamIds),
+        )!
+      : participatesInSurvey(subject.userId);
 
   return db
     .select({
@@ -55,22 +125,22 @@ export async function listSurveyGroups(
       name: surveyGroups.name,
       order: surveyGroups.order,
       surveyCount: sql<number>`count(${surveys.id})::int`,
+      foreignTeamName: teams.name,
     })
     .from(surveyGroups)
-    .leftJoin(
+    .innerJoin(teams, and(eq(teams.id, surveyGroups.teamId), eq(teams.status, 'active')))
+    .innerJoin(
       surveys,
       and(
         eq(surveys.surveyGroupId, surveyGroups.id),
         eq(surveys.teamId, surveyGroups.teamId),
         isNull(surveys.deletedAt),
-        seesInviteOnly
-          ? undefined
-          : or(eq(surveys.visibility, 'team'), eq(surveys.ownerUserId, subject.userId)),
+        accessible,
       ),
     )
-    .where(eq(surveyGroups.teamId, teamId))
-    .groupBy(surveyGroups.id)
-    .orderBy(asc(surveyGroups.order), asc(surveyGroups.name));
+    .where(ne(surveyGroups.teamId, scopeTeamId))
+    .groupBy(surveyGroups.id, teams.name)
+    .orderBy(asc(teams.name), asc(surveyGroups.order), asc(surveyGroups.name));
 }
 
 /** 이 팀이 아직 살아 있는가 — 해산된 팀에는 그룹 표면 전체가 닫힌다(티켓 13). */

@@ -99,6 +99,13 @@ const COLUMNS = {
     subject: internal({ activeTeamIds: [OTHER_TEAM_ID] }),
     participation: { kind: 'member' },
   },
+  '참여자 팀장(전파)': {
+    // **초대되지 않았다** — 내 팀원이 초대된 설문을 파생 시야로 본다. 그래서 입력이 참여
+    // 행이 아니라 relation 이다(실사 팀장 열과 같은 구조).
+    subject: internal({ activeTeamIds: [OTHER_TEAM_ID], leaderTeamIds: [OTHER_TEAM_ID] }),
+    participation: null,
+    relation: { participantTeamLed: true },
+  },
   '팀원(팀 공개만)': {
     subject: internal({ activeTeamIds: [TEAM_ID] }),
     participation: null,
@@ -148,11 +155,21 @@ const O = true;
 const X = false;
 
 /**
- * `[슈퍼어드민, 팀장, 소유자, 참여자, 팀원, 게스트, 실사원, 실사 팀장]` —
+ * `[슈퍼어드민, 팀장, 소유자, 참여자, 참여자 팀장, 팀원, 게스트, 실사원, 실사 팀장]` —
  * 표의 칸 순서 그대로 읽는다.
  */
 function cells(
-  ...values: [boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean]
+  ...values: [
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+  ]
 ): Cells {
   return Object.fromEntries(COLUMN_NAMES.map((name, i) => [name, values[i]])) as Cells;
 }
@@ -165,39 +182,39 @@ function cells(
  * 늘지 않고, 전부 꺼도 두 칸은 열린 채다. 그 축은 survey-access.test.ts 가 따로 본다.
  */
 const SPEC_ROWS: readonly Row[] = [
-  //                                                    슈퍼  팀장  소유  참여  팀원  게스트
+  //                                          슈퍼  팀장  소유  참여  전파  팀원  게스트  실사  실사장
   { label: 'survey.view', capabilities: ['survey.view'],
-    cells: cells(O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O) },
   { label: 'survey.edit', capabilities: ['survey.edit'],
-    cells: cells(O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X) },
   { label: 'survey.publish', capabilities: ['survey.publish'],
-    cells: cells(O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X) },
   { label: 'survey.delete (soft)', capabilities: ['survey.delete'],
-    cells: cells(O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X) },
   { label: '초대 추가(참여자·게스트·실사)', capabilities: ['survey.invite'],
-    cells: cells(O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X) },
   { label: '제외·공개 범위·부여 해제', capabilities: ['survey.manageAccess'],
-    cells: cells(O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X) },
   { label: 'survey.transferOwnership', capabilities: ['survey.transferOwnership'],
-    cells: cells(O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X) },
   { label: 'operations.view', capabilities: ['operations.view'],
-    cells: cells(O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O) },
   { label: 'responses.view (상세·수정)', capabilities: ['responses.view'],
-    cells: cells(O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X) },
   { label: 'contacts.view 원본', capabilities: ['contacts.view'],
-    cells: cells(O, O, O, O, X, X, O, O) },
+    cells: cells(O, O, O, O, X, X, X, O, O) },
   { label: 'contacts.manage (업로드·수정)', capabilities: ['contacts.manage'],
-    cells: cells(O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X) },
   { label: '결과코드·메모 쓰기', capabilities: ['contacts.writeAttempts'],
-    cells: cells(O, O, O, O, X, X, O, X) },
+    cells: cells(O, O, O, O, X, X, X, O, X) },
   { label: 'mail.view / mail.send', capabilities: ['mail.view', 'mail.send'],
-    cells: cells(O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X) },
   { label: 'export.download', capabilities: ['export.download'],
-    cells: cells(O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X) },
   { label: 'analytics.view', capabilities: ['analytics.view'],
-    cells: cells(O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X) },
   { label: 'surveyGroup.manage', capabilities: ['surveyGroup.manage'],
-    cells: cells(O, O, O, X, O, X, X, X) },
+    cells: cells(O, O, O, X, X, O, X, X, X) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,12 +255,13 @@ describe('표가 어휘 전체를 덮는다', () => {
     expect([...listed].sort()).toEqual([...surveyCapabilityValues].sort());
   });
 
-  it('열은 스펙 헤더 여덟 개다', () => {
+  it('열은 스펙 헤더 아홉 개다', () => {
     expect(COLUMN_NAMES).toEqual([
       '슈퍼어드민',
       '팀장(소유 팀)',
       '소유자',
       '참여자',
+      '참여자 팀장(전파)',
       '팀원(팀 공개만)',
       '게스트(부여 설문)',
       '실사원(초대 설문)',

@@ -3,9 +3,11 @@
  *
  * 여기서 고정하는 것은 관문이 **두 갈래**라는 사실이다.
  *
- * - 그룹 구조(생성·이름 변경·정렬·삭제·목록)는 팀 공용이라 팀장·팀원을 가리지 않지만
- *   **입력의 teamId 로** 판정한다. "어딘가의 팀원" 이면 통과시키는 순간 A팀 팀원이 B팀
- *   그룹을 만든다.
+ * - 그룹 구조 **쓰기**(생성·이름 변경·정렬·삭제)와 담기 후보 조회는 팀 공용이라 팀장·팀원을
+ *   가리지 않지만 **입력의 teamId 로** 판정한다. "어딘가의 팀원" 이면 통과시키는 순간 A팀
+ *   팀원이 B팀 그룹을 만든다.
+ * - **목록만 관문이 없다.** 돌려주는 것이 「그 팀의 그룹」이 아니라 「내게 보이는 그룹」이라
+ *   조회 조건이 좁힌다 — 내 팀 그룹과, 내가 볼 수 있는 설문이 담긴 타 팀 협업 그룹.
  * - 설문을 넣고 빼는 것은 그 설문의 survey.edit + surveyGroup.manage 를 둘 다 요구한다.
  *   전자만 보면 참여자(티켓 18)가 남의 팀 폴더 구조를 재배치하고, 후자만 보면 팀원이
  *   못 고치는 설문을 옮긴다.
@@ -116,8 +118,13 @@ describe('그룹 구조 표면 — 팀 공용, 입력 teamId 로 판정', () => 
   it('타 팀 teamId 는 FORBIDDEN — 서비스에 닿지 않는다', async () => {
     const client = clientWith();
 
+    /**
+     * **목록은 이 목록에 없다.** 그 표면만 관문 대신 조회 조건이 좁힌다 — 돌려주는 것이
+     * 「그 팀의 그룹」이 아니라 「내게 보이는 그룹」이라, 타 팀 teamId 로 불러도 협업 그룹만
+     * 오거나 빈 배열이 온다(`survey-groups.realdb` 가 실제 결과를 잰다). 관문으로 닫으면
+     * 참여자·전파 팀장이 자기 협업 폴더에 도달할 방법이 없다.
+     */
     for (const call of [
-      client.surveyGroups.list({ teamId: TEAM_B }),
       client.surveyGroups.create({ teamId: TEAM_B, name: '남의 팀 그룹' }),
       client.surveyGroups.reorder({ teamId: TEAM_B, orderedGroupIds: [GROUP_B] }),
       client.surveyGroups.listUngrouped({ teamId: TEAM_B, query: '' }),
@@ -125,7 +132,6 @@ describe('그룹 구조 표면 — 팀 공용, 입력 teamId 로 판정', () => 
       await expect(call).rejects.toMatchObject({ code: 'FORBIDDEN' });
     }
 
-    expect(svc.listSurveyGroups).not.toHaveBeenCalled();
     expect(svc.createSurveyGroup).not.toHaveBeenCalled();
     expect(svc.reorderSurveyGroups).not.toHaveBeenCalled();
     expect(svc.listUngroupedSurveys).not.toHaveBeenCalled();
@@ -313,11 +319,10 @@ describe('해산된 팀의 그룹 표면은 통째로 닫힌다 (티켓 13)', ()
 
   // getSurveyGroupTeamId 로 닫은 rename·remove·collect·move 와 이 표면이 어긋나면
   // "해산된 팀의 그룹은 쓰기가 닫힌다" 가 한 곳에서만 거짓이 된다.
-  it('슈퍼어드민도 정렬·목록·후보 조회를 할 수 없다', async () => {
+  it('슈퍼어드민도 정렬·후보 조회·생성을 할 수 없다', async () => {
     const client = clientWith({ isSuperadmin: true });
 
     for (const call of [
-      client.surveyGroups.list({ teamId: TEAM_A }),
       client.surveyGroups.reorder({ teamId: TEAM_A, orderedGroupIds: [GROUP_A] }),
       client.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' }),
       client.surveyGroups.create({ teamId: TEAM_A, name: '되살리기' }),
@@ -327,5 +332,21 @@ describe('해산된 팀의 그룹 표면은 통째로 닫힌다 (티켓 13)', ()
 
     expect(svc.reorderSurveyGroups).not.toHaveBeenCalled();
     expect(svc.createSurveyGroup).not.toHaveBeenCalled();
+  });
+
+  /**
+   * **목록은 거부가 아니라 빈 결과로 닫힌다.** 관문이 빠졌으므로(조회 조건이 좁힌다) 이
+   * 계약을 지는 것은 서비스의 팀 조인이다 — `teams.status='active'` 를 함께 보므로 archived
+   * 팀 그룹은 행 자체가 나오지 않는다. 슈퍼어드민에게 특히 중요하다: 멤버십 검사를 지나지
+   * 않으므로 조인이 없으면 해산된 팀의 폴더를 계속 본다.
+   *
+   * 실제 SQL 결과는 `survey-groups.realdb` 의 해산 블록이 잰다. 여기서 고정하는 것은
+   * 「이 표면만 FORBIDDEN 을 던지지 않는다」는 사실이다.
+   */
+  it('목록은 거부하지 않고 서비스에 맡긴다', async () => {
+    const client = clientWith({ isSuperadmin: true });
+
+    await expect(client.surveyGroups.list({ teamId: TEAM_A })).resolves.toEqual([]);
+    expect(svc.listSurveyGroups).toHaveBeenCalledWith(context({ isSuperadmin: true }).user, TEAM_A);
   });
 });

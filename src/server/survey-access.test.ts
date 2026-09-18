@@ -82,6 +82,22 @@ const TEAM_MEMBER_COLUMN: SurveyCapability[] = [
   'surveyGroup.manage',
 ];
 /**
+ * 참여자 팀장 열 — 초대의 **전파**로 서는 파생 시야다.
+ *
+ * 값이 제한 참여자 열과 같은 것이 상한이다(0123): 본인이 full 이면 팀장은 더 좁고, limited
+ * 면 동등해 **어느 경우에도 팀장이 본인보다 넓어지지 않는다**. 여기 **없는 것**이 이 문으로
+ * 열리지 않는 것의 정본이다 — responses.view · contacts.* · mail.* · export.download ·
+ * survey.delete · surveyGroup.manage.
+ */
+const PARTICIPANT_LEADER_COLUMN: SurveyCapability[] = [
+  'survey.view',
+  'survey.edit',
+  'survey.invite',
+  'operations.view',
+  'analytics.view',
+];
+
+/**
  * 게스트 열 — 프리뷰와 허용 탭뿐이다(스펙 §8).
  *
  * 여기 **없는 것**이 티켓 21 의 「항상 차단」 목록과 같은 문장이다: analytics.view ·
@@ -323,6 +339,79 @@ describe('resolveSurveyCapabilities — 실사 열 (티켓 25)', () => {
   it('실사에게는 탭 축이 없다 — guestTabs 는 null 이다', () => {
     const access = resolveSurveyAccess(fieldwork('worker'), survey(), { kind: 'fieldwork' });
     expect(access.guestTabs).toBeNull();
+  });
+});
+
+describe('resolveSurveyCapabilities — 초대의 팀장 전파', () => {
+  /** 소유 팀 밖의 팀장 — 자기 팀원이 초대돼야 비로소 선다. */
+  const outsideLeader = subject({
+    userId: 'leader-of-other-team',
+    activeTeamIds: [OTHER_TEAM_ID],
+    leaderTeamIds: [OTHER_TEAM_ID],
+  });
+
+  it('내 팀원이 초대된 설문을 팀장이 제한 참여자 열로 본다', () => {
+    expect(caps(outsideLeader, survey(), null, { participantTeamLed: true })).toEqual(
+      PARTICIPANT_LEADER_COLUMN.sort(),
+    );
+  });
+
+  it('전파가 없으면 아무것도 열리지 않는다', () => {
+    expect(caps(outsideLeader, survey(), null, { participantTeamLed: false })).toEqual([]);
+    // relation 자체가 없는 호출(대부분의 배치 경로)도 같다 — 좁은 쪽으로 틀린다.
+    expect(caps(outsideLeader, survey())).toEqual([]);
+  });
+
+  it('팀장이 본인보다 넓어지지 않는다', () => {
+    const full = caps(
+      subject({ userId: 'participant', activeTeamIds: [OTHER_TEAM_ID] }),
+      survey(),
+      { kind: 'member' },
+    );
+    // full 참여자 ⊃ 전파 팀장 — 응답 원문·삭제·메일·export 가 전파로는 넘어오지 않는다.
+    for (const capability of PARTICIPANT_LEADER_COLUMN) {
+      expect(full).toContain(capability);
+    }
+    expect(PARTICIPANT_LEADER_COLUMN.length).toBeLessThan(full.length);
+  });
+
+  it('전파는 팀원 열을 깎지 않는다', () => {
+    // 소유 팀 팀원이면서 자기 팀원의 초대로 전파까지 받는 사람 — 팀원 열(surveyGroup.manage
+    // 포함)을 그대로 가져야 한다. 파생이 권한을 줄이면 폴더 정리가 초대 한 번에 잠긴다.
+    const memberAndLeader = subject({ activeTeamIds: [TEAM_ID], leaderTeamIds: [OTHER_TEAM_ID] });
+    expect(caps(memberAndLeader, survey(), null, { participantTeamLed: true })).toEqual(
+      TEAM_MEMBER_COLUMN.sort(),
+    );
+  });
+
+  it('공개 범위는 전파에 관여하지 않는다', () => {
+    // invite_only 는 소유 팀 **팀원**에게만 숨기는 것이라(스펙 §3), 팀 축 밖에서 오는 전파는
+    // 그 변형에 영향받지 않는다 — 참여자 본인이 그렇듯이.
+    expect(
+      caps(outsideLeader, survey({ visibility: 'invite_only' }), null, {
+        participantTeamLed: true,
+      }),
+    ).toEqual(PARTICIPANT_LEADER_COLUMN.sort());
+  });
+
+  it('배치 대기·팀 미배치는 전파보다 먼저 막는다', () => {
+    expect(
+      caps(outsideLeader, survey({ assignmentStatus: 'assignment_pending' }), null, {
+        participantTeamLed: true,
+      }),
+    ).toEqual([]);
+    const unassigned = subject({ activeTeamIds: [], leaderTeamIds: [] });
+    expect(caps(unassigned, survey(), null, { participantTeamLed: true })).toEqual([]);
+  });
+
+  it('비내부 계정에는 전파 축이 없다', () => {
+    // 게스트·실사는 팀 멤버십이 금지라(스펙 §1) 팀장이라는 개념 자체가 없다. relation 이
+    // 실려 와도 각자의 부여 모델만 본다.
+    expect(
+      caps(subject({ userType: 'guest', activeTeamIds: [], leaderTeamIds: [] }), survey(), null, {
+        participantTeamLed: true,
+      }),
+    ).toEqual([]);
   });
 });
 

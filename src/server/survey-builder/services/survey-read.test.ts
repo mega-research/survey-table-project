@@ -187,6 +187,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       teamId: 'team-1',
       viewerId: 'u-1',
       seesInviteOnly: false,
+      leaderTeamIds: [],
     });
     expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1']);
     expect(result.scope).toEqual({ kind: 'team', teamId: 'team-1' });

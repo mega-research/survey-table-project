@@ -88,6 +88,8 @@ describe('buildSurveyScopeFilter — 목록 조회 조건', () => {
       teamId: 'team-1',
       viewerId: 'u-1',
       seesInviteOnly: false,
+      // 팀장이 아니면 전파 조건이 설 자리가 없다 — 목록이 그 서브쿼리를 세우지 않는다.
+      leaderTeamIds: [],
     });
   });
 
@@ -98,10 +100,23 @@ describe('buildSurveyScopeFilter — 목록 조회 조건', () => {
     });
   });
 
-  it('다른 팀 팀장이라는 사실은 이 팀에서 아무 힘이 없다', () => {
+  it('다른 팀 팀장이라는 사실은 이 팀의 invite_only 를 열지 않는다', () => {
     const leader = subject({ leaderTeamIds: ['team-2'] });
     expect(buildSurveyScopeFilter(leader, { kind: 'team', teamId: 'team-1' })).toMatchObject({
       seesInviteOnly: false,
+    });
+  });
+
+  it('다른 팀 팀장이라는 사실은 초대 전파 조건으로 실린다', () => {
+    /**
+     * `seesInviteOnly` 와 갈리는 지점이다. 저 값은 **이 팀의** 숨은 설문을 여는 축이라 타 팀
+     * 팀장에게는 아무 힘이 없지만, 초대의 팀장 전파는 팀 축 **밖**의 접근이라 어느 범위에서든
+     * 붙는다 — 내 팀원이 초대된 설문은 내가 어느 팀 화면을 보고 있든 나타난다(참여자 본인의
+     * 초대 설문이 모든 팀 범위에 나타나는 것과 같은 이유, getScopedSurveys 주석).
+     */
+    const leader = subject({ leaderTeamIds: ['team-2'] });
+    expect(buildSurveyScopeFilter(leader, { kind: 'team', teamId: 'team-1' })).toMatchObject({
+      leaderTeamIds: ['team-2'],
     });
   });
 

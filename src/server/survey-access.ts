@@ -4,7 +4,14 @@ import { type SQL, and, eq, exists, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import { db } from '@/db';
-import { fieldworkOrgs, surveyParticipants, surveys, users } from '@/db/schema';
+import {
+  fieldworkOrgs,
+  surveyParticipants,
+  surveys,
+  teamMembers,
+  teams,
+  users,
+} from '@/db/schema';
 import type { FieldworkRole, UserType } from '@/shared/contracts/auth';
 import {
   NO_SURVEY_GUEST_TABS,
@@ -228,6 +235,19 @@ const NONE: ReadonlySet<SurveyCapability> = new Set();
 export interface SurveyAccessRelation {
   /** 이 설문에 **내 업체 소속원**이 초대돼 있는가 — 로더가 업체로 좁혀 계산한다. */
   fieldworkOrgInvited?: boolean;
+  /**
+   * 이 설문에 **내가 팀장인 팀의 팀원**이 참여자로 초대돼 있는가 — 초대의 팀장 전파.
+   *
+   * 실사 팀장의 파생 시야와 같은 모양이고 주어가 다르다: 저쪽은 「내 업체 사람」, 이쪽은
+   * 「내 팀 사람」. 참여 행(`SurveyParticipation`)과 합치지 않는 이유도 같다 — 이것은
+   * **내** 초대가 아니라 남의 초대에서 파생된 사실이라, `kind` 가 없는 참여 행이라는
+   * 모순된 모양이 된다.
+   *
+   * 로더가 **팀장에게만** 계산한다(비용). 대상 팀원의 `status='active'` 를 함께 보는 것이
+   * 계약이다 — 참여 행은 계정 상태를 따라 지워지지 않으므로, 조건이 없으면 아무도 일하지
+   * 않는 설문이 팀장 시야에 계속 선다.
+   */
+  participantTeamLed?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,7 +262,8 @@ export interface SurveyAccessRelation {
  *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
  *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
  *  4. 배치 대기 설문 — 슈퍼어드민 외 차단. 팀이 정해지기 전에는 소유자도 못 연다(ADR-0006).
- *  5. 소유자(**소유 팀 소속일 때만**) → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원.
+ *  5. 소유자(**소유 팀 소속일 때만**) → 6. 소유 팀 팀장 → 7. 참여자 → 8. 팀 공개 설문의 팀원
+ *     → 9. **참여자의 팀장**(초대의 팀장 전파 — 파생이라 맨 뒤다).
  *
  * invite_only 는 8번만 지운다 — "소유 팀 팀원에게만 숨김"이 v2 의 뜻이다(스펙 §3).
  *
@@ -302,6 +323,20 @@ export function resolveSurveyCapabilities(
   }
 
   if (isTeamMember) return new Set(TEAM_MEMBER_CAPS);
+
+  /**
+   * 초대의 **팀장 전파** — 내 팀원이 초대된 설문을 그 팀장도 본다.
+   *
+   * 열이 `LIMITED_PARTICIPANT_CAPS` 인 것이 상한이다: 참여자 본인이 full 이면 팀장은 더
+   * 좁고, limited 면 동등하다 — 어느 경우에도 **팀장이 본인보다 넓어지지 않는다**(0123 의
+   * 계약을 이 문에서도 지킨다). 그래서 별개 상수를 두지 않는다. 사본을 만들면 한쪽만
+   * 고쳐지고 다른 쪽이 조용히 어긋난다(FULL_CAPS 주석과 같은 이유).
+   *
+   * 팀원 분기보다 **뒤에** 서는 것이 중요하다. 소유 팀 팀원이면서 자기 팀원의 초대로 전파도
+   * 받는 사람은 팀원 열(surveyGroup.manage 를 포함해 더 넓다)을 그대로 가져야 한다 —
+   * 파생이 권한을 **깎으면** 안 된다(실사 파생 시야와 같은 순서 계약).
+   */
+  if (relation?.participantTeamLed === true) return new Set(LIMITED_PARTICIPANT_CAPS);
   return NONE;
 }
 
@@ -456,6 +491,9 @@ export async function loadSurveyAccess(
       // 실행 계획에 들어가지 않는다 — 관문은 전 요청이 지나는 자리라 남의 축의 비용을
       // 짊어지면 안 된다.
       fieldworkOrgInvited: fieldworkOrgInvitedColumn(subject),
+      // **팀장에게만 켜지는 칸.** 팀장이 아닌 요청에는 상수 false 라 서브쿼리가 실행 계획에
+      // 들어가지 않는다 — 위 실사 칸과 같은 이유다.
+      participantTeamLed: participantTeamLedColumn(subject),
     })
     .from(surveys)
     .leftJoin(surveyParticipants, participationJoin(user.id))
@@ -470,6 +508,7 @@ export async function loadSurveyAccess(
   );
   return resolveSurveyAccess(subject, row, participation, {
     fieldworkOrgInvited: row.fieldworkOrgInvited,
+    participantTeamLed: row.participantTeamLed,
   });
 }
 
@@ -507,6 +546,51 @@ function fieldworkOrgInvitedColumn(subject: SurveyAccessSubject): SQL<boolean> {
         eq(invite.kind, 'fieldwork'),
         eq(colleague.fieldworkOrgId, subject.fieldworkOrgId),
         eq(colleague.status, 'active'),
+      ),
+    );
+  return sql<boolean>`${exists(invited)}`;
+}
+
+/**
+ * 이 설문에 **내가 팀장인 팀의 팀원**이 참여자로 초대돼 있는가 — 초대의 팀장 전파.
+ *
+ * 위 실사 칸과 같은 구조이고 조인 조건만 업체 대신 **내가 팀장인 팀**이다. 팀장이 아니면
+ * 상수 false 를 돌려준다 — 이 컬럼도 관문이 도는 모든 요청의 SELECT 에 실리므로, 무조건
+ * 세우면 팀장이 아닌 전원이 이 축의 비용을 치른다.
+ *
+ * 세 조건이 경계를 만든다.
+ *  - `kind='member'` — 게스트·실사 참여 행은 전파하지 않는다(그 계정들에는 팀이 없다).
+ *  - 팀원의 `status='active'` — 참여 행은 계정 상태를 따라 지워지지 않으므로, 조건이 없으면
+ *    퇴사자의 옛 초대가 팀장 시야에 영구히 남는다.
+ *  - 팀원 소속 팀의 `status='active'` — 해산된 팀의 멤버십은 유효 소속이 아니다(ADR-0011).
+ *    `leaderTeamIds` 자체가 이미 활성 팀만 담지만, 조인 쪽도 함께 본다: 대상 팀원이 그 팀에
+ *    **지금** 속해 있는가를 묻는 자리라 같은 술어를 두 번 세우는 편이 안전하다.
+ *
+ * 자기 자신은 따로 뺄 필요가 없다 — 본인이 초대됐으면 참여자 분기가 먼저 서서 이 값을 보지
+ * 않는다.
+ */
+function participantTeamLedColumn(subject: SurveyAccessSubject): SQL<boolean> {
+  if (subject.userType !== 'internal' || subject.leaderTeamIds.length === 0) {
+    return sql<boolean>`false`;
+  }
+  // 바깥 쿼리가 survey_participants·users 를 이미 다른 뜻으로 쓰고 있어 별칭이 필요하다
+  // (내 초대 행 / 소유자). 빌더로 세우면 컬럼이 tsc 관할로 남는다.
+  const invite = alias(surveyParticipants, 'team_invite');
+  const teammate = alias(users, 'team_invitee');
+  const membership = alias(teamMembers, 'team_invitee_membership');
+  const team = alias(teams, 'team_invitee_team');
+  const invited = db
+    .select({ one: sql`1` })
+    .from(invite)
+    .innerJoin(teammate, eq(teammate.id, invite.userId))
+    .innerJoin(membership, eq(membership.userId, invite.userId))
+    .innerJoin(team, and(eq(team.id, membership.teamId), eq(team.status, 'active')))
+    .where(
+      and(
+        eq(invite.surveyId, surveys.id),
+        eq(invite.kind, 'member'),
+        eq(teammate.status, 'active'),
+        inArray(membership.teamId, [...subject.leaderTeamIds]),
       ),
     );
   return sql<boolean>`${exists(invited)}`;

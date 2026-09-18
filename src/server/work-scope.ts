@@ -141,6 +141,14 @@ export type SurveyScopeFilter =
       viewerId: string;
       /** invite_only 설문까지 보는가 — 소유 팀 팀장·슈퍼어드민만(스펙 §3). */
       seesInviteOnly: boolean;
+      /**
+       * 내가 팀장인 팀들 — **초대의 팀장 전파**가 목록에 붙는 조건이다.
+       *
+       * 내 팀원이 참여자로 초대된 타 팀 설문을 팀장도 본다. 판정 코어의 9번 분기와 같은
+       * 사실이고, 목록이 그보다 좁으면 「그룹은 보이는데 설문이 없는」 빈 폴더가 그려진다.
+       * 빈 배열이면 조건 자체를 세우지 않는다.
+       */
+      leaderTeamIds: readonly string[];
     }
   | { kind: 'none' };
 
@@ -152,6 +160,9 @@ export type SurveyScopeFilter =
  *
  * **참여자로 초대받은 타 팀 설문도 같은 viewerId 로 붙는다**(티켓 18). 그 설문은 어느 팀
  * 범위에도 속하지 않으므로 팀 조건과 OR 로 잇는다 — 초대는 팀 축 밖의 접근이다.
+ *
+ * **내 팀원이 초대된 설문도 함께 붙는다** — 초대의 팀장 전파. 그 조건은 `leaderTeamIds` 가
+ * 지고, 판정 코어의 전파 분기와 같은 사실을 말한다.
  */
 export function buildSurveyScopeFilter(
   subject: SurveyAccessSubject,
@@ -164,5 +175,6 @@ export function buildSurveyScopeFilter(
     teamId: scope.teamId,
     viewerId: subject.userId,
     seesInviteOnly: subject.isSuperadmin || subject.leaderTeamIds.includes(scope.teamId),
+    leaderTeamIds: subject.leaderTeamIds,
   };
 }

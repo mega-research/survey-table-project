@@ -47,6 +47,10 @@ const A_LEADER_ID = crypto.randomUUID();
 const A_MEMBER_ID = crypto.randomUUID();
 /** B팀 — 초대받는 쪽. 이 사람은 A팀과 아무 관계가 없다. */
 const B_OUTSIDER_ID = crypto.randomUUID();
+/** B팀 팀장 — 초대되지 않는다. 팀원의 초대가 전파되는지 보는 주체다. */
+const B_LEADER_ID = crypto.randomUUID();
+/** C팀 팀장 — 아무 관계도 없다. 전파가 팀 경계를 넘지 않는지 보는 대조군. */
+const C_LEADER_ID = crypto.randomUUID();
 const SUPERADMIN_ID = crypto.randomUUID();
 /** 초대 불가 계정 — 유형 정합 검증용. */
 const GUEST_ID = crypto.randomUUID();
@@ -57,12 +61,15 @@ const DEPARTED_ID = crypto.randomUUID();
 
 const TEAM_A = crypto.randomUUID();
 const TEAM_B = crypto.randomUUID();
+const TEAM_C = crypto.randomUUID();
 
 const ALL_USER_IDS = [
   A_OWNER_ID,
   A_LEADER_ID,
   A_MEMBER_ID,
   B_OUTSIDER_ID,
+  B_LEADER_ID,
+  C_LEADER_ID,
   SUPERADMIN_ID,
   GUEST_ID,
   FIELDWORK_ID,
@@ -160,6 +167,8 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
     await seedUser(A_LEADER_ID);
     await seedUser(A_MEMBER_ID);
     await seedUser(B_OUTSIDER_ID);
+    await seedUser(B_LEADER_ID);
+    await seedUser(C_LEADER_ID);
     await seedUser(SUPERADMIN_ID, { isSuperadmin: true });
     await seedUser(GUEST_ID, { userType: 'guest' });
     await seedUser(FIELDWORK_ID, { userType: 'fieldwork' });
@@ -168,12 +177,15 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
     await db.insert(teamsTable).values([
       { id: TEAM_A, name: `참여팀A-${TEAM_A.slice(0, 8)}` },
       { id: TEAM_B, name: `참여팀B-${TEAM_B.slice(0, 8)}` },
+      { id: TEAM_C, name: `참여팀C-${TEAM_C.slice(0, 8)}` },
     ]);
     await db.insert(teamMembersTable).values([
       { teamId: TEAM_A, userId: A_OWNER_ID, role: 'member' },
       { teamId: TEAM_A, userId: A_LEADER_ID, role: 'leader' },
       { teamId: TEAM_A, userId: A_MEMBER_ID, role: 'member' },
       { teamId: TEAM_B, userId: B_OUTSIDER_ID, role: 'member' },
+      { teamId: TEAM_B, userId: B_LEADER_ID, role: 'leader' },
+      { teamId: TEAM_C, userId: C_LEADER_ID, role: 'leader' },
       // 퇴사자도 소속 행은 남는다(퇴사가 team_members 를 지우지 않는다 — 티켓 14).
       { teamId: TEAM_B, userId: DEPARTED_ID, role: 'member' },
     ]);
@@ -195,7 +207,7 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
       .delete(surveysTable)
       .where(inArray(surveysTable.id, [surveyId, neighbourSurveyId].filter(Boolean)));
     await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, ALL_USER_IDS));
-    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B]));
+    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B, TEAM_C]));
     // 실사 계정 → 업체 → 나머지 계정 순서다. FK 가 양쪽을 서로 잡고 있다(티켓 24):
     // 실사 계정은 업체를 가리키고(fieldwork_org_id), 업체는 만든 사람을 가리킨다(created_by).
     await db.delete(usersTable).where(eq(usersTable.id, FIELDWORK_ID));
@@ -546,15 +558,24 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
         { context: contextFor(B_OUTSIDER_ID) },
       );
 
-      // 구조 표면 — 팀 멤버십을 요구한다. 참여자는 A팀 사람이 아니다.
-      await expect(asParticipant.surveyGroups.list({ teamId: TEAM_A })).rejects.toMatchObject({
-        code: 'FORBIDDEN',
-      });
+      // **구조 쓰기**는 팀 멤버십을 요구한다. 참여자는 A팀 사람이 아니다.
+      await expect(
+        asParticipant.surveyGroups.create({ teamId: TEAM_A, name: '참여자가 만든 폴더' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
       // 설문을 미분류로 빼는 것도 막힌다 — surveyGroup.manage 가 없다.
       await expect(
         asParticipant.surveyGroups.move({ surveyId, groupId: null }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+      /**
+       * **목록만 예외다** — 관문 대신 조회 조건이 좁힌다.
+       *
+       * 그 목록이 돌려주는 것이 「그 팀의 그룹」이 아니라 「내게 보이는 그룹」으로 바뀌었다.
+       * 초대받은 설문이 담긴 협업 폴더는 보여야 하고, 그 설문이 어느 그룹에도 없으면 아무것도
+       * 오지 않는다. 관문으로 막아 두면 참여자가 자기 협업 폴더에 도달할 방법이 없다.
+       */
+      await expect(asParticipant.surveyGroups.list({ teamId: TEAM_A })).resolves.toEqual([]);
     });
   });
 
@@ -579,5 +600,75 @@ describe.skipIf(!isLocalDb)('설문 참여자 (real local DB)', () => {
       .update(surveysTable)
       .set({ teamId: TEAM_A, assignmentStatus: 'assigned' })
       .where(eq(surveysTable.id, surveyId));
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑤ 초대의 팀장 전파 — 참여 행 없이 서는 파생 시야
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 전파는 **참여 행을 만들지 않는다** — 판정 입력이 EXISTS 서브쿼리 하나이고 목록·그룹도
+   * 각자 같은 조건을 세운다. 목이 돌려주는 행은 언제나 테스트가 정한 행이라 조인 조건이
+   * 무엇이든 통과하므로, 이 축은 실 DB 로만 보인다.
+   *
+   * 대조군을 **두 팀**(B·C) 두는 것이 뼈대다. 팀이 하나뿐인 시드에서는 조인에 팀 조건이
+   * 있든 없든 결과가 같아 「타 팀 팀장은 못 본다」를 증명하지 못한다(티켓 25 의 실사 업체
+   * 둘과 같은 이유).
+   */
+  describe('초대는 그 사람의 팀장에게 전파된다', () => {
+    it('팀원이 초대되면 그 팀장이 제한 참여자 열을 얻는다', async () => {
+      expect(await caps(B_LEADER_ID)).toEqual([]);
+
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      expect((await caps(B_LEADER_ID)).sort()).toEqual([
+        'analytics.view',
+        'operations.view',
+        'survey.edit',
+        'survey.invite',
+        'survey.view',
+      ]);
+      // 목록에도 나와야 한다 — 없으면 그룹만 보이고 안이 빈 폴더가 된다.
+      expect(await visibleIds(B_LEADER_ID, TEAM_B)).toContain(surveyId);
+    });
+
+    it('전파는 팀 경계를 넘지 않는다', async () => {
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+
+      expect(await caps(C_LEADER_ID)).toEqual([]);
+      expect(await visibleIds(C_LEADER_ID, TEAM_C)).not.toContain(surveyId);
+    });
+
+    it('팀원이 아니라 팀장에게만 전파된다', async () => {
+      // B팀에 팀원이 둘 있어도 전파를 받는 것은 leader 행뿐이다. DEPARTED_ID 는 B팀 member 라
+      // 여기서 팀원 대조군이 된다(상태와 무관하게 role 이 member 다).
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+      expect(await caps(DEPARTED_ID)).toEqual([]);
+    });
+
+    it('비활성 팀원의 초대는 전파되지 않는다', async () => {
+      // 참여 행은 계정 상태를 따라 지워지지 않는다(퇴사가 멤버십·초대를 남긴다). 조건이
+      // 없으면 아무도 일하지 않는 설문이 팀장 시야에 영구히 선다. 서비스가 active 만
+      // 초대하므로 행을 직접 넣어 그 상태를 만든다.
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: DEPARTED_ID,
+        kind: 'member',
+        addedBy: A_OWNER_ID,
+      });
+
+      expect(await caps(B_LEADER_ID)).toEqual([]);
+      expect(await visibleIds(B_LEADER_ID, TEAM_B)).not.toContain(surveyId);
+    });
+
+    it('초대를 빼면 전파도 사라진다', async () => {
+      await clientFor(A_OWNER_ID).participants.add({ surveyId, userId: B_OUTSIDER_ID });
+      expect(await caps(B_LEADER_ID)).not.toEqual([]);
+
+      await clientFor(A_OWNER_ID).participants.remove({ surveyId, userId: B_OUTSIDER_ID });
+
+      expect(await caps(B_LEADER_ID)).toEqual([]);
+      expect(await visibleIds(B_LEADER_ID, TEAM_B)).not.toContain(surveyId);
+    });
   });
 });

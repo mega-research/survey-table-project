@@ -221,6 +221,14 @@ export const SurveyGroupListItem = z.object({
   order: z.number().int(),
   /** 소속 설문 수 — 삭제되지 않은 설문만 센다(삭제 확인 모달의 「설문 N개가 미분류로」). */
   surveyCount: z.number().int(),
+  /**
+   * 이 그룹이 **다른 팀의 것**일 때 그 팀 이름. 내 팀 그룹이면 null.
+   *
+   * 초대의 팀장 전파·참여자 초대로 타 팀 그룹이 내 목록에 섞여 들어온다(협업 그룹). 설문
+   * 카드가 소유 팀을 「… 소유」로 적는 것과 같은 방식으로 트리도 출처를 밝힌다 — 밝히지
+   * 않으면 내 팀 폴더와 구별되지 않아, 이름을 못 고치는 폴더가 내 것처럼 보인다.
+   */
+  foreignTeamName: z.string().nullable(),
 });
 export type SurveyGroupListItem = z.infer<typeof SurveyGroupListItem>;
 

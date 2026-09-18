@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import {
   surveyGroups as surveyGroupsTable,
+  surveyParticipants as participantsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -209,9 +210,13 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
   it('타 팀 사람은 그룹을 보지도 만지지도 못한다', async () => {
     const groupId = await seedGroup(member, TEAM_A, '팀A 전용');
 
-    await expect(outsider.surveyGroups.list({ teamId: TEAM_A })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-    });
+    /**
+     * 목록은 **관문이 아니라 조회 조건**이 좁힌다 — 아무 설문에도 초대되지 않았으므로 빈
+     * 배열이다. 거부가 아니라 「보이는 것이 없다」인 것이 요점이다: 협업 그룹은 팀 멤버십
+     * 없이도 보여야 하고(아래 협업 블록), 그 문을 관문으로 닫으면 참여자가 자기 폴더에
+     * 도달하지 못한다. 타 팀 그룹의 **이름이 새지 않는 것**이 여기서 지켜지는 계약이다.
+     */
+    await expect(outsider.surveyGroups.list({ teamId: TEAM_A })).resolves.toEqual([]);
     // 그룹 id 를 알아도 존재를 확인할 수 없다 — 사유는 NOT_FOUND 로 접힌다.
     await expect(
       outsider.surveyGroups.rename({ groupId, name: '가로채기' }),
@@ -360,6 +365,30 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       return { teamId, groupId };
     }
 
+    /**
+     * 목록에서도 사라져야 한다 — 관문이 목록에서 빠졌으므로(조회 조건이 좁힌다) 이 계약을
+     * 지는 것은 서비스의 팀 조인이다. **슈퍼어드민이 아니라 팀장으로** 확인하는 것이 요점은
+     * 아니다: 이 사람은 그 팀의 leader 였는데 팀이 archived 가 되는 순간 유효 소속이
+     * 사라진다(`getActiveTeamMemberships` 가 active 팀만 조인한다). 조인이 없으면 그래도
+     * 슈퍼어드민에게는 폴더가 계속 보인다.
+     */
+    it('목록 — 해산된 팀의 그룹은 행 자체가 나오지 않는다', async () => {
+      const { teamId, groupId } = await seedArchivedTeamGroup();
+
+      const asMember = await svc.listSurveyGroups(
+        { id: MEMBER_ID, isSuperadmin: false, userType: 'internal' },
+        teamId,
+      );
+      expect(asMember.map((g) => g.id)).not.toContain(groupId);
+
+      // 슈퍼어드민은 소속 검사를 지나지 않으므로 이 축이 조인으로만 닫힌다.
+      const asSuperadmin = await svc.listSurveyGroups(
+        { id: MEMBER_ID, isSuperadmin: true, userType: 'internal' },
+        teamId,
+      );
+      expect(asSuperadmin.map((g) => g.id)).not.toContain(groupId);
+    });
+
     it('삭제 — 감사 계보로 남겨야 할 행이 사라지지 않는다', async () => {
       const { groupId } = await seedArchivedTeamGroup();
 
@@ -400,6 +429,101 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       await expect(
         svc.reorderSurveyGroups({ teamId, orderedGroupIds: [groupId] }),
       ).rejects.toBeInstanceOf(TeamNotFoundError);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 협업 그룹 — 초대·전파가 타 팀 폴더를 보이게 한다
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 규칙은 하나다 — **내가 볼 수 있는 설문이 담긴 그룹은 내게도 보인다.**
+   *
+   * 그래서 「협업 그룹」 플래그가 없다. 담기가 곧 공유 여부를 정하고, 설문을 빼면 폴더도
+   * 사라진다. 조회 조건(inner join)이 그 규칙을 강제하므로 목으로는 무엇이든 통과한다.
+   *
+   * 가장 중요한 단언은 **보이지 않는 그룹의 이름이 새지 않는가**다. 카운트 0 으로 보여주면
+   * 뺄셈 한 번에 「내게 숨겨진 설문이 있다」가 드러난다(listSurveyGroups 주석의 계약).
+   */
+  describe('협업 그룹은 접근 가능한 설문이 담겼을 때만 보인다', () => {
+    it('초대받은 설문이 담긴 타 팀 그룹이 내 목록에 붙는다', async () => {
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId, groupId: shared });
+
+      // 초대 전 — 그 그룹은 존재조차 보이지 않는다.
+      expect(await outsider.surveyGroups.list({ teamId: TEAM_B })).toEqual([]);
+
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+
+      const visible = await outsider.surveyGroups.list({ teamId: TEAM_B });
+      expect(visible).toHaveLength(1);
+      expect(visible[0]).toMatchObject({ id: shared, name: '협업 폴더', surveyCount: 1 });
+      // 남의 팀 폴더임을 밝힌다 — 내 팀 그룹과 구별되지 않으면 못 고치는 폴더가 내 것처럼 보인다.
+      expect(visible[0]?.foreignTeamName).toContain('그룹팀A');
+    });
+
+    it('초대받지 않은 설문만 담긴 그룹은 이름조차 보이지 않는다', async () => {
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const secret = await seedGroup(member, TEAM_A, '비공개 폴더');
+      const sharedSurvey = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      const secretSurvey = await seedSurvey(TEAM_A, '남의 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId: sharedSurvey, groupId: shared });
+      await member.surveyGroups.move({ surveyId: secretSurvey, groupId: secret });
+      await db.insert(participantsTable).values({
+        surveyId: sharedSurvey,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+
+      const visible = await outsider.surveyGroups.list({ teamId: TEAM_B });
+
+      expect(visible.map((g) => g.id)).toEqual([shared]);
+      expect(visible.map((g) => g.name)).not.toContain('비공개 폴더');
+    });
+
+    it('설문을 그룹에서 빼면 협업 그룹도 사라진다', async () => {
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId, groupId: shared });
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+      expect(await outsider.surveyGroups.list({ teamId: TEAM_B })).toHaveLength(1);
+
+      await member.surveyGroups.move({ surveyId, groupId: null });
+
+      expect(await outsider.surveyGroups.list({ teamId: TEAM_B })).toEqual([]);
+    });
+
+    it('보이는 것과 만질 수 있는 것은 다르다', async () => {
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId, groupId: shared });
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+
+      // 목록에는 있지만 쓰기 표면은 그대로 막힌다 — 그룹은 팀 소유물이다.
+      expect(await outsider.surveyGroups.list({ teamId: TEAM_B })).toHaveLength(1);
+      await expect(
+        outsider.surveyGroups.rename({ groupId: shared, name: '내가 고친 이름' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(outsider.surveyGroups.remove({ groupId: shared })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
     });
   });
 
