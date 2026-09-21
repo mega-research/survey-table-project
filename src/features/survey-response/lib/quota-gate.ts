@@ -8,6 +8,25 @@ function hasValue(v: unknown): boolean {
 }
 
 /**
+ * 텍스트형 쿼터 차원의 대상 칸이 채워졌는가 — 필수 판정에 얹는 추가 조건.
+ *
+ * 쿼터 문항은 런타임 필수인데, 표 문항의 "답변됨"은 객체에 키가 하나라도 있으면 참이다. 대상
+ * 칸에 셀 필수가 걸려 있지 않은 표에서는 다른 칸만 채우고 넘어갈 수 있고, 그러면 쿼터 확인은
+ * 발동하지 않은 채(`shouldCheckQuota` = false) 미분류로 끝까지 완료된다 — 마감된 쿼터를 정상
+ * 화면에서 우회하는 길이다. 발동 조건과 **같은 판정**을 필수 검증에도 걸어 그 틈을 막는다.
+ * 게이트에 대상 칸이 등재되지 않은 문항은 언제나 true(관여하지 않는다).
+ */
+export function isQuotaTargetFilled(
+  gate: QuotaGate | null | undefined,
+  questionId: string,
+  response: unknown,
+): boolean {
+  const cellIds = gate?.cellIdsByQuestion?.[questionId];
+  if (!cellIds?.length) return true;
+  return allQuotaQuestionsAnswered([questionId], { [questionId]: response }, { [questionId]: cellIds });
+}
+
+/**
  * 게이트 문항이 전부 답변됐는지. 빈 게이트는 false(발동 안 함).
  * 빈 문자열/빈 배열은 미답변으로 본다. `cellIdsByQuestion` 에 오른 문항(텍스트형 차원의 표)은
  * 대상 칸 중 하나라도 값이 있어야 답변이다 — 표 응답은 다른 칸만 채워도 객체가 생긴다.

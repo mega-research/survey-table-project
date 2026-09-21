@@ -80,7 +80,7 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
+import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
@@ -1071,6 +1071,8 @@ function SurveyResponseFlowActive({
           : undefined;
       return (
         isQuestionAnsweredPure(question, response) &&
+        // 텍스트형 쿼터 차원 — 대상 칸이 비면 쿼터 확인이 발동하지 않으므로 미답변으로 막는다.
+        isQuotaTargetFilled(loadedSurvey?.quotaGate, question.id, response) &&
         !collectRequiredOptionTextIssues(
           question,
           response,
@@ -1079,7 +1081,14 @@ function SurveyResponseFlowActive({
         ).questionMissing
       );
     },
-    [responses, effectiveOptionTextsByQuestion, questions, contactAttrs, loadedSurvey?.lookups],
+    [
+      responses,
+      effectiveOptionTextsByQuestion,
+      questions,
+      contactAttrs,
+      loadedSurvey?.lookups,
+      loadedSurvey?.quotaGate,
+    ],
   );
 
   // 다음 step 결정 (step 내 분기 규칙 평가)

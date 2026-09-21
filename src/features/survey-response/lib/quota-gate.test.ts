@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   allQuotaQuestionsAnswered,
+  isQuotaTargetFilled,
   shouldCheckQuota,
 } from '@/features/survey-response/lib/quota-gate';
 
@@ -41,5 +42,24 @@ describe('shouldCheckQuota', () => {
     const gate = { questionIds: ['q1'], cellIdsByQuestion: { q1: ['sido'] } };
     expect(shouldCheckQuota(gate, { q1: { other: 'x' } })).toBe(false);
     expect(shouldCheckQuota(gate, { q1: { sido: '경기' } })).toBe(true);
+  });
+});
+
+describe('isQuotaTargetFilled — 필수 검증에 얹는 대상 칸 조건', () => {
+  const gate = { questionIds: ['q1'], cellIdsByQuestion: { q1: ['sido', 'sigungu'] } };
+
+  it('다른 칸만 채운 표는 미충족 — 이 상태로 넘어가면 쿼터 확인 없이 미분류로 완료된다', () => {
+    expect(isQuotaTargetFilled(gate, 'q1', { name: '메가리서치' })).toBe(false);
+    expect(isQuotaTargetFilled(gate, 'q1', undefined)).toBe(false);
+  });
+  it('대상 칸 중 하나라도 값이 있으면 충족 — 발동 조건(shouldCheckQuota)과 같은 판정', () => {
+    const answer = { name: '메가리서치', sigungu: '성남시' };
+    expect(isQuotaTargetFilled(gate, 'q1', answer)).toBe(true);
+    expect(shouldCheckQuota(gate, { q1: answer })).toBe(true);
+  });
+  it('대상 칸이 등재되지 않은 문항·게이트 없음은 관여하지 않는다', () => {
+    expect(isQuotaTargetFilled(gate, 'q2', {})).toBe(true);
+    expect(isQuotaTargetFilled({ questionIds: ['q1'] }, 'q1', {})).toBe(true);
+    expect(isQuotaTargetFilled(null, 'q1', {})).toBe(true);
   });
 });
