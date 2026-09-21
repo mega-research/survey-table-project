@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-16 (공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+> 최종 갱신: 2026-09-21 (자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 
 ---
 
@@ -319,7 +319,7 @@ survey_responses           # 수집된 응답
 ├── isTest                        # 테스트 파티션 여부
 ├── metadata (JSONB), lastEditedAt, deletedAt
 ├── versionId                     # 응답 시점 버전
-├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop (어휘·열림/종결 술어 SSOT: shared/contracts/survey-response.ts)
+├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop (어휘·열림/종결/재응답 술어 SSOT: shared/contracts/survey-response.ts — 전이표도 거기 주석)
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
@@ -545,17 +545,17 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 ## 질문 유형
 
-| 타입          | 설명               | 주요 속성                                                                                                              |
-| ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 타입          | 설명               | 주요 속성                                                                                                                         |
+| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow |
-| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                   |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                  |
-| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                  |
-| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                              |
-| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                           |
-| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                           |
-| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints |
-| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                   |
+| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                              |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                             |
+| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                             |
+| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                         |
+| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                      |
+| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                                      |
+| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints            |
+| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                              |
 
 공통: `titleHtml`(제목 서식본 — 아래 "셀 본문 부분 강조"와 같은 규칙), `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 
@@ -1000,6 +1000,10 @@ export function QuestionEditor({ questionId, onSave }: Props) {
     **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 계산 키가 `undefined` 로 등록되고, 그 사이드카가 등록 목록에서 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝나므로 아무도 모른다. 2026-09-16 에 실제로 닫혀 있었고(`__optTexts__` 를 `lib/option-text-read.ts` 로 내려 끊었다), 순환을 만든 것은 등록부의 직접 import 가 아니라 `prior-answers → response-sidecars` 라는 **전이 closure 안쪽 간선**이었다. 그래서 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 봐야 한다. `lib/survey/response-sidecars-import-order.test.ts` 가 소스를 읽어 이 간선을 막고, 등록 키 집합 전체를 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
 
 14. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정 — 세션 되돌리기 버퍼는 검토 후 미채택). 판정·삭제는 `lib/survey/question-visibility.ts` 의 `resolveVisibleQuestionIds`/`stripHiddenQuestionValues` 한 곳이다. 복제 금지 — 셀 게이팅(`cell-gating.ts`)과 같은 규약. 저장 경계 순서는 **숨은 문항 strip → 게이팅 strip → calc 재계산**. **초안·구간 저장에는 걸지 않는다.** 그쪽 answers 는 더티 키만 담은 부분 패치이고 저장이 jsonb 합집합 병합이라, strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것.
+
+15. **응답 종결 판정은 `status` 로 한다 — `is_completed` 는 종결 게이트가 아니다**: 자격미달(`screened_out`)은 완료 수 분자에서 빠지도록 `is_completed=false` 로 저장된다(`response-completion` 의 `isCompleted: !screenedOut`). 그래서 `is_completed` 를 "끝난 응답인가" 게이트로 쓰면 자격미달만 조용히 빠진다 — 재응답 허용이 `ok:true` 를 돌려주면서 아무것도 안 하던 사고가 이것이다(2026-09-21 수리). 어휘와 술어는 `shared/contracts/survey-response.ts` 가 SSOT 다: 열림 `isOpenResponseStatus` · 종결 `isConcludedResponseStatus` · 재응답 허용 대상 `isReeditableResponseStatus`(completed·screened_out). `is_completed=false` 를 쿼리에 쓰는 것 자체는 무방하나(열린 행 **후보** 조회 범위), 판정은 반드시 status 술어로 한 번 더 한다 — `lifecycle`·`response-row-create` 의 컨택 재사용 조회가 그 패턴이다.
+
+16. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe).
 
 ---
 
