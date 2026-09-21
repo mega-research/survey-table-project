@@ -55,7 +55,7 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     value: 'row-cards',
     label: '행 단위 카드',
     description:
-      '행마다 카드 하나를 만들고 그 안에 열별 선택을 나란히 둡니다. 열마다 하나씩 고르는 표에 맞습니다.',
+      '행마다 카드 하나를 만들고 고정 헤더 아래에 열별 선택을 세로 타일로 둡니다. 행과 축을 바꾸지 않고 축 단위 카드와 같은 디자인으로 표시합니다.',
   },
   {
     value: 'row-group-cards',

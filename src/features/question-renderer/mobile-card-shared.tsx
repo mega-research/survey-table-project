@@ -6,6 +6,54 @@ import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 
+/** 행·축 카드의 공통 외곽과 고정 헤더. 보기의 묶음·선택 규칙은 호출부가 소유한다. */
+export function MobileSectionCard({
+  title,
+  children,
+  testId,
+  headerTestId,
+  errorMessage,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+  testId?: string | undefined;
+  headerTestId?: string | undefined;
+  errorMessage?: string | undefined;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className={cn(
+        'rounded-2xl border bg-white',
+        errorMessage ? 'border-red-300' : 'border-gray-200',
+      )}
+    >
+      {(title || errorMessage) && (
+        <div
+          data-testid={headerTestId}
+          className={cn(
+            'sticky top-0 z-10 rounded-t-2xl border-b px-4 py-3',
+            errorMessage ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-100',
+          )}
+        >
+          {title && (
+            <div
+              className={cn(
+                'text-[17px] leading-snug font-bold whitespace-pre-line',
+                errorMessage ? 'text-red-600' : 'text-gray-900',
+              )}
+            >
+              {title}
+            </div>
+          )}
+          {errorMessage && <p className="mt-0.5 text-[13px] text-red-600">{errorMessage}</p>}
+        </div>
+      )}
+      <div className="space-y-2 p-3">{children}</div>
+    </div>
+  );
+}
+
 export interface MobileOptionCardProps {
   /** 카드 헤더 라벨 */
   label: ReactNode;
@@ -19,6 +67,9 @@ export interface MobileOptionCardProps {
   disabled?: boolean;
   /** 헤더 줄 탭 시 호출 (Case A 선택 토글). 미지정이면 헤더는 비인터랙티브 */
   onToggle?: () => void;
+  /** 행 카드는 축 카드와 같은 고정 헤더·분리된 본문을 쓴다. 선택은 본문의 타일이 담당한다. */
+  variant?: 'option' | 'section';
+  testId?: string;
 }
 
 export function MobileOptionCard({
@@ -29,7 +80,17 @@ export function MobileOptionCard({
   selected,
   disabled,
   onToggle,
+  variant = 'option',
+  testId,
 }: MobileOptionCardProps) {
+  if (variant === 'section') {
+    return (
+      <MobileSectionCard title={label} testId={testId} headerTestId="row-card-header">
+        <MobileDisplayCells cells={cells} />
+        {footer}
+      </MobileSectionCard>
+    );
+  }
   const interactive = Boolean(onToggle) && !disabled;
   return (
     <div
@@ -48,7 +109,7 @@ export function MobileOptionCard({
             {control}
           </span>
         )}
-        <div className="min-w-0 flex-1 whitespace-pre-line text-[15px] font-semibold leading-snug text-gray-900">
+        <div className="min-w-0 flex-1 text-[15px] leading-snug font-semibold whitespace-pre-line text-gray-900">
           {label}
         </div>
       </div>
