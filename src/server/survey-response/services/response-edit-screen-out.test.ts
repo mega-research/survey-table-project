@@ -43,6 +43,9 @@ interface FakeResponse {
 const h = vi.hoisted(() => ({
   response: null as FakeResponse | null,
   setPayload: null as Record<string, unknown> | null,
+  // 조회와 UPDATE 사이에 다른 요청이 바꿔 놓은 DB 의 현재 상태(경합 재현용). null 이면 조회 값 그대로.
+  concurrentStatus: null as string | null,
+  concurrentlyDeleted: false,
 }));
 
 vi.mock('./response-answers', () => ({
@@ -116,13 +119,23 @@ vi.mock('@/db', () => ({
                 returning: vi.fn(async () => {
                   const p = extractParams(where);
                   const row = h.response;
-                  return row && p['id'] === row.id ? [{ id: row.id }] : [];
+                  if (!row || p['id'] !== row.id || h.concurrentlyDeleted) return [];
+                  // 상태 가드 — WHERE 에 status 가 실렸으면 DB 의 현재 상태와 같아야 갱신된다.
+                  const dbStatus = h.concurrentStatus ?? row.status;
+                  if (p['status'] !== undefined && p['status'] !== dbStatus) return [];
+                  return [{ id: row.id }];
                 }),
               })),
             };
           }),
         })),
         insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
+        // 0행일 때의 원인 판별 재조회
+        select: vi.fn(() => ({
+          from: vi.fn(() => ({
+            where: vi.fn(async () => [{ deletedAt: h.concurrentlyDeleted ? new Date() : null }]),
+          })),
+        })),
       };
       return cb(tx);
     }),
@@ -161,6 +174,8 @@ async function save(answers: Record<string, unknown>) {
 
 beforeEach(() => {
   h.setPayload = null;
+  h.concurrentStatus = null;
+  h.concurrentlyDeleted = false;
   seed({});
 });
 
@@ -195,4 +210,33 @@ describe('saveAdminEdit — 자격미달 양방향 재판정', () => {
       expect(h.setPayload).not.toHaveProperty('isCompleted');
     },
   );
+});
+
+describe('saveAdminEdit — 종결 상태 쓰기의 동시성 가드', () => {
+  // 조회 뒤 재응답 허용이 in_progress 로 되돌렸는데, 뒤늦은 저장이 조회 당시 상태로 정한
+  // completed·screened_out 을 다시 덮어쓰던 경합. 재응답 허용이 지운 completedAt·컨택 완료
+  // 링크는 돌아오지 않아 상태와 연결이 어긋난다.
+  it('조회 뒤 상태가 바뀌었으면 status_conflict 로 거부하고 아무것도 쓰지 않는다', async () => {
+    const { replaceResponseAnswers } = await import('./response-answers');
+    vi.mocked(replaceResponseAnswers).mockClear();
+    seed({ status: 'completed', questionResponses: { 'q-screen': 'ok' } });
+    h.concurrentStatus = 'in_progress';
+
+    await expect(save({ 'q-screen': 'bad' })).rejects.toMatchObject({ reason: 'status_conflict' });
+    expect(replaceResponseAnswers).not.toHaveBeenCalled();
+  });
+
+  it('0행의 원인이 동시 삭제면 종전대로 response_deleted 다', async () => {
+    seed({ status: 'completed', questionResponses: { 'q-screen': 'ok' } });
+    h.concurrentlyDeleted = true;
+
+    await expect(save({ 'q-screen': 'bad' })).rejects.toMatchObject({ reason: 'response_deleted' });
+  });
+
+  it('상태를 쓰지 않는 저장(in_progress)은 가드를 걸지 않는다 — 응답자의 진행과 충돌하지 않는다', async () => {
+    seed({ status: 'in_progress', questionResponses: { 'q-screen': 'bad' } });
+    h.concurrentStatus = 'completed';
+
+    await expect(save({ 'q-screen': 'ok' })).resolves.toEqual({ ok: true });
+  });
 });

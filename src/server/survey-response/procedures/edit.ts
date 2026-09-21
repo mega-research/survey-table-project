@@ -18,6 +18,10 @@ const EDIT_ERROR_RESPONSES: Record<
     code: 'CONFLICT',
     message: '수정 중 새 버전이 배포되었습니다. 새로고침 후 다시 수정해 주세요.',
   },
+  status_conflict: {
+    code: 'CONFLICT',
+    message: '수정 중 응답 상태가 바뀌었습니다. 새로고침 후 다시 수정해 주세요.',
+  },
 };
 
 /**

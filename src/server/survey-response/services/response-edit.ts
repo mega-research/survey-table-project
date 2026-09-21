@@ -37,7 +37,8 @@ export { SurveyOwnershipError };
 export type ResponseEditErrorReason =
   | 'response_not_found'
   | 'response_deleted'
-  | 'version_conflict';
+  | 'version_conflict'
+  | 'status_conflict';
 
 /**
  * 응답 편집 거부. procedure 가 메시지 문자열이 아니라 reason 으로 분기한다 —
@@ -400,12 +401,26 @@ export async function saveAdminEdit(
           eq(surveyResponses.surveyId, surveyId),
           eq(surveyResponses.isTest, isTest),
           isNull(surveyResponses.deletedAt),
+          // 종결 상태를 쓰는 저장은 조회 당시 상태가 그대로일 때만 통과한다. terminalStatusSet 은
+          // 트랜잭션 밖에서 읽은 existing.status 로 정해지므로, 그 사이 재응답 허용이
+          // in_progress 로 되돌렸다면 이 UPDATE 가 completed·screened_out 을 다시 덮어쓴다 —
+          // 재응답 허용이 지운 completedAt·컨택 완료 링크는 복원되지 않아 상태와 연결이 어긋난다.
+          ...(terminalStatusSet.status !== undefined
+            ? [eq(surveyResponses.status, existing.status)]
+            : []),
         ),
       )
       .returning({ id: surveyResponses.id });
 
     if (updated.length === 0) {
-      throw new ResponseEditError('response_deleted');
+      // 0행의 원인은 둘이다 — 동시 삭제, 또는 위 상태 가드. 삭제가 아니면 상태 충돌이다.
+      const [current] = await tx
+        .select({ deletedAt: surveyResponses.deletedAt })
+        .from(surveyResponses)
+        .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.surveyId, surveyId)));
+      throw new ResponseEditError(
+        current && current.deletedAt === null ? 'status_conflict' : 'response_deleted',
+      );
     }
 
     await replaceResponseAnswers(tx, responseId, surveyId, storedResponses);
