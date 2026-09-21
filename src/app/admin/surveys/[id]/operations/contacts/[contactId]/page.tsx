@@ -15,6 +15,7 @@ import {
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -36,8 +37,11 @@ export default async function ContactDetailPage({ params }: PageProps) {
   // 완료 시점에만 생기므로 completed 로 간주).
   const editable = await getEditableResponseIdForTarget(detail.contact.id, scope);
   const editableResponseId = editable?.id ?? detail.contact.responseId;
-  const editableResponseCompleted = editable
-    ? editable.status === 'completed'
+  // 재응답 허용 대상 상태 판정은 contracts 의 술어 하나가 소유한다 — 여기서 리터럴로
+  // 다시 쓰면 서비스 가드(allowReeditResponse)와 조용히 어긋나 버튼이 안 뜨거나,
+  // 떠도 no-op 이 된다. 자격미달도 대상이다.
+  const editableResponseReeditable = editable
+    ? isReeditableResponseStatus(editable.status)
     : detail.contact.responseId != null;
 
   const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
@@ -102,7 +106,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           inviteToken: detail.contact.inviteToken,
           inviteCode: detail.contact.inviteCode,
           responseId: editableResponseId,
-          responseCompleted: editableResponseCompleted,
+          responseReeditable: editableResponseReeditable,
           attempts: detail.attempts,
         }}
       />

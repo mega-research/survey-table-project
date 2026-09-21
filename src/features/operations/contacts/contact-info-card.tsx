@@ -41,8 +41,8 @@ interface ContactInfoCardProps {
   contactMethod: ContactMethod | null;
   respondedAt: Date | null;
   responseId: string | null;
-  /** 수정 대상 응답이 완료 상태인지 — 재응답 허용 버튼 노출 (respondedAt 링크 누락 대비). */
-  responseCompleted?: boolean;
+  /** 수정 대상 응답이 재응답 허용 대상 상태인지 — 버튼 노출 (respondedAt 링크 누락 대비). */
+  responseReeditable?: boolean;
   inviteCode: string | null;
   /** 응답 초기화(hard reset) 버튼 노출 — authed 전용이라 게스트는 false. */
   canReset?: boolean;
@@ -71,7 +71,7 @@ export function ContactInfoCard({
   contactMethod,
   respondedAt,
   responseId,
-  responseCompleted = false,
+  responseReeditable = false,
   inviteCode,
   canReset = false,
   onColumnToggle,
@@ -284,7 +284,7 @@ export function ContactInfoCard({
                 응답 초기화
               </Button>
             )}
-            {canReset && responseId && responseCompleted && (
+            {canReset && responseId && responseReeditable && (
               <Button
                 size="sm"
                 variant="outline"
@@ -295,16 +295,17 @@ export function ContactInfoCard({
               </Button>
             )}
           </div>
-          {/* 재응답 허용 — 완료 응답을 진행중으로 되돌려 응답자 본인이 수정·재제출 */}
+          {/* 재응답 허용 — 완료·자격미달 응답을 진행중으로 되돌려 응답자 본인이 수정·재제출 */}
           <AlertDialog open={reeditOpen} onOpenChange={setReeditOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>재응답을 허용합니다</AlertDialogTitle>
                 <AlertDialogDescription>
-                  완료된 응답이 진행중 상태로 전환됩니다. 응답자가 기존 초대 링크로
+                  종결된 응답이 진행중 상태로 전환됩니다. 응답자가 기존 초대 링크로
                   다시 들어가면 지금까지의 답변이 채워진 채 수정할 수 있고, 다시
-                  제출하면 완료로 기록됩니다. 전환 동안에는 완료 통계에서 잠시
-                  제외되며, 수정/편집 현황에 허용 기록이 남습니다.
+                  제출하면 그 시점 답변으로 완료 여부와 자격미달 여부를 다시
+                  판정합니다. 전환 동안에는 완료 통계에서 잠시 제외되며,
+                  수정/편집 현황에 허용 기록이 남습니다.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

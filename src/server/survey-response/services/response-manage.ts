@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -11,6 +11,10 @@ import {
   surveyVersions,
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import {
+  isReeditableResponseStatus,
+  reeditableResponseStatusValues,
+} from '@/shared/contracts/survey-response';
 
 import { reeditDenial, type ReeditDenial } from '../domain/acceptance';
 import type {
@@ -170,15 +174,20 @@ export async function hardResetResponse(
 }
 
 /**
- * 재응답 허용 — 완료 응답을 답변 보존한 채 진행중으로 되돌린다.
+ * 재응답 허용 — 종결 응답을 답변 보존한 채 진행중으로 되돌린다.
  *
- * 응답자가 관리자에게 "다시 수정하고 싶다"고 요청했을 때 사용한다. 완료 응답을
+ * 대상 상태는 contracts 의 reeditableResponseStatusValues(completed·screened_out) 다.
+ * **isCompleted 로 판정하지 않는다** — 자격미달은 완료 수 분자에서 빠지도록
+ * is_completed=false 로 저장되므로, 그 컬럼을 게이트로 쓰면 되돌리기가 조용한 no-op 이
+ * 되어 운영자는 성공 토스트를 보고도 상태가 그대로인 것을 겪는다(실제 사고).
+ *
+ * 응답자가 관리자에게 "다시 수정하고 싶다"고 요청했을 때 사용한다. 종결 응답을
  * in_progress 로 되돌리고 컨택의 완료 링크(respondedAt/responseId)를 해제하면,
  * 응답자는 기존 초대 링크로 재진입해 기존 답변이 채워진 채 수정·재제출할 수 있다
  * (Track A 의 token_already_used 차단과 컨택 재사용·prefill·완료 재링크가 모두
  * 기존 기계 그대로 동작한다). 재제출하면 다시 완료로 기록된다.
  *
- * 완료 상태가 아니면 변경 0행 no-op (fail-soft, manage 공통 의미론).
+ * 되돌릴 수 있는 상태가 아니면 변경 0행 no-op (fail-soft, manage 공통 의미론).
  * 잠금 순서는 hardReset 과 동일하게 target → response 를 지킨다.
  *
  * 가드: 설문이 응답을 받을 수 없는 상태(미배포·중단·마감)이거나 연결된 조사 대상이
@@ -200,7 +209,7 @@ export async function allowReeditResponse(
     const [row] = await tx
       .select({
         contactTargetId: surveyResponses.contactTargetId,
-        isCompleted: surveyResponses.isCompleted,
+        status: surveyResponses.status,
         isTest: surveyResponses.isTest,
         metadata: surveyResponses.metadata,
       })
@@ -213,7 +222,7 @@ export async function allowReeditResponse(
         ),
       )
       .limit(1);
-    if (!row || !row.isCompleted) return;
+    if (!row || !isReeditableResponseStatus(row.status)) return;
 
     // 앵커는 수용 게이트보다 **먼저** 해석한다. 레거시 행은 정방향
     // (survey_responses.contact_target_id)이 null 인 채 역방향(contact_targets.response_id)만
@@ -292,7 +301,8 @@ export async function allowReeditResponse(
         and(
           eq(surveyResponses.id, responseId),
           eq(surveyResponses.surveyId, surveyId),
-          eq(surveyResponses.isCompleted, true),
+          // 위 select 와 같은 술어를 SQL 로 반복해 select~UPDATE 사이 경합을 막는다.
+          inArray(surveyResponses.status, [...reeditableResponseStatusValues]),
         ),
       )
       .returning({ id: surveyResponses.id });

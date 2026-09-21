@@ -26,6 +26,7 @@ import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 
+import { detectScreenOut } from '../domain/screen-out';
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers';
 import { assertAnswerValueSize, loadPiiTargets } from './submitted-answers';
@@ -78,11 +79,15 @@ function buildMigrationMetadataSql(rollback: {
  * 어드민 응답 수정 저장.
  *
  * - questionResponses (JSONB) 와 response_answers 정규화 행을 일괄 갱신.
- * - completedAt / status / startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
- *   예외(2026-08-11): 이탈(drop) 응답은 저장 시 completed 로 전환한다 — drop 은 sweep 이
+ * - startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
+ *   예외 1 (2026-08-11): 이탈(drop) 응답은 저장 시 completed 로 전환한다 — drop 은 sweep 이
  *   비활동으로 자동 부여한 상태라 응답자 확정 종결이 아니고, 운영자가 수정 화면에서 채워
- *   제출하는 행위가 곧 완료 확정이다. completed 재수정은 답만 갱신(상태 불변),
- *   in_progress 는 응답자 세션을 방해하지 않도록 전환하지 않는다.
+ *   제출하는 행위가 곧 완료 확정이다.
+ *   예외 2: 종결 응답(completed·screened_out, 그리고 이번 저장으로 완료 전환되는 drop)은
+ *   자격미달을 다시 판정해 completed ⇄ screened_out 을 오간다 — 운영자가 조건 문항을
+ *   고쳤는데 상태가 따라오지 않으면 자격미달이 영구히 붙박이가 된다. in_progress 는
+ *   응답자 세션을 방해하지 않도록, quotaful_out·bad 는 자격미달과 다른 축의 종결이라
+ *   건드리지 않는다.
  * - lastEditedAt / lastActivityAt 은 갱신, currentStepId 는 null 로 초기화.
  * - 삭제(soft delete)된 응답은 거부. 트랜잭션 안 UPDATE WHERE 에 isNull(deletedAt) 가드를
  *   둬서 사전 검사 이후 동시 soft delete 가 끼어드는 TOCTOU 도 차단한다.
@@ -171,8 +176,14 @@ export async function saveAdminEdit(
   // 그 외는 snapshot 기반 재계산.
   // status 기준 분기 (progressPct === 100 가 아님) — 99% drop 이 우연히 100 으로 반올림된 경우를
   // completed 로 오분류하지 않기 위해.
+  // 자격미달(screened_out)도 종결이라 100 이다 — completeResponse 가 그렇게 적는다.
+  // 빼면 자격미달 응답을 한 번 수정할 때마다 진척률이 조용히 떨어진다.
   let nextProgressPct: number | null;
-  if (existing.status === 'completed' || completesDrop) {
+  if (
+    existing.status === 'completed' ||
+    existing.status === 'screened_out' ||
+    completesDrop
+  ) {
     nextProgressPct = 100;
   } else {
     const { positionMap, totalQuestions } = await getProgressSnapshot(effectiveVersionId);
@@ -197,6 +208,14 @@ export async function saveAdminEdit(
   // input.questionResponses 를 in-place 로 건드리면 이후 호출부가 원본 input 을 재사용/로깅할
   // 때 조용히 값이 달라져 있는 사고를 유발할 수 있다.
   let finalResponses = questionResponses;
+  // 자격미달 재판정도 같은 재료(스냅샷 질문·그룹·LUT·컨택 attrs)를 써야 판정이 갈리지
+  // 않으므로 블록 밖에서 보관한다.
+  let snapshotForCalc: {
+    questions: Question[];
+    lookups: SurveyLookup[];
+    groups: QuestionGroup[];
+  } | null = null;
+  let contactAttrs: Record<string, string | undefined> = {};
   if (versionSnapshot) {
     // contracts/survey 의 SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
     // 보장이 타입 레벨엔 없다(questions 는 필수로 선언돼 있지만 손상된 스냅샷 행이 들어오면
@@ -213,7 +232,7 @@ export async function saveAdminEdit(
     // JSONB 스키마 드리프트 방어 — questions/lookups/groups 가 비배열(객체·문자열)이면
     // withCalcValues 순회나 lookup find 에서 크래시해 운영자 수정 전체가 실패한다.
     // Array.isArray 로 걸러 손상 스냅샷에서도 재계산만 조용히 스킵되게 한다.
-    const snapshotForCalc = {
+    snapshotForCalc = {
       questions: Array.isArray(rawSnapshotForCalc.questions)
         ? (rawSnapshotForCalc.questions as Question[])
         : [],
@@ -225,7 +244,6 @@ export async function saveAdminEdit(
         : [],
     };
 
-    let contactAttrs: Record<string, string | undefined> = {};
     if (existing.contactTargetId) {
       const [target] = await db
         .select({ attrs: contactTargets.attrs })
@@ -285,6 +303,50 @@ export async function saveAdminEdit(
     : clientChangedIds;
   const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
 
+  // ── 자격미달 양방향 재판정 ───────────────────────────────────────────────
+  // 운영자가 자격미달 조건 문항을 고치면 상태도 따라가야 한다. 종전에는 status 를
+  // 아예 set 하지 않아, 조건을 풀어 줘도 screened_out 이 그대로 남았다(실제 사고).
+  //
+  // 대상은 종결 응답(completed·screened_out)과 이번 저장으로 완료 전환되는 drop 뿐이다.
+  // in_progress 는 응답자 세션 중이라 건드리지 않고(기존 규약), quotaful_out·bad 는
+  // 자격미달과 다른 축의 종결이라 재판정이 덮어써선 안 된다.
+  //
+  // 판정 재료는 평문 finalResponses(= 숨은 문항 strip → 게이팅 strip → calc 재계산 이후)
+  // 다. 암호화 이전이어야 분기 매칭이 성립한다. 스냅샷을 못 얻으면(레거시 versionId,
+  // 손상 행, 변경 0건) 재판정을 건너뛰고 기존 상태를 보존한다 — 운영자의 정당한 수정이
+  // 판정 불능으로 실패하거나 조용히 강등되지 않게 하는 fail-safe (calc 재계산과 같은 정책).
+  const reJudgeable =
+    existing.status === 'completed' || existing.status === 'screened_out' || completesDrop;
+  const screenedOut =
+    reJudgeable && snapshotForCalc && snapshotForCalc.questions.length > 0
+      ? detectScreenOut(snapshotForCalc.questions, finalResponses, {
+          groups: snapshotForCalc.groups,
+          evalCtx: {
+            responses: responsesToLookupShape(finalResponses),
+            contactAttrs,
+            lookups: snapshotForCalc.lookups,
+          },
+        })
+      : null;
+
+  // 종결 상태 set — 재판정이 돌았으면 그 결과가, 안 돌았으면 기존 drop→completed 예외만
+  // 반영된다. completedAt 은 이미 있으면 보존한다(자격미달도 완료 시점에 기록된다).
+  const terminalStatusSet: {
+    status?: 'completed' | 'screened_out';
+    isCompleted?: boolean;
+    completedAt?: Date;
+  } =
+    screenedOut === null
+      ? completesDrop
+        ? { status: 'completed', isCompleted: true, completedAt: now }
+        : {}
+      : {
+          status: screenedOut ? 'screened_out' : 'completed',
+          // 자격미달은 완료 수 분자에서 빠진다 — completeResponse 와 같은 규칙.
+          isCompleted: !screenedOut,
+          ...(existing.completedAt === null ? { completedAt: now } : {}),
+        };
+
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
   const piiTargets = await loadPiiTargets(effectiveVersionId, surveyId);
   const storedResponses = hasPiiTargets(piiTargets)
@@ -314,10 +376,9 @@ export async function saveAdminEdit(
         lastActivityAt: now,
         currentStepId: null,
         progressPct: nextProgressPct,
-        // 이탈 응답 완료 전환 (상단 docstring 예외 참조) — 그 외 상태는 보존.
-        ...(completesDrop
-          ? { status: 'completed' as const, isCompleted: true, completedAt: now }
-          : {}),
+        // 이탈 응답 완료 전환 + 자격미달 양방향 재판정 (위 블록 참조).
+        // 그 밖의 상태(in_progress·quotaful_out·bad)는 보존된다.
+        ...terminalStatusSet,
         // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 원본 1회 백업.
         // adminEditRollback/migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다
         // (재수정해도 원본 유지). 백업의 questionResponses 는 DB 암호문 그대로 —
