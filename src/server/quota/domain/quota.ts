@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { QuotaConfig } from '@/shared/contracts/quota';
+import { QUOTA_DIMENSION_KINDS, type QuotaConfig } from '@/shared/contracts/quota';
 
 export const QuotaCategorySchema = z.object({
   id: z.string(),
@@ -8,13 +8,17 @@ export const QuotaCategorySchema = z.object({
   values: z.array(z.string()).optional(),
   min: z.number().nullable().optional(),
   max: z.number().nullable().optional(),
+  keywords: z.array(z.string()).optional(),
+  isElse: z.boolean().optional(),
 });
 
 export const QuotaDimensionSchema = z.object({
   id: z.string(),
   questionId: z.string(),
   label: z.string(),
-  kind: z.enum(['choice', 'numeric']),
+  kind: z.enum(QUOTA_DIMENSION_KINDS),
+  attrKey: z.string().optional(),
+  cellIds: z.array(z.string()).optional(),
   categories: z.array(QuotaCategorySchema),
 });
 

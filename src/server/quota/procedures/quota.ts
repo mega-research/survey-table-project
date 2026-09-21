@@ -3,6 +3,7 @@ import * as z from 'zod';
 import { authed, pub, withRateLimit } from '@/server/orpc';
 
 import { QuotaCheckInput, QuotaCheckResult, QuotaConfigSchema } from '../domain/quota';
+import { listQuotaAttrValues } from '../services/attr-values';
 import * as svc from '../services/quota';
 
 const get = authed
@@ -24,4 +25,10 @@ const check = pub
   .output(QuotaCheckResult)
   .handler(({ input }) => svc.checkQuota(input));
 
-export const quota = { get, save, check };
+// 속성형 차원의 카테고리 초안 — 명단 attrs 열의 고유 값. pii 는 attrs 에 없어 읽히지 않는다.
+const attrValues = authed
+  .input(z.object({ surveyId: z.string(), attrKey: z.string().min(1) }))
+  .output(z.object({ values: z.array(z.string()), truncated: z.boolean() }))
+  .handler(({ input }) => listQuotaAttrValues(input.surveyId, input.attrKey));
+
+export const quota = { get, save, check, attrValues };

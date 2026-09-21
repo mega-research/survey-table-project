@@ -29,7 +29,7 @@ const status: QuotaStatus = {
       tone: 'good',
     },
   ],
-  summary: { targetTotal: 10, currentTotal: 7, pct: 70, closedCells: 0, totalCells: 12 },
+  summary: { targetTotal: 10, currentTotal: 7, pct: 70, closedCells: 0, totalCells: 12, unclassified: 0 },
 };
 
 /** 기본 접힘 상태이므로 제목을 클릭해 펼친다. */

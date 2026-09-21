@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
+
 import { and, asc, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
@@ -341,10 +343,7 @@ export async function getSurveyForResponse(
         },
         lookups: snapshot.lookups ?? survey.lookups ?? [],
         ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-        quotaGate:
-          survey.quotaConfig && survey.quotaConfig.enabled
-            ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
-            : null,
+        quotaGate: buildQuotaGate(survey.quotaConfig),
         contactEmail: survey.contactEmail ?? null,
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
@@ -364,10 +363,7 @@ export async function getSurveyForResponse(
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) return null;
 
-  const quotaGate =
-    survey.quotaConfig && survey.quotaConfig.enabled
-      ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
-      : null;
+  const quotaGate = buildQuotaGate(survey.quotaConfig);
 
   // 미배포 설문에는 얼린 앵커가 없으므로 라이브 앵커를 그대로 쓴다 — 빌더 미리보기가
   // 발행 전에도 분할 화면을 보여줄 수 있어야 한다.

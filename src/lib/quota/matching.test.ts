@@ -8,6 +8,7 @@ import {
   findTarget,
   normalizeAnswerValues,
   resolveCategoryId,
+  resolveSubjectCategoryId,
   tallyAll,
 } from '@/lib/quota/matching';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
@@ -98,14 +99,14 @@ describe('resolveCategoryId — numeric (min ≤ 값 < max, 반열림)', () => {
 
 describe('deriveCategoryIds', () => {
   it('모든 차원 매칭 시 차원 순서대로 categoryId 배열', () => {
-    expect(deriveCategoryIds(config, { 'q-gender': 'female', 'q-age': '63' })).toEqual(['c-f', 'c-60']);
+    expect(deriveCategoryIds(config, { answers: { 'q-gender': 'female', 'q-age': '63' }, attrs: null })).toEqual(['c-f', 'c-60']);
   });
   it('한 차원이라도 미매칭이면 null (미분류)', () => {
-    expect(deriveCategoryIds(config, { 'q-gender': 'female', 'q-age': '45' })).toBeNull();
-    expect(deriveCategoryIds(config, { 'q-gender': 'other', 'q-age': '63' })).toBeNull();
+    expect(deriveCategoryIds(config, { answers: { 'q-gender': 'female', 'q-age': '45' }, attrs: null })).toBeNull();
+    expect(deriveCategoryIds(config, { answers: { 'q-gender': 'other', 'q-age': '63' }, attrs: null })).toBeNull();
   });
   it('차원 답 누락도 null', () => {
-    expect(deriveCategoryIds(config, { 'q-gender': 'female' })).toBeNull();
+    expect(deriveCategoryIds(config, { answers: { 'q-gender': 'female' }, attrs: null })).toBeNull();
   });
 });
 
@@ -127,7 +128,7 @@ describe('countCell / tallyAll', () => {
     { 'q-gender': 'female', 'q-age': '65' }, // c-f,c-60
     { 'q-gender': 'male', 'q-age': '25' }, // c-m,c-20
     { 'q-gender': 'other', 'q-age': '25' }, // 미분류
-  ];
+  ].map((answers) => ({ answers, attrs: null }));
   it('countCell은 해당 셀에 속하는 응답 수', () => {
     expect(countCell(config, ['c-f', 'c-60'], answersList)).toBe(2);
     expect(countCell(config, ['c-m', 'c-20'], answersList)).toBe(1);
@@ -156,5 +157,129 @@ describe('resolveCategoryId — numeric: 빈/공백은 0으로 오인 금지 (0 
   });
   it('실제 0은 매칭됨', () => {
     expect(resolveCategoryId(zeroBinDim, '0')).toBe('c-0-2');
+  });
+});
+
+// ── 조사 대상 속성형 · 텍스트형 (팹리스 수요기업 조사의 표본 배분이 출처) ──
+
+const fieldDim: QuotaDimension = {
+  id: 'd-field',
+  questionId: '',
+  label: '산업 분야',
+  kind: 'attr',
+  attrKey: '산업 분야',
+  categories: [
+    { id: 'c-ai', label: '인공지능', values: ['인공지능 및 지능형 컴퓨팅'] },
+    { id: 'c-bio', label: '바이오', values: ['바이오 및 의료기기'] },
+  ],
+};
+
+const SIDO = 'cell-sido';
+const SIGUNGU = 'cell-sigungu';
+const regionDim: QuotaDimension = {
+  id: 'd-region',
+  questionId: 'q1',
+  label: '지역',
+  kind: 'text',
+  cellIds: [SIDO, SIGUNGU],
+  categories: [
+    { id: 'c-sn', label: '성남시', keywords: ['성남', 'seongnam', ''] },
+    { id: 'c-etc', label: '성남시 외', isElse: true },
+  ],
+};
+
+function address(sido: string, sigungu: string) {
+  return { answers: { q1: { [SIDO]: sido, [SIGUNGU]: sigungu, other: '성남' } }, attrs: null };
+}
+
+describe('resolveSubjectCategoryId — attr', () => {
+  it('명단 값이 카테고리 values 와 완전 일치하면 그 id', () => {
+    const subject = { answers: {}, attrs: { '산업 분야': '바이오 및 의료기기' } };
+    expect(resolveSubjectCategoryId(fieldDim, subject)).toBe('c-bio');
+  });
+  it('앞뒤 공백은 정돈한다', () => {
+    const subject = { answers: {}, attrs: { '산업 분야': ' 인공지능 및 지능형 컴퓨팅 ' } };
+    expect(resolveSubjectCategoryId(fieldDim, subject)).toBe('c-ai');
+  });
+  it('부분 일치는 매칭이 아니다', () => {
+    const subject = { answers: {}, attrs: { '산업 분야': '바이오' } };
+    expect(resolveSubjectCategoryId(fieldDim, subject)).toBeNull();
+  });
+  it('조사 대상이 없거나 열이 비면 미분류', () => {
+    expect(resolveSubjectCategoryId(fieldDim, { answers: {}, attrs: null })).toBeNull();
+    expect(resolveSubjectCategoryId(fieldDim, { answers: {}, attrs: {} })).toBeNull();
+    expect(resolveSubjectCategoryId(fieldDim, { answers: {}, attrs: { '산업 분야': ' ' } })).toBeNull();
+  });
+  it('응답값에 같은 키가 있어도 attrs 만 본다', () => {
+    const subject = { answers: { '산업 분야': '바이오 및 의료기기' }, attrs: null };
+    expect(resolveSubjectCategoryId(fieldDim, subject)).toBeNull();
+  });
+});
+
+describe('resolveSubjectCategoryId — text (표 input 셀 여럿)', () => {
+  it.each([
+    ['경기', '성남시 분당구'],
+    ['경기도', '성남'],
+    ['경기도 성남시', '분당구'],
+    ['성남', '성남'],
+    ['', '경기도성남시중원구'],
+    ['경기', '성 남 시'],
+    ['Gyeonggi', 'SeongNam-si'],
+  ])('「%s / %s」 는 성남시', (sido, sigungu) => {
+    expect(resolveSubjectCategoryId(regionDim, address(sido, sigungu))).toBe('c-sn');
+  });
+  it('키워드에 안 걸리고 값이 있으면 그 외', () => {
+    expect(resolveSubjectCategoryId(regionDim, address('서울', '강남구'))).toBe('c-etc');
+    expect(resolveSubjectCategoryId(regionDim, address('', '수원시'))).toBe('c-etc');
+  });
+  it('대상 칸이 전부 비면 미분류 — 대상이 아닌 칸의 값은 보지 않는다', () => {
+    expect(resolveSubjectCategoryId(regionDim, address('', '  '))).toBeNull();
+    expect(resolveSubjectCategoryId(regionDim, { answers: {}, attrs: null })).toBeNull();
+    expect(resolveSubjectCategoryId(regionDim, { answers: { q1: 'x' }, attrs: null })).toBeNull();
+  });
+  it('칸 경계를 가로지르는 글자는 매칭이 아니다', () => {
+    expect(resolveSubjectCategoryId(regionDim, address('화성', '남양읍'))).toBe('c-etc');
+  });
+  it('그 외가 앞에 있어도 키워드 카테고리가 이긴다', () => {
+    const reversed = { ...regionDim, categories: [...regionDim.categories].reverse() };
+    expect(resolveSubjectCategoryId(reversed, address('경기', '성남시'))).toBe('c-sn');
+  });
+  it('빈 키워드만 있는 카테고리는 아무것도 받지 않는다', () => {
+    const dim = { ...regionDim, categories: [{ id: 'c-x', label: 'x', keywords: ['', ' '] }] };
+    expect(resolveSubjectCategoryId(dim, address('서울', '강남구'))).toBeNull();
+  });
+});
+
+describe('resolveSubjectCategoryId — text (단답형 문항)', () => {
+  const dim: QuotaDimension = {
+    id: 'd-t',
+    questionId: 'q-city',
+    label: '도시',
+    kind: 'text',
+    categories: [
+      { id: 'c-sn', label: '성남', keywords: ['성남'] },
+      { id: 'c-etc', label: '그 외', isElse: true },
+    ],
+  };
+  it('문자열 응답을 그대로 본다', () => {
+    expect(resolveSubjectCategoryId(dim, { answers: { 'q-city': '경기도 성남시' }, attrs: null })).toBe('c-sn');
+    expect(resolveSubjectCategoryId(dim, { answers: { 'q-city': '서울' }, attrs: null })).toBe('c-etc');
+    expect(resolveSubjectCategoryId(dim, { answers: { 'q-city': '' }, attrs: null })).toBeNull();
+  });
+});
+
+describe('deriveCategoryIds — 속성형 × 텍스트형 교차', () => {
+  const crossed = normalizeQuotaConfig({
+    enabled: true,
+    dimensions: [fieldDim, regionDim],
+    cells: [{ categoryIds: ['c-ai', 'c-sn'], target: 10 }],
+    closedMessage: null,
+  })!;
+  it('차원 순서대로 카테고리를 잇는다', () => {
+    const subject = { ...address('경기', '성남시'), attrs: { '산업 분야': '인공지능 및 지능형 컴퓨팅' } };
+    expect(deriveCategoryIds(crossed, subject)).toEqual(['c-ai', 'c-sn']);
+  });
+  it('익명 응답은 주소가 있어도 미분류', () => {
+    expect(deriveCategoryIds(crossed, address('경기', '성남시'))).toBeNull();
   });
 });

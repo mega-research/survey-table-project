@@ -249,7 +249,11 @@ export async function completeResponse(
   // 해당 경로는 notice-only 등 쿼터 게이트가 없는 흐름이다.
   let quotaOverflow = false;
   if (validatedResponses && gateRow && !gateRow.isTest) {
-    quotaOverflow = await detectQuotaOverflow(gateRow.surveyId, validatedResponses);
+    quotaOverflow = await detectQuotaOverflow(
+      gateRow.surveyId,
+      validatedResponses,
+      gateRow.contactTargetId,
+    );
   }
 
   // 판정용 표시 조건 평가 컨텍스트. 응답 페이지가 쓰는 것과 같은 재료(스냅샷 그룹·LUT·

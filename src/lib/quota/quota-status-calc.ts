@@ -1,4 +1,4 @@
-import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
+import { type QuotaSubject, cellKeyOf, deriveCategoryIds, tallyAll } from '@/lib/quota/matching';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 
 export type QuotaCellTone = 'done' | 'good' | 'warn' | 'low';
@@ -27,6 +27,11 @@ export interface QuotaSummary {
   pct: number;
   closedCells: number;
   totalCells: number;
+  /**
+   * 미분류 완료 수 — 차원 중 하나라도 카테고리를 얻지 못한 완료 응답. 쿼터 밖에서 새는 응답이라
+   * 키워드·값 누락의 유일한 신호다. 목표 없는(sparse) 셀에 분류된 응답은 여기 세지 않는다.
+   */
+  unclassified: number;
 }
 
 export interface QuotaStatus {
@@ -53,12 +58,13 @@ function labelForCategory(config: NormalizedQuotaConfig, dimensionIndex: number,
   return cat?.label ?? categoryId;
 }
 
-/** 완료 응답 answers 목록 → 셀별 현황 + 요약. */
+/** 완료 응답(판정 대상) 목록 → 셀별 현황 + 요약. */
 export function buildQuotaStatus(
   config: NormalizedQuotaConfig,
-  answersList: Record<string, unknown>[],
+  subjects: QuotaSubject[],
 ): QuotaStatus {
-  const counts = tallyAll(config, answersList);
+  const counts = tallyAll(config, subjects);
+  const unclassified = subjects.filter((s) => deriveCategoryIds(config, s) === null).length;
 
   const cells: QuotaCellStatus[] = config.cells.map((cell) => {
     const current = counts.get(cellKeyOf(cell.categoryIds)) ?? 0;
@@ -92,6 +98,7 @@ export function buildQuotaStatus(
       pct: targetTotal > 0 ? Math.round((currentTotal / targetTotal) * 100) : 0,
       closedCells,
       totalCells: cells.length,
+      unclassified,
     },
   };
 }

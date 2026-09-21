@@ -32,10 +32,91 @@ import {
   pivotTotals,
 } from './quota-pivot';
 
+/** 속성형 차원의 소스 후보 — 컬럼 스킴의 attrs 열(pii·system 제외). */
+export interface QuotaAttrColumn {
+  key: string;
+  label: string;
+}
+
 interface Props {
   surveyId: string;
   initialConfig: QuotaConfig | null;
   questions: Question[];
+  /** 조사 대상 명단의 attrs 열. 비면 속성형 조건을 추가할 수 없다. */
+  attrColumns?: QuotaAttrColumn[];
+  /** 초대 토큰 강제 여부 — 꺼져 있으면 속성형 조건에 익명 응답 경고를 띄운다. */
+  requireInviteToken?: boolean;
+}
+
+const KIND_LABEL: Record<QuotaDimension['kind'], string> = {
+  choice: '옵션형',
+  numeric: '숫자형',
+  attr: '조사 대상 속성',
+  text: '텍스트형',
+};
+
+/** "+ 조건 추가" 셀렉트 값 접두 — 문항 id 와 섞이지 않게 새 유형만 접두를 붙인다. */
+const TEXT_PREFIX = 'text:';
+const ATTR_PREFIX = 'attr:';
+
+interface TextCellOption {
+  id: string;
+  label: string;
+}
+
+/** 표 문항의 평문 input 셀 — 텍스트형 조건의 대상 칸 후보. */
+function textCellOptions(q: Question): TextCellOption[] {
+  return (q.tableRowsData ?? []).flatMap((row) =>
+    row.cells
+      .filter((cell) => cell.type === 'input' && cell.inputType !== 'number')
+      .map((cell, i) => ({
+        id: cell.id,
+        label: `${row.label} · ${cell.content?.trim() || cell.placeholder?.trim() || `입력칸 ${i + 1}`}`,
+      })),
+  );
+}
+
+/** 텍스트형 조건으로 쓸 수 있는 문항 — 평문 단답형·장문형, 또는 input 셀이 있는 표. */
+function isTextEligible(q: Question): boolean {
+  if (q.type === 'text') return q.inputType !== 'number';
+  if (q.type === 'textarea') return true;
+  if (q.type === 'table') return textCellOptions(q).length > 0;
+  return false;
+}
+
+function parseKeywords(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => k !== '');
+}
+
+/**
+ * 키워드 입력 — 쉼표로 구분. 타이핑 중인 쉼표·공백을 지우지 않도록 원문은 로컬 상태로 들고,
+ * 조건에는 정돈한 목록만 올린다.
+ */
+function KeywordsInput({
+  label,
+  keywords,
+  onChange,
+}: {
+  label: string;
+  keywords: string[];
+  onChange: (keywords: string[]) => void;
+}) {
+  const [raw, setRaw] = useState(keywords.join(', '));
+  return (
+    <Input
+      aria-label={label}
+      value={raw}
+      placeholder="예: 성남, seongnam"
+      onChange={(e) => {
+        setRaw(e.target.value);
+        onChange(parseKeywords(e.target.value));
+      }}
+      className="h-8 w-72 text-sm"
+    />
+  );
 }
 
 const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMessage: null };
@@ -95,7 +176,132 @@ function categoriesOf(dimensions: QuotaDimension[], index: number): QuotaCategor
   return dimensions[index]?.categories ?? [];
 }
 
-export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
+/** 사라진 문항 자리 — 대상 칸 후보가 비도록 하는 빈 문항. */
+const EMPTY_QUESTION: Question = { id: '', type: 'text', title: '', required: false, order: 0 };
+
+interface TextDimensionBodyProps {
+  dim: QuotaDimension;
+  cellOptions: TextCellOption[];
+  onCellIdsChange: (cellIds: string[]) => void;
+  onCategoryChange: (catId: string, p: Partial<QuotaCategory>) => void;
+  onAddKeywordCategory: () => void;
+  onAddElseCategory: () => void;
+  onRemoveCategory: (catId: string) => void;
+}
+
+/** 텍스트형 조건 본문 — 대상 칸 고르기(표 문항) + 카테고리별 키워드 + 「그 외」. */
+function TextDimensionBody({
+  dim,
+  cellOptions,
+  onCellIdsChange,
+  onCategoryChange,
+  onAddKeywordCategory,
+  onAddElseCategory,
+  onRemoveCategory,
+}: TextDimensionBodyProps) {
+  const cellIds = dim.cellIds ?? [];
+  const hasElse = dim.categories.some((c) => c.isElse);
+  return (
+    <div className="space-y-3">
+      {dim.cellIds && (
+        <fieldset>
+          <legend className="mb-1 text-xs text-slate-400">
+            대상 칸 — 고른 칸 중 어느 하나에라도 키워드가 있으면 그 카테고리입니다
+          </legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {cellOptions.map((opt) => (
+              <label key={opt.id} className="inline-flex items-center gap-1.5 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={cellIds.includes(opt.id)}
+                  onChange={(e) =>
+                    onCellIdsChange(
+                      e.target.checked ? [...cellIds, opt.id] : cellIds.filter((id) => id !== opt.id),
+                    )
+                  }
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      <table className="border-collapse text-sm">
+        <thead>
+          <tr className="text-left text-xs text-slate-400">
+            <th className="px-2 pb-1 font-normal">라벨</th>
+            <th className="px-2 pb-1 font-normal">키워드 (쉼표로 구분 · 하나라도 포함되면 매칭)</th>
+            <th className="px-2 pb-1" />
+          </tr>
+        </thead>
+        <tbody>
+          {dim.categories.map((cat) => (
+            <tr key={cat.id}>
+              <td className="px-2 py-1">
+                <Input
+                  aria-label="카테고리 라벨"
+                  value={cat.label}
+                  onChange={(e) => onCategoryChange(cat.id, { label: e.target.value })}
+                  className="h-8 w-32 text-sm"
+                />
+              </td>
+              <td className="px-2 py-1">
+                {cat.isElse ? (
+                  <span className="text-xs text-slate-500">
+                    그 외 — 값은 있으나 위 키워드에 걸리지 않은 응답 전부
+                  </span>
+                ) : (
+                  <KeywordsInput
+                    label={`${cat.label} 키워드`}
+                    keywords={cat.keywords ?? []}
+                    onChange={(keywords) => onCategoryChange(cat.id, { keywords })}
+                  />
+                )}
+              </td>
+              <td className="px-2 py-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600"
+                  onClick={() => onRemoveCategory(cat.id)}
+                >
+                  삭제
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex gap-4">
+        <button
+          type="button"
+          onClick={onAddKeywordCategory}
+          className="text-sm font-medium text-blue-600 hover:underline"
+        >
+          + 카테고리 추가
+        </button>
+        {!hasElse && (
+          <button
+            type="button"
+            onClick={onAddElseCategory}
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
+            + 「그 외」 추가
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function QuotaEditor({
+  surveyId,
+  initialConfig,
+  questions,
+  attrColumns = [],
+  requireInviteToken = true,
+}: Props) {
   const router = useRouter();
   const [config, setConfig] = useState<QuotaConfig>(initialConfig ?? EMPTY);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +319,13 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
   const addableQuestions = eligibleQuestions.filter(
     (q) => !config.dimensions.some((d) => d.questionId === q.id),
   );
+  const addableTextQuestions = questions.filter(
+    (q) => isTextEligible(q) && !config.dimensions.some((d) => d.questionId === q.id),
+  );
+  const addableAttrColumns = attrColumns.filter(
+    (c) => !config.dimensions.some((d) => d.kind === 'attr' && d.attrKey === c.key),
+  );
+  const hasAttrDimension = config.dimensions.some((d) => d.kind === 'attr');
   const combos = useMemo(() => cartesianCombos(config.dimensions), [config.dimensions]);
   // 조건 3개 전용 피벗(행=최다 카테고리 조건, 열=나머지 둘 중첩). 그 외 개수면 null.
   const pivot = useMemo(() => buildQuotaPivot(config.dimensions), [config.dimensions]);
@@ -141,9 +354,121 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
     patch({ dimensions: [...config.dimensions, dim], cells: [] });
   }
 
-  function handleAddDimension(questionId: string) {
-    addDimensionFromQuestion(questionId);
+  function addTextDimension(questionId: string) {
+    const q = questions.find((x) => x.id === questionId);
+    if (!q) return;
+    const dim: QuotaDimension = {
+      id: generateId(),
+      questionId: q.id,
+      label: q.title,
+      kind: 'text',
+      ...(q.type === 'table' ? { cellIds: [] } : {}),
+      categories: [
+        { id: generateId(), label: '새 카테고리', keywords: [] },
+        { id: generateId(), label: '그 외', isElse: true },
+      ],
+    };
+    patch({ dimensions: [...config.dimensions, dim], cells: [] });
+  }
+
+  /** 속성형 — 명단에 실제로 있는 값 목록을 읽어 1값=1카테고리 초안을 만든다. */
+  function addAttrDimension(attrKey: string) {
+    const column = attrColumns.find((c) => c.key === attrKey);
+    if (!column) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const { values, truncated } = await client.quota.attrValues({ surveyId, attrKey });
+        if (truncated) {
+          setError(`"${column.label}" 열은 값 종류가 너무 많아 쿼터 조건으로 쓸 수 없습니다.`);
+          return;
+        }
+        if (values.length === 0) {
+          setError(`"${column.label}" 열에 값이 있는 조사 대상이 없습니다.`);
+          return;
+        }
+        const dim: QuotaDimension = {
+          id: generateId(),
+          questionId: '',
+          label: column.label,
+          kind: 'attr',
+          attrKey,
+          categories: values.map((v) => ({ id: generateId(), label: v, values: [v] })),
+        };
+        setConfig((prev) => ({ ...prev, dimensions: [...prev.dimensions, dim], cells: [] }));
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    });
+  }
+
+  function handleAddDimension(value: string) {
+    if (value.startsWith(ATTR_PREFIX)) addAttrDimension(value.slice(ATTR_PREFIX.length));
+    else if (value.startsWith(TEXT_PREFIX)) addTextDimension(value.slice(TEXT_PREFIX.length));
+    else addDimensionFromQuestion(value);
     setAddDimensionValue('');
+  }
+
+  function updateDimension(dimId: string, p: Partial<QuotaDimension>) {
+    patch({ dimensions: config.dimensions.map((d) => (d.id === dimId ? { ...d, ...p } : d)) });
+  }
+
+  function updateCategory(dimId: string, catId: string, p: Partial<QuotaCategory>) {
+    patch({
+      dimensions: config.dimensions.map((d) =>
+        d.id !== dimId
+          ? d
+          : { ...d, categories: d.categories.map((c) => (c.id === catId ? { ...c, ...p } : c)) },
+      ),
+    });
+  }
+
+  /** 키워드 카테고리는 「그 외」 앞에 끼운다 — 「그 외」는 언제나 마지막이다. */
+  function addKeywordCategory(dimId: string) {
+    patch({
+      dimensions: config.dimensions.map((d) => {
+        if (d.id !== dimId) return d;
+        const added: QuotaCategory = { id: generateId(), label: '새 카테고리', keywords: [] };
+        return {
+          ...d,
+          categories: [
+            ...d.categories.filter((c) => !c.isElse),
+            added,
+            ...d.categories.filter((c) => c.isElse),
+          ],
+        };
+      }),
+      cells: [],
+    });
+  }
+
+  function addElseCategory(dimId: string) {
+    patch({
+      dimensions: config.dimensions.map((d) =>
+        d.id !== dimId || d.categories.some((c) => c.isElse)
+          ? d
+          : { ...d, categories: [...d.categories, { id: generateId(), label: '그 외', isElse: true }] },
+      ),
+      cells: [],
+    });
+  }
+
+  /** 소스가 사라진 조건 — 그대로 두면 전원 미분류가 된다. */
+  function missingSourceMessage(d: QuotaDimension): string | null {
+    if (d.kind === 'attr') {
+      return attrColumns.some((c) => c.key === d.attrKey)
+        ? null
+        : '조사 대상 명단에 이 열이 없습니다. 이 조건이 있는 동안 모든 응답이 미분류가 됩니다.';
+    }
+    const q = questions.find((x) => x.id === d.questionId);
+    if (!q) return '문항을 찾을 수 없습니다. 이 조건이 있는 동안 모든 응답이 미분류가 됩니다.';
+    if (d.kind === 'text' && d.cellIds) {
+      const known = new Set(textCellOptions(q).map((o) => o.id));
+      if (d.cellIds.some((id) => !known.has(id))) {
+        return '대상 칸 일부가 문항에서 사라졌습니다. 대상 칸을 다시 골라 주세요.';
+      }
+    }
+    return null;
   }
 
   function updateCategoryRange(
@@ -211,6 +536,16 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
   function validate(): string | null {
     for (const d of config.dimensions) {
       if (d.categories.length === 0) return `조건 "${d.label}"에 카테고리가 없습니다.`;
+      if (d.kind === 'text') {
+        if (d.cellIds && d.cellIds.length === 0) {
+          return `조건 "${d.label}"의 대상 칸을 하나 이상 골라 주세요.`;
+        }
+        for (const c of d.categories) {
+          if (!c.isElse && (c.keywords ?? []).length === 0) {
+            return `카테고리 "${c.label}"에 키워드가 없습니다.`;
+          }
+        }
+      }
       if (d.kind === 'numeric') {
         for (const c of d.categories) {
           if (
@@ -283,7 +618,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-bold text-slate-900">조건 {i + 1}</span>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500">
-                  {dim.kind === 'choice' ? '옵션형' : '숫자형'}
+                  {KIND_LABEL[dim.kind]}
                 </span>
                 <span className="text-sm text-slate-700">{dim.label}</span>
                 {dim.kind === 'numeric' && (
@@ -300,7 +635,25 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
               </Button>
             </div>
 
-            {dim.kind === 'choice' ? (
+            {missingSourceMessage(dim) && (
+              <p role="alert" className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+                {missingSourceMessage(dim)}
+              </p>
+            )}
+
+            {dim.kind === 'text' ? (
+              <TextDimensionBody
+                dim={dim}
+                cellOptions={textCellOptions(
+                  questions.find((q) => q.id === dim.questionId) ?? EMPTY_QUESTION,
+                )}
+                onCellIdsChange={(cellIds) => updateDimension(dim.id, { cellIds })}
+                onCategoryChange={(catId, p) => updateCategory(dim.id, catId, p)}
+                onAddKeywordCategory={() => addKeywordCategory(dim.id)}
+                onAddElseCategory={() => addElseCategory(dim.id)}
+                onRemoveCategory={(catId) => removeCategory(dim.id, catId)}
+              />
+            ) : dim.kind === 'choice' || dim.kind === 'attr' ? (
               <ul aria-label={`${dim.label} 변수 목록`} className="flex flex-wrap gap-2">
                 {dim.categories.map((cat, ci) => (
                   <li
@@ -402,12 +755,28 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                   {kindForQuestion(q) === 'numeric' ? ' (단답 숫자)' : ''}
                 </SelectItem>
               ))}
+              {addableAttrColumns.map((c) => (
+                <SelectItem key={`${ATTR_PREFIX}${c.key}`} value={`${ATTR_PREFIX}${c.key}`}>
+                  [조사 대상 속성] {c.label}
+                </SelectItem>
+              ))}
+              {addableTextQuestions.map((q) => (
+                <SelectItem key={`${TEXT_PREFIX}${q.id}`} value={`${TEXT_PREFIX}${q.id}`}>
+                  [텍스트 키워드] {q.title}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          {addableQuestions.length === 0 && (
+          {hasAttrDimension && !requireInviteToken && (
+            <p role="alert" className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+              초대 링크 없이 들어온 익명 응답은 조사 대상 속성을 알 수 없어 쿼터에 걸리지 않고
+              완료됩니다. 설문 설정에서 「초대 토큰 강제」를 켜는 것을 권장합니다.
+            </p>
+          )}
+          {addableQuestions.length + addableAttrColumns.length + addableTextQuestions.length === 0 && (
             <p className="mt-2 text-xs text-slate-400">
-              추가할 수 있는 문항이 없습니다. 라디오·드롭다운 단일 선택 또는 숫자 단답형 문항이
-              필요합니다.
+              추가할 수 있는 조건이 없습니다. 라디오·드롭다운 단일 선택, 단답형 문항, 입력 칸이 있는
+              표 문항, 또는 조사 대상 명단의 속성 열이 필요합니다.
             </p>
           )}
         </div>

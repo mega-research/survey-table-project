@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 
 import { QuotaEditor } from '@/features/operations/quota/quota-editor';
-import { getQuestionsBySurvey } from '@/server/read-models/survey-structure';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getQuestionsBySurvey, getSurveyById } from '@/server/read-models/survey-structure';
 import { getQuotaConfig } from '@/server/quota/services/quota';
 import type { InputType, Question } from '@/types/survey';
 
@@ -40,21 +42,34 @@ function toQuestion(row: Awaited<ReturnType<typeof getQuestionsBySurvey>>[number
 
 export default async function QuotaPage({ params }: PageProps) {
   const { id: surveyId } = await params;
-  const [config, questionRows] = await Promise.all([
+  const scope = await getOperationsDataScope(surveyId);
+  const [config, questionRows, scheme, survey] = await Promise.all([
     getQuotaConfig(surveyId),
     getQuestionsBySurvey(surveyId),
+    getContactColumnScheme(surveyId, scope),
+    getSurveyById(surveyId),
   ]);
   const questions = questionRows.map(toQuestion);
+  // 속성형 조건의 소스 후보 — attrs 열만. pii 는 암호문이라 매칭할 수 없고 system 은 명단 값이 아니다.
+  const attrColumns = (scheme?.columns ?? [])
+    .filter((c) => c.source.startsWith('attrs.'))
+    .map((c) => ({ key: c.source.slice('attrs.'.length), label: c.label }));
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">쿼터 설정</h2>
         <p className="text-sm text-slate-600">
-          차원(문항)을 고르고 셀별 목표를 정하면, 완료 수가 목표에 도달한 셀은 자동 마감됩니다.
+          차원(문항·조사 대상 속성)을 고르고 셀별 목표를 정하면, 완료 수가 목표에 도달한 셀은 자동 마감됩니다.
         </p>
       </div>
-      <QuotaEditor surveyId={surveyId} initialConfig={config} questions={questions} />
+      <QuotaEditor
+        surveyId={surveyId}
+        initialConfig={config}
+        questions={questions}
+        attrColumns={attrColumns}
+        requireInviteToken={survey?.requireInviteToken ?? false}
+      />
     </main>
   );
 }

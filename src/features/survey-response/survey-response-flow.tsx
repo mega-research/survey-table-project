@@ -80,7 +80,7 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
+import { shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
@@ -1634,7 +1634,7 @@ function SurveyResponseFlowActive({
     // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
     let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
       null;
-    if (!quotaCheckedRef.current && allQuotaQuestionsAnswered([...quotaGateIds], responses)) {
+    if (!quotaCheckedRef.current && shouldCheckQuota(loadedSurvey?.quotaGate, responses)) {
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;

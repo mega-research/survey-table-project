@@ -120,6 +120,14 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                       테스트 응답 집계
                     </span>
                   )}
+                  {status.summary.unclassified > 0 && (
+                    <span
+                      className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600"
+                      title="어느 조건에도 분류되지 않아 쿼터에 걸리지 않고 완료된 응답입니다. 키워드·값 누락을 확인하세요."
+                    >
+                      미분류 {numberFormatter.format(status.summary.unclassified)}
+                    </span>
+                  )}
                 </h3>
               </button>
             </CollapsibleTrigger>

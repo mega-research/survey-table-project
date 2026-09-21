@@ -4,8 +4,11 @@ import 'server-only';
 import { notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
-import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
+import {
+  loadCompletedQuotaSubjects,
+  loadContactAttrsForQuota,
+} from '@/server/read-models/completed-answers';
+import { countCell, deriveCategoryIds, findTarget, needsContactAttrs } from '@/lib/quota/matching';
 import { normalizeQuotaConfig, type NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 
@@ -52,20 +55,23 @@ export async function checkQuota(input: {
       eq(surveyResponses.surveyId, input.surveyId),
       notDeletedResponse,
     ),
-    columns: { isTest: true },
+    columns: { isTest: true, contactTargetId: true },
   });
   if (!response) throw new Error('쿼터 응답 범위가 일치하지 않습니다.');
   if (response.isTest) return { blocked: false, closedMessage: null };
 
-  const categoryIds = deriveCategoryIds(config, input.answers);
+  // 조사 대상 attrs 는 응답 행의 연결로 서버가 읽는다 — 클라이언트가 보낸 값은 받지 않는다.
+  const withAttrs = needsContactAttrs(config);
+  const attrs = withAttrs ? await loadContactAttrsForQuota(response.contactTargetId) : null;
+  const categoryIds = deriveCategoryIds(config, { answers: input.answers, attrs });
   if (!categoryIds) return { blocked: false, closedMessage: null };
 
   const target = findTarget(config, categoryIds);
   if (target === null) return { blocked: false, closedMessage: null };
 
   // 집행 모수는 언제나 실응답(real) — 테스트 파티션은 쿼터를 소비하지 않는다.
-  const answersList = await loadCompletedPlainAnswers(input.surveyId, 'real');
-  const current = countCell(config, categoryIds, answersList);
+  const subjects = await loadCompletedQuotaSubjects(input.surveyId, 'real', { withAttrs });
+  const current = countCell(config, categoryIds, subjects);
 
   if (current >= target) {
     await markQuotaFull(input.responseId, input.surveyId);

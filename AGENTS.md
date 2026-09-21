@@ -689,7 +689,11 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 `surveys.quota_config` (JSONB, NULL = 쿼터 없음) + `features/operations/quota` + `lib/quota/`.
 
-- 차원(`questionId` 바인딩, `choice` | `numeric`) × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만.
+- 차원 × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만. 차원 유형은 넷(`QUOTA_DIMENSION_KINDS`): 문항 바인딩 `choice`(보기값)·`numeric`(구간)·`text`(키워드 포함), 그리고 명단 attrs 열 바인딩 `attr`(값 완전 일치, `questionId` 는 빈 문자열). JSONB 라 마이그레이션 없음.
+- **분류 입력은 응답값이 아니라 판정 대상 `QuotaSubject`(응답값 + 조사 대상 attrs)다.** attrs 는 서버가 응답 행의 `contactTargetId` 로 읽은 값만 싣는다 — 클라이언트 입력 금지. 모수 로더 `loadCompletedQuotaSubjects` 는 `needsContactAttrs(config)` 일 때만 조사 대상을 한 번 더 읽는다. 집행·완료 시점 초과 감지·현황판 셋이 같은 `deriveCategoryIds` 를 쓴다.
+- **텍스트형**: 표 문항이면 `cellIds` 의 input 칸들, 단답형이면 응답 문자열 하나를 본다. 칸별로 공백 제거·소문자화 후 키워드 포함(카테고리 안 OR, 칸은 이어 붙이지 않는다). `isElse` 카테고리(「그 외」)는 놓인 자리와 무관하게 키워드가 전부 빗나간 뒤에만 받고, 대상 칸이 전부 비면 미분류다. 오탈자는 「그 외」로 들어가 미분류 수로는 안 보인다.
+- **미분류**(차원 하나라도 카테고리 없음)는 쿼터에 걸리지 않고 통과한다. 속성형에서는 익명 응답이 항상 미분류라 `requireInviteToken` 을 켜는 것이 관례다(편집 화면이 경고, 코드 강제 없음). 현황판 요약 `unclassified` 가 그 수를 보인다.
+- **쿼터 게이트**(`lib/quota/quota-gate-build.ts` → `Survey.quotaGate`): 속성형은 게이트 문항을 만들지 않는다. 텍스트형 표 문항은 `cellIdsByQuestion` 의 대상 칸에 값이 있어야 "답변됨"이다 — 표 응답은 다른 칸만 채워도 객체가 생겨, 객체 존재로 판정하면 응답당 1회뿐인 확인이 주소를 적기 전에 소진된다. 문항 기반 차원이 없는 플랜은 `checkWithoutQuestions` 로 첫 전환에서 확인한다.
 - `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
 - **publish 없이 즉시 반영되는 라이브 컬럼** (`isPaused`/`pausedMessage`와 동일 취급).
 - 실시간 달성률은 완료 응답 기준 — `docs/adr/0002-quota-realtime-from-completed-answers.md`.

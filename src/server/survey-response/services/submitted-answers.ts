@@ -9,8 +9,11 @@ import {
   type PiiTargets,
 } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
-import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
+import {
+  loadCompletedQuotaSubjects,
+  loadContactAttrsForQuota,
+} from '@/server/read-models/completed-answers';
+import { countCell, deriveCategoryIds, findTarget, needsContactAttrs } from '@/lib/quota/matching';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
@@ -236,6 +239,7 @@ export async function loadPiiTargets(
 export async function detectQuotaOverflow(
   surveyId: string,
   plainAnswers: Record<string, unknown>,
+  contactTargetId: string | null,
 ): Promise<boolean> {
   try {
     const surveyRow = await db.query.surveys.findFirst({
@@ -247,13 +251,15 @@ export async function detectQuotaOverflow(
     const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
     if (!config?.enabled) return false;
 
-    const categoryIds = deriveCategoryIds(config, plainAnswers);
+    const withAttrs = needsContactAttrs(config);
+    const attrs = withAttrs ? await loadContactAttrsForQuota(contactTargetId) : null;
+    const categoryIds = deriveCategoryIds(config, { answers: plainAnswers, attrs });
     if (!categoryIds) return false;
     const target = findTarget(config, categoryIds);
     if (target === null) return false;
 
-    const answersList = await loadCompletedPlainAnswers(surveyId, 'real');
-    return countCell(config, categoryIds, answersList) >= target;
+    const subjects = await loadCompletedQuotaSubjects(surveyId, 'real', { withAttrs });
+    return countCell(config, categoryIds, subjects) >= target;
   } catch (err) {
     logger.error({ surveyId, err }, '[quota] 완료 시점 초과 감지 실패 — fail-open 통과');
     return false;
