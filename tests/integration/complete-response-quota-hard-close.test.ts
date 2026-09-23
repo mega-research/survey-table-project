@@ -10,8 +10,9 @@ import { Param } from 'drizzle-orm';
 // 도착한 제출을 완료로 만들지 않고 답변은 저장한 채 quotaful_out 으로 돌린다. 옵션이 꺼진
 // 설문은 종전(complete-response-quota-overflow.test.ts — 완료 수용 + 표식) 그대로다.
 //
-// 좋은 테스트는 "누가 완료되고 누가 쿼터마감되는가"만 본다 — 잠금 SQL 자체는 단언하지 않는다.
-// db 모킹은 complete-response-quota-overflow.test.ts 하네스를 복제하고 tx.execute 를 더했다.
+// 좋은 테스트는 "누가 완료되고 누가 쿼터마감되는가"만 본다 — 잠금 호출 여부는 단언하지 않는다
+// (PRD Testing Decisions). db 모킹은 complete-response-quota-overflow.test.ts 하네스를 복제하고
+// tx.execute·.for('update') 를 더했다.
 
 const {
   selectTerminalQueue,
@@ -19,7 +20,6 @@ const {
   updateReturningMock,
   surveysRowHolder,
   gateRowHolder,
-  txExecuteMock,
   outerUpdateMock,
 } = vi.hoisted(() => ({
   selectTerminalQueue: [] as unknown[][],
@@ -27,7 +27,6 @@ const {
   updateReturningMock: vi.fn(),
   surveysRowHolder: { row: {} as Record<string, unknown> },
   gateRowHolder: { row: {} as Record<string, unknown> },
-  txExecuteMock: vi.fn(async () => []),
   outerUpdateMock: vi.fn(),
 }));
 
@@ -42,6 +41,8 @@ vi.mock('@/db', () => {
     chain['where'] = vi.fn(() => {
       const whereResult: Record<string, unknown> = {
         limit: vi.fn(() => Promise.resolve(nextSelectTerminal())),
+        // 빈 complete 경로의 row lock 읽기(.for('update'))
+        for: vi.fn(() => Promise.resolve(nextSelectTerminal())),
         then: (resolve: (v: unknown) => unknown) => resolve(nextSelectTerminal()),
       };
       return whereResult;
@@ -73,7 +74,7 @@ vi.mock('@/db', () => {
         select: vi.fn(() => makeSelectChain()),
         update: vi.fn(() => makeUpdateChain()),
         insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve(undefined)) })),
-        execute: txExecuteMock,
+        execute: vi.fn(async () => []),
       };
       return cb(tx);
     }),
@@ -200,7 +201,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     capturedUpdateSets.length = 0;
     selectTerminalQueue.length = 0;
     updateReturningMock.mockReset();
-    txExecuteMock.mockClear();
     outerUpdateMock.mockClear();
     updateReturningMock.mockResolvedValue([
       { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null, isTest: false },
@@ -255,7 +255,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     expect(result).not.toHaveProperty('kind');
   });
 
-  it('옵션이 꺼진 설문은 종전대로 완료를 수용하고 초과 표식만 남긴다 — 잠금도 잡지 않는다', async () => {
+  it('옵션이 꺼진 설문은 종전대로 완료를 수용하고 초과 표식만 남긴다', async () => {
     surveysRowHolder.row = {
       ...OPEN_SURVEY_ROW,
       quotaConfig: { ...HARD_CLOSE_PLAN, midSurveyClose: false },
@@ -267,7 +267,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     const set = mainSet();
     expect(set['status']).toBe('completed');
     expect(collectStrings(set['metadata']).join('')).toContain('"quotaOverflow":true');
-    expect(txExecuteMock).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty('kind');
   });
 
@@ -277,7 +276,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     const result = await submit({ [GATE_QID]: '기타' });
 
     expect(mainSet()['status']).toBe('completed');
-    expect(txExecuteMock).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty('kind');
   });
 
@@ -304,7 +302,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     const result = await submit({ [GATE_QID]: '여' });
 
     expect(mainSet()['status']).toBe('completed');
-    expect(txExecuteMock).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty('kind');
   });
 
@@ -318,7 +315,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     const result = await submit();
 
     expect(mainSet()['status']).toBe('completed');
-    expect(txExecuteMock).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty('kind');
   });
 
@@ -334,7 +330,48 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     const set = mainSet();
     expect(set['status']).toBe('completed');
     expect(collectStrings(set['metadata']).join('')).toContain('"quotaOverflow":true');
-    expect(txExecuteMock).not.toHaveBeenCalled();
+    expect(result).not.toHaveProperty('kind');
+  });
+
+  it('빈 complete(페이로드 없음)도 저장분으로 판정한다 — draft 로 저장한 답을 페이로드 없이 완료해 우회할 수 없다', async () => {
+    // select 순서(빈 경로): 0) 가용성 카운트 1) 잠금 전 저장분(셀 키 선택) 2) 잠금 아래 저장분
+    // 3) 셀 완료 수 재집계
+    selectTerminalQueue.length = 0;
+    selectTerminalQueue.push(
+      [{ total: 0 }],
+      [{ questionResponses: { [GATE_QID]: '남' } }],
+      [{ questionResponses: { [GATE_QID]: '남' } }],
+      [{ questionResponses: { [GATE_QID]: '남' } }, { questionResponses: { [GATE_QID]: '남' } }],
+    );
+
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    const result = await completeResponse({ responseId: RESPONSE_ID });
+
+    const set = capturedUpdateSets.find((s) => s['status'] !== undefined);
+    expect(set?.['status']).toBe('quotaful_out');
+    expect(set?.['isCompleted']).toBe(false);
+    expect(result).toEqual({
+      kind: 'quota_closed',
+      closedMessage: '죄송합니다. 응답 중 마감되었습니다.',
+    });
+  });
+
+  it('빈 complete 의 저장분 셀에 여유가 있으면 종전대로 완료된다', async () => {
+    selectTerminalQueue.length = 0;
+    selectTerminalQueue.push(
+      [{ total: 0 }],
+      [{ questionResponses: { [GATE_QID]: '남' } }],
+      [{ questionResponses: { [GATE_QID]: '남' } }],
+      [{ questionResponses: { [GATE_QID]: '남' } }],
+    );
+
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    const result = await completeResponse({ responseId: RESPONSE_ID });
+
+    const set = capturedUpdateSets.find((s) => s['status'] !== undefined);
+    expect(set?.['status']).toBe('completed');
     expect(result).not.toHaveProperty('kind');
   });
 

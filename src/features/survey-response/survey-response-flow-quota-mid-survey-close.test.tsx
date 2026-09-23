@@ -279,6 +279,26 @@ describe('페이지마다 백그라운드 재확인', () => {
     consoleError.mockRestore();
   });
 
+  it('되돌아가 쿼터 문항의 답을 바꾸면 다음 「다음」부터 새 답으로 판정한다', async () => {
+    mockSurvey({ questionIds: ['q1'], recheckOnEachStep: true });
+    renderFlow();
+    await answerFirstPage();
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 질문')).toBeInTheDocument();
+    expect(quotaCheck).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '이전' }));
+    expect(await screen.findByPlaceholderText('첫 답변')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('첫 답변'), { target: { value: 'v2' } });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 질문')).toBeInTheDocument();
+
+    await waitFor(() => expect(quotaCheck).toHaveBeenCalledTimes(2));
+    const lastCall = quotaCheck.mock.calls[1]![0] as { answers: Record<string, unknown> };
+    expect(lastCall.answers['q1']).toBe('v2');
+  });
+
   it('마지막 「제출」에서는 재확인을 따로 보내지 않는다 — 제출 자체가 판정을 받는다', async () => {
     mockSurvey({ questionIds: ['q1'], recheckOnEachStep: true });
     complete.mockResolvedValue({ id: 'response-1', status: 'completed' });

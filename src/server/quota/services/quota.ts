@@ -1,27 +1,25 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
+import type * as z from 'zod';
 
 import { notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import {
-  loadCompletedQuotaSubjects,
-  loadContactAttrsForQuota,
-} from '@/server/read-models/completed-answers';
+  countQuotaCellCompleted,
+  loadQuotaPlan,
+  resolveQuotaTargetCell,
+} from '@/server/read-models/quota-cell';
 import { resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
-import { countCell, deriveCategoryIds, findTarget, needsContactAttrs } from '@/lib/quota/matching';
-import { normalizeQuotaConfig, type NormalizedQuotaConfig } from '@/lib/quota/normalize';
+import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import { isConcludedResponseStatus } from '@/shared/contracts/survey-response';
 
+import type { QuotaCheckResult } from '../domain/quota';
+
 /** 설문의 쿼터 플랜 조회. 미설정이면 null. */
 export async function getQuotaConfig(surveyId: string): Promise<NormalizedQuotaConfig | null> {
-  const row = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
-    columns: { quotaConfig: true },
-  });
-  // JSONB 드리프트 보정 — 소비처는 dimensions·cells·categories 를 배열로 순회한다.
-  return normalizeQuotaConfig(row?.quotaConfig ?? null);
+  return loadQuotaPlan(surveyId);
 }
 
 /** 설문의 쿼터 플랜 저장(덮어쓰기). 없는 설문이면 throw. */
@@ -36,16 +34,8 @@ export async function saveQuotaConfig(surveyId: string, config: QuotaConfig): Pr
   return updated.quotaConfig ?? config;
 }
 
-export interface QuotaCheckOutcome {
-  blocked: boolean;
-  /** 입장 판정에서 막힌 응답자용 — 플랜의 마감 문구. */
-  closedMessage: string | null;
-  /**
-   * 입장 뒤(페이지 재확인)에 막힌 응답자용 — 진행 중 마감 문구, 비면 마감 문구. blocked 일 때만.
-   * 어느 단계에서 막혔는지는 클라이언트가 안다(첫 판정인지 재확인인지)라 서버는 둘 다 싣는다.
-   */
-  midSurveyClosedMessage?: string | null;
-}
+/** 판정 결과 — 모양은 domain 의 zod(QuotaCheckResult)가 소유한다. */
+export type QuotaCheckOutcome = z.infer<typeof QuotaCheckResult>;
 
 function blockedOutcome(config: NormalizedQuotaConfig): QuotaCheckOutcome {
   return {
@@ -84,26 +74,19 @@ export async function checkQuota(input: {
   });
   if (!response) throw new Error('쿼터 응답 범위가 일치하지 않습니다.');
   if (response.isTest) return { blocked: false, closedMessage: null };
-  // 재호출 멱등 — 상태가 없는 모킹 행은 진행 중으로 본다.
+  // 재호출 멱등 — 이미 쿼터마감이면 그대로 blocked, 그 밖의 종결 응답은 손대지 않는다.
   if (response.status === 'quotaful_out') return blockedOutcome(config);
-  if (response.status && isConcludedResponseStatus(response.status)) {
-    return { blocked: false, closedMessage: null };
-  }
+  if (isConcludedResponseStatus(response.status)) return { blocked: false, closedMessage: null };
 
   // 조사 대상 attrs 는 응답 행의 연결로 서버가 읽는다 — 클라이언트가 보낸 값은 받지 않는다.
-  const withAttrs = needsContactAttrs(config);
-  const attrs = withAttrs ? await loadContactAttrsForQuota(response.contactTargetId) : null;
-  const categoryIds = deriveCategoryIds(config, { answers: input.answers, attrs });
-  if (!categoryIds) return { blocked: false, closedMessage: null };
-
-  const target = findTarget(config, categoryIds);
-  if (target === null) return { blocked: false, closedMessage: null };
+  // 미분류·목표 없는 셀은 null → 통과.
+  const cell = await resolveQuotaTargetCell(config, input.answers, response.contactTargetId);
+  if (!cell) return { blocked: false, closedMessage: null };
 
   // 집행 모수는 언제나 실응답(real) — 테스트 파티션은 쿼터를 소비하지 않는다.
-  const subjects = await loadCompletedQuotaSubjects(input.surveyId, 'real', { withAttrs });
-  const current = countCell(config, categoryIds, subjects);
+  const current = await countQuotaCellCompleted(db, input.surveyId, config, cell);
 
-  if (current >= target) {
+  if (current >= cell.target) {
     await markQuotaFull(input.responseId, input.surveyId);
     return blockedOutcome(config);
   }

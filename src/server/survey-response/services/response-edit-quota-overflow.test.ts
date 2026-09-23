@@ -145,7 +145,6 @@ describe('saveAdminEdit — 이탈→완료 전환의 쿼터 면제', () => {
     h.responses.length = 0;
     h.lastSetPayload = null;
     h.overflow = false;
-    h.detectQuotaOverflow.mockClear();
   });
 
   it('셀이 이미 찼어도 완료로 전환하고 초과 표식을 남긴다', async () => {
@@ -156,7 +155,6 @@ describe('saveAdminEdit — 이탈→완료 전환의 쿼터 면제', () => {
 
     expect(h.responses[0]!['status']).toBe('completed');
     expect(h.responses[0]!['isCompleted']).toBe(true);
-    expect(h.detectQuotaOverflow).toHaveBeenCalledWith(SURVEY_ID, { q1: '남' }, CONTACT_ID);
     const metadataText = collectStrings(h.lastSetPayload?.['metadata']).join('');
     expect(metadataText).toContain('COALESCE(');
     expect(metadataText).toContain('"quotaOverflow":true');
@@ -177,7 +175,7 @@ describe('saveAdminEdit — 이탈→완료 전환의 쿼터 면제', () => {
 
     await edit();
 
-    expect(h.detectQuotaOverflow).not.toHaveBeenCalled();
+    // 판정이 돌았다면 overflow=true 라 표식이 남았을 것이다.
     expect(h.lastSetPayload?.['metadata']).toBeUndefined();
   });
 });

@@ -80,11 +80,8 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import {
-  isQuotaTargetFilled,
-  midSurveyClosedBody,
-  shouldCheckQuota,
-} from '@/features/survey-response/lib/quota-gate';
+import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
+import { midSurveyClosedBody } from '@/lib/quota/closed-message';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';

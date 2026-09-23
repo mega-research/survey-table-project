@@ -10,7 +10,7 @@ import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-
 import { consumeSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
-import { midSurveyClosedBody } from '@/features/survey-response/lib/quota-gate';
+import { midSurveyClosedBody } from '@/lib/quota/closed-message';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';

@@ -19,7 +19,11 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 import { numberFormatter } from '@/features/operations/format';
-import { resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
+import {
+  QUOTA_MID_SURVEY_CLOSED_FALLBACK,
+  midSurveyClosedBody,
+  resolveMidSurveyClosedMessage,
+} from '@/lib/quota/closed-message';
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';
@@ -130,13 +134,6 @@ const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMe
 const QUOTA_CLOSED_FALLBACK =
   '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.';
 
-/**
- * 진행 중 마감(입장 뒤에 끊긴 응답자) 기본 문구 — 사과 톤. 응답 화면 쪽
- * `features/survey-response/lib/quota-gate.ts` QUOTA_MID_SURVEY_CLOSED_FALLBACK 와 값 복제
- * (위 QUOTA_CLOSED_FALLBACK 과 같은 관례 — survey-response 쪽은 이 파일을 모른다).
- */
-const QUOTA_MID_SURVEY_CLOSED_FALLBACK =
-  '죄송합니다. 응답 중에 해당 조건의 모집이 완료되어 더 이상 진행하실 수 없습니다. 소중한 시간을 내어 참여해 주셔서 감사합니다.';
 
 /** 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */
 function kindForQuestion(q: Question): 'choice' | 'numeric' | null {
@@ -1155,7 +1152,7 @@ export function QuotaEditor({
                       <CheckCircle2 className="h-6 w-6 text-blue-500" />
                     </div>
                     <p className="text-lg leading-relaxed whitespace-pre-wrap text-gray-800">
-                      {resolveMidSurveyClosedMessage(config) ?? QUOTA_MID_SURVEY_CLOSED_FALLBACK}
+                      {midSurveyClosedBody(resolveMidSurveyClosedMessage(config))}
                     </p>
                   </div>
                 </div>

@@ -37,12 +37,14 @@ import {
 } from './response-gate';
 import {
   countQuotaCellCompleted,
+  loadQuotaPlan,
+  type QuotaTargetCell,
+  resolveQuotaTargetCell,
+} from '@/server/read-models/quota-cell';
+import {
   detectQuotaOverflow,
   encryptPiiAnswers,
   loadPiiTargets,
-  loadQuotaPlan,
-  type QuotaCloseCell,
-  resolveQuotaCellForClose,
   restorePrefillAnswers,
   sanitizeSubmittedResponses,
 } from './submitted-answers';
@@ -280,35 +282,58 @@ export async function completeResponse(
   }
 
   // 쿼터 — 옵션에 따라 두 경로로 갈린다. 쿼터 차원 매칭은 평문 답변 기준이므로 PII 암호화보다
-  // 먼저 판정 재료를 만든다. 빈 complete 경로(페이로드 없음)는 둘 다 생략 — notice-only 등
-  // 쿼터 게이트가 없는 흐름이라 종전 정책(초과 표식 생략)을 그대로 둔다.
+  // 먼저 판정 재료를 만든다.
   //
   // 1) 「진행 중 마감」 켜짐(ADR 0025): 제출 트랜잭션 안에서 설문+셀 키 advisory lock 을 잡고
   //    셀 완료 수를 다시 세어, 목표를 채운 뒤 도착한 제출을 완료로 만들지 않는다(아래 tx).
   //    여기서는 셀만 분류한다. 면제 — 재응답 허용으로 되돌려진 응답(reeditPendingSince)은
   //    "되돌려 놓고 재제출이 막히는 고아"를 만들지 않도록 2) 로 보낸다. 자격미달로 끝나는
   //    제출은 완료 수에 들지 않으므로 셀을 소비하지 않는다 — 판정하지 않는다.
+  //    빈 complete(페이로드 없음)도 판정한다 — draft 로 저장한 답을 페이로드 없이 완료해
+  //    우회하는 길을 막기 위해서다(클라이언트 값을 믿지 않는다). 셀은 잠금 아래에서 읽은
+  //    저장분으로 다시 분류하되, 잠금 순서(advisory → 응답 행)를 지키려면 셀 키를 먼저 알아야
+  //    하므로 잠금 전 저장분으로 키를 고른다. 그 사이 draft 가 셀을 바꾼 극히 드문 경우는
+  //    다른 키를 새로 잠그지 않고 통과시킨다(fail-open) — 두 번째 잠금은 순서를 깨뜨린다.
   // 2) 꺼짐(기존 설문): soft 초과 감지 — 게이트 통과~완료 사이 race 로 셀이 먼저 찬 완료를
-  //    식별해 metadata.quotaOverflow 표식만 남긴다(2026-08-11 정책). 잠금 없음.
+  //    식별해 metadata.quotaOverflow 표식만 남긴다(2026-08-11 정책). 잠금 없음. 빈 complete
+  //    경로는 종전대로 생략한다(통계 식별용 표식이지 집행이 아니다).
   let quotaOverflow = false;
   let quotaPlan: NormalizedQuotaConfig | null = null;
-  let hardCloseCell: QuotaCloseCell | null = null;
-  if (validatedResponses && gateRow && !gateRow.isTest) {
+  let hardCloseCell: QuotaTargetCell | null = null;
+  // 빈 complete 의 하드 차단 — 잠금 아래에서 저장분으로 다시 분류해야 한다는 표식.
+  let hardCloseFromStored = false;
+  if (gateRow && !gateRow.isTest) {
     quotaPlan = await loadQuotaPlan(gateRow.surveyId);
     const reeditPending = Boolean(gateRow.metadata?.['reeditPendingSince']);
-    if (isMidSurveyCloseActive(quotaPlan) && !reeditPending && !screenedOut) {
-      hardCloseCell = await resolveQuotaCellForClose(
-        quotaPlan,
-        validatedResponses,
-        gateRow.contactTargetId,
+    // 타입 가드를 살리려 불리언이 아니라 플랜 자체를 들고 간다.
+    const hardClosePlan = isMidSurveyCloseActive(quotaPlan) && !reeditPending ? quotaPlan : null;
+    if (validatedResponses) {
+      if (hardClosePlan && !screenedOut) {
+        hardCloseCell = await resolveQuotaTargetCell(
+          hardClosePlan,
+          validatedResponses,
+          gateRow.contactTargetId,
+        );
+      } else {
+        quotaOverflow = await detectQuotaOverflow(
+          gateRow.surveyId,
+          validatedResponses,
+          gateRow.contactTargetId,
+          quotaPlan,
+        );
+      }
+    } else if (hardClosePlan) {
+      const [stored] = await db
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId))
+        .limit(1);
+      const storedPlain = decryptQuestionResponses(
+        (stored?.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId },
       );
-    } else {
-      quotaOverflow = await detectQuotaOverflow(
-        gateRow.surveyId,
-        validatedResponses,
-        gateRow.contactTargetId,
-        quotaPlan,
-      );
+      hardCloseCell = await resolveQuotaTargetCell(hardClosePlan, storedPlain, gateRow.contactTargetId);
+      hardCloseFromStored = hardCloseCell !== null;
     }
   }
 
@@ -330,8 +355,11 @@ export async function completeResponse(
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${hardCloseCell.cellKey}))`,
       );
-      const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, hardCloseCell);
-      quotaFull = current >= hardCloseCell.target;
+      // 빈 complete 는 잠금 아래에서 저장분을 읽은 뒤(아래) 다시 분류해 센다.
+      if (!hardCloseFromStored) {
+        const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, hardCloseCell);
+        quotaFull = current >= hardCloseCell.target;
+      }
     }
     if (gateRow?.isTest) {
       await lockAndAssertResponseMutation(tx, {
@@ -350,7 +378,7 @@ export async function completeResponse(
     // 항상 이 잠금 아래에서 확보한다.
     let storedRecalcResponses: Record<string, unknown> | undefined;
     const needsScreenOutLookup = !validatedResponses && snapshotQuestions.length > 0;
-    if (storedRecalc || needsScreenOutLookup) {
+    if (storedRecalc || needsScreenOutLookup || hardCloseFromStored) {
       const [locked] = await tx
         .select({ questionResponses: surveyResponses.questionResponses })
         .from(surveyResponses)
@@ -402,6 +430,24 @@ export async function completeResponse(
           judgedResponses,
           buildScreenOutOptions(judgedResponses),
         );
+      }
+      // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 잠금 전에 고른
+      // 키와 같을 때만 센다(다르면 fail-open, 위 주석). 자격미달이면 셀을 소비하지 않는다.
+      if (hardCloseFromStored && hardCloseCell && gateRow && quotaPlan && !screenedOut) {
+        const lockedCell = await resolveQuotaTargetCell(
+          quotaPlan,
+          judgedResponses,
+          gateRow.contactTargetId,
+        );
+        if (lockedCell && lockedCell.cellKey === hardCloseCell.cellKey) {
+          const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, lockedCell);
+          quotaFull = current >= lockedCell.target;
+        } else {
+          logger.warn(
+            { surveyId: gateRow.surveyId, responseId },
+            '[quota] 빈 complete 의 저장분 셀이 잠금 전과 달라 하드 차단을 건너뛴다 — fail-open',
+          );
+        }
       }
     }
     // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).

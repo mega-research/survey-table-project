@@ -48,7 +48,7 @@ describe('checkQuota', () => {
     mockWhere.mockReset();
     mockUpdateWhere.mockReset();
     mockWhere.mockResolvedValue([]);
-    mockResponseFindFirst.mockResolvedValue({ isTest: false });
+    mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'in_progress' });
   });
 
   it('isTest 완료 응답을 셀 카운트 모수에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
@@ -72,7 +72,7 @@ describe('checkQuota', () => {
     mockSurveyFindFirst.mockResolvedValue({
       quotaConfig: { ...config, cells: [{ categoryIds: ['c-f'], target: 0 }] },
     });
-    mockResponseFindFirst.mockResolvedValue({ isTest: true });
+    mockResponseFindFirst.mockResolvedValue({ isTest: true, status: 'in_progress' });
     const { checkQuota } = await import('./quota');
 
     const result = await checkQuota({
@@ -138,7 +138,7 @@ describe('checkQuota', () => {
 
     it('attrs 는 응답 행의 조사 대상 연결로 서버가 읽고, 마감 셀이면 쿼터마감한다', async () => {
       mockSurveyFindFirst.mockResolvedValue({ quotaConfig: crossed });
-      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: 'c1' });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: 'c1', status: 'in_progress' });
       mockWhere
         .mockResolvedValueOnce([{ attrs: { '산업 분야': '인공지능' } }]) // 현재 응답의 조사 대상
         .mockResolvedValueOnce([{ questionResponses: seongnam, contactTargetId: 'c2' }]) // 완료 모수
@@ -157,7 +157,7 @@ describe('checkQuota', () => {
 
     it('조사 대상이 없는 응답은 미분류로 통과한다 — 모수도 읽지 않는다', async () => {
       mockSurveyFindFirst.mockResolvedValue({ quotaConfig: crossed });
-      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: null });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: null, status: 'in_progress' });
       const { checkQuota } = await import('./quota');
 
       const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: seongnam });
@@ -169,7 +169,7 @@ describe('checkQuota', () => {
 
     it('같은 산업 분야라도 성남 외 주소는 다른 셀이라 막히지 않는다', async () => {
       mockSurveyFindFirst.mockResolvedValue({ quotaConfig: crossed });
-      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: 'c1' });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, contactTargetId: 'c1', status: 'in_progress' });
       mockWhere.mockResolvedValueOnce([{ attrs: { '산업 분야': '인공지능' } }]);
       const { checkQuota } = await import('./quota');
 
