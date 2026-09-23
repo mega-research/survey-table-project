@@ -20,5 +20,7 @@ export function buildQuotaGate(config: QuotaConfig | null | undefined): QuotaGat
     questionIds,
     ...(Object.keys(cellIdsByQuestion).length > 0 ? { cellIdsByQuestion } : {}),
     ...(questionIds.length === 0 && dimensions.length > 0 ? { checkWithoutQuestions: true } : {}),
+    // 진행 중 마감 — 집행 중(위 enabled 가드 통과)일 때만 표식이 실린다.
+    ...(config.midSurveyClose ? { recheckOnEachStep: true } : {}),
   };
 }

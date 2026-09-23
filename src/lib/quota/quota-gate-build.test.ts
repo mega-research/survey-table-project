@@ -52,4 +52,21 @@ describe('buildQuotaGate', () => {
       checkWithoutQuestions: true,
     });
   });
+  describe('진행 중 마감', () => {
+    it('집행 중 + 옵션 켜짐이면 페이지마다 재확인 표식을 싣는다', () => {
+      expect(buildQuotaGate({ ...plan([choiceDim]), midSurveyClose: true })).toEqual({
+        questionIds: ['q-gender'],
+        recheckOnEachStep: true,
+      });
+    });
+    it('옵션이 부재·꺼짐인 기존 플랜은 표식이 없다', () => {
+      expect(buildQuotaGate(plan([choiceDim]))).not.toHaveProperty('recheckOnEachStep');
+      expect(buildQuotaGate({ ...plan([choiceDim]), midSurveyClose: false })).not.toHaveProperty(
+        'recheckOnEachStep',
+      );
+    });
+    it('집행 꺼짐 + 옵션 켜짐이면 게이트 자체가 null 이다', () => {
+      expect(buildQuotaGate({ ...plan([choiceDim], false), midSurveyClose: true })).toBeNull();
+    });
+  });
 });

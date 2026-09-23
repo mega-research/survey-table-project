@@ -57,6 +57,17 @@ export interface QuotaConfig {
   cells: QuotaCell[];
   /** 마감 종료 화면 문구. null이면 기본 폴백. */
   closedMessage: string | null;
+  /**
+   * 「진행 중 마감」 — 켜면 입장 판정을 통과한 응답자도 페이지마다 자기 셀을 다시 확인받고,
+   * 제출 순간에는 셀 단위로 직렬화해 목표를 넘는 완료를 만들지 않는다(ADR 0025).
+   * 부재·false = 종전 동작(입장 시 1회 판정, 동시 제출 초과는 표식만). JSONB 라 마이그레이션 없음.
+   */
+  midSurveyClose?: boolean | undefined;
+  /**
+   * 입장 뒤에 끊긴 응답자에게 보이는 문구(사과 톤). null·빈 문자열이면 closedMessage 로,
+   * 그것도 비면 응답 화면의 기본 문구로 폴백한다 — lib/quota/closed-message.
+   */
+  midSurveyClosedMessage?: string | null | undefined;
 }
 
 /** 응답 화면이 받는 쿼터 게이트 — 집행 중인 플랜에서만 만들어진다. */
@@ -70,4 +81,10 @@ export interface QuotaGate {
   cellIdsByQuestion?: Record<string, string[]>;
   /** 문항 기반 차원이 하나도 없는 플랜(조사 대상 속성형만) — 첫 페이지 전환에서 확인한다. */
   checkWithoutQuestions?: boolean;
+  /**
+   * 「진행 중 마감」 — 첫 판정 이후의 모든 「다음」에서 확인 RPC 를 백그라운드로 다시 보낸다.
+   * 집행 중 + 옵션 켜짐일 때만 실린다. 알림 속도를 위한 것이라 빠져도 제출 시점 서버 판정이
+   * 불변식을 지킨다.
+   */
+  recheckOnEachStep?: boolean;
 }

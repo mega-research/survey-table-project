@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 import { numberFormatter } from '@/features/operations/format';
+import { resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';
@@ -128,6 +129,14 @@ const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMe
  */
 const QUOTA_CLOSED_FALLBACK =
   '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.';
+
+/**
+ * 진행 중 마감(입장 뒤에 끊긴 응답자) 기본 문구 — 사과 톤. 응답 화면 쪽
+ * `features/survey-response/lib/quota-gate.ts` QUOTA_MID_SURVEY_CLOSED_FALLBACK 와 값 복제
+ * (위 QUOTA_CLOSED_FALLBACK 과 같은 관례 — survey-response 쪽은 이 파일을 모른다).
+ */
+const QUOTA_MID_SURVEY_CLOSED_FALLBACK =
+  '죄송합니다. 응답 중에 해당 조건의 모집이 완료되어 더 이상 진행하실 수 없습니다. 소중한 시간을 내어 참여해 주셔서 감사합니다.';
 
 /** 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */
 function kindForQuestion(q: Question): 'choice' | 'numeric' | null {
@@ -588,24 +597,56 @@ export function QuotaEditor({
         </div>
       )}
 
-      {/* 1) 헤더 — 집행 스위치 + 저장 */}
-      <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Switch
-            id="quota-enabled"
-            checked={config.enabled}
-            onCheckedChange={(enabled) => patch({ enabled })}
-          />
-          <label htmlFor="quota-enabled" className="text-sm font-medium text-slate-700">
-            집행{' '}
-            <span className={config.enabled ? 'font-semibold text-blue-600' : 'text-slate-400'}>
-              {config.enabled ? '켜짐' : '꺼짐'}
-            </span>
-          </label>
+      {/* 1) 헤더 — 집행 스위치 + 진행 중 마감 스위치 + 저장 */}
+      <div className="rounded-lg border bg-white px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="quota-enabled"
+              checked={config.enabled}
+              onCheckedChange={(enabled) => patch({ enabled })}
+            />
+            <label htmlFor="quota-enabled" className="text-sm font-medium text-slate-700">
+              집행{' '}
+              <span className={config.enabled ? 'font-semibold text-blue-600' : 'text-slate-400'}>
+                {config.enabled ? '켜짐' : '꺼짐'}
+              </span>
+            </label>
+          </div>
+          <Button onClick={save} disabled={isPending}>
+            {isPending ? '저장 중…' : '저장'}
+          </Button>
         </div>
-        <Button onClick={save} disabled={isPending}>
-          {isPending ? '저장 중…' : '저장'}
-        </Button>
+        {/* 진행 중 마감 — 켜면 입장 뒤에도 페이지마다 재확인하고 제출 순간 목표를 넘는 완료를 만들지 않는다 (ADR 0025) */}
+        <div className="mt-3 flex items-start gap-3 border-t pt-3">
+          <Switch
+            id="quota-mid-survey-close"
+            checked={config.midSurveyClose ?? false}
+            onCheckedChange={(midSurveyClose) => patch({ midSurveyClose })}
+            className="mt-0.5"
+          />
+          <div>
+            <label
+              htmlFor="quota-mid-survey-close"
+              className="text-sm font-medium text-slate-700"
+            >
+              진행 중 마감{' '}
+              <span
+                className={
+                  config.midSurveyClose ? 'font-semibold text-blue-600' : 'text-slate-400'
+                }
+              >
+                {config.midSurveyClose ? '켜짐' : '꺼짐'}
+              </span>
+            </label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              켜면 응답 중인 사람도 페이지를 넘길 때마다 자기 셀을 다시 확인받고, 제출 순간에
+              목표를 채운 뒤 도착한 제출은 완료 대신 쿼터마감으로 처리됩니다(답변은 저장). 셀의
+              완료 수가 목표를 넘지 않아야 하는 조사(완료자 전원 사례 지급)에서 켭니다. 셀이 찬 뒤
+              재응답을 허용하면 초과 완료 1건이 생길 수 있습니다.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 2) 조건 카드 — eligibleQuestions Select 로 추가, choice=읽기전용 보기 목록 / numeric=구간 편집 */}
@@ -1069,6 +1110,59 @@ export function QuotaEditor({
             </div>
           </div>
         </div>
+
+        {/* 진행 중 마감 문구 — 입장 뒤에 끊긴 응답자용(사과 톤). 비우면 위 마감 문구로 폴백 */}
+        {config.midSurveyClose && (
+          <div className="mt-6 border-t pt-4">
+            <h3 className="mb-1 text-sm font-bold text-slate-900">진행 중 마감 문구</h3>
+            <p className="mb-3 text-xs text-slate-500">
+              입장 판정은 통과했지만 응답 도중 셀이 마감돼 끊긴 응답자에게 표시됩니다. 비워두면
+              위의 마감 안내 문구로 표시됩니다. 줄바꿈 지원.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="quota-mid-survey-closed-message" className="sr-only">
+                  진행 중 마감 문구
+                </label>
+                <Textarea
+                  id="quota-mid-survey-closed-message"
+                  value={config.midSurveyClosedMessage ?? ''}
+                  onChange={(e) =>
+                    patch({
+                      midSurveyClosedMessage: e.target.value === '' ? null : e.target.value,
+                    })
+                  }
+                  placeholder={QUOTA_MID_SURVEY_CLOSED_FALLBACK}
+                  className="min-h-[190px]"
+                />
+                <p className="mt-2 rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  둘 다 비워두면 기본 문구로 표시됩니다:{' '}
+                  <span className="font-medium text-slate-700">
+                    {QUOTA_MID_SURVEY_CLOSED_FALLBACK}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-bold tracking-wide text-slate-400 uppercase">
+                  응답자 화면 미리보기
+                </p>
+                <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                  <div className="border-b bg-slate-50 px-3 py-2 text-xs text-slate-400">
+                    설문 응답 페이지
+                  </div>
+                  <div className="px-8 py-10 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+                      <CheckCircle2 className="h-6 w-6 text-blue-500" />
+                    </div>
+                    <p className="text-lg leading-relaxed whitespace-pre-wrap text-gray-800">
+                      {resolveMidSurveyClosedMessage(config) ?? QUOTA_MID_SURVEY_CLOSED_FALLBACK}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

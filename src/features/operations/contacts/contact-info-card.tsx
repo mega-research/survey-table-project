@@ -305,7 +305,8 @@ export function ContactInfoCard({
                   다시 들어가면 지금까지의 답변이 채워진 채 수정할 수 있고, 다시
                   제출하면 그 시점 답변으로 완료 여부와 자격미달 여부를 다시
                   판정합니다. 전환 동안에는 완료 통계에서 잠시 제외되며,
-                  수정/편집 현황에 허용 기록이 남습니다.
+                  수정/편집 현황에 허용 기록이 남습니다. 쿼터가 찬 셀의 응답이면
+                  재제출은 쿼터에 막히지 않아 초과 완료 1건이 생길 수 있습니다.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
