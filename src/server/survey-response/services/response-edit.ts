@@ -29,7 +29,7 @@ import { responsesToLookupShape } from '@/utils/branch-eval';
 import { detectScreenOut } from '../domain/screen-out';
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers';
-import { assertAnswerValueSize, loadPiiTargets } from './submitted-answers';
+import { assertAnswerValueSize, detectQuotaOverflow, loadPiiTargets } from './submitted-answers';
 
 export { SurveyOwnershipError };
 
@@ -348,6 +348,29 @@ export async function saveAdminEdit(
           ...(existing.completedAt === null ? { completedAt: now } : {}),
         };
 
+  // 이탈→완료 전환의 쿼터 — 운영자가 만드는 완료라 「진행 중 마감」 하드 차단을 타지 않는다
+  // (ADR 0025: 하드 차단은 경합 초과를 막는 것이지 운영자의 결정을 뒤집는 것이 아니다).
+  // 찬 셀이면 기존 초과 표식(metadata.quotaOverflow)만 남긴다. 판정은 평문 finalResponses
+  // 기준(암호화 이전)이고 attrs 는 응답 행의 연결로 서버가 읽는다. 테스트 파티션은 쿼터를
+  // 소비하지 않으므로 보지 않는다. 종결 응답의 일반 수정은 완료 수가 늘지 않아 판정하지 않는다.
+  const quotaOverflow =
+    completesDrop && !existing.isTest
+      ? await detectQuotaOverflow(surveyId, finalResponses, existing.contactTargetId)
+      : false;
+
+  // metadata 갱신 조각 — 이관 백업(1회)과 초과 표식을 한 조각으로 합친다. 둘 다 기존 키를
+  // 보존하는 jsonb 병합이라 통째 대입이 없다.
+  const migrationMetadataSql = migrating
+    ? buildMigrationMetadataSql({
+        versionId: existing.versionId,
+        questionResponses: existing.questionResponses ?? {},
+        savedAt: now.toISOString(),
+      })
+    : null;
+  const metadataSql = quotaOverflow
+    ? sql`${migrationMetadataSql ?? sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb)`} || '{"quotaOverflow":true}'::jsonb`
+    : migrationMetadataSql;
+
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
   const piiTargets = await loadPiiTargets(effectiveVersionId, surveyId);
   const storedResponses = hasPiiTargets(piiTargets)
@@ -384,16 +407,8 @@ export async function saveAdminEdit(
         // adminEditRollback/migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다
         // (재수정해도 원본 유지). 백업의 questionResponses 는 DB 암호문 그대로 —
         // 평문 PII 를 metadata 에 남기지 않는다.
-        ...(migrating
-          ? {
-              versionId: input.versionId,
-              metadata: buildMigrationMetadataSql({
-                versionId: existing.versionId,
-                questionResponses: existing.questionResponses ?? {},
-                savedAt: now.toISOString(),
-              }),
-            }
-          : {}),
+        ...(migrating ? { versionId: input.versionId } : {}),
+        ...(metadataSql ? { metadata: metadataSql } : {}),
       })
       .where(
         and(

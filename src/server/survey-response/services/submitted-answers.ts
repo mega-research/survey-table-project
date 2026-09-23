@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import { contactTargets, questions, surveyVersions, surveys } from '@/db/schema';
 import {
   encryptResponsesForStorage,
@@ -13,8 +13,14 @@ import {
   loadCompletedQuotaSubjects,
   loadContactAttrsForQuota,
 } from '@/server/read-models/completed-answers';
-import { countCell, deriveCategoryIds, findTarget, needsContactAttrs } from '@/lib/quota/matching';
-import { normalizeQuotaConfig } from '@/lib/quota/normalize';
+import {
+  cellKeyOf,
+  countCell,
+  deriveCategoryIds,
+  findTarget,
+  needsContactAttrs,
+} from '@/lib/quota/matching';
+import { normalizeQuotaConfig, type NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -240,30 +246,76 @@ export async function detectQuotaOverflow(
   surveyId: string,
   plainAnswers: Record<string, unknown>,
   contactTargetId: string | null,
+  preloadedPlan?: NormalizedQuotaConfig | null,
 ): Promise<boolean> {
   try {
-    const surveyRow = await db.query.surveys.findFirst({
-      where: eq(surveys.id, surveyId),
-      columns: { quotaConfig: true },
-    });
-    // JSONB 드리프트 보정 — 소비처(deriveCategoryIds·findTarget·countCell)는
-    // dimensions·cells·categories 를 배열로 순회한다.
-    const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
+    const config = preloadedPlan === undefined ? await loadQuotaPlan(surveyId) : preloadedPlan;
     if (!config?.enabled) return false;
 
-    const withAttrs = needsContactAttrs(config);
-    const attrs = withAttrs ? await loadContactAttrsForQuota(contactTargetId) : null;
-    const categoryIds = deriveCategoryIds(config, { answers: plainAnswers, attrs });
-    if (!categoryIds) return false;
-    const target = findTarget(config, categoryIds);
-    if (target === null) return false;
+    const cell = await resolveQuotaCellForClose(config, plainAnswers, contactTargetId);
+    if (!cell) return false;
 
-    const subjects = await loadCompletedQuotaSubjects(surveyId, 'real', { withAttrs });
-    return countCell(config, categoryIds, subjects) >= target;
+    const current = await countQuotaCellCompleted(db, surveyId, config, cell);
+    return current >= cell.target;
   } catch (err) {
     logger.error({ surveyId, err }, '[quota] 완료 시점 초과 감지 실패 — fail-open 통과');
     return false;
   }
+}
+
+/** 설문의 쿼터 플랜(정규화). 미설정이면 null. 완료 경로가 한 번 읽어 하드 차단·초과 표식이 공유한다. */
+export async function loadQuotaPlan(surveyId: string): Promise<NormalizedQuotaConfig | null> {
+  const surveyRow = await db.query.surveys.findFirst({
+    where: eq(surveys.id, surveyId),
+    columns: { quotaConfig: true },
+  });
+  // JSONB 드리프트 보정 — 소비처(deriveCategoryIds·findTarget·countCell)는
+  // dimensions·cells·categories 를 배열로 순회한다.
+  return normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
+}
+
+/**
+ * 제출 시점 쿼터 판정 대상 셀 — 서버가 저장할 평문 답 + 서버가 읽은 조사 대상 attrs 로 분류한다.
+ * 미분류·목표 없는 셀은 null(종전대로 통과). 입장 판정(quota.service.checkQuota)과 같은 분류
+ * 함수·같은 모수를 쓴다 — "재확인은 통과인데 제출은 마감" 이 규칙 차이에서 나오지 않게.
+ */
+export interface QuotaCloseCell {
+  categoryIds: string[];
+  /** 설문+셀 키 advisory lock 의 두 번째 키. */
+  cellKey: string;
+  target: number;
+  withAttrs: boolean;
+}
+
+export async function resolveQuotaCellForClose(
+  config: NormalizedQuotaConfig,
+  plainAnswers: Record<string, unknown>,
+  contactTargetId: string | null,
+): Promise<QuotaCloseCell | null> {
+  const withAttrs = needsContactAttrs(config);
+  const attrs = withAttrs ? await loadContactAttrsForQuota(contactTargetId) : null;
+  const categoryIds = deriveCategoryIds(config, { answers: plainAnswers, attrs });
+  if (!categoryIds) return null;
+  const target = findTarget(config, categoryIds);
+  if (target === null) return null;
+  return { categoryIds, cellKey: cellKeyOf(categoryIds), target, withAttrs };
+}
+
+/**
+ * 셀의 현재 완료 수 — 집행 모수는 언제나 실응답(real). 하드 차단은 셀 잠금을 잡은 트랜잭션을
+ * executor 로 넘겨 잠금 아래에서 다시 센다.
+ */
+export async function countQuotaCellCompleted(
+  executor: DbOrTx,
+  surveyId: string,
+  config: NormalizedQuotaConfig,
+  cell: QuotaCloseCell,
+): Promise<number> {
+  const subjects = await loadCompletedQuotaSubjects(surveyId, 'real', {
+    withAttrs: cell.withAttrs,
+    executor,
+  });
+  return countCell(config, cell.categoryIds, subjects);
 }
 
 // 응답 완료 (JSONB + response_answers 이중 쓰기)

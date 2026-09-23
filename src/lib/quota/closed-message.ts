@@ -4,9 +4,9 @@ import type { QuotaConfig } from '@/shared/contracts/quota';
  * 「진행 중 마감」이 실제로 작동하는 플랜인가 — 집행 중이고 옵션이 켜져 있다.
  * 제출 시점 하드 차단과 게이트 표식이 같은 판정을 쓴다.
  */
-export function isMidSurveyCloseActive(
-  config: Pick<QuotaConfig, 'enabled' | 'midSurveyClose'> | null | undefined,
-): boolean {
+export function isMidSurveyCloseActive<T extends Pick<QuotaConfig, 'enabled' | 'midSurveyClose'>>(
+  config: T | null | undefined,
+): config is T {
   return Boolean(config?.enabled && config.midSurveyClose);
 }
 

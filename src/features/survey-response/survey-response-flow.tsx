@@ -1383,6 +1383,7 @@ function SurveyResponseFlowActive({
       setHighlightQuestionIds,
       setDuplicateStatus,
       setPausedMessage: setRefetchedPausedMessage,
+      setQuotaClosedMessage,
       setInviteIsInvalid,
       setIsSubmitting,
       setCurrentStepIndex,

@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import 'server-only';
 
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveyResponses } from '@/db/schema/surveys';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
@@ -26,13 +26,17 @@ import {
  * `withAttrs` — 조사 대상 속성형 차원이 있는 플랜(`needsContactAttrs`)만 켠다. 켜면 응답에 연결된
  * 조사 대상의 attrs 를 한 번 더 읽어 싣고, 끄면 attrs 는 전부 null 이다. 익명 응답은 언제나 null.
  * pii 는 읽지 않는다 — attrs 는 평문이고 속성형 차원의 소스는 attrs 뿐이다.
+ *
+ * `executor` — 제출 시점 하드 차단(response-completion)이 셀 잠금을 잡은 트랜잭션 안에서 다시
+ * 셀 때 넘긴다. 생략하면 공용 db 다.
  */
 export async function loadCompletedQuotaSubjects(
   surveyId: string,
   scope: OperationsDataScope,
-  options: { withAttrs: boolean },
+  options: { withAttrs: boolean; executor?: DbOrTx },
 ): Promise<QuotaSubject[]> {
-  const rows = await db
+  const dbc = options.executor ?? db;
+  const rows = await dbc
     .select({
       questionResponses: surveyResponses.questionResponses,
       contactTargetId: surveyResponses.contactTargetId,
@@ -52,7 +56,7 @@ export async function loadCompletedQuotaSubjects(
     ? [...new Set(rows.map((r) => r.contactTargetId).filter((id): id is string => id != null))]
     : [];
   if (targetIds.length > 0) {
-    const targets = await db
+    const targets = await dbc
       .select({ id: contactTargets.id, attrs: contactTargets.attrs })
       .from(contactTargets)
       .where(inArray(contactTargets.id, targetIds));
