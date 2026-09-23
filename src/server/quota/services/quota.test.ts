@@ -147,7 +147,11 @@ describe('checkQuota', () => {
 
       const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: seongnam });
 
-      expect(result).toEqual({ blocked: true, closedMessage: '마감' });
+      expect(result).toEqual({
+        blocked: true,
+        closedMessage: '마감',
+        midSurveyClosedMessage: '마감',
+      });
       expect(mockUpdateWhere).toHaveBeenCalledOnce();
     });
 
@@ -177,6 +181,62 @@ describe('checkQuota', () => {
 
       expect(result).toEqual({ blocked: false, closedMessage: null }); // 목표 없는 셀
       expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+  });
+
+  // 진행 중 마감 — 페이지마다 재호출되므로 멱등이어야 한다 (ADR 0025).
+  describe('재호출 멱등', () => {
+    const midClose: QuotaConfig = {
+      ...config,
+      midSurveyClose: true,
+      midSurveyClosedMessage: '죄송합니다',
+    };
+
+    it('이미 쿼터마감인 응답은 모수를 다시 세지 않고 blocked 를 그대로 돌려준다', async () => {
+      mockSurveyFindFirst.mockResolvedValue({ quotaConfig: midClose });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'quotaful_out' });
+      const { checkQuota } = await import('./quota');
+
+      const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+
+      expect(result).toEqual({
+        blocked: true,
+        closedMessage: null,
+        midSurveyClosedMessage: '죄송합니다',
+      });
+      expect(mockWhere).not.toHaveBeenCalled();
+      expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
+    it('이미 완료된 응답에 늦게 온 확인은 막지 않는다', async () => {
+      mockSurveyFindFirst.mockResolvedValue({
+        quotaConfig: { ...midClose, cells: [{ categoryIds: ['c-f'], target: 0 }] },
+      });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'completed' });
+      const { checkQuota } = await import('./quota');
+
+      const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+
+      expect(result).toEqual({ blocked: false, closedMessage: null });
+      expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
+    it('마감 판정에 진행 중 마감 문구를 함께 싣고, 비면 마감 문구로 폴백한다', async () => {
+      mockSurveyFindFirst.mockResolvedValue({
+        quotaConfig: {
+          ...midClose,
+          closedMessage: '마감',
+          midSurveyClosedMessage: null,
+          cells: [{ categoryIds: ['c-f'], target: 0 }],
+        },
+      });
+      mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'in_progress' });
+      const { checkQuota } = await import('./quota');
+
+      const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+
+      expect(result).toEqual({ blocked: true, closedMessage: '마감', midSurveyClosedMessage: '마감' });
+      expect(mockUpdateWhere).toHaveBeenCalledOnce();
     });
   });
 });

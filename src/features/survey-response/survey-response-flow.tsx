@@ -80,7 +80,11 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
+import {
+  isQuotaTargetFilled,
+  midSurveyClosedBody,
+  shouldCheckQuota,
+} from '@/features/survey-response/lib/quota-gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
@@ -497,6 +501,9 @@ function SurveyResponseFlowActive({
     [loadedSurvey],
   );
   const quotaCheckedRef = useRef(false);
+  // 진행 중 마감(recheckOnEachStep) — 제출 클릭 뒤에 도착한 백그라운드 재확인 결과는 버린다.
+  // 제출 자체가 서버 판정을 받으므로(quota_closed 결과), 늦은 blocked 가 완료 화면을 덮어쓰면 안 된다.
+  const quotaRecheckStaleRef = useRef(false);
   const [quotaClosedMessage, setQuotaClosedMessage] = useState<string | null>(null);
   // 세션 도중 중단 감지 시 재조회한 최신 중단 문구 (handlePausedMutationError 가 승격).
   // 화면 폴백 체인: 재조회 문구 → 로드 시점 control.pausedMessage → DEFAULT_PAUSED_MESSAGE.
@@ -1672,6 +1679,34 @@ function SurveyResponseFlowActive({
           return null;
         }
       })();
+    } else if (
+      loadedSurvey?.quotaGate?.recheckOnEachStep &&
+      quotaCheckedRef.current &&
+      nextIndex !== -1 &&
+      currentResponseId
+    ) {
+      // 진행 중 마감(ADR 0025) — 첫 판정 이후의 모든 「다음」에서 같은 확인을 **기다리지 않고**
+      // 발사한다. 그 사이 셀이 찼으면 마감 화면으로 갈아 끼운다. 되돌아가 답을 바꿨으면 지금
+      // 답(responses)으로 새 셀이 판정된다. 실패·429 는 통과(fail-open) — 최종 방어는 제출
+      // 시점의 서버 판정이다. 마지막 「제출」(nextIndex === -1)에서는 보내지 않는다.
+      const recheckResponseId = currentResponseId;
+      const recheckSurveyId = loadedSurvey.id;
+      const recheckAnswers = responses;
+      void (async () => {
+        try {
+          const res = await client.quota.check({
+            responseId: recheckResponseId,
+            surveyId: recheckSurveyId,
+            answers: recheckAnswers,
+          });
+          if (!res.blocked || quotaRecheckStaleRef.current) return;
+          // 입장 뒤 막힘 — 진행 중 마감 문구(서버가 마감 문구로 폴백 적용, 구 서버는 필드 없음).
+          setQuotaClosedMessage(midSurveyClosedBody(res.midSurveyClosedMessage ?? res.closedMessage));
+          setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+        } catch (err) {
+          console.error('쿼터 재확인 오류:', err);
+        }
+      })();
     }
 
     // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
@@ -1696,6 +1731,7 @@ function SurveyResponseFlowActive({
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
     if (nextIndex === -1) {
+      quotaRecheckStaleRef.current = true;
       handleSubmit();
       return;
     }
@@ -1705,6 +1741,8 @@ function SurveyResponseFlowActive({
 
   const handlePrevious = useCallback(() => {
     if (stepHistory.length === 0) return;
+    // 제출이 실패해 되돌아온 경우 — 이후 「다음」의 재확인 결과를 다시 받는다.
+    quotaRecheckStaleRef.current = false;
     // handleNext 의 blurActiveInput 과 동일 사유 — 포커스 잔류 입력의 키보드 정리
     const active = document.activeElement;
     if (active instanceof HTMLElement) active.blur();
