@@ -121,3 +121,19 @@ describe('pivotTotals', () => {
     expect(pivotTotals([], pivotOf(), dimensions).grand).toBeNull();
   });
 });
+
+describe('sumStatusCells', () => {
+  const cells = [
+    { categoryIds: ['a', 'x'], current: 3, target: 10 },
+    { categoryIds: ['a', 'y'], current: 4, target: 6 },
+  ];
+  it('주어진 키의 셀만 현재·목표를 합산한다', async () => {
+    const { sumStatusCells } = await import('./quota-pivot');
+    expect(sumStatusCells(cells, ['ax', 'ay'])).toEqual({ current: 7, target: 16 });
+    expect(sumStatusCells(cells, ['ax', 'bz'])).toEqual({ current: 3, target: 10 });
+  });
+  it('설정된 셀이 하나도 없으면 null', async () => {
+    const { sumStatusCells } = await import('./quota-pivot');
+    expect(sumStatusCells(cells, ['bz'])).toBeNull();
+  });
+});

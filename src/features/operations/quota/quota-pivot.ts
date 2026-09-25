@@ -118,3 +118,32 @@ export function pivotTotals(
   }
   return { rows, cols, grand };
 }
+
+/** 현황판 합계 — 현재/목표 쌍. */
+export interface QuotaCountTarget {
+  current: number;
+  target: number;
+}
+
+/**
+ * 현황 셀 중 주어진 키(cellKeyOf 규약 — categoryIds 를 구분자 없이 이은 문자열)에 해당하는
+ * 것만 현재·목표를 합산한다. 설정된 셀이 하나도 없으면 null(무제한만 있는 줄은 「—」).
+ * 행 끝·열 끝·총계가 같은 함수로 센다.
+ */
+export function sumStatusCells(
+  cells: readonly { categoryIds: string[]; current: number; target: number }[],
+  keys: readonly string[],
+): QuotaCountTarget | null {
+  const byKey = new Map(cells.map((c) => [c.categoryIds.join(''), c]));
+  let hit = false;
+  let current = 0;
+  let target = 0;
+  for (const key of keys) {
+    const cell = byKey.get(key);
+    if (!cell) continue;
+    hit = true;
+    current += cell.current;
+    target += cell.target;
+  }
+  return hit ? { current, target } : null;
+}

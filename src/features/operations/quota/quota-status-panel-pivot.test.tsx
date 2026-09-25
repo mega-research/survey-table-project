@@ -70,10 +70,19 @@ describe('QuotaStatusPanel 3조건 매트릭스', () => {
     // 상단 그룹(성별)은 하위(연령대 2개)만큼 colSpan
     expect(screen.getByRole('columnheader', { name: '남' })).toHaveAttribute('colspan', '2');
     expect(screen.getAllByRole('columnheader', { name: '20대' })).toHaveLength(2);
-    // 안동시 행 × 남·20대 열 = current 7 / target 10 히트 셀
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('/ 10')).toBeInTheDocument();
-    expect(screen.getByText('70%')).toBeInTheDocument();
+    // 안동시 행 × 남·20대 열 = current 7 / target 10 — 칸은 n / m 만 보인다(진행바·% 없음).
+    // 같은 값이 행 계·열 계·총계에도 나타나 총 4번.
+    expect(screen.getAllByText('7 / 10')).toHaveLength(4);
+    expect(screen.queryByText('70%')).not.toBeInTheDocument();
+  });
+
+  it('행 끝과 열 끝에 계(n / m)를 두고, 설정된 셀이 없는 줄은 — 로 둔다', async () => {
+    await renderOpened();
+    const rowHeaders = screen.getAllByRole('columnheader', { name: '계' });
+    expect(rowHeaders.length).toBeGreaterThanOrEqual(1);
+    // 영주시·상주시 행 계와 나머지 5개 열 계, 미설정 칸들은 전부 —
+    const dashes = screen.getAllByText('—');
+    expect(dashes.length).toBeGreaterThanOrEqual(7);
   });
 
   it('헤더는 sticky — 세로 스크롤 시 테이블 끝까지 따라온다', async () => {
