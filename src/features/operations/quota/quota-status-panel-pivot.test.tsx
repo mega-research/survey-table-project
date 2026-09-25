@@ -91,3 +91,22 @@ describe('QuotaStatusPanel 3조건 매트릭스', () => {
     expect(thead?.className).toContain('sticky');
   });
 });
+
+describe('QuotaStatusPanel 셀 없음', () => {
+  it('목표가 설정된 셀이 없으면 카드를 그리되 안내를 보이고 보기 토글은 숨긴다', async () => {
+    const user = userEvent.setup();
+    render(
+      <QuotaStatusPanel
+        status={{
+          ...status,
+          cells: [],
+          summary: { ...status.summary, targetTotal: 0, currentTotal: 0, totalCells: 0 },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /쿼터 현황/ }));
+    expect(screen.getByText('목표가 설정된 셀이 없습니다')).toBeInTheDocument();
+    expect(screen.getByText(/조건을 추가하거나 지우면 셀 목표가 초기화/)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '매트릭스' })).not.toBeInTheDocument();
+  });
+});

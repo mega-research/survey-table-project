@@ -92,6 +92,9 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   const showMatrix = canMatrix && view === 'matrix';
   const dim0 = status.dimensions[0];
   const dim1 = status.dimensions[1];
+  // 목표가 설정된 셀이 없다 — 조건을 바꾸면 편집기가 셀 목표를 초기화하므로 흔히 이 상태가 된다.
+  // 카드를 통째로 숨기면 담당자가 원인을 알 수 없어, 카드는 그리되 안내만 보인다.
+  const hasCells = status.cells.length > 0;
 
   return (
     <Card>
@@ -132,7 +135,7 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                 </h3>
               </button>
             </CollapsibleTrigger>
-            {open && (
+            {open && hasCells && (
               <div
                 role="tablist"
                 aria-label="쿼터 현황 보기"
@@ -174,7 +177,12 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
           </div>
 
           <CollapsibleContent className="mt-3">
-            {showMatrix && pivot ? (
+            {!hasCells ? (
+              <EmptyState
+                message="목표가 설정된 셀이 없습니다"
+                description="조건을 추가하거나 지우면 셀 목표가 초기화됩니다. 쿼터 설정의 「조건 보기」 표에 목표를 입력하고 저장하면 여기에 현황이 나타납니다."
+              />
+            ) : showMatrix && pivot ? (
               <>
                 <MatrixLegend />
                 {/* 조건 보기 표와 같은 격자 — 칸은 n / m 만, 행 끝·열 끝에 계. sticky thead (bulk-preview 패턴) */}
