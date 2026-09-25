@@ -53,9 +53,11 @@ export async function resolveQuotaTargetCell(
   config: NormalizedQuotaConfig,
   plainAnswers: Record<string, unknown>,
   contactTargetId: string | null,
+  /** 트랜잭션 안에서 부르면 반드시 그 tx 를 넘긴다 — 전역 db 로 새면 풀(max 5)을 잡아먹어 교착한다. */
+  executor: DbOrTx = db,
 ): Promise<QuotaTargetCell | null> {
   const withAttrs = needsContactAttrs(config);
-  const attrs = withAttrs ? await loadContactAttrsForQuota(contactTargetId) : null;
+  const attrs = withAttrs ? await loadContactAttrsForQuota(contactTargetId, executor) : null;
   const categoryIds = deriveCategoryIds(config, { answers: plainAnswers, attrs });
   if (!categoryIds) return null;
   const target = findTarget(config, categoryIds);

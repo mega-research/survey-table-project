@@ -375,6 +375,35 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     expect(result).not.toHaveProperty('kind');
   });
 
+  it('셀이 찼더라도 다른 탭이 먼저 완료한 같은 응답이면 완료자로 본다 — 마감 결과가 아니다', async () => {
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    updateReturningMock.mockResolvedValue([]);
+    selectTerminalQueue.push([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, status: 'completed', deletedAt: null, isTest: false },
+    ]);
+
+    const result = await submit();
+
+    expect(result).not.toHaveProperty('kind');
+    expect(result).toMatchObject({ alreadyCompleted: true });
+  });
+
+  it('늦게 도착한 제출의 마지막 페이지 답변도 저장한다', async () => {
+    queueSelects([{ [GATE_QID]: '남' }], true);
+    updateReturningMock.mockResolvedValue([]);
+    selectTerminalQueue.push([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, status: 'quotaful_out', deletedAt: null },
+    ]);
+
+    await submit({ [GATE_QID]: '남' });
+
+    const answerSets = capturedUpdateSets.filter((s) => s['questionResponses'] !== undefined);
+    // 첫 UPDATE(0행) 뒤 상태를 건드리지 않는 저장 UPDATE 가 한 번 더 나간다.
+    expect(answerSets).toHaveLength(2);
+    expect(answerSets[1]).toMatchObject({ questionResponses: { [GATE_QID]: '남' } });
+    expect(answerSets[1]!['status']).toBeUndefined();
+  });
+
   it('이미 쿼터마감된 행에 늦게 도착한 complete 는 쿼터마감 결과를 돌려준다', async () => {
     // 페이지 재확인이 먼저 quotaful_out 으로 마킹한 뒤 제출이 도착한 경우 — 가짜 감사 화면도
     // "이미 완료" 안내도 아니라 마감 화면이어야 한다.

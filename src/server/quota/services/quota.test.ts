@@ -208,6 +208,23 @@ describe('checkQuota', () => {
       expect(mockUpdateWhere).not.toHaveBeenCalled();
     });
 
+    it('재응답 허용으로 되돌려진 응답은 찬 셀이어도 막지 않는다', async () => {
+      mockSurveyFindFirst.mockResolvedValue({
+        quotaConfig: { ...midClose, cells: [{ categoryIds: ['c-f'], target: 0 }] },
+      });
+      mockResponseFindFirst.mockResolvedValue({
+        isTest: false,
+        status: 'in_progress',
+        metadata: { reeditPendingSince: '2026-09-25T00:00:00.000Z' },
+      });
+      const { checkQuota } = await import('./quota');
+
+      const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+
+      expect(result).toEqual({ blocked: false, closedMessage: null });
+      expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
     it('이미 완료된 응답에 늦게 온 확인은 막지 않는다', async () => {
       mockSurveyFindFirst.mockResolvedValue({
         quotaConfig: { ...midClose, cells: [{ categoryIds: ['c-f'], target: 0 }] },

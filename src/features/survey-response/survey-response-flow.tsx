@@ -507,6 +507,9 @@ function SurveyResponseFlowActive({
     [loadedSurvey],
   );
   const quotaCheckedRef = useRef(false);
+  // 첫 판정(기다리는 확인)이 진행 중 — 그 사이 재클릭은 낙관 전환도 재확인도 하지 않는다.
+  // 첫 판정이 blocked 인데 다음 쪽이 잠깐 보였다 마감 화면으로 바뀌는 것을 막는다.
+  const quotaFirstCheckPendingRef = useRef(false);
   // 진행 중 마감(recheckOnEachStep) — 제출 클릭 뒤에 도착한 백그라운드 재확인 결과는 버린다.
   // 제출 자체가 서버 판정을 받으므로(quota_closed 결과), 늦은 blocked 가 완료 화면을 덮어쓰면 안 된다.
   const quotaRecheckStaleRef = useRef(false);
@@ -1657,10 +1660,12 @@ function SurveyResponseFlowActive({
     // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
     let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
       null;
+    if (quotaFirstCheckPendingRef.current) return;
     if (!quotaCheckedRef.current && shouldCheckQuota(loadedSurvey?.quotaGate, responses)) {
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
+      quotaFirstCheckPendingRef.current = true;
       quotaPromise = (async () => {
         // 낙관 전환으로 응답 행 생성(첫 답변 시 백그라운드 시작)보다 먼저 이 클릭에
         // 도달할 수 있다 — id 가 없다고 판정을 건너뛰면 하드 쿼터가 우회되므로,
@@ -1683,13 +1688,17 @@ function SurveyResponseFlowActive({
         } catch (err) {
           console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
           return null;
+        } finally {
+          quotaFirstCheckPendingRef.current = false;
         }
       })();
     } else if (
       loadedSurvey?.quotaGate?.recheckOnEachStep &&
       quotaCheckedRef.current &&
       nextIndex !== -1 &&
-      currentResponseId
+      currentResponseId &&
+      // 테스트 세션은 쿼터를 소비하지 않는다(서버도 즉시 통과) — 확인 예산만 쓰므로 보내지 않는다.
+      !isTestSession
     ) {
       // 진행 중 마감(ADR 0025) — 첫 판정 이후의 모든 「다음」에서 같은 확인을 **기다리지 않고**
       // 발사한다. 그 사이 셀이 찼으면 마감 화면으로 갈아 끼운다. 되돌아가 답을 바꿨으면 지금

@@ -438,6 +438,7 @@ export async function completeResponse(
           quotaPlan,
           judgedResponses,
           gateRow.contactTargetId,
+          tx,
         );
         if (lockedCell && lockedCell.cellKey === hardCloseCell.cellKey) {
           const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, lockedCell);
@@ -529,9 +530,27 @@ export async function completeResponse(
         // 이미 종결된 행에 대한 늦은 complete — 다른 화면이 먼저 제출했거나 본인 재시도.
         // 클라이언트가 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내로 접도록 표식한다.
         alreadyCompleted = true;
+        // 잠금 아래 quotaFull 판정은 이 UPDATE 가 적용됐을 때만 뜻이 있다 — 다른 탭이 먼저
+        // 완료해 셀을 채운 같은 응답이면 그 사람은 완료자다. 마감 결과를 돌려주면 안 된다.
+        quotaFull = false;
         // 쿼터마감 행이면 "이미 완료" 가 아니라 마감 화면이 맞다 — 페이지 재확인(quota.check)이
-        // 먼저 quotaful_out 으로 마킹한 뒤 제출이 도착한 경우.
+        // 먼저 quotaful_out 으로 마킹한 뒤 제출이 도착한 경우. 이때 마지막 페이지 답변은
+        // 위 UPDATE 가 0행이라 버려졌으므로 여기서 저장한다 — "답변은 저장한 채 쿼터마감"
+        // (ADR 0025). 상태·완료 시각은 건드리지 않는다.
         lateQuotaClosed = existing.status === 'quotaful_out';
+        if (lateQuotaClosed && validatedResponses) {
+          await tx
+            .update(surveyResponses)
+            .set({ questionResponses: validatedResponses, lastActivityAt: completedAt })
+            .where(
+              and(
+                eq(surveyResponses.id, responseId),
+                eq(surveyResponses.status, 'quotaful_out'),
+                isNull(surveyResponses.deletedAt),
+              ),
+            );
+          await replaceResponseAnswers(tx, responseId, existing.surveyId, validatedResponses);
+        }
       } else {
         // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
         throw new Error(

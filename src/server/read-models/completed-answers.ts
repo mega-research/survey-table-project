@@ -72,9 +72,10 @@ export async function loadCompletedQuotaSubjects(
 /** 응답 하나에 연결된 조사 대상의 attrs. 연결이 없거나 대상이 사라졌으면 null. */
 export async function loadContactAttrsForQuota(
   contactTargetId: string | null | undefined,
+  executor: DbOrTx = db,
 ): Promise<Record<string, string> | null> {
   if (!contactTargetId) return null;
-  const [target] = await db
+  const [target] = await executor
     .select({ attrs: contactTargets.attrs })
     .from(contactTargets)
     .where(eq(contactTargets.id, contactTargetId));
