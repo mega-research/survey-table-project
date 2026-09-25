@@ -49,7 +49,7 @@ describe('buildQuotaStatus', () => {
     { 'q-g': 'male', 'q-a': '25' }, // c-m,c-20  (2 → target 2 마감)
     { 'q-g': 'female', 'q-a': '63' }, // c-f,c-60
     { 'q-g': 'other', 'q-a': '63' }, // 미분류
-  ];
+  ].map((answers) => ({ answers, attrs: null }));
   it('셀별 current/target/pct/tone/labels', () => {
     const status = buildQuotaStatus(config, answersList);
     const mCell = status.cells.find((c) => c.categoryIds.join() === 'c-m,c-20')!;
@@ -69,5 +69,10 @@ describe('buildQuotaStatus', () => {
     expect(summary.pct).toBe(50);
     expect(summary.closedCells).toBe(1);
     expect(summary.totalCells).toBe(2);
+  });
+  it('summary.unclassified: 카테고리를 못 얻은 완료 수 — 목표 없는 셀에 분류된 응답은 세지 않는다', () => {
+    const sparse = { answers: { 'q-g': 'female', 'q-a': '25' }, attrs: null }; // 분류는 되나 목표 없는 셀
+    const { summary } = buildQuotaStatus(config, [...answersList, sparse]);
+    expect(summary.unclassified).toBe(1);
   });
 });

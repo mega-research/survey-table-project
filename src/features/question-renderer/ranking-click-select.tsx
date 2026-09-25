@@ -10,6 +10,7 @@ import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { useMobileView } from '@/hooks/use-media-query';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
@@ -17,6 +18,10 @@ import { rankOfOption, toggleRankingOption } from './utils/ranking-click';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
+import {
+  applyMobileOptionsGridOverride,
+  resolveMobileOptionsColumns,
+} from './utils/mobile-card-options';
 
 /**
  * 순위형 "보기 클릭" 입력 UI.
@@ -388,6 +393,8 @@ export interface RankingClickListProps {
   onChange: (next: RankingAnswer[]) => void;
   /** 보기 열 수 — question.optionsColumns 와 같은 의미(undefined/1=1열, 0=가로, N≥2=N열). */
   columns?: number | undefined;
+  /** 모바일 배치 — 미지정이면 다른 선택형과 같은 라벨 길이 기준을 쓴다. */
+  mobileColumns?: number | null | undefined;
   detailTargetScopeId?: string | undefined;
   questionId?: string | undefined;
   cellId?: string | undefined;
@@ -428,13 +435,24 @@ export function RankingClickList({
   allowOther,
   onChange,
   columns,
+  mobileColumns,
   detailTargetScopeId,
   questionId,
   cellId,
 }: RankingClickListProps) {
   const handle = useRankingClick({ answers, positions, onChange });
+  const isMobile = useMobileView();
   const rows = allowOther ? [...options, RANKING_OTHER_OPTION] : options;
-  const layout = rankingGridLayout(columns);
+  const effectiveColumns = isMobile
+    ? resolveMobileOptionsColumns(
+        mobileColumns,
+        rows.map((option) => option.label),
+      )
+    : columns;
+  const layout = rankingGridLayout(effectiveColumns);
+  const layoutStyle = isMobile
+    ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
+    : layout.style;
 
   return (
     <div className="space-y-3">
@@ -447,7 +465,7 @@ export function RankingClickList({
         cellId={cellId}
       />
       {handle.fullNotice && <RankingFullNotice positions={positions} />}
-      <div role="group" aria-label="순위 보기" className={layout.className} style={layout.style}>
+      <div role="group" aria-label="순위 보기" className={layout.className} style={layoutStyle}>
         {rows.map((opt) => (
           <RankingOptionFace
             key={opt.id}

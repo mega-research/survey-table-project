@@ -6,7 +6,7 @@ import { formatBytes } from '@/lib/utils';
  * 한 곳에서만 고치면 양쪽이 동기화된다 (상수 drift 방지).
  */
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
-export const MAX_UPLOAD_ROWS = 5000;
+export const MAX_UPLOAD_ROWS = 20_000;
 
 /**
  * 업로드 파일이 xlsx 확장자 + 용량 한도를 만족하는지 검증.

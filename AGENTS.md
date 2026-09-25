@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-16 (공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+> 최종 갱신: 2026-09-23 (쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 >
 > 2026-09-17 역할 모델 v2(`workspace-roles-v2`) 병합 — Better Auth 인증 · 팀·멤버십 · 설문 capability 접근 엔진(`server/survey-access`) · 작업 범위 · 설문 그룹 · 재배치 센터 · 공유(invite_only·참여자·게스트·실사) · soft delete 복구 · 실사 업체·대리 응답 귀속. 코드 배치·명명 규칙은 staging 기준으로 맞췄고, v2 마이그레이션 12개는 staging 의 0101~0110 과 번호가 겹쳐 **0111~0122** 로 밀었다(상대 순서 유지, 매핑은 아래 "마이그레이션 번호"). 배포 절차는 `docs/runbooks/workspace-roles-v2-deploy.md`.
 
@@ -503,7 +503,7 @@ survey_responses           # 수집된 응답
 ├── isTest                        # 테스트 파티션 여부
 ├── metadata (JSONB), lastEditedAt, deletedAt
 ├── versionId                     # 응답 시점 버전
-├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop (어휘·열림/종결 술어 SSOT: shared/contracts/survey-response.ts)
+├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop (어휘·열림/종결/재응답 술어 SSOT: shared/contracts/survey-response.ts — 전이표도 거기 주석)
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
@@ -771,17 +771,17 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 ## 질문 유형
 
-| 타입          | 설명               | 주요 속성                                                                                                              |
-| ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 타입          | 설명               | 주요 속성                                                                                                                         |
+| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow |
-| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                   |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                  |
-| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                  |
-| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                              |
-| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                           |
-| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                           |
-| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints |
-| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                   |
+| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                              |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                             |
+| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                             |
+| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                         |
+| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                      |
+| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                                      |
+| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints            |
+| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                              |
 
 공통: `titleHtml`(제목 서식본 — 아래 "셀 본문 부분 강조"와 같은 규칙), `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 
@@ -1458,10 +1458,21 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 `surveys.quota_config` (JSONB, NULL = 쿼터 없음) + `features/operations/quota` + `lib/quota/`.
 
-- 차원(`questionId` 바인딩, `choice` | `numeric`) × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만.
+- 차원 × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만. 차원 유형은 넷(`QUOTA_DIMENSION_KINDS`): 문항 바인딩 `choice`(보기값)·`numeric`(구간)·`text`(키워드 포함), 그리고 명단 attrs 열 바인딩 `attr`(값 완전 일치, `questionId` 는 빈 문자열). JSONB 라 마이그레이션 없음.
+- **분류 입력은 응답값이 아니라 판정 대상 `QuotaSubject`(응답값 + 조사 대상 attrs)다.** attrs 는 서버가 응답 행의 `contactTargetId` 로 읽은 값만 싣는다 — 클라이언트 입력 금지. 모수 로더 `loadCompletedQuotaSubjects` 는 `needsContactAttrs(config)` 일 때만 조사 대상을 한 번 더 읽는다. 집행·완료 시점 초과 감지·현황판 셋이 같은 `deriveCategoryIds` 를 쓴다.
+- **텍스트형**: 표 문항이면 `cellIds` 의 input 칸들, 단답형이면 응답 문자열 하나를 본다. 칸별로 공백 제거·소문자화 후 키워드 포함(카테고리 안 OR, 칸은 이어 붙이지 않는다). `isElse` 카테고리(「그 외」)는 놓인 자리와 무관하게 키워드가 전부 빗나간 뒤에만 받고, 대상 칸이 전부 비면 미분류다. 오탈자는 「그 외」로 들어가 미분류 수로는 안 보인다.
+- **미분류**(차원 하나라도 카테고리 없음)는 쿼터에 걸리지 않고 통과한다. 속성형에서는 익명 응답이 항상 미분류라 `requireInviteToken` 을 켜는 것이 관례다(편집 화면이 경고, 코드 강제 없음). 현황판 요약 `unclassified` 가 그 수를 보인다.
+- **쿼터 게이트**(`lib/quota/quota-gate-build.ts` → `Survey.quotaGate`): 속성형은 게이트 문항을 만들지 않는다. 텍스트형 표 문항은 `cellIdsByQuestion` 의 대상 칸에 값이 있어야 "답변됨"이다 — 표 응답은 다른 칸만 채워도 객체가 생겨, 객체 존재로 판정하면 응답당 1회뿐인 확인이 주소를 적기 전에 소진된다. 문항 기반 차원이 없는 플랜은 `checkWithoutQuestions` 로 첫 전환에서 확인한다.
 - `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
 - **publish 없이 즉시 반영되는 라이브 컬럼** (`isPaused`/`pausedMessage`와 동일 취급).
 - 실시간 달성률은 완료 응답 기준 — `docs/adr/0002-quota-realtime-from-completed-answers.md`.
+- **「진행 중 마감」** (`midSurveyClose`, 기본 꺼짐 — ADR 0025, CONTEXT.md 「진행 중 마감」): 셀 완료 수가 목표를 넘으면 안 되는 조사(완료자 전원 사례 지급)용. 켜면 두 가지가 바뀐다.
+  - **제출 시점 하드 차단(유일한 강제 지점)** — `completeResponse` 가 트랜잭션 첫 문장으로 `pg_advisory_xact_lock(hashtext(surveyId), hashtext(cellKey))` 를 잡고(응답 행 잠금보다 **먼저**, 교착 방지) 잠금 아래에서 셀 완료 수를 다시 센다(`countQuotaCellCompleted` — 모수 로더에 tx 를 `executor` 로 넘긴다). 목표 이상이면 답변은 저장하되 `status='quotaful_out'`·`is_completed=false`·`completed_at` 없음·컨택 완료 링크 없음이고, 결과는 `{ kind: 'quota_closed', closedMessage }` 다. 이미 `quotaful_out` 인 행의 늦은 제출도 같은 결과(「이미 완료」가 아니다). 판정 재료는 평문 답(PII 암호화 전) + 서버가 읽은 조사 대상 attrs 이고 입장 판정과 같은 `deriveCategoryIds` 를 쓴다. 자격미달로 끝나는 제출은 셀을 소비하지 않아 판정하지 않는다. **빈 complete(페이로드 없음)도 판정한다** — draft 로 저장한 답을 페이로드 없이 완료해 우회하는 길을 막는다. 잠금 순서(advisory → 응답 행)를 지키려 잠금 전 저장분으로 셀 키를 고르고, 잠금 아래 저장분으로 다시 분류해 같은 셀일 때만 센다(그 사이 draft 가 셀을 바꾼 극히 드문 경우는 fail-open, 경고 로그). 플랜 읽기·셀 분류·셀 완료 수는 `server/read-models/quota-cell.ts` 한 곳이고 입장 판정 `checkQuota` 도 같은 것을 쓴다.
+  - **페이지마다 백그라운드 재확인** — 게이트에 `recheckOnEachStep` 이 실리고(집행 중 + 옵션 켜짐, `buildQuotaGate`), 응답 화면은 첫 판정(기다림) 이후의 모든 「다음」에서 `quota.check` 를 기다리지 않고 발사한다. blocked 면 마감 화면으로 갈아 끼우고, 실패·429 는 통과, 마지막 「제출」에서는 보내지 않는다(제출이 판정을 받는다). 제출 뒤 도착한 늦은 결과는 버린다. `checkQuota` 는 그래서 **재호출 멱등**이다 — `quotaful_out` 이면 모수를 세지 않고 blocked, 그 밖의 종결 상태면 아무것도 안 한다. 알림 속도를 위한 것이라 빠져도 불변식은 깨지지 않는다.
+  - **문구 구분**: 입장 판정에서 막힘 = `closedMessage`, 입장 뒤 막힘 = `midSurveyClosedMessage`(비면 `closedMessage`, 둘 다 비면 사과 톤 상수 `QUOTA_MID_SURVEY_CLOSED_FALLBACK`). 폴백 사슬·상수·본문 헬퍼 `midSurveyClosedBody` 는 `lib/quota/closed-message.ts` 한 곳이고 응답 화면·편집 화면 미리보기가 같이 쓴다(기존 `QUOTA_CLOSED_FALLBACK` 의 값 복제 관례와 다르다 — 이번엔 양쪽이 이미 그 lib 을 import 한다). `quota.check` 결과는 둘 다 싣되 어느 단계인지는 클라이언트가 안다.
+  - **면제**: 운영자가 만드는 완료 — 관리자 응답 수정의 이탈→완료(`saveAdminEdit`)와 재응답 허용으로 되돌려진 응답(`metadata.reeditPendingSince`)의 재제출 — 는 차단하지 않고 기존 초과 표식 `metadata.quotaOverflow` 만 남긴다(재응답 표식은 재제출 뒤에도 남지만 완료 행은 재응답 허용으로만 다시 열린다). 미분류·목표 없는 셀·테스트 응답은 종전대로 통과.
+  - **꺼진 설문의 제출 경로는 종전과 같다** — 잠금 없음, 동시 제출 초과는 표식만(2026-08-11 정책). 자리 예약(진행중 응답을 셀 인원으로 세기)·일시 만원 화면은 검토 후 미채택이라 구현에 없다.
+  - 부하 메모: 재확인마다 완료 응답 전체를 읽어 센다. 완료 수천 건 설문에서 켜면 부하가 되니 그때 셀 카운트 질의로 바꾼다. 레이트리밋 `quota-check` 는 응답당 30·IP 당 300/분 그대로다 — 호출이 응답당 1회에서 페이지마다로 늘었으니 대형 공용 IP(콜센터급)에서 켜면 429 fail-open 이 늘 수 있다(불변식은 제출 판정이 지킨다).
 
 ---
 
@@ -1795,6 +1806,10 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
     **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 계산 키가 `undefined` 로 등록되고, 그 사이드카가 등록 목록에서 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝나므로 아무도 모른다. 2026-09-16 에 실제로 닫혀 있었고(`__optTexts__` 를 `lib/option-text-read.ts` 로 내려 끊었다), 순환을 만든 것은 등록부의 직접 import 가 아니라 `prior-answers → response-sidecars` 라는 **전이 closure 안쪽 간선**이었다. 그래서 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 봐야 한다. `lib/survey/response-sidecars-import-order.test.ts` 가 소스를 읽어 이 간선을 막고, 등록 키 집합 전체를 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
 
 14. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정 — 세션 되돌리기 버퍼는 검토 후 미채택). 판정·삭제는 `lib/survey/question-visibility.ts` 의 `resolveVisibleQuestionIds`/`stripHiddenQuestionValues` 한 곳이다. 복제 금지 — 셀 게이팅(`cell-gating.ts`)과 같은 규약. 저장 경계 순서는 **숨은 문항 strip → 게이팅 strip → calc 재계산**. **초안·구간 저장에는 걸지 않는다.** 그쪽 answers 는 더티 키만 담은 부분 패치이고 저장이 jsonb 합집합 병합이라, strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것.
+
+15. **응답 종결 판정은 `status` 로 한다 — `is_completed` 는 종결 게이트가 아니다**: 자격미달(`screened_out`)은 완료 수 분자에서 빠지도록 `is_completed=false` 로 저장된다(`response-completion` 의 `isCompleted: !screenedOut`). 그래서 `is_completed` 를 "끝난 응답인가" 게이트로 쓰면 자격미달만 조용히 빠진다 — 재응답 허용이 `ok:true` 를 돌려주면서 아무것도 안 하던 사고가 이것이다(2026-09-21 수리). 어휘와 술어는 `shared/contracts/survey-response.ts` 가 SSOT 다: 열림 `isOpenResponseStatus` · 종결 `isConcludedResponseStatus` · 재응답 허용 대상 `isReeditableResponseStatus`(completed·screened_out). `is_completed=false` 를 쿼리에 쓰는 것 자체는 무방하나(열린 행 **후보** 조회 범위), 판정은 반드시 status 술어로 한 번 더 한다 — `lifecycle`·`response-row-create` 의 컨택 재사용 조회가 그 패턴이다.
+
+16. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe).
 
 ---
 

@@ -3,10 +3,11 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
+import { loadCompletedQuotaSubjects } from '@/server/read-models/completed-answers';
 
 import type { OperationsDataScope } from '@/server/data-scope';
 import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/quota/quota-status-calc';
+import { needsContactAttrs } from '@/lib/quota/matching';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 /**
@@ -25,8 +26,10 @@ export async function getQuotaStatus(
   const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
   if (!config) return null;
 
-  const answersList = await loadCompletedPlainAnswers(surveyId, scope);
-  return buildQuotaStatus(config, answersList);
+  const subjects = await loadCompletedQuotaSubjects(surveyId, scope, {
+    withAttrs: needsContactAttrs(config),
+  });
+  return buildQuotaStatus(config, subjects);
 }
 
 /** KPI 카드용 요약만. 미설정이면 null. */

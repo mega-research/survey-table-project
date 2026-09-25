@@ -6,6 +6,11 @@ const h = vi.hoisted(() => ({
   lockedTestMode: false,
   deleteWheres: [] as unknown[],
   targetInsertValues: [] as Array<Record<string, unknown>>,
+  rows: [{ 회사명: '아크미' }] as Array<Record<string, string>>,
+  /** 묶음(2행 이상) INSERT 를 실패시킨다 — 행 단위 재시도 경로 검증용 */
+  failBatchInsert: false,
+  /** 이 회사명을 가진 행은 한 행씩 넣어도 실패한다 */
+  failRowCompany: null as string | null,
 }));
 
 vi.mock('@/server/data-scope', () => ({
@@ -13,7 +18,7 @@ vi.mock('@/server/data-scope', () => ({
 }));
 
 vi.mock('./excel-parser', () => ({
-  parseExcelRows: vi.fn(async () => [{ 회사명: '아크미' }]),
+  parseExcelRows: vi.fn(async () => h.rows),
   previewExcel: vi.fn(),
 }));
 
@@ -58,12 +63,22 @@ vi.mock('@/db', () => {
   tx['insert'] = vi.fn((table: Record<PropertyKey, unknown>) => {
     const tableName = table[Symbol.for('drizzle:Name')];
     return {
-      values: (values: Record<string, unknown>) => {
-        if (tableName === 'contact_targets') h.targetInsertValues.push(values);
+      values: (values: Record<string, unknown> | Record<string, unknown>[]) => {
+        const list = Array.isArray(values) ? values : [values];
+        if (tableName === 'contact_targets') {
+          if (h.failBatchInsert && list.length > 1) throw new Error('batch 실패');
+          const attrs = list[0]?.['attrs'] as Record<string, string> | undefined;
+          if (list.length === 1 && h.failRowCompany != null && attrs?.['회사명'] === h.failRowCompany) {
+            throw new Error('row 실패');
+          }
+          h.targetInsertValues.push(...list);
+        }
         return {
-          returning: async () => [
-            { id: tableName === 'contact_uploads' ? 'upload-1' : 'target-1' },
-          ],
+          // 조사 대상은 묶음 INSERT 라 넣은 행마다 id·resid 를 돌려준다
+          returning: async () =>
+            tableName === 'contact_uploads'
+              ? [{ id: 'upload-1' }]
+              : list.map((v, i) => ({ id: `target-${i + 1}`, resid: v['resid'] })),
         };
       },
     };
@@ -106,6 +121,9 @@ beforeEach(() => {
   h.lockedTestMode = false;
   h.deleteWheres.length = 0;
   h.targetInsertValues.length = 0;
+  h.rows = [{ 회사명: '아크미' }];
+  h.failBatchInsert = false;
+  h.failRowCompany = null;
 });
 
 describe('ingestContactUpload 삭제 직전 스코프 가드', () => {
@@ -128,5 +146,32 @@ describe('ingestContactUpload 삭제 직전 스코프 가드', () => {
     expect(deleteQuery.params).toContain(false);
     expect(h.targetInsertValues).toHaveLength(1);
     expect(h.targetInsertValues[0]).toMatchObject({ surveyId: SURVEY_ID, isTest: false });
+  });
+});
+
+describe('ingestContactUpload 묶음 적재', () => {
+  it('묶음 INSERT 가 실패하면 그 묶음만 행 단위로 다시 넣고, 실패 행은 시스템ID 를 소비하지 않는다', async () => {
+    h.rows = [{ 회사명: 'A' }, { 회사명: 'B' }, { 회사명: 'C' }, { 회사명: 'D' }];
+    h.failBatchInsert = true;
+    h.failRowCompany = 'B';
+
+    await expect(ingestContactUpload(input)).resolves.toMatchObject({
+      uploadedRows: 3,
+      errorRows: 1,
+    });
+
+    // mock 의 next_contact_resid 는 1 을 준다 — A=1, B 실패(번호 소비 없음), C=2, D=3
+    expect(h.targetInsertValues.map((v) => [(v['attrs'] as Record<string, string>)['회사명'], v['resid']])).toEqual([
+      ['A', 1],
+      ['C', 2],
+      ['D', 3],
+    ]);
+  });
+
+  it('묶음이 성공하면 행마다 연속 시스템ID 를 붙여 한 번에 넣는다', async () => {
+    h.rows = [{ 회사명: 'A' }, { 회사명: 'B' }, { 회사명: 'C' }];
+
+    await expect(ingestContactUpload(input)).resolves.toMatchObject({ uploadedRows: 3, errorRows: 0 });
+    expect(h.targetInsertValues.map((v) => v['resid'])).toEqual([1, 2, 3]);
   });
 });

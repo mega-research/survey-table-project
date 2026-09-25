@@ -10,6 +10,7 @@ import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-
 import { consumeSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
+import { midSurveyClosedBody } from '@/lib/quota/closed-message';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';
@@ -155,6 +156,8 @@ interface UseResponseLifecycleArgs {
   setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
   /** 세션 도중 중단 감지 시 재조회한 최신 중단 문구 승격용 (handlePausedMutationError 로 전달). */
   setPausedMessage?: Dispatch<SetStateAction<string | null>>;
+  /** 제출이 쿼터 진행 중 마감에 막혔을 때 마감 화면에 띄울 문구 (quota_closed 차단 화면이 읽는다). */
+  setQuotaClosedMessage?: Dispatch<SetStateAction<string | null>>;
   setInviteIsInvalid: Dispatch<SetStateAction<boolean>>;
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
@@ -248,6 +251,7 @@ export function useResponseLifecycle({
   setHighlightQuestionIds,
   setDuplicateStatus,
   setPausedMessage,
+  setQuotaClosedMessage,
   setInviteIsInvalid,
   setIsSubmitting,
   setCurrentStepIndex,
@@ -979,6 +983,13 @@ export function useResponseLifecycle({
         // 종전에는 서버가 던졌고 운영에서 마스킹돼 재시도 토스트로만 끝났다.
         if (completed && 'kind' in completed) {
           resetResponseState();
+          if (completed.kind === 'quota_closed') {
+            // 쿼터 「진행 중 마감」 하드 차단 — 답변은 저장됐고 상태만 쿼터마감. 완료 화면 대신
+            // 기존 쿼터 마감 화면에 진행 중 마감 문구(서버가 폴백 적용, null 이면 사과 톤 기본)를 띄운다.
+            setQuotaClosedMessage?.(midSurveyClosedBody(completed.closedMessage));
+            setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+            return;
+          }
           setDuplicateStatus({ kind: 'blocked', reason: completed.reason });
           return;
         }

@@ -286,6 +286,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
           allowOther={allowOther}
           onChange={onChange}
           columns={question.optionsColumns}
+          mobileColumns={question.mobileOptionsColumns}
           detailTargetScopeId={question.id}
           questionId={question.id}
         />
@@ -366,6 +367,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                   isGrouped ? handleGroupChange(scope.key, next) : onChange(next)
                 }
                 columns={question.optionsColumns}
+                mobileColumns={question.mobileOptionsColumns}
                 detailTargetScopeId={scope.detailTargetScopeId}
                 questionId={question.id}
                 cellId={scope.priorCellId}

@@ -2,16 +2,19 @@ import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactTargets, questions, surveyVersions, surveys } from '@/db/schema';
+import { contactTargets, questions, surveyVersions } from '@/db/schema';
 import {
   encryptResponsesForStorage,
   hasPiiTargets,
   type PiiTargets,
 } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers';
-import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
-import { normalizeQuotaConfig } from '@/lib/quota/normalize';
+import {
+  countQuotaCellCompleted,
+  loadQuotaPlan,
+  resolveQuotaTargetCell,
+} from '@/server/read-models/quota-cell';
+import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -230,30 +233,24 @@ export async function loadPiiTargets(
  * 게이트 판정(quota.check)과 완료 사이의 race(같은 셀 동시 진행자가 먼저 완료) 또는
  * 게이트 판정이 fail-open 으로 스킵된 완료를 식별한다. 정책(2026-08-11): 완주자는
  * 정상 완료로 수용하고 metadata.quotaOverflow 플래그만 남긴다 — 운영/데이터 처리에서
- * 식별·제외할 수 있게 한다. 카운트 소스는 quota.service.checkQuota 와 동일
+ * 식별·제외할 수 있게 한다. 카운트 소스는 server/quota checkQuota 와 동일(read-models/quota-cell)
  * (완료 응답 로드 후 lib/quota 순수 함수). 판정 실패는 fail-open — 완료를 막지 않는다.
  */
 export async function detectQuotaOverflow(
   surveyId: string,
   plainAnswers: Record<string, unknown>,
+  contactTargetId: string | null,
+  preloadedPlan?: NormalizedQuotaConfig | null,
 ): Promise<boolean> {
   try {
-    const surveyRow = await db.query.surveys.findFirst({
-      where: eq(surveys.id, surveyId),
-      columns: { quotaConfig: true },
-    });
-    // JSONB 드리프트 보정 — 소비처(deriveCategoryIds·findTarget·countCell)는
-    // dimensions·cells·categories 를 배열로 순회한다.
-    const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
+    const config = preloadedPlan === undefined ? await loadQuotaPlan(surveyId) : preloadedPlan;
     if (!config?.enabled) return false;
 
-    const categoryIds = deriveCategoryIds(config, plainAnswers);
-    if (!categoryIds) return false;
-    const target = findTarget(config, categoryIds);
-    if (target === null) return false;
+    const cell = await resolveQuotaTargetCell(config, plainAnswers, contactTargetId);
+    if (!cell) return false;
 
-    const answersList = await loadCompletedPlainAnswers(surveyId, 'real');
-    return countCell(config, categoryIds, answersList) >= target;
+    const current = await countQuotaCellCompleted(db, surveyId, config, cell);
+    return current >= cell.target;
   } catch (err) {
     logger.error({ surveyId, err }, '[quota] 완료 시점 초과 감지 실패 — fail-open 통과');
     return false;

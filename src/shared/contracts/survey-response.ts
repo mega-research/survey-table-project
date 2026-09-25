@@ -34,6 +34,8 @@ export interface PageVisit {
 //   in_progress ──(3h 유휴 sweep_stale_sessions)──▶ drop ──(재진입 되살리기)──▶ in_progress
 //   in_progress ──(쿼터 마감 markQuotaFull)────▶ quotaful_out
 //   completed   ──(운영 콘솔 재응답 허용)──────▶ in_progress
+//   screened_out ─(운영 콘솔 재응답 허용)──────▶ in_progress
+//   screened_out ⇄ completed ─(운영 콘솔 응답 수정 + 자격미달 재판정)
 //
 // screened_out 은 완료 확정과 같은 지점에서 갈린다 — 자격미달 end 규칙이 매칭되면
 // completeResponse 가 completed 대신 이 값을 쓴다(response-completion.service).
@@ -83,4 +85,26 @@ export function isOpenResponseStatus(status: string): status is OpenResponseStat
 /** 종결 상태인가(completed·screened_out·quotaful_out·bad). 알 수 없는 값은 false. */
 export function isConcludedResponseStatus(status: string): status is ConcludedResponseStatus {
   return (concludedResponseStatusValues as readonly string[]).includes(status);
+}
+
+/**
+ * 재응답 허용(운영 콘솔)으로 진행중으로 되돌릴 수 있는 상태.
+ *
+ * 자격미달(screened_out)도 포함한다 — 조건 문항을 잘못 고른 응답자를 초기화(응답 행
+ * 물리 삭제) 없이 되돌릴 수 있어야 하고, 재제출하면 completeResponse 가 자격미달을 다시
+ * 판정하므로 되돌리기가 판정을 건너뛰게 만들지 않는다.
+ *
+ * quotaful_out·bad 는 제외한다. 쿼터 마감은 되돌려도 재제출이 같은 셀에서 다시 막히고,
+ * bad 는 운영자가 부여한 폐기 표식이라 응답자에게 돌려줄 대상이 아니다.
+ *
+ * **isCompleted 로 판정하지 말 것** — screened_out 은 완료 수 분자에서 빠지도록
+ * is_completed=false 로 저장되므로(response-completion), 그 컬럼을 게이트로 쓰면
+ * 자격미달 되돌리기가 조용한 no-op 이 된다.
+ */
+export const reeditableResponseStatusValues = ['completed', 'screened_out'] as const;
+export type ReeditableResponseStatus = (typeof reeditableResponseStatusValues)[number];
+
+/** 재응답 허용 대상 상태인가. 알 수 없는 값은 false. */
+export function isReeditableResponseStatus(status: string): status is ReeditableResponseStatus {
+  return (reeditableResponseStatusValues as readonly string[]).includes(status);
 }

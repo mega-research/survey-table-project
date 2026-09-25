@@ -4,6 +4,7 @@ import 'server-only';
 import { type DbOrTx, db } from '@/db';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
 import { allocateContactResid } from './contact-resid';
+import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import {
@@ -17,11 +18,14 @@ import {
   appendNewColumnsToScheme,
   getSchemeRouting,
 } from './scheme-helpers';
-import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
+import { validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
   type PiiInput,
   buildPiiRows,
+  deletePiiPairsBatch,
   insertPiiRows,
+  planPiiValue,
+  upsertPiiRowsBatch,
   upsertPiiValue,
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
@@ -45,6 +49,21 @@ import type {
   ParseExcelPreviewResult,
 } from '../domain/contact-upload';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+
+/**
+ * 한 묶음에 싣는 행 수. contact_targets 7열 × 500행 = 3,500 파라미터로 PG 한도(65,535) 안쪽이고,
+ * 묶음이 실패하면 그 묶음만 행 단위로 다시 넣으므로 실패 한 건이 되풀이하는 비용도 작다.
+ */
+const CONTACT_WRITE_BATCH_ROWS = 500;
+
+/** PII 행을 나눠 넣는 상한 — 6열 × 2,000행 = 12,000 파라미터. */
+const PII_INSERT_BATCH_ROWS = 2000;
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 interface SurveyModeRow extends Record<string, unknown> {
   test_mode_enabled: boolean;
@@ -71,11 +90,7 @@ export async function parseExcelPreview(
     maxRows: 5,
   });
 
-  if (result.totalRows > MAX_UPLOAD_ROWS) {
-    throw new Error(
-      `최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다 (현재 ${result.totalRows.toLocaleString('ko-KR')} 행).`,
-    );
-  }
+  assertUploadRowLimit(result.totalRows, { operation: 'contact_upload_preview' });
 
   return {
     sheetNames: result.sheetNames,
@@ -101,7 +116,10 @@ export async function parseExcelPreview(
  * PII 라우팅: replace 는 위저드 입력만 따르고, merge/append 는 기존 스킴이 우선한다
  * (resolveEffectiveRouting — PII 평문 유출 차단).
  *
- * 트랜잭션: 단일 트랜잭션. 행 단위 INSERT/UPDATE 에러는 SAVEPOINT 격리.
+ * 트랜잭션: 단일 트랜잭션. 행을 500개씩 묶어 한 번에 쓰고(SAVEPOINT 하나), 묶음이 실패하면 그 묶음만
+ * 행 단위 SAVEPOINT 로 다시 넣어 실패 행을 집계한다. 행마다 SAVEPOINT 를 두던 방식은 서브트랜잭션이
+ * 수천 개 쌓여 행 수보다 빠르게 느려졌다(로컬 5,000행 53초). 시스템ID 는 트랜잭션 안에서 한 번
+ * 발번해(권고 잠금이 트랜잭션 끝까지 유지) 연속 번호를 붙인다.
  * 컬럼 스킴: replace 또는 기존 스킴이 없으면 전체 재생성, merge/append 는 신규 컬럼만 append.
  */
 export async function ingestContactUpload(
@@ -124,9 +142,7 @@ export async function ingestContactUpload(
     headerRow: mapping.headerRow,
   });
 
-  if (allRows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
-  }
+  assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];
@@ -195,42 +211,113 @@ export async function ingestContactUpload(
     if (!upload) throw new Error('contact_uploads INSERT 실패');
     const uploadId = upload.id;
 
-    /** 행 하나를 신규 컨택으로 INSERT (SAVEPOINT 내부에서 호출) */
-    async function insertContactRow(sp: typeof tx, row: Record<string, string>): Promise<void> {
-      // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+    /** 분류 기준 값 — 빈 셀('')만 NULL. '0' 등 falsy 문자열 라벨은 보존 (|| 사용 금지). */
+    function groupValueOf(row: Record<string, string>): string | null {
       const rawGroup = groupKey ? row[groupKey] : undefined;
-      const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+      return rawGroup != null && rawGroup !== '' ? rawGroup : null;
+    }
 
-      // attrs 에서 PII 키 제외 — PII 는 contact_pii 사이드 테이블에만 저장
+    /** attrs 에서 PII 키 제외 — PII 는 contact_pii 사이드 테이블에만 저장 */
+    function attrsWithoutPii(row: Record<string, string>): Record<string, string> {
       const cleanAttrs: Record<string, string> = {};
       for (const [k, v] of Object.entries(row)) {
         if (!piiKeySet.has(k)) cleanAttrs[k] = v;
       }
+      return cleanAttrs;
+    }
 
-      const resid = await allocateContactResid(sp, surveyId, false);
+    // 시스템ID 는 첫 신규 행을 넣을 때 한 번 발번한다. next_contact_resid 가 잡는 권고 잠금은
+    // 트랜잭션 끝까지 유지되므로, 그 뒤 연속 번호는 다른 발번(수동 추가 등)과 겹치지 않는다.
+    // 실패한 행은 번호를 소비하지 않는다 — 행마다 MAX+1 을 묻던 이전 방식과 같은 결과다.
+    let nextResid: number | null = null;
 
-      const [target] = await sp
+    /** 행 묶음을 신규 컨택으로 INSERT (SAVEPOINT 내부에서 호출). 번호는 startResid 부터 연속. */
+    async function insertContactChunk(
+      sp: typeof tx,
+      rows: readonly Record<string, string>[],
+      startResid: number,
+    ): Promise<void> {
+      const inserted = await sp
         .insert(contactTargets)
-        .values({
-          surveyId,
-          resid,
-          isTest: false,
-          groupValue,
-          attrs: cleanAttrs,
-          uploadId,
-          inviteCode: generateInviteCode(),
-        })
-        .returning({ id: contactTargets.id });
-      if (!target) throw new Error('contact_targets INSERT 실패');
+        .values(
+          rows.map((row, i) => ({
+            surveyId,
+            resid: startResid + i,
+            isTest: false,
+            groupValue: groupValueOf(row),
+            attrs: attrsWithoutPii(row),
+            uploadId,
+            inviteCode: generateInviteCode(),
+          })),
+        )
+        .returning({ id: contactTargets.id, resid: contactTargets.resid });
+      if (inserted.length !== rows.length) throw new Error('contact_targets INSERT 실패');
 
-      // PII 추출 + 암호화 저장 (buildPiiRows 가 빈 값/정규화 후 빈 값 자동 스킵)
+      // PII 추출 + 암호화 저장 (buildPiiRows 가 빈 값/정규화 후 빈 값 자동 스킵).
+      // RETURNING 순서에 기대지 않고 발번한 시스템ID 로 행을 짝짓는다.
       if (piiEntries.length > 0) {
-        const piiInputs: PiiInput[] = piiEntries.map((e) => ({
-          columnKey: e.columnKey,
-          fieldType: e.fieldType,
-          plain: row[e.columnKey] ?? '',
-        }));
-        await insertPiiRows(sp, buildPiiRows(target.id, piiInputs));
+        const idByResid = new Map(inserted.map((t) => [t.resid, t.id]));
+        const piiRows = rows.flatMap((row, i) => {
+          const targetId = idByResid.get(startResid + i);
+          if (!targetId) throw new Error('contact_targets INSERT 결과 대조 실패');
+          const piiInputs: PiiInput[] = piiEntries.map((e) => ({
+            columnKey: e.columnKey,
+            fieldType: e.fieldType,
+            plain: row[e.columnKey] ?? '',
+          }));
+          return buildPiiRows(targetId, piiInputs);
+        });
+        for (const part of chunk(piiRows, PII_INSERT_BATCH_ROWS)) {
+          await insertPiiRows(sp, part);
+        }
+      }
+    }
+
+    /**
+     * 신규 행 적재 — 묶음 단위로 넣고, 묶음이 실패하면 그 묶음만 행 단위로 다시 넣어 실패 행을 센다.
+     * logLabel 은 행 실패 로그 문구(기존 문구 유지).
+     */
+    async function insertContactRows(
+      items: readonly { rowIndex: number; row: Record<string, string> }[],
+      logLabel: string,
+    ): Promise<void> {
+      if (items.length === 0) return;
+      let resid: number = nextResid ?? (await allocateContactResid(tx, surveyId, false));
+      try {
+        for (const batch of chunk(items, CONTACT_WRITE_BATCH_ROWS)) {
+          const start = resid;
+          try {
+            await tx.transaction(async (sp) =>
+              insertContactChunk(
+                sp,
+                batch.map((b) => b.row),
+                start,
+              ),
+            );
+            resid = start + batch.length;
+            uploadedRows += batch.length;
+            continue;
+          } catch (e) {
+            // attrs/PII 값 로그 금지 — 식별자와 err 만
+            logger.warn(
+              { surveyId, uploadId, firstRowIndex: batch[0]?.rowIndex, size: batch.length, err: e },
+              '[ingestContactUpload] 묶음 INSERT 실패 — 행 단위로 다시 넣는다',
+            );
+          }
+          for (const { rowIndex, row } of batch) {
+            const single = resid;
+            try {
+              await tx.transaction(async (sp) => insertContactChunk(sp, [row], single));
+              resid = single + 1;
+              uploadedRows += 1;
+            } catch (e) {
+              errorRows += 1;
+              logger.error({ surveyId, uploadId, rowIndex, err: e }, logLabel);
+            }
+          }
+        }
+      } finally {
+        nextResid = resid;
       }
     }
 
@@ -241,16 +328,9 @@ export async function ingestContactUpload(
       targetId: string,
       existingAttrs: Record<string, string>,
     ): Promise<void> {
-      const cleanAttrs: Record<string, string> = {};
-      for (const [k, v] of Object.entries(row)) {
-        if (!piiKeySet.has(k)) cleanAttrs[k] = v;
-      }
+      const cleanAttrs = attrsWithoutPii(row);
       // 분류 기준 컬럼이 파일에 없으면 groupValue 는 건드리지 않는다.
-      const rawGroup = groupKey ? row[groupKey] : undefined;
-      const groupPatch =
-        groupKey != null
-          ? { groupValue: rawGroup != null && rawGroup !== '' ? rawGroup : null }
-          : {};
+      const groupPatch = groupKey != null ? { groupValue: groupValueOf(row) } : {};
 
       await sp
         .update(contactTargets)
@@ -267,6 +347,49 @@ export async function ingestContactUpload(
       }
     }
 
+    /**
+     * 키 일치 행 묶음을 한 번에 부분 갱신 (SAVEPOINT 내부에서 호출) — mergeContactRow 와 같은 결과.
+     * attrs 는 기존 값에 얕게 병합한 전체를 쓰고, PII 는 칸마다 upsert 또는 삭제를 묶어서 보낸다.
+     */
+    async function mergeContactChunk(
+      sp: typeof tx,
+      items: readonly { row: Record<string, string>; targetId: string }[],
+      existingAttrsById: Map<string, Record<string, string>>,
+    ): Promise<void> {
+      const payload = JSON.stringify(
+        items.map(({ row, targetId }) => ({
+          id: targetId,
+          attrs: { ...(existingAttrsById.get(targetId) ?? {}), ...attrsWithoutPii(row) },
+          group_value: groupValueOf(row),
+        })),
+      );
+      // 분류 기준 컬럼이 파일에 없으면 group_value 는 건드리지 않는다(행 단위와 같은 규칙).
+      const updated = await sp.execute<{ id: string }>(sql`
+        UPDATE contact_targets AS t
+        SET attrs = v.attrs,
+            group_value = ${groupKey != null ? sql`v.group_value` : sql`t.group_value`},
+            updated_at = now()
+        FROM jsonb_to_recordset(${payload}::jsonb) AS v(id uuid, attrs jsonb, group_value text)
+        WHERE t.id = v.id
+        RETURNING t.id
+      `);
+      if (updated.length !== items.length) throw new Error('contact_targets 병합 UPDATE 실패');
+
+      if (piiEntries.length > 0) {
+        const upserts = [];
+        const deletes: { contactTargetId: string; columnKey: string }[] = [];
+        for (const { row, targetId } of items) {
+          for (const e of piiEntries) {
+            const planned = planPiiValue(targetId, e.columnKey, e.fieldType, row[e.columnKey] ?? '');
+            if (planned) upserts.push(planned);
+            else deletes.push({ contactTargetId: targetId, columnKey: e.columnKey });
+          }
+        }
+        await upsertPiiRowsBatch(sp, upserts);
+        await deletePiiPairsBatch(sp, deletes);
+      }
+    }
+
     if (mode === 'merge') {
       const mergeKeys = mapping.mergeKeys ?? [];
       validateMergeKeys(mergeKeys, headerKeys, piiKeySet);
@@ -278,24 +401,39 @@ export async function ingestContactUpload(
       skippedBreakdown.multiMatches = classified.multiMatches.length;
       skippedBreakdown.emptyKeys = classified.emptyKeys.length;
 
-      for (const { rowIndex, targetId } of classified.matched) {
+      const matchedItems = classified.matched.flatMap(({ rowIndex, targetId }) => {
         const row = allRows[rowIndex];
-        if (!row) continue;
+        return row ? [{ rowIndex, row, targetId }] : [];
+      });
+      for (const batch of chunk(matchedItems, CONTACT_WRITE_BATCH_ROWS)) {
         try {
-          await tx.transaction(async (sp) => {
-            await mergeContactRow(sp, row, targetId, existingAttrsById.get(targetId) ?? {});
-          });
-          mergedRows += 1;
+          await tx.transaction(async (sp) => mergeContactChunk(sp, batch, existingAttrsById));
+          mergedRows += batch.length;
+          continue;
         } catch (e) {
-          errorRows += 1;
-          // attrs/PII 값 로그 금지 — 식별자와 err 만 (err serializer 가 쿼리 params 차단)
-          logger.error(
-            { surveyId, uploadId, rowIndex, err: e },
-            '[ingestContactUpload] merge row 실패',
+          logger.warn(
+            { surveyId, uploadId, firstRowIndex: batch[0]?.rowIndex, size: batch.length, err: e },
+            '[ingestContactUpload] 묶음 병합 실패 — 행 단위로 다시 갱신한다',
           );
+        }
+        for (const { rowIndex, row, targetId } of batch) {
+          try {
+            await tx.transaction(async (sp) => {
+              await mergeContactRow(sp, row, targetId, existingAttrsById.get(targetId) ?? {});
+            });
+            mergedRows += 1;
+          } catch (e) {
+            errorRows += 1;
+            // attrs/PII 값 로그 금지 — 식별자와 err 만 (err serializer 가 쿼리 params 차단)
+            logger.error(
+              { surveyId, uploadId, rowIndex, err: e },
+              '[ingestContactUpload] merge row 실패',
+            );
+          }
         }
       }
 
+      const unmatchedItems: { rowIndex: number; row: Record<string, string> }[] = [];
       for (const rowIndex of classified.unmatched) {
         const row = allRows[rowIndex];
         if (!row) continue;
@@ -303,17 +441,9 @@ export async function ingestContactUpload(
           skippedBreakdown.policy += 1;
           continue;
         }
-        try {
-          await tx.transaction(async (sp) => insertContactRow(sp, row));
-          uploadedRows += 1;
-        } catch (e) {
-          errorRows += 1;
-          logger.error(
-            { surveyId, uploadId, rowIndex, err: e },
-            '[ingestContactUpload] insert row 실패',
-          );
-        }
+        unmatchedItems.push({ rowIndex, row });
       }
+      await insertContactRows(unmatchedItems, '[ingestContactUpload] insert row 실패');
     } else {
       // replace / append 공통: 전 행 INSERT. append+중복검사는 중복 행만 policy 적용.
       const duplicateRowIndexes = new Set<number>();
@@ -338,19 +468,15 @@ export async function ingestContactUpload(
       }
       const duplicatePolicy = mapping.duplicatePolicy ?? 'skip';
 
+      const insertItems: { rowIndex: number; row: Record<string, string> }[] = [];
       for (const [rowIndex, row] of allRows.entries()) {
         if (duplicateRowIndexes.has(rowIndex) && duplicatePolicy === 'skip') {
           skippedBreakdown.policy += 1;
           continue;
         }
-        try {
-          await tx.transaction(async (sp) => insertContactRow(sp, row));
-          uploadedRows += 1;
-        } catch (e) {
-          errorRows += 1;
-          logger.error({ surveyId, uploadId, rowIndex, err: e }, '[ingestContactUpload] row 실패');
-        }
+        insertItems.push({ rowIndex, row });
       }
+      await insertContactRows(insertItems, '[ingestContactUpload] row 실패');
     }
 
     const skippedRows =
@@ -583,9 +709,7 @@ export async function matchContactUpload(
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
   });
-  if (allRows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
-  }
+  assertUploadRowLimit(allRows.length, { operation: 'contact_upload_match', surveyId });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];

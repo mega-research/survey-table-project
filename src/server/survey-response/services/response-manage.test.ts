@@ -31,8 +31,8 @@ vi.mock('@/db', () => {
   function terminalFor(fields: Record<string, unknown>): unknown[] {
     const keys = Object.keys(fields);
     h.selectedFieldSets.push(keys);
-    // 응답 행 조회
-    if (keys.includes('isCompleted')) return h.responseRow ? [h.responseRow] : [];
+    // 응답 행 조회 — status 는 버전 행 조회와 겹치므로 isTest 로 가른다.
+    if (keys.includes('isTest')) return h.responseRow ? [h.responseRow] : [];
     // 설문 게이트 행 조회 (status 도 포함하므로 isPaused 로 먼저 가른다)
     if (keys.includes('isPaused')) return h.gateRow ? [h.gateRow] : [];
     // 버전 행 조회
@@ -94,7 +94,7 @@ const INPUT = { surveyId: 'survey-1', responseId: 'resp-1' };
 function completedResponse(over: Record<string, unknown> = {}) {
   return {
     contactTargetId: null,
-    isCompleted: true,
+    status: 'completed',
     isTest: false,
     metadata: null,
     ...over,
@@ -257,8 +257,8 @@ describe('allowReeditResponse — 수용 게이트 (A-1 사전 박제)', () => {
     await expect(allowReeditResponse(INPUT)).rejects.toMatchObject({ reason: 'survey_paused' });
   });
 
-  it('[9] 완료 상태가 아니면 게이트를 타지 않고 no-op 이다 (fail-soft 의미론 유지)', async () => {
-    h.responseRow = completedResponse({ isCompleted: false });
+  it('[9] 되돌릴 수 있는 상태가 아니면 게이트를 타지 않고 no-op 이다 (fail-soft 의미론 유지)', async () => {
+    h.responseRow = completedResponse({ status: 'in_progress' });
     h.gateRow = gate({ status: 'draft' });
     const { allowReeditResponse } = await import('./response-manage');
 
@@ -322,4 +322,29 @@ describe('allowReeditResponse — 수용 게이트 (A-1 사전 박제)', () => {
     await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
     expect(revertWasApplied()).toBe(true);
   });
+});
+
+describe('allowReeditResponse — 자격미달 응답도 되돌린다', () => {
+  // 회귀: 게이트가 is_completed 였을 때 screened_out(is_completed=false) 은 조용한 no-op 이라
+  // 운영자가 성공 토스트를 보고도 상태가 그대로였다. 판정은 status 여야 한다.
+  it('자격미달(screened_out)은 게이트를 타고 진행중으로 되돌린다', async () => {
+    h.responseRow = completedResponse({ status: 'screened_out' });
+    const { allowReeditResponse } = await import('./response-manage');
+
+    await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
+    expect(surveyGateWasQueried()).toBe(true);
+    expect(revertWasApplied()).toBe(true);
+    expect(revertPayload()).toMatchObject({ status: 'in_progress', isCompleted: false });
+  });
+
+  it.each(['quotaful_out', 'bad', 'drop', 'in_progress'])(
+    '%s 은 되돌리기 대상이 아니다 (no-op)',
+    async (status) => {
+      h.responseRow = completedResponse({ status });
+      const { allowReeditResponse } = await import('./response-manage');
+
+      await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
+      expect(revertWasApplied()).toBe(false);
+    },
+  );
 });

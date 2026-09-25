@@ -41,11 +41,17 @@ export const SurveyResponseRowSchema = z.custom<SurveyResponse>();
  *   응답자 화면이 두 경로를 같은 분기로 처리한다. 던지면 운영에서 마스킹돼 500 이 되고,
  *   응답자는 설문을 다 채운 뒤 사유를 모른 채 재시도 토스트만 반복해서 본다.
  *
+ * - quota_closed: 쿼터 「진행 중 마감」 하드 차단 — 답변은 저장됐고 상태만 quotaful_out 이다.
+ *   제출은 성립하지 않았지만 blocked 와 달리 응답이 종결됐으므로 따로 갈라, 응답 화면이 완료
+ *   화면 대신 쿼터 마감 화면에 closedMessage(진행 중 마감 문구, 비면 마감 문구, null 이면
+ *   화면 기본 문구)를 띄운다. 이미 quotaful_out 인 행에 늦게 도착한 complete 도 같은 모양이다.
+ *
  * 응답 행에는 `kind` 필드가 없으므로 `'kind' in result` 로 안전하게 갈린다.
  */
 export type CompleteResponseResult =
   | (SurveyResponse & { alreadyCompleted?: boolean })
-  | { kind: 'blocked'; reason: BlockReason };
+  | { kind: 'blocked'; reason: BlockReason }
+  | { kind: 'quota_closed'; closedMessage: string | null };
 export const CompleteResponseOutput = z.custom<CompleteResponseResult>();
 
 export const TestAttemptIdentityFields = {

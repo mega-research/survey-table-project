@@ -627,6 +627,11 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, disposition: 'keep' },
   },
   'quota.get': { gate: 'rpc', capability: 'operations.view', input: { surveyId: S } },
+  'quota.attrValues': {
+    gate: 'rpc',
+    capability: 'operations.view',
+    input: { surveyId: S, attrKey: 'k' },
+  },
   'quota.save': {
     gate: 'rpc',
     capability: 'survey.edit',

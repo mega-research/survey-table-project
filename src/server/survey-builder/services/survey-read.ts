@@ -1,6 +1,8 @@
 import { and, asc, eq, isNull, ne } from 'drizzle-orm';
 import 'server-only';
 
+import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
+
 import { db } from '@/db';
 import {
   contactTargets,
@@ -412,10 +414,7 @@ export async function getSurveyForResponse(
         },
         lookups: snapshot.lookups ?? survey.lookups ?? [],
         ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-        quotaGate:
-          survey.quotaConfig && survey.quotaConfig.enabled
-            ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
-            : null,
+        quotaGate: buildQuotaGate(survey.quotaConfig),
         // 문의 이메일만 스냅샷 원칙 밖이다(티켓 20) — 미설정이면 **현재** 소유자로 해석한다.
         // 스냅샷에 굳히면 소유권 이전이 응답 화면에 영영 반영되지 않고, 설정값이 있으면
         // 그것이 답이라 조회 자체를 하지 않는다(지연 평가).
@@ -438,10 +437,7 @@ export async function getSurveyForResponse(
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) return null;
 
-  const quotaGate =
-    survey.quotaConfig && survey.quotaConfig.enabled
-      ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
-      : null;
+  const quotaGate = buildQuotaGate(survey.quotaConfig);
 
   // 미배포 경로도 같은 규칙이다 — 두 갈래가 갈리면 publish 전후로 문의 안내가 달라진다.
   // 겹치는 것은 **pub 조회**뿐이다: 빌더가 쓰는 getSurveyWithDetails 는 그대로 둔다

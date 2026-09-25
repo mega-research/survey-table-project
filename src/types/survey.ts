@@ -1,4 +1,5 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { QuotaGate } from '@/shared/contracts/quota';
 import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
@@ -897,7 +898,7 @@ export interface Survey {
   // 컨택리스트 표시 컬럼 스킴 — 빌더에서 attrs 키 셀렉터·LUT 키 매핑 UI 가 참조.
   contactColumns?: ContactColumnScheme;
   // 쿼터 게이트 — enabled면 이 문항들 응답 직후 checkQuota 발동 + 런타임 필수 강제. null=쿼터 없음/미집행.
-  quotaGate?: { questionIds: string[] } | null;
+  quotaGate?: QuotaGate | null;
   createdAt: Date;
   updatedAt: Date;
 }
