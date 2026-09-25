@@ -114,9 +114,8 @@ export default async function OperationsOverviewPage({
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
 
-      {quotaStatus && quotaStatus.cells.length > 0 && (
-        <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />
-      )}
+      {/* 플랜이 있으면 셀이 비어 있어도 그린다 — 카드 안에서 "목표 없음" 을 안내한다 */}
+      {quotaStatus && <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />}
 
       <DailyParticipationChart
         data={dailyBuckets}

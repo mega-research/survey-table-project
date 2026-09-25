@@ -11,7 +11,14 @@ import type { QuotaCellStatus, QuotaCellTone, QuotaStatus } from '@/lib/quota/qu
 import { cn } from '@/lib/utils';
 
 import { EmptyState } from '../empty-state';
-import { buildQuotaPivot, pivotCategoryIds, pivotColBorderClass, pivotColKey } from './quota-pivot';
+import {
+  buildQuotaPivot,
+  pivotCategoryIds,
+  pivotColBorderClass,
+  pivotColKey,
+  type QuotaCountTarget,
+  sumStatusCells,
+} from './quota-pivot';
 
 interface Props {
   status: QuotaStatus;
@@ -39,12 +46,6 @@ const TONE_TEXT: Record<QuotaCellTone, string> = {
   warn: 'text-amber-700',
   low: 'text-rose-600',
 };
-/** '마감'/'부족' 칩 — 목업과 동일하게 done/low 톤에만 표시 (good/warn은 칩 없음). */
-const TONE_CHIP: Partial<Record<QuotaCellTone, { label: string; className: string }>> = {
-  done: { label: '마감', className: 'bg-emerald-100 text-emerald-600' },
-  low: { label: '부족', className: 'bg-rose-100 text-rose-600' },
-};
-
 const LEGEND: { tone: QuotaCellTone; label: string }[] = [
   { tone: 'done', label: '마감 (100%)' },
   { tone: 'good', label: '순조 70%+' },
@@ -91,6 +92,9 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   const showMatrix = canMatrix && view === 'matrix';
   const dim0 = status.dimensions[0];
   const dim1 = status.dimensions[1];
+  // 목표가 설정된 셀이 없다 — 조건을 바꾸면 편집기가 셀 목표를 초기화하므로 흔히 이 상태가 된다.
+  // 카드를 통째로 숨기면 담당자가 원인을 알 수 없어, 카드는 그리되 안내만 보인다.
+  const hasCells = status.cells.length > 0;
 
   return (
     <Card>
@@ -131,7 +135,7 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                 </h3>
               </button>
             </CollapsibleTrigger>
-            {open && (
+            {open && hasCells && (
               <div
                 role="tablist"
                 aria-label="쿼터 현황 보기"
@@ -173,12 +177,17 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
           </div>
 
           <CollapsibleContent className="mt-3">
-            {showMatrix && pivot ? (
+            {!hasCells ? (
+              <EmptyState
+                message="목표가 설정된 셀이 없습니다"
+                description="조건을 추가하거나 지우면 셀 목표가 초기화됩니다. 쿼터 설정의 「조건 보기」 표에 목표를 입력하고 저장하면 여기에 현황이 나타납니다."
+              />
+            ) : showMatrix && pivot ? (
               <>
                 <MatrixLegend />
-                {/* 세로 max-h + sticky thead — 스크롤해도 헤더가 테이블 끝까지 따라온다 (bulk-preview 패턴) */}
+                {/* 조건 보기 표와 같은 격자 — 칸은 n / m 만, 행 끝·열 끝에 계. sticky thead (bulk-preview 패턴) */}
                 <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
-                  <table className="w-full border-separate border-spacing-0 text-sm">
+                  <table className="border-separate border-spacing-0 text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr>
                         <th
@@ -200,6 +209,12 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                             {outer.label}
                           </th>
                         ))}
+                        <th
+                          rowSpan={2}
+                          className="border-b border-l border-slate-300 bg-slate-100 px-3 py-2 text-center align-middle text-xs font-semibold text-slate-700"
+                        >
+                          계
+                        </th>
                       </tr>
                       <tr>
                         {pivot.columns.map((col, ci) => (
@@ -216,16 +231,15 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {pivot.rowDim.categories.map((row, ri) => {
-                        const isLastRow = ri === pivot.rowDim.categories.length - 1;
+                      {pivot.rowDim.categories.map((row) => {
+                        const rowKeys = pivot.columns.map((col) =>
+                          cellKey(pivotCategoryIds(status.dimensions, pivot, row.id, col)),
+                        );
                         return (
                           <tr key={row.id}>
                             <th
                               scope="row"
-                              className={cn(
-                                'border-r border-r-slate-300 bg-slate-50 px-3 py-2 text-left text-sm font-semibold whitespace-nowrap text-slate-700',
-                                !isLastRow && 'border-b border-b-slate-100',
-                              )}
+                              className="border-r border-b border-r-slate-300 border-b-slate-200 bg-slate-50 px-3 py-1.5 text-left text-sm font-semibold whitespace-nowrap text-slate-700"
                             >
                               {row.label}
                             </th>
@@ -238,18 +252,47 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                                 <td
                                   key={pivotColKey(col)}
                                   className={cn(
-                                    'p-1.5 align-top',
-                                    !isLastRow && 'border-b border-b-slate-100',
+                                    'border-b border-b-slate-200 p-1',
                                     pivotColBorderClass(ci, pivot),
                                   )}
                                 >
-                                  {cell ? <QuotaHeatCell cell={cell} /> : <UnsetHeatCell />}
+                                  {cell ? <QuotaCountCell cell={cell} /> : <UnsetCell />}
                                 </td>
                               );
                             })}
+                            <TotalCell total={sumStatusCells(status.cells, rowKeys)} />
                           </tr>
                         );
                       })}
+                      {/* 계 행 — 설정된 셀만 합산한 읽기 전용 요약 */}
+                      <tr>
+                        <th
+                          scope="row"
+                          className="border-t border-r border-t-slate-300 border-r-slate-300 bg-slate-100 px-3 py-1.5 text-left text-sm font-semibold text-slate-700"
+                        >
+                          계
+                        </th>
+                        {pivot.columns.map((col, ci) => {
+                          const colKeys = pivot.rowDim.categories.map((row) =>
+                            cellKey(pivotCategoryIds(status.dimensions, pivot, row.id, col)),
+                          );
+                          return (
+                            <TotalCell
+                              key={pivotColKey(col)}
+                              total={sumStatusCells(status.cells, colKeys)}
+                              className={cn('border-t border-t-slate-300', pivotColBorderClass(ci, pivot))}
+                            />
+                          );
+                        })}
+                        <TotalCell
+                          total={sumStatusCells(
+                            status.cells,
+                            status.cells.map((c) => cellKey(c.categoryIds)),
+                          )}
+                          className="border-t border-t-slate-300"
+                          grand
+                        />
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -257,25 +300,30 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
             ) : showMatrix && dim0 && dim1 ? (
               <>
                 <MatrixLegend />
-                <div className="max-h-[70vh] overflow-auto">
-                  <table className="w-full border-separate border-spacing-0 text-sm">
+                <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
+                  <table className="border-separate border-spacing-0 text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr>
-                        <th className="bg-white p-2" />
+                        <th className="border-r border-b border-slate-300 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-500">
+                          {dim0.label}
+                        </th>
                         {dim1.categories.map((col) => (
                           <th
                             key={col.id}
-                            className="border-b border-slate-200 bg-slate-50 p-2 text-center text-xs font-semibold text-slate-700"
+                            className="border-r border-b border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-xs font-semibold text-slate-700"
                           >
                             {col.label}
                           </th>
                         ))}
+                        <th className="border-b border-l border-slate-300 bg-slate-100 px-3 py-2 text-center text-xs font-semibold text-slate-700">
+                          계
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {dim0.categories.map((row) => (
                         <tr key={row.id}>
-                          <th className="border-r border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold whitespace-nowrap text-slate-700">
+                          <th className="border-r border-b border-r-slate-300 border-b-slate-200 bg-slate-50 px-3 py-1.5 text-left text-sm font-semibold whitespace-nowrap text-slate-700">
                             {row.label}
                           </th>
                           {dim1.categories.map((col) => {
@@ -283,14 +331,46 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                             return (
                               <td
                                 key={col.id}
-                                className="border-r border-b border-slate-100 p-1.5 align-top"
+                                className="border-r border-b border-r-slate-200 border-b-slate-200 p-1"
                               >
-                                {cell ? <QuotaHeatCell cell={cell} /> : <UnsetHeatCell />}
+                                {cell ? <QuotaCountCell cell={cell} /> : <UnsetCell />}
                               </td>
                             );
                           })}
+                          <TotalCell
+                            total={sumStatusCells(
+                              status.cells,
+                              dim1.categories.map((col) => cellKey([row.id, col.id])),
+                            )}
+                          />
                         </tr>
                       ))}
+                      <tr>
+                        <th
+                          scope="row"
+                          className="border-t border-r border-t-slate-300 border-r-slate-300 bg-slate-100 px-3 py-1.5 text-left text-sm font-semibold text-slate-700"
+                        >
+                          계
+                        </th>
+                        {dim1.categories.map((col) => (
+                          <TotalCell
+                            key={col.id}
+                            total={sumStatusCells(
+                              status.cells,
+                              dim0.categories.map((row) => cellKey([row.id, col.id])),
+                            )}
+                            className="border-t border-r border-t-slate-300 border-r-slate-200"
+                          />
+                        ))}
+                        <TotalCell
+                          total={sumStatusCells(
+                            status.cells,
+                            status.cells.map((c) => cellKey(c.categoryIds)),
+                          )}
+                          className="border-t border-t-slate-300"
+                          grand
+                        />
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -335,32 +415,44 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   );
 }
 
-/** 매트릭스 한 칸 — current/target + 진행바 + pct% + (done/low만) 마감/부족 칩. */
-function QuotaHeatCell({ cell }: { cell: QuotaCellStatus }) {
-  const chip = TONE_CHIP[cell.tone];
+/** 매트릭스 한 칸 — n / m 만. 톤은 글자색·옅은 배경으로만 드러낸다(진행바·%·칩 없음). */
+function QuotaCountCell({ cell }: { cell: QuotaCellStatus }) {
   return (
-    <div className={cn('flex min-w-[112px] flex-col gap-1.5 rounded-lg p-2', TONE_TINT[cell.tone])}>
-      <div className="flex items-baseline gap-1">
-        <span className="text-base font-bold text-slate-900">
-          {numberFormatter.format(cell.current)}
-        </span>
-        <span className="text-xs text-slate-400">/ {numberFormatter.format(cell.target)}</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-200/70">
-        <div
-          className={cn('h-full rounded-full', TONE_BAR[cell.tone])}
-          style={{ width: `${Math.min(100, cell.pct)}%` }}
-        />
-      </div>
-      <div className="flex min-h-[16px] items-center justify-between">
-        <span className={cn('text-xs font-bold', TONE_TEXT[cell.tone])}>{cell.pct}%</span>
-        {chip && (
-          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold', chip.className)}>
-            {chip.label}
-          </span>
-        )}
-      </div>
+    <div
+      className={cn(
+        'rounded px-2 py-1 text-center text-sm font-semibold tabular-nums whitespace-nowrap',
+        TONE_TINT[cell.tone],
+        TONE_TEXT[cell.tone],
+      )}
+      title={`${cell.pct}%`}
+    >
+      {numberFormatter.format(cell.current)} / {numberFormatter.format(cell.target)}
     </div>
+  );
+}
+
+/** 행 끝·열 끝·총계 칸 — 설정된 셀의 현재/목표 합. 무제한만 있는 줄은 —. */
+function TotalCell({
+  total,
+  className,
+  grand = false,
+}: {
+  total: QuotaCountTarget | null;
+  className?: string;
+  grand?: boolean;
+}) {
+  return (
+    <td
+      className={cn(
+        'border-b border-l border-b-slate-200 border-l-slate-300 bg-slate-100 px-3 py-1.5 text-center text-sm tabular-nums whitespace-nowrap',
+        grand ? 'font-bold text-slate-900' : 'font-semibold text-slate-700',
+        className,
+      )}
+    >
+      {total
+        ? `${numberFormatter.format(total.current)} / ${numberFormatter.format(total.target)}`
+        : '—'}
+    </td>
   );
 }
 
@@ -379,10 +471,6 @@ function MatrixLegend() {
 }
 
 /** 매트릭스 조합에 목표가 등록되지 않은 칸(sparse cells) — 데이터를 지어내지 않고 미설정 표시. */
-function UnsetHeatCell() {
-  return (
-    <div className="flex min-w-[112px] items-center justify-center rounded-lg bg-slate-50 p-2 text-xs text-slate-300">
-      —
-    </div>
-  );
+function UnsetCell() {
+  return <div className="px-2 py-1 text-center text-xs text-slate-300">—</div>;
 }
