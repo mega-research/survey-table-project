@@ -186,7 +186,7 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
               <>
                 <MatrixLegend />
                 {/* 조건 보기 표와 같은 격자 — 칸은 n / m 만, 행 끝·열 끝에 계. sticky thead (bulk-preview 패턴) */}
-                <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
+                <div className="mx-auto max-h-[70vh] w-fit max-w-full overflow-auto rounded-lg border border-slate-200">
                   <table className="border-separate border-spacing-0 text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr>
@@ -300,7 +300,7 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
             ) : showMatrix && dim0 && dim1 ? (
               <>
                 <MatrixLegend />
-                <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
+                <div className="mx-auto max-h-[70vh] w-fit max-w-full overflow-auto rounded-lg border border-slate-200">
                   <table className="border-separate border-spacing-0 text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr>
