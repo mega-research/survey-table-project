@@ -353,8 +353,9 @@ export async function saveAdminEdit(
   // 찬 셀이면 기존 초과 표식(metadata.quotaOverflow)만 남긴다. 판정은 평문 finalResponses
   // 기준(암호화 이전)이고 attrs 는 응답 행의 연결로 서버가 읽는다. 테스트 파티션은 쿼터를
   // 소비하지 않으므로 보지 않는다. 종결 응답의 일반 수정은 완료 수가 늘지 않아 판정하지 않는다.
+  // 자격미달로 판정된 전환은 완료 수에 들지 않아 표식을 남기지 않는다.
   const quotaOverflow =
-    completesDrop && !existing.isTest
+    completesDrop && !existing.isTest && screenedOut !== true
       ? await detectQuotaOverflow(surveyId, finalResponses, existing.contactTargetId)
       : false;
 

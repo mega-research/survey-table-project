@@ -70,10 +70,15 @@ export async function checkQuota(input: {
       eq(surveyResponses.surveyId, input.surveyId),
       notDeletedResponse,
     ),
-    columns: { isTest: true, contactTargetId: true, status: true },
+    columns: { isTest: true, contactTargetId: true, status: true, metadata: true },
   });
   if (!response) throw new Error('쿼터 응답 범위가 일치하지 않습니다.');
   if (response.isTest) return { blocked: false, closedMessage: null };
+  // 재응답 허용으로 되돌려진 응답(reeditPendingSince)은 막지 않는다 — 운영자가 되돌려 놓고
+  // 재제출이 막히는 고아를 만들지 않는다(ADR 0025). 제출 경로의 면제와 같은 표식이며, 그
+  // 응답이 완료되면 초과 표식만 남는다. 재확인이 페이지마다 도는 옵션에서는 이 면제가 없으면
+  // 되돌린 응답이 첫 「다음」에서 곧장 쿼터마감으로 떨어진다.
+  if (response.metadata?.['reeditPendingSince']) return { blocked: false, closedMessage: null };
   // 재호출 멱등 — 이미 쿼터마감이면 그대로 blocked, 그 밖의 종결 응답은 손대지 않는다.
   if (response.status === 'quotaful_out') return blockedOutcome(config);
   if (isConcludedResponseStatus(response.status)) return { blocked: false, closedMessage: null };

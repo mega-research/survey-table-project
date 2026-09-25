@@ -318,6 +318,51 @@ describe('페이지마다 백그라운드 재확인', () => {
   });
 });
 
+describe('늦은 재확인 결과와 테스트 세션', () => {
+  it('제출 뒤에 도착한 blocked 재확인은 버린다 — 완료 화면이 마감 화면으로 바뀌지 않는다', async () => {
+    mockSurvey({ questionIds: ['q1'], recheckOnEachStep: true });
+    const late = deferred<{ blocked: boolean; closedMessage: string | null; midSurveyClosedMessage?: string | null }>();
+    quotaCheck
+      .mockResolvedValueOnce({ blocked: false, closedMessage: null })
+      .mockImplementationOnce(() => late.promise);
+    complete.mockResolvedValue({ id: 'response-1', status: 'completed' });
+    renderFlow();
+    await answerFirstPage();
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 질문')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('세 번째 질문')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('감사합니다.')).toBeInTheDocument();
+
+    late.resolve({ blocked: true, closedMessage: null, midSurveyClosedMessage: '죄송합니다' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('감사합니다.')).toBeInTheDocument();
+    expect(screen.queryByText('죄송합니다')).not.toBeInTheDocument();
+  });
+
+  it('테스트 세션은 재확인을 보내지 않는다', async () => {
+    forResponse.mockResolvedValue({
+      survey: threePageSurvey({ questionIds: ['q1'], recheckOnEachStep: true }),
+      versionId: 'version-1',
+      control: { isPaused: false, pausedMessage: null, testSession: 'valid', testSessionKind: 'anonymous' },
+    });
+    render(
+      <SurveyResponseFlow surveyIdentifier="survey-slug" inviteToken={null} testToken="tok" />,
+    );
+    await answerFirstPage();
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('두 번째 질문')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('세 번째 질문')).toBeInTheDocument();
+
+    // 첫 판정 1회뿐 — 재확인은 없다.
+    expect(quotaCheck).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('제출 시점 쿼터마감', () => {
   it('제출 결과가 quota_closed 면 완료 화면 대신 진행 중 마감 문구로 마감 화면을 띄운다', async () => {
     mockSurvey({ questionIds: ['q1'], recheckOnEachStep: true });
