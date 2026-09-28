@@ -17,7 +17,10 @@ import { useOptionTexts, useResponseSources } from '@/features/question-renderer
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
-import { findMobileHeaderCell } from '@/features/question-renderer/utils/split-display-cells';
+import {
+  findMobileHeaderCell,
+  hasMobileDisplayCells,
+} from '@/features/question-renderer/utils/split-display-cells';
 import { useMobileView } from '@/hooks/use-media-query';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
@@ -711,7 +714,7 @@ export function ChoiceTableResponse({
     /** 행 단위 그룹 카드 — 카드 안을 보기 그룹(축)별 섹션으로 나누고 구분 셀을 제목·설명으로 항상 보인다 */
     grouped = false,
   ) => (
-    <div className={perRow && !grouped ? 'space-y-3' : 'space-y-2'}>
+    <div className={perRow ? 'space-y-3' : 'space-y-2'}>
       {rows.flatMap((row) => {
         const choiceCells = row.cells.filter((c) => c.type === 'choice_opt' && !c.isHidden);
         // 보기 셀이 아닌 인터랙티브 셀(단답 input·선택형 컨트롤) — 행 단위 카드에서만 그린다.
@@ -801,47 +804,33 @@ export function ChoiceTableResponse({
             headerText && headerCell ? headerCell : (firstOption ?? choiceCells[0]!);
           const anyChecked = choiceCells.some((c) => getChoiceCellState(c).checked);
           const allDisabled = choiceCells.every((c) => getChoiceCellState(c).disabled);
-          // 그룹 카드의 제목 — 구분 셀 첫 줄은 제목, 나머지 줄은 설명(작은 회색)으로 항상 보인다.
-          const breakAt = grouped ? cardLabel.indexOf('\n') : -1;
-          const groupedTitle = breakAt === -1 ? cardLabel : cardLabel.slice(0, breakAt);
-          const groupedDesc = breakAt === -1 ? '' : cardLabel.slice(breakAt + 1).trim();
+          // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
+          // 제목과 본문에 같은 내용이 두 번 나온다.
+          const displayCells = headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells;
           return [
+            // 그룹 카드도 행 카드와 같은 고정 머리 — 구분 셀을 줄 단위로 제목·설명으로 가르지 않고
+            // 서식본(contentHtml)까지 그대로 둔다. 둘째 줄을 회색 설명으로 내리면 셀 편집기에서
+            // 준 강조가 사라지고, 긴 카드를 스크롤할 때 어느 행인지 놓친다.
             <MobileOptionCard
               key={row.id}
-              variant={grouped ? 'option' : 'section'}
+              variant="section"
               testId={`row-card-${row.id}`}
               label={
-                grouped ? (
-                  <span
-                    className={getCellTextClassName(labelStyleSource)}
-                    style={getCellTextStyle(labelStyleSource)}
-                  >
-                    <span>{groupedTitle}</span>
-                    {groupedDesc && (
-                      <span className="mt-1 block text-[13px] leading-snug font-normal whitespace-pre-line text-gray-500">
-                        {groupedDesc}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span
-                    className={getCellTextClassName(labelStyleSource)}
-                    style={getCellTextStyle(labelStyleSource)}
-                  >
-                    <CellText
-                      text={cardLabel}
-                      html={
-                        headerText && headerCell
-                          ? resolveCellTextHtml(headerCell, attrs, quotes)
-                          : undefined
-                      }
-                    />
-                  </span>
-                )
+                <span
+                  className={getCellTextClassName(labelStyleSource)}
+                  style={getCellTextStyle(labelStyleSource)}
+                >
+                  <CellText
+                    text={cardLabel}
+                    html={
+                      headerText && headerCell
+                        ? resolveCellTextHtml(headerCell, attrs, quotes)
+                        : undefined
+                    }
+                  />
+                </span>
               }
-              // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
-              // 제목과 본문에 같은 내용이 두 번 나온다.
-              cells={headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells}
+              cells={displayCells}
               selected={anyChecked}
               disabled={allDisabled}
               footer={
@@ -852,7 +841,13 @@ export function ChoiceTableResponse({
                   {grouped ? (
                     // 그룹별 섹션 — 축 이름 제목 + 그 그룹의 보기 타일(라벨은 보기 텍스트).
                     // 같은 행에 그룹이 없는 셀(미소속)은 마지막 섹션(제목 없음)으로 모은다.
-                    <div className="space-y-3 border-t border-gray-100 pt-3">
+                    <div
+                      className={cn(
+                        'space-y-3',
+                        // 설명 셀이 있을 때만 구분선 — 없으면 머리의 경계선 바로 아래 선이 겹친다
+                        hasMobileDisplayCells(displayCells) && 'border-t border-gray-100 pt-3',
+                      )}
+                    >
                       {groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
                         const group = (question.choiceGroups ?? []).find((g) => g.id === groupId);
                         const sectionLabel = resolveChoiceGroupSectionLabel(

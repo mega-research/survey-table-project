@@ -301,7 +301,7 @@ questions                  # 개별 질문
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
-├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-cards|row-group-cards|axis-cards|original (0108 CHECK). row-group-cards 는 보기 소스 표 전용 — 행 카드 안을 보기 그룹(축)별 섹션으로 나누고 구분 셀을 제목·설명으로 항상 보임(섹션 제목은 question-renderer/utils/choice-group-section-label). axis-cards 는 보기 그룹이 있는 보기 소스 표 전용 — 축(그룹)마다 카드 하나, 제목은 열 헤더(sticky), 타일은 행 제목(CONTEXT.md "축 단위 카드")
+├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-cards|row-group-cards|axis-cards|original (0108 CHECK). row-group-cards 는 보기 그룹 표 전용(보기 소스 표·table 유형 둘 다) — 행 카드 안을 보기 그룹(축)별 섹션으로 나누고 구분 셀은 행 카드와 같은 고정 머리(sticky)에 줄바꿈·서식본(contentHtml) 그대로 항상 보임(2026-09-29 — 첫 줄 제목·나머지 회색 설명으로 가르던 것을 걷어냈다. 섹션 제목은 question-renderer/utils/choice-group-section-label). axis-cards 는 보기 그룹이 있는 보기 소스 표 전용 — 축(그룹)마다 카드 하나, 제목은 열 헤더(sticky), 타일은 행 제목(CONTEXT.md "축 단위 카드")
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
 ├── hideColumnLabels, pageBreakBefore

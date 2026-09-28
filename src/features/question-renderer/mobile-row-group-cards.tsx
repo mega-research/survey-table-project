@@ -2,10 +2,14 @@
 
 import React, { type ReactNode, useMemo } from 'react';
 
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/features/question-renderer/utils/classify-table';
 import {
   findMobileHeaderCell,
+  hasMobileDisplayCells,
   resolveMobileCellLabel,
 } from '@/features/question-renderer/utils/split-display-cells';
 import {
@@ -17,11 +21,12 @@ import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
-import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
+import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { MobileOptionCard } from './mobile-card-shared';
+import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 interface MobileRowGroupCardsProps {
   questionId: string;
@@ -45,8 +50,8 @@ function isVisible(cell: TableCell): boolean {
 
 /**
  * 테이블 유형 보기 그룹 표의 「행 단위 그룹 카드」 — 보기 소스 표(choice-table-response)의 같은
- * 모드를 이식한 것. 행마다 카드 하나, 구분 셀은 제목(첫 줄)·설명(나머지 줄)으로 항상 보이고,
- * 카드 안은 보기 그룹(축)별 섹션으로 나뉘어 세로 타일로 고른다. 같은 행의 입력 셀(단답·선택형)은
+ * 모드를 이식한 것. 행마다 카드 하나, 구분 셀은 고정 머리(스크롤해도 따라온다)에 줄바꿈·서식본
+ * 그대로 항상 보이고, 카드 안은 보기 그룹(축)별 섹션으로 나뉘어 세로 타일로 고른다. 같은 행의 입력 셀(단답·선택형)은
  * 섹션 아래에 라벨과 함께 온다 — 게이팅·상세기재는 InteractiveCell 이 셀 단위로 그대로 처리한다.
  *
  * 값은 ChoiceOptCell 이 `__choiceGroups` 에 쓴다 — 데스크톱 셀과 같은 컴포넌트의 타일 변형이라
@@ -94,9 +99,8 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
       ? substituteTokens((headerCell.content ?? '').trim(), attrs, quotes)
       : '';
     const cardLabel = headerText || substituteTokens(row.label ?? '', attrs, quotes);
-    const breakAt = cardLabel.indexOf('\n');
-    const title = breakAt === -1 ? cardLabel : cardLabel.slice(0, breakAt);
-    const description = breakAt === -1 ? '' : cardLabel.slice(breakAt + 1).trim();
+    // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 켜져 있으면 두 번 나온다
+    const displayCells = headerCell ? row.cells.filter((cell) => cell !== headerCell) : row.cells;
 
     const controlCells = row.cells.filter(
       (cell) => isVisible(cell) && CONTROL_CELL_TYPES.has(cell.type),
@@ -107,23 +111,31 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
     return [
       <MobileOptionCard
         key={row.id}
+        // 행 단위 카드와 같은 고정 머리 — 구분 셀을 줄 단위로 제목·설명으로 가르지 않고
+        // 서식본(contentHtml)까지 그대로 둔다. 둘째 줄을 회색 설명으로 내리면 셀 편집기에서
+        // 준 강조가 사라지고, 긴 카드를 스크롤할 때 어느 행인지 놓친다.
+        variant="section"
+        testId={`row-card-${row.id}`}
         label={
           <span
             className={headerCell ? getCellTextClassName(headerCell) : undefined}
             style={headerCell ? getCellTextStyle(headerCell) : undefined}
           >
-            <span>{title}</span>
-            {description && (
-              <span className="mt-1 block text-[13px] leading-snug font-normal whitespace-pre-line text-gray-500">
-                {description}
-              </span>
-            )}
+            <CellText
+              text={cardLabel}
+              html={headerCell ? resolveCellTextHtml(headerCell, attrs, quotes) : undefined}
+            />
           </span>
         }
-        // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 켜져 있으면 두 번 나온다
-        cells={headerCell ? row.cells.filter((cell) => cell !== headerCell) : row.cells}
+        cells={displayCells}
         footer={
-          <div className="space-y-3 border-t border-gray-100 pt-3">
+          <div
+            className={cn(
+              'space-y-3',
+              // 설명 셀이 있을 때만 구분선 — 없으면 머리의 경계선 바로 아래 선이 겹친다
+              hasMobileDisplayCells(displayCells) && 'border-t border-gray-100 pt-3',
+            )}
+          >
             {groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
               const group = groupId ? groupById.get(groupId) : undefined;
               if (!group) return null;
