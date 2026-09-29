@@ -59,11 +59,15 @@ function mapTestVersionPruned(err: unknown): never {
  * 응답자 본인에게는 적용되지 않는다 — 재응답 허용 설정은 종전 그대로다.
  */
 async function withProxyAttribution<T extends { kind: string; id?: string }>(
-  user: Parameters<typeof resolveProxyForResponseRpc>[0],
+  subject: Parameters<typeof resolveProxyForResponseRpc>[0],
   input: { surveyId: string; inviteToken?: string | undefined },
   run: () => Promise<T>,
 ): Promise<T> {
-  const proxy = await resolveProxyForResponseRpc(user, input.surveyId, input.inviteToken ?? null);
+  const proxy = await resolveProxyForResponseRpc(
+    subject,
+    input.surveyId,
+    input.inviteToken ?? null,
+  );
   const result = await run();
   if (result.id) await stampFieldworkAttribution(result.id, proxy);
   return result;
@@ -99,7 +103,7 @@ const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
-    withProxyAttribution(context.user, input, () => entry.createResponseWithFirstAnswer(input)),
+    withProxyAttribution(context, input, () => entry.createResponseWithFirstAnswer(input)),
   );
 
 /**
@@ -109,7 +113,7 @@ const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
-    withProxyAttribution(context.user, input, () => entry.createBlankResponse(input)),
+    withProxyAttribution(context, input, () => entry.createBlankResponse(input)),
   );
 
 /**

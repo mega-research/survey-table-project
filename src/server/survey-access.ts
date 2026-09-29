@@ -526,26 +526,40 @@ export function accountUserIdOf(actor: Actor): string | null {
 }
 
 /**
- * 「누가 넣었는가」의 두 칸 — **정확히 하나만 채워진다** (0127, ADR-0026, 티켓 08).
+ * 「누가 넣었는가」의 두 칸 — **정확히 하나만 채워진다** (0127, ADR-0026, 티켓 08·09).
  *
- * 계정 칸과 링크 칸을 따로 받는 시그니처(`createdBy`, `fieldworkLinkId` 두 인자)로 두면
- * 호출부가 둘 다 채우거나 둘 다 비우는 조합을 만들 수 있고, 그 조합은 DB 의 배타 CHECK 에서야
- * 터진다. 주체 하나에서 파생시키면 그 조합이 **타입상 만들어지지 않는다**.
+ * 계정 칸과 링크 칸을 따로 받는 시그니처(두 인자)로 두면 호출부가 둘 다 채우거나 둘 다 비우는
+ * 조합을 만들 수 있고, 그 조합은 DB 의 배타 CHECK 에서야 터진다. 주체 하나에서 파생시키면 그
+ * 조합이 **타입상 만들어지지 않는다**.
  *
  * 값을 두 칸으로 나누는 이유는 FK 가 서로 다른 테이블을 가리키기 때문이다 — 하나로 합치면
  * 참조 무결성이 사라진다.
+ *
+ * **컬럼 이름을 쓰지 않는다.** 같은 주체 구분이 테이블마다 다른 칸으로 간다 — 결과코드 회차는
+ * `created_by`, 대리 응답은 `fieldwork_user_id` 다. 어느 한쪽 이름을 여기 박으면 다른 쪽에서
+ * 읽을 때 거짓말이 된다.
  */
 export interface ActorAttribution {
-  /** `public.users` FK — 계정 주체일 때만. */
-  createdBy: string | null;
-  /** `survey_fieldwork_links` FK — 링크 주체일 때만. */
+  /** `public.users` FK 로 갈 값 — 계정 주체일 때만. */
+  accountUserId: string | null;
+  /** `survey_fieldwork_links` FK 로 갈 값 — 링크 주체일 때만. */
   fieldworkLinkId: string | null;
 }
 
 export function attributionOf(actor: Actor): ActorAttribution {
   return isLinkActor(actor)
-    ? { createdBy: null, fieldworkLinkId: actor.linkId }
-    : { createdBy: actor.id, fieldworkLinkId: null };
+    ? { accountUserId: null, fieldworkLinkId: actor.linkId }
+    : { accountUserId: actor.id, fieldworkLinkId: null };
+}
+
+/** 링크 주체의 귀속 — 계정을 거치지 않는 자리(대리 응답)가 쓴다. */
+export function linkAttribution(linkId: string): ActorAttribution {
+  return { accountUserId: null, fieldworkLinkId: linkId };
+}
+
+/** 계정 주체의 귀속 — 옛 실사 계정 모델이 쓴다. */
+export function accountAttribution(userId: string): ActorAttribution {
+  return { accountUserId: userId, fieldworkLinkId: null };
 }
 
 export class SurveyAccessError extends Error {

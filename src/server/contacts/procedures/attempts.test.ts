@@ -59,7 +59,7 @@ describe('attempts procedures', () => {
     // 작성자는 procedure 가 인증된 컨텍스트에서 넘긴다 — 서비스가 auth 를 다시 읽지 않는다.
     // 계정 주체는 계정 칸만 채우고 링크 칸은 빈다(0127 의 배타 CHECK).
     expect(svc.addAttempt).toHaveBeenCalledWith(input, false, {
-      createdBy: 'admin-1',
+      accountUserId: 'admin-1',
       fieldworkLinkId: null,
     });
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
@@ -157,7 +157,7 @@ describe('attempts procedures', () => {
     };
     const res = await client.contacts.attempts.add(input);
     expect(svc.addAttempt).toHaveBeenCalledWith(input, true, {
-      createdBy: 'external-1',
+      accountUserId: 'external-1',
       fieldworkLinkId: null,
     });
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
@@ -189,7 +189,7 @@ describe('attempts procedures', () => {
     await client.contacts.attempts.add(input);
     // 링크는 언제나 실 파티션이다(스펙 §11-3) — 두 번째 인자 true.
     expect(svc.addAttempt).toHaveBeenCalledWith(input, true, {
-      createdBy: null,
+      accountUserId: null,
       fieldworkLinkId: LINK_ID,
     });
   });

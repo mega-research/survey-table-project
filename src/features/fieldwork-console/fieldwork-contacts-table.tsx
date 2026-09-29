@@ -255,13 +255,9 @@ function StatusPill({ status }: { status: string | null }) {
  * 행 액션 (.pen 10-2) — 「결과 기록」 + 「응답 대행」.
  *
  * 대행은 그 컨택의 초대 링크를 새 탭으로 연다. **완료된 대상은 비활성**이다(.pen 캡션).
- * 귀속 기록(fieldworkUserId)과 대행 배너는 티켓 27 이 붙인다 — 링크 자체는 지금도 살아
- * 있으므로 버튼이 거짓말을 하지는 않는다.
- *
- * `&fw=1` 은 **힌트일 뿐 권한이 아니다.** 응답 페이지가 대행 배너를 물을지 말지를 정할 뿐이고,
- * 누가 붙여도 서버는 세션을 보고 판정한다(`resolveFieldworkProxy`). 이 힌트가 없으면 응답자
- * 전원이 배너 조회를 한 번씩 하게 되어 「응답자 화면 diff 0」이 깨진다 — `?test=` 토큰과 같은
- * 자리의 장치다.
+ * 귀속(fieldworkUserId)은 티켓 27 이 붙였고, 주소에 붙던 `&fw=1` 힌트는 **ADR-0026 이
+ * 대행 배너를 없애면서 함께 걷혔다**(티켓 09) — 그 파라미터의 유일한 목적이 배너였다.
+ * 지금 주소는 응답자가 받는 것과 글자 하나 다르지 않고, 귀속은 저장 경계가 세션으로 찍는다.
  *
  * **대행 버튼의 조건은 `canWriteAttempts` 가 아니라 토큰의 존재다.** 팀장의 파생 시야에서는
  * 서버 투영이 `inviteToken` 을 null 로 접으므로 여기서 감출 것이 애초에 없다 — 판정을 화면이
@@ -296,7 +292,7 @@ function RowActions({
         <span className="px-2.5 py-1 text-[11.5px] text-[#C7C7CC]">응답 완료</span>
       ) : (
         <a
-          href={`/survey/${surveyId}?invite=${row.inviteToken}&fw=1`}
+          href={`/survey/${surveyId}?invite=${row.inviteToken}`}
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-1 rounded-[8px] bg-[#2E4FCE] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-[#2743AE]"

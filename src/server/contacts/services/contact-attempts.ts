@@ -93,7 +93,7 @@ export async function addAttempt(
             attemptNo: nextNo,
             resultCode,
             note: note ?? null,
-            createdBy: author.createdBy,
+            createdBy: author.accountUserId,
             fieldworkLinkId: author.fieldworkLinkId,
           })
           .returning({ id: contactAttempts.id, attemptNo: contactAttempts.attemptNo });

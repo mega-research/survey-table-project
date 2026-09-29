@@ -861,10 +861,6 @@ const RESPONDENT_SURFACES = new Set([
   'surveyResponse.response.createWithFirstAnswer',
   'surveyResponse.response.createBlank',
   'surveyResponse.lifecycle.resume',
-  // 대리 응답 배너 (티켓 27). pub 인 것은 응답 페이지 전체가 pub 이기 때문이고, **판정 자체가
-  // 인증이다** — 코어가 세션·초대·컨택 일치를 다 본 뒤에만 값을 준다. 응답자에게는 언제나
-  // { mode: 'none' } 이라 설문 id 를 넣어 보는 것으로 얻는 것이 없다.
-  'surveyResponse.proxy.context',
   'surveyResponse.duplicate.checkOnEntry',
   'quota.check',
   // 이월 응답 프리필 — 초대 토큰이 자격이다. 토큰·설문이 함께 맞아야 값을 주고 삭제된 설문은 null.

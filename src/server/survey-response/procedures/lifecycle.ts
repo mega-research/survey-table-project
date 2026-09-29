@@ -57,7 +57,7 @@ const resume = pub
     // 짝이 여기 있어야 하고, **행 id 가 나온 뒤에** 찍어야 버전 이관이 성공한 분기도 함께
     // 잡힌다(그 분기는 touch 를 부르지 않는다).
     const proxy = await resolveProxyForResponseRpc(
-      context.user,
+      context,
       input.surveyId,
       input.inviteToken ?? null,
     );

@@ -10,6 +10,8 @@
  *  ③ **자격** — 미초대 실사·타 설문 토큰·팀장의 파생 시야는 대행이 아니다.
  *  ④ **이어서 대행** — 재개도 귀속을 남기고, 응답자가 이어받아도 지워지지 않는다.
  *  ⑤ **완료 대상 거부** — 대행 세션만 막히고 응답자 경로는 종전 그대로다.
+ *  ⑥ **외주 실사 링크 축** (ADR-0026 티켓 09) — 계정이 없는 주체의 대행. 같은 다섯 축을
+ *     링크 쿠키로 다시 묻고, **귀속이 계정 칸이 아니라 링크 칸에** 찍히는 것을 본다.
  */
 import { createRouterClient } from '@orpc/server';
 import { countDistinct, eq, inArray, sql } from 'drizzle-orm';
@@ -29,10 +31,12 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 import {
-  describeProxyTarget,
   resolveFieldworkProxy,
   stampFieldworkAttribution,
 } from '@/server/fieldwork-proxy';
+import { readFieldworkLinkSessions } from '@/lib/auth/fieldwork-link-session';
+import { authenticateFieldworkLink } from '@/server/fieldwork-link';
+import { issueFieldworkLink } from '@/server/workspace/services/fieldwork-links';
 import { lifecycle as lifecycleProcedures } from '@/server/survey-response/procedures/lifecycle';
 import { response as responseProcedures } from '@/server/survey-response/procedures/response';
 
@@ -86,6 +90,20 @@ function contextFor(userId: string | null, userType: 'internal' | 'fieldwork'): 
     // 직접 부르는 스위트의 공통 요건이다.
     headers: new Headers({ 'x-real-ip': '203.0.113.27' }),
   };
+}
+
+/**
+ * 링크 세션 하나만 들고 온 요청 — **계정이 없다** (ADR-0026).
+ *
+ * 쿠키는 접속 성공이 만든 실물을 그대로 쓴다. 손으로 서명해 넣으면 「우리가 서명한 쿠키인가」
+ * 를 우회하게 되어, 이 스위트가 막으려는 위조 축이 검증에서 빠진다.
+ */
+function linkContext(cookie: { name: string; value: string }): ORPCContext {
+  const headers = new Headers({
+    'x-real-ip': '203.0.113.27',
+    cookie: `${cookie.name}=${cookie.value}`,
+  });
+  return { db, user: null, headers, linkSessions: readFieldworkLinkSessions(headers) };
 }
 
 const responseClient = (userId: string | null, userType: 'internal' | 'fieldwork' = 'fieldwork') =>
@@ -216,24 +234,22 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
       expect((await responseRow())?.fieldworkUserId).toBe(WORKER_ID);
     });
 
-    it('배너가 실사원·업체·대상을 서버에서 받는다', async () => {
+    /**
+     * 배너 단언이 여기 있었다 — 실사원 이름·업체·대상 라벨을 서버에서 받는지 보던 것이다.
+     * **ADR-0026 이 대행 표시를 없애면서** 그 표면(`surveyResponse.proxy.context`)과
+     * 화면 조각이 통째로 사라졌다(티켓 09). 판정이 돌려주는 것은 이제 귀속과 차단뿐이고,
+     * 그 둘은 아래 단언들이 직접 본다.
+     */
+    it('판정이 귀속만 돌려준다 — 표시용 필드가 없다', async () => {
       const proxy = await resolveFieldworkProxy(
-        contextFor(WORKER_ID, 'fieldwork').user,
+        contextFor(WORKER_ID, 'fieldwork'),
         surveyId,
         inviteToken,
       );
       expect(proxy).toMatchObject({
         kind: 'proxy',
-        fieldworkUserId: WORKER_ID,
-        fieldworkUserName: '박현우',
-        resid: 1024,
+        attribution: { accountUserId: WORKER_ID, fieldworkLinkId: null },
       });
-      expect(proxy.kind === 'proxy' && proxy.orgName).toContain('그린리서치');
-      // 이름은 코어가 아니라 배너 표면이 읽는다 — 귀속만 필요한 경로가 PII 를 복호하지
-      // 않게 갈라 뒀다(리뷰 지적).
-      expect(
-        proxy.kind === 'proxy' ? await describeProxyTarget(proxy.contactTargetId, proxy.attrs) : '',
-      ).toBe('김민준');
     });
   });
 
@@ -277,7 +293,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
       // 소속원이 초대돼 팀장에게 열람은 열리지만, 그 열에는 writeAttempts 가 없다.
       await invite(WORKER_ID);
       expect(
-        await resolveFieldworkProxy(contextFor(LEADER_ID, 'fieldwork').user, surveyId, inviteToken),
+        await resolveFieldworkProxy(contextFor(LEADER_ID, 'fieldwork'), surveyId, inviteToken),
       ).toEqual({ kind: 'none' });
     });
 
@@ -285,7 +301,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
       await invite(WORKER_ID);
       expect(
         await resolveFieldworkProxy(
-          contextFor(OUTSIDER_ID, 'fieldwork').user,
+          contextFor(OUTSIDER_ID, 'fieldwork'),
           surveyId,
           inviteToken,
         ),
@@ -295,7 +311,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
     it('초대 토큰 없이 들어오면 대행이 아니다 — 대행은 컨택을 지목해야 성립한다', async () => {
       await invite(WORKER_ID);
       expect(
-        await resolveFieldworkProxy(contextFor(WORKER_ID, 'fieldwork').user, surveyId, null),
+        await resolveFieldworkProxy(contextFor(WORKER_ID, 'fieldwork'), surveyId, null),
       ).toEqual({ kind: 'none' });
     });
 
@@ -303,7 +319,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
       await invite(WORKER_ID);
       expect(
         await resolveFieldworkProxy(
-          contextFor(WORKER_ID, 'fieldwork').user,
+          contextFor(WORKER_ID, 'fieldwork'),
           surveyId,
           crypto.randomUUID(),
         ),
@@ -433,7 +449,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
         .returning({ id: responsesTable.id });
 
       const proxy = await resolveFieldworkProxy(
-        contextFor(WORKER_ID, 'fieldwork').user,
+        contextFor(WORKER_ID, 'fieldwork'),
         surveyId,
         inviteToken,
       );
@@ -558,7 +574,7 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
         .where(eq(responsesTable.contactTargetId, targetId));
 
       expect(
-        await resolveFieldworkProxy(contextFor(WORKER_ID, 'fieldwork').user, surveyId, inviteToken),
+        await resolveFieldworkProxy(contextFor(WORKER_ID, 'fieldwork'), surveyId, inviteToken),
       ).toMatchObject({ kind: 'proxy' });
     });
 
@@ -570,6 +586,149 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
           inviteToken,
         }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑥ 외주 실사 링크 축 — 계정이 없는 주체의 대행 (ADR-0026, 티켓 09)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('외주 실사 링크', () => {
+    /** 링크를 발급하고 접속까지 마친 요청 컨텍스트 하나. */
+    async function linkSession(): Promise<{ context: ORPCContext; linkId: string }> {
+      const issued = await issueFieldworkLink({ surveyId, actorId: OWNER_ID });
+      const auth = await authenticateFieldworkLink(issued.link.token, issued.password);
+      if (!auth.ok) throw new Error(`접속 실패: ${auth.reason}`);
+      return { context: linkContext(auth.cookie), linkId: issued.link.id };
+    }
+
+    function linkResponseClient(context: ORPCContext) {
+      return createRouterClient(
+        { response: responseProcedures, lifecycle: lifecycleProcedures },
+        { context },
+      );
+    }
+
+    /** 이 컨택 응답 행의 귀속 두 칸. */
+    async function attribution(): Promise<{
+      fieldworkUserId: string | null;
+      fieldworkLinkId: string | null;
+    } | undefined> {
+      const [row] = await db
+        .select({
+          fieldworkUserId: responsesTable.fieldworkUserId,
+          fieldworkLinkId: responsesTable.fieldworkLinkId,
+        })
+        .from(responsesTable)
+        .where(eq(responsesTable.contactTargetId, targetId));
+      return row;
+    }
+
+    it('링크로 만든 응답은 링크 칸에 찍히고 계정 칸은 빈다', async () => {
+      const { context, linkId } = await linkSession();
+      const result = await linkResponseClient(context).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect(result.kind).toBe('created');
+      // 계정 칸에 무엇이든 실리면 남의 이름으로 남는다 — 0127 의 배타 CHECK 가 지키는 것도
+      // 이 불변식이다.
+      expect(await attribution()).toEqual({ fieldworkUserId: null, fieldworkLinkId: linkId });
+    });
+
+    it('응답자 직접 응답은 두 칸 모두 빈다 — 짝 단언', async () => {
+      // 이 단언이 없으면 「언제나 링크가 찍힌다」도 위 테스트를 통과한다.
+      await responseClient(null, 'internal').response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect(await attribution()).toEqual({ fieldworkUserId: null, fieldworkLinkId: null });
+    });
+
+    it('이어서 대행도 귀속을 남긴다 — 재개는 INSERT 를 지나지 않는다', async () => {
+      await responseClient(null, 'internal').response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await attribution())?.fieldworkLinkId).toBeNull();
+
+      const { context, linkId } = await linkSession();
+      await linkResponseClient(context).lifecycle.resume(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await attribution())?.fieldworkLinkId).toBe(linkId);
+    });
+
+    it('응답자가 이어받아도 귀속이 null 로 덮이지 않는다', async () => {
+      // 그 응답은 실제로 **일부가 대행**이다 — 표식이 지워지면 검수가 그 사실을 잃는다.
+      const { context, linkId } = await linkSession();
+      await linkResponseClient(context).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await attribution())?.fieldworkLinkId).toBe(linkId);
+
+      await responseClient(null, 'internal').lifecycle.resume(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await attribution())?.fieldworkLinkId).toBe(linkId);
+    });
+
+    it('타 설문의 링크 쿠키로는 대행이 아니다 — 초대 토큰이 속한 설문으로 고른다', async () => {
+      // 업체가 두 조사를 병행하면 한 브라우저에 쿠키가 여럿 선다. 고르는 기준이 토큰의
+      // 설문이 아니면 이웃 조사의 링크로 이 조사를 대행하게 된다.
+      const neighbourId = crypto.randomUUID();
+      await db.insert(surveysTable).values({
+        id: neighbourId,
+        title: '이웃 조사',
+        teamId: TEAM_ID,
+        visibility: 'team',
+        assignmentStatus: 'assigned',
+        ownerUserId: OWNER_ID,
+        createdBy: OWNER_ID,
+        status: 'published',
+        isPublic: true,
+      });
+      try {
+        const issued = await issueFieldworkLink({
+          surveyId: neighbourId,
+          actorId: OWNER_ID,
+        });
+        const auth = await authenticateFieldworkLink(issued.link.token, issued.password);
+        if (!auth.ok) throw new Error('이웃 링크 접속 실패');
+
+        await linkResponseClient(linkContext(auth.cookie)).response.createBlank(
+          entryInput(crypto.randomUUID(), inviteToken),
+        );
+        expect(await attribution()).toEqual({ fieldworkUserId: null, fieldworkLinkId: null });
+      } finally {
+        await db.delete(surveysTable).where(eq(surveysTable.id, neighbourId));
+      }
+    });
+
+    it('설문이 중단되면 링크 대행도 멈춘다 — 세션이 닫히기 때문이다', async () => {
+      const { context } = await linkSession();
+      await db
+        .update(surveysTable)
+        .set({ isPaused: true })
+        .where(eq(surveysTable.id, surveyId));
+      expect(
+        await resolveFieldworkProxy(context, surveyId, inviteToken),
+      ).toEqual({ kind: 'none' });
+    });
+
+    it('이미 완료된 대상의 대행 진입을 서버가 거부한다', async () => {
+      await db.insert(responsesTable).values({
+        surveyId,
+        sessionId: crypto.randomUUID(),
+        contactTargetId: targetId,
+        status: 'completed',
+        isCompleted: true,
+        completedAt: new Date(),
+        questionResponses: {},
+      });
+      const { context } = await linkSession();
+      await expect(
+        linkResponseClient(context).response.createBlank(
+          entryInput(crypto.randomUUID(), inviteToken),
+        ),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
   });
 });

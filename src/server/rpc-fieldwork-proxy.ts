@@ -2,9 +2,11 @@ import 'server-only';
 
 import { ORPCError } from '@orpc/server';
 
-import type { AuthUser } from '@/shared/contracts/auth';
-
-import { type FieldworkProxy, resolveFieldworkProxy } from './fieldwork-proxy';
+import {
+  type FieldworkProxy,
+  type FieldworkProxySubject,
+  resolveFieldworkProxy,
+} from './fieldwork-proxy';
 
 /**
  * 대행 판정의 RPC 어댑터 — `rpc-survey-access`·`rpc-work-scope` 와 같은 자리 (티켓 27).
@@ -14,11 +16,11 @@ import { type FieldworkProxy, resolveFieldworkProxy } from './fieldwork-proxy';
  * 문자열을 각자 들고 있으면 한쪽만 고쳐지는 날이 온다.
  */
 export async function resolveProxyForResponseRpc(
-  user: AuthUser | null,
+  subject: FieldworkProxySubject,
   surveyId: string,
   inviteToken: string | null,
 ): Promise<FieldworkProxy> {
-  const proxy = await resolveFieldworkProxy(user, surveyId, inviteToken);
+  const proxy = await resolveFieldworkProxy(subject, surveyId, inviteToken);
   if (proxy.kind === 'blocked') {
     throw new ORPCError('FORBIDDEN', { message: '이미 응답이 완료된 대상입니다.' });
   }

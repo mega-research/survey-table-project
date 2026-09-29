@@ -53,7 +53,6 @@ import { duplicate } from '@/server/survey-response/procedures/duplicate';
 import { edit } from '@/server/survey-response/procedures/edit';
 import { lifecycle } from '@/server/survey-response/procedures/lifecycle';
 import { manage } from '@/server/survey-response/procedures/manage';
-import { proxy } from '@/server/survey-response/procedures/proxy';
 import { response } from '@/server/survey-response/procedures/response';
 
 import { health } from '@/server/health';
@@ -115,7 +114,6 @@ export const router = {
     duplicate,
     edit,
     manage,
-    proxy,
   },
   operations: {
     progress,
