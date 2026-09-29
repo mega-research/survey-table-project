@@ -1,35 +1,11 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/features/operations/empty-state';
-import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
-import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-download-dialog';
-import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
-import { ContactsPageClient } from '@/features/operations/contacts/contacts-page-client';
-import {
-  attrsKeyOf,
-  CONTACTS_PAGE_SIZE,
-  effectiveSortKey,
-  normalizeSortKey,
-} from '@/lib/operations/contacts-format';
-import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
-import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-  listContactsForSurvey,
-} from '@/server/read-models/contacts';
-import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
-import {
-  parseClausesFromUrl,
-  parseHeaderFiltersFromUrl,
-} from '@/server/read-models/contacts-filters';
-import type { FilterClause } from '@/lib/operations/filter-shared';
+import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
-import { adminOperationsBase } from '@/features/operations/operations-paths';
+import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
+import { loadSurveyCapabilities } from '@/server/survey-access';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -50,159 +26,35 @@ interface PageProps {
   }>;
 }
 
+/**
+ * 조사 대상 목록 — 화면 정의는 `ContactsListView` 가 갖고 여기는 관문·조립만 한다.
+ *
+ * 외주 실사 링크 트리(`/fw/[token]/operations/contacts`)가 **같은 뷰**를 다른 base·다른
+ * capability 로 렌더한다(ADR-0026, 티켓 06). 그래서 이 파일에 화면을 되돌려 쓰지 말 것 —
+ * 두 벌이 되는 순간 한쪽만 고쳐진다.
+ */
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
-  await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
-  const sp = await searchParams;
-  const scope = await getOperationsDataScope(surveyId);
-
-  // page / sort / dir 파싱 — 다중 조건 필터 전환과 함께 normalizeContactListArgs 가 제거되어 인라인 처리.
-  const pageRaw = Number(sp.page);
-  const parsedPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
-  const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
-
-  // 스킴 + resultCodes 병렬 로드
-  const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
+  const viewer = await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
+  const [scope, capabilities] = await Promise.all([
+    getOperationsDataScope(surveyId),
+    loadSurveyCapabilities(viewer, surveyId),
   ]);
-
-  // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
-  const visibleAttrsKeys = new Set(
-    (scheme?.columns ?? [])
-      .filter((c) => !c.hidden)
-      .map((c) => attrsKeyOf(c.source))
-      .filter((k): k is string => k != null),
-  );
-
-  const safeSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
-
-  const columnCandidates = buildColumnCandidates(scheme);
-
-  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
-  const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
-    idLists,
-  });
-  const headerClauses = parseHeaderFiltersFromUrl(
-    sp.hcol,
-    sp.hm,
-    sp.hv,
-    columnCandidates,
-    resultCodes,
-  );
-  // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
-  // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리.
-  const clauses: FilterClause[] = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
-
-  const { rows, total, page: clampedPage } = await listContactsForSurvey({
+  const data = await loadContactsListPage({
     surveyId,
     scope,
-    pageSize: CONTACTS_PAGE_SIZE,
-    clauses,
-    page: parsedPage,
-    sort: safeSort,
-    dir,
+    canViewMail: capabilities.has('mail.view'),
+    searchParams: await searchParams,
   });
 
-  if (!scheme) {
-    return (
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900">조사 대상 목록</h2>
-        </div>
-        <Card>
-          <CardContent className="px-5 py-4">
-            <EmptyState
-              message="아직 업로드된 조사 대상이 없습니다"
-              description="엑셀 파일을 업로드해 명단을 적재하세요."
-            />
-            <div className="mt-4 flex justify-center">
-              <ContactUploadAction
-                href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
-                label="엑셀 업로드"
-                disabled={scope === 'test'}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
-  const hasFilter = clauses.length > 0;
-
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      <div className="mb-4 flex items-end justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">조사 대상 목록</h2>
-          <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ContactsDownloadDialog
-            surveyId={surveyId}
-            candidates={buildDownloadCandidates(scheme)}
-          />
-          <ContactUploadAction
-            href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
-            label="+ 업로드"
-            disabled={scope === 'test'}
-          />
-          {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/surveys/${surveyId}/operations/contacts/prior-answers`}>
-              이월 응답 임포트
-            </Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
-          </Button>
-        </div>
-      </div>
-
-      <Card>
-        <CardContent className="px-5 py-4 space-y-4">
-          <ContactsFilterBar
-            surveyId={surveyId}
-            initialClauses={builderClauses.map((c) => ({
-              op: c.op,
-              source: c.condition.source,
-              value: c.condition.value,
-            }))}
-            columnCandidates={columnCandidates}
-            resultCodeOptions={resultCodes}
-            columnsSettingsHref={`/admin/surveys/${surveyId}/operations/contacts/columns`}
-          />
-          {rows.length === 0 ? (
-            <EmptyState
-              message={hasFilter ? '검색 결과가 없습니다' : '조사 대상이 없습니다'}
-              description={hasFilter ? '필터를 변경해 보세요.' : '엑셀로 명단을 업로드하세요.'}
-            />
-          ) : (
-            <ContactsPageClient
-              basePath={adminOperationsBase(surveyId)}
-              rows={rows}
-              total={total}
-              page={clampedPage}
-              pageSize={CONTACTS_PAGE_SIZE}
-              scheme={scheme}
-              surveyId={surveyId}
-              sort={safeSort}
-              dir={dir}
-              resultCodeOptions={resultCodes}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </main>
+    <ContactsListView
+      surveyId={surveyId}
+      basePath={adminOperationsBase(surveyId)}
+      capabilities={capabilities}
+      data={data}
+    />
   );
 }

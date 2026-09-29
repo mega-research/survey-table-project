@@ -60,7 +60,14 @@ async function lockTargetInCurrentScope(
 export async function addAttempt(
   input: AddContactAttemptInput,
   isExternal: boolean,
-  actorUserId: string,
+  /**
+   * 작성자 계정 — **null 이 정상값이다** (ADR-0026, 티켓 06).
+   *
+   * 외주 실사 링크는 `contacts.writeAttempts` 를 갖지만 계정이 아니다. 계정 FK 칸에 무엇이든
+   * 채우려 들면 그 순간 남의 이름으로 기록이 남으므로 비워 두고, 「어느 링크가 넣었는가」는
+   * 링크 귀속 칸이 받는다(0127, 티켓 08).
+   */
+  actorUserId: string | null,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 

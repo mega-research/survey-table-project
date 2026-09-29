@@ -67,3 +67,28 @@ export const SCOPED_INPUTS: Record<string, Record<string, unknown>> = {
 };
 
 export const SCOPED_PATHS = Object.keys(SCOPED_INPUTS).sort();
+
+/**
+ * 외주 실사 링크에게 **열리는** scoped 표면 (ADR-0026, 티켓 06).
+ *
+ * 링크 열은 capability 넷이고(`survey.view`·`operations.view`·`contacts.view`·
+ * `contacts.writeAttempts`) 그중 scoped 표면이 실제로 요구하는 것은 뒤의 둘이다. 그래서
+ * 여기 있는 여섯이 「밖에서 두드려 통과하는 문」의 전부다 — 이 목록이 곧 외주에게 나가는
+ * 쓰기 반경이므로, 한 줄이 늘면 리뷰가 그 줄을 보게 된다.
+ *
+ * 나머지는 파생이다(`LINK_BLOCKED_SCOPED_PATHS`). 새 scoped procedure 가 붙으면 자동으로
+ * **막힌 쪽**에 들어가고, 실제로 열려 있다면 음성 스위트가 그 자리에서 빨개진다 — 안전한
+ * 방향으로 기본값이 선다.
+ */
+export const LINK_OPEN_SCOPED_PATHS = [
+  'contacts.attempts.add',
+  'contacts.attempts.remove',
+  'contacts.attempts.update',
+  'contacts.attrValues.list',
+  'contacts.idLists.create',
+  'contacts.targets.setMemo',
+] as const;
+
+export const LINK_BLOCKED_SCOPED_PATHS = SCOPED_PATHS.filter(
+  (path) => !(LINK_OPEN_SCOPED_PATHS as readonly string[]).includes(path),
+);

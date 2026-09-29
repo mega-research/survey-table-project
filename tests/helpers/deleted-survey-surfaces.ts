@@ -97,10 +97,21 @@ export const PUB_SURVEY_SURFACES: Record<string, PubSurveySurfaceSpec> = {
  * 여기 적힌 것은 procedure 경로가 아니라 **서비스 함수 이름**이다 — bySlug·byPrivateToken 은
  * procedure 지만 previewToken 은 RSC(/preview/[token])가 서비스를 직접 부르는 경로라,
  * 같은 축을 표면 종류로 갈라 적으면 한쪽을 빠뜨린다.
+ *
+ * 값은 **그 축을 실제로 재는 realdb 파일**이다. 등재가 서류 작업이 되지 않도록 인벤토리
+ * 가드가 그 파일에 이름이 실제로 나오는지 대조한다 — 목록만 늘고 검증이 없는 상태는 사람
+ * 눈에 초록으로 보인다.
  */
-export const PUB_TOKEN_LOOKUPS = [
-  'getSurveyBySlug',
-  'getSurveyByPrivateToken',
-  'getSurveyByPreviewToken',
-  'resolveInviteCode',
-] as const;
+export const PUB_TOKEN_LOOKUPS: Record<string, string> = {
+  getSurveyBySlug: 'tests/integration/soft-delete-invisibility.realdb.test.ts',
+  getSurveyByPrivateToken: 'tests/integration/soft-delete-invisibility.realdb.test.ts',
+  getSurveyByPreviewToken: 'tests/integration/soft-delete-invisibility.realdb.test.ts',
+  resolveInviteCode: 'tests/integration/soft-delete-invisibility.realdb.test.ts',
+  /**
+   * 외주 실사 링크의 입구 (ADR-0026). 주소에 실리는 것이 토큰이라 `surveyId` 인벤토리에는
+   * 잡히지 않지만 **삭제된 설문을 여는 열쇠**라는 성질은 형제 넷과 같다. 링크는 설문 상태를
+   * 조인해 보고 삭제를 「닫힘」으로 접는다 — 없는 토큰과 같은 답이 아니라 닫힘 화면이다
+   * (외주는 링크를 이미 가진 사람이라 감출 것이 없고, 감추면 오타로 오해해 문의한다).
+   */
+  resolveFieldworkLinkEntry: 'tests/integration/fieldwork-link.realdb.test.ts',
+};

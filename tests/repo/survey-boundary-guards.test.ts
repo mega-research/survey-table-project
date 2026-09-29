@@ -31,6 +31,12 @@ const SURVEY_CONSOLE_ROOTS = [
   'admin/surveys/[id]',
   'analytics/[surveyId]',
   'guest/surveys/[surveyId]',
+  // 외주 실사 링크 콘솔(ADR-0026). 주소에 실리는 것은 설문 id 가 아니라 **토큰**이지만
+  // 묻는 질문은 같다 — 이 화면이 「어느 설문인가」를 스스로 지는가. 토큰 하나가 곧 설문
+  // 하나를 지목하므로 경계가 사라지는 것이 아니라 id 가 관문 쪽으로 옮겨 간 것뿐이다.
+  // 입구 화면(`fw/[token]/page.tsx`)은 여기 없다 — 세션을 만드는 자리라 관문이 없고,
+  // 그 예외는 `rsc-page-guards` 의 공개 허용 목록이 사유와 함께 진다.
+  'fw/[token]/operations',
 ];
 
 /**
@@ -40,7 +46,7 @@ const SURVEY_CONSOLE_ROOTS = [
  * 묻는 게스트 짝이다(티켓 22).
  */
 const PAGE_CAPABILITY_GATE =
-  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess)\s*\(/;
+  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess|assertFieldworkLinkPageAccess)\s*\(/;
 
 /** REST 쪽 짝 — 사유를 HTTP 코드로 옮기는 어댑터(404 존재 은닉 / 403). */
 const REST_CAPABILITY_GATE =
@@ -83,13 +89,14 @@ describe('설문 콘솔 RSC 페이지는 설문 capability 관문을 진다', ()
     expect(clientPages).toEqual(['admin/surveys/[id]/edit/page.tsx']);
   });
 
-  it('설문 콘솔 트리의 진입 레이아웃이 관문을 진다', () => {
+  it.each([
+    'admin/surveys/[id]/layout.tsx',
+    // 링크 콘솔의 셸 — 헤더·탭이 판정 결과를 받아 그리므로 여기서도 관문이 서야 한다.
+    'fw/[token]/operations/layout.tsx',
+  ])('설문 콘솔 트리의 진입 레이아웃이 관문을 진다: %s', (rel) => {
     // leaf 가 자기 정밀 관문을 갖지만, 트리 진입점에서 survey.view 를 한 번 접는 것이
     // 「보이지도 않는 설문」의 헤더·탭이 먼저 그려지는 것을 막는다.
-    const layout = readFileSync(
-      resolve(APP_DIR, 'admin/surveys/[id]/layout.tsx'),
-      'utf8',
-    );
+    const layout = readFileSync(resolve(APP_DIR, rel), 'utf8');
     expect(PAGE_CAPABILITY_GATE.test(layout)).toBe(true);
   });
 });
@@ -167,6 +174,8 @@ const BEHAVIOURAL_COVERAGE: Record<string, readonly string[]> = {
   'tests/integration/contacts-export-route.test.ts': ['타 팀 설문', '404'],
   // 하위 행 주입 — 관문이 통과한 뒤의 축 (티켓 15)
   'tests/integration/cross-team-idor.realdb.test.ts': ['남의 하위 행'],
+  // 링크 cross-survey — 사유의 대비가 정적 가드로는 보이지 않는다 (ADR-0026, 티켓 06)
+  'tests/integration/fieldwork-link.realdb.test.ts': ['타 설문', 'NOT_FOUND'],
 };
 
 describe('정적 가드의 짝이 되는 행동 검증이 실재한다', () => {

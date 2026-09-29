@@ -40,6 +40,19 @@ export interface FilterClause {
 }
 
 /**
+ * 화면이 편집하는 절 — 서버의 `FilterClause` 를 평평하게 펼친 모양.
+ *
+ * 필터바가 값을 타이핑하는 동안은 `FilterCondition` 으로 접히지 않은 중간 상태(빈 source·빈
+ * 값)가 정상이라 두 모양을 갈라 둔다. 소비자는 필터바(UI)와 조사 대상 목록 화면의 재료
+ * (`ContactsListPageData`)이고, 그 둘이 서버·UI 경계 양쪽에 있어 어휘의 집이 여기다.
+ */
+export interface ClientFilterClause {
+  op: CombineOp | null;
+  source: string;
+  value: string;
+}
+
+/**
  * 필터 source 문자열 상수 — 진척 보고/조사 대상 모듈 모두 공유.
  * 새 source 추가 시 한 곳에서만 갱신하면 모든 분기/검증/UI 가 따라간다.
  */

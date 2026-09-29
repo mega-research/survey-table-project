@@ -14,7 +14,7 @@ const sample = scoped
   .input(GetMailPreviewSampleInput)
   .output(GetMailPreviewSampleOutput)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.view');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.view');
     return svc.getMailPreviewSample(input);
   });
 
@@ -28,7 +28,7 @@ const testSend = scoped
   .output(SendTestTemplateMailOutput)
   .handler(async ({ context, input }) => {
     // 테스트 발송도 실제 메일이 나간다 — 열람(mail.view)이 아니라 발송 권한을 요구한다.
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     return svc.sendTestTemplateMail(input);
   });
 

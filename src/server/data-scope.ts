@@ -7,6 +7,9 @@ import 'server-only';
 import { type DbOrTx, db } from '@/db';
 import { contactTargets, mailCampaigns, surveyResponses, surveys } from '@/db/schema';
 import { isExternalViewer } from '@/lib/auth/external-viewer';
+import { isInternalUser } from '@/shared/contracts/auth';
+
+import { isLinkActor, type Actor } from './survey-access';
 
 export type OperationsDataScope = 'real' | 'test';
 
@@ -24,10 +27,33 @@ export function testFlagForScope(scope: OperationsDataScope): boolean {
   return scope === 'test';
 }
 
-export async function loadOperationsDataScope(surveyId: string): Promise<OperationsDataScope> {
+/**
+ * 이 주체가 **내부 계정이 아닌가** — 파티션 술어의 주체 판 (ADR-0026, 티켓 06).
+ *
+ * `isExternalViewer()` 는 `requireActiveAccount()` 를 부르므로 **링크 세션에서는 쓸 수 없다**
+ * (계정이 없어 그 문에서 던진다). 그래서 주체를 받는 형제를 둔다 — 판정은 같은 문장이다:
+ * 「내부가 아니면 real」. 술어를 「게스트인가」가 아니라 이렇게 적어 둔 것이 여기서 값을 한다
+ * (주체 종류가 하나 늘었는데 판정은 그대로다).
+ */
+export function isExternalActor(actor: Actor): boolean {
+  return isLinkActor(actor) || !isInternalUser(actor.userType);
+}
+
+/**
+ * 이 요청이 보는 파티션.
+ *
+ * `actor` 를 주면 그것으로 판정하고, 주지 않으면 세션을 읽는다(`isExternalViewer`). 주는
+ * 쪽은 링크 주체가 지날 수 있는 자리 — scoped procedure 와 `/fw` 콘솔 RSC — 이고, 세션을
+ * 읽는 쪽은 계정만 지나는 admin·게스트 RSC 다. **읽기·쓰기가 같은 술어를 쓰는 것이 계약이다**
+ * (`resolveWriteScopeIsTest` 주석 참조).
+ */
+export async function loadOperationsDataScope(
+  surveyId: string,
+  actor?: Actor,
+): Promise<OperationsDataScope> {
   // 설문 존재 검증을 건너뛰지 않도록 외부 계정이어도 조회는 그대로 수행하고 반환값만 덮는다.
   const [isExternal, rows] = await Promise.all([
-    isExternalViewer(),
+    actor === undefined ? isExternalViewer() : Promise.resolve(isExternalActor(actor)),
     db
       .select({ enabled: surveys.testModeEnabled })
       .from(surveys)
@@ -37,7 +63,7 @@ export async function loadOperationsDataScope(surveyId: string): Promise<Operati
 
   const row = rows[0];
   if (!row) throw new Error('설문을 찾을 수 없습니다.');
-  // 외부 콘솔(게스트·실사)은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+  // 외부 주체(게스트·실사 계정·외주 실사 링크)는 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
   if (isExternal) return 'real';
   return row.enabled ? 'test' : 'real';
 }

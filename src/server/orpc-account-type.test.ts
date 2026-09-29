@@ -13,6 +13,7 @@ import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import { userTypeValues } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
+import { accountUserIdOf } from './survey-access';
 import { account, authed, scoped, superadmin } from './orpc';
 
 function ctx(
@@ -29,7 +30,9 @@ function ctx(
 const internalOnly = authed.handler(({ context }) => ({ id: context.user.id }));
 const superadminOnly = superadmin.handler(({ context }) => ({ id: context.user.id }));
 const selfService = account.handler(({ context }) => ({ id: context.user.id }));
-const surveyScoped = scoped.handler(({ context }) => ({ id: context.user.id }));
+// scoped 는 계정과 링크 둘 다 들인다(티켓 06) — 이 파일이 묻는 것은 계정 유형 축이므로
+// 주체를 `context.actor` 로 읽어 두 종류 모두에서 컴파일되는 모양으로 둔다.
+const surveyScoped = scoped.handler(({ context }) => ({ id: accountUserIdOf(context.actor) }));
 
 const NON_INTERNAL = userTypeValues.filter((t) => t !== 'internal');
 

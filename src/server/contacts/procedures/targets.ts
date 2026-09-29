@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { isExternalAccount } from '@/shared/contracts/auth';
+import { isExternalActor } from '@/server/data-scope';
 import { authed, scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,
@@ -39,17 +40,17 @@ const add = scoped
   .output(ContactTargetRowSchema)
   .handler(async ({ context, input }) => {
     // 대상 추가는 명단 관리다 — 실사원의 회차 쓰기(writeAttempts)와 갈라 manage 를 요구한다.
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.manage');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.addContactTarget(input, isExternalAccount(context.user.userType));
+    return svc.addContactTarget(input, isExternalActor(context.actor));
   });
 
 const update = scoped
   .input(UpdateContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
-    await svc.updateContactTarget(input, isExternalAccount(context.user.userType)).catch(rethrowContactNotFound);
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.manage');
+    await svc.updateContactTarget(input, isExternalActor(context.actor)).catch(rethrowContactNotFound);
     return { ok: true as const };
   });
 
@@ -64,9 +65,9 @@ const setMemo = scoped
   .input(SetContactTargetMemoInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.writeAttempts');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     await svc
-      .setContactTargetMemo(input, isExternalAccount(context.user.userType))
+      .setContactTargetMemo(input, isExternalActor(context.actor))
       .catch(rethrowContactNotFound);
     return { ok: true as const };
   });

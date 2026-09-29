@@ -42,7 +42,7 @@ const create = scoped
   .output(CreateMailTemplateOutput)
   .handler(async ({ context, input }) => {
     // 템플릿 작성·수정·삭제는 발송 준비 행위라 mail.view 가 아니라 mail.send 를 따른다.
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     try {
       return await svc.createMailTemplate(input);
     } catch (err) {
@@ -54,7 +54,7 @@ const update = scoped
   .input(UpdateMailTemplateInput)
   .output(UpdateMailTemplateOutput)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     try {
       return await svc.updateMailTemplate(input);
     } catch (err) {
@@ -66,7 +66,7 @@ const remove = scoped
   .input(DeleteMailTemplateInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     try {
       await svc.deleteMailTemplate(input);
       return { ok: true as const };

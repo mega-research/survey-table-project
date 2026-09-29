@@ -513,6 +513,18 @@ export function isLinkActor(actor: Actor): actor is LinkActor {
   return 'kind' in actor && actor.kind === 'link';
 }
 
+/**
+ * 계정 주체의 userId — 링크에는 계정이 없으므로 `null` (ADR-0026, 티켓 06).
+ *
+ * 「누가 썼는가」를 남기는 자리(결과코드 회차 작성자·캠페인 생성자)가 이 값을 받는다. 링크가
+ * 쓴 것은 계정 칸이 아니라 링크 칸에 남아야 하므로(0127, 티켓 08) 여기서 빈 값을 주는 것이
+ * 맞다 — 관문이 이미 「그 표면이 링크에게 열려 있는가」를 가렸으므로 이 자리에서 다시 거부할
+ * 일이 아니다.
+ */
+export function accountUserIdOf(actor: Actor): string | null {
+  return isLinkActor(actor) ? null : actor.id;
+}
+
 export class SurveyAccessError extends Error {
   constructor(public readonly reason: 'not_found' | 'forbidden') {
     super(reason);

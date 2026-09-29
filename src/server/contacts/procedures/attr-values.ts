@@ -24,8 +24,8 @@ const list = scoped
   .input(ListContactAttrValuesInput)
   .output(ListContactAttrValuesOutput)
   .handler(async ({ input, context, errors }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.view');
-    const scope = await loadOperationsDataScope(input.surveyId);
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.view');
+    const scope = await loadOperationsDataScope(input.surveyId, context.actor);
     try {
       return await svc.listContactAttrValues({ ...input, scope });
     } catch (error) {

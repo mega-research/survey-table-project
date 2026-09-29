@@ -1,8 +1,8 @@
 import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
-import { isExternalAccount } from '@/shared/contracts/auth';
-import { scoped } from '@/server/orpc';
+import { isExternalActor } from '@/server/data-scope';
+import { requireScopedAccount, scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
@@ -71,10 +71,10 @@ const create = scoped
   .input(CreateCampaignInput)
   .output(CreateCampaignResult)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
     return svc
-      .createCampaign(input, context.user.id, isExternalAccount(context.user.userType))
+      .createCampaign(input, requireScopedAccount(context).id, isExternalActor(context.actor))
       .catch(rethrowCampaignRefusal);
   });
 
@@ -82,8 +82,8 @@ const cancel = scoped
   .input(CancelCampaignInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
-    await svc.cancelCampaign(input, isExternalAccount(context.user.userType)).catch(rethrowCampaignRefusal);
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
+    await svc.cancelCampaign(input, isExternalActor(context.actor)).catch(rethrowCampaignRefusal);
     return { ok: true as const };
   });
 
@@ -91,7 +91,7 @@ const resync = scoped
   .input(ResyncCampaignInput)
   .output(ResyncCampaignResult)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     return svc.resyncCampaign(input).catch(rethrowCampaignRefusal);
   });
 
@@ -100,7 +100,7 @@ const fetchCandidateIds = scoped
   .output(FetchCandidateIdsResult)
   .handler(async ({ context, input }) => {
     // 발송 마법사 전용 조회(수신 후보 확정) — 발송 흐름의 일부라 mail.view 가 아니라 mail.send 를 따른다.
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     return svc.fetchCandidateIds(input);
   });
 
@@ -108,7 +108,7 @@ const previewPreflight = scoped
   .input(PreviewPreflightInput)
   .output(PreviewPreflightResult)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     return svc.previewPreflight(input);
   });
 
@@ -116,8 +116,8 @@ const sendSingle = scoped
   .input(SendSingleCampaignInput)
   .output(CreateCampaignResult)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'mail.send');
-    return sendSingleCampaign(input, context.user.id, isExternalAccount(context.user.userType)).catch(
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
+    return sendSingleCampaign(input, requireScopedAccount(context).id, isExternalActor(context.actor)).catch(
       rethrowCampaignRefusal,
     );
   });

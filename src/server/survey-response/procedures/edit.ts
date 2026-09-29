@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
-import { isExternalAccount } from '@/shared/contracts/auth';
-import { scoped } from '@/server/orpc';
+import { isExternalActor } from '@/server/data-scope';
+import { requireScopedAccount, scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,
   toRpcSurveyAccessError,
@@ -57,16 +57,14 @@ const saveAdminEdit = scoped
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
     // 응답 수정은 스펙 §8 에서 응답 상세 열람과 한 행 — responses.view 로 지킨다.
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'responses.view');
     try {
+      const editor = requireScopedAccount(context);
       return await svc.saveAdminEdit(
         input,
-        {
-          id: context.user?.id ?? null,
-          email: context.user?.email ?? null,
-        },
+        { id: editor.id, email: editor.email },
         // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-        isExternalAccount(context.user.userType),
+        isExternalActor(context.actor),
       );
     } catch (err) {
       mapServiceError(err);

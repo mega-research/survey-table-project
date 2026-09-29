@@ -1,33 +1,11 @@
 import type { Metadata } from 'next';
 
-import { ProgressEmptyCard } from '@/features/operations/report/progress-empty-card';
-import { ProgressFilterBar } from '@/features/operations/report/progress-filter-bar';
-import {
-  type GroupByOption,
-  ProgressGroupByTabs,
-} from '@/features/operations/report/progress-group-by-tabs';
-import { ProgressTable } from '@/features/operations/report/progress-table';
-import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
-import { getContactColumnScheme } from '@/server/read-models/contacts';
-import { getOperationsDataScope } from '@/server/data-scope';
-import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
-import type { SortDir } from '@/lib/operations/report-progress-format';
-import {
-  EMPTY_PROGRESS_TOTALS,
-  parseProgressSort,
-  resolveActiveGroupKeys,
-} from '@/lib/operations/report-progress-format';
-import {
-  countContactTargets,
-  getProgressColumnScheme,
-  getProgressGroupLabel,
-  getProgressRows,
-  getProgressTotals,
-} from '@/server/operations/services/report-progress';
-import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { adminOperationsBase } from '@/features/operations/operations-paths';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { loadSurveyCapabilities } from '@/server/survey-access';
+
+import { ReportProgressScreen, type ReportProgressSearchParams } from '@/app/_operations/report-screen';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,156 +15,33 @@ export const metadata: Metadata = {
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    col?: string;
-    q?: string;
-    page?: string;
-    size?: string;
-    sort?: string;
-    dir?: string;
-    groupBy?: string;
-  }>;
+  searchParams: Promise<ReportProgressSearchParams>;
 }
 
 /**
- * 운영 콘솔 진척률 페이지.
+ * 그룹별 진척률 — 화면 정의는 `ReportProgressScreen` 이 갖고 여기는 관문·주체 해석만 한다.
  *
- * - server component: searchParams (q/page/sort/dir) 를 읽어 server adapter 호출.
- * - 조사 대상 0건이면 무거운 집계 SQL 을 건너뛰고 ProgressEmptyCard 만 렌더.
- * - meta 컬럼은 surveys.progress_columns 스킴(visible+order) 기준 동적 결정.
+ * 외주 실사 링크 트리(`/fw/[token]/operations/report`)가 **같은 본문**을 자기 base 로
+ * 렌더한다(ADR-0026).
  */
 export default async function ReportProgressPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다 (티켓 10).
   // 진척률 리포트는 컨택 attrs 를 행 단위로 그리므로 contacts.view 를 요구한다.
-  await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
-  const sp = await searchParams;
-  const scope = await getOperationsDataScope(surveyId);
-
-  // page 파싱 NaN 가드 — `?page=abc` / 음수 / undefined 모두 1 로 fallback.
-  // 가드 없으면 SQL OFFSET NaN ERROR 발생.
-  const pageRaw = Number(sp.page);
-  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
-  const size = 20;
-  const dir: SortDir = sp.dir === 'asc' ? 'asc' : 'desc';
-
-  // contactScheme 은 pii blindIndex 계산용 piiType 매핑에 필요. getContactColumnScheme 가
-  // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
-  const [scheme, groupLabel, contactScheme] = await Promise.all([
-    getProgressColumnScheme(surveyId),
-    getProgressGroupLabel(surveyId, scope),
-    getContactColumnScheme(surveyId, scope),
+  const viewer = await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
+  const [scope, capabilities] = await Promise.all([
+    getOperationsDataScope(surveyId),
+    loadSurveyCapabilities(viewer, surveyId),
   ]);
-  const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
-  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
-  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
-
-  // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
-  const columnCandidates: ColumnCandidateWithPii[] = (contactScheme?.columns ?? [])
-    .filter(
-      (c) =>
-        c.source === FILTER_SOURCE.RESID ||
-        c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
-        c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
-    )
-    .map((c) => ({
-      source: c.source,
-      label: c.label,
-      ...(c.piiType !== undefined ? { piiType: c.piiType } : {}),
-    }));
-
-  const rawCol = typeof sp.col === 'string' ? sp.col : null;
-  const rawQ = typeof sp.q === 'string' ? sp.q : null;
-  const condition = parseConditionFromUrl(rawCol, rawQ, columnCandidates);
-
-  // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
-  // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
-  const groupByCriteria: GroupByOption[] = resolveGroupCriteria(contactScheme).map((c) => ({
-    key: c.key,
-    label: c.label,
-  }));
-  // URL groupBy 해석:
-  // - 미지정 → 컬럼 설정에서 지정한 분류 기준 전체를 설정 순서(대>중>소>세부)대로 자동
-  //   선택. 미리 설정해두면 URL 진입만으로 조합 집계가 나오는 모델 (2026-08-14 결정).
-  // - 콤마 목록 → 지정된 분류 기준 키만 채택(칩 좁혀보기), 기준 순서로 정규화 + 중복
-  //   제거. 유효 키가 하나도 없으면 전체 기준 폴백.
-  // - 분류 기준 미지정 설문은 기존처럼 업로드 그룹(group_value) 기준 (칩 없음).
-  const activeCriteria: GroupByOption[] = resolveActiveGroupKeys(
-    groupByCriteria,
-    typeof sp.groupBy === 'string' ? sp.groupBy : undefined,
-  );
-  const activeKeys = activeCriteria.map((c) => c.key);
-  const titleLabel =
-    activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
-  const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
-  // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
-  const showResid = scheme.showResid ?? true;
-  const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;
-
-  // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
-  // 스킴에 없거나 라벨이 비어있으면 기본 라벨 폴백.
-  const residLabel =
-    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
-    RESID_DEFAULT_LABEL;
-
-  // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
-  const isEmpty = (await countContactTargets(surveyId, scope)) === 0;
-
-  const { rows, totals } = isEmpty
-    ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
-    : await Promise.all([
-        getProgressRows({
-          surveyId,
-          scope,
-          condition,
-          page,
-          size,
-          sort,
-          dir,
-          metaKeys,
-          groupByKeys: activeKeys,
-        }),
-        getProgressTotals(surveyId, scope, condition, activeKeys),
-      ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900">{titleLabel}별 진척률</h2>
-        {activeCriteria.length === 0 && (
-          <p className="text-sm text-slate-500">모집단 명단의 그룹 컬럼 기준 자동 집계</p>
-        )}
-      </div>
-
-      {isEmpty ? (
-        <ProgressEmptyCard basePath={adminOperationsBase(surveyId)} />
-      ) : (
-        <>
-          {groupByCriteria.length > 0 && (
-            <ProgressGroupByTabs options={groupByCriteria} activeKeys={activeKeys} />
-          )}
-          <ProgressFilterBar
-            basePath={adminOperationsBase(surveyId)}
-            initialSource={condition?.source ?? null}
-            // idlist 모드는 FilterCondition 에 value 없음(ranges 만) — rawQ 로 원본 입력값 복원
-            initialValue={condition && condition.mode !== 'idlist' ? condition.value : (rawQ ?? '')}
-            columnCandidates={columnCandidates}
-          />
-          <ProgressTable
-            rows={rows}
-            totals={totals}
-            metaColumns={visibleColumns}
-            residLabel={residLabel}
-            showResid={showResid}
-            groupColumns={activeCriteria.map((c) => ({ key: c.key, label: c.label }))}
-            page={page}
-            size={size}
-            sort={sort}
-            dir={dir}
-          />
-        </>
-      )}
-    </main>
+    <ReportProgressScreen
+      surveyId={surveyId}
+      basePath={adminOperationsBase(surveyId)}
+      capabilities={capabilities}
+      scope={scope}
+      searchParams={await searchParams}
+    />
   );
 }

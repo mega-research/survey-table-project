@@ -1,5 +1,6 @@
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { accountUserIdOf } from '@/server/survey-access';
 
 import { CreateContactIdListInput, CreateContactIdListOutput } from '../domain/contact-id-list';
 import * as svc from '../services/contact-id-lists';
@@ -12,8 +13,9 @@ const create = scoped
   .input(CreateContactIdListInput)
   .output(CreateContactIdListOutput)
   .handler(async ({ input, context }) => {
-    await assertScopedSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.view');
-    return svc.createContactIdList({ ...input, createdBy: context.user.id });
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.view');
+    // 링크가 만든 목록은 작성자 칸이 빈다 — 그 칸은 계정 FK 이고 링크는 계정이 아니다.
+    return svc.createContactIdList({ ...input, createdBy: accountUserIdOf(context.actor) });
   });
 
 export const idLists = {

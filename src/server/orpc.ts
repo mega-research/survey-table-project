@@ -5,6 +5,8 @@ import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate
 import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
+import { resolveLinkActorForSurvey } from './fieldwork-link';
+import type { Actor } from './survey-access';
 import { rpcLoggingMiddleware } from './rpc-logging';
 
 /** 컨텍스트 타입만 박은 원시 빌더 — 미들웨어 팩토리(withRateLimit) 전용. */
@@ -142,21 +144,87 @@ export const account = base.use(({ context, next }) => {
 });
 
 /**
- * 설문 스코프 베이스 — 세션 + active 계정. 게스트도 통과한다.
+ * 설문 스코프 베이스 — **계정 또는 외주 실사 링크**가 통과한다 (ADR-0026, 티켓 06).
  *
- * 지금은 인증 가드가 account 와 글자까지 같지만 **별개의 베이스로 둔다**. 두 베이스가 지는
- * 계약이 다르기 때문이다 — 이쪽은 "설문 일치를 handler 가 강제한다", 저쪽은 "자기 것만
- * 만진다". 별칭으로 묶으면 한쪽을 조일 때(예: account 에 자기 id 강제) 다른 쪽 전 표면이
- * 조용히 따라 바뀐다.
+ * 티켓 03 까지 이 베이스는 계정을 요구했다. 링크를 들이면 handler 가 `context.user.id` 를
+ * 읽다 터지기 때문이었고, handler 들이 주체를 읽을 줄 알게 되는 것이 이 티켓의 일이다.
+ * 지금 계약은 하나다 — **이 베이스를 쓰는 procedure 는 handler 첫 줄에서**
+ * `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<capability>')`
+ * **를 부른다.** 예외 없음(티켓 21 이 마지막 예외를 authed 로 옮겼다). 링크에게 열리는
+ * capability 는 넷뿐이라(survey.view·operations.view·contacts.view·contacts.writeAttempts)
+ * 나머지 표면은 관문이 전부 거부한다 — 그 사실은 `fieldwork-link-denial` 이 라우터를 열거해
+ * 고정한다.
  *
- * 이 베이스를 쓰는 procedure 는 반드시 handler 첫 줄에서
- * assertScopedSurveyCapabilityRpc(context.user, input.surveyId, '<capability>')
- * (server/rpc-survey-access.ts)를 호출해 설문 접근을 강제해야 한다 — env grant 게스트는
- * grant 일치로, 내부 계정은 capability 로 판정한다(티켓 10). 유일한 예외는 입력에
- * surveyId 가 없는 media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존.
- * 나머지 전 표면은 authed(게스트 차단) 유지 — 게스트는 기본 거부.
+ * 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다:
+ * 이쪽은 「설문 일치를 handler 가 강제한다」, 저쪽은 「자기 것만 만진다」.
+ *
+ * ## 계정이 있으면 계정이 이긴다
+ *
+ * 연구원이 자기가 발급한 링크를 같은 브라우저에서 눌러 보면 계정 세션과 `fw_` 쿠키가 함께
+ * 실려 온다. 그때 링크를 먼저 보면 **그 설문의 admin 콘솔이 조용히 링크 권한으로 깎인다** —
+ * 「방금까지 되던 편집이 안 된다」가 되고 원인이 쿠키라 아무도 못 찾는다. 계정을 먼저 보면
+ * 반대 방향의 사고는 없다: 링크 콘솔 화면 자체는 주소의 토큰으로 판정하므로(RSC 관문)
+ * 버튼 구성이 넓어지지 않고, 그 사람이 이미 가진 권한이 늘지도 않는다.
+ *
+ * **받아들인 어긋남이 하나 있다.** 그 상태에서 링크 콘솔을 보면 화면(RSC, 링크 주체 →
+ * 실 파티션)과 그 화면이 부르는 RPC(계정 주체 → 테스트 모드면 test 파티션)가 다른 파티션을
+ * 본다 — 테스트 모드를 켠 설문에서 필터 후보가 표의 행과 어긋나게 보인다. 겪는 사람은
+ * **테스트 모드를 스스로 켜 둔 담당 연구원 한 명**이고, 반대로 고치면 위의 「admin 콘솔이
+ * 깎인다」가 되살아난다.
+ *
+ * ## 계정이 없을 때만 DB 를 친다
+ *
+ * 링크 후보가 없으면 헤더 한 줄을 본 것이 전부이고(context), 계정이 있으면 그 자리에서
+ * 끝난다 — 응답자·연구원 요청의 비용은 0 이다.
  */
-export const scoped = base.use(({ context, next }) => {
-  return next({ context: { user: requireActiveUser(context.user) } });
+export const scoped = base.use(async ({ context, next }, input: unknown) => {
+  if (context.user !== null) {
+    const user = requireActiveUser(context.user);
+    // 계정 주체는 세션 값 그대로다 — `AuthUser` 가 판정이 읽는 만큼(`SurveyAccessUser`)을
+    // 이미 담고 있어 옮겨 담을 것이 없다.
+    return next({ context: { user, actor: user satisfies Actor } });
+  }
+  const surveyId = extractSurveyId(input);
+  const link =
+    surveyId === null
+      ? ({ kind: 'no_session' } as const)
+      : await resolveLinkActorForSurvey(context.linkSessions, surveyId);
+  if (link.kind === 'ok') return next({ context: { actor: link.actor as Actor } });
+
+  // **거부 사유가 둘로 갈린다.**
+  //  - `no_session` + 다른 링크 세션 보유 → NOT_FOUND. 이 주체에게 그 설문은 존재하지
+  //    않는다(게스트의 미부여 설문과 같은 판단). 여기서 UNAUTHORIZED 를 주면 타 설문 id
+  //    하나가 「세션이 끊겼다」로 보여 외주가 멀쩡한 비밀번호를 다시 넣는다.
+  //  - 그 밖(세션 없음·무효) → UNAUTHORIZED. 접속하거나 다시 접속해야 하는 상태다.
+  //    무효 사유(종료·중단·비밀번호 변경)를 갈라 말하지 않는 것은 코어의 계약이다.
+  if (link.kind === 'no_session' && (context.linkSessions?.length ?? 0) > 0) {
+    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+  }
+  throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
 });
 
+/**
+ * 검증 전 입력에서 설문 id 를 꺼낸다 — 링크 세션 고르기 전용.
+ *
+ * 최상위 string 키만 본다(rpc-logging·extractRateLimitClientId 와 같은 관례). 값이 실제로
+ * 그 설문인지는 묻지 않는다 — 판정은 링크 행과 관문이 하고, 여기서 하는 일은 **여러 개의
+ * `fw_` 쿠키 중 어느 것을 볼지 고르는 것**뿐이다. 없는 설문 id 를 넣으면 고를 쿠키가 없어
+ * 그대로 거부다.
+ */
+function extractSurveyId(input: unknown): string | null {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
+  const value = (input as Record<string, unknown>)['surveyId'];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * 계정 전용 scoped 표면이 세션 계정을 읽는 문 (티켓 06).
+ *
+ * scoped 베이스가 링크도 들이므로 `context.user` 는 null 일 수 있다. 이 문을 쓰는 표면들은
+ * 요구 capability(`mail.send`·`responses.view`)가 링크에게 닫혀 있어 여기까지 오지 않지만,
+ * 타입은 그 사실을 모른다. handler 마다 `!` 를 흩뿌리는 대신 한 곳으로 모으는 이유는
+ * **나중에 그 표면 하나가 링크에 열릴 때 터질 자리를 하나로 두려는 것**이다.
+ */
+export function requireScopedAccount(context: ORPCContext): NonNullable<ORPCContext['user']> {
+  return requireActiveUser(context.user);
+}

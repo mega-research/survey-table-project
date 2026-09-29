@@ -35,7 +35,21 @@ interface Props {
    * 축을 가지면 링크 콘솔에서 헤더만 admin 링크를 그린다.
    */
   internalShell?: boolean;
-  control: {
+  /**
+   * 헤더 오른쪽 끝에 덧붙일 것 — 셸마다 다른 「나가기」가 여기로 온다.
+   *
+   * 계정 셸은 `LogoutButton`(`internalShell`)이고 외주 실사 링크 셸은 쿠키 하나를 지우는
+   * 다른 동작이라, 헤더가 그 둘을 알면 운영 콘솔이 링크 모델을 import 하게 된다. 슬롯으로
+   * 받으면 헤더는 자리만 알고 무엇이 오는지는 모른다.
+   */
+  trailing?: React.ReactNode;
+  /**
+   * 설문 제어 상태 — `survey.edit` 를 가진 주체에게만 쓰인다.
+   *
+   * 없을 수 있는 것이 계약이다: 외주 실사 링크 셸은 중단·테스트 모드 버튼을 그리지 않으므로
+   * 그 재료를 읽을 이유가 없다(읽으면 화면에 쓰이지 않는 왕복이 하나 는다).
+   */
+  control?: {
     isPaused: boolean;
     pausedMessage: string | null;
     testModeEnabled: boolean;
@@ -58,6 +72,7 @@ export function OperationsPageHeader({
   surveyTitle,
   capabilities,
   internalShell = true,
+  trailing,
   control,
 }: Props) {
   const canEdit = capabilities.has('survey.edit');
@@ -85,7 +100,7 @@ export function OperationsPageHeader({
         <div className="flex items-center space-x-3">
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
-          {canEdit && <SurveyControlButtons surveyId={surveyId} initial={control} />}
+          {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}
           {internalShell && (
             <Link href={adminSurveyPreviewPath(surveyId)}>
               <Button variant="outline" size="sm">
@@ -104,6 +119,7 @@ export function OperationsPageHeader({
           )}
           {/* 로그아웃은 계정 동작이다 — 링크 세션의 「나가기」는 쿠키를 지우는 다른 일이다. */}
           {internalShell && <LogoutButton iconOnly />}
+          {trailing}
         </div>
       </div>
     </nav>

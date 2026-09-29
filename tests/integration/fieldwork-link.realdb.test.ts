@@ -17,6 +17,8 @@
  *  ④ 닫힘과 재개 — 중단·삭제·배치 대기·종료가 닫고, **중단은 재개하면 같은 주소로 열린다**
  *     (만료가 아니라 「중단 중 차단」이라는 것의 관찰 가능한 형태).
  *  ⑤ 비밀번호 변경이 **선 세션을 끊는다**.
+ *  ⑥ 콘솔 축 (티켓 06) — **사유의 대비**(자기 설문=FORBIDDEN ↔ 타 설문=NOT_FOUND)와
+ *     **파티션 고정**(테스트 모드를 켠 설문에서도 real 을 읽고 real 에 쓴다).
  */
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
@@ -24,20 +26,32 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  contactTargets as contactTargetsTable,
   surveyFieldworkLinks as linksTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
-import { fieldworkLinkCookieName } from '@/lib/auth/fieldwork-link-session';
+import {
+  fieldworkLinkCookieName,
+  readFieldworkLinkSessions,
+} from '@/lib/auth/fieldwork-link-session';
 import type { ORPCContext } from '@/server/context';
 import {
   authenticateFieldworkLink,
   resolveFieldworkLinkEntry,
   resolveLinkActor,
 } from '@/server/fieldwork-link';
+import { loadOperationsDataScope } from '@/server/data-scope';
+import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
+import { router } from '@/server/router';
 import { fieldworkLinks } from '@/server/workspace/procedures/fieldwork-links';
+import {
+  LINK_BLOCKED_SCOPED_PATHS,
+  LINK_OPEN_SCOPED_PATHS,
+  SCOPED_INPUTS,
+} from '@tests/helpers/scoped-surface-inputs';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -354,6 +368,214 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     expect(await authenticateFieldworkLink(token, password)).toEqual({
       ok: false,
       reason: 'denied',
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑥ 콘솔 축 — 사유의 대비와 파티션 고정 (티켓 06)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 링크 세션 하나를 들고 **scoped 표면 전수**를 두드린다.
+   *
+   * 목으로는 못 한다: `rowsFor` 는 WHERE 를 모르므로 어떤 설문 id 를 넣어도 같은 행을
+   * 돌려주고, 그러면 자기 설문과 타 설문이 구별되지 않는다. 사유가 갈리지 않으면 링크
+   * 하나가 「어느 조사가 존재하는가」를 확인하는 창구가 된다.
+   */
+  function linkClientFor(cookie: { name: string; value: string }) {
+    return createRouterClient(router, {
+      context: {
+        db,
+        user: null,
+        headers: cookieHeaders(cookie),
+        // 컨텍스트 조립은 `createContext` 가 하지만 여기서는 라우터를 직접 부르므로 같은
+        // 재료를 손으로 싣는다 — 서명 검증은 이미 접속 성공이 끝낸 일이다.
+        linkSessions: readFieldworkLinkSessions(cookieHeaders(cookie)),
+      } satisfies ORPCContext,
+    });
+  }
+
+  function callerFor(client: unknown, path: string): (input: unknown) => Promise<unknown> {
+    const fn = path
+      .split('.')
+      .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], client);
+    if (typeof fn !== 'function') throw new Error(`호출할 수 없는 경로: ${path}`);
+    return fn as (input: unknown) => Promise<unknown>;
+  }
+
+  describe('자기 설문 — 권한 밖은 FORBIDDEN', () => {
+    it.each(LINK_BLOCKED_SCOPED_PATHS)('%s 는 권한 부족으로 막힌다', async (path) => {
+      // 존재는 이미 안다(링크를 들고 있으니까) — 여기서 NOT_FOUND 가 나오면 외주 콘솔이
+      // 자기 조사를 「없는 것」으로 보게 된다.
+      const { cookie } = await issueAndSignIn();
+      await expect(
+        callerFor(linkClientFor(cookie), path)({ surveyId, ...SCOPED_INPUTS[path] }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+  });
+
+  describe('타 설문 — NOT_FOUND', () => {
+    it.each([...LINK_OPEN_SCOPED_PATHS, ...LINK_BLOCKED_SCOPED_PATHS])(
+      '%s 는 존재를 알리지 않는다',
+      async (path) => {
+        // 이 링크에게 이웃 설문은 **존재하지 않는 것**이다 — 자기 설문의 FORBIDDEN 과 갈려야
+        // 링크 하나가 「어느 조사가 있는가」를 확인하는 창구가 되지 않는다. UNAUTHORIZED 가
+        // 아닌 것도 의도다: 그 코드는 「세션이 끊겼다」는 뜻이라 멀쩡한 비밀번호를 다시 넣게
+        // 만든다. 자기 설문에서 열리는 여섯까지 함께 묻는 이유는 열린 문이 타 설문으로 새면
+        // 명단이 통째로 넘어가기 때문이다.
+        const { cookie } = await issueAndSignIn();
+        await expect(
+          callerFor(linkClientFor(cookie), path)({
+            surveyId: neighbourSurveyId,
+            ...SCOPED_INPUTS[path],
+          }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      },
+    );
+
+    it('링크 세션이 아예 없으면 UNAUTHORIZED 다 — 「없는 설문」과 갈린다', async () => {
+      // 접속하지 않은 사람에게는 사유를 말할 것이 없다. 이 갈림이 없으면 위의 NOT_FOUND 가
+      // 「세션은 있는데 그 설문이 아니다」를 뜻한다는 사실이 증명되지 않는다.
+      const anonymous = createRouterClient(router, {
+        context: { db, user: null, headers: new Headers() } satisfies ORPCContext,
+      });
+      await expect(
+        callerFor(anonymous, 'contacts.attrValues.list')({ surveyId, attrsKey: 'k' }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('이웃 설문의 링크 쿠키를 함께 들고 와도 이 설문은 이웃 것으로 열리지 않는다', async () => {
+      // 두 조사를 병행하는 브라우저가 실제 상황이다. 쿠키를 고르는 기준이 payload 의
+      // 설문 id 이므로, 이웃 쿠키는 이웃 설문에만 선다.
+      const mine = await issueAndSignIn();
+      const neighbour = await issueAndSignIn(neighbourSurveyId);
+      const both = createRouterClient(router, {
+        context: {
+          db,
+          user: null,
+          headers: cookieHeaders(mine.cookie, neighbour.cookie),
+          linkSessions: readFieldworkLinkSessions(cookieHeaders(mine.cookie, neighbour.cookie)),
+        } satisfies ORPCContext,
+      });
+      // 두 설문 모두에서 자기 쿠키로 관문을 지난다 — 스킴에 없는 열이라 서비스가
+      // FORBIDDEN_COLUMN 으로 거부하는데, 그것은 관문이 아니라 **지나간 뒤**의 거부다.
+      for (const target of [surveyId, neighbourSurveyId]) {
+        await expect(
+          callerFor(both, 'contacts.attrValues.list')({ surveyId: target, attrsKey: '없는열' }),
+        ).rejects.toMatchObject({ code: 'FORBIDDEN_COLUMN' });
+      }
+    });
+  });
+
+  describe('파티션 — 테스트 모드를 켜도 링크는 실데이터를 본다', () => {
+    it('읽기·쓰기 모두 real 이다 — 비대칭 금지', async () => {
+      await db
+        .update(surveysTable)
+        .set({ testModeEnabled: true })
+        .where(eq(surveysTable.id, surveyId));
+      const { cookie } = await issueAndSignIn();
+      const session = await resolveLinkActor(
+        (await db
+          .select({ token: linksTable.token })
+          .from(linksTable)
+          .where(eq(linksTable.surveyId, surveyId))
+          .limit(1))[0]!.token,
+        cookieHeaders(cookie),
+      );
+      if (!session.ok) throw new Error('세션이 서지 않았다');
+
+      // 담당 연구원(내부 계정)은 test 를 보는 설문이다 — 그 상태에서 링크만 real 이어야
+      // 「밖에서 전화 돌리는 사람이 실제 연락처를 본다」가 성립한다.
+      expect(await loadOperationsDataScope(surveyId, session.actor)).toBe('real');
+      expect(
+        await loadOperationsDataScope(surveyId, {
+          id: OWNER_ID,
+          isSuperadmin: false,
+          userType: 'internal',
+        }),
+      ).toBe('test');
+    });
+
+    it('링크가 보는 목록이 실 파티션 행이다', async () => {
+      await db
+        .update(surveysTable)
+        .set({ testModeEnabled: true })
+        .where(eq(surveysTable.id, surveyId));
+      // 같은 설문에 실/테스트 대상을 하나씩 심는다 — 파티션을 잘못 고르면 표가 반대 행을 센다.
+      await db.insert(contactTargetsTable).values([
+        {
+          surveyId,
+          resid: 1,
+          isTest: false,
+          inviteCode: `fwreal${surveyId.slice(0, 8)}`,
+          attrs: { 이름: '실데이터' },
+        },
+        {
+          surveyId,
+          resid: 1,
+          isTest: true,
+          inviteCode: `fwtest${surveyId.slice(0, 8)}`,
+          attrs: { 이름: '테스트' },
+        },
+      ]);
+      const { cookie } = await issueAndSignIn();
+      const [row] = await db
+        .select({ token: linksTable.token })
+        .from(linksTable)
+        .where(eq(linksTable.surveyId, surveyId))
+        .limit(1);
+      const session = await resolveLinkActor(row!.token, cookieHeaders(cookie));
+      if (!session.ok) throw new Error('세션이 서지 않았다');
+
+      const page = await loadContactsListPage({
+        surveyId,
+        scope: await loadOperationsDataScope(surveyId, session.actor),
+        canViewMail: false,
+        searchParams: {},
+      });
+      expect(page.total).toBe(1);
+      expect(page.rows[0]?.attrs['이름']).toBe('실데이터');
+    });
+  });
+
+  describe('메일 축 — 링크 목록에는 열도 필터도 정렬도 없다', () => {
+    it('「수신 상황」 열이 스킴·필터 후보에서 함께 빠지고 정렬도 폴백된다', async () => {
+      await db.insert(contactTargetsTable).values({
+        surveyId,
+        resid: 1,
+        isTest: false,
+        inviteCode: `fwmail${surveyId.slice(0, 8)}`,
+        attrs: { 회사명: '가나다' },
+      });
+      // 연구원이 「수신 상황」 열을 켜 둔 상태를 만든다 — 그 설정이 외주 목록까지 따라가면
+      // 초대 메일의 전달·열람·반송이 협력사에 그대로 보인다.
+      await db
+        .update(surveysTable)
+        .set({
+          contactColumns: {
+            version: 1,
+            headerRow: 1,
+            columns: [
+              { key: 'resid', source: 'system.resid', label: '시스템ID', order: 0 },
+              { key: '회사명', source: 'attrs.회사명', label: '회사명', order: 1 },
+              { key: 'email', source: 'system.email_count', label: '수신 상황', order: 2 },
+            ],
+          },
+        })
+        .where(eq(surveysTable.id, surveyId));
+
+      const args = { surveyId, scope: 'real' as const, searchParams: { sort: 'mailStatus' } };
+      const researcher = await loadContactsListPage({ ...args, canViewMail: true });
+      const outsourced = await loadContactsListPage({ ...args, canViewMail: false });
+
+      // 연구원 쪽은 종전 그대로여야 한다 — 이 단언이 없으면 「둘 다 빠졌다」도 통과한다.
+      expect(researcher.scheme?.columns.map((c) => c.source)).toContain('system.email_count');
+      expect(researcher.sort).toBe('mailStatus');
+
+      expect(outsourced.scheme?.columns.map((c) => c.source)).not.toContain('system.email_count');
+      expect(outsourced.columnCandidates.map((c) => c.source)).not.toContain('system.email_count');
+      // 보이지 않는 축으로 줄을 세울 수 없다 — 열만 숨기면 URL 의 sort 가 그대로 산다.
+      expect(outsourced.sort).toBe('resid');
     });
   });
 });

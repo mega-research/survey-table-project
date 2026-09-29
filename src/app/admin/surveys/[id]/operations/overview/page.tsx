@@ -1,29 +1,13 @@
 import type { Metadata } from 'next';
 
-import { ExportDataModal } from '@/features/analytics/export-data-modal';
-import { DailyParticipationChart } from '@/features/operations/daily-participation-chart';
-import { DailyStatsTable } from '@/features/operations/daily-stats-table';
-import { DropFunnel } from '@/features/operations/drop-funnel';
-import { InquiriesEmptyCard } from '@/features/operations/inquiries-empty-card';
-import { KpiRow } from '@/features/operations/kpi-row';
-import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
-import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
-import { ResponseTimeStats } from '@/features/operations/response-time-stats';
-import {
-  aggregateDaily,
-  aggregateDailyAvailableDates,
-} from '@/server/operations/services/aggregate-daily';
-import { aggregateStatus } from '@/server/operations/services/aggregate-status';
-import { getDailyStats } from '@/server/operations/services/daily-stats';
-import { getDropFunnel } from '@/server/operations/services/drop-funnel';
-import { getPageDwell } from '@/server/operations/services/page-dwell';
-import { getQuotaStatus } from '@/server/quota/services/quota-status';
-import { getResponseTime } from '@/server/operations/services/response-time';
-import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isExternalViewer } from '@/lib/auth/external-viewer';
-import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { loadSurveyCapabilities } from '@/server/survey-access';
+
+import {
+  OperationsOverviewScreen,
+  type OperationsOverviewSearchParams,
+} from '@/app/_operations/overview-screen';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.
@@ -42,99 +26,33 @@ export const metadata: Metadata = {
   title: '현황 - 응답 진행 현황',
 };
 
-interface OperationsOverviewPageProps {
+interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    mode?: 'day' | 'hour';
-    date?: string;
-    weekOffset?: string;
-    dwellOffset?: string;
-  }>;
+  searchParams: Promise<OperationsOverviewSearchParams>;
 }
 
 /**
- * 현황 콘솔 — Fieldwork report 진입 페이지.
+ * 응답 현황 — 화면 정의는 `OperationsOverviewScreen` 이 갖고 여기는 관문·주체 해석만 한다.
  *
- * 슬라이스 1 의 7개 위젯을 모두 마운트한다 (A1 KPI → A2 일자별 차트 →
- * A3 일자별 통계 → A4 응답시간 → A5 Drop funnel → A6 Page dwell →
- * Inquiries placeholder). 계획 3 에서 쿼터 진행 카드(A1 옆) + 쿼터 현황판을 추가한다.
- *
- * - 7개 어댑터를 `Promise.all` 로 병렬 호출.
- * - hour 모드에서 `date` 미지정 시 응답이 존재하는 가장 최근 일자(KST)로 자동 결정.
- *   응답이 전무하면 KST 오늘 일자로 fallback (어댑터의 `hourModeDate` 필수 조건 충족).
- * - 설문이 존재하지 않거나 soft-delete 된 경우 `notFound()` (D-7 전용 UI 는 후속 작업).
- * - `getQuotaStatus`는 쿼터 미설정 설문에서 null을 반환 — 이 경우 KPI 쿼터 카드는 '-'를 표시하고 현황판만 생략.
+ * 외주 실사 링크 트리(`/fw/[token]/operations/overview`)가 **같은 본문**을 다른 capability·
+ * 다른 파티션으로 렌더한다(ADR-0026). 여기에 화면을 되돌려 쓰지 말 것.
  */
-export default async function OperationsOverviewPage({
-  params,
-  searchParams,
-}: OperationsOverviewPageProps) {
+export default async function OperationsOverviewPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
-  await assertSurveyConsolePageAccess(surveyId, 'operations.view');
-  const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = await searchParams;
-  const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
-  const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
-
-  // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
-  // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, isExternal] = await Promise.all([getOperationsDataScope(surveyId), isExternalViewer()]);
-  const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
-  const latestAvailable =
-    availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
-  const effectiveDate =
-    mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
-
-  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
-    await Promise.all([
-      aggregateStatus(surveyId, scope),
-      aggregateDaily({ surveyId, scope, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
-      getDailyStats(surveyId, scope),
-      getResponseTime(surveyId, scope),
-      getDropFunnel(surveyId, scope),
-      getPageDwell(surveyId, scope),
-      // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
-      getQuotaStatus(surveyId, scope),
-      getSurveyById(surveyId),
-    ]);
+  const viewer = await assertSurveyConsolePageAccess(surveyId, 'operations.view');
+  const [scope, capabilities] = await Promise.all([
+    getOperationsDataScope(surveyId),
+    loadSurveyCapabilities(viewer, surveyId),
+  ]);
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
-          <p className="text-sm text-slate-500">
-            응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
-          </p>
-        </div>
-        {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트에게는 숨김 */}
-        {!isExternal && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
-      </div>
-
-      <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
-
-      {/* 플랜이 있으면 셀이 비어 있어도 그린다 — 카드 안에서 "목표 없음" 을 안내한다 */}
-      {quotaStatus && <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />}
-
-      <DailyParticipationChart
-        data={dailyBuckets}
-        mode={mode}
-        {...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {})}
-        availableDates={availableDates}
-        weekOffset={weekOffset}
-      />
-
-      <DailyStatsTable data={dailyStats} />
-
-      <ResponseTimeStats data={responseTime} />
-
-      <DropFunnel data={dropFunnel} />
-
-      <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />
-
-      {/* 응답자 문의사항 (백엔드 미구현 — 슬라이스 1 범위 외) */}
-      <InquiriesEmptyCard />
-    </main>
+    <OperationsOverviewScreen
+      surveyId={surveyId}
+      capabilities={capabilities}
+      scope={scope}
+      searchParams={await searchParams}
+    />
   );
 }

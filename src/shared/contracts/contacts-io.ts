@@ -4,7 +4,13 @@
 import * as z from 'zod';
 
 import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
-import type { ContactUploadMode } from '@/shared/contracts/contacts';
+import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts-format';
+import type { ClientFilterClause, ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
+import type {
+  ContactColumnScheme,
+  ContactResultCode,
+  ContactUploadMode,
+} from '@/shared/contracts/contacts';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
@@ -327,3 +333,40 @@ export const SavePriorAnswerImportConfigInput = z.object({
   valueAliases: z.record(z.string(), z.record(z.string(), z.string())),
 });
 export type SavePriorAnswerImportConfigInput = z.infer<typeof SavePriorAnswerImportConfigInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 조사 대상 목록 화면의 재료 — 두 라우트 트리가 같은 화면을 렌더하기 위한 경계 모양
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 조사 대상 목록 한 페이지를 그리는 데 필요한 것 전부 (ADR-0026, 티켓 06).
+ *
+ * `/admin` 과 외주 실사 링크 트리(`/fw`)가 **같은 화면 정의**를 쓴다. 조립은 read-model
+ * (`server/read-models/contacts-list-page`)이 하고 렌더는 UI
+ * (`features/operations/contacts/contacts-list-view`)가 하는데, 둘은 서로를 import 할 수
+ * 없으므로(서버↔UI 경계) 그 사이의 모양이 여기 산다 — 이 파일이 원래 하는 일이다.
+ *
+ * `basePath`·`capabilities` 는 여기 없다. **주체와 주소는 라우트가 아는 것**이고 조회 결과가
+ * 아니다 — 한 덩어리로 묶으면 로더가 「어느 트리에서 불렸는가」를 알아야 한다.
+ */
+export interface ContactsListPageData {
+  /**
+   * 컬럼 스킴 — **null 이면 아직 명단이 없다**(업로드 전). 화면이 빈 상태로 갈라진다.
+   */
+  scheme: ContactColumnScheme | null;
+  resultCodes: ContactResultCode[];
+  columnCandidates: ColumnCandidateWithPii[];
+  /** 필터바가 되그릴 초기 절 — URL 에서 읽은 것 그대로. */
+  initialClauses: ClientFilterClause[];
+  rows: ContactsRow[];
+  total: number;
+  /** 서버가 범위로 자른 페이지 번호 — URL 값이 아니다. */
+  page: number;
+  pageSize: number;
+  sort: ContactsSortKey;
+  dir: ContactsSortDir;
+  /** 필터가 걸려 있는가 — 빈 목록 문구가 갈린다. */
+  hasFilter: boolean;
+  /** 테스트 파티션을 보고 있는가 — 업로드가 막히는 유일한 사유다. */
+  isTestScope: boolean;
+}

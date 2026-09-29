@@ -49,7 +49,12 @@ describe('contacts.attrValues procedures', () => {
       SURVEY_ID,
       'contacts.view',
     );
-    expect(loadOperationsDataScope).toHaveBeenCalledWith(SURVEY_ID);
+    // 파티션은 주체를 따른다 — 링크 세션에서는 세션 조회(`isExternalViewer`)가 던지므로
+    // 주체를 인자로 받아야 한다(티켓 06).
+    expect(loadOperationsDataScope).toHaveBeenCalledWith(
+      SURVEY_ID,
+      expect.objectContaining({ id: 'admin-1' }),
+    );
     expect(svc.listContactAttrValues).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,
       attrsKey: '기업유형',

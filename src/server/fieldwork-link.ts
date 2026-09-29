@@ -12,6 +12,7 @@ import {
   isFieldworkLinkToken,
   readFieldworkLinkSessions,
   signFieldworkLinkSession,
+  type FieldworkLinkSession,
 } from '@/lib/auth/fieldwork-link-session';
 import type { SurveyAssignmentStatus } from '@/shared/contracts/workspace';
 
@@ -140,6 +141,53 @@ export async function resolveLinkActor(
   const row = await loadLinkRow(token);
   if (!row) return { ok: false, reason: 'unknown' };
   return evaluateSession(row, token, headers);
+}
+
+/**
+ * 이 설문의 링크 세션을 골라 검증한 결과 — **「없다」와 「죽었다」를 가른다** (티켓 06).
+ *
+ * 둘을 합치면 호출부가 사유를 고를 수 없다. 이 설문의 쿠키가 아예 없으면 그 설문은 이
+ * 주체에게 **존재하지 않는 것**이고(게스트의 미부여 설문과 같다), 있었는데 더는 유효하지
+ * 않으면(비밀번호 변경·종료·중단) **다시 접속해야 하는 것**이다. 한 코드로 뭉뚱그리면 타
+ * 설문 id 하나가 「세션이 끊겼다」로 보여 외주가 멀쩡한 비밀번호를 다시 넣는다.
+ */
+export type LinkActorForSurvey =
+  | { kind: 'ok'; actor: LinkActor }
+  /** 이 설문의 쿠키가 없다 — 이 주체에게 그 설문은 없는 것이다. */
+  | { kind: 'no_session' }
+  /** 쿠키는 있었지만 더는 서지 않는다 — 다시 접속해야 한다. */
+  | { kind: 'invalid' };
+
+/**
+ * 요청이 들고 온 링크 세션 중 **이 설문의 것**을 골라 검증한다 — scoped 베이스의 재료 (티켓 06).
+ *
+ * `resolveLinkActor` 와 묻는 방향이 반대다. 저쪽은 주소의 토큰으로 「이 링크가 열리는가」를
+ * 묻고(입구 화면·RSC), 이쪽은 입력의 설문 id 로 「이 요청을 낸 주체가 누구인가」를 묻는다 —
+ * RPC 에는 토큰이 실리지 않는다. 그래서 쿠키 **이름**이 아니라 payload 의 `surveyId` 로
+ * 고른다: 그 필드를 담아 둔 이유가 여기에 있다(티켓 05 의 주석이 예고한 자리).
+ *
+ * 고르기만 payload 로 하고 **판정은 전부 행이 한다.** 쿠키의 주장이 행과 어긋나면 거부이고,
+ * 주체의 설문은 언제나 `row.surveyId` 다 — 서명된 값이라 위조되지 않지만, 정본을 행에 두면
+ * 「쿠키가 말하는 설문」과 「링크가 여는 설문」이 갈릴 여지 자체가 없다.
+ *
+ * 무효 사유는 **한 값으로 접는다**(`invalid`). 종료·중단·비밀번호 변경을 갈라 돌려주면 그
+ * 응답이 곧 링크 상태를 알려 주는 창구가 되고, 호출부가 할 수 있는 일은 어차피 하나다.
+ */
+export async function resolveLinkActorForSurvey(
+  sessions: readonly FieldworkLinkSession[] | undefined,
+  surveyId: string,
+): Promise<LinkActorForSurvey> {
+  const candidate = sessions?.find((session) => session.claim.surveyId === surveyId);
+  if (!candidate) return { kind: 'no_session' };
+  const row = await loadLinkRow(candidate.token);
+  if (!row) return { kind: 'invalid' };
+  if (isClosed(row)) return { kind: 'invalid' };
+  if (row.surveyId !== surveyId) return { kind: 'invalid' };
+  if (candidate.claim.linkId !== row.linkId) return { kind: 'invalid' };
+  if (candidate.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
+    return { kind: 'invalid' };
+  }
+  return { kind: 'ok', actor: { kind: 'link', linkId: row.linkId, surveyId: row.surveyId } };
 }
 
 /**
