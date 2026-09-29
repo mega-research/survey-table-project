@@ -452,6 +452,12 @@ export const surveyResponses = pgTable(
     // FK 는 0122 마이그레이션이 만든다 — auth.ts 와 순환 import 를 피한다.
     fieldworkUserId: uuid('fieldwork_user_id'),
 
+    // 이 응답을 대신 입력한 **외주 실사 링크** — 위 계정 칸과 배타다 (0127, ADR-0026).
+    // 계정이 없는 주체라 `fieldwork_user_id` 에 채울 값이 없다. 채우는 것은 대리 응답
+    // 경로(티켓 09)이고, 여기서도 화면이 보내는 값이 아니라 서버가 세션·초대 토큰을 함께
+    // 보고 정한다. FK 와 배타 CHECK 는 0127 마이그레이션이 만든다.
+    fieldworkLinkId: uuid('fieldwork_link_id'),
+
     // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL
     progressPct: smallint('progress_pct'),
 

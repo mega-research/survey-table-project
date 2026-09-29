@@ -32,6 +32,8 @@ import type {
   PiiUpdate,
   ResponseEditLogRow,
 } from '@/shared/contracts/contacts-io';
+
+import type { ContactDetailPermissions } from './contact-detail-permissions';
 import { client } from '@/shared/lib/rpc';
 
 import { operationsPaths } from '../operations-paths';
@@ -53,8 +55,14 @@ interface ContactDetailFormProps {
     memo: string | null;
     contactMethod: ContactMethod | null;
     respondedAt: Date | null;
-    inviteToken: string;
-    inviteCode: string;
+    /**
+     * 대행 진입점이 될 초대 코드 — **null 이면 이 주체는 대신 누를 수 없다**.
+     *
+     * 원문 토큰(`inviteToken`)은 여기 없다. 이 화면이 쓰는 것은 짧은 링크를 만드는 코드
+     * 하나이고, 쓰지도 않는 값을 payload 에 실으면 감추는 의미가 사라진다 — 판정은 서버
+     * 투영(`ContactDetailScreen`)이 하고 여기는 받은 것만 그린다.
+     */
+    inviteCode: string | null;
     responseId: string | null;
     /** 수정 대상 응답이 재응답 허용 대상 상태인지 — 버튼 노출 판정 (respondedAt 링크 누락 대비). */
     responseReeditable?: boolean;
@@ -66,8 +74,13 @@ interface ContactDetailFormProps {
   editLogs?: ResponseEditLogRow[];
   /** 단건 메일 발송 다이얼로그용 (편집 모드에서만 의미). */
   mailSend?: { templates: MailTemplateOption[]; disabledReason: string | null };
-  /** 응답 초기화 버튼 노출 — authed 전용 RPC 라 게스트는 false. */
-  canReset?: boolean;
+  /**
+   * 이 주체가 이 화면에서 무엇을 할 수 있는가 — 서버가 판정을 풀어 넘긴 것 (티켓 08).
+   *
+   * 클라이언트 컴포넌트라 capability 집합을 그대로 받을 수 없어 불리언 묶음으로 온다.
+   * 푸는 자리는 `contactDetailPermissions` 한 곳이다.
+   */
+  permissions: ContactDetailPermissions;
 }
 
 export function ContactDetailForm({
@@ -80,7 +93,7 @@ export function ContactDetailForm({
   mailHistory = [],
   editLogs = [],
   mailSend,
-  canReset = false,
+  permissions,
 }: ContactDetailFormProps) {
   const router = useRouter();
   const isEdit = initial != null;
@@ -246,7 +259,22 @@ export function ContactDetailForm({
     const editTarget = isEdit && initial ? initial : null;
     startTransition(async () => {
       try {
-        if (editTarget) {
+        if (editTarget && !permissions.manageContacts) {
+          // **메모·연락 방법만 쓰는 좁은 표면**이다(`contacts.targets.setMemo`).
+          // 형제 `update` 와 요구 capability 가 다른 것이 그 표면의 존재 이유이고
+          // (writeAttempts ↔ manage), 여기서 `update` 를 부르면 외주가 명단 수정 권한을
+          // 요구받아 거부당한다 — 화면은 메모만 고쳤는데 저장이 실패한다.
+          await client.contacts.targets.setMemo({
+            surveyId,
+            id: editTarget.id,
+            memo,
+            contactMethod,
+          });
+          const attemptCard = attemptCardRef.current;
+          if (attemptCard) await attemptCard.flushIfSelected();
+          router.refresh();
+          setSuccessMessage('저장 완료');
+        } else if (editTarget) {
           await client.contacts.targets.update({
             id: editTarget.id,
             surveyId,
@@ -328,8 +356,10 @@ export function ContactDetailForm({
             responseId={initial?.responseId ?? null}
             responseReeditable={initial?.responseReeditable ?? false}
             inviteCode={initial?.inviteCode ?? null}
-            canReset={canReset && isEdit}
-            {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}
+            readOnlyFields={!permissions.manageContacts}
+            canWriteMemo={permissions.writeAttempts}
+            canManageResponses={permissions.manageResponses && isEdit}
+            {...(isEdit && permissions.manageContacts ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}
             onPiiChange={(k, v) => setPiiValues((prev) => ({ ...prev, [k]: v }))}
             onMemoChange={(m) => setMemo(m)}
@@ -339,7 +369,7 @@ export function ContactDetailForm({
             <Button variant="outline" onClick={goList}>
               목록
             </Button>
-            {isEdit && (
+            {isEdit && permissions.manageContacts && (
               <Button
                 variant="outline"
                 onClick={remove}
@@ -353,41 +383,60 @@ export function ContactDetailForm({
               <CopyInviteUrlButton inviteCode={initial.inviteCode} />
             )}
             <span className="flex-1" />
-            <Button onClick={save} disabled={isPending}>
-              {isPending ? '저장 중…' : '저장'}
-            </Button>
+            {/* 명단을 못 고치는 주체에게 남는 저장은 메모·연락 방법뿐이라 그렇게 적는다 —
+                「저장」이라고 쓰면 화면의 값 전부가 간다고 읽힌다. 회차는 자기 버튼이 따로
+                있어 이 버튼이 눌린다고 회차가 쌓이지 않는다(AC). */}
+            {(permissions.manageContacts || permissions.writeAttempts) && (
+              <Button onClick={save} disabled={isPending}>
+                {isPending
+                  ? '저장 중…'
+                  : permissions.manageContacts
+                    ? '저장'
+                    : '메모 저장'}
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="space-y-4">
           {isEdit && initial ? (
             <>
-              <ContactAttemptAddCard
-                ref={attemptCardRef}
-                contactTargetId={initial.id}
-                surveyId={surveyId}
-                resultCodes={resultCodes}
-              />
+              {permissions.writeAttempts && (
+                <ContactAttemptAddCard
+                  ref={attemptCardRef}
+                  contactTargetId={initial.id}
+                  surveyId={surveyId}
+                  resultCodes={resultCodes}
+                />
+              )}
               <ContactAttemptHistoryCard
                 contactTargetId={initial.id}
                 surveyId={surveyId}
                 attempts={initial.attempts}
                 resultCodes={resultCodes}
+                canDelete={permissions.writeAttempts}
               />
-              <ContactMailHistoryCard
-                rows={mailHistory}
-                action={
-                  mailSend ? (
-                    <SendSingleMailDialog
-                      surveyId={surveyId}
-                      contactTargetId={initial.id}
-                      templates={mailSend.templates}
-                      disabledReason={mailSend.disabledReason}
-                    />
-                  ) : undefined
-                }
-              />
-              <ContactEditHistoryCard rows={editLogs} hasResponse={initial.responseId != null} />
+              {/* 메일은 연구원의 채널이다 — 발송 이력도 단건 발송도 그 축의 판정을 따른다. */}
+              {permissions.viewMail && (
+                <ContactMailHistoryCard
+                  rows={mailHistory}
+                  action={
+                    mailSend && permissions.sendMail ? (
+                      <SendSingleMailDialog
+                        surveyId={surveyId}
+                        contactTargetId={initial.id}
+                        templates={mailSend.templates}
+                        disabledReason={mailSend.disabledReason}
+                      />
+                    ) : undefined
+                  }
+                />
+              )}
+              {/* 편집 이력에는 **고친 사람의 이메일**이 실린다 — 응답 원문을 볼 수 없는
+                  주체에게 내부 담당자 명단을 흘릴 이유가 없다. */}
+              {permissions.manageResponses && (
+                <ContactEditHistoryCard rows={editLogs} hasResponse={initial.responseId != null} />
+              )}
             </>
           ) : (
             <div className="rounded-lg border bg-slate-50 p-5 text-sm text-slate-500">

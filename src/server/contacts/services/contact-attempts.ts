@@ -6,6 +6,7 @@ import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { lockWriteScope } from '@/server/data-scope';
+import type { ActorAttribution } from '@/server/survey-access';
 
 import type {
   AddContactAttemptInput,
@@ -61,13 +62,13 @@ export async function addAttempt(
   input: AddContactAttemptInput,
   isExternal: boolean,
   /**
-   * 작성자 계정 — **null 이 정상값이다** (ADR-0026, 티켓 06).
+   * 「누가 넣었는가」 — 계정 칸과 링크 칸 중 **정확히 하나** (0127, ADR-0026, 티켓 08).
    *
    * 외주 실사 링크는 `contacts.writeAttempts` 를 갖지만 계정이 아니다. 계정 FK 칸에 무엇이든
-   * 채우려 들면 그 순간 남의 이름으로 기록이 남으므로 비워 두고, 「어느 링크가 넣었는가」는
-   * 링크 귀속 칸이 받는다(0127, 티켓 08).
+   * 채우려 들면 그 순간 남의 이름으로 기록이 남으므로 링크 칸이 따로 있고, 둘의 배타는
+   * `attributionOf` 가 주체에서 파생시켜 타입으로, DB 의 CHECK 가 저장 시점에 지킨다.
    */
-  actorUserId: string | null,
+  author: ActorAttribution,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
@@ -92,7 +93,8 @@ export async function addAttempt(
             attemptNo: nextNo,
             resultCode,
             note: note ?? null,
-            createdBy: actorUserId,
+            createdBy: author.createdBy,
+            fieldworkLinkId: author.fieldworkLinkId,
           })
           .returning({ id: contactAttempts.id, attemptNo: contactAttempts.attemptNo });
         if (!row) throw new Error('contact_attempts INSERT 실패');

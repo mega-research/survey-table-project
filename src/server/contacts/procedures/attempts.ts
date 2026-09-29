@@ -4,7 +4,7 @@ import * as z from 'zod';
 import { isExternalActor } from '@/server/data-scope';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-import { accountUserIdOf } from '@/server/survey-access';
+import { attributionOf } from '@/server/survey-access';
 
 import {
   AddContactAttemptInput,
@@ -38,7 +38,7 @@ const add = scoped
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
     return svc
-      .addAttempt(input, isExternalActor(context.actor), accountUserIdOf(context.actor))
+      .addAttempt(input, isExternalActor(context.actor), attributionOf(context.actor))
       .catch(rethrowAttemptNotFound);
   });
 

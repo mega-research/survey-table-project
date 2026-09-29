@@ -47,9 +47,25 @@ interface ContactInfoCardProps {
   responseId: string | null;
   /** 수정 대상 응답이 재응답 허용 대상 상태인지 — 버튼 노출 (respondedAt 링크 누락 대비). */
   responseReeditable?: boolean;
+  /**
+   * 대행 진입점이 될 초대 코드 — **없을 수 있는 것이 계약이다** (ADR-0026, 티켓 08).
+   *
+   * 서버 투영이 「이 주체가 대신 눌러도 되는가」를 판정해 넘기지 않기로 하면 여기 null 이
+   * 온다. 화면이 버튼만 감추는 것으로는 부족하다 — 코드가 payload 에 실리면 그 주소는
+   * `pub` 경로라 서버가 다시 못 막는다.
+   */
   inviteCode: string | null;
-  /** 응답 초기화(hard reset) 버튼 노출 — authed 전용이라 게스트는 false. */
-  canReset?: boolean;
+  /**
+   * attrs·PII 를 **보기만** 하는가 (`contacts.manage` 없음).
+   *
+   * 값을 감추는 것이 아니라 고치지 못하게 하는 것이다 — 외주는 전화를 걸어야 하므로 연락처
+   * 평문이 보여야 하고(스토리 29), 명단을 고치는 것은 담당 연구원의 일이다.
+   */
+  readOnlyFields?: boolean;
+  /** 메모·수신방법을 고칠 수 있는가 (`contacts.writeAttempts`). */
+  canWriteMemo?: boolean;
+  /** 응답 수정·초기화·재응답 허용 노출 (`responses.view`). */
+  canManageResponses?: boolean;
   /** 헤더 토글 변경 시 호출 — 컬럼 스킴 hidden 갱신. 신규 모드는 undefined. */
   onColumnToggle?: (key: string, hidden: boolean) => void;
   /** attrs 입력 변경 */
@@ -78,7 +94,9 @@ export function ContactInfoCard({
   responseId,
   responseReeditable = false,
   inviteCode,
-  canReset = false,
+  readOnlyFields = false,
+  canWriteMemo = true,
+  canManageResponses = false,
   onColumnToggle,
   onAttrsChange,
   onPiiChange,
@@ -167,7 +185,10 @@ export function ContactInfoCard({
           const value =
             def.kind === 'attrs' ? attrs[def.key] ?? '' : piiValues?.[def.key] ?? '';
           const isFailedPii = def.kind === 'pii' && failedPiiKeys?.has(def.key);
-          const onChange = isFailedPii
+          // 고칠 수 없는 주체에게는 같은 값을 읽기 전용으로 준다 — 전화를 걸려면 평문이
+          // 보여야 하고(스토리 29), 고치는 것은 담당 연구원의 일이다.
+          const isReadOnly = isFailedPii || readOnlyFields;
+          const onChange = isReadOnly
             ? undefined
             : def.kind === 'attrs'
               ? (e: React.ChangeEvent<HTMLInputElement>) => setAttrsField(def.key, e.target.value)
@@ -186,8 +207,14 @@ export function ContactInfoCard({
                 <Input
                   value={isFailedPii ? '복호화 실패 — 편집 불가' : value}
                   onChange={onChange}
-                  readOnly={isFailedPii}
-                  className={`h-9 pr-16 ${isFailedPii ? 'cursor-not-allowed bg-rose-50 text-rose-700' : ''}`}
+                  readOnly={isReadOnly}
+                  className={`h-9 pr-16 ${
+                    isFailedPii
+                      ? 'cursor-not-allowed bg-rose-50 text-rose-700'
+                      : readOnlyFields
+                        ? 'bg-slate-50'
+                        : ''
+                  }`}
                   title={
                     isFailedPii
                       ? '암호 키가 바뀌었거나 데이터가 손상되어 복호화할 수 없습니다. 재업로드로 복구 가능.'
@@ -224,12 +251,13 @@ export function ContactInfoCard({
                 <input
                   type="radio"
                   checked={contactMethod === m}
+                  disabled={!canWriteMemo}
                   onChange={() => onContactMethodChange(m)}
                 />
                 {CONTACT_METHOD_LABEL[m]}
               </label>
             ))}
-            {contactMethod && (
+            {contactMethod && canWriteMemo && (
               <button
                 type="button"
                 className="ml-auto text-[10px] text-slate-500 hover:underline"
@@ -248,38 +276,45 @@ export function ContactInfoCard({
             ) : (
               <span className="text-xs text-slate-400">미응답</span>
             )}
-            {/* 한 줄 유지 — 버튼 5개가 들어가야 하므로 컴팩트 사이즈 통일 */}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled
-              title="후속 슬라이스 (메일발송)"
-              className="h-7 px-2 text-xs"
-            >
-              QR
-            </Button>
-            {responseId ? (
-              <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                <Link
-                  href={operationsPaths(basePath).profileEdit(responseId)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  응답 수정
-                </Link>
-              </Button>
-            ) : (
+            {/* 한 줄 유지 — 버튼 5개가 들어가야 하므로 컴팩트 사이즈 통일.
+                QR 은 메일 발송 후속 슬라이스의 자리표시자라, 명단을 다루지 않는 주체
+                (외주 실사 링크 등)에게는 보일 이유가 없다. */}
+            {!readOnlyFields && (
               <Button
                 size="sm"
                 variant="outline"
                 disabled
-                title="응답이 아직 없습니다."
+                title="후속 슬라이스 (메일발송)"
                 className="h-7 px-2 text-xs"
               >
-                응답 수정
+                QR
               </Button>
             )}
-            {canReset && responseId && (
+            {/* 응답 수정은 응답 **원문** 화면이다 — 그 화면의 관문과 같은 것을 여기서 묻는다.
+                요구가 갈리면 외주에게 여는 주소가 없는 버튼이 생긴다. */}
+            {canManageResponses &&
+              (responseId ? (
+                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                  <Link
+                    href={operationsPaths(basePath).profileEdit(responseId)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    응답 수정
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  title="응답이 아직 없습니다."
+                  className="h-7 px-2 text-xs"
+                >
+                  응답 수정
+                </Button>
+              ))}
+            {canManageResponses && responseId && (
               <Button
                 size="sm"
                 variant="outline"
@@ -289,7 +324,7 @@ export function ContactInfoCard({
                 응답 초기화
               </Button>
             )}
-            {canReset && responseId && responseReeditable && (
+            {canManageResponses && responseId && responseReeditable && (
               <Button
                 size="sm"
                 variant="outline"
@@ -345,6 +380,8 @@ export function ContactInfoCard({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          {/* 초대 링크 = 그 사람의 응답 화면이자 **대행 진입점**이다. 코드가 null 이면 서버
+              투영이 「이 주체는 대신 누를 수 없다」고 정한 것이라 자리 자체가 없다. */}
           {inviteCode && inviteUrl && (
             <div className="mt-1 break-all text-sm text-slate-900">
               초대 링크:{' '}
@@ -366,9 +403,12 @@ export function ContactInfoCard({
           <textarea
             value={memo ?? ''}
             onChange={(e) => onMemoChange(e.target.value)}
-            placeholder="메모할 사항을 입력해주세요."
+            placeholder={canWriteMemo ? '메모할 사항을 입력해주세요.' : ''}
             rows={3}
-            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+            readOnly={!canWriteMemo}
+            className={`mt-1 w-full rounded border px-2 py-1.5 text-sm ${
+              canWriteMemo ? '' : 'bg-slate-50'
+            }`}
           />
         </div>
       </div>

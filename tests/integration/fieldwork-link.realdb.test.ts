@@ -19,6 +19,8 @@
  *  ⑤ 비밀번호 변경이 **선 세션을 끊는다**.
  *  ⑥ 콘솔 축 (티켓 06) — **사유의 대비**(자기 설문=FORBIDDEN ↔ 타 설문=NOT_FOUND)와
  *     **파티션 고정**(테스트 모드를 켠 설문에서도 real 을 읽고 real 에 쓴다).
+ *  ⑦ 귀속 축 (티켓 08) — 링크가 남긴 회차는 **링크 칸**에 찍히고 계정 칸은 빈다. 배타
+ *     CHECK 가 둘 다 채운 INSERT 를 거부하고, 귀속이 남은 링크는 **종료돼도 지워지지 않는다**.
  */
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
@@ -26,6 +28,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  contactAttempts as attemptsTable,
   contactTargets as contactTargetsTable,
   surveyFieldworkLinks as linksTable,
   surveys as surveysTable,
@@ -46,6 +49,7 @@ import {
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
+import { attempts } from '@/server/contacts/procedures/attempts';
 import { fieldworkLinks } from '@/server/workspace/procedures/fieldwork-links';
 import {
   LINK_BLOCKED_SCOPED_PATHS,
@@ -576,6 +580,138 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       expect(outsourced.columnCandidates.map((c) => c.source)).not.toContain('system.email_count');
       // 보이지 않는 축으로 줄을 세울 수 없다 — 열만 숨기면 URL 의 sort 가 그대로 산다.
       expect(outsourced.sort).toBe('resid');
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑦ 귀속 — 링크가 넣은 회차는 링크 칸에 남는다 (티켓 08, 0127)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('결과코드 회차의 귀속', () => {
+    /** 같은 설문에 조사 대상 하나 — 회차를 붙일 자리다. */
+    async function seedTarget(): Promise<string> {
+      const id = crypto.randomUUID();
+      await db.insert(contactTargetsTable).values({
+        id,
+        surveyId,
+        resid: 1,
+        isTest: false,
+        inviteCode: `fwatt${id.slice(0, 10)}`,
+        attrs: { 회사명: '가나다' },
+      });
+      return id;
+    }
+
+    it('링크가 넣으면 링크 칸이 차고 계정 칸은 빈다', async () => {
+      const { cookie, linkId } = await issueAndSignIn();
+      const contactTargetId = await seedTarget();
+
+      await callerFor(linkClientFor(cookie), 'contacts.attempts.add')({
+        surveyId,
+        contactTargetId,
+        resultCode: '1.조사완료',
+        note: '부재 — 오후 재통화',
+      });
+
+      const [row] = await db
+        .select({
+          createdBy: attemptsTable.createdBy,
+          fieldworkLinkId: attemptsTable.fieldworkLinkId,
+          resultCode: attemptsTable.resultCode,
+        })
+        .from(attemptsTable)
+        .where(eq(attemptsTable.contactTargetId, contactTargetId));
+
+      // 계정 칸에 무엇이든 실리면 남의 이름으로 기록이 남는다 — 그 자리는 비어야 한다.
+      expect(row).toMatchObject({
+        createdBy: null,
+        fieldworkLinkId: linkId,
+        resultCode: '1.조사완료',
+      });
+    });
+
+    it('연구원이 넣으면 계정 칸이 차고 링크 칸은 빈다 — 짝 단언', async () => {
+      // 이 단언이 없으면 「둘 다 항상 null」도 위 테스트를 통과한다.
+      const contactTargetId = await seedTarget();
+      await client.fieldworkLinks.issue({ surveyId });
+
+      await createRouterClient(
+        { contacts: { attempts } },
+        {
+          context: {
+            db,
+            user: {
+              id: OWNER_ID,
+              email: `fw-link-${OWNER_ID}@example.com`,
+              name: '링크발급자',
+              status: 'active',
+              isSuperadmin: false,
+              userType: 'internal',
+            },
+            headers: new Headers(),
+          } satisfies ORPCContext,
+        },
+      ).contacts.attempts.add({ surveyId, contactTargetId, resultCode: '2.거절' });
+
+      const [row] = await db
+        .select({
+          createdBy: attemptsTable.createdBy,
+          fieldworkLinkId: attemptsTable.fieldworkLinkId,
+        })
+        .from(attemptsTable)
+        .where(eq(attemptsTable.contactTargetId, contactTargetId));
+      expect(row).toEqual({ createdBy: OWNER_ID, fieldworkLinkId: null });
+    });
+
+    it('두 칸을 함께 채운 INSERT 는 DB 가 거부한다 — 배타 CHECK', async () => {
+      // 서비스 가드가 아니라 제약이어야 하는 이유: 둘 다 찬 행이 생기면 「누가 넣었는가」에
+      // 답이 둘이 되고, 그때는 이미 어느 쪽이 참인지 알 방법이 없다.
+      const { linkId } = await issueAndSignIn();
+      const contactTargetId = await seedTarget();
+      // drizzle 은 원문을 `cause` 로 감싼다 — 제약 **이름**을 확인해야 「아무 이유로나
+      // 실패했다」와 갈린다(컬럼 오타로 실패해도 그냥 throw 는 통과한다).
+      const violation = await db
+        .insert(attemptsTable)
+        .values({
+          contactTargetId,
+          attemptNo: 1,
+          resultCode: '1.조사완료',
+          createdBy: OWNER_ID,
+          fieldworkLinkId: linkId,
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(violation).not.toBeNull();
+      const cause = (violation as { cause?: { constraint_name?: string } }).cause;
+      expect(cause?.constraint_name).toBe('contact_attempts_author_exclusive_check');
+    });
+
+    it('귀속이 남은 링크도 종료된다 — 종료가 행 삭제가 아니기 때문', async () => {
+      // FK 가 RESTRICT 라 하드 삭제였다면 여기서 막힌다. 0126 이 종료를 closedAt 전환으로
+      // 둔 결정이 이 자리를 내다본 것이고, 되돌리면 「종료했더니 지난 기록자가 끊긴다」가 된다.
+      const { cookie, linkId } = await issueAndSignIn();
+      const contactTargetId = await seedTarget();
+      await callerFor(linkClientFor(cookie), 'contacts.attempts.add')({
+        surveyId,
+        contactTargetId,
+        resultCode: '1.조사완료',
+      });
+
+      await client.fieldworkLinks.close({ surveyId });
+
+      const [link] = await db
+        .select({ closedAt: linksTable.closedAt })
+        .from(linksTable)
+        .where(eq(linksTable.id, linkId));
+      expect(link?.closedAt).not.toBeNull();
+      // 회차는 그대로 남아 있고 귀속도 끊기지 않았다.
+      const [attempt] = await db
+        .select({ fieldworkLinkId: attemptsTable.fieldworkLinkId })
+        .from(attemptsTable)
+        .where(eq(attemptsTable.contactTargetId, contactTargetId));
+      expect(attempt?.fieldworkLinkId).toBe(linkId);
     });
   });
 });

@@ -20,6 +20,13 @@ interface ContactAttemptHistoryCardProps {
   surveyId: string;
   attempts: ContactAttemptRow[];
   resultCodes: ContactResultCode[];
+  /**
+   * 회차를 지울 수 있는가 (`contacts.writeAttempts`).
+   *
+   * 이력 자체는 회차를 못 쓰는 주체도 본다 — 「이 대상에 누가 언제 무엇을 남겼나」는 읽기
+   * 축이라 `contacts.view` 로 열린다. 지우는 것만 쓰기 축이다.
+   */
+  canDelete?: boolean;
 }
 
 export function ContactAttemptHistoryCard({
@@ -27,6 +34,7 @@ export function ContactAttemptHistoryCard({
   surveyId,
   attempts,
   resultCodes,
+  canDelete = true,
 }: ContactAttemptHistoryCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -89,15 +97,17 @@ export function ContactAttemptHistoryCard({
                   </div>
                   {a.note && <div className="mt-1 text-xs text-slate-600">{a.note}</div>}
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={isPending}
-                  className="text-red-600"
-                  onClick={() => remove(a.id)}
-                >
-                  삭제
-                </Button>
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isPending}
+                    className="text-red-600"
+                    onClick={() => remove(a.id)}
+                  >
+                    삭제
+                  </Button>
+                )}
               </div>
             );
           })

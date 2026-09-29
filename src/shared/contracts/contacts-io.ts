@@ -114,6 +114,19 @@ export interface ContactsRow {
    * 필터·정렬과 같은 표현식(effectiveMailStatusExpr) 기준.
    */
   latestMailStatus: MailRecipientStatus | null;
+  /**
+   * 초대 토큰 — 그 사람의 응답 화면 주소다.
+   *
+   * **운영 콘솔의 표는 이 값을 쓰지 않는다.** 소비자는 옛 실사 콘솔의 투영
+   * (`read-models/fieldwork-contacts`)뿐이고, 거기서 「대행해도 되는가」 판정에 따라
+   * null 로 접힌다. 여기 남아 있는 것은 스펙의 「조사 대상 목록에 새 투영을 만들지 않는다」
+   * (ADR-0026 §5)를 지킨 결과이고, 그래서 이 행을 받는 화면은 payload 에 토큰을 싣는다.
+   *
+   * **권한이 넓어지는 것은 아니다** — 이 행을 받는 주체는 전부 `contacts.view` 를 가졌고,
+   * 단건 상세에서 같은 링크를 정식으로 본다(외주 실사 링크는 대리 응답 자격도 갖는다).
+   * 게스트 콘솔처럼 그 자격이 **없는** 청중에게는 값을 지운 별도 투영이 따로 있다
+   * (`read-models/guest-contacts`). 새 청중을 이 행에 붙일 때 그 구분을 먼저 볼 것.
+   */
   inviteToken: string;
   createdAt: Date;
 }

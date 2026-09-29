@@ -102,6 +102,7 @@
     "0123_survey_participant_access_level",
     "0124_question_input_rows",
     "0125_question_title_html",
-    "0126_survey_fieldwork_links"
+    "0126_survey_fieldwork_links",
+    "0127_fieldwork_link_attribution"
   ]
 }

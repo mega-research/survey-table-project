@@ -525,6 +525,29 @@ export function accountUserIdOf(actor: Actor): string | null {
   return isLinkActor(actor) ? null : actor.id;
 }
 
+/**
+ * 「누가 넣었는가」의 두 칸 — **정확히 하나만 채워진다** (0127, ADR-0026, 티켓 08).
+ *
+ * 계정 칸과 링크 칸을 따로 받는 시그니처(`createdBy`, `fieldworkLinkId` 두 인자)로 두면
+ * 호출부가 둘 다 채우거나 둘 다 비우는 조합을 만들 수 있고, 그 조합은 DB 의 배타 CHECK 에서야
+ * 터진다. 주체 하나에서 파생시키면 그 조합이 **타입상 만들어지지 않는다**.
+ *
+ * 값을 두 칸으로 나누는 이유는 FK 가 서로 다른 테이블을 가리키기 때문이다 — 하나로 합치면
+ * 참조 무결성이 사라진다.
+ */
+export interface ActorAttribution {
+  /** `public.users` FK — 계정 주체일 때만. */
+  createdBy: string | null;
+  /** `survey_fieldwork_links` FK — 링크 주체일 때만. */
+  fieldworkLinkId: string | null;
+}
+
+export function attributionOf(actor: Actor): ActorAttribution {
+  return isLinkActor(actor)
+    ? { createdBy: null, fieldworkLinkId: actor.linkId }
+    : { createdBy: actor.id, fieldworkLinkId: null };
+}
+
 export class SurveyAccessError extends Error {
   constructor(public readonly reason: 'not_found' | 'forbidden') {
     super(reason);

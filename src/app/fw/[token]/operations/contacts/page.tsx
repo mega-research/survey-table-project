@@ -59,8 +59,8 @@ export default async function FieldworkLinkContactsPage({ params, searchParams }
       surveyId={surveyId}
       basePath={fieldworkLinkOperationsBase(token)}
       capabilities={capabilities}
-      // 단건 상세는 티켓 08 이 세운다 — 그때까지 행을 누르면 없는 주소로 떨어진다.
-      canOpenDetail={false}
+      // 단건 상세가 이 트리에 있다(티켓 08) — 목록의 주된 동작이 행 클릭이다.
+      canOpenDetail
       data={data}
     />
   );

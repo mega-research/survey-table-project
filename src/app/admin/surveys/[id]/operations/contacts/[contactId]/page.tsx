@@ -1,23 +1,10 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 
-import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
-import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
-import { attrsKeyOf } from '@/lib/operations/contacts-format';
-import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
-import {
-  getContactColumnScheme,
-  getContactDetailById,
-  getContactResultCodes,
-  getEditableResponseIdForTarget,
-  getMailRecipientsForTarget,
-  getResponseEditLogs,
-} from '@/server/read-models/contacts';
-import { getOperationsDataScope } from '@/server/data-scope';
-import { isExternalViewer } from '@/lib/auth/external-viewer';
-import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
-import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 import { adminOperationsBase } from '@/features/operations/operations-paths';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+
+import { ContactDetailScreen } from '@/app/_operations/contact-detail-screen';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -27,97 +14,28 @@ interface PageProps {
   params: Promise<{ id: string; contactId: string }>;
 }
 
+/**
+ * 조사 대상 단건 편집 — 화면 정의는 `ContactDetailScreen` 이 갖고 여기는 관문·주체 해석만 한다.
+ *
+ * 외주 실사 링크 트리(`/fw/[token]/operations/contacts/[contactId]`)가 **같은 본문**을 다른
+ * capability 로 렌더한다(ADR-0026, 티켓 08).
+ */
 export default async function ContactDetailPage({ params }: PageProps) {
   const { id: surveyId, contactId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
-  await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
+  const { capabilities } = await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
   const scope = await getOperationsDataScope(surveyId);
 
-  // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
-  // 이미 복호화된 뒤에 접히게 된다(티켓 15).
-  const detail = await getContactDetailById(contactId, surveyId, scope);
-  if (!detail) notFound();
-
-  // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
-  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는
-  // 완료 시점에만 생기므로 completed 로 간주).
-  const editable = await getEditableResponseIdForTarget(detail.contact.id, scope);
-  const editableResponseId = editable?.id ?? detail.contact.responseId;
-  // 재응답 허용 대상 상태 판정은 contracts 의 술어 하나가 소유한다 — 여기서 리터럴로
-  // 다시 쓰면 서비스 가드(allowReeditResponse)와 조용히 어긋나 버튼이 안 뜨거나,
-  // 떠도 no-op 이 된다. 자격미달도 대상이다.
-  const editableResponseReeditable = editable
-    ? isReeditableResponseStatus(editable.status)
-    : detail.contact.responseId != null;
-
-  const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    getMailRecipientsForTarget(detail.contact.id, scope),
-    getResponseEditLogs(editableResponseId, detail.contact.id),
-    getMailTemplatesBySurvey(surveyId),
-  ]);
-  if (!scheme) notFound();
-
-  const groupLabel = detail.contact.groupValue ?? '미지정';
-  const companyKey = scheme.columns.find((c) => attrsKeyOf(c.source)?.includes('기업명'))?.source;
-  const companyAttrsKey = companyKey ? attrsKeyOf(companyKey) : null;
-  const companyName = companyAttrsKey ? detail.contact.attrs[companyAttrsKey] : null;
-
-  const hasEmail = Object.values(detail.contact.piiDecrypted).some(
-    (p) => p.fieldType === 'email' && p.plain.trim() !== '',
-  );
-  const mailSendDisabledReason = detail.contact.unsubscribedAt
-    ? '수신거부된 대상입니다'
-    : !hasEmail
-      ? '이메일 정보가 없습니다'
-      : null;
-  const mailTemplateOptions = mailTemplates.map((t) => ({
-    id: t.id,
-    name: t.name,
-    subject: t.subject,
-    bodyHtml: t.bodyHtml,
-    fromName: t.fromName,
-  }));
-
   return (
-    <main className="mx-auto max-w-7xl px-6 py-6">
-      <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900">
-          조사 대상 단건 편집 — resid {detail.contact.resid}
-        </h2>
-        <p className="text-sm text-slate-500">
-          {groupLabel}
-          {companyName ? ` · ${companyName}` : ''}
-        </p>
-      </div>
-
-      <ContactDetailForm
-        surveyId={surveyId}
-        basePath={adminOperationsBase(surveyId)}
-        scheme={scheme}
-        resultCodes={resultCodes}
-        systemFieldKeys={extractSystemFieldKeys(scheme)}
-        mailHistory={mailHistory}
-        editLogs={editLogs}
-        mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
-        canReset={!(await isExternalViewer())}
-        initial={{
-          id: detail.contact.id,
-          resid: detail.contact.resid,
-          attrs: detail.contact.attrs,
-          piiDecrypted: detail.contact.piiDecrypted,
-          memo: detail.contact.memo,
-          contactMethod: detail.contact.contactMethod,
-          respondedAt: detail.contact.respondedAt,
-          inviteToken: detail.contact.inviteToken,
-          inviteCode: detail.contact.inviteCode,
-          responseId: editableResponseId,
-          responseReeditable: editableResponseReeditable,
-          attempts: detail.attempts,
-        }}
-      />
-    </main>
+    <ContactDetailScreen
+      surveyId={surveyId}
+      contactId={contactId}
+      basePath={adminOperationsBase(surveyId)}
+      capabilities={capabilities}
+      scope={scope}
+      // 연구원은 종전대로 초대 링크를 본다 — 발송 문의·수동 안내에 쓰는 값이다.
+      canProxyRespond
+    />
   );
 }

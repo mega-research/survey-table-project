@@ -92,7 +92,11 @@ vi.mock('@/server/read-models/version-snapshot', () => ({
   })),
 }));
 
-vi.mock('@/db', () => ({
+// **importOriginal 스프레드가 필수다** — `@/db` 는 끝에서 스키마를 통째로 되내보낸다.
+// 팩토리가 `{ db }` 만 돌려주면 전 테이블 export 가 사라지고, 체인에 들어오는 모듈이
+// `@/db` 에서 테이블을 받는 순간 `from(undefined)` 가 된다(tests/helpers/db-stub 주석).
+vi.mock('@/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db')>()),
   db: {
     query: {
       surveys: {

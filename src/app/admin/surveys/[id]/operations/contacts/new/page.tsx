@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
+import { contactDetailPermissions } from '@/features/operations/contacts/contact-detail-permissions';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
@@ -24,7 +25,7 @@ export default async function ContactNewPage({ params }: PageProps) {
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
   // 조사 대상을 새로 만드는 화면이라 열람(contacts.view)이 아니라 contacts.manage 를 요구한다.
-  await assertSurveyConsolePageAccess(surveyId, 'contacts.manage');
+  const { capabilities } = await assertSurveyConsolePageAccess(surveyId, 'contacts.manage');
   const scope = await getOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
@@ -46,6 +47,9 @@ export default async function ContactNewPage({ params }: PageProps) {
         scheme={scheme}
         resultCodes={resultCodes}
         systemFieldKeys={extractSystemFieldKeys(scheme)}
+        // 신규 모드는 관문이 이미 contacts.manage 를 요구했다 — 판정 결과를 그대로 푼다.
+        // 대행 진입점은 아직 대상이 없어 그릴 것이 없다.
+        permissions={contactDetailPermissions(capabilities, { proxyRespond: false })}
       />
     </main>
   );
