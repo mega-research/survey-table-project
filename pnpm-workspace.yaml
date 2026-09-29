@@ -70,7 +70,8 @@ overrides:
   '@chenglou/pretext': '^0.0.5'
   'linkify-it@5': '>=5.0.2 <6'
   # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
-  adm-zip: '>=0.6.0 <0.7'
+  # 2026-09-29 GHSA-7q85-xj36-vmfc(비압축 크기 선언값으로 메모리 무제한 할당 DoS, <0.6.1) 대응으로 하한 0.6.1
+  adm-zip: '>=0.6.1 <0.7'
   # brace-expansion 1.x: GHSA-mh99-v99m-4gvg(<1.1.17)·GHSA-rgw5-rvv9-x895(<1.1.18) ReDoS
   'brace-expansion@1': '>=1.1.18 <2'
   'brace-expansion@2': '>=2.1.4 <3'

@@ -41,6 +41,7 @@ overrides:
   '@tiptap/pm': 3.31.3
   '@tiptap/react': 3.31.3
   '@tiptap/starter-kit': 3.31.3
+  prosemirror-view@1: '>=1.42.3 <2'
   fast-xml-parser@5: '>=5.8.0 <6'
   ws@8: '>=8.21.0 <9'
   tar@7: '>=7.5.19 <8'
@@ -48,9 +49,8 @@ overrides:
   protobufjs@8: '>=8.6.3 <9'
   undici@7: '>=7.29.0 <8'
   '@chenglou/pretext': ^0.0.5
-  prosemirror-view@1: '>=1.42.3 <2'
   linkify-it@5: '>=5.0.2 <6'
-  adm-zip: '>=0.6.0 <0.7'
+  adm-zip: '>=0.6.1 <0.7'
   brace-expansion@1: '>=1.1.18 <2'
   brace-expansion@2: '>=2.1.4 <3'
   brace-expansion@5: '>=5.0.9 <6'
@@ -4249,8 +4249,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adm-zip@0.6.0:
-    resolution: {integrity: sha512-XleryMhbuksdKtofnWZ9Sk+4CUTbms4Mb/EU32SZwToAyZ5RgVos/ki8n+yr0LWHOGKuakbXTuuYNHLQjhddgg==}
+  adm-zip@0.6.1:
+    resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
     engines: {node: '>=14.0'}
 
   agent-base@6.0.2:
@@ -11352,7 +11352,7 @@ snapshots:
 
   acorn@8.17.0: {}
 
-  adm-zip@0.6.0: {}
+  adm-zip@0.6.1: {}
 
   agent-base@6.0.2:
     dependencies:
@@ -12744,7 +12744,7 @@ snapshots:
 
   inngest-cli@1.38.1:
     dependencies:
-      adm-zip: 0.6.0
+      adm-zip: 0.6.1
       debug: 4.4.3
       node-fetch: 2.7.0
       tar: 7.5.22
