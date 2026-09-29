@@ -103,6 +103,7 @@ import {
   type NumericIssue,
   collectNumericIssues,
   collectVisibleTableCells,
+  resolveChoiceGroupVisibleCellIds,
 } from '@/features/survey-response/lib/numeric-validation';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
@@ -1059,6 +1060,12 @@ function SurveyResponseFlowActive({
   const isQuestionAnswered = useCallback(
     (question: Question) => {
       const response = responses[question.id];
+      const visibilityCtx = {
+        allResponses: responses,
+        allQuestions: questions,
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
+      };
       const visibleCellIds =
         question.type === 'table'
           ? new Set(
@@ -1067,17 +1074,15 @@ function SurveyResponseFlowActive({
                 response && typeof response === 'object'
                   ? (response as Record<string, unknown>)
                   : {},
-                {
-                  allResponses: responses,
-                  allQuestions: questions,
-                  lookups: loadedSurvey?.lookups ?? [],
-                  contactAttrs,
-                },
+                visibilityCtx,
               ).map((cell) => cell.id),
             )
           : undefined;
       return (
-        isQuestionAnsweredPure(question, response) &&
+        // 보기 그룹 표는 숨은 행·열의 필수 그룹을 빼고 판정한다 — 채울 수 없는 그룹이 「다음」을 막지 않게.
+        isQuestionAnsweredPure(question, response, {
+          visibleCellIds: resolveChoiceGroupVisibleCellIds(question, response, visibilityCtx),
+        }) &&
         // 텍스트형 쿼터 차원 — 대상 칸이 비면 쿼터 확인이 발동하지 않으므로 미답변으로 막는다.
         isQuotaTargetFilled(loadedSurvey?.quotaGate, question.id, response) &&
         !collectRequiredOptionTextIssues(

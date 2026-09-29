@@ -23,12 +23,16 @@ import {
   updateChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
-import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
+import {
+  type NumericIssue,
+  resolveChoiceGroupVisibleCellIds,
+} from '@/features/survey-response/lib/numeric-validation';
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
 import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { Question } from '@/types/survey';
+import type { BranchEvalCtx } from '@/utils/branch-eval';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
@@ -50,6 +54,7 @@ export function GroupStepItem({
   showRequiredMessage,
   showChangeConfirmMessage,
   issues,
+  evalCtx,
 }: {
   item: StepItem;
   showSubgroupHeading: boolean;
@@ -62,8 +67,23 @@ export function GroupStepItem({
   /** 변동 확인 미선택 안내 문구 표시 — 응답 필수와 별개 축이다. */
   showChangeConfirmMessage: boolean;
   issues?: NumericIssue[] | undefined;
+  /** 표 행·열 표시조건 평가용 — 숨은 보기 그룹을 필수 안내에서 빼는 데 쓴다. */
+  evalCtx?: BranchEvalCtx | undefined;
 }) {
   const q = item.question;
+  // 보기 그룹 표에서 화면에 보이는 셀 — 필수 게이트(survey-response-flow)와 같은 판정이라야
+  // 숨은 행의 그룹이 붉은 외곽선·안내 배너에 뜨지 않는다.
+  const choiceGroupVisibility = useMemo(
+    () => ({
+      visibleCellIds: resolveChoiceGroupVisibleCellIds(q, responses[q.id], {
+        allResponses: responses,
+        allQuestions: questions,
+        lookups: evalCtx?.lookups ?? [],
+        contactAttrs: evalCtx?.contactAttrs ?? {},
+      }),
+    }),
+    [q, responses, questions, evalCtx],
+  );
   const onChange = useCallback((value: unknown) => onResponse(q.id, value), [onResponse, q.id]);
   const selectedDynamicRowIds = getDynamicRowSelections(responses, q.id);
   const onDynamicRowSelectionChange = useCallback(
@@ -130,7 +150,7 @@ export function GroupStepItem({
   const axisCardsOnMobile = isMobile && q.mobileTableDisplayMode === 'axis-cards';
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
-      ? collectUnfilledChoiceGroupIssues(q, responses[q.id]).map((issue) => ({
+      ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility).map((issue) => ({
           kind: 'required-cells' as const,
           message: issue.message,
           cellIds: issue.cellIds,
@@ -147,10 +167,10 @@ export function GroupStepItem({
         issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
       if (!isDefaultRequiredIssue) return issue;
       merged = true;
-      return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id]) };
+      return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility) };
     });
     return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile]);
+  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile, choiceGroupVisibility]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -244,6 +264,7 @@ export function GroupStepItem({
               selectedDynamicRowIds={selectedDynamicRowIds}
               onDynamicRowSelectionChange={onDynamicRowSelectionChange}
               showRequiredHighlight={showRequiredMessage}
+              requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
             />
           </div>
         </fieldset>
@@ -252,7 +273,7 @@ export function GroupStepItem({
             {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
             className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
           >
-            {resolveGroupedRequiredMessage(q, responses[q.id])}
+            {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility)}
           </p>
         )}
       </div>

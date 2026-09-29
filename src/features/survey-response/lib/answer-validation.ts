@@ -66,7 +66,31 @@ function isExclusiveChoiceValue(question: Question, val: unknown): boolean {
   return collectExclusiveChoiceCellIdsFromRows(question.tableRowsData).has(key);
 }
 
-export function isQuestionAnswered(question: Question, response: unknown): boolean {
+/**
+ * 필수 판정 옵션 — 보기 그룹 표에서 **화면에 보이는 셀 id 집합**.
+ *
+ * 행·열 표시조건이나 선택 안 된 동적 행으로 숨은 그룹은 응답자가 채울 수 없으므로 필수
+ * 판정에서 뺀다. 집합은 호출부가 `resolveChoiceGroupVisibleCellIds` 로 만든다 — 렌더러가
+ * 숨기는 행과 같은 판정이어야 해서 이 순수 함수는 조건을 직접 평가하지 않는다.
+ * 넘기지 않으면 종전대로 모든 그룹을 본다.
+ */
+export interface ChoiceGroupVisibility {
+  visibleCellIds?: ReadonlySet<string> | undefined;
+}
+
+export function isQuestionAnswered(
+  question: Question,
+  response: unknown,
+  visibility: ChoiceGroupVisibility = {},
+): boolean {
+  // 필수 그룹이 전부 숨었으면 채울 것이 없다 — 응답 전(undefined)이라도 막지 않는다.
+  if (
+    visibility.visibleCellIds &&
+    isChoiceGroupTableQuestion(question) &&
+    checkTargetChoiceGroups(question, visibility).length === 0
+  ) {
+    return true;
+  }
   if (response === undefined || response === null) return false;
 
   switch (question.type) {
@@ -93,7 +117,9 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
       if (isGroupedChoiceQuestion(question)) {
         const map = (response ?? {}) as Record<string, unknown>;
         if (isTableExclusiveSelected(question, map)) return true;
-        return checkTargetChoiceGroups(question).every((g) => isChoiceGroupFilled(g, map));
+        return checkTargetChoiceGroups(question, visibility).every((g) =>
+          isChoiceGroupFilled(g, map),
+        );
       }
       // 비그룹 checkbox — 기존 배열 + minSelections 검증. 단독 선택 보기(「없음」) 하나면
       // 완결된 답이라 최소 선택 수를 충족한 것으로 본다 (CONTEXT.md "단독 선택 보기").
@@ -138,7 +164,9 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
       if (isChoiceGroupTableQuestion(question)) {
         const map = readTableChoiceGroups(response);
         if (isTableExclusiveSelected(question, map)) return true;
-        return checkTargetChoiceGroups(question).every((g) => isChoiceGroupFilled(g, map));
+        return checkTargetChoiceGroups(question, visibility).every((g) =>
+          isChoiceGroupFilled(g, map),
+        );
       }
       return (
         typeof response === 'object' &&
@@ -189,8 +217,16 @@ function isChoiceGroupFilled(
  * 하나도 없으면 기존 의미론(모든 그룹)을 유지한다 — 선택형 그룹 질문의 진행률
  * 집계(모든 그룹 채워야 "답변됨")가 바뀌지 않도록.
  */
-function checkTargetChoiceGroups(question: Question): ChoiceGroupWithCells[] {
-  const groups = collectChoiceGroups(question);
+function checkTargetChoiceGroups(
+  question: Question,
+  { visibleCellIds }: ChoiceGroupVisibility = {},
+): ChoiceGroupWithCells[] {
+  // 숨은 그룹을 **먼저** 뺀다. 필수 판정 뒤에 빼면 "필수 그룹이 없으니 전부 대상" 폴백이
+  // 숨은 그룹을 다시 끌어온다.
+  const all = collectChoiceGroups(question);
+  const groups = visibleCellIds
+    ? all.filter((g) => g.cells.some((cell) => visibleCellIds.has(cell.id)))
+    : all;
   const required = groups.filter((g) => (g.required ?? question.required) === true);
   return required.length > 0 ? required : groups;
 }
@@ -219,12 +255,13 @@ export function hasExplicitRequiredChoiceGroup(question: Question): boolean {
 export function collectUnfilledChoiceGroupCellIds(
   question: Question,
   response: unknown,
+  visibility: ChoiceGroupVisibility = {},
 ): Set<string> {
   if (!isGroupedChoiceQuestion(question)) return new Set();
   const map = groupSelectionMap(question, response);
   const out = new Set<string>();
   if (isTableExclusiveSelected(question, map)) return out;
-  for (const group of checkTargetChoiceGroups(question)) {
+  for (const group of checkTargetChoiceGroups(question, visibility)) {
     if (isChoiceGroupFilled(group, map)) continue;
     for (const cell of group.cells) out.add(cell.id);
   }
@@ -249,13 +286,14 @@ export interface UnfilledChoiceGroupIssue {
 export function collectUnfilledChoiceGroupIssues(
   question: Question,
   response: unknown,
+  visibility: ChoiceGroupVisibility = {},
 ): UnfilledChoiceGroupIssue[] {
   if (!isGroupedChoiceQuestion(question)) return [];
   const map = groupSelectionMap(question, response);
   if (isTableExclusiveSelected(question, map)) return [];
   const fallback = resolveRequiredMessage(question);
   const byMessage = new Map<string, string[]>();
-  for (const group of checkTargetChoiceGroups(question)) {
+  for (const group of checkTargetChoiceGroups(question, visibility)) {
     if (isChoiceGroupFilled(group, map)) continue;
     const message = group.requiredMessage?.trim() || fallback;
     const ids = byMessage.get(message) ?? [];
@@ -265,12 +303,16 @@ export function collectUnfilledChoiceGroupIssues(
   return [...byMessage.entries()].map(([message, cellIds]) => ({ message, cellIds }));
 }
 
-export function resolveGroupedRequiredMessage(question: Question, response: unknown): string {
+export function resolveGroupedRequiredMessage(
+  question: Question,
+  response: unknown,
+  visibility: ChoiceGroupVisibility = {},
+): string {
   if (isGroupedChoiceQuestion(question)) {
     const map = groupSelectionMap(question, response);
     const unmet = isTableExclusiveSelected(question, map)
       ? undefined
-      : checkTargetChoiceGroups(question).find((g) => !isChoiceGroupFilled(g, map));
+      : checkTargetChoiceGroups(question, visibility).find((g) => !isChoiceGroupFilled(g, map));
     const custom = unmet?.requiredMessage?.trim();
     if (custom) return custom;
   }

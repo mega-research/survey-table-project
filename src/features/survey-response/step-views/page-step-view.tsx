@@ -84,6 +84,7 @@ export function PageStepView({
                     item.question.id,
                   )}
                   issues={numericIssues.get(item.question.id)}
+                  evalCtx={evalCtx}
                 />
               </div>
             );

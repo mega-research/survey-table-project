@@ -76,6 +76,11 @@ interface QuestionInputProps {
   onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
   /** 미충족 필수 보기 그룹을 표에 표시할지 — 「다음」을 누른 뒤에만 켠다. */
   showRequiredHighlight?: boolean | undefined;
+  /**
+   * 보기 그룹 표에서 화면에 보이는 셀 — 숨은 행·열의 필수 그룹을 붉은 외곽선에서 뺀다.
+   * 필수 게이트와 같은 판정(resolveChoiceGroupVisibleCellIds)으로 상위가 계산해 넘긴다.
+   */
+  requiredVisibleCellIds?: ReadonlySet<string> | undefined;
 }
 
 // 타입 정의
@@ -205,10 +210,12 @@ function resolveTableErrorCellIds(
   value: unknown,
   numericIssues: NumericIssue[] | undefined,
   showRequiredHighlight: boolean | undefined,
+  visibleCellIds: ReadonlySet<string> | undefined,
 ): Set<string> | undefined {
   const ids = new Set<string>(numericIssues?.flatMap((i) => i.cellIds ?? []) ?? []);
   if (showRequiredHighlight && isChoiceGroupTableQuestion(question)) {
-    for (const id of collectUnfilledChoiceGroupCellIds(question, value)) ids.add(id);
+    for (const id of collectUnfilledChoiceGroupCellIds(question, value, { visibleCellIds }))
+      ids.add(id);
   }
   return ids.size > 0 ? ids : undefined;
 }
@@ -223,6 +230,7 @@ function QuestionInputControl({
   selectedDynamicRowIds,
   onDynamicRowSelectionChange,
   showRequiredHighlight,
+  requiredVisibleCellIds,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -393,6 +401,7 @@ function QuestionInputControl({
             value,
             numericIssues,
             showRequiredHighlight,
+            requiredVisibleCellIds,
           )}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />

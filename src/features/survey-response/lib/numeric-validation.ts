@@ -191,6 +191,27 @@ export function collectVisibleTableCells(
 }
 
 /**
+ * 보기 그룹 표의 필수 판정에 넘길 **보이는 셀 id 집합** (`answer-validation` 의 visibleCellIds).
+ *
+ * 필수 셀·범위 검증과 같은 필터(collectVisibleTableCells)를 써서, 행·열 표시조건이나 선택 안 된
+ * 동적 행으로 숨은 보기 그룹이 「다음」을 막지 않게 한다. 보기 그룹 표가 아니면 undefined —
+ * 레거시 보기 소스 표(radio/checkbox)는 동적 행 선택이 표 응답 밖(루트 사이드카)에 있어 이
+ * 필터로 판정하면 선택된 동적 행까지 숨은 것으로 오판한다.
+ */
+export function resolveChoiceGroupVisibleCellIds(
+  question: Question,
+  response: unknown,
+  ctx: NumericValidationCtx,
+): ReadonlySet<string> | undefined {
+  if (!isChoiceGroupTableQuestion(question)) return undefined;
+  const cellValues =
+    response && typeof response === 'object' && !Array.isArray(response)
+      ? (response as Record<string, unknown>)
+      : {};
+  return new Set(collectVisibleTableCells(question, cellValues, ctx).map((cell) => cell.id));
+}
+
+/**
  * 필수 판정에서 빼는 셀 — 반복 2벌 이후의 셀.
  * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다.
  */
