@@ -4,6 +4,7 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
 import {
   FILTER_SOURCE,
   formatIdListToken,
+  type ClientFilterClause,
   type ColumnCandidate,
 } from '@/lib/operations/filter-shared';
 import { describeIdListValue, expandRangesToIds } from '@/lib/operations/id-list-paste';
@@ -14,10 +15,7 @@ import {
 } from '@/lib/operations/range-list';
 import { client } from '@/shared/lib/rpc';
 
-import {
-  FilterBarCore,
-  type ClientFilterClause,
-} from '@/features/operations/filters/filter-bar-core';
+import { FilterBarCore } from '@/features/operations/filters/filter-bar-core';
 
 import { ValueWidget } from './value-widget';
 

@@ -7,6 +7,7 @@ import {
   normalizeSortKey,
 } from '@/lib/operations/contacts-format';
 import { FILTER_SOURCE, type FilterClause } from '@/lib/operations/filter-shared';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 
 import type { OperationsDataScope } from '../data-scope';
@@ -42,6 +43,11 @@ export interface ContactsListPageArgs {
    * 화면이 아니라 여기서 걸러 내는 것이 요점이다 — 열을 숨기는 것만으로는 URL 의
    * `hcol=system.email_count` 헤더 필터와 `sort=mailStatus` 정렬이 그대로 살아, 보이지 않는
    * 축으로 목록을 줄 세우거나 좁힐 수 있다. 세 자리(열·후보·정렬)를 한 곳에서 닫는다.
+   *
+   * **닫지 않는 것도 적어 둔다.** 행 모양(`ContactsRow`)은 그대로라 `latestMailStatus` 와
+   * `inviteToken` 이 RSC payload 에는 실린다. 스펙이 「새 투영을 만들지 않는다」로 못 박은
+   * 자리이고(게스트는 반대로 값을 지운 투영을 쓴다), 링크는 대리 응답 자격을 갖는 주체라
+   * 초대 토큰이 곧 권한 상승이 아니다 — 그 노출 판정은 단건 상세(티켓 08)가 진다.
    */
   canViewMail: boolean;
   /** 라우트가 읽은 URL 쿼리 그대로. 키 이름은 주소 계약이라 두 트리가 같다. */
@@ -146,9 +152,7 @@ export async function loadContactsListPage({
  * `getContactColumnScheme` 의 React cache 가 같은 요청 안의 다른 소비자에게 깎인 스킴을
  * 돌려준다 — 컬럼 설정 화면과 목록이 같은 캐시를 본다.
  */
-function stripMailColumns(
-  scheme: Awaited<ReturnType<typeof getContactColumnScheme>>,
-): Awaited<ReturnType<typeof getContactColumnScheme>> {
+function stripMailColumns(scheme: ContactColumnScheme | null): ContactColumnScheme | null {
   if (!scheme) return scheme;
   const columns = scheme.columns.filter((column) => column.source !== FILTER_SOURCE.EMAIL);
   return columns.length === scheme.columns.length ? scheme : { ...scheme, columns };

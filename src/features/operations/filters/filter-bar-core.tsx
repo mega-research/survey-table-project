@@ -40,10 +40,6 @@ import type { ClientFilterClause } from '@/lib/operations/filter-shared';
 import { ClauseRow, type ClauseRowValue } from './clause-row';
 import { FilterResetButton } from './filter-reset-button';
 
-// 정의는 `lib/operations/filter-shared` 하나다 — 서버·UI 경계 양쪽이 같은 모양을 봐야 해서
-// 옮겼고(티켓 06), 소비자 대부분이 필터바와 같은 문장에서 받으므로 여기서 되내보낸다.
-export type { ClientFilterClause } from '@/lib/operations/filter-shared';
-
 /** 페이지별 값 입력 위젯 렌더러 — 조사 대상은 결과코드/web select, 응답 내역은 text input. */
 export type RenderValueWidget = (args: {
   source: string;

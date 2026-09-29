@@ -10,7 +10,7 @@ export default async function NewMailTemplatePage({ params }: Props) {
   const { id: surveyId } = await params;
   // 관문이 첫 await 다 — 종전에는 변수 카탈로그 조회가 인증보다 먼저 돌았다 (티켓 10).
   // 템플릿 작성은 발송 준비 표면이라 mail.send 를 요구한다.
-  const user = await assertSurveyConsolePageAccess(surveyId, 'mail.send');
+  const { user } = await assertSurveyConsolePageAccess(surveyId, 'mail.send');
   const fromDomain = process.env['RESEND_FROM_DOMAIN'] ?? '';
   const catalog = await getVariableCatalog(surveyId);
 

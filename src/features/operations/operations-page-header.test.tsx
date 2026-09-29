@@ -10,6 +10,7 @@ vi.mock('next/navigation', () => ({
 
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
+import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 
 /**
  * 헤더의 자리는 **두 축**이 정한다 (ADR-0026 티켓 02·06).
@@ -20,14 +21,6 @@ import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contract
  * 외주 실사 링크 셸에 남는 것은 **새로고침과 나가기 둘**이고, 「나가기」는 계정 로그아웃이
  * 아니라 쿠키 하나를 지우는 다른 동작이라 슬롯으로 들어온다.
  */
-
-/** 링크 주체가 갖는 넷 — 스펙 §8 의 「외주 링크」 열. */
-const LINK_CAPS: readonly SurveyCapability[] = [
-  'survey.view',
-  'operations.view',
-  'contacts.view',
-  'contacts.writeAttempts',
-];
 
 const CONTROL = {
   isPaused: false,
@@ -79,7 +72,7 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
   });
 
   it('외주 링크 셸에는 admin 자리가 하나도 없다', () => {
-    renderHeader(LINK_CAPS, {
+    renderHeader(LINK_CAPABILITIES, {
       internalShell: false,
       trailing: <button type="button">나가기</button>,
     });
@@ -95,7 +88,7 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
   it('제어 상태를 주지 않아도 터지지 않는다 — 링크 셸은 그 재료를 읽지 않는다', () => {
     // `control` 이 필수이던 시절에는 링크 레이아웃이 쓰지도 않을 제어 상태를 한 번 더
     // 읽어야 했다. 없어도 되는 것이 계약이라 그 사실을 여기서 못 박는다.
-    renderHeader(LINK_CAPS, { internalShell: false });
+    renderHeader(LINK_CAPABILITIES, { internalShell: false });
     expect(screen.getByText('새로고침')).toBeTruthy();
   });
 });

@@ -49,12 +49,17 @@ function resolveLogLinkId(context: ORPCContext): string | undefined {
 }
 
 /**
- * 입력에서 surveyId 만 안전 추출한다.
+ * **검증 전** 입력에서 surveyId 만 안전 추출한다.
  *
  * 최상위 객체의 surveyId string 키 외에는 접근하지 않는다 — input 본문에는
  * attrs·questionResponses 등 JSONB/PII 가 통째로 실릴 수 있어 로그 반입 금지.
+ *
+ * 소비자가 둘이라 여기서 내보낸다. 로깅은 「무엇을 건드린 요청인가」를 적으려고,
+ * scoped 베이스(orpc.ts)는 **여러 `fw_` 쿠키 중 어느 것이 이 호출의 주체인가**를 고르려고
+ * 같은 값을 본다. 둘 다 zod 보다 먼저 도는 자리라 같은 조심성(최상위 string 키만)이 필요하고,
+ * 각자 적으면 한쪽만 느슨해진다.
  */
-function extractSurveyIdOrUndefined(input: unknown): string | undefined {
+export function extractSurveyIdOrUndefined(input: unknown): string | undefined {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return undefined;
   }

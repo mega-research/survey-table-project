@@ -27,6 +27,10 @@ import { ContactsPageClient } from './contacts-page-client';
  * 둘 다 없어 하나도 그려지지 않는다. 화면이 감추는 것과 서버가 막는 것이 같은 값을 보는
  * 것이 요점이다 — 갈리면 「보이는데 누르면 거부」가 된다.
  *
+ * 네 번째로 갈리는 것이 하나 더 있는데 **capability 축이 아니다** — 행 클릭
+ * (`canOpenDetail`). 상세를 여는 요구는 목록과 같은 `contacts.view` 라 판정으로 갈리지 않고,
+ * 묻는 것은 「이 트리에 그 화면이 있는가」다.
+ *
  * 서버 컴포넌트다. `ContactsPageClient`·`ContactsFilterBar` 만 클라이언트이고 이 껍데기는
  * 데이터를 받아 배치만 한다 — 두 트리의 RSC 가 각자 로더를 부르고 이것을 렌더한다.
  */
@@ -35,10 +39,22 @@ interface Props {
   /** 이 콘솔의 주소 접두. */
   basePath: string;
   capabilities: ReadonlySet<SurveyCapability>;
+  /**
+   * 행을 눌러 단건 상세로 들어갈 수 있는가 — **이 트리에 그 화면이 있는가**이지
+   * capability 가 아니다(`ContactsPageClient` 주석 참조). 외주 실사 링크 트리는 티켓 08 에서
+   * 참이 된다.
+   */
+  canOpenDetail: boolean;
   data: ContactsListPageData;
 }
 
-export function ContactsListView({ surveyId, basePath, capabilities, data }: Props) {
+export function ContactsListView({
+  surveyId,
+  basePath,
+  capabilities,
+  canOpenDetail,
+  data,
+}: Props) {
   const paths = operationsPaths(basePath);
   const canManage = capabilities.has('contacts.manage');
   const canDownload = capabilities.has('export.download');
@@ -130,6 +146,7 @@ export function ContactsListView({ surveyId, basePath, capabilities, data }: Pro
           ) : (
             <ContactsPageClient
               basePath={basePath}
+              canOpenDetail={canOpenDetail}
               rows={data.rows}
               total={data.total}
               page={data.page}

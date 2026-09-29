@@ -11,10 +11,10 @@ interface Props {
    * 외주 실사 링크에는 그 권한이 없고 업로드 화면도 그 트리에 없다. 안내를 그대로 두면
    * **열리지 않는 주소**를 가리키며 할 수 없는 일을 시키게 된다.
    */
-  canUpload?: boolean;
+  canUpload: boolean;
 }
 
-export function ProgressEmptyCard({ basePath, canUpload = true }: Props) {
+export function ProgressEmptyCard({ basePath, canUpload }: Props) {
   return (
     <div
       role="alert"

@@ -10,6 +10,7 @@ vi.mock('next/navigation', () => ({
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
+import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 
 /**
  * 조사 대상 목록의 **액션 노출은 판정 결과가 정한다** (ADR-0026, 티켓 06).
@@ -19,14 +20,6 @@ import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contract
  *
  * 여기서 보는 것은 **버튼이 그려지는가** 하나다. 표 내용·필터 동작은 각자의 스위트가 진다.
  */
-
-/** 링크 주체가 갖는 넷 — 스펙 §8 의 「외주 링크」 열. */
-const LINK_CAPS: readonly SurveyCapability[] = [
-  'survey.view',
-  'operations.view',
-  'contacts.view',
-  'contacts.writeAttempts',
-];
 
 const SCHEME = {
   columns: [
@@ -59,6 +52,7 @@ function renderView(capabilities: readonly SurveyCapability[], pageData = data()
       surveyId="sv-1"
       basePath="/admin/surveys/sv-1/operations"
       capabilities={new Set(capabilities)}
+      canOpenDetail
       data={pageData}
     />,
   );
@@ -76,14 +70,14 @@ describe('ContactsListView — capability 가 액션을 정한다', () => {
   });
 
   it('외주 링크에게는 관리 액션이 하나도 그려지지 않는다', () => {
-    renderView(LINK_CAPS);
+    renderView(LINK_CAPABILITIES);
     for (const action of MANAGE_ACTIONS) {
       expect(screen.queryAllByText(action), `${action} 가 외주에게 보인다`).toEqual([]);
     }
   });
 
   it('외주 링크도 목록 자체와 총 건수는 본다 — 감추는 것은 액션뿐이다', () => {
-    renderView(LINK_CAPS, data({ total: 1234 }));
+    renderView(LINK_CAPABILITIES, data({ total: 1234 }));
     expect(screen.getByText('조사 대상 목록')).toBeTruthy();
     expect(screen.getByText('총 1,234건')).toBeTruthy();
   });
@@ -91,7 +85,7 @@ describe('ContactsListView — capability 가 액션을 정한다', () => {
   it('명단이 없을 때 외주에게는 업로드를 권하지 않는다', () => {
     // 외주는 명단을 올릴 수 없다 — 「엑셀로 명단을 업로드하세요」는 할 수 없는 일을 시킨다.
     // 「아직 업로드된 조사 대상이 없습니다」라는 사실 진술은 남는다(버튼이 아니라 상태다).
-    renderView(LINK_CAPS, data({ scheme: null }));
+    renderView(LINK_CAPABILITIES, data({ scheme: null }));
     expect(screen.queryAllByRole('link', { name: /업로드/ })).toEqual([]);
     expect(screen.getByText(/담당 연구원이 명단을 올리면/)).toBeTruthy();
   });

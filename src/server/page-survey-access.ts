@@ -6,7 +6,12 @@ import { requireAuth } from '@/lib/auth';
 import type { AuthUser } from '@/shared/contracts/auth';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import { type Actor, assertSurveyCapability, SurveyAccessError } from './survey-access';
+import {
+  type Actor,
+  assertSurveyCapability,
+  loadSurveyCapabilities,
+  SurveyAccessError,
+} from './survey-access';
 
 /**
  * 설문 capability 관문의 RSC 페이지 어댑터 — rpc-survey-access 의 페이지 짝 (티켓 09).
@@ -44,14 +49,33 @@ export async function assertSurveyCapabilityPage(
  * requireAdminPage + assertSurveyCapabilityPage 짝을 쓴다 — 지금은 정책이 같지만
  * **이유가 다르다**: 저쪽은 「관리 화면」임을 말하고 이쪽은 「설문 콘솔」임을 말한다.
  *
+ * **판정 결과를 함께 돌려준다.** 콘솔 화면은 관문을 지난 뒤 「무엇을 그릴까」를 정하려고
+ * 같은 집합을 다시 본다 — 헤더·탭·액션 버튼이 전부 그 값으로 갈린다(티켓 02·06). 화면이
+ * `loadSurveyCapabilities` 를 따로 부르면 한 페이지의 판정 조회가 하나 더 늘고, 그 비용은
+ * 관문이 이미 치른 것과 **똑같은 조회**다.
+ *
  * tests/repo/rsc-page-guards.test.ts 의 가드 목록에 등재돼 있다 — 이름을 바꾸면
  * 그 정규식도 함께 바꿀 것.
  */
+export interface SurveyConsolePageViewer {
+  user: AuthUser;
+  /** 관문이 읽은 판정 결과 그대로 — 화면이 이것으로 무엇을 그릴지 정한다. */
+  capabilities: ReadonlySet<SurveyCapability>;
+}
+
 export async function assertSurveyConsolePageAccess(
   surveyId: string,
   capability: SurveyCapability,
-): Promise<AuthUser> {
-  const viewer = await requireAuth();
-  await assertSurveyCapabilityPage(viewer, surveyId, capability);
-  return viewer;
+): Promise<SurveyConsolePageViewer> {
+  const user = await requireAuth();
+  // 관문과 같은 조회 하나다 — 거부 사유 접기(notFound)는 아래 `has` 검사가 대신한다.
+  let capabilities: ReadonlySet<SurveyCapability>;
+  try {
+    capabilities = await loadSurveyCapabilities(user, surveyId);
+  } catch (error) {
+    if (error instanceof SurveyAccessError) notFound();
+    throw error;
+  }
+  if (!capabilities.has(capability)) notFound();
+  return { user, capabilities };
 }

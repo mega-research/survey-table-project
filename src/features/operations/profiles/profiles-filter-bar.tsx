@@ -14,13 +14,11 @@ import {
 import { STATUS_FILTERS, type StatusFilter } from '@/lib/operations/profiles-format';
 import {
   placeholderFor as sharedPlaceholderFor,
+  type ClientFilterClause,
   type ColumnCandidate,
 } from '@/lib/operations/filter-shared';
 
-import {
-  FilterBarCore,
-  type ClientFilterClause,
-} from '@/features/operations/filters/filter-bar-core';
+import { FilterBarCore } from '@/features/operations/filters/filter-bar-core';
 
 interface Props {
   initialClauses: ClientFilterClause[];

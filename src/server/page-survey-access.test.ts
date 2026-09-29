@@ -24,10 +24,18 @@ vi.mock('./survey-access', () => {
       this.name = 'SurveyAccessError';
     }
   }
-  return { SurveyAccessError, assertSurveyCapability: vi.fn() };
+  return {
+    SurveyAccessError,
+    assertSurveyCapability: vi.fn(),
+    loadSurveyCapabilities: vi.fn(),
+  };
 });
 
-import { SurveyAccessError, assertSurveyCapability } from './survey-access';
+import {
+  SurveyAccessError,
+  assertSurveyCapability,
+  loadSurveyCapabilities,
+} from './survey-access';
 import {
   assertSurveyCapabilityPage,
   assertSurveyConsolePageAccess,
@@ -79,25 +87,42 @@ describe('assertSurveyConsolePageAccess — 게스트 허용 콘솔 페이지 �
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it('내부 계정은 capability 판정에 위임하고 viewer 를 돌려준다', async () => {
+  it('판정 결과를 viewer 와 **함께** 돌려준다 — 화면이 같은 조회를 다시 하지 않는다', async () => {
+    // 콘솔 화면은 관문을 지난 뒤 헤더·탭·액션을 그 집합으로 그린다(티켓 02·06). 여기서
+    // 집합을 안 주면 화면이 loadSurveyCapabilities 를 따로 불러 판정 조회가 하나 더 는다.
     requireAuth.mockResolvedValue(internalViewer);
-    vi.mocked(assertSurveyCapability).mockResolvedValue(undefined);
-    await expect(
-      assertSurveyConsolePageAccess(SURVEY_ID, 'responses.view'),
-    ).resolves.toBe(internalViewer);
-    expect(assertSurveyCapability).toHaveBeenCalledWith(
-      internalViewer,
-      SURVEY_ID,
-      'responses.view',
+    const capabilities = new Set(['responses.view', 'survey.view'] as const);
+    vi.mocked(loadSurveyCapabilities).mockResolvedValue(capabilities);
+    await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'responses.view')).resolves.toEqual({
+      user: internalViewer,
+      capabilities,
+    });
+    expect(loadSurveyCapabilities).toHaveBeenCalledWith(internalViewer, SURVEY_ID);
+  });
+
+  it('요구 capability 가 없으면 notFound 로 접힌다', async () => {
+    requireAuth.mockResolvedValue(internalViewer);
+    vi.mocked(loadSurveyCapabilities).mockResolvedValue(new Set(['survey.view'] as const));
+    await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view')).rejects.toThrow(
+      'NEXT_NOT_FOUND',
     );
   });
 
-  it('내부 계정의 capability 거부는 notFound 로 접힌다 — 타 팀 설문 존재 은닉', async () => {
+  it('없는 설문·볼 수 없는 설문도 notFound 로 접힌다 — 타 팀 설문 존재 은닉', async () => {
     requireAuth.mockResolvedValue(internalViewer);
-    vi.mocked(assertSurveyCapability).mockRejectedValueOnce(new SurveyAccessError('not_found'));
+    vi.mocked(loadSurveyCapabilities).mockRejectedValueOnce(new SurveyAccessError('not_found'));
     await expect(
       assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view'),
     ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  it('DB 장애는 notFound 로 접지 않는다 — 조용한 404 는 장애를 권한 문제로 오독하게 한다', async () => {
+    requireAuth.mockResolvedValue(internalViewer);
+    vi.mocked(loadSurveyCapabilities).mockRejectedValueOnce(new Error('connection lost'));
+    await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view')).rejects.toThrow(
+      'connection lost',
+    );
+    expect(notFound).not.toHaveBeenCalled();
   });
 
   // 티켓 21 이 이 가드의 env grant 게스트 분기를 걷었다 — 게스트는 /admin 구역에 아예
@@ -107,6 +132,6 @@ describe('assertSurveyConsolePageAccess — 게스트 허용 콘솔 페이지 �
     await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view')).rejects.toThrow(
       '인증이 필요합니다.',
     );
-    expect(assertSurveyCapability).not.toHaveBeenCalled();
+    expect(loadSurveyCapabilities).not.toHaveBeenCalled();
   });
 });

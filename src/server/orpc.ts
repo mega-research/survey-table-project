@@ -7,7 +7,7 @@ import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 import type { ORPCContext } from './context';
 import { resolveLinkActorForSurvey } from './fieldwork-link';
 import type { Actor } from './survey-access';
-import { rpcLoggingMiddleware } from './rpc-logging';
+import { extractSurveyIdOrUndefined, rpcLoggingMiddleware } from './rpc-logging';
 
 /** 컨텍스트 타입만 박은 원시 빌더 — 미들웨어 팩토리(withRateLimit) 전용. */
 const root = os.$context<ORPCContext>();
@@ -184,12 +184,17 @@ export const scoped = base.use(async ({ context, next }, input: unknown) => {
     // 이미 담고 있어 옮겨 담을 것이 없다.
     return next({ context: { user, actor: user satisfies Actor } });
   }
-  const surveyId = extractSurveyId(input);
-  const link =
-    surveyId === null
-      ? ({ kind: 'no_session' } as const)
-      : await resolveLinkActorForSurvey(context.linkSessions, surveyId);
-  if (link.kind === 'ok') return next({ context: { actor: link.actor as Actor } });
+  // 값이 실제로 그 설문인지는 묻지 않는다 — 판정은 링크 행과 관문이 하고, 여기서 하는 일은
+  // **여러 개의 `fw_` 쿠키 중 어느 것을 볼지 고르는 것**뿐이다. 지목된 설문이 없으면 고를
+  // 쿠키도 없어 주체를 알 수 없다(오늘 도달 경로는 없다 — scoped 표면 전수가 surveyId 를
+  // 받는 것을 음성 스위트가 고정한다).
+  const surveyId = extractSurveyIdOrUndefined(input);
+  if (!surveyId) throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
+
+  const link = await resolveLinkActorForSurvey(context.linkSessions, surveyId);
+  // 계정 분기와 **같은 타입**을 실어 보낸다 — 분기마다 모양이 다르면 handler 의
+  // `context.actor` 가 좁은 쪽으로 추론돼 계정 주체를 못 받는다.
+  if (link.kind === 'ok') return next({ context: { actor: link.actor satisfies Actor as Actor } });
 
   // **거부 사유가 둘로 갈린다.**
   //  - `no_session` + 다른 링크 세션 보유 → NOT_FOUND. 이 주체에게 그 설문은 존재하지
@@ -202,20 +207,6 @@ export const scoped = base.use(async ({ context, next }, input: unknown) => {
   }
   throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
 });
-
-/**
- * 검증 전 입력에서 설문 id 를 꺼낸다 — 링크 세션 고르기 전용.
- *
- * 최상위 string 키만 본다(rpc-logging·extractRateLimitClientId 와 같은 관례). 값이 실제로
- * 그 설문인지는 묻지 않는다 — 판정은 링크 행과 관문이 하고, 여기서 하는 일은 **여러 개의
- * `fw_` 쿠키 중 어느 것을 볼지 고르는 것**뿐이다. 없는 설문 id 를 넣으면 고를 쿠키가 없어
- * 그대로 거부다.
- */
-function extractSurveyId(input: unknown): string | null {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
-  const value = (input as Record<string, unknown>)['surveyId'];
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
 
 /**
  * 계정 전용 scoped 표면이 세션 계정을 읽는 문 (티켓 06).

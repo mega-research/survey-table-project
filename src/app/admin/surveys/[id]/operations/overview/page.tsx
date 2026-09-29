@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
-import { loadSurveyCapabilities } from '@/server/survey-access';
 
 import {
   OperationsOverviewScreen,
@@ -41,11 +40,8 @@ export default async function OperationsOverviewPage({ params, searchParams }: P
   const { id: surveyId } = await params;
   // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
-  const viewer = await assertSurveyConsolePageAccess(surveyId, 'operations.view');
-  const [scope, capabilities] = await Promise.all([
-    getOperationsDataScope(surveyId),
-    loadSurveyCapabilities(viewer, surveyId),
-  ]);
+  const { capabilities } = await assertSurveyConsolePageAccess(surveyId, 'operations.view');
+  const scope = await getOperationsDataScope(surveyId);
 
   return (
     <OperationsOverviewScreen

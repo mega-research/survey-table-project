@@ -7,6 +7,7 @@ vi.mock('next/navigation', () => ({
 
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
+import { LINK_CAPABILITIES, TEAM_MEMBER_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 
 /**
  * 탭 노출은 **판정 결과**가 정한다 — 주체 종류를 묻는 불리언이 아니다 (ADR-0026 티켓 02).
@@ -20,24 +21,6 @@ import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contract
  */
 
 const ALL: readonly SurveyCapability[] = surveyCapabilityValues;
-
-/** 링크 주체가 갖는 넷 — 스펙 §8 의 「외주 링크」 열. */
-const LINK_CAPS: readonly SurveyCapability[] = [
-  'survey.view',
-  'operations.view',
-  'contacts.view',
-  'contacts.writeAttempts',
-];
-
-/** 팀 공개 설문의 팀원 — 운영·분석은 보되 응답자 개인 데이터에는 닿지 않는다. */
-const TEAM_MEMBER_CAPS: readonly SurveyCapability[] = [
-  'survey.view',
-  'survey.edit',
-  'survey.invite',
-  'operations.view',
-  'analytics.view',
-  'surveyGroup.manage',
-];
 
 interface StripOptions {
   hasSurveyDocument?: boolean;
@@ -72,18 +55,18 @@ describe('OperationsTabStrip — capability 가 탭을 정한다', () => {
   });
 
   it('외주 링크는 현황·진척 보고·조사 대상 셋만 본다 — capability 넷 + 내부 셸 아님', () => {
-    renderStrip(LINK_CAPS, { hasSurveyDocument: true, internalShell: false });
+    renderStrip(LINK_CAPABILITIES, { hasSurveyDocument: true, internalShell: false });
     // 문항 수요·쿼터는 내부 전용 화면이라 조사표가 붙어 있어도 서지 않는다.
     expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상']);
   });
 
   it('메일 권한이 없으면 메일 탭이 서지 않는다', () => {
-    renderStrip(TEAM_MEMBER_CAPS);
+    renderStrip(TEAM_MEMBER_CAPABILITIES);
     expect(visibleTabs()).not.toContain('메일');
   });
 
   it('팀원은 조사 대상·진척 보고 탭을 보지 않는다 — 누르면 404 이던 자리다', () => {
-    renderStrip(TEAM_MEMBER_CAPS);
+    renderStrip(TEAM_MEMBER_CAPABILITIES);
     const tabs = visibleTabs();
     expect(tabs).toContain('실사 현황');
     expect(tabs).not.toContain('조사 대상');

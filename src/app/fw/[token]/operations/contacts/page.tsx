@@ -59,6 +59,8 @@ export default async function FieldworkLinkContactsPage({ params, searchParams }
       surveyId={surveyId}
       basePath={fieldworkLinkOperationsBase(token)}
       capabilities={capabilities}
+      // 단건 상세는 티켓 08 이 세운다 — 그때까지 행을 누르면 없는 주소로 떨어진다.
+      canOpenDetail={false}
       data={data}
     />
   );
