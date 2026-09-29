@@ -24,6 +24,7 @@ import {
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
 import { client } from '@/shared/lib/rpc';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 interface ColumnSchemeEditorProps {
   surveyId: string;
@@ -104,7 +105,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     startTransition(async () => {
       try {
         await client.contacts.columns.update({ surveyId, scheme: { ...scheme, columns } });
-        router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+        router.push(adminOperationsPaths(surveyId).contacts);
         router.refresh();
       } catch (e) {
         setError((e as Error).message);

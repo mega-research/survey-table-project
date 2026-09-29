@@ -34,8 +34,12 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
 
+import { operationsPaths } from '../operations-paths';
+
 interface ContactDetailFormProps {
   surveyId: string;
+  /** 이 콘솔의 주소 접두 — 저장·삭제 뒤 돌아갈 목록이 자기 트리 안이다. */
+  basePath: string;
   scheme: ContactColumnScheme;
   resultCodes: ContactResultCode[];
   systemFieldKeys?: { group?: string };
@@ -68,6 +72,7 @@ interface ContactDetailFormProps {
 
 export function ContactDetailForm({
   surveyId,
+  basePath,
   scheme,
   resultCodes,
   systemFieldKeys,
@@ -183,7 +188,7 @@ export function ContactDetailForm({
       try {
         await client.contacts.targets.remove({ surveyId, id: initial.id });
         // 삭제 후엔 dirty 무시 → router.push 직접
-        router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+        router.push(operationsPaths(basePath).contacts);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -275,7 +280,7 @@ export function ContactDetailForm({
           // 신규 저장 성공 → 방금 만든 대상의 상세 페이지로 이동.
           // new 페이지에 머물면 폼 입력이 남아 isDirty 가 계속 true → 목록 이동 시
           // confirm alert 오발생 + 재저장 시 중복 생성. push 로 떠나 둘 다 해소.
-          router.push(`/admin/surveys/${surveyId}/operations/contacts/${created.id}`);
+          router.push(operationsPaths(basePath).contact(created.id));
         }
       } catch (e) {
         setError((e as Error).message);
@@ -285,7 +290,7 @@ export function ContactDetailForm({
 
   function goList() {
     if (!confirmIfDirty()) return;
-    router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+    router.push(operationsPaths(basePath).contacts);
   }
 
   return (
@@ -311,6 +316,7 @@ export function ContactDetailForm({
         <div>
           <ContactInfoCard
             surveyId={surveyId}
+            basePath={basePath}
             resid={initial?.resid ?? null}
             scheme={localScheme}
             attrs={attrs}

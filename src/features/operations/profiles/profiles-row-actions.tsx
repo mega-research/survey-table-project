@@ -28,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 interface Props {
   surveyId: string;
@@ -72,7 +73,7 @@ export function ProfilesRowActions({
     });
   };
 
-  const editHref = `/admin/surveys/${surveyId}/operations/profiles/${responseId}/edit?idx=${idx}`;
+  const editHref = `${adminOperationsPaths(surveyId).profileEdit(responseId)}?idx=${idx}`;
 
   const openEditor = () => {
     window.open(editHref, '_blank', 'noopener,noreferrer');

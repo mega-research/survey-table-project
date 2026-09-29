@@ -27,6 +27,7 @@ import {
   getProgressTotals,
 } from '@/server/operations/services/report-progress';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,14 +160,14 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
       </div>
 
       {isEmpty ? (
-        <ProgressEmptyCard surveyId={surveyId} />
+        <ProgressEmptyCard basePath={adminOperationsBase(surveyId)} />
       ) : (
         <>
           {groupByCriteria.length > 0 && (
             <ProgressGroupByTabs options={groupByCriteria} activeKeys={activeKeys} />
           )}
           <ProgressFilterBar
-            surveyId={surveyId}
+            basePath={adminOperationsBase(surveyId)}
             initialSource={condition?.source ?? null}
             // idlist 모드는 FilterCondition 에 value 없음(ranges 만) — rawQ 로 원본 입력값 복원
             initialValue={condition && condition.mode !== 'idlist' ? condition.value : (rawQ ?? '')}

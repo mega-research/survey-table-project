@@ -28,8 +28,12 @@ import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { buildInviteUrl } from '@/lib/survey-url';
 
+import { operationsPaths } from '../operations-paths';
+
 interface ContactInfoCardProps {
   surveyId: string;
+  /** 이 콘솔의 주소 접두. */
+  basePath: string;
   resid: number | null;
   scheme: ContactColumnScheme;
   attrs: Record<string, string>;
@@ -62,6 +66,7 @@ type InputDef =
 
 export function ContactInfoCard({
   surveyId,
+  basePath,
   resid,
   scheme,
   attrs,
@@ -150,7 +155,7 @@ export function ContactInfoCard({
           <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             표시 가능한 컬럼이 없습니다.{' '}
             <a
-              href={`/admin/surveys/${surveyId}/operations/contacts/columns`}
+              href={operationsPaths(basePath).contactsColumns}
               className="underline"
             >
               컬럼 설정
@@ -256,7 +261,7 @@ export function ContactInfoCard({
             {responseId ? (
               <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                 <Link
-                  href={`/admin/surveys/${surveyId}/operations/profiles/${responseId}/edit`}
+                  href={operationsPaths(basePath).profileEdit(responseId)}
                   target="_blank"
                   rel="noreferrer"
                 >

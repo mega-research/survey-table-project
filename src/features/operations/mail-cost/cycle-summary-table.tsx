@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type { CycleSummary } from '@/shared/contracts/mail-io';
 
 import { formatInt, formatKrw } from './_format';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 interface Props {
   cycle: CycleSummary;
@@ -81,7 +82,7 @@ export function CycleSummaryTable({ cycle }: Props) {
                   <td className="max-w-[200px] truncate px-3 py-2.5 text-gray-600">
                     {c.archivedAt === null ? (
                       <Link
-                        href={`/admin/surveys/${c.surveyId}/operations/mail/campaigns/${c.campaignId}`}
+                        href={adminOperationsPaths(c.surveyId).mailCampaign(c.campaignId)}
                         className="hover:text-blue-600 hover:underline"
                       >
                         {c.surveyTitle}

@@ -8,6 +8,7 @@ import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 interface Props {
   surveyId: string;
@@ -148,7 +149,7 @@ export function UnsubscribedSegment({
               </SegPageLink>
               <PagerJump
                 totalPages={totalPages}
-                hrefTemplate={`/admin/surveys/${surveyId}/operations/mail/campaigns?unsubPage=__PAGE__#unsubscribed`}
+                hrefTemplate={`${adminOperationsPaths(surveyId).mailCampaigns}?unsubPage=__PAGE__#unsubscribed`}
               />
             </div>
           ) : null}
@@ -176,7 +177,7 @@ function SegPageLink({
   }
   return (
     <Link
-      href={`/admin/surveys/${surveyId}/operations/mail/campaigns?unsubPage=${page}#unsubscribed`}
+      href={`${adminOperationsPaths(surveyId).mailCampaigns}?unsubPage=${page}#unsubscribed`}
       className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
     >
       {children}

@@ -9,6 +9,7 @@ import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 import { isExternalViewer } from '@/lib/auth/external-viewer';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -48,7 +49,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
         control={control}
       />
       <OperationsTabStrip
-        surveyId={surveyId}
+        basePath={adminOperationsBase(surveyId)}
         isGuest={isExternal}
         hasSurveyDocument={documentRows.length > 0}
       />

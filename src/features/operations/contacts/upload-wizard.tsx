@@ -48,6 +48,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 
 import { UploadMatchStep } from './upload-match-step';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 type Step = 'file' | 'mapping' | 'match' | 'result';
 
@@ -885,7 +886,7 @@ export function UploadWizard({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => router.push(`/admin/surveys/${surveyId}/operations/contacts`)}>
+              <Button onClick={() => router.push(adminOperationsPaths(surveyId).contacts)}>
                 조사 대상 목록 보기
               </Button>
               <Button

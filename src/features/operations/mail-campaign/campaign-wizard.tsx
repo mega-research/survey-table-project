@@ -57,6 +57,7 @@ import {
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
 } from '@/lib/operations/filter-shared';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 interface Props {
   surveyId: string;
@@ -282,7 +283,7 @@ export function CampaignWizard({
           contactTargetIds: Array.from(selectedIds),
           filterSnapshot: buildFilterSnapshot(currentFilter),
         });
-        router.push(`/admin/surveys/${surveyId}/operations/mail/campaigns/${result.campaignId}`);
+        router.push(adminOperationsPaths(surveyId).mailCampaign(result.campaignId));
       } catch (err) {
         toast.error(getErrorMessage(err, '단체 메일 생성 실패'));
       }

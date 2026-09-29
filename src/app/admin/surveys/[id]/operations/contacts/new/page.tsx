@@ -9,6 +9,7 @@ import {
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',
@@ -41,6 +42,7 @@ export default async function ContactNewPage({ params }: PageProps) {
 
       <ContactDetailForm
         surveyId={surveyId}
+        basePath={adminOperationsBase(surveyId)}
         scheme={scheme}
         resultCodes={resultCodes}
         systemFieldKeys={extractSystemFieldKeys(scheme)}

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { EmptyState } from '@/features/operations/empty-state';
 import type { ContactUploadRow } from '@/shared/contracts/contacts-io';
+import { adminOperationsPaths } from '@/features/operations/operations-paths';
 
 const MODE_LABEL: Record<string, string> = { replace: '교체', merge: '병합', append: '추가' };
 const MODE_TONE: Record<string, string> = {
@@ -29,7 +30,7 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
           />
           <div className="mt-4 flex justify-center">
             <Button asChild>
-              <Link href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}>
+              <Link href={adminOperationsPaths(surveyId).contactsUploadNew}>
                 엑셀 업로드
               </Link>
             </Button>

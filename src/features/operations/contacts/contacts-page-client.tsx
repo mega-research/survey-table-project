@@ -7,8 +7,12 @@ import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactsRow } from '@/shared/contracts/contacts-io';
 
+import { operationsPaths } from '../operations-paths';
+
 interface ContactsPageClientProps {
   surveyId: string;
+  /** 이 콘솔의 주소 접두 — 행 클릭이 자기 트리 안에 머문다. */
+  basePath: string;
   scheme: ContactColumnScheme;
   rows: ContactsRow[];
   total: number;
@@ -24,6 +28,7 @@ interface ContactsPageClientProps {
  */
 export function ContactsPageClient({
   surveyId,
+  basePath,
   scheme,
   rows,
   total,
@@ -46,7 +51,7 @@ export function ContactsPageClient({
       dir={dir}
       surveyId={surveyId}
       resultCodeOptions={resultCodeOptions}
-      onRowClick={(row) => router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)}
+      onRowClick={(row) => router.push(operationsPaths(basePath).contact(row.id))}
     />
   );
 }

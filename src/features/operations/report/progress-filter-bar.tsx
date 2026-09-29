@@ -21,8 +21,11 @@ import {
 import { PiiExactMarker } from '@/features/operations/filter-pii-marker';
 import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 
+import { operationsPaths } from '../operations-paths';
+
 interface Props {
-  surveyId: string;
+  /** 이 콘솔의 주소 접두. */
+  basePath: string;
   initialSource: string | null;
   initialValue: string;
   columnCandidates: ColumnCandidate[];
@@ -45,7 +48,7 @@ const placeholderFor = (source: string | null) => sharedPlaceholderFor(source, '
  * 높이는 SelectTrigger 기준 h-10 으로 통일.
  */
 export function ProgressFilterBar({
-  surveyId,
+  basePath,
   initialSource,
   initialValue,
   columnCandidates,
@@ -136,7 +139,7 @@ export function ProgressFilterBar({
         }}
       />
       <Button asChild variant="outline" className="ml-auto h-10">
-        <Link href={`/admin/surveys/${surveyId}/operations/report/columns`}>컬럼 설정</Link>
+        <Link href={operationsPaths(basePath).reportColumns}>컬럼 설정</Link>
       </Button>
     </form>
   );

@@ -1,10 +1,13 @@
 import Link from 'next/link';
 
+import { operationsPaths } from '../operations-paths';
+
 interface Props {
-  surveyId: string;
+  /** 이 콘솔의 주소 접두. */
+  basePath: string;
 }
 
-export function ProgressEmptyCard({ surveyId }: Props) {
+export function ProgressEmptyCard({ basePath }: Props) {
   return (
     <div
       role="alert"
@@ -14,7 +17,7 @@ export function ProgressEmptyCard({ surveyId }: Props) {
       <p>
         이 설문은 조사 대상 명단이 비어 있어 진척률 표가 표시되지 않습니다.{' '}
         <Link
-          href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
+          href={operationsPaths(basePath).contactsUploadNew}
           className="underline hover:text-amber-900"
         >
           조사 대상 메뉴 → 조사 대상 업로드

@@ -12,8 +12,11 @@ import {
 } from '@/components/ui/navigation-menu';
 import { cn } from '@/lib/utils';
 
+import { adminMailCostPath, operationsPaths } from './operations-paths';
+
 interface OperationsTabStripProps {
-  surveyId: string;
+  /** 이 콘솔의 주소 접두 — 내부는 admin, 외주 실사 링크는 자기 트리(ADR-0026). */
+  basePath: string;
   /** 게스트 세션 — 쿼터 탭을 숨긴다. */
   isGuest: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
@@ -33,22 +36,22 @@ interface OperationsTabStripProps {
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
 export function OperationsTabStrip({
-  surveyId,
+  basePath,
   isGuest,
   hasSurveyDocument = false,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
-  const operationsBase = `/admin/surveys/${surveyId}/operations`;
-  const overviewHref = `${operationsBase}/overview`;
-  const profilesHref = `${operationsBase}/profiles`;
+  const paths = operationsPaths(basePath);
+  const overviewHref = paths.overview;
+  const profilesHref = paths.profiles;
   const isOverviewActive = pathname.startsWith(overviewHref);
   const isProfilesActive = pathname.startsWith(profilesHref);
   const isFieldworkActive = isOverviewActive || isProfilesActive;
 
-  const contactsHref = `${operationsBase}/contacts`;
-  const contactsUploadHref = `${operationsBase}/contacts/upload`;
-  const contactsColumnsHref = `${operationsBase}/contacts/columns`;
-  const contactsResultCodesHref = `${operationsBase}/contacts/result-codes`;
+  const contactsHref = paths.contacts;
+  const contactsUploadHref = paths.contactsUpload;
+  const contactsColumnsHref = paths.contactsColumns;
+  const contactsResultCodesHref = paths.contactsResultCodes;
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
@@ -64,22 +67,21 @@ export function OperationsTabStrip({
     isContactsColumnsActive ||
     isContactsResultCodesActive;
 
-  const mailBase = `${operationsBase}/mail`;
-  const mailCampaignsHref = `${mailBase}/campaigns`;
-  const mailTemplatesHref = `${mailBase}/templates`;
+  const mailCampaignsHref = paths.mailCampaigns;
+  const mailTemplatesHref = paths.mailTemplates;
   // 비용 정산은 인스턴스 전체 단위라 글로벌 페이지로 라우팅.
-  const mailCostHref = '/admin/billing/mail-cost';
+  const mailCostHref = adminMailCostPath();
   const isMailCampaignsActive = pathname.startsWith(mailCampaignsHref);
   const isMailTemplatesActive = pathname.startsWith(mailTemplatesHref);
   const isMailActive = isMailCampaignsActive || isMailTemplatesActive;
 
-  const reportHref = `${operationsBase}/report`;
+  const reportHref = paths.report;
   const isReportActive = pathname.startsWith(reportHref);
 
-  const quotaHref = `${operationsBase}/quota`;
+  const quotaHref = paths.quota;
   const isQuotaActive = pathname.startsWith(quotaHref);
 
-  const demandHref = `${operationsBase}/demand`;
+  const demandHref = paths.demand;
   const isDemandActive = pathname.startsWith(demandHref);
 
   return (

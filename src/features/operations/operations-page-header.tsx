@@ -5,6 +5,11 @@ import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
 
+import {
+  adminSurveyEditPath,
+  adminSurveyListPath,
+  adminSurveyPreviewPath,
+} from './operations-paths';
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
 
@@ -39,7 +44,7 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
           {/* 설문 목록은 어드민 전용 — 게스트가 누르면 강제 로그아웃되므로 숨긴다 */}
           {!isGuest && (
             <>
-              <Link href="/admin/surveys">
+              <Link href={adminSurveyListPath()}>
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   목록으로
@@ -58,14 +63,14 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 어드민 전용 — 게스트에게는 렌더하지 않는다 */}
           {!isGuest && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          <Link href={`/admin/surveys/${surveyId}/preview`}>
+          <Link href={adminSurveyPreviewPath(surveyId)}>
             <Button variant="outline" size="sm">
               <Eye className="mr-2 h-4 w-4" />
               설문 보기
             </Button>
           </Link>
           {!isGuest && (
-            <Link href={`/admin/surveys/${surveyId}/edit`}>
+            <Link href={adminSurveyEditPath(surveyId)}>
               <Button variant="outline" size="sm">
                 <Pencil className="mr-2 h-4 w-4" />
                 설문 편집

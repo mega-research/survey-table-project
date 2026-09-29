@@ -17,6 +17,7 @@ import { getOperationsDataScope } from '@/server/data-scope';
 import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -94,6 +95,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
 
       <ContactDetailForm
         surveyId={surveyId}
+        basePath={adminOperationsBase(surveyId)}
         scheme={scheme}
         resultCodes={resultCodes}
         systemFieldKeys={extractSystemFieldKeys(scheme)}

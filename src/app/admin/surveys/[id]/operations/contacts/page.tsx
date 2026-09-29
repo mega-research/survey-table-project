@@ -29,6 +29,7 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -188,6 +189,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             />
           ) : (
             <ContactsPageClient
+              basePath={adminOperationsBase(surveyId)}
               rows={rows}
               total={total}
               page={clampedPage}
