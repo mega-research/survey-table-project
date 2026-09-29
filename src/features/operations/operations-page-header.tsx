@@ -4,6 +4,7 @@ import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
+import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
   adminSurveyEditPath,
@@ -16,8 +17,15 @@ import { SurveyControlButtons } from './survey-control-buttons';
 interface Props {
   surveyId: string;
   surveyTitle: string;
-  /** 게스트(설문 단위 grant) 세션 — 설문 편집 등 admin 전용 버튼을 숨긴다. */
-  isGuest: boolean;
+  /**
+   * 이 주체가 이 설문에서 할 수 있는 일 — 설문 단위 액션의 노출을 정한다.
+   *
+   * 설문 중단·테스트 모드·설문 편집은 전부 `survey.edit` 하나다. 예전에는 「게스트인가」로
+   * 물었는데, 그 값은 admin 구역에서 언제나 false 라(비내부 계정은 레이아웃이 자기 홈으로
+   * 되돌린다) 실제로는 아무것도 가리지 않았고 `survey.edit` 없는 팀원에게 누르면 실패하는
+   * 버튼을 보여 주고 있었다.
+   */
+  capabilities: ReadonlySet<SurveyCapability>;
   control: {
     isPaused: boolean;
     pausedMessage: string | null;
@@ -36,23 +44,19 @@ interface Props {
  * `/admin/surveys/[id]/operations/*` 라우트의 layout 에서 한 번만 마운트되어
  * 모든 하위 페이지(현황/응답 내역/보고서/조사 대상)가 동일한 상단을 공유한다.
  */
-export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }: Props) {
+export function OperationsPageHeader({ surveyId, surveyTitle, capabilities, control }: Props) {
+  const canEdit = capabilities.has('survey.edit');
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         <div className="flex items-center space-x-4">
-          {/* 설문 목록은 어드민 전용 — 게스트가 누르면 강제 로그아웃되므로 숨긴다 */}
-          {!isGuest && (
-            <>
-              <Link href={adminSurveyListPath()}>
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  목록으로
-                </Button>
-              </Link>
-              <div className="h-6 w-px bg-gray-300" />
-            </>
-          )}
+          <Link href={adminSurveyListPath()}>
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              목록으로
+            </Button>
+          </Link>
+          <div className="h-6 w-px bg-gray-300" />
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-blue-500" />
             <h1 className="max-w-md truncate text-lg font-medium text-gray-900">{surveyTitle}</h1>
@@ -61,15 +65,15 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
 
         <div className="flex items-center space-x-3">
           <RefreshButton />
-          {/* 설문 중단·테스트 모드는 어드민 전용 — 게스트에게는 렌더하지 않는다 */}
-          {!isGuest && <SurveyControlButtons surveyId={surveyId} initial={control} />}
+          {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
+          {canEdit && <SurveyControlButtons surveyId={surveyId} initial={control} />}
           <Link href={adminSurveyPreviewPath(surveyId)}>
             <Button variant="outline" size="sm">
               <Eye className="mr-2 h-4 w-4" />
               설문 보기
             </Button>
           </Link>
-          {!isGuest && (
+          {canEdit && (
             <Link href={adminSurveyEditPath(surveyId)}>
               <Button variant="outline" size="sm">
                 <Pencil className="mr-2 h-4 w-4" />

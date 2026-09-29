@@ -8,7 +8,8 @@ import { OperationsPageHeader } from '@/features/operations/operations-page-head
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
-import { isExternalViewer } from '@/lib/auth/external-viewer';
+import { requireAuth } from '@/lib/auth';
+import { loadSurveyCapabilities } from '@/server/survey-access';
 import { adminOperationsBase } from '@/features/operations/operations-paths';
 
 interface LayoutProps {
@@ -27,9 +28,13 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const [control, isExternal, documentRows] = await Promise.all([
+  // 관문은 상위 `[id]` 레이아웃이 survey.view 로 이미 졌다 — 여기서 다시 묻지 않고
+  // 헤더·탭이 무엇을 그릴지 정할 판정 결과만 읽는다. 화면이 스스로 판정을 복제하지 않도록
+  // 불리언이 아니라 capability 집합을 그대로 넘긴다.
+  const viewer = await requireAuth();
+  const [control, capabilities, documentRows] = await Promise.all([
     getControlState(surveyId),
-    isExternalViewer(),
+    loadSurveyCapabilities(viewer, surveyId),
     // 조사표가 붙은 설문에서만 '문항 수요' 탭을 낸다 — 다른 설문에는 쓸 일이 없다.
     db
       .select({ id: surveyDocuments.id })
@@ -45,12 +50,12 @@ export default async function OperationsLayout({ children, params }: LayoutProps
       <OperationsPageHeader
         surveyId={surveyId}
         surveyTitle={survey.title}
-        isGuest={isExternal}
+        capabilities={capabilities}
         control={control}
       />
       <OperationsTabStrip
         basePath={adminOperationsBase(surveyId)}
-        isGuest={isExternal}
+        capabilities={capabilities}
         hasSurveyDocument={documentRows.length > 0}
       />
       {children}

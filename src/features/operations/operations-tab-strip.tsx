@@ -11,14 +11,30 @@ import {
   NavigationMenuTrigger,
 } from '@/components/ui/navigation-menu';
 import { cn } from '@/lib/utils';
+import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import { adminMailCostPath, operationsPaths } from './operations-paths';
 
 interface OperationsTabStripProps {
   /** 이 콘솔의 주소 접두 — 내부는 admin, 외주 실사 링크는 자기 트리(ADR-0026). */
   basePath: string;
-  /** 게스트 세션 — 쿼터 탭을 숨긴다. */
-  isGuest: boolean;
+  /**
+   * 이 주체가 이 설문에서 할 수 있는 일 — 탭 노출의 정본이다.
+   *
+   * 각 탭의 요구는 그 탭이 여는 leaf 페이지의 관문과 **같아야** 한다. 갈리면 「메뉴엔 있는데
+   * 누르면 404」가 된다 — 예전 `isGuest` 불리언 아래에서 팀 공개 설문의 팀원이 실제로
+   * 그랬다(응답 내역·조사 대상·메일 탭이 보이는데 전부 not_found).
+   */
+  capabilities: ReadonlySet<SurveyCapability>;
+  /**
+   * 내부 전용 자리를 그릴 것인가 — 쿼터·문항 수요·비용 정산.
+   *
+   * capability 로 물을 수 없는 **다른 축**이다: 그 화면들은 설문 단위 권한이 아니라 내부 계정
+   * 여부(`requireAdminPage`)가 지키고, 외주 링크 주체는 `operations.view` 를 갖고도 거기
+   * 닿지 못한다. 「무엇을 할 수 있는가」와 「어느 셸에 있는가」를 갈라 두는 것이 불리언
+   * 하나로 둘을 겸하던 자리의 교훈이다.
+   */
+  internalShell?: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
   hasSurveyDocument?: boolean;
 }
@@ -37,11 +53,21 @@ interface OperationsTabStripProps {
  */
 export function OperationsTabStrip({
   basePath,
-  isGuest,
+  capabilities,
+  internalShell = true,
   hasSurveyDocument = false,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
   const paths = operationsPaths(basePath);
+  const can = (capability: SurveyCapability) => capabilities.has(capability);
+
+  // 요구 capability 는 leaf 페이지의 관문에서 그대로 옮긴 것이다 — 진척 보고가
+  // operations.view 가 아니라 contacts.view 인 것이 특히 헷갈리는 자리다.
+  const canOverview = can('operations.view');
+  const canProfiles = can('responses.view');
+  const canContacts = can('contacts.view');
+  const canManageContacts = can('contacts.manage');
+  const canMail = can('mail.view');
   const overviewHref = paths.overview;
   const profilesHref = paths.profiles;
   const isOverviewActive = pathname.startsWith(overviewHref);
@@ -91,6 +117,7 @@ export function OperationsTabStrip({
           aria-label="현황 콘솔 메뉴"
           className="justify-start gap-1"
         >
+          {(canOverview || canProfiles) && (
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
@@ -103,15 +130,21 @@ export function OperationsTabStrip({
               실사 현황
             </NavigationMenuTrigger>
             <NavigationMenuContent className="min-w-[180px] p-1">
-              <SubLink href={overviewHref} active={isOverviewActive}>
-                응답 현황
-              </SubLink>
-              <SubLink href={profilesHref} active={isProfilesActive}>
-                응답 내역
-              </SubLink>
+              {canOverview && (
+                <SubLink href={overviewHref} active={isOverviewActive}>
+                  응답 현황
+                </SubLink>
+              )}
+              {canProfiles && (
+                <SubLink href={profilesHref} active={isProfilesActive}>
+                  응답 내역
+                </SubLink>
+              )}
             </NavigationMenuContent>
           </NavigationMenuItem>
+          )}
 
+          {canContacts && (
           <NavigationMenuItem>
             <Link
               href={reportHref}
@@ -126,7 +159,9 @@ export function OperationsTabStrip({
               진척 보고
             </Link>
           </NavigationMenuItem>
+          )}
 
+          {(canContacts || canManageContacts) && (
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
@@ -139,21 +174,29 @@ export function OperationsTabStrip({
               조사 대상
             </NavigationMenuTrigger>
             <NavigationMenuContent className="min-w-[180px] p-1">
-              <SubLink href={contactsHref} active={isContactsRootActive}>
-                조사 대상 목록
-              </SubLink>
-              <SubLink href={contactsUploadHref} active={isContactsUploadActive}>
-                조사 대상 업로드
-              </SubLink>
-              <SubLink href={contactsColumnsHref} active={isContactsColumnsActive}>
-                컬럼 설정
-              </SubLink>
-              <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
-                결과코드 설정
-              </SubLink>
+              {canContacts && (
+                <SubLink href={contactsHref} active={isContactsRootActive}>
+                  조사 대상 목록
+                </SubLink>
+              )}
+              {canManageContacts && (
+                <>
+                  <SubLink href={contactsUploadHref} active={isContactsUploadActive}>
+                    조사 대상 업로드
+                  </SubLink>
+                  <SubLink href={contactsColumnsHref} active={isContactsColumnsActive}>
+                    컬럼 설정
+                  </SubLink>
+                  <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
+                    결과코드 설정
+                  </SubLink>
+                </>
+              )}
             </NavigationMenuContent>
           </NavigationMenuItem>
+          )}
 
+          {canMail && (
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
@@ -172,13 +215,16 @@ export function OperationsTabStrip({
               <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
                 단체 발송
               </SubLink>
-              <SubLink href={mailCostHref} active={false}>
-                비용 정산
-              </SubLink>
+              {internalShell && (
+                <SubLink href={mailCostHref} active={false}>
+                  비용 정산
+                </SubLink>
+              )}
             </NavigationMenuContent>
           </NavigationMenuItem>
+          )}
 
-          {hasSurveyDocument && (
+          {internalShell && canOverview && hasSurveyDocument && (
             <NavigationMenuItem>
               <Link
                 href={demandHref}
@@ -195,7 +241,7 @@ export function OperationsTabStrip({
             </NavigationMenuItem>
           )}
 
-          {!isGuest && (
+          {internalShell && canOverview && (
             <NavigationMenuItem>
               <Link
                 href={quotaHref}
