@@ -18,6 +18,31 @@ export const LINK_CAPABILITIES: readonly SurveyCapability[] = [
   'contacts.writeAttempts',
 ];
 
+/**
+ * **전체 권한 참여자** — 사내 실사원이 초대되는 등급 (스펙 §8 참여자 열, ADR-0026 티켓 10).
+ *
+ * 설문의 처분권(발행·공유 관리·소유권 이전)과 팀 소유 구조(그룹)만 빠지고 운영은 전부 열린다.
+ * 그래서 사내 실사원에게는 전용 콘솔이 필요 없다 — 연구원과 같은 화면에서 일한다.
+ *
+ * 이 배열이 실제 판정과 같은지는 `survey-participants.realdb` 의 「참여자 열」 테스트가
+ * 실 DB 로 잰다. 여기 것은 화면 스위트의 **입력**이고, 손으로 옮겨 적는 것이 규약이다.
+ */
+export const FULL_PARTICIPANT_CAPABILITIES: readonly SurveyCapability[] = [
+  'survey.view',
+  'survey.edit',
+  'survey.delete',
+  'survey.invite',
+  'operations.view',
+  'responses.view',
+  'contacts.view',
+  'contacts.manage',
+  'contacts.writeAttempts',
+  'mail.view',
+  'mail.send',
+  'analytics.view',
+  'export.download',
+];
+
 /** 팀 공개 설문의 팀원 — 운영·분석은 보되 응답자 개인 데이터에는 닿지 않는다. */
 export const TEAM_MEMBER_CAPABILITIES: readonly SurveyCapability[] = [
   'survey.view',

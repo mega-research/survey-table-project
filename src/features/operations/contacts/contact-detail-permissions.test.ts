@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { contactDetailPermissions } from '@/features/operations/contacts/contact-detail-permissions';
-import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
+import {
+  FULL_PARTICIPANT_CAPABILITIES,
+  LINK_CAPABILITIES,
+} from '@tests/fixtures/survey-capability-columns';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
 
 /**
@@ -40,6 +43,23 @@ describe('contactDetailPermissions', () => {
       manageResponses: false,
       viewMail: false,
       sendMail: false,
+      proxyRespond: true,
+    });
+  });
+
+  /**
+   * 사내 실사원(전체 권한 참여자) — 단건 상세의 **모든 자리**가 열린다 (티켓 10, 스토리 50).
+   *
+   * 외주와 갈리는 지점이 이 한 줄이다. 둘이 같은 조사 대상 표를 보지만(티켓 06 이 화면을 한
+   * 벌로 만들었다) 사내는 응답 수정·단건 메일·명단 수정까지 닿는다.
+   */
+  it('사내 실사원은 명단 수정·응답 수정·단건 메일이 전부 열린다', () => {
+    expect(permissionsFor(FULL_PARTICIPANT_CAPABILITIES, true)).toEqual({
+      manageContacts: true,
+      writeAttempts: true,
+      manageResponses: true,
+      viewMail: true,
+      sendMail: true,
       proxyRespond: true,
     });
   });

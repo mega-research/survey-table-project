@@ -7,7 +7,11 @@ vi.mock('next/navigation', () => ({
 
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
-import { LINK_CAPABILITIES, TEAM_MEMBER_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
+import {
+  FULL_PARTICIPANT_CAPABILITIES,
+  LINK_CAPABILITIES,
+  TEAM_MEMBER_CAPABILITIES,
+} from '@tests/fixtures/survey-capability-columns';
 
 /**
  * 탭 노출은 **판정 결과**가 정한다 — 주체 종류를 묻는 불리언이 아니다 (ADR-0026 티켓 02).
@@ -58,6 +62,17 @@ describe('OperationsTabStrip — capability 가 탭을 정한다', () => {
     renderStrip(LINK_CAPABILITIES, { hasSurveyDocument: true, internalShell: false });
     // 문항 수요·쿼터는 내부 전용 화면이라 조사표가 붙어 있어도 서지 않는다.
     expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상']);
+  });
+
+  /**
+   * 사내 실사원(전체 권한 참여자) — **전용 콘솔이 없다는 주장의 화면 쪽 근거** (티켓 10).
+   *
+   * 쿼터·문항 수요는 설문 처분권이 아니라 내부 셸의 화면이라 함께 선다. 여기서 하나라도
+   * 빠지면 「연구원과 같은 화면에서 일한다」(스토리 50)가 거짓이 된다.
+   */
+  it('사내 실사원은 연구원과 같은 탭을 본다 — 전용 콘솔이 필요 없는 이유', () => {
+    renderStrip(FULL_PARTICIPANT_CAPABILITIES, { hasSurveyDocument: true });
+    expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상', '메일', '문항 수요', '쿼터']);
   });
 
   it('메일 권한이 없으면 메일 탭이 서지 않는다', () => {
