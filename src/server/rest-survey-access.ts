@@ -7,7 +7,7 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
 import {
   assertSurveyCapability,
   SurveyAccessError,
-  type SurveyAccessUser,
+  type Actor,
 } from './survey-access';
 
 /**
@@ -23,12 +23,12 @@ import {
  * 그대로 쓴다 — 이 표면의 기존 소비자(다운로드 실패 안내)가 보던 계약이다.
  */
 export async function checkSurveyCapabilityRest(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<NextResponse | null> {
   try {
-    await assertSurveyCapability(user, surveyId, capability);
+    await assertSurveyCapability(actor, surveyId, capability);
     return null;
   } catch (error) {
     if (error instanceof SurveyAccessError) {
@@ -50,9 +50,9 @@ export async function checkSurveyCapabilityRest(
  * 버튼이 살아 있어 티켓 11 이 현행 유지로 두고 이 티켓에 인계했다.
  */
 export async function checkScopedSurveyCapabilityRest(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<NextResponse | null> {
-  return checkSurveyCapabilityRest(user, surveyId, capability);
+  return checkSurveyCapabilityRest(actor, surveyId, capability);
 }

@@ -24,7 +24,7 @@ import {
 } from '@/server/read-models/survey-structure';
 import {
   type SurveyAccessUser,
-  loadAccessSubject,
+  loadAccountAccessSubject,
   resolveSurveyCapabilities,
 } from '@/server/survey-access';
 
@@ -72,7 +72,7 @@ export async function listSurveyGroups(
   user: SurveyAccessUser,
   teamId: string,
 ): Promise<ListSurveyGroupsOutput> {
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
   // **팀 미배치는 초대 설문을 포함해 전부 차단이다**(판정 코어의 3번 분기). 관문이 이 표면에서
   // 빠졌으므로(위 procedure 주석) 그 차단을 여기서 대신 진다 — 없으면 마지막 팀에서 제외된
   // 사람이 참여 행만으로 협업 그룹 이름·소유 팀 이름·설문 수를 계속 읽는다. 설문 목록은
@@ -171,7 +171,7 @@ function groupHoldsAnySurvey(): SQL<boolean> {
  * 멤버가 아닌 팀의 teamId 가 범위로 들어오는 경로가 없다(work-scope 가 내 팀으로 접는다).
  */
 async function listCollaboratingGroups(
-  subject: Awaited<ReturnType<typeof loadAccessSubject>>,
+  subject: Awaited<ReturnType<typeof loadAccountAccessSubject>>,
   scopeTeamId: string,
 ): Promise<ListSurveyGroupsOutput> {
   const accessible =
@@ -382,6 +382,8 @@ export async function listUngroupedSurveys(input: {
       visibility: surveys.visibility,
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
+      // 링크 주체만 보는 축이지만 판정 입력의 모양이라 여기서도 싣는다 — 계정 분기는 읽지 않는다.
+      isPaused: surveys.isPaused,
     })
     .from(surveys)
     .where(
@@ -397,7 +399,7 @@ export async function listUngroupedSurveys(input: {
     )
     .orderBy(asc(surveys.title));
 
-  const subject = await loadAccessSubject(input.user);
+  const subject = await loadAccountAccessSubject(input.user);
   return rows.flatMap((row) => {
     const caps = resolveSurveyCapabilities(subject, row, null);
     if (!caps.has('survey.view')) return [];

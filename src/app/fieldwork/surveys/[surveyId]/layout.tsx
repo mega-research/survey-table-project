@@ -7,7 +7,7 @@ import {
   getFieldworkOrgName,
   getFieldworkSurveyHeader,
 } from '@/server/read-models/fieldwork-surveys';
-import { loadAccessSubject } from '@/server/survey-access';
+import { loadAccountAccessSubject } from '@/server/survey-access';
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -25,7 +25,7 @@ export default async function FieldworkSurveyLayout({ params, children }: Props)
   const { surveyId } = await params;
   const { user } = await assertFieldworkSurveyPageAccess(surveyId, 'operations.view');
 
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
   const [header, orgName] = await Promise.all([
     getFieldworkSurveyHeader(surveyId),
     subject.fieldworkOrgId ? getFieldworkOrgName(subject.fieldworkOrgId) : Promise.resolve(null),

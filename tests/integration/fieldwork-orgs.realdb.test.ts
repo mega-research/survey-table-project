@@ -482,7 +482,8 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
 
     it('업체 소속만으로는 어떤 설문도 열리지 않는다 — 여는 것은 초대다 (티켓 25)', () => {
       const subject = {
-        userId: crypto.randomUUID(),
+        kind: 'account' as const,
+      userId: crypto.randomUUID(),
         isSuperadmin: false,
         userType: 'fieldwork' as const,
         activeTeamIds: [],
@@ -493,10 +494,12 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
         fieldworkRole: 'worker' as const,
       };
       const survey = {
+        id: 'survey-probe',
         teamId: TEAM_ID,
         visibility: 'team' as const,
         ownerUserId: SUPERADMIN_ID,
         assignmentStatus: 'assigned' as const,
+        isPaused: false,
       };
       // 업체는 소속 경계일 뿐 접근 경로가 아니다(ADR-0019) — 계정을 발급했다는 사실
       // 자체로는 어떤 설문도 열리지 않는다. 초대가 여는 것은 티켓 25 의 realdb 가 잰다.

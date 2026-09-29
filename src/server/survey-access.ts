@@ -41,7 +41,14 @@ import { getActiveTeamMemberships } from './read-models/team-memberships';
 // 주체·대상 모양
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface SurveyAccessSubject {
+/**
+ * 계정 주체 — 팀·소유권·참여 행 사슬을 타는 쪽.
+ *
+ * 링크 주체와 **판별 유니온**으로 둔다(ADR-0026). 기존 필드에 nullable 을 더하면 「계정인데
+ * userId 가 없는」 모양이 타입상 표현 가능해지고, 그것을 막는 일이 런타임으로 내려간다.
+ */
+export interface AccountAccessSubject {
+  kind: 'account';
   userId: string;
   isSuperadmin: boolean;
   userType: UserType;
@@ -61,12 +68,43 @@ export interface SurveyAccessSubject {
   fieldworkRole: FieldworkRole | null;
 }
 
+/**
+ * 외주 실사 링크 주체 — 계정이 아니다 (ADR-0026).
+ *
+ * 팀도 소유권도 참여 행도 없고 자격은 「이 링크가 이 설문을 연다」 하나뿐이라 필드가 둘이다.
+ * `linkId` 는 판정에 쓰이지 않지만 귀속(결과코드·응답)이 그 값을 남기므로 주체가 들고 다닌다.
+ */
+export interface LinkAccessSubject {
+  kind: 'link';
+  linkId: string;
+  /** 이 링크가 여는 유일한 설문. */
+  surveyId: string;
+}
+
+/** 판정이 보는 요청의 임자 — 계정 또는 외주 실사 링크. */
+export type SurveyAccessSubject = AccountAccessSubject | LinkAccessSubject;
+
 export interface SurveyAccessTarget {
+  /**
+   * 설문 id — 링크 주체가 자기 설문인지 견주는 값이다.
+   *
+   * 로더가 id 로 조회하므로 계정 경로에서는 늘 인자와 같지만, 대상이 스스로를 밝히지 않으면
+   * 순수 함수가 「이 링크가 이 설문을 여는가」를 물을 수 없다(인자를 하나 더 받는 대신 대상에
+   * 싣는다 — 배치 경로에서도 행마다 자연히 따라온다).
+   */
+  id: string;
   teamId: string | null;
   visibility: SurveyVisibility;
   /** 2단계 배포 중이라 nullable — 백필 전 행이 소유자 없이 존재할 수 있다. */
   ownerUserId: string | null;
   assignmentStatus: SurveyAssignmentStatus;
+  /**
+   * 응답 일시중지 중인가 — **링크 주체만 보는 축**이다 (ADR-0026).
+   *
+   * 링크에는 만료일이 없고 설문 중단이 그 일을 한다. 계정 열이 함께 닫히면 실사 중단이 곧
+   * 운영 중단이 되므로(연구원은 중단 중에도 콘솔을 쓴다) 계정 분기는 이 값을 읽지 않는다.
+   */
+  isPaused: boolean;
 }
 
 /**
@@ -223,6 +261,23 @@ const FIELDWORK_ORG_VIEW_CAPS: readonly SurveyCapability[] = FIELDWORK_INVITED_C
   (capability) => capability !== 'contacts.writeAttempts',
 );
 
+/**
+ * 외주 실사 링크 — 스펙 §8 의 「외주 링크」 열 (ADR-0026).
+ *
+ * **실사 초대 열과 같은 집합이고 새 어휘를 만들지 않는다** — 바뀐 것은 주체의 종류이지 외주가
+ * 할 수 있는 일이 아니다. 여기 없는 것이 곧 「항상 차단」의 정본이다: 설문 편집·응답 상세·
+ * 분석·내보내기·메일·명단 수정.
+ *
+ * 같은 값을 FIELDWORK_INVITED_CAPS 에서 파생시키지 않는 것은 의도다 — 저쪽은 철거될 모델의
+ * 열이라(ADR-0019 supersede) 사라질 때 이 열이 따라 비어서는 안 된다.
+ */
+const LINK_CAPS: readonly SurveyCapability[] = [
+  'survey.view',
+  'operations.view',
+  'contacts.view',
+  'contacts.writeAttempts',
+];
+
 const NONE: ReadonlySet<SurveyCapability> = new Set();
 
 /**
@@ -258,6 +313,9 @@ export interface SurveyAccessRelation {
  * 이 사람이 이 설문에서 할 수 있는 일 — DB 를 만지지 않는 순수 함수.
  *
  * 순서가 곧 정책이다:
+ *  0. **외주 실사 링크** — 계정이 아니라 접속 수단이다(ADR-0026). 아래 사슬을 하나도 타지
+ *     않으므로 맨 앞에 선다: 뒤에 두면 팀 미배치·소유자 같은 가드 중 하나가 링크를 먼저
+ *     걸러 「왜 거부됐는지 아무도 모르는」 상태가 된다.
  *  1. 계정 유형 — guest(티켓 21)와 fieldwork(티켓 25)는 각자의 부여 모델로 먼저 갈라진다.
  *  2. 슈퍼어드민 — 전권. break-glass 감사는 관문 레이어 책임이다.
  *  3. 팀 미배치 — 초대 설문을 포함해 모든 내부 설문 차단 (CONTEXT.md 「팀 미배치 사용자」).
@@ -285,6 +343,7 @@ export function resolveSurveyCapabilities(
   participation?: SurveyParticipation | null,
   relation?: SurveyAccessRelation,
 ): ReadonlySet<SurveyCapability> {
+  if (subject.kind === 'link') return resolveLinkCapabilities(subject, survey);
   // isSuperadmin 은 internal 전용 플래그다 — 유형 게이트가 먼저 선다.
   if (subject.userType === 'guest') {
     if (survey.assignmentStatus === 'assignment_pending') return NONE;
@@ -357,7 +416,7 @@ export function resolveSurveyCapabilities(
  * 배치 대기는 게스트와 같은 이유로 함께 막는다: 팀이 정해지기 전에는 아무도 못 연다(ADR-0006).
  */
 function resolveFieldworkCapabilities(
-  subject: SurveyAccessSubject,
+  subject: AccountAccessSubject,
   survey: SurveyAccessTarget,
   participation: SurveyParticipation | null | undefined,
   relation: SurveyAccessRelation | undefined,
@@ -369,6 +428,29 @@ function resolveFieldworkCapabilities(
     return new Set(FIELDWORK_ORG_VIEW_CAPS);
   }
   return NONE;
+}
+
+/**
+ * 링크 주체의 판정 — 물을 것이 셋뿐이다 (ADR-0026).
+ *
+ * 팀·소유권·공개 범위·참여 행을 전부 보지 않는다. 링크는 「이 설문 하나를 여는 접속 수단」이고
+ * 그 설문이 열려 있는 동안만 유효하다.
+ *
+ * 설문 일치를 **가장 먼저** 본다 — 링크 하나로 남의 설문 id 를 넣는 것이 이 모델의 유일한
+ * 수평 이동 시도이고, 여기서 막지 않으면 뒤의 어떤 조건도 그것을 대신 막아 주지 않는다.
+ *
+ * 중단(`isPaused`)이 만료일을 대신한다. 중단은 토글이라 재개하면 같은 링크가 그대로 다시
+ * 열리므로 이것은 만료가 아니라 **중단 중 차단**이다. 배치 대기를 함께 막는 것은 게스트·실사와
+ * 같은 이유다(팀이 정해지기 전에는 아무도 열 수 없다, ADR-0006).
+ */
+function resolveLinkCapabilities(
+  subject: LinkAccessSubject,
+  survey: SurveyAccessTarget,
+): ReadonlySet<SurveyCapability> {
+  if (subject.surveyId !== survey.id) return NONE;
+  if (survey.assignmentStatus === 'assignment_pending') return NONE;
+  if (survey.isPaused) return NONE;
+  return new Set(LINK_CAPS);
 }
 
 /**
@@ -389,7 +471,10 @@ export function resolveSurveyAccess(
   relation?: SurveyAccessRelation,
 ): SurveyAccess {
   const capabilities = resolveSurveyCapabilities(subject, survey, participation, relation);
-  if (subject.userType !== 'guest') return { capabilities, guestTabs: null };
+  // 탭 축은 게스트만 갖는다 — 링크에는 그 화면 설정이 없다(고정 탭 셋).
+  if (subject.kind === 'link' || subject.userType !== 'guest') {
+    return { capabilities, guestTabs: null };
+  }
   // 부여가 없으면 capability 도 비어 있다 — 탭만 열린 상태는 만들지 않는다.
   const guestTabs = capabilities.has('operations.view')
     ? normalizeSurveyGuestTabs(participation?.guestTabs)
@@ -401,11 +486,31 @@ export function resolveSurveyAccess(
 // 로더 · 관문
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 세션이 들고 있는 만큼의 주체 정보 — 멤버십은 로더가 채운다. */
+/** 세션이 들고 있는 만큼의 계정 정보 — 멤버십은 로더가 채운다. */
 export interface SurveyAccessUser {
   id: string;
   isSuperadmin: boolean;
   userType: UserType;
+}
+
+/**
+ * 요청 주체 — 계정 또는 외주 실사 링크 (ADR-0026).
+ *
+ * **판별자가 링크 쪽에만 있다.** 계정 변종에 필수 `kind` 를 더하면 이 타입을 받는 관문
+ * 호출부 전부(오늘 58곳)가 `context.user` 를 그대로 넘길 수 없게 된다 — 링크가 새로 들어온
+ * 것이므로 새로 온 쪽이 표식을 든다. 좁히기는 `isLinkActor` 하나로 모은다.
+ */
+export type Actor = SurveyAccessUser | LinkActor;
+
+/** 링크 세션이 들고 있는 만큼의 주체 정보 — 로더가 채울 것이 없다. */
+export interface LinkActor {
+  kind: 'link';
+  linkId: string;
+  surveyId: string;
+}
+
+export function isLinkActor(actor: Actor): actor is LinkActor {
+  return 'kind' in actor && actor.kind === 'link';
 }
 
 export class SurveyAccessError extends Error {
@@ -425,13 +530,30 @@ export class SurveyAccessError extends Error {
  * 실사의 업체·역할을 **세션이 아니라 DB 에서** 읽는 이유는 신선도다. 업체가 종료되거나
  * 역할이 바뀌어도 세션은 그대로라, 세션에 실으면 낡은 값으로 파생 시야가 계속 선다.
  */
-export async function loadAccessSubject(user: SurveyAccessUser): Promise<SurveyAccessSubject> {
+export async function loadAccessSubject(actor: Actor): Promise<SurveyAccessSubject> {
+  // 링크 주체는 읽을 소속이 없다 — 자격이 링크 행 하나에 다 들어 있다(ADR-0026).
+  if (isLinkActor(actor)) {
+    return { kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId };
+  }
+  return loadAccountAccessSubject(actor);
+}
+
+/**
+ * 계정임을 아는 호출부용 — 소속 축(팀·업체)을 읽는 쪽은 결과가 계정 주체임을 알아야 한다.
+ *
+ * `loadAccessSubject` 와 갈라 두는 것은 좁히기를 호출부마다 반복하지 않기 위해서다: 링크
+ * 주체에는 팀도 업체도 없으므로 그 필드를 읽는 코드는 애초에 계정만 받아야 한다.
+ */
+export async function loadAccountAccessSubject(
+  user: SurveyAccessUser,
+): Promise<AccountAccessSubject> {
   // 내부 계정이 아니면 멤버십 자체가 금지다(스펙 §1) — 조회를 아낀다.
   const memberships =
     user.userType === 'internal' ? await getActiveTeamMemberships(user.id) : [];
   const fieldwork =
     user.userType === 'fieldwork' ? await loadFieldworkAffiliation(user.id) : null;
   return {
+    kind: 'account',
     userId: user.id,
     isSuperadmin: user.isSuperadmin,
     userType: user.userType,
@@ -471,19 +593,25 @@ async function loadFieldworkAffiliation(
  * 통과하는 창이 생긴다.
  */
 export async function loadSurveyAccess(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
 ): Promise<SurveyAccess> {
+  // 링크 주체는 참여 행도 파생 시야도 없어 설문 행 하나만 읽는다 — 계정 경로의 조인·EXISTS
+  // 를 태우면 쓰지도 않을 값을 매 요청 치른다.
+  if (isLinkActor(actor)) return loadLinkSurveyAccess(actor, surveyId);
+  const user = actor;
   // 주체를 **먼저** 읽는다 — 실사 팀장의 파생 시야가 소속 업체를 조건으로 삼으므로, 그 값이
   // 있어야 아래 EXISTS 를 세울 수 있다. 왕복 수는 그대로다(내부는 멤버십, 실사는 업체·역할).
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
 
   const [row] = await db
     .select({
+      id: surveys.id,
       teamId: surveys.teamId,
       visibility: surveys.visibility,
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
+      isPaused: surveys.isPaused,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
       participantAccessLevel: surveyParticipants.accessLevel,
@@ -513,6 +641,30 @@ export async function loadSurveyAccess(
 }
 
 /**
+ * 링크 주체의 판정 — 설문 행 하나만 읽는다 (ADR-0026).
+ *
+ * 삭제된 설문은 계정 경로와 같은 이유로 없는 것으로 본다. 링크 행 자체의 유효성(비밀번호
+ * 표식·종료)은 이 코어의 관심이 아니다 — 그것은 세션을 세우는 자리가 이미 확인했고, 여기는
+ * 「그 주체가 이 설문에서 무엇을 할 수 있는가」만 답한다.
+ */
+async function loadLinkSurveyAccess(actor: LinkActor, surveyId: string): Promise<SurveyAccess> {
+  const [row] = await db
+    .select({
+      id: surveys.id,
+      teamId: surveys.teamId,
+      visibility: surveys.visibility,
+      ownerUserId: surveys.ownerUserId,
+      assignmentStatus: surveys.assignmentStatus,
+      isPaused: surveys.isPaused,
+    })
+    .from(surveys)
+    .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
+    .limit(1);
+  if (!row) throw new SurveyAccessError('not_found');
+  return resolveSurveyAccess({ kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId }, row);
+}
+
+/**
  * 이 설문에 **내 업체 소속원**이 초대돼 있는가 — 실사 팀장의 파생 시야 조건 (티켓 25).
  *
  * 팀장이 아니거나 실사가 아니면 상수 false 를 돌려준다. 조건을 코어가 아니라 여기서 거는
@@ -527,7 +679,7 @@ export async function loadSurveyAccess(
  * 팀장 시야에 계속 서 있는다. 홈 목록(read-models/fieldwork-surveys)도 같은 조건을 건다.
  *
  */
-function fieldworkOrgInvitedColumn(subject: SurveyAccessSubject): SQL<boolean> {
+function fieldworkOrgInvitedColumn(subject: AccountAccessSubject): SQL<boolean> {
   if (subject.fieldworkRole !== 'leader' || subject.fieldworkOrgId === null) {
     return sql<boolean>`false`;
   }
@@ -569,7 +721,7 @@ function fieldworkOrgInvitedColumn(subject: SurveyAccessSubject): SQL<boolean> {
  * 자기 자신은 따로 뺄 필요가 없다 — 본인이 초대됐으면 참여자 분기가 먼저 서서 이 값을 보지
  * 않는다.
  */
-function participantTeamLedColumn(subject: SurveyAccessSubject): SQL<boolean> {
+function participantTeamLedColumn(subject: AccountAccessSubject): SQL<boolean> {
   if (subject.userType !== 'internal' || subject.leaderTeamIds.length === 0) {
     return sql<boolean>`false`;
   }
@@ -598,10 +750,10 @@ function participantTeamLedColumn(subject: SurveyAccessSubject): SQL<boolean> {
 
 /** 위의 capability 축만 필요한 호출부용 — 표면 대부분이 이쪽이다. */
 export async function loadSurveyCapabilities(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
 ): Promise<ReadonlySet<SurveyCapability>> {
-  return (await loadSurveyAccess(user, surveyId)).capabilities;
+  return (await loadSurveyAccess(actor, surveyId)).capabilities;
 }
 
 /** 설문 행에 이 사람의 참여 행을 잇는 조인 조건 — 단건·배치 로더가 같은 것을 쓴다. */
@@ -646,11 +798,11 @@ export function denialReasonFor(
  * 코드(notFound()·NOT_FOUND/FORBIDDEN)로 옮기기만 한다.
  */
 export async function assertSurveyCapability(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<void> {
-  const caps = await loadSurveyCapabilities(user, surveyId);
+  const caps = await loadSurveyCapabilities(actor, surveyId);
   const denial = denialReasonFor(caps, capability);
   if (denial) throw new SurveyAccessError(denial);
 }
@@ -674,28 +826,45 @@ export async function assertSurveyCapability(
  * 화면이 된다.
  */
 export async function loadSurveyCapabilitiesBatch(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyIds: readonly string[],
 ): Promise<Map<string, ReadonlySet<SurveyCapability>>> {
   const result = new Map<string, ReadonlySet<SurveyCapability>>();
   if (surveyIds.length === 0) return result;
 
+  const ids = [...new Set(surveyIds)];
+  const target = {
+    id: surveys.id,
+    teamId: surveys.teamId,
+    visibility: surveys.visibility,
+    ownerUserId: surveys.ownerUserId,
+    assignmentStatus: surveys.assignmentStatus,
+    isPaused: surveys.isPaused,
+  };
+  const where = and(inArray(surveys.id, ids), isNull(surveys.deletedAt));
+
+  // 링크 주체는 참여 행이 없어 조인 자체가 없다 — 판정은 설문 일치·중단·배치 대기뿐이다.
+  if (isLinkActor(actor)) {
+    const linkSubject = await loadAccessSubject(actor);
+    for (const row of await db.select(target).from(surveys).where(where)) {
+      result.set(row.id, resolveSurveyCapabilities(linkSubject, row));
+    }
+    return result;
+  }
+
+  const subject = await loadAccountAccessSubject(actor);
+
   const rows = await db
     .select({
-      id: surveys.id,
-      teamId: surveys.teamId,
-      visibility: surveys.visibility,
-      ownerUserId: surveys.ownerUserId,
-      assignmentStatus: surveys.assignmentStatus,
+      ...target,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
       participantAccessLevel: surveyParticipants.accessLevel,
     })
     .from(surveys)
-    .leftJoin(surveyParticipants, participationJoin(user.id))
-    .where(and(inArray(surveys.id, [...new Set(surveyIds)]), isNull(surveys.deletedAt)));
+    .leftJoin(surveyParticipants, participationJoin(actor.id))
+    .where(where);
 
-  const subject = await loadAccessSubject(user);
   for (const row of rows) {
     result.set(
       row.id,
@@ -724,13 +893,13 @@ const NO_CAPABILITIES: ReadonlySet<SurveyCapability> = new Set();
  * 눈에 띄지 않으므로 코어에서 닫는다.
  */
 export async function assertSurveyCapabilityBatch(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyIds: readonly string[],
   capabilities: readonly SurveyCapability[],
 ): Promise<void> {
   if (surveyIds.length === 0) throw new SurveyAccessError('not_found');
 
-  const caps = await loadSurveyCapabilitiesBatch(user, surveyIds);
+  const caps = await loadSurveyCapabilitiesBatch(actor, surveyIds);
   for (const surveyId of surveyIds) {
     const own = caps.get(surveyId) ?? NO_CAPABILITIES;
     for (const capability of capabilities) {

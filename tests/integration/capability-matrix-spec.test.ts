@@ -25,12 +25,14 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveSurveyCapabilities,
   type SurveyAccessRelation,
+  type AccountAccessSubject,
   type SurveyAccessSubject,
   type SurveyAccessTarget,
   type SurveyParticipation,
 } from '@/server/survey-access';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
 
+const SURVEY_ID = 'survey-target';
 const TEAM_ID = 'team-owning';
 const OTHER_TEAM_ID = 'team-other';
 const OWNER_ID = 'user-owner';
@@ -48,7 +50,7 @@ interface Column {
 }
 
 /** 실사 주체 — 팀은 없고 업체·역할이 있다. */
-function fieldwork(role: 'leader' | 'worker'): SurveyAccessSubject {
+function fieldwork(role: 'leader' | 'worker'): AccountAccessSubject {
   return internal({
     userType: 'fieldwork',
     // 비내부 계정에 슈퍼어드민 플래그가 실려 와도 열리면 안 된다.
@@ -60,8 +62,9 @@ function fieldwork(role: 'leader' | 'worker'): SurveyAccessSubject {
   });
 }
 
-function internal(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
+function internal(over: Partial<AccountAccessSubject> = {}): AccountAccessSubject {
   return {
+    kind: 'account',
     userId: 'user-actor',
     isSuperadmin: false,
     userType: 'internal',
@@ -131,6 +134,12 @@ const COLUMNS = {
     participation: null,
     relation: { fieldworkOrgInvited: true },
   },
+  '외주 링크': {
+    // **계정이 아니다**(ADR-0026). 팀도 소유권도 참여 행도 없고 자격은 「이 링크가 이 설문을
+    // 연다」 하나뿐이라, 입력이 주체 하나로 끝난다 — participation 도 relation 도 없다.
+    subject: { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID },
+    participation: null,
+  },
 } satisfies Record<string, Column>;
 
 type ColumnName = keyof typeof COLUMNS;
@@ -155,11 +164,12 @@ const O = true;
 const X = false;
 
 /**
- * `[슈퍼어드민, 팀장, 소유자, 참여자, 참여자 팀장, 팀원, 게스트, 실사원, 실사 팀장]` —
+ * `[슈퍼어드민, 팀장, 소유자, 참여자, 참여자 팀장, 팀원, 게스트, 실사원, 실사 팀장, 외주 링크]` —
  * 표의 칸 순서 그대로 읽는다.
  */
 function cells(
   ...values: [
+    boolean,
     boolean,
     boolean,
     boolean,
@@ -182,39 +192,39 @@ function cells(
  * 늘지 않고, 전부 꺼도 두 칸은 열린 채다. 그 축은 survey-access.test.ts 가 따로 본다.
  */
 const SPEC_ROWS: readonly Row[] = [
-  //                                          슈퍼  팀장  소유  참여  전파  팀원  게스트  실사  실사장
+  //                                          슈퍼  팀장  소유  참여  전파  팀원  게스트  실사  실사장  링크
   { label: 'survey.view', capabilities: ['survey.view'],
-    cells: cells(O, O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O, O) },
   { label: 'survey.edit', capabilities: ['survey.edit'],
-    cells: cells(O, O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X) },
   { label: 'survey.publish', capabilities: ['survey.publish'],
-    cells: cells(O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X) },
   { label: 'survey.delete (soft)', capabilities: ['survey.delete'],
-    cells: cells(O, O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: '초대 추가(참여자·게스트·실사)', capabilities: ['survey.invite'],
-    cells: cells(O, O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X) },
   { label: '제외·공개 범위·부여 해제', capabilities: ['survey.manageAccess'],
-    cells: cells(O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X) },
   { label: 'survey.transferOwnership', capabilities: ['survey.transferOwnership'],
-    cells: cells(O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X) },
   { label: 'operations.view', capabilities: ['operations.view'],
-    cells: cells(O, O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O, O) },
   { label: 'responses.view (상세·수정)', capabilities: ['responses.view'],
-    cells: cells(O, O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: 'contacts.view 원본', capabilities: ['contacts.view'],
-    cells: cells(O, O, O, O, X, X, X, O, O) },
+    cells: cells(O, O, O, O, X, X, X, O, O, O) },
   { label: 'contacts.manage (업로드·수정)', capabilities: ['contacts.manage'],
-    cells: cells(O, O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: '결과코드·메모 쓰기', capabilities: ['contacts.writeAttempts'],
-    cells: cells(O, O, O, O, X, X, X, O, X) },
+    cells: cells(O, O, O, O, X, X, X, O, X, O) },
   { label: 'mail.view / mail.send', capabilities: ['mail.view', 'mail.send'],
-    cells: cells(O, O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: 'export.download', capabilities: ['export.download'],
-    cells: cells(O, O, O, O, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: 'analytics.view', capabilities: ['analytics.view'],
-    cells: cells(O, O, O, O, O, O, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X) },
   { label: 'surveyGroup.manage', capabilities: ['surveyGroup.manage'],
-    cells: cells(O, O, O, X, X, O, X, X, X) },
+    cells: cells(O, O, O, X, X, O, X, X, X, X) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,10 +233,12 @@ const SPEC_ROWS: readonly Row[] = [
 
 function survey(over: Partial<SurveyAccessTarget> = {}): SurveyAccessTarget {
   return {
+    id: SURVEY_ID,
     teamId: TEAM_ID,
     visibility: 'team',
     ownerUserId: OWNER_ID,
     assignmentStatus: 'assigned',
+    isPaused: false,
     ...over,
   };
 }
@@ -255,7 +267,7 @@ describe('표가 어휘 전체를 덮는다', () => {
     expect([...listed].sort()).toEqual([...surveyCapabilityValues].sort());
   });
 
-  it('열은 스펙 헤더 아홉 개다', () => {
+  it('열은 스펙 헤더 아홉 개 + 외주 링크 열이다', () => {
     expect(COLUMN_NAMES).toEqual([
       '슈퍼어드민',
       '팀장(소유 팀)',
@@ -266,6 +278,7 @@ describe('표가 어휘 전체를 덮는다', () => {
       '게스트(부여 설문)',
       '실사원(초대 설문)',
       '실사 팀장(자기 업체)',
+      '외주 링크',
     ]);
   });
 });
@@ -361,6 +374,56 @@ describe('스펙 §8 표 — 전 열 차단', () => {
       const removedOwner = internal({ userId: OWNER_ID, activeTeamIds: [], leaderTeamIds: [] });
       expect([...resolveSurveyCapabilities(removedOwner, survey())]).toEqual([]);
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ④-2 외주 링크 열 — 다른 축으로 닫힌다 (ADR-0026)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('외주 링크 열 — 설문 일치와 중단이 자격의 전부다', () => {
+  const linkSubject = COLUMNS['외주 링크'].subject;
+
+  it('자기 설문에서 표에 적힌 넷을 갖는다', () => {
+    expect([...resolveSurveyCapabilities(linkSubject, survey())].sort()).toEqual(
+      tableColumn('외주 링크'),
+    );
+  });
+
+  it('타 설문 id 에서는 비어 있다 — 링크는 설문 하나만 연다', () => {
+    const other = survey({ id: 'survey-other' });
+    expect([...resolveSurveyCapabilities(linkSubject, other)]).toEqual([]);
+  });
+
+  it('중단된 설문에서는 비어 있다 — 만료일 대신 중단이 링크를 닫는다', () => {
+    const paused = survey({ isPaused: true });
+    expect([...resolveSurveyCapabilities(linkSubject, paused)]).toEqual([]);
+  });
+
+  /**
+   * 짝 단언이 있어야 위 두 줄이 의미를 갖는다 — 중단은 **링크 축만** 닫는다. 연구원은 중단
+   * 중에도 콘솔을 쓰므로 계정 열이 함께 닫히면 실사 중단이 곧 운영 중단이 된다.
+   */
+  it.each(COLUMN_NAMES.filter((name) => name !== '외주 링크'))(
+    '중단된 설문에서 %s 열은 그대로다',
+    (name) => {
+      const paused = survey({ isPaused: true });
+      expect([...resolveFor(name, paused)].sort()).toEqual([...resolveFor(name, survey())].sort());
+    },
+  );
+
+  it('공개 범위는 링크에 관여하지 않는다 — 부여가 아니라 링크 자체가 자격이다', () => {
+    const inviteOnly = survey({ visibility: 'invite_only' });
+    expect([...resolveSurveyCapabilities(linkSubject, inviteOnly)].sort()).toEqual(
+      tableColumn('외주 링크'),
+    );
+  });
+
+  it('소유 팀·소유자가 무엇이든 답이 같다 — 팀 사슬을 타지 않는다', () => {
+    const orphan = survey({ teamId: null, ownerUserId: null });
+    expect([...resolveSurveyCapabilities(linkSubject, orphan)].sort()).toEqual(
+      tableColumn('외주 링크'),
+    );
   });
 });
 

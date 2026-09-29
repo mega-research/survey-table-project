@@ -5,10 +5,10 @@ import { ORPCError } from '@orpc/server';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
+  type Actor,
   assertSurveyCapability,
   assertSurveyCapabilityBatch,
   SurveyAccessError,
-  type SurveyAccessUser,
 } from './survey-access';
 
 /**
@@ -23,12 +23,12 @@ import {
  * 말고 assertSurveyCapability + notFound() 로 자기 표면에 맞게 접는다.
  */
 export async function assertSurveyCapabilityRpc(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<void> {
   try {
-    await assertSurveyCapability(user, surveyId, capability);
+    await assertSurveyCapability(actor, surveyId, capability);
   } catch (error) {
     throw toRpcSurveyAccessError(error);
   }
@@ -41,12 +41,12 @@ export async function assertSurveyCapabilityRpc(
  * DB 왕복 두 번이 난다. 판정 결과는 단건과 동일하고 거부 코드 매핑도 같다.
  */
 export async function assertSurveyCapabilityBatchRpc(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyIds: readonly string[],
   capabilities: readonly SurveyCapability[],
 ): Promise<void> {
   try {
-    await assertSurveyCapabilityBatch(user, surveyIds, capabilities);
+    await assertSurveyCapabilityBatch(actor, surveyIds, capabilities);
   } catch (error) {
     throw toRpcSurveyAccessError(error);
   }
@@ -64,13 +64,16 @@ export async function assertSurveyCapabilityBatchRpc(
  * **표면의 청중이 다르기 때문**이다: 이 이름이 붙은 자리는 「내부 계정 말고도 들어올 수
  * 있는 문」이라는 뜻이고, tests/repo 의 정적 가드도 그 구분을 본다. 합치면 어느 문이
  * 비내부 계정에 노출되는지가 코드에서 사라진다.
+ *
+ * 청중은 ADR-0026 에서 한 번 더 넓어진다 — 주체가 **계정이 아닐 수도** 있다(외주 실사 링크).
+ * 판정은 여전히 코어 하나가 한다.
  */
 export async function assertScopedSurveyCapabilityRpc(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<void> {
-  await assertSurveyCapabilityRpc(user, surveyId, capability);
+  await assertSurveyCapabilityRpc(actor, surveyId, capability);
 }
 
 /**

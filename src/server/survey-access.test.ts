@@ -12,7 +12,8 @@ import {
   participantAccessLevelFor,
   resolveSurveyAccess,
   resolveSurveyCapabilities,
-  type SurveyAccessSubject,
+  type AccountAccessSubject,
+  type LinkAccessSubject,
   type SurveyAccessTarget,
 } from './survey-access';
 
@@ -23,12 +24,14 @@ import {
  * 채점하게 되어 매트릭스가 바뀌어도 GREEN 이 유지된다.
  */
 
+const SURVEY_ID = 'survey-1';
 const TEAM_ID = 'team-1';
 const OTHER_TEAM_ID = 'team-2';
 const OWNER_ID = 'user-owner';
 
-function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
+function subject(over: Partial<AccountAccessSubject> = {}): AccountAccessSubject {
   return {
+    kind: 'account',
     userId: 'user-1',
     isSuperadmin: false,
     userType: 'internal',
@@ -43,10 +46,12 @@ function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
 
 function survey(over: Partial<SurveyAccessTarget> = {}): SurveyAccessTarget {
   return {
+    id: SURVEY_ID,
     teamId: TEAM_ID,
     visibility: 'team',
     ownerUserId: OWNER_ID,
     assignmentStatus: 'assigned',
+    isPaused: false,
     ...over,
   };
 }
@@ -416,7 +421,7 @@ describe('resolveSurveyCapabilities — 초대의 팀장 전파', () => {
 });
 
 describe('resolveSurveyCapabilities — 게스트 열 (티켓 21)', () => {
-  const guest = (over: Partial<SurveyAccessSubject> = {}) =>
+  const guest = (over: Partial<AccountAccessSubject> = {}) =>
     subject({ userType: 'guest', activeTeamIds: [], leaderTeamIds: [], ...over });
 
   it('부여된 설문에서 프리뷰와 현황만 — 분석·export·응답·컨택·메일은 없다', () => {
@@ -507,5 +512,85 @@ describe('denialReasonFor — 거부 사유의 유일한 정본', () => {
     expect(
       denialReasonFor(new Set<SurveyCapability>(['survey.view', 'survey.edit']), 'survey.edit'),
     ).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 외주 실사 링크 — 사슬을 타지 않는 주체 (ADR-0026)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 링크 열이 **왜** 그렇게 되는가 — 매트릭스 표(tests/integration/capability-matrix-spec)가
+ * 행 단위로 O·X 를 고정하고, 여기는 분기의 이유를 적는다.
+ *
+ * 요점은 링크가 계정 사슬을 **하나도** 타지 않는다는 것이다. 팀 미배치·소유자·팀장·참여자·
+ * 공개 범위는 전부 계정을 전제한 질문이라 링크에는 물을 것이 없고, 그래서 판정이 세 줄로
+ * 끝난다: 설문 일치 · 배치 대기 · 중단.
+ */
+describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
+  const link: LinkAccessSubject = { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID };
+
+  it('자기 설문에서 넷을 갖는다 — 실사 초대 열과 같은 집합이고 새 어휘가 없다', () => {
+    expect([...resolveSurveyCapabilities(link, survey())].sort()).toEqual([
+      'contacts.view',
+      'contacts.writeAttempts',
+      'operations.view',
+      'survey.view',
+    ]);
+  });
+
+  it('설문 일치를 가장 먼저 본다 — 링크 하나로 남의 설문을 여는 유일한 시도다', () => {
+    expect([...resolveSurveyCapabilities(link, survey({ id: 'survey-other' }))]).toEqual([]);
+  });
+
+  /**
+   * 링크에는 만료일이 없고 중단이 그 일을 한다. 「만료」가 아니라 「중단 중 차단」인 것이
+   * 요점이다 — 중단은 토글이라 재개하면 같은 링크가 그대로 다시 열린다.
+   */
+  it('중단 중이면 비어 있고, 재개하면 같은 주체가 그대로 열린다', () => {
+    expect([...resolveSurveyCapabilities(link, survey({ isPaused: true }))]).toEqual([]);
+    expect([...resolveSurveyCapabilities(link, survey({ isPaused: false }))].length).toBe(4);
+  });
+
+  /**
+   * 짝 단언 — 중단은 **링크 축만** 닫는다. 연구원은 중단 중에도 콘솔을 쓰므로, 계정 분기가
+   * 이 값을 읽기 시작하면 실사 중단이 곧 운영 중단이 된다.
+   */
+  it('중단은 계정 주체의 판정을 건드리지 않는다', () => {
+    const paused = survey({ isPaused: true });
+    const owner = subject({ userId: OWNER_ID });
+    expect([...resolveSurveyCapabilities(owner, paused)].sort()).toEqual(
+      [...resolveSurveyCapabilities(owner, survey())].sort(),
+    );
+  });
+
+  it('배치 대기 설문은 링크에도 닫힌다 — 팀이 정해지기 전에는 아무도 못 연다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect([...resolveSurveyCapabilities(link, pending)]).toEqual([]);
+  });
+
+  it('공개 범위·소유 팀·소유자를 보지 않는다 — 계정 사슬 밖의 주체다', () => {
+    const variants = [
+      survey({ visibility: 'invite_only' }),
+      survey({ teamId: null, ownerUserId: null }),
+      survey({ teamId: OTHER_TEAM_ID, ownerUserId: 'someone-else' }),
+    ];
+    for (const target of variants) {
+      expect([...resolveSurveyCapabilities(link, target)].length).toBe(4);
+    }
+  });
+
+  it('참여 행·파생 시야를 넘겨도 답이 변하지 않는다 — 링크의 자격은 링크 하나다', () => {
+    const withNoise = resolveSurveyCapabilities(
+      link,
+      survey(),
+      { kind: 'member' },
+      { participantTeamLed: true, fieldworkOrgInvited: true },
+    );
+    expect([...withNoise].sort()).toEqual([...resolveSurveyCapabilities(link, survey())].sort());
+  });
+
+  it('탭 축이 없다 — 게스트의 화이트리스트는 링크에 적용되지 않는다', () => {
+    expect(resolveSurveyAccess(link, survey()).guestTabs).toBeNull();
   });
 });

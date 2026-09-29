@@ -35,7 +35,7 @@ import { getVariableCatalog } from '@/server/read-models/variable-catalog';
 import {
   SurveyAccessError,
   type SurveyAccessUser,
-  loadAccessSubject,
+  loadAccountAccessSubject,
 } from '@/server/survey-access';
 import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
@@ -116,7 +116,7 @@ export async function getSurveyListWithCounts(
   requestedScope?: string | null,
   options: { deleted?: boolean } = {},
 ): Promise<SurveyListResult> {
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
   const scope = resolveWorkScopeFor(subject, requestedScope ?? null);
   const filter = buildSurveyScopeFilter(subject, scope);
 
@@ -176,7 +176,7 @@ export async function getSurveyListWithCounts(
 
 /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀을 고를 수 있다. */
 async function listSelectableTeams(
-  subject: Awaited<ReturnType<typeof loadAccessSubject>>,
+  subject: Awaited<ReturnType<typeof loadAccountAccessSubject>>,
 ): Promise<{ id: string; name: string }[]> {
   if (subject.isSuperadmin) return listActiveTeams();
   return (await getActiveTeamMemberships(subject.userId)).map((m) => ({

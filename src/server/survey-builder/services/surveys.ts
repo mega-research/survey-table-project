@@ -5,7 +5,7 @@ import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import {
   assertSurveyCapability,
-  loadAccessSubject,
+  loadAccountAccessSubject,
   SurveyAccessError,
   type SurveyAccessUser,
 } from '@/server/survey-access';
@@ -379,7 +379,7 @@ export async function duplicateSurvey(
 
   const original = await getSurveyById(surveyId);
   if (!original) return null;
-  const subject = await loadAccessSubject(actor);
+  const subject = await loadAccountAccessSubject(actor);
   const keepsOriginalTeam = copyKeepsOriginalTeam(subject, original.teamId);
 
   return await db.transaction(async (tx) => {

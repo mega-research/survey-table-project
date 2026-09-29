@@ -10,21 +10,24 @@ import {
 } from '@/shared/contracts/workspace';
 
 import {
-  loadAccessSubject,
-  type SurveyAccessSubject,
+  type AccountAccessSubject,
+  loadAccountAccessSubject,
   type SurveyAccessUser,
 } from './survey-access';
 
 /**
  * 범위 판정이 실제로 보는 것 — 유형·슈퍼어드민 플래그·팀 축뿐이다.
  *
- * `SurveyAccessSubject` 를 통째로 요구하지 않는 이유는 **작업 범위가 팀 축의 질문**이기
+ * 계정 변종에서 뽑는 것이 요점이다 — 외주 실사 링크 주체(ADR-0026)에는 팀 축이 아예 없어
+ * 작업 범위라는 질문이 성립하지 않는다.
+ *
+ * `AccountAccessSubject` 를 통째로 요구하지 않는 이유는 **작업 범위가 팀 축의 질문**이기
  * 때문이다. 실사 업체(티켓 24)처럼 팀이 아닌 소속 축이 주체에 붙어도 여기는 달라질 것이
  * 없고, 통째로 받으면 그 축이 늘 때마다 화면·테스트의 주체 리터럴이 함께 커진다.
  * 판정 코어가 만든 주체는 이 모양을 만족하므로 그대로 넘길 수 있다.
  */
 export type WorkScopeSubject = Pick<
-  SurveyAccessSubject,
+  AccountAccessSubject,
   'userType' | 'isSuperadmin' | 'activeTeamIds'
 >;
 
@@ -90,7 +93,7 @@ export async function resolveWorkScope(
   user: SurveyAccessUser,
   requested: string | null,
 ): Promise<WorkScope> {
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
   // 요청이 범위를 명시했으면 거부는 거부다 — 조용히 접으면 화면이 부분을 전체로 착각한다.
   if (requested !== null) return resolveWorkScopeFor(subject, requested);
 
@@ -165,7 +168,7 @@ export type SurveyScopeFilter =
  * 지고, 판정 코어의 전파 분기와 같은 사실을 말한다.
  */
 export function buildSurveyScopeFilter(
-  subject: SurveyAccessSubject,
+  subject: AccountAccessSubject,
   scope: WorkScope,
 ): SurveyScopeFilter {
   if (scope.kind === 'none') return { kind: 'none' };

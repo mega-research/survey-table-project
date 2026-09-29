@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SurveyAccessSubject } from './survey-access';
+import type { AccountAccessSubject } from './survey-access';
 import { WorkScopeError, buildSurveyScopeFilter, resolveWorkScopeFor } from './work-scope';
 
 const TEAM_UUID = '22222222-2222-4222-8222-222222222222';
 
-function subject(over: Partial<SurveyAccessSubject> = {}): SurveyAccessSubject {
+function subject(over: Partial<AccountAccessSubject> = {}): AccountAccessSubject {
   return {
+    kind: 'account',
     userId: 'u-1',
     isSuperadmin: false,
     userType: 'internal',

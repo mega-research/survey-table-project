@@ -6,11 +6,7 @@ import { requireAuth } from '@/lib/auth';
 import type { AuthUser } from '@/shared/contracts/auth';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import {
-  assertSurveyCapability,
-  SurveyAccessError,
-  type SurveyAccessUser,
-} from './survey-access';
+import { type Actor, assertSurveyCapability, SurveyAccessError } from './survey-access';
 
 /**
  * 설문 capability 관문의 RSC 페이지 어댑터 — rpc-survey-access 의 페이지 짝 (티켓 09).
@@ -24,12 +20,12 @@ import {
  * React cache() 로 묶어 요청당 판정을 1회로 줄인다(분석 페이지 2종 참조).
  */
 export async function assertSurveyCapabilityPage(
-  user: SurveyAccessUser,
+  actor: Actor,
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<void> {
   try {
-    await assertSurveyCapability(user, surveyId, capability);
+    await assertSurveyCapability(actor, surveyId, capability);
   } catch (error) {
     if (error instanceof SurveyAccessError) notFound();
     throw error;

@@ -25,7 +25,7 @@ import { internalActorContext } from '@tests/helpers/rpc-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { router } from '@/server/router';
-import { loadAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
+import { loadAccountAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
 import { buildSurveyScopeFilter } from '@/server/work-scope';
 
 const IDS = vi.hoisted(() => ({
@@ -119,7 +119,7 @@ const member = { id: MEMBER_ID, isSuperadmin: false, userType: 'internal' as con
  * 조건으로 옮긴다(그 번역이 맞는지는 realdb 스위트가 본다).
  */
 async function seesInviteOnly(user: typeof member): Promise<boolean> {
-  const filter = buildSurveyScopeFilter(await loadAccessSubject(user), {
+  const filter = buildSurveyScopeFilter(await loadAccountAccessSubject(user), {
     kind: 'team',
     teamId: IDS.TEAM_ID,
   });

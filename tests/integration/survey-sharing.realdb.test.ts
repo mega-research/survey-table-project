@@ -28,7 +28,7 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 import { getScopedSurveys } from '@/server/read-models/survey-structure';
-import { loadAccessSubject } from '@/server/survey-access';
+import { loadAccountAccessSubject } from '@/server/survey-access';
 import { buildSurveyScopeFilter } from '@/server/work-scope';
 import { sharing } from '@/server/workspace/procedures/sharing';
 
@@ -89,7 +89,7 @@ async function seedSurvey(title: string): Promise<string> {
 
 /** 그 사람이 팀 범위에서 보는 설문 id — 목록 SQL 을 그대로 지난다. */
 async function visibleIds(userId: string): Promise<string[]> {
-  const subject = await loadAccessSubject({
+  const subject = await loadAccountAccessSubject({
     id: userId,
     isSuperadmin: false,
     userType: 'internal',

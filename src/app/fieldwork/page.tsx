@@ -7,12 +7,12 @@ import {
   listInvitedFieldworkSurveys,
   listOrgFieldworkSurveys,
 } from '@/server/read-models/fieldwork-surveys';
-import { loadAccessSubject } from '@/server/survey-access';
+import { loadAccountAccessSubject } from '@/server/survey-access';
 
 /**
  * 실사 홈 (.pen FLOW 10-1, 역할 모델 v2 티켓 25).
  *
- * **소속·역할은 세션이 아니라 판정 코어에서 온다.** `loadAccessSubject` 가 활성 업체일 때만
+ * **소속·역할은 세션이 아니라 판정 코어에서 온다.** `loadAccountAccessSubject` 가 활성 업체일 때만
  * 소속을 채우므로, 업체가 종료되면 이 화면도 함께 닫힌다 — 목록만 따로 조회하면 「홈에는
  * 보이는데 눌러도 안 열리는」 어긋남이 생긴다(판정과 목록의 정본이 둘이 된다).
  *
@@ -25,7 +25,7 @@ import { loadAccessSubject } from '@/server/survey-access';
  */
 export default async function FieldworkHomePage() {
   const user = await requireAccountTypePage('fieldwork');
-  const subject = await loadAccessSubject(user);
+  const subject = await loadAccountAccessSubject(user);
   if (!subject.fieldworkOrgId || !subject.fieldworkRole) notFound();
 
   const [invited, orgSurveys, orgName] = await Promise.all([

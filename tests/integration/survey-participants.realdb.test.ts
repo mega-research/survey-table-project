@@ -32,7 +32,7 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 import { getScopedSurveys } from '@/server/read-models/survey-structure';
-import { loadAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
+import { loadAccountAccessSubject, loadSurveyCapabilities } from '@/server/survey-access';
 import { publish as publishProcedures } from '@/server/survey-builder/procedures/publish';
 import { surveys as surveyProcedures } from '@/server/survey-builder/procedures/surveys';
 import { buildSurveyScopeFilter } from '@/server/work-scope';
@@ -147,7 +147,7 @@ async function seedSurvey(title: string, visibility: 'team' | 'invite_only'): Pr
 
 /** 그 사람이 팀 범위에서 실제로 보는 설문 id — 목록 SQL 을 그대로 지난다. */
 async function visibleIds(userId: string, teamId: string): Promise<string[]> {
-  const subject = await loadAccessSubject(subjectOf(userId));
+  const subject = await loadAccountAccessSubject(subjectOf(userId));
   const rows = await getScopedSurveys(buildSurveyScopeFilter(subject, { kind: 'team', teamId }));
   return rows.map((row) => row.id);
 }
@@ -158,7 +158,7 @@ async function visibleGroupIdOf(
   teamId: string,
   id = surveyId,
 ): Promise<string | null | undefined> {
-  const subject = await loadAccessSubject(subjectOf(userId));
+  const subject = await loadAccountAccessSubject(subjectOf(userId));
   const rows = await getScopedSurveys(buildSurveyScopeFilter(subject, { kind: 'team', teamId }));
   return rows.find((row) => row.id === id)?.surveyGroupId;
 }
