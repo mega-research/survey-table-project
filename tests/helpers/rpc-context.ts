@@ -31,6 +31,36 @@ export function internalActorContext(options: InternalActorOptions): ORPCContext
   };
 }
 
+/**
+ * 외주 실사 링크 세션만 들고 온 주체 (ADR-0026) — **계정이 없다.**
+ *
+ * `user: null` 이 이 모양의 전부다. authed·superadmin·account 베이스가 그 칸만 보므로, 링크가
+ * 내부 표면에 닿지 못하는 것은 관문이 아니라 **베이스**가 먼저 막는 구조적 사실이다 — 이
+ * 헬퍼가 그 사실을 두드리는 도구다.
+ */
+export function linkActorContext(options: {
+  linkId: string;
+  surveyId: string;
+  token?: string;
+  passwordUpdatedAt?: string;
+}): ORPCContext {
+  return {
+    db: {} as never,
+    user: null,
+    headers: new Headers(),
+    linkSessions: [
+      {
+        token: options.token ?? 'fieldworkLinkToken01',
+        claim: {
+          linkId: options.linkId,
+          surveyId: options.surveyId,
+          passwordUpdatedAt: options.passwordUpdatedAt ?? '2026-09-29T00:00:00.000Z',
+        },
+      },
+    ],
+  };
+}
+
 export interface GuestActorOptions {
   id: string;
   name?: string;

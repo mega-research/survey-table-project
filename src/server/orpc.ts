@@ -23,15 +23,20 @@ export const pub = base;
 /**
  * 검증 전 입력에서 rate limit 클라이언트 축 식별자를 추출한다.
  *
- * sessionId(응답 생성 계열) 우선, 없으면 responseId(saveDraft/complete 계열).
+ * sessionId(응답 생성 계열) 우선, 없으면 responseId(saveDraft/complete 계열), 없으면
+ * token(외주 실사 링크의 비밀번호 검증 — 링크 하나가 곧 클라이언트 축이다).
  * 최상위 string 키 외에는 접근하지 않는다 (rpc-logging 의 surveyId 추출과 같은 관례).
  * 클라이언트 임의 값이므로 길이 상한으로 Redis 키 폭주를 막는다 — 식별자 회전 남용은
  * isRateLimitedTwoTier 의 IP 전체 가드가 담당하므로 여기서 진위를 검증하지 않는다.
+ *
+ * `token` 을 맨 뒤에 둔 것은 기존 버킷 키를 건드리지 않기 위해서다 — 이 축을 실제로 쓰는
+ * 그룹(IP_WIDE_GROUPS 등재분) 중 `token` 입력을 받는 것은 링크 검증뿐이고, 나머지는 앞의 두
+ * 키에서 이미 값을 얻는다. 미등재 그룹(lookup·public-read)은 클라이언트 축 자체를 무시한다.
  */
 function extractRateLimitClientId(input: unknown): string | null {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
   const record = input as Record<string, unknown>;
-  for (const key of ['sessionId', 'responseId'] as const) {
+  for (const key of ['sessionId', 'responseId', 'token'] as const) {
     const value = record[key];
     if (typeof value === 'string' && value.length > 0 && value.length <= 128) {
       return value;

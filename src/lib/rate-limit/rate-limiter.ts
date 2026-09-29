@@ -59,6 +59,16 @@ export const RATE_LIMIT_PRESETS = {
   // 로그인 등 인증 민감 경로(/api/auth). IP 당 10회/10분 — 크리덴셜 대입 억제.
   // 클라이언트 축이 없는 IP 단일 버킷이므로 IP_WIDE_GROUPS 에 등재하지 않는다.
   'auth-sensitive': { tokens: 10, window: '10 m' },
+  // 외주 실사 링크의 비밀번호 검증(ADR-0026). 클라이언트 축은 **링크 토큰**이다.
+  //
+  // `auth-sensitive`(IP 당 10회/10분)보다 느슨한 것은 버킷의 뜻이 다르기 때문이다 — 토큰이
+  // 설문당 하나라 한 업체 사무실의 조사원 전원이 **같은 (ip, token) 버킷**을 공유한다.
+  // 10회로 두면 오타 몇 번에 사무실 하나가 통째로 잠긴다. 온라인 추측은 이 값으로도 무의미하다:
+  // 자동 생성 비밀번호가 56자 문자셋 10자(약 58비트)이고 수동 입력도 8자 하한이라, 분당 수 회의
+  // 차이가 성공 확률을 바꾸지 않는다. 실질 방어는 비밀번호 엔트로피와 노출 시 재설정이 진다.
+  'fieldwork-link-auth': { tokens: 20, window: '5 m' },
+  // 위의 IP 전체 가드 — 토큰을 회전시키며 두드리는 남용을 막는다(토큰 축 단독은 우회 가능).
+  'fieldwork-link-auth-ip': { tokens: 200, window: '5 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitGroup = keyof typeof RATE_LIMIT_PRESETS;
@@ -72,6 +82,7 @@ export const IP_WIDE_GROUPS = {
   'response-segment': 'response-segment-ip',
   'response-draft': 'response-draft-ip',
   'quota-check': 'quota-check-ip',
+  'fieldwork-link-auth': 'fieldwork-link-auth-ip',
 } as const satisfies Partial<Record<RateLimitGroup, RateLimitGroup>>;
 
 export interface RateLimitResult {

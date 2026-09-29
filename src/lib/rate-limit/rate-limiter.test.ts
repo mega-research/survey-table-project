@@ -156,6 +156,19 @@ describe('isRateLimitedTwoTier', () => {
     expect(keys).toEqual(['lookup:1.2.3.4']);
   });
 
+  it('외주 실사 링크 비밀번호 검증은 토큰 축과 IP 가드를 함께 본다', async () => {
+    // 토큰 축 단독이면 토큰을 회전시키며 두드릴 수 있고, IP 축 단독이면 한 사무실의 조사원
+    // 전원이 한 버킷을 공유한다 — 짝이어야 둘 다 성립한다 (ADR-0026).
+    await expect(
+      isRateLimitedTwoTier('fieldwork-link-auth', '1.2.3.4', 'uNk2IUsrRx_Zk-R0'),
+    ).resolves.toBe(false);
+    const keys = limitMock.mock.calls.map((call) => call[0]);
+    expect(keys).toEqual([
+      'fieldwork-link-auth:1.2.3.4:uNk2IUsrRx_Zk-R0',
+      'fieldwork-link-auth-ip:1.2.3.4',
+    ]);
+  });
+
   it('fine/가드 어느 한쪽이라도 초과면 true 를 반환한다', async () => {
     // 세션 축은 통과해도 IP 전체 가드가 초과인 케이스 (NAT 남용 시나리오).
     limitMock.mockImplementation((key: string) =>

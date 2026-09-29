@@ -38,6 +38,7 @@ import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { fieldwork } from '@/server/workspace/procedures/fieldwork';
+import { fieldworkLinkSession } from '@/server/workspace/procedures/fieldwork-link-session';
 import { fieldworkLinks } from '@/server/workspace/procedures/fieldwork-links';
 import { fieldworkOrgs } from '@/server/workspace/procedures/fieldwork-orgs';
 import { guests } from '@/server/workspace/procedures/guests';
@@ -145,6 +146,9 @@ export const router = {
     // 외주 실사 링크 — 계정이 아니라 설문당 접속 수단 (.pen FLOW 10-2, ADR-0026).
     // 다섯 표면 전부 survey.manageAccess 다 — 비밀번호를 읽는 것이 곧 접근 수단을 얻는 것이다.
     fieldworkLinks,
+    // 링크 세션 — **외주가 부르는 pub 표면**이다(.pen FLOW 10-3). 위 관리 표면과 청중이
+    // 정반대라 그룹을 갈라 둔다: 섞으면 「로그인 없이 열린다」가 코드에서 읽히지 않는다.
+    fieldworkLinkSession,
   },
 };
 

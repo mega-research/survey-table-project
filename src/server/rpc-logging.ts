@@ -1,9 +1,10 @@
 import { ORPCError, os } from '@orpc/server';
 import * as Sentry from '@sentry/nextjs';
 
+import { FIELDWORK_LINK_LOG_ROLE } from '@/lib/auth/fieldwork-link-session';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { logRoleForUserType, type UserType } from '@/shared/contracts/auth';
+import { logRoleForUserType } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
 import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './rpc-error-policy';
@@ -16,7 +17,7 @@ import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './
  * 컨텍스트에 접근할 수 있고, RPCHandler(/api/rpc)와 OpenAPIHandler(/api/v1) 양쪽을
  * 핸들러 수정 없이 동일하게 커버한다.
  *
- * allowlist 관례: 바인딩은 식별자(rpc·userId·role·ip·surveyId)와 durationMs 뿐이다.
+ * allowlist 관례: 바인딩은 식별자(rpc·userId·linkId·role·ip·surveyId)와 durationMs 뿐이다.
  * input/output 본문·JSONB 컨테이너·PII 평문은 싣지 않는다 — redact 는 안전망일 뿐.
  */
 
@@ -27,8 +28,24 @@ import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './
  * 그 출처가 세션 자신이 됐고, 어휘는 `logRoleForUserType` 하나가 소유한다(업로드 REST
  * 가드와 공유 — 표면마다 다른 이름으로 남으면 로그 분석이 갈린다). 비인증만 여기서 정한다.
  */
-function resolveLogRole(user: { userType: UserType } | null | undefined): string {
-  return user ? logRoleForUserType(user.userType) : 'anonymous';
+function resolveLogRole(context: ORPCContext): string {
+  if (context.user) return logRoleForUserType(context.user.userType);
+  // 계정이 없어도 **링크 세션을 주장하는** 요청은 익명이 아니다 (ADR-0026). 그 쿠키가 지금도
+  // 유효한지는 관문이 판정하지만, 로그가 말하는 것은 「무엇을 들고 왔는가」다 — 거부된 요청도
+  // role=link 로 남아야 링크 쪽 거부를 응답자 트래픽에서 갈라낼 수 있다.
+  return context.linkSessions?.length ? FIELDWORK_LINK_LOG_ROLE : 'anonymous';
+}
+
+/**
+ * 링크 주체의 「누가」 — 후보가 정확히 하나일 때만 적는다.
+ *
+ * 두 조사를 병행하는 브라우저는 쿠키를 여럿 들고 오고, 어느 것이 이 호출의 주체인지는 관문이
+ * 입력의 설문 id 로 고른다. 미들웨어는 그 선택 전에 도므로 추측해 적지 않는다 — 틀린 linkId 가
+ * 로그에 남으면 귀속 추적이 거짓이 된다.
+ */
+function resolveLogLinkId(context: ORPCContext): string | undefined {
+  if (context.user || context.linkSessions?.length !== 1) return undefined;
+  return context.linkSessions[0]?.claim.linkId;
 }
 
 /**
@@ -49,11 +66,12 @@ export const rpcLoggingMiddleware = os
   .$context<ORPCContext>()
   .middleware(async ({ context, path, next }, input: unknown) => {
     const startedAt = Date.now();
-    // 누가(userId·role)·어디서(ip)·무엇을(rpc·surveyId) — 성공/실패 공통 바인딩
+    // 누가(userId|linkId·role)·어디서(ip)·무엇을(rpc·surveyId) — 성공/실패 공통 바인딩
     const fields = {
       rpc: path.join('.'),
       userId: context.user?.id,
-      role: resolveLogRole(context.user),
+      linkId: resolveLogLinkId(context),
+      role: resolveLogRole(context),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
       surveyId: extractSurveyIdOrUndefined(input),
     };
@@ -81,6 +99,7 @@ export const rpcLoggingMiddleware = os
           scope.setTag('code', code);
           scope.setTag('role', fields.role);
           if (fields.surveyId) scope.setTag('surveyId', fields.surveyId);
+          if (fields.linkId) scope.setTag('linkId', fields.linkId);
           const detail = getSentryContext(error);
           if (detail) scope.setContext('detail', detail);
           Sentry.captureException(error);

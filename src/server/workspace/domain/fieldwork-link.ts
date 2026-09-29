@@ -1,6 +1,11 @@
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
+import {
+  FIELDWORK_LINK_TOKEN_MAX_LENGTH,
+  FIELDWORK_LINK_TOKEN_MIN_LENGTH,
+} from '@/shared/contracts/workspace';
+
 /**
  * 외주 실사 링크의 순수 규칙 — 주소 토큰과 공유 비밀번호 (ADR-0026).
  *
@@ -9,15 +14,18 @@ import { z } from 'zod';
  */
 
 /**
- * 주소에 실리는 토큰 — 16자.
+ * 주소에 실리는 토큰.
+ *
+ * 길이는 계약(`FIELDWORK_LINK_TOKEN_MIN_LENGTH`)이 정한다 — 발번이 하한보다 짧은 값을 만들면
+ * 코덱의 모양 검증이 자기가 발급한 토큰을 거부한다. nanoid 의 기본 문자셋은 URL-safe 라 주소에
+ * 그대로 실리고 코덱의 정규식과도 맞는다.
  *
  * 초대 코드(`generateInviteCode`, 10자)보다 긴 것은 노출 반경이 다르기 때문이다. 초대 코드는
  * 대상 한 명의 응답 링크지만 이 토큰은 **설문 전체의 조사 대상 명단**으로 가는 문이고, 비밀번호
- * 화면 앞이라도 추측당해서 좋을 것이 없다. nanoid 의 기본 문자셋은 URL-safe 라 주소에 그대로
- * 실린다.
+ * 화면 앞이라도 추측당해서 좋을 것이 없다.
  */
 export function generateFieldworkLinkToken(): string {
-  return nanoid(16);
+  return nanoid(FIELDWORK_LINK_TOKEN_MIN_LENGTH);
 }
 
 /**
@@ -96,6 +104,32 @@ export type IssueFieldworkLinkInput = z.infer<typeof IssueFieldworkLinkInput>;
 /** 비밀번호 재설정 — 토큰은 건드리지 않는다(주소는 영구 고정이다). */
 export const ResetFieldworkLinkPasswordInput = IssueFieldworkLinkInput;
 export type ResetFieldworkLinkPasswordInput = z.infer<typeof ResetFieldworkLinkPasswordInput>;
+
+/**
+ * 링크 세션 표면의 입력 — **외주가 보내는 것**이라 두 칸이 전부다.
+ *
+ * `linkId`·`surveyId` 를 받지 않는 것이 계약이다. 화면이 그 값을 실어 보낼 수 있으면 누구든
+ * 남의 링크 세션을 주장하고, 그 주장이 그대로 귀속에 찍힌다(server/fieldwork-link 주석).
+ * 토큰의 모양 검증은 판정 코어의 `isFieldworkLinkToken` 이 한다 — 여기서 정규식을 복제하면
+ * 한쪽만 고쳐졌을 때 「경계는 통과했는데 코어가 모르는」 토큰이 생긴다.
+ *
+ * 비밀번호 칸에 최소 길이를 걸지 않는 것도 의도다. 검증 실패는 언제나 같은 `denied` 여야
+ * 하는데, 하한을 걸면 짧은 입력만 BAD_REQUEST 로 갈려 응답이 두 갈래가 된다.
+ *
+ * 길이 **상한만은** 경계가 진다 — 코어에 닿기 전에 rate limit 키·로그로 흘러갈 수 있어서다.
+ * 값은 계약(shared/contracts/workspace)이 소유한다 — 코덱의 정규식도 같은 상수를 본다.
+ */
+const TokenField = z.string().min(1).max(FIELDWORK_LINK_TOKEN_MAX_LENGTH);
+
+export const FieldworkLinkAuthInput = z.object({
+  token: TokenField,
+  password: z.string().min(1).max(200),
+});
+export type FieldworkLinkAuthInput = z.infer<typeof FieldworkLinkAuthInput>;
+
+/** 나가기 — 그 링크의 쿠키 하나만 지운다(다른 설문 링크는 살아 있다). */
+export const FieldworkLinkSignOutInput = z.object({ token: TokenField });
+export type FieldworkLinkSignOutInput = z.infer<typeof FieldworkLinkSignOutInput>;
 
 export class FieldworkLinkNotFoundError extends Error {
   constructor() {

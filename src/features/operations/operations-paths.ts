@@ -80,6 +80,20 @@ export function adminOperationsPaths(surveyId: string): OperationsPaths {
   return operationsPaths(adminOperationsBase(surveyId));
 }
 
+/**
+ * 외주 실사 링크 콘솔의 base — 접두가 `/fw/<token>` 이다 (ADR-0026, .pen FLOW 10-4).
+ *
+ * 설문 id 가 아니라 **링크 토큰**이 주소에 실리는 것이 요점이다. 외주에게 설문 id 를 보여줄
+ * 이유가 없고, 토큰 하나가 곧 그 설문을 지목하므로 경로에 둘이 함께 실릴 필요도 없다.
+ */
+export function fieldworkLinkOperationsBase(token: string): string {
+  return `/fw/${token}/operations`;
+}
+
+export function fieldworkLinkOperationsPaths(token: string): OperationsPaths {
+  return operationsPaths(fieldworkLinkOperationsBase(token));
+}
+
 export function adminSurveyListPath(): string {
   return '/admin/surveys';
 }

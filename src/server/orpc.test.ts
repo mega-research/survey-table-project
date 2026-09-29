@@ -88,6 +88,20 @@ describe('withRateLimit', () => {
     ]);
   });
 
+  it('sessionId·responseId 가 없으면 token 으로 폴백한다 — 외주 실사 링크 축', async () => {
+    // 링크 비밀번호 검증의 클라이언트 축은 링크 토큰이다(ADR-0026). 맨 뒤에 둔 것이 계약이다 —
+    // 앞의 두 키가 있으면 그것이 이기므로 기존 표면의 버킷 키가 바뀌지 않는다.
+    const client = createRouterClient(testRouter, { context: ctx(TRUSTED()) });
+    await client.echo({ token: 'uNk2IUsrRx_Zk-R0' });
+    expect(state.calls).toEqual([
+      { group: 'response-mutation', ip: '203.0.113.7', clientId: 'uNk2IUsrRx_Zk-R0' },
+    ]);
+
+    state.calls.length = 0;
+    await client.echo({ responseId: 'resp-9', token: 'uNk2IUsrRx_Zk-R0' });
+    expect(state.calls.map((call) => call.clientId)).toEqual(['resp-9']);
+  });
+
   it('식별자가 없거나 비정상(비문자열/과대 길이)이면 clientId 는 null 이다', async () => {
     const client = createRouterClient(testRouter, { context: ctx(TRUSTED()) });
     await client.echo({ surveyId: 's1' });

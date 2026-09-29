@@ -17,7 +17,8 @@ import { loadAppFiles } from '@tests/helpers/app-files';
  */
 
 /** 페이지가 서버 데이터에 닿는다는 신호 — service·read-model·drizzle 직접 import. */
-const SERVER_DATA_IMPORT = /from '@\/(server\/read-models|server\/[a-z-]+\/services|db)/;
+const SERVER_DATA_IMPORT =
+  /from '@\/(server\/read-models|server\/[a-z-]+\/services|server\/fieldwork-link|db)/;
 
 /** 자기 가드로 인정하는 호출. 무엇을 막는지는 각 가드가 정한다(내부 전용·유형·설문 경계·탭). */
 const PAGE_GUARD =
@@ -35,6 +36,8 @@ const PUBLIC_PAGES: Record<string, string> = {
   'preview/[token]/page.tsx': '빌더 미리보기 — previewToken 이 자격이다',
   'unsubscribe/[token]/page.tsx': '메일 수신거부 — unsubscribeToken 이 자격이다',
   'survey/[id]/page.tsx': '공개 응답 페이지 — 설문 자체가 공개 표면이다',
+  'fw/[token]/page.tsx':
+    '외주 실사 링크의 비밀번호 화면 — 세션을 **만드는** 자리라 가드를 붙이면 아무도 들어올 수 없다',
 };
 
 const pages = loadAppFiles('page.tsx');

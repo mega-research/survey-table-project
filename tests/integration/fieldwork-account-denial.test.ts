@@ -169,6 +169,12 @@ describe('내부 표면은 실사에게 전부 닫혀 있다', () => {
       'workspace.fieldwork.list:authed',
       'workspace.fieldwork.remove:authed',
       'workspace.fieldwork.searchCandidates:authed',
+      // 링크 **세션** 표면 둘만 pub 이다 — 외주가 로그인 없이 부르는 자리이고, 여기서
+      // 하는 일은 「비밀번호가 맞는가」와 「쿠키를 지운다」뿐이다. 관리 다섯과 청중이
+      // 정반대라 베이스도 반대여야 한다: authed 로 올리면 외주가 접속할 방법이 사라지고,
+      // 반대로 관리 표면이 pub 으로 내려가면 누구든 비밀번호를 읽는다.
+      'workspace.fieldworkLinkSession.authenticate:pub',
+      'workspace.fieldworkLinkSession.signOut:pub',
       'workspace.fieldworkLinks.close:authed',
       'workspace.fieldworkLinks.get:authed',
       'workspace.fieldworkLinks.issue:authed',

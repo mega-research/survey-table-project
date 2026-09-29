@@ -66,6 +66,18 @@ function ctx(
   };
 }
 
+/** 링크 세션 후보만 실린 컨텍스트 — 계정은 없다(외주 요청의 모양). */
+function linkCtx(linkIds: string[]): ORPCContext {
+  return {
+    db: {} as never,
+    user: null,
+    linkSessions: linkIds.map((linkId, index) => ({
+      token: `token-${index}`,
+      claim: { linkId, surveyId: `survey-${index}`, passwordUpdatedAt: '2026-09-29T00:00:00.000Z' },
+    })),
+  };
+}
+
 const testRouter = {
   ping: pub.handler(() => 'ok'),
   contacts: {
@@ -128,6 +140,37 @@ describe('rpcLoggingMiddleware', () => {
 
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
     expect(fields).toMatchObject({ userId: `${userType}-1`, role: userType });
+  });
+
+  // 링크 주체는 계정 축이 아니다 (ADR-0026). 쿠키가 지금도 유효한지는 관문이 판정하지만,
+  // 로그는 「무엇을 들고 왔는가」를 적어야 링크 쪽 거부를 응답자 트래픽에서 갈라낼 수 있다.
+  it('링크 세션을 들고 온 요청은 role=link 로 기록한다', async () => {
+    const client = createRouterClient(testRouter, { context: linkCtx(['link-1']) });
+    await client.ping();
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ role: 'link', linkId: 'link-1' });
+    expect(fields['userId']).toBeUndefined();
+  });
+
+  it('링크 쿠키가 여럿이면 linkId 를 적지 않는다 — 어느 것인지는 관문이 고른다', async () => {
+    const client = createRouterClient(testRouter, { context: linkCtx(['link-1', 'link-2']) });
+    await client.ping();
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ role: 'link' });
+    expect(fields['linkId']).toBeUndefined();
+  });
+
+  it('계정 세션이 있으면 링크 쿠키가 있어도 계정이 이긴다 — 연구원 요청이 link 로 뭉개지지 않는다', async () => {
+    const client = createRouterClient(testRouter, {
+      context: { ...linkCtx(['link-1']), ...ctx('admin-9') },
+    });
+    await client.ping();
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ userId: 'admin-9', role: 'admin' });
+    expect(fields['linkId']).toBeUndefined();
   });
 
   it('내부 계정은 role=admin 으로 기록한다 - authed 판정과 같은 축', async () => {

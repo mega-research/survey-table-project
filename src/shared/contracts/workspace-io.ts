@@ -1089,3 +1089,26 @@ export const RevealedFieldworkLinkPasswordOutput = z.object({ password: z.string
 export type RevealedFieldworkLinkPasswordOutput = z.infer<
   typeof RevealedFieldworkLinkPasswordOutput
 >;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 외주 실사 링크 세션 (ADR-0026, 티켓 05)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 관리 표면(위)과 달리 이쪽은 **외주가 부르는 pub 표면**이다. 그래서 모양이 최소다 —
+// 링크 주소와 비밀번호 한 칸이 입력의 전부이고, 응답에는 조사 이름도 링크 id 도 없다.
+
+/**
+ * 비밀번호 검증 결과.
+ *
+ * **에러로 던지지 않고 결과로 돌려준다.** 「틀렸다」와 「닫혔다」는 둘 다 정상 경로이고,
+ * 화면이 하는 일이 다르기 때문이다 — 틀렸으면 같은 자리에서 다시 받고, 닫혔으면 페이지를
+ * 다시 열어 닫힘 화면으로 갈아탄다.
+ *
+ * `denied` 하나가 **없는 토큰과 틀린 비밀번호를 함께** 받는다. 갈라 주면 이 응답이 곧 링크
+ * 존재 확인 창구가 된다(server/fieldwork-link 주석).
+ */
+export const FieldworkLinkAuthOutput = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), reason: z.enum(['denied', 'closed']) }),
+]);
+export type FieldworkLinkAuthOutput = z.infer<typeof FieldworkLinkAuthOutput>;
