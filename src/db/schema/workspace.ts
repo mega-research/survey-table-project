@@ -175,6 +175,63 @@ export const surveyParticipants = pgTable(
 );
 
 /**
+ * 외주 실사 링크 — 설문 하나에 대한 **접속 수단** (마이그레이션 0126, ADR-0026).
+ *
+ * 계정이 아니다. 연구원이 설문마다 전용 URL 하나와 공유 비밀번호 하나를 만들어 외주 업체에
+ * 전달하고, 외주는 그 링크로 그 설문의 운영 콘솔에 들어온다 — 업체도 담당자도 시스템에
+ * 등록하지 않는다. 현장의 외주 실사는 단기 인력이 한 접속 수단을 돌려쓰므로 사람 단위 귀속이
+ * 처음부터 성립하지 않고, 그래서 귀속의 단위를 사람에서 링크로 내렸다(ADR-0019 를 대체).
+ *
+ * **만료일 컬럼이 없다** — 설문 중단이 그 일을 한다. 판정은 `server/survey-access` 의 링크
+ * 분기가 `surveys.isPaused` 로 하며, 중단은 토글이라 재개하면 같은 링크가 그대로 열린다.
+ *
+ * **`token` 을 UPDATE 하지 말 것.** 주소는 설문당 하나로 영구 고정이고 재발급 경로가 없다 —
+ * 사람을 막는 일(유출·업체 교체)은 전부 비밀번호 변경이 진다.
+ *
+ * `passwordCipher` 는 **가역 암호화**다(해시가 아니다). 공유 출입 암호라 연구원이 다시 읽어
+ * 업체에 답해 줄 수 있어야 한다.
+ */
+export const surveyFieldworkLinks = pgTable(
+  'survey_fieldwork_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 설문이 하드 삭제되면 접속 수단도 의미가 없다 — 참여 행과 같은 판단이다. */
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    /** 주소에 실리는 값. 전역 유일하고 한 번 정해지면 바뀌지 않는다. */
+    token: text('token').notNull(),
+    /** 가역 암호화된 공유 비밀번호. lib/crypto 의 공유 비밀 래퍼가 읽고 쓴다. */
+    passwordCipher: text('password_cipher').notNull(),
+    /**
+     * 세션 폐기 표식 — 링크 세션 쿠키가 이 값을 들고 다니며 매 요청 대조한다.
+     * 비밀번호를 바꾸면 이미 들어와 있던 세션이 그 순간 끊긴다(시각 비교가 아니라 값 일치).
+     */
+    passwordUpdatedAt: timestamp('password_updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    passwordUpdatedBy: uuid('password_updated_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** 종료. 행 삭제가 아닌 이유는 귀속 FK 가 RESTRICT 라서다 — 종료된 행은 활성 UNIQUE 밖이다. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closedBy: uuid('closed_by').references(() => users.id, { onDelete: 'restrict' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_fieldwork_links_token_uq').on(t.token),
+    // 활성 링크는 설문당 하나 — 부분 인덱스라 종료된 행은 감사로 남고 재발급이 된다.
+    uniqueIndex('survey_fieldwork_links_active_survey_uq')
+      .on(t.surveyId)
+      .where(sql`closed_at IS NULL`),
+  ],
+);
+
+/**
  * 실사 업체 — 외주 실사 인력의 소속 경계 (마이그레이션 0120, 티켓 24).
  *
  * **팀이 아니다.** 설문을 소유하지 않고(`surveys.teamId` 는 이 테이블을 가리키지 않는다)

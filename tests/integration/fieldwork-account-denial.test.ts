@@ -155,6 +155,11 @@ describe('내부 표면은 실사에게 전부 닫혀 있다', () => {
   it('실사 초대 표면도 내부 전용이다 — 초대받은 사람이 남을 초대하지 못한다', () => {
     // 티켓 25 가 새로 만든 넷이 전부 authed 인지 확인한다. scoped 로 새면 실사원이
     // 자기 설문에 남을 붙일 수 있고, 그것은 「초대 추가는 접근 **내부인** 누구나」와 어긋난다.
+    //
+    // 외주 실사 링크 관리 표면 다섯도 같은 목록에 선다(ADR-0026). scoped 로 새면 **외주가
+    // 자기 비밀번호를 바꾸거나 링크를 종료**할 수 있고, 그 순간 담당 연구원이 통제권을 잃는다.
+    // 링크 주체가 이 표면들에 닿지 못하는 것은 관문(manageAccess)이 아니라 **베이스**가
+    // 먼저 막아야 한다 — 관문은 판정을 하려고 DB 를 한 번 읽지만 베이스는 읽지 않는다.
     const fieldworkSurfaces = procedures
       .filter((p) => p.path.startsWith('workspace.fieldwork'))
       .map((p) => `${p.path}:${p.base}`)
@@ -164,6 +169,11 @@ describe('내부 표면은 실사에게 전부 닫혀 있다', () => {
       'workspace.fieldwork.list:authed',
       'workspace.fieldwork.remove:authed',
       'workspace.fieldwork.searchCandidates:authed',
+      'workspace.fieldworkLinks.close:authed',
+      'workspace.fieldworkLinks.get:authed',
+      'workspace.fieldworkLinks.issue:authed',
+      'workspace.fieldworkLinks.resetPassword:authed',
+      'workspace.fieldworkLinks.revealPassword:authed',
       'workspace.fieldworkOrgs.archive:superadmin',
       'workspace.fieldworkOrgs.create:superadmin',
       'workspace.fieldworkOrgs.list:superadmin',

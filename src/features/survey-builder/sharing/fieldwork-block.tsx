@@ -18,6 +18,7 @@ import {
   useRemoveSurveyFieldwork,
   useSurveyFieldwork,
 } from '../queries/use-survey-fieldwork';
+import { FieldworkLinkPanel } from './fieldwork-link-panel';
 
 interface FieldworkBlockProps {
   surveyId: string;
@@ -39,8 +40,17 @@ interface FieldworkBlockProps {
  *
  * 화면에 없는 것이 계약이다 — **실사 팀장의 업체 시야를 여기서 켜고 끄지 않는다.** 그것은
  * 행이 아니라 소속원 초대의 함수라(코어의 파생 분기), 마지막 소속원을 빼면 저절로 닫힌다.
+ *
+ * ADR-0026 이 이 블록에 **세그먼트 둘**을 세웠다(.pen FLOW 10-1·10-2). 실사를 맡기는 방식이
+ * 둘이기 때문이다 — 사내 인력은 계정이 이미 있어 초대하면 되고, 외주는 계정을 만들지 않고
+ * 전용 링크를 발급한다. 두 자리가 한 블록에 있는 것은 담당자가 「이 설문은 누가 뛰는가」를
+ * 한 곳에서 정하기 때문이고, 설문 하나에 둘을 함께 쓰는 일은 없다.
+ *
+ * 「내부 실사원」 자리는 아직 옛 실사 계정 초대다 — 사내 계정을 전체 권한 참여자로 바꾸는 것은
+ * 후속 티켓이고, 철거는 링크 모델이 동작한 뒤 한 번에 한다(ADR-0026 「결과」).
  */
 export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
+  const [mode, setMode] = useState<FieldworkMode>('internal');
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -78,10 +88,10 @@ export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
   const members = data?.members ?? [];
   const canManage = data?.canManage ?? false;
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-semibold text-[#374151]">실사 — 대리 응답</span>
-
+  // 중첩 컴포넌트가 아니라 JSX 값이다 — 렌더 안에서 컴포넌트를 정의하면 매 렌더 새 타입이
+  // 되어 입력 칸이 리마운트되고 포커스·검색어가 날아간다.
+  const internalSection = (
+    <>
       <div className="relative">
         <div className="flex h-8 items-center gap-2 rounded-[8px] border border-[#D1D5DB] bg-white px-3">
           <Search className="h-[13px] w-[13px] shrink-0 text-[#9CA3AF]" />
@@ -135,9 +145,55 @@ export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
           초대 해제는 소유자·팀장·슈퍼어드민만 할 수 있습니다.
         </p>
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-semibold text-[#374151]">실사 조사원</span>
+
+      <div
+        role="radiogroup"
+        aria-label="실사 방식"
+        className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]"
+      >
+        {FIELDWORK_MODES.map(({ value, label }) => {
+          const active = mode === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => {
+                setMode(value);
+                setError(null);
+              }}
+              className={cn(
+                'flex h-8 flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition-colors',
+                active
+                  ? 'bg-white text-[#1C1C1E] shadow-sm'
+                  : 'text-[#6E6E73] hover:text-[#1C1C1E]',
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {mode === 'outsourced' ? <FieldworkLinkPanel surveyId={surveyId} /> : internalSection}
     </div>
   );
 }
+
+/** 실사를 맡기는 방식 둘 (.pen FLOW 10-1·10-2). 설문 하나에 둘을 함께 쓰는 일은 없다. */
+type FieldworkMode = 'internal' | 'outsourced';
+
+const FIELDWORK_MODES: ReadonlyArray<{ value: FieldworkMode; label: string }> = [
+  { value: 'internal', label: '내부 실사원' },
+  { value: 'outsourced', label: '외주' },
+];
 
 /** 이름 첫 글자 아바타 — 참여자·게스트 블록과 같은 규칙이되 색으로 갈라 놓는다. */
 function Avatar({ name }: { name: string }) {

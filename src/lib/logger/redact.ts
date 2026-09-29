@@ -61,6 +61,14 @@ export const REDACT_PATHS: string[] = [
   'representative',
   '*.representative',
 
+  // 외주 실사 링크의 공유 비밀번호 (ADR-0026) — 발급·재설정 입력과 평문 조회 응답에 실린다.
+  // 암호문(passwordCipher)까지 함께 거는 것은 이 값이 가역 암호화라 로그에 남으면 복호 가능한
+  // 자료가 되기 때문이다 — cipher 계열과 같은 취급이다.
+  'password',
+  '*.password',
+  'passwordCipher',
+  '*.passwordCipher',
+
   // HTTP 표준
   'req.headers.cookie',
   'req.headers.authorization',

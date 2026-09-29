@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFieldworkLinkUrl,
   buildInviteUrl,
   generateInviteCode,
   getSurveyAccessIdentifier,
@@ -79,5 +80,17 @@ describe('generateInviteCode', () => {
 
   it('호출마다 다른 값을 만든다', () => {
     expect(generateInviteCode()).not.toBe(generateInviteCode());
+  });
+});
+
+describe('buildFieldworkLinkUrl — 외주 실사 링크 (ADR-0026)', () => {
+  it('baseUrl 과 토큰으로 /fw/ 경로를 만든다', () => {
+    expect(buildFieldworkLinkUrl('7Kq2xVb9Lm3nP4tQ', 'https://survey.megaresearch.co.kr')).toBe(
+      'https://survey.megaresearch.co.kr/fw/7Kq2xVb9Lm3nP4tQ',
+    );
+  });
+
+  it('빈 baseUrl 이면 상대 경로로 폴백한다 — 초대 URL 과 같은 관행', () => {
+    expect(buildFieldworkLinkUrl('tok3n', '')).toBe('/fw/tok3n');
   });
 });

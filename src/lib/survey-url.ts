@@ -35,6 +35,8 @@ const RESERVED_SLUGS = [
   'private',
   '_next',
   'favicon',
+  // 외주 실사 링크 트리 (ADR-0026)
+  'fw',
   'robots',
   'sitemap',
   'manifest',
@@ -251,4 +253,18 @@ export function buildInviteUrl(
   baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
 ): string {
   return `${baseUrl}/i/${inviteCode}`;
+}
+
+/**
+ * 외주 실사 링크 URL 빌드 — {baseUrl}/fw/{token} (ADR-0026).
+ *
+ * 토큰이 경로에 실리는 것이 계약이다. 쿠키만으로 설문을 기억하면 업체가 두 조사를 병행할 때
+ * 한 브라우저에서 둘을 동시에 열 수 없고, 연구원이 공유 문서에 박아 둔 링크도 「어느 조사인지」를
+ * 말해 주지 못한다. 주소는 설문당 하나로 영구 고정이라 북마크가 유효하게 남는다.
+ */
+export function buildFieldworkLinkUrl(
+  token: string,
+  baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
+): string {
+  return `${baseUrl}/fw/${token}`;
 }

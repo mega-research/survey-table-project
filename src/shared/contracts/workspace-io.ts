@@ -1038,3 +1038,54 @@ export const FieldworkProxyContext = z.discriminatedUnion('mode', [
   }),
 ]);
 export type FieldworkProxyContext = z.infer<typeof FieldworkProxyContext>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 외주 실사 링크 (ADR-0026, .pen FLOW 10-2)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 계정이 아니라 **접속 수단**이다. 설문당 하나이며 주소는 영구 고정이고 만료일이 없다 —
+// 설문 중단이 링크를 닫고, 사람을 막는 일은 비밀번호 변경이 한다.
+//
+// 비밀번호 평문이 이 모양에 **없다.** 화면이 그 값을 들고 다니면 목록 응답에 실려 캐시·로그·
+// RSC payload 로 번진다. 연구원이 볼 때는 전용 표면(revealPassword)을 한 번 더 부른다.
+
+export const FieldworkLinkView = z.object({
+  id: z.uuid(),
+  /** 주소에 실리는 값. 화면은 이것으로 링크를 조립한다(buildFieldworkLinkUrl). */
+  token: z.string(),
+  /** 마지막으로 비밀번호를 바꾼 시각 — 「언제 바꿨는지」를 화면이 보여 준다. */
+  passwordUpdatedAt: z.date(),
+  createdAt: z.date(),
+});
+export type FieldworkLinkView = z.infer<typeof FieldworkLinkView>;
+
+/**
+ * 링크 블록의 상태 — 링크가 없을 수도 있다.
+ *
+ * `canManage` 를 함께 싣는 이유는 화면이 판정을 다시 하지 않기 위해서다. 다만 이 블록의 읽기
+ * 자체가 이미 `survey.manageAccess` 를 요구하므로 여기서 false 가 오는 일은 없다 —
+ * 그럼에도 싣는 것은 참여자·게스트 블록과 모양을 맞춰 두려는 것이고, 요구가 나중에 느슨해지면
+ * 화면이 저절로 따라오게 하려는 것이다.
+ */
+export const SurveyFieldworkLinkOutput = z.object({
+  link: FieldworkLinkView.nullable(),
+  canManage: z.boolean(),
+});
+export type SurveyFieldworkLinkOutput = z.infer<typeof SurveyFieldworkLinkOutput>;
+
+/**
+ * 발급·재설정 직후 응답 — **이때만** 평문 비밀번호가 함께 나온다.
+ *
+ * 자동 생성을 골랐을 때 연구원이 그 값을 알 방법이 이것뿐이다. 이후에 다시 보려면
+ * revealPassword 를 부르며, 그 호출은 구조화 로그에 한 줄로 남는다.
+ */
+export const IssuedFieldworkLinkOutput = z.object({
+  link: FieldworkLinkView,
+  password: z.string(),
+});
+export type IssuedFieldworkLinkOutput = z.infer<typeof IssuedFieldworkLinkOutput>;
+
+export const RevealedFieldworkLinkPasswordOutput = z.object({ password: z.string() });
+export type RevealedFieldworkLinkPasswordOutput = z.infer<
+  typeof RevealedFieldworkLinkPasswordOutput
+>;

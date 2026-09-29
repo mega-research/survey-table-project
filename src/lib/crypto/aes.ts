@@ -84,3 +84,23 @@ export function decryptPii(token: string): string {
   const dec = Buffer.concat([toU8(decipher.update(enc)), toU8(decipher.final())]);
   return dec.toString('utf8');
 }
+
+/**
+ * 공유 비밀(외주 실사 링크의 접속 비밀번호)의 암호화 — ADR-0026.
+ *
+ * 값은 `encryptPii`/`decryptPii` 와 완전히 같고 키도 같다. 이름을 따로 두는 이유는 **의도를
+ * 코드에 적기 위해서**다: 이 암호문은 개인정보가 아니라 **공유 출입 암호**이고, 그래서 해시가
+ * 아니라 가역 암호화인 것이 정책이다(연구원이 다시 읽어 업체에 답해 준다). PII 함수로 저장하면
+ * 나중에 PII 파기 스윕이 이 값을 대상으로 볼 위험이 있다.
+ *
+ * 키를 분리하지 않은 것도 결정이다 — 이 키가 새면 이미 컨택 PII 가 열리고, 링크 비밀번호가
+ * 추가로 새서 얻는 것은 그 PII 에 대한 콘솔 접근뿐이라 반경이 겹친다. 환경 셋에 키를 하나 더
+ * 관리하는 비용이 더 크다.
+ */
+export function encryptSharedSecret(plain: string): string {
+  return encryptPii(plain);
+}
+
+export function decryptSharedSecret(token: string): string {
+  return decryptPii(token);
+}

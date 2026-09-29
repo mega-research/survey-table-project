@@ -38,6 +38,7 @@ import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
 import { quota } from '@/server/quota/procedures/quota';
 import { fieldwork } from '@/server/workspace/procedures/fieldwork';
+import { fieldworkLinks } from '@/server/workspace/procedures/fieldwork-links';
 import { fieldworkOrgs } from '@/server/workspace/procedures/fieldwork-orgs';
 import { guests } from '@/server/workspace/procedures/guests';
 import { members } from '@/server/workspace/procedures/members';
@@ -139,7 +140,11 @@ export const router = {
     // 실사 업체 — 외주 실사 인력의 소속 경계 (.pen FLOW 10-4, 티켓 24). 슈퍼어드민 전용.
     fieldworkOrgs,
     // 설문 실사 초대 — 개인 단위 (.pen FLOW 4-2 실사 블록, 티켓 25).
+    // ADR-0026 이 이 모델을 대체하며, 철거는 링크 모델이 동작한 뒤 한 번에 한다.
     fieldwork,
+    // 외주 실사 링크 — 계정이 아니라 설문당 접속 수단 (.pen FLOW 10-2, ADR-0026).
+    // 다섯 표면 전부 survey.manageAccess 다 — 비밀번호를 읽는 것이 곧 접근 수단을 얻는 것이다.
+    fieldworkLinks,
   },
 };
 
