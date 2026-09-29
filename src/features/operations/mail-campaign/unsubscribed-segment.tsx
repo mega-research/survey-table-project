@@ -8,7 +8,7 @@ import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;

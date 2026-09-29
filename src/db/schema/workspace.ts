@@ -213,7 +213,11 @@ export const surveyFieldworkLinks = pgTable(
     passwordUpdatedBy: uuid('password_updated_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
-    /** 종료. 행 삭제가 아닌 이유는 귀속 FK 가 RESTRICT 라서다 — 종료된 행은 활성 UNIQUE 밖이다. */
+    /**
+     * 종료. 행을 지우지 않는 이유는 종료된 링크가 「그 링크가 무엇을 넣었는가」의 계보이기
+     * 때문이다 — 활성 UNIQUE 가 부분 인덱스라 종료 뒤 재발급이 된다. 귀속 칸이 붙으면
+     * RESTRICT FK 가 하드 삭제를 DB 에서도 막지만, **그 칸은 아직 없다.**
+     */
     closedAt: timestamp('closed_at', { withTimezone: true }),
     closedBy: uuid('closed_by').references(() => users.id, { onDelete: 'restrict' }),
     createdBy: uuid('created_by')

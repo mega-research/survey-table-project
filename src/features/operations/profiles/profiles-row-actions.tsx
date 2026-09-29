@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;

@@ -22,6 +22,7 @@ import {
   IssuedFieldworkLinkOutput,
   RevealedFieldworkLinkPasswordOutput,
   SurveyFieldworkLinkOutput,
+  WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
 
 import {
@@ -110,11 +111,13 @@ const revealPassword = authed
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
 const close = authed
   .input(SurveyFieldworkLinkInput)
+  .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    await svc.closeFieldworkLink({ surveyId: input.surveyId, actorId: context.user.id })
+    await svc
+      .closeFieldworkLink({ surveyId: input.surveyId, actorId: context.user.id })
       .catch(rethrowLinkError);
-    return { ok: true } as const;
+    return { success: true } as const;
   });
 
 export const fieldworkLinks = { get, issue, resetPassword, revealPassword, close };

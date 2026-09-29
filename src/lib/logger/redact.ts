@@ -64,10 +64,16 @@ export const REDACT_PATHS: string[] = [
   // 외주 실사 링크의 공유 비밀번호 (ADR-0026) — 발급·재설정 입력과 평문 조회 응답에 실린다.
   // 암호문(passwordCipher)까지 함께 거는 것은 이 값이 가역 암호화라 로그에 남으면 복호 가능한
   // 자료가 되기 때문이다 — cipher 계열과 같은 취급이다.
+  // pino 와일드카드는 **접미 매칭을 하지 않는다** — `*Password` 같은 패턴이 없으므로
+  // 실제 키 이름을 하나씩 적는다. 비밀번호 변경 입력(auth-io)의 두 칸이 그래서 따로 있다.
   'password',
   '*.password',
   'passwordCipher',
   '*.passwordCipher',
+  'currentPassword',
+  '*.currentPassword',
+  'newPassword',
+  '*.newPassword',
 
   // HTTP 표준
   'req.headers.cookie',

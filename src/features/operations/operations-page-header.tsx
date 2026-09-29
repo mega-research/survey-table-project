@@ -26,6 +26,15 @@ interface Props {
    * 버튼을 보여 주고 있었다.
    */
   capabilities: ReadonlySet<SurveyCapability>;
+  /**
+   * 내부 전용 자리를 그릴 것인가 — 목록으로·설문 보기·로그아웃.
+   *
+   * 탭 스트립과 **같은 축**이다(거기 주석 참조). capability 로 물을 수 없다: 설문 목록과 빌더
+   * 미리보기는 admin 주소이고 로그아웃은 계정 동작이라, 외주 실사 링크 주체는 `survey.view` 를
+   * 갖고도 그 셋에 닿지 못한다. 예전 `isGuest` 가 하던 은폐를 이 축이 잇는다 — 둘 중 한쪽만
+   * 축을 가지면 링크 콘솔에서 헤더만 admin 링크를 그린다.
+   */
+  internalShell?: boolean;
   control: {
     isPaused: boolean;
     pausedMessage: string | null;
@@ -44,19 +53,29 @@ interface Props {
  * `/admin/surveys/[id]/operations/*` 라우트의 layout 에서 한 번만 마운트되어
  * 모든 하위 페이지(현황/응답 내역/보고서/조사 대상)가 동일한 상단을 공유한다.
  */
-export function OperationsPageHeader({ surveyId, surveyTitle, capabilities, control }: Props) {
+export function OperationsPageHeader({
+  surveyId,
+  surveyTitle,
+  capabilities,
+  internalShell = true,
+  control,
+}: Props) {
   const canEdit = capabilities.has('survey.edit');
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link href={adminSurveyListPath()}>
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              목록으로
-            </Button>
-          </Link>
-          <div className="h-6 w-px bg-gray-300" />
+          {internalShell && (
+            <>
+              <Link href={adminSurveyListPath()}>
+                <Button variant="ghost" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  목록으로
+                </Button>
+              </Link>
+              <div className="h-6 w-px bg-gray-300" />
+            </>
+          )}
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-blue-500" />
             <h1 className="max-w-md truncate text-lg font-medium text-gray-900">{surveyTitle}</h1>
@@ -67,12 +86,14 @@ export function OperationsPageHeader({ surveyId, surveyTitle, capabilities, cont
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          <Link href={adminSurveyPreviewPath(surveyId)}>
-            <Button variant="outline" size="sm">
-              <Eye className="mr-2 h-4 w-4" />
-              설문 보기
-            </Button>
-          </Link>
+          {internalShell && (
+            <Link href={adminSurveyPreviewPath(surveyId)}>
+              <Button variant="outline" size="sm">
+                <Eye className="mr-2 h-4 w-4" />
+                설문 보기
+              </Button>
+            </Link>
+          )}
           {canEdit && (
             <Link href={adminSurveyEditPath(surveyId)}>
               <Button variant="outline" size="sm">
@@ -81,7 +102,8 @@ export function OperationsPageHeader({ surveyId, surveyTitle, capabilities, cont
               </Button>
             </Link>
           )}
-          <LogoutButton iconOnly />
+          {/* 로그아웃은 계정 동작이다 — 링크 세션의 「나가기」는 쿠키를 지우는 다른 일이다. */}
+          {internalShell && <LogoutButton iconOnly />}
         </div>
       </div>
     </nav>

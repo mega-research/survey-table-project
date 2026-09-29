@@ -16,14 +16,11 @@ export interface OperationsPaths {
   readonly base: string;
   readonly overview: string;
   readonly profiles: string;
-  readonly profilesColumns: string;
   readonly report: string;
   readonly reportColumns: string;
   readonly contacts: string;
-  readonly contactsNew: string;
   readonly contactsColumns: string;
   readonly contactsResultCodes: string;
-  readonly contactsPriorAnswers: string;
   readonly contactsUpload: string;
   readonly contactsUploadNew: string;
   readonly mailTemplates: string;
@@ -53,14 +50,11 @@ export function operationsPaths(base: string): OperationsPaths {
     base: root,
     overview: `${root}/overview`,
     profiles,
-    profilesColumns: `${profiles}/columns`,
     report: `${root}/report`,
     reportColumns: `${root}/report/columns`,
     contacts,
-    contactsNew: `${contacts}/new`,
     contactsColumns: `${contacts}/columns`,
     contactsResultCodes: `${contacts}/result-codes`,
-    contactsPriorAnswers: `${contacts}/prior-answers`,
     contactsUpload: `${contacts}/upload`,
     contactsUploadNew: `${contacts}/upload/new`,
     mailTemplates: `${mail}/templates`,

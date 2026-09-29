@@ -16,7 +16,7 @@ import {
 import type { HeaderFilterEntry } from '@/features/operations/filters/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;

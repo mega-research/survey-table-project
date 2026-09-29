@@ -57,7 +57,7 @@ import {
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
 } from '@/lib/operations/filter-shared';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;

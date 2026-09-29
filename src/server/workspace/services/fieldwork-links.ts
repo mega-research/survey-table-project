@@ -156,9 +156,10 @@ export async function revealFieldworkLinkPassword(surveyId: string): Promise<str
 /**
  * 링크 종료 — 행을 지우지 않고 `closedAt` 을 찍는다.
  *
- * 귀속(결과코드 회차·대리 응답)이 이 테이블을 RESTRICT 로 가리키므로 하드 삭제는 기록이 남은
- * 링크에서 막힌다. 활성 UNIQUE 가 부분 인덱스라 종료 뒤 재발급이 되고, 옛 행은 「그 링크가
- * 무엇을 넣었는가」의 계보로 남는다.
+ * 종료된 행이 「그 링크가 무엇을 넣었는가」의 계보이기 때문이다. 활성 UNIQUE 가 부분 인덱스라
+ * 종료 뒤 재발급이 된다. 귀속 칸(결과코드 회차·대리 응답)이 붙으면 RESTRICT FK 가 하드 삭제를
+ * DB 에서도 막지만 **그 칸은 아직 없다** — 지금 하드 삭제를 막는 것은 이 함수가 그것을 하지
+ * 않는다는 사실뿐이다.
  */
 export async function closeFieldworkLink(input: {
   surveyId: string;

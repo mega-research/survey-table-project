@@ -19,7 +19,7 @@ import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-
 import { MetaFields, type MetaFieldValues } from './meta-fields';
 import { MailPreviewDialog } from './preview-dialog';
 import type { VariableDef } from '@/shared/contracts/template-variables';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;

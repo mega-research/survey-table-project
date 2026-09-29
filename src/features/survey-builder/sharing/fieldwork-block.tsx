@@ -19,6 +19,7 @@ import {
   useSurveyFieldwork,
 } from '../queries/use-survey-fieldwork';
 import { FieldworkLinkPanel } from './fieldwork-link-panel';
+import { SegmentRow, type SegmentOption } from './segment-row';
 
 interface FieldworkBlockProps {
   surveyId: string;
@@ -152,35 +153,15 @@ export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
     <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-semibold text-[#374151]">실사 조사원</span>
 
-      <div
-        role="radiogroup"
-        aria-label="실사 방식"
-        className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]"
-      >
-        {FIELDWORK_MODES.map(({ value, label }) => {
-          const active = mode === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => {
-                setMode(value);
-                setError(null);
-              }}
-              className={cn(
-                'flex h-8 flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition-colors',
-                active
-                  ? 'bg-white text-[#1C1C1E] shadow-sm'
-                  : 'text-[#6E6E73] hover:text-[#1C1C1E]',
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentRow
+        label="실사 방식"
+        options={FIELDWORK_MODES}
+        value={mode}
+        onChange={(next) => {
+          setMode(next);
+          setError(null);
+        }}
+      />
 
       {mode === 'outsourced' ? <FieldworkLinkPanel surveyId={surveyId} /> : internalSection}
     </div>
@@ -190,7 +171,7 @@ export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
 /** 실사를 맡기는 방식 둘 (.pen FLOW 10-1·10-2). 설문 하나에 둘을 함께 쓰는 일은 없다. */
 type FieldworkMode = 'internal' | 'outsourced';
 
-const FIELDWORK_MODES: ReadonlyArray<{ value: FieldworkMode; label: string }> = [
+const FIELDWORK_MODES: ReadonlyArray<SegmentOption<FieldworkMode>> = [
   { value: 'internal', label: '내부 실사원' },
   { value: 'outsourced', label: '외주' },
 ];

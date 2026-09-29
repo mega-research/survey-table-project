@@ -24,7 +24,7 @@ import {
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
 import { client } from '@/shared/lib/rpc';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 interface ColumnSchemeEditorProps {
   surveyId: string;

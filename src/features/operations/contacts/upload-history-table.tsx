@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { EmptyState } from '@/features/operations/empty-state';
 import type { ContactUploadRow } from '@/shared/contracts/contacts-io';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 const MODE_LABEL: Record<string, string> = { replace: '교체', merge: '병합', append: '추가' };
 const MODE_TONE: Record<string, string> = {

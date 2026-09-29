@@ -48,7 +48,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 
 import { UploadMatchStep } from './upload-match-step';
-import { adminOperationsPaths } from '@/features/operations/operations-paths';
+import { adminOperationsPaths } from '../operations-paths';
 
 type Step = 'file' | 'mapping' | 'match' | 'result';
 

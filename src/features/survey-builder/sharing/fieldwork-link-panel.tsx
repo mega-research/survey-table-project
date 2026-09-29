@@ -33,6 +33,10 @@ interface FieldworkLinkPanelProps {
  *
  * 비밀번호는 **가려 두고 눌러서 본다.** 조회 응답에 평문이 실리지 않아(서버가 싣지 않는다)
  * 「보기」가 전용 표면을 한 번 더 부르며, 그 호출이 구조화 로그에 남는다.
+ *
+ * **자동 생성이 기본이고 직접 입력도 된다.** 기본을 자동으로 둔 것은 이 값이 전화로 읽어 주는
+ * 값이라 혼동 문자를 뺀 문자셋이 필요해서이고, 직접 입력을 남긴 것은 업체가 쓰던 규칙에 맞춰야
+ * 할 때가 있기 때문이다. 빈 칸으로 보내면 서버가 만든다 — 화면이 생성 규칙을 복제하지 않는다.
  */
 export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +44,8 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
   const [password, setPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  /** 직접 입력칸. 비어 있으면 서버가 만든다 — 생성 규칙을 화면이 복제하지 않는다. */
+  const [draft, setDraft] = useState('');
 
   const { data, isPending, isError } = useSurveyFieldworkLink(surveyId);
   const issue = useIssueFieldworkLink();
@@ -52,9 +58,16 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
     setError(null);
     try {
       setPassword(await action());
+      setDraft('');
     } catch (err) {
       setError(getErrorMessage(err, '외주 실사 링크를 처리하지 못했습니다.'));
     }
+  }
+
+  /** 빈 칸은 보내지 않는다 — optional 입력이라 생략이 「서버가 만든다」의 뜻이다. */
+  function passwordArg(): { password?: string } {
+    const typed = draft.trim();
+    return typed.length > 0 ? { password: typed } : {};
   }
 
   if (isPending) {
@@ -73,10 +86,13 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
   if (!data.link) {
     return (
       <div className="flex flex-col gap-2 py-1">
+        <PasswordDraftInput value={draft} onChange={setDraft} disabled={busy || !data.canManage} />
         <button
           type="button"
           disabled={busy || !data.canManage}
-          onClick={() => run(async () => (await issue.mutateAsync({ surveyId })).password)}
+          onClick={() =>
+            run(async () => (await issue.mutateAsync({ surveyId, ...passwordArg() })).password)
+          }
           className="flex h-9 items-center justify-center gap-1.5 rounded-[8px] bg-[#3b82f6] px-3 text-[13px] font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:bg-[#9CA3AF]"
         >
           {issue.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -91,7 +107,8 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
     );
   }
 
-  const url = buildFieldworkLinkUrl(data.link.token, typeof window === 'undefined' ? '' : window.location.origin);
+  // baseUrl 을 넘기지 않는다 — 기본값이 브라우저 origin 이고, 이 컴포넌트는 클라이언트 전용이다.
+  const url = buildFieldworkLinkUrl(data.link.token);
 
   return (
     <div className="flex flex-col gap-2 py-1">
@@ -139,7 +156,9 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
         <button
           type="button"
           disabled={busy || !data.canManage}
-          onClick={() => run(async () => (await reset.mutateAsync({ surveyId })).password)}
+          onClick={() =>
+            run(async () => (await reset.mutateAsync({ surveyId, ...passwordArg() })).password)
+          }
           className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
         >
           {reset.isPending ? (
@@ -150,6 +169,8 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
           변경
         </button>
       </div>
+
+      <PasswordDraftInput value={draft} onChange={setDraft} disabled={busy || !data.canManage} />
 
       <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
         설문 중단 시 닫힙니다. 링크가 유출되거나 업체를 바꿀 때는 비밀번호만 변경하세요 —
@@ -200,5 +221,31 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
 
       {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * 직접 입력칸 — 비워 두면 「변경」·「링크 발급」이 서버가 만든 값을 쓴다.
+ *
+ * 최소 길이를 화면에서 검사하지 않는다. 경계 스키마가 같은 규칙을 갖고 있고(`PasswordField`),
+ * 규칙을 두 벌 적으면 한쪽만 고쳐져 「화면은 통과했는데 서버가 거부하는」 칸이 된다.
+ */
+function PasswordDraftInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      placeholder="비밀번호 직접 입력 (비우면 자동 생성)"
+      className="h-9 rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 text-[12px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none disabled:bg-[#F3F4F6]"
+    />
   );
 }

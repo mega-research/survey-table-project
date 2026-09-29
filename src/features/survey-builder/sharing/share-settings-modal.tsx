@@ -6,7 +6,6 @@ import { ArrowRightLeft, Loader2, Lock, Users } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { cn } from '@/lib/utils';
 import {
   SURVEY_VISIBILITY_LABEL,
   type SurveyVisibility,
@@ -18,6 +17,7 @@ import { FieldworkBlock } from './fieldwork-block';
 import { GuestsBlock } from './guests-block';
 import { OwnershipTransferModal } from './ownership-transfer-modal';
 import { ParticipantsBlock } from './participants-block';
+import { SegmentRow, type SegmentOption } from './segment-row';
 
 interface ShareSettingsModalProps {
   surveyId: string;
@@ -45,6 +45,13 @@ const VISIBILITY_ICON: Record<SurveyVisibility, typeof Users> = {
   team: Users,
   invite_only: Lock,
 };
+
+const VISIBILITY_OPTIONS: ReadonlyArray<SegmentOption<SurveyVisibility>> =
+  surveyVisibilityValues.map((value) => ({
+    value,
+    label: SURVEY_VISIBILITY_LABEL[value],
+    icon: VISIBILITY_ICON[value],
+  }));
 
 /**
  * 공유 설정 모달 (.pen FLOW 4-2, 역할 모델 v2 티켓 16).
@@ -113,38 +120,16 @@ export function ShareSettingsModal({
         <div className="mt-4 flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold text-[#374151]">팀 공개 범위</span>
 
-          <div
-            role="radiogroup"
-            aria-label="공개 범위"
-            className="flex gap-1 rounded-[10px] bg-[#EEF0F4] p-[3px]"
-          >
-            {surveyVisibilityValues.map((value) => {
-              const Icon = VISIBILITY_ICON[value];
-              const active = selected === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  disabled={!canManageAccess || setVisibility.isPending}
-                  onClick={() => {
-                    setSelected(value);
-                    setError(null);
-                  }}
-                  className={cn(
-                    'flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] text-[13px] font-medium transition-colors',
-                    active ? 'bg-white text-[#1C1C1E] shadow-sm' : 'text-[#6E6E73]',
-                    canManageAccess && !active && 'hover:text-[#1C1C1E]',
-                    !canManageAccess && 'cursor-not-allowed',
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {SURVEY_VISIBILITY_LABEL[value]}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentRow
+            label="공개 범위"
+            options={VISIBILITY_OPTIONS}
+            value={selected}
+            disabled={!canManageAccess || setVisibility.isPending}
+            onChange={(value) => {
+              setSelected(value);
+              setError(null);
+            }}
+          />
 
           <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
             「초대된 멤버만」은 소유 팀 팀원에게만 숨깁니다 — 소유자·참여자·팀장·슈퍼어드민은 항상

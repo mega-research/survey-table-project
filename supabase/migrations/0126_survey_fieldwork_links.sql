@@ -27,10 +27,13 @@
 -- 시각의 대소가 아니라 **같은 값인가**를 보므로 앱·DB 시계 오차와 무관하다. 이 컬럼이 없으면
 -- ADR 의 「사람을 막는 일은 전부 이 비밀번호가 진다」가 거짓이 된다.
 --
--- **종료는 행 삭제가 아니라 closed_at 이다.** 귀속(contact_attempts·survey_responses 의 링크
--- 칸)이 이 테이블을 RESTRICT 로 가리키므로 하드 삭제는 기록이 남은 링크에서 막힌다. 팀 해산·
--- 실사 업체 종료가 archived 로 가는 것과 같은 관례다. 그래서 UNIQUE 는 부분 인덱스다 —
--- 활성 링크는 설문당 하나이고 종료된 행은 감사로 남는다.
+-- **종료는 행 삭제가 아니라 closed_at 이다.** 두 가지 이유가 있고 하나는 아직 미래다.
+--  ① 지금 참인 것: 종료된 링크는 「그 링크가 무엇을 넣었는가」의 계보다. 팀 해산·실사 업체
+--     종료가 archived 로 가는 것과 같은 관례이며, 그래서 UNIQUE 는 부분 인덱스다 — 활성
+--     링크는 설문당 하나이고 종료된 행은 그 제약 밖에 남는다.
+--  ② 곧 참이 될 것: 귀속 칸(contact_attempts·survey_responses 의 링크 칸)은 **이 마이그레이션에
+--     없다.** 붙을 때 RESTRICT 로 걸므로 그 뒤에는 기록이 남은 링크의 하드 삭제가 DB 에서도
+--     막힌다. 그 칸을 붙이는 마이그레이션은 이 결정을 되돌리지 말 것.
 --
 -- survey_id CASCADE : 설문이 하드 삭제되면 접속 수단도 의미가 없다. 형제 survey_participants
 -- 와 같은 판단이며, 앱의 삭제는 soft delete 라 이 경로는 사실상 안 쓰인다.
@@ -88,6 +91,6 @@ COMMENT ON COLUMN survey_fieldwork_links.password_cipher IS
 COMMENT ON COLUMN survey_fieldwork_links.password_updated_at IS
   '세션 폐기 표식. 링크 세션 쿠키가 이 값을 들고 다니며 매 요청 대조하므로 비밀번호 변경이 선 세션을 즉시 끊는다';
 COMMENT ON COLUMN survey_fieldwork_links.closed_at IS
-  '링크 종료. 행 삭제가 아닌 이유는 귀속 FK 가 RESTRICT 라서다 — 종료된 행은 활성 UNIQUE 밖이라 재발급이 된다';
+  '링크 종료. 행을 지우지 않는 이유는 종료된 링크가 「그 링크가 무엇을 넣었는가」의 계보이기 때문이다 — 활성 UNIQUE 가 부분 인덱스라 종료 뒤 재발급이 된다';
 
 COMMIT;
