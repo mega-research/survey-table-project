@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { projectChoiceGroupOriginalLine } from '@/features/question-renderer/utils/choice-group-original-line';
-import type { ChoiceGroup, HeaderCell, TableCell, TableColumn } from '@/types/survey';
+import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 // 지원제도 표(해운물류 멘토 C4) 모양 — 구분·항목·활용 여부 2칸·만족도 11칸, 헤더 2단.
 const col = (id: string, label: string): TableColumn => ({ id, label });
@@ -45,12 +45,16 @@ const choice = (id: string, groupId: string, extra: Partial<TableCell> = {}): Ta
 });
 const useCells = [choice('u1', 'g-use'), choice('u2', 'g-use')];
 const scaleCells = Array.from({ length: 11 }, (_, n) => choice(`c${n}`, 'g-sat'));
-const rowCells: TableCell[] = [
-  { id: 'cat', type: 'text', content: '지원 제도' },
-  { id: 'item', type: 'text', content: '회의실 및 교통비 지원' },
-  ...useCells,
-  ...scaleCells,
-];
+const row: TableRow = {
+  id: 'r1',
+  label: '회의실 및 교통비 지원',
+  cells: [
+    { id: 'cat', type: 'text', content: '지원 제도', rowspan: 3 },
+    { id: 'item', type: 'text', content: '회의실 및 교통비 지원' },
+    ...useCells,
+    ...scaleCells,
+  ],
+};
 const satGroup: ChoiceGroup = {
   id: 'g-sat',
   groupKey: 'rad2',
@@ -59,78 +63,72 @@ const satGroup: ChoiceGroup = {
   mobileOriginalLine: true,
 };
 
-const base = {
-  columns,
-  headerGrid,
-  hideColumnLabels: false,
-  rowCells,
-  groupCells: scaleCells,
-  rejectTextInput: true,
-};
+const base = { columns, headerGrid, hideColumnLabels: false, row, groupCells: scaleCells };
 
 describe('projectChoiceGroupOriginalLine', () => {
-  it('그룹 열만 잘라 낸 2단 헤더와 보기 한 줄을 만든다', () => {
+  it('그룹 열만 잘라 낸 원본 표 조각 — 열 11개, 2단 헤더, 보기 셀만 남은 행', () => {
     const line = projectChoiceGroupOriginalLine({ ...base, group: satGroup });
     expect(line).not.toBeNull();
-    expect(line!.columnCount).toBe(11);
-    expect(line!.headerRowCount).toBe(2);
-    expect(line!.headers.map((h) => [h.label, h.gridColumn, h.gridRow])).toEqual([
-      ['만족도', '1 / span 11', 1],
-      ['매우 불만족', 1, 2],
-      ['불만족', '2 / span 4', 2],
-      ['보통', 6, 2],
-      ['만족', '7 / span 4', 2],
-      ['매우 만족', 11, 2],
+    expect(line!.columns.map((c) => c.id)).toEqual(scaleCells.map((_, n) => `s${n}`));
+    expect(line!.headerGrid!.map((r) => r.map((h) => [h.label, h.colspan]))).toEqual([
+      [['만족도', 11]],
+      [
+        ['매우 불만족', 1],
+        ['불만족', 4],
+        ['보통', 1],
+        ['만족', 4],
+        ['매우 만족', 1],
+      ],
     ]);
-    expect(line!.options.map((o) => [o.cell.id, o.gridColumn])).toEqual(
-      scaleCells.map((cell, index) => [cell.id, index + 1]),
-    );
+    expect(line!.showColumnHeader).toBe(true);
+    expect(line!.row.id).toBe('r1');
+    expect(line!.row.cells.map((c) => c.id)).toEqual(scaleCells.map((c) => c.id));
   });
 
-  it('옵션을 켜지 않은 그룹은 null — 종전 타일로 그린다', () => {
+  it('옵션을 켜지 않은 그룹·순위 그룹은 null — 종전 타일로 그린다', () => {
     expect(
-      projectChoiceGroupOriginalLine({
-        ...base,
-        group: { ...satGroup, mobileOriginalLine: false },
-      }),
+      projectChoiceGroupOriginalLine({ ...base, group: { ...satGroup, mobileOriginalLine: false } }),
     ).toBeNull();
     expect(projectChoiceGroupOriginalLine({ ...base, group: undefined })).toBeNull();
+    expect(
+      projectChoiceGroupOriginalLine({ ...base, group: { ...satGroup, type: 'ranking' } }),
+    ).toBeNull();
   });
 
-  it('상세기재 보기가 있으면 표 문항은 타일로 두고, 보기 소스 표는 한 줄로 그린다', () => {
-    const withText = scaleCells.map((cell, n) =>
-      n === 10 ? { ...cell, allowTextInput: true } : cell,
-    );
-    const input = {
+  it('상세기재 보기가 있어도 원본 조각으로 그린다 — 입력칸은 원본 셀이 그린다', () => {
+    const withText = scaleCells.map((cell, n) => (n === 10 ? { ...cell, allowTextInput: true } : cell));
+    const line = projectChoiceGroupOriginalLine({
       ...base,
       group: satGroup,
       groupCells: withText,
-      rowCells: [...rowCells.slice(0, 4), ...withText],
-    };
-    expect(projectChoiceGroupOriginalLine(input)).toBeNull();
-    expect(projectChoiceGroupOriginalLine({ ...input, rejectTextInput: false })).not.toBeNull();
+      row: { ...row, cells: [...row.cells.slice(0, 4), ...withText] },
+    });
+    expect(line!.row.cells.at(-1)!.allowTextInput).toBe(true);
   });
 
-  it('헤더 그리드가 없으면 열 제목 한 줄, 열 제목을 숨겼으면 헤더 없음', () => {
-    const noGrid = projectChoiceGroupOriginalLine({
+  it('구분 셀의 행 병합은 조각에 남기지 않는다', () => {
+    const line = projectChoiceGroupOriginalLine({
       ...base,
-      group: satGroup,
-      headerGrid: undefined,
+      group: { ...satGroup },
+      groupCells: [...useCells],
     });
-    expect(noGrid!.headerRowCount).toBe(1);
-    expect(noGrid!.headers.map((h) => h.label)).toEqual(scaleCells.map((_, n) => `${n}점`));
+    expect(line!.row.cells.every((c) => c.rowspan === undefined)).toBe(true);
+  });
 
+  it('헤더 그리드가 없으면 열 제목으로, 열 제목을 숨겼으면 헤더 없이', () => {
+    const noGrid = projectChoiceGroupOriginalLine({ ...base, group: satGroup, headerGrid: undefined });
+    expect(noGrid!.headerGrid).toBeUndefined();
+    expect(noGrid!.showColumnHeader).toBe(true);
     const hidden = projectChoiceGroupOriginalLine({
       ...base,
       group: satGroup,
       headerGrid: undefined,
       hideColumnLabels: true,
     });
-    expect(hidden!.headerRowCount).toBe(0);
-    expect(hidden!.headers).toEqual([]);
+    expect(hidden!.showColumnHeader).toBe(false);
   });
 
-  it('보기 셀이 행에서 안 보이면(열과 짝이 안 맞으면) null', () => {
+  it('보기 셀이 열과 짝이 안 맞으면 null', () => {
     expect(
       projectChoiceGroupOriginalLine({ ...base, group: satGroup, columns: columns.slice(0, 5) }),
     ).toBeNull();

@@ -252,7 +252,7 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
-      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹만 세로 타일 대신 원본 한 줄로 — 기본 꺼짐 */}
+      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹만 세로 타일 대신 원본 표 조각으로 — 기본 꺼짐 */}
       {currentGroup && currentGroup.type !== 'ranking' && (
         <div className="space-y-1 rounded-md border border-gray-200 bg-gray-50 p-3">
           <div className="flex items-center justify-between gap-4">
@@ -276,8 +276,8 @@ export function ChoiceOptCellTab({
           </div>
           <p className="text-xs text-gray-500">
             모바일 표시 방식이 「행 단위 그룹 카드」일 때만 적용됩니다. 켜면 이 그룹의 보기를 세로
-            타일 대신 표의 헤더와 함께 한 줄로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 표
-            문항에서 상세기재 보기가 있는 그룹은 입력칸 자리가 없어 타일로 둡니다.
+            타일 대신 「행별 원본」처럼 원본 표 조각(이 그룹 열의 헤더 + 보기 한 줄, 가로 스크롤)으로
+            보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용.
           </p>
         </div>
       )}

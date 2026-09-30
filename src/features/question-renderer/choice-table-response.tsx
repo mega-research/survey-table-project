@@ -57,14 +57,11 @@ import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
-import {
-  ChoiceGroupOriginalLineView,
-  OriginalLineOptionFrame,
-} from './choice-group-original-line-view';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
 import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
+import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 import { ValidationIssueBanner } from './validation-issue-banner';
@@ -863,16 +860,14 @@ export function ChoiceTableResponse({
                         // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
                         // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
                         const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
-                        // 그룹 옵션을 켰으면 세로 타일 대신 원본 한 줄. 이 표의 상세기재는 카드 밖
-                        // 스택(rowTextStack)에 그려지므로 상세기재 보기가 있어도 한 줄로 둔다.
+                        // 그룹 옵션을 켰으면 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만)
                         const originalLine = projectChoiceGroupOriginalLine({
                           group,
                           columns: rowWiseLayout.columns,
                           headerGrid: rowWiseLayout.headerGrid,
                           hideColumnLabels: question.hideColumnLabels ?? false,
-                          rowCells: row.cells,
+                          row,
                           groupCells: cells,
-                          rejectTextInput: false,
                         });
                         return (
                           <div
@@ -894,41 +889,20 @@ export function ChoiceTableResponse({
                               </p>
                             )}
                             {originalLine ? (
-                              <ChoiceGroupOriginalLineView
-                                line={originalLine}
-                                testId={`choice-group-original-line-${groupId}`}
-                                renderOption={(choiceCell) => {
-                                  const { checked, disabled, option } =
-                                    getChoiceCellState(choiceCell);
-                                  const content = substituteTokens(
-                                    (choiceCell.content ?? '').trim(),
-                                    attrs,
-                                    quotes,
-                                  );
-                                  return (
-                                    <OriginalLineOptionFrame
-                                      checked={checked}
-                                      disabled={disabled}
-                                      control={renderMobileChoiceInput(
-                                        choiceCell,
-                                        option?.label || content || cardLabel,
-                                      )}
-                                    >
-                                      {content && (
-                                        <span
-                                          className={getCellTextClassName(choiceCell)}
-                                          style={getCellTextStyle(choiceCell)}
-                                        >
-                                          <CellText
-                                            text={content}
-                                            html={resolveCellTextHtml(choiceCell, attrs, quotes)}
-                                          />
-                                        </span>
-                                      )}
-                                    </OriginalLineOptionFrame>
-                                  );
-                                }}
-                              />
+                              <div data-testid={`choice-group-original-line-${groupId}`}>
+                                <MobileOriginalRowTable
+                                  columns={originalLine.columns}
+                                  rows={[originalLine.row]}
+                                  interactiveRowId={originalLine.row.id}
+                                  headerGrid={originalLine.headerGrid}
+                                  hideColumnLabels={!originalLine.showColumnHeader}
+                                  choiceControlType={group?.type === 'checkbox' ? 'checkbox' : 'radio'}
+                                  instanceScope={`${row.id}-${groupId}`}
+                                  renderCell={(cell) =>
+                                    renderSelectedRowCell(cell, `${row.id}-${groupId}`)
+                                  }
+                                />
+                              </div>
                             ) : (
                               /* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
                                 순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */

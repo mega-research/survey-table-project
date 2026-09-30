@@ -9,7 +9,8 @@ import { InteractiveTableResponse } from './interactive-table-response';
 
 /**
  * 보기 그룹 표 — 「행 단위 그룹 카드」에서 그룹 옵션(mobileOriginalLine)을 켠 그룹만 세로 타일
- * 대신 원본 한 줄(잘라 낸 헤더 + 보기 셀)로 그린다. 해운물류 멘토 C4(활용 여부 + 11점 만족도).
+ * 대신 행별 원본과 같은 원본 표 조각(그룹 열만 잘라 낸 헤더 + 보기 셀)으로 그린다.
+ * 해운물류 멘토 C4(활용 여부 + 11점 만족도).
  */
 
 vi.mock('@/hooks/use-media-query', () => ({
@@ -79,7 +80,13 @@ const rows: TableRow[] = [
   },
 ];
 
-function Harness({ originalLine }: { originalLine: boolean }) {
+function Harness({
+  originalLine,
+  rowsOverride,
+}: {
+  originalLine: boolean;
+  rowsOverride?: TableRow[];
+}) {
   const [value, setValue] = useState<Record<string, unknown>>({});
   const groups: ChoiceGroup[] = [
     { id: 'g-use', groupKey: 'rad1', type: 'radio', label: '활용 여부' },
@@ -90,7 +97,7 @@ function Harness({ originalLine }: { originalLine: boolean }) {
       <InteractiveTableResponse
         questionId="q1"
         columns={columns}
-        rows={rows}
+        rows={rowsOverride ?? rows}
         tableHeaderGrid={headerGrid}
         choiceGroups={groups}
         mobileTableDisplayMode="row-group-cards"
@@ -123,6 +130,24 @@ describe('행 단위 그룹 카드 — 원본 한 줄 그룹 옵션', () => {
     fireEvent.click(within(screen.getByTestId('choice-group-original-line-g-sat')).getByText('⑦'));
     expect(JSON.parse(screen.getByTestId('value').textContent!)).toEqual({
       __choiceGroups: { rad2: 'sat7' },
+    });
+  });
+
+  it('셀의 모바일 표시가 숨김이면 행별 원본처럼 글자 없이 컨트롤만 그린다', () => {
+    const hiddenRows = rows.map((row) => ({
+      ...row,
+      cells: row.cells.map((cell) =>
+        cell.type === 'choice_opt' ? { ...cell, mobileDisplay: 'hidden' as const } : cell,
+      ),
+    }));
+    render(<Harness originalLine rowsOverride={hiddenRows} />);
+    const line = screen.getByTestId('choice-group-original-line-g-sat');
+    expect(within(line).queryByText('⑤')).not.toBeInTheDocument();
+    const radios = within(line).getAllByRole('radio');
+    expect(radios).toHaveLength(11);
+    fireEvent.click(radios[3]!);
+    expect(JSON.parse(screen.getByTestId('value').textContent!)).toEqual({
+      __choiceGroups: { rad2: 'sat3' },
     });
   });
 

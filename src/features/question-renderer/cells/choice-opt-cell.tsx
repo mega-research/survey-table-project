@@ -27,7 +27,6 @@ import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
-import { OriginalLineOptionFrame } from '../choice-group-original-line-view';
 import { useGatingTableCells } from './gating-table-cells-context';
 
 interface ChoiceOptCellProps {
@@ -43,12 +42,9 @@ interface ChoiceOptCellProps {
   /**
    * 그리는 모양. 'cell'(기본)은 표 셀 안 [컨트롤 + 셀 텍스트]. 'tile' 은 모바일 행 단위 그룹
    * 카드의 세로 타일 — 테두리 칸 하나가 통째로 탭 영역이고 글자는 옵션 라벨이며 고르면 파랗게
-   * 칠한다(보기 소스 표의 같은 모드와 같은 얼굴). 'line' 은 같은 카드의 원본 한 줄
-   * (ChoiceGroup.mobileOriginalLine) 칸 — 셀 글자 아래 컨트롤, 칸 전체가 탭 영역. 상세기재 보기는
-   * 한 줄로 투영하지 않으므로(choice-group-original-line) 이 모양에는 입력칸이 없다.
-   * 선택 읽기·쓰기는 세 모양이 같다.
+   * 칠한다(보기 소스 표의 같은 모드와 같은 얼굴). 선택 읽기·쓰기는 두 모양이 같다.
    */
-  variant?: 'cell' | 'tile' | 'line' | undefined;
+  variant?: 'cell' | 'tile' | undefined;
 }
 
 /**
@@ -169,7 +165,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   );
 
   const controlCls =
-    variant === 'tile' || variant === 'line'
+    variant === 'tile'
       ? 'h-5 w-5 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500'
       : 'mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500';
   const control = isCheckbox ? (
@@ -197,18 +193,6 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       className={controlCls}
     />
   );
-
-  if (variant === 'line') {
-    return (
-      <OriginalLineOptionFrame checked={checked} htmlFor={inputId} control={control}>
-        {visibleText && (
-          <span className={getCellTextClassName(cell)} style={getCellTextStyle(cell)}>
-            <CellText text={visibleText} html={resolveCellTextHtml(cell, attrs, quotes)} />
-          </span>
-        )}
-      </OriginalLineOptionFrame>
-    );
-  }
 
   if (variant === 'tile') {
     return (

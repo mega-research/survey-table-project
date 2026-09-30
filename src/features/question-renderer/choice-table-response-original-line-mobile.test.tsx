@@ -7,7 +7,7 @@ import { ChoiceTableResponse } from './choice-table-response';
 
 /**
  * 보기 소스 표(radio/checkbox 문항 + 내장 표) — 「행 단위 그룹 카드」에서 그룹 옵션
- * (mobileOriginalLine)을 켠 그룹만 원본 한 줄로 그린다. 표 문항과 같은 옵션·같은 모양이다.
+ * (mobileOriginalLine)을 켠 그룹만 행별 원본과 같은 원본 표 조각으로 그린다. 표 문항과 같은 옵션·같은 모양이다.
  */
 
 vi.mock('@/hooks/use-media-query', () => ({

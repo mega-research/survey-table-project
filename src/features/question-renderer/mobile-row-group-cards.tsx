@@ -25,8 +25,8 @@ import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
-import { ChoiceGroupOriginalLineView } from './choice-group-original-line-view';
 import { MobileOptionCard } from './mobile-card-shared';
+import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { projectChoiceGroupOriginalLine } from './utils/choice-group-original-line';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
@@ -154,15 +154,14 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
               // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
               // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
               const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
-              // 그룹 옵션을 켰으면 세로 타일 대신 원본 한 줄 — 상세기재 보기가 있으면 타일로 둔다
+              // 그룹 옵션을 켰으면 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만)
               const originalLine = projectChoiceGroupOriginalLine({
                 group,
                 columns: visibleColumns,
                 headerGrid: visibleHeaderGrid,
                 hideColumnLabels,
-                rowCells: row.cells,
+                row,
                 groupCells: cells,
-                rejectTextInput: true,
               });
               return (
                 <div
@@ -184,20 +183,28 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                     </p>
                   )}
                   {originalLine ? (
-                    <ChoiceGroupOriginalLineView
-                      line={originalLine}
-                      testId={`choice-group-original-line-${group.id}`}
-                      renderOption={(cell) => (
-                        <ChoiceOptCell
-                          cell={cell}
-                          questionId={questionId}
-                          group={group}
-                          value={value}
-                          onChange={onChange}
-                          variant="line"
-                        />
-                      )}
-                    />
+                    <div data-testid={`choice-group-original-line-${group.id}`}>
+                      <MobileOriginalRowTable
+                        columns={originalLine.columns}
+                        rows={[originalLine.row]}
+                        interactiveRowId={originalLine.row.id}
+                        headerGrid={originalLine.headerGrid}
+                        hideColumnLabels={!originalLine.showColumnHeader}
+                        choiceControlType={group.type === 'checkbox' ? 'checkbox' : 'radio'}
+                        errorCellIds={errorCellIds}
+                        instanceScope={`${row.id}-${group.id}`}
+                        renderCell={(cell) => (
+                          <InteractiveCell
+                            cell={cell}
+                            questionId={questionId}
+                            value={value}
+                            onChange={onChange}
+                            inputIdScope={`${row.id}-${group.id}`}
+                            rowCells={row.cells}
+                          />
+                        )}
+                      />
+                    </div>
                   ) : (
                     // 타일은 세로 한 줄씩 — 가로로 접으면 척도 순서가 지그재그로 읽힌다
                     <div className="flex flex-col gap-2">
