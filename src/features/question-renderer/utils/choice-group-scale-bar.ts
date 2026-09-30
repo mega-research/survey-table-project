@@ -10,7 +10,8 @@ import { expandHeaderGrid } from './expand-header-grid';
  * 열만 헤더 격자에서 잘라 보고, 줄마다 역할을 정한다.
  *
  * - 제목 줄: 비지 않은 칸 하나가 대상 열 전체를 덮는다 — 버린다(카드의 그룹 이름과 겹친다)
- * - 칸 줄: 비지 않은 칸이 전부 한 칸짜리이고 대상 열을 빠짐없이 덮는다 — 칸 글자의 대체 출처
+ * - 칸 줄: 비지 않은 칸이 전부 한 칸짜리이고 대상 열을 빠짐없이 덮는다 — 칸 글자의 대체 출처,
+ *   5칸 이하 칸 안 라벨
  * - 구간 줄: 그 밖(여러 칸을 묶었거나 일부 칸만 이름이 있다) — 구간 띠·양끝/가운데 라벨·선택값 표시
  *
  * 고정 문구는 없다. 모든 글자는 보기 칸의 평문 content 와 헤더에서만 읽는다 — exportLabel 은
@@ -23,6 +24,8 @@ export interface ScaleBarCell {
   cellId: string;
   /** 막대 칸 글자 */
   text: string;
+  /** 5칸 이하일 때 칸 글자 아래 라벨 — 칸 글자와 같으면 두지 않는다(한 번만 보인다) */
+  inCellLabel?: string;
   bandIndex: number | null;
 }
 
@@ -87,10 +90,16 @@ function isVisible(cell: TableCell): boolean {
   return !cell.isHidden && !cell._isContinuation;
 }
 
-/** 헤더 글자의 줄바꿈(`전혀\n그렇지\n않다`)은 공백으로 잇는다 */
+/** 헤더 글자의 줄바꿈(`전혀\n그렇지\n않다`)은 공백으로 잇는다 — 보기 칸 글자도 같은 규칙이라야 둘을 비교할 수 있다 */
 function normalizeLabel(label: string): string {
   return label.replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * 번호뿐인 글자(`4` · `④` · `❹` · `4점`) — 라벨이 아니라 칸 번호다. 보기 칸 글자가 라벨이고 칸 줄이
+ * 번호인 헤더에서 라벨 아래 번호가 붙는(거꾸로 된) 칸 안 라벨을 막는다.
+ */
+const NUMBER_MARK = /^[\s0-9０-９\u2460-\u2473\u24EA-\u24FF\u2776-\u2793().점-]+$/u;
 
 /**
  * 헤더 격자를 대상 열 [first, first + count) 로 잘라 줄마다 역할을 정한다. 위 줄에서 세로 병합으로
@@ -169,7 +178,7 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
 
   const texts: string[] = [];
   for (let i = 0; i < count; i += 1) {
-    const own = (targetCells[i]!.content ?? '').trim();
+    const own = normalizeLabel(targetCells[i]!.content ?? '');
     if (own !== '') {
       texts.push(own);
       continue;
@@ -189,15 +198,34 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     return found < 0 ? null : found;
   };
 
-  const cells: ScaleBarCell[] = targetCells.map((cell, i) => ({
-    cellId: cell.id,
-    text: texts[i]!,
-    bandIndex: bandIndexAt(i),
-  }));
+  /** 6칸 이상 — 라벨을 칸 안이 아니라 막대 아래(양끝·가운데)와 선택값 표시로 보인다 */
+  const labelsBelowBar = count > IN_CELL_LABEL_MAX_CELLS;
+  // 5칸 이하는 칸 폭(약 70px)이 넉넉해 라벨을 칸 안에 넣는다 — 칸 줄 글자, 없으면 그 칸을 덮는 한 칸짜리
+  // 구간 이름. 여러 칸짜리 구간 이름은 한 칸에 붙일 수 없어 구간 띠로만 드러낸다. 칸 글자와 같은
+  // 라벨(보기 칸 글자가 곧 라벨이거나 칸 글자를 칸 줄에서 가져온 경우)은 되풀이하지 않는다.
+  const inCellLabelAt = (i: number, text: string, bandIndex: number | null): string | undefined => {
+    if (labelsBelowBar) return undefined;
+    const band = bandIndex === null ? undefined : bands[bandIndex];
+    const candidates = [cellLine?.[i]?.label, band?.span === 1 ? band.label : undefined];
+    return candidates.find(
+      (label) => label !== undefined && label !== '' && label !== text && !NUMBER_MARK.test(label),
+    );
+  };
+
+  const cells: ScaleBarCell[] = targetCells.map((cell, i) => {
+    const text = texts[i]!;
+    const bandIndex = bandIndexAt(i);
+    const inCellLabel = inCellLabelAt(i, text, bandIndex);
+    return {
+      cellId: cell.id,
+      text,
+      ...(inCellLabel !== undefined ? { inCellLabel } : {}),
+      bandIndex,
+    };
+  });
 
   const anchors: ScaleBarModel['anchors'] = {};
-  const wide = count > IN_CELL_LABEL_MAX_CELLS;
-  if (wide && bands.length > 0) {
+  if (labelsBelowBar && bands.length > 0) {
     const leftBand = cells[0]!.bandIndex;
     const rightBand = cells[count - 1]!.bandIndex;
     if (leftBand !== null) anchors.left = bands[leftBand]!.label;
@@ -215,6 +243,6 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
 
   return {
     ok: true,
-    model: { cells, bands, anchors, showsSelectionLabel: wide && bands.length > 0 },
+    model: { cells, bands, anchors, showsSelectionLabel: labelsBelowBar && bands.length > 0 },
   };
 }

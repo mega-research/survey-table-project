@@ -106,6 +106,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
                 key={barCell.cellId}
                 cell={cell}
                 barText={text(barCell.text)}
+                inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
                 bandLabel={bandLabelOf(barCell)}
                 first={index === 0}
                 questionId={questionId}
@@ -164,6 +165,8 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
 interface ScaleBarCellControlProps {
   cell: TableCell;
   barText: string;
+  /** 5칸 이하 칸 안 라벨 — 칸 글자 아래 줄 */
+  inCellLabel?: string | undefined;
   bandLabel: string;
   first: boolean;
   questionId: string;
@@ -177,6 +180,7 @@ interface ScaleBarCellControlProps {
 function ScaleBarCellControl({
   cell,
   barText,
+  inCellLabel,
   bandLabel,
   first,
   questionId,
@@ -191,7 +195,8 @@ function ScaleBarCellControl({
     <label
       htmlFor={inputId}
       className={cn(
-        'flex min-h-10 min-w-0 cursor-pointer items-center justify-center text-[13px] transition-colors select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-inset',
+        // 그리드 칸은 한 줄에서 가장 높은 칸에 맞춰 늘어나므로 라벨이 두 줄로 감겨도 칸 높이가 같다
+        'flex min-h-10 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 px-0.5 py-1 text-center text-[13px] transition-colors select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-inset',
         !first && 'border-l border-gray-200',
         checked ? 'bg-blue-600 font-semibold text-white' : 'text-gray-700',
       )}
@@ -200,13 +205,21 @@ function ScaleBarCellControl({
         type="radio"
         id={inputId}
         name={`${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${group.groupKey}-bar`}
-        aria-label={[barText, bandLabel].filter(Boolean).join(' ')}
+        // 같은 글자가 칸 안 라벨·구간 이름 양쪽에서 오면(한 칸짜리 구간) 한 번만 읽는다
+        aria-label={[...new Set([barText, inCellLabel, bandLabel])].filter(Boolean).join(' ')}
         checked={checked}
         onChange={() => {}}
         onClick={toggle}
         className="sr-only"
       />
-      <span aria-hidden>{barText}</span>
+      <span aria-hidden className="break-keep">
+        {barText}
+      </span>
+      {inCellLabel && (
+        <span aria-hidden className="text-[11px] leading-tight break-keep">
+          {inCellLabel}
+        </span>
+      )}
     </label>
   );
 }

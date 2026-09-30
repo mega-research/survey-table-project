@@ -228,3 +228,66 @@ describe('행 단위 그룹 카드 — 척도 막대 그룹', () => {
     expect(screen.getAllByRole('radio').length).toBeGreaterThanOrEqual(13);
   });
 });
+
+describe('행 단위 그룹 카드 — 5점 척도 막대(칸 안 라벨)', () => {
+  const FIVE = ['매우 불만족', '불만족', '보통', '만족', '매우 만족'];
+  const fiveColumns: TableColumn[] = [
+    { id: 'item', label: '평가항목' },
+    ...FIVE.map((_, n) => ({ id: `s${n}`, label: `${n + 1}점` })),
+  ];
+  const fiveHeader: HeaderCell[][] = [
+    [head('h-item', '평가항목', 1, 2), head('h-sat', '만족도', 5)],
+    FIVE.map((label, n) => head(`h${n}`, label, 1)),
+  ];
+  const fiveRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '회의실 및 교통비 지원',
+      cells: [
+        { id: 'item', type: 'text', content: '1) 회의실 및 교통비 지원' },
+        ...FIVE.map((_, n) => ({
+          id: `f${n}`,
+          type: 'choice_opt' as const,
+          content: String(n + 1),
+          choiceGroupId: 'g-sat',
+        })),
+      ],
+    },
+  ];
+
+  function FiveHarness() {
+    const [value, setValue] = useState<Record<string, unknown>>({});
+    return (
+      <>
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={fiveColumns}
+          rows={fiveRows}
+          tableHeaderGrid={fiveHeader}
+          choiceGroups={[
+            { id: 'g-sat', groupKey: 'rad1', type: 'radio', label: '만족도', mobileScaleBar: true },
+          ]}
+          mobileTableDisplayMode="row-group-cards"
+          value={value}
+          onChange={setValue}
+        />
+        <output data-testid="value">{JSON.stringify(value)}</output>
+      </>
+    );
+  }
+
+  it('칸 안에 번호와 라벨이 함께 나오고, 접근성 이름에 라벨이 들어간다', () => {
+    render(<FiveHarness />);
+    const bar = screen.getByTestId('choice-group-scale-bar-g-sat');
+    for (const label of FIVE) expect(within(bar).getByText(label)).toBeInTheDocument();
+    expect(within(bar).getByRole('radio', { name: '4 만족' })).toBeInTheDocument();
+  });
+
+  it('고르면 저장되지만 선택값 표시는 없다 — 라벨이 이미 칸 안에 보인다', () => {
+    render(<FiveHarness />);
+    const bar = screen.getByTestId('choice-group-scale-bar-g-sat');
+    fireEvent.click(within(bar).getByRole('radio', { name: '4 만족' }));
+    expect(valueOf()).toEqual({ __choiceGroups: { rad1: 'f3' } });
+    expect(within(bar).queryByTestId('scale-bar-selection')).not.toBeInTheDocument();
+  });
+});

@@ -275,6 +275,139 @@ describe('projectScaleBar — 헤더 줄 역할 판정', () => {
   });
 });
 
+describe('projectScaleBar — 5칸 이하 칸 안 라벨', () => {
+  const FIVE = ['매우 불만족', '불만족', '보통', '만족', '매우 만족'];
+  const fiveScale = (texts: string[] = ['1', '2', '3', '4', '5']) =>
+    texts.map((text, n) => choice(`c${n}`, text));
+
+  it('칸 줄이 있으면 칸 안 라벨은 칸 줄 글자다. 양끝·가운데 라벨과 선택값 표시는 없다', () => {
+    const header: HeaderCell[][] = [
+      [head('h-pre', '', 4), head('h-sat', '만족도', 5)],
+      [head('h-pre2', '', 4), ...FIVE.map((label, n) => head(`h${n}`, label, 1))],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(), headerGrid: header }));
+    expect(model.cells.map((c) => [c.text, c.inCellLabel])).toEqual([
+      ['1', '매우 불만족'],
+      ['2', '불만족'],
+      ['3', '보통'],
+      ['4', '만족'],
+      ['5', '매우 만족'],
+    ]);
+    expect(model.anchors).toEqual({});
+    expect(model.showsSelectionLabel).toBe(false);
+  });
+
+  it('칸 줄이 없으면 그 칸을 덮는 한 칸짜리 구간 이름 — 여러 칸짜리 구간은 칸 안에 쓰지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-pre', '', 4),
+        head('h-neg', '불만족', 2),
+        head('h-mid', '보통', 1),
+        head('h-pos', '만족', 2),
+      ],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(), headerGrid: header }));
+    expect(model.cells.map((c) => c.inCellLabel)).toEqual([
+      undefined,
+      undefined,
+      '보통',
+      undefined,
+      undefined,
+    ]);
+    expect(model.bands.map((b) => b.label)).toEqual(['불만족', '보통', '만족']);
+    expect(model.anchors).toEqual({});
+    expect(model.showsSelectionLabel).toBe(false);
+  });
+
+  it('보기 칸 글자 자체가 라벨이면 그 글자 한 번만 — 같은 칸 줄 글자를 되풀이하지 않는다', () => {
+    const noHeader = modelOf(c4({ scale: fiveScale(FIVE), headerGrid: undefined }));
+    expect(noHeader.cells.map((c) => [c.text, c.inCellLabel])).toEqual(
+      FIVE.map((label) => [label, undefined]),
+    );
+    const sameHeader: HeaderCell[][] = [
+      [head('h-pre', '', 4), ...FIVE.map((label, n) => head(`h${n}`, label, 1))],
+    ];
+    const repeated = modelOf(c4({ scale: fiveScale(FIVE), headerGrid: sameHeader }));
+    expect(repeated.cells.every((c) => c.inCellLabel === undefined)).toBe(true);
+  });
+
+  it('보기 칸 글자가 비어 칸 글자를 칸 줄에서 가져왔으면 칸 안 라벨로 또 쓰지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [head('h-pre', '', 4), ...FIVE.map((label, n) => head(`h${n}`, label, 1))],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(['', '', '', '', '']), headerGrid: header }));
+    expect(model.cells.map((c) => [c.text, c.inCellLabel])).toEqual(
+      FIVE.map((label) => [label, undefined]),
+    );
+  });
+
+  it('한 칸짜리 구간이 일부 칸에만 있으면 그 칸에만 라벨이 붙는다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-pre', '', 4),
+        head('h0', '매우 불만족', 1),
+        head('g1', '', 1),
+        head('h2', '보통', 1),
+        head('g3', '', 1),
+        head('h4', '매우 만족', 1),
+      ],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(), headerGrid: header }));
+    expect(model.cells.map((c) => c.inCellLabel)).toEqual([
+      '매우 불만족',
+      undefined,
+      '보통',
+      undefined,
+      '매우 만족',
+    ]);
+  });
+
+  it('보기 칸 글자가 라벨이고 칸 줄이 번호면 번호를 라벨로 붙이지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [head('h-pre', '', 4), ...['①', '②', '③', '④', '⑤'].map((n, i) => head(`h${i}`, n, 1))],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(FIVE), headerGrid: header }));
+    expect(model.cells.map((c) => [c.text, c.inCellLabel])).toEqual(
+      FIVE.map((label) => [label, undefined]),
+    );
+    const points = [
+      [head('h-pre', '', 4), ...[1, 2, 3, 4, 5].map((n) => head(`p${n}`, `${n}점`, 1))],
+    ];
+    const withPoints = modelOf(c4({ scale: fiveScale(FIVE), headerGrid: points }));
+    expect(withPoints.cells.every((c) => c.inCellLabel === undefined)).toBe(true);
+  });
+
+  it('보기 칸 글자의 줄바꿈도 헤더처럼 공백으로 이어 비교한다 — 같은 라벨을 두 번 쓰지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [head('h-pre', '', 4), ...FIVE.map((label, n) => head(`h${n}`, label, 1))],
+    ];
+    const wrapped = FIVE.map((label) => label.replace(' ', '\n'));
+    const model = modelOf(c4({ scale: fiveScale(wrapped), headerGrid: header }));
+    expect(model.cells.map((c) => [c.text, c.inCellLabel])).toEqual(
+      FIVE.map((label) => [label, undefined]),
+    );
+  });
+
+  it('3칸도 같은 규칙이다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-pre', '', 4),
+        head('h0', '아니다', 1),
+        head('h1', '보통', 1),
+        head('h2', '그렇다', 1),
+      ],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(['1', '2', '3']), headerGrid: header }));
+    expect(model.cells.map((c) => c.inCellLabel)).toEqual(['아니다', '보통', '그렇다']);
+    expect(model.anchors).toEqual({});
+  });
+
+  it('6칸 이상은 칸 안 라벨이 없다', () => {
+    const model = modelOf(c4());
+    expect(model.cells.every((c) => c.inCellLabel === undefined)).toBe(true);
+  });
+});
+
 describe('projectScaleBar — 폴백(null + 이유 코드)', () => {
   const reasonOf = (input: ProjectScaleBarInput) => {
     const result = projectScaleBar(input);
