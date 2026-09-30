@@ -47,11 +47,36 @@ export function projectChoiceGroupOriginalLine(
   const colIndices = groupCells.map((cell) => row.cells.findIndex((c) => c.id === cell.id));
   if (colIndices.some((index) => index < 0 || !columns[index])) return null;
 
-  const keptIds = new Set(colIndices.map((index) => columns[index]!.id));
+  return projectOriginalColumnPiece({
+    columns,
+    headerGrid: input.headerGrid,
+    hideColumnLabels: input.hideColumnLabels,
+    row,
+    columnIds: new Set(colIndices.map((index) => columns[index]!.id)),
+  });
+}
+
+export interface ProjectOriginalColumnPieceInput {
+  /** 행의 셀과 인덱스가 맞는 열 */
+  columns: readonly TableColumn[];
+  headerGrid?: HeaderCell[][] | undefined;
+  hideColumnLabels: boolean;
+  row: TableRow;
+  /** 조각에 남길 열 */
+  columnIds: ReadonlySet<string>;
+}
+
+/**
+ * 행 하나를 일부 열만 잘라 낸 원본 표 조각 — 헤더는 그 열로 클리핑한다(병합 셀은 걸친 만큼만,
+ * 밖의 열만 덮는 셀은 빠진다). 원본 한 줄과 「행별 척도」의 막대 아닌 부분이 쓴다.
+ */
+export function projectOriginalColumnPiece(
+  input: ProjectOriginalColumnPieceInput,
+): ChoiceGroupOriginalLine | null {
   const projected = recalculateColspansForVisibleColumns(
-    [...columns],
-    [row],
-    keptIds,
+    [...input.columns],
+    [input.row],
+    new Set(input.columnIds),
     input.headerGrid,
   );
   const projectedRow = projected.rows[0];

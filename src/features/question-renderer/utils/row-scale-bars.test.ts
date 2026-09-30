@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  type ProjectRowScaleBarsInput,
-  projectRowScaleBars,
+  type ProjectRowScaleLayoutInput,
+  type RowScaleSegment,
+  projectRowScaleLayout,
 } from '@/features/question-renderer/utils/row-scale-bars';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
-// 해운물류 멘토 D1 모양 — 항목 1칸 + 0~10점 11칸, 행마다 보기 그룹 하나.
+// 해운물류 멘토 C4 모양 한 행 — 항목 글자 · 활용 여부 2칸 · 만족도 11칸(⓪~⑩).
 const CIRC = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 const head = (id: string, label: string, colspan: number): HeaderCell => ({
   id,
@@ -14,159 +15,206 @@ const head = (id: string, label: string, colspan: number): HeaderCell => ({
   colspan,
   rowspan: 1,
 });
-const D1_HEADER: HeaderCell[][] = [
+const HEADER: HeaderCell[][] = [
   [
-    head('h-item', '항목', 1),
-    head('h-0', '전혀\n그렇지\n않다', 2),
-    head('h-2', '별로\n그렇지\n않다', 3),
+    head('h-item', '평가항목', 1),
+    head('h-u1', '활용함', 1),
+    head('h-u2', '활용 안함', 1),
+    head('h-0', '매우 불만족', 1),
+    head('h-neg', '불만족', 4),
     head('h-5', '보통', 1),
-    head('h-6', '약간\n그렇다', 3),
-    head('h-9', '매우\n그렇다', 2),
+    head('h-pos', '만족', 4),
+    head('h-10', '매우 만족', 1),
   ],
 ];
 const columns: TableColumn[] = [
-  { id: 'item', label: '항목' },
+  { id: 'item', label: '평가항목' },
+  { id: 'u1', label: '활용함' },
+  { id: 'u2', label: '활용 안함' },
   ...CIRC.map((_, n) => ({ id: `s${n}`, label: '' })),
 ];
-const group = (id: string, extra: Partial<ChoiceGroup> = {}): ChoiceGroup => ({
-  id,
-  groupKey: id,
+const USE: ChoiceGroup = { id: 'g-use', groupKey: 'rad1', type: 'radio', label: '활용 여부' };
+const SAT: ChoiceGroup = {
+  id: 'g-sat',
+  groupKey: 'rad2',
   type: 'radio',
-  label: '',
-  ...extra,
-});
-const scale = (rowId: string, groupId: string | undefined): TableCell[] =>
-  CIRC.map((content, n) => ({
-    id: `${rowId}-c${n}`,
-    type: 'choice_opt',
-    content,
-    ...(groupId ? { choiceGroupId: groupId } : {}),
-  }));
-const row = (id: string, cells: TableCell[]): TableRow => ({
-  id,
-  label: id,
-  cells: [{ id: `${id}-item`, type: 'text', content: id }, ...cells],
+  label: '만족도',
+  mobileScaleBar: true,
+};
+const useCells: TableCell[] = [
+  { id: 'use1', type: 'choice_opt', content: '①', choiceGroupId: 'g-use' },
+  { id: 'use2', type: 'choice_opt', content: '②', choiceGroupId: 'g-use' },
+];
+const satCells = (edit: (cell: TableCell, n: number) => TableCell = (c) => c): TableCell[] =>
+  CIRC.map((content, n) =>
+    edit({ id: `sat${n}`, type: 'choice_opt', content, choiceGroupId: 'g-sat' }, n),
+  );
+const row = (cells: TableCell[]): TableRow => ({
+  id: 'r1',
+  label: '회의실 지원',
+  cells: [{ id: 'item-cell', type: 'text', content: '회의실 지원' }, ...cells],
 });
 
-function input(overrides: Partial<ProjectRowScaleBarsInput> = {}): ProjectRowScaleBarsInput {
+function input(overrides: Partial<ProjectRowScaleLayoutInput> = {}): ProjectRowScaleLayoutInput {
   return {
     columns,
-    headerGrid: D1_HEADER,
-    row: row('r1', scale('r1', 'g1')),
-    choiceGroups: [group('g1')],
+    barHeaderGrid: HEADER,
+    pieceHeaderGrid: HEADER,
+    showPieceHeader: true,
+    row: row([...useCells, ...satCells()]),
+    choiceGroups: [USE, SAT],
     ungroupedSelectionType: null,
     ...overrides,
   };
 }
 
-describe('projectRowScaleBars — 행별 척도', () => {
-  it('보기 그룹 하나인 행은 막대 하나 — 구간·가운데 라벨은 헤더에서', () => {
-    const result = projectRowScaleBars(input());
-    if (!result.ok) throw new Error(result.reason);
-    expect(result.bars).toHaveLength(1);
-    const [bar] = result.bars;
-    expect(bar!.group?.id).toBe('g1');
-    expect(bar!.cells.map((cell) => cell.id)).toEqual(CIRC.map((_, n) => `r1-c${n}`));
-    expect(bar!.model.cells.map((cell) => cell.text)).toEqual(CIRC);
-    expect(bar!.model.anchors).toEqual({
-      left: '전혀 그렇지 않다',
-      middle: { label: '보통', index: 5 },
-      right: '매우 그렇다',
-    });
+const kinds = (segments: RowScaleSegment[] | null) =>
+  segments?.map((segment) =>
+    segment.kind === 'bar'
+      ? `bar:${segment.bar.key}`
+      : `original:${segment.piece.columns.map((c) => c.id).join(',')}`,
+  ) ?? null;
+
+describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
+  it('「척도 막대」로 고른 그룹만 막대, 나머지 응답 칸은 열 순서대로 원본 표 조각이다', () => {
+    const layout = projectRowScaleLayout(input());
+    // 항목 글자만 있는 열은 응답 칸이 없어 조각이 되지 않는다(행 제목이 이미 보인다)
+    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat']);
+    expect(layout.fallbacks).toEqual([]);
   });
 
-  it('보기 그룹이 둘이면 그룹마다 막대 하나, 행 순서대로', () => {
-    const two = [
-      ...scale('r1', 'g1').slice(0, 5),
-      ...scale('r1', 'g2')
-        .slice(5)
-        .map((cell) => ({ ...cell })),
-    ];
-    const result = projectRowScaleBars(
+  it('막대 칸 글자와 구간은 막대용 헤더에서, 조각의 헤더는 조각용 헤더에서 잘라 온다', () => {
+    const layout = projectRowScaleLayout(input());
+    const [piece, bar] = layout.segments!;
+    if (piece?.kind !== 'original' || bar?.kind !== 'bar') throw new Error('모양이 다르다');
+    expect(bar.bar.model.anchors).toEqual({
+      left: '매우 불만족',
+      middle: { label: '보통', index: 5 },
+      right: '매우 만족',
+    });
+    expect(piece.piece.headerGrid?.[0]?.map((h) => h.label)).toEqual(['활용함', '활용 안함']);
+    expect(piece.piece.showColumnHeader).toBe(true);
+  });
+
+  it('원본 조각에 헤더를 그리지 않는 설정이면 조각에 헤더가 없어도 막대 라벨은 남는다', () => {
+    const layout = projectRowScaleLayout(
+      input({ pieceHeaderGrid: undefined, showPieceHeader: false }),
+    );
+    const [piece, bar] = layout.segments!;
+    if (piece?.kind !== 'original' || bar?.kind !== 'bar') throw new Error('모양이 다르다');
+    expect(piece.piece.showColumnHeader).toBe(false);
+    expect(bar.bar.model.anchors.middle?.label).toBe('보통');
+  });
+
+  it('막대로 고른 그룹이 없으면 행 전체가 원본 표 조각이다(segments null)', () => {
+    const { mobileScaleBar: _bar, ...tiles } = SAT;
+    const layout = projectRowScaleLayout(input({ choiceGroups: [USE, tiles] }));
+    expect(layout.segments).toBeNull();
+    expect(layout.fallbacks).toEqual([]);
+  });
+
+  it('입력칸은 막대 뒤 원본 조각으로 남는다', () => {
+    const layout = projectRowScaleLayout(
       input({
-        row: row('r1', two),
-        choiceGroups: [group('g2'), group('g1')],
-        headerGrid: undefined,
+        row: row([...useCells, ...satCells(), { id: 'memo', type: 'input', content: '' }]),
+        columns: [...columns, { id: 'memo-col', label: '메모' }],
       }),
     );
-    if (!result.ok) throw new Error(result.reason);
-    expect(result.bars.map((bar) => bar.group?.id)).toEqual(['g1', 'g2']);
-    expect(result.bars.map((bar) => bar.cells.length)).toEqual([5, 6]);
+    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat', 'original:memo-col']);
   });
 
-  it('그룹 없는 보기 칸은 연속 묶음마다 막대 하나 — 보기 소스 표의 문항 선택 방식을 쓴다', () => {
-    const cells = scale('r1', undefined);
-    const split: TableCell[] = [
-      ...cells.slice(0, 4),
-      { id: 'gap', type: 'text', content: '|' },
-      ...cells.slice(4),
-    ];
-    const result = projectRowScaleBars(
+  it('막대로 고른 그룹을 못 그리면 그 그룹 열은 원본 조각으로 떨어지고 이유가 남는다', () => {
+    const layout = projectRowScaleLayout(
       input({
-        row: row('r1', split),
-        columns: [...columns, { id: 'extra', label: '' }],
-        headerGrid: undefined,
+        row: row([
+          ...useCells,
+          ...satCells((cell, n) => (n === 10 ? { ...cell, allowTextInput: true } : cell)),
+        ]),
+      }),
+    );
+    expect(layout.segments).toBeNull();
+    expect(layout.fallbacks).toEqual([{ key: 'g-sat', group: SAT, reason: 'text-input' }]);
+  });
+
+  it('그룹이 둘이고 하나만 폴백하면 폴백한 그룹은 원본 조각, 다른 그룹은 막대다', () => {
+    const second: ChoiceGroup = { ...SAT, id: 'g-sat2', groupKey: 'rad3' };
+    const cells = [
+      ...satCells().slice(0, 5),
+      ...satCells()
+        .slice(5)
+        .map((cell, n) => ({
+          ...cell,
+          choiceGroupId: 'g-sat2',
+          ...(n === 0 ? { exclusiveChoice: true } : {}),
+        })),
+    ];
+    const layout = projectRowScaleLayout(
+      input({
+        row: row([...useCells, ...cells]),
+        choiceGroups: [USE, SAT, second],
+        barHeaderGrid: undefined,
+      }),
+    );
+    expect(kinds(layout.segments)).toEqual([
+      'original:u1,u2',
+      'bar:g-sat',
+      'original:s5,s6,s7,s8,s9,s10',
+    ]);
+    expect(layout.fallbacks.map((f) => [f.key, f.reason])).toEqual([
+      ['g-sat2', 'exclusive-choice'],
+    ]);
+  });
+
+  it('그룹 없는 보기 칸은 보기 소스 표에서 모드만으로 막대다 — 이어진 묶음마다 하나', () => {
+    const plain = satCells().map(({ choiceGroupId: _g, ...cell }) => cell);
+    const layout = projectRowScaleLayout(
+      input({
+        row: row([
+          ...plain.slice(0, 4),
+          { id: 'gap', type: 'input', content: '' },
+          ...plain.slice(4),
+        ]),
+        columns: [
+          ...columns.slice(0, 1),
+          ...CIRC.slice(0, 4).map((_, n) => ({ id: `a${n}`, label: '' })),
+          { id: 'gap-col', label: '' },
+          ...CIRC.slice(4).map((_, n) => ({ id: `b${n}`, label: '' })),
+        ],
+        barHeaderGrid: undefined,
+        pieceHeaderGrid: undefined,
         choiceGroups: [],
         ungroupedSelectionType: 'radio',
       }),
     );
-    if (!result.ok) throw new Error(result.reason);
-    expect(result.bars.map((bar) => bar.group)).toEqual([undefined, undefined]);
-    expect(result.bars.map((bar) => bar.cells.length)).toEqual([4, 7]);
-    expect(new Set(result.bars.map((bar) => bar.key)).size).toBe(2);
+    expect(kinds(layout.segments)).toEqual(['bar:run:sat0', 'original:gap-col', 'bar:run:sat4']);
   });
 
-  it('복수 선택 문항의 그룹 없는 보기 칸은 폴백', () => {
-    const result = projectRowScaleBars(
+  it('checkbox 문항의 그룹 없는 보기 칸은 복수 선택이라 폴백한다', () => {
+    const plain = satCells().map(({ choiceGroupId: _g, ...cell }) => cell);
+    const layout = projectRowScaleLayout(
+      input({ row: row(plain), choiceGroups: [], ungroupedSelectionType: 'checkbox' }),
+    );
+    expect(layout.segments).toBeNull();
+    expect(layout.fallbacks.map((f) => f.reason)).toEqual(['not-single-choice']);
+  });
+
+  it('표 문항의 그룹 없는 보기 칸은 막대 후보가 아니다', () => {
+    const plain = satCells().map(({ choiceGroupId: _g, ...cell }) => cell);
+    const layout = projectRowScaleLayout(input({ row: row(plain), choiceGroups: [] }));
+    expect(layout).toEqual({ segments: null, fallbacks: [] });
+  });
+
+  it('숨은 칸은 조각을 만들지 않는다', () => {
+    const layout = projectRowScaleLayout(
       input({
-        row: row('r1', scale('r1', undefined)),
-        choiceGroups: [],
-        ungroupedSelectionType: 'checkbox',
+        row: row([
+          ...useCells,
+          ...satCells(),
+          { id: 'hidden-memo', type: 'input', content: '', isHidden: true },
+        ]),
+        columns: [...columns, { id: 'x', label: '' }],
       }),
     );
-    expect(result).toEqual({ ok: false, reason: 'not-single-choice' });
-  });
-
-  it('그룹 없는 보기 칸을 답할 수 없는 표(표 문항)에서는 그 칸을 막대로 만들지 않는다', () => {
-    const result = projectRowScaleBars(
-      input({
-        row: row('r1', scale('r1', undefined)),
-        choiceGroups: [],
-        ungroupedSelectionType: null,
-      }),
-    );
-    expect(result).toEqual({ ok: false, reason: 'cell-count' });
-  });
-
-  it('행에 입력칸 같은 다른 응답 칸이 있으면 행 전체가 폴백 — 막대만 그리면 그 칸이 사라진다', () => {
-    const cells: TableCell[] = [...scale('r1', 'g1'), { id: 'memo', type: 'input', content: '' }];
-    const result = projectRowScaleBars(
-      input({ row: row('r1', cells), columns: [...columns, { id: 'memo-col', label: '' }] }),
-    );
-    expect(result).toEqual({ ok: false, reason: 'non-choice-cell' });
-  });
-
-  it('그룹 하나라도 막대로 못 그리면 행 전체가 폴백 — 이유는 그 그룹의 것', () => {
-    const cells = scale('r1', 'g1').map((cell, n) =>
-      n === 10 ? { ...cell, allowTextInput: true } : cell,
-    );
-    const result = projectRowScaleBars(input({ row: row('r1', cells) }));
-    expect(result).toEqual({ ok: false, reason: 'text-input' });
-  });
-
-  it('숨은 칸·병합으로 이어진 칸은 보지 않는다', () => {
-    const cells = [
-      ...scale('r1', 'g1'),
-      { id: 'hidden-input', type: 'input' as const, content: '', isHidden: true },
-    ];
-    const result = projectRowScaleBars(
-      input({ row: row('r1', cells), columns: [...columns, { id: 'x', label: '' }] }),
-    );
-    expect(result.ok).toBe(true);
-  });
-
-  it('순위 그룹 칸은 막대가 아니다', () => {
-    const result = projectRowScaleBars(input({ choiceGroups: [group('g1', { type: 'ranking' })] }));
-    expect(result).toEqual({ ok: false, reason: 'not-single-choice' });
+    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat']);
   });
 });

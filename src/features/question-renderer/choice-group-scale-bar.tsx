@@ -7,13 +7,29 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { useChoiceGroupToggle } from '@/features/question-renderer/hooks/use-choice-opt-toggle';
-import type {
-  ScaleBarCell,
-  ScaleBarModel,
+import {
+  type ScaleBarBandTone,
+  type ScaleBarCell,
+  type ScaleBarModel,
+  resolveScaleBarBandTones,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
+
+/** 구간 띠 색 — 붉은색·회색·파란색, 양끝 구간은 짙게. 고른 칸의 구간은 같은 색을 가장 짙게 */
+const BAND_TONE_CLASS: Readonly<Record<ScaleBarBandTone['side'], [string, string, string]>> = {
+  // [기본, 짙게(양끝), 고름]
+  negative: ['bg-red-200', 'bg-red-400', 'bg-red-600'],
+  neutral: ['bg-gray-300', 'bg-gray-300', 'bg-gray-600'],
+  positive: ['bg-blue-200', 'bg-blue-400', 'bg-blue-600'],
+};
+
+function bandToneClass(tone: ScaleBarBandTone, selected: boolean): string {
+  const [base, strong, picked] = BAND_TONE_CLASS[tone.side];
+  if (selected) return picked;
+  return tone.strong ? strong : base;
+}
 
 /** 막대 키보드 이동 — 칸 수만큼 옮기거나(양끝에서 반대편으로 돈다) 첫 칸·끝 칸으로 */
 const SCALE_BAR_KEY_MOVES: Readonly<Record<string, number | 'first' | 'last'>> = {
@@ -60,8 +76,8 @@ interface ChoiceGroupScaleBarProps {
  * 척도 막대 — 척도 한 줄을 화면 폭에 맞춘 막대로 그린다(CONTEXT.md 「척도 막대」).
  *
  * 칸 글자는 원본 보기 칸 글자 그대로이고, 아래 구간 띠가 원본 헤더의 구간을 보여 준다. 구간 띠는
- * 구간을 구분만 하고 좋고 나쁨을 칠하지 않는다 — 척도가 양극이 아닐 수 있다(빈도·중요도). 두 회색
- * 톤을 교대로 칠하고 고른 칸의 구간만 강조색이다.
+ * 왼쪽 붉은색 · 가운데 회색 · 오른쪽 파란색이고 양끝 구간은 짙게, 고른 칸의 구간은 가장 짙게 칠한다
+ * (resolveScaleBarBandTones). 막대 아래 양끝·가운데 라벨은 검정 글자다.
  *
  * 그리기만 한다. 판정(그릴지·무엇을 쓸지)은 투영이 끝냈고, 선택 읽기·쓰기는 호출부가 세로 타일과
  * 같은 채널로 넘긴다 — 응답 모양·저장·검증은 무변경이다. 표 문항(__choiceGroups)과 보기 소스 표
@@ -90,6 +106,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
     cell.bandIndex === null ? '' : text(model.bands[cell.bandIndex]!.label);
   const columnsStyle = { gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` };
   const { left, middle, right } = model.anchors;
+  const bandTones = resolveScaleBarBandTones(model.bands, count);
   const hasAnchors = left !== undefined || middle !== undefined || right !== undefined;
   const idPrefix = inputIdScope ? `${inputIdScope}-` : '';
   const inputIdOf = (cellId: string) => `${idPrefix}${questionId}-${cellId}-bar`;
@@ -178,11 +195,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
                 key={`${band.start}-${band.label}`}
                 className={cn(
                   'h-1 rounded-full',
-                  bandIndex === selectedBand
-                    ? 'bg-blue-500'
-                    : bandIndex % 2 === 0
-                      ? 'bg-gray-200'
-                      : 'bg-gray-300',
+                  bandToneClass(bandTones[bandIndex]!, bandIndex === selectedBand),
                 )}
                 style={{ gridColumn: `${band.start + 1} / span ${band.span}` }}
               />
@@ -192,7 +205,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
         {hasAnchors && (
           // 라벨은 글자 길이가 아니라 막대 칸에 붙인다 — 왼쪽은 첫 칸에서 오른쪽으로, 오른쪽은 마지막
           // 칸에서 왼쪽으로 뻗고, 가운데는 그 칸 가운데에 둔다(양 끝 정렬이면 「보통」이 칸 사이로 밀린다).
-          <div aria-hidden className="relative mt-1 h-4 text-[11px] leading-4 text-gray-500">
+          <div aria-hidden className="relative mt-1 h-4 text-[11px] leading-4 text-gray-900">
             {left !== undefined && (
               <span className="absolute left-0 whitespace-nowrap">{text(left)}</span>
             )}

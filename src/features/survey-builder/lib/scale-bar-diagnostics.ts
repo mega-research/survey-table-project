@@ -8,7 +8,7 @@ import { DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/features/question-rendere
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import {
   type UngroupedSelectionType,
-  projectRowWiseScaleBars,
+  projectRowWiseScaleLayouts,
 } from '@/features/question-renderer/utils/row-scale-bars';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
@@ -125,9 +125,9 @@ const ROW_WISE_ANSWERABLE_CELL_TYPES: readonly TableCell['type'][] = [
 
 /**
  * 「행별 척도」 진단 — 응답 화면과 같은 행별 원본 모델(행 문항·앞쪽 열 제외·헤더 조각)을 만들고
- * 행마다 같은 투영(projectRowScaleBars)을 돌려 막대로 못 그리는 행을 이유별로 모은다. 그 행은 응답
- * 화면에서 원본 표 조각으로 보인다. 막대가 될 보기 칸이 없는 행(설명·입력 전용 행)은 척도가 아니라
- * 알리지 않는다.
+ * 행마다 같은 배치(projectRowScaleLayout)를 돌려, 막대로 고른 그룹(또는 그룹 없는 보기 소스 표의
+ * 보기 묶음)인데 막대로 못 그려 원본 조각으로 떨어지는 행을 이유별로 모은다. 막대로 고르지 않은
+ * 그룹은 원래 형태가 의도라 알리지 않는다.
  */
 export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBarIssue[] {
   const model = buildMobileRowWiseOriginalModel({
@@ -144,30 +144,24 @@ export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBar
     },
     answerableCellTypes: ROW_WISE_ANSWERABLE_CELL_TYPES,
   });
-  const byRowId = projectRowWiseScaleBars(model, input.choiceGroups, input.ungroupedSelectionType);
-  const groupIds = new Set(input.choiceGroups.map((group) => group.id));
+  const layouts = projectRowWiseScaleLayouts(
+    model,
+    input.choiceGroups,
+    input.ungroupedSelectionType,
+  );
   const authoredById = new Map(input.rows.map((row, index) => [row.id, { row, index }]));
   const failures: Array<{ reason: ScaleBarFallbackReason; rowLabel: string }> = [];
   const rowQuestions = model.sections.flatMap((section) =>
     section.subgroups.flatMap((subgroup) => subgroup.questions),
   );
   for (const rowQuestion of rowQuestions) {
-    const result = byRowId.get(rowQuestion.rowId);
-    if (!result || result.ok) continue;
-    // 막대가 될 보기 칸이 없는 행은 척도가 아니다 — 원본 조각이 곧 제 모양이라 알리지 않는다
-    const hasScaleCell = rowQuestion.projection.row.cells.some(
-      (cell) =>
-        cell.type === 'choice_opt' &&
-        isScaleBarVisibleCell(cell) &&
-        ((cell.choiceGroupId !== undefined && groupIds.has(cell.choiceGroupId)) ||
-          input.ungroupedSelectionType !== null),
-    );
-    if (!hasScaleCell) continue;
+    const fallbacks = layouts.get(rowQuestion.rowId)?.fallbacks ?? [];
+    if (fallbacks.length === 0) continue;
     const authored = authoredById.get(rowQuestion.rowId);
     const rowLabel =
       rowQuestion.title.trim() ||
       (authored ? rowLabelOf(authored.row, authored.index) : rowQuestion.rowId);
-    failures.push({ reason: result.reason, rowLabel });
+    for (const fallback of fallbacks) failures.push({ reason: fallback.reason, rowLabel });
   }
   return collectScaleBarIssues(failures);
 }

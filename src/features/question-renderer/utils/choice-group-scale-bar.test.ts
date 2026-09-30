@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ProjectScaleBarInput,
   projectScaleBar,
+  resolveScaleBarBandTones,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
@@ -489,5 +490,38 @@ describe('projectScaleBar — 폴백(null + 이유 코드)', () => {
   it('보기 칸이 열과 짝이 안 맞는다', () => {
     const input = c4();
     expect(reasonOf({ ...input, columns: input.columns.slice(0, 5) })).toBe('non-contiguous');
+  });
+});
+
+describe('resolveScaleBarBandTones — 구간 띠 색', () => {
+  const band = (start: number, span: number) => ({ label: `${start}`, start, span });
+
+  it('C4 11점: 왼쪽 붉은색·가운데 회색·오른쪽 파란색, 양끝 한 칸 구간은 짙게', () => {
+    const tones = resolveScaleBarBandTones(
+      [band(0, 1), band(1, 4), band(5, 1), band(6, 4), band(10, 1)],
+      11,
+    );
+    expect(tones).toEqual([
+      { side: 'negative', strong: true },
+      { side: 'negative', strong: false },
+      { side: 'neutral', strong: false },
+      { side: 'positive', strong: false },
+      { side: 'positive', strong: true },
+    ]);
+  });
+
+  it('짝수 칸은 가운데 경계로 가르고, 그쪽 구간이 하나뿐이면 짙게 하지 않는다', () => {
+    expect(resolveScaleBarBandTones([band(0, 3), band(3, 3)], 6)).toEqual([
+      { side: 'negative', strong: false },
+      { side: 'positive', strong: false },
+    ]);
+  });
+
+  it('가운데를 걸쳐 덮는 구간은 회색이다', () => {
+    expect(resolveScaleBarBandTones([band(0, 2), band(2, 3), band(5, 2)], 7)).toEqual([
+      { side: 'negative', strong: false },
+      { side: 'neutral', strong: false },
+      { side: 'positive', strong: false },
+    ]);
   });
 });

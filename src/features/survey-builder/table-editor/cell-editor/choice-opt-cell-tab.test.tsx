@@ -340,7 +340,7 @@ describe('ChoiceOptCellTab — 모바일 그룹 카드 보기 모양(세로 타�
       />,
     );
     expect(choiceButton('세로 타일')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(/행 단위 그룹 카드」일 때만 적용/)).toBeInTheDocument();
+    expect(screen.getByText(/행 단위 그룹 카드」일 때 적용되고/)).toBeInTheDocument();
     await userEvent.click(choiceButton('원본 한 줄'));
     expect(onChoiceGroupsChange).toHaveBeenCalledWith([
       rad1,

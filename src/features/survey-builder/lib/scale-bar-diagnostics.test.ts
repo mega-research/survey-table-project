@@ -118,9 +118,13 @@ describe('diagnoseChoiceGroupScaleBar — 척도 막대 그룹의 폴백 진단'
 });
 
 describe('diagnoseRowScaleBars — 「행별 척도」의 폴백 행 진단', () => {
-  const groups = ['r1', 'r2', 'r3'].map(
-    (id): ChoiceGroup => ({ id: `g-${id}`, groupKey: `rad-${id}`, type: 'radio', label: '' }),
-  );
+  const groups = ['r1', 'r2', 'r3'].map((id): ChoiceGroup => ({
+    id: `g-${id}`,
+    groupKey: `rad-${id}`,
+    type: 'radio',
+    label: '',
+    mobileScaleBar: true,
+  }));
   const d1Row = (id: string, label: string, extra: TableCell[] = []): TableRow => ({
     id,
     label,
@@ -146,7 +150,7 @@ describe('diagnoseRowScaleBars — 「행별 척도」의 폴백 행 진단', ()
     expect(diagnoseRowScaleBars({ ...base, rows })).toEqual([]);
   });
 
-  it('입력칸이 있는 행과 단독 선택 보기가 있는 행을 이유별로 알린다', () => {
+  it('막대로 고른 그룹을 못 그리는 행을 이유별로 알린다 — 입력칸은 원본 조각으로 남아 문제가 아니다', () => {
     const rows = [
       d1Row('r1', '전문성', [{ id: 'r1-memo', type: 'input', content: '' }]),
       d1Row('r2', '시간', [{ id: 'r2-x', type: 'text', content: '' }]),
@@ -157,16 +161,18 @@ describe('diagnoseRowScaleBars — 「행별 척도」의 폴백 행 진단', ()
     rows[2]!.cells[11] = { ...rows[2]!.cells[11]!, exclusiveChoice: true };
     expect(diagnoseRowScaleBars({ ...base, rows })).toEqual([
       {
-        reason: 'non-choice-cell',
-        message: SCALE_BAR_FALLBACK_MESSAGES['non-choice-cell'],
-        rowLabels: ['전문성'],
-      },
-      {
         reason: 'exclusive-choice',
         message: SCALE_BAR_FALLBACK_MESSAGES['exclusive-choice'],
         rowLabels: ['자료'],
       },
     ]);
+  });
+
+  it('막대로 고르지 않은 그룹은 원래 형태가 의도라 알리지 않는다', () => {
+    const rows = [d1Row('r1', '전문성', [{ id: 'r1-x', type: 'text', content: '' }])];
+    rows[0]!.cells[11] = { ...rows[0]!.cells[11]!, allowTextInput: true };
+    const tiles = groups.map(({ mobileScaleBar: _bar, ...group }) => group);
+    expect(diagnoseRowScaleBars({ ...base, rows, choiceGroups: tiles })).toEqual([]);
   });
 
   it('보기 칸이 없는 행(입력칸만 있는 행)은 척도가 아니라 알리지 않는다', () => {
@@ -195,7 +201,11 @@ describe('diagnoseRowScaleBars — 「행별 척도」의 폴백 행 진단', ()
         label: '전문성',
         cells: [
           { id: 'r1-item', type: 'text' as const, content: '전문성' },
-          ...CIRC.map((text, n) => ({ id: `r1-c${n}`, type: 'choice_opt' as const, content: text })),
+          ...CIRC.map((text, n) => ({
+            id: `r1-c${n}`,
+            type: 'choice_opt' as const,
+            content: text,
+          })),
           { id: 'r1-x', type: 'text' as const, content: '' },
         ],
       },

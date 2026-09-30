@@ -7,6 +7,11 @@ import type {
   TableRow,
 } from '@/types/survey';
 
+import { resolveChoiceGroupMobileView } from './choice-group-mobile-view';
+import {
+  type ChoiceGroupOriginalLine,
+  projectOriginalColumnPiece,
+} from './choice-group-original-line';
 import {
   type ScaleBarFallbackReason,
   type ScaleBarModel,
@@ -16,14 +21,14 @@ import {
 import type { MobileRowWiseOriginalModel } from './mobile-row-wise-original';
 
 /**
- * 「행별 척도」 모바일 표시 방식의 한 행 — 행별 원본 문항의 원본 표 조각 자리를 척도 막대로 바꿀 수
- * 있는지와, 바꾼다면 어떤 막대들인지(CONTEXT.md 「행별 척도」).
+ * 「행별 척도」 모바일 표시 방식의 한 행 — 행별 원본 문항의 원본 표 조각을 어디까지 척도 막대로
+ * 바꾸는지(CONTEXT.md 「행별 척도」).
  *
- * 막대 하나의 판정은 척도 막대 투영(choice-group-scale-bar) 그대로다. 여기서는 행을 막대 단위로
- * 가른다 — 보기 그룹이 있으면 그룹마다, 그룹 없는 보기 칸은 이어진 묶음마다 막대 하나.
- *
- * 행 단위로 전부 아니면 전무다. 한 묶음이라도 막대로 못 그리거나 보기 칸 말고 다른 응답 칸(입력칸
- * 등)이 있으면 그 행은 원본 표 조각으로 그린다 — 막대만 그리면 나머지 칸이 화면에서 사라진다.
+ * 막대가 되는 것은 **작성자가 고른 것뿐**이다 — 보기 그룹 보기 모양이 「척도 막대」인 그룹, 그리고
+ * 그룹 없는 보기 소스 표의 보기 칸(그룹별 설정이 없어 모드 자체가 선택이다, 이어진 묶음마다 하나).
+ * 나머지 응답 칸(다른 보기 그룹·입력칸 등)은 원래 형태 그대로 — 열 순서대로 이어진 열을 잘라 낸
+ * 원본 표 조각이다. 막대 하나의 판정은 척도 막대 투영(choice-group-scale-bar) 그대로이고, 고른
+ * 그룹을 못 그리면 그 그룹 열도 원본 조각으로 떨어지며 이유가 남는다(빌더 경고 재료).
  */
 
 export interface RowScaleBar {
@@ -36,14 +41,32 @@ export interface RowScaleBar {
   model: ScaleBarModel;
 }
 
-export type RowScaleBarsProjection =
-  { ok: true; bars: RowScaleBar[] } | { ok: false; reason: ScaleBarFallbackReason };
+export type RowScaleSegment =
+  | { kind: 'bar'; bar: RowScaleBar }
+  | { kind: 'original'; key: string; piece: ChoiceGroupOriginalLine };
 
-export interface ProjectRowScaleBarsInput {
+export interface RowScaleFallback {
+  key: string;
+  group: ChoiceGroup | undefined;
+  reason: ScaleBarFallbackReason;
+}
+
+export interface RowScaleLayout {
+  /** 행 순서대로의 막대·원본 조각. 막대가 하나도 없으면 null — 행 전체를 원본 표 조각으로 그린다 */
+  segments: RowScaleSegment[] | null;
+  /** 막대로 고른 묶음 중 못 그려 원본으로 떨어진 것 */
+  fallbacks: RowScaleFallback[];
+}
+
+export interface ProjectRowScaleLayoutInput {
   /** 행의 셀과 인덱스가 맞는 열 — 표시 조건·앞쪽 열 제외로 걸러진 뒤의 열 */
   columns: readonly TableColumn[];
-  /** columns 와 짝이 맞는 헤더 격자 */
-  headerGrid?: HeaderCell[][] | undefined;
+  /** 막대 라벨 재료 — 반복 헤더·열 라벨 숨김과 무관하게 잘라 낸 헤더 격자 */
+  barHeaderGrid?: HeaderCell[][] | undefined;
+  /** 원본 조각의 헤더 — 행별 원본 조각이 그리는 것과 같다(설정에 따라 없다) */
+  pieceHeaderGrid?: HeaderCell[][] | undefined;
+  /** 원본 조각에 헤더를 그리는가 — 행별 원본 조각과 같은 판정 */
+  showPieceHeader: boolean;
   row: TableRow;
   choiceGroups: readonly ChoiceGroup[];
   /**
@@ -66,8 +89,8 @@ export function resolveUngroupedSelectionType(
   return null;
 }
 
-/** 보기 칸 말고 이 행에 있으면 막대로 바꿀 수 없는 칸 — 응답 칸과 계산 칸 */
-const OTHER_ANSWER_CELL_TYPES = new Set<TableCell['type']>([
+/** 원본 조각을 만들 만한 칸 — 응답 칸·계산 칸·보기 칸. 글자만 있는 열은 행 제목이 이미 보인다 */
+const PIECE_CELL_TYPES = new Set<TableCell['type']>([
   'input',
   'radio',
   'checkbox',
@@ -75,35 +98,34 @@ const OTHER_ANSWER_CELL_TYPES = new Set<TableCell['type']>([
   'ranking',
   'ranking_opt',
   'calc',
+  'choice_opt',
 ]);
 
-interface Segment {
+interface BarCandidate {
   key: string;
   group: ChoiceGroup | undefined;
   selectionType: ChoiceGroup['type'];
   cells: TableCell[];
 }
 
-export function projectRowScaleBars(input: ProjectRowScaleBarsInput): RowScaleBarsProjection {
-  const { row } = input;
+/** 막대 후보 — 「척도 막대」로 고른 그룹, 그리고 (보기 소스 표라면) 그룹 없는 보기 칸의 이어진 묶음 */
+function collectBarCandidates(input: ProjectRowScaleLayoutInput): BarCandidate[] {
   const groupById = new Map(input.choiceGroups.map((group) => [group.id, group]));
-  const segments: Segment[] = [];
-  const segmentByGroupId = new Map<string, Segment>();
-  let run: Segment | undefined;
+  const candidates: BarCandidate[] = [];
+  const byGroupId = new Map<string, BarCandidate>();
+  let run: BarCandidate | undefined;
   let prevIndex = -2;
-
-  for (const [index, cell] of row.cells.entries()) {
-    if (!isScaleBarVisibleCell(cell)) continue;
-    if (OTHER_ANSWER_CELL_TYPES.has(cell.type)) return { ok: false, reason: 'non-choice-cell' };
-    if (cell.type !== 'choice_opt') continue;
+  for (const [index, cell] of input.row.cells.entries()) {
+    if (cell.type !== 'choice_opt' || !isScaleBarVisibleCell(cell)) continue;
     const group = cell.choiceGroupId ? groupById.get(cell.choiceGroupId) : undefined;
     if (group) {
-      const existing = segmentByGroupId.get(group.id);
+      if (resolveChoiceGroupMobileView(group) !== 'scale-bar') continue;
+      const existing = byGroupId.get(group.id);
       if (existing) existing.cells.push(cell);
       else {
-        const segment = { key: group.id, group, selectionType: group.type, cells: [cell] };
-        segmentByGroupId.set(group.id, segment);
-        segments.push(segment);
+        const candidate = { key: group.id, group, selectionType: group.type, cells: [cell] };
+        byGroupId.set(group.id, candidate);
+        candidates.push(candidate);
       }
       continue;
     }
@@ -117,53 +139,110 @@ export function projectRowScaleBars(input: ProjectRowScaleBarsInput): RowScaleBa
         selectionType: input.ungroupedSelectionType,
         cells: [cell],
       };
-      segments.push(run);
+      candidates.push(run);
     }
     prevIndex = index;
   }
+  return candidates;
+}
 
-  if (segments.length === 0) return { ok: false, reason: 'cell-count' };
-
-  const bars: RowScaleBar[] = [];
-  for (const segment of segments) {
+export function projectRowScaleLayout(input: ProjectRowScaleLayoutInput): RowScaleLayout {
+  const { row, columns } = input;
+  const fallbacks: RowScaleFallback[] = [];
+  /** 막대가 차지한 열 인덱스 → 그 막대 */
+  const barAtIndex = new Map<number, RowScaleBar>();
+  for (const candidate of collectBarCandidates(input)) {
     const projected = projectScaleBar({
-      selectionType: segment.selectionType,
-      columns: input.columns,
-      headerGrid: input.headerGrid,
+      selectionType: candidate.selectionType,
+      columns,
+      headerGrid: input.barHeaderGrid,
       row,
-      targetCells: segment.cells,
+      targetCells: candidate.cells,
     });
-    if (!projected.ok) return projected;
-    bars.push({
-      key: segment.key,
-      group: segment.group,
-      cells: segment.cells,
+    if (!projected.ok) {
+      fallbacks.push({ key: candidate.key, group: candidate.group, reason: projected.reason });
+      continue;
+    }
+    const bar: RowScaleBar = {
+      key: candidate.key,
+      group: candidate.group,
+      cells: candidate.cells,
       model: projected.model,
-    });
+    };
+    for (const cell of candidate.cells) {
+      barAtIndex.set(
+        row.cells.findIndex((c) => c.id === cell.id),
+        bar,
+      );
+    }
   }
-  return { ok: true, bars };
+  if (barAtIndex.size === 0) return { segments: null, fallbacks };
+
+  // 열 순서대로 걷는다 — 막대 열은 그 막대 하나로, 나머지 이어진 열은 원본 조각 하나로 묶는다
+  const segments: RowScaleSegment[] = [];
+  let pieceIndices: number[] = [];
+  const flushPiece = () => {
+    const indices = pieceIndices;
+    pieceIndices = [];
+    const hasAnswerCell = indices.some((index) => {
+      const cell = row.cells[index];
+      return cell !== undefined && isScaleBarVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type);
+    });
+    if (!hasAnswerCell) return;
+    const piece = projectOriginalColumnPiece({
+      columns,
+      headerGrid: input.pieceHeaderGrid,
+      hideColumnLabels: !input.showPieceHeader,
+      row,
+      columnIds: new Set(indices.map((index) => columns[index]!.id)),
+    });
+    if (piece) {
+      segments.push({ kind: 'original', key: `piece:${columns[indices[0]!]!.id}`, piece });
+    }
+  };
+  // 행 앞쪽의 글자 열(첫 응답 칸 앞)은 조각에 넣지 않는다 — 행 제목이 이미 보인다. 응답 칸 사이·뒤의
+  // 글자 열(단위 등)은 원래 형태 그대로 조각에 남는다.
+  const firstAnswerIndex = row.cells.findIndex(
+    (cell) => isScaleBarVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type),
+  );
+  let lastBar: RowScaleBar | undefined;
+  for (let index = Math.max(firstAnswerIndex, 0); index < columns.length; index += 1) {
+    const bar = barAtIndex.get(index);
+    if (bar) {
+      flushPiece();
+      if (bar !== lastBar) segments.push({ kind: 'bar', bar });
+      lastBar = bar;
+      continue;
+    }
+    lastBar = undefined;
+    pieceIndices.push(index);
+  }
+  flushPiece();
+  return { segments, fallbacks };
 }
 
 /**
- * 행별 원본 모델의 행 문항마다 막대 판정 — 두 응답 호스트(표 문항·보기 소스 표)와 빌더 진단이 같은
- * 순회·같은 헤더 재료를 쓴다. 헤더는 반복 헤더 설정과 무관하게 잘라 낸 격자(clippedHeaderGrid)다 —
- * 원본 조각의 헤더를 숨긴 표에서도 막대 라벨은 헤더에서 온다.
+ * 행별 원본 모델의 행 문항마다 행별 척도 배치 — 두 응답 호스트(표 문항·보기 소스 표)와 빌더 진단이
+ * 같은 순회·같은 헤더 재료를 쓴다. 막대 라벨은 반복 헤더 설정과 무관하게 잘라 낸 격자
+ * (clippedHeaderGrid)에서, 원본 조각의 헤더는 행별 원본 조각과 같은 격자에서 읽는다.
  */
-export function projectRowWiseScaleBars(
+export function projectRowWiseScaleLayouts(
   model: MobileRowWiseOriginalModel,
   choiceGroups: readonly ChoiceGroup[],
   ungroupedSelectionType: UngroupedSelectionType,
-): Map<string, RowScaleBarsProjection> {
-  const byRowId = new Map<string, RowScaleBarsProjection>();
+): Map<string, RowScaleLayout> {
+  const byRowId = new Map<string, RowScaleLayout>();
   for (const section of model.sections) {
     for (const subgroup of section.subgroups) {
       for (const rowQuestion of subgroup.questions) {
         const { projection } = rowQuestion;
         byRowId.set(
           rowQuestion.rowId,
-          projectRowScaleBars({
+          projectRowScaleLayout({
             columns: projection.columns,
-            headerGrid: projection.clippedHeaderGrid,
+            barHeaderGrid: projection.clippedHeaderGrid,
+            pieceHeaderGrid: projection.headerGrid,
+            showPieceHeader: projection.showColumnHeader,
             row: projection.row,
             choiceGroups,
             ungroupedSelectionType,

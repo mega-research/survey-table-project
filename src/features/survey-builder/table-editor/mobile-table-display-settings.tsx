@@ -66,7 +66,7 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     value: 'row-wise-scale',
     label: '행별 척도',
     description:
-      '행별 원본 문항과 같이 행마다 문항을 세우되, 원본 표 조각 대신 화면 폭에 맞춘 척도 막대(칸 글자 + 헤더 구간)로 표시합니다. 11점 척도처럼 칸이 많아 가로로 넘치는 표에 맞습니다. 막대로 그릴 수 없는 행은 원본 표 조각으로 보입니다.',
+      '행별 원본 문항과 같이 행마다 문항을 세우고, 보기 그룹 설정에서 보기 모양을 「척도 막대」로 고른 그룹만 화면 폭에 맞춘 척도 막대(칸 글자 + 헤더 구간)로 바꿉니다. 나머지 칸은 원본 표 조각 그대로입니다. 그룹이 없는 보기 소스 표는 보기 전체가 막대입니다. 11점 척도처럼 칸이 많아 가로로 넘치는 표에 맞습니다.',
   },
   {
     value: 'row-cards',
@@ -207,7 +207,7 @@ export function MobileTableDisplaySettings({
       </div>
       {mode === 'row-wise-scale' ? (
         <ScaleBarIssueAlert
-          title="척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 표 조각으로 보입니다."
+          title="척도 막대로 고른 그룹 중 막대로 그릴 수 없는 행이 있어 그 행에서는 원본 표 조각으로 보입니다."
           issues={rowScaleBarIssues}
         />
       ) : null}

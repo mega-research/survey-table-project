@@ -55,11 +55,13 @@ const columns: TableColumn[] = [
   { id: 'item', label: '항목', width: 190 },
   ...CIRC.map((_, n) => ({ id: `s${n}`, label: `${n}점`, width: 64 })),
 ];
+// 행마다 그룹 하나, 보기 모양 「척도 막대」 — 행별 척도는 막대로 고른 그룹만 막대로 그린다
 const groups: ChoiceGroup[] = ITEMS.map((_, i) => ({
   id: `g${i + 1}`,
   groupKey: `rad${i + 1}`,
   type: 'radio',
   label: '',
+  mobileScaleBar: true,
 }));
 const scaleCells = (rowIndex: number): TableCell[] =>
   CIRC.map((content, n) => ({
@@ -78,6 +80,7 @@ function Harness({
   mode = 'row-wise-scale',
   rowsOverride,
   columnsOverride,
+  groupsOverride,
   initialValue = {},
   errorCellIds,
   headerHidden = false,
@@ -86,6 +89,7 @@ function Harness({
   mode?: MobileTableDisplayMode;
   rowsOverride?: TableRow[];
   columnsOverride?: TableColumn[];
+  groupsOverride?: ChoiceGroup[];
   initialValue?: Record<string, unknown>;
   errorCellIds?: Set<string>;
 }) {
@@ -97,7 +101,7 @@ function Harness({
         columns={columnsOverride ?? columns}
         rows={rowsOverride ?? rows}
         tableHeaderGrid={headerGrid}
-        choiceGroups={groups}
+        choiceGroups={groupsOverride ?? groups}
         mobileTableDisplayMode={mode}
         mobileDrilldownOmitLeadingColumns={1}
         {...(headerHidden
@@ -177,8 +181,8 @@ describe('행별 척도 — 표 문항', () => {
     ).toBeChecked();
   });
 
-  it('막대로 못 그리는 행은 그 행만 원본 표 조각이다', () => {
-    const mixed = rows.map((row) =>
+  it('행에 입력칸이 있으면 막대 뒤에 입력칸 원본 조각이 남는다', () => {
+    const withMemo = rows.map((row) =>
       row.id === 'r2'
         ? { ...row, cells: [...row.cells, { id: 'r2-memo', type: 'input' as const, content: '' }] }
         : {
@@ -188,16 +192,81 @@ describe('행별 척도 — 표 문항', () => {
     );
     render(
       <Harness
-        rowsOverride={mixed}
+        rowsOverride={withMemo}
         columnsOverride={[...columns, { id: 'memo', label: '메모' }]}
       />,
     );
+    const block = rowBlock('r2');
+    const bar = within(block).getByTestId('choice-group-scale-bar-g2');
+    expect(
+      within(block)
+        .getAllByRole('radio')
+        .every((radio) => bar.contains(radio)),
+    ).toBe(true);
+    expect(within(block).getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('막대로 고른 그룹을 못 그리면 그 그룹은 원본 조각이다', () => {
+    const flagged = rows.map((row) =>
+      row.id === 'r2'
+        ? {
+            ...row,
+            cells: row.cells.map((cell) =>
+              cell.id === 'r2-c10' ? { ...cell, allowTextInput: true } : cell,
+            ),
+          }
+        : row,
+    );
+    render(<Harness rowsOverride={flagged} />);
     expect(screen.getByTestId('choice-group-scale-bar-g1')).toBeInTheDocument();
-    expect(screen.getByTestId('choice-group-scale-bar-g3')).toBeInTheDocument();
     expect(screen.queryByTestId('choice-group-scale-bar-g2')).not.toBeInTheDocument();
-    // 원본 표 조각 — 보기 칸이 표 셀 컨트롤로, 입력칸도 함께 그려진다
     expect(within(rowBlock('r2')).getAllByRole('radio')).toHaveLength(11);
-    expect(within(rowBlock('r2')).getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('막대로 고르지 않은 그룹은 원래 형태(원본 조각)이고, 같은 행의 막대 그룹만 막대다', () => {
+    // 한 행에 활용 여부(2칸, 보기 모양 기본) + 만족도(11칸, 척도 막대)
+    const use: ChoiceGroup = { id: 'g-use', groupKey: 'rad9', type: 'radio', label: '활용 여부' };
+    const mixedRow: TableRow = {
+      ...rows[0]!,
+      cells: [
+        rows[0]!.cells[0]!,
+        { id: 'use1', type: 'choice_opt', content: '①', choiceGroupId: 'g-use' },
+        { id: 'use2', type: 'choice_opt', content: '②', choiceGroupId: 'g-use' },
+        ...rows[0]!.cells.slice(1),
+      ],
+    };
+    const withUse = [
+      ...columns.slice(0, 1),
+      { id: 'u1', label: '활용함' },
+      { id: 'u2', label: '활용 안함' },
+      ...columns.slice(1),
+    ];
+    render(
+      <Harness
+        rowsOverride={[mixedRow]}
+        columnsOverride={withUse}
+        groupsOverride={[use, { ...groups[0]!, label: '만족도' }]}
+      />,
+    );
+    const block = rowBlock('r1');
+    const bar = within(block).getByTestId('choice-group-scale-bar-g1');
+    expect(within(bar).getAllByRole('radio')).toHaveLength(11);
+    // 막대가 행에 여럿과 섞이면 그룹 이름으로 가른다
+    expect(within(bar).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
+    // 활용 여부는 원본 조각의 라디오 두 개 — 막대 밖에 있다
+    const outside = within(block)
+      .getAllByRole('radio')
+      .filter((radio) => !bar.contains(radio));
+    expect(outside).toHaveLength(2);
+    fireEvent.click(outside[1]!);
+    expect(valueOf()).toEqual({ __choiceGroups: { rad9: 'use2' } });
+  });
+
+  it('보기 모양을 척도 막대로 고른 그룹이 없으면 행별 원본과 같다', () => {
+    const tiles = groups.map(({ mobileScaleBar: _bar, ...group }) => group);
+    render(<Harness groupsOverride={tiles} />);
+    expect(screen.queryByTestId('choice-group-scale-bar-g1')).not.toBeInTheDocument();
+    expect(within(rowBlock('r1')).getAllByRole('radio')).toHaveLength(11);
   });
 
   it('「다음」 뒤 미충족 필수 행이면 그 막대 묶음이 오류 상태다', () => {

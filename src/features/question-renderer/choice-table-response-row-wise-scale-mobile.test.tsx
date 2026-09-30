@@ -48,22 +48,26 @@ function question(options: {
 }): Question {
   const { type = 'radio', grouped = true, mode = 'row-wise-scale' } = options;
   const choiceGroups: ChoiceGroup[] = grouped
-    ? ITEMS.map((_, i) => ({ id: `g${i + 1}`, groupKey: `rad${i + 1}`, type, label: '' }))
+    ? ITEMS.map((_, i) => ({
+        id: `g${i + 1}`,
+        groupKey: `rad${i + 1}`,
+        type,
+        label: '',
+        mobileScaleBar: true,
+      }))
     : [];
   const rows: TableRow[] = ITEMS.map((item, i) => ({
     id: `r${i + 1}`,
     label: item,
     cells: [
       { id: `r${i + 1}-item`, type: 'text', content: item },
-      ...SCALE.map(
-        (content, n): TableCell => ({
-          id: `r${i + 1}-c${n}`,
-          type: 'choice_opt',
-          content,
-          choiceLabel: `${n + 1}점`,
-          ...(grouped ? { choiceGroupId: `g${i + 1}` } : {}),
-        }),
-      ),
+      ...SCALE.map((content, n): TableCell => ({
+        id: `r${i + 1}-c${n}`,
+        type: 'choice_opt',
+        content,
+        choiceLabel: `${n + 1}점`,
+        ...(grouped ? { choiceGroupId: `g${i + 1}` } : {}),
+      })),
     ],
   }));
   return {
@@ -113,7 +117,11 @@ describe('ChoiceTableResponse (mobile) — 행별 척도', () => {
       const bar = within(block).getByTestId(`choice-group-scale-bar-g${i + 1}`);
       expect(within(bar).getByRole('radiogroup', { name: item })).toBeInTheDocument();
       expect(within(bar).getAllByRole('radio')).toHaveLength(7);
-      expect(within(block).getAllByRole('radio').every((radio) => bar.contains(radio))).toBe(true);
+      expect(
+        within(block)
+          .getAllByRole('radio')
+          .every((radio) => bar.contains(radio)),
+      ).toBe(true);
     }
     const bar = screen.getByTestId('choice-group-scale-bar-g1');
     for (const label of ['전혀 필요 없음', '보통', '매우 필요함']) {
@@ -133,7 +141,9 @@ describe('ChoiceTableResponse (mobile) — 행별 척도', () => {
   it('저장된 답이 있으면 그 칸이 선택된 채로 그려진다', () => {
     render(<Harness q={question({})} initialValue={{ rad1: 'r1-c3' }} />);
     expect(
-      within(screen.getByTestId('choice-group-scale-bar-g1')).getByRole('radio', { name: '④ 보통' }),
+      within(screen.getByTestId('choice-group-scale-bar-g1')).getByRole('radio', {
+        name: '④ 보통',
+      }),
     ).toBeChecked();
   });
 

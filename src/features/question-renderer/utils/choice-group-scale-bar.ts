@@ -247,3 +247,36 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     model: { cells, bands, anchors, showsSelectionLabel: labelsBelowBar && bands.length > 0 },
   };
 }
+
+export interface ScaleBarBandTone {
+  /** 정가운데보다 왼쪽 구간은 negative, 오른쪽은 positive, 가운데를 덮는 구간은 neutral */
+  side: 'negative' | 'neutral' | 'positive';
+  /** 끝 구간(「매우 …」)은 짙게 — 그쪽에 구간이 둘 이상일 때만 */
+  strong: boolean;
+}
+
+/**
+ * 구간 띠의 색 — 왼쪽 붉은색 · 가운데 회색 · 오른쪽 파란색, 양끝 구간은 짙게. 빈도·중요도처럼 양극이
+ * 아닌 척도도 같은 색이다(회색 농담만으로는 구간이 잘 구별되지 않는다는 판단, 2026-09-30).
+ */
+export function resolveScaleBarBandTones(
+  bands: readonly ScaleBarBand[],
+  count: number,
+): ScaleBarBandTone[] {
+  const mid = count / 2;
+  const sides = bands.map((band): ScaleBarBandTone['side'] => {
+    const end = band.start + band.span;
+    if (end <= mid) return 'negative';
+    if (band.start >= mid) return 'positive';
+    return 'neutral';
+  });
+  const negatives = sides.filter((side) => side === 'negative').length;
+  const positives = sides.filter((side) => side === 'positive').length;
+  return bands.map((band, index) => {
+    const side = sides[index]!;
+    const strong =
+      (side === 'negative' && band.start === 0 && negatives > 1) ||
+      (side === 'positive' && band.start + band.span === count && positives > 1);
+    return { side, strong };
+  });
+}

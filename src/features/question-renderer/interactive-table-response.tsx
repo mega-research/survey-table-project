@@ -85,8 +85,8 @@ import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
 import {
-  type RowScaleBarsProjection,
-  projectRowWiseScaleBars,
+  type RowScaleLayout,
+  projectRowWiseScaleLayouts,
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
@@ -982,15 +982,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     visibleHeaderGrid,
   ]);
   // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
-  const rowScaleBarsByRowId = useMemo(
+  const rowScaleLayouts = useMemo(
     () =>
       usesRowWiseSheet && mobileMode === 'row-wise-scale'
-        ? projectRowWiseScaleBars(
+        ? projectRowWiseScaleLayouts(
             rowWiseOriginalModel,
             choiceGroups ?? [],
             resolveUngroupedSelectionType('table'),
           )
-        : new Map<string, RowScaleBarsProjection>(),
+        : new Map<string, RowScaleLayout>(),
     [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet],
   );
 
@@ -1255,35 +1255,27 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   <MobileRowWiseOriginalSheet
                     model={rowWiseOriginalModel}
                     errorCellIds={errorCellIds}
-                    renderBody={(rowQuestion, { inputIdScope }) => {
-                      const projected = rowScaleBarsByRowId.get(rowQuestion.rowId);
-                      if (!projected?.ok) return null;
-                      const several = projected.bars.length > 1;
-                      return (
-                        <div className="space-y-3 px-1">
-                          {projected.bars.map((bar) =>
-                            bar.group ? (
-                              <TableChoiceGroupScaleBar
-                                key={bar.key}
-                                questionId={questionId}
-                                group={bar.group}
-                                model={bar.model}
-                                cells={bar.cells}
-                                // 행 제목이 위에 있다 — 막대가 여럿일 때만 그룹 이름으로 가른다
-                                label={
-                                  several ? substituteTokens(bar.group.label, attrs, quotes) : ''
-                                }
-                                ariaLabel={several ? bar.group.label || rowQuestion.title : rowQuestion.title}
-                                invalid={bar.cells.some((cell) => errorCellIds?.has(cell.id))}
-                                value={value}
-                                onChange={mergedOnChange}
-                                inputIdScope={inputIdScope}
-                              />
-                            ) : null,
-                          )}
-                        </div>
-                      );
-                    }}
+                    scaleLayoutByRowId={rowScaleLayouts}
+                    // 표 문항의 막대는 늘 보기 그룹 막대다(그룹 없는 보기 칸은 후보가 아니다)
+                    renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) =>
+                      bar.group ? (
+                        <TableChoiceGroupScaleBar
+                          questionId={questionId}
+                          group={bar.group}
+                          model={bar.model}
+                          cells={bar.cells}
+                          // 행 제목이 위에 있다 — 행에 막대·조각이 여럿일 때만 그룹 이름으로 가른다
+                          label={sharesRow ? substituteTokens(bar.group.label, attrs, quotes) : ''}
+                          ariaLabel={
+                            sharesRow ? bar.group.label || rowQuestion.title : rowQuestion.title
+                          }
+                          invalid={bar.cells.some((cell) => errorCellIds?.has(cell.id))}
+                          value={value}
+                          onChange={mergedOnChange}
+                          inputIdScope={inputIdScope}
+                        />
+                      ) : null
+                    }
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??

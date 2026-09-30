@@ -7,6 +7,10 @@ import type {
   MobileRowWiseOriginalModel,
   MobileRowWiseOriginalQuestion,
 } from '@/features/question-renderer/utils/mobile-row-wise-original';
+import type {
+  RowScaleBar,
+  RowScaleLayout,
+} from '@/features/question-renderer/utils/row-scale-bars';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 
@@ -25,16 +29,24 @@ interface MobileRowWiseOriginalSheetProps {
     'radio' | 'checkbox' | ((cell: TableCell) => 'radio' | 'checkbox') | undefined;
   errorCellIds?: Set<string> | undefined;
   /**
-   * 행 본문을 원본 표 조각 대신 다른 것(행별 척도의 척도 막대)으로 그린다. null 을 돌려주면 그 행은
-   * 원본 표 조각 그대로다(막대로 못 그리는 행의 폴백).
+   * 「행별 척도」 배치(projectRowWiseScaleLayouts) — 막대가 있는 행은 행 순서대로 막대와 원본 조각을
+   * 번갈아 그리고, 없는 행(segments null)은 종전 원본 표 조각 그대로다.
    */
-  renderBody?:
-    | ((question: MobileRowWiseOriginalQuestion, context: RowBodyContext) => React.ReactNode | null)
+  scaleLayoutByRowId?: ReadonlyMap<string, RowScaleLayout> | undefined;
+  /** 막대 하나 — 선택 읽기·쓰기 채널이 문항마다 달라 호스트가 그린다 */
+  renderScaleBar?:
+    | ((
+        bar: RowScaleBar,
+        question: MobileRowWiseOriginalQuestion,
+        context: ScaleBarRenderContext,
+      ) => React.ReactNode)
     | undefined;
 }
 
-export interface RowBodyContext {
+export interface ScaleBarRenderContext {
   inputIdScope: string;
+  /** 행에 막대·조각이 여럿이다 — 막대 머리에 그룹 이름을 보여 가른다(하나면 행 제목으로 족하다) */
+  sharesRow: boolean;
 }
 
 export function MobileRowWiseOriginalSheet({
@@ -42,7 +54,8 @@ export function MobileRowWiseOriginalSheet({
   renderCell,
   choiceControlType,
   errorCellIds,
-  renderBody,
+  scaleLayoutByRowId,
+  renderScaleBar,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
 
@@ -95,7 +108,17 @@ export function MobileRowWiseOriginalSheet({
                     );
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
-                    const customBody = renderBody?.(question, { inputIdScope });
+                    const segments = renderScaleBar
+                      ? scaleLayoutByRowId?.get(question.rowId)?.segments
+                      : undefined;
+                    const renderPieceCell = (cell: TableCell) =>
+                      renderCell(
+                        cell,
+                        question,
+                        inputIdScope,
+                        errorCellIds?.has(cell.id) ?? false,
+                        errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
+                      );
 
                     return (
                       <div
@@ -121,7 +144,34 @@ export function MobileRowWiseOriginalSheet({
                             {question.title}의 응답을 확인해 주세요.
                           </p>
                         ) : null}
-                        {customBody ?? (
+                        {segments && renderScaleBar ? (
+                          // 행별 척도 — 막대로 고른 것만 막대, 나머지 응답 칸은 열 순서대로 원본 조각
+                          <div className="space-y-3">
+                            {segments.map((segment) =>
+                              segment.kind === 'bar' ? (
+                                <div key={segment.bar.key} className="px-1">
+                                  {renderScaleBar(segment.bar, question, {
+                                    inputIdScope,
+                                    sharesRow: segments.length > 1,
+                                  })}
+                                </div>
+                              ) : (
+                                <MobileOriginalRowTable
+                                  key={segment.key}
+                                  columns={segment.piece.columns}
+                                  rows={[segment.piece.row]}
+                                  interactiveRowId={segment.piece.row.id}
+                                  headerGrid={segment.piece.headerGrid}
+                                  hideColumnLabels={!segment.piece.showColumnHeader}
+                                  choiceControlType={choiceControlType}
+                                  errorCellIds={errorCellIds}
+                                  instanceScope={`${question.rowId}:${segment.key}`}
+                                  renderCell={renderPieceCell}
+                                />
+                              ),
+                            )}
+                          </div>
+                        ) : (
                           <MobileOriginalRowTable
                             columns={question.projection.columns}
                             rows={[...question.projection.repeatedRows, question.projection.row]}
@@ -131,15 +181,7 @@ export function MobileRowWiseOriginalSheet({
                             choiceControlType={choiceControlType}
                             errorCellIds={errorCellIds}
                             instanceScope={question.rowId}
-                            renderCell={(cell) =>
-                              renderCell(
-                                cell,
-                                question,
-                                inputIdScope,
-                                errorCellIds?.has(cell.id) ?? false,
-                                errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
-                              )
-                            }
+                            renderCell={renderPieceCell}
                           />
                         )}
                       </div>

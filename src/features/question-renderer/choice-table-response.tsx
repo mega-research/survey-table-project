@@ -52,8 +52,8 @@ import { buildChoiceGroupOutline } from './utils/choice-group-outline';
 import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 import {
-  type RowScaleBarsProjection,
-  projectRowWiseScaleBars,
+  type RowScaleLayout,
+  projectRowWiseScaleLayouts,
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
@@ -1271,15 +1271,15 @@ export function ChoiceTableResponse({
     };
   }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
   // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
-  const rowScaleBarsByRowId = useMemo(
+  const rowScaleLayouts = useMemo(
     () =>
       mobileMode === 'row-wise-scale'
-        ? projectRowWiseScaleBars(
+        ? projectRowWiseScaleLayouts(
             rowWiseOriginalModel,
             question.choiceGroups ?? [],
             resolveUngroupedSelectionType(question.type),
           )
-        : new Map<string, RowScaleBarsProjection>(),
+        : new Map<string, RowScaleLayout>(),
     [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel],
   );
 
@@ -1366,38 +1366,27 @@ export function ChoiceTableResponse({
                 : 'radio'
           }
           renderCell={(cell, _question, inputIdScope) => renderSelectedRowCell(cell, inputIdScope)}
-          renderBody={(rowQuestion, { inputIdScope }) => {
-            const projected = rowScaleBarsByRowId.get(rowQuestion.rowId);
-            if (!projected?.ok) return null;
-            const several = projected.bars.length > 1;
+          scaleLayoutByRowId={rowScaleLayouts}
+          renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) => {
+            // 쓰기는 세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id
+            const selected = bar.cells.find((c) => getChoiceCellState(c).checked)?.id;
+            const groupLabel = bar.group?.label ?? '';
             return (
-              <div className="space-y-3 px-1">
-                {projected.bars.map((bar) => {
-                  // 쓰기는 세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id
-                  const selected = bar.cells.find((c) => getChoiceCellState(c).checked)?.id;
-                  const groupLabel = bar.group?.label ?? '';
-                  return (
-                    <ChoiceGroupScaleBar
-                      key={bar.key}
-                      questionId={question.id}
-                      barId={bar.key}
-                      model={bar.model}
-                      // 행 제목이 위에 있다 — 막대가 여럿일 때만 그룹 이름으로 가른다
-                      label={several ? substituteTokens(groupLabel, attrs, quotes) : ''}
-                      ariaLabel={several ? groupLabel || rowQuestion.title : rowQuestion.title}
-                      invalid={bar.cells.some((c) => unfilledGroupCellIds.has(c.id))}
-                      selectedCellId={selected}
-                      onToggleCell={(cellId) => toggle(cellId, cellId !== selected)}
-                      disabledCellIds={
-                        new Set(
-                          bar.cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id),
-                        )
-                      }
-                      inputIdScope={inputIdScope}
-                    />
-                  );
-                })}
-              </div>
+              <ChoiceGroupScaleBar
+                questionId={question.id}
+                barId={bar.key}
+                model={bar.model}
+                // 행 제목이 위에 있다 — 행에 막대·조각이 여럿일 때만 그룹 이름으로 가른다
+                label={sharesRow ? substituteTokens(groupLabel, attrs, quotes) : ''}
+                ariaLabel={sharesRow ? groupLabel || rowQuestion.title : rowQuestion.title}
+                invalid={bar.cells.some((c) => unfilledGroupCellIds.has(c.id))}
+                selectedCellId={selected}
+                onToggleCell={(cellId) => toggle(cellId, cellId !== selected)}
+                disabledCellIds={
+                  new Set(bar.cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id))
+                }
+                inputIdScope={inputIdScope}
+              />
             );
           }}
         />
