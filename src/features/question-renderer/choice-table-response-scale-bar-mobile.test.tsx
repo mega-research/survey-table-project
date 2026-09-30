@@ -82,14 +82,21 @@ function question(type: 'radio' | 'checkbox', satGroup: Partial<ChoiceGroup>): Q
 function Harness({
   satGroup = { mobileScaleBar: true },
   initialValue = {},
+  unfilledGroupCellIds,
 }: {
   satGroup?: Partial<ChoiceGroup>;
   initialValue?: GroupedChoiceAnswer;
+  unfilledGroupCellIds?: Set<string>;
 }) {
   const [value, setValue] = useState<unknown>(initialValue);
   return (
     <>
-      <ChoiceTableResponse question={question('radio', satGroup)} value={value} onChange={setValue} />
+      <ChoiceTableResponse
+        question={question('radio', satGroup)}
+        value={value}
+        onChange={setValue}
+        unfilledGroupCellIds={unfilledGroupCellIds}
+      />
       <output data-testid="value">{JSON.stringify(value)}</output>
     </>
   );
@@ -162,5 +169,59 @@ describe('ChoiceTableResponse (mobile) — 척도 막대 그룹', () => {
     render(<Harness />);
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
     expect(screen.getAllByRole('radio').length).toBeGreaterThanOrEqual(13);
+  });
+});
+
+describe('ChoiceTableResponse (mobile) — 척도 막대 상태(필수 오류 · 방향키)', () => {
+  it('「다음」 뒤 미충족 필수 그룹이면 막대 묶음이 오류 상태다', () => {
+    const satIds = new Set(CIRC.map((_, n) => `sat${n}`));
+    const { rerender } = render(<Harness unfilledGroupCellIds={satIds} />);
+    expect(screen.getByRole('radiogroup', { name: '만족도' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    rerender(<Harness unfilledGroupCellIds={new Set(['u1', 'u2'])} />);
+    expect(screen.getByRole('radiogroup', { name: '만족도' })).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('방향키로 칸을 옮기면 그룹 맵의 선택이 바뀌고 다른 그룹 답은 그대로다', () => {
+    render(<Harness initialValue={{ rad1: 'u2', rad2: 'sat9' }} />);
+    const group = screen.getByRole('radiogroup', { name: '만족도' });
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⑨ 만족' }), { key: 'ArrowRight' });
+    expect(valueOf()).toEqual({ rad1: 'u2', rad2: 'sat10' });
+    expect(within(group).getByRole('radio', { name: '⑩ 매우 만족' })).toHaveFocus();
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⑩ 매우 만족' }), {
+      key: 'ArrowRight',
+    });
+    expect(valueOf()).toEqual({ rad1: 'u2', rad2: 'sat0' });
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⓪ 매우 불만족' }), { key: 'End' });
+    expect(valueOf()).toEqual({ rad1: 'u2', rad2: 'sat10' });
+  });
+});
+
+describe('ChoiceTableResponse (mobile) — 척도 막대 비활성 칸', () => {
+  // checkbox 문항 안의 radio 그룹 — 문항 최대 선택 수에 닿으면 세로 타일처럼 고르지 않은 칸이 비활성이다
+  function maxedQuestion(): Question {
+    const base = question('checkbox', { type: 'radio', mobileScaleBar: true });
+    return { ...base, maxSelections: 1 };
+  }
+
+  it('비활성 칸은 누를 수 없고, 눌러도 답이 써지지 않는다', () => {
+    const onChange = vi.fn();
+    render(
+      <ChoiceTableResponse question={maxedQuestion()} value={{ rad1: ['u1'] }} onChange={onChange} />,
+    );
+    const group = screen.getByRole('radiogroup', { name: '만족도' });
+    const seven = within(group).getByRole('radio', { name: '⑦ 만족' });
+    expect(seven).toBeDisabled();
+    fireEvent.click(within(group).getByText('⑦'));
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⑥ 만족' }), { key: 'ArrowRight' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('상한 전에는 막대 칸이 모두 활성이다', () => {
+    render(<ChoiceTableResponse question={maxedQuestion()} value={{}} onChange={() => {}} />);
+    const group = screen.getByRole('radiogroup', { name: '만족도' });
+    for (const radio of within(group).getAllByRole('radio')) expect(radio).toBeEnabled();
   });
 });

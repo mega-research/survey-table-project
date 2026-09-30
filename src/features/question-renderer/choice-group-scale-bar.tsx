@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 
 import {
   useAnswerQuotes,
@@ -15,6 +15,16 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 
+/** 막대 키보드 이동 — 칸 수만큼 옮기거나(양끝에서 반대편으로 돈다) 첫 칸·끝 칸으로 */
+const SCALE_BAR_KEY_MOVES: Readonly<Record<string, number | 'first' | 'last'>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+  Home: 'first',
+  End: 'last',
+};
+
 interface ChoiceGroupScaleBarProps {
   questionId: string;
   group: ChoiceGroup;
@@ -22,7 +32,7 @@ interface ChoiceGroupScaleBarProps {
   model: ScaleBarModel;
   /** 섹션 제목 — 막대 머리 줄에 선택값 표시와 나란히 둔다. 비면 그룹 이름을 접근성 이름으로 쓴다 */
   label: string;
-  /** 미충족 필수 그룹 — 머리 줄을 붉게 */
+  /** 미충족 필수 그룹 — 머리 줄을 붉게, 막대 묶음을 오류 상태(aria-invalid)로 */
   invalid?: boolean | undefined;
   /** 이 그룹에서 고른 보기 칸 id — 없으면 고른 칸 없음 */
   selectedCellId: string | undefined;
@@ -31,6 +41,11 @@ interface ChoiceGroupScaleBarProps {
    * 규칙이다 — 표 문항은 TableChoiceGroupScaleBar, 보기 소스 표는 그 문항의 보기 선택 쓰기.
    */
   onToggleCell: (cellId: string) => void;
+  /**
+   * 누를 수 없는 칸(원래 보기 칸 id) — 세로 타일이 비활성인 칸과 같은 판정을 호출부가 넘긴다
+   * (보기 소스 표의 문항 최대 선택 수). 보기 칸은 셀 게이팅 대상이 아니라 게이팅은 여기 오지 않는다.
+   */
+  disabledCellIds?: ReadonlySet<string> | undefined;
   /** 같은 문항이 여러 번 그려지는 자리에서 입력 id 가 겹치지 않게 */
   inputIdScope?: string | undefined;
 }
@@ -54,6 +69,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   invalid,
   selectedCellId,
   onToggleCell,
+  disabledCellIds,
   inputIdScope,
 }: ChoiceGroupScaleBarProps) {
   const attrs = useContactAttrs();
@@ -69,6 +85,34 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   const { left, middle, right } = model.anchors;
   const hasAnchors = left !== undefined || middle !== undefined || right !== undefined;
   const idPrefix = inputIdScope ? `${inputIdScope}-` : '';
+  const inputIdOf = (cellId: string) => `${idPrefix}${questionId}-${cellId}-bar`;
+  const radioGroupRef = useRef<HTMLDivElement>(null);
+
+  // 방향키로 칸을 옮기며 고른다 — 단일 선택 그룹의 표준 키보드 동작에 양끝 돌기·Home/End 를 더한다.
+  // 브라우저 기본 이동은 돌지 않고 Home/End 도 없어 직접 맡는다. 칸 순서는 DOM 이 아니라 모델에서
+  // 읽는다(입력 id 로 찾는다) — DOM 은 포커스를 옮길 때만 쓴다.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.metaKey || event.ctrlKey) return;
+    const move = SCALE_BAR_KEY_MOVES[event.key];
+    if (move === undefined) return;
+    const targetId = (event.target as HTMLElement).id;
+    const from = model.cells.findIndex((cell) => inputIdOf(cell.cellId) === targetId);
+    if (from < 0) return;
+    // 비활성 칸은 건너뛴다 — 방향키로도 누를 수 없는 칸에 답이 써지면 안 된다
+    const enabled = (index: number) => !disabledCellIds?.has(model.cells[index]!.cellId);
+    const step = move === 'first' ? 1 : move === 'last' ? -1 : move;
+    let to = move === 'first' ? 0 : move === 'last' ? count - 1 : (from + move + count) % count;
+    for (let tried = 0; tried < count && !enabled(to); tried += 1) {
+      to = (to + step + count) % count;
+    }
+    if (!enabled(to)) return;
+    event.preventDefault();
+    const next = model.cells[to]!.cellId;
+    radioGroupRef.current
+      ?.querySelector<HTMLInputElement>(`input[id="${CSS.escape(inputIdOf(next))}"]`)
+      ?.focus();
+    if (next !== selectedCellId) onToggleCell(next);
+  };
 
   return (
     <div data-testid={`choice-group-scale-bar-${group.id}`} className="space-y-1.5">
@@ -92,7 +136,14 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           </span>
         )}
       </div>
-      <div role="radiogroup" aria-label={label || text(group.label)}>
+      <div
+        ref={radioGroupRef}
+        role="radiogroup"
+        aria-label={label || text(group.label)}
+        // 「다음」 뒤 미충족 필수 그룹 — 섹션 테두리·머리 줄과 같은 판정. 문구는 문항 단위 안내가 낸다
+        aria-invalid={invalid || undefined}
+        onKeyDown={handleKeyDown}
+      >
         <div
           className="grid overflow-hidden rounded-lg border border-gray-300 bg-white"
           style={columnsStyle}
@@ -100,13 +151,14 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           {model.cells.map((barCell, index) => (
             <ScaleBarCellControl
               key={barCell.cellId}
-              inputId={`${idPrefix}${questionId}-${barCell.cellId}-bar`}
+              inputId={inputIdOf(barCell.cellId)}
               inputName={`${idPrefix}${questionId}-${group.groupKey}-bar`}
               barText={text(barCell.text)}
               inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
               bandLabel={bandLabelOf(barCell)}
               first={index === 0}
               checked={barCell.cellId === selectedCellId}
+              disabled={disabledCellIds?.has(barCell.cellId) ?? false}
               onToggle={() => onToggleCell(barCell.cellId)}
             />
           ))}
@@ -164,6 +216,7 @@ interface ScaleBarCellControlProps {
   bandLabel: string;
   first: boolean;
   checked: boolean;
+  disabled: boolean;
   onToggle: () => void;
 }
 
@@ -176,6 +229,7 @@ function ScaleBarCellControl({
   bandLabel,
   first,
   checked,
+  disabled,
   onToggle,
 }: ScaleBarCellControlProps) {
   return (
@@ -186,6 +240,7 @@ function ScaleBarCellControl({
         'flex min-h-10 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 px-0.5 py-1 text-center text-[13px] transition-colors select-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-inset',
         !first && 'border-l border-gray-200',
         checked ? 'bg-blue-600 font-semibold text-white' : 'text-gray-700',
+        disabled && 'cursor-default opacity-50',
       )}
     >
       <input
@@ -195,6 +250,7 @@ function ScaleBarCellControl({
         // 같은 글자가 칸 안 라벨·구간 이름 양쪽에서 오면(한 칸짜리 구간) 한 번만 읽는다
         aria-label={[...new Set([barText, inCellLabel, bandLabel])].filter(Boolean).join(' ')}
         checked={checked}
+        disabled={disabled}
         onChange={() => {}}
         onClick={onToggle}
         className="sr-only"

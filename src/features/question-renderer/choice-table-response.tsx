@@ -873,6 +873,10 @@ export function ChoiceTableResponse({
                           groupCells: cells,
                         });
                         const selectedInGroup = cells.find((c) => getChoiceCellState(c).checked)?.id;
+                        // 세로 타일과 같은 비활성 판정(문항 최대 선택 수) — 막대 칸도 누를 수 없다
+                        const disabledInGroup = new Set(
+                          cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id),
+                        );
                         return (
                           <div
                             key={groupId ?? '__none__'}
@@ -893,6 +897,7 @@ export function ChoiceTableResponse({
                                 invalid={unfilled}
                                 selectedCellId={selectedInGroup}
                                 onToggleCell={(cellId) => toggle(cellId, cellId !== selectedInGroup)}
+                                disabledCellIds={disabledInGroup}
                                 inputIdScope={row.id}
                               />
                             ) : sectionLabel ? (

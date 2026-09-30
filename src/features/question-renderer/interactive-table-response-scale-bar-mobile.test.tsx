@@ -105,10 +105,12 @@ function Harness({
   satGroup = { mobileScaleBar: true },
   rowsOverride,
   initialValue = {},
+  errorCellIds,
 }: {
   satGroup?: Partial<ChoiceGroup>;
   rowsOverride?: TableRow[];
   initialValue?: Record<string, unknown>;
+  errorCellIds?: Set<string>;
 }) {
   const [value, setValue] = useState<Record<string, unknown>>(initialValue);
   const groups: ChoiceGroup[] = [
@@ -126,6 +128,7 @@ function Harness({
         mobileTableDisplayMode="row-group-cards"
         value={value}
         onChange={setValue}
+        errorCellIds={errorCellIds}
       />
       <output data-testid="value">{JSON.stringify(value)}</output>
     </>
@@ -226,6 +229,50 @@ describe('행 단위 그룹 카드 — 척도 막대 그룹', () => {
     render(<Harness />);
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
     expect(screen.getAllByRole('radio').length).toBeGreaterThanOrEqual(13);
+  });
+});
+
+describe('행 단위 그룹 카드 — 척도 막대 상태(필수 오류 · 접근성 · 방향키)', () => {
+  it('「다음」 뒤 미충족 필수 그룹이면 막대 묶음이 오류 상태다 — 섹션 판정과 같은 위반 셀 집합', () => {
+    const { rerender } = render(<Harness errorCellIds={new Set(scaleCells.map((c) => c.id))} />);
+    expect(screen.getByRole('radiogroup', { name: '만족도' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    rerender(<Harness errorCellIds={new Set(['use1', 'use2'])} />);
+    expect(screen.getByRole('radiogroup', { name: '만족도' })).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('방향키로 칸을 옮기면 그 칸이 선택되고 포커스가 따라간다. 양끝에서는 반대편으로 돈다', () => {
+    render(<Harness initialValue={{ __choiceGroups: { rad2: 'sat5' } }} />);
+    const group = screen.getByRole('radiogroup', { name: '만족도' });
+    const five = within(group).getByRole('radio', { name: '⑤ 보통' });
+    fireEvent.keyDown(five, { key: 'ArrowRight' });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat6' } });
+    const six = within(group).getByRole('radio', { name: '⑥ 만족' });
+    expect(six).toHaveFocus();
+    expect(six).toBeChecked();
+    fireEvent.keyDown(six, { key: 'ArrowUp' });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat5' } });
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⑤ 보통' }), { key: 'ArrowLeft' });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat4' } });
+
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '④ 불만족' }), { key: 'Home' });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat0' } });
+    fireEvent.keyDown(within(group).getByRole('radio', { name: '⓪ 매우 불만족' }), {
+      key: 'ArrowLeft',
+    });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat10' } });
+    expect(within(group).getByRole('radio', { name: '⑩ 매우 만족' })).toHaveFocus();
+  });
+
+  it('다른 키·수정키 조합은 선택을 바꾸지 않는다', () => {
+    render(<Harness initialValue={{ __choiceGroups: { rad2: 'sat5' } }} />);
+    const five = screen.getByRole('radio', { name: '⑤ 보통' });
+    fireEvent.keyDown(five, { key: 'a' });
+    fireEvent.keyDown(five, { key: 'ArrowRight', altKey: true });
+    fireEvent.keyDown(five, { key: 'ArrowLeft', metaKey: true });
+    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat5' } });
   });
 });
 
