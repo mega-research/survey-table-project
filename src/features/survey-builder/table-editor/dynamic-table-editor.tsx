@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
+import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -145,13 +146,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             columns: currentColumns,
             headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
             choiceGroups: mobileTableQuestion.choiceGroups ?? [],
-            // 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이다 — 보기 소스 표만 문항 선택 방식
-            ungroupedSelectionType:
-              mobileTableQuestion.type === 'checkbox'
-                ? 'checkbox'
-                : mobileTableQuestion.type === 'radio'
-                  ? 'radio'
-                  : null,
+            ungroupedSelectionType: resolveUngroupedSelectionType(mobileTableQuestion.type),
             hideColumnLabels: mobileTableQuestion.hideColumnLabels ?? false,
             omitLeadingColumns: mobileDrilldownOmitLeadingColumns,
             repeatHeaderStartRow: mobileDrilldownRepeatHeaderRange?.startRow ?? null,

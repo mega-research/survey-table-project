@@ -16,6 +16,7 @@ import { InputFormatSelect } from '@/features/survey-builder/input-format-select
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { ScaleBarIssueAlert } from '@/features/survey-builder/table-editor/scale-bar-issue-alert';
 import { generateId } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, QuestionType } from '@/types/survey';
@@ -303,25 +304,12 @@ export function ChoiceOptCellTab({
             글자 + 헤더 구간)로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 막대로 그릴 수 없는
             그룹은 원본 한 줄로 보입니다.
           </p>
-          {resolveChoiceGroupMobileView(currentGroup) === 'scale-bar' &&
-            scaleBarIssues.length > 0 && (
-              <div
-                role="alert"
-                className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
-              >
-                <p className="font-medium">
-                  척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 한 줄로 보입니다.
-                </p>
-                <ul className="list-disc space-y-0.5 pl-4">
-                  {scaleBarIssues.map((issue) => (
-                    <li key={issue.reason}>
-                      {issue.message}
-                      <span className="text-amber-700"> (행: {issue.rowLabels.join(', ')})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          {resolveChoiceGroupMobileView(currentGroup) === 'scale-bar' && (
+            <ScaleBarIssueAlert
+              title="척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 한 줄로 보입니다."
+              issues={scaleBarIssues}
+            />
+          )}
         </div>
       )}
 

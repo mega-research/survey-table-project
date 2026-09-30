@@ -19,6 +19,8 @@ import {
   isRowWiseMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 
+import { ScaleBarIssueAlert } from './scale-bar-issue-alert';
+
 interface MobileTableDisplaySettingsValue {
   mode: MobileTableDisplayMode;
   omitLeadingColumns: number;
@@ -203,23 +205,11 @@ export function MobileTableDisplaySettings({
           );
         })}
       </div>
-      {mode === 'row-wise-scale' && rowScaleBarIssues.length > 0 ? (
-        <div
-          role="alert"
-          className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
-        >
-          <p className="font-medium">
-            척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 표 조각으로 보입니다.
-          </p>
-          <ul className="list-disc space-y-0.5 pl-4">
-            {rowScaleBarIssues.map((issue) => (
-              <li key={issue.reason}>
-                {issue.message}
-                <span className="text-amber-700"> (행: {issue.rowLabels.join(', ')})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {mode === 'row-wise-scale' ? (
+        <ScaleBarIssueAlert
+          title="척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 표 조각으로 보입니다."
+          issues={rowScaleBarIssues}
+        />
       ) : null}
       {mode === 'drilldown-original-row' || isRowWiseMobileTableDisplayMode(mode) ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">

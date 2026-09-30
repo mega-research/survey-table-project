@@ -86,7 +86,8 @@ function fallback(reason: ScaleBarFallbackReason): ScaleBarProjection {
   return { ok: false, reason };
 }
 
-function isVisible(cell: TableCell): boolean {
+/** 막대 판정이 보는 칸 — 숨김·병합으로 이어진 칸은 없는 칸이다. 행 판정·빌더 진단도 이 기준을 쓴다 */
+export function isScaleBarVisibleCell(cell: TableCell): boolean {
   return !cell.isHidden && !cell._isContinuation;
 }
 
@@ -158,7 +159,7 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     if (next === prev + 1) continue;
     // 사이에 낀 칸이 입력칸 등이면 「보기 칸이 아닌 것이 섞였다」, 다른 그룹 보기·병합 칸이면 비연속
     const between = row.cells.slice(prev + 1, Math.max(next, prev + 1));
-    const hasNonChoice = between.some((cell) => isVisible(cell) && cell.type !== 'choice_opt');
+    const hasNonChoice = between.some((cell) => isScaleBarVisibleCell(cell) && cell.type !== 'choice_opt');
     return fallback(hasNonChoice ? 'non-choice-cell' : 'non-contiguous');
   }
 

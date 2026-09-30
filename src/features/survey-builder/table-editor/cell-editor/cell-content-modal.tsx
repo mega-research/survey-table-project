@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
+import { resolveChoiceGroupMobileView } from '@/features/question-renderer/utils/choice-group-mobile-view';
 import {
   AnswerQuoteQuestionControl,
 } from '@/features/survey-builder/answer-quote-fields';
@@ -377,21 +378,35 @@ export function CellContentModal({
 
   // 「척도 막대」 폴백 진단 — 응답 화면과 같은 투영을 이 셀의 편집 중 값(그룹·상세기재·단독 선택)을
   // 반영한 표에 돌린다. 저장 전 토글도 곧바로 경고에 보이게 한다.
+  // 보기 모양이 척도 막대일 때만 돈다 — 경고가 그때만 보인다.
   const scaleBarGroup =
     contentType === 'choice_opt'
       ? editChoiceGroups.find((group) => group.id === form.choiceGroupId)
       : undefined;
-  const scaleBarIssues = scaleBarGroup
-    ? diagnoseChoiceGroupScaleBar({
-        group: scaleBarGroup,
-        rows: gatingRows.map((row) => ({
-          ...row,
-          cells: row.cells.map((c) => (c.id === cell.id ? buildUpdatedCell(form, cell) : c)),
-        })),
-        columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
-        headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
-      })
-    : [];
+  const scaleBarIssues = useMemo(
+    () =>
+      scaleBarGroup && resolveChoiceGroupMobileView(scaleBarGroup) === 'scale-bar'
+        ? diagnoseChoiceGroupScaleBar({
+            group: scaleBarGroup,
+            rows: gatingRows.map((row) => ({
+              ...row,
+              cells: row.cells.map((c) => (c.id === cell.id ? buildUpdatedCell(form, cell) : c)),
+            })),
+            columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
+            headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
+          })
+        : [],
+    [
+      cell,
+      form,
+      gatingRows,
+      getLatestColumns,
+      getLatestHeaderGrid,
+      ownQuestion.tableColumns,
+      ownQuestion.tableHeaderGrid,
+      scaleBarGroup,
+    ],
+  );
 
   // 자동생성 셀코드/라벨 계산
   const autoCellCode = generateCellCode(questionCode, rowCode, columnCode);

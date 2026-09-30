@@ -1,11 +1,15 @@
 import {
   SCALE_BAR_MAX_CELLS,
   type ScaleBarFallbackReason,
+  isScaleBarVisibleCell,
   projectScaleBar,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import { DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/features/question-renderer/utils/classify-table';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
-import { projectRowScaleBars } from '@/features/question-renderer/utils/row-scale-bars';
+import {
+  type UngroupedSelectionType,
+  projectRowWiseScaleBars,
+} from '@/features/question-renderer/utils/row-scale-bars';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
@@ -37,15 +41,12 @@ export interface ScaleBarIssue {
   rowLabels: string[];
 }
 
-function isVisible(cell: TableCell): boolean {
-  return !cell.isHidden && !cell._isContinuation;
-}
-
 function rowLabelOf(row: TableRow, index: number): string {
   const label = (row.label ?? '').trim();
   if (label) return label;
   const text = row.cells.find(
-    (cell) => cell.type === 'text' && isVisible(cell) && (cell.content ?? '').trim() !== '',
+    (cell) =>
+      cell.type === 'text' && isScaleBarVisibleCell(cell) && (cell.content ?? '').trim() !== '',
   );
   return text ? text.content!.trim() : `${index + 1}행`;
 }
@@ -85,7 +86,10 @@ export function diagnoseChoiceGroupScaleBar(
   const failures: Array<{ reason: ScaleBarFallbackReason; rowLabel: string }> = [];
   input.rows.forEach((row, index) => {
     const targetCells = row.cells.filter(
-      (cell) => cell.type === 'choice_opt' && cell.choiceGroupId === group.id && isVisible(cell),
+      (cell) =>
+        cell.type === 'choice_opt' &&
+        cell.choiceGroupId === group.id &&
+        isScaleBarVisibleCell(cell),
     );
     if (targetCells.length === 0) return;
     const result = projectScaleBar({
@@ -105,8 +109,8 @@ export interface DiagnoseRowScaleBarsInput {
   columns: TableColumn[];
   headerGrid?: HeaderCell[][] | undefined;
   choiceGroups: readonly ChoiceGroup[];
-  /** 그룹 없는 보기 칸의 선택 방식 — 보기 소스 표는 문항 유형, 표 문항은 null(답할 수 없는 칸) */
-  ungroupedSelectionType: 'radio' | 'checkbox' | null;
+  /** 그룹 없는 보기 칸의 선택 방식 — resolveUngroupedSelectionType(문항 유형) */
+  ungroupedSelectionType: UngroupedSelectionType;
   hideColumnLabels: boolean;
   omitLeadingColumns: number;
   repeatHeaderStartRow?: number | null | undefined;
@@ -140,36 +144,30 @@ export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBar
     },
     answerableCellTypes: ROW_WISE_ANSWERABLE_CELL_TYPES,
   });
+  const byRowId = projectRowWiseScaleBars(model, input.choiceGroups, input.ungroupedSelectionType);
   const groupIds = new Set(input.choiceGroups.map((group) => group.id));
-  const rowIndex = new Map(input.rows.map((row, index) => [row.id, index]));
+  const authoredById = new Map(input.rows.map((row, index) => [row.id, { row, index }]));
   const failures: Array<{ reason: ScaleBarFallbackReason; rowLabel: string }> = [];
-  for (const section of model.sections) {
-    for (const subgroup of section.subgroups) {
-      for (const rowQuestion of subgroup.questions) {
-        const { row } = rowQuestion.projection;
-        const hasScaleCell = row.cells.some(
-          (cell) =>
-            cell.type === 'choice_opt' &&
-            isVisible(cell) &&
-            ((cell.choiceGroupId !== undefined && groupIds.has(cell.choiceGroupId)) ||
-              input.ungroupedSelectionType !== null),
-        );
-        if (!hasScaleCell) continue;
-        const result = projectRowScaleBars({
-          columns: rowQuestion.projection.columns,
-          headerGrid: rowQuestion.projection.headerGrid,
-          row,
-          choiceGroups: input.choiceGroups,
-          ungroupedSelectionType: input.ungroupedSelectionType,
-        });
-        if (result.ok) continue;
-        const authored = input.rows.find((candidate) => candidate.id === rowQuestion.rowId);
-        const rowLabel =
-          rowQuestion.title.trim() ||
-          (authored ? rowLabelOf(authored, rowIndex.get(authored.id) ?? 0) : rowQuestion.rowId);
-        failures.push({ reason: result.reason, rowLabel });
-      }
-    }
+  const rowQuestions = model.sections.flatMap((section) =>
+    section.subgroups.flatMap((subgroup) => subgroup.questions),
+  );
+  for (const rowQuestion of rowQuestions) {
+    const result = byRowId.get(rowQuestion.rowId);
+    if (!result || result.ok) continue;
+    // 막대가 될 보기 칸이 없는 행은 척도가 아니다 — 원본 조각이 곧 제 모양이라 알리지 않는다
+    const hasScaleCell = rowQuestion.projection.row.cells.some(
+      (cell) =>
+        cell.type === 'choice_opt' &&
+        isScaleBarVisibleCell(cell) &&
+        ((cell.choiceGroupId !== undefined && groupIds.has(cell.choiceGroupId)) ||
+          input.ungroupedSelectionType !== null),
+    );
+    if (!hasScaleCell) continue;
+    const authored = authoredById.get(rowQuestion.rowId);
+    const rowLabel =
+      rowQuestion.title.trim() ||
+      (authored ? rowLabelOf(authored.row, authored.index) : rowQuestion.rowId);
+    failures.push({ reason: result.reason, rowLabel });
   }
   return collectScaleBarIssues(failures);
 }

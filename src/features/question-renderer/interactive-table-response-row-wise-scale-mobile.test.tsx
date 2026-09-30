@@ -80,7 +80,9 @@ function Harness({
   columnsOverride,
   initialValue = {},
   errorCellIds,
+  headerHidden = false,
 }: {
+  headerHidden?: boolean;
   mode?: MobileTableDisplayMode;
   rowsOverride?: TableRow[];
   columnsOverride?: TableColumn[];
@@ -98,6 +100,13 @@ function Harness({
         choiceGroups={groups}
         mobileTableDisplayMode={mode}
         mobileDrilldownOmitLeadingColumns={1}
+        {...(headerHidden
+          ? {
+              hideColumnLabels: true,
+              mobileDrilldownRepeatHeaderStartRow: null,
+              mobileDrilldownRepeatHeaderEndRow: null,
+            }
+          : {})}
         value={value}
         onChange={setValue}
         errorCellIds={errorCellIds}
@@ -121,9 +130,21 @@ describe('행별 척도 — 표 문항', () => {
       expect(within(bar).getAllByRole('radio')).toHaveLength(11);
       expect(within(bar).getByRole('radiogroup', { name: item })).toBeInTheDocument();
       // 행의 컨트롤은 막대 칸뿐 — 원본 표 조각이 함께 그려지지 않는다
-      expect(within(block).getAllByRole('radio').every((radio) => bar.contains(radio))).toBe(true);
+      expect(
+        within(block)
+          .getAllByRole('radio')
+          .every((radio) => bar.contains(radio)),
+      ).toBe(true);
     }
     // 양끝·가운데 라벨은 헤더 구간에서
+    const bar = screen.getByTestId('choice-group-scale-bar-g1');
+    for (const label of ['전혀 그렇지 않다', '보통', '매우 그렇다']) {
+      expect(within(bar).getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it('열 헤더를 숨기고 반복 헤더를 비운 표도 막대 라벨은 헤더 구간에서 온다', () => {
+    render(<Harness headerHidden />);
     const bar = screen.getByTestId('choice-group-scale-bar-g1');
     for (const label of ['전혀 그렇지 않다', '보통', '매우 그렇다']) {
       expect(within(bar).getByText(label)).toBeInTheDocument();
@@ -137,7 +158,9 @@ describe('행별 척도 — 표 문항', () => {
     expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r2-c7' } });
     fireEvent.click(within(bar).getByText('③'));
     expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r2-c3' } });
-    expect(within(bar).getByTestId('scale-bar-selection')).toHaveTextContent('③ · 별로 그렇지 않다');
+    expect(within(bar).getByTestId('scale-bar-selection')).toHaveTextContent(
+      '③ · 별로 그렇지 않다',
+    );
   });
 
   it('저장된 답이 있으면 그 칸이 선택된 채로 그려진다', () => {
@@ -158,9 +181,17 @@ describe('행별 척도 — 표 문항', () => {
     const mixed = rows.map((row) =>
       row.id === 'r2'
         ? { ...row, cells: [...row.cells, { id: 'r2-memo', type: 'input' as const, content: '' }] }
-        : { ...row, cells: [...row.cells, { id: `${row.id}-blank`, type: 'text' as const, content: '' }] },
+        : {
+            ...row,
+            cells: [...row.cells, { id: `${row.id}-blank`, type: 'text' as const, content: '' }],
+          },
     );
-    render(<Harness rowsOverride={mixed} columnsOverride={[...columns, { id: 'memo', label: '메모' }]} />);
+    render(
+      <Harness
+        rowsOverride={mixed}
+        columnsOverride={[...columns, { id: 'memo', label: '메모' }]}
+      />,
+    );
     expect(screen.getByTestId('choice-group-scale-bar-g1')).toBeInTheDocument();
     expect(screen.getByTestId('choice-group-scale-bar-g3')).toBeInTheDocument();
     expect(screen.queryByTestId('choice-group-scale-bar-g2')).not.toBeInTheDocument();

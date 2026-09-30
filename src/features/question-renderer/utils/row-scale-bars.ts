@@ -1,10 +1,19 @@
-import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type {
+  ChoiceGroup,
+  HeaderCell,
+  QuestionType,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
 
 import {
   type ScaleBarFallbackReason,
   type ScaleBarModel,
+  isScaleBarVisibleCell,
   projectScaleBar,
 } from './choice-group-scale-bar';
+import type { MobileRowWiseOriginalModel } from './mobile-row-wise-original';
 
 /**
  * 「행별 척도」 모바일 표시 방식의 한 행 — 행별 원본 문항의 원본 표 조각 자리를 척도 막대로 바꿀 수
@@ -41,7 +50,20 @@ export interface ProjectRowScaleBarsInput {
    * 그룹 없는 보기 칸의 선택 방식. 보기 소스 표는 문항 유형(radio/checkbox), 표 문항은 null —
    * 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이라 막대로 만들지 않는다.
    */
-  ungroupedSelectionType: 'radio' | 'checkbox' | null;
+  ungroupedSelectionType: UngroupedSelectionType;
+}
+
+export type UngroupedSelectionType = 'radio' | 'checkbox' | null;
+
+/**
+ * 그룹 없는 보기 칸의 선택 방식 — 보기 소스 표(radio·checkbox 문항)는 문항 선택이라 문항 유형,
+ * 표 문항은 null(그룹 없는 보기 칸은 답할 수 없는 글자 칸이다).
+ */
+export function resolveUngroupedSelectionType(
+  questionType: QuestionType | undefined,
+): UngroupedSelectionType {
+  if (questionType === 'radio' || questionType === 'checkbox') return questionType;
+  return null;
 }
 
 /** 보기 칸 말고 이 행에 있으면 막대로 바꿀 수 없는 칸 — 응답 칸과 계산 칸 */
@@ -54,10 +76,6 @@ const OTHER_ANSWER_CELL_TYPES = new Set<TableCell['type']>([
   'ranking_opt',
   'calc',
 ]);
-
-function isVisible(cell: TableCell): boolean {
-  return !cell.isHidden && !cell._isContinuation;
-}
 
 interface Segment {
   key: string;
@@ -75,7 +93,7 @@ export function projectRowScaleBars(input: ProjectRowScaleBarsInput): RowScaleBa
   let prevIndex = -2;
 
   for (const [index, cell] of row.cells.entries()) {
-    if (!isVisible(cell)) continue;
+    if (!isScaleBarVisibleCell(cell)) continue;
     if (OTHER_ANSWER_CELL_TYPES.has(cell.type)) return { ok: false, reason: 'non-choice-cell' };
     if (cell.type !== 'choice_opt') continue;
     const group = cell.choiceGroupId ? groupById.get(cell.choiceGroupId) : undefined;
@@ -124,4 +142,35 @@ export function projectRowScaleBars(input: ProjectRowScaleBarsInput): RowScaleBa
     });
   }
   return { ok: true, bars };
+}
+
+/**
+ * 행별 원본 모델의 행 문항마다 막대 판정 — 두 응답 호스트(표 문항·보기 소스 표)와 빌더 진단이 같은
+ * 순회·같은 헤더 재료를 쓴다. 헤더는 반복 헤더 설정과 무관하게 잘라 낸 격자(clippedHeaderGrid)다 —
+ * 원본 조각의 헤더를 숨긴 표에서도 막대 라벨은 헤더에서 온다.
+ */
+export function projectRowWiseScaleBars(
+  model: MobileRowWiseOriginalModel,
+  choiceGroups: readonly ChoiceGroup[],
+  ungroupedSelectionType: UngroupedSelectionType,
+): Map<string, RowScaleBarsProjection> {
+  const byRowId = new Map<string, RowScaleBarsProjection>();
+  for (const section of model.sections) {
+    for (const subgroup of section.subgroups) {
+      for (const rowQuestion of subgroup.questions) {
+        const { projection } = rowQuestion;
+        byRowId.set(
+          rowQuestion.rowId,
+          projectRowScaleBars({
+            columns: projection.columns,
+            headerGrid: projection.clippedHeaderGrid,
+            row: projection.row,
+            choiceGroups,
+            ungroupedSelectionType,
+          }),
+        );
+      }
+    }
+  }
+  return byRowId;
 }

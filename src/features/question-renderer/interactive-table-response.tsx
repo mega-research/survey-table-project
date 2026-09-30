@@ -84,7 +84,11 @@ import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
-import { projectRowScaleBars } from './utils/row-scale-bars';
+import {
+  type RowScaleBarsProjection,
+  projectRowWiseScaleBars,
+  resolveUngroupedSelectionType,
+} from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
@@ -977,29 +981,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     visibleColumns,
     visibleHeaderGrid,
   ]);
-  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행(null)은 원본 표 조각 그대로다.
-  // 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이라 막대로 만들지 않는다.
-  const rowScaleBarsByRowId = useMemo(() => {
-    const byRowId = new Map<string, ReturnType<typeof projectRowScaleBars>>();
-    if (!usesRowWiseSheet || mobileMode !== 'row-wise-scale') return byRowId;
-    for (const section of rowWiseOriginalModel.sections) {
-      for (const subgroup of section.subgroups) {
-        for (const rowQuestion of subgroup.questions) {
-          byRowId.set(
-            rowQuestion.rowId,
-            projectRowScaleBars({
-              columns: rowQuestion.projection.columns,
-              headerGrid: rowQuestion.projection.headerGrid,
-              row: rowQuestion.projection.row,
-              choiceGroups: choiceGroups ?? [],
-              ungroupedSelectionType: null,
-            }),
-          );
-        }
-      }
-    }
-    return byRowId;
-  }, [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  const rowScaleBarsByRowId = useMemo(
+    () =>
+      usesRowWiseSheet && mobileMode === 'row-wise-scale'
+        ? projectRowWiseScaleBars(
+            rowWiseOriginalModel,
+            choiceGroups ?? [],
+            resolveUngroupedSelectionType('table'),
+          )
+        : new Map<string, RowScaleBarsProjection>(),
+    [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet],
+  );
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
   // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).

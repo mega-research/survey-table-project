@@ -51,7 +51,11 @@ import {
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
 import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
-import { projectRowScaleBars } from './utils/row-scale-bars';
+import {
+  type RowScaleBarsProjection,
+  projectRowWiseScaleBars,
+  resolveUngroupedSelectionType,
+} from './utils/row-scale-bars';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import {
   isRowWiseMobileTableDisplayMode,
@@ -1266,29 +1270,18 @@ export function ChoiceTableResponse({
       })),
     };
   }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
-  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행(null)은 원본 표 조각 그대로다.
-  // 그룹 없는 보기 칸은 문항 선택(radio/checkbox 문항 유형)이라 이어진 묶음마다 막대 하나다.
-  const rowScaleBarsByRowId = useMemo(() => {
-    const byRowId = new Map<string, ReturnType<typeof projectRowScaleBars>>();
-    if (mobileMode !== 'row-wise-scale') return byRowId;
-    for (const section of rowWiseOriginalModel.sections) {
-      for (const subgroup of section.subgroups) {
-        for (const rowQuestion of subgroup.questions) {
-          byRowId.set(
-            rowQuestion.rowId,
-            projectRowScaleBars({
-              columns: rowQuestion.projection.columns,
-              headerGrid: rowQuestion.projection.headerGrid,
-              row: rowQuestion.projection.row,
-              choiceGroups: question.choiceGroups ?? [],
-              ungroupedSelectionType: question.type === 'checkbox' ? 'checkbox' : 'radio',
-            }),
-          );
-        }
-      }
-    }
-    return byRowId;
-  }, [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  const rowScaleBarsByRowId = useMemo(
+    () =>
+      mobileMode === 'row-wise-scale'
+        ? projectRowWiseScaleBars(
+            rowWiseOriginalModel,
+            question.choiceGroups ?? [],
+            resolveUngroupedSelectionType(question.type),
+          )
+        : new Map<string, RowScaleBarsProjection>(),
+    [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel],
+  );
 
   const confirmDynamicRows = (rowIds: string[]) => {
     if (!activeDynamicGroupId || !onDynamicRowSelectionChange) return;
