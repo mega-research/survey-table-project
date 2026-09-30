@@ -49,7 +49,7 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
-import { projectChoiceGroupOriginalLine } from './utils/choice-group-original-line';
+import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
@@ -57,6 +57,7 @@ import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
+import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
@@ -860,15 +861,18 @@ export function ChoiceTableResponse({
                         // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
                         // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
                         const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
-                        // 그룹 옵션을 켰으면 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만)
-                        const originalLine = projectChoiceGroupOriginalLine({
+                        // 그룹 보기 모양 — 척도 막대 / 원본 한 줄(막대 폴백 포함) / 세로 타일.
+                        // 선택 방식은 쓰기와 같은 판정(getGroupTypeOfCell)이라 복수 선택 그룹은 폴백이다.
+                        const view = projectChoiceGroupSectionView({
                           group,
+                          selectionType: getGroupTypeOfCell(question, cells[0]!.id),
                           columns: rowWiseLayout.columns,
                           headerGrid: rowWiseLayout.headerGrid,
                           hideColumnLabels: question.hideColumnLabels ?? false,
                           row,
                           groupCells: cells,
                         });
+                        const selectedInGroup = cells.find((c) => getChoiceCellState(c).checked)?.id;
                         return (
                           <div
                             key={groupId ?? '__none__'}
@@ -878,7 +882,20 @@ export function ChoiceTableResponse({
                               unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                             )}
                           >
-                            {sectionLabel && (
+                            {view.kind === 'scale-bar' ? (
+                              // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다. 쓰기는 세로
+                              // 타일과 같은 이 문항의 보기 선택 쓰기 — 그룹 맵에 원래 보기 칸 id
+                              <ChoiceGroupScaleBar
+                                questionId={question.id}
+                                group={view.group}
+                                model={view.model}
+                                label={sectionLabel}
+                                invalid={unfilled}
+                                selectedCellId={selectedInGroup}
+                                onToggleCell={(cellId) => toggle(cellId, cellId !== selectedInGroup)}
+                                inputIdScope={row.id}
+                              />
+                            ) : sectionLabel ? (
                               <p
                                 className={cn(
                                   'text-[13px] font-semibold',
@@ -887,15 +904,15 @@ export function ChoiceTableResponse({
                               >
                                 {sectionLabel}
                               </p>
-                            )}
-                            {originalLine ? (
+                            ) : null}
+                            {view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
                               <div data-testid={`choice-group-original-line-${groupId}`}>
                                 <MobileOriginalRowTable
-                                  columns={originalLine.columns}
-                                  rows={[originalLine.row]}
-                                  interactiveRowId={originalLine.row.id}
-                                  headerGrid={originalLine.headerGrid}
-                                  hideColumnLabels={!originalLine.showColumnHeader}
+                                  columns={view.line.columns}
+                                  rows={[view.line.row]}
+                                  interactiveRowId={view.line.row.id}
+                                  headerGrid={view.line.headerGrid}
+                                  hideColumnLabels={!view.line.showColumnHeader}
                                   choiceControlType={group?.type === 'checkbox' ? 'checkbox' : 'radio'}
                                   instanceScope={`${row.id}-${groupId}`}
                                   renderCell={(cell) =>

@@ -1,15 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
-import {
-  useChoiceGroupSelection,
-  useChoiceOptToggle,
-} from '@/features/question-renderer/hooks/use-choice-opt-toggle';
+import { useChoiceGroupToggle } from '@/features/question-renderer/hooks/use-choice-opt-toggle';
 import type {
   ScaleBarCell,
   ScaleBarModel,
@@ -23,14 +20,17 @@ interface ChoiceGroupScaleBarProps {
   group: ChoiceGroup;
   /** projectScaleBar 가 돌려준 막대 모델 */
   model: ScaleBarModel;
-  /** 막대 칸이 된 원래 보기 칸 — 선택 쓰기가 이 셀로 간다 */
-  cells: readonly TableCell[];
   /** 섹션 제목 — 막대 머리 줄에 선택값 표시와 나란히 둔다. 비면 그룹 이름을 접근성 이름으로 쓴다 */
   label: string;
   /** 미충족 필수 그룹 — 머리 줄을 붉게 */
   invalid?: boolean | undefined;
-  value?: Record<string, unknown> | undefined;
-  onChange?: ((value: Record<string, unknown>) => void) | undefined;
+  /** 이 그룹에서 고른 보기 칸 id — 없으면 고른 칸 없음 */
+  selectedCellId: string | undefined;
+  /**
+   * 막대 칸(원래 보기 칸 id)을 눌렀을 때. 고르기·다시 누르면 풀기는 호출부 문항의 선택 쓰기
+   * 규칙이다 — 표 문항은 TableChoiceGroupScaleBar, 보기 소스 표는 그 문항의 보기 선택 쓰기.
+   */
+  onToggleCell: (cellId: string) => void;
   /** 같은 문항이 여러 번 그려지는 자리에서 입력 id 가 겹치지 않게 */
   inputIdScope?: string | undefined;
 }
@@ -42,27 +42,25 @@ interface ChoiceGroupScaleBarProps {
  * 구간을 구분만 하고 좋고 나쁨을 칠하지 않는다 — 척도가 양극이 아닐 수 있다(빈도·중요도). 두 회색
  * 톤을 교대로 칠하고 고른 칸의 구간만 강조색이다.
  *
- * 선택 쓰기는 세로 타일과 같은 채널(useChoiceOptToggle)이라 응답 모양·저장·검증은 무변경이다.
- * 판정(그릴지·무엇을 쓸지)은 투영이 끝냈고 여기는 그리기만 한다.
+ * 그리기만 한다. 판정(그릴지·무엇을 쓸지)은 투영이 끝냈고, 선택 읽기·쓰기는 호출부가 세로 타일과
+ * 같은 채널로 넘긴다 — 응답 모양·저장·검증은 무변경이다. 표 문항(__choiceGroups)과 보기 소스 표
+ * (그룹 맵)는 응답 모양이 달라 채널을 주입받는다.
  */
 export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   questionId,
   group,
   model,
-  cells,
   label,
   invalid,
-  value,
-  onChange,
+  selectedCellId,
+  onToggleCell,
   inputIdScope,
 }: ChoiceGroupScaleBarProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const text = (raw: string) => substituteTokens(raw, attrs, quotes);
-  const selection = useChoiceGroupSelection(questionId, group.groupKey, value);
-  const cellById = new Map(cells.map((cell) => [cell.id, cell]));
   const count = model.cells.length;
-  const selectedIndex = model.cells.findIndex((cell) => cell.cellId === selection);
+  const selectedIndex = model.cells.findIndex((cell) => cell.cellId === selectedCellId);
   const selected = selectedIndex >= 0 ? model.cells[selectedIndex] : undefined;
   const selectedBand = selected?.bandIndex ?? null;
   const bandLabelOf = (cell: ScaleBarCell) =>
@@ -70,6 +68,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   const columnsStyle = { gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` };
   const { left, middle, right } = model.anchors;
   const hasAnchors = left !== undefined || middle !== undefined || right !== undefined;
+  const idPrefix = inputIdScope ? `${inputIdScope}-` : '';
 
   return (
     <div data-testid={`choice-group-scale-bar-${group.id}`} className="space-y-1.5">
@@ -98,25 +97,19 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           className="grid overflow-hidden rounded-lg border border-gray-300 bg-white"
           style={columnsStyle}
         >
-          {model.cells.map((barCell, index) => {
-            const cell = cellById.get(barCell.cellId);
-            if (!cell) return null;
-            return (
-              <ScaleBarCellControl
-                key={barCell.cellId}
-                cell={cell}
-                barText={text(barCell.text)}
-                inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
-                bandLabel={bandLabelOf(barCell)}
-                first={index === 0}
-                questionId={questionId}
-                group={group}
-                value={value}
-                onChange={onChange}
-                inputIdScope={inputIdScope}
-              />
-            );
-          })}
+          {model.cells.map((barCell, index) => (
+            <ScaleBarCellControl
+              key={barCell.cellId}
+              inputId={`${idPrefix}${questionId}-${barCell.cellId}-bar`}
+              inputName={`${idPrefix}${questionId}-${group.groupKey}-bar`}
+              barText={text(barCell.text)}
+              inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
+              bandLabel={bandLabelOf(barCell)}
+              first={index === 0}
+              checked={barCell.cellId === selectedCellId}
+              onToggle={() => onToggleCell(barCell.cellId)}
+            />
+          ))}
         </div>
         {model.bands.length > 0 && (
           // 구간마다 띠 하나 — 구간 사이만 틈을 둬 여러 칸이 한 구간으로 묶인 것이 보이게 한다
@@ -163,34 +156,28 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
 });
 
 interface ScaleBarCellControlProps {
-  cell: TableCell;
+  inputId: string;
+  inputName: string;
   barText: string;
   /** 5칸 이하 칸 안 라벨 — 칸 글자 아래 줄 */
   inCellLabel?: string | undefined;
   bandLabel: string;
   first: boolean;
-  questionId: string;
-  group: ChoiceGroup;
-  value?: Record<string, unknown> | undefined;
-  onChange?: ((value: Record<string, unknown>) => void) | undefined;
-  inputIdScope?: string | undefined;
+  checked: boolean;
+  onToggle: () => void;
 }
 
 /** 막대 칸 하나 — 칸 전체가 탭 영역이고, 라디오는 스크린리더·키보드용으로 칸 안에 숨어 있다 */
 function ScaleBarCellControl({
-  cell,
+  inputId,
+  inputName,
   barText,
   inCellLabel,
   bandLabel,
   first,
-  questionId,
-  group,
-  value,
-  onChange,
-  inputIdScope,
+  checked,
+  onToggle,
 }: ScaleBarCellControlProps) {
-  const { checked, toggle } = useChoiceOptToggle({ cell, questionId, group, value, onChange });
-  const inputId = `${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${cell.id}-bar`;
   return (
     <label
       htmlFor={inputId}
@@ -204,12 +191,12 @@ function ScaleBarCellControl({
       <input
         type="radio"
         id={inputId}
-        name={`${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${group.groupKey}-bar`}
+        name={inputName}
         // 같은 글자가 칸 안 라벨·구간 이름 양쪽에서 오면(한 칸짜리 구간) 한 번만 읽는다
         aria-label={[...new Set([barText, inCellLabel, bandLabel])].filter(Boolean).join(' ')}
         checked={checked}
         onChange={() => {}}
-        onClick={toggle}
+        onClick={onToggle}
         className="sr-only"
       />
       <span aria-hidden className="break-keep">
@@ -223,3 +210,44 @@ function ScaleBarCellControl({
     </label>
   );
 }
+
+interface TableChoiceGroupScaleBarProps
+  extends Omit<ChoiceGroupScaleBarProps, 'selectedCellId' | 'onToggleCell'> {
+  /** 막대 칸이 된 원래 보기 칸 — 단독 선택 규칙 판정에 셀 정의가 필요하다 */
+  cells: readonly TableCell[];
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((value: Record<string, unknown>) => void) | undefined;
+}
+
+/**
+ * 표 문항(보기 그룹 표)의 척도 막대 — 선택 읽기·쓰기가 세로 타일(ChoiceOptCell)과 같은
+ * useChoiceGroupToggle 이다. 저장은 표 응답 안 예약 키 `__choiceGroups[그룹키]`.
+ */
+export const TableChoiceGroupScaleBar = React.memo(function TableChoiceGroupScaleBar({
+  cells,
+  value,
+  onChange,
+  ...barProps
+}: TableChoiceGroupScaleBarProps) {
+  const { selection, toggle } = useChoiceGroupToggle({
+    questionId: barProps.questionId,
+    group: barProps.group,
+    value,
+    onChange,
+  });
+  const cellById = useMemo(() => new Map(cells.map((cell) => [cell.id, cell])), [cells]);
+  const onToggleCell = useCallback(
+    (cellId: string) => {
+      const cell = cellById.get(cellId);
+      if (cell) toggle(cell);
+    },
+    [cellById, toggle],
+  );
+  return (
+    <ChoiceGroupScaleBar
+      {...barProps}
+      selectedCellId={typeof selection === 'string' ? selection : undefined}
+      onToggleCell={onToggleCell}
+    />
+  );
+});

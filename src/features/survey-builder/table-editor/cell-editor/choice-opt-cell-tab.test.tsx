@@ -380,6 +380,25 @@ describe('ChoiceOptCellTab — 모바일 그룹 카드 보기 모양(세로 타�
     expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, rad2]);
   });
 
+  it('보기 소스 표(radio 문항)의 보기 그룹에서도 세 가지를 고를 수 있다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          parentQuestionType: 'radio',
+          choiceGroups: [rad1, rad2],
+          choiceGroupId: 'g2',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    for (const name of ['세로 타일', '원본 한 줄', '척도 막대']) {
+      expect(choiceButton(name)).toBeInTheDocument();
+    }
+    await userEvent.click(choiceButton('척도 막대'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, { ...rad2, mobileScaleBar: true }]);
+  });
+
   it('그룹이 없는 셀에서는 보이지 않는다', () => {
     render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1] })} />);
     expect(screen.queryByRole('button', { name: '척도 막대' })).not.toBeInTheDocument();
