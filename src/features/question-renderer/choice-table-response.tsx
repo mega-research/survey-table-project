@@ -51,8 +51,12 @@ import {
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
 import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
+import { projectRowScaleBars } from './utils/row-scale-bars';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
-import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import {
+  isRowWiseMobileTableDisplayMode,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
@@ -891,9 +895,10 @@ export function ChoiceTableResponse({
                               // 타일과 같은 이 문항의 보기 선택 쓰기 — 그룹 맵에 원래 보기 칸 id
                               <ChoiceGroupScaleBar
                                 questionId={question.id}
-                                group={view.group}
+                                barId={view.group.id}
                                 model={view.model}
                                 label={sectionLabel}
+                                ariaLabel={view.group.label}
                                 invalid={unfilled}
                                 selectedCellId={selectedInGroup}
                                 onToggleCell={(cellId) => toggle(cellId, cellId !== selectedInGroup)}
@@ -1222,7 +1227,7 @@ export function ChoiceTableResponse({
    * 컴포넌트의 수동 메모이제이션을 보존하지 못한다(preserve-manual-memoization 경고).
    */
   const rowWiseOriginalModel = useMemo(() => {
-    if (mobileMode !== 'row-wise-original') return { sections: [] };
+    if (!isRowWiseMobileTableDisplayMode(mobileMode)) return { sections: [] };
     const columns = question.tableColumns ?? [];
     const rows = question.tableRowsData ?? [];
     const model = buildMobileRowWiseOriginalModel({
@@ -1261,6 +1266,29 @@ export function ChoiceTableResponse({
       })),
     };
   }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행(null)은 원본 표 조각 그대로다.
+  // 그룹 없는 보기 칸은 문항 선택(radio/checkbox 문항 유형)이라 이어진 묶음마다 막대 하나다.
+  const rowScaleBarsByRowId = useMemo(() => {
+    const byRowId = new Map<string, ReturnType<typeof projectRowScaleBars>>();
+    if (mobileMode !== 'row-wise-scale') return byRowId;
+    for (const section of rowWiseOriginalModel.sections) {
+      for (const subgroup of section.subgroups) {
+        for (const rowQuestion of subgroup.questions) {
+          byRowId.set(
+            rowQuestion.rowId,
+            projectRowScaleBars({
+              columns: rowQuestion.projection.columns,
+              headerGrid: rowQuestion.projection.headerGrid,
+              row: rowQuestion.projection.row,
+              choiceGroups: question.choiceGroups ?? [],
+              ungroupedSelectionType: question.type === 'checkbox' ? 'checkbox' : 'radio',
+            }),
+          );
+        }
+      }
+    }
+    return byRowId;
+  }, [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel]);
 
   const confirmDynamicRows = (rowIds: string[]) => {
     if (!activeDynamicGroupId || !onDynamicRowSelectionChange) return;
@@ -1302,7 +1330,7 @@ export function ChoiceTableResponse({
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
     renderCell(cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell, true, inputIdScope);
 
-  if (isMobile && mobileMode === 'row-wise-original') {
+  if (isMobile && isRowWiseMobileTableDisplayMode(mobileMode)) {
     return (
       <div className="space-y-2">
         {rowWiseLayout.configs.length > 0 && onDynamicRowSelectionChange ? (
@@ -1345,6 +1373,40 @@ export function ChoiceTableResponse({
                 : 'radio'
           }
           renderCell={(cell, _question, inputIdScope) => renderSelectedRowCell(cell, inputIdScope)}
+          renderBody={(rowQuestion, { inputIdScope }) => {
+            const projected = rowScaleBarsByRowId.get(rowQuestion.rowId);
+            if (!projected?.ok) return null;
+            const several = projected.bars.length > 1;
+            return (
+              <div className="space-y-3 px-1">
+                {projected.bars.map((bar) => {
+                  // 쓰기는 세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id
+                  const selected = bar.cells.find((c) => getChoiceCellState(c).checked)?.id;
+                  const groupLabel = bar.group?.label ?? '';
+                  return (
+                    <ChoiceGroupScaleBar
+                      key={bar.key}
+                      questionId={question.id}
+                      barId={bar.key}
+                      model={bar.model}
+                      // 행 제목이 위에 있다 — 막대가 여럿일 때만 그룹 이름으로 가른다
+                      label={several ? substituteTokens(groupLabel, attrs, quotes) : ''}
+                      ariaLabel={several ? groupLabel || rowQuestion.title : rowQuestion.title}
+                      invalid={bar.cells.some((c) => unfilledGroupCellIds.has(c.id))}
+                      selectedCellId={selected}
+                      onToggleCell={(cellId) => toggle(cellId, cellId !== selected)}
+                      disabledCellIds={
+                        new Set(
+                          bar.cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id),
+                        )
+                      }
+                      inputIdScope={inputIdScope}
+                    />
+                  );
+                })}
+              </div>
+            );
+          }}
         />
         {counter}
         {activeDynamicGroupId ? (

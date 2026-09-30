@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
+import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
@@ -134,6 +135,39 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   );
   const mobileDrilldownRepeatHeaderRange = resolveMobileDrilldownRepeatHeaderRange(
     mobileTableQuestion ?? {},
+  );
+  // 「행별 척도」 폴백 진단 — 응답 화면과 같은 행별 모델·투영으로, 편집 중인 표 구조 기준이다
+  const rowScaleBarIssues = useMemo(
+    () =>
+      mobileTableDisplayMode === 'row-wise-scale' && mobileTableQuestion
+        ? diagnoseRowScaleBars({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            choiceGroups: mobileTableQuestion.choiceGroups ?? [],
+            // 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이다 — 보기 소스 표만 문항 선택 방식
+            ungroupedSelectionType:
+              mobileTableQuestion.type === 'checkbox'
+                ? 'checkbox'
+                : mobileTableQuestion.type === 'radio'
+                  ? 'radio'
+                  : null,
+            hideColumnLabels: mobileTableQuestion.hideColumnLabels ?? false,
+            omitLeadingColumns: mobileDrilldownOmitLeadingColumns,
+            repeatHeaderStartRow: mobileDrilldownRepeatHeaderRange?.startRow ?? null,
+            repeatHeaderEndRow: mobileDrilldownRepeatHeaderRange?.endRow ?? null,
+          })
+        : [],
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderRange,
+      mobileTableDisplayMode,
+      mobileTableQuestion,
+      useMultiRowHeader,
+    ],
   );
 
   const {
@@ -580,6 +614,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             <MobileTableDisplaySettings
               questionType={mobileTableQuestion.type}
               hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
+              rowScaleBarIssues={rowScaleBarIssues}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}

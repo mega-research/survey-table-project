@@ -6,6 +6,7 @@ import { Check } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { cn } from '@/lib/utils';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import {
@@ -13,7 +14,10 @@ import {
   parseMobileDrilldownRepeatHeaderText,
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
-import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  isRowWiseMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 
 interface MobileTableDisplaySettingsValue {
   mode: MobileTableDisplayMode;
@@ -33,6 +37,11 @@ interface MobileTableDisplaySettingsProps {
   questionType?: 'table' | 'radio' | 'checkbox' | undefined;
   /** 테이블 유형에 보기 그룹이 있는가 — 있으면 행 단위 그룹 카드를 테이블 유형에도 노출 */
   hasChoiceGroups?: boolean | undefined;
+  /**
+   * 「행별 척도」에서 막대로 못 그려 원본 표 조각으로 보일 행과 이유(diagnoseRowScaleBars) —
+   * 그 모드를 골랐을 때만 경고로 보인다.
+   */
+  rowScaleBarIssues?: readonly ScaleBarIssue[] | undefined;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -50,6 +59,12 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     value: 'row-wise-original',
     label: '행별 원본 문항',
     description: '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
+  },
+  {
+    value: 'row-wise-scale',
+    label: '행별 척도',
+    description:
+      '행별 원본 문항과 같이 행마다 문항을 세우되, 원본 표 조각 대신 화면 폭에 맞춘 척도 막대(칸 글자 + 헤더 구간)로 표시합니다. 11점 척도처럼 칸이 많아 가로로 넘치는 표에 맞습니다. 막대로 그릴 수 없는 행은 원본 표 조각으로 보입니다.',
   },
   {
     value: 'row-cards',
@@ -85,6 +100,7 @@ export function MobileTableDisplaySettings({
   onChange,
   questionType,
   hasChoiceGroups = false,
+  rowScaleBarIssues = [],
 }: MobileTableDisplaySettingsProps) {
   const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
   const visibleOptions = OPTIONS.filter((option) => {
@@ -187,7 +203,25 @@ export function MobileTableDisplaySettings({
           );
         })}
       </div>
-      {mode === 'drilldown-original-row' || mode === 'row-wise-original' ? (
+      {mode === 'row-wise-scale' && rowScaleBarIssues.length > 0 ? (
+        <div
+          role="alert"
+          className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+        >
+          <p className="font-medium">
+            척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 표 조각으로 보입니다.
+          </p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {rowScaleBarIssues.map((issue) => (
+              <li key={issue.reason}>
+                {issue.message}
+                <span className="text-amber-700"> (행: {issue.rowLabels.join(', ')})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {mode === 'drilldown-original-row' || isRowWiseMobileTableDisplayMode(mode) ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>

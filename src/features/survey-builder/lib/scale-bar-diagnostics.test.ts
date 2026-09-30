@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SCALE_BAR_FALLBACK_MESSAGES,
   diagnoseChoiceGroupScaleBar,
+  diagnoseRowScaleBars,
 } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import type { ChoiceGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
 
@@ -113,5 +114,94 @@ describe('diagnoseChoiceGroupScaleBar — 척도 막대 그룹의 폴백 진단'
     for (const message of Object.values(SCALE_BAR_FALLBACK_MESSAGES)) {
       expect(message.trim()).not.toBe('');
     }
+  });
+});
+
+describe('diagnoseRowScaleBars — 「행별 척도」의 폴백 행 진단', () => {
+  const groups = ['r1', 'r2', 'r3'].map(
+    (id): ChoiceGroup => ({ id: `g-${id}`, groupKey: `rad-${id}`, type: 'radio', label: '' }),
+  );
+  const d1Row = (id: string, label: string, extra: TableCell[] = []): TableRow => ({
+    id,
+    label,
+    cells: [
+      { id: `${id}-item`, type: 'text', content: label },
+      ...CIRC.map((text, n) => choice(`${id}-c${n}`, text, { choiceGroupId: `g-${id}` })),
+      ...extra,
+    ],
+  });
+  const base = {
+    columns: [...columns, { id: 'extra', label: '' }],
+    choiceGroups: groups,
+    ungroupedSelectionType: null,
+    hideColumnLabels: false,
+    omitLeadingColumns: 1,
+  };
+
+  it('모든 행이 막대로 그려지면 문제가 없다', () => {
+    const rows = [
+      d1Row('r1', '전문성', [{ id: 'r1-x', type: 'text', content: '' }]),
+      d1Row('r2', '시간', [{ id: 'r2-x', type: 'text', content: '' }]),
+    ];
+    expect(diagnoseRowScaleBars({ ...base, rows })).toEqual([]);
+  });
+
+  it('입력칸이 있는 행과 단독 선택 보기가 있는 행을 이유별로 알린다', () => {
+    const rows = [
+      d1Row('r1', '전문성', [{ id: 'r1-memo', type: 'input', content: '' }]),
+      d1Row('r2', '시간', [{ id: 'r2-x', type: 'text', content: '' }]),
+      {
+        ...d1Row('r3', '자료', [{ id: 'r3-x', type: 'text', content: '' }]),
+      },
+    ];
+    rows[2]!.cells[11] = { ...rows[2]!.cells[11]!, exclusiveChoice: true };
+    expect(diagnoseRowScaleBars({ ...base, rows })).toEqual([
+      {
+        reason: 'non-choice-cell',
+        message: SCALE_BAR_FALLBACK_MESSAGES['non-choice-cell'],
+        rowLabels: ['전문성'],
+      },
+      {
+        reason: 'exclusive-choice',
+        message: SCALE_BAR_FALLBACK_MESSAGES['exclusive-choice'],
+        rowLabels: ['자료'],
+      },
+    ]);
+  });
+
+  it('보기 칸이 없는 행(입력칸만 있는 행)은 척도가 아니라 알리지 않는다', () => {
+    const rows = [
+      {
+        id: 'memo',
+        label: '기타 의견',
+        cells: [
+          { id: 'memo-item', type: 'text' as const, content: '기타 의견' },
+          { id: 'memo-input', type: 'input' as const, content: '' },
+          ...Array.from({ length: 11 }, (_, n) => ({
+            id: `memo-b${n}`,
+            type: 'text' as const,
+            content: '',
+          })),
+        ],
+      },
+    ];
+    expect(diagnoseRowScaleBars({ ...base, rows })).toEqual([]);
+  });
+
+  it('보기 소스 표의 checkbox 문항은 그룹 없는 보기 칸 행을 복수 선택으로 알린다', () => {
+    const rows = [
+      {
+        id: 'r1',
+        label: '전문성',
+        cells: [
+          { id: 'r1-item', type: 'text' as const, content: '전문성' },
+          ...CIRC.map((text, n) => ({ id: `r1-c${n}`, type: 'choice_opt' as const, content: text })),
+          { id: 'r1-x', type: 'text' as const, content: '' },
+        ],
+      },
+    ];
+    expect(
+      diagnoseRowScaleBars({ ...base, rows, choiceGroups: [], ungroupedSelectionType: 'checkbox' }),
+    ).toEqual([expect.objectContaining({ reason: 'not-single-choice', rowLabels: ['전문성'] })]);
   });
 });

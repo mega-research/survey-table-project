@@ -19,7 +19,12 @@ import {
   decideDrilldown,
 } from '@/features/question-renderer/utils/classify-table';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -64,6 +69,7 @@ import {
 } from './utils/choice-group-outline';
 import {
   clampMobileDrilldownOmitLeadingColumns,
+  isRowWiseMobileTableDisplayMode,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 import {
@@ -73,10 +79,12 @@ import {
 
 import { InteractiveCell } from './cells';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
+import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
+import { projectRowScaleBars } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
@@ -523,11 +531,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     containerRef: tableContainerRef,
   });
   const isMobileView = useMobileView();
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const mobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,
     mobileOriginalTable,
   });
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
+  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
+  const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
@@ -688,7 +700,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     headerRowCount,
   });
   const rowWiseDisplayRows = useMemo(() => {
-    if (!isMobileView || mobileMode !== 'row-wise-original' || !hasDynamicRows) {
+    if (!usesRowWiseSheet || !hasDynamicRows) {
       return displayRows;
     }
 
@@ -737,9 +749,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     groupConfigMap,
     hasDynamicRows,
     hiddenGroupIds,
-    isMobileView,
-    mobileMode,
     selectedRowIds,
+    usesRowWiseSheet,
   ]);
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
@@ -930,7 +941,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     [rowWiseDisplayRows],
   );
   const rowWiseOriginalModel = useMemo(() => {
-    if (!isMobileView || mobileMode !== 'row-wise-original') {
+    if (!usesRowWiseSheet) {
       return { sections: [] };
     }
 
@@ -957,16 +968,38 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     columns,
     displayCellById,
     hideColumnLabels,
-    isMobileView,
     mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderEndRow,
     mobileDrilldownRepeatHeaderStartRow,
-    mobileMode,
     rowWiseDisplayRows,
     rows,
+    usesRowWiseSheet,
     visibleColumns,
     visibleHeaderGrid,
   ]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행(null)은 원본 표 조각 그대로다.
+  // 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이라 막대로 만들지 않는다.
+  const rowScaleBarsByRowId = useMemo(() => {
+    const byRowId = new Map<string, ReturnType<typeof projectRowScaleBars>>();
+    if (!usesRowWiseSheet || mobileMode !== 'row-wise-scale') return byRowId;
+    for (const section of rowWiseOriginalModel.sections) {
+      for (const subgroup of section.subgroups) {
+        for (const rowQuestion of subgroup.questions) {
+          byRowId.set(
+            rowQuestion.rowId,
+            projectRowScaleBars({
+              columns: rowQuestion.projection.columns,
+              headerGrid: rowQuestion.projection.headerGrid,
+              row: rowQuestion.projection.row,
+              choiceGroups: choiceGroups ?? [],
+              ungroupedSelectionType: null,
+            }),
+          );
+        }
+      }
+    }
+    return byRowId;
+  }, [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet]);
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
   // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
@@ -1223,12 +1256,41 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           >
             <div className="w-full">
               {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
-              {isMobileView && mobileMode === 'row-wise-original' ? (
+              {usesRowWiseSheet ? (
                 <div className="space-y-3">
                   {dynamicGroupPicker}
                   <MobileRowWiseOriginalSheet
                     model={rowWiseOriginalModel}
                     errorCellIds={errorCellIds}
+                    renderBody={(rowQuestion, { inputIdScope }) => {
+                      const projected = rowScaleBarsByRowId.get(rowQuestion.rowId);
+                      if (!projected?.ok) return null;
+                      const several = projected.bars.length > 1;
+                      return (
+                        <div className="space-y-3 px-1">
+                          {projected.bars.map((bar) =>
+                            bar.group ? (
+                              <TableChoiceGroupScaleBar
+                                key={bar.key}
+                                questionId={questionId}
+                                group={bar.group}
+                                model={bar.model}
+                                cells={bar.cells}
+                                // 행 제목이 위에 있다 — 막대가 여럿일 때만 그룹 이름으로 가른다
+                                label={
+                                  several ? substituteTokens(bar.group.label, attrs, quotes) : ''
+                                }
+                                ariaLabel={several ? bar.group.label || rowQuestion.title : rowQuestion.title}
+                                invalid={bar.cells.some((cell) => errorCellIds?.has(cell.id))}
+                                value={value}
+                                onChange={mergedOnChange}
+                                inputIdScope={inputIdScope}
+                              />
+                            ) : null,
+                          )}
+                        </div>
+                      );
+                    }}
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??

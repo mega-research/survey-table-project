@@ -3,6 +3,9 @@ import {
   type ScaleBarFallbackReason,
   projectScaleBar,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
+import { DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/features/question-renderer/utils/classify-table';
+import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
+import { projectRowScaleBars } from '@/features/question-renderer/utils/row-scale-bars';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
@@ -94,5 +97,79 @@ export function diagnoseChoiceGroupScaleBar(
     });
     if (!result.ok) failures.push({ reason: result.reason, rowLabel: rowLabelOf(row, index) });
   });
+  return collectScaleBarIssues(failures);
+}
+
+export interface DiagnoseRowScaleBarsInput {
+  rows: TableRow[];
+  columns: TableColumn[];
+  headerGrid?: HeaderCell[][] | undefined;
+  choiceGroups: readonly ChoiceGroup[];
+  /** 그룹 없는 보기 칸의 선택 방식 — 보기 소스 표는 문항 유형, 표 문항은 null(답할 수 없는 칸) */
+  ungroupedSelectionType: 'radio' | 'checkbox' | null;
+  hideColumnLabels: boolean;
+  omitLeadingColumns: number;
+  repeatHeaderStartRow?: number | null | undefined;
+  repeatHeaderEndRow?: number | null | undefined;
+}
+
+/** 행 문항 판정에 쓰는 응답 칸 — 표 문항·보기 소스 표 양쪽을 덮는다(보기 칸 없는 행은 어차피 보지 않는다) */
+const ROW_WISE_ANSWERABLE_CELL_TYPES: readonly TableCell['type'][] = [
+  ...DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
+  'choice_opt',
+];
+
+/**
+ * 「행별 척도」 진단 — 응답 화면과 같은 행별 원본 모델(행 문항·앞쪽 열 제외·헤더 조각)을 만들고
+ * 행마다 같은 투영(projectRowScaleBars)을 돌려 막대로 못 그리는 행을 이유별로 모은다. 그 행은 응답
+ * 화면에서 원본 표 조각으로 보인다. 막대가 될 보기 칸이 없는 행(설명·입력 전용 행)은 척도가 아니라
+ * 알리지 않는다.
+ */
+export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBarIssue[] {
+  const model = buildMobileRowWiseOriginalModel({
+    authoredColumns: input.columns,
+    authoredRows: input.rows,
+    visibleColumns: input.columns,
+    ...(input.headerGrid ? { visibleHeaderGrid: input.headerGrid } : {}),
+    displayRows: input.rows,
+    hideColumnLabels: input.hideColumnLabels,
+    settings: {
+      omitLeadingAuthoredColumns: input.omitLeadingColumns,
+      repeatHeaderStartRow: input.repeatHeaderStartRow,
+      repeatHeaderEndRow: input.repeatHeaderEndRow,
+    },
+    answerableCellTypes: ROW_WISE_ANSWERABLE_CELL_TYPES,
+  });
+  const groupIds = new Set(input.choiceGroups.map((group) => group.id));
+  const rowIndex = new Map(input.rows.map((row, index) => [row.id, index]));
+  const failures: Array<{ reason: ScaleBarFallbackReason; rowLabel: string }> = [];
+  for (const section of model.sections) {
+    for (const subgroup of section.subgroups) {
+      for (const rowQuestion of subgroup.questions) {
+        const { row } = rowQuestion.projection;
+        const hasScaleCell = row.cells.some(
+          (cell) =>
+            cell.type === 'choice_opt' &&
+            isVisible(cell) &&
+            ((cell.choiceGroupId !== undefined && groupIds.has(cell.choiceGroupId)) ||
+              input.ungroupedSelectionType !== null),
+        );
+        if (!hasScaleCell) continue;
+        const result = projectRowScaleBars({
+          columns: rowQuestion.projection.columns,
+          headerGrid: rowQuestion.projection.headerGrid,
+          row,
+          choiceGroups: input.choiceGroups,
+          ungroupedSelectionType: input.ungroupedSelectionType,
+        });
+        if (result.ok) continue;
+        const authored = input.rows.find((candidate) => candidate.id === rowQuestion.rowId);
+        const rowLabel =
+          rowQuestion.title.trim() ||
+          (authored ? rowLabelOf(authored, rowIndex.get(authored.id) ?? 0) : rowQuestion.rowId);
+        failures.push({ reason: result.reason, rowLabel });
+      }
+    }
+  }
   return collectScaleBarIssues(failures);
 }

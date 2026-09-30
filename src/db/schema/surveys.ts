@@ -303,7 +303,7 @@ export const questions = pgTable(
   (table) => [
     check(
       'questions_mobile_table_display_mode_check',
-      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-cards', 'row-group-cards', 'axis-cards', 'original')`,
+      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-wise-scale', 'row-cards', 'row-group-cards', 'axis-cards', 'original')`,
     ),
     check(
       'questions_input_rows_range',

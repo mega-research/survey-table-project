@@ -88,6 +88,7 @@
     "0109_text_validation",
     "0110_screened_out_message",
     "0124_question_input_rows",
-    "0125_question_title_html"
+    "0125_question_title_html",
+    "0128_add_row_wise_scale_mobile_mode"
   ]
 }

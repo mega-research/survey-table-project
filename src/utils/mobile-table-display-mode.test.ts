@@ -14,14 +14,15 @@ describe('MOBILE_TABLE_DISPLAY_MODES', () => {
   // lib/question/schema.ts 1)·Drizzle 컬럼 타입·아래 폴백 판정의 유효값을 만든다.
   // 단 DB CHECK 는 여기서 파생되지 않는다 — Drizzle 의 text(..., { enum }) 는 타입 전용이라 SQL 을
   // 만들지 않는다. 같은 목록을 손으로 다시 쓴 사본이 **둘** 있다: 실제 제약을 만드는
-  // supabase/migrations (DROP 후 리터럴 목록으로 다시 ADD, 현행 0108_add_axis_cards_mobile_mode.sql)
+  // supabase/migrations (DROP 후 리터럴 목록으로 다시 ADD, 현행 0128_add_row_wise_scale_mobile_mode.sql)
   // 와 db/schema/surveys.ts 의 questions_mobile_table_display_mode_check. 어휘를 늘리면 셋을 함께
   // 고쳐야 하고, 배열만 고쳐 배포하면 새 값을 담은 questions 쓰기가 CHECK 제약에서 깨진다.
-  it('표시 방식 어휘 7종을 담는다', () => {
+  it('표시 방식 어휘 8종을 담는다', () => {
     expect(MOBILE_TABLE_DISPLAY_MODES).toEqual([
       'auto',
       'drilldown-original-row',
       'row-wise-original',
+      'row-wise-scale',
       'row-cards',
       'row-group-cards',
       'axis-cards',

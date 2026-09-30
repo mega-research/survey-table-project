@@ -24,6 +24,17 @@ interface MobileRowWiseOriginalSheetProps {
   choiceControlType?:
     'radio' | 'checkbox' | ((cell: TableCell) => 'radio' | 'checkbox') | undefined;
   errorCellIds?: Set<string> | undefined;
+  /**
+   * 행 본문을 원본 표 조각 대신 다른 것(행별 척도의 척도 막대)으로 그린다. null 을 돌려주면 그 행은
+   * 원본 표 조각 그대로다(막대로 못 그리는 행의 폴백).
+   */
+  renderBody?:
+    | ((question: MobileRowWiseOriginalQuestion, context: RowBodyContext) => React.ReactNode | null)
+    | undefined;
+}
+
+export interface RowBodyContext {
+  inputIdScope: string;
 }
 
 export function MobileRowWiseOriginalSheet({
@@ -31,6 +42,7 @@ export function MobileRowWiseOriginalSheet({
   renderCell,
   choiceControlType,
   errorCellIds,
+  renderBody,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
 
@@ -83,6 +95,7 @@ export function MobileRowWiseOriginalSheet({
                     );
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
+                    const customBody = renderBody?.(question, { inputIdScope });
 
                     return (
                       <div
@@ -108,25 +121,27 @@ export function MobileRowWiseOriginalSheet({
                             {question.title}의 응답을 확인해 주세요.
                           </p>
                         ) : null}
-                        <MobileOriginalRowTable
-                          columns={question.projection.columns}
-                          rows={[...question.projection.repeatedRows, question.projection.row]}
-                          interactiveRowId={question.projection.row.id}
-                          headerGrid={question.projection.headerGrid}
-                          hideColumnLabels={!question.projection.showColumnHeader}
-                          choiceControlType={choiceControlType}
-                          errorCellIds={errorCellIds}
-                          instanceScope={question.rowId}
-                          renderCell={(cell) =>
-                            renderCell(
-                              cell,
-                              question,
-                              inputIdScope,
-                              errorCellIds?.has(cell.id) ?? false,
-                              errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
-                            )
-                          }
-                        />
+                        {customBody ?? (
+                          <MobileOriginalRowTable
+                            columns={question.projection.columns}
+                            rows={[...question.projection.repeatedRows, question.projection.row]}
+                            interactiveRowId={question.projection.row.id}
+                            headerGrid={question.projection.headerGrid}
+                            hideColumnLabels={!question.projection.showColumnHeader}
+                            choiceControlType={choiceControlType}
+                            errorCellIds={errorCellIds}
+                            instanceScope={question.rowId}
+                            renderCell={(cell) =>
+                              renderCell(
+                                cell,
+                                question,
+                                inputIdScope,
+                                errorCellIds?.has(cell.id) ?? false,
+                                errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
+                              )
+                            }
+                          />
+                        )}
                       </div>
                     );
                   })}

@@ -27,11 +27,17 @@ const SCALE_BAR_KEY_MOVES: Readonly<Record<string, number | 'first' | 'last'>> =
 
 interface ChoiceGroupScaleBarProps {
   questionId: string;
-  group: ChoiceGroup;
+  /**
+   * 문항 안에서 막대를 가르는 id — 보기 그룹 id, 그룹 없는 묶음(보기 소스 표의 문항 선택)은 행별
+   * 척도 투영의 묶음 키. 입력 name 과 테스트 id 에 쓴다.
+   */
+  barId: string;
   /** projectScaleBar 가 돌려준 막대 모델 */
   model: ScaleBarModel;
-  /** 섹션 제목 — 막대 머리 줄에 선택값 표시와 나란히 둔다. 비면 그룹 이름을 접근성 이름으로 쓴다 */
+  /** 섹션 제목 — 막대 머리 줄에 선택값 표시와 나란히 둔다. 비면 ariaLabel 을 접근성 이름으로 쓴다 */
   label: string;
+  /** 제목을 보이지 않는 자리(행 제목이 위에 있는 행별 척도)의 막대 접근성 이름 — 그룹 이름·행 제목 */
+  ariaLabel?: string | undefined;
   /** 미충족 필수 그룹 — 머리 줄을 붉게, 막대 묶음을 오류 상태(aria-invalid)로 */
   invalid?: boolean | undefined;
   /** 이 그룹에서 고른 보기 칸 id — 없으면 고른 칸 없음 */
@@ -63,9 +69,10 @@ interface ChoiceGroupScaleBarProps {
  */
 export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   questionId,
-  group,
+  barId,
   model,
   label,
+  ariaLabel,
   invalid,
   selectedCellId,
   onToggleCell,
@@ -115,7 +122,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   };
 
   return (
-    <div data-testid={`choice-group-scale-bar-${group.id}`} className="space-y-1.5">
+    <div data-testid={`choice-group-scale-bar-${barId}`} className="space-y-1.5">
       <div className="flex items-start justify-between gap-2">
         {label && (
           <p
@@ -139,7 +146,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
       <div
         ref={radioGroupRef}
         role="radiogroup"
-        aria-label={label || text(group.label)}
+        aria-label={label || text(ariaLabel ?? '')}
         // 「다음」 뒤 미충족 필수 그룹 — 섹션 테두리·머리 줄과 같은 판정. 문구는 문항 단위 안내가 낸다
         aria-invalid={invalid || undefined}
         onKeyDown={handleKeyDown}
@@ -152,7 +159,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
             <ScaleBarCellControl
               key={barCell.cellId}
               inputId={inputIdOf(barCell.cellId)}
-              inputName={`${idPrefix}${questionId}-${group.groupKey}-bar`}
+              inputName={`${idPrefix}${questionId}-${barId}-bar`}
               barText={text(barCell.text)}
               inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
               bandLabel={bandLabelOf(barCell)}
@@ -268,7 +275,8 @@ function ScaleBarCellControl({
 }
 
 interface TableChoiceGroupScaleBarProps
-  extends Omit<ChoiceGroupScaleBarProps, 'selectedCellId' | 'onToggleCell'> {
+  extends Omit<ChoiceGroupScaleBarProps, 'barId' | 'selectedCellId' | 'onToggleCell'> {
+  group: ChoiceGroup;
   /** 막대 칸이 된 원래 보기 칸 — 단독 선택 규칙 판정에 셀 정의가 필요하다 */
   cells: readonly TableCell[];
   value?: Record<string, unknown> | undefined;
@@ -280,6 +288,7 @@ interface TableChoiceGroupScaleBarProps
  * useChoiceGroupToggle 이다. 저장은 표 응답 안 예약 키 `__choiceGroups[그룹키]`.
  */
 export const TableChoiceGroupScaleBar = React.memo(function TableChoiceGroupScaleBar({
+  group,
   cells,
   value,
   onChange,
@@ -287,7 +296,7 @@ export const TableChoiceGroupScaleBar = React.memo(function TableChoiceGroupScal
 }: TableChoiceGroupScaleBarProps) {
   const { selection, toggle } = useChoiceGroupToggle({
     questionId: barProps.questionId,
-    group: barProps.group,
+    group,
     value,
     onChange,
   });
@@ -302,6 +311,8 @@ export const TableChoiceGroupScaleBar = React.memo(function TableChoiceGroupScal
   return (
     <ChoiceGroupScaleBar
       {...barProps}
+      barId={group.id}
+      ariaLabel={barProps.ariaLabel ?? group.label}
       selectedCellId={typeof selection === 'string' ? selection : undefined}
       onToggleCell={onToggleCell}
     />
