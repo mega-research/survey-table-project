@@ -1,6 +1,9 @@
 import { QueryProvider } from '@/components/providers/query-provider';
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
-import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
+import {
+  fieldworkLinkOperationsBase,
+  fieldworkLinkPreviewPath,
+} from '@/features/operations/operations-paths';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
@@ -46,6 +49,8 @@ export default async function FieldworkLinkOperationsLayout({ children, params }
           surveyTitle={survey?.title ?? ''}
           capabilities={capabilities}
           internalShell={false}
+          // 설문 보기는 admin 미리보기가 아니라 링크 트리의 열람 화면으로 간다(ADR-0027 이후).
+          previewHref={fieldworkLinkPreviewPath(token)}
           trailing={<LinkSignOutButton token={token} />}
         />
         <OperationsTabStrip

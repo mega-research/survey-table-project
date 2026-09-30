@@ -101,6 +101,16 @@ export function fieldworkLinkOperationsPaths(token: string): OperationsPaths {
   return operationsPaths(fieldworkLinkOperationsBase(token));
 }
 
+/**
+ * 외주 실사 링크의 「설문 보기」 — 배포된 응답 화면을 열람 전용으로 연다.
+ *
+ * 운영 콘솔 셸(헤더·탭) **밖**이다. 내부의 `/surveys/<id>/preview` 도 콘솔 셸 밖의 전체 화면이라
+ * 두 셸이 같은 모양이 되도록 `/operations` 아래에 두지 않는다.
+ */
+export function fieldworkLinkPreviewPath(token: string): string {
+  return `/fw/${token}/preview`;
+}
+
 export function surveyListPath(): string {
   return '/surveys';
 }

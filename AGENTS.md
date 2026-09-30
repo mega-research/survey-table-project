@@ -90,6 +90,7 @@ src/
 │   │                           # 「가로질러 읽는가」다
 │   ├── fw/[token]/             # 외주 실사 링크 콘솔 (ADR-0026) — 계정이 아니라 **링크**가 연다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음 — 세션을 만드는 자리)
+│   │   ├── preview/            # 설문 보기 — 콘솔 셸 밖의 열람 전용 화면(내부 /surveys/[id]/preview 의 짝)
 │   │   └── operations/         # 깎인 헤더·탭 + contacts·contacts/[contactId]·overview·report
 │   │                           # ·profiles·profiles/[responseId]/edit (ADR-0027). 레이아웃이 QueryProvider 를 연다
 │   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
@@ -796,6 +797,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /fw/[token]                       # 외주 실사 링크의 입구 — 비밀번호 화면 + 닫힘 안내 (ADR-0026)
                                   # 가드가 **없는 것이 정의**다(세션을 만드는 자리). 없는 토큰과 틀린
                                   # 비밀번호가 같은 화면이고, 닫힘(중단·종료·삭제·배치 대기)만 갈라 말한다
+/fw/[token]/preview               # 설문 보기 — 배포 스냅샷을 열람 전용으로(응답이 남지 않는다). 콘솔 헤더의 「설문 보기」가 연다.
+                                  # 미리보기 링크 복사는 없다 — previewToken 주소는 링크를 닫아도 열리는 pub 경로다
 /fw/[token]/operations            # 탭 없는 주소 — 조사 대상으로 리다이렉트
 /fw/[token]/operations/contacts   # 조사 대상 목록 — **내부 콘솔과 같은 화면 정의**(ContactsListView)
                                   # 다운로드·업로드·이월 임포트·대상 추가·컬럼 설정은 그려지지 않고

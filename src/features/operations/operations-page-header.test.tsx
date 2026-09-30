@@ -18,8 +18,9 @@ import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
  *  - `internalShell` — 어느 셸에 있는가. 설문 목록·빌더 미리보기·로그아웃은 admin 주소·계정
  *    동작이라 capability 로 물을 수 없다.
  *
- * 외주 실사 링크 셸에 남는 것은 **새로고침과 나가기 둘**이고, 「나가기」는 계정 로그아웃이
- * 아니라 쿠키 하나를 지우는 다른 동작이라 슬롯으로 들어온다.
+ * 외주 실사 링크 셸에 남는 것은 **새로고침·설문 보기·나가기**다. 「나가기」는 계정 로그아웃이
+ * 아니라 쿠키 하나를 지우는 다른 동작이라 슬롯으로 들어오고, 「설문 보기」는 admin 미리보기가
+ * 아니라 링크 트리의 열람 화면으로 가도록 셸이 주소를 준다(`previewHref`, ADR-0027 이후).
  */
 
 const CONTROL = {
@@ -40,7 +41,7 @@ const CONTROL = {
  */
 function renderHeader(
   capabilities: readonly SurveyCapability[],
-  options: { internalShell?: boolean; trailing?: React.ReactNode } = {},
+  options: { internalShell?: boolean; trailing?: React.ReactNode; previewHref?: string } = {},
 ) {
   const queryClient = new QueryClient();
   return rtlRender(
@@ -50,6 +51,7 @@ function renderHeader(
       capabilities={new Set(capabilities)}
       internalShell={options.internalShell ?? true}
       {...(options.trailing !== undefined ? { trailing: options.trailing } : {})}
+      {...(options.previewHref !== undefined ? { previewHref: options.previewHref } : {})}
       {...(options.internalShell === false ? {} : { control: CONTROL })}
     />,
     {
@@ -61,7 +63,7 @@ function renderHeader(
 }
 
 /** 링크 셸에 있어서는 안 되는 자리들. */
-const INTERNAL_ONLY = ['목록으로', '설문 보기', '설문 편집'];
+const INTERNAL_ONLY = ['목록으로', '설문 편집'];
 
 describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만 남는다', () => {
   it('전권 내부 주체는 admin 자리를 전부 본다', () => {
@@ -69,12 +71,29 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
     for (const label of INTERNAL_ONLY) {
       expect(screen.queryAllByText(label).length, `${label} 가 없다`).toBeGreaterThan(0);
     }
+    // 내부 셸의 설문 보기는 빌더 미리보기로 간다.
+    expect(screen.getByText('설문 보기').closest('a')?.getAttribute('href')).toBe(
+      '/surveys/sv-1/preview',
+    );
+  });
+
+  it('외주 링크 셸의 설문 보기는 링크 트리의 열람 화면으로 간다 — admin 주소가 아니다', () => {
+    renderHeader(LINK_CAPABILITIES, { internalShell: false, previewHref: '/fw/tok/preview' });
+    expect(screen.getByText('설문 보기').closest('a')?.getAttribute('href')).toBe(
+      '/fw/tok/preview',
+    );
+  });
+
+  it('링크 셸에 주소를 주지 않으면 설문 보기가 없다 — admin 미리보기로 새지 않는다', () => {
+    renderHeader(LINK_CAPABILITIES, { internalShell: false });
+    expect(screen.queryAllByText('설문 보기')).toEqual([]);
   });
 
   it('외주 링크 셸에는 admin 자리가 하나도 없다', () => {
     renderHeader(LINK_CAPABILITIES, {
       internalShell: false,
       trailing: <button type="button">나가기</button>,
+      previewHref: '/fw/tok/preview',
     });
     for (const label of INTERNAL_ONLY) {
       expect(screen.queryAllByText(label), `${label} 가 외주에게 보인다`).toEqual([]);

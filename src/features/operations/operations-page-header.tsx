@@ -27,7 +27,7 @@ interface Props {
    */
   capabilities: ReadonlySet<SurveyCapability>;
   /**
-   * 내부 전용 자리를 그릴 것인가 — 목록으로·설문 보기·로그아웃.
+   * 내부 전용 자리를 그릴 것인가 — 목록으로·로그아웃(설문 보기는 아래 `previewHref`).
    *
    * 탭 스트립과 **같은 축**이다(거기 주석 참조). capability 로 물을 수 없다: 설문 목록과 빌더
    * 미리보기는 admin 주소이고 로그아웃은 계정 동작이라, 외주 실사 링크 주체는 `survey.view` 를
@@ -43,6 +43,15 @@ interface Props {
    * 받으면 헤더는 자리만 알고 무엇이 오는지는 모른다.
    */
   trailing?: React.ReactNode;
+  /**
+   * 「설문 보기」가 여는 주소. 주지 않으면 내부 셸은 빌더 미리보기(`/surveys/<id>/preview`)로,
+   * 링크 셸은 버튼을 그리지 않는다.
+   *
+   * 셸마다 주소가 다르다 — 빌더 미리보기는 admin 주소라 외주 실사 링크는 `/fw/<token>/preview`
+   * 를 준다(ADR-0027 이후). `internalShell` 로 묻지 않는 이유는 그 축이 「admin 주소인가」라서다:
+   * 설문 보기 자체는 `survey.view` 로 누구나 볼 수 있는 화면이다.
+   */
+  previewHref?: string;
   /**
    * 설문 제어 상태 — `survey.edit` 를 가진 주체에게만 쓰인다.
    *
@@ -73,9 +82,11 @@ export function OperationsPageHeader({
   capabilities,
   internalShell = true,
   trailing,
+  previewHref: previewHrefProp,
   control,
 }: Props) {
   const canEdit = capabilities.has('survey.edit');
+  const previewHref = previewHrefProp ?? (internalShell ? surveyPreviewPath(surveyId) : null);
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -101,8 +112,8 @@ export function OperationsPageHeader({
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          {internalShell && (
-            <Link href={surveyPreviewPath(surveyId)}>
+          {previewHref && (
+            <Link href={previewHref}>
               <Button variant="outline" size="sm">
                 <Eye className="mr-2 h-4 w-4" />
                 설문 보기
