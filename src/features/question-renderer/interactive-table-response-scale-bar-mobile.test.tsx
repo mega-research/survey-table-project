@@ -192,6 +192,25 @@ describe('행 단위 그룹 카드 — 척도 막대 그룹', () => {
     expect(screen.getByTestId('choice-group-original-line-g-sat')).toBeInTheDocument();
   });
 
+  it.each([
+    ['상세기재가 붙은 보기', { allowTextInput: true }],
+    ['단독 선택 보기', { exclusiveChoice: true }],
+  ])('%s가 섞이면 원본 한 줄로 폴백한다', (_name, extra) => {
+    const flagged = rows.map((row) => ({
+      ...row,
+      cells: row.cells.map((cell) => (cell.id === 'sat10' ? { ...cell, ...extra } : cell)),
+    }));
+    render(<Harness rowsOverride={flagged} />);
+    expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
+    expect(screen.getByTestId('choice-group-original-line-g-sat')).toBeInTheDocument();
+  });
+
+  it('복수 선택 그룹은 원본 한 줄로 폴백한다', () => {
+    render(<Harness satGroup={{ type: 'checkbox', mobileScaleBar: true }} />);
+    expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
+    expect(screen.getByTestId('choice-group-original-line-g-sat')).toBeInTheDocument();
+  });
+
   it('보기 칸 사이에 입력칸이 섞이면 원본 한 줄로 폴백한다', () => {
     const mixed = rows.map((row) => ({
       ...row,

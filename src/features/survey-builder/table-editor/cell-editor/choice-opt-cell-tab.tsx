@@ -13,6 +13,7 @@ import {
 import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
+import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { generateId } from '@/lib/utils';
@@ -63,6 +64,11 @@ interface ChoiceOptCellTabProps {
   choiceGroupId: string;
   onChoiceGroupIdChange: (id: string) => void;
   onChoiceGroupsChange: (groups: ChoiceGroup[]) => void;
+  /**
+   * 현재 그룹을 척도 막대로 그릴 수 없는 행과 이유(diagnoseChoiceGroupScaleBar) — 보기 모양이
+   * 「척도 막대」일 때만 경고로 보인다. 응답 화면은 그 행을 원본 한 줄로 그린다.
+   */
+  scaleBarIssues?: readonly ScaleBarIssue[] | undefined;
   /** 질문 레벨 "필수 질문" 여부 — 그룹별 필수 토글의 상속 기본값 표시용 */
   questionRequired: boolean;
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
@@ -100,6 +106,7 @@ export function ChoiceOptCellTab({
   choiceGroupId,
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
+  scaleBarIssues = [],
   questionRequired,
   answerQuoteEnabled = false,
   answerQuoteText,
@@ -296,6 +303,25 @@ export function ChoiceOptCellTab({
             글자 + 헤더 구간)로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 막대로 그릴 수 없는
             그룹은 원본 한 줄로 보입니다.
           </p>
+          {resolveChoiceGroupMobileView(currentGroup) === 'scale-bar' &&
+            scaleBarIssues.length > 0 && (
+              <div
+                role="alert"
+                className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+              >
+                <p className="font-medium">
+                  척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 한 줄로 보입니다.
+                </p>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {scaleBarIssues.map((issue) => (
+                    <li key={issue.reason}>
+                      {issue.message}
+                      <span className="text-amber-700"> (행: {issue.rowLabels.join(', ')})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
         </div>
       )}
 

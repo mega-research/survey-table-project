@@ -38,12 +38,14 @@ import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
+import { diagnoseChoiceGroupScaleBar } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import {
   type ContentType,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
+  buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
@@ -372,6 +374,24 @@ export function CellContentModal({
     }
     return counts;
   })();
+
+  // 「척도 막대」 폴백 진단 — 응답 화면과 같은 투영을 이 셀의 편집 중 값(그룹·상세기재·단독 선택)을
+  // 반영한 표에 돌린다. 저장 전 토글도 곧바로 경고에 보이게 한다.
+  const scaleBarGroup =
+    contentType === 'choice_opt'
+      ? editChoiceGroups.find((group) => group.id === form.choiceGroupId)
+      : undefined;
+  const scaleBarIssues = scaleBarGroup
+    ? diagnoseChoiceGroupScaleBar({
+        group: scaleBarGroup,
+        rows: gatingRows.map((row) => ({
+          ...row,
+          cells: row.cells.map((c) => (c.id === cell.id ? buildUpdatedCell(form, cell) : c)),
+        })),
+        columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
+        headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
+      })
+    : [];
 
   // 자동생성 셀코드/라벨 계산
   const autoCellCode = generateCellCode(questionCode, rowCode, columnCode);
@@ -869,6 +889,7 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              scaleBarIssues={scaleBarIssues}
               questionRequired={ownQuestion.required}
               answerQuoteEnabled={answerQuoteEnabled}
               answerQuoteText={answerQuoteText}

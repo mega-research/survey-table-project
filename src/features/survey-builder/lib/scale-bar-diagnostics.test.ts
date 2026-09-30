@@ -1,0 +1,117 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  SCALE_BAR_FALLBACK_MESSAGES,
+  diagnoseChoiceGroupScaleBar,
+} from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import type { ChoiceGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
+
+const CIRC = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+const satisfaction: ChoiceGroup = { id: 'g-sat', groupKey: 'rad2', type: 'radio', label: '만족도' };
+
+const choice = (id: string, content: string, extra: Partial<TableCell> = {}): TableCell => ({
+  id,
+  type: 'choice_opt',
+  content,
+  choiceGroupId: 'g-sat',
+  ...extra,
+});
+
+function scaleRow(
+  id: string,
+  label: string,
+  edit: (cell: TableCell, n: number) => TableCell = (cell) => cell,
+): TableRow {
+  return {
+    id,
+    label,
+    cells: [
+      { id: `${id}-item`, type: 'text', content: label },
+      ...CIRC.map((text, n) => edit(choice(`${id}-c${n}`, text), n)),
+    ],
+  };
+}
+
+const columns: TableColumn[] = Array.from({ length: 12 }, (_, n) => ({ id: `col${n}`, label: '' }));
+
+describe('diagnoseChoiceGroupScaleBar — 척도 막대 그룹의 폴백 진단', () => {
+  it('모든 행이 막대로 그려지면 문제가 없다', () => {
+    const rows = [scaleRow('r1', '회의실 지원'), scaleRow('r2', '교통비 지원')];
+    expect(diagnoseChoiceGroupScaleBar({ group: satisfaction, rows, columns })).toEqual([]);
+  });
+
+  it('폴백하는 행을 이유별로 모아 행 이름과 문구를 준다', () => {
+    const rows = [
+      scaleRow('r1', '회의실 지원', (cell, n) =>
+        n === 10 ? { ...cell, allowTextInput: true } : cell,
+      ),
+      scaleRow('r2', '교통비 지원'),
+      scaleRow('r3', '멘토링', (cell, n) => (n === 10 ? { ...cell, allowTextInput: true } : cell)),
+    ];
+    expect(diagnoseChoiceGroupScaleBar({ group: satisfaction, rows, columns })).toEqual([
+      {
+        reason: 'text-input',
+        message: SCALE_BAR_FALLBACK_MESSAGES['text-input'],
+        rowLabels: ['회의실 지원', '멘토링'],
+      },
+    ]);
+  });
+
+  it('복수 선택 그룹은 이유 하나로 모든 행을 알린다', () => {
+    const rows = [scaleRow('r1', '회의실 지원'), scaleRow('r2', '교통비 지원')];
+    const issues = diagnoseChoiceGroupScaleBar({
+      group: { ...satisfaction, type: 'checkbox' },
+      rows,
+      columns,
+    });
+    expect(issues.map((issue) => issue.reason)).toEqual(['not-single-choice']);
+    expect(issues[0]!.rowLabels).toEqual(['회의실 지원', '교통비 지원']);
+  });
+
+  it('행 이름이 없으면 첫 글자 칸, 그것도 없으면 행 번호', () => {
+    const noLabel = { ...scaleRow('r1', '회의실 지원'), label: '' };
+    const bare: TableRow = {
+      id: 'r2',
+      label: '',
+      cells: [
+        { id: 'r2-item', type: 'text', content: '' },
+        ...CIRC.map((_, n) => choice(`r2-c${n}`, '')),
+      ],
+    };
+    const issues = diagnoseChoiceGroupScaleBar({
+      group: satisfaction,
+      rows: [noLabel, bare],
+      columns,
+    });
+    expect(issues).toEqual([
+      expect.objectContaining({ reason: 'missing-text', rowLabels: ['2행'] }),
+    ]);
+    const onlyFirst = diagnoseChoiceGroupScaleBar({
+      group: satisfaction,
+      rows: [
+        {
+          ...noLabel,
+          cells: noLabel.cells.map((cell, n) => (n === 5 ? { ...cell, content: '' } : cell)),
+        },
+      ],
+      columns,
+    });
+    expect(onlyFirst[0]!.rowLabels).toEqual(['회의실 지원']);
+  });
+
+  it('그룹 칸이 없는 행과 숨은 칸은 보지 않는다', () => {
+    const rows = [
+      { id: 'head', label: '구분', cells: [{ id: 'h', type: 'text' as const, content: '구분' }] },
+      scaleRow('r1', '회의실 지원', (cell, n) =>
+        n === 10 ? { ...cell, allowTextInput: true, isHidden: true } : cell,
+      ),
+    ];
+    expect(diagnoseChoiceGroupScaleBar({ group: satisfaction, rows, columns })).toEqual([]);
+  });
+
+  it('이유 코드마다 한국어 문구가 있다', () => {
+    for (const message of Object.values(SCALE_BAR_FALLBACK_MESSAGES)) {
+      expect(message.trim()).not.toBe('');
+    }
+  });
+});
