@@ -19,6 +19,9 @@ interface RankingOptCellTabProps {
   onSpssNumericCodeChange: (v: number | '') => void;
   isOtherRankingCell: boolean;
   onIsOtherRankingCellChange: (v: boolean) => void;
+  /** 상세 기재 — 선택 시 텍스트 입력. 보기 번호는 그대로 남고 텍스트는 `_rk{k}_text` 로 받는다 */
+  allowTextInput: boolean;
+  onAllowTextInputChange: (v: boolean) => void;
   /** 질문 레벨의 ranking 그룹 목록 */
   choiceGroups: ChoiceGroup[];
   /** 그룹 id → 멤버 셀 수 (표시용) */
@@ -44,6 +47,8 @@ export function RankingOptCellTab({
   onSpssNumericCodeChange,
   isOtherRankingCell,
   onIsOtherRankingCellChange,
+  allowTextInput,
+  onAllowTextInputChange,
   choiceGroups,
   groupMemberCounts,
   choiceGroupId,
@@ -145,6 +150,25 @@ export function RankingOptCellTab({
       <div className="flex items-center justify-between gap-4">
         <Label className="text-sm font-medium">이 셀을 &quot;기타&quot;로 사용</Label>
         <Switch checked={isOther} onCheckedChange={onIsOtherRankingCellChange} />
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="ranking-opt-allow-text" className="text-sm font-medium">
+            선택 시 텍스트 입력 받기
+          </Label>
+          <Switch
+            id="ranking-opt-allow-text"
+            checked={!isOther && allowTextInput}
+            onCheckedChange={onAllowTextInputChange}
+            disabled={isOther}
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          {isOther
+            ? '"기타"로 사용하는 셀은 응답값 없이 입력 텍스트만 _etc 변수로 받습니다.'
+            : '응답값(보기 번호)을 그대로 기록하고, 입력한 텍스트는 _text 변수로 받습니다. 보기 목록의 "주관식 선택지"와 같습니다.'}
+        </p>
       </div>
 
       <div className="space-y-2">

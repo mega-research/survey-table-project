@@ -866,6 +866,8 @@ export function CellContentModal({
               onSpssNumericCodeChange={setCellSpssNumericCode}
               isOtherRankingCell={isOtherRankingCell}
               onIsOtherRankingCellChange={setIsOtherRankingCell}
+              allowTextInput={choiceAllowTextInput}
+              onAllowTextInputChange={setChoiceAllowTextInput}
               choiceGroups={editChoiceGroups}
               groupMemberCounts={groupMemberCounts}
               choiceGroupId={choiceGroupId}

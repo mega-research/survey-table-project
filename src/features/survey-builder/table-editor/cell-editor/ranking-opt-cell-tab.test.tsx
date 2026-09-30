@@ -14,6 +14,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     onSpssNumericCodeChange: vi.fn(),
     isOtherRankingCell: false,
     onIsOtherRankingCellChange: vi.fn(),
+    allowTextInput: false,
+    onAllowTextInputChange: vi.fn(),
     choiceGroups: [] as ChoiceGroup[],
     groupMemberCounts: {} as Record<string, number>,
     choiceGroupId: '',
@@ -157,5 +159,22 @@ describe('RankingOptCellTab — 순위 그룹 지정 UI', () => {
     render(<RankingOptCellTab {...makeProps()} />);
 
     expect(screen.getByText(/하나의 순위 select 세트/)).toBeInTheDocument();
+  });
+});
+
+describe('RankingOptCellTab — 상세 기재(선택 시 텍스트 입력 받기)', () => {
+  it('스위치를 켜면 onAllowTextInputChange(true) 가 호출된다', async () => {
+    const onAllowTextInputChange = vi.fn();
+    render(<RankingOptCellTab {...makeProps({ onAllowTextInputChange })} />);
+
+    await userEvent.click(screen.getByRole('switch', { name: /선택 시 텍스트 입력 받기/ }));
+
+    expect(onAllowTextInputChange).toHaveBeenCalledWith(true);
+  });
+
+  it('기타 모드에서는 상세 기재 스위치가 비활성이다 — 기타는 _etc 로 따로 받는다', () => {
+    render(<RankingOptCellTab {...makeProps({ isOtherRankingCell: true })} />);
+
+    expect(screen.getByRole('switch', { name: /선택 시 텍스트 입력 받기/ })).toBeDisabled();
   });
 });

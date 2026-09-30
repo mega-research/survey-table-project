@@ -562,6 +562,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     ...(contentType === 'ranking_opt' && form.isOtherRankingCell
       ? { isOtherRankingCell: true }
       : {}),
+    // ranking_opt 상세 기재 — 보기 번호는 그대로 기록하고 입력 텍스트는 `_rk{k}_text` 로 받는다.
+    // 기타 모드(번호 없이 `_etc`)와는 배타라 기타면 싣지 않는다. 폼 상태는 choice_opt 와 공유한다.
+    ...(contentType === 'ranking_opt' && !form.isOtherRankingCell && form.choiceAllowTextInput
+      ? { allowTextInput: true }
+      : {}),
     // 보기 옵션 소스 셀 (Case A)
     ...(contentType === 'choice_opt'
       ? {

@@ -385,6 +385,40 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out).not.toHaveProperty('spssNumericCode');
   });
 
+  it('ranking_opt: 상세 기재를 켜면 allowTextInput 이 저장되고 응답값(spssNumericCode)도 유지된다', () => {
+    const form: CellFormState = {
+      ...baseForm('ranking_opt'),
+      cellSpssNumericCode: 15,
+      isOtherRankingCell: false,
+      choiceAllowTextInput: true,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).toEqual({
+      id: 'c1',
+      type: 'ranking_opt',
+      content: '',
+      spssNumericCode: 15,
+      allowTextInput: true,
+      ...CUSTOM_FALSE,
+    });
+  });
+
+  it('ranking_opt: 기존 셀의 상세 기재는 셀을 열어 저장해도 보존된다', () => {
+    const cell: TableCell = { id: 'c1', type: 'ranking_opt', content: '⑮ 기타', allowTextInput: true };
+    const out = buildUpdatedCell({ ...cellToFormState(cell), contentType: 'ranking_opt' }, cell);
+    expect(out.allowTextInput).toBe(true);
+  });
+
+  it('ranking_opt: 기타 모드에서는 상세 기재를 싣지 않는다 (기타는 _etc 로 따로 받는다)', () => {
+    const form: CellFormState = {
+      ...baseForm('ranking_opt'),
+      isOtherRankingCell: true,
+      choiceAllowTextInput: true,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).not.toHaveProperty('allowTextInput');
+  });
+
   it('ranking_opt: choiceGroupId 설정 시 저장되고 해제(빈 문자열) 시 키가 제거된다', () => {
     const cellWithGroup: TableCell = {
       id: 'c1',
