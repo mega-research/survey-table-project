@@ -50,6 +50,16 @@ import {
 } from './submitted-answers';
 import { lockAndAssertResponseMutation } from './test-target-attempt';
 
+/** 빈 complete 의 셀 재판정 횟수 — 넘으면 조작된 동시 요청으로 보고 거부한다 */
+const QUOTA_CELL_RETRY_LIMIT = 3;
+
+/** 잠금 아래 저장분의 쿼터 셀이 잠금 전에 고른 셀과 다르다 — 트랜잭션을 되돌리고 이 셀로 다시 한다 */
+class QuotaCellChangedError extends Error {
+  constructor(readonly cell: QuotaTargetCell) {
+    super('quota cell changed under lock');
+  }
+}
+
 /**
  * 응답 완료 확정 — 게이트 재검증부터 정제·암호화·쿼터 판정·컨택 후처리까지.
  *
@@ -296,8 +306,9 @@ export async function completeResponse(
   //    빈 complete(페이로드 없음)도 판정한다 — draft 로 저장한 답을 페이로드 없이 완료해
   //    우회하는 길을 막기 위해서다(클라이언트 값을 믿지 않는다). 셀은 잠금 아래에서 읽은
   //    저장분으로 다시 분류하되, 잠금 순서(advisory → 응답 행)를 지키려면 셀 키를 먼저 알아야
-  //    하므로 잠금 전 저장분으로 키를 고른다. 그 사이 draft 가 셀을 바꾼 극히 드문 경우는
-  //    다른 키를 새로 잠그지 않고 통과시킨다(fail-open) — 두 번째 잠금은 순서를 깨뜨린다.
+  //    하므로 잠금 전 저장분으로 키를 고른다. 그 사이 draft 가 셀을 바꿨으면(미분류였다가
+  //    분류된 경우 포함) 트랜잭션을 되돌리고 바뀐 셀의 잠금부터 다시 잡아 처음부터 센다 —
+  //    잠금을 쥔 채 두 번째 셀을 잠그면 순서가 깨져 교착할 수 있다. 계속 바뀌면 거부한다.
   // 2) 꺼짐(기존 설문): soft 초과 감지 — 게이트 통과~완료 사이 race 로 셀이 먼저 찬 완료를
   //    식별해 metadata.quotaOverflow 표식만 남긴다(2026-08-11 정책). 잠금 없음. 빈 complete
   //    경로는 종전대로 생략한다(통계 식별용 표식이지 집행이 아니다).
@@ -337,7 +348,8 @@ export async function completeResponse(
         { responseId },
       );
       hardCloseCell = await resolveQuotaTargetCell(hardClosePlan, storedPlain, gateRow.contactTargetId);
-      hardCloseFromStored = hardCloseCell !== null;
+      // 잠금 전에 미분류여도 잠금 아래에서 다시 분류한다 — 그 사이 draft 가 셀을 정했을 수 있다
+      hardCloseFromStored = true;
     }
   }
 
@@ -350,7 +362,7 @@ export async function completeResponse(
   let quotaFull = false;
   // 이미 quotaful_out 인 행에 늦게 도착한 complete(페이지 재확인이 먼저 마킹한 경우).
   let lateQuotaClosed = false;
-  const result = await db.transaction(async (tx) => {
+  const completeInTransaction = () => db.transaction(async (tx) => {
     // 쿼터 하드 차단 — 설문+셀 키 트랜잭션 advisory lock 을 **응답 행 잠금보다 먼저** 잡아
     // 순서를 고정한다(교착 방지). 같은 셀의 제출은 여기서 직렬화되고, 잠금 아래에서 다시 센
     // 완료 수가 목표 이상이면 이 제출은 완료가 아니라 쿼터마감이 된다. 잠금은 commit 에 풀리므로
@@ -435,23 +447,22 @@ export async function completeResponse(
           buildScreenOutOptions(judgedResponses),
         );
       }
-      // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 잠금 전에 고른
-      // 키와 같을 때만 센다(다르면 fail-open, 위 주석). 자격미달이면 셀을 소비하지 않는다.
-      if (hardCloseFromStored && hardCloseCell && gateRow && quotaPlan && !screenedOut) {
+      // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 자격미달이면 셀을
+      // 소비하지 않는다. 잠금 전에 고른 셀과 다르면 이 셀의 잠금을 쥐고 있지 않으므로 세지 않고
+      // 되돌린다 — 바깥 재시도가 바뀐 셀의 잠금부터 다시 잡는다. 미분류가 됐으면 쿼터에 걸리지 않는다.
+      if (hardCloseFromStored && gateRow && quotaPlan && !screenedOut) {
         const lockedCell = await resolveQuotaTargetCell(
           quotaPlan,
           judgedResponses,
           gateRow.contactTargetId,
           tx,
         );
-        if (lockedCell && lockedCell.cellKey === hardCloseCell.cellKey) {
+        if (lockedCell && lockedCell.cellKey !== hardCloseCell?.cellKey) {
+          throw new QuotaCellChangedError(lockedCell);
+        }
+        if (lockedCell) {
           const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, lockedCell);
           quotaFull = current >= lockedCell.target;
-        } else {
-          logger.warn(
-            { surveyId: gateRow.surveyId, responseId },
-            '[quota] 빈 complete 의 저장분 셀이 잠금 전과 달라 하드 차단을 건너뛴다 — fail-open',
-          );
         }
       }
     }
@@ -604,6 +615,30 @@ export async function completeResponse(
 
     return alreadyCompleted ? { ...completedResponse, alreadyCompleted: true } : completedResponse;
   });
+
+  // 빈 complete 의 셀이 잠금 전후로 달랐으면 바뀐 셀로 처음부터 다시 한다 — 되돌린 트랜잭션은
+  // 아무것도 남기지 않는다. 정상 응답 화면은 늘 페이로드를 보내 이 경로에 오지 않으므로, 셀이
+  // 계속 바뀌는 것은 조작된 동시 요청이다. 그때는 완료로 만들지 않고 거부한다(fail-closed).
+  let result: Awaited<ReturnType<typeof completeInTransaction>> | undefined;
+  for (let attempt = 1; result === undefined; attempt += 1) {
+    quotaFull = false;
+    lateQuotaClosed = false;
+    try {
+      result = await completeInTransaction();
+    } catch (err) {
+      if (!(err instanceof QuotaCellChangedError)) throw err;
+      logger.warn(
+        { surveyId: gateRow?.surveyId, responseId, attempt },
+        '[quota] 빈 complete 의 저장분 셀이 잠금 전과 달라 바뀐 셀로 다시 판정한다',
+      );
+      if (attempt >= QUOTA_CELL_RETRY_LIMIT) {
+        throw new Error(
+          `completeResponse: 쿼터 셀이 판정 중 계속 바뀌어 완료를 거부한다 (responseId=${responseId})`,
+        );
+      }
+      hardCloseCell = err.cell;
+    }
+  }
 
   // 실제 대상자 연결은 응답 완료 커밋 이후 best-effort로 유지한다. 이를 완료 트랜잭션에
   // 넣으면 response → target 순서가 되어, target → response 순서인 컨택 삭제/hard reset과
