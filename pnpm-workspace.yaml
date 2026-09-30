@@ -66,7 +66,8 @@ overrides:
   'tar@7': '>=7.5.19 <8'
   'protobufjs@7': '>=7.6.1 <8'
   'protobufjs@8': '>=8.6.3 <9'
-  'undici@7': '>=7.29.0 <8'
+  # undici 7: 2026-09-30 GHSA-rfgv-xxqx-mfg5(WebSocket 하위 프로토콜 DoS)·GHSA-w293-vg96-wgc3(BalancedPool TLS 검증 우회) 대응으로 하한 7.29.1 — jsdom(테스트 전용) 경유
+  'undici@7': '>=7.29.1 <8'
   '@chenglou/pretext': '^0.0.5'
   'linkify-it@5': '>=5.0.2 <6'
   # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
