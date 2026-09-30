@@ -715,6 +715,10 @@ export interface ChoiceGroup {
   // 기본 꺼짐(기존 타일 유지). radio/checkbox 그룹 전용.
   // 판정·배치는 features/question-renderer/utils/choice-group-original-line.
   mobileOriginalLine?: boolean;
+  // 모바일 「행 단위 그룹 카드」에서 이 그룹을 가로 스크롤 없는 척도 막대(칸 글자 + 구간 띠 + 양끝·가운데
+  // 라벨)로 그린다. mobileOriginalLine 과 배타 — 읽기·쓰기는 features/question-renderer/utils/
+  // choice-group-mobile-view, 판정은 choice-group-scale-bar. 그릴 수 없으면 원본 한 줄로 폴백한다.
+  mobileScaleBar?: boolean;
 }
 
 export interface TableColumn {

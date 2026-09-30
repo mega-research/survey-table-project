@@ -5,6 +5,15 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  type ChoiceGroupMobileView,
+  resolveChoiceGroupMobileView,
+  withChoiceGroupMobileView,
+} from '@/features/question-renderer/utils/choice-group-mobile-view';
+import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
+import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
+import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
+import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { generateId } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
@@ -13,10 +22,11 @@ import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
-import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
-import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
-import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
-import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+const MOBILE_VIEW_CHOICES: ReadonlyArray<{ view: ChoiceGroupMobileView; label: string }> = [
+  { view: 'tiles', label: '세로 타일' },
+  { view: 'original-line', label: '원본 한 줄' },
+  { view: 'scale-bar', label: '척도 막대' },
+];
 
 interface ChoiceOptCellTabProps {
   choiceLabel: string;
@@ -252,32 +262,39 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
-      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹만 세로 타일 대신 원본 표 조각으로 — 기본 꺼짐 */}
+      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹을 그리는 모양 — 기본 세로 타일 */}
       {currentGroup && currentGroup.type !== 'ranking' && (
-        <div className="space-y-1 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="choice-group-original-line" className="text-sm font-medium">
-              모바일 그룹 카드에서 원본 한 줄로 보기 ({currentGroup.groupKey})
-            </Label>
-            <Switch
-              id="choice-group-original-line"
-              checked={currentGroup.mobileOriginalLine === true}
-              onCheckedChange={(on) =>
-                onChoiceGroupsChange(
-                  choiceGroups.map((g) => {
-                    if (g.id !== choiceGroupId) return g;
-                    if (on) return { ...g, mobileOriginalLine: true };
-                    const { mobileOriginalLine: _off, ...rest } = g;
-                    return rest;
-                  }),
-                )
-              }
-            />
+        <div className="space-y-1.5 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <p className="text-sm font-medium">
+            모바일 그룹 카드에서 보기 모양 ({currentGroup.groupKey})
+          </p>
+          <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+            {MOBILE_VIEW_CHOICES.map(({ view, label }, index) => {
+              const active = resolveChoiceGroupMobileView(currentGroup) === view;
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    onChoiceGroupsChange(
+                      choiceGroups.map((g) =>
+                        g.id === choiceGroupId ? withChoiceGroupMobileView(g, view) : g,
+                      ),
+                    )
+                  }
+                  className={`px-3 py-1 text-xs font-medium ${index > 0 ? 'border-l border-gray-200' : ''} ${active ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
           <p className="text-xs text-gray-500">
-            모바일 표시 방식이 「행 단위 그룹 카드」일 때만 적용됩니다. 켜면 이 그룹의 보기를 세로
-            타일 대신 「행별 원본」처럼 원본 표 조각(이 그룹 열의 헤더 + 보기 한 줄, 가로 스크롤)으로
-            보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용.
+            모바일 표시 방식이 「행 단위 그룹 카드」일 때만 적용됩니다. 원본 한 줄은 이 그룹 열의
+            헤더 + 보기 한 줄을 원본 표 조각(가로 스크롤)으로, 척도 막대는 화면 폭에 맞춘 막대(칸
+            글자 + 헤더 구간)로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 막대로 그릴 수 없는
+            그룹은 원본 한 줄로 보입니다.
           </p>
         </div>
       )}

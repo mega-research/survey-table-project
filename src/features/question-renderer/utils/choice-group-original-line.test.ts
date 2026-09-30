@@ -87,7 +87,10 @@ describe('projectChoiceGroupOriginalLine', () => {
 
   it('옵션을 켜지 않은 그룹·순위 그룹은 null — 종전 타일로 그린다', () => {
     expect(
-      projectChoiceGroupOriginalLine({ ...base, group: { ...satGroup, mobileOriginalLine: false } }),
+      projectChoiceGroupOriginalLine({
+        ...base,
+        group: { ...satGroup, mobileOriginalLine: false },
+      }),
     ).toBeNull();
     expect(projectChoiceGroupOriginalLine({ ...base, group: undefined })).toBeNull();
     expect(
@@ -95,8 +98,19 @@ describe('projectChoiceGroupOriginalLine', () => {
     ).toBeNull();
   });
 
+  it('척도 막대 그룹도 조각을 만든다 — 막대를 못 그릴 때의 폴백', () => {
+    const { mobileOriginalLine: _off, ...rest } = satGroup;
+    const line = projectChoiceGroupOriginalLine({
+      ...base,
+      group: { ...rest, mobileScaleBar: true },
+    });
+    expect(line!.row.cells.map((c) => c.id)).toEqual(scaleCells.map((c) => c.id));
+  });
+
   it('상세기재 보기가 있어도 원본 조각으로 그린다 — 입력칸은 원본 셀이 그린다', () => {
-    const withText = scaleCells.map((cell, n) => (n === 10 ? { ...cell, allowTextInput: true } : cell));
+    const withText = scaleCells.map((cell, n) =>
+      n === 10 ? { ...cell, allowTextInput: true } : cell,
+    );
     const line = projectChoiceGroupOriginalLine({
       ...base,
       group: satGroup,
@@ -116,7 +130,11 @@ describe('projectChoiceGroupOriginalLine', () => {
   });
 
   it('헤더 그리드가 없으면 열 제목으로, 열 제목을 숨겼으면 헤더 없이', () => {
-    const noGrid = projectChoiceGroupOriginalLine({ ...base, group: satGroup, headerGrid: undefined });
+    const noGrid = projectChoiceGroupOriginalLine({
+      ...base,
+      group: satGroup,
+      headerGrid: undefined,
+    });
     expect(noGrid!.headerGrid).toBeUndefined();
     expect(noGrid!.showColumnHeader).toBe(true);
     const hidden = projectChoiceGroupOriginalLine({

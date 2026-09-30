@@ -25,16 +25,19 @@ import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
+import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { MobileOptionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
+import { resolveChoiceGroupMobileView } from './utils/choice-group-mobile-view';
 import { projectChoiceGroupOriginalLine } from './utils/choice-group-original-line';
+import { projectScaleBar } from './utils/choice-group-scale-bar';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 interface MobileRowGroupCardsProps {
   questionId: string;
   displayRows: TableRow[];
   visibleColumns: TableColumn[];
-  /** 표시 조건으로 걸러진 헤더 그리드 — 원본 한 줄(ChoiceGroup.mobileOriginalLine) 헤더의 재료 */
+  /** 표시 조건으로 걸러진 헤더 그리드 — 원본 한 줄·척도 막대(ChoiceGroup.mobileOriginalLine·mobileScaleBar) 헤더의 재료 */
   visibleHeaderGrid?: HeaderCell[][] | undefined;
   choiceGroups: ChoiceGroup[];
   hideColumnLabels: boolean;
@@ -154,15 +157,28 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
               // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
               // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
               const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
-              // 그룹 옵션을 켰으면 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만)
-              const originalLine = projectChoiceGroupOriginalLine({
-                group,
-                columns: visibleColumns,
-                headerGrid: visibleHeaderGrid,
-                hideColumnLabels,
-                row,
-                groupCells: cells,
-              });
+              // 그룹 보기 모양 — 척도 막대를 골랐으면 막대, 못 그리면 원본 한 줄로 폴백한다
+              const scaleBar =
+                resolveChoiceGroupMobileView(group) === 'scale-bar'
+                  ? projectScaleBar({
+                      selectionType: group.type,
+                      columns: visibleColumns,
+                      headerGrid: visibleHeaderGrid,
+                      row,
+                      targetCells: cells,
+                    })
+                  : null;
+              // 원본 한 줄(또는 막대 폴백)이면 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만)
+              const originalLine = scaleBar?.ok
+                ? null
+                : projectChoiceGroupOriginalLine({
+                    group,
+                    columns: visibleColumns,
+                    headerGrid: visibleHeaderGrid,
+                    hideColumnLabels,
+                    row,
+                    groupCells: cells,
+                  });
               return (
                 <div
                   key={group.id}
@@ -172,7 +188,20 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                     unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                   )}
                 >
-                  {sectionLabel && (
+                  {scaleBar?.ok ? (
+                    // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다
+                    <ChoiceGroupScaleBar
+                      questionId={questionId}
+                      group={group}
+                      model={scaleBar.model}
+                      cells={cells}
+                      label={sectionLabel}
+                      invalid={unfilled}
+                      value={value}
+                      onChange={onChange}
+                      inputIdScope={row.id}
+                    />
+                  ) : sectionLabel ? (
                     <p
                       className={cn(
                         'text-[13px] font-semibold',
@@ -181,8 +210,8 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                     >
                       {sectionLabel}
                     </p>
-                  )}
-                  {originalLine ? (
+                  ) : null}
+                  {scaleBar?.ok ? null : originalLine ? (
                     <div data-testid={`choice-group-original-line-${group.id}`}>
                       <MobileOriginalRowTable
                         columns={originalLine.columns}

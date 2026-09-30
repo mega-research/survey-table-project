@@ -1,6 +1,8 @@
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
 
+import { resolveChoiceGroupMobileView } from './choice-group-mobile-view';
+
 /**
  * 「행 단위 그룹 카드」의 보기 그룹 한 섹션을 **원본 표 조각**으로 그리기 위한 투영.
  *
@@ -9,6 +11,8 @@ import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helper
  * 그린다. 11점 척도처럼 보기가 많은 그룹이 타일 11장으로 길게 늘어지는 것을 막는 옵션이다
  * (기본 꺼짐, 기존 모양 유지). 헤더는 원본 헤더 그리드를 그룹 열로 클리핑한다 — 병합 셀은
  * 걸친 만큼만 남고, 그룹 밖 열만 덮는 셀은 빠진다.
+ *
+ * 척도 막대(`ChoiceGroup.mobileScaleBar`)를 그릴 수 없는 그룹의 폴백도 이 조각이다.
  *
  * 결과는 `MobileOriginalRowTable` 에 그대로 넘긴다 — 셀 렌더(선택 쓰기·상세기재)는 행별 원본과
  * 같은 호출부 렌더러가 맡는다.
@@ -37,7 +41,7 @@ export function projectChoiceGroupOriginalLine(
   input: ProjectChoiceGroupOriginalLineInput,
 ): ChoiceGroupOriginalLine | null {
   const { group, columns, row, groupCells } = input;
-  if (!group?.mobileOriginalLine || group.type === 'ranking') return null;
+  if (resolveChoiceGroupMobileView(group) === 'tiles') return null;
   if (groupCells.length === 0) return null;
 
   const colIndices = groupCells.map((cell) => row.cells.findIndex((c) => c.id === cell.id));

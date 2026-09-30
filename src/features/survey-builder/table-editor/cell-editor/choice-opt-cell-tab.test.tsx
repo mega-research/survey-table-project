@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChoiceGroup } from '@/types/survey';
 import { ChoiceOptCellTab } from '@/features/survey-builder/table-editor/cell-editor/choice-opt-cell-tab';
+import type { ChoiceGroup } from '@/types/survey';
 
 // 기본 공통 props (단일 radio 그룹 없는 초기 상태)
 function makeProps(overrides: Record<string, unknown> = {}) {
@@ -110,8 +110,9 @@ describe('ChoiceOptCellTab — 옵션 그룹 지정 UI', () => {
     await userEvent.type(labelInput, 'X');
 
     // 마지막 호출에서 g1 의 label 에 'X' 가 추가되어야 한다
-    const lastCall: ChoiceGroup[] =
-      onChoiceGroupsChange.mock.calls[onChoiceGroupsChange.mock.calls.length - 1]![0] as ChoiceGroup[];
+    const lastCall: ChoiceGroup[] = onChoiceGroupsChange.mock.calls[
+      onChoiceGroupsChange.mock.calls.length - 1
+    ]![0] as ChoiceGroup[];
     const updated = lastCall.find((g) => g.id === 'g1')!;
     expect(updated.label).toContain('X');
     // g2 는 그대로
@@ -288,7 +289,9 @@ describe('ChoiceOptCellTab — 단독 선택 보기 토글', () => {
   });
 
   it('그룹이 없으면 문항 유형이 checkbox 일 때만 보인다', () => {
-    const { unmount } = render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'checkbox' })} />);
+    const { unmount } = render(
+      <ChoiceOptCellTab {...makeProps({ parentQuestionType: 'checkbox' })} />,
+    );
     expect(screen.getByRole('switch', { name: '단독 선택 보기' })).toBeInTheDocument();
     unmount();
     render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'radio' })} />);
@@ -326,21 +329,26 @@ describe('ChoiceOptCellTab — 단독 선택 범위', () => {
   });
 });
 
-describe('ChoiceOptCellTab — 모바일 그룹 카드 원본 한 줄 토글', () => {
-  it('그룹에 속한 셀에서 보이고 기본은 꺼져 있다. 켜면 그 그룹에만 mobileOriginalLine 이 붙는다', async () => {
+describe('ChoiceOptCellTab — 모바일 그룹 카드 보기 모양(세로 타일 / 원본 한 줄 / 척도 막대)', () => {
+  const choiceButton = (name: string) => screen.getByRole('button', { name });
+
+  it('그룹에 속한 셀에서 보이고 기본은 세로 타일이다. 원본 한 줄을 고르면 그 그룹에만 mobileOriginalLine 이 붙는다', async () => {
     const onChoiceGroupsChange = vi.fn();
     render(
       <ChoiceOptCellTab
         {...makeProps({ choiceGroups: [rad1, rad2], choiceGroupId: 'g2', onChoiceGroupsChange })}
       />,
     );
-    const toggle = screen.getByRole('switch', { name: /원본 한 줄로 보기/ });
-    expect(toggle).not.toBeChecked();
-    await userEvent.click(toggle);
-    expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, { ...rad2, mobileOriginalLine: true }]);
+    expect(choiceButton('세로 타일')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/행 단위 그룹 카드」일 때만 적용/)).toBeInTheDocument();
+    await userEvent.click(choiceButton('원본 한 줄'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([
+      rad1,
+      { ...rad2, mobileOriginalLine: true },
+    ]);
   });
 
-  it('끄면 필드를 지운다 — 켜 둔 적 없는 그룹과 같은 모양으로 돌아간다', async () => {
+  it('척도 막대를 고르면 mobileScaleBar 만 남는다 — 원본 한 줄과 배타다', async () => {
     const onChoiceGroupsChange = vi.fn();
     render(
       <ChoiceOptCellTab
@@ -351,12 +359,29 @@ describe('ChoiceOptCellTab — 모바일 그룹 카드 원본 한 줄 토글', (
         })}
       />,
     );
-    await userEvent.click(screen.getByRole('switch', { name: /원본 한 줄로 보기/ }));
+    expect(choiceButton('원본 한 줄')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(choiceButton('척도 막대'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, { ...rad2, mobileScaleBar: true }]);
+  });
+
+  it('세로 타일로 되돌리면 필드를 지운다 — 켜 둔 적 없는 그룹과 같은 모양으로 돌아간다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [rad1, { ...rad2, mobileScaleBar: true }],
+          choiceGroupId: 'g2',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    expect(choiceButton('척도 막대')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(choiceButton('세로 타일'));
     expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, rad2]);
   });
 
   it('그룹이 없는 셀에서는 보이지 않는다', () => {
     render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1] })} />);
-    expect(screen.queryByRole('switch', { name: /원본 한 줄로 보기/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '척도 막대' })).not.toBeInTheDocument();
   });
 });
