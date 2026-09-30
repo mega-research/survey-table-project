@@ -1,0 +1,85 @@
+import Link from 'next/link';
+
+import { Plus } from 'lucide-react';
+
+import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
+import { UnsubscribedSegment } from '@/features/operations/mail-campaign/unsubscribed-segment';
+import { Button } from '@/components/ui/button';
+import {
+  listCampaignsForSurvey,
+  listUnsubscribedContacts,
+} from '@/server/mail/services/campaigns-read';
+import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import { getContactColumnScheme } from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
+
+const PAGE_SIZE = 20;
+const UNSUB_PAGE_SIZE = 10;
+
+interface Props {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string; unsubPage?: string }>;
+}
+
+function parsePage(value: string | undefined): number {
+  const n = parseInt(value ?? '1', 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+export default async function MailCampaignsListPage({ params, searchParams }: Props) {
+  const { id: surveyId } = await params;
+  // 상위 레이아웃은 소프트 내비게이션에서 다시 돌지 않는다 — 세션이 폐기된 뒤에도
+  // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다 (티켓 10).
+  await assertSurveyConsolePageAccess(surveyId, 'mail.view');
+  const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
+  const page = parsePage(sp.page);
+  const unsubPage = parsePage(sp.unsubPage);
+
+  const [campaigns, unsubscribed, scheme] = await Promise.all([
+    listCampaignsForSurvey({ surveyId, scope, page, pageSize: PAGE_SIZE }),
+    listUnsubscribedContacts({ surveyId, scope, page: unsubPage, pageSize: UNSUB_PAGE_SIZE }),
+    getContactColumnScheme(surveyId, scope),
+  ]);
+
+  return (
+    <main className="mx-auto max-w-7xl space-y-10 px-6 py-8">
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">단체 발송</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              조사 대상 목록으로 단체 발송한 회차와 발송 현황을 관리합니다. 총{' '}
+              {campaigns.total.toLocaleString('ko-KR')}건.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href={`/surveys/${surveyId}/operations/mail/campaigns/new`}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              발송 등록
+            </Link>
+          </Button>
+        </div>
+        <CampaignsList
+          surveyId={surveyId}
+          rows={campaigns.rows}
+          total={campaigns.total}
+          page={campaigns.page}
+          pageSize={PAGE_SIZE}
+        />
+      </section>
+
+      <section id="unsubscribed">
+        <UnsubscribedSegment
+          surveyId={surveyId}
+          rows={unsubscribed.rows}
+          total={unsubscribed.total}
+          page={unsubscribed.page}
+          pageSize={UNSUB_PAGE_SIZE}
+          mailColumns={resolveMailDisplayColumns(scheme)}
+        />
+      </section>
+    </main>
+  );
+}

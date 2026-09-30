@@ -20,7 +20,7 @@ interface Props {
  * 두 콘솔이 서로를 import 하지 않는 독립 묶음이라(PRD 의존 방향) 공용 구역에 둔다.
  * 내부 계정은 사이드바 하단 프로필 메뉴로 같은 자리를 대신하며 그것은 티켓 08 소관이다.
  *
- * 프로필은 세 유형 공통 화면이라 /admin/profile 로 간다 — `/admin` 아래지만 내부 전용이
+ * 프로필은 세 유형 공통 화면이라 /profile 로 간다 — 내부 콘솔 트리에 있지만 내부 전용이
  * 아니다(ACCOUNT_PAGES).
  */
 export function AccountMenu({ name, affiliation, badge, image }: Props) {
@@ -45,7 +45,7 @@ export function AccountMenu({ name, affiliation, badge, image }: Props) {
         <span className="text-[11px] text-[#9CA3AF]">{badge}</span>
       </span>
       <Link
-        href="/admin/profile"
+        href="/profile"
         className="ml-2 text-[12.5px] text-[#6E6E73] underline-offset-2 hover:text-[#1C1C1E] hover:underline"
       >
         프로필 수정

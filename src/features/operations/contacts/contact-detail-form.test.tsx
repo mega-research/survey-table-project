@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => '/admin/surveys/sv-1/operations/contacts/ct-1',
+  usePathname: () => '/surveys/sv-1/operations/contacts/ct-1',
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -35,7 +35,7 @@ function renderForm(capabilities: readonly SurveyCapability[], proxyRespond = tr
   return render(
     <ContactDetailForm
       surveyId="sv-1"
-      basePath="/admin/surveys/sv-1/operations"
+      basePath="/surveys/sv-1/operations"
       scheme={SCHEME}
       resultCodes={[{ code: '1', label: '조사완료', order: 0, tone: 'green' }]}
       permissions={contactDetailPermissions(new Set(capabilities), { proxyRespond })}

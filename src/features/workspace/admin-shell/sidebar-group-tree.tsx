@@ -35,7 +35,7 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
   const groups = data ?? [];
   if (!teamId || groups.length === 0) return null;
 
-  const onListPage = pathname === '/admin/surveys';
+  const onListPage = pathname === '/surveys';
   const activeGroupId = onListPage ? searchParams.get('group') : null;
 
   return (
@@ -45,7 +45,7 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
         return (
           <Link
             key={group.id}
-            href={`/admin/surveys?group=${group.id}`}
+            href={`/surveys?group=${group.id}`}
             title={group.foreignTeamName ? `${group.name} · ${group.foreignTeamName}` : group.name}
             className={cn(
               'flex items-center gap-[7px] rounded-[7px] py-[7px] pr-2.5 pl-6 text-[12.5px] transition-colors',

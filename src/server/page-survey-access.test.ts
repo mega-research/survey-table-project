@@ -125,7 +125,7 @@ describe('assertSurveyConsolePageAccess — 게스트 허용 콘솔 페이지 �
     expect(notFound).not.toHaveBeenCalled();
   });
 
-  // 티켓 21 이 이 가드의 env grant 게스트 분기를 걷었다 — 게스트는 /admin 구역에 아예
+  // 티켓 21 이 이 가드의 env grant 게스트 분기를 걷었다 — 게스트는 내부 구역에 아예
   // 들어오지 못하고(레이아웃 유형 게이트) 자기 화면은 /guest 다.
   it('세션이 없으면 capability 판정까지 가지 않는다', async () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));

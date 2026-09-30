@@ -1,4 +1,6 @@
-const DEFAULT_REDIRECT = '/admin/surveys';
+import { LOGIN_PATH } from './protected-paths';
+
+const DEFAULT_REDIRECT = '/surveys';
 
 // 브라우저 URL 파서는 탭·개행·CR 등 제어 문자를 제거한 뒤 URL 을 해석하므로,
 // "/\t/evil.com" 같은 값이 "//" 검사를 통과하고도 실제로는 "//evil.com"(프로토콜 상대 URL,
@@ -30,6 +32,6 @@ export function sanitizeRedirectPath(raw: string | null | undefined): string {
   const path = sanitizeInternalPath(raw);
   if (path === null) return DEFAULT_REDIRECT;
   const pathname = path.split(/[?#]/)[0];
-  if (pathname === '/' || pathname === '/admin/login') return DEFAULT_REDIRECT;
+  if (pathname === '/' || pathname === LOGIN_PATH) return DEFAULT_REDIRECT;
   return path;
 }

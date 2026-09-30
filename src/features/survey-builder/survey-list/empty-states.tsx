@@ -22,7 +22,7 @@ export function NoTeamEmptyState() {
         설문도 볼 수 없습니다.
       </p>
       <Link
-        href="/admin/profile"
+        href="/profile"
         className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 leading-9 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
       >
         프로필 보기
@@ -62,7 +62,7 @@ export function NoSurveysEmptyState({ canCreate }: { canCreate: boolean }) {
       <p className="text-[13.5px] text-[#6E6E73]">첫 번째 설문을 만들어 보세요.</p>
       {canCreate && (
         <Link
-          href="/admin/surveys/create"
+          href="/surveys/create"
           className="mt-1 flex h-9 items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
         >
           <Plus className="h-4 w-4" />
@@ -92,7 +92,7 @@ export function EmptyGroupState() {
         옮길 수 있습니다.
       </p>
       <Link
-        href="/admin/surveys"
+        href="/surveys"
         className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] leading-9 font-medium text-[#374151] hover:bg-[#F5F5F7]"
       >
         전체 목록으로

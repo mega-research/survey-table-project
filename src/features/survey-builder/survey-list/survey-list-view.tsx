@@ -157,7 +157,7 @@ export function SurveyListView() {
   const groupsSettled = teamScopeId !== null && !groupsPending && !groupsError;
   useEffect(() => {
     if (!requestedGroupId || !groupsSettled || activeGroup) return;
-    router.replace('/admin/surveys');
+    router.replace('/surveys');
   }, [requestedGroupId, groupsSettled, activeGroup, router]);
 
   // 칩 카운트·소유자 목록은 그룹 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
@@ -272,7 +272,7 @@ export function SurveyListView() {
           )}
           {canCreate ? (
             <Link
-              href="/admin/surveys/create"
+              href="/surveys/create"
               className="flex h-[42px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[14px] font-semibold text-white hover:bg-[#2743AE]"
             >
               <Plus className="h-4 w-4" />새 설문 만들기
@@ -318,7 +318,7 @@ export function SurveyListView() {
       {requestedGroupId !== null && groupsError && !showLoading && !error && (
         <div className="py-24 text-center text-[13.5px] text-[#6E6E73]">
           그룹을 불러올 수 없습니다.{' '}
-          <Link href="/admin/surveys" className="text-[#2E4FCE] hover:underline">
+          <Link href="/surveys" className="text-[#2E4FCE] hover:underline">
             전체 목록으로
           </Link>
         </div>

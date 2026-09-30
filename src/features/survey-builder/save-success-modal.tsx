@@ -232,7 +232,7 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             확인
           </Button>
-          <Button onClick={() => (window.location.href = '/admin/surveys')}>설문 목록으로</Button>
+          <Button onClick={() => (window.location.href = '/surveys')}>설문 목록으로</Button>
         </div>
       </DialogContent>
     </Dialog>

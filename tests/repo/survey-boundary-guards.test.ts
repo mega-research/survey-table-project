@@ -28,7 +28,7 @@ import { APP_DIR, loadAppFiles, REPO_ROOT } from '@tests/helpers/app-files';
  * 인벤토리를 나누면 새 트리가 이 게이트 밖에서 자란다.
  */
 const SURVEY_CONSOLE_ROOTS = [
-  'admin/surveys/[id]',
+  '(internal)/surveys/[id]',
   'analytics/[surveyId]',
   'guest/surveys/[surveyId]',
   // 외주 실사 링크 콘솔(ADR-0026). 주소에 실리는 것은 설문 id 가 아니라 **토큰**이지만
@@ -86,11 +86,11 @@ describe('설문 콘솔 RSC 페이지는 설문 capability 관문을 진다', ()
       .filter((page) => CLIENT_PAGE.test(page.source))
       .map((page) => page.rel);
     // 빌더 편집 화면 하나. 늘어난다면 "왜 서버에서 안 읽는가" 를 확인하고 여기 등재할 것.
-    expect(clientPages).toEqual(['admin/surveys/[id]/edit/page.tsx']);
+    expect(clientPages).toEqual(['(internal)/surveys/[id]/edit/page.tsx']);
   });
 
   it.each([
-    'admin/surveys/[id]/layout.tsx',
+    '(internal)/surveys/[id]/layout.tsx',
     // 링크 콘솔의 셸 — 헤더·탭이 판정 결과를 받아 그리므로 여기서도 관문이 서야 한다.
     'fw/[token]/operations/layout.tsx',
   ])('설문 콘솔 트리의 진입 레이아웃이 관문을 진다: %s', (rel) => {

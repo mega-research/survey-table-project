@@ -276,7 +276,7 @@ describe.skipIf(!isLocalDb)('게스트 콘솔 (real local DB)', () => {
     it('내부 계정은 이 문을 지나지 못한다 — 게스트 구역이다', async () => {
       authState.user = { ...guestUser(OWNER_ID), userType: 'internal' };
       await expect(assertGuestSurveyPageAccess(overviewOnlyId)).rejects.toThrow(
-        'REDIRECT:/admin/surveys',
+        'REDIRECT:/surveys',
       );
     });
   });

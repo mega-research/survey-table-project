@@ -127,7 +127,7 @@ describe('ProfileView — 기본 정보', () => {
 
   it('돌아갈 곳은 계정 유형이 정한다', () => {
     const { unmount } = renderView();
-    expect(screen.getByRole('link', { name: '돌아가기' })).toHaveAttribute('href', '/admin/surveys');
+    expect(screen.getByRole('link', { name: '돌아가기' })).toHaveAttribute('href', '/surveys');
     unmount();
 
     renderView({ ...INTERNAL, userType: 'fieldwork' });

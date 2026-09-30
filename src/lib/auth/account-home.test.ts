@@ -19,7 +19,7 @@ import {
 
 describe('accountHomePath', () => {
   it.each([
-    ['internal', '/admin/surveys'],
+    ['internal', '/surveys'],
     ['guest', '/guest'],
     ['fieldwork', '/fieldwork'],
   ] as const)('%s 의 홈은 %s', (userType, expected) => {
@@ -42,7 +42,7 @@ describe('accountHomePath', () => {
     // redirect(undefined) 가 되어 리다이렉트가 조용히 깨진다.
     expect(accountHomePath(undefined)).toBe('/guest');
     expect(accountHomePath('nonsense' as never)).toBe('/guest');
-    expect(resolvePostLoginDestination(undefined, '/admin/surveys')).toBe('/guest');
+    expect(resolvePostLoginDestination(undefined, '/surveys')).toBe('/guest');
   });
 });
 
@@ -64,8 +64,8 @@ describe('isAccountTypePath — 이 경로가 어느 유형의 구역인가', ()
 
 describe('resolvePostLoginDestination', () => {
   it('내부 계정은 요청한 목적지로 그대로 간다', () => {
-    expect(resolvePostLoginDestination('internal', '/admin/surveys/abc/edit')).toBe(
-      '/admin/surveys/abc/edit',
+    expect(resolvePostLoginDestination('internal', '/surveys/abc/edit')).toBe(
+      '/surveys/abc/edit',
     );
   });
 
@@ -80,8 +80,8 @@ describe('resolvePostLoginDestination', () => {
 
   it('게스트·실사가 내부 경로를 요청하면 자기 홈으로 접는다', () => {
     // 그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가게 된다.
-    expect(resolvePostLoginDestination('guest', '/admin/surveys')).toBe('/guest');
-    expect(resolvePostLoginDestination('fieldwork', '/admin/surveys/abc/operations')).toBe(
+    expect(resolvePostLoginDestination('guest', '/surveys')).toBe('/guest');
+    expect(resolvePostLoginDestination('fieldwork', '/surveys/abc/operations')).toBe(
       '/fieldwork',
     );
     expect(resolvePostLoginDestination('guest', '/fieldwork')).toBe('/guest');
@@ -89,18 +89,18 @@ describe('resolvePostLoginDestination', () => {
 
   it('세 유형 모두 프로필 목적지는 존중한다 (자기 계정 화면은 공통)', () => {
     for (const userType of userTypeValues satisfies readonly UserType[]) {
-      expect(resolvePostLoginDestination(userType, '/admin/profile')).toBe('/admin/profile');
+      expect(resolvePostLoginDestination(userType, '/profile')).toBe('/profile');
     }
   });
 
   it('목적지가 없으면 자기 홈으로 간다', () => {
     expect(resolvePostLoginDestination('guest', '')).toBe('/guest');
-    expect(resolvePostLoginDestination('internal', '')).toBe('/admin/surveys');
+    expect(resolvePostLoginDestination('internal', '')).toBe('/surveys');
   });
 
   it('로그인 라우트는 목적지가 될 수 없다', () => {
     // 되돌려 보내면 그대로 로그인 화면을 오가는 루프가 된다.
-    expect(resolvePostLoginDestination('internal', '/admin/login')).toBe('/admin/surveys');
-    expect(resolvePostLoginDestination('guest', '/admin/login')).toBe('/guest');
+    expect(resolvePostLoginDestination('internal', '/login')).toBe('/surveys');
+    expect(resolvePostLoginDestination('guest', '/login')).toBe('/guest');
   });
 });

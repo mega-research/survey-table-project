@@ -1,0 +1,632 @@
+'use client';
+
+import { use, useEffect, useRef, useState } from 'react';
+
+import Link from 'next/link';
+
+import { useMutation } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Download,
+  FileText,
+  Library,
+  Plus,
+  Rocket,
+  Save,
+  Share2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
+
+import { SurveyDocumentPanel } from '@/features/survey-builder/survey-document/survey-document-panel';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TestModeControl } from '@/features/operations/test-mode-control';
+import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
+import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { useBuilderScroll } from '@/features/survey-builder/hooks/use-builder-scroll';
+import { QuestionTypePalette } from '@/features/survey-builder/question-type-palette';
+import { ScrollEdgeButtons } from '@/features/survey-builder/scroll-edge-buttons';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SaveSuccessModal } from '@/features/survey-builder/save-success-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { SurveySettingsPanel } from '@/features/survey-builder/survey-settings-panel';
+import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
+import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
+import { client } from '@/shared/lib/rpc';
+import { useErrorDialogStore } from '@/stores/error-dialog-store';
+import { Question } from '@/types/survey';
+
+
+interface EditSurveyPageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function EditSurveyPage({ params }: EditSurveyPageProps) {
+  const { id } = use(params);
+  // 액션 (안정적 참조)
+  const { updateSurveyTitle, addQuestion, addPreparedQuestion, updateSurveySlug, markPublished } =
+    useSurveyBuilderStore(
+      useShallow((s) => ({
+        updateSurveyTitle: s.updateSurveyTitle,
+        addQuestion: s.addQuestion,
+        addPreparedQuestion: s.addPreparedQuestion,
+        updateSurveySlug: s.updateSurveySlug,
+        markPublished: s.markPublished,
+      })),
+    );
+
+  // Primitive 상태 (값 비교)
+  const { surveyId, isModifiedSincePublish } = useSurveyBuilderStore(
+    useShallow((s) => ({
+      surveyId: s.currentSurvey.id,
+      isModifiedSincePublish: s.isModifiedSincePublish,
+    })),
+  );
+  // 헤더 모달이 updateSurveyTitle로 직접 바꾸는 store.title — 툴바 로컬 titleInput 동기화용 구독
+  const storeTitle = useSurveyBuilderStore((s) => s.currentSurvey.title);
+
+  // 질문/그룹 배열은 SortableQuestionList 내부에서 직접 구독
+  // 페이지에서는 길이만 구독하여 리렌더 최소화
+  const questionCount = useSurveyBuilderStore((s) => s.currentSurvey.questions.length);
+  const groupCount = useSurveyBuilderStore((s) => (s.currentSurvey.groups || []).length);
+  const isDirty = useSurveyBuilderStore((s) => s.isDirty);
+
+  const { selectedQuestionId, selectQuestion, setVariableCatalog } = useSurveyUIStore(
+    useShallow((s) => ({
+      selectedQuestionId: s.selectedQuestionId,
+      selectQuestion: s.selectQuestion,
+      setVariableCatalog: s.setVariableCatalog,
+    })),
+  );
+  const {
+    showScrollButtons,
+    questionNumberInput,
+    setQuestionNumberInput,
+    scrollToTop,
+    scrollToBottom,
+    handleQuestionNumberKeyPress,
+  } = useBuilderScroll(selectQuestion);
+  // TanStack Query 훅 사용
+  const { data: survey, isLoading: isSurveyLoading, isError } = useSurvey(id);
+  const { saveSurvey } = useSurveySync();
+
+  const [titleInput, setTitleInput] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [slugInput, setSlugInput] = useState('');
+  const [slugError, setSlugError] = useState('');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const initializedSurveyIdRef = useRef<string | null>(null);
+
+  // 라이브러리 관련 상태
+  const [leftSidebarTab, setLeftSidebarTab] = useState<'types' | 'library'>('types');
+  const [showSaveQuestionModal, setShowSaveQuestionModal] = useState(false);
+  const [questionToSave, setQuestionToSave] = useState<Question | null>(null);
+  const [showImportExportModal, setShowImportExportModal] = useState(false);
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      // 배포 전 저장
+      await saveSurvey();
+      return client.surveyBuilder.publish.publish({ surveyId });
+    },
+    onSuccess: (version) => {
+      markPublished();
+      toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
+    },
+    onError: (error) => {
+      const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
+      if (issues && issues.length > 0) {
+        useErrorDialogStore.getState().show({
+          title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
+          description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
+          issues,
+        });
+      } else {
+        toast.error(
+          `배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+        );
+      }
+    },
+  });
+  const isPublishing = publishMutation.isPending;
+  // 가운데 열 탭 — 질문 편집 / 조사표(수요조사용 PDF)
+  const [centerTab, setCenterTab] = useState<'edit' | 'document'>('edit');
+
+  // 설문 불러오기 - 초기 로드 또는 다른 설문으로 전환 시에만 로컬 입력 동기화.
+  // setState 는 렌더 중 조정 패턴, 스토어 세팅(외부 시스템)은 아래 effect 가 담당한다.
+  const [initializedInputsSurveyId, setInitializedInputsSurveyId] = useState<string | null>(null);
+  if (survey && initializedInputsSurveyId !== id) {
+    setInitializedInputsSurveyId(id);
+    setTitleInput(survey.title);
+    setSlugInput(survey.slug || '');
+    setSlugError('');
+  }
+
+  useEffect(() => {
+    if (survey && initializedSurveyIdRef.current !== id) {
+      initializedSurveyIdRef.current = id;
+      useSurveyBuilderStore.getState().setSurvey(survey);
+    }
+  }, [survey, id]);
+
+  // 헤더 모달이 updateSurveyTitle로 store.title을 직접 바꿀 수 있어(설문 헤더 설정 등),
+  // 툴바 로컬 titleInput이 stale해지지 않도록 store 값으로 동기화한다.
+  // 단, 툴바 입력이 포커스 상태(한글 IME 조합 포함)일 때 되돌리면 조합이 깨지므로 포커스 가드를 둔다.
+  useEffect(() => {
+    if (document.activeElement !== titleInputRef.current) {
+      setTitleInput(storeTitle);
+    }
+  }, [storeTitle]);
+
+  // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
+  useEffect(() => {
+    client.surveyBuilder.read
+      .variableCatalog({ surveyId: id })
+      .then((catalog) => {
+        setVariableCatalog(catalog);
+      })
+      .catch(() => {
+        // 컨택 없는 설문이면 빈 배열 — 정상 케이스
+      });
+  }, [id, setVariableCatalog]);
+
+  // 저장되지 않은 변경이 있을 때 페이지 이탈 경고
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  // 슬러그 입력 핸들러 (입력값만 업데이트, 서버 호출은 제거)
+  const handleSlugChange = (value: string) => {
+    setSlugInput(value);
+    updateSurveySlug(value); // 로컬 스토어 업데이트
+
+    // 빈 값이면 즉시 에러 초기화
+    if (!value) {
+      setSlugError('');
+      return;
+    }
+
+    // 클라이언트 사이드 유효성 검사만 즉시 수행
+    const validation = validateSlug(value);
+    if (!validation.isValid) {
+      setSlugError(validation.error || '');
+      return;
+    }
+
+    // 서버 호출은 useEffect의 debounce가 담당
+  };
+
+  // 슬러그 중복 검사 (Debounce 적용 - 500ms 지연)
+  useEffect(() => {
+    // 빈 값이면 검사하지 않음 — 에러 초기화는 입력 지점(handleSlugChange/설문 전환 동기화)이 담당
+    if (!slugInput) {
+      return;
+    }
+
+    const validation = validateSlug(slugInput);
+    if (!validation.isValid) {
+      // 클라이언트 사이드 검사는 이미 handleSlugChange에서 처리됨
+      return;
+    }
+
+    let cancelled = false;
+
+    // 500ms 후에 서버 검사 수행
+    const excludePatch = surveyId ? { excludeSurveyId: surveyId } : {};
+    const timer = setTimeout(async () => {
+      try {
+        const isAvailable = await client.surveyBuilder.read.slugAvailable({
+          slug: slugInput,
+          ...excludePatch,
+        });
+        if (cancelled) return;
+        if (!isAvailable) {
+          setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
+        } else {
+          setSlugError('');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('슬러그 중복 검사 실패:', error);
+        }
+      }
+    }, 500); // 0.5초 대기
+
+    // cleanup: 타이핑이 계속되면 이전 타이머 취소 + 진행 중인 async 무시
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [slugInput, surveyId]);
+
+  // 제목에서 자동 슬러그 생성
+  const handleAutoGenerateSlug = async () => {
+    const autoSlug = generateSlugFromTitle(titleInput);
+    if (autoSlug) {
+      // 중복 시 접미사 추가 - 서버 액션으로 확인
+      let finalSlug = autoSlug;
+      let counter = 1;
+      let isAvailable = await client.surveyBuilder.read.slugAvailable({
+        slug: finalSlug,
+        ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+      });
+      while (!isAvailable) {
+        finalSlug = `${autoSlug}-${counter}`;
+        counter++;
+        isAvailable = await client.surveyBuilder.read.slugAvailable({
+          slug: finalSlug,
+          ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+        });
+      }
+      setSlugInput(finalSlug);
+      updateSurveySlug(finalSlug);
+      setSlugError('');
+    }
+  };
+
+
+  // 설문 저장 (diff 기반)
+  const handleSaveSurvey = async () => {
+    const latestSurvey = useSurveyBuilderStore.getState().currentSurvey;
+    // 공개 설문인데 슬러그가 없으면 자동 생성
+    if (latestSurvey.settings.isPublic && !slugInput) {
+      await handleAutoGenerateSlug();
+    }
+
+    try {
+      await saveSurvey();
+      setShowSaveModal(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('이미 사용 중인 URL') ||
+        message.includes('slug_unique') ||
+        message.includes('23505')
+      ) {
+        setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
+      } else {
+        toast.error('설문 저장에 실패했습니다. 다시 시도해주세요.');
+      }
+    }
+  };
+
+  // 설문 배포
+  const handlePublishSurvey = async () => {
+    if (!surveyId) return;
+
+    // 배포 안내 N건 (ADR-0014) — 진행중·이탈 응답이 새 버전으로 이어짐을 고지.
+    // 집계 실패는 배포를 막지 않는다 (안내는 부가 정보).
+    let migratableLine = '';
+    try {
+      const { count } = await client.surveyBuilder.publish.migratableCount({ surveyId });
+      if (count > 0) {
+        migratableLine = `\n진행 중 응답 ${count}건이 새 버전으로 이어집니다.`;
+      }
+    } catch {
+      // 집계 실패 무시 — 안내 없이 진행
+    }
+
+    const confirmed = window.confirm(
+      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`,
+    );
+    if (!confirmed) return;
+
+    publishMutation.mutate();
+  };
+
+
+  // 질문 라이브러리에 저장
+  const handleSaveToLibrary = (question: Question) => {
+    setQuestionToSave(question);
+    setShowSaveQuestionModal(true);
+  };
+
+  // 라이브러리에서 질문 추가
+  const handleAddFromLibrary = (question: Question) => {
+    addPreparedQuestion(question);
+  };
+
+  // 로딩 상태
+  if (isSurveyLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+          <p className="text-gray-600">설문을 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 설문을 찾을 수 없는 경우
+  if (isError || (!isSurveyLoading && !survey)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+          </div>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">설문을 찾을 수 없습니다</h2>
+          <p className="mb-6 text-gray-500">요청하신 설문이 존재하지 않거나 삭제되었습니다.</p>
+          <Button asChild>
+            <Link href="/surveys">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              목록으로 돌아가기
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation */}
+      <nav className="border-b border-gray-200 bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link href="/surveys">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                목록으로
+              </Button>
+            </Link>
+            <div className="h-6 w-px bg-gray-300" />
+            <Input
+              ref={titleInputRef}
+              value={titleInput}
+              onChange={(e) => {
+                setTitleInput(e.target.value);
+                updateSurveyTitle(e.target.value);
+              }}
+              className="border-none bg-transparent px-2 text-lg font-medium focus:border focus:border-blue-200 focus:bg-white"
+              placeholder="설문 제목을 입력하세요"
+            />
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* 운영 콘솔과 동일한 DB 테스트 모드 토글 — 테스트 링크는 마지막 발행본 기준 */}
+            {surveyId && <TestModeControl surveyId={surveyId} />}
+            <Button variant="outline" size="sm" onClick={handleSaveSurvey}>
+              <Save className="mr-2 h-4 w-4" />
+              저장
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePublishSurvey}
+              disabled={isPublishing}
+              className="border-blue-300 text-blue-600 hover:bg-blue-50"
+            >
+              <Rocket className="mr-2 h-4 w-4" />
+              {isPublishing ? '배포 중...' : '배포'}
+            </Button>
+            <Button size="sm">
+              <Share2 className="mr-2 h-4 w-4" />
+              공유
+            </Button>
+          </div>
+        </div>
+      </nav>
+
+      {/* 배포 후 수정 경고 배너 */}
+      {isModifiedSincePublish && (
+        <div className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <span>배포된 설문이 수정되었습니다. 변경사항을 반영하려면 재배포가 필요합니다.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePublishSurvey}
+            disabled={isPublishing}
+            className="border-amber-300 text-amber-800 hover:bg-amber-100"
+          >
+            <Rocket className="mr-2 h-3 w-3" />
+            {isPublishing ? '배포 중...' : '재배포'}
+          </Button>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="w-full p-6">
+        <div className="grid grid-cols-[280px_1fr_280px] gap-6">
+          {/* Left Sidebar - Question Types & Library */}
+          <div className="flex max-h-[calc(100vh-140px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <Tabs
+              value={leftSidebarTab}
+              onValueChange={(v) => setLeftSidebarTab(v as 'types' | 'library')}
+              className="flex h-full flex-col"
+            >
+              <TabsList className="mb-0 grid w-full grid-cols-2 p-1">
+                <TabsTrigger value="types" className="text-xs">
+                  <Plus className="mr-1 h-3 w-3" />
+                  질문 생성
+                </TabsTrigger>
+                <TabsTrigger value="library" className="text-xs">
+                  <Library className="mr-1 h-3 w-3" />
+                  보관함
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="types" className="m-0 flex-1 overflow-y-auto p-4 pt-2">
+                <div className="space-y-3">
+                  <ResponseHeaderSettingsModal />
+                  <QuestionTypePalette onSelect={addQuestion} />
+                  <CompletionMessageModal />
+                </div>
+
+                <div className="mt-6 border-t border-gray-200 pt-6">
+                  <h4 className="mb-3 text-sm font-medium text-gray-700">설문 정보</h4>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    <p>그룹 수: {groupCount}개</p>
+                    <p>질문 수: {questionCount}개</p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent
+                value="library"
+                className="m-0 flex flex-1 flex-col overflow-hidden p-4 pt-2"
+              >
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <QuestionLibraryPanel onAddQuestion={handleAddFromLibrary} />
+                </div>
+
+                {/* 내보내기/가져오기 버튼 */}
+                <div className="mt-4 flex-shrink-0 border-t border-gray-200 pt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowImportExportModal(true)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    내보내기 / 가져오기
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Center - Survey Preview/Edit + 조사표 */}
+          <div className="flex h-[calc(100vh-140px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <Tabs
+              value={centerTab}
+              onValueChange={(v) => setCenterTab(v as 'edit' | 'document')}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <TabsList className="mx-6 mt-4 grid w-[240px] grid-cols-2">
+                <TabsTrigger value="edit" className="text-xs">
+                  질문 편집
+                </TabsTrigger>
+                <TabsTrigger value="document" className="text-xs">
+                  <FileText className="mr-1 h-3 w-3" />
+                  조사표
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="edit" className="m-0 min-h-0 flex-1 overflow-y-auto">
+            <div className="border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <h3 className="text-lg font-semibold text-gray-900">설문 편집</h3>
+                  {questionCount > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max={questionCount}
+                        value={questionNumberInput}
+                        onChange={(e) => setQuestionNumberInput(e.target.value)}
+                        onKeyPress={handleQuestionNumberKeyPress}
+                        placeholder="질문 번호"
+                        className="h-8 w-24 text-sm"
+                      />
+                      <span className="text-xs text-gray-500">/ {questionCount}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500">{questionCount}개 질문</div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {questionCount === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+                    <Plus className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h3 className="mb-2 text-lg font-medium text-gray-900">질문을 추가해보세요</h3>
+                  <p className="mb-6 text-gray-500">
+                    왼쪽에서 원하는 질문 유형을 클릭하거나 보관함에서 불러올 수 있습니다.
+                  </p>
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      onClick={() => {
+                        addQuestion('text');
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />첫 번째 질문 추가
+                    </Button>
+                    <Button variant="outline" onClick={() => setLeftSidebarTab('library')}>
+                      <Library className="mr-2 h-4 w-4" />
+                      보관함에서 불러오기
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <SortableQuestionList
+                  selectedQuestionId={selectedQuestionId}
+                  onSaveToLibrary={handleSaveToLibrary}
+                />
+              )}
+            </div>
+              </TabsContent>
+
+              <TabsContent value="document" className="m-0 min-h-0 flex-1 overflow-hidden">
+                {surveyId ? (
+                  <SurveyDocumentPanel surveyId={surveyId} />
+                ) : (
+                  <div className="grid h-full place-items-center text-sm text-gray-500">
+                    설문을 먼저 저장하면 조사표를 붙일 수 있습니다.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Right Sidebar - Settings */}
+          <SurveySettingsPanel slugInput={slugInput} onAutoGenerateSlug={handleAutoGenerateSlug} />
+        </div>
+      </div>
+
+      {/* Floating Scroll Buttons */}
+      {showScrollButtons && (
+        <ScrollEdgeButtons onScrollTop={scrollToTop} onScrollBottom={scrollToBottom} />
+      )}
+
+      {/* 저장 완료 모달 */}
+      <SaveSuccessModal
+        open={showSaveModal}
+        onOpenChange={setShowSaveModal}
+        slugInput={slugInput}
+        slugError={slugError}
+        titleInput={titleInput}
+        onSlugChange={handleSlugChange}
+        onAutoGenerateSlug={handleAutoGenerateSlug}
+      />
+
+      {/* 질문 저장 모달 */}
+      <SaveQuestionModal
+        open={showSaveQuestionModal}
+        onOpenChange={setShowSaveQuestionModal}
+        question={questionToSave}
+        onSaved={() => {
+          setQuestionToSave(null);
+        }}
+      />
+
+      {/* 라이브러리 내보내기/가져오기 모달 */}
+      <ImportExportLibraryModal
+        open={showImportExportModal}
+        onOpenChange={setShowImportExportModal}
+      />
+    </div>
+  );
+}

@@ -1,14 +1,13 @@
 /**
  * 운영 콘솔 주소 조립 — 접두를 아는 유일한 자리.
  *
- * 화면 컴포넌트는 `/admin/surveys/<id>/operations` 를 직접 쓰지 않고 `basePath` 를 주입받는다.
- * 오늘 주입되는 값은 admin 하나뿐이라 보이는 것은 종전과 같지만, 외주 실사 링크 콘솔이
- * **같은 화면 정의를 다른 접두로** 열고(ADR-0026) 나중에 `/admin` 접두를 걷는 작업도 이 파일
- * 하나만 만지게 된다.
+ * 화면 컴포넌트는 `/surveys/<id>/operations` 를 직접 쓰지 않고 `basePath` 를 주입받는다.
+ * 소비자가 둘이라(내부 콘솔·외주 실사 링크 콘솔) 이 이음새가 실제로 맞는지 증명돼 있고,
+ * `/admin` 접두를 걷을 때 만진 자리도 이 파일 하나였다.
  *
  * 링크 콘솔이 재사용하지 않는 화면(메일·업로드·컬럼 설정·응답 내역)은 주입받을 상대가 없어
- * `adminOperationsPaths` 를 스스로 부른다 — 주입과 자가 조립이 갈리는 기준은 **그 화면이
- * admin 밖에서도 열리는가**이고, 하드코딩 문자열은 어느 쪽에도 남기지 않는다.
+ * `internalOperationsPaths` 를 스스로 부른다 — 주입과 자가 조립이 갈리는 기준은 **그 화면이
+ * 내부 콘솔 밖에서도 열리는가**이고, 하드코딩 문자열은 어느 쪽에도 남기지 않는다.
  */
 
 /** 운영 콘솔 하위 주소 모음. 문자열 자리는 고정 주소, 함수 자리는 id 를 받는 주소다. */
@@ -70,14 +69,20 @@ export function operationsPaths(base: string): OperationsPaths {
   };
 }
 
-/** 내부 운영 콘솔의 base. `/admin` 접두를 아는 자리는 이 아래 넷뿐이다. */
-export function adminOperationsBase(surveyId: string): string {
-  return `/admin/surveys/${surveyId}/operations`;
+/**
+ * 내부 콘솔의 base — 직원이 쓰는 주소.
+ *
+ * 세그먼트가 `/surveys` 로 시작하는 것이 요점이다. 파일은 라우트 그룹 `app/(internal)/` 안에
+ * 묶여 있지만 괄호는 주소에 나타나지 않으므로, **파일 트리와 주소가 한 단계 어긋난다** —
+ * 이 함수가 그 어긋남을 흡수하는 유일한 자리다.
+ */
+export function internalOperationsBase(surveyId: string): string {
+  return `/surveys/${surveyId}/operations`;
 }
 
-/** admin 전용 화면이 스스로 부르는 편의 생성자. */
-export function adminOperationsPaths(surveyId: string): OperationsPaths {
-  return operationsPaths(adminOperationsBase(surveyId));
+/** 내부 콘솔 전용 화면이 스스로 부르는 편의 생성자. */
+export function internalOperationsPaths(surveyId: string): OperationsPaths {
+  return operationsPaths(internalOperationsBase(surveyId));
 }
 
 /**
@@ -94,19 +99,19 @@ export function fieldworkLinkOperationsPaths(token: string): OperationsPaths {
   return operationsPaths(fieldworkLinkOperationsBase(token));
 }
 
-export function adminSurveyListPath(): string {
-  return '/admin/surveys';
+export function surveyListPath(): string {
+  return '/surveys';
 }
 
-export function adminSurveyEditPath(surveyId: string): string {
-  return `/admin/surveys/${surveyId}/edit`;
+export function surveyEditPath(surveyId: string): string {
+  return `/surveys/${surveyId}/edit`;
 }
 
-export function adminSurveyPreviewPath(surveyId: string): string {
-  return `/admin/surveys/${surveyId}/preview`;
+export function surveyPreviewPath(surveyId: string): string {
+  return `/surveys/${surveyId}/preview`;
 }
 
 /** 메일 비용 정산은 인스턴스 전체 단위라 설문 스코프 밖의 글로벌 주소다. */
-export function adminMailCostPath(): string {
-  return '/admin/billing/mail-cost';
+export function mailCostPath(): string {
+  return '/billing/mail-cost';
 }

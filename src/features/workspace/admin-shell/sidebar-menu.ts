@@ -23,10 +23,10 @@ export function getSidebarMenuItemIds(
 }
 
 /**
- * 사이드바를 감추는 화면인가 — 설문 하나에 들어간 편집기(`/admin/surveys/[id]/edit`)와
- * 운영 콘솔(`/admin/surveys/[id]/operations/...`)은 자기 헤더·탭을 갖고 화면 폭을 전부 쓴다.
- * 목록·생성·미리보기·분석 등 나머지 admin 화면은 사이드바를 그대로 둔다.
+ * 사이드바를 감추는 화면인가 — 설문 하나에 들어간 편집기(`/surveys/[id]/edit`)와
+ * 운영 콘솔(`/surveys/[id]/operations/...`)은 자기 헤더·탭을 갖고 화면 폭을 전부 쓴다.
+ * 목록·생성·미리보기·분석 등 나머지 내부 화면은 사이드바를 그대로 둔다.
  */
 export function isSidebarHiddenPath(pathname: string): boolean {
-  return /^\/admin\/surveys\/[^/]+\/(edit|operations)(\/|$)/.test(pathname);
+  return /^\/surveys\/[^/]+\/(edit|operations)(\/|$)/.test(pathname);
 }

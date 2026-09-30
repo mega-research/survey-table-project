@@ -7,7 +7,7 @@ import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
-  usePathname: () => '/admin/surveys/sv-1/operations/mail/campaigns/c-1',
+  usePathname: () => '/surveys/sv-1/operations/mail/campaigns/c-1',
   useSearchParams: () => new URLSearchParams(),
 }));
 

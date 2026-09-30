@@ -181,7 +181,7 @@ function PendingSurveyTable({
             />
             <div className="flex flex-1 flex-col gap-[2px]">
               <Link
-                href={`/admin/reassignment/surveys/${survey.surveyId}`}
+                href={`/reassignment/surveys/${survey.surveyId}`}
                 className="text-[13.5px] font-semibold text-[#1C1C1E] hover:text-[#2E4FCE]"
               >
                 {survey.title}
@@ -270,7 +270,7 @@ export function ReassignmentView() {
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
       <div className="mx-auto max-w-[1048px] space-y-[18px]">
         <Link
-          href="/admin/teams"
+          href="/teams"
           className="inline-flex items-center gap-1 text-[13px] text-[#6E6E73] hover:text-[#1C1C1E]"
         >
           <ArrowLeft className="h-4 w-4" />팀 관리

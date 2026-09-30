@@ -53,7 +53,7 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem asChild>
-              <Link href={`/admin/teams/${team.id}`}>팀 상세</Link>
+              <Link href={`/teams/${team.id}`}>팀 상세</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {/* .pen FLOW 7-1 의 케밥은 이 항목을 **항상 강조**해 둔다(bg #FEF2F2) — 되돌릴 수
@@ -109,7 +109,7 @@ export function TeamListView() {
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
       <div className="mx-auto max-w-[1048px] space-y-6">
         <Link
-          href="/admin/surveys"
+          href="/surveys"
           className="inline-flex items-center gap-1 text-[13px] text-[#6E6E73] hover:text-[#1C1C1E]"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -144,7 +144,7 @@ export function TeamListView() {
               ]}
             />
             <Link
-              href="/admin/reassignment"
+              href="/reassignment"
               className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-[7px] text-[12.5px] font-semibold text-[#2E4FCE] hover:bg-[#F5F7FF]"
             >
               재배치 센터

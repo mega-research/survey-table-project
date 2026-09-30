@@ -82,7 +82,7 @@ export function UserManagementView() {
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
       <div className="mx-auto max-w-[1048px] space-y-6">
         <Link
-          href="/admin/surveys"
+          href="/surveys"
           className="inline-flex items-center gap-1 text-[13px] text-[#6E6E73] hover:text-[#1C1C1E]"
         >
           <ArrowLeft className="h-4 w-4" />

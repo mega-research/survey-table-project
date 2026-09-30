@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
-const FALLBACK_HREF = '/admin/surveys';
+const FALLBACK_HREF = '/surveys';
 
 export function BackButton() {
   const router = useRouter();

@@ -91,7 +91,7 @@ export function SidebarProfile({ user, memberships, collapsed }: Props) {
         className="w-[204px] rounded-[10px] border-[#E0E2E8] p-1.5 shadow-[0_10px_28px_rgba(13,27,76,0.2)]"
       >
         <Link
-          href="/admin/profile"
+          href="/profile"
           onClick={() => setOpen(false)}
           className="flex items-center gap-2 rounded-[7px] px-2.5 py-2 text-[13px] font-normal text-[#374151] hover:bg-[#F5F5F7]"
         >

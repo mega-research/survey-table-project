@@ -27,7 +27,7 @@ import { getContactColumnScheme } from '@/server/read-models/contacts';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 /**
- * 그룹별 진척률 화면의 본문 — `/admin` 과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
+ * 그룹별 진척률 화면의 본문 — 내부 콘솔(`app/(internal)`)과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
  * (ADR-0026, 티켓 06·07).
  *
  * 형제 `overview-screen` 의 주석에 이 폴더의 규칙이 있다. 트리마다 갈리는 것은 둘이다.

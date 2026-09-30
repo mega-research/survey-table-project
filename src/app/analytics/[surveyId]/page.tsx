@@ -74,7 +74,7 @@ export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Link href={`/admin/surveys/${surveyId}/edit`}>
+              <Link href={`/surveys/${surveyId}/edit`}>
                 <Button variant="outline" size="sm">
                   <Settings className="mr-2 h-4 w-4" />
                   설문 편집

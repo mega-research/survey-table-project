@@ -16,7 +16,7 @@ import {
 import type { HeaderFilterEntry } from '@/features/operations/filters/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
-import { adminOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;
@@ -91,7 +91,7 @@ function buildHref(
   if (overrides.recipPage && overrides.recipPage !== 1)
     params.set('recipPage', String(overrides.recipPage));
   const qs = params.toString();
-  return `${adminOperationsPaths(surveyId).mailCampaign(campaignId)}${qs ? `?${qs}` : ''}`;
+  return `${internalOperationsPaths(surveyId).mailCampaign(campaignId)}${qs ? `?${qs}` : ''}`;
 }
 
 export function CampaignRecipientsTable({

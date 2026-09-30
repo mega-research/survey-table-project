@@ -21,7 +21,7 @@ interface Props {
  */
 export async function signOutToLogin(): Promise<void> {
   await authClient.signOut();
-  window.location.assign('/admin/login');
+  window.location.assign('/login');
 }
 
 /**

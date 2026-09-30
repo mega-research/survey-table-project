@@ -13,7 +13,7 @@ import { AUTH_PAGES, ACCOUNT_PAGES } from './protected-paths';
  * 게스트·실사 홈은 이 티켓에서 스텁(빈 상태)이고 내용은 티켓 22·25 가 채운다.
  */
 export const ACCOUNT_HOME_PATH: Record<UserType, string> = {
-  internal: '/admin/surveys',
+  internal: '/surveys',
   guest: '/guest',
   fieldwork: '/fieldwork',
 };
@@ -41,8 +41,10 @@ export const NON_INTERNAL_HOME_PATHS: readonly string[] = userTypeValues
  * 다음 문자가 `/` 일 때만이다.
  */
 export function isAccountTypePath(pathname: string, userType: UserType | undefined): boolean {
-  // internal 의 홈은 /admin/surveys 지만 내부 구역은 /admin 전체다 — 유형 구역 판정은
-  // 게스트·실사 전용이므로 내부는 이 함수의 대상이 아니다(항상 false).
+  // internal 의 홈은 /surveys 지만 내부 구역은 루트 여덟 개로 흩어져 있어(`app/(internal)/*`)
+  // 「홈 접두로 구역을 판정한다」가 성립하지 않는다 — 유형 구역 판정은 게스트·실사 전용이므로
+  // 내부는 이 함수의 대상이 아니다(항상 false). 내부 구역의 어휘는
+  // `protected-paths` 의 SESSION_GATED_ROOT_SEGMENTS 가 갖는다.
   // 값이 없으면 어떤 구역도 자기 것이 아니다 — 안전한 방향으로 접는다.
   if (!userType || userType === 'internal') return false;
   const home = ACCOUNT_HOME_PATH[userType];

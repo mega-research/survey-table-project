@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
-  adminSurveyEditPath,
-  adminSurveyListPath,
-  adminSurveyPreviewPath,
+  surveyEditPath,
+  surveyListPath,
+  surveyPreviewPath,
 } from './operations-paths';
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
@@ -64,7 +64,7 @@ interface Props {
 /**
  * 운영 콘솔 공통 페이지 헤더.
  *
- * `/admin/surveys/[id]/operations/*` 라우트의 layout 에서 한 번만 마운트되어
+ * `/surveys/[id]/operations/*` 라우트의 layout 에서 한 번만 마운트되어
  * 모든 하위 페이지(현황/응답 내역/보고서/조사 대상)가 동일한 상단을 공유한다.
  */
 export function OperationsPageHeader({
@@ -82,7 +82,7 @@ export function OperationsPageHeader({
         <div className="flex items-center space-x-4">
           {internalShell && (
             <>
-              <Link href={adminSurveyListPath()}>
+              <Link href={surveyListPath()}>
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   목록으로
@@ -102,7 +102,7 @@ export function OperationsPageHeader({
           {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}
           {internalShell && (
-            <Link href={adminSurveyPreviewPath(surveyId)}>
+            <Link href={surveyPreviewPath(surveyId)}>
               <Button variant="outline" size="sm">
                 <Eye className="mr-2 h-4 w-4" />
                 설문 보기
@@ -110,7 +110,7 @@ export function OperationsPageHeader({
             </Link>
           )}
           {canEdit && (
-            <Link href={adminSurveyEditPath(surveyId)}>
+            <Link href={surveyEditPath(surveyId)}>
               <Button variant="outline" size="sm">
                 <Pencil className="mr-2 h-4 w-4" />
                 설문 편집

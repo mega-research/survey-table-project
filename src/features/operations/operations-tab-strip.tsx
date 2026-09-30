@@ -13,10 +13,10 @@ import {
 import { cn } from '@/lib/utils';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import { adminMailCostPath, operationsPaths } from './operations-paths';
+import { mailCostPath, operationsPaths } from './operations-paths';
 
 interface OperationsTabStripProps {
-  /** 이 콘솔의 주소 접두 — 내부는 admin, 외주 실사 링크는 자기 트리(ADR-0026). */
+  /** 이 콘솔의 주소 접두 — 내부는 `/surveys/<id>/operations`, 외주 실사 링크는 자기 트리(ADR-0026). */
   basePath: string;
   /**
    * 이 주체가 이 설문에서 할 수 있는 일 — 탭 노출의 정본이다.
@@ -96,7 +96,7 @@ export function OperationsTabStrip({
   const mailCampaignsHref = paths.mailCampaigns;
   const mailTemplatesHref = paths.mailTemplates;
   // 비용 정산은 인스턴스 전체 단위라 글로벌 페이지로 라우팅.
-  const mailCostHref = adminMailCostPath();
+  const mailCostHref = mailCostPath();
   const isMailCampaignsActive = pathname.startsWith(mailCampaignsHref);
   const isMailTemplatesActive = pathname.startsWith(mailTemplatesHref);
   const isMailActive = isMailCampaignsActive || isMailTemplatesActive;

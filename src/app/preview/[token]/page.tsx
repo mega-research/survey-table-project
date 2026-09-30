@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 /**
  * 로그인 없이 접근 가능한 공개 읽기 전용 설문 미리보기.
  *
- * `/admin/surveys/[id]/preview` 는 middleware 보호 + 내부 UUID(id) 노출이라 그대로
+ * `/surveys/[id]/preview` 는 middleware 보호 + 내부 UUID(id) 노출이라 그대로
  * 공유할 수 없다. 이 라우트는 `surveys.previewToken`(설문마다 발급되는 unguessable
  * 공개 핸들, 미리보기 전용)만으로 설문을 찾는다 — id/slug/privateToken 으로는
  * 절대 매칭하지 않는다(getSurveyByPreviewToken 은 previewToken 컬럼만 조회).

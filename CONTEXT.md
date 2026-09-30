@@ -447,7 +447,7 @@ _Avoid_: 응답자 식별(응답한 사람이 아니라 입력한 사람이다),
 >
 > - **링크 행과 세션** — `survey_fieldwork_links`(0126, 설문당 활성 하나는 `WHERE closed_at IS NULL` 부분 UNIQUE) + `workspace.fieldworkLinks` 5종(전부 `survey.manageAccess`) + `workspace.fieldworkLinkSession` 2종(pub). 판정 코어는 `server/fieldwork-link.ts`, 쿠키 코덱은 `lib/auth/fieldwork-link-session.ts`(이름이 `fw_<token>` 이라 한 브라우저에 여러 설문의 세션이 선다).
 > - **주체 어휘** — `server/survey-access.ts` 의 `Actor = SurveyAccessUser | LinkActor`. **판별자는 링크 쪽에만** 있어 기존 관문 호출부가 수정 없이 통과한다. `scoped` 베이스가 계정과 링크 둘 다 들이고(계정이 있으면 계정이 이긴다), 링크는 입력의 설문 id 로 쿠키를 골라 링크 행과 대조해 세운다.
-> - **콘솔** — `/fw/<token>/operations/{contacts,contacts/<id>,overview,report}`. **화면 정의는 `/admin` 과 한 벌**이고 갈리는 것은 주소 접두·capability·데이터 파티션 셋뿐이다. 관문은 `server/page-fieldwork-link-access.ts`.
+> - **콘솔** — `/fw/<token>/operations/{contacts,contacts/<id>,overview,report}`. **화면 정의는 내부 콘솔과 한 벌**이고 갈리는 것은 주소 접두·capability·데이터 파티션 셋뿐이다. 관문은 `server/page-fieldwork-link-access.ts`.
 > - **귀속** — `contact_attempts.fieldwork_link_id`·`survey_responses.fieldwork_link_id`(0127). 계정 칸과 **배타 CHECK** 로 묶여 있고, 주체에서 파생시키는 `attributionOf` 가 잘못된 조합을 타입 단계에서 막는다.
 > - **대리 응답** — `?fw=1` 힌트와 대행 배너가 **사라졌다**(티켓 09). 그 파라미터의 유일한 목적이 배너였고 ADR 이 대행 표시를 없앴다. 판정(`server/fieldwork-proxy.ts`)이 돌려주는 것은 귀속과 차단뿐이다.
 > - **사내 실사원** — 공유 설정 모달 실사 블록의 「내부 실사원」 세그먼트가 **참여자 블록과 같은 RPC** 를 쓴다. 새 표면이 0 이고, 추가된 사람은 참여자 목록의 행이 된다.
@@ -483,7 +483,7 @@ _Avoid_: 역할명 하드코딩 분기
 반대로 **담긴 설문을 하나도 볼 수 없는 그룹은 이름조차 나오지 않는다** — 같은 팀 안에서도 그렇다. 「초대된 멤버만」 설문만 담긴 폴더는 초대 안 된 팀원에게 보이지 않는다(카운트 0으로 보여주면 폴더 이름이 곧 정보이고, 「0건인데 왜 있지」로 숨겨진 설문의 존재가 드러난다). **빈 그룹은 예외로 보인다** — 감출 설문이 없고, 폴더를 먼저 만들고 나중에 담는 동선이라 안 보이면 방금 만든 폴더가 즉시 사라진다.
 _Avoid_: 질문 그룹과 혼용, 폴더 권한(권한은 설문 단위 — 그룹은 시각적 묶음일 뿐), 협업 그룹 플래그
 
-> 구현 상태: **구현됨** (2026-08-27, 티켓 12) — `survey_groups`(0117)·`workspace.surveyGroups` RPC 8종·.pen FLOW 2 화면 4종·그룹 화면 `/admin/surveys?group=<id>`·사이드바 그룹 트리. 그룹 삭제는 소속 설문을 미분류로 되돌린다(FK ON DELETE SET NULL). 해산(13)·재배치(14)는 `surveys.survey_group_id` 를 함께 NULL 로 내린다(0117 마이그레이션 헤더의 계약). **타 팀 승계도 티켓 19 가 끊는다**(2026-08-28) — 수동 이전·재배치 모두 팀이 실제로 바뀐 설문만 미분류로 내린다.
+> 구현 상태: **구현됨** (2026-08-27, 티켓 12) — `survey_groups`(0117)·`workspace.surveyGroups` RPC 8종·.pen FLOW 2 화면 4종·그룹 화면 `/surveys?group=<id>`·사이드바 그룹 트리. 그룹 삭제는 소속 설문을 미분류로 되돌린다(FK ON DELETE SET NULL). 해산(13)·재배치(14)는 `surveys.survey_group_id` 를 함께 NULL 로 내린다(0117 마이그레이션 헤더의 계약). **타 팀 승계도 티켓 19 가 끊는다**(2026-08-28) — 수동 이전·재배치 모두 팀이 실제로 바뀐 설문만 미분류로 내린다.
 
 **미분류 (ungrouped)**:
 어느 설문 그룹에도 속하지 않은 상태(`surveys.survey_group_id IS NULL`). 그룹이 없는 팀의 기본값이자 그룹 삭제·타 팀 이동의 귀착점이다. 「설문 담기」의 후보는 미분류 설문뿐이며, 그룹 간 이동은 카드 케밥의 단건 동선만 쓴다.
@@ -521,7 +521,7 @@ _Avoid_: 팀 삭제, 팀 데이터 삭제, 전체 공유 전환, 재배치 중(r
 메가리서치(시스템 전체 보기) 카드로 진입하는 슈퍼어드민 전용 인박스. 미배치 사용자와 배치 대기 설문 두 탭으로 해산·전환 잔여물을 배치하며, 해산된 팀 이력은 지표로만 조회한다. 팀장은 접근할 수 없다.
 _Avoid_: 팀장 공용 콘솔, teamId 딥링크 진입, 승계 대기 탭
 
-> 구현 상태: **구현됨** (2026-08-27, 티켓 14) — `/admin/reassignment` + `workspace.reassignment` 5종(전부 superadmin) + .pen FLOW 8-2~8-4·9-2 화면. 배치 대기 설문의 **출신 팀**은 `survey_ownership_events`(0118)에서 되짚는다 — 해산이 `surveys.team_id` 를 NULL 로 내리므로 설문 행에는 출처가 남지 않아서다. **새 소유자는 목적지 팀의 활성 멤버여야 한다**(판정 코어의 소유자 분기가 소유 팀 소속을 함께 묻기 때문). 일괄 배치는 전부 아니면 전무이고, 배치는 `survey_group_id` 를 NULL 로 둔다. **배치 취소 표면은 만들지 않는다** — 되돌리려면 정식 이전(티켓 19)을 쓴다. 승계 대기(`succession_pending`)는 **별도 탭 없이 배치 대기와 같은 목록**으로 들어온다(티켓 19 — 처리자가 하는 일이 같다). 표기만 갈린다.
+> 구현 상태: **구현됨** (2026-08-27, 티켓 14) — `/reassignment` + `workspace.reassignment` 5종(전부 superadmin) + .pen FLOW 8-2~8-4·9-2 화면. 배치 대기 설문의 **출신 팀**은 `survey_ownership_events`(0118)에서 되짚는다 — 해산이 `surveys.team_id` 를 NULL 로 내리므로 설문 행에는 출처가 남지 않아서다. **새 소유자는 목적지 팀의 활성 멤버여야 한다**(판정 코어의 소유자 분기가 소유 팀 소속을 함께 묻기 때문). 일괄 배치는 전부 아니면 전무이고, 배치는 `survey_group_id` 를 NULL 로 둔다. **배치 취소 표면은 만들지 않는다** — 되돌리려면 정식 이전(티켓 19)을 쓴다. 승계 대기(`succession_pending`)는 **별도 탭 없이 배치 대기와 같은 목록**으로 들어온다(티켓 19 — 처리자가 하는 일이 같다). 표기만 갈린다.
 
 ### 응답 개인정보
 

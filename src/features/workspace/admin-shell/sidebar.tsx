@@ -69,10 +69,10 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
         {menuItemIds.includes('surveys') && (
           <>
             <SidebarMenuLink
-              href="/admin/surveys"
+              href="/surveys"
               label="설문 목록"
               icon={<FileText className="h-4 w-4 shrink-0" />}
-              active={pathname?.startsWith('/admin/surveys') ?? false}
+              active={pathname?.startsWith('/surveys') ?? false}
               collapsed={collapsed}
             />
             {/* 그룹 트리는 접힌 사이드바에 넣지 않는다 — 이름 없는 폴더 아이콘 줄만 남는다. */}
@@ -83,28 +83,28 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
         )}
         {menuItemIds.includes('users') && (
           <SidebarMenuLink
-            href="/admin/users"
+            href="/users"
             label="사용자 관리"
             icon={<Users className="h-4 w-4 shrink-0" />}
-            active={pathname?.startsWith('/admin/users') ?? false}
+            active={pathname?.startsWith('/users') ?? false}
             collapsed={collapsed}
           />
         )}
         {menuItemIds.includes('teams') && (
           <SidebarMenuLink
-            href="/admin/teams"
+            href="/teams"
             label="팀 관리"
             icon={<Building2 className="h-4 w-4 shrink-0" />}
-            active={pathname?.startsWith('/admin/teams') ?? false}
+            active={pathname?.startsWith('/teams') ?? false}
             collapsed={collapsed}
           />
         )}
         {menuItemIds.includes('profile') && (
           <SidebarMenuLink
-            href="/admin/profile"
+            href="/profile"
             label="프로필"
             icon={<UserRound className="h-4 w-4 shrink-0" />}
-            active={pathname?.startsWith('/admin/profile') ?? false}
+            active={pathname?.startsWith('/profile') ?? false}
             collapsed={collapsed}
           />
         )}

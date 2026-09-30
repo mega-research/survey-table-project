@@ -42,7 +42,7 @@ export function TeamDetailView({ teamId }: Props) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#F9FAFB]">
         <p className="text-[13px] text-[#6E6E73]">팀을 찾을 수 없습니다.</p>
-        <Link href="/admin/teams" className="text-[13px] text-[#2E4FCE] hover:underline">
+        <Link href="/teams" className="text-[13px] text-[#2E4FCE] hover:underline">
           팀 관리로 돌아가기
         </Link>
       </div>
@@ -55,7 +55,7 @@ export function TeamDetailView({ teamId }: Props) {
         <div className="flex items-end justify-between">
           <div className="flex flex-col gap-1">
             <span className="text-[13px] text-[#6E6E73]">
-              <Link href="/admin/teams" className="hover:text-[#1C1C1E]">
+              <Link href="/teams" className="hover:text-[#1C1C1E]">
                 팀 관리
               </Link>
               {` / ${team.name}`}

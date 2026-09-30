@@ -79,7 +79,7 @@ export function CreateTeamPickDialog({ open, onOpenChange, teams }: CreateTeamPi
             disabled={selected === null}
             onClick={() => {
               if (selected === null) return;
-              router.push(`/admin/surveys/create?team=${encodeURIComponent(selected)}`);
+              router.push(`/surveys/create?team=${encodeURIComponent(selected)}`);
             }}
           >
             만들기

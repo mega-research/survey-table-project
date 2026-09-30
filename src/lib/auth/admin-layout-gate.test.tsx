@@ -21,7 +21,7 @@ vi.mock('@/components/providers/query-provider', () => ({
   QueryProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-import AdminLayout from '@/app/admin/layout';
+import AdminLayout from '@/app/(internal)/layout';
 
 const ACTIVE = {
   id: 'admin-1',
@@ -50,8 +50,8 @@ beforeEach(() => {
 describe('AdminLayout 재검증', () => {
   it('세션이 없으면 원래 목적지를 실어 로그인으로 보낸다 — 쿠키만 있고 무효한 경우', async () => {
     readSessionUser.mockResolvedValue(null);
-    await expect(render('/admin/surveys')).rejects.toThrow(
-      'REDIRECT:/admin/login?redirect=%2Fadmin%2Fsurveys',
+    await expect(render('/surveys')).rejects.toThrow(
+      'REDIRECT:/login?redirect=%2Fsurveys',
     );
   });
 
@@ -59,18 +59,18 @@ describe('AdminLayout 재검증', () => {
     '%s 계정은 로그인으로 되돌린다',
     async (status) => {
       readSessionUser.mockResolvedValue({ ...ACTIVE, status });
-      await expect(render('/admin/surveys')).rejects.toThrow('REDIRECT:/admin/login');
+      await expect(render('/surveys')).rejects.toThrow('REDIRECT:/login');
     },
   );
 
   it('active 계정은 통과한다', async () => {
     readSessionUser.mockResolvedValue(ACTIVE);
-    await expect(render('/admin/surveys')).resolves.toBeDefined();
+    await expect(render('/surveys')).resolves.toBeDefined();
     expect(redirect).not.toHaveBeenCalled();
   });
 
   it('로그인 페이지는 세션을 보지 않는다 — 미인증도 폼을 봐야 한다', async () => {
-    await expect(render('/admin/login')).resolves.toBeDefined();
+    await expect(render('/login')).resolves.toBeDefined();
     expect(readSessionUser).not.toHaveBeenCalled();
   });
 
@@ -85,7 +85,7 @@ describe('AdminLayout 계정 유형 게이트', () => {
   ] as const)('%s 계정은 내부 경로에서 자기 홈으로 돌려보낸다', async (userType, home) => {
     // 티켓 03 이 계정 발급을 열었으므로 이 축이 없으면 발급이 곧 내부 표면 접근이 된다.
     readSessionUser.mockResolvedValue({ ...ACTIVE, userType });
-    await expect(render('/admin/surveys')).rejects.toThrow('REDIRECT');
+    await expect(render('/surveys')).rejects.toThrow('REDIRECT');
     expect(redirect).toHaveBeenCalledWith(home);
   });
 
@@ -93,7 +93,7 @@ describe('AdminLayout 계정 유형 게이트', () => {
     '%s 계정도 프로필은 통과한다 (세 유형 공통 화면)',
     async (userType) => {
       readSessionUser.mockResolvedValue({ ...ACTIVE, userType });
-      await render('/admin/profile');
+      await render('/profile');
       expect(redirect).not.toHaveBeenCalled();
     },
   );
@@ -101,6 +101,6 @@ describe('AdminLayout 계정 유형 게이트', () => {
   it('유형이 실려 오지 않으면 내부로 열지 않는다', async () => {
     // readSessionUser 의 안전 기본값과 같은 방향 — 값이 없으면 닫는 쪽으로 접는다.
     readSessionUser.mockResolvedValue({ ...ACTIVE, userType: undefined });
-    await expect(render('/admin/surveys')).rejects.toThrow('REDIRECT');
+    await expect(render('/surveys')).rejects.toThrow('REDIRECT');
   });
 });

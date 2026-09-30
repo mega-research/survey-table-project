@@ -125,7 +125,7 @@ export interface UnsubscribedContactRow {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 메일 비용 정산 화면 행 (/admin/billing/mail-cost)
+// 메일 비용 정산 화면 행 (/billing/mail-cost)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CampaignCycleRow {

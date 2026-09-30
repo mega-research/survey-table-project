@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { OperationsPaths } from './operations-paths';
 import {
-  adminOperationsBase,
-  adminOperationsPaths,
-  adminSurveyEditPath,
-  adminSurveyListPath,
-  adminSurveyPreviewPath,
+  internalOperationsBase,
+  internalOperationsPaths,
+  surveyEditPath,
+  surveyListPath,
+  surveyPreviewPath,
   operationsPaths,
 } from './operations-paths';
 
@@ -39,7 +39,7 @@ describe('operationsPaths', () => {
   });
 
   it('base 를 바꾸면 모든 자리가 함께 따라간다', () => {
-    const admin = resolveAll(operationsPaths(adminOperationsBase(SURVEY_ID)));
+    const admin = resolveAll(operationsPaths(internalOperationsBase(SURVEY_ID)));
     const link = resolveAll(operationsPaths(OTHER_BASE));
 
     expect(link.map(([key]) => key)).toEqual(admin.map(([key]) => key));
@@ -47,7 +47,7 @@ describe('operationsPaths', () => {
       const [, linkHref] = link[index]!;
       // 접두만 다르고 그 뒤 꼬리는 완전히 같아야 한다.
       expect(linkHref.slice(OTHER_BASE.length), `${key} 의 꼬리가 갈렸다`).toBe(
-        adminHref.slice(adminOperationsBase(SURVEY_ID).length),
+        adminHref.slice(internalOperationsBase(SURVEY_ID).length),
       );
     }
   });
@@ -71,19 +71,19 @@ describe('operationsPaths', () => {
 
 describe('admin 접두를 아는 유일한 자리', () => {
   it('운영 콘솔 base 를 설문 id 로 조립한다', () => {
-    expect(adminOperationsBase(SURVEY_ID)).toBe(`/admin/surveys/${SURVEY_ID}/operations`);
+    expect(internalOperationsBase(SURVEY_ID)).toBe(`/surveys/${SURVEY_ID}/operations`);
   });
 
   it('admin 편의 생성자가 같은 base 의 paths 를 준다', () => {
     // 함수 자리가 있어 객체끼리는 동일성 비교가 되지 않는다 — 풀어낸 주소로 견준다.
-    expect(resolveAll(adminOperationsPaths(SURVEY_ID))).toEqual(
-      resolveAll(operationsPaths(adminOperationsBase(SURVEY_ID))),
+    expect(resolveAll(internalOperationsPaths(SURVEY_ID))).toEqual(
+      resolveAll(operationsPaths(internalOperationsBase(SURVEY_ID))),
     );
   });
 
   it('운영 콘솔 밖의 admin 주소도 여기서 나온다', () => {
-    expect(adminSurveyListPath()).toBe('/admin/surveys');
-    expect(adminSurveyEditPath(SURVEY_ID)).toBe(`/admin/surveys/${SURVEY_ID}/edit`);
-    expect(adminSurveyPreviewPath(SURVEY_ID)).toBe(`/admin/surveys/${SURVEY_ID}/preview`);
+    expect(surveyListPath()).toBe('/surveys');
+    expect(surveyEditPath(SURVEY_ID)).toBe(`/surveys/${SURVEY_ID}/edit`);
+    expect(surveyPreviewPath(SURVEY_ID)).toBe(`/surveys/${SURVEY_ID}/preview`);
   });
 });

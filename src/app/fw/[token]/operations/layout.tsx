@@ -9,7 +9,7 @@ import { LinkSignOutButton } from './link-sign-out-button';
 /**
  * 외주 실사 링크 콘솔의 셸 — 깎인 헤더와 탭 (ADR-0026, .pen FLOW 10-4).
  *
- * **화면 정의는 `/admin` 과 한 벌이다.** 헤더와 탭 스트립은 같은 컴포넌트이고, 무엇이
+ * **화면 정의는 내부 콘솔과 한 벌이다.** 헤더와 탭 스트립은 같은 컴포넌트이고, 무엇이
  * 그려질지는 주입된 `capabilities` 와 `internalShell=false` 가 정한다. 그래서 여기에
  * 외주 전용 헤더를 새로 짜지 않는다 — 두 벌이 되면 한쪽만 고쳐진다.
  *

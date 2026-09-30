@@ -14,11 +14,11 @@ import { describe, expect, it } from 'vitest';
 import { loadAppFiles } from '@tests/helpers/app-files';
 
 /** 슈퍼어드민 전용이어야 하는 라우트 묶음. */
-const SYSTEM_SCOPE_ROUTES = ['admin/teams', 'admin/users', 'admin/reassignment'];
+const SYSTEM_SCOPE_ROUTES = ['(internal)/teams', '(internal)/users', '(internal)/reassignment'];
 
 /** 그 아래여도 팀 경계로 좁혀지는 화면 — 사유를 함께 적는다. */
 const TEAM_SCOPED_EXCEPTIONS: Record<string, string> = {
-  'admin/teams/[teamId]/page.tsx':
+  '(internal)/teams/[teamId]/page.tsx':
     '팀 상세는 그 팀 소속도 연다 — 슈퍼어드민 전용이 아니고 서비스가 NOT_FOUND 로 접는다',
 };
 

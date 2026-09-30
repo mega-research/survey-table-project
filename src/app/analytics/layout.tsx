@@ -16,7 +16,7 @@ import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 export default async function AnalyticsLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionUser(await headers());
   if (!user || !isActiveUser(user.status)) {
-    redirect('/admin/login');
+    redirect('/login');
   }
   // 분석은 내부 구역이다 — 게스트·실사 계정은 자기 홈으로 돌려보낸다(admin 레이아웃과 같은 판단).
   if (!isInternalUser(user.userType)) {

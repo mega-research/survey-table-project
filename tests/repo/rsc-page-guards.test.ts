@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadAppFiles } from '@tests/helpers/app-files';
+import { PUBLIC_PAGES, loadAppFiles } from '@tests/helpers/app-files';
 
 /**
  * 회귀 가드: 서버 데이터를 직접 부르는 RSC 페이지는 자기 인증 가드를 가져야 한다 (티켓 31).
@@ -23,22 +23,6 @@ const SERVER_DATA_IMPORT =
 /** 자기 가드로 인정하는 호출. 무엇을 막는지는 각 가드가 정한다(내부 전용·유형·설문 경계·탭). */
 const PAGE_GUARD =
   /\b(requireAuth|requireAdminPage|requireSuperadminPage|requireActiveAccount|requireAccountTypePage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess|assertFieldworkSurveyPageAccess|assertFieldworkLinkPageAccess)\s*\(/;
-
-/**
- * 인증 없이 열려야 하는 페이지 — 응답자 표면.
- *
- * 셋 다 URL 에 실린 토큰이 곧 자격이다(초대 코드·프리뷰 토큰·수신거부 토큰). 로그인을 요구하면
- * 응답자가 설문에 들어올 수 없다. 여기 새 항목을 더할 때는 **왜 무인증이어야 하는지**를
- * 같은 줄에 적을 것 — 적을 말이 없으면 가드가 빠진 것이다.
- */
-const PUBLIC_PAGES: Record<string, string> = {
-  'i/[code]/page.tsx': '짧은 초대 링크 — inviteCode 가 자격이다',
-  'preview/[token]/page.tsx': '빌더 미리보기 — previewToken 이 자격이다',
-  'unsubscribe/[token]/page.tsx': '메일 수신거부 — unsubscribeToken 이 자격이다',
-  'survey/[id]/page.tsx': '공개 응답 페이지 — 설문 자체가 공개 표면이다',
-  'fw/[token]/page.tsx':
-    '외주 실사 링크의 비밀번호 화면 — 세션을 **만드는** 자리라 가드를 붙이면 아무도 들어올 수 없다',
-};
 
 const pages = loadAppFiles('page.tsx');
 

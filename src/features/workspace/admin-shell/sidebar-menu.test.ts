@@ -19,17 +19,17 @@ describe('getSidebarMenuItemIds', () => {
 
 describe('isSidebarHiddenPath', () => {
   it('설문 편집기와 운영 콘솔에서는 사이드바를 감춘다', () => {
-    expect(isSidebarHiddenPath('/admin/surveys/abc/edit')).toBe(true);
-    expect(isSidebarHiddenPath('/admin/surveys/abc/operations')).toBe(true);
-    expect(isSidebarHiddenPath('/admin/surveys/abc/operations/contacts/1')).toBe(true);
+    expect(isSidebarHiddenPath('/surveys/abc/edit')).toBe(true);
+    expect(isSidebarHiddenPath('/surveys/abc/operations')).toBe(true);
+    expect(isSidebarHiddenPath('/surveys/abc/operations/contacts/1')).toBe(true);
   });
 
   it('목록·생성·미리보기·분석·기타 admin 화면은 사이드바를 둔다', () => {
-    expect(isSidebarHiddenPath('/admin/surveys')).toBe(false);
-    expect(isSidebarHiddenPath('/admin/surveys/create')).toBe(false);
-    expect(isSidebarHiddenPath('/admin/surveys/abc/preview')).toBe(false);
-    expect(isSidebarHiddenPath('/admin/surveys/abc/analytics')).toBe(false);
-    expect(isSidebarHiddenPath('/admin/surveys/abc/editor')).toBe(false);
-    expect(isSidebarHiddenPath('/admin/users')).toBe(false);
+    expect(isSidebarHiddenPath('/surveys')).toBe(false);
+    expect(isSidebarHiddenPath('/surveys/create')).toBe(false);
+    expect(isSidebarHiddenPath('/surveys/abc/preview')).toBe(false);
+    expect(isSidebarHiddenPath('/surveys/abc/analytics')).toBe(false);
+    expect(isSidebarHiddenPath('/surveys/abc/editor')).toBe(false);
+    expect(isSidebarHiddenPath('/users')).toBe(false);
   });
 });

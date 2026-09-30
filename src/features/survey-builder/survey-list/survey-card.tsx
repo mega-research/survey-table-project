@@ -151,7 +151,7 @@ export function SurveyCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem asChild disabled={!canEdit}>
-              <Link href={`/admin/surveys/${survey.id}/edit`}>
+              <Link href={`/surveys/${survey.id}/edit`}>
                 <Pencil className="h-3.5 w-3.5" />
                 수정
               </Link>
@@ -240,13 +240,13 @@ export function SurveyCard({
       {/* 액션 순서 — 수정 · 현황 · 분석 · 문의(.pen 설문 카드의 문의·분석 순서를 바꿨다). 구분선은 없다. */}
       <div className="flex gap-1.5 pt-1.5">
         <CardActionLink
-          href={`/admin/surveys/${survey.id}/edit`}
+          href={`/surveys/${survey.id}/edit`}
           icon={<Pencil className="h-3.5 w-3.5" />}
           label="수정"
           disabled={!canEdit}
         />
         <CardActionLink
-          href={`/admin/surveys/${survey.id}/operations/overview`}
+          href={`/surveys/${survey.id}/operations/overview`}
           icon={<Activity className="h-3.5 w-3.5" />}
           label="현황"
         />

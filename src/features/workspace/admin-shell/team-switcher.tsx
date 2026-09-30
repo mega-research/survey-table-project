@@ -110,7 +110,7 @@ export function TeamSwitcher({ memberships, collapsed }: Props) {
           <>
             <div className="my-1 h-px bg-[#E5E5EA]" />
             <Link
-              href={`/admin/teams/${leaderTeamId}`}
+              href={`/teams/${leaderTeamId}`}
               onClick={() => setOpen(false)}
               className="flex items-center justify-between rounded-[7px] px-2.5 py-2 text-[13px] text-[#374151] hover:bg-gray-50"
             >

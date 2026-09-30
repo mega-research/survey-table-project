@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-29 (외주 실사 링크 — 계정 없이 **설문별 URL + 공유 비밀번호**로 운영 콘솔을 연다. 요청 주체 어휘가 `Actor = 계정 | 링크` 로 넓어지고(`server/survey-access`), `scoped` 베이스가 링크를 들이며, 콘솔은 `/fw/<token>/operations/*` 가 **`/admin` 과 같은 화면 정의**를 다른 접두·capability·파티션으로 렌더한다. 링크 행 0126 · 귀속 칸 0127(계정 칸과 배타 CHECK). 대행 배너와 `?fw=1` 은 사라졌다. 사내 실사원은 전용 모델이 아니라 **전체 권한 참여자**다. ADR-0026(ADR-0019 대체 — 옛 실사 계정 모델은 공존하되 UI 입구를 잃었다). 직전: 2026-09-23 쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+> 최종 갱신: 2026-09-30 (**`/admin` 접두 제거** — 직원 콘솔이 라우트 그룹 `app/(internal)/` 로 옮겨 주소가 `/surveys`·`/users`·`/teams`·`/reassignment`·`/profile`·`/billing`·`/file-cleanup`·`/login` 루트 여덟 개가 됐다(파일 트리와 주소가 한 단계 어긋난다). 1차 게이트가 접두 하나에서 **루트 목록**으로 바뀌어 어휘 `SESSION_GATED_ROOT_SEGMENTS`·`PUBLIC_ROOT_SEGMENTS` 를 `lib/auth/protected-paths` 에 세우고, matcher 리터럴↔어휘는 `proxy-gate.test.ts`·어휘↔디렉터리는 `tests/repo/proxy-matcher-coverage.test.ts` 가 대조한다. 주소 조립은 `features/operations/operations-paths` 하나(`internalOperationsBase` 등으로 개명). 옛 주소는 `next.config.ts` 영구 리다이렉트가 받는다. 마이그레이션 없음. 직전: 2026-09-29 외주 실사 링크 — 계정 없이 **설문별 URL + 공유 비밀번호**로 운영 콘솔을 연다. 요청 주체 어휘가 `Actor = 계정 | 링크` 로 넓어지고(`server/survey-access`), `scoped` 베이스가 링크를 들이며, 콘솔은 `/fw/<token>/operations/*` 가 **내부 콘솔과 같은 화면 정의**를 다른 접두·capability·파티션으로 렌더한다. 링크 행 0126 · 귀속 칸 0127(계정 칸과 배타 CHECK). 대행 배너와 `?fw=1` 은 사라졌다. 사내 실사원은 전용 모델이 아니라 **전체 권한 참여자**다. ADR-0026(ADR-0019 대체 — 옛 실사 계정 모델은 공존하되 UI 입구를 잃었다). 직전: 2026-09-23 쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 >
 > 2026-09-17 역할 모델 v2(`workspace-roles-v2`) 병합 — Better Auth 인증 · 팀·멤버십 · 설문 capability 접근 엔진(`server/survey-access`) · 작업 범위 · 설문 그룹 · 재배치 센터 · 공유(invite_only·참여자·게스트·실사) · soft delete 복구 · 실사 업체·대리 응답 귀속. 코드 배치·명명 규칙은 staging 기준으로 맞췄고, v2 마이그레이션 12개는 staging 의 0101~0110 과 번호가 겹쳐 **0111~0122** 로 밀었다(상대 순서 유지, 매핑은 아래 "마이그레이션 번호"). 배포 절차는 `docs/runbooks/workspace-roles-v2-deploy.md`.
 
@@ -63,7 +63,11 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 ```
 src/
 ├── app/                        # Next.js App Router
-│   ├── admin/                  # 관리자 인터페이스
+│   ├── (internal)/             # 내부 직원 콘솔 — **라우트 그룹이라 괄호는 주소에 없다**
+│   │   │                       # `/surveys`·`/users`·… 가 곧 루트다(옛 `/admin` 접두 제거).
+│   │   │                       # 그래서 1차 게이트가 접두 하나가 아니라 **루트 목록**을 본다 —
+│   │   │                       # 어휘는 `lib/auth/protected-paths`, 완전성은
+│   │   │                       # `tests/repo/proxy-matcher-coverage.test.ts` 가 디렉터리에서 확인
 │   │   ├── surveys/
 │   │   │   ├── create/         # 설문 생성
 │   │   │   └── [id]/
@@ -328,7 +332,8 @@ src/
 │   └── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
-└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 쿠키 1차 게이트 + x-pathname 전달)
+└── proxy.ts                    # Next 미들웨어 (세션 쿠키 1차 게이트 + x-pathname 전달)
+                                # matcher 는 루트 전수 리터럴 — 어휘는 lib/auth/protected-paths
 ```
 
 ---
@@ -746,7 +751,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 ## 운영 콘솔 라우트
 
 ```
-/admin/surveys/[id]/operations/
+/surveys/[id]/operations/
 ├── overview                      # 응답 현황 (slice 1)
 ├── profiles                      # 응답 내역 (slice 2)
 │   ├── [responseId]/edit         # 응답 상세/수정
@@ -767,16 +772,16 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
     ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
-/admin/surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
-/admin/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
+/surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
+/users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
                                   # 「실사 업체」 탭이 같은 화면 안에 있다 (.pen FLOW 10-4, 티켓 24 — 업체 카드 + 카드별 계정 발급)
-/admin/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
-/admin/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
-/admin/reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
-/admin/reassignment/surveys/[surveyId]  # 단건 설문 재배치 (새 소유자·목적지 팀·공개 범위 원자 확정)
-/admin/profile                    # 내 프로필 — **세 계정 유형 공통**. /admin 아래지만 내부 전용이 아니다(ACCOUNT_PAGES)
-/admin/billing/mail-cost          # 메일 비용 정산
-/admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
+/teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
+/teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
+/reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
+/reassignment/surveys/[surveyId]  # 단건 설문 재배치 (새 소유자·목적지 팀·공개 범위 원자 확정)
+/profile                    # 내 프로필 — **세 계정 유형 공통**. 내부 콘솔 트리에 있지만 내부 전용이 아니다(ACCOUNT_PAGES)
+/billing/mail-cost          # 메일 비용 정산
+/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 
 /guest                            # 게스트 홈 — 부여 설문 카드 (티켓 22, .pen FLOW 5-2)
 /guest/surveys/[surveyId]         # 탭 없는 주소 — 첫 화면으로 리다이렉트(허용 탭 없으면 미리보기)
@@ -787,7 +792,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
                                   # 가드가 **없는 것이 정의**다(세션을 만드는 자리). 없는 토큰과 틀린
                                   # 비밀번호가 같은 화면이고, 닫힘(중단·종료·삭제·배치 대기)만 갈라 말한다
 /fw/[token]/operations            # 탭 없는 주소 — 조사 대상으로 리다이렉트
-/fw/[token]/operations/contacts   # 조사 대상 목록 — **`/admin` 과 같은 화면 정의**(ContactsListView)
+/fw/[token]/operations/contacts   # 조사 대상 목록 — **내부 콘솔과 같은 화면 정의**(ContactsListView)
                                   # 다운로드·업로드·이월 임포트·대상 추가·컬럼 설정은 그려지지 않고
                                   # 메일 열은 열·필터 후보·정렬 셋이 로더에서 함께 닫힌다
 /fw/[token]/operations/contacts/[contactId]  # 단건 상세 — 연락처 복호 평문 + 회차·메모(저장 버튼이 다르다)
@@ -923,7 +928,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   30일 세션 + 하루 1회 사용 시 연장, `disableSignUp`(공개 가입 없음)·`autoSignIn` 없음·이메일 비밀번호
   재설정 없음(분실은 슈퍼어드민이 새 임시 비밀번호를 지정). sign-in 전 비활성 상태(active 외)를 차단하며
   실패 응답은 미존재 계정과 바디·타이밍까지 동일(더미 해시). 시드는 `pnpm auth:seed`.
-- **계정 수명주기**는 `server/auth`(도메인 규칙 + 서비스)와 `/admin/users` 행 케밥이 담당한다.
+- **계정 수명주기**는 `server/auth`(도메인 규칙 + 서비스)와 `/users` 행 케밥이 담당한다.
   허용 전이는 `shared/contracts/auth.ts` 의 `USER_STATUS_TRANSITIONS` 하나가 정하고, 서버 강제
   (`resolveUserStatusTransition`)와 화면 메뉴(`availableUserStatusActions`)가 같은 표를 본다 —
   화면이 표를 따로 들면 "메뉴엔 있는데 누르면 CONFLICT" 가 된다. 전이는 advisory lock + 행 잠금
@@ -1051,7 +1056,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   순서로 `FOR UPDATE` 를 잡고 **잠긴 값으로** 팀 일치·미분류 여부를 다시 본다. 그룹 이동은
   `surveys.updatedAt` 을 건드리지 않는다 — 폴더에 넣는 일은 내용 수정이 아니고, 건드리면
   「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다. 화면 쪽은 그룹 화면이 목록의
-  다른 상태가 아니라 **주소**(`/admin/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
+  다른 상태가 아니라 **주소**(`/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
   입구다. 지목한 그룹이 목록에 없으면(삭제됨·타 팀 id) 좁힘 자체를 하지 않아 빈 화면에
   갇히지 않는다.
 - **설문 접근 판정은 `server/survey-access.ts` 하나가 한다**(티켓 07, 스펙 §8). `data-scope` 가
@@ -1082,7 +1087,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   잠기지 않게), 일반 사용자의 `system` 요청은 **거부한다**(조용히 접으면 부분 목록을 전체로 착각한다).
   요청이 범위를 지목하지 않으면 `work_scope` 쿠키를 읽는다(이름 SSOT 는 `shared/contracts/workspace.ts`).
   설문 목록 응답은 **해석된 범위**를 함께 돌려준다 — 요청과 다를 수 있어 화면이 그것을 정답으로 삼는다.
-  화면 쪽은 사이드바 팀 스위처(티켓 08)가 담당한다 — `app/admin/layout.tsx` 가 같은 판정 코어로 초기
+  화면 쪽은 사이드바 팀 스위처(티켓 08)가 담당한다 — `app/(internal)/layout.tsx` 가 같은 판정 코어로 초기
   범위를 해석해 `AdminShell` 에 넘기고(무효 쿠키는 거부가 아니라 기본 범위로 접는다 — 쿠키는 편의값),
   전환은 쿠키 기록 + 전체 쿼리 캐시 무효화 + `router.refresh` 로 처리한다. 목록 쿼리 키에는 항상
   해석된 범위가 들어가 팀 간 캐시가 섞이지 않고, 팀 미배치는 조회 자체를 하지 않는다(.pen FLOW 9-1).
@@ -1106,7 +1111,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·발송 mail.send ·
   내보내기 export.download · mutation(운영 제어·쿼터 저장·컬럼 픽커 저장 포함) survey.edit ·
   발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. **단 분석 RSC 화면 둘
-  (`/analytics/[surveyId]`·`/admin/surveys/[id]/analytics`)은 `responses.view` 도 요구한다** —
+  (`/analytics/[surveyId]`·`/surveys/[id]/analytics`)은 `responses.view` 도 요구한다** —
   `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
   직렬화하므로 RSC payload 에 그대로 실린다(analytics **RPC** 는 집계 스키마로만 나가 종전대로
   analytics.view 다). 두 화면이 갈리지 않게 `tests/repo/analytics-page-guards.test.ts` 가 묶는다.
@@ -1186,7 +1191,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     (`getSurveyGroupTeamId` 가 active 팀만)·**새 설문 귀속**(`resolveNewSurveyOwnership` 이
     쓰기 직전 재확인)에 계속 닿을 수 있었다.
 - **재배치 센터는 팀 경계로 좁힐 수 없는 목록이라 슈퍼어드민 전용이다**(티켓 14, .pen FLOW
-  8-2~8-4·9-2). `/admin/reassignment` 는 팀 관리의 「메가리서치」 카드가 유일한 입구고
+  8-2~8-4·9-2). `/reassignment` 는 팀 관리의 「메가리서치」 카드가 유일한 입구고
   사이드바 항목도 `teamId` 딥링크도 없다 — 여기 있는 사람과 설문은 **어느 팀에도 속하지
   않아** 팀장에게 하나라도 열면 그 순간 전사 열람이 된다. `workspace.reassignment` 5종
   (`inbox`·`pendingSurvey`·`ownerCandidates`·`assignUser`·`assignSurveys`)이 전부 superadmin
@@ -1249,14 +1254,24 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - **`/api/auth` POST 는 허용목록이다**(`sign-in/email`·`sign-out`). catch-all 이 전 엔드포인트를
   열어두면 `update-user` 로 아바타 URL 검증을, `change-password` 로 다른 기기 로그아웃을
   우회할 수 있다. 서버는 `auth.api.*` 를 직접 부르므로 목록을 좁혀도 앱 동작은 그대로다.
-- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로
-  `/admin`·`/analytics`·`/guest`·`/fieldwork` 진입을 거르고 `x-pathname` 요청 헤더를 넘긴다.
-  쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/admin/layout.tsx`·
+- **게이트는 2단이다.** `proxy.ts` 는 세션 쿠키 존재만 보는 1차 게이트(DB 미조회)로 내부 콘솔·
+  `/analytics`·`/guest`·`/fieldwork` 진입을 거르고 `x-pathname` 요청 헤더를 넘긴다.
+  **`/admin` 접두를 걷은 뒤(라우트 그룹 `app/(internal)/`) 이 게이트가 보는 것은 접두가 아니라
+  루트 목록이다** — 어휘의 정본은 `lib/auth/protected-paths` 의 `SESSION_GATED_ROOT_SEGMENTS`,
+  matcher 리터럴은 그 사본이고(Next 가 빌드 타임에 정적으로 읽어 배열을 못 쓴다), 대조는
+  `proxy-gate.test.ts`(리터럴↔어휘)와 `tests/repo/proxy-matcher-coverage.test.ts`
+  (어휘↔디렉터리)가 나눠 진다. **새 내부 루트를 만들고 등재를 빠뜨리면 그 구역만 1차 게이트
+  밖에서 자라고 아무 에러도 나지 않는다** — 그래서 완전성의 출처를 사람이 아니라 파일 시스템에
+  두었다. 루트마다 `'/x'` 와 `'/x/:path*'` 두 줄인 것도 계약이다(후자는 루트 자체를 매치하지
+  않아 목록 화면이 무방비가 된다). 옛 주소는 `next.config.ts` 의 `/admin/:path*` → `/:path*`
+  영구 리다이렉트가 받는다 — rewrite 가 아니라 redirect 다(두 주소를 살려 두면 접두를 걷은
+  것이 아니다).
+  쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/(internal)/layout.tsx`·
   `app/analytics/layout.tsx` 가 서버에서 재검증한다. 유형 구역(`/guest`·`/fieldwork`)은 페이지의
   `requireAccountTypePage` 가 본다. 비로그인 접근을 허용하는 경로 목록은
-  `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있고(현재 `/admin/login` 뿐), 유형과 무관하게
-  열리는 admin 경로는 같은 파일의 `ACCOUNT_PAGES`(현재 `/admin/profile` 뿐)다.
-- **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/admin/login` 으로 되돌아오고,
+  `lib/auth/protected-paths.ts` 의 `AUTH_PAGES` 한 곳에 있고(현재 `/login` 뿐), 유형과 무관하게
+  열리는 내부 콘솔 경로는 같은 파일의 `ACCOUNT_PAGES`(현재 `/profile` 뿐)다.
+- **로그인**은 `authClient.signIn.email`(클라이언트)로 세션을 만든 뒤 `/login` 으로 되돌아오고,
   목적지 해석은 그 페이지(RSC)가 한다 — 계정 유형이 세션에만 있어 클라이언트가 결정할 수 없다.
   복귀 경로는 `lib/auth/safe-redirect.ts` 가 정제한다(내부 절대경로만, 제어 문자 차단).
   로그아웃은 `components/auth/logout-button.tsx` 의 `authClient.signOut`.
@@ -1279,14 +1294,14 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   (설문·운영·export·업로드)에는 들어오지 못한다. 각자의 콘솔은 `scoped` 등 자기 가드로 열린다.
   `readSessionUser` 의 안전 기본값은 'guest' — 값이 없으면 내부를 열지 않는 쪽으로 접는다.
 - **유형별 목적지**(티켓 05): 홈 표의 SSOT 는 `lib/auth/account-home.ts` 의 `ACCOUNT_HOME_PATH`
-  (internal→`/admin/surveys` · guest→`/guest` · fieldwork→`/fieldwork`). 로그인 직후 목적지는
+  (internal→`/surveys` · guest→`/guest` · fieldwork→`/fieldwork`). 로그인 직후 목적지는
   `resolvePostLoginDestination` 이 정한다 — 게스트·실사가 요청한 내부 경로는 자기 홈으로 접는다
   (그대로 보내면 admin 게이트가 되돌려 보내 로그인 화면을 오가는 루프가 된다). admin·analytics
   레이아웃은 비내부 계정을 자기 홈으로 **리다이렉트**하고(존재를 감출 이유가 없어 notFound 가 아니다),
-  `ACCOUNT_PAGES`(현재 `/admin/profile`)만 비켜준다. **목적지 축은 하나다**(티켓 21) — 예전에는
+  `ACCOUNT_PAGES`(현재 `/profile`)만 비켜준다. **목적지 축은 하나다**(티켓 21) — 예전에는
   설문 단위 env grant 게스트가 먼저 갈라져 grant 설문 콘솔로 갔고 담당 아닌 설문을 향한 로그인은
   강제 로그아웃까지 했는데, 그 동선이 통째로 사라졌다.
-- **프로필은 세 유형 공통**(.pen FLOW 3-2, `/admin/profile`). 본인이 바꾸는 것은 이름·아바타·비밀번호
+- **프로필은 세 유형 공통**(.pen FLOW 3-2, `/profile`). 본인이 바꾸는 것은 이름·아바타·비밀번호
   뿐이다 — `UpdateProfileInput` 에 이메일·직책·소속이 없는 것이 이 표면의 정의다. 내부 계정은
   이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
   것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
@@ -1317,7 +1332,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     고객사 계정을 훑을 수 있다. 대상 자격은 서비스가 본다: **guest + active 만**.
   - 서비스의 WHERE 에 `kind='guest'` 를 함께 거는 것이 칸막이다 — 참여자·게스트가 같은 테이블에
     살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
-  - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/admin/logout`).
+  - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/logout`).
     그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
   - 부여 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
     **게스트가 보는 콘솔은 `/guest` 다**(티켓 22). 그 관문이 `server/page-guest-access.ts` 의
@@ -1359,7 +1374,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **쿠키 이름이 `fw_<token>` 이다.** 업체가 두 조사를 병행하면 한 브라우저에 세션이 여럿
     서므로 이름이 고정이면 나중 조사가 앞선 조사를 덮는다. path 는 `/` 다 — 대리 응답이
     `/survey/...` 로 나간다.
-  - **화면 정의는 `/admin` 과 한 벌이다.** `/fw/<token>/operations/*` 가 같은 본문을 다른
+  - **화면 정의는 내부 콘솔과 한 벌이다.** `/fw/<token>/operations/*` 가 같은 본문을 다른
     접두·capability·파티션으로 렌더한다(`src/app/_operations/` + `features/operations`).
     ADR 의 「화면을 따로 짜면 두 벌이 되어 한쪽만 고쳐진다」가 라우트가 둘이어도 지켜진다.
   - **외주임을 알리는 배지·배너가 없다.** 대리 응답도 응답자와 글자 하나 다르지 않고, 그래서
@@ -1508,7 +1523,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 
 - **설문 삭제가 등록하는 후보는 사실상 전부 '보존됨' 으로 닫힌다**(티켓 17). soft delete 라
   소멸하는 행이 없어 참조 재확인이 언제나 히트하기 때문이다. 등록 자체는 관행으로 남겼으므로
-  `/admin/file-cleanup` 대기 큐에 「지워지지 않을 후보」가 쌓이는 것이 정상이다 — 큐의 길이를
+  `/file-cleanup` 대기 큐에 「지워지지 않을 후보」가 쌓이는 것이 정상이다 — 큐의 길이를
   「지워질 파일 수」로 읽지 말 것.
 - **참조 표면(`REFERENCE_SURFACE`)의 `surveys`·`questions` 에는 deletedAt 술어를 달지 말 것**
   (티켓 17). 설문 삭제가 soft delete 라 그 행들은 살아남고, 살아남은 행이 키의 참조를 계속
@@ -1517,7 +1532,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
   일관성을 이유로 같은 줄을 달기 쉬운데, 달면 삭제 7일 뒤 집행자가 파일을 지우고 그 뒤의
   복구는 이미지·첨부가 빠진 설문을 되살린다. `reference-surface.test.ts` 가 못 박는다.
 
-관리 UI는 `/admin/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
+관리 UI는 `/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
 
 > **JS 로 R2 객체를 읽는 표면은 버킷 CORS 가 필요하다.** 기존 사용처는 전부 `<img>`·메일 HTML 이라
 > CORS 없이 동작했고, 그래서 버킷에 정책이 없어도 아무도 몰랐다. 조사표 뷰어(pdf.js)가 `fetch` 로

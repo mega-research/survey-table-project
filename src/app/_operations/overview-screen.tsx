@@ -23,7 +23,7 @@ import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 /**
- * 응답 현황 화면의 본문 — `/admin` 과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
+ * 응답 현황 화면의 본문 — 내부 콘솔(`app/(internal)`)과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
  * (ADR-0026, 티켓 06·07).
  *
  * ## 왜 app 층에 사는가

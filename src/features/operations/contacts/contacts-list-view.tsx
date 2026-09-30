@@ -14,7 +14,7 @@ import { ContactsFilterBar } from './contacts-filter-bar';
 import { ContactsPageClient } from './contacts-page-client';
 
 /**
- * 조사 대상 목록 화면 — `/admin` 과 외주 실사 링크 트리가 함께 쓰는 **한 벌** (ADR-0026, 티켓 06).
+ * 조사 대상 목록 화면 — 내부 콘솔과 외주 실사 링크 트리가 함께 쓰는 **한 벌** (ADR-0026, 티켓 06).
  *
  * ADR 의 「화면을 따로 짜면 두 벌이 되어 한쪽만 고쳐진다」가 라우트가 둘이어도 지켜지는
  * 자리다. 트리마다 다른 것은 셋뿐이고 전부 props 로 들어온다.

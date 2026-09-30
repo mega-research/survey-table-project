@@ -24,7 +24,7 @@ export interface UnsubscribeResult {
  */
 function revalidateCampaignsForSurvey(surveyId: string): void {
   revalidatePath(
-    `/admin/surveys/${surveyId}/operations/mail/campaigns`,
+    `/surveys/${surveyId}/operations/mail/campaigns`,
     'layout',
   );
 }

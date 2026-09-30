@@ -48,6 +48,15 @@ const nextConfig: NextConfig = {
     return securityHeaders();
   },
 
+  // 옛 `/admin` 접두를 걷은 뒤(라우트 그룹 `app/(internal)/`) 남은 북마크·메일 본문의 링크를
+  // 새 주소로 넘긴다. **rewrite 가 아니라 redirect** 인 것이 요점이다 — rewrite 는 두 주소를
+  // 영구히 살려 두므로 「접두를 걷었다」가 거짓이 되고, 콘솔 안의 상대 링크가 옛 주소로
+  // 되돌아가는 트리도 함께 남는다. permanent(308)는 브라우저가 캐시하므로 되돌리기 어렵지만,
+  // 되돌릴 계획이 없는 이전이라 그것이 맞는 값이다.
+  async redirects() {
+    return [{ source: '/admin/:path*', destination: '/:path*', permanent: true }];
+  },
+
   // 2. 타입스크립트 에러 확인 (빌드 시 타입 검증)
   typescript: {
     ignoreBuildErrors: false,
@@ -60,7 +69,7 @@ const nextConfig: NextConfig = {
   // 잡으면 @img+sharp-linux-x64 스토어 안의 심링크 디렉토리를 통과한 경로까지 트레이스에
   // 들어가 Vercel 패키징이 "invalid deployment package(symlinked directories)" 로 죽는다.
   // 런타임 dlopen 은 sharp-linux-x64 스토어의 형제 심링크(RPATH $ORIGIN/../..) 를 타고
-  // 이 실제 디렉토리로 도달한다. sharp 가 /api/rpc(mail 서비스)와 /admin RSC 페이지에도
+  // 이 실제 디렉토리로 도달한다. sharp 가 /api/rpc(mail 서비스)와 내부 콘솔 RSC 페이지에도
   // 번들되므로 키는 '/**'. sharp 수정 릴리스로 재현이 사라지면 이 블록은 제거할 것.
   outputFileTracingIncludes: {
     '/**': [

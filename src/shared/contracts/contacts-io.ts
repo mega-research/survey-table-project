@@ -354,7 +354,7 @@ export type SavePriorAnswerImportConfigInput = z.infer<typeof SavePriorAnswerImp
 /**
  * 조사 대상 목록 한 페이지를 그리는 데 필요한 것 전부 (ADR-0026, 티켓 06).
  *
- * `/admin` 과 외주 실사 링크 트리(`/fw`)가 **같은 화면 정의**를 쓴다. 조립은 read-model
+ * 내부 콘솔과 외주 실사 링크 트리(`/fw`)가 **같은 화면 정의**를 쓴다. 조립은 read-model
  * (`server/read-models/contacts-list-page`)이 하고 렌더는 UI
  * (`features/operations/contacts/contacts-list-view`)가 하는데, 둘은 서로를 import 할 수
  * 없으므로(서버↔UI 경계) 그 사이의 모양이 여기 산다 — 이 파일이 원래 하는 일이다.

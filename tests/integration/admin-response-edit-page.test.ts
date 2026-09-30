@@ -57,7 +57,7 @@ vi.mock('@/server/contacts/services/contact-prior-answers', () => ({
   lookupPriorAnswersByContactTarget: vi.fn(async () => null),
 }));
 vi.mock(
-  '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/admin-response-editor',
+  '@/app/(internal)/surveys/[id]/operations/profiles/[responseId]/edit/admin-response-editor',
   () => ({
     AdminResponseEditor: () => null,
   }),
@@ -65,7 +65,7 @@ vi.mock(
 
 import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
 
-import AdminResponseEditPage from '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/page';
+import AdminResponseEditPage from '@/app/(internal)/surveys/[id]/operations/profiles/[responseId]/edit/page';
 
 describe('AdminResponseEditPage contact scope', () => {
   // AdminResponseEditor 로 전달되는 props 전체를 찾는다 — initialContactAttrs 는

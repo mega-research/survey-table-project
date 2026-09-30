@@ -7,7 +7,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailTemplate } from '@/db/schema/mail';
 
 import { DeleteTemplateButton } from './delete-template-button';
-import { adminOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;
@@ -24,7 +24,7 @@ export function MailTemplateList({ surveyId, templates }: Props) {
           </div>
           <p className="text-sm text-gray-500">아직 등록된 메일 템플릿이 없습니다.</p>
           <Link
-            href={adminOperationsPaths(surveyId).mailTemplateNew}
+            href={internalOperationsPaths(surveyId).mailTemplateNew}
             className="mt-3 text-sm font-medium text-blue-500 hover:text-blue-600"
           >
             첫 템플릿 만들기 →
@@ -47,7 +47,7 @@ export function MailTemplateList({ surveyId, templates }: Props) {
         </thead>
         <tbody>
           {templates.map((t) => {
-            const editHref = adminOperationsPaths(surveyId).mailTemplateEdit(t.id);
+            const editHref = internalOperationsPaths(surveyId).mailTemplateEdit(t.id);
             return (
               <tr
                 key={t.id}

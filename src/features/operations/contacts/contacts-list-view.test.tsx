@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => '/admin/surveys/sv-1/operations/contacts',
+  usePathname: () => '/surveys/sv-1/operations/contacts',
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -50,7 +50,7 @@ function renderView(capabilities: readonly SurveyCapability[], pageData = data()
   return render(
     <ContactsListView
       surveyId="sv-1"
-      basePath="/admin/surveys/sv-1/operations"
+      basePath="/surveys/sv-1/operations"
       capabilities={new Set(capabilities)}
       canOpenDetail
       data={pageData}

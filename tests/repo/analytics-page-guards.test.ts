@@ -19,7 +19,7 @@ const REPO_ROOT = join(import.meta.dirname, '../..');
 
 const ANALYTICS_PAGES = [
   'src/app/analytics/[surveyId]/page.tsx',
-  'src/app/admin/surveys/[id]/analytics/page.tsx',
+  'src/app/(internal)/surveys/[id]/analytics/page.tsx',
 ];
 
 /** 원문 응답 행을 읽는 read model — 이걸 부르면 응답 열람 권한이 필요하다. */

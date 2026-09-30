@@ -53,13 +53,13 @@ export default async function AnalyticsListPage() {
               <h1 className="text-xl font-semibold text-gray-900">설문 분석</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/admin/surveys">
+              <Link href="/surveys">
                 <Button variant="outline" size="sm">
                   <FileText className="mr-2 h-4 w-4" />
                   설문 관리
                 </Button>
               </Link>
-              <Link href="/admin/surveys/create">
+              <Link href="/surveys/create">
                 <Button size="sm">
                   <Plus className="mr-2 h-4 w-4" />새 설문
                 </Button>
@@ -143,7 +143,7 @@ export default async function AnalyticsListPage() {
             <BarChart3 className="mx-auto mb-4 h-16 w-16 text-gray-300" />
             <h2 className="mb-2 text-xl font-semibold text-gray-900">아직 설문이 없습니다</h2>
             <p className="mb-6 text-gray-500">새 설문을 만들어 응답을 수집하고 분석해보세요.</p>
-            <Link href="/admin/surveys/create">
+            <Link href="/surveys/create">
               <Button>
                 <Plus className="mr-2 h-4 w-4" />첫 설문 만들기
               </Button>

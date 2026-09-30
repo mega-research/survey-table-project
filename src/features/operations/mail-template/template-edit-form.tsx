@@ -19,7 +19,7 @@ import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-
 import { MetaFields, type MetaFieldValues } from './meta-fields';
 import { MailPreviewDialog } from './preview-dialog';
 import type { VariableDef } from '@/shared/contracts/template-variables';
-import { adminOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;
@@ -145,7 +145,7 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
           // 신규 생성 → 새 id 의 edit URL 로 자리 잡음 (full page reload 없이 URL 만 교체).
           // 다음 저장은 update 경로로 가도록 함.
           router.replace(
-            adminOperationsPaths(surveyId).mailTemplateEdit(result.id),
+            internalOperationsPaths(surveyId).mailTemplateEdit(result.id),
           );
         }
       } catch (err) {

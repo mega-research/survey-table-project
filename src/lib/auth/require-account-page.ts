@@ -22,7 +22,7 @@ export async function requireAccountTypePage(expected: UserType): Promise<AuthUs
   try {
     user = await requireActiveAccount();
   } catch {
-    redirect(`/admin/login?redirect=${encodeURIComponent(accountHomePath(expected))}`);
+    redirect(`/login?redirect=${encodeURIComponent(accountHomePath(expected))}`);
   }
   if (user.userType !== expected) {
     redirect(accountHomePath(user.userType));

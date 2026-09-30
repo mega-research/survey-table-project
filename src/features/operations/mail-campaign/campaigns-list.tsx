@@ -7,7 +7,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
 import type { CampaignRow } from '@/shared/contracts/mail-io';
-import { adminOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;
@@ -41,7 +41,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
           </div>
           <p className="text-sm text-gray-500">아직 등록된 발송 회차가 없습니다.</p>
           <Link
-            href={adminOperationsPaths(surveyId).mailCampaignNew}
+            href={internalOperationsPaths(surveyId).mailCampaignNew}
             className="mt-3 text-sm font-medium text-blue-500 hover:text-blue-600"
           >
             첫 단체 메일 만들기 →
@@ -84,7 +84,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               const errors = r.bouncedCount + r.failedCount + r.complainedCount;
               const inflight = r.queuedCount + r.sentCount;
               const status = STATUS_LABEL[r.status];
-              const detailHref = adminOperationsPaths(surveyId).mailCampaign(r.id);
+              const detailHref = internalOperationsPaths(surveyId).mailCampaign(r.id);
               return (
                 <tr
                   key={r.id}
@@ -210,7 +210,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
           </PageLink>
           <PagerJump
             totalPages={totalPages}
-            hrefTemplate={`${adminOperationsPaths(surveyId).mailCampaigns}?page=__PAGE__`}
+            hrefTemplate={`${internalOperationsPaths(surveyId).mailCampaigns}?page=__PAGE__`}
           />
         </div>
       ) : null}
@@ -236,7 +236,7 @@ function PageLink({
   }
   return (
     <Link
-      href={`${adminOperationsPaths(surveyId).mailCampaigns}?page=${page}`}
+      href={`${internalOperationsPaths(surveyId).mailCampaigns}?page=${page}`}
       className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
     >
       {children}

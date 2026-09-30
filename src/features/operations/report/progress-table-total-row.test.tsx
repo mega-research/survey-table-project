@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => '/admin/surveys/sv-1/operations/report',
+  usePathname: () => '/surveys/sv-1/operations/report',
   useSearchParams: () => new URLSearchParams(),
 }));
 

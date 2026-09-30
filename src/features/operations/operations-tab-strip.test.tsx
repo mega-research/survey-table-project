@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/admin/surveys/sv-1/operations/overview',
+  usePathname: () => '/surveys/sv-1/operations/overview',
 }));
 
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
@@ -35,7 +35,7 @@ interface StripOptions {
 function renderStrip(capabilities: readonly SurveyCapability[], options: StripOptions = {}) {
   return render(
     <OperationsTabStrip
-      basePath="/admin/surveys/sv-1/operations"
+      basePath="/surveys/sv-1/operations"
       capabilities={new Set(capabilities)}
       internalShell={options.internalShell ?? true}
       hasSurveyDocument={options.hasSurveyDocument ?? false}

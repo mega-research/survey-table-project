@@ -24,7 +24,7 @@ export function GroupViewHeader({
   return (
     <div className="flex flex-col gap-1">
       <p className="text-[13px] text-[#6E6E73]">
-        <Link href="/admin/surveys" className="hover:text-[#1C1C1E] hover:underline">
+        <Link href="/surveys" className="hover:text-[#1C1C1E] hover:underline">
           설문 목록
         </Link>
         <span className="px-1">/</span>

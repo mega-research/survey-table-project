@@ -21,7 +21,7 @@ import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 /**
- * 조사 대상 단건 상세의 본문 — `/admin` 과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
+ * 조사 대상 단건 상세의 본문 — 내부 콘솔(`app/(internal)`)과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
  * (ADR-0026, 티켓 08).
  *
  * 형제 `overview-screen` 의 주석에 이 폴더의 규칙이 있다: **가로질러 읽는 화면만 여기 온다.**

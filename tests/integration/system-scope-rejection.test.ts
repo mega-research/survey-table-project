@@ -183,7 +183,7 @@ describe('② 쿠키: system 이 남아 있어도 시스템 범위를 얻지 못
     // 모킹만 살아남아 "쿠키 축을 검증했다" 는 말이 거짓이 된다.
     expect(WORK_SCOPE_COOKIE).toBe('work_scope');
     // 두 파일이 갈리면 한쪽만 500 을 내므로 여기서 함께 묶는다.
-    for (const rel of ['src/app/admin/layout.tsx', 'src/app/analytics/page.tsx']) {
+    for (const rel of ['src/app/(internal)/layout.tsx', 'src/app/analytics/page.tsx']) {
       const source = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
       expect(source, `${rel} 이 쿠키 범위를 해석한다`).toContain('WORK_SCOPE_COOKIE');
       expect(source, `${rel} 에 접기 처리가 없다`).toMatch(/catch/);

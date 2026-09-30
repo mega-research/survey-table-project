@@ -86,7 +86,7 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
     return (
       <CenterMessage>
         이 설문은 더 이상 배치 대기 상태가 아닙니다.
-        <Link href="/admin/reassignment" className="font-semibold text-[#2E4FCE]">
+        <Link href="/reassignment" className="font-semibold text-[#2E4FCE]">
           재배치 센터로
         </Link>
       </CenterMessage>
@@ -106,7 +106,7 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
         ownerUserId: fields.ownerUserId,
         visibility: fields.visibility,
       });
-      router.push('/admin/reassignment');
+      router.push('/reassignment');
     } catch (err) {
       setError(getErrorMessage(err, '설문을 배치하지 못했습니다.'));
     }
@@ -116,7 +116,7 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
       <div className="mx-auto max-w-[820px] space-y-[18px]">
         <nav className="text-[13px] text-[#6E6E73]">
-          <Link href="/admin/reassignment" className="hover:text-[#1C1C1E]">
+          <Link href="/reassignment" className="hover:text-[#1C1C1E]">
             재배치 센터
           </Link>
           <span className="px-1.5">/</span>
@@ -185,7 +185,7 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
 
           <div className="flex items-center justify-end gap-2">
             <Link
-              href="/admin/reassignment"
+              href="/reassignment"
               className="rounded-lg border border-[#E5E5EA] bg-white px-3.5 py-2 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
             >
               취소
