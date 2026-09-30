@@ -325,3 +325,38 @@ describe('ChoiceOptCellTab — 단독 선택 범위', () => {
     expect(screen.queryByRole('button', { name: '표 전체' })).not.toBeInTheDocument();
   });
 });
+
+describe('ChoiceOptCellTab — 모바일 그룹 카드 원본 한 줄 토글', () => {
+  it('그룹에 속한 셀에서 보이고 기본은 꺼져 있다. 켜면 그 그룹에만 mobileOriginalLine 이 붙는다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({ choiceGroups: [rad1, rad2], choiceGroupId: 'g2', onChoiceGroupsChange })}
+      />,
+    );
+    const toggle = screen.getByRole('switch', { name: /원본 한 줄로 보기/ });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, { ...rad2, mobileOriginalLine: true }]);
+  });
+
+  it('끄면 필드를 지운다 — 켜 둔 적 없는 그룹과 같은 모양으로 돌아간다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [rad1, { ...rad2, mobileOriginalLine: true }],
+          choiceGroupId: 'g2',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    await userEvent.click(screen.getByRole('switch', { name: /원본 한 줄로 보기/ }));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([rad1, rad2]);
+  });
+
+  it('그룹이 없는 셀에서는 보이지 않는다', () => {
+    render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1] })} />);
+    expect(screen.queryByRole('switch', { name: /원본 한 줄로 보기/ })).not.toBeInTheDocument();
+  });
+});

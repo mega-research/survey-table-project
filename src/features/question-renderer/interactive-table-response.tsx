@@ -1260,6 +1260,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   questionId={questionId}
                   displayRows={displayRows}
                   visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
                   choiceGroups={choiceGroups ?? []}
                   hideColumnLabels={hideColumnLabels}
                   value={value}

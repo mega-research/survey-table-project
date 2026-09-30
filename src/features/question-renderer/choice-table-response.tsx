@@ -49,6 +49,7 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
+import { projectChoiceGroupOriginalLine } from './utils/choice-group-original-line';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
@@ -56,6 +57,10 @@ import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
+import {
+  ChoiceGroupOriginalLineView,
+  OriginalLineOptionFrame,
+} from './choice-group-original-line-view';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
@@ -858,6 +863,17 @@ export function ChoiceTableResponse({
                         // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
                         // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
                         const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
+                        // 그룹 옵션을 켰으면 세로 타일 대신 원본 한 줄. 이 표의 상세기재는 카드 밖
+                        // 스택(rowTextStack)에 그려지므로 상세기재 보기가 있어도 한 줄로 둔다.
+                        const originalLine = projectChoiceGroupOriginalLine({
+                          group,
+                          columns: rowWiseLayout.columns,
+                          headerGrid: rowWiseLayout.headerGrid,
+                          hideColumnLabels: question.hideColumnLabels ?? false,
+                          rowCells: row.cells,
+                          groupCells: cells,
+                          rejectTextInput: false,
+                        });
                         return (
                           <div
                             key={groupId ?? '__none__'}
@@ -877,31 +893,71 @@ export function ChoiceTableResponse({
                                 {sectionLabel}
                               </p>
                             )}
-                            {/* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
-                                순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */}
-                            <div className="flex flex-col gap-2">
-                              {cells.map((choiceCell) => {
-                                const { checked, disabled, option } =
-                                  getChoiceCellState(choiceCell);
-                                const tileLabel = option?.label ?? '';
-                                return (
-                                  <label
-                                    key={choiceCell.id}
-                                    data-cell-id={choiceCell.id}
-                                    className={cn(
-                                      'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
-                                      checked
-                                        ? 'border-blue-300 bg-blue-50 text-blue-900'
-                                        : 'border-gray-200 bg-white text-gray-800',
-                                      disabled && 'cursor-default opacity-50',
-                                    )}
-                                  >
-                                    {renderMobileChoiceInput(choiceCell, tileLabel || cardLabel)}
-                                    {tileLabel && <span className="leading-snug">{tileLabel}</span>}
-                                  </label>
-                                );
-                              })}
-                            </div>
+                            {originalLine ? (
+                              <ChoiceGroupOriginalLineView
+                                line={originalLine}
+                                testId={`choice-group-original-line-${groupId}`}
+                                renderOption={(choiceCell) => {
+                                  const { checked, disabled, option } =
+                                    getChoiceCellState(choiceCell);
+                                  const content = substituteTokens(
+                                    (choiceCell.content ?? '').trim(),
+                                    attrs,
+                                    quotes,
+                                  );
+                                  return (
+                                    <OriginalLineOptionFrame
+                                      checked={checked}
+                                      disabled={disabled}
+                                      control={renderMobileChoiceInput(
+                                        choiceCell,
+                                        option?.label || content || cardLabel,
+                                      )}
+                                    >
+                                      {content && (
+                                        <span
+                                          className={getCellTextClassName(choiceCell)}
+                                          style={getCellTextStyle(choiceCell)}
+                                        >
+                                          <CellText
+                                            text={content}
+                                            html={resolveCellTextHtml(choiceCell, attrs, quotes)}
+                                          />
+                                        </span>
+                                      )}
+                                    </OriginalLineOptionFrame>
+                                  );
+                                }}
+                              />
+                            ) : (
+                              /* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
+                                순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */
+                              <div className="flex flex-col gap-2">
+                                {cells.map((choiceCell) => {
+                                  const { checked, disabled, option } =
+                                    getChoiceCellState(choiceCell);
+                                  const tileLabel = option?.label ?? '';
+                                  return (
+                                    <label
+                                      key={choiceCell.id}
+                                      data-cell-id={choiceCell.id}
+                                      className={cn(
+                                        'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+                                        checked
+                                          ? 'border-blue-300 bg-blue-50 text-blue-900'
+                                          : 'border-gray-200 bg-white text-gray-800',
+                                        disabled && 'cursor-default opacity-50',
+                                      )}
+                                    >
+                                      {renderMobileChoiceInput(choiceCell, tileLabel || cardLabel)}
+                                      {tileLabel && (
+                                        <span className="leading-snug">{tileLabel}</span>
+                                      )}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -916,7 +972,7 @@ export function ChoiceTableResponse({
                         ).length;
                         const axisLabel =
                           sameGroupCount > 1
-                            ? option?.label ?? ''
+                            ? (option?.label ?? '')
                             : resolveChoiceAxisLabel(row, choiceCell);
                         // 「다음」을 누른 뒤 답하지 않은 필수 그룹의 타일은 붉게 — 데스크톱 표의 보기
                         // 그룹 외곽선·그룹 카드 섹션과 같은 판정(unfilledGroupCellIds).

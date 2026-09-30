@@ -710,6 +710,10 @@ export interface ChoiceGroup {
   required?: boolean;
   // 이 그룹 미응답 시 안내 문구. 없으면 질문 requiredMessage → 기본 문구 폴백.
   requiredMessage?: string;
+  // 모바일 「행 단위 그룹 카드」에서 이 그룹을 세로 타일 대신 원본 한 줄(잘라 낸 헤더 + 보기 셀)로
+  // 그린다. 11점 척도처럼 보기가 많은 그룹용 — 기본 꺼짐(기존 타일 유지). radio/checkbox 그룹 전용.
+  // 판정·배치는 features/question-renderer/utils/choice-group-original-line.
+  mobileOriginalLine?: boolean;
 }
 
 export interface TableColumn {

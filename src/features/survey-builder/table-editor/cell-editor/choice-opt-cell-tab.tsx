@@ -252,6 +252,36 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
+      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹만 세로 타일 대신 원본 한 줄로 — 기본 꺼짐 */}
+      {currentGroup && currentGroup.type !== 'ranking' && (
+        <div className="space-y-1 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="choice-group-original-line" className="text-sm font-medium">
+              모바일 그룹 카드에서 원본 한 줄로 보기 ({currentGroup.groupKey})
+            </Label>
+            <Switch
+              id="choice-group-original-line"
+              checked={currentGroup.mobileOriginalLine === true}
+              onCheckedChange={(on) =>
+                onChoiceGroupsChange(
+                  choiceGroups.map((g) => {
+                    if (g.id !== choiceGroupId) return g;
+                    if (on) return { ...g, mobileOriginalLine: true };
+                    const { mobileOriginalLine: _off, ...rest } = g;
+                    return rest;
+                  }),
+                )
+              }
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            모바일 표시 방식이 「행 단위 그룹 카드」일 때만 적용됩니다. 켜면 이 그룹의 보기를 세로
+            타일 대신 표의 헤더와 함께 한 줄로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 표
+            문항에서 상세기재 보기가 있는 그룹은 입력칸 자리가 없어 타일로 둡니다.
+          </p>
+        </div>
+      )}
+
       {/* 단독 선택 보기 — 체크박스에서만 의미가 있다. 그룹이 있으면 그룹 종류, 없으면(레거시 보기
           소스 표) 문항 유형으로 판단한다. 라디오는 원래 하나만 남으니 노출하지 않는다. */}
       {(currentGroup ? currentGroup.type === 'checkbox' : parentQuestionType === 'checkbox') && (

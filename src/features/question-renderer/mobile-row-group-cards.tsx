@@ -18,20 +18,24 @@ import {
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { ChoiceGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
+import { ChoiceGroupOriginalLineView } from './choice-group-original-line-view';
 import { MobileOptionCard } from './mobile-card-shared';
+import { projectChoiceGroupOriginalLine } from './utils/choice-group-original-line';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 interface MobileRowGroupCardsProps {
   questionId: string;
   displayRows: TableRow[];
   visibleColumns: TableColumn[];
+  /** 표시 조건으로 걸러진 헤더 그리드 — 원본 한 줄(ChoiceGroup.mobileOriginalLine) 헤더의 재료 */
+  visibleHeaderGrid?: HeaderCell[][] | undefined;
   choiceGroups: ChoiceGroup[];
   hideColumnLabels: boolean;
   value?: Record<string, unknown> | undefined;
@@ -62,6 +66,7 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
   questionId,
   displayRows,
   visibleColumns,
+  visibleHeaderGrid,
   choiceGroups,
   hideColumnLabels,
   value,
@@ -149,6 +154,16 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
               // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
               // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
               const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
+              // 그룹 옵션을 켰으면 세로 타일 대신 원본 한 줄 — 상세기재 보기가 있으면 타일로 둔다
+              const originalLine = projectChoiceGroupOriginalLine({
+                group,
+                columns: visibleColumns,
+                headerGrid: visibleHeaderGrid,
+                hideColumnLabels,
+                rowCells: row.cells,
+                groupCells: cells,
+                rejectTextInput: true,
+              });
               return (
                 <div
                   key={group.id}
@@ -168,20 +183,37 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                       {sectionLabel}
                     </p>
                   )}
-                  {/* 타일은 세로 한 줄씩 — 가로로 접으면 척도 순서가 지그재그로 읽힌다 */}
-                  <div className="flex flex-col gap-2">
-                    {cells.map((cell) => (
-                      <ChoiceOptCell
-                        key={cell.id}
-                        cell={cell}
-                        questionId={questionId}
-                        group={group}
-                        value={value}
-                        onChange={onChange}
-                        variant="tile"
-                      />
-                    ))}
-                  </div>
+                  {originalLine ? (
+                    <ChoiceGroupOriginalLineView
+                      line={originalLine}
+                      testId={`choice-group-original-line-${group.id}`}
+                      renderOption={(cell) => (
+                        <ChoiceOptCell
+                          cell={cell}
+                          questionId={questionId}
+                          group={group}
+                          value={value}
+                          onChange={onChange}
+                          variant="line"
+                        />
+                      )}
+                    />
+                  ) : (
+                    // 타일은 세로 한 줄씩 — 가로로 접으면 척도 순서가 지그재그로 읽힌다
+                    <div className="flex flex-col gap-2">
+                      {cells.map((cell) => (
+                        <ChoiceOptCell
+                          key={cell.id}
+                          cell={cell}
+                          questionId={questionId}
+                          group={group}
+                          value={value}
+                          onChange={onChange}
+                          variant="tile"
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
