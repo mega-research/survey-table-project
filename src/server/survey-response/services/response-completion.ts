@@ -194,9 +194,13 @@ export async function completeResponse(
     // 컨택 attrs 는 calc 수식뿐 아니라 표시 조건 평가(숨은 문항 strip·자격미달 판정)에도
     // 쓰이므로, 하나라도 필요하면 한 번만 읽어 공유한다. **숨은 문항 strip 보다 먼저**
     // 읽어야 한다 — 그 strip 이 이 attrs 를 평가 컨텍스트로 받는다.
+    // 표 행 표시조건도 센다 — 숨은 행 strip 이 같은 attrs 로 행을 판정한다. 빠뜨리면 attrs 를
+    // 읽는 행 조건(응답 × 컨택 계수 등)이 빈 attrs 로 거짓이 되어, 응답자에게 보였던 행의 답을
+    // 제출에서 지운다.
     const hasDisplayConditions =
-      snapQuestions.some((q) => q.displayCondition) ||
-      snapshotGroups.some((g) => g.displayCondition);
+      snapQuestions.some(
+        (q) => q.displayCondition || (q.tableRowsData ?? []).some((row) => row.displayCondition),
+      ) || snapshotGroups.some((g) => g.displayCondition);
     if ((hasCalcCells || hasDisplayConditions) && gateRow.contactTargetId) {
       const [target] = await db
         .select({ attrs: contactTargets.attrs })
