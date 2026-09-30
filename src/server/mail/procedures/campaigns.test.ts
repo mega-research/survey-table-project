@@ -2,6 +2,7 @@ import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { linkActorContext } from '@tests/helpers/rpc-context';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 vi.mock('../services/campaigns', () => ({
@@ -21,6 +22,21 @@ vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: 
 import * as svc from '../services/campaigns';
 import * as singleSvc from '../services/single-send';
 import { campaigns } from './campaigns';
+
+/**
+ * 링크 세션 해석만 대역으로 둔다 — 이 파일이 묻는 것은 **주체가 어떻게 귀속으로 바뀌는가**다
+ * (쿠키의 유효성은 `fieldwork-link.realdb` 가 실 DB 로 진다). attempts.test.ts 와 같은 대역이다.
+ */
+vi.mock('@/server/fieldwork-link', () => ({
+  resolveLinkActorForSurvey: vi.fn(
+    async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
+      sessions?.length
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId } }
+        : { kind: 'no_session' as const },
+  ),
+}));
+
+const LINK_ID = 'e1000000-0000-4000-8000-00000000b002';
 
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
@@ -55,7 +71,7 @@ describe('mail.campaigns procedures', () => {
       SURVEY_ID,
       'mail.send',
     );
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -154,9 +170,9 @@ describe('mail.campaigns procedures', () => {
     expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'mail.send',
+      'mail.sendSingle',
     );
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -192,7 +208,7 @@ describe('mail.campaigns procedures', () => {
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, { accountUserId: 'guest-1', fieldworkLinkId: null }, true);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -213,7 +229,7 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, { accountUserId: 'guest-1', fieldworkLinkId: null }, true);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -246,5 +262,33 @@ describe('mail.campaigns procedures', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(singleSvc.sendSingleCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe('mail.campaigns — 외주 실사 링크 (ADR-0027)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('단건 발송은 mail.sendSingle 을 묻고 링크 칸에 귀속된다 — 실 파티션으로 위임된다', async () => {
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: linkActorContext({ linkId: LINK_ID, surveyId: SURVEY_ID }) },
+    );
+    const input = { surveyId: SURVEY_ID, contactTargetId: CONTACT_ID, mailTemplateId: TEMPLATE_ID };
+    await client.campaigns.sendSingle(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID },
+      SURVEY_ID,
+      'mail.sendSingle',
+    );
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(
+      input,
+      { accountUserId: null, fieldworkLinkId: LINK_ID },
+      true,
+    );
   });
 });

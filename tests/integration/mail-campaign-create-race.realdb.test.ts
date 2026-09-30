@@ -543,7 +543,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       try {
         const firstCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-a'),
-          randomUUID(),
+          { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
         ));
         creations.push(firstCreation);
@@ -552,7 +552,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
 
         const secondCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-b'),
-          randomUUID(),
+          { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
         ));
         creations.push(secondCreation);
@@ -591,7 +591,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           `, '실제 모드 전환 query', HARNESS_QUERY_BUDGET_MS);
           const realCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.realTargetId, 'real-a'),
-            randomUUID(),
+            { accountUserId: randomUUID(), fieldworkLinkId: null },
             false,
           ));
           await withTimeout(
@@ -641,7 +641,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       try {
         creation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'locked-test'),
-          randomUUID(),
+          { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
         ));
         operations.push(creation);
@@ -706,7 +706,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
 
           const staleCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.testTargetId, 'stale-test'),
-            randomUUID(),
+            { accountUserId: randomUUID(), fieldworkLinkId: null },
             false,
           ));
           await withTimeout(

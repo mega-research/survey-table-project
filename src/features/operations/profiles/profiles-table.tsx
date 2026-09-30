@@ -68,8 +68,13 @@ interface Props {
   view: ProfilesView;
   /** 설문에 컨택 타겟이 존재하는지 — false 면 시스템ID 열을 만들지 않는다 (엑셀 내보내기와 동일 규칙) */
   hasContacts: boolean;
-  /** 게스트 세션 — 행 액션에서 admin 전용 메뉴(삭제·초기화·복원)를 숨긴다. */
-  isGuest: boolean;
+  /** 이 콘솔의 주소 접두 — 행의 「수정」이 여는 응답 수정 화면이 이 아래에 있다. */
+  basePath: string;
+  /**
+   * 응답 삭제·초기화·복원을 그릴 것인가 (`responses.manage`). 외주 링크(ADR-0027)는 수정만
+   * 갖는다 — 그 셋은 서버가 authed 베이스와 이 칸으로 이중으로 막는다.
+   */
+  canManageResponses: boolean;
   /** 표시 컬럼 스킴 — visibleProfileColumns 결과 (order 순, hidden 제외). */
   columnScheme: ProfileColumnDef[];
   /** contactTargetId → columnKey → 복호화 평문. 표시 스킴의 pii.* 키만 채워진다. */
@@ -123,7 +128,8 @@ export function ProfilesTable({
   surveyId,
   view,
   hasContacts,
-  isGuest,
+  basePath,
+  canManageResponses,
   columnScheme,
   piiByTarget,
 }: Props) {
@@ -296,14 +302,15 @@ export function ProfilesTable({
             responseId={row.original.id}
             idx={row.original.idx}
             view={view}
-            isGuest={isGuest}
+            basePath={basePath}
+            canManage={canManageResponses}
             status={row.original.status}
           />
         ),
         meta: meta('center', false),
       },
     ];
-  }, [surveyId, view, hasContacts, isGuest, columnScheme, piiByTarget]);
+  }, [surveyId, view, hasContacts, basePath, canManageResponses, columnScheme, piiByTarget]);
 
   // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
   // eslint-disable-next-line react-hooks/incompatible-library

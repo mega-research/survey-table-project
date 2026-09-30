@@ -209,7 +209,11 @@ const SPEC_ROWS: readonly Row[] = [
     cells: cells(O, O, O, X, X, X, X, X, X, X) },
   { label: 'operations.view', capabilities: ['operations.view'],
     cells: cells(O, O, O, O, O, O, O, O, O, O) },
-  { label: 'responses.view (상세·수정)', capabilities: ['responses.view'],
+  // 외주 링크 칸은 ADR-0027 이 열었다 — 전화로 받은 답을 고치는 것이 외주 업무다.
+  { label: 'responses.view (목록·상세·수정)', capabilities: ['responses.view'],
+    cells: cells(O, O, O, O, X, X, X, X, X, O) },
+  // 수정과 가른 행이다(ADR-0027) — 외주 링크가 답을 고치되 응답을 지우지는 못하게.
+  { label: 'responses.manage (삭제·복원·초기화·재응답 허용)', capabilities: ['responses.manage'],
     cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: 'contacts.view 원본', capabilities: ['contacts.view'],
     cells: cells(O, O, O, O, X, X, X, O, O, O) },
@@ -219,6 +223,9 @@ const SPEC_ROWS: readonly Row[] = [
     cells: cells(O, O, O, O, X, X, X, O, X, O) },
   { label: 'mail.view / mail.send', capabilities: ['mail.view', 'mail.send'],
     cells: cells(O, O, O, O, X, X, X, X, X, X) },
+  // 메일 탭과 가른 행이다(ADR-0027) — 외주 링크는 조사 대상 한 명에게만 보낸다.
+  { label: 'mail.sendSingle (조사 대상 단건 발송)', capabilities: ['mail.sendSingle'],
+    cells: cells(O, O, O, O, X, X, X, X, X, O) },
   { label: 'export.download', capabilities: ['export.download'],
     cells: cells(O, O, O, O, X, X, X, X, X, X) },
   { label: 'analytics.view', capabilities: ['analytics.view'],
@@ -384,7 +391,7 @@ describe('스펙 §8 표 — 전 열 차단', () => {
 describe('외주 링크 열 — 설문 일치와 중단이 자격의 전부다', () => {
   const linkSubject = COLUMNS['외주 링크'].subject;
 
-  it('자기 설문에서 표에 적힌 넷을 갖는다', () => {
+  it('자기 설문에서 표에 적힌 여섯을 갖는다', () => {
     expect([...resolveSurveyCapabilities(linkSubject, survey())].sort()).toEqual(
       tableColumn('외주 링크'),
     );

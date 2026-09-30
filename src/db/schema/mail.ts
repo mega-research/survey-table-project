@@ -85,6 +85,10 @@ export const mailCampaigns = pgTable(
     filterSnapshot: jsonb('filter_snapshot').notNull().default({}).$type<CampaignFilterSnapshot>(),
 
     createdBy: uuid('created_by'),
+    // 이 단건 메일을 보낸 **외주 실사 링크** — 위 계정 칸과 배타다 (0128, ADR-0027).
+    // 계정이 없는 주체라 created_by 에 채울 값이 없다. 저장만 하고 화면에는 표시하지 않는다.
+    // FK 와 배타 CHECK 는 0128 마이그레이션이 만든다.
+    fieldworkLinkId: uuid('fieldwork_link_id'),
     status: text('status').$type<MailCampaignStatus>().notNull().default('draft'),
 
     // 카운터 캐시

@@ -10,12 +10,17 @@
  */
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-/** 외주 실사 링크 — 열람·현황·조사 대상·결과 기록 넷 (ADR-0026). */
+/**
+ * 외주 실사 링크 — 열람·현황·조사 대상·결과 기록 넷(ADR-0026)에 응답 목록·상세·수정과
+ * 조사 대상 단건 메일 둘(ADR-0027). 응답 관리(`responses.manage`)와 메일 탭은 없다.
+ */
 export const LINK_CAPABILITIES: readonly SurveyCapability[] = [
   'survey.view',
   'operations.view',
+  'responses.view',
   'contacts.view',
   'contacts.writeAttempts',
+  'mail.sendSingle',
 ];
 
 /**
@@ -34,11 +39,13 @@ export const FULL_PARTICIPANT_CAPABILITIES: readonly SurveyCapability[] = [
   'survey.invite',
   'operations.view',
   'responses.view',
+  'responses.manage',
   'contacts.view',
   'contacts.manage',
   'contacts.writeAttempts',
   'mail.view',
   'mail.send',
+  'mail.sendSingle',
   'analytics.view',
   'export.download',
 ];

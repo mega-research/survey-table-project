@@ -12,6 +12,7 @@ import {
 
 import type { CreateCampaignResult, SendSingleCampaignInput } from '../domain/mail-campaign';
 import { createCampaign } from './campaigns';
+import type { ActorAttribution } from '@/server/survey-access';
 import { getMailTemplate } from './templates';
 
 /**
@@ -22,7 +23,7 @@ import { getMailTemplate } from './templates';
  */
 export async function sendSingleCampaign(
   input: SendSingleCampaignInput,
-  userId: string,
+  creator: ActorAttribution,
   isExternal: boolean,
 ): Promise<CreateCampaignResult> {
   const [contact] = await db
@@ -91,7 +92,7 @@ export async function sendSingleCampaign(
       title: `단건: ${template.name}`,
       contactTargetIds: [input.contactTargetId],
     },
-    userId,
+    creator,
     isExternal,
     { kind: 'single' },
   );

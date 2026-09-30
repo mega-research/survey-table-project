@@ -352,13 +352,25 @@ export const surveyCapabilityValues = [
   'survey.manageAccess',
   'survey.transferOwnership',
   'operations.view',
+  /** 응답 내역 목록·응답 상세·응답 **수정** — 외주 실사 링크도 갖는다(ADR-0027). */
   'responses.view',
+  /**
+   * 응답 삭제·복원·초기화·재응답 허용 — 되돌리기 어렵거나 응답자 흐름을 다시 여는 관리 4종.
+   * 수정과 가른 이유는 외주 링크가 답을 고치되 응답을 지우지는 못해야 해서다(ADR-0027).
+   */
+  'responses.manage',
   'contacts.view',
   'contacts.manage',
   /** 결과코드·메모 쓰기 — 실사원도 갖는 유일한 쓰기라 contacts.manage 와 가른다. */
   'contacts.writeAttempts',
   'mail.view',
+  /** 단체 메일·템플릿 작성·테스트 발송 — 메일 탭 전체의 쓰기. */
   'mail.send',
+  /**
+   * 조사 대상 **한 명**에게 연구원이 만든 템플릿으로 보내는 단건 발송 + 그 사람의 발송 이력.
+   * `mail.send` 와 가른 이유는 외주 링크가 단건만 보내고 메일 탭은 못 열어야 해서다(ADR-0027).
+   */
+  'mail.sendSingle',
   'analytics.view',
   'export.download',
   'surveyGroup.manage',

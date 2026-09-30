@@ -55,6 +55,14 @@ interface Props {
    * 초대 코드의 노출로 옮긴다.
    */
   canProxyRespond: boolean;
+  /**
+   * 편집 이력의 **내부 담당자 이메일**을 걷을 것인가 — 외주 실사 링크 트리가 켠다(ADR-0027).
+   *
+   * 외주는 응답을 고칠 수 있어 편집 이력을 보지만, 그 행에 실린 연구원 이메일은 외주의 일과
+   * 무관한 내부 명단이다. capability 로 물을 수 없다 — 이력을 볼 자격과 명단을 볼 자격이 같지
+   * 않다. 걷은 행은 화면이 「관리자」로, 외주가 고친 행은 「외주」로 읽는다.
+   */
+  hideStaffEmails?: boolean;
 }
 
 export async function ContactDetailScreen({
@@ -64,6 +72,7 @@ export async function ContactDetailScreen({
   capabilities,
   scope,
   canProxyRespond,
+  hideStaffEmails = false,
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
@@ -84,14 +93,18 @@ export async function ContactDetailScreen({
     ? isReeditableResponseStatus(editable.status)
     : detail.contact.responseId != null;
 
-  const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
+  const [scheme, resultCodes, mailHistory, rawEditLogs, mailTemplates] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
-    permissions.manageResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
+    permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
     permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
   ]);
   if (!scheme) notFound();
+  // 화면에서 감추지 않고 payload 에서 뺀다 — 감추기만 하면 이메일이 RSC payload 로 나간다.
+  const editLogs = hideStaffEmails
+    ? rawEditLogs.map((row) => ({ ...row, editorEmail: null }))
+    : rawEditLogs;
 
   const groupLabel = detail.contact.groupValue ?? '미지정';
   const companyKey = scheme.columns.find((c) => attrsKeyOf(c.source)?.includes('기업명'))?.source;

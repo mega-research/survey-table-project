@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { operationsPaths } from '@/features/operations/operations-paths';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { client } from '@/shared/lib/rpc';
 import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
@@ -10,6 +11,8 @@ import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 interface Props {
   surveyId: string;
+  /** 이 콘솔의 주소 접두 — 저장 뒤 돌아갈 응답 내역이 이 아래에 있다. */
+  basePath: string;
   responseId: string;
   initialResponses: Record<string, unknown>;
   versionSnapshot: SurveyVersionSnapshot | null;
@@ -28,10 +31,12 @@ interface Props {
  *
  * - SurveyResponseFlow 를 admin-edit 모드로 호출.
  * - onSubmit 안에서 saveAdminEdit 호출 + 응답자 목록으로 router.push.
+ * - 내부 콘솔과 외주 실사 링크 트리가 함께 쓴다(ADR-0027) — 돌아갈 주소만 `basePath` 로 갈린다.
  * - amber 헤더로 "어드민 수정 모드" 명시.
  */
 export function AdminResponseEditor({
   surveyId,
+  basePath,
   responseId,
   initialResponses,
   versionSnapshot,
@@ -83,7 +88,7 @@ export function AdminResponseEditor({
               toast.error(err instanceof Error ? err.message : '저장에 실패했습니다.');
               throw err;
             }
-            router.push(`/surveys/${surveyId}/operations/profiles`);
+            router.push(operationsPaths(basePath).profiles);
           },
         }}
       />

@@ -61,6 +61,29 @@ describe('mail.preview procedures', () => {
     expect(res).toBeNull();
   });
 
+  it('contactSample 은 mail.sendSingle 을 묻고 주체와 함께 서비스에 위임한다 (ADR-0027)', async () => {
+    vi.mocked(svc.getMailPreviewSample).mockResolvedValue(null as never);
+    const context = authedContext();
+    const client = createRouterClient({ preview }, { context });
+    const input = { surveyId: 'sv-1', contactTargetId: '33333333-3333-4333-8333-333333333333' };
+    await client.preview.contactSample(input);
+    // 단건 발송 창의 미리보기다 — 메일 탭(mail.view)이 없는 외주 링크도 지나야 한다.
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      context.user,
+      'sv-1',
+      'mail.sendSingle',
+    );
+    expect(svc.getMailPreviewSample).toHaveBeenCalledWith(input, context.user);
+  });
+
+  it('contactSample 은 대상 지목이 필수다 — 「첫 컨택」 폴백이 없다', async () => {
+    const client = createRouterClient({ preview }, { context: authedContext() });
+    await expect(
+      client.preview.contactSample({ surveyId: 'sv-1' } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.getMailPreviewSample).not.toHaveBeenCalled();
+  });
+
   it('testSend는 service.sendTestTemplateMail에 위임하고 결과객체를 반환한다', async () => {
     vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({ ok: true, id: 'msg-1' } as never);
     const context = authedContext();

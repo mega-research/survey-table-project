@@ -697,7 +697,7 @@ describe('profiles-row-actions', () => {
           questionResponses: { [qid]: 'new' },
           versionId: null,
         },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       );
 
@@ -719,7 +719,7 @@ describe('profiles-row-actions', () => {
       await expect(
         saveAdminEdit(
           { surveyId, responseId, questionResponses: {}, versionId: null },
-          { id: 'admin-1', email: 'a@b.com' },
+          { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
           false,
         ),
       ).rejects.toMatchObject({ reason: 'response_deleted' });
@@ -750,7 +750,7 @@ describe('profiles-row-actions', () => {
           questionResponses: { [newQid]: 'NEW_ANS' },
           versionId: null,
         },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       );
 
@@ -769,7 +769,7 @@ describe('profiles-row-actions', () => {
       await expect(
         saveAdminEdit(
           { surveyId, responseId: 'nonexistent-id', questionResponses: {}, versionId: null },
-          { id: 'admin-1', email: 'a@b.com' },
+          { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
           false,
         ),
       ).rejects.toMatchObject({ reason: 'response_not_found' });

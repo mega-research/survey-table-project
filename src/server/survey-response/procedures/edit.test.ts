@@ -2,6 +2,7 @@ import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { linkActorContext } from '@tests/helpers/rpc-context';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { SurveyAccessError } from '@/server/survey-access';
 
@@ -24,6 +25,21 @@ vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   assertScopedSurveyCapabilityRpc: vi.fn(),
 }));
+
+/**
+ * 링크 세션 해석만 대역으로 둔다 — 이 파일이 묻는 것은 **주체가 어떻게 귀속으로 바뀌는가**다
+ * (쿠키의 유효성은 `fieldwork-link.realdb` 가 실 DB 로 진다). attempts.test.ts 와 같은 대역이다.
+ */
+vi.mock('@/server/fieldwork-link', () => ({
+  resolveLinkActorForSurvey: vi.fn(
+    async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
+      sessions?.length
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId } }
+        : { kind: 'no_session' as const },
+  ),
+}));
+
+const LINK_ID = 'e1000000-0000-4000-8000-00000000b001';
 
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
@@ -55,7 +71,7 @@ describe('surveyResponse.edit procedures', () => {
     );
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
       input,
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
     expect(res).toEqual({ ok: true });
@@ -174,7 +190,7 @@ describe('surveyResponse.edit procedures', () => {
     const res = await client.edit.saveAdminEdit(input);
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
       input,
-      { id: 'guest-1', email: 'g@b.com' },
+      { attribution: { accountUserId: 'guest-1', fieldworkLinkId: null }, email: 'g@b.com' },
       true,
     );
     expect(res).toEqual({ ok: true });
@@ -202,7 +218,7 @@ describe('surveyResponse.edit procedures', () => {
     const res = await client.edit.saveAdminEdit(input);
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
       input,
-      { id: 'guest-1', email: 'g@b.com' },
+      { attribution: { accountUserId: 'guest-1', fieldworkLinkId: null }, email: 'g@b.com' },
       true,
     );
     expect(res).toEqual({ ok: true });
@@ -238,5 +254,34 @@ describe('surveyResponse.edit procedures', () => {
         versionId: 'v-old',
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
+
+describe('surveyResponse.edit — 외주 실사 링크 (ADR-0027)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('링크 주체의 수정은 링크 칸에 귀속되고 이메일이 없다 — 실 파티션으로 위임된다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
+    const client = createRouterClient(
+      { edit },
+      { context: linkActorContext({ linkId: LINK_ID, surveyId: SURVEY_ID }) },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      responseId: RESPONSE_ID,
+      questionResponses: { q1: 'a' },
+      versionId: null,
+    };
+    await client.edit.saveAdminEdit(input);
+    expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
+      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID },
+      SURVEY_ID,
+      'responses.view',
+    );
+    expect(svc.saveAdminEdit).toHaveBeenCalledWith(
+      input,
+      { attribution: { accountUserId: null, fieldworkLinkId: LINK_ID }, email: null },
+      true,
+    );
   });
 });

@@ -16,6 +16,7 @@ import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import type { Actor } from '@/server/survey-access';
 
 import type {
   GetMailPreviewSampleInput,
@@ -32,8 +33,10 @@ import type {
  */
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
+  actor?: Actor,
 ): Promise<GetMailPreviewSampleOutput> {
-  const scope = await loadOperationsDataScope(input.surveyId);
+  // 주체를 받으면 그것으로 파티션을 정한다 — 외주 실사 링크에는 세션 계정이 없다(ADR-0027).
+  const scope = await loadOperationsDataScope(input.surveyId, actor);
   const sample = input.contactTargetId
     ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
     : await getFirstContactSample(input.surveyId, scope);

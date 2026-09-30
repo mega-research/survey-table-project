@@ -13,6 +13,7 @@ import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
+import type { ActorAttribution } from '@/server/survey-access';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -43,12 +44,13 @@ import type {
  *     실패 시 campaign status → 'draft' 보상 롤백 (비-트랜잭션 db.update).
  *
  * 인증/캐시 갱신은 procedure(scoped) + 소비처 router.push 가 담당.
- * userId 는 인증된 context.user.id 를 procedure 가 주입. isExternal 도 procedure 가
- * context.user.id 에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
+ * creator 는 인증된 주체에서 procedure 가 파생해 주입한다 — 계정이면 created_by, 외주 실사
+ * 링크(단건 발송, ADR-0027)면 fieldwork_link_id 가 채워진다(0128 배타 CHECK). isExternal 도
+ * procedure 가 주체에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
  */
 export async function createCampaign(
   input: CreateCampaignInput,
-  userId: string,
+  creator: ActorAttribution,
   isExternal: boolean,
   opts: { kind?: MailCampaignKind } = {},
 ): Promise<CreateCampaignResult> {
@@ -128,7 +130,8 @@ export async function createCampaign(
         replyToSnapshot: template.replyTo,
         attachmentsSnapshot: template.attachments,
         filterSnapshot,
-        createdBy: userId,
+        createdBy: creator.accountUserId,
+        fieldworkLinkId: creator.fieldworkLinkId,
         status: 'queued',
       })
       .returning({ id: mailCampaigns.id });

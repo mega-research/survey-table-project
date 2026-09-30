@@ -21,9 +21,10 @@ interface PageProps {
  * 회차로 쌓고(30), 맥락을 메모로 남긴다(31). 회차 저장과 메모 저장이 **다른 버튼**이라 메모만
  * 고치려다 회차가 쌓이지 않는다(32).
  *
- * 빠지는 것은 전부 판정이 정한다 — 명단 수정 폼·삭제(`contacts.manage`), 응답 수정·초기화·
- * 편집 이력(`responses.view`), 메일 이력·단건 발송(`mail.*`). 링크 열에 그 셋이 하나도 없어
- * 화면에 그려지지 않고, 서버도 각자의 관문으로 거부한다.
+ * 빠지는 것은 전부 판정이 정한다 — 명단 수정 폼·삭제(`contacts.manage`), 응답 초기화·재응답
+ * 허용(`responses.manage`). 링크 열에 그 칸이 없어 화면에 그려지지 않고, 서버도 각자의
+ * 관문으로 거부한다. 응답 수정·편집 이력(`responses.view`)과 단건 메일·그 사람의 발송 이력
+ * (`mail.sendSingle`)은 ADR-0027 이 열었다 — 편집 이력의 연구원 이메일은 걷어서 넘긴다.
  *
  * **대행 진입점은 열린다.** 링크는 그 설문의 대리 응답 자격을 갖는 주체이고(ADR-0026),
  * 초대 코드의 노출은 화면이 아니라 이 인자가 정한다 — 귀속과 완료 대상 거부는 티켓 09 다.
@@ -44,6 +45,7 @@ export default async function FieldworkLinkContactDetailPage({ params }: PagePro
       capabilities={capabilities}
       scope={scope}
       canProxyRespond
+      hideStaffEmails
     />
   );
 }

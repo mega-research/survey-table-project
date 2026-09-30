@@ -518,6 +518,11 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'mail.view',
     input: { surveyId: S, contactTargetId: C },
   },
+  'mail.preview.contactSample': {
+    gate: 'scoped',
+    capability: 'mail.sendSingle',
+    input: { surveyId: S, contactTargetId: C },
+  },
   'mail.preview.testSend': {
     gate: 'scoped',
     capability: 'mail.send',
@@ -558,7 +563,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
   },
   'mail.campaigns.sendSingle': {
     gate: 'scoped',
-    capability: 'mail.send',
+    capability: 'mail.sendSingle',
     input: { surveyId: S, contactTargetId: C, mailTemplateId: C },
   },
   'mail.unsubscribe.revertByContactId': {
@@ -575,22 +580,22 @@ const SURFACES: Record<string, SurfaceSpec> = {
   },
   'surveyResponse.manage.softDelete': {
     gate: 'rpc',
-    capability: 'responses.view',
+    capability: 'responses.manage',
     input: { surveyId: S, responseId: C },
   },
   'surveyResponse.manage.restore': {
     gate: 'rpc',
-    capability: 'responses.view',
+    capability: 'responses.manage',
     input: { surveyId: S, responseId: C },
   },
   'surveyResponse.manage.hardReset': {
     gate: 'rpc',
-    capability: 'responses.view',
+    capability: 'responses.manage',
     input: { surveyId: S, responseId: C },
   },
   'surveyResponse.manage.allowReedit': {
     gate: 'rpc',
-    capability: 'responses.view',
+    capability: 'responses.manage',
     input: { surveyId: S, responseId: C },
   },
 

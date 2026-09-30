@@ -37,7 +37,9 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
           <ul className="space-y-2">
             {rows.map((r) => (
               <li key={r.id} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                <div className="text-sm text-slate-700">{r.editorEmail ?? '관리자'}</div>
+                <div className="text-sm text-slate-700">
+                  {r.byFieldworkLink ? '외주' : (r.editorEmail ?? '관리자')}
+                </div>
                 <div className="text-xs text-slate-500">
                   <LocalDateTime value={r.createdAt} /> ·{' '}
                   {r.action === 'reset' ? (

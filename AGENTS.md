@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-09-30 (**`/admin` 접두 제거** — 직원 콘솔이 라우트 그룹 `app/(internal)/` 로 옮겨 주소가 `/surveys`·`/users`·`/teams`·`/reassignment`·`/profile`·`/billing`·`/file-cleanup`·`/login` 루트 여덟 개가 됐다(파일 트리와 주소가 한 단계 어긋난다). 1차 게이트가 접두 하나에서 **루트 목록**으로 바뀌어 어휘 `SESSION_GATED_ROOT_SEGMENTS`·`PUBLIC_ROOT_SEGMENTS` 를 `lib/auth/protected-paths` 에 세우고, matcher 리터럴↔어휘는 `proxy-gate.test.ts`·어휘↔디렉터리는 `tests/repo/proxy-matcher-coverage.test.ts` 가 대조한다. 주소 조립은 `features/operations/operations-paths` 하나(`internalOperationsBase` 등으로 개명). 옛 주소는 `next.config.ts` 영구 리다이렉트가 받는다. 마이그레이션 없음. 직전: 2026-09-29 외주 실사 링크 — 계정 없이 **설문별 URL + 공유 비밀번호**로 운영 콘솔을 연다. 요청 주체 어휘가 `Actor = 계정 | 링크` 로 넓어지고(`server/survey-access`), `scoped` 베이스가 링크를 들이며, 콘솔은 `/fw/<token>/operations/*` 가 **내부 콘솔과 같은 화면 정의**를 다른 접두·capability·파티션으로 렌더한다. 링크 행 0126 · 귀속 칸 0127(계정 칸과 배타 CHECK). 대행 배너와 `?fw=1` 은 사라졌다. 사내 실사원은 전용 모델이 아니라 **전체 권한 참여자**다. ADR-0026(ADR-0019 대체 — 옛 실사 계정 모델은 공존하되 UI 입구를 잃었다). 직전: 2026-09-23 쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+> 최종 갱신: 2026-09-30 (**외주 실사 링크에 응답 수정·단건 메일** — 링크 열이 넷에서 여섯이 됐다(`responses.view`·`mail.sendSingle`). 옛 칸을 그대로 주면 초기화·단체 메일이 딸려 오므로 **칸을 쪼갰다** — 응답 삭제·복원·초기화·재응답 허용은 `responses.manage`, 조사 대상 한 명에게 보내는 단건은 `mail.sendSingle`(내부 열은 두 칸을 함께 얻어 권한이 줄지 않는다). 단건 발송 창 미리보기는 대상 지목 필수 표면 `mail.preview.contactSample` 로 따로 섰다. 응답 내역·응답 수정 본문이 `app/_operations/profiles-screen`·`response-edit-screen` 으로 올라가 `/fw/<token>/operations/profiles` 가 같은 화면을 연다. 귀속 칸 0128(`mail_campaigns`·`response_edit_logs` 의 `fieldwork_link_id`, 계정 칸과 배타 CHECK) — 편집 이력은 링크 행을 「외주」로 읽고, 외주 콘솔에는 연구원 이메일을 걷어 넘긴다. 링크 콘솔 레이아웃이 `QueryProvider` 를 연다(조사 대상 표의 헤더 필터가 `useQuery`). ADR-0027. 직전: 2026-09-30 **`/admin` 접두 제거** — 직원 콘솔이 라우트 그룹 `app/(internal)/` 로 옮겨 주소가 `/surveys`·`/users`·`/teams`·`/reassignment`·`/profile`·`/billing`·`/file-cleanup`·`/login` 루트 여덟 개가 됐다(파일 트리와 주소가 한 단계 어긋난다). 1차 게이트가 접두 하나에서 **루트 목록**으로 바뀌어 어휘 `SESSION_GATED_ROOT_SEGMENTS`·`PUBLIC_ROOT_SEGMENTS` 를 `lib/auth/protected-paths` 에 세우고, matcher 리터럴↔어휘는 `proxy-gate.test.ts`·어휘↔디렉터리는 `tests/repo/proxy-matcher-coverage.test.ts` 가 대조한다. 주소 조립은 `features/operations/operations-paths` 하나(`internalOperationsBase` 등으로 개명). 옛 주소는 `next.config.ts` 영구 리다이렉트가 받는다. 마이그레이션 없음. 직전: 2026-09-29 외주 실사 링크 — 계정 없이 **설문별 URL + 공유 비밀번호**로 운영 콘솔을 연다. 요청 주체 어휘가 `Actor = 계정 | 링크` 로 넓어지고(`server/survey-access`), `scoped` 베이스가 링크를 들이며, 콘솔은 `/fw/<token>/operations/*` 가 **내부 콘솔과 같은 화면 정의**를 다른 접두·capability·파티션으로 렌더한다. 링크 행 0126 · 귀속 칸 0127(계정 칸과 배타 CHECK). 대행 배너와 `?fw=1` 은 사라졌다. 사내 실사원은 전용 모델이 아니라 **전체 권한 참여자**다. ADR-0026(ADR-0019 대체 — 옛 실사 계정 모델은 공존하되 UI 입구를 잃었다). 직전: 2026-09-23 쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 >
 > 2026-09-17 역할 모델 v2(`workspace-roles-v2`) 병합 — Better Auth 인증 · 팀·멤버십 · 설문 capability 접근 엔진(`server/survey-access`) · 작업 범위 · 설문 그룹 · 재배치 센터 · 공유(invite_only·참여자·게스트·실사) · soft delete 복구 · 실사 업체·대리 응답 귀속. 코드 배치·명명 규칙은 staging 기준으로 맞췄고, v2 마이그레이션 12개는 staging 의 0101~0110 과 번호가 겹쳐 **0111~0122** 로 밀었다(상대 순서 유지, 매핑은 아래 "마이그레이션 번호"). 배포 절차는 `docs/runbooks/workspace-roles-v2-deploy.md`.
 
@@ -81,7 +81,8 @@ src/
 │   │   └── profile/            # 프로필
 │   ├── api/                    # API 라우트 (아래 API 섹션 참조)
 │   ├── _operations/            # **두 라우트 트리가 공유하는 페이지 본문** (ADR-0026)
-│   │                           # overview-screen·report-screen·contact-detail-screen — 조립이
+│   │                           # overview-screen·report-screen·contact-detail-screen·profiles-screen
+│   │                           # ·response-edit-screen(+ 클라이언트 admin-response-editor) — 조립이
 │   │                           # 여러 서버 도메인을 가로질러 읽어(operations+quota+mail+read-models)
 │   │                           # 도메인도 UI 도 소유할 수 없다. `_` 접두라 라우팅에서 제외된다
 │   │                           # (선례: api/.../export/raw-export-load.ts). 조사 대상 목록은 조립이
@@ -90,6 +91,7 @@ src/
 │   ├── fw/[token]/             # 외주 실사 링크 콘솔 (ADR-0026) — 계정이 아니라 **링크**가 연다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음 — 세션을 만드는 자리)
 │   │   └── operations/         # 깎인 헤더·탭 + contacts·contacts/[contactId]·overview·report
+│   │                           # ·profiles·profiles/[responseId]/edit (ADR-0027). 레이아웃이 QueryProvider 를 연다
 │   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
 │   ├── i/[code]/               # 짧은 초대 링크 (inviteCode → 응답 페이지)
 │   ├── preview/[token]/        # 토큰 미리보기 (previewToken)
@@ -569,6 +571,8 @@ survey_versions            # 설문 버전 스냅샷 (불변)
 response_edit_logs         # 관리자 응답 편집 이력
 ├── id, responseId, contactTargetId, surveyId, action
 ├── editedBy, editorEmail
+├── fieldworkLinkId               # 이 수정을 한 외주 실사 링크 (0128, FK restrict) — editedBy 와 배타 CHECK.
+│                                 #   편집 이력 화면은 이 칸이 채워진 행을 「외주」로 읽는다
 ├── changedQuestions (JSONB), changedCount
 └── createdAt
 
@@ -668,6 +672,7 @@ mail_campaigns             # 발송 회차
 │   openedCount, bouncedCount, complainedCount, failedCount,
 │   skippedUnsubscribedCount  # webhook이 atomic delta로 갱신
 ├── createdBy, scheduledAt, startedAt, completedAt, archivedAt
+├── fieldworkLinkId        # 단건 메일을 보낸 외주 실사 링크 (0128, FK restrict) — createdBy 와 배타 CHECK
 └── createdAt, updatedAt  (UNIQUE surveyId+isTest+runNumber)
 
 mail_recipients            # 수신자별 status + Resend message id
@@ -796,7 +801,10 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
                                   # 다운로드·업로드·이월 임포트·대상 추가·컬럼 설정은 그려지지 않고
                                   # 메일 열은 열·필터 후보·정렬 셋이 로더에서 함께 닫힌다
 /fw/[token]/operations/contacts/[contactId]  # 단건 상세 — 연락처 복호 평문 + 회차·메모(저장 버튼이 다르다)
-                                  # 명단 수정 폼·응답 수정·단건 메일·삭제·편집 이력은 없고, 그리지 않는 것은 읽지도 않는다
+                                  # + 응답 수정 진입·편집 이력(연구원 이메일은 걷는다)·단건 메일·그 사람의 발송 이력 (ADR-0027)
+                                  # 명단 수정 폼·삭제·응답 초기화·재응답 허용은 없고, 그리지 않는 것은 읽지도 않는다
+/fw/[token]/operations/profiles   # 응답 내역 — 내부 콘솔과 같은 본문(profiles-screen). 삭제·복원·초기화·휴지통 보기·
+                                  # 컬럼 설정은 없다 · [responseId]/edit 응답 수정 (ADR-0027)
 /fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓴다(같은 숫자)
                                   # 관문은 assertFieldworkLinkPageAccess 이고 leaf 마다 자기 capability 를 준다
 
@@ -1106,9 +1114,11 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   얻거나 타 팀 설문의 존재를 확인하는 우회를 막는다.
 - **관문 배선(티켓 09·10 완료분)**: 빌더·분석·운영 콘솔 도메인의 surveyId procedure 전수가
   handler 첫 줄에서 capability 관문을 지난다. 매핑 — 조회 survey.view · 운영 제어·현황 조회
-  operations.view · 응답 조회·응답 관리 4종·응답 상세 편집 responses.view · 컨택 열람
+  operations.view · 응답 조회·응답 상세 편집 responses.view · 응답 관리 4종(삭제·복원·초기화·
+  재응답 허용) responses.manage · 컨택 열람
   contacts.view · 컨택 관리·업로드·결과코드 어휘·수신거부 해제 contacts.manage · 결과코드
-  회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·발송 mail.send ·
+  회차 쓰기 contacts.writeAttempts · 메일 조회 mail.view · 캠페인·템플릿·테스트 발송 mail.send ·
+  조사 대상 단건 발송·그 미리보기(contactSample) mail.sendSingle ·
   내보내기 export.download · mutation(운영 제어·쿼터 저장·컬럼 픽커 저장 포함) survey.edit ·
   발행 survey.publish · 삭제 survey.delete · 분석 analytics.view. **단 분석 RSC 화면 둘
   (`/analytics/[surveyId]`·`/surveys/[id]/analytics`)은 `responses.view` 도 요구한다** —
@@ -1282,7 +1292,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정·**실사 업체**) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (비내부 계정 포함) **또는 외주 실사 링크 세션**(ADR-0026). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **링크 주체는 계정이 없어 `context.user` 가 null 이라, handler 는 `context.actor` 로 주체를 읽는다** — 계정이 있으면 계정이 이기고(연구원이 자기 링크를 눌러 본 브라우저에서 admin 콘솔이 조용히 깎이지 않게), 없으면 입력의 설문 id 로 `fw_<token>` 쿠키를 골라 링크 행과 대조한다. 거부가 셋으로 갈린다 — 다른 링크 세션은 있는데 이 설문의 것이 없으면 **NOT_FOUND**(그 주체에게 없는 설문), 세션이 없거나 더는 유효하지 않으면 **UNAUTHORIZED**, 자기 설문의 권한 밖은 **FORBIDDEN**. 계정 전용 scoped 표면(메일·응답 상세)이 세션 계정을 읽는 문은 `requireScopedAccount` 하나다. **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다 — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial`·`fieldwork-link-denial` 네 스위트가 각각 목록으로 고정한다 — 마지막 것이 링크에게 열리는 scoped 표면이 **정확히 여섯**(회차 3 · attrValues · idLists · setMemo)임을 라우터 열거 위에 세운다.
+  - **`scoped`** — 세션 + active (비내부 계정 포함) **또는 외주 실사 링크 세션**(ADR-0026). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **링크 주체는 계정이 없어 `context.user` 가 null 이라, handler 는 `context.actor` 로 주체를 읽는다** — 계정이 있으면 계정이 이기고(연구원이 자기 링크를 눌러 본 브라우저에서 admin 콘솔이 조용히 깎이지 않게), 없으면 입력의 설문 id 로 `fw_<token>` 쿠키를 골라 링크 행과 대조한다. 거부가 셋으로 갈린다 — 다른 링크 세션은 있는데 이 설문의 것이 없으면 **NOT_FOUND**(그 주체에게 없는 설문), 세션이 없거나 더는 유효하지 않으면 **UNAUTHORIZED**, 자기 설문의 권한 밖은 **FORBIDDEN**. 계정 전용 scoped 표면(메일 탭 쓰기)이 세션 계정을 읽는 문은 `requireScopedAccount` 하나다 — 단건 발송·응답 수정은 ADR-0027 이 링크에 열어 주체에서 귀속을 파생한다(`attributionOf`). **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다 — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial`·`fieldwork-link-denial` 네 스위트가 각각 목록으로 고정한다 — 마지막 것이 링크에게 열리는 scoped 표면이 **정확히 아홉**(회차 3 · attrValues · idLists · setMemo · 응답 수정 저장 · 단건 발송 · 단건 미리보기 contactSample)임을 라우터 열거 위에 세운다(`tests/helpers/scoped-surface-inputs` 의 `LINK_OPEN_SCOPED_PATHS`).
 - **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
   남아 있는 이유는 하나다** — 이름이 **표면의 청중**을 적기 때문이다. 티켓 21 이 게스트 분기를
   걷으면서 셋 다 본문이 한 줄 위임으로 줄었지만, 「이 페이지는 관리 화면이다」·「이 문은 비내부
@@ -1361,9 +1371,12 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - **외주 실사 링크는 계정이 아닌 두 번째 주체다**(ADR-0026, 티켓 01~~10). 연구원이 설문마다
   **전용 URL + 공유 비밀번호**를 발급하고(`survey_fieldwork_links` 0126 — 발급·조회·비밀번호
   열람·변경·종료 전부 `survey.manageAccess`) 외주는 계정 없이 그 설문의 운영 콘솔에 들어온다.
-  열리는 capability 는 **정확히 넷** — `survey.view`·`operations.view`·`contacts.view`·
-  `contacts.writeAttempts`. 열을 새로 만들지 않은 것이 요점이다: 바뀐 것은 주체의 종류이지
-  외주가 할 수 있는 일이 아니다.
+  열리는 capability 는 **정확히 여섯** — `survey.view`·`operations.view`·`contacts.view`·
+  `contacts.writeAttempts`·`responses.view`·`mail.sendSingle`. 처음 넷(실사 초대 열과 같은
+  집합)에 ADR-0027 이 **응답 목록·상세·수정**과 **조사 대상 단건 메일**을 더했다. 옛 칸을 그대로
+  주면 딸려 오는 것이 있어 **칸을 쪼갰다** — 응답 삭제·복원·초기화·재응답 허용은
+  `responses.manage`, 메일 탭(단체 메일·템플릿·테스트 발송)은 `mail.send`/`mail.view` 로 남아
+  링크에게 닫혀 있다. 내부 열은 쪼갠 두 칸을 함께 얻어 권한이 줄지 않는다.
   - **「열려 있다」의 정의가 중단 아님 + 삭제 아님 둘뿐이다** — 링크에 만료일이 없고 설문
     중단이 그 일을 한다. 재개하면 **같은 주소·같은 비밀번호**로 다시 열리므로 만료가 아니라
     「중단 중 차단」이다. `isPaused` 는 **링크 주체만 보는 축**이다: 계정 열이 함께 닫히면
@@ -1379,10 +1392,16 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     ADR 의 「화면을 따로 짜면 두 벌이 되어 한쪽만 고쳐진다」가 라우트가 둘이어도 지켜진다.
   - **외주임을 알리는 배지·배너가 없다.** 대리 응답도 응답자와 글자 하나 다르지 않고, 그래서
     `?fw=1` 힌트가 사라졌다 — 그 파라미터의 유일한 목적이 배너였다.
-  - **귀속은 옆 칸 두 개다**(0127) — `contact_attempts.fieldwork_link_id`·
-    `survey_responses.fieldwork_link_id`. 계정 칸과 **배타 CHECK** 로 묶이고, 주체에서
-    파생시키는 `attributionOf` 가 잘못된 조합을 타입 단계에서 막는다. 저장만 하고 화면에는
-    표시하지 않는다(조사 대상 표에 「기록자」 열을 만들지 않는다).
+  - **귀속은 옆 칸이다**(0127·0128) — `contact_attempts`·`survey_responses`·`mail_campaigns`·
+    `response_edit_logs` 의 `fieldwork_link_id`. 계정 칸과 **배타 CHECK** 로 묶이고, 주체에서
+    파생시키는 `attributionOf` 가 잘못된 조합을 타입 단계에서 막는다. 회차·응답·캠페인은 저장만
+    하고 화면에는 표시하지 않는다(조사 대상 표에 「기록자」 열을 만들지 않는다). **편집 이력만
+    예외**다 — 원래 표시되는 기록이라 링크 행을 「외주」로 읽고, 외주 콘솔로 넘길 때는 연구원
+    이메일을 걷는다(`ContactDetailScreen` 의 `hideStaffEmails` — 이력을 볼 자격과 내부 명단을 볼
+    자격이 달라 capability 가 아니라 라우트가 정한다).
+  - **단건 발송 창의 미리보기는 별도 표면이다**(`mail.preview.contactSample`, `mail.sendSingle`).
+    템플릿 편집기의 `mail.preview.sample` 은 「첫 컨택」 폴백이 있는 메일 탭 표면(`mail.view`)이라
+    그대로 열면 임의 컨택을 들여다보는 문이 된다 — 대상 지목이 필수인 짝을 세웠다.
   - **사내 실사원은 전용 모델이 아니다** — 설문마다 **전체 권한 참여자**로 초대되어 연구원과
     같은 콘솔에서 일한다. 공유 설정 실사 블록의 「내부 실사원」 세그먼트가 참여자 블록과 같은
     RPC 를 쓰고, 실사팀 소속을 묻지 않는다(실사팀은 그냥 팀이다).
@@ -1929,6 +1948,9 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
   두 칸을 한 마이그레이션에 넣은 것은 **배타 CHECK 가 두 테이블에서 같은 모양이어야** 하기
   때문이다 — 나눠 쓰면 뒤에 오는 쪽이 앞의 결정을 다시 읽어야 하고 그 사이에 한쪽만 제약
   없는 창이 생긴다. 응답 쪽 칸은 0127 이 만들고 **채우는 것은 대리 응답 경로**다
+- **외주 실사 링크 0128** (2026-09-30, ADR-0027) — 단건 메일·응답 수정의 귀속 칸
+  (`mail_campaigns.fieldwork_link_id`·`response_edit_logs.fieldwork_link_id`, 0127 과 같은 배타 CHECK
+  모양). 빈 DB 재생·재적용 멱등은 임시 DB 로 확인했다(124/124)
 - **main 계열 0124·0125** (2026-09-17): main 이 같은 날 0111·0112 로 만든 입력칸 높이·제목 서식본은 위 역할 모델 v2 번호(0111~0123)와 겹쳐 staging 병합 전에 0124·0125 로 옮겼다 — 번호 기록 표가 DB 에 없어 파일 이름만 바뀌고 이미 적용한 DB 는 그대로다
 
 ## DB 드리프트 점검

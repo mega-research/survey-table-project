@@ -56,18 +56,26 @@ vi.mock('@/db', () => ({
 vi.mock('@/server/contacts/services/contact-prior-answers', () => ({
   lookupPriorAnswersByContactTarget: vi.fn(async () => null),
 }));
-vi.mock(
-  '@/app/(internal)/surveys/[id]/operations/profiles/[responseId]/edit/admin-response-editor',
-  () => ({
-    AdminResponseEditor: () => null,
-  }),
-);
+vi.mock('@/app/_operations/admin-response-editor', () => ({
+  AdminResponseEditor: () => null,
+}));
 
 import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
 
-import AdminResponseEditPage from '@/app/(internal)/surveys/[id]/operations/profiles/[responseId]/edit/page';
+import { ResponseEditScreen } from '@/app/_operations/response-edit-screen';
 
-describe('AdminResponseEditPage contact scope', () => {
+// 본문은 내부 콘솔과 외주 링크 트리가 함께 쓴다(ADR-0027) — 스코프 격리는 본문의 계약이다.
+function renderScreen() {
+  return ResponseEditScreen({
+    surveyId: SURVEY_ID,
+    responseId: RESPONSE_ID,
+    basePath: `/surveys/${SURVEY_ID}/operations`,
+    scope: 'real' as never,
+    idx: null,
+  });
+}
+
+describe('ResponseEditScreen contact scope', () => {
   // AdminResponseEditor 로 전달되는 props 전체를 찾는다 — initialContactAttrs 는
   // 이 컴포넌트에만 있는 고유 prop 이라 이 컴포넌트 노드 식별자로도 재사용한다.
   function findEditorProps(node: unknown): Record<string, unknown> | null {
@@ -87,10 +95,7 @@ describe('AdminResponseEditPage contact scope', () => {
   }
 
   it('같은 test scope라도 다른 설문의 contact attrs를 응답 편집기에 전달하지 않는다', async () => {
-    const rendered = await AdminResponseEditPage({
-      params: Promise.resolve({ id: SURVEY_ID, responseId: RESPONSE_ID }),
-      searchParams: Promise.resolve({}),
-    });
+    const rendered = await renderScreen();
 
     const props = findEditorProps(rendered);
     expect(props?.['initialContactAttrs']).toEqual({});
@@ -100,10 +105,7 @@ describe('AdminResponseEditPage contact scope', () => {
   });
 
   it('이월 응답 조회도 이 설문·이 파티션으로 못 박아 부른다', async () => {
-    await AdminResponseEditPage({
-      params: Promise.resolve({ id: SURVEY_ID, responseId: RESPONSE_ID }),
-      searchParams: Promise.resolve({}),
-    });
+    await renderScreen();
 
     expect(vi.mocked(lookupPriorAnswersByContactTarget)).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,

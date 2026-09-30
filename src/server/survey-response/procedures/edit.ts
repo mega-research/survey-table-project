@@ -1,12 +1,12 @@
 import { ORPCError } from '@orpc/server';
 
 import { isExternalActor } from '@/server/data-scope';
-import { requireScopedAccount, scoped } from '@/server/orpc';
+import { scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,
   toRpcSurveyAccessError,
 } from '@/server/rpc-survey-access';
-import { SurveyAccessError } from '@/server/survey-access';
+import { attributionOf, isLinkActor, SurveyAccessError } from '@/server/survey-access';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit';
@@ -56,13 +56,18 @@ const saveAdminEdit = scoped
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
-    // 응답 수정은 스펙 §8 에서 응답 상세 열람과 한 행 — responses.view 로 지킨다.
+    // 응답 수정은 스펙 §8 에서 응답 상세 열람과 한 행 — responses.view 로 지킨다. 외주 실사
+    // 링크도 이 칸을 가진다(ADR-0027) — 삭제·초기화는 responses.manage 라 여전히 닫혀 있다.
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'responses.view');
     try {
-      const editor = requireScopedAccount(context);
+      const actor = context.actor;
       return await svc.saveAdminEdit(
         input,
-        { id: editor.id, email: editor.email },
+        {
+          attribution: attributionOf(actor),
+          // 링크에는 계정이 없다 — 이력 화면이 링크 칸을 보고 「외주」로 읽는다.
+          email: isLinkActor(actor) ? null : (context.user?.email ?? null),
+        },
         // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
         isExternalActor(context.actor),
       );

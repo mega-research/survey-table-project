@@ -49,7 +49,8 @@ export default async function FieldworkLinkContactsPage({ params, searchParams }
   const data = await loadContactsListPage({
     surveyId,
     scope,
-    // 링크 열에 메일 capability 가 하나도 없다 — 「수신 상황」 열·필터·정렬이 통째로 빠진다.
+    // 링크에는 메일 탭 열람(`mail.view`)이 없다 — 「수신 상황」 열·필터·정렬이 통째로 빠진다.
+    // 단건 발송(`mail.sendSingle`, ADR-0027)은 상세 화면의 일이라 이 표와 무관하다.
     canViewMail: capabilities.has('mail.view'),
     searchParams: await searchParams,
   });

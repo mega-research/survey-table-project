@@ -28,15 +28,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { internalOperationsPaths } from '../operations-paths';
+import { operationsPaths } from '../operations-paths';
 
 interface Props {
   surveyId: string;
   responseId: string;
   idx: number;
   view: ProfilesView;
-  /** 게스트 세션 — manage.* (authed 전용) 액션인 삭제·초기화·복원 메뉴를 숨긴다. */
-  isGuest?: boolean;
+  /** 이 콘솔의 주소 접두 — 내부 콘솔과 외주 링크 콘솔이 같은 표를 쓴다(ADR-0026). */
+  basePath: string;
+  /**
+   * 삭제·초기화·복원 메뉴를 그릴 것인가 (`responses.manage`). 없는 주체(외주 링크, ADR-0027)
+   * 에게는 「수정」만 남는다 — 그 셋의 표면은 authed 라 링크는 어차피 거부된다.
+   */
+  canManage: boolean;
   /** 응답 status — 이탈(drop) 응답의 수정 다이얼로그에 완료 전환 안내를 띄운다. */
   status?: string;
 }
@@ -48,7 +53,8 @@ export function ProfilesRowActions({
   responseId,
   idx,
   view,
-  isGuest = false,
+  basePath,
+  canManage,
   status,
 }: Props) {
   const router = useRouter();
@@ -73,15 +79,15 @@ export function ProfilesRowActions({
     });
   };
 
-  const editHref = `${internalOperationsPaths(surveyId).profileEdit(responseId)}?idx=${idx}`;
+  const editHref = `${operationsPaths(basePath).profileEdit(responseId)}?idx=${idx}`;
 
   const openEditor = () => {
     window.open(editHref, '_blank', 'noopener,noreferrer');
     setDialog(null);
   };
 
-  // 게스트: 휴지통 뷰의 유일한 액션(복원)이 authed 전용이라 메뉴 자체를 감춘다.
-  if (isGuest && view !== 'active') return null;
+  // 휴지통 뷰의 유일한 액션(복원)이 responses.manage 라 그 칸이 없으면 메뉴 자체를 감춘다.
+  if (!canManage && view !== 'active') return null;
 
   return (
     <>
@@ -95,7 +101,7 @@ export function ProfilesRowActions({
           {view === 'active' ? (
             <>
               <DropdownMenuItem onSelect={() => setDialog('edit')}>수정</DropdownMenuItem>
-              {!isGuest && (
+              {canManage && (
                 <>
                   <DropdownMenuItem onSelect={() => setDialog('delete')}>삭제</DropdownMenuItem>
                   <DropdownMenuSeparator />

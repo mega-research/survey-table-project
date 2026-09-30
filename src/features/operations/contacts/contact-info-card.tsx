@@ -64,7 +64,9 @@ interface ContactInfoCardProps {
   readOnlyFields?: boolean;
   /** 메모·수신방법을 고칠 수 있는가 (`contacts.writeAttempts`). */
   canWriteMemo?: boolean;
-  /** 응답 수정·초기화·재응답 허용 노출 (`responses.view`). */
+  /** 응답 수정 화면 진입 노출 (`responses.view`) — 외주 링크도 갖는다(ADR-0027). */
+  canEditResponses?: boolean;
+  /** 응답 초기화·재응답 허용 노출 (`responses.manage`). */
   canManageResponses?: boolean;
   /** 헤더 토글 변경 시 호출 — 컬럼 스킴 hidden 갱신. 신규 모드는 undefined. */
   onColumnToggle?: (key: string, hidden: boolean) => void;
@@ -96,6 +98,7 @@ export function ContactInfoCard({
   inviteCode,
   readOnlyFields = false,
   canWriteMemo = true,
+  canEditResponses = false,
   canManageResponses = false,
   onColumnToggle,
   onAttrsChange,
@@ -292,7 +295,7 @@ export function ContactInfoCard({
             )}
             {/* 응답 수정은 응답 **원문** 화면이다 — 그 화면의 관문과 같은 것을 여기서 묻는다.
                 요구가 갈리면 외주에게 여는 주소가 없는 버튼이 생긴다. */}
-            {canManageResponses &&
+            {canEditResponses &&
               (responseId ? (
                 <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                   <Link

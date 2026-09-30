@@ -320,7 +320,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
         questionResponses: { 'q-ctrl': 'yes', 'q-later': '수집된 답', 'q-free': '고침' },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -353,7 +353,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
         questionResponses: { 'q-ctrl': 'yes', 'q-later': '수집된 답', 'q-free': '고침' },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -386,7 +386,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
         questionResponses: orderPayload(),
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 

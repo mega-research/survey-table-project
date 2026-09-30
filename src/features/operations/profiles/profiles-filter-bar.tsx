@@ -24,6 +24,13 @@ interface Props {
   initialClauses: ClientFilterClause[];
   initialStatus: StatusFilter;
   columnCandidates: ColumnCandidate[];
+  /**
+   * 「삭제됨」(휴지통) 보기를 고를 수 있는가 — 기본 true.
+   *
+   * 휴지통의 유일한 동작이 복원(`responses.manage`)이라 그 칸이 없는 주체(외주 링크, ADR-0027)
+   * 에게는 항목을 그리지 않는다. 주소로 직접 넣어도 화면(profiles-screen)이 전체 보기로 접는다.
+   */
+  showDeleted?: boolean;
 }
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
@@ -47,7 +54,12 @@ function placeholderFor(source: string): string {
  * 응답 내역 필터 — 공용 FilterBarCore(다중 절 AND/OR + 전체 검색)의 응답 전용 wrapper.
  * 상태 select 만 이 페이지 특화 컨트롤로 붙는다 (검색 submit 시 status 파라미터 반영).
  */
-export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandidates }: Props) {
+export function ProfilesFilterBar({
+  initialClauses,
+  initialStatus,
+  columnCandidates,
+  showDeleted = true,
+}: Props) {
   const [status, setStatus] = useState<StatusFilter>(initialStatus);
 
   // 브라우저 뒤로/앞으로 가기 시 server 가 새 initial 을 내려주면 로컬 state 동기화.
@@ -94,8 +106,12 @@ export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandida
                   {o.label}
                 </SelectItem>
               ))}
-              <SelectSeparator />
-              <SelectItem value="deleted">삭제됨</SelectItem>
+              {showDeleted && (
+                <>
+                  <SelectSeparator />
+                  <SelectItem value="deleted">삭제됨</SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </>

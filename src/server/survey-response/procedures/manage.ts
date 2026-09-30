@@ -35,8 +35,9 @@ const softDelete = authed
   .input(SoftDeleteResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
-    // 응답 관리 4종은 스펙 §8 에서 응답 상세·수정과 한 행 — responses.view 로 지킨다.
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
+    // 응답 관리 4종(삭제·복원·초기화·재응답 허용)은 수정과 갈라 responses.manage 로 지킨다 —
+    // 외주 링크는 답을 고치되(responses.view) 응답을 지우거나 되돌리지는 못한다(ADR-0027).
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.manage');
     try {
       return await svc.softDeleteResponse(input);
     } catch (err) {
@@ -48,7 +49,7 @@ const restore = authed
   .input(RestoreResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.manage');
     try {
       return await svc.restoreResponse(input);
     } catch (err) {
@@ -60,7 +61,7 @@ const hardReset = authed
   .input(HardResetResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.manage');
     try {
       // 초기화 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
       return await svc.hardResetResponse(input, {
@@ -76,7 +77,7 @@ const allowReedit = authed
   .input(AllowReeditResponseInput)
   .output(ResponseManageOutput)
   .handler(async ({ input, context }) => {
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.manage');
     try {
       // 재응답 허용 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
       return await svc.allowReeditResponse(input, {

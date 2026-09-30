@@ -284,7 +284,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         title: '테스트 캠페인',
         contactTargetIds: [idValid, idExcluded],
       },
-      USER_ID,
+      { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
     );
 
@@ -309,7 +309,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         // 동일 UUID 2회 — 위저드 선택 상태 버그 등으로 중복 유입 시나리오
         contactTargetIds: [idValid, idValid],
       },
-      USER_ID,
+      { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
     );
 
@@ -335,7 +335,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         title: '반송 제외 캠페인',
         contactTargetIds: [idValid, idBounced],
       },
-      USER_ID,
+      { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
     );
 
@@ -360,7 +360,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         title: '단건: 반송 주소 재발송',
         contactTargetIds: [idBounced],
       },
-      USER_ID,
+      { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
       { kind: 'single' },
     );

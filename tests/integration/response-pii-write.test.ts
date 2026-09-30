@@ -987,7 +987,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
           questionResponses: { [PLAIN_QUESTION_ID]: 'a'.repeat(300 * 1024) },
           versionId: VERSION_ID,
         },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       ),
     ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
@@ -1007,7 +1007,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
           questionResponses: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
           versionId: VERSION_ID,
         },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       ),
     ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
@@ -1026,7 +1026,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
         questionResponses: { [QUESTION_ID]: 'a'.repeat(100 * 1024) },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
     expect(updateSetLogMock).toHaveBeenCalledTimes(1);
@@ -1088,7 +1088,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -1117,7 +1117,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -1214,7 +1214,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -1261,7 +1261,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
         versionId: null,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -1341,7 +1341,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
         versionId: VERSION_ID,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -1388,7 +1388,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
           },
           versionId: VERSION_ID,
         },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       ),
     ).resolves.toEqual({ ok: true });

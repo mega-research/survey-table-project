@@ -170,6 +170,8 @@ export interface ResponseEditLogRow {
   id: string;
   action: 'edit' | 'reset' | 'reedit_allow';
   editorEmail: string | null;
+  /** 외주 실사 링크가 고친 행인가 (0128, ADR-0027) — 계정이 없어 이메일 대신 「외주」로 읽는다. */
+  byFieldworkLink: boolean;
   changedQuestions: ResponseEditChange[];
   changedCount: number;
   createdAt: Date;

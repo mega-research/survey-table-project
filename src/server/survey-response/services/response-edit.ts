@@ -8,7 +8,7 @@ import {
   surveyResponses,
   surveys,
 } from '@/db/schema';
-import { SurveyAccessError } from '@/server/survey-access';
+import { SurveyAccessError, type ActorAttribution } from '@/server/survey-access';
 import {
   decryptQuestionResponses,
   encryptResponsesForStorage,
@@ -107,9 +107,19 @@ function buildMigrationMetadataSql(rollback: {
  * isTest 값으로 스코프를 좁혀, 테스트 파티션 responseId 를 알아내도 편집이 닿지 않게
  * 한다 — 파티션이 안 맞으면 존재하지 않는 응답과 동일하게 response_not_found 로 처리.
  */
+/**
+ * 편집 이력에 남길 「누가 고쳤는가」 — 계정 칸과 링크 칸 중 하나만 채워진다(0128, ADR-0027).
+ *
+ * 이메일은 계정 주체일 때만 있다. 링크에는 계정이 없어 이력 화면은 그 행을 「외주」로 읽는다.
+ */
+export interface ResponseEditor {
+  attribution: ActorAttribution;
+  email: string | null;
+}
+
 export async function saveAdminEdit(
   input: SaveAdminEditInput,
-  editor: { id: string | null; email: string | null },
+  editor: ResponseEditor,
   isExternal: boolean,
 ): Promise<{ ok: true }> {
   const { surveyId, responseId, questionResponses } = input;
@@ -445,7 +455,8 @@ export async function saveAdminEdit(
       await tx.insert(responseEditLogs).values({
         responseId,
         surveyId,
-        editedBy: editor.id,
+        editedBy: editor.attribution.accountUserId,
+        fieldworkLinkId: editor.attribution.fieldworkLinkId,
         editorEmail: editor.email,
         changedQuestions,
         changedCount: changedQuestions.length,

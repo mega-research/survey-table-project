@@ -167,11 +167,13 @@ const PARTICIPANT_CAPS: readonly SurveyCapability[] = [
   'survey.invite',
   'operations.view',
   'responses.view',
+  'responses.manage',
   'contacts.view',
   'contacts.manage',
   'contacts.writeAttempts',
   'mail.view',
   'mail.send',
+  'mail.sendSingle',
   'analytics.view',
   'export.download',
 ];
@@ -262,11 +264,16 @@ const FIELDWORK_ORG_VIEW_CAPS: readonly SurveyCapability[] = FIELDWORK_INVITED_C
 );
 
 /**
- * 외주 실사 링크 — 스펙 §8 의 「외주 링크」 열 (ADR-0026).
+ * 외주 실사 링크 — 스펙 §8 의 「외주 링크」 열 (ADR-0026, ADR-0027).
  *
- * **실사 초대 열과 같은 집합이고 새 어휘를 만들지 않는다** — 바뀐 것은 주체의 종류이지 외주가
- * 할 수 있는 일이 아니다. 여기 없는 것이 곧 「항상 차단」의 정본이다: 설문 편집·응답 상세·
- * 분석·내보내기·메일·명단 수정.
+ * 처음에는 실사 초대 열과 같은 넷이었고, ADR-0027 이 두 칸을 더했다 — **응답 내역·상세·수정**
+ * (`responses.view`)과 **조사 대상 한 명에게 보내는 단건 메일**(`mail.sendSingle`). 외주가
+ * 전화로 받은 답을 고치고, 연락이 닿은 사람에게 링크 메일을 다시 보내는 것이 현장 업무라서다.
+ *
+ * 여기 없는 것이 곧 「항상 차단」의 정본이다: 설문 편집·응답 삭제/초기화/재응답 허용
+ * (`responses.manage`)·메일 탭(`mail.view`·`mail.send`)·분석·내보내기·명단 수정.
+ * 칸을 새로 가른 것도 그래서다 — 옛 `responses.view`·`mail.send` 를 그대로 주면 초기화와
+ * 단체 메일이 함께 열린다.
  *
  * 같은 값을 FIELDWORK_INVITED_CAPS 에서 파생시키지 않는 것은 의도다 — 저쪽은 철거될 모델의
  * 열이라(ADR-0019 supersede) 사라질 때 이 열이 따라 비어서는 안 된다.
@@ -274,8 +281,10 @@ const FIELDWORK_ORG_VIEW_CAPS: readonly SurveyCapability[] = FIELDWORK_INVITED_C
 const LINK_CAPS: readonly SurveyCapability[] = [
   'survey.view',
   'operations.view',
+  'responses.view',
   'contacts.view',
   'contacts.writeAttempts',
+  'mail.sendSingle',
 ];
 
 const NONE: ReadonlySet<SurveyCapability> = new Set();

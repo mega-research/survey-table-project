@@ -16,10 +16,18 @@ export interface ContactDetailPermissions {
   manageContacts: boolean;
   /** 회차 기록과 메모·연락 방법 저장 (`contacts.writeAttempts`). */
   writeAttempts: boolean;
-  /** 응답 수정·초기화·재응답 허용과 편집 이력 (`responses.view`). */
+  /** 응답 수정 화면 진입과 편집 이력 (`responses.view`). */
+  editResponses: boolean;
+  /** 응답 초기화·재응답 허용 (`responses.manage`) — 외주 링크에는 없다(ADR-0027). */
   manageResponses: boolean;
-  /** 메일 발송 이력 카드와 단건 발송 (`mail.view`·`mail.send`). */
+  /**
+   * 이 대상의 메일 발송 이력 카드 (`mail.view` 또는 `mail.sendSingle`).
+   *
+   * 단건만 보내는 주체(외주 링크)도 이력은 본다 — 보낸 메일이 나갔는지·열렸는지를 확인할
+   * 자리가 여기뿐이고, 담기는 것은 이 한 사람에게 간 메일이라 메일 탭이 열리지는 않는다.
+   */
   viewMail: boolean;
+  /** 단건 발송 (`mail.sendSingle`) — 메일 탭 쓰기(`mail.send`)와 다른 칸이다. */
   sendMail: boolean;
   /**
    * 대행 진입점(초대 링크)을 그릴 것인가 — **capability 축이 아니다.**
@@ -38,9 +46,10 @@ export function contactDetailPermissions(
   return {
     manageContacts: capabilities.has('contacts.manage'),
     writeAttempts: capabilities.has('contacts.writeAttempts'),
-    manageResponses: capabilities.has('responses.view'),
-    viewMail: capabilities.has('mail.view'),
-    sendMail: capabilities.has('mail.send'),
+    editResponses: capabilities.has('responses.view'),
+    manageResponses: capabilities.has('responses.manage'),
+    viewMail: capabilities.has('mail.view') || capabilities.has('mail.sendSingle'),
+    sendMail: capabilities.has('mail.sendSingle'),
     proxyRespond: options.proxyRespond,
   };
 }

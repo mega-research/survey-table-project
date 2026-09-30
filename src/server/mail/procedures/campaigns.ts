@@ -3,6 +3,7 @@ import * as z from 'zod';
 
 import { isExternalActor } from '@/server/data-scope';
 import { requireScopedAccount, scoped } from '@/server/orpc';
+import { accountAttribution, attributionOf } from '@/server/survey-access';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
 import {
@@ -74,7 +75,11 @@ const create = scoped
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
     return svc
-      .createCampaign(input, requireScopedAccount(context).id, isExternalActor(context.actor))
+      .createCampaign(
+        input,
+        accountAttribution(requireScopedAccount(context).id),
+        isExternalActor(context.actor),
+      )
       .catch(rethrowCampaignRefusal);
   });
 
@@ -112,14 +117,23 @@ const previewPreflight = scoped
     return svc.previewPreflight(input);
   });
 
+/**
+ * 조사 대상 한 명에게 단건 발송 — 메일 탭(`mail.send`)과 **다른 칸**을 요구한다(ADR-0027).
+ *
+ * 외주 실사 링크는 이 칸(`mail.sendSingle`)만 갖는다. 연구원이 만든 템플릿을 골라 한 사람에게
+ * 보내는 것까지이고, 단체 메일·템플릿 작성은 `mail.send` 라 닫혀 있다. 귀속은 주체에서
+ * 파생한다 — 링크면 created_by 가 아니라 fieldwork_link_id 에 남는다(0128).
+ */
 const sendSingle = scoped
   .input(SendSingleCampaignInput)
   .output(CreateCampaignResult)
   .handler(async ({ context, input }) => {
-    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
-    return sendSingleCampaign(input, requireScopedAccount(context).id, isExternalActor(context.actor)).catch(
-      rethrowCampaignRefusal,
-    );
+    await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.sendSingle');
+    return sendSingleCampaign(
+      input,
+      attributionOf(context.actor),
+      isExternalActor(context.actor),
+    ).catch(rethrowCampaignRefusal);
   });
 
 export const campaigns = {

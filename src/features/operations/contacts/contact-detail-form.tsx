@@ -358,6 +358,7 @@ export function ContactDetailForm({
             inviteCode={initial?.inviteCode ?? null}
             readOnlyFields={!permissions.manageContacts}
             canWriteMemo={permissions.writeAttempts}
+            canEditResponses={permissions.editResponses && isEdit}
             canManageResponses={permissions.manageResponses && isEdit}
             {...(isEdit && permissions.manageContacts ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}
@@ -416,7 +417,7 @@ export function ContactDetailForm({
                 resultCodes={resultCodes}
                 canDelete={permissions.writeAttempts}
               />
-              {/* 메일은 연구원의 채널이다 — 발송 이력도 단건 발송도 그 축의 판정을 따른다. */}
+              {/* 발송 이력은 메일 탭 열람자와 단건 발송자가 함께 본다 — 외주 링크는 후자다(ADR-0027). */}
               {permissions.viewMail && (
                 <ContactMailHistoryCard
                   rows={mailHistory}
@@ -433,8 +434,9 @@ export function ContactDetailForm({
                 />
               )}
               {/* 편집 이력에는 **고친 사람의 이메일**이 실린다 — 응답 원문을 볼 수 없는
-                  주체에게 내부 담당자 명단을 흘릴 이유가 없다. */}
-              {permissions.manageResponses && (
+                  주체에게 내부 담당자 명단을 흘릴 이유가 없다. 외주 링크에게는 이메일을 걷은
+                  행이 온다(ContactDetailScreen 의 투영). */}
+              {permissions.editResponses && (
                 <ContactEditHistoryCard rows={editLogs} hasResponse={initial.responseId != null} />
               )}
             </>

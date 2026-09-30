@@ -157,7 +157,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -182,7 +182,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -214,7 +214,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a', q3: 'b' },
         versionId: null,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -241,7 +241,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await expect(
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       ),
     ).resolves.toEqual({ ok: true });
@@ -267,7 +267,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a' },
         versionId: null,
       },
-      { id: 'admin-1', email: 'a@b.com' },
+      { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
     );
 
@@ -300,7 +300,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await expect(
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
-        { id: 'admin-1', email: 'a@b.com' },
+        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
       ),
     ).rejects.toMatchObject({ reason: 'response_deleted' });

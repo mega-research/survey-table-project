@@ -70,11 +70,13 @@ const PARTICIPANT_COLUMN: SurveyCapability[] = [
   'survey.invite',
   'operations.view',
   'responses.view',
+  'responses.manage',
   'contacts.view',
   'contacts.manage',
   'contacts.writeAttempts',
   'mail.view',
   'mail.send',
+  'mail.sendSingle',
   'analytics.view',
   'export.download',
 ];
@@ -530,13 +532,24 @@ describe('denialReasonFor — 거부 사유의 유일한 정본', () => {
 describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
   const link: LinkAccessSubject = { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID };
 
-  it('자기 설문에서 넷을 갖는다 — 실사 초대 열과 같은 집합이고 새 어휘가 없다', () => {
-    expect([...resolveSurveyCapabilities(link, survey())].sort()).toEqual([
+  /**
+   * 처음 넷(실사 초대 열과 같은 집합)에 ADR-0027 이 둘을 더했다 — 응답 수정과 단건 메일.
+   * 옛 칸(`responses.view` 의 관리 4종·`mail.send` 의 메일 탭)을 그대로 주지 않으려고
+   * `responses.manage`·`mail.sendSingle` 로 칸을 갈랐다. 그 둘이 **없는** 것이 요점이다.
+   */
+  it('자기 설문에서 여섯을 갖는다 — 응답 관리·메일 탭은 없다', () => {
+    const caps = resolveSurveyCapabilities(link, survey());
+    expect([...caps].sort()).toEqual([
       'contacts.view',
       'contacts.writeAttempts',
+      'mail.sendSingle',
       'operations.view',
+      'responses.view',
       'survey.view',
     ]);
+    expect(caps.has('responses.manage')).toBe(false);
+    expect(caps.has('mail.send')).toBe(false);
+    expect(caps.has('mail.view')).toBe(false);
   });
 
   it('설문 일치를 가장 먼저 본다 — 링크 하나로 남의 설문을 여는 유일한 시도다', () => {
@@ -549,7 +562,7 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
    */
   it('중단 중이면 비어 있고, 재개하면 같은 주체가 그대로 열린다', () => {
     expect([...resolveSurveyCapabilities(link, survey({ isPaused: true }))]).toEqual([]);
-    expect([...resolveSurveyCapabilities(link, survey({ isPaused: false }))].length).toBe(4);
+    expect([...resolveSurveyCapabilities(link, survey({ isPaused: false }))].length).toBe(6);
   });
 
   /**
@@ -576,7 +589,7 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
       survey({ teamId: OTHER_TEAM_ID, ownerUserId: 'someone-else' }),
     ];
     for (const target of variants) {
-      expect([...resolveSurveyCapabilities(link, target)].length).toBe(4);
+      expect([...resolveSurveyCapabilities(link, target)].length).toBe(6);
     }
   });
 

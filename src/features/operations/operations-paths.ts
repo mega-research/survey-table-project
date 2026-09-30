@@ -15,6 +15,7 @@ export interface OperationsPaths {
   readonly base: string;
   readonly overview: string;
   readonly profiles: string;
+  readonly profilesColumns: string;
   readonly report: string;
   readonly reportColumns: string;
   readonly contacts: string;
@@ -49,6 +50,7 @@ export function operationsPaths(base: string): OperationsPaths {
     base: root,
     overview: `${root}/overview`,
     profiles,
+    profilesColumns: `${profiles}/columns`,
     report: `${root}/report`,
     reportColumns: `${root}/report/columns`,
     contacts,

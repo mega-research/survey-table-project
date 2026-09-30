@@ -212,7 +212,8 @@ export const scoped = base.use(async ({ context, next }, input: unknown) => {
  * 계정 전용 scoped 표면이 세션 계정을 읽는 문 (티켓 06).
  *
  * scoped 베이스가 링크도 들이므로 `context.user` 는 null 일 수 있다. 이 문을 쓰는 표면들은
- * 요구 capability(`mail.send`·`responses.view`)가 링크에게 닫혀 있어 여기까지 오지 않지만,
+ * 요구 capability(`mail.send`)가 링크에게 닫혀 있어 여기까지 오지 않지만 — 링크에 열린 단건
+ * 발송·응답 수정(ADR-0027)은 이 문을 쓰지 않고 주체에서 귀속을 파생한다(`attributionOf`) —
  * 타입은 그 사실을 모른다. handler 마다 `!` 를 흩뿌리는 대신 한 곳으로 모으는 이유는
  * **나중에 그 표면 하나가 링크에 열릴 때 터질 자리를 하나로 두려는 것**이다.
  */

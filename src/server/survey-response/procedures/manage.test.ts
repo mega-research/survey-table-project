@@ -46,7 +46,7 @@ describe('surveyResponse.manage procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'responses.view',
+      'responses.manage',
     );
     expect(svc.softDeleteResponse).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });
@@ -61,7 +61,7 @@ describe('surveyResponse.manage procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'responses.view',
+      'responses.manage',
     );
     expect(svc.restoreResponse).toHaveBeenCalledWith(input);
     expect(res).toEqual({ ok: true });
@@ -76,7 +76,7 @@ describe('surveyResponse.manage procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'responses.view',
+      'responses.manage',
     );
     expect(svc.hardResetResponse).toHaveBeenCalledWith(input, {
       id: 'admin-1',
@@ -94,7 +94,7 @@ describe('surveyResponse.manage procedures', () => {
     expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(
       context.user,
       SURVEY_ID,
-      'responses.view',
+      'responses.manage',
     );
     expect(svc.allowReeditResponse).toHaveBeenCalledWith(input, {
       id: 'admin-1',

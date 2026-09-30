@@ -16,6 +16,19 @@ export const GetMailPreviewSampleInput = z.object({
 export type GetMailPreviewSampleInput = z.infer<typeof GetMailPreviewSampleInput>;
 
 /**
+ * 단건 발송 창의 미리보기 입력 — 대상이 **반드시** 지목된다 (ADR-0027).
+ *
+ * 템플릿 편집기의 `sample` 은 「첫 컨택」으로 폴백하는 메일 탭 표면(`mail.view`)이다. 단건
+ * 발송 창은 보낼 사람 하나만 미리 보면 되므로 폴백 없는 입력을 따로 둔다 — 그래야 이 표면을
+ * `mail.sendSingle` 로 열어도 설문의 임의 컨택을 들여다보는 문이 되지 않는다.
+ */
+export const GetContactMailPreviewSampleInput = z.object({
+  surveyId: z.string(),
+  contactTargetId: z.string().uuid(),
+});
+export type GetContactMailPreviewSampleInput = z.infer<typeof GetContactMailPreviewSampleInput>;
+
+/**
  * 미리보기 샘플 출력 — 컨택 0건이면 null.
  * 원본 ActionResult{ok:true,data} 를 풀어 데이터 또는 null 로 단순화.
  */

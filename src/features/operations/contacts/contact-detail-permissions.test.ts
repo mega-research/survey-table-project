@@ -22,6 +22,7 @@ describe('contactDetailPermissions', () => {
     expect(permissionsFor(surveyCapabilityValues, true)).toEqual({
       manageContacts: true,
       writeAttempts: true,
+      editResponses: true,
       manageResponses: true,
       viewMail: true,
       sendMail: true,
@@ -30,19 +31,20 @@ describe('contactDetailPermissions', () => {
   });
 
   /**
-   * 외주 실사 링크 — **회차·메모만 열린다.**
+   * 외주 실사 링크 — 회차·메모에 더해 **응답 수정과 단건 메일**이 열린다 (ADR-0027).
    *
-   * 이 한 줄이 스펙 §6 의 「명단 수정·응답 수정·단건 메일에 절대 닿지 못한다」를 화면 쪽에서
-   * 못 박는 자리다. 서버도 각자의 관문으로 막지만, 화면이 그리지 않아야 외주가 자기 권한
-   * 밖을 눌러 거부당하지 않는다(스토리 33).
+   * 닫힌 채로 남는 것이 요점이다 — 명단 수정(`contacts.manage`)과 응답 초기화·재응답 허용
+   * (`responses.manage`). 서버도 각자의 관문으로 막지만, 화면이 그리지 않아야 외주가 자기
+   * 권한 밖을 눌러 거부당하지 않는다(스토리 33).
    */
-  it('외주 실사 링크는 회차·메모만 열고 나머지는 닫는다', () => {
+  it('외주 실사 링크는 회차·메모·응답 수정·단건 메일을 열고 명단 수정·응답 관리는 닫는다', () => {
     expect(permissionsFor(LINK_CAPABILITIES, true)).toEqual({
       manageContacts: false,
       writeAttempts: true,
+      editResponses: true,
       manageResponses: false,
-      viewMail: false,
-      sendMail: false,
+      viewMail: true,
+      sendMail: true,
       proxyRespond: true,
     });
   });
@@ -57,6 +59,7 @@ describe('contactDetailPermissions', () => {
     expect(permissionsFor(FULL_PARTICIPANT_CAPABILITIES, true)).toEqual({
       manageContacts: true,
       writeAttempts: true,
+      editResponses: true,
       manageResponses: true,
       viewMail: true,
       sendMail: true,
@@ -75,5 +78,20 @@ describe('contactDetailPermissions', () => {
     const viewer = permissionsFor(['contacts.view', 'mail.view']);
     expect(viewer.viewMail).toBe(true);
     expect(viewer.sendMail).toBe(false);
+  });
+
+  it('단건 발송은 메일 탭 쓰기(mail.send)가 아니라 mail.sendSingle 을 따른다', () => {
+    // 메일 탭만 쓰는 주체가 생겨도 단건 버튼이 따라 열리지 않고, 단건만 보내는 주체(외주
+    // 링크)는 메일 탭 없이도 이력 카드와 버튼을 함께 본다.
+    expect(permissionsFor(['contacts.view', 'mail.send']).sendMail).toBe(false);
+    const single = permissionsFor(['contacts.view', 'mail.sendSingle']);
+    expect(single.sendMail).toBe(true);
+    expect(single.viewMail).toBe(true);
+  });
+
+  it('응답 수정과 응답 관리가 갈린다 — 고치되 지우지는 못하는 주체가 있다', () => {
+    const editor = permissionsFor(['contacts.view', 'responses.view']);
+    expect(editor.editResponses).toBe(true);
+    expect(editor.manageResponses).toBe(false);
   });
 });

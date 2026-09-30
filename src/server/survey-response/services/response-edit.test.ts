@@ -141,7 +141,7 @@ vi.mock('@/db', () => ({
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 const RESPONSE_ID = '22222222-2222-4222-8222-222222222222';
-const EDITOR = { id: 'admin-1', email: 'a@b.com' };
+const EDITOR = { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' };
 
 // metadata sql 조각(jsonb_set(...) 중첩 템플릿) 안에 박힌 리터럴 텍스트를 전부 모아
 // 이어붙인다 — 실 SQL 을 실행하지 않고도 '{adminEditRollback}' 같은 키 리터럴과

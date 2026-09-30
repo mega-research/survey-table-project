@@ -31,7 +31,13 @@ const SCHEME: ContactColumnScheme = {
   ],
 };
 
-function renderForm(capabilities: readonly SurveyCapability[], proxyRespond = true) {
+function renderForm(
+  capabilities: readonly SurveyCapability[],
+  proxyRespond = true,
+  // 응답이 있어야 응답 관리 버튼(초기화·재응답 허용)이 그려질 자격이 생긴다 — 없으면 그
+  // 버튼이 판정과 무관하게 빠져 「외주에게 안 보인다」 단언이 아무것도 증명하지 못한다.
+  responseId: string | null = 'resp-1',
+) {
   return render(
     <ContactDetailForm
       surveyId="sv-1"
@@ -51,16 +57,21 @@ function renderForm(capabilities: readonly SurveyCapability[], proxyRespond = tr
         contactMethod: null,
         respondedAt: null,
         inviteCode: proxyRespond ? 'abc12345' : null,
-        responseId: null,
-        responseReeditable: false,
+        responseId,
+        responseReeditable: responseId !== null,
         attempts: [],
       }}
     />,
   );
 }
 
-/** 외주에게 하나도 보이면 안 되는 자리 — 티켓 08 의 「그려지지 않는다」 목록. */
-const BLOCKED_ACTIONS = [/^삭제$/, /단건 메일|메일 발송/, /응답 수정/, /응답 초기화/, /재응답 허용/];
+/**
+ * 외주에게 하나도 보이면 안 되는 자리 — 티켓 08 의 「그려지지 않는다」 목록.
+ *
+ * 응답 수정과 단건 메일은 ADR-0027 이 열어 이 목록에서 빠졌다. 남은 것이 명단 삭제와 응답
+ * 관리(`responses.manage`) 둘이다.
+ */
+const BLOCKED_ACTIONS = [/^삭제$/, /응답 초기화/, /재응답 허용/];
 
 describe('ContactDetailForm — 판정이 그릴 것을 정한다', () => {
   it('전권 주체는 관리 자리를 전부 본다', () => {
@@ -69,11 +80,26 @@ describe('ContactDetailForm — 판정이 그릴 것을 정한다', () => {
     expect(screen.getByText('저장')).toBeTruthy();
   });
 
-  it('외주 실사 링크에게는 명단·응답·메일 자리가 하나도 없다', () => {
+  it('외주 실사 링크에게는 명단 삭제·응답 관리 자리가 하나도 없다', () => {
     renderForm(LINK_CAPABILITIES);
     for (const action of BLOCKED_ACTIONS) {
       expect(screen.queryAllByText(action), `${action} 가 외주에게 보인다`).toEqual([]);
     }
+  });
+
+  // 짝 단언 — 같은 렌더에서 전권 주체에게는 그 자리가 있어야 위 테스트가 의미를 갖는다.
+  it('전권 주체에게는 응답 관리 자리가 있다', () => {
+    renderForm(surveyCapabilityValues);
+    expect(screen.getByText('응답 초기화')).toBeTruthy();
+    expect(screen.getByText('재응답 허용')).toBeTruthy();
+  });
+
+  it('외주 실사 링크는 응답 수정·단건 메일·발송 이력·편집 이력을 본다 (ADR-0027)', () => {
+    renderForm(LINK_CAPABILITIES);
+    expect(screen.getByText('응답 수정')).toBeTruthy();
+    expect(screen.getByText('메일 보내기')).toBeTruthy();
+    expect(screen.getByText(/이메일 발송 현황/)).toBeTruthy();
+    expect(screen.getByText(/수정 \/ 편집 현황/)).toBeTruthy();
   });
 
   it('연락처는 평문으로 보이되 고칠 수 없다 — 값을 감추는 것이 아니다', () => {

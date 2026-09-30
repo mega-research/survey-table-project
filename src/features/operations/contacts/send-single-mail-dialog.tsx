@@ -98,7 +98,7 @@ export function SendSingleMailDialog({
       if (!cancelled) setFetchState({ status: 'loading' });
     });
     client.mail.preview
-      .sample({ surveyId, contactTargetId })
+      .contactSample({ surveyId, contactTargetId })
       .then((sample) => {
         if (cancelled) return;
         setFetchState({ status: 'ready', sample });

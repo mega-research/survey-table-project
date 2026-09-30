@@ -16,8 +16,8 @@
  * 관문은 판정하려고 DB 를 한 번 읽지만 베이스는 읽지 않는다.
  *
  * **`scoped` 는 티켓 06 에서 열렸다.** 그래서 두 번째 질문이 붙는다 — 그 문 전수 중 링크가
- * 통과하는 것이 **정확히 어느 여섯인가**(`LINK_OPEN_SCOPED_PATHS`), 그리고 자기 설문에서
- * 서는 capability 가 **정확히 넷인가**. 두 목록의 합집합이 라우터 열거와 같아야 하므로, 새
+ * 통과하는 것이 **정확히 어느 아홉인가**(`LINK_OPEN_SCOPED_PATHS`), 그리고 자기 설문에서
+ * 서는 capability 가 **정확히 여섯인가**(넷에서 ADR-0027 이 응답 수정·단건 메일 둘을 더했다). 두 목록의 합집합이 라우터 열거와 같아야 하므로, 새
  * scoped procedure 가 붙으면 그 자리에서 빨개진다 — 그것이 「누락 표면 없음」의 증명이다.
  *
  * 여기서 두드리지 않는 축이 하나 있다: **미부여 설문 id 를 넣었을 때의 사유 대비**
@@ -160,7 +160,7 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// scoped — 링크가 지나는 유일한 문. 통과하는 것이 정확히 여섯이다
+// scoped — 링크가 지나는 유일한 문. 통과하는 것이 정확히 아홉이다
 // ─────────────────────────────────────────────────────────────────────────────
 
 const linkActor = { kind: 'link' as const, linkId: LINK_ID, surveyId: SURVEY_ID };
@@ -171,13 +171,17 @@ const LINK_COLUMN: SurveyCapability[] = [
   'operations.view',
   'contacts.view',
   'contacts.writeAttempts',
+  // ADR-0027 — 응답 목록·상세·수정과 조사 대상 단건 메일. 응답 관리(`responses.manage`)와
+  // 메일 탭(`mail.view`·`mail.send`)은 없다 — 아래 BLOCKED 목록이 그것을 관문으로 확인한다.
+  'responses.view',
+  'mail.sendSingle',
 ];
 
 const BLOCKED_CAPABILITIES = surveyCapabilityValues.filter(
   (capability) => !LINK_COLUMN.includes(capability),
 );
 
-describe('자기 설문에서 열리는 capability 가 정확히 넷이다', () => {
+describe('자기 설문에서 열리는 capability 가 정확히 여섯이다', () => {
   it('판정 결과가 링크 열과 정확히 같다', async () => {
     const { capabilities } = await loadSurveyAccess(linkActor, SURVEY_ID);
     expect([...capabilities].sort()).toEqual([...LINK_COLUMN].sort());
@@ -198,7 +202,7 @@ describe('자기 설문에서 열리는 capability 가 정확히 넷이다', () 
   });
 });
 
-describe('scoped 표면 전수 — 열린 여섯과 막힌 나머지', () => {
+describe('scoped 표면 전수 — 열린 아홉과 막힌 나머지', () => {
   it('두 목록의 합집합이 라우터 열거와 같다 — 새 표면은 막힌 쪽으로 떨어진다', () => {
     const enumerated = procedures
       .filter((p) => p.base === 'scoped')
