@@ -1666,16 +1666,19 @@ function SurveyResponseFlowActive({
         // 낙관 전환으로 응답 행 생성(첫 답변 시 백그라운드 시작)보다 먼저 이 클릭에
         // 도달할 수 있다 — id 가 없다고 판정을 건너뛰면 하드 쿼터가 우회되므로,
         // 응답당 최대 1회뿐인 이 판정 클릭에서만 생성 완료를 기다려 id 를 확보한다.
-        const responseId = currentResponseId ?? (await waitForResponseId());
-        if (!responseId) {
-          // 생성이 시작조차 안 됐다(첫 답변 전) — 판정을 보류하고 플래그를 되돌려
-          // 다음 클릭에서 재시도한다.
-          quotaCheckedRef.current = false;
-          return null;
-        }
         // try 밖에서 계산 — React Compiler 는 try 블록 안의 값 블록(?. / ??)을 다루지 못한다.
         const quotaSurveyId = loadedSurvey?.id ?? '';
+        let responseId = currentResponseId;
+        // 대기 표식은 모든 출구에서 풀어야 한다 — 하나라도 새면 이후 모든 「다음」·「제출」이
+        // 위 가드에서 반환되어 응답이 영구 정지한다(id 없는 조기 반환이 그랬다).
         try {
+          if (!responseId) responseId = await waitForResponseId();
+          if (!responseId) {
+            // 생성이 시작조차 안 됐거나 실패했다 — 판정을 보류하고 플래그를 되돌려
+            // 다음 클릭에서 재시도한다.
+            quotaCheckedRef.current = false;
+            return null;
+          }
           return await client.quota.check({
             responseId,
             surveyId: quotaSurveyId,
