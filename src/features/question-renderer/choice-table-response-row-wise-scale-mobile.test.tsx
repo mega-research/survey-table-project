@@ -181,6 +181,20 @@ describe('ChoiceTableResponse (mobile) — 행별 척도', () => {
     expect(within(rowBlock('r2')).getAllByRole('radio')).toHaveLength(7);
   });
 
+  it('보기 모양을 따로 고르지 않은 그룹은 세로 타일이다 — 쓰기는 같은 그룹 맵', () => {
+    const q = question({});
+    const tiles = {
+      ...q,
+      choiceGroups: (q.choiceGroups ?? []).map(({ mobileScaleBar: _bar, ...group }) => group),
+    } as Question;
+    render(<Harness q={tiles} />);
+    expect(screen.queryByTestId('choice-group-scale-bar-g1')).not.toBeInTheDocument();
+    const group = within(rowBlock('r1')).getByRole('group', { name: ITEMS[0]! });
+    expect(within(group).getAllByRole('radio')).toHaveLength(7);
+    fireEvent.click(within(group).getByRole('radio', { name: '3점' }));
+    expect(valueOf()).toEqual({ rad1: 'r1-c2' });
+  });
+
   it('「행별 원본 문항」은 종전 원본 표 조각 그대로다', () => {
     render(<Harness q={question({ mode: 'row-wise-original' })} />);
     expect(screen.queryByTestId('choice-group-scale-bar-g1')).not.toBeInTheDocument();

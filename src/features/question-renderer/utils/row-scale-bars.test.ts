@@ -72,19 +72,23 @@ const kinds = (segments: RowScaleSegment[] | null) =>
   segments?.map((segment) =>
     segment.kind === 'bar'
       ? `bar:${segment.bar.key}`
-      : `original:${segment.piece.columns.map((c) => c.id).join(',')}`,
+      : segment.kind === 'tiles'
+        ? `tiles:${segment.group.id}`
+        : `original:${segment.piece.columns.map((c) => c.id).join(',')}`,
   ) ?? null;
 
 describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
-  it('「척도 막대」로 고른 그룹만 막대, 나머지 응답 칸은 열 순서대로 원본 표 조각이다', () => {
+  it('그룹마다 제 보기 모양 — 기본은 세로 타일, 「척도 막대」로 고른 그룹은 막대, 열 순서대로', () => {
     const layout = projectRowScaleLayout(input());
     // 항목 글자만 있는 열은 응답 칸이 없어 조각이 되지 않는다(행 제목이 이미 보인다)
-    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat']);
+    expect(kinds(layout.segments)).toEqual(['tiles:g-use', 'bar:g-sat']);
     expect(layout.fallbacks).toEqual([]);
   });
 
-  it('막대 칸 글자와 구간은 막대용 헤더에서, 조각의 헤더는 조각용 헤더에서 잘라 온다', () => {
-    const layout = projectRowScaleLayout(input());
+  it('「원본 한 줄」 그룹은 그 열의 원본 조각 — 막대 칸 글자와 구간은 막대용 헤더에서, 조각의 헤더는 조각용 헤더에서 잘라 온다', () => {
+    const layout = projectRowScaleLayout(
+      input({ choiceGroups: [{ ...USE, mobileOriginalLine: true }, SAT] }),
+    );
     const [piece, bar] = layout.segments!;
     if (piece?.kind !== 'original' || bar?.kind !== 'bar') throw new Error('모양이 다르다');
     expect(bar.bar.model.anchors).toEqual({
@@ -98,7 +102,11 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
 
   it('원본 조각에 헤더를 그리지 않는 설정이면 조각에 헤더가 없어도 막대 라벨은 남는다', () => {
     const layout = projectRowScaleLayout(
-      input({ pieceHeaderGrid: undefined, showPieceHeader: false }),
+      input({
+        choiceGroups: [{ ...USE, mobileOriginalLine: true }, SAT],
+        pieceHeaderGrid: undefined,
+        showPieceHeader: false,
+      }),
     );
     const [piece, bar] = layout.segments!;
     if (piece?.kind !== 'original' || bar?.kind !== 'bar') throw new Error('모양이 다르다');
@@ -106,11 +114,21 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
     expect(bar.bar.model.anchors.middle?.label).toBe('보통');
   });
 
-  it('막대로 고른 그룹이 없으면 행 전체가 원본 표 조각이다(segments null)', () => {
+  it('막대로 고른 그룹이 없어도 그룹은 세로 타일이다 — 행별 척도는 그룹 카드와 같은 보기 모양을 따른다', () => {
     const { mobileScaleBar: _bar, ...tiles } = SAT;
     const layout = projectRowScaleLayout(input({ choiceGroups: [USE, tiles] }));
-    expect(layout.segments).toBeNull();
+    expect(kinds(layout.segments)).toEqual(['tiles:g-use', 'tiles:g-sat']);
     expect(layout.fallbacks).toEqual([]);
+  });
+
+  it('보기 그룹도 막대 후보도 없는 행(입력칸만)은 행 전체가 원본 표 조각이다(segments null)', () => {
+    const layout = projectRowScaleLayout(
+      input({
+        row: row([{ id: 'memo', type: 'input', content: '' }]),
+        columns: [columns[0]!, { id: 'memo-col', label: '메모' }],
+      }),
+    );
+    expect(layout.segments).toBeNull();
   });
 
   it('입력칸은 막대 뒤 원본 조각으로 남는다', () => {
@@ -120,7 +138,7 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
         columns: [...columns, { id: 'memo-col', label: '메모' }],
       }),
     );
-    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat', 'original:memo-col']);
+    expect(kinds(layout.segments)).toEqual(['tiles:g-use', 'bar:g-sat', 'original:memo-col']);
   });
 
   it('막대로 고른 그룹을 못 그리면 그 그룹 열은 원본 조각으로 떨어지고 이유가 남는다', () => {
@@ -132,7 +150,11 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
         ]),
       }),
     );
-    expect(layout.segments).toBeNull();
+    // 그룹 카드와 같다 — 막대를 못 그리면 원본 한 줄
+    expect(kinds(layout.segments)).toEqual([
+      'tiles:g-use',
+      'original:s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10',
+    ]);
     expect(layout.fallbacks).toEqual([{ key: 'g-sat', group: SAT, reason: 'text-input' }]);
   });
 
@@ -156,7 +178,7 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
       }),
     );
     expect(kinds(layout.segments)).toEqual([
-      'original:u1,u2',
+      'tiles:g-use',
       'bar:g-sat',
       'original:s5,s6,s7,s8,s9,s10',
     ]);
@@ -215,6 +237,6 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
         columns: [...columns, { id: 'x', label: '' }],
       }),
     );
-    expect(kinds(layout.segments)).toEqual(['original:u1,u2', 'bar:g-sat']);
+    expect(kinds(layout.segments)).toEqual(['tiles:g-use', 'bar:g-sat']);
   });
 });

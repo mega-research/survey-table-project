@@ -78,12 +78,13 @@ import {
 } from '@/utils/table-merge-helpers';
 
 import { InteractiveCell } from './cells';
+import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
 import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
-import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
+import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
 import {
   type RowScaleLayout,
   projectRowWiseScaleLayouts,
@@ -1256,6 +1257,30 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                     model={rowWiseOriginalModel}
                     errorCellIds={errorCellIds}
                     scaleLayoutByRowId={rowScaleLayouts}
+                    // 타일은 그룹 카드의 세로 타일과 같은 ChoiceOptCell — 단독 선택·상세기재 규칙이 한 곳이다
+                    renderGroupTiles={(group, cells, rowQuestion, { inputIdScope, sharesRow }) => {
+                      const label = sharesRow ? substituteTokens(group.label, attrs, quotes) : '';
+                      return (
+                        <RowTileSection
+                          label={label}
+                          ariaLabel={label || rowQuestion.title}
+                          invalid={cells.some((cell) => errorCellIds?.has(cell.id))}
+                        >
+                          {cells.map((cell) => (
+                            <ChoiceOptCell
+                              key={cell.id}
+                              cell={cell}
+                              questionId={questionId}
+                              group={group}
+                              value={value}
+                              onChange={mergedOnChange}
+                              inputIdScope={inputIdScope}
+                              variant="tile"
+                            />
+                          ))}
+                        </RowTileSection>
+                      );
+                    }}
                     // 표 문항의 막대는 늘 보기 그룹 막대다(그룹 없는 보기 칸은 후보가 아니다)
                     renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) =>
                       bar.group ? (

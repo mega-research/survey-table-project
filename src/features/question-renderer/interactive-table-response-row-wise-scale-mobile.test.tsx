@@ -223,7 +223,7 @@ describe('행별 척도 — 표 문항', () => {
     expect(within(rowBlock('r2')).getAllByRole('radio')).toHaveLength(11);
   });
 
-  it('막대로 고르지 않은 그룹은 원래 형태(원본 조각)이고, 같은 행의 막대 그룹만 막대다', () => {
+  it('막대로 고르지 않은 그룹은 그룹 카드와 같은 세로 타일이고, 같은 행의 막대 그룹만 막대다', () => {
     // 한 행에 활용 여부(2칸, 보기 모양 기본) + 만족도(11칸, 척도 막대)
     const use: ChoiceGroup = { id: 'g-use', groupKey: 'rad9', type: 'radio', label: '활용 여부' };
     const mixedRow: TableRow = {
@@ -253,20 +253,37 @@ describe('행별 척도 — 표 문항', () => {
     expect(within(bar).getAllByRole('radio')).toHaveLength(11);
     // 막대가 행에 여럿과 섞이면 그룹 이름으로 가른다
     expect(within(bar).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
-    // 활용 여부는 원본 조각의 라디오 두 개 — 막대 밖에 있다
-    const outside = within(block)
-      .getAllByRole('radio')
-      .filter((radio) => !bar.contains(radio));
-    expect(outside).toHaveLength(2);
-    fireEvent.click(outside[1]!);
+    // 활용 여부는 세로 타일 두 장 — 행에 여럿이라 그룹 이름을 머리로 단다
+    const tiles = within(block).getByRole('group', { name: '활용 여부' });
+    expect(within(tiles).getAllByRole('radio')).toHaveLength(2);
+    expect(
+      within(block)
+        .getAllByRole('radio')
+        .filter((r) => !bar.contains(r)),
+    ).toHaveLength(2);
+    fireEvent.click(within(tiles).getAllByRole('radio')[1]!);
     expect(valueOf()).toEqual({ __choiceGroups: { rad9: 'use2' } });
   });
 
-  it('보기 모양을 척도 막대로 고른 그룹이 없으면 행별 원본과 같다', () => {
+  it('보기 모양을 따로 고르지 않은 그룹은 세로 타일이다 — 행에 하나면 행 제목을 이름으로', () => {
     const tiles = groups.map(({ mobileScaleBar: _bar, ...group }) => group);
     render(<Harness groupsOverride={tiles} />);
     expect(screen.queryByTestId('choice-group-scale-bar-g1')).not.toBeInTheDocument();
-    expect(within(rowBlock('r1')).getAllByRole('radio')).toHaveLength(11);
+    const group = within(rowBlock('r1')).getByRole('group', { name: ITEMS[0]! });
+    expect(within(group).getAllByRole('radio')).toHaveLength(11);
+    fireEvent.click(within(group).getAllByRole('radio')[3]!);
+    expect(valueOf()).toEqual({ __choiceGroups: { rad1: 'r1-c3' } });
+  });
+
+  it('「원본 한 줄」로 고른 그룹은 그 그룹 열의 원본 표 조각이다', () => {
+    const lines = groups.map(({ mobileScaleBar: _bar, ...group }) => ({
+      ...group,
+      mobileOriginalLine: true,
+    }));
+    render(<Harness groupsOverride={lines} />);
+    const block = rowBlock('r1');
+    expect(within(block).queryByRole('group', { name: ITEMS[0]! })).not.toBeInTheDocument();
+    expect(within(block).getAllByRole('radio')).toHaveLength(11);
   });
 
   it('「다음」 뒤 미충족 필수 행이면 그 막대 묶음이 오류 상태다', () => {

@@ -12,7 +12,7 @@ import type {
   RowScaleLayout,
 } from '@/features/question-renderer/utils/row-scale-bars';
 import { cn } from '@/lib/utils';
-import type { TableCell } from '@/types/survey';
+import type { ChoiceGroup, TableCell } from '@/types/survey';
 
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 
@@ -33,6 +33,15 @@ interface MobileRowWiseOriginalSheetProps {
    * 번갈아 그리고, 없는 행(segments null)은 종전 원본 표 조각 그대로다.
    */
   scaleLayoutByRowId?: ReadonlyMap<string, RowScaleLayout> | undefined;
+  /** 세로 타일 한 그룹 — 그룹 카드의 섹션과 같은 얼굴. 선택 채널이 문항마다 달라 호스트가 그린다 */
+  renderGroupTiles?:
+    | ((
+        group: ChoiceGroup,
+        cells: readonly TableCell[],
+        question: MobileRowWiseOriginalQuestion,
+        context: ScaleBarRenderContext,
+      ) => React.ReactNode)
+    | undefined;
   /** 막대 하나 — 선택 읽기·쓰기 채널이 문항마다 달라 호스트가 그린다 */
   renderScaleBar?:
     | ((
@@ -45,7 +54,7 @@ interface MobileRowWiseOriginalSheetProps {
 
 export interface ScaleBarRenderContext {
   inputIdScope: string;
-  /** 행에 막대·조각이 여럿이다 — 막대 머리에 그룹 이름을 보여 가른다(하나면 행 제목으로 족하다) */
+  /** 행에 막대·타일·조각이 여럿이다 — 머리에 그룹 이름을 보여 가른다(하나면 행 제목으로 족하다) */
   sharesRow: boolean;
 }
 
@@ -55,6 +64,7 @@ export function MobileRowWiseOriginalSheet({
   choiceControlType,
   errorCellIds,
   scaleLayoutByRowId,
+  renderGroupTiles,
   renderScaleBar,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
@@ -108,9 +118,10 @@ export function MobileRowWiseOriginalSheet({
                     );
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
-                    const segments = renderScaleBar
-                      ? scaleLayoutByRowId?.get(question.rowId)?.segments
-                      : undefined;
+                    const segments =
+                      renderScaleBar && renderGroupTiles
+                        ? scaleLayoutByRowId?.get(question.rowId)?.segments
+                        : undefined;
                     const renderPieceCell = (cell: TableCell) =>
                       renderCell(
                         cell,
@@ -144,13 +155,20 @@ export function MobileRowWiseOriginalSheet({
                             {question.title}의 응답을 확인해 주세요.
                           </p>
                         ) : null}
-                        {segments && renderScaleBar ? (
-                          // 행별 척도 — 막대로 고른 것만 막대, 나머지 응답 칸은 열 순서대로 원본 조각
+                        {segments && renderScaleBar && renderGroupTiles ? (
+                          // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대), 나머지 응답 칸은 원본 조각
                           <div className="space-y-3">
                             {segments.map((segment) =>
                               segment.kind === 'bar' ? (
                                 <div key={segment.bar.key} className="px-1">
                                   {renderScaleBar(segment.bar, question, {
+                                    inputIdScope,
+                                    sharesRow: segments.length > 1,
+                                  })}
+                                </div>
+                              ) : segment.kind === 'tiles' ? (
+                                <div key={segment.key} className="px-1">
+                                  {renderGroupTiles(segment.group, segment.cells, question, {
                                     inputIdScope,
                                     sharesRow: segments.length > 1,
                                   })}
@@ -193,6 +211,35 @@ export function MobileRowWiseOriginalSheet({
           })}
         </section>
       ))}
+    </div>
+  );
+}
+
+interface RowTileSectionProps {
+  /** 머리 줄 — 행에 여럿일 때만 그룹 이름, 하나면 비운다(행 제목이 위에 있다) */
+  label: string;
+  /** 타일 묶음의 접근성 이름 — 머리가 비면 행 제목 */
+  ariaLabel: string;
+  /** 「다음」 뒤 미충족 필수 그룹 — 그룹 카드의 섹션과 같은 붉은 테두리 */
+  invalid: boolean;
+  children: React.ReactNode;
+}
+
+/** 행별 척도의 세로 타일 한 그룹 — 「행 단위 그룹 카드」 섹션과 같은 얼굴(머리 줄 + 세로 타일) */
+export function RowTileSection({ label, ariaLabel, invalid, children }: RowTileSectionProps) {
+  return (
+    <div
+      className={cn('space-y-1.5', invalid && 'rounded-lg border border-red-300 bg-red-50/40 p-2')}
+    >
+      {label ? (
+        <p className={cn('text-[13px] font-semibold', invalid ? 'text-red-600' : 'text-gray-600')}>
+          {label}
+        </p>
+      ) : null}
+      {/* 타일은 세로 한 줄씩 — 가로로 접으면 척도 순서가 지그재그로 읽힌다 */}
+      <div role="group" aria-label={ariaLabel} className="flex flex-col gap-2">
+        {children}
+      </div>
     </div>
   );
 }

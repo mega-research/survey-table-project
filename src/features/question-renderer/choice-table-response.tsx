@@ -12,7 +12,10 @@ import {
 } from '@/features/question-renderer/contact-attrs-context';
 import { DynamicRowSelectorModal } from '@/features/question-renderer/dynamic-row-selector-modal';
 import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
-import { MobileRowWiseOriginalSheet } from '@/features/question-renderer/mobile-row-wise-original-sheet';
+import {
+  MobileRowWiseOriginalSheet,
+  RowTileSection,
+} from '@/features/question-renderer/mobile-row-wise-original-sheet';
 import { useOptionTexts, useResponseSources } from '@/features/question-renderer/response-sources';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
@@ -661,6 +664,29 @@ export function ChoiceTableResponse({
   ) : null;
 
   /** 카드 모드의 선택 컨트롤 하나 — 단일 카드와 행 카드가 같은 토글 규칙을 쓴다. */
+  /**
+   * 세로 타일 하나 — 테두리 칸이 통째로 탭 영역이고 글자는 옵션 라벨, 고르면 칠한다. 「행 단위 그룹
+   * 카드」의 그룹 섹션과 「행별 척도」의 타일 그룹이 같이 쓴다.
+   */
+  const renderChoiceTile = (choiceCell: TableCell, fallbackLabel: string) => {
+    const { checked, disabled, option } = getChoiceCellState(choiceCell);
+    const tileLabel = option?.label ?? '';
+    return (
+      <label
+        key={choiceCell.id}
+        data-cell-id={choiceCell.id}
+        className={cn(
+          'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+          checked ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white text-gray-800',
+          disabled && 'cursor-default opacity-50',
+        )}
+      >
+        {renderMobileChoiceInput(choiceCell, tileLabel || fallbackLabel)}
+        {tileLabel && <span className="leading-snug">{tileLabel}</span>}
+      </label>
+    );
+  };
+
   const renderMobileChoiceInput = (choiceCell: TableCell, ariaLabel: string) => {
     const { checked, disabled } = getChoiceCellState(choiceCell);
     // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
@@ -938,29 +964,9 @@ export function ChoiceTableResponse({
                               /* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
                                 순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */
                               <div className="flex flex-col gap-2">
-                                {cells.map((choiceCell) => {
-                                  const { checked, disabled, option } =
-                                    getChoiceCellState(choiceCell);
-                                  const tileLabel = option?.label ?? '';
-                                  return (
-                                    <label
-                                      key={choiceCell.id}
-                                      data-cell-id={choiceCell.id}
-                                      className={cn(
-                                        'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
-                                        checked
-                                          ? 'border-blue-300 bg-blue-50 text-blue-900'
-                                          : 'border-gray-200 bg-white text-gray-800',
-                                        disabled && 'cursor-default opacity-50',
-                                      )}
-                                    >
-                                      {renderMobileChoiceInput(choiceCell, tileLabel || cardLabel)}
-                                      {tileLabel && (
-                                        <span className="leading-snug">{tileLabel}</span>
-                                      )}
-                                    </label>
-                                  );
-                                })}
+                                {cells.map((choiceCell) =>
+                                  renderChoiceTile(choiceCell, cardLabel),
+                                )}
                               </div>
                             )}
                           </div>
@@ -1367,6 +1373,18 @@ export function ChoiceTableResponse({
           }
           renderCell={(cell, _question, inputIdScope) => renderSelectedRowCell(cell, inputIdScope)}
           scaleLayoutByRowId={rowScaleLayouts}
+          renderGroupTiles={(group, cells, rowQuestion, { sharesRow }) => {
+            const label = sharesRow ? substituteTokens(group.label, attrs, quotes) : '';
+            return (
+              <RowTileSection
+                label={label}
+                ariaLabel={label || rowQuestion.title}
+                invalid={cells.some((c) => unfilledGroupCellIds.has(c.id))}
+              >
+                {cells.map((choiceCell) => renderChoiceTile(choiceCell, rowQuestion.title))}
+              </RowTileSection>
+            );
+          }}
           renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) => {
             // 쓰기는 세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id
             const selected = bar.cells.find((c) => getChoiceCellState(c).checked)?.id;

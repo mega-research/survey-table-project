@@ -126,8 +126,8 @@ const ROW_WISE_ANSWERABLE_CELL_TYPES: readonly TableCell['type'][] = [
 /**
  * 「행별 척도」 진단 — 응답 화면과 같은 행별 원본 모델(행 문항·앞쪽 열 제외·헤더 조각)을 만들고
  * 행마다 같은 배치(projectRowScaleLayout)를 돌려, 막대로 고른 그룹(또는 그룹 없는 보기 소스 표의
- * 보기 묶음)인데 막대로 못 그려 원본 조각으로 떨어지는 행을 이유별로 모은다. 막대로 고르지 않은
- * 그룹은 원래 형태가 의도라 알리지 않는다.
+ * 보기 묶음)인데 막대로 못 그려 원본 한 줄로 떨어지는 행을 이유별로 모은다. 막대로 고르지 않은
+ * 그룹은 제 보기 모양(세로 타일 등)이 의도라 알리지 않는다.
  */
 export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBarIssue[] {
   const model = buildMobileRowWiseOriginalModel({
