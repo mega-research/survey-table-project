@@ -152,3 +152,55 @@ describe('stripHiddenQuestionValues — 숨은 표 행', () => {
     expect(out).not.toHaveProperty('follow');
   });
 });
+
+describe('stripHiddenQuestionValues — 숨은 행에서 시작한 세로 병합 셀', () => {
+  // 렌더러(recalculateRowspansForVisibleRows)는 숨은 행이 가진 병합 시작 셀을 같은 id 로
+  // 첫 가시 행에 올려 그린다. 응답자에게 보이는 칸이므로 그 값은 지우면 안 된다.
+  const merged: Question = {
+    id: 'm',
+    type: 'table',
+    title: '병합 입력',
+    required: false,
+    order: 1,
+    tableColumns: [
+      { id: 'col-label', label: '항목' },
+      { id: 'col-note', label: '비고' },
+    ],
+    tableRowsData: [
+      {
+        id: 'r-ict',
+        label: 'ICT',
+        displayCondition: showWhen('b3', ['01']),
+        cells: [
+          { id: 'ict-label', type: 'text', content: 'ICT' },
+          { id: 'note', type: 'input', content: '', rowspan: 2 },
+        ],
+      },
+      {
+        id: 'r-common',
+        label: '공통',
+        cells: [
+          { id: 'common-label', type: 'text', content: '공통' },
+          { id: 'note-cont', type: 'input', content: '', isHidden: true },
+        ],
+      },
+    ],
+  };
+
+  it('병합 범위에 보이는 행이 남아 있으면 병합 셀 값을 지우지 않는다', () => {
+    const out = stripHiddenQuestionValues([source, merged], { b3: ['02'], m: { note: '비고 값' } });
+    expect(out['m']).toEqual({ note: '비고 값' });
+  });
+
+  it('병합 범위가 전부 숨으면 병합 셀 값도 지운다', () => {
+    const allHidden: Question = {
+      ...merged,
+      tableRowsData: merged.tableRowsData!.map((row) => ({
+        ...row,
+        displayCondition: showWhen('b3', ['01']),
+      })),
+    };
+    const out = stripHiddenQuestionValues([source, allHidden], { b3: ['02'], m: { note: '비고 값' } });
+    expect(out['m']).toEqual({});
+  });
+});

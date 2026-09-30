@@ -7,6 +7,7 @@ import type {
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import { shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
+import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { CHOICE_GROUPS_KEY } from './choice-selection';
 import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
@@ -303,10 +304,19 @@ function stripHiddenRowValues(
     if (!rows.some((row) => row.displayCondition)) continue;
 
     const hiddenCellIds = new Set<string>();
+    const visibleRowIds = new Set<string>();
     for (const row of rows) {
-      if (!row.displayCondition) continue;
-      if (shouldDisplayRow(row, responses, questions, ctx)) continue;
+      if (!row.displayCondition || shouldDisplayRow(row, responses, questions, ctx)) {
+        visibleRowIds.add(row.id);
+        continue;
+      }
       for (const cell of row.cells) hiddenCellIds.add(cell.id);
+    }
+    if (hiddenCellIds.size === 0) continue;
+    // 숨은 행이 가진 세로 병합 시작 셀은 렌더러가 같은 id 로 첫 가시 행에 올려 그린다 —
+    // 응답자에게 보이는 칸이므로 지우지 않는다. 렌더러와 같은 투영으로 판정한다.
+    for (const row of recalculateRowspansForVisibleRows(rows, visibleRowIds)) {
+      for (const cell of row.cells) if (!cell.isHidden) hiddenCellIds.delete(cell.id);
     }
     if (hiddenCellIds.size === 0) continue;
 
