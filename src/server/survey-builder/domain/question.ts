@@ -45,6 +45,7 @@ export const CreateQuestionInput = z.object({
   mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
+  maxSelectionsSource: z.custom<QuestionType['maxSelectionsSource']>().optional(),
   noticeContent: z.string().optional(),
   // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
   noticeBgColor: z
@@ -117,6 +118,7 @@ export const UpdateQuestionData = z.object({
   mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
+  maxSelectionsSource: z.custom<QuestionType['maxSelectionsSource']>().optional(),
   noticeContent: z.string().optional(),
   // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
   noticeBgColor: z

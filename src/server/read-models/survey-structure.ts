@@ -122,6 +122,13 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.choiceGroups != null ? { choiceGroups: q.choiceGroups } : {}),
     ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
     ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
+    ...(q.maxSelectionsSource != null
+      ? {
+          maxSelectionsSource: q.maxSelectionsSource as NonNullable<
+            QuestionType['maxSelectionsSource']
+          >,
+        }
+      : {}),
     ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),
     ...(q.noticeBgColor != null ? { noticeBgColor: q.noticeBgColor } : {}),
     ...(q.requiresAcknowledgment != null

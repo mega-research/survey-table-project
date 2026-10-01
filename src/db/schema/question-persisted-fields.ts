@@ -33,6 +33,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'mobileOptionsColumns',
   'minSelections',
   'maxSelections',
+  'maxSelectionsSource',
   'noticeContent',
   'noticeBgColor',
   'requiresAcknowledgment',

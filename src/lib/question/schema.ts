@@ -114,6 +114,10 @@ export const CheckboxQuestionSchema = base
     type: z.literal('checkbox'),
     minSelections: z.number().optional(),
     maxSelections: z.number().optional(),
+    maxSelectionsSource: z
+      .custom<NonNullable<Question['maxSelectionsSource']>>()
+      .nullable()
+      .optional(),
   });
 
 export const SelectQuestionSchema = base.extend({

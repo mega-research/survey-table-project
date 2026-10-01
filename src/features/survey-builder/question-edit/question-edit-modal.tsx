@@ -108,6 +108,9 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
     ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
     ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
+    ...(question.maxSelectionsSource !== undefined
+      ? { maxSelectionsSource: question.maxSelectionsSource }
+      : {}),
     noticeContent: question.noticeContent || '',
     ...(question.noticeBgColor !== undefined ? { noticeBgColor: question.noticeBgColor } : {}),
     requiresAcknowledgment: question.requiresAcknowledgment || false,
@@ -550,6 +553,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   : question?.mobileOptionsColumns,
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
+              // null = 연동 해제가 유효값이므로 ?? 폴백 금지
+              maxSelectionsSource:
+                currentFormData.maxSelectionsSource !== undefined
+                  ? currentFormData.maxSelectionsSource
+                  : question?.maxSelectionsSource,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,
               // null = 기본 파랑 복귀가 유효값이므로 ?? 폴백 금지
               noticeBgColor:

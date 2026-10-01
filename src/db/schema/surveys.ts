@@ -46,6 +46,7 @@ import type {
   TableRow,
   TableValidationRule,
   TextValidation,
+  MaxSelectionsSource,
 } from '@/types/survey';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 
@@ -211,6 +212,8 @@ export const questions = pgTable(
     // 체크박스 선택 개수 제한 (checkbox 타입 전용)
     minSelections: integer('min_selections'),
     maxSelections: integer('max_selections'),
+    // 최대 선택 개수를 다른 문항 응답에서 가져온다 {questionId, unlimitedFrom} — NULL = 고정값만 (0130)
+    maxSelectionsSource: jsonb('max_selections_source').$type<MaxSelectionsSource>(),
 
     // 순위형(ranking) 타입 전용 설정
     rankingConfig: jsonb('ranking_config').$type<RankingConfig>(),

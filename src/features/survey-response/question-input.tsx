@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
@@ -221,7 +222,7 @@ function resolveTableErrorCellIds(
 }
 
 function QuestionInputControl({
-  question,
+  question: questionProp,
   value,
   onChange: onChangeProp,
   allResponses,
@@ -236,6 +237,9 @@ function QuestionInputControl({
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
+  // 최대 선택 개수가 다른 문항 응답을 따라가는 문항은 여기서 상한을 갈아 끼운다 — 아래 렌더러들은
+  // 고정 숫자만 읽는다. 출처가 없는 문항은 같은 참조가 그대로 돌아온다.
+  const question = withResolvedMaxSelections(questionProp, allResponses);
   // 선택형 문항은 답이 바뀔 때 선택이 풀린 기타·상세 기재 입력값을 비운다(순위형과 같은 동작).
   const onChange = useClearDeselectedOptionTexts(question, onChangeProp);
 

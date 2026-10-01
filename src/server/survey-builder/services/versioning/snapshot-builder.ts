@@ -72,6 +72,7 @@ interface SnapshotQuestion {
   choiceGroups?: Question['choiceGroups'] | undefined;
   minSelections?: number | undefined;
   maxSelections?: number | undefined;
+  maxSelectionsSource?: Question['maxSelectionsSource'] | undefined;
   noticeContent?: string | undefined;
   noticeBgColor?: string | undefined;
   requiresAcknowledgment?: boolean | undefined;
@@ -170,6 +171,7 @@ export function buildSurveySnapshot(
       choiceGroups: q.choiceGroups,
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
+      maxSelectionsSource: q.maxSelectionsSource,
       noticeContent: q.noticeContent,
       noticeBgColor: q.noticeBgColor,
       requiresAcknowledgment: q.requiresAcknowledgment,

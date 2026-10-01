@@ -53,6 +53,11 @@ import {
   textQualityViolation,
 } from '@/features/question-renderer/utils/text-quality';
 
+import { resolveMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
+import { countSelectionsTowardMax } from '@/features/question-renderer/utils/exclusive-choice';
+import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
+
+import { isExclusiveChoiceValue } from './answer-validation';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
@@ -64,7 +69,9 @@ export interface NumericIssue {
     | 'formula'
     | 'format'
     /** 단답형·장문형 응답 품질(최소 글자 수·의미 없는 입력) — 입력칸 아래에 문구가 붙는다 */
-    | 'text-quality';
+    | 'text-quality'
+    /** 체크박스 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라갈 때만 생긴다 */
+    | 'selection-max';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -663,6 +670,30 @@ function formatViolationMessage(
   return result.ok ? null : formatFailureMessage(inputType, result.reason);
 }
 
+/**
+ * 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라가는 비그룹 체크박스만 본다.
+ *
+ * 고정 상한은 선택 가드(꽉 차면 나머지 비활성)만으로 넘을 수 없지만, 따라가는 상한은 참조
+ * 문항을 나중에 줄이면 이미 고른 것이 초과 상태로 남는다. 선택을 대신 지우지 않고 「다음」을
+ * 막아 응답자가 뺄 것을 고르게 한다. 개수는 선택 가드와 같이 단독 선택 보기를 빼고 센다.
+ */
+function selectionMaxIssue(
+  question: Question,
+  response: unknown,
+  ctx: NumericValidationCtx | undefined,
+): NumericIssue | null {
+  if (question.type !== 'checkbox' || !question.maxSelectionsSource?.questionId) return null;
+  if (isGroupedChoiceQuestion(question) || !Array.isArray(response)) return null;
+  const max = resolveMaxSelections(question, ctx?.allResponses);
+  if (max === undefined) return null;
+  const count = countSelectionsTowardMax(response, (val) => isExclusiveChoiceValue(question, val));
+  if (count <= max) return null;
+  return {
+    kind: 'selection-max',
+    message: `최대 ${max}개까지 선택할 수 있습니다. (현재 ${count}개 선택)`,
+  };
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
@@ -700,6 +731,8 @@ export function collectNumericIssues(
       ...collectOptionTextIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
     );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
+    const selectionMax = selectionMaxIssue(question, response, ctx);
+    if (selectionMax) issues.push(selectionMax);
     return issues;
   }
   const cellValues =

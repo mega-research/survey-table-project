@@ -59,7 +59,7 @@ function requiredRankCount(question: Question, optionCount: number): number {
  * 비그룹 checkbox 응답값 하나가 단독 선택 보기인가. 값은 옵션 value(일반 문항) 또는
  * 보기 셀 id(보기 소스 표)이고, 기타 상세기재는 `{selectedValue}` 객체다.
  */
-function isExclusiveChoiceValue(question: Question, val: unknown): boolean {
+export function isExclusiveChoiceValue(question: Question, val: unknown): boolean {
   const key = choiceValueKey(val);
   if (key === undefined) return false;
   if (question.options?.some((o) => o.exclusiveChoice === true && o.value === key)) return true;

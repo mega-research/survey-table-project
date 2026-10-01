@@ -108,7 +108,7 @@ export interface CheckboxQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    Pick<Question, 'minSelections' | 'maxSelections'> {
+    Pick<Question, 'minSelections' | 'maxSelections' | 'maxSelectionsSource'> {
   type: 'checkbox';
 }
 

@@ -37,6 +37,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   mobileOptionsColumns: 1,
   minSelections: 1,
   maxSelections: 3,
+  maxSelectionsSource: { questionId: 'q-team-count', unlimitedFrom: 5 },
   noticeContent: '<p>공지</p>',
   noticeBgColor: 'none',
   requiresAcknowledgment: true,

@@ -134,6 +134,16 @@ export interface TextValidation {
   rejectMeaningless?: boolean;
 }
 
+/**
+ * 최대 선택 개수의 출처 (questions.max_selections_source JSONB).
+ * "담당한 팀 수만큼만 고를 수 있다" 처럼 상한이 앞 문항 응답을 따라가는 경우에 쓴다.
+ * 판정은 features/question-renderer/utils/dynamic-selection-limit 한 곳이다.
+ */
+export interface MaxSelectionsSource {
+  questionId: string; // 숫자형 단답(text + inputType number) 문항
+  unlimitedFrom?: number; // 참조값이 이 수 이상이면 제한 없음. 미지정 = 항상 참조값이 상한
+}
+
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
   unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
@@ -829,6 +839,9 @@ export interface Question {
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
+  // 최대 선택 개수를 다른 문항의 숫자 응답에서 가져온다 (비그룹 checkbox 전용, 0130).
+  // 참조값을 못 읽으면 위 고정 maxSelections 로 폴백한다.
+  maxSelectionsSource?: MaxSelectionsSource | null;
   // 순위형(ranking) 타입 전용. optionsSource='table' 이면 Case 2 (tableRowsData 의 ranking_opt 셀을 옵션으로)
   rankingConfig?: RankingConfig;
   // 테이블 레벨 옵션 그룹 정의 (보기 셀 묶음 - SPSS 그룹 변수/MRSET 단위)

@@ -220,6 +220,7 @@ export async function commitCellEdit({
               mobileOptionsColumns: question.mobileOptionsColumns,
               minSelections: question.minSelections,
               maxSelections: question.maxSelections,
+              maxSelectionsSource: question.maxSelectionsSource,
               noticeContent: question.noticeContent,
               requiresAcknowledgment: question.requiresAcknowledgment,
               noticeBgColor: question.noticeBgColor,

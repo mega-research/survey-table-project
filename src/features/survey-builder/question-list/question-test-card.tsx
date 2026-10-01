@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
@@ -474,7 +475,7 @@ function SelectTestInput({
 
 // 질문 타입별 테스트 입력 컴포넌트
 function QuestionTestInput({
-  question,
+  question: questionProp,
   value,
   onChange: onChangeProp,
   allResponses,
@@ -492,6 +493,8 @@ function QuestionTestInput({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 응답 화면(QuestionInput)과 같이 — 최대 선택 개수가 다른 문항 응답을 따라가면 상한을 갈아 끼운다.
+  const question = withResolvedMaxSelections(questionProp, allResponses);
   // 응답 화면(QuestionInput)과 같이 — 답이 바뀌면 선택이 풀린 기타·상세 기재 입력값을 비운다.
   const onChange = useClearDeselectedOptionTexts(question, onChangeProp);
 
