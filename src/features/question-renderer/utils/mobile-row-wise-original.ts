@@ -153,6 +153,8 @@ export function buildMobileRowWiseOriginalModel(
           resolveChoiceLabel,
           rowLabelSourceCellId: leaf.labelSourceCellId,
           isLabelSourceHidden: input.isLabelSourceHidden,
+          // 행 제목은 카드 머리글이라 라벨이 없으면 자리 자체를 비운다
+          fallbackLabel: '',
         }).label;
         const subgroupLabel =
           leaf.subGroupSourceCellId && input.isLabelSourceHidden?.(leaf.subGroupSourceCellId)

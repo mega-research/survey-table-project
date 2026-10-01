@@ -169,6 +169,7 @@ export function getMobileOriginalRowLabelCandidate({
   resolveChoiceLabel,
   rowLabelSourceCellId,
   isLabelSourceHidden,
+  fallbackLabel = '(라벨 없음)',
 }: {
   authoredColumns: TableColumn[];
   row: TableRow;
@@ -176,6 +177,8 @@ export function getMobileOriginalRowLabelCandidate({
   resolveChoiceLabel: (cellId: string) => string | undefined;
   rowLabelSourceCellId?: string | undefined;
   isLabelSourceHidden?: ((cellId: string) => boolean) | undefined;
+  /** 라벨을 못 찾았을 때 쓸 글자. 목록 항목처럼 이름이 꼭 있어야 하는 자리가 아니면 '' 로 비운다. */
+  fallbackLabel?: string | undefined;
 }): MobileOriginalRowLabelCandidate {
   const omit = clampMobileDrilldownOmitLeadingColumns(
     omitLeadingAuthoredColumns,
@@ -225,5 +228,5 @@ export function getMobileOriginalRowLabelCandidate({
   const choiceLabel = choice ? resolveChoiceLabel(choice.id)?.trim() : undefined;
   return choice && choiceLabel
     ? { label: choiceLabel, sourceCellId: choice.id }
-    : { label: '(라벨 없음)' };
+    : { label: fallbackLabel };
 }

@@ -113,6 +113,8 @@ export function MobileRowWiseOriginalSheet({
                     // 같은 행 라벨이 하위 그룹과 행 제목 양쪽에 쓰일 수 있다.
                     // 중복이면 표시와 접근성 이름 모두 위쪽 카드 헤더를 사용한다.
                     const useSubgroupTitle = sharesSubgroupTitle(question);
+                    // 라벨이 없는 행은 제목 줄을 그리지 않는다
+                    const hasTitle = Boolean(question.title.trim());
                     const hasError = question.projection.row.cells.some((cell) =>
                       errorCellIds?.has(cell.id),
                     );
@@ -135,11 +137,13 @@ export function MobileRowWiseOriginalSheet({
                       <div
                         key={question.rowId}
                         role="group"
-                        aria-labelledby={useSubgroupTitle ? subgroupLabelId : labelId}
+                        aria-labelledby={
+                          useSubgroupTitle ? subgroupLabelId : hasTitle ? labelId : undefined
+                        }
                         data-row-question-id={question.rowId}
                         className="space-y-3 px-3 py-4"
                       >
-                        {!useSubgroupTitle ? (
+                        {!useSubgroupTitle && hasTitle ? (
                           <h5
                             id={labelId}
                             className={cn(
@@ -152,7 +156,9 @@ export function MobileRowWiseOriginalSheet({
                         ) : null}
                         {errorDescriptionId ? (
                           <p id={errorDescriptionId} className="sr-only">
-                            {question.title}의 응답을 확인해 주세요.
+                            {hasTitle
+                              ? `${question.title}의 응답을 확인해 주세요.`
+                              : '응답을 확인해 주세요.'}
                           </p>
                         ) : null}
                         {segments && renderScaleBar && renderGroupTiles ? (
