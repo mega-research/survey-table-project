@@ -12,7 +12,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 영역           | 기술                                        | 버전            |
 | -------------- | ------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)             | 16.3.5          |
+| 프레임워크     | Next.js (App Router, Turbopack)             | 16.3.8          |
 | UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
 | 스타일링       | TailwindCSS                                 | 4.x             |
 | 컴포넌트       | shadcn/ui (Radix UI)                        | -               |

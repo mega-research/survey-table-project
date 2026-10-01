@@ -115,7 +115,7 @@
     "inngest": "^4.4.0",
     "lucide-react": "^0.544.0",
     "nanoid": "^5.1.11",
-    "next": "16.3.5",
+    "next": "16.3.8",
     "pdfjs-dist": "^6.3.289",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
