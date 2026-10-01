@@ -150,7 +150,14 @@ export interface NumberFormat {
 // 하위호환 확장 — 기존 저장 데이터는 필드 그대로 유효하다.
 export interface SumConstraint {
   id: string;
-  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계. 존재하지 않는 id는 평가 시 무시
+  /**
+   * 좌변 집계 방식 (leftExpr 없을 때). 미지정·'sum' = 선택 셀 값의 합계, 'count' = 선택한 칸 중
+   * **입력된 칸 수**("10행 중 하나 이상 입력"). count 는 숫자 칸뿐 아니라 인터랙티브 셀 전부
+   * (입력·라디오·체크박스·셀렉트·순위)를 대상으로 하고, 합계와 달리 대상이 전부 비어 있어도·표를
+   * 건드리지 않았어도 검사한다. leftExpr·targetExpr·tolerance 는 쓰지 않는다 (CONTEXT.md "입력된 칸 수").
+   */
+  aggregate?: 'sum' | 'count';
+  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계(또는 입력된 칸 수). 존재하지 않는 id는 평가 시 무시
   leftExpr?: CalcExpr; // 있으면 좌변 = 이 수식 (cellIds 무시)
   operator: 'eq' | 'ne' | 'gte' | 'lte' | 'gt' | 'lt'; // 같음/다름/이상/이하/초과/미만
   target: number; // targetExpr 없을 때 우변 리터럴. 기본 100

@@ -365,6 +365,54 @@ export function evaluateSumConstraint(
   return { skipped: false, ok, sum: left };
 }
 
+/** 합계 제약이 「입력된 칸 수」 모드인가 — 좌변 수식(leftExpr)이 있으면 수식이 우선이다. */
+export function isFilledCountConstraint(constraint: SumConstraint): boolean {
+  return constraint.aggregate === 'count' && !constraint.leftExpr;
+}
+
+/**
+ * 「입력된 칸 수」 제약 평가 — 선택한 칸 중 응답이 들어 있는 칸의 수를 기준값과 비교한다.
+ *
+ * 합계 모드와 다른 점은 **대상이 전부 비어도 건너뛰지 않는다**는 것이다. "이 칸들 중 하나는
+ * 적어야 한다" 가 이 모드의 존재 이유라, 비었다고 넘어가면 규칙이 아무것도 막지 못한다.
+ * 건너뛰는 경우는 화면에 대상 칸이 하나도 없을 때뿐이다(전부 숨었거나 비활성 — 채울 길이 없는
+ * 규칙이 「다음」을 영영 막으면 안 된다).
+ *
+ * "입력됨" 은 필수 셀 판정과 같은 정본(isCellValuePresent)을 쓴다 — 공백만 있는 문자열·빈 배열은
+ * 미입력, 숫자 0 은 입력이다. 기준값은 리터럴(target)만 본다.
+ * @param existingCellIds 보이고 활성인 셀 id 집합 (합계 모드와 같은 필터)
+ */
+export function evaluateFilledCountConstraint(
+  constraint: SumConstraint,
+  cellValues: Record<string, unknown>,
+  existingCellIds: Set<string>,
+): { skipped: boolean; ok: boolean; count: number; filledIds: string[]; emptyIds: string[] } {
+  const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
+  if (targetIds.length === 0) {
+    return { skipped: true, ok: true, count: 0, filledIds: [], emptyIds: [] };
+  }
+  const filledIds = targetIds.filter((id) => isCellValuePresent(cellValues[id]));
+  const emptyIds = targetIds.filter((id) => !filledIds.includes(id));
+  const ok = compareValues(filledIds.length, constraint.target, constraint.operator, 0);
+  return { skipped: false, ok, count: filledIds.length, filledIds, emptyIds };
+}
+
+const FILLED_COUNT_PHRASES: Record<SumConstraint['operator'], (target: number) => string> = {
+  eq: (n) => `정확히 ${n}칸을 입력해야 합니다`,
+  ne: (n) => `입력한 칸이 ${n}칸이 아니어야 합니다`,
+  gte: (n) => `${n}칸 이상 입력해야 합니다`,
+  lte: (n) => `${n}칸까지만 입력할 수 있습니다`,
+  gt: (n) => `${n}칸보다 많이 입력해야 합니다`,
+  lt: (n) => `${n}칸보다 적게 입력해야 합니다`,
+};
+
+// 저작자 문구가 있으면 그대로, 없으면 기준과 현재 칸 수를 알려 준다(합계 문구와 같은 원칙).
+function filledCountMessage(constraint: SumConstraint, count: number): string {
+  const custom = constraint.errorMessage?.trim();
+  if (custom) return custom;
+  return `선택된 칸 중 ${FILLED_COUNT_PHRASES[constraint.operator](constraint.target)} (현재 ${count}칸)`;
+}
+
 const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
   eq: '이 되어야 합니다',
   ne: '이 아니어야 합니다',
@@ -678,6 +726,23 @@ export function collectNumericIssues(
   const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells, choiceSelection));
   const issues: NumericIssue[] = [...groupOptionTextIssues];
 
+  const existingIds = new Set(enabled.map((c) => c.id));
+
+  // 0) 입력된 칸 수 제약 — 미접촉 표에서도 평가한다. "이 칸들 중 N칸은 적어야 한다" 는 표를
+  //    건드리지 않은 응답자에게도 걸려야 하므로 아래 미접촉 스킵 밖에 둔다. 모자라면 빈 칸을,
+  //    넘치면 채운 칸을 짚는다.
+  for (const constraint of question.sumConstraints ?? []) {
+    if (!isFilledCountConstraint(constraint)) continue;
+    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
+    if (result.skipped || result.ok) continue;
+    const highlightIds = result.count < constraint.target ? result.emptyIds : result.filledIds;
+    issues.push({
+      kind: 'sum',
+      message: filledCountMessage(constraint, result.count),
+      ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
+    });
+  }
+
   // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이
   // 존재하므로 항상 평가한다 (미응답 데이터 참조는 group/SUM 이 0으로 접어 표시되고,
   // 그 표시값이 기준 수식과 어긋나면 표를 통째로 건너뛴 것과 무관하게 차단돼야 한다).
@@ -738,8 +803,8 @@ export function collectNumericIssues(
 
     // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
     //    숨은 열/행·비활성 게이팅 셀 제외)
-    const existingIds = new Set(enabled.map((c) => c.id));
     for (const constraint of question.sumConstraints ?? []) {
+      if (isFilledCountConstraint(constraint)) continue; // 위 0) 에서 평가했다
       const result = evaluateSumConstraint(
         constraint,
         cellValues,

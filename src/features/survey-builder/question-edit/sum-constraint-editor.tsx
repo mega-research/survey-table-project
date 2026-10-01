@@ -5,8 +5,10 @@
  * 셀 선택은 TablePreview 의 renderCell override 로 숫자 input 셀에만 체크 오버레이를 씌운다.
  * (기존 TableValidationEditor 의 분기 규칙과 별개 — 이쪽은 차단형 검증)
  *
- * 좌변/우변은 각각 "셀 선택 합계 ↔ 수식", "숫자 ↔ 데이터 참조" 두 모드를 토글한다.
- * 모드는 leftExpr/targetExpr 존재 여부에서 파생한다 — 로컬 state 로 이중화하지 않는다
+ * 좌변은 "셀 선택 합계 · 입력된 칸 수 · 수식" 세 모드, 우변은 "숫자 ↔ 데이터 참조" 두 모드다.
+ * 「입력된 칸 수」 는 "이 칸들 중 N칸 이상 입력" 용이라 숫자 칸뿐 아니라 인터랙티브 셀 전부를
+ * 고를 수 있고, 기준값은 숫자만 받는다(참조·오차 없음).
+ * 모드는 leftExpr/aggregate/targetExpr 에서 파생한다 — 로컬 state 로 이중화하지 않는다
  * (formData vs store 이중 상태로 데이터가 조용히 유실되는 버그군 재발 방지).
  */
 
@@ -29,6 +31,7 @@ import type {
   TableRow,
 } from '@/types/survey';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 
 import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
 
@@ -49,6 +52,47 @@ export function seedLeftExprFromCellIds(cellIds: string[]): CalcExpr {
     terms: [{ kind: 'agg', fn: 'sum', items: cellIds.map((cellId) => ({ kind: 'cell', cellId })) }],
   };
 }
+
+type LeftMode = 'cells' | 'count' | 'expr';
+
+/** 좌변 모드 — 수식이 있으면 수식, 없으면 집계 방식에서 파생한다. */
+export function leftModeOf(constraint: SumConstraint): LeftMode {
+  if (constraint.leftExpr) return 'expr';
+  return constraint.aggregate === 'count' ? 'count' : 'cells';
+}
+
+/**
+ * 좌변 모드 전환 — 모드에 맞지 않는 필드를 함께 정리한 새 규칙을 돌려준다.
+ * - 수식: 기존 선택을 SUM 수식으로 시드한다(칸 수에서 오면 숫자 칸만 남긴 뒤).
+ * - 입력된 칸 수: 수식·데이터 참조·오차를 걷어낸다. 기준값이 합계용 기본값(100) 그대로면 1 로 낮춘다.
+ * - 셀 선택 합계: 숫자 칸이 아닌 선택을 뺀다(합산할 수 없다).
+ */
+export function switchLeftMode(
+  constraint: SumConstraint,
+  mode: LeftMode,
+  numericCellIds: ReadonlySet<string>,
+): SumConstraint {
+  if (leftModeOf(constraint) === mode) return constraint;
+  const { leftExpr: _leftExpr, aggregate: _aggregate, ...base } = constraint;
+  const numericOnly = base.cellIds.filter((id) => numericCellIds.has(id));
+  if (mode === 'expr') {
+    return { ...base, cellIds: numericOnly, leftExpr: seedLeftExprFromCellIds(numericOnly) };
+  }
+  if (mode === 'cells') return { ...base, cellIds: numericOnly };
+  const { targetExpr: _targetExpr, tolerance: _tolerance, ...rest } = base;
+  return {
+    ...rest,
+    aggregate: 'count',
+    target: leftModeOf(constraint) === 'cells' && rest.target === 100 ? 1 : rest.target,
+    operator: leftModeOf(constraint) === 'cells' && rest.operator === 'eq' ? 'gte' : rest.operator,
+  };
+}
+
+const LEFT_MODE_OPTIONS: Array<{ value: LeftMode; label: string }> = [
+  { value: 'cells', label: '셀 선택 합계' },
+  { value: 'count', label: '입력된 칸 수' },
+  { value: 'expr', label: '수식' },
+];
 
 interface Props {
   constraints: SumConstraint[];
@@ -91,6 +135,14 @@ export function SumConstraintEditor({
       .map((c) => c.id),
   );
 
+  // 「입력된 칸 수」 대상 — 응답을 받는 인터랙티브 셀 전부 (필수 셀 대상과 같은 집합)
+  const interactiveCellIds = new Set(
+    tableRowsData
+      .flatMap((row) => row.cells)
+      .filter((c) => REQUIRED_CELL_TYPES.has(c.type) && !c.isHidden)
+      .map((c) => c.id),
+  );
+
   // 저장 전 dangling cellId 정리 (이중 방어의 빌더 쪽)
   const emit = (next: SumConstraint[]) => onUpdate(pruneSumConstraints(next, tableRowsData));
 
@@ -123,17 +175,11 @@ export function SumConstraintEditor({
   // 주의: 셀 선택 합계 모드는 대상 셀이 전부 빈 값이면 검증 자체를 건너뛰지만(evaluateSumConstraint
   // skipped), 수식 모드는 빈 셀을 0으로 계산해 비교를 그대로 실행한다 — 토글이 완전 등가 변환은
   // 아니다(계산 셀(calc cell)과 동일 의미론이라 의도된 차이).
-  const setLeftMode = (index: number, mode: 'cells' | 'expr') => {
+  const setLeftMode = (index: number, mode: LeftMode) => {
     const current = constraints[index];
     if (!current) return;
-    if (mode === 'expr') {
-      if (current.leftExpr) return;
-      updateAt(index, { leftExpr: seedLeftExprFromCellIds(current.cellIds) });
-      return;
-    }
-    if (!current.leftExpr) return;
-    const { leftExpr: _drop, ...rest } = current;
-    emit(constraints.map((c, i) => (i === index ? rest : c)));
+    const next = switchLeftMode(current, mode, numericCellIds);
+    if (next !== current) emit(constraints.map((c, i) => (i === index ? next : c)));
   };
 
   const setRightMode = (index: number, mode: 'number' | 'ref') => {
@@ -169,7 +215,8 @@ export function SumConstraintEditor({
         <div>
           <h4 className="text-sm font-semibold">합계 검증</h4>
           <p className="mt-0.5 text-xs text-gray-500">
-            선택한 숫자 셀들의 합이 조건을 만족해야 응답자가 다음으로 진행할 수 있습니다
+            선택한 숫자 셀들의 합, 또는 선택한 칸 중 입력된 칸 수가 조건을 만족해야 응답자가 다음으로
+            진행할 수 있습니다
           </p>
         </div>
         <Button
@@ -187,7 +234,7 @@ export function SumConstraintEditor({
         </Button>
       </div>
 
-      {numericCellIds.size === 0 && (
+      {numericCellIds.size === 0 && interactiveCellIds.size === 0 && (
         <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
           숫자 input 셀이 없습니다. 셀 편집에서 입력 셀의 &quot;숫자만 입력&quot;을 먼저 켜주세요.
         </p>
@@ -195,6 +242,9 @@ export function SumConstraintEditor({
 
       {constraints.map((constraint, index) => {
         const expanded = expandedIds.has(constraint.id);
+        const leftMode = leftModeOf(constraint);
+        const isCount = leftMode === 'count';
+        const selectableCellIds = isCount ? interactiveCellIds : numericCellIds;
         const operatorLabel =
           OPERATOR_OPTIONS.find((o) => o.value === constraint.operator)?.label ?? '';
         return (
@@ -213,7 +263,11 @@ export function SumConstraintEditor({
                   <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
                 )}
                 <span className="truncate text-xs text-gray-600">
-                  {constraint.leftExpr ? '수식' : `셀 ${constraint.cellIds.length}개 합계`}{' '}
+                  {leftMode === 'expr'
+                    ? '수식'
+                    : isCount
+                      ? `칸 ${constraint.cellIds.length}개 중 입력된 칸 수`
+                      : `셀 ${constraint.cellIds.length}개 합계`}{' '}
                   {operatorLabel} {constraint.targetExpr ? '참조 값' : constraint.target}
                   {!constraint.leftExpr && constraint.cellIds.length === 0 && (
                     <span className="ml-1.5 font-medium text-amber-600">셀 미선택</span>
@@ -236,24 +290,27 @@ export function SumConstraintEditor({
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-600">비교할 값</span>
                   <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
-                    <button
-                      type="button"
-                      aria-pressed={!constraint.leftExpr}
-                      onClick={() => setLeftMode(index, 'cells')}
-                      className={`px-3 py-1 text-xs font-medium ${!constraint.leftExpr ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
-                    >
-                      셀 선택 합계
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={!!constraint.leftExpr}
-                      onClick={() => setLeftMode(index, 'expr')}
-                      className={`border-l border-gray-200 px-3 py-1 text-xs font-medium ${constraint.leftExpr ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
-                    >
-                      수식
-                    </button>
+                    {LEFT_MODE_OPTIONS.map((option, optionIndex) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={leftMode === option.value}
+                        onClick={() => setLeftMode(index, option.value)}
+                        className={`px-3 py-1 text-xs font-medium ${optionIndex > 0 ? 'border-l border-gray-200' : ''} ${leftMode === option.value ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
+
+                {isCount && (
+                  <p className="text-xs text-gray-500">
+                    고른 칸 중 응답이 들어 있는 칸의 수를 셉니다(숫자 0 도 입력). 전부 비어 있어도, 표를
+                    건드리지 않았어도 검사합니다 — &quot;이 칸들 중 하나 이상 입력&quot; 에 씁니다. 숨은
+                    행·비활성 칸은 세지 않습니다.
+                  </p>
+                )}
 
                 {constraint.leftExpr ? (
                   <FormulaExprEditor
@@ -266,7 +323,9 @@ export function SumConstraintEditor({
                   <>
                     {constraint.cellIds.length === 0 && (
                       <p className="text-xs font-medium text-amber-600">
-                        합산할 셀이 선택되지 않았습니다 — 아래 표에서 셀을 선택하세요
+                        {isCount
+                          ? '대상 칸이 선택되지 않았습니다 — 아래 표에서 칸을 선택하세요'
+                          : '합산할 셀이 선택되지 않았습니다 — 아래 표에서 셀을 선택하세요'}
                       </p>
                     )}
                     <TablePreview
@@ -275,7 +334,7 @@ export function SumConstraintEditor({
                       tableHeaderGrid={tableHeaderGrid}
                       hideColumnLabels={hideColumnLabels}
                       renderCell={(cell: TableCell) => {
-                        if (!numericCellIds.has(cell.id)) return undefined; // 읽기 전용 폴백
+                        if (!selectableCellIds.has(cell.id)) return undefined; // 읽기 전용 폴백
                         const selected = constraint.cellIds.includes(cell.id);
                         return (
                           <label
@@ -289,7 +348,7 @@ export function SumConstraintEditor({
                               onChange={() => toggleCell(index, cell.id)}
                               className="h-4 w-4"
                             />
-                            합산
+                            {isCount ? '대상' : '합산'}
                           </label>
                         );
                       }}
@@ -300,9 +359,11 @@ export function SumConstraintEditor({
                 {/* 조건 + 우변 */}
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-xs text-gray-600">
-                    {constraint.leftExpr ? '계산 값이' : '선택 셀 합계가'}
+                    {leftMode === 'expr' ? '계산 값이' : isCount ? '입력된 칸 수가' : '선택 셀 합계가'}
                   </span>
-                  <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                  <div
+                    className={`inline-flex overflow-hidden rounded-md border border-gray-200 ${isCount ? 'hidden' : ''}`}
+                  >
                     <button
                       type="button"
                       aria-pressed={!constraint.targetExpr}
@@ -361,7 +422,7 @@ export function SumConstraintEditor({
                 )}
 
                 {/* 오차 허용 — eq/ne 전용 */}
-                {(constraint.operator === 'eq' || constraint.operator === 'ne') && (
+                {!isCount && (constraint.operator === 'eq' || constraint.operator === 'ne') && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-xs text-gray-600">오차 허용 ±</span>
                     <Input
