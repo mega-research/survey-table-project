@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
 import {
@@ -12,7 +12,7 @@ import {
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
-import { CHOICE_GROUPS_KEY, collectTableChoiceSelection } from '@/lib/survey/choice-selection';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { TableCell } from '@/types/survey';
 
@@ -21,6 +21,7 @@ import { CellContentLayout } from './cell-content-layout';
 import { CheckboxCell } from './checkbox-cell';
 import { useChoiceGroups } from './choice-groups-context';
 import { ChoiceOptCell } from './choice-opt-cell';
+import { createGateValueSelector, gateWantsChoiceSelection, selectNoGateValues } from './gate-value-selector';
 import { useGatingTableCells } from './gating-table-cells-context';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
@@ -212,47 +213,28 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     siblingCellIds,
   );
 
-  // 게이팅 평가에 실제로 필요한 값은 컨트롤러 셀 하나뿐이다(option 조건의 옵션 id/value
-  // 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 질문 응답 객체 전체를
+  // 게이팅 평가에 실제로 필요한 값은 이 셀의 조건이 참조하는 컨트롤러뿐이다(option 조건의
+  // 옵션 id/value 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 질문 응답 객체 전체를
   // 구독하면, mergePatch 가 매 입력마다 만드는 새 참조 탓에 같은 표의
   // 모든 InteractiveCell(input 뿐 아니라 checkbox/radio/text 전 타입)이 셀 하나만 바뀌어도
-  // 재렌더된다 — use-cell-response 의 selectCell 이 지키는 셀 단위 스칼라 구독 원칙을 여기서도
-  // 지켜야 한다. enabledWhen 이 없는 셀(대다수)은 controllerCellId 가 undefined 라 구독
-  // 자체가 항상 같은 값(undefined)을 반환해 재렌더를 유발하지 않는다.
-  const controllerCellId =
-    GATABLE_CELL_TYPES.has(cell.type) && cell.enabledWhen
-      ? cell.enabledWhen.controllerCellId
-      : undefined;
+  // 재렌더된다 — use-cell-response 의 selectCell 이 지키는 셀 단위 구독 원칙을 여기서도
+  // 지켜야 한다. 조건 묶음은 컨트롤러가 여럿이라 필요한 키만 뽑은 객체를 구독하고,
+  // 선택자가 값이 그대로면 같은 객체를 돌려줘 재렌더를 막는다(createGateValueSelector).
+  // enabledWhen 이 없는 셀(대다수)은 모듈 상수 선택자가 항상 같은 빈 객체를 돌려준다.
+  const gateCondition = GATABLE_CELL_TYPES.has(cell.type) ? cell.enabledWhen : undefined;
+  const selectGateValues = useMemo(
+    () => (gateCondition ? createGateValueSelector(gateCondition) : selectNoGateValues),
+    [gateCondition],
+  );
+  const sourceGateValues = useQuestionResponseSelector(source, questionId, selectGateValues);
 
   // choice-selected 조건의 컨트롤러는 셀 값이 아니라 표 응답 안 예약 키(그룹 선택 맵)에 있다.
-  // 주입 원본은 그 맵 하나만 구독한다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
-  const wantsChoiceSelection = cell.enabledWhen?.kind === 'choice-selected';
-  const controllerKey = controllerCellId
-    ? wantsChoiceSelection
-      ? CHOICE_GROUPS_KEY
-      : controllerCellId
-    : undefined;
-  const selectController = useCallback(
-    (questionResponse: unknown) => {
-      if (!controllerKey) return undefined;
-      if (typeof questionResponse === 'object' && questionResponse !== null) {
-        return (questionResponse as Record<string, unknown>)[controllerKey];
-      }
-      return undefined;
-    },
-    [controllerKey],
-  );
-  const sourceControllerValue = useQuestionResponseSelector(source, questionId, selectController);
+  // 선택자는 그 맵을 키 하나로 싣는다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
+  const wantsChoiceSelection = gateWantsChoiceSelection(gateCondition);
 
   // 주입 원본이 없으면(controlled 렌더) 상위에서 이미 질문 단위 value prop 으로 내려오므로
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
-  // 키는 위에서 계산한 controllerKey 를 그대로 쓴다 — 객체 리터럴에 조건식 계산 키를 두면
-  // React Compiler 가 이 컴포넌트를 통째로 최적화에서 제외한다(표 셀마다 그려지는 핫 패스다).
-  const gatingCellValues: Record<string, unknown> = source
-    ? controllerKey
-      ? { [controllerKey]: sourceControllerValue }
-      : {}
-    : (value ?? {});
+  const gatingCellValues: Record<string, unknown> = source ? sourceGateValues : (value ?? {});
 
   const tableCells = useGatingTableCells();
   const choiceGroups = useChoiceGroups();

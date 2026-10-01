@@ -355,8 +355,9 @@ export interface CalcCellValidation {
   errorMessage?: string; // 미지정 시 연산자별 기본 문구
 }
 
-// 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
-export type CellEnableCondition =
+// 셀 활성 조건(게이팅) — 같은 표 컨트롤러 셀 값에 따라 대상 셀의 입력 가능 여부를 제어한다.
+// 잎 조건 = 컨트롤러 셀 하나 + 판정 하나.
+export type CellEnableLeafCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
   | { kind: 'filled'; controllerCellId: string }
   /**
@@ -370,6 +371,21 @@ export type CellEnableCondition =
       op: '>' | '>=' | '<' | '<=' | '==' | '!=';
       value: number;
     };
+
+/**
+ * 조건 묶음 — 연산자 1개 + 조건 N개. 연산자를 섞으려면 묶음을 중첩한다(계산 셀 수식 CalcExpr 의
+ * group 과 같은 모델 — 우선순위 모호성이 구조적으로 생기지 않는다). 연산자 어휘와 뜻은 문항
+ * 표시조건과 같다: AND 모두 충족 · OR 하나라도 충족 · NOT 하나도 충족하지 않음(NOR).
+ * 조건이 0개인 묶음은 "조건 없음" = 충족이다(표시조건의 빈 그룹 규칙과 동일, 빌더가 경고).
+ * 트리 순회는 `@/utils/cell-gate-tree` 하나로 한다 — 컨트롤러가 하나라고 가정하지 말 것.
+ */
+export interface CellEnableGroupCondition {
+  kind: 'group';
+  op: ConditionLogicType;
+  terms: CellEnableCondition[];
+}
+
+export type CellEnableCondition = CellEnableLeafCondition | CellEnableGroupCondition;
 
 export interface TableCell {
   id: string;

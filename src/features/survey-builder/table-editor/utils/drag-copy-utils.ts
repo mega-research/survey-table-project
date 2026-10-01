@@ -1,4 +1,5 @@
 import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
+import { collectGateControllerIds, resolveGateLeaves } from '@/utils/cell-gate-tree';
 
 // ── 타입 ──
 
@@ -70,7 +71,10 @@ export function createRadioGroupRemapper(genId: () => string): (sourceName: stri
 /**
  * 붙여넣거나 복제된 셀의 게이팅(enabledWhen) 컨트롤러 참조 재해석.
  *
- * - `remappedControllerId` 가 있으면(컨트롤러가 복사 영역/복제 행 안) → 그 id 로 치환
+ * 조건 묶음이면 **잎마다** 아래 규칙을 적용하고, 잎 하나라도 제거 대상이면 조건 전체를
+ * 제거한다(resolveGateLeaves — 일부만 빼면 AND 가 느슨해지는 식으로 뜻이 바뀐다).
+ *
+ * - `remapController(id)` 가 값을 주면(컨트롤러가 복사 영역/복제 행 안) → 그 id 로 치환
  * - 없지만 컨트롤러가 대상 **표**에 보이는 셀로 존재하면 → 그대로 유지. 컨트롤러는 같은 표
  *   안이면 어느 행이든 되므로(2026-09-10) 같은 행일 필요가 없다.
  * - 그 외 → undefined 로 게이팅 제거. 다른 표로 옮겨 컨트롤러가 없거나, 병합으로 숨겨진
@@ -79,13 +83,16 @@ export function createRadioGroupRemapper(genId: () => string): (sourceName: stri
  */
 export function resolvePastedGating(
   condition: CellEnableCondition,
-  remappedControllerId: string | undefined,
+  remapController: ((controllerCellId: string) => string | undefined) | undefined,
   targetTableCells: ReadonlyArray<Pick<TableCell, 'id' | 'isHidden'>>,
 ): CellEnableCondition | undefined {
-  if (remappedControllerId) return { ...condition, controllerCellId: remappedControllerId };
-  const controller = targetTableCells.find((c) => c.id === condition.controllerCellId);
-  if (controller && !controller.isHidden) return condition;
-  return undefined;
+  return resolveGateLeaves(condition, (leaf) => {
+    const remapped = remapController?.(leaf.controllerCellId);
+    if (remapped) return { ...leaf, controllerCellId: remapped };
+    const controller = targetTableCells.find((c) => c.id === leaf.controllerCellId);
+    if (controller && !controller.isHidden) return leaf;
+    return undefined;
+  });
 }
 
 /** 병합 스팬이 덮어 숨겨질 셀 id 집합 (앵커 자신 제외). recalculateHiddenCells 와 같은
@@ -141,15 +148,19 @@ export function pruneDeadGatingAfterPaste(
     for (let c = 0; c < row.cells.length; c++) {
       const cell = row.cells[c];
       if (!cell?.enabledWhen) continue;
-      const controller = row.cells.find((c2) => c2.id === cell.enabledWhen!.controllerCellId);
-      const dead = !controller || coveredAfter.has(controller.id);
-      if (!dead) continue;
+      // 조건 묶음이면 컨트롤러가 여럿이다 — 하나라도 죽으면 조건 전체가 죽은 것으로 본다.
+      const controllerIds = collectGateControllerIds(cell.enabledWhen);
+      const isDead = (id: string) => {
+        const controller = row.cells.find((c2) => c2.id === id);
+        return !controller || coveredAfter.has(controller.id);
+      };
+      if (!controllerIds.some(isDead)) continue;
 
       const insideArea = c >= area.fromCol && c <= area.toCol;
-      const newlyHidden =
-        controller !== undefined &&
-        coveredAfter.has(controller.id) &&
-        !coveredBefore.has(controller.id);
+      const newlyHidden = controllerIds.some(
+        (id) =>
+          row.cells.some((c2) => c2.id === id) && coveredAfter.has(id) && !coveredBefore.has(id),
+      );
       if (insideArea || newlyHidden) {
         delete cell.enabledWhen;
         delete cell.requiredWhenEnabled;

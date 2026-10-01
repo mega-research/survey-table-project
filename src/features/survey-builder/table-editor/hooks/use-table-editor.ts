@@ -16,6 +16,7 @@ import {
 } from '@/types/survey';
 import { type HeaderBulkStyle, applyHeaderBulkStyle, withHeaderStyle } from '@/features/survey-builder/table-editor/utils/header-style';
 import { remapGatingValues } from '@/features/survey-builder/utils/option-value-remap';
+import { mapGateLeaves } from '@/utils/cell-gate-tree';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
   generateAllCellCodes,
@@ -862,10 +863,10 @@ export function useTableEditor({
           // 게이팅 컨트롤러가 같은 행을 가리키면 복제 행의 새 id 로 리매핑
           // (같은 행 밖 참조는 원본 그대로 두고 진단이 잡는다)
           if (cloned.enabledWhen) {
-            const remapped = clonedCellIdByOld.get(cloned.enabledWhen.controllerCellId);
-            if (remapped) {
-              cloned.enabledWhen = { ...cloned.enabledWhen, controllerCellId: remapped };
-            }
+            cloned.enabledWhen = mapGateLeaves(cloned.enabledWhen, (leaf) => {
+              const remapped = clonedCellIdByOld.get(leaf.controllerCellId);
+              return remapped ? { ...leaf, controllerCellId: remapped } : leaf;
+            });
           }
           // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
           // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서

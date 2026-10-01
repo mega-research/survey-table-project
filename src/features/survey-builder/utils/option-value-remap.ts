@@ -5,10 +5,11 @@ import type {
   QuestionConditionGroup,
   TableRow,
 } from '@/types/survey';
+import { mapGateLeaves } from '@/utils/cell-gate-tree';
 
 /**
  * 옵션 value 변경 시 표 셀의 게이팅(enabledWhen) 참조를 리매핑한다.
- * controllerCellId 가 일치하고 kind === 'option' 인 셀의 values 배열에서만
+ * controllerCellId 가 일치하고 kind === 'option' 인 잎 조건(묶음 안 포함)의 values 배열에서만
  * oldValue → newValue 치환. 변경이 없으면 원본 배열 참조를 그대로 반환한다
  * (React 리렌더 최소화 관례).
  */
@@ -24,24 +25,19 @@ export function remapGatingValues(
     let rowChanged = false;
 
     const nextCells = row.cells.map((cell) => {
-      const enabledWhen = cell.enabledWhen;
-      if (
-        !enabledWhen ||
-        enabledWhen.kind !== 'option' ||
-        enabledWhen.controllerCellId !== controllerCellId ||
-        !enabledWhen.values.includes(oldValue)
-      ) {
-        return cell;
-      }
+      if (!cell.enabledWhen) return cell;
+      // 조건 묶음이면 트리의 모든 option 잎을 본다 — 같은 컨트롤러가 여러 잎에 나올 수 있다.
+      const enabledWhen = mapGateLeaves(cell.enabledWhen, (leaf) =>
+        leaf.kind === 'option' &&
+        leaf.controllerCellId === controllerCellId &&
+        leaf.values.includes(oldValue)
+          ? { ...leaf, values: leaf.values.map((v) => (v === oldValue ? newValue : v)) }
+          : leaf,
+      );
+      if (enabledWhen === cell.enabledWhen) return cell;
 
       rowChanged = true;
-      return {
-        ...cell,
-        enabledWhen: {
-          ...enabledWhen,
-          values: enabledWhen.values.map((v) => (v === oldValue ? newValue : v)),
-        },
-      };
+      return { ...cell, enabledWhen };
     });
 
     if (!rowChanged) return row;

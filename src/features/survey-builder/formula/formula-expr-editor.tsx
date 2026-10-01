@@ -296,7 +296,8 @@ interface TermControlsProps {
   onRemove: (index: number) => void;
 }
 
-function TermControls({ index, count, onMove, onRemove }: TermControlsProps) {
+/** 항의 순서 이동·삭제 버튼 — 셀 활성 조건 묶음 편집기(cell-gating-editor)도 같이 쓴다. */
+export function TermControls({ index, count, onMove, onRemove }: TermControlsProps) {
   return (
     <div className="flex shrink-0 items-center">
       <Button

@@ -1,7 +1,14 @@
 import { collectSelectedChoiceCellIds } from '@/lib/survey/choice-selection';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import { decodeChoiceTableCellValue } from '@/lib/survey/choice-table-cell-value';
-import type { CellEnableCondition, Question, TableCell, TableRow } from '@/types/survey';
+import type {
+  CellEnableCondition,
+  CellEnableLeafCondition,
+  Question,
+  TableCell,
+  TableRow,
+} from '@/types/survey';
+import { isGateGroup } from '@/utils/cell-gate-tree';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { resolveSelectedValues } from '@/utils/table-cell-semantics';
 
@@ -22,6 +29,8 @@ import { resolveSelectedValues } from '@/utils/table-cell-semantics';
  *   단 prefill 셀은 게이팅 무시(항상 활성) — 서버 prefill 강제 복원과 양립 불가라
  *   설정 자체가 금지이며, 외부 유입 데이터 방어다.
  * - 표시 조건(displayCondition)은 보지 않는다 — 값 기준 판정만.
+ * - 조건은 잎(컨트롤러 하나 + 판정 하나) 또는 묶음(AND/OR/NOT + 조건 N개, 중첩 가능)이다.
+ *   트리 순회는 `@/utils/cell-gate-tree` — 컨트롤러가 하나라고 가정하지 말 것.
  * - option 조건은 컨트롤러 셀의 실제 응답 형태(flat string | `{optionId}` 래핑 | 그 배열)를
  *   `table-cell-semantics.ts` 의 정본 규칙(resolveSelectedValues, 내부적으로 unwrapOptionId/
  *   findOptionByStored 사용)으로 옵션 value 로 해석한 뒤 condition.values 와 비교한다.
@@ -75,8 +84,8 @@ function resolveOptionValueSet(
   return new Set(resolveSelectedValues(controller, value));
 }
 
-function evaluate(
-  condition: CellEnableCondition,
+function evaluateLeaf(
+  condition: CellEnableLeafCondition,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[] | undefined,
   choiceSelection: ReadonlySet<string> | undefined,
@@ -104,6 +113,35 @@ function evaluate(
         case '!=': return n !== condition.value;
       }
     }
+  }
+}
+
+/**
+ * 조건 트리 평가. 묶음의 연산자 뜻은 문항 표시조건(branch-logic 의 shouldDisplay 계열)과 같다 —
+ * AND 모두 충족 · OR 하나라도 충족 · NOT 하나도 충족하지 않음. 조건이 0개인 묶음은
+ * "조건 없음" = 충족이다: OR 이 some([]) === false 로 영구 비활성이 되는 것을 막는다
+ * (표시조건이 2026-09-08 에 같은 사고를 겪었다). 빈 묶음은 빌더 진단이 경고한다.
+ */
+function evaluate(
+  condition: CellEnableCondition,
+  cellValues: Record<string, unknown>,
+  tableCells: readonly TableCell[] | undefined,
+  choiceSelection: ReadonlySet<string> | undefined,
+): boolean {
+  if (!isGateGroup(condition)) {
+    return evaluateLeaf(condition, cellValues, tableCells, choiceSelection);
+  }
+  if (condition.terms.length === 0) return true;
+  const results = condition.terms.map((term) =>
+    evaluate(term, cellValues, tableCells, choiceSelection),
+  );
+  switch (condition.op) {
+    case 'AND':
+      return results.every(Boolean);
+    case 'OR':
+      return results.some(Boolean);
+    case 'NOT':
+      return !results.some(Boolean);
   }
 }
 

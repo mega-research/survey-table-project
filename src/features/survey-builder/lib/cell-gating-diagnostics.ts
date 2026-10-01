@@ -1,4 +1,9 @@
 import type { Question, TableCell } from '@/types/survey';
+import {
+  collectGateControllerIds,
+  hasEmptyGateGroup,
+  isGateGroup,
+} from '@/utils/cell-gate-tree';
 import { formatCellLabel } from '@/utils/cell-label';
 
 /**
@@ -13,6 +18,7 @@ import { formatCellLabel } from '@/utils/cell-label';
  * - gating-hidden-controller: 컨트롤러가 병합으로 숨겨진 셀 (red — 응답 불가라 영구 비활성)
  * - gating-self-ref: 자기 자신을 컨트롤러로 지정 (red)
  * - gating-cycle: 게이팅 체인 순환 (amber — 런타임은 안정: 양쪽 빈 값이면 양쪽 비활성)
+ * - gating-empty-group: 조건이 0개인 묶음 (amber — "조건 없음" 으로 항상 충족)
  * - gating-prefill-conflict: prefill(defaultValueTemplate) 셀에 게이팅 설정 (amber — 게이팅 무시됨)
  */
 
@@ -22,6 +28,7 @@ export interface GatingDiagnostic {
     | 'gating-hidden-controller'
     | 'gating-self-ref'
     | 'gating-cycle'
+    | 'gating-empty-group'
     | 'gating-prefill-conflict';
   questionId: string;
   cellId: string;
@@ -38,73 +45,91 @@ function checkTable(question: Question, out: GatingDiagnostic[]): void {
 
   for (const cell of gated) {
     const label = formatCellLabel(cell);
-    const controllerId = cell.enabledWhen.controllerCellId;
+    // 조건 묶음이면 컨트롤러가 여럿이다 — 컨트롤러마다 검사하되 같은 종류는 셀당 1건으로 접는다.
     // 컨트롤러는 같은 표 안이면 어느 행이든 된다 — 행 경계는 보지 않는다.
-    const controller = byId.get(controllerId);
+    const controllerIds = collectGateControllerIds(cell.enabledWhen);
+    const grouped = isGateGroup(cell.enabledWhen);
+    const pushOnce = (kind: GatingDiagnostic['kind'], message: string) => {
+      out.push({ kind, questionId: question.id, cellId: cell.id, message });
+    };
 
-    if (controllerId === cell.id) {
-      out.push({
-        kind: 'gating-self-ref',
-        questionId: question.id,
-        cellId: cell.id,
-        message: `활성 조건이 자기 자신을 컨트롤러로 참조합니다: ${label}. 조건을 다시 지정하세요.`,
-      });
-    } else if (controller?.isHidden) {
-      out.push({
-        kind: 'gating-hidden-controller',
-        questionId: question.id,
-        cellId: cell.id,
-        message: `활성 조건 컨트롤러가 병합으로 숨겨진 셀입니다: ${label}. 숨겨진 셀은 응답할 수 없어 이 셀은 항상 비활성이 됩니다.`,
-      });
-    } else if (!controller) {
-      out.push({
-        kind: 'gating-broken-ref',
-        questionId: question.id,
-        cellId: cell.id,
-        message: `활성 조건이 존재하지 않는 셀을 참조합니다: ${label}. 컨트롤러 값이 생길 수 없어 이 셀은 항상 비활성이 됩니다.`,
-      });
+    if (controllerIds.includes(cell.id)) {
+      pushOnce(
+        'gating-self-ref',
+        `활성 조건이 자기 자신을 컨트롤러로 참조합니다: ${label}. 조건을 다시 지정하세요.`,
+      );
+    }
+    const others = controllerIds.filter((id) => id !== cell.id);
+    // 묶음에서는 죽은 조건 하나가 곧 "항상 비활성" 은 아니다(OR 의 다른 조건이 살릴 수 있다) —
+    // 그 조건이 영영 충족되지 않는다는 사실만 말한다.
+    const consequence = grouped
+      ? '그 조건은 충족될 수 없습니다.'
+      : '이 셀은 항상 비활성이 됩니다.';
+    if (others.some((id) => byId.get(id)?.isHidden)) {
+      pushOnce(
+        'gating-hidden-controller',
+        `활성 조건 컨트롤러가 병합으로 숨겨진 셀입니다: ${label}. 숨겨진 셀은 응답할 수 없어 ${consequence}`,
+      );
+    }
+    if (others.some((id) => !byId.has(id))) {
+      pushOnce(
+        'gating-broken-ref',
+        `활성 조건이 존재하지 않는 셀을 참조합니다: ${label}. 컨트롤러 값이 생길 수 없어 ${consequence}`,
+      );
+    }
+
+    if (hasEmptyGateGroup(cell.enabledWhen)) {
+      pushOnce(
+        'gating-empty-group',
+        `활성 조건에 조건이 없는 묶음이 있습니다: ${label}. 빈 묶음은 "조건 없음" 으로 항상 충족됩니다 — 조건을 추가하거나 묶음을 삭제하세요.`,
+      );
     }
 
     if (cell.defaultValueTemplate && cell.defaultValueTemplate.trim().length > 0) {
-      out.push({
-        kind: 'gating-prefill-conflict',
-        questionId: question.id,
-        cellId: cell.id,
-        message: `자동 입력(prefill) 셀에 활성 조건이 설정되어 있습니다: ${label}. prefill 이 우선되어 게이팅이 무시됩니다.`,
-      });
+      pushOnce(
+        'gating-prefill-conflict',
+        `자동 입력(prefill) 셀에 활성 조건이 설정되어 있습니다: ${label}. prefill 이 우선되어 게이팅이 무시됩니다.`,
+      );
     }
   }
 
   // 게이팅 체인 순환 — 표 전체의 gated 셀 → 컨트롤러 간선의 사이클 (filled 상호 참조 등).
-  // 컨트롤러가 다른 행일 수 있으므로 행이 아니라 표 단위로 본다.
-  // 자기 참조는 전용 진단(gating-self-ref)이 이미 잡으므로 간선에서 제외한다.
-  const edges = new Map<string, string>();
+  // 컨트롤러가 다른 행일 수 있으므로 행이 아니라 표 단위로 본다. 조건 묶음은 간선이 여럿이라
+  // 깊이 우선 탐색(3색)으로 본다. 자기 참조는 전용 진단(gating-self-ref)이 이미 잡으므로
+  // 간선에서 제외한다.
+  const edges = new Map<string, string[]>();
   for (const cell of gated) {
-    if (cell.enabledWhen.controllerCellId !== cell.id) {
-      edges.set(cell.id, cell.enabledWhen.controllerCellId);
-    }
+    const targets = collectGateControllerIds(cell.enabledWhen).filter((id) => id !== cell.id);
+    if (targets.length > 0) edges.set(cell.id, targets);
   }
+  const done = new Set<string>();
   const reported = new Set<string>();
-  for (const start of edges.keys()) {
-    if (reported.has(start)) continue;
-    const path = new Set<string>();
-    let node: string | undefined = start;
-    while (node !== undefined && edges.has(node) && !path.has(node)) {
-      path.add(node);
-      node = edges.get(node);
-    }
-    if (node !== undefined && path.has(node)) {
-      // node 부터 사이클 — 사이클 구성원 전체를 보고 1건으로 접는다
-      for (const id of path) reported.add(id);
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const visit = (node: string): void => {
+    if (done.has(node)) return;
+    if (onStack.has(node)) {
+      // node 부터 스택 끝까지가 사이클 — 구성원 전체를 1건으로 접는다
+      const members = stack.slice(stack.indexOf(node));
+      if (members.some((id) => reported.has(id))) return;
+      for (const id of members) reported.add(id);
       const cell = byId.get(node);
       out.push({
         kind: 'gating-cycle',
         questionId: question.id,
         cellId: node,
-        message: `활성 조건이 서로를 순환 참조합니다: ${cell ? formatCellLabel(cell) : node.slice(0, 6)} 포함 ${path.size}개 셀. 모두 빈 값이면 함께 비활성으로 유지됩니다.`,
+        message: `활성 조건이 서로를 순환 참조합니다: ${cell ? formatCellLabel(cell) : node.slice(0, 6)} 포함 ${members.length}개 셀. 모두 빈 값이면 함께 비활성으로 유지됩니다.`,
       });
+      return;
     }
-  }
+    stack.push(node);
+    onStack.add(node);
+    for (const next of edges.get(node) ?? []) visit(next);
+    stack.pop();
+    onStack.delete(node);
+    done.add(node);
+  };
+  for (const start of edges.keys()) visit(start);
 }
 
 /**

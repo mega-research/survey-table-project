@@ -457,3 +457,103 @@ describe('보기 소스 표 사이드카 게이팅', () => {
     expect(out['__optTexts__']).toEqual({ q: { A: '' } });
   });
 });
+
+describe('조건 묶음 — AND / OR / NOT 과 중첩', () => {
+  const gte1 = (id: string) =>
+    ({ kind: 'numeric', controllerCellId: id, op: '>=', value: 1 }) as const;
+  const group = (
+    op: 'AND' | 'OR' | 'NOT',
+    terms: NonNullable<TableCell['enabledWhen']>[],
+  ): NonNullable<TableCell['enabledWhen']> => ({ kind: 'group', op, terms });
+
+  it('OR — 하나라도 충족하면 활성 (Q8 기타 행: 현재 보유 ≥ 1 또는 희망 규모 ≥ 1)', () => {
+    const cell = inputCell('name', { enabledWhen: group('OR', [gte1('now'), gte1('want')]) });
+    expect(isCellEnabled(cell, { now: '2' })).toBe(true);
+    expect(isCellEnabled(cell, { want: '1' })).toBe(true);
+    expect(isCellEnabled(cell, { now: '0', want: '0' })).toBe(false);
+    expect(isCellEnabled(cell, {})).toBe(false);
+  });
+
+  it('AND — 모두 충족해야 활성', () => {
+    const cell = inputCell('t', { enabledWhen: group('AND', [gte1('a'), gte1('b')]) });
+    expect(isCellEnabled(cell, { a: '1', b: '1' })).toBe(true);
+    expect(isCellEnabled(cell, { a: '1' })).toBe(false);
+  });
+
+  it('NOT — 하나도 충족하지 않아야 활성이고, 미응답은 미충족이라 처음에는 활성이다', () => {
+    const cell = inputCell('t', { enabledWhen: group('NOT', [gte1('a'), gte1('b')]) });
+    expect(isCellEnabled(cell, {})).toBe(true);
+    expect(isCellEnabled(cell, { a: '0', b: '0' })).toBe(true);
+    expect(isCellEnabled(cell, { a: '3' })).toBe(false);
+  });
+
+  it('중첩 — (a 또는 b) 그리고 c', () => {
+    const cell = inputCell('t', {
+      enabledWhen: group('AND', [group('OR', [gte1('a'), gte1('b')]), gte1('c')]),
+    });
+    expect(isCellEnabled(cell, { b: '1', c: '1' })).toBe(true);
+    expect(isCellEnabled(cell, { a: '1', b: '1' })).toBe(false);
+    expect(isCellEnabled(cell, { c: '1' })).toBe(false);
+  });
+
+  it('조건이 0개인 묶음은 "조건 없음" 이라 충족이다 (표시조건의 빈 그룹 규칙과 같다)', () => {
+    for (const op of ['AND', 'OR', 'NOT'] as const) {
+      expect(isCellEnabled(inputCell('t', { enabledWhen: group(op, []) }), {})).toBe(true);
+    }
+  });
+
+  it('묶음 안에서 종류가 다른 조건을 섞는다 — 옵션 선택 또는 보기 선택', () => {
+    const cell = inputCell('t', {
+      enabledWhen: group('OR', [
+        { kind: 'option', controllerCellId: 'perf', values: ['1'] },
+        { kind: 'choice-selected', controllerCellId: 'opt' },
+      ]),
+    });
+    expect(isCellEnabled(cell, { perf: '1' })).toBe(true);
+    expect(isCellEnabled(cell, {}, undefined, new Set(['opt']))).toBe(true);
+    expect(isCellEnabled(cell, { perf: '2' }, undefined, new Set(['other']))).toBe(false);
+  });
+
+  it('저장 strip — OR 묶음의 컨트롤러가 모두 미충족이면 값을 지우고, 하나라도 충족하면 둔다', () => {
+    const q = {
+      id: 'q',
+      type: 'table',
+      tableRowsData: [
+        {
+          id: 'r',
+          label: '',
+          cells: [
+            inputCell('now'),
+            inputCell('want'),
+            inputCell('name', { inputType: 'text', enabledWhen: group('OR', [gte1('now'), gte1('want')]) }),
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const kept = { q: { want: '2', name: 'X100' } };
+    expect(stripDisabledCellValues([q], kept)).toBe(kept);
+    expect(stripDisabledCellValues([q], { q: { now: '0', name: 'X100' } })).toEqual({
+      q: { now: '0' },
+    });
+  });
+
+  it('저장 strip — 묶음을 거친 체인도 고정점까지 지운다', () => {
+    // a 비움 → b(OR[a]) 비활성 → c(AND[b 값 있음]) 비활성
+    const q = {
+      id: 'q',
+      type: 'table',
+      tableRowsData: [
+        {
+          id: 'r',
+          label: '',
+          cells: [
+            inputCell('c', { enabledWhen: group('AND', [{ kind: 'filled', controllerCellId: 'b' }]) }),
+            inputCell('b', { enabledWhen: group('OR', [gte1('a')]) }),
+            inputCell('a'),
+          ],
+        },
+      ],
+    } as unknown as Question;
+    expect(stripDisabledCellValues([q], { q: { a: '', b: '5', c: '7' } })).toEqual({ q: { a: '' } });
+  });
+});

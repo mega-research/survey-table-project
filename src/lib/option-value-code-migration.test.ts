@@ -282,6 +282,49 @@ describe('remapTableRows / remapTableColumns', () => {
     expect((nextRows[0]?.cells[2]?.['enabledWhen'] as { values: string[] }).values).toEqual(['option-1']);
   });
 
+  it('조건 묶음 안의 option 잎도 치환한다 (중첩 포함)', () => {
+    const rows = [
+      {
+        id: 'row1',
+        cells: [
+          { id: 'ctrl', type: 'radio' },
+          {
+            id: 'target',
+            type: 'input',
+            enabledWhen: {
+              kind: 'group',
+              op: 'OR',
+              terms: [
+                { kind: 'option', controllerCellId: 'ctrl', values: ['option-1'] },
+                { kind: 'filled', controllerCellId: 'ctrl' },
+                {
+                  kind: 'group',
+                  op: 'NOT',
+                  terms: [{ kind: 'option', controllerCellId: 'ctrl', values: ['option-1', 'option-2'] }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    const cellMaps = new Map([['ctrl', new Map([['option-1', '1']])]]);
+
+    const result = remapTableRows(rows, noMaps, cellMaps);
+
+    expect(result.gatingCount).toBe(2);
+    const nextRows = result.value as Array<{ cells: Array<Record<string, unknown>> }>;
+    expect(nextRows[0]?.cells[1]?.['enabledWhen']).toEqual({
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+        { kind: 'filled', controllerCellId: 'ctrl' },
+        { kind: 'group', op: 'NOT', terms: [{ kind: 'option', controllerCellId: 'ctrl', values: ['1', 'option-2'] }] },
+      ],
+    });
+  });
+
   it('행/열 displayCondition 도 리매핑한다', () => {
     const maps: ConditionRemapMaps = {
       byQuestion: new Map([['q-src', new Map([['옵션1', '1']])]]),
