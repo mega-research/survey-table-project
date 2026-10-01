@@ -100,7 +100,7 @@ const VIRTUALIZATION_THRESHOLD = 100;
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold whitespace-pre-line text-gray-800 [overflow-wrap:anywhere]';
 
 // ── 행 반복 버튼 (표 아래) ──
 

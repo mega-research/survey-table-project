@@ -52,6 +52,7 @@ import {
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
 import {
   buildTableCellVarName,
+  flattenLabelLineBreaks,
   generateExportLabel,
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
@@ -962,7 +963,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
       if (!col) continue;
       const colCode = col.columnCode || `c${colIdx + 1}`;
       groupVarName = `${q.questionCode}_${colCode}`;
-      groupLabel = col.label || groupName;
+      groupLabel = (col.label ? flattenLabelLineBreaks(col.label) : '') || groupName;
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];

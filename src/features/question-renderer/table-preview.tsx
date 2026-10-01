@@ -34,7 +34,7 @@ import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-control
 // text-base: rowgroup 컨테이너의 text-sm 상속을 끊는다 — 척도형(라디오/체크박스/랭킹)
 // 테이블은 응답 선택지 라벨이 헤더에 실리므로 본문(14px)보다 큰 16px 로 읽혀야 한다.
 const HEADER_CELL_CLASS =
-  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium';
+  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium whitespace-pre-line';
 
 const EMPTY_LABEL = <span className="text-sm text-gray-400 italic" />;
 

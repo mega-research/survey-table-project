@@ -124,6 +124,11 @@ export function generateCellCode(
   return `${questionCode}_${rowCode}_${columnCode}`;
 }
 
+/** 라벨 안 줄바꿈을 공백 하나로 편다 — 표 헤더의 줄바꿈은 화면 전용이라 내보내기 라벨에 싣지 않는다 */
+export function flattenLabelLineBreaks(label: string): string {
+  return label.replace(/\s*\n\s*/g, ' ').trim();
+}
+
 /** exportLabel 자동생성: questionCode(질문 SPSS 변수명)_columnLabel_rowLabel */
 export function generateExportLabel(
   questionCode: string | undefined,
@@ -131,7 +136,8 @@ export function generateExportLabel(
   rowLabel: string | undefined,
 ): string | undefined {
   if (!questionCode || !columnLabel || !rowLabel) return undefined;
-  return `${questionCode}_${columnLabel}_${rowLabel}`;
+  // 헤더 라벨의 줄바꿈은 화면 표시용이다 — 엑셀·SPSS 라벨에는 공백으로 편다.
+  return `${questionCode}_${flattenLabelLineBreaks(columnLabel)}_${rowLabel}`;
 }
 
 // ── SPSS 변수 타입 / 측정 수준 자동 판단 ──

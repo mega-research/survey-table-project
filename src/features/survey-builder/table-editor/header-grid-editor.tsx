@@ -5,7 +5,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Combine, Minus, Palette, Plus, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn, generateId } from '@/lib/utils';
 import { HeaderCell } from '@/types/survey';
@@ -548,18 +547,22 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                 onMouseEnter={() => handleMouseEnter(rowIdx, gridCol)}
               >
                 {isEditing ? (
-                  <Input
+                  // Enter 는 편집 종료, Shift+Enter 는 줄바꿈 — 응답 화면 헤더가 줄바꿈을 그대로 그린다
+                  <textarea
                     autoFocus
+                    rows={Math.max(1, cell.label.split('\n').length)}
                     value={cell.label}
                     onChange={(e) => updateLabel(rowIdx, cellIdx, e.target.value)}
                     onBlur={() => setEditingCell(null)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === 'Escape') {
+                      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Escape') {
+                        e.preventDefault();
                         setEditingCell(null);
                       }
                     }}
+                    title="Shift+Enter 로 줄바꿈"
                     className={cn(
-                      'h-7 bg-transparent text-center text-sm',
+                      'w-full resize-none rounded-md border border-gray-200 bg-transparent px-1 py-0.5 text-center text-sm outline-none focus:border-blue-400',
                       getCellTextClassName(cell),
                     )}
                     style={getCellTextStyle(cell)}
@@ -567,6 +570,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                 ) : (
                   <span
                     className={cn(
+                      'whitespace-pre-line',
                       cell.label ? 'text-gray-800' : 'text-gray-400 italic',
                       getCellTextClassName(cell),
                     )}
