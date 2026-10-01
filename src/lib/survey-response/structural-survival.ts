@@ -1,6 +1,10 @@
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import type { Question, QuestionOption, TableCell } from '@/types/survey';
-import { collectChoiceGroups, isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
+import {
+  collectChoiceGroups,
+  isGroupedChoiceQuestion,
+  isGroupedRankingQuestion,
+} from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { findOptionByStored, unwrapOptionId } from '@/utils/table-cell-semantics';
 
@@ -290,6 +294,24 @@ function judgeQuestionAnswer(question: Question, value: unknown): QuestionVerdic
       return removed ? { kind: 'replace', value: filtered } : { kind: 'keep' };
     }
     case 'ranking': {
+      // 그룹별 순위의 답은 배열이 아니라 그룹 맵({그룹키: RankingAnswer[]})이다 — 위 grouped
+      // checkbox 와 같은 이유로, 배열이 아니라고 버리면 답이 통째로 사라져 DB 에 되쓰인다.
+      // 그룹마다 고아 순위만 걸러내고, 배열이 아닌 항목은 판별 불능이라 그대로 둔다.
+      if (isGroupedRankingQuestion(question) && isPlainObjectValue(value)) {
+        const source = rankingOptionSource(question);
+        const surviving: Record<string, unknown> = {};
+        let changed = false;
+        for (const [groupKey, entries] of Object.entries(value)) {
+          if (!Array.isArray(entries)) {
+            surviving[groupKey] = entries;
+            continue;
+          }
+          const { filtered, removed } = filterRankingEntries(entries, source);
+          if (removed) changed = true;
+          surviving[groupKey] = removed ? filtered : entries;
+        }
+        return changed ? { kind: 'replace', value: surviving } : { kind: 'keep' };
+      }
       if (!Array.isArray(value)) return { kind: 'drop' };
       const { filtered, removed } = filterRankingEntries(value, rankingOptionSource(question));
       return removed ? { kind: 'replace', value: filtered } : { kind: 'keep' };
