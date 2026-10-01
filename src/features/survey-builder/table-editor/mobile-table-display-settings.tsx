@@ -87,6 +87,12 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
       '보기 그룹(축)마다 카드 하나를 만들고 그 안에 행을 보기로 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 현재 활용·활용 계획처럼 축마다 독립된 선택인데 행 목록만 같은 표에 맞습니다.',
   },
   {
+    value: 'item-cards',
+    label: '항목 단위 카드',
+    description:
+      '글자 셀(라벨)마다 카드 하나를 만들고 다음 라벨 전까지의 입력 칸을 그 카드에 담습니다. 한 행에 「라벨 + 입력」이 여러 쌍 놓인 양식형 표에 맞습니다. 이어진 라벨은 상위 · 하위 제목이 되고, 세로 병합된 상위 라벨은 아래 행 카드에도 따라갑니다. 단위 · 주석처럼 제목이 아닌 글자 셀은 셀의 모바일 표시를 「숨김」(또는 「바로 표시」 · 「접기」로 카드 설명)으로 지정하세요.',
+  },
+  {
     value: 'original',
     label: '전체 원본 표',
     description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
@@ -113,6 +119,8 @@ export function MobileTableDisplaySettings({
     }
     // 축 단위 카드는 축(보기 그룹)이 있어야 세울 수 있다 — 그룹 없는 표는 자동 카드가 같은 모양
     if (option.value === 'axis-cards') return isChoiceSourceTable && hasChoiceGroups;
+    // 항목 단위 카드는 입력 칸이 셀 값인 테이블 유형 전용 — 보기 소스 표의 보기는 문항 응답이다
+    if (option.value === 'item-cards') return questionType === 'table';
     return true;
   });
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);

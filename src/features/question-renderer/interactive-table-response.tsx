@@ -91,6 +91,7 @@ import {
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
+import { MobileItemCards } from './mobile-item-cards';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
@@ -1335,6 +1336,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   visibleHeaderGrid={visibleHeaderGrid}
                   choiceGroups={choiceGroups ?? []}
                   hideColumnLabels={hideColumnLabels}
+                  value={value}
+                  onChange={mergedOnChange}
+                  errorCellIds={errorCellIds}
+                  dynamicGroupPicker={dynamicGroupPicker}
+                />
+              ) : isMobileView && mobileMode === 'item-cards' ? (
+                <MobileItemCards
+                  questionId={questionId}
+                  displayRows={displayRows}
                   value={value}
                   onChange={mergedOnChange}
                   errorCellIds={errorCellIds}

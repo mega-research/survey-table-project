@@ -6,6 +6,7 @@ export const MOBILE_TABLE_DISPLAY_MODES = [
   'row-cards',
   'row-group-cards',
   'axis-cards',
+  'item-cards',
   'original',
 ] as const;
 
