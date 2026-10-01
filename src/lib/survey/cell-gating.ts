@@ -23,7 +23,7 @@ import { resolveSelectedValues } from '@/utils/table-cell-semantics';
  * 판정이 갈리면 "화면에선 비활성인데 검증은 필수라 함"이 생기므로 복제 금지
  * (answer-quote / cell-formula 와 같은 규약). server-only 의존 금지.
  *
- * - 컨트롤러 미응답 = 미충족 = 비활성.
+ * - 컨트롤러 미응답 = 미충족 = 비활성. 컨트롤러 자신이 비활성이면 값이 남아 있어도 미응답으로 본다.
  * - 깨진 컨트롤러 참조(값 키 부재와 구분 불가)는 조건 평가 실패 = 비활성이 아니라,
  *   **컨트롤러 셀 자체가 표에 없을 때는 빌더 진단이 잡는다** — 런타임은 값만 본다.
  *   단 prefill 셀은 게이팅 무시(항상 활성) — 서버 prefill 강제 복원과 양립 불가라
@@ -84,18 +84,51 @@ function resolveOptionValueSet(
   return new Set(resolveSelectedValues(controller, value));
 }
 
-function evaluateLeaf(
-  condition: CellEnableLeafCondition,
-  cellValues: Record<string, unknown>,
-  tableCells: readonly TableCell[] | undefined,
-  choiceSelection: ReadonlySet<string> | undefined,
-): boolean {
-  const raw = cellValues[condition.controllerCellId];
+/** 평가 한 번의 문맥 — 값·셀 정의·보기 선택과, 순환 방지를 위한 "지금 평가 중인 셀" 집합. */
+interface GateEvalContext {
+  cellValues: Record<string, unknown>;
+  tableCells: readonly TableCell[] | undefined;
+  choiceSelection: ReadonlySet<string> | undefined;
+  visiting: Set<string>;
+}
+
+/** 이 셀에 게이팅이 실제로 걸리는가 — 렌더·strip 이 게이팅을 적용하는 조건과 같다. */
+function isGatedCell(cell: TableCell): boolean {
+  return (
+    cell.enabledWhen !== undefined &&
+    GATABLE_CELL_TYPES.has(cell.type) &&
+    !cell.isHidden &&
+    !cell.defaultValueTemplate?.trim()
+  );
+}
+
+/**
+ * 컨트롤러 셀의 "유효한" 값. **컨트롤러 자신이 비활성이면 값이 남아 있어도 없는 것으로 본다** —
+ * 비활성 셀의 값은 곧 지워질 잔존값이라, 그것을 근거로 판정하면 지우는 순서에 따라 결과가
+ * 갈린다. NOT 이 들어오면서 이 차이가 답변 유실이 됐다: `a 또는 NOT(b)` 인 셀이, a 만 지워지고
+ * b 는 아직 안 지워진 중간 상태에서 비활성으로 판정돼 값이 삭제됐다(최종 상태에서는 활성).
+ * 잔존값을 처음부터 무시하면 중간 상태가 없어 strip 결과가 셀 배치 순서와 무관해진다.
+ *
+ * 컨트롤러 정의를 못 찾으면(tableCells 미전달·깨진 참조) 값 그대로 본다. 순환 참조는 지금
+ * 평가 중인 셀로 되돌아오는 간선에서 값 그대로 보고 끊는다(종전 동작 — 빌더 진단이 경고).
+ */
+function effectiveControllerValue(controllerCellId: string, ctx: GateEvalContext): unknown {
+  const raw = ctx.cellValues[controllerCellId];
+  if (ctx.visiting.has(controllerCellId)) return raw;
+  const controller = ctx.tableCells?.find((c) => c.id === controllerCellId);
+  if (!controller || !isGatedCell(controller)) return raw;
+  return evaluateCell(controller, ctx) ? raw : undefined;
+}
+
+function evaluateLeaf(condition: CellEnableLeafCondition, ctx: GateEvalContext): boolean {
+  // 보기 선택 조건의 컨트롤러는 보기 옵션 셀이다 — 게이팅 대상이 아니라 유효값 해석이 없다.
+  if (condition.kind === 'choice-selected') {
+    return ctx.choiceSelection?.has(condition.controllerCellId) === true;
+  }
+  const raw = effectiveControllerValue(condition.controllerCellId, ctx);
   switch (condition.kind) {
-    case 'choice-selected':
-      return choiceSelection?.has(condition.controllerCellId) === true;
     case 'option': {
-      const selected = resolveOptionValueSet(condition, raw, tableCells);
+      const selected = resolveOptionValueSet(condition, raw, ctx.tableCells);
       return condition.values.some((v) => selected.has(v));
     }
     case 'filled':
@@ -122,19 +155,10 @@ function evaluateLeaf(
  * "조건 없음" = 충족이다: OR 이 some([]) === false 로 영구 비활성이 되는 것을 막는다
  * (표시조건이 2026-09-08 에 같은 사고를 겪었다). 빈 묶음은 빌더 진단이 경고한다.
  */
-function evaluate(
-  condition: CellEnableCondition,
-  cellValues: Record<string, unknown>,
-  tableCells: readonly TableCell[] | undefined,
-  choiceSelection: ReadonlySet<string> | undefined,
-): boolean {
-  if (!isGateGroup(condition)) {
-    return evaluateLeaf(condition, cellValues, tableCells, choiceSelection);
-  }
+function evaluate(condition: CellEnableCondition, ctx: GateEvalContext): boolean {
+  if (!isGateGroup(condition)) return evaluateLeaf(condition, ctx);
   if (condition.terms.length === 0) return true;
-  const results = condition.terms.map((term) =>
-    evaluate(term, cellValues, tableCells, choiceSelection),
-  );
+  const results = condition.terms.map((term) => evaluate(term, ctx));
   switch (condition.op) {
     case 'AND':
       return results.every(Boolean);
@@ -142,6 +166,19 @@ function evaluate(
       return results.some(Boolean);
     case 'NOT':
       return !results.some(Boolean);
+  }
+}
+
+/** 셀 하나의 활성 여부 — 평가 중 표식을 걸어 순환을 끊는다. */
+function evaluateCell(cell: TableCell, ctx: GateEvalContext): boolean {
+  if (!cell.enabledWhen) return true;
+  // prefill 우선 — 게이팅 설정은 빌더에서 금지되지만 외부 유입 데이터를 방어한다
+  if (cell.defaultValueTemplate?.trim()) return true;
+  ctx.visiting.add(cell.id);
+  try {
+    return evaluate(cell.enabledWhen, ctx);
+  } finally {
+    ctx.visiting.delete(cell.id);
   }
 }
 
@@ -160,6 +197,11 @@ export function collectTableCells(rows: readonly TableRow[] | null | undefined):
  * (collectTableCells). 컨트롤러는 같은 행일 필요가 없다(2026-09-10 결정) — 값은 문항 단위
  * 응답 객체에서 id 로 찾으므로 행 경계가 없고, 정의 탐색만 표 전체면 된다. 생략 시 하위호환
  * flat 비교로 폴백한다.
+ *
+ * tableCells 는 **비활성 컨트롤러의 잔존값을 무시하는 데도 쓴다**(effectiveControllerValue) —
+ * 컨트롤러가 그 자신의 조건으로 비활성이면 값이 남아 있어도 없는 것으로 본다. 그래서 cellValues
+ * 에는 이 셀의 컨트롤러뿐 아니라 **컨트롤러의 컨트롤러** 값도 있어야 한다. 응답 화면의 구독은
+ * gate-value-selector 가 그 닫힘을 구한다.
  */
 export function isCellEnabled(
   cell: TableCell,
@@ -169,9 +211,7 @@ export function isCellEnabled(
   choiceSelection?: ReadonlySet<string>,
 ): boolean {
   if (!cell.enabledWhen) return true;
-  // prefill 우선 — 게이팅 설정은 빌더에서 금지되지만 외부 유입 데이터를 방어한다
-  if (cell.defaultValueTemplate?.trim()) return true;
-  return evaluate(cell.enabledWhen, cellValues, tableCells, choiceSelection);
+  return evaluateCell(cell, { cellValues, tableCells, choiceSelection, visiting: new Set() });
 }
 
 /**

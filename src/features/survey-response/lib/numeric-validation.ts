@@ -46,6 +46,7 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
+import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import {
   type TextQualityViolation,
   isPlainTextInput,
@@ -108,7 +109,8 @@ export function isRequiredCell(cell: TableCell): boolean {
 /**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
  * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
- * - isHidden 셀(병합 피복 셀)
+ * - isHidden 셀(병합 피복 셀). 단 숨은 행에서 시작한 세로 병합 셀이 가시 행에 올라와 그려지면
+ *   그 셀은 포함한다 (렌더러와 같은 투영)
  * - ctx 전달 시: displayCondition 미충족으로 렌더러가 숨기는 열의 셀(위치 기반 매핑,
  *   row.cells[i] ↔ tableColumns[i])과 행의 셀
  * 필수 셀·범위·합계 검증이 이 필터를 공유한다: 화면에 없는 셀의 잔존 값이나 미입력이
@@ -167,7 +169,7 @@ export function collectVisibleTableCells(
       }
     });
   }
-  return rows
+  const visibleRows = rows
     .filter(
       (row) =>
         (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
@@ -185,7 +187,16 @@ export function collectVisibleTableCells(
         !ctx ||
         !row.displayCondition ||
         shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
-    )
+    );
+  // 숨은 행에서 시작한 세로 병합 셀은 렌더러가 같은 id 로 첫 가시 행에 올려 그린다 — 화면에
+  // 있는 칸이므로 검증 대상이다. 렌더러와 같은 투영(recalculateRowspansForVisibleRows)을 쓴다.
+  // 행이 하나도 숨지 않았거나 세로 병합이 없으면 투영이 필요 없다(대다수 표).
+  const projectedRows =
+    visibleRows.length < rows.length &&
+    rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
+      ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
+      : visibleRows;
+  return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
     .filter((c) => !c.isHidden);
 }

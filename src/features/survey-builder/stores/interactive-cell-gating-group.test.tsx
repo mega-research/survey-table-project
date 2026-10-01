@@ -85,4 +85,45 @@ describe('조건 묶음 게이팅 — 응답 화면 배선', () => {
     const response = useTestResponseStore.getState().testResponses['q1'] as Record<string, unknown>;
     expect(response['name']).toBeUndefined();
   });
+
+  it('비활성 컨트롤러의 잔존값은 없는 것으로 본다 — 상류가 닫히면 하류가 곧바로 다시 판정된다', () => {
+    // x 가 비면 a·b 비활성. c 는 "a 에 값이 있거나 b 에 값이 없으면" 활성 — 어느 쪽이든 활성이고
+    // 그 사이 중간 상태에서도 답이 지워지면 안 된다.
+    const x: TableCell = { id: 'x', type: 'input', content: '' };
+    const a: TableCell = { id: 'a', type: 'input', content: '', enabledWhen: { kind: 'filled', controllerCellId: 'x' } };
+    const b: TableCell = { id: 'b', type: 'input', content: '', enabledWhen: { kind: 'filled', controllerCellId: 'x' } };
+    const c: TableCell = {
+      id: 'c',
+      type: 'input',
+      content: '',
+      enabledWhen: {
+        kind: 'group',
+        op: 'OR',
+        terms: [
+          { kind: 'filled', controllerCellId: 'a' },
+          { kind: 'group', op: 'NOT', terms: [{ kind: 'filled', controllerCellId: 'b' }] },
+        ],
+      },
+    };
+    const cells = [x, a, b, c];
+    useTestResponseStore.setState({
+      testResponses: { q1: { x: '1', a: '값', b: '값', c: '지켜야 할 답' } },
+    });
+    const { container } = render(
+      withPreview(
+        <>
+          {cells.map((cell) => (
+            <InteractiveCell key={cell.id} cell={cell} questionId="q1" rowCells={cells} />
+          ))}
+        </>,
+      ),
+    );
+    expect(container.querySelectorAll('input')).toHaveLength(4);
+
+    setResponse({ x: '', a: '값', b: '값', c: '지켜야 할 답' });
+    const response = useTestResponseStore.getState().testResponses['q1'] as Record<string, unknown>;
+    expect(response['c']).toBe('지켜야 할 답');
+    expect(response['a'] ?? '').toBe('');
+    expect(response['b'] ?? '').toBe('');
+  });
 });

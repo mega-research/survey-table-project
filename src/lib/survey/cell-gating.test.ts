@@ -557,3 +557,95 @@ describe('조건 묶음 — AND / OR / NOT 과 중첩', () => {
     expect(stripDisabledCellValues([q], { q: { a: '', b: '5', c: '7' } })).toEqual({ q: { a: '' } });
   });
 });
+
+describe('비활성 컨트롤러의 값은 없는 것으로 본다 — NOT 과 체인', () => {
+  // x 가 비면 a·b 가 비활성. c 는 "a 에 값이 있거나, b 에 값이 없으면" 활성.
+  // x 를 비운 직후 저장 페이로드에는 a·b 의 옛 값이 남아 있다. a·b 는 어차피 지워질 값이라
+  // c 는 "b 에 값이 없다" 로 활성이어야 하고, c 의 답은 보존돼야 한다.
+  const gatedBy = (id: string) => ({ kind: 'filled', controllerCellId: id }) as const;
+  const cCondition: NonNullable<TableCell['enabledWhen']> = {
+    kind: 'group',
+    op: 'OR',
+    terms: [gatedBy('a'), { kind: 'group', op: 'NOT', terms: [gatedBy('b')] }],
+  };
+  const cells = {
+    x: inputCell('x'),
+    a: inputCell('a', { enabledWhen: gatedBy('x') }),
+    b: inputCell('b', { enabledWhen: gatedBy('x') }),
+    c: inputCell('c', { enabledWhen: cCondition }),
+  };
+  const tableOf = (order: Array<keyof typeof cells>) =>
+    ({
+      id: 'q',
+      type: 'table',
+      tableRowsData: [{ id: 'r', label: '', cells: order.map((k) => cells[k]) }],
+    }) as unknown as Question;
+  const stale = { q: { x: '', a: '옛값', b: '옛값', c: '지켜야 할 답' } };
+
+  it('저장 strip 결과가 셀 배치 순서와 무관하다', () => {
+    const orders: Array<Array<keyof typeof cells>> = [
+      ['x', 'a', 'b', 'c'],
+      ['x', 'a', 'c', 'b'],
+      ['c', 'b', 'a', 'x'],
+      ['b', 'c', 'x', 'a'],
+    ];
+    for (const order of orders) {
+      expect(stripDisabledCellValues([tableOf(order)], stale)).toEqual({
+        q: { x: '', c: '지켜야 할 답' },
+      });
+    }
+  });
+
+  it('isCellEnabled 도 비활성 컨트롤러의 잔존 값을 무시한다 (표 전체 셀을 넘겼을 때)', () => {
+    const all = Object.values(cells);
+    expect(isCellEnabled(cells.c, stale.q, all)).toBe(true);
+    // x 가 채워져 a·b 가 살아 있으면 값 그대로 판정한다
+    expect(isCellEnabled(cells.c, { x: '1', a: '', b: '값' }, all)).toBe(false);
+    expect(isCellEnabled(cells.c, { x: '1', a: '값', b: '값' }, all)).toBe(true);
+  });
+
+  it('체인 — 상류가 비활성이면 그 값이 남아 있어도 하류는 곧바로 비활성이다', () => {
+    const b = inputCell('b', { enabledWhen: gatedBy('a') });
+    const c = inputCell('c', { enabledWhen: gatedBy('b') });
+    expect(isCellEnabled(c, { a: '', b: '남은 값' }, [inputCell('a'), b, c])).toBe(false);
+  });
+
+  it('순환 참조는 종전처럼 값만 보고 판정한다 — 무한 재귀하지 않는다', () => {
+    const p = inputCell('p', { enabledWhen: gatedBy('r') });
+    const r = inputCell('r', { enabledWhen: gatedBy('p') });
+    expect(isCellEnabled(p, { p: '1', r: '1' }, [p, r])).toBe(true);
+    expect(isCellEnabled(p, {}, [p, r])).toBe(false);
+  });
+
+  it('보기 소스 표 사이드카도 순서와 무관하다', () => {
+    const text = (id: string, over: Partial<TableCell> = {}) =>
+      inputCell(id, { inputType: 'text', ...over });
+    const defs = {
+      x: text('x'),
+      a: text('a', { enabledWhen: gatedBy('x') }),
+      b: text('b', { enabledWhen: gatedBy('x') }),
+      c: text('c', { enabledWhen: cCondition }),
+    };
+    for (const order of [
+      ['x', 'a', 'c', 'b'],
+      ['c', 'b', 'a', 'x'],
+    ] as Array<Array<keyof typeof defs>>) {
+      const q = {
+        id: 'q',
+        type: 'checkbox',
+        tableRowsData: [
+          {
+            id: 'r',
+            label: '',
+            cells: [{ id: 'opt', type: 'choice_opt', content: '' }, ...order.map((k) => defs[k])],
+          },
+        ],
+      } as unknown as Question;
+      const out = stripDisabledCellValues([q], {
+        q: [],
+        __optTexts__: { q: { x: '', a: '옛값', b: '옛값', c: '지켜야 할 답' } },
+      });
+      expect(out['__optTexts__']).toEqual({ q: { x: '', c: '지켜야 할 답' } });
+    }
+  });
+});

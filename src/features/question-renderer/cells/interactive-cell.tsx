@@ -222,9 +222,13 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // 선택자가 값이 그대로면 같은 객체를 돌려줘 재렌더를 막는다(createGateValueSelector).
   // enabledWhen 이 없는 셀(대다수)은 모듈 상수 선택자가 항상 같은 빈 객체를 돌려준다.
   const gateCondition = GATABLE_CELL_TYPES.has(cell.type) ? cell.enabledWhen : undefined;
+  // 컨트롤러가 그 자신도 게이팅 셀이면 상류 값까지 구독해야 한다(비활성 컨트롤러의 잔존값은
+  // 없는 것으로 본다 — gate-value-selector 가 그 닫힘을 구한다). 그래서 셀 정의가 먼저 필요하다.
+  const tableCells = useGatingTableCells();
+  const gatingCells = tableCells ?? rowCells;
   const selectGateValues = useMemo(
-    () => (gateCondition ? createGateValueSelector(gateCondition) : selectNoGateValues),
-    [gateCondition],
+    () => (gateCondition ? createGateValueSelector(gateCondition, gatingCells) : selectNoGateValues),
+    [gateCondition, gatingCells],
   );
   const sourceGateValues = useQuestionResponseSelector(source, questionId, selectGateValues);
 
@@ -236,14 +240,13 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
   const gatingCellValues: Record<string, unknown> = source ? sourceGateValues : (value ?? {});
 
-  const tableCells = useGatingTableCells();
   const choiceGroups = useChoiceGroups();
   const choiceSelection = wantsChoiceSelection
     ? collectTableChoiceSelection(gatingCellValues)
     : undefined;
   const gatingDisabled =
     GATABLE_CELL_TYPES.has(cell.type) &&
-    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells, choiceSelection);
+    !isCellEnabled(cell, gatingCellValues, gatingCells, choiceSelection);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,

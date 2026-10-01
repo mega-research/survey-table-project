@@ -1,5 +1,5 @@
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
-import type { CellEnableCondition } from '@/types/survey';
+import type { CellEnableCondition, TableCell } from '@/types/survey';
 import { collectGateLeaves } from '@/utils/cell-gate-tree';
 
 /**
@@ -27,21 +27,40 @@ export function gateWantsChoiceSelection(condition: CellEnableCondition | undefi
 /**
  * 조건이 읽는 응답 키 — 잎마다 컨트롤러 셀 id, 보기 선택 조건은 표 응답 안 예약 키
  * (그룹 선택 맵) 하나. 중복은 뺀다.
+ *
+ * 컨트롤러가 그 자신도 게이팅 셀이면 **그 컨트롤러의 컨트롤러까지** 따라간다. 평가기는
+ * 비활성 컨트롤러의 잔존값을 없는 것으로 보는데(cell-gating 의 effectiveControllerValue),
+ * 그 판정에는 상류 값이 필요하다 — 구독이 직접 컨트롤러에서 멈추면 상류가 바뀌어도 이 셀이
+ * 다시 판정되지 않는다. tableCells 가 없으면 직접 컨트롤러만 구독한다(종전 동작).
  */
-export function gateSubscriptionKeys(condition: CellEnableCondition): string[] {
-  return [
-    ...new Set(
-      collectGateLeaves(condition).map((leaf) =>
-        leaf.kind === 'choice-selected' ? CHOICE_GROUPS_KEY : leaf.controllerCellId,
-      ),
-    ),
-  ];
+export function gateSubscriptionKeys(
+  condition: CellEnableCondition,
+  tableCells?: readonly TableCell[],
+): string[] {
+  const keys = new Set<string>();
+  const seenControllers = new Set<string>();
+  const walk = (current: CellEnableCondition) => {
+    for (const leaf of collectGateLeaves(current)) {
+      if (leaf.kind === 'choice-selected') {
+        keys.add(CHOICE_GROUPS_KEY);
+        continue;
+      }
+      keys.add(leaf.controllerCellId);
+      if (seenControllers.has(leaf.controllerCellId)) continue;
+      seenControllers.add(leaf.controllerCellId);
+      const upstream = tableCells?.find((c) => c.id === leaf.controllerCellId)?.enabledWhen;
+      if (upstream) walk(upstream);
+    }
+  };
+  walk(condition);
+  return [...keys];
 }
 
 export function createGateValueSelector(
   condition: CellEnableCondition,
+  tableCells?: readonly TableCell[],
 ): (questionResponse: unknown) => Record<string, unknown> {
-  const keys = gateSubscriptionKeys(condition);
+  const keys = gateSubscriptionKeys(condition, tableCells);
   if (keys.length === 0) return selectNoGateValues;
   let previous: Record<string, unknown> | undefined;
   return (questionResponse) => {

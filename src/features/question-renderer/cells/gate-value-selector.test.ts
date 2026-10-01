@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
-import type { CellEnableCondition } from '@/types/survey';
+import type { CellEnableCondition, TableCell } from '@/types/survey';
 
 import {
   createGateValueSelector,
@@ -61,5 +61,18 @@ describe('gate-value-selector', () => {
   it('게이팅 없는 셀의 선택자는 항상 같은 빈 객체다', () => {
     expect(selectNoGateValues()).toBe(selectNoGateValues());
     expect(createGateValueSelector({ kind: 'group', op: 'AND', terms: [] })).toBe(selectNoGateValues);
+  });
+
+  it('컨트롤러가 게이팅 셀이면 그 상류 컨트롤러까지 구독한다 — 순환이어도 멈춘다', () => {
+    const cells = [
+      { id: 'x', type: 'input', content: '' },
+      { id: 'a', type: 'input', content: '', enabledWhen: { kind: 'filled', controllerCellId: 'x' } },
+      { id: 'p', type: 'input', content: '', enabledWhen: { kind: 'filled', controllerCellId: 'r' } },
+      { id: 'r', type: 'input', content: '', enabledWhen: { kind: 'filled', controllerCellId: 'p' } },
+    ] as TableCell[];
+    const onA: CellEnableCondition = { kind: 'filled', controllerCellId: 'a' };
+    expect(gateSubscriptionKeys(onA, cells)).toEqual(['a', 'x']);
+    expect(gateSubscriptionKeys(onA)).toEqual(['a']);
+    expect(gateSubscriptionKeys({ kind: 'filled', controllerCellId: 'p' }, cells)).toEqual(['p', 'r']);
   });
 });
