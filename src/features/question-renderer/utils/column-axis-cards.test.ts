@@ -105,3 +105,59 @@ describe('buildColumnAxisCards', () => {
     ).toEqual([]);
   });
 });
+
+describe('buildColumnAxisCards — 상위 구분', () => {
+  // AI 실태조사 Q28 모양 — 「내부 R&D」가 세 행을 세로로 덮고, 「합계」는 두 열을 가로로 덮는다.
+  const rndColumns: TableColumn[] = [
+    { id: 'group', label: '구분' },
+    { id: 'item', label: '구분' },
+    { id: 'ratio', label: '비율' },
+  ];
+  const rndRows = (groupExtra: Partial<TableCell> = {}): TableRow[] => [
+    {
+      id: 'a',
+      label: '',
+      cells: [
+        text('in', '내부 R&D', { rowspan: 2, ...groupExtra }),
+        text('a-l', '① 독자'),
+        input('a-v'),
+      ],
+    },
+    {
+      id: 'b',
+      label: '',
+      cells: [text('in-x', '내부 R&D', { isHidden: true }), text('b-l', '② 공동'), input('b-v')],
+    },
+    { id: 'c', label: '', cells: [text('out', '외부 R&D'), text('c-l', '④ 외주'), input('c-v')] },
+    {
+      id: 't',
+      label: '',
+      cells: [
+        text('sum', '합계', { colspan: 2 }),
+        text('sum-x', '', { isHidden: true }),
+        input('t-v'),
+      ],
+    },
+  ];
+  const groupsOf = (rows: TableRow[]) =>
+    buildColumnAxisCards({ columns: rndColumns, displayRows: rows })[0]!.items.map((item) => [
+      item.label,
+      item.groupCells.map((cell) => cell.content),
+    ]);
+
+  it('세로 병합된 구분 셀은 덮인 아래 행에도 따라가고, 구분 없는 행은 비어 있다', () => {
+    expect(groupsOf(rndRows())).toEqual([
+      ['① 독자', ['내부 R&D']],
+      ['② 공동', ['내부 R&D']],
+      ['④ 외주', ['외부 R&D']],
+      ['합계', []],
+    ]);
+  });
+
+  it('모바일에서 숨긴 구분 셀은 상위 구분이 되지 않는다', () => {
+    expect(groupsOf(rndRows({ mobileDisplay: 'hidden' })).slice(0, 2)).toEqual([
+      ['① 독자', []],
+      ['② 공동', []],
+    ]);
+  });
+});

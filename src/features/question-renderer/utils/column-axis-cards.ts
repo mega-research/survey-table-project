@@ -1,6 +1,7 @@
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { expandHeaderGrid } from './expand-header-grid';
+import { buildTableRowspanCoverage } from './table-rowspan-coverage';
 
 /**
  * 테이블 유형의 「축 단위 카드」 — 응답 칸이 놓인 **열마다 카드 하나**, 그 안에 행을 차례로 세운다
@@ -18,6 +19,11 @@ export interface ColumnAxisCardItem {
   label: string;
   /** 행 제목이 된 글자 셀 — 서식본(contentHtml)·굵게를 그대로 쓰려고 넘긴다 */
   labelCell: TableCell | undefined;
+  /**
+   * 행 제목보다 앞에 놓인 상위 구분 셀들(왼쪽 → 오른쪽) — 세로 병합으로 위 행에서 내려온 것 포함
+   * (「내부 R&D」 아래 ①②③). 카드 안에서 구분이 바뀌는 자리에 소제목으로 선다.
+   */
+  groupCells: TableCell[];
 }
 
 export interface ColumnAxisCard {
@@ -75,22 +81,40 @@ export function headerPath(
   return path;
 }
 
-/** 행 제목 — 첫 응답 칸 앞의 글자 셀 중 마지막(저작자가 모바일에서 숨긴 셀은 제외) */
-function rowLabel(row: TableRow): Pick<ColumnAxisCardItem, 'label' | 'labelCell'> {
+const isLabelText = (cell: TableCell): boolean =>
+  cell.type === 'text' && cell.mobileDisplay !== 'hidden' && (cell.content ?? '').trim() !== '';
+
+/**
+ * 행 제목 — 첫 응답 칸 앞의 글자 셀 중 마지막(저작자가 모바일에서 숨긴 셀은 제외). 그보다 앞의 글자
+ * 셀은 상위 구분이다. 상위 구분은 세로 병합으로 위 행에서 내려온 셀도 센다 — 아래 행이 제 구분을
+ * 잃지 않는다. 행 제목은 그 행 자신의 셀만 된다(내려온 셀은 여러 행의 것이라 행을 구분하지 못한다).
+ */
+function rowLabel(
+  row: TableRow,
+  covered: ReadonlyArray<TableCell | undefined>,
+): Pick<ColumnAxisCardItem, 'label' | 'labelCell' | 'groupCells'> {
   const firstAnswer = row.cells.findIndex(isAnswerCell);
-  const leading = firstAnswer < 0 ? row.cells : row.cells.slice(0, firstAnswer);
-  for (let index = leading.length - 1; index >= 0; index -= 1) {
-    const cell = leading[index]!;
-    if (
-      cell.type === 'text' &&
-      isVisible(cell) &&
-      cell.mobileDisplay !== 'hidden' &&
-      (cell.content ?? '').trim() !== ''
-    ) {
-      return { label: cell.content.trim(), labelCell: cell };
+  const end = firstAnswer < 0 ? row.cells.length : firstAnswer;
+  let labelIndex = -1;
+  for (let index = end - 1; index >= 0; index -= 1) {
+    const cell = row.cells[index]!;
+    if (isVisible(cell) && isLabelText(cell)) {
+      labelIndex = index;
+      break;
     }
   }
-  return { label: (row.label ?? '').trim(), labelCell: undefined };
+  const groupCells: TableCell[] = [];
+  for (let index = 0; index < (labelIndex < 0 ? end : labelIndex); index += 1) {
+    const own = row.cells[index]!;
+    // 자기 셀이 보이면 그 셀, 가려졌으면 위에서 내려온 세로 병합 셀(가로 병합에 덮인 자리는 자기 자신이 돌아온다)
+    const cell = isVisible(own) ? own : covered[index];
+    if (!cell || (cell === own && !isVisible(own))) continue;
+    if (isLabelText(cell) && !groupCells.includes(cell)) groupCells.push(cell);
+  }
+  const labelCell = labelIndex < 0 ? undefined : row.cells[labelIndex];
+  return labelCell
+    ? { label: labelCell.content.trim(), labelCell, groupCells }
+    : { label: (row.label ?? '').trim(), labelCell: undefined, groupCells };
 }
 
 /**
@@ -101,9 +125,12 @@ function rowLabel(row: TableRow): Pick<ColumnAxisCardItem, 'label' | 'labelCell'
 export function buildColumnAxisCards(input: {
   columns: readonly TableColumn[];
   headerGrid?: HeaderCell[][] | undefined;
-  displayRows: readonly TableRow[];
+  displayRows: TableRow[];
 }): ColumnAxisCard[] {
-  const labels = new Map(input.displayRows.map((row) => [row.id, rowLabel(row)]));
+  const coverage = buildTableRowspanCoverage(input.displayRows);
+  const labels = new Map(
+    input.displayRows.map((row) => [row.id, rowLabel(row, coverage.get(row.id) ?? row.cells)]),
+  );
   const cards: ColumnAxisCard[] = [];
   for (const [columnIndex, column] of input.columns.entries()) {
     const items: ColumnAxisCardItem[] = [];

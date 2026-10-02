@@ -88,37 +88,67 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
           }
         >
           <div className="space-y-3 px-1 py-1">
-            {card.items.map(({ cell: sourceCell, row, label, labelCell }) => {
+            {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells }, index) => {
               const cell = overrideCellOptionsColumnsForCard(sourceCell);
               const invalid = errorCellIds?.has(cell.id) === true;
+              // 상위 구분(내부 R&D · 외부 R&D)이 바뀌는 자리에 소제목을 세운다. 구분 없는 행(합계)으로
+              // 넘어가면 선만 그어 앞 구분에 딸린 것처럼 보이지 않게 한다.
+              const groupKey = groupCells.map((group) => group.id).join('/');
+              const previous = card.items[index - 1];
+              const previousKey = previous?.groupCells.map((group) => group.id).join('/') ?? '';
+              const groupChanged = groupKey !== previousKey;
               return (
-                <div key={cell.id} data-cell-id={cell.id} className="space-y-1">
-                  {label && (
-                    <p className="text-sm font-medium text-gray-900">
-                      <CellText
-                        text={substituteTokens(label, attrs, quotes)}
-                        html={labelCell ? resolveCellTextHtml(labelCell, attrs, quotes) : undefined}
-                      />
+                <React.Fragment key={cell.id}>
+                  {groupChanged && groupKey && (
+                    <p
+                      data-testid="column-axis-card-group"
+                      className={cn(
+                        'text-[13px] font-bold text-blue-700',
+                        index > 0 && 'border-t border-gray-200 pt-3',
+                      )}
+                    >
+                      {groupCells.map((group, groupIndex) => (
+                        <React.Fragment key={group.id}>
+                          {groupIndex > 0 && ' · '}
+                          <CellText
+                            text={substituteTokens(group.content.trim(), attrs, quotes)}
+                            html={resolveCellTextHtml(group, attrs, quotes)}
+                          />
+                        </React.Fragment>
+                      ))}
                     </p>
                   )}
-                  <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
-                    <InteractiveCell
-                      cell={cell}
-                      questionId={questionId}
-                      value={value}
-                      onChange={onChange}
-                      rowCells={row.cells}
-                      ariaInvalid={invalid}
-                      hintInFlow
-                      ignoreInputWidth
-                      {...resolveRadioGroupProps(
-                        cell,
-                        row.id,
-                        radioBucketsByRowId.get(row.id) ?? new Map(),
-                      )}
-                    />
+                  {groupChanged && !groupKey && <div className="border-t border-gray-200" />}
+                  <div data-cell-id={cell.id} className="space-y-1">
+                    {label && (
+                      <p className="text-sm font-medium text-gray-900">
+                        <CellText
+                          text={substituteTokens(label, attrs, quotes)}
+                          html={
+                            labelCell ? resolveCellTextHtml(labelCell, attrs, quotes) : undefined
+                          }
+                        />
+                      </p>
+                    )}
+                    <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
+                      <InteractiveCell
+                        cell={cell}
+                        questionId={questionId}
+                        value={value}
+                        onChange={onChange}
+                        rowCells={row.cells}
+                        ariaInvalid={invalid}
+                        hintInFlow
+                        ignoreInputWidth
+                        {...resolveRadioGroupProps(
+                          cell,
+                          row.id,
+                          radioBucketsByRowId.get(row.id) ?? new Map(),
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
