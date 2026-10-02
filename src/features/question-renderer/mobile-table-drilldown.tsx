@@ -5,22 +5,25 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 
 import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import {
   type ClassifiedLeaf,
   type ClassifiedSection,
   classifyTable,
   columnLeafLabels,
 } from '@/features/question-renderer/utils/classify-table';
-import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,
 } from '@/features/question-renderer/utils/mobile-original-row';
+import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 import {
   buildRadioGroupBuckets,
   resolveRadioGroupProps,
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -33,9 +36,9 @@ import {
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
 
+import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
 import { useGatingTableCells } from './cells/gating-table-cells-context';
-import { CellText, resolveCellTextHtml } from './cell-text';
 import { DisplayCellContent } from './mobile-display-cells';
 import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
@@ -340,7 +343,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       return [
         <span
           key={cell.id}
-          className="block whitespace-pre-wrap text-xs leading-relaxed text-gray-500 [overflow-wrap:anywhere] [word-break:normal]"
+          className="block text-xs leading-relaxed [overflow-wrap:anywhere] [word-break:normal] whitespace-pre-wrap text-gray-500"
         >
           <CellText
             text={plain}
@@ -414,6 +417,32 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     </div>
   );
 
+  // matrix 상세의 열 묶음 — 입력 열(colGroups)에 읽기 전용 계산 칸을 **열 순서대로** 끼운다.
+  // 열 묶음은 입력 열만 다뤄 계산 칸이 맨 아래에 라벨 없이 몰렸다(「상용 · 임시」 아래 「합계」가
+  // 채용 칸 뒤에 나왔다). 계산 칸은 제 열 앞의 마지막 입력 열이 속한 묶음에 든다.
+  const matrixDetailGroups = (section: ClassifiedSection, leaf: ClassifiedLeaf) => {
+    const groups = section.colGroups.map((group) => ({
+      label: group.label,
+      items: group.cols.flatMap((column) => {
+        const cellId = leaf.cellByCol[column.col];
+        // 실제 열 인덱스(column.col)로 이 리프의 입력 셀을 찾는다. 비대칭 matrix 에서
+        // 행마다 채운 열이 달라도 셀이 올바른 열 라벨 아래 렌더된다.
+        return cellId == null ? [] : [{ cellId, col: column.col, label: column.label }];
+      }),
+    }));
+    if (groups.length === 0) groups.push({ label: '', items: [] });
+    for (const cellId of leaf.calcCellIds) {
+      const col = rowCellsByCellId.get(cellId)?.findIndex((cell) => cell.id === cellId) ?? -1;
+      let target = groups[0]!;
+      for (const group of groups) {
+        if (group.items.some((item) => item.col < col)) target = group;
+      }
+      target.items.push({ cellId, col, label: columnLabelByCellId.get(cellId) ?? '' });
+      target.items.sort((x, y) => x.col - y.col);
+    }
+    return groups;
+  };
+
   const renderMatrixLeafDetail = (leaf: ClassifiedLeaf, section: ClassifiedSection) => (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
       <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
@@ -425,7 +454,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         </div>
       )}
       <div className="space-y-4 p-4">
-        {section.colGroups.map((group, groupIndex) => (
+        {matrixDetailGroups(section, leaf).map((group, groupIndex) => (
           <div key={groupIndex}>
             {group.label && (
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-600">
@@ -434,22 +463,18 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               </div>
             )}
             <div className="space-y-3">
-              {group.cols.map((column) => {
-                // 실제 열 인덱스(column.col)로 이 리프의 입력 셀을 찾는다. 비대칭 matrix 에서
-                // 행마다 채운 열이 달라도 셀이 올바른 열 라벨 아래 렌더된다.
-                const cellId = leaf.cellByCol[column.col];
-                if (cellId == null) return null;
-                const cell = cellById.get(cellId);
+              {group.items.map((item) => {
+                const cell = cellById.get(item.cellId);
                 if (!cell) return null;
                 // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
                 // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
                 const label = substituteTokens(
-                  resolveMobileCellLabel(cell, column.label),
+                  resolveMobileCellLabel(cell, item.label),
                   attrs,
                   quotes,
                 );
                 return (
-                  <div key={column.col} className="space-y-1">
+                  <div key={item.cellId} className="space-y-1">
                     {label && (
                       <div className="flex items-start gap-1.5">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
@@ -458,17 +483,12 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                         </span>
                       </div>
                     )}
-                    {renderCell(cellId)}
+                    {renderCell(item.cellId)}
                   </div>
                 );
               })}
             </div>
           </div>
-        ))}
-        {/* 읽기 전용 계산 셀 — matrix 열 그룹은 입력 열만 다루므로(cellByCol) 그룹 뒤에
-            별도로 표시한다. 완료 판정에는 불포함 */}
-        {leaf.calcCellIds.map((cellId) => (
-          <div key={cellId}>{renderCell(cellId)}</div>
         ))}
       </div>
     </div>
@@ -496,7 +516,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   );
   const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
   const completedRows = answerableRows.filter((row) =>
-    isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells }),
+    isTableRowCompleted(row, currentResponse, {
+      answerableCellTypes: completionCellTypes,
+      tableCells: gatingTableCells,
+    }),
   ).length;
 
   const renderOriginalRowDetail = (leaf: ClassifiedLeaf) => {
@@ -580,7 +603,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             completed: countable.filter((leaf) => {
               const row = navigationRowById.get(leaf.rowId);
               return row
-                ? isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells })
+                ? isTableRowCompleted(row, currentResponse, {
+                    answerableCellTypes: completionCellTypes,
+                    tableCells: gatingTableCells,
+                  })
                 : false;
             }).length,
             total: countable.length,
@@ -595,7 +621,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           const row = navigationRowById.get(leaf.rowId);
           return {
             completed:
-              row && isTableRowCompleted(row, currentResponse, { answerableCellTypes: completionCellTypes, tableCells: gatingTableCells })
+              row &&
+              isTableRowCompleted(row, currentResponse, {
+                answerableCellTypes: completionCellTypes,
+                tableCells: gatingTableCells,
+              })
                 ? 1
                 : 0,
             total: 1,

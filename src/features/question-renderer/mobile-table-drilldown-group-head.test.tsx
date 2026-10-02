@@ -73,7 +73,9 @@ const childRow = (key: string, title: string, first: TableCell): TableRow => ({
   cells: [
     first,
     text(`${key}-title`, title),
-    text(`${key}-desc`, `${title} 설명 첫 줄\n${title} 설명 둘째 줄`, { mobileDisplay: 'collapsed' }),
+    text(`${key}-desc`, `${title} 설명 첫 줄\n${title} 설명 둘째 줄`, {
+      mobileDisplay: 'collapsed',
+    }),
     input(`${key}-a`),
     input(`${key}-b`),
     calc(`${key}-sum`),
@@ -96,6 +98,7 @@ function renderDrilldown(
     displayRows?: TableRow[];
     authoredRows?: TableRow[];
     detailMode?: 'legacy' | 'original-row';
+    columns?: TableColumn[];
     navigateToCellRef?: React.MutableRefObject<((cellIds: readonly string[]) => void) | null>;
   } = {},
 ) {
@@ -106,8 +109,8 @@ function renderDrilldown(
         questionId="q1"
         authoredRows={authored}
         displayRows={o.displayRows ?? authored}
-        authoredColumns={columns}
-        visibleColumns={columns}
+        authoredColumns={o.columns ?? columns}
+        visibleColumns={o.columns ?? columns}
         currentResponse={{}}
         hideColumnLabels={false}
         hasDynamicRows={false}
@@ -266,7 +269,14 @@ describe('모바일 표 드릴다운 — 묶음 경계', () => {
       {
         id: 'r3x',
         label: '',
-        cells: [hidden('r3x-h0'), text('r3x-title', '3-x. 중간 소계'), text('r3x-desc', ''), calc('r3x-a'), calc('r3x-b'), calc('r3x-sum')],
+        cells: [
+          hidden('r3x-h0'),
+          text('r3x-title', '3-x. 중간 소계'),
+          text('r3x-desc', ''),
+          calc('r3x-a'),
+          calc('r3x-b'),
+          calc('r3x-sum'),
+        ],
       },
       all[4]!,
       all[5]!,
@@ -280,14 +290,52 @@ describe('모바일 표 드릴다운 — 묶음 경계', () => {
   });
 
   it('오류 배너의 위치 이동은 묶음 안 하위 직업의 상세로 간다', () => {
-    const navigateToCellRef: React.MutableRefObject<((cellIds: readonly string[]) => void) | null> = {
-      current: null,
-    };
+    const navigateToCellRef: React.MutableRefObject<((cellIds: readonly string[]) => void) | null> =
+      {
+        current: null,
+      };
     renderDrilldown({ navigateToCellRef });
 
     act(() => navigateToCellRef.current?.(['r32-b']));
 
     expect(document.querySelector('[data-cell-id="r32-b"]')).not.toBeNull();
     expect(document.querySelector('[data-cell-id="r31-a"]')).toBeNull();
+  });
+});
+
+describe('모바일 표 드릴다운 — 상세의 계산 칸 자리', () => {
+  it('계산 칸은 맨 아래로 몰리지 않고 제 열 자리에 라벨과 함께 나온다', () => {
+    // 「상용 | 합계(계산) | 임시」 — 계산 칸이 입력 칸 사이에 놓인 표
+    const middleColumns: TableColumn[] = [
+      ...columns.slice(0, 3),
+      { id: 'c3', label: '상용', width: 80 },
+      { id: 'c4', label: '소계', width: 80 },
+      { id: 'c5', label: '임시', width: 80 },
+    ];
+    const row = (key: string, title: string): TableRow => ({
+      id: key,
+      label: '',
+      cells: [
+        text(`${key}-title`, title, { colspan: 2 }),
+        hidden(`${key}-h`),
+        text(`${key}-desc`, '', {}),
+        input(`${key}-a`),
+        { ...calc(`${key}-sum`), mobileLabel: '상용 소계' },
+        input(`${key}-b`),
+      ],
+    });
+    renderDrilldown({
+      authoredRows: [row('r1', '1. 관리자'), row('r2', '2. 컨설턴트')],
+      columns: middleColumns,
+    });
+    fireEvent.click(card(/1\. 관리자/));
+
+    const labels = ['상용', '상용 소계', '임시'].map((label) => screen.getByText(label));
+    expect(
+      labels[0]!.compareDocumentPosition(labels[1]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      labels[1]!.compareDocumentPosition(labels[2]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
