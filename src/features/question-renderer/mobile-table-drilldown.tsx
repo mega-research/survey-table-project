@@ -374,9 +374,15 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           return (
             <div
               key={cellId}
-              className="min-w-[4.5rem] flex-1 rounded-lg bg-white/80 px-1 py-1.5 text-center"
+              // 칸 폭은 라벨 글자가 정한다 — 균등 분할로 라벨을 말줄임하지 않고, 한 줄에 안 들어가면
+              // 다음 줄로 넘긴다(남는 폭은 그 줄의 칸들이 나눠 갖는다).
+              className="max-w-full min-w-[4.5rem] flex-auto rounded-lg bg-white/80 px-1 py-1.5 text-center"
             >
-              {label && <div className="truncate px-1 text-[11px] text-gray-500">{label}</div>}
+              {label && (
+                <div className="px-1.5 text-[11px] leading-tight break-keep text-gray-500">
+                  {label}
+                </div>
+              )}
               {renderCell(cellId)}
             </div>
           );
