@@ -207,10 +207,14 @@ export function buildMobileRowWiseOriginalModel(
         section.labelSourceCellId && input.isLabelSourceHidden?.(section.labelSourceCellId)
           ? ''
           : section.label.trim();
-      const label =
-        questions.length === 1 && rawSectionLabel === questions[0]?.title
-          ? ''
-          : rawSectionLabel;
+      const only = questions.length === 1 ? questions[0] : undefined;
+      const duplicatesTitle = only !== undefined && rawSectionLabel === only.title;
+      // 섹션 이름과 행 제목이 같으면 한 번만 보인다. 보통은 행 제목 쪽을 남기지만, 제목 열 자리에
+      // 응답 칸이 놓여 행 제목을 섹션 열에서 빌려 온 행(「⑩ 기타」 + 입력칸)은 섹션 머리를 남긴다 —
+      // 이웃 행들과 같은 머리 모양이 되고, 입력칸이 제목 자리를 채운다.
+      const keepsSectionHeader = duplicatesTitle && only.omittedAnswerCells.length > 0;
+      if (keepsSectionHeader) only.title = '';
+      const label = duplicatesTitle && !keepsSectionHeader ? '' : rawSectionLabel;
 
       return [{
         id: section.labelSourceCellId ?? `section:${sectionIndex}`,

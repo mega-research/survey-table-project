@@ -209,5 +209,9 @@ describe('buildMobileRowWiseOriginalModel — 제외한 앞쪽 열의 응답 칸
     expect(byRow.get('plain')?.omittedAnswerCells).toEqual([]);
     expect(byRow.get('etc')?.omittedAnswerCells.map((c) => c.id)).toEqual(['e-etc']);
     expect(byRow.get('etc')?.projection.row.cells.map((c) => c.id)).toEqual(['e-a', 'e-b']);
+    // 제목을 섹션 열에서 빌려 온 행은 섹션 머리를 남기고 행 제목을 비운다 — 이웃 행과 같은 머리 모양
+    expect(model.sections.map((s) => s.label)).toEqual(['⑨ 교육', '⑩ 기타']);
+    expect(byRow.get('plain')?.title).toBe('설명');
+    expect(byRow.get('etc')?.title).toBe('');
   });
 });
