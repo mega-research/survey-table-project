@@ -195,10 +195,11 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                 )}
                 {block.summaries.map((summary) => (
                   <div key={summary.key} className="space-y-1.5">
-                    <p className="text-xs leading-snug font-medium whitespace-pre-line text-gray-600">
+                    <p className="text-sm leading-snug font-semibold whitespace-pre-line text-gray-700">
                       {cardTitle(summary)}
                     </p>
-                    <div className="flex divide-x divide-blue-100 rounded-xl border border-blue-100 bg-white">
+                    {/* 값은 한 줄에 하나씩 — 라벨 왼쪽, 값 오른쪽. 가로로 나누면 라벨이 접혀 안 읽힌다 */}
+                    <div className="divide-y divide-blue-100 rounded-xl border border-blue-100 bg-white">
                       {summary.inputs.map(({ cell, row, columnIndex }) => {
                         const label =
                           cell.mobileLabel?.trim() || (blocks.columnLabels[columnIndex] ?? '');
@@ -206,16 +207,14 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                           <div
                             key={cell.id}
                             data-cell-id={cell.id}
-                            className="flex min-w-0 flex-1 flex-col justify-between px-1 pt-2 pb-1 text-center"
+                            className="flex items-center justify-between gap-3 px-3 py-0.5"
                           >
-                            {label && (
-                              <p className="px-1 text-[11px] leading-tight break-keep text-gray-500">
-                                {substituteTokens(label, attrs, quotes)}
-                              </p>
-                            )}
-                            <div className="[&_span:first-child]:text-lg [&_span:first-child]:font-bold [&_span:first-child]:text-gray-900">
+                            <p className="min-w-0 text-[15px] leading-snug text-gray-700">
+                              {substituteTokens(label, attrs, quotes)}
+                            </p>
+                            <div className="shrink-0 [&_span:first-child]:text-lg [&_span:first-child]:font-bold [&_span:first-child]:text-gray-900">
                               <InteractiveCell
-                                cell={{ ...cell, inputTextAlign: 'center' }}
+                                cell={{ ...cell, inputTextAlign: 'right' }}
                                 questionId={questionId}
                                 value={value}
                                 onChange={onChange}
