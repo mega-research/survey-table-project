@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/features/question-renderer/utils/classify-table';
@@ -21,6 +21,12 @@ interface MobileDrilldownShellProps {
   getLeafStatus: (leaf: ClassifiedLeaf) => DrilldownStatus;
   renderLeafDetail: (leaf: ClassifiedLeaf, section: ClassifiedSection) => React.ReactNode;
   renderLegacySection?: (section: ClassifiedSection) => React.ReactNode;
+  /** 묶음 머리·계산 전용 요약의 값 줄(계산 셀들). 없으면 그 섹션들도 종전처럼 누르는 카드로 그린다. */
+  renderSummary?: ((section: ClassifiedSection) => React.ReactNode) | undefined;
+  /** 리프의 설명 셀 — 'card' 는 목차 카드 안(자세히=첫 줄, 바로표시=전문), 'full' 은 전문. 없으면 null. */
+  renderDescription?:
+    | ((leaf: ClassifiedLeaf, variant: 'card' | 'full') => React.ReactNode)
+    | undefined;
   footer?: React.ReactNode;
   onLeaveLeafForward?: (leaf: ClassifiedLeaf) => void;
   onLeaveSection?: (section: ClassifiedSection) => void;
@@ -33,8 +39,28 @@ interface MobileDrilldownShellProps {
 }
 
 export function getSectionIdentity(section: ClassifiedSection): string {
-  return section.labelSourceCellId
+  return section.identity
+    ?? section.labelSourceCellId
     ?? `${section.kind}:${section.label}`;
+}
+
+/** 묶음 머리·계산 전용 요약의 「설명 보기」 — 제목 줄 아래에 설명 전문을 펼친다. */
+function GroupHeadDescription({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-blue-600"
+      >
+        설명 보기
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="basis-full rounded-lg bg-white/70 p-3">{children}</div>}
+    </>
+  );
 }
 
 export function MobileDrilldownShell({
@@ -45,6 +71,8 @@ export function MobileDrilldownShell({
   getLeafStatus,
   renderLeafDetail,
   renderLegacySection,
+  renderSummary,
+  renderDescription,
   footer,
   onLeaveLeafForward,
   onLeaveSection,
@@ -143,6 +171,16 @@ export function MobileDrilldownShell({
     });
   };
 
+  // 목차에서 들어갈 수 있는 섹션 — 묶음 머리·계산 전용 요약은 값만 보이는 블록이라 건너뛴다.
+  const isEnterable = (target: ClassifiedSection) => !renderSummary || target.role === 'default';
+  const adjacentEnterableIndex = (from: number, step: 1 | -1): number | null => {
+    for (let i = from + step; i >= 0 && i < sections.length; i += step) {
+      const candidate = sections[i];
+      if (candidate && isEnterable(candidate)) return i;
+    }
+    return null;
+  };
+
   const goToRoot = () => {
     if (section) onLeaveSection?.(section);
     setNav({ sectionId: null, leafId: null });
@@ -151,7 +189,8 @@ export function MobileDrilldownShell({
 
   const goToNextSection = (sectionIndex: number, section: ClassifiedSection) => {
     onLeaveSection?.(section);
-    enterSection(sectionIndex + 1);
+    const next = adjacentEnterableIndex(sectionIndex, 1);
+    if (next !== null) enterSection(next);
   };
 
   // 부제의 개수는 진행 뱃지·진행바와 같은 분모(입력이 있는 행)를 쓴다.
@@ -206,15 +245,20 @@ export function MobileDrilldownShell({
       <div className="mt-4">
         {showSectionNavigation && (
           <div className="mb-3 flex gap-2.5">
+            {/* 앞에 들어갈 섹션이 있으면 그리로 — 목차 복귀는 위의 「뒤로」가 맡는다 */}
             <button
               type="button"
-              onClick={goToRoot}
+              onClick={() => {
+                const previous = adjacentEnterableIndex(sectionIndex, -1);
+                if (previous !== null) enterSection(previous);
+                else goToRoot();
+              }}
               className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50"
             >
               <ChevronLeft className="h-4 w-4" />
-              목차로
+              {adjacentEnterableIndex(sectionIndex, -1) !== null ? '이전 섹션' : '목차로'}
             </button>
-            {sectionIndex < sections.length - 1 && (
+            {adjacentEnterableIndex(sectionIndex, 1) !== null && (
               <button
                 type="button"
                 onClick={() => {
@@ -251,40 +295,126 @@ export function MobileDrilldownShell({
     );
   };
 
+  const renderSectionCard = (index: number) => {
+    const cardSection = sections[index];
+    if (!cardSection) return null;
+    const status = getSectionStatus(cardSection);
+    const full = status.total > 0 && status.completed === status.total;
+    // 설명은 리프(행)의 것이라 한 행짜리 섹션의 카드에만 붙인다. 있으면 개수 부제 자리를 대신한다.
+    const soleLeaf = cardSection.leaves.length === 1 ? cardSection.leaves[0] : undefined;
+    const description = soleLeaf ? renderDescription?.(soleLeaf, 'card') : null;
+    return (
+      <button
+        key={getSectionIdentity(cardSection)}
+        type="button"
+        onClick={() => enterSection(index)}
+        className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-gray-900">
+            {cardSection.label || '항목'}
+          </div>
+          {description ? (
+            <div className="mt-0.5">{description}</div>
+          ) : (
+            <div className="mt-0.5 text-xs text-gray-400">{secSubText(cardSection, status)}</div>
+          )}
+        </div>
+        {/* total 0 = 전부 표시 전용(계산 셀만 있는 섹션) — 카운트 뱃지 생략 */}
+        {status.total > 0 && (
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+              full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
+            )}
+          >
+            {status.completed}/{status.total}
+          </span>
+        )}
+        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+      </button>
+    );
+  };
+
+  // 목차 블록 — 묶음 머리는 바로 뒤에 이어지는 자기 하위 섹션들을 품는다.
+  type RootBlock =
+    | { kind: 'card'; index: number }
+    | { kind: 'summary'; index: number }
+    | { kind: 'group'; index: number; children: number[] };
+  const rootBlocks: RootBlock[] = [];
+  sections.forEach((rootSection, index) => {
+    // 묶음 소속을 역할보다 먼저 본다 — 묶음 안의 계산 전용 하위 행도 묶음을 끊지 않고 그 안에 남는다.
+    const last = rootBlocks[rootBlocks.length - 1];
+    const head = last?.kind === 'group' ? sections[last.index] : undefined;
+    if (
+      last?.kind === 'group' &&
+      rootSection.role !== 'group-head' &&
+      rootSection.groupHeadRowId !== undefined &&
+      head?.groupHeadRowId === rootSection.groupHeadRowId
+    ) {
+      last.children.push(index);
+      return;
+    }
+    if (isEnterable(rootSection)) rootBlocks.push({ kind: 'card', index });
+    else if (rootSection.role === 'group-head') rootBlocks.push({ kind: 'group', index, children: [] });
+    else rootBlocks.push({ kind: 'summary', index });
+  });
+
+  // 누르지 않는 블록의 제목 줄 — 제목 + (설명이 있으면) 「설명 보기」
+  const renderBlockTitle = (blockSection: ClassifiedSection, className?: string) => {
+    const headLeaf = blockSection.leaves[0];
+    const description = headLeaf ? renderDescription?.(headLeaf, 'full') : null;
+    return (
+      <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-2', className)}>
+        <div className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
+          {blockSection.label || '항목'}
+        </div>
+        {description && <GroupHeadDescription>{description}</GroupHeadDescription>}
+      </div>
+    );
+  };
+  const renderSummaryBlock = (index: number) => {
+    const blockSection = sections[index];
+    if (!blockSection) return null;
+    return (
+      <div
+        key={getSectionIdentity(blockSection)}
+        role="group"
+        aria-label={blockSection.label || '항목'}
+        className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+      >
+        {renderBlockTitle(blockSection)}
+        <div className="mt-2">{renderSummary?.(blockSection)}</div>
+      </div>
+    );
+  };
+
   if (nav.sectionId === null || !section || sectionIndex === null) {
     return (
       <div ref={rootRef}>
         <p className="mb-3 px-1 text-sm font-medium text-gray-500">작성할 항목을 선택하세요</p>
         <div className="space-y-2.5">
-          {sections.map((section, sectionIndex) => {
-            const status = getSectionStatus(section);
-            const full = status.total > 0 && status.completed === status.total;
+          {rootBlocks.map((block) => {
+            if (block.kind === 'card') return renderSectionCard(block.index);
+            if (block.kind === 'summary') return renderSummaryBlock(block.index);
+            const blockSection = sections[block.index];
+            if (!blockSection) return null;
             return (
-              <button
-                key={getSectionIdentity(section)}
-                type="button"
-                onClick={() => enterSection(sectionIndex)}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
+              <div
+                key={getSectionIdentity(blockSection)}
+                role="group"
+                aria-label={blockSection.label || '항목'}
+                className="space-y-2.5 rounded-xl border border-blue-100 bg-blue-50/40 p-3"
               >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-gray-900">
-                    {section.label || '항목'}
-                  </div>
-                  <div className="mt-0.5 text-xs text-gray-400">{secSubText(section, status)}</div>
-                </div>
-                {/* total 0 = 전부 표시 전용(계산 셀만 있는 섹션) — 카운트 뱃지 생략 */}
-                {status.total > 0 && (
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                    )}
-                  >
-                    {status.completed}/{status.total}
-                  </span>
-                )}
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-              </button>
+                {renderBlockTitle(blockSection, 'px-1')}
+                <div>{renderSummary?.(blockSection)}</div>
+                {block.children.map((childIndex) => {
+                  const child = sections[childIndex];
+                  return child && isEnterable(child)
+                    ? renderSectionCard(childIndex)
+                    : renderSummaryBlock(childIndex);
+                })}
+              </div>
             );
           })}
         </div>
@@ -325,8 +455,9 @@ export function MobileDrilldownShell({
                   onClick={() => setNav({ sectionId: nav.sectionId, leafId: leaf.rowId })}
                   className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
                 >
-                  <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
-                    {leaf.label}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-gray-900">{leaf.label}</span>
+                    {renderDescription?.(leaf, 'card')}
                   </span>
                   {/* total 0 = 채울 것이 없는 표시 전용 행(계산 셀만 있는 행) — 카운트 뱃지 생략 */}
                   {status.total > 0 && (
@@ -353,8 +484,10 @@ export function MobileDrilldownShell({
   const usesLeafList = requiresLeafList(section);
   const isFirstLeaf = leafIndex <= 0;
   const isLastLeaf = leafIndex >= section.leaves.length - 1;
-  const hasNextSection = sectionIndex < sections.length - 1;
-  const onlyRootExit = isFirstLeaf && isLastLeaf && !hasNextSection;
+  const hasNextSection = adjacentEnterableIndex(sectionIndex, 1) !== null;
+  const previousSectionIndex = adjacentEnterableIndex(sectionIndex, -1);
+  const onlyRootExit =
+    isFirstLeaf && isLastLeaf && !hasNextSection && previousSectionIndex === null;
   const navGray =
     'flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50';
   const navBlue =
@@ -384,7 +517,17 @@ export function MobileDrilldownShell({
         </div>
       ) : (
         <div className="mt-3 flex gap-2.5">
-          {isFirstLeaf ? (
+          {isFirstLeaf && previousSectionIndex !== null ? (
+            // 앞 섹션으로 — 목차 복귀는 위의 「뒤로」가 맡는다. 뒤로 가는 이동은 빈 칸을 확정하지 않는다.
+            <button
+              type="button"
+              onClick={() => enterSection(previousSectionIndex)}
+              className={navGray}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              이전 섹션
+            </button>
+          ) : isFirstLeaf ? (
             <button type="button" onClick={goToRoot} className={navGray}>
               <ChevronLeft className="h-4 w-4" />
               목차로

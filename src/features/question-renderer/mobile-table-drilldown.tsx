@@ -8,6 +8,7 @@ import {
   type ClassifiedLeaf,
   type ClassifiedSection,
   classifyTable,
+  columnLeafLabels,
 } from '@/features/question-renderer/utils/classify-table';
 import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 import {
@@ -34,6 +35,8 @@ import {
 
 import { InteractiveCell } from './cells';
 import { useGatingTableCells } from './cells/gating-table-cells-context';
+import { CellText, resolveCellTextHtml } from './cell-text';
+import { DisplayCellContent } from './mobile-display-cells';
 import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 
@@ -117,8 +120,19 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         answerableCellTypes,
         // 합계 표시 등 계산 전용 행도 상세 화면에 보여야 한다 (진행률 카운트에는 불포함)
         includeCalcOnlyLeaves: true,
+        // 들여쓰기 표시 셀·설명 셀을 읽는다. 묶음 머리 판정은 저작 구조 기준이라 원본 행·열을 함께 넘긴다
+        readMobileDisplay: true,
+        authoredRows,
+        authoredColumns,
       }),
-    [visibleColumns, navigationRows, visibleHeaderGrid, answerableCellTypes],
+    [
+      visibleColumns,
+      navigationRows,
+      visibleHeaderGrid,
+      answerableCellTypes,
+      authoredRows,
+      authoredColumns,
+    ],
   );
 
   // cell.id → TableCell (입력 셀 렌더용)
@@ -134,6 +148,18 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     () => providedTableCells ?? collectTableCells(displayRows),
     [providedTableCells, displayRows],
   );
+  // cell.id → 그 셀이 놓인 열의 맨 아래 헤더 라벨 (요약 값의 라벨 폴백)
+  const columnLabelByCellId = useMemo(() => {
+    const labels = columnLeafLabels({
+      tableColumns: visibleColumns,
+      tableHeaderGrid: visibleHeaderGrid,
+    });
+    const m = new Map<string, string>();
+    for (const row of displayRows) {
+      row.cells.forEach((cell, columnIndex) => m.set(cell.id, labels[columnIndex] ?? ''));
+    }
+    return m;
+  }, [displayRows, visibleColumns, visibleHeaderGrid]);
   // cell.id → 같은 행의 셀 목록 (셀 게이팅 평가용 rowCells 폴백 — option 조건의 {optionId}
   // 래핑 해석에 컨트롤러 셀 정의가 필요하다)
   const rowCellsByCellId = useMemo(() => {
@@ -278,6 +304,84 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     );
   };
 
+  // 설명 셀 — 'card' 는 목차 카드(버튼) 안이라 누를 수 있는 것을 넣지 않는다: 「자세히」는 첫 줄만,
+  // 「바로표시」는 전문. 'full' 은 상세·머리 펼침용 전문.
+  const renderDescription = (leaf: ClassifiedLeaf, variant: 'card' | 'full') => {
+    const cells = leaf.descriptionCellIds.flatMap((id) => cellById.get(id) ?? []);
+    if (cells.length === 0) return null;
+    if (variant === 'full') {
+      return (
+        <div className="space-y-2">
+          {cells.map((cell) => (
+            <DisplayCellContent key={cell.id} cell={cell} />
+          ))}
+        </div>
+      );
+    }
+    const lines = cells.flatMap((cell) => {
+      if (cell.type !== 'text') return [];
+      const plain = substituteTokens((cell.content ?? '').trim(), attrs, quotes);
+      if (!plain) return [];
+      if (cell.mobileDisplay === 'collapsed') {
+        return [
+          // 첫 줄만 — 서식본은 문단이 곧 줄이라 첫 문단만 남기고, 평문은 첫 줄바꿈에서 자른다
+          <span
+            key={cell.id}
+            className="block truncate text-xs text-gray-500 [&_p]:inline [&_p:not(:first-child)]:hidden"
+          >
+            <CellText
+              text={plain.split('\n')[0] ?? ''}
+              html={resolveCellTextHtml(cell, attrs, quotes)}
+              boldFirstLine={false}
+            />
+          </span>,
+        ];
+      }
+      return [
+        <span
+          key={cell.id}
+          className="block whitespace-pre-wrap text-xs leading-relaxed text-gray-500 [overflow-wrap:anywhere] [word-break:normal]"
+        >
+          <CellText
+            text={plain}
+            html={resolveCellTextHtml(cell, attrs, quotes)}
+            boldFirstLine={cell.boldFirstLine}
+          />
+        </span>,
+      ];
+    });
+    return lines.length > 0 ? <span className="block space-y-1">{lines}</span> : null;
+  };
+
+  // 묶음 머리·계산 전용 요약의 값 줄 — 계산 셀마다 「라벨 + 값」 한 칸. 라벨은 입력 칸과 같은
+  // 규칙(셀 라벨 → 엑셀 라벨 → 열 제목)이고 값은 계산 셀 렌더 그대로라 응답이 바뀌면 따라 바뀐다.
+  const renderSummary = (section: ClassifiedSection) => {
+    const calcCellIds = section.leaves.flatMap((leaf) => leaf.calcCellIds);
+    if (calcCellIds.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {calcCellIds.map((cellId) => {
+          const cell = cellById.get(cellId);
+          if (!cell) return null;
+          const label = substituteTokens(
+            resolveMobileCellLabel(cell, columnLabelByCellId.get(cellId)),
+            attrs,
+            quotes,
+          );
+          return (
+            <div
+              key={cellId}
+              className="min-w-[4.5rem] flex-1 rounded-lg bg-white/80 px-1 py-1.5 text-center"
+            >
+              {label && <div className="truncate px-1 text-[11px] text-gray-500">{label}</div>}
+              {renderCell(cellId)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderScalarOrListSection = (section: ClassifiedSection) => (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
       <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
@@ -296,6 +400,9 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 </span>
                 {done && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
               </div>
+              {leaf.descriptionCellIds.length > 0 && (
+                <div className="mb-2">{renderDescription(leaf, 'full')}</div>
+              )}
               {leaf.inputCellIds[0] != null
                 ? renderCell(leaf.inputCellIds[0])
                 : // 계산 셀만 있는 행(합계 표시 행 등)은 계산값을 인라인으로 보여준다
@@ -310,8 +417,13 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   const renderMatrixLeafDetail = (leaf: ClassifiedLeaf, section: ClassifiedSection) => (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
       <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
-        {leaf.label}
+        {leaf.label || section.label}
       </div>
+      {leaf.descriptionCellIds.length > 0 && (
+        <div className="border-b border-gray-100 bg-gray-50/40 px-4 py-3">
+          {renderDescription(leaf, 'full')}
+        </div>
+      )}
       <div className="space-y-4 p-4">
         {section.colGroups.map((group, groupIndex) => (
           <div key={groupIndex}>
@@ -491,6 +603,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           };
         }}
         renderLeafDetail={renderOriginalRowDetail}
+        renderSummary={renderSummary}
+        renderDescription={renderDescription}
         onReturnToRoot={() => {
           horizontalScrollRef.current = 0;
         }}
@@ -516,6 +630,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       })}
       renderLegacySection={renderScalarOrListSection}
       renderLeafDetail={renderMatrixLeafDetail}
+      renderSummary={renderSummary}
+      renderDescription={renderDescription}
       onLeaveLeafForward={(leaf) => ackCells(leaf.inputCellIds)}
       onLeaveSection={(section) => ackCells(section.leaves.flatMap((leaf) => leaf.inputCellIds))}
       navigateRef={shellNavRef}

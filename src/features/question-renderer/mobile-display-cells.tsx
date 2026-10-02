@@ -13,7 +13,7 @@ import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { splitMobileDisplayCells } from '@/features/question-renderer/utils/split-display-cells';
 
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
-function DisplayCellContent({ cell }: { cell: TableCell }) {
+export function DisplayCellContent({ cell }: { cell: TableCell }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
 
