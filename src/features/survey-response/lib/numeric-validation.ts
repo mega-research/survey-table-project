@@ -329,7 +329,7 @@ export function evaluateSumConstraint(
   cellValues: Record<string, unknown>,
   existingCellIds: Set<string>,
   evalOpts?: SumConstraintEvalOpts,
-): { skipped: boolean; ok: boolean; sum: number } {
+): { skipped: boolean; ok: boolean; sum: number; target?: number } {
   // 좌변
   let left: number;
   if (constraint.leftExpr) {
@@ -380,7 +380,7 @@ export function evaluateSumConstraint(
   }
 
   const ok = compareValues(left, right, constraint.operator, constraint.tolerance ?? 0);
-  return { skipped: false, ok, sum: left };
+  return { skipped: false, ok, sum: left, target: right };
 }
 
 /** 합계 제약이 「입력된 칸 수」 모드인가 — 좌변 수식(leftExpr)이 있으면 수식이 우선이다. */
@@ -424,10 +424,37 @@ const FILLED_COUNT_PHRASES: Record<SumConstraint['operator'], (target: number) =
   lt: (n) => `${n}칸보다 적게 입력해야 합니다`,
 };
 
+/** 저작자 문구에서 실제 숫자로 바뀌는 자리표시자 — 쓰지 않으면 문구는 종전 그대로다. */
+export const MESSAGE_CURRENT_TOKEN = '{현재값}';
+export const MESSAGE_TARGET_TOKEN = '{기준값}';
+
+function formatMessageNumber(n: number): string {
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: 9 });
+}
+
+/**
+ * 저작자 문구의 `{현재값}`·`{기준값}` 을 검증에 쓴 실제 숫자로 바꾼다. 숫자를 보일지는 문구를
+ * 쓴 사람이 고른다 — 자리표시자가 없으면 값은 드러나지 않는다(기준값 미노출 원칙은 기본 문구와
+ * 자리표시자 없는 문구에서 그대로다). 값을 구하지 못한 자리표시자는 그대로 둔다.
+ */
+export function fillMessageValues(
+  message: string,
+  values: { current?: number; target?: number },
+): string {
+  let out = message;
+  if (values.current !== undefined) {
+    out = out.replaceAll(MESSAGE_CURRENT_TOKEN, formatMessageNumber(values.current));
+  }
+  if (values.target !== undefined) {
+    out = out.replaceAll(MESSAGE_TARGET_TOKEN, formatMessageNumber(values.target));
+  }
+  return out;
+}
+
 // 저작자 문구가 있으면 그대로, 없으면 기준과 현재 칸 수를 알려 준다(합계 문구와 같은 원칙).
 function filledCountMessage(constraint: SumConstraint, count: number): string {
   const custom = constraint.errorMessage?.trim();
-  if (custom) return custom;
+  if (custom) return fillMessageValues(custom, { current: count, target: constraint.target });
   return `선택된 칸 중 ${FILLED_COUNT_PHRASES[constraint.operator](constraint.target)} (현재 ${count}칸)`;
 }
 
@@ -445,9 +472,18 @@ const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
 // 저작자가 문구를 직접 썼으면 그대로 보여 준다 — "(현재 24324)" 같은 꼬리는 달력 환산값처럼
 // 응답자에게 의미 없는 수를 노출하고, 문구를 쓴 사람이 고를 방법이 없었다(셀 수식 검증과 동일).
 // 기본 문구에만 현재 합을 붙인다 — 퍼센트 합계 100 맞추기처럼 합을 알아야 고칠 수 있어서다.
-function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
+function sumConstraintMessage(
+  constraint: SumConstraint,
+  sum: number,
+  targetValue: number | undefined,
+): string {
   const custom = constraint.errorMessage?.trim();
-  if (custom) return custom;
+  if (custom) {
+    return fillMessageValues(custom, {
+      current: sum,
+      ...(targetValue !== undefined ? { target: targetValue } : {}),
+    });
+  }
   const subject = constraint.leftExpr ? '계산 값' : '선택된 셀 합계';
   const target = constraint.targetExpr ? '기준값' : String(constraint.target);
   return `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]} (현재 ${sum})`;
@@ -862,7 +898,7 @@ export function collectNumericIssues(
           : constraint.cellIds.filter((id) => existingIds.has(id));
         issues.push({
           kind: 'sum',
-          message: sumConstraintMessage(constraint, result.sum),
+          message: sumConstraintMessage(constraint, result.sum, result.target),
           ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
         });
       }
@@ -950,8 +986,10 @@ export function collectNumericIssues(
         issues.push({
           kind: 'formula',
           message:
-            cell.formulaErrorMessage?.trim() ||
-            '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+            fillMessageValues(cell.formulaErrorMessage?.trim() ?? '', {
+              current: roundedInput,
+              target: computed,
+            }) || '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
           cellIds: [cell.id],
         });
       }
@@ -989,7 +1027,7 @@ export function collectNumericIssues(
       issues.push({
         kind: 'formula',
         message:
-          v.errorMessage?.trim() ||
+          fillMessageValues(v.errorMessage?.trim() ?? '', { current: computed, target }) ||
           `계산 결과가 기준값${SUM_OPERATOR_PHRASES[v.operator]} (현재 ${computed})`,
         cellIds: [cell.id],
       });

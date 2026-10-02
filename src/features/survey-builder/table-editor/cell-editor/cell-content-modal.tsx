@@ -1000,7 +1000,7 @@ export function CellContentModal({
                   <Input
                     value={calcValidationErrorMessage}
                     onChange={(e) => setCalcValidationErrorMessage(e.target.value)}
-                    placeholder="위반 시 표시할 문구 (비우면 기본 문구, 기준값 미노출)"
+                    placeholder="위반 시 표시할 문구 (비우면 기본 문구) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜"
                   />
                 </>
               ) : null}

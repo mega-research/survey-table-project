@@ -440,7 +440,7 @@ export function SumConstraintEditor({
                 <Input
                   value={constraint.errorMessage ?? ''}
                   onChange={(e) => setErrorMessage(index, e.target.value)}
-                  placeholder="에러 메시지 (비우면 자동 생성)"
+                  placeholder="에러 메시지 (비우면 자동 생성) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜"
                   className="h-8 text-sm"
                 />
               </>

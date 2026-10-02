@@ -254,7 +254,7 @@ export function InputCellTab({
               <Input
                 value={formulaErrorMessage}
                 onChange={(e) => setFormulaErrorMessage(e.target.value)}
-                placeholder="불일치 시 표시할 문구 (비우면 기본 문구, 계산값 미노출)"
+                placeholder="불일치 시 표시할 문구 (비우면 기본 문구) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜"
               />
             </>
           ) : null}
