@@ -135,6 +135,24 @@ function classifyHeaderLines(
   });
 }
 
+/**
+ * 다단 헤더(headerGrid)가 없는 표 — 헤더는 열 제목 한 줄이다. 그 줄을 칸 줄로 읽는다.
+ * 빠뜨리면 「전혀 중요하지 않음 … 매우 중요」가 열 제목에만 있는 척도 표에서 막대에 번호만 남는다.
+ */
+function columnLabelLines(
+  columns: ReadonlyArray<{ label?: string | undefined }>,
+  first: number,
+  count: number,
+): HeaderLine[] {
+  const segments: Segment[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const label = normalizeLabel(columns[first + i]?.label ?? '');
+    if (label !== '') segments.push({ label, start: i, span: 1 });
+  }
+  if (segments.length === 0) return [];
+  return [{ role: segments.length === count ? 'cells' : 'bands', segments }];
+}
+
 /** 가장 아래(보기에 가장 가까운) 해당 역할 줄 */
 function lastLine(lines: HeaderLine[], role: 'cells' | 'bands'): Segment[] | undefined {
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -174,7 +192,7 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
   const lines =
     input.headerGrid && input.headerGrid.length > 0
       ? classifyHeaderLines(input.headerGrid, first, count)
-      : [];
+      : columnLabelLines(columns, first, count);
   const cellLine = lastLine(lines, 'cells');
 
   const texts: string[] = [];

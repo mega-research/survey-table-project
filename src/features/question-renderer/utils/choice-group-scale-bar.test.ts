@@ -9,7 +9,8 @@ import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/surve
 
 // 해운물류 멘토 C4 모양 — 구분·항목·활용 여부 2칸·만족도 11칸(⓪~⑩).
 const CIRC = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
-const col = (id: string): TableColumn => ({ id, label: id });
+// 열 제목은 비운다 — 다단 헤더가 없으면 열 제목이 칸 줄로 읽히므로, 헤더 격자를 보는 테스트에 섞이면 안 된다
+const col = (id: string): TableColumn => ({ id, label: '' });
 const head = (id: string, label: string, colspan: number, rowspan = 1): HeaderCell => ({
   id,
   label,
@@ -523,5 +524,38 @@ describe('resolveScaleBarBandTones — 구간 띠 색', () => {
       { side: 'neutral', strong: false },
       { side: 'positive', strong: false },
     ]);
+  });
+});
+
+describe('projectScaleBar — 다단 헤더 없는 표(열 제목 한 줄)', () => {
+  // AI 실태조사 Q21 모양 — headerGrid 없이 열 제목이 곧 척도 라벨, 보기 칸 글자는 번호.
+  const LABELS = ['전혀 중요하지 않음', '중요하지 않음', '보통', '중요', '매우 중요'];
+  const scale = ['①', '②', '③', '④', '⑤'].map((text, n) => choice(`c${n}`, text));
+  const input: ProjectScaleBarInput = {
+    selectionType: 'radio',
+    columns: [
+      { id: 'a', label: '지원 분야' },
+      { id: 'b', label: '세부 지원 내용' },
+      ...LABELS.map((label, n) => ({ id: `s${n}`, label })),
+    ],
+    headerGrid: undefined,
+    row: {
+      id: 'r1',
+      label: '',
+      cells: [
+        { id: 'x', type: 'text', content: '① 사전 정보 제공' },
+        { id: 'y', type: 'text', content: '국제 입찰 정보' },
+        ...scale,
+      ],
+    },
+    targetCells: scale,
+  };
+
+  it('열 제목이 칸 안 라벨이 된다', () => {
+    const result = projectScaleBar(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.model.cells.map((c) => c.inCellLabel)).toEqual(LABELS);
+    expect(result.model.cells.map((c) => c.text)).toEqual(['①', '②', '③', '④', '⑤']);
   });
 });
