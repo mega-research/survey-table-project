@@ -75,7 +75,8 @@ interface ChoiceGroupScaleBarProps {
 /**
  * 척도 막대 — 척도 한 줄을 화면 폭에 맞춘 막대로 그린다(CONTEXT.md 「척도 막대」).
  *
- * 칸 글자는 원본 보기 칸 글자 그대로이고, 아래 구간 띠가 원본 헤더의 구간을 보여 준다. 구간 띠는
+ * 칸 글자는 원본 보기 칸 글자 그대로이고, 아래 구간 띠가 원본 헤더의 구간을 보여 준다(헤더에 구간
+ * 줄이 없으면 칸마다 띠 하나). 구간 띠는
  * 왼쪽 붉은색 · 가운데 회색 · 오른쪽 파란색이고 양끝 구간은 짙게, 고른 칸의 구간은 가장 짙게 칠한다
  * (resolveScaleBarBandTones). 막대 아래 양끝·가운데 라벨은 검정 글자다.
  *
@@ -106,7 +107,14 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
     cell.bandIndex === null ? '' : text(model.bands[cell.bandIndex]!.label);
   const columnsStyle = { gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` };
   const { left, middle, right } = model.anchors;
-  const bandTones = resolveScaleBarBandTones(model.bands, count);
+  // 띠는 늘 그린다 — 헤더에 구간 줄이 없는 척도(칸마다 이름이 하나씩인 5점 등)는 칸마다 띠 하나다.
+  // 구간 이름·선택값 표시는 여전히 헤더의 구간(model.bands)만 쓴다.
+  const hasHeaderBands = model.bands.length > 0;
+  const stripBands = hasHeaderBands
+    ? model.bands
+    : model.cells.map((_, index) => ({ label: '', start: index, span: 1 }));
+  const selectedStrip = hasHeaderBands ? selectedBand : selectedIndex >= 0 ? selectedIndex : null;
+  const bandTones = resolveScaleBarBandTones(stripBands, count);
   const hasAnchors = left !== undefined || middle !== undefined || right !== undefined;
   const idPrefix = inputIdScope ? `${inputIdScope}-` : '';
   const inputIdOf = (cellId: string) => `${idPrefix}${questionId}-${cellId}-bar`;
@@ -187,21 +195,26 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
             />
           ))}
         </div>
-        {model.bands.length > 0 && (
+        {
           // 구간마다 띠 하나 — 구간 사이만 틈을 둬 여러 칸이 한 구간으로 묶인 것이 보이게 한다
-          <div aria-hidden className="mt-1 grid gap-x-0.5" style={columnsStyle}>
-            {model.bands.map((band, bandIndex) => (
+          <div
+            aria-hidden
+            data-testid="scale-bar-strip"
+            className="mt-1 grid gap-x-0.5"
+            style={columnsStyle}
+          >
+            {stripBands.map((band, bandIndex) => (
               <div
                 key={`${band.start}-${band.label}`}
                 className={cn(
                   'h-1 rounded-full',
-                  bandToneClass(bandTones[bandIndex]!, bandIndex === selectedBand),
+                  bandToneClass(bandTones[bandIndex]!, bandIndex === selectedStrip),
                 )}
                 style={{ gridColumn: `${band.start + 1} / span ${band.span}` }}
               />
             ))}
           </div>
-        )}
+        }
         {hasAnchors && (
           // 라벨은 글자 길이가 아니라 막대 칸에 붙인다 — 왼쪽은 첫 칸에서 오른쪽으로, 오른쪽은 마지막
           // 칸에서 왼쪽으로 뻗고, 가운데는 그 칸 가운데에 둔다(양 끝 정렬이면 「보통」이 칸 사이로 밀린다).
@@ -287,8 +300,10 @@ function ScaleBarCellControl({
   );
 }
 
-interface TableChoiceGroupScaleBarProps
-  extends Omit<ChoiceGroupScaleBarProps, 'barId' | 'selectedCellId' | 'onToggleCell'> {
+interface TableChoiceGroupScaleBarProps extends Omit<
+  ChoiceGroupScaleBarProps,
+  'barId' | 'selectedCellId' | 'onToggleCell'
+> {
   group: ChoiceGroup;
   /** 막대 칸이 된 원래 보기 칸 — 단독 선택 규칙 판정에 셀 정의가 필요하다 */
   cells: readonly TableCell[];
