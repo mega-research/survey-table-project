@@ -198,23 +198,19 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                     <p className="text-sm leading-snug font-semibold whitespace-pre-line text-gray-700">
                       {cardTitle(summary)}
                     </p>
-                    {/* 값은 한 줄에 하나씩 — 라벨 왼쪽, 값 오른쪽. 가로로 나누면 라벨이 접혀 안 읽힌다 */}
+                    {/* 항목 카드의 입력 칸과 같은 세로 배치 — 라벨 위, 값 아래. 가로로 나누면 라벨이 접혀 안 읽힌다 */}
                     <div className="divide-y divide-blue-100 rounded-xl border border-blue-100 bg-white">
                       {summary.inputs.map(({ cell, row, columnIndex }) => {
                         const label =
                           cell.mobileLabel?.trim() || (blocks.columnLabels[columnIndex] ?? '');
                         return (
-                          <div
-                            key={cell.id}
-                            data-cell-id={cell.id}
-                            className="flex items-center justify-between gap-3 px-3 py-0.5"
-                          >
-                            <p className="min-w-0 text-[15px] leading-snug text-gray-700">
+                          <div key={cell.id} data-cell-id={cell.id} className="px-3 pt-2 pb-0.5">
+                            <p className="text-sm leading-snug font-medium text-gray-700">
                               {substituteTokens(label, attrs, quotes)}
                             </p>
-                            <div className="shrink-0 [&_span:first-child]:text-lg [&_span:first-child]:font-bold [&_span:first-child]:text-gray-900">
+                            <div className="-mx-2 [&_span:first-child]:text-lg [&_span:first-child]:font-bold [&_span:first-child]:text-gray-900">
                               <InteractiveCell
-                                cell={{ ...cell, inputTextAlign: 'right' }}
+                                cell={{ ...cell, inputTextAlign: 'left' }}
                                 questionId={questionId}
                                 value={value}
                                 onChange={onChange}
