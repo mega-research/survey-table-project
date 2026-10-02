@@ -995,13 +995,14 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell, valueChanges) => {
+          onSave={(cell, valueChanges, options) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
               updateCell(
                 selectedCellContext.rowIndex,
                 selectedCellContext.cellIndex,
                 cell,
                 valueChanges,
+                options,
               );
             }
             // 표 밖(다른 질문/그룹/행/열)의 표시조건 리매핑은 셀 모달이 DB 커밋 직후 직접

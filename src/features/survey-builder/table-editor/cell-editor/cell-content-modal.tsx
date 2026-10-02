@@ -81,6 +81,10 @@ import { CellGatingEditor } from './cell-gating-editor';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
+import {
+  type CellSaveOptions,
+  countColumnMobileDisplayTargets,
+} from '../utils/column-mobile-display';
 import { commitCellEdit } from './commit-cell-edit';
 import { validateCellEdit } from './validate-cell-edit';
 import { CellIdentityFields } from './cell-identity-fields';
@@ -99,7 +103,11 @@ interface CellContentModalProps {
    * 동기화시킨 변경 쌍들(순서대로) — 상위(dynamic-table-editor/use-table-editor)가
    * 같은 커밋 안에서 이 셀을 controllerCellId 로 참조하는 게이팅을 리매핑하는 데 쓴다.
    */
-  onSave: (cell: TableCell, valueChanges?: { oldValue: string; newValue: string }[]) => void;
+  onSave: (
+    cell: TableCell,
+    valueChanges?: { oldValue: string; newValue: string }[],
+    options?: CellSaveOptions,
+  ) => void;
   /**
    * 이 셀을 소유한 질문(표) — 계산 탭·검증 토글의 FormulaExprEditor 가 같은 질문 셀 참조 픽커에
    * 사용한다. 에디터의 실시간 편집 상태(currentQuestionAsQuestion)를 그대로 받아야
@@ -326,10 +334,13 @@ export function CellContentModal({
   const [editChoiceGroups, setEditChoiceGroups] = useState<ChoiceGroup[]>(
     () => choiceGroupsProp ?? [],
   );
+  // 「같은 열의 다른 표시 셀에도 적용」 체크 — 셀이 아니라 이번 저장에만 속한 값이라 폼 밖에 둔다.
+  const [mobileDisplayColumnWide, setMobileDisplayColumnWide] = useState(false);
   const choiceGroupsResetKey = isOpen ? (cell?.id ?? '') : null;
   const [prevChoiceGroupsResetKey, setPrevChoiceGroupsResetKey] = useState<string | null>(null);
   if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
     setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
+    setMobileDisplayColumnWide(false);
     if (isOpen) {
       const storeQuestion = readBuilderState().currentSurvey.questions.find(
         (q) => q.id === currentQuestionId,
@@ -457,6 +468,8 @@ export function CellContentModal({
           remapOptionValueInConditions,
           onSave,
           onChoiceGroupsChange,
+          // 체크한 뒤 셀 유형을 바꾸면 체크가 화면에서 사라진 채 남는다 — 그때는 적용하지 않는다
+          mobileDisplayColumnWide: mobileDisplayColumnWide && contentType === cell.type,
         }),
       {
         onError: (error) => {
@@ -1080,6 +1093,17 @@ export function CellContentModal({
           columnLabel={columnLabel}
           showContentMobileDisplay={showContentMobileDisplay}
           showInteractiveMobileLabel={showInteractiveMobileLabel}
+          // 유형을 바꾸는 중이면 저장 전 유형과 열의 셀 유형이 어긋나 대상 수가 틀리므로 숨긴다
+          columnApplyCount={
+            cell && contentType === cell.type
+              ? countColumnMobileDisplayTargets(
+                  getLatestRows?.() ?? ownQuestion.tableRowsData ?? [],
+                  cell.id,
+                )
+              : 0
+          }
+          applyToColumn={mobileDisplayColumnWide}
+          onApplyToColumnChange={setMobileDisplayColumnWide}
         />
 
         <div className="mt-6 border-t border-gray-200 pt-6">

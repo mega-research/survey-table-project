@@ -14,6 +14,10 @@ interface CellMobileFieldsProps {
   showContentMobileDisplay: boolean;
   /** 입력 셀 — 모바일 카드 제목 입력칸을 보여준다. */
   showInteractiveMobileLabel: boolean;
+  /** 같은 열에서 일괄 적용 대상이 되는 다른 표시 셀 수. 0·미지정이면 체크를 그리지 않는다. */
+  columnApplyCount?: number | undefined;
+  applyToColumn?: boolean | undefined;
+  onApplyToColumnChange?: ((checked: boolean) => void) | undefined;
 }
 
 /** cell-content-modal 의 '모바일 카드 표시' 구획. 상태는 모달이 그대로 들고 있다. */
@@ -23,6 +27,9 @@ export function CellMobileFields({
   columnLabel,
   showContentMobileDisplay,
   showInteractiveMobileLabel,
+  columnApplyCount,
+  applyToColumn,
+  onApplyToColumnChange,
 }: CellMobileFieldsProps) {
   const { contentType, exportLabel, mobileDisplay, mobileLabel } = form;
   const { setMobileDisplay, setMobileLabel } = setters;
@@ -98,6 +105,19 @@ export function CellMobileFields({
           </Button>
         )}
       </div>
+
+      {/* 열 일괄 적용 — 설명 열처럼 행마다 같은 표시를 걸어야 하는 자리. 저장할 때 함께 반영된다 */}
+      {showContentMobileDisplay && !!columnApplyCount && (
+        <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-gray-300"
+            checked={applyToColumn ?? false}
+            onChange={(e) => onApplyToColumnChange?.(e.target.checked)}
+          />
+          같은 열의 다른 표시 셀에도 적용 ({columnApplyCount}개)
+        </label>
+      )}
 
       {/* 셀 라벨 — 모바일 카드/드릴다운에서 입력칸 위에 붙는 제목 */}
       {showInteractiveMobileLabel && mobileDisplay !== 'hidden' && (

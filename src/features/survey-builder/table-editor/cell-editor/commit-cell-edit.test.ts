@@ -257,3 +257,51 @@ describe('commitCellEdit — choiceGroups prune', () => {
     expect('choiceGroups' in updateQuestionMock.mock.calls[0]![0].data).toBe(false);
   });
 });
+
+describe('commitCellEdit — 열 단위 모바일 표시 일괄 지정', () => {
+  const DESC_ROWS: TableRow[] = [
+    { id: 'r1', label: '', cells: [CELL, { id: 'c12', type: 'input', content: '' }] },
+    { id: 'r2', label: '', cells: [{ id: 'c21', type: 'text', content: '설명 2' }, { id: 'c22', type: 'input', content: '' }] },
+    { id: 'r3', label: '', cells: [{ id: 'c31', type: 'text', content: '' }, { id: 'c32', type: 'input', content: '' }] },
+  ];
+  const bulkArgs = (over: Record<string, unknown> = {}) =>
+    args({
+      form: cellToFormState({ ...CELL, mobileDisplay: 'collapsed' }),
+      latest: { rows: () => DESC_ROWS, columns: () => LATEST_COLUMNS.slice(0, 2) },
+      ...over,
+    });
+
+  it('체크했으면 onSave 에 열 일괄 값을 실어 보낸다 — 표 편집기가 같은 갱신에 적용한다', async () => {
+    const question = tableQuestion();
+    seedStore(question);
+    const onSave = vi.fn();
+    await commitCellEdit(bulkArgs({ question, onSave, mobileDisplayColumnWide: true }) as never);
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c11', mobileDisplay: 'collapsed' }),
+      undefined,
+      { columnMobileDisplay: { value: 'collapsed' } },
+    );
+  });
+
+  it('체크했으면 저장되는 행에도 같은 열의 표시 셀이 함께 바뀌어 실린다', async () => {
+    const question = tableQuestion();
+    seedStore(question);
+    await commitCellEdit(bulkArgs({ question, mobileDisplayColumnWide: true }) as never);
+
+    const sent = updateQuestionMock.mock.calls[0]![0].data.tableRowsData as TableRow[];
+    expect(sent.map((row) => row.cells[0]!.mobileDisplay)).toEqual(['collapsed', 'collapsed', undefined]);
+    expect(sent.map((row) => row.cells[1]!.mobileDisplay)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('체크하지 않으면 다른 셀은 그대로이고 onSave 에 일괄 값이 없다', async () => {
+    const question = tableQuestion();
+    seedStore(question);
+    const onSave = vi.fn();
+    await commitCellEdit(bulkArgs({ question, onSave }) as never);
+
+    expect(onSave.mock.calls[0]![2]).toBeUndefined();
+    const sent = updateQuestionMock.mock.calls[0]![0].data.tableRowsData as TableRow[];
+    expect(sent.map((row) => row.cells[0]!.mobileDisplay)).toEqual(['collapsed', undefined, undefined]);
+  });
+});

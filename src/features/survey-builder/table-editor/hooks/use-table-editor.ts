@@ -33,6 +33,7 @@ import {
   regenerateCellOptionIds,
   resolvePastedGating,
 } from '../utils/drag-copy-utils';
+import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
 
@@ -1210,6 +1211,9 @@ export function useTableEditor({
       cellIndex: number,
       cell: TableCell,
       valueChanges?: { oldValue: string; newValue: string }[],
+      // 열 단위 모바일 표시 일괄 지정 — 셀 저장과 같은 커밋에 싣는다. 셀별 연속 갱신으로 쪼개면
+      // 모달·스토어 이중 상태에서 일부가 유실된다.
+      options?: CellSaveOptions,
     ) => {
       // 옵션 optionCode 편집이 value 를 동기화시킨 경우, 이 셀을 controllerCellId 로
       // 참조하는 같은 표의 게이팅(enabledWhen)을 셀 저장과 같은 커밋에서 리매핑한다.
@@ -1224,6 +1228,14 @@ export function useTableEditor({
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? cell : c)) }
           : row,
       );
+
+      if (options?.columnMobileDisplay) {
+        updatedRows = applyMobileDisplayToColumn(
+          updatedRows,
+          cell.id,
+          options.columnMobileDisplay.value,
+        );
+      }
 
       const rowspan = cell.rowspan || 1;
       const colspan = cell.colspan || 1;
