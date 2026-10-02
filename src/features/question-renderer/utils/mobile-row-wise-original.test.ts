@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
+import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 
 const columns: TableColumn[] = [
   { id: 'section', label: '구분' },
@@ -73,11 +73,12 @@ describe('buildMobileRowWiseOriginalModel', () => {
     const questions = model.sections[0]?.subgroups.flatMap((group) => group.questions) ?? [];
     expect(questions.map((question) => question.rowId)).toEqual(['row-1', 'row-2']);
     expect(questions.map((question) => question.title)).toEqual(['직무', '진로']);
-    expect(questions.map((question) => question.projection.columns.map((column) => column.id)))
-      .toEqual([
-        ['score-a', 'score-b'],
-        ['score-a', 'score-b'],
-      ]);
+    expect(
+      questions.map((question) => question.projection.columns.map((column) => column.id)),
+    ).toEqual([
+      ['score-a', 'score-b'],
+      ['score-a', 'score-b'],
+    ]);
     expect(questions[0]?.projection.row.cells.map((cell) => cell.id)).toEqual([
       'answer-1',
       'answer-1-empty',
@@ -163,13 +164,50 @@ describe('buildMobileRowWiseOriginalModel', () => {
       section.subgroups.flatMap((group) => group.questions),
     );
 
-    expect(questions.map((question) => question.rowId)).toEqual([
-      'merged-row-1',
-      'merged-row-2',
-    ]);
+    expect(questions.map((question) => question.rowId)).toEqual(['merged-row-1', 'merged-row-2']);
     expect(questions.map((question) => question.projection.row.cells[0]?.id)).toEqual([
       'shared-input',
       'shared-input',
     ]);
+  });
+});
+
+describe('buildMobileRowWiseOriginalModel — 제외한 앞쪽 열의 응답 칸', () => {
+  // AI 실태조사 Q21 모양 — 「기타」 행은 설명 열(제외 대상) 자리에 입력칸이 놓인다.
+  const plainRow: TableRow = {
+    id: 'plain',
+    label: '교육',
+    cells: [
+      text('p-section', '⑨ 교육'),
+      text('p-item', '설명'),
+      input('p-a', 'A'),
+      input('p-b', 'B'),
+    ],
+  };
+  const etcRow: TableRow = {
+    id: 'etc',
+    label: '기타',
+    cells: [
+      text('e-section', '⑩ 기타'),
+      input('e-etc', 'ex) 기타'),
+      input('e-a', 'A'),
+      input('e-b', 'B'),
+    ],
+  };
+
+  it('제외한 열에 놓인 입력칸은 조각에서 빠지는 대신 그 행의 omittedAnswerCells 로 남는다', () => {
+    const model = buildMobileRowWiseOriginalModel({
+      authoredColumns: columns,
+      authoredRows: [plainRow, etcRow],
+      visibleColumns: columns,
+      displayRows: [plainRow, etcRow],
+      hideColumnLabels: false,
+      settings: { omitLeadingAuthoredColumns: 2 },
+    });
+    const questions = model.sections.flatMap((s) => s.subgroups.flatMap((g) => g.questions));
+    const byRow = new Map(questions.map((q) => [q.rowId, q]));
+    expect(byRow.get('plain')?.omittedAnswerCells).toEqual([]);
+    expect(byRow.get('etc')?.omittedAnswerCells.map((c) => c.id)).toEqual(['e-etc']);
+    expect(byRow.get('etc')?.projection.row.cells.map((c) => c.id)).toEqual(['e-a', 'e-b']);
   });
 });

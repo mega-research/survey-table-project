@@ -9,8 +9,10 @@ import {
 import {
   type MobileOriginalRowProjection,
   getMobileOriginalRowLabelCandidate,
+  isMobileOriginalRowInteractiveCell,
   projectMobileOriginalRow,
 } from '@/features/question-renderer/utils/mobile-original-row';
+import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 import { buildTableRowspanCoverage } from '@/features/question-renderer/utils/table-rowspan-coverage';
 
 export interface OriginalRowDetailSettings {
@@ -23,6 +25,12 @@ export interface MobileRowWiseOriginalQuestion {
   rowId: string;
   title: string;
   projection: MobileOriginalRowProjection;
+  /**
+   * 「앞쪽 열 제외」로 조각에서 빠진 열에 놓인 이 행의 응답 칸 — 대개 그 열은 글자(행 제목)지만
+   * 「기타」 행처럼 입력칸이 놓이기도 한다. 조각에는 자리가 없어 행 제목 아래에 따로 그린다.
+   * 빠뜨리면 응답자가 채울 수 없는 칸이 된다.
+   */
+  omittedAnswerCells: TableCell[];
 }
 
 export interface MobileRowWiseOriginalSubgroup {
@@ -127,6 +135,17 @@ export function buildMobileRowWiseOriginalModel(
     answerableCellTypes: input.answerableCellTypes,
   });
 
+  const omit = clampMobileDrilldownOmitLeadingColumns(
+    input.settings.omitLeadingAuthoredColumns,
+    input.authoredColumns.length,
+  );
+  const omittedColumnIds = new Set(
+    input.authoredColumns.slice(0, omit).map((column) => column.id),
+  );
+  const omittedVisibleIndices = input.visibleColumns.flatMap((column, index) =>
+    omittedColumnIds.has(column.id) ? [index] : [],
+  );
+
   const sections = classifiedSections.flatMap<MobileRowWiseOriginalSection>(
     (section, sectionIndex) => {
       const subgroups: MobileRowWiseOriginalSubgroup[] = [];
@@ -144,7 +163,12 @@ export function buildMobileRowWiseOriginalModel(
           repeatedRowIds,
           includeColumnHeader: includesMobileDrilldownColumnHeader(repeatHeaderRange),
         });
-        if (!projection?.hasInteractiveCells) continue;
+        if (!projection) continue;
+        const omittedAnswerCells = omittedVisibleIndices.flatMap((index) => {
+          const cell = row.cells[index];
+          return cell && isMobileOriginalRowInteractiveCell(cell) ? [cell] : [];
+        });
+        if (!projection.hasInteractiveCells && omittedAnswerCells.length === 0) continue;
 
         const title = getMobileOriginalRowLabelCandidate({
           authoredColumns: input.authoredColumns,
@@ -174,7 +198,7 @@ export function buildMobileRowWiseOriginalModel(
                 subgroups.push(next);
                 return next;
               })();
-        subgroup.questions.push({ rowId: row.id, title, projection });
+        subgroup.questions.push({ rowId: row.id, title, projection, omittedAnswerCells });
       }
 
       const questions = subgroups.flatMap((subgroup) => subgroup.questions);

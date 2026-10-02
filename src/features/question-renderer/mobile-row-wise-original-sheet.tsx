@@ -115,9 +115,10 @@ export function MobileRowWiseOriginalSheet({
                     const useSubgroupTitle = sharesSubgroupTitle(question);
                     // 라벨이 없는 행은 제목 줄을 그리지 않는다
                     const hasTitle = Boolean(question.title.trim());
-                    const hasError = question.projection.row.cells.some((cell) =>
-                      errorCellIds?.has(cell.id),
-                    );
+                    const hasError = [
+                      ...question.projection.row.cells,
+                      ...question.omittedAnswerCells,
+                    ].some((cell) => errorCellIds?.has(cell.id));
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
                     const segments =
@@ -161,6 +162,19 @@ export function MobileRowWiseOriginalSheet({
                               : '응답을 확인해 주세요.'}
                           </p>
                         ) : null}
+                        {/* 제외한 앞쪽 열에 놓인 응답 칸(「기타」 행의 입력칸 등) — 조각에 자리가 없어 여기 그린다 */}
+                        {question.omittedAnswerCells.map((cell) => (
+                          <div
+                            key={cell.id}
+                            data-omitted-answer-cell={cell.id}
+                            className={cn(
+                              'px-1',
+                              errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
+                            )}
+                          >
+                            {renderPieceCell(cell)}
+                          </div>
+                        ))}
                         {segments && renderScaleBar && renderGroupTiles ? (
                           // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대), 나머지 응답 칸은 원본 조각
                           <div className="space-y-3">
