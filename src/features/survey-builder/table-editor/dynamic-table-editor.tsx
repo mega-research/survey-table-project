@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
+import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
@@ -616,6 +617,14 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               repeatHeaderStartRow={mobileDrilldownRepeatHeaderRange?.startRow ?? null}
               repeatHeaderEndRow={mobileDrilldownRepeatHeaderRange?.endRow ?? null}
               itemCardBlockColumns={mobileTableQuestion.mobileItemCardBlockColumns}
+              columnHeaderLabels={currentColumns.map(
+                (_, index) =>
+                  headerPath(
+                    currentColumns,
+                    useMultiRowHeader ? currentHeaderGrid : undefined,
+                    index,
+                  ).at(-1) ?? '',
+              )}
               onChange={({
                 mode,
                 omitLeadingColumns,

@@ -176,12 +176,17 @@ export const MobileItemCards = React.memo(function MobileItemCards({
       <div className="space-y-5">
         {dynamicGroupPicker}
         {blocks.blocks.map((block) => (
-          <section key={block.key} data-testid={`item-card-block-${block.key}`}>
+          // 블록 하나가 한 덩어리 — 머리가 위에 붙고 그 블록의 항목 카드를 품는다
+          <section
+            key={block.key}
+            data-testid={`item-card-block-${block.key}`}
+            className="rounded-2xl border border-blue-200 bg-blue-50/40"
+          >
             {(block.title || block.summaries.length > 0) && (
               // 블록 머리 — 그 블록을 지나는 동안 화면 위에 붙는다(카드 고정 헤더 z-10 위)
               <div
                 data-testid="item-card-block-head"
-                className="sticky top-0 z-20 space-y-2 rounded-xl border border-gray-300 bg-gray-200 px-4 py-3"
+                className="sticky top-0 z-20 space-y-2.5 rounded-t-2xl border-b border-blue-200 bg-blue-50 px-4 py-3"
               >
                 {block.title && (
                   <div className="text-[17px] leading-snug font-bold text-gray-900">
@@ -189,11 +194,11 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                   </div>
                 )}
                 {block.summaries.map((summary) => (
-                  <div key={summary.key} className="space-y-1">
-                    <p className="text-[13px] font-medium whitespace-pre-line text-gray-600">
+                  <div key={summary.key} className="space-y-1.5">
+                    <p className="text-xs leading-snug font-medium whitespace-pre-line text-gray-600">
                       {cardTitle(summary)}
                     </p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="flex divide-x divide-blue-100 rounded-xl border border-blue-100 bg-white">
                       {summary.inputs.map(({ cell, row, columnIndex }) => {
                         const label =
                           cell.mobileLabel?.trim() || (blocks.columnLabels[columnIndex] ?? '');
@@ -201,22 +206,24 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                           <div
                             key={cell.id}
                             data-cell-id={cell.id}
-                            className="rounded-lg bg-white px-1 py-1"
+                            className="flex min-w-0 flex-1 flex-col justify-between px-1 pt-2 pb-1 text-center"
                           >
                             {label && (
-                              <p className="px-2 text-[11px] leading-tight text-gray-500">
+                              <p className="px-1 text-[11px] leading-tight break-keep text-gray-500">
                                 {substituteTokens(label, attrs, quotes)}
                               </p>
                             )}
-                            <InteractiveCell
-                              cell={cell}
-                              questionId={questionId}
-                              value={value}
-                              onChange={onChange}
-                              rowCells={row.cells}
-                              hintInFlow
-                              ignoreInputWidth
-                            />
+                            <div className="[&_span:first-child]:text-lg [&_span:first-child]:font-bold [&_span:first-child]:text-gray-900">
+                              <InteractiveCell
+                                cell={{ ...cell, inputTextAlign: 'center' }}
+                                questionId={questionId}
+                                value={value}
+                                onChange={onChange}
+                                rowCells={row.cells}
+                                hintInFlow
+                                ignoreInputWidth
+                              />
+                            </div>
                           </div>
                         );
                       })}
@@ -225,7 +232,7 @@ export const MobileItemCards = React.memo(function MobileItemCards({
                 ))}
               </div>
             )}
-            <div className="mt-3 space-y-3">
+            <div className="space-y-2.5 p-2.5">
               {block.cards.map((card) => renderCard(card, blocks.columnLabels))}
             </div>
           </section>

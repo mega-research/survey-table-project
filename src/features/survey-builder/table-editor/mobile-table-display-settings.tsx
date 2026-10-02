@@ -42,6 +42,8 @@ interface MobileTableDisplaySettingsProps {
   repeatHeaderEndRow?: number | null | undefined;
   /** 「항목 단위 카드」 블록 시작 열(1부터). 비면 블록 없음 */
   itemCardBlockColumns?: readonly number[] | null | undefined;
+  /** 열마다의 헤더 글자(작성 열 순서) — 적은 블록 시작 열이 어느 열인지 되짚어 보인다 */
+  columnHeaderLabels?: readonly string[] | undefined;
   onChange: (value: MobileTableDisplaySettingsValue) => void;
   /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
   questionType?: 'table' | 'radio' | 'checkbox' | undefined;
@@ -114,6 +116,7 @@ export function MobileTableDisplaySettings({
   repeatHeaderStartRow,
   repeatHeaderEndRow,
   itemCardBlockColumns,
+  columnHeaderLabels,
   onChange,
   questionType,
   hasChoiceGroups = false,
@@ -277,12 +280,24 @@ export function MobileTableDisplaySettings({
             <p className="text-xs text-red-600">
               1부터 {columnCount}까지의 열 번호를 쉼표로 구분해 적어 주세요.
             </p>
-          ) : (
+          ) : null}
+          {!blockDraftInvalid && committedBlockColumns ? (
+            <ul className="space-y-0.5 text-xs text-gray-700">
+              {committedBlockColumns.map((start, index) => (
+                <li key={start}>
+                  블록 {index + 1} — {start}열
+                  {columnHeaderLabels?.[start - 1] ? ` 「${columnHeaderLabels[start - 1]}」` : ''}
+                  부터
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {blockDraftInvalid ? null : (
             <p className="text-xs text-gray-500">
-              표 두 벌을 좌우로 붙인 표에서 각 표가 시작하는 열 번호를 적습니다(예: 1, 5). 블록마다
-              항목을 끝까지 세운 뒤 다음 블록으로 넘어가고, 블록 제목(시작 열의 헤더)과 계산 칸만
-              있는 합계 행이 머리로 화면 위에 고정됩니다. 입력 칸 이름은 열 헤더를 씁니다. 비우면 행
-              순서 그대로입니다.
+              표 두 벌을 좌우로 붙인 표에서 각 표가 시작하는 열 번호를 적습니다(예: 1, 6 —
+              들여쓰기용 빈 열도 한 열로 셉니다). 블록마다 항목을 끝까지 세운 뒤 다음 블록으로
+              넘어가고, 블록 제목(시작 열의 헤더)과 계산 칸만 있는 합계 행이 머리로 화면 위에
+              고정됩니다. 입력 칸 이름은 열 헤더를 씁니다. 비우면 행 순서 그대로입니다.
             </p>
           )}
         </div>
