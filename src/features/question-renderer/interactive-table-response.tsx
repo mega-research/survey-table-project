@@ -91,6 +91,7 @@ import {
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
+import { MobileColumnAxisCards } from './mobile-column-axis-cards';
 import { MobileItemCards } from './mobile-item-cards';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
@@ -1345,6 +1346,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 <MobileItemCards
                   questionId={questionId}
                   displayRows={displayRows}
+                  value={value}
+                  onChange={mergedOnChange}
+                  errorCellIds={errorCellIds}
+                  dynamicGroupPicker={dynamicGroupPicker}
+                />
+              ) : isMobileView && mobileMode === 'axis-cards' ? (
+                // 테이블 유형의 축 = 열. 보기 소스 표의 축 단위 카드(보기 그룹 = 축)는 choice-table-response 몫
+                <MobileColumnAxisCards
+                  questionId={questionId}
+                  displayRows={displayRows}
+                  visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
                   value={value}
                   onChange={mergedOnChange}
                   errorCellIds={errorCellIds}

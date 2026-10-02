@@ -84,7 +84,7 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     value: 'axis-cards',
     label: '축 단위 카드',
     description:
-      '보기 그룹(축)마다 카드 하나를 만들고 그 안에 행을 보기로 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 현재 활용·활용 계획처럼 축마다 독립된 선택인데 행 목록만 같은 표에 맞습니다.',
+      '축마다 카드 하나를 만들고 그 안에 행을 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 보기 소스 표는 보기 그룹이 축이고(현재 활용·활용 계획처럼 축마다 독립된 선택), 테이블 유형은 응답 칸이 놓인 열이 축입니다(2025년·2026년처럼 연도별로 같은 행을 채우는 입력 표).',
   },
   {
     value: 'item-cards',
@@ -117,8 +117,11 @@ export function MobileTableDisplaySettings({
     if (option.value === 'row-group-cards') {
       return isChoiceSourceTable || (questionType === 'table' && hasChoiceGroups);
     }
-    // 축 단위 카드는 축(보기 그룹)이 있어야 세울 수 있다 — 그룹 없는 표는 자동 카드가 같은 모양
-    if (option.value === 'axis-cards') return isChoiceSourceTable && hasChoiceGroups;
+    // 축 단위 카드 — 보기 소스 표는 축(보기 그룹)이 있어야 세울 수 있다(그룹 없는 표는 자동 카드가
+    // 같은 모양). 테이블 유형은 응답 칸이 놓인 열이 축이라 그룹 없이도 된다.
+    if (option.value === 'axis-cards') {
+      return questionType === 'table' || (isChoiceSourceTable && hasChoiceGroups);
+    }
     // 항목 단위 카드는 입력 칸이 셀 값인 테이블 유형 전용 — 보기 소스 표의 보기는 문항 응답이다
     if (option.value === 'item-cards') return questionType === 'table';
     return true;

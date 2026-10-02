@@ -147,7 +147,11 @@ export function GroupStepItem({
   // 모바일 축 단위 카드는 미충족 카드마다 자기 아래에 같은 상자를 그린다 — 여기서 또 내면
   // 마지막 카드 아래에 둘이 겹친다. 문구는 여전히 그 상자 몫이라 아래 <p> 는 생략한다.
   const isMobile = useMobileView();
-  const axisCardsOnMobile = isMobile && q.mobileTableDisplayMode === 'axis-cards';
+  // 보기 소스 표의 축 단위 카드만 해당한다 — 테이블 유형의 축 단위 카드(열 = 축)는 카드별 상자가 없다
+  const axisCardsOnMobile =
+    isMobile &&
+    q.mobileTableDisplayMode === 'axis-cards' &&
+    (q.type === 'radio' || q.type === 'checkbox');
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
       ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility).map((issue) => ({
