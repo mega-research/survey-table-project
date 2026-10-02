@@ -432,6 +432,8 @@ interface InteractiveTableResponseProps {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  /** 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서). 비면 블록 없이 행 순서 */
+  mobileItemCardBlockColumns?: number[] | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /**
@@ -522,6 +524,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   mobileDrilldownOmitLeadingColumns,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
+  mobileItemCardBlockColumns,
   enableSticky = true,
   choiceGroups,
   errorCellIds,
@@ -1346,6 +1349,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 <MobileItemCards
                   questionId={questionId}
                   displayRows={displayRows}
+                  blockStartColumns={mobileItemCardBlockColumns}
+                  authoredColumns={columns}
+                  visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
                   value={value}
                   onChange={mergedOnChange}
                   errorCellIds={errorCellIds}

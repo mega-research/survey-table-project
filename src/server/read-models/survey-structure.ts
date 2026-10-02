@@ -177,6 +177,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+    ...(q.mobileItemCardBlockColumns != null ? { mobileItemCardBlockColumns: q.mobileItemCardBlockColumns } : {}),
     ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
     ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
     ...(q.displayCondition != null

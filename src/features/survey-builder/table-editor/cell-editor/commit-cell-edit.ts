@@ -267,6 +267,7 @@ export async function commitCellEdit({
               mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
               mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
               mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+              mobileItemCardBlockColumns: question.mobileItemCardBlockColumns,
               hideTitle: question.hideTitle,
               pageBreakBefore: question.pageBreakBefore,
               rankingConfig: question.rankingConfig,

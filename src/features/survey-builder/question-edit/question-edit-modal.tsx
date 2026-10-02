@@ -8,8 +8,8 @@ import {
   ChevronDown,
   Circle,
   Eye,
-  History,
   FileText,
+  History,
   Info,
   ListOrdered,
   Settings,
@@ -20,10 +20,10 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { QuestionConditionEditor } from '@/features/survey-builder/condition/question-condition-editor';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
@@ -46,17 +46,14 @@ import {
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
-import { runAsyncAction } from '@/utils/run-async-action';
+import { resolveQuestionTitleHtml, titleHtmlHasMarks } from '@/lib/survey/question-title-html';
 import { isValidUUID } from '@/lib/utils';
-import {
-  resolveQuestionTitleHtml,
-  titleHtmlHasMarks,
-} from '@/lib/survey/question-title-html';
 import { client } from '@/shared/lib/rpc';
 import { isOptionListType } from '@/types/question-types';
 import { Question, type QuestionConditionGroup } from '@/types/survey';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
+import { runAsyncAction } from '@/utils/run-async-action';
 
 import { QuestionBasicTab } from './question-basic-tab';
 import { SumConstraintEditor } from './sum-constraint-editor';
@@ -208,6 +205,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     let originalExportCellOrder: Question['exportCellOrder'];
     let originalStickyColumnCount: Question['stickyColumnCount'];
+    let originalMobileItemCardBlockColumns: Question['mobileItemCardBlockColumns'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore
@@ -220,6 +218,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
       originalExportCellOrder = q?.exportCellOrder;
       originalStickyColumnCount = q?.stickyColumnCount;
+      originalMobileItemCardBlockColumns = q?.mobileItemCardBlockColumns;
       didSaveRef.current = false;
     }
     return () => {
@@ -260,6 +259,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   delete restoredQuestion.exportCellOrder;
                 } else {
                   restoredQuestion.exportCellOrder = originalExportCellOrder;
+                }
+                if (originalMobileItemCardBlockColumns === undefined) {
+                  delete restoredQuestion.mobileItemCardBlockColumns;
+                } else {
+                  restoredQuestion.mobileItemCardBlockColumns = originalMobileItemCardBlockColumns;
                 }
                 if (originalStickyColumnCount === undefined) {
                   delete restoredQuestion.stickyColumnCount;
@@ -379,10 +383,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   // 저장 핸들러 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
   /** 이월값 조건 탭은 표시 조건과 같은 즉시 저장 경로를 쓴다. 새 질문은 아직 DB 에 없어 건너뛴다. */
   const savePriorAnswerField = useCallback(
-    async (data: { priorAnswerCondition?: QuestionConditionGroup | undefined; priorAnswerDisabled?: boolean }) => {
+    async (data: {
+      priorAnswerCondition?: QuestionConditionGroup | undefined;
+      priorAnswerDisabled?: boolean;
+    }) => {
       const store = useSurveyBuilderStore.getState();
       const isNewQuestion = !!store.questionChanges.added[questionId || ''];
-      if (!questionId || !store.currentSurvey.id || !isValidUUID(questionId) || isNewQuestion) return;
+      if (!questionId || !store.currentSurvey.id || !isValidUUID(questionId) || isNewQuestion)
+        return;
       try {
         await client.surveyBuilder.questions.update({
           questionId,
@@ -447,6 +455,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         ? { exportCellOrder: storeQuestion.exportCellOrder }
         : {}),
       // 좌측 고정 열 개수도 표 에디터의 silentUpdateQuestion 경로로 store 에만 쓰인다.
+      ...(storeQuestion?.mobileItemCardBlockColumns !== undefined
+        ? { mobileItemCardBlockColumns: storeQuestion.mobileItemCardBlockColumns }
+        : {}),
       ...(storeQuestion?.stickyColumnCount !== undefined
         ? { stickyColumnCount: storeQuestion.stickyColumnCount }
         : {}),
@@ -623,6 +634,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
               // null = 자동 판정 복귀가 유효값이므로 ?? 폴백 금지
+              mobileItemCardBlockColumns:
+                currentFormData.mobileItemCardBlockColumns !== undefined
+                  ? currentFormData.mobileItemCardBlockColumns
+                  : question?.mobileItemCardBlockColumns,
               stickyColumnCount:
                 currentFormData.stickyColumnCount !== undefined
                   ? currentFormData.stickyColumnCount
@@ -899,8 +914,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 <div>
                   <Label className="text-sm font-medium">이월값 불러오기</Label>
                   <p className="mt-1 text-xs text-gray-500">
-                    끄면 지난 회차 응답이 있어도 이 문항에는 채우지 않습니다. 응답자가 새로
-                    입력한 값이 그대로 저장됩니다. 아래 조건은 켜져 있을 때만 적용됩니다.
+                    끄면 지난 회차 응답이 있어도 이 문항에는 채우지 않습니다. 응답자가 새로 입력한
+                    값이 그대로 저장됩니다. 아래 조건은 켜져 있을 때만 적용됩니다.
                   </p>
                 </div>
                 <Switch
@@ -919,28 +934,28 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               </div>
 
               <div className={priorAnswerEnabled ? undefined : 'pointer-events-none opacity-50'}>
-              <QuestionConditionEditor
-                question={question}
-                {...(formData.priorAnswerCondition
-                  ? { initialCondition: formData.priorAnswerCondition }
-                  : question.priorAnswerCondition
-                    ? { initialCondition: question.priorAnswerCondition }
-                    : {})}
-                onUpdate={async (conditionGroup) => {
-                  setFormData((prev) => {
-                    const next: Partial<Question> = { ...prev };
-                    if (conditionGroup !== undefined) {
-                      next.priorAnswerCondition = conditionGroup;
-                    } else {
-                      delete next.priorAnswerCondition;
-                    }
-                    return next;
-                  });
+                <QuestionConditionEditor
+                  question={question}
+                  {...(formData.priorAnswerCondition
+                    ? { initialCondition: formData.priorAnswerCondition }
+                    : question.priorAnswerCondition
+                      ? { initialCondition: question.priorAnswerCondition }
+                      : {})}
+                  onUpdate={async (conditionGroup) => {
+                    setFormData((prev) => {
+                      const next: Partial<Question> = { ...prev };
+                      if (conditionGroup !== undefined) {
+                        next.priorAnswerCondition = conditionGroup;
+                      } else {
+                        delete next.priorAnswerCondition;
+                      }
+                      return next;
+                    });
 
-                  await savePriorAnswerField({ priorAnswerCondition: conditionGroup });
-                }}
-                allQuestions={questions}
-              />
+                    await savePriorAnswerField({ priorAnswerCondition: conditionGroup });
+                  }}
+                  allQuestions={questions}
+                />
               </div>
             </TabsContent>
           </Tabs>

@@ -87,6 +87,7 @@ interface SnapshotQuestion {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  mobileItemCardBlockColumns?: number[] | null | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
@@ -186,6 +187,7 @@ export function buildSurveySnapshot(
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
       mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
       mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+      mobileItemCardBlockColumns: q.mobileItemCardBlockColumns,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,

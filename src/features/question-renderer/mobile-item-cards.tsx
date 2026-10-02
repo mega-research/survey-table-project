@@ -7,7 +7,9 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
+import { buildItemCardBlocks } from '@/features/question-renderer/utils/item-card-blocks';
 import {
+  type ItemCard,
   buildItemCards,
   itemCardTitleText,
 } from '@/features/question-renderer/utils/item-cards';
@@ -18,7 +20,7 @@ import {
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { TableRow } from '@/types/survey';
+import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
@@ -34,6 +36,14 @@ interface MobileItemCardsProps {
   errorCellIds?: Set<string> | undefined;
   /** 동적 행 그룹 선택 버튼 목록 — 호스트가 만들어 카드 목록 위에 둔다 */
   dynamicGroupPicker?: ReactNode;
+  /**
+   * 「블록 단위로 세우기」 — 블록 시작 열(1부터, 작성 열 순서). 비면 종전처럼 행 순서로 카드를 편다.
+   * 지정하면 아래 세 열 정보가 함께 와야 한다(블록 제목·입력 라벨을 열 헤더에서 읽는다).
+   */
+  blockStartColumns?: readonly number[] | null | undefined;
+  authoredColumns?: readonly TableColumn[] | undefined;
+  visibleColumns?: readonly TableColumn[] | undefined;
+  visibleHeaderGrid?: HeaderCell[][] | undefined;
 }
 
 /**
@@ -49,94 +59,185 @@ export const MobileItemCards = React.memo(function MobileItemCards({
   onChange,
   errorCellIds,
   dynamicGroupPicker,
+  blockStartColumns,
+  authoredColumns,
+  visibleColumns,
+  visibleHeaderGrid,
 }: MobileItemCardsProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const cards = useMemo(() => buildItemCards(displayRows), [displayRows]);
+  const blocks = useMemo(
+    () =>
+      authoredColumns && visibleColumns
+        ? buildItemCardBlocks({
+            authoredColumns,
+            visibleColumns,
+            visibleHeaderGrid,
+            displayRows,
+            blockStartColumns,
+          })
+        : null,
+    [authoredColumns, blockStartColumns, displayRows, visibleColumns, visibleHeaderGrid],
+  );
+  const cards = useMemo(() => (blocks ? [] : buildItemCards(displayRows)), [blocks, displayRows]);
   const radioBucketsByRowId = useMemo(
     () => new Map(displayRows.map((row) => [row.id, buildRadioGroupBuckets(row)])),
     [displayRows],
   );
 
+  const renderInputs = (card: ItemCard, columnLabels?: readonly string[]) =>
+    card.inputs.map(({ cell: sourceCell, row, columnIndex }) => {
+      const cell = overrideCellOptionsColumnsForCard(sourceCell);
+      // 블록 모드만 열 헤더를 라벨 폴백으로 쓴다 — 블록 없는 표는 종전대로 모바일 라벨만
+      const label =
+        cell.mobileDisplay === 'hidden'
+          ? ''
+          : cell.mobileLabel?.trim() || (columnLabels?.[columnIndex] ?? '');
+      const invalid = errorCellIds?.has(cell.id) === true;
+      return (
+        <div key={cell.id} data-cell-id={cell.id} className="space-y-1">
+          {label && (
+            <p className="text-sm font-medium text-gray-900">
+              {substituteTokens(label, attrs, quotes)}
+            </p>
+          )}
+          <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
+            <InteractiveCell
+              cell={cell}
+              questionId={questionId}
+              value={value}
+              onChange={onChange}
+              rowCells={row.cells}
+              ariaInvalid={invalid}
+              hintInFlow
+              ignoreInputWidth
+              {...resolveRadioGroupProps(
+                cell,
+                row.id,
+                radioBucketsByRowId.get(row.id) ?? new Map(),
+              )}
+            />
+          </div>
+        </div>
+      );
+    });
+
+  const renderCard = (card: ItemCard, columnLabels?: readonly string[]) => {
+    const ancestors = card.titleCells.slice(0, -1);
+    const titleCell = card.titleCells[card.titleCells.length - 1];
+    const titleText = titleCell
+      ? substituteTokens(itemCardTitleText(titleCell), attrs, quotes)
+      : substituteTokens(card.fallbackTitle, attrs, quotes);
+    return (
+      <MobileSectionCard
+        key={card.key}
+        testId={`item-card-${card.key}`}
+        headerTestId="item-card-header"
+        title={
+          titleText ? (
+            <>
+              {ancestors.length > 0 && (
+                <span className="mb-0.5 block text-[13px] font-medium text-gray-500">
+                  {ancestors
+                    .map((cell) => substituteTokens(itemCardTitleText(cell), attrs, quotes))
+                    .join(' · ')}
+                </span>
+              )}
+              <span
+                className={titleCell ? getCellTextClassName(titleCell) : undefined}
+                style={titleCell ? getCellTextStyle(titleCell) : undefined}
+              >
+                <CellText
+                  text={titleText}
+                  html={
+                    titleCell?.type === 'text'
+                      ? resolveCellTextHtml(titleCell, attrs, quotes)
+                      : undefined
+                  }
+                />
+              </span>
+            </>
+          ) : null
+        }
+      >
+        <MobileDisplayCells cells={card.displayCells} />
+        <div className="space-y-3 px-1 py-1">{renderInputs(card, columnLabels)}</div>
+      </MobileSectionCard>
+    );
+  };
+
+  const cardTitle = (card: ItemCard) => {
+    const cell = card.titleCells[card.titleCells.length - 1];
+    return substituteTokens(cell ? itemCardTitleText(cell) : card.fallbackTitle, attrs, quotes);
+  };
+
+  if (blocks) {
+    return (
+      <div className="space-y-5">
+        {dynamicGroupPicker}
+        {blocks.blocks.map((block) => (
+          <section key={block.key} data-testid={`item-card-block-${block.key}`}>
+            {(block.title || block.summaries.length > 0) && (
+              // 블록 머리 — 그 블록을 지나는 동안 화면 위에 붙는다(카드 고정 헤더 z-10 위)
+              <div
+                data-testid="item-card-block-head"
+                className="sticky top-0 z-20 space-y-2 rounded-xl border border-gray-300 bg-gray-200 px-4 py-3"
+              >
+                {block.title && (
+                  <div className="text-[17px] leading-snug font-bold text-gray-900">
+                    {substituteTokens(block.title, attrs, quotes)}
+                  </div>
+                )}
+                {block.summaries.map((summary) => (
+                  <div key={summary.key} className="space-y-1">
+                    <p className="text-[13px] font-medium whitespace-pre-line text-gray-600">
+                      {cardTitle(summary)}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {summary.inputs.map(({ cell, row, columnIndex }) => {
+                        const label =
+                          cell.mobileLabel?.trim() || (blocks.columnLabels[columnIndex] ?? '');
+                        return (
+                          <div
+                            key={cell.id}
+                            data-cell-id={cell.id}
+                            className="rounded-lg bg-white px-1 py-1"
+                          >
+                            {label && (
+                              <p className="px-2 text-[11px] leading-tight text-gray-500">
+                                {substituteTokens(label, attrs, quotes)}
+                              </p>
+                            )}
+                            <InteractiveCell
+                              cell={cell}
+                              questionId={questionId}
+                              value={value}
+                              onChange={onChange}
+                              rowCells={row.cells}
+                              hintInFlow
+                              ignoreInputWidth
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 space-y-3">
+              {block.cards.map((card) => renderCard(card, blocks.columnLabels))}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {dynamicGroupPicker}
-      {cards.map((card) => {
-        const ancestors = card.titleCells.slice(0, -1);
-        const titleCell = card.titleCells[card.titleCells.length - 1];
-        const titleText = titleCell
-          ? substituteTokens(itemCardTitleText(titleCell), attrs, quotes)
-          : substituteTokens(card.fallbackTitle, attrs, quotes);
-        return (
-          <MobileSectionCard
-            key={card.key}
-            testId={`item-card-${card.key}`}
-            headerTestId="item-card-header"
-            title={
-              titleText ? (
-                <>
-                  {ancestors.length > 0 && (
-                    <span className="mb-0.5 block text-[13px] font-medium text-gray-500">
-                      {ancestors
-                        .map((cell) => substituteTokens(itemCardTitleText(cell), attrs, quotes))
-                        .join(' · ')}
-                    </span>
-                  )}
-                  <span
-                    className={titleCell ? getCellTextClassName(titleCell) : undefined}
-                    style={titleCell ? getCellTextStyle(titleCell) : undefined}
-                  >
-                    <CellText
-                      text={titleText}
-                      html={
-                        titleCell?.type === 'text'
-                          ? resolveCellTextHtml(titleCell, attrs, quotes)
-                          : undefined
-                      }
-                    />
-                  </span>
-                </>
-              ) : null
-            }
-          >
-            <MobileDisplayCells cells={card.displayCells} />
-            <div className="space-y-3 px-1 py-1">
-              {card.inputs.map(({ cell: sourceCell, row }) => {
-                const cell = overrideCellOptionsColumnsForCard(sourceCell);
-                const label =
-                  cell.mobileDisplay === 'hidden' ? '' : (cell.mobileLabel?.trim() ?? '');
-                const invalid = errorCellIds?.has(cell.id) === true;
-                return (
-                  <div key={cell.id} data-cell-id={cell.id} className="space-y-1">
-                    {label && (
-                      <p className="text-sm font-medium text-gray-900">
-                        {substituteTokens(label, attrs, quotes)}
-                      </p>
-                    )}
-                    <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
-                      <InteractiveCell
-                        cell={cell}
-                        questionId={questionId}
-                        value={value}
-                        onChange={onChange}
-                        rowCells={row.cells}
-                        ariaInvalid={invalid}
-                        hintInFlow
-                        ignoreInputWidth
-                        {...resolveRadioGroupProps(
-                          cell,
-                          row.id,
-                          radioBucketsByRowId.get(row.id) ?? new Map(),
-                        )}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </MobileSectionCard>
-        );
-      })}
+      {cards.map((card) => renderCard(card))}
     </div>
   );
 });

@@ -66,6 +66,7 @@ type MobileTableDisplayFields = Pick<
   | 'mobileDrilldownOmitLeadingColumns'
   | 'mobileDrilldownRepeatHeaderStartRow'
   | 'mobileDrilldownRepeatHeaderEndRow'
+  | 'mobileItemCardBlockColumns'
 >;
 
 export interface TextQuestion

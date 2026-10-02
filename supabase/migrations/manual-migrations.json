@@ -91,6 +91,7 @@
     "0125_question_title_html",
     "0128_add_row_wise_scale_mobile_mode",
     "0129_add_item_cards_mobile_mode",
-    "0130_question_max_selections_source"
+    "0130_question_max_selections_source",
+    "0131_question_mobile_item_card_block_columns"
   ]
 }

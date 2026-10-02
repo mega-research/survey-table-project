@@ -281,6 +281,8 @@ export const questions = pgTable(
       'mobile_drilldown_repeat_header_start_row',
     ).default(0),
     mobileDrilldownRepeatHeaderEndRow: integer('mobile_drilldown_repeat_header_end_row').default(0),
+    // 「항목 단위 카드」 블록 시작 열 (1부터). NULL = 블록 없음 (0131)
+    mobileItemCardBlockColumns: jsonb('mobile_item_card_block_columns').$type<number[]>(),
 
     // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
     hideTitle: boolean('hide_title').default(false),

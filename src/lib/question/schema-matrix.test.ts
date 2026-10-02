@@ -79,6 +79,7 @@ const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileDrilldownOmitLeadingColumns',
   'mobileDrilldownRepeatHeaderStartRow',
   'mobileDrilldownRepeatHeaderEndRow',
+  'mobileItemCardBlockColumns',
 ];
 
 function shapeKeys(schema: { shape: Record<string, unknown> }): string[] {

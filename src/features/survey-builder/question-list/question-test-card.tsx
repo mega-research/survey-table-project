@@ -605,6 +605,7 @@ function QuestionTestInput({
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
           mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}
+          mobileItemCardBlockColumns={question.mobileItemCardBlockColumns}
           {...(question.mobileDrilldownRepeatHeaderStartRow !== undefined
             ? {
                 mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,

@@ -898,6 +898,9 @@ export interface Question {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  // 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서) — 좌우로 붙은 표를 모바일에서 블록마다 차례로 세운다.
+  // 비어 있으면 블록 없이 행 순서 그대로다 (CONTEXT.md "블록 단위로 세우기")
+  mobileItemCardBlockColumns?: number[] | null;
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle?: boolean;
   // 응답 페이지 수동 페이지 구분점 — 이 질문 앞에서 새 페이지를 시작한다

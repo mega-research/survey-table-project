@@ -350,6 +350,7 @@ export async function duplicateSurvey(
         mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
         mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
         mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+        mobileItemCardBlockColumns: question.mobileItemCardBlockColumns ?? null,
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],

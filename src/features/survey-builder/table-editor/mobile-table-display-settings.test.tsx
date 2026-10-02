@@ -94,6 +94,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: 0,
       repeatHeaderEndRow: 0,
+      itemCardBlockColumns: null,
     });
   });
 
@@ -117,6 +118,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 2,
       repeatHeaderStartRow: 0,
       repeatHeaderEndRow: 0,
+      itemCardBlockColumns: null,
     });
   });
 
@@ -214,6 +216,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: 2,
       repeatHeaderEndRow: 3,
+      itemCardBlockColumns: null,
     });
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
@@ -222,6 +225,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: null,
       repeatHeaderEndRow: null,
+      itemCardBlockColumns: null,
     });
   });
 
@@ -260,6 +264,50 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: null,
       repeatHeaderEndRow: null,
+      itemCardBlockColumns: null,
     });
+  });
+});
+
+describe('블록 시작 열', () => {
+  const base = {
+    omitLeadingColumns: 1,
+    columnCount: 8,
+    questionType: 'table' as const,
+  };
+
+  it('항목 단위 카드에서만 입력칸이 보인다', () => {
+    const { rerender } = render(
+      <MobileTableDisplaySettings {...base} mode="auto" onChange={vi.fn()} />,
+    );
+    expect(screen.queryByLabelText('블록 시작 열')).not.toBeInTheDocument();
+    rerender(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={vi.fn()} />);
+    expect(screen.getByLabelText('블록 시작 열')).toBeInTheDocument();
+  });
+
+  it('「1,5」를 적으면 열 번호 배열로 내보내고, 비우면 null 이다', () => {
+    const onChange = vi.fn();
+    render(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={onChange} />);
+    const field = screen.getByLabelText('블록 시작 열');
+    fireEvent.change(field, { target: { value: '1,5' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'item-cards', itemCardBlockColumns: [1, 5] }),
+    );
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ itemCardBlockColumns: null }),
+    );
+  });
+
+  it('열 수를 넘는 번호는 저장하지 않고 안내한다', () => {
+    const onChange = vi.fn();
+    render(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={onChange} />);
+    const field = screen.getByLabelText('블록 시작 열');
+    fireEvent.change(field, { target: { value: '1,9' } });
+    fireEvent.blur(field);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/1부터 8까지의 열 번호/)).toBeInTheDocument();
   });
 });

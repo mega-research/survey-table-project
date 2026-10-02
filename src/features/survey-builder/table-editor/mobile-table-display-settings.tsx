@@ -6,6 +6,11 @@ import { Check } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  formatItemCardBlockColumns,
+  normalizeItemCardBlockColumns,
+  parseItemCardBlockColumnsText,
+} from '@/features/question-renderer/utils/item-card-blocks';
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { cn } from '@/lib/utils';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
@@ -26,6 +31,7 @@ interface MobileTableDisplaySettingsValue {
   omitLeadingColumns: number;
   repeatHeaderStartRow: number | null;
   repeatHeaderEndRow: number | null;
+  itemCardBlockColumns: number[] | null;
 }
 
 interface MobileTableDisplaySettingsProps {
@@ -34,6 +40,8 @@ interface MobileTableDisplaySettingsProps {
   columnCount: number;
   repeatHeaderStartRow?: number | null | undefined;
   repeatHeaderEndRow?: number | null | undefined;
+  /** 「항목 단위 카드」 블록 시작 열(1부터). 비면 블록 없음 */
+  itemCardBlockColumns?: readonly number[] | null | undefined;
   onChange: (value: MobileTableDisplaySettingsValue) => void;
   /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
   questionType?: 'table' | 'radio' | 'checkbox' | undefined;
@@ -105,6 +113,7 @@ export function MobileTableDisplaySettings({
   columnCount,
   repeatHeaderStartRow,
   repeatHeaderEndRow,
+  itemCardBlockColumns,
   onChange,
   questionType,
   hasChoiceGroups = false,
@@ -141,14 +150,37 @@ export function MobileTableDisplaySettings({
     setRepeatHeaderDraft(committedText);
   }
 
+  const committedBlockColumns = normalizeItemCardBlockColumns(itemCardBlockColumns, columnCount);
+  const committedBlockText = formatItemCardBlockColumns(committedBlockColumns);
+  const [blockDraft, setBlockDraft] = useState(committedBlockText);
+  const [blockDraftInvalid, setBlockDraftInvalid] = useState(false);
+  const [prevCommittedBlockText, setPrevCommittedBlockText] = useState(committedBlockText);
+  if (prevCommittedBlockText !== committedBlockText) {
+    setPrevCommittedBlockText(committedBlockText);
+    setBlockDraft(committedBlockText);
+    setBlockDraftInvalid(false);
+  }
+
   const emit = (next: Partial<MobileTableDisplaySettingsValue>) =>
     onChange({
       mode,
       omitLeadingColumns: normalizedCount,
       repeatHeaderStartRow: committedRange?.startRow ?? null,
       repeatHeaderEndRow: committedRange?.endRow ?? null,
+      itemCardBlockColumns: committedBlockColumns,
       ...next,
     });
+
+  const commitBlockDraft = () => {
+    const parsed = parseItemCardBlockColumnsText(blockDraft, columnCount);
+    if (!parsed.ok) {
+      setBlockDraftInvalid(true);
+      return;
+    }
+    setBlockDraftInvalid(false);
+    setBlockDraft(formatItemCardBlockColumns(parsed.value));
+    emit({ itemCardBlockColumns: parsed.value });
+  };
 
   const commitRepeatHeaderDraft = () => {
     const parsed = parseMobileDrilldownRepeatHeaderText(repeatHeaderDraft);
@@ -221,6 +253,39 @@ export function MobileTableDisplaySettings({
           title="척도 막대로 고른 그룹 중 막대로 그릴 수 없는 행이 있어 그 행에서는 원본 표 조각으로 보입니다."
           issues={rowScaleBarIssues}
         />
+      ) : null}
+      {mode === 'item-cards' ? (
+        <div className="max-w-xl space-y-1.5">
+          <Label htmlFor="mobile-item-card-block-columns">블록 시작 열</Label>
+          <Input
+            id="mobile-item-card-block-columns"
+            type="text"
+            inputMode="text"
+            placeholder="예: 1, 5"
+            aria-invalid={blockDraftInvalid}
+            value={blockDraft}
+            onChange={(event) => setBlockDraft(event.target.value)}
+            onBlur={commitBlockDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitBlockDraft();
+              }
+            }}
+          />
+          {blockDraftInvalid ? (
+            <p className="text-xs text-red-600">
+              1부터 {columnCount}까지의 열 번호를 쉼표로 구분해 적어 주세요.
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500">
+              표 두 벌을 좌우로 붙인 표에서 각 표가 시작하는 열 번호를 적습니다(예: 1, 5). 블록마다
+              항목을 끝까지 세운 뒤 다음 블록으로 넘어가고, 블록 제목(시작 열의 헤더)과 계산 칸만
+              있는 합계 행이 머리로 화면 위에 고정됩니다. 입력 칸 이름은 열 헤더를 씁니다. 비우면 행
+              순서 그대로입니다.
+            </p>
+          )}
+        </div>
       ) : null}
       {mode === 'drilldown-original-row' || isRowWiseMobileTableDisplayMode(mode) ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">

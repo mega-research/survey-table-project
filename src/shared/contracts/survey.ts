@@ -241,6 +241,7 @@ export interface QuestionData {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  mobileItemCardBlockColumns?: number[] | null;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;

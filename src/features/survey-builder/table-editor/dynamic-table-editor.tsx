@@ -615,11 +615,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               columnCount={currentColumns.length}
               repeatHeaderStartRow={mobileDrilldownRepeatHeaderRange?.startRow ?? null}
               repeatHeaderEndRow={mobileDrilldownRepeatHeaderRange?.endRow ?? null}
+              itemCardBlockColumns={mobileTableQuestion.mobileItemCardBlockColumns}
               onChange={({
                 mode,
                 omitLeadingColumns,
                 repeatHeaderStartRow,
                 repeatHeaderEndRow,
+                itemCardBlockColumns,
               }) => {
                 if (!editingQuestionId) return;
                 silentUpdateQuestion(editingQuestionId, {
@@ -627,6 +629,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   mobileDrilldownOmitLeadingColumns: omitLeadingColumns,
                   mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
                   mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
+                  mobileItemCardBlockColumns: itemCardBlockColumns,
                 });
               }}
             />

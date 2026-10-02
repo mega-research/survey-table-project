@@ -77,6 +77,7 @@ const mobileTableDisplay = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
 });
 
 export const TextQuestionSchema = base.extend({

@@ -84,6 +84,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     mobileDrilldownOmitLeadingColumns: data.mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderStartRow: data.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: data.mobileDrilldownRepeatHeaderEndRow,
+    mobileItemCardBlockColumns: data.mobileItemCardBlockColumns ?? null,
     hideTitle: data.hideTitle,
     pageBreakBefore: data.pageBreakBefore,
     rankingConfig: data.rankingConfig as NewQuestion['rankingConfig'],

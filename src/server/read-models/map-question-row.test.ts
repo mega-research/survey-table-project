@@ -62,6 +62,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   mobileDrilldownOmitLeadingColumns: 1,
   mobileDrilldownRepeatHeaderStartRow: 0,
   mobileDrilldownRepeatHeaderEndRow: 0,
+  mobileItemCardBlockColumns: [1, 5],
   hideTitle: true,
   pageBreakBefore: true,
   rankingConfig: { optionsSource: 'manual', rankCount: 2 },

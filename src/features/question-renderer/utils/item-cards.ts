@@ -27,6 +27,8 @@ export interface ItemCardInput {
   cell: TableCell;
   /** 게이팅·라디오 그룹 판정용 — 이 칸이 놓인 행 */
   row: TableRow;
+  /** 이 칸이 놓인 열(displayRows 의 셀 인덱스) — 블록 모드가 열 헤더를 입력 라벨로 읽는다 */
+  columnIndex: number;
 }
 
 export interface ItemCard {
@@ -71,7 +73,14 @@ export function itemCardTitleText(cell: TableCell): string {
   return labelOnlyRadioText(cell) ?? (cell.content ?? '').trim();
 }
 
-export function buildItemCards(displayRows: TableRow[]): ItemCard[] {
+/**
+ * `columnRange` 를 주면 그 열 구간([start, end))의 셀만 훑는다 — 「블록 단위로 세우기」가 블록마다
+ * 같은 규칙을 한 번씩 돌린다(`item-card-blocks`). 세로 병합 판정은 표 전체 기준 그대로다.
+ */
+export function buildItemCards(
+  displayRows: TableRow[],
+  columnRange?: { start: number; end: number },
+): ItemCard[] {
   const coverage = buildTableRowspanCoverage(displayRows);
   const cards: ItemCard[] = [];
 
@@ -82,6 +91,9 @@ export function buildItemCards(displayRows: TableRow[]): ItemCard[] {
     let pendingDisplay: TableCell[] = [];
 
     row.cells.forEach((own, columnIndex) => {
+      if (columnRange && (columnIndex < columnRange.start || columnIndex >= columnRange.end)) {
+        return;
+      }
       const placeholder = own.isHidden || own._isContinuation;
       const anchor = covered[columnIndex];
       if (placeholder) {
@@ -130,7 +142,7 @@ export function buildItemCards(displayRows: TableRow[]): ItemCard[] {
         pendingDisplay = [];
         cards.push(open);
       }
-      open.inputs.push({ cell: own, row });
+      open.inputs.push({ cell: own, row, columnIndex });
     });
   }
 

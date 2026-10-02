@@ -53,7 +53,7 @@ function normalize(label: string | undefined): string {
 }
 
 /** 열 하나를 덮는 헤더 글자 경로(위 → 아래, 이웃 중복 제거). 다단 헤더가 없으면 열 제목 하나 */
-function headerPath(
+export function headerPath(
   columns: readonly TableColumn[],
   headerGrid: HeaderCell[][] | undefined,
   columnIndex: number,

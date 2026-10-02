@@ -399,6 +399,9 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
+            {...(question.mobileItemCardBlockColumns != null
+              ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
+              : {})}
           choiceGroups={question.choiceGroups}
           errorCellIds={resolveTableErrorCellIds(
             question,
