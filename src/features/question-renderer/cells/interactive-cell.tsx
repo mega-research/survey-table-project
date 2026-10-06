@@ -276,14 +276,12 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     questionId,
     selectDistinctValues,
   );
-  const distinctCellValues: Record<string, unknown> = source ? sourceDistinctValues : (value ?? {});
-  const disabledOptionValues = useMemo(
-    () =>
-      distinctKeys.length > 0 && gatingCells
-        ? takenDistinctValues(cell, gatingCells, distinctCellValues)
-        : undefined,
-    [cell, distinctKeys, gatingCells, distinctCellValues],
-  );
+  const disabledOptionValues = useMemo(() => {
+    if (distinctKeys.length === 0 || !gatingCells) return undefined;
+    // 주입 원본이 없으면(controlled 렌더) 질문 단위 value prop 이 원본이다 — 게이팅과 같다.
+    const distinctCellValues = source ? sourceDistinctValues : (value ?? {});
+    return takenDistinctValues(cell, gatingCells, distinctCellValues);
+  }, [cell, distinctKeys, gatingCells, source, sourceDistinctValues, value]);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,
