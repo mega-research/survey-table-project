@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { TableCell } from '@/types/survey';
 
-import { findDistinctViolations, takenDistinctValues } from './distinct-select-group';
+import {
+  distinctSubscriptionKeys,
+  findDistinctViolations,
+  takenDistinctValues,
+} from './distinct-select-group';
 
 /**
  * 중복 불가 묶음 — 같은 묶음 이름을 가진 선택 칸끼리는 같은 보기를 두 번 고를 수 없다.
@@ -122,5 +126,58 @@ describe('findDistinctViolations — 같은 묶음에 같은 보기가 둘 이�
 
   it('빈 선택끼리는 중복이 아니다', () => {
     expect(findDistinctViolations(cells, { a1: '', a2: '' })).toEqual([]);
+  });
+});
+
+/**
+ * 게이팅과의 결합 — 칸이 「지금 열려 있는가」는 셀 게이팅 평가기가 정한다. 보기 선택으로 열리는
+ * 칸(choice-selected)은 표 응답 안 예약 키의 선택을, 컨트롤러가 다시 게이팅 칸이면 그 상류 값을
+ * 봐야 한다 — 빠뜨리면 실제로 열린 칸이 닫힌 것으로 판정되어 중복이 통과한다.
+ */
+describe('중복 불가 묶음 — 보기 선택 · 상류 게이팅으로 열리는 칸', () => {
+  const choiceGated: TableCell[] = [
+    { id: 'opt1', type: 'choice_opt', content: '수출함', choiceGroupId: 'g1' },
+    select('x1', 'g', { enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt1' } }),
+    select('x2', 'g', { enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt1' } }),
+  ];
+
+  it('보기를 골라 열린 칸끼리의 중복을 잡는다', () => {
+    const values = { x1: 'us', x2: 'us', __choiceGroups: { g1: 'opt1' } };
+    expect(findDistinctViolations(choiceGated, values).sort()).toEqual(['x1', 'x2']);
+    expect(taken('x2', values, choiceGated)).toEqual(['us']);
+  });
+
+  it('보기를 고르지 않아 닫힌 칸의 잔존값은 고른 것으로 치지 않는다', () => {
+    const values = { x1: 'us', x2: 'us' };
+    expect(findDistinctViolations(choiceGated, values)).toEqual([]);
+    expect(taken('x2', values, choiceGated)).toEqual([]);
+  });
+
+  it('구독 키에 보기 선택 예약 키가 든다', () => {
+    expect(distinctSubscriptionKeys(choiceGated[2]!, choiceGated).sort()).toEqual([
+      '__choiceGroups',
+      'x1',
+    ]);
+  });
+
+  it('구독 키에 컨트롤러의 컨트롤러까지 든다', () => {
+    const chained: TableCell[] = [
+      { id: 'top', type: 'input', content: '', inputType: 'number' },
+      {
+        id: 'mid',
+        type: 'input',
+        content: '',
+        inputType: 'number',
+        enabledWhen: { kind: 'numeric', op: '>', value: 0, controllerCellId: 'top' },
+      },
+      select('y1', 'g', {
+        enabledWhen: { kind: 'numeric', op: '>', value: 0, controllerCellId: 'mid' },
+      }),
+      select('y2', 'g'),
+    ];
+    expect(distinctSubscriptionKeys(chained[3]!, chained).sort()).toEqual(['mid', 'top', 'y1']);
+    // 상류가 닫히면 중간 컨트롤러의 잔존값은 없는 것이다 → y1 은 닫힌 칸
+    expect(taken('y2', { mid: '5', y1: 'us' }, chained)).toEqual([]);
+    expect(taken('y2', { top: '1', mid: '5', y1: 'us' }, chained)).toEqual(['us']);
   });
 });

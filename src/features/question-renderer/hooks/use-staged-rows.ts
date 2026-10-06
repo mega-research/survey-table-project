@@ -10,7 +10,7 @@ import {
   cellIdsOfStagedRowAt,
   deriveOpenStagedCount,
   hiddenStagedRowIds,
-  isStagedRowsActive,
+  resolveStagedRows,
   stagedRowCount,
 } from '@/features/question-renderer/utils/staged-rows';
 import type { StagedRowsConfig, TableRow } from '@/types/survey';
@@ -80,7 +80,8 @@ export function useStagedRows({
 
   const mergePatch = useQuestionResponseWriter({ questionId, value, onChange });
 
-  const config = isStagedRowsActive(stagedRowsConfig) ? stagedRowsConfig : null;
+  // 구조가 깨진 설정(묶음 행이 사라짐 · 보기 옵션 칸이 듦 등)은 동작시키지 않는다 — 전부 보인다.
+  const config = useMemo(() => resolveStagedRows(rows, stagedRowsConfig), [rows, stagedRowsConfig]);
 
   const maxCount = useMemo(() => (config ? stagedRowCount(rows, config) : 0), [config, rows]);
   const isActive = maxCount > 0;

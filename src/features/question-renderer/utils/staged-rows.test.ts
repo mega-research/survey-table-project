@@ -9,6 +9,7 @@ import {
   isStagedRowsActive,
   isStagedRowsIntact,
   remapStagedRowIds,
+  resolveStagedRows,
   stagedOptionalCellIds,
   stagedRowCount,
   validateStagedRows,
@@ -65,6 +66,21 @@ describe('deriveOpenStagedCount — 값에서 파생하는 열린 행 수', () =
     );
     expect(deriveOpenStagedCount(gated, config, { s4a: '잔존' })).toBe(2);
     expect(deriveOpenStagedCount(gated, config, { h1: '10', s4a: '값' })).toBe(4);
+  });
+
+  it('계산 칸의 저장값은 응답으로 치지 않는다 — 저장 뒤 다시 들어와도 열린 수가 같다', () => {
+    // 저장 경계는 계산 칸의 값을 응답에 주입한다(빈 행도 '0'). 그 값을 응답으로 세면 저장 전에는
+    // 닫혀 있던 행이 재진입 때 열리고, 그 행의 필수 칸이 「다음」을 막는다.
+    const withCalc: TableRow[] = rows.map((row) =>
+      row.id === 's3' || row.id === 's4'
+        ? { ...row, cells: [row.cells[0]!, { id: `${row.id}calc`, content: '', type: 'calc' }] }
+        : row,
+    );
+    expect(deriveOpenStagedCount(withCalc, config, { s3calc: '0', s4calc: '0' })).toBe(2);
+    expect(deriveOpenStagedCount(withCalc, config, { s3a: '5', s3calc: '5', s4calc: '0' })).toBe(3);
+    expect([...stagedOptionalCellIds(withCalc, config, { s3calc: '0', s4calc: '0' })].sort()).toEqual(
+      ['s3a', 's3calc', 's4a', 's4calc'],
+    );
   });
 
   it('처음 보이는 행 수는 1 이상 · 묶음 행 수 이하로 다듬는다', () => {
@@ -157,6 +173,29 @@ describe('validateStagedRows — 묶음으로 지정해도 되는가', () => {
     expect(kinds(['s1', 's2'], 1.5)).toEqual(['initial-count']);
   });
 
+  it('보기 옵션 칸 · 순위 옵션 칸이 든 행은 넣을 수 없다 — 그 선택은 칸 값이 아닌 곳에 산다', () => {
+    // 보기 그룹 선택은 표 응답 안 예약 키에, 순위 옵션은 문항 응답에 저장된다. 열린 수 파생·닫을 때
+    // 값 비우기·필수 범위가 전부 「행의 칸 값」을 보므로 이런 행을 묶으면 닫아도 선택이 남는다.
+    const choiceRow: TableRow = {
+      id: 's2',
+      label: 's2',
+      cells: [{ id: 'opt', content: '①', type: 'choice_opt', choiceGroupId: 'g1' }],
+    };
+    const rankRow: TableRow = {
+      id: 's3',
+      label: 's3',
+      cells: [{ id: 'rk', content: '가', type: 'ranking_opt' }],
+    };
+    const table = [rows[0]!, rows[1]!, choiceRow, rankRow, rows[4]!, rows[5]!];
+    const violations = validateStagedRows(table, {
+      rowIds: ['s1', 's2', 's3', 's4'],
+      initialVisibleCount: 1,
+    });
+    expect(violations.map((v) => v.kind)).toEqual(['choice-cell']);
+    expect(violations[0]!.rowIds).toEqual(['s2', 's3']);
+    expect(isStagedRowsIntact(table, { ...config, initialVisibleCount: 1 })).toBe(false);
+  });
+
   it('행 반복 행 · 동적 행 그룹 행 · 표시 조건이 걸린 행은 넣을 수 없다', () => {
     const table: TableRow[] = [
       { ...rows[1]!, repeatIndex: 1 },
@@ -227,5 +266,23 @@ describe('remapStagedRowIds — 행 id 가 새로 발번되는 경로', () => {
   it('꺼져 있거나 없는 설정은 null', () => {
     expect(remapStagedRowIds(null, new Map())).toBeNull();
     expect(remapStagedRowIds({ ...config, enabled: false }, new Map())).toBeNull();
+  });
+});
+
+describe('resolveStagedRows — 실제로 동작시킬 설정인가', () => {
+  it('성립하는 설정은 그대로, 구조가 깨진 설정은 null (전부 보이는 쪽으로 물러난다)', () => {
+    expect(resolveStagedRows(rows, config)).toBe(config);
+    expect(resolveStagedRows(rows, null)).toBeNull();
+    expect(resolveStagedRows(rows, { ...config, enabled: false })).toBeNull();
+    // 묶음 행 하나가 사라졌거나 사이에 다른 행이 끼었다
+    expect(resolveStagedRows(rows.filter((row) => row.id !== 's3'), config)).toBeNull();
+    // 묶음 행에 보기 옵션 칸이 들어왔다
+    const withChoice = rows.map((row) =>
+      row.id === 's2'
+        ? { ...row, cells: [{ id: 'opt', content: '①', type: 'choice_opt' as const }] }
+        : row,
+    );
+    expect(resolveStagedRows(withChoice, config)).toBeNull();
+    expect(stagedOptionalCellIds(withChoice, config, {}).size).toBe(0);
   });
 });

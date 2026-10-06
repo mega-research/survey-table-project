@@ -6,7 +6,7 @@ import { isStagedRowsIntact } from '@/features/question-renderer/utils/staged-ro
 import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
 import { disableRowRepeat, expandRepeatRows, isRowRepeatIntact } from '@/lib/question/row-repeat';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
-import type { Question } from '@/types/survey';
+import type { Question, StagedRowsConfig } from '@/types/survey';
 
 interface QuestionTableFieldsProps {
   question: Question;
@@ -111,11 +111,17 @@ export function QuestionTableFields({
             return next;
           });
         }}
-        onStagedRowsConfigChange={(config) => {
-          // 구조는 건드리지 않는다 — 설정만 바꾼다. 끌 때는 명시적 null(키를 지우면 부분 패치
-          // 저장이 undefined 를 "미변경"으로 읽어 DB 에 이전 설정이 남는다).
-          setFormData((prev) => ({ ...prev, stagedRowsConfig: config }));
-        }}
+        // 행 차례로 열기는 테이블 유형에서만 동작한다(응답 화면의 표 렌더러가 읽는다). 보기·순위
+        // 문항의 내장 표에는 설정 카드를 내지 않는다 — 핸들러를 주지 않으면 카드가 그려지지 않는다.
+        {...((formData.type ?? question.type) === 'table'
+          ? {
+              onStagedRowsConfigChange: (config: StagedRowsConfig | null) => {
+                // 구조는 건드리지 않는다 — 설정만 바꾼다. 끌 때는 명시적 null(키를 지우면 부분
+                // 패치 저장이 undefined 를 "미변경"으로 읽어 DB 에 이전 설정이 남는다).
+                setFormData((prev) => ({ ...prev, stagedRowsConfig: config }));
+              },
+            }
+          : {})}
         onDynamicRowConfigsChange={(configs) => {
           setFormData((prev) => {
             const next: Partial<Question> = { ...prev };

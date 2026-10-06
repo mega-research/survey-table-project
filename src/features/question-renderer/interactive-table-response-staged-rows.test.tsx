@@ -145,6 +145,28 @@ describe('행 차례로 열기 — 응답 화면', () => {
     expect(JSON.parse(screen.getByTestId('value').textContent!).s2a).toBe('일본');
   });
 
+  it('구조가 깨진 설정은 동작시키지 않는다 — 전부 보이고 버튼이 없다', () => {
+    // 묶음 행에 보기 옵션 칸이 든 표. 그 선택은 칸 값이 아닌 곳에 저장돼 열고 닫기가 따라가지 못한다.
+    const withChoice: TableRow[] = rows.map((row) =>
+      row.id === 's3'
+        ? { ...row, cells: [{ id: 'opt', content: '①', type: 'choice_opt' }, inputCell('s3b')] }
+        : row,
+    );
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={withChoice}
+        stagedRowsConfig={config}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+      />,
+    );
+    expect(document.querySelector('[data-row-id="s4"]')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '국가 추가' })).not.toBeInTheDocument();
+  });
+
   it('설정이 꺼져 있으면 전부 보이고 버튼이 없다', () => {
     render(
       <InteractiveTableResponse

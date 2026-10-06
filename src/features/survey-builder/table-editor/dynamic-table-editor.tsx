@@ -813,12 +813,16 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         onChange={props.onRowRepeatConfigChange}
       />
 
-      {/* 행 차례로 열기 설정 — 저작된 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다 */}
-      <StagedRowsSettingsCard
-        rows={currentRows}
-        config={props.stagedRowsConfig}
-        onChange={props.onStagedRowsConfigChange}
-      />
+      {/* 행 차례로 열기 설정 — 저작된 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다.
+          호스트가 핸들러를 줄 때만 그린다: 응답 화면이 이 설정을 읽는 것은 테이블 유형뿐이라,
+          보기·순위 문항의 내장 표에서는 켜도 아무 일도 일어나지 않는다. */}
+      {props.onStagedRowsConfigChange && (
+        <StagedRowsSettingsCard
+          rows={currentRows}
+          config={props.stagedRowsConfig}
+          onChange={props.onStagedRowsConfigChange}
+        />
+      )}
 
       {/* 동적 행 그룹 설정 */}
       <Card>

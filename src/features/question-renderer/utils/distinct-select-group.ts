@@ -4,9 +4,10 @@
  * 화면의 회색 비활성과 차단형 검증이 이 모듈 하나의 판정을 쓴다 — 갈리면 "회색인데 검증은 통과"
  * 하거나 "고를 수 있었는데 다음에서 막힘"이 생긴다 (CONTEXT.md "중복 불가 묶음").
  */
+import { gateSubscriptionKeys } from '@/features/question-renderer/cells/gate-value-selector';
 import { isCellEnabled } from '@/lib/survey/cell-gating';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import type { TableCell } from '@/types/survey';
-import { collectGateLeaves } from '@/utils/cell-gate-tree';
 import { findOptionByStored, unwrapOptionId } from '@/utils/table-cell-semantics';
 
 /**
@@ -20,11 +21,18 @@ export function distinctGroupOf(cell: TableCell): string | null {
   return name ? name : null;
 }
 
-/** 이 칸이 지금 고른 보기 값 — 없거나, 게이팅으로 닫힌 칸이면 null. */
+/**
+ * 이 칸이 지금 고른 보기 값 — 없거나, 게이팅으로 닫힌 칸이면 null.
+ *
+ * 「닫혔는가」는 셀 게이팅 평가기가 정한다. 보기 선택으로 열리는 칸(choice-selected)은 표 응답 안
+ * 예약 키의 선택 집합이 있어야 판정된다 — 넘기지 않으면 그 조건이 늘 미충족이라, 실제로 열린 칸이
+ * 닫힌 것으로 빠져 중복이 통과한다.
+ */
 function liveSelection(
   cell: TableCell,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[],
+  choiceSelection: ReadonlySet<string>,
 ): string | null {
   const stored = unwrapOptionId(cellValues[cell.id]);
   if (!stored) return null;
@@ -32,7 +40,9 @@ function liveSelection(
   // 고른 것으로 치지 않는다 — 화면에 보이지 않는 값이 보기를 차지하면 응답자가 풀 수 없다.
   const option = findOptionByStored(cell.selectOptions ?? [], stored);
   if (!option) return null;
-  return isCellEnabled(cell, cellValues, tableCells) ? (option.value ?? option.id) : null;
+  return isCellEnabled(cell, cellValues, tableCells, choiceSelection)
+    ? (option.value ?? option.id)
+    : null;
 }
 
 /** 같은 묶음의 다른 칸들 (자기 제외). 묶음 이름이 없으면 빈 목록. */
@@ -52,8 +62,9 @@ export function takenDistinctValues(
   cellValues: Record<string, unknown>,
 ): Set<string> {
   const taken = new Set<string>();
+  const choiceSelection = collectTableChoiceSelection(cellValues);
   for (const peer of distinctGroupPeers(cell, tableCells)) {
-    const selected = liveSelection(peer, cellValues, tableCells);
+    const selected = liveSelection(peer, cellValues, tableCells, choiceSelection);
     if (selected !== null) taken.add(selected);
   }
   return taken;
@@ -65,10 +76,11 @@ export function findDistinctViolations(
   cellValues: Record<string, unknown>,
 ): string[] {
   const cellIdsByChoice = new Map<string, string[]>();
+  const choiceSelection = collectTableChoiceSelection(cellValues);
   for (const cell of tableCells) {
     const group = distinctGroupOf(cell);
     if (group === null) continue;
-    const selected = liveSelection(cell, cellValues, tableCells);
+    const selected = liveSelection(cell, cellValues, tableCells, choiceSelection);
     if (selected === null) continue;
     const key = JSON.stringify([group, selected]);
     cellIdsByChoice.set(key, [...(cellIdsByChoice.get(key) ?? []), cell.id]);
@@ -77,8 +89,10 @@ export function findDistinctViolations(
 }
 
 /**
- * 비활성 보기 계산이 읽는 응답 키 — 같은 묶음 다른 칸들의 값과, 그 칸들이 게이팅 칸이면
- * 직접 컨트롤러의 값(닫힌 칸의 선택을 빼는 데 쓴다). 묶음 구성원이 아니면 빈 목록.
+ * 비활성 보기 계산이 읽는 응답 키 — 같은 묶음 다른 칸들의 값과, 그 칸들의 게이팅이 읽는 키 전부.
+ * 게이팅 키는 셀 게이팅 구독과 같은 함수로 구한다(컨트롤러의 컨트롤러까지, 보기 선택 조건이면
+ * 표 응답 안 예약 키) — 평가기가 보는 값과 구독하는 값이 어긋나면 상류가 바뀌어도 비활성 표시가
+ * 따라오지 않는다. 묶음 구성원이 아니면 빈 목록.
  */
 export function distinctSubscriptionKeys(
   cell: TableCell,
@@ -87,9 +101,8 @@ export function distinctSubscriptionKeys(
   const keys = new Set<string>();
   for (const peer of distinctGroupPeers(cell, tableCells)) {
     keys.add(peer.id);
-    for (const leaf of collectGateLeaves(peer.enabledWhen)) {
-      if (leaf.kind !== 'choice-selected') keys.add(leaf.controllerCellId);
-    }
+    if (!peer.enabledWhen) continue;
+    for (const key of gateSubscriptionKeys(peer.enabledWhen, tableCells)) keys.add(key);
   }
   return [...keys];
 }

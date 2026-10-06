@@ -82,6 +82,19 @@ describe('행 차례로 열기 설정 카드', () => {
     expect(screen.getByRole('button', { name: '차례로 열기 켜기' })).toBeDisabled();
   });
 
+  it('보기 옵션 셀이 든 행은 지정을 막는다 — 그 선택은 행의 칸 값이 아닌 곳에 저장된다', async () => {
+    const user = userEvent.setup();
+    const withChoice = rows.map((row) =>
+      row.id === 's3' ? { ...row, cells: [cell('opt', 'choice_opt'), cell('s3b')] } : row,
+    );
+    render(<StagedRowsSettingsCard rows={withChoice} onChange={vi.fn()} />);
+
+    await pickRange(user, 's1', 's4');
+
+    expect(screen.getByText(/보기 옵션·순위 옵션 셀이 든 행/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '차례로 열기 켜기' })).toBeDisabled();
+  });
+
   it('행 반복으로 펼쳐진 2벌 이후 행은 후보에 나오지 않는다', () => {
     const withRepeat: TableRow[] = [
       ...rows,
