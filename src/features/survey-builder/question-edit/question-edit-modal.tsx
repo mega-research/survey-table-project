@@ -124,6 +124,9 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.rowRepeatConfig !== undefined
       ? { rowRepeatConfig: question.rowRepeatConfig }
       : {}),
+    ...(question.stagedRowsConfig !== undefined
+      ? { stagedRowsConfig: question.stagedRowsConfig }
+      : {}),
     ...(question.dynamicRowConfigs !== undefined
       ? { dynamicRowConfigs: question.dynamicRowConfigs }
       : {}),
@@ -623,6 +626,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.priorAnswerDisabled ?? question?.priorAnswerDisabled,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
               rowRepeatConfig: currentFormData.rowRepeatConfig ?? question?.rowRepeatConfig,
+              stagedRowsConfig: currentFormData.stagedRowsConfig ?? question?.stagedRowsConfig,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
               // 소유하지 않는다 — hideColumnLabels 와 동일한 silent drop 방지 머지.

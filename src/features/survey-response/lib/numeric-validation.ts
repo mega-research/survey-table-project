@@ -8,6 +8,7 @@
  */
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
+import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
 import {
   areAllFormulaRefsEmpty,
   evaluateCellFormula,
@@ -913,11 +914,19 @@ export function collectNumericIssues(
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
     const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
+    // 행 차례로 열기: 「처음 보이는 행」과 「값이 있는 마지막 행」 뒤의 묶음 행은 필수에서 뺀다.
+    // 행 반복과 달리 범위가 값에서 나온다 — 적기 시작한 행까지는 평범한 행으로 검사한다.
+    const stagedOptional = stagedOptionalCellIds(
+      question.tableRowsData,
+      question.stagedRowsConfig,
+      cellValues,
+    );
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
+        !stagedOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —

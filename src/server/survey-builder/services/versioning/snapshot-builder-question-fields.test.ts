@@ -72,6 +72,7 @@ const SENTINEL = {
   sumConstraints: [],
   dynamicRowConfigs: [],
   rowRepeatConfig: { enabled: true, templateRowIds: ['r1'], maxRepeats: 20 },
+  stagedRowsConfig: { enabled: true, rowIds: ['r1', 'r2'], initialVisibleCount: 1 },
   hideColumnLabels: true,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',

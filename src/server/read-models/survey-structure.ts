@@ -153,6 +153,9 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.rowRepeatConfig != null
       ? { rowRepeatConfig: q.rowRepeatConfig as NonNullable<QuestionType['rowRepeatConfig']> }
       : {}),
+    ...(q.stagedRowsConfig != null
+      ? { stagedRowsConfig: q.stagedRowsConfig as NonNullable<QuestionType['stagedRowsConfig']> }
+      : {}),
     ...(q.numberFormat != null
       ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
       : {}),

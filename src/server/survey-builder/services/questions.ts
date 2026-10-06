@@ -76,6 +76,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     priorAnswerDisabled: data.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     rowRepeatConfig: data.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
+    stagedRowsConfig: data.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
     hideColumnLabels: data.hideColumnLabels,
     stickyColumnCount: data.stickyColumnCount ?? null,
     exportCellOrder: data.exportCellOrder ?? null,

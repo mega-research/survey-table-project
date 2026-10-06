@@ -1,14 +1,26 @@
 import { useMemo } from 'react';
 
-import { useDynamicRowLayout } from '@/features/question-renderer/hooks/use-dynamic-row-layout';
+import {
+  type StagedControlPlacement,
+  useDynamicRowLayout,
+} from '@/features/question-renderer/hooks/use-dynamic-row-layout';
 import { useDynamicRowState } from '@/features/question-renderer/hooks/use-dynamic-row-state';
 import {
   type UseRowRepeatReturn,
   useRowRepeat,
 } from '@/features/question-renderer/hooks/use-row-repeat';
+import {
+  type UseStagedRowsReturn,
+  useStagedRows,
+} from '@/features/question-renderer/hooks/use-staged-rows';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import { collectTableCells } from '@/lib/survey/cell-gating';
-import type { DynamicRowGroupConfig, RowRepeatConfig, TableRow } from '@/types/survey';
+import type {
+  DynamicRowGroupConfig,
+  RowRepeatConfig,
+  StagedRowsConfig,
+  TableRow,
+} from '@/types/survey';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 /**
@@ -41,6 +53,8 @@ interface UseDynamicRowsParams {
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 구조에 펼쳐진 벌 중 몇 벌을 보일지 정하는 데만 쓴다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 행 차례로 열기 설정 — 저작된 행 묶음 중 몇 행을 보일지 정하는 데만 쓴다 */
+  stagedRowsConfig?: StagedRowsConfig | null | undefined;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   headerRowCount: number;
@@ -69,6 +83,10 @@ interface UseDynamicRowsReturn {
   toggleGroupExpanded: (groupId: string) => void;
   // 행 반복 (구조에 펼쳐진 벌의 노출 제어)
   rowRepeat: UseRowRepeatReturn;
+  // 행 차례로 열기 (저작된 행 묶음의 노출 제어)
+  stagedRows: UseStagedRowsReturn;
+  /** 표 안 버튼 줄의 자리 — 보이는 묶음 행이 없으면 null (호출부가 표 아래 버튼으로 폴백) */
+  stagedControl: StagedControlPlacement | null;
 }
 
 export function useDynamicRows({
@@ -79,6 +97,7 @@ export function useDynamicRows({
   hiddenGroupIds,
   dynamicRowConfigs,
   rowRepeatConfig,
+  stagedRowsConfig,
   value,
   onChange,
   headerRowCount,
@@ -119,6 +138,17 @@ export function useDynamicRows({
   });
   const hiddenRepeatRowIds = rowRepeat.hiddenRowIds;
 
+  // 1-c) 행 차례로 열기 가시성 — 행 반복과 같은 층이고 같은 이유로 구조 전체 행을 넘긴다.
+  //      다른 점은 행의 출처뿐이다: 저쪽은 복제된 벌, 이쪽은 저작된 평범한 행.
+  const stagedRows = useStagedRows({
+    questionId,
+    rows,
+    stagedRowsConfig,
+    value,
+    onChange,
+  });
+  const hiddenStagedRowIds = stagedRows.hiddenRowIds;
+
   // 2) 가시 행 필터링 — 행 displayCondition 결과 적용 + 동적 그룹 행 제외 + rowspan 재계산
   const visibleRows = useMemo(() => {
     if (columnFilteredRows.length === 0) return columnFilteredRows;
@@ -130,6 +160,10 @@ export function useDynamicRows({
 
     if (hiddenRepeatRowIds.size > 0) {
       filtered = filtered.filter((row) => !hiddenRepeatRowIds.has(row.id));
+    }
+
+    if (hiddenStagedRowIds.size > 0) {
+      filtered = filtered.filter((row) => !hiddenStagedRowIds.has(row.id));
     }
 
     if (hasDynamicRows) {
@@ -153,21 +187,37 @@ export function useDynamicRows({
     hasDynamicRows,
     groupConfigMap,
     hiddenRepeatRowIds,
+    hiddenStagedRowIds,
   ]);
 
+  // 버튼 줄 앵커 판정용 — 묶음의 행 id. 가려진 행은 visibleRows 에 없으므로 레이아웃은
+  // "보이는 마지막 묶음 행"만 찾으면 된다.
+  const stagedRowIds = useMemo(
+    () =>
+      stagedRows.isActive && stagedRowsConfig ? new Set(stagedRowsConfig.rowIds) : undefined,
+    [stagedRows.isActive, stagedRowsConfig],
+  );
+
   // 3) 동적 행 레이아웃 — displayRows, 셀렉터 배치, grid 좌표
-  const { displayRows, rowGridMap, selectorGridMap, groupSelectedCountMap, expandedGroupRows } =
-    useDynamicRowLayout({
-      rows,
-      columnFilteredRows,
-      visibleRows,
-      groupConfigMap,
-      selectedRowIds,
-      hasDynamicRows,
-      headerRowCount,
-      expandedGroupIds,
-      hiddenGroupIds,
-    });
+  const {
+    displayRows,
+    rowGridMap,
+    selectorGridMap,
+    groupSelectedCountMap,
+    expandedGroupRows,
+    stagedControl,
+  } = useDynamicRowLayout({
+    rows,
+    columnFilteredRows,
+    visibleRows,
+    groupConfigMap,
+    selectedRowIds,
+    hasDynamicRows,
+    headerRowCount,
+    expandedGroupIds,
+    hiddenGroupIds,
+    stagedRowIds,
+  });
 
   // 4) 행별 완료 상태 맵 (displayRows + 펼친 그룹 행 포함)
   const rowCompletionMap = useMemo(() => {
@@ -203,5 +253,7 @@ export function useDynamicRows({
     expandedGroupIds,
     toggleGroupExpanded,
     rowRepeat,
+    stagedRows,
+    stagedControl,
   };
 }

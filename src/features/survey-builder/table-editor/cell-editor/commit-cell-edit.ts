@@ -260,6 +260,7 @@ export async function commitCellEdit({
               sumConstraints: question.sumConstraints,
               dynamicRowConfigs: question.dynamicRowConfigs,
               rowRepeatConfig: question.rowRepeatConfig,
+              stagedRowsConfig: question.stagedRowsConfig,
               hideColumnLabels: question.hideColumnLabels,
               stickyColumnCount: question.stickyColumnCount,
               mobileOriginalTable: question.mobileOriginalTable,

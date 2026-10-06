@@ -122,6 +122,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
+    stagedRowsConfig: question.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
     hideColumnLabels: question.hideColumnLabels,
     stickyColumnCount: question.stickyColumnCount ?? null,
     exportCellOrder: question.exportCellOrder ?? null,
@@ -194,6 +195,7 @@ const QUESTION_UPSERT_SET = {
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,
+  stagedRowsConfig: sql`excluded.staged_rows_config`,
   hideColumnLabels: sql`excluded.hide_column_labels`,
   stickyColumnCount: sql`excluded.sticky_column_count`,
   exportCellOrder: sql`excluded.export_cell_order`,

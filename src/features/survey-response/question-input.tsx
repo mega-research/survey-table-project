@@ -374,6 +374,9 @@ function QuestionInputControl({
           {...(question.rowRepeatConfig != null
             ? { rowRepeatConfig: question.rowRepeatConfig }
             : {})}
+          {...(question.stagedRowsConfig != null
+            ? { stagedRowsConfig: question.stagedRowsConfig }
+            : {})}
           {...(question.hideColumnLabels !== undefined
             ? { hideColumnLabels: question.hideColumnLabels }
             : {})}

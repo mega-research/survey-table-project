@@ -80,6 +80,7 @@ interface SnapshotQuestion {
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   rowRepeatConfig?: Question['rowRepeatConfig'] | undefined;
+  stagedRowsConfig?: Question['stagedRowsConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
   stickyColumnCount?: number | null | undefined;
   mobileOriginalTable?: boolean | undefined;
@@ -180,6 +181,7 @@ export function buildSurveySnapshot(
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
       rowRepeatConfig: q.rowRepeatConfig,
+      stagedRowsConfig: q.stagedRowsConfig,
       hideColumnLabels: q.hideColumnLabels,
       stickyColumnCount: q.stickyColumnCount,
       mobileOriginalTable: q.mobileOriginalTable,

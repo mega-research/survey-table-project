@@ -138,7 +138,10 @@ export interface TableQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig'> {
+    Pick<
+      Question,
+      'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig' | 'stagedRowsConfig'
+    > {
   type: 'table';
 }
 

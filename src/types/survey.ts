@@ -583,6 +583,9 @@ export interface TableCell {
   optionTextSlot?: boolean;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
+  // 런타임 전용: 이 세로 병합 칸이 표 안에 끼운 버튼 줄(행 차례로 열기)을 가로질러 덮는 줄 수.
+  // 격자 배치에만 쓰고 의미상 rowspan(접근성·모바일 투영)은 건드리지 않는다.
+  _gridRowSpanExtra?: number;
   /**
    * 응답 인용 사용 여부. 그 자체가 질문 노릇을 하는 셀
    * (radio/checkbox/select/input/ranking)에서만 의미가 있다.
@@ -712,6 +715,22 @@ export interface RowRepeatConfig {
   templateRowIds: string[];
   /** 최대 반복 벌 수 (기본 20) */
   maxRepeats: number;
+  /** 추가 버튼 문구 (기본 '행 추가') */
+  addLabel?: string;
+}
+
+/**
+ * 행 차례로 열기 — 저작자가 만든 연속된 행 묶음을 처음 몇 행만 보이고 응답자가 `+` 로 한 행씩 연다.
+ *
+ * 행 반복과 달리 구조를 건드리지 않는다. 묶음의 행은 평범한 행이고 이 설정은 가시성만 정한다
+ * (CONTEXT.md "행 차례로 열기", ADR 0028).
+ */
+export interface StagedRowsConfig {
+  enabled: boolean;
+  /** 묶음을 이루는 연속 행 id 목록 */
+  rowIds: string[];
+  /** 처음 보이는 행 수 (1 이상, 묶음 행 수 미만) */
+  initialVisibleCount: number;
   /** 추가 버튼 문구 (기본 '행 추가') */
   addLabel?: string;
 }
@@ -881,6 +900,8 @@ export interface Question {
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다
   rowRepeatConfig?: RowRepeatConfig | null;
+  // 행 차례로 열기 — 처음 몇 행만 보이고 + 로 여는 저작된 행 묶음 (null = 꺼짐)
+  stagedRowsConfig?: StagedRowsConfig | null;
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
   /**

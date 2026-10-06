@@ -597,6 +597,7 @@ function QuestionTestInput({
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
           rowRepeatConfig={question.rowRepeatConfig}
+          stagedRowsConfig={question.stagedRowsConfig}
           allResponses={allResponses}
           allQuestions={allQuestions}
           ignoreDisplayConditions

@@ -55,6 +55,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   sumConstraints: [],
   dynamicRowConfigs: [],
   rowRepeatConfig: { enabled: true, templateRowIds: ['r1'], maxRepeats: 20 },
+  stagedRowsConfig: { enabled: true, rowIds: ['r1', 'r2'], initialVisibleCount: 1 },
   hideColumnLabels: true,
   stickyColumnCount: 2,
   mobileOriginalTable: true,

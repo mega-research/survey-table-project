@@ -44,6 +44,12 @@ interface MobileItemCardsProps {
   authoredColumns?: readonly TableColumn[] | undefined;
   visibleColumns?: readonly TableColumn[] | undefined;
   visibleHeaderGrid?: HeaderCell[][] | undefined;
+  /**
+   * 「행 차례로 열기」 버튼 — `rowIds` 의 행에서 나온 카드 중 마지막 것 아래에 `node` 를 세운다.
+   * 블록 모드는 블록마다(같은 행이 블록마다 카드를 낸다), 블록이 없으면 목록에서 한 번.
+   * 어느 목록에도 그 행의 카드가 없으면 맨 끝에 한 번 둔다 — 버튼이 사라지는 일은 없다.
+   */
+  afterRows?: { rowIds: ReadonlySet<string>; node: ReactNode } | undefined;
 }
 
 /**
@@ -63,6 +69,7 @@ export const MobileItemCards = React.memo(function MobileItemCards({
   authoredColumns,
   visibleColumns,
   visibleHeaderGrid,
+  afterRows,
 }: MobileItemCardsProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -166,6 +173,28 @@ export const MobileItemCards = React.memo(function MobileItemCards({
     );
   };
 
+  /** 카드 목록 + 그 목록에서 `afterRows` 행의 마지막 카드 아래에 선 버튼 */
+  const anchorIndexOf = (list: readonly ItemCard[]) =>
+    afterRows ? list.findLastIndex((card) => afterRows.rowIds.has(card.rowId)) : -1;
+  const renderCardList = (list: readonly ItemCard[], columnLabels?: readonly string[]) => {
+    const anchorIndex = anchorIndexOf(list);
+    return list.map((card, index) =>
+      index === anchorIndex ? (
+        <React.Fragment key={card.key}>
+          {renderCard(card, columnLabels)}
+          <div data-testid="item-card-row-controls">{afterRows?.node}</div>
+        </React.Fragment>
+      ) : (
+        renderCard(card, columnLabels)
+      ),
+    );
+  };
+  const cardLists = blocks ? blocks.blocks.map((block) => block.cards) : [cards];
+  const trailingControls =
+    afterRows && cardLists.every((list) => anchorIndexOf(list) === -1) ? (
+      <div data-testid="item-card-row-controls">{afterRows.node}</div>
+    ) : null;
+
   const cardTitle = (card: ItemCard) => {
     const cell = card.titleCells[card.titleCells.length - 1];
     return substituteTokens(cell ? itemCardTitleText(cell) : card.fallbackTitle, attrs, quotes);
@@ -228,10 +257,11 @@ export const MobileItemCards = React.memo(function MobileItemCards({
               </div>
             )}
             <div className="space-y-2.5 p-2.5">
-              {block.cards.map((card) => renderCard(card, blocks.columnLabels))}
+              {renderCardList(block.cards, blocks.columnLabels)}
             </div>
           </section>
         ))}
+        {trailingControls}
       </div>
     );
   }
@@ -239,7 +269,8 @@ export const MobileItemCards = React.memo(function MobileItemCards({
   return (
     <div className="space-y-3">
       {dynamicGroupPicker}
-      {cards.map((card) => renderCard(card))}
+      {renderCardList(cards)}
+      {trailingControls}
     </div>
   );
 });

@@ -150,6 +150,7 @@ export const TableQuestionSchema = base
     tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),
     dynamicRowConfigs: z.custom<NonNullable<Question['dynamicRowConfigs']>>().optional(),
     rowRepeatConfig: z.custom<NonNullable<Question['rowRepeatConfig']>>().optional(),
+    stagedRowsConfig: z.custom<NonNullable<Question['stagedRowsConfig']>>().optional(),
   });
 
 export const NoticeQuestionSchema = base.extend({

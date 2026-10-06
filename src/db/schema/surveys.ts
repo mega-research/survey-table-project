@@ -38,6 +38,7 @@ import type {
   QuestionOption,
   RankingConfig,
   RowRepeatConfig,
+  StagedRowsConfig,
   SelectLevel,
   SumConstraint,
   SurveyLookup,
@@ -296,6 +297,8 @@ export const questions = pgTable(
     // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다.
     // 펼쳐진 행 자체는 table_rows_data 에 눌러앉고, 이 컬럼은 템플릿 지정과 상한만 쥔다.
     rowRepeatConfig: jsonb('row_repeat_config').$type<RowRepeatConfig>(),
+    // 행 차례로 열기 (0132) — 저작된 행 묶음의 가시성 설정. 구조는 건드리지 않는다 (ADR 0028)
+    stagedRowsConfig: jsonb('staged_rows_config').$type<StagedRowsConfig>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
     priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
     priorAnswerDisabled: boolean('prior_answer_disabled'),
