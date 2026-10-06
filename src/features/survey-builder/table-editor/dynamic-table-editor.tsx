@@ -14,7 +14,7 @@ import { resolveUngroupedSelectionType } from '@/features/question-renderer/util
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, StagedRowsConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -34,6 +34,7 @@ import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
 import { RowRepeatSettingsCard } from './row-repeat-settings-card';
+import { StagedRowsSettingsCard } from './staged-rows-settings-card';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
@@ -67,6 +68,8 @@ interface DynamicTableEditorProps {
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 행 차례로 열기 설정 — 구조는 그대로이고 응답 화면의 가시성만 정한다 */
+  stagedRowsConfig?: StagedRowsConfig | null | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
@@ -77,6 +80,8 @@ interface DynamicTableEditorProps {
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
   /** null 을 주면 반복을 끈다 (뒤쪽 벌이 구조에서 걷힌다) */
   onRowRepeatConfigChange?: (config: RowRepeatConfig | null) => void;
+  /** null 을 주면 끈다 (행은 그대로다) */
+  onStagedRowsConfigChange?: (config: StagedRowsConfig | null) => void;
 }
 
 // ── 컴포넌트 ──
@@ -806,6 +811,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         sumConstraints={mobileTableQuestion?.sumConstraints}
         tableValidationRules={mobileTableQuestion?.tableValidationRules}
         onChange={props.onRowRepeatConfigChange}
+      />
+
+      {/* 행 차례로 열기 설정 — 저작된 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다 */}
+      <StagedRowsSettingsCard
+        rows={currentRows}
+        config={props.stagedRowsConfig}
+        onChange={props.onStagedRowsConfigChange}
       />
 
       {/* 동적 행 그룹 설정 */}

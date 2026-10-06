@@ -13,6 +13,7 @@ import { generateId } from '@/lib/utils';
 import type { Question, TableColumn, TableRow } from '@/types/survey';
 import { remapCellRefs } from '@/utils/table-cell-refs';
 
+import { remapStagedRowIds } from '@/features/question-renderer/utils/staged-rows';
 import { regenerateCellOptionIds } from '@/features/survey-builder/table-editor/utils/drag-copy-utils';
 
 /** 복제된 표 조각 — 값이 있는 키만 담는다 (표가 없는 질문이면 빈 객체). */
@@ -21,6 +22,7 @@ export interface DuplicatedQuestionTable {
   tableRowsData?: TableRow[];
   dynamicRowConfigs?: NonNullable<Question['dynamicRowConfigs']>;
   rowRepeatConfig?: NonNullable<Question['rowRepeatConfig']>;
+  stagedRowsConfig?: NonNullable<Question['stagedRowsConfig']>;
 }
 
 export function duplicateQuestionTable(
@@ -69,6 +71,8 @@ export function duplicateQuestionTable(
   });
 
   const repeat = remapRowRepeatIds(remappedRows ?? [], question.rowRepeatConfig, rowIdMap);
+  // 행 차례로 열기 묶음도 행 id 를 담는다 — 옮기지 않으면 복제본의 묶음이 통째로 빈다.
+  const staged = remapStagedRowIds(question.stagedRowsConfig, rowIdMap);
 
   return {
     ...(newColumns !== undefined ? { tableColumns: newColumns } : {}),
@@ -77,5 +81,6 @@ export function duplicateQuestionTable(
       : {}),
     ...(newDynamicRowConfigs !== undefined ? { dynamicRowConfigs: newDynamicRowConfigs } : {}),
     ...(repeat.config ? { rowRepeatConfig: repeat.config } : {}),
+    ...(staged ? { stagedRowsConfig: staged } : {}),
   };
 }

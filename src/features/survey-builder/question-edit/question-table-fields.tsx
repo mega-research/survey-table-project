@@ -2,6 +2,7 @@
 
 import { Label } from '@/components/ui/label';
 import { TablePreview } from '@/features/question-renderer/table-preview';
+import { isStagedRowsIntact } from '@/features/question-renderer/utils/staged-rows';
 import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
 import { disableRowRepeat, expandRepeatRows, isRowRepeatIntact } from '@/lib/question/row-repeat';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
@@ -61,6 +62,7 @@ export function QuestionTableFields({
         answerQuoteEnabled={answerQuoteEnabled}
         dynamicRowConfigs={formData.dynamicRowConfigs}
         rowRepeatConfig={formData.rowRepeatConfig}
+        stagedRowsConfig={formData.stagedRowsConfig}
         onTableChange={(data) => {
           setFormData((prev) => {
             // 템플릿 행을 지우거나 흩어 놓으면 설정이 낡는다. 구조를 되돌리는 것으로
@@ -75,6 +77,11 @@ export function QuestionTableFields({
               // 1벌(템플릿)의 구조 변경만 뒤 벌로 전파된다.
               tableRowsData: expandRepeatRows(data.tableRowsData, prev.rowRepeatConfig),
               ...(intact ? {} : { rowRepeatConfig: null }),
+              // 행 차례로 열기 묶음도 행 id 로 가리킨다 — 묶음 행이 지워지거나 사이에 다른 행이
+              // 끼면 설정을 끈다. 명시적 null 이어야 저장이 "미변경"으로 읽지 않는다(위와 같다).
+              ...(isStagedRowsIntact(data.tableRowsData, prev.stagedRowsConfig)
+                ? {}
+                : { stagedRowsConfig: null }),
             };
             // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
             // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
@@ -88,6 +95,11 @@ export function QuestionTableFields({
             if (config) {
               next.rowRepeatConfig = config;
               next.tableRowsData = expandRepeatRows(prev.tableRowsData ?? [], config);
+              // 반복 블록이 「행 차례로 열기」 묶음과 겹치면 묶음을 끈다 — 한 행에 숨는 이유가
+              // 둘이면 열린 행 수가 화면과 어긋난다.
+              if (!isStagedRowsIntact(next.tableRowsData, prev.stagedRowsConfig)) {
+                next.stagedRowsConfig = null;
+              }
             } else {
               // 끄면 뒤쪽 벌을 걷어낸다 — 남겨두면 응답 화면에 늘 펼쳐진 채 나온다.
               // **명시적 null 이어야 한다.** 키를 지우면 부분 패치 저장이 undefined 를
@@ -98,6 +110,11 @@ export function QuestionTableFields({
             }
             return next;
           });
+        }}
+        onStagedRowsConfigChange={(config) => {
+          // 구조는 건드리지 않는다 — 설정만 바꾼다. 끌 때는 명시적 null(키를 지우면 부분 패치
+          // 저장이 undefined 를 "미변경"으로 읽어 DB 에 이전 설정이 남는다).
+          setFormData((prev) => ({ ...prev, stagedRowsConfig: config }));
         }}
         onDynamicRowConfigsChange={(configs) => {
           setFormData((prev) => {

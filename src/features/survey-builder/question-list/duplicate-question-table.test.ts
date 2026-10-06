@@ -112,6 +112,31 @@ describe('duplicateQuestionTable', () => {
     expect(out.dynamicRowConfigs![0]!.insertAfterRowId).toBe(out.tableRowsData![0]!.id);
   });
 
+  it('행 차례로 열기 묶음도 새 행 id 를 가리킨다', () => {
+    const base = tableQuestion();
+    const rows = [
+      ...base.tableRowsData!,
+      { id: 'row2', label: '둘째', cells: [cell('c3'), cell('c4')] },
+    ];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      stagedRowsConfig: { enabled: true, rowIds: ['row1', 'row2'], initialVisibleCount: 1 },
+    });
+
+    const out = duplicateQuestionTable(q);
+
+    expect(out.stagedRowsConfig).toEqual({
+      enabled: true,
+      rowIds: out.tableRowsData!.map((row) => row.id),
+      initialVisibleCount: 1,
+    });
+    expect(out.stagedRowsConfig!.rowIds).not.toContain('row1');
+  });
+
+  it('행 차례로 열기를 쓰지 않는 표의 복제본에는 설정 키가 없다', () => {
+    expect('stagedRowsConfig' in duplicateQuestionTable(tableQuestion())).toBe(false);
+  });
+
   it('행 반복 설정과 벌 표식도 새 행 id 를 가리킨다', () => {
     let n = 0;
     const config: RowRepeatConfig = { enabled: true, templateRowIds: ['row1'], maxRepeats: 2 };

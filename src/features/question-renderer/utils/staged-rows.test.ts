@@ -7,8 +7,11 @@ import {
   deriveOpenStagedCount,
   hiddenStagedRowIds,
   isStagedRowsActive,
+  isStagedRowsIntact,
+  remapStagedRowIds,
   stagedOptionalCellIds,
   stagedRowCount,
+  validateStagedRows,
 } from './staged-rows';
 
 function inputRow(id: string, cellIds: string[]): TableRow {
@@ -125,5 +128,104 @@ describe('stagedOptionalCellIds — 필수에서 빼는 칸', () => {
     expect(stagedOptionalCellIds(rows, null, {}).size).toBe(0);
     expect(stagedOptionalCellIds(rows, { ...config, enabled: false }, {}).size).toBe(0);
     expect(stagedOptionalCellIds(undefined, config, {}).size).toBe(0);
+  });
+});
+
+describe('validateStagedRows — 묶음으로 지정해도 되는가', () => {
+  const kinds = (rowIds: string[], initialVisibleCount: number, table = rows) =>
+    validateStagedRows(table, { rowIds, initialVisibleCount }).map((v) => v.kind);
+
+  it('연속된 평범한 행 묶음은 통과한다', () => {
+    expect(kinds(['s1', 's2', 's3', 's4'], 2)).toEqual([]);
+  });
+
+  it('빈 묶음', () => {
+    expect(kinds([], 1)).toEqual(['empty']);
+  });
+
+  it('표에 없는 행', () => {
+    expect(kinds(['s1', 'gone'], 1)).toEqual(['unknown-row']);
+  });
+
+  it('붙어 있지 않은 행', () => {
+    expect(kinds(['s1', 's3'], 1)).toEqual(['not-contiguous']);
+  });
+
+  it('처음 보이는 행 수가 묶음 행 수와 같거나 크면 열 것이 없다', () => {
+    expect(kinds(['s1', 's2'], 2)).toEqual(['initial-count']);
+    expect(kinds(['s1', 's2'], 0)).toEqual(['initial-count']);
+    expect(kinds(['s1', 's2'], 1.5)).toEqual(['initial-count']);
+  });
+
+  it('행 반복 행 · 동적 행 그룹 행 · 표시 조건이 걸린 행은 넣을 수 없다', () => {
+    const table: TableRow[] = [
+      { ...rows[1]!, repeatIndex: 1 },
+      { ...rows[2]!, dynamicGroupId: 'g1' },
+      { ...rows[3]!, displayCondition: { logicType: 'AND', conditions: [] } },
+      rows[4]!,
+    ];
+    const violations = validateStagedRows(table, {
+      rowIds: ['s1', 's2', 's3', 's4'],
+      initialVisibleCount: 1,
+    });
+    expect(violations.map((v) => v.kind).sort()).toEqual([
+      'display-condition',
+      'dynamic-row',
+      'row-repeat',
+    ]);
+    expect(violations.find((v) => v.kind === 'row-repeat')!.rowIds).toEqual(['s1']);
+  });
+});
+
+describe('isStagedRowsIntact — 표가 바뀐 뒤에도 묶음이 성립하는가', () => {
+  it('묶음 행이 전부 살아 있고 붙어 있으면 성립한다', () => {
+    expect(isStagedRowsIntact(rows, config)).toBe(true);
+  });
+
+  it('묶음 밖의 행을 지우거나 옮겨도 성립한다', () => {
+    expect(isStagedRowsIntact(rows.slice(1), config)).toBe(true);
+    expect(isStagedRowsIntact([rows[5]!, ...rows.slice(0, 5)], config)).toBe(true);
+  });
+
+  it('묶음 행이 지워지면 깨진다', () => {
+    expect(isStagedRowsIntact(rows.filter((row) => row.id !== 's3'), config)).toBe(false);
+  });
+
+  it('묶음 사이에 다른 행이 끼면 깨진다', () => {
+    const interleaved = [rows[1]!, rows[0]!, rows[2]!, rows[3]!, rows[4]!];
+    expect(isStagedRowsIntact(interleaved, config)).toBe(false);
+  });
+
+  it('묶음 행이 행 반복 블록이 되거나 표시 조건·동적 행 그룹이 붙으면 깨진다', () => {
+    const withRepeat = rows.map((row) => (row.id === 's2' ? { ...row, repeatIndex: 1 } : row));
+    const withCondition = rows.map((row) =>
+      row.id === 's2' ? { ...row, displayCondition: { logicType: 'AND', conditions: [] } } : row,
+    ) as TableRow[];
+    const withDynamic = rows.map((row) => (row.id === 's2' ? { ...row, dynamicGroupId: 'g' } : row));
+    expect(isStagedRowsIntact(withRepeat, config)).toBe(false);
+    expect(isStagedRowsIntact(withCondition, config)).toBe(false);
+    expect(isStagedRowsIntact(withDynamic, config)).toBe(false);
+  });
+
+  it('꺼져 있거나 없는 설정은 깨질 것이 없다', () => {
+    expect(isStagedRowsIntact([], null)).toBe(true);
+    expect(isStagedRowsIntact([], { ...config, enabled: false })).toBe(true);
+  });
+});
+
+describe('remapStagedRowIds — 행 id 가 새로 발번되는 경로', () => {
+  it('대응표에 있는 행 id 를 새 id 로 옮긴다', () => {
+    const map = new Map([
+      ['s1', 'n1'],
+      ['s2', 'n2'],
+      ['s3', 'n3'],
+      ['s4', 'n4'],
+    ]);
+    expect(remapStagedRowIds(config, map)).toEqual({ ...config, rowIds: ['n1', 'n2', 'n3', 'n4'] });
+  });
+
+  it('꺼져 있거나 없는 설정은 null', () => {
+    expect(remapStagedRowIds(null, new Map())).toBeNull();
+    expect(remapStagedRowIds({ ...config, enabled: false }, new Map())).toBeNull();
   });
 });
