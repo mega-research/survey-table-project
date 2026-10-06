@@ -11,6 +11,10 @@ import {
   useQuestionResponseSelector,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
+import {
+  distinctSubscriptionKeys,
+  takenDistinctValues,
+} from '@/features/question-renderer/utils/distinct-select-group';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
 import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -21,7 +25,12 @@ import { CellContentLayout } from './cell-content-layout';
 import { CheckboxCell } from './checkbox-cell';
 import { useChoiceGroups } from './choice-groups-context';
 import { ChoiceOptCell } from './choice-opt-cell';
-import { createGateValueSelector, gateWantsChoiceSelection, selectNoGateValues } from './gate-value-selector';
+import {
+  createGateValueSelector,
+  createKeyedValueSelector,
+  gateWantsChoiceSelection,
+  selectNoGateValues,
+} from './gate-value-selector';
 import { useGatingTableCells } from './gating-table-cells-context';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
@@ -47,6 +56,7 @@ const CellRouter = React.memo(function CellRouter({
   ariaDescribedBy,
   hintInFlow,
   ignoreInputWidth,
+  disabledOptionValues,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -84,6 +94,7 @@ const CellRouter = React.memo(function CellRouter({
           inputIdScope={inputIdScope}
           ariaInvalid={ariaInvalid}
           ariaDescribedBy={ariaDescribedBy}
+          disabledOptionValues={disabledOptionValues}
         />
       );
     case 'input':
@@ -248,6 +259,32 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     GATABLE_CELL_TYPES.has(cell.type) &&
     !isCellEnabled(cell, gatingCellValues, gatingCells, choiceSelection);
 
+  // 중복 불가 묶음 — 같은 묶음의 다른 선택 칸이 고른 보기는 이 칸의 목록에서 비활성이다.
+  // 게이팅과 같은 구독 원칙: 묶음 구성원(과 그 컨트롤러)의 값만 뽑아 구독해, 묶음 밖의 칸이
+  // 바뀔 때는 재렌더되지 않는다. 묶음 이름이 없는 칸(대다수)은 모듈 상수 선택자를 쓴다.
+  // 묶음은 행을 가로지르므로 표 전체 셀이 있어야 성립한다 — 없으면 같은 행 안에서만 본다.
+  const distinctKeys = useMemo(
+    () => (gatingCells ? distinctSubscriptionKeys(cell, gatingCells) : []),
+    [cell, gatingCells],
+  );
+  const selectDistinctValues = useMemo(
+    () => createKeyedValueSelector(distinctKeys),
+    [distinctKeys],
+  );
+  const sourceDistinctValues = useQuestionResponseSelector(
+    source,
+    questionId,
+    selectDistinctValues,
+  );
+  const distinctCellValues: Record<string, unknown> = source ? sourceDistinctValues : (value ?? {});
+  const disabledOptionValues = useMemo(
+    () =>
+      distinctKeys.length > 0 && gatingCells
+        ? takenDistinctValues(cell, gatingCells, distinctCellValues)
+        : undefined,
+    [cell, distinctKeys, gatingCells, distinctCellValues],
+  );
+
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,
   // radio/select/input 은 문자열 — 빈 배열·빈 객체는 잔존값이 아니므로 재지움 루프를 막는다.
@@ -316,6 +353,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ariaDescribedBy={ariaDescribedBy}
       hintInFlow={hintInFlow}
       ignoreInputWidth={ignoreInputWidth}
+      disabledOptionValues={disabledOptionValues}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

@@ -7,6 +7,7 @@
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
+import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
 import {
@@ -61,6 +62,9 @@ import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { isExclusiveChoiceValue } from './answer-validation';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
+/** 중복 불가 묶음 위반 문구 — 고정이다(저작자 문구를 받지 않는다). */
+export const DISTINCT_SELECT_MESSAGE = '같은 항목을 두 번 선택할 수 없습니다.';
+
 export interface NumericIssue {
   kind:
     | 'range'
@@ -72,7 +76,9 @@ export interface NumericIssue {
     /** 단답형·장문형 응답 품질(최소 글자 수·의미 없는 입력) — 입력칸 아래에 문구가 붙는다 */
     | 'text-quality'
     /** 체크박스 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라갈 때만 생긴다 */
-    | 'selection-max';
+    | 'selection-max'
+    /** 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다 */
+    | 'distinct';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -965,6 +971,20 @@ export function collectNumericIssues(
         ...(visibleOptionTextIssues.detailTargetIds
           ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
           : {}),
+      });
+    }
+
+    // 3-b) 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다. 화면은 다른 칸이
+    //      고른 보기를 비활성으로 막지만, 기능을 켜기 전의 응답·이월 응답으로 들어온 중복은
+    //      여기서 잡는다. 판정은 화면의 비활성 계산과 같은 모듈이다(게이팅으로 닫힌 칸 제외 포함).
+    const distinctViolationIds = findDistinctViolations(tableCells, cellValues).filter((id) =>
+      existingIds.has(id),
+    );
+    if (distinctViolationIds.length > 0) {
+      issues.push({
+        kind: 'distinct',
+        message: DISTINCT_SELECT_MESSAGE,
+        cellIds: distinctViolationIds,
       });
     }
 

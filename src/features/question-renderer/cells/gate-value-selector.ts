@@ -60,7 +60,16 @@ export function createGateValueSelector(
   condition: CellEnableCondition,
   tableCells?: readonly TableCell[],
 ): (questionResponse: unknown) => Record<string, unknown> {
-  const keys = gateSubscriptionKeys(condition, tableCells);
+  return createKeyedValueSelector(gateSubscriptionKeys(condition, tableCells));
+}
+
+/**
+ * 응답에서 주어진 키만 뽑아 구독하는 선택자 — 값이 전부 그대로면 직전 객체를 다시 준다.
+ * 게이팅 컨트롤러 구독과 중복 불가 묶음의 구성원 구독이 같은 캐시 규칙을 쓴다.
+ */
+export function createKeyedValueSelector(
+  keys: readonly string[],
+): (questionResponse: unknown) => Record<string, unknown> {
   if (keys.length === 0) return selectNoGateValues;
   let previous: Record<string, unknown> | undefined;
   return (questionResponse) => {
