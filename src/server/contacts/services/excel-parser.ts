@@ -174,11 +174,18 @@ export async function previewExcel(
     rows.push(obj);
   }
 
+  // 총 행 수는 적재(parseExcelRows)와 같은 규칙으로 센다. ws.rowCount 는 값 없이 서식만
+  // 남은 꼬리 행까지 세어, 171명짜리 명단이 「555 행 적재 시작」으로 보였다.
+  let totalRows = 0;
+  for (let r = startRow; r <= ws.rowCount; r++) {
+    if (readDataRow(ws, r, headers) !== null) totalRows++;
+  }
+
   return {
     sheetNames,
     headers,
     rows,
-    totalRows: ws.rowCount - opts.headerRow,
+    totalRows,
   };
 }
 
@@ -199,17 +206,27 @@ export async function parseExcelRows(
   const headers = readHeaders(ws, opts.headerRow);
   const rows: Array<Record<string, string>> = [];
   for (let r = opts.headerRow + 1; r <= ws.rowCount; r++) {
-    const row = ws.getRow(r);
-    const obj: Record<string, string> = {};
-    let allEmpty = true;
-    headers.forEach((key, idx) => {
-      const value = cellNodeToString(row.getCell(idx + 1));
-      if (value !== '') allEmpty = false;
-      obj[key] = value;
-    });
-    if (!allEmpty) rows.push(obj);
+    const obj = readDataRow(ws, r, headers);
+    if (obj !== null) rows.push(obj);
   }
   return rows;
+}
+
+/** 데이터 행 한 줄. 헤더 열이 전부 비면 null — 시트 끝에 서식만 남은 행이 흔하다. */
+function readDataRow(
+  ws: ExcelJS.Worksheet,
+  rowNumber: number,
+  headers: string[],
+): Record<string, string> | null {
+  const row = ws.getRow(rowNumber);
+  const obj: Record<string, string> = {};
+  let allEmpty = true;
+  headers.forEach((key, idx) => {
+    const value = cellNodeToString(row.getCell(idx + 1));
+    if (value !== '') allEmpty = false;
+    obj[key] = value;
+  });
+  return allEmpty ? null : obj;
 }
 
 function readHeaders(ws: ExcelJS.Worksheet, headerRow: number): string[] {
@@ -320,17 +337,21 @@ export async function previewExcelGrid(
       ? ws.rowCount
       : Math.min(ws.rowCount, startRow + opts.maxRows - 1);
   const rows: string[][] = [];
-  for (let r = startRow; r <= endRow; r++) {
+  // 총 행 수는 표본만 읽을 때도 시트 끝까지 훑어 값이 있는 행만 센다 — 적재될 행 수와 같아야 한다.
+  let totalRows = 0;
+  for (let r = startRow; r <= ws.rowCount; r++) {
     const values = readGridRow(ws, r, columnCount, false);
+    const hasValue = values.some((value) => value !== '');
+    if (hasValue) totalRows++;
     // 전량 읽기(적재)에서는 완전히 빈 행을 버린다 — 시트 끝의 서식만 남은 행이 흔하다.
-    if (opts.maxRows !== undefined || values.some((value) => value !== '')) rows.push(values);
+    if (opts.maxRows === undefined ? hasValue : r <= endRow) rows.push(values);
   }
 
   return {
     sheetNames,
     headerRows,
     rows,
-    totalRows: Math.max(0, ws.rowCount - opts.headerRowCount),
+    totalRows,
   };
 }
 

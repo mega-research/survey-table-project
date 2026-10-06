@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import ExcelJS from 'exceljs';
-import { previewExcel, parseExcelRows, normalizeHeaderKey } from './excel-parser';
+import { previewExcel, previewExcelGrid, parseExcelRows, normalizeHeaderKey } from './excel-parser';
 
 async function loadFixture(name: string): Promise<Buffer> {
   return readFile(`tests/fixtures/contacts/${name}`);
@@ -236,5 +236,39 @@ describe('헤더 셀 직렬화 왕복 - richText·하이퍼링크·수식', () =
     });
     const result = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 1 });
     expect(result.headers.some((h) => h.includes('[object Object]'))).toBe(false);
+  });
+});
+
+describe('총 행 수 - 서식만 남은 꼬리 행', () => {
+  // 엑셀은 값 없이 테두리·색만 칠한 행도 시트 범위에 넣는다. 그 행 수를 그대로 보이면
+  // 171명짜리 명단이 「555 행 적재 시작」으로 뜬다 — 적재는 빈 행을 건너뛰므로 숫자만 틀린다.
+  const styledTail = (ws: ExcelJS.Worksheet) => {
+    ws.getCell('A1').value = '이름';
+    ws.getCell('B1').value = '이메일';
+    ws.getCell('A2').value = '가';
+    ws.getCell('B2').value = 'a@test.com';
+    ws.getCell('A3').value = '나';
+    // 가운데 빈 행(4행)도 적재에서 빠진다
+    ws.getCell('A5').value = '다';
+    for (let r = 6; r <= 40; r++) {
+      ws.getCell(`A${r}`).border = { bottom: { style: 'thin' } };
+    }
+  };
+
+  it('previewExcel 의 totalRows 는 적재될 행 수와 같다', async () => {
+    const buf = await buildWorkbookBuffer(styledTail);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(rows).toHaveLength(3);
+    expect(preview.totalRows).toBe(3);
+  });
+
+  it('previewExcelGrid 의 totalRows 도 표본만 읽을 때 빈 행을 세지 않는다', async () => {
+    const buf = await buildWorkbookBuffer(styledTail);
+    const sample = await previewExcelGrid(buf, { sheetName: 'Sheet1', headerRowCount: 1, maxRows: 2 });
+    const full = await previewExcelGrid(buf, { sheetName: 'Sheet1', headerRowCount: 1 });
+    expect(full.rows).toHaveLength(3);
+    expect(sample.totalRows).toBe(3);
+    expect(full.totalRows).toBe(3);
   });
 });
