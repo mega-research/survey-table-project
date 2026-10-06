@@ -81,10 +81,15 @@ import { CellGatingEditor } from './cell-gating-editor';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
+import { countColumnDistinctGroupTargets } from '../utils/column-distinct-group';
 import {
   type CellSaveOptions,
   countColumnMobileDisplayTargets,
 } from '../utils/column-mobile-display';
+import {
+  DISTINCT_GROUP_WARNING_MESSAGES,
+  diagnoseDistinctGroup,
+} from '@/features/survey-builder/lib/distinct-group-diagnostics';
 import { commitCellEdit } from './commit-cell-edit';
 import { validateCellEdit } from './validate-cell-edit';
 import { CellIdentityFields } from './cell-identity-fields';
@@ -201,6 +206,7 @@ export function CellContentModal({
     checkboxOptions,
     radioOptions,
     radioGroupName,
+    distinctGroup,
     selectOptions,
     allowOtherOption,
     cellOptionsColumns,
@@ -269,6 +275,7 @@ export function CellContentModal({
     setCheckboxOptions,
     setRadioOptions,
     setRadioGroupName,
+    setDistinctGroup,
     setSelectOptions,
     setAllowOtherOption,
     setCellOptionsColumns,
@@ -336,11 +343,14 @@ export function CellContentModal({
   );
   // 「같은 열의 다른 표시 셀에도 적용」 체크 — 셀이 아니라 이번 저장에만 속한 값이라 폼 밖에 둔다.
   const [mobileDisplayColumnWide, setMobileDisplayColumnWide] = useState(false);
+  // 「같은 열의 다른 선택 칸에도 적용」(중복 불가 묶음) — 같은 이유로 폼 밖에 둔다.
+  const [distinctGroupColumnWide, setDistinctGroupColumnWide] = useState(false);
   const choiceGroupsResetKey = isOpen ? (cell?.id ?? '') : null;
   const [prevChoiceGroupsResetKey, setPrevChoiceGroupsResetKey] = useState<string | null>(null);
   if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
     setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
     setMobileDisplayColumnWide(false);
+    setDistinctGroupColumnWide(false);
     if (isOpen) {
       const storeQuestion = readBuilderState().currentSurvey.questions.find(
         (q) => q.id === currentQuestionId,
@@ -363,6 +373,20 @@ export function CellContentModal({
     () => collapseRepeatRows(getLatestRows?.() ?? ownQuestion.tableRowsData ?? []),
     [getLatestRows, ownQuestion.tableRowsData],
   );
+  // 중복 불가 묶음 — 같은 열의 다른 선택 칸 수(일괄 적용 대상)와, 동작하지 않는 설정 안내.
+  // 유형을 선택 칸으로 두었을 때만 뜻이 있다.
+  const distinctGroupColumnCount =
+    cell && contentType === 'select' ? countColumnDistinctGroupTargets(gatingRows, cell.id) : 0;
+  const distinctGroupWarning =
+    cell && contentType === 'select'
+      ? diagnoseDistinctGroup({
+          rows: gatingRows,
+          cellId: cell.id,
+          name: distinctGroup,
+          selectOptions,
+          applyToColumn: distinctGroupColumnWide,
+        })
+      : null;
   // 보기 소스 표인가 — 보기 옵션 셀이 하나라도 있으면. (문항 type 으로 판정하면 안 된다: 표
   // 편집기가 넘기는 ownQuestion 은 type 이 늘 'table' 이다.)
   const isChoiceSourceTable = useMemo(
@@ -470,6 +494,8 @@ export function CellContentModal({
           onChoiceGroupsChange,
           // 체크한 뒤 셀 유형을 바꾸면 체크가 화면에서 사라진 채 남는다 — 그때는 적용하지 않는다
           mobileDisplayColumnWide: mobileDisplayColumnWide && contentType === cell.type,
+          // 묶음 이름은 선택 칸 전용 — 체크한 뒤 유형을 바꿨으면 적용하지 않는다
+          distinctGroupColumnWide: distinctGroupColumnWide && contentType === 'select',
         }),
       {
         onError: (error) => {
@@ -824,6 +850,16 @@ export function CellContentModal({
                   ...pendingOptionValueChangesRef.current,
                   change,
                 ];
+              }}
+              distinctGroup={{
+                name: distinctGroup,
+                onNameChange: setDistinctGroup,
+                applyToColumn: distinctGroupColumnWide,
+                onApplyToColumnChange: setDistinctGroupColumnWide,
+                columnApplyCount: distinctGroupColumnCount,
+                warning: distinctGroupWarning
+                  ? DISTINCT_GROUP_WARNING_MESSAGES[distinctGroupWarning]
+                  : undefined,
               }}
             />
           </TabsContent>

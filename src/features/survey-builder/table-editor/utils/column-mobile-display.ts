@@ -15,6 +15,11 @@ import type { TableCell, TableRow } from '@/types/survey';
  */
 export interface CellSaveOptions {
   columnMobileDisplay?: { value: TableCell['mobileDisplay'] } | undefined;
+  /**
+   * 중복 불가 묶음 이름을 같은 열의 다른 선택 칸에도 건다 (column-distinct-group).
+   * 같은 이유로 `{ value }` 로 감싼다 — undefined 는 "이름을 지워라"다.
+   */
+  columnDistinctGroup?: { value: string | undefined } | undefined;
 }
 
 const DISPLAY_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);

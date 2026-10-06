@@ -84,3 +84,50 @@ describe('useTableEditor.updateCell — 열 단위 모바일 표시 일괄 지�
     expect(rows.map((row) => row.cells[1]!.mobileDisplay)).toEqual(['collapsed', undefined, undefined]);
   });
 });
+
+describe('useTableEditor.updateCell — 중복 불가 묶음 이름의 열 단위 일괄 지정', () => {
+  const selectRows = (): TableRow[] =>
+    ['a', 'b', 'c'].map((key) => ({
+      id: `row-${key}`,
+      label: '',
+      height: 60,
+      minHeight: 40,
+      cells: [
+        { id: `${key}-title`, type: 'text', content: `국가 ${key}` },
+        { id: `${key}-2025`, type: 'select', content: '', selectOptions: [] },
+        { id: `${key}-2026`, type: 'select', content: '', selectOptions: [] },
+      ],
+    }));
+
+  it('같은 열의 선택 칸에 한 번의 갱신으로 적용한다', () => {
+    const onTableChange = vi.fn();
+    const hook = renderHook(() =>
+      useTableEditor({
+        tableTitle: '표 질문',
+        columns: COLUMNS,
+        rows: selectRows(),
+        currentQuestionId: 'q1',
+        questionCode: 'Q1',
+        questionTitle: '표 질문',
+        onTableChange,
+      }),
+    );
+    const cell = hook.result.current.state.currentRows[0]!.cells[1]!;
+    onTableChange.mockClear();
+
+    act(() => {
+      hook.result.current.actions.updateCell(
+        0,
+        1,
+        { ...cell, distinctGroup: '2025' },
+        undefined,
+        { columnDistinctGroup: { value: '2025' } },
+      );
+    });
+
+    const rows = hook.result.current.state.currentRows;
+    expect(rows.map((row) => row.cells[1]!.distinctGroup)).toEqual(['2025', '2025', '2025']);
+    expect(rows.map((row) => row.cells[2]!.distinctGroup)).toEqual([undefined, undefined, undefined]);
+    expect(onTableChange).toHaveBeenCalledTimes(1);
+  });
+});

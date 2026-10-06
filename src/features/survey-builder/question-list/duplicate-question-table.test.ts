@@ -133,6 +133,30 @@ describe('duplicateQuestionTable', () => {
     expect(out.stagedRowsConfig!.rowIds).not.toContain('row1');
   });
 
+  it('중복 불가 묶음 이름은 복제본의 칸에 그대로 따라간다 — 같은 문항 안의 관계다', () => {
+    const select = (id: string): TableCell =>
+      cell(id, {
+        type: 'select',
+        selectOptions: [{ id: `${id}-o1`, label: '미국', value: 'us' }],
+        distinctGroup: '2025',
+      });
+    const q = tableQuestion({
+      tableRowsData: [
+        { id: 'row1', label: '1', cells: [select('s1'), cell('p1')] },
+        { id: 'row2', label: '2', cells: [select('s2'), cell('p2')] },
+      ],
+    });
+
+    const out = duplicateQuestionTable(q);
+
+    expect(out.tableRowsData!.map((row) => row.cells[0]!.distinctGroup)).toEqual(['2025', '2025']);
+    // 보기 값은 그대로라 복제본 안에서도 같은 보기로 비교된다.
+    expect(out.tableRowsData!.map((row) => row.cells[0]!.selectOptions![0]!.value)).toEqual([
+      'us',
+      'us',
+    ]);
+  });
+
   it('행 차례로 열기를 쓰지 않는 표의 복제본에는 설정 키가 없다', () => {
     expect('stagedRowsConfig' in duplicateQuestionTable(tableQuestion())).toBe(false);
   });

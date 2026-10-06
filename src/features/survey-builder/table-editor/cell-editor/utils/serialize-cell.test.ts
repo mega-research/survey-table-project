@@ -1423,3 +1423,44 @@ describe('buildUpdatedCell — 본문 서식본(contentHtml)', () => {
     expect(cellToFormState(baseCell).textContentHtml).toBe('');
   });
 });
+
+describe('중복 불가 묶음 이름 — 선택 칸 전용', () => {
+  const selectCell: TableCell = {
+    id: 'c1',
+    type: 'select',
+    content: '',
+    selectOptions: [{ id: 'o1', label: '미국', value: 'us' }],
+    distinctGroup: '수출국가-2025',
+  };
+
+  it('셀에 적힌 이름을 폼으로 읽고 그대로 실어 보낸다', () => {
+    const form = cellToFormState(selectCell);
+    expect(form.distinctGroup).toBe('수출국가-2025');
+    expect(buildUpdatedCell(form, selectCell).distinctGroup).toBe('수출국가-2025');
+  });
+
+  it('다른 설정만 고쳐 저장해도 이름이 남는다', () => {
+    const form = { ...cellToFormState(selectCell), textContent: '* 국가코드 선택' };
+    const out = buildUpdatedCell(form, selectCell);
+    expect(out.content).toBe('* 국가코드 선택');
+    expect(out.distinctGroup).toBe('수출국가-2025');
+  });
+
+  it('이름을 비우면 키가 사라진다 — 옛 값이 되살아나지 않는다', () => {
+    const out = buildUpdatedCell({ ...cellToFormState(selectCell), distinctGroup: '  ' }, selectCell);
+    expect('distinctGroup' in out).toBe(false);
+  });
+
+  it('앞뒤 공백은 다듬어 저장한다', () => {
+    const out = buildUpdatedCell(
+      { ...cellToFormState(selectCell), distinctGroup: ' 수출국가-2026 ' },
+      selectCell,
+    );
+    expect(out.distinctGroup).toBe('수출국가-2026');
+  });
+
+  it('유형을 선택 칸이 아닌 것으로 바꾸면 이름이 떨어진다', () => {
+    const out = buildUpdatedCell({ ...cellToFormState(selectCell), contentType: 'input' }, selectCell);
+    expect('distinctGroup' in out).toBe(false);
+  });
+});

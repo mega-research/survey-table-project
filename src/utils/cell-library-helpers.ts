@@ -28,6 +28,8 @@ export function sanitizeCellForLibrary(cell: TableCell): Partial<TableCell> {
     imageUrl: _imageUrl,
     // 제거 대상: 라디오 그룹명 (테이블 위치에 종속)
     radioGroupName: _radioGroupName,
+    // 제거 대상: 중복 불가 묶음 이름 (그 표의 다른 선택 칸들과 맺은 관계 — 다른 표로 가면 뜻이 없다)
+    distinctGroup: _distinctGroup,
     // 제거 대상: 순위별 수동 SPSS 변수명 (원본 셀 전용, 다른 위치에 로드되면 충돌)
     rankVarNames: _rankVarNames,
     // 제거 대상: 응답 인용 토글·이름 (설문 전역 식별자 — 다른 위치/설문에 로드되면
@@ -123,6 +125,12 @@ export function restoreCellFromLibrary(
   if (targetCell.rowspan !== undefined) result.rowspan = targetCell.rowspan;
   if (targetCell.colspan !== undefined) result.colspan = targetCell.colspan;
   if (targetCell.radioGroupName !== undefined) result.radioGroupName = targetCell.radioGroupName;
+  // 중복 불가 묶음은 대상 표의 것만 유효하다 — 보관함 데이터에 남은 이름(legacy)은 버리고,
+  // 불러온 셀이 선택 칸일 때만 대상 칸의 이름을 지킨다.
+  delete result.distinctGroup;
+  if (targetCell.distinctGroup !== undefined && result.type === 'select') {
+    result.distinctGroup = targetCell.distinctGroup;
+  }
   // 순위별 수동 변수명은 셀 위치 종속이라 로드 시 강제 초기화 (legacy 라이브러리 데이터 가드)
   delete result.rankVarNames;
   return result as TableCell;

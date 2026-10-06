@@ -41,6 +41,7 @@ export interface CellFormSetters {
   setCheckboxOptions: (v: CellFormState['checkboxOptions']) => void;
   setRadioOptions: (v: CellFormState['radioOptions']) => void;
   setRadioGroupName: (v: string) => void;
+  setDistinctGroup: (v: string) => void;
   setSelectOptions: (v: CellFormState['selectOptions']) => void;
   setAllowOtherOption: (v: boolean) => void;
   setCellOptionsColumns: (v: number | undefined) => void;
@@ -155,6 +156,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setCheckboxOptions: set('checkboxOptions'),
       setRadioOptions: set('radioOptions'),
       setRadioGroupName: set('radioGroupName'),
+      setDistinctGroup: set('distinctGroup'),
       setSelectOptions: set('selectOptions'),
       setAllowOtherOption: set('allowOtherOption'),
       setCellOptionsColumns: set('cellOptionsColumns'),

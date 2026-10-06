@@ -33,6 +33,7 @@ import {
   regenerateCellOptionIds,
   resolvePastedGating,
 } from '../utils/drag-copy-utils';
+import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
 import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -1234,6 +1235,13 @@ export function useTableEditor({
           updatedRows,
           cell.id,
           options.columnMobileDisplay.value,
+        );
+      }
+      if (options?.columnDistinctGroup) {
+        updatedRows = applyDistinctGroupToColumn(
+          updatedRows,
+          cell.id,
+          options.columnDistinctGroup.value,
         );
       }
 

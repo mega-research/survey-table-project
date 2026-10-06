@@ -36,6 +36,8 @@ export interface CellFormState {
   checkboxOptions: CheckboxOption[];
   radioOptions: RadioOption[];
   radioGroupName: string;
+  /** 중복 불가 묶음 이름 (선택 칸 전용) — 빈 글자는 미지정 */
+  distinctGroup: string;
   selectOptions: QuestionOption[];
   allowOtherOption: boolean;
   cellOptionsColumns: number | undefined;
@@ -221,6 +223,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     checkboxOptions: cell.checkboxOptions || [],
     radioOptions: cell.radioOptions || [],
     radioGroupName: cell.radioGroupName || '',
+    distinctGroup: cell.distinctGroup || '',
     selectOptions: cell.selectOptions || [],
     allowOtherOption: cell.allowOtherOption || false,
     cellOptionsColumns: cell.optionsColumns,
@@ -337,6 +340,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     checkboxOptions: _checkboxOptions,
     radioOptions: _radioOptions,
     radioGroupName: _radioGroupName,
+    distinctGroup: _distinctGroup,
     selectOptions: _selectOptions,
     allowOtherOption: _allowOtherOption,
     optionsColumns: _optionsColumns,
@@ -415,6 +419,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { radioOptions: form.radioOptions, radioGroupName: form.radioGroupName }
       : {}),
     ...(contentType === 'select' ? { selectOptions: form.selectOptions } : {}),
+    // 중복 불가 묶음 — 선택 칸 전용. 비우면 키를 두지 않는다(미지정).
+    ...(contentType === 'select' && form.distinctGroup.trim()
+      ? { distinctGroup: form.distinctGroup.trim() }
+      : {}),
     ...(['checkbox', 'radio', 'select', 'ranking'].includes(contentType)
       ? {
           allowOtherOption: form.allowOtherOption,

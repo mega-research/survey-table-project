@@ -83,3 +83,31 @@ describe('sanitizeCellForLibrary — 응답 인용 토글·이름 제거 (설문
     expect(restored).not.toHaveProperty('answerQuoteName');
   });
 });
+
+describe('중복 불가 묶음 이름 — 표 위치에 종속된 설정이라 보관함을 타지 않는다', () => {
+  const source: TableCell = {
+    id: 'src',
+    type: 'select',
+    content: '',
+    selectOptions: [{ id: 'o1', label: '미국', value: 'us' }],
+    distinctGroup: '수출국가-2025',
+  };
+
+  it('보관함에 저장할 때 이름을 뺀다', () => {
+    expect('distinctGroup' in sanitizeCellForLibrary(source)).toBe(false);
+  });
+
+  it('불러올 때 대상 칸의 이름을 지킨다 — 옛 보관함 데이터의 이름은 버린다', () => {
+    const legacy = { ...sanitizeCellForLibrary(source), distinctGroup: '남의 표 묶음' };
+    const kept = restoreCellFromLibrary(legacy, {
+      id: 'target',
+      type: 'select',
+      content: '',
+      distinctGroup: '이 표의 묶음',
+    });
+    expect(kept.distinctGroup).toBe('이 표의 묶음');
+
+    const none = restoreCellFromLibrary(legacy, { id: 'target', type: 'text', content: '' });
+    expect('distinctGroup' in none).toBe(false);
+  });
+});

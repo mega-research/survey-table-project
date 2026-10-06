@@ -22,6 +22,7 @@ import { client } from '@/shared/lib/rpc';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
+import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
 import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { GROUPABLE_CELL_TYPES, buildUpdatedCell } from './utils/serialize-cell';
 import type { UseCellFormResult } from './hooks/use-cell-form';
@@ -55,6 +56,8 @@ export interface CommitCellEditArgs {
   onChoiceGroupsChange?: ((groups: ChoiceGroup[]) => void) | undefined;
   /** 이 셀의 「모바일 카드 표시」를 같은 열의 다른 표시 셀에도 적용할지 (모달의 체크). */
   mobileDisplayColumnWide?: boolean | undefined;
+  /** 이 칸의 「중복 불가 묶음 이름」을 같은 열의 다른 선택 칸에도 적용할지 (모달의 체크). */
+  distinctGroupColumnWide?: boolean | undefined;
 }
 
 /**
@@ -77,6 +80,7 @@ export async function commitCellEdit({
   onSave,
   onChoiceGroupsChange,
   mobileDisplayColumnWide,
+  distinctGroupColumnWide,
 }: CommitCellEditArgs): Promise<void> {
   const readBuilderState = useSurveyBuilderStore.getState;
   const writeBuilderState = useSurveyBuilderStore.setState;
@@ -93,9 +97,17 @@ export async function commitCellEdit({
     // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
     // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
     // 열 일괄 지정은 저장되는 셀의 값(미지정 포함)을 그대로 따른다.
-    const saveOptions: CellSaveOptions | undefined = mobileDisplayColumnWide
-      ? { columnMobileDisplay: { value: updatedCell.mobileDisplay } }
-      : undefined;
+    const saveOptions: CellSaveOptions | undefined =
+      mobileDisplayColumnWide || distinctGroupColumnWide
+        ? {
+            ...(mobileDisplayColumnWide
+              ? { columnMobileDisplay: { value: updatedCell.mobileDisplay } }
+              : {}),
+            ...(distinctGroupColumnWide
+              ? { columnDistinctGroup: { value: updatedCell.distinctGroup } }
+              : {}),
+          }
+        : undefined;
     onSave(
       updatedCell,
       pendingOptionValueChangesRef.current.length > 0
@@ -127,13 +139,20 @@ export async function commitCellEdit({
         }));
         // 열 일괄 지정도 같은 이유로 재적용한다 — getLatestRows 가 배선되지 않은 폴백(store 행)에서는
         // onSave 의 반영이 베이스에 없다.
-        const updatedRowsData = saveOptions?.columnMobileDisplay
+        const rowsWithMobileDisplay = saveOptions?.columnMobileDisplay
           ? applyMobileDisplayToColumn(
               rowsWithCell,
               cell.id,
               saveOptions.columnMobileDisplay.value,
             )
           : rowsWithCell;
+        const updatedRowsData = saveOptions?.columnDistinctGroup
+          ? applyDistinctGroupToColumn(
+              rowsWithMobileDisplay,
+              cell.id,
+              saveOptions.columnDistinctGroup.value,
+            )
+          : rowsWithMobileDisplay;
 
         // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
         // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.

@@ -305,3 +305,55 @@ describe('commitCellEdit — 열 단위 모바일 표시 일괄 지정', () => {
     expect(sent.map((row) => row.cells[0]!.mobileDisplay)).toEqual(['collapsed', undefined, undefined]);
   });
 });
+
+describe('commitCellEdit — 중복 불가 묶음 이름의 열 단위 일괄 지정', () => {
+  const selectCell = (id: string): TableCell => ({ id, type: 'select', content: '', selectOptions: [] });
+  const ANCHOR = selectCell('s11');
+  const SELECT_ROWS: TableRow[] = [
+    { id: 'r1', label: '', cells: [ANCHOR, { id: 's12', type: 'input', content: '' }] },
+    { id: 'r2', label: '', cells: [selectCell('s21'), selectCell('s22')] },
+    { id: 'r3', label: '', cells: [{ id: 's31', type: 'text', content: '합계' }, selectCell('s32')] },
+  ];
+  const groupArgs = (over: Record<string, unknown> = {}) =>
+    args({
+      cell: ANCHOR,
+      form: { ...cellToFormState(ANCHOR), distinctGroup: '수출국가-2025' },
+      latest: { rows: () => SELECT_ROWS, columns: () => LATEST_COLUMNS.slice(0, 2) },
+      ...over,
+    });
+
+  it('체크했으면 onSave 에 묶음 이름을 실어 보내고, 저장되는 행의 같은 열 선택 칸에도 건다', async () => {
+    const question = tableQuestion({ tableRowsData: SELECT_ROWS });
+    seedStore(question);
+    const onSave = vi.fn();
+    await commitCellEdit(groupArgs({ question, onSave, distinctGroupColumnWide: true }) as never);
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 's11', distinctGroup: '수출국가-2025' }),
+      undefined,
+      { columnDistinctGroup: { value: '수출국가-2025' } },
+    );
+    const sent = updateQuestionMock.mock.calls[0]![0].data.tableRowsData as TableRow[];
+    expect(sent.map((row) => row.cells[0]!.distinctGroup)).toEqual([
+      '수출국가-2025',
+      '수출국가-2025',
+      undefined,
+    ]);
+    expect(sent.map((row) => row.cells[1]!.distinctGroup)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('체크하지 않으면 그 칸에만 이름이 든다', async () => {
+    const question = tableQuestion({ tableRowsData: SELECT_ROWS });
+    seedStore(question);
+    const onSave = vi.fn();
+    await commitCellEdit(groupArgs({ question, onSave }) as never);
+
+    expect(onSave.mock.calls[0]![2]).toBeUndefined();
+    const sent = updateQuestionMock.mock.calls[0]![0].data.tableRowsData as TableRow[];
+    expect(sent.map((row) => row.cells[0]!.distinctGroup)).toEqual([
+      '수출국가-2025',
+      undefined,
+      undefined,
+    ]);
+  });
+});
