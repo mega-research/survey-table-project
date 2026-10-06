@@ -19,7 +19,7 @@ import {
   SendSingleMailDialog,
 } from '@/features/operations/contacts/send-single-mail-dialog';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { type PiiFieldType, describePiiFormatProblems } from '@/lib/crypto/pii-fields';
 import { piiKeyOf } from '@/lib/operations/contacts-format';
 import type {
   ContactColumnScheme,
@@ -217,6 +217,19 @@ export function ContactDetailForm({
   function save() {
     setError(null);
     const piiUpdates = buildPiiUpdates();
+    // 값이 있는데 형식이 틀린 칸(예: `@` 없는 메일)은 보내지 않는다 — 서버 저장 경로가 그 값을
+    // 「빈 값」으로 다뤄 기존 암호화 행을 지우고 성공으로 끝나면, 「저장 완료」가 뜬 채 값이 사라진다.
+    // 서버도 같은 판정으로 거부하지만(contact-targets), 여기서 먼저 막아 컬럼 라벨로 알린다.
+    const formatProblems = describePiiFormatProblems(
+      piiUpdates,
+      (columnKey) =>
+        scheme.columns.find((c) => piiKeyOf(c.source) === columnKey)?.label ?? columnKey,
+    );
+    if (formatProblems.length > 0) {
+      setSuccessMessage(null);
+      setError(formatProblems.join(' '));
+      return;
+    }
     // 빈 값으로 비운 PII 컬럼은 contact_pii 행이 DELETE 됨 — 복구 불가. confirm 요구.
     const willDeleteKeys: string[] = [];
     for (const u of piiUpdates) {

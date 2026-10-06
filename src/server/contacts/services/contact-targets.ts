@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq } from 'drizzle-orm';
 import 'server-only';
 
@@ -5,6 +6,7 @@ import { type DbTransaction, db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { sanitizeAttrsAgainstPiiScheme } from './scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
+import { describePiiFormatProblems } from '@/lib/crypto/pii-fields';
 import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
@@ -25,6 +27,20 @@ import {
 } from '@/lib/operations/contacts-format';
 
 import { allocateContactResid } from './contact-resid';
+
+/**
+ * 값이 있는데 형식이 틀린 PII(예: `@` 없는 메일)를 저장 전에 거부한다.
+ *
+ * upsertPiiValue 는 「정규화 결과가 빈 값」을 「칸을 비웠다」와 같게 다뤄 기존 암호화 행을 지우고
+ * 성공으로 끝난다 — 그대로 넘기면 화면에는 「저장 완료」가 뜨고 값은 사라진다(2026-10-06 실사고).
+ * 사람이 값을 넣은 단건 추가·수정은 여기서 막는다. 트랜잭션 앞에서 던지므로 같은 요청의
+ * attrs·메모도 쓰이지 않는다(반쯤 저장된 상태를 만들지 않는다). 엑셀 업로드는 이 경로를 타지
+ * 않고 종전대로 형식이 틀린 칸을 건너뛴다.
+ */
+function assertStorablePiiUpdates(piiUpdates: UpdateContactTargetInput['piiUpdates']): void {
+  const problems = describePiiFormatProblems(piiUpdates ?? []);
+  if (problems.length > 0) throw new ORPCError('BAD_REQUEST', { message: problems.join(' ') });
+}
 
 /**
  * 현재 DB 모드를 기준으로 대상자를 잠근다.
@@ -89,6 +105,7 @@ export async function addContactTarget(
   isGuest: boolean,
 ): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  assertStorablePiiUpdates(piiUpdates);
 
   const result = await db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
@@ -140,6 +157,7 @@ export async function updateContactTarget(
   isGuest: boolean,
 ): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
     const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
