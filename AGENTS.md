@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-10-02 (항목 단위 카드 「블록 단위로 세우기」 — 좌우로 붙은 표를 블록마다 차례로, `mobileItemCardBlockColumns` 0131 · 투영 `question-renderer/utils/item-card-blocks` · 드릴다운 상세의 계산 칸은 맨 아래가 아니라 제 열 자리에 라벨과 함께 · 직전: 모바일 드릴다운 묶음 머리 — 목차 열의 빈 글자 셀(숨기기)이 덮는 행은 각자 카드, 윗행이 계산 전용이면 소계를 보이는 머리 · 「바로표시」·「자세히」 셀은 제목이 아니라 설명 · 계산 전용 행은 요약 블록 · 셀 모달 「같은 열의 다른 표시 셀에도 적용」, 마이그레이션 없음 · 분류 `question-renderer/utils/classify-table` · 직전: 축 단위 카드를 테이블 유형에도 — 응답 칸이 놓인 열마다 카드 하나, 마이그레이션 없음 · 직전: 2026-10-01 모바일 표시 방식 「항목 단위 카드」 `item-cards` 0129 CHECK — 라벨(글자 셀)마다 카드 하나, 양식형 표용, 테이블 유형 전용 · 투영 `question-renderer/utils/item-cards` · 직전: 합계 제약 「입력된 칸 수」 모드 — `SumConstraint.aggregate: 'count'`, 선택한 칸 중 N칸 이상 입력, 미접촉 표에서도 평가 · 셀 게이팅 조건 묶음 — `enabledWhen` 에 `kind: 'group'`(AND/OR/NOT + 조건 N개, 중첩 가능) 추가, JSONB 라 마이그레이션 없음 · 트리 순회 `utils/cell-gate-tree` · 응답 화면 다중 컨트롤러 구독 `question-renderer/cells/gate-value-selector` · 빌더 진단 `gating-empty-group`. 직전: 2026-09-30 (모바일 척도 막대 — 보기 그룹 보기 모양 「척도 막대」 `ChoiceGroup.mobileScaleBar`(JSONB, 마이그레이션 없음, `mobileOriginalLine` 과 배타) · 모바일 표시 방식 「행별 척도」 `row-wise-scale` 0128 CHECK · 투영 `question-renderer/utils/choice-group-scale-bar`·`row-scale-bars` · 빌더 폴백 경고 `survey-builder/lib/scale-bar-diagnostics`. 직전: 2026-09-23 (쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
+> 최종 갱신: 2026-10-06 (표 문항 「행 차례로 열기」 — 저작된 행 묶음을 처음 몇 행만 보이고 `+` 로 한 행씩, `stagedRowsConfig` 0132 · 순수 로직 `question-renderer/utils/staged-rows` · ADR 0028 · 선택 칸 「중복 불가 묶음」 `TableCell.distinctGroup`(JSONB, 마이그레이션 없음) · 판정 `question-renderer/utils/distinct-select-group` · 직전: 2026-10-02 항목 단위 카드 「블록 단위로 세우기」 — 좌우로 붙은 표를 블록마다 차례로, `mobileItemCardBlockColumns` 0131 · 투영 `question-renderer/utils/item-card-blocks` · 드릴다운 상세의 계산 칸은 맨 아래가 아니라 제 열 자리에 라벨과 함께 · 직전: 모바일 드릴다운 묶음 머리 — 목차 열의 빈 글자 셀(숨기기)이 덮는 행은 각자 카드, 윗행이 계산 전용이면 소계를 보이는 머리 · 「바로표시」·「자세히」 셀은 제목이 아니라 설명 · 계산 전용 행은 요약 블록 · 셀 모달 「같은 열의 다른 표시 셀에도 적용」, 마이그레이션 없음 · 분류 `question-renderer/utils/classify-table` · 직전: 축 단위 카드를 테이블 유형에도 — 응답 칸이 놓인 열마다 카드 하나, 마이그레이션 없음 · 직전: 2026-10-01 모바일 표시 방식 「항목 단위 카드」 `item-cards` 0129 CHECK — 라벨(글자 셀)마다 카드 하나, 양식형 표용, 테이블 유형 전용 · 투영 `question-renderer/utils/item-cards` · 직전: 합계 제약 「입력된 칸 수」 모드 — `SumConstraint.aggregate: 'count'`, 선택한 칸 중 N칸 이상 입력, 미접촉 표에서도 평가 · 셀 게이팅 조건 묶음 — `enabledWhen` 에 `kind: 'group'`(AND/OR/NOT + 조건 N개, 중첩 가능) 추가, JSONB 라 마이그레이션 없음 · 트리 순회 `utils/cell-gate-tree` · 응답 화면 다중 컨트롤러 구독 `question-renderer/cells/gate-value-selector` · 빌더 진단 `gating-empty-group`. 직전: 2026-09-30 (모바일 척도 막대 — 보기 그룹 보기 모양 「척도 막대」 `ChoiceGroup.mobileScaleBar`(JSONB, 마이그레이션 없음, `mobileOriginalLine` 과 배타) · 모바일 표시 방식 「행별 척도」 `row-wise-scale` 0128 CHECK · 투영 `question-renderer/utils/choice-group-scale-bar`·`row-scale-bars` · 빌더 폴백 경고 `survey-builder/lib/scale-bar-diagnostics`. 직전: 2026-09-23 (쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 
 ---
 
@@ -121,7 +121,7 @@ src/
 │   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header·duplicate-question-table(질문 복제 시 셀 참조·행 반복 참조 재배선))
 │   │   ├── survey-document/    # 조사표 오서링 (survey-document-panel 진입점 + anchor-canvas 드래그) — app edit 페이지가 연다
 │   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
-│   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점 + row-repeat-settings-card 행 반복 설정) + hooks/·utils/·bulk-generator/
+│   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점 + row-repeat-settings-card 행 반복 설정 + staged-rows-settings-card 행 차례로 열기 설정) + hooks/·utils/(column-distinct-group 묶음 이름 열 일괄 지정 포함)·bulk-generator/
 │   │   │   └── cell-editor/    # 셀 내용 모달 (cell-content-modal → *-cell-tab·cell-choice/gating-editor) + hooks/use-cell-form·utils/serialize-cell·utils/cell-rich-text(셀 본문 부분 강조 HTML)
 │   │   ├── condition/          # 표시조건 편집 사슬 (question-condition-editor → condition-card → expression/value/numeric) + utils/
 │   │   ├── lookup/             # LUT 선택·편집·CSV·보관함 (공용 리프 — condition·formula 가 소비)
@@ -139,7 +139,7 @@ src/
 │   │   │                       # 셀 본문 cell-text·순위형 클릭 ranking-click-select·보기 소스 표 셀 컨트롤 choice-table-cell-control/gated-cell·상세기재 줄 option-text-row·행 단위 그룹 카드 mobile-row-group-cards 도 여기 (2026-09-15 병합 — 스토어 직접 구독 대신 response-sources 주입 계약으로 옮겨 적었다)
 │   │   │                       # pdf-page-view(조사표 한 쪽 렌더, 빌더·응답 공용) 도 루트
 │   │   ├── cells/              # 표 셀 렌더러
-│   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅 + 행 반복 use-row-repeat·입력 형식 use-input-format-field·포커스 use-field-focus
+│   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅 + 행 반복 use-row-repeat·행 차례로 열기 use-staged-rows·입력 형식 use-input-format-field·포커스 use-field-focus
 │   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts + anchor-geometry·anchor-outline(조사표 좌표) + ranking-mobile-sections(순위형 모바일 구간) + 입력 형식 파서 input-format·응답 품질 text-quality/cell-text-quality·단독 선택 exclusive-choice·순위 클릭 ranking-click·보기 그룹 외곽선/섹션 라벨 choice-group-outline/section-label · 모바일 보기 그룹 보기 모양 choice-group-mobile-view/section-view · 원본 한 줄 choice-group-original-line · 척도 막대 투영 choice-group-scale-bar(빌더 진단도 소비)·행별 척도 row-scale-bars (input-format·text-quality/cell-text-quality·exclusive-choice 는 builder·response 도 소비하고 나머지는 렌더러 전용 — 여러 feature 가 쓰는 순수 규칙은 방향상 가장 낮은 renderer 가 소유, 2026-09-15)
 │   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (38개) — 렌더러만 import
 │   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
@@ -293,6 +293,7 @@ questions                  # 개별 질문
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
 ├── tableValidationRules, dynamicRowConfigs, sumConstraints (JSONB)   # 검증/합계 제약
 ├── rowRepeatConfig (JSONB)       # 행 반복 — 응답자가 + 로 늘리는 연속 행 묶음 {enabled, templateRowIds, maxRepeats, addLabel}
+├── stagedRowsConfig (JSONB)      # 행 차례로 열기 — 저작된 연속 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다 {enabled, rowIds, initialVisibleCount, addLabel} (0132). 구조는 건드리지 않고 가시성만 정한다 — 행 반복과 다른 개념(ADR 0028)
 ├── rankingConfig (JSONB)         # 순위형 전용
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── maxSelectionsSource (JSONB)   # 최대 선택 개수를 다른 문항의 숫자 응답에서 가져온다 {questionId, unlimitedFrom} — NULL=고정값만 (0130)
@@ -548,17 +549,17 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 ## 질문 유형
 
-| 타입          | 설명               | 주요 속성                                                                                                                         |
-| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow |
-| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                              |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                             |
-| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                             |
-| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                         |
-| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                      |
-| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                                      |
-| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, sumConstraints            |
-| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                              |
+| 타입          | 설명               | 주요 속성                                                                                                                                |
+| ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow        |
+| `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                                     |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                                    |
+| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                                    |
+| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                                |
+| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                             |
+| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                                                             |
+| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, stagedRowsConfig, sumConstraints |
+| `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                                     |
 
 공통: `titleHtml`(제목 서식본 — 아래 "셀 본문 부분 강조"와 같은 규칙), `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 
@@ -579,6 +580,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 - `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스
 - `calc`: 수식 기반 읽기 전용 계산 셀
+
+> **중복 불가 묶음** (`cell.distinctGroup`, select 셀 전용, 2026-10-06): 같은 묶음 이름을 가진 선택 칸끼리는 같은 보기를 두 번 고를 수 없다. 묶음은 열·행 배치와 무관하게 **이름으로만** 정해지고(셀 편집 모달의 「중복 불가 묶음 이름」 + 「같은 열의 다른 선택 칸에도 적용」), 비교는 보기 값(`option.value ?? option.id`)이다 — 칸마다 보기 값이 다르면 아무것도 막지 않으므로 모달이 경고한다(`survey-builder/lib/distinct-group-diagnostics`). 다른 칸이 고른 보기는 목록에 남되 `disabled` 다(순위형 드롭다운과 같은 얼굴 — 목록에서 빼지 않는다). 이미 들어온 중복은 `NumericIssue.kind: 'distinct'`(클라이언트 전용, 고정 문구, 관리자 수정에서도 완화하지 않는다)가 막는다. 화면 비활성과 검증이 `features/question-renderer/utils/distinct-select-group.ts` 하나의 판정을 쓰고, 게이팅으로 닫힌 칸·병합에 가려진 칸(`isHidden` — 병합 저장이 덮인 칸에 내용을 통째 복사한다)은 구성원에서 뺀다. 응답 화면은 묶음 구성원의 값만 구독한다(`createKeyedValueSelector`). 셀 직렬화(`serialize-cell.ts`)는 이 필드를 **네 곳**(폼 상태 · hydrate · 걷어내기 목록 · select 조건부 spread)에서 다루고, 셀 보관함은 싣지 않는다(표 위치에 종속). CONTEXT.md "중복 불가 묶음".
 
 > **셀 본문 부분 강조** (`cell.contentHtml`, 2026-09-10): 셀 편집 모달의 "셀 텍스트 내용"은 굵게·글자색·변수 삽입만 있는 축소 편집기(`components/ui/rich-text-editor/inline-rich-text-editor.tsx`, 스키마는 `inline-cell-extensions.ts`)다. **정본은 여전히 평문 `content`** 이고, 글자 일부에 색·굵게가 있을 때만 `contentHtml` 을 곁에 둔다(`serialize-cell.ts` 가 마크 유무로 판정, 마이그레이션 없음). 내보내기·SPSS 라벨·보기 라벨 파생·행 높이 측정·행 라벨 비교는 전부 평문을 보므로 무변경이고, 화면 표시만 `CellText`(`features/question-renderer/cell-text.tsx`) 가 서식본을 우선한다 — 토큰 치환은 `resolveCellTextHtml`, sanitize 는 `sanitizeCellHtml`(문단·줄바꿈·strong·span color 만). 셀 본문을 새로 그리는 자리를 만들면 평문을 직접 흘리지 말고 `CellText` 에 `html` 까지 넘길 것. 문단 = 평문의 한 줄이라 "첫 줄만 굵게"는 첫 문단에 걸린다.
 
@@ -993,6 +996,8 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
+   **행 차례로 열기**(`stagedRowsConfig`, 0132)는 행 반복과 또 다른 기능이다(ADR 0028) — 저작자가 직접 만든 평범한 행 묶음을 처음 N행만 보이고 `+` 로 한 행씩 연다. **구조를 펼치지도 접지도 않는다.** 묶음의 행은 평범한 행이라 선택 칸·셀 게이팅·합계 제약이 그대로 동작하고, 내보내기 열은 열림 여부와 무관하게 항상 나간다(행 반복의 미사용 벌 pruning 없음). 열린 행 수는 저장하지 않고 값에서 파생한다 — `max(처음 보이는 행 수, 값이 있는 마지막 묶음 행)`(`features/question-renderer/utils/staged-rows.ts` 의 `deriveOpenStagedCount`, 게이팅으로 닫힌 칸의 값은 없는 것으로 친다). **필수 판정도 같은 함수를 쓴다** — 그 뒤의 묶음 행만 필수에서 빠진다(`stagedOptionalCellIds`). 행 반복의 「1벌만」과 다르다. `−` 는 마지막으로 연 행의 값을 비우고 닫는다. 버튼 줄은 묶음 바로 아래에 선다: 데스크톱 표는 격자 한 줄(`use-dynamic-row-layout` 의 `stagedControl`)이고 묶음을 가로지르는 세로 병합 칸은 `_gridRowSpanExtra`(런타임 전용)로 그 줄까지 덮는다 — 가로지르는 칸이 왼쪽 끝에 붙어 있지 않거나 같은 표에 동적 행 셀렉터가 있으면 병합을 앵커에서 쪼갠다. 모바일 「항목 단위 카드」는 블록마다(`MobileItemCards` 의 `afterRows`), 그 밖의 모바일 표시 방식은 표 아래에 한 번. 묶음에 넣을 수 없는 행은 행 반복 행·동적 행 그룹 행·표시 조건 행이고(`validateStagedRows`), 표가 바뀌어 묶음이 깨지면(`isStagedRowsIntact`) 설정을 **명시적 null** 로 끈다(`question-table-fields.tsx`). 문항 복제는 `remapStagedRowIds` 로 행 id 를 옮긴다. 순수 로직이 lib 이 아니라 renderer 에 있는 것은 소비자가 features 뿐이어서다.
+
    **행 반복**(`rowRepeatConfig`)은 동적 행 그룹과 다른 기능이다 — 저쪽은 빌더가 만들어 둔 행 풀에서 응답자가 고르는 것이고, 이쪽은 같은 모양의 칸을 원하는 벌 수만큼(최대 20) 반복하는 것이다. 설정은 분리하고 렌더 파이프라인(`use-dynamic-rows`)만 공유한다. 구조에는 저장 시점에 최대 벌까지 **실제로 펼쳐 둔다**(`lib/question/row-repeat.ts` 의 `expandRepeatRows`) — 응답값 키가 발행 스냅샷 안의 `cell.id` 로 유지되어 저장 경계·초안·이월 임포트·관리자 편집이 전부 무변경이다. **펼치기는 멱등**이어야 한다(이미 있는 벌은 행·셀 id 를 그대로 두고 템플릿 구조 변경만 전파). 표에 반복 블록을 켜면 그 표의 `rowCode` 를 **명시 발번**한다 — `buildTableCellVarName` 의 제로패딩 자릿수가 `rows.length` 기준이라 20벌로 펼치는 순간 같은 표의 비반복 행 변수명이 `r1` → `r01` 로 통째 바뀌기 때문이다. 내보내기는 모수 전체를 1회 스캔해(`lib/analytics/row-repeat-usage.ts`) 아무도 채우지 않은 뒤쪽 벌의 열을 뺀다(설문 전체 기준 — 분할 파일 간 열 구성이 갈리지 않도록). 필수 검증은 1벌만 본다.
 
 5. **다단계 선택**: `selectLevels` 배열로 3단계까지. 부모 선택에 따라 동적 로딩.
@@ -1048,6 +1053,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- 행 차례로 열기 `staged_rows_config` 는 0132 다 (2026-10-06)
 - 항목 단위 카드 블록 시작 열 `mobile_item_card_block_columns` 는 0131 이다 (2026-10-02)
 - 최대 선택 개수 연동 `max_selections_source` 는 0130 이다 (2026-10-01)
 - 「항목 단위 카드」 CHECK 갱신은 0129 다 (2026-10-01). staging 병합 때 CHECK 목록은 0129 본문이 현행이다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
@@ -1084,7 +1090,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 ### Worktree bootstrap
 
 - `superpowers:using-git-worktrees`로 프로젝트 로컬 worktree를 만들 때는 메인 checkout의 런타임 환경을 우선 공유한다.
-- 메인과 worktree의 `package.json`, `pnpm-lock.yaml`이 같으면 worktree의 `node_modules`를 메인 checkout의 `node_modules`를 가리키는 심볼릭 링크로 구성한다. 두 파일이 다르면 링크하지 말고 별도 설치가 필요함을 먼저 알린다.
+- worktree 의 `node_modules` 는 **심볼릭 링크하지 않고 `pnpm install --frozen-lockfile` 로 실제 설치한다**(전역 store 하드링크라 십여 초). pnpm 11 의 `verify-deps-before-run` 이 링크된 `node_modules` 를 이물로 보고 자동 `pnpm install` 을 돌리는데, 모듈 퍼지 확인에서 멈춰 명령이 실행되지 않은 채 exit 0 으로 끝나고, 퍼지가 진행되면 링크 너머 메인 checkout 의 `node_modules` 가 지워진다 (2026-08-25 발견, 2026-10-06 재발).
 - 메인 checkout에 존재하는 ignored 환경 파일(`.env`, `.env.local`, `.env.development`, `.env.development.local`)은 내용을 읽거나 출력하지 않고 worktree에 심볼릭 링크한다.
 - worktree 준비 완료를 보고하기 전에 의존성 링크와 환경 파일 링크가 유효한지 확인한다.
 
