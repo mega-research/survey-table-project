@@ -377,3 +377,58 @@ describe('날짜 셀', () => {
     expect(preview.rows[1]?.['접수 시각']).toBe('1988-03-14');
   });
 });
+
+describe('숨겨진 열', () => {
+  // A 이름 · B 메모(숨김) · C 이름(숨김, 같은 헤더) · D 지역
+  const withHiddenColumns = (ws: ExcelJS.Worksheet) => {
+    ['이름', '메모', '이름', '지역'].forEach((h, i) => {
+      ws.getRow(1).getCell(i + 1).value = h;
+    });
+    ws.getRow(2).values = ['가', '비고1', '가-별칭', '서울'];
+    ws.getRow(3).values = ['나', '비고2', '나-별칭', '부산'];
+    // 4행은 숨겨진 열에만 값이 있다
+    ws.getRow(4).getCell(2).value = '비고만';
+    ws.getColumn(2).hidden = true;
+    ws.getColumn(3).hidden = true;
+  };
+
+  it('미리보기는 숨겨진 열의 헤더 키를 알려 주고, 헤더와 행에는 그대로 둔다', async () => {
+    const buf = await buildWorkbookBuffer(withHiddenColumns);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(preview.headers).toEqual(['이름', '메모', '이름__2', '지역']);
+    expect(preview.hiddenHeaders).toEqual(['메모', '이름__2']);
+    expect(preview.rows[0]).toEqual({ 이름: '가', 메모: '비고1', 이름__2: '가-별칭', 지역: '서울' });
+  });
+
+  it('기본은 숨겨진 열도 함께 읽는다', async () => {
+    const buf = await buildWorkbookBuffer(withHiddenColumns);
+    const parsed = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(Object.keys(parsed.rows[0] ?? {})).toEqual(['이름', '메모', '이름__2', '지역']);
+    expect(parsed.skippedHiddenColumns).toBe(0);
+  });
+
+  it('skipHiddenColumns 면 보이는 열만 읽고 남은 열의 키는 그대로다', async () => {
+    const buf = await buildWorkbookBuffer(withHiddenColumns);
+    const parsed = await parseExcelRows(buf, {
+      sheetName: 'Sheet1',
+      headerRow: 1,
+      skipHiddenColumns: true,
+    });
+    expect(parsed.rows[0]).toEqual({ 이름: '가', 지역: '서울' });
+    expect(parsed.rows[1]).toEqual({ 이름: '나', 지역: '부산' });
+    expect(parsed.skippedHiddenColumns).toBe(2);
+  });
+
+  it('열을 빼도 행 수는 미리보기와 같다 — 빈 행 판정은 숨겨진 열까지 본다', async () => {
+    const buf = await buildWorkbookBuffer(withHiddenColumns);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const parsed = await parseExcelRows(buf, {
+      sheetName: 'Sheet1',
+      headerRow: 1,
+      skipHiddenColumns: true,
+    });
+    expect(preview.totalRows).toBe(3);
+    expect(parsed.rows).toHaveLength(3);
+    expect(parsed.rows[2]).toEqual({ 이름: '', 지역: '' });
+  });
+});

@@ -98,9 +98,12 @@ const PII_OPTIONS: Array<{ value: PiiFieldType | '_none'; label: string }> = [
 function buildInitialMapping(
   headers: string[],
   existingScheme: ContactColumnScheme | null,
+  allHeaders: string[] = headers,
 ): MappingState {
   const detected = autoDetectSystemFields(headers);
-  const piiAuto = autoDetectPiiMapping(headers);
+  // PII 자동 감지는 숨겨진 열까지 본다 — 숨겨진 열을 나중에 포함으로 돌려도
+  // 이메일·전화 열이 평문 컬럼으로 시작하지 않게 한다.
+  const piiAuto = autoDetectPiiMapping(allHeaders);
 
   // 디폴트 표시 토글:
   // - 자동 감지된 PII 컬럼 전부
@@ -136,6 +139,62 @@ function buildInitialMapping(
   };
 }
 
+/** 숨겨진 열 안내에 이름을 몇 개까지 적을지 */
+const HIDDEN_HEADER_SAMPLE = 6;
+
+interface HiddenChoiceProps {
+  title: string;
+  detail: string;
+  /** true = 빼기 */
+  skip: boolean;
+  onChange: (skip: boolean) => void;
+  skipTitle: string;
+  skipDesc: string;
+  includeTitle: string;
+  includeDesc: string;
+}
+
+/** 엑셀에서 숨겨진 행·열을 뺄지 포함할지 고르는 한 줄. */
+function HiddenChoice({
+  title,
+  detail,
+  skip,
+  onChange,
+  skipTitle,
+  skipDesc,
+  includeTitle,
+  includeDesc,
+}: HiddenChoiceProps) {
+  const options = [
+    { value: true, title: skipTitle, desc: skipDesc },
+    { value: false, title: includeTitle, desc: includeDesc },
+  ];
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium text-amber-900">{title}</div>
+      <div className="text-xs break-keep text-amber-800">{detail}</div>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((opt) => (
+          <button
+            key={String(opt.value)}
+            type="button"
+            aria-pressed={skip === opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              skip === opt.value
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="text-sm font-semibold text-gray-900">{opt.title}</div>
+            <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 시트가 아직 선택되지 않았을 때만 첫 시트명을 돌려준다(선택돼 있으면 null). */
 function pickInitialSheetName(current: string, sheetNames: string[]): string | null {
   if (current) return null;
@@ -158,6 +217,8 @@ export function UploadWizard({
   const [preview, setPreview] = useState<ParseExcelPreviewResult | null>(null);
   // 엑셀에서 숨겨진 행(필터로 걸러졌거나 손으로 숨긴 행)을 빼고 적재할지 — 숨겨진 행이 있을 때만 묻는다
   const [skipHiddenRows, setSkipHiddenRows] = useState(true);
+  // 엑셀에서 숨겨진 열을 빼고 적재할지 — 숨겨진 열이 있을 때만 묻는다
+  const [skipHiddenColumns, setSkipHiddenColumns] = useState(true);
   const [mapping, setMapping] = useState<MappingState>({
     groupLevels: {},
     selectedAttrs: new Set(),
@@ -224,9 +285,18 @@ export function UploadWizard({
         const nextSheetName = pickInitialSheetName(sheetName, r.sheetNames);
         if (nextSheetName) setSheetName(nextSheetName);
 
-        setMapping(buildInitialMapping(r.headers, existingScheme));
+        // 숨겨진 열은 기본으로 뺀다 — 기본 표시·분류 기준도 보이는 열에서 고른다.
+        const hidden = new Set(r.hiddenHeaders);
+        setMapping(
+          buildInitialMapping(
+            r.headers.filter((h) => !hidden.has(h)),
+            existingScheme,
+            r.headers,
+          ),
+        );
         setReplaceConfirmed(false);
         setSkipHiddenRows(true);
+        setSkipHiddenColumns(true);
         setMode('replace');
         setDupCheck(false);
         setMergeKeys(new Set());
@@ -243,6 +313,18 @@ export function UploadWizard({
   /** 실제로 적재될 행 수 — 숨겨진 행을 빼기로 했으면 그만큼 줄어든다 */
   const effectiveRowCount = (preview?.totalRows ?? 0) - (excludesHiddenRows ? hiddenRowCount : 0);
 
+  const hiddenHeaders = preview?.hiddenHeaders ?? [];
+  const excludesHiddenColumns = hiddenHeaders.length > 0 && skipHiddenColumns;
+  /**
+   * 실제로 적재될 열 — 숨겨진 열을 빼기로 했으면 보이는 열만.
+   * 매핑 상태(표시·개인정보·분류·라벨)는 전체 헤더 기준으로 쥐고 있고, 화면과 제출은
+   * 이 목록으로 걸러 쓴다. 그래야 빼기·포함을 오가도 손본 설정이 남는다.
+   */
+  const activeHeaders = excludesHiddenColumns
+    ? (preview?.headers ?? []).filter((h) => !hiddenHeaders.includes(h))
+    : (preview?.headers ?? []);
+  const shownCount = activeHeaders.filter((h) => mapping.selectedAttrs.has(h)).length;
+
   function buildMapping(): ContactUploadMapping {
     // 레벨 배정 확정:
     // - replace: 마법사 select 상태 그대로.
@@ -251,22 +333,28 @@ export function UploadWizard({
     const effectiveLevels: Record<string, GroupLevel> = isLockedMode
       ? Object.fromEntries(
           Array.from(existingLevelByKey.entries()).filter(([key]) =>
-            preview ? preview.headers.includes(key) : false,
+            activeHeaders.includes(key),
           ),
         )
-      : mapping.groupLevels;
+      : Object.fromEntries(
+          Object.entries(mapping.groupLevels).filter(([key]) => activeHeaders.includes(key)),
+        );
     // 대분류(1) 헤더 = group_value 소스 — 레거시 systemFields.group 인덱스로 동기화
     const level1Header = Object.entries(effectiveLevels).find(([, l]) => l === 1)?.[0];
-    const groupIdx = level1Header != null && preview ? preview.headers.indexOf(level1Header) : -1;
+    // 서버는 읽은 열(= activeHeaders)의 순서로 인덱스를 푼다.
+    const groupIdx = level1Header != null ? activeHeaders.indexOf(level1Header) : -1;
     return {
       systemFields: { ...(groupIdx >= 0 ? { group: groupIdx } : {}) },
       ...(Object.keys(effectiveLevels).length > 0 ? { groupLevels: effectiveLevels } : {}),
-      piiMapping: mapping.piiMapping,
-      selectedAttrsKeys: Array.from(mapping.selectedAttrs),
+      piiMapping: Object.fromEntries(
+        Object.entries(mapping.piiMapping).filter(([key]) => activeHeaders.includes(key)),
+      ),
+      selectedAttrsKeys: activeHeaders.filter((h) => mapping.selectedAttrs.has(h)),
       labelOverrides: mapping.labelOverrides,
       headerRow,
       sheetName,
       ...(hiddenRowCount > 0 ? { skipHiddenRows } : {}),
+      ...(hiddenHeaders.length > 0 ? { skipHiddenColumns } : {}),
       mode,
       ...(needsKeySelection ? { mergeKeys: Array.from(mergeKeys) } : {}),
       ...(mode === 'merge' ? { unmatchedPolicy } : {}),
@@ -290,7 +378,7 @@ export function UploadWizard({
 
   async function handleIngest() {
     if (!file || !preview) return;
-    if (mapping.selectedAttrs.size === 0) {
+    if (shownCount === 0) {
       setError('표시할 컬럼이 없습니다. 최소 한 개는 체크해주세요.');
       return;
     }
@@ -543,47 +631,40 @@ export function UploadWizard({
               </div>
             )}
 
-            {hiddenRowCount > 0 && (
-              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div className="text-sm font-medium text-amber-900">
-                  엑셀에 숨겨진 행이 {hiddenRowCount.toLocaleString('ko-KR')}개 있습니다
-                </div>
-                <div className="text-xs text-amber-800">
-                  필터로 걸러졌거나 숨기기 한 행입니다. 전체{' '}
-                  {preview.totalRows.toLocaleString('ko-KR')}행 중 화면에 보이는 행은{' '}
-                  {(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행입니다.
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      {
-                        value: true,
-                        title: '숨겨진 행 빼기',
-                        desc: `보이는 ${(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행만 적재`,
-                      },
-                      {
-                        value: false,
-                        title: '숨겨진 행 포함',
-                        desc: `전체 ${preview.totalRows.toLocaleString('ko-KR')}행 적재`,
-                      },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={String(opt.value)}
-                      type="button"
-                      aria-pressed={skipHiddenRows === opt.value}
-                      onClick={() => setSkipHiddenRows(opt.value)}
-                      className={`rounded-lg border bg-white p-3 text-left transition-colors ${
-                        skipHiddenRows === opt.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-sm font-semibold text-gray-900">{opt.title}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
-                    </button>
-                  ))}
-                </div>
+            {(hiddenRowCount > 0 || hiddenHeaders.length > 0) && (
+              <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                {hiddenRowCount > 0 && (
+                  <HiddenChoice
+                    title={`엑셀에 숨겨진 행이 ${hiddenRowCount.toLocaleString('ko-KR')}개 있습니다`}
+                    detail={`필터로 걸러졌거나 숨기기 한 행입니다. 전체 ${preview.totalRows.toLocaleString('ko-KR')}행 중 엑셀 화면에 보이는 행은 ${(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행입니다.`}
+                    skip={skipHiddenRows}
+                    onChange={setSkipHiddenRows}
+                    skipTitle="숨겨진 행 빼기"
+                    skipDesc={`보이는 ${(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행만 적재`}
+                    includeTitle="숨겨진 행 포함"
+                    includeDesc={`전체 ${preview.totalRows.toLocaleString('ko-KR')}행 적재`}
+                  />
+                )}
+                {hiddenHeaders.length > 0 && (
+                  <HiddenChoice
+                    title={`엑셀에 숨겨진 열이 ${hiddenHeaders.length.toLocaleString('ko-KR')}개 있습니다`}
+                    detail={`${hiddenHeaders.slice(0, HIDDEN_HEADER_SAMPLE).join(', ')}${
+                      hiddenHeaders.length > HIDDEN_HEADER_SAMPLE
+                        ? ` 외 ${(hiddenHeaders.length - HIDDEN_HEADER_SAMPLE).toLocaleString('ko-KR')}개`
+                        : ''
+                    }`}
+                    skip={skipHiddenColumns}
+                    onChange={(next) => {
+                      setSkipHiddenColumns(next);
+                      // 키로 고른 열이 빠질 수 있다 — 모드 전환과 같이 키 선택을 비운다.
+                      setMergeKeys(new Set());
+                    }}
+                    skipTitle="숨겨진 열 빼기"
+                    skipDesc={`보이는 ${(preview.headers.length - hiddenHeaders.length).toLocaleString('ko-KR')}개 열만 저장`}
+                    includeTitle="숨겨진 열 포함"
+                    includeDesc={`전체 ${preview.headers.length.toLocaleString('ko-KR')}개 열 저장`}
+                  />
+                )}
               </div>
             )}
 
@@ -597,7 +678,7 @@ export function UploadWizard({
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50">
                     <tr>
-                      {preview.headers.map((h, i) => (
+                      {activeHeaders.map((h, i) => (
                         <th key={i} className="border-b px-2 py-1 text-left whitespace-nowrap">
                           {h}
                         </th>
@@ -607,7 +688,7 @@ export function UploadWizard({
                   <tbody>
                     {(excludesHiddenRows ? preview.visibleRows : preview.rows).map((row, ri) => (
                       <tr key={ri}>
-                        {preview.headers.map((h, ci) => (
+                        {activeHeaders.map((h, ci) => (
                           <td key={ci} className="border-b px-2 py-1 whitespace-nowrap">
                             {row[h]}
                           </td>
@@ -627,7 +708,10 @@ export function UploadWizard({
                   <button
                     type="button"
                     onClick={() =>
-                      setMapping((m) => ({ ...m, selectedAttrs: new Set(preview.headers) }))
+                      setMapping((m) => ({
+                        ...m,
+                        selectedAttrs: new Set([...m.selectedAttrs, ...activeHeaders]),
+                      }))
                     }
                     className="text-blue-600 hover:underline"
                   >
@@ -635,13 +719,20 @@ export function UploadWizard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMapping((m) => ({ ...m, selectedAttrs: new Set() }))}
+                    onClick={() =>
+                      setMapping((m) => ({
+                        ...m,
+                        selectedAttrs: new Set(
+                          Array.from(m.selectedAttrs).filter((h) => !activeHeaders.includes(h)),
+                        ),
+                      }))
+                    }
                     className="text-slate-500 hover:underline"
                   >
                     전체 숨김
                   </button>
                   <span className="text-slate-500">
-                    {mapping.selectedAttrs.size}/{preview.headers.length} 표시
+                    {shownCount}/{activeHeaders.length} 표시
                   </span>
                 </div>
               </div>
@@ -680,7 +771,7 @@ export function UploadWizard({
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.headers.map((h) => {
+                    {activeHeaders.map((h) => {
                       const pii = mapping.piiMapping[h];
                       const labelValue = mapping.labelOverrides[h] ?? h;
                       const isShown = mapping.selectedAttrs.has(h);
@@ -934,6 +1025,12 @@ export function UploadWizard({
                 <div>
                   숨겨진 행 제외:{' '}
                   <strong>{result.hiddenRowsExcluded.toLocaleString('ko-KR')}</strong> 행
+                </div>
+              )}
+              {result.hiddenColumnsExcluded > 0 && (
+                <div>
+                  숨겨진 열 제외:{' '}
+                  <strong>{result.hiddenColumnsExcluded.toLocaleString('ko-KR')}</strong> 개
                 </div>
               )}
               <div>

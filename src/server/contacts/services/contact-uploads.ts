@@ -103,6 +103,7 @@ export async function parseExcelPreview(
     totalRows: result.totalRows,
     visibleRows: result.visibleRows,
     hiddenRows: result.hiddenRows,
+    hiddenHeaders: result.hiddenHeaders,
   };
 }
 
@@ -143,10 +144,15 @@ export async function ingestContactUpload(
   ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const { rows: allRows, skippedHiddenRows } = await parseExcelRows(buffer, {
+  const {
+    rows: allRows,
+    skippedHiddenRows,
+    skippedHiddenColumns,
+  } = await parseExcelRows(buffer, {
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
     skipHiddenRows: mapping.skipHiddenRows === true,
+    skipHiddenColumns: mapping.skipHiddenColumns === true,
   });
 
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
@@ -512,6 +518,7 @@ export async function ingestContactUpload(
       skippedRows,
       skippedBreakdown,
       hiddenRowsExcluded: skippedHiddenRows,
+      hiddenColumnsExcluded: skippedHiddenColumns,
     };
   });
 
@@ -717,6 +724,7 @@ export async function matchContactUpload(
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
     skipHiddenRows: mapping.skipHiddenRows === true,
+    skipHiddenColumns: mapping.skipHiddenColumns === true,
   });
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_match', surveyId });
 

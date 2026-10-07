@@ -22,6 +22,7 @@ vi.mock('./excel-parser', () => ({
     rows: h.rows,
     rowNumbers: h.rows.map((_, i) => i + 2),
     skippedHiddenRows: 0,
+    skippedHiddenColumns: 0,
   })),
   previewExcel: vi.fn(),
 }));

@@ -60,6 +60,7 @@ const parseExcelRowsMock = vi.fn(async () => ({
   rows: [] as Array<Record<string, string>>,
   rowNumbers: [] as number[],
   skippedHiddenRows: 0,
+  skippedHiddenColumns: 0,
 }));
 
 vi.mock('@/server/data-scope', async (importOriginal) => ({

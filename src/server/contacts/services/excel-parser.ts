@@ -162,6 +162,8 @@ export interface PreviewResult {
   visibleRows: Array<Record<string, string>>;
   /** 값이 있는 데이터 행 중 엑셀에서 숨겨진 행 수. */
   hiddenRows: number;
+  /** 엑셀에서 숨겨진 열의 헤더 키. `headers`·`rows` 에는 숨겨진 열도 그대로 들어 있다. */
+  hiddenHeaders: string[];
 }
 
 /**
@@ -176,7 +178,15 @@ export async function previewExcel(
   const sheetNames = wb.worksheets.map((w) => w.name);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
   if (!ws) {
-    return { sheetNames, headers: [], rows: [], totalRows: 0, visibleRows: [], hiddenRows: 0 };
+    return {
+      sheetNames,
+      headers: [],
+      rows: [],
+      totalRows: 0,
+      visibleRows: [],
+      hiddenRows: 0,
+      hiddenHeaders: [],
+    };
   }
 
   const headers = readHeaders(ws, opts.headerRow);
@@ -209,6 +219,7 @@ export async function previewExcel(
     totalRows,
     visibleRows,
     hiddenRows,
+    hiddenHeaders: headers.filter((_, idx) => isHiddenColumn(ws, idx + 1)),
   };
 }
 
@@ -217,6 +228,12 @@ export interface ParseRowsOptions {
   headerRow: number;
   /** 엑셀에서 숨겨진 행을 건너뛴다. 디폴트 false (보이든 숨겨졌든 전부 읽는다). */
   skipHiddenRows?: boolean;
+  /**
+   * 엑셀에서 숨겨진 열을 읽지 않는다. 디폴트 false.
+   * 남는 열의 키는 그대로다 — 같은 이름 헤더의 `__2` 접미는 숨겨진 열까지 세어 붙인다.
+   * 미리보기가 보여 준 키와 적재되는 키가 옵션에 따라 달라지면 매핑이 어긋난다.
+   */
+  skipHiddenColumns?: boolean;
 }
 
 export interface ParsedExcelRows {
@@ -228,6 +245,8 @@ export interface ParsedExcelRows {
   rowNumbers: number[];
   /** skipHiddenRows 로 건너뛴 행 수 — 값이 있는 행만 센다. */
   skippedHiddenRows: number;
+  /** skipHiddenColumns 로 읽지 않은 열 수. */
+  skippedHiddenColumns: number;
 }
 
 /** 풀 파싱 — 적재용. 행 수 한계(MAX_UPLOAD_ROWS)는 호출자가 가드. */
@@ -237,14 +256,20 @@ export async function parseExcelRows(
 ): Promise<ParsedExcelRows> {
   const wb = await loadWorkbook(buffer);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
-  if (!ws) return { rows: [], rowNumbers: [], skippedHiddenRows: 0 };
+  if (!ws) return { rows: [], rowNumbers: [], skippedHiddenRows: 0, skippedHiddenColumns: 0 };
 
   const headers = readHeaders(ws, opts.headerRow);
+  const omitColumns = new Set<number>();
+  if (opts.skipHiddenColumns === true) {
+    headers.forEach((_, idx) => {
+      if (isHiddenColumn(ws, idx + 1)) omitColumns.add(idx + 1);
+    });
+  }
   const rows: Array<Record<string, string>> = [];
   const rowNumbers: number[] = [];
   let skippedHiddenRows = 0;
   for (let r = opts.headerRow + 1; r <= ws.rowCount; r++) {
-    const obj = readDataRow(ws, r, headers);
+    const obj = readDataRow(ws, r, headers, omitColumns);
     if (obj === null) continue;
     if (opts.skipHiddenRows === true && isHiddenRow(ws, r)) {
       skippedHiddenRows++;
@@ -253,7 +278,7 @@ export async function parseExcelRows(
     rows.push(obj);
     rowNumbers.push(r);
   }
-  return { rows, rowNumbers, skippedHiddenRows };
+  return { rows, rowNumbers, skippedHiddenRows, skippedHiddenColumns: omitColumns.size };
 }
 
 /**
@@ -264,11 +289,22 @@ function isHiddenRow(ws: ExcelJS.Worksheet, rowNumber: number): boolean {
   return ws.getRow(rowNumber).hidden;
 }
 
-/** 헤더 열 기준으로 한 행을 읽는다. `isEmpty` 는 헤더 열이 전부 빈 경우. */
+/** 엑셀에서 숨겨진 열인가 (1-based 열 번호). */
+function isHiddenColumn(ws: ExcelJS.Worksheet, colNumber: number): boolean {
+  return ws.getColumn(colNumber).hidden;
+}
+
+/**
+ * 헤더 열 기준으로 한 행을 읽는다. `isEmpty` 는 헤더 열이 전부 빈 경우.
+ *
+ * `omitColumns`(1-based 열 번호)의 열은 결과에 싣지 않는다. 빈 행 판정에는 그 열도 본다 —
+ * 열을 빼느냐에 따라 행 수가 달라지면 미리보기의 행 수와 적재 행 수가 어긋난다.
+ */
 function readRowRecord(
   ws: ExcelJS.Worksheet,
   rowNumber: number,
   headers: string[],
+  omitColumns?: ReadonlySet<number>,
 ): { record: Record<string, string>; isEmpty: boolean } {
   const row = ws.getRow(rowNumber);
   const record: Record<string, string> = {};
@@ -276,6 +312,7 @@ function readRowRecord(
   headers.forEach((key, idx) => {
     const value = cellNodeToString(row.getCell(idx + 1));
     if (value !== '') isEmpty = false;
+    if (omitColumns?.has(idx + 1)) return;
     record[key] = value;
   });
   return { record, isEmpty };
@@ -286,8 +323,9 @@ function readDataRow(
   ws: ExcelJS.Worksheet,
   rowNumber: number,
   headers: string[],
+  omitColumns?: ReadonlySet<number>,
 ): Record<string, string> | null {
-  const { record, isEmpty } = readRowRecord(ws, rowNumber, headers);
+  const { record, isEmpty } = readRowRecord(ws, rowNumber, headers, omitColumns);
   return isEmpty ? null : record;
 }
 

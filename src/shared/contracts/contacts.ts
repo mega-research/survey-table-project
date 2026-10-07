@@ -87,6 +87,11 @@ export interface ContactUploadMapping {
    * 미지정(과거 데이터)은 false — 숨겨진 행도 함께 적재한다.
    */
   skipHiddenRows?: boolean;
+  /**
+   * 엑셀에서 숨겨진 열을 읽지 않는다 — 그 열은 명단에 저장되지 않는다.
+   * 미지정(과거 데이터)은 false.
+   */
+  skipHiddenColumns?: boolean;
   /** 업로드 모드. 미지정(과거 데이터)은 replace 로 간주. */
   mode?: ContactUploadMode;
   /**
