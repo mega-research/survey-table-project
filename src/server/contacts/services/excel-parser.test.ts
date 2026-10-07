@@ -82,7 +82,7 @@ describe('previewExcel - individual-mini.xlsx (Row 0 병합, Row 1 헤더)', () 
 describe('parseExcelRows', () => {
   it('group-mini.xlsx 5행 모두 파싱', async () => {
     const buf = await loadFixture('group-mini.xlsx');
-    const rows = await parseExcelRows(buf, { sheetName: '단체참가', headerRow: 2 });
+    const { rows } = await parseExcelRows(buf, { sheetName: '단체참가', headerRow: 2 });
     expect(rows).toHaveLength(5);
     const rows0 = rows[0];
     if (!rows0) throw new Error('expected rows[0]');
@@ -92,7 +92,7 @@ describe('parseExcelRows', () => {
 
   it('빈 셀 → 빈 문자열 보존 (NULL 아님)', async () => {
     const buf = await loadFixture('individual-mini.xlsx');
-    const rows = await parseExcelRows(buf, { sheetName: '개별참가', headerRow: 2 });
+    const { rows } = await parseExcelRows(buf, { sheetName: '개별참가', headerRow: 2 });
     const row2 = rows[2];
     const row3 = rows[3];
     if (!row2) throw new Error('expected rows[2]');
@@ -103,7 +103,7 @@ describe('parseExcelRows', () => {
 
   it('숫자 셀 → 문자열로 보관', async () => {
     const buf = await loadFixture('individual-mini.xlsx');
-    const rows = await parseExcelRows(buf, { sheetName: '개별참가', headerRow: 2 });
+    const { rows } = await parseExcelRows(buf, { sheetName: '개별참가', headerRow: 2 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['연 번']).toBe('1');
@@ -118,7 +118,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
       // 브라우저/Outlook 에서 붙여넣으면 자동 하이퍼링크되는 케이스
       ws.getCell('A2').value = { text: 'a@b.com', hyperlink: 'mailto:a@b.com' };
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['이메일']).toBe('a@b.com');
@@ -134,7 +134,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
         ],
       };
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['이름']).toBe('홍길동');
@@ -145,7 +145,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
       ws.getCell('A1').value = '합계';
       ws.getCell('A2').value = { formula: '1+2', result: 3 };
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['합계']).toBe('3');
@@ -158,7 +158,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
       ws.getCell('A1').value = '수량';
       ws.getCell('A2').value = { formula: '1-1', result: 0 };
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['수량']).toBe('0');
@@ -169,7 +169,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
       ws.getCell('A1').value = '여부';
       ws.getCell('A2').value = { formula: 'FALSE()', result: false };
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['여부']).toBe('false');
@@ -183,7 +183,7 @@ describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
       ws.getCell('A2').value = { formula: 'A9' };
       ws.getCell('B2').value = '홍길동';
     });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     const row0 = rows[0];
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['미계산']).toBe('');
@@ -258,7 +258,7 @@ describe('총 행 수 - 서식만 남은 꼬리 행', () => {
   it('previewExcel 의 totalRows 는 적재될 행 수와 같다', async () => {
     const buf = await buildWorkbookBuffer(styledTail);
     const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
-    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
     expect(rows).toHaveLength(3);
     expect(preview.totalRows).toBe(3);
   });
@@ -270,5 +270,79 @@ describe('총 행 수 - 서식만 남은 꼬리 행', () => {
     expect(full.rows).toHaveLength(3);
     expect(sample.totalRows).toBe(3);
     expect(full.totalRows).toBe(3);
+  });
+});
+
+describe('숨겨진 행 (필터로 걸러졌거나 손으로 숨긴 행)', () => {
+  // 1행 헤더, 2~7행 데이터. 3행·5행은 숨김, 6행은 빈 행인데 숨김.
+  const filtered = (ws: ExcelJS.Worksheet) => {
+    ws.getCell('A1').value = '이름';
+    ws.getCell('B1').value = '지역';
+    const data: Array<[string, string]> = [
+      ['가', '서울'],
+      ['나', '부산'],
+      ['다', '서울'],
+      ['라', '부산'],
+    ];
+    data.forEach(([name, region], i) => {
+      ws.getCell(`A${i + 2}`).value = name;
+      ws.getCell(`B${i + 2}`).value = region;
+    });
+    ws.getCell('A7').value = '마';
+    ws.getCell('B7').value = '서울';
+    ws.getRow(3).hidden = true;
+    ws.getRow(5).hidden = true;
+    ws.getRow(6).hidden = true;
+  };
+
+  it('기본은 숨겨진 행도 함께 읽는다', async () => {
+    const buf = await buildWorkbookBuffer(filtered);
+    const parsed = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(parsed.rows.map((r) => r['이름'])).toEqual(['가', '나', '다', '라', '마']);
+    expect(parsed.rowNumbers).toEqual([2, 3, 4, 5, 7]);
+    expect(parsed.skippedHiddenRows).toBe(0);
+  });
+
+  it('skipHiddenRows 면 보이는 행만 읽고, 행 번호는 엑셀의 실제 행을 가리킨다', async () => {
+    const buf = await buildWorkbookBuffer(filtered);
+    const parsed = await parseExcelRows(buf, {
+      sheetName: 'Sheet1',
+      headerRow: 1,
+      skipHiddenRows: true,
+    });
+    expect(parsed.rows.map((r) => r['이름'])).toEqual(['가', '다', '마']);
+    expect(parsed.rowNumbers).toEqual([2, 4, 7]);
+    // 값 없이 숨겨진 6행은 어차피 읽지 않는 행이라 세지 않는다
+    expect(parsed.skippedHiddenRows).toBe(2);
+  });
+
+  it('미리보기는 숨겨진 행 수와 숨겨진 행을 뺀 표본을 함께 돌려준다', async () => {
+    const buf = await buildWorkbookBuffer(filtered);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1, maxRows: 2 });
+    expect(preview.totalRows).toBe(5);
+    expect(preview.hiddenRows).toBe(2);
+    expect(preview.rows.map((r) => r['이름'])).toEqual(['가', '나']);
+    expect(preview.visibleRows.map((r) => r['이름'])).toEqual(['가', '다']);
+  });
+
+  it('미리보기의 보이는 행 수는 skipHiddenRows 로 적재될 행 수와 같다', async () => {
+    const buf = await buildWorkbookBuffer(filtered);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const parsed = await parseExcelRows(buf, {
+      sheetName: 'Sheet1',
+      headerRow: 1,
+      skipHiddenRows: true,
+    });
+    expect(preview.totalRows - preview.hiddenRows).toBe(parsed.rows.length);
+  });
+
+  it('숨겨진 행이 없는 파일은 hiddenRows 가 0 이다', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '이름';
+      ws.getCell('A2').value = '가';
+    });
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(preview.hiddenRows).toBe(0);
+    expect(preview.visibleRows).toEqual(preview.rows);
   });
 });

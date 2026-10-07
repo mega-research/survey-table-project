@@ -47,6 +47,8 @@ describe('contacts.uploads procedures', () => {
       headers: ['name'],
       rows: [{ name: '홍길동' }],
       totalRows: 1,
+      visibleRows: [{ name: '홍길동' }],
+      hiddenRows: 0,
     } as never);
     const client = createRouterClient({ uploads }, { context: authedContext() });
     const file = xlsxFile();
@@ -66,6 +68,7 @@ describe('contacts.uploads procedures', () => {
       errorRows: 0,
       skippedRows: 0,
       skippedBreakdown: { policy: 0, fileDuplicates: 0, multiMatches: 0, emptyKeys: 0 },
+      hiddenRowsExcluded: 0,
     } as never);
     const client = createRouterClient({ uploads }, { context: authedContext() });
     const file = xlsxFile();

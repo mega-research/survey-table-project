@@ -156,6 +156,8 @@ export function UploadWizard({
   const [headerRow, setHeaderRow] = useState(2);
   const [sheetName, setSheetName] = useState<string>('');
   const [preview, setPreview] = useState<ParseExcelPreviewResult | null>(null);
+  // 엑셀에서 숨겨진 행(필터로 걸러졌거나 손으로 숨긴 행)을 빼고 적재할지 — 숨겨진 행이 있을 때만 묻는다
+  const [skipHiddenRows, setSkipHiddenRows] = useState(true);
   const [mapping, setMapping] = useState<MappingState>({
     groupLevels: {},
     selectedAttrs: new Set(),
@@ -224,6 +226,7 @@ export function UploadWizard({
 
         setMapping(buildInitialMapping(r.headers, existingScheme));
         setReplaceConfirmed(false);
+        setSkipHiddenRows(true);
         setMode('replace');
         setDupCheck(false);
         setMergeKeys(new Set());
@@ -234,6 +237,11 @@ export function UploadWizard({
       }
     });
   }
+
+  const hiddenRowCount = preview?.hiddenRows ?? 0;
+  const excludesHiddenRows = hiddenRowCount > 0 && skipHiddenRows;
+  /** 실제로 적재될 행 수 — 숨겨진 행을 빼기로 했으면 그만큼 줄어든다 */
+  const effectiveRowCount = (preview?.totalRows ?? 0) - (excludesHiddenRows ? hiddenRowCount : 0);
 
   function buildMapping(): ContactUploadMapping {
     // 레벨 배정 확정:
@@ -258,6 +266,7 @@ export function UploadWizard({
       labelOverrides: mapping.labelOverrides,
       headerRow,
       sheetName,
+      ...(hiddenRowCount > 0 ? { skipHiddenRows } : {}),
       mode,
       ...(needsKeySelection ? { mergeKeys: Array.from(mergeKeys) } : {}),
       ...(mode === 'merge' ? { unmatchedPolicy } : {}),
@@ -534,10 +543,55 @@ export function UploadWizard({
               </div>
             )}
 
+            {hiddenRowCount > 0 && (
+              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="text-sm font-medium text-amber-900">
+                  엑셀에 숨겨진 행이 {hiddenRowCount.toLocaleString('ko-KR')}개 있습니다
+                </div>
+                <div className="text-xs text-amber-800">
+                  필터로 걸러졌거나 숨기기 한 행입니다. 전체{' '}
+                  {preview.totalRows.toLocaleString('ko-KR')}행 중 화면에 보이는 행은{' '}
+                  {(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행입니다.
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        value: true,
+                        title: '숨겨진 행 빼기',
+                        desc: `보이는 ${(preview.totalRows - hiddenRowCount).toLocaleString('ko-KR')}행만 적재`,
+                      },
+                      {
+                        value: false,
+                        title: '숨겨진 행 포함',
+                        desc: `전체 ${preview.totalRows.toLocaleString('ko-KR')}행 적재`,
+                      },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      aria-pressed={skipHiddenRows === opt.value}
+                      onClick={() => setSkipHiddenRows(opt.value)}
+                      className={`rounded-lg border bg-white p-3 text-left transition-colors ${
+                        skipHiddenRows === opt.value
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold text-gray-900">{opt.title}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 미리보기 (엑셀 첫 5행) */}
             <div>
               <div className="mb-1 text-xs text-slate-500">
-                미리보기: 총 {preview.totalRows.toLocaleString('ko-KR')} 행 · 첫 5행
+                미리보기: 총 {effectiveRowCount.toLocaleString('ko-KR')} 행 · 첫 5행
+                {excludesHiddenRows && ' (숨겨진 행 제외)'}
               </div>
               <div className="overflow-x-auto rounded border">
                 <table className="w-full text-xs">
@@ -551,7 +605,7 @@ export function UploadWizard({
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.rows.map((row, ri) => (
+                    {(excludesHiddenRows ? preview.visibleRows : preview.rows).map((row, ri) => (
                       <tr key={ri}>
                         {preview.headers.map((h, ci) => (
                           <td key={ci} className="border-b px-2 py-1 whitespace-nowrap">
@@ -837,7 +891,7 @@ export function UploadWizard({
                 ? '처리 중…'
                 : needsMatchStep
                   ? '매칭 확인'
-                  : `${preview.totalRows.toLocaleString('ko-KR')} 행 적재 시작`}
+                  : `${effectiveRowCount.toLocaleString('ko-KR')} 행 적재 시작`}
             </Button>
           </div>
         )}
@@ -874,6 +928,12 @@ export function UploadWizard({
                     {result.skippedBreakdown.multiMatches} · 키 빈 값{' '}
                     {result.skippedBreakdown.emptyKeys})
                   </span>
+                </div>
+              )}
+              {result.hiddenRowsExcluded > 0 && (
+                <div>
+                  숨겨진 행 제외:{' '}
+                  <strong>{result.hiddenRowsExcluded.toLocaleString('ko-KR')}</strong> 행
                 </div>
               )}
               <div>

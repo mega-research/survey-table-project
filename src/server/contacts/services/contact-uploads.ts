@@ -90,13 +90,19 @@ export async function parseExcelPreview(
     maxRows: 5,
   });
 
-  assertUploadRowLimit(result.totalRows, { operation: 'contact_upload_preview' });
+  // 숨겨진 행을 빼면 한도 안에 드는 파일은 통과시킨다 — 뺄지 말지는 다음 단계에서 정하고,
+  // 포함을 골라 한도를 넘으면 매칭·적재의 가드가 막는다.
+  assertUploadRowLimit(result.totalRows - result.hiddenRows, {
+    operation: 'contact_upload_preview',
+  });
 
   return {
     sheetNames: result.sheetNames,
     headers: result.headers,
     rows: result.rows,
     totalRows: result.totalRows,
+    visibleRows: result.visibleRows,
+    hiddenRows: result.hiddenRows,
   };
 }
 
@@ -137,9 +143,10 @@ export async function ingestContactUpload(
   ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const allRows = await parseExcelRows(buffer, {
+  const { rows: allRows, skippedHiddenRows } = await parseExcelRows(buffer, {
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
+    skipHiddenRows: mapping.skipHiddenRows === true,
   });
 
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
@@ -504,6 +511,7 @@ export async function ingestContactUpload(
       errorRows,
       skippedRows,
       skippedBreakdown,
+      hiddenRowsExcluded: skippedHiddenRows,
     };
   });
 
@@ -705,9 +713,10 @@ export async function matchContactUpload(
   ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const allRows = await parseExcelRows(buffer, {
+  const { rows: allRows, rowNumbers } = await parseExcelRows(buffer, {
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
+    skipHiddenRows: mapping.skipHiddenRows === true,
   });
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_match', surveyId });
 
@@ -729,7 +738,8 @@ export async function matchContactUpload(
 
   const toSamples = (indices: number[]) =>
     indices.slice(0, SAMPLE_LIMIT).map((rowIndex) => ({
-      excelRow: mapping.headerRow + 1 + rowIndex,
+      // 빈 행·숨겨진 행을 건너뛰어 읽으므로 인덱스가 아니라 파서가 준 행 번호를 쓴다.
+      excelRow: rowNumbers[rowIndex] ?? mapping.headerRow + 1 + rowIndex,
       keyValues: Object.fromEntries(mergeKeys.map((k) => [k, allRows[rowIndex]?.[k] ?? ''])),
     }));
 

@@ -56,7 +56,11 @@ const h = vi.hoisted(() => ({
   scope: 'test' as 'real' | 'test',
 }));
 
-const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
+const parseExcelRowsMock = vi.fn(async () => ({
+  rows: [] as Array<Record<string, string>>,
+  rowNumbers: [] as number[],
+  skippedHiddenRows: 0,
+}));
 
 vi.mock('@/server/data-scope', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/data-scope')>()),

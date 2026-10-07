@@ -18,7 +18,11 @@ vi.mock('@/server/data-scope', () => ({
 }));
 
 vi.mock('./excel-parser', () => ({
-  parseExcelRows: vi.fn(async () => h.rows),
+  parseExcelRows: vi.fn(async () => ({
+    rows: h.rows,
+    rowNumbers: h.rows.map((_, i) => i + 2),
+    skippedHiddenRows: 0,
+  })),
   previewExcel: vi.fn(),
 }));
 

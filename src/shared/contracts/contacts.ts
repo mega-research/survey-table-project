@@ -82,6 +82,11 @@ export interface ContactUploadMapping {
   headerRow: number;
   /** 사용자가 선택한 시트 이름 (디폴트 첫 시트) */
   sheetName: string;
+  /**
+   * 엑셀에서 숨겨진 행(필터로 걸러진 행·손으로 숨긴 행)을 빼고 적재한다.
+   * 미지정(과거 데이터)은 false — 숨겨진 행도 함께 적재한다.
+   */
+  skipHiddenRows?: boolean;
   /** 업로드 모드. 미지정(과거 데이터)은 replace 로 간주. */
   mode?: ContactUploadMode;
   /**
