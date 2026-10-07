@@ -346,3 +346,34 @@ describe('숨겨진 행 (필터로 걸러졌거나 손으로 숨긴 행)', () =>
     expect(preview.visibleRows).toEqual(preview.rows);
   });
 });
+
+describe('날짜 셀', () => {
+  const dated = (ws: ExcelJS.Worksheet) => {
+    ws.getCell('A1').value = '설립 일자';
+    ws.getCell('B1').value = '접수 시각';
+    ws.getCell('A2').value = new Date(Date.UTC(2017, 8, 7));
+    ws.getCell('B2').value = new Date(Date.UTC(2024, 11, 11, 14, 30, 5));
+    // 글자로 적힌 날짜는 손대지 않는다
+    ws.getCell('A3').value = '2000.10.27';
+    ws.getCell('B3').value = { formula: 'A2', result: new Date(Date.UTC(1988, 2, 14)) };
+  };
+
+  it('시각이 없는 날짜는 YYYY-MM-DD 로 읽는다', async () => {
+    const buf = await buildWorkbookBuffer(dated);
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(rows[0]?.['설립 일자']).toBe('2017-09-07');
+    expect(rows[1]?.['설립 일자']).toBe('2000.10.27');
+  });
+
+  it('시각이 있으면 시각까지 남긴다', async () => {
+    const buf = await buildWorkbookBuffer(dated);
+    const { rows } = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(rows[0]?.['접수 시각']).toBe('2024-12-11 14:30:05');
+  });
+
+  it('수식 결과가 날짜여도 같은 모양이다', async () => {
+    const buf = await buildWorkbookBuffer(dated);
+    const preview = await previewExcel(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    expect(preview.rows[1]?.['접수 시각']).toBe('1988-03-14');
+  });
+});

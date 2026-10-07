@@ -27,10 +27,26 @@ export function normalizeHeaderKey(value: unknown): string {
   return cellToString(value).replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 날짜 셀 → 엑셀에서 보던 모양. 시각이 없는 날짜(자정)는 `YYYY-MM-DD`, 시각이 있으면
+ * `YYYY-MM-DD HH:mm:ss`.
+ *
+ * exceljs 는 날짜 일련번호를 UTC 기준 Date 로 올린다. 그래서 UTC 로 읽어야 하루가 밀리지
+ * 않는다 — 로컬 시각대로 읽으면 서버 시각대에 따라 전날이 된다. 예전에는 ISO 문자열을
+ * 그대로 찍어 명단에 `2017-09-07T00:00:00.000Z` 가 보였다.
+ */
+function dateToString(value: Date): string {
+  if (Number.isNaN(value.getTime())) return '';
+  const iso = value.toISOString();
+  const date = iso.slice(0, 10);
+  const time = iso.slice(11, 19);
+  return time === '00:00:00' ? date : `${date} ${time}`;
+}
+
 /** 셀 → 문자열. 숫자/null/undefined 모두 안전하게 string. */
 function cellToString(value: unknown): string {
   if (value == null) return '';
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return dateToString(value);
   if (typeof value === 'object') {
     // 수식 셀 (CellFormulaValue / CellSharedFormulaValue): 계산 결과 사용.
     // 결과가 없으면 수식 문자열이 아니라 빈 값으로 본다 (사람이 보는 값이 없다).
