@@ -85,13 +85,19 @@ jobs:
       # 모두 moderate 라 --audit-level=high 게이트에 걸리지 않는다.
       - name: 공급망 보안 감사 게이트
         env:
-          # 잔존 unfixable transitive high 취약점 allowlist — 현재 0건.
+          # 잔존 unfixable transitive high 취약점 allowlist — 현재 1건.
+          #   GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, 깊게 중첩된 패턴의 스택 고갈 DoS) — 2026-10-07 등재.
+          #   패치 릴리스가 없다(권고의 first_patched_version 이 비어 있고 npm 최신이 3.0.3).
+          #   경로는 eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces
+          #   하나뿐인 개발 의존성이고(운영 번들에 없음), 패턴은 우리 lint 설정에서만 온다.
+          #   eslint-config-next 16.4.0 도 같은 fast-glob 3.3.1 을 써 상향으로는 풀리지 않는다.
+          #   braces 3.0.4+ 가 나오면 'braces@3' override 로 올리고 이 등재를 지울 것.
           # 2026-07-28 대청소로 17건을 overrides 승격, 2026-08-05 에 마지막 1건
           # (brace-expansion GHSA-mh99-v99m-4gvg)도 2.x 자체 패치(2.1.3+)가 나와
           # 'brace-expansion@2': '2.1.4' 승격으로 해소했다.
           # 신규 high 가 뜨면 먼저 pnpm-workspace.yaml overrides 로 패치를 시도하고,
           # 정말 불가능할 때만 사유와 함께 여기에 GHSA id 를 추가한다.
-          AUDIT_ALLOWLIST: ''
+          AUDIT_ALLOWLIST: 'GHSA-vfj7-8cjw-p6xm'
         run: |
           pnpm audit --audit-level=high --json > audit-report.json || true
           pnpm exec tsx .github/audit-gate.ts audit-report.json

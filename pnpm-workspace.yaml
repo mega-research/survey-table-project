@@ -88,9 +88,12 @@ overrides:
   'fast-uri@3': '>=3.1.6 <4'
   'fast-uri@4': '>=4.1.2 <5'
   'postcss@8': '>=8.5.18 <9'
+  # source-map-js 1.x: GHSA-68fv-2mgg-jv7q (<1.2.2) — next·postcss 경유 transitive. 2026-10-07 하한 1.2.2
+  'source-map-js@1': '>=1.2.2 <2'
   # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(docs 주석 참조).
   # 하한은 GHSA-rgj7-g3m4-5g8c(<0.35.4, 번들 libheif 의 heap overflow) 때문에 0.35.4.
-  sharp: '>=0.35.4 <0.36'
+  # 2026-10-07 GHSA-wq5f-xc86-pv6w(번들 librsvg CVE-2026-96889, <0.35.5) 대응으로 하한 0.35.5
+  sharp: '>=0.35.5 <0.36'
   # nanoid 3.x(postcss 경유 transitive): GHSA-2v37-7h3g-55p8 (<3.3.17). 직접 의존 5.x 는 비해당.
   'nanoid@3': '>=3.3.17 <4'
   'minimatch@3': '>=3.1.4 <4'

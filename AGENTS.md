@@ -29,7 +29,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
 | 데이터베이스   | PostgreSQL (Supabase)                       | -               |
 | 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
-| 이미지 처리    | sharp                                       | 0.35.4          |
+| 이미지 처리    | sharp                                       | 0.35.5          |
 | HTML sanitize  | sanitize-html                               | 2.17.0          |
 | 이메일 발송    | Resend + React Email                        | 6.12.3          |
 | 이메일 webhook | svix                                        | 1.93.0          |
