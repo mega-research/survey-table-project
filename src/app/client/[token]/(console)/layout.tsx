@@ -10,6 +10,7 @@ import {
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
 import { clientLinkPath } from '@/lib/survey-url';
 import { assertClientLinkPageAccess } from '@/server/page-client-link-access';
+import { hasQuotaPlan } from '@/server/quota/services/quota-status';
 import { getClientSurveyHeader } from '@/server/read-models/guest-surveys';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -40,7 +41,8 @@ interface Props {
  *
  * 탭 줄만 따로다(`GuestTabStrip`). 탭을 여는 축이 capability 가 아니라 연구원이 켠 화이트리스트
  * 라서 운영 콘솔의 탭 스트립을 그대로 쓸 수 없다 — 모양은 같고 판정만 이쪽 것이다. 설문
- * 미리보기는 탭이 아니라 화면 머리의 「설문 보기」가 연다(운영 콘솔과 같은 자리).
+ * 미리보기는 탭이 아니라 화면 머리의 「설문 보기」가 연다(운영 콘솔과 같은 자리). 쿼터 현황 탭은
+ * 칩이 켜져 있어도 **쿼터가 있는 설문에서만** 선다.
  *
  * 목록·홈으로 가는 길이 없다 — 링크는 설문 하나만 연다. 조사 기간과 진행 상태는 탭 줄 오른쪽에
  * 한 줄로 선다: 중단된 설문도 이 링크로는 열리므로 「지금 멈춰 있다」를 화면이 말해야 한다.
@@ -61,7 +63,10 @@ export default async function ClientLinkConsoleLayout({ params, children }: Prop
   const { token } = await params;
   const { surveyId, tabs } = await assertClientLinkPageAccess(token);
 
-  const header = await getClientSurveyHeader(surveyId);
+  const [header, hasQuota] = await Promise.all([
+    getClientSurveyHeader(surveyId),
+    hasQuotaPlan(surveyId),
+  ]);
   // 관문을 지났는데 머리를 못 읽었다면 그 사이 설문이 닫힌 것이다 — 존재를 알리지 않는다.
   if (!header) notFound();
 
@@ -78,7 +83,10 @@ export default async function ClientLinkConsoleLayout({ params, children }: Prop
       />
       <GuestTabStrip
         basePath={basePath}
-        tabs={tabs}
+        // 쿼터 현황 칩이 켜져 있어도 쿼터가 없는 설문에서는 탭을 세우지 않는다 — 눌러도 빈
+        // 안내뿐이다(외주 링크 콘솔과 같은 규칙). 감추는 것은 **탭 줄뿐**이고 화이트리스트와
+        // 관문은 그대로다: 연구원이 쿼터를 설정하면 칩을 다시 만지지 않아도 탭이 선다.
+        tabs={{ ...tabs, quota: tabs.quota && hasQuota }}
         meta={`${guestPeriodLabel(header.publishedAt, header.endDate)} · ${GUEST_SURVEY_LIFECYCLE_LABEL[header.lifecycle]}`}
       />
       {children}

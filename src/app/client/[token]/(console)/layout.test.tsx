@@ -26,6 +26,11 @@ vi.mock('@/server/read-models/guest-surveys', () => ({
   getClientSurveyHeader: header.load,
 }));
 
+const quota = vi.hoisted(() => ({ has: vi.fn(async () => true) }));
+vi.mock('@/server/quota/services/quota-status', () => ({
+  hasQuotaPlan: quota.has,
+}));
+
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 
 import ClientLinkConsoleLayout from './layout';
@@ -120,6 +125,34 @@ describe('클라이언트 링크 콘솔 셸', () => {
     expect(hrefs.every((href) => href?.startsWith(`/client/${TOKEN}/`))).toBe(true);
     // 설문 보기 + 켜진 탭 넷.
     expect(hrefs).toHaveLength(5);
+  });
+
+  it('쿼터 현황 칩이 켜져 있어도 쿼터가 없는 설문이면 탭을 세우지 않는다', async () => {
+    gate.assert.mockResolvedValue({
+      surveyId: 'survey-1',
+      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: true },
+    });
+    header.load.mockResolvedValue({
+      surveyId: 'survey-1',
+      title: '고객사 열람 조사',
+      publishedAt: null,
+      endDate: null,
+      lifecycle: 'running',
+    });
+
+    quota.has.mockResolvedValueOnce(false);
+    const first = await renderLayout();
+    expect(screen.getByRole('link', { name: '응답 현황' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '쿼터 현황' })).not.toBeInTheDocument();
+    first.unmount();
+
+    // 연구원이 쿼터를 설정하면 칩을 다시 만지지 않아도 탭이 선다.
+    quota.has.mockResolvedValueOnce(true);
+    await renderLayout();
+    expect(screen.getByRole('link', { name: '쿼터 현황' })).toHaveAttribute(
+      'href',
+      `/client/${TOKEN}/quota`,
+    );
   });
 
   it('관문을 탭 없이 지난다 — 탭 판정은 각 화면의 몫이다', async () => {
