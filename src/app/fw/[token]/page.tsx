@@ -63,7 +63,7 @@ export default async function FieldworkLinkEntryPage({ params }: PageProps) {
             <p className="mt-5 flex items-start gap-2 rounded-lg bg-[#F4F5F8] p-3 text-[12px] leading-[1.6] text-[#6B7280]">
               <Lock className="mt-[2px] h-3.5 w-3.5 shrink-0" />
               <span>
-                이 링크는 이 설문의 조사 대상에만 닿습니다. 설문이 중단되면 닫힙니다.
+                이 링크는 이 설문의 조사 대상에만 닿습니다. 설문이 중단되거나 종료되면 닫힙니다.
               </span>
             </p>
           </>
@@ -74,18 +74,19 @@ export default async function FieldworkLinkEntryPage({ params }: PageProps) {
 }
 
 /**
- * 닫힘 안내 — 네 사유를 갈라 말하지 않는다.
+ * 닫힘 안내 — 다섯 사유를 갈라 말하지 않는다.
  *
  * 외주가 할 수 있는 일이 「연구원에게 묻는다」 하나라 사유를 나눠도 쓸 데가 없고, 나누면
  * 배치 대기·삭제처럼 내부 상태가 그대로 외부로 나간다. 「다시 열릴 수 있다」를 적는 것은
- * 중단이 토글이기 때문이다 — 만료가 아니라 중단 중 차단이라 주소와 비밀번호는 그대로 쓴다.
+ * 중단도 설문 종료(ADR-0030)도 되돌릴 수 있기 때문이다 — 어느 쪽이든 링크 행을 건드리지
+ * 않아 주소와 비밀번호는 그대로 쓴다.
  */
 function ClosedNotice() {
   return (
     <>
       <p className="mt-1.5 text-[15px] font-medium text-[#1C1C1E]">접속이 닫혔습니다</p>
       <p className="mt-2.5 text-[13px] leading-[1.7] text-[#6B7280]">
-        이 설문의 실사가 중단되었거나 링크가 종료되었습니다. 다시 열리면 지금 받은 주소와
+        이 설문의 실사가 중단·종료되었거나 링크가 종료되었습니다. 다시 열리면 지금 받은 주소와
         비밀번호를 그대로 쓸 수 있으니, 담당 연구원에게 문의해 주세요.
       </p>
     </>

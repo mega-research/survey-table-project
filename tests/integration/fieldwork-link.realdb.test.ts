@@ -47,6 +47,7 @@ import {
   resolveLinkActor,
 } from '@/server/fieldwork-link';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { setClosed } from '@/server/operations/services/control';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
 import { attempts } from '@/server/contacts/procedures/attempts';
@@ -281,6 +282,54 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       ok: false,
       reason: 'closed',
     });
+  });
+
+  // 설문 종료(ADR-0030) — 닫는 모양은 중단과 같고 뜻이 다르다. 중단은 「잠깐 멈춤」이고
+  // 종료는 「조사가 끝나 외부 접근을 전부 닫는다」다. 둘 다 링크 행을 건드리지 않는다.
+
+  it('설문 종료가 링크를 닫고, 종료를 취소하면 같은 주소·같은 쿠키로 다시 열린다', async () => {
+    const { token, cookie, linkId } = await issueAndSignIn();
+    const headers = cookieHeaders(cookie);
+    await db.update(surveysTable).set({ status: 'published' }).where(eq(surveysTable.id, surveyId));
+    const [linkBefore] = await db
+      .select()
+      .from(linksTable)
+      .where(eq(linksTable.id, linkId));
+
+    await setClosed({ surveyId, isClosed: true });
+    expect(await resolveLinkActor(token, headers)).toEqual({ ok: false, reason: 'closed' });
+    expect(await resolveFieldworkLinkEntry(token, headers)).toEqual({
+      kind: 'closed',
+      surveyTitle: '외주 실사 조사',
+    });
+    // 종료는 링크 행을 건드리지 않는다 — 닫힘은 설문 상태에서 파생된다. 행의 closed_at 은
+    // 「이 링크만 닫는다」로 남고, 비밀번호 표식이 그대로라 선 세션이 폐기되지도 않는다.
+    const [linkAfter] = await db.select().from(linksTable).where(eq(linksTable.id, linkId));
+    expect(linkAfter).toEqual(linkBefore);
+
+    await setClosed({ surveyId, isClosed: false });
+    expect(await resolveLinkActor(token, headers)).toMatchObject({ ok: true });
+  });
+
+  it('종료된 설문에서는 비밀번호가 맞아도 닫힘이다 — 접속으로 뚫리지 않는다', async () => {
+    const { token, password } = await issueAndSignIn();
+    await db.update(surveysTable).set({ status: 'closed' }).where(eq(surveysTable.id, surveyId));
+    expect(await authenticateFieldworkLink(token, password)).toEqual({
+      ok: false,
+      reason: 'closed',
+    });
+  });
+
+  it('종료하면 이미 들어와 있던 세션의 요청이 다음부터 막힌다', async () => {
+    // 세션 판정만 닫히고 capability 판정이 열려 있으면(또는 그 반대면) 선 세션이 계속
+    // 움직인다. 링크에게 열린 표면 하나를 실제로 불러 두 판정이 함께 닫혔음을 본다.
+    const { cookie } = await issueAndSignIn();
+    const call = callerFor(linkClientFor(cookie), 'contacts.idLists.create');
+    const input = { surveyId, ...SCOPED_INPUTS['contacts.idLists.create'] };
+    await expect(call(input)).resolves.toBeDefined();
+
+    await db.update(surveysTable).set({ status: 'closed' }).where(eq(surveysTable.id, surveyId));
+    await expect(call(input)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
   it('soft delete 된 설문의 링크는 닫힌다', async () => {

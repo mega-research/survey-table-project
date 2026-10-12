@@ -500,6 +500,7 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
         ownerUserId: SUPERADMIN_ID,
         assignmentStatus: 'assigned' as const,
         isPaused: false,
+        isClosed: false,
       };
       // 업체는 소속 경계일 뿐 접근 경로가 아니다(ADR-0019) — 계정을 발급했다는 사실
       // 자체로는 어떤 설문도 열리지 않는다. 초대가 여는 것은 티켓 25 의 realdb 가 잰다.

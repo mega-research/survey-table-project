@@ -52,6 +52,7 @@ function survey(over: Partial<SurveyAccessTarget> = {}): SurveyAccessTarget {
     ownerUserId: OWNER_ID,
     assignmentStatus: 'assigned',
     isPaused: false,
+    isClosed: false,
     ...over,
   };
 }
@@ -573,6 +574,25 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
     const paused = survey({ isPaused: true });
     const owner = subject({ userId: OWNER_ID });
     expect([...resolveSurveyCapabilities(owner, paused)].sort()).toEqual(
+      [...resolveSurveyCapabilities(owner, survey())].sort(),
+    );
+  });
+
+  /**
+   * 설문 종료(ADR-0030)도 링크를 닫는다. 중단과 같은 모양이지만 뜻이 다르다 — 중단은 「잠깐
+   * 멈춤」이고 종료는 「조사가 끝나 외부 접근을 전부 닫는다」다. 종료를 취소하면 링크 행을
+   * 건드린 적이 없으므로 같은 주체가 그대로 열린다.
+   */
+  it('종료된 설문에서는 비어 있고, 종료를 취소하면 같은 주체가 그대로 열린다', () => {
+    expect([...resolveSurveyCapabilities(link, survey({ isClosed: true }))]).toEqual([]);
+    expect([...resolveSurveyCapabilities(link, survey({ isClosed: false }))].length).toBe(6);
+  });
+
+  /** 짝 단언 — 종료도 **링크 축만** 닫는다. 조사가 끝난 뒤의 정리는 그때부터가 본업이다. */
+  it('종료는 계정 주체의 판정을 건드리지 않는다', () => {
+    const closed = survey({ isClosed: true });
+    const owner = subject({ userId: OWNER_ID });
+    expect([...resolveSurveyCapabilities(owner, closed)].sort()).toEqual(
       [...resolveSurveyCapabilities(owner, survey())].sort(),
     );
   });

@@ -105,7 +105,26 @@ export interface SurveyAccessTarget {
    * 운영 중단이 되므로(연구원은 중단 중에도 콘솔을 쓴다) 계정 분기는 이 값을 읽지 않는다.
    */
   isPaused: boolean;
+  /**
+   * 설문이 종료됐는가 (`surveys.status === 'closed'`) — 이것도 **링크 주체만 보는 축**이다
+   * (ADR-0030).
+   *
+   * 종료는 「조사가 끝나 외부 접근을 전부 닫는다」다. 계정 분기가 이 값을 읽기 시작하면 조사가
+   * 끝난 뒤의 정리(응답 수정·내보내기·분석·메일)가 막힌다 — 그 일은 그때부터가 본업이다.
+   * 로더는 `surveyClosedColumn` 으로 채운다.
+   */
+  isClosed: boolean;
 }
+
+/**
+ * 판정 입력의 `isClosed` 를 채우는 컬럼 식 — 로더들이 함께 쓴다.
+ *
+ * status 문자열을 그대로 싣지 않고 불리언으로 접어 두는 이유는 판정 코어가 설문 수명 어휘를
+ * 몰라도 되게 하려는 것이다(코어가 묻는 것은 「닫혔는가」 하나다). 한 곳에 두지 않으면 로더
+ * 넷이 각자 리터럴을 적고, 그중 하나의 오타가 「그 경로로 들어온 링크만 종료 뒤에도 열려
+ * 있는」 구멍이 된다.
+ */
+export const surveyClosedColumn = sql<boolean>`${surveys.status} = 'closed'`;
 
 /**
  * 설문 단위 초대 (survey_participants, 티켓 18).
@@ -440,7 +459,7 @@ function resolveFieldworkCapabilities(
 }
 
 /**
- * 링크 주체의 판정 — 물을 것이 셋뿐이다 (ADR-0026).
+ * 링크 주체의 판정 — 물을 것이 넷뿐이다 (ADR-0026 · ADR-0030).
  *
  * 팀·소유권·공개 범위·참여 행을 전부 보지 않는다. 링크는 「이 설문 하나를 여는 접속 수단」이고
  * 그 설문이 열려 있는 동안만 유효하다.
@@ -451,6 +470,12 @@ function resolveFieldworkCapabilities(
  * 중단(`isPaused`)이 만료일을 대신한다. 중단은 토글이라 재개하면 같은 링크가 그대로 다시
  * 열리므로 이것은 만료가 아니라 **중단 중 차단**이다. 배치 대기를 함께 막는 것은 게스트·실사와
  * 같은 이유다(팀이 정해지기 전에는 아무도 열 수 없다, ADR-0006).
+ *
+ * 종료(`isClosed`)는 「조사가 끝났다」다(ADR-0030). 닫는 모양은 중단과 같고 링크 행을 건드리지
+ * 않는 것도 같아서, 종료를 취소하거나 다시 발행하면 같은 주소·같은 비밀번호로 다시 열린다.
+ *
+ * **세션 판정(`server/fieldwork-link` 의 `isClosed`)도 같은 사실을 본다.** 이쪽만 있으면 닫힘
+ * 화면을 그릴 재료가 없고, 저쪽만 있으면 이미 들어와 있던 세션이 계속 움직인다.
  */
 function resolveLinkCapabilities(
   subject: LinkAccessSubject,
@@ -459,6 +484,7 @@ function resolveLinkCapabilities(
   if (subject.surveyId !== survey.id) return NONE;
   if (survey.assignmentStatus === 'assignment_pending') return NONE;
   if (survey.isPaused) return NONE;
+  if (survey.isClosed) return NONE;
   return new Set(LINK_CAPS);
 }
 
@@ -670,6 +696,7 @@ export async function loadSurveyAccess(
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
       isPaused: surveys.isPaused,
+      isClosed: surveyClosedColumn,
       participantKind: surveyParticipants.kind,
       guestTabs: surveyParticipants.guestTabs,
       participantAccessLevel: surveyParticipants.accessLevel,
@@ -714,6 +741,7 @@ async function loadLinkSurveyAccess(actor: LinkActor, surveyId: string): Promise
       ownerUserId: surveys.ownerUserId,
       assignmentStatus: surveys.assignmentStatus,
       isPaused: surveys.isPaused,
+      isClosed: surveyClosedColumn,
     })
     .from(surveys)
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
@@ -898,6 +926,7 @@ export async function loadSurveyCapabilitiesBatch(
     ownerUserId: surveys.ownerUserId,
     assignmentStatus: surveys.assignmentStatus,
     isPaused: surveys.isPaused,
+    isClosed: surveyClosedColumn,
   };
   const where = and(inArray(surveys.id, ids), isNull(surveys.deletedAt));
 

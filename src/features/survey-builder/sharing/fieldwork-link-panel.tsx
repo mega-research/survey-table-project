@@ -25,7 +25,7 @@ interface FieldworkLinkPanelProps {
  *
  * 화면에 **없는 것이 계약**이다.
  *  - 업체명·담당자 칸이 없다: 외주 업체도 담당자도 시스템에 등록하지 않는다.
- *  - 만료일 칸이 없다: 설문 중단이 링크를 닫는다. 그래서 「설문 중단 시 닫힘」을 적어 둔다 —
+ *  - 만료일 칸이 없다: 설문 중단·종료가 링크를 닫는다(ADR-0030). 그래서 그 사실을 적어 둔다 —
  *    만료일이 없는 이유를 담당자가 짐작하지 않게 한다.
  *  - 주소 재발급 버튼이 없다: 주소만 새어도 비밀번호 화면까지만 보이므로 주소를 갈아끼워
  *    막아지는 것이 없고, 고정이라 공유 문서에 박아 둘 수 있다. 사람을 막는 일은 전부
@@ -173,7 +173,7 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
       <PasswordDraftInput value={draft} onChange={setDraft} disabled={busy || !data.canManage} />
 
       <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-        설문 중단 시 닫힙니다. 링크가 유출되거나 업체를 바꿀 때는 비밀번호만 변경하세요 —
+        설문을 중단하거나 종료하면 닫힙니다. 링크가 유출되거나 업체를 바꿀 때는 비밀번호만 변경하세요 —
         주소는 설문당 하나로 고정입니다. 링크와 비밀번호는 서로 다른 채널로 전달하는 것이
         안전합니다.
       </p>

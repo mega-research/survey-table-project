@@ -246,6 +246,7 @@ function survey(over: Partial<SurveyAccessTarget> = {}): SurveyAccessTarget {
     ownerUserId: OWNER_ID,
     assignmentStatus: 'assigned',
     isPaused: false,
+    isClosed: false,
     ...over,
   };
 }
@@ -388,7 +389,7 @@ describe('스펙 §8 표 — 전 열 차단', () => {
 // ④-2 외주 링크 열 — 다른 축으로 닫힌다 (ADR-0026)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('외주 링크 열 — 설문 일치와 중단이 자격의 전부다', () => {
+describe('외주 링크 열 — 설문 일치와 중단·종료가 자격의 전부다', () => {
   const linkSubject = COLUMNS['외주 링크'].subject;
 
   it('자기 설문에서 표에 적힌 여섯을 갖는다', () => {
@@ -416,6 +417,23 @@ describe('외주 링크 열 — 설문 일치와 중단이 자격의 전부다',
     (name) => {
       const paused = survey({ isPaused: true });
       expect([...resolveFor(name, paused)].sort()).toEqual([...resolveFor(name, survey())].sort());
+    },
+  );
+
+  it('종료된 설문에서는 비어 있다 — 조사가 끝나면 외부 접근이 닫힌다 (ADR-0030)', () => {
+    const closed = survey({ isClosed: true });
+    expect([...resolveSurveyCapabilities(linkSubject, closed)]).toEqual([]);
+  });
+
+  /**
+   * 「종료는 링크 축만 닫는다」가 「중단은 링크 축만 닫는다」 옆에 짝으로 선다. 계정 열이
+   * 종료를 읽기 시작하면 조사가 끝난 뒤의 정리(응답 수정·내보내기·분석·메일)가 막힌다.
+   */
+  it.each(COLUMN_NAMES.filter((name) => name !== '외주 링크'))(
+    '종료된 설문에서 %s 열은 그대로다',
+    (name) => {
+      const closed = survey({ isClosed: true });
+      expect([...resolveFor(name, closed)].sort()).toEqual([...resolveFor(name, survey())].sort());
     },
   );
 

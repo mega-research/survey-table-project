@@ -33,6 +33,8 @@ const SCAN_ROOTS = ['src/server', 'src/app', 'src/lib', 'src/actions'];
 const KNOWN_READERS: Record<string, string> = {
   'src/server/operations/services/control.ts':
     '종료 스위치 자신 — 종료 여부 조회와 「발행된 적 있는 설문만」 전이 조건',
+  'src/server/survey-access.ts':
+    '판정 입력의 isClosed 를 채우는 컬럼 식 — 링크 주체만 읽는 축(종료가 외부 링크를 닫는다)',
   'src/server/survey-builder/services/survey-publish.ts':
     '배포 확인 창의 재료 — 종료된 설문이면 배포가 종료를 푼다고 알린다(표시용)',
   'src/server/survey-response/services/response-manage.ts':

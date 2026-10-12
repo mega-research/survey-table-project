@@ -26,6 +26,7 @@ import {
   type SurveyAccessUser,
   loadAccountAccessSubject,
   resolveSurveyCapabilities,
+  surveyClosedColumn,
 } from '@/server/survey-access';
 
 import {
@@ -384,6 +385,7 @@ export async function listUngroupedSurveys(input: {
       assignmentStatus: surveys.assignmentStatus,
       // 링크 주체만 보는 축이지만 판정 입력의 모양이라 여기서도 싣는다 — 계정 분기는 읽지 않는다.
       isPaused: surveys.isPaused,
+      isClosed: surveyClosedColumn,
     })
     .from(surveys)
     .where(

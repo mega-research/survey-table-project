@@ -16,7 +16,7 @@ import {
 } from '@/lib/auth/fieldwork-link-session';
 import type { SurveyAssignmentStatus } from '@/shared/contracts/workspace';
 
-import type { LinkActor } from './survey-access';
+import { type LinkActor, surveyClosedColumn } from './survey-access';
 
 /**
  * 외주 실사 링크 세션의 판정 코어 — `data-scope`·`survey-access`·`fieldwork-proxy` 와 나란한
@@ -33,7 +33,7 @@ import type { LinkActor } from './survey-access';
  *
  * ## 사유는 둘로만 갈린다
  *
- * **닫힘**(중단·링크 종료·삭제·배치 대기)과 **그 밖 전부**(비밀번호 화면)다.
+ * **닫힘**(중단·설문 종료·링크 종료·삭제·배치 대기)과 **그 밖 전부**(비밀번호 화면)다.
  *  - 「없는 토큰」과 「틀린 비밀번호」를 가르지 않는다. 가르면 주소 스캔이 링크의 존재를
  *    확인하는 창구가 된다.
  *  - 반대로 닫힘은 말해 준다. 링크를 **이미 가진 사람**에게만 보이는 정보라 새는 것이 없고,
@@ -65,6 +65,12 @@ interface LinkRow {
   closedAt: Date | null;
   /** 설문 중단 — 링크의 만료일을 대신한다(ADR-0026). 재개하면 같은 주소로 다시 열린다. */
   isPaused: boolean;
+  /**
+   * 설문 종료(ADR-0030) — 조사가 끝나 외부 접근을 전부 닫는다. 링크 행의 `closedAt`(이 링크만
+   * 닫는다)과 다른 사실이다: 이쪽은 설문 상태에서 파생되고 링크 행을 건드리지 않으므로,
+   * 종료를 취소하거나 다시 발행하면 같은 주소·같은 비밀번호로 다시 열린다.
+   */
+  surveyClosed: boolean;
   /** 어휘는 workspace 계약이 소유한다 — 문자열로 넓히면 오타가 tsc 를 지나간다. */
   assignmentStatus: SurveyAssignmentStatus;
   deletedAt: Date | null;
@@ -89,6 +95,7 @@ async function loadLinkRow(token: string): Promise<LinkRow | null> {
       passwordUpdatedAt: surveyFieldworkLinks.passwordUpdatedAt,
       closedAt: surveyFieldworkLinks.closedAt,
       isPaused: surveys.isPaused,
+      surveyClosed: surveyClosedColumn,
       assignmentStatus: surveys.assignmentStatus,
       deletedAt: surveys.deletedAt,
     })
@@ -100,9 +107,9 @@ async function loadLinkRow(token: string): Promise<LinkRow | null> {
 }
 
 /**
- * 「닫혔는가」 — 네 사유가 한 답으로 모인다.
+ * 「닫혔는가」 — 다섯 사유가 한 답으로 모인다.
  *
- * 판정 코어(`resolveSurveyCapabilities`)의 링크 분기도 중단·배치 대기를 보고 빈 집합을 준다.
+ * 판정 코어(`resolveSurveyCapabilities`)의 링크 분기도 중단·종료·배치 대기를 보고 빈 집합을 준다.
  * 같은 사실을 두 곳이 보는 것이 중복처럼 읽히지만 묻는 시점이 다르다 — 이쪽은 「문을 열어
  * 줄까」이고 저쪽은 「문을 지난 주체가 무엇을 할 수 있는가」다. 이쪽만 있으면 중단 중에
  * 이미 들어와 있던 세션이 계속 움직이고, 저쪽만 있으면 닫힘 화면을 그릴 재료가 없다.
@@ -112,6 +119,7 @@ function isClosed(row: LinkRow): boolean {
     row.closedAt !== null ||
     row.deletedAt !== null ||
     row.isPaused ||
+    row.surveyClosed ||
     row.assignmentStatus === 'assignment_pending'
   );
 }

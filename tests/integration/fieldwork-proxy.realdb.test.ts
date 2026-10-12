@@ -713,6 +713,54 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
       ).toEqual({ kind: 'none' });
     });
 
+    // 설문 종료(ADR-0030) — 링크가 닫히므로 대행도 멈춘다. 닫히는 길은 중단과 같지만 응답
+    // 쪽 결과가 다르다: 종료는 새 응답만 막고 진행 중 응답은 남긴다.
+
+    it('설문이 종료되면 링크 대행도 멈춘다 — 세션이 닫히기 때문이다', async () => {
+      const { context } = await linkSession();
+      await db
+        .update(surveysTable)
+        .set({ status: 'closed' })
+        .where(eq(surveysTable.id, surveyId));
+      expect(
+        await resolveFieldworkProxy(context, surveyId, inviteToken),
+      ).toEqual({ kind: 'none' });
+    });
+
+    it('종료 뒤에는 링크 쿠키를 든 채로도 새 응답을 시작하지 못한다', async () => {
+      // 대행 자격을 잃으면 응답자 경로로 떨어지고, 그 경로의 신규 진입은 종료 게이트가 막는다.
+      // 둘 중 하나만 서면 종료된 설문에 응답 행이 새로 생긴다.
+      const { context } = await linkSession();
+      await db
+        .update(surveysTable)
+        .set({ status: 'closed' })
+        .where(eq(surveysTable.id, surveyId));
+
+      const result = await linkResponseClient(context).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect(result).toMatchObject({ kind: 'blocked', reason: 'not_accepting' });
+      expect(await attribution()).toBeUndefined();
+    });
+
+    it('외주가 시작해 둔 응답은 종료 뒤에도 남고 귀속이 지워지지 않는다', async () => {
+      const { context, linkId } = await linkSession();
+      await linkResponseClient(context).response.createBlank(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      await db
+        .update(surveysTable)
+        .set({ status: 'closed' })
+        .where(eq(surveysTable.id, surveyId));
+
+      // 종료 뒤 응답자가 이어받는다 — 진행 중 응답은 끝까지 갈 수 있고, 일부가 대행이었다는
+      // 사실은 그대로 남는다.
+      await responseClient(null, 'internal').lifecycle.resume(
+        entryInput(crypto.randomUUID(), inviteToken),
+      );
+      expect((await attribution())?.fieldworkLinkId).toBe(linkId);
+    });
+
     it('이미 완료된 대상의 대행 진입을 서버가 거부한다', async () => {
       await db.insert(responsesTable).values({
         surveyId,
