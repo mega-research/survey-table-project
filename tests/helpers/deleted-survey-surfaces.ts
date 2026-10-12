@@ -110,4 +110,9 @@ export const PUB_TOKEN_LOOKUPS: Record<string, string> = {
    * (외주는 링크를 이미 가진 사람이라 감출 것이 없고, 감추면 오타로 오해해 문의한다).
    */
   resolveAccessLinkEntry: 'tests/integration/fieldwork-link.realdb.test.ts',
+  /**
+   * 클라이언트 링크의 입구 (ADR-0029) — 같은 성질이고 같은 답이다(삭제는 닫힘). 조사 이름을
+   * 싣지 않는 입구라 닫힘 화면에도 이름이 없다.
+   */
+  resolveClientLinkEntry: 'tests/integration/client-link.realdb.test.ts',
 };

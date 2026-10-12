@@ -37,7 +37,7 @@ export const SESSION_GATED_ROOT_SEGMENTS: readonly string[] = [
 ];
 
 /**
- * 세션 없이 열려야 하는 **루트 세그먼트** — 응답자·외주 표면.
+ * 세션 없이 열려야 하는 **루트 세그먼트** — 응답자·외주·클라이언트 표면.
  *
  * 위 목록과 겹치면 안 되고, matcher 에 들어가면 응답자가 로그인으로 튕긴다. 출처는
  * `tests/repo/rsc-page-guards.test.ts` 의 `PUBLIC_PAGES` 이며 그 대조도 가드가 한다.
@@ -49,6 +49,9 @@ export const PUBLIC_ROOT_SEGMENTS: readonly string[] = [
   'preview',
   'unsubscribe',
   'fw',
+  // 클라이언트 링크 (ADR-0029) — 계정이 아니라 링크 세션으로 열린다. `/fw` 와 같은 이유로
+  // matcher 밖이어야 한다(넣으면 클라이언트가 전원 로그인으로 튕긴다).
+  'client',
 ];
 
 /**

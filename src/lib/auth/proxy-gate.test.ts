@@ -79,4 +79,9 @@ describe('proxy 세션 쿠키 게이트', () => {
     // 여기 넣으면 외주가 전원 로그인으로 튕겨 기능이 통째로 닫힌다 (ADR-0026).
     expect(config.matcher.some((pattern) => pattern.startsWith('/fw'))).toBe(false);
   });
+
+  it('클라이언트 링크 구역도 matcher 밖이다 — 고객사에게는 계정이 없다', () => {
+    // 여기 넣으면 클라이언트가 전원 로그인으로 튕긴다 (ADR-0029).
+    expect(config.matcher.some((pattern) => pattern.startsWith('/client'))).toBe(false);
+  });
 });

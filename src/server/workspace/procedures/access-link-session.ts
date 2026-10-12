@@ -1,12 +1,16 @@
 /**
- * 외주 실사 링크 세션 procedure — 접속과 나가기 (ADR-0026, .pen FLOW 10-3).
+ * 링크 세션 procedure — 접속과 나가기 (ADR-0026·0029, .pen FLOW 10-3).
+ *
+ * 외주 실사 링크와 클라이언트 링크가 **각자의 표면 쌍**을 갖는다(아래 `authenticateClient`
+ * 참조 — 갈라 둔 이유는 로그다).
  *
  * **형제 `access-links.ts` 와 청중이 정반대다.** 저쪽은 연구원이 부르는 `authed` 관리
- * 표면이고 이쪽은 **외주가 부르는 `pub` 표면**이다. 같은 파일에 두지 않은 이유가 그것이다 —
+ * 표면이고 이쪽은 **링크를 받은 외부인이 부르는 `pub` 표면**이다. 같은 파일에 두지 않은 이유가 그것이다 —
  * 한 그룹에 섞이면 「이 표면은 로그인 없이 열린다」가 코드에서 읽히지 않고, 관리 표면을 조일
  * 때 세션 표면이 조용히 따라 닫힌다.
  *
- * 인증은 링크 주소의 토큰 + 비밀번호 한 칸이고, 성공하면 `fw_<token>` 쿠키가 심긴다.
+ * 인증은 링크 주소의 토큰 + 비밀번호 한 칸이고, 성공하면 종류별 쿠키(`fw_<token>` ·
+ * `cl_<token>`)가 심긴다.
  * 판정은 전부 코어(`server/access-link`)가 하고 여기는 **쿠키를 심고 지우는 일**만 한다 —
  * 그 일은 코어가 할 수 없다(요청/응답을 만지지 않는 자리다).
  *
@@ -25,6 +29,7 @@ import { cookies } from 'next/headers';
 
 import {
   authenticateAccessLink,
+  authenticateClientLink,
   type AccessLinkSessionCookie,
 } from '@/server/access-link';
 import { pub, withRateLimit } from '@/server/orpc';
@@ -32,7 +37,12 @@ import {
   AccessLinkAuthOutput,
   WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
-import { fieldworkLinkCookieName, isAccessLinkToken } from '@/lib/auth/access-link-session';
+import {
+  accessLinkCookieName,
+  accessLinkCookiePath,
+  isAccessLinkToken,
+} from '@/lib/auth/access-link-session';
+import type { AccessLinkKind } from '@/shared/contracts/workspace';
 
 import {
   AccessLinkAuthInput,
@@ -40,10 +50,13 @@ import {
 } from '../domain/access-link';
 
 /**
- * 쿠키 속성 — path 가 `/` 인 것이 계약이다.
+ * 쿠키 속성 — **경로는 종류가 정한다**(`accessLinkCookiePath`).
  *
- * 대리 응답이 `/survey/...` 로 나가므로 path 를 `/fw/...` 로 좁히면 그 화면에 세션이 실리지
- * 않는다. 대신 이름에 토큰이 들어 있어 설문끼리 섞이지 않는다(lib/auth/access-link-session).
+ * 외주 쿠키는 `/` 다. 대리 응답이 `/survey/...` 로 나가므로 `/fw/...` 로 좁히면 그 화면에
+ * 세션이 실리지 않는다. 대신 이름에 토큰이 들어 있어 설문끼리 섞이지 않는다.
+ * 클라이언트 쿠키는 `/client/<token>` 이다 — 읽기만 하는 주체라 자기 콘솔 밖에 실릴 이유가
+ * 없고, RPC 주소에 실리지 않는 것이 「클라이언트 세션이 scoped 표면에 닿지 못한다」를
+ * capability 판정 이전에 지킨다(ADR-0029).
  *
  * `secure` 를 프로덕션에서만 켜는 것은 로컬 http 개발 때문이다 — 켠 채로 두면 localhost 에서
  * 쿠키가 아예 심기지 않아 기능이 통째로 동작하지 않는다.
@@ -53,7 +66,6 @@ function sessionCookieOptions() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
-    path: '/',
   };
 }
 
@@ -63,6 +75,20 @@ async function setSessionCookie(cookie: AccessLinkSessionCookie): Promise<void> 
     value: cookie.value,
     maxAge: cookie.maxAgeSeconds,
     ...sessionCookieOptions(),
+    path: cookie.path,
+  });
+}
+
+/**
+ * 그 종류·그 토큰의 쿠키 하나를 지운다.
+ *
+ * **심을 때와 같은 경로를 준다.** 경로가 다르면 브라우저는 다른 쿠키로 보고 지우지 않는다 —
+ * 「나가기」를 눌렀는데 세션이 살아 있는 사고가 그렇게 난다.
+ */
+async function clearSessionCookie(kind: AccessLinkKind, token: string): Promise<void> {
+  (await cookies()).delete({
+    name: accessLinkCookieName(kind, token),
+    path: accessLinkCookiePath(kind, token),
   });
 }
 
@@ -98,11 +124,40 @@ const signOut = pub
   .output(WorkspaceActionOutput)
   .handler(async ({ input }) => {
     if (!isAccessLinkToken(input.token)) return { success: true } as const;
-    (await cookies()).delete({
-      name: fieldworkLinkCookieName(input.token),
-      path: sessionCookieOptions().path,
-    });
+    await clearSessionCookie('fieldwork', input.token);
     return { success: true } as const;
   });
 
-export const accessLinkSession = { authenticate, signOut };
+/**
+ * 클라이언트 링크의 접속 (ADR-0029) — 외주 쪽과 **표면이 따로다.**
+ *
+ * 입력에 종류를 받는 한 표면으로 두지 않은 이유는 로그다. 구조화 로그·Sentry 가 적는 것은
+ * RPC 이름이라, 표면이 갈려 있어야 어느 입구가 두드려졌는지가 읽힌다. 판정도 종류별 코어를
+ * 따로 지난다 — 종류가 어긋난 토큰은 저쪽에서 없는 링크다.
+ *
+ * 레이트리밋 그룹은 외주와 같은 것을 쓴다. 클라이언트 축이 토큰이라 버킷은 링크마다 저절로
+ * 갈리고, IP 전체 가드는 두 입구를 합쳐 세는 것이 맞다(토큰을 돌려 가며 두드리는 것을 막는
+ * 가드다).
+ */
+const authenticateClient = pub
+  .use(withRateLimit('access-link-auth'))
+  .input(AccessLinkAuthInput)
+  .output(AccessLinkAuthOutput)
+  .handler(async ({ input }) => {
+    const result = await authenticateClientLink(input.token, input.password);
+    if (!result.ok) return { ok: false as const, reason: result.reason };
+    await setSessionCookie(result.cookie);
+    return { ok: true as const };
+  });
+
+/** 클라이언트 링크의 나가기 — 그 링크의 쿠키 하나만, **심을 때와 같은 경로로** 지운다. */
+const signOutClient = pub
+  .input(AccessLinkSignOutInput)
+  .output(WorkspaceActionOutput)
+  .handler(async ({ input }) => {
+    if (!isAccessLinkToken(input.token)) return { success: true } as const;
+    await clearSessionCookie('client', input.token);
+    return { success: true } as const;
+  });
+
+export const accessLinkSession = { authenticate, signOut, authenticateClient, signOutClient };

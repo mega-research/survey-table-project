@@ -37,6 +37,8 @@ const RESERVED_SLUGS = [
   'favicon',
   // 외주 실사 링크 트리 (ADR-0026)
   'fw',
+  // 클라이언트 링크 트리 (ADR-0029)
+  'client',
   'robots',
   'sitemap',
   'manifest',
@@ -280,5 +282,17 @@ export function buildClientLinkUrl(
   token: string,
   baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
 ): string {
-  return `${baseUrl}/client/${token}`;
+  return `${baseUrl}${clientLinkPath(token)}`;
+}
+
+/**
+ * 클라이언트 링크 콘솔의 주소 접두 — `/client/{token}`.
+ *
+ * 입구 화면이 이 주소이고, 그 아래에 열람 화면들이 선다(`/client/{token}/overview` 등).
+ * lib 에 사는 이유는 소비자가 세 층이기 때문이다 — 서버 관문(접속 전이면 입구로 돌려보낸다)·
+ * 라우트·공유 설정 패널. 쿠키의 경로(`lib/auth/access-link-session` 의 `accessLinkCookiePath`)
+ * 도 같은 모양이어야 세션이 자기 콘솔에 실린다.
+ */
+export function clientLinkPath(token: string): string {
+  return `/client/${token}`;
 }

@@ -140,6 +140,20 @@ const COLUMNS = {
     subject: { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID, linkKind: 'fieldwork' },
     participation: null,
   },
+  '클라이언트 링크': {
+    // 두 번째 종류의 링크(ADR-0029) — 고객사가 계정 없이 그 설문의 현황을 본다. 옛 게스트
+    // 열과 **같은 두 칸**이다: 바뀐 것은 들어오는 방법이지 볼 수 있는 것이 아니다.
+    // 탭 화이트리스트는 capability 가 아니라 별도 축이라 이 표에 나타나지 않는다 — 전부 켠
+    // 주체로 두어도 열은 늘지 않는다.
+    subject: {
+      kind: 'link',
+      linkId: 'link-2',
+      surveyId: SURVEY_ID,
+      linkKind: 'client',
+      clientTabs: { overview: true, progressReport: true, contactsMasked: true, quota: true },
+    },
+    participation: null,
+  },
 } satisfies Record<string, Column>;
 
 type ColumnName = keyof typeof COLUMNS;
@@ -164,11 +178,13 @@ const O = true;
 const X = false;
 
 /**
- * `[슈퍼어드민, 팀장, 소유자, 참여자, 참여자 팀장, 팀원, 게스트, 실사원, 실사 팀장, 외주 링크]` —
+ * `[슈퍼어드민, 팀장, 소유자, 참여자, 참여자 팀장, 팀원, 게스트, 실사원, 실사 팀장, 외주 링크,
+ * 클라이언트 링크]` —
  * 표의 칸 순서 그대로 읽는다.
  */
 function cells(
   ...values: [
+    boolean,
     boolean,
     boolean,
     boolean,
@@ -192,46 +208,46 @@ function cells(
  * 늘지 않고, 전부 꺼도 두 칸은 열린 채다. 그 축은 survey-access.test.ts 가 따로 본다.
  */
 const SPEC_ROWS: readonly Row[] = [
-  //                                          슈퍼  팀장  소유  참여  전파  팀원  게스트  실사  실사장  링크
+  //                                          슈퍼  팀장  소유  참여  전파  팀원  게스트  실사  실사장  링크  클라
   { label: 'survey.view', capabilities: ['survey.view'],
-    cells: cells(O, O, O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O, O, O) },
   { label: 'survey.edit', capabilities: ['survey.edit'],
-    cells: cells(O, O, O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X, X) },
   { label: 'survey.publish', capabilities: ['survey.publish'],
-    cells: cells(O, O, O, X, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X, X) },
   { label: 'survey.delete (soft)', capabilities: ['survey.delete'],
-    cells: cells(O, O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X, X) },
   { label: '초대 추가(참여자·게스트·실사)', capabilities: ['survey.invite'],
-    cells: cells(O, O, O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X, X) },
   { label: '제외·공개 범위·부여 해제', capabilities: ['survey.manageAccess'],
-    cells: cells(O, O, O, X, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X, X) },
   { label: 'survey.transferOwnership', capabilities: ['survey.transferOwnership'],
-    cells: cells(O, O, O, X, X, X, X, X, X, X) },
+    cells: cells(O, O, O, X, X, X, X, X, X, X, X) },
   { label: 'operations.view', capabilities: ['operations.view'],
-    cells: cells(O, O, O, O, O, O, O, O, O, O) },
+    cells: cells(O, O, O, O, O, O, O, O, O, O, O) },
   // 외주 링크 칸은 ADR-0027 이 열었다 — 전화로 받은 답을 고치는 것이 외주 업무다.
   { label: 'responses.view (목록·상세·수정)', capabilities: ['responses.view'],
-    cells: cells(O, O, O, O, X, X, X, X, X, O) },
+    cells: cells(O, O, O, O, X, X, X, X, X, O, X) },
   // 수정과 가른 행이다(ADR-0027) — 외주 링크가 답을 고치되 응답을 지우지는 못하게.
   { label: 'responses.manage (삭제·복원·초기화·재응답 허용)', capabilities: ['responses.manage'],
-    cells: cells(O, O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X, X) },
   { label: 'contacts.view 원본', capabilities: ['contacts.view'],
-    cells: cells(O, O, O, O, X, X, X, O, O, O) },
+    cells: cells(O, O, O, O, X, X, X, O, O, O, X) },
   { label: 'contacts.manage (업로드·수정)', capabilities: ['contacts.manage'],
-    cells: cells(O, O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X, X) },
   { label: '결과코드·메모 쓰기', capabilities: ['contacts.writeAttempts'],
-    cells: cells(O, O, O, O, X, X, X, O, X, O) },
+    cells: cells(O, O, O, O, X, X, X, O, X, O, X) },
   { label: 'mail.view / mail.send', capabilities: ['mail.view', 'mail.send'],
-    cells: cells(O, O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X, X) },
   // 메일 탭과 가른 행이다(ADR-0027) — 외주 링크는 조사 대상 한 명에게만 보낸다.
   { label: 'mail.sendSingle (조사 대상 단건 발송)', capabilities: ['mail.sendSingle'],
-    cells: cells(O, O, O, O, X, X, X, X, X, O) },
+    cells: cells(O, O, O, O, X, X, X, X, X, O, X) },
   { label: 'export.download', capabilities: ['export.download'],
-    cells: cells(O, O, O, O, X, X, X, X, X, X) },
+    cells: cells(O, O, O, O, X, X, X, X, X, X, X) },
   { label: 'analytics.view', capabilities: ['analytics.view'],
-    cells: cells(O, O, O, O, O, O, X, X, X, X) },
+    cells: cells(O, O, O, O, O, O, X, X, X, X, X) },
   { label: 'surveyGroup.manage', capabilities: ['surveyGroup.manage'],
-    cells: cells(O, O, O, X, X, O, X, X, X, X) },
+    cells: cells(O, O, O, X, X, O, X, X, X, X, X) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,7 +291,7 @@ describe('표가 어휘 전체를 덮는다', () => {
     expect([...listed].sort()).toEqual([...surveyCapabilityValues].sort());
   });
 
-  it('열은 스펙 헤더 아홉 개 + 외주 링크 열이다', () => {
+  it('열은 스펙 헤더 아홉 개 + 링크 열 둘이다', () => {
     expect(COLUMN_NAMES).toEqual([
       '슈퍼어드민',
       '팀장(소유 팀)',
@@ -287,6 +303,7 @@ describe('표가 어휘 전체를 덮는다', () => {
       '실사원(초대 설문)',
       '실사 팀장(자기 업체)',
       '외주 링크',
+      '클라이언트 링크',
     ]);
   });
 });
@@ -429,7 +446,7 @@ describe('외주 링크 열 — 설문 일치와 중단·종료가 자격의 전
    * 「종료는 링크 축만 닫는다」가 「중단은 링크 축만 닫는다」 옆에 짝으로 선다. 계정 열이
    * 종료를 읽기 시작하면 조사가 끝난 뒤의 정리(응답 수정·내보내기·분석·메일)가 막힌다.
    */
-  it.each(COLUMN_NAMES.filter((name) => name !== '외주 링크'))(
+  it.each(COLUMN_NAMES.filter((name) => !name.endsWith('링크')))(
     '종료된 설문에서 %s 열은 그대로다',
     (name) => {
       const closed = survey({ isClosed: true });
@@ -449,6 +466,44 @@ describe('외주 링크 열 — 설문 일치와 중단·종료가 자격의 전
     expect([...resolveSurveyCapabilities(linkSubject, orphan)].sort()).toEqual(
       tableColumn('외주 링크'),
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ④-3 클라이언트 링크 열 — 닫히는 조건이 외주 링크와 다르다 (ADR-0029·0030)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('클라이언트 링크 열 — 중단에는 열려 있고 종료에 닫힌다', () => {
+  const clientSubject = COLUMNS['클라이언트 링크'].subject;
+
+  it('자기 설문에서 표에 적힌 둘을 갖는다 — 옛 게스트 열과 같은 집합이다', () => {
+    expect([...resolveSurveyCapabilities(clientSubject, survey())].sort()).toEqual(
+      tableColumn('클라이언트 링크'),
+    );
+    expect(tableColumn('클라이언트 링크')).toEqual(tableColumn('게스트(부여 설문)'));
+  });
+
+  it('타 설문 id 에서는 비어 있다 — 링크는 설문 하나만 연다', () => {
+    expect([...resolveSurveyCapabilities(clientSubject, survey({ id: 'survey-other' }))]).toEqual([]);
+  });
+
+  /**
+   * 외주 링크와 갈리는 지점이다. 클라이언트가 결과를 가장 보고 싶어 하는 시점은 응답이 멈춘
+   * 뒤라, 중단에 함께 닫으면 조사가 끝나는 순간 최종 숫자를 볼 곳이 없어진다.
+   */
+  it('중단된 설문에서도 그대로다', () => {
+    expect([...resolveSurveyCapabilities(clientSubject, survey({ isPaused: true }))].sort()).toEqual(
+      tableColumn('클라이언트 링크'),
+    );
+  });
+
+  it('종료된 설문에서는 비어 있다 — 종료가 외부 접근을 전부 닫는다', () => {
+    expect([...resolveSurveyCapabilities(clientSubject, survey({ isClosed: true }))]).toEqual([]);
+  });
+
+  it('배치 대기 설문에서는 비어 있다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect([...resolveSurveyCapabilities(clientSubject, pending)]).toEqual([]);
   });
 });
 

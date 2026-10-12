@@ -597,18 +597,6 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
     );
   });
 
-  /**
-   * 종류가 열을 정한다(ADR-0029). 외주가 아닌 종류가 외주의 여섯 칸을 물려받으면 클라이언트에게
-   * 조사 대상 원본과 응답 수정이 열린다 — 틀려도 좁은 쪽으로 틀려야 하는 자리다.
-   */
-  it('외주가 아닌 종류의 링크는 외주의 열을 물려받지 않는다', () => {
-    const clientLink: LinkAccessSubject = { ...link, linkKind: 'client' };
-    const caps = resolveSurveyCapabilities(clientLink, survey());
-    for (const cap of ['contacts.view', 'contacts.writeAttempts', 'responses.view', 'mail.sendSingle'] as const) {
-      expect(caps.has(cap), `${cap} 이 클라이언트 링크에 열렸다`).toBe(false);
-    }
-  });
-
   it('배치 대기 설문은 링크에도 닫힌다 — 팀이 정해지기 전에는 아무도 못 연다', () => {
     const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
     expect([...resolveSurveyCapabilities(link, pending)]).toEqual([]);
@@ -637,5 +625,93 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
 
   it('탭 축이 없다 — 게스트의 화이트리스트는 링크에 적용되지 않는다', () => {
     expect(resolveSurveyAccess(link, survey()).guestTabs).toBeNull();
+  });
+});
+
+/**
+ * 클라이언트 링크 — 두 번째 종류의 링크 (ADR-0029).
+ *
+ * 고객사가 계정 없이 그 설문의 현황을 본다. 외주 링크와 주체의 모양은 같고 갈리는 것이 셋이다:
+ * **열**(둘뿐이다), **닫히는 조건**(중단에 닫히지 않는다), **탭 축**(연구원이 고른 화면만 연다).
+ */
+describe('resolveSurveyCapabilities — 클라이언트 링크', () => {
+  const ALL_TABS = { overview: true, progressReport: true, contactsMasked: true, quota: true };
+  const OVERVIEW_ONLY = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+  const clientLink = (clientTabs = OVERVIEW_ONLY): LinkAccessSubject => ({
+    kind: 'link',
+    linkId: 'link-2',
+    surveyId: SURVEY_ID,
+    linkKind: 'client',
+    clientTabs,
+  });
+
+  it('자기 설문에서 정확히 둘을 갖는다 — 열람과 현황', () => {
+    expect([...resolveSurveyCapabilities(clientLink(), survey())].sort()).toEqual([
+      'operations.view',
+      'survey.view',
+    ]);
+  });
+
+  /**
+   * 외주의 열을 물려받지 않는다. 종류를 묻지 않고 한 상수를 주면 클라이언트에게 조사 대상
+   * 원본·응답 수정·단건 메일이 열린다 — 틀려도 좁은 쪽으로 틀려야 하는 자리다.
+   */
+  it('외주 링크의 칸은 하나도 없다', () => {
+    const caps = resolveSurveyCapabilities(clientLink(ALL_TABS), survey());
+    for (const cap of [
+      'contacts.view',
+      'contacts.writeAttempts',
+      'responses.view',
+      'mail.sendSingle',
+    ] as const) {
+      expect(caps.has(cap), `${cap} 이 클라이언트 링크에 열렸다`).toBe(false);
+    }
+  });
+
+  it('탭을 전부 켜도 capability 는 늘지 않는다 — 탭은 별도 축이다', () => {
+    expect([...resolveSurveyCapabilities(clientLink(ALL_TABS), survey())].sort()).toEqual(
+      [...resolveSurveyCapabilities(clientLink(OVERVIEW_ONLY), survey())].sort(),
+    );
+  });
+
+  it('설문 일치를 가장 먼저 본다', () => {
+    expect([...resolveSurveyCapabilities(clientLink(), survey({ id: 'survey-other' }))]).toEqual([]);
+  });
+
+  it('중단된 설문에서도 열려 있다 — 외주 링크와 갈리는 지점이다', () => {
+    const paused = survey({ isPaused: true });
+    expect([...resolveSurveyCapabilities(clientLink(), paused)].length).toBe(2);
+    // 대조군 — 같은 설문에서 외주 링크는 닫힌다.
+    const fieldworkLink: LinkAccessSubject = {
+      kind: 'link',
+      linkId: 'link-1',
+      surveyId: SURVEY_ID,
+      linkKind: 'fieldwork',
+    };
+    expect([...resolveSurveyCapabilities(fieldworkLink, paused)]).toEqual([]);
+  });
+
+  it('종료된 설문에서는 닫히고, 종료를 취소하면 같은 주체가 그대로 열린다', () => {
+    expect([...resolveSurveyCapabilities(clientLink(), survey({ isClosed: true }))]).toEqual([]);
+    expect([...resolveSurveyCapabilities(clientLink(), survey())].length).toBe(2);
+  });
+
+  it('배치 대기 설문에서는 닫힌다', () => {
+    const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
+    expect([...resolveSurveyCapabilities(clientLink(), pending)]).toEqual([]);
+  });
+
+  it('탭 축이 주체가 든 화이트리스트 그대로 나온다', () => {
+    expect(resolveSurveyAccess(clientLink(OVERVIEW_ONLY), survey()).guestTabs).toEqual(OVERVIEW_ONLY);
+    expect(resolveSurveyAccess(clientLink(ALL_TABS), survey()).guestTabs).toEqual(ALL_TABS);
+  });
+
+  it('닫힌 설문에서는 탭도 전부 꺼진 것으로 나온다 — capability 없이 탭만 서지 않는다', () => {
+    expect(resolveSurveyAccess(clientLink(ALL_TABS), survey({ isClosed: true })).guestTabs).toEqual({
+      overview: false,
+      progressReport: false,
+      contactsMasked: false,
+      quota: false,
+    });
   });
 });

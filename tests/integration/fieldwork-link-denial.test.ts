@@ -142,7 +142,7 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
     await expect(callerFor(path)({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('링크 세션 표면 둘만 pub 이다 — 외주가 실제로 부를 수 있는 것의 전부', () => {
+  it('링크 세션 표면 넷만 pub 이다 — 링크로 들어온 사람이 실제로 부를 수 있는 것의 전부', () => {
     const linkSurfaces = procedures
       .filter((p) => p.path.startsWith('workspace.accessLink'))
       .map((p) => `${p.path}:${p.base}`)
@@ -151,7 +151,11 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
     // 연구원이 통제권을 잃는다. 세션 둘이 authed 로 올라가면 접속할 방법이 사라진다.
     expect(linkSurfaces).toEqual([
       'workspace.accessLinkSession.authenticate:pub',
+      // 클라이언트 링크의 세션 표면 둘(ADR-0029) — 외주 쪽과 표면이 따로다. 로그가 적는 것이
+      // RPC 이름이라 입구의 종류가 거기서 읽힌다.
+      'workspace.accessLinkSession.authenticateClient:pub',
       'workspace.accessLinkSession.signOut:pub',
+      'workspace.accessLinkSession.signOutClient:pub',
       'workspace.accessLinks.close:authed',
       'workspace.accessLinks.get:authed',
       'workspace.accessLinks.issue:authed',

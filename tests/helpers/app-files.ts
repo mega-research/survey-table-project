@@ -52,6 +52,8 @@ export const PUBLIC_PAGES: Record<string, string> = {
   'survey/[id]/page.tsx': '공개 응답 페이지 — 설문 자체가 공개 표면이다',
   'fw/[token]/page.tsx':
     '외주 실사 링크의 비밀번호 화면 — 세션을 **만드는** 자리라 가드를 붙이면 아무도 들어올 수 없다',
+  'client/[token]/page.tsx':
+    '클라이언트 링크의 비밀번호 화면 — 위와 같은 이유다. 조사 이름조차 받지 않는다(ADR-0029)',
 };
 
 /** `src/app` 직속 디렉터리 이름 — 라우트 그룹 `(…)`·비공개 폴더 `_…` 는 제외한다. */

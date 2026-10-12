@@ -7,19 +7,25 @@ import { surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret } from '@/lib/crypto/aes';
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
 import {
-  fieldworkLinkCookieName,
   ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
+  accessLinkCookieName,
+  accessLinkCookiePath,
   isAccessLinkToken,
-  readFieldworkLinkSessions,
+  readAccessLinkSession,
   signAccessLinkSession,
   type AccessLinkSession,
 } from '@/lib/auth/access-link-session';
-import type { AccessLinkKind, SurveyAssignmentStatus } from '@/shared/contracts/workspace';
+import {
+  type AccessLinkKind,
+  normalizeSurveyGuestTabs,
+  type SurveyAssignmentStatus,
+  type SurveyGuestTabs,
+} from '@/shared/contracts/workspace';
 
 import { type LinkActor, surveyClosedColumn } from './survey-access';
 
 /**
- * 외주 실사 링크 세션의 판정 코어 — `data-scope`·`survey-access`·`fieldwork-proxy` 와 나란한
+ * 링크 세션(외주 실사 링크 · 클라이언트 링크)의 판정 코어 — `data-scope`·`survey-access`·`fieldwork-proxy` 와 나란한
  * 자리다 (ADR-0026).
  *
  * 판정이 도메인 하나에 속하지 않기 때문에 코어다: 링크 행은 workspace 가 갖고, 「열려 있는
@@ -63,6 +69,8 @@ interface LinkRow {
   surveyTitle: string;
   passwordCipher: string;
   passwordUpdatedAt: Date;
+  /** 클라이언트 링크의 탭 화이트리스트(원본) — 주체에 실을 때 정규화한다. 외주 링크는 NULL. */
+  clientTabs: SurveyGuestTabs | null;
   /** 링크 종료 시각 — 종료된 행은 계보로 남는다(0126 부분 UNIQUE). */
   closedAt: Date | null;
   /** 설문 중단 — 링크의 만료일을 대신한다(ADR-0026). 재개하면 같은 주소로 다시 열린다. */
@@ -79,26 +87,17 @@ interface LinkRow {
 }
 
 /**
- * 이 모듈의 입구들이 받는 링크의 종류 — **지금은 외주 실사 링크 하나다** (ADR-0029).
- *
- * 입구가 셋이고 전부 외주의 것이다: `/fw/<token>` 의 화면과 관문, scoped 베이스, 대리 응답.
- * 클라이언트 링크의 토큰이 이리로 오면 **없는 토큰**이어야 한다 — 그 칸막이가 없으면
- * 클라이언트에게 준 주소의 접두만 `/fw` 로 바꿔 넣어 외주 콘솔이 열린다. 클라이언트 링크의
- * 입구(`/client/<token>`)는 다음 티켓이 이 값을 인자로 열면서 세운다.
- */
-const ENTRANCE_KIND: AccessLinkKind = 'fieldwork';
-
-/**
  * 토큰으로 링크 행을 읽는다 — **종료된 행도 읽는다.**
  *
  * `closedAt IS NULL` 을 WHERE 에 걸면 종료된 링크가 「없는 토큰」이 되어 비밀번호 화면이 뜬다.
  * 그러면 외주는 비밀번호를 몇 번이고 다시 넣어 본다 — 닫힘을 말해 주는 판단과 어긋난다.
  *
- * **종류는 WHERE 에 건다.** 종류가 어긋난 토큰은 닫힌 링크가 아니라 없는 링크다 — 닫힘 화면은
- * 「이 주소가 한때 링크였다」를 알려 주므로, 어긋난 종류에 그것을 보이면 다른 입구의 토큰이
- * 유효한지가 확인된다.
+ * **종류는 WHERE 에 건다** — 입구마다 자기 종류의 링크만 받는다(ADR-0029). 종류가 어긋난
+ * 토큰은 닫힌 링크가 아니라 없는 링크다: 닫힘 화면은 「이 주소가 한때 링크였다」를 알려
+ * 주므로, 어긋난 종류에 그것을 보이면 다른 입구의 토큰이 유효한지가 확인된다. 이 칸막이가
+ * 없으면 클라이언트에게 준 주소의 접두만 `/fw` 로 바꿔 넣어 외주 콘솔이 열린다.
  */
-async function loadLinkRow(token: string): Promise<LinkRow | null> {
+async function loadLinkRow(kind: AccessLinkKind, token: string): Promise<LinkRow | null> {
   // 모양이 아니면 조회하지 않는다 — 주소에서 온 아무 문자열로 DB 를 치지 않기 위해서이고,
   // 세 진입점이 같은 가드를 각자 쓰지 않게 하려는 것이기도 하다.
   if (!isAccessLinkToken(token)) return null;
@@ -110,6 +109,7 @@ async function loadLinkRow(token: string): Promise<LinkRow | null> {
       surveyTitle: surveys.title,
       passwordCipher: surveyAccessLinks.passwordCipher,
       passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+      clientTabs: surveyAccessLinks.clientTabs,
       closedAt: surveyAccessLinks.closedAt,
       isPaused: surveys.isPaused,
       surveyClosed: surveyClosedColumn,
@@ -118,18 +118,26 @@ async function loadLinkRow(token: string): Promise<LinkRow | null> {
     })
     .from(surveyAccessLinks)
     .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
-    .where(and(eq(surveyAccessLinks.token, token), eq(surveyAccessLinks.kind, ENTRANCE_KIND)))
+    .where(and(eq(surveyAccessLinks.token, token), eq(surveyAccessLinks.kind, kind)))
     .limit(1);
   return row ?? null;
 }
 
-/** 링크 행 → 요청 주체. 종류를 **행에서** 싣는다 — 쿠키나 주소가 주장한 값이 아니다. */
+/**
+ * 링크 행 → 요청 주체. 종류와 탭을 **행에서** 싣는다 — 쿠키나 주소가 주장한 값이 아니다.
+ *
+ * 탭이 쿠키에 없는 것이 요점이다. 세션 판정은 매 요청 이 행을 읽으므로, 연구원이 탭을 바꾸면
+ * 클라이언트의 다음 요청부터 반영된다 — 쿠키에 실었다면 12시간 동안 옛 탭이 산다.
+ */
 function toLinkActor(row: LinkRow): LinkActor {
-  return { kind: 'link', linkId: row.linkId, surveyId: row.surveyId, linkKind: row.kind };
+  const base = { kind: 'link' as const, linkId: row.linkId, surveyId: row.surveyId };
+  return row.kind === 'client'
+    ? { ...base, linkKind: 'client', clientTabs: normalizeSurveyGuestTabs(row.clientTabs) }
+    : { ...base, linkKind: 'fieldwork' };
 }
 
 /**
- * 「닫혔는가」 — 다섯 사유가 한 답으로 모인다.
+ * 「닫혔는가」 — 다섯 사유가 한 답으로 모인다. **중단만 종류를 가린다**(ADR-0029·0030).
  *
  * 판정 코어(`resolveSurveyCapabilities`)의 링크 분기도 중단·종료·배치 대기를 보고 빈 집합을 준다.
  * 같은 사실을 두 곳이 보는 것이 중복처럼 읽히지만 묻는 시점이 다르다 — 이쪽은 「문을 열어
@@ -140,7 +148,9 @@ function isClosed(row: LinkRow): boolean {
   return (
     row.closedAt !== null ||
     row.deletedAt !== null ||
-    row.isPaused ||
+    // 중단은 「실사를 멈춘다」다 — 외주 링크만 닫는다. 클라이언트는 응답이 멈춘 뒤에 결과를
+    // 보므로 열려 있고, 조사가 끝나 외부를 전부 닫는 일은 아래 종료가 한다.
+    (row.kind === 'fieldwork' && row.isPaused) ||
     row.surveyClosed ||
     row.assignmentStatus === 'assignment_pending'
   );
@@ -168,7 +178,30 @@ export async function resolveLinkActor(
   token: string,
   headers: Headers,
 ): Promise<LinkActorResult> {
-  const row = await loadLinkRow(token);
+  return resolveActorFor('fieldwork', token, headers);
+}
+
+/**
+ * 클라이언트 링크의 세션 판정 (ADR-0029) — `/client/<token>` 의 관문이 부른다.
+ *
+ * 외주 쪽(`resolveLinkActor`)과 판정은 한 벌이고 갈리는 것은 종류뿐이다: 어느 링크를 받는가
+ * (WHERE), 어느 쿠키를 읽는가(이름·경로), 무엇에 닫히는가(중단에는 닫히지 않는다).
+ * **주소의 토큰으로만** 세션이 선다 — 클라이언트 쿠키는 RPC 주소에 실리지 않으므로 설문 id
+ * 로 세션을 고르는 짝(`resolveLinkActorForSurvey`)이 클라이언트에게는 없다.
+ */
+export async function resolveClientLinkActor(
+  token: string,
+  headers: Headers,
+): Promise<LinkActorResult> {
+  return resolveActorFor('client', token, headers);
+}
+
+async function resolveActorFor(
+  kind: AccessLinkKind,
+  token: string,
+  headers: Headers,
+): Promise<LinkActorResult> {
+  const row = await loadLinkRow(kind, token);
   if (!row) return { ok: false, reason: 'unknown' };
   return evaluateSession(row, token, headers);
 }
@@ -209,7 +242,10 @@ export async function resolveLinkActorForSurvey(
 ): Promise<LinkActorForSurvey> {
   const candidate = sessions?.find((session) => session.claim.surveyId === surveyId);
   if (!candidate) return { kind: 'no_session' };
-  const row = await loadLinkRow(candidate.token);
+  // 이 경로가 받는 것은 외주 세션뿐이다 — 목록(`readFieldworkLinkSessions`)에 클라이언트
+  // 쿠키가 서지 않고, 누가 클라이언트 쿠키의 값을 외주 이름으로 바꿔 보내도 그 토큰의 행은
+  // 외주 종류가 아니라 여기서 없는 링크가 된다.
+  const row = await loadLinkRow('fieldwork', candidate.token);
   if (!row) return { kind: 'invalid' };
   if (isClosed(row)) return { kind: 'invalid' };
   if (row.surveyId !== surveyId) return { kind: 'invalid' };
@@ -227,16 +263,16 @@ export async function resolveLinkActorForSurvey(
  */
 function evaluateSession(row: LinkRow, token: string, headers: Headers): LinkActorResult {
   if (isClosed(row)) return { ok: false, reason: 'closed' };
-  // 이 토큰의 쿠키만 본다 — 다른 설문 링크의 세션으로 이 설문이 열리면 칸막이가 없다.
-  const session = readFieldworkLinkSessions(headers).find((s) => s.token === token);
-  if (!session) return { ok: false, reason: 'unauthenticated' };
-  if (session.claim.linkId !== row.linkId) return { ok: false, reason: 'unauthenticated' };
+  // 이 토큰·이 종류의 쿠키만 본다 — 다른 설문 링크의 세션으로 이 설문이 열리면 칸막이가 없다.
+  const claim = readAccessLinkSession(row.kind, token, headers);
+  if (!claim) return { ok: false, reason: 'unauthenticated' };
+  if (claim.linkId !== row.linkId) return { ok: false, reason: 'unauthenticated' };
   // `claim.surveyId` 는 **여기서 대조하지 않는다.** 주체의 설문은 언제나 잠긴 행에서 오고
   // (`row.surveyId`) 링크 행의 설문은 바뀌지 않으므로 대조는 항상 참이다. 그 필드를 payload 에
   // 담은 이유는 다른 데 있다 — 쿠키가 여럿인 요청에서 **DB 를 읽기 전에** 어느 쿠키가 이
   // 설문의 것인지 고르는 데 쓴다(티켓 06 의 scoped 관문).
 
-  if (session.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
+  if (claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
     return { ok: false, reason: 'unauthenticated' };
   }
   return { ok: true, actor: toLinkActor(row) };
@@ -268,12 +304,39 @@ export async function resolveAccessLinkEntry(
   token: string,
   headers: Headers,
 ): Promise<AccessLinkEntry> {
-  const row = await loadLinkRow(token);
+  const row = await loadLinkRow('fieldwork', token);
   if (!row) return { kind: 'password', surveyTitle: null };
   if (isClosed(row)) return { kind: 'closed', surveyTitle: row.surveyTitle };
   return evaluateSession(row, token, headers).ok
     ? { kind: 'authenticated' }
     : { kind: 'password', surveyTitle: row.surveyTitle };
+}
+
+/**
+ * 클라이언트 링크의 주소를 열었을 때 무엇을 그릴지 (ADR-0029).
+ *
+ * **조사 이름이 이 모양에 없다** — 외주 입구와 일부러 다르다. 저쪽은 여러 조사를 동시에 뛰는
+ * 사람이 어느 링크인지 알아야 해서 이름을 보이지만, 이쪽은 토큰만 가진 사람에게 무슨 조사인지
+ * 알려 줄 이유가 없다. 그리지 않는 것으로 끝내지 않고 **타입에서 뺀다**: 값이 화면까지 오면
+ * 안 그려도 RSC payload 에 실린다.
+ *
+ * 접속된 상태에는 탭이 실린다 — 입구가 「허용된 첫 화면」으로 보내는 재료다.
+ */
+export type ClientLinkEntry =
+  | { kind: 'authenticated'; tabs: SurveyGuestTabs }
+  | { kind: 'password' }
+  | { kind: 'closed' };
+
+export async function resolveClientLinkEntry(
+  token: string,
+  headers: Headers,
+): Promise<ClientLinkEntry> {
+  const row = await loadLinkRow('client', token);
+  if (!row) return { kind: 'password' };
+  if (isClosed(row)) return { kind: 'closed' };
+  return evaluateSession(row, token, headers).ok
+    ? { kind: 'authenticated', tabs: normalizeSurveyGuestTabs(row.clientTabs) }
+    : { kind: 'password' };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +347,8 @@ export async function resolveAccessLinkEntry(
 export interface AccessLinkSessionCookie {
   name: string;
   value: string;
+  /** 쿠키가 실리는 경로 — 종류가 정한다(`accessLinkCookiePath`). */
+  path: string;
   maxAgeSeconds: number;
 }
 
@@ -307,7 +372,23 @@ export async function authenticateAccessLink(
   token: string,
   password: string,
 ): Promise<AccessLinkAuthResult> {
-  const row = await loadLinkRow(token);
+  return authenticateFor('fieldwork', token, password);
+}
+
+/** 클라이언트 링크의 비밀번호 판정 — 외주 쪽과 한 벌이고 종류만 다르다(ADR-0029). */
+export async function authenticateClientLink(
+  token: string,
+  password: string,
+): Promise<AccessLinkAuthResult> {
+  return authenticateFor('client', token, password);
+}
+
+async function authenticateFor(
+  kind: AccessLinkKind,
+  token: string,
+  password: string,
+): Promise<AccessLinkAuthResult> {
+  const row = await loadLinkRow(kind, token);
   if (!row) return { ok: false, reason: 'denied' };
   if (isClosed(row)) return { ok: false, reason: 'closed' };
   if (!constantTimeEquals(decryptSharedSecret(row.passwordCipher), password.trim())) {
@@ -316,7 +397,8 @@ export async function authenticateAccessLink(
   return {
     ok: true,
     cookie: {
-      name: fieldworkLinkCookieName(token),
+      name: accessLinkCookieName(row.kind, token),
+      path: accessLinkCookiePath(row.kind, token),
       value: signAccessLinkSession({
         linkId: row.linkId,
         surveyId: row.surveyId,

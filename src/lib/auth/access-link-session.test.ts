@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  accessLinkCookieName,
+  accessLinkCookiePath,
   fieldworkLinkCookieName,
   isAccessLinkToken,
+  readAccessLinkSession,
   readFieldworkLinkSessions,
   signAccessLinkSession,
   verifyAccessLinkSession,
@@ -118,5 +121,51 @@ describe('요청 헤더에서 링크 세션 읽기', () => {
         cookieHeader([fieldworkLinkCookieName(TOKEN), encodeURIComponent(signed)]),
       ),
     ).toEqual([{ token: TOKEN, claim: CLAIM }]);
+  });
+});
+
+/**
+ * 종류별 쿠키 (ADR-0029).
+ *
+ * 외주 링크와 클라이언트 링크는 쿠키의 **이름과 경로**가 다르다. 외주 쿠키가 사이트 전체에
+ * 실리는 근거는 대리 응답이 `/survey/…` 로 나가기 때문인데 클라이언트에게는 그 근거가 없다.
+ * 그래서 클라이언트 쿠키는 자기 콘솔 아래에만 실린다 — RPC 주소에 실리지 않으므로 scoped
+ * 베이스와 대리 응답 판정이 클라이언트 세션을 볼 길이 구조적으로 없다.
+ */
+describe('종류별 쿠키', () => {
+  it('이름의 접두가 종류마다 다르다', () => {
+    expect(accessLinkCookieName('fieldwork', TOKEN)).toBe(`fw_${TOKEN}`);
+    expect(accessLinkCookieName('client', TOKEN)).toBe(`cl_${TOKEN}`);
+    // 옛 이름의 함수는 외주 쿠키를 가리킨다 — 이미 전달된 링크의 세션이 살아 있어야 한다.
+    expect(fieldworkLinkCookieName(TOKEN)).toBe(accessLinkCookieName('fieldwork', TOKEN));
+  });
+
+  it('토큰 모양이 아니면 이름을 만들지 않는다', () => {
+    expect(() => accessLinkCookieName('client', 'bad token;')).toThrow();
+  });
+
+  it('외주 쿠키는 사이트 전체에, 클라이언트 쿠키는 자기 콘솔 아래에만 실린다', () => {
+    expect(accessLinkCookiePath('fieldwork', TOKEN)).toBe('/');
+    expect(accessLinkCookiePath('client', TOKEN)).toBe(`/client/${TOKEN}`);
+  });
+
+  it('그 종류·그 토큰의 쿠키 하나만 읽는다', () => {
+    const value = signAccessLinkSession(CLAIM);
+    const headers = cookieHeader([`cl_${TOKEN}`, value], [`fw_${OTHER_TOKEN}`, value]);
+
+    expect(readAccessLinkSession('client', TOKEN, headers)).toEqual(CLAIM);
+    // 같은 토큰이어도 다른 종류의 이름으로는 읽히지 않는다.
+    expect(readAccessLinkSession('fieldwork', TOKEN, headers)).toBeNull();
+    expect(readAccessLinkSession('client', OTHER_TOKEN, headers)).toBeNull();
+  });
+
+  it('클라이언트 쿠키는 외주 세션 목록에 서지 않는다 — scoped 베이스가 보는 것은 그 목록이다', () => {
+    const headers = cookieHeader([`cl_${TOKEN}`, signAccessLinkSession(CLAIM)]);
+    expect(readFieldworkLinkSessions(headers)).toEqual([]);
+  });
+
+  it('위조된 값은 null 이다', () => {
+    const headers = cookieHeader([`cl_${TOKEN}`, 'forged.value']);
+    expect(readAccessLinkSession('client', TOKEN, headers)).toBeNull();
   });
 });

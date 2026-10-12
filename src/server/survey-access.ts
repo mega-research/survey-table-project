@@ -75,18 +75,28 @@ export interface AccountAccessSubject {
  * 팀도 소유권도 참여 행도 없고 자격은 「이 링크가 이 설문을 연다」 하나뿐이라 필드가 둘이다.
  * `linkId` 는 판정에 쓰이지 않지만 귀속(결과코드·응답)이 그 값을 남기므로 주체가 들고 다닌다.
  */
-export interface LinkAccessSubject {
+export type LinkAccessSubject = {
   kind: 'link';
   linkId: string;
   /** 이 링크가 여는 유일한 설문. */
   surveyId: string;
-  /**
-   * 링크의 종류 (ADR-0029) — 외주 실사 링크 | 클라이언트 링크. **필수다.** 선택 필드로 두고
-   * 「없으면 외주」로 접으면 종류를 빠뜨린 클라이언트 링크가 외주의 여섯 칸(조사 대상 원본·
-   * 응답 수정·단건 메일)을 얻는다 — 틀려도 좁은 쪽으로 틀려야 하는 자리다.
-   */
-  linkKind: AccessLinkKind;
-}
+} & LinkKindFacet;
+
+/**
+ * 링크의 종류와, 그 종류만 갖는 축 (ADR-0029) — 외주 실사 링크 | 클라이언트 링크.
+ *
+ * **`linkKind` 는 필수다.** 선택 필드로 두고 「없으면 외주」로 접으면 종류를 빠뜨린 클라이언트
+ * 링크가 외주의 여섯 칸(조사 대상 원본·응답 수정·단건 메일)을 얻는다 — 틀려도 좁은 쪽으로
+ * 틀려야 하는 자리다.
+ *
+ * 유니온인 것은 탭 때문이다. 탭 화이트리스트는 **클라이언트 링크에만** 있는 축이라, 한 모양에
+ * nullable 로 두면 「외주인데 탭이 있는」·「클라이언트인데 탭이 없는」 조합이 타입상 만들어진다.
+ * 탭은 세션 판정이 **링크 행에서 매 요청** 읽어 싣는다(쿠키에 싣지 않는다) — 연구원이 탭을
+ * 바꾸면 클라이언트의 다음 요청부터 반영된다.
+ */
+export type LinkKindFacet =
+  | { linkKind: Extract<AccessLinkKind, 'fieldwork'> }
+  | { linkKind: Extract<AccessLinkKind, 'client'>; clientTabs: SurveyGuestTabs };
 
 /** 판정이 보는 요청의 임자 — 계정 또는 외주 실사 링크. */
 export type SurveyAccessSubject = AccountAccessSubject | LinkAccessSubject;
@@ -252,6 +262,16 @@ export function participantAccessLevelFor(
  * 아무리 열어도 이 목록이 늘지 않는 것이 계약이며, 설정 실수로 새지 않는 이유이기도 하다.
  */
 const GUEST_CAPS: readonly SurveyCapability[] = ['survey.view', 'operations.view'];
+
+/**
+ * 클라이언트 링크 — 고객사가 계정 없이 그 설문의 현황을 본다 (ADR-0029).
+ *
+ * **옛 게스트 열과 같은 두 칸**이다. 바뀐 것은 들어오는 방법(계정 → 링크)이지 볼 수 있는 것이
+ * 아니다. 그래도 상수를 따로 두는 것은 두 모델의 수명이 달라서다 — 게스트 계정 모델이 걷힐 때
+ * 이쪽이 함께 흔들리면 안 된다. 여기 없는 것이 「항상 차단」의 정본이고(분석·내보내기·응답
+ * 상세·조사 대상 원본·메일·편집), 탭을 전부 켜도 이 목록은 늘지 않는다.
+ */
+const CLIENT_LINK_CAPS: readonly SurveyCapability[] = ['survey.view', 'operations.view'];
 
 /**
  * 실사원(초대) — 스펙 §8 의 「실사원(초대 설문)」 열 (ADR-0019).
@@ -481,6 +501,9 @@ function resolveFieldworkCapabilities(
  * 종료(`isClosed`)는 「조사가 끝났다」다(ADR-0030). 닫는 모양은 중단과 같고 링크 행을 건드리지
  * 않는 것도 같아서, 종료를 취소하거나 다시 발행하면 같은 주소·같은 비밀번호로 다시 열린다.
  *
+ * **중단과 종료가 종류별로 갈린다**(ADR-0029). 종료는 두 종류를 함께 닫고, 중단은 외주 링크만
+ * 닫는다.
+ *
  * **세션 판정(`server/access-link` 의 `isClosed`)도 같은 사실을 본다.** 이쪽만 있으면 닫힘
  * 화면을 그릴 재료가 없고, 저쪽만 있으면 이미 들어와 있던 세션이 계속 움직인다.
  */
@@ -490,13 +513,19 @@ function resolveLinkCapabilities(
 ): ReadonlySet<SurveyCapability> {
   if (subject.surveyId !== survey.id) return NONE;
   if (survey.assignmentStatus === 'assignment_pending') return NONE;
-  // 외주 실사 링크가 아닌 종류에는 아직 열이 없다(ADR-0029). 종류를 묻지 않고 아래로 내려가면
-  // 클라이언트 링크가 외주의 여섯 칸 — 조사 대상 원본·응답 수정·단건 메일 — 을 얻는다.
-  // 클라이언트 열은 그 링크의 입구가 서는 티켓이 여기에 세운다.
-  if (subject.linkKind !== 'fieldwork') return NONE;
-  if (survey.isPaused) return NONE;
+  // 종료는 두 종류를 함께 닫는다 — 「이제 외부는 전부 끝」이 그 스위치의 뜻이다(ADR-0030).
   if (survey.isClosed) return NONE;
-  return new Set(LINK_CAPS);
+  // **종류가 열과 닫히는 조건을 함께 정한다.** 종류를 묻지 않고 한 상수를 주면 클라이언트
+  // 링크가 외주의 여섯 칸 — 조사 대상 원본·응답 수정·단건 메일 — 을 얻는다.
+  switch (subject.linkKind) {
+    case 'fieldwork':
+      // 중단은 「실사를 멈춘다」다 — 외주 링크만 닫는다.
+      return survey.isPaused ? NONE : new Set(LINK_CAPS);
+    case 'client':
+      // 클라이언트는 중단에 닫히지 않는다. 결과를 가장 보고 싶어 하는 시점이 응답이 멈춘
+      // 뒤라, 함께 닫으면 조사가 끝나는 순간 최종 숫자를 볼 곳이 없어진다(ADR-0029).
+      return new Set(CLIENT_LINK_CAPS);
+  }
 }
 
 /**
@@ -517,8 +546,20 @@ export function resolveSurveyAccess(
   relation?: SurveyAccessRelation,
 ): SurveyAccess {
   const capabilities = resolveSurveyCapabilities(subject, survey, participation, relation);
-  // 탭 축은 게스트만 갖는다 — 링크에는 그 화면 설정이 없다(고정 탭 셋).
-  if (subject.kind === 'link' || subject.userType !== 'guest') {
+  if (subject.kind === 'link') {
+    // 외주 링크에는 화면 설정이 없다(고정 탭 셋). 클라이언트 링크는 주체가 든 화이트리스트가
+    // 그대로 탭 축이다 — 닫힌 설문에서는 capability 가 비므로 탭도 전부 끈다(탭만 열린 상태를
+    // 만들지 않는다, 게스트와 같은 규칙).
+    if (subject.linkKind !== 'client') return { capabilities, guestTabs: null };
+    return {
+      capabilities,
+      guestTabs: capabilities.has('operations.view')
+        ? subject.clientTabs
+        : { ...NO_SURVEY_GUEST_TABS },
+    };
+  }
+  // 계정 쪽의 탭 축은 게스트만 갖는다.
+  if (subject.userType !== 'guest') {
     return { capabilities, guestTabs: null };
   }
   // 부여가 없으면 capability 도 비어 있다 — 탭만 열린 상태는 만들지 않는다.
@@ -549,13 +590,12 @@ export interface SurveyAccessUser {
 export type Actor = SurveyAccessUser | LinkActor;
 
 /** 링크 세션이 들고 있는 만큼의 주체 정보 — 로더가 채울 것이 없다. */
-export interface LinkActor {
+export type LinkActor = {
   kind: 'link';
   linkId: string;
   surveyId: string;
-  /** 링크의 종류 — 세션 판정이 링크 행에서 읽어 싣는다(`LinkAccessSubject.linkKind` 참조). */
-  linkKind: AccessLinkKind;
-}
+  // 종류와 (클라이언트라면) 탭 — 세션 판정이 링크 행에서 읽어 싣는다(`LinkKindFacet` 참조).
+} & LinkKindFacet;
 
 export function isLinkActor(actor: Actor): actor is LinkActor {
   return 'kind' in actor && actor.kind === 'link';
@@ -629,14 +669,8 @@ export class SurveyAccessError extends Error {
  */
 export async function loadAccessSubject(actor: Actor): Promise<SurveyAccessSubject> {
   // 링크 주체는 읽을 소속이 없다 — 자격이 링크 행 하나에 다 들어 있다(ADR-0026).
-  if (isLinkActor(actor)) {
-    return {
-      kind: 'link',
-      linkId: actor.linkId,
-      surveyId: actor.surveyId,
-      linkKind: actor.linkKind,
-    };
-  }
+  // 주체가 곧 판정 입력이다 — 요청 주체와 판정 주체의 모양이 같다(종류·탭까지).
+  if (isLinkActor(actor)) return actor;
   return loadAccountAccessSubject(actor);
 }
 
@@ -765,10 +799,7 @@ async function loadLinkSurveyAccess(actor: LinkActor, surveyId: string): Promise
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
     .limit(1);
   if (!row) throw new SurveyAccessError('not_found');
-  return resolveSurveyAccess(
-    { kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId, linkKind: actor.linkKind },
-    row,
-  );
+  return resolveSurveyAccess(actor, row);
 }
 
 /**

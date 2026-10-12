@@ -3,9 +3,11 @@ import 'server-only';
 import { createHmac } from 'node:crypto';
 
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
+import { clientLinkPath } from '@/lib/survey-url';
 import {
   ACCESS_LINK_TOKEN_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MIN_LENGTH,
+  type AccessLinkKind,
 } from '@/shared/contracts/workspace';
 
 /**
@@ -38,8 +40,24 @@ import {
  * 서명은 그 앞단의 값싼 관문일 뿐이고, 서명만 보고 통과시키면 비밀번호를 바꿔도 세션이 산다.
  */
 
-/** 쿠키 이름 접두 — 뒤에 링크 토큰이 붙는다. */
+/** 쿠키 이름 접두 — 뒤에 링크 토큰이 붙는다. 외주 실사 링크의 것이다. */
 export const FIELDWORK_LINK_COOKIE_PREFIX = 'fw_';
+
+/**
+ * 클라이언트 링크의 쿠키 이름 접두 (ADR-0029).
+ *
+ * 외주 쿠키와 **이름도 경로도** 가른다(`accessLinkCookiePath`). 한 설문에 두 종류의 링크가
+ * 함께 서므로 한 브라우저가 같은 설문의 두 쿠키를 들 수 있는데, 「설문 id 로 링크 세션을
+ * 고르는」 경로(scoped 베이스·대리 응답)가 그 둘을 한 목록에서 고르면 판정이 쿠키 순서에
+ * 달린다. 접두가 다르면 그 목록(`readFieldworkLinkSessions`)에 클라이언트 쿠키가 아예 서지
+ * 않는다.
+ */
+export const CLIENT_LINK_COOKIE_PREFIX = 'cl_';
+
+const COOKIE_PREFIX: Record<AccessLinkKind, string> = {
+  fieldwork: FIELDWORK_LINK_COOKIE_PREFIX,
+  client: CLIENT_LINK_COOKIE_PREFIX,
+};
 
 /**
  * 세션 유효기간 — 12시간.
@@ -76,11 +94,33 @@ export function isAccessLinkToken(token: string): boolean {
   return TOKEN_PATTERN.test(token);
 }
 
-export function fieldworkLinkCookieName(token: string): string {
+/** 그 종류·그 토큰의 세션 쿠키 이름. 토큰 모양이 아니면 던진다 — 이름에 붙는 값이다. */
+export function accessLinkCookieName(kind: AccessLinkKind, token: string): string {
   if (!isAccessLinkToken(token)) {
-    throw new Error('fieldworkLinkCookieName: 링크 토큰 모양이 아니다');
+    throw new Error('accessLinkCookieName: 링크 토큰 모양이 아니다');
   }
-  return `${FIELDWORK_LINK_COOKIE_PREFIX}${token}`;
+  return `${COOKIE_PREFIX[kind]}${token}`;
+}
+
+/** 외주 실사 링크의 쿠키 이름 — 이미 전달된 링크의 세션이 살아 있도록 이름을 바꾸지 않는다. */
+export function fieldworkLinkCookieName(token: string): string {
+  return accessLinkCookieName('fieldwork', token);
+}
+
+/**
+ * 그 쿠키가 실리는 경로.
+ *
+ * 외주 쿠키가 `/` 인 근거는 **대리 응답이 `/survey/…` 로 나가기** 때문이다(그 요청에 세션이
+ * 실려야 귀속이 찍힌다). 클라이언트에게는 그 근거가 없다 — 읽기만 하고, 화면이 전부 자기
+ * 콘솔 아래의 RSC 다. 그래서 `/client/<token>` 으로 좁힌다: **RPC 주소에 쿠키가 실리지
+ * 않으므로** 클라이언트 세션이 scoped 표면에 닿을 길이 capability 판정 이전에 없다.
+ */
+export function accessLinkCookiePath(kind: AccessLinkKind, token: string): string {
+  if (kind === 'fieldwork') return '/';
+  if (!isAccessLinkToken(token)) {
+    throw new Error('accessLinkCookiePath: 링크 토큰 모양이 아니다');
+  }
+  return clientLinkPath(token);
 }
 
 /** 쿠키에 담기는 주장 — 이 셋이 DB 대조의 재료다. */
@@ -200,4 +240,31 @@ export function readFieldworkLinkSessions(headers: Headers): AccessLinkSession[]
     if (claim) sessions.push({ token, claim });
   }
   return sessions;
+}
+
+/**
+ * 그 종류·그 토큰의 세션 쿠키 **하나**를 읽는다 — 주소의 토큰으로 세션을 세우는 쪽이 쓴다.
+ *
+ * `readFieldworkLinkSessions` 와 묻는 방향이 다르다. 저쪽은 「이 요청이 든 외주 세션 전부」
+ * 이고(RPC 에는 토큰이 실리지 않아 설문 id 로 골라야 한다), 이쪽은 「이 주소의 세션」이다.
+ * 클라이언트 링크는 이쪽으로만 읽힌다 — 목록 쪽에는 서지 않는다.
+ *
+ * 위조·훼손·없음은 전부 null 이다. DB 를 치지 않는다.
+ */
+export function readAccessLinkSession(
+  kind: AccessLinkKind,
+  token: string,
+  headers: Headers,
+): AccessLinkSessionClaim | null {
+  if (!isAccessLinkToken(token)) return null;
+  const header = headers.get('cookie');
+  if (!header) return null;
+  const wanted = accessLinkCookieName(kind, token);
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    if (part.slice(0, eq).trim() !== wanted) continue;
+    return verifyAccessLinkSession(decodeCookieValue(part.slice(eq + 1).trim()));
+  }
+  return null;
 }
