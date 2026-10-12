@@ -27,7 +27,11 @@ interface OperationsTabStripProps {
    */
   capabilities: ReadonlySet<SurveyCapability>;
   /**
-   * 내부 전용 자리를 그릴 것인가 — 쿼터·문항 수요·비용 정산.
+   * 내부 전용 자리를 그릴 것인가 — 문항 수요·비용 정산.
+   *
+   * 쿼터는 두 셸에 다 서되 **여는 화면이 다르다**: 내부는 플랜 편집 + 현황판, 링크 셸은
+   * 읽기 전용 현황판 하나다(이름도 「쿼터 현황」으로 갈린다). 주소는 같은 조각(`/quota`)이고
+   * 어느 화면인지는 각 트리의 page 가 정한다.
    *
    * capability 로 물을 수 없는 **다른 축**이다: 그 화면들은 설문 단위 권한이 아니라 내부 계정
    * 여부(`requireAdminPage`)가 지키고, 외주 링크 주체는 `operations.view` 를 갖고도 거기
@@ -46,7 +50,7 @@ interface OperationsTabStripProps {
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
  * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
- * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
+ * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`) — 링크 셸에서는 「쿼터 현황」(읽기 전용 현황판)
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
@@ -241,7 +245,7 @@ export function OperationsTabStrip({
             </NavigationMenuItem>
           )}
 
-          {internalShell && canOverview && (
+          {canOverview && (
             <NavigationMenuItem>
               <Link
                 href={quotaHref}
@@ -253,7 +257,7 @@ export function OperationsTabStrip({
                     : 'border-transparent text-slate-500 hover:text-slate-900',
                 )}
               >
-                쿼터
+                {internalShell ? '쿼터' : '쿼터 현황'}
               </Link>
             </NavigationMenuItem>
           )}

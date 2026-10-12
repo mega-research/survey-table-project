@@ -58,10 +58,19 @@ describe('OperationsTabStrip — capability 가 탭을 정한다', () => {
     expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상', '메일', '문항 수요', '쿼터']);
   });
 
-  it('외주 링크는 현황·진척 보고·조사 대상 셋만 본다 — capability 넷 + 내부 셸 아님', () => {
+  it('외주 링크는 현황·진척 보고·조사 대상·쿼터 현황을 본다 — 내부 셸 아님', () => {
     renderStrip(LINK_CAPABILITIES, { hasSurveyDocument: true, internalShell: false });
-    // 문항 수요·쿼터는 내부 전용 화면이라 조사표가 붙어 있어도 서지 않는다.
-    expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상']);
+    // 문항 수요는 내부 전용 화면이라 조사표가 붙어 있어도 서지 않는다. 쿼터는 읽기 전용
+    // 현황판으로 서고 이름이 「쿼터 현황」이다 — 내부의 「쿼터」(플랜 편집)와 다른 화면이다.
+    expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상', '쿼터 현황']);
+  });
+
+  it('링크 셸의 쿼터 현황은 주입받은 접두 아래로 간다', () => {
+    renderStrip(LINK_CAPABILITIES, { internalShell: false });
+    expect(screen.getByRole('link', { name: '쿼터 현황' })).toHaveAttribute(
+      'href',
+      '/surveys/sv-1/operations/quota',
+    );
   });
 
   /**

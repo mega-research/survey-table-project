@@ -110,7 +110,7 @@ src/
 │   ├── fw/[token]/             # 외주 실사 링크 콘솔 (ADR-0026) — 계정이 아니라 **링크**가 연다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음 — 세션을 만드는 자리)
 │   │   ├── preview/            # 설문 보기 — 콘솔 셸 밖의 열람 전용 화면(내부 /surveys/[id]/preview 의 짝)
-│   │   └── operations/         # 깎인 헤더·탭 + contacts·contacts/[contactId]·overview·report
+│   │   └── operations/         # 깎인 헤더·탭 + contacts·contacts/[contactId]·overview·report·quota(읽기 전용 현황판)
 │   │                           # ·profiles·profiles/[responseId]/edit (ADR-0027). 레이아웃이 QueryProvider 를 연다
 │   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
 │   ├── i/[code]/               # 짧은 초대 링크 (inviteCode → 응답 페이지)
@@ -863,6 +863,9 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /fw/[token]/operations/profiles   # 응답 내역 — 내부 콘솔과 같은 본문(profiles-screen). 삭제·복원·초기화·휴지통 보기·
                                   # 컬럼 설정은 없다 · [responseId]/edit 응답 수정 (ADR-0027)
 /fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓴다(같은 숫자)
+/fw/[token]/operations/quota      # 쿼터 현황 — **읽기 전용 현황판 하나**(2026-10-12). 플랜 편집은 없다(`survey.edit` 축).
+                                  # 본문은 클라이언트 콘솔과 같은 것(app/_client-console/quota-screen), 관문은 operations.view —
+                                  # 새 capability 를 세우지 않았다(링크의 여섯 칸 그대로). 탭 이름은 「쿼터 현황」
                                   # 관문은 assertFieldworkLinkPageAccess 이고 leaf 마다 자기 capability 를 준다
 
 /fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)
