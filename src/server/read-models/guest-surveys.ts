@@ -9,7 +9,11 @@ import {
   type SurveyStatus,
 } from '@/shared/contracts/survey-builder-io';
 import { normalizeSurveyGuestTabs } from '@/shared/contracts/workspace';
-import type { GuestSurveyCardRow, GuestSurveyLifecycle } from '@/shared/contracts/workspace-io';
+import type {
+  ClientSurveyHeaderRow,
+  GuestSurveyCardRow,
+  GuestSurveyLifecycle,
+} from '@/shared/contracts/workspace-io';
 
 /**
  * 게스트 홈이 보는 「부여된 설문」 목록 (.pen FLOW 5-2, 역할 모델 v2 티켓 22).
@@ -44,6 +48,56 @@ export async function getGuestSurveyCard(
 ): Promise<GuestSurveyCardRow | null> {
   const [row] = await selectGuestSurveys(userId, eq(surveys.id, surveyId));
   return row ?? null;
+}
+
+/**
+ * 열람 화면 머리 — **설문 id 만으로** 읽는다 (ADR-0029).
+ *
+ * 클라이언트 링크 입구가 쓴다. 링크 주체에게는 계정이 없어 위의 「이 사람에게 부여된 설문」으로
+ * 물을 수 없다 — 누가 볼 수 있는가는 관문(링크 세션 + capability)이 이미 답했고, 이 조회는 그
+ * 뒤에 불린다. 그래서 부여 행을 지나지 않는다.
+ *
+ * 닫는 조건은 관문과 같다(삭제 · 배치 대기). 관문을 지난 직후 그 사이에 설문이 닫혔다면
+ * null 이고, 호출부가 존재를 알리지 않는다.
+ *
+ * 진행 상태는 계정 쪽 카드와 **같은 판정 함수**를 쓴다 — 두 입구의 화면 머리가 다른 말을
+ * 하지 않게 한다. 탭은 싣지 않는다: 계정은 참여 행에서, 링크는 링크 행에서 오므로 이 조회의
+ * 관심사가 아니다.
+ */
+export async function getClientSurveyHeader(
+  surveyId: string,
+): Promise<ClientSurveyHeaderRow | null> {
+  const [row] = await db
+    .select({
+      surveyId: surveys.id,
+      title: surveys.title,
+      endDate: surveys.endDate,
+      status: surveys.status,
+      isPaused: surveys.isPaused,
+      currentVersionId: surveys.currentVersionId,
+      publishedAt: surveyVersions.publishedAt,
+    })
+    .from(surveys)
+    .leftJoin(surveyVersions, eq(surveyVersions.id, surveys.currentVersionId))
+    .where(
+      and(
+        eq(surveys.id, surveyId),
+        isNull(surveys.deletedAt),
+        eq(surveys.assignmentStatus, 'assigned'),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  return {
+    surveyId: row.surveyId,
+    title: row.title,
+    publishedAt: row.publishedAt ?? null,
+    endDate: row.endDate,
+    lifecycle: resolveGuestSurveyLifecycle(
+      { ...row, status: normalizeSurveyStatus(row.status) },
+      Date.now(),
+    ),
+  };
 }
 
 async function selectGuestSurveys(

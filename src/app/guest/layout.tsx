@@ -1,3 +1,4 @@
+import { AccountMenu } from '@/components/auth/account-menu';
 import { GuestShell } from '@/features/guest-console/guest-shell';
 import { requireAccountTypePage } from '@/lib/auth/require-account-page';
 import { getProfile } from '@/server/auth/services/auth';
@@ -25,7 +26,19 @@ export default async function GuestLayout({ children }: { children: React.ReactN
     .catch(() => null);
 
   return (
-    <GuestShell user={user} organization={organization}>
+    // 셸은 누가 들어왔는지를 모른다 — 홈 주소와 오른쪽 자리를 입구가 넣는다(클라이언트 링크
+    // 입구와 함께 쓰는 셸이다, ADR-0029). 계정 입구의 몫은 부여 설문 목록과 프로필·로그아웃 메뉴다.
+    <GuestShell
+      homeHref="/guest"
+      trailing={
+        <AccountMenu
+          name={user.name}
+          affiliation={organization}
+          badge="게스트"
+          image={user.image ?? null}
+        />
+      }
+    >
       {children}
     </GuestShell>
   );

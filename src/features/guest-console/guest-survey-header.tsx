@@ -14,11 +14,23 @@ import {
   GUEST_PREVIEW_LABEL,
   GUEST_PREVIEW_SEGMENT,
   GUEST_SURVEY_LIFECYCLE_LABEL,
+  guestConsoleHref,
   guestPeriodLabel,
 } from './guest-vocabulary';
 
 interface Props {
-  surveyId: string;
+  /**
+   * 이 열람 화면의 주소 접두 — 탭 링크가 그 아래로 간다.
+   *
+   * 헤더는 자기 주소를 모른다. 같은 헤더를 계정 입구(`/guest/surveys/<id>`)와 링크 입구
+   * (`/client/<token>`)가 함께 쓰므로 접두를 여기 적어 두면 한쪽의 탭이 다른 쪽 주소로 나간다.
+   */
+  basePath: string;
+  /**
+   * 「목록으로」가 가는 곳 — **null 이면 그 링크를 그리지 않는다.** 링크 입구에는 목록이 없다
+   * (설문 하나만 연다).
+   */
+  backHref: string | null;
   title: string;
   publishedAt: Date | null;
   endDate: Date | null;
@@ -41,7 +53,8 @@ interface Props {
  * 않으므로, 그 사실을 화면이 먼저 말하지 않으면 클라이언트가 테스트 응답을 남긴 줄 안다.
  */
 export function GuestSurveyHeader({
-  surveyId,
+  basePath,
+  backHref,
   title,
   publishedAt,
   endDate,
@@ -49,7 +62,6 @@ export function GuestSurveyHeader({
   tabs,
 }: Props) {
   const segment = useSelectedLayoutSegment();
-  const base = `/guest/surveys/${surveyId}`;
   const links = [
     { segment: GUEST_PREVIEW_SEGMENT, label: GUEST_PREVIEW_LABEL },
     ...allowedGuestTabs(tabs),
@@ -59,13 +71,15 @@ export function GuestSurveyHeader({
     <div className="border-b border-[#E5E5EA] bg-white px-6 pt-4">
       <div className="mx-auto flex max-w-7xl flex-col gap-3">
         <div className="flex items-start gap-3">
-          <Link
-            href="/guest"
-            aria-label="열람 가능한 조사 목록으로"
-            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          {backHref && (
+            <Link
+              href={backHref}
+              aria-label="열람 가능한 조사 목록으로"
+              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          )}
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-[16.5px] font-semibold text-[#1C1C1E]">{title}</h1>
@@ -86,7 +100,7 @@ export function GuestSurveyHeader({
             return (
               <Link
                 key={link.segment}
-                href={`${base}/${link.segment}`}
+                href={guestConsoleHref(basePath, link.segment)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'shrink-0 border-b-2 px-3 pb-2.5 text-[13px] font-medium transition-colors',

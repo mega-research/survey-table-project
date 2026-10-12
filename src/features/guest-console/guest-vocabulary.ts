@@ -61,6 +61,35 @@ export function firstGuestTabSegment(tabs: SurveyGuestTabs): string | null {
   return allowedGuestTabs(tabs)[0]?.segment ?? null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 주소 — 접두는 입구가 정한다 (ADR-0029)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 같은 화면을 두 입구가 연다: 계정(`/guest/surveys/<id>`)과 클라이언트 링크(`/client/<token>`).
+// 화면은 자기 접두를 모르고 주입받는다 — 접두를 화면 안에 적으면 링크로 들어온 클라이언트의
+// 탭이 계정 주소로 나가 로그인 화면에 떨어진다. 운영 콘솔의 `operationsPaths(base)` 와 같은
+// 방식이다.
+
+/** 계정 입구의 접두 — 부여받은 설문 하나의 열람 화면. */
+export function guestAccountSurveyBase(surveyId: string): string {
+  return `/guest/surveys/${surveyId}`;
+}
+
+/** 접두 아래 화면 하나의 주소. */
+export function guestConsoleHref(base: string, segment: string): string {
+  return `${base}/${segment}`;
+}
+
+/**
+ * 탭 없는 주소의 착지점 — 허용된 첫 탭, 없으면 미리보기.
+ *
+ * 카드의 「현황 보기」와 접속 직후의 이동이 같은 규칙을 쓴다. 허용 탭이 하나도 없는 부여·링크도
+ * 만들 수 있으므로(체크를 전부 끄면 된다) 그때 갈 곳은 화이트리스트 밖의 미리보기다.
+ */
+export function guestConsoleEntryHref(base: string, tabs: SurveyGuestTabs): string {
+  return guestConsoleHref(base, firstGuestTabSegment(tabs) ?? GUEST_PREVIEW_SEGMENT);
+}
+
 /**
  * 카드·서브헤더의 기간 표기 — `2026. 08. 10. ~ 2026. 09. 05.` (.pen 5-2).
  *

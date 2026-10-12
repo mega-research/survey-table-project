@@ -11,6 +11,9 @@ import {
   allowedGuestTabs,
   firstGuestTabSegment,
   GUEST_TAB_SEGMENT,
+  guestAccountSurveyBase,
+  guestConsoleEntryHref,
+  guestConsoleHref,
   guestPeriodLabel,
 } from './guest-vocabulary';
 
@@ -71,5 +74,33 @@ describe('guestPeriodLabel — 기간 표기 (.pen 5-2)', () => {
 
   it('미발행·마감일 없음은 문구로 말한다 — 빈 칸을 두지 않는다', () => {
     expect(guestPeriodLabel(null, null)).toBe('발행 전 ~ 마감일 없음');
+  });
+});
+
+/**
+ * 주소 조립 (ADR-0029, 티켓 06).
+ *
+ * 같은 화면을 두 입구가 연다 — 계정(`/guest/surveys/<id>`)과 링크(`/client/<token>`). 화면은
+ * 자기 접두를 모르고 주입받는다. 접두를 화면 안에 적어 두면 링크로 들어온 클라이언트의 탭이
+ * 계정 주소로 나가 로그인 화면에 떨어진다.
+ */
+describe('주소 조립 — 접두는 주입받는다', () => {
+  it('계정 입구의 접두는 설문 id 로 정해진다', () => {
+    expect(guestAccountSurveyBase('s-1')).toBe('/guest/surveys/s-1');
+  });
+
+  it('탭 주소는 접두 아래 세그먼트 하나다', () => {
+    expect(guestConsoleHref('/guest/surveys/s-1', 'overview')).toBe('/guest/surveys/s-1/overview');
+    expect(guestConsoleHref('/client/tok', 'report')).toBe('/client/tok/report');
+  });
+
+  it('착지 주소는 허용된 첫 탭이고, 없으면 미리보기다', () => {
+    expect(guestConsoleEntryHref('/client/tok', DEFAULT_SURVEY_GUEST_TABS)).toBe(
+      '/client/tok/overview',
+    );
+    expect(
+      guestConsoleEntryHref('/client/tok', { ...NO_SURVEY_GUEST_TABS, quota: true }),
+    ).toBe('/client/tok/quota');
+    expect(guestConsoleEntryHref('/client/tok', NO_SURVEY_GUEST_TABS)).toBe('/client/tok/preview');
   });
 });

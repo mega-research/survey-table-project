@@ -12,6 +12,7 @@ import {
   GUEST_PREVIEW_LABEL,
   GUEST_PREVIEW_SEGMENT,
   GUEST_SURVEY_LIFECYCLE_LABEL,
+  guestAccountSurveyBase,
   guestPeriodLabel,
 } from './guest-vocabulary';
 
@@ -59,7 +60,7 @@ export function GuestHomeView({ surveys }: Props) {
 function GuestSurveyCard({ survey }: { survey: GuestSurveyCardRow }) {
   const tabs = allowedGuestTabs(survey.tabs);
   const firstTab = firstGuestTabSegment(survey.tabs);
-  const base = `/guest/surveys/${survey.surveyId}`;
+  const base = guestAccountSurveyBase(survey.surveyId);
 
   return (
     <article className="flex flex-col gap-3 rounded-[14px] border border-[#E5E5EA] bg-white p-[18px]">

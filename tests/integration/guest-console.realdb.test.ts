@@ -52,7 +52,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 const { assertGuestSurveyPageAccess } = await import('@/server/page-guest-access');
-const { listGuestSurveys } = await import('@/server/read-models/guest-surveys');
+const { getClientSurveyHeader, listGuestSurveys } = await import(
+  '@/server/read-models/guest-surveys'
+);
 const { listGuestContacts } = await import('@/server/read-models/guest-contacts');
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
@@ -222,6 +224,48 @@ describe.skipIf(!isLocalDb)('게스트 콘솔 (real local DB)', () => {
   // ───────────────────────────────────────────────────────────────────────────
   // ② 탭 관문 — 주소 축에서도 선다
   // ───────────────────────────────────────────────────────────────────────────
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ①-2 열람 화면 머리 — 설문 id 만으로 읽는다 (ADR-0029, 티켓 06)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('열람 화면 머리는 설문 행만으로 읽힌다', () => {
+    // 클라이언트 링크 입구에는 계정이 없어 「이 사람에게 부여된 설문」으로 물을 수 없다.
+    // 그래서 부여 행을 지나지 않는 조회가 따로 있고, 진행 상태는 계정 쪽과 같은 판정을 쓴다.
+
+    it('부여 행과 무관하게 제목·기간·진행 상태를 돌려준다', async () => {
+      // 이 게스트에게 부여되지 않은 설문이다 — 누가 볼 수 있는가는 관문이 이미 답했고,
+      // 이 조회는 그 뒤에 불린다.
+      const header = await getClientSurveyHeader(foreignSurveyId);
+      expect(header).toEqual({
+        surveyId: foreignSurveyId,
+        title: '부여되지 않은 조사',
+        publishedAt: null,
+        endDate: null,
+        lifecycle: 'draft',
+      });
+    });
+
+    it('계정 쪽 카드와 같은 진행 상태를 낸다 — 판정의 정본이 하나다', async () => {
+      await db
+        .update(surveysTable)
+        .set({ isPaused: true })
+        .where(eq(surveysTable.id, overviewOnlyId));
+      const card = (await listGuestSurveys(GUEST_ID)).find((r) => r.surveyId === overviewOnlyId);
+      const header = await getClientSurveyHeader(overviewOnlyId);
+      expect(header?.lifecycle).toBe(card?.lifecycle);
+      expect(header?.title).toBe(card?.title);
+    });
+
+    it('삭제됐거나 배치 대기인 설문은 null 이다 — 관문이 닫는 것과 같은 조건이다', async () => {
+      expect(await getClientSurveyHeader(pendingSurveyId)).toBeNull();
+      await db
+        .update(surveysTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(surveysTable.id, overviewOnlyId));
+      expect(await getClientSurveyHeader(overviewOnlyId)).toBeNull();
+    });
+  });
 
   describe('탭 관문', () => {
     it('허용된 탭은 통과하고 탭 구성을 함께 돌려준다', async () => {

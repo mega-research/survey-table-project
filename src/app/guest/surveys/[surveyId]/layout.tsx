@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { GuestSurveyHeader } from '@/features/guest-console/guest-survey-header';
+import { guestAccountSurveyBase } from '@/features/guest-console/guest-vocabulary';
 import { assertGuestSurveyPageAccess } from '@/server/page-guest-access';
 import { getGuestSurveyCard } from '@/server/read-models/guest-surveys';
 
@@ -31,7 +32,9 @@ export default async function GuestSurveyLayout({ params, children }: Props) {
   return (
     <>
       <GuestSurveyHeader
-        surveyId={surveyId}
+        basePath={guestAccountSurveyBase(surveyId)}
+        // 계정 입구에는 부여 설문 목록이 있다 — 링크 입구는 이 자리에 null 을 준다.
+        backHref="/guest"
         title={card.title}
         publishedAt={card.publishedAt}
         endDate={card.endDate}
