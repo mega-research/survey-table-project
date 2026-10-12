@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { superadmin } from '@/server/orpc';
 import { departUserWithSuccession, DepartureSuccessionError } from '@/server/workflows/user-departure';
 import { RehireTeamAssignmentError, rehireUserWithTeam } from '@/server/workflows/user-rehire';
+import { isCreatableUserType } from '@/shared/contracts/auth-io';
 
 import {
   ChangeUserStatusInput,
@@ -60,14 +61,20 @@ const list = superadmin
 /**
  * 계정 직접 발급 (슈퍼어드민 전용).
  *
- * 유형별 필드 차이는 CreateUserInput 유니온이 판정한다 — 실사는 소속 업체 id·역할이
- * 필수라 빠뜨린 호출은 여기 도달하기 전에 BAD_REQUEST 로 떨어진다. 그 id 가 **활성 업체**
- * 인지는 서비스가 트랜잭션 안에서 잠근 채 확인한다(티켓 24).
+ * 유형별 필드 차이는 CreateUserInput 유니온이 판정한다.
+ *
+ * **발급하지 않는 유형은 이 문에서 막는다** (`isCreatableUserType`, ADR-0029). 화면이 그
+ * 세그먼트를 감춘 것만으로는 「입구를 닫았다」가 화면의 약속에 그친다. 서비스는 막지 않는다 —
+ * 옛 실사 계정 모델의 불변식을 지키는 스위트가 서비스로 계정을 만들고, 철거 전까지 그
+ * 스위트들이 초록이어야 한다.
  */
 const create = superadmin
   .input(CreateUserInput)
   .output(CreateUserOutput)
   .handler(async ({ input, context }) => {
+    if (!isCreatableUserType(input.userType)) {
+      throw new ORPCError('BAD_REQUEST', { message: '이 유형의 계정은 더 이상 발급하지 않습니다.' });
+    }
     try {
       return await svc.createUser(context.user.id, input);
     } catch (err) {

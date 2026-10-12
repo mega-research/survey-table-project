@@ -114,12 +114,31 @@ describe('users 생성 procedure', () => {
     expect(svc.createUser).not.toHaveBeenCalled();
   });
 
-  it('실사 유형은 아직 생성할 수 없다 (티켓 24)', async () => {
+  it('실사 유형은 발급하지 않는다 — 모양이 완전한 요청도 서비스에 닿지 않는다 (ADR-0029)', async () => {
+    // 화면에서 실사 세그먼트를 숨긴 것만으로는 「입구를 닫았다」가 화면의 약속에 그친다.
+    // 업체 id·역할까지 갖춘 raw 요청이 이 문에서 막혀야 한다.
     await expect(
-      // 모달의 실사 세그먼트는 비활성이지만, 서버가 유일한 판정자여야 한다.
-      clientWith().users.create({ ...VALID_CREATE, userType: 'fieldwork' } as never),
+      clientWith().users.create({
+        userType: 'fieldwork',
+        name: '김실사',
+        email: 'fw@example.com',
+        password: 'initial-pw-12',
+        fieldworkOrgId: '3f000000-0000-4000-8000-00000000a001',
+        fieldworkRole: 'worker',
+      }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(svc.createUser).not.toHaveBeenCalled();
+  });
+
+  it('게스트 유형은 아직 발급된다 — 클라이언트 링크가 서기 전까지의 유일한 길이다', async () => {
+    await clientWith().users.create({
+      userType: 'guest',
+      name: '김담당',
+      email: 'client@klog.or.kr',
+      password: 'initial-pw-12',
+      organization: '한국물류협회',
+    });
+    expect(svc.createUser).toHaveBeenCalledTimes(1);
   });
 
   it('이메일 중복은 CONFLICT 로 바꾼다', async () => {

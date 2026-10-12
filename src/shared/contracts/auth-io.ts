@@ -164,18 +164,25 @@ export const CreateUserInput = z.discriminatedUnion('userType', [
 export type CreateUserInput = z.infer<typeof CreateUserInput>;
 
 /**
- * 생성 가능한 유형 — 모달 세그먼트의 활성 여부 판정에 UI 도 쓴다.
+ * 발급할 수 있는 유형 — **화면의 세그먼트와 발급 표면(`auth.users.create`)이 같은 목록을 본다.**
  *
- * 티켓 24 로 셋 전부가 열렸지만 **손으로 적은 목록으로 남긴다.** `userTypeValues` 를 그대로
- * 가리키면 새 유형이 어휘에 추가되는 순간 발급 경로가 없는데도 모달 세그먼트가 저절로
- * 열린다 — 그때 실제로 눌러 보기 전까지 아무도 모른다. 지금은 값이 같지만 묻는 질문이 다르다:
- * 「존재하는 유형」과 「이 화면에서 발급할 수 있는 유형」.
+ * 「존재하는 유형」(`userTypeValues`)과 묻는 질문이 다르다. 입력 유니온(`CreateUserInput`)과도
+ * 다르다: 유니온은 「그 유형의 계정이 어떤 모양인가」이고 이 목록은 「지금 그 유형을
+ * 발급하는가」다. 유니온에서 변종을 지우지 않는 이유는 서비스가 그 모양을 계속 받기 때문이다
+ * (옛 모델의 불변식을 지키는 스위트가 서비스로 계정을 만든다).
+ *
+ * **`fieldwork` 가 없다** (ADR-0029, 2026-10-12). 외주 실사가 설문별 링크로 바뀌면서
+ * (ADR-0026) 실사 계정을 설문에 초대하는 입구가 사라졌다 — 발급하면 로그인만 되고 아무
+ * 설문도 못 여는 계정이 쌓인다. 닫은 것은 입구이고 옛 모델의 코드·테이블은 남아 있다:
+ * 철거는 링크 모델로 실제 조사 한 건을 프로덕션에서 끝낸 뒤의 일이다. `guest` 도 클라이언트
+ * 링크가 동작하면 같은 이유로 여기서 빠진다.
  */
-export const creatableUserTypes = [
-  'internal',
-  'guest',
-  'fieldwork',
-] as const satisfies readonly UserType[];
+export const creatableUserTypes = ['internal', 'guest'] as const satisfies readonly UserType[];
+
+/** 그 유형을 지금 발급하는가 — 발급 표면이 경계에서 묻는다. */
+export function isCreatableUserType(userType: UserType): boolean {
+  return (creatableUserTypes as readonly UserType[]).includes(userType);
+}
 
 export const CreateUserOutput = z.object({ id: z.uuid() });
 export type CreateUserOutput = z.infer<typeof CreateUserOutput>;

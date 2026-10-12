@@ -27,7 +27,9 @@ import {
   userStatusEvents as statusEventsTable,
   users as usersTable,
 } from '@/db/schema';
+import { InvalidFieldworkOrgError } from '@/server/auth/domain/users';
 import { users as usersProcedures } from '@/server/auth/procedures/users';
+import { createUser } from '@/server/auth/services/users';
 import type { ORPCContext } from '@/server/context';
 import { resolveSurveyCapabilities } from '@/server/survey-access';
 import { fieldworkOrgs as orgProcedures } from '@/server/workspace/procedures/fieldwork-orgs';
@@ -107,12 +109,19 @@ async function makeOrg(label: string, memo: string | null = null): Promise<strin
   return id;
 }
 
+/**
+ * 실사 계정 하나를 **서비스로** 만든다.
+ *
+ * 발급 표면(`auth.users.create`)은 실사 유형을 더 받지 않는다(ADR-0029 — 입구를 닫았다).
+ * 이 스위트가 지키는 것은 입구가 아니라 **옛 모델의 불변식**(소속 정합·종료 가드·잠금 짝)이고
+ * 그것들은 서비스와 DB 에 산다 — 철거 전까지 초록이어야 하므로 서비스로 내려가 만든다.
+ */
 async function issueFieldworkAccount(
   orgId: string,
   role: 'leader' | 'worker',
   label = crypto.randomUUID().slice(0, 8),
 ): Promise<string> {
-  const { id } = await superUsers().users.create({
+  const { id } = await createUser(SUPERADMIN_ID, {
     userType: 'fieldwork',
     name: `실사-${label}`,
     email: `fieldwork-${label}-${RUN}@agency.example.com`,
@@ -277,18 +286,39 @@ describe.skipIf(!isLocalDb)('실사 업체 + 계정 발급 (real local DB)', () 
     });
 
     it('없는 업체 id 로는 발급되지 않는다', async () => {
-      await expect(issueFieldworkAccount(crypto.randomUUID(), 'worker')).rejects.toMatchObject({
-        code: 'CONFLICT',
-      });
+      await expect(issueFieldworkAccount(crypto.randomUUID(), 'worker')).rejects.toBeInstanceOf(
+        InvalidFieldworkOrgError,
+      );
     });
 
     it('종료된 업체로도 발급되지 않는다', async () => {
       const orgId = await makeOrg('종료후발급');
       await superOrgs().orgs.archive({ orgId });
 
-      await expect(issueFieldworkAccount(orgId, 'worker')).rejects.toMatchObject({
-        code: 'CONFLICT',
-      });
+      await expect(issueFieldworkAccount(orgId, 'worker')).rejects.toBeInstanceOf(
+        InvalidFieldworkOrgError,
+      );
+    });
+
+    it('발급 표면은 실사 유형을 받지 않는다 — 모양이 완전해도 계정이 생기지 않는다 (ADR-0029)', async () => {
+      // 입구를 닫았다는 것이 화면의 약속에 그치지 않음을 실제 행으로 본다. 활성 업체와 역할을
+      // 갖춘 요청이라 예전에는 그대로 계정이 만들어졌다.
+      const orgId = await makeOrg('입구닫힘');
+      const email = `closed-entrance-${RUN}@agency.example.com`;
+
+      await expect(
+        superUsers().users.create({
+          userType: 'fieldwork',
+          name: '입구닫힘',
+          email,
+          password: 'fieldwork-pass-1234',
+          fieldworkOrgId: orgId,
+          fieldworkRole: 'worker',
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      const rows = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email));
+      expect(rows).toEqual([]);
     });
 
     it('업체·역할을 빼면 경계에서 떨어진다 — 업체 없는 실사 계정은 만들 수 없다', async () => {
