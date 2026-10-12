@@ -4,7 +4,13 @@ import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import type { TableCell, TableColumn, TableRow } from '@/types/survey';
+import type {
+  Question,
+  QuestionConditionGroup,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
 
 import { InteractiveTableResponse } from './interactive-table-response';
 
@@ -117,5 +123,69 @@ describe('중복 불가 묶음 — 응답 화면', () => {
     await user.selectOptions(selectOf('a1'), '');
 
     expect(optionOf('a2', 'us')).toBeEnabled();
+  });
+});
+
+describe('중복 불가 묶음 — 표시 조건으로 숨은 칸', () => {
+  const showWhenYes: QuestionConditionGroup = {
+    logicType: 'AND',
+    conditions: [
+      {
+        id: 'c',
+        sourceQuestionId: 'src',
+        conditionType: 'value-match',
+        requiredValues: ['y'],
+        logicType: 'AND',
+      },
+    ],
+  };
+  const source = {
+    id: 'src',
+    type: 'radio',
+    title: '원천',
+    required: false,
+    order: 0,
+    options: [
+      { id: 's1', label: '예', value: 'y' },
+      { id: 's2', label: '아니오', value: 'n' },
+    ],
+  } as Question;
+  const conditionalRows: TableRow[] = [
+    { id: 'r1', label: '1', cells: [select('a1', '2025'), select('b1', '2026')] },
+    {
+      id: 'r2',
+      label: '2',
+      displayCondition: showWhenYes,
+      cells: [select('a2', '2025'), select('b2', '2026')],
+    },
+  ];
+  // 둘째 행이 보일 때 a2 에서 「미국」을 골랐고, 그 뒤 조건이 바뀌어 행이 숨었다
+  const leftover = { a2: 'us' };
+
+  function ConditionalHarness({ srcValue }: { srcValue: string }) {
+    const [value, setValue] = useState<Record<string, unknown>>(leftover);
+    return (
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={conditionalRows}
+        value={value}
+        onChange={setValue}
+        allResponses={{ src: srcValue, q1: value }}
+        allQuestions={[source]}
+        enableSticky={false}
+      />
+    );
+  }
+
+  it('숨은 행의 칸이 고른 보기는 보이는 칸의 목록에서 비활성이 아니다', () => {
+    render(<ConditionalHarness srcValue="n" />);
+    expect(document.querySelector('[data-cell-id="a2"]')).toBeNull();
+    expect(optionOf('a1', 'us')).toBeEnabled();
+  });
+
+  it('그 행이 보이면 종전처럼 비활성이다', () => {
+    render(<ConditionalHarness srcValue="y" />);
+    expect(optionOf('a1', 'us')).toBeDisabled();
   });
 });

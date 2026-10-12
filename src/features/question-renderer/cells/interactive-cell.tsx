@@ -31,7 +31,7 @@ import {
   gateWantsChoiceSelection,
   selectNoGateValues,
 } from './gate-value-selector';
-import { useGatingTableCells } from './gating-table-cells-context';
+import { useGatingTableCells, useVisibleTableCellIds } from './gating-table-cells-context';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
 import { RadioCell } from './radio-cell';
@@ -264,6 +264,9 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // 게이팅과 같은 구독 원칙: 묶음 구성원(과 그 컨트롤러)의 값만 뽑아 구독해, 묶음 밖의 칸이
   // 바뀔 때는 재렌더되지 않는다. 묶음 이름이 없는 칸(대다수)은 모듈 상수 선택자를 쓴다.
   // 묶음은 행을 가로지르므로 표 전체 셀이 있어야 성립한다 — 없으면 같은 행 안에서만 본다.
+  // 구성원은 지금 보이는 칸만이다(표시 조건으로 숨은 칸의 잔존 선택은 세지 않는다) — 차단 검증과
+  // 같은 범위. 구독 키는 좁히지 않는다: 숨은 칸의 값이 바뀔 일이 없어 넓게 잡아도 재렌더가 늘지 않는다.
+  const visibleCellIds = useVisibleTableCellIds() ?? undefined;
   const distinctKeys = useMemo(
     () => (gatingCells ? distinctSubscriptionKeys(cell, gatingCells) : []),
     [cell, gatingCells],
@@ -281,8 +284,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     if (distinctKeys.length === 0 || !gatingCells) return undefined;
     // 주입 원본이 없으면(controlled 렌더) 질문 단위 value prop 이 원본이다 — 게이팅과 같다.
     const distinctCellValues = source ? sourceDistinctValues : (value ?? {});
-    return takenDistinctValues(cell, gatingCells, distinctCellValues);
-  }, [cell, distinctKeys, gatingCells, source, sourceDistinctValues, value]);
+    return takenDistinctValues(cell, gatingCells, distinctCellValues, visibleCellIds);
+  }, [cell, distinctKeys, gatingCells, source, sourceDistinctValues, value, visibleCellIds]);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,

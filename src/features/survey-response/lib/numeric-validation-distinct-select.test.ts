@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { isRelaxableIssueKind } from '@/features/survey-response/lib/admin-edit-required-relax';
 import { collectNumericIssues } from '@/features/survey-response/lib/numeric-validation';
-import type { Question, TableCell } from '@/types/survey';
+import type { Question, QuestionConditionGroup, TableCell } from '@/types/survey';
 
 /**
  * 중복 불가 묶음 — 화면에서 회색으로 막는 것과 별개로, 이미 들어온 중복(기능을 켜기 전의 응답·
@@ -60,5 +60,67 @@ describe('중복 불가 묶음 — 차단 검증', () => {
 
   it('관리자 응답 수정에서도 완화하지 않는다', () => {
     expect(isRelaxableIssueKind('distinct')).toBe(false);
+  });
+});
+
+describe('중복 불가 묶음 — 표시 조건으로 숨은 칸', () => {
+  const showWhenYes: QuestionConditionGroup = {
+    logicType: 'AND',
+    conditions: [
+      {
+        id: 'c',
+        sourceQuestionId: 'src',
+        conditionType: 'value-match',
+        requiredValues: ['y'],
+        logicType: 'AND',
+      },
+    ],
+  };
+  const source = {
+    id: 'src',
+    type: 'radio',
+    title: '원천',
+    required: false,
+    order: 0,
+    options: [
+      { id: 's1', label: '예', value: 'y' },
+      { id: 's2', label: '아니오', value: 'n' },
+    ],
+  } as Question;
+
+  /** 같은 묶음 두 칸 — 둘째 칸이 조건부 행(또는 열)에 있다 */
+  const hiddenRowTable = {
+    ...question,
+    tableColumns: [{ id: 'c1', label: '국가' }],
+    tableRowsData: [
+      { id: 'r1', label: '1', cells: [select('a1', 'g')] },
+      { id: 'r2', label: '2', displayCondition: showWhenYes, cells: [select('a2', 'g')] },
+    ],
+  } as Question;
+  const hiddenColumnTable = {
+    ...question,
+    tableColumns: [
+      { id: 'c1', label: '1순위' },
+      { id: 'c2', label: '2순위', displayCondition: showWhenYes },
+    ],
+    tableRowsData: [{ id: 'r1', label: '1', cells: [select('a1', 'g'), select('a2', 'g')] }],
+  } as Question;
+
+  const issuesOf = (table: Question, srcValue: string) => {
+    const value = { a1: 'us', a2: 'us' };
+    return collectNumericIssues(table, value, {
+      allResponses: { src: srcValue, [table.id]: value },
+      allQuestions: [source, table],
+    }).filter((issue) => issue.kind === 'distinct');
+  };
+
+  it('숨은 행의 잔존 선택과 값이 같아도 보이는 칸을 막지 않는다', () => {
+    expect(issuesOf(hiddenRowTable, 'n')).toEqual([]);
+    expect(issuesOf(hiddenRowTable, 'y')).toHaveLength(1);
+  });
+
+  it('숨은 열의 잔존 선택과 값이 같아도 보이는 칸을 막지 않는다', () => {
+    expect(issuesOf(hiddenColumnTable, 'n')).toEqual([]);
+    expect(issuesOf(hiddenColumnTable, 'y')).toHaveLength(1);
   });
 });

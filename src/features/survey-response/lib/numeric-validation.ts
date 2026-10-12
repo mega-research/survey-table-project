@@ -977,8 +977,12 @@ export function collectNumericIssues(
     // 3-b) 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다. 화면은 다른 칸이
     //      고른 보기를 비활성으로 막지만, 기능을 켜기 전의 응답·이월 응답으로 들어온 중복은
     //      여기서 잡는다. 판정은 화면의 비활성 계산과 같은 모듈이다(게이팅으로 닫힌 칸 제외 포함).
-    const distinctViolationIds = findDistinctViolations(tableCells, cellValues).filter((id) =>
-      existingIds.has(id),
+    //      구성원은 보이는 칸만이다 — 표시 조건으로 숨은 칸의 잔존 선택이 보이는 칸을 막으면
+    //      응답자가 풀 수 없다. 표 전체에서 찾고 id 만 거르면 숨은 칸과의 중복이 그대로 남는다.
+    const distinctViolationIds = findDistinctViolations(
+      tableCells,
+      cellValues,
+      new Set(visible.map((c) => c.id)),
     );
     if (distinctViolationIds.length > 0) {
       issues.push({

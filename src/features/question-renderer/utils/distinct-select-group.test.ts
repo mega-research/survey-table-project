@@ -181,3 +181,25 @@ describe('중복 불가 묶음 — 보기 선택 · 상류 게이팅으로 열�
     expect(taken('y2', { top: '1', mid: '5', y1: 'us' }, chained)).toEqual(['us']);
   });
 });
+
+describe('묶음 구성원은 지금 화면에 보이는 칸만이다', () => {
+  // a2 가 표시 조건으로 숨은 행·열에 있다 — 숨기 전에 고른 값이 응답에 남아 있다
+  const visibleIds = new Set(['a1', 'a3', 'b1', 'b2', 'free']);
+
+  it('숨은 칸이 고른 보기는 비활성으로 잡지 않는다', () => {
+    const a1 = cells.find((c) => c.id === 'a1')!;
+    expect([...takenDistinctValues(a1, cells, { a2: 'us' }, visibleIds)]).toEqual([]);
+    expect([...takenDistinctValues(a1, cells, { a2: 'us', a3: 'jp' }, visibleIds)]).toEqual(['jp']);
+  });
+
+  it('숨은 칸과 값이 같아도 중복이 아니다 — 보이는 칸끼리의 중복은 그대로 잡는다', () => {
+    expect(findDistinctViolations(cells, { a1: 'us', a2: 'us' }, visibleIds)).toEqual([]);
+    expect(
+      findDistinctViolations(cells, { a1: 'us', a2: 'us', a3: 'us' }, visibleIds).sort(),
+    ).toEqual(['a1', 'a3']);
+  });
+
+  it('보이는 칸 집합을 주지 않으면 표 전체가 구성원이다', () => {
+    expect(findDistinctViolations(cells, { a1: 'us', a2: 'us' }).sort()).toEqual(['a1', 'a2']);
+  });
+});

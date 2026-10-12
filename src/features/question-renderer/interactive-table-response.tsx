@@ -18,6 +18,7 @@ import {
   DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
   decideDrilldown,
 } from '@/features/question-renderer/utils/classify-table';
+import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
 import {
   useAnswerQuotes,
@@ -1113,6 +1114,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
   const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
 
+  // 중복 불가 묶음의 구성원 범위 — 지금 그려지는 행·열에 있는 칸만. 표시 조건으로 숨은 칸은 값이
+  // 응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지한다. 묶음이 없는 표(대다수)는 만들지 않는다.
+  const visibleCellIds = useMemo(() => {
+    if (!gatingTableCells.some((cell) => distinctGroupOf(cell) !== null)) return null;
+    const ids = new Set<string>();
+    for (const row of rowWiseDisplayRows) {
+      for (const cell of row.cells) if (!cell.isHidden) ids.add(cell.id);
+    }
+    return ids;
+  }, [gatingTableCells, rowWiseDisplayRows]);
+
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
     return (
@@ -1343,7 +1355,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
-      <GatingTableCellsProvider value={gatingTableCells}>
+      <GatingTableCellsProvider value={gatingTableCells} visibleCellIds={visibleCellIds}>
         <Card className={className}>
           {tableTitle && (
             <CardHeader>

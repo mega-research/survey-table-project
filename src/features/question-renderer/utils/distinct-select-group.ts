@@ -45,11 +45,35 @@ function liveSelection(
     : null;
 }
 
+/**
+ * 지금 화면에 보이는 칸인가. `visibleCellIds` 는 행·열 표시 조건과 동적 행 선택을 거쳐 남은 칸의
+ * id 집합이다 — 숨은 칸의 값은 응답에 남아 있어(제출 때 지워진다) 구성원으로 세면 보이지 않는 칸이
+ * 보기를 차지하고, 응답자는 풀 수 없는 중복에 막힌다. 집합을 주지 않으면 표 전체가 보이는 것으로
+ * 본다(표시 조건을 모르는 호출자 — 종전 동작).
+ *
+ * `tableCells` 는 좁히지 않는다. 게이팅 평가는 숨은 행의 컨트롤러 정의도 찾아야 한다.
+ */
+function isVisibleMember(
+  cell: TableCell,
+  visibleCellIds: ReadonlySet<string> | undefined,
+): boolean {
+  return visibleCellIds === undefined || visibleCellIds.has(cell.id);
+}
+
 /** 같은 묶음의 다른 칸들 (자기 제외). 묶음 이름이 없으면 빈 목록. */
-export function distinctGroupPeers(cell: TableCell, tableCells: readonly TableCell[]): TableCell[] {
+export function distinctGroupPeers(
+  cell: TableCell,
+  tableCells: readonly TableCell[],
+  visibleCellIds?: ReadonlySet<string>,
+): TableCell[] {
   const group = distinctGroupOf(cell);
   if (group === null) return [];
-  return tableCells.filter((other) => other.id !== cell.id && distinctGroupOf(other) === group);
+  return tableCells.filter(
+    (other) =>
+      other.id !== cell.id &&
+      distinctGroupOf(other) === group &&
+      isVisibleMember(other, visibleCellIds),
+  );
 }
 
 /**
@@ -60,10 +84,11 @@ export function takenDistinctValues(
   cell: TableCell,
   tableCells: readonly TableCell[],
   cellValues: Record<string, unknown>,
+  visibleCellIds?: ReadonlySet<string>,
 ): Set<string> {
   const taken = new Set<string>();
   const choiceSelection = collectTableChoiceSelection(cellValues);
-  for (const peer of distinctGroupPeers(cell, tableCells)) {
+  for (const peer of distinctGroupPeers(cell, tableCells, visibleCellIds)) {
     const selected = liveSelection(peer, cellValues, tableCells, choiceSelection);
     if (selected !== null) taken.add(selected);
   }
@@ -74,12 +99,13 @@ export function takenDistinctValues(
 export function findDistinctViolations(
   tableCells: readonly TableCell[],
   cellValues: Record<string, unknown>,
+  visibleCellIds?: ReadonlySet<string>,
 ): string[] {
   const cellIdsByChoice = new Map<string, string[]>();
   const choiceSelection = collectTableChoiceSelection(cellValues);
   for (const cell of tableCells) {
     const group = distinctGroupOf(cell);
-    if (group === null) continue;
+    if (group === null || !isVisibleMember(cell, visibleCellIds)) continue;
     const selected = liveSelection(cell, cellValues, tableCells, choiceSelection);
     if (selected === null) continue;
     const key = JSON.stringify([group, selected]);
