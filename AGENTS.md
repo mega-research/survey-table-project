@@ -104,6 +104,9 @@ src/
 │   │   └── (console)/          # 셸(화면 머리·탭·나가기) + overview·report·contacts·quota·preview. 라우트 그룹인
 │   │                           # 이유는 입구 화면에 셸이 서면 비밀번호 전에 조사 이름이 그려지기 때문이다.
 │   │                           # QueryProvider 를 열지 않는다(부를 데이터 RPC 가 없다)
+│   │                           # **얼굴은 운영 콘솔과 한 벌이다** — 화면 머리는 `OperationsPageHeader`(internalShell=false:
+│   │                           # 새로고침·설문 보기·나가기 셋), 탭 줄은 같은 모양의 `GuestTabStrip`(판정만 탭 화이트리스트).
+│   │                           # 설문 미리보기는 탭이 아니라 「설문 보기」가 연다. 기간·진행 상태는 탭 줄 오른쪽 한 줄
 │   ├── fw/[token]/             # 외주 실사 링크 콘솔 (ADR-0026) — 계정이 아니라 **링크**가 연다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음 — 세션을 만드는 자리)
 │   │   ├── preview/            # 설문 보기 — 콘솔 셸 밖의 열람 전용 화면(내부 /surveys/[id]/preview 의 짝)
@@ -263,6 +266,9 @@ src/
 │   │                           # 서브헤더는 basePath·backHref 를 주입받는다 — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
 │   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
 │   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
+│   │                           # ·guest-tab-strip(클라이언트 링크 콘솔의 탭 줄 — 운영 콘솔 탭 스트립과 같은 얼굴, 허용 탭만).
+│   │                           # **guest-shell·guest-survey-header 는 이제 게스트 계정 입구만 쓴다** — 링크 입구의 화면 머리는
+│   │                           # 운영 콘솔 헤더로 옮겼다(2026-10-12). 본문(`app/_client-console`)과 어휘·표는 여전히 한 벌이다
 │   └── fieldwork-console/      # 실사 콘솔 (티켓 25·26, .pen FLOW 10-1·10-2) — fieldwork-home-view 진입점
 │                               # 초대 설문 표 + 팀장 전용 「업체 전체」 세그먼트
 │                               # + fieldwork-header-bar(헤더)·fieldwork-survey-header(서브헤더+고정 탭 둘)
