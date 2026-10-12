@@ -5,6 +5,7 @@ import * as z from 'zod';
 
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
+  accessLinkKindValues,
   fieldworkOrgStatusValues,
   surveyParticipantAccessLevelValues,
   surveyParticipantKindValues,
@@ -543,7 +544,7 @@ export type RemoveSurveyParticipantInput = z.infer<typeof RemoveSurveyParticipan
  * `satisfies` 로 어휘 타입에 묶는 것이 요점이다 — 탭이 늘었을 때 한쪽만 늘면 tsc 가
  * 그 자리에서 호명한다(둘이 따로 놀면 「계약에는 있는데 검증에서 떨어지는」 키가 생긴다).
  */
-const SurveyGuestTabsSchema = z.object({
+export const SurveyGuestTabsSchema = z.object({
   overview: z.boolean(),
   progressReport: z.boolean(),
   contactsMasked: z.boolean(),
@@ -1034,8 +1035,20 @@ export type FieldworkContactsPage = z.infer<typeof FieldworkContactsPage>;
 
 export const AccessLinkView = z.object({
   id: z.uuid(),
-  /** 주소에 실리는 값. 화면은 이것으로 링크를 조립한다(buildFieldworkLinkUrl). */
+  /** 종류 — 외주 실사 링크 | 클라이언트 링크(ADR-0029). 주소 접두가 여기서 갈린다. */
+  kind: z.enum(accessLinkKindValues),
+  /**
+   * 주소에 실리는 값. 화면은 이것으로 링크를 조립한다 — 종류마다 접두가 다르다
+   * (`buildFieldworkLinkUrl` · `buildClientLinkUrl`).
+   */
   token: z.string(),
+  /**
+   * 클라이언트 링크의 현황 탭 화이트리스트 — **정규화를 끝낸 값**이다(컬럼이 비어 있으면
+   * 기본값 = 응답 현황 하나). 외주 링크에는 그 축이 없어 null 이다: 전부 false 인 객체와
+   * 갈라 두는 이유는 「탭이 전부 꺼진 클라이언트 링크」와 「탭 개념이 없는 링크」가 다른
+   * 화면이기 때문이다.
+   */
+  clientTabs: SurveyGuestTabsSchema.nullable(),
   /** 마지막으로 비밀번호를 바꾼 시각 — 「언제 바꿨는지」를 화면이 보여 준다. */
   passwordUpdatedAt: z.date(),
   createdAt: z.date(),

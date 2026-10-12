@@ -754,27 +754,36 @@ const SURFACES: Record<string, SurfaceSpec> = {
   'workspace.accessLinks.get': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S },
+    input: { surveyId: S, kind: 'fieldwork' },
   },
   'workspace.accessLinks.issue': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S },
+    input: { surveyId: S, kind: 'fieldwork' },
   },
   'workspace.accessLinks.resetPassword': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S },
+    input: { surveyId: S, kind: 'fieldwork' },
   },
   'workspace.accessLinks.revealPassword': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S },
+    input: { surveyId: S, kind: 'fieldwork' },
   },
   'workspace.accessLinks.close': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S },
+    input: { surveyId: S, kind: 'fieldwork' },
+  },
+  // 종류를 바꿔 넣어도 같은 관문이다 — 클라이언트 링크의 관리도 타 팀 설문에서는 NOT_FOUND.
+  'workspace.accessLinks.setClientTabs': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: {
+      surveyId: S,
+      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: false },
+    },
   },
 
   // ── 소유권 이전 ─────────────────────────────────────────────────────────

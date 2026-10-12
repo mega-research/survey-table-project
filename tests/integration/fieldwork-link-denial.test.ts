@@ -64,6 +64,8 @@ vi.mock('@/db', async (importOriginal) => {
 
   const linkRow = {
     linkId: IDS.LINK_ID,
+    // 종류는 행에서 온다 — 세션 판정이 그 값을 주체에 싣고, 판정 코어가 열을 고른다.
+    kind: 'fieldwork',
     surveyId: IDS.SURVEY_ID,
     surveyTitle: '외주 조사',
     passwordCipher: 'cipher',
@@ -155,6 +157,9 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
       'workspace.accessLinks.issue:authed',
       'workspace.accessLinks.resetPassword:authed',
       'workspace.accessLinks.revealPassword:authed',
+      // 클라이언트 링크의 탭 저장(ADR-0029) — 이것도 연구원의 관리 표면이다. 링크 주체에게
+      // 열리면 클라이언트가 자기에게 보이는 화면을 스스로 넓힌다.
+      'workspace.accessLinks.setClientTabs:authed',
     ]);
   });
 });

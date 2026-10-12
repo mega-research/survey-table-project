@@ -14,7 +14,7 @@ import {
 
 import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
 import { FieldworkBlock } from './fieldwork-block';
-import { GuestsBlock } from './guests-block';
+import { ClientBlock } from './client-block';
 import { OwnershipTransferModal } from './ownership-transfer-modal';
 import { ParticipantsBlock } from './participants-block';
 import { SegmentRow, type SegmentOption } from './segment-row';
@@ -153,9 +153,9 @@ export function ShareSettingsModal({
           />
         </div>
 
-        {/* 클라이언트 블록도 같은 축이다 — 부여·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
+        {/* 클라이언트 블록도 같은 축이다 — 링크 발급·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
         <div className="mt-4 border-t border-[#F0F0F2] pt-4">
-          <GuestsBlock surveyId={surveyId} />
+          <ClientBlock surveyId={surveyId} />
         </div>
 
         {/* 실사 블록 — 네 번째이자 마지막 블록(.pen 4-2). 초대는 개인 단위이고 즉시 반영이다. */}

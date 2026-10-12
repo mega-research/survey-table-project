@@ -18,8 +18,8 @@ import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-import type { AccessLinkKind } from '@/shared/contracts/workspace';
 import {
+  AccessLinkView,
   IssuedAccessLinkOutput,
   RevealedAccessLinkPasswordOutput,
   SurveyAccessLinkOutput,
@@ -31,6 +31,7 @@ import {
   AccessLinkNotFoundError,
   IssueAccessLinkInput,
   ResetAccessLinkPasswordInput,
+  SetClientLinkTabsInput,
   SurveyAccessLinkInput,
 } from '../domain/access-link';
 import * as svc from '../services/access-links';
@@ -52,22 +53,13 @@ function rethrowLinkError(err: unknown): never {
   throw err;
 }
 
-/**
- * 이 표면이 다루는 링크의 종류 — **지금은 외주 실사 링크 하나다.**
- *
- * 서비스는 종류를 필수 인자로 받는다(한 설문에 두 종류가 함께 서므로 칸막이가 필요하다).
- * 클라이언트 링크의 발급은 다음 티켓이 입력에 종류를 더하면서 연다 — 그때 이 상수가 입력
- * 값으로 바뀐다.
- */
-const LINK_KIND: AccessLinkKind = 'fieldwork';
-
 /** 이 설문의 링크 상태 — 없으면 null. 평문 비밀번호는 실리지 않는다. */
 const get = authed
   .input(SurveyAccessLinkInput)
   .output(SurveyAccessLinkOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    const link = await svc.getAccessLink(input.surveyId, LINK_KIND);
+    const link = await svc.getAccessLink(input.surveyId, input.kind);
     // 이 표면 자체가 manageAccess 를 요구하므로 여기까지 온 주체는 언제나 관리자다.
     return { link, canManage: true };
   });
@@ -81,7 +73,7 @@ const issue = authed
     return svc
       .issueAccessLink({
         surveyId: input.surveyId,
-        kind: LINK_KIND,
+        kind: input.kind,
         password: input.password,
         actorId: context.user.id,
       })
@@ -103,7 +95,7 @@ const resetPassword = authed
     return svc
       .resetAccessLinkPassword({
         surveyId: input.surveyId,
-        kind: LINK_KIND,
+        kind: input.kind,
         password: input.password,
         actorId: context.user.id,
       })
@@ -117,9 +109,24 @@ const revealPassword = authed
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     const password = await svc
-      .revealAccessLinkPassword(input.surveyId, LINK_KIND)
+      .revealAccessLinkPassword(input.surveyId, input.kind)
       .catch(rethrowLinkError);
     return { password };
+  });
+
+/**
+ * 클라이언트 링크의 현황 탭 저장 (ADR-0029).
+ *
+ * 관문이 발급과 같은 `survey.manageAccess` 인 것이 요점이다. 탭을 켜는 일은 이미 나간 링크의
+ * 범위를 넓히는 일이라 — 조사 대상(마스킹)·쿼터가 외부에 열린다 — 발급할 자격이 있는 사람만
+ * 해야 한다. 게스트 계정의 탭 저장이 같은 이유로 같은 자격을 요구했다.
+ */
+const setClientTabs = authed
+  .input(SetClientLinkTabsInput)
+  .output(AccessLinkView)
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
+    return svc.setClientLinkTabs(input).catch(rethrowLinkError);
   });
 
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
@@ -129,9 +136,9 @@ const close = authed
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     await svc
-      .closeAccessLink({ surveyId: input.surveyId, kind: LINK_KIND, actorId: context.user.id })
+      .closeAccessLink({ surveyId: input.surveyId, kind: input.kind, actorId: context.user.id })
       .catch(rethrowLinkError);
     return { success: true } as const;
   });
 
-export const accessLinks = { get, issue, resetPassword, revealPassword, close };
+export const accessLinks = { get, issue, resetPassword, revealPassword, setClientTabs, close };

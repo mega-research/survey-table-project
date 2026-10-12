@@ -5,23 +5,75 @@ import { useState } from 'react';
 import { Check, Copy, Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
 
 import { getErrorMessage } from '@/lib/get-error-message';
-import { buildFieldworkLinkUrl } from '@/lib/survey-url';
+import { buildClientLinkUrl, buildFieldworkLinkUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
+import {
+  type AccessLinkKind,
+  SURVEY_GUEST_TAB_LABEL,
+  type SurveyGuestTab,
+  type SurveyGuestTabs,
+  surveyGuestTabValues,
+} from '@/shared/contracts/workspace';
 
 import {
   useCloseAccessLink,
   useIssueAccessLink,
   useResetAccessLinkPassword,
   useRevealAccessLinkPassword,
+  useSetClientLinkTabs,
   useSurveyAccessLink,
 } from '../queries/use-survey-access-link';
 
-interface FieldworkLinkPanelProps {
+interface AccessLinkPanelProps {
   surveyId: string;
+  /** 이 패널이 다루는 링크의 종류 — 조회·발급·변경·종료가 전부 이 값으로 나간다. */
+  kind: AccessLinkKind;
 }
 
 /**
- * 실사 블록의 「외주」 세그먼트 — 전용 링크와 공유 비밀번호 (ADR-0026, .pen FLOW 10-2).
+ * 종류마다 갈리는 것 — **주소와 문구뿐이다.** 하는 일(발급·주소 복사·비밀번호 보기·변경·
+ * 종료)은 두 종류가 같아 패널을 한 벌로 둔다: 따로 짜면 한쪽만 고쳐진다.
+ */
+const PANEL_COPY: Record<
+  AccessLinkKind,
+  {
+    buildUrl: (token: string) => string;
+    /** 발급 전 — 이 링크가 무엇을 여는가. */
+    intro: string;
+    /** 발급 후 — 언제 닫히고, 사람을 막으려면 무엇을 하는가. */
+    lifecycle: string;
+    closeConfirm: string;
+    failure: string;
+  }
+> = {
+  fieldwork: {
+    buildUrl: buildFieldworkLinkUrl,
+    intro:
+      '링크 하나로 조사 대상·결과 기록·대리 응답이 열립니다. 업체도 담당자도 등록하지 않습니다.',
+    lifecycle:
+      '설문을 중단하거나 종료하면 닫힙니다. 링크가 유출되거나 업체를 바꿀 때는 비밀번호만 변경하세요 — 주소는 설문당 하나로 고정입니다. 링크와 비밀번호는 서로 다른 채널로 전달하는 것이 안전합니다.',
+    closeConfirm: '링크를 종료하면 외주가 더 이상 들어오지 못합니다.',
+    failure: '외주 실사 링크를 처리하지 못했습니다.',
+  },
+  client: {
+    buildUrl: buildClientLinkUrl,
+    intro:
+      '링크 하나로 이 설문의 현황을 열람합니다. 고객사 계정을 만들지 않습니다. 발급 뒤에 보여 줄 화면을 고릅니다.',
+    // 외주 링크와 닫히는 조건이 다르다(ADR-0029·0030) — 클라이언트는 응답이 멈춘 뒤에 최종
+    // 숫자를 보므로 중단에 닫히지 않는다. 그 차이를 적어 두지 않으면 담당자가 「중단했으니
+    // 고객사도 못 본다」고 짐작한다.
+    lifecycle:
+      '설문을 중단해도 열려 있고, 종료하면 닫힙니다. 담당자가 바뀌거나 링크가 유출되면 비밀번호만 변경하세요 — 주소는 고정입니다. 링크와 비밀번호는 서로 다른 채널로 전달하는 것이 안전합니다.',
+    closeConfirm: '링크를 종료하면 클라이언트가 더 이상 들어오지 못합니다.',
+    failure: '클라이언트 링크를 처리하지 못했습니다.',
+  },
+};
+
+/**
+ * 링크 패널 — 전용 링크와 공유 비밀번호 (ADR-0026·0029, .pen FLOW 10-2).
+ *
+ * 실사 블록의 「외주」 세그먼트와 클라이언트 블록이 **같은 패널**을 쓴다. 클라이언트 링크에만
+ * 있는 것은 탭 칩 하나다 — 보여 줄 화면을 고른다.
  *
  * 화면에 **없는 것이 계약**이다.
  *  - 업체명·담당자 칸이 없다: 외주 업체도 담당자도 시스템에 등록하지 않는다.
@@ -38,7 +90,8 @@ interface FieldworkLinkPanelProps {
  * 값이라 혼동 문자를 뺀 문자셋이 필요해서이고, 직접 입력을 남긴 것은 업체가 쓰던 규칙에 맞춰야
  * 할 때가 있기 때문이다. 빈 칸으로 보내면 서버가 만든다 — 화면이 생성 규칙을 복제하지 않는다.
  */
-export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
+export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
+  const copy = PANEL_COPY[kind];
   const [error, setError] = useState<string | null>(null);
   /** 화면에만 머무는 평문 — 쿼리 캐시에 넣지 않는다. */
   const [password, setPassword] = useState<string | null>(null);
@@ -47,12 +100,18 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
   /** 직접 입력칸. 비어 있으면 서버가 만든다 — 생성 규칙을 화면이 복제하지 않는다. */
   const [draft, setDraft] = useState('');
 
-  const { data, isPending, isError } = useSurveyAccessLink(surveyId);
+  const { data, isPending, isError } = useSurveyAccessLink(surveyId, kind);
   const issue = useIssueAccessLink();
   const reset = useResetAccessLinkPassword();
   const reveal = useRevealAccessLinkPassword();
   const close = useCloseAccessLink();
-  const busy = issue.isPending || reset.isPending || reveal.isPending || close.isPending;
+  const setTabs = useSetClientLinkTabs();
+  const busy =
+    issue.isPending ||
+    reset.isPending ||
+    reveal.isPending ||
+    close.isPending ||
+    setTabs.isPending;
 
   async function run(action: () => Promise<string | null>) {
     setError(null);
@@ -60,7 +119,7 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
       setPassword(await action());
       setDraft('');
     } catch (err) {
-      setError(getErrorMessage(err, '외주 실사 링크를 처리하지 못했습니다.'));
+      setError(getErrorMessage(err, copy.failure));
     }
   }
 
@@ -91,24 +150,24 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
           type="button"
           disabled={busy || !data.canManage}
           onClick={() =>
-            run(async () => (await issue.mutateAsync({ surveyId, ...passwordArg() })).password)
+            run(
+              async () => (await issue.mutateAsync({ surveyId, kind, ...passwordArg() })).password,
+            )
           }
           className="flex h-9 items-center justify-center gap-1.5 rounded-[8px] bg-[#3b82f6] px-3 text-[13px] font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:bg-[#9CA3AF]"
         >
           {issue.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           링크 발급
         </button>
-        <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-          링크 하나로 조사 대상·결과 기록·대리 응답이 열립니다. 업체도 담당자도 등록하지
-          않습니다.
-        </p>
+        <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">{copy.intro}</p>
         {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
       </div>
     );
   }
 
   // baseUrl 을 넘기지 않는다 — 기본값이 브라우저 origin 이고, 이 컴포넌트는 클라이언트 전용이다.
-  const url = buildFieldworkLinkUrl(data.link.token);
+  const url = copy.buildUrl(data.link.token);
+  const tabs = data.link.clientTabs;
 
   return (
     <div className="flex flex-col gap-2 py-1">
@@ -146,7 +205,7 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
           onClick={() =>
             password
               ? setPassword(null)
-              : run(async () => (await reveal.mutateAsync({ surveyId })).password)
+              : run(async () => (await reveal.mutateAsync({ surveyId, kind })).password)
           }
           className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
         >
@@ -157,7 +216,9 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
           type="button"
           disabled={busy || !data.canManage}
           onClick={() =>
-            run(async () => (await reset.mutateAsync({ surveyId, ...passwordArg() })).password)
+            run(
+              async () => (await reset.mutateAsync({ surveyId, kind, ...passwordArg() })).password,
+            )
           }
           className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
         >
@@ -172,28 +233,46 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
 
       <PasswordDraftInput value={draft} onChange={setDraft} disabled={busy || !data.canManage} />
 
-      <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-        설문을 중단하거나 종료하면 닫힙니다. 링크가 유출되거나 업체를 바꿀 때는 비밀번호만 변경하세요 —
-        주소는 설문당 하나로 고정입니다. 링크와 비밀번호는 서로 다른 채널로 전달하는 것이
-        안전합니다.
-      </p>
+      {/* 클라이언트 링크에만 있는 축 — 보여 줄 화면. 외주 링크는 탭이 고정이라 값이 null 이다.
+          권한이 없어도 칩은 **보인다**: 지금 무엇이 열려 있는지는 초대한 사람도 알아야 한다. */}
+      {tabs && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12px] text-[#6E6E73]">보여 줄 화면</span>
+          <ClientTabChips
+            tabs={tabs}
+            disabled={busy || !data.canManage}
+            onToggle={async (tab) => {
+              setError(null);
+              try {
+                // 네 값을 통째로 보낸다 — 칩 하나만 보내면 동시에 누른 다른 사람의 저장을 되돌린다.
+                await setTabs.mutateAsync({ surveyId, tabs: { ...tabs, [tab]: !tabs[tab] } });
+              } catch (err) {
+                setError(getErrorMessage(err, copy.failure));
+              }
+            }}
+          />
+          <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+            설문 미리보기는 언제나 열립니다. 바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
+          </p>
+        </div>
+      )}
+
+      <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">{copy.lifecycle}</p>
 
       {confirmingClose ? (
         <div className="flex items-center gap-1.5">
-          <span className="flex-1 text-[12px] text-[#374151]">
-            링크를 종료하면 외주가 더 이상 들어오지 못합니다.
-          </span>
+          <span className="flex-1 text-[12px] text-[#374151]">{copy.closeConfirm}</span>
           <button
             type="button"
             disabled={busy}
             onClick={async () => {
               setError(null);
               try {
-                await close.mutateAsync({ surveyId });
+                await close.mutateAsync({ surveyId, kind });
                 setPassword(null);
                 setConfirmingClose(false);
               } catch (err) {
-                setError(getErrorMessage(err, '외주 실사 링크를 처리하지 못했습니다.'));
+                setError(getErrorMessage(err, copy.failure));
               }
             }}
             className="h-8 rounded-[8px] bg-[#DC2626] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#B91C1C] disabled:bg-[#9CA3AF]"
@@ -220,6 +299,49 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
       )}
 
       {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * 클라이언트 링크의 탭 칩 — 게스트 계정 블록의 칩과 같은 어휘·같은 순서다.
+ *
+ * 어휘 순서는 `surveyGuestTabValues` 가 정한다. 화면이 자기 배열을 들면 탭이 늘었을 때 계약에는
+ * 있는데 안 그려지는 값이 생긴다.
+ */
+function ClientTabChips({
+  tabs,
+  disabled,
+  onToggle,
+}: {
+  tabs: SurveyGuestTabs;
+  disabled: boolean;
+  onToggle: (tab: SurveyGuestTab) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {surveyGuestTabValues.map((tab) => {
+        const active = tabs[tab];
+        return (
+          <button
+            key={tab}
+            type="button"
+            role="checkbox"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => onToggle(tab)}
+            className={cn(
+              'flex h-[26px] items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-50',
+              active
+                ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
+                : 'border-[#E5E5EA] bg-white text-[#6E6E73] hover:text-[#1C1C1E]',
+            )}
+          >
+            {active && <Check className="h-3 w-3" />}
+            {SURVEY_GUEST_TAB_LABEL[tab]}
+          </button>
+        );
+      })}
     </div>
   );
 }

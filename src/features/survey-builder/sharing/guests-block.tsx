@@ -27,7 +27,10 @@ interface GuestsBlockProps {
 }
 
 /**
- * 공유 설정 모달의 클라이언트(게스트) 블록 (.pen FLOW 4-2, 역할 모델 v2 티켓 21).
+ * 공유 설정 모달 클라이언트 블록의 「게스트 계정」 세그먼트 (.pen FLOW 4-2, 역할 모델 v2 티켓 21).
+ *
+ * **옛 모델이다** — 클라이언트에게 여는 기본 길은 설문별 링크로 바뀌었고(ADR-0029), 이 조각은
+ * 공존 창 동안 두 번째 세그먼트로 남는다. 블록 제목과 세그먼트는 상위(`ClientBlock`)가 그린다.
  *
  * 참여자 블록과 나란히 서지만 **탭 칩 줄이 하나 더 있다**. 게스트가 갖는 권한은 언제나
  * 같고(프리뷰 + 현황) 설문마다 달라지는 것은 어느 탭이 열리는가라, 그 선택이 이 화면의
@@ -96,8 +99,6 @@ export function GuestsBlock({ surveyId }: GuestsBlockProps) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-semibold text-[#374151]">클라이언트 — 게스트 계정</span>
-
       <div className="relative">
         <div className="flex h-8 items-center gap-2 rounded-[8px] border border-[#D1D5DB] bg-white px-3">
           <Search className="h-[13px] w-[13px] shrink-0 text-[#9CA3AF]" />

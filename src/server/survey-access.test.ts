@@ -597,6 +597,18 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
     );
   });
 
+  /**
+   * 종류가 열을 정한다(ADR-0029). 외주가 아닌 종류가 외주의 여섯 칸을 물려받으면 클라이언트에게
+   * 조사 대상 원본과 응답 수정이 열린다 — 틀려도 좁은 쪽으로 틀려야 하는 자리다.
+   */
+  it('외주가 아닌 종류의 링크는 외주의 열을 물려받지 않는다', () => {
+    const clientLink: LinkAccessSubject = { ...link, linkKind: 'client' };
+    const caps = resolveSurveyCapabilities(clientLink, survey());
+    for (const cap of ['contacts.view', 'contacts.writeAttempts', 'responses.view', 'mail.sendSingle'] as const) {
+      expect(caps.has(cap), `${cap} 이 클라이언트 링크에 열렸다`).toBe(false);
+    }
+  });
+
   it('배치 대기 설문은 링크에도 닫힌다 — 팀이 정해지기 전에는 아무도 못 연다', () => {
     const pending = survey({ teamId: null, assignmentStatus: 'assignment_pending' });
     expect([...resolveSurveyCapabilities(link, pending)]).toEqual([]);

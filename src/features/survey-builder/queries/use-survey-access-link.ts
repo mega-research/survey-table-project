@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import type { AccessLinkKind, SurveyGuestTabs } from '@/shared/contracts/workspace';
 import { client, orpc } from '@/shared/lib/rpc';
 
 import { surveyKeys } from './use-surveys';
 
 /**
- * 외주 실사 링크 쿼리·변경 (ADR-0026, .pen FLOW 10-2).
+ * 설문 접속 링크(외주 실사 링크 · 클라이언트 링크) 쿼리·변경 (ADR-0026·0029, .pen FLOW 10-2).
  *
  * 실사 초대 훅(use-survey-fieldwork)과 캐시를 따로 둔다 — 두 모델이 공존하는 창에서 한 키로
  * 합치면 링크 발급 한 번이 초대 목록까지 다시 당긴다.
@@ -18,13 +19,16 @@ import { surveyKeys } from './use-surveys';
  */
 export const surveyAccessLinkKeys = {
   all: [...surveyKeys.all, 'access-link'] as const,
-  detail: (surveyId: string) => [...surveyAccessLinkKeys.all, surveyId] as const,
+  // 종류가 키에 들어간다 — 한 설문에 외주 링크와 클라이언트 링크가 함께 서므로, 빠지면 두
+  // 패널이 서로의 캐시를 덮어 「클라이언트 블록에 외주 링크의 주소가 뜬다」.
+  detail: (surveyId: string, kind: AccessLinkKind) =>
+    [...surveyAccessLinkKeys.all, surveyId, kind] as const,
 };
 
-export function useSurveyAccessLink(surveyId: string) {
+export function useSurveyAccessLink(surveyId: string, kind: AccessLinkKind) {
   return useQuery({
-    queryKey: surveyAccessLinkKeys.detail(surveyId),
-    queryFn: () => orpc.workspace.accessLinks.get.call({ surveyId }),
+    queryKey: surveyAccessLinkKeys.detail(surveyId, kind),
+    queryFn: () => orpc.workspace.accessLinks.get.call({ surveyId, kind }),
     staleTime: 10_000,
     refetchOnWindowFocus: false,
   });
@@ -50,20 +54,32 @@ function useLinkMutation<TInput, TOutput>(fn: (input: TInput) => Promise<TOutput
 }
 
 export function useIssueAccessLink() {
-  return useLinkMutation((input: { surveyId: string; password?: string }) =>
+  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind; password?: string }) =>
     client.workspace.accessLinks.issue(input),
   );
 }
 
 export function useResetAccessLinkPassword() {
-  return useLinkMutation((input: { surveyId: string; password?: string }) =>
+  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind; password?: string }) =>
     client.workspace.accessLinks.resetPassword(input),
   );
 }
 
 export function useCloseAccessLink() {
-  return useLinkMutation((input: { surveyId: string }) =>
+  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind }) =>
     client.workspace.accessLinks.close(input),
+  );
+}
+
+/**
+ * 클라이언트 링크의 현황 탭 저장 (ADR-0029) — 종류를 받지 않는다. 탭은 클라이언트 링크의 축이다.
+ *
+ * 네 값을 통째로 보낸다. 칩 하나만 보내면 두 사람이 다른 칩을 동시에 누를 때 한쪽의 저장이
+ * 다른 쪽을 옛 값으로 되돌린다.
+ */
+export function useSetClientLinkTabs() {
+  return useLinkMutation((input: { surveyId: string; tabs: SurveyGuestTabs }) =>
+    client.workspace.accessLinks.setClientTabs(input),
   );
 }
 
@@ -75,7 +91,7 @@ export function useCloseAccessLink() {
  */
 export function useRevealAccessLinkPassword() {
   return useMutation({
-    mutationFn: (input: { surveyId: string }) =>
+    mutationFn: (input: { surveyId: string; kind: AccessLinkKind }) =>
       client.workspace.accessLinks.revealPassword(input),
   });
 }

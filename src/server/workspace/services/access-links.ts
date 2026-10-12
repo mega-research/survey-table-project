@@ -6,7 +6,11 @@ import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { isUniqueViolation } from '@/lib/pg-error';
-import type { AccessLinkKind } from '@/shared/contracts/workspace';
+import {
+  type AccessLinkKind,
+  normalizeSurveyGuestTabs,
+  type SurveyGuestTabs,
+} from '@/shared/contracts/workspace';
 import type { AccessLinkView } from '@/shared/contracts/workspace-io';
 
 import {
@@ -29,16 +33,36 @@ import {
  * 한다. 링크 행에 만료 축을 두지 않은 이유가 그것이고, 여기서 중단을 함께 보면 판정이 두 벌이 된다.
  */
 
-/** drizzle 행 → 화면이 보는 모양. 암호문은 절대 섞지 않는다. */
+/** 화면이 보는 컬럼 — 암호문은 여기 없다. 조회·발급·재설정·탭 저장이 같은 목록을 쓴다. */
+const VIEW_COLUMNS = {
+  id: surveyAccessLinks.id,
+  kind: surveyAccessLinks.kind,
+  token: surveyAccessLinks.token,
+  clientTabs: surveyAccessLinks.clientTabs,
+  passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+  createdAt: surveyAccessLinks.createdAt,
+} as const;
+
+/**
+ * drizzle 행 → 화면이 보는 모양. 암호문은 절대 섞지 않는다.
+ *
+ * 탭은 여기서 정규화를 끝낸다 — 클라이언트 링크는 컬럼이 비어 있어도 기본값(응답 현황 하나)을
+ * 받고, 외주 링크는 그 축이 없어 null 이다. 화면이 「비어 있으면 기본값」을 다시 계산하면
+ * 서버의 판정(같은 정규화)과 갈릴 자리가 하나 더 생긴다.
+ */
 function toView(row: {
   id: string;
+  kind: AccessLinkKind;
   token: string;
+  clientTabs: SurveyGuestTabs | null;
   passwordUpdatedAt: Date;
   createdAt: Date;
 }): AccessLinkView {
   return {
     id: row.id,
+    kind: row.kind,
     token: row.token,
+    clientTabs: row.kind === 'client' ? normalizeSurveyGuestTabs(row.clientTabs) : null,
     passwordUpdatedAt: row.passwordUpdatedAt,
     createdAt: row.createdAt,
   };
@@ -64,12 +88,7 @@ export async function getAccessLink(
   kind: AccessLinkKind,
 ): Promise<AccessLinkView | null> {
   const [row] = await db
-    .select({
-      id: surveyAccessLinks.id,
-      token: surveyAccessLinks.token,
-      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
-      createdAt: surveyAccessLinks.createdAt,
-    })
+    .select(VIEW_COLUMNS)
     .from(surveyAccessLinks)
     .where(activeLink(surveyId, kind))
     .limit(1);
@@ -103,12 +122,7 @@ export async function issueAccessLink(input: {
         passwordUpdatedBy: input.actorId,
         createdBy: input.actorId,
       })
-      .returning({
-        id: surveyAccessLinks.id,
-        token: surveyAccessLinks.token,
-        passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
-        createdAt: surveyAccessLinks.createdAt,
-      });
+      .returning(VIEW_COLUMNS);
     if (!row) throw new Error('접속 링크 INSERT 실패');
     return { link: toView(row), password };
   } catch (error) {
@@ -141,14 +155,33 @@ export async function resetAccessLinkPassword(input: {
       updatedAt: now,
     })
     .where(activeLink(input.surveyId, input.kind))
-    .returning({
-      id: surveyAccessLinks.id,
-      token: surveyAccessLinks.token,
-      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
-      createdAt: surveyAccessLinks.createdAt,
-    });
+    .returning(VIEW_COLUMNS);
   if (!row) throw new AccessLinkNotFoundError();
   return { link: toView(row), password };
+}
+
+/**
+ * 클라이언트 링크의 현황 탭 저장 (ADR-0029).
+ *
+ * **WHERE 가 클라이언트 종류로 못 박혀 있다.** 이 함수는 종류를 받지 않는다 — 외주 링크에는
+ * 탭 축이 없고, 종류를 인자로 열면 호출부의 실수 하나가 외주 링크에 값을 쓰려다 0134 의 CHECK
+ * 에 걸려 500 이 된다. 클라이언트 링크가 없으면 NotFound 다(외주 링크만 있는 설문 포함).
+ *
+ * `updatedAt` 만 올리고 `passwordUpdatedAt` 은 건드리지 않는다 — 탭을 바꾼다고 선 세션이
+ * 끊기면 안 된다. 바뀐 탭은 클라이언트의 다음 요청부터 반영된다(세션 판정이 매 요청 이 행을
+ * 읽는다 — 쿠키에 탭을 싣지 않는 이유다).
+ */
+export async function setClientLinkTabs(input: {
+  surveyId: string;
+  tabs: SurveyGuestTabs;
+}): Promise<AccessLinkView> {
+  const [row] = await db
+    .update(surveyAccessLinks)
+    .set({ clientTabs: input.tabs, updatedAt: new Date() })
+    .where(activeLink(input.surveyId, 'client'))
+    .returning(VIEW_COLUMNS);
+  if (!row) throw new AccessLinkNotFoundError();
+  return toView(row);
 }
 
 /**

@@ -268,3 +268,17 @@ export function buildFieldworkLinkUrl(
 ): string {
   return `${baseUrl}/fw/${token}`;
 }
+
+/**
+ * 클라이언트 링크 URL 빌드 — {baseUrl}/client/{token} (ADR-0029).
+ *
+ * 설문 제목을 주소에 싣지 않는다. 제목은 추측할 수 있어 첫 번째 자물쇠(추측 불가능한 토큰)가
+ * 사라지고, 제목만 넣어 봐도 「이런 조사를 하고 있다」가 확인된다 — 다른 고객사의 조사 존재가
+ * 드러난다. 한글 주소가 메신저·메일에서 퍼센트 인코딩으로 깨지는 것도 이유다.
+ */
+export function buildClientLinkUrl(
+  token: string,
+  baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
+): string {
+  return `${baseUrl}/client/${token}`;
+}

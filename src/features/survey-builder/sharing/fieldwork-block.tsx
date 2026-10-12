@@ -12,7 +12,7 @@ import {
   useAddSurveyParticipant,
   useParticipantCandidates,
 } from '../queries/use-survey-participants';
-import { FieldworkLinkPanel } from './fieldwork-link-panel';
+import { AccessLinkPanel } from './access-link-panel';
 import { SegmentRow, type SegmentOption } from './segment-row';
 
 interface FieldworkBlockProps {
@@ -54,7 +54,7 @@ export function FieldworkBlock({ surveyId }: FieldworkBlockProps) {
       <SegmentRow label="실사 방식" options={FIELDWORK_MODES} value={mode} onChange={setMode} />
 
       {mode === 'outsourced' ? (
-        <FieldworkLinkPanel surveyId={surveyId} />
+        <AccessLinkPanel surveyId={surveyId} kind="fieldwork" />
       ) : (
         <InternalFieldworkSection surveyId={surveyId} />
       )}

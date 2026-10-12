@@ -490,6 +490,10 @@ function resolveLinkCapabilities(
 ): ReadonlySet<SurveyCapability> {
   if (subject.surveyId !== survey.id) return NONE;
   if (survey.assignmentStatus === 'assignment_pending') return NONE;
+  // 외주 실사 링크가 아닌 종류에는 아직 열이 없다(ADR-0029). 종류를 묻지 않고 아래로 내려가면
+  // 클라이언트 링크가 외주의 여섯 칸 — 조사 대상 원본·응답 수정·단건 메일 — 을 얻는다.
+  // 클라이언트 열은 그 링크의 입구가 서는 티켓이 여기에 세운다.
+  if (subject.linkKind !== 'fieldwork') return NONE;
   if (survey.isPaused) return NONE;
   if (survey.isClosed) return NONE;
   return new Set(LINK_CAPS);

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyAccessLinks, surveys } from '@/db/schema';
@@ -79,10 +79,24 @@ interface LinkRow {
 }
 
 /**
+ * 이 모듈의 입구들이 받는 링크의 종류 — **지금은 외주 실사 링크 하나다** (ADR-0029).
+ *
+ * 입구가 셋이고 전부 외주의 것이다: `/fw/<token>` 의 화면과 관문, scoped 베이스, 대리 응답.
+ * 클라이언트 링크의 토큰이 이리로 오면 **없는 토큰**이어야 한다 — 그 칸막이가 없으면
+ * 클라이언트에게 준 주소의 접두만 `/fw` 로 바꿔 넣어 외주 콘솔이 열린다. 클라이언트 링크의
+ * 입구(`/client/<token>`)는 다음 티켓이 이 값을 인자로 열면서 세운다.
+ */
+const ENTRANCE_KIND: AccessLinkKind = 'fieldwork';
+
+/**
  * 토큰으로 링크 행을 읽는다 — **종료된 행도 읽는다.**
  *
  * `closedAt IS NULL` 을 WHERE 에 걸면 종료된 링크가 「없는 토큰」이 되어 비밀번호 화면이 뜬다.
  * 그러면 외주는 비밀번호를 몇 번이고 다시 넣어 본다 — 닫힘을 말해 주는 판단과 어긋난다.
+ *
+ * **종류는 WHERE 에 건다.** 종류가 어긋난 토큰은 닫힌 링크가 아니라 없는 링크다 — 닫힘 화면은
+ * 「이 주소가 한때 링크였다」를 알려 주므로, 어긋난 종류에 그것을 보이면 다른 입구의 토큰이
+ * 유효한지가 확인된다.
  */
 async function loadLinkRow(token: string): Promise<LinkRow | null> {
   // 모양이 아니면 조회하지 않는다 — 주소에서 온 아무 문자열로 DB 를 치지 않기 위해서이고,
@@ -104,7 +118,7 @@ async function loadLinkRow(token: string): Promise<LinkRow | null> {
     })
     .from(surveyAccessLinks)
     .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
-    .where(eq(surveyAccessLinks.token, token))
+    .where(and(eq(surveyAccessLinks.token, token), eq(surveyAccessLinks.kind, ENTRANCE_KIND)))
     .limit(1);
   return row ?? null;
 }

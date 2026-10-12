@@ -4,7 +4,9 @@ import { z } from 'zod';
 import {
   ACCESS_LINK_TOKEN_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MIN_LENGTH,
+  accessLinkKindValues,
 } from '@/shared/contracts/workspace';
+import { SurveyGuestTabsSchema } from '@/shared/contracts/workspace-io';
 
 /**
  * 외주 실사 링크의 순수 규칙 — 주소 토큰과 공유 비밀번호 (ADR-0026).
@@ -91,12 +93,22 @@ const PasswordField = z
   .min(ACCESS_LINK_PASSWORD_MIN_LENGTH, `비밀번호는 ${ACCESS_LINK_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`)
   .max(64, '비밀번호는 64자까지 가능합니다.');
 
-export const SurveyAccessLinkInput = z.object({ surveyId: z.uuid() });
+/**
+ * 어느 링크인가 — 관리 표면이 **한 벌**이라 종류를 입력으로 받는다 (ADR-0029).
+ *
+ * 종류에 기본값을 두지 않는 것이 계약이다. 한 설문에 외주 링크와 클라이언트 링크가 함께 서므로
+ * 종류를 빠뜨린 요청이 어느 한쪽으로 접히면, 클라이언트 패널에서 누른 「종료」가 외주 링크를
+ * 닫는다 — 권한은 같아서(둘 다 `survey.manageAccess`) 아무 관문도 그것을 막아 주지 않는다.
+ */
+const KindField = z.enum(accessLinkKindValues);
+
+export const SurveyAccessLinkInput = z.object({ surveyId: z.uuid(), kind: KindField });
 export type SurveyAccessLinkInput = z.infer<typeof SurveyAccessLinkInput>;
 
 /** 발급. 비밀번호를 생략하면 읽어 주기 쉬운 값을 서버가 만든다. */
 export const IssueAccessLinkInput = z.object({
   surveyId: z.uuid(),
+  kind: KindField,
   password: PasswordField.optional(),
 });
 export type IssueAccessLinkInput = z.infer<typeof IssueAccessLinkInput>;
@@ -104,6 +116,22 @@ export type IssueAccessLinkInput = z.infer<typeof IssueAccessLinkInput>;
 /** 비밀번호 재설정 — 토큰은 건드리지 않는다(주소는 영구 고정이다). */
 export const ResetAccessLinkPasswordInput = IssueAccessLinkInput;
 export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswordInput>;
+
+/**
+ * 클라이언트 링크의 현황 탭 저장 — **종류를 받지 않는다.**
+ *
+ * 탭은 클라이언트 링크의 축이다. 외주 콘솔에는 설문마다 고르는 화면이 없어(탭이 고정이다)
+ * 종류를 입력으로 열어 두면 「외주 링크에 탭을 저장했는데 아무 일도 없는」 요청이 생긴다 —
+ * 표면 자체를 한 종류로 못 박는다. DB 의 CHECK 도 같은 사실을 지킨다(0134).
+ *
+ * 네 값을 통째로 받는다(부분 갱신이 아니다) — 게스트 계정의 탭 저장과 같은 모양이다. 일부만
+ * 받으면 두 사람이 다른 칩을 동시에 누를 때 한쪽의 저장이 다른 쪽을 옛 값으로 되돌린다.
+ */
+export const SetClientLinkTabsInput = z.object({
+  surveyId: z.uuid(),
+  tabs: SurveyGuestTabsSchema,
+});
+export type SetClientLinkTabsInput = z.infer<typeof SetClientLinkTabsInput>;
 
 /**
  * 링크 세션 표면의 입력 — **외주가 보내는 것**이라 두 칸이 전부다.
@@ -133,14 +161,14 @@ export type AccessLinkSignOutInput = z.infer<typeof AccessLinkSignOutInput>;
 
 export class AccessLinkNotFoundError extends Error {
   constructor() {
-    super('이 설문에는 외주 실사 링크가 없습니다.');
+    super('이 설문에는 발급된 링크가 없습니다.');
     this.name = 'AccessLinkNotFoundError';
   }
 }
 
 export class AccessLinkAlreadyIssuedError extends Error {
   constructor() {
-    super('이 설문에는 이미 외주 실사 링크가 있습니다.');
+    super('이 설문에는 이미 발급된 링크가 있습니다.');
     this.name = 'AccessLinkAlreadyIssuedError';
   }
 }
