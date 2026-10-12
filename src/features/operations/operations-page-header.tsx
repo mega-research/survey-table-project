@@ -4,6 +4,7 @@ import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import {
@@ -90,8 +91,8 @@ export function OperationsPageHeader({
   const previewHref = previewHrefProp ?? (internalShell ? surveyPreviewPath(surveyId) : null);
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
-        <div className="flex items-center space-x-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center space-x-4">
           {internalShell && (
             <>
               <Link href={surveyListPath()}>
@@ -103,13 +104,26 @@ export function OperationsPageHeader({
               <div className="h-6 w-px bg-gray-300" />
             </>
           )}
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-blue-500" />
-            <h1 className="max-w-md truncate text-lg font-medium text-gray-900">{surveyTitle}</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <Activity className="h-5 w-5 shrink-0 text-blue-500" />
+            {/*
+              링크 셸(외주 실사·클라이언트)은 제목을 자르지 않는다 — 버튼이 서넛뿐이라 자리가 있고,
+              밖에서 온 사람에게는 이 한 줄이 「어느 조사인가」의 전부다. 길면 줄을 바꾼다.
+              내부 셸은 버튼이 많아 종전대로 한 줄로 자른다(전체 이름은 title 로 읽힌다).
+            */}
+            <h1
+              title={surveyTitle}
+              className={cn(
+                'text-lg font-medium text-gray-900',
+                internalShell ? 'max-w-md truncate' : 'break-keep',
+              )}
+            >
+              {surveyTitle}
+            </h1>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex shrink-0 items-center space-x-3">
           <RefreshButton />
           {/* 설문 중단·종료·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}

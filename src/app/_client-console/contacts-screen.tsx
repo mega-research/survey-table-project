@@ -38,7 +38,7 @@ export async function ClientContactsScreen({ surveyId, basePath, searchParams }:
       <div>
         <h2 className="text-xl font-bold text-gray-900">조사 대상</h2>
         <p className="text-sm text-slate-500">
-          연락처 등 개인정보 컬럼은 마스킹되어 표시됩니다.
+          연락처 등 개인정보는 일부만 표시됩니다.
         </p>
       </div>
       <GuestContactsTable page={contacts} basePath={basePath} />

@@ -220,7 +220,9 @@ export type SurveyGuestTab = (typeof surveyGuestTabValues)[number];
 export const SURVEY_GUEST_TAB_LABEL: Record<SurveyGuestTab, string> = {
   overview: '응답 현황',
   progressReport: '진척 보고',
-  contactsMasked: '조사 대상 (마스킹)',
+  // 화면 이름에 「마스킹」을 적지 않는다 — 고객사가 보는 탭 이름이다(2026-10-12). 개인정보가
+  // 가려진다는 사실은 그 화면의 안내 문구가 말한다. 어휘 키(`contactsMasked`)는 그대로다.
+  contactsMasked: '조사 대상',
   quota: '쿼터 현황',
 };
 

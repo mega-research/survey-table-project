@@ -87,7 +87,7 @@ describe('AccessLinkPanel', () => {
 
     expect(screen.getByRole('checkbox', { name: '응답 현황' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '진척 보고' })).not.toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '조사 대상 (마스킹)' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '조사 대상' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: '쿼터 현황' })).not.toBeChecked();
   });
 
