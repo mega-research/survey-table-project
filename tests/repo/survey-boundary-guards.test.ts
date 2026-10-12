@@ -37,6 +37,9 @@ const SURVEY_CONSOLE_ROOTS = [
   // 입구 화면(`fw/[token]/page.tsx`)은 여기 없다 — 세션을 만드는 자리라 관문이 없고,
   // 그 예외는 `rsc-page-guards` 의 공개 허용 목록이 사유와 함께 진다.
   'fw/[token]/operations',
+  // 클라이언트 링크 콘솔(ADR-0029) — 위와 같은 구조다(토큰이 설문을 지목한다). 라우트 그룹
+  // `(console)` 아래가 콘솔이고, 그 밖의 `client/[token]/page.tsx` 는 입구 화면이다.
+  'client/[token]/(console)',
 ];
 
 /**
@@ -46,7 +49,7 @@ const SURVEY_CONSOLE_ROOTS = [
  * 묻는 게스트 짝이다(티켓 22).
  */
 const PAGE_CAPABILITY_GATE =
-  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess|assertFieldworkLinkPageAccess)\s*\(/;
+  /\b(assertSurveyCapabilityPage|assertSurveyConsolePageAccess|assertGuestSurveyPageAccess|assertFieldworkLinkPageAccess|assertClientLinkPageAccess)\s*\(/;
 
 /** REST 쪽 짝 — 사유를 HTTP 코드로 옮기는 어댑터(404 존재 은닉 / 403). */
 const REST_CAPABILITY_GATE =
@@ -93,6 +96,8 @@ describe('설문 콘솔 RSC 페이지는 설문 capability 관문을 진다', ()
     '(internal)/surveys/[id]/layout.tsx',
     // 링크 콘솔의 셸 — 헤더·탭이 판정 결과를 받아 그리므로 여기서도 관문이 서야 한다.
     'fw/[token]/operations/layout.tsx',
+    // 클라이언트 링크 콘솔의 셸 — 화면 머리에 조사 이름이 실리므로 링크가 열려 있는지부터 본다.
+    'client/[token]/(console)/layout.tsx',
   ])('설문 콘솔 트리의 진입 레이아웃이 관문을 진다: %s', (rel) => {
     // leaf 가 자기 정밀 관문을 갖지만, 트리 진입점에서 survey.view 를 한 번 접는 것이
     // 「보이지도 않는 설문」의 헤더·탭이 먼저 그려지는 것을 막는다.
