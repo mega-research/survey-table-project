@@ -965,6 +965,7 @@ POST   /api/response/segment                   # 구간 응답 저장 (sendBeaco
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다리 — 옛 운영 콘솔 주소를 직원은 내부 콘솔로, 옛 게스트는 외주 링크(/fw/<token>)로 (307, 전환기 장치)
 *      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
 ```
 
@@ -1331,7 +1332,15 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   두었다. 루트마다 `'/x'` 와 `'/x/:path*'` 두 줄인 것도 계약이다(후자는 루트 자체를 매치하지
   않아 목록 화면이 무방비가 된다). 옛 주소는 `next.config.ts` 의 `/admin/:path*` → `/:path*`
   영구 리다이렉트가 받는다 — rewrite 가 아니라 redirect 다(두 주소를 살려 두면 접두를 걷은
-  것이 아니다).
+  것이 아니다). **옛 운영 콘솔 주소(`/admin/surveys/<id>/operations[/…]`)만 예외다** — 직원과
+  옛 게스트 계정이 함께 쓰던 주소라 접두만 걷으면 옛 게스트가 로그인 화면에 갇힌다. 그 주소는
+  일반 규칙보다 **앞선** 임시(307) 규칙이 다리 라우트 `/api/legacy-guest-link/[surveyId]` 로
+  보내고, 라우트가 세션 쿠키의 존재로 가른다: 직원은 `/surveys/<id>/operations/…`(종전의 답),
+  세션이 없고 **옛 grant 에 오른 설문**(`GUEST_SURVEY_GRANTS` 의 설문 id — 계정 쪽은 더는 뜻이
+  없다)이고 열린 외주 링크가 있으면 `/fw/<token>`. 목록 밖 설문은 링크가 있어도 조회하지
+  않는다(설문 id 로 토큰을 알아내는 창구가 되지 않게). **전환기 장치다** — env 를 비우면 꺼지고,
+  서 있는 동안 그 설문들의 링크는 비밀번호 하나로 지켜진다. 규칙의 순서는
+  `tests/repo/next-config-redirects.test.ts` 가, 판정은 라우트 옆 `route.test.ts` 가 본다.
   쿠키 유효성·계정 상태(active)·**계정 유형**·게스트 경로 제한은 `app/(internal)/layout.tsx`·
   `app/analytics/layout.tsx` 가 서버에서 재검증한다. 유형 구역(`/guest`·`/fieldwork`)은 페이지의
   `requireAccountTypePage` 가 본다. 비로그인 접근을 허용하는 경로 목록은
@@ -1468,6 +1477,8 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
   - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/logout`).
     그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
+    env 값 자체는 **옛 주소 다리의 허용 목록**으로만 남아 있다(`lib/auth/legacy-guest-link` —
+    설문 id 만 읽고 권한은 아무것도 주지 않는다. 위 「게이트는 2단이다」 참조).
   - 부여 화면 조각은 `features/survey-builder/sharing/guests-block` 인데 **지금 여는 화면이 없다**
     (클라이언트 블록이 링크 패널만 그린다 — 이미 부여된 행은 그대로 유효하다),
     **게스트가 보는 콘솔은 `/guest` 다**(티켓 22). 그 관문이 `server/page-guest-access.ts` 의
@@ -1890,6 +1901,7 @@ UPSTASH_REDIS_REST_TOKEN=
 # 로깅 / 기타
 AXIOM_TOKEN=  AXIOM_DATASET=  LOG_LEVEL=
 ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비활성)
+GUEST_SURVEY_GRANTS=            # 옛 게스트 주소 다리의 허용 목록 (<userId>:<surveyId>,… — 설문 id 만 쓴다). 비우면 다리가 꺼진다
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.

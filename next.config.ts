@@ -27,6 +27,32 @@ export function securityHeaders() {
   ];
 }
 
+// 옛 `/admin` 주소를 받는 리다이렉트 규칙. headers 와 같은 이유로 순수 함수로 뺐다 —
+// **Next 는 먼저 맞는 규칙 하나만 적용하므로 순서가 곧 동작**이고, 그 순서를
+// tests/repo/next-config-redirects.test.ts 가 본다.
+//
+// 앞의 둘은 옛 게스트 다리다. 옛 운영 콘솔 주소는 직원과 옛 게스트 계정이 함께 쓰던 주소라
+// 접두만 걷어서는 안 되고, 라우트(app/api/legacy-guest-link)가 세션 쿠키를 보고 가른다 —
+// 직원은 `/surveys/<id>/operations/…` 로, 옛 게스트는 그 설문의 외주 실사 링크(`/fw/<token>`)로.
+// 임시(307)인 것이 요점이다: 다리는 전환기 장치라 걷어낼 수 있어야 하는데 영구(308)는
+// 브라우저가 캐시한다. 주소마다 두 줄인 것은 proxy matcher 와 같은 계약이다(`:path*` 한 줄에
+// 루트 자체를 맡기지 않는다).
+export function adminPrefixRedirects() {
+  return [
+    {
+      source: '/admin/surveys/:surveyId/operations',
+      destination: '/api/legacy-guest-link/:surveyId',
+      permanent: false,
+    },
+    {
+      source: '/admin/surveys/:surveyId/operations/:path*',
+      destination: '/api/legacy-guest-link/:surveyId/:path*',
+      permanent: false,
+    },
+    { source: '/admin/:path*', destination: '/:path*', permanent: true },
+  ];
+}
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
 
@@ -54,7 +80,7 @@ const nextConfig: NextConfig = {
   // 되돌아가는 트리도 함께 남는다. permanent(308)는 브라우저가 캐시하므로 되돌리기 어렵지만,
   // 되돌릴 계획이 없는 이전이라 그것이 맞는 값이다.
   async redirects() {
-    return [{ source: '/admin/:path*', destination: '/:path*', permanent: true }];
+    return adminPrefixRedirects();
   },
 
   // 2. 타입스크립트 에러 확인 (빌드 시 타입 검증)
