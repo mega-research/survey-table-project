@@ -150,10 +150,14 @@ export const account = base.use(({ context, next }) => {
  * 읽다 터지기 때문이었고, handler 들이 주체를 읽을 줄 알게 되는 것이 이 티켓의 일이다.
  * 지금 계약은 하나다 — **이 베이스를 쓰는 procedure 는 handler 첫 줄에서**
  * `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<capability>')`
- * **를 부른다.** 예외 없음(티켓 21 이 마지막 예외를 authed 로 옮겼다). 링크에게 열리는
- * capability 는 넷뿐이라(survey.view·operations.view·contacts.view·contacts.writeAttempts)
- * 나머지 표면은 관문이 전부 거부한다 — 그 사실은 `fieldwork-link-denial` 이 라우터를 열거해
- * 고정한다.
+ * **를 부른다.** 예외 없음(티켓 21 이 마지막 예외를 authed 로 옮겼다). 외주 실사 링크에게
+ * 열리는 capability 는 여섯뿐이라(survey.view·operations.view·contacts.view·
+ * contacts.writeAttempts 에 ADR-0027 이 responses.view·mail.sendSingle 을 더했다) 나머지
+ * 표면은 관문이 전부 거부한다 — 그 사실은 `fieldwork-link-denial` 이 라우터를 열거해 고정한다.
+ *
+ * **이 문을 지나는 링크는 외주 실사 링크뿐이다**(ADR-0029). 클라이언트 링크의 쿠키는 경로가
+ * 자기 콘솔 아래라 RPC 주소에 실리지 않고, 실려도 세션 목록에 서지 않는다
+ * (`lib/auth/access-link-session`).
  *
  * 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다:
  * 이쪽은 「설문 일치를 handler 가 강제한다」, 저쪽은 「자기 것만 만진다」.

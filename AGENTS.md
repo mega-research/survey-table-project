@@ -4,7 +4,9 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-10-12 (**main 병합** — main(hotfix) 의 2026-10-06 까지 70커밋을 staging 에 들였다. 충돌은 이 문서·`pnpm-lock.yaml`·`manual-migrations.json` 셋뿐이었다(main 이 이미 재편 구조 위에 있다). 마이그레이션 접두 0128 이 양쪽에서 겹쳐 **staging 의 외주 실사 링크 귀속 0128 을 0133 으로 옮겼다** — main 의 0128~0132 는 운영 DB 에 적용된 번호라 그대로 둔다(아래 "마이그레이션 번호"). 아래 두 문단은 각 계열이 병합 전에 적어 둔 갱신 기록이다.)
+> 최종 갱신: 2026-10-12 (**클라이언트 링크 · 설문 종료** — 클라이언트(고객사)도 계정이 아니라 **설문별 URL + 공유 비밀번호**로 들어온다(`/client/<token>`, ADR-0029). 링크 테이블이 종류 중립 이름 `survey_access_links` 로 옮겨 `kind`(`fieldwork`|`client`)와 클라이언트 탭 화이트리스트 `client_tabs` 를 갖는다(0134). 서버 모듈도 따라 옮겼다 — `server/access-link`·`lib/auth/access-link-session`·`workspace.accessLinks`·`workspace.accessLinkSession`. 클라이언트 링크 열은 옛 게스트 열과 같은 둘(`survey.view`·`operations.view`)이고, 쿠키가 `cl_<token>` · path `/client/<token>` 이라 RPC 주소에 실리지 않는다. 화면은 게스트 콘솔과 한 벌(`app/_client-console`). **설문 종료**가 중단과 별개의 상태로 섰다(`surveys.status='closed'`, 마이그레이션 없음, ADR-0030) — 새 응답과 외부 링크 둘을 닫고, 종료 취소·재발행이 다시 연다. 중단은 외주 링크만 닫는다. **실사·게스트 계정의 발급 입구를 닫았다**(`creatableUserTypes = ['internal']`) — 옛 계정 모델의 코드·테이블·콘솔은 그대로다. 아래 문단들은 그 앞의 갱신 기록이다.)
+>
+> 직전 — 2026-10-12 (**main 병합** — main(hotfix) 의 2026-10-06 까지 70커밋을 staging 에 들였다. 충돌은 이 문서·`pnpm-lock.yaml`·`manual-migrations.json` 셋뿐이었다(main 이 이미 재편 구조 위에 있다). 마이그레이션 접두 0128 이 양쪽에서 겹쳐 **staging 의 외주 실사 링크 귀속 0128 을 0133 으로 옮겼다** — main 의 0128~0132 는 운영 DB 에 적용된 번호라 그대로 둔다(아래 "마이그레이션 번호"). 아래 두 문단은 각 계열이 병합 전에 적어 둔 갱신 기록이다.)
 >
 > main 계열 — 2026-10-06 (표 문항 「행 차례로 열기」 — 저작된 행 묶음을 처음 몇 행만 보이고 `+` 로 한 행씩, `stagedRowsConfig` 0132 · 순수 로직 `question-renderer/utils/staged-rows` · ADR 0028 · 선택 칸 「중복 불가 묶음」 `TableCell.distinctGroup`(JSONB, 마이그레이션 없음) · 판정 `question-renderer/utils/distinct-select-group` · 직전: 2026-10-02 항목 단위 카드 「블록 단위로 세우기」 — 좌우로 붙은 표를 블록마다 차례로, `mobileItemCardBlockColumns` 0131 · 투영 `question-renderer/utils/item-card-blocks` · 드릴다운 상세의 계산 칸은 맨 아래가 아니라 제 열 자리에 라벨과 함께 · 직전: 모바일 드릴다운 묶음 머리 — 목차 열의 빈 글자 셀(숨기기)이 덮는 행은 각자 카드, 윗행이 계산 전용이면 소계를 보이는 머리 · 「바로표시」·「자세히」 셀은 제목이 아니라 설명 · 계산 전용 행은 요약 블록 · 셀 모달 「같은 열의 다른 표시 셀에도 적용」, 마이그레이션 없음 · 분류 `question-renderer/utils/classify-table` · 직전: 축 단위 카드를 테이블 유형에도 — 응답 칸이 놓인 열마다 카드 하나, 마이그레이션 없음 · 직전: 2026-10-01 모바일 표시 방식 「항목 단위 카드」 `item-cards` 0129 CHECK — 라벨(글자 셀)마다 카드 하나, 양식형 표용, 테이블 유형 전용 · 투영 `question-renderer/utils/item-cards` · 직전: 합계 제약 「입력된 칸 수」 모드 — `SumConstraint.aggregate: 'count'`, 선택한 칸 중 N칸 이상 입력, 미접촉 표에서도 평가 · 셀 게이팅 조건 묶음 — `enabledWhen` 에 `kind: 'group'`(AND/OR/NOT + 조건 N개, 중첩 가능) 추가, JSONB 라 마이그레이션 없음 · 트리 순회 `utils/cell-gate-tree` · 응답 화면 다중 컨트롤러 구독 `question-renderer/cells/gate-value-selector` · 빌더 진단 `gating-empty-group`. 직전: 2026-09-30 (모바일 척도 막대 — 보기 그룹 보기 모양 「척도 막대」 `ChoiceGroup.mobileScaleBar`(JSONB, 마이그레이션 없음, `mobileOriginalLine` 과 배타) · 모바일 표시 방식 「행별 척도」 `row-wise-scale` 0128 CHECK · 투영 `question-renderer/utils/choice-group-scale-bar`·`row-scale-bars` · 빌더 폴백 경고 `survey-builder/lib/scale-bar-diagnostics`. 직전: 2026-09-23 (쿼터 「진행 중 마감」 옵션 — 플랜 JSONB 에 `midSurveyClose`·`midSurveyClosedMessage` 추가(마이그레이션 없음), 게이트 표식 `recheckOnEachStep` 으로 페이지마다 백그라운드 재확인, 제출 트랜잭션 안 설문+셀 advisory lock 하드 차단 → `quotaful_out`, 제출 결과 `kind: 'quota_closed'`, 운영자 경로(관리자 수정 이탈→완료·재응답 허용 재제출) 면제 + 초과 표식. ADR 0025. 직전: 2026-09-21 자격미달 응답 상태 전이 — 재응답 허용 대상에 `screened_out` 추가(게이트를 `is_completed` → `status` 로, 술어 `isReeditableResponseStatus` 신설), 관리자 응답 수정에 자격미달 양방향 재판정 `completed ⇄ screened_out` 추가. 마이그레이션 없음 — `status` 는 CHECK 없는 text 컬럼이고 어휘도 그대로다. 직전: 2026-09-16 공급망 보안 패치 — Next 16.3.5·TipTap 3.31.3·sharp 0.35.4 상향, js-yaml 하한 4.3.2, prosemirror-view 중복 해소 override 신설, eslint 규칙 블록에 `files` 확장자 지정(지정이 없으면 `.cjs` 하나가 lint 실행 전체를 중단한다). 직전: origin/main 의 9/3~9/15 hotfix·기능 195커밋을 8월 재편 구조로 병합하고 신규 모듈 12개를 소비자 실측대로 feature 안으로 이동 — 자격미달 종료 문구 `screenedOutMessage` 0110 · 단답형·장문형·표 input 셀 응답 품질 검사 `textValidation` 0109(판정 `features/question-renderer/utils/text-quality`, 클라이언트 차단, 손대지 않은 이월 값 면제) · 모바일 표시 방식 「축 단위 카드」 `axis-cards` 0108 · 「행 단위 그룹 카드」 0107 · 「행 단위 카드」 0106 · 보기 그룹 표(table 유형 choiceGroups) · 표 input 셀 `inputWidth`·셀 공통 `hideRightBorder` · 단독 선택 보기 `exclusiveChoice`(`features/question-renderer/utils/exclusive-choice.ts`) · 표 행 반복 `rowRepeatConfig` 0104(`lib/question/row-repeat`) · 좌측 고정 열 `stickyColumnCount` 0105 · 입력 형식 검사 5종(`@/types/input-type`·`@/features/question-renderer/utils/input-format`, ADR 0023) · 문항별 이월값 조건 0102·끄기 0103 · 변동 확인 설문 스위치 0101 · 숨은 문항 응답 삭제(`lib/survey/question-visibility`) · 순위형 보기 클릭 방식 · Raw 내보내기 `includePriorAnswers=1`·명단 열 상시 부착(`includeContactColumns` 폐기)·숨은 문항 값 제외 · Raw 양식 이월 응답 임포트. 직전: 2026-09-03 구조 병합(조사표 survey-document 를 server 11번째 도메인으로 신설). server/=oRPC 도메인 11개 · features/=5개 묶음)
 >
@@ -92,6 +94,16 @@ src/
 │   │                           # (선례: api/.../export/raw-export-load.ts). 조사 대상 목록은 조립이
 │   │                           # read-model 하나로 닫혀 features 로 올라갔다 — 여기 오는 기준은
 │   │                           # 「가로질러 읽는가」다
+│   ├── _client-console/        # **두 입구가 공유하는 클라이언트 열람 본문** (ADR-0029) — overview·report·contacts
+│   │                           # ·quota·preview-screen. 게스트 계정 입구(`/guest/surveys/[surveyId]`)와 클라이언트
+│   │                           # 링크 입구(`/client/[token]`)의 page 는 관문과 주소 접두만 준다. **세션을 읽지 않는다** —
+│   │                           # 받는 것은 설문 id 뿐이고 파티션은 실데이터 상수다(계정 없는 링크 세션에서도 돈다)
+│   ├── client/[token]/         # 클라이언트 링크 (ADR-0029) — 고객사가 계정 없이 그 설문의 현황을 본다
+│   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음). **조사 이름을 받지 않는다** — 접속된
+│   │   │                       # 세션은 허용된 첫 탭(없으면 미리보기)으로 보낸다. 「탭 없는 주소」가 곧 이 화면이다
+│   │   └── (console)/          # 셸(화면 머리·탭·나가기) + overview·report·contacts·quota·preview. 라우트 그룹인
+│   │                           # 이유는 입구 화면에 셸이 서면 비밀번호 전에 조사 이름이 그려지기 때문이다.
+│   │                           # QueryProvider 를 열지 않는다(부를 데이터 RPC 가 없다)
 │   ├── fw/[token]/             # 외주 실사 링크 콘솔 (ADR-0026) — 계정이 아니라 **링크**가 연다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음 — 세션을 만드는 자리)
 │   │   ├── preview/            # 설문 보기 — 콘솔 셸 밖의 열람 전용 화면(내부 /surveys/[id]/preview 의 짝)
@@ -116,13 +128,19 @@ src/
 │   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   ├── work-scope.ts           # 요청이 어느 **팀 경계**를 보는가 (팀 | 시스템 전체 보기 | 없음) — data-scope 의 형제
 │   ├── rpc-work-scope.ts       # 위 거부의 RPC 어댑터 — toRpcWorkScopeError(WorkScopeError→FORBIDDEN, 티켓 15)
-│   ├── fieldwork-link.ts       # 외주 실사 링크 세션 판정 코어 (ADR-0026) — 토큰으로 「이 링크가 열리는가」(입구 화면·RSC)
-│   │                           # + 입력의 설문 id 로 「이 요청의 주체가 누구인가」(resolveLinkActorForSurvey, scoped 베이스)
-│   │                           # 거부는 셋 — no_session(그 설문이 없다) · invalid(다시 접속) · closed(중단·종료·삭제·배치 대기)
+│   ├── access-link.ts          # 링크 세션 판정 코어 (ADR-0026·0029, 구 fieldwork-link) — 토큰으로 「이 링크가 열리는가」(입구 화면·RSC)
+│   │                           # + 입력의 설문 id 로 「이 요청의 주체가 누구인가」(resolveLinkActorForSurvey, scoped 베이스 — **외주 전용**)
+│   │                           # 거부는 셋 — no_session(그 설문이 없다) · invalid(다시 접속) · closed(종료·삭제·배치 대기 + 외주만 중단)
+│   │                           # 입구가 종류별이다: resolveLinkActor·resolveAccessLinkEntry·authenticateAccessLink(외주)
+│   │                           # ↔ resolveClientLinkActor·resolveClientLinkEntry·authenticateClientLink. **종류는 WHERE 에 건다** —
+│   │                           # 어긋난 종류의 토큰은 닫힌 링크가 아니라 없는 링크다
 │   ├── fieldwork-proxy.ts      # 대리 응답 판정 코어 — 자격은 contacts.writeAttempts 하나이고 두 모델(링크·옛 실사 계정)이 같은 문을 지난다
 │   │                           # 돌려주는 것은 **귀속과 차단뿐** (배너가 사라져 표시용 필드가 없다) + stampFieldworkAttribution
 │   ├── rpc-fieldwork-proxy.ts  # 위의 RPC 어댑터 — 완료 대상 대행 진입 → FORBIDDEN
-│   ├── page-fieldwork-link-access.ts # 링크 콘솔 RSC 관문 — 접속 전·닫힘은 입구 화면으로 redirect, capability 부족만 notFound
+│   ├── page-fieldwork-link-access.ts # 외주 링크 콘솔 RSC 관문 — 접속 전·닫힘은 입구 화면으로 redirect, capability 부족만 notFound
+│   ├── page-client-link-access.ts # 클라이언트 링크 콘솔 RSC 관문 (ADR-0029) — assertClientLinkPageAccess(token, tab?).
+│   │                           # 토큰으로 세션을 세우고 operations.view 뒤에 **탭 화이트리스트**를 다시 묻는다. 설문 id 를
+│   │                           # 받지 않고 돌려준다. 접속 전·닫힘은 입구로 redirect, 탭 밖은 사유 구분 없이 notFound
 │   ├── survey-access.ts        # 설문 capability 판정 단일 정본 — resolveSurveyCapabilities(순수) + denialReasonFor(거부 사유 정본) + assertSurveyCapability(관문)
 │   │                           # 주체 어휘는 `Actor = SurveyAccessUser | LinkActor` — **판별자가 링크 쪽에만** 있어 기존 호출부가 수정 없이 통과한다(ADR-0026)
 │   │                           # 「누가 넣었는가」의 두 칸(계정·링크)은 attributionOf 가 주체에서 파생시킨다 — 잘못된 조합이 타입상 만들어지지 않는다
@@ -170,7 +188,10 @@ src/
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
-│   │   │                       # 공개 범위·참여자·클라이언트(게스트)·실사 네 블록 + 소유권 이전(티켓 16·18·21·25)
+│   │   │                       # 공개 범위·참여자·클라이언트·실사 네 블록 + 소유권 이전(티켓 16·18·21·25)
+│   │   │                       # 링크 패널은 access-link-panel 한 벌(`AccessLinkPanel({ surveyId, kind })`) — 클라이언트 블록은
+│   │   │                       # 그것만 그리고(탭 칩 포함), 실사 블록은 「내부 실사원 | 외주」 세그먼트의 외주 쪽에 쓴다.
+│   │   │                       # guests-block(게스트 계정 부여)은 **여는 화면이 없는 채로 남아 있다**(ADR-0029, 철거 전)
 │   │   │                       # PRD 맵은 workspace 로 적었지만 입구가 설문 카드라 그 배치는 불가능하다
 │   │                       # (두 묶음은 서로 import 금지 — 그룹 UI 가 survey-list/groups 에 사는 선례)
 │   │                       # 후속 블록도 workspace 표면을 RPC 로 부르므로 feature import 는 안 생긴다
@@ -217,8 +238,10 @@ src/
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── account-vocabulary.ts # 계정 표시 어휘(유형·상태 라벨·상태 배지) — 사용자 관리·팀 관리·실사 업체 셋이 쓴다
 │   │   ├── account-query-keys.ts # 사용자·업체 쿼리 키 — 업체 mutation 이 양쪽 캐시를 접어야 해서 루트에 있다
-│   │   ├── segmented-choice.tsx  # 세그먼트 컨트롤 — 계정 생성 모달의 유형·역할 두 자리가 쓴다
-│   │   ├── fieldwork-orgs/     # 실사 업체 관리 (티켓 24, .pen FLOW 10-4) — fieldwork-orgs-view 진입점
+│   │   ├── segmented-choice.tsx  # 세그먼트 컨트롤 — 계정 정보 편집 모달(user-edit-modal)이 쓴다. 계정 생성 모달의 유형
+│   │   │                       # 세그먼트는 발급 유형이 내부 하나로 줄며 사라졌다(ADR-0029)
+│   │   ├── fieldwork-orgs/     # 실사 업체 관리 (티켓 24, .pen FLOW 10-4) — **여는 화면이 없다**(ADR-0029: 사용자 관리의
+│   │   │                       # 「실사 업체」 탭을 걷었다. 옛 실사 계정 모델의 화면이라 철거 전까지 파일만 남는다) — fieldwork-orgs-view
 │   │   │                       # + fieldwork-org-card(카드·계정 명단·종료 확인) + fieldwork-org-form-modal
 │   │   │                       # + queries/use-fieldwork-orgs. **사용자 관리를 import 하지 않는다** —
 │   │   │                       # 저쪽이 이 묶음을 부르므로 방향이 한쪽이어야 한다(계정 발급 모달은 상위가 연다)
@@ -235,7 +258,9 @@ src/
 │   └── team-management/    # team-list-view·team-detail-view 진입점 + team-form-modal(생성·설정 겸용)
 │   │                           # + member-add-modal(pull 검색) · team-member-row(직책 인라인·역할·제외)
 │   │                           # + queries/use-teams. 목록은 슈퍼어드민, 상세는 팀 소속도 연다(.pen FLOW 7)
-│   ├── guest-console/          # 게스트 콘솔 (티켓 22) — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
+│   ├── guest-console/          # 클라이언트 열람 콘솔의 화면 조각 (티켓 22) — **두 입구가 함께 쓴다**(게스트 계정 `/guest` ·
+│   │                           # 클라이언트 링크 `/client/<token>`, ADR-0029). 조각은 자기 주소를 모른다: 셸은 homeHref·trailing 을,
+│   │                           # 서브헤더는 basePath·backHref 를 주입받는다 — guest-shell(헤더바)·guest-home-view(부여 설문 카드)
 │   │                           # ·guest-survey-header(서브헤더+탭, 허용 탭만 그린다)·guest-contacts-table
 │   │                           # (마스킹 표 — operations 표를 안 쓰는 유일한 자리)·guest-vocabulary(탭↔주소)
 │   └── fieldwork-console/      # 실사 콘솔 (티켓 25·26, .pen FLOW 10-1·10-2) — fieldwork-home-view 진입점
@@ -433,13 +458,17 @@ survey_participants        # 설문 단위 부여 — 참여자·게스트·실�
 ├── addedBy (FK restrict), createdAt
 └── UNIQUE(surveyId, userId)  # 한 사람이 한 설문에 두 자격으로 서지 않는다
 
-survey_fieldwork_links     # 외주 실사 링크 = 설문 하나를 여는 **접속 수단 하나** (0126, ADR-0026)
+survey_access_links        # 링크 = 설문 하나를 여는 **접속 수단 하나** (0126 → 0134 개명, ADR-0026·0029). 구 survey_fieldwork_links
 ├── id, surveyId (FK **cascade**), token (UNIQUE, 16자 이상 URL-safe — 재발급 경로 없음)
+├── kind                    # fieldwork(외주 실사 링크) | client(클라이언트 링크) — NOT NULL default 'fieldwork' + CHECK (0134).
+│                           # 어휘 SSOT 는 shared/contracts/workspace 의 accessLinkKindValues. **종류가 입구·열·닫히는 조건을 정한다**
+├── clientTabs (JSONB)      # kind=client 전용 탭 화이트리스트(SurveyGuestTabs 와 같은 모양) — 외주에서는 NULL 이어야 한다(CHECK).
+│                           # NULL 이면 기본값(응답 현황만). **쿠키가 아니라 매 요청 이 컬럼에서 읽는다**
 ├── passwordCipher          # **가역 암호화**(해시가 아니다) — 공유 출입 암호라 연구원이 다시 읽는다. 키는 컨택 PII 와 같은 것
 ├── passwordUpdatedAt       # **세션 폐기 표식** — 쿠키가 이 값을 들고 다니고 매 요청 대조한다(시각의 대소가 아니라 값의 일치)
 ├── passwordUpdatedBy, createdBy (FK restrict)
 ├── closedAt, closedBy      # 종료는 행 삭제가 아니라 상태 전환 — 귀속 FK 가 restrict 이라 하드 삭제가 막힌다
-└── createdAt  (UNIQUE partial(surveyId) WHERE closed_at IS NULL — 활성 링크는 설문당 하나, 종료된 행은 계보)
+└── createdAt  (UNIQUE partial(surveyId, kind) WHERE closed_at IS NULL — 활성 링크는 설문당 **종류별** 하나, 종료된 행은 계보)
 
 survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, 티켓 14 — append-only)
 ├── id, surveyId (FK **cascade**)
@@ -490,7 +519,9 @@ surveys                    # 설문 설정
 │                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부
 ├── forceWideLayout               # 강제 와이드 레이아웃
-├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
+├── status                        # 'draft' | 'published' | 'closed' — closed 는 **설문 종료**(ADR-0030, CHECK 없는 text 라 마이그레이션 없음).
+│                                 #   전이는 published ⇄ closed 뿐(operations.control.setClosed, survey.edit) + 재발행이 published 로 되돌린다.
+│                                 #   isPaused 와 독립이다. 스냅샷 밖 라이브 컬럼처럼 즉시 반영된다
 ├── currentVersionId              # 현재 활성 배포 버전
 ├── teamId                        # 소유 팀 (0116, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
@@ -788,7 +819,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 
 /surveys?group=<groupId>    # 그룹 화면 (티켓 12 — 브레드크럼 + 폴더 제목 + 「그룹 편집」, 목록 툴바는 그룹 범위로)
 /users                      # 사용자 관리 (슈퍼어드민 전용 — 유형·상태 필터 + 계정 직접 생성 + 행 케밥의 상태 전이·비밀번호 재설정)
-                                  # 「실사 업체」 탭이 같은 화면 안에 있다 (.pen FLOW 10-4, 티켓 24 — 업체 카드 + 카드별 계정 발급)
+                                  # 만들 수 있는 유형은 **내부 하나**다 — 실사·게스트는 설문별 링크로 바뀌어 발급 입구를 닫았고
+                                  # 「실사 업체」 탭도 걷었다(ADR-0029). 목록의 유형 필터와 기존 계정의 상태 전이·재설정은 그대로다
 /teams                      # 팀 관리 (슈퍼어드민 전용 — 메가리서치 카드 + 팀 카드 + 새 팀)
 /teams/[teamId]             # 팀 상세 (슈퍼어드민 + 그 팀 소속 — 멤버 표·직책 인라인·역할·제외·팀원 추가)
 /reassignment               # 재배치 센터 (슈퍼어드민 전용 — 미배치 사용자 / 배치 대기 설문 두 탭 + 일괄 배치 바)
@@ -802,6 +834,13 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /guest/surveys/[surveyId]/preview   # 설문지 미리보기 — 화이트리스트 밖(부여됐으면 언제나)
 /guest/surveys/[surveyId]/overview  # 응답 현황  · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황
                                   # 넷은 전부 탭 화이트리스트가 연다 (.pen FLOW 5-3)
+/client/[token]                   # 클라이언트 링크의 입구 — 비밀번호 화면 + 닫힘 안내 (ADR-0029). 가드가 없는 것이 정의다.
+                                  # **조사 이름이 없다**(외주 입구와 다르다). 닫힘은 링크 종료·설문 종료·삭제·배치 대기 —
+                                  # **설문 중단은 닫힘이 아니다.** 접속된 세션은 허용된 첫 탭(없으면 미리보기)으로 보낸다
+/client/[token]/overview          # 응답 현황 · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황 —
+                                  # 연구원이 켠 탭만 열린다. 게스트 콘솔과 **같은 본문**(app/_client-console)
+/client/[token]/preview           # 설문지 미리보기 — 탭 화이트리스트 밖(링크가 열려 있으면 언제나)
+                                  # 관문은 assertClientLinkPageAccess(token, tab?) — 접속 전·닫힘은 입구로, 탭 밖은 notFound
 /fw/[token]                       # 외주 실사 링크의 입구 — 비밀번호 화면 + 닫힘 안내 (ADR-0026)
                                   # 가드가 **없는 것이 정의**다(세션을 만드는 자리). 없는 토큰과 틀린
                                   # 비밀번호가 같은 화면이고, 닫힘(중단·종료·삭제·배치 대기)만 갈라 말한다
@@ -1309,7 +1348,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.
   - **`superadmin`** — `authed` + `isSuperadmin`. 전역 관리 표면(사용자 관리·계정 상태 전이·비밀번호 재설정·**실사 업체**) 전용. 페이지 쪽 짝은 `requireSuperadminPage`.
   - **`account`** — 세션 + active. **계정 유형을 보지 않는다.** 프로필처럼 "누구든 자기 것만 만지는" 표면 전용(`auth.getProfile`·`updateProfile`·`updatePassword`). 아바타 정책 상수는 `lib/upload/image-policy.ts` 의 `AVATAR_UPLOAD_POLICY` 한 곳에 있고 라우트와 화면이 같은 값을 본다. 자기 것만 만진다는 보장은 베이스가 아니라 handler 가 한다 — 대상 id 를 입력에서 받지 말고 `context.user.id` 를 쓸 것. REST 짝은 `requireActiveAccount`, 페이지 짝은 `requireAccountTypePage`.
-  - **`scoped`** — 세션 + active (비내부 계정 포함) **또는 외주 실사 링크 세션**(ADR-0026). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **링크 주체는 계정이 없어 `context.user` 가 null 이라, handler 는 `context.actor` 로 주체를 읽는다** — 계정이 있으면 계정이 이기고(연구원이 자기 링크를 눌러 본 브라우저에서 admin 콘솔이 조용히 깎이지 않게), 없으면 입력의 설문 id 로 `fw_<token>` 쿠키를 골라 링크 행과 대조한다. 거부가 셋으로 갈린다 — 다른 링크 세션은 있는데 이 설문의 것이 없으면 **NOT_FOUND**(그 주체에게 없는 설문), 세션이 없거나 더는 유효하지 않으면 **UNAUTHORIZED**, 자기 설문의 권한 밖은 **FORBIDDEN**. 계정 전용 scoped 표면(메일 탭 쓰기)이 세션 계정을 읽는 문은 `requireScopedAccount` 하나다 — 단건 발송·응답 수정은 ADR-0027 이 링크에 열어 주체에서 귀속을 파생한다(`attributionOf`). **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다 — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial`·`fieldwork-link-denial` 네 스위트가 각각 목록으로 고정한다 — 마지막 것이 링크에게 열리는 scoped 표면이 **정확히 아홉**(회차 3 · attrValues · idLists · setMemo · 응답 수정 저장 · 단건 발송 · 단건 미리보기 contactSample)임을 라우터 열거 위에 세운다(`tests/helpers/scoped-surface-inputs` 의 `LINK_OPEN_SCOPED_PATHS`).
+  - **`scoped`** — 세션 + active (비내부 계정 포함) **또는 외주 실사 링크 세션**(ADR-0026). **베이스는 유형으로 막지 않지만 handler 관문이 막는다** — 판정은 capability 코어 하나이며, 게스트 열에는 이 표면들이 요구하는 capability(컨택·메일·응답 상세·export)가 하나도 없어 전부 거부된다. **링크 주체는 계정이 없어 `context.user` 가 null 이라, handler 는 `context.actor` 로 주체를 읽는다** — 계정이 있으면 계정이 이기고(연구원이 자기 링크를 눌러 본 브라우저에서 admin 콘솔이 조용히 깎이지 않게), 없으면 입력의 설문 id 로 `fw_<token>` 쿠키를 골라 링크 행과 대조한다. **이 문을 지나는 링크는 외주 실사 링크뿐이다** — 클라이언트 링크의 쿠키(`cl_<token>`)는 path 가 `/client/<token>` 이라 `/api/rpc` 에 실리지 않고, 실려도 세션 목록(`readFieldworkLinkSessions`)에 서지 않으며, 값을 외주 이름으로 바꿔 세워도 그 토큰의 행이 외주 종류가 아니라 무효다(세 겹 — `client-link.realdb` 가 scoped 전수를 그 위조로 두드린다). 거부가 셋으로 갈린다 — 다른 링크 세션은 있는데 이 설문의 것이 없으면 **NOT_FOUND**(그 주체에게 없는 설문), 세션이 없거나 더는 유효하지 않으면 **UNAUTHORIZED**, 자기 설문의 권한 밖은 **FORBIDDEN**. 계정 전용 scoped 표면(메일 탭 쓰기)이 세션 계정을 읽는 문은 `requireScopedAccount` 하나다 — 단건 발송·응답 수정은 ADR-0027 이 링크에 열어 주체에서 귀속을 파생한다(`attributionOf`). **실사는 티켓 25 가 컨택 축을 열어 이 베이스를 실제로 지나는 첫 비내부 유형이 됐다** — 그래서 「어디까지 열렸는가」의 경계를 `fieldwork-account-denial` 이 어휘 전수로 고정한다. 인증 가드가 `account` 와 더는 같지 않지만 **별개의 베이스로 둔다**는 이유는 그대로다 — 지는 계약이 달라서(이쪽은 설문 일치 강제, 저쪽은 자기 것만), 별칭으로 묶으면 한쪽을 조일 때 다른 쪽 전 표면이 조용히 따라 바뀐다. **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, '<cap>')` 호출 필수** — 예외 없음(티켓 21 이 마지막 예외를 `authed` 로 옮겼다). 그 사실은 `cross-team-idor-rpc`·`guest-account-denial`·`fieldwork-account-denial`·`fieldwork-link-denial` 네 스위트가 각각 목록으로 고정한다 — 마지막 것이 링크에게 열리는 scoped 표면이 **정확히 아홉**(회차 3 · attrValues · idLists · setMemo · 응답 수정 저장 · 단건 발송 · 단건 미리보기 contactSample)임을 라우터 열거 위에 세운다(`tests/helpers/scoped-surface-inputs` 의 `LINK_OPEN_SCOPED_PATHS`). 같은 스위트가 **pub 인 링크 세션 표면이 넷**(`accessLinkSession.authenticate`·`signOut` + 클라이언트 짝 `authenticateClient`·`signOutClient`)임도 고정한다 — 종류별로 표면을 가른 것은 로그가 적는 것이 RPC 이름이라서다.
 - **위임만 하는 가드 셋(`requireAdminPage`·`assertScopedSurveyCapabilityRpc`·`checkScopedSurveyCapabilityRest`)이
   남아 있는 이유는 하나다** — 이름이 **표면의 청중**을 적기 때문이다. 티켓 21 이 게스트 분기를
   걷으면서 셋 다 본문이 한 줄 위임으로 줄었지만, 「이 페이지는 관리 화면이다」·「이 문은 비내부
@@ -1333,7 +1372,72 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
   것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
   서비스가 그 URL 이 우리 R2 공개 URL 인지 확인한다(외부 주소면 남의 서버가 우리 화면에 그림을 그린다).
-- **게스트(클라이언트)는 계정이고, 자격은 설문 단위 부여 하나다**(티켓 21, 스펙 §5·§8, .pen FLOW 4-2).
+- **클라이언트(고객사)는 계정이 아니라 링크로 들어온다**(ADR-0029, 2026-10-12). 연구원이 공유 설정
+  모달의 클라이언트 블록에서 이 설문 전용 **`/client/<token>` 주소 + 공유 비밀번호**를 발급하고
+  볼 화면을 칩으로 고른다. 외주 실사 링크와 **같은 테이블·같은 관리 표면**이고(`survey_access_links`
+  의 `kind='client'`, `workspace.accessLinks` — 입력의 `kind` 는 기본값 없는 필수) 갈리는 것은 넷이다.
+  - **열이 둘뿐이다** — `survey.view` + `operations.view`. 아래 옛 게스트 열과 같은 집합이고
+    (`CLIENT_LINK_CAPS`, 상수는 따로 — 두 모델의 수명이 다르다) 여기 없는 것이 「항상 차단」의
+    정본이다. 탭 화이트리스트(`client_tabs`, 어휘·기본값·정규화는 `SurveyGuestTabs` 그대로)는
+    capability 가 아니라 별도 축이라 **전부 켜도 열은 늘지 않는다**. 탭 저장은
+    `accessLinks.setClientTabs`(`survey.manageAccess`, 종류를 받지 않는다 — 서비스 WHERE 가
+    클라이언트로 못 박혀 있다).
+  - **닫히는 조건이 다르다** — 아래 「닫힘 표」.
+  - **입구가 조사 이름을 받지 않는다.** 토큰만 가진 사람에게 무슨 조사인지 알려 줄 이유가 없다.
+    그리지 않는 것이 아니라 판정 코어가 돌려주는 모양(`ClientLinkEntry`)에 이름이 없다 — RSC
+    payload 에도 실리지 않는다. 그래서 콘솔이 라우트 그룹 `(console)` 아래에 선다.
+  - **쿠키가 자기 콘솔에만 실린다** — `cl_<token>`, path `/client/<token>`
+    (`accessLinkCookieName`·`accessLinkCookiePath`). 외주 쿠키가 `/` 인 근거(대리 응답이
+    `/survey/…` 로 나간다)가 클라이언트에게는 없다. RPC 주소에 실리지 않으므로 **scoped 표면에
+    닿는 길이 capability 판정 이전에 없다**. 지울 때도 **심을 때와 같은 경로**를 줘야 한다.
+  - **탭은 매 요청 링크 행에서 읽는다**(주체 `LinkActor` 의 `clientTabs` — 세션 판정이 싣는다).
+    쿠키에 싣지 않으므로 연구원이 탭을 끄면 클라이언트의 다음 화면 이동에서 닫힌다.
+    `LinkActor`·`LinkAccessSubject` 는 종류 유니온(`LinkKindFacet`)이라 「외주인데 탭이 있는」
+    조합이 타입상 만들어지지 않는다. **`linkKind` 는 필수다** — 「없으면 외주」로 접으면 종류를
+    빠뜨린 클라이언트 링크가 외주의 여섯 칸을 얻는다.
+  - **종류가 어긋난 토큰은 없는 토큰이다.** `loadLinkRow` 가 종류를 WHERE 에 걸어, 클라이언트에게
+    준 주소의 접두만 `/fw` 로 바꿔 넣어도 비밀번호 화면까지만 보이고 어떤 비밀번호도 통하지
+    않는다(반대 방향도 같다). 닫힘 화면조차 보이지 않는 것이 요점이다 — 닫힘은 「이 주소가 한때
+    링크였다」를 알려 준다.
+  - 콘솔 관문은 `assertClientLinkPageAccess(token, tab?)` — **설문 id 를 받지 않고 돌려준다.**
+    접속 전·끊김·닫힘·없는 토큰은 입구로 redirect, **탭 밖은 사유 구분 없이 notFound**(주소
+    조작으로 탭 구성이 확인되면 안 된다). 화면은 게스트 콘솔과 한 벌이다(`app/_client-console`).
+  - 음성 검증: `client-link.realdb`(세션 — 종류 칸막이·중단 중 열림·종료 닫힘·세션 폐기·탭 반영·
+    조사 이름 미노출·scoped 전수 위조)와 `client-console.realdb`(관문 — 탭·거부의 두 갈래·
+    마스킹 투영), `capability-matrix-spec` 의 클라이언트 링크 열.
+- **닫힘 표 — 무엇이 어느 문을 닫는가**(ADR-0029·0030). 세션 판정(`server/access-link` 의
+  `isClosed`)과 capability 판정(`resolveLinkCapabilities`)이 **같은 표를 따로 본다** — 한쪽만
+  닫히면 선 세션이 계속 움직인다.
+
+  | 사유                  | 외주 실사 링크 | 클라이언트 링크 | 내부 콘솔 |
+  | --------------------- | -------------- | --------------- | --------- |
+  | 설문 **중단**         | 닫힘           | **열림**        | 열림      |
+  | 설문 **종료**         | 닫힘           | 닫힘            | 열림      |
+  | 설문 삭제 · 배치 대기 | 닫힘           | 닫힘            | 닫힘      |
+  | 그 링크의 종료        | 닫힘           | (자기 것만)     | —         |
+
+  중단은 「실사를 멈춘다」이고 종료는 「조사가 끝나 외부를 전부 닫는다」다. 클라이언트가 결과를
+  가장 보고 싶어 하는 시점이 응답이 멈춘 뒤라 중단에는 열어 둔다. **넷 다 링크 행을 건드리지
+  않는다**(자기 링크 종료만 `closed_at`) — 재개·종료 취소·재발행이 같은 주소·같은 비밀번호·같은
+  쿠키로 다시 연다.
+- **설문 종료는 중단과 별개의 상태다**(ADR-0030). `surveys.status='closed'` — 전이는
+  `published ⇄ closed` 뿐이고(`operations.control.setClosed`, **`survey.edit`**, 조건부 UPDATE 라
+  그 밖의 상태에서는 CONFLICT) **재발행이 published 로 되돌린다**. `isPaused` 와 독립이라 둘이
+  함께 설 수 있다. 종료가 닫는 것은 둘이다 — 외부 링크(위 표)와 **새 응답**(아래 주의사항 18).
+  내부 콘솔·분석·내보내기는 그대로다. 「발행된 적 있는가」를 `status === 'published'` 로 묻던
+  자리는 전부 고쳤고(`status_not_published` 술어·게스트 카드 진행 상태·발행 확인 문구),
+  `tests/repo/survey-status-readers.test.ts` 가 `surveys.status` 를 읽는 서버 파일을 목록으로
+  고정한다 — **새 독자가 붙으면 그 파일이 빨개지고, 종료를 어떻게 다룰지 정한 뒤 등재한다.**
+- **실사·게스트 계정의 발급 입구는 닫혀 있다**(ADR-0029, 2026-10-12). 발급 가능 유형 목록
+  `creatableUserTypes`(`shared/contracts/auth-io`, 지금 값은 `['internal']`) 하나를 계정 생성 창과
+  발급 표면 `auth.users.create` 가 함께 본다 — 모양이 완전한 raw 요청도 BAD_REQUEST 다. **닫은 것은 입구이고 옛 모델은
+  남아 있다**: 입력 유니온의 변종·서비스 `createUser`·부여 RPC(`workspace.guests`·
+  `workspace.fieldwork`·`workspace.fieldworkOrgs`)·콘솔(`/guest`·`/fieldwork`)·테이블.
+  이미 있는 계정은 로그인도, 부여된 설문의 열람도 종전대로다. 옛 모델의 스위트가 계정을
+  **서비스로** 만드는 이유가 그것이다(RPC 로 만들면 닫힌 문에 걸린다). **철거는 링크 모델로
+  실제 조사 한 건을 프로덕션에서 끝낸 뒤의 일이다 — 그 전에 「안 쓰는 코드」로 보고 지우지
+  말 것.** 아래 게스트·실사 계정 절들은 그 **옛 모델의 설명**이다.
+- **[옛 모델 — 발급 입구 닫힘, 철거 전] 게스트(클라이언트)는 계정이고, 자격은 설문 단위 부여 하나다**(티켓 21, 스펙 §5·§8, .pen FLOW 4-2).
   `survey_participants` 의 `kind='guest'` 행이 그 설문 **하나만** 열고 팀 멤버십은 만들지 않는다.
   판정은 코어의 게스트 분기이며 **팀·소유권 사슬을 타지 않는다** — 팀도 소유권도 없는 계정이라
   그 분기들이 무의미하고, 함께 막는 것은 배치 대기뿐이다(팀이 정해지기 전에는 아무도 못 연다).
@@ -1361,7 +1465,8 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     살아, 조건이 빠지면 한 블록의 「제외」가 다른 블록의 목록을 비운다.
   - **env grant 모델은 은퇴했다**(`GUEST_SURVEY_GRANTS`·`lib/auth/guest-grants`·`/logout`).
     그 축이 사라지면서 scoped 어댑터 3형제의 게스트 분기도 함께 걷혔다 — 판정은 코어 하나다.
-  - 부여 화면은 공유 설정 모달의 클라이언트 블록(`features/survey-builder/sharing/guests-block`)이고,
+  - 부여 화면 조각은 `features/survey-builder/sharing/guests-block` 인데 **지금 여는 화면이 없다**
+    (클라이언트 블록이 링크 패널만 그린다 — 이미 부여된 행은 그대로 유효하다),
     **게스트가 보는 콘솔은 `/guest` 다**(티켓 22). 그 관문이 `server/page-guest-access.ts` 의
     `assertGuestSurveyPageAccess` — capability(`operations.view`)를 지난 뒤 **탭 축을 다시 묻는다**.
     `tab` 을 생략하면 탭을 묻지 않는다(미리보기는 화이트리스트 밖). **거부는 전부 notFound 이고
@@ -1386,16 +1491,18 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     설문 id 를 넣고 **사유의 대비**를 본다: 부여=FORBIDDEN, 미부여·남의 부여=NOT_FOUND.
     갈리지 않으면 거부는 같아도 게스트 계정 하나가 조사 목록의 존재 확인 창구가 된다.
 - **외주 실사 링크는 계정이 아닌 두 번째 주체다**(ADR-0026, 티켓 01~~10). 연구원이 설문마다
-  **전용 URL + 공유 비밀번호**를 발급하고(`survey_fieldwork_links` 0126 — 발급·조회·비밀번호
-  열람·변경·종료 전부 `survey.manageAccess`) 외주는 계정 없이 그 설문의 운영 콘솔에 들어온다.
+  **전용 URL + 공유 비밀번호**를 발급하고(`survey_access_links` 의 `kind='fieldwork'`, 0126·0134 —
+  발급·조회·비밀번호 열람·변경·종료 전부 `survey.manageAccess`, 표면은 `workspace.accessLinks`)
+  외주는 계정 없이 그 설문의 운영 콘솔에 들어온다. **링크의 종류는 둘이다** — 이 절은 외주 쪽이고
+  클라이언트 링크는 위 절이다.
   열리는 capability 는 **정확히 여섯** — `survey.view`·`operations.view`·`contacts.view`·
   `contacts.writeAttempts`·`responses.view`·`mail.sendSingle`. 처음 넷(실사 초대 열과 같은
   집합)에 ADR-0027 이 **응답 목록·상세·수정**과 **조사 대상 단건 메일**을 더했다. 옛 칸을 그대로
   주면 딸려 오는 것이 있어 **칸을 쪼갰다** — 응답 삭제·복원·초기화·재응답 허용은
   `responses.manage`, 메일 탭(단체 메일·템플릿·테스트 발송)은 `mail.send`/`mail.view` 로 남아
   링크에게 닫혀 있다. 내부 열은 쪼갠 두 칸을 함께 얻어 권한이 줄지 않는다.
-  - **「열려 있다」의 정의가 중단 아님 + 삭제 아님 둘뿐이다** — 링크에 만료일이 없고 설문
-    중단이 그 일을 한다. 재개하면 **같은 주소·같은 비밀번호**로 다시 열리므로 만료가 아니라
+  - **링크에 만료일이 없고 설문의 상태가 그 일을 한다** — 중단과 종료가 닫는다(위 「닫힘 표」).
+    재개하거나 종료를 취소하면 **같은 주소·같은 비밀번호**로 다시 열리므로 만료가 아니라
     「중단 중 차단」이다. `isPaused` 는 **링크 주체만 보는 축**이다: 계정 열이 함께 닫히면
     실사 중단이 곧 운영 중단이 된다(연구원은 중단 중에도 콘솔을 쓴다).
   - **비밀번호 변경이 선 세션을 즉시 끊는다.** 쿠키가 `password_updated_at` 을 들고 다니고 매
@@ -1422,11 +1529,12 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
   - **사내 실사원은 전용 모델이 아니다** — 설문마다 **전체 권한 참여자**로 초대되어 연구원과
     같은 콘솔에서 일한다. 공유 설정 실사 블록의 「내부 실사원」 세그먼트가 참여자 블록과 같은
     RPC 를 쓰고, 실사팀 소속을 묻지 않는다(실사팀은 그냥 팀이다).
-  - **옛 실사 계정 모델(ADR-0019)은 공존하되 UI 입구를 잃었다** — 철거는 별도 스펙이다.
-- 게스트·실사 콘솔과 **외주 실사 링크**는 전역 테스트 모드와 무관하게 항상 실데이터를 본다 —
+  - **옛 실사 계정 모델(ADR-0019)은 공존하되 UI 입구를 잃었다** — 초대 블록에 이어 계정 발급과
+    업체 관리 탭도 닫혔다(위 「발급 입구는 닫혀 있다」). 철거는 별도 스펙이다.
+- 게스트·실사 콘솔과 **링크 둘(외주 실사 · 클라이언트)**은 전역 테스트 모드와 무관하게 항상 실데이터를 본다 —
   술어는 「내부가 아닌가」 하나이고, 계정은 `isExternalViewer`(세션), 주체를 받는 자리는
   `isExternalActor`(`server/data-scope`)가 답한다.
-- **실사 초대는 개인 단위이고, 팀장의 업체 시야는 파생이다**(티켓 25, 스펙 §6, ADR-0019,
+- **[옛 모델 — 입구 닫힘, 철거 전] 실사 초대는 개인 단위이고, 팀장의 업체 시야는 파생이다**(티켓 25, 스펙 §6, ADR-0019,
   .pen FLOW 4-2 실사 블록·10-1). `survey_participants` 의 `kind='fieldwork'` 행 하나가 그
   설문 하나를 연다 — 업체 단위 초대도, 업체 측 배정 UI 도 없다(MVP 무게로 기각).
   - **초대 열**은 `survey.view` · `operations.view` · `contacts.view` · `contacts.writeAttempts`
@@ -1454,7 +1562,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     FORBIDDEN, 초대 설문에서 열리는 capability 가 정확히 넷)와 `fieldwork-invites.realdb.test.ts`
     (**업체 둘을 심는 것이 뼈대** — 업체가 하나뿐인 시드에서는 조인 조건이 있든 없든 결과가
     같아 「타 업체는 안 보인다」를 증명하지 못한다. 대칭까지 함께 잰다).
-- **실사 콘솔은 초대가 여는 화면 둘이고 탭은 고정이다**(티켓 26, 스펙 §6, ADR-0019,
+- **[옛 모델 — 입구 닫힘, 철거 전] 실사 콘솔은 초대가 여는 화면 둘이고 탭은 고정이다**(티켓 26, 스펙 §6, ADR-0019,
   .pen FLOW 10-2). `/fieldwork/surveys/[surveyId]` 아래 조사 대상·응답 현황이며, 게스트의
   탭 화이트리스트에 해당하는 축이 **없다** — 초대되면 둘 다 열린다. 관문
   `assertFieldworkSurveyPageAccess` 가 그 짝이고 **leaf 마다 자기 capability 를 준다**
@@ -1514,7 +1622,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     재실사를 지시하는 것이 정상 동선이라, 술어가 없으면 그 대상이 영구히 대행 불가가 된다.
   - 음성 검증은 `fieldwork-proxy.realdb.test.ts` — 귀속·응답자 null 2종·자격 5종·진입 분기
     4종(물려받기·버전 이관·컨택 불일치·삭제된 완료)·완료 거부 3종.
-- **실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
+- **[옛 모델 — 입구 닫힘, 철거 전] 실사 업체는 소속 경계일 뿐 워크스페이스가 아니다**(티켓 24, 스펙 §6, ADR-0019, .pen FLOW 10-4).
   `fieldwork_orgs`(0120)는 이름·상태·메모만 갖고, 설문을 소유하지 않으며(`surveys.team_id` 는 이
   테이블을 가리키지 않는다) 팀 멤버십을 만들지 않고 재배치 목적지가 될 수 없다. 하는 일은
   「이 실사 계정이 어느 업체 사람인가」 하나이며, 그 경계가 없으면 실사 팀장의 파생 시야(티켓 25)가
@@ -1680,7 +1788,7 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
 - 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
-- **외부 주체(게스트·실사 계정·외주 실사 링크)는 항상 real 파티션**(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 「내부가 아닌가」 하나이고 접근제어가 아니라 **파티션** 축이다. 계정은 `isExternalViewer`(세션을 읽는다), 주체를 받는 자리는 `isExternalActor` — 링크 세션에는 계정이 없어 앞의 것이 던지기 때문이다(`loadOperationsDataScope(surveyId, actor?)`). 티켓 25 에서 게스트 전용이던 이 규칙이 넓어졌다: 실사가 `contacts.view`·`contacts.writeAttempts` 를 얻으면서 컨택 표면이 실제로 열렸는데, 게스트만 고정하면 담당 연구원이 테스트 모드를 켠 설문에서 **실사원이 test 파티션을 읽고 결과코드를 test 로 쓴다** — 밖에서 전화를 돌리는 사람이 실데이터를 못 본다. 술어를 「게스트인가」가 아니라 **「내부가 아닌가」**로 적는 것이 요점이다.
+- **외부 주체(게스트·실사 계정·외주 실사 링크·클라이언트 링크)는 항상 real 파티션**(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리. 판정은 「내부가 아닌가」 하나이고 접근제어가 아니라 **파티션** 축이다. 계정은 `isExternalViewer`(세션을 읽는다), 주체를 받는 자리는 `isExternalActor` — 링크 세션에는 계정이 없어 앞의 것이 던지기 때문이다(`loadOperationsDataScope(surveyId, actor?)`). 티켓 25 에서 게스트 전용이던 이 규칙이 넓어졌다: 실사가 `contacts.view`·`contacts.writeAttempts` 를 얻으면서 컨택 표면이 실제로 열렸는데, 게스트만 고정하면 담당 연구원이 테스트 모드를 켠 설문에서 **실사원이 test 파티션을 읽고 결과코드를 test 로 쓴다** — 밖에서 전화를 돌리는 사람이 실데이터를 못 본다. 술어를 「게스트인가」가 아니라 **「내부가 아닌가」**로 적는 것이 요점이다.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
 ---
@@ -1940,6 +2048,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 17. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe).
 
+18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
+
 ---
 
 ## CI 게이트
@@ -1974,6 +2084,14 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
   모양). 빈 DB 재생·재적용 멱등은 임시 DB 로 확인했다. **처음 번호는 0128 이었다** — main 이 같은
   시기에 0128~0132 를 운영 DB 에 먼저 적용해 2026-10-12 병합 때 0133 으로 옮겼다(스테이징 DB 에는
   옛 번호로 적용돼 있고 본문은 그대로라 DB 작업은 없다)
+- **링크 테이블 개명 0134** (2026-10-12, ADR-0029) — `survey_fieldwork_links` → `survey_access_links`,
+  `kind`(NOT NULL default `'fieldwork'` — 기본값이 있어 2단계 배포가 필요 없다)·`client_tabs`,
+  활성 링크 UNIQUE 를 `(survey_id)` → `(survey_id, kind)` 로. 이름이 박힌 인덱스·CHECK·PK·FK 를
+  함께 옮겼다(Postgres 는 테이블 개명 때 따라 바꾸지 않는다). **귀속 칸 `fieldwork_link_id` 넷은
+  이름을 그대로 둔다** — 채우는 것이 외주 링크뿐이다. 재적용이 까다롭다: 0126 의
+  `CREATE TABLE IF NOT EXISTS` 가 옛 이름의 빈 껍데기를 다시 세우므로 0134 가 그것을 지운다(행이
+  있으면 멈춘다). **테이블 개명은 옛 코드와 양립하지 않는다** — 스테이징은 푸시 직전에 적용하고,
+  프로덕션은 0126·0127·0133·0134 를 함께 적용한다(그 테이블이 아직 없다)
 - **main 계열 0124·0125** (2026-09-17): main 이 같은 날 0111·0112 로 만든 입력칸 높이·제목 서식본은 위 역할 모델 v2 번호(0111~0123)와 겹쳐 staging 병합 전에 0124·0125 로 옮겼다 — 번호 기록 표가 DB 에 없어 파일 이름만 바뀌고 이미 적용한 DB 는 그대로다
 - **main 계열 0128~0132** (2026-09-30~10-06): 0128 「행별 척도」 CHECK 갱신 · 0129 「항목 단위 카드」 CHECK 갱신 · 0130 최대 선택 개수 연동 `max_selections_source` · 0131 항목 단위 카드 블록 시작 열 `mobile_item_card_block_columns` · 0132 행 차례로 열기 `staged_rows_config`. main 이 0126·0127(외주 링크)을 비워 두고 0128 부터 썼다. **0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼우므로 배열에서 이 순서를 지킬 것** — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. 배열은 0126·0127 뒤에 0128~0132, 그 뒤에 0133 이다(0133 은 0126 의 링크 테이블만 전제하고 main 쪽 다섯과 만지는 객체가 서로소다)
 
