@@ -17,7 +17,6 @@ import { getAccessLink } from '@/server/workspace/services/access-links';
  * 하나로 다시 보낸다.
  *
  *  - **직원**(세션 쿠키가 있다) → `/surveys/<id>/operations/…` — 접두만 걷은 종전의 답.
- *    탭 없는 주소만 응답 현황으로 보낸다(그 주소 자체에는 페이지가 없다).
  *  - **옛 게스트**(세션이 없고, 옛 grant 에 오른 설문이고, 열린 외주 링크가 있다) → `/fw/<token>`.
  *  - 그 밖 → 직원과 같은 주소. 세션이 없으면 1차 게이트가 로그인으로 보낸다.
  *

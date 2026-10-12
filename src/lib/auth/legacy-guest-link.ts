@@ -44,19 +44,18 @@ export function parseLegacyGuestSurveyIds(raw: string | undefined): ReadonlySet<
 }
 
 /**
- * 옛 운영 콘솔 주소에서 `/admin` 접두를 걷은 주소 — 다리가 발화하지 않을 때의 목적지.
+ * 옛 운영 콘솔 주소에서 `/admin` 접두만 걷은 주소 — 다리가 발화하지 않을 때의 목적지.
  *
- * 하위 경로가 있으면 일반 규칙(`/admin/:path*` → `/:path*`)이 냈을 답과 같다: 직원의 옛
- * 북마크는 다리를 거쳐도 종전과 같은 화면에 닿는다. **탭 없는 주소만 응답 현황으로 보낸다** —
- * `/surveys/<id>/operations` 자체에는 페이지가 없어(탭마다 페이지가 있고 설문 카드도 응답
- * 현황으로 들어간다) 그대로 넘기면 로그인한 직원이 404 를 본다. 세그먼트는 주소에서 온
- * 값이라 인코딩하고 점 세그먼트는 버린다 — 실려 온 값이 콘솔 경로 밖을 가리키지 못한다.
+ * 일반 규칙(`/admin/:path*` → `/:path*`)이 냈을 답과 같아야 한다: 직원의 옛 북마크는 다리를
+ * 거쳐도 종전과 같은 화면에 닿는다. 탭 없는 주소를 여기서 고쳐 보내지 않는다 — 기본 탭은
+ * 그 주소의 페이지(`surveys/[id]/operations/page.tsx`)가 정하고, 여기 한 벌 더 적으면 갈린다.
+ * 세그먼트는 주소에서 온 값이라 인코딩하고 점 세그먼트는 버린다 — 실려 온 값이 콘솔 경로
+ * 밖을 가리키지 못한다.
  */
 export function legacyConsoleStaffPath(surveyId: string, rest: readonly string[]): string {
-  const segments = rest.filter((segment) => segment !== '' && segment !== '.' && segment !== '..');
-  const tail =
-    segments.length === 0
-      ? '/overview'
-      : segments.map((segment) => `/${encodeURIComponent(segment)}`).join('');
+  const tail = rest
+    .filter((segment) => segment !== '' && segment !== '.' && segment !== '..')
+    .map((segment) => `/${encodeURIComponent(segment)}`)
+    .join('');
   return `/surveys/${encodeURIComponent(surveyId)}/operations${tail}`;
 }
