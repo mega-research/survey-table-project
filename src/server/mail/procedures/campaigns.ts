@@ -122,7 +122,7 @@ const previewPreflight = scoped
  *
  * 외주 실사 링크는 이 칸(`mail.sendSingle`)만 갖는다. 연구원이 만든 템플릿을 골라 한 사람에게
  * 보내는 것까지이고, 단체 메일·템플릿 작성은 `mail.send` 라 닫혀 있다. 귀속은 주체에서
- * 파생한다 — 링크면 created_by 가 아니라 fieldwork_link_id 에 남는다(0128).
+ * 파생한다 — 링크면 created_by 가 아니라 fieldwork_link_id 에 남는다(0133).
  */
 const sendSingle = scoped
   .input(SendSingleCampaignInput)

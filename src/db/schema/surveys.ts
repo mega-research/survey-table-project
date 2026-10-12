@@ -570,8 +570,8 @@ export const responseEditLogs = pgTable('response_edit_logs', {
   editedBy: text('edited_by'),
   // 스냅샷 — 계정 삭제돼도 누구였는지 보존.
   editorEmail: text('editor_email'),
-  // 이 수정을 한 **외주 실사 링크** — edited_by 와 배타다 (0128, ADR-0027). 편집 이력 화면은
-  // 이 칸이 채워진 행을 「외주」로 읽는다. FK 와 배타 CHECK 는 0128 마이그레이션이 만든다.
+  // 이 수정을 한 **외주 실사 링크** — edited_by 와 배타다 (0133, ADR-0027). 편집 이력 화면은
+  // 이 칸이 채워진 행을 「외주」로 읽는다. FK 와 배타 CHECK 는 0133 마이그레이션이 만든다.
   fieldworkLinkId: uuid('fieldwork_link_id'),
   changedQuestions: jsonb('changed_questions').$type<ResponseEditChange[]>().notNull().default([]),
   changedCount: integer('changed_count').notNull().default(0),

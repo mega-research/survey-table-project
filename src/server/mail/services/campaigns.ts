@@ -45,7 +45,7 @@ import type {
  *
  * 인증/캐시 갱신은 procedure(scoped) + 소비처 router.push 가 담당.
  * creator 는 인증된 주체에서 procedure 가 파생해 주입한다 — 계정이면 created_by, 외주 실사
- * 링크(단건 발송, ADR-0027)면 fieldwork_link_id 가 채워진다(0128 배타 CHECK). isExternal 도
+ * 링크(단건 발송, ADR-0027)면 fieldwork_link_id 가 채워진다(0133 배타 CHECK). isExternal 도
  * procedure 가 주체에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
  */
 export async function createCampaign(
