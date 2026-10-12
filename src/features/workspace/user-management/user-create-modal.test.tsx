@@ -1,9 +1,10 @@
 /**
- * 사용자 생성 모달 (.pen FLOW 1-2) — 유형에 따라 필드가 바뀌고, 서버로 무엇을 보내는가.
+ * 사용자 생성 모달 (.pen FLOW 1-2) — 서버로 무엇을 보내는가.
  *
- * **실사 유형은 없다** (ADR-0029). 외주 실사가 설문별 링크로 바뀌면서 실사 계정을 설문에
- * 초대하는 입구가 사라졌는데, 발급 화면만 남아 로그인만 되고 아무 설문도 못 여는 계정이
- * 만들어지고 있었다. 옛 모델의 코드는 남아 있다 — 닫은 것은 입구다.
+ * **만들 수 있는 유형이 직원 하나다** (ADR-0029). 외주 실사와 클라이언트가 둘 다 설문별
+ * 링크로 바뀌어, 실사·게스트 계정을 발급해도 쓸 곳이 없다 — 로그인만 되고 아무 설문도 못
+ * 여는 계정이 쌓인다. 유형이 하나뿐이라 고르는 세그먼트 자체가 없다. 옛 모델의 코드는
+ * 남아 있다 — 닫은 것은 입구다.
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -35,29 +36,21 @@ beforeEach(() => {
 });
 
 describe('UserCreateModal', () => {
-  it('만들 수 있는 유형은 직원과 게스트다 — 실사 세그먼트가 없다', () => {
+  it('유형을 고르는 자리가 없다 — 만들 수 있는 것이 직원 하나다', () => {
     renderModal();
-    for (const label of ['직원', '게스트']) {
-      expect(screen.getByRole('button', { name: label })).toBeEnabled();
+    expect(screen.queryByText('계정 유형')).toBeNull();
+    for (const label of ['직원', '게스트', '실사']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull();
     }
-    expect(screen.queryByRole('button', { name: '실사' })).toBeNull();
+    // 유형별로 갈리던 칸도 함께 없다.
+    expect(screen.queryByLabelText('소속 기관')).toBeNull();
     expect(screen.queryByLabelText('소속 업체')).toBeNull();
   });
 
-  it('내부 유형은 직책과 (아직 비활성인) 팀 배정을 보여준다', () => {
+  it('직책과 (아직 비활성인) 팀 배정을 보여준다', () => {
     renderModal();
     expect(screen.getByLabelText('직책')).toBeEnabled();
     expect(screen.getByLabelText('팀 배정 (선택)')).toBeDisabled();
-    expect(screen.queryByLabelText('소속 기관')).not.toBeInTheDocument();
-  });
-
-  it('게스트 유형으로 바꾸면 소속 기관 필드로 교체된다', async () => {
-    const user = userEvent.setup();
-    renderModal();
-    await user.click(screen.getByRole('button', { name: '게스트' }));
-
-    expect(screen.getByLabelText('소속 기관')).toBeInTheDocument();
-    expect(screen.queryByLabelText('직책')).not.toBeInTheDocument();
   });
 
   it('내부 계정 생성은 직책을 실어 보낸다', async () => {
@@ -75,23 +68,6 @@ describe('UserCreateModal', () => {
       jobTitle: '연구원',
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
-  });
-
-  it('게스트 계정 생성은 소속 기관을 실어 보낸다', async () => {
-    const user = userEvent.setup();
-    renderModal();
-    await user.click(screen.getByRole('button', { name: '게스트' }));
-    await fillCommon(user);
-    await user.type(screen.getByLabelText('소속 기관'), '한국물류협회');
-    await user.click(screen.getByRole('button', { name: '생성' }));
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      userType: 'guest',
-      name: '김새로',
-      email: 'saero.kim@megaresearch.co.kr',
-      password: 'initial-pw-12',
-      organization: '한국물류협회',
-    });
   });
 
   it('8자 미만 비밀번호는 서버로 보내지 않는다', async () => {

@@ -171,13 +171,13 @@ export type CreateUserInput = z.infer<typeof CreateUserInput>;
  * 발급하는가」다. 유니온에서 변종을 지우지 않는 이유는 서비스가 그 모양을 계속 받기 때문이다
  * (옛 모델의 불변식을 지키는 스위트가 서비스로 계정을 만든다).
  *
- * **`fieldwork` 가 없다** (ADR-0029, 2026-10-12). 외주 실사가 설문별 링크로 바뀌면서
- * (ADR-0026) 실사 계정을 설문에 초대하는 입구가 사라졌다 — 발급하면 로그인만 되고 아무
- * 설문도 못 여는 계정이 쌓인다. 닫은 것은 입구이고 옛 모델의 코드·테이블은 남아 있다:
- * 철거는 링크 모델로 실제 조사 한 건을 프로덕션에서 끝낸 뒤의 일이다. `guest` 도 클라이언트
- * 링크가 동작하면 같은 이유로 여기서 빠진다.
+ * **`fieldwork` 와 `guest` 가 없다** (ADR-0029, 2026-10-12). 외주 실사(ADR-0026)와 클라이언트가
+ * 둘 다 설문별 링크로 바뀌면서, 그 유형의 계정을 설문에 붙이는 입구가 사라졌다 — 발급하면
+ * 로그인만 되고 아무 설문도 못 여는 계정이 쌓인다. 닫은 것은 입구이고 옛 모델의 코드·
+ * 테이블은 남아 있다(이미 있는 계정은 로그인도, 부여된 설문의 열람도 종전대로다). 철거는
+ * 링크 모델로 실제 조사 한 건을 프로덕션에서 끝낸 뒤의 일이다.
  */
-export const creatableUserTypes = ['internal', 'guest'] as const satisfies readonly UserType[];
+export const creatableUserTypes = ['internal'] as const satisfies readonly UserType[];
 
 /** 그 유형을 지금 발급하는가 — 발급 표면이 경계에서 묻는다. */
 export function isCreatableUserType(userType: UserType): boolean {

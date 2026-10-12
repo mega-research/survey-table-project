@@ -9,6 +9,8 @@ import {
   UserNotFoundError,
   UserStatusTransitionError,
 } from '../domain/users';
+import { CreateUserInput } from '@/shared/contracts/auth-io';
+
 import * as svc from '../services/users';
 import { users } from './users';
 
@@ -130,14 +132,22 @@ describe('users 생성 procedure', () => {
     expect(svc.createUser).not.toHaveBeenCalled();
   });
 
-  it('게스트 유형은 아직 발급된다 — 클라이언트 링크가 서기 전까지의 유일한 길이다', async () => {
-    await clientWith().users.create({
-      userType: 'guest',
-      name: '김담당',
-      email: 'client@klog.or.kr',
-      password: 'initial-pw-12',
-      organization: '한국물류협회',
-    });
+  it('게스트 유형도 발급하지 않는다 — 클라이언트에게 여는 길은 설문별 링크다 (ADR-0029)', async () => {
+    // 실사와 같은 문이다. 모양이 완전한 raw 요청도 서비스에 닿지 않는다.
+    await expect(
+      clientWith().users.create({
+        userType: 'guest',
+        name: '김담당',
+        email: 'client@klog.or.kr',
+        password: 'initial-pw-12',
+        organization: '한국물류협회',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.createUser).not.toHaveBeenCalled();
+  });
+
+  it('내부 유형은 종전대로 발급된다 — 닫힌 것은 두 유형뿐이다', async () => {
+    await clientWith().users.create(VALID_CREATE);
     expect(svc.createUser).toHaveBeenCalledTimes(1);
   });
 
@@ -164,15 +174,19 @@ describe('users 생성 입력 정규화', () => {
     });
   });
 
-  it('비워 보낸 소속 기관도 미입력으로 접는다', async () => {
-    await clientWith().users.create({
-      userType: 'guest',
-      name: '김담당',
-      email: 'client@klog.or.kr',
-      password: 'initial-pw-12',
-      organization: '',
-    });
-    expect(svc.createUser).toHaveBeenCalledWith(SUPERADMIN_ID, {
+  it('비워 보낸 소속 기관도 미입력으로 접는다', () => {
+    // 게스트 유형은 발급 표면에서 닫혔지만(ADR-0029) **입력 유니온의 변종은 그대로다** —
+    // 서비스가 그 모양을 계속 받는다(옛 모델의 스위트가 서비스로 계정을 만든다). 그래서
+    // 정규화는 procedure 가 아니라 계약에서 본다.
+    expect(
+      CreateUserInput.parse({
+        userType: 'guest',
+        name: '김담당',
+        email: 'client@klog.or.kr',
+        password: 'initial-pw-12',
+        organization: '',
+      }),
+    ).toEqual({
       userType: 'guest',
       name: '김담당',
       email: 'client@klog.or.kr',

@@ -12,37 +12,41 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import {
   CreateUserInput,
   MIN_PASSWORD_LENGTH,
-  creatableUserTypes,
+  type creatableUserTypes,
 } from '@/shared/contracts/auth-io';
 
-import { USER_TYPE_LABEL } from '../account-vocabulary';
 import { FIELD_INPUT, FIELD_LABEL } from '../field-styles';
-import { SegmentedChoice } from '../segmented-choice';
 import { useCreateUser } from './queries/use-users';
 
 /**
- * 유형 세그먼트 — .pen FLOW 1-2.
+ * 이 창이 만드는 유형 — **내부 하나다** (ADR-0029, 2026-10-12).
  *
- * 어휘(`creatableUserTypes`)를 그대로 쓰므로 발급 가능한 유형이 늘거나 줄면 세그먼트가
- * 저절로 따라간다 — 목록을 손으로 적으면 계약과 화면이 갈린다. **실사는 그 목록에 없다**
- * (ADR-0029): 외주 실사가 설문별 링크로 바뀌어 실사 계정을 쓸 곳이 사라졌다.
+ * .pen FLOW 1-2 에는 유형 세그먼트(직원 | 게스트 | 실사)가 있었다. 외주 실사와 클라이언트가
+ * 둘 다 설문별 링크로 바뀌어 그 두 유형의 계정을 쓸 곳이 사라졌고, 고를 것이 하나뿐이라
+ * 세그먼트 자체를 그리지 않는다 — 선택지가 하나인 선택 컨트롤은 「다른 유형도 있었나」만
+ * 묻게 만든다. 게스트 전용이던 소속 기관 칸도 함께 없다.
+ *
+ * 닫은 것은 입구다. 서버의 발급 표면도 같은 목록(`creatableUserTypes`)으로 막고, 옛 모델의
+ * 코드·테이블과 이미 있는 계정은 그대로다 — 철거는 링크 모델로 실제 조사 한 건을
+ * 프로덕션에서 끝낸 뒤의 일이다.
+ *
+ * 값을 계약의 목록에 `satisfies` 로 묶어 둔다 — 그 목록에서 내부 유형이 빠지거나 발급 유형이
+ * 다시 늘면 여기서 컴파일이 멈춰, 화면만 옛 모양으로 남지 않는다.
  */
-type CreatableUserType = (typeof creatableUserTypes)[number];
-const TYPE_SEGMENTS: readonly CreatableUserType[] = creatableUserTypes;
+const CREATED_USER_TYPE = 'internal' satisfies (typeof creatableUserTypes)[number];
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const EMPTY = { name: '', email: '', password: '', jobTitle: '', organization: '' };
+const EMPTY = { name: '', email: '', password: '', jobTitle: '' };
 
 /**
  * 사용자 생성 모달 — 슈퍼어드민이 계정을 직접 발급한다(ADR-0018).
  * 생성 즉시 active 라 승인 단계도 안내 메일도 없다.
  */
 export function UserCreateModal({ open, onOpenChange }: Props) {
-  const [userType, setUserType] = useState<CreatableUserType>('internal');
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createUser, isPending } = useCreateUser();
@@ -53,7 +57,6 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
 
   function close() {
     setForm(EMPTY);
-    setUserType('internal');
     setError(null);
     onOpenChange(false);
   }
@@ -62,14 +65,14 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
     event.preventDefault();
     setError(null);
 
-    const common = { name: form.name, email: form.email, password: form.password };
     // 규칙은 경계 계약 한 곳에만 둔다 — 여기서 길이·형식을 손으로 재현하면 서버와 갈린다.
-    // 유형별 칸의 차이도 그 유니온이 정한다.
-    const parsed = CreateUserInput.safeParse(
-      userType === 'internal'
-        ? { userType: 'internal', ...common, jobTitle: form.jobTitle }
-        : { userType: 'guest', ...common, organization: form.organization },
-    );
+    const parsed = CreateUserInput.safeParse({
+      userType: CREATED_USER_TYPE,
+      name: form.name,
+      email: form.email,
+      password: form.password,
+      jobTitle: form.jobTitle,
+    });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? '입력을 다시 확인해 주세요.');
       return;
@@ -92,16 +95,6 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
         </DialogTitle>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-[18px]">
-          <div className="space-y-2">
-            <span className={FIELD_LABEL}>계정 유형</span>
-            <SegmentedChoice
-              options={TYPE_SEGMENTS}
-              value={userType}
-              label={(value) => USER_TYPE_LABEL[value]}
-              onChange={setUserType}
-            />
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="user-name" className={FIELD_LABEL}>
               이름
@@ -147,51 +140,33 @@ export function UserCreateModal({ open, onOpenChange }: Props) {
             </p>
           </div>
 
-          {userType === 'internal' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="user-job-title" className={FIELD_LABEL}>
-                  직책
-                </Label>
-                <Input
-                  id="user-job-title"
-                  value={form.jobTitle}
-                  onChange={(e) => set('jobTitle', e.target.value)}
-                  maxLength={50}
-                  className={FIELD_INPUT}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="user-team" className={FIELD_LABEL}>
-                  팀 배정 (선택)
-                </Label>
-                {/* 팀 배정은 팀 관리(.pen FLOW 7-2)의 「팀원 추가」가 한다 — 발급 시점에
-                    겸직·역할까지 고르게 하면 같은 규칙이 두 화면에 복제된다. */}
-                <Input
-                  id="user-team"
-                  disabled
-                  placeholder="팀 관리에서 배정"
-                  className={FIELD_INPUT}
-                />
-              </div>
-            </div>
-          )}
-
-          {userType === 'guest' && (
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="user-organization" className={FIELD_LABEL}>
-                소속 기관
+              <Label htmlFor="user-job-title" className={FIELD_LABEL}>
+                직책
               </Label>
               <Input
-                id="user-organization"
-                value={form.organization}
-                onChange={(e) => set('organization', e.target.value)}
-                maxLength={100}
-                placeholder="한국물류협회"
+                id="user-job-title"
+                value={form.jobTitle}
+                onChange={(e) => set('jobTitle', e.target.value)}
+                maxLength={50}
                 className={FIELD_INPUT}
               />
             </div>
-          )}
+            <div className="space-y-2">
+              <Label htmlFor="user-team" className={FIELD_LABEL}>
+                팀 배정 (선택)
+              </Label>
+              {/* 팀 배정은 팀 관리(.pen FLOW 7-2)의 「팀원 추가」가 한다 — 발급 시점에
+                  겸직·역할까지 고르게 하면 같은 규칙이 두 화면에 복제된다. */}
+              <Input
+                id="user-team"
+                disabled
+                placeholder="팀 관리에서 배정"
+                className={FIELD_INPUT}
+              />
+            </div>
+          </div>
 
           <p className="text-[11px] text-[#9CA3AF]">
             생성 즉시 재직 중이라 이 계정으로 바로 로그인할 수 있습니다. 승인 단계와 안내 메일은
