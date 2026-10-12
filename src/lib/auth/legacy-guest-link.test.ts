@@ -36,10 +36,14 @@ describe('parseLegacyGuestSurveyIds', () => {
 
 describe('legacyConsoleStaffPath', () => {
   it('접두를 걷은 운영 콘솔 주소를 만든다', () => {
-    expect(legacyConsoleStaffPath(S1, [])).toBe(`/surveys/${S1}/operations`);
     expect(legacyConsoleStaffPath(S1, ['contacts', 'abc'])).toBe(
       `/surveys/${S1}/operations/contacts/abc`,
     );
+  });
+
+  it('탭 없는 주소는 응답 현황으로 보낸다 — 그 주소 자체에는 페이지가 없어 404 가 된다', () => {
+    expect(legacyConsoleStaffPath(S1, [])).toBe(`/surveys/${S1}/operations/overview`);
+    expect(legacyConsoleStaffPath(S1, ['..', '.'])).toBe(`/surveys/${S1}/operations/overview`);
   });
 
   it('세그먼트를 인코딩하고 점 세그먼트를 버린다 — 실려 온 값이 콘솔 경로를 벗어나지 못한다', () => {

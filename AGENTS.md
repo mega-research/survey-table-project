@@ -1335,7 +1335,9 @@ GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다
   것이 아니다). **옛 운영 콘솔 주소(`/admin/surveys/<id>/operations[/…]`)만 예외다** — 직원과
   옛 게스트 계정이 함께 쓰던 주소라 접두만 걷으면 옛 게스트가 로그인 화면에 갇힌다. 그 주소는
   일반 규칙보다 **앞선** 임시(307) 규칙이 다리 라우트 `/api/legacy-guest-link/[surveyId]` 로
-  보내고, 라우트가 세션 쿠키의 존재로 가른다: 직원은 `/surveys/<id>/operations/…`(종전의 답),
+  보내고, 라우트가 세션 쿠키의 존재로 가른다: 직원은 `/surveys/<id>/operations/…`(종전의 답 —
+  단 탭 없는 주소는 응답 현황으로 보낸다. `/surveys/<id>/operations` 자체에는 페이지가 없어 그대로
+  넘기면 404 다),
   세션이 없고 **옛 grant 에 오른 설문**(`GUEST_SURVEY_GRANTS` 의 설문 id — 계정 쪽은 더는 뜻이
   없다)이고 열린 외주 링크가 있으면 `/fw/<token>`. 목록 밖 설문은 링크가 있어도 조회하지
   않는다(설문 id 로 토큰을 알아내는 창구가 되지 않게). **전환기 장치다** — env 를 비우면 꺼지고,

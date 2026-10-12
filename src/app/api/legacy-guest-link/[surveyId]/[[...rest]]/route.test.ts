@@ -69,13 +69,13 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
   it('운영 환경의 보안 접두 쿠키도 직원 세션으로 읽는다', async () => {
     const res = await call(GRANTED, { cookie: '__Secure-better-auth.session_token=abc.def' });
 
-    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations`);
+    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations/overview`);
   });
 
   it('옛 게스트 설문이 아니면 링크를 찾지 않는다 — 설문 id 로 토큰을 알아내는 창구가 되지 않는다', async () => {
     const res = await call(OTHER);
 
-    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${OTHER}/operations`);
+    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${OTHER}/operations/overview`);
     expect(getAccessLinkMock).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,7 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
 
     const res = await call(GRANTED);
 
-    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations`);
+    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations/overview`);
     expect(getAccessLinkMock).not.toHaveBeenCalled();
   });
 
