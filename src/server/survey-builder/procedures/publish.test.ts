@@ -75,7 +75,7 @@ describe('surveyBuilder.publish — capability 관문 (티켓 09)', () => {
 
   it('publish·migratableCount 는 survey.publish 관문을 지난다', async () => {
     vi.mocked(svc.publishSurvey).mockResolvedValue(VERSION_ROW as never);
-    vi.mocked(svc.countMigratableResponses).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(svc.countMigratableResponses).mockResolvedValue({ count: 0, isClosed: false });
     const context = authedContext();
     const client = createRouterClient({ publish }, { context });
 

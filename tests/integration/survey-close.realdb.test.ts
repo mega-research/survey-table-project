@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  questions as questionsTable,
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
   teamMembers as teamMembersTable,
@@ -28,6 +29,10 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 import { control } from '@/server/operations/procedures/control';
+import {
+  countMigratableResponses,
+  publishSurvey,
+} from '@/server/survey-builder/services/survey-publish';
 import { loadSurveyCapabilities } from '@/server/survey-access';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
@@ -131,6 +136,7 @@ describe.skipIf(!isLocalDb)('설문 종료 — 실 DB', () => {
   afterAll(async () => {
     if (createdSurveyIds.length > 0) {
       await db.update(surveysTable).set({ currentVersionId: null }).where(inArray(surveysTable.id, createdSurveyIds));
+      await db.delete(questionsTable).where(inArray(questionsTable.surveyId, createdSurveyIds));
       await db.delete(surveyVersionsTable).where(inArray(surveyVersionsTable.surveyId, createdSurveyIds));
       await db.delete(surveysTable).where(inArray(surveysTable.id, createdSurveyIds));
     }
@@ -222,6 +228,30 @@ describe.skipIf(!isLocalDb)('설문 종료 — 실 DB', () => {
     await clientFor(OWNER_ID).control.setClosed({ surveyId, isClosed: true });
 
     expect([...(await loadSurveyCapabilities(member, surveyId))].sort()).toEqual(before);
+  });
+
+  it('종료된 설문을 다시 발행하면 종료가 풀린다 — 중단은 그대로다', async () => {
+    const surveyId = await seedSurvey({ isPaused: true, pausedMessage: '잠시 점검 중입니다' });
+    await db.insert(questionsTable).values({
+      surveyId,
+      type: 'radio',
+      title: '질문 1',
+      order: 1,
+      questionCode: 'Q1',
+      options: [{ id: 'o1', label: '예', value: 'o1' }],
+    });
+    await clientFor(OWNER_ID).control.setClosed({ surveyId, isClosed: true });
+    // 배포 확인 창이 읽는 값 — 종료된 설문임을 미리 안다.
+    expect((await countMigratableResponses({ surveyId })).isClosed).toBe(true);
+
+    await publishSurvey({ surveyId });
+
+    const after = await rowOf(surveyId);
+    expect(after.status).toBe('published');
+    // 발행은 중단을 풀지 않는다 — 종료와 중단은 독립인 축이다.
+    expect(after.isPaused).toBe(true);
+    expect(after.pausedMessage).toBe('잠시 점검 중입니다');
+    expect((await countMigratableResponses({ surveyId })).isClosed).toBe(false);
   });
 
   it('타 팀 사람에게는 없는 설문이다 — 상태가 그대로다', async () => {

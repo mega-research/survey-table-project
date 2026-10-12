@@ -57,6 +57,15 @@ describe('countByStatusChip', () => {
     ]);
     expect(counts).toEqual({ all: 3, draft: 1, published: 2, closed: 0 });
   });
+
+  it('종료된 설문은 진행중이 아니라 종료로 센다 (ADR-0030)', () => {
+    const counts = countByStatusChip([
+      item({ id: 'a', status: 'published' }),
+      item({ id: 'b', status: 'closed' }),
+      item({ id: 'c', status: 'closed' }),
+    ]);
+    expect(counts).toEqual({ all: 3, draft: 0, published: 1, closed: 2 });
+  });
 });
 
 describe('narrowToGroup', () => {
@@ -85,6 +94,19 @@ describe('filterSurveyList', () => {
     expect(out.map((s) => s.id)).toEqual(['a']);
   });
 
+
+  it('종료 칩은 종료된 설문만 남긴다 — 진행중 칩에는 종료된 설문이 없다', () => {
+    const rows = [
+      item({ id: 'open', status: 'published' }),
+      item({ id: 'closed', status: 'closed' }),
+    ];
+    expect(
+      filterSurveyList(rows, { ...baseFilters, statusChip: 'closed' }).map((s) => s.id),
+    ).toEqual(['closed']);
+    expect(
+      filterSurveyList(rows, { ...baseFilters, statusChip: 'published' }).map((s) => s.id),
+    ).toEqual(['open']);
+  });
 
   it('상태 칩으로 좁힌다', () => {
     const rows = [item({ id: 'a', status: 'draft' }), item({ id: 'b', status: 'published' })];

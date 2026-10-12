@@ -83,7 +83,10 @@ async function selectGuestSurveys(
     title: row.title,
     publishedAt: row.publishedAt ?? null,
     endDate: row.endDate,
-    lifecycle: resolveLifecycle({ ...row, status: normalizeSurveyStatus(row.status) }),
+    lifecycle: resolveGuestSurveyLifecycle(
+      { ...row, status: normalizeSurveyStatus(row.status) },
+      Date.now(),
+    ),
     tabs: normalizeSurveyGuestTabs(row.guestTabs),
   }));
 }
@@ -96,16 +99,24 @@ async function selectGuestSurveys(
  * `normalizeSurveyStatus` 로 접어서 넘긴다(로더 정규화 관례).
  *
  * 미발행이 먼저인 이유는 그 설문에 열 것이 없기 때문이다(프리뷰는 배포 스냅샷을 본다).
- * 종료가 일시중지보다 먼저인 것은 마감일이 지난 설문의 중단 여부가 응답자에게 의미가 없어서다.
+ * **「발행된 적 있는가」는 배포 버전의 유무로 묻는다** — 설문 종료(ADR-0030)가 생긴 뒤로
+ * `status` 는 published 가 아니어도 발행된 설문일 수 있다. 예전처럼 「published 가 아니면
+ * 미발행」으로 두면 종료한 설문이 클라이언트에게 「미발행」으로 보인다.
+ * 종료가 일시중지보다 먼저인 것은 끝난 조사의 중단 여부가 보는 사람에게 의미가 없어서다 —
+ * 종료 스위치로 끝냈든 마감일이 지났든 같다.
  */
-function resolveLifecycle(row: {
-  status: SurveyStatus;
-  currentVersionId: string | null;
-  isPaused: boolean;
-  endDate: Date | null;
-}): GuestSurveyLifecycle {
-  if (row.status !== 'published' || row.currentVersionId === null) return 'draft';
-  if (row.endDate !== null && row.endDate.getTime() < Date.now()) return 'closed';
+export function resolveGuestSurveyLifecycle(
+  row: {
+    status: SurveyStatus;
+    currentVersionId: string | null;
+    isPaused: boolean;
+    endDate: Date | null;
+  },
+  now: number,
+): GuestSurveyLifecycle {
+  if (row.status === 'draft' || row.currentVersionId === null) return 'draft';
+  if (row.status === 'closed') return 'closed';
+  if (row.endDate !== null && row.endDate.getTime() < now) return 'closed';
   if (row.isPaused) return 'paused';
   return 'running';
 }

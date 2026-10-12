@@ -27,6 +27,7 @@ import { TestModeControl } from '@/features/operations/test-mode-control';
 import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { publishConfirmMessage } from '@/features/survey-builder/lib/publish-confirm-message';
 import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
 import { useBuilderScroll } from '@/features/survey-builder/hooks/use-builder-scroll';
@@ -308,21 +309,19 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const handlePublishSurvey = async () => {
     if (!surveyId) return;
 
-    // 배포 안내 N건 (ADR-0014) — 진행중·이탈 응답이 새 버전으로 이어짐을 고지.
-    // 집계 실패는 배포를 막지 않는다 (안내는 부가 정보).
-    let migratableLine = '';
+    // 배포 안내 — 진행중·이탈 응답이 새 버전으로 이어짐(ADR-0014)과, 종료된 설문이면 배포가
+    // 종료를 푼다는 것(ADR-0030)을 고지한다.
+    // 조회 실패는 배포를 막지 않는다. 그때는 종료 경고도 빠지는데, 막으면 이 한 번의 조회
+    // 장애가 배포 전체를 세운다 — 안내는 부가 정보이고 배포는 본업이다.
+    let preflight = { migratableCount: 0, isClosed: false };
     try {
-      const { count } = await client.surveyBuilder.publish.migratableCount({ surveyId });
-      if (count > 0) {
-        migratableLine = `\n진행 중 응답 ${count}건이 새 버전으로 이어집니다.`;
-      }
+      const result = await client.surveyBuilder.publish.migratableCount({ surveyId });
+      preflight = { migratableCount: result.count, isClosed: result.isClosed };
     } catch {
-      // 집계 실패 무시 — 안내 없이 진행
+      // 조회 실패 무시 — 기본 문구로 진행
     }
 
-    const confirmed = window.confirm(
-      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`,
-    );
+    const confirmed = window.confirm(publishConfirmMessage(preflight));
     if (!confirmed) return;
 
     publishMutation.mutate();

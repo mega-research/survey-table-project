@@ -33,6 +33,8 @@ const SCAN_ROOTS = ['src/server', 'src/app', 'src/lib', 'src/actions'];
 const KNOWN_READERS: Record<string, string> = {
   'src/server/operations/services/control.ts':
     '종료 스위치 자신 — 종료 여부 조회와 「발행된 적 있는 설문만」 전이 조건',
+  'src/server/survey-builder/services/survey-publish.ts':
+    '배포 확인 창의 재료 — 종료된 설문이면 배포가 종료를 푼다고 알린다(표시용)',
   'src/server/survey-response/services/response-manage.ts':
     '재응답 허용 게이트 — 판정은 acceptance.ts 의 reedit 행(종료 거부)',
   'src/server/read-models/survey-structure.ts':

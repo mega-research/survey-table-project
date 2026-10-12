@@ -144,18 +144,23 @@ export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVe
  */
 export async function countMigratableResponses(input: {
   surveyId: string;
-}): Promise<{ count: number }> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, input.surveyId),
-        // 열린 상태(in_progress·drop) — contracts 의 openResponseStatusValues 가 SSOT
-        inArray(surveyResponses.status, [...openResponseStatusValues]),
-        eq(surveyResponses.isTest, false),
-        isNull(surveyResponses.deletedAt),
+}): Promise<{ count: number; isClosed: boolean }> {
+  const [[row], [survey]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, input.surveyId),
+          // 열린 상태(in_progress·drop) — contracts 의 openResponseStatusValues 가 SSOT
+          inArray(surveyResponses.status, [...openResponseStatusValues]),
+          eq(surveyResponses.isTest, false),
+          isNull(surveyResponses.deletedAt),
+        ),
       ),
-    );
-  return { count: row?.count ?? 0 };
+    // 종료 여부(ADR-0030) — 배포가 종료를 풀므로 확인 창이 미리 알려야 한다. 표시용이고
+    // 판정이 아니다: 배포 자체는 종료된 설문을 그대로 받는다.
+    db.select({ status: surveys.status }).from(surveys).where(eq(surveys.id, input.surveyId)),
+  ]);
+  return { count: row?.count ?? 0, isClosed: survey?.status === 'closed' };
 }

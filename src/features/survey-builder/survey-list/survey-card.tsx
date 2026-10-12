@@ -7,6 +7,7 @@ import Link from 'next/link';
 import {
   Activity,
   ChartColumn,
+  CircleStop,
   Clock,
   CopyPlus,
   EllipsisVertical,
@@ -212,6 +213,15 @@ export function SurveyCard({
           {modifiedDateSuffix(survey, scope, currentUserId)}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* 종료 배지(ADR-0030) — 진행중·작성중에는 달지 않는다. 대부분의 카드가 같은 배지를
+              달면 아무것도 말하지 않게 되고, 눈에 띄어야 하는 것은 「더는 응답을 받지 않는다」
+              하나다. 공개/비공개보다 앞에 두는 것도 그래서다. */}
+          {survey.status === 'closed' && (
+            <span className="flex items-center gap-[5px] rounded-full bg-[#F1F5F9] px-[11px] py-1 text-[13px] font-medium text-[#475569]">
+              <CircleStop className="h-3 w-3" />
+              종료
+            </span>
+          )}
           {survey.isPublic ? (
             <span className="flex items-center gap-[5px] rounded-full bg-[#E8F6EE] px-[11px] py-1 text-[13px] font-medium text-[#1D8A4E]">
               <Globe className="h-3 w-3" />

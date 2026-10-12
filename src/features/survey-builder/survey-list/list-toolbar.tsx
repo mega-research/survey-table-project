@@ -14,11 +14,16 @@ import { cn } from '@/lib/utils';
 import type { SurveyListSortBy, SurveyListStatusChip } from './survey-list-pipeline';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
+//
+// `closed` 의 라벨은 「종료」다(ADR-0030). .pen 은 「완료」로 그렸지만 버튼이 「설문 종료」이고
+// 「완료」는 응답 상태의 어휘라, 카드의 「완료 N건」 옆에서 무엇의 완료인지 읽히지 않는다.
+// 점 색도 강조색(#2E4FCE)에서 헤더의 「종료됨」과 같은 회청으로 옮겼다 — 끝난 조사가 눈에
+// 띄어야 할 이유가 없다.
 const STATUS_CHIPS: { key: SurveyListStatusChip; label: string; dot: string | null }[] = [
   { key: 'all', label: '전체', dot: null },
   { key: 'draft', label: '작성중', dot: '#9CA3AF' },
   { key: 'published', label: '진행중', dot: '#1D8A4E' },
-  { key: 'closed', label: '완료', dot: '#2E4FCE' },
+  { key: 'closed', label: '종료', dot: '#64748B' },
 ];
 
 const SORT_OPTIONS: { key: SurveyListSortBy; label: string }[] = [
