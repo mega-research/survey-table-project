@@ -31,6 +31,7 @@ export const SelectCell = React.memo(function SelectCell({
   ariaInvalid,
   ariaDescribedBy,
   priorChoiceValue,
+  disabledOptionValues,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -82,7 +83,12 @@ export const SelectCell = React.memo(function SelectCell({
           >
             <option value="">선택하세요</option>
             {cell.selectOptions.map((option) => (
-              <option key={option.id} value={option.value ?? option.id}>
+              <option
+                key={option.id}
+                value={option.value ?? option.id}
+                // 같은 묶음의 다른 칸이 고른 보기 — 목록에 남기고 고를 수만 없게 한다
+                disabled={disabledOptionValues?.has(option.value ?? option.id)}
+              >
                 {substituteTokens(option.label, attrs, quotes)}
               </option>
             ))}

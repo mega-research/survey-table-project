@@ -2,9 +2,11 @@ export const MOBILE_TABLE_DISPLAY_MODES = [
   'auto',
   'drilldown-original-row',
   'row-wise-original',
+  'row-wise-scale',
   'row-cards',
   'row-group-cards',
   'axis-cards',
+  'item-cards',
   'original',
 ] as const;
 

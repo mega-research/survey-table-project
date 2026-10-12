@@ -159,3 +159,92 @@ describe('CellGatingEditor', () => {
     expect(screen.getByText(/설정할 수 없습니다/)).toBeTruthy();
   });
 });
+
+describe('CellGatingEditor — 조건 묶음 (AND / OR / NOT, 중첩)', () => {
+  afterEach(cleanup);
+
+  const now: TableCell = { id: 'now', type: 'input', content: '', exportLabel: '현재 보유 규모' };
+  const want: TableCell = { id: 'want', type: 'input', content: '', exportLabel: '희망 규모' };
+  const gte1 = (id: string): CellEnableCondition => ({
+    kind: 'numeric',
+    controllerCellId: id,
+    op: '>=',
+    value: 1,
+  });
+
+  it('단일 조건에서 "조건 추가" 를 누르면 AND 묶음으로 승격한다', () => {
+    const { onConditionChange } = renderEditor({ condition: gte1('now'), rowCells: [now, want, self] });
+    fireEvent.click(screen.getByRole('button', { name: /조건 추가/ }));
+    expect(onConditionChange).toHaveBeenCalledWith({
+      kind: 'group',
+      op: 'AND',
+      terms: [gte1('now'), { kind: 'filled', controllerCellId: 'now' }],
+    });
+  });
+
+  it('묶음의 결합 방식을 OR 로 바꾼다', () => {
+    const group: CellEnableCondition = { kind: 'group', op: 'AND', terms: [gte1('now'), gte1('want')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    fireEvent.change(screen.getByLabelText('조건 결합 방식'), { target: { value: 'OR' } });
+    expect(onConditionChange).toHaveBeenCalledWith({ ...group, op: 'OR' });
+  });
+
+  it('묶음 안 두 번째 조건의 컨트롤러를 바꾸면 그 조건만 바뀐다', () => {
+    const group: CellEnableCondition = { kind: 'group', op: 'OR', terms: [gte1('now'), gte1('now')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    fireEvent.change(screen.getAllByLabelText('컨트롤러')[1]!, { target: { value: 'want' } });
+    expect(onConditionChange).toHaveBeenCalledWith({
+      kind: 'group',
+      op: 'OR',
+      terms: [gte1('now'), { kind: 'filled', controllerCellId: 'want' }],
+    });
+  });
+
+  it('조건이 하나만 남으면 단일 조건으로 되돌아간다', () => {
+    const group: CellEnableCondition = { kind: 'group', op: 'OR', terms: [gte1('now'), gte1('want')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    fireEvent.click(screen.getAllByLabelText('항 삭제')[0]!);
+    expect(onConditionChange).toHaveBeenCalledWith(gte1('want'));
+  });
+
+  it('NOT 묶음은 조건이 하나만 남아도 묶음으로 둔다 — 부정의 뜻이 사라지면 안 된다', () => {
+    const group: CellEnableCondition = { kind: 'group', op: 'NOT', terms: [gte1('now'), gte1('want')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    fireEvent.click(screen.getAllByLabelText('항 삭제')[1]!);
+    expect(onConditionChange).toHaveBeenCalledWith({ kind: 'group', op: 'NOT', terms: [gte1('now')] });
+    expect(screen.getByText(/처음 상태에서 이\s+묶음은 충족/)).toBeTruthy();
+  });
+
+  it('"하위 묶음 추가" 는 바깥과 다른 결합 방식의 묶음을 조건으로 넣는다', () => {
+    const group: CellEnableCondition = { kind: 'group', op: 'AND', terms: [gte1('now'), gte1('want')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    fireEvent.click(screen.getByRole('button', { name: /하위 묶음 추가/ }));
+    expect(onConditionChange).toHaveBeenCalledWith({
+      kind: 'group',
+      op: 'AND',
+      terms: [
+        gte1('now'),
+        gte1('want'),
+        { kind: 'group', op: 'OR', terms: [{ kind: 'filled', controllerCellId: 'now' }] },
+      ],
+    });
+  });
+
+  it('중첩 묶음 안의 조건을 고치면 바깥 구조는 그대로다', () => {
+    const inner: CellEnableCondition = { kind: 'group', op: 'OR', terms: [gte1('now'), gte1('want')] };
+    const group: CellEnableCondition = { kind: 'group', op: 'AND', terms: [inner, gte1('now')] };
+    const { onConditionChange } = renderEditor({ condition: group, rowCells: [now, want, self] });
+    // 결합 방식 select 는 바깥·안쪽 순서로 둘
+    fireEvent.change(screen.getAllByLabelText('조건 결합 방식')[1]!, { target: { value: 'NOT' } });
+    expect(onConditionChange).toHaveBeenCalledWith({
+      kind: 'group',
+      op: 'AND',
+      terms: [{ ...inner, op: 'NOT' }, gte1('now')],
+    });
+  });
+
+  it('조건이 없는 묶음은 경고를 보여준다', () => {
+    renderEditor({ condition: { kind: 'group', op: 'OR', terms: [] }, rowCells: [now, want, self] });
+    expect(screen.getByText(/조건이 없는 묶음은 항상 충족/)).toBeTruthy();
+  });
+});

@@ -45,6 +45,7 @@ export const CreateQuestionInput = z.object({
   mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
+  maxSelectionsSource: z.custom<QuestionType['maxSelectionsSource']>().optional(),
   noticeContent: z.string().optional(),
   // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
   noticeBgColor: z
@@ -69,6 +70,7 @@ export const CreateQuestionInput = z.object({
   priorAnswerDisabled: z.boolean().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   rowRepeatConfig: z.custom<QuestionType['rowRepeatConfig']>().optional(),
+  stagedRowsConfig: z.custom<QuestionType['stagedRowsConfig']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
@@ -77,6 +79,7 @@ export const CreateQuestionInput = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
@@ -117,6 +120,7 @@ export const UpdateQuestionData = z.object({
   mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
+  maxSelectionsSource: z.custom<QuestionType['maxSelectionsSource']>().optional(),
   noticeContent: z.string().optional(),
   // 공지 패널 배경색 — 'none'(무색) 또는 hex. null 로 기본 파랑 복귀
   noticeBgColor: z
@@ -138,6 +142,7 @@ export const UpdateQuestionData = z.object({
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   rowRepeatConfig: z.custom<QuestionType['rowRepeatConfig']>().optional(),
+  stagedRowsConfig: z.custom<QuestionType['stagedRowsConfig']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
@@ -146,6 +151,7 @@ export const UpdateQuestionData = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),

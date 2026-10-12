@@ -36,6 +36,8 @@ export interface CellFormState {
   checkboxOptions: CheckboxOption[];
   radioOptions: RadioOption[];
   radioGroupName: string;
+  /** 중복 불가 묶음 이름 (선택 칸 전용) — 빈 글자는 미지정 */
+  distinctGroup: string;
   selectOptions: QuestionOption[];
   allowOtherOption: boolean;
   cellOptionsColumns: number | undefined;
@@ -221,6 +223,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     checkboxOptions: cell.checkboxOptions || [],
     radioOptions: cell.radioOptions || [],
     radioGroupName: cell.radioGroupName || '',
+    distinctGroup: cell.distinctGroup || '',
     selectOptions: cell.selectOptions || [],
     allowOtherOption: cell.allowOtherOption || false,
     cellOptionsColumns: cell.optionsColumns,
@@ -337,6 +340,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     checkboxOptions: _checkboxOptions,
     radioOptions: _radioOptions,
     radioGroupName: _radioGroupName,
+    distinctGroup: _distinctGroup,
     selectOptions: _selectOptions,
     allowOtherOption: _allowOtherOption,
     optionsColumns: _optionsColumns,
@@ -415,6 +419,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { radioOptions: form.radioOptions, radioGroupName: form.radioGroupName }
       : {}),
     ...(contentType === 'select' ? { selectOptions: form.selectOptions } : {}),
+    // 중복 불가 묶음 — 선택 칸 전용. 비우면 키를 두지 않는다(미지정).
+    ...(contentType === 'select' && form.distinctGroup.trim()
+      ? { distinctGroup: form.distinctGroup.trim() }
+      : {}),
     ...(['checkbox', 'radio', 'select', 'ranking'].includes(contentType)
       ? {
           allowOtherOption: form.allowOtherOption,
@@ -561,6 +569,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     // ranking_opt 셀을 질문-레벨 "기타" 엔트리로 사용할지 (타입 전환 시 키 자체 제거).
     ...(contentType === 'ranking_opt' && form.isOtherRankingCell
       ? { isOtherRankingCell: true }
+      : {}),
+    // ranking_opt 상세 기재 — 보기 번호는 그대로 기록하고 입력 텍스트는 `_rk{k}_text` 로 받는다.
+    // 기타 모드(번호 없이 `_etc`)와는 배타라 기타면 싣지 않는다. 폼 상태는 choice_opt 와 공유한다.
+    ...(contentType === 'ranking_opt' && !form.isOtherRankingCell && form.choiceAllowTextInput
+      ? { allowTextInput: true }
       : {}),
     // 보기 옵션 소스 셀 (Case A)
     ...(contentType === 'choice_opt'

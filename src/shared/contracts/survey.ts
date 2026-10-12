@@ -15,6 +15,7 @@ import type {
   TableRow,
   TableValidationRule,
   TextValidation,
+  MaxSelectionsSource,
 } from '@/types/survey';
 
 import type { SurveyAnchorSnapshot } from './survey-document';
@@ -228,6 +229,7 @@ export interface QuestionData {
   mobileOptionsColumns?: number | null;
   minSelections?: number;
   maxSelections?: number;
+  maxSelectionsSource?: MaxSelectionsSource | null;
   noticeContent?: string;
   requiresAcknowledgment?: boolean;
   placeholder?: string;
@@ -239,6 +241,7 @@ export interface QuestionData {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  mobileItemCardBlockColumns?: number[] | null;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;

@@ -94,6 +94,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: 0,
       repeatHeaderEndRow: 0,
+      itemCardBlockColumns: null,
     });
   });
 
@@ -117,10 +118,11 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 2,
       repeatHeaderStartRow: 0,
       repeatHeaderEndRow: 0,
+      itemCardBlockColumns: null,
     });
   });
 
-  it('라벨된 radiogroup과 네 radio 및 비색상 선택 표시를 제공한다', () => {
+  it('라벨된 radiogroup과 다섯 radio 및 비색상 선택 표시를 제공한다', () => {
     render(
       <MobileTableDisplaySettings
         mode="auto"
@@ -133,7 +135,7 @@ describe('MobileTableDisplaySettings', () => {
     );
 
     expect(screen.getByRole('radiogroup', { name: '모바일 표시 방식' })).toBeInTheDocument();
-    expect(screen.getAllByRole('radio')).toHaveLength(4);
+    expect(screen.getAllByRole('radio')).toHaveLength(5);
     expect(screen.getByRole('radio', { name: '자동 카드' })).toBeChecked();
     expect(screen.getByRole('radio', { name: '행별 원본 문항' })).toBeInTheDocument();
     expect(
@@ -160,6 +162,37 @@ describe('MobileTableDisplaySettings', () => {
       .toBeInTheDocument();
     rerender(<MobileTableDisplaySettings mode="row-wise-original" {...props} />);
     expect(screen.getByLabelText('상세에서 반복할 헤더 행')).toHaveValue('0-2');
+    rerender(<MobileTableDisplaySettings mode="row-wise-scale" {...props} />);
+    expect(screen.getByLabelText('상세에서 반복할 헤더 행')).toHaveValue('0-2');
+    expect(screen.getByLabelText('상세에서 제외할 앞쪽 열 수')).toBeInTheDocument();
+  });
+
+  it('행별 척도는 행별 원본 문항과 같은 자리에 늘 보이고, 고르면 부모로 전달한다', () => {
+    const onChange = vi.fn();
+    render(
+      <MobileTableDisplaySettings
+        mode="auto"
+        omitLeadingColumns={1}
+        columnCount={12}
+        questionType="table"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: '행별 척도' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'row-wise-scale' }));
+  });
+
+  it('행별 척도에서 막대로 못 그리는 행이 있으면 이유와 행을 경고한다 — 다른 모드에서는 숨긴다', () => {
+    const issues = [
+      { reason: 'text-input' as const, message: '상세기재가 켜진 보기가 있습니다.', rowLabels: ['전문성', '자료'] },
+    ];
+    const props = { omitLeadingColumns: 1, columnCount: 12, onChange: vi.fn(), rowScaleBarIssues: issues };
+    const { rerender } = render(<MobileTableDisplaySettings mode="row-wise-scale" {...props} />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('상세기재가 켜진 보기가 있습니다.');
+    expect(alert).toHaveTextContent('전문성, 자료');
+    rerender(<MobileTableDisplaySettings mode="row-wise-original" {...props} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('Enter와 blur에서 정상 범위를 start/end로 확정한다', () => {
@@ -183,6 +216,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: 2,
       repeatHeaderEndRow: 3,
+      itemCardBlockColumns: null,
     });
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
@@ -191,6 +225,7 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: null,
       repeatHeaderEndRow: null,
+      itemCardBlockColumns: null,
     });
   });
 
@@ -229,6 +264,50 @@ describe('MobileTableDisplaySettings', () => {
       omitLeadingColumns: 1,
       repeatHeaderStartRow: null,
       repeatHeaderEndRow: null,
+      itemCardBlockColumns: null,
     });
+  });
+});
+
+describe('블록 시작 열', () => {
+  const base = {
+    omitLeadingColumns: 1,
+    columnCount: 8,
+    questionType: 'table' as const,
+  };
+
+  it('항목 단위 카드에서만 입력칸이 보인다', () => {
+    const { rerender } = render(
+      <MobileTableDisplaySettings {...base} mode="auto" onChange={vi.fn()} />,
+    );
+    expect(screen.queryByLabelText('블록 시작 열')).not.toBeInTheDocument();
+    rerender(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={vi.fn()} />);
+    expect(screen.getByLabelText('블록 시작 열')).toBeInTheDocument();
+  });
+
+  it('「1,5」를 적으면 열 번호 배열로 내보내고, 비우면 null 이다', () => {
+    const onChange = vi.fn();
+    render(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={onChange} />);
+    const field = screen.getByLabelText('블록 시작 열');
+    fireEvent.change(field, { target: { value: '1,5' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'item-cards', itemCardBlockColumns: [1, 5] }),
+    );
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ itemCardBlockColumns: null }),
+    );
+  });
+
+  it('열 수를 넘는 번호는 저장하지 않고 안내한다', () => {
+    const onChange = vi.fn();
+    render(<MobileTableDisplaySettings {...base} mode="item-cards" onChange={onChange} />);
+    const field = screen.getByLabelText('블록 시작 열');
+    fireEvent.change(field, { target: { value: '1,9' } });
+    fireEvent.blur(field);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/1부터 8까지의 열 번호/)).toBeInTheDocument();
   });
 });

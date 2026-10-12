@@ -248,13 +248,14 @@ export function useDragCopy({
               // 리매핑 위치는 이번 붙여넣기가 소스의 보이는 컨트롤러 셀을 그대로 써넣는
               // 자리라서(붙여넣기 후 recalculateHiddenCells 가 소스 병합 기하를 복원)
               // 대상의 이전 hidden 여부와 무관하게 유효하다.
-              const pos = findRegionSourceCellPos(region, targetCell.enabledWhen.controllerCellId);
-              const remappedControllerId = pos
-                ? rows[targetRow + pos.row]?.cells[targetCol + pos.col]?.id
-                : undefined;
+              // 조건 묶음이면 컨트롤러마다 따로 되짚는다.
+              const remapController = (controllerCellId: string) => {
+                const pos = findRegionSourceCellPos(region, controllerCellId);
+                return pos ? rows[targetRow + pos.row]?.cells[targetCol + pos.col]?.id : undefined;
+              };
               const resolved = resolvePastedGating(
                 targetCell.enabledWhen,
-                remappedControllerId,
+                remapController,
                 collectTableCells(rows),
               );
               if (resolved) {

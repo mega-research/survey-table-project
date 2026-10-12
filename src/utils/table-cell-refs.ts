@@ -12,6 +12,8 @@
  */
 import type { CalcExpr, TableCell } from '@/types/survey';
 
+import { mapGateLeaves } from './cell-gate-tree';
+
 export function remapCalcExprCellIds(
   expr: CalcExpr,
   idMap: ReadonlyMap<string, string>,
@@ -43,10 +45,12 @@ export function remapCellRefs(
   let next = cell;
 
   if (cell.enabledWhen) {
-    const mapped = idMap.get(cell.enabledWhen.controllerCellId);
-    if (mapped) {
-      next = { ...next, enabledWhen: { ...cell.enabledWhen, controllerCellId: mapped } };
-    }
+    // 조건 묶음이면 트리의 모든 잎을 옮긴다 — 대응표에 없는 컨트롤러(블록 밖 참조)는 그대로 둔다.
+    const enabledWhen = mapGateLeaves(cell.enabledWhen, (leaf) => {
+      const mapped = idMap.get(leaf.controllerCellId);
+      return mapped ? { ...leaf, controllerCellId: mapped } : leaf;
+    });
+    if (enabledWhen !== cell.enabledWhen) next = { ...next, enabledWhen };
   }
 
   if (cell.formula) {

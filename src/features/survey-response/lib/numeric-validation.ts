@@ -7,7 +7,9 @@
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
+import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
+import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
 import {
   areAllFormulaRefsEmpty,
   evaluateCellFormula,
@@ -46,13 +48,22 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
+import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import {
   type TextQualityViolation,
   isPlainTextInput,
   textQualityViolation,
 } from '@/features/question-renderer/utils/text-quality';
 
+import { resolveMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
+import { countSelectionsTowardMax } from '@/features/question-renderer/utils/exclusive-choice';
+import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
+
+import { isExclusiveChoiceValue } from './answer-validation';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
+
+/** 중복 불가 묶음 위반 문구 — 고정이다(저작자 문구를 받지 않는다). */
+export const DISTINCT_SELECT_MESSAGE = '같은 항목을 두 번 선택할 수 없습니다.';
 
 export interface NumericIssue {
   kind:
@@ -63,7 +74,11 @@ export interface NumericIssue {
     | 'formula'
     | 'format'
     /** 단답형·장문형 응답 품질(최소 글자 수·의미 없는 입력) — 입력칸 아래에 문구가 붙는다 */
-    | 'text-quality';
+    | 'text-quality'
+    /** 체크박스 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라갈 때만 생긴다 */
+    | 'selection-max'
+    /** 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다 */
+    | 'distinct';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -108,7 +123,8 @@ export function isRequiredCell(cell: TableCell): boolean {
 /**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
  * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
- * - isHidden 셀(병합 피복 셀)
+ * - isHidden 셀(병합 피복 셀). 단 숨은 행에서 시작한 세로 병합 셀이 가시 행에 올라와 그려지면
+ *   그 셀은 포함한다 (렌더러와 같은 투영)
  * - ctx 전달 시: displayCondition 미충족으로 렌더러가 숨기는 열의 셀(위치 기반 매핑,
  *   row.cells[i] ↔ tableColumns[i])과 행의 셀
  * 필수 셀·범위·합계 검증이 이 필터를 공유한다: 화면에 없는 셀의 잔존 값이나 미입력이
@@ -167,7 +183,7 @@ export function collectVisibleTableCells(
       }
     });
   }
-  return rows
+  const visibleRows = rows
     .filter(
       (row) =>
         (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
@@ -185,9 +201,39 @@ export function collectVisibleTableCells(
         !ctx ||
         !row.displayCondition ||
         shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
-    )
+    );
+  // 숨은 행에서 시작한 세로 병합 셀은 렌더러가 같은 id 로 첫 가시 행에 올려 그린다 — 화면에
+  // 있는 칸이므로 검증 대상이다. 렌더러와 같은 투영(recalculateRowspansForVisibleRows)을 쓴다.
+  // 행이 하나도 숨지 않았거나 세로 병합이 없으면 투영이 필요 없다(대다수 표).
+  const projectedRows =
+    visibleRows.length < rows.length &&
+    rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
+      ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
+      : visibleRows;
+  return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
     .filter((c) => !c.isHidden);
+}
+
+/**
+ * 보기 그룹 표의 필수 판정에 넘길 **보이는 셀 id 집합** (`answer-validation` 의 visibleCellIds).
+ *
+ * 필수 셀·범위 검증과 같은 필터(collectVisibleTableCells)를 써서, 행·열 표시조건이나 선택 안 된
+ * 동적 행으로 숨은 보기 그룹이 「다음」을 막지 않게 한다. 보기 그룹 표가 아니면 undefined —
+ * 레거시 보기 소스 표(radio/checkbox)는 동적 행 선택이 표 응답 밖(루트 사이드카)에 있어 이
+ * 필터로 판정하면 선택된 동적 행까지 숨은 것으로 오판한다.
+ */
+export function resolveChoiceGroupVisibleCellIds(
+  question: Question,
+  response: unknown,
+  ctx: NumericValidationCtx,
+): ReadonlySet<string> | undefined {
+  if (!isChoiceGroupTableQuestion(question)) return undefined;
+  const cellValues =
+    response && typeof response === 'object' && !Array.isArray(response)
+      ? (response as Record<string, unknown>)
+      : {};
+  return new Set(collectVisibleTableCells(question, cellValues, ctx).map((cell) => cell.id));
 }
 
 /**
@@ -290,7 +336,7 @@ export function evaluateSumConstraint(
   cellValues: Record<string, unknown>,
   existingCellIds: Set<string>,
   evalOpts?: SumConstraintEvalOpts,
-): { skipped: boolean; ok: boolean; sum: number } {
+): { skipped: boolean; ok: boolean; sum: number; target?: number } {
   // 좌변
   let left: number;
   if (constraint.leftExpr) {
@@ -341,7 +387,82 @@ export function evaluateSumConstraint(
   }
 
   const ok = compareValues(left, right, constraint.operator, constraint.tolerance ?? 0);
-  return { skipped: false, ok, sum: left };
+  return { skipped: false, ok, sum: left, target: right };
+}
+
+/** 합계 제약이 「입력된 칸 수」 모드인가 — 좌변 수식(leftExpr)이 있으면 수식이 우선이다. */
+export function isFilledCountConstraint(constraint: SumConstraint): boolean {
+  return constraint.aggregate === 'count' && !constraint.leftExpr;
+}
+
+/**
+ * 「입력된 칸 수」 제약 평가 — 선택한 칸 중 응답이 들어 있는 칸의 수를 기준값과 비교한다.
+ *
+ * 합계 모드와 다른 점은 **대상이 전부 비어도 건너뛰지 않는다**는 것이다. "이 칸들 중 하나는
+ * 적어야 한다" 가 이 모드의 존재 이유라, 비었다고 넘어가면 규칙이 아무것도 막지 못한다.
+ * 건너뛰는 경우는 화면에 대상 칸이 하나도 없을 때뿐이다(전부 숨었거나 비활성 — 채울 길이 없는
+ * 규칙이 「다음」을 영영 막으면 안 된다).
+ *
+ * "입력됨" 은 필수 셀 판정과 같은 정본(isCellValuePresent)을 쓴다 — 공백만 있는 문자열·빈 배열은
+ * 미입력, 숫자 0 은 입력이다. 기준값은 리터럴(target)만 본다.
+ * @param existingCellIds 보이고 활성인 셀 id 집합 (합계 모드와 같은 필터)
+ */
+export function evaluateFilledCountConstraint(
+  constraint: SumConstraint,
+  cellValues: Record<string, unknown>,
+  existingCellIds: Set<string>,
+): { skipped: boolean; ok: boolean; count: number; filledIds: string[]; emptyIds: string[] } {
+  const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
+  if (targetIds.length === 0) {
+    return { skipped: true, ok: true, count: 0, filledIds: [], emptyIds: [] };
+  }
+  const filledIds = targetIds.filter((id) => isCellValuePresent(cellValues[id]));
+  const emptyIds = targetIds.filter((id) => !filledIds.includes(id));
+  const ok = compareValues(filledIds.length, constraint.target, constraint.operator, 0);
+  return { skipped: false, ok, count: filledIds.length, filledIds, emptyIds };
+}
+
+const FILLED_COUNT_PHRASES: Record<SumConstraint['operator'], (target: number) => string> = {
+  eq: (n) => `정확히 ${n}칸을 입력해야 합니다`,
+  ne: (n) => `입력한 칸이 ${n}칸이 아니어야 합니다`,
+  gte: (n) => `${n}칸 이상 입력해야 합니다`,
+  lte: (n) => `${n}칸까지만 입력할 수 있습니다`,
+  gt: (n) => `${n}칸보다 많이 입력해야 합니다`,
+  lt: (n) => `${n}칸보다 적게 입력해야 합니다`,
+};
+
+/** 저작자 문구에서 실제 숫자로 바뀌는 자리표시자 — 쓰지 않으면 문구는 종전 그대로다. */
+export const MESSAGE_CURRENT_TOKEN = '{현재값}';
+export const MESSAGE_TARGET_TOKEN = '{기준값}';
+
+function formatMessageNumber(n: number): string {
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: 9 });
+}
+
+/**
+ * 저작자 문구의 `{현재값}`·`{기준값}` 을 검증에 쓴 실제 숫자로 바꾼다. 숫자를 보일지는 문구를
+ * 쓴 사람이 고른다 — 자리표시자가 없으면 값은 드러나지 않는다(기준값 미노출 원칙은 기본 문구와
+ * 자리표시자 없는 문구에서 그대로다). 값을 구하지 못한 자리표시자는 그대로 둔다.
+ */
+export function fillMessageValues(
+  message: string,
+  values: { current?: number; target?: number },
+): string {
+  let out = message;
+  if (values.current !== undefined) {
+    out = out.replaceAll(MESSAGE_CURRENT_TOKEN, formatMessageNumber(values.current));
+  }
+  if (values.target !== undefined) {
+    out = out.replaceAll(MESSAGE_TARGET_TOKEN, formatMessageNumber(values.target));
+  }
+  return out;
+}
+
+// 저작자 문구가 있으면 그대로, 없으면 기준과 현재 칸 수를 알려 준다(합계 문구와 같은 원칙).
+function filledCountMessage(constraint: SumConstraint, count: number): string {
+  const custom = constraint.errorMessage?.trim();
+  if (custom) return fillMessageValues(custom, { current: count, target: constraint.target });
+  return `선택된 칸 중 ${FILLED_COUNT_PHRASES[constraint.operator](constraint.target)} (현재 ${count}칸)`;
 }
 
 const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
@@ -358,9 +479,18 @@ const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
 // 저작자가 문구를 직접 썼으면 그대로 보여 준다 — "(현재 24324)" 같은 꼬리는 달력 환산값처럼
 // 응답자에게 의미 없는 수를 노출하고, 문구를 쓴 사람이 고를 방법이 없었다(셀 수식 검증과 동일).
 // 기본 문구에만 현재 합을 붙인다 — 퍼센트 합계 100 맞추기처럼 합을 알아야 고칠 수 있어서다.
-function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
+function sumConstraintMessage(
+  constraint: SumConstraint,
+  sum: number,
+  targetValue: number | undefined,
+): string {
   const custom = constraint.errorMessage?.trim();
-  if (custom) return custom;
+  if (custom) {
+    return fillMessageValues(custom, {
+      current: sum,
+      ...(targetValue !== undefined ? { target: targetValue } : {}),
+    });
+  }
   const subject = constraint.leftExpr ? '계산 값' : '선택된 셀 합계';
   const target = constraint.targetExpr ? '기준값' : String(constraint.target);
   return `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]} (현재 ${sum})`;
@@ -583,6 +713,30 @@ function formatViolationMessage(
   return result.ok ? null : formatFailureMessage(inputType, result.reason);
 }
 
+/**
+ * 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라가는 비그룹 체크박스만 본다.
+ *
+ * 고정 상한은 선택 가드(꽉 차면 나머지 비활성)만으로 넘을 수 없지만, 따라가는 상한은 참조
+ * 문항을 나중에 줄이면 이미 고른 것이 초과 상태로 남는다. 선택을 대신 지우지 않고 「다음」을
+ * 막아 응답자가 뺄 것을 고르게 한다. 개수는 선택 가드와 같이 단독 선택 보기를 빼고 센다.
+ */
+function selectionMaxIssue(
+  question: Question,
+  response: unknown,
+  ctx: NumericValidationCtx | undefined,
+): NumericIssue | null {
+  if (question.type !== 'checkbox' || !question.maxSelectionsSource?.questionId) return null;
+  if (isGroupedChoiceQuestion(question) || !Array.isArray(response)) return null;
+  const max = resolveMaxSelections(question, ctx?.allResponses);
+  if (max === undefined) return null;
+  const count = countSelectionsTowardMax(response, (val) => isExclusiveChoiceValue(question, val));
+  if (count <= max) return null;
+  return {
+    kind: 'selection-max',
+    message: `최대 ${max}개까지 선택할 수 있습니다. (현재 ${count}개 선택)`,
+  };
+}
+
 export function collectNumericIssues(
   question: Question,
   response: unknown,
@@ -620,6 +774,8 @@ export function collectNumericIssues(
       ...collectOptionTextIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
     );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
+    const selectionMax = selectionMaxIssue(question, response, ctx);
+    if (selectionMax) issues.push(selectionMax);
     return issues;
   }
   const cellValues =
@@ -656,6 +812,23 @@ export function collectNumericIssues(
   const choiceSelection = collectSelectedChoiceCellIds(question, cellValues);
   const enabled = visible.filter((c) => isCellEnabled(c, cellValues, tableCells, choiceSelection));
   const issues: NumericIssue[] = [...groupOptionTextIssues];
+
+  const existingIds = new Set(enabled.map((c) => c.id));
+
+  // 0) 입력된 칸 수 제약 — 미접촉 표에서도 평가한다. "이 칸들 중 N칸은 적어야 한다" 는 표를
+  //    건드리지 않은 응답자에게도 걸려야 하므로 아래 미접촉 스킵 밖에 둔다. 모자라면 빈 칸을,
+  //    넘치면 채운 칸을 짚는다.
+  for (const constraint of question.sumConstraints ?? []) {
+    if (!isFilledCountConstraint(constraint)) continue;
+    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
+    if (result.skipped || result.ok) continue;
+    const highlightIds = result.count < constraint.target ? result.emptyIds : result.filledIds;
+    issues.push({
+      kind: 'sum',
+      message: filledCountMessage(constraint, result.count),
+      ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
+    });
+  }
 
   // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이
   // 존재하므로 항상 평가한다 (미응답 데이터 참조는 group/SUM 이 0으로 접어 표시되고,
@@ -717,8 +890,8 @@ export function collectNumericIssues(
 
     // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
     //    숨은 열/행·비활성 게이팅 셀 제외)
-    const existingIds = new Set(enabled.map((c) => c.id));
     for (const constraint of question.sumConstraints ?? []) {
+      if (isFilledCountConstraint(constraint)) continue; // 위 0) 에서 평가했다
       const result = evaluateSumConstraint(
         constraint,
         cellValues,
@@ -732,7 +905,7 @@ export function collectNumericIssues(
           : constraint.cellIds.filter((id) => existingIds.has(id));
         issues.push({
           kind: 'sum',
-          message: sumConstraintMessage(constraint, result.sum),
+          message: sumConstraintMessage(constraint, result.sum, result.target),
           ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
         });
       }
@@ -747,11 +920,19 @@ export function collectNumericIssues(
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
     const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
+    // 행 차례로 열기: 「처음 보이는 행」과 「값이 있는 마지막 행」 뒤의 묶음 행은 필수에서 뺀다.
+    // 행 반복과 달리 범위가 값에서 나온다 — 적기 시작한 행까지는 평범한 행으로 검사한다.
+    const stagedOptional = stagedOptionalCellIds(
+      question.tableRowsData,
+      question.stagedRowsConfig,
+      cellValues,
+    );
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
+        !stagedOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
@@ -793,6 +974,24 @@ export function collectNumericIssues(
       });
     }
 
+    // 3-b) 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다. 화면은 다른 칸이
+    //      고른 보기를 비활성으로 막지만, 기능을 켜기 전의 응답·이월 응답으로 들어온 중복은
+    //      여기서 잡는다. 판정은 화면의 비활성 계산과 같은 모듈이다(게이팅으로 닫힌 칸 제외 포함).
+    //      구성원은 보이는 칸만이다 — 표시 조건으로 숨은 칸의 잔존 선택이 보이는 칸을 막으면
+    //      응답자가 풀 수 없다. 표 전체에서 찾고 id 만 거르면 숨은 칸과의 중복이 그대로 남는다.
+    const distinctViolationIds = findDistinctViolations(
+      tableCells,
+      cellValues,
+      new Set(visible.map((c) => c.id)),
+    );
+    if (distinctViolationIds.length > 0) {
+      issues.push({
+        kind: 'distinct',
+        message: DISTINCT_SELECT_MESSAGE,
+        cellIds: distinctViolationIds,
+      });
+    }
+
     // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
     //    비활성 셀은 제외 — 지워지기 전 잔존 값이 수식 불일치로 차단하면 안 됨.
     for (const cell of enabled) {
@@ -820,8 +1019,10 @@ export function collectNumericIssues(
         issues.push({
           kind: 'formula',
           message:
-            cell.formulaErrorMessage?.trim() ||
-            '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+            fillMessageValues(cell.formulaErrorMessage?.trim() ?? '', {
+              current: roundedInput,
+              target: computed,
+            }) || '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
           cellIds: [cell.id],
         });
       }
@@ -859,7 +1060,7 @@ export function collectNumericIssues(
       issues.push({
         kind: 'formula',
         message:
-          v.errorMessage?.trim() ||
+          fillMessageValues(v.errorMessage?.trim() ?? '', { current: computed, target }) ||
           `계산 결과가 기준값${SUM_OPERATOR_PHRASES[v.operator]} (현재 ${computed})`,
         cellIds: [cell.id],
       });

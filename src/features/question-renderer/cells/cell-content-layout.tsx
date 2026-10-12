@@ -29,6 +29,15 @@ interface CellContentLayoutProps {
    * 셀 컨테이너의 items-* 는 w-full 인 이 행에 닿지 않아 여기서 justify-* 로 옮긴다.
    */
   horizontalAlign?: TableCell['horizontalAlign'];
+  /**
+   * 입력칸 아래에 붙는 보조 줄(단위 읽기 「1백만원」·글자 수·흐름 속 위반 안내).
+   * left/right 배치에서 children 과 한 덩어리로 두면 라벨이 [입력칸+보조 줄] 전체의 세로
+   * 가운데로 내려가 입력칸과 어긋난다 — 따로 받아 라벨은 입력칸 하나와만 맞추고 보조 줄은
+   * 입력칸 열 아래에 둔다.
+   * 내용이 생겼다 사라지는 보조 줄은 **늘 같은 요소를 넘기고 비었을 때 숨길 것**(empty:hidden) —
+   * 있을 때만 넘기면 트리 모양이 바뀌어 입력칸이 다시 마운트되고 포커스를 잃는다.
+   */
+  below?: React.ReactNode;
 }
 
 const ROW_JUSTIFY = {
@@ -59,6 +68,7 @@ export function CellContentLayout({
   textColor,
   fillWidth = true,
   horizontalAlign,
+  below,
 }: CellContentLayoutProps) {
   const childCls = fillWidth ? 'min-w-0 flex-1' : 'min-w-0 shrink-0';
   const rowCls = cn(
@@ -66,8 +76,17 @@ export function CellContentLayout({
     !fillWidth && ROW_JUSTIFY[horizontalAlign ?? 'left'],
   );
   const hasContent = (!!content && content.trim().length > 0) || !!contentHtml;
+  const stacked = below ? (
+    // gap 인 이유 — 호출측이 빈 보조 줄을 숨긴 채(empty:hidden) 늘 넘겨도 간격이 생기지 않는다
+    <div className="flex w-full flex-col gap-1.5">
+      {children}
+      {below}
+    </div>
+  ) : (
+    children
+  );
   if (!hasContent) {
-    return <>{children}</>;
+    return <>{stacked}</>;
   }
 
   const label = (
@@ -79,11 +98,37 @@ export function CellContentLayout({
     </div>
   );
 
+  // 보조 줄이 있는 left/right — 2열 격자. 1행에서 입력칸과 라벨을 세로 가운데로 맞추고,
+  // 보조 줄은 2행의 입력칸 열에 둔다.
+  if (below && (position === 'left' || position === 'right')) {
+    const inputFirst = position === 'right';
+    const inputTrack = fillWidth ? 'minmax(0,1fr)' : 'auto';
+    return (
+      <div
+        className={cn(
+          'grid w-full items-center gap-x-2 gap-y-1.5',
+          !fillWidth && ROW_JUSTIFY[horizontalAlign ?? 'left'],
+        )}
+        style={{
+          gridTemplateColumns: inputFirst ? `${inputTrack} auto` : `auto ${inputTrack}`,
+        }}
+      >
+        {!inputFirst && label}
+        <div className="min-w-0">{children}</div>
+        {inputFirst && label}
+        {/* 보조 줄이 비어 숨겨졌으면 이 칸도 접는다 — 남기면 빈 2행과 행 간격이 생긴다 */}
+        <div className={cn('min-w-0 has-[>:empty]:hidden', !inputFirst && 'col-start-2')}>
+          {below}
+        </div>
+      </div>
+    );
+  }
+
   switch (position) {
     case 'bottom':
       return (
         <div className="flex w-full flex-col gap-2">
-          {children}
+          {stacked}
           {label}
         </div>
       );
@@ -106,7 +151,7 @@ export function CellContentLayout({
       return (
         <div className="flex w-full flex-col gap-2">
           {label}
-          {children}
+          {stacked}
         </div>
       );
   }

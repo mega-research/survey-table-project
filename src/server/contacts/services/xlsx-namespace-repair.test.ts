@@ -188,7 +188,7 @@ describe('excel-parser — 접두사 네임스페이스 폴백', () => {
   });
 
   it('parseExcelRows 가 전체 행을 돌려준다', async () => {
-    const rows = await parseExcelRows(prefixedXlsx(), { sheetName: '명단', headerRow: 1 });
+    const { rows } = await parseExcelRows(prefixedXlsx(), { sheetName: '명단', headerRow: 1 });
     expect(rows).toEqual([
       { 이름: '홍길동', 이메일: 'hong@example.com' },
       { 이름: '김철수', 이메일: 'kim@example.com' },

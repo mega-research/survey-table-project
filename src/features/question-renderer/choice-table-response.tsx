@@ -12,12 +12,18 @@ import {
 } from '@/features/question-renderer/contact-attrs-context';
 import { DynamicRowSelectorModal } from '@/features/question-renderer/dynamic-row-selector-modal';
 import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
-import { MobileRowWiseOriginalSheet } from '@/features/question-renderer/mobile-row-wise-original-sheet';
+import {
+  MobileRowWiseOriginalSheet,
+  RowTileSection,
+} from '@/features/question-renderer/mobile-row-wise-original-sheet';
 import { useOptionTexts, useResponseSources } from '@/features/question-renderer/response-sources';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
-import { findMobileHeaderCell } from '@/features/question-renderer/utils/split-display-cells';
+import {
+  findMobileHeaderCell,
+  hasMobileDisplayCells,
+} from '@/features/question-renderer/utils/split-display-cells';
 import { useMobileView } from '@/hooks/use-media-query';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
 import { CHOICE_TABLE_CONTROL_CELL_TYPES } from '@/lib/survey/choice-table-cell-value';
@@ -46,17 +52,28 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
+import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
+import {
+  type RowScaleLayout,
+  projectRowWiseScaleLayouts,
+  resolveUngroupedSelectionType,
+} from './utils/row-scale-bars';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
-import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import {
+  isRowWiseMobileTableDisplayMode,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
+import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
 import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
+import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 import { ValidationIssueBanner } from './validation-issue-banner';
@@ -647,6 +664,29 @@ export function ChoiceTableResponse({
   ) : null;
 
   /** 카드 모드의 선택 컨트롤 하나 — 단일 카드와 행 카드가 같은 토글 규칙을 쓴다. */
+  /**
+   * 세로 타일 하나 — 테두리 칸이 통째로 탭 영역이고 글자는 옵션 라벨, 고르면 칠한다. 「행 단위 그룹
+   * 카드」의 그룹 섹션과 「행별 척도」의 타일 그룹이 같이 쓴다.
+   */
+  const renderChoiceTile = (choiceCell: TableCell, fallbackLabel: string) => {
+    const { checked, disabled, option } = getChoiceCellState(choiceCell);
+    const tileLabel = option?.label ?? '';
+    return (
+      <label
+        key={choiceCell.id}
+        data-cell-id={choiceCell.id}
+        className={cn(
+          'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+          checked ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white text-gray-800',
+          disabled && 'cursor-default opacity-50',
+        )}
+      >
+        {renderMobileChoiceInput(choiceCell, tileLabel || fallbackLabel)}
+        {tileLabel && <span className="leading-snug">{tileLabel}</span>}
+      </label>
+    );
+  };
+
   const renderMobileChoiceInput = (choiceCell: TableCell, ariaLabel: string) => {
     const { checked, disabled } = getChoiceCellState(choiceCell);
     // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
@@ -711,7 +751,7 @@ export function ChoiceTableResponse({
     /** 행 단위 그룹 카드 — 카드 안을 보기 그룹(축)별 섹션으로 나누고 구분 셀을 제목·설명으로 항상 보인다 */
     grouped = false,
   ) => (
-    <div className={perRow && !grouped ? 'space-y-3' : 'space-y-2'}>
+    <div className={perRow ? 'space-y-3' : 'space-y-2'}>
       {rows.flatMap((row) => {
         const choiceCells = row.cells.filter((c) => c.type === 'choice_opt' && !c.isHidden);
         // 보기 셀이 아닌 인터랙티브 셀(단답 input·선택형 컨트롤) — 행 단위 카드에서만 그린다.
@@ -801,47 +841,33 @@ export function ChoiceTableResponse({
             headerText && headerCell ? headerCell : (firstOption ?? choiceCells[0]!);
           const anyChecked = choiceCells.some((c) => getChoiceCellState(c).checked);
           const allDisabled = choiceCells.every((c) => getChoiceCellState(c).disabled);
-          // 그룹 카드의 제목 — 구분 셀 첫 줄은 제목, 나머지 줄은 설명(작은 회색)으로 항상 보인다.
-          const breakAt = grouped ? cardLabel.indexOf('\n') : -1;
-          const groupedTitle = breakAt === -1 ? cardLabel : cardLabel.slice(0, breakAt);
-          const groupedDesc = breakAt === -1 ? '' : cardLabel.slice(breakAt + 1).trim();
+          // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
+          // 제목과 본문에 같은 내용이 두 번 나온다.
+          const displayCells = headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells;
           return [
+            // 그룹 카드도 행 카드와 같은 고정 머리 — 구분 셀을 줄 단위로 제목·설명으로 가르지 않고
+            // 서식본(contentHtml)까지 그대로 둔다. 둘째 줄을 회색 설명으로 내리면 셀 편집기에서
+            // 준 강조가 사라지고, 긴 카드를 스크롤할 때 어느 행인지 놓친다.
             <MobileOptionCard
               key={row.id}
-              variant={grouped ? 'option' : 'section'}
+              variant="section"
               testId={`row-card-${row.id}`}
               label={
-                grouped ? (
-                  <span
-                    className={getCellTextClassName(labelStyleSource)}
-                    style={getCellTextStyle(labelStyleSource)}
-                  >
-                    <span>{groupedTitle}</span>
-                    {groupedDesc && (
-                      <span className="mt-1 block text-[13px] leading-snug font-normal whitespace-pre-line text-gray-500">
-                        {groupedDesc}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span
-                    className={getCellTextClassName(labelStyleSource)}
-                    style={getCellTextStyle(labelStyleSource)}
-                  >
-                    <CellText
-                      text={cardLabel}
-                      html={
-                        headerText && headerCell
-                          ? resolveCellTextHtml(headerCell, attrs, quotes)
-                          : undefined
-                      }
-                    />
-                  </span>
-                )
+                <span
+                  className={getCellTextClassName(labelStyleSource)}
+                  style={getCellTextStyle(labelStyleSource)}
+                >
+                  <CellText
+                    text={cardLabel}
+                    html={
+                      headerText && headerCell
+                        ? resolveCellTextHtml(headerCell, attrs, quotes)
+                        : undefined
+                    }
+                  />
+                </span>
               }
-              // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
-              // 제목과 본문에 같은 내용이 두 번 나온다.
-              cells={headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells}
+              cells={displayCells}
               selected={anyChecked}
               disabled={allDisabled}
               footer={
@@ -852,7 +878,13 @@ export function ChoiceTableResponse({
                   {grouped ? (
                     // 그룹별 섹션 — 축 이름 제목 + 그 그룹의 보기 타일(라벨은 보기 텍스트).
                     // 같은 행에 그룹이 없는 셀(미소속)은 마지막 섹션(제목 없음)으로 모은다.
-                    <div className="space-y-3 border-t border-gray-100 pt-3">
+                    <div
+                      className={cn(
+                        'space-y-3',
+                        // 설명 셀이 있을 때만 구분선 — 없으면 머리의 경계선 바로 아래 선이 겹친다
+                        hasMobileDisplayCells(displayCells) && 'border-t border-gray-100 pt-3',
+                      )}
+                    >
                       {groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
                         const group = (question.choiceGroups ?? []).find((g) => g.id === groupId);
                         const sectionLabel = resolveChoiceGroupSectionLabel(
@@ -863,6 +895,22 @@ export function ChoiceTableResponse({
                         // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
                         // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
                         const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
+                        // 그룹 보기 모양 — 척도 막대 / 원본 한 줄(막대 폴백 포함) / 세로 타일.
+                        // 선택 방식은 쓰기와 같은 판정(getGroupTypeOfCell)이라 복수 선택 그룹은 폴백이다.
+                        const view = projectChoiceGroupSectionView({
+                          group,
+                          selectionType: getGroupTypeOfCell(question, cells[0]!.id),
+                          columns: rowWiseLayout.columns,
+                          headerGrid: rowWiseLayout.headerGrid,
+                          hideColumnLabels: question.hideColumnLabels ?? false,
+                          row,
+                          groupCells: cells,
+                        });
+                        const selectedInGroup = cells.find((c) => getChoiceCellState(c).checked)?.id;
+                        // 세로 타일과 같은 비활성 판정(문항 최대 선택 수) — 막대 칸도 누를 수 없다
+                        const disabledInGroup = new Set(
+                          cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id),
+                        );
                         return (
                           <div
                             key={groupId ?? '__none__'}
@@ -872,7 +920,22 @@ export function ChoiceTableResponse({
                               unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                             )}
                           >
-                            {sectionLabel && (
+                            {view.kind === 'scale-bar' ? (
+                              // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다. 쓰기는 세로
+                              // 타일과 같은 이 문항의 보기 선택 쓰기 — 그룹 맵에 원래 보기 칸 id
+                              <ChoiceGroupScaleBar
+                                questionId={question.id}
+                                barId={view.group.id}
+                                model={view.model}
+                                label={sectionLabel}
+                                ariaLabel={view.group.label}
+                                invalid={unfilled}
+                                selectedCellId={selectedInGroup}
+                                onToggleCell={(cellId) => toggle(cellId, cellId !== selectedInGroup)}
+                                disabledCellIds={disabledInGroup}
+                                inputIdScope={row.id}
+                              />
+                            ) : sectionLabel ? (
                               <p
                                 className={cn(
                                   'text-[13px] font-semibold',
@@ -881,32 +944,31 @@ export function ChoiceTableResponse({
                               >
                                 {sectionLabel}
                               </p>
+                            ) : null}
+                            {view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
+                              <div data-testid={`choice-group-original-line-${groupId}`}>
+                                <MobileOriginalRowTable
+                                  columns={view.line.columns}
+                                  rows={[view.line.row]}
+                                  interactiveRowId={view.line.row.id}
+                                  headerGrid={view.line.headerGrid}
+                                  hideColumnLabels={!view.line.showColumnHeader}
+                                  choiceControlType={group?.type === 'checkbox' ? 'checkbox' : 'radio'}
+                                  instanceScope={`${row.id}-${groupId}`}
+                                  renderCell={(cell) =>
+                                    renderSelectedRowCell(cell, `${row.id}-${groupId}`)
+                                  }
+                                />
+                              </div>
+                            ) : (
+                              /* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
+                                순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */
+                              <div className="flex flex-col gap-2">
+                                {cells.map((choiceCell) =>
+                                  renderChoiceTile(choiceCell, cardLabel),
+                                )}
+                              </div>
                             )}
-                            {/* 타일은 세로 한 줄씩 — 가로로 접으면 휴대폰 폭에서 2열이 되어 척도
-                                순서(전혀 필요 없음 → 매우 필요함)가 지그재그로 읽힌다. */}
-                            <div className="flex flex-col gap-2">
-                              {cells.map((choiceCell) => {
-                                const { checked, disabled, option } =
-                                  getChoiceCellState(choiceCell);
-                                const tileLabel = option?.label ?? '';
-                                return (
-                                  <label
-                                    key={choiceCell.id}
-                                    data-cell-id={choiceCell.id}
-                                    className={cn(
-                                      'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
-                                      checked
-                                        ? 'border-blue-300 bg-blue-50 text-blue-900'
-                                        : 'border-gray-200 bg-white text-gray-800',
-                                      disabled && 'cursor-default opacity-50',
-                                    )}
-                                  >
-                                    {renderMobileChoiceInput(choiceCell, tileLabel || cardLabel)}
-                                    {tileLabel && <span className="leading-snug">{tileLabel}</span>}
-                                  </label>
-                                );
-                              })}
-                            </div>
                           </div>
                         );
                       })}
@@ -921,7 +983,7 @@ export function ChoiceTableResponse({
                         ).length;
                         const axisLabel =
                           sameGroupCount > 1
-                            ? option?.label ?? ''
+                            ? (option?.label ?? '')
                             : resolveChoiceAxisLabel(row, choiceCell);
                         // 「다음」을 누른 뒤 답하지 않은 필수 그룹의 타일은 붉게 — 데스크톱 표의 보기
                         // 그룹 외곽선·그룹 카드 섹션과 같은 판정(unfilledGroupCellIds).
@@ -1175,7 +1237,7 @@ export function ChoiceTableResponse({
    * 컴포넌트의 수동 메모이제이션을 보존하지 못한다(preserve-manual-memoization 경고).
    */
   const rowWiseOriginalModel = useMemo(() => {
-    if (mobileMode !== 'row-wise-original') return { sections: [] };
+    if (!isRowWiseMobileTableDisplayMode(mobileMode)) return { sections: [] };
     const columns = question.tableColumns ?? [];
     const rows = question.tableRowsData ?? [];
     const model = buildMobileRowWiseOriginalModel({
@@ -1214,6 +1276,18 @@ export function ChoiceTableResponse({
       })),
     };
   }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  const rowScaleLayouts = useMemo(
+    () =>
+      mobileMode === 'row-wise-scale'
+        ? projectRowWiseScaleLayouts(
+            rowWiseOriginalModel,
+            question.choiceGroups ?? [],
+            resolveUngroupedSelectionType(question.type),
+          )
+        : new Map<string, RowScaleLayout>(),
+    [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel],
+  );
 
   const confirmDynamicRows = (rowIds: string[]) => {
     if (!activeDynamicGroupId || !onDynamicRowSelectionChange) return;
@@ -1255,7 +1329,7 @@ export function ChoiceTableResponse({
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
     renderCell(cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell, true, inputIdScope);
 
-  if (isMobile && mobileMode === 'row-wise-original') {
+  if (isMobile && isRowWiseMobileTableDisplayMode(mobileMode)) {
     return (
       <div className="space-y-2">
         {rowWiseLayout.configs.length > 0 && onDynamicRowSelectionChange ? (
@@ -1298,6 +1372,41 @@ export function ChoiceTableResponse({
                 : 'radio'
           }
           renderCell={(cell, _question, inputIdScope) => renderSelectedRowCell(cell, inputIdScope)}
+          scaleLayoutByRowId={rowScaleLayouts}
+          renderGroupTiles={(group, cells, rowQuestion, { sharesRow }) => {
+            const label = sharesRow ? substituteTokens(group.label, attrs, quotes) : '';
+            return (
+              <RowTileSection
+                label={label}
+                ariaLabel={label || rowQuestion.title}
+                invalid={cells.some((c) => unfilledGroupCellIds.has(c.id))}
+              >
+                {cells.map((choiceCell) => renderChoiceTile(choiceCell, rowQuestion.title))}
+              </RowTileSection>
+            );
+          }}
+          renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) => {
+            // 쓰기는 세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id
+            const selected = bar.cells.find((c) => getChoiceCellState(c).checked)?.id;
+            const groupLabel = bar.group?.label ?? '';
+            return (
+              <ChoiceGroupScaleBar
+                questionId={question.id}
+                barId={bar.key}
+                model={bar.model}
+                // 행 제목이 위에 있다 — 행에 막대·조각이 여럿일 때만 그룹 이름으로 가른다
+                label={sharesRow ? substituteTokens(groupLabel, attrs, quotes) : ''}
+                ariaLabel={sharesRow ? groupLabel || rowQuestion.title : rowQuestion.title}
+                invalid={bar.cells.some((c) => unfilledGroupCellIds.has(c.id))}
+                selectedCellId={selected}
+                onToggleCell={(cellId) => toggle(cellId, cellId !== selected)}
+                disabledCellIds={
+                  new Set(bar.cells.filter((c) => getChoiceCellState(c).disabled).map((c) => c.id))
+                }
+                inputIdScope={inputIdScope}
+              />
+            );
+          }}
         />
         {counter}
         {activeDynamicGroupId ? (

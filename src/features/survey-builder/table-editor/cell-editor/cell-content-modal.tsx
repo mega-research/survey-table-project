@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
+import { resolveChoiceGroupMobileView } from '@/features/question-renderer/utils/choice-group-mobile-view';
 import {
   AnswerQuoteQuestionControl,
 } from '@/features/survey-builder/answer-quote-fields';
@@ -38,12 +39,14 @@ import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
+import { diagnoseChoiceGroupScaleBar } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import {
   type ContentType,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
+  buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
@@ -78,6 +81,15 @@ import { CellGatingEditor } from './cell-gating-editor';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
+import { countColumnDistinctGroupTargets } from '../utils/column-distinct-group';
+import {
+  type CellSaveOptions,
+  countColumnMobileDisplayTargets,
+} from '../utils/column-mobile-display';
+import {
+  DISTINCT_GROUP_WARNING_MESSAGES,
+  diagnoseDistinctGroup,
+} from '@/features/survey-builder/lib/distinct-group-diagnostics';
 import { commitCellEdit } from './commit-cell-edit';
 import { validateCellEdit } from './validate-cell-edit';
 import { CellIdentityFields } from './cell-identity-fields';
@@ -96,7 +108,11 @@ interface CellContentModalProps {
    * 동기화시킨 변경 쌍들(순서대로) — 상위(dynamic-table-editor/use-table-editor)가
    * 같은 커밋 안에서 이 셀을 controllerCellId 로 참조하는 게이팅을 리매핑하는 데 쓴다.
    */
-  onSave: (cell: TableCell, valueChanges?: { oldValue: string; newValue: string }[]) => void;
+  onSave: (
+    cell: TableCell,
+    valueChanges?: { oldValue: string; newValue: string }[],
+    options?: CellSaveOptions,
+  ) => void;
   /**
    * 이 셀을 소유한 질문(표) — 계산 탭·검증 토글의 FormulaExprEditor 가 같은 질문 셀 참조 픽커에
    * 사용한다. 에디터의 실시간 편집 상태(currentQuestionAsQuestion)를 그대로 받아야
@@ -190,6 +206,7 @@ export function CellContentModal({
     checkboxOptions,
     radioOptions,
     radioGroupName,
+    distinctGroup,
     selectOptions,
     allowOtherOption,
     cellOptionsColumns,
@@ -258,6 +275,7 @@ export function CellContentModal({
     setCheckboxOptions,
     setRadioOptions,
     setRadioGroupName,
+    setDistinctGroup,
     setSelectOptions,
     setAllowOtherOption,
     setCellOptionsColumns,
@@ -323,10 +341,16 @@ export function CellContentModal({
   const [editChoiceGroups, setEditChoiceGroups] = useState<ChoiceGroup[]>(
     () => choiceGroupsProp ?? [],
   );
+  // 「같은 열의 다른 표시 셀에도 적용」 체크 — 셀이 아니라 이번 저장에만 속한 값이라 폼 밖에 둔다.
+  const [mobileDisplayColumnWide, setMobileDisplayColumnWide] = useState(false);
+  // 「같은 열의 다른 선택 칸에도 적용」(중복 불가 묶음) — 같은 이유로 폼 밖에 둔다.
+  const [distinctGroupColumnWide, setDistinctGroupColumnWide] = useState(false);
   const choiceGroupsResetKey = isOpen ? (cell?.id ?? '') : null;
   const [prevChoiceGroupsResetKey, setPrevChoiceGroupsResetKey] = useState<string | null>(null);
   if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
     setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
+    setMobileDisplayColumnWide(false);
+    setDistinctGroupColumnWide(false);
     if (isOpen) {
       const storeQuestion = readBuilderState().currentSurvey.questions.find(
         (q) => q.id === currentQuestionId,
@@ -349,6 +373,20 @@ export function CellContentModal({
     () => collapseRepeatRows(getLatestRows?.() ?? ownQuestion.tableRowsData ?? []),
     [getLatestRows, ownQuestion.tableRowsData],
   );
+  // 중복 불가 묶음 — 같은 열의 다른 선택 칸 수(일괄 적용 대상)와, 동작하지 않는 설정 안내.
+  // 유형을 선택 칸으로 두었을 때만 뜻이 있다.
+  const distinctGroupColumnCount =
+    cell && contentType === 'select' ? countColumnDistinctGroupTargets(gatingRows, cell.id) : 0;
+  const distinctGroupWarning =
+    cell && contentType === 'select'
+      ? diagnoseDistinctGroup({
+          rows: gatingRows,
+          cellId: cell.id,
+          name: distinctGroup,
+          selectOptions,
+          applyToColumn: distinctGroupColumnWide,
+        })
+      : null;
   // 보기 소스 표인가 — 보기 옵션 셀이 하나라도 있으면. (문항 type 으로 판정하면 안 된다: 표
   // 편집기가 넘기는 ownQuestion 은 type 이 늘 'table' 이다.)
   const isChoiceSourceTable = useMemo(
@@ -372,6 +410,38 @@ export function CellContentModal({
     }
     return counts;
   })();
+
+  // 「척도 막대」 폴백 진단 — 응답 화면과 같은 투영을 이 셀의 편집 중 값(그룹·상세기재·단독 선택)을
+  // 반영한 표에 돌린다. 저장 전 토글도 곧바로 경고에 보이게 한다.
+  // 보기 모양이 척도 막대일 때만 돈다 — 경고가 그때만 보인다.
+  const scaleBarGroup =
+    contentType === 'choice_opt'
+      ? editChoiceGroups.find((group) => group.id === form.choiceGroupId)
+      : undefined;
+  const scaleBarIssues = useMemo(
+    () =>
+      scaleBarGroup && resolveChoiceGroupMobileView(scaleBarGroup) === 'scale-bar'
+        ? diagnoseChoiceGroupScaleBar({
+            group: scaleBarGroup,
+            rows: gatingRows.map((row) => ({
+              ...row,
+              cells: row.cells.map((c) => (c.id === cell.id ? buildUpdatedCell(form, cell) : c)),
+            })),
+            columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
+            headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
+          })
+        : [],
+    [
+      cell,
+      form,
+      gatingRows,
+      getLatestColumns,
+      getLatestHeaderGrid,
+      ownQuestion.tableColumns,
+      ownQuestion.tableHeaderGrid,
+      scaleBarGroup,
+    ],
+  );
 
   // 자동생성 셀코드/라벨 계산
   const autoCellCode = generateCellCode(questionCode, rowCode, columnCode);
@@ -422,6 +492,10 @@ export function CellContentModal({
           remapOptionValueInConditions,
           onSave,
           onChoiceGroupsChange,
+          // 체크한 뒤 셀 유형을 바꾸면 체크가 화면에서 사라진 채 남는다 — 그때는 적용하지 않는다
+          mobileDisplayColumnWide: mobileDisplayColumnWide && contentType === cell.type,
+          // 묶음 이름은 선택 칸 전용 — 체크한 뒤 유형을 바꿨으면 적용하지 않는다
+          distinctGroupColumnWide: distinctGroupColumnWide && contentType === 'select',
         }),
       {
         onError: (error) => {
@@ -777,6 +851,16 @@ export function CellContentModal({
                   change,
                 ];
               }}
+              distinctGroup={{
+                name: distinctGroup,
+                onNameChange: setDistinctGroup,
+                applyToColumn: distinctGroupColumnWide,
+                onApplyToColumnChange: setDistinctGroupColumnWide,
+                columnApplyCount: distinctGroupColumnCount,
+                warning: distinctGroupWarning
+                  ? DISTINCT_GROUP_WARNING_MESSAGES[distinctGroupWarning]
+                  : undefined,
+              }}
             />
           </TabsContent>
 
@@ -831,6 +915,8 @@ export function CellContentModal({
               onSpssNumericCodeChange={setCellSpssNumericCode}
               isOtherRankingCell={isOtherRankingCell}
               onIsOtherRankingCellChange={setIsOtherRankingCell}
+              allowTextInput={choiceAllowTextInput}
+              onAllowTextInputChange={setChoiceAllowTextInput}
               choiceGroups={editChoiceGroups}
               groupMemberCounts={groupMemberCounts}
               choiceGroupId={choiceGroupId}
@@ -869,6 +955,7 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              scaleBarIssues={scaleBarIssues}
               questionRequired={ownQuestion.required}
               answerQuoteEnabled={answerQuoteEnabled}
               answerQuoteText={answerQuoteText}
@@ -949,7 +1036,7 @@ export function CellContentModal({
                   <Input
                     value={calcValidationErrorMessage}
                     onChange={(e) => setCalcValidationErrorMessage(e.target.value)}
-                    placeholder="위반 시 표시할 문구 (비우면 기본 문구, 기준값 미노출)"
+                    placeholder="위반 시 표시할 문구 (비우면 기본 문구) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜"
                   />
                 </>
               ) : null}
@@ -1042,6 +1129,17 @@ export function CellContentModal({
           columnLabel={columnLabel}
           showContentMobileDisplay={showContentMobileDisplay}
           showInteractiveMobileLabel={showInteractiveMobileLabel}
+          // 유형을 바꾸는 중이면 저장 전 유형과 열의 셀 유형이 어긋나 대상 수가 틀리므로 숨긴다
+          columnApplyCount={
+            cell && contentType === cell.type
+              ? countColumnMobileDisplayTargets(
+                  getLatestRows?.() ?? ownQuestion.tableRowsData ?? [],
+                  cell.id,
+                )
+              : 0
+          }
+          applyToColumn={mobileDisplayColumnWide}
+          onApplyToColumnChange={setMobileDisplayColumnWide}
         />
 
         <div className="mt-6 border-t border-gray-200 pt-6">

@@ -450,3 +450,289 @@ describe('decideDrilldown', () => {
     expect(d.useDrilldown).toBe(false);
   });
 });
+
+// ── 묶음 머리 · 설명 셀 (readMobileDisplay) ──
+describe('classifyTable — 들여쓰기 표시 셀 · 묶음 머리 · 설명 셀', () => {
+  const CALC = (id: string): TableCell => ({
+    id,
+    type: 'calc',
+    content: '',
+    formula: { kind: 'cell', cellId: 'x' },
+  });
+  const TX = (id: string, content: string, o: Partial<TableCell> = {}): TableCell => ({
+    id,
+    type: 'text',
+    content,
+    ...o,
+  });
+  const cols = () => [C('직업 분류'), C('직업 분류'), C('설명'), C('상용'), C('임시'), C('합계')];
+  // 맨 윗줄 행: 제목이 좁은 칸 + 라벨 칸을 가로 병합
+  const topRow = (key: string, title: string, o: { calcOnly?: boolean; desc?: Partial<TableCell> } = {}): TableRow => ({
+    id: key,
+    label: '',
+    cells: [
+      TX(`${key}-title`, title, { colspan: 2 }),
+      H(),
+      TX(`${key}-desc`, `${title} 설명\n둘째 줄`, o.desc),
+      o.calcOnly ? CALC(`${key}-a`) : I(`${key}-a`),
+      o.calcOnly ? CALC(`${key}-b`) : I(`${key}-b`),
+      CALC(`${key}-sum`),
+    ],
+  });
+  const childRow = (key: string, title: string, first: TableCell): TableRow => ({
+    id: key,
+    label: '',
+    cells: [
+      first,
+      TX(`${key}-title`, title),
+      TX(`${key}-desc`, `${title} 설명`, { mobileDisplay: 'collapsed' }),
+      I(`${key}-a`),
+      I(`${key}-b`),
+      CALC(`${key}-sum`),
+    ],
+  });
+  const marker = (o: Partial<TableCell> = {}): TableCell =>
+    TX('marker', '', { rowspan: 3, mobileDisplay: 'hidden', ...o });
+  const jobs = (o: { marker?: TableCell; r3?: TableRow } = {}): TableRow[] => [
+    topRow('r1', '1. 관리자', { desc: { mobileDisplay: 'collapsed' } }),
+    o.r3 ?? topRow('r3', '3. 개발자', { calcOnly: true, desc: { mobileDisplay: 'inline' } }),
+    childRow('r31', '3-1. 설계', o.marker ?? marker()),
+    childRow('r32', '3-2. SW', H()),
+    childRow('r33', '3-3. HW', H()),
+    topRow('rt', '합계', { calcOnly: true }),
+  ];
+  const run = (rows: TableRow[], authoredRows: TableRow[] = rows) =>
+    classifyTable({
+      tableColumns: cols(),
+      tableRowsData: rows,
+      authoredRows,
+      includeCalcOnlyLeaves: true,
+      readMobileDisplay: true,
+    });
+  const brief = (rows: TableRow[], authoredRows?: TableRow[]) =>
+    run(rows, authoredRows).map((s) => [s.label, s.role, s.groupHeadRowId ?? null]);
+
+  it('빈 숨김 셀이 덮는 행은 각자 섹션이 되고 윗행(계산 전용)이 묶음 머리가 된다', () => {
+    expect(brief(jobs())).toEqual([
+      ['1. 관리자', 'default', null],
+      ['3. 개발자', 'group-head', 'r3'],
+      ['3-1. 설계', 'default', 'r3'],
+      ['3-2. SW', 'default', 'r3'],
+      ['3-3. HW', 'default', 'r3'],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('쪼갠 섹션은 식별자가 서로 다르고 리프를 하나씩 갖는다', () => {
+    const children = run(jobs()).filter((s) => s.groupHeadRowId === 'r3' && s.role === 'default');
+    expect(new Set(children.map((s) => s.identity)).size).toBe(3);
+    expect(children.map((s) => s.leaves.map((l) => l.rowId))).toEqual([['r31'], ['r32'], ['r33']]);
+    expect(children.map((s) => s.totalInputs)).toEqual([2, 2, 2]);
+  });
+
+  it('설명 셀은 제목 후보에서 빠지고 리프의 설명으로 실린다', () => {
+    const sections = run(jobs());
+    const leaf = sections[0]!.leaves[0]!;
+    expect(leaf.label).toBe('1. 관리자');
+    expect(leaf.descriptionCellIds).toEqual(['r1-desc']);
+    expect(sections[2]!.leaves[0]!.label).toBe('3-1. 설계');
+    expect(sections[2]!.leaves[0]!.descriptionCellIds).toEqual(['r31-desc']);
+  });
+
+  it('모바일 표시를 지정하지 않은 글자 셀은 설명이 아니다 — 기존처럼 가장 오른쪽 글자가 제목', () => {
+    const leaf = run(jobs()).at(-1)!.leaves[0]!;
+    expect(leaf.descriptionCellIds).toEqual([]);
+    expect(leaf.label).toBe('합계 설명\n둘째 줄');
+  });
+
+  it('세로 병합된 설명 셀은 덮인 행 모두의 설명이다', () => {
+    const rows = jobs();
+    rows[2]!.cells[2] = TX('shared-desc', '공통 설명', { rowspan: 2, mobileDisplay: 'inline' });
+    rows[3]!.cells[2] = H();
+    const sections = run(rows);
+    expect(sections[2]!.leaves[0]!.descriptionCellIds).toEqual(['shared-desc']);
+    expect(sections[3]!.leaves[0]!.descriptionCellIds).toEqual(['shared-desc']);
+    expect(sections[3]!.leaves[0]!.label).toBe('3-2. SW');
+  });
+
+  it('모바일 표시를 지정한 적 없는 빈 병합 셀도 들여쓰기 표시다 — 글자 셀의 기본값이 숨기기', () => {
+    expect(brief(jobs({ marker: TX('marker', '', { rowspan: 3 }) })).map(([label]) => label)).toEqual([
+      '1. 관리자', '3. 개발자', '3-1. 설계', '3-2. SW', '3-3. HW', '합계',
+    ]);
+  });
+
+  it('빈 병합 셀에 숨기기가 아닌 표시를 걸면 지금처럼 한 섹션으로 뭉친다', () => {
+    expect(brief(jobs({ marker: marker({ mobileDisplay: 'header' }) }))).toEqual([
+      ['1. 관리자', 'default', null],
+      ['3. 개발자', 'calc-summary', null],
+      ['', 'default', null],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('하위에 입력 행이 없으면(계산 행 아래의 계산 행) 묶음이 아니다', () => {
+    const rows: TableRow[] = [
+      topRow('r1', '1. 관리자'),
+      topRow('rs', '소계', { calcOnly: true }),
+      {
+        id: 'rt',
+        label: '',
+        cells: [TX('blank', ''), TX('rt-title', '합계'), TX('rt-desc', ''), CALC('rt-a'), CALC('rt-b'), CALC('rt-sum')],
+      },
+    ];
+    expect(brief(rows)).toEqual([
+      ['1. 관리자', 'default', null],
+      ['소계', 'calc-summary', null],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('내용이 있는 병합 셀은 숨기기를 걸어도 쪼개지 않는다', () => {
+    const out = brief(jobs({ marker: marker({ content: '하위' }) }));
+    expect(out).toHaveLength(4);
+    expect(out[2]).toEqual(['하위', 'default', null]);
+  });
+
+  it('윗행에 입력칸이 있으면 묶음 없이 평평하다', () => {
+    expect(brief(jobs({ r3: topRow('r3', '3. 개발자') }))).toEqual([
+      ['1. 관리자', 'default', null],
+      ['3. 개발자', 'default', null],
+      ['3-1. 설계', 'default', null],
+      ['3-2. SW', 'default', null],
+      ['3-3. HW', 'default', null],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('들여쓰기 표시 셀이 표 맨 위면 묶음 없이 평평하다', () => {
+    const rows = jobs().slice(2);
+    expect(brief(rows).slice(0, 3)).toEqual([
+      ['3-1. 설계', 'default', null],
+      ['3-2. SW', 'default', null],
+      ['3-3. HW', 'default', null],
+    ]);
+  });
+
+  it('윗행이 다른 세로 병합 묶음의 일부면 머리가 되지 않는다', () => {
+    const rows = jobs();
+    rows[0]!.cells[0] = TX('merged', '위 묶음', { rowspan: 2 });
+    rows[1]!.cells[0] = H();
+    const out = brief(rows);
+    expect(out.every(([, role]) => role !== 'group-head')).toBe(true);
+    expect(out.slice(1, 4).map(([label]) => label)).toEqual(['3-1. 설계', '3-2. SW', '3-3. HW']);
+  });
+
+  it('하위가 일부만 보이면 남은 하위만 머리에 소속된다', () => {
+    const authored = jobs();
+    // 3-1 이 표시조건으로 빠지면 병합 시작 셀이 다음 가시 행으로 올라온다(id 유지)
+    const visible = [authored[0]!, authored[1]!, childRow('r32', '3-2. SW', marker({ rowspan: 2 })), authored[4]!, authored[5]!];
+    expect(brief(visible, authored)).toEqual([
+      ['1. 관리자', 'default', null],
+      ['3. 개발자', 'group-head', 'r3'],
+      ['3-2. SW', 'default', 'r3'],
+      ['3-3. HW', 'default', 'r3'],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('하위가 전부 숨겨지면 머리도 빠진다', () => {
+    const authored = jobs();
+    const visible = [authored[0]!, authored[1]!, authored[5]!];
+    expect(brief(visible, authored)).toEqual([
+      ['1. 관리자', 'default', null],
+      ['합계', 'calc-summary', null],
+    ]);
+  });
+
+  it('들여쓰기 표시 셀이 두 군데면 묶음도 둘이다', () => {
+    const rows = [
+      ...jobs().slice(0, 5),
+      topRow('r5', '5. 분석', { calcOnly: true }),
+      childRow('r51', '5-1. 통계', TX('marker2', '', { rowspan: 2, mobileDisplay: 'hidden' })),
+      childRow('r52', '5-2. 시각화', H()),
+    ];
+    const out = brief(rows);
+    expect(out.filter(([, role]) => role === 'group-head').map(([, , head]) => head)).toEqual(['r3', 'r5']);
+    expect(out.slice(-2)).toEqual([
+      ['5-1. 통계', 'default', 'r5'],
+      ['5-2. 시각화', 'default', 'r5'],
+    ]);
+  });
+
+  it('목차 열이 아닌 열의 빈 글자 셀은 묶음과 무관하다 — 윗행(계산 전용)이 사라지지 않는다', () => {
+    const rows = [
+      topRow('r1', '1. 관리자'),
+      topRow('rt', '소계', { calcOnly: true }),
+      topRow('r2', '2. 컨설턴트'),
+    ];
+    rows[2]!.cells[2] = TX('blank-desc', '', { mobileDisplay: 'hidden' });
+    expect(brief(rows).map(([label, role]) => [label, role])).toEqual([
+      ['1. 관리자', 'default'],
+      ['소계', 'calc-summary'],
+      ['2. 컨설턴트', 'default'],
+    ]);
+  });
+
+  it('조건부로 숨은 열이 있어도 저작 행의 목차 열을 열 id 로 찾는다', () => {
+    const visibleCols = cols();
+    const authoredCols = [C('숨은 열'), ...visibleCols];
+    const authored = jobs().map((row) => ({ ...row, cells: [TX(`${row.id}-x`, 'x'), ...row.cells] }));
+    const sections = classifyTable({
+      tableColumns: visibleCols,
+      tableRowsData: jobs(),
+      authoredRows: authored,
+      authoredColumns: authoredCols,
+      includeCalcOnlyLeaves: true,
+      readMobileDisplay: true,
+    });
+    expect(sections.map((s) => s.role)).toEqual([
+      'default', 'group-head', 'default', 'default', 'default', 'calc-summary',
+    ]);
+  });
+
+  it('하위 행 안에 또 다른 라벨 병합이 있어도 행마다 섹션이 되고 제목은 가장 오른쪽 라벨이다', () => {
+    const wide = [C('들여쓰기'), C('중분류'), C('소분류'), C('상용'), C('임시')];
+    const rows: TableRow[] = [
+      { id: 'h', label: '', cells: [TX('h-t', '3. 개발자', { colspan: 3 }), H(), H(), CALC('h-a'), CALC('h-b')] },
+      { id: 'a', label: '', cells: [TX('m', '', { rowspan: 2 }), TX('mid', 'SW', { rowspan: 2 }), TX('a-t', '백엔드'), I('a-a'), I('a-b')] },
+      { id: 'b', label: '', cells: [H(), H(), TX('b-t', '프런트'), I('b-a'), I('b-b')] },
+    ];
+    const sections = classifyTable({
+      tableColumns: wide,
+      tableRowsData: rows,
+      includeCalcOnlyLeaves: true,
+      readMobileDisplay: true,
+    });
+    expect(sections.map((s) => [s.label, s.role, s.groupHeadRowId])).toEqual([
+      ['3. 개발자', 'group-head', 'h'],
+      ['백엔드', 'default', 'h'],
+      ['프런트', 'default', 'h'],
+    ]);
+    expect(sections[1]!.leaves[0]!.subGroup).toBe('SW');
+  });
+
+  it('동적 행 앵커가 병합을 갈라 뒤 세그먼트가 자리 채움 셀로 시작해도 같은 머리에 소속된다', () => {
+    const authored = jobs();
+    // 뒤 세그먼트: r33 의 자리 채움 셀(id 유지)이 병합 시작 셀로 승격된 모양
+    const placeholderId = authored[4]!.cells[0]!.id;
+    const visible = [
+      authored[0]!,
+      authored[1]!,
+      childRow('r31', '3-1. 설계', marker({ rowspan: 1 })),
+      childRow('r33', '3-3. HW', TX(placeholderId, '', { mobileDisplay: 'hidden' })),
+      authored[5]!,
+    ];
+    expect(brief(visible, authored).slice(1, 4)).toEqual([
+      ['3. 개발자', 'group-head', 'r3'],
+      ['3-1. 설계', 'default', 'r3'],
+      ['3-3. HW', 'default', 'r3'],
+    ]);
+  });
+
+  it('옵션을 켜지 않으면(보기 소스 표 드릴다운 등) 결과가 종전과 같다', () => {
+    const sections = classifyTable({ tableColumns: cols(), tableRowsData: jobs(), includeCalcOnlyLeaves: true });
+    expect(sections.map((s) => s.label)).toEqual(['1. 관리자', '3. 개발자', '', '합계']);
+    expect(sections.every((s) => s.role === 'default' && s.groupHeadRowId === undefined)).toBe(true);
+    expect(sections[0]!.leaves[0]!.label).toBe('1. 관리자 설명\n둘째 줄');
+  });
+});

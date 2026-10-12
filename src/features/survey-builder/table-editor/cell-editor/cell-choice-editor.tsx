@@ -73,6 +73,24 @@ export interface CellChoiceEditorProps {
    * 게이팅(enabledWhen)을 저장 시점에 함께 리매핑하는 데 사용한다.
    */
   onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
+
+  /**
+   * 중복 불가 묶음 (select 전용, CONTEXT.md "중복 불가 묶음") — 같은 이름의 선택 칸끼리는
+   * 같은 보기를 두 번 고를 수 없다. 표 편집 모달만 넘긴다.
+   */
+  distinctGroup?:
+    | {
+        name: string;
+        onNameChange: (name: string) => void;
+        /** 「같은 열의 다른 선택 칸에도 적용」 체크 — 저장할 때 함께 반영된다 */
+        applyToColumn: boolean;
+        onApplyToColumnChange: (checked: boolean) => void;
+        /** 같은 열의 다른 선택 칸 수 — 0 이면 체크를 보이지 않는다 */
+        columnApplyCount: number;
+        /** 동작하지 않는 설정 안내 (묶음에 칸이 하나뿐 등) */
+        warning?: string | undefined;
+      }
+    | undefined;
 }
 
 export function CellChoiceEditor({
@@ -95,6 +113,7 @@ export function CellChoiceEditor({
   maxSelections,
   onMaxSelectionsChange,
   onOptionValueChange,
+  distinctGroup,
 }: CellChoiceEditorProps) {
   // 조건부 분기 토글 상태 (이 컴포넌트 내부에서만 사용)
   const [showBranchSettings, setShowBranchSettings] = useState(false);
@@ -696,6 +715,37 @@ export function CellChoiceEditor({
   // --- select ---
   return (
     <div className="space-y-4">
+      {distinctGroup && (
+        <div className="space-y-2">
+          <Label htmlFor="select-distinct-group">중복 불가 묶음 이름</Label>
+          <Input
+            id="select-distinct-group"
+            value={distinctGroup.name}
+            onChange={(e) => distinctGroup.onNameChange(e.target.value)}
+            placeholder="비워 두면 중복을 막지 않습니다 (예: 수출국가-2025)"
+          />
+          <p className="text-xs text-gray-500">
+            같은 이름을 가진 선택 칸끼리는 같은 보기를 두 번 고를 수 없습니다. 다른 칸에서 고른
+            보기는 목록에 회색으로 남습니다.
+          </p>
+          {distinctGroup.columnApplyCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                checked={distinctGroup.applyToColumn}
+                onChange={(e) => distinctGroup.onApplyToColumnChange(e.target.checked)}
+              />
+              같은 열의 다른 선택 칸에도 적용 ({distinctGroup.columnApplyCount}개)
+            </label>
+          )}
+          {distinctGroup.warning && (
+            <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">
+              {distinctGroup.warning}
+            </p>
+          )}
+        </div>
+      )}
       <div className="space-y-4">
         <div className="flex items-start justify-between">
           <Label>Select 옵션 관리</Label>

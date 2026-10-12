@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -18,7 +19,7 @@ import {
   appendNewColumnsToScheme,
   getSchemeRouting,
 } from './scheme-helpers';
-import { validateXlsxFile } from '@/lib/contacts/upload-limits';
+import { emptyUploadProblem, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
   type PiiInput,
   buildPiiRows,
@@ -90,13 +91,20 @@ export async function parseExcelPreview(
     maxRows: 5,
   });
 
-  assertUploadRowLimit(result.totalRows, { operation: 'contact_upload_preview' });
+  // 숨겨진 행을 빼면 한도 안에 드는 파일은 통과시킨다 — 뺄지 말지는 다음 단계에서 정하고,
+  // 포함을 골라 한도를 넘으면 매칭·적재의 가드가 막는다.
+  assertUploadRowLimit(result.totalRows - result.hiddenRows, {
+    operation: 'contact_upload_preview',
+  });
 
   return {
     sheetNames: result.sheetNames,
     headers: result.headers,
     rows: result.rows,
     totalRows: result.totalRows,
+    visibleRows: result.visibleRows,
+    hiddenRows: result.hiddenRows,
+    hiddenHeaders: result.hiddenHeaders,
   };
 }
 
@@ -137,12 +145,22 @@ export async function ingestContactUpload(
   ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const allRows = await parseExcelRows(buffer, {
+  const {
+    rows: allRows,
+    skippedHiddenRows,
+    skippedHiddenColumns,
+  } = await parseExcelRows(buffer, {
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
+    skipHiddenRows: mapping.skipHiddenRows === true,
+    skipHiddenColumns: mapping.skipHiddenColumns === true,
   });
 
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
+  // 0행은 트랜잭션에 들어가기 전에 거부한다 — replace 는 기존 조사 대상을 먼저 지우므로,
+  // 넣을 행이 없으면 명단만 사라진다(전 행이 필터로 숨겨진 파일이 그 경로다).
+  const emptyProblem = emptyUploadProblem(allRows.length, skippedHiddenRows);
+  if (emptyProblem) throw new ORPCError('BAD_REQUEST', { message: emptyProblem });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];
@@ -504,6 +522,8 @@ export async function ingestContactUpload(
       errorRows,
       skippedRows,
       skippedBreakdown,
+      hiddenRowsExcluded: skippedHiddenRows,
+      hiddenColumnsExcluded: skippedHiddenColumns,
     };
   });
 
@@ -705,9 +725,11 @@ export async function matchContactUpload(
   ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const allRows = await parseExcelRows(buffer, {
+  const { rows: allRows, rowNumbers } = await parseExcelRows(buffer, {
     sheetName: mapping.sheetName,
     headerRow: mapping.headerRow,
+    skipHiddenRows: mapping.skipHiddenRows === true,
+    skipHiddenColumns: mapping.skipHiddenColumns === true,
   });
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_match', surveyId });
 
@@ -729,7 +751,8 @@ export async function matchContactUpload(
 
   const toSamples = (indices: number[]) =>
     indices.slice(0, SAMPLE_LIMIT).map((rowIndex) => ({
-      excelRow: mapping.headerRow + 1 + rowIndex,
+      // 빈 행·숨겨진 행을 건너뛰어 읽으므로 인덱스가 아니라 파서가 준 행 번호를 쓴다.
+      excelRow: rowNumbers[rowIndex] ?? mapping.headerRow + 1 + rowIndex,
       keyValues: Object.fromEntries(mergeKeys.map((k) => [k, allRows[rowIndex]?.[k] ?? ''])),
     }));
 

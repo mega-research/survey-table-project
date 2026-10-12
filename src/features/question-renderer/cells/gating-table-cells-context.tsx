@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext } from 'react';
+import { type ReactNode, createContext, useContext } from 'react';
 
 import type { TableCell } from '@/types/survey';
 
@@ -20,8 +20,38 @@ import type { TableCell } from '@/types/survey';
  */
 const GatingTableCellsContext = createContext<readonly TableCell[] | null>(null);
 
-export const GatingTableCellsProvider = GatingTableCellsContext.Provider;
+/**
+ * 지금 화면에 보이는 칸의 id 집합 — 행·열 표시 조건과 동적 행 선택을 거쳐 남은 칸.
+ *
+ * 중복 불가 묶음이 구성원을 고르는 데 쓴다: 숨은 칸의 값은 응답에 남아 있어, 표 전체 셀로 판정하면
+ * 보이지 않는 칸이 보기를 차지한다. 차단 검증(numeric-validation 의 collectVisibleTableCells)과
+ * 같은 범위여야 「회색인데 검증은 통과」·「고를 수 있었는데 다음에서 막힘」이 안 생긴다.
+ * 묶음이 없는 표(대다수)는 공급하지 않는다 — null 이면 표 전체가 보이는 것으로 본다.
+ */
+const VisibleTableCellIdsContext = createContext<ReadonlySet<string> | null>(null);
+
+export function GatingTableCellsProvider({
+  value,
+  visibleCellIds = null,
+  children,
+}: {
+  value: readonly TableCell[] | null;
+  visibleCellIds?: ReadonlySet<string> | null;
+  children: ReactNode;
+}) {
+  return (
+    <GatingTableCellsContext.Provider value={value}>
+      <VisibleTableCellIdsContext.Provider value={visibleCellIds}>
+        {children}
+      </VisibleTableCellIdsContext.Provider>
+    </GatingTableCellsContext.Provider>
+  );
+}
 
 export function useGatingTableCells(): readonly TableCell[] | null {
   return useContext(GatingTableCellsContext);
+}
+
+export function useVisibleTableCellIds(): ReadonlySet<string> | null {
+  return useContext(VisibleTableCellIdsContext);
 }

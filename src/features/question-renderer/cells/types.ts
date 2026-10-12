@@ -32,6 +32,11 @@ export interface InteractiveCellProps {
    */
   ignoreInputWidth?: boolean | undefined;
   /**
+   * 목록에 남기되 고를 수 없는 보기 값(select 셀 전용) — 중복 불가 묶음의 다른 칸이 이미 고른 것.
+   * 키는 선택 칸이 `<option value>` 에 쓰는 것과 같다(`option.value ?? option.id`).
+   */
+  disabledOptionValues?: ReadonlySet<string> | undefined;
+  /**
    * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
    * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한
    * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).

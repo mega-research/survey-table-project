@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
 import {
@@ -11,8 +11,12 @@ import {
   useQuestionResponseSelector,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
+import {
+  distinctSubscriptionKeys,
+  takenDistinctValues,
+} from '@/features/question-renderer/utils/distinct-select-group';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
-import { CHOICE_GROUPS_KEY, collectTableChoiceSelection } from '@/lib/survey/choice-selection';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { TableCell } from '@/types/survey';
 
@@ -21,7 +25,13 @@ import { CellContentLayout } from './cell-content-layout';
 import { CheckboxCell } from './checkbox-cell';
 import { useChoiceGroups } from './choice-groups-context';
 import { ChoiceOptCell } from './choice-opt-cell';
-import { useGatingTableCells } from './gating-table-cells-context';
+import {
+  createGateValueSelector,
+  createKeyedValueSelector,
+  gateWantsChoiceSelection,
+  selectNoGateValues,
+} from './gate-value-selector';
+import { useGatingTableCells, useVisibleTableCellIds } from './gating-table-cells-context';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
 import { RadioCell } from './radio-cell';
@@ -46,6 +56,7 @@ const CellRouter = React.memo(function CellRouter({
   ariaDescribedBy,
   hintInFlow,
   ignoreInputWidth,
+  disabledOptionValues,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -83,6 +94,7 @@ const CellRouter = React.memo(function CellRouter({
           inputIdScope={inputIdScope}
           ariaInvalid={ariaInvalid}
           ariaDescribedBy={ariaDescribedBy}
+          disabledOptionValues={disabledOptionValues}
         />
       );
     case 'input':
@@ -212,56 +224,68 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     siblingCellIds,
   );
 
-  // 게이팅 평가에 실제로 필요한 값은 컨트롤러 셀 하나뿐이다(option 조건의 옵션 id/value
-  // 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 질문 응답 객체 전체를
+  // 게이팅 평가에 실제로 필요한 값은 이 셀의 조건이 참조하는 컨트롤러뿐이다(option 조건의
+  // 옵션 id/value 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 질문 응답 객체 전체를
   // 구독하면, mergePatch 가 매 입력마다 만드는 새 참조 탓에 같은 표의
   // 모든 InteractiveCell(input 뿐 아니라 checkbox/radio/text 전 타입)이 셀 하나만 바뀌어도
-  // 재렌더된다 — use-cell-response 의 selectCell 이 지키는 셀 단위 스칼라 구독 원칙을 여기서도
-  // 지켜야 한다. enabledWhen 이 없는 셀(대다수)은 controllerCellId 가 undefined 라 구독
-  // 자체가 항상 같은 값(undefined)을 반환해 재렌더를 유발하지 않는다.
-  const controllerCellId =
-    GATABLE_CELL_TYPES.has(cell.type) && cell.enabledWhen
-      ? cell.enabledWhen.controllerCellId
-      : undefined;
+  // 재렌더된다 — use-cell-response 의 selectCell 이 지키는 셀 단위 구독 원칙을 여기서도
+  // 지켜야 한다. 조건 묶음은 컨트롤러가 여럿이라 필요한 키만 뽑은 객체를 구독하고,
+  // 선택자가 값이 그대로면 같은 객체를 돌려줘 재렌더를 막는다(createGateValueSelector).
+  // enabledWhen 이 없는 셀(대다수)은 모듈 상수 선택자가 항상 같은 빈 객체를 돌려준다.
+  const gateCondition = GATABLE_CELL_TYPES.has(cell.type) ? cell.enabledWhen : undefined;
+  // 컨트롤러가 그 자신도 게이팅 셀이면 상류 값까지 구독해야 한다(비활성 컨트롤러의 잔존값은
+  // 없는 것으로 본다 — gate-value-selector 가 그 닫힘을 구한다). 그래서 셀 정의가 먼저 필요하다.
+  const tableCells = useGatingTableCells();
+  const gatingCells = tableCells ?? rowCells;
+  const selectGateValues = useMemo(
+    () => (gateCondition ? createGateValueSelector(gateCondition, gatingCells) : selectNoGateValues),
+    [gateCondition, gatingCells],
+  );
+  const sourceGateValues = useQuestionResponseSelector(source, questionId, selectGateValues);
 
   // choice-selected 조건의 컨트롤러는 셀 값이 아니라 표 응답 안 예약 키(그룹 선택 맵)에 있다.
-  // 주입 원본은 그 맵 하나만 구독한다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
-  const wantsChoiceSelection = cell.enabledWhen?.kind === 'choice-selected';
-  const controllerKey = controllerCellId
-    ? wantsChoiceSelection
-      ? CHOICE_GROUPS_KEY
-      : controllerCellId
-    : undefined;
-  const selectController = useCallback(
-    (questionResponse: unknown) => {
-      if (!controllerKey) return undefined;
-      if (typeof questionResponse === 'object' && questionResponse !== null) {
-        return (questionResponse as Record<string, unknown>)[controllerKey];
-      }
-      return undefined;
-    },
-    [controllerKey],
-  );
-  const sourceControllerValue = useQuestionResponseSelector(source, questionId, selectController);
+  // 선택자는 그 맵을 키 하나로 싣는다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
+  // 상류 컨트롤러의 조건까지 본다 — 이 칸의 조건에는 없어도 컨트롤러가 보기 선택으로 열릴 수 있다.
+  const wantsChoiceSelection = gateWantsChoiceSelection(gateCondition, gatingCells);
 
   // 주입 원본이 없으면(controlled 렌더) 상위에서 이미 질문 단위 value prop 으로 내려오므로
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
-  // 키는 위에서 계산한 controllerKey 를 그대로 쓴다 — 객체 리터럴에 조건식 계산 키를 두면
-  // React Compiler 가 이 컴포넌트를 통째로 최적화에서 제외한다(표 셀마다 그려지는 핫 패스다).
-  const gatingCellValues: Record<string, unknown> = source
-    ? controllerKey
-      ? { [controllerKey]: sourceControllerValue }
-      : {}
-    : (value ?? {});
+  const gatingCellValues: Record<string, unknown> = source ? sourceGateValues : (value ?? {});
 
-  const tableCells = useGatingTableCells();
   const choiceGroups = useChoiceGroups();
   const choiceSelection = wantsChoiceSelection
     ? collectTableChoiceSelection(gatingCellValues)
     : undefined;
   const gatingDisabled =
     GATABLE_CELL_TYPES.has(cell.type) &&
-    !isCellEnabled(cell, gatingCellValues, tableCells ?? rowCells, choiceSelection);
+    !isCellEnabled(cell, gatingCellValues, gatingCells, choiceSelection);
+
+  // 중복 불가 묶음 — 같은 묶음의 다른 선택 칸이 고른 보기는 이 칸의 목록에서 비활성이다.
+  // 게이팅과 같은 구독 원칙: 묶음 구성원(과 그 컨트롤러)의 값만 뽑아 구독해, 묶음 밖의 칸이
+  // 바뀔 때는 재렌더되지 않는다. 묶음 이름이 없는 칸(대다수)은 모듈 상수 선택자를 쓴다.
+  // 묶음은 행을 가로지르므로 표 전체 셀이 있어야 성립한다 — 없으면 같은 행 안에서만 본다.
+  // 구성원은 지금 보이는 칸만이다(표시 조건으로 숨은 칸의 잔존 선택은 세지 않는다) — 차단 검증과
+  // 같은 범위. 구독 키는 좁히지 않는다: 숨은 칸의 값이 바뀔 일이 없어 넓게 잡아도 재렌더가 늘지 않는다.
+  const visibleCellIds = useVisibleTableCellIds() ?? undefined;
+  const distinctKeys = useMemo(
+    () => (gatingCells ? distinctSubscriptionKeys(cell, gatingCells) : []),
+    [cell, gatingCells],
+  );
+  const selectDistinctValues = useMemo(
+    () => createKeyedValueSelector(distinctKeys),
+    [distinctKeys],
+  );
+  const sourceDistinctValues = useQuestionResponseSelector(
+    source,
+    questionId,
+    selectDistinctValues,
+  );
+  const disabledOptionValues = useMemo(() => {
+    if (distinctKeys.length === 0 || !gatingCells) return undefined;
+    // 주입 원본이 없으면(controlled 렌더) 질문 단위 value prop 이 원본이다 — 게이팅과 같다.
+    const distinctCellValues = source ? sourceDistinctValues : (value ?? {});
+    return takenDistinctValues(cell, gatingCells, distinctCellValues, visibleCellIds);
+  }, [cell, distinctKeys, gatingCells, source, sourceDistinctValues, value, visibleCellIds]);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
   // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,
@@ -331,6 +355,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ariaDescribedBy={ariaDescribedBy}
       hintInFlow={hintInFlow}
       ignoreInputWidth={ignoreInputWidth}
+      disabledOptionValues={disabledOptionValues}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

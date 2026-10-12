@@ -43,7 +43,31 @@ describe('복제 벌의 블록 안 참조는 자기 벌을 가리킨다', () => 
     const [ctrl, gated] = second.cells;
 
     expect(gated!.enabledWhen).toEqual({ kind: 'filled', controllerCellId: ctrl!.id });
-    expect(gated!.enabledWhen!.controllerCellId).not.toBe('t-ctrl');
+    expect(gated!.enabledWhen).not.toEqual({ kind: 'filled', controllerCellId: 't-ctrl' });
+  });
+
+  it('조건 묶음은 블록 안 컨트롤러만 자기 벌로 옮기고 블록 밖 컨트롤러는 그대로 둔다', () => {
+    const rows = rowsWithGating();
+    rows[1]!.cells[1]!.enabledWhen = {
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'filled', controllerCellId: 't-ctrl' },
+        { kind: 'group', op: 'NOT', terms: [{ kind: 'filled', controllerCellId: 'out1' }] },
+      ],
+    };
+    const out = expand(rows);
+    const [ctrl, gated] = out.find((r) => r.repeatIndex === 2)!.cells;
+
+    expect(gated!.enabledWhen).toEqual({
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'filled', controllerCellId: ctrl!.id },
+        { kind: 'group', op: 'NOT', terms: [{ kind: 'filled', controllerCellId: 'out1' }] },
+      ],
+    });
+    expect(ctrl!.id).not.toBe('t-ctrl');
   });
 
   it('option 게이팅도 같은 규칙을 탄다', () => {

@@ -200,6 +200,29 @@ describe('survey-store remapQuestionRefs', () => {
     expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(false);
   });
 
+  it('최대 선택 개수 연동(maxSelectionsSource)의 참조 문항을 리매핑하고 나머지 설정은 보존한다', () => {
+    const limited = makeQuestion({
+      id: 'q-limited',
+      type: 'checkbox',
+      maxSelectionsSource: { questionId: OLD_ID, unlimitedFrom: 5 },
+    });
+    const unrelated = makeQuestion({
+      id: 'q-unrelated',
+      type: 'checkbox',
+      maxSelectionsSource: { questionId: 'q-someone-else' },
+    });
+    useSurveyBuilderStore.getState().setSurvey(makeSurvey({ questions: [limited, unrelated] }));
+
+    const scope = useSurveyBuilderStore.getState().remapQuestionRefs(OLD_ID, NEW_ID);
+
+    const questions = useSurveyBuilderStore.getState().currentSurvey.questions;
+    expect(questions[0]!.maxSelectionsSource).toEqual({ questionId: NEW_ID, unlimitedFrom: 5 });
+    expect(questions[1]!.maxSelectionsSource).toEqual({ questionId: 'q-someone-else' });
+    // 스코프에 들어야 호출자가 그 문항을 다시 영속한다 — 빠지면 DB 에는 temp id 가 남는다
+    expect(scope).toEqual({ questionIds: ['q-limited'], groupIds: [] });
+    expect(useSurveyBuilderStore.getState().questionChanges.updated['q-limited']).toBe(true);
+  });
+
   it('참조가 전혀 없으면 아무것도 바꾸지 않고 빈 스코프를 반환한다', () => {
     const unrelated = makeQuestion({ id: 'q-clean' });
     useSurveyBuilderStore.getState().setSurvey(makeSurvey({ questions: [unrelated] }));

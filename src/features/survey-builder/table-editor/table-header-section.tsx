@@ -129,11 +129,13 @@ const ColumnHeader = React.memo(function ColumnHeader({
     >
       {!hideColumnLabels && (
         <div className="space-y-1">
-          <Input
+          {/* Enter 로 줄바꿈 — 응답 화면 헤더가 줄바꿈을 그대로 그린다 */}
+          <textarea
+            rows={Math.max(1, localLabel.split('\n').length)}
             value={localLabel}
             onChange={(e) => setLocalLabel(e.target.value)}
             className={cn(
-              'h-7 w-full border border-gray-200 bg-transparent pr-7 text-center text-sm',
+              'w-full resize-none rounded-md border border-gray-200 bg-transparent py-1 pr-7 pl-1 text-center text-sm outline-none focus:border-blue-400',
               getCellTextClassName(column),
             )}
             style={getCellTextStyle(column)}

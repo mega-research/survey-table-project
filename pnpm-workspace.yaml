@@ -66,15 +66,19 @@ overrides:
   'tar@7': '>=7.5.19 <8'
   'protobufjs@7': '>=7.6.1 <8'
   'protobufjs@8': '>=8.6.3 <9'
-  'undici@7': '>=7.29.0 <8'
+  # undici 7: 2026-09-30 GHSA-rfgv-xxqx-mfg5(WebSocket 하위 프로토콜 DoS)·GHSA-w293-vg96-wgc3(BalancedPool TLS 검증 우회) 대응으로 하한 7.29.1 — jsdom(테스트 전용) 경유
+  'undici@7': '>=7.29.1 <8'
   '@chenglou/pretext': '^0.0.5'
   'linkify-it@5': '>=5.0.2 <6'
   # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
-  adm-zip: '>=0.6.0 <0.7'
+  # 2026-09-29 GHSA-7q85-xj36-vmfc(비압축 크기 선언값으로 메모리 무제한 할당 DoS, <0.6.1) 대응으로 하한 0.6.1
+  adm-zip: '>=0.6.1 <0.7'
   # brace-expansion 1.x: GHSA-mh99-v99m-4gvg(<1.1.17)·GHSA-rgw5-rvv9-x895(<1.1.18) ReDoS
-  'brace-expansion@1': '>=1.1.18 <2'
-  'brace-expansion@2': '>=2.1.4 <3'
-  'brace-expansion@5': '>=5.0.9 <6'
+  # 2026-09-30 GHSA-6j4f-fj2g-mc7p·GHSA-qhr7-859c-m2p7 대응으로 세 줄기 하한 상향(1.1.20 · 2.1.6 · 5.0.11)
+  # — exceljs·inngest·@sentry/nextjs·eslint 경유 glob/minimatch 전이 의존
+  'brace-expansion@1': '>=1.1.20 <2'
+  'brace-expansion@2': '>=2.1.6 <3'
+  'brace-expansion@5': '>=5.0.11 <6'
   # js-yaml 4.x: GHSA-2883-xcg3-v3hh (<4.3.2) maxTotalMergeKeys 가 빈 merge 소스의 CPU 를
   # 제한하지 못한다. eslint 툴체인 경유 transitive(dev 전용)지만 하한만 올리면 끝난다.
   'js-yaml@4': '>=4.3.2 <5'
@@ -84,15 +88,18 @@ overrides:
   'fast-uri@3': '>=3.1.6 <4'
   'fast-uri@4': '>=4.1.2 <5'
   'postcss@8': '>=8.5.18 <9'
+  # source-map-js 1.x: GHSA-68fv-2mgg-jv7q (<1.2.2) — next·postcss 경유 transitive. 2026-10-07 하한 1.2.2
+  'source-map-js@1': '>=1.2.2 <2'
   # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(docs 주석 참조).
   # 하한은 GHSA-rgj7-g3m4-5g8c(<0.35.4, 번들 libheif 의 heap overflow) 때문에 0.35.4.
-  sharp: '>=0.35.4 <0.36'
+  # 2026-10-07 GHSA-wq5f-xc86-pv6w(번들 librsvg CVE-2026-96889, <0.35.5) 대응으로 하한 0.35.5
+  sharp: '>=0.35.5 <0.36'
   # nanoid 3.x(postcss 경유 transitive): GHSA-2v37-7h3g-55p8 (<3.3.17). 직접 의존 5.x 는 비해당.
   'nanoid@3': '>=3.3.17 <4'
   'minimatch@3': '>=3.1.4 <4'
   'minimatch@9': '>=9.0.7 <10'
   'flatted@3': '>=3.4.2 <4'
-  '@grpc/grpc-js@1': '>=1.14.4 <2'
+  '@grpc/grpc-js@1': '>=1.14.5 <2'
   'picomatch@2': '>=2.3.2 <3'
   'picomatch@4': '>=4.0.4 <5'
   'rollup@4': '>=4.59.0 <5'
@@ -109,3 +116,15 @@ allowBuilds:
   msw: true
   protobufjs: true
   unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@next/env@16.3.8'
+  - '@next/swc-darwin-arm64@16.3.8'
+  - '@next/swc-darwin-x64@16.3.8'
+  - '@next/swc-linux-arm64-gnu@16.3.8'
+  - '@next/swc-linux-arm64-musl@16.3.8'
+  - '@next/swc-linux-x64-gnu@16.3.8'
+  - '@next/swc-linux-x64-musl@16.3.8'
+  - '@next/swc-win32-arm64-msvc@16.3.8'
+  - '@next/swc-win32-x64-msvc@16.3.8'
+  - next@16.3.8

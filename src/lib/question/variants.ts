@@ -66,6 +66,7 @@ type MobileTableDisplayFields = Pick<
   | 'mobileDrilldownOmitLeadingColumns'
   | 'mobileDrilldownRepeatHeaderStartRow'
   | 'mobileDrilldownRepeatHeaderEndRow'
+  | 'mobileItemCardBlockColumns'
 >;
 
 export interface TextQuestion
@@ -108,7 +109,7 @@ export interface CheckboxQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    Pick<Question, 'minSelections' | 'maxSelections'> {
+    Pick<Question, 'minSelections' | 'maxSelections' | 'maxSelectionsSource'> {
   type: 'checkbox';
 }
 
@@ -137,7 +138,10 @@ export interface TableQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig'> {
+    Pick<
+      Question,
+      'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig' | 'stagedRowsConfig'
+    > {
   type: 'table';
 }
 

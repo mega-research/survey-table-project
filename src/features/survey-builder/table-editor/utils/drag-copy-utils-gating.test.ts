@@ -7,6 +7,7 @@ import {
   resolvePastedGating,
 } from '@/features/survey-builder/table-editor/utils/drag-copy-utils';
 import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
+import { collectGateControllerIds } from '@/utils/cell-gate-tree';
 
 const condition: CellEnableCondition = {
   kind: 'option',
@@ -16,7 +17,7 @@ const condition: CellEnableCondition = {
 
 describe('resolvePastedGating — 붙여넣기/복제 시 게이팅 참조 재해석', () => {
   it('영역 내 컨트롤러는 리매핑된 id 로 치환된다', () => {
-    const out = resolvePastedGating(condition, 'target-ctrl', [{ id: 'x' }]);
+    const out = resolvePastedGating(condition, () => 'target-ctrl', [{ id: 'x' }]);
     expect(out).toEqual({ kind: 'option', controllerCellId: 'target-ctrl', values: ['1'] });
   });
 
@@ -45,8 +46,40 @@ describe('resolvePastedGating — 붙여넣기/복제 시 게이팅 참조 재�
       op: '>=',
       value: 3,
     };
-    const out = resolvePastedGating(numeric, 'new-ctrl', []);
+    const out = resolvePastedGating(numeric, () => 'new-ctrl', []);
     expect(out).toEqual({ kind: 'numeric', controllerCellId: 'new-ctrl', op: '>=', value: 3 });
+  });
+});
+
+describe('resolvePastedGating — 조건 묶음', () => {
+  const group: CellEnableCondition = {
+    kind: 'group',
+    op: 'OR',
+    terms: [
+      { kind: 'filled', controllerCellId: 'in-area' },
+      { kind: 'group', op: 'AND', terms: [{ kind: 'filled', controllerCellId: 'outside' }] },
+    ],
+  };
+
+  it('잎마다 따로 해석한다 — 영역 안 컨트롤러는 치환, 표에 남아 있는 컨트롤러는 유지', () => {
+    const out = resolvePastedGating(
+      group,
+      (id) => (id === 'in-area' ? 'pasted' : undefined),
+      [{ id: 'outside' }],
+    );
+    expect(out).toEqual({
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'filled', controllerCellId: 'pasted' },
+        { kind: 'group', op: 'AND', terms: [{ kind: 'filled', controllerCellId: 'outside' }] },
+      ],
+    });
+  });
+
+  it('잎 하나라도 죽은 참조면 조건 전체를 제거한다 — 일부만 빼면 뜻이 바뀐다', () => {
+    const out = resolvePastedGating(group, (id) => (id === 'in-area' ? 'pasted' : undefined), []);
+    expect(out).toBeUndefined();
   });
 });
 
@@ -95,10 +128,10 @@ describe('영역 스냅샷의 게이팅 컨트롤러 되짚기 (sourceCellIds)',
     ];
     const pastedCondition = region.cells[0]?.[1]?.enabledWhen;
     expect(pastedCondition).toBeDefined();
-    const pos = findRegionSourceCellPos(region, pastedCondition!.controllerCellId);
+    const pos = findRegionSourceCellPos(region, collectGateControllerIds(pastedCondition)[0]!);
     expect(pos).toEqual({ row: 0, col: 0 });
     const remappedId = targetRowCells[pos!.col]?.id;
-    const resolved = resolvePastedGating(pastedCondition!, remappedId, targetRowCells);
+    const resolved = resolvePastedGating(pastedCondition!, () => remappedId, targetRowCells);
     expect(resolved).toEqual({ kind: 'option', controllerCellId: 't-ctrl', values: ['1'] });
   });
 });

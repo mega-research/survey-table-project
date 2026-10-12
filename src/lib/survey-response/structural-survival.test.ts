@@ -446,3 +446,55 @@ describe('applyStructuralSurvival — 보기 그룹 표 (table + __choiceGroups)
     expect(result.affectedQuestionIds).toEqual(['q1']);
   });
 });
+
+describe('applyStructuralSurvival — 그룹별 순위 (ranking + choiceGroups)', () => {
+  const groupedRanking = (cells: TableCell[]) =>
+    q({
+      id: 'q1',
+      type: 'ranking',
+      rankingConfig: { positions: 2, optionsSource: 'table' },
+      choiceGroups: [
+        { id: 'g1', groupKey: 'rk1', label: '가', type: 'ranking' },
+        { id: 'g2', groupKey: 'rk2', label: '나', type: 'ranking' },
+      ],
+      tableRowsData: [row('r1', cells)],
+    } as Partial<Question> & Pick<Question, 'id' | 'type'>);
+  const cells = [
+    cell({ id: 'a', type: 'ranking_opt', choiceGroupId: 'g1' }),
+    cell({ id: 'b', type: 'ranking_opt', choiceGroupId: 'g1' }),
+    cell({ id: 'c', type: 'ranking_opt', choiceGroupId: 'g2' }),
+  ];
+
+  it('그룹 맵 모양의 답은 같은 구조에서 참조 그대로 산다', () => {
+    const answer = {
+      rk1: [
+        { rank: 1, optionValue: 'a' },
+        { rank: 2, optionValue: 'b' },
+      ],
+      rk2: [{ rank: 1, optionValue: 'c' }],
+    };
+    const result = applyStructuralSurvival({ q1: answer }, [groupedRanking(cells)]);
+    expect(result.survivingResponses['q1']).toBe(answer);
+    expect(result.affectedQuestionIds).toEqual([]);
+  });
+
+  it('사라진 보기 셀을 가리키는 순위만 지운다', () => {
+    const result = applyStructuralSurvival(
+      {
+        q1: {
+          rk1: [
+            { rank: 1, optionValue: 'a' },
+            { rank: 2, optionValue: 'b' },
+          ],
+          rk2: [{ rank: 1, optionValue: 'c' }],
+        },
+      },
+      [groupedRanking(cells.filter((c) => c.id !== 'b'))],
+    );
+    expect(result.survivingResponses['q1']).toEqual({
+      rk1: [{ rank: 1, optionValue: 'a' }],
+      rk2: [{ rank: 1, optionValue: 'c' }],
+    });
+    expect(result.affectedQuestionIds).toEqual(['q1']);
+  });
+});

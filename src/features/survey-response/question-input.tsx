@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
@@ -76,6 +77,11 @@ interface QuestionInputProps {
   onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
   /** 미충족 필수 보기 그룹을 표에 표시할지 — 「다음」을 누른 뒤에만 켠다. */
   showRequiredHighlight?: boolean | undefined;
+  /**
+   * 보기 그룹 표에서 화면에 보이는 셀 — 숨은 행·열의 필수 그룹을 붉은 외곽선에서 뺀다.
+   * 필수 게이트와 같은 판정(resolveChoiceGroupVisibleCellIds)으로 상위가 계산해 넘긴다.
+   */
+  requiredVisibleCellIds?: ReadonlySet<string> | undefined;
 }
 
 // 타입 정의
@@ -205,16 +211,18 @@ function resolveTableErrorCellIds(
   value: unknown,
   numericIssues: NumericIssue[] | undefined,
   showRequiredHighlight: boolean | undefined,
+  visibleCellIds: ReadonlySet<string> | undefined,
 ): Set<string> | undefined {
   const ids = new Set<string>(numericIssues?.flatMap((i) => i.cellIds ?? []) ?? []);
   if (showRequiredHighlight && isChoiceGroupTableQuestion(question)) {
-    for (const id of collectUnfilledChoiceGroupCellIds(question, value)) ids.add(id);
+    for (const id of collectUnfilledChoiceGroupCellIds(question, value, { visibleCellIds }))
+      ids.add(id);
   }
   return ids.size > 0 ? ids : undefined;
 }
 
 function QuestionInputControl({
-  question,
+  question: questionProp,
   value,
   onChange: onChangeProp,
   allResponses,
@@ -223,11 +231,15 @@ function QuestionInputControl({
   selectedDynamicRowIds,
   onDynamicRowSelectionChange,
   showRequiredHighlight,
+  requiredVisibleCellIds,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
+  // 최대 선택 개수가 다른 문항 응답을 따라가는 문항은 여기서 상한을 갈아 끼운다 — 아래 렌더러들은
+  // 고정 숫자만 읽는다. 출처가 없는 문항은 같은 참조가 그대로 돌아온다.
+  const question = withResolvedMaxSelections(questionProp, allResponses);
   // 선택형 문항은 답이 바뀔 때 선택이 풀린 기타·상세 기재 입력값을 비운다(순위형과 같은 동작).
   const onChange = useClearDeselectedOptionTexts(question, onChangeProp);
 
@@ -362,6 +374,9 @@ function QuestionInputControl({
           {...(question.rowRepeatConfig != null
             ? { rowRepeatConfig: question.rowRepeatConfig }
             : {})}
+          {...(question.stagedRowsConfig != null
+            ? { stagedRowsConfig: question.stagedRowsConfig }
+            : {})}
           {...(question.hideColumnLabels !== undefined
             ? { hideColumnLabels: question.hideColumnLabels }
             : {})}
@@ -387,12 +402,16 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
+            {...(question.mobileItemCardBlockColumns != null
+              ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
+              : {})}
           choiceGroups={question.choiceGroups}
           errorCellIds={resolveTableErrorCellIds(
             question,
             value,
             numericIssues,
             showRequiredHighlight,
+            requiredVisibleCellIds,
           )}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />

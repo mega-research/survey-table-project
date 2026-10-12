@@ -134,6 +134,16 @@ export interface TextValidation {
   rejectMeaningless?: boolean;
 }
 
+/**
+ * 최대 선택 개수의 출처 (questions.max_selections_source JSONB).
+ * "담당한 팀 수만큼만 고를 수 있다" 처럼 상한이 앞 문항 응답을 따라가는 경우에 쓴다.
+ * 판정은 features/question-renderer/utils/dynamic-selection-limit 한 곳이다.
+ */
+export interface MaxSelectionsSource {
+  questionId: string; // 숫자형 단답(text + inputType number) 문항
+  unlimitedFrom?: number; // 참조값이 이 수 이상이면 제한 없음. 미지정 = 항상 참조값이 상한
+}
+
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
   unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
@@ -150,7 +160,14 @@ export interface NumberFormat {
 // 하위호환 확장 — 기존 저장 데이터는 필드 그대로 유효하다.
 export interface SumConstraint {
   id: string;
-  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계. 존재하지 않는 id는 평가 시 무시
+  /**
+   * 좌변 집계 방식 (leftExpr 없을 때). 미지정·'sum' = 선택 셀 값의 합계, 'count' = 선택한 칸 중
+   * **입력된 칸 수**("10행 중 하나 이상 입력"). count 는 숫자 칸뿐 아니라 인터랙티브 셀 전부
+   * (입력·라디오·체크박스·셀렉트·순위)를 대상으로 하고, 합계와 달리 대상이 전부 비어 있어도·표를
+   * 건드리지 않았어도 검사한다. leftExpr·targetExpr·tolerance 는 쓰지 않는다 (CONTEXT.md "입력된 칸 수").
+   */
+  aggregate?: 'sum' | 'count';
+  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계(또는 입력된 칸 수). 존재하지 않는 id는 평가 시 무시
   leftExpr?: CalcExpr; // 있으면 좌변 = 이 수식 (cellIds 무시)
   operator: 'eq' | 'ne' | 'gte' | 'lte' | 'gt' | 'lt'; // 같음/다름/이상/이하/초과/미만
   target: number; // targetExpr 없을 때 우변 리터럴. 기본 100
@@ -355,8 +372,9 @@ export interface CalcCellValidation {
   errorMessage?: string; // 미지정 시 연산자별 기본 문구
 }
 
-// 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
-export type CellEnableCondition =
+// 셀 활성 조건(게이팅) — 같은 표 컨트롤러 셀 값에 따라 대상 셀의 입력 가능 여부를 제어한다.
+// 잎 조건 = 컨트롤러 셀 하나 + 판정 하나.
+export type CellEnableLeafCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
   | { kind: 'filled'; controllerCellId: string }
   /**
@@ -370,6 +388,21 @@ export type CellEnableCondition =
       op: '>' | '>=' | '<' | '<=' | '==' | '!=';
       value: number;
     };
+
+/**
+ * 조건 묶음 — 연산자 1개 + 조건 N개. 연산자를 섞으려면 묶음을 중첩한다(계산 셀 수식 CalcExpr 의
+ * group 과 같은 모델 — 우선순위 모호성이 구조적으로 생기지 않는다). 연산자 어휘와 뜻은 문항
+ * 표시조건과 같다: AND 모두 충족 · OR 하나라도 충족 · NOT 하나도 충족하지 않음(NOR).
+ * 조건이 0개인 묶음은 "조건 없음" = 충족이다(표시조건의 빈 그룹 규칙과 동일, 빌더가 경고).
+ * 트리 순회는 `@/utils/cell-gate-tree` 하나로 한다 — 컨트롤러가 하나라고 가정하지 말 것.
+ */
+export interface CellEnableGroupCondition {
+  kind: 'group';
+  op: ConditionLogicType;
+  terms: CellEnableCondition[];
+}
+
+export type CellEnableCondition = CellEnableLeafCondition | CellEnableGroupCondition;
 
 export interface TableCell {
   id: string;
@@ -548,8 +581,17 @@ export interface TableCell {
    * 데이터·검증·내보내기 무변경. 모바일 카드는 카드 아래 스택 그대로다.
    */
   optionTextSlot?: boolean;
+  /**
+   * 중복 불가 묶음 이름 (선택 칸 전용). 같은 이름의 선택 칸끼리는 같은 보기를 두 번 고를 수 없다 —
+   * 다른 칸이 고른 보기는 목록에 비활성으로 남고, 이미 들어온 중복은 차단형 검증이 막는다.
+   * 열·행 배치와 무관하게 이름만으로 묶는다 (CONTEXT.md "중복 불가 묶음").
+   */
+  distinctGroup?: string;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
+  // 런타임 전용: 이 세로 병합 칸이 표 안에 끼운 버튼 줄(행 차례로 열기)을 가로질러 덮는 줄 수.
+  // 격자 배치에만 쓰고 의미상 rowspan(접근성·모바일 투영)은 건드리지 않는다.
+  _gridRowSpanExtra?: number;
   /**
    * 응답 인용 사용 여부. 그 자체가 질문 노릇을 하는 셀
    * (radio/checkbox/select/input/ranking)에서만 의미가 있다.
@@ -683,6 +725,22 @@ export interface RowRepeatConfig {
   addLabel?: string;
 }
 
+/**
+ * 행 차례로 열기 — 저작자가 만든 연속된 행 묶음을 처음 몇 행만 보이고 응답자가 `+` 로 한 행씩 연다.
+ *
+ * 행 반복과 달리 구조를 건드리지 않는다. 묶음의 행은 평범한 행이고 이 설정은 가시성만 정한다
+ * (CONTEXT.md "행 차례로 열기", ADR 0028).
+ */
+export interface StagedRowsConfig {
+  enabled: boolean;
+  /** 묶음을 이루는 연속 행 id 목록 */
+  rowIds: string[];
+  /** 처음 보이는 행 수 (1 이상, 묶음 행 수 미만) */
+  initialVisibleCount: number;
+  /** 추가 버튼 문구 (기본 '행 추가') */
+  addLabel?: string;
+}
+
 // 동적 행 그룹 설정
 export interface DynamicRowGroupConfig {
   groupId: string; // 그룹 고유 ID
@@ -710,6 +768,15 @@ export interface ChoiceGroup {
   required?: boolean;
   // 이 그룹 미응답 시 안내 문구. 없으면 질문 requiredMessage → 기본 문구 폴백.
   requiredMessage?: string;
+  // 모바일 「행 단위 그룹 카드」에서 이 그룹을 세로 타일 대신 행별 원본과 같은 원본 표 조각(그룹 열만
+  // 잘라 낸 헤더 + 보기 셀, 원본 열 폭·가로 스크롤)으로 그린다. 11점 척도처럼 보기가 많은 그룹용 —
+  // 기본 꺼짐(기존 타일 유지). radio/checkbox 그룹 전용.
+  // 판정·배치는 features/question-renderer/utils/choice-group-original-line.
+  mobileOriginalLine?: boolean;
+  // 모바일 「행 단위 그룹 카드」에서 이 그룹을 가로 스크롤 없는 척도 막대(칸 글자 + 구간 띠 + 양끝·가운데
+  // 라벨)로 그린다. mobileOriginalLine 과 배타 — 읽기·쓰기는 features/question-renderer/utils/
+  // choice-group-mobile-view, 판정은 choice-group-scale-bar. 그릴 수 없으면 원본 한 줄로 폴백한다.
+  mobileScaleBar?: boolean;
 }
 
 export interface TableColumn {
@@ -797,6 +864,9 @@ export interface Question {
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
+  // 최대 선택 개수를 다른 문항의 숫자 응답에서 가져온다 (비그룹 checkbox 전용, 0130).
+  // 참조값을 못 읽으면 위 고정 maxSelections 로 폴백한다.
+  maxSelectionsSource?: MaxSelectionsSource | null;
   // 순위형(ranking) 타입 전용. optionsSource='table' 이면 Case 2 (tableRowsData 의 ranking_opt 셀을 옵션으로)
   rankingConfig?: RankingConfig;
   // 테이블 레벨 옵션 그룹 정의 (보기 셀 묶음 - SPSS 그룹 변수/MRSET 단위)
@@ -836,6 +906,8 @@ export interface Question {
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다
   rowRepeatConfig?: RowRepeatConfig | null;
+  // 행 차례로 열기 — 처음 몇 행만 보이고 + 로 여는 저작된 행 묶음 (null = 꺼짐)
+  stagedRowsConfig?: StagedRowsConfig | null;
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
   /**
@@ -853,6 +925,9 @@ export interface Question {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  // 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서) — 좌우로 붙은 표를 모바일에서 블록마다 차례로 세운다.
+  // 비어 있으면 블록 없이 행 순서 그대로다 (CONTEXT.md "블록 단위로 세우기")
+  mobileItemCardBlockColumns?: number[] | null;
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle?: boolean;
   // 응답 페이지 수동 페이지 구분점 — 이 질문 앞에서 새 페이지를 시작한다

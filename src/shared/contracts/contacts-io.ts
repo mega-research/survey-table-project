@@ -42,7 +42,14 @@ export const ParseExcelPreviewResultSchema = z.object({
   sheetNames: z.array(z.string()),
   headers: z.array(z.string()),
   rows: z.array(z.record(z.string(), z.string())),
+  /** 값이 있는 데이터 행 수 — 숨겨진 행 포함 */
   totalRows: z.number(),
+  /** 숨겨진 행을 뺀 첫 5행 — 숨겨진 행을 빼고 적재할 때 보일 미리보기 */
+  visibleRows: z.array(z.record(z.string(), z.string())),
+  /** 엑셀에서 숨겨진(필터로 걸러졌거나 손으로 숨긴) 데이터 행 수. totalRows 에 포함된다 */
+  hiddenRows: z.number(),
+  /** 엑셀에서 숨겨진 열의 헤더 키. headers·rows 에는 숨겨진 열도 들어 있다 */
+  hiddenHeaders: z.array(z.string()),
 });
 export type ParseExcelPreviewResult = z.infer<typeof ParseExcelPreviewResultSchema>;
 
@@ -59,6 +66,10 @@ export const IngestContactUploadResultSchema = z.object({
     multiMatches: z.number(),
     emptyKeys: z.number(),
   }),
+  /** 엑셀에서 숨겨져 있어 읽지 않은 행 수 — skippedRows 와 별개 (DB 미저장) */
+  hiddenRowsExcluded: z.number(),
+  /** 엑셀에서 숨겨져 있어 읽지 않은 열 수 (DB 미저장) */
+  hiddenColumnsExcluded: z.number(),
 });
 export type IngestContactUploadResult = z.infer<typeof IngestContactUploadResultSchema>;
 

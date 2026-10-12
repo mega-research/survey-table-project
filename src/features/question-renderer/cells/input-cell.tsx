@@ -11,20 +11,26 @@ import {
 import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
+import {
+  usePriorAnswers,
+  usePriorHighlight,
+} from '@/features/question-renderer/prior-answers-context';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
+import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
+import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
+import {
+  PRIOR_HIGHLIGHT_TEXT_CLS,
+  isPriorText,
+} from '@/features/question-renderer/utils/prior-answer-highlight';
 import {
   getHorizontalItemsClass,
   getInputTextAlignClass,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
-import { PRIOR_HIGHLIGHT_TEXT_CLS, isPriorText } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
-import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
 
 import { CellContentLayout } from './cell-content-layout';
 import { FloatingHint } from './floating-hint';
@@ -150,6 +156,16 @@ export const InputCell = React.memo(function InputCell({
   const fixedWidthStyle =
     fixedWidth !== undefined ? { width: `${fixedWidth}px`, maxWidth: '100%' } : undefined;
 
+  const stackCls = cn(
+    'flex w-full flex-col space-y-1.5',
+    // 너비를 고정한 입력칸은 셀의 가로 정렬을 따른다(기본 왼쪽)
+    fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
+  );
+  // 입력칸 아래 보조 줄 — 라벨(단위 글자)은 입력칸과만 세로를 맞추도록 레이아웃에 따로 넘긴다.
+  const showCounter = Boolean(cell.inputMaxLength) && !isPrefilled;
+  const showUnitReading = Boolean(unitReading) && !isPrefilled;
+  const showFlowViolation = Boolean(hintInFlow) && hasViolation;
+
   return (
     // 위반 안내는 body 포털이라 여기에 위치 기준점은 없다 — relative 는 다른 오버레이용으로 남긴다.
     <div className="relative w-full">
@@ -162,14 +178,48 @@ export const InputCell = React.memo(function InputCell({
         textColor={cell.textColor}
         fillWidth={fixedWidth === undefined}
         horizontalAlign={cell.horizontalAlign}
+        below={
+          // 비어도 늘 넘긴다 — 있을 때만 넘기면 위반 안내가 뜨는 순간 입력칸이 다시 마운트된다
+          <div className={cn(stackCls, 'empty:hidden')}>
+            {showCounter && (
+              <div className="flex justify-end">
+                <p className="text-xs text-gray-500">
+                  <span
+                    className={
+                      textValue.length >= (cell.inputMaxLength ?? 0)
+                        ? 'font-medium text-red-500'
+                        : ''
+                    }
+                  >
+                    {textValue.length}
+                  </span>
+                  {' / '}
+                  {cell.inputMaxLength}자
+                </p>
+              </div>
+            )}
+
+            {showUnitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
+
+            {/* 카드 모드 — 위반 안내를 흐름에 둔다. 카드는 셀이 세로로 쌓여 옆 칸이 없고
+                  overflow-hidden 이라 아래 띄우면 잘리거나(마지막 셀) 다음 셀 라벨을 덮는다. */}
+            {showFlowViolation && (
+              <div className="space-y-0.5 text-left">
+                {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+                {formatField.violation && (
+                  <p className="text-xs text-red-500">* {formatField.violation}</p>
+                )}
+                {qualityViolation && (
+                  <p className="text-xs text-red-500" data-testid="cell-text-quality-violation">
+                    * {qualityViolation.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        }
       >
-        <div
-          className={cn(
-            'flex w-full flex-col space-y-1.5',
-            // 너비를 고정한 입력칸은 셀의 가로 정렬을 따른다(기본 왼쪽)
-            fixedWidth !== undefined && getHorizontalItemsClass(cell.horizontalAlign),
-          )}
-        >
+        <div className={stackCls}>
           {isMultiline ? (
             <textarea
               ref={anchorRef as React.RefObject<HTMLTextAreaElement>}
@@ -237,42 +287,6 @@ export const InputCell = React.memo(function InputCell({
               aria-invalid={ariaInvalid || undefined}
               aria-describedby={ariaDescribedBy}
             />
-          )}
-
-          {cell.inputMaxLength && !isPrefilled && (
-            <div className="flex justify-end">
-              <p className="text-xs text-gray-500">
-                <span
-                  className={
-                    textValue.length >= cell.inputMaxLength ? 'font-medium text-red-500' : ''
-                  }
-                >
-                  {textValue.length}
-                </span>
-                {' / '}
-                {cell.inputMaxLength}자
-              </p>
-            </div>
-          )}
-
-          {unitReading && !isPrefilled && (
-            <p className="text-muted-foreground text-xs">{unitReading}</p>
-          )}
-
-          {/* 카드 모드 — 위반 안내를 흐름에 둔다. 카드는 셀이 세로로 쌓여 옆 칸이 없고
-              overflow-hidden 이라 아래 띄우면 잘리거나(마지막 셀) 다음 셀 라벨을 덮는다. */}
-          {hintInFlow && hasViolation && (
-            <div className="space-y-0.5 text-left">
-              {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
-              {formatField.violation && (
-                <p className="text-xs text-red-500">* {formatField.violation}</p>
-              )}
-              {qualityViolation && (
-                <p className="text-xs text-red-500" data-testid="cell-text-quality-violation">
-                  * {qualityViolation.message}
-                </p>
-              )}
-            </div>
           )}
         </div>
       </CellContentLayout>

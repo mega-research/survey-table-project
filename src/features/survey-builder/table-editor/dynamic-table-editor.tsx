@@ -9,9 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
+import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
+import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, StagedRowsConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -31,6 +34,7 @@ import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
 import { RowRepeatSettingsCard } from './row-repeat-settings-card';
+import { StagedRowsSettingsCard } from './staged-rows-settings-card';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
@@ -64,6 +68,8 @@ interface DynamicTableEditorProps {
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 행 차례로 열기 설정 — 구조는 그대로이고 응답 화면의 가시성만 정한다 */
+  stagedRowsConfig?: StagedRowsConfig | null | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
@@ -74,6 +80,8 @@ interface DynamicTableEditorProps {
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
   /** null 을 주면 반복을 끈다 (뒤쪽 벌이 구조에서 걷힌다) */
   onRowRepeatConfigChange?: (config: RowRepeatConfig | null) => void;
+  /** null 을 주면 끈다 (행은 그대로다) */
+  onStagedRowsConfigChange?: (config: StagedRowsConfig | null) => void;
 }
 
 // ── 컴포넌트 ──
@@ -134,6 +142,33 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   );
   const mobileDrilldownRepeatHeaderRange = resolveMobileDrilldownRepeatHeaderRange(
     mobileTableQuestion ?? {},
+  );
+  // 「행별 척도」 폴백 진단 — 응답 화면과 같은 행별 모델·투영으로, 편집 중인 표 구조 기준이다
+  const rowScaleBarIssues = useMemo(
+    () =>
+      mobileTableDisplayMode === 'row-wise-scale' && mobileTableQuestion
+        ? diagnoseRowScaleBars({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            choiceGroups: mobileTableQuestion.choiceGroups ?? [],
+            ungroupedSelectionType: resolveUngroupedSelectionType(mobileTableQuestion.type),
+            hideColumnLabels: mobileTableQuestion.hideColumnLabels ?? false,
+            omitLeadingColumns: mobileDrilldownOmitLeadingColumns,
+            repeatHeaderStartRow: mobileDrilldownRepeatHeaderRange?.startRow ?? null,
+            repeatHeaderEndRow: mobileDrilldownRepeatHeaderRange?.endRow ?? null,
+          })
+        : [],
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderRange,
+      mobileTableDisplayMode,
+      mobileTableQuestion,
+      useMultiRowHeader,
+    ],
   );
 
   const {
@@ -580,16 +615,27 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             <MobileTableDisplaySettings
               questionType={mobileTableQuestion.type}
               hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
+              rowScaleBarIssues={rowScaleBarIssues}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}
               repeatHeaderStartRow={mobileDrilldownRepeatHeaderRange?.startRow ?? null}
               repeatHeaderEndRow={mobileDrilldownRepeatHeaderRange?.endRow ?? null}
+              itemCardBlockColumns={mobileTableQuestion.mobileItemCardBlockColumns}
+              columnHeaderLabels={currentColumns.map(
+                (_, index) =>
+                  headerPath(
+                    currentColumns,
+                    useMultiRowHeader ? currentHeaderGrid : undefined,
+                    index,
+                  ).at(-1) ?? '',
+              )}
               onChange={({
                 mode,
                 omitLeadingColumns,
                 repeatHeaderStartRow,
                 repeatHeaderEndRow,
+                itemCardBlockColumns,
               }) => {
                 if (!editingQuestionId) return;
                 silentUpdateQuestion(editingQuestionId, {
@@ -597,6 +643,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   mobileDrilldownOmitLeadingColumns: omitLeadingColumns,
                   mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
                   mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
+                  mobileItemCardBlockColumns: itemCardBlockColumns,
                 });
               }}
             />
@@ -765,6 +812,17 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         tableValidationRules={mobileTableQuestion?.tableValidationRules}
         onChange={props.onRowRepeatConfigChange}
       />
+
+      {/* 행 차례로 열기 설정 — 저작된 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다.
+          호스트가 핸들러를 줄 때만 그린다: 응답 화면이 이 설정을 읽는 것은 테이블 유형뿐이라,
+          보기·순위 문항의 내장 표에서는 켜도 아무 일도 일어나지 않는다. */}
+      {props.onStagedRowsConfigChange && (
+        <StagedRowsSettingsCard
+          rows={currentRows}
+          config={props.stagedRowsConfig}
+          onChange={props.onStagedRowsConfigChange}
+        />
+      )}
 
       {/* 동적 행 그룹 설정 */}
       <Card>
@@ -965,13 +1023,14 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell, valueChanges) => {
+          onSave={(cell, valueChanges, options) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
               updateCell(
                 selectedCellContext.rowIndex,
                 selectedCellContext.cellIndex,
                 cell,
                 valueChanges,
+                options,
               );
             }
             // 표 밖(다른 질문/그룹/행/열)의 표시조건 리매핑은 셀 모달이 DB 커밋 직후 직접

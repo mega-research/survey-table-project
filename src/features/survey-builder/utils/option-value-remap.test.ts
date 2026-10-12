@@ -24,6 +24,40 @@ describe('remapGatingValues', () => {
     const src = rows();
     expect(remapGatingValues(src, 'nobody', 'x', 'y')).toBe(src);
   });
+
+  it('조건 묶음 안의 option 잎도 치환하고 다른 컨트롤러의 잎은 건드리지 않는다', () => {
+    const src = [
+      {
+        id: 'r',
+        label: '',
+        cells: [
+          {
+            id: 't',
+            type: 'input',
+            content: '',
+            enabledWhen: {
+              kind: 'group',
+              op: 'OR',
+              terms: [
+                { kind: 'option', controllerCellId: 'ctrl', values: ['option-2'] },
+                { kind: 'option', controllerCellId: 'other', values: ['option-2'] },
+              ],
+            },
+          },
+        ],
+      },
+    ] as unknown as Parameters<typeof remapGatingValues>[0];
+    const out = remapGatingValues(src, 'ctrl', 'option-2', '5');
+    expect(out[0]!.cells[0]!.enabledWhen).toEqual({
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'option', controllerCellId: 'ctrl', values: ['5'] },
+        { kind: 'option', controllerCellId: 'other', values: ['option-2'] },
+      ],
+    });
+    expect(remapGatingValues(src, 'nobody', 'option-2', '5')).toBe(src);
+  });
 });
 
 const conditionGroup = (): QuestionConditionGroup => ({

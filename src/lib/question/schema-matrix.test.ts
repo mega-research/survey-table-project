@@ -79,6 +79,7 @@ const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileDrilldownOmitLeadingColumns',
   'mobileDrilldownRepeatHeaderStartRow',
   'mobileDrilldownRepeatHeaderEndRow',
+  'mobileItemCardBlockColumns',
 ];
 
 function shapeKeys(schema: { shape: Record<string, unknown> }): string[] {
@@ -134,6 +135,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         'choiceGroups',
         'minSelections',
         'maxSelections',
+        'maxSelectionsSource',
       ]),
     );
   });
@@ -170,6 +172,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         'tableValidationRules',
         'dynamicRowConfigs',
         'rowRepeatConfig',
+        'stagedRowsConfig',
       ]),
     );
   });

@@ -1153,6 +1153,7 @@ const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
   inputCellIds: [`${rowId}-value`],
   calcCellIds: [],
   cellByCol: { 1: `${rowId}-value` },
+  descriptionCellIds: [],
 });
 
 const section = (
@@ -1162,6 +1163,7 @@ const section = (
   label: leaves.length === 1 ? '항목' : '척도',
   kind: 'matrix',
   reason: '테스트',
+  role: 'default',
   leaves,
   colGroups: [{ label: '점수', cols: [{ col: 1, label: '1점' }] }],
   totalInputs: leaves.length,

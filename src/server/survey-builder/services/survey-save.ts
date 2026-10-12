@@ -193,6 +193,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
     minSelections: question.minSelections,
     maxSelections: question.maxSelections,
+    maxSelectionsSource: (question.maxSelectionsSource ?? null) as NewQuestion['maxSelectionsSource'],
     noticeContent: question.noticeContent,
     noticeBgColor: question.noticeBgColor,
     requiresAcknowledgment: question.requiresAcknowledgment,
@@ -208,6 +209,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
+    stagedRowsConfig: question.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
     hideColumnLabels: question.hideColumnLabels,
     stickyColumnCount: question.stickyColumnCount ?? null,
     exportCellOrder: question.exportCellOrder ?? null,
@@ -216,6 +218,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+    mobileItemCardBlockColumns: question.mobileItemCardBlockColumns ?? null,
     hideTitle: question.hideTitle,
     displayCondition: question.displayCondition as NewQuestion['displayCondition'],
     priorAnswerCondition:
@@ -265,6 +268,7 @@ const QUESTION_UPSERT_SET = {
   choiceGroups: sql`excluded.choice_groups`,
   minSelections: sql`excluded.min_selections`,
   maxSelections: sql`excluded.max_selections`,
+  maxSelectionsSource: sql`excluded.max_selections_source`,
   noticeContent: sql`excluded.notice_content`,
   noticeBgColor: sql`excluded.notice_bg_color`,
   requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
@@ -278,6 +282,7 @@ const QUESTION_UPSERT_SET = {
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,
+  stagedRowsConfig: sql`excluded.staged_rows_config`,
   hideColumnLabels: sql`excluded.hide_column_labels`,
   stickyColumnCount: sql`excluded.sticky_column_count`,
   exportCellOrder: sql`excluded.export_cell_order`,
@@ -288,6 +293,7 @@ const QUESTION_UPSERT_SET = {
     sql`excluded.mobile_drilldown_repeat_header_start_row`,
   mobileDrilldownRepeatHeaderEndRow:
     sql`excluded.mobile_drilldown_repeat_header_end_row`,
+  mobileItemCardBlockColumns: sql`excluded.mobile_item_card_block_columns`,
   hideTitle: sql`excluded.hide_title`,
   displayCondition: sql`excluded.display_condition`,
   priorAnswerCondition: sql`excluded.prior_answer_condition`,

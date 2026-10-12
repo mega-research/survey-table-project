@@ -230,4 +230,96 @@ describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
     expect(later?.metadata?.['quotaOverflow']).toBe(true);
     expect(earlier?.metadata?.['quotaOverflow']).toBeUndefined();
   });
+
+  it('빈 complete 가 잠금을 기다리는 사이 draft 가 답을 마감된 셀로 바꾸면 바뀐 셀로 다시 세어 쿼터마감한다', async () => {
+    // 여 셀(목표 1)은 이미 한 명이 완료해 찼다. 응답 r 은 draft 로 「남」 을 저장해 둔 채
+    // 페이로드 없이 완료를 부른다. 잠금 전에는 「남」 으로 셀을 고르지만, 응답 행 잠금을 기다리는
+    // 사이 다른 트랜잭션이 답을 「여」 로 바꿔 커밋한다 — 잠금 아래에서는 마감된 여 셀이다.
+    const twoCellPlan: QuotaConfig = {
+      ...plan(true),
+      dimensions: [
+        {
+          id: 'dim-gender',
+          questionId: GATE_QID,
+          label: '성별',
+          kind: 'choice',
+          categories: [
+            { id: 'cat-m', label: '남', values: ['남'] },
+            { id: 'cat-f', label: '여', values: ['여'] },
+          ],
+        },
+      ],
+      cells: [
+        { categoryIds: ['cat-m'], target: 5 },
+        { categoryIds: ['cat-f'], target: 1 },
+      ],
+    };
+    const { surveyId, responseIds } = await seed(true, 2);
+    const [done, r] = responseIds as [string, string];
+    await db.update(surveys).set({ quotaConfig: twoCellPlan }).where(sql`${surveys.id} = ${surveyId}`);
+    await db
+      .update(surveyResponses)
+      .set({ status: 'completed', isCompleted: true, completedAt: new Date(), questionResponses: { [GATE_QID]: '여' } })
+      .where(sql`${surveyResponses.id} = ${done}`);
+    await db
+      .update(surveyResponses)
+      .set({ questionResponses: { [GATE_QID]: '남' } })
+      .where(sql`${surveyResponses.id} = ${r}`);
+
+    // 응답 행 잠금을 쥔 draft 트랜잭션 — 완료가 행 잠금에서 기다리는 것을 본 뒤 답을 바꿔 커밋한다
+    let markLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      markLocked = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const draft = db.transaction(async (tx) => {
+      await tx.execute(sql`select id from survey_responses where id = ${r} for update`);
+      markLocked();
+      await released;
+      await tx
+        .update(surveyResponses)
+        .set({ questionResponses: { [GATE_QID]: '여' } })
+        .where(sql`${surveyResponses.id} = ${r}`);
+    });
+    await locked;
+    const completion = completeResponse({ responseId: r });
+    let result: Awaited<typeof completion>;
+    try {
+      await waitForRowLockWaiter();
+    } finally {
+      release();
+      await draft;
+      result = await completion;
+    }
+
+    expect(result).toEqual({
+      kind: 'quota_closed',
+      closedMessage: '죄송합니다. 응답 중 마감되었습니다.',
+    });
+    const [row] = await loadRows([r]);
+    expect(row?.status).toBe('quotaful_out');
+    expect(row?.isCompleted).toBe(false);
+    expect(row?.questionResponses).toEqual({ [GATE_QID]: '여' });
+  });
 });
+
+/** 다른 연결이 행 잠금(튜플·트랜잭션 id)을 기다리는 것을 볼 때까지 */
+async function waitForRowLockWaiter(): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const rows = await db.execute<{ waiting: number }>(sql`
+      SELECT count(*)::int AS waiting
+      FROM pg_stat_activity
+      WHERE pid <> pg_backend_pid()
+        AND datname = current_database()
+        AND wait_event_type = 'Lock'
+        AND wait_event IN ('transactionid', 'tuple')
+    `);
+    if ((rows[0]?.waiting ?? 0) >= 1) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('응답 행 잠금 대기자를 관찰하지 못했습니다');
+}

@@ -45,6 +45,12 @@ export interface MobileOriginalRowProjection {
   row: TableRow;
   repeatedRows: TableRow[];
   headerGrid?: HeaderCell[][] | undefined;
+  /**
+   * 반복 헤더 범위·열 라벨 숨김과 무관하게 조각 열로 잘라 낸 헤더 격자. 원본 조각에 헤더를 그릴지는
+   * headerGrid 가 정하고, 이것은 조각을 그리지 않는 표현(행별 척도의 척도 막대)이 라벨 재료로 읽는다 —
+   * 헤더를 숨긴 표에서도 막대의 구간·양끝 라벨은 헤더에서 와야 한다.
+   */
+  clippedHeaderGrid?: HeaderCell[][] | undefined;
   showColumnHeader: boolean;
   hasInteractiveCells: boolean;
   sourceRowIdByCellId: ReadonlyMap<string, string>;
@@ -120,6 +126,7 @@ export function projectMobileOriginalRow(
     repeatedRows,
     showColumnHeader,
     ...(showColumnHeader && projected.headerGrid ? { headerGrid: projected.headerGrid } : {}),
+    ...(projected.headerGrid ? { clippedHeaderGrid: projected.headerGrid } : {}),
     hasInteractiveCells: row.cells.some(isMobileOriginalRowInteractiveCell),
     sourceRowIdByCellId,
   };
@@ -162,6 +169,7 @@ export function getMobileOriginalRowLabelCandidate({
   resolveChoiceLabel,
   rowLabelSourceCellId,
   isLabelSourceHidden,
+  fallbackLabel = '(라벨 없음)',
 }: {
   authoredColumns: TableColumn[];
   row: TableRow;
@@ -169,6 +177,8 @@ export function getMobileOriginalRowLabelCandidate({
   resolveChoiceLabel: (cellId: string) => string | undefined;
   rowLabelSourceCellId?: string | undefined;
   isLabelSourceHidden?: ((cellId: string) => boolean) | undefined;
+  /** 라벨을 못 찾았을 때 쓸 글자. 목록 항목처럼 이름이 꼭 있어야 하는 자리가 아니면 '' 로 비운다. */
+  fallbackLabel?: string | undefined;
 }): MobileOriginalRowLabelCandidate {
   const omit = clampMobileDrilldownOmitLeadingColumns(
     omitLeadingAuthoredColumns,
@@ -218,5 +228,5 @@ export function getMobileOriginalRowLabelCandidate({
   const choiceLabel = choice ? resolveChoiceLabel(choice.id)?.trim() : undefined;
   return choice && choiceLabel
     ? { label: choiceLabel, sourceCellId: choice.id }
-    : { label: '(라벨 없음)' };
+    : { label: fallbackLabel };
 }

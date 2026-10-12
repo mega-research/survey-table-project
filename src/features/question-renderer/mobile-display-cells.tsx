@@ -13,7 +13,7 @@ import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { splitMobileDisplayCells } from '@/features/question-renderer/utils/split-display-cells';
 
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
-function DisplayCellContent({ cell }: { cell: TableCell }) {
+export function DisplayCellContent({ cell }: { cell: TableCell }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
 
@@ -41,7 +41,9 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
   return (
     <div
       className={cn(
-        'whitespace-pre-wrap text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]',
+        // body 의 keep-all(어절 단위 줄바꿈) 상속을 끊는다 — 좁은 카드에서 긴 어절이 통째로
+        // 다음 줄로 넘어가 줄 끝이 크게 비던 것을 글자 단위로 채운다.
+        'whitespace-pre-wrap text-sm leading-relaxed [word-break:normal] text-gray-600 [overflow-wrap:anywhere]',
         getCellTextClassName(cell),
       )}
       style={getCellTextStyle(cell)}

@@ -31,6 +31,13 @@ interface Props {
  * lib/mail/variable-extractor 의 `[^}]+` 패턴을 그대로 쓰면 안 된다 — 그 패턴은
  * 여는 중괄호까지 삼켜 삼중 중괄호를 망가뜨린다(substitute-tokens.ts 참조).
  */
+/** 게이팅 진단 중 amber(경고)로 보이는 종류 — 나머지는 red(오류). */
+const GATING_WARNING_KINDS: ReadonlySet<GatingDiagnostic['kind']> = new Set([
+  'gating-cycle',
+  'gating-prefill-conflict',
+  'gating-empty-group',
+]);
+
 const QUOTE_TOKEN_PATTERN = /\{\{\{([^{}]+)\}\}\}/g;
 
 // 소스 목록은 배열 하나로 받는다 — spread 호출은 대형 설문(수만 소스)에서 V8 인자
@@ -407,19 +414,13 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
     () => collectGatingDiagnostics(questions),
     [questions],
   );
-  // tone 배분: 참조 오류 2종(broken/self)과 숨김 컨트롤러는 red, 순환·prefill 충돌은 amber.
+  // tone 배분: 참조 오류 2종(broken/self)과 숨김 컨트롤러는 red, 순환·prefill 충돌·빈 묶음은 amber.
   const gatingErrors = useMemo(
-    () =>
-      gatingDiagnostics.filter(
-        (d) => d.kind !== 'gating-cycle' && d.kind !== 'gating-prefill-conflict',
-      ),
+    () => gatingDiagnostics.filter((d) => !GATING_WARNING_KINDS.has(d.kind)),
     [gatingDiagnostics],
   );
   const gatingWarnings = useMemo(
-    () =>
-      gatingDiagnostics.filter(
-        (d) => d.kind === 'gating-cycle' || d.kind === 'gating-prefill-conflict',
-      ),
+    () => gatingDiagnostics.filter((d) => GATING_WARNING_KINDS.has(d.kind)),
     [gatingDiagnostics],
   );
   const gatingLine = (d: GatingDiagnostic): string =>

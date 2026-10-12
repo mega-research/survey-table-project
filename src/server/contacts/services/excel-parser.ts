@@ -27,10 +27,26 @@ export function normalizeHeaderKey(value: unknown): string {
   return cellToString(value).replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 날짜 셀 → 엑셀에서 보던 모양. 시각이 없는 날짜(자정)는 `YYYY-MM-DD`, 시각이 있으면
+ * `YYYY-MM-DD HH:mm:ss`.
+ *
+ * exceljs 는 날짜 일련번호를 UTC 기준 Date 로 올린다. 그래서 UTC 로 읽어야 하루가 밀리지
+ * 않는다 — 로컬 시각대로 읽으면 서버 시각대에 따라 전날이 된다. 예전에는 ISO 문자열을
+ * 그대로 찍어 명단에 `2017-09-07T00:00:00.000Z` 가 보였다.
+ */
+function dateToString(value: Date): string {
+  if (Number.isNaN(value.getTime())) return '';
+  const iso = value.toISOString();
+  const date = iso.slice(0, 10);
+  const time = iso.slice(11, 19);
+  return time === '00:00:00' ? date : `${date} ${time}`;
+}
+
 /** 셀 → 문자열. 숫자/null/undefined 모두 안전하게 string. */
 function cellToString(value: unknown): string {
   if (value == null) return '';
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return dateToString(value);
   if (typeof value === 'object') {
     // 수식 셀 (CellFormulaValue / CellSharedFormulaValue): 계산 결과 사용.
     // 결과가 없으면 수식 문자열이 아니라 빈 값으로 본다 (사람이 보는 값이 없다).
@@ -140,7 +156,14 @@ export interface PreviewResult {
   sheetNames: string[];
   headers: string[];
   rows: Array<Record<string, string>>;
+  /** 값이 있는 데이터 행 수. 숨겨진 행도 센다 — 숨겨진 행을 빼면 `totalRows - hiddenRows`. */
   totalRows: number;
+  /** 숨겨진 행과 빈 행을 뺀 첫 maxRows 행 — 숨겨진 행을 빼고 적재할 때의 미리보기. */
+  visibleRows: Array<Record<string, string>>;
+  /** 값이 있는 데이터 행 중 엑셀에서 숨겨진 행 수. */
+  hiddenRows: number;
+  /** 엑셀에서 숨겨진 열의 헤더 키. `headers`·`rows` 에는 숨겨진 열도 그대로 들어 있다. */
+  hiddenHeaders: string[];
 }
 
 /**
@@ -155,7 +178,15 @@ export async function previewExcel(
   const sheetNames = wb.worksheets.map((w) => w.name);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
   if (!ws) {
-    return { sheetNames, headers: [], rows: [], totalRows: 0 };
+    return {
+      sheetNames,
+      headers: [],
+      rows: [],
+      totalRows: 0,
+      visibleRows: [],
+      hiddenRows: 0,
+      hiddenHeaders: [],
+    };
   }
 
   const headers = readHeaders(ws, opts.headerRow);
@@ -165,51 +196,137 @@ export async function previewExcel(
   const endRow = Math.min(ws.rowCount, startRow + maxRows - 1);
 
   for (let r = startRow; r <= endRow; r++) {
-    const row = ws.getRow(r);
-    const obj: Record<string, string> = {};
-    headers.forEach((key, idx) => {
-      const cell = row.getCell(idx + 1);
-      obj[key] = cellNodeToString(cell);
-    });
-    rows.push(obj);
+    rows.push(readRowRecord(ws, r, headers).record);
+  }
+
+  // 총 행 수는 적재(parseExcelRows)와 같은 규칙으로 센다. ws.rowCount 는 값 없이 서식만
+  // 남은 꼬리 행까지 세어, 171명짜리 명단이 「555 행 적재 시작」으로 보였다.
+  let totalRows = 0;
+  let hiddenRows = 0;
+  const visibleRows: Array<Record<string, string>> = [];
+  for (let r = startRow; r <= ws.rowCount; r++) {
+    const obj = readDataRow(ws, r, headers);
+    if (obj === null) continue;
+    totalRows++;
+    if (isHiddenRow(ws, r)) hiddenRows++;
+    else if (visibleRows.length < maxRows) visibleRows.push(obj);
   }
 
   return {
     sheetNames,
     headers,
     rows,
-    totalRows: ws.rowCount - opts.headerRow,
+    totalRows,
+    visibleRows,
+    hiddenRows,
+    hiddenHeaders: headers.filter((_, idx) => isHiddenColumn(ws, idx + 1)),
   };
 }
 
 export interface ParseRowsOptions {
   sheetName: string;
   headerRow: number;
+  /** 엑셀에서 숨겨진 행을 건너뛴다. 디폴트 false (보이든 숨겨졌든 전부 읽는다). */
+  skipHiddenRows?: boolean;
+  /**
+   * 엑셀에서 숨겨진 열을 읽지 않는다. 디폴트 false.
+   * 남는 열의 키는 그대로다 — 같은 이름 헤더의 `__2` 접미는 숨겨진 열까지 세어 붙인다.
+   * 미리보기가 보여 준 키와 적재되는 키가 옵션에 따라 달라지면 매핑이 어긋난다.
+   */
+  skipHiddenColumns?: boolean;
+}
+
+export interface ParsedExcelRows {
+  rows: Array<Record<string, string>>;
+  /**
+   * rows 와 같은 순서의 엑셀 행 번호(1-based). 빈 행과 숨겨진 행을 건너뛰므로
+   * 「헤더 행 + 인덱스」로는 원래 행을 되짚을 수 없다.
+   */
+  rowNumbers: number[];
+  /** skipHiddenRows 로 건너뛴 행 수 — 값이 있는 행만 센다. */
+  skippedHiddenRows: number;
+  /** skipHiddenColumns 로 읽지 않은 열 수. */
+  skippedHiddenColumns: number;
 }
 
 /** 풀 파싱 — 적재용. 행 수 한계(MAX_UPLOAD_ROWS)는 호출자가 가드. */
 export async function parseExcelRows(
   buffer: Buffer | ArrayBuffer,
   opts: ParseRowsOptions,
-): Promise<Array<Record<string, string>>> {
+): Promise<ParsedExcelRows> {
   const wb = await loadWorkbook(buffer);
   const ws = wb.getWorksheet(opts.sheetName) ?? wb.worksheets[0];
-  if (!ws) return [];
+  if (!ws) return { rows: [], rowNumbers: [], skippedHiddenRows: 0, skippedHiddenColumns: 0 };
 
   const headers = readHeaders(ws, opts.headerRow);
-  const rows: Array<Record<string, string>> = [];
-  for (let r = opts.headerRow + 1; r <= ws.rowCount; r++) {
-    const row = ws.getRow(r);
-    const obj: Record<string, string> = {};
-    let allEmpty = true;
-    headers.forEach((key, idx) => {
-      const value = cellNodeToString(row.getCell(idx + 1));
-      if (value !== '') allEmpty = false;
-      obj[key] = value;
+  const omitColumns = new Set<number>();
+  if (opts.skipHiddenColumns === true) {
+    headers.forEach((_, idx) => {
+      if (isHiddenColumn(ws, idx + 1)) omitColumns.add(idx + 1);
     });
-    if (!allEmpty) rows.push(obj);
   }
-  return rows;
+  const rows: Array<Record<string, string>> = [];
+  const rowNumbers: number[] = [];
+  let skippedHiddenRows = 0;
+  for (let r = opts.headerRow + 1; r <= ws.rowCount; r++) {
+    const obj = readDataRow(ws, r, headers, omitColumns);
+    if (obj === null) continue;
+    if (opts.skipHiddenRows === true && isHiddenRow(ws, r)) {
+      skippedHiddenRows++;
+      continue;
+    }
+    rows.push(obj);
+    rowNumbers.push(r);
+  }
+  return { rows, rowNumbers, skippedHiddenRows, skippedHiddenColumns: omitColumns.size };
+}
+
+/**
+ * 엑셀에서 숨겨진 행인가. 필터로 걸러진 행·손으로 숨긴 행·접힌 그룹의 행이 파일에는
+ * 모두 같은 `hidden` 표식으로 남아 서로 구분되지 않는다.
+ */
+function isHiddenRow(ws: ExcelJS.Worksheet, rowNumber: number): boolean {
+  return ws.getRow(rowNumber).hidden;
+}
+
+/** 엑셀에서 숨겨진 열인가 (1-based 열 번호). */
+function isHiddenColumn(ws: ExcelJS.Worksheet, colNumber: number): boolean {
+  return ws.getColumn(colNumber).hidden;
+}
+
+/**
+ * 헤더 열 기준으로 한 행을 읽는다. `isEmpty` 는 헤더 열이 전부 빈 경우.
+ *
+ * `omitColumns`(1-based 열 번호)의 열은 결과에 싣지 않는다. 빈 행 판정에는 그 열도 본다 —
+ * 열을 빼느냐에 따라 행 수가 달라지면 미리보기의 행 수와 적재 행 수가 어긋난다.
+ */
+function readRowRecord(
+  ws: ExcelJS.Worksheet,
+  rowNumber: number,
+  headers: string[],
+  omitColumns?: ReadonlySet<number>,
+): { record: Record<string, string>; isEmpty: boolean } {
+  const row = ws.getRow(rowNumber);
+  const record: Record<string, string> = {};
+  let isEmpty = true;
+  headers.forEach((key, idx) => {
+    const value = cellNodeToString(row.getCell(idx + 1));
+    if (value !== '') isEmpty = false;
+    if (omitColumns?.has(idx + 1)) return;
+    record[key] = value;
+  });
+  return { record, isEmpty };
+}
+
+/** 데이터 행 한 줄. 헤더 열이 전부 비면 null — 시트 끝에 서식만 남은 행이 흔하다. */
+function readDataRow(
+  ws: ExcelJS.Worksheet,
+  rowNumber: number,
+  headers: string[],
+  omitColumns?: ReadonlySet<number>,
+): Record<string, string> | null {
+  const { record, isEmpty } = readRowRecord(ws, rowNumber, headers, omitColumns);
+  return isEmpty ? null : record;
 }
 
 function readHeaders(ws: ExcelJS.Worksheet, headerRow: number): string[] {
@@ -320,17 +437,21 @@ export async function previewExcelGrid(
       ? ws.rowCount
       : Math.min(ws.rowCount, startRow + opts.maxRows - 1);
   const rows: string[][] = [];
-  for (let r = startRow; r <= endRow; r++) {
+  // 총 행 수는 표본만 읽을 때도 시트 끝까지 훑어 값이 있는 행만 센다 — 적재될 행 수와 같아야 한다.
+  let totalRows = 0;
+  for (let r = startRow; r <= ws.rowCount; r++) {
     const values = readGridRow(ws, r, columnCount, false);
+    const hasValue = values.some((value) => value !== '');
+    if (hasValue) totalRows++;
     // 전량 읽기(적재)에서는 완전히 빈 행을 버린다 — 시트 끝의 서식만 남은 행이 흔하다.
-    if (opts.maxRows !== undefined || values.some((value) => value !== '')) rows.push(values);
+    if (opts.maxRows === undefined ? hasValue : r <= endRow) rows.push(values);
   }
 
   return {
     sheetNames,
     headerRows,
     rows,
-    totalRows: Math.max(0, ws.rowCount - opts.headerRowCount),
+    totalRows,
   };
 }
 

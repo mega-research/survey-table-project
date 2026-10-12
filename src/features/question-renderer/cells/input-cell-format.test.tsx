@@ -70,7 +70,8 @@ describe('표 input 셀 입력 형식', () => {
     const inFlow = screen.getByText(/사업자번호는 10자리입니다/);
     expect(inFlow.closest('.absolute')).toBeNull();
     // 카드 안에서 잘리지 않도록 입력칸과 같은 흐름 컨테이너에 들어 있다
-    expect(inFlow.closest('.flex-col')).toContainElement(screen.getByRole('textbox'));
+    expect(inFlow.closest('[data-floating-hint]')).toBeNull();
+    expect(inFlow.closest('.relative')).toContainElement(screen.getByRole('textbox'));
   });
 
   it('번호 형식 칸은 글자가 쳐지지 않고 숫자와 하이픈만 들어간다', async () => {

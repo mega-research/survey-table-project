@@ -110,3 +110,69 @@ describe('updateContactTarget groupValue 보존', () => {
     expect(capturedSets[0]).toMatchObject({ groupValue: '0' });
   });
 });
+
+/**
+ * 값이 있는데 형식이 틀린 PII(예: `@` 없는 메일)는 저장 경로에 넘기지 않고 거부한다.
+ * 넘기면 「빈 값」으로 취급되어 기존 암호화 행이 지워지고 호출은 성공으로 끝난다 —
+ * 화면에는 「저장 완료」가 뜨고 값은 사라진다(2026-10-06 실사고).
+ */
+describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => {
+  beforeEach(() => {
+    capturedSets.length = 0;
+    selectResultQueue.length = 0;
+    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
+    vi.clearAllMocks();
+  });
+
+  it('@ 없는 메일이면 BAD_REQUEST 로 거부하고 아무것도 쓰지 않는다', async () => {
+    const { upsertPiiValue } = await import('@/lib/crypto/contact-pii-repo');
+
+    await expect(
+      updateContactTarget(
+        {
+          id: 'ct-1',
+          surveyId: 'sv-1',
+          attrs: { 회사명: '아크미' },
+          piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'dream-elec.co.kr' }],
+        },
+        false,
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/「이메일1」.*메일 형식/) });
+
+    // 기존 암호화 행을 건드리지 않고(삭제 포함), 같은 요청의 attrs·메모도 쓰지 않는다.
+    expect(upsertPiiValue).not.toHaveBeenCalled();
+    expect(capturedSets).toHaveLength(0);
+  });
+
+  it('칸을 비운 것은 그대로 통과한다 — 지우겠다는 뜻이다', async () => {
+    const { upsertPiiValue } = await import('@/lib/crypto/contact-pii-repo');
+
+    await updateContactTarget(
+      {
+        id: 'ct-1',
+        surveyId: 'sv-1',
+        attrs: {},
+        piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: '' }],
+      },
+      false,
+    );
+
+    expect(upsertPiiValue).toHaveBeenCalledWith(expect.anything(), 'ct-1', '이메일1', 'email', '');
+  });
+
+  it('형식이 맞는 값은 그대로 저장한다', async () => {
+    const { upsertPiiValue } = await import('@/lib/crypto/contact-pii-repo');
+
+    await updateContactTarget(
+      {
+        id: 'ct-1',
+        surveyId: 'sv-1',
+        attrs: {},
+        piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'info@dream-elec.co.kr' }],
+      },
+      false,
+    );
+
+    expect(upsertPiiValue).toHaveBeenCalledTimes(1);
+  });
+});

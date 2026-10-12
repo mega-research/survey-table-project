@@ -22,6 +22,8 @@ import { client } from '@/shared/lib/rpc';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
+import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
+import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { GROUPABLE_CELL_TYPES, buildUpdatedCell } from './utils/serialize-cell';
 import type { UseCellFormResult } from './hooks/use-cell-form';
 
@@ -46,8 +48,16 @@ export interface CommitCellEditArgs {
   ensureSurvey: () => Promise<void>;
   saveSurveyScoped: (scope: { questionIds: string[]; groupIds?: string[] }) => Promise<unknown>;
   remapOptionValueInConditions: SurveyBuilderState['remapOptionValueInConditions'];
-  onSave: (cell: TableCell, valueChanges?: { oldValue: string; newValue: string }[]) => void;
+  onSave: (
+    cell: TableCell,
+    valueChanges?: { oldValue: string; newValue: string }[],
+    options?: CellSaveOptions,
+  ) => void;
   onChoiceGroupsChange?: ((groups: ChoiceGroup[]) => void) | undefined;
+  /** 이 셀의 「모바일 카드 표시」를 같은 열의 다른 표시 셀에도 적용할지 (모달의 체크). */
+  mobileDisplayColumnWide?: boolean | undefined;
+  /** 이 칸의 「중복 불가 묶음 이름」을 같은 열의 다른 선택 칸에도 적용할지 (모달의 체크). */
+  distinctGroupColumnWide?: boolean | undefined;
 }
 
 /**
@@ -69,6 +79,8 @@ export async function commitCellEdit({
   remapOptionValueInConditions,
   onSave,
   onChoiceGroupsChange,
+  mobileDisplayColumnWide,
+  distinctGroupColumnWide,
 }: CommitCellEditArgs): Promise<void> {
   const readBuilderState = useSurveyBuilderStore.getState;
   const writeBuilderState = useSurveyBuilderStore.setState;
@@ -84,11 +96,24 @@ export async function commitCellEdit({
     // 로컬 스토어 업데이트 (셀 저장) — onChoiceGroupsChange 보다 먼저 수행해야
     // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
     // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
+    // 열 일괄 지정은 저장되는 셀의 값(미지정 포함)을 그대로 따른다.
+    const saveOptions: CellSaveOptions | undefined =
+      mobileDisplayColumnWide || distinctGroupColumnWide
+        ? {
+            ...(mobileDisplayColumnWide
+              ? { columnMobileDisplay: { value: updatedCell.mobileDisplay } }
+              : {}),
+            ...(distinctGroupColumnWide
+              ? { columnDistinctGroup: { value: updatedCell.distinctGroup } }
+              : {}),
+          }
+        : undefined;
     onSave(
       updatedCell,
       pendingOptionValueChangesRef.current.length > 0
         ? pendingOptionValueChangesRef.current
         : undefined,
+      ...(saveOptions ? [saveOptions] : []),
     );
 
     // choice_opt 또는 ranking_opt 탭에서 그룹 변경이 있었으면 정리 후 부모에게 통보.
@@ -108,10 +133,26 @@ export async function commitCellEdit({
       const baseRows = getLatestRows?.() ?? question?.tableRowsData;
       if (question && baseRows) {
         // 최신 행에서 해당 셀을 업데이트(onSave 로 이미 반영됐어도 id 기준 재적용은 idempotent)
-        const updatedRowsData = baseRows.map((row) => ({
+        const rowsWithCell = baseRows.map((row) => ({
           ...row,
           cells: row.cells.map((c) => (c.id === cell.id ? updatedCell : c)),
         }));
+        // 열 일괄 지정도 같은 이유로 재적용한다 — getLatestRows 가 배선되지 않은 폴백(store 행)에서는
+        // onSave 의 반영이 베이스에 없다.
+        const rowsWithMobileDisplay = saveOptions?.columnMobileDisplay
+          ? applyMobileDisplayToColumn(
+              rowsWithCell,
+              cell.id,
+              saveOptions.columnMobileDisplay.value,
+            )
+          : rowsWithCell;
+        const updatedRowsData = saveOptions?.columnDistinctGroup
+          ? applyDistinctGroupToColumn(
+              rowsWithMobileDisplay,
+              cell.id,
+              saveOptions.columnDistinctGroup.value,
+            )
+          : rowsWithMobileDisplay;
 
         // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
         // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.
@@ -220,6 +261,7 @@ export async function commitCellEdit({
               mobileOptionsColumns: question.mobileOptionsColumns,
               minSelections: question.minSelections,
               maxSelections: question.maxSelections,
+              maxSelectionsSource: question.maxSelectionsSource,
               noticeContent: question.noticeContent,
               requiresAcknowledgment: question.requiresAcknowledgment,
               noticeBgColor: question.noticeBgColor,
@@ -237,6 +279,7 @@ export async function commitCellEdit({
               sumConstraints: question.sumConstraints,
               dynamicRowConfigs: question.dynamicRowConfigs,
               rowRepeatConfig: question.rowRepeatConfig,
+              stagedRowsConfig: question.stagedRowsConfig,
               hideColumnLabels: question.hideColumnLabels,
               stickyColumnCount: question.stickyColumnCount,
               mobileOriginalTable: question.mobileOriginalTable,
@@ -244,6 +287,7 @@ export async function commitCellEdit({
               mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
               mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
               mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+              mobileItemCardBlockColumns: question.mobileItemCardBlockColumns,
               hideTitle: question.hideTitle,
               pageBreakBefore: question.pageBreakBefore,
               rankingConfig: question.rankingConfig,

@@ -296,16 +296,38 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     } as unknown as Question;
   }
 
-  it('행마다 카드 하나 — 구분 셀이 제목·설명으로 보이고 그룹마다 섹션 제목(축 이름)이 붙는다', () => {
+  it('행마다 카드 하나 — 구분 셀이 제목으로 보이고 그룹마다 섹션 제목(축 이름)이 붙는다', () => {
     const { container } = render(
       <ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />,
     );
     expect(container.querySelectorAll('.rounded-2xl')).toHaveLength(1);
-    expect(screen.getByText('1) 얼라이언스 운영')).toBeInTheDocument();
+    expect(screen.getByText(/1\) 얼라이언스 운영/)).toBeInTheDocument();
     expect(screen.getByText(/네트워킹 및 행사 개최/)).toBeInTheDocument();
     for (const section of ['인지여부', '필요성', '참여 의향']) {
       expect(screen.getByText(section)).toBeInTheDocument();
     }
+  });
+
+  it('카드 머리는 화면 위에 고정되고, 구분 셀의 여러 줄은 나누지 않고 제목 한 자리에 그대로 둔다', () => {
+    render(<ChoiceTableResponse question={groupedRowQuestion()} value={{}} onChange={() => {}} />);
+    const header = within(screen.getByTestId('row-card-r1')).getByTestId('row-card-header');
+    expect(header).toHaveClass('sticky', 'top-0');
+    expect(header).toHaveTextContent('1) 얼라이언스 운영 네트워킹 및 행사 개최');
+    expect(header.querySelector('.text-gray-500')).toBeNull();
+  });
+
+  it('구분 셀의 서식본(contentHtml)이 있으면 카드 머리가 그것을 그린다', () => {
+    const q = groupedRowQuestion();
+    q.tableRowsData![0]!.cells[0] = {
+      ...q.tableRowsData![0]!.cells[0]!,
+      content: '(논문게재 사업 멘티 대상)\n3) 논문게재 지원',
+      contentHtml:
+        '<p><strong><span style="color: #ef4444">(논문게재 사업 멘티 대상)</span></strong></p><p>3) 논문게재 지원</p>',
+    };
+    render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
+    const header = within(screen.getByTestId('row-card-r1')).getByTestId('row-card-header');
+    expect(header.querySelector('strong span')).toHaveTextContent('(논문게재 사업 멘티 대상)');
+    expect(header).toHaveTextContent('3) 논문게재 지원');
   });
 
   it('섹션 안 보기 타일은 세로로 한 줄씩 쌓인다 — 휴대폰 폭에서 2열로 접히지 않는다', () => {
@@ -321,7 +343,7 @@ describe('ChoiceTableResponse (mobile) — 행 단위 그룹 카드', () => {
     const q = groupedRowQuestion();
     q.tableRowsData![0]!.cells[0] = { ...q.tableRowsData![0]!.cells[0]!, mobileDisplay: 'inline' };
     render(<ChoiceTableResponse question={q} value={{}} onChange={() => {}} />);
-    expect(screen.getAllByText('1) 얼라이언스 운영')).toHaveLength(1);
+    expect(screen.getAllByText(/1\) 얼라이언스 운영/)).toHaveLength(1);
     expect(screen.getAllByText(/네트워킹 및 행사 개최/)).toHaveLength(1);
   });
 

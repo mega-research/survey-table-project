@@ -385,6 +385,13 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.choiceGroups != null ? { choiceGroups: q.choiceGroups } : {}),
     ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
     ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
+    ...(q.maxSelectionsSource != null
+      ? {
+          maxSelectionsSource: q.maxSelectionsSource as NonNullable<
+            QuestionType['maxSelectionsSource']
+          >,
+        }
+      : {}),
     ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),
     ...(q.noticeBgColor != null ? { noticeBgColor: q.noticeBgColor } : {}),
     ...(q.requiresAcknowledgment != null
@@ -408,6 +415,9 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     ...(q.rowRepeatConfig != null
       ? { rowRepeatConfig: q.rowRepeatConfig as NonNullable<QuestionType['rowRepeatConfig']> }
+      : {}),
+    ...(q.stagedRowsConfig != null
+      ? { stagedRowsConfig: q.stagedRowsConfig as NonNullable<QuestionType['stagedRowsConfig']> }
       : {}),
     ...(q.numberFormat != null
       ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> }
@@ -433,6 +443,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+    ...(q.mobileItemCardBlockColumns != null ? { mobileItemCardBlockColumns: q.mobileItemCardBlockColumns } : {}),
     ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
     ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
     ...(q.displayCondition != null

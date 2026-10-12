@@ -153,3 +153,73 @@ describe('collectGatingDiagnostics — 내장 표가 있는 문항 전부', () =
     expect(collectGatingDiagnostics([plain])).toEqual([]);
   });
 });
+
+describe('collectGatingDiagnostics — 조건 묶음', () => {
+  const group = (
+    op: 'AND' | 'OR' | 'NOT',
+    ids: string[],
+  ): NonNullable<TableCell['enabledWhen']> => ({
+    kind: 'group',
+    op,
+    terms: ids.map((id) => ({ kind: 'filled', controllerCellId: id })),
+  });
+  const input = (id: string, enabledWhen?: TableCell['enabledWhen']): TableCell =>
+    ({ id, type: 'input', content: '', ...(enabledWhen ? { enabledWhen } : {}) }) as TableCell;
+
+  it('컨트롤러가 모두 살아 있는 묶음은 진단이 없다', () => {
+    const q = makeQuestion([row('r1', [input('a'), input('b'), input('t', group('OR', ['a', 'b']))])]);
+    expect(collectGatingDiagnostics([q])).toEqual([]);
+  });
+
+  it('묶음 안 조건 하나가 없는 셀을 가리키면 gating-broken-ref — 문구는 "그 조건" 을 말한다', () => {
+    const q = makeQuestion([row('r1', [input('a'), input('t', group('OR', ['a', 'ghost']))])]);
+    const out = collectGatingDiagnostics([q]);
+    expect(out.map((d) => d.kind)).toEqual(['gating-broken-ref']);
+    expect(out[0]!.message).toContain('그 조건은 충족될 수 없습니다');
+  });
+
+  it('깊은 묶음 안의 자기 참조도 잡는다', () => {
+    const nested: NonNullable<TableCell['enabledWhen']> = {
+      kind: 'group',
+      op: 'AND',
+      terms: [{ kind: 'filled', controllerCellId: 'a' }, group('OR', ['t'])],
+    };
+    const q = makeQuestion([row('r1', [input('a'), input('t', nested)])]);
+    expect(collectGatingDiagnostics([q]).map((d) => d.kind)).toEqual(['gating-self-ref']);
+  });
+
+  it('같은 종류의 문제가 여러 조건에 있어도 셀당 1건이다', () => {
+    const q = makeQuestion([row('r1', [input('t', group('OR', ['ghost1', 'ghost2']))])]);
+    expect(collectGatingDiagnostics([q]).map((d) => d.kind)).toEqual(['gating-broken-ref']);
+  });
+
+  it('조건이 0개인 묶음 → gating-empty-group', () => {
+    const q = makeQuestion([row('r1', [input('a'), input('t', group('OR', []))])]);
+    expect(collectGatingDiagnostics([q]).map((d) => d.kind)).toEqual(['gating-empty-group']);
+  });
+
+  it('묶음을 거친 순환 — t 가 (a 또는 b) 를 보고 b 가 t 를 본다', () => {
+    const q = makeQuestion([
+      row('r1', [
+        input('a'),
+        input('b', { kind: 'filled', controllerCellId: 't' }),
+        input('t', group('OR', ['a', 'b'])),
+      ]),
+    ]);
+    const out = collectGatingDiagnostics([q]);
+    expect(out.map((d) => d.kind)).toEqual(['gating-cycle']);
+    expect(out[0]!.message).toContain('2개 셀');
+  });
+
+  it('두 셀이 같은 컨트롤러를 보는 것(다이아몬드)은 순환이 아니다', () => {
+    const q = makeQuestion([
+      row('r1', [
+        input('a'),
+        input('b', { kind: 'filled', controllerCellId: 'a' }),
+        input('c', { kind: 'filled', controllerCellId: 'a' }),
+        input('t', group('AND', ['b', 'c'])),
+      ]),
+    ]);
+    expect(collectGatingDiagnostics([q])).toEqual([]);
+  });
+});

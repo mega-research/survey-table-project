@@ -561,3 +561,107 @@ describe('completeResponse — 보기 그룹 표의 __choiceGroups 보존', () =
     });
   });
 });
+
+// ─── 행 표시조건만 컨택 attrs 를 읽는 설문 ─────────────────────────────────
+
+/**
+ * 문항·그룹 표시조건도 calc 셀도 없고 **행 표시조건만** 컨택 attrs 를 읽는 설문. 응답 화면은
+ * attrs 로 그 행을 보이는데, 제출이 attrs 를 안 읽으면 빈 attrs 로 판정해 멀쩡한 행 답을 지운다.
+ */
+const ATTR_ROW_QUESTIONS = [
+  { id: 'q-count', type: 'text', title: '인원', order: 0 },
+  {
+    id: 'q-attr-row',
+    type: 'table',
+    title: '대상별 행',
+    order: 1,
+    tableRowsData: [
+      {
+        id: 'ar1',
+        label: '대상 행',
+        displayCondition: {
+          logicType: 'AND',
+          conditions: [
+            {
+              id: 'ar1-c1',
+              enabled: true,
+              logicType: 'AND',
+              conditionType: 'expression',
+              sourceQuestionId: '',
+              expressionConfig: {
+                clauses: [
+                  {
+                    kind: 'comparison',
+                    // 응답 × 컨택 계수 > 0 — attrs 가 없으면 무효 전파로 거짓이 되어 행이 숨는다
+                    comparison: {
+                      left: {
+                        kind: 'binop',
+                        op: '*',
+                        left: { kind: 'question', questionId: 'q-count' },
+                        right: { kind: 'attr', attrsKey: '계수' },
+                      },
+                      op: '>',
+                      right: { kind: 'literal', value: 0 },
+                    },
+                  },
+                ],
+                joinOps: [],
+              },
+            },
+          ],
+        },
+        cells: [{ id: 'ar1_in', content: '', type: 'input' }],
+      },
+    ],
+  },
+];
+
+describe('completeResponse — 행 표시조건만 컨택 attrs 를 읽는 설문', () => {
+  const CONTACT_ID = '00000000-0000-4000-8000-0000000000c1';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: CONTACT_ID,
+      isTest: false,
+    });
+    surveyFindFirstMock.mockResolvedValue({
+      id: SURVEY_ID,
+      status: 'published',
+      endDate: null,
+      maxResponses: null,
+      isPublic: true,
+      requireInviteToken: false,
+      currentVersionId: VERSION_ID,
+      isPaused: false,
+      testModeEnabled: false,
+      testToken: null,
+    });
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    selectThenMock.mockReturnValue([{ total: 0 }]);
+    // limit 조회는 스냅샷·컨택 attrs 가 같은 모의를 탄다 — 한 행에 둘 다 싣는다
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: ATTR_ROW_QUESTIONS }, attrs: { 계수: '2' } },
+    ]);
+    stubExecute(ATTR_ROW_QUESTIONS.map((q) => q.id));
+    updateReturningMock.mockReturnValue([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: CONTACT_ID, pageVisits: null },
+    ]);
+  });
+
+  it('attrs 로 보이는 행의 답을 제출에서 지우지 않는다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { 'q-count': '3', 'q-attr-row': { ar1_in: '서울' } } },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    expect(setArg.questionResponses['q-attr-row']).toEqual({ ar1_in: '서울' });
+  });
+});

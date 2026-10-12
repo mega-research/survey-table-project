@@ -421,4 +421,105 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       closedMessage: '죄송합니다. 응답 중 마감되었습니다.',
     });
   });
+
+  describe('빈 complete — 잠금 전과 잠금 아래의 셀이 다르면 바뀐 셀로 다시 센다', () => {
+    // 두 셀(남 여유 · 여 마감). 잠금 전 저장분으로 고른 셀과 잠금 아래 저장분의 셀이 다르면,
+    // 그 사이 draft 가 답을 바꾼 것이다 — 세지 않고 통과시키면 마감된 셀에 완료가 생긴다.
+    const TWO_CELL_PLAN = {
+      ...HARD_CLOSE_PLAN,
+      dimensions: [
+        {
+          id: 'dim-gender',
+          questionId: GATE_QID,
+          kind: 'choice',
+          categories: [
+            { id: 'cat-male', values: ['남'] },
+            { id: 'cat-female', values: ['여'] },
+          ],
+        },
+      ],
+      cells: [
+        { categoryIds: ['cat-male'], target: 2 },
+        { categoryIds: ['cat-female'], target: 1 },
+      ],
+    };
+    const stored = (value: string) => [{ questionResponses: { [GATE_QID]: value } }];
+
+    beforeEach(() => {
+      surveysRowHolder.row = { ...OPEN_SURVEY_ROW, quotaConfig: TWO_CELL_PLAN };
+    });
+
+    it('여유 셀에서 마감된 셀로 바뀌었으면 바뀐 셀로 다시 세어 쿼터마감한다', async () => {
+      // 0) 가용성 카운트 1) 잠금 전 저장분 — 남
+      // [1차 tx] 2) 잠금 아래 저장분 — 여 → 셀이 바뀌어 되돌린다
+      // [2차 tx, 여 잠금] 3) 잠금 아래 저장분 — 여 4) 여 셀 완료 수(목표 1 을 이미 채움)
+      selectTerminalQueue.push([{ total: 0 }], stored('남'), stored('여'), stored('여'), stored('여'));
+
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      const result = await completeResponse({ responseId: RESPONSE_ID });
+
+      const statusSets = capturedUpdateSets.filter((s) => s['status'] !== undefined);
+      expect(statusSets.map((s) => s['status'])).toEqual(['quotaful_out']);
+      expect(result).toEqual({
+        kind: 'quota_closed',
+        closedMessage: '죄송합니다. 응답 중 마감되었습니다.',
+      });
+    });
+
+    it('잠금 전에는 미분류였다가 잠금 아래에서 마감된 셀로 분류돼도 다시 세어 쿼터마감한다', async () => {
+      selectTerminalQueue.push([{ total: 0 }], stored('기타'), stored('여'), stored('여'), stored('여'));
+
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      const result = await completeResponse({ responseId: RESPONSE_ID });
+
+      expect(result).toEqual({
+        kind: 'quota_closed',
+        closedMessage: '죄송합니다. 응답 중 마감되었습니다.',
+      });
+    });
+
+    it('바뀐 셀에 여유가 있으면 완료된다', async () => {
+      // 2차 tx 의 남 셀 완료 수 — 1명(목표 2)
+      selectTerminalQueue.push([{ total: 0 }], stored('여'), stored('남'), stored('남'), stored('남'));
+
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      const result = await completeResponse({ responseId: RESPONSE_ID });
+
+      const statusSets = capturedUpdateSets.filter((s) => s['status'] !== undefined);
+      expect(statusSets.map((s) => s['status'])).toEqual(['completed']);
+      expect(result).not.toHaveProperty('kind');
+    });
+
+    it('잠금 아래에서 미분류가 됐으면 쿼터에 걸리지 않고 완료된다', async () => {
+      selectTerminalQueue.push([{ total: 0 }], stored('여'), stored('기타'));
+
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      const result = await completeResponse({ responseId: RESPONSE_ID });
+
+      const statusSets = capturedUpdateSets.filter((s) => s['status'] !== undefined);
+      expect(statusSets.map((s) => s['status'])).toEqual(['completed']);
+      expect(result).not.toHaveProperty('kind');
+    });
+
+    it('셀이 계속 바뀌면 완료로 만들지 않고 거부한다', async () => {
+      // 잠금 아래 저장분이 시도마다 다른 셀 — 남·여를 번갈아 돈다
+      selectTerminalQueue.push(
+        [{ total: 0 }],
+        stored('남'),
+        stored('여'),
+        stored('남'),
+        stored('여'),
+        stored('남'),
+      );
+
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      await expect(completeResponse({ responseId: RESPONSE_ID })).rejects.toThrow();
+      expect(capturedUpdateSets.filter((s) => s['status'] !== undefined)).toEqual([]);
+    });
+  });
 });

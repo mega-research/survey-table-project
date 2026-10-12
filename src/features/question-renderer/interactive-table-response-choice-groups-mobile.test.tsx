@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { ChoiceGroup, TableColumn, TableRow } from '@/types/survey';
@@ -216,15 +216,57 @@ describe('보기 그룹 표 — 행 단위 그룹 카드', () => {
     );
   }
 
-  it('보기 셀이 있는 행마다 카드 하나 — 구분 셀이 제목·설명으로 보이고 그룹마다 섹션 제목(축 이름)이 붙는다', () => {
+  it('보기 셀이 있는 행마다 카드 하나 — 구분 셀이 제목으로 보이고 그룹마다 섹션 제목(축 이름)이 붙는다', () => {
     const { container } = render(<HarnessB1 />);
     // 보기 셀이 없는 설명 행은 카드가 되지 않는다
     expect(container.querySelectorAll('.rounded-2xl')).toHaveLength(1);
-    expect(screen.getByText('1) 얼라이언스 운영')).toBeInTheDocument();
+    expect(screen.getByText(/1\) 얼라이언스 운영/)).toBeInTheDocument();
     expect(screen.getByText(/네트워킹 및 행사 개최/)).toBeInTheDocument();
     expect(screen.queryByText('설명만 있는 행')).not.toBeInTheDocument();
     expect(screen.getByText('인지여부')).toBeInTheDocument();
     expect(screen.getByText('참여 의향')).toBeInTheDocument();
+  });
+
+  it('카드 머리는 화면 위에 고정되고, 구분 셀의 여러 줄은 나누지 않고 제목 한 자리에 그대로 둔다', () => {
+    render(<HarnessB1 />);
+    const header = within(screen.getByTestId('row-card-r1')).getByTestId('row-card-header');
+    expect(header).toHaveClass('sticky', 'top-0');
+    expect(header).toHaveTextContent('1) 얼라이언스 운영 네트워킹 및 행사 개최');
+    // 둘째 줄이 작은 회색 설명으로 내려가지 않는다
+    expect(header.querySelector('.text-gray-500')).toBeNull();
+  });
+
+  it('구분 셀의 서식본(contentHtml)이 있으면 카드 머리가 그것을 그린다', () => {
+    const rows: TableRow[] = [
+      {
+        ...rowsB1[0]!,
+        cells: rowsB1[0]!.cells.map((cell) =>
+          cell.id === 'r1-lbl'
+            ? {
+                ...cell,
+                content: '(논문게재 사업 멘티 대상)\n3) 논문게재 지원',
+                contentHtml:
+                  '<p><strong><span style="color: #ef4444">(논문게재 사업 멘티 대상)</span></strong></p><p>3) 논문게재 지원</p>',
+              }
+            : cell,
+        ),
+      },
+    ];
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columnsB1}
+        rows={rows}
+        choiceGroups={groupsB1}
+        mobileTableDisplayMode="row-group-cards"
+        value={{}}
+        onChange={() => {}}
+      />,
+    );
+    const header = within(screen.getByTestId('row-card-r1')).getByTestId('row-card-header');
+    const emphasized = header.querySelector('strong span');
+    expect(emphasized).toHaveTextContent('(논문게재 사업 멘티 대상)');
+    expect(header).toHaveTextContent('3) 논문게재 지원');
   });
 
   it('타일은 옵션 라벨을 보이고 세로로 한 줄씩 쌓이며, 고르면 __choiceGroups 에 쓰인다', () => {

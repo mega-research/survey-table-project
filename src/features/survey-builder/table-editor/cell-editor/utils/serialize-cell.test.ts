@@ -385,6 +385,40 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out).not.toHaveProperty('spssNumericCode');
   });
 
+  it('ranking_opt: 상세 기재를 켜면 allowTextInput 이 저장되고 응답값(spssNumericCode)도 유지된다', () => {
+    const form: CellFormState = {
+      ...baseForm('ranking_opt'),
+      cellSpssNumericCode: 15,
+      isOtherRankingCell: false,
+      choiceAllowTextInput: true,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).toEqual({
+      id: 'c1',
+      type: 'ranking_opt',
+      content: '',
+      spssNumericCode: 15,
+      allowTextInput: true,
+      ...CUSTOM_FALSE,
+    });
+  });
+
+  it('ranking_opt: 기존 셀의 상세 기재는 셀을 열어 저장해도 보존된다', () => {
+    const cell: TableCell = { id: 'c1', type: 'ranking_opt', content: '⑮ 기타', allowTextInput: true };
+    const out = buildUpdatedCell({ ...cellToFormState(cell), contentType: 'ranking_opt' }, cell);
+    expect(out.allowTextInput).toBe(true);
+  });
+
+  it('ranking_opt: 기타 모드에서는 상세 기재를 싣지 않는다 (기타는 _etc 로 따로 받는다)', () => {
+    const form: CellFormState = {
+      ...baseForm('ranking_opt'),
+      isOtherRankingCell: true,
+      choiceAllowTextInput: true,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).not.toHaveProperty('allowTextInput');
+  });
+
   it('ranking_opt: choiceGroupId 설정 시 저장되고 해제(빈 문자열) 시 키가 제거된다', () => {
     const cellWithGroup: TableCell = {
       id: 'c1',
@@ -1387,5 +1421,46 @@ describe('buildUpdatedCell — 본문 서식본(contentHtml)', () => {
         .textContentHtml,
     ).toBe('<p><strong>a</strong></p>');
     expect(cellToFormState(baseCell).textContentHtml).toBe('');
+  });
+});
+
+describe('중복 불가 묶음 이름 — 선택 칸 전용', () => {
+  const selectCell: TableCell = {
+    id: 'c1',
+    type: 'select',
+    content: '',
+    selectOptions: [{ id: 'o1', label: '미국', value: 'us' }],
+    distinctGroup: '수출국가-2025',
+  };
+
+  it('셀에 적힌 이름을 폼으로 읽고 그대로 실어 보낸다', () => {
+    const form = cellToFormState(selectCell);
+    expect(form.distinctGroup).toBe('수출국가-2025');
+    expect(buildUpdatedCell(form, selectCell).distinctGroup).toBe('수출국가-2025');
+  });
+
+  it('다른 설정만 고쳐 저장해도 이름이 남는다', () => {
+    const form = { ...cellToFormState(selectCell), textContent: '* 국가코드 선택' };
+    const out = buildUpdatedCell(form, selectCell);
+    expect(out.content).toBe('* 국가코드 선택');
+    expect(out.distinctGroup).toBe('수출국가-2025');
+  });
+
+  it('이름을 비우면 키가 사라진다 — 옛 값이 되살아나지 않는다', () => {
+    const out = buildUpdatedCell({ ...cellToFormState(selectCell), distinctGroup: '  ' }, selectCell);
+    expect('distinctGroup' in out).toBe(false);
+  });
+
+  it('앞뒤 공백은 다듬어 저장한다', () => {
+    const out = buildUpdatedCell(
+      { ...cellToFormState(selectCell), distinctGroup: ' 수출국가-2026 ' },
+      selectCell,
+    );
+    expect(out.distinctGroup).toBe('수출국가-2026');
+  });
+
+  it('유형을 선택 칸이 아닌 것으로 바꾸면 이름이 떨어진다', () => {
+    const out = buildUpdatedCell({ ...cellToFormState(selectCell), contentType: 'input' }, selectCell);
+    expect('distinctGroup' in out).toBe(false);
   });
 });

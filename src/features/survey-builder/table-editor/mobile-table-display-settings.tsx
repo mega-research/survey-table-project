@@ -6,6 +6,12 @@ import { Check } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  formatItemCardBlockColumns,
+  normalizeItemCardBlockColumns,
+  parseItemCardBlockColumnsText,
+} from '@/features/question-renderer/utils/item-card-blocks';
+import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { cn } from '@/lib/utils';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import {
@@ -13,13 +19,19 @@ import {
   parseMobileDrilldownRepeatHeaderText,
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
-import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  isRowWiseMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
+
+import { ScaleBarIssueAlert } from './scale-bar-issue-alert';
 
 interface MobileTableDisplaySettingsValue {
   mode: MobileTableDisplayMode;
   omitLeadingColumns: number;
   repeatHeaderStartRow: number | null;
   repeatHeaderEndRow: number | null;
+  itemCardBlockColumns: number[] | null;
 }
 
 interface MobileTableDisplaySettingsProps {
@@ -28,11 +40,20 @@ interface MobileTableDisplaySettingsProps {
   columnCount: number;
   repeatHeaderStartRow?: number | null | undefined;
   repeatHeaderEndRow?: number | null | undefined;
+  /** 「항목 단위 카드」 블록 시작 열(1부터). 비면 블록 없음 */
+  itemCardBlockColumns?: readonly number[] | null | undefined;
+  /** 열마다의 헤더 글자(작성 열 순서) — 적은 블록 시작 열이 어느 열인지 되짚어 보인다 */
+  columnHeaderLabels?: readonly string[] | undefined;
   onChange: (value: MobileTableDisplaySettingsValue) => void;
   /** 문항 유형 — 행 단위 카드는 보기-소스 표(radio/checkbox)에서만 의미가 있어 그때만 노출 */
   questionType?: 'table' | 'radio' | 'checkbox' | undefined;
   /** 테이블 유형에 보기 그룹이 있는가 — 있으면 행 단위 그룹 카드를 테이블 유형에도 노출 */
   hasChoiceGroups?: boolean | undefined;
+  /**
+   * 「행별 척도」에서 막대로 못 그려 원본 표 조각으로 보일 행과 이유(diagnoseRowScaleBars) —
+   * 그 모드를 골랐을 때만 경고로 보인다.
+   */
+  rowScaleBarIssues?: readonly ScaleBarIssue[] | undefined;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -52,6 +73,12 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     description: '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
   },
   {
+    value: 'row-wise-scale',
+    label: '행별 척도',
+    description:
+      '행별 원본 문항과 같이 행마다 문항을 세우고, 각 보기 그룹은 그룹 설정의 보기 모양(세로 타일 · 원본 한 줄 · 척도 막대)대로 보여 줍니다 — 행 단위 그룹 카드와 같은 설정입니다. 척도 막대로 고른 그룹은 화면 폭에 맞춘 막대(칸 글자 + 헤더 구간)가 됩니다. 그룹이 없는 보기 소스 표는 보기 전체가 막대입니다. 11점 척도처럼 칸이 많아 가로로 넘치는 표에 맞습니다.',
+  },
+  {
     value: 'row-cards',
     label: '행 단위 카드',
     description:
@@ -67,7 +94,13 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     value: 'axis-cards',
     label: '축 단위 카드',
     description:
-      '보기 그룹(축)마다 카드 하나를 만들고 그 안에 행을 보기로 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 현재 활용·활용 계획처럼 축마다 독립된 선택인데 행 목록만 같은 표에 맞습니다.',
+      '축마다 카드 하나를 만들고 그 안에 행을 나열합니다. 카드 제목은 열 헤더이고 화면 위에 고정되어 따라옵니다. 보기 소스 표는 보기 그룹이 축이고(현재 활용·활용 계획처럼 축마다 독립된 선택), 테이블 유형은 응답 칸이 놓인 열이 축입니다(2025년·2026년처럼 연도별로 같은 행을 채우는 입력 표).',
+  },
+  {
+    value: 'item-cards',
+    label: '항목 단위 카드',
+    description:
+      '글자 셀(라벨)마다 카드 하나를 만들고 다음 라벨 전까지의 입력 칸을 그 카드에 담습니다. 한 행에 「라벨 + 입력」이 여러 쌍 놓인 양식형 표에 맞습니다. 이어진 라벨은 상위 · 하위 제목이 되고, 세로 병합된 상위 라벨은 아래 행 카드에도 따라갑니다. 단위 · 주석처럼 제목이 아닌 글자 셀은 셀의 모바일 표시를 「숨김」(또는 「바로 표시」 · 「접기」로 카드 설명)으로 지정하세요.',
   },
   {
     value: 'original',
@@ -82,9 +115,12 @@ export function MobileTableDisplaySettings({
   columnCount,
   repeatHeaderStartRow,
   repeatHeaderEndRow,
+  itemCardBlockColumns,
+  columnHeaderLabels,
   onChange,
   questionType,
   hasChoiceGroups = false,
+  rowScaleBarIssues = [],
 }: MobileTableDisplaySettingsProps) {
   const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
   const visibleOptions = OPTIONS.filter((option) => {
@@ -93,8 +129,13 @@ export function MobileTableDisplaySettings({
     if (option.value === 'row-group-cards') {
       return isChoiceSourceTable || (questionType === 'table' && hasChoiceGroups);
     }
-    // 축 단위 카드는 축(보기 그룹)이 있어야 세울 수 있다 — 그룹 없는 표는 자동 카드가 같은 모양
-    if (option.value === 'axis-cards') return isChoiceSourceTable && hasChoiceGroups;
+    // 축 단위 카드 — 보기 소스 표는 축(보기 그룹)이 있어야 세울 수 있다(그룹 없는 표는 자동 카드가
+    // 같은 모양). 테이블 유형은 응답 칸이 놓인 열이 축이라 그룹 없이도 된다.
+    if (option.value === 'axis-cards') {
+      return questionType === 'table' || (isChoiceSourceTable && hasChoiceGroups);
+    }
+    // 항목 단위 카드는 입력 칸이 셀 값인 테이블 유형 전용 — 보기 소스 표의 보기는 문항 응답이다
+    if (option.value === 'item-cards') return questionType === 'table';
     return true;
   });
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
@@ -112,14 +153,37 @@ export function MobileTableDisplaySettings({
     setRepeatHeaderDraft(committedText);
   }
 
+  const committedBlockColumns = normalizeItemCardBlockColumns(itemCardBlockColumns, columnCount);
+  const committedBlockText = formatItemCardBlockColumns(committedBlockColumns);
+  const [blockDraft, setBlockDraft] = useState(committedBlockText);
+  const [blockDraftInvalid, setBlockDraftInvalid] = useState(false);
+  const [prevCommittedBlockText, setPrevCommittedBlockText] = useState(committedBlockText);
+  if (prevCommittedBlockText !== committedBlockText) {
+    setPrevCommittedBlockText(committedBlockText);
+    setBlockDraft(committedBlockText);
+    setBlockDraftInvalid(false);
+  }
+
   const emit = (next: Partial<MobileTableDisplaySettingsValue>) =>
     onChange({
       mode,
       omitLeadingColumns: normalizedCount,
       repeatHeaderStartRow: committedRange?.startRow ?? null,
       repeatHeaderEndRow: committedRange?.endRow ?? null,
+      itemCardBlockColumns: committedBlockColumns,
       ...next,
     });
+
+  const commitBlockDraft = () => {
+    const parsed = parseItemCardBlockColumnsText(blockDraft, columnCount);
+    if (!parsed.ok) {
+      setBlockDraftInvalid(true);
+      return;
+    }
+    setBlockDraftInvalid(false);
+    setBlockDraft(formatItemCardBlockColumns(parsed.value));
+    emit({ itemCardBlockColumns: parsed.value });
+  };
 
   const commitRepeatHeaderDraft = () => {
     const parsed = parseMobileDrilldownRepeatHeaderText(repeatHeaderDraft);
@@ -187,7 +251,58 @@ export function MobileTableDisplaySettings({
           );
         })}
       </div>
-      {mode === 'drilldown-original-row' || mode === 'row-wise-original' ? (
+      {mode === 'row-wise-scale' ? (
+        <ScaleBarIssueAlert
+          title="척도 막대로 고른 그룹 중 막대로 그릴 수 없는 행이 있어 그 행에서는 원본 표 조각으로 보입니다."
+          issues={rowScaleBarIssues}
+        />
+      ) : null}
+      {mode === 'item-cards' ? (
+        <div className="max-w-xl space-y-1.5">
+          <Label htmlFor="mobile-item-card-block-columns">블록 시작 열</Label>
+          <Input
+            id="mobile-item-card-block-columns"
+            type="text"
+            inputMode="text"
+            placeholder="예: 1, 5"
+            aria-invalid={blockDraftInvalid}
+            value={blockDraft}
+            onChange={(event) => setBlockDraft(event.target.value)}
+            onBlur={commitBlockDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitBlockDraft();
+              }
+            }}
+          />
+          {blockDraftInvalid ? (
+            <p className="text-xs text-red-600">
+              1부터 {columnCount}까지의 열 번호를 쉼표로 구분해 적어 주세요.
+            </p>
+          ) : null}
+          {!blockDraftInvalid && committedBlockColumns ? (
+            <ul className="space-y-0.5 text-xs text-gray-700">
+              {committedBlockColumns.map((start, index) => (
+                <li key={start}>
+                  블록 {index + 1} — {start}열
+                  {columnHeaderLabels?.[start - 1] ? ` 「${columnHeaderLabels[start - 1]}」` : ''}
+                  부터
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {blockDraftInvalid ? null : (
+            <p className="text-xs text-gray-500">
+              표 두 벌을 좌우로 붙인 표에서 각 표가 시작하는 열 번호를 적습니다(예: 1, 6 —
+              들여쓰기용 빈 열도 한 열로 셉니다). 블록마다 항목을 끝까지 세운 뒤 다음 블록으로
+              넘어가고, 블록 제목(시작 열의 헤더)과 계산 칸만 있는 합계 행이 머리로 화면 위에
+              고정됩니다. 입력 칸 이름은 열 헤더를 씁니다. 비우면 행 순서 그대로입니다.
+            </p>
+          )}
+        </div>
+      ) : null}
+      {mode === 'drilldown-original-row' || isRowWiseMobileTableDisplayMode(mode) ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>

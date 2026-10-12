@@ -18,8 +18,14 @@ import {
   DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
   decideDrilldown,
 } from '@/features/question-renderer/utils/classify-table';
+import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -48,6 +54,7 @@ import {
   MobileTableDisplayMode,
   Question,
   RowRepeatConfig,
+  StagedRowsConfig,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -64,6 +71,7 @@ import {
 } from './utils/choice-group-outline';
 import {
   clampMobileDrilldownOmitLeadingColumns,
+  isRowWiseMobileTableDisplayMode,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 import {
@@ -72,21 +80,31 @@ import {
 } from '@/utils/table-merge-helpers';
 
 import { InteractiveCell } from './cells';
+import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
+import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
-import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
+import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
+import {
+  type RowScaleLayout,
+  projectRowWiseScaleLayouts,
+  resolveUngroupedSelectionType,
+} from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
+import { MobileColumnAxisCards } from './mobile-column-axis-cards';
+import { MobileItemCards } from './mobile-item-cards';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
+import { StagedRowsButtons } from './staged-rows-buttons';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold whitespace-pre-line text-gray-800 [overflow-wrap:anywhere]';
 
 // ── 행 반복 버튼 (표 아래) ──
 
@@ -135,6 +153,57 @@ const RowRepeatControls = React.memo(function RowRepeatControls({
       {!canAdd && (
         <span className="text-xs text-gray-500">최대 {maxCount}개까지 추가할 수 있습니다.</span>
       )}
+    </div>
+  );
+});
+
+// ── 행 차례로 열기 버튼 줄 (표 안, 묶음 바로 아래) ──
+
+interface StagedRowsControlRowProps {
+  addLabel: string;
+  canAdd: boolean;
+  canRemove: boolean;
+  openCount: number;
+  maxCount: number;
+  onAdd: () => void;
+  onRemove: () => void;
+  gridRow: number;
+  /** 버튼 줄이 시작하는 열 — 앞 열은 묶음을 가로지르는 세로 병합 칸이 덮는다 */
+  columnStart: number;
+}
+
+/**
+ * 묶음 바로 아래에 서는 `+`/`−` 줄. 저작된 행을 가릴 뿐이라 여기서 바뀌는 것은
+ * "몇 행을 보일까"와, 닫을 때 그 행의 값을 비우는 것뿐이다.
+ */
+const StagedRowsControlRow = React.memo(function StagedRowsControlRow({
+  addLabel,
+  canAdd,
+  canRemove,
+  openCount,
+  maxCount,
+  onAdd,
+  onRemove,
+  gridRow,
+  columnStart,
+}: StagedRowsControlRowProps) {
+  return (
+    <div
+      role="group"
+      aria-label="행 추가·삭제"
+      className="border-r border-b border-gray-400 bg-white"
+      style={{ gridColumn: `${columnStart} / -1`, gridRow }}
+    >
+      <StagedRowsButtons
+        addLabel={addLabel}
+        canAdd={canAdd}
+        canRemove={canRemove}
+        openCount={openCount}
+        maxCount={maxCount}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        className={cn('px-3 py-2', columnStart === 1 && 'sticky left-0 w-fit')}
+      />
     </div>
   );
 });
@@ -337,8 +406,10 @@ function renderRowCells({
     const isSticky = cellIndex < stickyCount;
     const isLastSticky = isSticky && cellIndex === stickyCount - 1;
 
+    // 격자에서 덮는 줄 수 — 표 안에 끼운 버튼 줄을 가로지르는 병합 칸은 그 줄까지 덮는다.
+    const gridSpan = rs + (cell._gridRowSpanExtra ?? 0);
     const style: React.CSSProperties = {
-      gridRow: rs > 1 ? `${gridRow} / span ${rs}` : gridRow,
+      gridRow: gridSpan > 1 ? `${gridRow} / span ${gridSpan}` : gridRow,
       gridColumn: cs > 1 ? `${col} / span ${cs}` : col,
     };
     if (isSticky && stickyInfo) {
@@ -408,6 +479,8 @@ interface InteractiveTableResponseProps {
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 구조에 펼쳐진 벌 중 지금 보일 벌을 정한다 (없으면 전부 그린다) */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 행 차례로 열기 설정 — 저작된 행 묶음 중 지금 보일 행을 정한다 (없으면 전부 그린다) */
+  stagedRowsConfig?: StagedRowsConfig | null | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
   stickyColumnCount?: number | null | undefined;
@@ -417,6 +490,8 @@ interface InteractiveTableResponseProps {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  /** 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서). 비면 블록 없이 행 순서 */
+  mobileItemCardBlockColumns?: number[] | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /**
@@ -500,6 +575,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   ignoreDisplayConditions = false,
   dynamicRowConfigs,
   rowRepeatConfig,
+  stagedRowsConfig,
   hideColumnLabels = false,
   stickyColumnCount,
   mobileOriginalTable = false,
@@ -507,6 +583,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   mobileDrilldownOmitLeadingColumns,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
+  mobileItemCardBlockColumns,
   enableSticky = true,
   choiceGroups,
   errorCellIds,
@@ -523,11 +600,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     containerRef: tableContainerRef,
   });
   const isMobileView = useMobileView();
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const mobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,
     mobileOriginalTable,
   });
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
+  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
+  const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
@@ -675,6 +756,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     expandedGroupIds,
     toggleGroupExpanded,
     rowRepeat,
+    stagedRows,
+    stagedControl,
   } = useDynamicRows({
     questionId,
     rows,
@@ -683,12 +766,40 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     hiddenGroupIds,
     dynamicRowConfigs,
     rowRepeatConfig,
+    stagedRowsConfig,
     value,
     onChange: mergedOnChange,
     headerRowCount,
   });
+  // 버튼 줄이 묶음 바로 아래에 서는 화면인가 — 데스크톱 표(모바일의 「원본」 포함)에서
+  // 보이는 묶음 행이 있을 때. 그 밖의 화면은 표 아래 버튼으로 폴백한다.
+  const stagedInDesktopTable = !mobileUsesCards && stagedControl !== null;
+  // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다).
+  const stagedInItemCards = isMobileView && mobileMode === 'item-cards' && stagedRows.isActive;
+  const stagedControlsInline = stagedInDesktopTable || stagedInItemCards;
+  const stagedItemCardControls = useMemo(
+    () =>
+      stagedInItemCards && stagedRowsConfig
+        ? {
+            rowIds: new Set(stagedRowsConfig.rowIds),
+            node: (
+              <StagedRowsButtons
+                addLabel={stagedRows.addLabel}
+                canAdd={stagedRows.canAdd}
+                canRemove={stagedRows.canRemove}
+                openCount={stagedRows.openCount}
+                maxCount={stagedRows.maxCount}
+                onAdd={stagedRows.addRow}
+                onRemove={stagedRows.removeRow}
+                className="px-1 py-1"
+              />
+            ),
+          }
+        : undefined,
+    [stagedInItemCards, stagedRowsConfig, stagedRows],
+  );
   const rowWiseDisplayRows = useMemo(() => {
-    if (!isMobileView || mobileMode !== 'row-wise-original' || !hasDynamicRows) {
+    if (!usesRowWiseSheet || !hasDynamicRows) {
       return displayRows;
     }
 
@@ -737,9 +848,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     groupConfigMap,
     hasDynamicRows,
     hiddenGroupIds,
-    isMobileView,
-    mobileMode,
     selectedRowIds,
+    usesRowWiseSheet,
   ]);
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
@@ -897,6 +1007,27 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     ],
   );
 
+  // 4-b) 표 안에 끼우는 줄 전부 — 동적 행 셀렉터 + 행 차례로 열기 버튼 줄 (가상화/비가상화 공용)
+  const renderInsertedRows = useCallback(() => {
+    const selectorRows = renderSelectorRows();
+    if (!stagedRows.isActive || !stagedControl) return selectorRows;
+    return [
+      ...selectorRows,
+      <StagedRowsControlRow
+        key="staged-rows-control"
+        addLabel={stagedRows.addLabel}
+        canAdd={stagedRows.canAdd}
+        canRemove={stagedRows.canRemove}
+        openCount={stagedRows.openCount}
+        maxCount={stagedRows.maxCount}
+        onAdd={stagedRows.addRow}
+        onRemove={stagedRows.removeRow}
+        gridRow={stagedControl.gridRow}
+        columnStart={stagedControl.columnStart}
+      />,
+    ];
+  }, [renderSelectorRows, stagedRows, stagedControl]);
+
   // 모바일: 계층/매트릭스 감지 시 드릴다운, 평면 단순 표는 기존 스테퍼
   // hooks-rules: 아래 빈 테이블 early return 이전에 호출해야 hook 순서가 보장된다
   // 보기 그룹 표는 보기 셀도 "응답 가능한 셀" 이다 — 모바일 분류(드릴다운 리프·값 열)·행 완료·
@@ -930,7 +1061,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     [rowWiseDisplayRows],
   );
   const rowWiseOriginalModel = useMemo(() => {
-    if (!isMobileView || mobileMode !== 'row-wise-original') {
+    if (!usesRowWiseSheet) {
       return { sections: [] };
     }
 
@@ -957,20 +1088,42 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     columns,
     displayCellById,
     hideColumnLabels,
-    isMobileView,
     mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderEndRow,
     mobileDrilldownRepeatHeaderStartRow,
-    mobileMode,
     rowWiseDisplayRows,
     rows,
+    usesRowWiseSheet,
     visibleColumns,
     visibleHeaderGrid,
   ]);
+  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  const rowScaleLayouts = useMemo(
+    () =>
+      usesRowWiseSheet && mobileMode === 'row-wise-scale'
+        ? projectRowWiseScaleLayouts(
+            rowWiseOriginalModel,
+            choiceGroups ?? [],
+            resolveUngroupedSelectionType('table'),
+          )
+        : new Map<string, RowScaleLayout>(),
+    [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet],
+  );
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
   // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
   const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
+
+  // 중복 불가 묶음의 구성원 범위 — 지금 그려지는 행·열에 있는 칸만. 표시 조건으로 숨은 칸은 값이
+  // 응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지한다. 묶음이 없는 표(대다수)는 만들지 않는다.
+  const visibleCellIds = useMemo(() => {
+    if (!gatingTableCells.some((cell) => distinctGroupOf(cell) !== null)) return null;
+    const ids = new Set<string>();
+    for (const row of rowWiseDisplayRows) {
+      for (const cell of row.cells) if (!cell.isHidden) ids.add(cell.id);
+    }
+    return ids;
+  }, [gatingTableCells, rowWiseDisplayRows]);
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
@@ -1096,7 +1249,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 onChange={mergedOnChange}
                 gridTemplateCols={gridTemplateCols}
                 totalWidth={totalWidth}
-                renderSelectorRows={renderSelectorRows}
+                renderSelectorRows={renderInsertedRows}
                 stickyInfo={stickyInfo}
                 applyCellBackground={applyCellBackground}
               />
@@ -1128,8 +1281,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   </React.Fragment>
                 ))}
 
-                {/* 셀렉터 행들 — 명시적 grid-row 배치 */}
-                {renderSelectorRows()}
+                {/* 셀렉터 행 · 행 차례로 열기 버튼 줄 — 명시적 grid-row 배치 */}
+                {renderInsertedRows()}
               </div>
             )}
           </div>
@@ -1202,7 +1355,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
-      <GatingTableCellsProvider value={gatingTableCells}>
+      <GatingTableCellsProvider value={gatingTableCells} visibleCellIds={visibleCellIds}>
         <Card className={className}>
           {tableTitle && (
             <CardHeader>
@@ -1223,12 +1376,57 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           >
             <div className="w-full">
               {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
-              {isMobileView && mobileMode === 'row-wise-original' ? (
+              {usesRowWiseSheet ? (
                 <div className="space-y-3">
                   {dynamicGroupPicker}
                   <MobileRowWiseOriginalSheet
                     model={rowWiseOriginalModel}
                     errorCellIds={errorCellIds}
+                    scaleLayoutByRowId={rowScaleLayouts}
+                    // 타일은 그룹 카드의 세로 타일과 같은 ChoiceOptCell — 단독 선택·상세기재 규칙이 한 곳이다
+                    renderGroupTiles={(group, cells, rowQuestion, { inputIdScope, sharesRow }) => {
+                      const label = sharesRow ? substituteTokens(group.label, attrs, quotes) : '';
+                      return (
+                        <RowTileSection
+                          label={label}
+                          ariaLabel={label || rowQuestion.title}
+                          invalid={cells.some((cell) => errorCellIds?.has(cell.id))}
+                        >
+                          {cells.map((cell) => (
+                            <ChoiceOptCell
+                              key={cell.id}
+                              cell={cell}
+                              questionId={questionId}
+                              group={group}
+                              value={value}
+                              onChange={mergedOnChange}
+                              inputIdScope={inputIdScope}
+                              variant="tile"
+                            />
+                          ))}
+                        </RowTileSection>
+                      );
+                    }}
+                    // 표 문항의 막대는 늘 보기 그룹 막대다(그룹 없는 보기 칸은 후보가 아니다)
+                    renderScaleBar={(bar, rowQuestion, { inputIdScope, sharesRow }) =>
+                      bar.group ? (
+                        <TableChoiceGroupScaleBar
+                          questionId={questionId}
+                          group={bar.group}
+                          model={bar.model}
+                          cells={bar.cells}
+                          // 행 제목이 위에 있다 — 행에 막대·조각이 여럿일 때만 그룹 이름으로 가른다
+                          label={sharesRow ? substituteTokens(bar.group.label, attrs, quotes) : ''}
+                          ariaLabel={
+                            sharesRow ? bar.group.label || rowQuestion.title : rowQuestion.title
+                          }
+                          invalid={bar.cells.some((cell) => errorCellIds?.has(cell.id))}
+                          value={value}
+                          onChange={mergedOnChange}
+                          inputIdScope={inputIdScope}
+                        />
+                      ) : null
+                    }
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
@@ -1260,8 +1458,35 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   questionId={questionId}
                   displayRows={displayRows}
                   visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
                   choiceGroups={choiceGroups ?? []}
                   hideColumnLabels={hideColumnLabels}
+                  value={value}
+                  onChange={mergedOnChange}
+                  errorCellIds={errorCellIds}
+                  dynamicGroupPicker={dynamicGroupPicker}
+                />
+              ) : isMobileView && mobileMode === 'item-cards' ? (
+                <MobileItemCards
+                  questionId={questionId}
+                  displayRows={displayRows}
+                  blockStartColumns={mobileItemCardBlockColumns}
+                  authoredColumns={columns}
+                  visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
+                  value={value}
+                  onChange={mergedOnChange}
+                  errorCellIds={errorCellIds}
+                  dynamicGroupPicker={dynamicGroupPicker}
+                  afterRows={stagedItemCardControls}
+                />
+              ) : isMobileView && mobileMode === 'axis-cards' ? (
+                // 테이블 유형의 축 = 열. 보기 소스 표의 축 단위 카드(보기 그룹 = 축)는 choice-table-response 몫
+                <MobileColumnAxisCards
+                  questionId={questionId}
+                  displayRows={displayRows}
+                  visibleColumns={visibleColumns}
+                  visibleHeaderGrid={visibleHeaderGrid}
                   value={value}
                   onChange={mergedOnChange}
                   errorCellIds={errorCellIds}
@@ -1295,6 +1520,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 maxCount={rowRepeat.maxCount}
                 onAdd={rowRepeat.addBundle}
                 onRemove={rowRepeat.removeBundle}
+              />
+            )}
+
+            {/* 행 차례로 열기 — 버튼 줄이 묶음 바로 아래에 선 화면에서는 여기에 또 그리지 않는다 */}
+            {stagedRows.isActive && !stagedControlsInline && (
+              <StagedRowsButtons
+                addLabel={stagedRows.addLabel}
+                canAdd={stagedRows.canAdd}
+                canRemove={stagedRows.canRemove}
+                openCount={stagedRows.openCount}
+                maxCount={stagedRows.maxCount}
+                onAdd={stagedRows.addRow}
+                onRemove={stagedRows.removeRow}
+                className="mt-3"
               />
             )}
 

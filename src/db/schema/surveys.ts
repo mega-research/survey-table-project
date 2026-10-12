@@ -46,6 +46,7 @@ import type {
   QuestionOption,
   RankingConfig,
   RowRepeatConfig,
+  StagedRowsConfig,
   SelectLevel,
   SumConstraint,
   SurveyLookup,
@@ -54,6 +55,7 @@ import type {
   TableRow,
   TableValidationRule,
   TextValidation,
+  MaxSelectionsSource,
 } from '@/types/survey';
 import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 
@@ -286,6 +288,8 @@ export const questions = pgTable(
     // 체크박스 선택 개수 제한 (checkbox 타입 전용)
     minSelections: integer('min_selections'),
     maxSelections: integer('max_selections'),
+    // 최대 선택 개수를 다른 문항 응답에서 가져온다 {questionId, unlimitedFrom} — NULL = 고정값만 (0130)
+    maxSelectionsSource: jsonb('max_selections_source').$type<MaxSelectionsSource>(),
 
     // 순위형(ranking) 타입 전용 설정
     rankingConfig: jsonb('ranking_config').$type<RankingConfig>(),
@@ -353,6 +357,8 @@ export const questions = pgTable(
       'mobile_drilldown_repeat_header_start_row',
     ).default(0),
     mobileDrilldownRepeatHeaderEndRow: integer('mobile_drilldown_repeat_header_end_row').default(0),
+    // 「항목 단위 카드」 블록 시작 열 (1부터). NULL = 블록 없음 (0131)
+    mobileItemCardBlockColumns: jsonb('mobile_item_card_block_columns').$type<number[]>(),
 
     // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
     hideTitle: boolean('hide_title').default(false),
@@ -366,6 +372,8 @@ export const questions = pgTable(
     // 행 반복 설정 (테이블 타입 전용) — 응답자가 + 로 행 묶음을 늘린다.
     // 펼쳐진 행 자체는 table_rows_data 에 눌러앉고, 이 컬럼은 템플릿 지정과 상한만 쥔다.
     rowRepeatConfig: jsonb('row_repeat_config').$type<RowRepeatConfig>(),
+    // 행 차례로 열기 (0132) — 저작된 행 묶음의 가시성 설정. 구조는 건드리지 않는다 (ADR 0028)
+    stagedRowsConfig: jsonb('staged_rows_config').$type<StagedRowsConfig>(),
     displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
     priorAnswerCondition: jsonb('prior_answer_condition').$type<QuestionConditionGroup>(),
     priorAnswerDisabled: boolean('prior_answer_disabled'),
@@ -378,7 +386,7 @@ export const questions = pgTable(
   (table) => [
     check(
       'questions_mobile_table_display_mode_check',
-      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-cards', 'row-group-cards', 'axis-cards', 'original')`,
+      sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-wise-scale', 'row-cards', 'row-group-cards', 'axis-cards', 'item-cards', 'original')`,
     ),
     check(
       'questions_input_rows_range',

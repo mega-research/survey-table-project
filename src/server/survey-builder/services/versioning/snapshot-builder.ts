@@ -72,6 +72,7 @@ interface SnapshotQuestion {
   choiceGroups?: Question['choiceGroups'] | undefined;
   minSelections?: number | undefined;
   maxSelections?: number | undefined;
+  maxSelectionsSource?: Question['maxSelectionsSource'] | undefined;
   noticeContent?: string | undefined;
   noticeBgColor?: string | undefined;
   requiresAcknowledgment?: boolean | undefined;
@@ -79,6 +80,7 @@ interface SnapshotQuestion {
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   rowRepeatConfig?: Question['rowRepeatConfig'] | undefined;
+  stagedRowsConfig?: Question['stagedRowsConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
   stickyColumnCount?: number | null | undefined;
   mobileOriginalTable?: boolean | undefined;
@@ -86,6 +88,7 @@ interface SnapshotQuestion {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  mobileItemCardBlockColumns?: number[] | null | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
@@ -170,6 +173,7 @@ export function buildSurveySnapshot(
       choiceGroups: q.choiceGroups,
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
+      maxSelectionsSource: q.maxSelectionsSource,
       noticeContent: q.noticeContent,
       noticeBgColor: q.noticeBgColor,
       requiresAcknowledgment: q.requiresAcknowledgment,
@@ -177,6 +181,7 @@ export function buildSurveySnapshot(
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
       rowRepeatConfig: q.rowRepeatConfig,
+      stagedRowsConfig: q.stagedRowsConfig,
       hideColumnLabels: q.hideColumnLabels,
       stickyColumnCount: q.stickyColumnCount,
       mobileOriginalTable: q.mobileOriginalTable,
@@ -184,6 +189,7 @@ export function buildSurveySnapshot(
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
       mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
       mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+      mobileItemCardBlockColumns: q.mobileItemCardBlockColumns,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,

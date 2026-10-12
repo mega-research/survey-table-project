@@ -501,8 +501,36 @@ export function remapTableColumns(columns: unknown, maps: ConditionRemapMaps): {
 }
 
 /**
+ * 셀 게이팅 조건 하나의 값 참조 리매핑. 조건 묶음(kind === 'group')이면 terms 를 재귀로 돈다 —
+ * 이 모듈은 DB 에서 읽은 unknown JSON 을 다루므로 타입드 헬퍼(cell-gate-tree) 대신 직접 걷는다.
+ * 잎은 kind === 'option' 이고 controllerCellId 의 맵이 있는 경우에만 values 를 치환한다.
+ */
+function remapGatingCondition(
+  condition: unknown,
+  cellMaps: ReadonlyMap<string, ValueMap>,
+): { value: unknown; count: number } {
+  if (!isPlainObject(condition)) return { value: condition, count: 0 };
+  if (condition['kind'] === 'group') {
+    if (!Array.isArray(condition['terms'])) return { value: condition, count: 0 };
+    let count = 0;
+    const terms = (condition['terms'] as unknown[]).map((term) => {
+      const remapped = remapGatingCondition(term, cellMaps);
+      count += remapped.count;
+      return remapped.value;
+    });
+    return count > 0 ? { value: { ...condition, terms }, count } : { value: condition, count: 0 };
+  }
+  if (condition['kind'] !== 'option') return { value: condition, count: 0 };
+  const controllerCellId = asString(condition['controllerCellId']);
+  if (controllerCellId === null) return { value: condition, count: 0 };
+  const remapped = remapStringArray(condition['values'], cellMaps.get(controllerCellId));
+  if (remapped.count === 0) return { value: condition, count: 0 };
+  return { value: { ...condition, values: remapped.value }, count: remapped.count };
+}
+
+/**
  * table_rows_data 의 행 표시조건 + 셀 게이팅(enabledWhen)을 리매핑한다.
- * 게이팅은 kind === 'option' 이고 controllerCellId 의 맵이 있는 경우에만 values 를 치환한다.
+ * 게이팅은 remapGatingCondition — 조건 묶음 안의 option 잎까지 치환한다.
  */
 export function remapTableRows(
   rows: unknown,
@@ -532,15 +560,11 @@ export function remapTableRows(
       let cellsChanged = false;
       const nextCells = (row['cells'] as unknown[]).map((cell) => {
         if (!isPlainObject(cell)) return cell;
-        const enabledWhen = cell['enabledWhen'];
-        if (!isPlainObject(enabledWhen) || enabledWhen['kind'] !== 'option') return cell;
-        const controllerCellId = asString(enabledWhen['controllerCellId']);
-        if (controllerCellId === null) return cell;
-        const remapped = remapStringArray(enabledWhen['values'], cellMaps.get(controllerCellId));
+        const remapped = remapGatingCondition(cell['enabledWhen'], cellMaps);
         if (remapped.count === 0) return cell;
         gatingCount += remapped.count;
         cellsChanged = true;
-        return { ...cell, enabledWhen: { ...enabledWhen, values: remapped.value } };
+        return { ...cell, enabledWhen: remapped.value };
       });
       if (cellsChanged) {
         nextRow = { ...nextRow, cells: nextCells };

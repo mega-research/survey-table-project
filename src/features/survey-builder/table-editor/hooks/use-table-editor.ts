@@ -16,6 +16,7 @@ import {
 } from '@/types/survey';
 import { type HeaderBulkStyle, applyHeaderBulkStyle, withHeaderStyle } from '@/features/survey-builder/table-editor/utils/header-style';
 import { remapGatingValues } from '@/features/survey-builder/utils/option-value-remap';
+import { mapGateLeaves } from '@/utils/cell-gate-tree';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
   generateAllCellCodes,
@@ -32,6 +33,8 @@ import {
   regenerateCellOptionIds,
   resolvePastedGating,
 } from '../utils/drag-copy-utils';
+import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
+import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
 
@@ -862,10 +865,10 @@ export function useTableEditor({
           // 게이팅 컨트롤러가 같은 행을 가리키면 복제 행의 새 id 로 리매핑
           // (같은 행 밖 참조는 원본 그대로 두고 진단이 잡는다)
           if (cloned.enabledWhen) {
-            const remapped = clonedCellIdByOld.get(cloned.enabledWhen.controllerCellId);
-            if (remapped) {
-              cloned.enabledWhen = { ...cloned.enabledWhen, controllerCellId: remapped };
-            }
+            cloned.enabledWhen = mapGateLeaves(cloned.enabledWhen, (leaf) => {
+              const remapped = clonedCellIdByOld.get(leaf.controllerCellId);
+              return remapped ? { ...leaf, controllerCellId: remapped } : leaf;
+            });
           }
           // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
           // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서
@@ -1209,6 +1212,9 @@ export function useTableEditor({
       cellIndex: number,
       cell: TableCell,
       valueChanges?: { oldValue: string; newValue: string }[],
+      // 열 단위 모바일 표시 일괄 지정 — 셀 저장과 같은 커밋에 싣는다. 셀별 연속 갱신으로 쪼개면
+      // 모달·스토어 이중 상태에서 일부가 유실된다.
+      options?: CellSaveOptions,
     ) => {
       // 옵션 optionCode 편집이 value 를 동기화시킨 경우, 이 셀을 controllerCellId 로
       // 참조하는 같은 표의 게이팅(enabledWhen)을 셀 저장과 같은 커밋에서 리매핑한다.
@@ -1223,6 +1229,21 @@ export function useTableEditor({
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? cell : c)) }
           : row,
       );
+
+      if (options?.columnMobileDisplay) {
+        updatedRows = applyMobileDisplayToColumn(
+          updatedRows,
+          cell.id,
+          options.columnMobileDisplay.value,
+        );
+      }
+      if (options?.columnDistinctGroup) {
+        updatedRows = applyDistinctGroupToColumn(
+          updatedRows,
+          cell.id,
+          options.columnDistinctGroup.value,
+        );
+      }
 
       const rowspan = cell.rowspan || 1;
       const colspan = cell.colspan || 1;

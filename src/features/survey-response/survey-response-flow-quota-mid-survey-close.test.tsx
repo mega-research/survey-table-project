@@ -402,3 +402,21 @@ describe('제출 시점 쿼터마감', () => {
     expect(screen.queryByText(new RegExp(QUOTA_CLOSED_DEFAULT))).not.toBeInTheDocument();
   });
 });
+
+describe('첫 판정 때 응답 행이 아직 없으면', () => {
+  it('판정을 미루고 다음 클릭을 막지 않는다 — 응답 행이 생긴 뒤 「다음」에서 다시 판정한다', async () => {
+    // 속성형만 있는 플랜처럼 문항 없이 첫 전환에서 판정하는 게이트 — 첫 쪽에 답하지 않으면
+    // 응답 행이 없다.
+    mockSurvey({ questionIds: [], checkWithoutQuestions: true });
+    renderFlow();
+    await screen.findByPlaceholderText('첫 답변');
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    fireEvent.change(await screen.findByPlaceholderText('둘째 답변'), { target: { value: 'v2' } });
+    await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByText('세 번째 질문')).toBeInTheDocument();
+    expect(quotaCheck).toHaveBeenCalledTimes(1);
+  });
+});

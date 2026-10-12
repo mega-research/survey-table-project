@@ -77,6 +77,7 @@ const mobileTableDisplay = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
 });
 
 export const TextQuestionSchema = base.extend({
@@ -114,6 +115,10 @@ export const CheckboxQuestionSchema = base
     type: z.literal('checkbox'),
     minSelections: z.number().optional(),
     maxSelections: z.number().optional(),
+    maxSelectionsSource: z
+      .custom<NonNullable<Question['maxSelectionsSource']>>()
+      .nullable()
+      .optional(),
   });
 
 export const SelectQuestionSchema = base.extend({
@@ -145,6 +150,7 @@ export const TableQuestionSchema = base
     tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),
     dynamicRowConfigs: z.custom<NonNullable<Question['dynamicRowConfigs']>>().optional(),
     rowRepeatConfig: z.custom<NonNullable<Question['rowRepeatConfig']>>().optional(),
+    stagedRowsConfig: z.custom<NonNullable<Question['stagedRowsConfig']>>().optional(),
   });
 
 export const NoticeQuestionSchema = base.extend({
