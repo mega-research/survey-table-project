@@ -621,6 +621,11 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.edit',
     input: { surveyId: S, isPaused: true },
   },
+  'operations.control.setClosed': {
+    gate: 'rpc',
+    capability: 'survey.edit',
+    input: { surveyId: S, isClosed: true },
+  },
   'operations.control.setTestMode': {
     gate: 'rpc',
     capability: 'survey.edit',

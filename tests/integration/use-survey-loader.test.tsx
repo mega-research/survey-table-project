@@ -79,6 +79,8 @@ const survey: Survey = {
 const noneControl: SurveyControl = {
   isPaused: false,
   pausedMessage: null,
+  isClosed: false,
+  resumableByInvite: null,
   testSession: 'none',
   testSessionKind: null,
   priorWaveLabel: null,

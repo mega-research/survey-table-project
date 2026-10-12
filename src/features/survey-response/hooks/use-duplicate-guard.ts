@@ -1,11 +1,13 @@
 import { ORPCError } from '@orpc/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { NoticeReason } from '@/features/survey-response/already-responded-view';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
+
+import { sessionStorageKey } from './session-helpers';
 
 /**
  * 응답 흐름의 중복 차단 상태. 컴포넌트가 소유(렌더 분기)하지만
@@ -26,6 +28,13 @@ interface UseDuplicateGuardArgs {
    * true 면 네트워크 호출 없이 즉시 ok 로 통과시킨다 — 테스트 링크는 같은 브라우저로 반복 응답이 정상.
    */
   skip?: boolean;
+  /**
+   * 종료된 설문의 첫 화면 판정 재료 (ADR-0030). 생략하면 종료되지 않은 설문으로 본다.
+   *
+   * `resumableByInvite` 는 서버가 초대 토큰의 조사 대상에게 진행 중 응답이 있는지 본 결과다 —
+   * 유효한 초대가 아니면 null(서버가 모른다)이고, 그때는 이 브라우저에 남은 세션으로 가른다.
+   */
+  closedEntry?: { isClosed: boolean; resumableByInvite: boolean | null };
 }
 
 interface UseDuplicateGuardResult {
@@ -56,12 +65,41 @@ export function useDuplicateGuard({
   inviteToken,
   signals,
   skip = false,
+  closedEntry,
 }: UseDuplicateGuardArgs): UseDuplicateGuardResult {
   // DuplicateStatus 타입은 useResponseLifecycle 과 공유한다(handleResponse/handleSubmit 가 blocked 로 set).
   // admin-edit 분기 (8/8) — 어드민 수정은 중복검사 대상이 아니므로 초기값부터 ok.
   const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>(() =>
     isAdminEdit || isPreview ? { kind: 'ok' } : { kind: 'checking' },
   );
+
+  // 종료된 설문의 첫 화면 (ADR-0030) — 종료는 「새 응답만」 닫으므로, 여기서 막아도 되는 것은
+  // **이어갈 응답이 없다고 확인된 방문자**뿐이다. 응답하던 사람을 첫 화면에서 막으면 쓰던 답을
+  // 잃는다(진행 중 응답은 끝까지 제출시킨다는 약속이 깨진다).
+  //  - 초대 링크: 서버가 그 대상의 진행 중 응답 유무를 알려 준다(다른 기기 이어가기 포함).
+  //  - 그 밖: 이 브라우저에 남은 세션이 유일한 단서다. 남아 있으면 통과시키고 회복에 맡긴다 —
+  //    회복이 고아·종결 세션의 키를 지우면 다음 렌더에서 막힌다.
+  // 여기서 통과한 새 방문자는 첫 답변의 수용 게이트가 막는다 — 이 판정은 안내를 앞당길 뿐이고
+  // 강제 지점이 아니다.
+  //
+  // localStorage 는 렌더에서 직접 읽을 수 없어(SSR) 외부 저장소로 구독한다. 서버 스냅샷 null 은
+  // 「아직 모른다」이고 그동안은 checking 이 유지된다.
+  const surveyId = loadedSurvey?.id ?? null;
+  const hasSavedSession = useSyncExternalStore(
+    subscribeToNothing,
+    () =>
+      surveyId === null
+        ? null
+        : window.localStorage.getItem(sessionStorageKey(surveyId, inviteToken)) !== null,
+    () => null,
+  );
+  const closedWithNothingToResume =
+    closedEntry?.isClosed === true &&
+    !isAdminEdit &&
+    !isPreview &&
+    !skip &&
+    (closedEntry.resumableByInvite === false ||
+      (closedEntry.resumableByInvite === null && hasSavedSession === false));
 
   // 진입 시 중복 검사 — 설문 로드 + 신호 수집 완료 후 1회 실행
   // signals 가 null 인 동안 effect skip → state 채워지면 자동 재실행
@@ -70,6 +108,8 @@ export function useDuplicateGuard({
     if (isAdminEdit || isPreview) return;
     // 유효 테스트 세션 — 진입 시 중복검사 자체를 건너뜀 (반환값은 아래에서 ok 로 덮는다).
     if (skip) return;
+    // 종료 안내로 막힌 방문자는 중복을 물을 이유가 없다 — 어차피 응답을 시작할 수 없다.
+    if (closedWithNothingToResume) return;
     if (!loadedSurvey?.id || !signals) return;
     let cancelled = false;
     // 페이로드는 try 밖에서 확정한다 — try 본문의 conditional spread 는 React Compiler 가
@@ -99,7 +139,7 @@ export function useDuplicateGuard({
     return () => {
       cancelled = true;
     };
-  }, [isAdminEdit, isPreview, skip, loadedSurvey?.id, inviteToken, signals]);
+  }, [isAdminEdit, isPreview, skip, closedWithNothingToResume, loadedSurvey?.id, inviteToken, signals]);
 
   // 유효 테스트 세션은 진입 시 중복검사 없이 통과. 내부 state 를 effect 에서 동기 set 하면
   // cascading render 가 되므로(react-hooks/set-state-in-effect), 반환값만 파생해 덮는다.
@@ -107,10 +147,21 @@ export function useDuplicateGuard({
   // blocked 은폐가 아니다. 사후에 외부(쿼터 마감 quota_closed / 봇가드 / 무효 테스트 토큰
   // invalid_test_token)가 set 한 blocked 는 마스킹하지 않고 그대로 노출해야 실플로우 검증이 된다
   // (I-2). 그래서 checking 만 ok 로 파생하고 blocked/ok 는 그대로 통과시킨다.
+  //
+  // 종료 안내도 같은 방식으로 파생한다. 외부가 먼저 세운 blocked(쿼터 마감 등)는 덮지 않는다.
   const effectiveStatus: DuplicateStatus =
-    skip && duplicateStatus.kind === 'checking' ? { kind: 'ok' } : duplicateStatus;
+    closedWithNothingToResume && duplicateStatus.kind !== 'blocked'
+      ? { kind: 'blocked', reason: 'not_accepting' }
+      : skip && duplicateStatus.kind === 'checking'
+        ? { kind: 'ok' }
+        : duplicateStatus;
 
   return { duplicateStatus: effectiveStatus, setDuplicateStatus };
+}
+
+/** localStorage 는 이 훅이 바꾸지 않는다 — 변화는 다른 상태 갱신이 부르는 재렌더에서 다시 읽힌다. */
+function subscribeToNothing(): () => void {
+  return () => {};
 }
 
 /**

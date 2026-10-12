@@ -234,6 +234,110 @@ describe('useDuplicateGuard - checkOnEntry effect', () => {
 // I-2: skip(유효 테스트 세션)은 entry-check 진행 상태(checking)만 ok 로 우회하고,
 // 사후에 외부(쿼터 마감 / 봇가드 / 무효 테스트 토큰)가 set 한 blocked 는 마스킹하지 않고 노출한다.
 // (skip 의 목적은 checkOnEntry 네트워크 호출 억제 + checking 우회이지 blocked 은폐가 아님.)
+describe('useDuplicateGuard - 종료된 설문의 첫 화면 (ADR-0030)', () => {
+  // 종료는 「새 응답만」 닫는다. 그래서 첫 화면에서 막아도 되는 것은 **이어갈 응답이 없다고
+  // 확인된 방문자**뿐이다 — 응답하던 사람을 첫 화면에서 막으면 쓰던 답을 잃는다.
+  const SAVED_KEY = 'survey-session:survey-1';
+
+  beforeEach(() => {
+    checkOnEntry.mockReset();
+    checkOnEntry.mockResolvedValue({ blocked: false });
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('초대 없이 처음 온 방문자는 응답을 받지 않는다는 안내로 막힌다', async () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({ signals, closedEntry: { isClosed: true, resumableByInvite: null } }),
+      ),
+    );
+    await waitFor(() =>
+      expect(result.current.duplicateStatus).toEqual({ kind: 'blocked', reason: 'not_accepting' }),
+    );
+    expect(checkOnEntry).not.toHaveBeenCalled();
+  });
+
+  it('이 브라우저에 진행하던 세션이 남아 있으면 막지 않는다 — 회복이 이어 준다', async () => {
+    window.localStorage.setItem(SAVED_KEY, 'session-saved');
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({ signals, closedEntry: { isClosed: true, resumableByInvite: null } }),
+      ),
+    );
+    await waitFor(() => expect(result.current.duplicateStatus).toEqual({ kind: 'ok' }));
+    expect(checkOnEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it('초대 링크로 왔고 그 대상에게 진행 중 응답이 없으면 막힌다', async () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({
+          signals,
+          inviteToken: 'invite-1',
+          closedEntry: { isClosed: true, resumableByInvite: false },
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(result.current.duplicateStatus).toEqual({ kind: 'blocked', reason: 'not_accepting' }),
+    );
+    expect(checkOnEntry).not.toHaveBeenCalled();
+  });
+
+  it('초대 링크의 대상에게 진행 중 응답이 있으면 막지 않는다 (다른 기기에서 이어가기 포함)', async () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({
+          signals,
+          inviteToken: 'invite-1',
+          closedEntry: { isClosed: true, resumableByInvite: true },
+        }),
+      ),
+    );
+    await waitFor(() => expect(result.current.duplicateStatus).toEqual({ kind: 'ok' }));
+    expect(checkOnEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it('신호 수집을 기다리지 않고 막는다 — 판정에 필요한 것이 설문과 세션뿐이다', async () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({ signals: null, closedEntry: { isClosed: true, resumableByInvite: null } }),
+      ),
+    );
+    await waitFor(() =>
+      expect(result.current.duplicateStatus).toEqual({ kind: 'blocked', reason: 'not_accepting' }),
+    );
+  });
+
+  it('유효 테스트 세션은 종료된 설문에서도 통과한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({
+          signals,
+          skip: true,
+          closedEntry: { isClosed: true, resumableByInvite: null },
+        }),
+      ),
+    );
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
+
+  it('종료되지 않은 설문은 종전대로 중복 검사만 한다', async () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(
+        baseArgs({ signals, closedEntry: { isClosed: false, resumableByInvite: null } }),
+      ),
+    );
+    await waitFor(() => expect(result.current.duplicateStatus).toEqual({ kind: 'ok' }));
+    expect(checkOnEntry).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('useDuplicateGuard - skip 이어도 blocked 는 노출한다 (I-2)', () => {
   afterEach(() => {
     vi.clearAllMocks();

@@ -90,6 +90,8 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
       control: {
         isPaused: false,
         pausedMessage: null,
+        isClosed: false,
+        resumableByInvite: null,
         testSession: 'none',
         testSessionKind: null,
         priorWaveLabel: null,
@@ -135,6 +137,8 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
             control: {
               isPaused: false,
               pausedMessage: null,
+              isClosed: false,
+              resumableByInvite: null,
               testSession: 'none',
               testSessionKind: null,
               priorWaveLabel: null,

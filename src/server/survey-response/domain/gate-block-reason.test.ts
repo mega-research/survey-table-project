@@ -14,9 +14,11 @@ describe('toGateBlockReason', () => {
     expect(toGateBlockReason('invite_required')).toBe('invalid_token');
   });
 
-  it('미배포·마감·정원·버전 문제는 모두 not_accepting 으로 접는다', () => {
+  it('미배포·종료·마감·정원·버전 문제는 모두 not_accepting 으로 접는다', () => {
     // 응답자에게 내부 사유를 세분해 노출하지 않는다 — 화면 문구는 하나면 충분하다.
     expect(toGateBlockReason('status_not_published')).toBe('not_accepting');
+    // 종료(ADR-0030)도 같은 문구다 — 종료 전용 안내를 만들지 않는다.
+    expect(toGateBlockReason('survey_closed')).toBe('not_accepting');
     expect(toGateBlockReason('end_date_passed')).toBe('not_accepting');
     expect(toGateBlockReason('max_responses_reached')).toBe('not_accepting');
     expect(toGateBlockReason('survey_not_found')).toBe('not_accepting');

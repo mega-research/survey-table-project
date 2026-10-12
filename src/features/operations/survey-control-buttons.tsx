@@ -31,6 +31,7 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 
+import { SurveyCloseControl } from './survey-close-control';
 import { TestModeControl } from './test-mode-control';
 
 interface Props {
@@ -38,6 +39,7 @@ interface Props {
   initial: {
     isPaused: boolean;
     pausedMessage: string | null;
+    isClosed: boolean;
     testModeEnabled: boolean;
     testToken: string | null;
     accessIdentifier: string;
@@ -48,8 +50,9 @@ interface Props {
 }
 
 /**
- * 운영 헤더의 설문 중단·테스트 모드 토글 버튼.
+ * 운영 헤더의 설문 중단·종료·테스트 모드 토글 버튼.
  *
+ * - 종료: SurveyCloseControl 에 위임 — 중단과 독립인 축이다(ADR-0030).
  * - 테스트 모드: TestModeControl (설문 편집 헤더와 공용) 에 위임.
  * - 중단: 응답자 화면에 안내 문구만 노출하고 신규 응답 접수를 막는다. ON 이면 rose 톤으로
  *   "중단 중" 을 표시하고 클릭 시 재개 확인을 받는다.
@@ -125,6 +128,8 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
           설문 중단
         </Button>
       )}
+
+      <SurveyCloseControl surveyId={surveyId} initialClosed={initial.isClosed} />
 
       {/* 중단 문구 — 프리필: 기존 pausedMessage 또는 기본 안내 문구 */}
       <Dialog open={pauseDialogOpen} onOpenChange={setPauseDialogOpen}>

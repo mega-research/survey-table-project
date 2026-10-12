@@ -137,9 +137,12 @@ export const surveys = pgTable(
     forceWideLayout: boolean('force_wide_layout').default(false).notNull(),
 
     // 버전 관리
-    // 'draft' | 'published'. 'closed' 는 **미구현 어휘**다 — 레포 어디에도 이 값을 쓰는 경로가
-    // 없고 프로덕션에도 0건이다. 조사를 끝낼 때 실제로 쓰는 수단은 endDate(마감)와 isPaused(중단)다.
-    // 만들 자리가 아니라 지울지 판단할 자리 — 결정과 근거는 트래커 B-g 참조.
+    // 'draft' | 'published' | 'closed'. CHECK 없는 text 컬럼이고 어휘는 계약
+    // (`surveyStatusValues`)이 쥔다.
+    //  - published → 발행(`publishSurvey`)이 쓴다. 종료된 설문을 다시 발행하면 종료가 풀린다.
+    //  - closed → 설문 종료(ADR-0030, `operations.control.setClosed`). **새 응답만** 닫고 외부
+    //    링크를 닫는다. 중단(isPaused)과 독립인 축이며 버전 행은 건드리지 않는다 — 그래서
+    //    「발행된 적 있는가」는 이 컬럼이 아니라 currentVersionId 로 묻는다.
     status: text('status').notNull().default('draft'),
     currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
 

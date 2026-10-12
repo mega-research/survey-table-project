@@ -533,6 +533,12 @@ function SurveyResponseFlowActive({
     signals,
     // 유효 테스트 세션은 같은 브라우저로 반복 응답이 정상 → 진입 시 중복검사 skip.
     skip: isTestSession,
+    // 종료된 설문의 첫 화면(ADR-0030) — **진입 판정**이다. 이 화면이 응답 행을 쥐었거나 제출을
+    // 마쳤으면 묻지 않는다: 종료는 새 응답만 닫으므로 응답하던 사람은 끝까지 가야 하고, 제출
+    // 뒤에는 세션 키가 지워져 「이어갈 것이 없다」가 참이 되는데 그때 보여야 할 것은 완료 화면이다.
+    ...(control?.isClosed && currentResponseId === null && !isCompleted
+      ? { closedEntry: { isClosed: true, resumableByInvite: control.resumableByInvite } }
+      : {}),
   });
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.

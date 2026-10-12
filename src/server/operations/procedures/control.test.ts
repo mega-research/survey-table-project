@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ORPCContext } from '@/server/context';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
+import { SurveyNotClosableError } from '../domain/survey-close';
 import * as svc from '../services/control';
 import { control } from './control';
 
 vi.mock('../services/control', () => ({
   getControlState: vi.fn(),
   setPaused: vi.fn(),
+  setClosed: vi.fn(),
   setTestMode: vi.fn(),
   disableTestWorkspace: vi.fn(),
 }));
@@ -30,6 +32,7 @@ describe('operations.control procedures', () => {
     vi.mocked(svc.getControlState).mockResolvedValue({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
       testModeEnabled: false,
       testToken: null,
       accessIdentifier: 'survey-1',
@@ -49,6 +52,7 @@ describe('operations.control procedures', () => {
     expect(res).toEqual({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
       testModeEnabled: false,
       testToken: null,
       accessIdentifier: 'survey-1',
@@ -76,10 +80,29 @@ describe('operations.control procedures', () => {
     expect(res).toEqual({ isPaused: true, pausedMessage: '점검 중' });
   });
 
+  it('setClosed 는 중단과 같은 survey.edit 을 요구하고 서비스에 위임한다', async () => {
+    vi.mocked(svc.setClosed).mockResolvedValue({ isClosed: true });
+    const context = authedContext();
+    const client = createRouterClient({ control }, { context });
+    const res = await client.control.setClosed({ surveyId: SURVEY_ID, isClosed: true });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, 'survey.edit');
+    expect(svc.setClosed).toHaveBeenCalledWith({ surveyId: SURVEY_ID, isClosed: true });
+    expect(res).toEqual({ isClosed: true });
+  });
+
+  it('발행된 적 없는 설문의 종료는 CONFLICT 로 나간다 — 500 으로 마스킹되지 않는다', async () => {
+    vi.mocked(svc.setClosed).mockRejectedValue(new SurveyNotClosableError());
+    const client = createRouterClient({ control }, { context: authedContext() });
+    await expect(
+      client.control.setClosed({ surveyId: SURVEY_ID, isClosed: true }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '발행된 적 없는 설문은 종료할 수 없습니다.' });
+  });
+
   it('setTestMode 는 ON만 위임하고 전체 control state를 반환한다', async () => {
     vi.mocked(svc.setTestMode).mockResolvedValue({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
       testModeEnabled: true,
       testToken: 'tok',
       accessIdentifier: 'survey-1',
@@ -95,6 +118,7 @@ describe('operations.control procedures', () => {
     expect(res).toEqual({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
       testModeEnabled: true,
       testToken: 'tok',
       accessIdentifier: 'survey-1',
@@ -161,6 +185,7 @@ describe('operations.control procedures', () => {
 
   it.each([
     ['setPaused', () => ({ surveyId: SURVEY_ID, isPaused: true })],
+    ['setClosed', () => ({ surveyId: SURVEY_ID, isClosed: true })],
     ['setTestMode', () => ({ surveyId: SURVEY_ID, enabled: true as const })],
     ['disable', () => ({ surveyId: SURVEY_ID, disposition: 'delete' as const })],
   ])('타 팀 설문 id 로 %s 하면 NOT_FOUND — 서비스에 닿지 않는다', async (name, makeInput) => {
@@ -171,6 +196,7 @@ describe('operations.control procedures', () => {
     const call = client.control[name as 'setPaused'] as (input: unknown) => Promise<unknown>;
     await expect(call(makeInput())).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(svc.setPaused).not.toHaveBeenCalled();
+    expect(svc.setClosed).not.toHaveBeenCalled();
     expect(svc.setTestMode).not.toHaveBeenCalled();
     expect(svc.disableTestWorkspace).not.toHaveBeenCalled();
   });

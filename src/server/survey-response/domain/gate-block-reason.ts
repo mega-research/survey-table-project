@@ -21,6 +21,7 @@ export function toGateBlockReason(reason: string): BlockReason | null {
     case 'invite_required':
       return 'invalid_token';
     case 'status_not_published':
+    case 'survey_closed':
     case 'end_date_passed':
     case 'max_responses_reached':
     case 'survey_not_found':

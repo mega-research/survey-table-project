@@ -18,7 +18,10 @@ import { isValidUUID } from '@/lib/utils';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
-import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import {
+  getResponseCountsGroupedBySurvey,
+  hasOpenResponseForContact,
+} from '@/server/read-models/responses';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
@@ -300,6 +303,8 @@ export async function getSurveyForResponse(
   // surveys 행에서 읽는다 — snapshot.settings 에서 가져오면 안 된다.
   let testSession: 'none' | 'valid' | 'invalid' = 'none';
   let testSessionKind: 'anonymous' | 'target' | null = null;
+  // 종료된 설문의 첫 화면 재료 — 유효한 실 대상 초대일 때만 채운다.
+  let invitedContactTargetId: string | null = null;
 
   if (input.inviteToken != null && input.testToken != null) {
     testSession = 'invalid';
@@ -310,6 +315,8 @@ export async function getSurveyForResponse(
     } else if (invite.kind === 'valid' && invite.isTest) {
       testSession = 'valid';
       testSessionKind = 'target';
+    } else if (invite.kind === 'valid') {
+      invitedContactTargetId = invite.contactTargetId;
     }
   } else if (input.testToken != null) {
     const tokenIsValid = isValidTestToken(survey, input.testToken);
@@ -326,9 +333,19 @@ export async function getSurveyForResponse(
       testSession = 'invalid';
     }
   }
+  // 종료(ADR-0030)는 새 응답만 닫는다. 응답 화면이 첫 화면에서 막아도 되는 방문자를 가르도록,
+  // 초대 대상에게 이어갈 응답이 있는지를 함께 알린다. **종료된 설문에서만** 조회한다 — 열린
+  // 설문의 진입이 압도적으로 많아 그쪽에 왕복을 더하면 안 된다.
+  const isClosed = survey.status === 'closed';
+  const resumableByInvite =
+    isClosed && invitedContactTargetId !== null
+      ? await hasOpenResponseForContact(invitedContactTargetId)
+      : null;
   const control = {
     isPaused: survey.isPaused,
     pausedMessage: survey.pausedMessage,
+    isClosed,
+    resumableByInvite,
     testSession,
     testSessionKind,
     // 회차 라벨은 스냅샷에 freeze 하지 않는다 — 운영 중 문구 교정이 publish 없이 반영돼야 한다.

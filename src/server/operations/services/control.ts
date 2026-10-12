@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import 'server-only';
 
@@ -6,11 +6,15 @@ import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
+import { CLOSABLE_SURVEY_STATUSES, SurveyNotClosableError } from '../domain/survey-close';
+
 export { disableTestWorkspace } from './test-workspace';
 
 export interface SurveyControlState {
   isPaused: boolean;
   pausedMessage: string | null;
+  /** 설문 종료 여부 (ADR-0030) — `surveys.status === 'closed'`. 중단과 독립이다. */
+  isClosed: boolean;
   testModeEnabled: boolean;
   testToken: string | null;
   accessIdentifier: string;
@@ -26,6 +30,7 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
     .select({
       isPaused: surveys.isPaused,
       pausedMessage: surveys.pausedMessage,
+      status: surveys.status,
       testModeEnabled: surveys.testModeEnabled,
       testToken: surveys.testToken,
       id: surveys.id,
@@ -64,6 +69,7 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
   return {
     isPaused: row.isPaused,
     pausedMessage: row.pausedMessage,
+    isClosed: row.status === 'closed',
     testModeEnabled: row.testModeEnabled,
     testToken: row.testToken,
     accessIdentifier: getSurveyAccessIdentifier(row),
@@ -90,6 +96,40 @@ export async function setPaused(input: {
     .returning({ isPaused: surveys.isPaused, pausedMessage: surveys.pausedMessage });
   if (!updated) throw new Error('설문 중단 상태 저장에 실패했습니다.');
   return updated;
+}
+
+/**
+ * 설문 종료·종료 취소 (ADR-0030).
+ *
+ * **조건부 UPDATE 한 번이다.** 읽고 나서 쓰면 그 사이에 끼어든 발행·삭제를 덮는다. WHERE 가
+ * 「발행된 적 있는 설문」만 고르므로 초안은 0행이 되고, 그것이 곧 거부다 — 종료 취소가 초안을
+ * 발행 상태로 올리는 길이 이 조건 하나로 닫힌다.
+ *
+ * 건드리는 것은 `status` 뿐이다. 중단(`isPaused`)·중단 문구·현재 버전은 종료와 독립이라,
+ * 중단해 둔 설문을 종료했다 취소하면 중단 상태로 돌아온다. 링크 행도 건드리지 않는다 —
+ * 외부 링크의 닫힘은 이 값에서 파생되므로 종료 취소가 같은 주소·같은 비밀번호를 되살린다.
+ *
+ * 같은 상태로의 요청은 멱등이다(종료된 설문을 다시 종료해도 성공).
+ */
+export async function setClosed(input: {
+  surveyId: string;
+  isClosed: boolean;
+}): Promise<{ isClosed: boolean }> {
+  const [updated] = await db
+    .update(surveys)
+    .set({ status: input.isClosed ? 'closed' : 'published', updatedAt: new Date() })
+    .where(
+      and(
+        eq(surveys.id, input.surveyId),
+        isNull(surveys.deletedAt),
+        inArray(surveys.status, [...CLOSABLE_SURVEY_STATUSES]),
+      ),
+    )
+    .returning({ status: surveys.status });
+  // 관문이 존재를 이미 확인했으므로 0행은 초안이다(관문과 UPDATE 사이에 삭제된 경우도
+  // 같은 사유로 접는다 — 종료할 수 없다는 답은 어느 쪽에도 참이다).
+  if (!updated) throw new SurveyNotClosableError();
+  return { isClosed: updated.status === 'closed' };
 }
 
 export async function setTestMode(input: {

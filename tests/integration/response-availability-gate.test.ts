@@ -330,6 +330,26 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
       reason: 'survey_paused',
     });
   });
+
+  it('종료된 설문에서도 진행 중이던 응답은 제출된다 — 종료는 신규 접수만 막는다 (ADR-0030)', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'closed' }));
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    const res = await completeResponse({ responseId: 'r1' });
+    expect(res).toMatchObject({ id: 'r1' });
+  });
+
+  it('종료 + 중단은 제출도 차단한다 — 즉시 전면 중단의 수단은 중단이다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'closed', isPaused: true }));
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
+      kind: 'blocked',
+      reason: 'survey_paused',
+    });
+  });
 });
 
 describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테스트 세션 판정 + 중단 게이트', () => {
@@ -407,6 +427,31 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
         surveyId: SURVEY_ID,
         sessionId: 'gate-session-draft',
         versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'not_accepting' });
+  });
+
+  it('종료된 설문은 현재 버전이 published 로 남아 있어도 create 를 not_accepting 으로 막는다 (ADR-0030)', async () => {
+    // 종료는 설문 행만 바꾼다. 발행이 남긴 버전은 published 그대로라, 응답 화면이 그 버전 id 를
+    // 들고 오는 실제 진입이 이 조합이다 — 「설문 또는 버전」으로 물으면 새 응답이 들어온다.
+    const VERSION_ID = '00000000-0000-4000-8000-0000000000aa';
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ status: 'closed', currentVersionId: VERSION_ID }),
+    );
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    responseFindFirstMock.mockResolvedValue(undefined);
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/server/survey-response/services/response-entry');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'gate-session-closed',
+        versionId: VERSION_ID,
         questionId: 'q1',
         value: 'a',
         currentStepId: 'step1',

@@ -26,6 +26,7 @@ import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 const CONTROL = {
   isPaused: false,
   pausedMessage: null,
+  isClosed: false,
   testModeEnabled: false,
   testToken: null,
   accessIdentifier: 'sv-1',
@@ -109,5 +110,25 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
     // 읽어야 했다. 없어도 되는 것이 계약이라 그 사실을 여기서 못 박는다.
     renderHeader(LINK_CAPABILITIES, { internalShell: false });
     expect(screen.getByText('새로고침')).toBeTruthy();
+  });
+});
+
+describe('OperationsPageHeader — 설문 종료는 중단과 같은 자리·같은 자격이다 (ADR-0030)', () => {
+  it('설문을 고칠 수 있는 주체에게 중단과 종료가 함께 보인다', () => {
+    renderHeader(surveyCapabilityValues);
+    expect(screen.getByRole('button', { name: '설문 중단' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '설문 종료' })).toBeTruthy();
+  });
+
+  it('survey.edit 이 없으면 둘 다 보이지 않는다 — 한쪽만 누를 수 있는 사람이 없다', () => {
+    renderHeader(surveyCapabilityValues.filter((cap) => cap !== 'survey.edit'));
+    expect(screen.queryByRole('button', { name: '설문 중단' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '설문 종료' })).toBeNull();
+  });
+
+  it('외주 링크 셸에는 종료 버튼이 없다', () => {
+    renderHeader(LINK_CAPABILITIES, { internalShell: false });
+    expect(screen.queryByRole('button', { name: '설문 종료' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '종료됨' })).toBeNull();
   });
 });

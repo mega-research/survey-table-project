@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
-import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import {
+  getResponseCountsGroupedBySurvey,
+  hasOpenResponseForContact,
+} from '@/server/read-models/responses';
 import * as readModels from '@/server/read-models/survey-structure';
 import {
   countDeletedSurveys,
@@ -38,6 +41,7 @@ vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
 
 vi.mock('@/server/read-models/responses', () => ({
   getResponseCountsGroupedBySurvey: vi.fn(),
+  hasOpenResponseForContact: vi.fn(),
 }));
 
 vi.mock('@/server/read-models/team-memberships', () => ({
@@ -534,6 +538,8 @@ describe('survey-read.service getSurveyForResponse control', () => {
     expect(result?.control).toEqual({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
+      resumableByInvite: null,
       testSession: 'none',
       testSessionKind: null,
     });
@@ -675,6 +681,8 @@ describe('survey-read.service getSurveyForResponse control', () => {
     expect(result?.control).toEqual({
       isPaused: false,
       pausedMessage: null,
+      isClosed: false,
+      resumableByInvite: null,
       testSession: 'invalid',
       testSessionKind: null,
     });
@@ -751,6 +759,8 @@ describe('survey-read.service getSurveyForResponse control', () => {
     expect(result?.control).toEqual({
       isPaused: true,
       pausedMessage: '점검 중입니다',
+      isClosed: false,
+      resumableByInvite: null,
       testSession: 'valid',
       testSessionKind: 'anonymous',
     });
@@ -760,6 +770,120 @@ describe('survey-read.service getSurveyForResponse control', () => {
 // 응답자 화면의 문의 이메일은 **설정값이 없으면 현재 소유자**로 해석된다(티켓 20).
 // 스냅샷에 박아 두면 소유권 이전이 반영되지 않고, surveys 행에 채워 넣으면 빌더 설정
 // 패널이 「미설정인데 값이 보이는」 화면이 된다 — 그래서 pub 조회 시점에만 겹쳐 준다.
+// 종료된 설문의 첫 화면 재료 (ADR-0030). 종료는 「새 응답만」 닫으므로 응답 화면이 첫 화면에서
+// 막아도 되는지 가르려면, 초대 대상에게 이어갈 응답이 있는지를 서버가 알려 줘야 한다 — 다른
+// 기기에서 이어가는 사람의 세션은 이 브라우저에 없다.
+describe('survey-read.service getSurveyForResponse control — 설문 종료', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    contactTargetsFindFirst.mockReset();
+    vi.mocked(findContactByInviteToken).mockReset();
+    vi.mocked(hasOpenResponseForContact).mockReset();
+  });
+
+  function surveyRow(surveyId: string, status: string) {
+    return {
+      id: surveyId,
+      status,
+      currentVersionId: null,
+      requireInviteToken: false,
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: 'contact@example.com',
+      lookups: [],
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: false,
+      testToken: null,
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    };
+  }
+
+  function mockDetails(surveyId: string) {
+    vi.mocked(getSurveyWithDetailsData).mockResolvedValue({
+      id: surveyId,
+      title: '종료 설문',
+      groups: [],
+      questions: [],
+      settings: {
+        isPublic: true,
+        allowMultipleResponses: false,
+        showProgressBar: true,
+        shuffleQuestions: false,
+        requireLogin: false,
+        thankYouMessage: '감사합니다',
+      },
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    } as unknown as SurveyType);
+  }
+
+  const validInvite = {
+    kind: 'valid',
+    contactTargetId: 'target-1',
+    respondedAt: null,
+    isTest: false,
+  } as const;
+
+  it('종료되지 않은 설문은 isClosed=false 이고 진행 중 응답을 조회하지 않는다', async () => {
+    surveysFindFirst.mockResolvedValue(surveyRow('s-open', 'published'));
+    vi.mocked(findContactByInviteToken).mockResolvedValue(validInvite);
+    mockDetails('s-open');
+
+    const result = await getSurveyForResponse({ surveyId: 's-open', inviteToken: 'invite-token' });
+
+    expect(result?.control).toMatchObject({ isClosed: false, resumableByInvite: null });
+    // 열린 설문의 진입은 압도적으로 많다 — 종료 판정 때문에 조회가 하나 늘면 안 된다.
+    expect(hasOpenResponseForContact).not.toHaveBeenCalled();
+  });
+
+  it('초대 없이 들어오면 isClosed 만 알리고 이어갈 응답 여부는 모른다고 답한다', async () => {
+    surveysFindFirst.mockResolvedValue(surveyRow('s-closed', 'closed'));
+    mockDetails('s-closed');
+
+    const result = await getSurveyForResponse({ surveyId: 's-closed' });
+
+    expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: null });
+    expect(hasOpenResponseForContact).not.toHaveBeenCalled();
+  });
+
+  it('초대 대상에게 진행 중 응답이 있으면 resumableByInvite=true 다', async () => {
+    surveysFindFirst.mockResolvedValue(surveyRow('s-closed', 'closed'));
+    vi.mocked(findContactByInviteToken).mockResolvedValue(validInvite);
+    vi.mocked(hasOpenResponseForContact).mockResolvedValue(true);
+    mockDetails('s-closed');
+
+    const result = await getSurveyForResponse({ surveyId: 's-closed', inviteToken: 'invite-token' });
+
+    expect(hasOpenResponseForContact).toHaveBeenCalledWith('target-1');
+    expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: true });
+  });
+
+  it('초대 대상에게 진행 중 응답이 없으면 resumableByInvite=false 다', async () => {
+    surveysFindFirst.mockResolvedValue(surveyRow('s-closed', 'closed'));
+    vi.mocked(findContactByInviteToken).mockResolvedValue(validInvite);
+    vi.mocked(hasOpenResponseForContact).mockResolvedValue(false);
+    mockDetails('s-closed');
+
+    const result = await getSurveyForResponse({ surveyId: 's-closed', inviteToken: 'invite-token' });
+
+    expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: false });
+  });
+
+  it('무효한 초대 토큰은 익명과 같다 — 모른다고 답한다', async () => {
+    surveysFindFirst.mockResolvedValue(surveyRow('s-closed', 'closed'));
+    vi.mocked(findContactByInviteToken).mockResolvedValue({ kind: 'invalid' });
+    mockDetails('s-closed');
+
+    const result = await getSurveyForResponse({ surveyId: 's-closed', inviteToken: 'broken' });
+
+    expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: null });
+    expect(hasOpenResponseForContact).not.toHaveBeenCalled();
+  });
+});
+
 describe('survey-read.service getSurveyForResponse contactEmail 소유자 연동', () => {
   beforeEach(() => {
     vi.clearAllMocks();

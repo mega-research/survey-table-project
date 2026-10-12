@@ -30,9 +30,6 @@ describe('newResponseDenial — 술어 경계', () => {
     expect(newResponseDenial(survey({ status: 'draft' }), { status: 'published' }, OK)).toBeNull();
     expect(newResponseDenial(survey(), { status: 'superseded' }, OK)).toBeNull();
     expect(newResponseDenial(survey({ status: 'draft' }), null, OK)).toBe('status_not_published');
-    expect(newResponseDenial(survey({ status: 'closed' }), { status: 'closed' }, OK)).toBe(
-      'status_not_published',
-    );
   });
 
   it('마감 경계는 <= 다 — endDate === now 는 거부, +1ms 는 통과, null 은 무제한', () => {
@@ -173,6 +170,62 @@ describe('completeResponseDenial — 마감은 진행 중 응답을 몰수하지
         contactTargetId: null,
       }),
     ).toBe('invite_required');
+  });
+});
+
+describe('설문 종료 — 새 응답만 닫고 진행 중 응답은 끝까지 받는다 (ADR-0030)', () => {
+  const closed = survey({ status: 'closed' });
+  // 종료는 설문 행만 바꾼다 — 발행이 남긴 버전 행은 published 그대로다.
+  const liveVersion = { status: 'published' } as const;
+  const completing = { contactTargetId: 'ct-1', completedCount: 0, isTest: false, now: NOW } as const;
+
+  it('신규 진입은 버전이 published 로 남아 있어도 거부된다', () => {
+    expect(newResponseDenial(closed, liveVersion, OK)).toBe('survey_closed');
+    expect(newResponseDenial(closed, null, OK)).toBe('survey_closed');
+  });
+
+  it('제출 완료는 통과한다 — 버전 정보 없이 판정돼도 같다', () => {
+    expect(completeResponseDenial(closed, liveVersion, completing)).toBeNull();
+    expect(completeResponseDenial(closed, null, completing)).toBeNull();
+  });
+
+  it('재응답 허용은 거부된다 — 되돌리기는 닫힌 접수를 다시 여는 행위다', () => {
+    expect(reeditDenial(closed, liveVersion, { contactTargetId: 'ct-1', isTest: false, now: NOW })).toBe(
+      'survey_closed',
+    );
+  });
+
+  it('종료는 미배포와 다른 사유다 — draft 는 완료도 계속 거부된다', () => {
+    expect(newResponseDenial(survey({ status: 'draft' }), null, OK)).toBe('status_not_published');
+    expect(completeResponseDenial(survey({ status: 'draft' }), null, completing)).toBe(
+      'status_not_published',
+    );
+  });
+
+  it('종료와 중단이 겹치면 신규 진입은 종료를, 제출 완료는 중단을 말한다', () => {
+    const closedAndPaused = survey({ status: 'closed', isPaused: true });
+    expect(newResponseDenial(closedAndPaused, liveVersion, OK)).toBe('survey_closed');
+    expect(completeResponseDenial(closedAndPaused, liveVersion, completing)).toBe('survey_paused');
+  });
+
+  it('종료된 설문의 다른 검사는 그대로 선다 — 정원·초대', () => {
+    expect(
+      completeResponseDenial(survey({ status: 'closed', maxResponses: 1 }), liveVersion, {
+        ...completing,
+        completedCount: 1,
+      }),
+    ).toBe('max_responses_reached');
+    expect(
+      completeResponseDenial(survey({ status: 'closed', isPublic: false }), liveVersion, {
+        ...completing,
+        contactTargetId: null,
+      }),
+    ).toBe('invite_required');
+  });
+
+  it('테스트 응답은 종료된 설문에서도 면제된다', () => {
+    expect(newResponseDenial(closed, liveVersion, { ...OK, isTest: true })).toBeNull();
+    expect(reeditDenial(closed, liveVersion, { contactTargetId: 'ct-1', isTest: true, now: NOW })).toBeNull();
   });
 });
 

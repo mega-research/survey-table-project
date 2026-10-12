@@ -10,8 +10,8 @@ import type { SurveyAssignmentStatus, SurveyVisibility, WorkScope } from './work
 // surveys.status — 설문 수명 상태 (컬럼 어휘)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// 'closed' 는 미구현 어휘다 — 쓰는 경로가 없고 프로덕션에도 0건이다(조사 종료는 endDate·
-// isPaused 로 한다). 목록 상태 칩(.pen FLOW 6)이 세 값을 다 그리므로 어휘에는 남긴다.
+// 'closed' 는 설문 종료다(ADR-0030) — 새 응답을 닫고 외부 링크(외주·클라이언트)를 닫는다.
+// 중단(isPaused)과 다른 축이고, 종료 취소·재발행이 published 로 되돌린다.
 
 export const surveyStatusValues = ['draft', 'published', 'closed'] as const;
 export type SurveyStatus = (typeof surveyStatusValues)[number];
@@ -143,6 +143,18 @@ export interface SurveyDiffPayload {
 export type SurveyControl = {
   isPaused: boolean;
   pausedMessage: string | null;
+  /**
+   * 설문 종료 여부 (ADR-0030, `surveys.status === 'closed'`). 종료는 **새 응답만** 닫는다 —
+   * 응답하던 사람은 끝까지 제출한다. 그래서 중단과 달리 이 값만으로 화면을 막으면 안 된다.
+   */
+  isClosed: boolean;
+  /**
+   * 종료된 설문에서, 초대 토큰의 조사 대상에게 이어갈 응답이 있는가.
+   * 종료되지 않았거나 유효한 초대가 아니면 null — 서버가 모른다는 뜻이고, 응답 화면은 그때
+   * 이 브라우저에 남은 세션으로 가른다. 다른 기기에서 이어가는 사람의 세션은 브라우저에 없어
+   * 서버만 답할 수 있다.
+   */
+  resumableByInvite: boolean | null;
   testSession: 'none' | 'valid' | 'invalid';
   testSessionKind: 'anonymous' | 'target' | null;
   /** 추적조사의 이전 회차 라벨(surveys.prior_wave_label). 없으면 null */

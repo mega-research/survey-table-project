@@ -4,11 +4,13 @@ import * as z from 'zod';
 import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
+import { SurveyNotClosableError } from '../domain/survey-close';
 import * as svc from '../services/control';
 
 const ControlStateSchema = z.object({
   isPaused: z.boolean(),
   pausedMessage: z.string().nullable(),
+  isClosed: z.boolean(),
   testModeEnabled: z.boolean(),
   testToken: z.string().nullable(),
   accessIdentifier: z.string(),
@@ -50,6 +52,30 @@ const setPaused = authed
     });
   });
 
+/**
+ * 설문 종료·종료 취소 (ADR-0030).
+ *
+ * capability 가 중단과 같은 `survey.edit` 인 것이 계약이다 — 갈리면 「중단은 되는데 종료는
+ * 안 되는」 사람이 생겨 스위치가 둘인 이유가 흐려진다. 외부 접근을 끊는 방향이라 넓게 줘도
+ * 위험하지 않다.
+ */
+const setClosed = authed
+  .input(z.object({ surveyId: z.string(), isClosed: z.boolean() }))
+  .output(z.object({ isClosed: z.boolean() }))
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
+    try {
+      return await svc.setClosed(input);
+    } catch (error) {
+      // 문자열 Error 로 두면 rpc-error-policy 가 500 으로 마스킹해, 정확히 거부된 요청이
+      // 화면에는 「내부 오류」로 보인다.
+      if (error instanceof SurveyNotClosableError) {
+        throw new ORPCError('CONFLICT', { message: error.message });
+      }
+      throw error;
+    }
+  });
+
 const setTestMode = authed
   .input(z.object({ surveyId: z.string(), enabled: z.literal(true) }))
   .output(ControlStateSchema)
@@ -81,4 +107,4 @@ const disable = authed
     return svc.disableTestWorkspace(input);
   });
 
-export const control = { get, setPaused, setTestMode, disable };
+export const control = { get, setPaused, setClosed, setTestMode, disable };

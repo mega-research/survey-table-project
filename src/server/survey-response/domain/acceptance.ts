@@ -10,6 +10,7 @@
  */
 export type AcceptanceDenial =
   | 'status_not_published'
+  | 'survey_closed'
   | 'survey_paused'
   | 'end_date_passed'
   | 'max_responses_reached'
@@ -18,8 +19,8 @@ export type AcceptanceDenial =
 /** 재응답 허용이 보는 부분집합 — ReeditUnavailableError 생성자 인자 union 과 정확히 동일. */
 export type ReeditDenial = Exclude<AcceptanceDenial, 'max_responses_reached'>;
 
-/** 완료 제출이 보는 부분집합 — 마감은 신규 접수만 막으므로 빠진다. */
-export type CompleteDenial = Exclude<AcceptanceDenial, 'end_date_passed'>;
+/** 완료 제출이 보는 부분집합 — 마감과 종료는 신규 접수만 막으므로 빠진다. */
+export type CompleteDenial = Exclude<AcceptanceDenial, 'end_date_passed' | 'survey_closed'>;
 
 /** 진행 중 응답 계속이 보는 부분집합. */
 export type OngoingDenial = Extract<AcceptanceDenial, 'survey_paused'>;
@@ -62,13 +63,16 @@ export type VersionAcceptanceState = { status: string } | null;
 
 /**
  * 판정 순서. **외부 관측 가능한 계약이다** — 위반이 여럿일 때 첫 사유가
- * toGateBlockReason 을 거쳐 응답자 화면 문구를 정한다(status/endDate/max → not_accepting,
- * paused → survey_paused, invite → invalid_token). 정렬·재배치 금지.
+ * toGateBlockReason 을 거쳐 응답자 화면 문구를 정한다(status/closed/endDate/max →
+ * not_accepting, paused → survey_paused, invite → invalid_token). 정렬·재배치 금지.
+ * 종료가 중단보다 앞인 것은 status 계열이 한 묶음이어서다 — 종료된 설문에 새로 들어온
+ * 사람에게 「잠시 멈췄다」고 말하면 다시 와 보라는 뜻이 된다.
  * 서비스 어댑터(assertSurveyAcceptingResponses / assertResponseCompletable /
  * assertSurveyNotPaused / allowReeditResponse)가 모두 이 순서를 따른다.
  */
 const CHECK_ORDER = [
   'status_not_published',
+  'survey_closed',
   'survey_paused',
   'end_date_passed',
   'max_responses_reached',
@@ -91,6 +95,7 @@ const CHECKS_FOR = {
    */
   newResponse: [
     'status_not_published',
+    'survey_closed',
     'survey_paused',
     'end_date_passed',
     'max_responses_reached',
@@ -106,17 +111,13 @@ const CHECKS_FOR = {
    * 부수 효과: 지금까지는 CHECK_ORDER 상 마감이 정원보다 앞이라 마감 후 완료 시도가 항상
    * 마감에서 먼저 잘려 정원 검사에 도달하지 않았다. 마감을 빼면 정원 검사가 처음으로
    * 활성화되어 사유가 end_date_passed → max_responses_reached 로 승계된다. 어느 쪽도 차단이라
-   * 정책 회귀가 아니다. 다만 완료 경로는 blocked 폴딩을 타지 않으므로 두 사유 모두
-   * 응답자에게는 500 으로 나간다 — 사유 태그만 바뀐다.
+   * 정책 회귀가 아니다. 서비스가 두 사유를 blocked 결과로 접어 돌려준다(toGateBlockedResult).
    *
-   * 미배포(status_not_published)는 계속 차단하지만, **설문 종료(status='closed') 기능이
-   * 생기면 이 검사를 종료에 한해 풀어야 한다** — 2026-08-21 사용자 결정: 종료는 마감과
-   * 같은 결로 "신규 진입만 차단하고 진행 중 응답은 끝까지 제출시킨다". 즉시 전면 중단이
-   * 필요한 경우의 수단은 이미 isPaused 다(운영자가 건 라이브 스위치라 진행 중에도 적용).
-   * 지금 검사를 미리 빼지 않는 이유: 레포 전체에 status 를 'closed' 로 쓰는 경로가 없어
-   * (publish 만 존재) 실행되지 않는 완화가 되고, draft 방어만 잃는다. 종료 기능을 만들 때
-   * 이 행에서 status_not_published 를 빼는 대신 'draft 면 거부, closed 면 통과' 검사로
-   * 갈아끼우면 된다 — newResponse·reedit 행은 그대로 published 만 통과시킨다.
+   * **종료(survey_closed)도 미검사(의도)** — 2026-08-21 사용자 결정: 종료는 마감과 같은 결로
+   * "신규 진입만 차단하고 진행 중 응답은 끝까지 제출시킨다". 즉시 전면 중단이 필요한 경우의
+   * 수단은 isPaused 다(운영자가 건 라이브 스위치라 진행 중에도 적용). 미배포는 계속 차단한다:
+   * status_not_published 술어가 종료된 설문을 「발행된 적 있는 설문」으로 보아 통과시키고,
+   * draft 는 그대로 거부한다.
    */
   completeResponse: [
     'status_not_published',
@@ -139,10 +140,16 @@ const CHECKS_FOR = {
    * invite 검사(의도) — 되돌리기의 목적은 응답자가 초대 링크로 재진입해 재제출하는 것이라,
    * 연결된 조사 대상이 없으면 강등만 되고 재제출 경로가 없는 고아 상태가 된다. 되돌리기는
    * 통과시키면서 재제출은 막는 비대칭을 없앤다.
-   * status·endDate 는 계속 본다 — 되돌리기는 이미 닫힌 접수를 관리자가 다시 여는 행위라
-   * 진행 중 응답을 지키는 것과 성격이 다르다.
+   * status·종료·endDate 는 계속 본다 — 되돌리기는 이미 닫힌 접수를 관리자가 다시 여는 행위라
+   * 진행 중 응답을 지키는 것과 성격이 다르다. 종료된 설문은 종료를 먼저 취소해야 한다.
    */
-  reedit: ['status_not_published', 'survey_paused', 'end_date_passed', 'invite_required'],
+  reedit: [
+    'status_not_published',
+    'survey_closed',
+    'survey_paused',
+    'end_date_passed',
+    'invite_required',
+  ],
 } as const satisfies Record<string, readonly AcceptanceDenial[]>;
 
 /**
@@ -166,8 +173,14 @@ interface AcceptanceFacts {
 
 /** 검사 본문 — 각 규칙은 여기 1회만 존재한다. true = 위반. */
 const PREDICATES: Record<AcceptanceDenial, (f: AcceptanceFacts) => boolean> = {
-  // 설문 자체가 published 이거나, 판정 대상 version 이 published 여야 한다.
-  status_not_published: (f) => f.status !== 'published' && f.versionStatus !== 'published',
+  // 「발행된 적 없는 설문」 — 설문이 published·closed 이거나, 판정 대상 version 이 published 면
+  // 통과한다. closed 를 여기서 통과시키는 것은 종료가 미배포와 다른 사유(survey_closed)이기
+  // 때문이다: 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다.
+  status_not_published: (f) =>
+    f.status !== 'published' && f.status !== 'closed' && f.versionStatus !== 'published',
+  // 설문 종료(ADR-0030). **설문 행만 본다** — 종료는 버전 행을 건드리지 않아 버전은 published
+  // 로 남으므로, 「설문 또는 버전」으로 물으면 종료된 설문에 새 응답이 그대로 들어온다.
+  survey_closed: (f) => f.status === 'closed',
   survey_paused: (f) => f.isPaused === true,
   // null = 무제한, 경계는 <= (endDate === now 는 거부).
   end_date_passed: (f) => f.endDate != null && f.endDate.getTime() <= f.now,

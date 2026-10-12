@@ -157,12 +157,22 @@ describe('allowReeditResponse — 수용 게이트 (A-1 사전 박제)', () => {
   });
 
   it('[1b] 거부 사유는 reason 필드로 노출된다 (procedure 문구 매핑 키)', async () => {
-    h.gateRow = gate({ status: 'closed', currentVersionId: null });
+    h.gateRow = gate({ status: 'draft', currentVersionId: null });
     const { allowReeditResponse } = await import('./response-manage');
 
     await expect(allowReeditResponse(INPUT)).rejects.toMatchObject({
       reason: 'status_not_published',
     });
+  });
+
+  it('[1c] 종료된 설문은 현재 버전이 published 여도 survey_closed 로 거부한다 (ADR-0030)', async () => {
+    // 종료는 설문 행만 바꾼다 — 버전은 published 로 남아 「설문 OR 버전」으로는 걸리지 않는다.
+    h.gateRow = gate({ status: 'closed', currentVersionId: 'ver-1' });
+    h.versionRow = { status: 'published' };
+    const { allowReeditResponse } = await import('./response-manage');
+
+    await expect(allowReeditResponse(INPUT)).rejects.toMatchObject({ reason: 'survey_closed' });
+    expect(revertWasApplied()).toBe(false);
   });
 
   it('[2] 설문이 draft 여도 현재 버전이 published 면 되돌리기를 수행한다 (설문 OR 버전)', async () => {

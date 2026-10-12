@@ -20,7 +20,7 @@ interface Props {
   /**
    * 이 주체가 이 설문에서 할 수 있는 일 — 설문 단위 액션의 노출을 정한다.
    *
-   * 설문 중단·테스트 모드·설문 편집은 전부 `survey.edit` 하나다. 예전에는 「게스트인가」로
+   * 설문 중단·종료·테스트 모드·설문 편집은 전부 `survey.edit` 하나다. 예전에는 「게스트인가」로
    * 물었는데, 그 값은 admin 구역에서 언제나 false 라(비내부 계정은 레이아웃이 자기 홈으로
    * 되돌린다) 실제로는 아무것도 가리지 않았고 `survey.edit` 없는 팀원에게 누르면 실패하는
    * 버튼을 보여 주고 있었다.
@@ -55,12 +55,13 @@ interface Props {
   /**
    * 설문 제어 상태 — `survey.edit` 를 가진 주체에게만 쓰인다.
    *
-   * 없을 수 있는 것이 계약이다: 외주 실사 링크 셸은 중단·테스트 모드 버튼을 그리지 않으므로
+   * 없을 수 있는 것이 계약이다: 외주 실사 링크 셸은 중단·종료·테스트 모드 버튼을 그리지 않으므로
    * 그 재료를 읽을 이유가 없다(읽으면 화면에 쓰이지 않는 왕복이 하나 는다).
    */
   control?: {
     isPaused: boolean;
     pausedMessage: string | null;
+    isClosed: boolean;
     testModeEnabled: boolean;
     testToken: string | null;
     accessIdentifier: string;
@@ -110,7 +111,7 @@ export function OperationsPageHeader({
 
         <div className="flex items-center space-x-3">
           <RefreshButton />
-          {/* 설문 중단·테스트 모드는 설문을 고칠 수 있는 주체만 */}
+          {/* 설문 중단·종료·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}
           {previewHref && (
             <Link href={previewHref}>

@@ -7,6 +7,7 @@ import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
+import { openResponseStatusValues } from '@/shared/contracts/survey-response';
 
 // ========================
 // 응답 조회 함수
@@ -40,6 +41,29 @@ export async function getResponseById(
       { responseId: response.id },
     ),
   };
+}
+
+/**
+ * 이 조사 대상에게 이어갈 응답이 있는가 — 열린 상태(in_progress·drop)이고 삭제되지 않은 행.
+ *
+ * 재진입(`resumeOrCreateResponse` 의 컨택 분기)이 되살리는 것과 같은 모집단이다. 종료된 설문의
+ * 첫 화면이 이 답으로 「막아도 되는 방문자」를 가른다(ADR-0030) — 종료는 새 응답만 닫으므로
+ * 응답하던 사람을 첫 화면에서 막으면 안 된다. 강제 지점이 아니라 안내를 앞당기는 재료라,
+ * 틀리면 넓은 쪽(통과)으로 틀려야 한다: 통과한 새 방문자는 첫 답변의 수용 게이트가 막는다.
+ */
+export async function hasOpenResponseForContact(contactTargetId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: surveyResponses.id })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.contactTargetId, contactTargetId),
+        inArray(surveyResponses.status, [...openResponseStatusValues]),
+        notDeletedResponse,
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 // 전체 설문의 응답 수를 한 번의 GROUP BY 로 집계 (설문별 fan-out N+1 제거).
