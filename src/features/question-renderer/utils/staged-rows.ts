@@ -6,6 +6,7 @@
  * 묶음을 정한다(CONTEXT.md "행 차례로 열기", ADR 0028).
  */
 import { GATABLE_CELL_TYPES, collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import type { StagedRowsConfig, TableCell, TableRow } from '@/types/survey';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
@@ -29,10 +30,13 @@ export function deriveOpenStagedCount(
   const cellValues = values ?? {};
   const staged = stagedRowsOf(rows, config);
   const tableCells = collectTableCells(rows);
+  const choiceSelection = collectTableChoiceSelection(cellValues);
   let open = clampInitialVisibleCount(config.initialVisibleCount, staged.length);
   staged.forEach((row, index) => {
     if (index < open) return;
-    if (row.cells.some((cell) => hasLiveValue(cell, cellValues, tableCells))) open = index + 1;
+    if (row.cells.some((cell) => hasLiveValue(cell, cellValues, tableCells, choiceSelection))) {
+      open = index + 1;
+    }
   });
   return open;
 }
@@ -48,17 +52,19 @@ function clampInitialVisibleCount(value: number, stagedLength: number): number {
  * - **응답 칸만 센다**(input · radio · checkbox · select · ranking). 계산 칸은 저장 경계가 값을
  *   주입하므로(빈 행도 '0') 응답으로 세면 저장 전에는 닫혀 있던 행이 재진입 때 열리고, 그 행의
  *   필수 칸이 「다음」을 막는다 — 저장 전후로 열린 수가 달라지면 안 된다.
- * - 게이팅으로 닫힌 칸의 잔존값은 없는 것으로 본다.
+ * - 게이팅으로 닫힌 칸의 잔존값은 없는 것으로 본다. 보기 선택으로 열리는 칸은 표 응답 안 예약 키의
+ *   선택 집합이 있어야 판정된다 — 넘기지 않으면 열린 칸이 늘 닫힌 것으로 읽혀 값이 있는 행이 닫힌다.
  */
 function hasLiveValue(
   cell: TableCell,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[],
+  choiceSelection: ReadonlySet<string>,
 ): boolean {
   return (
     GATABLE_CELL_TYPES.has(cell.type) &&
     isCellValuePresent(cellValues[cell.id]) &&
-    isCellEnabled(cell, cellValues, tableCells)
+    isCellEnabled(cell, cellValues, tableCells, choiceSelection)
   );
 }
 

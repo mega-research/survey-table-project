@@ -245,7 +245,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
 
   // choice-selected 조건의 컨트롤러는 셀 값이 아니라 표 응답 안 예약 키(그룹 선택 맵)에 있다.
   // 선택자는 그 맵을 키 하나로 싣는다 — 맵 참조는 그룹 선택이 바뀔 때만 바뀐다.
-  const wantsChoiceSelection = gateWantsChoiceSelection(gateCondition);
+  // 상류 컨트롤러의 조건까지 본다 — 이 칸의 조건에는 없어도 컨트롤러가 보기 선택으로 열릴 수 있다.
+  const wantsChoiceSelection = gateWantsChoiceSelection(gateCondition, gatingCells);
 
   // 주입 원본이 없으면(controlled 렌더) 상위에서 이미 질문 단위 value prop 으로 내려오므로
   // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.

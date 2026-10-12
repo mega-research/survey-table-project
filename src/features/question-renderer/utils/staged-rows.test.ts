@@ -68,6 +68,25 @@ describe('deriveOpenStagedCount — 값에서 파생하는 열린 행 수', () =
     expect(deriveOpenStagedCount(gated, config, { h1: '10', s4a: '값' })).toBe(4);
   });
 
+  it('보기 선택으로 열리는 칸의 값은 그 보기가 골라졌을 때 센다', () => {
+    // 보기 그룹 표 — 컨트롤러는 묶음 밖의 보기 옵션 셀이고, 선택은 표 응답 안 예약 키에 있다
+    const gated: TableRow[] = rows.map((row) =>
+      row.id === 's4'
+        ? {
+            ...row,
+            cells: row.cells.map((cell) => ({
+              ...cell,
+              enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt' } as const,
+            })),
+          }
+        : row,
+    );
+    expect(deriveOpenStagedCount(gated, config, { s4a: '잔존' })).toBe(2);
+    expect(
+      deriveOpenStagedCount(gated, config, { s4a: '값', __choiceGroups: { g: 'opt' } }),
+    ).toBe(4);
+  });
+
   it('계산 칸의 저장값은 응답으로 치지 않는다 — 저장 뒤 다시 들어와도 열린 수가 같다', () => {
     // 저장 경계는 계산 칸의 값을 응답에 주입한다(빈 행도 '0'). 그 값을 응답으로 세면 저장 전에는
     // 닫혀 있던 행이 재진입 때 열리고, 그 행의 필수 칸이 「다음」을 막는다.

@@ -75,4 +75,20 @@ describe('gate-value-selector', () => {
     expect(gateSubscriptionKeys(onA)).toEqual(['a']);
     expect(gateSubscriptionKeys({ kind: 'filled', controllerCellId: 'p' }, cells)).toEqual(['p', 'r']);
   });
+
+  it('컨트롤러가 보기 선택으로 열리는 칸이면 하류 조건도 보기 선택 집합이 필요하다', () => {
+    const cells = [
+      { id: 'opt', type: 'choice_opt', content: '' },
+      {
+        id: 'a',
+        type: 'input',
+        content: '',
+        enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt' },
+      },
+    ] as TableCell[];
+    const onA: CellEnableCondition = { kind: 'filled', controllerCellId: 'a' };
+    expect(gateWantsChoiceSelection(onA, cells)).toBe(true);
+    // 셀 정의가 없으면 상류를 알 수 없다 — 직접 조건만 본다
+    expect(gateWantsChoiceSelection(onA)).toBe(false);
+  });
 });

@@ -19,9 +19,20 @@ export function selectNoGateValues(): Record<string, unknown> {
   return NO_VALUES;
 }
 
-/** 조건 트리 어딘가에 보기 선택(choice-selected) 조건이 있는가. */
-export function gateWantsChoiceSelection(condition: CellEnableCondition | undefined): boolean {
-  return collectGateLeaves(condition).some((leaf) => leaf.kind === 'choice-selected');
+/**
+ * 이 조건을 평가하는 데 보기 선택 집합이 필요한가 — 조건 트리 어딘가, **또는 그 컨트롤러의 상류
+ * 조건 어딘가**에 보기 선택(choice-selected) 조건이 있다.
+ *
+ * 구독 키와 같은 닫힘을 쓴다. 평가기는 컨트롤러가 열렸는지를 그 컨트롤러의 조건으로 다시 판정하므로,
+ * 직접 조건만 보고 선택 집합을 빼면 보기 선택으로 열린 컨트롤러가 닫힌 것으로 읽혀 하류 칸의 답이
+ * 지워진다(보기 선택 → A → B 연쇄).
+ */
+export function gateWantsChoiceSelection(
+  condition: CellEnableCondition | undefined,
+  tableCells?: readonly TableCell[],
+): boolean {
+  if (!condition) return false;
+  return gateSubscriptionKeys(condition, tableCells).includes(CHOICE_GROUPS_KEY);
 }
 
 /**

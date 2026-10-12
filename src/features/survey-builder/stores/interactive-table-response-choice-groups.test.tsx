@@ -512,4 +512,63 @@ describe('보기 그룹 표 — choice-selected 게이팅', () => {
     );
     expect(screen.getByPlaceholderText('구매 시기')).toBeInTheDocument();
   });
+
+  /**
+   * 연쇄 — 보기 선택으로 열리는 칸(구매 시기)을 다시 컨트롤러로 삼는 칸(구매 사유).
+   * 하류 칸의 조건에는 보기 선택이 없지만, 상류 칸이 열렸는지는 보기 선택으로 판정한다.
+   * 선택 집합을 넘기지 않으면 상류가 닫힌 것으로 읽혀 하류의 답이 지워진다.
+   */
+  const chainedRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '',
+      cells: [
+        ...gatedRows[0]!.cells,
+        {
+          id: 'why',
+          content: '',
+          type: 'input',
+          placeholder: '구매 사유',
+          enabledWhen: { kind: 'filled', controllerCellId: 'when' },
+        },
+      ],
+    },
+  ];
+  const chainedAnswer = { when: '내년', why: '교체', __choiceGroups: { rad1: 'opt-yes' } };
+
+  it('보기 선택으로 열린 칸을 컨트롤러로 삼는 칸도 열리고, 이미 적은 답이 지워지지 않는다', async () => {
+    function ChainedHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>(chainedAnswer);
+      return (
+        <>
+          <InteractiveTableResponse
+            questionId="q1"
+            columns={columns}
+            rows={chainedRows}
+            choiceGroups={[choiceGroups[0]!]}
+            value={value}
+            onChange={setValue}
+            enableSticky={false}
+          />
+          <output data-testid="value">{JSON.stringify(value)}</output>
+        </>
+      );
+    }
+    render(<ChainedHarness />);
+    expect(await screen.findByPlaceholderText('구매 사유')).toHaveValue('교체');
+    expect(readValue()).toEqual(chainedAnswer);
+  });
+
+  it('테스트 모드에서도 연쇄 하류 칸이 스토어의 그룹 선택으로 열린다', () => {
+    useTestResponseStore.setState({ testResponses: { q1: chainedAnswer } });
+    const cells = chainedRows[0]!.cells;
+    render(
+      <ResponseSourcesProvider sources={previewResponseSources}>
+        <ChoiceGroupsProvider value={[choiceGroups[0]!]}>
+          <InteractiveCell cell={cells[3]!} questionId="q1" rowCells={cells} />
+        </ChoiceGroupsProvider>
+      </ResponseSourcesProvider>,
+    );
+    expect(screen.getByPlaceholderText('구매 사유')).toHaveValue('교체');
+  });
 });
