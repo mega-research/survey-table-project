@@ -19,6 +19,10 @@ vi.mock('@/server/survey-builder/services/survey-read', () => ({
   getSurveyById: vi.fn(async () => ({ title: '설문' })),
 }));
 
+vi.mock('@/server/quota/services/quota-status', () => ({
+  hasQuotaPlan: vi.fn(async () => false),
+}));
+
 // 셸의 나머지 조각은 관심사가 아니다 — provider 유무만 본다.
 vi.mock('@/features/operations/operations-page-header', () => ({
   OperationsPageHeader: () => null,

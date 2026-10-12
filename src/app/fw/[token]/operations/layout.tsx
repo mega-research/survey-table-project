@@ -6,6 +6,7 @@ import {
 } from '@/features/operations/operations-paths';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
+import { hasQuotaPlan } from '@/server/quota/services/quota-status';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 import { LinkSignOutButton } from './link-sign-out-button';
@@ -20,7 +21,8 @@ import { LinkSignOutButton } from './link-sign-out-button';
  * **외주임을 알리는 배지·배너를 두지 않는다**(ADR). 외주가 보는 것은 연구원이 설명하는
  * 화면과 같아야 하고, 「당신은 외부 인력」이라는 표시는 그 설명에 아무것도 더하지 않는다.
  *
- * 탭은 **판정 결과를 그대로** 받는다 — 현황·진척 보고·조사 대상에 쿼터 현황(읽기 전용)이 더해져 넷이다. 탭이 여는 주소는
+ * 탭은 **판정 결과를 그대로** 받는다 — 현황·진척 보고·조사 대상에 쿼터 현황(읽기 전용)이 더해져 넷이다.
+ * 쿼터 현황만은 쿼터가 있는 설문에서만 선다(없으면 빈 안내뿐이다). 탭이 여는 주소는
  * 전부 이 트리 안에 실재해야 한다(「메뉴엔 있는데 누르면 404」가 예전 `isGuest` 불리언
  * 아래에서 실제로 있었던 회귀다). 그래서 leaf 셋이 이 셸과 같은 커밋에 선다.
  *
@@ -38,8 +40,9 @@ export default async function FieldworkLinkOperationsLayout({ children, params }
   const { token } = await params;
   // 트리 진입점에서 survey.view 를 한 번 접는다 — leaf 는 자기 정밀 관문을 따로 가진다.
   const { surveyId, capabilities } = await assertFieldworkLinkPageAccess(token, 'survey.view');
-  // 관문이 지났으므로 설문은 살아 있다 — 제목만 쓴다.
-  const survey = await getSurveyById(surveyId);
+  // 관문이 지났으므로 설문은 살아 있다 — 제목만 쓴다. 쿼터 유무는 「쿼터 현황」 탭을 세울지
+  // 정한다: 쿼터가 없는 설문에서 그 탭은 빈 안내뿐이라 그리지 않는다.
+  const [survey, hasQuota] = await Promise.all([getSurveyById(surveyId), hasQuotaPlan(surveyId)]);
 
   return (
     <QueryProvider>
@@ -57,6 +60,7 @@ export default async function FieldworkLinkOperationsLayout({ children, params }
           basePath={fieldworkLinkOperationsBase(token)}
           capabilities={capabilities}
           internalShell={false}
+          hasQuota={hasQuota}
         />
         {children}
       </div>

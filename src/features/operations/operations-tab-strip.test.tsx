@@ -30,6 +30,7 @@ interface StripOptions {
   hasSurveyDocument?: boolean;
   /** 내부 셸인가 — 외주 링크 콘솔만 false 다. */
   internalShell?: boolean;
+  hasQuota?: boolean;
 }
 
 function renderStrip(capabilities: readonly SurveyCapability[], options: StripOptions = {}) {
@@ -39,6 +40,7 @@ function renderStrip(capabilities: readonly SurveyCapability[], options: StripOp
       capabilities={new Set(capabilities)}
       internalShell={options.internalShell ?? true}
       hasSurveyDocument={options.hasSurveyDocument ?? false}
+      {...(options.hasQuota !== undefined ? { hasQuota: options.hasQuota } : {})}
     />,
   );
 }
@@ -63,6 +65,16 @@ describe('OperationsTabStrip — capability 가 탭을 정한다', () => {
     // 문항 수요는 내부 전용 화면이라 조사표가 붙어 있어도 서지 않는다. 쿼터는 읽기 전용
     // 현황판으로 서고 이름이 「쿼터 현황」이다 — 내부의 「쿼터」(플랜 편집)와 다른 화면이다.
     expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상', '쿼터 현황']);
+  });
+
+  it('쿼터가 없는 설문이면 링크 셸에 쿼터 현황이 서지 않는다 — 눌러도 빈 안내뿐인 탭을 두지 않는다', () => {
+    renderStrip(LINK_CAPABILITIES, { internalShell: false, hasQuota: false });
+    expect(visibleTabs()).toEqual(['실사 현황', '진척 보고', '조사 대상']);
+  });
+
+  it('내부 셸의 쿼터는 쿼터가 없어도 선다 — 거기가 쿼터를 만드는 자리다', () => {
+    renderStrip(ALL, { hasQuota: false });
+    expect(visibleTabs()).toContain('쿼터');
   });
 
   it('링크 셸의 쿼터 현황은 주입받은 접두 아래로 간다', () => {

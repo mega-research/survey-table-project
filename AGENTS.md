@@ -865,7 +865,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 /fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓴다(같은 숫자)
 /fw/[token]/operations/quota      # 쿼터 현황 — **읽기 전용 현황판 하나**(2026-10-12). 플랜 편집은 없다(`survey.edit` 축).
                                   # 본문은 클라이언트 콘솔과 같은 것(app/_client-console/quota-screen), 관문은 operations.view —
-                                  # 새 capability 를 세우지 않았다(링크의 여섯 칸 그대로). 탭 이름은 「쿼터 현황」
+                                  # 새 capability 를 세우지 않았다(링크의 여섯 칸 그대로). 탭 이름은 「쿼터 현황」이고
+                                  # **쿼터가 없는 설문에서는 탭이 서지 않는다**(`hasQuotaPlan` — 현황 화면의 빈 상태와 같은 술어)
                                   # 관문은 assertFieldworkLinkPageAccess 이고 leaf 마다 자기 capability 를 준다
 
 /fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)

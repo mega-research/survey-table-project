@@ -41,6 +41,15 @@ interface OperationsTabStripProps {
   internalShell?: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
   hasSurveyDocument?: boolean;
+  /**
+   * 보여 줄 쿼터가 있는 설문인가 — **링크 셸의 「쿼터 현황」 탭만** 이 값을 본다.
+   *
+   * 링크 셸의 쿼터는 읽기 전용 현황판이라 쿼터가 없는 설문에서는 빈 안내뿐이다. 그런 탭을
+   * 세워 두지 않는다. 내부 셸은 이 값과 무관하게 언제나 그린다 — 거기가 쿼터를 **만드는**
+   * 자리라 없을 때 감추면 만들 길이 사라진다. 기본값이 true 인 것도 그래서다(주지 않으면
+   * 종전대로 선다).
+   */
+  hasQuota?: boolean;
 }
 
 /**
@@ -50,7 +59,8 @@ interface OperationsTabStripProps {
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
  * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
- * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`) — 링크 셸에서는 「쿼터 현황」(읽기 전용 현황판)
+ * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`) — 링크 셸에서는 「쿼터 현황」(읽기 전용 현황판)이고
+ *   쿼터가 없는 설문에서는 서지 않는다
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
@@ -60,6 +70,7 @@ export function OperationsTabStrip({
   capabilities,
   internalShell = true,
   hasSurveyDocument = false,
+  hasQuota = true,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
   const paths = operationsPaths(basePath);
@@ -245,7 +256,7 @@ export function OperationsTabStrip({
             </NavigationMenuItem>
           )}
 
-          {canOverview && (
+          {canOverview && (internalShell || hasQuota) && (
             <NavigationMenuItem>
               <Link
                 href={quotaHref}
