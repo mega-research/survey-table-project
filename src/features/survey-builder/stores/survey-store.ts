@@ -986,6 +986,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
                 questionChanged = true;
               }
             }
+            // 최대 선택 개수 연동 — 상한을 읽어 올 숫자 문항 참조. 빠뜨리면 temp id 를 계속 가리켜
+            // 응답 화면이 참조값을 못 찾고 고정 상한으로 조용히 폴백한다.
+            if (question.maxSelectionsSource?.questionId === oldId) {
+              question.maxSelectionsSource = {
+                ...question.maxSelectionsSource,
+                questionId: newId,
+              };
+              questionChanged = true;
+            }
             if (questionChanged) {
               changed = true;
               affectedIds.add(question.id);

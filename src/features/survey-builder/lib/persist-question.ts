@@ -17,8 +17,8 @@ const writeBuilderState = useSurveyBuilderStore.setState;
  * 질문 편집 모달과 셀 내용 모달이 같은 순서를 각각 갖고 있었다 —
  * (1) questionChanges.added 에서 빼 다음 저장이 UPDATE 경로를 타게 하고,
  * (2) 서버가 다른 id 를 돌려줬으면 스토어 질문 id 를 스왑한 뒤
- * (3) 그 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·branchRule goto)을
- *     새 id 로 리매핑한다.
+ * (3) 그 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·branchRule goto)과
+ *     최대 선택 개수 연동(maxSelectionsSource)을 새 id 로 리매핑한다.
  *
  * (3)을 빠뜨리면 참조가 temp id 로 끊긴다. 두 벌로 두면 한쪽만 고쳐질 수 있는 자리였다.
  *
