@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   deleteWheres: [] as unknown[],
   targetInsertValues: [] as Array<Record<string, unknown>>,
   rows: [{ 회사명: '아크미' }] as Array<Record<string, string>>,
+  /** 「숨겨진 행 제외」로 파서가 건너뛴 행 수 */
+  skippedHiddenRows: 0,
   /** 묶음(2행 이상) INSERT 를 실패시킨다 — 행 단위 재시도 경로 검증용 */
   failBatchInsert: false,
   /** 이 회사명을 가진 행은 한 행씩 넣어도 실패한다 */
@@ -21,7 +23,7 @@ vi.mock('./excel-parser', () => ({
   parseExcelRows: vi.fn(async () => ({
     rows: h.rows,
     rowNumbers: h.rows.map((_, i) => i + 2),
-    skippedHiddenRows: 0,
+    skippedHiddenRows: h.skippedHiddenRows,
     skippedHiddenColumns: 0,
   })),
   previewExcel: vi.fn(),
@@ -127,6 +129,7 @@ beforeEach(() => {
   h.deleteWheres.length = 0;
   h.targetInsertValues.length = 0;
   h.rows = [{ 회사명: '아크미' }];
+  h.skippedHiddenRows = 0;
   h.failBatchInsert = false;
   h.failRowCompany = null;
 });
@@ -178,5 +181,23 @@ describe('ingestContactUpload 묶음 적재', () => {
 
     await expect(ingestContactUpload(input)).resolves.toMatchObject({ uploadedRows: 3, errorRows: 0 });
     expect(h.targetInsertValues.map((v) => v['resid'])).toEqual([1, 2, 3]);
+  });
+});
+
+describe('ingestContactUpload 빈 업로드 거부', () => {
+  it('적재할 행이 없으면 기존 조사 대상을 지우기 전에 거부한다', async () => {
+    h.rows = [];
+
+    await expect(ingestContactUpload(input)).rejects.toThrow('적재할 행이 없습니다');
+    expect(h.deleteWheres).toHaveLength(0);
+    expect(h.targetInsertValues).toHaveLength(0);
+  });
+
+  it('필터로 전 행이 숨겨진 파일도 같다 — 빠진 행 수를 알려 준다', async () => {
+    h.rows = [];
+    h.skippedHiddenRows = 171;
+
+    await expect(ingestContactUpload(input)).rejects.toThrow('171');
+    expect(h.deleteWheres).toHaveLength(0);
   });
 });

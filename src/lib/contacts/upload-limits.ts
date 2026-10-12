@@ -22,3 +22,19 @@ export function validateXlsxFile(file: File): string | null {
   }
   return null;
 }
+
+/**
+ * 적재할 행이 하나도 없는 업로드인가 — 그렇다면 사용자용 거부 사유, 아니면 null.
+ *
+ * 0행 업로드는 어떤 모드에서도 뜻이 없고, replace 에서는 기존 조사 대상을 전부 지운 뒤 아무것도
+ * 넣지 않아 명단이 통째로 사라진다(개별 링크·회차 기록·PII 포함). 엑셀 필터가 전 행을 걸러 낸
+ * 파일을 「숨겨진 행 제외」로 올리면 이 상태가 된다 — 그 경우 빠진 행 수와 푸는 방법을 알려 준다.
+ * 마법사(실행 전)와 서버(삭제 전)가 같은 문구를 쓴다.
+ */
+export function emptyUploadProblem(rowCount: number, skippedHiddenRows: number): string | null {
+  if (rowCount > 0) return null;
+  if (skippedHiddenRows > 0) {
+    return `적재할 행이 없습니다. 엑셀에서 숨겨진 ${skippedHiddenRows.toLocaleString('ko-KR')}행을 빼면 남는 행이 없습니다 — 엑셀의 필터를 풀거나 숨겨진 행을 포함해 적재해 주세요.`;
+  }
+  return '적재할 행이 없습니다. 헤더 행 아래에 데이터가 있는지 확인해 주세요.';
+}

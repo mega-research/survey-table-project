@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -18,7 +19,7 @@ import {
   appendNewColumnsToScheme,
   getSchemeRouting,
 } from './scheme-helpers';
-import { validateXlsxFile } from '@/lib/contacts/upload-limits';
+import { emptyUploadProblem, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
   type PiiInput,
   buildPiiRows,
@@ -156,6 +157,10 @@ export async function ingestContactUpload(
   });
 
   assertUploadRowLimit(allRows.length, { operation: 'contact_upload_ingest', surveyId });
+  // 0행은 트랜잭션에 들어가기 전에 거부한다 — replace 는 기존 조사 대상을 먼저 지우므로,
+  // 넣을 행이 없으면 명단만 사라진다(전 행이 필터로 숨겨진 파일이 그 경로다).
+  const emptyProblem = emptyUploadProblem(allRows.length, skippedHiddenRows);
+  if (emptyProblem) throw new ORPCError('BAD_REQUEST', { message: emptyProblem });
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];

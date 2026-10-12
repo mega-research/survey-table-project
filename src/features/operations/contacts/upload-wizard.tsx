@@ -31,7 +31,12 @@ import {
   resolveGroupCriteria,
 } from '@/lib/contacts/group-levels';
 import { getSchemeRouting, suggestSimilarKeys } from '@/lib/contacts/match-contacts';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_ROWS,
+  emptyUploadProblem,
+  validateXlsxFile,
+} from '@/lib/contacts/upload-limits';
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
@@ -362,8 +367,16 @@ export function UploadWizard({
     };
   }
 
+  /** 적재할 행이 없으면 실행하지 않는다 — replace 는 명단만 지우고 끝난다. 서버도 같은 문구로 거부한다. */
+  function blockEmptyUpload(): boolean {
+    const problem = emptyUploadProblem(effectiveRowCount, excludesHiddenRows ? hiddenRowCount : 0);
+    if (problem) setError(problem);
+    return problem !== null;
+  }
+
   async function handleMatchPreview() {
     if (!file) return;
+    if (blockEmptyUpload()) return;
     setError(null);
     startTransition(async () => {
       try {
@@ -382,6 +395,7 @@ export function UploadWizard({
       setError('표시할 컬럼이 없습니다. 최소 한 개는 체크해주세요.');
       return;
     }
+    if (blockEmptyUpload()) return;
     setError(null);
     startTransition(async () => {
       try {
