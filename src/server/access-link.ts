@@ -3,18 +3,18 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyFieldworkLinks, surveys } from '@/db/schema';
+import { surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret } from '@/lib/crypto/aes';
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
 import {
   fieldworkLinkCookieName,
-  FIELDWORK_LINK_SESSION_MAX_AGE_SECONDS,
-  isFieldworkLinkToken,
+  ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
+  isAccessLinkToken,
   readFieldworkLinkSessions,
-  signFieldworkLinkSession,
-  type FieldworkLinkSession,
-} from '@/lib/auth/fieldwork-link-session';
-import type { SurveyAssignmentStatus } from '@/shared/contracts/workspace';
+  signAccessLinkSession,
+  type AccessLinkSession,
+} from '@/lib/auth/access-link-session';
+import type { AccessLinkKind, SurveyAssignmentStatus } from '@/shared/contracts/workspace';
 
 import { type LinkActor, surveyClosedColumn } from './survey-access';
 
@@ -40,12 +40,12 @@ import { type LinkActor, surveyClosedColumn } from './survey-access';
  *    감추면 외주가 오타로 오해해 연구원에게 문의한다(스토리 21).
  *
  * 스펙이 적었던 `locked`(한도 초과) 사유는 여기 없다. 레이트리밋은 Redis 를 치는 RPC
- * 미들웨어(`withRateLimit('fieldwork-link-auth')`)의 일이고, 코어가 그것을 알면 판정이
+ * 미들웨어(`withRateLimit('access-link-auth')`)의 일이고, 코어가 그것을 알면 판정이
  * 외부 자원에 묶인다 — 화면이 보는 「잠시 후 다시」는 그 미들웨어의 TOO_MANY_REQUESTS 다.
  *
  * ## 링크 행을 여기서 또 읽는 이유
  *
- * `server/workspace/services/fieldwork-links` 도 같은 테이블을 읽지만 묻는 것이 다르다 —
+ * `server/workspace/services/access-links` 도 같은 테이블을 읽지만 묻는 것이 다르다 —
  * 저쪽은 `surveyId` 로 「연구원에게 보여줄 링크 상태」를, 이쪽은 `token` 으로 「이 요청이
  * 유효한 세션인가」를 묻고 설문 행까지 함께 본다. 한쪽으로 합치면 관문이 도는 모든 요청이
  * 연구원 화면용 모양을 만들고 버린다.
@@ -57,6 +57,8 @@ import { type LinkActor, surveyClosedColumn } from './survey-access';
 
 interface LinkRow {
   linkId: string;
+  /** 링크의 종류 — 주체에 실려 capability 열과 닫히는 조건을 가른다(ADR-0029). */
+  kind: AccessLinkKind;
   surveyId: string;
   surveyTitle: string;
   passwordCipher: string;
@@ -85,25 +87,31 @@ interface LinkRow {
 async function loadLinkRow(token: string): Promise<LinkRow | null> {
   // 모양이 아니면 조회하지 않는다 — 주소에서 온 아무 문자열로 DB 를 치지 않기 위해서이고,
   // 세 진입점이 같은 가드를 각자 쓰지 않게 하려는 것이기도 하다.
-  if (!isFieldworkLinkToken(token)) return null;
+  if (!isAccessLinkToken(token)) return null;
   const [row] = await db
     .select({
-      linkId: surveyFieldworkLinks.id,
-      surveyId: surveyFieldworkLinks.surveyId,
+      linkId: surveyAccessLinks.id,
+      kind: surveyAccessLinks.kind,
+      surveyId: surveyAccessLinks.surveyId,
       surveyTitle: surveys.title,
-      passwordCipher: surveyFieldworkLinks.passwordCipher,
-      passwordUpdatedAt: surveyFieldworkLinks.passwordUpdatedAt,
-      closedAt: surveyFieldworkLinks.closedAt,
+      passwordCipher: surveyAccessLinks.passwordCipher,
+      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+      closedAt: surveyAccessLinks.closedAt,
       isPaused: surveys.isPaused,
       surveyClosed: surveyClosedColumn,
       assignmentStatus: surveys.assignmentStatus,
       deletedAt: surveys.deletedAt,
     })
-    .from(surveyFieldworkLinks)
-    .innerJoin(surveys, eq(surveys.id, surveyFieldworkLinks.surveyId))
-    .where(eq(surveyFieldworkLinks.token, token))
+    .from(surveyAccessLinks)
+    .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
+    .where(eq(surveyAccessLinks.token, token))
     .limit(1);
   return row ?? null;
+}
+
+/** 링크 행 → 요청 주체. 종류를 **행에서** 싣는다 — 쿠키나 주소가 주장한 값이 아니다. */
+function toLinkActor(row: LinkRow): LinkActor {
+  return { kind: 'link', linkId: row.linkId, surveyId: row.surveyId, linkKind: row.kind };
 }
 
 /**
@@ -182,7 +190,7 @@ export type LinkActorForSurvey =
  * 응답이 곧 링크 상태를 알려 주는 창구가 되고, 호출부가 할 수 있는 일은 어차피 하나다.
  */
 export async function resolveLinkActorForSurvey(
-  sessions: readonly FieldworkLinkSession[] | undefined,
+  sessions: readonly AccessLinkSession[] | undefined,
   surveyId: string,
 ): Promise<LinkActorForSurvey> {
   const candidate = sessions?.find((session) => session.claim.surveyId === surveyId);
@@ -195,7 +203,7 @@ export async function resolveLinkActorForSurvey(
   if (candidate.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
     return { kind: 'invalid' };
   }
-  return { kind: 'ok', actor: { kind: 'link', linkId: row.linkId, surveyId: row.surveyId } };
+  return { kind: 'ok', actor: toLinkActor(row) };
 }
 
 /**
@@ -217,7 +225,7 @@ function evaluateSession(row: LinkRow, token: string, headers: Headers): LinkAct
   if (session.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
     return { ok: false, reason: 'unauthenticated' };
   }
-  return { ok: true, actor: { kind: 'link', linkId: row.linkId, surveyId: row.surveyId } };
+  return { ok: true, actor: toLinkActor(row) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,15 +245,15 @@ function evaluateSession(row: LinkRow, token: string, headers: Headers): LinkAct
  * 남는 차이는 「이미 실재 토큰을 손에 쥔 사람만 얻는 확인」이라 새로 여는 것이 없다.
  * 뒤집으려면 이 함수가 아니라 스토리 17 을 먼저 접어야 한다.
  */
-export type FieldworkLinkEntry =
+export type AccessLinkEntry =
   | { kind: 'authenticated' }
   | { kind: 'password'; surveyTitle: string | null }
   | { kind: 'closed'; surveyTitle: string };
 
-export async function resolveFieldworkLinkEntry(
+export async function resolveAccessLinkEntry(
   token: string,
   headers: Headers,
-): Promise<FieldworkLinkEntry> {
+): Promise<AccessLinkEntry> {
   const row = await loadLinkRow(token);
   if (!row) return { kind: 'password', surveyTitle: null };
   if (isClosed(row)) return { kind: 'closed', surveyTitle: row.surveyTitle };
@@ -259,14 +267,14 @@ export async function resolveFieldworkLinkEntry(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 접속 성공 시 심을 쿠키 — 심는 것은 procedure 가 한다(코어는 응답을 만지지 않는다). */
-export interface FieldworkLinkSessionCookie {
+export interface AccessLinkSessionCookie {
   name: string;
   value: string;
   maxAgeSeconds: number;
 }
 
-export type FieldworkLinkAuthResult =
-  | { ok: true; cookie: FieldworkLinkSessionCookie }
+export type AccessLinkAuthResult =
+  | { ok: true; cookie: AccessLinkSessionCookie }
   | { ok: false; reason: 'denied' | 'closed' };
 
 /**
@@ -281,10 +289,10 @@ export type FieldworkLinkAuthResult =
  * 앞뒤 공백은 버린다 — 발급 쪽 경계 스키마도 `.trim()` 이라 같은 규칙이어야 「맞는데 안 들어가는」
  * 비밀번호가 생기지 않는다.
  */
-export async function authenticateFieldworkLink(
+export async function authenticateAccessLink(
   token: string,
   password: string,
-): Promise<FieldworkLinkAuthResult> {
+): Promise<AccessLinkAuthResult> {
   const row = await loadLinkRow(token);
   if (!row) return { ok: false, reason: 'denied' };
   if (isClosed(row)) return { ok: false, reason: 'closed' };
@@ -295,12 +303,12 @@ export async function authenticateFieldworkLink(
     ok: true,
     cookie: {
       name: fieldworkLinkCookieName(token),
-      value: signFieldworkLinkSession({
+      value: signAccessLinkSession({
         linkId: row.linkId,
         surveyId: row.surveyId,
         passwordUpdatedAt: row.passwordUpdatedAt.toISOString(),
       }),
-      maxAgeSeconds: FIELDWORK_LINK_SESSION_MAX_AGE_SECONDS,
+      maxAgeSeconds: ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
     },
   };
 }

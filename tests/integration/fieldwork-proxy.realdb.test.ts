@@ -34,9 +34,9 @@ import {
   resolveFieldworkProxy,
   stampFieldworkAttribution,
 } from '@/server/fieldwork-proxy';
-import { readFieldworkLinkSessions } from '@/lib/auth/fieldwork-link-session';
-import { authenticateFieldworkLink } from '@/server/fieldwork-link';
-import { issueFieldworkLink } from '@/server/workspace/services/fieldwork-links';
+import { readFieldworkLinkSessions } from '@/lib/auth/access-link-session';
+import { authenticateAccessLink } from '@/server/access-link';
+import { issueAccessLink } from '@/server/workspace/services/access-links';
 import { lifecycle as lifecycleProcedures } from '@/server/survey-response/procedures/lifecycle';
 import { response as responseProcedures } from '@/server/survey-response/procedures/response';
 
@@ -596,8 +596,8 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
   describe('외주 실사 링크', () => {
     /** 링크를 발급하고 접속까지 마친 요청 컨텍스트 하나. */
     async function linkSession(): Promise<{ context: ORPCContext; linkId: string }> {
-      const issued = await issueFieldworkLink({ surveyId, actorId: OWNER_ID });
-      const auth = await authenticateFieldworkLink(issued.link.token, issued.password);
+      const issued = await issueAccessLink({ surveyId, kind: 'fieldwork', actorId: OWNER_ID });
+      const auth = await authenticateAccessLink(issued.link.token, issued.password);
       if (!auth.ok) throw new Error(`접속 실패: ${auth.reason}`);
       return { context: linkContext(auth.cookie), linkId: issued.link.id };
     }
@@ -686,11 +686,8 @@ describe.skipIf(!isLocalDb)('대리 응답 귀속 (real local DB)', () => {
         isPublic: true,
       });
       try {
-        const issued = await issueFieldworkLink({
-          surveyId: neighbourId,
-          actorId: OWNER_ID,
-        });
-        const auth = await authenticateFieldworkLink(issued.link.token, issued.password);
+        const issued = await issueAccessLink({ surveyId: neighbourId, kind: 'fieldwork', actorId: OWNER_ID });
+        const auth = await authenticateAccessLink(issued.link.token, issued.password);
         if (!auth.ok) throw new Error('이웃 링크 접속 실패');
 
         await linkResponseClient(linkContext(auth.cookie)).response.createBlank(

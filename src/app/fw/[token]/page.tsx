@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
 
 import { fieldworkLinkOperationsPaths } from '@/features/operations/operations-paths';
-import { resolveFieldworkLinkEntry } from '@/server/fieldwork-link';
+import { resolveAccessLinkEntry } from '@/server/access-link';
 
 import { FieldworkLinkPasswordForm } from './password-form';
 
@@ -30,7 +30,7 @@ interface PageProps {
 
 export default async function FieldworkLinkEntryPage({ params }: PageProps) {
   const { token } = await params;
-  const entry = await resolveFieldworkLinkEntry(token, await headers());
+  const entry = await resolveAccessLinkEntry(token, await headers());
 
   if (entry.kind === 'authenticated') {
     redirect(fieldworkLinkOperationsPaths(token).contacts);

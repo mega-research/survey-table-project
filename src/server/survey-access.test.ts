@@ -531,7 +531,7 @@ describe('denialReasonFor — 거부 사유의 유일한 정본', () => {
  * 끝난다: 설문 일치 · 배치 대기 · 중단.
  */
 describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
-  const link: LinkAccessSubject = { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID };
+  const link: LinkAccessSubject = { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID, linkKind: 'fieldwork' };
 
   /**
    * 처음 넷(실사 초대 열과 같은 집합)에 ADR-0027 이 둘을 더했다 — 응답 수정과 단건 메일.

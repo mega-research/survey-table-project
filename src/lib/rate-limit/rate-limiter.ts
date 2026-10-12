@@ -66,9 +66,9 @@ export const RATE_LIMIT_PRESETS = {
   // 10회로 두면 오타 몇 번에 사무실 하나가 통째로 잠긴다. 온라인 추측은 이 값으로도 무의미하다:
   // 자동 생성 비밀번호가 56자 문자셋 10자(약 58비트)이고 수동 입력도 8자 하한이라, 분당 수 회의
   // 차이가 성공 확률을 바꾸지 않는다. 실질 방어는 비밀번호 엔트로피와 노출 시 재설정이 진다.
-  'fieldwork-link-auth': { tokens: 20, window: '5 m' },
+  'access-link-auth': { tokens: 20, window: '5 m' },
   // 위의 IP 전체 가드 — 토큰을 회전시키며 두드리는 남용을 막는다(토큰 축 단독은 우회 가능).
-  'fieldwork-link-auth-ip': { tokens: 200, window: '5 m' },
+  'access-link-auth-ip': { tokens: 200, window: '5 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitGroup = keyof typeof RATE_LIMIT_PRESETS;
@@ -82,7 +82,7 @@ export const IP_WIDE_GROUPS = {
   'response-segment': 'response-segment-ip',
   'response-draft': 'response-draft-ip',
   'quota-check': 'quota-check-ip',
-  'fieldwork-link-auth': 'fieldwork-link-auth-ip',
+  'access-link-auth': 'access-link-auth-ip',
 } as const satisfies Partial<Record<RateLimitGroup, RateLimitGroup>>;
 
 export interface RateLimitResult {

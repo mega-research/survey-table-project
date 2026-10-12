@@ -751,27 +751,27 @@ const SURFACES: Record<string, SurfaceSpec> = {
   // 참여자·게스트 블록처럼 두 축으로 갈리지 **않는다.** 비밀번호를 읽는 것이 곧 접근 수단을
   // 얻는 것이라, 조회조차 열람 권한만 있는 팀원에게 열면 외부로 나가는 열쇠가 그 손에서
   // 만들어진다. 한 줄이라도 survey.invite 로 내려오면 이 인벤토리에서 먼저 보여야 한다.
-  'workspace.fieldworkLinks.get': {
+  'workspace.accessLinks.get': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S },
   },
-  'workspace.fieldworkLinks.issue': {
+  'workspace.accessLinks.issue': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S },
   },
-  'workspace.fieldworkLinks.resetPassword': {
+  'workspace.accessLinks.resetPassword': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S },
   },
-  'workspace.fieldworkLinks.revealPassword': {
+  'workspace.accessLinks.revealPassword': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S },
   },
-  'workspace.fieldworkLinks.close': {
+  'workspace.accessLinks.close': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S },

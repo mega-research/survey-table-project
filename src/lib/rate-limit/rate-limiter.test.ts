@@ -160,12 +160,12 @@ describe('isRateLimitedTwoTier', () => {
     // 토큰 축 단독이면 토큰을 회전시키며 두드릴 수 있고, IP 축 단독이면 한 사무실의 조사원
     // 전원이 한 버킷을 공유한다 — 짝이어야 둘 다 성립한다 (ADR-0026).
     await expect(
-      isRateLimitedTwoTier('fieldwork-link-auth', '1.2.3.4', 'uNk2IUsrRx_Zk-R0'),
+      isRateLimitedTwoTier('access-link-auth', '1.2.3.4', 'uNk2IUsrRx_Zk-R0'),
     ).resolves.toBe(false);
     const keys = limitMock.mock.calls.map((call) => call[0]);
     expect(keys).toEqual([
-      'fieldwork-link-auth:1.2.3.4:uNk2IUsrRx_Zk-R0',
-      'fieldwork-link-auth-ip:1.2.3.4',
+      'access-link-auth:1.2.3.4:uNk2IUsrRx_Zk-R0',
+      'access-link-auth-ip:1.2.3.4',
     ]);
   });
 

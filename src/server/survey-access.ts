@@ -14,6 +14,7 @@ import {
 } from '@/db/schema';
 import type { FieldworkRole, UserType } from '@/shared/contracts/auth';
 import {
+  type AccessLinkKind,
   NO_SURVEY_GUEST_TABS,
   normalizeSurveyGuestTabs,
   surveyCapabilityValues,
@@ -79,6 +80,12 @@ export interface LinkAccessSubject {
   linkId: string;
   /** 이 링크가 여는 유일한 설문. */
   surveyId: string;
+  /**
+   * 링크의 종류 (ADR-0029) — 외주 실사 링크 | 클라이언트 링크. **필수다.** 선택 필드로 두고
+   * 「없으면 외주」로 접으면 종류를 빠뜨린 클라이언트 링크가 외주의 여섯 칸(조사 대상 원본·
+   * 응답 수정·단건 메일)을 얻는다 — 틀려도 좁은 쪽으로 틀려야 하는 자리다.
+   */
+  linkKind: AccessLinkKind;
 }
 
 /** 판정이 보는 요청의 임자 — 계정 또는 외주 실사 링크. */
@@ -474,7 +481,7 @@ function resolveFieldworkCapabilities(
  * 종료(`isClosed`)는 「조사가 끝났다」다(ADR-0030). 닫는 모양은 중단과 같고 링크 행을 건드리지
  * 않는 것도 같아서, 종료를 취소하거나 다시 발행하면 같은 주소·같은 비밀번호로 다시 열린다.
  *
- * **세션 판정(`server/fieldwork-link` 의 `isClosed`)도 같은 사실을 본다.** 이쪽만 있으면 닫힘
+ * **세션 판정(`server/access-link` 의 `isClosed`)도 같은 사실을 본다.** 이쪽만 있으면 닫힘
  * 화면을 그릴 재료가 없고, 저쪽만 있으면 이미 들어와 있던 세션이 계속 움직인다.
  */
 function resolveLinkCapabilities(
@@ -542,6 +549,8 @@ export interface LinkActor {
   kind: 'link';
   linkId: string;
   surveyId: string;
+  /** 링크의 종류 — 세션 판정이 링크 행에서 읽어 싣는다(`LinkAccessSubject.linkKind` 참조). */
+  linkKind: AccessLinkKind;
 }
 
 export function isLinkActor(actor: Actor): actor is LinkActor {
@@ -577,7 +586,7 @@ export function accountUserIdOf(actor: Actor): string | null {
 export interface ActorAttribution {
   /** `public.users` FK 로 갈 값 — 계정 주체일 때만. */
   accountUserId: string | null;
-  /** `survey_fieldwork_links` FK 로 갈 값 — 링크 주체일 때만. */
+  /** `survey_access_links` FK 로 갈 값 — 링크 주체일 때만. */
   fieldworkLinkId: string | null;
 }
 
@@ -617,7 +626,12 @@ export class SurveyAccessError extends Error {
 export async function loadAccessSubject(actor: Actor): Promise<SurveyAccessSubject> {
   // 링크 주체는 읽을 소속이 없다 — 자격이 링크 행 하나에 다 들어 있다(ADR-0026).
   if (isLinkActor(actor)) {
-    return { kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId };
+    return {
+      kind: 'link',
+      linkId: actor.linkId,
+      surveyId: actor.surveyId,
+      linkKind: actor.linkKind,
+    };
   }
   return loadAccountAccessSubject(actor);
 }
@@ -747,7 +761,10 @@ async function loadLinkSurveyAccess(actor: LinkActor, surveyId: string): Promise
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
     .limit(1);
   if (!row) throw new SurveyAccessError('not_found');
-  return resolveSurveyAccess({ kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId }, row);
+  return resolveSurveyAccess(
+    { kind: 'link', linkId: actor.linkId, surveyId: actor.surveyId, linkKind: actor.linkKind },
+    row,
+  );
 }
 
 /**

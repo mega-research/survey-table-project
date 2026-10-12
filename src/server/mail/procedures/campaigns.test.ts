@@ -27,11 +27,11 @@ import { campaigns } from './campaigns';
  * 링크 세션 해석만 대역으로 둔다 — 이 파일이 묻는 것은 **주체가 어떻게 귀속으로 바뀌는가**다
  * (쿠키의 유효성은 `fieldwork-link.realdb` 가 실 DB 로 진다). attempts.test.ts 와 같은 대역이다.
  */
-vi.mock('@/server/fieldwork-link', () => ({
+vi.mock('@/server/access-link', () => ({
   resolveLinkActorForSurvey: vi.fn(
     async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
       sessions?.length
-        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId } }
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const } }
         : { kind: 'no_session' as const },
   ),
 }));
@@ -281,7 +281,7 @@ describe('mail.campaigns — 외주 실사 링크 (ADR-0027)', () => {
     const input = { surveyId: SURVEY_ID, contactTargetId: CONTACT_ID, mailTemplateId: TEMPLATE_ID };
     await client.campaigns.sendSingle(input);
     expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
-      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID },
+      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID, linkKind: 'fieldwork' },
       SURVEY_ID,
       'mail.sendSingle',
     );

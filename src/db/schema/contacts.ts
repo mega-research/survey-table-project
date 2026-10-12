@@ -123,7 +123,7 @@ export const contactAttempts = pgTable(
     // 이 회차를 넣은 외주 실사 링크 — **계정 칸과 배타다** (0127, ADR-0026).
     // 외주에게는 계정이 없어 `created_by` 에 채울 값이 없다. 둘 다 채운 행을 막는 것은
     // 서비스가 아니라 CHECK 제약이고(한 행 안의 조건이라 DB 가 강제할 수 있다), FK 는
-    // 마이그레이션이 만든다 — survey_fieldwork_links 와 순환 import 를 피한다.
+    // 마이그레이션이 만든다 — survey_access_links 와 순환 import 를 피한다.
     fieldworkLinkId: uuid('fieldwork_link_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

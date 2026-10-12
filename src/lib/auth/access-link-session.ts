@@ -4,14 +4,14 @@ import { createHmac } from 'node:crypto';
 
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
 import {
-  FIELDWORK_LINK_TOKEN_MAX_LENGTH,
-  FIELDWORK_LINK_TOKEN_MIN_LENGTH,
+  ACCESS_LINK_TOKEN_MAX_LENGTH,
+  ACCESS_LINK_TOKEN_MIN_LENGTH,
 } from '@/shared/contracts/workspace';
 
 /**
  * 외주 실사 링크 세션 쿠키의 코덱 — 서명·검증·읽기 (ADR-0026).
  *
- * 인프라 어댑터라 `lib/auth` 에 산다. 판정은 `server/fieldwork-link` 의 코어가 하고 여기는
+ * 인프라 어댑터라 `lib/auth` 에 산다. 판정은 `server/access-link` 의 코어가 하고 여기는
  * 「쿠키 값이 우리가 만든 것인가」만 답한다 — 형제 `session-revocation.ts` 와 같은 자리다.
  *
  * ## 쿠키 이름에 토큰을 넣는다
@@ -48,7 +48,7 @@ export const FIELDWORK_LINK_COOKIE_PREFIX = 'fw_';
  * 공용 PC 에서 자리를 비우는 동선이 흔하기 때문이고, 그보다 짧은 차단은 「나가기」와
  * 비밀번호 변경이 진다.
  */
-export const FIELDWORK_LINK_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
+export const ACCESS_LINK_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 
 /**
  * 구조화 로그·Sentry 태그의 `role` 값 (ADR-0026).
@@ -57,7 +57,7 @@ export const FIELDWORK_LINK_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
  * 어휘를 한 자리에 적어 두는 이유는 로그 분석이 표면마다 다른 이름으로 갈리지 않게 하려는
  * 것이고, 그 관례는 업로드 REST 가드와 rpc-logging 이 어휘를 공유하는 것과 같다.
  */
-export const FIELDWORK_LINK_LOG_ROLE = 'link';
+export const ACCESS_LINK_LOG_ROLE = 'link';
 
 /**
  * 링크 토큰의 모양 — nanoid URL-safe, 계약이 정한 두 길이 사이.
@@ -66,28 +66,28 @@ export const FIELDWORK_LINK_LOG_ROLE = 'link';
  * 들어가면 쿠키 헤더가 쪼개지고, 그것은 판정 이전의 사고다. 길이 어휘는
  * `shared/contracts/workspace` 가 소유한다 — 경계 스키마도 같은 값을 봐야 하고, 그쪽은
  * client-safe 라 이 파일(server-only)을 import 할 수 없다. 발번은
- * `server/workspace/domain/fieldwork-link` 의 `generateFieldworkLinkToken` 이 한다.
+ * `server/workspace/domain/access-link` 의 `generateAccessLinkToken` 이 한다.
  */
 const TOKEN_PATTERN = new RegExp(
-  `^[A-Za-z0-9_-]{${FIELDWORK_LINK_TOKEN_MIN_LENGTH},${FIELDWORK_LINK_TOKEN_MAX_LENGTH}}$`,
+  `^[A-Za-z0-9_-]{${ACCESS_LINK_TOKEN_MIN_LENGTH},${ACCESS_LINK_TOKEN_MAX_LENGTH}}$`,
 );
 
-export function isFieldworkLinkToken(token: string): boolean {
+export function isAccessLinkToken(token: string): boolean {
   return TOKEN_PATTERN.test(token);
 }
 
 export function fieldworkLinkCookieName(token: string): string {
-  if (!isFieldworkLinkToken(token)) {
+  if (!isAccessLinkToken(token)) {
     throw new Error('fieldworkLinkCookieName: 링크 토큰 모양이 아니다');
   }
   return `${FIELDWORK_LINK_COOKIE_PREFIX}${token}`;
 }
 
 /** 쿠키에 담기는 주장 — 이 셋이 DB 대조의 재료다. */
-export interface FieldworkLinkSessionClaim {
+export interface AccessLinkSessionClaim {
   linkId: string;
   surveyId: string;
-  /** 발급 시점의 `survey_fieldwork_links.password_updated_at` (ISO). 값 일치로 대조한다. */
+  /** 발급 시점의 `survey_access_links.password_updated_at` (ISO). 값 일치로 대조한다. */
   passwordUpdatedAt: string;
 }
 
@@ -108,7 +108,7 @@ function signature(payload: string): string {
 }
 
 /** payload 와 서명을 점으로 이은 쿠키 값. */
-export function signFieldworkLinkSession(claim: FieldworkLinkSessionClaim): string {
+export function signAccessLinkSession(claim: AccessLinkSessionClaim): string {
   const payload = toBase64Url(
     JSON.stringify({
       linkId: claim.linkId,
@@ -129,7 +129,7 @@ function signatureMatches(payload: string, given: string): boolean {
  * 사유를 갈라 돌려주지 않는다 — 호출부가 할 수 있는 일이 「비밀번호를 다시 받는다」 하나라
  * 갈라도 쓸 데가 없고, 갈라 두면 로그·응답에 위조 시도의 종류가 남아 공격자에게 되돌아간다.
  */
-export function verifyFieldworkLinkSession(value: string): FieldworkLinkSessionClaim | null {
+export function verifyAccessLinkSession(value: string): AccessLinkSessionClaim | null {
   const dot = value.indexOf('.');
   if (dot <= 0 || dot === value.length - 1) return null;
   const payload = value.slice(0, dot);
@@ -154,9 +154,9 @@ export function verifyFieldworkLinkSession(value: string): FieldworkLinkSessionC
 }
 
 /** 한 요청이 들고 온 링크 세션 하나 — 토큰은 쿠키 이름에서 나온다. */
-export interface FieldworkLinkSession {
+export interface AccessLinkSession {
   token: string;
-  claim: FieldworkLinkSessionClaim;
+  claim: AccessLinkSessionClaim;
 }
 
 /**
@@ -185,18 +185,18 @@ function decodeCookieValue(raw: string): string {
  * **DB 를 치지 않는다.** 여기까지는 「우리가 서명한 쿠키인가」이고, 「지금도 유효한가」는
  * 판정 코어가 링크 행을 읽어 답한다.
  */
-export function readFieldworkLinkSessions(headers: Headers): FieldworkLinkSession[] {
+export function readFieldworkLinkSessions(headers: Headers): AccessLinkSession[] {
   const header = headers.get('cookie');
   if (!header) return [];
-  const sessions: FieldworkLinkSession[] = [];
+  const sessions: AccessLinkSession[] = [];
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');
     if (eq <= 0) continue;
     const name = part.slice(0, eq).trim();
     if (!name.startsWith(FIELDWORK_LINK_COOKIE_PREFIX)) continue;
     const token = name.slice(FIELDWORK_LINK_COOKIE_PREFIX.length);
-    if (!isFieldworkLinkToken(token)) continue;
-    const claim = verifyFieldworkLinkSession(decodeCookieValue(part.slice(eq + 1).trim()));
+    if (!isAccessLinkToken(token)) continue;
+    const claim = verifyAccessLinkSession(decodeCookieValue(part.slice(eq + 1).trim()));
     if (claim) sessions.push({ token, claim });
   }
   return sessions;

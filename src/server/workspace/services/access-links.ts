@@ -3,17 +3,18 @@ import 'server-only';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyFieldworkLinks } from '@/db/schema';
+import { surveyAccessLinks } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { isUniqueViolation } from '@/lib/pg-error';
-import type { FieldworkLinkView } from '@/shared/contracts/workspace-io';
+import type { AccessLinkKind } from '@/shared/contracts/workspace';
+import type { AccessLinkView } from '@/shared/contracts/workspace-io';
 
 import {
-  FieldworkLinkAlreadyIssuedError,
-  FieldworkLinkNotFoundError,
-  generateFieldworkLinkPassword,
-  generateFieldworkLinkToken,
-} from '../domain/fieldwork-link';
+  AccessLinkAlreadyIssuedError,
+  AccessLinkNotFoundError,
+  generateAccessLinkPassword,
+  generateAccessLinkToken,
+} from '../domain/access-link';
 
 /**
  * 외주 실사 링크의 저장소 계층 (ADR-0026).
@@ -34,7 +35,7 @@ function toView(row: {
   token: string;
   passwordUpdatedAt: Date;
   createdAt: Date;
-}): FieldworkLinkView {
+}): AccessLinkView {
   return {
     id: row.id,
     token: row.token,
@@ -43,24 +44,34 @@ function toView(row: {
   };
 }
 
-/** 이 설문의 활성 링크 조건 — 종료된 행은 감사 계보이므로 조회에서 빠진다. */
-function activeLink(surveyId: string) {
+/**
+ * 이 설문의 **그 종류** 활성 링크 조건 — 종료된 행은 감사 계보이므로 조회에서 빠진다.
+ *
+ * 종류를 함께 거는 것이 칸막이다. 한 설문에 외주 링크와 클라이언트 링크가 함께 서므로, 조건이
+ * 빠지면 한쪽의 비밀번호 변경·종료가 다른 쪽 링크에 걸린다(참여 행에서 `kind='guest'` 를
+ * WHERE 에 함께 거는 것과 같은 이유다). 필수 인자라 빠뜨린 호출이 컴파일되지 않는다.
+ */
+function activeLink(surveyId: string, kind: AccessLinkKind) {
   return and(
-    eq(surveyFieldworkLinks.surveyId, surveyId),
-    isNull(surveyFieldworkLinks.closedAt),
+    eq(surveyAccessLinks.surveyId, surveyId),
+    eq(surveyAccessLinks.kind, kind),
+    isNull(surveyAccessLinks.closedAt),
   );
 }
 
-export async function getFieldworkLink(surveyId: string): Promise<FieldworkLinkView | null> {
+export async function getAccessLink(
+  surveyId: string,
+  kind: AccessLinkKind,
+): Promise<AccessLinkView | null> {
   const [row] = await db
     .select({
-      id: surveyFieldworkLinks.id,
-      token: surveyFieldworkLinks.token,
-      passwordUpdatedAt: surveyFieldworkLinks.passwordUpdatedAt,
-      createdAt: surveyFieldworkLinks.createdAt,
+      id: surveyAccessLinks.id,
+      token: surveyAccessLinks.token,
+      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+      createdAt: surveyAccessLinks.createdAt,
     })
-    .from(surveyFieldworkLinks)
-    .where(activeLink(surveyId))
+    .from(surveyAccessLinks)
+    .where(activeLink(surveyId, kind))
     .limit(1);
   return row ? toView(row) : null;
 }
@@ -74,32 +85,34 @@ export async function getFieldworkLink(surveyId: string): Promise<FieldworkLinkV
  * 중복은 DB 제약으로 받는다. 먼저 SELECT 해서 확인하면 두 요청이 같은 창에서 통과해 둘 다
  * INSERT 를 시도하고, 그때 나는 것은 제약 위반이 아니라 **두 번째 링크**다(제약이 없다면).
  */
-export async function issueFieldworkLink(input: {
+export async function issueAccessLink(input: {
   surveyId: string;
+  kind: AccessLinkKind;
   password?: string | undefined;
   actorId: string;
-}): Promise<{ link: FieldworkLinkView; password: string }> {
-  const password = input.password ?? generateFieldworkLinkPassword();
+}): Promise<{ link: AccessLinkView; password: string }> {
+  const password = input.password ?? generateAccessLinkPassword();
   try {
     const [row] = await db
-      .insert(surveyFieldworkLinks)
+      .insert(surveyAccessLinks)
       .values({
         surveyId: input.surveyId,
-        token: generateFieldworkLinkToken(),
+        kind: input.kind,
+        token: generateAccessLinkToken(),
         passwordCipher: encryptSharedSecret(password),
         passwordUpdatedBy: input.actorId,
         createdBy: input.actorId,
       })
       .returning({
-        id: surveyFieldworkLinks.id,
-        token: surveyFieldworkLinks.token,
-        passwordUpdatedAt: surveyFieldworkLinks.passwordUpdatedAt,
-        createdAt: surveyFieldworkLinks.createdAt,
+        id: surveyAccessLinks.id,
+        token: surveyAccessLinks.token,
+        passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+        createdAt: surveyAccessLinks.createdAt,
       });
-    if (!row) throw new Error('외주 실사 링크 INSERT 실패');
+    if (!row) throw new Error('접속 링크 INSERT 실패');
     return { link: toView(row), password };
   } catch (error) {
-    if (isUniqueViolation(error)) throw new FieldworkLinkAlreadyIssuedError();
+    if (isUniqueViolation(error)) throw new AccessLinkAlreadyIssuedError();
     throw error;
   }
 }
@@ -111,29 +124,30 @@ export async function issueFieldworkLink(input: {
  * 매 요청 대조하므로, 이 UPDATE 하나로 이미 들어와 있던 외주 세션 전부가 끊긴다. ADR 의
  * 「사람을 막는 일은 전부 이 비밀번호가 진다」가 이 한 줄에 걸려 있다.
  */
-export async function resetFieldworkLinkPassword(input: {
+export async function resetAccessLinkPassword(input: {
   surveyId: string;
+  kind: AccessLinkKind;
   password?: string | undefined;
   actorId: string;
-}): Promise<{ link: FieldworkLinkView; password: string }> {
-  const password = input.password ?? generateFieldworkLinkPassword();
+}): Promise<{ link: AccessLinkView; password: string }> {
+  const password = input.password ?? generateAccessLinkPassword();
   const now = new Date();
   const [row] = await db
-    .update(surveyFieldworkLinks)
+    .update(surveyAccessLinks)
     .set({
       passwordCipher: encryptSharedSecret(password),
       passwordUpdatedAt: now,
       passwordUpdatedBy: input.actorId,
       updatedAt: now,
     })
-    .where(activeLink(input.surveyId))
+    .where(activeLink(input.surveyId, input.kind))
     .returning({
-      id: surveyFieldworkLinks.id,
-      token: surveyFieldworkLinks.token,
-      passwordUpdatedAt: surveyFieldworkLinks.passwordUpdatedAt,
-      createdAt: surveyFieldworkLinks.createdAt,
+      id: surveyAccessLinks.id,
+      token: surveyAccessLinks.token,
+      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+      createdAt: surveyAccessLinks.createdAt,
     });
-  if (!row) throw new FieldworkLinkNotFoundError();
+  if (!row) throw new AccessLinkNotFoundError();
   return { link: toView(row), password };
 }
 
@@ -143,13 +157,16 @@ export async function resetFieldworkLinkPassword(input: {
  * 목록 응답에 평문을 실으면 그 값이 캐시·로그·RSC payload 로 번지고, 「누가 언제 읽었는가」도
  * 남지 않는다. 따로 두면 rpc-logging 이 호출 한 줄을 기록한다.
  */
-export async function revealFieldworkLinkPassword(surveyId: string): Promise<string> {
+export async function revealAccessLinkPassword(
+  surveyId: string,
+  kind: AccessLinkKind,
+): Promise<string> {
   const [row] = await db
-    .select({ passwordCipher: surveyFieldworkLinks.passwordCipher })
-    .from(surveyFieldworkLinks)
-    .where(activeLink(surveyId))
+    .select({ passwordCipher: surveyAccessLinks.passwordCipher })
+    .from(surveyAccessLinks)
+    .where(activeLink(surveyId, kind))
     .limit(1);
-  if (!row) throw new FieldworkLinkNotFoundError();
+  if (!row) throw new AccessLinkNotFoundError();
   return decryptSharedSecret(row.passwordCipher);
 }
 
@@ -161,15 +178,16 @@ export async function revealFieldworkLinkPassword(surveyId: string): Promise<str
  * DB 에서도 막지만 **그 칸은 아직 없다** — 지금 하드 삭제를 막는 것은 이 함수가 그것을 하지
  * 않는다는 사실뿐이다.
  */
-export async function closeFieldworkLink(input: {
+export async function closeAccessLink(input: {
   surveyId: string;
+  kind: AccessLinkKind;
   actorId: string;
 }): Promise<void> {
   const now = new Date();
   const [row] = await db
-    .update(surveyFieldworkLinks)
+    .update(surveyAccessLinks)
     .set({ closedAt: now, closedBy: input.actorId, updatedAt: now })
-    .where(activeLink(input.surveyId))
-    .returning({ id: surveyFieldworkLinks.id });
-  if (!row) throw new FieldworkLinkNotFoundError();
+    .where(activeLink(input.surveyId, input.kind))
+    .returning({ id: surveyAccessLinks.id });
+  if (!row) throw new AccessLinkNotFoundError();
 }

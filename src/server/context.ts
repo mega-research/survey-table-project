@@ -3,8 +3,8 @@ import 'server-only';
 import { db } from '@/db';
 import {
   readFieldworkLinkSessions,
-  type FieldworkLinkSession,
-} from '@/lib/auth/fieldwork-link-session';
+  type AccessLinkSession,
+} from '@/lib/auth/access-link-session';
 import { readSessionUser } from '@/lib/auth/session';
 import type { AuthUser } from '@/shared/contracts/auth';
 
@@ -30,11 +30,11 @@ export interface ORPCContext {
    * 정한다 — 컨텍스트를 만드는 시점에는 입력이 아직 파싱되지 않았다.
    *
    * **후보일 뿐이다.** 여기까지는 「우리가 서명한 쿠키인가」이고, 「지금도 유효한가」(링크 종료·
-   * 설문 중단·비밀번호 변경)는 관문이 링크 행을 읽어 답한다(server/fieldwork-link). 그래서
+   * 설문 중단·비밀번호 변경)는 관문이 링크 행을 읽어 답한다(server/access-link). 그래서
    * `user` 를 계정 전용으로 남겨 둔 것이 안전 방향이다 — authed·superadmin·account 베이스는
    * 이 칸을 보지 않으므로 링크 요청이 내부 표면에 닿는 순간 그대로 UNAUTHORIZED 가 된다.
    */
-  linkSessions?: readonly FieldworkLinkSession[];
+  linkSessions?: readonly AccessLinkSession[];
 }
 
 /**

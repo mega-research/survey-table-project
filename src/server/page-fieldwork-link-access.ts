@@ -5,7 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import { resolveLinkActor } from './fieldwork-link';
+import { resolveLinkActor } from './access-link';
 import { type LinkActor, loadSurveyAccess, SurveyAccessError } from './survey-access';
 
 /**

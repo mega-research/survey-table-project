@@ -15,13 +15,13 @@ vi.mock('@/server/rpc-survey-access', () => ({ assertScopedSurveyCapabilityRpc: 
  * 링크 세션 해석만 대역으로 둔다 — 이 파일이 묻는 것은 **주체가 어떻게 귀속으로 바뀌는가**이지
  * 「쿠키가 유효한가」가 아니다(그 축은 `fieldwork-link.realdb` 가 실 DB 로 진다).
  */
-vi.mock('@/server/fieldwork-link', () => ({
+vi.mock('@/server/access-link', () => ({
   // 쿠키를 들고 온 요청만 통과시킨다 — 세션이 없으면 「접속하라」(UNAUTHORIZED)가 그대로
   // 서야 하고, 그 단언이 아래 무인증 테스트다.
   resolveLinkActorForSurvey: vi.fn(
     async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
       sessions?.length
-        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId } }
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const } }
         : { kind: 'no_session' as const },
   ),
 }));

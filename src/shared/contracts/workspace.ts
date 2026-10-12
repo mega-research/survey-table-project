@@ -415,9 +415,24 @@ export const WORK_SCOPE_COOKIE = 'work_scope';
  * 하한이 초대 코드(10자)보다 긴 것은 노출 반경이 다르기 때문이다 — 초대 코드는 대상 한 명의
  * 응답 링크지만 이 토큰은 **설문 전체의 조사 대상 명단**으로 가는 문이다.
  *
- * 상한이 필요한 자리는 **경계**다. 모양 검증은 코덱(lib/auth/fieldwork-link-session)이 하지만
+ * 상한이 필요한 자리는 **경계**다. 모양 검증은 코덱(lib/auth/access-link-session)이 하지만
  * 그것은 코어 안이고, 경계는 그보다 먼저 서서 길이 없는 문자열이 rate limit 키·로그로 흘러가는
  * 것을 막아야 한다. 값이 두 곳에 필요하므로 어휘를 여기 둔다 — 숫자를 복제하면 한쪽만 늘어난다.
  */
-export const FIELDWORK_LINK_TOKEN_MIN_LENGTH = 16;
-export const FIELDWORK_LINK_TOKEN_MAX_LENGTH = 64;
+export const ACCESS_LINK_TOKEN_MIN_LENGTH = 16;
+export const ACCESS_LINK_TOKEN_MAX_LENGTH = 64;
+
+/**
+ * 링크의 종류 (`survey_access_links.kind`, 0134 CHECK) — 누가 그 링크로 들어오는가.
+ *
+ *  - `fieldwork` — 외주 실사 링크(ADR-0026). 그 설문의 운영 콘솔(`/fw/<token>`)을 연다.
+ *  - `client` — 클라이언트 링크(ADR-0029). 그 설문의 현황 열람 화면(`/client/<token>`)을 연다.
+ *
+ * 종류가 정하는 것은 셋이다: **주소**, **capability 열**, **닫히는 조건**(외주는 설문 중단에
+ * 닫히고 클라이언트는 닫히지 않는다). 활성 링크는 설문당 종류별 하나라 한 설문에 둘이 함께 선다.
+ *
+ * 값을 늘릴 때는 이 배열·0134 의 CHECK·판정 코어(`server/survey-access` 의 링크 분기)를 함께
+ * 볼 것 — Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다.
+ */
+export const accessLinkKindValues = ['fieldwork', 'client'] as const;
+export type AccessLinkKind = (typeof accessLinkKindValues)[number];

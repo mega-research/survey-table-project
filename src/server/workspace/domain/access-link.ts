@@ -2,8 +2,8 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import {
-  FIELDWORK_LINK_TOKEN_MAX_LENGTH,
-  FIELDWORK_LINK_TOKEN_MIN_LENGTH,
+  ACCESS_LINK_TOKEN_MAX_LENGTH,
+  ACCESS_LINK_TOKEN_MIN_LENGTH,
 } from '@/shared/contracts/workspace';
 
 /**
@@ -16,7 +16,7 @@ import {
 /**
  * 주소에 실리는 토큰.
  *
- * 길이는 계약(`FIELDWORK_LINK_TOKEN_MIN_LENGTH`)이 정한다 — 발번이 하한보다 짧은 값을 만들면
+ * 길이는 계약(`ACCESS_LINK_TOKEN_MIN_LENGTH`)이 정한다 — 발번이 하한보다 짧은 값을 만들면
  * 코덱의 모양 검증이 자기가 발급한 토큰을 거부한다. nanoid 의 기본 문자셋은 URL-safe 라 주소에
  * 그대로 실리고 코덱의 정규식과도 맞는다.
  *
@@ -24,8 +24,8 @@ import {
  * 대상 한 명의 응답 링크지만 이 토큰은 **설문 전체의 조사 대상 명단**으로 가는 문이고, 비밀번호
  * 화면 앞이라도 추측당해서 좋을 것이 없다.
  */
-export function generateFieldworkLinkToken(): string {
-  return nanoid(FIELDWORK_LINK_TOKEN_MIN_LENGTH);
+export function generateAccessLinkToken(): string {
+  return nanoid(ACCESS_LINK_TOKEN_MIN_LENGTH);
 }
 
 /**
@@ -40,7 +40,7 @@ const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456
 const GENERATED_PASSWORD_LENGTH = 10;
 
 /** 사람이 직접 입력할 때의 최소 길이. 경계 스키마가 같은 값을 강제한다. */
-export const FIELDWORK_LINK_PASSWORD_MIN_LENGTH = 8;
+export const ACCESS_LINK_PASSWORD_MIN_LENGTH = 8;
 
 /**
  * 읽어 주기 쉬운 공유 비밀번호를 만든다.
@@ -48,7 +48,7 @@ export const FIELDWORK_LINK_PASSWORD_MIN_LENGTH = 8;
  * `crypto.getRandomValues` 를 쓰고 modulo 편향을 버림으로 없앤다 — 짧은 공유 암호라 편향이
  * 실질 위험은 아니지만, 난수 품질을 낮추는 코드를 남겨 두면 다음 사람이 그것을 선례로 삼는다.
  */
-export function generateFieldworkLinkPassword(): string {
+export function generateAccessLinkPassword(): string {
   const size = PASSWORD_ALPHABET.length;
   // 256 을 문자셋 크기로 나눈 나머지 구간은 버린다 — 그 구간을 쓰면 앞쪽 문자가 더 자주 나온다.
   const limit = Math.floor(256 / size) * size;
@@ -71,7 +71,7 @@ export function generateFieldworkLinkPassword(): string {
  * 붙여넣기에서 따라오는 공백 하나가 「맞는데 안 들어가는」 비밀번호를 만든다. 가운데 공백은
  * 그대로 둔다(일부러 넣은 구분일 수 있다).
  */
-export function normalizeFieldworkLinkPassword(raw: string): string {
+export function normalizeAccessLinkPassword(raw: string): string {
   return raw.trim();
 }
 
@@ -88,29 +88,29 @@ export function normalizeFieldworkLinkPassword(raw: string): string {
 const PasswordField = z
   .string()
   .trim()
-  .min(FIELDWORK_LINK_PASSWORD_MIN_LENGTH, `비밀번호는 ${FIELDWORK_LINK_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`)
+  .min(ACCESS_LINK_PASSWORD_MIN_LENGTH, `비밀번호는 ${ACCESS_LINK_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`)
   .max(64, '비밀번호는 64자까지 가능합니다.');
 
-export const SurveyFieldworkLinkInput = z.object({ surveyId: z.uuid() });
-export type SurveyFieldworkLinkInput = z.infer<typeof SurveyFieldworkLinkInput>;
+export const SurveyAccessLinkInput = z.object({ surveyId: z.uuid() });
+export type SurveyAccessLinkInput = z.infer<typeof SurveyAccessLinkInput>;
 
 /** 발급. 비밀번호를 생략하면 읽어 주기 쉬운 값을 서버가 만든다. */
-export const IssueFieldworkLinkInput = z.object({
+export const IssueAccessLinkInput = z.object({
   surveyId: z.uuid(),
   password: PasswordField.optional(),
 });
-export type IssueFieldworkLinkInput = z.infer<typeof IssueFieldworkLinkInput>;
+export type IssueAccessLinkInput = z.infer<typeof IssueAccessLinkInput>;
 
 /** 비밀번호 재설정 — 토큰은 건드리지 않는다(주소는 영구 고정이다). */
-export const ResetFieldworkLinkPasswordInput = IssueFieldworkLinkInput;
-export type ResetFieldworkLinkPasswordInput = z.infer<typeof ResetFieldworkLinkPasswordInput>;
+export const ResetAccessLinkPasswordInput = IssueAccessLinkInput;
+export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswordInput>;
 
 /**
  * 링크 세션 표면의 입력 — **외주가 보내는 것**이라 두 칸이 전부다.
  *
  * `linkId`·`surveyId` 를 받지 않는 것이 계약이다. 화면이 그 값을 실어 보낼 수 있으면 누구든
- * 남의 링크 세션을 주장하고, 그 주장이 그대로 귀속에 찍힌다(server/fieldwork-link 주석).
- * 토큰의 모양 검증은 판정 코어의 `isFieldworkLinkToken` 이 한다 — 여기서 정규식을 복제하면
+ * 남의 링크 세션을 주장하고, 그 주장이 그대로 귀속에 찍힌다(server/access-link 주석).
+ * 토큰의 모양 검증은 판정 코어의 `isAccessLinkToken` 이 한다 — 여기서 정규식을 복제하면
  * 한쪽만 고쳐졌을 때 「경계는 통과했는데 코어가 모르는」 토큰이 생긴다.
  *
  * 비밀번호 칸에 최소 길이를 걸지 않는 것도 의도다. 검증 실패는 언제나 같은 `denied` 여야
@@ -119,28 +119,28 @@ export type ResetFieldworkLinkPasswordInput = z.infer<typeof ResetFieldworkLinkP
  * 길이 **상한만은** 경계가 진다 — 코어에 닿기 전에 rate limit 키·로그로 흘러갈 수 있어서다.
  * 값은 계약(shared/contracts/workspace)이 소유한다 — 코덱의 정규식도 같은 상수를 본다.
  */
-const TokenField = z.string().min(1).max(FIELDWORK_LINK_TOKEN_MAX_LENGTH);
+const TokenField = z.string().min(1).max(ACCESS_LINK_TOKEN_MAX_LENGTH);
 
-export const FieldworkLinkAuthInput = z.object({
+export const AccessLinkAuthInput = z.object({
   token: TokenField,
   password: z.string().min(1).max(200),
 });
-export type FieldworkLinkAuthInput = z.infer<typeof FieldworkLinkAuthInput>;
+export type AccessLinkAuthInput = z.infer<typeof AccessLinkAuthInput>;
 
 /** 나가기 — 그 링크의 쿠키 하나만 지운다(다른 설문 링크는 살아 있다). */
-export const FieldworkLinkSignOutInput = z.object({ token: TokenField });
-export type FieldworkLinkSignOutInput = z.infer<typeof FieldworkLinkSignOutInput>;
+export const AccessLinkSignOutInput = z.object({ token: TokenField });
+export type AccessLinkSignOutInput = z.infer<typeof AccessLinkSignOutInput>;
 
-export class FieldworkLinkNotFoundError extends Error {
+export class AccessLinkNotFoundError extends Error {
   constructor() {
     super('이 설문에는 외주 실사 링크가 없습니다.');
-    this.name = 'FieldworkLinkNotFoundError';
+    this.name = 'AccessLinkNotFoundError';
   }
 }
 
-export class FieldworkLinkAlreadyIssuedError extends Error {
+export class AccessLinkAlreadyIssuedError extends Error {
   constructor() {
     super('이 설문에는 이미 외주 실사 링크가 있습니다.');
-    this.name = 'FieldworkLinkAlreadyIssuedError';
+    this.name = 'AccessLinkAlreadyIssuedError';
   }
 }

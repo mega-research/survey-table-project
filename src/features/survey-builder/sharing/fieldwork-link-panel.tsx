@@ -9,12 +9,12 @@ import { buildFieldworkLinkUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
 
 import {
-  useCloseFieldworkLink,
-  useIssueFieldworkLink,
-  useResetFieldworkLinkPassword,
-  useRevealFieldworkLinkPassword,
-  useSurveyFieldworkLink,
-} from '../queries/use-survey-fieldwork-link';
+  useCloseAccessLink,
+  useIssueAccessLink,
+  useResetAccessLinkPassword,
+  useRevealAccessLinkPassword,
+  useSurveyAccessLink,
+} from '../queries/use-survey-access-link';
 
 interface FieldworkLinkPanelProps {
   surveyId: string;
@@ -47,11 +47,11 @@ export function FieldworkLinkPanel({ surveyId }: FieldworkLinkPanelProps) {
   /** 직접 입력칸. 비어 있으면 서버가 만든다 — 생성 규칙을 화면이 복제하지 않는다. */
   const [draft, setDraft] = useState('');
 
-  const { data, isPending, isError } = useSurveyFieldworkLink(surveyId);
-  const issue = useIssueFieldworkLink();
-  const reset = useResetFieldworkLinkPassword();
-  const reveal = useRevealFieldworkLinkPassword();
-  const close = useCloseFieldworkLink();
+  const { data, isPending, isError } = useSurveyAccessLink(surveyId);
+  const issue = useIssueAccessLink();
+  const reset = useResetAccessLinkPassword();
+  const reveal = useRevealAccessLinkPassword();
+  const close = useCloseAccessLink();
   const busy = issue.isPending || reset.isPending || reveal.isPending || close.isPending;
 
   async function run(action: () => Promise<string | null>) {

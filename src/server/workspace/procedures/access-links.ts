@@ -18,21 +18,22 @@ import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import type { AccessLinkKind } from '@/shared/contracts/workspace';
 import {
-  IssuedFieldworkLinkOutput,
-  RevealedFieldworkLinkPasswordOutput,
-  SurveyFieldworkLinkOutput,
+  IssuedAccessLinkOutput,
+  RevealedAccessLinkPasswordOutput,
+  SurveyAccessLinkOutput,
   WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
 
 import {
-  FieldworkLinkAlreadyIssuedError,
-  FieldworkLinkNotFoundError,
-  IssueFieldworkLinkInput,
-  ResetFieldworkLinkPasswordInput,
-  SurveyFieldworkLinkInput,
-} from '../domain/fieldwork-link';
-import * as svc from '../services/fieldwork-links';
+  AccessLinkAlreadyIssuedError,
+  AccessLinkNotFoundError,
+  IssueAccessLinkInput,
+  ResetAccessLinkPasswordInput,
+  SurveyAccessLinkInput,
+} from '../domain/access-link';
+import * as svc from '../services/access-links';
 
 /**
  * 도메인 에러 → RPC 코드.
@@ -42,35 +43,45 @@ import * as svc from '../services/fieldwork-links';
  * 요청이 화면에는 「내부 오류」로 보인다.
  */
 function rethrowLinkError(err: unknown): never {
-  if (err instanceof FieldworkLinkAlreadyIssuedError) {
+  if (err instanceof AccessLinkAlreadyIssuedError) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
-  if (err instanceof FieldworkLinkNotFoundError) {
+  if (err instanceof AccessLinkNotFoundError) {
     throw new ORPCError('NOT_FOUND', { message: err.message });
   }
   throw err;
 }
 
+/**
+ * 이 표면이 다루는 링크의 종류 — **지금은 외주 실사 링크 하나다.**
+ *
+ * 서비스는 종류를 필수 인자로 받는다(한 설문에 두 종류가 함께 서므로 칸막이가 필요하다).
+ * 클라이언트 링크의 발급은 다음 티켓이 입력에 종류를 더하면서 연다 — 그때 이 상수가 입력
+ * 값으로 바뀐다.
+ */
+const LINK_KIND: AccessLinkKind = 'fieldwork';
+
 /** 이 설문의 링크 상태 — 없으면 null. 평문 비밀번호는 실리지 않는다. */
 const get = authed
-  .input(SurveyFieldworkLinkInput)
-  .output(SurveyFieldworkLinkOutput)
+  .input(SurveyAccessLinkInput)
+  .output(SurveyAccessLinkOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    const link = await svc.getFieldworkLink(input.surveyId);
+    const link = await svc.getAccessLink(input.surveyId, LINK_KIND);
     // 이 표면 자체가 manageAccess 를 요구하므로 여기까지 온 주체는 언제나 관리자다.
     return { link, canManage: true };
   });
 
 /** 발급 — 자동 생성 비밀번호를 **이때 한 번** 평문으로 함께 돌려준다. */
 const issue = authed
-  .input(IssueFieldworkLinkInput)
-  .output(IssuedFieldworkLinkOutput)
+  .input(IssueAccessLinkInput)
+  .output(IssuedAccessLinkOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     return svc
-      .issueFieldworkLink({
+      .issueAccessLink({
         surveyId: input.surveyId,
+        kind: LINK_KIND,
         password: input.password,
         actorId: context.user.id,
       })
@@ -85,13 +96,14 @@ const issue = authed
  * 연구원이 공유 문서에 박아 둔 링크가 계속 유효하다.
  */
 const resetPassword = authed
-  .input(ResetFieldworkLinkPasswordInput)
-  .output(IssuedFieldworkLinkOutput)
+  .input(ResetAccessLinkPasswordInput)
+  .output(IssuedAccessLinkOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     return svc
-      .resetFieldworkLinkPassword({
+      .resetAccessLinkPassword({
         surveyId: input.surveyId,
+        kind: LINK_KIND,
         password: input.password,
         actorId: context.user.id,
       })
@@ -100,24 +112,26 @@ const resetPassword = authed
 
 /** 평문 조회 — 업체가 잊었을 때 연구원이 바로 답해 준다. 호출이 구조화 로그에 남는다. */
 const revealPassword = authed
-  .input(SurveyFieldworkLinkInput)
-  .output(RevealedFieldworkLinkPasswordOutput)
+  .input(SurveyAccessLinkInput)
+  .output(RevealedAccessLinkPasswordOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    const password = await svc.revealFieldworkLinkPassword(input.surveyId).catch(rethrowLinkError);
+    const password = await svc
+      .revealAccessLinkPassword(input.surveyId, LINK_KIND)
+      .catch(rethrowLinkError);
     return { password };
   });
 
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
 const close = authed
-  .input(SurveyFieldworkLinkInput)
+  .input(SurveyAccessLinkInput)
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     await svc
-      .closeFieldworkLink({ surveyId: input.surveyId, actorId: context.user.id })
+      .closeAccessLink({ surveyId: input.surveyId, kind: LINK_KIND, actorId: context.user.id })
       .catch(rethrowLinkError);
     return { success: true } as const;
   });
 
-export const fieldworkLinks = { get, issue, resetPassword, revealPassword, close };
+export const accessLinks = { get, issue, resetPassword, revealPassword, close };

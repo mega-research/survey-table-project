@@ -1032,7 +1032,7 @@ export type FieldworkContactsPage = z.infer<typeof FieldworkContactsPage>;
 // 비밀번호 평문이 이 모양에 **없다.** 화면이 그 값을 들고 다니면 목록 응답에 실려 캐시·로그·
 // RSC payload 로 번진다. 연구원이 볼 때는 전용 표면(revealPassword)을 한 번 더 부른다.
 
-export const FieldworkLinkView = z.object({
+export const AccessLinkView = z.object({
   id: z.uuid(),
   /** 주소에 실리는 값. 화면은 이것으로 링크를 조립한다(buildFieldworkLinkUrl). */
   token: z.string(),
@@ -1040,7 +1040,7 @@ export const FieldworkLinkView = z.object({
   passwordUpdatedAt: z.date(),
   createdAt: z.date(),
 });
-export type FieldworkLinkView = z.infer<typeof FieldworkLinkView>;
+export type AccessLinkView = z.infer<typeof AccessLinkView>;
 
 /**
  * 링크 블록의 상태 — 링크가 없을 수도 있다.
@@ -1050,11 +1050,11 @@ export type FieldworkLinkView = z.infer<typeof FieldworkLinkView>;
  * 그럼에도 싣는 것은 참여자·게스트 블록과 모양을 맞춰 두려는 것이고, 요구가 나중에 느슨해지면
  * 화면이 저절로 따라오게 하려는 것이다.
  */
-export const SurveyFieldworkLinkOutput = z.object({
-  link: FieldworkLinkView.nullable(),
+export const SurveyAccessLinkOutput = z.object({
+  link: AccessLinkView.nullable(),
   canManage: z.boolean(),
 });
-export type SurveyFieldworkLinkOutput = z.infer<typeof SurveyFieldworkLinkOutput>;
+export type SurveyAccessLinkOutput = z.infer<typeof SurveyAccessLinkOutput>;
 
 /**
  * 발급·재설정 직후 응답 — **이때만** 평문 비밀번호가 함께 나온다.
@@ -1062,15 +1062,15 @@ export type SurveyFieldworkLinkOutput = z.infer<typeof SurveyFieldworkLinkOutput
  * 자동 생성을 골랐을 때 연구원이 그 값을 알 방법이 이것뿐이다. 이후에 다시 보려면
  * revealPassword 를 부르며, 그 호출은 구조화 로그에 한 줄로 남는다.
  */
-export const IssuedFieldworkLinkOutput = z.object({
-  link: FieldworkLinkView,
+export const IssuedAccessLinkOutput = z.object({
+  link: AccessLinkView,
   password: z.string(),
 });
-export type IssuedFieldworkLinkOutput = z.infer<typeof IssuedFieldworkLinkOutput>;
+export type IssuedAccessLinkOutput = z.infer<typeof IssuedAccessLinkOutput>;
 
-export const RevealedFieldworkLinkPasswordOutput = z.object({ password: z.string() });
-export type RevealedFieldworkLinkPasswordOutput = z.infer<
-  typeof RevealedFieldworkLinkPasswordOutput
+export const RevealedAccessLinkPasswordOutput = z.object({ password: z.string() });
+export type RevealedAccessLinkPasswordOutput = z.infer<
+  typeof RevealedAccessLinkPasswordOutput
 >;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1088,10 +1088,10 @@ export type RevealedFieldworkLinkPasswordOutput = z.infer<
  * 다시 열어 닫힘 화면으로 갈아탄다.
  *
  * `denied` 하나가 **없는 토큰과 틀린 비밀번호를 함께** 받는다. 갈라 주면 이 응답이 곧 링크
- * 존재 확인 창구가 된다(server/fieldwork-link 주석).
+ * 존재 확인 창구가 된다(server/access-link 주석).
  */
-export const FieldworkLinkAuthOutput = z.discriminatedUnion('ok', [
+export const AccessLinkAuthOutput = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(true) }),
   z.object({ ok: z.literal(false), reason: z.enum(['denied', 'closed']) }),
 ]);
-export type FieldworkLinkAuthOutput = z.infer<typeof FieldworkLinkAuthOutput>;
+export type AccessLinkAuthOutput = z.infer<typeof AccessLinkAuthOutput>;

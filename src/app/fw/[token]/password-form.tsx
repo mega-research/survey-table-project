@@ -38,7 +38,7 @@ export function FieldworkLinkPasswordForm({ token }: Props) {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await client.workspace.fieldworkLinkSession.authenticate({
+      const result = await client.workspace.accessLinkSession.authenticate({
         token,
         password: String(formData.get('password') ?? ''),
       });

@@ -30,7 +30,7 @@ import { db } from '@/db';
 import {
   contactAttempts as attemptsTable,
   contactTargets as contactTargetsTable,
-  surveyFieldworkLinks as linksTable,
+  surveyAccessLinks as linksTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -39,19 +39,20 @@ import {
 import {
   fieldworkLinkCookieName,
   readFieldworkLinkSessions,
-} from '@/lib/auth/fieldwork-link-session';
+} from '@/lib/auth/access-link-session';
 import type { ORPCContext } from '@/server/context';
+import { accessLinkKindValues } from '@/shared/contracts/workspace';
 import {
-  authenticateFieldworkLink,
-  resolveFieldworkLinkEntry,
+  authenticateAccessLink,
+  resolveAccessLinkEntry,
   resolveLinkActor,
-} from '@/server/fieldwork-link';
+} from '@/server/access-link';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { setClosed } from '@/server/operations/services/control';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
 import { attempts } from '@/server/contacts/procedures/attempts';
-import { fieldworkLinks } from '@/server/workspace/procedures/fieldwork-links';
+import { accessLinks } from '@/server/workspace/procedures/access-links';
 import {
   LINK_BLOCKED_SCOPED_PATHS,
   LINK_OPEN_SCOPED_PATHS,
@@ -69,7 +70,7 @@ let surveyId = '';
 let neighbourSurveyId = '';
 
 const client = createRouterClient(
-  { fieldworkLinks },
+  { accessLinks },
   {
     context: {
       db,
@@ -106,8 +107,8 @@ async function seedSurvey(title: string): Promise<string> {
 
 /** 링크를 발급하고 접속까지 마친 세션 하나 — 축 대부분의 출발점이다. */
 async function issueAndSignIn(target = surveyId) {
-  const { link, password } = await client.fieldworkLinks.issue({ surveyId: target });
-  const auth = await authenticateFieldworkLink(link.token, password);
+  const { link, password } = await client.accessLinks.issue({ surveyId: target });
+  const auth = await authenticateAccessLink(link.token, password);
   if (!auth.ok) throw new Error(`접속 실패: ${auth.reason}`);
   return { token: link.token, password, linkId: link.id, cookie: auth.cookie };
 }
@@ -154,21 +155,21 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   // ───────────────────────────────────────────────────────────────────────────
 
   it('발급이 추측 저항적인 토큰과 평문 비밀번호를 한 번 돌려준다', async () => {
-    const { link, password } = await client.fieldworkLinks.issue({ surveyId });
+    const { link, password } = await client.accessLinks.issue({ surveyId });
     // 길이는 코드가 정한다 — 와이어프레임의 8자 예시는 그림이다(PRD Further Notes).
     expect(link.token.length).toBeGreaterThanOrEqual(16);
     expect(password.length).toBeGreaterThanOrEqual(8);
-    expect(await client.fieldworkLinks.get({ surveyId })).toMatchObject({
+    expect(await client.accessLinks.get({ surveyId })).toMatchObject({
       link: { token: link.token },
       canManage: true,
     });
   });
 
   it('저장한 비밀번호를 그대로 다시 읽는다 — 해시가 아니라 가역 암호화다', async () => {
-    const { password } = await client.fieldworkLinks.issue({ surveyId, password: 'Hanbit2026!' });
+    const { password } = await client.accessLinks.issue({ surveyId, password: 'Hanbit2026!' });
     expect(password).toBe('Hanbit2026!');
     // 연구원이 업체에 답해 줘야 하므로 되읽기가 기능이다. 해시였다면 이 단언이 불가능하다.
-    expect(await client.fieldworkLinks.revealPassword({ surveyId })).toEqual({
+    expect(await client.accessLinks.revealPassword({ surveyId })).toEqual({
       password: 'Hanbit2026!',
     });
     // 저장된 것은 평문이 아니다 — 컬럼을 직접 본다.
@@ -180,15 +181,15 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   });
 
   it('활성 링크는 설문당 하나다 — 두 번째 발급은 CONFLICT', async () => {
-    await client.fieldworkLinks.issue({ surveyId });
-    await expect(client.fieldworkLinks.issue({ surveyId })).rejects.toMatchObject({
+    await client.accessLinks.issue({ surveyId });
+    await expect(client.accessLinks.issue({ surveyId })).rejects.toMatchObject({
       code: 'CONFLICT',
     });
   });
 
   it('설문마다 다른 토큰이 난다', async () => {
-    const a = await client.fieldworkLinks.issue({ surveyId });
-    const b = await client.fieldworkLinks.issue({ surveyId: neighbourSurveyId });
+    const a = await client.accessLinks.issue({ surveyId });
+    const b = await client.accessLinks.issue({ surveyId: neighbourSurveyId });
     expect(a.link.token).not.toBe(b.link.token);
   });
 
@@ -199,27 +200,30 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   it('맞는 비밀번호가 그 설문의 링크 주체를 세운다', async () => {
     const { token, cookie, linkId } = await issueAndSignIn();
     const result = await resolveLinkActor(token, cookieHeaders(cookie));
-    expect(result).toEqual({ ok: true, actor: { kind: 'link', linkId, surveyId } });
+    expect(result).toEqual({
+      ok: true,
+      actor: { kind: 'link', linkId, surveyId, linkKind: 'fieldwork' },
+    });
   });
 
   it('없는 토큰과 틀린 비밀번호가 같은 답이다 — 주소 스캔이 존재를 확인하지 못한다', async () => {
     const { token } = await issueAndSignIn();
-    const wrong = await authenticateFieldworkLink(token, '전혀아닌비밀번호');
-    const unknown = await authenticateFieldworkLink('zzzzzzzzzzzzzzzz', 'anything');
+    const wrong = await authenticateAccessLink(token, '전혀아닌비밀번호');
+    const unknown = await authenticateAccessLink('zzzzzzzzzzzzzzzz', 'anything');
     expect(wrong).toEqual({ ok: false, reason: 'denied' });
     expect(unknown).toEqual(wrong);
   });
 
   it('쿠키가 없으면 비밀번호 화면이고 조사 이름이 보인다', async () => {
     const { token } = await issueAndSignIn();
-    expect(await resolveFieldworkLinkEntry(token, new Headers())).toEqual({
+    expect(await resolveAccessLinkEntry(token, new Headers())).toEqual({
       kind: 'password',
       surveyTitle: '외주 실사 조사',
     });
   });
 
   it('없는 토큰도 같은 비밀번호 화면이다 — 조사 이름만 없다', async () => {
-    expect(await resolveFieldworkLinkEntry('zzzzzzzzzzzzzzzz', new Headers())).toEqual({
+    expect(await resolveAccessLinkEntry('zzzzzzzzzzzzzzzz', new Headers())).toEqual({
       kind: 'password',
       surveyTitle: null,
     });
@@ -265,7 +269,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
     await db.update(surveysTable).set({ isPaused: true }).where(eq(surveysTable.id, surveyId));
     expect(await resolveLinkActor(token, headers)).toEqual({ ok: false, reason: 'closed' });
-    expect(await resolveFieldworkLinkEntry(token, headers)).toEqual({
+    expect(await resolveAccessLinkEntry(token, headers)).toEqual({
       kind: 'closed',
       surveyTitle: '외주 실사 조사',
     });
@@ -278,7 +282,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   it('중단 중에는 비밀번호가 맞아도 닫힘이다 — 접속으로 뚫리지 않는다', async () => {
     const { token, password } = await issueAndSignIn();
     await db.update(surveysTable).set({ isPaused: true }).where(eq(surveysTable.id, surveyId));
-    expect(await authenticateFieldworkLink(token, password)).toEqual({
+    expect(await authenticateAccessLink(token, password)).toEqual({
       ok: false,
       reason: 'closed',
     });
@@ -298,7 +302,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
     await setClosed({ surveyId, isClosed: true });
     expect(await resolveLinkActor(token, headers)).toEqual({ ok: false, reason: 'closed' });
-    expect(await resolveFieldworkLinkEntry(token, headers)).toEqual({
+    expect(await resolveAccessLinkEntry(token, headers)).toEqual({
       kind: 'closed',
       surveyTitle: '외주 실사 조사',
     });
@@ -314,7 +318,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   it('종료된 설문에서는 비밀번호가 맞아도 닫힘이다 — 접속으로 뚫리지 않는다', async () => {
     const { token, password } = await issueAndSignIn();
     await db.update(surveysTable).set({ status: 'closed' }).where(eq(surveysTable.id, surveyId));
-    expect(await authenticateFieldworkLink(token, password)).toEqual({
+    expect(await authenticateAccessLink(token, password)).toEqual({
       ok: false,
       reason: 'closed',
     });
@@ -356,18 +360,94 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     });
   });
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // ④-2 종류 컬럼 (0134, ADR-0029)
+  // ───────────────────────────────────────────────────────────────────────────
+  //
+  // 링크 행이 종류를 갖는다 — 외주 실사 링크 | 클라이언트 링크. 어휘는 계약 배열
+  // (`accessLinkKindValues`)에 있고 DB 의 CHECK 는 마이그레이션이 손으로 쓴 사본이라, 둘이
+  // 같은 값을 보는지는 실제 INSERT 로만 확인된다(Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다).
+
+  describe('종류 컬럼', () => {
+    /** 제약 **이름**까지 본다 — 아무 이유로나 실패한 INSERT 와 갈라야 한다. */
+    async function violationOf(run: () => Promise<unknown>): Promise<string | undefined> {
+      const error = await run().then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error).not.toBeNull();
+      return (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
+    }
+
+    function linkValues(over: Partial<typeof linksTable.$inferInsert>) {
+      return {
+        surveyId,
+        token: `kind-probe-${crypto.randomUUID().slice(0, 12)}`,
+        passwordCipher: 'x',
+        passwordUpdatedBy: OWNER_ID,
+        createdBy: OWNER_ID,
+        ...over,
+      };
+    }
+
+    it('발급된 외주 링크의 종류는 fieldwork 다', async () => {
+      const { linkId } = await issueAndSignIn();
+      const [row] = await db
+        .select({ kind: linksTable.kind, clientTabs: linksTable.clientTabs })
+        .from(linksTable)
+        .where(eq(linksTable.id, linkId));
+      expect(row).toEqual({ kind: 'fieldwork', clientTabs: null });
+    });
+
+    it('어휘의 모든 종류를 DB 가 받고, 한 설문에 종류별로 함께 선다', async () => {
+      // 활성 UNIQUE 가 (설문, 종류)라 종류가 다르면 충돌하지 않는다 — 한 설문에서 실사와
+      // 고객사 보고를 동시에 돌린다.
+      for (const kind of accessLinkKindValues) {
+        await db.insert(linksTable).values(linkValues({ kind }));
+      }
+      const rows = await db
+        .select({ kind: linksTable.kind })
+        .from(linksTable)
+        .where(eq(linksTable.surveyId, surveyId));
+      expect(rows.map((r) => r.kind).sort()).toEqual([...accessLinkKindValues].sort());
+    });
+
+    it('같은 종류의 활성 링크는 설문당 하나다', async () => {
+      await db.insert(linksTable).values(linkValues({ kind: 'client' }));
+      expect(await violationOf(() => db.insert(linksTable).values(linkValues({ kind: 'client' })))).toBe(
+        'survey_access_links_active_survey_kind_uq',
+      );
+    });
+
+    it('어휘 밖의 종류는 DB 가 거부한다', async () => {
+      expect(
+        await violationOf(() => db.insert(linksTable).values(linkValues({ kind: 'guest' as never }))),
+      ).toBe('survey_access_links_kind_check');
+    });
+
+    it('외주 링크에는 탭을 저장할 수 없다 — 탭은 클라이언트 링크의 축이다', async () => {
+      const tabs = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+      expect(
+        await violationOf(() =>
+          db.insert(linksTable).values(linkValues({ kind: 'fieldwork', clientTabs: tabs })),
+        ),
+      ).toBe('survey_access_links_client_tabs_check');
+      await db.insert(linksTable).values(linkValues({ kind: 'client', clientTabs: tabs }));
+    });
+  });
+
   it('종료는 행 삭제가 아니라 closedAt 이고, 그 뒤 재발급이 된다', async () => {
     const first = await issueAndSignIn();
-    await client.fieldworkLinks.close({ surveyId });
+    await client.accessLinks.close({ surveyId });
 
     // 옛 토큰은 「없는 토큰」이 아니라 「닫힘」이다 — 외주가 비밀번호를 다시 넣어 보지 않는다.
     expect(await resolveLinkActor(first.token, cookieHeaders(first.cookie))).toEqual({
       ok: false,
       reason: 'closed',
     });
-    expect(await client.fieldworkLinks.get({ surveyId })).toMatchObject({ link: null });
+    expect(await client.accessLinks.get({ surveyId })).toMatchObject({ link: null });
 
-    const second = await client.fieldworkLinks.issue({ surveyId });
+    const second = await client.accessLinks.issue({ surveyId });
     expect(second.link.token).not.toBe(first.token);
 
     // 옛 행이 계보로 남는다 — 부분 UNIQUE 가 활성 하나만 강제한다.
@@ -381,9 +461,9 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
   it('링크가 없는 설문에서 종료·재설정·평문 조회는 NOT_FOUND 다', async () => {
     for (const call of [
-      () => client.fieldworkLinks.close({ surveyId }),
-      () => client.fieldworkLinks.resetPassword({ surveyId }),
-      () => client.fieldworkLinks.revealPassword({ surveyId }),
+      () => client.accessLinks.close({ surveyId }),
+      () => client.accessLinks.resetPassword({ surveyId }),
+      () => client.accessLinks.revealPassword({ surveyId }),
     ]) {
       await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
     }
@@ -398,7 +478,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     const headers = cookieHeaders(cookie);
     expect(await resolveLinkActor(token, headers)).toMatchObject({ ok: true });
 
-    const reset = await client.fieldworkLinks.resetPassword({ surveyId, password: 'NewPass2026' });
+    const reset = await client.accessLinks.resetPassword({ surveyId, password: 'NewPass2026' });
     // 변경 전 쿠키로 다시 오면 거부다 — 판정은 시각의 대소가 아니라 표식 값의 일치다.
     expect(await resolveLinkActor(token, headers)).toEqual({
       ok: false,
@@ -413,12 +493,12 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
   it('주소는 바뀌지 않는다 — 비밀번호 변경은 토큰을 건드리지 않는다', async () => {
     const { token, password } = await issueAndSignIn();
-    const reset = await client.fieldworkLinks.resetPassword({ surveyId, password: 'NewPass2026' });
+    const reset = await client.accessLinks.resetPassword({ surveyId, password: 'NewPass2026' });
     expect(reset.link.token).toBe(token);
 
     // 새 비밀번호로는 같은 주소에서 다시 들어간다. 옛 비밀번호는 더 이상 통하지 않는다.
-    expect(await authenticateFieldworkLink(token, 'NewPass2026')).toMatchObject({ ok: true });
-    expect(await authenticateFieldworkLink(token, password)).toEqual({
+    expect(await authenticateAccessLink(token, 'NewPass2026')).toMatchObject({ ok: true });
+    expect(await authenticateAccessLink(token, password)).toEqual({
       ok: false,
       reason: 'denied',
     });
@@ -682,7 +762,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     it('연구원이 넣으면 계정 칸이 차고 링크 칸은 빈다 — 짝 단언', async () => {
       // 이 단언이 없으면 「둘 다 항상 null」도 위 테스트를 통과한다.
       const contactTargetId = await seedTarget();
-      await client.fieldworkLinks.issue({ surveyId });
+      await client.accessLinks.issue({ surveyId });
 
       await createRouterClient(
         { contacts: { attempts } },
@@ -748,7 +828,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         resultCode: '1.조사완료',
       });
 
-      await client.fieldworkLinks.close({ surveyId });
+      await client.accessLinks.close({ surveyId });
 
       const [link] = await db
         .select({ closedAt: linksTable.closedAt })

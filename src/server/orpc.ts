@@ -5,7 +5,7 @@ import { type RateLimitGroup, isRateLimitedTwoTier } from '@/lib/rate-limit/rate
 import { isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 
 import type { ORPCContext } from './context';
-import { resolveLinkActorForSurvey } from './fieldwork-link';
+import { resolveLinkActorForSurvey } from './access-link';
 import type { Actor } from './survey-access';
 import { extractSurveyIdOrUndefined, rpcLoggingMiddleware } from './rpc-logging';
 

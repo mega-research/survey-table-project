@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type {
+  AccessLinkKind,
   FieldworkOrgStatus,
   SurveyGuestTabs,
   SurveyParticipantAccessLevel,
@@ -175,26 +176,37 @@ export const surveyParticipants = pgTable(
 );
 
 /**
- * 외주 실사 링크 — 설문 하나에 대한 **접속 수단** (마이그레이션 0126, ADR-0026).
+ * 설문 접속 링크 — 설문 하나에 대한 **접속 수단** (마이그레이션 0126·0134, ADR-0026·0029).
  *
- * 계정이 아니다. 연구원이 설문마다 전용 URL 하나와 공유 비밀번호 하나를 만들어 외주 업체에
- * 전달하고, 외주는 그 링크로 그 설문의 운영 콘솔에 들어온다 — 업체도 담당자도 시스템에
- * 등록하지 않는다. 현장의 외주 실사는 단기 인력이 한 접속 수단을 돌려쓰므로 사람 단위 귀속이
- * 처음부터 성립하지 않고, 그래서 귀속의 단위를 사람에서 링크로 내렸다(ADR-0019 를 대체).
+ * 계정이 아니다. 연구원이 설문마다 전용 URL 하나와 공유 비밀번호 하나를 만들어 전달하고, 받은
+ * 쪽은 그 링크로 그 설문에 들어온다 — 업체도 담당자도 고객사도 시스템에 등록하지 않는다.
+ * 한 접속 수단을 여럿이 돌려쓰므로 사람 단위 귀속이 처음부터 성립하지 않고, 그래서 귀속의
+ * 단위를 사람에서 링크로 내렸다(ADR-0019 를 대체).
  *
- * **만료일 컬럼이 없다** — 설문 중단이 그 일을 한다. 판정은 `server/survey-access` 의 링크
- * 분기가 `surveys.isPaused` 로 하며, 중단은 토글이라 재개하면 같은 링크가 그대로 열린다.
+ * **`kind` 가 종류를 가른다** — 외주 실사 링크(`fieldwork`)와 클라이언트 링크(`client`).
+ * 활성 링크는 설문당 종류별 하나다. 테이블 이름이 종류 중립인 것은 0134 가 옛 이름
+ * (`survey_fieldwork_links`)에서 옮겼기 때문이다. 귀속 칸(`fieldwork_link_id`)은 외주 링크만
+ * 채우므로 이름을 그대로 뒀다.
  *
- * **`token` 을 UPDATE 하지 말 것.** 주소는 설문당 하나로 영구 고정이고 재발급 경로가 없다 —
- * 사람을 막는 일(유출·업체 교체)은 전부 비밀번호 변경이 진다.
+ * **만료일 컬럼이 없다** — 설문 상태가 그 일을 한다(중단·종료). 판정은 `server/survey-access`
+ * 의 링크 분기와 `server/access-link` 의 세션 판정이 함께 하며, 둘 다 링크 행을 건드리지 않아
+ * 재개·종료 취소가 같은 링크를 그대로 되살린다.
+ *
+ * **`token` 을 UPDATE 하지 말 것.** 주소는 영구 고정이고 재발급 경로가 없다 — 사람을 막는
+ * 일(유출·업체 교체·담당자 교체)은 전부 비밀번호 변경이 진다.
  *
  * `passwordCipher` 는 **가역 암호화**다(해시가 아니다). 공유 출입 암호라 연구원이 다시 읽어
- * 업체에 답해 줄 수 있어야 한다.
+ * 답해 줄 수 있어야 한다.
  */
-export const surveyFieldworkLinks = pgTable(
-  'survey_fieldwork_links',
+export const surveyAccessLinks = pgTable(
+  'survey_access_links',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    /**
+     * 종류 — 0134 의 CHECK 가 어휘를 지킨다(`accessLinkKindValues`). 기본값이 `fieldwork` 인
+     * 것은 이 컬럼이 생기기 전의 행이 전부 외주 링크였기 때문이다.
+     */
+    kind: text('kind').$type<AccessLinkKind>().notNull().default('fieldwork'),
     /** 설문이 하드 삭제되면 접속 수단도 의미가 없다 — 참여 행과 같은 판단이다. */
     surveyId: uuid('survey_id')
       .notNull()
@@ -220,6 +232,12 @@ export const surveyFieldworkLinks = pgTable(
      */
     closedAt: timestamp('closed_at', { withTimezone: true }),
     closedBy: uuid('closed_by').references(() => users.id, { onDelete: 'restrict' }),
+    /**
+     * 클라이언트 링크의 현황 탭 화이트리스트 — **`kind='client'` 전용**(0134 CHECK 가 외주
+     * 링크에서 NULL 을 강제한다). NULL 이면 기본값(응답 현황 하나)이고, 읽는 쪽은
+     * `normalizeSurveyGuestTabs` 로 접는다 — 참여 행의 `guest_tabs` 와 같은 어휘다.
+     */
+    clientTabs: jsonb('client_tabs').$type<SurveyGuestTabs>(),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -227,10 +245,11 @@ export const surveyFieldworkLinks = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('survey_fieldwork_links_token_uq').on(t.token),
-    // 활성 링크는 설문당 하나 — 부분 인덱스라 종료된 행은 감사로 남고 재발급이 된다.
-    uniqueIndex('survey_fieldwork_links_active_survey_uq')
-      .on(t.surveyId)
+    uniqueIndex('survey_access_links_token_uq').on(t.token),
+    // 활성 링크는 설문당 **종류별** 하나 — 한 설문에 외주 링크와 클라이언트 링크가 함께 선다.
+    // 부분 인덱스라 종료된 행은 감사로 남고 재발급이 된다.
+    uniqueIndex('survey_access_links_active_survey_kind_uq')
+      .on(t.surveyId, t.kind)
       .where(sql`closed_at IS NULL`),
   ],
 );

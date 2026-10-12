@@ -16,15 +16,15 @@ import { surveyKeys } from './use-surveys';
  * 발급·재설정·평문 조회는 전부 mutation 이라 결과가 화면 상태로만 잠깐 머문다. useQuery 로
  * 두면 그 값이 쿼리 캐시에 남아 다른 화면·리렌더에서 되살아난다.
  */
-export const surveyFieldworkLinkKeys = {
-  all: [...surveyKeys.all, 'fieldwork-link'] as const,
-  detail: (surveyId: string) => [...surveyFieldworkLinkKeys.all, surveyId] as const,
+export const surveyAccessLinkKeys = {
+  all: [...surveyKeys.all, 'access-link'] as const,
+  detail: (surveyId: string) => [...surveyAccessLinkKeys.all, surveyId] as const,
 };
 
-export function useSurveyFieldworkLink(surveyId: string) {
+export function useSurveyAccessLink(surveyId: string) {
   return useQuery({
-    queryKey: surveyFieldworkLinkKeys.detail(surveyId),
-    queryFn: () => orpc.workspace.fieldworkLinks.get.call({ surveyId }),
+    queryKey: surveyAccessLinkKeys.detail(surveyId),
+    queryFn: () => orpc.workspace.accessLinks.get.call({ surveyId }),
     staleTime: 10_000,
     refetchOnWindowFocus: false,
   });
@@ -44,26 +44,26 @@ function useLinkMutation<TInput, TOutput>(fn: (input: TInput) => Promise<TOutput
   return useMutation({
     mutationFn: fn,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: surveyFieldworkLinkKeys.all });
+      queryClient.invalidateQueries({ queryKey: surveyAccessLinkKeys.all });
     },
   });
 }
 
-export function useIssueFieldworkLink() {
+export function useIssueAccessLink() {
   return useLinkMutation((input: { surveyId: string; password?: string }) =>
-    client.workspace.fieldworkLinks.issue(input),
+    client.workspace.accessLinks.issue(input),
   );
 }
 
-export function useResetFieldworkLinkPassword() {
+export function useResetAccessLinkPassword() {
   return useLinkMutation((input: { surveyId: string; password?: string }) =>
-    client.workspace.fieldworkLinks.resetPassword(input),
+    client.workspace.accessLinks.resetPassword(input),
   );
 }
 
-export function useCloseFieldworkLink() {
+export function useCloseAccessLink() {
   return useLinkMutation((input: { surveyId: string }) =>
-    client.workspace.fieldworkLinks.close(input),
+    client.workspace.accessLinks.close(input),
   );
 }
 
@@ -73,9 +73,9 @@ export function useCloseFieldworkLink() {
  * 읽기이지만 **부작용이 있다**: 호출 한 줄이 구조화 로그에 남아 「누가 언제 읽었는가」가 된다.
  * useQuery 로 두면 화면이 열릴 때마다 저절로 불려 그 기록이 의미를 잃는다.
  */
-export function useRevealFieldworkLinkPassword() {
+export function useRevealAccessLinkPassword() {
   return useMutation({
     mutationFn: (input: { surveyId: string }) =>
-      client.workspace.fieldworkLinks.revealPassword(input),
+      client.workspace.accessLinks.revealPassword(input),
   });
 }

@@ -156,10 +156,9 @@ describe('내부 표면은 실사에게 전부 닫혀 있다', () => {
     // 티켓 25 가 새로 만든 넷이 전부 authed 인지 확인한다. scoped 로 새면 실사원이
     // 자기 설문에 남을 붙일 수 있고, 그것은 「초대 추가는 접근 **내부인** 누구나」와 어긋난다.
     //
-    // 외주 실사 링크 관리 표면 다섯도 같은 목록에 선다(ADR-0026). scoped 로 새면 **외주가
-    // 자기 비밀번호를 바꾸거나 링크를 종료**할 수 있고, 그 순간 담당 연구원이 통제권을 잃는다.
-    // 링크 주체가 이 표면들에 닿지 못하는 것은 관문(manageAccess)이 아니라 **베이스**가
-    // 먼저 막아야 한다 — 관문은 판정을 하려고 DB 를 한 번 읽지만 베이스는 읽지 않는다.
+    // 링크 관리·세션 표면은 이 목록에 없다 — 0134 가 종류 중립 이름(`workspace.accessLink*`)으로
+    // 옮겼고 그 베이스는 `fieldwork-link-denial` 이 목록으로 고정한다. 실사 계정에게 관리
+    // 다섯이 닫혀 있다는 사실은 위의 authed 전수 단언이 이미 진다.
     const fieldworkSurfaces = procedures
       .filter((p) => p.path.startsWith('workspace.fieldwork'))
       .map((p) => `${p.path}:${p.base}`)
@@ -169,17 +168,6 @@ describe('내부 표면은 실사에게 전부 닫혀 있다', () => {
       'workspace.fieldwork.list:authed',
       'workspace.fieldwork.remove:authed',
       'workspace.fieldwork.searchCandidates:authed',
-      // 링크 **세션** 표면 둘만 pub 이다 — 외주가 로그인 없이 부르는 자리이고, 여기서
-      // 하는 일은 「비밀번호가 맞는가」와 「쿠키를 지운다」뿐이다. 관리 다섯과 청중이
-      // 정반대라 베이스도 반대여야 한다: authed 로 올리면 외주가 접속할 방법이 사라지고,
-      // 반대로 관리 표면이 pub 으로 내려가면 누구든 비밀번호를 읽는다.
-      'workspace.fieldworkLinkSession.authenticate:pub',
-      'workspace.fieldworkLinkSession.signOut:pub',
-      'workspace.fieldworkLinks.close:authed',
-      'workspace.fieldworkLinks.get:authed',
-      'workspace.fieldworkLinks.issue:authed',
-      'workspace.fieldworkLinks.resetPassword:authed',
-      'workspace.fieldworkLinks.revealPassword:authed',
       'workspace.fieldworkOrgs.archive:superadmin',
       'workspace.fieldworkOrgs.create:superadmin',
       'workspace.fieldworkOrgs.list:superadmin',

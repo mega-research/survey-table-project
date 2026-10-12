@@ -60,7 +60,7 @@ vi.mock('@/db', async (importOriginal) => {
   // importOriginal 스프레드가 필수다 — `@/db` 는 스키마를 통째로 되내보낸다(db-stub 주석).
   const actual = await importOriginal<typeof import('@/db')>();
   const { createDbStub } = await import('@tests/helpers/db-stub');
-  const { surveyFieldworkLinks, surveys } = await import('@/db/schema');
+  const { surveyAccessLinks, surveys } = await import('@/db/schema');
 
   const linkRow = {
     linkId: IDS.LINK_ID,
@@ -90,7 +90,7 @@ vi.mock('@/db', async (importOriginal) => {
     db: createDbStub({
       reachedMessage: 'FIELDWORK LINK DENIAL: 베이스를 지나 서비스가 DB 에 닿았다',
       rowsFor: (table) => {
-        if (table === surveyFieldworkLinks) return [linkRow];
+        if (table === surveyAccessLinks) return [linkRow];
         if (table === surveys) return [surveyRow];
         return [];
       },
@@ -142,19 +142,19 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
 
   it('링크 세션 표면 둘만 pub 이다 — 외주가 실제로 부를 수 있는 것의 전부', () => {
     const linkSurfaces = procedures
-      .filter((p) => p.path.startsWith('workspace.fieldworkLink'))
+      .filter((p) => p.path.startsWith('workspace.accessLink'))
       .map((p) => `${p.path}:${p.base}`)
       .sort();
     // 관리 다섯이 pub 으로 내려가면 외주가 자기 비밀번호를 읽거나 바꾼다 — 그 순간 담당
     // 연구원이 통제권을 잃는다. 세션 둘이 authed 로 올라가면 접속할 방법이 사라진다.
     expect(linkSurfaces).toEqual([
-      'workspace.fieldworkLinkSession.authenticate:pub',
-      'workspace.fieldworkLinkSession.signOut:pub',
-      'workspace.fieldworkLinks.close:authed',
-      'workspace.fieldworkLinks.get:authed',
-      'workspace.fieldworkLinks.issue:authed',
-      'workspace.fieldworkLinks.resetPassword:authed',
-      'workspace.fieldworkLinks.revealPassword:authed',
+      'workspace.accessLinkSession.authenticate:pub',
+      'workspace.accessLinkSession.signOut:pub',
+      'workspace.accessLinks.close:authed',
+      'workspace.accessLinks.get:authed',
+      'workspace.accessLinks.issue:authed',
+      'workspace.accessLinks.resetPassword:authed',
+      'workspace.accessLinks.revealPassword:authed',
     ]);
   });
 });
@@ -163,7 +163,7 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
 // scoped — 링크가 지나는 유일한 문. 통과하는 것이 정확히 아홉이다
 // ─────────────────────────────────────────────────────────────────────────────
 
-const linkActor = { kind: 'link' as const, linkId: LINK_ID, surveyId: SURVEY_ID };
+const linkActor = { kind: 'link' as const, linkId: LINK_ID, surveyId: SURVEY_ID, linkKind: 'fieldwork' as const };
 
 /** 링크 열 — 스펙 §8 의 「외주 링크」. 여기 없는 것이 「항상 차단」 목록이다. */
 const LINK_COLUMN: SurveyCapability[] = [

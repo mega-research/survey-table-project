@@ -1,7 +1,7 @@
 import { ORPCError, os } from '@orpc/server';
 import * as Sentry from '@sentry/nextjs';
 
-import { FIELDWORK_LINK_LOG_ROLE } from '@/lib/auth/fieldwork-link-session';
+import { ACCESS_LINK_LOG_ROLE } from '@/lib/auth/access-link-session';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { logRoleForUserType } from '@/shared/contracts/auth';
@@ -33,7 +33,7 @@ function resolveLogRole(context: ORPCContext): string {
   // 계정이 없어도 **링크 세션을 주장하는** 요청은 익명이 아니다 (ADR-0026). 그 쿠키가 지금도
   // 유효한지는 관문이 판정하지만, 로그가 말하는 것은 「무엇을 들고 왔는가」다 — 거부된 요청도
   // role=link 로 남아야 링크 쪽 거부를 응답자 트래픽에서 갈라낼 수 있다.
-  return context.linkSessions?.length ? FIELDWORK_LINK_LOG_ROLE : 'anonymous';
+  return context.linkSessions?.length ? ACCESS_LINK_LOG_ROLE : 'anonymous';
 }
 
 /**

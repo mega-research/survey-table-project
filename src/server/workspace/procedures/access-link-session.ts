@@ -1,13 +1,13 @@
 /**
  * 외주 실사 링크 세션 procedure — 접속과 나가기 (ADR-0026, .pen FLOW 10-3).
  *
- * **형제 `fieldwork-links.ts` 와 청중이 정반대다.** 저쪽은 연구원이 부르는 `authed` 관리
+ * **형제 `access-links.ts` 와 청중이 정반대다.** 저쪽은 연구원이 부르는 `authed` 관리
  * 표면이고 이쪽은 **외주가 부르는 `pub` 표면**이다. 같은 파일에 두지 않은 이유가 그것이다 —
  * 한 그룹에 섞이면 「이 표면은 로그인 없이 열린다」가 코드에서 읽히지 않고, 관리 표면을 조일
  * 때 세션 표면이 조용히 따라 닫힌다.
  *
  * 인증은 링크 주소의 토큰 + 비밀번호 한 칸이고, 성공하면 `fw_<token>` 쿠키가 심긴다.
- * 판정은 전부 코어(`server/fieldwork-link`)가 하고 여기는 **쿠키를 심고 지우는 일**만 한다 —
+ * 판정은 전부 코어(`server/access-link`)가 하고 여기는 **쿠키를 심고 지우는 일**만 한다 —
  * 그 일은 코어가 할 수 없다(요청/응답을 만지지 않는 자리다).
  *
  * **쿠키를 쓰는 procedure 가 여기 하나다.** AGENTS.md 의 표면 선택 원칙은 「redirect+쿠키
@@ -18,32 +18,32 @@
  * oRPC 는 Route Handler(`/api/rpc`) 위에서 돌므로 `cookies()` 쓰기가 허용된다 — 프로덕션
  * 빌드로 Set-Cookie 가 실제로 나가는 것을 확인했다.
  *
- * 무차별 대입 대상이라 `withRateLimit('fieldwork-link-auth')` 를 태운다. 클라이언트 축은
+ * 무차별 대입 대상이라 `withRateLimit('access-link-auth')` 를 태운다. 클라이언트 축은
  * 입력의 `token` 이고 IP 전체 가드가 짝으로 붙는다(토큰 축 단독은 회전으로 우회된다).
  */
 import { cookies } from 'next/headers';
 
 import {
-  authenticateFieldworkLink,
-  type FieldworkLinkSessionCookie,
-} from '@/server/fieldwork-link';
+  authenticateAccessLink,
+  type AccessLinkSessionCookie,
+} from '@/server/access-link';
 import { pub, withRateLimit } from '@/server/orpc';
 import {
-  FieldworkLinkAuthOutput,
+  AccessLinkAuthOutput,
   WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
-import { fieldworkLinkCookieName, isFieldworkLinkToken } from '@/lib/auth/fieldwork-link-session';
+import { fieldworkLinkCookieName, isAccessLinkToken } from '@/lib/auth/access-link-session';
 
 import {
-  FieldworkLinkAuthInput,
-  FieldworkLinkSignOutInput,
-} from '../domain/fieldwork-link';
+  AccessLinkAuthInput,
+  AccessLinkSignOutInput,
+} from '../domain/access-link';
 
 /**
  * 쿠키 속성 — path 가 `/` 인 것이 계약이다.
  *
  * 대리 응답이 `/survey/...` 로 나가므로 path 를 `/fw/...` 로 좁히면 그 화면에 세션이 실리지
- * 않는다. 대신 이름에 토큰이 들어 있어 설문끼리 섞이지 않는다(lib/auth/fieldwork-link-session).
+ * 않는다. 대신 이름에 토큰이 들어 있어 설문끼리 섞이지 않는다(lib/auth/access-link-session).
  *
  * `secure` 를 프로덕션에서만 켜는 것은 로컬 http 개발 때문이다 — 켠 채로 두면 localhost 에서
  * 쿠키가 아예 심기지 않아 기능이 통째로 동작하지 않는다.
@@ -57,7 +57,7 @@ function sessionCookieOptions() {
   };
 }
 
-async function setSessionCookie(cookie: FieldworkLinkSessionCookie): Promise<void> {
+async function setSessionCookie(cookie: AccessLinkSessionCookie): Promise<void> {
   (await cookies()).set({
     name: cookie.name,
     value: cookie.value,
@@ -74,11 +74,11 @@ async function setSessionCookie(cookie: FieldworkLinkSessionCookie): Promise<voi
  * 가르면 그 코드가 곧 링크 존재 여부의 신호가 되기도 한다.
  */
 const authenticate = pub
-  .use(withRateLimit('fieldwork-link-auth'))
-  .input(FieldworkLinkAuthInput)
-  .output(FieldworkLinkAuthOutput)
+  .use(withRateLimit('access-link-auth'))
+  .input(AccessLinkAuthInput)
+  .output(AccessLinkAuthOutput)
   .handler(async ({ input }) => {
-    const result = await authenticateFieldworkLink(input.token, input.password);
+    const result = await authenticateAccessLink(input.token, input.password);
     if (!result.ok) return { ok: false as const, reason: result.reason };
     await setSessionCookie(result.cookie);
     return { ok: true as const };
@@ -94,10 +94,10 @@ const authenticate = pub
  * DB 를 읽으면 로그아웃이 링크 존재 확인 창구가 된다.
  */
 const signOut = pub
-  .input(FieldworkLinkSignOutInput)
+  .input(AccessLinkSignOutInput)
   .output(WorkspaceActionOutput)
   .handler(async ({ input }) => {
-    if (!isFieldworkLinkToken(input.token)) return { success: true } as const;
+    if (!isAccessLinkToken(input.token)) return { success: true } as const;
     (await cookies()).delete({
       name: fieldworkLinkCookieName(input.token),
       path: sessionCookieOptions().path,
@@ -105,4 +105,4 @@ const signOut = pub
     return { success: true } as const;
   });
 
-export const fieldworkLinkSession = { authenticate, signOut };
+export const accessLinkSession = { authenticate, signOut };

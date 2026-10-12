@@ -3,10 +3,10 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
-import type { FieldworkLinkSession } from '@/lib/auth/fieldwork-link-session';
+import type { AccessLinkSession } from '@/lib/auth/access-link-session';
 import type { AuthUser } from '@/shared/contracts/auth';
 
-import { resolveLinkActorForSurvey } from './fieldwork-link';
+import { resolveLinkActorForSurvey } from './access-link';
 import {
   accountAttribution,
   type ActorAttribution,
@@ -15,7 +15,7 @@ import {
 } from './survey-access';
 
 /**
- * 대리 응답 세션 판정 — `data-scope`·`survey-access`·`fieldwork-link` 와 나란한 코어
+ * 대리 응답 세션 판정 — `data-scope`·`survey-access`·`access-link` 와 나란한 코어
  * (티켓 27, ADR-0019 → ADR-0026 티켓 09).
  *
  * 외주가 조사 대상 화면의 「응답 대행」으로 컨택의 초대 링크를 열면 **응답자와 똑같은 응답
@@ -65,7 +65,7 @@ export type FieldworkProxy =
 export interface FieldworkProxySubject {
   user: AuthUser | null;
   /** 서명만 검증된 링크 세션 후보 — 「지금도 유효한가」는 이 파일이 링크 행을 읽어 답한다. */
-  linkSessions?: readonly FieldworkLinkSession[] | undefined;
+  linkSessions?: readonly AccessLinkSession[] | undefined;
 }
 
 export async function resolveFieldworkProxy(

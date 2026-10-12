@@ -109,6 +109,7 @@
     "0130_question_max_selections_source",
     "0131_question_mobile_item_card_block_columns",
     "0132_question_staged_rows_config",
-    "0133_fieldwork_link_mail_and_edit_attribution"
+    "0133_fieldwork_link_mail_and_edit_attribution",
+    "0134_survey_access_links"
   ]
 }

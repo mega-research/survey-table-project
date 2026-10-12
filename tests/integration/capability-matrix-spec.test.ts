@@ -137,7 +137,7 @@ const COLUMNS = {
   '외주 링크': {
     // **계정이 아니다**(ADR-0026). 팀도 소유권도 참여 행도 없고 자격은 「이 링크가 이 설문을
     // 연다」 하나뿐이라, 입력이 주체 하나로 끝난다 — participation 도 relation 도 없다.
-    subject: { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID },
+    subject: { kind: 'link', linkId: 'link-1', surveyId: SURVEY_ID, linkKind: 'fieldwork' },
     participation: null,
   },
 } satisfies Record<string, Column>;

@@ -109,5 +109,5 @@ export const PUB_TOKEN_LOOKUPS: Record<string, string> = {
    * 조인해 보고 삭제를 「닫힘」으로 접는다 — 없는 토큰과 같은 답이 아니라 닫힘 화면이다
    * (외주는 링크를 이미 가진 사람이라 감출 것이 없고, 감추면 오타로 오해해 문의한다).
    */
-  resolveFieldworkLinkEntry: 'tests/integration/fieldwork-link.realdb.test.ts',
+  resolveAccessLinkEntry: 'tests/integration/fieldwork-link.realdb.test.ts',
 };
