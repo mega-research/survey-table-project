@@ -6,6 +6,12 @@
 //   재렌더 전까지 UTC 가 그대로 노출되는 문제가 있었다. 한국 운영 컨텍스트로 고정하면
 //   서버/클라이언트가 항상 같은 문자열을 그려 이 문제 자체가 사라진다.
 //
+// **로케일도 고정한다(`ko-KR`).** 시간대만 고정하고 로케일을 비워 두면(`undefined`) 서버는
+//   호스트 기본 로케일(en-US → `10/08/2026`)로, 브라우저는 사용자 로케일(ko-KR →
+//   `2026. 10. 08.`)로 그려 클라이언트 컴포넌트에서 hydration 이 깨진다(2026-10-12 발견 —
+//   게스트 콘솔 서브헤더). 「서버와 클라이언트가 같은 문자열」은 시간대와 로케일 둘 다
+//   고정해야 성립한다.
+//
 // - formatLocal* 함수: KST 고정 표시. (이름의 Local 은 호출부 시그니처 유지를 위해 남긴
 //   것으로 "브라우저 로컬"이 아니라 화면 표시용이라는 의미로 읽을 것.)
 // - Server Component 에서는 <LocalDateTime /> 컴포넌트 사용.
@@ -37,6 +43,9 @@ const MONTH_DAY_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   hour12: false,
 };
 
+/** 표시 로케일 — 서버·브라우저가 같은 문자열을 내도록 고정한다(헤더 참조). */
+const DISPLAY_LOCALE = 'ko-KR';
+
 function toDate(d: Date | string | number): Date {
   return d instanceof Date ? d : new Date(d);
 }
@@ -44,7 +53,7 @@ function toDate(d: Date | string | number): Date {
 /** 'YYYY. MM. DD. HH:mm' — KST 고정. */
 export function formatLocalDateTime(d: Date | string | number | null | undefined): string {
   if (d === null || d === undefined) return '—';
-  return toDate(d).toLocaleString(undefined, DATETIME_OPTIONS);
+  return toDate(d).toLocaleString(DISPLAY_LOCALE, DATETIME_OPTIONS);
 }
 
 /**
@@ -61,7 +70,7 @@ export function kstTodayIsoDate(): string {
 /** 'YYYY. MM. DD.' — KST 고정. */
 export function formatLocalDate(d: Date | string | number | null | undefined): string {
   if (d === null || d === undefined) return '—';
-  return toDate(d).toLocaleDateString(undefined, DATE_OPTIONS);
+  return toDate(d).toLocaleDateString(DISPLAY_LOCALE, DATE_OPTIONS);
 }
 
 /** 'MM. DD. HH:mm' — KST 고정. */
@@ -69,11 +78,11 @@ export function formatLocalMonthDayTime(
   d: Date | string | number | null | undefined,
 ): string {
   if (d === null || d === undefined) return '—';
-  return toDate(d).toLocaleString(undefined, MONTH_DAY_TIME_OPTIONS);
+  return toDate(d).toLocaleString(DISPLAY_LOCALE, MONTH_DAY_TIME_OPTIONS);
 }
 
 // Excel/CSV 다운로드용 — 한국 운영 컨텍스트 고정. Server 전용.
-const KST_DATETIME_FMT = new Intl.DateTimeFormat('ko-KR', {
+const KST_DATETIME_FMT = new Intl.DateTimeFormat(DISPLAY_LOCALE, {
   timeZone: 'Asia/Seoul',
   year: 'numeric',
   month: '2-digit',
