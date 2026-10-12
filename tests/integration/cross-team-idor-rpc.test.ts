@@ -777,13 +777,10 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, kind: 'fieldwork' },
   },
   // 종류를 바꿔 넣어도 같은 관문이다 — 클라이언트 링크의 관리도 타 팀 설문에서는 NOT_FOUND.
-  'workspace.accessLinks.setClientTabs': {
+  'workspace.accessLinks.setClientTab': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: {
-      surveyId: S,
-      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: false },
-    },
+    input: { surveyId: S, tab: 'overview', enabled: true },
   },
 
   // ── 소유권 이전 ─────────────────────────────────────────────────────────

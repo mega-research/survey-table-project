@@ -9,6 +9,7 @@ import { isUniqueViolation } from '@/lib/pg-error';
 import {
   type AccessLinkKind,
   normalizeSurveyGuestTabs,
+  type SurveyGuestTab,
   type SurveyGuestTabs,
 } from '@/shared/contracts/workspace';
 import type { AccessLinkView } from '@/shared/contracts/workspace-io';
@@ -161,27 +162,55 @@ export async function resetAccessLinkPassword(input: {
 }
 
 /**
- * 클라이언트 링크의 현황 탭 저장 (ADR-0029).
+ * 클라이언트 링크의 현황 탭 하나를 켜거나 끈다 (ADR-0029).
  *
  * **WHERE 가 클라이언트 종류로 못 박혀 있다.** 이 함수는 종류를 받지 않는다 — 외주 링크에는
  * 탭 축이 없고, 종류를 인자로 열면 호출부의 실수 하나가 외주 링크에 값을 쓰려다 0134 의 CHECK
  * 에 걸려 500 이 된다. 클라이언트 링크가 없으면 NotFound 다(외주 링크만 있는 설문 포함).
  *
+ * ## 행을 잠그고 한 칸만 고친다
+ *
+ * 요청이 말하는 것은 칩 하나뿐이다(`SetClientLinkTabInput` 주석). 나머지 셋은 **잠근 행에서**
+ * 읽는다 — 요청자의 화면이 얼마나 낡았든 그 사람이 모르는 칩은 지금 DB 에 있는 값 그대로
+ * 남는다. 잠금(`FOR UPDATE`)이 없으면 읽고-고쳐-쓰기가 겹쳐 서로 다른 칩의 동시 저장 중
+ * 하나가 사라진다. 잠금을 기다린 뒤 조건을 다시 보므로(READ COMMITTED), 그 사이 링크가
+ * 종료됐으면 행이 잡히지 않아 NotFound 다.
+ *
+ * SQL 한 줄(`client_tabs || jsonb_build_object(...)`)로 쓰지 않은 이유는 둘이다. 컬럼이 비어
+ * 있으면 기본값(응답 현황 하나)이라 빈 자리에 칩 하나만 얹으면 나머지 키가 없는 객체가 되고,
+ * 정규화가 그것을 false 로 읽어 **응답 현황이 조용히 꺼진다** — 기본값을 SQL 에 한 벌 더
+ * 적어야 한다. 그리고 jsonb 문서를 raw SQL 에 바인딩하면 드라이버가 이중 인코딩한다(주의사항
+ * 13). 정규화 함수 하나를 거치는 쪽이 두 문제를 함께 없앤다.
+ *
  * `updatedAt` 만 올리고 `passwordUpdatedAt` 은 건드리지 않는다 — 탭을 바꾼다고 선 세션이
  * 끊기면 안 된다. 바뀐 탭은 클라이언트의 다음 요청부터 반영된다(세션 판정이 매 요청 이 행을
  * 읽는다 — 쿠키에 탭을 싣지 않는 이유다).
  */
-export async function setClientLinkTabs(input: {
+export async function setClientLinkTab(input: {
   surveyId: string;
-  tabs: SurveyGuestTabs;
+  tab: SurveyGuestTab;
+  enabled: boolean;
 }): Promise<AccessLinkView> {
-  const [row] = await db
-    .update(surveyAccessLinks)
-    .set({ clientTabs: input.tabs, updatedAt: new Date() })
-    .where(activeLink(input.surveyId, 'client'))
-    .returning(VIEW_COLUMNS);
-  if (!row) throw new AccessLinkNotFoundError();
-  return toView(row);
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ id: surveyAccessLinks.id, clientTabs: surveyAccessLinks.clientTabs })
+      .from(surveyAccessLinks)
+      .where(activeLink(input.surveyId, 'client'))
+      .for('update');
+    if (!current) throw new AccessLinkNotFoundError();
+
+    const clientTabs: SurveyGuestTabs = {
+      ...normalizeSurveyGuestTabs(current.clientTabs),
+      [input.tab]: input.enabled,
+    };
+    const [row] = await tx
+      .update(surveyAccessLinks)
+      .set({ clientTabs, updatedAt: new Date() })
+      .where(eq(surveyAccessLinks.id, current.id))
+      .returning(VIEW_COLUMNS);
+    if (!row) throw new AccessLinkNotFoundError();
+    return toView(row);
+  });
 }
 
 /**

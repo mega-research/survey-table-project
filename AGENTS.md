@@ -1380,8 +1380,11 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
     (`CLIENT_LINK_CAPS`, 상수는 따로 — 두 모델의 수명이 다르다) 여기 없는 것이 「항상 차단」의
     정본이다. 탭 화이트리스트(`client_tabs`, 어휘·기본값·정규화는 `SurveyGuestTabs` 그대로)는
     capability 가 아니라 별도 축이라 **전부 켜도 열은 늘지 않는다**. 탭 저장은
-    `accessLinks.setClientTabs`(`survey.manageAccess`, 종류를 받지 않는다 — 서비스 WHERE 가
-    클라이언트로 못 박혀 있다).
+    `accessLinks.setClientTab`(`survey.manageAccess`, 종류를 받지 않는다 — 서비스 WHERE 가
+    클라이언트로 못 박혀 있다). **칩 하나와 그 값만 받는다** — 네 값을 통째로 받으면 화면이
+    낡은 연구원의 저장이 남이 방금 끈 탭을 되살린다(넓어지는 쪽으로 조용히 틀린다, 2026-10-12
+    리뷰). 서비스가 행을 `FOR UPDATE` 로 잠그고 나머지 셋을 잠근 행에서 읽는다. 옛 게스트
+    계정의 탭 저장은 통째로 받는 모양 그대로다(입구가 닫힌 철거 대상이라 고치지 않았다).
   - **닫히는 조건이 다르다** — 아래 「닫힘 표」.
   - **입구가 조사 이름을 받지 않는다.** 토큰만 가진 사람에게 무슨 조사인지 알려 줄 이유가 없다.
     그리지 않는 것이 아니라 판정 코어가 돌려주는 모양(`ClientLinkEntry`)에 이름이 없다 — RSC

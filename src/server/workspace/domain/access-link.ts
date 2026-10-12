@@ -5,8 +5,8 @@ import {
   ACCESS_LINK_TOKEN_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MIN_LENGTH,
   accessLinkKindValues,
+  surveyGuestTabValues,
 } from '@/shared/contracts/workspace';
-import { SurveyGuestTabsSchema } from '@/shared/contracts/workspace-io';
 
 /**
  * 외주 실사 링크의 순수 규칙 — 주소 토큰과 공유 비밀번호 (ADR-0026).
@@ -124,14 +124,27 @@ export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswor
  * 종류를 입력으로 열어 두면 「외주 링크에 탭을 저장했는데 아무 일도 없는」 요청이 생긴다 —
  * 표면 자체를 한 종류로 못 박는다. DB 의 CHECK 도 같은 사실을 지킨다(0134).
  *
- * 네 값을 통째로 받는다(부분 갱신이 아니다) — 게스트 계정의 탭 저장과 같은 모양이다. 일부만
- * 받으면 두 사람이 다른 칩을 동시에 누를 때 한쪽의 저장이 다른 쪽을 옛 값으로 되돌린다.
+ * ## 칩 하나와 그 값만 받는다 — 네 값을 통째로 받지 않는다
+ *
+ * 통째로 받으면 **화면이 낡은 사람의 저장이 남의 변경을 되돌린다.** 두 연구원이 초대 모달을
+ * 열어 둔 채 A 가 「조사 대상」을 끄고 B 가 「쿼터 현황」을 켜면, B 의 화면에 남아 있던
+ * `조사 대상=true` 가 함께 실려 와 A 가 닫은 화면이 고객사에게 다시 열린다. 넓어지는 쪽으로
+ * 조용히 틀린다. 처음에는 반대로 적혀 있었다(「일부만 받으면 한쪽의 저장이 다른 쪽을
+ * 되돌린다」) — 틀린 추론이었고 2026-10-12 리뷰가 잡았다. 요청이 말하는 것이 「이 칩을 이
+ * 값으로」뿐이면 요청자가 모르는 칩은 요청에 실릴 길이 없다.
+ *
+ * `enabled` 를 토글이 아니라 **값**으로 받는 것도 같은 이유다. 「뒤집어라」는 지금 값을
+ * 전제하므로 낡은 화면에서 누르면 뜻이 반대가 된다 — 꺼진 줄 알고 켜려던 것이 끄기가 된다.
+ *
+ * 옛 게스트 계정의 탭 저장(`workspace.guests`)은 통째로 받는 모양 그대로다. 그 화면은 입구가
+ * 닫혀 있고(ADR-0029) 철거 대상이라 고치지 않았다 — 되살린다면 같은 문제를 그대로 갖는다.
  */
-export const SetClientLinkTabsInput = z.object({
+export const SetClientLinkTabInput = z.object({
   surveyId: z.uuid(),
-  tabs: SurveyGuestTabsSchema,
+  tab: z.enum(surveyGuestTabValues),
+  enabled: z.boolean(),
 });
-export type SetClientLinkTabsInput = z.infer<typeof SetClientLinkTabsInput>;
+export type SetClientLinkTabInput = z.infer<typeof SetClientLinkTabInput>;
 
 /**
  * 링크 세션 표면의 입력 — **외주가 보내는 것**이라 두 칸이 전부다.

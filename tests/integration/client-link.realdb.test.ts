@@ -42,6 +42,7 @@ import { setClosed } from '@/server/operations/services/control';
 import { router } from '@/server/router';
 import { loadSurveyAccess } from '@/server/survey-access';
 import { accessLinks } from '@/server/workspace/procedures/access-links';
+import { surveyGuestTabValues, type SurveyGuestTabs } from '@/shared/contracts/workspace';
 import { SCOPED_INPUTS, SCOPED_PATHS } from '@tests/helpers/scoped-surface-inputs';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
@@ -75,6 +76,18 @@ const admin = createRouterClient(
 
 function cookieHeaders(...cookies: Array<{ name: string; value: string }>): Headers {
   return new Headers({ cookie: cookies.map((c) => `${c.name}=${c.value}`).join('; ') });
+}
+
+/**
+ * 탭 구성을 통째로 맞춘다 — 테스트 편의다.
+ *
+ * 저장 표면은 칩 하나씩만 받는다(낡은 화면의 저장이 남의 변경을 되돌리지 않게). 여기서는
+ * 「이 구성일 때 무엇이 열리는가」를 묻는 것이 목적이라 네 칩을 차례로 맞춘다.
+ */
+async function setTabs(target: SurveyGuestTabs): Promise<void> {
+  for (const tab of surveyGuestTabValues) {
+    await admin.accessLinks.setClientTab({ surveyId, tab, enabled: target[tab] });
+  }
 }
 
 /** 클라이언트 링크를 발급하고 접속까지 마친 세션 하나. */
@@ -390,13 +403,13 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
     const headers = cookieHeaders(cookie);
     const widened = { overview: true, progressReport: true, contactsMasked: false, quota: true };
 
-    await admin.accessLinks.setClientTabs({ surveyId, tabs: widened });
+    await setTabs(widened);
     const afterWiden = await resolveClientLinkActor(token, headers);
     if (!afterWiden.ok) throw new Error('세션이 서지 않았다');
     expect((await loadSurveyAccess(afterWiden.actor, surveyId)).guestTabs).toEqual(widened);
 
     const narrowed = { overview: false, progressReport: false, contactsMasked: false, quota: false };
-    await admin.accessLinks.setClientTabs({ surveyId, tabs: narrowed });
+    await setTabs(narrowed);
     const afterNarrow = await resolveClientLinkActor(token, headers);
     if (!afterNarrow.ok) throw new Error('세션이 서지 않았다');
     const access = await loadSurveyAccess(afterNarrow.actor, surveyId);

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { AccessLinkKind, SurveyGuestTabs } from '@/shared/contracts/workspace';
+import type { AccessLinkKind, SurveyGuestTab } from '@/shared/contracts/workspace';
 import { client, orpc } from '@/shared/lib/rpc';
 
 import { surveyKeys } from './use-surveys';
@@ -77,9 +77,9 @@ export function useCloseAccessLink() {
  * 네 값을 통째로 보낸다. 칩 하나만 보내면 두 사람이 다른 칩을 동시에 누를 때 한쪽의 저장이
  * 다른 쪽을 옛 값으로 되돌린다.
  */
-export function useSetClientLinkTabs() {
-  return useLinkMutation((input: { surveyId: string; tabs: SurveyGuestTabs }) =>
-    client.workspace.accessLinks.setClientTabs(input),
+export function useSetClientLinkTab() {
+  return useLinkMutation((input: { surveyId: string; tab: SurveyGuestTab; enabled: boolean }) =>
+    client.workspace.accessLinks.setClientTab(input),
   );
 }
 

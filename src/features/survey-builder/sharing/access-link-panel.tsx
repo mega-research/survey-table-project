@@ -20,7 +20,7 @@ import {
   useIssueAccessLink,
   useResetAccessLinkPassword,
   useRevealAccessLinkPassword,
-  useSetClientLinkTabs,
+  useSetClientLinkTab,
   useSurveyAccessLink,
 } from '../queries/use-survey-access-link';
 
@@ -105,13 +105,13 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   const reset = useResetAccessLinkPassword();
   const reveal = useRevealAccessLinkPassword();
   const close = useCloseAccessLink();
-  const setTabs = useSetClientLinkTabs();
+  const setTab = useSetClientLinkTab();
   const busy =
     issue.isPending ||
     reset.isPending ||
     reveal.isPending ||
     close.isPending ||
-    setTabs.isPending;
+    setTab.isPending;
 
   async function run(action: () => Promise<string | null>) {
     setError(null);
@@ -244,8 +244,10 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
             onToggle={async (tab) => {
               setError(null);
               try {
-                // 네 값을 통째로 보낸다 — 칩 하나만 보내면 동시에 누른 다른 사람의 저장을 되돌린다.
-                await setTabs.mutateAsync({ surveyId, tabs: { ...tabs, [tab]: !tabs[tab] } });
+                // 누른 칩과 그 값만 보낸다. 네 값을 통째로 보내면 이 화면이 낡았을 때 다른
+                // 사람이 방금 끈 칩을 되살린다. 응답이 저장 뒤의 전체 모습이라 캐시가 그것으로
+                // 갈리고, 남이 바꾼 칩도 그때 함께 보인다.
+                await setTab.mutateAsync({ surveyId, tab, enabled: !tabs[tab] });
               } catch (err) {
                 setError(getErrorMessage(err, copy.failure));
               }

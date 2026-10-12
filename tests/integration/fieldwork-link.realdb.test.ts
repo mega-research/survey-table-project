@@ -249,8 +249,11 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       await client.accessLinks.issue({ surveyId, kind: 'client' });
       const tabs = { overview: true, progressReport: true, contactsMasked: false, quota: true };
 
-      await client.accessLinks.setClientTabs({ surveyId, tabs });
+      await client.accessLinks.setClientTab({ surveyId, tab: 'progressReport', enabled: true });
+      const saved = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true });
 
+      // 저장의 응답이 곧 저장 뒤의 전체 모습이다 — 화면이 그것으로 칩을 다시 그린다.
+      expect(saved.clientTabs).toEqual(tabs);
       expect((await client.accessLinks.get({ surveyId, kind: 'client' })).link?.clientTabs).toEqual(tabs);
       const [fieldworkRow] = await db
         .select({ clientTabs: linksTable.clientTabs })
@@ -259,10 +262,78 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       expect(fieldworkRow?.clientTabs).toBeNull();
     });
 
+    /**
+     * 탭 저장은 **칩 하나**를 받는다 — 네 값을 통째로 받지 않는다 (2026-10-12 리뷰).
+     *
+     * 통째로 받던 동안에는 화면이 낡은 사람의 저장이 남의 변경을 되돌렸다. 두 연구원이 초대
+     * 모달을 열어 둔 채 A 가 「조사 대상」을 끄고 B 가 「쿼터 현황」을 켜면, B 의 화면에 남아
+     * 있던 `조사 대상=true` 가 함께 저장되어 A 가 닫은 화면이 고객사에게 다시 열린다. 넓어지는
+     * 쪽으로 조용히 틀리고, B 의 화면은 자기가 보던 것과 같아 아무도 알아채지 못한다.
+     */
+    it('다른 칩을 바꾸는 저장이 먼저 끈 탭을 되살리지 않는다', async () => {
+      await client.accessLinks.issue({ surveyId, kind: 'client' });
+      await client.accessLinks.setClientTab({ surveyId, tab: 'contactsMasked', enabled: true });
+      // 여기까지가 두 사람이 모달을 연 시점의 모습이다 — 둘 다 「조사 대상」이 켜진 것을 본다.
+
+      await client.accessLinks.setClientTab({ surveyId, tab: 'contactsMasked', enabled: false }); // A
+      const afterB = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true }); // B
+
+      expect(afterB.clientTabs).toEqual({
+        overview: true,
+        progressReport: false,
+        contactsMasked: false,
+        quota: true,
+      });
+    });
+
+    it('서로 다른 칩의 동시 저장이 둘 다 남는다', async () => {
+      // 읽고-고쳐-쓰기가 잠금 없이 돌면 한쪽이 다른 쪽을 덮는다. 행 잠금이 줄을 세운다.
+      await client.accessLinks.issue({ surveyId, kind: 'client' });
+      for (let round = 0; round < 5; round += 1) {
+        await Promise.all([
+          client.accessLinks.setClientTab({ surveyId, tab: 'overview', enabled: false }),
+          client.accessLinks.setClientTab({ surveyId, tab: 'progressReport', enabled: true }),
+          client.accessLinks.setClientTab({ surveyId, tab: 'contactsMasked', enabled: true }),
+          client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true }),
+        ]);
+        expect((await client.accessLinks.get({ surveyId, kind: 'client' })).link?.clientTabs).toEqual({
+          overview: false,
+          progressReport: true,
+          contactsMasked: true,
+          quota: true,
+        });
+        // 다음 회차를 위해 발급 직후 모습으로 되돌린다.
+        await client.accessLinks.setClientTab({ surveyId, tab: 'overview', enabled: true });
+        for (const tab of ['progressReport', 'contactsMasked', 'quota'] as const) {
+          await client.accessLinks.setClientTab({ surveyId, tab, enabled: false });
+        }
+      }
+    });
+
+    it('탭을 한 번도 저장하지 않은 링크에서 칩 하나를 켜도 기본 탭이 남는다', async () => {
+      // 컬럼이 비어 있으면 기본값(응답 현황만)이다. 빈 자리에 칩 하나만 적으면 나머지 키가
+      // 없는 객체가 되고, 정규화가 그것을 false 로 읽어 응답 현황이 조용히 꺼진다.
+      await client.accessLinks.issue({ surveyId, kind: 'client' });
+      const saved = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true });
+      expect(saved.clientTabs).toEqual({
+        overview: true,
+        progressReport: false,
+        contactsMasked: false,
+        quota: true,
+      });
+    });
+
+    it('어휘 밖의 탭은 경계에서 거부된다', async () => {
+      await client.accessLinks.issue({ surveyId, kind: 'client' });
+      await expect(
+        client.accessLinks.setClientTab({ surveyId, tab: 'mail', enabled: true } as never),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
     it('클라이언트 링크가 없으면 탭 저장은 NOT_FOUND 다 — 외주 링크에 저장되지 않는다', async () => {
       const fieldwork = await client.accessLinks.issue({ surveyId, kind: 'fieldwork' });
       await expect(
-        client.accessLinks.setClientTabs({ surveyId, tabs: OVERVIEW_ONLY }),
+        client.accessLinks.setClientTab({ surveyId, tab: 'overview', enabled: true }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
       const [row] = await db
         .select({ clientTabs: linksTable.clientTabs })

@@ -31,7 +31,7 @@ import {
   AccessLinkNotFoundError,
   IssueAccessLinkInput,
   ResetAccessLinkPasswordInput,
-  SetClientLinkTabsInput,
+  SetClientLinkTabInput,
   SurveyAccessLinkInput,
 } from '../domain/access-link';
 import * as svc from '../services/access-links';
@@ -115,18 +115,19 @@ const revealPassword = authed
   });
 
 /**
- * 클라이언트 링크의 현황 탭 저장 (ADR-0029).
+ * 클라이언트 링크의 현황 탭 하나를 켜거나 끈다 (ADR-0029).
  *
+ * 받는 것은 칩 하나와 그 값이다 — 응답은 저장 뒤의 전체 모습이라 화면이 그것으로 다시 그린다.
  * 관문이 발급과 같은 `survey.manageAccess` 인 것이 요점이다. 탭을 켜는 일은 이미 나간 링크의
  * 범위를 넓히는 일이라 — 조사 대상(마스킹)·쿼터가 외부에 열린다 — 발급할 자격이 있는 사람만
  * 해야 한다. 게스트 계정의 탭 저장이 같은 이유로 같은 자격을 요구했다.
  */
-const setClientTabs = authed
-  .input(SetClientLinkTabsInput)
+const setClientTab = authed
+  .input(SetClientLinkTabInput)
   .output(AccessLinkView)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    return svc.setClientLinkTabs(input).catch(rethrowLinkError);
+    return svc.setClientLinkTab(input).catch(rethrowLinkError);
   });
 
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
@@ -141,4 +142,4 @@ const close = authed
     return { success: true } as const;
   });
 
-export const accessLinks = { get, issue, resetPassword, revealPassword, setClientTabs, close };
+export const accessLinks = { get, issue, resetPassword, revealPassword, setClientTab, close };

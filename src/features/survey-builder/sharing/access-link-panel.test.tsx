@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessLinkKind } from '@/shared/contracts/workspace';
 import type { SurveyAccessLinkOutput } from '@/shared/contracts/workspace-io';
 
-const { state, issue, setTabs, close } = vi.hoisted(() => ({
+const { state, issue, setTab, close } = vi.hoisted(() => ({
   state: { data: null as unknown },
   issue: vi.fn(),
-  setTabs: vi.fn(),
+  setTab: vi.fn(),
   close: vi.fn(),
 }));
 
@@ -22,7 +22,7 @@ vi.mock('../queries/use-survey-access-link', () => ({
   useResetAccessLinkPassword: () => mutation(vi.fn()),
   useRevealAccessLinkPassword: () => mutation(vi.fn()),
   useCloseAccessLink: () => mutation(close),
-  useSetClientLinkTabs: () => mutation(setTabs),
+  useSetClientLinkTab: () => mutation(setTab),
 }));
 
 import { AccessLinkPanel } from './access-link-panel';
@@ -55,7 +55,7 @@ describe('AccessLinkPanel', () => {
     vi.clearAllMocks();
     state.data = null;
     issue.mockResolvedValue({ link: linkState('client').link, password: 'GeneratedPw1' });
-    setTabs.mockResolvedValue(linkState('client').link);
+    setTab.mockResolvedValue(linkState('client').link);
   });
 
   it('발급은 자기 종류로 보낸다 — 다른 종류의 링크를 만들지 않는다', async () => {
@@ -91,15 +91,32 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByRole('checkbox', { name: '쿼터 현황' })).not.toBeChecked();
   });
 
-  it('칩을 누르면 네 값을 통째로 저장한다', async () => {
+  /**
+   * 누른 칩과 그 값만 보낸다 — 네 값을 통째로 보내지 않는다 (2026-10-12 리뷰).
+   *
+   * 통째로 보내면 이 화면이 낡았을 때 다른 사람이 방금 끈 칩이 요청에 실려 되살아난다.
+   * 요청에 **다른 칩이 실리지 않는 것**까지 본다 — 그것이 이 계약의 전부다.
+   */
+  it('칩을 누르면 그 칩과 값만 저장한다 — 다른 칩은 요청에 실리지 않는다', async () => {
     state.data = linkState('client');
     const user = userEvent.setup();
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
 
     await user.click(screen.getByRole('checkbox', { name: '쿼터 현황' }));
 
+    await waitFor(() => expect(setTab).toHaveBeenCalledTimes(1));
+    expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'quota', enabled: true });
+  });
+
+  it('켜진 칩을 누르면 끄기로 나간다 — 토글이 아니라 값이다', async () => {
+    state.data = linkState('client');
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    await user.click(screen.getByRole('checkbox', { name: '응답 현황' }));
+
     await waitFor(() =>
-      expect(setTabs).toHaveBeenCalledWith({ surveyId: 's-1', tabs: { ...TABS, quota: true } }),
+      expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'overview', enabled: false }),
     );
   });
 

@@ -31,7 +31,7 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
-import type { SurveyGuestTabs } from '@/shared/contracts/workspace';
+import { surveyGuestTabValues, type SurveyGuestTabs } from '@/shared/contracts/workspace';
 
 const requestState = vi.hoisted(() => ({ headers: new Headers() }));
 
@@ -119,6 +119,18 @@ async function seedSurvey(title: string): Promise<string> {
   return id;
 }
 
+/**
+ * 탭 구성을 통째로 맞춘다 — 테스트 편의다.
+ *
+ * 저장 표면은 칩 하나씩만 받는다(낡은 화면의 저장이 남의 변경을 되돌리지 않게). 여기서는
+ * 「이 구성일 때 무엇이 열리는가」를 묻는 것이 목적이라 네 칩을 차례로 맞춘다.
+ */
+async function setTabs(target: SurveyGuestTabs): Promise<void> {
+  for (const tab of surveyGuestTabValues) {
+    await admin.accessLinks.setClientTab({ surveyId, tab, enabled: target[tab] });
+  }
+}
+
 /** 클라이언트 링크를 발급하고, 그 세션의 쿠키를 요청에 실은 상태로 만든다. */
 async function issueAndEnter(target = surveyId) {
   const { link } = await admin.accessLinks.issue({
@@ -188,10 +200,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
 
     it('설문지 미리보기는 화이트리스트 밖이라 언제나 열린다 — 탭을 전부 꺼도', async () => {
       const { token } = await issueAndEnter();
-      await admin.accessLinks.setClientTabs({
-        surveyId,
-        tabs: { overview: false, progressReport: false, contactsMasked: false, quota: false },
-      });
+      await setTabs({ overview: false, progressReport: false, contactsMasked: false, quota: false });
       await expect(assertClientLinkPageAccess(token)).resolves.toMatchObject({ surveyId });
       await expect(assertClientLinkPageAccess(token, 'overview')).rejects.toThrow(
         'NEXT_NOT_FOUND',
@@ -206,15 +215,12 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       const { token } = await issueAndEnter();
       await expect(assertClientLinkPageAccess(token, 'quota')).rejects.toThrow('NEXT_NOT_FOUND');
 
-      await admin.accessLinks.setClientTabs({
-        surveyId,
-        tabs: { ...OVERVIEW_ONLY, quota: true },
-      });
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true });
       await expect(assertClientLinkPageAccess(token, 'quota')).resolves.toMatchObject({
         tabs: { quota: true },
       });
 
-      await admin.accessLinks.setClientTabs({ surveyId, tabs: OVERVIEW_ONLY });
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: false });
       await expect(assertClientLinkPageAccess(token, 'quota')).rejects.toThrow('NEXT_NOT_FOUND');
     });
   });
@@ -392,10 +398,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
 
     it('관문을 지난 화면이 읽는 표에 원문·암호문·초대 토큰·컨택 id·메일 열이 없다', async () => {
       const { token } = await issueAndEnter();
-      await admin.accessLinks.setClientTabs({
-        surveyId,
-        tabs: { ...OVERVIEW_ONLY, contactsMasked: true },
-      });
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'contactsMasked', enabled: true });
       const viewer = await assertClientLinkPageAccess(token, 'contactsMasked');
       const [stored] = await db
         .select({ inviteToken: contactTargetsTable.inviteToken })
