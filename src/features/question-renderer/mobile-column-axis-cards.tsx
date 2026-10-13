@@ -6,7 +6,10 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
-import { buildColumnAxisCards } from '@/features/question-renderer/utils/column-axis-cards';
+import {
+  buildColumnAxisCards,
+  withRowTitleAsCheckLabel,
+} from '@/features/question-renderer/utils/column-axis-cards';
 import { overrideCellOptionsColumnsForCard } from '@/features/question-renderer/utils/mobile-card-options';
 import {
   buildRadioGroupBuckets,
@@ -89,7 +92,9 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
         >
           <div className="space-y-3 px-1 py-1">
             {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells }, index) => {
-              const cell = overrideCellOptionsColumnsForCard(sourceCell);
+              // 글자 없는 체크박스 하나짜리 칸은 행 제목을 그 체크의 라벨로 옆에 붙인다(☐ 행 제목).
+              const checkWithTitle = withRowTitleAsCheckLabel(sourceCell, label);
+              const cell = overrideCellOptionsColumnsForCard(checkWithTitle ?? sourceCell);
               const invalid = errorCellIds?.has(cell.id) === true;
               // 상위 구분(내부 R&D · 외부 R&D)이 바뀌는 자리에 소제목을 세운다. 구분 없는 행(합계)으로
               // 넘어가면 선만 그어 앞 구분에 딸린 것처럼 보이지 않게 한다.
@@ -120,7 +125,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                   )}
                   {groupChanged && !groupKey && <div className="border-t border-gray-200" />}
                   <div data-cell-id={cell.id} className="space-y-1">
-                    {label && (
+                    {label && !checkWithTitle && (
                       <p className="text-sm font-medium text-gray-900">
                         <CellText
                           text={substituteTokens(label, attrs, quotes)}

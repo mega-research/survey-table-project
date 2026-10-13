@@ -150,3 +150,25 @@ export function buildColumnAxisCards(input: {
   }
   return cards;
 }
+
+/**
+ * 행 제목을 체크 칸의 보기 라벨로 옮긴 셀 — 「행 제목 한 줄 + 그 아래 글자 없는 체크박스 하나」를
+ * 「☐ 행 제목」 한 줄로 그리기 위한 것이다. 해당하지 않으면 null(종전대로 제목 위 · 컨트롤 아래).
+ *
+ * 대상은 **보기가 하나뿐이고 그 보기에 글자가 없는 체크 칸**이다 — 기관 × 연도 표처럼 행 제목이 곧
+ * 그 체크의 뜻인 칸. 보기에 글자가 있거나 여럿이면 행 제목은 묶음 이름이라 위에 둬야 한다.
+ * 라벨이 되면 눌러서 체크할 수 있고, 줄바꿈(좁은 PC 열에 맞춘 것)은 띄어쓰기로 편다.
+ *
+ * 그리는 자리만 바꾼다 — 원본 셀·응답값·보기 id 는 그대로다. 게이팅으로 닫힌 칸은 컨트롤과 함께
+ * 이 라벨도 그려지지 않는다(라벨이 컨트롤의 일부가 됐으므로).
+ */
+export function withRowTitleAsCheckLabel(cell: TableCell, rowTitle: string): TableCell | null {
+  if (cell.type !== 'checkbox') return null;
+  const options = cell.checkboxOptions ?? [];
+  const only = options[0];
+  if (options.length !== 1 || !only) return null;
+  if ((only.label ?? '').trim() !== '' || (cell.content ?? '').trim() !== '') return null;
+  const label = normalize(rowTitle);
+  if (!label) return null;
+  return { ...cell, checkboxOptions: [{ ...only, label }] };
+}
