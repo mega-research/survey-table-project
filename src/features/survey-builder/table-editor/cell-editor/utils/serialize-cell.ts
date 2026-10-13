@@ -105,6 +105,8 @@ export interface CellFormState {
   inputTextAlign: NonNullable<TableCell['inputTextAlign']> | 'inherit';
   /** 오른쪽 세로선 숨김 (TableCell.hideRightBorder) */
   hideRightBorder: boolean;
+  /** 상세 기재 입력칸을 표 아래에 (TableCell.optionTextBelowTable) — 체크박스·라디오·선택 칸 */
+  optionTextBelowTable: boolean;
   isMergeEnabled: boolean;
   rowspan: number | '';
   colspan: number | '';
@@ -167,6 +169,12 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
 
 // 입력값 가로 정렬 컨트롤을 표시할 셀 타입 — 값이 칸 안에서 채워지는 방향이 의미를 갖는 셀들
 export const INPUT_TEXT_ALIGN_CELL_TYPES = new Set<ContentType>(['input', 'calc']);
+/** 「상세 기재 입력칸을 표 아래에」를 줄 수 있는 칸 — 상세 기재 보기를 가질 수 있는 선택형 칸 */
+export const OPTION_TEXT_BELOW_TABLE_CELL_TYPES = new Set<ContentType>([
+  'checkbox',
+  'radio',
+  'select',
+]);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 /** 필수 응답 가능 셀 타입 — 정의는 셀 의미론(table-cell-semantics)이 소유한다. 호환 재수출. */
@@ -279,6 +287,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     textPosition: cell.textPosition || 'top',
     inputTextAlign: cell.inputTextAlign ?? 'inherit',
     hideRightBorder: cell.hideRightBorder === true,
+    optionTextBelowTable: cell.optionTextBelowTable === true,
     isMergeEnabled:
       (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
     rowspan: cell.rowspan || 1,
@@ -351,6 +360,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     inputAutoGrow: _inputAutoGrow,
     inputWidth: _inputWidth,
     hideRightBorder: _hideRightBorder,
+    optionTextBelowTable: _optionTextBelowTable,
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
     piiEncrypted: _piiEncrypted,
@@ -609,6 +619,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       : {}),
     // 오른쪽 세로선 숨김 — 셀 종류 무관. 끄면 키를 남기지 않는다.
     ...(form.hideRightBorder ? { hideRightBorder: true } : {}),
+    // 상세 기재 입력칸을 표 아래에 — 보기를 가진 칸에만 뜻이 있다. 유형을 바꾸면 키가 떨어진다.
+    ...(form.optionTextBelowTable && OPTION_TEXT_BELOW_TABLE_CELL_TYPES.has(contentType)
+      ? { optionTextBelowTable: true }
+      : {}),
     // 셀 병합 속성 추가
     ...(form.isMergeEnabled && typeof form.rowspan === 'number' && form.rowspan > 1
       ? { rowspan: form.rowspan }

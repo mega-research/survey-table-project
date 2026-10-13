@@ -424,6 +424,13 @@ export interface TableCell {
    * (년 칸 | 월 칸 처럼 입력칸 둘을 나란히 둘 때). 빌더 편집 격자는 셀 경계를 보여야 해서 그대로 그린다.
    */
   hideRightBorder?: boolean;
+  /**
+   * 상세 기재 입력칸을 표 아래에 — 체크박스·라디오·선택 칸의 「기타」 입력칸을 좁은 칸 안이 아니라
+   * 표 아래 한 줄(열 제목 · 행 제목 라벨 + 입력칸)로 그린다. 격자 표(데스크톱·모바일 원본 표)에서만
+   * 옮기고, 모바일 카드는 칸이 넓어 그대로 칸 안에 둔다. 값이 사는 자리(`__optTexts__`)는 같다.
+   * 테이블 유형 문항 전용 — 판정은 question-renderer/utils/option-text-below-table.
+   */
+  optionTextBelowTable?: boolean;
   // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
   choiceGroupId?: string;
   /**

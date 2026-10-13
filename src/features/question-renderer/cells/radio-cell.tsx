@@ -10,15 +10,16 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   isPriorChoice,
   matchesPriorChoice,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
-import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellOptionsContainer } from './cell-options-container';
+import { useOptionTextMovedBelowTable } from './option-text-placement-context';
 import type { InteractiveCellProps } from './types';
 
 /** 라디오 셀 (인터랙티브) */
@@ -36,6 +37,7 @@ export const RadioCell = React.memo(function RadioCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const textInputBelowTable = useOptionTextMovedBelowTable(cell);
   const isPriorOption = (optionKey: string) =>
     priorChoiceValue !== undefined
       ? matchesPriorChoice(priorChoiceValue, optionKey)
@@ -65,9 +67,12 @@ export const RadioCell = React.memo(function RadioCell({
   // 기타 입력란(1d): 선택한 allowTextInput 옵션의 입력란을 옵션 그리드 아래
   // [옵션 라벨 칩 | 풀폭 입력란] 행으로 렌더. 셀 안(footer 슬롯)이므로
   // 테이블 그리드/폭에는 영향 없음.
-  const selectedTextOption = cell.radioOptions.find(
-    (option) => option.allowTextInput && (option.value ?? option.id) === cellResponse,
-  );
+  // 「표 아래에」를 켠 칸은 격자 표가 표 아래 줄로 그린다 — 여기서는 접는다.
+  const selectedTextOption = textInputBelowTable
+    ? undefined
+    : cell.radioOptions.find(
+        (option) => option.allowTextInput && (option.value ?? option.id) === cellResponse,
+      );
   const footer = selectedTextOption ? (
     <OptionTextInputStack
       questionId={questionId}

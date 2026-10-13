@@ -52,6 +52,7 @@ export interface CellFormSetters {
   setInputAutoGrow: (v: boolean) => void;
   setInputWidth: (v: number | '') => void;
   setHideRightBorder: (v: boolean) => void;
+  setOptionTextBelowTable: (v: boolean) => void;
   setInputDefaultValueTemplate: (v: string) => void;
   setInputType: (v: InputType) => void;
   setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
@@ -167,6 +168,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setInputAutoGrow: set('inputAutoGrow'),
       setInputWidth: set('inputWidth'),
       setHideRightBorder: set('hideRightBorder'),
+      setOptionTextBelowTable: set('optionTextBelowTable'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
       setInputType: set('inputType'),
       setInputPiiEncrypted: set('inputPiiEncrypted'),

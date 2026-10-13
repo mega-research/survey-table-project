@@ -498,6 +498,25 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputWidth).toBe('');
   });
 
+  it('상세 기재 입력칸을 표 아래에 — 선택형 칸에서 켰을 때만 키를 남기고, 유형을 바꾸면 떨어진다', () => {
+    const on = buildUpdatedCell({ ...baseForm('checkbox'), optionTextBelowTable: true }, baseCell);
+    expect(on.optionTextBelowTable).toBe(true);
+    expect(cellToFormState(on).optionTextBelowTable).toBe(true);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('checkbox'), optionTextBelowTable: false },
+      { id: 'c1', type: 'checkbox', content: '', optionTextBelowTable: true },
+    );
+    expect(off).not.toHaveProperty('optionTextBelowTable');
+
+    // 입력 칸으로 바꾸면 폼에 켜져 있어도 저장하지 않는다
+    const retyped = buildUpdatedCell(
+      { ...baseForm('input'), optionTextBelowTable: true },
+      { id: 'c1', type: 'checkbox', content: '', optionTextBelowTable: true },
+    );
+    expect(retyped).not.toHaveProperty('optionTextBelowTable');
+  });
+
   it('오른쪽 세로선 숨김은 켰을 때만 hideRightBorder 키를 남기고, 끄면 기존 값도 지운다', () => {
     const on = buildUpdatedCell({ ...baseForm('text'), hideRightBorder: true }, baseCell);
     expect(on.hideRightBorder).toBe(true);

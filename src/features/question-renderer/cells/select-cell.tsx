@@ -10,15 +10,16 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorChoice,
   matchesPriorChoice,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
-import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellContentLayout } from './cell-content-layout';
+import { useOptionTextMovedBelowTable } from './option-text-placement-context';
 import type { InteractiveCellProps } from './types';
 
 /** 드롭다운 셀 (인터랙티브) */
@@ -36,6 +37,7 @@ export const SelectCell = React.memo(function SelectCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const textInputBelowTable = useOptionTextMovedBelowTable(cell);
   const handleSelectChange = useCallback(
     (optionId: string) => {
       onUpdateValue(optionId);
@@ -96,7 +98,8 @@ export const SelectCell = React.memo(function SelectCell({
           <ChevronDown className="pointer-events-none absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>
 
-        {selectedOption?.allowTextInput && (
+        {/* 「표 아래에」를 켠 칸은 격자 표가 표 아래 줄로 그린다 */}
+        {selectedOption?.allowTextInput && !textInputBelowTable && (
           <OptionTextInput questionId={questionId} option={selectedOption} className="w-full" />
         )}
       </div>

@@ -46,6 +46,7 @@ import {
   type ContentType,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
+  OPTION_TEXT_BELOW_TABLE_CELL_TYPES,
   buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
@@ -213,6 +214,7 @@ export function CellContentModal({
     cellMobileOptionsColumns,
     inputDefaultValueTemplate,
     hideRightBorder,
+    optionTextBelowTable,
     cellNumberFormat,
     cellRequired,
     cellRequiredMessage,
@@ -266,6 +268,20 @@ export function CellContentModal({
   // 표-소스 선택형 질문(radio/checkbox + choice_opt)의 다른 셀들은 응답 페이지에서 inert 라
   // 값이 생기지 않는다 — 거기에 토글을 노출하면 켜도 아무 일이 없는 죽은 설정이 된다.
   const showCellAnswerQuote = parentQuestionType === 'table';
+  // 「상세 기재 입력칸을 표 아래에」 — 표 문항의 격자 표만 표 아래 줄을 그린다(보기·순위 문항의
+  // 내장 표는 다른 렌더러). 상세 기재 보기가 없으면 옮길 입력칸이 없어 스위치를 숨긴다.
+  const cellTextOptions =
+    contentType === 'checkbox'
+      ? checkboxOptions
+      : contentType === 'radio'
+        ? radioOptions
+        : contentType === 'select'
+          ? selectOptions
+          : [];
+  const showOptionTextBelowTable =
+    parentQuestionType === 'table' &&
+    OPTION_TEXT_BELOW_TABLE_CELL_TYPES.has(contentType) &&
+    (optionTextBelowTable || cellTextOptions.some((option) => option.allowTextInput));
   const showContentMobileDisplay = MOBILE_DISPLAY_CELL_TYPES.has(contentType);
   const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
@@ -281,6 +297,7 @@ export function CellContentModal({
     setCellOptionsColumns,
     setCellMobileOptionsColumns,
     setHideRightBorder,
+    setOptionTextBelowTable,
     setCellNumberFormat,
     setCellRequired,
     setCellRequiredMessage,
@@ -1098,6 +1115,32 @@ export function CellContentModal({
               </div>
             </div>
           )}
+
+        {/* 상세 기재 입력칸을 표 아래에 — 좁은 칸의 「기타」 입력칸을 표 아래 한 줄로 옮긴다 */}
+        {showOptionTextBelowTable && (
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label
+                  htmlFor="option-text-below-table"
+                  className="text-sm font-medium text-gray-900"
+                >
+                  상세 기재 입력칸을 표 아래에
+                </Label>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  「기타」처럼 상세 기재를 받는 보기를 고르면 입력칸을 칸 안이 아니라 표 아래 한
+                  줄로 보입니다. 칸이 좁아 입력칸이 잘릴 때 씁니다. 어느 칸의 입력인지는 행 제목 ·
+                  열 제목으로 표시합니다. 모바일 카드에서는 그대로 칸 안에 나옵니다.
+                </p>
+              </div>
+              <Switch
+                id="option-text-below-table"
+                checked={optionTextBelowTable}
+                onCheckedChange={setOptionTextBelowTable}
+              />
+            </div>
+          </div>
+        )}
 
         {/* 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 다음 셀과 한 칸처럼 이어 보인다 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
