@@ -116,6 +116,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   const selectedStrip = hasHeaderBands ? selectedBand : selectedIndex >= 0 ? selectedIndex : null;
   const bandTones = resolveScaleBarBandTones(stripBands, count);
   const hasAnchors = left !== undefined || middle !== undefined || right !== undefined;
+  const hasLegend = model.cells.some((cell) => cell.legendLabel !== undefined);
   const idPrefix = inputIdScope ? `${inputIdScope}-` : '';
   const inputIdOf = (cellId: string) => `${idPrefix}${questionId}-${cellId}-bar`;
   const radioGroupRef = useRef<HTMLDivElement>(null);
@@ -187,7 +188,9 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
               inputName={`${idPrefix}${questionId}-${barId}-bar`}
               barText={text(barCell.text)}
               inCellLabel={barCell.inCellLabel ? text(barCell.inCellLabel) : undefined}
-              bandLabel={bandLabelOf(barCell)}
+              bandLabel={
+                bandLabelOf(barCell) || (barCell.legendLabel ? text(barCell.legendLabel) : '')
+              }
               first={index === 0}
               checked={barCell.cellId === selectedCellId}
               disabled={disabledCellIds?.has(barCell.cellId) ?? false}
@@ -234,6 +237,32 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
               <span className="absolute right-0 whitespace-nowrap">{text(right)}</span>
             )}
           </div>
+        )}
+        {hasLegend && (
+          // 칸마다 이름이 따로 있는 6칸 이상 척도 — 칸 폭에 이름이 안 들어가 막대 아래에 목록으로 적는다.
+          // 줄을 눌러도 그 칸이 골라진다(막대 칸의 라디오에 묶인 라벨). 읽기는 막대 칸이 이미 한다.
+          <ul data-testid="scale-bar-legend" className="mt-2 space-y-0.5">
+            {model.cells.map((barCell) => {
+              const checked = barCell.cellId === selectedCellId;
+              const disabled = disabledCellIds?.has(barCell.cellId) ?? false;
+              return (
+                <li key={barCell.cellId}>
+                  <label
+                    htmlFor={inputIdOf(barCell.cellId)}
+                    aria-hidden
+                    className={cn(
+                      'flex cursor-pointer items-start gap-1.5 rounded px-1 py-0.5 text-[13px] leading-snug',
+                      checked ? 'bg-blue-50 font-semibold text-blue-800' : 'text-gray-700',
+                      disabled && 'cursor-default opacity-50',
+                    )}
+                  >
+                    <span className="shrink-0">{text(barCell.text)}</span>
+                    <span className="min-w-0 break-keep">{text(barCell.legendLabel ?? '')}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>
