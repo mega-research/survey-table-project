@@ -16,6 +16,7 @@ import {
 import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { PlaceholderField } from '@/features/survey-builder/placeholder-field';
 import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
 import { isInputFormat } from '@/types/input-type';
@@ -265,14 +266,17 @@ export function InputCellTab({
         <Label htmlFor="input-placeholder" className="text-sm font-medium">
           안내 문구 (Placeholder)
         </Label>
-        <Input
+        {/* 응답 화면(input-cell)과 같은 판정 — 평문 모드에서 줄 수 2 이상이거나 높이 늘리기를 켠 칸이 여러 줄이다 */}
+        <PlaceholderField
           id="input-placeholder"
           value={inputPlaceholder}
-          onChange={(e) => setInputPlaceholder(e.target.value)}
-          placeholder="예: 이름을 입력하세요"
+          onChange={setInputPlaceholder}
+          multiline={
+            isPlainTextInput({ type: 'text', inputType }) &&
+            ((typeof inputRows === 'number' && inputRows >= 2) || inputAutoGrow === true)
+          }
           className="w-full"
         />
-        <p className="text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
       </div>
 
       <div className="space-y-2">
