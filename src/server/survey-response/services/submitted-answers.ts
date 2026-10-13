@@ -352,7 +352,7 @@ export async function sanitizeSubmittedResponses(
  * 정제 (2/3) — prefill 강제 복원.
  *
  * defaultValueTemplate 이 있는 질문의 응답값은 contact_targets.attrs 로 치환한 expected 와
- * 일치해야 한다. 클라이언트가 disabled 입력을 우회 조작해도 서버가 expected 로 되돌린다.
+ * 일치해야 한다(치환 결과가 빈 문항은 잠기지 않으므로 대상이 아니다). 클라이언트가 disabled 입력을 우회 조작해도 서버가 expected 로 되돌린다.
  * 오염 가드를 통과한 값에만 적용한다 — 원본으로 되돌리면 가드가 무력해진다.
  */
 export async function restorePrefillAnswers(
@@ -382,6 +382,9 @@ export async function restorePrefillAnswers(
     for (const q of prefillQuestions) {
       if (!q.template?.trim()) continue;
       const expected = substituteTokens(q.template, attrs);
+      // 명단 값이 비면 잠긴 문항이 아니다 — 응답자가 직접 적은 값이므로 그대로 둔다
+      // (화면의 잠금 판정 `resolveTokenPrefill` 과 같은 식).
+      if (expected.trim().length === 0) continue;
       // 제출된(=필터 통과한) 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill
       // 질문은 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
       if (!(q.id in validated)) continue;

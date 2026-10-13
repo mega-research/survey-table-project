@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
@@ -126,6 +127,7 @@ export function OptionTextInput({
   // 응답 품질 위반(표 input 셀 전용) — 평문 모드·이월 면제 판정은 검증 쪽 함수가 쥔다
   // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
   const focus = useFieldFocus();
+  const attrs = useContactAttrs();
   const qualityViolation = focus.focused
     ? null
     : resolveCellTextQualityViolation(
@@ -135,6 +137,7 @@ export function OptionTextInput({
           textValidation: option.textValidation,
         },
         rawValue,
+        attrs,
         priorOptionText(priorAnswersForFormat, questionId, option.id),
       );
 

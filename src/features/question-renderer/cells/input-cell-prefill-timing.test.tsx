@@ -40,6 +40,38 @@ describe('InputCell prefill·emptyDefault 쓰기 횟수', () => {
     expect(first).toHaveBeenCalledTimes(1);
   });
 
+  it('명단 값이 빈 prefill 칸은 잠그지 않는다 — 응답자가 직접 적고, 적은 값을 지우지 않는다', () => {
+    const cell = {
+      id: 'c-prefill-empty',
+      type: 'input',
+      content: '',
+      defaultValueTemplate: '{{사업자등록번호}}',
+    } as unknown as TableCell;
+    const onUpdateValue = vi.fn();
+    // 명단(회사)에는 이 칸이 읽는 키가 없다
+    const { container } = render(renderCell(cell, '123-45-67891', onUpdateValue));
+    const input = container.querySelector('input');
+    expect(input).not.toBeNull();
+    expect(input?.disabled).toBe(false);
+    expect(input?.hasAttribute('data-prefilled')).toBe(false);
+    expect(input?.value).toBe('123-45-67891');
+    // 빈 프리필 값으로 응답자의 입력을 덮어쓰지 않는다
+    expect(onUpdateValue).not.toHaveBeenCalled();
+  });
+
+  it('명단 값이 있는 prefill 칸은 종전대로 잠근다', () => {
+    const cell = {
+      id: 'c-prefill-locked',
+      type: 'input',
+      content: '',
+      defaultValueTemplate: '{{회사}}',
+    } as unknown as TableCell;
+    const { container } = render(renderCell(cell, '메가리서치', vi.fn()));
+    const input = container.querySelector('input');
+    expect(input?.disabled).toBe(true);
+    expect(input?.value).toBe('메가리서치');
+  });
+
   it('emptyDefault 는 응답 미존재(undefined)일 때만 1회 쓰고, 빈 문자열로 지운 뒤에는 쓰지 않는다', () => {
     const cell = {
       id: 'c-empty',

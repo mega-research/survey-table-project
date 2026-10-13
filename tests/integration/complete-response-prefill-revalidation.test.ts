@@ -209,6 +209,27 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     ).toBe('홍길동');
   });
 
+  it('명단 값이 비어 잠기지 않은 prefill 질문은 응답자가 적은 값을 그대로 둔다', async () => {
+    // 명단에 name 이 없다 — 화면은 이 문항을 잠그지 않고 응답자가 직접 적는다.
+    queueSelects({ attrs: {}, template: '{{name}}' });
+
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { [PREFILL_QID]: '직접 적은 이름' } },
+    });
+
+    const mainSet = capturedUpdateSets.find(
+      (s) => s['questionResponses'] !== undefined,
+    );
+    expect(
+      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
+    ).toBe('직접 적은 이름');
+  });
+
   it('응답에 포함되지 않은(미노출) prefill 질문에는 허위 답변을 주입하지 않는다', async () => {
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 

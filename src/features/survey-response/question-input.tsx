@@ -50,6 +50,7 @@ import {
 } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
 import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { resolveTokenPrefill } from '@/features/question-renderer/utils/token-prefill';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
@@ -819,7 +820,10 @@ function TextareaResponseInput({
   priorHighlightCls: string;
 }) {
   const focus = useFieldFocus();
-  const quality = focus.focused ? null : resolveTextQualityViolation(question, value, priorAnswers);
+  const attrs = useContactAttrs();
+  const quality = focus.focused
+    ? null
+    : resolveTextQualityViolation(question, value, attrs, priorAnswers);
   const max = effectiveMaxLength(question.textValidation);
   const text = typeof value === 'string' ? value : '';
   // 줄 수 미지정이면 기존 4줄. 높이 늘리기를 켜면 줄 수가 최소 높이다.
@@ -876,9 +880,9 @@ function TextResponseInput({
 }) {
   // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
   const { markSeedWrite } = useResponseSources();
-  const template = question.defaultValueTemplate ?? '';
-  const isPrefilled = template.trim().length > 0;
-  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  // 명단 값이 비면 잠그지 않는다 — 그 문항은 응답자가 직접 적는 평범한 단답형이다(token-prefill).
+  const prefilledValue = resolveTokenPrefill(question.defaultValueTemplate, attrs) ?? '';
+  const isPrefilled = prefilledValue !== '';
   const currentValue = typeof value === 'string' ? value : '';
   const isNumberMode = question.inputType === 'number';
   const format = isInputFormat(question.inputType) ? question.inputType : null;
@@ -888,7 +892,7 @@ function TextResponseInput({
   const focus = useFieldFocus();
   const qualityViolation = focus.focused
     ? null
-    : resolveTextQualityViolation(question, currentValue, priorAnswersForQuality);
+    : resolveTextQualityViolation(question, currentValue, attrs, priorAnswersForQuality);
   // 입력 상한 — 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시. 평문 모드에서만.
   const maxLength =
     isPlainTextInput(question) && !isPrefilled ? effectiveMaxLength(question.textValidation) : null;

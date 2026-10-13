@@ -10,34 +10,48 @@ const textQ = (over: Partial<Question> = {}): Question =>
 describe('normalizeFormatValues', () => {
   it('단답형 형식 값을 정규형으로 정돈한다', () => {
     const q = textQ({ inputType: 'mobile' });
-    expect(normalizeFormatValues([q], { q1: '01012345678' })).toEqual({ q1: '010-1234-5678' });
+    expect(normalizeFormatValues([q], { q1: '01012345678' }, null)).toEqual({
+      q1: '010-1234-5678',
+    });
   });
 
   it('형식이 틀린 값은 손대지 않는다 — 차단이 이미 판단했거나 관리자가 통과시킨 값이다', () => {
     const q = textQ({ inputType: 'mobile' });
-    expect(normalizeFormatValues([q], { q1: '+81 90 1234 5678' })).toEqual({
+    expect(normalizeFormatValues([q], { q1: '+81 90 1234 5678' }, null)).toEqual({
       q1: '+81 90 1234 5678',
     });
   });
 
   it('토큰 프리필로 잠긴 칸은 손대지 않는다 — 화면에 보이는 값과 갈라지면 안 된다', () => {
     const q = textQ({ inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' });
-    expect(normalizeFormatValues([q], { q1: '010 1234 5678' })).toEqual({ q1: '010 1234 5678' });
+    expect(
+      normalizeFormatValues([q], { q1: '010 1234 5678' }, { 휴대전화: '010 1234 5678' }),
+    ).toEqual({ q1: '010 1234 5678' });
+  });
+
+  it('명단 값이 비어 잠기지 않은 프리필 칸은 응답자가 적은 값이므로 정돈한다', () => {
+    const q = textQ({ inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' });
+    expect(normalizeFormatValues([q], { q1: '010 1234 5678' }, {})).toEqual({
+      q1: '010-1234-5678',
+    });
+    expect(normalizeFormatValues([q], { q1: '010 1234 5678' }, { 휴대전화: ' ' })).toEqual({
+      q1: '010-1234-5678',
+    });
   });
 
   it('이월 원본 그대로인 값은 손대지 않는다', () => {
     const q = textQ({ inputType: 'mobile' });
     const payload = { q1: '01012345678' };
-    expect(normalizeFormatValues([q], payload, { q1: '01012345678' })).toEqual(payload);
+    expect(normalizeFormatValues([q], payload, null, { q1: '01012345678' })).toEqual(payload);
   });
 
   it('형식이 아닌 문항·빈 값은 그대로 두고 객체 참조도 유지한다', () => {
     const q = textQ({ inputType: 'number' });
     const payload = { q1: '1234' };
-    expect(normalizeFormatValues([q], payload)).toBe(payload);
+    expect(normalizeFormatValues([q], payload, null)).toBe(payload);
     const q2 = textQ({ inputType: 'mobile' });
     const empty = { q1: '' };
-    expect(normalizeFormatValues([q2], empty)).toBe(empty);
+    expect(normalizeFormatValues([q2], empty, null)).toBe(empty);
   });
 
   it('표 input 셀을 정돈한다', () => {
@@ -59,7 +73,11 @@ describe('normalizeFormatValues', () => {
       ],
     } as unknown as Question;
     expect(
-      normalizeFormatValues([q], { qt: { c1: '021234567', c2: ' A@B.CO.KR ', c3: '021234567' } }),
+      normalizeFormatValues(
+        [q],
+        { qt: { c1: '021234567', c2: ' A@B.CO.KR ', c3: '021234567' } },
+        null,
+      ),
     ).toEqual({ qt: { c1: '02-123-4567', c2: 'a@b.co.kr', c3: '021234567' } });
   });
 
@@ -76,10 +94,14 @@ describe('normalizeFormatValues', () => {
       ],
     } as unknown as Question;
     expect(
-      normalizeFormatValues([q], {
-        qc: ['1', '2'],
-        __optTexts__: { qc: { o1: '010 1234 5678', o2: '010 1234 5678' } },
-      }),
+      normalizeFormatValues(
+        [q],
+        {
+          qc: ['1', '2'],
+          __optTexts__: { qc: { o1: '010 1234 5678', o2: '010 1234 5678' } },
+        },
+        null,
+      ),
     ).toEqual({
       qc: ['1', '2'],
       __optTexts__: { qc: { o1: '010-1234-5678', o2: '010 1234 5678' } },
@@ -105,7 +127,7 @@ describe('normalizeFormatValues', () => {
       ],
     } as unknown as Question;
     expect(
-      normalizeFormatValues([q], { qs: 'src', __optTexts__: { qs: { tel: '0212345678' } } }),
+      normalizeFormatValues([q], { qs: 'src', __optTexts__: { qs: { tel: '0212345678' } } }, null),
     ).toEqual({ qs: 'src', __optTexts__: { qs: { tel: '02-1234-5678' } } });
   });
 });

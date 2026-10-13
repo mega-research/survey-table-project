@@ -26,6 +26,7 @@ import {
   getHorizontalItemsClass,
   getInputTextAlignClass,
 } from '@/features/question-renderer/utils/table-grid-utils';
+import { resolveTokenPrefill } from '@/features/question-renderer/utils/token-prefill';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -52,15 +53,15 @@ export const InputCell = React.memo(function InputCell({
   const quotes = useAnswerQuotes();
   // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
   const { markSeedWrite } = useResponseSources();
-  const template = cell.defaultValueTemplate ?? '';
-  const isPrefilled = template.trim().length > 0;
   // prefill 은 attrs 만 치환한다(quotes 를 넘기지 않는다). 이 결과는 onUpdateValue 로 응답에
   // 저장되는데(questionResponses → response_answers → 엑셀/SPSS export), 응답 인용은
   // "저장되지 않는 파생값"이 불변식이다(utils/answer-quote.ts).
   // 게다가 표 셀 답변은 셀에 piiEncrypted 를 켠 경우에만 암호화되므로, 인용을 허용하면
   // 암호화 단답형의 원문이 인용값을 타고 평문 셀 답변으로 새는 경로가 열린다.
   // 질문 레벨 prefill(question-input.tsx)·서버 재검증(server/survey-response/services/submitted-answers.ts)도 attrs 기준이다.
-  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  // 명단 값이 비면 잠그지 않는다 — 그 칸은 응답자가 직접 적는 평범한 입력칸이다(token-prefill).
+  const prefilledValue = resolveTokenPrefill(cell.defaultValueTemplate, attrs) ?? '';
+  const isPrefilled = prefilledValue !== '';
   const currentValue = (cellResponse as string) || '';
   const textValue = isPrefilled ? prefilledValue : currentValue;
 
@@ -136,6 +137,7 @@ export const InputCell = React.memo(function InputCell({
     : resolveCellTextQualityViolation(
         cell,
         currentValue,
+        attrs,
         priorAnswerText(priorAnswersForFormat, questionId, cell.id),
       );
   const hasViolation =

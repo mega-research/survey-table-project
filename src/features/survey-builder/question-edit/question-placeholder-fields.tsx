@@ -117,7 +117,8 @@ export function QuestionPlaceholderFields({
           )}
         </div>
         <p className="text-xs text-gray-500">
-          변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+          명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
+          입력합니다
         </p>
       </div>
       <div className="space-y-2">

@@ -621,7 +621,7 @@ function collectChoiceTableInputCellIssues(
       }
       if (value === '') continue;
       // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교다.
-      const formatMessage = isTokenPrefilled(cell.defaultValueTemplate)
+      const formatMessage = isTokenPrefilled(cell.defaultValueTemplate, ctx?.contactAttrs)
         ? null
         : formatViolationMessage(
             cell.inputType,
@@ -639,6 +639,7 @@ function collectChoiceTableInputCellIssues(
       const quality = resolveCellTextQualityViolation(
         cell,
         rawValue,
+        ctx?.contactAttrs,
         priorOptionText(ctx?.priorAnswers, question.id, cell.id),
       );
       if (quality) {
@@ -679,10 +680,13 @@ function collectChoiceTableInputCellIssues(
 export function resolveTextQualityViolation(
   question: Question,
   value: unknown,
+  attrs: Record<string, string | undefined> | null | undefined,
   priorAnswers?: PriorAnswers | null,
 ): TextQualityViolation | null {
   if (!question.textValidation || !isPlainTextInput(question)) return null;
-  if (question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate)) return null;
+  if (question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate, attrs)) {
+    return null;
+  }
   if (
     typeof value === 'string' &&
     isUntouchedPriorValue(value, priorAnswerText(priorAnswers, question.id) ?? null)
@@ -743,7 +747,7 @@ export function collectNumericIssues(
   ctx?: NumericValidationCtx,
 ): NumericIssue[] {
   if (question.type === 'text' && isInputFormat(question.inputType)) {
-    if (isTokenPrefilled(question.defaultValueTemplate)) return [];
+    if (isTokenPrefilled(question.defaultValueTemplate, ctx?.contactAttrs)) return [];
     const message = formatViolationMessage(
       question.inputType,
       response,
@@ -760,7 +764,12 @@ export function collectNumericIssues(
 
   if (question.type !== 'table') {
     const issues: NumericIssue[] = [];
-    const quality = resolveTextQualityViolation(question, response, ctx?.priorAnswers);
+    const quality = resolveTextQualityViolation(
+      question,
+      response,
+      ctx?.contactAttrs,
+      ctx?.priorAnswers,
+    );
     if (quality) issues.push({ kind: 'text-quality', message: quality.message });
     const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
     if (optionTextIssues.questionMissing) {
@@ -856,7 +865,7 @@ export function collectNumericIssues(
     //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
     const formatViolations = inputCells.filter(
       (c) =>
-        !isTokenPrefilled(c.defaultValueTemplate) &&
+        !isTokenPrefilled(c.defaultValueTemplate, ctx?.contactAttrs) &&
         formatViolationMessage(
           c.inputType,
           cellValues[c.id],
@@ -877,6 +886,7 @@ export function collectNumericIssues(
         resolveCellTextQualityViolation(
           c,
           cellValues[c.id],
+          ctx?.contactAttrs,
           priorAnswerText(ctx?.priorAnswers, question.id, c.id),
         ) !== null,
     );
