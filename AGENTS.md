@@ -132,7 +132,7 @@ src/
 │   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload·persist-question·variable-generator·saved-question-branch-logic·cell-formula/gating-diagnostics — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap·prune-sum-constraints·input-mode(숫자 모드↔입력 형식 전환)
-│   │   └── (루트 26개)          # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields 등) + app 이 직접 여는 모달·패널
+│   │   └── (루트 27개)          # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields·placeholder-field 등) + app 이 직접 여는 모달·패널
 │   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
 │   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (102개) — 어떤 feature 도 import 하지 않는다
 │   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
