@@ -16,7 +16,10 @@ import { isInputFormat } from '@/types/input-type';
 import type { Question, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { parseInputFormat } from '@/features/question-renderer/utils/input-format';
-import { isTokenPrefilled } from '@/features/question-renderer/utils/token-prefill';
+import {
+  cellLockTemplate,
+  isTokenPrefilled,
+} from '@/features/question-renderer/utils/token-prefill';
 
 import {
   type PriorAnswers,
@@ -96,7 +99,7 @@ export function normalizeFormatValues(
         const normalized = normalizeOne(
           cells[cell.id],
           cell.inputType,
-          cell.defaultValueTemplate,
+          cellLockTemplate(cell),
           attrs,
           priorAnswerText(priorAnswers, question.id, cell.id),
         );
@@ -142,7 +145,7 @@ export function normalizeFormatValues(
     }
     for (const cell of flatCellsOf(question)) {
       if (cell.type !== 'input') continue;
-      applyToId(cell.id, cell.inputType, cell.defaultValueTemplate);
+      applyToId(cell.id, cell.inputType, cellLockTemplate(cell));
     }
     if (textChanged) {
       nextSidecar[question.id] = updated;

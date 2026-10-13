@@ -51,6 +51,8 @@ export interface CellFormState {
   /** 입력칸 너비(px). '' 이면 셀 폭 전체 (TableCell.inputWidth) */
   inputWidth: number | '';
   inputDefaultValueTemplate: string;
+  /** prefill 값을 응답자가 고칠 수 있게 (TableCell.prefillEditable) — 템플릿이 있을 때만 저장한다 */
+  inputPrefillEditable: boolean;
   inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
   inputPiiEncrypted: boolean;
@@ -242,6 +244,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputAutoGrow: cell.inputAutoGrow === true,
     inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
+    inputPrefillEditable: cell.prefillEditable === true,
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
@@ -362,6 +365,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     hideRightBorder: _hideRightBorder,
     optionTextBelowTable: _optionTextBelowTable,
     defaultValueTemplate: _defaultValueTemplate,
+    prefillEditable: _prefillEditable,
     inputType: _inputType,
     piiEncrypted: _piiEncrypted,
     emptyDefault: _emptyDefault,
@@ -463,6 +467,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             : {}),
           ...(form.inputDefaultValueTemplate.trim().length > 0
             ? { defaultValueTemplate: form.inputDefaultValueTemplate.trim() }
+            : {}),
+          ...(form.inputPrefillEditable && form.inputDefaultValueTemplate.trim().length > 0
+            ? { prefillEditable: true }
             : {}),
           inputType: form.inputType,
           ...(form.inputPiiEncrypted ? { piiEncrypted: true } : {}),

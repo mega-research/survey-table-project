@@ -507,6 +507,12 @@ export interface TableCell {
   inputWidth?: number;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
+  /**
+   * prefill 값을 응답자가 고칠 수 있게 둔다. 켜면 명단 값은 잠금 값이 아니라 **처음 한 번 깔리는
+   * 초기값**이다 — 칸은 평범한 입력칸이라 형식·품질 검사를 받고, 응답자가 고치거나 지운 값이 남는다.
+   * 미지정이면 종전대로 명단 값으로 잠근다. 표 input 셀 전용(단답형 문항에는 없다).
+   */
+  prefillEditable?: boolean;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위

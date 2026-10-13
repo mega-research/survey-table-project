@@ -2,7 +2,7 @@ import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { TableCell } from '@/types/survey';
 
 import { type TextQualityViolation, isPlainTextInput, textQualityViolation } from './text-quality';
-import { isTokenPrefilled } from './token-prefill';
+import { cellLockTemplate, isTokenPrefilled } from './token-prefill';
 
 /**
  * 표 input 셀 하나의 응답 품질 위반 — 셀 렌더러(표·보기 표 사이드카)와 차단 검증이 같은 판정을 쓴다.
@@ -17,6 +17,7 @@ export function resolveCellTextQualityViolation(
   cell: {
     inputType?: TableCell['inputType'] | undefined;
     defaultValueTemplate?: string | null | undefined;
+    prefillEditable?: boolean | undefined;
     textValidation?: TableCell['textValidation'] | undefined;
   },
   value: unknown,
@@ -26,7 +27,7 @@ export function resolveCellTextQualityViolation(
   if (!cell.textValidation || !isPlainTextInput({ type: 'text', inputType: cell.inputType })) {
     return null;
   }
-  if (isTokenPrefilled(cell.defaultValueTemplate, attrs)) return null;
+  if (isTokenPrefilled(cellLockTemplate(cell), attrs)) return null;
   if (typeof value === 'string' && isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
   return textQualityViolation(cell.textValidation, value);
 }

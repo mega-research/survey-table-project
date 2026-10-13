@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTokenPrefilled, resolveTokenPrefill } from './token-prefill';
+import { cellLockTemplate, isTokenPrefilled, resolveTokenPrefill } from './token-prefill';
 
 describe('resolveTokenPrefill — 잠금은 명단에서 값이 왔을 때만', () => {
   it('명단 값이 있으면 그 값으로 잠근다', () => {
@@ -34,5 +34,20 @@ describe('resolveTokenPrefill — 잠금은 명단에서 값이 왔을 때만', 
 
   it('토큰 없는 고정 글자 템플릿은 종전대로 그 글자로 잠근다', () => {
     expect(resolveTokenPrefill('해당 없음', {})).toBe('해당 없음');
+  });
+});
+
+describe('cellLockTemplate — 고칠 수 있는 prefill 셀은 잠금 대상이 아니다', () => {
+  it('옵션을 켠 셀은 잠금 템플릿이 없다', () => {
+    const cell = { defaultValueTemplate: '{{기업명}}', prefillEditable: true };
+    expect(cellLockTemplate(cell)).toBeNull();
+    expect(isTokenPrefilled(cellLockTemplate(cell), { 기업명: '메가리서치' })).toBe(false);
+  });
+
+  it('옵션이 없으면 종전대로 템플릿이 잠금 기준이다', () => {
+    const cell = { defaultValueTemplate: '{{기업명}}' };
+    expect(cellLockTemplate(cell)).toBe('{{기업명}}');
+    expect(isTokenPrefilled(cellLockTemplate(cell), { 기업명: '메가리서치' })).toBe(true);
+    expect(cellLockTemplate({})).toBeNull();
   });
 });

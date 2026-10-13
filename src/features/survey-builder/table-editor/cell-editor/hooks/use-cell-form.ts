@@ -54,6 +54,7 @@ export interface CellFormSetters {
   setHideRightBorder: (v: boolean) => void;
   setOptionTextBelowTable: (v: boolean) => void;
   setInputDefaultValueTemplate: (v: string) => void;
+  setInputPrefillEditable: (v: boolean) => void;
   setInputType: (v: InputType) => void;
   setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
   setEmptyDefaultEnabled: (v: boolean) => void;
@@ -170,6 +171,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setHideRightBorder: set('hideRightBorder'),
       setOptionTextBelowTable: set('optionTextBelowTable'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
+      setInputPrefillEditable: set('inputPrefillEditable'),
       setInputType: set('inputType'),
       setInputPiiEncrypted: set('inputPiiEncrypted'),
       setEmptyDefaultEnabled: set('emptyDefaultEnabled'),

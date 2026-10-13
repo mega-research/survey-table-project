@@ -17,7 +17,10 @@ import {
 } from '@/lib/survey/cell-formula';
 import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
 import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
-import { isTokenPrefilled } from '@/features/question-renderer/utils/token-prefill';
+import {
+  cellLockTemplate,
+  isTokenPrefilled,
+} from '@/features/question-renderer/utils/token-prefill';
 import {
   collectSelectedChoiceCellIds,
   isChoiceGroupTableQuestion,
@@ -621,7 +624,7 @@ function collectChoiceTableInputCellIssues(
       }
       if (value === '') continue;
       // 형식 판정에는 원문을 넘긴다 — 이월 면제가 글자 그대로 비교다.
-      const formatMessage = isTokenPrefilled(cell.defaultValueTemplate, ctx?.contactAttrs)
+      const formatMessage = isTokenPrefilled(cellLockTemplate(cell), ctx?.contactAttrs)
         ? null
         : formatViolationMessage(
             cell.inputType,
@@ -865,7 +868,7 @@ export function collectNumericIssues(
     //      여기서는 어느 칸인지만 짚는다(범위 위반과 같은 모양).
     const formatViolations = inputCells.filter(
       (c) =>
-        !isTokenPrefilled(c.defaultValueTemplate, ctx?.contactAttrs) &&
+        !isTokenPrefilled(cellLockTemplate(c), ctx?.contactAttrs) &&
         formatViolationMessage(
           c.inputType,
           cellValues[c.id],

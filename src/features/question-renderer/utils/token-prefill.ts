@@ -22,6 +22,18 @@ export function resolveTokenPrefill(
 }
 
 /**
+ * 표 input 셀의 잠금 템플릿 — 「응답자가 고칠 수 있게」(`prefillEditable`)를 켠 셀은 잠그지 않는다.
+ * 그 셀의 템플릿은 처음 한 번 깔리는 초기값일 뿐이라, 잠긴 칸에 주는 면제(형식·품질 검사,
+ * 형식 정돈)를 받지 않는다.
+ */
+export function cellLockTemplate(cell: {
+  defaultValueTemplate?: string | null | undefined;
+  prefillEditable?: boolean | undefined;
+}): string | null {
+  return cell.prefillEditable === true ? null : (cell.defaultValueTemplate ?? null);
+}
+
+/**
  * 토큰 프리필로 잠긴 칸인가. 렌더러가 `disabled` 로 그리는 판정과 같은 식이다
  * (`question-input.tsx` · `question-renderer/cells/input-cell.tsx`).
  *

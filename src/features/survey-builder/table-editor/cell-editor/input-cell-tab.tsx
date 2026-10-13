@@ -69,6 +69,7 @@ export function InputCellTab({
     formulaErrorMessage,
     inputPlaceholder,
     inputDefaultValueTemplate,
+    inputPrefillEditable,
     inputMaxLength,
     inputRows,
     inputAutoGrow,
@@ -93,6 +94,7 @@ export function InputCellTab({
     setFormulaErrorMessage,
     setInputPlaceholder,
     setInputDefaultValueTemplate,
+    setInputPrefillEditable,
     setInputMaxLength,
     setInputRows,
     setInputAutoGrow,
@@ -304,6 +306,25 @@ export function InputCellTab({
           명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
           입력합니다
         </p>
+        {(inputDefaultValueTemplate.trim().length > 0 || inputPrefillEditable) && (
+          <div className="flex items-start justify-between gap-4 pt-1">
+            <div>
+              <Label htmlFor="input-prefill-editable" className="text-sm font-medium">
+                응답자가 고칠 수 있게
+              </Label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                켜면 명단 값을 잠그지 않고 처음 한 번만 채워 둡니다. 응답자가 고치거나 지운 값이
+                저장됩니다
+              </p>
+            </div>
+            <Switch
+              id="input-prefill-editable"
+              checked={inputPrefillEditable}
+              onCheckedChange={setInputPrefillEditable}
+              disabled={inputDefaultValueTemplate.trim().length === 0}
+            />
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

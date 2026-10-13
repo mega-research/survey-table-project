@@ -345,6 +345,19 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
     ).toEqual(['c2']);
   });
 
+  it('「응답자가 고칠 수 있게」를 켠 프리필 표 셀은 명단 값이 있어도 검사한다', () => {
+    const q = tableQuestion([
+      { id: 'c1', inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}', prefillEditable: true },
+    ]);
+    expect(
+      collectNumericIssues(
+        q,
+        { c1: '+81 90 1234 5678' },
+        withAttrs({ 휴대전화: '+81 90 1234 5678' }),
+      )[0]?.cellIds,
+    ).toEqual(['c1']);
+  });
+
   it('명단 값이 비어 잠기지 않은 프리필 표 셀은 검사한다', () => {
     const q = tableQuestion([
       { id: 'c1', inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' },

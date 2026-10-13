@@ -529,6 +529,29 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(off).not.toHaveProperty('hideRightBorder');
   });
 
+  it('prefill 「응답자가 고칠 수 있게」는 템플릿이 있을 때만 prefillEditable 키를 남긴다', () => {
+    const on = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '{{기업명}}', inputPrefillEditable: true },
+      baseCell,
+    );
+    expect(on.prefillEditable).toBe(true);
+    expect(cellToFormState(on).inputPrefillEditable).toBe(true);
+
+    // 템플릿을 지우면 옵션도 함께 사라진다 — 깔 값이 없는 초기값 옵션은 뜻이 없다
+    const noTemplate = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '', inputPrefillEditable: true },
+      on,
+    );
+    expect(noTemplate).not.toHaveProperty('prefillEditable');
+
+    const off = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '{{기업명}}', inputPrefillEditable: false },
+      on,
+    );
+    expect(off).not.toHaveProperty('prefillEditable');
+    expect(off.defaultValueTemplate).toBe('{{기업명}}');
+  });
+
   it('입력한 만큼 높이 늘리기는 평문 칸에서 켰을 때만 inputAutoGrow 키를 남긴다', () => {
     const on = buildUpdatedCell({ ...baseForm('input'), inputAutoGrow: true }, baseCell);
     expect(on.inputAutoGrow).toBe(true);

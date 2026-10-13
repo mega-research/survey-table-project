@@ -72,6 +72,50 @@ describe('InputCell prefill·emptyDefault 쓰기 횟수', () => {
     expect(input?.value).toBe('메가리서치');
   });
 
+  it('「응답자가 고칠 수 있게」를 켠 prefill 칸은 잠그지 않고 처음 한 번만 명단 값을 깐다', () => {
+    const cell = {
+      id: 'c-prefill-editable',
+      type: 'input',
+      content: '',
+      defaultValueTemplate: '{{회사}}',
+      prefillEditable: true,
+    } as unknown as TableCell;
+    const first = vi.fn();
+    const { container, rerender } = render(renderCell(cell, undefined, first));
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledWith('메가리서치');
+
+    // 깔린 값은 평범한 응답값이다 — 잠기지 않는다
+    const seeded = vi.fn();
+    rerender(renderCell(cell, '메가리서치', seeded));
+    const input = container.querySelector('input');
+    expect(input?.disabled).toBe(false);
+    expect(input?.value).toBe('메가리서치');
+    expect(seeded).not.toHaveBeenCalled();
+
+    // 응답자가 고친 값·지운 값을 명단 값으로 되돌리지 않는다
+    const edited = vi.fn();
+    rerender(renderCell(cell, '메가리서치(주)', edited));
+    expect(container.querySelector('input')?.value).toBe('메가리서치(주)');
+    rerender(renderCell(cell, '', edited));
+    expect(container.querySelector('input')?.value).toBe('');
+    expect(edited).not.toHaveBeenCalled();
+  });
+
+  it('고칠 수 있는 prefill 칸도 명단 값이 없으면 아무것도 깔지 않는다', () => {
+    const cell = {
+      id: 'c-prefill-editable-empty',
+      type: 'input',
+      content: '',
+      defaultValueTemplate: '{{사업자등록번호}}',
+      prefillEditable: true,
+    } as unknown as TableCell;
+    const onUpdateValue = vi.fn();
+    const { container } = render(renderCell(cell, undefined, onUpdateValue));
+    expect(onUpdateValue).not.toHaveBeenCalled();
+    expect(container.querySelector('input')?.disabled).toBe(false);
+  });
+
   it('emptyDefault 는 응답 미존재(undefined)일 때만 1회 쓰고, 빈 문자열로 지운 뒤에는 쓰지 않는다', () => {
     const cell = {
       id: 'c-empty',
