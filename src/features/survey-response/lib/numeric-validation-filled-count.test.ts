@@ -115,6 +115,42 @@ describe('collectNumericIssues — 입력된 칸 수', () => {
     expect(issues[0]!.message).toBe('선택된 칸 중 1칸까지만 입력할 수 있습니다 (현재 2칸)');
   });
 
+  it('「와 다르게」 위반은 빈 칸을 짚는다 — 한 행의 두 칸을 함께 적게 하는 규칙', () => {
+    const pair = question([cell('name', { inputType: 'text' }), cell('share')], {
+      id: 'k2',
+      aggregate: 'count',
+      cellIds: ['name', 'share'],
+      operator: 'ne',
+      target: 1,
+    });
+    expect(collectNumericIssues(pair, {})).toHaveLength(0);
+    expect(collectNumericIssues(pair, { name: 'A', share: '30' })).toHaveLength(0);
+    expect(collectNumericIssues(pair, { name: 'A' })[0]).toMatchObject({ cellIds: ['share'] });
+    expect(collectNumericIssues(pair, { share: '30' })[0]).toMatchObject({ cellIds: ['name'] });
+  });
+
+  it('「와 다르게」 위반인데 빈 칸이 없으면 채운 칸을 짚는다', () => {
+    const notAll = question([cell('a'), cell('b')], {
+      id: 'k3',
+      aggregate: 'count',
+      cellIds: ['a', 'b'],
+      operator: 'ne',
+      target: 2,
+    });
+    expect(collectNumericIssues(notAll, { a: '1', b: '2' })[0]).toMatchObject({
+      cellIds: ['a', 'b'],
+    });
+  });
+
+  it('「초과」 위반은 기준과 같은 수만 채웠어도 빈 칸을 짚는다', () => {
+    const moreThan1 = question([cell('a'), cell('b'), cell('c')], {
+      ...atLeastOne,
+      operator: 'gt',
+      target: 1,
+    });
+    expect(collectNumericIssues(moreThan1, { a: '1' })[0]).toMatchObject({ cellIds: ['b', 'c'] });
+  });
+
   it('비활성 게이팅 칸은 대상에서 빠진다 — 남은 대상이 없으면 막지 않는다', () => {
     const gated = question(
       [cell('ctl'), cell('a', { enabledWhen: { kind: 'filled', controllerCellId: 'ctl' } })],

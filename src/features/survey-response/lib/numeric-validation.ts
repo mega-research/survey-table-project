@@ -425,6 +425,31 @@ export function evaluateFilledCountConstraint(
   return { skipped: false, ok, count: filledIds.length, filledIds, emptyIds };
 }
 
+/**
+ * 「입력된 칸 수」 위반에서 짚을 칸 — 고치려면 어느 쪽 칸을 손대야 하는지로 정한다.
+ * 이상·초과는 더 적어야 하니 빈 칸, 이하·미만은 덜 적어야 하니 채운 칸, 같음은 모자라면 빈 칸·
+ * 넘치면 채운 칸이다. 다름은 위반이 곧 "기준과 같은 수" 라 어느 쪽으로도 풀리지만 빈 칸을 짚는다 —
+ * 한 행의 두 칸을 함께 적게 하는 규칙(2칸 중 1칸이 아니게)에서 응답자가 채울 칸이 그쪽이다.
+ * 빈 칸이 없으면 채운 칸으로 물러선다. 판정(통과·차단)과 무관한 표시 위치일 뿐이다.
+ */
+function filledCountHighlightIds(
+  constraint: SumConstraint,
+  result: { count: number; filledIds: string[]; emptyIds: string[] },
+): string[] {
+  switch (constraint.operator) {
+    case 'gte':
+    case 'gt':
+      return result.emptyIds;
+    case 'lte':
+    case 'lt':
+      return result.filledIds;
+    case 'eq':
+      return result.count < constraint.target ? result.emptyIds : result.filledIds;
+    case 'ne':
+      return result.emptyIds.length > 0 ? result.emptyIds : result.filledIds;
+  }
+}
+
 const FILLED_COUNT_PHRASES: Record<SumConstraint['operator'], (target: number) => string> = {
   eq: (n) => `정확히 ${n}칸을 입력해야 합니다`,
   ne: (n) => `입력한 칸이 ${n}칸이 아니어야 합니다`,
@@ -834,7 +859,7 @@ export function collectNumericIssues(
     if (!isFilledCountConstraint(constraint)) continue;
     const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
     if (result.skipped || result.ok) continue;
-    const highlightIds = result.count < constraint.target ? result.emptyIds : result.filledIds;
+    const highlightIds = filledCountHighlightIds(constraint, result);
     issues.push({
       kind: 'sum',
       message: filledCountMessage(constraint, result.count),
