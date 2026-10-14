@@ -1,14 +1,14 @@
 import 'server-only';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import * as Sentry from '@sentry/nextjs';
 
 import { db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { decryptPii } from '@/lib/crypto/aes';
+import { contactTargets } from '@/db/schema/contacts';
 import { maskHint } from '@/lib/crypto/mask-hint';
 import { UUID_RE } from '@/lib/mail/constants';
+import { loadSendEmailForTarget } from '@/server/read-models/mail-email-order';
 
 import type {
   LookupContactByTokenInput,
@@ -33,44 +33,28 @@ export async function lookupContactByToken(
     return { ok: false, email: null, alreadyUnsubscribed: false };
   }
   try {
-    // contact_targets + contact_pii(email) LEFT JOIN — 이메일은 마스킹/표시용으로만 사용.
-    // 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째.
-    const rows = await db
+    const [existing] = await db
       .select({
         id: contactTargets.id,
+        surveyId: contactTargets.surveyId,
+        isTest: contactTargets.isTest,
         unsubscribedAt: contactTargets.unsubscribedAt,
-        cipher: contactPii.cipher,
-        columnKey: contactPii.columnKey,
       })
       .from(contactTargets)
-      .leftJoin(
-        contactPii,
-        and(
-          eq(contactPii.contactTargetId, contactTargets.id),
-          eq(contactPii.fieldType, 'email'),
-        ),
-      )
       .where(eq(contactTargets.unsubscribeToken, token))
-      .orderBy(asc(contactPii.columnKey))
       .limit(1);
 
-    const existing = rows[0];
     if (!existing) {
       return { ok: false, email: null, alreadyUnsubscribed: false };
     }
 
+    // 이메일은 마스킹/표시용으로만 사용. 한 컨택에 email 컬럼이 여러 개면 발송과 같은
+    // 규칙으로 고른다 — 메일을 받은 주소가 화면에 보여야 한다.
     // 미인증(pub) 경로이므로 평문 이메일을 노출하지 않는다. 복호화 후 즉시 마스킹해
     // 표시용 힌트(asd...@nav...)만 반환한다. 소비처(unsubscribe page)는 화면 표시
     // 문자열로만 사용하므로 마스킹 값으로 충분하다.
-    let email: string | null = null;
-    if (existing.cipher) {
-      try {
-        const plain = decryptPii(existing.cipher);
-        email = maskHint('email', plain) || null;
-      } catch {
-        // 복호화 실패 시 email 노출 안 함 (null 유지)
-      }
-    }
+    const plain = await loadSendEmailForTarget(existing);
+    const email = plain ? maskHint('email', plain) || null : null;
 
     return {
       ok: true,

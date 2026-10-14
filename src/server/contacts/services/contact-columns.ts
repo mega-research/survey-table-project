@@ -4,6 +4,7 @@ import 'server-only';
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
+import { validateMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
 import {
   type OperationsDataScope,
@@ -41,6 +42,9 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   if (scheme.columns.some((c) => c.showInMail === true && !canShowInMail(c))) {
     throw new Error('메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.');
   }
+  // 발송 주소 순서 가드 — 이메일로 암호화된 열 전용, 1 이상의 정수, 열마다 다른 값
+  const mailOrderProblem = validateMailEmailOrder(scheme.columns);
+  if (mailOrderProblem) throw new Error(mailOrderProblem);
   await db.transaction(async (tx) => {
     // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });

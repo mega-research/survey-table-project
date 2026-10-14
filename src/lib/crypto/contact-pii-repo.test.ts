@@ -36,14 +36,14 @@ describe('selectEmailPiiRows', () => {
   it('대상 id 가 비면 쿼리 없이 빈 배열을 돌려준다', async () => {
     const { executor, select } = makeExecutor([]);
 
-    await expect(selectEmailPiiRows(executor, [])).resolves.toEqual([]);
+    await expect(selectEmailPiiRows(executor, [], null)).resolves.toEqual([]);
     expect(select).not.toHaveBeenCalled();
   });
 
   it("field_type='email' 과 contact_target_id IN (...) 조건으로 조회한다", async () => {
     const { executor, captured } = makeExecutor([]);
 
-    await selectEmailPiiRows(executor, [A, B]);
+    await selectEmailPiiRows(executor, [A, B], null);
 
     const query = dialect.sqlToQuery(captured.where as never);
     expect(query.sql).toContain('"field_type" = ');
@@ -54,12 +54,38 @@ describe('selectEmailPiiRows', () => {
   it('contact_target_id, column_key 오름차순으로 정렬한다 — 첫 컬럼 선택의 전제', async () => {
     const { executor, captured } = makeExecutor([]);
 
-    await selectEmailPiiRows(executor, [A]);
+    await selectEmailPiiRows(executor, [A], null);
 
     const [first, second] = captured.orderBy.map((o) => dialect.sqlToQuery(o as never).sql);
     expect(first).toBe('"contact_pii"."contact_target_id" asc');
     expect(second).toBe('"contact_pii"."column_key" asc');
     expect(captured.orderBy).toHaveLength(2);
+  });
+
+  it('발송 주소 순서가 지정되면 순위에 든 열만 조회하고 그 순위로 정렬한다', async () => {
+    const { executor, captured } = makeExecutor([]);
+
+    await selectEmailPiiRows(executor, [A], ['실무자 e-mail', '대표자 e-mail']);
+
+    const where = dialect.sqlToQuery(captured.where as never);
+    expect(where.sql).toContain('"contact_pii"."column_key" IN ($3, $4)');
+    expect(where.params).toEqual(['email', A, '실무자 e-mail', '대표자 e-mail']);
+
+    const order = dialect.sqlToQuery(captured.orderBy[1] as never);
+    expect(order.sql).toBe(
+      'CASE "contact_pii"."column_key" WHEN $1 THEN 0 WHEN $2 THEN 1 END asc',
+    );
+    expect(order.params).toEqual(['실무자 e-mail', '대표자 e-mail']);
+  });
+
+  it('열이 하나뿐인 순서도 값마다 바인딩한다 — ANY 배열 바인딩의 길이 1 풀림을 피한다', async () => {
+    const { executor, captured } = makeExecutor([]);
+
+    await selectEmailPiiRows(executor, [A], ['실무자 e-mail']);
+
+    const where = dialect.sqlToQuery(captured.where as never);
+    expect(where.sql).toContain('"contact_pii"."column_key" IN ($3)');
+    expect(where.params).toEqual(['email', A, '실무자 e-mail']);
   });
 });
 

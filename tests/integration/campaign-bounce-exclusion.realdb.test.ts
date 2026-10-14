@@ -10,8 +10,13 @@ import {
   mailRecipients,
   surveys,
 } from '@/db/schema';
-import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
+import {
+  buildPiiRows,
+  type PiiInput,
+  selectEmailPiiRows,
+} from '@/lib/crypto/contact-pii-repo';
 import { listBouncedContactIds } from '@/server/mail/services/campaigns-read';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -144,5 +149,92 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
     await seedBounce(surveyId, id, 'primary-dead@example.com');
 
     expect(await listBouncedContactIds(surveyId)).toEqual([id]);
+  });
+
+  /** 컬럼 설정에 발송 주소 순서를 건다 — keys 는 1순위부터. */
+  function orderedScheme(keys: string[], allKeys: string[]): ContactColumnScheme {
+    return {
+      version: 1,
+      headerRow: 1,
+      columns: allKeys.map((key, i) => {
+        const rank = keys.indexOf(key);
+        return {
+          key,
+          label: key,
+          source: `pii.${key}` as const,
+          order: i + 1,
+          piiType: 'email' as const,
+          ...(rank >= 0 ? { mailOrder: rank + 1 } : {}),
+        };
+      }),
+    };
+  }
+
+  it('발송 주소 순서를 지정하면 열 이름순이 아니라 그 순서의 첫 열을 발송 주소로 본다', async () => {
+    const surveyId = await newSurvey('순서 지정 — 실무자 우선');
+    await db
+      .update(surveys)
+      .set({
+        contactColumns: orderedScheme(
+          ['실무자 e-mail', '대표자 e-mail'],
+          ['대표자 e-mail', '실무자 e-mail'],
+        ),
+      })
+      .where(eq(surveys.id, surveyId));
+    // 열 이름순으로는 '대표자 e-mail' 이 먼저다 — 순서 지정이 이를 뒤집는다.
+    const ceoBounced = await seedContact(surveyId, [
+      ['대표자 e-mail', 'ceo-dead@example.com'],
+      ['실무자 e-mail', 'staff@example.com'],
+    ]);
+    const staffBounced = await seedContact(surveyId, [
+      ['대표자 e-mail', 'ceo@example.com'],
+      ['실무자 e-mail', 'staff-dead@example.com'],
+    ]);
+    await seedBounce(surveyId, ceoBounced, 'ceo-dead@example.com');
+    await seedBounce(surveyId, staffBounced, 'staff-dead@example.com');
+
+    expect(await listBouncedContactIds(surveyId)).toEqual([staffBounced]);
+
+    const rows = await selectEmailPiiRows(db, [ceoBounced], ['실무자 e-mail', '대표자 e-mail']);
+    expect(rows.map((r) => r.columnKey)).toEqual(['실무자 e-mail', '대표자 e-mail']);
+  });
+
+  it('순서에 넣지 않은 열은 발송 주소 후보가 아니다 — 그 주소의 반송으로 제외하지 않는다', async () => {
+    const surveyId = await newSurvey('순서 지정 — 대표자 제외');
+    await db
+      .update(surveys)
+      .set({
+        contactColumns: orderedScheme(['실무자 e-mail'], ['대표자 e-mail', '실무자 e-mail']),
+      })
+      .where(eq(surveys.id, surveyId));
+    const onlyCeo = await seedContact(surveyId, [['대표자 e-mail', 'only-ceo-dead@example.com']]);
+    await seedBounce(surveyId, onlyCeo, 'only-ceo-dead@example.com');
+
+    expect(await listBouncedContactIds(surveyId)).toEqual([]);
+    expect(await selectEmailPiiRows(db, [onlyCeo], ['실무자 e-mail'])).toEqual([]);
+  });
+
+  it('테스트 파티션 컨택은 테스트 스킴의 순서를 따른다', async () => {
+    const surveyId = await newSurvey('파티션별 순서');
+    const keys = ['대표자 e-mail', '실무자 e-mail'];
+    await db
+      .update(surveys)
+      .set({
+        contactColumns: orderedScheme(['실무자 e-mail'], keys),
+        testContactColumns: orderedScheme(['대표자 e-mail'], keys),
+      })
+      .where(eq(surveys.id, surveyId));
+    const columns: Array<[string, string]> = [
+      ['대표자 e-mail', 'part-ceo-dead@example.com'],
+      ['실무자 e-mail', 'part-staff@example.com'],
+    ];
+    const real = await seedContact(surveyId, columns);
+    const test = await seedContact(surveyId, columns);
+    await db.update(contactTargets).set({ isTest: true }).where(eq(contactTargets.id, test));
+    await seedBounce(surveyId, real, 'part-ceo-dead@example.com');
+
+    // 실 파티션은 실무자 주소로 보내므로 대표자 주소 반송과 무관하고, 테스트 파티션은 대표자 주소로 보낸다.
+    expect(await listBouncedContactIds(surveyId)).toEqual([test]);
+    expect(real).toBeTruthy();
   });
 });

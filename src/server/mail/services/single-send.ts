@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
+import { loadMailEmailOrder } from '@/server/read-models/mail-email-order';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -29,6 +30,7 @@ export async function sendSingleCampaign(
     .select({
       id: contactTargets.id,
       surveyId: contactTargets.surveyId,
+      isTest: contactTargets.isTest,
       unsubscribedAt: contactTargets.unsubscribedAt,
     })
     .from(contactTargets)
@@ -74,7 +76,9 @@ export async function sendSingleCampaign(
   }
 
   // 존재 검사만 필요하지만 "어떤 행이 이메일인가" 는 selectEmailPiiRows 한 곳이 정한다.
-  const emailRows = await selectEmailPiiRows(db, [input.contactTargetId]);
+  // 발송 주소 순서가 지정된 설문은 순위에 든 열만 본다 — createCampaign 이 실제로 쓰는 후보와 같다.
+  const emailOrder = await loadMailEmailOrder(contact.surveyId, contact.isTest);
+  const emailRows = await selectEmailPiiRows(db, [input.contactTargetId], emailOrder);
   if (emailRows.length === 0) {
     throw new Error('이메일 정보가 없는 조사 대상입니다.');
   }

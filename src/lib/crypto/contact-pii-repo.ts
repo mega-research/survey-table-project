@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { type SQL, and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { type DbOrTx, type DbTransaction as Tx, db } from '@/db';
 import { type NewContactPii, contactPii } from '@/db/schema';
+import type { MailEmailOrder } from '@/lib/contacts/mail-email-order';
 
 import { decryptPii, encryptPii } from './aes';
 import { blindIndex } from './blind';
@@ -123,8 +124,35 @@ export interface EmailPiiRow {
 }
 
 /**
- * 컨택들의 email PII 행을 (contact_target_id, column_key) 오름차순으로 조회한다.
- * "컨택의 이메일 = field_type='email' 이고 column_key 오름차순 첫 컬럼" 불변식의 단일 소스.
+ * 발송 주소 후보 조건 — 순위가 지정된 설문은 그 열만 후보다. 지정이 없으면 조건 없음(undefined).
+ * columnKey 는 contact_pii.column_key 를 가리키는 식 — 원시 서브쿼리에서는 별칭 붙인 `cp.column_key`.
+ */
+export function emailColumnCandidateSql(columnKey: SQL, order: MailEmailOrder): SQL | undefined {
+  if (!order || order.length === 0) return undefined;
+  // ANY(${arr}) 바인딩은 길이 1 배열을 조용히 풀어 버린다 — 값마다 바인딩해 IN 으로 쓴다.
+  return sql`${columnKey} IN (${sql.join(
+    order.map((key) => sql`${key}`),
+    sql`, `,
+  )})`;
+}
+
+/**
+ * 발송 주소 정렬식 — 순위가 지정됐으면 그 순위, 아니면 열 이름 오름차순(종전 동작).
+ * 순위에 없는 열은 emailColumnCandidateSql 이 미리 걸러 CASE 가 NULL 을 내지 않는다.
+ */
+export function emailColumnOrderSql(columnKey: SQL, order: MailEmailOrder): SQL {
+  if (!order || order.length === 0) return columnKey;
+  return sql`CASE ${columnKey} ${sql.join(
+    // 순위는 배열 인덱스라 리터럴로 쓴다 — 바인딩하면 CASE 결과가 text 로 추론되어 '10' < '2' 가 된다.
+    order.map((key, rank) => sql`WHEN ${key} THEN ${sql.raw(String(rank))}`),
+    sql` `,
+  )} END`;
+}
+
+/**
+ * 컨택들의 발송 주소 후보 email PII 행을 (contact_target_id, 발송 주소 순서) 로 조회한다.
+ * "컨택의 이메일 = field_type='email' 인 열 중 발송 주소 순서가 가장 앞선 열" 불변식의 단일 소스.
+ * 순서는 컬럼 설정의 mailOrder 에서 오고(`resolveMailEmailOrder`), 지정이 없으면 column_key 오름차순이다.
  *
  * DISTINCT ON 으로 첫 행만 자르지 않고 전 행을 돌려준다 — 발송 경로(createCampaign·preflight)는
  * 첫 컬럼이 복호화 실패/공백이면 다음 컬럼으로 폴백하므로 "첫 usable 컬럼" 선택은 호출부가 맡는다.
@@ -134,8 +162,10 @@ export interface EmailPiiRow {
 export async function selectEmailPiiRows(
   executor: DbOrTx,
   contactTargetIds: readonly string[],
+  order: MailEmailOrder,
 ): Promise<EmailPiiRow[]> {
   if (contactTargetIds.length === 0) return [];
+  const columnKey = sql`${contactPii.columnKey}`;
   return executor
     .select({
       id: contactPii.id,
@@ -149,12 +179,13 @@ export async function selectEmailPiiRows(
       and(
         eq(contactPii.fieldType, 'email'),
         inArray(contactPii.contactTargetId, [...contactTargetIds]),
+        emailColumnCandidateSql(columnKey, order),
       ),
     )
-    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
+    .orderBy(asc(contactPii.contactTargetId), asc(emailColumnOrderSql(columnKey, order)));
 }
 
-/** selectEmailPiiRows 결과(정렬 보장)에서 컨택당 첫 행만 남긴다 — column_key 오름차순 첫 컬럼. */
+/** selectEmailPiiRows 결과(정렬 보장)에서 컨택당 첫 행만 남긴다 — 발송 주소 순서가 가장 앞선 컬럼. */
 export function firstEmailRowByTarget<T extends { contactTargetId: string }>(
   rows: readonly T[],
 ): Map<string, T> {

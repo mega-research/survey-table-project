@@ -9,7 +9,9 @@ import {
   mailRecipients,
   mailTemplates,
 } from '@/db/schema/mail';
+import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { decryptPii } from '@/lib/crypto/aes';
+import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
@@ -63,11 +65,18 @@ export async function createCampaign(
 
   const result = await db.transaction(async (tx) => {
     // a. 현재 운영 scope 잠금. 모드 전환과 캠페인 생성을 직렬화하고 클라이언트 값은 신뢰하지 않는다.
-    const locked = await lockWriteScope(tx, input.surveyId, isGuest, { lock: 'share' });
+    //    같은 잠금으로 컬럼 설정도 읽는다 — 발송 주소 순서가 캠페인 생성 도중 바뀌지 않는다.
+    const locked = await lockWriteScope(tx, input.surveyId, isGuest, {
+      lock: 'share',
+      columns: ['contactColumns', 'testContactColumns'],
+    });
     if (!locked) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
     const { isTest } = locked;
+    const emailOrder = resolveMailEmailOrder(
+      isTest ? locked.row.testContactColumns : locked.row.contactColumns,
+    );
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx
@@ -137,7 +146,8 @@ export async function createCampaign(
     }
 
     // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
-    //    한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째 사용 (앞에서 dedupe).
+    //    한 컨택에 email 컬럼이 여러 개면 발송 주소 순서(컬럼 설정의 mailOrder, 미지정이면
+    //    column_key 오름차순)대로 훑어 값이 있는 첫 컬럼을 쓴다 (앞에서 dedupe).
     //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지)·반송 이력
     //    컨택을 제외한다. 제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는
     //    발송되는 미스매치 발생.
@@ -158,6 +168,7 @@ export async function createCampaign(
       sql`"contact_targets"."id"`,
     )}`;
 
+    const emailColumnKey = sql`${contactPii.columnKey}`;
     const piiJoined = await tx
       .select({
         id: contactTargets.id,
@@ -175,6 +186,7 @@ export async function createCampaign(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
+          emailColumnCandidateSql(emailColumnKey, emailOrder),
           isNull(contactTargets.unsubscribedAt),
           // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
           sql`NOT (${latestResultUnsubscribedSql})`,
@@ -184,12 +196,12 @@ export async function createCampaign(
             : []),
         ),
       )
-      .orderBy(asc(contactTargets.id), asc(contactPii.columnKey));
+      .orderBy(asc(contactTargets.id), asc(emailColumnOrderSql(emailColumnKey, emailOrder)));
 
     const seen = new Set<string>();
     const validContacts: Array<{ id: string; email: string; inviteToken: string }> = [];
     for (const r of piiJoined) {
-      if (seen.has(r.id)) continue; // 첫 email 컬럼만
+      if (seen.has(r.id)) continue; // 순서가 가장 앞선 email 컬럼만
       try {
         const email = decryptPii(r.cipher);
         if (!email || !email.trim()) continue;

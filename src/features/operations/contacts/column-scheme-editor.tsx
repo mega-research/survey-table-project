@@ -22,7 +22,13 @@ import {
   type GroupLevel,
 } from '@/lib/contacts/group-levels';
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
+import {
+  assignMailOrder,
+  canOrderMailEmail,
+  resolveMailEmailOrder,
+} from '@/lib/contacts/mail-email-order';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
+import { piiKeyOf } from '@/lib/operations/contacts-format';
 import { client } from '@/shared/lib/rpc';
 
 interface ColumnSchemeEditorProps {
@@ -95,6 +101,11 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     );
   }
 
+  /** 발송 주소 순위 배정 — 이미 쓰인 순위를 고르면 두 열의 순위를 맞바꾼다. null = 지정 안 함. */
+  function setMailOrder(index: number, rank: number | null) {
+    setColumns((prev) => assignMailOrder(prev, index, rank));
+  }
+
   function setLabel(index: number, label: string) {
     setColumns((prev) => prev.map((c, i) => (i === index ? { ...c, label } : c)));
   }
@@ -111,6 +122,15 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
       }
     });
   }
+
+  // 발송 주소 순서는 이메일 열이 둘 이상일 때만 고를 것이 있다 — 하나뿐이면 열 자체를 숨긴다.
+  const emailColumns = columns.filter(canOrderMailEmail);
+  const showMailOrder = emailColumns.length >= 2;
+  const mailOrderRanks = emailColumns.map((_, i) => i + 1);
+  const mailOrderKeys = resolveMailEmailOrder({ columns });
+  const mailOrderLabels = mailOrderKeys?.map(
+    (key) => emailColumns.find((c) => piiKeyOf(c.source) === key)?.label ?? key,
+  );
 
   return (
     <div className="space-y-4">
@@ -130,6 +150,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
               <th className="px-3 py-2 text-left">개인정보 (암호화)</th>
               <th className="px-3 py-2 text-center">분류 기준</th>
               <th className="px-3 py-2 text-center">메일 표시</th>
+              {showMailOrder && <th className="px-3 py-2 text-center">발송 주소 순서</th>}
               <th className="px-3 py-2 text-center">표시</th>
             </tr>
           </thead>
@@ -207,6 +228,40 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                       <span className="text-slate-300">—</span>
                     )}
                   </td>
+                  {showMailOrder && (
+                    <td
+                      className="px-3 py-2 text-center"
+                      title={
+                        !canOrderMailEmail(col)
+                          ? '이메일로 암호화된 열만 발송 주소로 쓸 수 있습니다.'
+                          : undefined
+                      }
+                    >
+                      {canOrderMailEmail(col) ? (
+                        <Select
+                          value={col.mailOrder != null ? String(col.mailOrder) : '_none'}
+                          onValueChange={(v) => setMailOrder(i, v === '_none' ? null : Number(v))}
+                        >
+                          <SelectTrigger
+                            className="h-8 w-[110px] text-sm"
+                            aria-label={`${col.label} 발송 주소 순서`}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">지정 안 함</SelectItem>
+                            {mailOrderRanks.map((rank) => (
+                              <SelectItem key={rank} value={String(rank)}>
+                                {rank}순위
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-center">
                     <Switch checked={!col.hidden} onCheckedChange={() => toggleHide(i)} />
                   </td>
@@ -224,6 +279,19 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
         분류 기준: 컬럼을 대·중·소·세부분류 레벨에 배정하면 진척보고가 그 순서대로 조합
         집계합니다. 레벨당 컬럼 1개이며, 이미 쓰인 레벨을 고르면 기존 컬럼에서 해제됩니다.
       </div>
+
+      {showMailOrder && (
+        <div className="text-xs text-slate-500">
+          발송 주소 순서: 단건·단체 메일을 어느 이메일 열의 주소로 보낼지 정합니다. 순위를 준
+          열만 쓰며, 1순위 주소가 비어 있는 대상은 다음 순위 주소로 보냅니다. 순위를 주지 않은
+          열로는 보내지 않습니다.{' '}
+          <span className="font-semibold text-slate-700">
+            {mailOrderLabels
+              ? `지금 설정: ${mailOrderLabels.join(' → ')}`
+              : '지금 설정: 지정 없음 — 열 이름 가나다순으로 값이 있는 첫 열의 주소로 보냅니다.'}
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Button onClick={save} disabled={isPending}>{isPending ? '저장 중…' : '저장'}</Button>

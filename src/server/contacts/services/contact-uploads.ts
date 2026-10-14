@@ -8,6 +8,7 @@ import { allocateContactResid } from './contact-resid';
 import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
+import { carryOverMailOrder } from '@/lib/contacts/mail-email-order';
 import {
   type ExistingContactKeyInfo,
   buildKeyTuple,
@@ -509,9 +510,14 @@ export async function ingestContactUpload(
       .where(eq(contactUploads.id, upload.id));
 
     // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
+    // 교체로 다시 만든 스킴에도 발송 주소 순서는 이어 붙인다 — 재업로드 한 번에 순서가
+    // 열 이름순으로 돌아가면 다음 단체 메일이 엉뚱한 주소로 나간다.
     const scheme =
       mode === 'replace' || existingScheme == null
-        ? autoGenerateColumnScheme(headerKeys, mapping, piiKeySet)
+        ? carryOverMailOrder(
+            autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+            existingScheme,
+          )
         : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);
     await tx.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
 

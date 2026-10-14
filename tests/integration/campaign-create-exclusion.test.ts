@@ -237,6 +237,14 @@ vi.mock('@/lib/inngest/client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
 }));
 
+// 발송 주소 순서는 컬럼 설정에서 읽는다 — 이 스위트는 순서 미지정(열 이름순)을 전제로 하고
+// 스킴 조회 자체는 검증 대상이 아니다. 통 mock 대신 원본에 덮어써 import 체인 확장에 견딘다.
+vi.mock('@/server/read-models/mail-email-order', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/mail-email-order')>()),
+  loadMailEmailOrder: vi.fn(async () => null),
+  loadMailEmailOrders: vi.fn(async () => ({ real: null, test: null })),
+}));
+
 vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
