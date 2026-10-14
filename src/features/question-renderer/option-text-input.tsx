@@ -45,6 +45,12 @@ interface OptionTextInputProps {
     textValidation?: TextValidation | null | undefined;
     defaultValueTemplate?: string | undefined;
     /**
+     * 표 input 셀의 「응답자가 고칠 수 있게」 — 이 입력칸은 값을 깔지도 잠그지도 않고, 품질 검사의
+     * 잠금 면제 판정에만 쓴다. 차단 검증(numeric-validation)이 셀을 통째로 넘겨 같은 판정을 하므로
+     * 빠뜨리면 문구 없이 「다음」만 막힌다.
+     */
+    prefillEditable?: boolean | undefined;
+    /**
      * 여러 줄 입력 — 표 input 셀의 inputRows·inputAutoGrow 를 그대로 받는다. 평문 모드의
      * 기본 렌더에서만 textarea 로 그리고, 숫자·형식·칩 셸 모드는 한 줄 그대로다.
      */
@@ -134,6 +140,7 @@ export function OptionTextInput({
         {
           inputType: option.textInputType,
           defaultValueTemplate: option.defaultValueTemplate,
+          prefillEditable: option.prefillEditable,
           textValidation: option.textValidation,
         },
         rawValue,

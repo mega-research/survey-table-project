@@ -39,6 +39,12 @@ interface InputCellTabProps {
   /** 표 질문일 때만 셀 단위 인용 컨트롤을 보여준다. */
   showCellAnswerQuote: boolean;
   answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 이 표의 input 셀에 prefill 이 실제로 깔리는가 — 테이블 유형 문항만 그렇다. 보기·순위 문항의
+   * 내장 표는 input 셀을 사이드카 입력칸으로 그려 템플릿을 깔지 않으므로, 동작하지 않는 설정을
+   * 내놓지 않는다(이미 적힌 템플릿은 지울 수 있게 칸만 남긴다).
+   */
+  prefillSupported?: boolean | undefined;
 }
 
 /**
@@ -55,6 +61,7 @@ export function InputCellTab({
   variableCatalog,
   showCellAnswerQuote,
   answerQuoteEnabled = false,
+  prefillSupported = true,
 }: InputCellTabProps) {
   const {
     inputType,
@@ -281,51 +288,61 @@ export function InputCellTab({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="input-default-value-template" className="text-sm font-medium">
-          응답값 prefill <span className="font-normal text-gray-500">(선택)</span>
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="input-default-value-template"
-            ref={inputTemplateRef}
-            value={inputDefaultValueTemplate}
-            onChange={(e) => setInputDefaultValueTemplate(e.target.value)}
-            placeholder="예: {{전시회명}}"
-            className="flex-1"
-          />
-          {variableCatalog.length > 0 && (
-            <VariableButton
-              catalog={variableCatalog}
-              inputRef={inputTemplateRef}
-              onChange={(v) => setInputDefaultValueTemplate(v)}
+      {(prefillSupported || inputDefaultValueTemplate.trim().length > 0) && (
+        <div className="space-y-2">
+          <Label htmlFor="input-default-value-template" className="text-sm font-medium">
+            응답값 prefill <span className="font-normal text-gray-500">(선택)</span>
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="input-default-value-template"
+              ref={inputTemplateRef}
+              value={inputDefaultValueTemplate}
+              onChange={(e) => setInputDefaultValueTemplate(e.target.value)}
+              placeholder="예: {{전시회명}}"
+              className="flex-1"
             />
-          )}
-        </div>
-        <p className="text-xs text-gray-500">
-          명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
-          입력합니다
-        </p>
-        {(inputDefaultValueTemplate.trim().length > 0 || inputPrefillEditable) && (
-          <div className="flex items-start justify-between gap-4 pt-1">
-            <div>
-              <Label htmlFor="input-prefill-editable" className="text-sm font-medium">
-                응답자가 고칠 수 있게
-              </Label>
-              <p className="mt-0.5 text-xs text-gray-500">
-                켜면 명단 값을 잠그지 않고 처음 한 번만 채워 둡니다. 응답자가 고치거나 지운 값이
-                저장됩니다
-              </p>
-            </div>
-            <Switch
-              id="input-prefill-editable"
-              checked={inputPrefillEditable}
-              onCheckedChange={setInputPrefillEditable}
-              disabled={inputDefaultValueTemplate.trim().length === 0}
-            />
+            {variableCatalog.length > 0 && (
+              <VariableButton
+                catalog={variableCatalog}
+                inputRef={inputTemplateRef}
+                onChange={(v) => setInputDefaultValueTemplate(v)}
+              />
+            )}
           </div>
-        )}
-      </div>
+          {prefillSupported ? (
+            <p className="text-xs text-gray-500">
+              명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
+              입력합니다
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700">
+              보기·순위 문항의 표에서는 prefill 이 채워지지 않습니다. 이 칸을 비워 두세요 — 명단
+              값을 미리 채우려면 테이블 유형 문항을 쓰세요
+            </p>
+          )}
+          {prefillSupported &&
+            (inputDefaultValueTemplate.trim().length > 0 || inputPrefillEditable) && (
+              <div className="flex items-start justify-between gap-4 pt-1">
+                <div>
+                  <Label htmlFor="input-prefill-editable" className="text-sm font-medium">
+                    응답자가 고칠 수 있게
+                  </Label>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    켜면 명단 값을 잠그지 않고 처음 한 번만 채워 둡니다. 응답자가 고치거나 지운 값이
+                    저장됩니다
+                  </p>
+                </div>
+                <Switch
+                  id="input-prefill-editable"
+                  checked={inputPrefillEditable}
+                  onCheckedChange={setInputPrefillEditable}
+                  disabled={inputDefaultValueTemplate.trim().length === 0}
+                />
+              </div>
+            )}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="input-rows">입력칸 줄 수</Label>

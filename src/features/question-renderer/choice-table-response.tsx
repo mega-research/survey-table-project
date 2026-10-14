@@ -546,6 +546,7 @@ export function ChoiceTableResponse({
             ...(cell.defaultValueTemplate !== undefined
               ? { defaultValueTemplate: cell.defaultValueTemplate }
               : {}),
+            ...(cell.prefillEditable ? { prefillEditable: true } : {}),
             ...(cell.numberFormat !== undefined
               ? { textInputNumberFormat: cell.numberFormat }
               : {}),

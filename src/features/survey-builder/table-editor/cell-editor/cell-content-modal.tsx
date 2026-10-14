@@ -268,6 +268,9 @@ export function CellContentModal({
   // 표-소스 선택형 질문(radio/checkbox + choice_opt)의 다른 셀들은 응답 페이지에서 inert 라
   // 값이 생기지 않는다 — 거기에 토글을 노출하면 켜도 아무 일이 없는 죽은 설정이 된다.
   const showCellAnswerQuote = parentQuestionType === 'table';
+  // prefill 은 테이블 유형 문항의 input 셀에만 깔린다 — 보기·순위 문항의 내장 표는 사이드카 입력칸이라
+  // 템플릿을 읽지 않는다. 호스트를 모르면(스토어에 아직 없는 문항) 종전대로 내놓는다.
+  const prefillSupported = parentQuestionType === undefined || parentQuestionType === 'table';
   // 「상세 기재 입력칸을 표 아래에」 — 표 문항의 격자 표만 표 아래 줄을 그린다(보기·순위 문항의
   // 내장 표는 다른 렌더러). 상세 기재 보기가 없으면 옮길 입력칸이 없어 스위치를 숨긴다.
   const cellTextOptions =
@@ -762,6 +765,7 @@ export function CellContentModal({
               variableCatalog={variableCatalog}
               showCellAnswerQuote={showCellAnswerQuote}
               answerQuoteEnabled={answerQuoteEnabled}
+              prefillSupported={prefillSupported}
             />
           </TabsContent>
 
