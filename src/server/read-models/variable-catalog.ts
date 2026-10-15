@@ -5,6 +5,7 @@ import 'server-only';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
+import { canExposeToRespondent } from '@/lib/contacts/respondent-visible-pii';
 import { contactTargets } from '@/db/schema/contacts';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 
@@ -51,6 +52,20 @@ export const getVariableCatalog = cache(
       }
     }
 
-    return [...attrsKeys, ...system];
+    // 설문 프리필 토큰은 「응답 화면에 노출」을 켠 개인정보 열도 읽는다(응답 화면이 attrs 에 합친다).
+    // 메일 본문은 합치지 않으므로 survey 목적에만 싣는다.
+    const exposedPii: VariableDef[] =
+      purpose === 'survey'
+        ? (survey?.contactColumns?.columns ?? [])
+            .filter((c) => c.respondentVisible === true && canExposeToRespondent(c))
+            .map((c) => ({
+              key: c.source.slice('pii.'.length),
+              label: c.label,
+              category: 'attrs' as const,
+              description: '개인정보 열 — 응답 화면에 노출',
+            }))
+        : [];
+
+    return [...attrsKeys, ...exposedPii, ...system];
   },
 );

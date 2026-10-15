@@ -9,6 +9,7 @@ import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import { carryOverMailOrder } from '@/lib/contacts/mail-email-order';
+import { carryOverRespondentVisible } from '@/lib/contacts/respondent-visible-pii';
 import {
   type ExistingContactKeyInfo,
   buildKeyTuple,
@@ -511,11 +512,15 @@ export async function ingestContactUpload(
 
     // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
     // 교체로 다시 만든 스킴에도 발송 주소 순서는 이어 붙인다 — 재업로드 한 번에 순서가
-    // 열 이름순으로 돌아가면 다음 단체 메일이 엉뚱한 주소로 나간다.
+    // 열 이름순으로 돌아가면 다음 단체 메일이 엉뚱한 주소로 나간다. 응답 화면 노출도 같다 —
+    // 빠지면 그 열을 읽는 프리필 칸이 조용히 빈칸이 된다.
     const scheme =
       mode === 'replace' || existingScheme == null
-        ? carryOverMailOrder(
-            autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+        ? carryOverRespondentVisible(
+            carryOverMailOrder(
+              autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+              existingScheme,
+            ),
             existingScheme,
           )
         : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);

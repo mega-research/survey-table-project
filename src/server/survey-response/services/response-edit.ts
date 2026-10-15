@@ -21,6 +21,7 @@ import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
@@ -246,12 +247,8 @@ export async function saveAdminEdit(
     };
 
     if (existing.contactTargetId) {
-      const [target] = await db
-        .select({ attrs: contactTargets.attrs })
-        .from(contactTargets)
-        .where(eq(contactTargets.id, existing.contactTargetId))
-        .limit(1);
-      contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+      // 응답 화면과 같은 명단 값 — 「응답 화면에 노출」 개인정보 열까지 합친 것.
+      contactAttrs = await loadRespondentContactAttrs(existing.contactTargetId);
     }
 
     // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와

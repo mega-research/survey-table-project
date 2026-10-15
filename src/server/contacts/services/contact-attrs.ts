@@ -5,6 +5,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
+import { appendRespondentVisiblePii } from '@/server/read-models/respondent-contact-attrs';
 import {
   classifyInviteTokenOwner,
   findInviteTokenOwner,
@@ -27,6 +28,7 @@ export class InvalidTestLinkError extends Error {
 
 /**
  * inviteToken 으로 attrs 조회. 무효 토큰이면 null 반환 (silent fallback).
+ * 「응답 화면에 노출」을 켠 개인정보 열의 복호화 값도 합쳐서 돌려준다(read-models/respondent-contact-attrs).
  * - lookup_contact_by_invite_token RPC 와 동일한 매칭 정책 (surveyId + inviteToken)
  * - 응답 도중 새로고침 시 매번 fresh 로드 — 운영자가 attrs 수정하면 다음 진입에 반영
  * - 실제 대상자는 테스트 모드와 무관하게 조회, OFF인 테스트 대상자는 INVALID_TEST_LINK
@@ -55,9 +57,12 @@ export async function lookupContactAttrs(
 
   const [row] = await db
     .select({
+      id: contactTargets.id,
       attrs: contactTargets.attrs,
       isTest: contactTargets.isTest,
       testModeEnabled: surveys.testModeEnabled,
+      contactColumns: surveys.contactColumns,
+      testContactColumns: surveys.testContactColumns,
     })
     .from(contactTargets)
     .innerJoin(surveys, eq(contactTargets.surveyId, surveys.id))
@@ -75,5 +80,9 @@ export async function lookupContactAttrs(
     return null;
   }
   if (row.isTest && !row.testModeEnabled) throw new InvalidTestLinkError();
-  return row.attrs;
+  // 컬럼 설정에서 「응답 화면에 노출」을 켠 개인정보 열은 복호화해 attrs 에 합친다.
+  return appendRespondentVisiblePii(row, {
+    real: row.contactColumns,
+    test: row.testContactColumns,
+  });
 }

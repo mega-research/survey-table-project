@@ -17,6 +17,7 @@ import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { notTestResponse } from '@/server/response-filters';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import {
   loadVersionSnapshot,
   snapshotLookups as readSnapshotLookups,
@@ -212,12 +213,8 @@ export async function completeResponse(
         (q) => q.displayCondition || (q.tableRowsData ?? []).some((row) => row.displayCondition),
       ) || snapshotGroups.some((g) => g.displayCondition);
     if ((hasCalcCells || hasDisplayConditions) && gateRow.contactTargetId) {
-      const [target] = await db
-        .select({ attrs: contactTargets.attrs })
-        .from(contactTargets)
-        .where(eq(contactTargets.id, gateRow.contactTargetId))
-        .limit(1);
-      snapshotContactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+      // 응답 화면과 같은 명단 값 — 「응답 화면에 노출」 개인정보 열까지 합친 것.
+      snapshotContactAttrs = await loadRespondentContactAttrs(gateRow.contactTargetId);
     }
 
     // 숨은 문항 값 strip — 게이팅 strip 보다 **먼저** 온다. 문항이 통째로 사라지면 그 표의

@@ -47,15 +47,17 @@ function makeUpdateChain() {
 }
 
 function makeSelectChain() {
-  return {
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        limit: vi.fn(() => selectLimitMock()),
-        for: vi.fn(() => Promise.resolve(selectForUpdateMock())),
-        then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
-          Promise.resolve(selectThenMock()).then(resolve, reject),
-      })),
+  const whereStep = {
+    where: vi.fn(() => ({
+      limit: vi.fn(() => selectLimitMock()),
+      for: vi.fn(() => Promise.resolve(selectForUpdateMock())),
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve(selectThenMock()).then(resolve, reject),
     })),
+  };
+  // 명단 값 로더(respondent-contact-attrs)는 조사 대상 ⋈ 설문으로 읽는다.
+  return {
+    from: vi.fn(() => ({ ...whereStep, innerJoin: vi.fn(() => whereStep) })),
   };
 }
 

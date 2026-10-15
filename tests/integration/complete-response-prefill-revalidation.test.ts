@@ -38,6 +38,8 @@ vi.mock('@/db', () => {
   function makeSelectChain(): Record<string, unknown> {
     const chain: Record<string, unknown> = {};
     chain['from'] = vi.fn(() => chain);
+    // 명단 값 로더(respondent-contact-attrs)는 조사 대상 ⋈ 설문으로 읽는다.
+    chain['innerJoin'] = vi.fn(() => chain);
     chain['where'] = vi.fn(() => {
       // .where() 자체를 thenable 로 — 뒤에 .limit() 이 붙으면 그쪽이 우선 소비
       const whereResult: Record<string, unknown> = {

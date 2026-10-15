@@ -33,6 +33,8 @@ vi.mock('@/db', () => {
   function makeSelectChain(): Record<string, unknown> {
     const chain: Record<string, unknown> = {};
     chain['from'] = vi.fn(() => chain);
+    // 명단 값 로더(respondent-contact-attrs)는 조사 대상 ⋈ 설문으로 읽는다.
+    chain['innerJoin'] = vi.fn(() => chain);
     chain['where'] = vi.fn(() => {
       const whereResult: Record<string, unknown> = {
         limit: vi.fn(() => Promise.resolve(nextSelectTerminal())),
