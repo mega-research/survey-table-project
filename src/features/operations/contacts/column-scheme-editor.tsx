@@ -27,7 +27,6 @@ import {
   canOrderMailEmail,
   resolveMailEmailOrder,
 } from '@/lib/contacts/mail-email-order';
-import { canExposeToRespondent } from '@/lib/contacts/respondent-visible-pii';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
 import { piiKeyOf } from '@/lib/operations/contacts-format';
 import { client } from '@/shared/lib/rpc';
@@ -85,17 +84,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     );
   }
 
-  /** 응답 화면 노출 토글 — 끄면 필드를 지운다(메일 표시와 같은 관례). */
-  function toggleRespondentVisible(index: number) {
-    setColumns((prev) =>
-      prev.map((c, i) => {
-        if (i !== index) return c;
-        const { respondentVisible: _drop, ...rest } = c;
-        return c.respondentVisible ? rest : { ...rest, respondentVisible: true };
-      }),
-    );
-  }
-
   /** 레벨 배정 — 같은 레벨을 쓰던 다른 컬럼에서는 해제(레벨당 1개). null = 없음. */
   function setGroupLevel(index: number, level: GroupLevel | null) {
     setColumns((prev) =>
@@ -143,8 +131,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
   const mailOrderLabels = mailOrderKeys?.map(
     (key) => emailColumns.find((c) => piiKeyOf(c.source) === key)?.label ?? key,
   );
-  // 응답 화면 노출은 개인정보 열이 있을 때만 고를 것이 있다.
-  const showRespondentVisible = columns.some(canExposeToRespondent);
 
   return (
     <div className="space-y-4">
@@ -165,9 +151,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
               <th className="px-3 py-2 text-center">분류 기준</th>
               <th className="px-3 py-2 text-center">메일 표시</th>
               {showMailOrder && <th className="px-3 py-2 text-center">발송 주소 순서</th>}
-              {showRespondentVisible && (
-                <th className="px-3 py-2 text-center">응답 화면 노출</th>
-              )}
               <th className="px-3 py-2 text-center">표시</th>
             </tr>
           </thead>
@@ -279,26 +262,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                       )}
                     </td>
                   )}
-                  {showRespondentVisible && (
-                    <td
-                      className="px-3 py-2 text-center"
-                      title={
-                        canExposeToRespondent(col)
-                          ? '켜면 초대 링크를 가진 사람에게 이 값이 그대로 보입니다.'
-                          : '명단 속성(attrs) 열은 원래 응답 화면 토큰으로 읽힙니다.'
-                      }
-                    >
-                      {canExposeToRespondent(col) ? (
-                        <Switch
-                          checked={col.respondentVisible === true}
-                          onCheckedChange={() => toggleRespondentVisible(i)}
-                          aria-label={`${col.label} 응답 화면 노출`}
-                        />
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                  )}
                   <td className="px-3 py-2 text-center">
                     <Switch checked={!col.hidden} onCheckedChange={() => toggleHide(i)} />
                   </td>
@@ -327,17 +290,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
               ? `지금 설정: ${mailOrderLabels.join(' → ')}`
               : '지금 설정: 지정 없음 — 열 이름 가나다순으로 값이 있는 첫 열의 주소로 보냅니다.'}
           </span>
-        </div>
-      )}
-
-      {showRespondentVisible && (
-        <div className="text-xs text-slate-500">
-          응답 화면 노출: 개인정보로 암호화된 열의 값을 설문 프리필 토큰(예: 사업자번호를 미리 채운
-          칸)과 표시 조건이 읽게 합니다.{' '}
-          <span className="font-semibold text-amber-700">
-            켜면 초대 링크를 가진 사람에게 이 값이 그대로 보입니다.
-          </span>{' '}
-          사업자번호는 123-45-67890 모양으로 나갑니다. 메일 본문 변수에는 쓰이지 않습니다.
         </div>
       )}
 

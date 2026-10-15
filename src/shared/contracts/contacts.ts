@@ -43,12 +43,6 @@ export interface ContactColumnDef {
    */
   mailOrder?: number;
   /**
-   * 응답 화면에 노출. 개인정보로 암호화된 열(`pii.*`) 전용 — 켜면 이 열의 복호화 값이 응답 화면의
-   * 명단 값(attrs)에 열 이름 키로 합쳐져 프리필 토큰·표시 조건이 읽는다. 초대 링크를 가진 사람에게
-   * 값이 그대로 보인다. 기본 꺼짐. 판정은 `lib/contacts/respondent-visible-pii` 한 곳.
-   */
-  respondentVisible?: boolean;
-  /**
    * PII 매핑 타입. 지정되면 해당 엑셀 컬럼 값이 contact_pii 사이드 테이블에
    * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
    */

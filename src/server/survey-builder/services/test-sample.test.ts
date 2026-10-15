@@ -54,7 +54,7 @@ describe('getSurveyTestSample', () => {
       attrs: { 이름: '홍길동' },
       resid: 1,
     } as never);
-    // 응답 화면과 같은 명단 값 — 「응답 화면 노출」 개인정보 열까지 합친 것을 싣는다.
+    // 응답 화면과 같은 명단 값 — 개인정보 열까지 합친 것을 싣는다.
     vi.mocked(loadRespondentContactAttrs).mockResolvedValue({
       이름: '홍길동',
       사업자등록번호: '123-45-67890',

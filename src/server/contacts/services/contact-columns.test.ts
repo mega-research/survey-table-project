@@ -89,35 +89,4 @@ describe('updateContactColumns 현재 스코프', () => {
     );
     expect(capturedSets).toEqual([]);
   });
-
-  it('응답 화면 노출은 개인정보 열에만 저장되고, attrs 열에 걸면 거부한다', async () => {
-    const piiColumn = {
-      key: '사업자등록번호',
-      label: '사업자등록번호',
-      source: 'pii.사업자등록번호' as const,
-      order: 1,
-      piiType: 'biz_number' as const,
-      respondentVisible: true,
-    };
-    await updateContactColumns({
-      surveyId: 'sv-1',
-      scheme: { version: 1, headerRow: 1, columns: [piiColumn] },
-    });
-    expect(capturedSets).toHaveLength(1);
-
-    const attrsColumn = {
-      key: '기업명',
-      label: '기업명',
-      source: 'attrs.기업명' as const,
-      order: 2,
-      respondentVisible: true,
-    };
-    await expect(
-      updateContactColumns({
-        surveyId: 'sv-1',
-        scheme: { version: 1, headerRow: 1, columns: [attrsColumn] },
-      }),
-    ).rejects.toThrow('응답 화면 노출은 개인정보로 암호화된 열에만 지정할 수 있습니다.');
-    expect(capturedSets).toHaveLength(1);
-  });
 });

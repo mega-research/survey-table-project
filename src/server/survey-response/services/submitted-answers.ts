@@ -352,7 +352,7 @@ export async function sanitizeSubmittedResponses(
 /**
  * 정제 (2/3) — prefill 강제 복원.
  *
- * defaultValueTemplate 이 있는 질문의 응답값은 명단 값(attrs + 응답 화면 노출 개인정보 열)으로 치환한 expected 와
+ * defaultValueTemplate 이 있는 질문의 응답값은 명단 값(attrs + 개인정보 열)으로 치환한 expected 와
  * 일치해야 한다(치환 결과가 빈 문항은 잠기지 않으므로 대상이 아니다). 클라이언트가 disabled 입력을 우회 조작해도 서버가 expected 로 되돌린다.
  * 오염 가드를 통과한 값에만 적용한다 — 원본으로 되돌리면 가드가 무력해진다.
  */
@@ -364,7 +364,7 @@ export async function restorePrefillAnswers(
   const contactTargetId = gateRow.contactTargetId;
 
   if (contactTargetId) {
-    // 응답 화면이 치환한 것과 같은 명단 값 — 「응답 화면에 노출」 개인정보 열까지 합친 것.
+    // 응답 화면이 치환한 것과 같은 명단 값 — 개인정보 열까지 합친 것.
     const attrs = await loadRespondentContactAttrs(contactTargetId);
 
     const prefillQuestions = await db

@@ -129,7 +129,8 @@ const ROGUE_QID = 'q-rogue-not-in-survey';
 //   0) 가용성 게이트 완료 카운트 (countCompletedResponses)
 //   1) 유효 questionId 집합 (loadValidQuestionIds — questions 테이블 폴백)
 //   2) contactTargets attrs (prefill 재검증)
-//   3) prefillQuestions
+//   3) contact_pii 행 (명단 값에 합칠 개인정보 열)
+//   4) prefillQuestions
 // (prefill 의 contactTargetId/surveyId 는 gateRow 재사용으로 별도 select 없음)
 function queueSelects(opts: {
   validQuestionIds: string[];
@@ -142,6 +143,8 @@ function queueSelects(opts: {
     [{ total: 0 }],
     opts.validQuestionIds.map((id) => ({ id })),
     [{ attrs: opts.attrs }],
+    // 개인정보 열 행(read-models/respondent-contact-attrs) — 없음
+    [],
     opts.prefillTemplate
       ? [{ id: opts.prefillQid ?? PREFILL_QID, template: opts.prefillTemplate }]
       : [],

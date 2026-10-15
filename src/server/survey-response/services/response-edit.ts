@@ -247,7 +247,7 @@ export async function saveAdminEdit(
     };
 
     if (existing.contactTargetId) {
-      // 응답 화면과 같은 명단 값 — 「응답 화면에 노출」 개인정보 열까지 합친 것.
+      // 응답 화면과 같은 명단 값 — 개인정보 열까지 합친 것.
       contactAttrs = await loadRespondentContactAttrs(existing.contactTargetId);
     }
 

@@ -16,8 +16,8 @@ import type { SurveyTestSample } from '../domain/test-sample';
  * 어드민 인증된 빌더 안에서만 첫 컨택 attrs 를 제공한다.
  * 컨택이 0건이면 null.
  *
- * email/inviteToken 등 PII 는 노출하지 않고 attrs/resid 만 추출한다(기존 동작 보존). 단 컬럼 설정에서
- * 「응답 화면 노출」을 켠 개인정보 열은 응답 화면처럼 attrs 에 합친다.
+ * inviteToken 은 노출하지 않고 attrs/resid 만 추출한다. 개인정보로 암호화된 열은 응답 화면처럼 attrs 에
+ * 합친다 — 빌더는 관리자 인증 아래라 설문이 쓰는 열을 가리지 않고 전부 싣는다.
  */
 export async function getSurveyTestSample(
   surveyId: string,
@@ -35,7 +35,7 @@ export async function getSurveyTestSample(
   const scope = await loadOperationsDataScope(surveyId);
   const sample = await getFirstContactSample(surveyId, scope);
   if (!sample) return null;
-  // 응답 화면과 같은 명단 값 — 「응답 화면에 노출」 개인정보 열까지 합친다. 빠지면 그 열을 읽는
+  // 응답 화면과 같은 명단 값 — 개인정보 열까지 합친다. 빠지면 그 열을 읽는
   // 프리필 토큰이 미리보기에서 `[키]` 자리 표시 글자로 깔려 형식 검사에 걸린다.
   return { attrs: await loadRespondentContactAttrs(sample.id), resid: sample.resid };
 }

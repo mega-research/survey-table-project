@@ -2,8 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { encryptPii } from '@/lib/crypto/aes';
-import { appendRespondentVisiblePii } from '@/server/read-models/respondent-contact-attrs';
-import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
+import { appendContactPii } from '@/server/read-models/respondent-contact-attrs';
 
 // 주입된 executor 만 쓴다 — 전역 db 는 로드만 막는다.
 vi.mock('@/db', () => ({ db: {} }));
@@ -21,83 +20,49 @@ function makeExecutor(rows: Array<{ fieldType: string; columnKey: string; cipher
       },
     }),
   }));
-  return { executor: { select } as never, select, captured };
+  return { executor: { select } as never, captured };
 }
 
-const col = (key: string, over: Partial<ContactColumnDef> = {}): ContactColumnDef => ({
-  key,
-  label: key,
-  source: `pii.${key}`,
-  order: 1,
-  piiType: 'biz_number',
-  ...over,
-});
-const scheme = (columns: ContactColumnDef[]): ContactColumnScheme => ({
-  version: 1,
-  headerRow: 1,
-  columns,
-});
+const TARGET_ID = '11111111-1111-4111-8111-111111111111';
 
-const TARGET = { id: '11111111-1111-4111-8111-111111111111', isTest: false };
-
-describe('appendRespondentVisiblePii', () => {
-  it('노출 열이 없으면 contact_pii 를 읽지 않고 attrs 를 그대로 돌려준다', async () => {
-    const { executor, select } = makeExecutor([]);
-    const out = await appendRespondentVisiblePii(
-      { ...TARGET, attrs: { 기업명: '가나' } },
-      { real: scheme([col('사업자등록번호')]), test: null },
-      executor,
-    );
-    expect(out).toEqual({ 기업명: '가나' });
-    expect(select).not.toHaveBeenCalled();
-  });
-
-  it('노출 열만 조회해 복호화 값을 열 이름 키로 합친다 — 사업자번호는 하이픈을 넣는다', async () => {
+describe('appendContactPii', () => {
+  it('개인정보 열의 복호화 값을 열 이름 키로 합친다 — 사업자번호는 하이픈을 넣는다', async () => {
     const { executor, captured } = makeExecutor([
       { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: encryptPii('1234567890') },
+      { fieldType: 'name', columnKey: '대표자명', cipher: encryptPii('홍길동') },
     ]);
-    const out = await appendRespondentVisiblePii(
-      { ...TARGET, attrs: { 기업명: '가나' } },
-      {
-        real: scheme([
-          col('사업자등록번호', { respondentVisible: true }),
-          col('대표자 e-mail', { piiType: 'email' }),
-        ]),
-        test: null,
-      },
-      executor,
-    );
-    expect(out).toEqual({ 기업명: '가나', 사업자등록번호: '123-45-67890' });
-    const where = dialect.sqlToQuery(captured.where as never);
-    expect(where.params).toEqual([TARGET.id, '사업자등록번호']);
+    const out = await appendContactPii({ id: TARGET_ID, attrs: { 기업명: '가나' } }, {}, executor);
+    expect(out).toEqual({ 기업명: '가나', 사업자등록번호: '123-45-67890', 대표자명: '홍길동' });
+    expect(dialect.sqlToQuery(captured.where as never).params).toEqual([TARGET_ID]);
   });
 
-  it('테스트 파티션 대상은 테스트 스킴의 노출 설정을 따른다', async () => {
-    const { executor, select } = makeExecutor([]);
-    await appendRespondentVisiblePii(
-      { ...TARGET, isTest: true, attrs: {} },
-      { real: scheme([col('사업자등록번호', { respondentVisible: true })]), test: null },
+  it('allowedKeys 를 주면 그 열만 합친다 — 응답자 브라우저로는 설문이 읽는 열만 보낸다', async () => {
+    const { executor } = makeExecutor([
+      { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: encryptPii('1234567890') },
+      { fieldType: 'mobile', columnKey: '실무자 휴대번호', cipher: encryptPii('01012345678') },
+    ]);
+    const out = await appendContactPii(
+      { id: TARGET_ID, attrs: {} },
+      { allowedKeys: async () => new Set(['사업자등록번호']) },
       executor,
     );
-    expect(select).not.toHaveBeenCalled();
+    expect(out).toEqual({ 사업자등록번호: '123-45-67890' });
+  });
+
+  it('개인정보 행이 없으면 allowedKeys 를 부르지 않고 attrs 를 그대로 돌려준다', async () => {
+    const { executor } = makeExecutor([]);
+    const allowedKeys = vi.fn(async () => new Set<string>());
+    const out = await appendContactPii({ id: TARGET_ID, attrs: { 기업명: '가나' } }, { allowedKeys }, executor);
+    expect(out).toEqual({ 기업명: '가나' });
+    expect(allowedKeys).not.toHaveBeenCalled();
   });
 
   it('복호화에 실패한 열은 빼고 나머지를 합친다', async () => {
     const { executor } = makeExecutor([
       { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: 'broken' },
-      { fieldType: 'name', columnKey: '대표자', cipher: encryptPii('홍길동') },
+      { fieldType: 'name', columnKey: '대표자명', cipher: encryptPii('홍길동') },
     ]);
-    const out = await appendRespondentVisiblePii(
-      { ...TARGET, attrs: null },
-      {
-        real: scheme([
-          col('사업자등록번호', { respondentVisible: true }),
-          col('대표자', { piiType: 'name', respondentVisible: true }),
-        ]),
-        test: null,
-      },
-      executor,
-    );
-    expect(out).toEqual({ 대표자: '홍길동' });
+    const out = await appendContactPii({ id: TARGET_ID, attrs: null }, {}, executor);
+    expect(out).toEqual({ 대표자명: '홍길동' });
   });
 });

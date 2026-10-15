@@ -122,7 +122,7 @@ function queueSelects(opts: {
   template: string;
 }) {
   // 호출 순서: 0) 가용성 게이트 완료 카운트  1) 유효 questionId 집합(loadValidQuestionIds)
-  //           2) contactTargets  3) prefillQuestions
+  //           2) contactTargets  3) contact_pii 행  4) prefillQuestions
   // (prefill 의 contactTargetId/surveyId 는 gateRow 재사용으로 별도 responseRow select 없음)
   // 유효 집합은 prefill 질문(PREFILL_QID)과 비-prefill 키('other')를 포함해 멤버십 필터를 통과시킨다.
   selectTerminalQueue.length = 0;
@@ -130,6 +130,8 @@ function queueSelects(opts: {
     [{ total: 0 }],
     [{ id: PREFILL_QID }, { id: 'other' }],
     [{ attrs: opts.attrs }],
+    // 개인정보 열 행(read-models/respondent-contact-attrs) — 없음
+    [],
     [{ id: PREFILL_QID, template: opts.template }],
   );
 }

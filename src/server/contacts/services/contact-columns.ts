@@ -6,7 +6,6 @@ import { contactTargets, surveys } from '@/db/schema';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
 import { validateMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
-import { validateRespondentVisible } from '@/lib/contacts/respondent-visible-pii';
 import {
   type OperationsDataScope,
   lockWriteScope,
@@ -46,9 +45,6 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   // 발송 주소 순서 가드 — 이메일로 암호화된 열 전용, 1 이상의 정수, 열마다 다른 값
   const mailOrderProblem = validateMailEmailOrder(scheme.columns);
   if (mailOrderProblem) throw new Error(mailOrderProblem);
-  // 응답 화면 노출 가드 — 개인정보로 암호화된 열 전용 (attrs 열은 원래 보인다)
-  const respondentVisibleProblem = validateRespondentVisible(scheme.columns);
-  if (respondentVisibleProblem) throw new Error(respondentVisibleProblem);
   await db.transaction(async (tx) => {
     // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });

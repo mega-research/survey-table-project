@@ -5,7 +5,6 @@ import 'server-only';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
-import { canExposeToRespondent } from '@/lib/contacts/respondent-visible-pii';
 import { piiKeyOf } from '@/lib/operations/contacts-format';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
@@ -54,11 +53,10 @@ export const getVariableCatalog = cache(
       }
     }
 
-    // 설문 프리필 토큰은 「응답 화면에 노출」을 켠 개인정보 열도 읽는다(응답 화면이 attrs 에 합친다).
-    // 메일 본문은 합치지 않으므로 survey 목적에만 싣는다.
-    // 빌더는 파티션을 가리지 않으므로 실·테스트 스킴 어느 쪽에서 켰든 싣는다 — 테스트 모드에서
-    // 컬럼 설정을 저장하면 테스트 스킴에만 들어가, 실 스킴만 보면 켠 열이 메뉴에 안 나온다.
-    let exposedPii: VariableDef[] = [];
+    // 설문 토큰은 개인정보로 암호화된 열도 읽는다(응답 화면이 명단 값에 합친다 —
+    // read-models/respondent-contact-attrs). 메일 본문은 합치지 않으므로 survey 목적에만 싣는다.
+    // 빌더는 파티션을 가리지 않으므로 실·테스트 스킴의 개인정보 열을 함께 싣는다.
+    let piiKeys: VariableDef[] = [];
     if (purpose === 'survey') {
       const [schemes] = await db
         .select({ test: surveys.testContactColumns })
@@ -71,18 +69,12 @@ export const getVariableCatalog = cache(
         ...(schemes?.test?.columns ?? []),
       ]) {
         const key = piiKeyOf(c.source);
-        if (key == null || c.respondentVisible !== true || !canExposeToRespondent(c)) continue;
-        if (attrsKeys.some((v) => v.key === key) || byKey.has(key)) continue;
-        byKey.set(key, {
-          key,
-          label: c.label,
-          category: 'attrs',
-          description: '개인정보 열 — 응답 화면에 노출',
-        });
+        if (key == null || attrsKeys.some((v) => v.key === key) || byKey.has(key)) continue;
+        byKey.set(key, { key, label: c.label, category: 'attrs', description: '개인정보 열' });
       }
-      exposedPii = [...byKey.values()];
+      piiKeys = [...byKey.values()];
     }
 
-    return [...attrsKeys, ...exposedPii, ...system];
+    return [...attrsKeys, ...piiKeys, ...system];
   },
 );

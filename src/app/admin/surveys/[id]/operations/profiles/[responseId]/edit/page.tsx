@@ -103,7 +103,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
       : Promise.resolve(null),
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
-  // 「응답 화면에 노출」 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
+  // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
   const contactAttrs = contactRow ? await loadRespondentContactAttrs(contactRow.id) : {};
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
