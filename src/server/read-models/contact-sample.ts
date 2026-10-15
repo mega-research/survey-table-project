@@ -13,6 +13,8 @@ import {
 import { loadSendEmailForTarget } from './mail-email-order';
 
 export interface FirstContactSample {
+  /** contact_targets.id */
+  id: string;
   attrs: Record<string, string>;
   inviteCode: string;
   /** 발송 주소(email PII 복호화 평문) — 미리보기 표시용. 없으면 null. */
@@ -44,6 +46,7 @@ async function withDecryptedEmail(
   });
 
   return {
+    id: row.id,
     attrs: row.attrs as Record<string, string>,
     inviteCode: row.inviteCode,
     email,

@@ -24,9 +24,13 @@ vi.mock('@/server/data-scope', () => ({
 vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(),
 }));
+vi.mock('@/server/read-models/respondent-contact-attrs', () => ({
+  loadRespondentContactAttrs: vi.fn(),
+}));
 
 import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 
 import { getSurveyTestSample } from './test-sample';
 
@@ -46,13 +50,20 @@ describe('getSurveyTestSample', () => {
     limitMock.mockResolvedValue([{ id: 's1' }]);
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real' as never);
     vi.mocked(getFirstContactSample).mockResolvedValue({
+      id: 'ct-1',
       attrs: { 이름: '홍길동' },
       resid: 1,
     } as never);
+    // 응답 화면과 같은 명단 값 — 「응답 화면 노출」 개인정보 열까지 합친 것을 싣는다.
+    vi.mocked(loadRespondentContactAttrs).mockResolvedValue({
+      이름: '홍길동',
+      사업자등록번호: '123-45-67890',
+    });
     await expect(getSurveyTestSample('s1')).resolves.toEqual({
-      attrs: { 이름: '홍길동' },
+      attrs: { 이름: '홍길동', 사업자등록번호: '123-45-67890' },
       resid: 1,
     });
+    expect(loadRespondentContactAttrs).toHaveBeenCalledWith('ct-1');
   });
 
   it('설문은 있는데 컨택이 0건이면 null (기존 동작 보존)', async () => {

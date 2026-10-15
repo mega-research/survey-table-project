@@ -30,6 +30,7 @@ import { MailWrapper } from './template-wrapper';
 import { getMailPreviewSample, sendTestTemplateMail } from './preview';
 
 const sampleData: FirstContactSample = {
+  id: 'ct-1',
   attrs: { name: '홍길동' },
   inviteCode: 'abc123',
   email: 'h@example.com',
@@ -78,6 +79,7 @@ describe('getMailPreviewSample', () => {
   it('contactTargetId 지정 시 getContactSampleById 로 해당 컨택 샘플을 쓴다', async () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
     vi.mocked(getContactSampleById).mockResolvedValue({
+      id: 'ct-5',
       attrs: { IDX: '5' },
       inviteCode: 'DktK3edZjq',
       email: 'play@funflow.co.kr',
