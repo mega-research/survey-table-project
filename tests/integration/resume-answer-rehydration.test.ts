@@ -27,6 +27,7 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
+import { isValidTestToken } from '@/server/read-models/survey-control';
 import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle';
 
 describe('resumeOrCreateResponse 응답 복원', () => {
@@ -296,5 +297,36 @@ describe('resumeOrCreateResponse 응답 복원', () => {
       await expect(resume()).resolves.toBeNull();
       expect(updateSetMock).not.toHaveBeenCalled();
     });
+  });
+
+  /**
+   * 익명 테스트 링크와 공개 링크는 브라우저에 같은 세션 키(`survey-session:<설문>`)를 쓴다.
+   * 테스트 모드를 끈 뒤 같은 브라우저로 공개 링크에 들어오면 예전 테스트 행을 이어받고,
+   * 그 행의 쓰기 가드(테스트 모드 꺼짐)가 저장마다 500 을 냈다(2026-10-15). 반대로 테스트 링크가
+   * 실응답 행을 이어받으면 테스트 답이 실데이터에 섞인다. 세션의 테스트 여부와 행이 다르면 이어받지
+   * 않는다 — null 이면 클라이언트가 저장 키를 지우고 새 세션으로 시작한다.
+   */
+  it.each([
+    { row: true, session: false, label: '공개 링크가 예전 테스트 행을' },
+    { row: false, session: true, label: '테스트 링크가 실응답 행을' },
+  ])('$label 이어받지 않는다', async ({ row, session }) => {
+    vi.mocked(isValidTestToken).mockReturnValueOnce(session);
+    const limitMock = vi.fn().mockResolvedValue([
+      { id: 'response-1', status: 'in_progress', isTest: row, questionResponses: { q1: '답' } },
+    ]);
+    selectMock.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: limitMock })),
+      })),
+    });
+
+    await expect(
+      resumeOrCreateResponse({
+        surveyId: 'survey-1',
+        sessionId: 'saved-session',
+        ...(session ? { testToken: 'test-token' } : {}),
+      }),
+    ).resolves.toBeNull();
+    expect(updateSetMock).not.toHaveBeenCalled();
   });
 });

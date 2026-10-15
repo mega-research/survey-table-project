@@ -695,7 +695,10 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
   });
 
   it('isTest 행은 isPaused 여도 재개된다', async () => {
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    // 세션 키로 이어받는 테스트 행은 테스트 링크 세션에서만 이어진다(세션·행의 테스트 여부가 같아야 한다).
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
+    );
     selectLimitMock.mockResolvedValue([{ id: 'resp-3', status: 'drop', isTest: true }]);
 
     const { resumeOrCreateResponse } =
@@ -703,6 +706,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'sess-paused-3',
+      testToken: 'tok',
     });
     expect(result).toEqual({
       id: 'resp-3',
@@ -1122,8 +1126,10 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     ).resolves.toMatchObject({ id: 'r1' });
   });
 
-  it('재진입: 유효한 테스트 링크 세션이면 비-테스트 행도 중단을 면제받는다', async () => {
-    // 기존 케이스는 "행 자체가 isTest" 갈래만 덮는다. isTestSession 갈래 박제.
+  it('재진입: 테스트 링크 세션은 같은 세션 키의 실응답 행을 이어받지 않는다', async () => {
+    // 2026-10-15 전에는 이어받아 중단까지 면제했다 — 테스트 링크로 적은 답이 실응답 행에 섞였다.
+    // 익명 테스트 링크와 공개 링크가 브라우저의 같은 세션 키를 쓰므로 한 브라우저에서 두 링크를
+    // 오가면 생긴다. null 이면 클라이언트가 새 세션으로 테스트 응답을 시작한다.
     surveyFindFirstMock.mockResolvedValue(
       publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
     );
@@ -1138,7 +1144,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
       sessionId: 'a1-test-session',
       testToken: 'tok',
     });
-    expect(result).toMatchObject({ id: 'resp-ts', status: 'in_progress' });
+    expect(result).toBeNull();
   });
 
   it('재진입: 제어 플래그 조회가 null 이면 중단 판정 없이 통과한다 (fail-open)', async () => {
