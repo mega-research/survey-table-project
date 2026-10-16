@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { PAGER_ITEM_CLASS } from './pager-classes';
+
 interface PagerJumpProps {
   totalPages: number;
   /** 클라이언트 상태 기반 페이저: 콜백으로 이동 */
@@ -46,13 +48,13 @@ export function PagerJump({ totalPages, onJump, hrefTemplate }: PagerJumpProps) 
         }}
         placeholder="페이지"
         aria-label="이동할 페이지 번호"
-        className="w-14 rounded border border-slate-200 px-2 py-1 text-center text-xs tabular-nums placeholder:text-slate-300 focus:border-blue-400 focus:outline-none"
+        className="h-9 w-16 rounded-md border border-slate-300 bg-white px-2 text-center text-sm text-slate-800 tabular-nums placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
       />
       <button
         type="button"
         onClick={jump}
         disabled={value === ''}
-        className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className={PAGER_ITEM_CLASS}
       >
         이동
       </button>

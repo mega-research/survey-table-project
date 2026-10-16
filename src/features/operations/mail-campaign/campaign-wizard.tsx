@@ -31,6 +31,12 @@ import { FilterResetButton } from '@/features/operations/filters/filter-reset-bu
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
 import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
@@ -538,43 +544,45 @@ export function CampaignWizard({
 
         {totalPages > 1 ? (
           <div className="flex items-center justify-end gap-1 text-sm">
-            <span className="mr-1 text-slate-500">
+            <span className={PAGER_STATUS_CLASS}>
               {candidates.page} / {totalPages}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              type="button"
               onClick={() => changePage(candidates.page - 1)}
               disabled={candidates.page <= 1}
+              className={PAGER_ITEM_CLASS}
             >
               이전
-            </Button>
+            </button>
             {buildPageItems(candidates.page, totalPages).map((item, i) =>
               item === 'ellipsis' ? (
-                <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                   …
                 </span>
+              ) : item === candidates.page ? (
+                <span key={item} aria-current="page" className={PAGER_ITEM_CURRENT_CLASS}>
+                  {item}
+                </span>
               ) : (
-                <Button
+                <button
                   key={item}
-                  variant={item === candidates.page ? 'default' : 'outline'}
-                  size="sm"
+                  type="button"
                   onClick={() => changePage(item)}
-                  aria-current={item === candidates.page ? 'page' : undefined}
-                  className={item === candidates.page ? 'pointer-events-none' : undefined}
+                  className={PAGER_ITEM_CLASS}
                 >
                   {item}
-                </Button>
+                </button>
               ),
             )}
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              type="button"
               onClick={() => changePage(candidates.page + 1)}
               disabled={candidates.page >= totalPages}
+              className={PAGER_ITEM_CLASS}
             >
               다음
-            </Button>
+            </button>
             <PagerJump totalPages={totalPages} onJump={changePage} />
           </div>
         ) : null}

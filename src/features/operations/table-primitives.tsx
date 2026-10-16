@@ -1,5 +1,10 @@
 import { numberFormatter } from '@/features/operations/format';
 
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+} from './pager-classes';
 import { PagerJump } from './pager-jump';
 
 export type CellAlign = 'left' | 'right' | 'center';
@@ -29,24 +34,36 @@ export function SortIndicator({ direction }: SortIndicatorProps) {
   );
 }
 
+/** 번호형 페이지네이션이 한 번에 보이는 페이지 묶음 크기. */
+export const PAGE_BLOCK_SIZE = 10;
+
 /**
- * 번호형 페이지네이션에 노출할 페이지 목록 계산.
- * 전체가 7페이지 이하면 전부, 초과 시 [1, …, 현재±2, …, 마지막] 윈도우.
+ * 번호형 페이지네이션에 노출할 페이지 목록 계산 — 10개 묶음 단위.
+ * 현재 페이지가 속한 묶음(1~10, 11~20, …)을 통째로 보이고, 맨 앞(1)과 맨 뒤(마지막)는
+ * 묶음 밖이어도 남긴다. 묶음 안에서 페이지를 옮겨도 번호 줄이 그대로라 덜 움직인다.
+ * 예) 16페이지 중 7 → [1..10, …, 16] · 12 → [1, …, 11..16]
  * 서버/클라이언트 컴포넌트 공용 (링크 기반 페이저에서도 import).
  */
 export function buildPageItems(page: number, totalPages: number): Array<number | 'ellipsis'> {
-  if (totalPages <= 7) {
+  if (totalPages <= PAGE_BLOCK_SIZE) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
-  const start = Math.max(2, page - 2);
-  const end = Math.min(totalPages - 1, page + 2);
-  const items: Array<number | 'ellipsis'> = [1];
-  if (start > 2) items.push('ellipsis');
+  const current = Math.min(Math.max(1, page), totalPages);
+  const start = Math.floor((current - 1) / PAGE_BLOCK_SIZE) * PAGE_BLOCK_SIZE + 1;
+  const end = Math.min(start + PAGE_BLOCK_SIZE - 1, totalPages);
+  const items: Array<number | 'ellipsis'> = [];
+  if (start > 1) {
+    items.push(1);
+    if (start > 2) items.push('ellipsis');
+  }
   for (let i = start; i <= end; i += 1) items.push(i);
-  if (end < totalPages - 1) items.push('ellipsis');
-  items.push(totalPages);
+  if (end < totalPages) {
+    if (end < totalPages - 1) items.push('ellipsis');
+    items.push(totalPages);
+  }
   return items;
 }
+
 
 interface TablePagerFooterProps {
   total: number;
@@ -72,23 +89,18 @@ export function TablePagerFooter({
   onPage,
 }: TablePagerFooterProps) {
   return (
-    <div className="mt-3 flex items-center justify-between gap-2 px-1 text-xs text-slate-600">
+    <div className="mt-3 flex items-center justify-between gap-2 px-1 text-sm text-slate-600">
       <span>
         총 {numberFormatter.format(total)}건 · {page} / {totalPages} 페이지
       </span>
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={onPrev}
-          disabled={page <= 1}
-          className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-        >
+        <button type="button" onClick={onPrev} disabled={page <= 1} className={PAGER_ITEM_CLASS}>
           ‹ 이전
         </button>
         {onPage
           ? buildPageItems(page, totalPages).map((item, i) =>
               item === 'ellipsis' ? (
-                <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                   …
                 </span>
               ) : (
@@ -98,11 +110,7 @@ export function TablePagerFooter({
                   onClick={() => onPage(item)}
                   disabled={item === page}
                   aria-current={item === page ? 'page' : undefined}
-                  className={
-                    item === page
-                      ? 'rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white'
-                      : 'rounded border border-slate-200 px-2 py-1 tabular-nums hover:bg-slate-50'
-                  }
+                  className={item === page ? PAGER_ITEM_CURRENT_CLASS : PAGER_ITEM_CLASS}
                 >
                   {item}
                 </button>
@@ -113,7 +121,7 @@ export function TablePagerFooter({
           type="button"
           onClick={onNext}
           disabled={page >= totalPages}
-          className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className={PAGER_ITEM_CLASS}
         >
           다음 ›
         </button>

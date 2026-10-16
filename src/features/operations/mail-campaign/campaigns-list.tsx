@@ -4,6 +4,13 @@ import { Send } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_ITEM_DISABLED_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
 import type { CampaignRow } from '@/shared/contracts/mail-io';
@@ -179,7 +186,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
 
       {totalPages > 1 ? (
         <div className="flex items-center justify-end gap-1 text-sm">
-          <span className="mr-1 text-slate-500">
+          <span className={PAGER_STATUS_CLASS}>
             {page} / {totalPages}
           </span>
           <PageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
@@ -187,14 +194,14 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
           </PageLink>
           {buildPageItems(page, totalPages).map((item, i) =>
             item === 'ellipsis' ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+              <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                 …
               </span>
             ) : item === page ? (
               <span
                 key={item}
                 aria-current="page"
-                className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+                className={PAGER_ITEM_CURRENT_CLASS}
               >
                 {item}
               </span>
@@ -230,13 +237,15 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">{children}</span>
+      <span aria-disabled="true" className={PAGER_ITEM_DISABLED_CLASS}>
+        {children}
+      </span>
     );
   }
   return (
     <Link
       href={`/admin/surveys/${surveyId}/operations/mail/campaigns?page=${page}`}
-      className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
+      className={PAGER_ITEM_CLASS}
     >
       {children}
     </Link>
