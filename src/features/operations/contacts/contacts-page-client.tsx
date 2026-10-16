@@ -1,7 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
+import { contactDetailHref } from '@/features/operations/contacts/contacts-list-return';
 import { ContactsTable } from '@/features/operations/contacts/contacts-table';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts-format';
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
@@ -34,6 +35,8 @@ export function ContactsPageClient({
   resultCodeOptions,
 }: ContactsPageClientProps) {
   const router = useRouter();
+  // 지금 목록의 페이지·필터·정렬을 단건 편집으로 실어 가 「목록」이 이 화면으로 돌아오게 한다.
+  const listQuery = useSearchParams().toString();
 
   return (
     <ContactsTable
@@ -46,7 +49,7 @@ export function ContactsPageClient({
       dir={dir}
       surveyId={surveyId}
       resultCodeOptions={resultCodeOptions}
-      onRowClick={(row) => router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)}
+      onRowClick={(row) => router.push(contactDetailHref(surveyId, row.id, listQuery))}
     />
   );
 }

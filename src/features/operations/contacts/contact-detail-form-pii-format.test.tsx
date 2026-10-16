@@ -17,6 +17,7 @@ const refresh = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
   client: {

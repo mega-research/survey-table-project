@@ -9,6 +9,10 @@ import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
 import { ContactsPageClient } from '@/features/operations/contacts/contacts-page-client';
 import {
+  contactDetailHref,
+  listQueryFromSearchParams,
+} from '@/features/operations/contacts/contacts-list-return';
+import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,
   effectiveSortKey,
@@ -159,7 +163,9 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             </Link>
           </Button>
           <Button asChild size="sm">
-            <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
+            <Link href={contactDetailHref(surveyId, 'new', listQueryFromSearchParams(sp))}>
+              + 조사 대상 추가
+            </Link>
           </Button>
         </div>
       </div>

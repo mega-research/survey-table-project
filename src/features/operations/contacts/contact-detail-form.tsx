@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +13,11 @@ import { ContactAttemptHistoryCard } from '@/features/operations/contacts/contac
 import { ContactEditHistoryCard } from '@/features/operations/contacts/contact-edit-history-card';
 import { ContactInfoCard } from '@/features/operations/contacts/contact-info-card';
 import { ContactMailHistoryCard } from '@/features/operations/contacts/contact-mail-history-card';
+import {
+  LIST_QUERY_PARAM,
+  contactDetailHref,
+  contactsListHref,
+} from '@/features/operations/contacts/contacts-list-return';
 import { CopyInviteUrlButton } from '@/features/operations/contacts/copy-invite-url-button';
 import {
   type MailTemplateOption,
@@ -78,6 +83,8 @@ export function ContactDetailForm({
   canReset = false,
 }: ContactDetailFormProps) {
   const router = useRouter();
+  // 목록에서 실어 온 페이지·필터·정렬 — 「목록」·삭제 뒤 이동이 그 목록 화면으로 돌아간다.
+  const listQuery = useSearchParams().get(LIST_QUERY_PARAM);
   const isEdit = initial != null;
 
   const [attrs, setAttrs] = useState<Record<string, string>>(initial?.attrs ?? {});
@@ -183,7 +190,7 @@ export function ContactDetailForm({
       try {
         await client.contacts.targets.remove({ surveyId, id: initial.id });
         // 삭제 후엔 dirty 무시 → router.push 직접
-        router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+        router.push(contactsListHref(surveyId, listQuery));
       } catch (e) {
         setError((e as Error).message);
       }
@@ -288,7 +295,7 @@ export function ContactDetailForm({
           // 신규 저장 성공 → 방금 만든 대상의 상세 페이지로 이동.
           // new 페이지에 머물면 폼 입력이 남아 isDirty 가 계속 true → 목록 이동 시
           // confirm alert 오발생 + 재저장 시 중복 생성. push 로 떠나 둘 다 해소.
-          router.push(`/admin/surveys/${surveyId}/operations/contacts/${created.id}`);
+          router.push(contactDetailHref(surveyId, created.id, listQuery));
         }
       } catch (e) {
         setError((e as Error).message);
@@ -298,7 +305,7 @@ export function ContactDetailForm({
 
   function goList() {
     if (!confirmIfDirty()) return;
-    router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+    router.push(contactsListHref(surveyId, listQuery));
   }
 
   return (
