@@ -6,7 +6,11 @@ import { db } from '@/db';
 import { contactPii, contactTargets, mailCampaigns, mailRecipients, surveys } from '@/db/schema';
 import { encryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
-import { requestRecipientFallbacks } from '@/server/mail/services/campaign-fallback';
+import { dispatchCampaignChunk } from '@/server/mail/services/campaign-dispatch';
+import {
+  listStalledFallbackCampaigns,
+  requestRecipientFallbacks,
+} from '@/server/mail/services/campaign-fallback';
 import { processResendEvent } from '@/server/mail/services/resend-webhook';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
@@ -16,6 +20,9 @@ vi.mock('@/lib/inngest/client', () => ({ inngest: { send: inngestSend } }));
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 const run = process.env['RUN_REALDB'] === '1' && isLocalDb ? describe : describe.skip;
+
+process.env['NEXT_PUBLIC_APP_URL'] = 'https://example.com';
+process.env['RESEND_FROM_DOMAIN'] = 'mail.example.com';
 
 /**
  * 대체 발송 — 실패·반송된 수신자를 발송 주소 순서의 다음 이메일 열로 자동 재발송한다.
@@ -240,5 +247,56 @@ run('대체 발송 (mail fallback)', () => {
     const reopened = await fallbackOf(first.campaignId);
     expect(reopened?.campaign).toMatchObject({ status: 'queued', completedAt: null, recipientCount: 2, queuedCount: 1 });
     expect(reopened?.recipients.map((r) => r.emailSnapshot).sort()).toEqual(['la2@a.com', 'lb2@a.com']);
+  });
+
+  it('다음 칸에 이미 보낸 주소가 섞여 있으면 새 주소만 보내고, 주소 하나로 반송된 주소는 다른 칸에서도 뺀다', async () => {
+    const contactId = await seedContact({ ceo: 'm@a.com', staff: 'm@a.com / dead@a.com / fresh@a.com' });
+    // 다른 회차에서 dead@a.com 하나로 보낸 메일이 반송된 이력
+    const other = await seedContact({ ceo: 'dead@a.com' });
+    const deadRun = await seedSentRecipient(other, 'dead@a.com', 'ceo');
+    await db.update(mailRecipients).set({ status: 'bounced' }).where(eq(mailRecipients.id, deadRun.recipientId));
+
+    const { campaignId, messageId } = await seedSentRecipient(contactId, 'm@a.com', 'ceo');
+    await processResendEvent(messageId, 'email.bounced', new Date().toISOString());
+
+    expect((await fallbackOf(campaignId))?.recipients).toEqual([
+      expect.objectContaining({ emailSnapshot: 'fresh@a.com', emailColumnKey: 'staff' }),
+    ]);
+  });
+
+  it('대기 중에 응답을 마친 사람에게는 대체 발송을 보내지 않고 사유를 남긴다', async () => {
+    const contactId = await seedContact({ ceo: 'w@a.com', staff: 'w2@a.com' });
+    const { campaignId, messageId } = await seedSentRecipient(contactId, 'w@a.com', 'ceo');
+    await processResendEvent(messageId, 'email.bounced', new Date().toISOString());
+    const fb = await fallbackOf(campaignId);
+    const queued = fb!.recipients[0]!;
+
+    await db.update(contactTargets).set({ respondedAt: new Date() }).where(eq(contactTargets.id, contactId));
+    await expect(dispatchCampaignChunk(fb!.campaign.id, [queued.id])).resolves.toEqual({ sent: 0, failed: 0 });
+
+    const [after] = await db
+      .select({ status: mailRecipients.status, errorReason: mailRecipients.errorReason })
+      .from(mailRecipients)
+      .where(eq(mailRecipients.id, queued.id));
+    expect(after).toEqual({ status: 'skipped_unsubscribed', errorReason: '응답 완료로 대체 발송 생략' });
+  });
+
+  it('큐 등록이 실패해 대기 수신자가 오래 남은 대체 회차를 정기 점검이 찾는다', async () => {
+    inngestSend.mockRejectedValueOnce(new Error('inngest down'));
+    const contactId = await seedContact({ ceo: 's@a.com', staff: 's2@a.com' });
+    const { campaignId, messageId } = await seedSentRecipient(contactId, 's@a.com', 'ceo');
+    await processResendEvent(messageId, 'email.bounced', new Date().toISOString());
+    const fb = await fallbackOf(campaignId);
+    expect(fb?.recipients[0]?.status).toBe('queued');
+
+    // 방금 만든 회차는 아직 멈춘 것으로 보지 않는다
+    const ids = async (now: Date) => (await listStalledFallbackCampaigns(now)).map((c) => c.campaignId);
+    expect(await ids(new Date())).not.toContain(fb!.campaign.id);
+    // 2분이 넘도록 아무도 집어 가지 않으면 다시 깨울 대상이다
+    const later = new Date(Date.now() + 3 * 60_000);
+    expect(await ids(later)).toContain(fb!.campaign.id);
+    // 대기 수신자가 처리되면 대상이 아니다
+    await db.update(mailRecipients).set({ status: 'sent' }).where(eq(mailRecipients.id, fb!.recipients[0]!.id));
+    expect(await ids(later)).not.toContain(fb!.campaign.id);
   });
 });

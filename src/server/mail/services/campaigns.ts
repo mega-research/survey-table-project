@@ -11,8 +11,10 @@ import {
 } from '@/db/schema/mail';
 import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { decryptPii } from '@/lib/crypto/aes';
+import { blindIndex } from '@/lib/crypto/blind';
 import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
 import { inngest } from '@/lib/inngest/client';
+import { remainingSendValue } from '@/lib/mail/fallback-address';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
@@ -204,12 +206,16 @@ export async function createCampaign(
       columnKey: string;
       inviteToken: string;
     }> = [];
+    // 반송 판정은 주소 하나하나로 — 칸에 「a / b」처럼 여럿이면 반송된 주소만 빼고 남은 주소로 보낸다.
+    const isBouncedAddress = (address: string) => bouncedBlinds.has(blindIndex('email', address));
     for (const r of piiJoined) {
       if (seen.has(r.id)) continue; // 순서가 가장 앞선 email 컬럼만
-      if (r.blindIndex && bouncedBlinds.has(r.blindIndex)) continue; // 반송된 주소 → 다음 순위 열
+      if (r.blindIndex && bouncedBlinds.has(r.blindIndex)) continue; // 반송된 칸 → 다음 순위 열
       try {
-        const email = decryptPii(r.cipher);
-        if (!email || !email.trim()) continue;
+        const cell = decryptPii(r.cipher);
+        if (!cell || !cell.trim()) continue;
+        const email = bouncedBlinds.size > 0 ? remainingSendValue(cell, isBouncedAddress) : cell;
+        if (email === null) continue; // 칸의 주소가 전부 반송 → 다음 순위 열
         seen.add(r.id);
         validContacts.push({ id: r.id, email, columnKey: r.columnKey, inviteToken: r.inviteToken });
       } catch {

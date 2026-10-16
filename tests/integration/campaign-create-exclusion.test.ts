@@ -32,6 +32,10 @@ interface FakeState {
   bouncedContactIds: string[];
   // 2순위 이메일 열(email2 = <id>-2@example.com)이 있는 컨택
   secondEmailContactIds: string[];
+  // 1순위 칸 값을 직접 정한 컨택(여러 주소 칸 등)
+  cellOverrides: Record<string, string>;
+  // 그대로 반송 이력에 넣을 발송 스냅샷
+  bouncedSnapshots: string[];
 }
 
 const state: FakeState = {
@@ -41,6 +45,8 @@ const state: FakeState = {
   insertedRecipients: [],
   bouncedContactIds: [],
   secondEmailContactIds: [],
+  cellOverrides: {},
+  bouncedSnapshots: [],
 };
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -87,13 +93,16 @@ function buildPiiSelectChain() {
         .filter((c) => !(excludeByCode && isNegativeContact(c)))
         .filter((c) => !excludedIds.has(c.id))
         .flatMap((c) => {
-          const row = (columnKey: string, local: string) => ({
-            id: c.id,
-            columnKey,
-            cipher: `cipher:${local}`,
-            blindIndex: blindIndex('email', `${local}@example.com`),
-            inviteToken: `invite-${c.id}`,
-          });
+          const row = (columnKey: string, local: string) => {
+            const override = columnKey === 'email' ? state.cellOverrides[c.id] : undefined;
+            return {
+              id: c.id,
+              columnKey,
+              cipher: override !== undefined ? `raw:${override}` : `cipher:${local}`,
+              blindIndex: blindIndex('email', override ?? `${local}@example.com`),
+              inviteToken: `invite-${c.id}`,
+            };
+          };
           return state.secondEmailContactIds.includes(c.id)
             ? [row('email', c.id), row('email2', `${c.id}-2`)]
             : [row('email', c.id)];
@@ -230,9 +239,10 @@ vi.mock('@/db', () => ({
       from: () => ({
         innerJoin: () => ({
           where: () =>
-            Promise.resolve(
-              state.bouncedContactIds.map((id) => ({ emailSnapshot: `${id}@example.com` })),
-            ),
+            Promise.resolve([
+              ...state.bouncedContactIds.map((id) => ({ emailSnapshot: `${id}@example.com` })),
+              ...state.bouncedSnapshots.map((emailSnapshot) => ({ emailSnapshot })),
+            ]),
         }),
       }),
     })),
@@ -247,7 +257,9 @@ vi.mock('@/db', () => ({
 
 vi.mock('@/lib/crypto/aes', () => ({
   // cipher:<id> → 유효한 이메일 문자열 복호화 시뮬레이션
-  decryptPii: vi.fn((cipher: string) => `${cipher.replace('cipher:', '')}@example.com`),
+  decryptPii: vi.fn((cipher: string) =>
+    cipher.startsWith('raw:') ? cipher.slice('raw:'.length) : `${cipher.replace('cipher:', '')}@example.com`,
+  ),
 }));
 
 vi.mock('@/lib/inngest/client', () => ({
@@ -298,6 +310,8 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     state.insertedRecipients = [];
     state.bouncedContactIds = [];
     state.secondEmailContactIds = [];
+    state.cellOverrides = {};
+    state.bouncedSnapshots = [];
     vi.clearAllMocks();
   });
 
@@ -390,6 +404,48 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     expect(result.queuedCount).toBe(1);
     expect(state.insertedRecipients).toEqual([
       { contactTargetId: idBounced, emailSnapshot: `${idBounced}-2@example.com`, emailColumnKey: 'email2' },
+    ]);
+  });
+
+  it('여러 주소 칸은 반송된 주소만 빼고 남은 주소로 보낸다 (2026-10-16 리뷰)', async () => {
+    const id = seedContact();
+    state.cellOverrides[id] = 'dead@x.com / live@x.com';
+    state.bouncedSnapshots = ['dead@x.com'];
+
+    await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '여러 주소 칸 반송',
+        contactTargetIds: [id],
+      },
+      USER_ID,
+      false,
+    );
+
+    expect(state.insertedRecipients).toEqual([
+      { contactTargetId: id, emailSnapshot: 'live@x.com', emailColumnKey: 'email' },
+    ]);
+  });
+
+  it('여러 주소로 보낸 한 통의 반송은 그 칸에 든 주소를 하나하나 반송으로 확정하지 않는다', async () => {
+    const id = seedContact();
+    state.cellOverrides[id] = 'a@x.com';
+    state.bouncedSnapshots = ['a@x.com / b@x.com'];
+
+    await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '묶음 반송',
+        contactTargetIds: [id],
+      },
+      USER_ID,
+      false,
+    );
+
+    expect(state.insertedRecipients).toEqual([
+      { contactTargetId: id, emailSnapshot: 'a@x.com', emailColumnKey: 'email' },
     ]);
   });
 

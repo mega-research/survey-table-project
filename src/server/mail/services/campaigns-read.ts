@@ -18,6 +18,7 @@ import {
   getMaskHintsForTargets,
   selectEmailPiiRows,
 } from '@/lib/crypto/contact-pii-repo';
+import { splitEmailAddresses } from '@/lib/mail/split-email-addresses';
 import { maskEmail } from '@/lib/operations/contacts-format';
 import { loadMailEmailOrder, loadMailEmailOrders } from '@/server/read-models/mail-email-order';
 import {
@@ -646,8 +647,17 @@ export async function listBouncedEmailBlindIndexes(surveyId: string): Promise<st
   const blinds = new Set<string>();
   for (const r of rows) {
     if (!r.emailSnapshot) continue; // snapshot 이 비면 대조 불가
+    // 칸 값 그대로 — 같은 칸(「a / b」 통째)을 다시 쓰는 컨택과 대조한다(listBouncedContactIds 의 SQL 은 칸 단위).
     const blind = blindIndex('email', r.emailSnapshot);
     if (blind) blinds.add(blind); // 정규화 후 빈 값도 대조 불가
+    // 주소 하나로 보낸 메일이 반송됐으면 그 주소를 반송 주소로 확정한다 — 다른 칸에 섞여 있어도 뺀다.
+    // 여러 주소로 보낸 한 통의 반송은 어느 주소인지 알 수 없어(반송 세부를 읽지 않는다) 주소 단위로 확정하지
+    // 않는다 — 확정하면 멀쩡한 주소까지 앞으로 계속 발송에서 빠진다.
+    const addresses = splitEmailAddresses(r.emailSnapshot);
+    if (addresses.length === 1) {
+      const addressBlind = blindIndex('email', addresses[0]!);
+      if (addressBlind) blinds.add(addressBlind);
+    }
   }
   return [...blinds];
 }

@@ -1,10 +1,11 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import { decryptPii } from '@/lib/crypto/aes';
+import { blindIndex } from '@/lib/crypto/blind';
 import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
 import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
@@ -117,7 +118,6 @@ async function queueRecipientFallback(sourceRecipientId: string): Promise<Queued
       .select({
         columnKey: contactPii.columnKey,
         cipher: contactPii.cipher,
-        blindIndex: contactPii.blindIndex,
       })
       .from(contactPii)
       .where(
@@ -133,7 +133,7 @@ async function queueRecipientFallback(sourceRecipientId: string): Promise<Queued
       try {
         const email = decryptPii(row.cipher);
         if (email.trim()) {
-          candidates.push({ columnKey: row.columnKey, email, blindIndex: row.blindIndex ?? '' });
+          candidates.push({ columnKey: row.columnKey, email });
         }
       } catch {
         // 복호화 실패 열은 후보에서 뺀다 — 발송(createCampaign)과 같은 규칙
@@ -145,7 +145,7 @@ async function queueRecipientFallback(sourceRecipientId: string): Promise<Queued
       usedColumnKey: source.emailColumnKey,
       usedEmail: source.emailSnapshot,
       triedEmails,
-      bouncedBlindIndexes,
+      isBouncedAddress: (address) => bouncedBlindIndexes.has(blindIndex('email', address)),
     });
     if (!next) return null;
 
@@ -256,3 +256,35 @@ export function triggersFallback(status: MailRecipientStatus): boolean {
   return FALLBACK_TRIGGER_STATUSES.includes(status);
 }
 
+/** 대체 회차가 「멈췄다」고 볼 대기 시간 — 이보다 오래 손대지 않은 대기 수신자를 다시 깨운다. */
+export const FALLBACK_STALL_MS = 2 * 60_000;
+
+/**
+ * 대기 수신자가 있는데 오래 아무도 집어 가지 않은 대체 회차 — 정기 점검(`mailFallbackSweeper`)이 다시 큐에 올린다.
+ *
+ * 대체 수신자를 커밋한 뒤 `mail/campaign.queued` 발행이 실패하면 그 수신자를 다시 깨울 사건이 없다 —
+ * 같은 수신자로 다시 불려도 이미 있는 줄이라 그냥 끝나고, webhook 은 중복 제거로 다시 오지 않는다.
+ * 이 점검이 그 구멍을 메운다(2026-10-16 리뷰). 회차의 updated_at 은 수신자를 넣거나(카운터) 발송이
+ * 진행될 때(카운터) 갱신되므로, 오래 그대로인 queued 행은 아무도 처리하지 않는 것이다.
+ * 발송 중인 회차에 다시 큐를 넣어도 안전하다 — 발송기는 전역 직렬이고 수신자 lease 가 중복 발송을 막는다.
+ */
+export async function listStalledFallbackCampaigns(now = new Date()): Promise<QueuedFallback[]> {
+  const stalledBefore = new Date(now.getTime() - FALLBACK_STALL_MS);
+  return db
+    .select({ campaignId: mailCampaigns.id, surveyId: mailCampaigns.surveyId })
+    .from(mailCampaigns)
+    .where(
+      and(
+        eq(mailCampaigns.kind, 'fallback'),
+        isNull(mailCampaigns.archivedAt),
+        inArray(mailCampaigns.status, ['queued', 'sending']),
+        lt(mailCampaigns.updatedAt, stalledBefore),
+        sql`EXISTS (
+          SELECT 1 FROM mail_recipients r
+          WHERE r.campaign_id = ${mailCampaigns.id}
+            AND r.status = 'queued'
+            AND r.archived_at IS NULL
+        )`,
+      ),
+    );
+}

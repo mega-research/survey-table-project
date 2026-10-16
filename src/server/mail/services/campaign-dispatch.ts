@@ -124,7 +124,11 @@ async function claimRecipientDelivery(
     if (!recipientRef) return { kind: 'unavailable' };
 
     const [campaign] = await tx
-      .select({ status: mailCampaigns.status, archivedAt: mailCampaigns.archivedAt })
+      .select({
+        status: mailCampaigns.status,
+        archivedAt: mailCampaigns.archivedAt,
+        kind: mailCampaigns.kind,
+      })
       .from(mailCampaigns)
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
@@ -136,6 +140,7 @@ async function claimRecipientDelivery(
           .select({
             id: contactTargets.id,
             unsubscribedAt: contactTargets.unsubscribedAt,
+            respondedAt: contactTargets.respondedAt,
           })
           .from(contactTargets)
           .where(eq(contactTargets.id, recipientRef.contactTargetId))
@@ -239,6 +244,11 @@ async function claimRecipientDelivery(
       }
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
+      }
+      // 대체 발송은 응답을 받으려는 재시도다 — 큐잉 → dispatch 사이에 응답을 마친 사람에게는 보내지 않는다.
+      // 단체·단건 발송은 응답자에게 일부러 보내는 경우(감사 메일 등)가 있어 여기서 거르지 않는다.
+      if (campaign.kind === 'fallback' && currentContact.respondedAt !== null) {
+        return finishWithoutSend('skipped_unsubscribed', '응답 완료로 대체 발송 생략');
       }
       // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증.
       if (await latestResultCodeUnsubscribed(currentContact.id)) {
