@@ -435,8 +435,6 @@ export function ProfilesTable({
           total={total}
           page={page}
           totalPages={totalPages}
-          onPrev={() => handlePageChange(page - 1)}
-          onNext={() => handlePageChange(page + 1)}
           onPage={handlePageChange}
         />
       )}

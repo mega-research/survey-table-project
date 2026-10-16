@@ -12,7 +12,7 @@ import {
   PAGER_STATUS_CLASS,
 } from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import type { CampaignRow } from '@/shared/contracts/mail-io';
 
 interface Props {
@@ -58,6 +58,10 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+
+  const nav = pageBlockNavTargets(page, totalPages);
 
   return (
     <div className="space-y-3">
@@ -189,7 +193,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
           <span className={PAGER_STATUS_CLASS}>
             {page} / {totalPages}
           </span>
-          <PageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
+          <PageLink surveyId={surveyId} page={nav.prev ?? 1} disabled={nav.prev === null}>
             이전
           </PageLink>
           {buildPageItems(page, totalPages).map((item, i) =>
@@ -211,7 +215,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               </PageLink>
             ),
           )}
-          <PageLink surveyId={surveyId} page={page + 1} disabled={page >= totalPages}>
+          <PageLink surveyId={surveyId} page={nav.next ?? totalPages} disabled={nav.next === null}>
             다음
           </PageLink>
           <PagerJump

@@ -64,15 +64,28 @@ export function buildPageItems(page: number, totalPages: number): Array<number |
   return items;
 }
 
+/**
+ * 이전·다음 버튼이 가는 페이지 — 한 페이지씩이 아니라 묶음 단위로 넘긴다.
+ * 다음 = 다음 묶음의 첫 페이지(11, 21 …), 이전 = 이전 묶음의 마지막 페이지(10, 20 …).
+ * 갈 묶음이 없으면 null(버튼 비활성) — 전체가 한 묶음이면 둘 다 null.
+ */
+export function pageBlockNavTargets(
+  page: number,
+  totalPages: number,
+): { prev: number | null; next: number | null } {
+  const current = Math.min(Math.max(1, page), Math.max(1, totalPages));
+  const start = Math.floor((current - 1) / PAGE_BLOCK_SIZE) * PAGE_BLOCK_SIZE + 1;
+  const end = Math.min(start + PAGE_BLOCK_SIZE - 1, totalPages);
+  return { prev: start > 1 ? start - 1 : null, next: end < totalPages ? end + 1 : null };
+}
+
 
 interface TablePagerFooterProps {
   total: number;
   page: number;
   totalPages: number;
-  onPrev: () => void;
-  onNext: () => void;
-  /** 페이지 번호 직접 이동. 전달 시 이전/다음 사이에 번호 버튼 노출. */
-  onPage?: (page: number) => void;
+  /** 페이지 이동 — 번호 버튼·묶음 단위 이전/다음·페이지 입력이 모두 이것으로 간다. */
+  onPage: (page: number) => void;
 }
 
 /**
@@ -84,21 +97,24 @@ export function TablePagerFooter({
   total,
   page,
   totalPages,
-  onPrev,
-  onNext,
   onPage,
 }: TablePagerFooterProps) {
+  const nav = pageBlockNavTargets(page, totalPages);
   return (
     <div className="mt-3 flex items-center justify-between gap-2 px-1 text-sm text-slate-600">
       <span>
         총 {numberFormatter.format(total)}건 · {page} / {totalPages} 페이지
       </span>
       <div className="flex items-center gap-1">
-        <button type="button" onClick={onPrev} disabled={page <= 1} className={PAGER_ITEM_CLASS}>
+        <button
+          type="button"
+          onClick={() => nav.prev !== null && onPage(nav.prev)}
+          disabled={nav.prev === null}
+          className={PAGER_ITEM_CLASS}
+        >
           ‹ 이전
         </button>
-        {onPage
-          ? buildPageItems(page, totalPages).map((item, i) =>
+        {buildPageItems(page, totalPages).map((item, i) =>
               item === 'ellipsis' ? (
                 <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                   …
@@ -115,17 +131,16 @@ export function TablePagerFooter({
                   {item}
                 </button>
               ),
-            )
-          : null}
+        )}
         <button
           type="button"
-          onClick={onNext}
-          disabled={page >= totalPages}
+          onClick={() => nav.next !== null && onPage(nav.next)}
+          disabled={nav.next === null}
           className={PAGER_ITEM_CLASS}
         >
           다음 ›
         </button>
-        {onPage ? <PagerJump totalPages={totalPages} onJump={onPage} /> : null}
+        <PagerJump totalPages={totalPages} onJump={onPage} />
       </div>
     </div>
   );

@@ -38,7 +38,7 @@ import {
   PAGER_STATUS_CLASS,
 } from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles-format';
@@ -140,6 +140,10 @@ export function CampaignWizard({
   }
 
   const totalPages = Math.max(1, Math.ceil(candidates.total / candidates.pageSize));
+
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+
+  const nav = pageBlockNavTargets(candidates.page, totalPages);
   const selectedCount = selectedIds.size;
   const visibleIds = useMemo(() => candidates.rows.map((r) => r.id), [candidates.rows]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
@@ -549,8 +553,8 @@ export function CampaignWizard({
             </span>
             <button
               type="button"
-              onClick={() => changePage(candidates.page - 1)}
-              disabled={candidates.page <= 1}
+              onClick={() => nav.prev !== null && changePage(nav.prev)}
+              disabled={nav.prev === null}
               className={PAGER_ITEM_CLASS}
             >
               이전
@@ -577,8 +581,8 @@ export function CampaignWizard({
             )}
             <button
               type="button"
-              onClick={() => changePage(candidates.page + 1)}
-              disabled={candidates.page >= totalPages}
+              onClick={() => nav.next !== null && changePage(nav.next)}
+              disabled={nav.next === null}
               className={PAGER_ITEM_CLASS}
             >
               다음

@@ -206,8 +206,6 @@ export function DailyStatsTable({ data }: Props) {
                 total={data.length}
                 page={table.getState().pagination.pageIndex + 1}
                 totalPages={table.getPageCount()}
-                onPrev={() => table.previousPage()}
-                onNext={() => table.nextPage()}
                 onPage={(p) => table.setPageIndex(p - 1)}
               />
             )}

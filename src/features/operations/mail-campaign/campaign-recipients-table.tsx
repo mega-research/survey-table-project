@@ -11,7 +11,7 @@ import {
   PAGER_STATUS_CLASS,
 } from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
@@ -119,6 +119,8 @@ export function CampaignRecipientsTable({
   showResid,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+  const nav = pageBlockNavTargets(page, totalPages);
 
   // 모든 링크가 활성 깔때기를 기본으로 물고 간다 — 한 군데라도 빠뜨리면 그 링크를
   // 누르는 순간 필터가 조용히 풀린다.
@@ -343,11 +345,11 @@ export function CampaignRecipientsTable({
           </span>
           <PageLink
             href={
-              page > 1
+              nav.prev !== null
                 ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
-                    recipPage: page - 1,
+                    recipPage: nav.prev,
                   })
                 : null
             }
@@ -382,11 +384,11 @@ export function CampaignRecipientsTable({
           )}
           <PageLink
             href={
-              page < totalPages
+              nav.next !== null
                 ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
-                    recipPage: page + 1,
+                    recipPage: nav.next,
                   })
                 : null
             }

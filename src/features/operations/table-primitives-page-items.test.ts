@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPageItems } from './table-primitives';
+import { buildPageItems, pageBlockNavTargets } from './table-primitives';
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
@@ -33,5 +33,24 @@ describe('buildPageItems — 10개 묶음', () => {
   it('범위 밖 페이지는 가장 가까운 묶음으로 접는다', () => {
     expect(buildPageItems(0, 16)).toEqual([...range(1, 10), 'ellipsis', 16]);
     expect(buildPageItems(99, 16)).toEqual([1, 'ellipsis', ...range(11, 16)]);
+  });
+});
+
+describe('pageBlockNavTargets — 이전·다음은 묶음 단위', () => {
+  it('다음은 다음 묶음의 첫 페이지, 이전은 이전 묶음의 마지막 페이지다', () => {
+    expect(pageBlockNavTargets(1, 47)).toEqual({ prev: null, next: 11 });
+    expect(pageBlockNavTargets(7, 47)).toEqual({ prev: null, next: 11 });
+    expect(pageBlockNavTargets(15, 47)).toEqual({ prev: 10, next: 21 });
+    expect(pageBlockNavTargets(25, 47)).toEqual({ prev: 20, next: 31 });
+  });
+
+  it('마지막 묶음에서는 다음이 없다', () => {
+    expect(pageBlockNavTargets(12, 16)).toEqual({ prev: 10, next: null });
+    expect(pageBlockNavTargets(47, 47)).toEqual({ prev: 40, next: null });
+  });
+
+  it('전체가 한 묶음이면 이전·다음 모두 없다', () => {
+    expect(pageBlockNavTargets(3, 10)).toEqual({ prev: null, next: null });
+    expect(pageBlockNavTargets(1, 1)).toEqual({ prev: null, next: null });
   });
 });
