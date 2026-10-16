@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { MailAttachment } from '@/shared/contracts/mail';
 import { downloadR2Object } from '@/lib/image-utils-server';
 import { MAX_ATTACHMENT_TOTAL_BYTES } from '@/lib/mail/constants';
+import { mailToList } from '@/lib/mail/split-email-addresses';
 import { getResend } from './resend-client';
 
 export interface ResolvedBulkAttachment {
@@ -112,7 +113,7 @@ export async function sendCampaignRecipient(
   const { data, error } = await resend.emails.send(
     {
       from: input.from,
-      to: [recipient.to],
+      to: mailToList(recipient.to),
       replyTo: input.replyTo,
       subject: recipient.subject,
       html: recipient.html,
@@ -209,7 +210,7 @@ async function sendInBatches(input: BulkSendInput): Promise<BulkSendResultItem[]
   for (const c of chunks) {
     const payloads = c.map((r) => ({
       from: input.from,
-      to: [r.to],
+      to: mailToList(r.to),
       replyTo: input.replyTo,
       subject: r.subject,
       html: r.html,
@@ -275,7 +276,7 @@ async function sendOneByOneInternal(
     try {
       const { data, error } = await resend.emails.send({
         from: input.from,
-        to: [r.to],
+        to: mailToList(r.to),
         replyTo: input.replyTo,
         subject: r.subject,
         html: r.html,
