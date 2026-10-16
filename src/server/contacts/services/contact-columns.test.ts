@@ -28,6 +28,14 @@ vi.mock('@/db', () => {
 
 import { updateContactColumns } from './contact-columns';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 describe('updateContactColumns 현재 스코프', () => {
   beforeEach(() => {
     capturedSets.length = 0;

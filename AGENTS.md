@@ -267,7 +267,7 @@ surveys                    # 설문 설정
 ├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
-├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
+├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — 아래 "테스트 모드"
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
@@ -797,9 +797,10 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 
 ## 테스트 모드
 
-설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
+두 겹이다(2026-10-16). **설문의 테스트 환경**(`surveys.testModeEnabled` + `testToken`)은 모두에게 같고 테스트 링크·테스트 대상자 링크가 사는지만 정한다(응답자 쪽 판정은 그대로 이 플래그). **콘솔이 테스트 파티션을 보는지는 브라우저마다** 쿠키 `ops-test-view-<surveyId>`(`lib/operations/test-view-cookie.ts`)로 정한다 — 전에는 한 사람이 켜면 모든 사람의 콘솔이 테스트 데이터로 바뀌었다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
-- 읽기/쓰기 파티션은 `server/data-scope.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
+- 읽기/쓰기 파티션은 `server/data-scope.ts`가 단일 결정한다 — `resolveWriteScopeIsTest(전역 플래그, 게스트, 브라우저 쿠키)` 가 **전역 ON ∧ 쿠키 ON ∧ 비게스트**일 때만 test 다. 읽기 `loadOperationsDataScope`·쓰기 `lockWriteScope` 둘 다 쿠키를 `readBrowserTestView` 로 읽는다(요청 밖이면 false). 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것. **`testModeEnabled` 를 직접 읽어 콘솔 파티션을 정하지 말 것** — 실데이터 업로드 가드(`contact-uploads`)도 그래서 이 함수를 쓴다.
+- 토글(`features/operations/test-mode-control.tsx`, 시안 `pencil/테스트모드_드롭다운_시안.pen`): 버튼 자체는 아무 동작이 없고 호버·클릭으로 메뉴 넷을 연다 — 「테스트 모드」 스위치(설문 단위, 끌 때 보관/삭제 확인 창) · 테스트 링크 복사 · 「테스트 데이터 보기」 스위치(브라우저 단위 쿠키) · 테스트 조사 대상자 생성. 테스트 모드가 꺼져 있으면 아래 셋은 막힌다. **테스트 모드를 켜도 보기는 자동으로 켜지지 않는다**(따로 켠다). 대상자 생성은 테스트 파티션에 쓰므로 실데이터를 보는 채로 누르면 보기를 함께 켠다. 버튼 모양: 꺼짐=회색 · 켜짐=주황 테두리+ON · 이 브라우저가 테스트 데이터를 보는 중=꽉 찬 주황 「테스트 데이터 보는 중」. 테스트 모드가 꺼졌는데 쿠키가 남으면 콘솔이 지운다(다시 켜질 때 묻지 않고 테스트 보기로 돌아가지 않게).
 - 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 

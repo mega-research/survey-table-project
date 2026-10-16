@@ -171,6 +171,14 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
 import { createCampaign } from '@/server/mail/services/campaigns';
 import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';
 const REAL_ID = '00000000-0000-4000-8000-000000000010';

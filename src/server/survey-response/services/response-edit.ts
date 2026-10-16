@@ -15,7 +15,7 @@ import {
   hasPiiTargets,
 } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { resolveWriteScopeIsTest } from '@/server/data-scope';
+import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 import { withCalcValues } from '@/lib/survey/cell-formula';
@@ -132,7 +132,11 @@ export async function saveAdminEdit(
     throw new ResponseEditError('version_conflict');
   }
 
-  const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isGuest);
+  const isTest = resolveWriteScopeIsTest(
+    ownerRow.testModeEnabled,
+    isGuest,
+    await readBrowserTestView(surveyId),
+  );
 
   const existing = await db.query.surveyResponses.findFirst({
     where: and(

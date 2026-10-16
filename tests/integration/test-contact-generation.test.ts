@@ -6,6 +6,14 @@ import { addContactTarget } from '@/server/contacts/services/contact-targets';
 import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
 import { generateTestContacts } from '@/server/contacts/services/test-contacts';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 type TargetRow = {
   id: string;
   surveyId: string;

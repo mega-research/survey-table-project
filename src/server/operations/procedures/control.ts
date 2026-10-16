@@ -8,6 +8,7 @@ const ControlStateSchema = z.object({
   isPaused: z.boolean(),
   pausedMessage: z.string().nullable(),
   testModeEnabled: z.boolean(),
+  testViewInBrowser: z.boolean(),
   testToken: z.string().nullable(),
   accessIdentifier: z.string(),
   testResponseCount: z.number().int(),

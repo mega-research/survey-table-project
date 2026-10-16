@@ -39,6 +39,7 @@ interface Props {
     isPaused: boolean;
     pausedMessage: string | null;
     testModeEnabled: boolean;
+    testViewInBrowser: boolean;
     testToken: string | null;
     accessIdentifier: string;
     testResponseCount: number;

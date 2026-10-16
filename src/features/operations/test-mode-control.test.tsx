@@ -58,6 +58,7 @@ const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 function initial(overrides: Record<string, unknown> = {}) {
   return {
     testModeEnabled: true,
+    testViewInBrowser: true,
     testToken: 'anon-token',
     accessIdentifier: 'survey-one',
     testResponseCount: 2,
@@ -67,8 +68,28 @@ function initial(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const COOKIE_NAME = `ops-test-view-${SURVEY_ID}`;
+
+/** 헤더의 테스트 모드 버튼 — 상태에 따라 「테스트 모드」 또는 「테스트 데이터 보는 중」이다. */
+const trigger = () => screen.getByRole('button', { name: /테스트 (모드|데이터 보는 중)/ });
+
+/** 메뉴 항목을 순서대로 — 일반 항목과 켜고 끄는 항목(menuitemcheckbox)을 함께. */
+function menuEntries(menu: HTMLElement) {
+  return [...menu.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]')].map((el) => ({
+    role: el.getAttribute('role'),
+    text: el.textContent ?? '',
+    disabled: el.hasAttribute('data-disabled'),
+    checked: el.getAttribute('aria-checked'),
+  }));
+}
+
+function clearTestViewCookie() {
+  document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  clearTestViewCookie();
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -76,18 +97,22 @@ beforeEach(() => {
 });
 
 describe('TestModeControl popup contract', () => {
-  it('대상자 0명은 copy/create/separator/off만 표시하고 anonymous 링크를 복사한다', async () => {
+  it('메뉴는 테스트 모드 · 링크 복사 · 테스트 데이터 보기 · 대상자 생성 넷이고 anonymous 링크를 복사한다', async () => {
     const user = userEvent.setup();
     const clipboardWrite = vi.spyOn(navigator.clipboard, 'writeText');
     render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     const menu = await screen.findByRole('menu');
-    expect(
-      within(menu)
-        .getAllByRole('menuitem')
-        .map((item) => item.textContent),
-    ).toEqual(['테스트 링크 복사', '테스트 대상자 생성', '테스트 모드 끄기']);
+    const entries = menuEntries(menu);
+    expect(entries.map((e) => [e.role, e.text.split(/모든|이 브라우저|켜면|이미/)[0]])).toEqual([
+      ['menuitemcheckbox', '테스트 모드'],
+      ['menuitem', '테스트 링크 복사'],
+      ['menuitemcheckbox', '테스트 데이터 보기'],
+      ['menuitem', '테스트 조사 대상자 생성'],
+    ]);
+    expect(entries.map((e) => e.checked)).toEqual(['true', null, 'true', null]);
+    expect(entries.every((e) => !e.disabled)).toBe(true);
     expect(within(menu).getAllByRole('separator')).toHaveLength(1);
 
     await user.click(within(menu).getByRole('menuitem', { name: '테스트 링크 복사' }));
@@ -96,7 +121,7 @@ describe('TestModeControl popup contract', () => {
     );
   });
 
-  it('대상자 1명 이상은 copy/separator/off만 표시하고 resid 첫 invite 링크를 복사한다', async () => {
+  it('대상자 1명 이상은 생성 항목을 막고 resid 첫 invite 링크를 복사한다', async () => {
     const user = userEvent.setup();
     const clipboardWrite = vi.spyOn(navigator.clipboard, 'writeText');
     render(
@@ -106,15 +131,11 @@ describe('TestModeControl popup contract', () => {
       />,
     );
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     const menu = await screen.findByRole('menu');
-    expect(
-      within(menu)
-        .getAllByRole('menuitem')
-        .map((item) => item.textContent),
-    ).toEqual(['테스트 링크 복사', '테스트 모드 끄기']);
-    expect(within(menu).getAllByRole('separator')).toHaveLength(1);
-    expect(within(menu).queryByText('테스트 대상자 생성')).not.toBeInTheDocument();
+    const generator = within(menu).getByRole('menuitem', { name: /테스트 조사 대상자 생성/ });
+    expect(generator).toHaveAttribute('data-disabled');
+    expect(generator).toHaveTextContent('이미 1명을 만들었습니다');
 
     await user.click(within(menu).getByRole('menuitem', { name: '테스트 링크 복사' }));
     expect(clipboardWrite).toHaveBeenCalledWith('http://localhost:3000/i/invite-first');
@@ -131,9 +152,9 @@ describe('TestModeControl popup contract', () => {
     );
     render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     const menu = await screen.findByRole('menu');
-    await user.click(within(menu).getByRole('menuitem', { name: '테스트 대상자 생성' }));
+    await user.click(within(menu).getByRole('menuitem', { name: /테스트 조사 대상자 생성/ }));
 
     const dialog = await screen.findByRole('dialog', { name: '테스트 대상자 생성' });
     const countInput = within(dialog).getByRole('spinbutton', { name: '생성 인원' });
@@ -159,10 +180,10 @@ describe('TestModeControl popup contract', () => {
     const user = userEvent.setup();
     render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
       within(await screen.findByRole('menu')).getByRole('menuitem', {
-        name: '테스트 대상자 생성',
+        name: /테스트 조사 대상자 생성/,
       }),
     );
     const dialog = await screen.findByRole('dialog', { name: '테스트 대상자 생성' });
@@ -187,10 +208,10 @@ describe('TestModeControl popup contract', () => {
     );
     render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
       within(await screen.findByRole('menu')).getByRole('menuitem', {
-        name: '테스트 대상자 생성',
+        name: /테스트 조사 대상자 생성/,
       }),
     );
     const dialog = await screen.findByRole('dialog', { name: '테스트 대상자 생성' });
@@ -212,9 +233,9 @@ describe('TestModeControl exit dialog contract', () => {
     controlGetMock.mockResolvedValue(zeroState);
     render(<TestModeControl surveyId={SURVEY_ID} initial={zeroState} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
-      within(await screen.findByRole('menu')).getByRole('menuitem', { name: '테스트 모드 끄기' }),
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
     );
 
     const dialog = await screen.findByRole('alertdialog');
@@ -235,6 +256,7 @@ describe('TestModeControl exit dialog contract', () => {
     });
     controlDisableMock.mockResolvedValue({
       testModeEnabled: false,
+      testViewInBrowser: false,
       deletedResponseCount: 0,
       deletedTargetCount: 0,
       remainingResponseCount: 3,
@@ -242,9 +264,9 @@ describe('TestModeControl exit dialog contract', () => {
     });
     render(<TestModeControl surveyId={SURVEY_ID} initial={targetedState} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
-      within(await screen.findByRole('menu')).getByRole('menuitem', { name: '테스트 모드 끄기' }),
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
     );
     const dialog = await screen.findByRole('alertdialog');
     expect(
@@ -273,6 +295,7 @@ describe('TestModeControl exit dialog contract', () => {
     });
     controlDisableMock.mockResolvedValue({
       testModeEnabled: false,
+      testViewInBrowser: false,
       deletedResponseCount: 2,
       deletedTargetCount: 1,
       remainingResponseCount: 0,
@@ -283,6 +306,7 @@ describe('TestModeControl exit dialog contract', () => {
       pausedMessage: null,
       ...initial({
         testModeEnabled: true,
+        testViewInBrowser: true,
         testResponseCount: 0,
         testTargetCount: 0,
         firstTestInviteCode: null,
@@ -290,9 +314,9 @@ describe('TestModeControl exit dialog contract', () => {
     });
     render(<TestModeControl surveyId={SURVEY_ID} initial={targetedState} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
-      within(await screen.findByRole('menu')).getByRole('menuitem', { name: '테스트 모드 끄기' }),
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
     );
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: '삭제 후 끄기' }));
@@ -302,7 +326,12 @@ describe('TestModeControl exit dialog contract', () => {
       surveyId: SURVEY_ID,
       disposition: 'delete',
     });
-    await user.click(await screen.findByRole('button', { name: '테스트 모드' }));
+    await waitFor(() => expect(trigger()).toHaveAccessibleName('테스트 모드'));
+    await user.hover(trigger());
+    await user.click(
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
+    );
+    await waitFor(() => expect(controlSetTestModeMock).toHaveBeenCalledTimes(1));
     expect(clipboardWrite).toHaveBeenCalledWith(
       'http://localhost:3000/survey/survey-one?test=anon-token',
     );
@@ -311,19 +340,19 @@ describe('TestModeControl exit dialog contract', () => {
   it('다른 관리자가 먼저 종료한 stale disable은 control을 즉시 다시 읽고 dialog를 닫는다', async () => {
     const user = userEvent.setup();
     controlDisableMock.mockRejectedValue(new Error('TEST_WORKSPACE_DISABLE_STALE'));
-    controlGetMock.mockResolvedValue(initial({ testModeEnabled: false }));
+    controlGetMock.mockResolvedValue(initial({ testModeEnabled: false, testViewInBrowser: false }));
     render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
 
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
     await user.click(
-      within(await screen.findByRole('menu')).getByRole('menuitem', { name: '테스트 모드 끄기' }),
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
     );
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: '삭제 후 끄기' }));
 
     await waitFor(() => expect(controlGetMock).toHaveBeenCalledWith({ surveyId: SURVEY_ID }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '테스트 모드' })).not.toHaveClass('border-amber-300');
+    expect(trigger()).toHaveAccessibleName('테스트 모드');
   });
 });
 
@@ -333,7 +362,7 @@ describe('TestModeControl global state sync', () => {
     const { rerender } = render(
       <TestModeControl
         surveyId={SURVEY_ID}
-        initial={initial({ testModeEnabled: false, testResponseCount: 0 })}
+        initial={initial({ testModeEnabled: false, testViewInBrowser: false, testResponseCount: 0 })}
       />,
     );
 
@@ -343,10 +372,12 @@ describe('TestModeControl global state sync', () => {
         initial={initial({ testTargetCount: 1, firstTestInviteCode: 'invite-refreshed' })}
       />,
     );
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
+    await user.hover(trigger());
 
     const menu = await screen.findByRole('menu');
-    expect(within(menu).queryByText('테스트 대상자 생성')).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole('menuitem', { name: /테스트 조사 대상자 생성/ }),
+    ).toHaveAttribute('data-disabled');
   });
 
   it('focus refresh는 snapshot 변경이 있을 때만 router를 refresh한다', async () => {
@@ -401,14 +432,134 @@ describe('TestModeControl global state sync', () => {
     window.dispatchEvent(new Event('focus'));
     await waitFor(() => expect(controlGetMock).toHaveBeenCalledTimes(2));
 
-    await act(async () => resolveSecond(initial({ testModeEnabled: false })));
+    await act(async () => resolveSecond(initial({ testModeEnabled: false, testViewInBrowser: false })));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '테스트 모드' })).not.toHaveClass(
         'border-amber-300',
       ),
     );
     await act(async () => resolveFirst(initial()));
-    expect(screen.getByRole('button', { name: '테스트 모드' })).not.toHaveClass('border-amber-300');
+    expect(trigger()).toHaveAccessibleName('테스트 모드');
     expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TestModeControl 브라우저별 테스트 데이터 보기', () => {
+  it('버튼은 눌러도 아무것도 바꾸지 않고 메뉴만 연다 — 호버로 열린 메뉴를 클릭이 닫지 않는다', async () => {
+    const user = userEvent.setup();
+    render(
+      <TestModeControl
+        surveyId={SURVEY_ID}
+        initial={initial({ testModeEnabled: false, testViewInBrowser: false })}
+      />,
+    );
+
+    await user.click(trigger());
+
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    await user.click(trigger());
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(controlSetTestModeMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it('테스트 모드가 꺼져 있으면 링크 복사·테스트 데이터 보기·대상자 생성이 막힌다', async () => {
+    const user = userEvent.setup();
+    render(
+      <TestModeControl
+        surveyId={SURVEY_ID}
+        initial={initial({ testModeEnabled: false, testViewInBrowser: false })}
+      />,
+    );
+
+    await user.hover(trigger());
+    const entries = menuEntries(await screen.findByRole('menu'));
+    expect(entries.map((e) => e.disabled)).toEqual([false, true, true, true]);
+    expect(entries[0]?.checked).toBe('false');
+  });
+
+  it('테스트 모드를 켜도 이 브라우저의 테스트 데이터 보기는 켜지 않는다', async () => {
+    const user = userEvent.setup();
+    controlSetTestModeMock.mockResolvedValue(initial({ testViewInBrowser: false }));
+    render(
+      <TestModeControl
+        surveyId={SURVEY_ID}
+        initial={initial({ testModeEnabled: false, testViewInBrowser: false })}
+      />,
+    );
+
+    await user.hover(trigger());
+    await user.click(
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', { name: /^테스트 모드/ }),
+    );
+
+    await waitFor(() => expect(controlSetTestModeMock).toHaveBeenCalledTimes(1));
+    expect(document.cookie).not.toContain(`${COOKIE_NAME}=1`);
+    await waitFor(() => expect(trigger()).toHaveAccessibleName(/^테스트 모드/));
+    expect(trigger()).toHaveTextContent('ON');
+  });
+
+  it('다른 사람이 켠 테스트 모드에서 테스트 데이터 보기를 켜면 쿠키만 켜고 버튼이 「테스트 데이터 보는 중」이 된다', async () => {
+    const user = userEvent.setup();
+    render(<TestModeControl surveyId={SURVEY_ID} initial={initial({ testViewInBrowser: false })} />);
+
+    expect(trigger()).toHaveTextContent('테스트 모드');
+    await user.hover(trigger());
+    const view = within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', {
+      name: /테스트 데이터 보기/,
+    });
+    expect(view).toHaveAttribute('aria-checked', 'false');
+    expect(view).toHaveTextContent('지금 실데이터를 보는 중');
+    await user.click(view);
+
+    expect(controlSetTestModeMock).not.toHaveBeenCalled();
+    expect(document.cookie).toContain(`${COOKIE_NAME}=1`);
+    expect(refreshMock).toHaveBeenCalled();
+    expect(trigger()).toHaveTextContent('테스트 데이터 보는 중');
+  });
+
+  it('테스트 데이터 보기를 끄면 쿠키만 지우고 테스트 모드는 끄지 않는다', async () => {
+    const user = userEvent.setup();
+    document.cookie = `${COOKIE_NAME}=1; path=/`;
+    render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} />);
+
+    await user.hover(trigger());
+    await user.click(
+      within(await screen.findByRole('menu')).getByRole('menuitemcheckbox', {
+        name: /테스트 데이터 보기/,
+      }),
+    );
+
+    expect(controlDisableMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(document.cookie).not.toContain(`${COOKIE_NAME}=1`);
+    expect(trigger()).toHaveTextContent('테스트 모드');
+  });
+
+  it('실데이터를 보는 채로 대상자 생성을 누르면 테스트 데이터 보기를 함께 켠다', async () => {
+    const user = userEvent.setup();
+    render(<TestModeControl surveyId={SURVEY_ID} initial={initial({ testViewInBrowser: false })} />);
+
+    await user.hover(trigger());
+    await user.click(
+      within(await screen.findByRole('menu')).getByRole('menuitem', {
+        name: /테스트 조사 대상자 생성/,
+      }),
+    );
+
+    expect(await screen.findByRole('dialog', { name: '테스트 대상자 생성' })).toBeInTheDocument();
+    expect(document.cookie).toContain(`${COOKIE_NAME}=1`);
+  });
+
+  it('테스트 모드가 꺼졌는데 쿠키가 남아 있으면 지운다 — 다시 켜질 때 묻지 않고 테스트 보기로 돌아가지 않게', async () => {
+    document.cookie = `${COOKIE_NAME}=1; path=/`;
+    render(
+      <TestModeControl
+        surveyId={SURVEY_ID}
+        initial={initial({ testModeEnabled: false, testViewInBrowser: true })}
+      />,
+    );
+
+    await waitFor(() => expect(document.cookie).not.toContain(`${COOKIE_NAME}=1`));
   });
 });

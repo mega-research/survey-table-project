@@ -33,7 +33,11 @@ import {
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { logger } from '@/lib/logger';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
-import { loadOperationsDataScope } from '@/server/data-scope';
+import {
+  loadOperationsDataScope,
+  readBrowserTestView,
+  resolveWriteScopeIsTest,
+} from '@/server/data-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 import type {
   ContactColumnDef,
@@ -181,6 +185,8 @@ export async function ingestContactUpload(
   let errorRows = 0;
   const skippedBreakdown = { policy: 0, fileDuplicates: 0, multiMatches: 0, emptyKeys: 0 };
 
+  // 이 브라우저의 보기 선택 — 다른 사람이 테스트 모드를 켜 둔 동안에도 실데이터를 보는 브라우저는 올릴 수 있다.
+  const browserTestView = await readBrowserTestView(surveyId);
   const result = await db.transaction(async (tx) => {
     // 설문 행 잠금 — 모드 전환·동시 업로드와 직렬화. 스킴도 같은 쿼리로 확보.
     const scopeRows = await tx.execute<SurveyModeRow>(sql`
@@ -191,7 +197,7 @@ export async function ingestContactUpload(
     `);
     const survey = scopeRows[0];
     if (!survey) throw new Error('설문을 찾을 수 없습니다.');
-    if (survey.test_mode_enabled) {
+    if (resolveWriteScopeIsTest(survey.test_mode_enabled, false, browserTestView)) {
       throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
     }
     const existingScheme = normalizeContactColumnScheme(survey.contact_columns ?? null);

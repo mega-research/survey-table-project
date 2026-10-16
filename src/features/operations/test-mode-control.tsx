@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
 import { useMutation } from '@tanstack/react-query';
-import { Copy, FlaskConical } from 'lucide-react';
+import { ChevronDown, Copy, Eye, FlaskConical, Power, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -28,10 +28,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TestContactGeneratorDialog } from '@/features/operations/contacts/test-contact-generator-dialog';
 import { getErrorMessage } from '@/lib/get-error-message';
+import {
+  TEST_VIEW_COOKIE_MAX_AGE_SECONDS,
+  TEST_VIEW_COOKIE_VALUE,
+  testViewCookieName,
+} from '@/lib/operations/test-view-cookie';
 import { client } from '@/shared/lib/rpc';
 
 interface TestModeState {
   testModeEnabled: boolean;
+  testViewInBrowser: boolean;
   testToken: string | null;
   accessIdentifier: string;
   testResponseCount: number;
@@ -42,6 +48,7 @@ interface TestModeState {
 function toTestModeState(row: TestModeState): TestModeState {
   return {
     testModeEnabled: row.testModeEnabled,
+    testViewInBrowser: row.testViewInBrowser,
     testToken: row.testToken,
     accessIdentifier: row.accessIdentifier,
     testResponseCount: row.testResponseCount,
@@ -54,6 +61,7 @@ function toTestModeState(row: TestModeState): TestModeState {
 function offFallbackState(surveyId: string): TestModeState {
   return {
     testModeEnabled: false,
+    testViewInBrowser: false,
     testToken: null,
     accessIdentifier: surveyId,
     testResponseCount: 0,
@@ -62,10 +70,22 @@ function offFallbackState(surveyId: string): TestModeState {
   };
 }
 
+/**
+ * 이 브라우저의 「테스트 모드로 보기」 쿠키를 켜고 끈다. 콘솔 파티션은 서버가 이 쿠키와 설문의
+ * 테스트 모드를 함께 보고 정하므로(server/data-scope) 바꾼 뒤에는 router.refresh 로 다시 읽는다.
+ */
+function writeTestViewCookie(surveyId: string, on: boolean) {
+  const name = testViewCookieName(surveyId);
+  document.cookie = on
+    ? `${name}=${TEST_VIEW_COOKIE_VALUE}; path=/; max-age=${TEST_VIEW_COOKIE_MAX_AGE_SECONDS}; samesite=lax`
+    : `${name}=; path=/; max-age=0; samesite=lax`;
+}
+
 function hasSameTestModeState(current: TestModeState | null, next: TestModeState): boolean {
   return (
     current !== null &&
     current.testModeEnabled === next.testModeEnabled &&
+    current.testViewInBrowser === next.testViewInBrowser &&
     current.testToken === next.testToken &&
     current.accessIdentifier === next.accessIdentifier &&
     current.testResponseCount === next.testResponseCount &&
@@ -85,6 +105,11 @@ interface Props {
 
 /**
  * 설문 테스트 모드 토글 (운영 콘솔·설문 편집 헤더 공용).
+ *
+ * 두 겹이다. 「테스트 모드」(`testModeEnabled` — 테스트 링크가 산다)는 설문 단위라 모두에게 같고,
+ * 「테스트 데이터 보기」는 브라우저마다 쿠키로 정한다 — 한 사람이 켜도 다른 사람의 콘솔은 실데이터 그대로다.
+ * 버튼 자체는 아무 동작이 없고 호버·클릭으로 메뉴 넷(테스트 모드 · 링크 복사 · 테스트 데이터 보기 ·
+ * 대상자 생성)을 연다. 테스트 모드를 켜도 보기는 따로 켜고, 끌 때는 보관/삭제 확인 창을 거친다.
  *
  * 켜면 `/survey/{accessIdentifier}?test={token}` 링크가 활성화되어 중단/중복 게이트를 우회하고
  * 응답이 `survey_responses.isTest=true` 로 적재된다(집계 제외). 켜는 즉시 링크를
@@ -177,6 +202,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
   // 테스트 모드 드롭다운 — 클릭 외에 호버로도 열린다. 대각선 이동 중 닫힘을 막기 위해
   // mouseleave 후 200ms 지연 뒤 닫고, 트리거/콘텐츠 어느 쪽이든 재진입하면 취소한다.
   const [testMenuOpen, setTestMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuCloseTimer = useRef<number | null>(null);
 
   const openTestMenu = () => {
@@ -202,6 +228,29 @@ export function TestModeControl({ surveyId, initial }: Props) {
     },
     [],
   );
+
+  // 설문의 테스트 모드(모든 사람) · 이 브라우저의 콘솔이 지금 테스트 데이터를 보는가(서버 판정 server/data-scope 와 같은 식).
+  const envOn = state?.testModeEnabled === true;
+  const viewingTest = envOn && state?.testViewInBrowser === true;
+
+  // 테스트 환경이 꺼졌는데 쿠키가 남아 있으면 지운다 — 남겨 두면 누군가 다시 켜는 순간
+  // 이 브라우저가 묻지도 않고 테스트 보기로 돌아간다.
+  const staleTestView = state !== null && !state.testModeEnabled && state.testViewInBrowser;
+  // 쿠키만 지운다 — 화면은 이미 꺼진 모양이고, 상태의 testViewInBrowser 는 다음 조회가 false 로 맞춘다.
+  useEffect(() => {
+    if (staleTestView) writeTestViewCookie(surveyId, false);
+  }, [staleTestView, surveyId]);
+
+  const setBrowserTestView = (on: boolean) => {
+    writeTestViewCookie(surveyId, on);
+    controlRequestVersion.current += 1;
+    setState((current) => {
+      const next = current ? { ...current, testViewInBrowser: on } : current;
+      stateRef.current = next;
+      return next;
+    });
+    router.refresh();
+  };
 
   const buildAnonymousTestLink = (token: string, identifier: string) =>
     `${window.location.origin}/survey/${identifier}?test=${token}`;
@@ -247,9 +296,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
           );
           toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 클립보드에 복사했습니다.');
         } catch {
-          toast.success(
-            '테스트 모드가 켜졌습니다. 버튼에 마우스를 올리면 테스트 링크를 복사할 수 있습니다.',
-          );
+          toast.success('테스트 모드가 켜졌습니다. 메뉴에서 테스트 링크를 복사할 수 있습니다.');
         }
       }
       router.refresh();
@@ -258,9 +305,28 @@ export function TestModeControl({ surveyId, initial }: Props) {
       toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
     },
   });
+  // 테스트 모드를 켜도 이 브라우저의 테스트 데이터 보기는 켜지 않는다 — 보기는 메뉴에서 따로 켠다.
   const enableTestMode = () => {
     controlRequestVersion.current += 1;
     enableMutation.mutate();
+  };
+
+  const toggleTestView = () => {
+    const on = !viewingTest;
+    setBrowserTestView(on);
+    toast.success(
+      on
+        ? '이 브라우저에서 테스트 데이터를 봅니다.'
+        : '이 브라우저는 실데이터 화면으로 돌아왔습니다. 테스트 모드는 켜진 채로 남습니다.',
+    );
+  };
+
+  // 테스트 대상자는 테스트 데이터 쪽에 만들어진다(서버가 이 브라우저의 보기로 파티션을 정한다).
+  // 실데이터를 보는 채로 만들면 막히므로 보기를 먼저 켠다.
+  const openGenerator = () => {
+    setTestMenuOpen(false);
+    if (!viewingTest) setBrowserTestView(true);
+    setGeneratorOpen(true);
   };
 
   const requestDisableTestMode = () => {
@@ -279,9 +345,11 @@ export function TestModeControl({ surveyId, initial }: Props) {
       return { result, disposition };
     },
     onSuccess: ({ result, disposition }) => {
+      writeTestViewCookie(surveyId, false);
       const next = {
         ...(stateRef.current ?? {
           testModeEnabled: false,
+          testViewInBrowser: false,
           testToken: null,
           accessIdentifier: surveyId,
           testResponseCount: 0,
@@ -289,6 +357,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
           firstTestInviteCode: null,
         }),
         testModeEnabled: false,
+        testViewInBrowser: false,
         testResponseCount: result.remainingResponseCount,
         testTargetCount: result.remainingTargetCount,
         firstTestInviteCode:
@@ -346,55 +415,92 @@ export function TestModeControl({ surveyId, initial }: Props) {
 
   return (
     <>
-      {state?.testModeEnabled ? (
-        // modal={false}: 호버 오픈 중 배경 pointer-events 잠금이 없어야 mouseleave 닫힘이 자연스럽다
-        <DropdownMenu open={testMenuOpen} onOpenChange={setTestMenuOpen} modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isPending}
-              className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-              onMouseEnter={openTestMenu}
-              onMouseLeave={scheduleTestMenuClose}
-            >
-              <FlaskConical className="mr-2 h-4 w-4" />
-              테스트 모드
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
+      {/* 버튼은 아무 동작이 없고 메뉴만 연다(호버·클릭). modal={false}: 호버 오픈 중 배경 잠금이 없어야 mouseleave 닫힘이 자연스럽다 */}
+      <DropdownMenu open={testMenuOpen} onOpenChange={setTestMenuOpen} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            ref={triggerRef}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending || state === null}
+            className={
+              viewingTest
+                ? 'border-amber-600 bg-amber-500 text-white hover:bg-amber-600 hover:text-white'
+                : envOn
+                  ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : undefined
+            }
             onMouseEnter={openTestMenu}
             onMouseLeave={scheduleTestMenuClose}
+            // 호버로 이미 열린 메뉴를 클릭이 다시 닫지 않게 — 기본 동작을 막으면 Radix 가 토글을 건너뛴다.
+            onPointerDown={(e) => {
+              if (testMenuOpen) e.preventDefault();
+            }}
           >
-            <DropdownMenuItem disabled={!testLink} onSelect={copyTestLink}>
-              <Copy className="mr-2 h-4 w-4" />
-              테스트 링크 복사
-            </DropdownMenuItem>
-            {state.testTargetCount === 0 ? (
-              <DropdownMenuItem onSelect={() => setGeneratorOpen(true)}>
-                테스트 대상자 생성
-              </DropdownMenuItem>
+            <FlaskConical className="mr-2 h-4 w-4" />
+            {viewingTest ? '테스트 데이터 보는 중' : '테스트 모드'}
+            {envOn ? (
+              <span
+                className={`ml-2 rounded px-1.5 py-0.5 text-[11px] leading-none font-bold text-white ${
+                  viewingTest ? 'bg-amber-700' : 'bg-amber-500'
+                }`}
+              >
+                ON
+              </span>
             ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={isPending} onSelect={requestDisableTestMode}>
-              테스트 모드 끄기
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isPending || state === null}
-          onClick={enableTestMode}
+            <ChevronDown className="ml-1 h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-[340px]"
+          onMouseEnter={openTestMenu}
+          onMouseLeave={scheduleTestMenuClose}
+          // 버튼 위 클릭은 메뉴 바깥 클릭으로 치지 않는다 — 열린 메뉴를 닫지 않게(위 onPointerDown 과 짝).
+          onPointerDownOutside={(e) => {
+            if (triggerRef.current?.contains(e.target as Node)) e.preventDefault();
+          }}
         >
-          <FlaskConical className="mr-2 h-4 w-4" />
-          테스트 모드
-        </Button>
-      )}
+          <ToggleMenuItem
+            icon={<Power className="h-4 w-4" />}
+            label="테스트 모드"
+            hint={envOn ? '모든 사람에게 적용' : '켜면 모든 사람에게 테스트 링크가 열립니다'}
+            checked={envOn}
+            disabled={isPending}
+            onToggle={envOn ? requestDisableTestMode : enableTestMode}
+          />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!envOn || !testLink} onSelect={copyTestLink}>
+            <Copy className="mr-2 h-4 w-4" />
+            테스트 링크 복사
+          </DropdownMenuItem>
+          <ToggleMenuItem
+            icon={<Eye className="h-4 w-4" />}
+            label="테스트 데이터 보기"
+            hint={
+              envOn && !viewingTest ? '이 브라우저만 · 지금 실데이터를 보는 중' : '이 브라우저만'
+            }
+            checked={viewingTest}
+            disabled={!envOn || isPending}
+            onToggle={toggleTestView}
+          />
+          <DropdownMenuItem
+            disabled={!envOn || (state?.testTargetCount ?? 0) > 0}
+            onSelect={openGenerator}
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            <span className="flex flex-col">
+              <span>테스트 조사 대상자 생성</span>
+              {envOn && state && state.testTargetCount > 0 ? (
+                <span className="text-xs text-slate-500">
+                  이미 {state.testTargetCount}명을 만들었습니다
+                </span>
+              ) : null}
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <TestContactGeneratorDialog
         surveyId={surveyId}
@@ -453,5 +559,52 @@ export function TestModeControl({ surveyId, initial }: Props) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * 메뉴 안의 켜고 끄는 항목 — 고른 뒤에도 메뉴를 닫지 않는다(스위치가 바뀌는 걸 보게).
+ * 스위치는 모양만이고 상태는 menuitemcheckbox 의 aria-checked 로 알린다.
+ */
+function ToggleMenuItem({
+  icon,
+  label,
+  hint,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <DropdownMenuItem
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onSelect={(e) => {
+        e.preventDefault();
+        onToggle();
+      }}
+      className="items-start gap-2"
+    >
+      <span className="mt-0.5">{icon}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span>{label}</span>
+        <span className="text-xs text-slate-500">{hint}</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className={`mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+          checked ? 'justify-end bg-blue-500' : 'justify-start bg-slate-300'
+        }`}
+      >
+        <span className="h-4 w-4 rounded-full bg-white" />
+      </span>
+    </DropdownMenuItem>
   );
 }
