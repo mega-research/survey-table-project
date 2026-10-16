@@ -33,7 +33,7 @@ import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles-format';
 import type { MailTemplate } from '@/db/schema/mail';
@@ -77,6 +77,8 @@ interface Props {
   dir: CampaignSortDir;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 export function CampaignWizard({
@@ -91,6 +93,7 @@ export function CampaignWizard({
   sort,
   dir,
   mailColumns,
+  showResid,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -421,17 +424,19 @@ export function CampaignWizard({
                     aria-label="현재 페이지 전체 선택"
                   />
                 </th>
-                <th className="px-3 py-2">
-                  <SortHeader
-                    label={RESID_DEFAULT_LABEL}
-                    sortKey="resid"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
-                </th>
+                {showResid ? (
+                  <th className="px-3 py-2">
+                    <SortHeader
+                      label={RESID_DEFAULT_LABEL}
+                      sortKey="resid"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                  </th>
+                ) : null}
                 {mailColumns.map((c) => (
-                  <th key={c.key} className="px-3 py-2">
+                  <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
                     {c.label}
                   </th>
                 ))}
@@ -484,7 +489,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7 + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6 + (showResid ? 1 : 0) + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -501,10 +506,12 @@ export function CampaignWizard({
                         aria-label={`${r.emailMasked} 선택`}
                       />
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    {showResid ? (
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    ) : null}
                     {mailColumns.map((c) => (
-                      <td key={c.key} className="px-3 py-2 text-slate-600">
-                        {r.attrs[c.key] || '—'}
+                      <td key={`${c.kind}.${c.key}`} className="px-3 py-2 text-slate-600">
+                        {mailColumnValue(c, r.attrs, r.piiMasks) || '—'}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>

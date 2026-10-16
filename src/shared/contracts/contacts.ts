@@ -30,9 +30,10 @@ export interface ContactColumnDef {
   /** 숨김 (운영 컬럼 일부는 hide 불가 — UI 가드) */
   hidden?: boolean;
   /**
-   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 이 컬럼을 표시.
-   * attrs.* 소스 전용 — system/pii 컬럼은 attrs 에 값이 없어 표시할 수 없다(서비스 가드).
-   * 조사 대상 목록의 hidden 과는 독립이다.
+   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표·수신거부 명단)에 이 컬럼을 표시.
+   * attrs.*·pii.*(마스킹 힌트로)·system.resid 만 — 운영 컬럼은 서비스 가드가 거부한다.
+   * attrs·pii 는 켜야(true) 보이고, 시스템ID 는 기본으로 보여 끈 경우에만 false 가 저장된다.
+   * 조사 대상 목록의 hidden 과는 독립이다. 해석은 `lib/contacts/mail-display-columns`.
    */
   showInMail?: boolean;
   /**

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
 import type { MailTemplate } from '@/db/schema/mail';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { CampaignCandidateRow } from '@/shared/contracts/mail-io';
 
 vi.mock('next/navigation', () => ({
@@ -33,6 +34,7 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     emailMasked: 'lsj...@meg...',
     groupValue: '메가리서치',
     attrs: {},
+    piiMasks: {},
     respondedAt: null,
     responseStatus: null,
     progressPct: null,
@@ -46,7 +48,8 @@ const template = { id: 'tpl-1', name: '기본 템플릿', subject: '설문 안�
 
 function renderWizard(
   rows: CampaignCandidateRow[],
-  mailColumns: Array<{ key: string; label: string }>,
+  mailColumns: MailDisplayColumn[],
+  showResid = true,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -68,6 +71,7 @@ function renderWizard(
         sort="resid"
         dir="asc"
         mailColumns={mailColumns}
+        showResid={showResid}
       />
     </QueryClientProvider>,
   );
@@ -92,7 +96,7 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
         candidate({ id: 'ct-1', resid: 1, attrs: { 리스트ID: 'L-001' } }),
         candidate({ id: 'ct-2', resid: 2, attrs: {} }),
       ],
-      [{ key: '리스트ID', label: '리스트 ID' }],
+      [{ key: '리스트ID', label: '리스트 ID', kind: 'attrs' }],
     );
 
     // [0] 체크박스, [1] 시스템ID, [2] 리스트 ID
@@ -105,5 +109,24 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
 
     expect(headerLabels()).toHaveLength(7);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
+  });
+
+  it('개인정보 열은 마스킹 힌트를 그린다 — attrs 에 같은 키가 있어도 힌트를 쓴다', () => {
+    renderWizard(
+      [
+        candidate({ id: 'x-1', attrs: { 대표자명: '평문' }, piiMasks: { 대표자명: '김*수' } }),
+        candidate({ id: 'x-2', piiMasks: {} }),
+      ],
+      [{ key: '대표자명', label: '대표자', kind: 'pii' }],
+    );
+
+    expect(columnCells('대표자')).toEqual(['김*수', '—']);
+  });
+
+  it('시스템ID 를 끄면 그 열이 빠진다', () => {
+    renderWizard([candidate({})], [], false);
+
+    expect(headerLabels()).toHaveLength(6);
+    expect(headerLabels()).not.toContain('시스템ID');
   });
 });

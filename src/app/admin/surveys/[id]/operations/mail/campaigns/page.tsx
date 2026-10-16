@@ -9,7 +9,11 @@ import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
 } from '@/server/mail/services/campaigns-read';
-import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import {
+  mailPiiMaskKeys,
+  resolveMailDisplayColumns,
+  resolveMailShowsResid,
+} from '@/lib/contacts/mail-display-columns';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 
@@ -33,11 +37,19 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
   const page = parsePage(sp.page);
   const unsubPage = parsePage(sp.unsubPage);
 
-  const [campaigns, unsubscribed, scheme] = await Promise.all([
+  // 수신거부 명단은 메일 표시를 켠 개인정보 열의 힌트를 실어야 해서 스킴을 먼저 읽는다.
+  const [campaigns, scheme] = await Promise.all([
     listCampaignsForSurvey({ surveyId, scope, page, pageSize: PAGE_SIZE }),
-    listUnsubscribedContacts({ surveyId, scope, page: unsubPage, pageSize: UNSUB_PAGE_SIZE }),
     getContactColumnScheme(surveyId, scope),
   ]);
+  const mailColumns = resolveMailDisplayColumns(scheme);
+  const unsubscribed = await listUnsubscribedContacts({
+    surveyId,
+    scope,
+    page: unsubPage,
+    pageSize: UNSUB_PAGE_SIZE,
+    piiMaskKeys: mailPiiMaskKeys(mailColumns),
+  });
 
   return (
     <main className="mx-auto max-w-7xl space-y-10 px-6 py-8">
@@ -73,7 +85,8 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
           total={unsubscribed.total}
           page={unsubscribed.page}
           pageSize={UNSUB_PAGE_SIZE}
-          mailColumns={resolveMailDisplayColumns(scheme)}
+          mailColumns={mailColumns}
+          showResid={resolveMailShowsResid(scheme)}
         />
       </section>
     </main>

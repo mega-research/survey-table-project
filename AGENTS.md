@@ -259,7 +259,7 @@ surveys                    # 설문 설정
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
 │                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
-│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표에 attrs 컬럼 노출, attrs.* 전용)
+│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표·수신거부 명단에 열 노출 — attrs.* 는 값, pii.* 는 마스킹 힌트(켠 열만 서버가 읽는다), system.resid 는 기본 보임이라 끈 경우만 false. 해석 lib/contacts/mail-display-columns)
 │                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — 아래 "메일 발송 주소 순서")
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의

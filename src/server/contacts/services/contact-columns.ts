@@ -38,9 +38,9 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   if (new Set(levels).size !== levels.length) {
     throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
   }
-  // 메일 표시 가드 — attrs.* 전용 (system/pii 는 attrs 에 값이 없어 표시 불가)
+  // 메일 표시 가드 — 명단 속성·개인정보·시스템ID 열만. 운영 컬럼(컨택결과·web 등)은 메일 표에 따로 있다.
   if (scheme.columns.some((c) => c.showInMail === true && !canShowInMail(c))) {
-    throw new Error('메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.');
+    throw new Error('메일 표시는 명단 속성·개인정보·시스템ID 열에만 지정할 수 있습니다.');
   }
   // 발송 주소 순서 가드 — 이메일로 암호화된 열 전용, 1 이상의 정수, 열마다 다른 값
   const mailOrderProblem = validateMailEmailOrder(scheme.columns);

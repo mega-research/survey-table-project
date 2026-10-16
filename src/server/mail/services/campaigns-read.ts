@@ -16,6 +16,7 @@ import {
   emailColumnCandidateSql,
   emailColumnOrderSql,
   firstEmailRowByTarget,
+  getMaskHintsForTargets,
   selectEmailPiiRows,
 } from '@/lib/crypto/contact-pii-repo';
 import { maskEmail } from '@/lib/operations/contacts-format';
@@ -410,6 +411,8 @@ export async function listCampaignRecipients(args: {
   errorReasons?: string[];
   /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
   resultCodes?: string[];
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -486,6 +489,11 @@ export async function listCampaignRecipients(args: {
     .limit(pageSize)
     .offset(offset);
 
+  const piiMasks = await fetchPiiMasks(
+    rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
+    args.piiMaskKeys,
+  );
+
   return {
     rows: rows.map((r) => ({
       id: r.id,
@@ -493,6 +501,7 @@ export async function listCampaignRecipients(args: {
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
       contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
+      contactPiiMasks: (r.contactTargetId && piiMasks.get(r.contactTargetId)) || {},
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
@@ -789,6 +798,28 @@ async function fetchEmailMaskHints(
 const EMAIL_DASH = '—';
 
 /**
+ * 메일 표시를 켠 개인정보 열의 마스킹 힌트 — 조사 대상 목록과 같은 값(평문 복호화 없음).
+ * 켠 열이 없으면 조회하지 않는다. 결과는 contact_id → (column_key → 힌트), 힌트가 없는 칸은 뺀다.
+ */
+async function fetchPiiMasks(
+  contactIds: readonly string[],
+  keys: readonly string[] | undefined,
+): Promise<Map<string, Record<string, string>>> {
+  const result = new Map<string, Record<string, string>>();
+  if (!keys || keys.length === 0 || contactIds.length === 0) return result;
+  const wanted = new Set(keys);
+  const hints = await getMaskHintsForTargets(contactIds);
+  for (const [id, byKey] of hints) {
+    const masks: Record<string, string> = {};
+    for (const [key, hint] of Object.entries(byKey)) {
+      if (wanted.has(key) && hint.maskHint) masks[key] = hint.maskHint;
+    }
+    result.set(id, masks);
+  }
+  return result;
+}
+
+/**
  * 미리보기 정렬 컬럼 매핑. id tiebreaker 는 호출부에서 추가.
  *
  * 응답여부는 미응답(respondedAt NULL) ↔ 응답완료 그룹 토글이 목적이므로 방향에 따라
@@ -828,6 +859,8 @@ export async function previewCampaignCandidates(args: {
   dir?: CampaignSortDir;
   page?: number;
   pageSize?: number;
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const [{ negative: negativeCodes }, bouncedContactIds, emailOrder] = await Promise.all([
@@ -892,7 +925,10 @@ export async function previewCampaignCandidates(args: {
     .limit(pageSize)
     .offset(offset);
 
-  const maskMap = await fetchEmailMaskHints(rows.map((r) => r.id), emailOrder);
+  const [maskMap, piiMasks] = await Promise.all([
+    fetchEmailMaskHints(rows.map((r) => r.id), emailOrder),
+    fetchPiiMasks(rows.map((r) => r.id), args.piiMaskKeys),
+  ]);
 
   return {
     rows: rows.map((r) => ({
@@ -902,6 +938,7 @@ export async function previewCampaignCandidates(args: {
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
+      piiMasks: piiMasks.get(r.id) ?? {},
       respondedAt: r.respondedAt,
       responseStatus: r.responseStatus,
       progressPct: r.progressPct,
@@ -955,6 +992,8 @@ export async function listUnsubscribedContacts(args: {
   scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
@@ -993,10 +1032,13 @@ export async function listUnsubscribedContacts(args: {
     .offset(offset);
 
   const emailOrder = await loadMailEmailOrder(args.surveyId, testFlagForScope(args.scope));
-  const maskMap = await fetchEmailMaskHints(
-    rows.map((r) => r.id),
-    emailOrder,
-  );
+  const [maskMap, piiMasks] = await Promise.all([
+    fetchEmailMaskHints(
+      rows.map((r) => r.id),
+      emailOrder,
+    ),
+    fetchPiiMasks(rows.map((r) => r.id), args.piiMaskKeys),
+  ]);
 
   return {
     rows: rows.map((r) => ({
@@ -1005,6 +1047,7 @@ export async function listUnsubscribedContacts(args: {
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
+      piiMasks: piiMasks.get(r.id) ?? {},
       unsubscribedAt: r.unsubscribedAt,
       resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
         ? r.latestAttemptAt

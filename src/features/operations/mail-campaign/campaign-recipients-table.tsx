@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
 import {
@@ -37,6 +37,8 @@ interface Props {
   resultOptions: Array<{ value: string; label: string }>;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 // 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
@@ -107,6 +109,7 @@ export function CampaignRecipientsTable({
   errorOptions,
   resultOptions,
   mailColumns,
+  showResid,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -214,9 +217,9 @@ export function CampaignRecipientsTable({
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                <th className="px-3 py-2">시스템ID</th>
+                {showResid ? <th className="px-3 py-2">시스템ID</th> : null}
                 {mailColumns.map((c) => (
-                  <th key={c.key} className="px-3 py-2">
+                  <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
                     {c.label}
                   </th>
                 ))}
@@ -273,12 +276,14 @@ export function CampaignRecipientsTable({
                     key={r.id}
                     className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-slate-600">
-                      {r.contactResid === null ? '—' : `#${r.contactResid}`}
-                    </td>
+                    {showResid ? (
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                        {r.contactResid === null ? '—' : `#${r.contactResid}`}
+                      </td>
+                    ) : null}
                     {mailColumns.map((c) => (
-                      <td key={c.key} className="px-3 py-2 text-slate-600">
-                        {r.contactAttrs[c.key] || '—'}
+                      <td key={`${c.kind}.${c.key}`} className="px-3 py-2 text-slate-600">
+                        {mailColumnValue(c, r.contactAttrs, r.contactPiiMasks) || '—'}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>

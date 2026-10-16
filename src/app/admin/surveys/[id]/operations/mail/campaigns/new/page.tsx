@@ -21,7 +21,11 @@ import {
 } from '@/server/read-models/contacts-filters';
 import { getOperationsDataScope } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
-import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import {
+  mailPiiMaskKeys,
+  resolveMailDisplayColumns,
+  resolveMailShowsResid,
+} from '@/lib/contacts/mail-display-columns';
 import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
 import { buildTemplateRedirectQuery } from '@/features/operations/mail-campaign/campaign-wizard-url';
 import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
@@ -150,6 +154,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     : 'resid';
   const dir: CampaignSortDir = sp.dir === 'desc' ? 'desc' : 'asc';
 
+  const mailColumns = resolveMailDisplayColumns(scheme);
   const candidates = await previewCampaignCandidates({
     surveyId,
     scope,
@@ -159,6 +164,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     dir,
     page: parsePage(sp.page),
     pageSize: PAGE_SIZE,
+    piiMaskKeys: mailPiiMaskKeys(mailColumns),
   });
 
   // 스냅샷은 빌더/깔때기를 따로 담는다 — 깔때기의 in 모드 다중값은 {source,value,op}
@@ -215,7 +221,8 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         initialClauses={initialClauses}
         sort={sort}
         dir={dir}
-        mailColumns={resolveMailDisplayColumns(scheme)}
+        mailColumns={mailColumns}
+        showResid={resolveMailShowsResid(scheme)}
       />
     </main>
   );

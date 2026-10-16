@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -17,6 +17,8 @@ interface Props {
   pageSize: number;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 export function UnsubscribedSegment({
@@ -26,6 +28,7 @@ export function UnsubscribedSegment({
   page,
   pageSize,
   mailColumns,
+  showResid,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -52,9 +55,9 @@ export function UnsubscribedSegment({
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                  <th className="px-4 py-3">시스템ID</th>
+                  {showResid ? <th className="px-4 py-3">시스템ID</th> : null}
                   {mailColumns.map((c) => (
-                    <th key={c.key} className="px-4 py-3">
+                    <th key={`${c.kind}.${c.key}`} className="px-4 py-3">
                       {c.label}
                     </th>
                   ))}
@@ -73,10 +76,12 @@ export function UnsubscribedSegment({
                       key={r.id}
                       className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                     >
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      {showResid ? (
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      ) : null}
                       {mailColumns.map((c) => (
-                        <td key={c.key} className="px-4 py-3 text-slate-600">
-                          {r.attrs[c.key] || '—'}
+                        <td key={`${c.kind}.${c.key}`} className="px-4 py-3 text-slate-600">
+                          {mailColumnValue(c, r.attrs, r.piiMasks) || '—'}
                         </td>
                       ))}
                       <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>

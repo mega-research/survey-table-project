@@ -21,7 +21,11 @@ import {
   resolveGroupCriteria,
   type GroupLevel,
 } from '@/lib/contacts/group-levels';
-import { canShowInMail } from '@/lib/contacts/mail-display-columns';
+import {
+  canShowInMail,
+  isShownInMail,
+  toggleShowInMail as toggledShowInMail,
+} from '@/lib/contacts/mail-display-columns';
 import {
   assignMailOrder,
   canOrderMailEmail,
@@ -73,15 +77,9 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     setColumns((prev) => prev.map((c, i) => (i === index ? { ...c, hidden: !c.hidden } : c)));
   }
 
-  /** 메일 표시 토글 — 끄면 필드를 지워 스킴 JSON 을 깨끗하게 유지한다. */
+  /** 메일 표시 토글 — 기본값으로 돌아가면 필드를 지워 스킴 JSON 을 깨끗하게 유지한다. */
   function toggleShowInMail(index: number) {
-    setColumns((prev) =>
-      prev.map((c, i) => {
-        if (i !== index) return c;
-        const { showInMail: _drop, ...rest } = c;
-        return c.showInMail ? rest : { ...rest, showInMail: true };
-      }),
-    );
+    setColumns((prev) => prev.map((c, i) => (i === index ? toggledShowInMail(c) : c)));
   }
 
   /** 레벨 배정 — 같은 레벨을 쓰던 다른 컬럼에서는 해제(레벨당 1개). null = 없음. */
@@ -140,9 +138,9 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
         </div>
       )}
 
-      <div className="rounded border bg-white">
+      <div className="overflow-x-auto rounded border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+          <thead className="bg-slate-50 text-xs whitespace-nowrap text-slate-600 uppercase">
             <tr>
               <th className="px-3 py-2 text-left">순서</th>
               <th className="px-3 py-2 text-left">라벨</th>
@@ -166,11 +164,15 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                     </div>
                   </td>
                   <td className="px-3 py-2">
-                    <Input value={col.label} onChange={(e) => setLabel(i, e.target.value)} className="h-8 text-sm" />
+                    <Input
+                      value={col.label}
+                      onChange={(e) => setLabel(i, e.target.value)}
+                      className="h-8 min-w-[160px] px-2 py-1 text-sm"
+                    />
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-500">{col.source}</td>
+                  <td className="px-3 py-2 text-xs break-all text-slate-500">{col.source}</td>
                   <td
-                    className="px-3 py-2 text-xs text-slate-600"
+                    className="px-3 py-2 text-xs whitespace-nowrap text-slate-600"
                     title={col.piiType ? '개인정보 종류는 재업로드로만 변경 가능합니다.' : undefined}
                   >
                     {col.piiType ? (
@@ -214,13 +216,15 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                     className="px-3 py-2 text-center"
                     title={
                       !canShowInMail(col)
-                        ? '명단 속성(attrs) 컬럼만 메일 발송 표에 표시할 수 있습니다.'
-                        : undefined
+                        ? '컨택결과·메일·web 등 운영 컬럼은 메일 발송 표에 따로 있습니다.'
+                        : col.piiType
+                          ? '개인정보는 조사 대상 목록처럼 가린 값으로 표시됩니다.'
+                          : undefined
                     }
                   >
                     {canShowInMail(col) ? (
                       <Switch
-                        checked={col.showInMail === true}
+                        checked={isShownInMail(col)}
                         onCheckedChange={() => toggleShowInMail(i)}
                         aria-label={`${col.label} 메일 표시`}
                       />
