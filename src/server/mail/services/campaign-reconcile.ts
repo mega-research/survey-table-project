@@ -4,6 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { requestRecipientFallbacks, triggersFallback } from './campaign-fallback';
 import { getResend } from './resend-client';
 import { mapResendLastEvent, canTransition, applyRecipientTransition } from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
@@ -111,6 +112,7 @@ export async function reconcileCampaignRecipients(
   const actions = planReconcileTransitions(targets, lookups);
   const eventAt = new Date();
   let updated = 0;
+  const fallbackRecipientIds: string[] = [];
 
   for (const action of actions) {
     await db.transaction(async (tx) => {
@@ -142,8 +144,11 @@ export async function reconcileCampaignRecipients(
         recipientArchivedAt: row.archivedAt,
       });
       if (ok) updated += 1;
+      if (ok && triggersFallback(action.newStatus)) fallbackRecipientIds.push(row.id);
     });
   }
+  // 반송·실패로 바뀐 수신자 — 전이가 커밋된 뒤 다음 순위 주소로 대체 발송을 건다.
+  if (fallbackRecipientIds.length > 0) await requestRecipientFallbacks(fallbackRecipientIds);
 
   return { checked: targets.length, updated };
 }

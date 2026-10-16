@@ -102,7 +102,14 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                 >
                   <td className="font-mono text-xs text-slate-600">
                     <Link href={detailHref} className="block px-3 py-3">
-                      #{r.runNumber}
+                      {/* 대체 발송 회차는 별도 대역(2000001~) 번호라 번호 대신 표시만 — 원래 회차는 제목에 */}
+                      {r.kind === 'fallback' ? (
+                        <span className="rounded bg-amber-50 px-1.5 py-0.5 font-sans text-amber-700">
+                          대체
+                        </span>
+                      ) : (
+                        `#${r.runNumber}`
+                      )}
                     </Link>
                   </td>
                   <td className="font-medium text-gray-900">

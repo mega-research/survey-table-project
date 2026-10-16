@@ -1,0 +1,258 @@
+import { and, asc, eq, sql } from 'drizzle-orm';
+import 'server-only';
+
+import { db } from '@/db';
+import { contactPii, contactTargets } from '@/db/schema/contacts';
+import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { decryptPii } from '@/lib/crypto/aes';
+import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
+import { inngest } from '@/lib/inngest/client';
+import { logger } from '@/lib/logger';
+import {
+  type FallbackEmailCandidate,
+  fallbackCampaignTitle,
+  pickFallbackAddress,
+} from '@/lib/mail/fallback-address';
+import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
+import { loadMailEmailOrder } from '@/server/read-models/mail-email-order';
+import {
+  buildNegativeCodeExists,
+  getResultCodeStatuses,
+} from '@/server/read-models/result-code-statuses';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
+
+import { listBouncedEmailBlindIndexes } from './campaigns-read';
+
+/**
+ * 대체 발송 — 수신자가 실패(발송 거부)·반송되면 발송 주소 순서의 다음 이메일 열로 자동 재발송한다 (2026-10-16).
+ *
+ * 원래 회차(부모) 아래 kind='fallback' 회차를 하나 붙이고 그 회차의 수신자로 넣은 뒤 `mail/campaign.queued` 를
+ * 다시 낸다 — 발송·lease·webhook·집계는 기존 장치를 그대로 탄다. 대체 발송이 또 실패·반송되면 그 대체 회차의
+ * 자식 대체 회차로 이어진다(3순위 …). 수신자 한 줄 = (회차, 조사 대상) 유일 제약이라 같은 회차에는 쌓지 않는다.
+ *
+ * 다시 보내지 않는 경우: 그사이 응답을 마쳤거나, 수신거부·스팸 신고(신고는 수신거부로 수렴)했거나, 연락 금지
+ * 결과코드가 붙었거나, 회차가 취소·보관됐거나, 다음 순위 주소가 없을 때. 같은 수신자로 여러 번 불려도
+ * 대체 회차에 한 줄만 생긴다(유일 제약 + ON CONFLICT) — webhook 재전송·dispatch 재시도에 안전하다.
+ */
+
+/** 대체 발송을 일으키는 수신자 상태. 스팸 신고(complained)는 수신거부라 넣지 않는다. */
+export const FALLBACK_TRIGGER_STATUSES: readonly MailRecipientStatus[] = ['bounced', 'failed'];
+
+/** 대체 발송 사슬을 거슬러 올라가는 깊이 상한 — 이메일 열 수보다 넉넉하게. */
+const MAX_CHAIN_DEPTH = 20;
+
+interface QueuedFallback {
+  campaignId: string;
+  surveyId: string;
+}
+
+async function queueRecipientFallback(sourceRecipientId: string): Promise<QueuedFallback | null> {
+  return db.transaction(async (tx) => {
+    const [source] = await tx
+      .select({
+        id: mailRecipients.id,
+        campaignId: mailRecipients.campaignId,
+        contactTargetId: mailRecipients.contactTargetId,
+        status: mailRecipients.status,
+        archivedAt: mailRecipients.archivedAt,
+        emailSnapshot: mailRecipients.emailSnapshot,
+        emailColumnKey: mailRecipients.emailColumnKey,
+        sourceRecipientId: mailRecipients.sourceRecipientId,
+      })
+      .from(mailRecipients)
+      .where(eq(mailRecipients.id, sourceRecipientId));
+    if (!source?.contactTargetId || source.archivedAt !== null) return null;
+    if (!FALLBACK_TRIGGER_STATUSES.includes(source.status as MailRecipientStatus)) return null;
+
+    // 부모 회차 잠금 — 같은 부모의 대체 회차를 동시에 둘 만들지 않게 직렬화한다.
+    const [parent] = await tx
+      .select()
+      .from(mailCampaigns)
+      .where(eq(mailCampaigns.id, source.campaignId))
+      .for('update');
+    if (!parent || parent.archivedAt !== null || parent.status === 'cancelled') return null;
+
+    const { negative: negativeCodes } = await getResultCodeStatuses(parent.surveyId);
+    const [contact] = await tx
+      .select({
+        id: contactTargets.id,
+        isTest: contactTargets.isTest,
+        inviteToken: contactTargets.inviteToken,
+        unsubscribedAt: contactTargets.unsubscribedAt,
+        respondedAt: contactTargets.respondedAt,
+        resultUnsubscribed: sql<boolean>`${latestResultUnsubscribedSql}`,
+        negativeCode: sql<boolean>`${buildNegativeCodeExists(negativeCodes, sql`"contact_targets"."id"`)}`,
+      })
+      .from(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.id, source.contactTargetId),
+          eq(contactTargets.surveyId, parent.surveyId),
+        ),
+      );
+    if (!contact || contact.isTest !== parent.isTest) return null;
+    if (contact.unsubscribedAt !== null || contact.respondedAt !== null) return null;
+    if (contact.resultUnsubscribed || contact.negativeCode) return null;
+
+    // 대체 발송 사슬에서 이미 보낸 주소 — 같은 주소로 다시 가지 않게.
+    const triedEmails: string[] = source.emailSnapshot ? [source.emailSnapshot] : [];
+    let ancestorId = source.sourceRecipientId;
+    for (let depth = 0; ancestorId && depth < MAX_CHAIN_DEPTH; depth += 1) {
+      const [ancestor] = await tx
+        .select({
+          emailSnapshot: mailRecipients.emailSnapshot,
+          sourceRecipientId: mailRecipients.sourceRecipientId,
+        })
+        .from(mailRecipients)
+        .where(eq(mailRecipients.id, ancestorId));
+      if (!ancestor) break;
+      if (ancestor.emailSnapshot) triedEmails.push(ancestor.emailSnapshot);
+      ancestorId = ancestor.sourceRecipientId;
+    }
+
+    // 다음 순위 주소 — 발송(createCampaign)과 같은 순서·같은 후보 열.
+    const order = await loadMailEmailOrder(parent.surveyId, parent.isTest, tx);
+    const columnKey = sql`${contactPii.columnKey}`;
+    const piiRows = await tx
+      .select({
+        columnKey: contactPii.columnKey,
+        cipher: contactPii.cipher,
+        blindIndex: contactPii.blindIndex,
+      })
+      .from(contactPii)
+      .where(
+        and(
+          eq(contactPii.contactTargetId, contact.id),
+          eq(contactPii.fieldType, 'email'),
+          emailColumnCandidateSql(columnKey, order),
+        ),
+      )
+      .orderBy(asc(emailColumnOrderSql(columnKey, order)));
+    const candidates: FallbackEmailCandidate[] = [];
+    for (const row of piiRows) {
+      try {
+        const email = decryptPii(row.cipher);
+        if (email.trim()) {
+          candidates.push({ columnKey: row.columnKey, email, blindIndex: row.blindIndex ?? '' });
+        }
+      } catch {
+        // 복호화 실패 열은 후보에서 뺀다 — 발송(createCampaign)과 같은 규칙
+      }
+    }
+    const bouncedBlindIndexes = new Set(await listBouncedEmailBlindIndexes(parent.surveyId));
+    const next = pickFallbackAddress({
+      candidates,
+      usedColumnKey: source.emailColumnKey,
+      usedEmail: source.emailSnapshot,
+      triedEmails,
+      bouncedBlindIndexes,
+    });
+    if (!next) return null;
+
+    // 부모의 대체 회차 — 없으면 만든다. 내용은 부모 회차의 발송 스냅샷을 그대로 쓴다.
+    let [fallback] = await tx
+      .select({
+        id: mailCampaigns.id,
+        status: mailCampaigns.status,
+        archivedAt: mailCampaigns.archivedAt,
+      })
+      .from(mailCampaigns)
+      .where(
+        and(eq(mailCampaigns.parentCampaignId, parent.id), eq(mailCampaigns.kind, 'fallback')),
+      )
+      .for('update');
+    if (!fallback) {
+      const runRows = await tx.execute<{ next_id: number }>(
+        sql`SELECT next_fallback_run_number(${parent.surveyId}, ${parent.isTest}) AS next_id`,
+      );
+      const runNumber = Number(runRows[0]?.next_id ?? 0);
+      if (!runNumber) throw new Error('대체 발송 회차 번호 발급에 실패했습니다.');
+      [fallback] = await tx
+        .insert(mailCampaigns)
+        .values({
+          surveyId: parent.surveyId,
+          isTest: parent.isTest,
+          mailTemplateId: parent.mailTemplateId,
+          runNumber,
+          kind: 'fallback',
+          parentCampaignId: parent.id,
+          title: fallbackCampaignTitle(parent.title, parent.kind === 'fallback'),
+          subjectSnapshot: parent.subjectSnapshot,
+          bodyHtmlSnapshot: parent.bodyHtmlSnapshot,
+          fromLocalSnapshot: parent.fromLocalSnapshot,
+          fromNameSnapshot: parent.fromNameSnapshot,
+          replyToSnapshot: parent.replyToSnapshot,
+          attachmentsSnapshot: parent.attachmentsSnapshot,
+          filterSnapshot: {},
+          createdBy: parent.createdBy,
+          status: 'queued',
+        })
+        .returning({
+          id: mailCampaigns.id,
+          status: mailCampaigns.status,
+          archivedAt: mailCampaigns.archivedAt,
+        });
+      if (!fallback) throw new Error('대체 발송 회차 생성에 실패했습니다.');
+    }
+    if (fallback.archivedAt !== null || fallback.status === 'cancelled') return null;
+
+    const inserted = await tx
+      .insert(mailRecipients)
+      .values({
+        campaignId: fallback.id,
+        contactTargetId: contact.id,
+        emailSnapshot: next.email,
+        emailColumnKey: next.columnKey,
+        sourceRecipientId: source.id,
+        inviteTokenSnapshot: contact.inviteToken,
+        status: 'queued',
+      })
+      .onConflictDoNothing({ target: [mailRecipients.campaignId, mailRecipients.contactTargetId] })
+      .returning({ id: mailRecipients.id });
+    if (inserted.length === 0) return null;
+
+    // 이미 끝난 대체 회차에 늦게 온 반송이면 다시 연다 — 발송기가 queued·sending 회차만 처리한다.
+    await tx
+      .update(mailCampaigns)
+      .set({
+        recipientCount: sql`${mailCampaigns.recipientCount} + 1`,
+        queuedCount: sql`${mailCampaigns.queuedCount} + 1`,
+        status: sql`CASE WHEN ${mailCampaigns.status} IN ('completed', 'partial') THEN 'queued' ELSE ${mailCampaigns.status} END`,
+        completedAt: sql`CASE WHEN ${mailCampaigns.status} IN ('completed', 'partial') THEN NULL ELSE ${mailCampaigns.completedAt} END`,
+        updatedAt: new Date(),
+      })
+      .where(eq(mailCampaigns.id, fallback.id));
+
+    return { campaignId: fallback.id, surveyId: parent.surveyId };
+  });
+}
+
+/**
+ * 실패·반송으로 바뀐 수신자들의 대체 발송을 건다 — 상태 전이가 커밋된 **뒤에** 부른다.
+ * 대체 발송은 부가 동작이라 실패해도 호출부(webhook·reconcile·dispatch)를 깨지 않고 로그만 남긴다.
+ */
+export async function requestRecipientFallbacks(recipientIds: readonly string[]): Promise<void> {
+  const queued = new Map<string, QueuedFallback>();
+  for (const recipientId of new Set(recipientIds)) {
+    try {
+      const result = await queueRecipientFallback(recipientId);
+      if (result) queued.set(result.campaignId, result);
+    } catch (err) {
+      logger.error({ err, recipientId }, '[mail-fallback] 대체 발송 등록 실패');
+    }
+  }
+  for (const { campaignId, surveyId } of queued.values()) {
+    try {
+      await inngest.send({ name: 'mail/campaign.queued', data: { campaignId, surveyId } });
+    } catch (err) {
+      // 수신자는 queued 로 남는다 — 같은 대체 회차에 다음 수신자가 들어올 때 다시 깨운다.
+      logger.error({ err, campaignId }, '[mail-fallback] 대체 발송 큐 등록 실패');
+    }
+  }
+}
+
+/** 수신자 상태가 대체 발송을 일으키는가. */
+export function triggersFallback(status: MailRecipientStatus): boolean {
+  return FALLBACK_TRIGGER_STATUSES.includes(status);
+}
+

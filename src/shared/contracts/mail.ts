@@ -70,8 +70,10 @@ export const mailCampaignStatusValues = [
 ] as const;
 export type MailCampaignStatus = (typeof mailCampaignStatusValues)[number];
 
-// mail_campaigns.kind — 발송 회차 종류 (bulk = 단체 발송, single = 컨택 단건 발송)
-export const mailCampaignKindValues = ['bulk', 'single'] as const;
+// mail_campaigns.kind — 발송 회차 종류 (bulk = 단체 발송, single = 컨택 단건 발송,
+// fallback = 대체 발송 — 부모 회차에서 실패·반송된 수신자에게 발송 주소 순서의 다음 열로 자동 재발송, 0135)
+// DB CHECK(mail_campaigns_kind_check)는 마이그레이션이 따로 쥐고 있다 — 어휘를 늘리면 셋을 함께 볼 것.
+export const mailCampaignKindValues = ['bulk', 'single', 'fallback'] as const;
 export type MailCampaignKind = (typeof mailCampaignKindValues)[number];
 
 // mail_recipients.status 전이: queued → sending → sent → delivered → opened

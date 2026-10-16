@@ -14,7 +14,6 @@ import { blindIndex } from '@/lib/crypto/blind';
 import type { MailEmailOrder } from '@/lib/contacts/mail-email-order';
 import {
   emailColumnCandidateSql,
-  emailColumnOrderSql,
   firstEmailRowByTarget,
   getMaskHintsForTargets,
   selectEmailPiiRows,
@@ -47,6 +46,7 @@ import type { FilterClause } from '@/lib/operations/filter-shared';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
+  MailCampaignKind,
   MailCampaignStatus,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
@@ -93,7 +93,8 @@ export async function listCampaignsForSurvey(args: {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const where = and(
     eq(mailCampaigns.surveyId, args.surveyId),
-    eq(mailCampaigns.kind, 'bulk'),
+    // 대체 발송(실패·반송 뒤 다음 순위 주소로 자동 재발송) 회차도 목록에 함께 보인다. 단건은 컨택 상세에.
+    inArray(mailCampaigns.kind, ['bulk', 'fallback']),
     campaignScopeCondition(args.scope),
     isNull(mailCampaigns.archivedAt),
   )!;
@@ -111,6 +112,7 @@ export async function listCampaignsForSurvey(args: {
     .select({
       id: mailCampaigns.id,
       runNumber: mailCampaigns.runNumber,
+      kind: mailCampaigns.kind,
       isTest: mailCampaigns.isTest,
       title: mailCampaigns.title,
       status: mailCampaigns.status,
@@ -152,6 +154,9 @@ export interface CampaignDetail {
   id: string;
   surveyId: string;
   runNumber: number;
+  kind: MailCampaignKind;
+  /** 대체 발송 회차면 원래(부모) 회차 */
+  parentCampaignId: string | null;
   title: string;
   status: MailCampaignStatus;
   mailTemplateId: string | null;
@@ -242,6 +247,8 @@ export async function getCampaignDetail(
     id: c.id,
     surveyId: c.surveyId,
     runNumber: c.runNumber,
+    kind: c.kind,
+    parentCampaignId: c.parentCampaignId,
     title: c.title,
     status: c.status as MailCampaignStatus,
     mailTemplateId: c.mailTemplateId,
@@ -596,18 +603,28 @@ function hasEmailPiiSql(order: MailEmailOrder): SQL<boolean> {
   )`;
 }
 
-/** 발송에 쓰는 주소의 blind index — 발송 주소 순서가 가장 앞선 email 열 하나. */
-function sendAddressBlindSql(order: MailEmailOrder): SQL {
+/**
+ * 발송 후보 email 열 중 blind index 가 반송 집합에 있는(any=false 면 「없는」) 열이 하나라도 있나.
+ * blind index 가 빈 열(형식이 맞지 않아 대조 불가)은 반송 집합에 없는 것으로 친다 — 발송은 그 열도 쓴다.
+ */
+function candidateEmailBlindSql(order: MailEmailOrder, blinds: readonly string[], bounced: boolean): SQL {
   const candidate = emailColumnCandidateSql(CP_COLUMN_KEY, order);
-  return sql`(
-    SELECT cp.blind_index
-    FROM contact_pii cp
+  const inBlinds = sql`cp.blind_index IN (${sql.join(
+    blinds.map((b) => sql`${b}`),
+    sql`, `,
+  )})`;
+  return sql`EXISTS (
+    SELECT 1 FROM contact_pii cp
     WHERE cp.contact_target_id = ${contactTargets.id}
       AND cp.field_type = 'email'
       ${candidate ? sql`AND ${candidate}` : sql``}
-    ORDER BY ${emailColumnOrderSql(CP_COLUMN_KEY, order)}
-    LIMIT 1
+      AND ${bounced ? inBlinds : sql`(cp.blind_index IS NULL OR NOT (${inBlinds}))`}
   )`;
+}
+
+/** 반송 집합 때문에 보낼 열이 하나도 남지 않은 컨택 — 반송된 열이 있고, 반송 안 된 후보 열이 없다. */
+function allCandidatesBouncedSql(order: MailEmailOrder, blinds: readonly string[]): SQL {
+  return sql`(${candidateEmailBlindSql(order, blinds, true)} AND NOT ${candidateEmailBlindSql(order, blinds, false)})`;
 }
 
 /**
@@ -619,7 +636,7 @@ function sendAddressBlindSql(order: MailEmailOrder): SQL {
  * 교체 직후 반송 이력이 통째로 사라진다. email_snapshot 은 컨택 삭제와 무관하게 남으므로
  * 주소 기준 판정은 교체를 넘어 보존된다.
  */
-async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]> {
+export async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]> {
   const rows = await db
     .selectDistinct({ emailSnapshot: mailRecipients.emailSnapshot })
     .from(mailRecipients)
@@ -636,43 +653,38 @@ async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]>
 }
 
 /**
- * 반송 이력으로 발송에서 자동 제외할 컨택 id 목록.
+ * 반송 이력으로 발송에서 자동 제외할 컨택 id 목록 — **보낼 열이 하나도 남지 않은** 컨택만.
  *
  * 반송(bounced)은 컨택이 아니라 "주소"의 속성이다 — 하드바운스 주소에 재발송하면
- * 발신 도메인 평판이 깎이므로 반송된 주소를 아직 쓰는 컨택만 제외한다. 관리자가 이메일을
- * 수정하거나 병합 업로드로 주소가 바뀌면 대조가 어긋나 자동으로 다시 발송 대상이 된다.
+ * 발신 도메인 평판이 깎이므로 반송된 주소로는 다시 보내지 않는다. 다만 발송 주소 순서의 다른 열
+ * (대표자 메일이 반송되면 실무자 메일)이 남아 있으면 발송(createCampaign)은 그 열로 넘어가므로
+ * 컨택을 빼지 않는다 (2026-10-16 대체 발송과 함께 바꿨다 — 전에는 1순위 열만 보고 컨택을 통째로 뺐다).
+ * 관리자가 이메일을 수정하거나 병합 업로드로 주소가 바뀌면 대조가 어긋나 자동으로 다시 발송 대상이 된다.
  *
  * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
  * 미리보기 목록에서는 제외하지 않는다 — 발송 시점(preflight·createCampaign)에만 적용.
  * 단건 발송에는 적용하지 않는다 — 관리자가 특정 컨택을 지목한 의도적 발송이므로 반송
  * 주소여도 허용한다 (2026-08-13 결정). 단건은 createCampaign(kind='single') 경로를
  * 재사용하므로 스킵은 createCampaign 내부에서 kind 로 분기한다.
+ *
+ * 복호화 실패·공백 값 열은 SQL 로 가릴 수 없어 「보낼 수 있는 열」로 센다(좁은 조건 — cipher 손상 등).
+ * 이 함수는 파티션을 가리지 않고 설문 전체를 보는데 순서는 파티션마다 다르다 —
+ * 실/테스트 스킴의 순서를 각각 읽어 행의 is_test 로 갈라 쓴다.
  */
 export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
   const blinds = await listBouncedEmailBlindIndexes(surveyId);
   if (blinds.length === 0) return [];
 
-  // 발송이 쓰는 주소의 근사치를 대조한다 — createCampaign 은 contact_pii 를 발송 주소 순서
-  // (컬럼 설정의 mailOrder, 미지정이면 column_key 오름차순)대로 훑되, 첫 email 컬럼의
-  // 복호화가 실패하거나 결과가 공백이면 다음 컬럼으로 폴백한다. 이 서브쿼리는 그 폴백을
-  // 모델링하지 않고 순서가 가장 앞선 열만 본다 — 복호화 가능 여부는 SQL 술어로 표현할 수
-  // 없고, 정확히 맞추려면 설문 전체 컨택의 cipher 를 매번 복호화해야 해서 preflight 비용이
-  // 과다하기 때문이다. 그 갭 때문에 첫 컬럼이 실제로 사용 불가능해 두 번째 컬럼으로 발송된
-  // 컨택은, 그 두 번째 주소가 반송돼도 이 판정으로는 제외되지 않는다(cipher 손상·키 미스매치
-  // 등 좁은 조건에서만 발동). 발송 쪽 선택 규칙이 바뀌면 sendAddressBlindSql 도 함께 바꿔야 한다.
-  //
-  // 이 함수는 파티션을 가리지 않고 설문 전체를 보는데 순서는 파티션마다 다르다 —
-  // 실/테스트 스킴의 순서를 각각 읽어 행의 is_test 로 갈라 쓴다.
   const orders = await loadMailEmailOrders(surveyId);
-  const sendAddressBlind = sql`(CASE WHEN ${contactTargets.isTest}
-    THEN ${sendAddressBlindSql(orders.test)}
-    ELSE ${sendAddressBlindSql(orders.real)}
+  const excluded = sql`(CASE WHEN ${contactTargets.isTest}
+    THEN ${allCandidatesBouncedSql(orders.test, blinds)}
+    ELSE ${allCandidatesBouncedSql(orders.real, blinds)}
   END)`;
 
   const rows = await db
     .select({ id: contactTargets.id })
     .from(contactTargets)
-    .where(and(eq(contactTargets.surveyId, surveyId), inArray(sendAddressBlind, blinds)));
+    .where(and(eq(contactTargets.surveyId, surveyId), excluded));
 
   return rows.map((r) => r.id);
 }

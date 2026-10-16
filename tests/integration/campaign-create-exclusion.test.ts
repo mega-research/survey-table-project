@@ -27,15 +27,20 @@ interface FakeState {
   contacts: SeedContact[];
   negativeCodes: string[];
   insertedRecipientContactIds: string[];
-  // listBouncedContactIds 2단계 시뮬레이션용 — 비어 있으면 기존과 동일하게 "반송 없음".
+  insertedRecipients: Array<{ contactTargetId: string; emailSnapshot: string; emailColumnKey: string }>;
+  // 1순위 주소(<id>@example.com)가 반송된 컨택 — 비어 있으면 "반송 없음".
   bouncedContactIds: string[];
+  // 2순위 이메일 열(email2 = <id>-2@example.com)이 있는 컨택
+  secondEmailContactIds: string[];
 }
 
 const state: FakeState = {
   contacts: [],
   negativeCodes: [],
   insertedRecipientContactIds: [],
+  insertedRecipients: [],
   bouncedContactIds: [],
+  secondEmailContactIds: [],
 };
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -81,12 +86,18 @@ function buildPiiSelectChain() {
         .filter((c) => c.unsubscribedAt === null)
         .filter((c) => !(excludeByCode && isNegativeContact(c)))
         .filter((c) => !excludedIds.has(c.id))
-        .map((c) => ({
-          id: c.id,
-          columnKey: 'email',
-          cipher: `cipher:${c.id}`,
-          inviteToken: `invite-${c.id}`,
-        }));
+        .flatMap((c) => {
+          const row = (columnKey: string, local: string) => ({
+            id: c.id,
+            columnKey,
+            cipher: `cipher:${local}`,
+            blindIndex: blindIndex('email', `${local}@example.com`),
+            inviteToken: `invite-${c.id}`,
+          });
+          return state.secondEmailContactIds.includes(c.id)
+            ? [row('email', c.id), row('email2', `${c.id}-2`)]
+            : [row('email', c.id)];
+        });
       return Promise.resolve(rows);
     },
   };
@@ -172,6 +183,12 @@ const tx = {
         for (const r of arr) {
           if (r && typeof r === 'object' && 'contactTargetId' in r && r.contactTargetId) {
             state.insertedRecipientContactIds.push(r.contactTargetId);
+            const rec = r as { contactTargetId: string; emailSnapshot: string; emailColumnKey: string };
+            state.insertedRecipients.push({
+              contactTargetId: rec.contactTargetId,
+              emailSnapshot: rec.emailSnapshot,
+              emailColumnKey: rec.emailColumnKey,
+            });
           }
         }
         return {
@@ -214,7 +231,7 @@ vi.mock('@/db', () => ({
         innerJoin: () => ({
           where: () =>
             Promise.resolve(
-              state.bouncedContactIds.map((id) => ({ emailSnapshot: `bounced-${id}@example.com` })),
+              state.bouncedContactIds.map((id) => ({ emailSnapshot: `${id}@example.com` })),
             ),
         }),
       }),
@@ -256,6 +273,7 @@ vi.mock('@/server/read-models/result-code-statuses', async () => {
   };
 });
 
+import { blindIndex } from '@/lib/crypto/blind';
 import { createCampaign } from '@/server/mail/services/campaigns';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
@@ -277,7 +295,9 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     state.contacts = [];
     state.negativeCodes = ['수신거부'];
     state.insertedRecipientContactIds = [];
+    state.insertedRecipients = [];
     state.bouncedContactIds = [];
+    state.secondEmailContactIds = [];
     vi.clearAllMocks();
   });
 
@@ -327,11 +347,9 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     expect(result.skippedCount).toBe(0);
   });
 
-  // 회귀: listBouncedContactIds 가 반환한 id 가 mail_recipients 재페치 WHERE 의
-  // notInArray 에 실제로 반영돼 발송에서 빠지는지 검증한다. 기존에는 db.selectDistinct
-  // 를 항상 빈 배열로 목킹해 이 분기(campaigns.ts:170-172)가 한 번도
-  // 실행되지 않았다 — 통째로 지워도 스위트가 초록이었다.
-  it('반송 이력이 있는 컨택은 mail_recipients 에 포함되지 않는다', async () => {
+  // 반송된 주소의 열은 건너뛰고 다음 순위 열로 넘어간다 — 보낼 열이 하나도 남지 않을 때만 빠진다
+  // (2026-10-16 대체 발송과 함께 — 전에는 1순위 열이 반송이면 컨택을 통째로 뺐다).
+  it('반송된 주소밖에 없는 컨택은 mail_recipients 에 포함되지 않는다', async () => {
     const idValid = seedContact();
     const idBounced = seedContact();
     state.bouncedContactIds = [idBounced];
@@ -347,11 +365,52 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       false,
     );
 
-    // valid 1명만 큐잉, 반송 이력 1명은 skip
     expect(state.insertedRecipientContactIds).toContain(idValid);
     expect(state.insertedRecipientContactIds).not.toContain(idBounced);
     expect(result.queuedCount).toBe(1);
     expect(result.skippedCount).toBe(1);
+  });
+
+  it('1순위 주소가 반송된 컨택은 2순위 열 주소로 보내고 쓴 열을 남긴다', async () => {
+    const idBounced = seedContact();
+    state.bouncedContactIds = [idBounced];
+    state.secondEmailContactIds = [idBounced];
+
+    const result = await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '반송 다음 순위',
+        contactTargetIds: [idBounced],
+      },
+      USER_ID,
+      false,
+    );
+
+    expect(result.queuedCount).toBe(1);
+    expect(state.insertedRecipients).toEqual([
+      { contactTargetId: idBounced, emailSnapshot: `${idBounced}-2@example.com`, emailColumnKey: 'email2' },
+    ]);
+  });
+
+  it('반송이 없으면 1순위 열 주소로 보내고 쓴 열을 남긴다', async () => {
+    const id = seedContact();
+    state.secondEmailContactIds = [id];
+
+    await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '기본 순위',
+        contactTargetIds: [id],
+      },
+      USER_ID,
+      false,
+    );
+
+    expect(state.insertedRecipients).toEqual([
+      { contactTargetId: id, emailSnapshot: `${id}@example.com`, emailColumnKey: 'email' },
+    ]);
   });
 
   // 정책(2026-08-13): 단건 발송은 관리자가 특정 컨택을 지목한 의도적 발송이므로

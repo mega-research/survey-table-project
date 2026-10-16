@@ -33,6 +33,8 @@ export type MailPreviewSample = z.infer<typeof MailPreviewSampleSchema>;
 export interface CampaignRow {
   id: string;
   runNumber: number;
+  /** 'fallback' 이면 대체 발송 회차 — 회차 번호 대신 「대체」로 보인다 */
+  kind: MailCampaignKind;
   isTest: boolean;
   title: string;
   status: MailCampaignStatus;

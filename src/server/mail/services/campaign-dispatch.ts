@@ -13,6 +13,7 @@ import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
+import { requestRecipientFallbacks } from './campaign-fallback';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from './recipient-status-transition';
 import { renderForCampaignSend } from './render-for-send';
@@ -897,8 +898,14 @@ export async function dispatchCampaignChunk(
       result,
     );
     if (!applied) continue;
-    if (result.kind === 'accepted') sent += 1;
-    else failed += 1;
+    if (result.kind === 'accepted') {
+      sent += 1;
+    } else {
+      failed += 1;
+      // 메일 서비스가 주소를 거부한 실패 — 다음 순위 주소로 대체 발송을 건다. 청크 뒤로 모으지 않고
+      // 바로 거는 것은 이후 수신자에서 재시도 오류가 나 청크가 끊겨도 이미 확정된 실패를 놓치지 않기 위해서다.
+      await requestRecipientFallbacks([proposed.recipientId]);
+    }
   }
 
   // 전건 failed(message_id 없음)로 끝나면 webhook이 도착하지 않아 finalize가 영영

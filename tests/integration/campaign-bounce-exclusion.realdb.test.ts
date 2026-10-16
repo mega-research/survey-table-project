@@ -140,15 +140,23 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
     expect(await listBouncedContactIds(surveyId)).toEqual([]);
   });
 
-  it('발송 주소인 첫 email 컬럼이 반송된 경우 제외한다', async () => {
+  // 2026-10-16 대체 발송과 함께 바꿨다 — 1순위 열이 반송돼도 다음 순위 열이 남아 있으면 발송은 그 열로
+  // 넘어가므로 제외하지 않는다. 보낼 열이 하나도 남지 않을 때만 제외한다.
+  it('첫 email 컬럼이 반송돼도 다음 순위 열이 남아 있으면 제외하지 않고, 후보 열이 전부 반송이면 제외한다', async () => {
     const surveyId = await newSurvey('대표 메일 반송');
-    const id = await seedContact(surveyId, [
+    const hasBackup = await seedContact(surveyId, [
       ['1_대표메일', 'primary-dead@example.com'],
       ['2_담당메일', 'backup@example.com'],
     ]);
-    await seedBounce(surveyId, id, 'primary-dead@example.com');
+    const allDead = await seedContact(surveyId, [
+      ['1_대표메일', 'p-dead@example.com'],
+      ['2_담당메일', 'b-dead@example.com'],
+    ]);
+    await seedBounce(surveyId, hasBackup, 'primary-dead@example.com');
+    await seedBounce(surveyId, allDead, 'p-dead@example.com');
+    await seedBounce(surveyId, allDead, 'b-dead@example.com');
 
-    expect(await listBouncedContactIds(surveyId)).toEqual([id]);
+    expect(await listBouncedContactIds(surveyId)).toEqual([allDead]);
   });
 
   /** 컬럼 설정에 발송 주소 순서를 건다 — keys 는 1순위부터. */
@@ -170,7 +178,7 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
     };
   }
 
-  it('발송 주소 순서를 지정하면 열 이름순이 아니라 그 순서의 첫 열을 발송 주소로 본다', async () => {
+  it('발송 주소 순서를 지정하면 그 순서에 든 열만 후보로 보고, 후보가 모두 반송된 컨택만 제외한다', async () => {
     const surveyId = await newSurvey('순서 지정 — 실무자 우선');
     await db
       .update(surveys)
@@ -190,10 +198,14 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
       ['대표자 e-mail', 'ceo@example.com'],
       ['실무자 e-mail', 'staff-dead@example.com'],
     ]);
+    // 순서에 든 열만 후보다 — 실무자 열만 있고 그 주소가 반송된 컨택은 보낼 열이 없다.
+    const staffOnlyDead = await seedContact(surveyId, [['실무자 e-mail', 'staff-only-dead@example.com']]);
     await seedBounce(surveyId, ceoBounced, 'ceo-dead@example.com');
     await seedBounce(surveyId, staffBounced, 'staff-dead@example.com');
+    await seedBounce(surveyId, staffOnlyDead, 'staff-only-dead@example.com');
 
-    expect(await listBouncedContactIds(surveyId)).toEqual([staffBounced]);
+    // 둘 다 반송 안 된 다른 순위 열이 남아 있어 발송은 그 열로 넘어간다 — 제외되지 않는다.
+    expect(await listBouncedContactIds(surveyId)).toEqual([staffOnlyDead]);
 
     const rows = await selectEmailPiiRows(db, [ceoBounced], ['실무자 e-mail', '대표자 e-mail']);
     expect(rows.map((r) => r.columnKey)).toEqual(['실무자 e-mail', '대표자 e-mail']);

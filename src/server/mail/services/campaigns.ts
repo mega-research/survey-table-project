@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -148,21 +148,22 @@ export async function createCampaign(
     // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
     //    한 컨택에 email 컬럼이 여러 개면 발송 주소 순서(컬럼 설정의 mailOrder, 미지정이면
     //    column_key 오름차순)대로 훑어 값이 있는 첫 컬럼을 쓴다 (앞에서 dedupe).
-    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지)·반송 이력
-    //    컨택을 제외한다. 제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는
-    //    발송되는 미스매치 발생.
-    //    반송 제외는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
-    //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
-    //    으로 단건 발송 자체가 실패한다.
+    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
+    //    반송된 주소의 열은 건너뛰고 다음 순위 열로 넘어간다 — 보낼 열이 하나도 남지 않으면 그
+    //    컨택은 빠진다. preflight 의 반송 제외 건수(listBouncedContactIds)와 같은 규칙이다
+    //    (2026-10-16 — 전에는 1순위 열이 반송이면 컨택을 통째로 뺐다).
+    //    반송 건너뛰기는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
+    //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정).
     const { buildNegativeCodeExists, getResultCodeStatuses } =
       await import('@/server/read-models/result-code-statuses');
     const { latestResultUnsubscribedSql } =
       await import('@/lib/operations/contacts-filter-sql.server');
-    const { listBouncedContactIds } = await import('./campaigns-read');
-    const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+    const { listBouncedEmailBlindIndexes } = await import('./campaigns-read');
+    const [{ negative: negativeCodes }, bouncedBlindList] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
-      kind === 'single' ? Promise.resolve([]) : listBouncedContactIds(input.surveyId),
+      kind === 'single' ? Promise.resolve([]) : listBouncedEmailBlindIndexes(input.surveyId),
     ]);
+    const bouncedBlinds = new Set(bouncedBlindList);
     const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
       negativeCodes,
       sql`"contact_targets"."id"`,
@@ -174,6 +175,7 @@ export async function createCampaign(
         id: contactTargets.id,
         columnKey: contactPii.columnKey,
         cipher: contactPii.cipher,
+        blindIndex: contactPii.blindIndex,
         inviteToken: contactTargets.inviteToken,
       })
       .from(contactTargets)
@@ -191,22 +193,25 @@ export async function createCampaign(
           // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
           sql`NOT (${latestResultUnsubscribedSql})`,
           notExcludedByCode,
-          ...(bouncedContactIds.length > 0
-            ? [notInArray(contactTargets.id, bouncedContactIds)]
-            : []),
         ),
       )
       .orderBy(asc(contactTargets.id), asc(emailColumnOrderSql(emailColumnKey, emailOrder)));
 
     const seen = new Set<string>();
-    const validContacts: Array<{ id: string; email: string; inviteToken: string }> = [];
+    const validContacts: Array<{
+      id: string;
+      email: string;
+      columnKey: string;
+      inviteToken: string;
+    }> = [];
     for (const r of piiJoined) {
       if (seen.has(r.id)) continue; // 순서가 가장 앞선 email 컬럼만
+      if (r.blindIndex && bouncedBlinds.has(r.blindIndex)) continue; // 반송된 주소 → 다음 순위 열
       try {
         const email = decryptPii(r.cipher);
         if (!email || !email.trim()) continue;
         seen.add(r.id);
-        validContacts.push({ id: r.id, email, inviteToken: r.inviteToken });
+        validContacts.push({ id: r.id, email, columnKey: r.columnKey, inviteToken: r.inviteToken });
       } catch {
         // 복호화 실패 행은 발송 대상에서 제외 (cipher 손상/키 미스매치)
       }
@@ -226,6 +231,8 @@ export async function createCampaign(
       campaignId: campaign.id,
       contactTargetId: c.id,
       emailSnapshot: c.email,
+      // 대체 발송이 「다음 순위 열」을 고를 때 기준이 된다.
+      emailColumnKey: c.columnKey,
       inviteTokenSnapshot: c.inviteToken,
       status: 'queued' as const,
     }));

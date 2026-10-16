@@ -5,7 +5,7 @@ import * as z from 'zod';
 
 import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
 import type { ContactUploadMode } from '@/shared/contracts/contacts';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,8 +147,8 @@ export interface MailHistoryRow {
   id: string;
   campaignTitle: string;
   runNumber: number;
-  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기 */
-  kind: 'bulk' | 'single';
+  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기. 'fallback'이면 대체 발송(제목에 표기) */
+  kind: MailCampaignKind;
   status: MailRecipientStatus;
   sentAt: Date | null;
   deliveredAt: Date | null;

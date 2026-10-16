@@ -442,7 +442,8 @@ mail_templates             # 메일 템플릿
 
 mail_campaigns             # 발송 회차
 ├── id, surveyId, mailTemplateId, runNumber, title
-├── kind                   # bulk | 단건 발송 등 캠페인 종류
+├── kind                   # bulk(단체) | single(단건, 1000001~) | fallback(대체 발송, 2000001~ — 0135 CHECK)
+├── parentCampaignId       # 대체 발송의 원래 회차 (부모마다 대체 회차 하나 — 부분 유일 인덱스)
 ├── isTest                 # 테스트 파티션 여부
 ├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 발송 시점 스냅샷
 ├── status                 # draft|queued|sending|completed|partial|cancelled
@@ -455,6 +456,7 @@ mail_campaigns             # 발송 회차
 mail_recipients            # 수신자별 status + Resend message id
 ├── id, campaignId, contactTargetId
 ├── emailSnapshot, inviteTokenSnapshot
+├── emailColumnKey, sourceRecipientId  # 주소를 꺼낸 명단 이메일 열 · 대체 발송의 출처 수신자 (0135, 이전 행은 NULL)
 ├── status                 # queued|sending|sent|delivered|opened|bounced|complained|failed|skipped_unsubscribed
 ├── resendMessageId, errorReason
 ├── sendAttemptedAt, sendLeaseToken, sendLeaseExpiresAt, sendPayloadSnapshot  # 중복 발송 방지 lease
@@ -545,6 +547,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 > 운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
 > 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 엑셀·SPSS export 라우트도 같은 스코프를 탄다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
 > **메일 발송 주소 순서** (2026-10-14): 명단에 이메일로 암호화된 열이 여럿이면(대표자 e-mail · 실무자 e-mail …) 컬럼 설정(`contacts/columns`)의 「발송 주소 순서」로 어느 열의 주소로 보낼지 정한다 — 이메일 열이 둘 이상일 때만 열이 나온다. 저장은 컬럼별 `mailOrder`(1부터)이고 파티션마다 스킴이 따로라 순서도 따로다. **순위를 준 열만 후보**이고 순위 오름차순으로 값이 있는 첫 열의 주소를 쓴다(1순위가 비면 다음 순위). 순위 밖 열에만 주소가 있는 대상은 발송되지 않고 사전 점검이 「이메일 누락」으로 센다. **어느 열에도 순위가 없으면 종전대로 `column_key` 오름차순 첫 열**이다 — 그래서 미설정 설문은 `대표자 e-mail` 이 `실무자 e-mail` 을 이긴다. 해석은 `lib/contacts/mail-email-order.ts` 의 `resolveMailEmailOrder`(→ `MailEmailOrder`, null = 미지정) 한 곳이고, SQL 조각은 `lib/crypto/contact-pii-repo.ts` 의 `emailColumnCandidateSql`·`emailColumnOrderSql`, 스킴 로더는 `server/read-models/mail-email-order.ts` 다. 이 순서를 타는 자리는 일곱이다 — 발송(`createCampaign`, 스코프 SHARE 잠금으로 스킴을 같이 읽는다) · 사전 점검(`preflightRecipients`) · 후보 목록·제외 집계(`hasEmailPiiSql`) · 반송 제외(`listBouncedContactIds` — 파티션을 가리지 않는 함수라 `is_test` 로 순서를 갈라 쓴다) · 단건 선검증 · 미리보기 샘플 · 수신거부 화면(`loadSendEmailForTarget`). **새로 "이 대상의 이메일"을 읽는 자리를 만들면 `field_type='email'` 을 직접 정렬하지 말고 `selectEmailPiiRows(…, order)` 를 쓸 것.** 교체 업로드는 스킴을 다시 만들지만 순서는 열 이름이 같은 이메일 열에 이어 붙인다(`carryOverMailOrder`) — 빠지면 재업로드 한 번에 조용히 대표자 주소로 돌아간다. 이미 만든 캠페인은 `email_snapshot` 이 고정이라 영향이 없다. 대상별 지정(컨택 상세에서 한 명만 다른 열로)은 미구현이다.
+> **메일 대체 발송** (2026-10-16, 0135): 수신자가 **반송**(webhook·reconcile)되거나 메일 서비스가 주소를 **거부**(발송 시 영구 실패)하면, 발송 주소 순서의 **다음 이메일 열**로 자동으로 한 통을 더 보낸다. 원래 회차 아래 `kind='fallback'` 회차를 하나 붙여 그 수신자로 넣고 `mail/campaign.queued` 를 다시 낸다 — 발송·lease·webhook·집계는 기존 장치 그대로(새 Inngest 함수 없음). 대체 발송이 또 반송되면 그 대체 회차의 자식 회차(「· 대체 발송 2차」)로 3순위 …. 수신자 한 줄 = (회차, 조사 대상) 유일 제약 때문에 같은 회차에 쌓지 않는다. 다음 주소 판정은 `lib/mail/fallback-address.ts` 의 `pickFallbackAddress`(쓴 열의 다음 열 · 사슬에서 보낸 주소와 이 설문 반송 주소는 건너뜀 · 쓴 열을 모르면 값으로 찾음), 서비스는 `server/mail/services/campaign-fallback.ts` 의 `requestRecipientFallbacks` 이고 **상태 전이가 커밋된 뒤** webhook·reconcile·dispatch(영구 실패 settle 직후) 세 곳이 부른다. 응답 완료·수신거부·스팸 신고(complained — 수신거부로 수렴)·연락 금지 결과코드·회차 취소/보관이면 보내지 않는다. 끝난 대체 회차에 늦은 반송이 오면 회차를 `queued` 로 다시 연다. 단건 발송도 같다. 한 통에 담기는 주소는 `lib/mail/split-email-addresses.ts` 가 칸 하나의 여러 주소(`/` `,` `;` 줄바꿈)를 나눈 것이다. 같은 날 **반송 제외 규칙**도 바꿨다 — `listBouncedContactIds` 는 후보 이메일 열이 **전부** 반송 주소인 컨택만 빼고, `createCampaign`(bulk)은 반송된 열을 건너뛰고 다음 순위 열을 쓴다(전에는 1순위 열이 반송이면 컨택을 통째로 뺐다).
 > 조사 대상·단체 메일 위저드의 시스템ID/attrs 컬럼 검색은 **엑셀 열 붙여넣기 ID 목록**을 받는다 (`lib/operations/range-list.ts` — 공백·개행·탭·콤마 구분, 중복 제거). 단일 컬럼 인라인 상한 2,000개(URL 헤더 한계), 초과분은 `contacts.idLists.create` 로 `contact_id_lists` 에 저장하고 `q=list:<uuid>:<count>` 토큰으로 검색한다. 파서는 동기라 페이지/서비스가 `loadIdListsForValues`(`server/read-models/contact-id-lists.ts`) 로 토큰을 먼저 읽어 `parseClausesFromUrl(…, { idLists })` 에 넘긴다 — 새 파싱 지점을 만들면 이 단계를 빠뜨리지 말 것. 「전체」 컬럼 검색의 200개 상한은 컬럼 곱연산 SQL 보호용으로 별개다.
 
 ---
@@ -1058,6 +1061,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- 메일 대체 발송 `mail_campaigns.parent_campaign_id`·kind `fallback`·`mail_recipients.email_column_key`/`source_recipient_id`·`next_fallback_run_number` 는 0135 다 (2026-10-16). 0133·0134 는 staging 브랜치(외주 링크·클라이언트 링크)가 쓰고 있어 건너뛰었다
 - 행 차례로 열기 `staged_rows_config` 는 0132 다 (2026-10-06)
 - 항목 단위 카드 블록 시작 열 `mobile_item_card_block_columns` 는 0131 이다 (2026-10-02)
 - 최대 선택 개수 연동 `max_selections_source` 는 0130 이다 (2026-10-01)

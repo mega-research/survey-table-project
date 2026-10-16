@@ -189,7 +189,13 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-slate-500">#{campaign.runNumber}</span>
+              {campaign.kind === 'fallback' ? (
+                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+                  대체 발송
+                </span>
+              ) : (
+                <span className="font-mono text-xs text-slate-500">#{campaign.runNumber}</span>
+              )}
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge.tone}`}
               >
@@ -199,6 +205,20 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               {campaign.title}
             </h1>
+            {campaign.kind === 'fallback' ? (
+              <p className="text-sm text-slate-500">
+                원래 회차에서 실패·반송된 사람에게 발송 주소 순서의 다음 이메일로 자동으로 다시 보낸
+                회차입니다.{' '}
+                {campaign.parentCampaignId ? (
+                  <Link
+                    href={`/admin/surveys/${surveyId}/operations/mail/campaigns/${campaign.parentCampaignId}`}
+                    className="text-blue-600 hover:underline"
+                  >
+                    원래 회차 보기
+                  </Link>
+                ) : null}
+              </p>
+            ) : null}
             {campaign.templateName ? (
               <p className="text-sm text-slate-500">
                 템플릿:{' '}
