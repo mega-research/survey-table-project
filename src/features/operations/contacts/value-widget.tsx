@@ -12,6 +12,10 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import {
   contactResultFilterOptions,
+  decodeMultiClauseValue,
+  encodeMultiClauseValue,
+  FILTER_NONE_LABEL,
+  FILTER_NONE_VALUE,
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
   placeholderFor,
@@ -54,6 +58,50 @@ export function ValueWidget({
   surveyId,
   idListAutoGrow = false,
 }: Props) {
+  // 여러 값(오른쪽 값 목록에서 체크한 값들) — 칩으로 보이고 × 로 하나씩 뺀다.
+  const multi = decodeMultiClauseValue(value);
+  if (multi) {
+    const labelOf = (v: string): string => {
+      if (v === FILTER_NONE_VALUE) return FILTER_NONE_LABEL;
+      if (source === FILTER_SOURCE.CONTACT_OWNER) {
+        return assignmentOptions.find((o) => o.id === v)?.name ?? v;
+      }
+      if (source === FILTER_SOURCE.CONTACT_RESULT) {
+        return resultCodeOptions.find((o) => o.code === v)?.label ?? v;
+      }
+      if (source === FILTER_SOURCE.WEB) {
+        return webFilterOptionsFor([v]).find((o) => o.value === v)?.label ?? v;
+      }
+      if (source === FILTER_SOURCE.EMAIL) {
+        return MAIL_FILTER_OPTIONS.find((o) => o.value === v)?.label ?? v;
+      }
+      return v;
+    };
+    return (
+      <div
+        id={inputId}
+        className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5"
+      >
+        {multi.map((v) => (
+          <span
+            key={v}
+            className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+          >
+            {labelOf(v)}
+            <button
+              type="button"
+              aria-label={`${labelOf(v)} 빼기`}
+              className="text-blue-400 hover:text-blue-700"
+              onClick={() => onChange(encodeMultiClauseValue(multi.filter((x) => x !== v)))}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
   if (source === FILTER_SOURCE.CONTACT_OWNER) {
     return (
       <Select value={value} onValueChange={onChange}>

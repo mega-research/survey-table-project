@@ -44,7 +44,7 @@ export interface ListContactAttrValuesResult {
  * 컬럼 스킴 화이트리스트 검증: 보이는(hidden 아님) attrs 컬럼만 허용.
  * attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를 열거하는 것을 막는다.
  */
-async function assertAttrColumnAllowed(
+export async function assertAttrColumnAllowed(
   surveyId: string,
   attrsKey: string,
   scope: OperationsDataScope,

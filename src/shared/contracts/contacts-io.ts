@@ -130,6 +130,22 @@ export interface ContactAssignmentListResult {
   total: number;
 }
 
+/** 컨택원 수정 화면 오른쪽 대상 목록 한 줄 — 개인정보 열은 목록 화면과 같은 마스킹 힌트만. */
+export interface ContactAssignmentMatchRow {
+  id: string;
+  resid: number;
+  attrs: Record<string, string>;
+  piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
+  assignment: { id: string; name: string } | null;
+}
+
+export interface ContactAssignmentMatchesResult {
+  rows: ContactAssignmentMatchRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface ContactsRow {
   id: string;
   resid: number;

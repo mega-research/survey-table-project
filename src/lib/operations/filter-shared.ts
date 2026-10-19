@@ -238,6 +238,22 @@ export function webFilterOptionsFor(
  */
 export const HEADER_FILTER_VALUE_SEPARATOR = '\u001f';
 
+/**
+ * 조건 줄 값 하나에 여러 값을 담는다 — 컨택원 수정 화면 오른쪽 값 목록에서 체크한 값들.
+ * 파서는 헤더 체크박스 필터와 같은 in 절로 읽는다(컬럼 내 OR). 양끝에도 구분자를 둬
+ * 값 다듬기(trim)가 첫·끝 값의 앞뒤 공백을 지우지 않게 한다 — 엑셀 값엔 "서울 " 이 실존한다.
+ */
+export function encodeMultiClauseValue(values: readonly string[]): string {
+  if (values.length === 0) return '';
+  return `${HEADER_FILTER_VALUE_SEPARATOR}${values.join(HEADER_FILTER_VALUE_SEPARATOR)}${HEADER_FILTER_VALUE_SEPARATOR}`;
+}
+
+/** encodeMultiClauseValue 의 역 — 여러 값 형식이 아니면 null. 공백뿐인 토큰만 버린다. */
+export function decodeMultiClauseValue(value: string): string[] | null {
+  if (!value.includes(HEADER_FILTER_VALUE_SEPARATOR)) return null;
+  return value.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
+}
+
 /** 헤더 필터 URL hm 파라미터가 가질 수 있는 모드. */
 export const HEADER_FILTER_MODES = ['in', 'text', 'exact'] as const;
 export type HeaderFilterMode = (typeof HEADER_FILTER_MODES)[number];

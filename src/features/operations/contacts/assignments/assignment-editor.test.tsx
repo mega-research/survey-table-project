@@ -13,6 +13,8 @@ vi.mock('@/shared/lib/rpc', () => ({
         apply: (...a: unknown[]) => apply(...a),
         rename: vi.fn(),
         remove: vi.fn(),
+        facets: vi.fn(async () => ({ kind: 'many' })),
+        matches: vi.fn(async () => ({ rows: [], total: 0, page: 1, pageSize: 10 })),
       },
       idLists: { create: vi.fn() },
       attrValues: { nonNumericCount: vi.fn() },
@@ -40,6 +42,7 @@ function renderEditor(lastClauses: Array<{ source: string; value: string; op: ''
         ]}
         resultCodeOptions={[]}
         assignmentOptions={[{ id: AID, name: '10차', order: 1 }]}
+        displayColumn={{ source: 'attrs.기업명', label: '기업명' }}
       />
     </QueryClientProvider>,
   );

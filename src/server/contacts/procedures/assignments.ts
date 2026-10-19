@@ -3,9 +3,14 @@ import * as z from 'zod';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyAccess, authed } from '@/server/orpc';
 
+import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
+
 import {
   ApplyAssignmentInput,
   AssignmentChangeSummarySchema,
+  AssignmentFacetsInput,
+  AssignmentFacetsOutput,
+  AssignmentMatchesInput,
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
   PreviewAssignmentInput,
@@ -16,6 +21,8 @@ import {
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
 import * as applySvc from '../services/contact-assignment-apply';
+import * as facetSvc from '../services/contact-assignment-facets';
+import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
 import * as svc from '../services/contact-assignments';
 
 /**
@@ -116,6 +123,32 @@ const apply = authed
     return applySvc.applyAssignment(input);
   });
 
+/** 수정 화면 오른쪽 값 목록 — 체크박스형 열의 값과 명단 전체 기준 인원. */
+const facets = authed
+  .errors({ FORBIDDEN_COLUMN: { status: 403, message: '컬럼 스킴에 없는 컬럼입니다.' } })
+  .input(AssignmentFacetsInput)
+  .output(AssignmentFacetsOutput)
+  .handler(async ({ context, input, errors }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    const scope = await loadOperationsDataScope(input.surveyId);
+    try {
+      return await facetSvc.listAssignmentFacets(input.surveyId, scope, input.source);
+    } catch (error) {
+      if (error instanceof ForbiddenAttrColumnError) throw errors.FORBIDDEN_COLUMN();
+      throw error;
+    }
+  });
+
+/** 수정 화면 오른쪽 대상 목록 — 조건에 맞는 대상 10명씩. */
+const matches = authed
+  .input(AssignmentMatchesInput)
+  .output(z.custom<ContactAssignmentMatchesResult>())
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    const scope = await loadOperationsDataScope(input.surveyId);
+    return applySvc.listAssignmentMatches(input, scope);
+  });
+
 export const assignments = {
   list,
   create,
@@ -125,4 +158,6 @@ export const assignments = {
   setTarget,
   preview,
   apply,
+  facets,
+  matches,
 };

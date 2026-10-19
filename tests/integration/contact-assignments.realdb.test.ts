@@ -26,14 +26,20 @@ import {
 } from '@/server/contacts/services/contact-assignments';
 import {
   applyAssignment,
+  listAssignmentMatches,
   previewAssignment,
 } from '@/server/contacts/services/contact-assignment-apply';
+import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
 } from '@/server/read-models/contacts-filters';
-import { FILTER_NONE_VALUE, HEADER_FILTER_VALUE_SEPARATOR } from '@/lib/operations/filter-shared';
+import {
+  encodeMultiClauseValue,
+  FILTER_NONE_VALUE,
+  HEADER_FILTER_VALUE_SEPARATOR,
+} from '@/lib/operations/filter-shared';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
@@ -512,6 +518,55 @@ run('컨택원 배정 (real local DB)', () => {
       const allEven = assigned.every((n) => n! % 2 === 0);
       expect(assigned).toHaveLength(10);
       expect(allOdd || allEven).toBe(true);
+    });
+  });
+
+  describe('수정 화면 오른쪽 패널', () => {
+    it('값 목록 인원은 명단 전체 기준이고, 체크한 값들(여러 값) 조건이 같은 인원을 낸다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 5);
+      // 기업명: 기업1..기업5 → 일부를 같은 값으로
+      await db
+        .update(contactTargets)
+        .set({ attrs: { 기업명: 'A' } })
+        .where(inArray(contactTargets.id, [ids[0]!, ids[1]!]));
+      await db
+        .update(contactTargets)
+        .set({ attrs: { 기업명: '' } })
+        .where(eq(contactTargets.id, ids[4]!));
+      const owner = await createAssignment({ surveyId, name: '10차' });
+
+      const facets = await listAssignmentFacets(surveyId, 'real', 'attrs.기업명');
+      expect(facets).toEqual({
+        kind: 'values',
+        // 헤더 필터 값 목록과 같은 정렬(ko 자연 정렬 — 한글이 먼저).
+        values: [
+          { value: '기업3', label: '기업3', count: 1 },
+          { value: '기업4', label: '기업4', count: 1 },
+          { value: 'A', label: 'A', count: 2 },
+          { value: FILTER_NONE_VALUE, label: '— (없음)', count: 1 },
+        ],
+        total: 5,
+      });
+
+      const clauses = [
+        { source: 'attrs.기업명', value: encodeMultiClauseValue(['A', FILTER_NONE_VALUE]), op: '' as const },
+      ];
+      const preview = await previewAssignment({ surveyId, assignmentId: owner.id, clauses }, 'real');
+      expect(preview.matched).toBe(3);
+      const page = await listAssignmentMatches({ surveyId, clauses, page: 1 }, 'real');
+      expect(page.total).toBe(3);
+      expect(page.rows.map((r) => r.resid)).toEqual([1, 2, 5]);
+
+      const ownerFacets = await listAssignmentFacets(surveyId, 'real', 'system.contact_owner');
+      expect(ownerFacets).toMatchObject({
+        kind: 'values',
+        values: [
+          { value: owner.id, label: '10차', count: 0 },
+          { value: FILTER_NONE_VALUE, count: 5 },
+        ],
+      });
+      expect(await listAssignmentFacets(surveyId, 'real', 'system.resid')).toEqual({ kind: 'many' });
     });
   });
 });

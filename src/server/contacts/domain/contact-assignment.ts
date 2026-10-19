@@ -98,3 +98,30 @@ export const AssignmentChangeSummarySchema = z.object({
   leaving: z.number().int(),
 });
 export type AssignmentChangeSummary = z.infer<typeof AssignmentChangeSummarySchema>;
+
+/** 컨택원 수정 화면 오른쪽 — 체크박스형 열의 값 목록(명단 전체 기준 인원). */
+export const AssignmentFacetsInput = z.object({
+  surveyId: z.string().uuid(),
+  source: z.string().min(1).max(300),
+});
+export type AssignmentFacetsInput = z.infer<typeof AssignmentFacetsInput>;
+
+export const AssignmentFacetsOutput = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('values'),
+    /** 값 · 표시 이름 · 인원. 빈 값은 FILTER_NONE_VALUE 로 맨 끝에 온다(있을 때만). */
+    values: z.array(z.object({ value: z.string(), label: z.string(), count: z.number().int() })),
+    total: z.number().int(),
+  }),
+  /** 값 종류가 많아 체크박스로 그리지 않는 열 — 대상 목록으로 보인다. */
+  z.object({ kind: z.literal('many') }),
+]);
+export type AssignmentFacetsOutput = z.infer<typeof AssignmentFacetsOutput>;
+
+/** 컨택원 수정 화면 오른쪽 — 조건에 맞는 대상 목록 (10명씩). */
+export const AssignmentMatchesInput = z.object({
+  surveyId: z.string().uuid(),
+  clauses: AssignmentClausesSchema,
+  page: z.number().int().min(1).max(100_000),
+});
+export type AssignmentMatchesInput = z.infer<typeof AssignmentMatchesInput>;

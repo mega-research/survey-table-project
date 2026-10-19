@@ -350,6 +350,13 @@ function buildClause(
   const extraCondition = extra?.clause?.(col, trimmed) ?? null;
   if (extraCondition) return { op, condition: extraCondition };
 
+  // 여러 값(체크한 값들 — encodeMultiClauseValue)은 헤더 체크박스 필터와 같은 in 절이다.
+  // 원형 q 를 넘긴다 — 값 앞뒤 공백까지 보존해야 IN 비교가 맞는다(splitHeaderValues 주석).
+  if (q.includes(HEADER_FILTER_VALUE_SEPARATOR)) {
+    const condition = buildHeaderCondition(col, 'in', q, candidates, resultCodes, extra);
+    return condition ? { op, condition } : null;
+  }
+
   // 전체 컬럼 검색 — candidates 화이트리스트 안의 attrs/pii 로만 전개하므로
   // whitelist 조회 없이 자체 처리 (전개 자체가 화이트리스트 검증).
   if (col === FILTER_SOURCE.ALL) {

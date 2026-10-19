@@ -1067,3 +1067,35 @@ describe('「현재 컨택원」 조건', () => {
     ).toEqual([]);
   });
 });
+
+describe('조건 줄의 여러 값 (체크한 값들)', () => {
+  const candidates: ColumnCandidate[] = [
+    { source: 'attrs.참가 전시회', label: '참가 전시회' },
+    { source: 'system.web', label: 'web' },
+  ];
+
+  it('헤더 체크박스와 같은 in 절이고 값 앞뒤 공백을 보존한다', async () => {
+    const { encodeMultiClauseValue } = await import('@/lib/operations/filter-shared');
+    const q = encodeMultiClauseValue(['CES 2026', '서울 ', FILTER_NONE_VALUE]);
+    const [c] = parseClausesFromUrl(['attrs.참가 전시회'], [q.trim()], [''], candidates, []);
+    expect(c?.condition).toEqual({
+      source: 'attrs.참가 전시회',
+      mode: 'in',
+      value: '',
+      values: ['CES 2026', '서울 '],
+      includeNull: true,
+    });
+  });
+
+  it('응답 상태 여러 개', async () => {
+    const { encodeMultiClauseValue } = await import('@/lib/operations/filter-shared');
+    const [c] = parseClausesFromUrl(
+      ['system.web'],
+      [encodeMultiClauseValue(['completed', 'none'])],
+      [''],
+      candidates,
+      [],
+    );
+    expect(c?.condition).toMatchObject({ mode: 'in', values: ['completed', 'none'] });
+  });
+});

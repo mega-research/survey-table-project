@@ -1,9 +1,11 @@
 'use client';
 
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, useTransition } from 'react';
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
+
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import {
@@ -21,18 +23,19 @@ import { Input } from '@/components/ui/input';
 import { prepareContactClauseValue } from '@/features/operations/contacts/contacts-filter-bar';
 import { ValueWidget } from '@/features/operations/contacts/value-widget';
 import {
-  draftRowsToClauses,
   FilterBarCore,
-  newDraftRowId,
   type FilterDraftRow,
+  draftRowsToClauses,
+  newDraftRowId,
 } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
+import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
 
 import { assignmentsHref } from './assignment-hrefs';
+import { AssignmentSidePanel } from './assignment-side-panel';
 
 interface Props {
   surveyId: string;
@@ -40,6 +43,8 @@ interface Props {
   columnCandidates: ColumnCandidate[];
   resultCodeOptions: ContactResultCode[];
   assignmentOptions: ContactAssignmentOption[];
+  /** 오른쪽 대상 목록 두 번째 열 — 스킴의 표시 첫 attrs 열. */
+  displayColumn: { source: string; label: string } | null;
 }
 
 type Summary = Awaited<ReturnType<typeof client.contacts.assignments.preview>>;
@@ -77,6 +82,7 @@ export function AssignmentEditor({
   columnCandidates,
   resultCodeOptions,
   assignmentOptions,
+  displayColumn,
 }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -85,6 +91,7 @@ export function AssignmentEditor({
   const [rows, setRows] = useState<FilterDraftRow[]>(() =>
     initialRows(assignment.lastClauses, columnCandidates),
   );
+  const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -106,9 +113,7 @@ export function AssignmentEditor({
   const draft = draftRowsToClauses(rows);
   const draftKey = JSON.stringify(draft);
   const [prepared, setPrepared] = useState<
-    | { key: string; clauses: ContactAssignmentClause[] }
-    | { key: string; error: string }
-    | null
+    { key: string; clauses: ContactAssignmentClause[] } | { key: string; error: string } | null
   >(null);
 
   useEffect(() => {
@@ -124,7 +129,10 @@ export function AssignmentEditor({
         })
         .catch((err: unknown) => {
           if (!cancelled) {
-            setPrepared({ key: draftKey, error: getErrorMessage(err, '조건을 해석할 수 없습니다.') });
+            setPrepared({
+              key: draftKey,
+              error: getErrorMessage(err, '조건을 해석할 수 없습니다.'),
+            });
           }
         });
     }, PREVIEW_DEBOUNCE_MS);
@@ -221,133 +229,151 @@ export function AssignmentEditor({
     });
   };
 
+  // 오른쪽 패널이 따라가는 줄 — 고른 줄이 지워졌으면 첫 줄.
+  const focusedRow = rows.find((r) => r.id === focusedRowId) ?? rows[0] ?? null;
+  const setFocusedValue = (value: string) => {
+    if (!focusedRow) return;
+    setRows(rows.map((r) => (r.id === focusedRow.id ? { ...r, value } : r)));
+  };
+
   const canApply =
     draft.length > 0 && summary != null && !settling && previewError == null && !isPending;
 
   return (
-    <div className="rounded-lg border bg-white">
-      <div className="grid grid-cols-[180px_1fr] border-b">
-        <label htmlFor="assignment-name" className="px-4 py-4 text-sm font-medium text-slate-700">
-          컨택원 이름
-        </label>
-        <div className="px-4 py-3">
-          <Input
-            id="assignment-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            className="h-10 max-w-[420px]"
-          />
+    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="rounded-lg border bg-white">
+        <div className="grid grid-cols-[180px_1fr] border-b">
+          <label htmlFor="assignment-name" className="px-4 py-4 text-sm font-medium text-slate-700">
+            컨택원 이름
+          </label>
+          <div className="px-4 py-3">
+            <Input
+              id="assignment-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              className="h-10 max-w-[420px]"
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-[180px_1fr] border-b">
-        <div className="px-4 py-4">
-          <div className="text-sm font-medium text-slate-700">배정할 대상</div>
-          <p className="mt-1 text-xs text-slate-500">조사 대상 목록 필터와 같은 조건입니다.</p>
-        </div>
-        <div className="px-4 py-3">
-          <FilterBarCore
-            as="div"
-            variant="stack"
-            rows={rows}
-            onRowsChange={setRows}
-            columnCandidates={columnCandidates}
-            ariaLabel="배정할 대상 조건"
-            defaultValueForSource={(source) => (source === FILTER_SOURCE.WEB ? 'completed' : '')}
-            renderValueWidget={({ source, value, onChange, inputId }) => (
-              <div className="min-w-0 flex-1">
-                <ValueWidget
-                  source={source}
-                  value={value}
-                  onChange={onChange}
-                  resultCodeOptions={resultCodeOptions}
-                  assignmentOptions={assignmentOptions}
-                  surveyId={surveyId}
-                  idListAutoGrow
-                  {...(inputId !== undefined ? { inputId } : {})}
+        <div className="grid grid-cols-[180px_1fr] border-b">
+          <div className="px-4 py-4">
+            <div className="text-sm font-medium text-slate-700">배정할 대상</div>
+            <p className="mt-1 text-xs text-slate-500">조사 대상 목록 필터와 같은 조건입니다.</p>
+          </div>
+          <div className="px-4 py-3">
+            <FilterBarCore
+              as="div"
+              variant="stack"
+              rows={rows}
+              onRowsChange={setRows}
+              onRowFocus={setFocusedRowId}
+              columnCandidates={columnCandidates}
+              ariaLabel="배정할 대상 조건"
+              defaultValueForSource={(source) => (source === FILTER_SOURCE.WEB ? 'completed' : '')}
+              renderValueWidget={({ source, value, onChange, inputId }) => (
+                <div className="min-w-0 flex-1">
+                  <ValueWidget
+                    source={source}
+                    value={value}
+                    onChange={onChange}
+                    resultCodeOptions={resultCodeOptions}
+                    assignmentOptions={assignmentOptions}
+                    surveyId={surveyId}
+                    idListAutoGrow
+                    {...(inputId !== undefined ? { inputId } : {})}
+                  />
+                </div>
+              )}
+              stackFooter={
+                <MatchedCount
+                  empty={draft.length === 0}
+                  settling={settling}
+                  error={previewError}
+                  matched={summary?.matched}
                 />
-              </div>
-            )}
-            stackFooter={
-              <MatchedCount
-                empty={draft.length === 0}
-                settling={settling}
-                error={previewError}
-                matched={summary?.matched}
-              />
-            }
-          />
+              }
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="outline" size="sm">
-            <Link href={assignmentsHref(surveyId)}>목록</Link>
-          </Button>
-          <button
-            type="button"
-            className="text-sm text-red-600 hover:text-red-700"
-            onClick={() => setRemoveOpen(true)}
-          >
-            컨택원 삭제
-          </button>
-        </div>
-        <Button onClick={() => setConfirmOpen(true)} disabled={!canApply}>
-          {summary
-            ? `교체 적용 · ${savedName} ${fmt(summary.current)}명 → ${fmt(summary.matched)}명`
-            : '교체 적용'}
-        </Button>
-      </div>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {savedName}의 배정을 조건 결과로 바꿉니다
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              {summary ? <ApplySummary name={savedName} summary={summary} /> : <span />}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction disabled={isPending} onClick={runApply}>
-              교체 적용
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>컨택원 {savedName}을(를) 지웁니다</AlertDialogTitle>
-            <AlertDialogDescription>
-              {summary && summary.current > 0
-                ? `배정된 ${fmt(summary.current)}명이 배정 없음이 됩니다. 되돌릴 수 없습니다.`
-                : '배정된 대상은 배정 없음이 됩니다. 되돌릴 수 없습니다.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isPending}
-              onClick={runRemove}
-              className="bg-red-600 hover:bg-red-700"
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Button asChild variant="outline" size="sm">
+              <Link href={assignmentsHref(surveyId)}>목록</Link>
+            </Button>
+            <button
+              type="button"
+              className="text-sm text-red-600 hover:text-red-700"
+              onClick={() => setRemoveOpen(true)}
             >
-              삭제
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              컨택원 삭제
+            </button>
+          </div>
+          <Button onClick={() => setConfirmOpen(true)} disabled={!canApply}>
+            {summary
+              ? `교체 적용 · ${savedName} ${fmt(summary.current)}명 → ${fmt(summary.matched)}명`
+              : '교체 적용'}
+          </Button>
+        </div>
+
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{savedName}의 배정을 조건 결과로 바꿉니다</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                {summary ? <ApplySummary name={savedName} summary={summary} /> : <span />}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction disabled={isPending} onClick={runApply}>
+                교체 적용
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>컨택원 {savedName}을(를) 지웁니다</AlertDialogTitle>
+              <AlertDialogDescription>
+                {summary && summary.current > 0
+                  ? `배정된 ${fmt(summary.current)}명이 배정 없음이 됩니다. 되돌릴 수 없습니다.`
+                  : '배정된 대상은 배정 없음이 됩니다. 되돌릴 수 없습니다.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isPending}
+                onClick={runRemove}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                삭제
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      <AssignmentSidePanel
+        surveyId={surveyId}
+        assignment={{ id: assignment.id, name: savedName }}
+        focused={focusedRow ? { source: focusedRow.source, value: focusedRow.value } : null}
+        onFocusedValueChange={setFocusedValue}
+        clauses={draft.length > 0 ? readyClauses : null}
+        columnCandidates={columnCandidates}
+        displayColumn={displayColumn}
+        otherOwnerNames={summary?.fromOthers.map((o) => o.name) ?? []}
+      />
     </div>
   );
 }
@@ -368,7 +394,9 @@ function MatchedCount({
   matched: number | undefined;
 }) {
   if (empty) {
-    return <span className="text-sm text-slate-500">조건을 하나 이상 넣어야 적용할 수 있습니다</span>;
+    return (
+      <span className="text-sm text-slate-500">조건을 하나 이상 넣어야 적용할 수 있습니다</span>
+    );
   }
   if (error) {
     return (

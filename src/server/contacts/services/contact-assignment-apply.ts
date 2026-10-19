@@ -12,13 +12,16 @@ import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
+  listContactsForSurvey,
 } from '@/server/read-models/contacts';
 import { parseClausesFromUrl } from '@/server/read-models/contacts-filters';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
+import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
 import type {
   ApplyAssignmentInput,
   AssignmentChangeSummary,
+  AssignmentMatchesInput,
   PreviewAssignmentInput,
 } from '../domain/contact-assignment';
 import { listAssignmentOptions } from './contact-assignments';
@@ -204,4 +207,39 @@ export async function applyAssignment(
       .where(eq(contactAssignments.id, input.assignmentId));
     return summary;
   });
+}
+
+/** 오른쪽 대상 목록 한 쪽의 인원. */
+export const ASSIGNMENT_MATCHES_PAGE_SIZE = 10;
+
+/**
+ * 조건에 맞는 대상 목록(시스템ID 순, 10명씩) — 컨택원 수정 화면 오른쪽. 조사 대상 목록과
+ * 같은 read model 을 써서 같은 조건이면 같은 사람이 나오고, 개인정보 열은 같은 마스킹 힌트만 싣는다.
+ */
+export async function listAssignmentMatches(
+  input: AssignmentMatchesInput,
+  scope: OperationsDataScope,
+): Promise<ContactAssignmentMatchesResult> {
+  const clauses = await resolveAssignmentClauses(input.surveyId, scope, input.clauses);
+  const { rows, total, page } = await listContactsForSurvey({
+    surveyId: input.surveyId,
+    scope,
+    clauses,
+    page: input.page,
+    pageSize: ASSIGNMENT_MATCHES_PAGE_SIZE,
+    sort: 'resid',
+    dir: 'asc',
+  });
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      resid: r.resid,
+      attrs: r.attrs,
+      piiMaskHints: r.piiMaskHints,
+      assignment: r.assignment,
+    })),
+    total,
+    page,
+    pageSize: ASSIGNMENT_MATCHES_PAGE_SIZE,
+  };
 }

@@ -47,6 +47,12 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
     (c) => c.source !== FILTER_SOURCE.ALL,
   );
 
+  // 오른쪽 대상 목록 두 번째 열 — 표시 중인 첫 attrs 열 (기업명 등).
+  const firstAttrs = (scheme?.columns ?? [])
+    .filter((c) => !c.hidden && c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX))
+    .sort((a, b) => a.order - b.order)[0];
+  const displayColumn = firstAttrs ? { source: firstAttrs.source, label: firstAttrs.label } : null;
+
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
       <nav className="mb-2 flex items-center gap-2 text-sm" aria-label="경로">
@@ -63,6 +69,7 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
         columnCandidates={columnCandidates}
         resultCodeOptions={resultCodes}
         assignmentOptions={assignmentOptions}
+        displayColumn={displayColumn}
       />
     </main>
   );
