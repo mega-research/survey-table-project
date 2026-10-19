@@ -60,14 +60,14 @@ describe('AssignmentEditor — 교체 적용', () => {
     });
   });
 
-  it('마지막 조건으로 채워 열고, 인원과 버튼에 결과가 적힌다', async () => {
+  it('마지막 조건으로 채워 열고, 인원이 적히면 적용할 수 있다', async () => {
     renderEditor([
       { source: 'system.resid', value: '1-100', op: '' },
       { source: 'system.resid', value: '짝수', op: 'AND' },
     ]);
     // 디바운스(400ms) 뒤 미리보기 — 전체 스위트 부하에서도 기다리도록 넉넉히.
     expect(await screen.findByText('41명', undefined, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '교체 적용 · 10차 59명 → 41명' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '배정 적용' })).toBeEnabled();
     expect(preview).toHaveBeenCalledWith({
       surveyId: SURVEY,
       assignmentId: AID,
@@ -82,13 +82,12 @@ describe('AssignmentEditor — 교체 적용', () => {
     const user = userEvent.setup();
     apply.mockResolvedValue({ matched: 41, current: 59, incoming: 10, fromOthers: [], leaving: 31 });
     renderEditor([{ source: 'system.resid', value: '1-100', op: '' }]);
-    await user.click(
-      await screen.findByRole('button', { name: /교체 적용 · 10차/ }, { timeout: 5000 }),
-    );
+    expect(await screen.findByText('41명', undefined, { timeout: 5000 })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '배정 적용' }));
     expect(screen.getByText('새로 들어옴 10명 (배정 없음에서)')).toBeInTheDocument();
     expect(screen.getByText('다른 컨택원에서 옮겨 옴 3명 (11차 3)')).toBeInTheDocument();
     expect(screen.getByText('빠짐 31명 (배정 없음이 됩니다)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '교체 적용' }));
+    await user.click(screen.getByRole('button', { name: '배정 적용' }));
     await waitFor(() =>
       expect(apply).toHaveBeenCalledWith({
         surveyId: SURVEY,
@@ -101,7 +100,7 @@ describe('AssignmentEditor — 교체 적용', () => {
   it('조건이 비어 있으면 적용할 수 없다', async () => {
     renderEditor(null);
     expect(screen.getByText('조건을 하나 이상 넣어야 적용할 수 있습니다')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '교체 적용' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '배정 적용' })).toBeDisabled();
     expect(preview).not.toHaveBeenCalled();
   });
 });

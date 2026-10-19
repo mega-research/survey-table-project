@@ -197,14 +197,14 @@ export function AssignmentEditor({
         });
         setConfirmOpen(false);
         toast.success(
-          `교체 적용했습니다 — ${savedName} ${fmt(result.matched)}명 (새로 ${fmt(result.incoming)} · 다른 컨택원에서 ${fmt(sumOthers(result))} · 빠짐 ${fmt(result.leaving)})`,
+          `배정 적용했습니다 — ${savedName} ${fmt(result.matched)}명 (새로 ${fmt(result.incoming)} · 다른 컨택원에서 ${fmt(sumOthers(result))} · 빠짐 ${fmt(result.leaving)})`,
         );
         await queryClient.invalidateQueries({
           queryKey: ['contact-assignment-preview', surveyId, assignment.id],
         });
         router.refresh();
       } catch (err) {
-        toast.error(getErrorMessage(err, '교체 적용에 실패했습니다.'));
+        toast.error(getErrorMessage(err, '배정 적용에 실패했습니다.'));
       }
     });
   };
@@ -319,9 +319,7 @@ export function AssignmentEditor({
             </button>
           </div>
           <Button onClick={() => setConfirmOpen(true)} disabled={!canApply}>
-            {summary
-              ? `교체 적용 · ${savedName} ${fmt(summary.current)}명 → ${fmt(summary.matched)}명`
-              : '교체 적용'}
+            배정 적용
           </Button>
         </div>
 
@@ -336,7 +334,7 @@ export function AssignmentEditor({
             <AlertDialogFooter>
               <AlertDialogCancel>취소</AlertDialogCancel>
               <AlertDialogAction disabled={isPending} onClick={runApply}>
-                교체 적용
+                배정 적용
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
