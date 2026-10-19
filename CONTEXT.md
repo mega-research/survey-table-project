@@ -256,6 +256,10 @@ _Avoid_: 테이블 필드 = table 유형 전용이라는 가정, isChoiceGroupCa
 스냅샷·export 등 신뢰 불가 직렬화 데이터가 `Question[]`로 들어오는 읽기 경계의 단일 거처(`src/lib/question/normalize.ts`). preserve(판별자만 검증, 무변형 passthrough + 관측)와 strict(zod parse + cross-type 오염 키 소거) 2모드. 경계 캐스트는 이 module 안 한 곳에만 존재한다 — 새 역직렬화 지점에서 `as unknown as Question[]`을 만들지 않는다.
 _Avoid_: 역직렬화 단언, 호출처별 자가 검증
 
+**셀 필드 정책 (cell field policy)**:
+`TableCell` 의 키마다 두 가지를 정해 둔 표(`src/utils/table-cell-field-policy.ts`) — ① **셀 편집 폼이 소유하는가**(`owned`: 저장 때 원본 값을 걷어내고 폼 값으로만 다시 쓴다 · `kept`: 폼이 모르는 키라 원본 그대로 · `dropped`: 저장하면 늘 빠진다) ② **셀 보관함에 싣는가**(`carry` · `drop` — 위치·표 안 관계·설문 전역 이름처럼 다른 자리에서 뜻이 없는 키는 뺀다). 표의 타입이 `keyof TableCell` 전부를 요구해 새 필드를 정책 없이 추가하면 tsc 가 막는다. 셀 편집 저장의 걷어내기 목록과 보관함 제거 목록은 이 표에서 나온다. 폼 소유 키를 저장하는 쪽(유형별 조건부 기록)은 손으로 쓰고, 유형별 견본 셀의 폼 왕복 테스트가 빠짐을 잡는다. 붙여넣기는 정책을 쓰지 않는다 — 대상 칸은 id 만 남기고 원본 칸으로 갈아 끼운다(단일 칸 붙여넣기와 같은 규칙).
+_Avoid_: 셀 저장 함수 안의 손 구조 분해 목록, 유형별 정리 키 목록, 대상 칸 위에 원본 속성을 덮어 합치는 붙여넣기
+
 ### 입력 형식
 
 **표 input 셀의 여러 줄 (multiline input cell)**:

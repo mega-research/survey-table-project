@@ -5,7 +5,7 @@ import { type Patch, applyPatches, enablePatches, produceWithPatches } from 'imm
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
-import type { TableColumn, TableRow } from '@/types/survey';
+import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -19,7 +19,6 @@ import {
   type PasteConflictResult,
   calculateDragRange,
   checkPasteConflict,
-  clearStaleTypeProperties,
   createRadioGroupRemapper,
   findRegionSourceCellPos,
   pruneDeadGatingAfterPaste,
@@ -195,39 +194,26 @@ export function useDragCopy({
           for (let cc = 0; cc < region.width; cc++) {
             const absRow = targetRow + rr;
             const absCol = targetCol + cc;
-            const targetCell = draft[absRow]?.cells[absCol];
-            if (!targetCell) continue;
+            const targetRowCells = draft[absRow]?.cells;
+            const previousTarget = targetRowCells?.[absCol];
+            if (!targetRowCells || !previousTarget) continue;
+            const preservedId = previousTarget.id;
 
             const sourceCellRow = region.cells[rr];
             const sourceCell = sourceCellRow ? sourceCellRow[cc] : undefined;
 
             if (sourceCell === null || sourceCell === undefined) {
               if (sourceCell === null) {
-                // hidden 위치 → 내용 초기화 (recalculateHiddenCells가 isHidden 설정)
-                targetCell.type = 'text';
-                targetCell.content = '';
-                delete targetCell.contentHtml;
-                delete targetCell.rowspan;
-                delete targetCell.colspan;
-                // 타입별 잔여 속성 정리
-                clearStaleTypeProperties(
-                  targetCell as unknown as Record<string, unknown>,
-                  'text',
-                );
+                // hidden 위치 → 빈 칸으로 초기화 (recalculateHiddenCells가 isHidden 설정)
+                targetRowCells[absCol] = { id: preservedId, type: 'text', content: '' };
               }
               continue;
             }
 
-            // 대상 셀의 기존 타입과 다르면 잔여 속성 정리
-            clearStaleTypeProperties(
-              targetCell as unknown as Record<string, unknown>,
-              sourceCell.type ?? targetCell.type,
-            );
-
-            // 소스 셀의 속성 적용 (id는 보존)
-            const preservedId = targetCell.id;
-            Object.assign(targetCell, structuredClone(sourceCell));
-            targetCell.id = preservedId;
+            // 대상 칸은 id 만 남기고 소스 칸으로 갈아 끼운다 — 단일 칸 붙여넣기와 같은 규칙.
+            // 덮어 합치면 소스에 없는 대상의 옛 속성(게이팅·필수·숫자 서식 등)이 남는다.
+            const targetCell: TableCell = { ...structuredClone(sourceCell), id: preservedId };
+            targetRowCells[absCol] = targetCell;
 
             // 옵션 id 재발번 — 소스와 공유하면 optionTexts 사이드카가 충돌한다
             regenerateCellOptionIds(targetCell, generateId);

@@ -884,6 +884,23 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
     expect(out).not.toHaveProperty('required');
   });
 
+  it('안내 문구를 지우면 기존 requiredMessage 가 되살아나지 않는다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      required: true,
+      requiredMessage: '옛 문구',
+    };
+    const cleared = buildUpdatedCell(
+      { ...baseForm('radio'), cellRequired: true, cellRequiredMessage: '' },
+      cell,
+    );
+    expect(cleared).not.toHaveProperty('requiredMessage');
+    const unrequired = buildUpdatedCell({ ...cellToFormState(cell), cellRequired: false }, cell);
+    expect(unrequired).not.toHaveProperty('requiredMessage');
+  });
+
   it('비대상 타입(text)은 cellRequired 를 저장하지 않는다', () => {
     const out = buildUpdatedCell({ ...baseForm('text'), cellRequired: true }, baseCell);
     expect(out).not.toHaveProperty('required');

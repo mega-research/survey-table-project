@@ -17,6 +17,7 @@ import {
 import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { INTERACTIVE_CELL_TYPES } from '@/utils/table-cell-code-generator';
+import { CELL_FORM_STRIPPED_KEYS, omitCellKeys } from '@/utils/table-cell-field-policy';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
@@ -333,84 +334,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     return trimmed.some((n) => n.length > 0) ? trimmed : undefined;
   })();
 
-  // 폼이 책임지는 필드는 기존 셀에서 베이스 복사하지 않는다.
+  // 폼이 책임지는 필드는 기존 셀에서 베이스 복사하지 않는다 — 걷어낼 키는 셀 필드 정책이 정한다.
   // 값 비우기/기본값 복귀 시 cellBase 의 예전 값이 되살아나는 것을 막고,
   // 아래 조건부 저장 블록을 단일 source of truth 로 둔다.
-  const {
-    cellCode: _cellCode,
-    isCustomCellCode: _isCustomCellCode,
-    exportLabel: _exportLabel,
-    isCustomExportLabel: _isCustomExportLabel,
-    mobileLabel: _mobileLabel,
-    optionTextSlot: _optionTextSlot,
-    choiceGroupId: _choiceGroupId,
-    spssVarType: _spssVarType,
-    spssMeasure: _spssMeasure,
-    spssNumericCode: _spssNumericCode,
-    imageUrl: _imageUrl,
-    videoUrl: _videoUrl,
-    checkboxOptions: _checkboxOptions,
-    radioOptions: _radioOptions,
-    radioGroupName: _radioGroupName,
-    distinctGroup: _distinctGroup,
-    selectOptions: _selectOptions,
-    allowOtherOption: _allowOtherOption,
-    optionsColumns: _optionsColumns,
-    mobileOptionsColumns: _mobileOptionsColumns,
-    placeholder: _placeholder,
-    inputMaxLength: _inputMaxLength,
-    inputRows: _inputRows,
-    inputAutoGrow: _inputAutoGrow,
-    inputWidth: _inputWidth,
-    hideRightBorder: _hideRightBorder,
-    optionTextBelowTable: _optionTextBelowTable,
-    defaultValueTemplate: _defaultValueTemplate,
-    prefillEditable: _prefillEditable,
-    inputType: _inputType,
-    piiEncrypted: _piiEncrypted,
-    emptyDefault: _emptyDefault,
-    numberFormat: _numberFormat,
-    textValidation: _textValidation,
-    required: _required,
-    enabledWhen: _enabledWhen,
-    requiredWhenEnabled: _requiredWhenEnabled,
-    minSelections: _minSelections,
-    maxSelections: _maxSelections,
-    rankingConfig: _rankingConfig,
-    rankingOptions: _rankingOptions,
-    rankSuffixPattern: _rankSuffixPattern,
-    rankVarNames: _rankVarNames,
-    rankingLabel: _rankingLabel,
-    isOtherRankingCell: _isOtherRankingCell,
-    choiceLabel: _choiceLabel,
-    exclusiveChoice: _exclusiveChoice,
-    exclusiveScope: _exclusiveScope,
-    branchRule: _branchRule,
-    allowTextInput: _allowTextInput,
-    textInputType: _textInputType,
-    textInputNumberFormat: _textInputNumberFormat,
-    textInputPlaceholder: _textInputPlaceholder,
-    contentHtml: _contentHtml,
-    textBold: _textBold,
-    boldFirstLine: _boldFirstLine,
-    backgroundColor: _backgroundColor,
-    textColor: _textColor,
-    rowspan: _rowspan,
-    colspan: _colspan,
-    horizontalAlign: _horizontalAlign,
-    verticalAlign: _verticalAlign,
-    textPosition: _textPosition,
-    inputTextAlign: _inputTextAlign,
-    mobileDisplay: _mobileDisplay,
-    answerQuoteText: _answerQuoteText,
-    answerQuoteEnabled: _answerQuoteEnabled,
-    answerQuoteName: _answerQuoteName,
-    formula: _formula,
-    formulaTolerance: _formulaTolerance,
-    formulaErrorMessage: _formulaErrorMessage,
-    calcValidation: _calcValidation,
-    ...cellBase
-  } = cell;
+  const cellBase = omitCellKeys(cell, CELL_FORM_STRIPPED_KEYS);
 
   const updatedCell: TableCell = {
     ...cellBase,
@@ -572,7 +499,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     ...(contentType === 'ranking_opt' && form.rankingLabel.trim().length > 0
       ? { rankingLabel: form.rankingLabel.trim() }
       : {}),
-    // ranking_opt 그룹 귀속. 빈 문자열이면 기존 셀의 choiceGroupId 를 후처리 delete 로 제거.
+    // ranking_opt 그룹 귀속. 빈 문자열이면 키를 두지 않는다(원본 값은 이미 걷어냈다).
     ...(contentType === 'ranking_opt' && form.choiceGroupId
       ? { choiceGroupId: form.choiceGroupId }
       : {}),
@@ -617,10 +544,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.choiceBranchRule
             ? { branchRule: { ...form.choiceBranchRule, value: cell.id } }
             : {}),
-          // 그룹 귀속. 빈 문자열이면 기존 셀에 있던 choiceGroupId 도 제거된다.
-          // (choice_opt block 이 cellBase spread 이후에 위치하므로 빈 값 시
-          //  명시적으로 undefined 를 넣어 키를 덮어쓴다 — exactOptionalPropertyTypes 준수를 위해
-          //  후처리 delete 방식 대신 아래 updatedCell 후처리를 사용한다.)
+          // 그룹 귀속. 빈 문자열이면 키를 두지 않는다(원본 값은 이미 걷어냈다).
           ...(form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
         }
       : {}),
@@ -694,13 +618,6 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       : {}),
   };
 
-  // choice_opt 또는 ranking_opt 에서 그룹 해제(빈 문자열)를 선택했을 때,
-  // cellBase spread 로 남아있을 수 있는 choiceGroupId 를 제거한다.
-  // exactOptionalPropertyTypes 상 undefined 할당은 금지이므로 delete 사용.
-  if (GROUPABLE_CELL_TYPES.has(contentType) && !form.choiceGroupId) {
-    delete (updatedCell as Partial<TableCell>).choiceGroupId;
-  }
-
   // 표시 셀(text/image/video): 기본 hidden 은 새 셀에는 저장하지 않는다. 다만 기존에
   // header/inline/collapsed/hidden 으로 명시 설정된 셀을 hidden 으로 바꾸는 경우는
   // "자동 카드 헤더 폴백도 숨김" 의도를 보존해야 한다.
@@ -722,20 +639,6 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
   }
   if (!MOBILE_DISPLAY_CELL_TYPES.has(contentType) && !MOBILE_LABEL_CELL_TYPES.has(contentType)) {
     delete (updatedCell as Partial<TableCell>).mobileDisplay;
-  }
-
-  // 정렬도 기본값으로 되돌릴 때 cellBase 의 이전 값이 남지 않도록 제거한다.
-  if (form.horizontalAlign === 'left') {
-    delete (updatedCell as Partial<TableCell>).horizontalAlign;
-  }
-  if (form.verticalAlign === 'top') {
-    delete (updatedCell as Partial<TableCell>).verticalAlign;
-  }
-  if (!TEXT_POSITION_CELL_TYPES.has(contentType) || form.textPosition === 'top') {
-    delete (updatedCell as Partial<TableCell>).textPosition;
-  }
-  if (!INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) || form.inputTextAlign === 'inherit') {
-    delete (updatedCell as Partial<TableCell>).inputTextAlign;
   }
 
   return updatedCell;
