@@ -24,6 +24,7 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     contactGroupValue: null,
     contactAttrs: {},
     contactPiiMasks: {},
+    contactAssignmentName: null,
     latestResultCode: null,
     emailMasked: 'lsj...@meg...',
     status: 'sent',

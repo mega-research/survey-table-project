@@ -62,6 +62,27 @@ describe('resolveMailDisplayColumns', () => {
     expect(resolveMailDisplayColumns(scheme)).toEqual([]);
   });
 
+  it('컨택원 열은 includeContactOwner 를 켠 호출에만 나온다 — 게스트 화면은 켜 두어도 없다', () => {
+    const scheme = schemeOf([
+      { key: '회사명', label: '회사명', source: 'attrs.회사명', order: 2, showInMail: true },
+      {
+        key: 'contact_owner',
+        label: '컨택원',
+        source: 'system.contact_owner',
+        order: 1,
+        showInMail: true,
+      },
+    ]);
+
+    expect(resolveMailDisplayColumns(scheme)).toEqual([
+      { key: '회사명', label: '회사명', kind: 'attrs' },
+    ]);
+    expect(resolveMailDisplayColumns(scheme, { includeContactOwner: true })).toEqual([
+      { key: 'contact_owner', label: '컨택원', kind: 'owner' },
+      { key: '회사명', label: '회사명', kind: 'attrs' },
+    ]);
+  });
+
   it('스킴이 없으면 빈 목록', () => {
     expect(resolveMailDisplayColumns(null)).toEqual([]);
   });
@@ -92,10 +113,11 @@ describe('toggleShowInMail', () => {
 });
 
 describe('canShowInMail', () => {
-  it('attrs·pii·시스템ID 만 — 운영 컬럼은 아니다', () => {
+  it('attrs·pii·시스템ID·컨택원만 — 그 밖의 운영 컬럼은 아니다', () => {
     expect(canShowInMail({ source: 'attrs.회사명' })).toBe(true);
     expect(canShowInMail({ source: 'pii.이메일' })).toBe(true);
     expect(canShowInMail({ source: 'system.resid' })).toBe(true);
+    expect(canShowInMail({ source: 'system.contact_owner' })).toBe(true);
     expect(canShowInMail({ source: 'system.contact_result' })).toBe(false);
   });
 });
@@ -107,5 +129,8 @@ describe('mailColumnValue', () => {
     expect(mailColumnValue({ key: '회사명', label: '', kind: 'attrs' }, attrs, masks)).toBe('메가');
     expect(mailColumnValue({ key: '대표자명', label: '', kind: 'pii' }, attrs, masks)).toBe('김*수');
     expect(mailColumnValue({ key: '없음', label: '', kind: 'pii' }, attrs, masks)).toBe('');
+    const owner = { key: 'contact_owner', label: '', kind: 'owner' } as const;
+    expect(mailColumnValue(owner, attrs, masks, '이메일 갱신')).toBe('이메일 갱신');
+    expect(mailColumnValue(owner, attrs, masks, null)).toBe('');
   });
 });

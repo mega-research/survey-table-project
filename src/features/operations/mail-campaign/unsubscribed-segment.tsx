@@ -90,7 +90,7 @@ export function UnsubscribedSegment({
                       ) : null}
                       {mailColumns.map((c) => (
                         <td key={`${c.kind}.${c.key}`} className="px-4 py-3 text-slate-600">
-                          {mailColumnValue(c, r.attrs, r.piiMasks) || '—'}
+                          {mailColumnValue(c, r.attrs, r.piiMasks, r.assignmentName) || '—'}
                         </td>
                       ))}
                       <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>

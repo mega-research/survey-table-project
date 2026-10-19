@@ -16,11 +16,13 @@ import {
 } from '@/server/mail/services/campaigns-read';
 import {
   mailPiiMaskKeys,
+  mailShowsContactOwner,
   resolveMailDisplayColumns,
   resolveMailShowsResid,
 } from '@/lib/contacts/mail-display-columns';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
@@ -111,8 +113,12 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   }
 
   // 수신자 표는 메일 표시를 켠 개인정보 열의 힌트를 실어야 해서 스킴을 먼저 읽는다.
-  const scheme = await getContactColumnScheme(surveyId, scope);
-  const mailColumns = resolveMailDisplayColumns(scheme);
+  const [scheme, isGuest] = await Promise.all([
+    getContactColumnScheme(surveyId, scope),
+    isGuestViewer(),
+  ]);
+  // 컨택원 열은 내부 실사 정보라 게스트 표에는 켜 두어도 싣지 않는다.
+  const mailColumns = resolveMailDisplayColumns(scheme, { includeContactOwner: !isGuest });
   const [recipients, facets] = await Promise.all([
     listCampaignRecipients({
       surveyId,
@@ -126,6 +132,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
       errorReasons,
       resultCodes,
       piiMaskKeys: mailPiiMaskKeys(mailColumns),
+      includeAssignment: mailShowsContactOwner(mailColumns),
     }),
     listCampaignRecipientFacets({ surveyId, campaignId: cid, scope }),
   ]);

@@ -65,6 +65,8 @@ export interface CampaignRecipientRow {
   contactAttrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
   contactPiiMasks: Record<string, string>;
+  /** 대상이 지금 맡겨진 컨택원 이름 — 메일 표시를 켠 비게스트 화면에서만 싣는다. 배정 없음이면 null */
+  contactAssignmentName: string | null;
   emailMasked: string;
   status: MailRecipientStatus;
   /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
@@ -89,6 +91,8 @@ export interface CampaignCandidateRow {
   attrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
   piiMasks: Record<string, string>;
+  /** 대상이 지금 맡겨진 컨택원 이름 — 메일 표시를 켠 비게스트 화면에서만 싣는다. 배정 없음이면 null */
+  assignmentName: string | null;
   respondedAt: Date | null;
   /**
    * 매칭 응답의 status — 표시와 필터가 같은 축을 보게 하는 값.
@@ -126,6 +130,8 @@ export interface UnsubscribedContactRow {
   attrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
   piiMasks: Record<string, string>;
+  /** 대상이 지금 맡겨진 컨택원 이름 — 메일 표시를 켠 비게스트 화면에서만 싣는다. 배정 없음이면 null */
+  assignmentName: string | null;
   /** 링크 수신거부 시각. 결과코드 축으로만 수신거부면 null */
   unsubscribedAt: Date | null;
   /** 최근 결과코드가 수신거부인 회차의 시각. 그 축이 아니면 null */

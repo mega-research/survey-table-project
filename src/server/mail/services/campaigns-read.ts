@@ -278,6 +278,16 @@ export async function getCampaignDetail(
   };
 }
 
+/**
+ * 대상이 지금 맡겨진 컨택원 이름(메일 표의 컨택원 열). 꺼져 있으면 읽지 않고 NULL —
+ * 게스트 화면은 켜지 않는다. contact_targets 와 상관되므로 세 표의 FROM 이 그 테이블이어야 한다.
+ */
+function assignmentNameExpr(include: boolean | undefined) {
+  return include
+    ? sql<string | null>`(SELECT name FROM contact_assignments WHERE id = "contact_targets".assignment_id)`
+    : sql<string | null>`NULL::text`;
+}
+
 export interface ListCampaignRecipientsResult {
   rows: CampaignRecipientRow[];
   total: number;
@@ -421,6 +431,8 @@ export async function listCampaignRecipients(args: {
   resultCodes?: string[];
   /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
   piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -477,6 +489,7 @@ export async function listCampaignRecipients(args: {
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
       contactAttrs: contactTargets.attrs,
+      contactAssignmentName: assignmentNameExpr(args.includeAssignment),
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
@@ -510,6 +523,7 @@ export async function listCampaignRecipients(args: {
       contactGroupValue: r.contactGroupValue,
       contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       contactPiiMasks: (r.contactTargetId && piiMasks.get(r.contactTargetId)) || {},
+      contactAssignmentName: r.contactAssignmentName,
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
@@ -883,6 +897,8 @@ export async function previewCampaignCandidates(args: {
   pageSize?: number;
   /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
   piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const [{ negative: negativeCodes }, bouncedContactIds, emailOrder] = await Promise.all([
@@ -926,6 +942,7 @@ export async function previewCampaignCandidates(args: {
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
+      assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       respondedAt: contactTargets.respondedAt,
       // 표시·필터가 같은 매칭(matchedResponseSubquery)을 공유해야 한다 — 갈라지면
       // "진행 중" 으로 거른 행이 표에서는 "미응답" 으로 보인다.
@@ -961,6 +978,7 @@ export async function previewCampaignCandidates(args: {
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
+      assignmentName: r.assignmentName,
       respondedAt: r.respondedAt,
       responseStatus: r.responseStatus,
       progressPct: r.progressPct,
@@ -1016,6 +1034,8 @@ export async function listUnsubscribedContacts(args: {
   pageSize?: number;
   /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
   piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
@@ -1041,6 +1061,7 @@ export async function listUnsubscribedContacts(args: {
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
+      assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       unsubscribedAt: contactTargets.unsubscribedAt,
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptAt: latestAttemptAtExpr.as('latest_attempt_at'),
@@ -1070,6 +1091,7 @@ export async function listUnsubscribedContacts(args: {
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
+      assignmentName: r.assignmentName,
       unsubscribedAt: r.unsubscribedAt,
       resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
         ? r.latestAttemptAt

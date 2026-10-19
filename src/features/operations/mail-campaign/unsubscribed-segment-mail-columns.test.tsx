@@ -23,6 +23,7 @@ function row(overrides: Partial<UnsubscribedContactRow>): UnsubscribedContactRow
     groupValue: null,
     attrs: {},
     piiMasks: {},
+    assignmentName: null,
     unsubscribedAt: null,
     resultUnsubscribedAt: new Date('2026-08-26T00:00:00Z'),
     ...overrides,

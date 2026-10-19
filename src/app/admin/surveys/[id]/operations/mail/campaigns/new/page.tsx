@@ -26,6 +26,7 @@ import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import {
   mailPiiMaskKeys,
+  mailShowsContactOwner,
   resolveMailDisplayColumns,
   resolveMailShowsResid,
 } from '@/lib/contacts/mail-display-columns';
@@ -186,7 +187,8 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     : 'resid';
   const dir: CampaignSortDir = sp.dir === 'desc' ? 'desc' : 'asc';
 
-  const mailColumns = resolveMailDisplayColumns(scheme);
+  // 컨택원 열은 내부 실사 정보라 게스트 표에는 켜 두어도 싣지 않는다.
+  const mailColumns = resolveMailDisplayColumns(scheme, { includeContactOwner: !isGuest });
   const candidates = await previewCampaignCandidates({
     surveyId,
     scope,
@@ -197,6 +199,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     page: parsePage(sp.page),
     pageSize: PAGE_SIZE,
     piiMaskKeys: mailPiiMaskKeys(mailColumns),
+    includeAssignment: mailShowsContactOwner(mailColumns),
   });
 
   // 스냅샷은 빌더/깔때기를 따로 담는다 — 깔때기의 in 모드 다중값은 {source,value,op}

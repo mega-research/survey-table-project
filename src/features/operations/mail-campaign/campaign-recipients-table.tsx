@@ -292,7 +292,7 @@ export function CampaignRecipientsTable({
                     ) : null}
                     {mailColumns.map((c) => (
                       <td key={`${c.kind}.${c.key}`} className="px-3 py-2 text-slate-600">
-                        {mailColumnValue(c, r.contactAttrs, r.contactPiiMasks) || '—'}
+                        {mailColumnValue(c, r.contactAttrs, r.contactPiiMasks, r.contactAssignmentName) || '—'}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>

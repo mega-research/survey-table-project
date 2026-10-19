@@ -11,11 +11,13 @@ import {
 } from '@/server/mail/services/campaigns-read';
 import {
   mailPiiMaskKeys,
+  mailShowsContactOwner,
   resolveMailDisplayColumns,
   resolveMailShowsResid,
 } from '@/lib/contacts/mail-display-columns';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 const PAGE_SIZE = 20;
 const UNSUB_PAGE_SIZE = 10;
@@ -38,17 +40,20 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
   const unsubPage = parsePage(sp.unsubPage);
 
   // 수신거부 명단은 메일 표시를 켠 개인정보 열의 힌트를 실어야 해서 스킴을 먼저 읽는다.
-  const [campaigns, scheme] = await Promise.all([
+  const [campaigns, scheme, isGuest] = await Promise.all([
     listCampaignsForSurvey({ surveyId, scope, page, pageSize: PAGE_SIZE }),
     getContactColumnScheme(surveyId, scope),
+    isGuestViewer(),
   ]);
-  const mailColumns = resolveMailDisplayColumns(scheme);
+  // 컨택원 열은 내부 실사 정보라 게스트 표에는 켜 두어도 싣지 않는다.
+  const mailColumns = resolveMailDisplayColumns(scheme, { includeContactOwner: !isGuest });
   const unsubscribed = await listUnsubscribedContacts({
     surveyId,
     scope,
     page: unsubPage,
     pageSize: UNSUB_PAGE_SIZE,
     piiMaskKeys: mailPiiMaskKeys(mailColumns),
+    includeAssignment: mailShowsContactOwner(mailColumns),
   });
 
   return (

@@ -7,9 +7,9 @@
  *
  * 실행: pnpm test:integration (로컬 supabase 54322). 일반 pnpm test 에서는 스킵된다.
  */
-import { randomUUID } from 'node:crypto';
-
 import { eq, inArray, sql } from 'drizzle-orm';
+import ExcelJS from 'exceljs';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
@@ -20,9 +20,22 @@ import {
   surveyResponses,
   surveys,
 } from '@/db/schema';
+import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
 import {
-  createAssignment,
+  FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
+  HEADER_FILTER_VALUE_SEPARATOR,
+  encodeMultiClauseValue,
+} from '@/lib/operations/filter-shared';
+import {
+  applyAssignment,
+  listAssignmentMatches,
+  previewAssignment,
+} from '@/server/contacts/services/contact-assignment-apply';
+import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
+import {
   DuplicateAssignmentNameError,
+  createAssignment,
   listAssignmentOptions,
   listAssignmentsWithStats,
   removeAssignment,
@@ -30,31 +43,21 @@ import {
   reorderAssignments,
   setTargetAssignment,
 } from '@/server/contacts/services/contact-assignments';
+import { countAssignedTargets } from '@/server/contacts/services/contact-assignments';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
+import { fetchCandidateIds } from '@/server/mail/services/campaigns';
 import {
-  applyAssignment,
-  listAssignmentMatches,
-  previewAssignment,
-} from '@/server/contacts/services/contact-assignment-apply';
+  listUnsubscribedContacts,
+  previewCampaignCandidates,
+} from '@/server/mail/services/campaigns-read';
 import { getProgressRows, getProgressTotals } from '@/server/operations/services/report-progress';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
-import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
-import { countAssignedTargets } from '@/server/contacts/services/contact-assignments';
-import ExcelJS from 'exceljs';
-import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
 } from '@/server/read-models/contacts-filters';
-import {
-  encodeMultiClauseValue,
-  FILTER_NONE_VALUE,
-  FILTER_NOT_NONE_VALUE,
-  HEADER_FILTER_VALUE_SEPARATOR,
-} from '@/lib/operations/filter-shared';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
-import { fetchCandidateIds } from '@/server/mail/services/campaigns';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -323,14 +326,31 @@ run('컨택원 배정 (real local DB)', () => {
       await setTargetAssignment({ surveyId, contactTargetId: t!, assignmentId: owner.id });
     }
     await db.insert(surveyResponses).values([
-      { surveyId, contactTargetId: t1!, questionResponses: {}, status: 'completed', isCompleted: true },
+      {
+        surveyId,
+        contactTargetId: t1!,
+        questionResponses: {},
+        status: 'completed',
+        isCompleted: true,
+      },
       { surveyId, contactTargetId: t2!, questionResponses: {}, status: 'in_progress' },
-      { surveyId, contactTargetId: t4!, questionResponses: {}, status: 'completed', isCompleted: true },
+      {
+        surveyId,
+        contactTargetId: t4!,
+        questionResponses: {},
+        status: 'completed',
+        isCompleted: true,
+      },
     ]);
 
     const data = await listAssignmentsWithStats(surveyId, 'real');
     expect(data.rows).toHaveLength(1);
-    expect(data.rows[0]?.stats).toEqual({ assigned: 3, completed: 1, inProgress: 1, notStarted: 1 });
+    expect(data.rows[0]?.stats).toEqual({
+      assigned: 3,
+      completed: 1,
+      inProgress: 1,
+      notStarted: 1,
+    });
     expect(data.unassigned).toEqual({ assigned: 2, completed: 1, inProgress: 0, notStarted: 1 });
     expect(data.total).toBe(5);
 
@@ -461,7 +481,10 @@ run('컨택원 배정 (real local DB)', () => {
       await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: owner.id });
       const clauses = [{ source: 'attrs.기업명', value: '기업1', op: '' as const }];
 
-      const preview = await previewAssignment({ surveyId, assignmentId: owner.id, clauses }, 'real');
+      const preview = await previewAssignment(
+        { surveyId, assignmentId: owner.id, clauses },
+        'real',
+      );
       expect(preview.matched).toBe(1);
       // 미리보기 뒤 대상 1의 기업명이 바뀌었다 → 적용 시점에는 0명
       await db
@@ -477,7 +500,10 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const ids = await seedTargets(surveyId, 4);
       // 기업명: 기업1, (빈 값), 기업3, (키 없음)
-      await db.update(contactTargets).set({ attrs: { 기업명: '' } }).where(eq(contactTargets.id, ids[1]!));
+      await db
+        .update(contactTargets)
+        .set({ attrs: { 기업명: '' } })
+        .where(eq(contactTargets.id, ids[1]!));
       await db.update(contactTargets).set({ attrs: {} }).where(eq(contactTargets.id, ids[3]!));
       const owner = await createAssignment({ surveyId, name: '10차' });
 
@@ -485,7 +511,11 @@ run('컨택원 배정 (real local DB)', () => {
         surveyId,
         assignmentId: owner.id,
         clauses: [
-          { source: 'attrs.기업명', value: encodeMultiClauseValue([FILTER_NOT_NONE_VALUE]), op: '' },
+          {
+            source: 'attrs.기업명',
+            value: encodeMultiClauseValue([FILTER_NOT_NONE_VALUE]),
+            op: '',
+          },
         ],
       });
       expect(withValue.matched).toBe(2);
@@ -526,9 +556,7 @@ run('컨택원 배정 (real local DB)', () => {
         applyAssignment({
           surveyId,
           assignmentId: owner.id,
-          clauses: [
-            { source: 'system.resid', value: `list:${randomUUID()}:3000`, op: '' },
-          ],
+          clauses: [{ source: 'system.resid', value: `list:${randomUUID()}:3000`, op: '' }],
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
       expect(await assignmentOf(ids[0]!)).toBe(owner.id);
@@ -571,7 +599,12 @@ run('컨택원 배정 (real local DB)', () => {
         clauses: [{ source: 'system.contact_owner', value: b.id, op: '' }],
       });
       expect(fromB).toMatchObject({ matched: 2, current: 1, leaving: 1 });
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([a.id, a.id, null, null]);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        a.id,
+        a.id,
+        null,
+        null,
+      ]);
 
       // A 를 「지금 배정 없음」으로 교체 → 3, 4 가 A, 지금 A 인 1, 2 는 빠진다(다시 돌아오지 않는다)
       const fromNone = await applyAssignment({
@@ -580,7 +613,12 @@ run('컨택원 배정 (real local DB)', () => {
         clauses: [{ source: 'system.contact_owner', value: FILTER_NONE_VALUE, op: '' }],
       });
       expect(fromNone).toMatchObject({ matched: 2, current: 2, incoming: 2, leaving: 2 });
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, a.id, a.id]);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        null,
+        null,
+        a.id,
+        a.id,
+      ]);
     });
 
     it('데드락으로 취소되면 자동으로 다시 실행해 성공한다 — 나중에 끝난 쪽이 이긴다', async () => {
@@ -669,7 +707,9 @@ run('컨택원 배정 (real local DB)', () => {
       ]);
 
       const owners = await Promise.all(ids.map((id) => assignmentOf(id)));
-      const assigned = owners.map((o, i) => (o === owner.id ? i + 1 : null)).filter((n) => n != null);
+      const assigned = owners
+        .map((o, i) => (o === owner.id ? i + 1 : null))
+        .filter((n) => n != null);
       const allOdd = assigned.every((n) => n! % 2 === 1);
       const allEven = assigned.every((n) => n! % 2 === 0);
       expect(assigned).toHaveLength(10);
@@ -706,9 +746,16 @@ run('컨택원 배정 (real local DB)', () => {
       });
 
       const clauses = [
-        { source: 'attrs.기업명', value: encodeMultiClauseValue(['A', FILTER_NONE_VALUE]), op: '' as const },
+        {
+          source: 'attrs.기업명',
+          value: encodeMultiClauseValue(['A', FILTER_NONE_VALUE]),
+          op: '' as const,
+        },
       ];
-      const preview = await previewAssignment({ surveyId, assignmentId: owner.id, clauses }, 'real');
+      const preview = await previewAssignment(
+        { surveyId, assignmentId: owner.id, clauses },
+        'real',
+      );
       expect(preview.matched).toBe(3);
       const page = await listAssignmentMatches({ surveyId, clauses, page: 1 }, 'real');
       expect(page.total).toBe(3);
@@ -722,7 +769,9 @@ run('컨택원 배정 (real local DB)', () => {
           { value: FILTER_NONE_VALUE, count: 5 },
         ],
       });
-      expect(await listAssignmentFacets(surveyId, 'real', 'system.resid')).toEqual({ kind: 'many' });
+      expect(await listAssignmentFacets(surveyId, 'real', 'system.resid')).toEqual({
+        kind: 'many',
+      });
     });
   });
 
@@ -765,7 +814,9 @@ run('컨택원 배정 (real local DB)', () => {
         dir: 'asc',
         groupByKeys: [OWNER],
       });
-      expect(byOwner.map((r) => [r.groupLabel, r.groupValues, r.listCount, r.completedCount])).toEqual([
+      expect(
+        byOwner.map((r) => [r.groupLabel, r.groupValues, r.listCount, r.completedCount]),
+      ).toEqual([
         ['11차', ['11차'], 1, 0],
         ['10차', ['10차'], 2, 1],
         ['(배정 없음)', [null], 2, 0],
@@ -786,7 +837,10 @@ run('컨택원 배정 (real local DB)', () => {
       expect(combo.get('기업2 / 10차')).toBe(1);
       expect(combo.get('기업3 / 11차')).toBe(1);
       expect(combo.get('기업5 / (배정 없음)')).toBe(1);
-      expect((await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER])).groupCount).toBe(5);
+      expect(
+        (await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER]))
+          .groupCount,
+      ).toBe(5);
     });
   });
 
@@ -874,13 +928,15 @@ run('컨택원 배정 (real local DB)', () => {
   describe('단체 메일 「현재 컨택원」 조건', () => {
     async function seedMailable(surveyId: string, count: number): Promise<string[]> {
       const ids = await seedTargets(surveyId, count);
-      await db.insert(contactPii).values(
-        ids.flatMap((id, i) =>
-          buildPiiRows(id, [
-            { columnKey: 'email', fieldType: 'email', plain: `owner${i + 1}@example.com` },
-          ]),
-        ),
-      );
+      await db
+        .insert(contactPii)
+        .values(
+          ids.flatMap((id, i) =>
+            buildPiiRows(id, [
+              { columnKey: 'email', fieldType: 'email', plain: `owner${i + 1}@example.com` },
+            ]),
+          ),
+        );
       return ids;
     }
 
@@ -910,6 +966,43 @@ run('컨택원 배정 (real local DB)', () => {
         false,
       );
       expect(unassigned.ids).toEqual([t2]);
+    });
+
+    it('컨택원 열을 켜면 미리보기·수신거부 명단 행에 지금 컨택원 이름이 실린다', async () => {
+      const surveyId = await seedSurvey();
+      const [t1, t2] = await seedMailable(surveyId, 2);
+      const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await db
+        .update(contactTargets)
+        .set({ unsubscribedAt: new Date() })
+        .where(eq(contactTargets.id, t2!));
+
+      const preview = await previewCampaignCandidates({
+        surveyId,
+        scope: 'real',
+        clauses: [],
+        unrespondedOnly: false,
+        includeAssignment: true,
+      });
+      expect(preview.rows.map((r) => [r.id, r.assignmentName])).toEqual([[t1, '이메일 갱신']]);
+
+      await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id });
+      const unsub = await listUnsubscribedContacts({
+        surveyId,
+        scope: 'real',
+        includeAssignment: true,
+      });
+      expect(unsub.rows.map((r) => r.assignmentName)).toEqual(['이메일 갱신']);
+
+      // 끄면(게스트 화면) 읽지 않는다.
+      const hidden = await previewCampaignCandidates({
+        surveyId,
+        scope: 'real',
+        clauses: [],
+        unrespondedOnly: false,
+      });
+      expect(hidden.rows.map((r) => r.assignmentName)).toEqual([null]);
     });
 
     it('조건의 컨택원이 지워졌으면 넓어진 명단을 고르지 않고 거부한다', async () => {

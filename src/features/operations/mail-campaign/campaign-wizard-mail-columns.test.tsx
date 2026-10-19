@@ -35,6 +35,7 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     groupValue: '메가리서치',
     attrs: {},
     piiMasks: {},
+    assignmentName: null,
     respondedAt: null,
     responseStatus: null,
     progressPct: null,
@@ -124,6 +125,18 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
     );
 
     expect(columnCells('대표자')).toEqual(['김*수', '—']);
+  });
+
+  it('컨택원 열은 지금 맡은 컨택원 이름을 그린다 — 배정 없음이면 —', () => {
+    renderWizard(
+      [
+        candidate({ id: 'o-1', assignmentName: '이메일 갱신' }),
+        candidate({ id: 'o-2', assignmentName: null }),
+      ],
+      [{ key: 'contact_owner', label: '컨택원', kind: 'owner' }],
+    );
+
+    expect(columnCells('컨택원')).toEqual(['이메일 갱신', '—']);
   });
 
   it('시스템ID 를 끄면 그 열이 빠진다', () => {
