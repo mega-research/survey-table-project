@@ -32,12 +32,9 @@ import {
 } from '@/server/contacts/services/contact-assignments';
 import {
   applyAssignment,
-  assignFromList,
   listAssignmentMatches,
-  previewAssignFromList,
   previewAssignment,
 } from '@/server/contacts/services/contact-assignment-apply';
-import { createContactIdList } from '@/server/contacts/services/contact-id-lists';
 import { getProgressRows, getProgressTotals } from '@/server/operations/services/report-progress';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
 import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
@@ -51,7 +48,6 @@ import {
 } from '@/server/read-models/contacts-filters';
 import {
   encodeMultiClauseValue,
-  formatIdListToken,
   FILTER_NONE_VALUE,
   FILTER_NOT_NONE_VALUE,
   HEADER_FILTER_VALUE_SEPARATOR,
@@ -727,139 +723,6 @@ run('컨택원 배정 (real local DB)', () => {
         ],
       });
       expect(await listAssignmentFacets(surveyId, 'real', 'system.resid')).toEqual({ kind: 'many' });
-    });
-  });
-
-  describe('목록에서 배정', () => {
-    const emptyFilter = { col: [], q: [], op: [], hcol: [], hm: [], hv: [] };
-
-    it('얹기 — 결과 대상만 옮기고 그 컨택원의 기존 배정은 남는다', async () => {
-      const surveyId = await seedSurvey();
-      const ids = await seedTargets(surveyId, 6);
-      const tenth = await createAssignment({ surveyId, name: '10차' });
-      const eleventh = await createAssignment({ surveyId, name: '11차' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[5]!, assignmentId: eleventh.id }); // 6 → 11차 (조건 밖)
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id }); // 1 → 10차
-
-      const filter = { ...emptyFilter, col: ['system.resid'], q: ['1-3'], op: [''] };
-      const preview = await previewAssignFromList(
-        { surveyId, assignmentId: eleventh.id, filter },
-        'real',
-      );
-      expect(preview).toEqual({
-        matched: 3,
-        targetCurrent: 1,
-        groups: [
-          { id: tenth.id, name: '10차', count: 1 },
-          { id: null, name: null, count: 2 },
-        ],
-      });
-
-      const applied = await assignFromList({ surveyId, assignmentId: eleventh.id, filter });
-      expect(applied).toEqual(preview);
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
-        eleventh.id,
-        eleventh.id,
-        eleventh.id,
-        null,
-        null,
-        eleventh.id, // 기존 배정 유지
-      ]);
-    });
-
-    it('풀기 — 검색 결과의 배정이 없어진다 (열 머리 필터 조건)', async () => {
-      const surveyId = await seedSurvey();
-      const ids = await seedTargets(surveyId, 3);
-      const tenth = await createAssignment({ surveyId, name: '10차' });
-      const eleventh = await createAssignment({ surveyId, name: '11차' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: eleventh.id });
-      const filter = {
-        ...emptyFilter,
-        hcol: ['system.contact_owner'],
-        hm: ['in'],
-        hv: [tenth.id],
-      };
-      const applied = await assignFromList({ surveyId, assignmentId: null, filter });
-      expect(applied.groups).toEqual([{ id: tenth.id, name: '10차', count: 2 }]);
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
-        null,
-        null,
-        eleventh.id,
-      ]);
-    });
-
-    it('목록이 쓸 수 없는 열 머리 필터가 섞이면 전체로 넓히지 않고 거부한다', async () => {
-      const surveyId = await seedSurvey();
-      const ids = await seedTargets(surveyId, 2);
-      const tenth = await createAssignment({ surveyId, name: '10차' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
-      const filter = { ...emptyFilter, hcol: ['system.resid'], hm: ['text'], hv: ['1'] };
-      await expect(assignFromList({ surveyId, assignmentId: null, filter })).rejects.toMatchObject({
-        code: 'BAD_REQUEST',
-      });
-      expect(await assignmentOf(ids[0]!)).toBe(tenth.id);
-    });
-
-    it('미리보기 뒤 조건의 컨택원이 지워지면 전체로 넓히지 않고 거부한다', async () => {
-      const surveyId = await seedSurvey();
-      const ids = await seedTargets(surveyId, 3);
-      const a = await createAssignment({ surveyId, name: 'A' });
-      const b = await createAssignment({ surveyId, name: 'B' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: b.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: a.id });
-      const filter = { ...emptyFilter, hcol: ['system.contact_owner'], hm: ['in'], hv: [b.id] };
-
-      expect(
-        (await previewAssignFromList({ surveyId, assignmentId: a.id, filter }, 'real')).matched,
-      ).toBe(1);
-      await removeAssignment({ surveyId, id: b.id });
-
-      await expect(assignFromList({ surveyId, assignmentId: a.id, filter })).rejects.toMatchObject({
-        code: 'BAD_REQUEST',
-      });
-      await expect(assignFromList({ surveyId, assignmentId: null, filter })).rejects.toMatchObject({
-        code: 'BAD_REQUEST',
-      });
-      await expect(
-        assignFromList({
-          surveyId,
-          assignmentId: a.id,
-          filter: { ...emptyFilter, col: ['system.contact_owner'], q: [b.id], op: [''] },
-        }),
-      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-      // 아무것도 바뀌지 않았다 (1 은 B 삭제로 배정 없음, 2 는 A 그대로, 3 은 없음).
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, a.id, null]);
-    });
-
-    it('저장 ID 목록 토큰 조건에서도 동작하고 파티션을 넘지 않는다', async () => {
-      const surveyId = await seedSurvey({ testMode: true });
-      const ids = await seedTargets(surveyId, 4);
-      const [testTarget] = await seedTargets(surveyId, 1, true);
-      const owner = await createAssignment({ surveyId, name: '10차' });
-      const list = await createContactIdList({ surveyId, ids: [2, 4], createdBy: null });
-      const filter = {
-        ...emptyFilter,
-        col: ['system.resid'],
-        q: [formatIdListToken(list.id, list.count)],
-        op: [''],
-      };
-      const applied = await assignFromList({ surveyId, assignmentId: owner.id, filter });
-      expect(applied.matched).toBe(2);
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
-        null,
-        owner.id,
-        null,
-        owner.id,
-      ]);
-      // 테스트 파티션 대상(resid 1)은 실 컨택원 조건에 걸리지 않는다.
-      expect(await assignmentOf(testTarget!)).toBeNull();
-
-      viewTest(true);
-      await expect(
-        assignFromList({ surveyId, assignmentId: owner.id, filter: emptyFilter }),
-      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 

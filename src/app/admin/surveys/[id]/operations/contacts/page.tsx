@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/features/operations/empty-state';
-import { AssignFromListButton } from '@/features/operations/contacts/assignments/assign-from-list-button';
 import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
 import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-download-dialog';
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
@@ -141,15 +140,6 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* 목록에서 배정 — 컨택원은 내부 실사 운영 도구라 게스트에게는 없다 */}
-          {!isGuest && assignmentOptions.length > 0 && (
-            <AssignFromListButton
-              surveyId={surveyId}
-              total={total}
-              filtered={hasFilter}
-              options={assignmentOptions}
-            />
-          )}
           <ContactsDownloadDialog
             surveyId={surveyId}
             candidates={buildDownloadCandidates(scheme)}
