@@ -15,7 +15,15 @@ import {
   testFlagForScope,
 } from '@/server/data-scope';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
-import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress-format';
+import {
+  formatProgressGroupKey,
+  type ProgressGroupKey,
+  type ProgressRow,
+  type ProgressSortKey,
+  type ProgressSystemGroupKey,
+  type ProgressTotals,
+  type SortDir,
+} from '@/lib/operations/report-progress-format';
 import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
@@ -204,17 +212,66 @@ export interface GetProgressRowsArgs {
   dir: SortDir;
   metaKeys: string[];
   /**
-   * 분류 기준 attrs 키 목록 (순서 = 표 컬럼 순서, 최대 4개). 빈 배열/미지정이면
-   * 기본 group_value 기준. 호출부(page RSC)에서 contactColumns 의 groupBy 컬럼
-   * 목록으로 검증된 값만 전달.
+   * 분류 기준 태그 키 목록 (순서 = 표 컬럼 순서). 빈 배열/미지정이면 기본 group_value
+   * 기준. 호출부(page RSC)에서 컬럼 설정의 분류 기준·시스템 기준으로 검증된 값만 전달.
    */
-  groupByKeys?: string[];
+  groupByKeys?: ProgressGroupKey[];
 }
 
 /** 그룹 키 개수 — 기본(group_value) 모드는 1. */
-function groupKeyCount(groupByKeys: string[] | undefined): number {
+function groupKeyCount(groupByKeys: ProgressGroupKey[] | undefined): number {
   return groupByKeys && groupByKeys.length > 0 ? groupByKeys.length : 1;
 }
+
+/**
+ * 분류 기준 하나의 SQL 조각.
+ * - value: base 서브쿼리(ctt)에서 그룹 키를 내는 식 — GROUP BY·행 식별의 기준
+ * - label: 그룹 키 컬럼 → 표시 값 (null = 미분류 — 표가 nullLabel 로 그린다)
+ * - sort: 그룹 키 컬럼 → 정렬 값 (null 은 NULLS LAST 로 끝)
+ */
+interface GroupKeySql {
+  value: SQL;
+  label: (col: SQL) => SQL;
+  sort: (col: SQL) => SQL;
+  nullLabel: string;
+}
+
+const UNCLASSIFIED_LABEL = '(미분류)';
+
+function groupKeySql(key: ProgressGroupKey | null): GroupKeySql {
+  if (key === null) {
+    // 기본 모드 — 업로드 그룹(group_value) 기준.
+    return {
+      value: sql`ctt.group_value`,
+      label: (col) => col,
+      sort: (col) => col,
+      nullLabel: UNCLASSIFIED_LABEL,
+    };
+  }
+  if (key.kind === 'attrs') {
+    // attrs 값이 빈 문자열이면 미분류 취급 (NULLIF).
+    return {
+      value: sql`NULLIF(ctt.attrs->>${key.key}, '')`,
+      label: (col) => col,
+      sort: (col) => col,
+      nullLabel: UNCLASSIFIED_LABEL,
+    };
+  }
+  return systemGroupKeySql(key.key);
+}
+
+function systemGroupKeySql(key: ProgressSystemGroupKey): GroupKeySql {
+  const unknownKey: never = key;
+  throw new Error(`알 수 없는 시스템 분류 기준: ${String(unknownKey)}`);
+}
+
+function groupKeySqls(groupByKeys: ProgressGroupKey[] | undefined): GroupKeySql[] {
+  return groupByKeys && groupByKeys.length > 0
+    ? groupByKeys.map(groupKeySql)
+    : [groupKeySql(null)];
+}
+
+const groupKeyCol = (i: number): SQL => sql`ct.${sql.identifier(`group_key_${i}`)}`;
 
 /**
  * 그룹 키를 한 번만 계산해 group_key_0..N 컬럼으로 노출하는 base 서브쿼리.
@@ -224,14 +281,8 @@ function groupKeyCount(groupByKeys: string[] | undefined): number {
  * 별칭 컬럼으로 만든 뒤 바깥에서는 bare column 으로만 참조한다.
  * 별칭을 ct 로 유지해 기존 filter/EXISTS SQL (`ct.*` 참조)이 그대로 동작한다.
  */
-function buildGroupedBase(groupByKeys: string[] | undefined): SQL {
-  // attrs 값이 빈 문자열이면 미분류 취급 (NULLIF). 기본 group_value 는 기존 동작 유지.
-  const exprs =
-    groupByKeys && groupByKeys.length > 0
-      ? groupByKeys.map(
-          (k, i) => sql`NULLIF(ctt.attrs->>${k}, '') AS ${sql.identifier(`group_key_${i}`)}`,
-        )
-      : [sql`ctt.group_value AS ${sql.identifier('group_key_0')}`];
+function buildGroupedBase(keys: GroupKeySql[]): SQL {
+  const exprs = keys.map((k, i) => sql`${k.value} AS ${sql.identifier(`group_key_${i}`)}`);
   const joined = exprs.reduce((acc, cur) => sql`${acc}, ${cur}`);
   return sql`(SELECT ctt.*, ${joined} FROM contact_targets ctt) ct`;
 }
@@ -275,6 +326,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const offset = Math.max(0, (page - 1) * size);
   const isTest = testFlagForScope(scope);
   const keyCount = groupKeyCount(groupByKeys);
+  const keySqls = groupKeySqls(groupByKeys);
 
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
@@ -291,11 +343,11 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
     const idx = metaKeys.indexOf(key);
     sortExpr = idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
   } else if (sort.startsWith('group:')) {
-    // group:<attrs키> — 활성 기준 키를 인덱스로 해석 후 inner alias 만 raw 임베드.
+    // group:<분류 키> — 활성 기준 키를 인덱스로 해석 후 inner alias 만 raw 임베드.
     // 사용자 입력(키)은 SQL 에 직접 박히지 않는다.
-    const idx = (groupByKeys ?? []).indexOf(sort.slice(6));
+    const idx = (groupByKeys ?? []).map(formatProgressGroupKey).indexOf(sort.slice(6));
     sortExpr =
-      idx >= 0 && idx < keyCount ? sql.raw(`group_raw_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
+      idx >= 0 && idx < keyCount ? sql.raw(`group_sort_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
   } else {
     const mapped =
       SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}` | `group:${string}`>];
@@ -305,18 +357,20 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 
   const filterSql = buildFilterSql(condition);
 
-  // 그룹 값 SELECT (group_raw_0..N) + 라벨 concat + GROUP BY 절
-  const groupRawSelect = Array.from(
-    { length: keyCount },
-    (_, i) => sql`ct.${sql.identifier(`group_key_${i}`)} AS ${sql.identifier(`group_raw_${i}`)}`,
-  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
-  const groupLabelParts = Array.from(
-    { length: keyCount },
-    (_, i) => sql`COALESCE(ct.${sql.identifier(`group_key_${i}`)}, '(미분류)')`,
-  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+  // 그룹 값 SELECT (group_raw·group_label·group_sort 0..N) + 라벨 concat + GROUP BY 절
+  const groupRawSelect = keySqls
+    .map(
+      (k, i) => sql`${groupKeyCol(i)} AS ${sql.identifier(`group_raw_${i}`)},
+        ${k.label(groupKeyCol(i))} AS ${sql.identifier(`group_label_${i}`)},
+        ${k.sort(groupKeyCol(i))} AS ${sql.identifier(`group_sort_${i}`)}`,
+    )
+    .reduce((acc, cur) => sql`${acc}, ${cur}`);
+  const groupLabelParts = keySqls
+    .map((k, i) => sql`COALESCE(${k.label(groupKeyCol(i))}, ${k.nullLabel})`)
+    .reduce((acc, cur) => sql`${acc}, ${cur}`);
   // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서)
   const tiebreaker = Array.from({ length: keyCount }, (_, i) =>
-    sql.raw(`group_raw_${i} NULLS LAST`),
+    sql.raw(`group_sort_${i} NULLS LAST, group_raw_${i} NULLS LAST`),
   ).reduce((acc, cur) => sql`${acc}, ${cur}`);
 
   const result = await db.execute(sql`
@@ -329,7 +383,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_count,
         COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
-      FROM ${buildGroupedBase(groupByKeys)}
+      FROM ${buildGroupedBase(keySqls)}
       WHERE ct.survey_id = ${surveyId}
         AND ct.is_test = ${isTest}
         AND ${filterSql}
@@ -345,14 +399,19 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       const v = r[`meta_${i}`];
       meta[k] = typeof v === 'string' && v.length > 0 ? v : null;
     });
-    const groupValues = Array.from({ length: keyCount }, (_, i) => {
+    const groupRaws = Array.from({ length: keyCount }, (_, i) => {
       const v = r[`group_raw_${i}`];
       return v == null ? null : String(v);
     });
+    // 표시 값 — attrs 기준은 값 그대로, 시스템 기준은 표시 이름 (group_label_N).
+    const groupValues = Array.from({ length: keyCount }, (_, i) => {
+      const v = r[`group_label_${i}`];
+      return v == null ? null : String(v);
+    });
     // 조합 행 식별 키 — 값에 못 나오는 unit separator(0x1f) 조인. 전부 null 이면 null.
-    const groupValueRaw = groupValues.every((v) => v == null)
+    const groupValueRaw = groupRaws.every((v) => v == null)
       ? null
-      : groupValues.map((v) => v ?? '').join('');
+      : groupRaws.map((v) => v ?? '').join('');
     return {
       groupLabel: String(r['group_label']),
       groupValueRaw,
@@ -380,7 +439,7 @@ export async function getProgressTotals(
   surveyId: string,
   scope: OperationsDataScope,
   condition: FilterCondition | null,
-  groupByKeys?: string[],
+  groupByKeys?: ProgressGroupKey[],
 ): Promise<ProgressTotals> {
   const isTest = testFlagForScope(scope);
   const keyCount = groupKeyCount(groupByKeys);
@@ -392,7 +451,7 @@ export async function getProgressTotals(
   const result = await db.execute(sql`
     SELECT
       (SELECT COUNT(*)::int FROM (
-        SELECT 1 FROM ${buildGroupedBase(groupByKeys)}
+        SELECT 1 FROM ${buildGroupedBase(groupKeySqls(groupByKeys))}
         WHERE ct.survey_id = ${surveyId}
           AND ct.is_test = ${isTest}
           AND ${filterSql}

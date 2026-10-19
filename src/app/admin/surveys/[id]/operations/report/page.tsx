@@ -13,8 +13,14 @@ import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
-import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress-format';
-import { EMPTY_PROGRESS_TOTALS } from '@/lib/operations/report-progress-format';
+import {
+  EMPTY_PROGRESS_TOTALS,
+  formatProgressGroupKey,
+  parseProgressGroupKey,
+  type ProgressGroupKey,
+  type ProgressSortKey,
+  type SortDir,
+} from '@/lib/operations/report-progress-format';
 import {
   countContactTargets,
   getProgressColumnScheme,
@@ -50,8 +56,13 @@ const VALID_SORTS: ProgressSortKey[] = [
   'responseRate',
 ];
 
+/** 분류 기준 칩 하나 — key 는 주소·정렬에 실리는 직렬화된 태그 키. */
+interface GroupCriterion extends GroupByOption {
+  groupKey: ProgressGroupKey;
+}
+
 /**
- * sort 검증 — 고정 5종 + meta:<key> + group:<attrs키> (현재 활성 기준 키만 허용).
+ * sort 검증 — 고정 5종 + meta:<key> + group:<분류 키> (현재 활성 기준 키만 허용).
  * 알 수 없는 값은 기본 'responseRate' 으로 폴백.
  */
 function parseSort(
@@ -116,29 +127,32 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
 
   // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
   // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
-  const groupByCriteria: GroupByOption[] = resolveGroupCriteria(contactScheme).map((c) => ({
-    key: c.key,
-    label: c.label,
-  }));
+  const groupByCriteria: GroupCriterion[] = resolveGroupCriteria(contactScheme).map((c) => {
+    const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
+    return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
+  });
   // URL groupBy 해석:
   // - 미지정 → 컬럼 설정에서 지정한 분류 기준 전체를 설정 순서(대>중>소>세부)대로 자동
   //   선택. 미리 설정해두면 URL 진입만으로 조합 집계가 나오는 모델 (2026-08-14 결정).
   // - 콤마 목록 → 지정된 분류 기준 키만 채택(칩 좁혀보기), 기준 순서로 정규화 + 중복
-  //   제거. 유효 키가 하나도 없으면 전체 기준 폴백.
+  //   제거. 유효 키가 하나도 없으면 전체 기준 폴백. 모르는 시스템 키(`system:…`)는
+  //   태그 키 파싱에서 버려진다.
   // - 분류 기준 미지정 설문은 기존처럼 업로드 그룹(group_value) 기준 (칩 없음).
   const rawGroupBy = typeof sp.groupBy === 'string' ? sp.groupBy : null;
-  let activeCriteria: GroupByOption[];
+  let activeCriteria: GroupCriterion[];
   if (rawGroupBy === null) {
     activeCriteria = groupByCriteria;
   } else {
     const requestedKeys = rawGroupBy
       .split(',')
-      .map((k) => k.trim())
-      .filter((k) => k.length > 0);
+      .map((k) => parseProgressGroupKey(k.trim()))
+      .filter((k): k is ProgressGroupKey => k !== null)
+      .map(formatProgressGroupKey);
     const matched = groupByCriteria.filter((c) => requestedKeys.includes(c.key));
     activeCriteria = matched.length > 0 ? matched : groupByCriteria;
   }
   const activeKeys = activeCriteria.map((c) => c.key);
+  const activeGroupKeys = activeCriteria.map((c) => c.groupKey);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
   const parsedSort = parseSort(sp.sort, metaKeys, activeKeys);
@@ -167,9 +181,9 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
           sort,
           dir,
           metaKeys,
-          groupByKeys: activeKeys,
+          groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, scope, condition, activeKeys),
+        getProgressTotals(surveyId, scope, condition, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (
@@ -186,7 +200,10 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
       ) : (
         <>
           {groupByCriteria.length > 0 && (
-            <ProgressGroupByTabs options={groupByCriteria} activeKeys={activeKeys} />
+            <ProgressGroupByTabs
+              options={groupByCriteria.map(({ key, label }) => ({ key, label }))}
+              activeKeys={activeKeys}
+            />
           )}
           <ProgressFilterBar
             surveyId={surveyId}

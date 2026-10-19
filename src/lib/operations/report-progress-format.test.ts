@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatProgressGroupKey,
+  parseProgressGroupKey,
   computeRate,
   toneFromRate,
   sortGroupRows,
@@ -109,5 +111,20 @@ describe('computeTotals', () => {
       excludedTotal: 0,
       ...NO_REASONS,
     });
+  });
+});
+
+describe('parseProgressGroupKey / formatProgressGroupKey', () => {
+  it('접두 없는 키는 attrs 키다 — 기존 groupBy= 주소가 그대로 열린다', () => {
+    expect(parseProgressGroupKey('참가 전시회')).toEqual({ kind: 'attrs', key: '참가 전시회' });
+    expect(formatProgressGroupKey({ kind: 'attrs', key: '참가 전시회' })).toBe('참가 전시회');
+  });
+
+  it('모르는 시스템 키는 버린다', () => {
+    expect(parseProgressGroupKey('system:unknown')).toBeNull();
+  });
+
+  it('빈 문자열은 키가 아니다', () => {
+    expect(parseProgressGroupKey('')).toBeNull();
   });
 });

@@ -4,14 +4,14 @@ import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-p
 import { cn } from '@/lib/utils';
 
 export interface GroupByOption {
-  /** attrs 키 (컬럼 설정에서 분류 기준으로 지정된 컬럼) */
+  /** 직렬화된 분류 키 — attrs 키는 그대로, 시스템 기준은 `system:<이름>` */
   key: string;
   label: string;
 }
 
 interface Props {
   options: GroupByOption[];
-  /** 현재 활성 attrs 키 목록 */
+  /** 현재 활성 분류 키 목록 */
   activeKeys: string[];
 }
 
