@@ -1,6 +1,7 @@
 'use client';
 
 import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import {
   FILTER_SOURCE,
   formatIdListToken,
@@ -24,6 +25,8 @@ interface Props {
   initialClauses: ClientFilterClause[];
   columnCandidates: ColumnCandidate[];
   resultCodeOptions: ContactResultCode[];
+  /** 「현재 컨택원」 값 선택지 (컨택원 순서). 그 열을 후보로 둔 표면만 넘긴다. */
+  assignmentOptions?: ContactAssignmentOption[];
   /** 있을 때만 "컬럼 설정" 버튼 노출 (조사대상목록 전용). 메일 마법사는 미전달. */
   columnsSettingsHref?: string;
   /** form aria-label. 기본 "조사 대상 필터". */
@@ -41,6 +44,7 @@ export function ContactsFilterBar({
   initialClauses,
   columnCandidates,
   resultCodeOptions,
+  assignmentOptions,
   columnsSettingsHref,
   ariaLabel = '조사 대상 필터',
   resetExtraParams,
@@ -62,6 +66,7 @@ export function ContactsFilterBar({
           value={value}
           onChange={onChange}
           resultCodeOptions={resultCodeOptions}
+          {...(assignmentOptions !== undefined ? { assignmentOptions } : {})}
           surveyId={surveyId}
           {...(inputId !== undefined ? { inputId } : {})}
         />

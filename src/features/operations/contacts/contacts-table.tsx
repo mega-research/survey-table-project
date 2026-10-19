@@ -14,7 +14,11 @@ import {
   attrsKeyOf,
   piiKeyOf,
 } from '@/lib/operations/contacts-format';
-import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
+import {
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  withNoneOption,
+} from '@/lib/operations/filter-shared';
 import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles-format';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import type {
@@ -22,7 +26,7 @@ import type {
   ContactColumnScheme,
   ContactResultCode,
 } from '@/shared/contracts/contacts';
-import type { ContactsRow } from '@/shared/contracts/contacts-io';
+import type { ContactAssignmentOption, ContactsRow } from '@/shared/contracts/contacts-io';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -38,6 +42,8 @@ interface ContactsTableProps {
   surveyId: string;
   /** system.contact_result 헤더 필터 체크박스 옵션 */
   resultCodeOptions: ContactResultCode[];
+  /** system.contact_owner 헤더 필터 체크박스 옵션 (컨택원 순서) + 「— (없음)」. */
+  assignmentOptions?: ContactAssignmentOption[];
   /** 행 클릭 시 호출 — 단건 편집 라우트로 push */
   onRowClick?: (row: ContactsRow) => void;
 }
@@ -49,7 +55,8 @@ function isHeaderFilterable(source: string): boolean {
     source.startsWith(FILTER_SOURCE.PII_PREFIX) ||
     source === FILTER_SOURCE.CONTACT_RESULT ||
     source === FILTER_SOURCE.WEB ||
-    source === FILTER_SOURCE.EMAIL
+    source === FILTER_SOURCE.EMAIL ||
+    source === FILTER_SOURCE.CONTACT_OWNER
   );
 }
 
@@ -66,6 +73,9 @@ function sortKeyOf(source: string): ContactsSortKey | null {
     case 'system.email_count':
       // 최신 메일 수신 상태 순위 기준 (열람 → 전달 완료 → … → 실패, 없음 마지막).
       return 'mailStatus';
+    case 'system.contact_owner':
+      // 컨택원 순서 → 이름, 배정 없음 마지막.
+      return 'owner';
     default:
       return null;
   }
@@ -192,6 +202,7 @@ export function ContactsTable({
   dir,
   surveyId,
   resultCodeOptions,
+  assignmentOptions = [],
   onRowClick,
 }: ContactsTableProps) {
   const pushParams = useSearchParamsMutator();
@@ -267,6 +278,13 @@ export function ContactsTable({
                                   value: o.value,
                                   label: o.label,
                                 })),
+                              }
+                            : {})}
+                          {...(col.source === FILTER_SOURCE.CONTACT_OWNER
+                            ? {
+                                fixedOptions: withNoneOption(
+                                  assignmentOptions.map((o) => ({ value: o.id, label: o.name })),
+                                ),
                               }
                             : {})}
                           resultCodeOptions={resultCodeOptions}

@@ -20,7 +20,12 @@ import {
   listAssignmentOptions,
   setTargetAssignment,
 } from '@/server/contacts/services/contact-assignments';
-import { listContactsForSurvey } from '@/server/read-models/contacts';
+import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
+import {
+  parseClausesFromUrl,
+  parseHeaderFiltersFromUrl,
+} from '@/server/read-models/contacts-filters';
+import { FILTER_NONE_VALUE, HEADER_FILTER_VALUE_SEPARATOR } from '@/lib/operations/filter-shared';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
@@ -208,5 +213,73 @@ run('컨택원 배정 (real local DB)', () => {
 
     await db.delete(contactAssignments).where(eq(contactAssignments.id, owner.id));
     expect(await assignmentOf(t1!)).toBeNull();
+  });
+
+  it('「현재 컨택원」 조건과 「컨택원」 열 정렬이 실제 행에서 맞다', async () => {
+    const surveyId = await seedSurvey();
+    const [t1, t2, t3] = await seedTargets(surveyId, 4);
+    const tenth = await createAssignment({ surveyId, name: '10차' });
+    const eleventh = await createAssignment({ surveyId, name: '11차' });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: eleventh.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: tenth.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: eleventh.id });
+    // t4 는 배정 없음
+
+    const [row] = await db
+      .select({ scheme: surveys.contactColumns })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    const candidates = buildColumnCandidates(row!.scheme, { includeContactOwner: true });
+    const assignmentIds = new Set([tenth.id, eleventh.id]);
+    const residsOf = async (clauses: Parameters<typeof listContactsForSurvey>[0]['clauses']) =>
+      (
+        await listContactsForSurvey({
+          surveyId,
+          scope: 'real',
+          clauses,
+          page: 1,
+          pageSize: 50,
+          sort: 'resid',
+          dir: 'asc',
+        })
+      ).rows.map((r) => r.resid);
+
+    // 검색바: 11차
+    expect(
+      await residsOf(
+        parseClausesFromUrl(['system.contact_owner'], [eleventh.id], [''], candidates, [], {
+          assignmentIds,
+        }),
+      ),
+    ).toEqual([1, 3]);
+    // 헤더: 10차 + 배정 없음 (= 「11차만 빼고 나머지」)
+    expect(
+      await residsOf(
+        parseHeaderFiltersFromUrl(
+          ['system.contact_owner'],
+          ['in'],
+          [[tenth.id, FILTER_NONE_VALUE].join(HEADER_FILTER_VALUE_SEPARATOR)],
+          candidates,
+          [],
+          { assignmentIds },
+        ),
+      ),
+    ).toEqual([2, 4]);
+
+    // 정렬: 컨택원 순서(10차 → 11차) → 배정 없음 끝 — 내림차순이어도 배정 없음은 끝
+    const sorted = async (dir: 'asc' | 'desc') =>
+      (
+        await listContactsForSurvey({
+          surveyId,
+          scope: 'real',
+          clauses: [],
+          page: 1,
+          pageSize: 50,
+          sort: 'owner',
+          dir,
+        })
+      ).rows.map((r) => r.resid);
+    expect(await sorted('asc')).toEqual([2, 1, 3, 4]);
+    expect(await sorted('desc')).toEqual([1, 3, 2, 4]);
   });
 });

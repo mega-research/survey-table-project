@@ -1009,3 +1009,61 @@ describe('parseClausesFromUrl — 짝수·홀수', () => {
     expect(a?.condition.mode).toBe('text');
   });
 });
+
+describe('「현재 컨택원」 조건', () => {
+  const A1 = '11111111-1111-4111-8111-111111111111';
+  const A2 = '22222222-2222-4222-8222-222222222222';
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+  const candidates: ColumnCandidate[] = [{ source: 'system.contact_owner', label: '컨택원' }];
+  const assignmentIds = new Set([A1, A2]);
+
+  it('검색바: 이 설문·파티션의 컨택원 id 는 enum 절', () => {
+    const [c] = parseClausesFromUrl(['system.contact_owner'], [A1], [''], candidates, [], {
+      assignmentIds,
+    });
+    expect(c?.condition).toEqual({ source: 'system.contact_owner', mode: 'enum', value: A1 });
+  });
+
+  it('검색바: 배정 없음 센티널은 includeNull', () => {
+    const [c] = parseClausesFromUrl(
+      ['system.contact_owner'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      [],
+      { assignmentIds },
+    );
+    expect(c?.condition).toMatchObject({ mode: 'enum', includeNull: true });
+  });
+
+  it('다른 설문·파티션 id 는 조건 미적용 — 0건으로 접지 않는다', () => {
+    expect(
+      parseClausesFromUrl(['system.contact_owner'], [OTHER], [''], candidates, [], { assignmentIds }),
+    ).toEqual([]);
+    // 컨택원 목록을 넘기지 않는 파서(메일 위저드 등)는 이 절을 만들지 않는다.
+    expect(parseClausesFromUrl(['system.contact_owner'], [A1], [''], candidates, [])).toEqual([]);
+  });
+
+  it('헤더: 여러 컨택원 + 배정 없음 in 절, 모르는 id 는 버린다', () => {
+    const [c] = parseHeaderFiltersFromUrl(
+      ['system.contact_owner'],
+      ['in'],
+      [[A1, OTHER, FILTER_NONE_VALUE].join(SEP)],
+      candidates,
+      [],
+      { assignmentIds },
+    );
+    expect(c?.condition).toEqual({
+      source: 'system.contact_owner',
+      mode: 'in',
+      value: '',
+      values: [A1],
+      includeNull: true,
+    });
+    expect(
+      parseHeaderFiltersFromUrl(['system.contact_owner'], ['in'], [OTHER], candidates, [], {
+        assignmentIds,
+      }),
+    ).toEqual([]);
+  });
+});

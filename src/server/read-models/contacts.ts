@@ -139,6 +139,12 @@ const assignmentNameExpr = sql<string | null>`(
   WHERE contact_assignments.id = "contact_targets".assignment_id
 )`;
 
+// 「컨택원」 열 정렬 축 — 컨택원 순서. 배정 없음은 NULL(NULLS LAST)이라 방향과 무관하게 끝.
+const assignmentOrderExpr = sql<number | null>`(
+  SELECT "order" FROM contact_assignments
+  WHERE contact_assignments.id = "contact_targets".assignment_id
+)`;
+
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
@@ -196,12 +202,19 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
         ? // 메일 상태 순위 축 — 오름차순 열람 → 전달 완료 → … → 실패,
           // 발송 이력 없음(NULL)은 방향 무관 항상 마지막. 같은 상태 안은 시스템ID 순.
           [orderExpr(mailStatusRankExpr, dir), asc(contactTargets.resid)]
-        : [
-            orderExpr(
-              SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
-              dir,
-            ),
-          ];
+        : sort === 'owner'
+          ? // 컨택원 순서 → 이름, 배정 없음은 끝. 같은 컨택원 안은 시스템ID 순.
+            [
+              orderExpr(assignmentOrderExpr, dir),
+              orderExpr(assignmentNameExpr, dir),
+              asc(contactTargets.resid),
+            ]
+          : [
+              orderExpr(
+                SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+                dir,
+              ),
+            ];
 
   const dataRows = await db
     .select({
@@ -341,11 +354,14 @@ export const getContactColumnScheme = cache(
 
 /**
  * 필터 컬럼 후보 생성 — 조사대상목록·단체 메일 마법사 공유.
- * 맨 앞 "전체"(system.all) + system.resid / contact_result / web + attrs.* + pii.*.
- * placeholder 전용 컬럼(system.email_count / system.contact_owner)은 제외.
+ * 맨 앞 "전체"(system.all) + system.resid / contact_result / web / email_count + attrs.* + pii.*.
+ *
+ * 「현재 컨택원」(system.contact_owner)은 includeContactOwner 를 켠 표면(조사 대상 목록·컨택원
+ * 수정)만 받는다 — 단체 메일 위저드는 이 필터 SQL 을 공유하지만 컨택원 조건을 두지 않는다.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,
+  opts: { includeContactOwner?: boolean } = {},
 ): ColumnCandidateWithPii[] {
   const columns = (scheme?.columns ?? [])
     .filter(
@@ -354,6 +370,7 @@ export function buildColumnCandidates(
         c.source === FILTER_SOURCE.CONTACT_RESULT ||
         c.source === FILTER_SOURCE.WEB ||
         c.source === FILTER_SOURCE.EMAIL ||
+        (opts.includeContactOwner === true && c.source === FILTER_SOURCE.CONTACT_OWNER) ||
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )

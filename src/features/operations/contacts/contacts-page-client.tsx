@@ -6,7 +6,7 @@ import { contactDetailHref } from '@/features/operations/contacts/contacts-list-
 import { ContactsTable } from '@/features/operations/contacts/contacts-table';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts-format';
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
-import type { ContactsRow } from '@/shared/contracts/contacts-io';
+import type { ContactAssignmentOption, ContactsRow } from '@/shared/contracts/contacts-io';
 
 interface ContactsPageClientProps {
   surveyId: string;
@@ -18,6 +18,8 @@ interface ContactsPageClientProps {
   sort: ContactsSortKey;
   dir: ContactsSortDir;
   resultCodeOptions: ContactResultCode[];
+  /** 「컨택원」 열 머리 필터 선택지 (컨택원 순서). 게스트는 빈 배열. */
+  assignmentOptions?: ContactAssignmentOption[];
 }
 
 /**
@@ -33,6 +35,7 @@ export function ContactsPageClient({
   sort,
   dir,
   resultCodeOptions,
+  assignmentOptions = [],
 }: ContactsPageClientProps) {
   const router = useRouter();
   // 지금 목록의 페이지·필터·정렬을 단건 편집으로 실어 가 「목록」이 이 화면으로 돌아오게 한다.
@@ -49,6 +52,7 @@ export function ContactsPageClient({
       dir={dir}
       surveyId={surveyId}
       resultCodeOptions={resultCodeOptions}
+      assignmentOptions={assignmentOptions}
       onRowClick={(row) => router.push(contactDetailHref(surveyId, row.id, listQuery))}
     />
   );

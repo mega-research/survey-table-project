@@ -82,6 +82,8 @@ export const CONTACTS_SORT_KEYS = [
   // 메일 컬럼 헤더 정렬 — 최신 수신 상태 순위(열람 → 전달 완료 → … → 실패),
   // 발송 이력 없음은 항상 마지막.
   'mailStatus',
+  // 컨택원 컬럼 헤더 정렬 — 컨택원 순서 → 이름, 배정 없음은 항상 마지막.
+  'owner',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
 

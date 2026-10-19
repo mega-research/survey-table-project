@@ -55,6 +55,11 @@ export const FILTER_SOURCE = {
   CONTACT_RESULT: 'system.contact_result',
   WEB: 'system.web',
   EMAIL: 'system.email_count',
+  /**
+   * 현재 컨택원 — 값은 컨택원 id, 배정 없음은 FILTER_NONE_VALUE. 파서가 이 설문·파티션의
+   * 컨택원 id 로 검증한다(ParseExtraHooks.assignmentIds). 단체 메일 위저드 후보에는 넣지 않는다.
+   */
+  CONTACT_OWNER: 'system.contact_owner',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
 } as const;

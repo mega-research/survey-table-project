@@ -126,6 +126,9 @@ export interface ClauseColumnRefs {
   extra?: (cond: FilterCondition) => SQL | null;
 }
 
+// 「현재 컨택원」 — contact_targets 전용 컬럼이라 refs 주입과 무관하다 (응답 내역 파서는 미생성).
+const CONTACT_OWNER_COL = sql`"contact_targets".assignment_id`;
+
 const CONTACT_TARGET_REFS: ClauseColumnRefs = {
   resid: sql`"contact_targets".resid`,
   attrs: sql`"contact_targets".attrs`,
@@ -214,6 +217,12 @@ export function buildClauseSql(
 
   if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
     return webStatusCondSql(cond.value);
+  }
+
+  if (cond.source === FILTER_SOURCE.CONTACT_OWNER && cond.mode === 'enum') {
+    // 배정 없음 = assignment_id IS NULL. 값 검증(이 설문·파티션의 컨택원)은 파서 책임.
+    if (cond.includeNull === true) return sql`${CONTACT_OWNER_COL} IS NULL`;
+    return sql`${CONTACT_OWNER_COL} = ${cond.value}`;
   }
 
   if (cond.source === FILTER_SOURCE.EMAIL && cond.mode === 'boolean') {
@@ -350,6 +359,21 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
     if (cond.includeNull === true) parts.push(sql`${latestResultCodeExpr} IS NULL`);
     // 수신거부 코드가 선택에 포함되면 메일 경로 수신거부(해지 링크·발송 스킵)도 함께 잡는다.
     if (values.some((v) => isUnsubscribeResultCode(v))) parts.push(isUnsubscribedSql);
+    return sql`(${sql.join(parts, sql` OR `)})`;
+  }
+
+  if (cond.source === FILTER_SOURCE.CONTACT_OWNER) {
+    // 컨택원 IN 목록과 배정 없음(IS NULL)을 OR 로 묶는다 — NULL 은 IN 으로 표현 불가.
+    const parts: SQL[] = [];
+    if (values.length > 0) {
+      parts.push(
+        sql`${CONTACT_OWNER_COL} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+    if (cond.includeNull === true) parts.push(sql`${CONTACT_OWNER_COL} IS NULL`);
     return sql`(${sql.join(parts, sql` OR `)})`;
   }
 

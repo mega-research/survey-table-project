@@ -9,12 +9,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import {
   contactResultFilterOptions,
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
   placeholderFor,
   webFilterOptionsFor,
+  withNoneOption,
 } from '@/lib/operations/filter-shared';
 import { isIdListSource } from '@/lib/operations/id-list-paste';
 
@@ -25,6 +27,8 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   resultCodeOptions: ContactResultCode[];
+  /** system.contact_owner 선택지 (컨택원 순서) — 끝에 「— (없음)」이 붙는다. */
+  assignmentOptions?: ContactAssignmentOption[];
   inputId?: string;
   /** ID 목록 입력의 서버 조회(명단 열 홀짝 비숫자 인원)용. */
   surveyId?: string;
@@ -34,6 +38,7 @@ interface Props {
  * 컬럼 source 에 따라 다른 입력 위젯 렌더.
  * - system.contact_result -> 결과코드 dropdown (+ "결과 없음")
  * - system.web -> 응답 완료/미응답 dropdown
+ * - system.contact_owner -> 컨택원 dropdown (+ "— (없음)")
  * - system.resid / attrs.* -> ID 목록 입력 (IdListInput — 엑셀 붙여넣기·인식 개수·경고)
  * - 그 외 (pii.*) -> text input
  */
@@ -42,9 +47,29 @@ export function ValueWidget({
   value,
   onChange,
   resultCodeOptions,
+  assignmentOptions = [],
   inputId,
   surveyId,
 }: Props) {
+  if (source === FILTER_SOURCE.CONTACT_OWNER) {
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={inputId} className="w-[260px] h-10">
+          <SelectValue placeholder="컨택원 선택" />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {withNoneOption(assignmentOptions.map((o) => ({ value: o.id, label: o.name }))).map(
+            (o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ),
+          )}
+        </SelectContent>
+      </Select>
+    );
+  }
+
   if (source === FILTER_SOURCE.CONTACT_RESULT) {
     return (
       <Select value={value} onValueChange={onChange}>

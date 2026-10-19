@@ -541,3 +541,45 @@ describe('latestResultUnsubscribedSql', () => {
     expect(query.sql.toUpperCase()).toContain('FALSE');
   });
 });
+
+describe('「현재 컨택원」 절 SQL', () => {
+  const A1 = '11111111-1111-4111-8111-111111111111';
+
+  it('enum 은 assignment_id 일치, 배정 없음은 IS NULL', () => {
+    const one = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        { op: null, condition: { source: 'system.contact_owner', mode: 'enum', value: A1 } },
+      ]),
+    );
+    expect(one.sql).toContain('"contact_targets".assignment_id =');
+    expect(one.params).toContain(A1);
+    const none = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'system.contact_owner', mode: 'enum', value: '__none__', includeNull: true },
+        },
+      ]),
+    );
+    expect(none.sql).toContain('"contact_targets".assignment_id IS NULL');
+  });
+
+  it('in 은 IN 목록과 배정 없음을 OR 로', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.contact_owner',
+            mode: 'in',
+            value: '',
+            values: [A1],
+            includeNull: true,
+          },
+        },
+      ]),
+    );
+    expect(q.sql).toContain('"contact_targets".assignment_id IN (');
+    expect(q.sql).toContain('OR "contact_targets".assignment_id IS NULL');
+  });
+});

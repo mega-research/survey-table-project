@@ -59,6 +59,12 @@ export interface ParseExtraHooks {
    * loadIdListsForValues 로 미리 읽어 넘긴다 (파서는 동기). 없는 토큰은 0건으로 접힌다.
    */
   idLists?: ReadonlyMap<string, number[]>;
+  /**
+   * 이 설문·이 세션 파티션의 컨택원 id — 「현재 컨택원」 절 검증용(결과코드 목록과 같은 역할).
+   * 넘기지 않으면 그 절을 만들지 않는다 — 단체 메일 위저드처럼 컨택원 조건이 없는 표면이
+   * 주소 조작으로 이 조건을 받지 않게 하는 기본값이다.
+   */
+  assignmentIds?: ReadonlySet<string>;
 }
 
 /** `짝수`/`홀수` 한 단어면 홀짝 idlist 절. 아니면 null (섞인 토큰은 종전 규칙). */
@@ -153,7 +159,7 @@ export function parseHeaderFiltersFromUrl(
     const mode = modeRaw as HeaderFilterMode;
     const condition =
       extra?.header?.(col, mode, hv) ??
-      buildHeaderCondition(col, mode, hv, candidates, resultCodes);
+      buildHeaderCondition(col, mode, hv, candidates, resultCodes, extra);
     if (!condition) continue;
     bySource.set(col, condition);
   }
@@ -170,9 +176,26 @@ function buildHeaderCondition(
   hv: string,
   candidates: ColumnCandidate[],
   resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
 ): FilterCondition | null {
   const candidate = candidates.find((c) => c.source === col);
   if (!candidate) return null;
+
+  if (col === FILTER_SOURCE.CONTACT_OWNER) {
+    if (mode !== 'in' || !extra?.assignmentIds) return null;
+    const raw = splitHeaderValues(hv);
+    // 센티널이 항상 이긴다. 다른 설문·다른 파티션 id 는 버린다 — 남은 게 없으면 조건 미적용.
+    const includeNull = raw.includes(FILTER_NONE_VALUE);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE && extra.assignmentIds!.has(v));
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
+  }
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
@@ -404,6 +427,19 @@ function buildClause(
   if (col === FILTER_SOURCE.WEB) {
     if (!WEB_FILTER_VALUES.has(trimmed)) return null;
     return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.CONTACT_OWNER) {
+    if (!extra?.assignmentIds) return null;
+    if (trimmed === FILTER_NONE_VALUE) {
+      return {
+        op,
+        condition: { source: col, mode: 'enum', value: FILTER_NONE_VALUE, includeNull: true },
+      };
+    }
+    // 다른 설문·다른 파티션의 id 는 조건 미적용 — 조용히 0건이 되지 않게 절을 버린다.
+    if (!extra.assignmentIds.has(trimmed)) return null;
+    return { op, condition: { source: col, mode: 'enum', value: trimmed } };
   }
 
   if (col === FILTER_SOURCE.EMAIL) {

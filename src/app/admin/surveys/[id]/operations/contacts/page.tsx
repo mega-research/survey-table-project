@@ -32,6 +32,7 @@ import {
 } from '@/server/read-models/contacts-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { withoutContactOwnerColumn } from '@/lib/operations/contacts-format';
 
@@ -70,8 +71,10 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     getContactResultCodes(surveyId),
     isGuestViewer(),
   ]);
-  // 컨택원은 내부 실사 운영 정보 — 게스트 목록에는 열도 값도 싣지 않는다.
+  // 컨택원은 내부 실사 운영 정보 — 게스트 목록에는 열·값·필터 후보·정렬 모두 싣지 않는다.
   const scheme = isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme;
+  const assignmentOptions = isGuest ? [] : await listAssignmentOptions(surveyId, scope);
+  const assignmentIds = new Set(assignmentOptions.map((o) => o.id));
 
   // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
   const visibleAttrsKeys = new Set(
@@ -81,14 +84,16 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
       .filter((k): k is string => k != null),
   );
 
-  const safeSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
+  const requestedSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
+  const safeSort = isGuest && requestedSort === 'owner' ? 'resid' : requestedSort;
 
-  const columnCandidates = buildColumnCandidates(scheme);
+  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
 
   // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
   const idLists = await loadIdListsForValues(surveyId, sp.q);
   const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
     idLists,
+    assignmentIds,
   });
   const headerClauses = parseHeaderFiltersFromUrl(
     sp.hcol,
@@ -96,6 +101,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     sp.hv,
     columnCandidates,
     resultCodes,
+    { assignmentIds },
   );
   // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
   // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리.
@@ -187,6 +193,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             }))}
             columnCandidates={columnCandidates}
             resultCodeOptions={resultCodes}
+            assignmentOptions={assignmentOptions}
             columnsSettingsHref={`/admin/surveys/${surveyId}/operations/contacts/columns`}
           />
           {rows.length === 0 ? (
@@ -205,6 +212,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
               sort={safeSort}
               dir={dir}
               resultCodeOptions={resultCodes}
+              assignmentOptions={assignmentOptions}
             />
           )}
         </CardContent>
