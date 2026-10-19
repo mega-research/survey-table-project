@@ -7,6 +7,9 @@ import {
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
   ListContactAssignmentsInput,
+  RemoveContactAssignmentInput,
+  RenameContactAssignmentInput,
+  ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
 import * as svc from '../services/contact-assignments';
@@ -57,8 +60,44 @@ const setTarget = authed
     return { ok: true as const };
   });
 
+const rename = authed
+  .errors(DUPLICATE_NAME)
+  .input(RenameContactAssignmentInput)
+  .output(z.object({ ok: z.literal(true) }))
+  .handler(async ({ context, input, errors }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    try {
+      await svc.renameAssignment(input);
+    } catch (error) {
+      if (error instanceof svc.DuplicateAssignmentNameError) throw errors.DUPLICATE_NAME();
+      throw error;
+    }
+    return { ok: true as const };
+  });
+
+const reorder = authed
+  .input(ReorderContactAssignmentsInput)
+  .output(z.object({ ok: z.literal(true) }))
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    await svc.reorderAssignments(input);
+    return { ok: true as const };
+  });
+
+/** 지우기 — 배정된 대상은 배정 없음이 된다. */
+const remove = authed
+  .input(RemoveContactAssignmentInput)
+  .output(z.object({ unassigned: z.number().int() }))
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.removeAssignment(input);
+  });
+
 export const assignments = {
   list,
   create,
+  rename,
+  reorder,
+  remove,
   setTarget,
 };

@@ -121,6 +121,8 @@ export function guestPathRedirect(
         'contacts/upload',
         'contacts/result-codes',
         'contacts/columns',
+        // 컨택원 관리 — 내부 실사 운영 도구라 게스트에게 열지 않는다(procedure 도 authed).
+        'contacts/assignments',
         'quota',
       ];
       for (const sub of blockedSubpaths) {

@@ -13,11 +13,15 @@ import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
-import { contactAssignments, contactTargets, surveys } from '@/db/schema';
+import { contactAssignments, contactTargets, surveyResponses, surveys } from '@/db/schema';
 import {
   createAssignment,
   DuplicateAssignmentNameError,
   listAssignmentOptions,
+  listAssignmentsWithStats,
+  removeAssignment,
+  renameAssignment,
+  reorderAssignments,
   setTargetAssignment,
 } from '@/server/contacts/services/contact-assignments';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
@@ -281,5 +285,91 @@ run('컨택원 배정 (real local DB)', () => {
       ).rows.map((r) => r.resid);
     expect(await sorted('asc')).toEqual([2, 1, 3, 4]);
     expect(await sorted('desc')).toEqual([1, 3, 2, 4]);
+  });
+
+  it('관리 목록 인원은 조사 대상 목록 응답 상태와 같은 식이고 배정 없음 줄이 있다', async () => {
+    const surveyId = await seedSurvey();
+    const [t1, t2, t3, t4] = await seedTargets(surveyId, 5);
+    const owner = await createAssignment({ surveyId, name: '10차' });
+    for (const t of [t1, t2, t3]) {
+      await setTargetAssignment({ surveyId, contactTargetId: t!, assignmentId: owner.id });
+    }
+    await db.insert(surveyResponses).values([
+      { surveyId, contactTargetId: t1!, questionResponses: {}, status: 'completed', isCompleted: true },
+      { surveyId, contactTargetId: t2!, questionResponses: {}, status: 'in_progress' },
+      { surveyId, contactTargetId: t4!, questionResponses: {}, status: 'completed', isCompleted: true },
+    ]);
+
+    const data = await listAssignmentsWithStats(surveyId, 'real');
+    expect(data.rows).toHaveLength(1);
+    expect(data.rows[0]?.stats).toEqual({ assigned: 3, completed: 1, inProgress: 1, notStarted: 1 });
+    expect(data.unassigned).toEqual({ assigned: 2, completed: 1, inProgress: 0, notStarted: 1 });
+    expect(data.total).toBe(5);
+
+    // 같은 숫자를 조사 대상 목록 web 필터로도 얻는다.
+    const [row] = await db
+      .select({ scheme: surveys.contactColumns })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    const candidates = buildColumnCandidates(row!.scheme, { includeContactOwner: true });
+    const completedOfOwner = await listContactsForSurvey({
+      surveyId,
+      scope: 'real',
+      clauses: [
+        ...parseClausesFromUrl(['system.contact_owner'], [owner.id], [''], candidates, [], {
+          assignmentIds: new Set([owner.id]),
+        }),
+        ...parseClausesFromUrl(['system.web'], ['completed'], ['AND'], candidates, []).map((c) => ({
+          ...c,
+          op: 'AND' as const,
+        })),
+      ],
+      page: 1,
+      pageSize: 50,
+      sort: 'resid',
+      dir: 'asc',
+    });
+    expect(completedOfOwner.total).toBe(1);
+  });
+
+  it('지우면 배정된 대상이 배정 없음이 되고 풀린 인원을 돌려준다', async () => {
+    const surveyId = await seedSurvey();
+    const [t1, t2] = await seedTargets(surveyId, 2);
+    const owner = await createAssignment({ surveyId, name: '삭제할 차수' });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id });
+
+    expect(await removeAssignment({ surveyId, id: owner.id })).toEqual({ unassigned: 2 });
+    expect(await assignmentOf(t1!)).toBeNull();
+    expect(await assignmentOf(t2!)).toBeNull();
+    expect(await listAssignmentOptions(surveyId, 'real')).toEqual([]);
+  });
+
+  it('순서를 바꾸고, 목록이 바뀐 뒤의 순서 요청은 거부한다 — 이름 바꾸기는 중복을 거부한다', async () => {
+    const surveyId = await seedSurvey();
+    const a = await createAssignment({ surveyId, name: 'A' });
+    const b = await createAssignment({ surveyId, name: 'B' });
+    const c = await createAssignment({ surveyId, name: 'C' });
+
+    await reorderAssignments({ surveyId, ids: [c.id, a.id, b.id] });
+    expect((await listAssignmentOptions(surveyId, 'real')).map((o) => o.name)).toEqual([
+      'C',
+      'A',
+      'B',
+    ]);
+
+    await expect(reorderAssignments({ surveyId, ids: [a.id, b.id] })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+
+    await renameAssignment({ surveyId, id: a.id, name: 'A2' });
+    await expect(renameAssignment({ surveyId, id: b.id, name: 'C' })).rejects.toBeInstanceOf(
+      DuplicateAssignmentNameError,
+    );
+    expect((await listAssignmentOptions(surveyId, 'real')).map((o) => o.name)).toEqual([
+      'C',
+      'A2',
+      'B',
+    ]);
   });
 });

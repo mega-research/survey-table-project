@@ -105,6 +105,31 @@ export const ContactAssignmentOptionSchema = z.object({
 });
 export type ContactAssignmentOption = z.infer<typeof ContactAssignmentOptionSchema>;
 
+/**
+ * 컨택원 관리 목록의 인원 — 응답 상태는 조사 대상 목록의 응답 상태(web 열·필터)와 같은 식이라
+ * 두 화면 숫자가 같다. 완료=completed · 진행 중=in_progress · 미접속=응답 없음. 그 밖의 상태
+ * (이탈·자격 미달 등)는 배정 인원에만 들어간다.
+ */
+export interface ContactAssignmentStats {
+  assigned: number;
+  completed: number;
+  inProgress: number;
+  notStarted: number;
+}
+
+export interface ContactAssignmentListRow extends ContactAssignmentOption {
+  stats: ContactAssignmentStats;
+  lastAppliedAt: Date | null;
+}
+
+export interface ContactAssignmentListResult {
+  rows: ContactAssignmentListRow[];
+  /** 배정 없는 대상 인원 */
+  unassigned: ContactAssignmentStats;
+  /** 이 파티션의 조사 대상 전체 */
+  total: number;
+}
+
 export interface ContactsRow {
   id: string;
   resid: number;

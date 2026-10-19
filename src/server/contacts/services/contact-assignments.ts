@@ -5,6 +5,7 @@ import 'server-only';
 import { type DbOrTx, type DbTransaction, db } from '@/db';
 import { contactAssignments, contactTargets, surveys } from '@/db/schema';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
   lockWriteScope,
@@ -13,8 +14,16 @@ import {
 } from '@/server/data-scope';
 
 import type {
+  ContactAssignmentListResult,
+  ContactAssignmentStats,
+} from '@/shared/contracts/contacts-io';
+
+import type {
   ContactAssignmentOption,
   CreateContactAssignmentInput,
+  RemoveContactAssignmentInput,
+  RenameContactAssignmentInput,
+  ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
 import { ensureContactOwnerColumn } from './scheme-helpers';
@@ -170,3 +179,165 @@ export async function setTargetAssignment(input: SetTargetAssignmentInput): Prom
     }
   });
 }
+
+const EMPTY_STATS: ContactAssignmentStats = {
+  assigned: 0,
+  completed: 0,
+  inProgress: 0,
+  notStarted: 0,
+};
+
+/**
+ * 컨택원 관리 목록 — 컨택원마다 배정·완료·진행 중·미접속 인원 + 배정 없음 줄.
+ *
+ * 응답 상태는 조사 대상 목록 web 열과 같은 매칭 응답(matchedResponseSubquery)의 status 다 —
+ * 두 화면 숫자가 갈리지 않게 같은 식을 쓴다.
+ */
+export async function listAssignmentsWithStats(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<ContactAssignmentListResult> {
+  const isTest = testFlagForScope(scope);
+  const [assignmentRows, statRows] = await Promise.all([
+    db
+      .select({
+        id: contactAssignments.id,
+        name: contactAssignments.name,
+        order: contactAssignments.order,
+        lastAppliedAt: contactAssignments.lastAppliedAt,
+      })
+      .from(contactAssignments)
+      .where(and(eq(contactAssignments.surveyId, surveyId), eq(contactAssignments.isTest, isTest)))
+      .orderBy(asc(contactAssignments.order), asc(contactAssignments.name)),
+    db.execute(sql`
+      WITH t AS (
+        SELECT "contact_targets".assignment_id AS aid,
+               ${matchedResponseSubquery(sql`status`)} AS st
+        FROM contact_targets
+        WHERE "contact_targets".survey_id = ${surveyId}
+          AND "contact_targets".is_test = ${isTest}
+      )
+      SELECT aid,
+             count(*)::int AS assigned,
+             count(*) FILTER (WHERE st = 'completed')::int AS completed,
+             count(*) FILTER (WHERE st = 'in_progress')::int AS in_progress,
+             count(*) FILTER (WHERE st IS NULL)::int AS not_started
+      FROM t
+      GROUP BY aid
+    `),
+  ]);
+
+  const statsByAid = new Map<string | null, ContactAssignmentStats>();
+  let total = 0;
+  for (const r of statRows as unknown as Array<Record<string, unknown>>) {
+    const stats: ContactAssignmentStats = {
+      assigned: Number(r['assigned'] ?? 0),
+      completed: Number(r['completed'] ?? 0),
+      inProgress: Number(r['in_progress'] ?? 0),
+      notStarted: Number(r['not_started'] ?? 0),
+    };
+    total += stats.assigned;
+    statsByAid.set(r['aid'] == null ? null : String(r['aid']), stats);
+  }
+
+  return {
+    rows: assignmentRows.map((a) => ({ ...a, stats: statsByAid.get(a.id) ?? EMPTY_STATS })),
+    unassigned: statsByAid.get(null) ?? EMPTY_STATS,
+    total,
+  };
+}
+
+/** 이 세션 파티션의 컨택원 행을 잠근다 — 없거나 다른 파티션이면 NOT_FOUND. */
+async function lockAssignmentInScope(
+  tx: DbTransaction,
+  surveyId: string,
+  id: string,
+): Promise<{ isTest: boolean }> {
+  const locked = await lockWriteScope(tx, surveyId, false, { lock: 'share' });
+  if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+  const [row] = await tx
+    .select({ id: contactAssignments.id })
+    .from(contactAssignments)
+    .where(
+      and(
+        eq(contactAssignments.id, id),
+        eq(contactAssignments.surveyId, surveyId),
+        eq(contactAssignments.isTest, locked.isTest),
+      ),
+    )
+    .for('update');
+  if (!row) throw new ORPCError('NOT_FOUND', { message: '컨택원을 찾을 수 없습니다.' });
+  return { isTest: locked.isTest };
+}
+
+/** 이름 바꾸기 — 배정은 그대로. 같은 파티션 안 같은 이름은 거부. */
+export async function renameAssignment(input: RenameContactAssignmentInput): Promise<void> {
+  try {
+    await db.transaction(async (tx) => {
+      await lockAssignmentInScope(tx, input.surveyId, input.id);
+      await tx
+        .update(contactAssignments)
+        .set({ name: input.name, updatedAt: new Date() })
+        .where(eq(contactAssignments.id, input.id));
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new DuplicateAssignmentNameError(input.name);
+    throw error;
+  }
+}
+
+/**
+ * 순서 바꾸기 — ids 는 이 파티션의 컨택원 전부를 새 순서대로 담아야 한다. 일부만 오거나
+ * 남의 id 가 섞이면 거부한다(목록을 연 뒤 다른 사람이 만들거나 지운 경우 — 새로고침 후 다시).
+ * 순서는 필터 선택지·진척 보고 줄 순서에 쓰인다.
+ */
+export async function reorderAssignments(input: ReorderContactAssignmentsInput): Promise<void> {
+  await db.transaction(async (tx) => {
+    const locked = await lockWriteScope(tx, input.surveyId, false, { lock: 'share' });
+    if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+    const existing = await tx
+      .select({ id: contactAssignments.id })
+      .from(contactAssignments)
+      .where(
+        and(
+          eq(contactAssignments.surveyId, input.surveyId),
+          eq(contactAssignments.isTest, locked.isTest),
+        ),
+      )
+      .for('update');
+    const existingIds = new Set(existing.map((r) => r.id));
+    const requested = new Set(input.ids);
+    const same =
+      requested.size === input.ids.length &&
+      requested.size === existingIds.size &&
+      input.ids.every((id) => existingIds.has(id));
+    if (!same) {
+      throw new ORPCError('CONFLICT', {
+        message: '컨택원 목록이 바뀌었습니다. 새로고침한 뒤 다시 정렬해 주세요.',
+      });
+    }
+    const now = new Date();
+    for (const [i, id] of input.ids.entries()) {
+      await tx
+        .update(contactAssignments)
+        .set({ order: i + 1, updatedAt: now })
+        .where(eq(contactAssignments.id, id));
+    }
+  });
+}
+
+/** 지우기 — 배정된 대상은 FK(ON DELETE SET NULL)로 배정 없음이 된다. 풀린 인원을 돌려준다. */
+export async function removeAssignment(
+  input: RemoveContactAssignmentInput,
+): Promise<{ unassigned: number }> {
+  return db.transaction(async (tx) => {
+    await lockAssignmentInScope(tx, input.surveyId, input.id);
+    const [count] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(contactTargets)
+      .where(eq(contactTargets.assignmentId, input.id));
+    await tx.delete(contactAssignments).where(eq(contactAssignments.id, input.id));
+    return { unassigned: Number(count?.n ?? 0) };
+  });
+}
+

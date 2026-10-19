@@ -36,3 +36,23 @@ export const SetTargetAssignmentInput = z.object({
   assignmentId: z.string().uuid().nullable(),
 });
 export type SetTargetAssignmentInput = z.infer<typeof SetTargetAssignmentInput>;
+
+export const RenameContactAssignmentInput = z.object({
+  surveyId: z.string().uuid(),
+  id: z.string().uuid(),
+  name: ContactAssignmentName,
+});
+export type RenameContactAssignmentInput = z.infer<typeof RenameContactAssignmentInput>;
+
+/** 컨택원 순서 — 이 파티션의 컨택원 id 전부를 새 순서대로. */
+export const ReorderContactAssignmentsInput = z.object({
+  surveyId: z.string().uuid(),
+  ids: z.array(z.string().uuid()).min(1).max(500),
+});
+export type ReorderContactAssignmentsInput = z.infer<typeof ReorderContactAssignmentsInput>;
+
+export const RemoveContactAssignmentInput = z.object({
+  surveyId: z.string().uuid(),
+  id: z.string().uuid(),
+});
+export type RemoveContactAssignmentInput = z.infer<typeof RemoveContactAssignmentInput>;

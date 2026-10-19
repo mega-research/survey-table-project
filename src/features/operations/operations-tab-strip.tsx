@@ -25,7 +25,7 @@ interface OperationsTabStripProps {
  *
  * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` 드롭다운
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
- * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
+ * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` / `컨택원 관리`(게스트 제외) 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
@@ -49,20 +49,24 @@ export function OperationsTabStrip({
   const contactsUploadHref = `${operationsBase}/contacts/upload`;
   const contactsColumnsHref = `${operationsBase}/contacts/columns`;
   const contactsResultCodesHref = `${operationsBase}/contacts/result-codes`;
+  const contactsAssignmentsHref = `${operationsBase}/contacts/assignments`;
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
      !pathname.startsWith(contactsUploadHref) &&
      !pathname.startsWith(contactsColumnsHref) &&
-     !pathname.startsWith(contactsResultCodesHref));
+     !pathname.startsWith(contactsResultCodesHref) &&
+     !pathname.startsWith(contactsAssignmentsHref));
   const isContactsUploadActive = pathname.startsWith(contactsUploadHref);
   const isContactsColumnsActive = pathname.startsWith(contactsColumnsHref);
   const isContactsResultCodesActive = pathname.startsWith(contactsResultCodesHref);
+  const isContactsAssignmentsActive = pathname.startsWith(contactsAssignmentsHref);
   const isContactsActive =
     isContactsRootActive ||
     isContactsUploadActive ||
     isContactsColumnsActive ||
-    isContactsResultCodesActive;
+    isContactsResultCodesActive ||
+    isContactsAssignmentsActive;
 
   const mailBase = `${operationsBase}/mail`;
   const mailCampaignsHref = `${mailBase}/campaigns`;
@@ -149,6 +153,12 @@ export function OperationsTabStrip({
               <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
                 결과코드 설정
               </SubLink>
+              {/* 컨택원은 내부 실사 운영 도구 — 게스트에게는 메뉴가 없다 */}
+              {!isGuest && (
+                <SubLink href={contactsAssignmentsHref} active={isContactsAssignmentsActive}>
+                  컨택원 관리
+                </SubLink>
+              )}
             </NavigationMenuContent>
           </NavigationMenuItem>
 
