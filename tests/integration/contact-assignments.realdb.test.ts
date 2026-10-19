@@ -47,6 +47,7 @@ import {
   encodeMultiClauseValue,
   formatIdListToken,
   FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
   HEADER_FILTER_VALUE_SEPARATOR,
 } from '@/lib/operations/filter-shared';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
@@ -466,6 +467,42 @@ run('컨택원 배정 (real local DB)', () => {
       const applied = await applyAssignment({ surveyId, assignmentId: owner.id, clauses });
       expect(applied).toMatchObject({ matched: 0, current: 1, leaving: 1 });
       expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, null]);
+    });
+
+    it('명단 열 「— 제외하고 보기」(값 있는 대상 전부)·「— 인 것만 보기」로 배정한다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 4);
+      // 기업명: 기업1, (빈 값), 기업3, (키 없음)
+      await db.update(contactTargets).set({ attrs: { 기업명: '' } }).where(eq(contactTargets.id, ids[1]!));
+      await db.update(contactTargets).set({ attrs: {} }).where(eq(contactTargets.id, ids[3]!));
+      const owner = await createAssignment({ surveyId, name: '10차' });
+
+      const withValue = await applyAssignment({
+        surveyId,
+        assignmentId: owner.id,
+        clauses: [
+          { source: 'attrs.기업명', value: encodeMultiClauseValue([FILTER_NOT_NONE_VALUE]), op: '' },
+        ],
+      });
+      expect(withValue.matched).toBe(2);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        owner.id,
+        null,
+        owner.id,
+        null,
+      ]);
+
+      const empty = await previewAssignment(
+        {
+          surveyId,
+          assignmentId: owner.id,
+          clauses: [
+            { source: 'attrs.기업명', value: encodeMultiClauseValue([FILTER_NONE_VALUE]), op: '' },
+          ],
+        },
+        'real',
+      );
+      expect(empty.matched).toBe(2);
     });
 
     it('해석이 안 되는 조건·모르는 저장 목록은 거부한다 — 조건이 넓어지지 않는다', async () => {

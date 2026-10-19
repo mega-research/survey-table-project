@@ -288,6 +288,7 @@ export function AssignmentEditor({
                     assignmentOptions={assignmentOptions}
                     surveyId={surveyId}
                     idListAutoGrow
+                  emptyToggles
                     {...(inputId !== undefined ? { inputId } : {})}
                   />
                 </div>

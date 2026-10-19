@@ -1,5 +1,8 @@
 'use client';
 
+import { useId } from 'react';
+
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -15,7 +18,10 @@ import {
   decodeMultiClauseValue,
   encodeMultiClauseValue,
   FILTER_NONE_LABEL,
+  FILTER_NONE_TOGGLE_LABEL,
   FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_TOGGLE_LABEL,
+  FILTER_NOT_NONE_VALUE,
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
   placeholderFor,
@@ -38,6 +44,58 @@ interface Props {
   surveyId?: string;
   /** ID 목록 입력칸이 입력한 만큼 끝없이 늘어난다 (컨택원 수정 화면). */
   idListAutoGrow?: boolean;
+  /**
+   * 명단 열·개인정보 열 아래에 「— 인 것만 보기」/「— 제외하고 보기」 토글 (컨택원 수정 화면).
+   * 조사 대상 목록 열 머리 필터와 같은 빈 값 조건을 조건 줄로 만든다 — 「ID 값 있는 대상 전부」.
+   */
+  emptyToggles?: boolean;
+}
+
+/** 빈 값 토글 값 — 센티널 하나만 담긴 여러 값 형식이면 그 센티널. 아니면 null. */
+function emptyModeOf(value: string): string | null {
+  const decoded = decodeMultiClauseValue(value);
+  if (!decoded || decoded.length !== 1) return null;
+  const only = decoded[0]!;
+  return only === FILTER_NONE_VALUE || only === FILTER_NOT_NONE_VALUE ? only : null;
+}
+
+/**
+ * 컬럼 source 에 따라 다른 입력 위젯 — emptyToggles 를 켠 명단·개인정보 열은 입력칸 아래
+ * 빈 값 토글을 붙인다. 토글이 켜지면 입력은 쓰지 않으므로 비우고 막는다(헤더 필터와 같다).
+ */
+export function ValueWidget(props: Props) {
+  const { source, value, onChange, emptyToggles = false } = props;
+  const toggleId = useId();
+  const togglable =
+    emptyToggles &&
+    (source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) || source.startsWith(FILTER_SOURCE.PII_PREFIX));
+  if (!togglable) return <ValueInput {...props} />;
+
+  const emptyMode = emptyModeOf(value);
+  const toggles = [
+    { sentinel: FILTER_NONE_VALUE, label: FILTER_NONE_TOGGLE_LABEL },
+    { sentinel: FILTER_NOT_NONE_VALUE, label: FILTER_NOT_NONE_TOGGLE_LABEL },
+  ];
+  return (
+    <div className="flex flex-col gap-1.5">
+      <ValueInput {...props} value={emptyMode ? '' : value} disabled={emptyMode != null} />
+      <div className="flex items-center gap-4 text-xs text-slate-600">
+        {toggles.map((t) => (
+          <span key={t.sentinel} className="flex items-center gap-1.5">
+            <Checkbox
+              id={`${toggleId}-${t.sentinel}`}
+              checked={emptyMode === t.sentinel}
+              // 둘은 서로를 끈다 — 동시에 켜면 0건이다.
+              onCheckedChange={(c) => onChange(c === true ? encodeMultiClauseValue([t.sentinel]) : '')}
+            />
+            <label htmlFor={`${toggleId}-${t.sentinel}`} className="cursor-pointer">
+              {t.label}
+            </label>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -48,7 +106,7 @@ interface Props {
  * - system.resid / attrs.* -> ID 목록 입력 (IdListInput — 엑셀 붙여넣기·인식 개수·경고)
  * - 그 외 (pii.*) -> text input
  */
-export function ValueWidget({
+function ValueInput({
   source,
   value,
   onChange,
@@ -57,12 +115,14 @@ export function ValueWidget({
   inputId,
   surveyId,
   idListAutoGrow = false,
-}: Props) {
+  disabled = false,
+}: Props & { disabled?: boolean }) {
   // 여러 값(오른쪽 값 목록에서 체크한 값들) — 칩으로 보이고 × 로 하나씩 뺀다.
   const multi = decodeMultiClauseValue(value);
   if (multi) {
     const labelOf = (v: string): string => {
       if (v === FILTER_NONE_VALUE) return FILTER_NONE_LABEL;
+      if (v === FILTER_NOT_NONE_VALUE) return FILTER_NOT_NONE_TOGGLE_LABEL;
       if (source === FILTER_SOURCE.CONTACT_OWNER) {
         return assignmentOptions.find((o) => o.id === v)?.name ?? v;
       }
@@ -185,6 +245,7 @@ export function ValueWidget({
         {...(inputId !== undefined ? { inputId } : {})}
         {...(surveyId !== undefined ? { surveyId } : {})}
         autoGrow={idListAutoGrow}
+        disabled={disabled}
       />
     );
   }
@@ -195,6 +256,7 @@ export function ValueWidget({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholderFor(source)}
+      disabled={disabled}
       className="w-[260px] h-10"
     />
   );

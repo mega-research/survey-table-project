@@ -24,6 +24,8 @@ interface Props {
    * 켜면 Enter 는 검색 제출이 아니라 줄바꿈이다 — 그 화면은 다른 폼 안에 있다.
    */
   autoGrow?: boolean;
+  /** 빈 값 토글이 켜져 입력을 쓰지 않을 때 */
+  disabled?: boolean;
 }
 
 const INVALID_PREVIEW = 5;
@@ -43,6 +45,7 @@ export function IdListInput({
   inputId,
   surveyId,
   autoGrow = false,
+  disabled = false,
 }: Props) {
   const statusId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -129,6 +132,7 @@ export function IdListInput({
       <Textarea
         ref={textareaRef}
         id={inputId}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onPaste={handlePaste}
