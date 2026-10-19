@@ -49,7 +49,7 @@ const fetchCandidateIds = scoped
   .output(FetchCandidateIdsResult)
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.fetchCandidateIds(input);
+    return svc.fetchCandidateIds(input, isGuestUser(context.user.id));
   });
 
 const previewPreflight = scoped

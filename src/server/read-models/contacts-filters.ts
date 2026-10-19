@@ -61,7 +61,7 @@ export interface ParseExtraHooks {
   idLists?: ReadonlyMap<string, number[]>;
   /**
    * 이 설문·이 세션 파티션의 컨택원 id — 「현재 컨택원」 절 검증용(결과코드 목록과 같은 역할).
-   * 넘기지 않으면 그 절을 만들지 않는다 — 단체 메일 위저드처럼 컨택원 조건이 없는 표면이
+   * 넘기지 않으면 그 절을 만들지 않는다 — 게스트 표면처럼 컨택원 조건이 없는 표면이
    * 주소 조작으로 이 조건을 받지 않게 하는 기본값이다.
    */
   assignmentIds?: ReadonlySet<string>;
@@ -477,6 +477,50 @@ export interface ContactListFilterParams {
   hcol?: string[] | string | undefined;
   hm?: string[] | string | undefined;
   hv?: string[] | string | undefined;
+}
+
+/**
+ * 주소(또는 그와 동형인 스냅샷)에 실렸지만 지금 해석되지 않는 절의 수 — 지워진 컨택원,
+ * 스킴에서 빠진 열, 읽지 못한 `list:` 토큰 등. 파서는 이런 절을 조용히 버리므로 조건이
+ * 넓어진다(빈 조건이면 전체). 그 결과로 대상을 고르거나 쓰는 자리는 이 수가 0 인지 먼저 본다.
+ * 값이 빈 검색바 절은 원래 쓰지 않는 자리라 세지 않는다.
+ */
+export function countUnresolvedListClauses(
+  params: ContactListFilterParams,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+  extra: ParseExtraHooks,
+): number {
+  const col = toArray(params.col);
+  const q = toArray(params.q);
+  const hcol = toArray(params.hcol);
+  const hm = toArray(params.hm);
+  const hv = toArray(params.hv);
+  let lost = 0;
+  const builderCount = Math.min(col.length, q.length);
+  for (let i = 0; i < builderCount; i++) {
+    const value = q[i]!;
+    if (value.trim().length === 0) continue;
+    const parsed = parseClausesFromUrl([col[i]!], [value], [''], candidates, resultCodes, extra);
+    if (parsed.length === 0) lost++;
+  }
+  const headerCount = Math.min(hcol.length, hm.length, hv.length);
+  for (let i = 0; i < headerCount; i++) {
+    const parsed = parseHeaderFiltersFromUrl(
+      [hcol[i]!],
+      [hm[i]!],
+      [hv[i]!],
+      candidates,
+      resultCodes,
+      extra,
+    );
+    if (parsed.length === 0) lost++;
+  }
+  for (const value of q) {
+    const token = parseIdListToken(value);
+    if (token && !extra.idLists?.has(token.id)) lost++;
+  }
+  return lost;
 }
 
 /**

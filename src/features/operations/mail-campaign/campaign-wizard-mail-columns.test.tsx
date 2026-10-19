@@ -50,6 +50,7 @@ function renderWizard(
   rows: CampaignCandidateRow[],
   mailColumns: MailDisplayColumn[],
   showResid = true,
+  unresolvedClauseCount = 0,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -67,6 +68,8 @@ function renderWizard(
         initialTemplateId="tpl-1"
         columnCandidates={[]}
         resultCodeOptions={[]}
+        assignmentOptions={[]}
+        unresolvedClauseCount={unresolvedClauseCount}
         initialClauses={[]}
         sort="resid"
         dir="asc"
@@ -128,5 +131,19 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
 
     expect(headerLabels()).toHaveLength(6);
     expect(headerLabels()).not.toContain('시스템ID');
+  });
+});
+
+describe('CampaignWizard 적용할 수 없는 조건', () => {
+  it('빠진 조건이 있으면 명단이 넓다고 경고한다', () => {
+    renderWizard([candidate({})], [], true, 1);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('적용할 수 없는 조건 1개');
+  });
+
+  it('빠진 조건이 없으면 경고가 없다', () => {
+    renderWizard([candidate({})], []);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

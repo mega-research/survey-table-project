@@ -15,9 +15,9 @@ import {
   listContactsForSurvey,
 } from '@/server/read-models/contacts';
 import {
+  countUnresolvedListClauses,
   parseClausesFromUrl,
   parseContactListClauses,
-  parseHeaderFiltersFromUrl,
 } from '@/server/read-models/contacts-filters';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
@@ -286,34 +286,11 @@ async function resolveListFilter(
   const candidates = buildColumnCandidates(scheme, { includeContactOwner: true });
   const extra = { idLists, assignmentIds: new Set(assignments.map((a) => a.id)) };
 
-  const lost = (): never => {
+  if (countUnresolvedListClauses(filter, candidates, resultCodes, extra) > 0) {
     throw new ORPCError('BAD_REQUEST', {
       message:
         '검색 조건 중 지금 적용할 수 없는 조건이 있습니다(지워진 컨택원 등). 목록을 새로고침해 조건을 다시 걸어 주세요.',
     });
-  };
-  const builderCount = Math.min(filter.col.length, filter.q.length);
-  for (let i = 0; i < builderCount; i++) {
-    const q = filter.q[i]!;
-    if (q.trim().length === 0) continue;
-    const parsed = parseClausesFromUrl([filter.col[i]!], [q], [''], candidates, resultCodes, extra);
-    if (parsed.length === 0) lost();
-  }
-  const headerCount = Math.min(filter.hcol.length, filter.hm.length, filter.hv.length);
-  for (let i = 0; i < headerCount; i++) {
-    const parsed = parseHeaderFiltersFromUrl(
-      [filter.hcol[i]!],
-      [filter.hm[i]!],
-      [filter.hv[i]!],
-      candidates,
-      resultCodes,
-      extra,
-    );
-    if (parsed.length === 0) lost();
-  }
-  for (const v of filter.q) {
-    const token = parseIdListToken(v);
-    if (token && !idLists.has(token.id)) lost();
   }
 
   return parseContactListClauses(filter, candidates, resultCodes, extra).clauses;

@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
+import { contactAssignments, contactPii, contactTargets } from '@/db/schema/contacts';
 import {
   type MailCampaignKind,
   mailCampaigns,
@@ -16,7 +16,7 @@ import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/conta
 import { inngest } from '@/lib/inngest/client';
 import { remainingSendValue } from '@/lib/mail/fallback-address';
 import { withTestPrefix } from './test-campaign';
-import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
+import { loadOperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -348,6 +348,7 @@ export async function resyncCampaign(input: ResyncCampaignInput): Promise<Resync
  */
 export async function fetchCandidateIds(
   input: FetchCandidateIdsInput,
+  isGuest: boolean,
 ): Promise<FetchCandidateIdsResult> {
   const { surveyId, filter } = input;
 
@@ -355,9 +356,8 @@ export async function fetchCandidateIds(
     await import('./campaigns-read');
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
     await import('@/server/read-models/contacts');
-  const { parseClausesFromUrl, parseHeaderFiltersFromUrl } = await import(
-    '@/server/read-models/contacts-filters'
-  );
+  const { countUnresolvedListClauses, parseClausesFromUrl, parseHeaderFiltersFromUrl } =
+    await import('@/server/read-models/contacts-filters');
   const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
   const { loadIdListsForValues } = await import('@/server/read-models/contact-id-lists');
   const scope = await loadOperationsDataScope(surveyId);
@@ -366,20 +366,36 @@ export async function fetchCandidateIds(
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
-  const candidates = buildColumnCandidates(scheme);
+  // 「현재 컨택원」 조건은 마법사 페이지와 같이 게스트가 아닐 때만 해석한다 — 이 설문·파티션의 컨택원만.
+  const assignments = isGuest
+    ? []
+    : await db
+        .select({ id: contactAssignments.id })
+        .from(contactAssignments)
+        .where(
+          and(
+            eq(contactAssignments.surveyId, surveyId),
+            eq(contactAssignments.isTest, testFlagForScope(scope)),
+          ),
+        );
+  const candidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
   const rawClauses = filter.clauses ?? [];
   // 스냅샷의 `list:<uuid>` 토큰도 마법사 페이지와 같은 실체로 해석해야 같은 집합을 고른다.
   const idLists = await loadIdListsForValues(
     surveyId,
     rawClauses.map((c) => c.value),
   );
+  const parseExtra = {
+    idLists,
+    ...(isGuest ? {} : { assignmentIds: new Set(assignments.map((a) => a.id)) }),
+  };
   const builderClauses = parseClausesFromUrl(
     rawClauses.map((c) => c.source),
     rawClauses.map((c) => c.value),
     rawClauses.map((c) => c.op ?? ''),
     candidates,
     resultCodes,
-    { idLists },
+    parseExtra,
   );
   // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
   const headerCandidates = [
@@ -395,7 +411,32 @@ export async function fetchCandidateIds(
     rawHeaderClauses.map((c) => c.hv),
     headerCandidates,
     resultCodes,
+    parseExtra,
   );
+  // 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 절이 해석되지 않으면 고르지 않는다 —
+  // 파서가 그 절을 버리면 화면에 보이던 것보다 넓은 명단(빈 조건이면 전체)을 고르게 된다.
+  const unresolved =
+    countUnresolvedListClauses(
+      { col: rawClauses.map((c) => c.source), q: rawClauses.map((c) => c.value) },
+      candidates,
+      resultCodes,
+      parseExtra,
+    ) +
+    countUnresolvedListClauses(
+      {
+        hcol: rawHeaderClauses.map((c) => c.source),
+        hm: rawHeaderClauses.map((c) => c.mode),
+        hv: rawHeaderClauses.map((c) => c.hv),
+      },
+      headerCandidates,
+      resultCodes,
+      parseExtra,
+    );
+  if (unresolved > 0) {
+    throw new Error(
+      '수신자 조건 중 지금 적용할 수 없는 조건이 있습니다(지워진 컨택원 등). 화면을 새로고침해 조건을 다시 걸어 주세요.',
+    );
+  }
   // 마법사 페이지의 결합 규칙과 동일해야 한다 — 어긋나면 "필터 결과 전체 선택"이
   // 화면에 보이는 명단과 다른 집합을 고른다.
   const clauses = [

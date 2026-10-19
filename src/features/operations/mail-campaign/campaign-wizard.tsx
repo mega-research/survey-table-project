@@ -51,6 +51,7 @@ import {
 import { getErrorMessage } from '@/lib/get-error-message';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 import type {
   CampaignCandidateRow,
@@ -78,6 +79,13 @@ interface Props {
   initialTemplateId: string | null;
   columnCandidates: ColumnCandidate[];
   resultCodeOptions: ContactResultCode[];
+  /** 「현재 컨택원」 값 선택지 — 게스트에게는 빈 배열(후보에도 열이 없다). */
+  assignmentOptions: ContactAssignmentOption[];
+  /**
+   * 주소에 실렸지만 지금 해석되지 않아 빠진 조건 수(지워진 컨택원 등). 0 보다 크면 명단이
+   * 원래 조건보다 넓으므로 경고하고 「미응답자 재발송」의 자동 전체 선택을 하지 않는다.
+   */
+  unresolvedClauseCount: number;
   initialClauses: { op: 'AND' | 'OR' | null; source: string; value: string }[];
   sort: CampaignSortKey;
   dir: CampaignSortDir;
@@ -95,6 +103,8 @@ export function CampaignWizard({
   initialTemplateId,
   columnCandidates,
   resultCodeOptions,
+  assignmentOptions,
+  unresolvedClauseCount,
   initialClauses,
   sort,
   dir,
@@ -232,7 +242,7 @@ export function CampaignWizard({
       router.replace(`?${next.toString()}`, { scroll: false });
     };
 
-    if (candidates.total === 0) {
+    if (candidates.total === 0 || unresolvedClauseCount > 0) {
       stripFlag();
       return;
     }
@@ -249,7 +259,15 @@ export function CampaignWizard({
       }
       stripFlag();
     });
-  }, [searchParams, candidates.total, surveyId, currentFilter, router, fetchCandidateIdsAsync]);
+  }, [
+    searchParams,
+    candidates.total,
+    unresolvedClauseCount,
+    surveyId,
+    currentFilter,
+    router,
+    fetchCandidateIdsAsync,
+  ]);
 
   async function openConfirm() {
     if (selectedCount === 0) {
@@ -347,9 +365,20 @@ export function CampaignWizard({
           initialClauses={initialClauses}
           columnCandidates={columnCandidates}
           resultCodeOptions={resultCodeOptions}
+          assignmentOptions={assignmentOptions}
           ariaLabel="수신자 필터"
           resetExtraParams={['unresponded']}
         />
+
+        {unresolvedClauseCount > 0 ? (
+          <p
+            role="alert"
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          >
+            적용할 수 없는 조건 {unresolvedClauseCount}개가 빠져 아래 명단이 원래 조건보다 넓습니다
+            (지워진 컨택원·열 등). 조건을 다시 걸어 주세요.
+          </p>
+        ) : null}
 
         <div className="flex items-center gap-2">
           <Checkbox

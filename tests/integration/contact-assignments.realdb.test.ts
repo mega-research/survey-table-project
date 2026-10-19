@@ -13,7 +13,13 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
-import { contactAssignments, contactTargets, surveyResponses, surveys } from '@/db/schema';
+import {
+  contactAssignments,
+  contactPii,
+  contactTargets,
+  surveyResponses,
+  surveys,
+} from '@/db/schema';
 import {
   createAssignment,
   DuplicateAssignmentNameError,
@@ -51,6 +57,8 @@ import {
   HEADER_FILTER_VALUE_SEPARATOR,
 } from '@/lib/operations/filter-shared';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
+import { fetchCandidateIds } from '@/server/mail/services/campaigns';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -997,6 +1005,83 @@ run('컨택원 배정 (real local DB)', () => {
       await disableTestWorkspace({ surveyId, disposition: 'delete' });
       expect(await listAssignmentOptions(surveyId, 'test')).toEqual([]);
       expect((await listAssignmentOptions(surveyId, 'real')).map((o) => o.id)).toEqual([real.id]);
+    });
+  });
+
+  describe('단체 메일 「현재 컨택원」 조건', () => {
+    async function seedMailable(surveyId: string, count: number): Promise<string[]> {
+      const ids = await seedTargets(surveyId, count);
+      await db.insert(contactPii).values(
+        ids.flatMap((id, i) =>
+          buildPiiRows(id, [
+            { columnKey: 'email', fieldType: 'email', plain: `owner${i + 1}@example.com` },
+          ]),
+        ),
+      );
+      return ids;
+    }
+
+    it('전체 선택이 그 컨택원에 배정된 대상만 고른다 — 배정 없음도 조건으로 고른다', async () => {
+      const surveyId = await seedSurvey();
+      const [t1, t2, t3] = await seedMailable(surveyId, 3);
+      const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: owner.id });
+
+      const byOwner = await fetchCandidateIds(
+        {
+          surveyId,
+          filter: { clauses: [{ source: 'system.contact_owner', value: owner.id, op: null }] },
+        },
+        false,
+      );
+      expect(new Set(byOwner.ids)).toEqual(new Set([t1, t3]));
+
+      const unassigned = await fetchCandidateIds(
+        {
+          surveyId,
+          filter: {
+            clauses: [{ source: 'system.contact_owner', value: FILTER_NONE_VALUE, op: null }],
+          },
+        },
+        false,
+      );
+      expect(unassigned.ids).toEqual([t2]);
+    });
+
+    it('조건의 컨택원이 지워졌으면 넓어진 명단을 고르지 않고 거부한다', async () => {
+      const surveyId = await seedSurvey();
+      const [t1] = await seedMailable(surveyId, 2);
+      const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await removeAssignment({ surveyId, id: owner.id });
+
+      await expect(
+        fetchCandidateIds(
+          {
+            surveyId,
+            filter: { clauses: [{ source: 'system.contact_owner', value: owner.id, op: null }] },
+          },
+          false,
+        ),
+      ).rejects.toThrow('지금 적용할 수 없는 조건');
+    });
+
+    it('게스트에게는 컨택원 조건을 해석하지 않고 거부한다 — 전체로 넓히지 않는다', async () => {
+      const surveyId = await seedSurvey();
+      const [t1] = await seedMailable(surveyId, 2);
+      const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+
+      await expect(
+        fetchCandidateIds(
+          {
+            surveyId,
+            filter: { clauses: [{ source: 'system.contact_owner', value: owner.id, op: null }] },
+          },
+          true,
+        ),
+      ).rejects.toThrow('지금 적용할 수 없는 조건');
     });
   });
 });

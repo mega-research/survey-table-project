@@ -357,7 +357,7 @@ export const getContactColumnScheme = cache(
  * 맨 앞 "전체"(system.all) + system.resid / contact_result / web / email_count + attrs.* + pii.*.
  *
  * 「현재 컨택원」(system.contact_owner)은 includeContactOwner 를 켠 표면(조사 대상 목록·컨택원
- * 수정)만 받는다 — 단체 메일 위저드는 이 필터 SQL 을 공유하지만 컨택원 조건을 두지 않는다.
+ * 수정·단체 메일 위저드)만 받는다 — 셋 다 게스트에게는 끈다. 응답 내역은 받지 않는다.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,

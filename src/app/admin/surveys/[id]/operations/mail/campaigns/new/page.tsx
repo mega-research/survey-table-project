@@ -16,10 +16,13 @@ import {
   getContactResultCodes,
 } from '@/server/read-models/contacts';
 import {
+  countUnresolvedListClauses,
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
 } from '@/server/read-models/contacts-filters';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import {
   mailPiiMaskKeys,
@@ -115,16 +118,28 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     );
   }
 
-  const [scheme, resultCodes] = await Promise.all([
+  const [scheme, resultCodes, isGuest] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
+    isGuestViewer(),
   ]);
-  const columnCandidates = buildColumnCandidates(scheme);
+  // 「현재 컨택원」 조건은 내부 실사 운영 정보라 게스트 위저드에는 후보·선택지를 싣지 않는다.
+  const assignmentOptions = isGuest ? [] : await listAssignmentOptions(surveyId, scope);
+  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
   // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
   const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
+  const parseExtra = {
     idLists,
-  });
+    ...(isGuest ? {} : { assignmentIds: new Set(assignmentOptions.map((o) => o.id)) }),
+  };
+  const builderClauses = parseClausesFromUrl(
+    sp.col,
+    sp.q,
+    sp.op,
+    columnCandidates,
+    resultCodes,
+    parseExtra,
+  );
   // 미리보기 표는 고정 컬럼이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
   const headerCandidates = [
     ...columnCandidates,
@@ -138,7 +153,24 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     sp.hv,
     headerCandidates,
     resultCodes,
+    parseExtra,
   );
+  // 주소의 조건 중 지금 해석되지 않는 것(지워진 컨택원 등) — 파서가 버려 명단이 넓어진다.
+  // 「미응답자 재발송」의 자동 전체 선택이 그 넓어진 명단을 고르지 않도록 위저드에 알린다.
+  // 검색바와 깔때기는 후보 목록이 달라 따로 센다(깔때기는 고정 열이 더 붙는다).
+  const unresolvedClauseCount =
+    countUnresolvedListClauses(
+      { col: sp.col, q: sp.q },
+      columnCandidates,
+      resultCodes,
+      parseExtra,
+    ) +
+    countUnresolvedListClauses(
+      { hcol: sp.hcol, hm: sp.hm, hv: sp.hv },
+      headerCandidates,
+      resultCodes,
+      parseExtra,
+    );
   // 조사 대상 목록과 같은 결합 규칙 — UI 는 상호배타지만 URL 직접 조작 시 AND 로 무해 처리.
   const clauses: FilterClause[] = [
     ...builderClauses,
@@ -218,6 +250,8 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         initialTemplateId={sp.templateId}
         columnCandidates={columnCandidates}
         resultCodeOptions={resultCodes}
+        assignmentOptions={assignmentOptions}
+        unresolvedClauseCount={unresolvedClauseCount}
         initialClauses={initialClauses}
         sort={sort}
         dir={dir}

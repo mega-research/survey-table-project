@@ -77,7 +77,7 @@ describe('mail.campaigns procedures', () => {
     const client = createRouterClient({ campaigns }, { context: authedContext() });
     const input = { surveyId: SURVEY_ID, filter: { unrespondedOnly: true } };
     const res = await client.campaigns.fetchCandidateIds(input);
-    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input);
+    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ids: [CONTACT_ID], total: 1, truncated: false });
   });
 
@@ -179,6 +179,23 @@ describe('mail.campaigns procedures', () => {
     const res = await client.campaigns.create(input);
     expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('게스트의 fetchCandidateIds 는 isGuest=true 로 위임된다 — 컨택원 조건을 해석하지 않는다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.fetchCandidateIds).mockResolvedValue({
+      ids: [],
+      total: 0,
+      truncated: false,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = { surveyId: SURVEY_ID, filter: { unrespondedOnly: true } };
+    await client.campaigns.fetchCandidateIds(input);
+    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input, true);
   });
 
   it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
