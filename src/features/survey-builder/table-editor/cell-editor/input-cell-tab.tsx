@@ -24,15 +24,14 @@ import type { Question } from '@/types/survey';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
-import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
+import type { CellFormActions, CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
 interface InputCellTabProps {
   form: UseCellFormResult['form'];
   setters: CellFormSetters;
   /** prefill 템플릿 입력칸 — 변수 버튼이 커서 위치에 토큰을 꽂는다. */
   inputTemplateRef: RefObject<HTMLInputElement | null>;
-  /** 숫자 모드를 이 세션에서 처음 켰는지 — 초기값 기본 ON 을 한 번만 적용한다. */
-  emptyDefaultAutoAppliedRef: { current: boolean };
+  actions: CellFormActions;
   ownQuestion: Question;
   questions: Question[];
   variableCatalog: VariableDef[];
@@ -55,7 +54,7 @@ export function InputCellTab({
   form,
   setters,
   inputTemplateRef,
-  emptyDefaultAutoAppliedRef,
+  actions,
   ownQuestion,
   questions,
   variableCatalog,
@@ -141,16 +140,8 @@ export function InputCellTab({
               id="input-type-number"
               disabled={isInputFormat(inputType)}
               checked={inputType === 'number'}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setInputType(checked ? 'number' : 'text');
-                if (checked && !emptyDefaultAutoAppliedRef.current) {
-                  // 숫자 모드를 이 세션에서 처음 켤 때만 emptyDefault 기본 ON (기본값 0).
-                  // 이후 사용자가 초기값 옵션을 끈 뒤 다시 토글해도 강제로 켜지지 않는다.
-                  emptyDefaultAutoAppliedRef.current = true;
-                  setEmptyDefaultEnabled(true);
-                }
-              }}
+              // 이번 편집에서 처음 켤 때만 초기값(0)도 켠다 (cell-form-transitions)
+              onChange={(e) => actions.toggleNumberMode(e.target.checked)}
               className="mt-0.5 h-4 w-4"
             />
             <label htmlFor="input-type-number" className="flex-1 cursor-pointer text-sm">

@@ -59,6 +59,11 @@ export interface CellFormState {
   inputPiiEncrypted: boolean;
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
+  /**
+   * 이번 편집에서 숫자 모드를 켤 때 초기값을 이미 한 번 켜 주었는가 (저장되지 않는 편집 세션 상태).
+   * 셀을 다시 읽을 때(모달 열기·셀 바뀜) false 로 돌아간다 — cell-form-transitions 의 toggleNumberMode.
+   */
+  emptyDefaultAutoApplied: boolean;
   cellNumberFormat: NumberFormat | undefined;
   /** input 셀 응답 품질 검사 (TableCell.textValidation). null = 없음 */
   cellTextValidation: TextValidation | null;
@@ -250,6 +255,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
+    emptyDefaultAutoApplied: false,
     cellNumberFormat: cell.numberFormat,
     cellTextValidation: cell.textValidation ?? null,
     cellRequired: cell.required ?? false,

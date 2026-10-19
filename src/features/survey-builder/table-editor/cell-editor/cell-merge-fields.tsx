@@ -4,17 +4,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 
-import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
+import type { CellFormActions, CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
 interface CellMergeFieldsProps {
   form: UseCellFormResult['form'];
   setters: CellFormSetters;
+  actions: CellFormActions;
 }
 
 /** cell-content-modal 의 '셀 병합' 구획. 상태는 모달이 그대로 들고 있다. */
-export function CellMergeFields({ form, setters }: CellMergeFieldsProps) {
+export function CellMergeFields({ form, setters, actions }: CellMergeFieldsProps) {
   const { isMergeEnabled, rowspan, colspan } = form;
-  const { setIsMergeEnabled, setRowspan, setColspan } = setters;
+  const { setRowspan, setColspan } = setters;
 
   return (
   <div className="mt-6 border-t border-gray-200 pt-6">
@@ -27,17 +28,8 @@ export function CellMergeFields({ form, setters }: CellMergeFieldsProps) {
         <Switch
           id="merge-toggle"
           checked={isMergeEnabled}
-          onCheckedChange={(checked) => {
-            setIsMergeEnabled(checked);
-            if (!checked) {
-              setRowspan(1);
-              setColspan(1);
-            } else {
-              // 토글 켤 때 빈 값이면 1로 설정
-              if (rowspan === '') setRowspan(1);
-              if (colspan === '') setColspan(1);
-            }
-          }}
+          // 끄면 병합 수를 1로, 켤 때는 빈 병합 수만 1로 (cell-form-transitions)
+          onCheckedChange={actions.toggleMerge}
         />
       </div>
     </div>

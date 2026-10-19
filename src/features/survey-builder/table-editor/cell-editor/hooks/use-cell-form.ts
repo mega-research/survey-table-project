@@ -2,8 +2,21 @@
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
-import { TableCell } from '@/types/survey';
-import { CellFormState, cellToFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
+import { generateId } from '@/lib/utils';
+import { CellEnableCondition, TableCell } from '@/types/survey';
+import { getMaxSpssCode } from '@/utils/option-code-generator';
+import {
+  type CellAutoCodes,
+  changeContentType,
+  changeGatingCondition,
+  editCellCode,
+  editExportLabel,
+  resetCellCode,
+  resetExportLabel,
+  toggleMerge,
+  toggleNumberMode,
+} from '@/features/survey-builder/table-editor/cell-editor/utils/cell-form-transitions';
+import { CellFormState, ContentType, cellToFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 
 /**
  * 셀 편집 폼 상태를 단일 소스로 관리하는 훅.
@@ -19,7 +32,9 @@ import { CellFormState, cellToFormState } from '@/features/survey-builder/table-
 
 type Action =
   | { type: 'HYDRATE'; cell: TableCell }
-  | { type: 'SET_FIELD'; field: keyof CellFormState; value: CellFormState[keyof CellFormState] };
+  | { type: 'SET_FIELD'; field: keyof CellFormState; value: CellFormState[keyof CellFormState] }
+  /** 필드 여럿을 함께 바꾸는 폼 동작 (cell-form-transitions 의 순수 함수) */
+  | { type: 'UPDATE'; update: (state: CellFormState) => CellFormState };
 
 function reducer(state: CellFormState, action: Action): CellFormState {
   switch (action.type) {
@@ -27,6 +42,8 @@ function reducer(state: CellFormState, action: Action): CellFormState {
       return cellToFormState(action.cell);
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
+    case 'UPDATE':
+      return action.update(state);
     default:
       return state;
   }
@@ -42,9 +59,22 @@ const CELL_FORM_FIELDS = Object.keys(
   cellToFormState({ id: '', type: 'text', content: '' }),
 ) as (keyof CellFormState)[];
 
+/** 입력 하나가 폼 필드 여럿을 함께 바꾸는 동작 — 규칙은 cell-form-transitions 가 소유한다 */
+export interface CellFormActions {
+  changeContentType: (next: ContentType, auto: CellAutoCodes) => void;
+  changeGatingCondition: (condition: CellEnableCondition | undefined) => void;
+  toggleNumberMode: (on: boolean) => void;
+  editCellCode: (value: string, autoCellCode: string | undefined) => void;
+  resetCellCode: (autoCellCode: string | undefined) => void;
+  editExportLabel: (value: string, autoExportLabel: string | undefined) => void;
+  resetExportLabel: (autoExportLabel: string | undefined) => void;
+  toggleMerge: (on: boolean) => void;
+}
+
 export interface UseCellFormResult {
   form: CellFormState;
   setters: CellFormSetters;
+  actions: CellFormActions;
   /** 원본 cell 값으로 폼 롤백 (취소 시) */
   reset: () => void;
 }
@@ -81,5 +111,35 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
     [],
   );
 
-  return { form, setters, reset };
+  const actions = useMemo<CellFormActions>(() => {
+    const update = (fn: (state: CellFormState) => CellFormState) =>
+      dispatch({ type: 'UPDATE', update: fn });
+    return {
+      changeContentType: (next, auto) => {
+        // 기본 보기는 id 를 새로 발급하므로 리듀서 밖에서 만든다 (리듀서는 순수해야 한다)
+        const defaultRankingOptions =
+          next === 'ranking'
+            ? [
+                { id: generateId(), label: '옵션 1', value: 'opt1', spssNumericCode: getMaxSpssCode([]) + 1 },
+                { id: generateId(), label: '옵션 2', value: 'opt2', spssNumericCode: getMaxSpssCode([]) + 2 },
+              ]
+            : undefined;
+        update((s) =>
+          changeContentType(s, next, {
+            ...auto,
+            ...(defaultRankingOptions ? { defaultRankingOptions } : {}),
+          }),
+        );
+      },
+      changeGatingCondition: (condition) => update((s) => changeGatingCondition(s, condition)),
+      toggleNumberMode: (on) => update((s) => toggleNumberMode(s, on)),
+      editCellCode: (value, auto) => update((s) => editCellCode(s, value, auto)),
+      resetCellCode: (auto) => update((s) => resetCellCode(s, auto)),
+      editExportLabel: (value, auto) => update((s) => editExportLabel(s, value, auto)),
+      resetExportLabel: (auto) => update((s) => resetExportLabel(s, auto)),
+      toggleMerge: (on) => update((s) => toggleMerge(s, on)),
+    };
+  }, []);
+
+  return { form, setters, actions, reset };
 }
