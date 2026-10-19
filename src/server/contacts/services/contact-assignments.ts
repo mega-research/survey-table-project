@@ -6,7 +6,8 @@ import { type DbOrTx, type DbTransaction, db } from '@/db';
 import { contactAssignments, contactTargets, surveys } from '@/db/schema';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
-import { isUniqueViolation } from '@/lib/pg-error';
+import { logger } from '@/lib/logger';
+import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
 import {
   lockWriteScope,
   testFlagForScope,
@@ -37,6 +38,26 @@ import { ensureContactOwnerColumn } from './scheme-helpers';
  * - 한 대상은 컨택원 하나에만 속한다(contact_targets.assignment_id). 마지막 배정이 이긴다.
  * - 게스트는 procedure 베이스(authed)에서 막힌다 — 서비스는 게스트를 받지 않는다.
  */
+
+/**
+ * 배정을 여러 행에 한꺼번에 쓰는 작업(교체 적용·목록에서 배정·지우기)은 서로 다른 컨택원끼리
+ * 겹치는 대상을 다른 순서로 잠가 교착이 날 수 있다. Postgres 가 한쪽을 통째로 되돌리면 그
+ * 작업을 처음부터 다시 돌린다 — 조건도 다시 계산하므로 겹치는 대상은 나중에 끝난 쪽이 이긴다
+ * (「마지막 배정이 이긴다」). 다시 돈 일은 경고 로그로 남긴다.
+ */
+export function retryAssignmentWrite<T>(
+  rpc: string,
+  surveyId: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  return retryOnTxConflict(run, {
+    onRetry: (attempt, error) =>
+      logger.warn(
+        { rpc, surveyId, attempt, err: error instanceof Error ? error.message : String(error) },
+        '[contact-assignment] 트랜잭션 충돌 — 다시 실행',
+      ),
+  });
+}
 
 export class DuplicateAssignmentNameError extends Error {
   constructor(name: string) {
@@ -329,6 +350,15 @@ export async function reorderAssignments(input: ReorderContactAssignmentsInput):
 
 /** 지우기 — 배정된 대상은 FK(ON DELETE SET NULL)로 배정 없음이 된다. 풀린 인원을 돌려준다. */
 export async function removeAssignment(
+  input: RemoveContactAssignmentInput,
+): Promise<{ unassigned: number }> {
+  // 지우기는 FK 로 배정된 대상 전부를 풀어 교체 적용과 교착이 날 수 있다.
+  return retryAssignmentWrite('contacts.assignments.remove', input.surveyId, () =>
+    removeAssignmentOnce(input),
+  );
+}
+
+async function removeAssignmentOnce(
   input: RemoveContactAssignmentInput,
 ): Promise<{ unassigned: number }> {
   return db.transaction(async (tx) => {

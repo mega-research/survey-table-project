@@ -30,7 +30,7 @@ import type {
   ListAssignSummary,
   PreviewAssignmentInput,
 } from '../domain/contact-assignment';
-import { listAssignmentOptions } from './contact-assignments';
+import { listAssignmentOptions, retryAssignmentWrite } from './contact-assignments';
 
 /**
  * 교체 적용 — 컨택원 하나의 배정을 조건 결과와 똑같이 만든다 (CONTEXT.md 「교체 적용」).
@@ -177,6 +177,15 @@ export async function previewAssignment(
  * → 마지막 조건·적용 시각 저장. 결과가 0명이어도 적용한다(컨택원을 일부러 비울 수 있게).
  */
 export async function applyAssignment(
+  input: ApplyAssignmentInput,
+): Promise<AssignmentChangeSummary> {
+  // 교착으로 되돌려지면 처음부터 다시 — retryAssignmentWrite 주석 참조.
+  return retryAssignmentWrite('contacts.assignments.apply', input.surveyId, () =>
+    applyAssignmentOnce(input),
+  );
+}
+
+async function applyAssignmentOnce(
   input: ApplyAssignmentInput,
 ): Promise<AssignmentChangeSummary> {
   return db.transaction(async (tx) => {
@@ -367,6 +376,12 @@ export async function previewAssignFromList(
  * 직렬화한다.
  */
 export async function assignFromList(input: AssignFromListInput): Promise<ListAssignSummary> {
+  return retryAssignmentWrite('contacts.assignments.assignFromList', input.surveyId, () =>
+    assignFromListOnce(input),
+  );
+}
+
+async function assignFromListOnce(input: AssignFromListInput): Promise<ListAssignSummary> {
   return db.transaction(async (tx) => {
     const locked = await lockWriteScope(tx, input.surveyId, false, { lock: 'share' });
     if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });

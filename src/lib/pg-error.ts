@@ -25,3 +25,44 @@ export function isUniqueViolation(e: unknown): boolean {
   if (err.cause !== undefined && err.cause !== e) return isUniqueViolation(err.cause);
   return false;
 }
+
+/** drizzle 이 감싼 에러까지 내려가 Postgres SQLSTATE 를 읽는다. 없으면 null. */
+function pgErrorCode(e: unknown): string | null {
+  let cur: unknown = e;
+  for (let depth = 0; depth < 5 && cur != null && typeof cur === 'object'; depth++) {
+    const code = (cur as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+/**
+ * 다시 실행하면 풀리는 트랜잭션 충돌 — 교착(40P01)과 직렬화 실패(40001).
+ * Postgres 가 한쪽 트랜잭션을 통째로 되돌린 것이라 같은 작업을 처음부터 다시 돌려도 안전하다.
+ */
+export function isRetryableTxConflict(e: unknown): boolean {
+  const code = pgErrorCode(e);
+  return code === '40P01' || code === '40001';
+}
+
+/**
+ * 트랜잭션 충돌이면 처음부터 다시 실행한다 (기본 3번까지, 짧은 무작위 대기).
+ * run 은 트랜잭션 하나를 통째로 여는 함수여야 한다 — 다시 돌 때 조건도 그 시점 데이터로
+ * 새로 계산되므로, 겹치는 대상에서는 나중에 끝난 쪽이 이긴다.
+ */
+export async function retryOnTxConflict<T>(
+  run: () => Promise<T>,
+  opts: { attempts?: number; onRetry?: (attempt: number, error: unknown) => void } = {},
+): Promise<T> {
+  const attempts = opts.attempts ?? 3;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (attempt >= attempts || !isRetryableTxConflict(error)) throw error;
+      opts.onRetry?.(attempt, error);
+      await new Promise((r) => setTimeout(r, 20 + Math.random() * 80 * attempt));
+    }
+  }
+}

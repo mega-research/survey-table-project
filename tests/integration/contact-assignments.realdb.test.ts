@@ -9,7 +9,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
@@ -541,6 +541,79 @@ run('컨택원 배정 (real local DB)', () => {
       expect(fromNone).toMatchObject({ matched: 2, current: 2, incoming: 2, leaving: 2 });
       expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, a.id, a.id]);
     });
+
+    it('데드락으로 취소되면 자동으로 다시 실행해 성공한다 — 나중에 끝난 쪽이 이긴다', async () => {
+      const surveyId = await seedSurvey();
+      const [t1, t2] = await seedTargets(surveyId, 2);
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      const clauses = [{ source: 'system.resid', value: '1-2', op: '' as const }];
+
+      // 다른 작업 T 가 대상 2 를 먼저 잠근다.
+      let releaseT!: () => void;
+      const tHoldsT2 = new Promise<void>((resolve) => {
+        releaseT = resolve;
+      });
+      let tLocked!: () => void;
+      const tReady = new Promise<void>((resolve) => {
+        tLocked = resolve;
+      });
+      const other = db.transaction(async (tx) => {
+        // 데드락 판정은 먼저 기다리기 시작한 교체 적용 쪽에서 나게 한다(이쪽은 늦게 판정).
+        await tx.execute(sql`SET LOCAL deadlock_timeout = '10s'`);
+        await tx.execute(sql`SELECT id FROM contact_targets WHERE id = ${t2!} FOR UPDATE`);
+        tLocked();
+        await tHoldsT2;
+        // 교체 적용이 대상 1 을 쥔 채 대상 2 를 기다리는 동안, T 가 대상 1 을 바꾸려 한다 → 교착.
+        await tx.execute(sql`UPDATE contact_targets SET memo = 'T' WHERE id = ${t1!}`);
+      });
+      await tReady;
+
+      const applying = applyAssignment({ surveyId, assignmentId: owner.id, clauses });
+      // 교체 적용이 행 잠금을 기다리기 시작할 때까지 본다.
+      for (let i = 0; i < 100; i++) {
+        const waiting = await db.execute(sql`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query ILIKE 'update "contact_targets"%'
+        `);
+        if (Number((waiting as unknown as Array<{ n: number }>)[0]?.n ?? 0) > 0) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      releaseT();
+
+      await other;
+      const applied = await applying;
+      expect(applied.matched).toBe(2);
+      expect(await assignmentOf(t1!)).toBe(owner.id);
+      expect(await assignmentOf(t2!)).toBe(owner.id);
+      const [memo] = await db
+        .select({ memo: contactTargets.memo })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, t1!));
+      expect(memo?.memo).toBe('T');
+    }, 30_000);
+
+    it('다른 컨택원 둘이 겹치는 대상에 동시에 여러 번 적용해도 전부 성공하고 남는 배정은 둘 중 하나다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 40);
+      const a = await createAssignment({ surveyId, name: 'A' });
+      const b = await createAssignment({ surveyId, name: 'B' });
+      const odd = [{ source: 'system.resid', value: '1-30', op: '' as const }];
+      const even = [{ source: 'system.resid', value: '11-40', op: '' as const }];
+
+      const runs = Array.from({ length: 8 }, (_, i) =>
+        i % 2 === 0
+          ? applyAssignment({ surveyId, assignmentId: a.id, clauses: odd })
+          : applyAssignment({ surveyId, assignmentId: b.id, clauses: even }),
+      );
+      const settled = await Promise.allSettled(runs);
+      expect(settled.filter((r) => r.status === 'rejected')).toEqual([]);
+
+      const owners = await Promise.all(ids.map((id) => assignmentOf(id)));
+      // 1-10 은 A 만, 31-40 은 B 만 조건이고, 겹치는 11-30 은 둘 중 하나다.
+      expect(owners.slice(0, 10).every((o) => o === a.id)).toBe(true);
+      expect(owners.slice(30).every((o) => o === b.id)).toBe(true);
+      expect(owners.slice(10, 30).every((o) => o === a.id || o === b.id)).toBe(true);
+    }, 30_000);
 
     it('같은 컨택원 동시 적용은 직렬화되어 한쪽 결과로 깔끔히 정리된다', async () => {
       const surveyId = await seedSurvey();
