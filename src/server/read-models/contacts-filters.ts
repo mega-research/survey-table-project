@@ -468,3 +468,50 @@ function buildClause(
 
   return null;
 }
+
+/** 조사 대상 목록 주소의 필터 파라미터 — 검색바(col/q/op) + 열 머리 필터(hcol/hm/hv). */
+export interface ContactListFilterParams {
+  col?: string[] | string | undefined;
+  q?: string[] | string | undefined;
+  op?: string[] | string | undefined;
+  hcol?: string[] | string | undefined;
+  hm?: string[] | string | undefined;
+  hv?: string[] | string | undefined;
+}
+
+/**
+ * 조사 대상 목록의 「지금 걸린 검색 결과」 조건 — 목록 페이지와 목록에서 배정(서버 재평가)이
+ * 같은 해석을 쓴다. UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재하고, 주소 직접
+ * 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리한다.
+ */
+export function parseContactListClauses(
+  params: ContactListFilterParams,
+  candidates: ColumnCandidate[],
+  resultCodes: ContactResultCode[],
+  extra: ParseExtraHooks,
+): { builderClauses: FilterClause[]; headerClauses: FilterClause[]; clauses: FilterClause[] } {
+  const builderClauses = parseClausesFromUrl(
+    params.col,
+    params.q,
+    params.op,
+    candidates,
+    resultCodes,
+    extra,
+  );
+  const headerClauses = parseHeaderFiltersFromUrl(
+    params.hcol,
+    params.hm,
+    params.hv,
+    candidates,
+    resultCodes,
+    extra,
+  );
+  const clauses: FilterClause[] = [
+    ...builderClauses,
+    ...headerClauses.map((c, i) => ({
+      condition: c.condition,
+      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
+    })),
+  ];
+  return { builderClauses, headerClauses, clauses };
+}

@@ -26,9 +26,12 @@ import {
 } from '@/server/contacts/services/contact-assignments';
 import {
   applyAssignment,
+  assignFromList,
   listAssignmentMatches,
+  previewAssignFromList,
   previewAssignment,
 } from '@/server/contacts/services/contact-assignment-apply';
+import { createContactIdList } from '@/server/contacts/services/contact-id-lists';
 import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
@@ -37,6 +40,7 @@ import {
 } from '@/server/read-models/contacts-filters';
 import {
   encodeMultiClauseValue,
+  formatIdListToken,
   FILTER_NONE_VALUE,
   HEADER_FILTER_VALUE_SEPARATOR,
 } from '@/lib/operations/filter-shared';
@@ -567,6 +571,92 @@ run('컨택원 배정 (real local DB)', () => {
         ],
       });
       expect(await listAssignmentFacets(surveyId, 'real', 'system.resid')).toEqual({ kind: 'many' });
+    });
+  });
+
+  describe('목록에서 배정', () => {
+    const emptyFilter = { col: [], q: [], op: [], hcol: [], hm: [], hv: [] };
+
+    it('얹기 — 결과 대상만 옮기고 그 컨택원의 기존 배정은 남는다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 6);
+      const tenth = await createAssignment({ surveyId, name: '10차' });
+      const eleventh = await createAssignment({ surveyId, name: '11차' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[5]!, assignmentId: eleventh.id }); // 6 → 11차 (조건 밖)
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id }); // 1 → 10차
+
+      const filter = { ...emptyFilter, col: ['system.resid'], q: ['1-3'], op: [''] };
+      const preview = await previewAssignFromList(
+        { surveyId, assignmentId: eleventh.id, filter },
+        'real',
+      );
+      expect(preview).toEqual({
+        matched: 3,
+        targetCurrent: 1,
+        groups: [
+          { id: tenth.id, name: '10차', count: 1 },
+          { id: null, name: null, count: 2 },
+        ],
+      });
+
+      const applied = await assignFromList({ surveyId, assignmentId: eleventh.id, filter });
+      expect(applied).toEqual(preview);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        eleventh.id,
+        eleventh.id,
+        eleventh.id,
+        null,
+        null,
+        eleventh.id, // 기존 배정 유지
+      ]);
+    });
+
+    it('풀기 — 검색 결과의 배정이 없어진다 (열 머리 필터 조건)', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 3);
+      const tenth = await createAssignment({ surveyId, name: '10차' });
+      for (const id of ids) {
+        await setTargetAssignment({ surveyId, contactTargetId: id, assignmentId: tenth.id });
+      }
+      const filter = {
+        ...emptyFilter,
+        hcol: ['system.resid'],
+        hm: ['text'],
+        hv: ['1'],
+      };
+      // 시스템ID 는 열 머리 필터 대상이 아니라 무시된다 → 전체(3명)가 결과다.
+      const applied = await assignFromList({ surveyId, assignmentId: null, filter });
+      expect(applied.groups).toEqual([{ id: tenth.id, name: '10차', count: 3 }]);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, null]);
+    });
+
+    it('저장 ID 목록 토큰 조건에서도 동작하고 파티션을 넘지 않는다', async () => {
+      const surveyId = await seedSurvey({ testMode: true });
+      const ids = await seedTargets(surveyId, 4);
+      const [testTarget] = await seedTargets(surveyId, 1, true);
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      const list = await createContactIdList({ surveyId, ids: [2, 4], createdBy: null });
+      const filter = {
+        ...emptyFilter,
+        col: ['system.resid'],
+        q: [formatIdListToken(list.id, list.count)],
+        op: [''],
+      };
+      const applied = await assignFromList({ surveyId, assignmentId: owner.id, filter });
+      expect(applied.matched).toBe(2);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        null,
+        owner.id,
+        null,
+        owner.id,
+      ]);
+      // 테스트 파티션 대상(resid 1)은 실 컨택원 조건에 걸리지 않는다.
+      expect(await assignmentOf(testTarget!)).toBeNull();
+
+      viewTest(true);
+      await expect(
+        assignFromList({ surveyId, assignmentId: owner.id, filter: emptyFilter }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 });

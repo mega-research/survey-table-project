@@ -93,6 +93,13 @@ describe('contacts.assignments procedures', () => {
           assignmentId: TARGET_ID,
           clauses: [{ source: 'system.resid', value: '1', op: '' }],
         }),
+      () =>
+        client.assignments.assignFromList({
+          surveyId: SURVEY_ID,
+          assignmentId: null,
+          filter: { col: [], q: [], op: [], hcol: [], hm: [], hv: [] },
+        }),
+      () => client.assignments.facets({ surveyId: SURVEY_ID, source: 'system.web' }),
     ]) {
       await expect(call()).rejects.toMatchObject({ code: 'FORBIDDEN' });
     }

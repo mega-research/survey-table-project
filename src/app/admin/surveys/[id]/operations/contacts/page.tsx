@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/features/operations/empty-state';
+import { AssignFromListButton } from '@/features/operations/contacts/assignments/assign-from-list-button';
 import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
 import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-download-dialog';
 import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
@@ -26,11 +27,7 @@ import {
   listContactsForSurvey,
 } from '@/server/read-models/contacts';
 import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
-import {
-  parseClausesFromUrl,
-  parseHeaderFiltersFromUrl,
-} from '@/server/read-models/contacts-filters';
-import type { FilterClause } from '@/lib/operations/filter-shared';
+import { parseContactListClauses } from '@/server/read-models/contacts-filters';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -91,27 +88,12 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
   const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
-    idLists,
-    assignmentIds,
-  });
-  const headerClauses = parseHeaderFiltersFromUrl(
-    sp.hcol,
-    sp.hm,
-    sp.hv,
+  const { builderClauses, clauses } = parseContactListClauses(
+    sp,
     columnCandidates,
     resultCodes,
-    { assignmentIds },
+    { idLists, assignmentIds },
   );
-  // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
-  // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리.
-  const clauses: FilterClause[] = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
@@ -159,6 +141,15 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 목록에서 배정 — 컨택원은 내부 실사 운영 도구라 게스트에게는 없다 */}
+          {!isGuest && assignmentOptions.length > 0 && (
+            <AssignFromListButton
+              surveyId={surveyId}
+              total={total}
+              filtered={hasFilter}
+              options={assignmentOptions}
+            />
+          )}
           <ContactsDownloadDialog
             surveyId={surveyId}
             candidates={buildDownloadCandidates(scheme)}

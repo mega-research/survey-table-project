@@ -14,14 +14,19 @@ import {
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/server/read-models/contacts';
-import { parseClausesFromUrl } from '@/server/read-models/contacts-filters';
+import {
+  parseClausesFromUrl,
+  parseContactListClauses,
+} from '@/server/read-models/contacts-filters';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
 import type {
   ApplyAssignmentInput,
+  AssignFromListInput,
   AssignmentChangeSummary,
   AssignmentMatchesInput,
+  ListAssignSummary,
   PreviewAssignmentInput,
 } from '../domain/contact-assignment';
 import { listAssignmentOptions } from './contact-assignments';
@@ -242,4 +247,115 @@ export async function listAssignmentMatches(
     page,
     pageSize: ASSIGNMENT_MATCHES_PAGE_SIZE,
   };
+}
+
+/**
+ * 조사 대상 목록 주소의 필터 → 절. 목록 페이지와 같은 해석(parseContactListClauses)을 쓴다.
+ * 목록에서 배정은 목록이 보여 준 결과에 얹는 일이라 검색과 똑같이 해석한다 — 교체 적용처럼
+ * 해석이 안 되는 절을 거부하지 않는다(목록이 이미 그 절 없이 보여 줬다).
+ */
+async function resolveListFilter(
+  surveyId: string,
+  scope: OperationsDataScope,
+  filter: AssignFromListInput['filter'],
+  executor: DbOrTx,
+): Promise<FilterClause[]> {
+  const [scheme, resultCodes, assignments, idLists] = await Promise.all([
+    getContactColumnScheme(surveyId, scope),
+    getContactResultCodes(surveyId),
+    listAssignmentOptions(surveyId, scope, executor),
+    loadIdListsForValues(surveyId, filter.q),
+  ]);
+  const candidates = buildColumnCandidates(scheme, { includeContactOwner: true });
+  return parseContactListClauses(filter, candidates, resultCodes, {
+    idLists,
+    assignmentIds: new Set(assignments.map((a) => a.id)),
+  }).clauses;
+}
+
+async function summarizeList(
+  executor: DbOrTx,
+  surveyId: string,
+  isTest: boolean,
+  assignmentId: string | null,
+  matchSql: SQL,
+): Promise<ListAssignSummary> {
+  const scopeSql = sql`"contact_targets".survey_id = ${surveyId} AND "contact_targets".is_test = ${isTest}`;
+  const [groups, target] = await Promise.all([
+    executor.execute(sql`
+      SELECT a.id, a.name, count(*)::int AS n
+      FROM contact_targets
+      LEFT JOIN contact_assignments a ON a.id = "contact_targets".assignment_id
+      WHERE ${scopeSql} AND ${matchSql}
+      GROUP BY a.id, a.name, a."order"
+      ORDER BY a."order" NULLS LAST, a.name
+    `),
+    assignmentId === null
+      ? Promise.resolve(null)
+      : executor.execute(sql`
+          SELECT count(*)::int AS n FROM contact_targets
+          WHERE ${scopeSql} AND "contact_targets".assignment_id = ${assignmentId}
+        `),
+  ]);
+  const rows = (groups as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: r['id'] == null ? null : String(r['id']),
+    name: r['name'] == null ? null : String(r['name']),
+    count: Number(r['n'] ?? 0),
+  }));
+  const targetRow = target ? (target as unknown as Array<Record<string, unknown>>)[0] : null;
+  return {
+    matched: rows.reduce((n, r) => n + r.count, 0),
+    targetCurrent: targetRow ? Number(targetRow['n'] ?? 0) : null,
+    groups: rows,
+  };
+}
+
+/** 목록에서 배정 미리보기 — 아무것도 쓰지 않는다. */
+export async function previewAssignFromList(
+  input: AssignFromListInput,
+  scope: OperationsDataScope,
+): Promise<ListAssignSummary> {
+  const isTest = testFlagForScope(scope);
+  if (input.assignmentId !== null) {
+    await assertAssignmentInScope(db, input.surveyId, isTest, input.assignmentId, false);
+  }
+  const clauses = await resolveListFilter(input.surveyId, scope, input.filter, db);
+  return summarizeList(db, input.surveyId, isTest, input.assignmentId, matchOf(clauses));
+}
+
+/**
+ * 목록에서 배정 (CONTEXT.md 「목록에서 배정」) — 지금 걸린 검색 결과를 컨택원 하나로 옮긴다.
+ * 그 컨택원의 기존 배정은 건드리지 않는다(빠지는 대상이 없다). assignmentId=null 이면 결과의
+ * 배정을 푼다. 조건은 적용 시점에 다시 평가하고, 컨택원 행을 잠가 같은 컨택원의 교체 적용과
+ * 직렬화한다.
+ */
+export async function assignFromList(input: AssignFromListInput): Promise<ListAssignSummary> {
+  return db.transaction(async (tx) => {
+    const locked = await lockWriteScope(tx, input.surveyId, false, { lock: 'share' });
+    if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+    if (input.assignmentId !== null) {
+      await assertAssignmentInScope(tx, input.surveyId, locked.isTest, input.assignmentId, true);
+    }
+    const clauses = await resolveListFilter(input.surveyId, locked.scope, input.filter, tx);
+    const match = matchOf(clauses);
+    const summary = await summarizeList(
+      tx,
+      input.surveyId,
+      locked.isTest,
+      input.assignmentId,
+      match,
+    );
+    await tx
+      .update(contactTargets)
+      .set({ assignmentId: input.assignmentId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contactTargets.surveyId, input.surveyId),
+          eq(contactTargets.isTest, locked.isTest),
+          match,
+          sql`${contactTargets.assignmentId} IS DISTINCT FROM ${input.assignmentId}`,
+        ),
+      );
+    return summary;
+  });
 }

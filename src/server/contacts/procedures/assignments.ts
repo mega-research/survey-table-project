@@ -7,6 +7,7 @@ import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts
 
 import {
   ApplyAssignmentInput,
+  AssignFromListInput,
   AssignmentChangeSummarySchema,
   AssignmentFacetsInput,
   AssignmentFacetsOutput,
@@ -14,6 +15,7 @@ import {
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
   PreviewAssignmentInput,
+  ListAssignSummarySchema,
   ListContactAssignmentsInput,
   RemoveContactAssignmentInput,
   RenameContactAssignmentInput,
@@ -149,6 +151,25 @@ const matches = authed
     return applySvc.listAssignmentMatches(input, scope);
   });
 
+/** 목록에서 배정 미리보기 — 검색 결과를 지금 컨택원별로 나눈 인원. */
+const previewFromList = authed
+  .input(AssignFromListInput)
+  .output(ListAssignSummarySchema)
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    const scope = await loadOperationsDataScope(input.surveyId);
+    return applySvc.previewAssignFromList(input, scope);
+  });
+
+/** 목록에서 배정 — 검색 결과를 컨택원 하나로 얹는다(null 이면 배정을 푼다). */
+const assignFromList = authed
+  .input(AssignFromListInput)
+  .output(ListAssignSummarySchema)
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return applySvc.assignFromList(input);
+  });
+
 export const assignments = {
   list,
   create,
@@ -160,4 +181,6 @@ export const assignments = {
   apply,
   facets,
   matches,
+  previewFromList,
+  assignFromList,
 };

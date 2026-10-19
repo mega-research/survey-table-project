@@ -125,3 +125,36 @@ export const AssignmentMatchesInput = z.object({
   page: z.number().int().min(1).max(100_000),
 });
 export type AssignmentMatchesInput = z.infer<typeof AssignmentMatchesInput>;
+
+const ParamList = z.array(z.string().max(200_000)).max(60);
+
+/** 조사 대상 목록 주소의 필터 — 검색바(col/q/op) + 열 머리 필터(hcol/hm/hv). */
+export const ContactListFilterSchema = z.object({
+  col: ParamList.default([]),
+  q: ParamList.default([]),
+  op: ParamList.default([]),
+  hcol: ParamList.default([]),
+  hm: ParamList.default([]),
+  hv: ParamList.default([]),
+});
+
+/** 목록에서 배정 — 지금 걸린 검색 결과를 컨택원 하나로(null = 배정 풀기). */
+export const AssignFromListInput = z.object({
+  surveyId: z.string().uuid(),
+  assignmentId: z.string().uuid().nullable(),
+  filter: ContactListFilterSchema,
+});
+export type AssignFromListInput = z.infer<typeof AssignFromListInput>;
+
+/**
+ * 목록에서 배정 집계 — 검색 결과를 지금 컨택원별로 나눈 인원(null = 배정 없음).
+ * target 은 고른 컨택원의 지금 배정 인원(풀기면 null).
+ */
+export const ListAssignSummarySchema = z.object({
+  matched: z.number().int(),
+  targetCurrent: z.number().int().nullable(),
+  groups: z.array(
+    z.object({ id: z.string().nullable(), name: z.string().nullable(), count: z.number().int() }),
+  ),
+});
+export type ListAssignSummary = z.infer<typeof ListAssignSummarySchema>;
