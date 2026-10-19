@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -11,7 +11,11 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
+import type {
+  ContactAssignmentClause,
+  ContactUploadMapping,
+  ContactUploadMode,
+} from '@/shared/contracts/contacts';
 
 import { surveyResponses, surveys } from './surveys';
 
@@ -30,6 +34,35 @@ export const contactUploads = pgTable('contact_uploads', {
   uploadedBy: uuid('uploaded_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * 컨택원 — 조사 대상을 나눠 맡기는 이름 붙은 배정 묶음 (0136). 계정이 아니다.
+ * 실데이터·테스트 데이터에 따로 있고(is_test), 같은 설문·파티션 안에서 이름이 겹치지 않는다.
+ * lastClauses 는 마지막으로 교체 적용한 조건 — 컨택원 수정 화면을 다시 열면 채운다.
+ */
+export const contactAssignments = pgTable(
+  'contact_assignments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    isTest: boolean('is_test').notNull().default(false),
+    name: text('name').notNull(),
+    order: integer('order').notNull().default(0),
+    lastClauses: jsonb('last_clauses').$type<ContactAssignmentClause[]>(),
+    lastAppliedAt: timestamp('last_applied_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    surveyScopeNameUnique: unique('contact_assignments_survey_scope_name_unique').on(
+      table.surveyId,
+      table.isTest,
+      table.name,
+    ),
+  }),
+);
 
 export const contactTargets = pgTable(
   'contact_targets',
@@ -51,10 +84,17 @@ export const contactTargets = pgTable(
     responseId: uuid('response_id').references(() => surveyResponses.id, { onDelete: 'set null' }),
     memo: text('memo'),
     contactMethod: text('contact_method'),
+    /** 지금 맡은 컨택원 (0136). 컨택원을 지우면 배정 없음(NULL)이 된다. */
+    assignmentId: uuid('assignment_id').references(() => contactAssignments.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
+    assignmentIdx: index('contact_targets_assignment_idx')
+      .on(table.assignmentId)
+      .where(sql`${table.assignmentId} IS NOT NULL`),
     surveyScopeResidUnique: unique('contact_targets_survey_scope_resid_unique').on(
       table.surveyId,
       table.isTest,
@@ -223,4 +263,5 @@ export type NewContactAttempt = typeof contactAttempts.$inferInsert;
 export type ContactPii = typeof contactPii.$inferSelect;
 export type NewContactPii = typeof contactPii.$inferInsert;
 export type ContactPriorAnswers = typeof contactPriorAnswers.$inferSelect;
+export type ContactAssignment = typeof contactAssignments.$inferSelect;
 export type NewContactPriorAnswers = typeof contactPriorAnswers.$inferInsert;

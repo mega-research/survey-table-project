@@ -1,5 +1,6 @@
 import { analytics } from '@/server/analytics/procedures/analytics';
 import { auth } from '@/server/auth/procedures/auth';
+import { assignments } from '@/server/contacts/procedures/assignments';
 import { attempts } from '@/server/contacts/procedures/attempts';
 import { attrs } from '@/server/contacts/procedures/attrs';
 import { attrValues } from '@/server/contacts/procedures/attr-values';
@@ -84,6 +85,7 @@ export const router = {
     attrValues,
     idLists,
     priorAnswers,
+    assignments,
   },
   mail: {
     templates,

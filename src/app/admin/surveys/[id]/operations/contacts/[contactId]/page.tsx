@@ -14,6 +14,7 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 
@@ -44,13 +45,17 @@ export default async function ContactDetailPage({ params }: PageProps) {
     ? isReeditableResponseStatus(editable.status)
     : detail.contact.responseId != null;
 
-  const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    getMailRecipientsForTarget(detail.contact.id, scope),
-    getResponseEditLogs(editableResponseId, detail.contact.id),
-    getMailTemplatesBySurvey(surveyId),
-  ]);
+  const isGuest = await isGuestViewer();
+  const [scheme, resultCodes, mailHistory, editLogs, mailTemplates, assignmentOptions] =
+    await Promise.all([
+      getContactColumnScheme(surveyId, scope),
+      getContactResultCodes(surveyId),
+      getMailRecipientsForTarget(detail.contact.id, scope),
+      getResponseEditLogs(editableResponseId, detail.contact.id),
+      getMailTemplatesBySurvey(surveyId),
+      // 컨택원은 내부 실사 운영 정보 — 게스트에게는 읽지도 내리지도 않는다.
+      isGuest ? Promise.resolve(null) : listAssignmentOptions(surveyId, scope),
+    ]);
   if (!scheme) notFound();
 
   const groupLabel = detail.contact.groupValue ?? '미지정';
@@ -94,7 +99,15 @@ export default async function ContactDetailPage({ params }: PageProps) {
         mailHistory={mailHistory}
         editLogs={editLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
-        canReset={!(await isGuestViewer())}
+        canReset={!isGuest}
+        {...(assignmentOptions
+          ? {
+              assignment: {
+                currentId: detail.contact.assignmentId,
+                options: assignmentOptions,
+              },
+            }
+          : {})}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,

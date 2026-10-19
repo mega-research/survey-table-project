@@ -54,6 +54,8 @@ interface ContactInfoCardProps {
   onPiiChange?: (columnKey: string, value: string) => void;
   onMemoChange: (memo: string) => void;
   onContactMethodChange: (method: ContactMethod | null) => void;
+  /** 명단 열 아래 「컨택원」 드롭다운 자리 — 게스트·신규 모드는 비운다. */
+  assignmentControl?: React.ReactNode;
 }
 
 type InputDef =
@@ -79,6 +81,7 @@ export function ContactInfoCard({
   onPiiChange,
   onMemoChange,
   onContactMethodChange,
+  assignmentControl,
 }: ContactInfoCardProps) {
   const router = useRouter();
   const [resetOpen, setResetOpen] = useState(false);
@@ -209,6 +212,8 @@ export function ContactInfoCard({
             </div>
           );
         })}
+
+        {assignmentControl}
 
         {/* 수신방법 + Web 응답 메타 */}
         <div className="mt-3 rounded bg-slate-50 px-3 py-2">

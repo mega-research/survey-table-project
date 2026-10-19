@@ -62,6 +62,17 @@ export interface ContactColumnDef {
   groupLevel?: 1 | 2 | 3 | 4;
 }
 
+/**
+ * contact_assignments.last_clauses — 마지막으로 교체 적용한 조건 줄 한 개.
+ * 조사 대상 필터 URL 의 col/q/op 와 같은 모양이다(source=col, value=q, op=op).
+ * 첫 줄의 op 는 빈 문자열. 2,000개 넘는 ID 목록은 `list:<uuid>:<count>` 토큰으로 담긴다.
+ */
+export interface ContactAssignmentClause {
+  source: string;
+  value: string;
+  op: '' | 'AND' | 'OR';
+}
+
 /** 컨택 업로드 모드. replace=전체 교체(기존 동작), merge=키 일치 갱신, append=신규 추가 */
 export type ContactUploadMode = 'replace' | 'merge' | 'append';
 

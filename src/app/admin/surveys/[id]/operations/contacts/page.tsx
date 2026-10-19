@@ -32,6 +32,8 @@ import {
 } from '@/server/read-models/contacts-filters';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { withoutContactOwnerColumn } from '@/lib/operations/contacts-format';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -63,10 +65,13 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
 
   // 스킴 + resultCodes 병렬 로드
-  const [scheme, resultCodes] = await Promise.all([
+  const [loadedScheme, resultCodes, isGuest] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
+    isGuestViewer(),
   ]);
+  // 컨택원은 내부 실사 운영 정보 — 게스트 목록에는 열도 값도 싣지 않는다.
+  const scheme = isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme;
 
   // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
   const visibleAttrsKeys = new Set(
@@ -110,6 +115,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     page: parsedPage,
     sort: safeSort,
     dir,
+    includeAssignment: !isGuest,
   });
 
   if (!scheme) {

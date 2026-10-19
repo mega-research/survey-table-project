@@ -97,6 +97,14 @@ export type MatchContactUploadResult = z.infer<typeof MatchContactUploadResultSc
 // 조회 자체는 server/read-models/contacts.server 소관이고 여기는 모양만 둔다.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** 컨택원 선택지 — 목록 열·상세 드롭다운·필터 선택지가 공유한다. 배열은 컨택원 순서대로. */
+export const ContactAssignmentOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  order: z.number().int(),
+});
+export type ContactAssignmentOption = z.infer<typeof ContactAssignmentOptionSchema>;
+
 export interface ContactsRow {
   id: string;
   resid: number;
@@ -121,6 +129,11 @@ export interface ContactsRow {
   latestMailStatus: MailRecipientStatus | null;
   inviteToken: string;
   createdAt: Date;
+  /**
+   * 지금 맡은 컨택원. 배정 없음이면 null. 게스트 목록은 컨택원을 싣지 않아 늘 null 이다
+   * (내부 실사 운영 정보 — CONTEXT.md 「컨택원」).
+   */
+  assignment: { id: string; name: string } | null;
 }
 
 export interface ContactUploadRow {

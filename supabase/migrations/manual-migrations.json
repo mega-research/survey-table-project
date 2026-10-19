@@ -94,6 +94,7 @@
     "0130_question_max_selections_source",
     "0131_question_mobile_item_card_block_columns",
     "0132_question_staged_rows_config",
-    "0135_mail_fallback_campaigns"
+    "0135_mail_fallback_campaigns",
+    "0136_contact_assignments"
   ]
 }

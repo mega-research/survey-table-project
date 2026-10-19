@@ -10,15 +10,18 @@
  *
  * postgres-js 는 에러 객체에 `code` 를 싣지만, 래핑되거나 직렬화를 거치면 사라질 수 있어
  * message 문자열 폴백을 함께 둔다. `contact-attempts.service.ts` 의 file-private 헬퍼가
- * 원본이며 판정 로직을 한 글자도 바꾸지 않고 올렸다.
+ * 원본이고, drizzle 이 감싼 에러를 위해 cause 를 따라가는 판정이 더해졌다.
  */
 export function isUniqueViolation(e: unknown): boolean {
   if (e == null || typeof e !== 'object') return false;
-  const err = e as { code?: unknown; message?: unknown };
+  const err = e as { code?: unknown; message?: unknown; cause?: unknown };
   if (err.code === '23505') return true;
   if (typeof err.message === 'string') {
     if (err.message.includes('23505')) return true;
     if (err.message.toLowerCase().includes('unique')) return true;
   }
+  // drizzle 은 드라이버 에러를 DrizzleQueryError("Failed query: …")로 감싸 cause 에 싣는다 —
+  // 감싼 쪽 message 에는 SQLSTATE 도 제약 이름도 없어 cause 까지 내려가 봐야 한다.
+  if (err.cause !== undefined && err.cause !== e) return isUniqueViolation(err.cause);
   return false;
 }

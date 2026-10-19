@@ -90,6 +90,11 @@ export interface ListContactsArgs {
   sort: ContactsSortKey;
   dir: ContactsSortDir;
   pageSize: number;
+  /**
+   * 컨택원(지금 맡은 배정)을 행에 싣는가. 게스트 목록은 false — 내부 실사 운영 정보라
+   * 열·값 모두 게스트에게 보내지 않는다. 기본 true.
+   */
+  includeAssignment?: boolean;
 }
 
 export interface ListContactsResult {
@@ -128,6 +133,12 @@ const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
 
 // 최신 메일 수신 상태 표현식은 contacts-filter-sql 로 이관 — 필터·정렬과 공유.
 
+// 지금 맡은 컨택원 이름 — 목록 「컨택원」 열. 배정 없음이면 NULL.
+const assignmentNameExpr = sql<string | null>`(
+  SELECT name FROM contact_assignments
+  WHERE contact_assignments.id = "contact_targets".assignment_id
+)`;
+
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
@@ -145,7 +156,7 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, clauses, sort, dir } = args;
+  const { surveyId, scope, page, pageSize, clauses, sort, dir, includeAssignment = true } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
@@ -206,6 +217,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      assignmentId: contactTargets.assignmentId,
+      assignmentName: assignmentNameExpr.as('assignment_name'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -230,6 +243,10 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     latestMailStatus: r.latestMailStatus,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
+    assignment:
+      includeAssignment && r.assignmentId != null && r.assignmentName != null
+        ? { id: r.assignmentId, name: r.assignmentName }
+        : null,
   }));
 
   return { rows, total, page: clampedPage };
@@ -369,6 +386,8 @@ export interface ContactDetailRow {
   respondedAt: Date | null;
   unsubscribedAt: Date | null;
   responseId: string | null;
+  /** 지금 맡은 컨택원 id (배정 없음이면 null). 게스트 화면에는 내리지 않는다. */
+  assignmentId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -400,6 +419,7 @@ export async function getContactDetailById(
       respondedAt: contactTargets.respondedAt,
       unsubscribedAt: contactTargets.unsubscribedAt,
       responseId: contactTargets.responseId,
+      assignmentId: contactTargets.assignmentId,
       createdAt: contactTargets.createdAt,
       updatedAt: contactTargets.updatedAt,
     })

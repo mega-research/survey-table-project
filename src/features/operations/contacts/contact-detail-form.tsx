@@ -9,6 +9,7 @@ import {
   ContactAttemptAddCard,
   type ContactAttemptAddCardHandle,
 } from '@/features/operations/contacts/contact-attempt-add-card';
+import { ContactAssignmentSelect } from '@/features/operations/contacts/contact-assignment-select';
 import { ContactAttemptHistoryCard } from '@/features/operations/contacts/contact-attempt-history-card';
 import { ContactEditHistoryCard } from '@/features/operations/contacts/contact-edit-history-card';
 import { ContactInfoCard } from '@/features/operations/contacts/contact-info-card';
@@ -32,6 +33,7 @@ import type {
   ContactResultCode,
 } from '@/shared/contracts/contacts';
 import type {
+  ContactAssignmentOption,
   ContactAttemptRow,
   MailHistoryRow,
   PiiUpdate,
@@ -69,6 +71,10 @@ interface ContactDetailFormProps {
   mailSend?: { templates: MailTemplateOption[]; disabledReason: string | null };
   /** 응답 초기화 버튼 노출 — authed 전용 RPC 라 게스트는 false. */
   canReset?: boolean;
+  /**
+   * 「컨택원」 드롭다운 (편집 모드에서만). 게스트에게는 내리지 않는다 — 내부 실사 운영 정보.
+   */
+  assignment?: { currentId: string | null; options: ContactAssignmentOption[] };
 }
 
 export function ContactDetailForm({
@@ -81,6 +87,7 @@ export function ContactDetailForm({
   editLogs = [],
   mailSend,
   canReset = false,
+  assignment,
 }: ContactDetailFormProps) {
   const router = useRouter();
   // 목록에서 실어 온 페이지·필터·정렬 — 「목록」·삭제 뒤 이동이 그 목록 화면으로 돌아간다.
@@ -343,6 +350,16 @@ export function ContactDetailForm({
             responseReeditable={initial?.responseReeditable ?? false}
             inviteCode={initial?.inviteCode ?? null}
             canReset={canReset && isEdit}
+            assignmentControl={
+              isEdit && initial && assignment ? (
+                <ContactAssignmentSelect
+                  surveyId={surveyId}
+                  contactTargetId={initial.id}
+                  currentAssignmentId={assignment.currentId}
+                  options={assignment.options}
+                />
+              ) : undefined
+            }
             {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}
             onPiiChange={(k, v) => setPiiValues((prev) => ({ ...prev, [k]: v }))}

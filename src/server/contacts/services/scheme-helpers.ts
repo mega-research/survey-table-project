@@ -96,3 +96,20 @@ export function appendNewColumnsToScheme(
 
   return { ...scheme, columns };
 }
+
+/**
+ * 「컨택원」 열(system.contact_owner)이 없는 스킴에 그 열을 끝(운영 열 자리)에 덧붙인다.
+ * 이미 있으면 같은 객체를 그대로 돌려준다 — 호출부가 참조 비교로 저장 여부를 정한다.
+ * 컨택원 기능 전에 만든 스킴은 이 열이 없을 수 있다(테스트 스킴·열 설정에서 지운 경우).
+ */
+export function ensureContactOwnerColumn<T extends ContactColumnScheme>(scheme: T): T {
+  if (scheme.columns.some((c) => c.source === 'system.contact_owner')) return scheme;
+  const order = scheme.columns.reduce((max, c) => Math.max(max, c.order), 0) + 1;
+  return {
+    ...scheme,
+    columns: [
+      ...scheme.columns,
+      { key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order },
+    ],
+  };
+}

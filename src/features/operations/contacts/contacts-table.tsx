@@ -155,7 +155,17 @@ function computeCell(
       };
     }
     case 'system.contact_owner':
-      return { display: '—', plain: undefined }; // 후속 슬라이스 면접원
+      // 지금 맡은 컨택원 — 배정 없음은 다른 열의 빈 값과 같은 「—」.
+      return row.assignment
+        ? {
+            display: (
+              <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                {row.assignment.name}
+              </span>
+            ),
+            plain: row.assignment.name,
+          }
+        : { display: '—', plain: undefined };
     default:
       return { display: '—', plain: undefined };
   }
@@ -168,7 +178,7 @@ function computeCell(
  * - attrs.* source: row.attrs[키] 표시 (이메일/사업자번호는 마스킹)
  * - system.resid/contact_result/web: 시스템 필드
  * - system.email_count: 최신 메일 수신 상태 badge (mail_recipients, 발송 이력 없으면 —)
- * - system.contact_owner: 다음 슬라이스 (면접원) 까지 placeholder
+ * - system.contact_owner: 지금 맡은 컨택원 이름 칩 (배정 없음은 —)
  *
  * 페이지네이션은 TablePagerFooter (totalPages/onPrev/onNext) 패턴을 그대로 사용.
  */
