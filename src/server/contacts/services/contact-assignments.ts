@@ -374,3 +374,21 @@ export async function getAssignmentForEdit(
   // JSONB 드리프트 보정 — 배열이 아닌 저장분은 조건 없음으로 읽는다.
   return { ...row, lastClauses: Array.isArray(row.lastClauses) ? row.lastClauses : null };
 }
+
+/** 이 파티션에서 컨택원에 배정된 대상 수 — 교체 업로드 경고(「배정 N명이 풀립니다」). */
+export async function countAssignedTargets(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(contactTargets)
+    .where(
+      and(
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, testFlagForScope(scope)),
+        sql`${contactTargets.assignmentId} IS NOT NULL`,
+      ),
+    );
+  return Number(row?.n ?? 0);
+}

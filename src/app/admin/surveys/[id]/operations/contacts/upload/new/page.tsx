@@ -4,6 +4,7 @@ import { UploadWizard } from '@/features/operations/contacts/upload-wizard';
 import { Card, CardContent } from '@/components/ui/card';
 import { getExistingContactsCount } from '@/server/contacts/services/contact-columns';
 import { countPriorAnswerTargets } from '@/server/contacts/services/prior-answer-import';
+import { countAssignedTargets } from '@/server/contacts/services/contact-assignments';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 
@@ -36,6 +37,8 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
   // 명단 replace 는 조사 대상을 지워 이월 응답까지 연쇄 삭제한다 — 되돌릴 수 없으니 미리 알린다.
   const existingPriorAnswerCount = await countPriorAnswerTargets(surveyId, isTestScope);
   const existingScheme = await getContactColumnScheme(surveyId, scope);
+  // 교체 업로드는 조사 대상을 새로 만들어 컨택원 배정이 전부 풀린다(컨택원은 남는다).
+  const existingAssignedCount = await countAssignedTargets(surveyId, scope);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -46,6 +49,7 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
       <UploadWizard
         surveyId={surveyId}
         existingPriorAnswerCount={existingPriorAnswerCount}
+        existingAssignedCount={existingAssignedCount}
         existingContactsCount={existingContactsCount}
         existingScheme={existingScheme}
       />

@@ -33,6 +33,10 @@ import {
 } from '@/server/contacts/services/contact-assignment-apply';
 import { createContactIdList } from '@/server/contacts/services/contact-id-lists';
 import { getProgressRows, getProgressTotals } from '@/server/operations/services/report-progress';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
+import { countAssignedTargets } from '@/server/contacts/services/contact-assignments';
+import ExcelJS from 'exceljs';
 import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
@@ -55,6 +59,10 @@ vi.mock('next/headers', () => ({
       cookieState.testView && name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined,
   }),
 }));
+
+// ingestContactUpload → loadOperationsDataScope → isGuestViewer 는 요청 세션을 fail-closed 로
+// 요구한다. 실DB 테스트에는 요청 스코프가 없어 어드민(게스트 아님)으로 고정한다.
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: () => Promise.resolve(false) }));
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -722,6 +730,87 @@ run('컨택원 배정 (real local DB)', () => {
       expect(combo.get('기업3 / 11차')).toBe(1);
       expect(combo.get('기업5 / (배정 없음)')).toBe(1);
       expect((await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER])).groupCount).toBe(5);
+    });
+  });
+
+  describe('명단 업로드 · 테스트 모드 끄기', () => {
+    async function xlsx(rows: string[][]): Promise<File> {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Sheet1');
+      ws.addRow(['idx', '회사']);
+      for (const r of rows) ws.addRow(r);
+      return new File([await wb.xlsx.writeBuffer()], 'roster.xlsx');
+    }
+    const mapping = (mode: 'replace' | 'merge') => ({
+      systemFields: {},
+      selectedAttrsKeys: ['idx', '회사'],
+      headerRow: 1,
+      sheetName: 'Sheet1',
+      mode,
+      ...(mode === 'merge' ? { mergeKeys: ['idx'], unmatchedPolicy: 'skip' as const } : {}),
+    });
+
+    async function seedUploaded(): Promise<{ surveyId: string; ownerId: string }> {
+      const surveyId = randomUUID();
+      await db.insert(surveys).values({ id: surveyId, title: '업로드 배정 실DB' });
+      createdSurveyIds.push(surveyId);
+      await ingestContactUpload({
+        surveyId,
+        file: await xlsx([
+          ['1', 'A'],
+          ['2', 'B'],
+        ]),
+        mapping: mapping('replace'),
+      });
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      const targets = await db
+        .select({ id: contactTargets.id })
+        .from(contactTargets)
+        .where(eq(contactTargets.surveyId, surveyId));
+      for (const t of targets) {
+        await setTargetAssignment({ surveyId, contactTargetId: t.id, assignmentId: owner.id });
+      }
+      expect(await countAssignedTargets(surveyId, 'real')).toBe(2);
+      return { surveyId, ownerId: owner.id };
+    }
+
+    it('교체 업로드 후 배정은 풀리고 컨택원은 남는다', async () => {
+      const { surveyId, ownerId } = await seedUploaded();
+      await ingestContactUpload({
+        surveyId,
+        file: await xlsx([
+          ['1', 'A'],
+          ['3', 'C'],
+        ]),
+        mapping: mapping('replace'),
+      });
+      expect(await countAssignedTargets(surveyId, 'real')).toBe(0);
+      expect((await listAssignmentOptions(surveyId, 'real')).map((o) => o.id)).toEqual([ownerId]);
+    });
+
+    it('병합 업로드 후 배정은 그대로다', async () => {
+      const { surveyId, ownerId } = await seedUploaded();
+      await ingestContactUpload({
+        surveyId,
+        file: await xlsx([['1', 'A2']]),
+        mapping: mapping('merge'),
+      });
+      const rows = await db
+        .select({ a: contactTargets.assignmentId })
+        .from(contactTargets)
+        .where(eq(contactTargets.surveyId, surveyId));
+      expect(rows.map((r) => r.a)).toEqual([ownerId, ownerId]);
+    });
+
+    it('테스트 모드를 지우며 끄면 테스트 컨택원이 없어지고 실 컨택원은 그대로다', async () => {
+      const surveyId = await seedSurvey({ testMode: true });
+      const real = await createAssignment({ surveyId, name: '실 10차' });
+      viewTest(true);
+      await createAssignment({ surveyId, name: '테스트 10차' });
+
+      await disableTestWorkspace({ surveyId, disposition: 'delete' });
+      expect(await listAssignmentOptions(surveyId, 'test')).toEqual([]);
+      expect((await listAssignmentOptions(surveyId, 'real')).map((o) => o.id)).toEqual([real.id]);
     });
   });
 });

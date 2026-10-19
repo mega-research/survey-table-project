@@ -2,7 +2,13 @@ import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
-import { contactTargets, mailCampaigns, surveyResponses, surveys } from '@/db/schema';
+import {
+  contactAssignments,
+  contactTargets,
+  mailCampaigns,
+  surveyResponses,
+  surveys,
+} from '@/db/schema';
 import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive';
 
 export interface DisableTestWorkspaceResult {
@@ -80,6 +86,12 @@ export async function disableTestWorkspace(input: {
         .delete(contactTargets)
         .where(and(eq(contactTargets.surveyId, input.surveyId), eq(contactTargets.isTest, true)))
         .returning({ id: contactTargets.id });
+      // 테스트 컨택원도 테스트 데이터다 — 남겨 두면 다음 테스트 모드에 이름만 남은 찌꺼기가 된다.
+      await tx
+        .delete(contactAssignments)
+        .where(
+          and(eq(contactAssignments.surveyId, input.surveyId), eq(contactAssignments.isTest, true)),
+        );
       await tx
         .update(surveys)
         .set({ testContactColumns: null, updatedAt: new Date() })

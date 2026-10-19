@@ -65,6 +65,11 @@ interface UploadWizardProps {
    * replace 는 조사 대상을 지우므로 이월 응답도 함께 사라진다 — 되돌릴 방법이 없다.
    */
   existingPriorAnswerCount: number;
+  /**
+   * 컨택원에 배정된 기존 조사 대상 수 — replace 는 조사 대상을 새로 만들어 배정이 전부 풀린다
+   * (컨택원은 남는다). 병합·추가 업로드는 배정을 그대로 둔다.
+   */
+  existingAssignedCount?: number;
   /** 기존 컬럼 스킴 — 병합/추가 모드의 컬럼 잠금·라우팅 표시 기준 */
   existingScheme: ContactColumnScheme | null;
 }
@@ -210,6 +215,7 @@ export function UploadWizard({
   surveyId,
   existingContactsCount,
   existingPriorAnswerCount,
+  existingAssignedCount = 0,
   existingScheme,
 }: UploadWizardProps) {
   const router = useRouter();
@@ -971,6 +977,18 @@ export function UploadWizard({
                       이월 응답 {existingPriorAnswerCount.toLocaleString('ko-KR')}건도 함께
                       삭제됨 — 지난 회차 rawdata 를 다시 임포트해야 합니다
                     </li>
+                  )}
+                  {existingAssignedCount > 0 && (
+                    <>
+                      <li className="font-semibold">
+                        컨택원 배정 {existingAssignedCount.toLocaleString('ko-KR')}명이 풀립니다 —
+                        컨택원은 남으니 컨택원 관리에서 다시 적용하세요
+                      </li>
+                      <li>
+                        시스템ID 범위로 만든 조건은 번호가 바뀌어, 다시 적용하면 다른 대상이 걸릴
+                        수 있습니다
+                      </li>
+                    </>
                   )}
                   <li>응답 본체는 보존되지만 조사 대상 매칭이 끊겨 익명 응답으로 표시됨</li>
                 </ul>
