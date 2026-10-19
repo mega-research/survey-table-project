@@ -31,6 +31,8 @@ interface Props {
   onChange: (next: ClauseRowValue) => void;
   onRemove: () => void;
   index: number;
+  /** stack 첫 줄 — AND/OR 대신 「조건」 라벨을 그린다 (결합 연산자가 없는 자리). */
+  first?: boolean;
 }
 
 export function ClauseRow({
@@ -41,6 +43,7 @@ export function ClauseRow({
   onChange,
   onRemove,
   index,
+  first = false,
 }: Props) {
   return (
     <div
@@ -48,18 +51,22 @@ export function ClauseRow({
       role="group"
       aria-label={`조건 ${index + 2}`}
     >
-      <Select
-        value={clause.op}
-        onValueChange={(v) => onChange({ ...clause, op: v as 'AND' | 'OR' })}
-      >
-        <SelectTrigger className="h-10 w-[88px] font-bold text-blue-700">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="AND">AND</SelectItem>
-          <SelectItem value="OR">OR</SelectItem>
-        </SelectContent>
-      </Select>
+      {first ? (
+        <span className="w-[88px] shrink-0 px-3 text-sm text-slate-500">조건</span>
+      ) : (
+        <Select
+          value={clause.op}
+          onValueChange={(v) => onChange({ ...clause, op: v as 'AND' | 'OR' })}
+        >
+          <SelectTrigger className="h-10 w-[88px] font-bold text-blue-700">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AND">AND</SelectItem>
+            <SelectItem value="OR">OR</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
       <Select
         value={clause.source}
         onValueChange={(s) =>

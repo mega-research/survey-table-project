@@ -17,10 +17,8 @@ import {
   type ColumnCandidate,
 } from '@/lib/operations/filter-shared';
 
-import {
-  FilterBarCore,
-  type ClientFilterClause,
-} from '@/features/operations/filters/filter-bar-core';
+import type { ClientFilterClause } from '@/features/operations/filters/filter-bar-core';
+import { UrlFilterBar } from '@/features/operations/filters/url-filter-bar';
 
 interface Props {
   initialClauses: ClientFilterClause[];
@@ -46,7 +44,7 @@ function placeholderFor(source: string): string {
 }
 
 /**
- * 응답 내역 필터 — 공용 FilterBarCore(다중 절 AND/OR + 전체 검색)의 응답 전용 wrapper.
+ * 응답 내역 필터 — 공용 UrlFilterBar(다중 절 AND/OR + 전체 검색)의 응답 전용 wrapper.
  * 상태 select 만 이 페이지 특화 컨트롤로 붙는다 (검색 submit 시 status 파라미터 반영).
  */
 export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandidates }: Props) {
@@ -61,7 +59,7 @@ export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandida
   }
 
   return (
-    <FilterBarCore
+    <UrlFilterBar
       initialClauses={initialClauses}
       columnCandidates={columnCandidates}
       ariaLabel="응답 내역 필터"
