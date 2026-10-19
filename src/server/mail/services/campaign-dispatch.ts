@@ -421,6 +421,8 @@ async function settleClaimedRecipient(
         : {
             status: 'failed',
             errorReason: activeRecipientErrorReason(result.errorReason),
+            // 대체 발송 처리 대기 — 커밋 뒤 대체 발송 등록이 빠져도 정기 점검이 다시 처리한다.
+            fallbackPendingAt: now,
             sendAttemptedAt: null,
             sendLeaseToken: null,
             sendLeaseExpiresAt: null,

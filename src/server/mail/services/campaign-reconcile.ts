@@ -4,9 +4,14 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
-import { requestRecipientFallbacks, triggersFallback } from './campaign-fallback';
+import { requestRecipientFallbacks } from './campaign-fallback';
 import { getResend } from './resend-client';
-import { mapResendLastEvent, canTransition, applyRecipientTransition } from './recipient-status-transition';
+import {
+  mapResendLastEvent,
+  canTransition,
+  applyRecipientTransition,
+  triggersFallback,
+} from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 export interface StuckRecipient {

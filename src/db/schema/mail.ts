@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -159,6 +160,11 @@ export const mailRecipients = pgTable(
     }),
     inviteTokenSnapshot: uuid('invite_token_snapshot'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /**
+     * 대체 발송 처리 대기 (0137) — 반송·거부로 바뀌는 트랜잭션이 찍고, 대체 발송 처리가 커밋될 때 지운다.
+     * 오래 남은 행은 정기 점검이 다시 처리한다(campaign-fallback). NULL = 처리할 것 없음.
+     */
+    fallbackPendingAt: timestamp('fallback_pending_at', { withTimezone: true }),
 
     status: text('status').$type<MailRecipientStatus>().notNull().default('queued'),
     resendMessageId: text('resend_message_id'),
@@ -186,6 +192,9 @@ export const mailRecipients = pgTable(
     resendMessageIdUnique: uniqueIndex('mail_recipients_resend_msg_idx')
       .on(table.resendMessageId)
       .where(sql`${table.resendMessageId} IS NOT NULL`),
+    fallbackPendingIdx: index('mail_recipients_fallback_pending_idx')
+      .on(table.fallbackPendingAt)
+      .where(sql`${table.fallbackPendingAt} IS NOT NULL`),
   }),
 );
 

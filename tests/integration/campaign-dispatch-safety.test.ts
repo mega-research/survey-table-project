@@ -1043,4 +1043,16 @@ describe('dispatchCampaignChunk 안전 발송', () => {
     expect(retry).toEqual({ sent: 0, failed: 0, cancelled: true });
     expect(state.setPayloads.filter((payload) => payload['status'] === 'failed')).toHaveLength(1);
   });
+
+  it('메일 서비스가 주소를 거부하면 failed 전이와 같은 문장에 대체 발송 처리 대기 표식을 남긴다', async () => {
+    sendRecipientMock.mockResolvedValueOnce({
+      kind: 'permanent_failure',
+      errorReason: 'invalid email',
+    });
+
+    await dispatchCampaignChunk('c1', ['r1']);
+
+    const failed = state.setPayloads.find((payload) => payload['status'] === 'failed');
+    expect(failed?.['fallbackPendingAt']).toBeInstanceOf(Date);
+  });
 });

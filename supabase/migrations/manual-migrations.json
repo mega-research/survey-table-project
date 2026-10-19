@@ -95,6 +95,7 @@
     "0131_question_mobile_item_card_block_columns",
     "0132_question_staged_rows_config",
     "0135_mail_fallback_campaigns",
-    "0136_contact_assignments"
+    "0136_contact_assignments",
+    "0137_mail_recipient_fallback_pending"
   ]
 }

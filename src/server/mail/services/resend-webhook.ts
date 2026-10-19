@@ -3,10 +3,11 @@ import 'server-only';
 
 import { type DbTransaction as Tx, db } from '@/db';
 import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
-import { requestRecipientFallbacks, triggersFallback } from './campaign-fallback';
+import { requestRecipientFallbacks } from './campaign-fallback';
 import {
   applyRecipientTransition,
   mapResendWebhookType,
+  triggersFallback,
 } from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 

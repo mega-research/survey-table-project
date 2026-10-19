@@ -8,14 +8,35 @@ import { encryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
 import { dispatchCampaignChunk } from '@/server/mail/services/campaign-dispatch';
 import {
+  listPendingFallbackRecipientIds,
   listStalledFallbackCampaigns,
   requestRecipientFallbacks,
+  retryPendingRecipientFallbacks,
 } from '@/server/mail/services/campaign-fallback';
-import { processResendEvent } from '@/server/mail/services/resend-webhook';
+import {
+  processResendEvent,
+  processResendWebhookEvent,
+} from '@/server/mail/services/resend-webhook';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 const { inngestSend } = vi.hoisted(() => ({ inngestSend: vi.fn(async () => undefined) }));
 vi.mock('@/lib/inngest/client', () => ({ inngest: { send: inngestSend } }));
+
+// 대체 발송 등록 트랜잭션 안에서 DB 오류가 나는 경우를 흉내 낸다 — 켜면 결과코드 조회가 한 번 실패한다.
+const { failNextResultCodeRead } = vi.hoisted(() => ({ failNextResultCodeRead: { on: false } }));
+vi.mock('@/server/read-models/result-code-statuses', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/read-models/result-code-statuses')>();
+  return {
+    ...actual,
+    getResultCodeStatuses: async (surveyId: string) => {
+      if (failNextResultCodeRead.on) {
+        failNextResultCodeRead.on = false;
+        throw new Error('connection terminated unexpectedly');
+      }
+      return actual.getResultCodeStatuses(surveyId);
+    },
+  };
+});
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -108,6 +129,14 @@ run('대체 발송 (mail fallback)', () => {
     return { campaignId, recipientId, messageId };
   }
 
+  async function pendingOf(recipientId: string): Promise<Date | null> {
+    const [row] = await db
+      .select({ at: mailRecipients.fallbackPendingAt })
+      .from(mailRecipients)
+      .where(eq(mailRecipients.id, recipientId));
+    return row?.at ?? null;
+  }
+
   async function fallbackOf(parentCampaignId: string) {
     const [campaign] = await db
       .select()
@@ -151,6 +180,8 @@ run('대체 발송 (mail fallback)', () => {
       data: { campaignId: fb!.campaign.id, surveyId },
     });
 
+    // 처리하면 처리 대기 표식이 지워진다
+    expect(await pendingOf(recipientId)).toBeNull();
     // 같은 수신자로 다시 불려도(webhook 재전송·재시도) 한 줄만
     await requestRecipientFallbacks([recipientId]);
     expect((await fallbackOf(campaignId))?.recipients).toHaveLength(1);
@@ -172,7 +203,7 @@ run('대체 발송 (mail fallback)', () => {
     const fb2Recipient = fb2!.recipients[0]!;
     await db
       .update(mailRecipients)
-      .set({ status: 'bounced' })
+      .set({ status: 'bounced', fallbackPendingAt: new Date() })
       .where(eq(mailRecipients.id, fb2Recipient.id));
     await requestRecipientFallbacks([fb2Recipient.id]);
     expect(await fallbackOf(fb2!.campaign.id)).toBeNull();
@@ -181,7 +212,10 @@ run('대체 발송 (mail fallback)', () => {
   it('쓴 열을 모르는 옛 수신자도 주소 값으로 쓴 열을 찾아 다음 순위로 보낸다', async () => {
     const contactId = await seedContact({ ceo: 'old@a.com', staff: 'next@a.com' });
     const { campaignId, recipientId } = await seedSentRecipient(contactId, 'old@a.com', null);
-    await db.update(mailRecipients).set({ status: 'failed' }).where(eq(mailRecipients.id, recipientId));
+    await db
+      .update(mailRecipients)
+      .set({ status: 'failed', fallbackPendingAt: new Date() })
+      .where(eq(mailRecipients.id, recipientId));
 
     await requestRecipientFallbacks([recipientId]);
 
@@ -207,6 +241,8 @@ run('대체 발송 (mail fallback)', () => {
 
     for (const r of [r1, r2, r3, r4]) expect(await fallbackOf(r.campaignId)).toBeNull();
     expect(inngestSend).not.toHaveBeenCalled();
+    // 보내지 않기로 판정한 것도 처리다 — 표식을 지워 정기 점검이 다시 부르지 않는다
+    for (const r of [r1, r2, r3, r4]) expect(await pendingOf(r.recipientId)).toBeNull();
   });
 
   it('스팸 신고·전달 완료는 대체 발송을 일으키지 않는다', async () => {
@@ -233,6 +269,7 @@ run('대체 발송 (mail fallback)', () => {
       emailSnapshot: 'lb@a.com',
       emailColumnKey: 'ceo',
       status: 'bounced',
+      fallbackPendingAt: new Date(),
     });
 
     await processResendEvent(first.messageId, 'email.bounced', new Date().toISOString());
@@ -298,5 +335,55 @@ run('대체 발송 (mail fallback)', () => {
     // 대기 수신자가 처리되면 대상이 아니다
     await db.update(mailRecipients).set({ status: 'sent' }).where(eq(mailRecipients.id, fb!.recipients[0]!.id));
     expect(await ids(later)).not.toContain(fb!.campaign.id);
+  });
+
+  it('대체 발송 등록이 DB 오류로 빠지면 같은 webhook 재전송은 중복 제거되지만 정기 점검이 복구한다', async () => {
+    const contactId = await seedContact({ ceo: 'x@a.com', staff: 'x2@a.com' });
+    const { campaignId, recipientId, messageId } = await seedSentRecipient(contactId, 'x@a.com', 'ceo');
+    const event = {
+      id: `evt-${recipientId}`,
+      type: 'email.bounced',
+      createdAt: new Date().toISOString(),
+      resendMessageId: messageId,
+    };
+
+    failNextResultCodeRead.on = true;
+    await expect(processResendWebhookEvent(event)).resolves.toBe('processed');
+    // 반송 전이는 커밋됐고 대체 발송은 등록되지 않았다 — 처리 대기 표식이 남는다
+    expect(await fallbackOf(campaignId)).toBeNull();
+    expect(await pendingOf(recipientId)).not.toBeNull();
+
+    // 같은 이벤트가 다시 와도 중복 제거로 아무것도 하지 않는다
+    await expect(processResendWebhookEvent(event)).resolves.toBe('deduped');
+    expect(await fallbackOf(campaignId)).toBeNull();
+
+    // 즉시 경로와 겹치지 않게 2분이 지나야 정기 점검 대상이다
+    expect(await listPendingFallbackRecipientIds(new Date())).not.toContain(recipientId);
+    const later = new Date(Date.now() + 3 * 60_000);
+    expect(await listPendingFallbackRecipientIds(later)).toContain(recipientId);
+
+    await retryPendingRecipientFallbacks(later);
+    const fb = await fallbackOf(campaignId);
+    expect(fb?.recipients).toEqual([
+      expect.objectContaining({ emailSnapshot: 'x2@a.com', sourceRecipientId: recipientId, status: 'queued' }),
+    ]);
+    expect(inngestSend).toHaveBeenCalledWith({
+      name: 'mail/campaign.queued',
+      data: { campaignId: fb!.campaign.id, surveyId },
+    });
+    expect(await pendingOf(recipientId)).toBeNull();
+    expect(await listPendingFallbackRecipientIds(later)).not.toContain(recipientId);
+  });
+
+  it('처리 대기 표식이 3일보다 오래되면 늦은 대체 발송이 되므로 정기 점검이 건너뛴다', async () => {
+    const contactId = await seedContact({ ceo: 'o@a.com', staff: 'o2@a.com' });
+    const { recipientId } = await seedSentRecipient(contactId, 'o@a.com', 'ceo');
+    const markedAt = new Date(Date.now() - 4 * 24 * 60 * 60_000);
+    await db
+      .update(mailRecipients)
+      .set({ status: 'bounced', fallbackPendingAt: markedAt })
+      .where(eq(mailRecipients.id, recipientId));
+
+    expect(await listPendingFallbackRecipientIds(new Date())).not.toContain(recipientId);
   });
 });
