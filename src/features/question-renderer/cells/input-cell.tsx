@@ -8,7 +8,7 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
-import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import {

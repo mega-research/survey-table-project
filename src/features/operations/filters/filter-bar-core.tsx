@@ -183,6 +183,7 @@ export function FilterBarCore({
               onRemove={() => removeAt(i)}
               index={i - 1}
               first={i === 0}
+              alignTop
             />
           </div>
         ))}

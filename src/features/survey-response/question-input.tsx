@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
-import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';

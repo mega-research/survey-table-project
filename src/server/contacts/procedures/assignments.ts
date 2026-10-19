@@ -4,14 +4,18 @@ import { loadOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyAccess, authed } from '@/server/orpc';
 
 import {
+  ApplyAssignmentInput,
+  AssignmentChangeSummarySchema,
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
+  PreviewAssignmentInput,
   ListContactAssignmentsInput,
   RemoveContactAssignmentInput,
   RenameContactAssignmentInput,
   ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
+import * as applySvc from '../services/contact-assignment-apply';
 import * as svc from '../services/contact-assignments';
 
 /**
@@ -93,6 +97,25 @@ const remove = authed
     return svc.removeAssignment(input);
   });
 
+/** 교체 적용 미리보기 — 조건에 맞는 인원과 교체하면 바뀌는 인원 (아무것도 쓰지 않는다). */
+const preview = authed
+  .input(PreviewAssignmentInput)
+  .output(AssignmentChangeSummarySchema)
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    const scope = await loadOperationsDataScope(input.surveyId);
+    return applySvc.previewAssignment(input, scope);
+  });
+
+/** 교체 적용 — 이 컨택원의 배정을 조건 결과와 같게. 조건은 적용 시점에 다시 평가한다. */
+const apply = authed
+  .input(ApplyAssignmentInput)
+  .output(AssignmentChangeSummarySchema)
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return applySvc.applyAssignment(input);
+  });
+
 export const assignments = {
   list,
   create,
@@ -100,4 +123,6 @@ export const assignments = {
   reorder,
   remove,
   setTarget,
+  preview,
+  apply,
 };

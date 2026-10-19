@@ -56,3 +56,45 @@ export const RemoveContactAssignmentInput = z.object({
   id: z.string().uuid(),
 });
 export type RemoveContactAssignmentInput = z.infer<typeof RemoveContactAssignmentInput>;
+
+/** 조건 줄 하나 — 조사 대상 필터 URL 의 col/q/op 와 같은 모양 (contacts 계약 ContactAssignmentClause). */
+export const ContactAssignmentClauseSchema = z.object({
+  source: z.string().min(1).max(300),
+  value: z.string().trim().min(1).max(200_000),
+  op: z.enum(['', 'AND', 'OR']),
+});
+
+/** 교체 적용·미리보기의 조건 — 줄 0개는 거부한다(전원이 빠지는 사고 방지 — 비우려면 지우기). */
+export const AssignmentClausesSchema = z
+  .array(ContactAssignmentClauseSchema)
+  .min(1, '조건을 하나 이상 넣어 주세요.')
+  .max(50);
+
+export const PreviewAssignmentInput = z.object({
+  surveyId: z.string().uuid(),
+  assignmentId: z.string().uuid(),
+  clauses: AssignmentClausesSchema,
+});
+export type PreviewAssignmentInput = z.infer<typeof PreviewAssignmentInput>;
+
+export const ApplyAssignmentInput = z.object({
+  surveyId: z.string().uuid(),
+  assignmentId: z.string().uuid(),
+  clauses: AssignmentClausesSchema,
+});
+export type ApplyAssignmentInput = z.infer<typeof ApplyAssignmentInput>;
+
+/** 교체 적용 결과 집계 — 미리보기와 적용 결과가 같은 모양이다. */
+export const AssignmentChangeSummarySchema = z.object({
+  /** 조건에 맞는 대상 = 적용 뒤 이 컨택원의 배정 */
+  matched: z.number().int(),
+  /** 적용 전 이 컨택원의 배정 */
+  current: z.number().int(),
+  /** 배정 없음에서 새로 들어오는 대상 */
+  incoming: z.number().int(),
+  /** 다른 컨택원에서 옮겨 오는 대상 — 컨택원별 */
+  fromOthers: z.array(z.object({ id: z.string(), name: z.string(), count: z.number().int() })),
+  /** 조건 밖이라 배정 없음이 되는 대상 */
+  leaving: z.number().int(),
+});
+export type AssignmentChangeSummary = z.infer<typeof AssignmentChangeSummarySchema>;

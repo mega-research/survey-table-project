@@ -1,9 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 
 import { Textarea } from '@/components/ui/textarea';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { describeIdListValue, normalizePastedIdList } from '@/lib/operations/id-list-paste';
 import { parityLabel, SINGLE_COLUMN_ID_LIST_MAX } from '@/lib/operations/range-list';
@@ -18,6 +19,11 @@ interface Props {
   inputId?: string;
   /** 있으면 명단 열 홀짝 조건에서 숫자가 아닌 값 인원을 서버에 물어 상태줄에 보인다. */
   surveyId?: string;
+  /**
+   * 입력한 만큼 칸이 끝없이 늘어난다 (컨택원 수정 화면). 기본은 6줄 상한의 검색바 모양.
+   * 켜면 Enter 는 검색 제출이 아니라 줄바꿈이다 — 그 화면은 다른 폼 안에 있다.
+   */
+  autoGrow?: boolean;
 }
 
 const INVALID_PREVIEW = 5;
@@ -29,8 +35,18 @@ const fmt = (n: number) => n.toLocaleString('ko-KR');
  * - Enter 는 검색 제출, Shift+Enter 는 줄바꿈 (textarea 라 폼 제출을 직접 건다)
  * - 인식 개수·중복 제거·숫자 아닌 값·상한 초과를 검색 전에 알린다 — 조용히 0건이 되는 사고 방지
  */
-export function IdListInput({ source, value, onChange, placeholder, inputId, surveyId }: Props) {
+export function IdListInput({
+  source,
+  value,
+  onChange,
+  placeholder,
+  inputId,
+  surveyId,
+  autoGrow = false,
+}: Props) {
   const statusId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useAutoGrowTextarea(textareaRef, value, autoGrow);
   const status = describeIdListValue(source, value);
   const attrsKey = source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)
     ? source.slice(FILTER_SOURCE.ATTRS_PREFIX.length)
@@ -49,6 +65,7 @@ export function IdListInput({ source, value, onChange, placeholder, inputId, sur
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (autoGrow) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       e.currentTarget.form?.requestSubmit();
@@ -110,17 +127,22 @@ export function IdListInput({ source, value, onChange, placeholder, inputId, sur
   return (
     <div className="flex flex-col gap-1">
       <Textarea
+        ref={textareaRef}
         id={inputId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        rows={rows}
+        rows={autoGrow ? 1 : rows}
         aria-describedby={statusLine ? statusId : undefined}
         className={cn(
           'min-h-10 py-2 text-sm leading-6 placeholder:text-gray-500',
-          wide ? 'w-[420px] resize-y' : 'h-10 w-[260px] overflow-hidden whitespace-nowrap',
+          autoGrow
+            ? 'w-full resize-none overflow-hidden font-mono'
+            : wide
+              ? 'w-[420px] resize-y'
+              : 'h-10 w-[260px] overflow-hidden whitespace-nowrap',
         )}
       />
       {statusLine}

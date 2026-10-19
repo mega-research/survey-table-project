@@ -13,6 +13,7 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 
+import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import type {
   ContactAssignmentListResult,
   ContactAssignmentStats,
@@ -341,3 +342,35 @@ export async function removeAssignment(
   });
 }
 
+
+/** 컨택원 수정 화면 — 이 세션 파티션의 컨택원 하나 (마지막 조건 포함). 없으면 null. */
+export async function getAssignmentForEdit(
+  surveyId: string,
+  scope: OperationsDataScope,
+  id: string,
+): Promise<{
+  id: string;
+  name: string;
+  lastClauses: ContactAssignmentClause[] | null;
+  lastAppliedAt: Date | null;
+} | null> {
+  const [row] = await db
+    .select({
+      id: contactAssignments.id,
+      name: contactAssignments.name,
+      lastClauses: contactAssignments.lastClauses,
+      lastAppliedAt: contactAssignments.lastAppliedAt,
+    })
+    .from(contactAssignments)
+    .where(
+      and(
+        eq(contactAssignments.id, id),
+        eq(contactAssignments.surveyId, surveyId),
+        eq(contactAssignments.isTest, testFlagForScope(scope)),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  // JSONB 드리프트 보정 — 배열이 아닌 저장분은 조건 없음으로 읽는다.
+  return { ...row, lastClauses: Array.isArray(row.lastClauses) ? row.lastClauses : null };
+}

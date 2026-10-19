@@ -32,6 +32,8 @@ interface Props {
   inputId?: string;
   /** ID 목록 입력의 서버 조회(명단 열 홀짝 비숫자 인원)용. */
   surveyId?: string;
+  /** ID 목록 입력칸이 입력한 만큼 끝없이 늘어난다 (컨택원 수정 화면). */
+  idListAutoGrow?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function ValueWidget({
   assignmentOptions = [],
   inputId,
   surveyId,
+  idListAutoGrow = false,
 }: Props) {
   if (source === FILTER_SOURCE.CONTACT_OWNER) {
     return (
@@ -133,6 +136,7 @@ export function ValueWidget({
         placeholder={placeholderFor(source)}
         {...(inputId !== undefined ? { inputId } : {})}
         {...(surveyId !== undefined ? { surveyId } : {})}
+        autoGrow={idListAutoGrow}
       />
     );
   }

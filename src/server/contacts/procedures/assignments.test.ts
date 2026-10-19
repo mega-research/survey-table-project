@@ -77,9 +77,35 @@ describe('contacts.assignments procedures', () => {
         assignmentId: null,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    for (const call of [
+      () => client.assignments.rename({ surveyId: SURVEY_ID, id: TARGET_ID, name: 'x' }),
+      () => client.assignments.reorder({ surveyId: SURVEY_ID, ids: [TARGET_ID] }),
+      () => client.assignments.remove({ surveyId: SURVEY_ID, id: TARGET_ID }),
+      () =>
+        client.assignments.preview({
+          surveyId: SURVEY_ID,
+          assignmentId: TARGET_ID,
+          clauses: [{ source: 'system.resid', value: '1', op: '' }],
+        }),
+      () =>
+        client.assignments.apply({
+          surveyId: SURVEY_ID,
+          assignmentId: TARGET_ID,
+          clauses: [{ source: 'system.resid', value: '1', op: '' }],
+        }),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    }
     expect(svc.listAssignmentOptions).not.toHaveBeenCalled();
     expect(svc.createAssignment).not.toHaveBeenCalled();
     expect(svc.setTargetAssignment).not.toHaveBeenCalled();
+  });
+
+  it('교체 적용은 조건 줄 0개를 거부한다', async () => {
+    const client = createRouterClient({ assignments }, { context: ctx('admin-1') });
+    await expect(
+      client.assignments.apply({ surveyId: SURVEY_ID, assignmentId: TARGET_ID, clauses: [] }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('setTarget 은 배정 없음(null)도 그대로 넘긴다', async () => {

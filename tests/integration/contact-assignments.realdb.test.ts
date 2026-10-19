@@ -24,6 +24,10 @@ import {
   reorderAssignments,
   setTargetAssignment,
 } from '@/server/contacts/services/contact-assignments';
+import {
+  applyAssignment,
+  previewAssignment,
+} from '@/server/contacts/services/contact-assignment-apply';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
   parseClausesFromUrl,
@@ -371,5 +375,143 @@ run('컨택원 배정 (real local DB)', () => {
       'A2',
       'B',
     ]);
+  });
+
+  describe('교체 적용', () => {
+    it('조건 결과 = 이 컨택원 배정 — 다른 컨택원에서 옮겨 오고, 조건 밖은 배정 없음', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 10);
+      const tenth = await createAssignment({ surveyId, name: '10차' });
+      const eleventh = await createAssignment({ surveyId, name: '11차' });
+      // 10차: 1, 9 / 11차: 2
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[8]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: eleventh.id });
+
+      // 1-6 중 짝수 → 2, 4, 6
+      const clauses = [
+        { source: 'system.resid', value: '1-6', op: '' as const },
+        { source: 'system.resid', value: '짝수', op: 'AND' as const },
+      ];
+      const preview = await previewAssignment(
+        { surveyId, assignmentId: tenth.id, clauses },
+        'real',
+      );
+      expect(preview).toEqual({
+        matched: 3,
+        current: 2,
+        incoming: 2,
+        fromOthers: [{ id: eleventh.id, name: '11차', count: 1 }],
+        leaving: 2,
+      });
+
+      const applied = await applyAssignment({ surveyId, assignmentId: tenth.id, clauses });
+      expect(applied).toEqual(preview);
+
+      const owners = await Promise.all(ids.map((id) => assignmentOf(id)));
+      expect(owners).toEqual([
+        null, // 1 — 조건 밖이라 풀림
+        tenth.id, // 2 — 11차에서 옮겨 옴
+        null,
+        tenth.id, // 4
+        null,
+        tenth.id, // 6
+        null,
+        null,
+        null, // 9 — 조건 밖이라 풀림
+        null,
+      ]);
+
+      const [saved] = await db
+        .select({ c: contactAssignments.lastClauses, at: contactAssignments.lastAppliedAt })
+        .from(contactAssignments)
+        .where(eq(contactAssignments.id, tenth.id));
+      expect(saved?.c).toEqual(clauses);
+      expect(saved?.at).toBeInstanceOf(Date);
+    });
+
+    it('미리보기 뒤 명단이 바뀌면 적용 시점 결과로 반영된다 — 결과 0명도 적용된다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 3);
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: owner.id });
+      const clauses = [{ source: 'attrs.기업명', value: '기업1', op: '' as const }];
+
+      const preview = await previewAssignment({ surveyId, assignmentId: owner.id, clauses }, 'real');
+      expect(preview.matched).toBe(1);
+      // 미리보기 뒤 대상 1의 기업명이 바뀌었다 → 적용 시점에는 0명
+      await db
+        .update(contactTargets)
+        .set({ attrs: { 기업명: '바뀐기업' } })
+        .where(eq(contactTargets.id, ids[0]!));
+      const applied = await applyAssignment({ surveyId, assignmentId: owner.id, clauses });
+      expect(applied).toMatchObject({ matched: 0, current: 1, leaving: 1 });
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, null]);
+    });
+
+    it('해석이 안 되는 조건·모르는 저장 목록은 거부한다 — 조건이 넓어지지 않는다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 2);
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: owner.id });
+
+      await expect(
+        applyAssignment({
+          surveyId,
+          assignmentId: owner.id,
+          clauses: [{ source: 'attrs.없는열', value: 'x', op: '' }],
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(
+        applyAssignment({
+          surveyId,
+          assignmentId: owner.id,
+          clauses: [
+            { source: 'system.resid', value: `list:${randomUUID()}:3000`, op: '' },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      expect(await assignmentOf(ids[0]!)).toBe(owner.id);
+    });
+
+    it('테스트 파티션 컨택원은 실데이터 세션에서 적용되지 않고 대상도 파티션 안에서만 고른다', async () => {
+      const surveyId = await seedSurvey({ testMode: true });
+      const [realT] = await seedTargets(surveyId, 1, false);
+      const [testT] = await seedTargets(surveyId, 1, true);
+      viewTest(true);
+      const testOwner = await createAssignment({ surveyId, name: '테스트 10차' });
+      const clauses = [{ source: 'system.resid', value: '1', op: '' as const }];
+
+      viewTest(false);
+      await expect(
+        applyAssignment({ surveyId, assignmentId: testOwner.id, clauses }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      viewTest(true);
+      const applied = await applyAssignment({ surveyId, assignmentId: testOwner.id, clauses });
+      expect(applied.matched).toBe(1);
+      expect(await assignmentOf(testT!)).toBe(testOwner.id);
+      expect(await assignmentOf(realT!)).toBeNull();
+    });
+
+    it('같은 컨택원 동시 적용은 직렬화되어 한쪽 결과로 깔끔히 정리된다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 20);
+      const owner = await createAssignment({ surveyId, name: '10차' });
+      const odd = [{ source: 'system.resid', value: '홀수', op: '' as const }];
+      const even = [{ source: 'system.resid', value: '짝수', op: '' as const }];
+
+      await Promise.all([
+        applyAssignment({ surveyId, assignmentId: owner.id, clauses: odd }),
+        applyAssignment({ surveyId, assignmentId: owner.id, clauses: even }),
+      ]);
+
+      const owners = await Promise.all(ids.map((id) => assignmentOf(id)));
+      const assigned = owners.map((o, i) => (o === owner.id ? i + 1 : null)).filter((n) => n != null);
+      const allOdd = assigned.every((n) => n! % 2 === 1);
+      const allEven = assigned.every((n) => n! % 2 === 0);
+      expect(assigned).toHaveLength(10);
+      expect(allOdd || allEven).toBe(true);
+    });
   });
 });

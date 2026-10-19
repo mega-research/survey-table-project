@@ -33,6 +33,8 @@ interface Props {
   index: number;
   /** stack 첫 줄 — AND/OR 대신 「조건」 라벨을 그린다 (결합 연산자가 없는 자리). */
   first?: boolean;
+  /** 값 칸이 여러 줄로 자라는 화면 — 열 선택을 줄 맨 위에 붙인다. */
+  alignTop?: boolean;
 }
 
 export function ClauseRow({
@@ -44,15 +46,16 @@ export function ClauseRow({
   onRemove,
   index,
   first = false,
+  alignTop = false,
 }: Props) {
   return (
     <div
-      className="mb-2 flex items-center gap-2"
+      className={`mb-2 flex gap-2 ${alignTop ? 'items-start' : 'items-center'}`}
       role="group"
       aria-label={`조건 ${index + 2}`}
     >
       {first ? (
-        <span className="w-[88px] shrink-0 px-3 text-sm text-slate-500">조건</span>
+        <span className="w-[88px] shrink-0 px-3 text-sm leading-10 text-slate-500">조건</span>
       ) : (
         <Select
           value={clause.op}
