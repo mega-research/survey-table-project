@@ -10,7 +10,7 @@ import {
 
 /**
  * 필터 입력칸의 ID 목록 붙여넣기 — 클라이언트(위젯·필터바)와 테스트가 공유하는 순수 모듈.
- * 서버 파서(contacts-filters.server)와 같은 range-list 파서를 쓰므로 화면의 판정과
+ * 서버 파서(read-models/contacts-filter-parse)와 같은 range-list 파서를 쓰므로 화면의 판정과
  * 실제 검색 결과가 어긋나지 않는다.
  */
 

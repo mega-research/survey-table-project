@@ -19,18 +19,14 @@ import {
   normalizeSortKey,
 } from '@/lib/operations/contacts-format';
 import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
 import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-  listContactsForSurvey,
-} from '@/server/read-models/contacts';
-import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
-import { parseContactListClauses } from '@/server/read-models/contacts-filters';
+  contactFilterInputFromUrl,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { withoutContactOwnerColumn } from '@/lib/operations/contacts-format';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -61,16 +57,13 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   const parsedPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
 
-  // 스킴 + resultCodes 병렬 로드
-  const [loadedScheme, resultCodes, isGuest] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    isGuestViewer(),
-  ]);
-  // 컨택원은 내부 실사 운영 정보 — 게스트 목록에는 열·값·필터 후보·정렬 모두 싣지 않는다.
-  const scheme = isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme;
-  const assignmentOptions = isGuest ? [] : await listAssignmentOptions(surveyId, scope);
-  const assignmentIds = new Set(assignmentOptions.map((o) => o.id));
+  // 스킴·결과코드·컨택원·필터 후보 — 게스트면 컨택원 열·후보·선택지가 빠져 있다.
+  const isGuest = await isGuestViewer();
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isGuest,
+    surface: 'contacts',
+  });
+  const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 
   // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
   const visibleAttrsKeys = new Set(
@@ -83,22 +76,16 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   const requestedSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
   const safeSort = isGuest && requestedSort === 'owner' ? 'resid' : requestedSort;
 
-  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
-
-  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
-  const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const { builderClauses, clauses } = parseContactListClauses(
-    sp,
-    columnCandidates,
-    resultCodes,
-    { idLists, assignmentIds },
-  );
+  const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {
+    mode: 'read',
+  });
+  const { builderClauses, clauses } = filter;
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
     scope,
     pageSize: CONTACTS_PAGE_SIZE,
-    clauses,
+    filter,
     page: parsedPage,
     sort: safeSort,
     dir,

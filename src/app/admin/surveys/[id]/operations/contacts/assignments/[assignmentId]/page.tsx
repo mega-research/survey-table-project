@@ -6,16 +6,9 @@ import { AssignmentEditor } from '@/features/operations/contacts/assignments/ass
 import { assignmentsHref } from '@/features/operations/contacts/assignments/assignment-hrefs';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import {
-  getAssignmentForEdit,
-  listAssignmentOptions,
-} from '@/server/contacts/services/contact-assignments';
+import { getAssignmentForEdit } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
-import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-} from '@/server/read-models/contacts';
+import { loadContactFilterContext } from '@/server/read-models/contact-filter-resolution';
 
 export const metadata: Metadata = {
   title: '현황 - 컨택원 수정',
@@ -34,16 +27,16 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
   if (await isGuestViewer()) notFound();
   const scope = await getOperationsDataScope(surveyId);
 
-  const [assignment, scheme, resultCodes, assignmentOptions] = await Promise.all([
+  // 교체 적용이 조건을 해석하는 것과 같은 컨텍스트 — 후보·결과코드·컨택원이 서버 해석과 같다.
+  const [assignment, filterCtx] = await Promise.all([
     getAssignmentForEdit(surveyId, scope, assignmentId),
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    listAssignmentOptions(surveyId, scope),
+    loadContactFilterContext(surveyId, scope, { isGuest: false, surface: 'contacts' }),
   ]);
   if (!assignment) notFound();
+  const { scheme, resultCodes, assignmentOptions } = filterCtx;
 
   // 「전체」 부분검색은 배정 조건으로 쓰지 않는다 — 어느 열에서 걸렸는지 설명할 수 없다.
-  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: true }).filter(
+  const columnCandidates = filterCtx.columnCandidates.filter(
     (c) => c.source !== FILTER_SOURCE.ALL,
   );
 

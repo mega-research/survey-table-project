@@ -70,7 +70,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import type { FilterClause } from '@/lib/operations/filter-shared';
+import type { ResolvedContactFilter } from './contact-filter-resolution';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
 // 기존 호출부(RSC·서비스)의 import 경로를 유지한다.
@@ -85,7 +85,8 @@ export type {
 export interface ListContactsArgs {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   page: number;
   sort: ContactsSortKey;
   dir: ContactsSortDir;
@@ -154,7 +155,7 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *
  * 핵심:
  * - contact_targets 베이스 + 최신 contact_attempts (correlated subquery) 조인
- * - FilterClause[] 기반 다중 조건 필터 (buildContactsFilterSql)
+ * - 조사 대상 필터 해석 결과의 다중 조건 필터 (buildContactsFilterSql)
  * - page 클램프 (profiles.server.ts 패턴)
  * - PII 마스킹 (email/biz)
  *
@@ -162,11 +163,11 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, clauses, sort, dir, includeAssignment = true } = args;
+  const { surveyId, scope, page, pageSize, filter, sort, dir, includeAssignment = true } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
-  whereParts.push(buildContactsFilterSql(clauses));
+  whereParts.push(buildContactsFilterSql(filter.clauses));
 
   const whereClause = and(...whereParts)!;
 

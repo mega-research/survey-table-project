@@ -36,7 +36,6 @@ import { listAssignmentFacets } from '@/server/contacts/services/contact-assignm
 import {
   DuplicateAssignmentNameError,
   createAssignment,
-  listAssignmentOptions,
   listAssignmentsWithStats,
   removeAssignment,
   renameAssignment,
@@ -52,12 +51,16 @@ import {
 } from '@/server/mail/services/campaigns-read';
 import { getProgressRows, getProgressTotals } from '@/server/operations/services/report-progress';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace';
-import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import {
-  parseClausesFromUrl,
-  parseHeaderFiltersFromUrl,
-} from '@/server/read-models/contacts-filters';
+  type ContactFilterInput,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -170,7 +173,7 @@ run('컨택원 배정 (real local DB)', () => {
     const listed = await listContactsForSurvey({
       surveyId,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       page: 1,
       pageSize: 10,
       sort: 'resid',
@@ -182,7 +185,7 @@ run('컨택원 배정 (real local DB)', () => {
     const guestListed = await listContactsForSurvey({
       surveyId,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       page: 1,
       pageSize: 10,
       sort: 'resid',
@@ -260,18 +263,16 @@ run('컨택원 배정 (real local DB)', () => {
     await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: eleventh.id });
     // t4 는 배정 없음
 
-    const [row] = await db
-      .select({ scheme: surveys.contactColumns })
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-    const candidates = buildColumnCandidates(row!.scheme, { includeContactOwner: true });
-    const assignmentIds = new Set([tenth.id, eleventh.id]);
-    const residsOf = async (clauses: Parameters<typeof listContactsForSurvey>[0]['clauses']) =>
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+      isGuest: false,
+      surface: 'contacts',
+    });
+    const residsOf = async (input: ContactFilterInput) =>
       (
         await listContactsForSurvey({
           surveyId,
           scope: 'real',
-          clauses,
+          filter: await resolveContactFilter(filterCtx, input, { mode: 'read' }),
           page: 1,
           pageSize: 50,
           sort: 'resid',
@@ -281,24 +282,21 @@ run('컨택원 배정 (real local DB)', () => {
 
     // 검색바: 11차
     expect(
-      await residsOf(
-        parseClausesFromUrl(['system.contact_owner'], [eleventh.id], [''], candidates, [], {
-          assignmentIds,
-        }),
-      ),
+      await residsOf({
+        clauses: [{ source: 'system.contact_owner', value: eleventh.id, op: null }],
+      }),
     ).toEqual([1, 3]);
     // 헤더: 10차 + 배정 없음 (= 「11차만 빼고 나머지」)
     expect(
-      await residsOf(
-        parseHeaderFiltersFromUrl(
-          ['system.contact_owner'],
-          ['in'],
-          [[tenth.id, FILTER_NONE_VALUE].join(HEADER_FILTER_VALUE_SEPARATOR)],
-          candidates,
-          [],
-          { assignmentIds },
-        ),
-      ),
+      await residsOf({
+        headerClauses: [
+          {
+            source: 'system.contact_owner',
+            mode: 'in',
+            hv: [tenth.id, FILTER_NONE_VALUE].join(HEADER_FILTER_VALUE_SEPARATOR),
+          },
+        ],
+      }),
     ).toEqual([2, 4]);
 
     // 정렬: 컨택원 순서(10차 → 11차) → 배정 없음 끝 — 내림차순이어도 배정 없음은 끝
@@ -307,7 +305,7 @@ run('컨택원 배정 (real local DB)', () => {
         await listContactsForSurvey({
           surveyId,
           scope: 'real',
-          clauses: [],
+          filter: resolvedFilterForTest(),
           page: 1,
           pageSize: 50,
           sort: 'owner',
@@ -355,23 +353,23 @@ run('컨택원 배정 (real local DB)', () => {
     expect(data.total).toBe(5);
 
     // 같은 숫자를 조사 대상 목록 web 필터로도 얻는다.
-    const [row] = await db
-      .select({ scheme: surveys.contactColumns })
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-    const candidates = buildColumnCandidates(row!.scheme, { includeContactOwner: true });
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+      isGuest: false,
+      surface: 'contacts',
+    });
     const completedOfOwner = await listContactsForSurvey({
       surveyId,
       scope: 'real',
-      clauses: [
-        ...parseClausesFromUrl(['system.contact_owner'], [owner.id], [''], candidates, [], {
-          assignmentIds: new Set([owner.id]),
-        }),
-        ...parseClausesFromUrl(['system.web'], ['completed'], ['AND'], candidates, []).map((c) => ({
-          ...c,
-          op: 'AND' as const,
-        })),
-      ],
+      filter: await resolveContactFilter(
+        filterCtx,
+        {
+          clauses: [
+            { source: 'system.contact_owner', value: owner.id, op: null },
+            { source: 'system.web', value: 'completed', op: 'AND' },
+          ],
+        },
+        { mode: 'read' },
+      ),
       page: 1,
       pageSize: 50,
       sort: 'resid',
@@ -981,7 +979,7 @@ run('컨택원 배정 (real local DB)', () => {
       const preview = await previewCampaignCandidates({
         surveyId,
         scope: 'real',
-        clauses: [],
+        filter: resolvedFilterForTest(),
         unrespondedOnly: false,
         includeAssignment: true,
       });
@@ -999,7 +997,7 @@ run('컨택원 배정 (real local DB)', () => {
       const hidden = await previewCampaignCandidates({
         surveyId,
         scope: 'real',
-        clauses: [],
+        filter: resolvedFilterForTest(),
         unrespondedOnly: false,
       });
       expect(hidden.rows.map((r) => r.assignmentName)).toEqual([null]);
@@ -1020,7 +1018,30 @@ run('컨택원 배정 (real local DB)', () => {
           },
           false,
         ),
-      ).rejects.toThrow('지금 적용할 수 없는 조건');
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: expect.stringContaining('지금 적용할 수 없습니다'),
+      });
+    });
+
+    it('전체 선택이 한 단체 메일 상한(10,000명)을 넘으면 사유를 담아 거부한다', async () => {
+      const surveyId = await seedSurvey();
+      // 암호화를 거치지 않는 더미 이메일 행 — 후보 판정은 email 행의 존재만 본다.
+      await db.execute(sql`
+        WITH t AS (
+          INSERT INTO contact_targets (survey_id, resid, invite_code)
+          SELECT ${surveyId}, g, 'cap' || ${surveyId.slice(0, 8)} || g
+          FROM generate_series(1, 10001) AS g
+          RETURNING id
+        )
+        INSERT INTO contact_pii (contact_target_id, field_type, column_key, cipher, blind_index)
+        SELECT id, 'email', 'email', 'x', 'x' FROM t
+      `);
+
+      await expect(fetchCandidateIds({ surveyId, filter: {} }, false)).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: expect.stringContaining('최대 10,000명'),
+      });
     });
 
     it('게스트에게는 컨택원 조건을 해석하지 않고 거부한다 — 전체로 넓히지 않는다', async () => {
@@ -1037,7 +1058,10 @@ run('컨택원 배정 (real local DB)', () => {
           },
           true,
         ),
-      ).rejects.toThrow('지금 적용할 수 없는 조건');
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: expect.stringContaining('지금 적용할 수 없습니다'),
+      });
     });
   });
 });

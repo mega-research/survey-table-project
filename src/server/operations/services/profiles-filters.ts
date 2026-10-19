@@ -8,7 +8,7 @@ import {
   parseHeaderFiltersFromUrl,
   splitHeaderValues,
   type ParseExtraHooks,
-} from '@/server/read-models/contacts-filters';
+} from '@/server/read-models/contacts-filter-parse';
 import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql.server';
 import {
   escapeLikePattern,
@@ -29,7 +29,7 @@ export const PROFILES_EXTRA_CANDIDATES: ColumnCandidate[] = [
  * 다중 조건 필터 (조사 대상 절 파이프라인 재사용)
  *
  * 검색바(col/q/op)·헤더 깔때기(hcol/hm/hv) URL 어휘와 절 결합 규칙(AND/OR,
- * 괄호 그룹화)은 contacts-filters.server / contacts-filter-sql 을 그대로 쓰고,
+ * 괄호 그룹화)은 contacts-filter-parse / contacts-filter-sql 을 그대로 쓰고,
  * 응답 내역 전용 source(idx/browser/status)만 훅으로 끼운다.
  * ==========================================================================*/
 

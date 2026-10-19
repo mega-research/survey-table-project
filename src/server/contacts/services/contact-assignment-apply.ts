@@ -5,16 +5,13 @@ import 'server-only';
 import { type DbOrTx, db } from '@/db';
 import { contactAssignments, contactTargets } from '@/db/schema';
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
-import { type FilterClause, parseIdListToken } from '@/lib/operations/filter-shared';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
-import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
 import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-  listContactsForSurvey,
-} from '@/server/read-models/contacts';
-import { parseClausesFromUrl } from '@/server/read-models/contacts-filters';
+  type ResolvedContactFilter,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
@@ -24,7 +21,7 @@ import type {
   AssignmentMatchesInput,
   PreviewAssignmentInput,
 } from '../domain/contact-assignment';
-import { listAssignmentOptions, retryAssignmentWrite } from './contact-assignments';
+import { retryAssignmentWrite } from './contact-assignments';
 
 /**
  * 교체 적용 — 컨택원 하나의 배정을 조건 결과와 똑같이 만든다 (CONTEXT.md 「교체 적용」).
@@ -34,51 +31,23 @@ import { listAssignmentOptions, retryAssignmentWrite } from './contact-assignmen
  */
 
 /**
- * 조건 줄 → 필터 절. 조사 대상 목록 URL 파서와 같은 검증을 배열 입력으로 쓴다.
- *
- * 목록 검색은 해석이 안 되는 절을 조용히 버리지만, 교체 적용에서 절 하나가 빠지면 조건이
- * 넓어져 남의 배정을 끌어오거나 빠질 대상이 남는다. 그래서 하나라도 해석이 안 되면 거부한다.
- * 저장 ID 목록 토큰도 실제 목록을 읽지 못하면 거부한다(0건으로 접혀 전원이 빠지는 사고).
+ * 조건 줄 → 해석 결과(write). 조사 대상 목록과 같은 해석이되, 목록 검색은 해석이 안 되는 조건을
+ * 조용히 버리지만 교체 적용에서 조건 하나가 빠지면 조건이 넓어져 남의 배정을 끌어오거나 빠질
+ * 대상이 남는다 — write 해석은 그런 조건(읽지 못한 ID 목록 포함)이 하나라도 있으면 거부한다.
+ * 교체 적용은 게스트가 없다(authed). 컨택원은 호출자의 트랜잭션으로 읽는다.
  */
-export async function resolveAssignmentClauses(
+async function resolveAssignmentFilter(
   surveyId: string,
   scope: OperationsDataScope,
   clauses: ContactAssignmentClause[],
   executor: DbOrTx = db,
-): Promise<FilterClause[]> {
-  const values = clauses.map((c) => c.value);
-  const [scheme, resultCodes, assignments, idLists] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    listAssignmentOptions(surveyId, scope, executor),
-    loadIdListsForValues(surveyId, values),
-  ]);
-  for (const v of values) {
-    const token = parseIdListToken(v);
-    if (token && !idLists.has(token.id)) {
-      throw new ORPCError('BAD_REQUEST', {
-        message: '저장된 ID 목록을 찾을 수 없습니다. 목록을 다시 붙여넣어 주세요.',
-      });
-    }
-  }
-  const candidates = buildColumnCandidates(scheme, { includeContactOwner: true });
-  const parsed = clauses.map(
-    (c) =>
-      parseClausesFromUrl([c.source], [c.value], [c.op], candidates, resultCodes, {
-        idLists,
-        assignmentIds: new Set(assignments.map((a) => a.id)),
-      })[0],
-  );
-  const failed = parsed.findIndex((p) => p === undefined);
-  if (failed >= 0) {
-    throw new ORPCError('BAD_REQUEST', {
-      message: `조건 ${failed + 1}을(를) 해석할 수 없습니다. 열과 값을 확인해 주세요.`,
-    });
-  }
-  return parsed.map((p, i) => ({
-    condition: p!.condition,
-    op: i === 0 ? null : clauses[i]!.op === 'OR' ? 'OR' : 'AND',
-  }));
+): Promise<ResolvedContactFilter<'write'>> {
+  const ctx = await loadContactFilterContext(surveyId, scope, {
+    isGuest: false,
+    surface: 'contacts',
+    executor,
+  });
+  return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
 }
 
 /**
@@ -128,8 +97,8 @@ async function summarize(
 }
 
 /** NULL 없는 불리언 — 조건 밖을 셀 때·풀 때 3값 논리로 빠지는 행이 없게. */
-function matchOf(clauses: FilterClause[]): SQL {
-  return sql`COALESCE((${buildContactsFilterSql(clauses)}), FALSE)`;
+function matchOf(filter: ResolvedContactFilter<'write'>): SQL {
+  return sql`COALESCE((${buildContactsFilterSql(filter.clauses)}), FALSE)`;
 }
 
 async function assertAssignmentInScope(
@@ -161,8 +130,8 @@ export async function previewAssignment(
 ): Promise<AssignmentChangeSummary> {
   const isTest = testFlagForScope(scope);
   await assertAssignmentInScope(db, input.surveyId, isTest, input.assignmentId, false);
-  const clauses = await resolveAssignmentClauses(input.surveyId, scope, input.clauses);
-  return summarize(db, input.surveyId, isTest, input.assignmentId, matchOf(clauses));
+  const filter = await resolveAssignmentFilter(input.surveyId, scope, input.clauses);
+  return summarize(db, input.surveyId, isTest, input.assignmentId, matchOf(filter));
 }
 
 /**
@@ -187,8 +156,8 @@ async function applyAssignmentOnce(
     if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     await assertAssignmentInScope(tx, input.surveyId, locked.isTest, input.assignmentId, true);
 
-    const clauses = await resolveAssignmentClauses(input.surveyId, locked.scope, input.clauses, tx);
-    const match = matchOf(clauses);
+    const filter = await resolveAssignmentFilter(input.surveyId, locked.scope, input.clauses, tx);
+    const match = matchOf(filter);
     const summary = await summarize(tx, input.surveyId, locked.isTest, input.assignmentId, match);
     const now = new Date();
     const inScope = and(
@@ -232,11 +201,11 @@ export async function listAssignmentMatches(
   input: AssignmentMatchesInput,
   scope: OperationsDataScope,
 ): Promise<ContactAssignmentMatchesResult> {
-  const clauses = await resolveAssignmentClauses(input.surveyId, scope, input.clauses);
+  const filter = await resolveAssignmentFilter(input.surveyId, scope, input.clauses);
   const { rows, total, page } = await listContactsForSurvey({
     surveyId: input.surveyId,
     scope,
-    clauses,
+    filter,
     page: input.page,
     pageSize: ASSIGNMENT_MATCHES_PAGE_SIZE,
     sort: 'resid',

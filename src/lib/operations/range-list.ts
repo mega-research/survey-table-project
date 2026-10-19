@@ -89,7 +89,7 @@ export function isValidId(n: number): boolean {
  * - 역방향 (50-10) 은 자동 swap (10-50)
  * - 같은 값·같은 범위는 하나로 접고 duplicates 로 센다
  *
- * server 의 operations/progress-filters 와 read-models/contacts-filters 양쪽에서 공유.
+ * server 의 operations/progress-filters 와 read-models/contacts-filter-parse 양쪽에서 공유.
  */
 export function parseIdListDetailed(
   input: string,
@@ -143,7 +143,7 @@ export function parseIdListDetailed(
  * 범위/리스트 입력 파싱. 문법 불일치(숫자 아닌 토큰 포함)·빈 입력·상한 초과는 null.
  * 상세 사유가 필요한 위젯은 parseIdListDetailed 를 쓴다.
  *
- * progress-filters.server.ts / profiles-filters.server.ts / contacts-filters.server.ts 가 공유.
+ * progress-filters / profiles-filters / read-models/contacts-filter-parse 가 공유.
  */
 export function parseIdListInput(
   input: string,

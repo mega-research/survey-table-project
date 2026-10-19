@@ -12,7 +12,7 @@ import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import {

@@ -18,7 +18,12 @@ import {
   previewCampaignCandidates,
 } from '@/server/mail/services/campaigns-read';
 import { FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
-import { parseHeaderFiltersFromUrl } from '@/server/read-models/contacts-filters';
+import {
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
+
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -171,7 +176,7 @@ run('캠페인 필터 실 DB 왕복', () => {
     const desc = await previewCampaignCandidates({
       surveyId: sortSurveyId,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       unrespondedOnly: false,
       sort: 'responded',
       dir: 'desc',
@@ -212,18 +217,21 @@ run('캠페인 필터 실 DB 왕복', () => {
       questionResponses: {},
     });
 
-    const clauses = parseHeaderFiltersFromUrl(
-      ['system.web'],
-      ['in'],
-      ['in_progress'],
-      [{ source: 'system.web', label: '응답' }],
-      [],
+    // 단체 메일 깔때기의 응답 열은 스킴과 무관한 고정 열이다(surface: 'mail').
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+      isGuest: false,
+      surface: 'mail',
+    });
+    const filter = await resolveContactFilter(
+      filterCtx,
+      { headerClauses: [{ source: 'system.web', mode: 'in', hv: 'in_progress' }] },
+      { mode: 'read' },
     );
 
     const result = await previewCampaignCandidates({
       surveyId,
       scope: 'real',
-      clauses,
+      filter,
       unrespondedOnly: false,
       page: 1,
       pageSize: 20,

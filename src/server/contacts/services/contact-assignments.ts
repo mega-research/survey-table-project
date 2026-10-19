@@ -2,7 +2,7 @@ import { ORPCError } from '@orpc/server';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { type DbOrTx, type DbTransaction, db } from '@/db';
+import { type DbTransaction, db } from '@/db';
 import { contactAssignments, contactTargets, surveys } from '@/db/schema';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
@@ -64,28 +64,6 @@ export class DuplicateAssignmentNameError extends Error {
     super(`같은 이름의 컨택원이 이미 있습니다: ${name}`);
     this.name = 'DuplicateAssignmentNameError';
   }
-}
-
-/** 이 설문·파티션의 컨택원 — 순서대로(같으면 이름순). */
-export async function listAssignmentOptions(
-  surveyId: string,
-  scope: OperationsDataScope,
-  executor: DbOrTx = db,
-): Promise<ContactAssignmentOption[]> {
-  return executor
-    .select({
-      id: contactAssignments.id,
-      name: contactAssignments.name,
-      order: contactAssignments.order,
-    })
-    .from(contactAssignments)
-    .where(
-      and(
-        eq(contactAssignments.surveyId, surveyId),
-        eq(contactAssignments.isTest, testFlagForScope(scope)),
-      ),
-    )
-    .orderBy(asc(contactAssignments.order), asc(contactAssignments.name));
 }
 
 /**

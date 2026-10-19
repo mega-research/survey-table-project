@@ -1,8 +1,9 @@
+import { ORPCError } from '@orpc/server';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactAssignments, contactPii, contactTargets } from '@/db/schema/contacts';
+import { contactPii, contactTargets } from '@/db/schema/contacts';
 import {
   type MailCampaignKind,
   mailCampaigns,
@@ -16,7 +17,7 @@ import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/conta
 import { inngest } from '@/lib/inngest/client';
 import { remainingSendValue } from '@/lib/mail/fallback-address';
 import { withTestPrefix } from './test-campaign';
-import { loadOperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
+import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -354,113 +355,37 @@ export async function fetchCandidateIds(
 
   const { previewCampaignCandidates, countCampaignCandidates } =
     await import('./campaigns-read');
-  const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
-    await import('@/server/read-models/contacts');
-  const { countUnresolvedListClauses, parseClausesFromUrl, parseHeaderFiltersFromUrl } =
-    await import('@/server/read-models/contacts-filters');
-  const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
-  const { loadIdListsForValues } = await import('@/server/read-models/contact-id-lists');
+  const { loadContactFilterContext, resolveContactFilter } = await import(
+    '@/server/read-models/contact-filter-resolution'
+  );
   const scope = await loadOperationsDataScope(surveyId);
 
-  const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-  ]);
-  // 「현재 컨택원」 조건은 마법사 페이지와 같이 게스트가 아닐 때만 해석한다 — 이 설문·파티션의 컨택원만.
-  const assignments = isGuest
-    ? []
-    : await db
-        .select({ id: contactAssignments.id })
-        .from(contactAssignments)
-        .where(
-          and(
-            eq(contactAssignments.surveyId, surveyId),
-            eq(contactAssignments.isTest, testFlagForScope(scope)),
-          ),
-        );
-  const candidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
-  const rawClauses = filter.clauses ?? [];
-  // 스냅샷의 `list:<uuid>` 토큰도 마법사 페이지와 같은 실체로 해석해야 같은 집합을 고른다.
-  const idLists = await loadIdListsForValues(
-    surveyId,
-    rawClauses.map((c) => c.value),
-  );
-  const parseExtra = {
-    idLists,
-    ...(isGuest ? {} : { assignmentIds: new Set(assignments.map((a) => a.id)) }),
-  };
-  const builderClauses = parseClausesFromUrl(
-    rawClauses.map((c) => c.source),
-    rawClauses.map((c) => c.value),
-    rawClauses.map((c) => c.op ?? ''),
-    candidates,
-    resultCodes,
-    parseExtra,
-  );
-  // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
-  const headerCandidates = [
-    ...candidates,
-    ...CAMPAIGN_HEADER_FILTER_COLUMNS.filter(
-      (c) => !candidates.some((cc) => cc.source === c.source),
-    ),
-  ];
-  const rawHeaderClauses = filter.headerClauses ?? [];
-  const headerClauses = parseHeaderFiltersFromUrl(
-    rawHeaderClauses.map((c) => c.source),
-    rawHeaderClauses.map((c) => c.mode),
-    rawHeaderClauses.map((c) => c.hv),
-    headerCandidates,
-    resultCodes,
-    parseExtra,
-  );
-  // 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 절이 해석되지 않으면 고르지 않는다 —
-  // 파서가 그 절을 버리면 화면에 보이던 것보다 넓은 명단(빈 조건이면 전체)을 고르게 된다.
-  const unresolved =
-    countUnresolvedListClauses(
-      { col: rawClauses.map((c) => c.source), q: rawClauses.map((c) => c.value) },
-      candidates,
-      resultCodes,
-      parseExtra,
-    ) +
-    countUnresolvedListClauses(
-      {
-        hcol: rawHeaderClauses.map((c) => c.source),
-        hm: rawHeaderClauses.map((c) => c.mode),
-        hv: rawHeaderClauses.map((c) => c.hv),
-      },
-      headerCandidates,
-      resultCodes,
-      parseExtra,
-    );
-  if (unresolved > 0) {
-    throw new Error(
-      '수신자 조건 중 지금 적용할 수 없는 조건이 있습니다(지워진 컨택원 등). 화면을 새로고침해 조건을 다시 걸어 주세요.',
-    );
-  }
-  // 마법사 페이지의 결합 규칙과 동일해야 한다 — 어긋나면 "필터 결과 전체 선택"이
-  // 화면에 보이는 명단과 다른 집합을 고른다.
-  const clauses = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
+  // 마법사 페이지와 같은 컨텍스트·같은 해석 — 어긋나면 "필터 결과 전체 선택"이 화면에 보이는
+  // 명단과 다른 집합을 고른다. 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 해석되지 않는
+  // 조건이 생기면 write 해석이 거부한다 — 버리면 화면보다 넓은 명단(빈 조건이면 전체)을 고른다.
+  const filterCtx = await loadContactFilterContext(surveyId, scope, { isGuest, surface: 'mail' });
+  const resolved = await resolveContactFilter(filterCtx, filter, { mode: 'write' });
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 
-  const total = await countCampaignCandidates({ surveyId, scope, clauses, unrespondedOnly });
+  const total = await countCampaignCandidates({
+    surveyId,
+    scope,
+    filter: resolved,
+    unrespondedOnly,
+  });
   const MAX_IDS = 10_000;
   if (total > MAX_IDS) {
-    throw new Error(
-      `필터에 해당하는 수신자가 ${total.toLocaleString('ko-KR')}명입니다. 한 단체 메일당 최대 ${MAX_IDS.toLocaleString('ko-KR')}명 — 필터를 좁혀주세요.`,
-    );
+    throw new ORPCError('BAD_REQUEST', {
+      message:
+        `필터에 해당하는 수신자가 ${total.toLocaleString('ko-KR')}명입니다. 한 단체 메일당 최대 ${MAX_IDS.toLocaleString('ko-KR')}명 — 필터를 좁혀주세요.`,
+    });
   }
 
   // page=1, pageSize=total 로 한 번에 전체 페치
   const result = await previewCampaignCandidates({
     surveyId,
     scope,
-    clauses,
+    filter: resolved,
     unrespondedOnly,
     page: 1,
     pageSize: Math.max(1, total),

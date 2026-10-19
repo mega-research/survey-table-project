@@ -14,7 +14,7 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 

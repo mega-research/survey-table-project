@@ -2,6 +2,8 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { extractRawSql } from './_helpers/result-code-mock';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+
 // countCampaignCandidates 는 getResultCodeStatuses + db.select(count).where(...) 만 사용.
 // where 의 raw SQL 을 extractRawSql 로 평탄화해 자동 제외/필터 결합을 검증한다.
 // (preflight-exclusion.test.ts 패턴 — db / result-code-statuses mock)
@@ -72,7 +74,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('contact_pii'); // HAS_EMAIL_PII
@@ -87,7 +89,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses,
+      filter: resolvedFilterForTest(clauses),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('attrs');
@@ -103,7 +105,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses,
+      filter: resolvedFilterForTest(clauses),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('responded_at');

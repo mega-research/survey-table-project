@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  countUnresolvedListClauses,
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
   placeholderFor,
   type ColumnCandidate,
-} from './contacts-filters';
+} from './contacts-filter-parse';
 import {
   FILTER_NONE_LABEL,
   FILTER_NONE_VALUE,
@@ -1066,50 +1065,6 @@ describe('「현재 컨택원」 조건', () => {
         assignmentIds,
       }),
     ).toEqual([]);
-  });
-});
-
-describe('countUnresolvedListClauses — 지금 해석되지 않아 빠질 절', () => {
-  const A1 = '11111111-1111-4111-8111-111111111111';
-  const GONE = '99999999-9999-4999-8999-999999999999';
-  const candidates: ColumnCandidate[] = [
-    { source: 'system.contact_owner', label: '컨택원' },
-    { source: 'attrs.기업명', label: '기업명' },
-  ];
-  const extra = { assignmentIds: new Set([A1]) };
-
-  it('해석되는 절과 값이 빈 검색바 절은 세지 않는다', () => {
-    expect(
-      countUnresolvedListClauses(
-        { col: ['system.contact_owner', 'attrs.기업명'], q: [A1, '  '] },
-        candidates,
-        [],
-        extra,
-      ),
-    ).toBe(0);
-  });
-
-  it('지워진 컨택원·후보에 없는 열·읽지 못한 목록 토큰을 센다', () => {
-    expect(
-      countUnresolvedListClauses(
-        {
-          col: ['system.contact_owner', 'attrs.없는열', 'attrs.기업명'],
-          q: [GONE, '가', 'list:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:3000'],
-          hcol: ['system.contact_owner'],
-          hm: ['in'],
-          hv: [GONE],
-        },
-        candidates,
-        [],
-        extra,
-      ),
-    ).toBe(4);
-  });
-
-  it('컨택원 목록을 넘기지 않은 표면(게스트)의 컨택원 절은 빠질 절이다', () => {
-    expect(
-      countUnresolvedListClauses({ col: ['system.contact_owner'], q: [A1] }, candidates, [], {}),
-    ).toBe(1);
   });
 });
 

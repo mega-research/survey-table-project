@@ -7,17 +7,21 @@ vi.mock('../services/contact-assignments', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/contact-assignments')>();
   return {
     ...actual,
-    listAssignmentOptions: vi.fn(),
     createAssignment: vi.fn(),
     setTargetAssignment: vi.fn(),
   };
 });
+
+vi.mock('@/server/read-models/contact-assignment-options', () => ({
+  listAssignmentOptions: vi.fn(),
+}));
 
 vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import * as svc from '../services/contact-assignments';
 import { assignments } from './assignments';
 
@@ -34,10 +38,10 @@ describe('contacts.assignments procedures', () => {
 
   it('list 는 이 세션의 파티션으로 컨택원을 읽는다', async () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('test');
-    vi.mocked(svc.listAssignmentOptions).mockResolvedValue([{ id: 'a1', name: '10차', order: 1 }]);
+    vi.mocked(listAssignmentOptions).mockResolvedValue([{ id: 'a1', name: '10차', order: 1 }]);
     const client = createRouterClient({ assignments }, { context: ctx('admin-1') });
     const res = await client.assignments.list({ surveyId: SURVEY_ID });
-    expect(svc.listAssignmentOptions).toHaveBeenCalledWith(SURVEY_ID, 'test');
+    expect(listAssignmentOptions).toHaveBeenCalledWith(SURVEY_ID, 'test');
     expect(res).toEqual([{ id: 'a1', name: '10차', order: 1 }]);
   });
 
@@ -97,7 +101,7 @@ describe('contacts.assignments procedures', () => {
     ]) {
       await expect(call()).rejects.toMatchObject({ code: 'FORBIDDEN' });
     }
-    expect(svc.listAssignmentOptions).not.toHaveBeenCalled();
+    expect(listAssignmentOptions).not.toHaveBeenCalled();
     expect(svc.createAssignment).not.toHaveBeenCalled();
     expect(svc.setTargetAssignment).not.toHaveBeenCalled();
   });

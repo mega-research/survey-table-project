@@ -44,6 +44,7 @@ import {
   testFlagForScope,
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
+import type { ResolvedContactFilter } from '@/server/read-models/contact-filter-resolution';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
@@ -739,7 +740,7 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  * 반송 이력 컨택은 미리보기 명단에는 그대로 표시하고 발송 시점(preflight·
  * createCampaign)에만 제외한다 — 목록에서 조용히 사라지면 명단 대조가 어렵다.
  *
- * clauses 의 PII blindIndex 는 호출자(page/action)의 parseClausesFromUrl 에서 이미
+ * clauses 의 PII blindIndex 는 호출자의 조사 대상 필터 해석(resolveContactFilter)에서 이미
  * 계산되어 들어오므로 여기서는 비동기 PII 조회를 하지 않는다 → 동기 함수.
  */
 function buildCandidateWhere(
@@ -889,7 +890,8 @@ function buildCandidateOrderBy(
 export async function previewCampaignCandidates(args: {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   unrespondedOnly: boolean;
   sort?: CampaignSortKey;
   dir?: CampaignSortDir;
@@ -910,7 +912,7 @@ export async function previewCampaignCandidates(args: {
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.clauses,
+    args.filter.clauses,
     args.unrespondedOnly,
     negativeCodes,
     emailOrder,
@@ -924,7 +926,7 @@ export async function previewCampaignCandidates(args: {
     countCandidateExclusions(
       args.surveyId,
       args.scope,
-      args.clauses,
+      args.filter.clauses,
       args.unrespondedOnly,
       negativeCodes,
       bouncedContactIds,
@@ -994,7 +996,8 @@ export async function previewCampaignCandidates(args: {
 export async function countCampaignCandidates(args: {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   unrespondedOnly: boolean;
 }): Promise<number> {
   const [{ negative: negativeCodes }, emailOrder] = await Promise.all([
@@ -1004,7 +1007,7 @@ export async function countCampaignCandidates(args: {
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.clauses,
+    args.filter.clauses,
     args.unrespondedOnly,
     negativeCodes,
     emailOrder,

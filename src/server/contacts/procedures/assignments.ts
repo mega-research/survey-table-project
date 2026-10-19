@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyAccess, authed } from '@/server/orpc';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
@@ -44,7 +45,7 @@ const list = authed
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
     const scope = await loadOperationsDataScope(input.surveyId);
-    return svc.listAssignmentOptions(input.surveyId, scope);
+    return listAssignmentOptions(input.surveyId, scope);
   });
 
 const create = authed

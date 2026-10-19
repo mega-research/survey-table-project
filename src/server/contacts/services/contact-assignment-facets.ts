@@ -17,11 +17,11 @@ import {
   contactResultFilterOptions,
 } from '@/lib/operations/filter-shared';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { getContactResultCodes } from '@/server/read-models/contacts';
 
 import type { AssignmentFacetsOutput } from '../domain/contact-assignment';
 import { ATTR_VALUES_CHECKBOX_LIMIT, assertAttrColumnAllowed } from './contact-attr-values';
-import { listAssignmentOptions } from './contact-assignments';
 
 /**
  * 컨택원 수정 화면 오른쪽 값 목록 — 조건 줄이 고른 열의 값과 값별 인원(명단 전체 기준).
