@@ -513,6 +513,35 @@ run('컨택원 배정 (real local DB)', () => {
       expect(await assignmentOf(realT!)).toBeNull();
     });
 
+    it('「현재 컨택원」·「배정 없음」 조건 — 옮겨 온 대상이 같은 적용 안에서 다시 풀리지 않는다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 4);
+      const a = await createAssignment({ surveyId, name: 'A' });
+      const b = await createAssignment({ surveyId, name: 'B' });
+      // 1 → B, 2 → B, 3 → A, 4 → 없음
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: b.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: b.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: a.id });
+
+      // A 를 「지금 B 인 대상」으로 교체 → 1, 2 가 A, 3 은 빠짐
+      const fromB = await applyAssignment({
+        surveyId,
+        assignmentId: a.id,
+        clauses: [{ source: 'system.contact_owner', value: b.id, op: '' }],
+      });
+      expect(fromB).toMatchObject({ matched: 2, current: 1, leaving: 1 });
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([a.id, a.id, null, null]);
+
+      // A 를 「지금 배정 없음」으로 교체 → 3, 4 가 A, 지금 A 인 1, 2 는 빠진다(다시 돌아오지 않는다)
+      const fromNone = await applyAssignment({
+        surveyId,
+        assignmentId: a.id,
+        clauses: [{ source: 'system.contact_owner', value: FILTER_NONE_VALUE, op: '' }],
+      });
+      expect(fromNone).toMatchObject({ matched: 2, current: 2, incoming: 2, leaving: 2 });
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, a.id, a.id]);
+    });
+
     it('같은 컨택원 동시 적용은 직렬화되어 한쪽 결과로 깔끔히 정리된다', async () => {
       const surveyId = await seedSurvey();
       const ids = await seedTargets(surveyId, 20);
@@ -624,19 +653,66 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const ids = await seedTargets(surveyId, 3);
       const tenth = await createAssignment({ surveyId, name: '10차' });
-      for (const id of ids) {
-        await setTargetAssignment({ surveyId, contactTargetId: id, assignmentId: tenth.id });
-      }
+      const eleventh = await createAssignment({ surveyId, name: '11차' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: eleventh.id });
       const filter = {
         ...emptyFilter,
-        hcol: ['system.resid'],
-        hm: ['text'],
-        hv: ['1'],
+        hcol: ['system.contact_owner'],
+        hm: ['in'],
+        hv: [tenth.id],
       };
-      // 시스템ID 는 열 머리 필터 대상이 아니라 무시된다 → 전체(3명)가 결과다.
       const applied = await assignFromList({ surveyId, assignmentId: null, filter });
-      expect(applied.groups).toEqual([{ id: tenth.id, name: '10차', count: 3 }]);
-      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, null, null]);
+      expect(applied.groups).toEqual([{ id: tenth.id, name: '10차', count: 2 }]);
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([
+        null,
+        null,
+        eleventh.id,
+      ]);
+    });
+
+    it('목록이 쓸 수 없는 열 머리 필터가 섞이면 전체로 넓히지 않고 거부한다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 2);
+      const tenth = await createAssignment({ surveyId, name: '10차' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
+      const filter = { ...emptyFilter, hcol: ['system.resid'], hm: ['text'], hv: ['1'] };
+      await expect(assignFromList({ surveyId, assignmentId: null, filter })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+      expect(await assignmentOf(ids[0]!)).toBe(tenth.id);
+    });
+
+    it('미리보기 뒤 조건의 컨택원이 지워지면 전체로 넓히지 않고 거부한다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 3);
+      const a = await createAssignment({ surveyId, name: 'A' });
+      const b = await createAssignment({ surveyId, name: 'B' });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: b.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: a.id });
+      const filter = { ...emptyFilter, hcol: ['system.contact_owner'], hm: ['in'], hv: [b.id] };
+
+      expect(
+        (await previewAssignFromList({ surveyId, assignmentId: a.id, filter }, 'real')).matched,
+      ).toBe(1);
+      await removeAssignment({ surveyId, id: b.id });
+
+      await expect(assignFromList({ surveyId, assignmentId: a.id, filter })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+      await expect(assignFromList({ surveyId, assignmentId: null, filter })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
+      await expect(
+        assignFromList({
+          surveyId,
+          assignmentId: a.id,
+          filter: { ...emptyFilter, col: ['system.contact_owner'], q: [b.id], op: [''] },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      // 아무것도 바뀌지 않았다 (1 은 B 삭제로 배정 없음, 2 는 A 그대로, 3 은 없음).
+      expect(await Promise.all(ids.map((id) => assignmentOf(id)))).toEqual([null, a.id, null]);
     });
 
     it('저장 ID 목록 토큰 조건에서도 동작하고 파티션을 넘지 않는다', async () => {

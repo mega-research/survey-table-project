@@ -17,6 +17,7 @@ import {
 import {
   parseClausesFromUrl,
   parseContactListClauses,
+  parseHeaderFiltersFromUrl,
 } from '@/server/read-models/contacts-filters';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
@@ -192,20 +193,23 @@ export async function applyAssignment(
       eq(contactTargets.isTest, locked.isTest),
     );
 
+    // 들어옴·빠짐을 한 문장으로 쓴다 — 조건이 「현재 컨택원」·「배정 없음」이면 앞 문장이 바꾼
+    // assignment_id 를 뒤 문장이 다시 읽어 방금 옮긴 대상을 도로 풀거나(B→A 가 다시 없음) 방금
+    // 푼 대상을 도로 끌어온다. 한 UPDATE 안에서는 모든 행이 문장 시작 시점의 상태로 한 번만
+    // 판정된다(상관 서브쿼리도 같은 스냅숏을 읽는다).
     await tx
       .update(contactTargets)
-      .set({ assignmentId: input.assignmentId, updatedAt: now })
+      .set({
+        assignmentId: sql`CASE WHEN ${match} THEN ${input.assignmentId}::uuid ELSE NULL END`,
+        updatedAt: now,
+      })
       .where(
         and(
           inScope,
-          match,
-          sql`${contactTargets.assignmentId} IS DISTINCT FROM ${input.assignmentId}`,
+          sql`((${match} AND ${contactTargets.assignmentId} IS DISTINCT FROM ${input.assignmentId}::uuid)
+            OR (NOT ${match} AND ${contactTargets.assignmentId} = ${input.assignmentId}::uuid))`,
         ),
       );
-    await tx
-      .update(contactTargets)
-      .set({ assignmentId: null, updatedAt: now })
-      .where(and(inScope, eq(contactTargets.assignmentId, input.assignmentId), sql`NOT ${match}`));
     await tx
       .update(contactAssignments)
       .set({ lastClauses: input.clauses, lastAppliedAt: now, updatedAt: now })
@@ -251,8 +255,12 @@ export async function listAssignmentMatches(
 
 /**
  * 조사 대상 목록 주소의 필터 → 절. 목록 페이지와 같은 해석(parseContactListClauses)을 쓴다.
- * 목록에서 배정은 목록이 보여 준 결과에 얹는 일이라 검색과 똑같이 해석한다 — 교체 적용처럼
- * 해석이 안 되는 절을 거부하지 않는다(목록이 이미 그 절 없이 보여 줬다).
+ *
+ * 다만 보낸 절이 하나라도 지금 해석되지 않으면 거부한다. 목록 검색은 그런 절을 조용히 버리지만,
+ * 쓰기에서 버리면 조건이 넓어진다 — 미리보기 뒤 다른 사람이 조건의 컨택원을 지우면 「현재
+ * 컨택원 = B」 절이 빠져 빈 조건(전체)이 되고, 파티션 전체를 옮기거나 풀어 버린다. 값이 빈
+ * 검색바 절은 목록도 원래 쓰지 않는 자리라 따지지 않는다. 처음부터 조건이 없는 전체 배정은
+ * 그대로 허용한다.
  */
 async function resolveListFilter(
   surveyId: string,
@@ -267,10 +275,39 @@ async function resolveListFilter(
     loadIdListsForValues(surveyId, filter.q),
   ]);
   const candidates = buildColumnCandidates(scheme, { includeContactOwner: true });
-  return parseContactListClauses(filter, candidates, resultCodes, {
-    idLists,
-    assignmentIds: new Set(assignments.map((a) => a.id)),
-  }).clauses;
+  const extra = { idLists, assignmentIds: new Set(assignments.map((a) => a.id)) };
+
+  const lost = (): never => {
+    throw new ORPCError('BAD_REQUEST', {
+      message:
+        '검색 조건 중 지금 적용할 수 없는 조건이 있습니다(지워진 컨택원 등). 목록을 새로고침해 조건을 다시 걸어 주세요.',
+    });
+  };
+  const builderCount = Math.min(filter.col.length, filter.q.length);
+  for (let i = 0; i < builderCount; i++) {
+    const q = filter.q[i]!;
+    if (q.trim().length === 0) continue;
+    const parsed = parseClausesFromUrl([filter.col[i]!], [q], [''], candidates, resultCodes, extra);
+    if (parsed.length === 0) lost();
+  }
+  const headerCount = Math.min(filter.hcol.length, filter.hm.length, filter.hv.length);
+  for (let i = 0; i < headerCount; i++) {
+    const parsed = parseHeaderFiltersFromUrl(
+      [filter.hcol[i]!],
+      [filter.hm[i]!],
+      [filter.hv[i]!],
+      candidates,
+      resultCodes,
+      extra,
+    );
+    if (parsed.length === 0) lost();
+  }
+  for (const v of filter.q) {
+    const token = parseIdListToken(v);
+    if (token && !idLists.has(token.id)) lost();
+  }
+
+  return parseContactListClauses(filter, candidates, resultCodes, extra).clauses;
 }
 
 async function summarizeList(

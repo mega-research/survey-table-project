@@ -139,7 +139,11 @@ export function AssignFromListButton({ surveyId, total, filtered, options }: Pro
           </Select>
           {target !== '' && (
             <div className="min-h-12 text-sm text-slate-700" aria-live="polite">
-              {previewQuery.isPending ? (
+              {previewQuery.isError ? (
+                <p role="alert" className="text-red-600">
+                  {getErrorMessage(previewQuery.error, '배정 인원을 계산하지 못했습니다.')}
+                </p>
+              ) : previewQuery.isPending ? (
                 <span className="text-slate-400">계산 중…</span>
               ) : summary ? (
                 <ListAssignSummaryText
