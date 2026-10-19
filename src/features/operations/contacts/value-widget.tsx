@@ -26,6 +26,8 @@ interface Props {
   onChange: (v: string) => void;
   resultCodeOptions: ContactResultCode[];
   inputId?: string;
+  /** ID 목록 입력의 서버 조회(명단 열 홀짝 비숫자 인원)용. */
+  surveyId?: string;
 }
 
 /**
@@ -35,7 +37,14 @@ interface Props {
  * - system.resid / attrs.* -> ID 목록 입력 (IdListInput — 엑셀 붙여넣기·인식 개수·경고)
  * - 그 외 (pii.*) -> text input
  */
-export function ValueWidget({ source, value, onChange, resultCodeOptions, inputId }: Props) {
+export function ValueWidget({
+  source,
+  value,
+  onChange,
+  resultCodeOptions,
+  inputId,
+  surveyId,
+}: Props) {
   if (source === FILTER_SOURCE.CONTACT_RESULT) {
     return (
       <Select value={value} onValueChange={onChange}>
@@ -98,6 +107,7 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
         onChange={onChange}
         placeholder={placeholderFor(source)}
         {...(inputId !== undefined ? { inputId } : {})}
+        {...(surveyId !== undefined ? { surveyId } : {})}
       />
     );
   }

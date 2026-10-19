@@ -1,11 +1,14 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useId } from 'react';
 
 import { Textarea } from '@/components/ui/textarea';
+import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { describeIdListValue, normalizePastedIdList } from '@/lib/operations/id-list-paste';
-import { SINGLE_COLUMN_ID_LIST_MAX } from '@/lib/operations/range-list';
+import { parityLabel, SINGLE_COLUMN_ID_LIST_MAX } from '@/lib/operations/range-list';
 import { cn } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   source: string;
@@ -13,6 +16,8 @@ interface Props {
   onChange: (v: string) => void;
   placeholder?: string;
   inputId?: string;
+  /** 있으면 명단 열 홀짝 조건에서 숫자가 아닌 값 인원을 서버에 물어 상태줄에 보인다. */
+  surveyId?: string;
 }
 
 const INVALID_PREVIEW = 5;
@@ -24,9 +29,12 @@ const fmt = (n: number) => n.toLocaleString('ko-KR');
  * - Enter 는 검색 제출, Shift+Enter 는 줄바꿈 (textarea 라 폼 제출을 직접 건다)
  * - 인식 개수·중복 제거·숫자 아닌 값·상한 초과를 검색 전에 알린다 — 조용히 0건이 되는 사고 방지
  */
-export function IdListInput({ source, value, onChange, placeholder, inputId }: Props) {
+export function IdListInput({ source, value, onChange, placeholder, inputId, surveyId }: Props) {
   const statusId = useId();
   const status = describeIdListValue(source, value);
+  const attrsKey = source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)
+    ? source.slice(FILTER_SOURCE.ATTRS_PREFIX.length)
+    : null;
   const wide = value.length > 40 || value.includes('\n');
   const rows = wide ? Math.min(6, Math.max(2, Math.ceil(value.length / 70))) : 1;
 
@@ -80,6 +88,15 @@ export function IdListInput({ source, value, onChange, placeholder, inputId }: P
         {more}
       </p>
     );
+  } else if (status.kind === 'parity') {
+    statusLine = (
+      <p id={statusId} className="text-xs text-slate-500">
+        {parityLabel(status.parity)}
+        {attrsKey != null && surveyId != null ? (
+          <NonNumericExcludedNote surveyId={surveyId} attrsKey={attrsKey} />
+        ) : null}
+      </p>
+    );
   } else if (status.kind === 'token') {
     statusLine = (
       <p id={statusId} className="text-xs text-slate-500">
@@ -109,4 +126,18 @@ export function IdListInput({ source, value, onChange, placeholder, inputId }: P
       {statusLine}
     </div>
   );
+}
+
+/**
+ * 명단 열 홀짝 — 숫자가 아닌 값은 어느 쪽에도 걸리지 않는다. 조용히 빠지지 않게 인원을 보인다.
+ * 홀짝 조건일 때만 마운트해 서버에 묻는다.
+ */
+function NonNumericExcludedNote({ surveyId, attrsKey }: { surveyId: string; attrsKey: string }) {
+  const { data } = useQuery({
+    queryKey: ['contact-attr-non-numeric', surveyId, attrsKey],
+    queryFn: () => client.contacts.attrValues.nonNumericCount({ surveyId, attrsKey }),
+    staleTime: 60_000,
+  });
+  if (!data || data.count === 0) return null;
+  return <> · 숫자가 아닌 값 {fmt(data.count)}명 제외</>;
 }

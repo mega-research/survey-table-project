@@ -1,9 +1,11 @@
 import { FILTER_SOURCE, parseIdListToken } from './filter-shared';
 import {
   type NumRange,
+  type Parity,
   SINGLE_COLUMN_ID_LIST_MAX,
   hasLeadingZeroToken,
   parseIdListDetailed,
+  parseParityKeyword,
 } from './range-list';
 
 /**
@@ -42,6 +44,8 @@ export type IdListStatus =
   | { kind: 'none' }
   /** 저장된 목록 토큰 — count 는 토큰 접미사 (없으면 null) */
   | { kind: 'token'; count: number | null }
+  /** `짝수`/`홀수` 한 단어 — 번호 홀짝으로 건다 */
+  | { kind: 'parity'; parity: Parity }
   /** 숫자 2개 이상 인식 — overLimit 면 검색 시 저장 경로로 간다 */
   | { kind: 'list'; count: number; duplicates: number; overLimit: boolean }
   /** 숫자 아닌 토큰이 섞임 — 검색 전에 고치도록 경고 */
@@ -63,6 +67,8 @@ export function describeIdListValue(source: string, value: string): IdListStatus
   if (trimmed.length === 0) return { kind: 'none' };
   const token = parseIdListToken(trimmed);
   if (token) return { kind: 'token', count: token.count };
+  const parity = parseParityKeyword(trimmed);
+  if (parity) return { kind: 'parity', parity };
   const r = parseIdListDetailed(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
   if (r.invalid.length > 0) {
     const looksLikeList = source === FILTER_SOURCE.RESID || r.count >= 2;

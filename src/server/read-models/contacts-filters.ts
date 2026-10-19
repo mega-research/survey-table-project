@@ -21,6 +21,7 @@ import {
 import {
   hasLeadingZeroToken,
   parseIdListInput,
+  parseParityKeyword,
   SINGLE_COLUMN_ID_LIST_MAX,
 } from '@/lib/operations/range-list';
 
@@ -58,6 +59,13 @@ export interface ParseExtraHooks {
    * loadIdListsForValues 로 미리 읽어 넘긴다 (파서는 동기). 없는 토큰은 0건으로 접힌다.
    */
   idLists?: ReadonlyMap<string, number[]>;
+}
+
+/** `짝수`/`홀수` 한 단어면 홀짝 idlist 절. 아니면 null (섞인 토큰은 종전 규칙). */
+function parityCondition(col: string, trimmed: string): FilterCondition | null {
+  const parity = parseParityKeyword(trimmed);
+  if (!parity) return null;
+  return { source: col, mode: 'idlist', value: trimmed, ranges: [], parity };
 }
 
 /**
@@ -274,6 +282,8 @@ function attrsTextOrIdlistCondition(
 ): FilterCondition {
   const fromToken = idListTokenCondition(col, trimmed, extra);
   if (fromToken) return fromToken;
+  const fromParity = parityCondition(col, trimmed);
+  if (fromParity) return fromParity;
   // 단일 컬럼이라 전체 검색의 컬럼 곱연산 상한(200)이 아니라 인라인 상한(2,000)을 쓴다.
   const ranges = hasLeadingZeroToken(trimmed)
     ? null
@@ -363,6 +373,8 @@ function buildClause(
   if (col === FILTER_SOURCE.RESID) {
     const fromToken = idListTokenCondition(col, trimmed, extra);
     if (fromToken) return { op, condition: fromToken };
+    const fromParity = parityCondition(col, trimmed);
+    if (fromParity) return { op, condition: fromParity };
     const ranges = parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
     if (ranges !== null) {
       return { op, condition: { source: 'system.resid', mode: 'idlist', value: trimmed, ranges } };

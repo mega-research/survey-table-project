@@ -8,6 +8,7 @@ vi.mock('../services/contact-attr-values', async (importOriginal) => {
   return {
     ...actual,
     listContactAttrValues: vi.fn(),
+    countNonNumericAttrValues: vi.fn(),
   };
 });
 
@@ -58,6 +59,21 @@ describe('contacts.attrValues procedures', () => {
     await expect(
       client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '없는컬럼' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN_COLUMN' });
+  });
+
+  it('nonNumericCount 는 스코프를 해석해 비숫자 인원을 돌려준다', async () => {
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(svc.countNonNumericAttrValues).mockResolvedValue(3);
+
+    const client = createRouterClient({ attrValues }, { context: authedContext() });
+    const res = await client.attrValues.nonNumericCount({ surveyId: SURVEY_ID, attrsKey: '명단ID' });
+
+    expect(svc.countNonNumericAttrValues).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      attrsKey: '명단ID',
+      scope: 'real',
+    });
+    expect(res).toEqual({ count: 3 });
   });
 
   it('인증 없으면 UNAUTHORIZED', async () => {

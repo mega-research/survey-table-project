@@ -62,6 +62,7 @@ export function ContactsFilterBar({
           value={value}
           onChange={onChange}
           resultCodeOptions={resultCodeOptions}
+          surveyId={surveyId}
           {...(inputId !== undefined ? { inputId } : {})}
         />
       )}

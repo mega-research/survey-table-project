@@ -2,6 +2,7 @@ import { assertSurveyAccess, scoped } from '@/server/orpc';
 import { loadOperationsDataScope } from '@/server/data-scope';
 
 import {
+  CountNonNumericAttrValuesOutput,
   ListContactAttrValuesInput,
   ListContactAttrValuesOutput,
 } from '../domain/contact-attr-values';
@@ -35,6 +36,33 @@ const list = scoped
     }
   });
 
+/**
+ * 홀짝 조건(`짝수`/`홀수`) 입력 상태줄 — 그 열에서 숫자가 아니라 걸리지 않는 인원.
+ * 조사 대상 필터와 같은 표면이라 list 와 같은 권한·화이트리스트를 탄다.
+ */
+const nonNumericCount = scoped
+  .errors({
+    FORBIDDEN_COLUMN: {
+      status: 403,
+      message: '컬럼 스킴에 없는 컬럼입니다.',
+    },
+  })
+  .input(ListContactAttrValuesInput)
+  .output(CountNonNumericAttrValuesOutput)
+  .handler(async ({ input, context, errors }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    const scope = await loadOperationsDataScope(input.surveyId);
+    try {
+      return { count: await svc.countNonNumericAttrValues({ ...input, scope }) };
+    } catch (error) {
+      if (error instanceof svc.ForbiddenAttrColumnError) {
+        throw errors.FORBIDDEN_COLUMN();
+      }
+      throw error;
+    }
+  });
+
 export const attrValues = {
   list,
+  nonNumericCount,
 };

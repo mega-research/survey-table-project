@@ -1,5 +1,5 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
-import type { NumRange } from './range-list';
+import type { NumRange, Parity } from './range-list';
 
 export type CombineOp = 'AND' | 'OR';
 export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
@@ -32,6 +32,11 @@ export interface FilterCondition {
    * 텍스트 컬럼("A1")에서는 종전 부분검색으로 남게 하는 이음새.
    */
   textFallback?: boolean;
+  /**
+   * mode === 'idlist' 의 홀짝 키워드(`짝수`/`홀수`) — ranges 대신 번호 홀짝으로 건다.
+   * 시스템ID 는 resid, attrs 는 값 전체가 숫자인 행만(앞자리 0 허용) 정수로 읽는다.
+   */
+  parity?: Parity;
 }
 
 export interface FilterClause {

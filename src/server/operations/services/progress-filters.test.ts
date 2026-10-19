@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 import {
+  buildFilterSql,
   placeholderFor,
   parseConditionFromUrl,
   type ColumnCandidate,
@@ -106,5 +108,37 @@ describe('parseConditionFromUrl', () => {
   it('returns null for pii.* when normalization fails (invalid email)', () => {
     // normalizePii('email', 'abc') 가 빈 문자열 반환 → blindIndex 빈 문자열 → null.
     expect(parseConditionFromUrl('pii.email', 'abc', candidates)).toBeNull();
+  });
+});
+
+describe('진척 보고 필터 — 짝수·홀수', () => {
+  const cands = [
+    { source: 'system.resid', label: '시스템ID' },
+    { source: 'attrs.명단ID', label: '명단ID' },
+  ];
+
+  it('시스템ID·명단 열의 한 단어 키워드는 parity 조건', () => {
+    expect(parseConditionFromUrl('system.resid', '짝수', cands)).toEqual({
+      source: 'system.resid',
+      mode: 'parity',
+      parity: 'even',
+    });
+    expect(parseConditionFromUrl('attrs.명단ID', '홀수', cands)).toEqual({
+      source: 'attrs.명단ID',
+      mode: 'parity',
+      parity: 'odd',
+    });
+  });
+
+  it('SQL 은 나머지 연산 — 명단 열은 숫자 값만', () => {
+    const dialect = new PgDialect();
+    const resid = dialect.sqlToQuery(
+      buildFilterSql({ source: 'system.resid', mode: 'parity', parity: 'odd' }),
+    );
+    expect(resid.sql).toContain('ct.resid % 2');
+    const attrs = dialect.sqlToQuery(
+      buildFilterSql({ source: 'attrs.명단ID', mode: 'parity', parity: 'even' }),
+    );
+    expect(attrs.sql).toContain("~ '^[0-9]+$'");
   });
 });

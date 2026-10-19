@@ -88,3 +88,15 @@ describe('ValueWidget — 시스템ID/attrs 컬럼의 ID 목록 붙여넣기', (
     expect(screen.queryByText(/인식/)).not.toBeInTheDocument();
   });
 });
+
+describe('ValueWidget — 짝수·홀수', () => {
+  it('시스템ID 짝수는 상태줄에 「짝수 번호」', () => {
+    renderWidget('system.resid', '짝수');
+    expect(screen.getByText('짝수 번호')).toBeInTheDocument();
+  });
+
+  it('섞인 토큰은 키워드가 아니라 무효 토큰 경고', () => {
+    renderWidget('system.resid', '짝수 1-10');
+    expect(screen.getByRole('alert')).toHaveTextContent('숫자가 아닌 값 1개: 짝수');
+  });
+});

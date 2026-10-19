@@ -984,3 +984,28 @@ describe('parseClausesFromUrl - ID 목록 붙여넣기 (단일 컬럼 상한·�
     expect(clause?.condition).toMatchObject({ mode: 'idlist', ranges: [] });
   });
 });
+
+describe('parseClausesFromUrl — 짝수·홀수', () => {
+  const candidates: ColumnCandidate[] = [
+    { source: 'system.resid', label: '시스템ID' },
+    { source: 'attrs.명단ID', label: '명단ID' },
+  ];
+
+  it('시스템ID 짝수 → parity even idlist 절', () => {
+    const [c] = parseClausesFromUrl(['system.resid'], ['짝수'], [''], candidates, []);
+    expect(c?.condition).toMatchObject({ source: 'system.resid', mode: 'idlist', parity: 'even', value: '짝수' });
+  });
+
+  it('명단 열 홀수 → parity odd idlist 절', () => {
+    const [c] = parseClausesFromUrl(['attrs.명단ID'], ['홀수'], [''], candidates, []);
+    expect(c?.condition).toMatchObject({ source: 'attrs.명단ID', mode: 'idlist', parity: 'odd' });
+  });
+
+  it('섞인 토큰은 키워드가 아니다 — 시스템ID 는 text 폴백, 명단 열은 부분검색', () => {
+    const [r] = parseClausesFromUrl(['system.resid'], ['짝수 1-10'], [''], candidates, []);
+    expect(r?.condition.mode).toBe('text');
+    expect(r?.condition.parity).toBeUndefined();
+    const [a] = parseClausesFromUrl(['attrs.명단ID'], ['짝수 1-10'], [''], candidates, []);
+    expect(a?.condition.mode).toBe('text');
+  });
+});

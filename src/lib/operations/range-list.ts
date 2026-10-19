@@ -29,6 +29,24 @@ export function hasLeadingZeroToken(input: string): boolean {
   return /(^|[\s,;-])0\d/.test(input);
 }
 
+/** 번호 홀짝 — 필터 입력칸에 `짝수`·`홀수` 한 단어로 적는다. */
+export type Parity = 'even' | 'odd';
+
+const PARITY_KEYWORDS: Readonly<Record<string, Parity>> = { 짝수: 'even', 홀수: 'odd' };
+
+/**
+ * 입력이 `짝수` 또는 `홀수` **한 단어일 때만** 홀짝 키워드. 다른 토큰과 섞이면 null —
+ * 범위와 함께 쓰려면 조건을 AND 로 하나 더 둔다(문법을 겹치지 않는다).
+ */
+export function parseParityKeyword(input: string): Parity | null {
+  return PARITY_KEYWORDS[input.trim()] ?? null;
+}
+
+/** 상태줄·칩 표기. */
+export function parityLabel(parity: Parity): string {
+  return parity === 'even' ? '짝수 번호' : '홀수 번호';
+}
+
 export interface NumRange {
   from: number;
   to: number;

@@ -1,7 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { NumRange } from './range-list';
+import type { NumRange, Parity } from './range-list';
 import {
   FILTER_SOURCE,
   UNSUBSCRIBE_RESULT_CODE_KEYWORD,
@@ -158,6 +158,14 @@ function rangesToSql(expr: SQL, ranges: NumRange[]): SQL {
 }
 
 /**
+ * 홀짝 절 — 정수식의 나머지. 식이 NULL(숫자가 아닌 attrs 값·빈 값)이면 비교도 NULL 이라
+ * 짝수에도 홀수에도 걸리지 않는다.
+ */
+function paritySql(expr: SQL, parity: Parity): SQL {
+  return sql`(${expr} % 2 = ${parity === 'even' ? 0 : 1})`;
+}
+
+/**
  * 단일 절 SQL. cond.source 와 mode 별로 분기.
  *
  * SECURITY: cond.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
@@ -176,6 +184,7 @@ export function buildClauseSql(
 
   if (cond.source === FILTER_SOURCE.RESID) {
     if (cond.mode === 'idlist') {
+      if (cond.parity) return paritySql(refs.resid, cond.parity);
       if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
       return rangesToSql(refs.resid, cond.ranges);
     }
@@ -213,11 +222,12 @@ export function buildClauseSql(
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
     // NO 같은 숫자 attrs 컬럼의 숫자 검색 (예: "3", "10-13, 15").
-    if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
-    // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다.
+    // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다. 앞자리 0 은 그대로 숫자로 읽힌다.
     const numExpr = sql`(CASE WHEN ${refs.attrs}->>${key} ~ '^[0-9]+$' THEN (${refs.attrs}->>${key})::numeric END)`;
+    if (cond.parity) return paritySql(numExpr, cond.parity);
+    if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
     const conds: SQL[] = [rangesToSql(numExpr, cond.ranges)];
     if (cond.textFallback === true && cond.value.length > 0) {
       // 값이 순수 정수가 아닌 행(numExpr IS NULL)만 부분검색으로 건진다 — 숫자 값은
