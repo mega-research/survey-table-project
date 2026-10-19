@@ -894,11 +894,10 @@ describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
       await import('@/server/survey-response/services/response-completion');
     await completeResponse({ responseId: 'r1' });
 
-    // completeResponse 이 시나리오(data 없음, versionId 없음)에서는 정원 count 쿼리 1건만
-    // db.select(...).where(...) 를 탄다 — 그 조건에 notTestResponse(is_test=false) 가
-    // 실제로 포함됐는지 SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로
-    // 결과값 비교만으로는 누락을 잡지 못한다).
-    expect(selectWhereLogMock).toHaveBeenCalledTimes(1);
+    // completeResponse 의 첫 db.select(...).where(...) 는 정원 count 쿼리다(그 뒤는 응답 확정
+    // 재료의 PII 대상 조회) — 그 조건에 notTestResponse(is_test=false) 가 실제로 포함됐는지
+    // SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로 결과값 비교만으로는
+    // 누락을 잡지 못한다).
     const whereArg = selectWhereLogMock.mock.calls[0]![0];
     const query = dialect.sqlToQuery(whereArg);
     expect(query.sql).toContain('is_test');

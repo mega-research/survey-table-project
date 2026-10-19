@@ -142,17 +142,13 @@ const HARD_CLOSE_PLAN = {
 // select 호출 순서(versionId=null, contactTargetId=null):
 //   0) 가용성 게이트 완료 카운트 (countCompletedResponses)
 //   1) 유효 questionId 집합 (loadValidQuestionIds)
-//   2·3) loadPiiTargets — 질문 단위·셀 단위 (레거시 폴백, 둘 다 빈 결과)
+//   2·3) 응답 확정 재료의 loadPiiTargets — 질문 단위·셀 단위 (레거시 폴백, 둘 다 빈 결과)
 //   4) 하드 차단: 트랜잭션 안 셀 완료 수 재집계 / 표식 경로: 트랜잭션 밖 detectQuotaOverflow
 //      (둘 다 완료 응답 로드 한 번이라 자리가 같다)
-function queueSelects(completedAnswersRows: Record<string, unknown>[], hardClose: boolean) {
+function queueSelects(completedAnswersRows: Record<string, unknown>[]) {
   selectTerminalQueue.length = 0;
   const completedRows = completedAnswersRows.map((answers) => ({ questionResponses: answers }));
-  if (hardClose) {
-    selectTerminalQueue.push([{ total: 0 }], [{ id: GATE_QID }], [], [], completedRows);
-  } else {
-    selectTerminalQueue.push([{ total: 0 }], [{ id: GATE_QID }], completedRows);
-  }
+  selectTerminalQueue.push([{ total: 0 }], [{ id: GATE_QID }], [], [], completedRows);
 }
 
 function mainSet(): Record<string, unknown> {
@@ -210,7 +206,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('셀이 목표를 채웠으면 완료로 만들지 않고 답변을 저장한 채 quotaful_out 으로 쓴다', async () => {
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -235,7 +231,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       ...OPEN_SURVEY_ROW,
       quotaConfig: { ...HARD_CLOSE_PLAN, midSurveyClosedMessage: null },
     };
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -243,7 +239,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('셀에 여유가 있으면 종전대로 완료된다', async () => {
-    queueSelects([{ [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -260,7 +256,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       ...OPEN_SURVEY_ROW,
       quotaConfig: { ...HARD_CLOSE_PLAN, midSurveyClose: false },
     };
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], false);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -271,7 +267,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('미분류 응답은 차단하지 않는다', async () => {
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit({ [GATE_QID]: '기타' });
 
@@ -297,7 +293,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
         ],
       },
     };
-    queueSelects([], true);
+    queueSelects([]);
 
     const result = await submit({ [GATE_QID]: '여' });
 
@@ -310,7 +306,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     updateReturningMock.mockResolvedValue([
       { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null, isTest: true },
     ]);
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -323,7 +319,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       ...BASE_GATE_ROW,
       metadata: { reeditPendingSince: '2026-09-23T00:00:00.000Z' },
     };
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], false);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const result = await submit();
 
@@ -334,11 +330,13 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('빈 complete(페이로드 없음)도 저장분으로 판정한다 — draft 로 저장한 답을 페이로드 없이 완료해 우회할 수 없다', async () => {
-    // select 순서(빈 경로): 0) 가용성 카운트 1) 잠금 전 저장분(셀 키 선택) 2) 잠금 아래 저장분
-    // 3) 셀 완료 수 재집계
+    // select 순서(빈 경로): 0) 가용성 카운트 1·2) 응답 확정 재료의 PII 대상 3) 잠금 전 저장분(셀 키 선택)
+    // 4) 잠금 아래 저장분 5) 셀 완료 수 재집계
     selectTerminalQueue.length = 0;
     selectTerminalQueue.push(
       [{ total: 0 }],
+      [],
+      [],
       [{ questionResponses: { [GATE_QID]: '남' } }],
       [{ questionResponses: { [GATE_QID]: '남' } }],
       [{ questionResponses: { [GATE_QID]: '남' } }, { questionResponses: { [GATE_QID]: '남' } }],
@@ -361,6 +359,8 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     selectTerminalQueue.length = 0;
     selectTerminalQueue.push(
       [{ total: 0 }],
+      [],
+      [],
       [{ questionResponses: { [GATE_QID]: '남' } }],
       [{ questionResponses: { [GATE_QID]: '남' } }],
       [{ questionResponses: { [GATE_QID]: '남' } }],
@@ -376,7 +376,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('셀이 찼더라도 다른 탭이 먼저 완료한 같은 응답이면 완료자로 본다 — 마감 결과가 아니다', async () => {
-    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
     updateReturningMock.mockResolvedValue([]);
     selectTerminalQueue.push([
       { id: RESPONSE_ID, surveyId: SURVEY_ID, status: 'completed', deletedAt: null, isTest: false },
@@ -389,7 +389,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   });
 
   it('늦게 도착한 제출의 마지막 페이지 답변도 저장한다', async () => {
-    queueSelects([{ [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }]);
     updateReturningMock.mockResolvedValue([]);
     selectTerminalQueue.push([
       { id: RESPONSE_ID, surveyId: SURVEY_ID, status: 'quotaful_out', deletedAt: null },
@@ -407,7 +407,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   it('이미 쿼터마감된 행에 늦게 도착한 complete 는 쿼터마감 결과를 돌려준다', async () => {
     // 페이지 재확인이 먼저 quotaful_out 으로 마킹한 뒤 제출이 도착한 경우 — 가짜 감사 화면도
     // "이미 완료" 안내도 아니라 마감 화면이어야 한다.
-    queueSelects([{ [GATE_QID]: '남' }], true);
+    queueSelects([{ [GATE_QID]: '남' }]);
     updateReturningMock.mockResolvedValue([]);
     // UPDATE 0행 뒤 기존 행 재조회(tx.select ... limit 1)
     selectTerminalQueue.push([
@@ -450,10 +450,10 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     });
 
     it('여유 셀에서 마감된 셀로 바뀌었으면 바뀐 셀로 다시 세어 쿼터마감한다', async () => {
-      // 0) 가용성 카운트 1) 잠금 전 저장분 — 남
-      // [1차 tx] 2) 잠금 아래 저장분 — 여 → 셀이 바뀌어 되돌린다
-      // [2차 tx, 여 잠금] 3) 잠금 아래 저장분 — 여 4) 여 셀 완료 수(목표 1 을 이미 채움)
-      selectTerminalQueue.push([{ total: 0 }], stored('남'), stored('여'), stored('여'), stored('여'));
+      // 0) 가용성 카운트 1·2) 응답 확정 재료의 PII 대상 3) 잠금 전 저장분 — 남
+      // [1차 tx] 4) 잠금 아래 저장분 — 여 → 셀이 바뀌어 되돌린다
+      // [2차 tx, 여 잠금] 5) 잠금 아래 저장분 — 여 6) 여 셀 완료 수(목표 1 을 이미 채움)
+      selectTerminalQueue.push([{ total: 0 }], [], [], stored('남'), stored('여'), stored('여'), stored('여'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -468,7 +468,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     });
 
     it('잠금 전에는 미분류였다가 잠금 아래에서 마감된 셀로 분류돼도 다시 세어 쿼터마감한다', async () => {
-      selectTerminalQueue.push([{ total: 0 }], stored('기타'), stored('여'), stored('여'), stored('여'));
+      selectTerminalQueue.push([{ total: 0 }], [], [], stored('기타'), stored('여'), stored('여'), stored('여'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -482,7 +482,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
 
     it('바뀐 셀에 여유가 있으면 완료된다', async () => {
       // 2차 tx 의 남 셀 완료 수 — 1명(목표 2)
-      selectTerminalQueue.push([{ total: 0 }], stored('여'), stored('남'), stored('남'), stored('남'));
+      selectTerminalQueue.push([{ total: 0 }], [], [], stored('여'), stored('남'), stored('남'), stored('남'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -494,7 +494,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     });
 
     it('잠금 아래에서 미분류가 됐으면 쿼터에 걸리지 않고 완료된다', async () => {
-      selectTerminalQueue.push([{ total: 0 }], stored('여'), stored('기타'));
+      selectTerminalQueue.push([{ total: 0 }], [], [], stored('여'), stored('기타'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -509,6 +509,8 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       // 잠금 아래 저장분이 시도마다 다른 셀 — 남·여를 번갈아 돈다
       selectTerminalQueue.push(
         [{ total: 0 }],
+        [],
+        [],
         stored('남'),
         stored('여'),
         stored('남'),

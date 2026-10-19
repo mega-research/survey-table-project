@@ -9,8 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * 1. 구버전 응답(migrating)에는 strip 을 걸지 않는다 — 재배포로 생기거나 좁혀진 표시
  *    조건이 이미 수집된 답을 소급해 지우면 안 된다 (스펙 결정 "이미 수집된 응답은 소급
  *    정리하지 않는다"). edit log 는 값을 남기지 않아 복구 경로가 없다.
- * 2. 순서 계약 — 숨은 문항 strip → 게이팅 strip → calc 재계산. 세 지점이 각각 주석으로만
- *    선언하던 것을 픽스처 하나로 고정한다. 어느 한 쌍이라도 뒤바뀌면 저장 결과가 달라진다.
+ * 2. 보기 그룹 표의 `__choiceGroups` 가 complete 저장 경계를 지나도 남는다.
+ *
+ * 순서 계약(숨은 문항 strip → 게이팅 strip → calc 재계산)은 응답 확정 모듈 하나로 모였으므로
+ * 그 단위 테스트(`answer-finalization.test.ts`)가 지킨다. 여기서 경로마다 다시 검사하지 않는다.
  */
 
 const {
@@ -290,7 +292,7 @@ function laterConditionSnapshot() {
 
 // ─── saveAdminEdit ─────────────────────────────────────────────────────────
 
-describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
+describe('saveAdminEdit — 숨은 문항 strip 게이트', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
@@ -363,102 +365,6 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트와 순서', () => {
       questionResponses: Record<string, unknown>;
     };
     expect(setArg.questionResponses['q-later']).toBeUndefined();
-  });
-
-  it('숨은 문항 strip → 게이팅 strip → calc 재계산 순서로 저장한다', async () => {
-    responseFindFirstMock.mockResolvedValue({
-      id: RESPONSE_ID,
-      surveyId: SURVEY_ID,
-      versionId: VERSION_ID,
-      deletedAt: null,
-      status: 'completed',
-      contactTargetId: null,
-      // 클라 diff 를 만들어 스냅샷 조회 경로를 태우기 위한 이전 값.
-      questionResponses: { 'q-ctrl': 'yes' },
-    });
-    selectLimitMock.mockResolvedValue([{ snapshot: { questions: ORDER_QUESTIONS } }]);
-
-    const { saveAdminEdit } = await import(
-      '@/server/survey-response/services/response-edit'
-    );
-    await saveAdminEdit(
-      {
-        surveyId: SURVEY_ID,
-        responseId: RESPONSE_ID,
-        questionResponses: orderPayload(),
-        versionId: VERSION_ID,
-      },
-      { id: 'admin-1', email: 'a@b.com' },
-      false,
-    );
-
-    const setArg = updateSetLogMock.mock.calls[0]![0] as {
-      questionResponses: Record<string, unknown>;
-    };
-    expectOrderContract(setArg.questionResponses);
-  });
-});
-
-// ─── completeResponse ──────────────────────────────────────────────────────
-
-describe('completeResponse — 숨은 문항 strip 순서', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    responseFindFirstMock.mockResolvedValue({
-      surveyId: SURVEY_ID,
-      versionId: VERSION_ID,
-      contactTargetId: null,
-      isTest: false,
-    });
-    surveyFindFirstMock.mockResolvedValue({
-      id: SURVEY_ID,
-      status: 'published',
-      endDate: null,
-      maxResponses: null,
-      isPublic: true,
-      requireInviteToken: false,
-      currentVersionId: VERSION_ID,
-      isPaused: false,
-      testModeEnabled: false,
-      testToken: null,
-    });
-    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
-    selectThenMock.mockReturnValue([{ total: 0 }]);
-    selectLimitMock.mockResolvedValue([{ snapshot: { questions: ORDER_QUESTIONS } }]);
-    stubExecute(ORDER_QUESTIONS.map((q) => q.id));
-    updateReturningMock.mockReturnValue([
-      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null },
-    ]);
-  });
-
-  it('숨은 문항 strip → 게이팅 strip → calc 재계산 순서로 저장한다', async () => {
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
-    await completeResponse({
-      responseId: RESPONSE_ID,
-      data: { questionResponses: orderPayload() },
-    });
-
-    const setArg = updateSetLogMock.mock.calls[0]![0] as {
-      questionResponses: Record<string, unknown>;
-    };
-    expectOrderContract(setArg.questionResponses);
-  });
-
-  it('페이로드 없는 빈 complete 의 잠금 아래 재계산도 같은 순서를 지킨다', async () => {
-    // 초안으로 저장돼 있던 값(유령값 포함)을 row lock 아래에서 읽어 다시 태우는 경로.
-    selectForUpdateMock.mockReturnValue([{ questionResponses: orderPayload() }]);
-
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
-    await completeResponse({ responseId: RESPONSE_ID });
-
-    const setArg = updateSetLogMock.mock.calls[0]![0] as {
-      questionResponses: Record<string, unknown>;
-    };
-    expectOrderContract(setArg.questionResponses);
   });
 });
 

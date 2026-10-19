@@ -3,11 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { questions, surveyVersions } from '@/db/schema';
-import {
-  encryptResponsesForStorage,
-  hasPiiTargets,
-  type PiiTargets,
-} from '@/lib/crypto/response-pii';
+import type { PiiTargets } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import {
@@ -270,7 +266,7 @@ export type CompleteGateRow = {
 };
 
 /**
- * 정제 (1/3) — 제출 페이로드의 오염 가드.
+ * 받은 답 검사 (1/2) — 제출 페이로드의 오염 가드.
  *
  * completeResponse 는 data.questionResponses 를 verbatim 저장하므로, 미인증 응답자가
  * (a) 설문에 없는 임의 questionId 수천 개, 또는 (b) 단일 키에 수 MB 값을 주입해 JSONB
@@ -350,7 +346,7 @@ export async function sanitizeSubmittedResponses(
 }
 
 /**
- * 정제 (2/3) — prefill 강제 복원.
+ * 받은 답 검사 (2/2) — prefill 강제 복원. 이 뒤가 응답 확정(answer-finalization)이다.
  *
  * defaultValueTemplate 이 있는 질문의 응답값은 명단 값(attrs + 개인정보 열)으로 치환한 expected 와
  * 일치해야 한다(치환 결과가 빈 문항은 잠기지 않으므로 대상이 아니다). 클라이언트가 disabled 입력을 우회 조작해도 서버가 expected 로 되돌린다.
@@ -398,25 +394,18 @@ export async function restorePrefillAnswers(
 }
 
 /**
- * 정제 (3/3) — PII 문항·PII input 셀 암호화. prefill 복원(평문 비교) 이후, 저장 직전이어야 한다.
+ * 저장값 바이트 필터 — 받은 답 검사의 평문 필터를 통과했어도 암호문은 상한을 넘을 수 있다.
+ * 넘는 키만 silent drop 한다(받은 답 검사와 같은 의미론 — 완주자의 완료 자체는 막지 않는다).
+ * 평문 키는 이미 같은 임계로 걸렀으므로 다시 재도 결과가 같다 — 크기가 변할 수 있는 것은
+ * 암호화된 키뿐이다.
  */
-export async function encryptPiiAnswers(
-  validated: Record<string, unknown>,
-  gateRow: CompleteGateRow,
-): Promise<Record<string, unknown>> {
-  const piiTargets = await loadPiiTargets(gateRow.versionId, gateRow.surveyId);
-  if (hasPiiTargets(piiTargets)) {
-    const encrypted = encryptResponsesForStorage(validated, piiTargets);
-    // 바이트 필터 2단(저장값 기준): 위쪽 평문 필터를 통과했어도 암호문은 상한을 넘을 수
-    // 있다. 크기가 변한 키는 암호화된 것(질문 단위·셀 단위)뿐이라 그 키만 다시 잰다. 이 경로의
-    // 의미론은 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
-    for (const qid of new Set([...piiTargets.questionIds, ...piiTargets.cellIds.keys()])) {
-      if (!(qid in encrypted)) continue;
-      const storedBytes = Buffer.byteLength(JSON.stringify(encrypted[qid] ?? null), 'utf8');
-      if (storedBytes > MAX_ANSWER_VALUE_BYTES) delete encrypted[qid];
+export function dropOversizedStoredValues(stored: Record<string, unknown>): Record<string, unknown> {
+  let out: Record<string, unknown> | null = null;
+  for (const [qid, value] of Object.entries(stored)) {
+    if (Buffer.byteLength(JSON.stringify(value ?? null), 'utf8') > MAX_ANSWER_VALUE_BYTES) {
+      out ??= { ...stored };
+      delete out[qid];
     }
-    return encrypted;
   }
-
-  return validated;
+  return out ?? stored;
 }
