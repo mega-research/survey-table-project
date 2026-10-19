@@ -83,10 +83,10 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   // 평소엔 접힘 — 제목 클릭으로 펼침/접힘 (2026-07-02 운영 피드백).
   const [open, setOpen] = useState(false);
 
-  // 부족 셀 순 = 남은 수(target-current) 내림차순
+  // 부족 셀 순 = 남은 수(target-current) 내림차순. 달성한 셀(남은 수 0)도 빼지 않고 맨 뒤에
+  // 등록 순서대로 둔다 — 조건이 1개면 매트릭스가 없어 여기가 달성 셀을 볼 유일한 자리다.
   const shortfall: ShortfallCell[] = [...status.cells]
     .map((c) => ({ ...c, remaining: Math.max(0, c.target - c.current) }))
-    .filter((c) => c.remaining > 0)
     .sort((a, b) => b.remaining - a.remaining);
 
   const showMatrix = canMatrix && view === 'matrix';
@@ -375,37 +375,54 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
                   </table>
                 </div>
               </>
-            ) : shortfall.length === 0 ? (
-              <EmptyState
-                message="부족한 셀이 없습니다"
-                description="모든 셀이 목표를 달성했습니다"
-              />
             ) : (
               <ol className="divide-y divide-slate-100">
-                {shortfall.map((cell, i) => (
-                  <li
-                    key={cellKey(cell.categoryIds)}
-                    className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"
-                  >
-                    <span className="w-5 shrink-0 text-xs font-bold text-slate-400">{i + 1}</span>
-                    <span className="w-40 shrink-0 truncate text-sm font-semibold text-slate-900">
-                      {cell.labels.join(' · ')}
-                    </span>
-                    <span className="w-24 shrink-0 text-xs text-slate-500">
-                      {numberFormatter.format(cell.current)} / {numberFormatter.format(cell.target)}
-                    </span>
-                    <div className="h-2 max-w-xs flex-1 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-rose-300"
-                        style={{ width: `${Math.min(100, cell.pct)}%` }}
-                      />
-                    </div>
-                    <span className="w-24 shrink-0 text-right text-sm font-bold text-amber-700">
-                      {numberFormatter.format(cell.remaining)}{' '}
-                      <span className="text-xs font-normal text-slate-400">남음</span>
-                    </span>
-                  </li>
-                ))}
+                {shortfall.map((cell, i) => {
+                  const achieved = cell.remaining === 0;
+                  return (
+                    <li
+                      key={cellKey(cell.categoryIds)}
+                      className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"
+                    >
+                      {/* 순번은 부족 순위라 달성 셀에는 매기지 않는다 */}
+                      <span className="w-5 shrink-0 text-xs font-bold text-slate-400">
+                        {achieved ? '' : i + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          'w-40 shrink-0 truncate text-sm font-semibold',
+                          achieved ? 'text-slate-500' : 'text-slate-900',
+                        )}
+                      >
+                        {cell.labels.join(' · ')}
+                      </span>
+                      <span className="w-24 shrink-0 text-xs text-slate-500">
+                        {numberFormatter.format(cell.current)} / {numberFormatter.format(cell.target)}
+                      </span>
+                      <div className="h-2 max-w-xs flex-1 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            achieved ? TONE_BAR.done : 'bg-rose-300',
+                          )}
+                          style={{ width: `${Math.min(100, cell.pct)}%` }}
+                        />
+                      </div>
+                      {achieved ? (
+                        <span
+                          className={cn('w-24 shrink-0 text-right text-sm font-bold', TONE_TEXT.done)}
+                        >
+                          달성
+                        </span>
+                      ) : (
+                        <span className="w-24 shrink-0 text-right text-sm font-bold text-amber-700">
+                          {numberFormatter.format(cell.remaining)}{' '}
+                          <span className="text-xs font-normal text-slate-400">남음</span>
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </CollapsibleContent>
