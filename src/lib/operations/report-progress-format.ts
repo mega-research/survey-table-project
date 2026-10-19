@@ -58,7 +58,10 @@ export interface ProgressRow {
  * 진척 보고 분류 기준 중 명단 attrs 가 아닌 것 — 시스템이 아는 축.
  * 주소(`groupBy=`)·정렬(`group:<키>`)에는 `system:<이름>` 으로 실린다.
  */
-export const PROGRESS_SYSTEM_GROUP_KEYS = [] as const;
+export const PROGRESS_SYSTEM_GROUP_KEYS = [
+  // 지금 맡은 컨택원 — 완료도 지금 맡은 컨택원 기준으로 센다 (CONTEXT.md 「배정」).
+  'contact_owner',
+] as const;
 export type ProgressSystemGroupKey = (typeof PROGRESS_SYSTEM_GROUP_KEYS)[number];
 
 /**

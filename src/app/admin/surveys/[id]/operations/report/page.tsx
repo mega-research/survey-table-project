@@ -11,6 +11,8 @@ import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { listAssignmentOptions } from '@/server/contacts/services/contact-assignments';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import {
@@ -59,7 +61,11 @@ const VALID_SORTS: ProgressSortKey[] = [
 /** 분류 기준 칩 하나 — key 는 주소·정렬에 실리는 직렬화된 태그 키. */
 interface GroupCriterion extends GroupByOption {
   groupKey: ProgressGroupKey;
+  /** 값 없는 그룹 표기 (기본 「(미분류)」) */
+  nullLabel?: string;
 }
+
+const CONTACT_OWNER_GROUP_KEY: ProgressGroupKey = { kind: 'system', key: 'contact_owner' };
 
 /**
  * sort 검증 — 고정 5종 + meta:<key> + group:<분류 키> (현재 활성 기준 키만 허용).
@@ -98,11 +104,15 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
 
   // contactScheme 은 pii blindIndex 계산용 piiType 매핑에 필요. getContactColumnScheme 가
   // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
-  const [scheme, groupLabel, contactScheme] = await Promise.all([
+  const [scheme, groupLabel, contactScheme, isGuest] = await Promise.all([
     getProgressColumnScheme(surveyId),
     getProgressGroupLabel(surveyId, scope),
     getContactColumnScheme(surveyId, scope),
+    isGuestViewer(),
   ]);
+  // 컨택원은 내부 실사 운영 정보 — 게스트에게는 분류 기준 칩이 없다.
+  const hasAssignments =
+    !isGuest && (await listAssignmentOptions(surveyId, scope)).length > 0;
   const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
   // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
   const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
@@ -127,10 +137,26 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
 
   // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
   // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
-  const groupByCriteria: GroupCriterion[] = resolveGroupCriteria(contactScheme).map((c) => {
-    const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
-    return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
-  });
+  // 「컨택원」 칩은 컨택원이 하나라도 있을 때 맨 끝에 나오고 처음에는 꺼져 있다 — 보던 진척
+  // 보고가 컨택원이 생겼다고 갑자기 바뀌지 않게 (defaultOff).
+  const groupByCriteria: GroupCriterion[] = [
+    ...resolveGroupCriteria(contactScheme).map((c) => {
+      const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
+      return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
+    }),
+    ...(hasAssignments
+      ? [
+          {
+            key: formatProgressGroupKey(CONTACT_OWNER_GROUP_KEY),
+            label: '컨택원',
+            groupKey: CONTACT_OWNER_GROUP_KEY,
+            nullLabel: '(배정 없음)',
+            defaultOff: true,
+          },
+        ]
+      : []),
+  ];
+  const defaultCriteria = groupByCriteria.filter((c) => !c.defaultOff);
   // URL groupBy 해석:
   // - 미지정 → 컬럼 설정에서 지정한 분류 기준 전체를 설정 순서(대>중>소>세부)대로 자동
   //   선택. 미리 설정해두면 URL 진입만으로 조합 집계가 나오는 모델 (2026-08-14 결정).
@@ -141,7 +167,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const rawGroupBy = typeof sp.groupBy === 'string' ? sp.groupBy : null;
   let activeCriteria: GroupCriterion[];
   if (rawGroupBy === null) {
-    activeCriteria = groupByCriteria;
+    activeCriteria = defaultCriteria;
   } else {
     const requestedKeys = rawGroupBy
       .split(',')
@@ -149,7 +175,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
       .filter((k): k is ProgressGroupKey => k !== null)
       .map(formatProgressGroupKey);
     const matched = groupByCriteria.filter((c) => requestedKeys.includes(c.key));
-    activeCriteria = matched.length > 0 ? matched : groupByCriteria;
+    activeCriteria = matched.length > 0 ? matched : defaultCriteria;
   }
   const activeKeys = activeCriteria.map((c) => c.key);
   const activeGroupKeys = activeCriteria.map((c) => c.groupKey);
@@ -201,7 +227,11 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
         <>
           {groupByCriteria.length > 0 && (
             <ProgressGroupByTabs
-              options={groupByCriteria.map(({ key, label }) => ({ key, label }))}
+              options={groupByCriteria.map(({ key, label, defaultOff }) => ({
+                key,
+                label,
+                ...(defaultOff ? { defaultOff } : {}),
+              }))}
               activeKeys={activeKeys}
             />
           )}
@@ -222,7 +252,11 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
             metaColumns={visibleColumns}
             residLabel={residLabel}
             showResid={showResid}
-            groupColumns={activeCriteria.map((c) => ({ key: c.key, label: c.label }))}
+            groupColumns={activeCriteria.map((c) => ({
+              key: c.key,
+              label: c.label,
+              ...(c.nullLabel ? { nullLabel: c.nullLabel } : {}),
+            }))}
             page={page}
             size={size}
             sort={sort}

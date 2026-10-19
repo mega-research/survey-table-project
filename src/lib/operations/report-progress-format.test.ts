@@ -120,6 +120,16 @@ describe('parseProgressGroupKey / formatProgressGroupKey', () => {
     expect(formatProgressGroupKey({ kind: 'attrs', key: '참가 전시회' })).toBe('참가 전시회');
   });
 
+  it('컨택원은 시스템 기준이다', () => {
+    expect(parseProgressGroupKey('system:contact_owner')).toEqual({
+      kind: 'system',
+      key: 'contact_owner',
+    });
+    expect(formatProgressGroupKey({ kind: 'system', key: 'contact_owner' })).toBe(
+      'system:contact_owner',
+    );
+  });
+
   it('모르는 시스템 키는 버린다', () => {
     expect(parseProgressGroupKey('system:unknown')).toBeNull();
   });

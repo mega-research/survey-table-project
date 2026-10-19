@@ -7,6 +7,8 @@ export interface GroupByOption {
   /** 직렬화된 분류 키 — attrs 키는 그대로, 시스템 기준은 `system:<이름>` */
   key: string;
   label: string;
+  /** 주소에 groupBy 가 없을 때 꺼진 채로 나오는 칩 (예: 컨택원). */
+  defaultOff?: boolean;
 }
 
 interface Props {
@@ -32,9 +34,12 @@ export function ProgressGroupByTabs({ options, activeKeys }: Props) {
       : [...activeKeys, key];
     // 옵션(컬럼 설정) 순서로 정규화 — URL 이 클릭 순서에 좌우되지 않게
     const ordered = options.map((o) => o.key).filter((k) => next.includes(k));
-    if (ordered.length === 0) return; // 최소 1개 유지
+    // 최소 1개 유지 — 단 기본으로 켜지는 칩이 하나도 없으면(컨택원 칩만 있는 설문) 마지막 칩을
+    // 끄는 것은 기본 화면(업로드 그룹 기준)으로 돌아가는 일이라 주소에서 기준을 지운다.
+    if (ordered.length === 0 && options.some((o) => !o.defaultOff)) return;
     pushParams((p) => {
-      p.set('groupBy', ordered.join(','));
+      if (ordered.length === 0) p.delete('groupBy');
+      else p.set('groupBy', ordered.join(','));
       p.delete('page');
     });
   };

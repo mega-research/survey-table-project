@@ -261,8 +261,20 @@ function groupKeySql(key: ProgressGroupKey | null): GroupKeySql {
 }
 
 function systemGroupKeySql(key: ProgressSystemGroupKey): GroupKeySql {
-  const unknownKey: never = key;
-  throw new Error(`알 수 없는 시스템 분류 기준: ${String(unknownKey)}`);
+  switch (key) {
+    case 'contact_owner':
+      // 그룹 키는 컨택원 id, 표시는 이름, 정렬은 컨택원 순서. 배정 없음은 한 줄로 모여 끝에 선다.
+      return {
+        value: sql`ctt.assignment_id`,
+        label: (col) => sql`(SELECT ca.name FROM contact_assignments ca WHERE ca.id = ${col})`,
+        sort: (col) => sql`(SELECT ca."order" FROM contact_assignments ca WHERE ca.id = ${col})`,
+        nullLabel: '(배정 없음)',
+      };
+    default: {
+      const unknownKey: never = key;
+      throw new Error(`알 수 없는 시스템 분류 기준: ${String(unknownKey)}`);
+    }
+  }
 }
 
 function groupKeySqls(groupByKeys: ProgressGroupKey[] | undefined): GroupKeySql[] {

@@ -32,6 +32,7 @@ import {
   previewAssignment,
 } from '@/server/contacts/services/contact-assignment-apply';
 import { createContactIdList } from '@/server/contacts/services/contact-id-lists';
+import { getProgressRows, getProgressTotals } from '@/server/operations/services/report-progress';
 import { listAssignmentFacets } from '@/server/contacts/services/contact-assignment-facets';
 import { buildColumnCandidates, listContactsForSurvey } from '@/server/read-models/contacts';
 import {
@@ -657,6 +658,70 @@ run('컨택원 배정 (real local DB)', () => {
       await expect(
         assignFromList({ surveyId, assignmentId: owner.id, filter: emptyFilter }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  describe('진척 보고 「컨택원」 기준', () => {
+    const OWNER = { kind: 'system', key: 'contact_owner' } as const;
+
+    it('컨택원별 줄(순서대로) + 배정 없음 한 줄, 다른 기준과 섞이고 합계가 맞다', async () => {
+      const surveyId = await seedSurvey();
+      const ids = await seedTargets(surveyId, 5);
+      const tenth = await createAssignment({ surveyId, name: '10차' });
+      const eleventh = await createAssignment({ surveyId, name: '11차' });
+      await reorderAssignments({ surveyId, ids: [eleventh.id, tenth.id] }); // 11차가 먼저
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: tenth.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: eleventh.id });
+      // 4, 5 는 배정 없음. 대상 1 은 응답 완료.
+      await db.insert(surveyResponses).values({
+        surveyId,
+        contactTargetId: ids[0]!,
+        questionResponses: {},
+        status: 'completed',
+        isCompleted: true,
+      });
+      await db
+        .update(contactTargets)
+        .set({ attrs: { 기업명: '갑' } })
+        .where(inArray(contactTargets.id, [ids[0]!, ids[3]!]));
+
+      const base = {
+        surveyId,
+        scope: 'real' as const,
+        condition: null,
+        page: 1,
+        size: 20,
+        metaKeys: [],
+      };
+      const byOwner = await getProgressRows({
+        ...base,
+        sort: `group:system:contact_owner`,
+        dir: 'asc',
+        groupByKeys: [OWNER],
+      });
+      expect(byOwner.map((r) => [r.groupLabel, r.groupValues, r.listCount, r.completedCount])).toEqual([
+        ['11차', ['11차'], 1, 0],
+        ['10차', ['10차'], 2, 1],
+        ['(배정 없음)', [null], 2, 0],
+      ]);
+
+      const totals = await getProgressTotals(surveyId, 'real', null, [OWNER]);
+      expect(totals).toMatchObject({ groupCount: 3, listTotal: 5, completedTotal: 1 });
+
+      const mixed = await getProgressRows({
+        ...base,
+        sort: 'groupLabel',
+        dir: 'asc',
+        groupByKeys: [{ kind: 'attrs', key: '기업명' }, OWNER],
+      });
+      const combo = new Map(mixed.map((r) => [r.groupLabel, r.listCount]));
+      expect(combo.get('갑 / 10차')).toBe(1);
+      expect(combo.get('갑 / (배정 없음)')).toBe(1);
+      expect(combo.get('기업2 / 10차')).toBe(1);
+      expect(combo.get('기업3 / 11차')).toBe(1);
+      expect(combo.get('기업5 / (배정 없음)')).toBe(1);
+      expect((await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER])).groupCount).toBe(5);
     });
   });
 });
