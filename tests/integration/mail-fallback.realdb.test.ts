@@ -301,6 +301,25 @@ run('대체 발송 (mail fallback)', () => {
     ]);
   });
 
+  it('다른 회차에서 칸째 반송된 칸(여러 주소 한 통)은 건너뛴다 — 단체 발송과 같은 규칙 (2026-10-19)', async () => {
+    const contactId = await seedContact({
+      ceo: 'p@a.com',
+      staff: 'pair1@a.com / pair2@a.com',
+      staff2: 'solo@a.com',
+    });
+    // 다른 회차에서 같은 칸 값을 한 통으로 보낸 메일이 반송된 이력 — 어느 주소인지 몰라 칸째 막는다
+    const other = await seedContact({ ceo: 'pair1@a.com / pair2@a.com' });
+    const pairRun = await seedSentRecipient(other, 'pair1@a.com / pair2@a.com', 'ceo');
+    await db.update(mailRecipients).set({ status: 'bounced' }).where(eq(mailRecipients.id, pairRun.recipientId));
+
+    const { campaignId, messageId } = await seedSentRecipient(contactId, 'p@a.com', 'ceo');
+    await processResendEvent(messageId, 'email.bounced', new Date().toISOString());
+
+    expect((await fallbackOf(campaignId))?.recipients).toEqual([
+      expect.objectContaining({ emailSnapshot: 'solo@a.com', emailColumnKey: 'staff2' }),
+    ]);
+  });
+
   it('대기 중에 응답을 마친 사람에게는 대체 발송을 보내지 않고 사유를 남긴다', async () => {
     const contactId = await seedContact({ ceo: 'w@a.com', staff: 'w2@a.com' });
     const { campaignId, messageId } = await seedSentRecipient(contactId, 'w@a.com', 'ceo');

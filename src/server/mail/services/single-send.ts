@@ -3,9 +3,8 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
-import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
-import { loadMailEmailOrder } from '@/server/read-models/mail-email-order';
+import { loadMailEmailOrder, resolveSendAddresses } from '@/server/read-models/send-address';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -75,11 +74,13 @@ export async function sendSingleCampaign(
     throw new Error('연락금지 결과코드가 기록된 조사 대상입니다.');
   }
 
-  // 존재 검사만 필요하지만 "어떤 행이 이메일인가" 는 selectEmailPiiRows 한 곳이 정한다.
-  // 발송 주소 순서가 지정된 설문은 순위에 든 열만 본다 — createCampaign 이 실제로 쓰는 후보와 같다.
+  // 보낼 주소가 있는가 — 발송(createCampaign)과 같은 발송 주소 규칙. 단건은 반송을 보지 않는다
+  // (관리자가 지목한 의도적 발송, 2026-08-13 결정).
   const emailOrder = await loadMailEmailOrder(contact.surveyId, contact.isTest);
-  const emailRows = await selectEmailPiiRows(db, [input.contactTargetId], emailOrder);
-  if (emailRows.length === 0) {
+  const address = (await resolveSendAddresses(db, [input.contactTargetId], emailOrder)).get(
+    input.contactTargetId,
+  );
+  if (address?.kind !== 'send') {
     throw new Error('이메일 정보가 없는 조사 대상입니다.');
   }
 

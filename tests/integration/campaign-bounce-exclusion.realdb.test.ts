@@ -10,12 +10,12 @@ import {
   mailRecipients,
   surveys,
 } from '@/db/schema';
+import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import {
-  buildPiiRows,
-  type PiiInput,
-  selectEmailPiiRows,
-} from '@/lib/crypto/contact-pii-repo';
-import { listBouncedContactIds } from '@/server/mail/services/campaigns-read';
+  listBouncedContactIds,
+  preflightRecipients,
+} from '@/server/mail/services/campaigns-read';
+import { loadBouncedAddresses, selectEmailPiiRows } from '@/server/read-models/send-address';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
@@ -157,6 +157,25 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
     await seedBounce(surveyId, allDead, 'b-dead@example.com');
 
     expect(await listBouncedContactIds(surveyId)).toEqual([allDead]);
+  });
+
+  // 2026-10-19 발송 주소 모듈 — 칸 「a, c」의 주소가 각각 따로 반송됐으면 발송은 그 칸을 건너뛴다.
+  // 마법사 예고(listBouncedContactIds)는 칸 단위 SQL 근사라 놓치지만 사전 점검은 발송과 같은 판정이다.
+  it('칸 안 주소가 각각 반송된 컨택 — 예고는 칸 단위 근사로 놓치고, 사전 점검은 반송으로 정확히 센다', async () => {
+    const surveyId = await newSurvey('칸 안 주소 각각 반송');
+    const pair = await seedContact(surveyId, [['이메일', 'a-dead@example.com, c-dead@example.com']]);
+    await seedBounce(surveyId, null, 'a-dead@example.com');
+    await seedBounce(surveyId, null, 'c-dead@example.com');
+
+    expect(await listBouncedContactIds(surveyId)).toEqual([]);
+    const preflight = await preflightRecipients({
+      surveyId,
+      scope: 'real',
+      selectedContactIds: [pair],
+      bounced: await loadBouncedAddresses(surveyId),
+    });
+    expect(preflight.validIds).toEqual([]);
+    expect(preflight.bouncedIds).toEqual([pair]);
   });
 
   /** 컬럼 설정에 발송 주소 순서를 건다 — keys 는 1순위부터. */

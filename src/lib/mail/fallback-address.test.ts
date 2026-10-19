@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  type FallbackEmailCandidate,
-  fallbackCampaignTitle,
-  pickFallbackAddress,
-  remainingSendValue,
-} from './fallback-address';
+import { fallbackCampaignTitle, pickFallbackAddress } from './fallback-address';
+import type { SendAddressCell } from './send-address';
 
-const c = (columnKey: string, email: string): FallbackEmailCandidate => ({ columnKey, email });
+const c = (columnKey: string, value: string | null): SendAddressCell => ({ columnKey, value });
 const ceo = c('대표자 e-mail', 'ceo@a.com');
 const staff = c('실무자 e-mail', 'staff@a.com');
 const staff2 = c('실무자 e-mail__2', 'staff2@a.com');
@@ -99,6 +95,30 @@ describe('pickFallbackAddress', () => {
     ).toEqual({ columnKey: '실무자 e-mail__2', email: 'staff2@a.com' });
   });
 
+  it('다른 회차에서 칸째 반송된 칸(여러 주소 한 통)은 칸 안 주소가 멀쩡해 보여도 건너뛴다 — 단체 발송과 같은 규칙', () => {
+    expect(
+      pickFallbackAddress({
+        candidates: [ceo, c('실무자 e-mail', 'a@a.com / b@a.com'), staff2],
+        usedColumnKey: '대표자 e-mail',
+        usedEmail: 'ceo@a.com',
+        triedEmails: ['ceo@a.com'],
+        isBouncedAddress: bouncedOf('a@a.com / b@a.com'),
+      }),
+    ).toEqual({ columnKey: '실무자 e-mail__2', email: 'staff2@a.com' });
+  });
+
+  it('복호화에 실패한 칸은 건너뛴다', () => {
+    expect(
+      pickFallbackAddress({
+        candidates: [ceo, c('실무자 e-mail', null), staff2],
+        usedColumnKey: '대표자 e-mail',
+        usedEmail: 'ceo@a.com',
+        triedEmails: ['ceo@a.com'],
+        isBouncedAddress: notBounced,
+      }),
+    ).toEqual({ columnKey: '실무자 e-mail__2', email: 'staff2@a.com' });
+  });
+
   it('쓴 열을 모르면 주소 값으로 찾고, 그것도 없으면 처음부터 보되 보낸 주소는 건너뛴다', () => {
     expect(
       pickFallbackAddress({
@@ -118,22 +138,6 @@ describe('pickFallbackAddress', () => {
         isBouncedAddress: notBounced,
       }),
     ).toEqual({ columnKey: '대표자 e-mail', email: 'ceo@a.com' });
-  });
-});
-
-describe('remainingSendValue', () => {
-  it('빠지는 주소가 없으면 칸 값을 그대로 돌려준다', () => {
-    expect(remainingSendValue('a@x.com / b@y.com', notBounced)).toBe('a@x.com / b@y.com');
-  });
-
-  it('빠진 주소를 제외하고 쉼표로 잇고, 다 빠지면 null', () => {
-    expect(remainingSendValue('a@x.com / b@y.com', bouncedOf('a@x.com'))).toBe('b@y.com');
-    expect(remainingSendValue('a@x.com / b@y.com', bouncedOf('a@x.com', 'b@y.com'))).toBeNull();
-  });
-
-  it('주소 모양이 없는 칸은 칸 값 하나로 판정한다', () => {
-    expect(remainingSendValue('kim@naver', notBounced)).toBe('kim@naver');
-    expect(remainingSendValue('kim@naver', bouncedOf('kim@naver'))).toBeNull();
   });
 });
 

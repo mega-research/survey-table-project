@@ -6,12 +6,10 @@ import { db } from '@/db';
 import { contactPii, contactTargets, mailRecipients, mailTemplates, surveys } from '@/db/schema';
 import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import { createCampaign } from '@/server/mail/services/campaigns';
-import {
-  listBouncedContactIds,
-  preflightRecipients,
-} from '@/server/mail/services/campaigns-read';
+import { preflightRecipients } from '@/server/mail/services/campaigns-read';
 import { lookupContactByToken } from '@/server/mail/services/unsubscribe';
 import { getContactSampleById } from '@/server/read-models/contact-sample';
+import { loadBouncedAddresses } from '@/server/read-models/send-address';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 vi.mock('@/lib/inngest/client', () => ({
@@ -158,7 +156,7 @@ run('메일 발송 주소 순서 — 컬럼 설정이 실제 발송 주소를 �
       surveyId,
       scope: 'real',
       selectedContactIds: [hasStaff, ceoOnly],
-      bouncedContactIds: await listBouncedContactIds(surveyId),
+      bounced: await loadBouncedAddresses(surveyId),
     });
     expect(preflight.validIds).toEqual([hasStaff]);
     expect(preflight.emailMissingIds).toEqual([ceoOnly]);

@@ -8,7 +8,7 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { maskHint } from '@/lib/crypto/mask-hint';
 import { UUID_RE } from '@/lib/mail/constants';
-import { loadSendEmailForTarget } from '@/server/read-models/mail-email-order';
+import { loadSendEmailForTarget } from '@/server/read-models/send-address';
 
 import type {
   LookupContactByTokenInput,

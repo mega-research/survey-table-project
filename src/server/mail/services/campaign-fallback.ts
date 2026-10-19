@@ -2,27 +2,23 @@ import { and, asc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
+import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
-import { decryptPii } from '@/lib/crypto/aes';
-import { blindIndex } from '@/lib/crypto/blind';
-import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
 import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
-import {
-  type FallbackEmailCandidate,
-  fallbackCampaignTitle,
-  pickFallbackAddress,
-} from '@/lib/mail/fallback-address';
+import { fallbackCampaignTitle, pickFallbackAddress } from '@/lib/mail/fallback-address';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
-import { loadMailEmailOrder } from '@/server/read-models/mail-email-order';
+import {
+  loadBouncedAddresses,
+  loadMailEmailOrder,
+  loadSendAddressCells,
+} from '@/server/read-models/send-address';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/server/read-models/result-code-statuses';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import { listBouncedEmailBlindIndexes } from './campaigns-read';
 import { triggersFallback } from './recipient-status-transition';
 
 /**
@@ -151,41 +147,18 @@ async function planRecipientFallback(
     ancestorId = ancestor.sourceRecipientId;
   }
 
-  // 다음 순위 주소 — 발송(createCampaign)과 같은 순서·같은 후보 열.
+  // 다음 순위 주소 — 발송(createCampaign)과 같은 순서·같은 후보 칸·같은 규칙(복호화 실패·반송 칸 건너뜀).
   const order = await loadMailEmailOrder(parent.surveyId, parent.isTest, tx);
-  const columnKey = sql`${contactPii.columnKey}`;
-  const piiRows = await tx
-    .select({
-      columnKey: contactPii.columnKey,
-      cipher: contactPii.cipher,
-    })
-    .from(contactPii)
-    .where(
-      and(
-        eq(contactPii.contactTargetId, contact.id),
-        eq(contactPii.fieldType, 'email'),
-        emailColumnCandidateSql(columnKey, order),
-      ),
-    )
-    .orderBy(asc(emailColumnOrderSql(columnKey, order)));
-  const candidates: FallbackEmailCandidate[] = [];
-  for (const row of piiRows) {
-    try {
-      const email = decryptPii(row.cipher);
-      if (email.trim()) {
-        candidates.push({ columnKey: row.columnKey, email });
-      }
-    } catch {
-      // 복호화 실패 열은 후보에서 뺀다 — 발송(createCampaign)과 같은 규칙
-    }
-  }
-  const bouncedBlindIndexes = new Set(await listBouncedEmailBlindIndexes(parent.surveyId));
+  const [candidates, bounced] = await Promise.all([
+    loadSendAddressCells(tx, contact.id, order),
+    loadBouncedAddresses(parent.surveyId),
+  ]);
   const next = pickFallbackAddress({
     candidates,
     usedColumnKey: source.emailColumnKey,
     usedEmail: source.emailSnapshot,
     triedEmails,
-    isBouncedAddress: (address) => bouncedBlindIndexes.has(blindIndex('email', address)),
+    isBouncedAddress: (value) => bounced.has(value),
   });
   if (!next) return null;
 

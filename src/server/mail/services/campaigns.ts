@@ -11,13 +11,17 @@ import {
   mailTemplates,
 } from '@/db/schema/mail';
 import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
-import { decryptPii } from '@/lib/crypto/aes';
-import { blindIndex } from '@/lib/crypto/blind';
-import { emailColumnCandidateSql, emailColumnOrderSql } from '@/lib/crypto/contact-pii-repo';
 import { inngest } from '@/lib/inngest/client';
-import { remainingSendValue } from '@/lib/mail/fallback-address';
+import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
+import {
+  NO_BOUNCED_ADDRESSES,
+  decryptSendAddressCells,
+  emailCandidateSql,
+  emailOrderSql,
+  loadBouncedAddresses,
+} from '@/server/read-models/send-address';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -148,80 +152,70 @@ export async function createCampaign(
       throw new Error('단체 메일 생성에 실패했습니다.');
     }
 
-    // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
-    //    한 컨택에 email 컬럼이 여러 개면 발송 주소 순서(컬럼 설정의 mailOrder, 미지정이면
-    //    column_key 오름차순)대로 훑어 값이 있는 첫 컬럼을 쓴다 (앞에서 dedupe).
-    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
-    //    반송된 주소의 열은 건너뛰고 다음 순위 열로 넘어간다 — 보낼 열이 하나도 남지 않으면 그
-    //    컨택은 빠진다. preflight 의 반송 제외 건수(listBouncedContactIds)와 같은 규칙이다
-    //    (2026-10-16 — 전에는 1순위 열이 반송이면 컨택을 통째로 뺐다).
+    // e. valid contact 재페치 — contact_pii 에서 발송 주소 후보 칸까지 같이 가져온다.
+    //    어느 주소로 보낼지는 발송 주소 규칙(resolveSendAddress) 하나가 정한다 — 발송 주소 순서대로
+    //    보낼 수 있는 첫 칸이고, 반송된 칸·주소는 건너뛰어 다음 순위로 넘어간다. 보낼 곳이 남지 않으면
+    //    그 컨택은 빠진다. 사전 점검(preflightRecipients)이 같은 규칙으로 센다.
+    //    preflight 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
     //    반송 건너뛰기는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
     //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정).
     const { buildNegativeCodeExists, getResultCodeStatuses } =
       await import('@/server/read-models/result-code-statuses');
     const { latestResultUnsubscribedSql } =
       await import('@/lib/operations/contacts-filter-sql.server');
-    const { listBouncedEmailBlindIndexes } = await import('./campaigns-read');
-    const [{ negative: negativeCodes }, bouncedBlindList] = await Promise.all([
+    const [{ negative: negativeCodes }, bounced] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
-      kind === 'single' ? Promise.resolve([]) : listBouncedEmailBlindIndexes(input.surveyId),
+      kind === 'single' ? Promise.resolve(NO_BOUNCED_ADDRESSES) : loadBouncedAddresses(input.surveyId),
     ]);
-    const bouncedBlinds = new Set(bouncedBlindList);
     const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
       negativeCodes,
       sql`"contact_targets"."id"`,
     )}`;
 
-    const emailColumnKey = sql`${contactPii.columnKey}`;
     const piiJoined = await tx
       .select({
         id: contactTargets.id,
         columnKey: contactPii.columnKey,
         cipher: contactPii.cipher,
-        blindIndex: contactPii.blindIndex,
         inviteToken: contactTargets.inviteToken,
       })
       .from(contactTargets)
       .innerJoin(
         contactPii,
-        and(eq(contactPii.contactTargetId, contactTargets.id), eq(contactPii.fieldType, 'email')),
+        and(eq(contactPii.contactTargetId, contactTargets.id), emailCandidateSql(emailOrder)),
       )
       .where(
         and(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
-          emailColumnCandidateSql(emailColumnKey, emailOrder),
           isNull(contactTargets.unsubscribedAt),
           // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
           sql`NOT (${latestResultUnsubscribedSql})`,
           notExcludedByCode,
         ),
       )
-      .orderBy(asc(contactTargets.id), asc(emailColumnOrderSql(emailColumnKey, emailOrder)));
+      .orderBy(asc(contactTargets.id), asc(emailOrderSql(emailOrder)));
 
-    const seen = new Set<string>();
+    const inviteTokens = new Map(piiJoined.map((r) => [r.id, r.inviteToken]));
+    const cellsByTarget = decryptSendAddressCells(
+      piiJoined.map((r) => ({ contactTargetId: r.id, columnKey: r.columnKey, cipher: r.cipher })),
+    );
     const validContacts: Array<{
       id: string;
       email: string;
       columnKey: string;
       inviteToken: string;
     }> = [];
-    // 반송 판정은 주소 하나하나로 — 칸에 「a / b」처럼 여럿이면 반송된 주소만 빼고 남은 주소로 보낸다.
-    const isBouncedAddress = (address: string) => bouncedBlinds.has(blindIndex('email', address));
-    for (const r of piiJoined) {
-      if (seen.has(r.id)) continue; // 순서가 가장 앞선 email 컬럼만
-      if (r.blindIndex && bouncedBlinds.has(r.blindIndex)) continue; // 반송된 칸 → 다음 순위 열
-      try {
-        const cell = decryptPii(r.cipher);
-        if (!cell || !cell.trim()) continue;
-        const email = bouncedBlinds.size > 0 ? remainingSendValue(cell, isBouncedAddress) : cell;
-        if (email === null) continue; // 칸의 주소가 전부 반송 → 다음 순위 열
-        seen.add(r.id);
-        validContacts.push({ id: r.id, email, columnKey: r.columnKey, inviteToken: r.inviteToken });
-      } catch {
-        // 복호화 실패 행은 발송 대상에서 제외 (cipher 손상/키 미스매치)
-      }
+    for (const [id, cells] of cellsByTarget) {
+      const resolved = resolveSendAddress(cells, (v) => bounced.has(v));
+      if (resolved.kind !== 'send') continue;
+      validContacts.push({
+        id,
+        email: resolved.email,
+        columnKey: resolved.columnKey,
+        inviteToken: inviteTokens.get(id)!,
+      });
     }
 
     const validCount = validContacts.length;
@@ -405,17 +399,16 @@ export async function previewPreflight(
 ): Promise<PreviewPreflightResult> {
   const { surveyId, selectedContactIds } = input;
 
-  const { preflightRecipients, listBouncedContactIds } =
-    await import('./campaigns-read');
-  const [scope, bouncedContactIds] = await Promise.all([
+  const { preflightRecipients } = await import('./campaigns-read');
+  const [scope, bounced] = await Promise.all([
     loadOperationsDataScope(surveyId),
-    listBouncedContactIds(surveyId),
+    loadBouncedAddresses(surveyId),
   ]);
   const result = await preflightRecipients({
     surveyId,
     scope,
     selectedContactIds,
-    bouncedContactIds,
+    bounced,
   });
   return {
     validCount: result.validIds.length,

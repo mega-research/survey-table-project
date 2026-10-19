@@ -9,7 +9,7 @@ import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { UUID_RE } from '@/lib/mail/constants';
-import { loadSendEmailForTarget } from '@/server/read-models/mail-email-order';
+import { loadSendEmailForTarget } from '@/server/read-models/send-address';
 
 export interface UnsubscribeResult {
   ok: boolean;

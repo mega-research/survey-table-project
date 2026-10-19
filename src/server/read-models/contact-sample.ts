@@ -10,7 +10,7 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 
-import { loadSendEmailForTarget } from './mail-email-order';
+import { loadSendEmailForTarget } from './send-address';
 
 export interface FirstContactSample {
   /** contact_targets.id */
@@ -31,8 +31,8 @@ interface ContactSampleRow {
 
 /**
  * email 복호화 블록 — `getFirstContactSample` / `getContactSampleById` 공유.
- * 한 컨택에 여러 email 컬럼이 있으면 발송과 같은 규칙으로 고른다(`loadSendEmailForTarget`) —
- * 미리보기에 보이는 주소가 실제로 나가는 주소여야 한다.
+ * 한 컨택에 여러 email 컬럼이 있으면 발송 주소 규칙으로 고른다(`loadSendEmailForTarget`) — 순서상
+ * 보낼 수 있는 첫 주소이고 반송은 보지 않는다(단건 발송이 쓰는 주소와 같다).
  */
 async function withDecryptedEmail(
   row: ContactSampleRow,
