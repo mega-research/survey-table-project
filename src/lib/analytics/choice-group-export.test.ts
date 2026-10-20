@@ -998,3 +998,46 @@ describe('보기 그룹 표 export — generateSPSSColumns', () => {
     expect(syntax).toContain('/MCGROUP NAME=$Q10_cb1 LABEL=\'구매처\' VARIABLES=Q10_cb1_1 Q10_cb1_2.');
   });
 });
+
+describe('표 보기 칸의 변수번호 — cell.optionCode (2026-10-20)', () => {
+  // 보기 칸에 변수번호를 적으면 일반 보기의 optionCode 처럼 변수명 숫자 자리에 쓴다.
+  // 적지 않은 칸은 종전대로 순번이다.
+  const cells = [
+    { id: 'c1', content: '① 가', type: 'choice_opt', optionCode: 'opt01', spssNumericCode: 1 },
+    { id: 'c2', content: '② 나', type: 'choice_opt', optionCode: 'opt02', spssNumericCode: 2 },
+    {
+      id: 'c3', content: '③ 기타', type: 'choice_opt', optionCode: 'opt03', spssNumericCode: 3,
+      allowTextInput: true,
+    },
+  ];
+  const checkbox = (choiceGroups?: unknown[]) =>
+    ({
+      id: 'q-cb', type: 'checkbox', title: '복수', required: false, order: 1, questionCode: 'D2_1',
+      ...(choiceGroups ? { choiceGroups } : {}),
+      tableRowsData: [
+        {
+          id: 'r1', label: '행',
+          cells: cells.map((c) => (choiceGroups ? { ...c, choiceGroupId: 'gd' } : c)),
+        },
+      ],
+    }) as unknown as Question;
+
+  it('그룹 없는 보기 소스 표', () => {
+    expect(generateSPSSColumns([checkbox()]).map((c) => c.spssVarName)).toEqual([
+      'D2_1_opt01', 'D2_1_opt02', 'D2_1_opt03', 'D2_1_opt03_text',
+    ]);
+  });
+
+  it('기본 그룹(default) 표', () => {
+    const cols = generateSPSSColumns([checkbox([{ id: 'gd', groupKey: 'default', type: 'checkbox', label: '' }])]);
+    expect(cols.map((c) => c.spssVarName)).toEqual(['D2_1_opt01', 'D2_1_opt02', 'D2_1_opt03', 'D2_1_opt03_text']);
+  });
+
+  it('단일 선택 표의 상세기재 변수도 변수번호를 쓴다', () => {
+    const radio = {
+      ...checkbox([{ id: 'gd', groupKey: 'default', type: 'radio', label: '' }]),
+      type: 'radio', questionCode: 'D1_1',
+    } as unknown as Question;
+    expect(generateSPSSColumns([radio]).map((c) => c.spssVarName)).toEqual(['D1_1', 'D1_1_opt03_text']);
+  });
+});

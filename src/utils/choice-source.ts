@@ -52,6 +52,7 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     value: cell.id,
     label: buildChoiceOptLabel(cell, '(라벨 없음)'),
     spssNumericCode: cell.spssNumericCode ?? idx + 1,
+    ...(cell.optionCode !== undefined ? { optionCode: cell.optionCode } : {}),
     ...(cell.exportLabel !== undefined ? { exportLabel: cell.exportLabel } : {}),
     ...(cell.branchRule !== undefined ? { branchRule: cell.branchRule } : {}),
     ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),

@@ -449,6 +449,11 @@ export interface TableCell {
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
   // SPSS 숫자코드 (ranking_opt 셀이 Case 2 옵션 소스로 쓰일 때 사용. 비어있으면 1-based 인덱스 자동)
   spssNumericCode?: number;
+  /**
+   * 보기 칸(choice_opt)의 변수번호 — 일반 보기의 optionCode 와 같은 자리(`D2_1_opt01`, `D2_1_opt04_text`).
+   * 비우면 종전대로 순번이다. 빌더 편집 폼에는 아직 칸이 없다(스크립트로만 적는다).
+   */
+  optionCode?: string;
   content: string;
   /**
    * 셀 본문의 서식본(HTML) — 글자 일부에 색·굵게를 준 경우에만 채운다. `content` 는 여전히
