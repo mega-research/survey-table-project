@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock, Monitor } from 'lucide-react';
 import Link from 'next/link';
 
@@ -169,10 +171,13 @@ export function SurveyCompletedScreen({
   thankYouMessage,
   title = '응답 완료!',
   showCompletedTime = true,
+  footer,
 }: {
   thankYouMessage: string | null | undefined;
   title?: string;
   showCompletedTime?: boolean;
+  /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
+  footer?: ReactNode;
 }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50">
@@ -188,8 +193,34 @@ export function SurveyCompletedScreen({
               <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
             </div>
           )}
+          {footer}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * 종료 후 이동 안내 (패널 연동). 실응답은 곧바로 이동하므로 잠깐 보이는 안내 + 수동 링크,
+ * 테스트·미리보기는 패널 집계에 잡히지 않게 이동하지 않고 어디로 갈지만 보인다.
+ */
+export function EndRedirectNotice({ url, mode }: { url: string; mode: 'redirecting' | 'test' }) {
+  return (
+    <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+      {mode === 'redirecting' ? (
+        <p>
+          잠시 후 이동합니다. 이동하지 않으면{' '}
+          <a href={url} className="font-medium text-blue-600 underline">
+            여기를 눌러 주세요
+          </a>
+          .
+        </p>
+      ) : (
+        <>
+          <p>테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.</p>
+          <p className="mt-1 font-medium break-all text-gray-900">{url}</p>
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,10 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { QuotaGate } from '@/shared/contracts/quota';
-import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
+import type {
+  GroupNameDesign,
+  SurveyEndRedirects,
+  SurveyResponseHeaderConfig,
+} from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
@@ -1022,6 +1026,9 @@ export interface SurveySettings {
   // 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + 내보내기 _CHG 변수.
   // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0101 마이그레이션).
   changeConfirmEnabled?: boolean;
+  // 종료 후 이동 주소 (패널 연동) — 완료·자격미달·쿼터 마감별 주소. 키가 없으면 종료 화면.
+  // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0138 마이그레이션).
+  endRedirects?: SurveyEndRedirects | null;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

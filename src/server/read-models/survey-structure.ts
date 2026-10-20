@@ -273,6 +273,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       forceWideLayout: survey.forceWideLayout,
       priorWaveLabel: survey.priorWaveLabel,
       changeConfirmEnabled: survey.changeConfirmEnabled,
+      endRedirects: survey.endRedirects ?? null,
       responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),
     },
     lookups: survey.lookups ?? [],

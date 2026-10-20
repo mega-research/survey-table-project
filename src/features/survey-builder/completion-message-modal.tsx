@@ -7,9 +7,34 @@ import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { isEndRedirectUrl, normalizeEndRedirects } from '@/lib/survey/end-redirect';
+import type { SurveyEndRedirects } from '@/shared/contracts/survey';
+
+type RedirectDraft = Required<Record<keyof SurveyEndRedirects, string>>;
+
+const REDIRECT_FIELDS: { key: keyof SurveyEndRedirects; label: string }[] = [
+  { key: 'completed', label: '완료' },
+  { key: 'screenedOut', label: '자격 미달' },
+  { key: 'quotaClosed', label: '쿼터 마감' },
+];
+
+function toRedirectDraft(redirects: SurveyEndRedirects | null | undefined): RedirectDraft {
+  return {
+    completed: redirects?.completed ?? '',
+    screenedOut: redirects?.screenedOut ?? '',
+    quotaClosed: redirects?.quotaClosed ?? '',
+  };
+}
+
+/** 비어 있으면 통과(이동 안 함), 무언가 적었으면 http(s) 주소여야 한다. */
+function isRedirectDraftValid(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === '' || isEndRedirectUrl(trimmed);
+}
 
 /**
  * 질문 생성 목록 맨 아래에 위치하는 "응답 완료" 트리거 카드 + 편집 다이얼로그.
@@ -24,22 +49,31 @@ export function CompletionMessageModal() {
   const screenedOutMessage = useSurveyBuilderStore(
     (s) => s.currentSurvey.settings.screenedOutMessage ?? '',
   );
+  const endRedirects = useSurveyBuilderStore((s) => s.currentSurvey.settings.endRedirects);
   const updateSurveySettings = useSurveyBuilderStore((s) => s.updateSurveySettings);
 
   const [draftMessage, setDraftMessage] = useState(thankYouMessage);
   const [draftScreenedOut, setDraftScreenedOut] = useState(screenedOutMessage);
+  const [draftRedirects, setDraftRedirects] = useState(() => toRedirectDraft(endRedirects));
+  const redirectsValid = REDIRECT_FIELDS.every(({ key }) =>
+    isRedirectDraftValid(draftRedirects[key]),
+  );
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       // 열릴 때마다 최신 store 기준으로 재시드 — 이전 초안(취소로 폐기된 편집분 포함)은 버린다
       setDraftMessage(thankYouMessage);
       setDraftScreenedOut(screenedOutMessage);
+      setDraftRedirects(toRedirectDraft(endRedirects));
     }
     setOpen(next);
   };
 
   const handleSave = () => {
+    if (!redirectsValid) return;
     updateSurveySettings({
+      // 빈 칸은 빠지고 하나도 없으면 null — 서버 저장도 같은 정규화를 한 번 더 건다
+      endRedirects: normalizeEndRedirects(draftRedirects),
       thankYouMessage: draftMessage,
       // 비우면 null — 완료 문구로 폴백한다(CONTEXT.md 「자격미달 종료 문구」)
       screenedOutMessage: draftScreenedOut.trim() === '' ? null : draftScreenedOut,
@@ -59,7 +93,9 @@ export function CompletionMessageModal() {
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-sm font-medium text-gray-900">응답 완료</h4>
-            <p className="mt-1 text-xs text-gray-500">응답 완료 화면 멘트 설정</p>
+            <p className="mt-1 text-xs text-gray-500">
+              응답 완료 화면 멘트 · 종료 후 이동 주소 설정
+            </p>
           </div>
         </div>
       </Card>
@@ -68,7 +104,7 @@ export function CompletionMessageModal() {
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>응답 완료 멘트</DialogTitle>
+            <DialogTitle>응답 완료 설정</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-2">
@@ -102,12 +138,54 @@ export function CompletionMessageModal() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <Label>종료 후 이동 주소</Label>
+            <div className="space-y-2">
+              {REDIRECT_FIELDS.map(({ key, label }) => {
+                const valid = isRedirectDraftValid(draftRedirects[key]);
+                return (
+                  <div key={key}>
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor={`end-redirect-${key}`}
+                        className="w-16 shrink-0 text-xs font-normal text-gray-600"
+                      >
+                        {label}
+                      </Label>
+                      <Input
+                        id={`end-redirect-${key}`}
+                        type="url"
+                        value={draftRedirects[key]}
+                        onChange={(e) =>
+                          setDraftRedirects((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                        placeholder="https://"
+                        aria-invalid={!valid}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    {!valid && (
+                      <p className="mt-1 pl-18 text-xs text-red-600">
+                        http:// 또는 https:// 로 시작하는 주소를 입력해 주세요.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-400">
+              패널 업체 연동용입니다. 주소를 적은 결과로 끝나면 종료 화면 대신 그 주소로 바로
+              이동합니다. 비워 두면 위 멘트가 나옵니다. 테스트 링크·미리보기는 이동하지 않고 주소만
+              보여 줍니다. 배포 없이 즉시 반영됩니다.
+            </p>
+          </div>
+
           {/* 저장/취소 게이트 — X·ESC·바깥 클릭은 위 onOpenChange(false)가 담당(조용히 폐기) */}
           <div className="flex items-center justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               취소
             </Button>
-            <Button type="button" onClick={handleSave}>
+            <Button type="button" onClick={handleSave} disabled={!redirectsValid}>
               저장
             </Button>
           </div>

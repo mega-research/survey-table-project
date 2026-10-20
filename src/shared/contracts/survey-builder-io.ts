@@ -2,6 +2,7 @@
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
+import type { SurveyEndRedirects } from './survey';
 import type { SurveyAnchorSnapshot } from './survey-document';
 
 /**
@@ -47,6 +48,11 @@ export type SurveyControl = {
    * 띄우지 않는다. true 면 지금까지의 동작 그대로다.
    */
   changeConfirmEnabled: boolean;
+  /**
+   * 종료 후 이동 주소 (패널 연동). 실사 중에 패널이 주소를 바꿔도 재발행 없이 반영되도록 라이브다.
+   * null 이면 종전대로 종료 화면.
+   */
+  endRedirects: SurveyEndRedirects | null;
 };
 
 /**

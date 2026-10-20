@@ -46,6 +46,7 @@ import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-c
 import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   DesktopOnlyScreen,
+  EndRedirectNotice,
   InvalidTestLinkScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
@@ -65,6 +66,7 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
+import { type EndRedirectOutcome, resolveEndRedirectUrl } from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
@@ -1798,9 +1800,30 @@ function SurveyResponseFlowActive({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [loadedSurvey, currentStepIndex, isCompleted]);
 
-  // 페이지 이탈 시 경고
+  // 종료 후 이동 (패널 연동, CONTEXT.md 「종료 후 이동 주소」). 완료·자격미달은 완료 화면,
+  // 쿼터 마감은 입장·진행 중·제출 어느 시점이든 quota_closed 차단 화면에서 정해진다.
+  // 관리자 수정은 응답자가 아니라 보내지 않는다. 테스트·미리보기는 패널 집계에 잡히지 않게
+  // 보내지 않고 화면에 주소만 보인다.
+  const endOutcome: EndRedirectOutcome | null = isCompleted
+    ? completionOutcome
+    : duplicateStatus.kind === 'blocked' && duplicateStatus.reason === 'quota_closed'
+      ? 'quota_closed'
+      : null;
+  const endRedirectUrl =
+    endOutcome && !isAdminEdit ? resolveEndRedirectUrl(control?.endRedirects, endOutcome) : null;
+  const redirectsNow = endRedirectUrl !== null && !isPreview && !isTestSession;
+  const endRedirectFooter = endRedirectUrl ? (
+    <EndRedirectNotice url={endRedirectUrl} mode={redirectsNow ? 'redirecting' : 'test'} />
+  ) : null;
   useEffect(() => {
-    if (isPreview || !hasResponses || isCompleted) return;
+    // replace — 뒤로 가기로 우리 종료 화면에 돌아와 같은 주소로 다시 튕기지 않게 한다
+    if (redirectsNow && endRedirectUrl) window.location.replace(endRedirectUrl);
+  }, [redirectsNow, endRedirectUrl]);
+
+  // 페이지 이탈 시 경고 — 종료 후 이동 중이면 걸지 않는다(진행 중 쿼터 마감은 답이 남아 있어
+  // 경고가 이동을 막는다)
+  useEffect(() => {
+    if (isPreview || !hasResponses || isCompleted || redirectsNow) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       // Chrome/Edge/Firefox 는 returnValue 를 요구
@@ -1808,7 +1831,7 @@ function SurveyResponseFlowActive({
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [isPreview, hasResponses, isCompleted]);
+  }, [isPreview, hasResponses, isCompleted, redirectsNow]);
 
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
@@ -1836,6 +1859,7 @@ function SurveyResponseFlowActive({
               ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
               : null
         }
+        footer={endRedirectFooter}
       />
     );
   }
@@ -1853,6 +1877,7 @@ function SurveyResponseFlowActive({
         title={isPreview ? '설문 확인 완료' : screen.title}
         thankYouMessage={isPreview ? '입력 내용은 저장되지 않았습니다.' : screen.message}
         showCompletedTime={!isPreview}
+        footer={endRedirectFooter}
       />
     );
   }

@@ -271,6 +271,7 @@ surveys                    # 설문 설정
 ├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — 아래 "테스트 모드"
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
+├── endRedirects (JSONB)          # 종료 후 이동 주소 {completed, screenedOut, quotaClosed} — 패널 연동, 라이브 컬럼(0138). http(s) 만, 판정 lib/survey/end-redirect. 테스트·미리보기는 이동 안 함 (CONTEXT.md 「종료 후 이동 주소」)
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
 │                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부
@@ -1065,7 +1066,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
-3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 응답 페이지 미반영. "테스트 모드 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
+3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 응답 페이지 미반영. "테스트 모드 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
@@ -1126,6 +1127,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- 종료 후 이동 주소 `surveys.end_redirects` 는 0138 이다 (2026-10-20)
 - 메일 대체 발송 처리 대기 `mail_recipients.fallback_pending_at` 은 0137 이다 (2026-10-19)
 - 컨택원 배정 `contact_assignments`·`contact_targets.assignment_id` 는 0136 이다 (2026-10-19)
 - 메일 대체 발송 `mail_campaigns.parent_campaign_id`·kind `fallback`·`mail_recipients.email_column_key`/`source_recipient_id`·`next_fallback_run_number` 는 0135 다 (2026-10-16). 0133·0134 는 staging 브랜치(외주 링크·클라이언트 링크)가 쓰고 있어 건너뛰었다

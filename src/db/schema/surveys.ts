@@ -20,6 +20,7 @@ import type { QuotaConfig } from '@/shared/contracts/quota';
 import type {
   GroupNameDesign,
   QuestionData,
+  SurveyEndRedirects,
   SurveyResponseHeaderConfig,
   SurveyVersionSnapshot,
 } from '@/shared/contracts/survey';
@@ -114,6 +115,10 @@ export const surveys = pgTable(
     // 미리 깔고 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + _CHG 변수.
     // 스냅샷 밖 라이브 컬럼 (0101 마이그레이션)
     changeConfirmEnabled: boolean('change_confirm_enabled').default(false).notNull(),
+
+    // 종료 후 이동 주소 (패널 연동) — 완료·자격미달·쿼터 마감별 주소. NULL/키 없음이면 종료 화면.
+    // 스냅샷 밖 라이브 컬럼 (0138 마이그레이션)
+    endRedirects: jsonb('end_redirects').$type<SurveyEndRedirects>(),
 
     // 추적조사 이월 응답 임포트 확정 설정 — 블록↔문항 매핑과 값 대응.
     // 재업로드가 정상 경로라 확정을 보관해 재사용한다. 스냅샷 밖 라이브 컬럼 (0096 마이그레이션)

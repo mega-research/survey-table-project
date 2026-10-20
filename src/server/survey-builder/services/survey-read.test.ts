@@ -449,6 +449,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
       pausedMessage: null,
       testSession: 'none',
       testSessionKind: null,
+      endRedirects: null,
     });
   });
 
@@ -590,6 +591,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
       pausedMessage: null,
       testSession: 'invalid',
       testSessionKind: null,
+      endRedirects: null,
     });
   });
 
@@ -639,6 +641,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
         pausedMessage: '점검 중입니다',
         testModeEnabled: true,
         testToken: 'tok-valid',
+        endRedirects: { completed: 'https://panel.example/done' },
       }),
     );
     surveyVersionsFindFirst.mockResolvedValue({
@@ -666,6 +669,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
       pausedMessage: '점검 중입니다',
       testSession: 'valid',
       testSessionKind: 'anonymous',
+      endRedirects: { completed: 'https://panel.example/done' },
     });
   });
 });
