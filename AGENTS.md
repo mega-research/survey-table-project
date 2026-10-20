@@ -12,22 +12,25 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 (각 폴더의 `CLAUDE.md` 는 그 파일의 심볼릭 링크). Claude Code 는 그 폴더의 파일을 읽을 때 자동으로
 싣지만, 다른 도구는 아니므로 **해당 영역을 만지기 전에 직접 읽을 것.**
 
-| 작업 영역                                                               | 읽을 문서                                |
-| ----------------------------------------------------------------------- | ---------------------------------------- |
-| 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소                           | `src/app/AGENTS.md`                      |
-| 운영 집계·파티션 · 진척 보고 분류 키                                    | `src/server/operations/AGENTS.md`        |
-| 메일 발송 주소·대체 발송                                                | `src/server/mail/AGENTS.md`              |
-| 서버 트리 · 인증과 권한(capability·팀·소유권·참여자·링크) · 테스트 모드 | `src/server/AGENTS.md`                   |
-| 쿼터                                                                    | `src/server/quota/AGENTS.md`             |
-| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                          | `src/server/survey-document/AGENTS.md`   |
-| R2 파일 수명주기                                                        | `src/server/storage-lifecycle/AGENTS.md` |
-| 조사 대상 — 컨택원 배정 · 필터 해석 · ID 목록 검색 · 이월 응답 임포트   | `src/server/contacts/AGENTS.md`          |
-| 운영 콘솔 필터 바 구조                                                  | `src/features/operations/AGENTS.md`      |
-| DB 스키마 (테이블·컬럼·관계)                                            | `src/db/schema/AGENTS.md`                |
-| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙              | `src/features/AGENTS.md`                 |
-| lib 트리 · 레이트리밋 · 로깅 · Sentry                                   | `src/lib/AGENTS.md`                      |
-| 도메인 용어                                                             | `CONTEXT.md`                             |
-| 결정 배경                                                               | `docs/adr/`                              |
+| 작업 영역                                                                                                        | 읽을 문서                                |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소                                                                    | `src/app/AGENTS.md`                      |
+| 운영 집계·파티션 · 진척 보고 분류 키                                                                             | `src/server/operations/AGENTS.md`        |
+| 메일 발송 주소·대체 발송                                                                                         | `src/server/mail/AGENTS.md`              |
+| 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드                               | `src/server/AGENTS.md`                   |
+| 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`         |
+| 계정 수명주기 · 프로필 · 계정 발급 입구                                                                          | `src/server/auth/AGENTS.md`              |
+| 세션(Better Auth) · 1차 게이트(proxy) · 로그인 · 유형별 목적지                                                   | `src/lib/auth/AGENTS.md`                 |
+| 쿼터                                                                                                             | `src/server/quota/AGENTS.md`             |
+| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                                   | `src/server/survey-document/AGENTS.md`   |
+| R2 파일 수명주기                                                                                                 | `src/server/storage-lifecycle/AGENTS.md` |
+| 조사 대상 — 컨택원 배정 · 필터 해석 · ID 목록 검색 · 이월 응답 임포트                                            | `src/server/contacts/AGENTS.md`          |
+| 운영 콘솔 필터 바 구조                                                                                           | `src/features/operations/AGENTS.md`      |
+| DB 스키마 (테이블·컬럼·관계)                                                                                     | `src/db/schema/AGENTS.md`                |
+| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙                                                       | `src/features/AGENTS.md`                 |
+| lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                            | `src/lib/AGENTS.md`                      |
+| 도메인 용어                                                                                                      | `CONTEXT.md`                             |
+| 결정 배경                                                                                                        | `docs/adr/`                              |
 
 **변경 이력은 어느 문서에도 쌓지 않는다** — git log 와 ADR 이 그 자리다. 새 상세 절은 루트가 아니라
 해당 영역 문서에 쓴다.
