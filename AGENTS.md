@@ -522,28 +522,9 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
-- **역할 모델 v2 번호 재배치 (2026-09-17)**: v2 의 12개가 staging 의 0101~0110(main 계열)과 같은 숫자라 **0111~0122** 로 밀었다(상대 순서 유지). 매핑 — 0101→0111 better_auth_tables · 0102→0112 better_auth_v2_reconcile · 0103→0113 users_organization · 0104→0114 users_sessions_revoked_at · 0105→0115 teams_and_memberships · 0106→0116 surveys_team_scoping · 0107→0117 survey_groups · 0108→0118 survey_ownership_events · 0109→0119 survey_participants · 0110→0120 fieldwork_orgs · 0111→0121 contact_actor_fk_to_app_users · 0112→0122 response_fieldwork_attribution. 적용 이력 테이블이 없어 DB 작업은 없다 — 스테이징 DB 에는 이미 옛 번호로 적용돼 있고, 프로덕션 적용 대상은 **0112~0122**(0111 은 선반영 재현용이라 적용 금지)
-- **외주 실사 링크 0126·0127** (2026-09-29, ADR-0026) — 링크 행(`survey_fieldwork_links`)과
-  귀속 칸 둘(`contact_attempts.fieldwork_link_id`·`survey_responses.fieldwork_link_id`).
-  두 칸을 한 마이그레이션에 넣은 것은 **배타 CHECK 가 두 테이블에서 같은 모양이어야** 하기
-  때문이다 — 나눠 쓰면 뒤에 오는 쪽이 앞의 결정을 다시 읽어야 하고 그 사이에 한쪽만 제약
-  없는 창이 생긴다. 응답 쪽 칸은 0127 이 만들고 **채우는 것은 대리 응답 경로**다
-- **외주 실사 링크 0133** (2026-09-30, ADR-0027) — 단건 메일·응답 수정의 귀속 칸
-  (`mail_campaigns.fieldwork_link_id`·`response_edit_logs.fieldwork_link_id`, 0127 과 같은 배타 CHECK
-  모양). 빈 DB 재생·재적용 멱등은 임시 DB 로 확인했다. **처음 번호는 0128 이었다** — main 이 같은
-  시기에 0128~0132 를 운영 DB 에 먼저 적용해 2026-10-12 병합 때 0133 으로 옮겼다(스테이징 DB 에는
-  옛 번호로 적용돼 있고 본문은 그대로라 DB 작업은 없다)
-- **링크 테이블 개명 0134** (2026-10-12, ADR-0029) — `survey_fieldwork_links` → `survey_access_links`,
-  `kind`(NOT NULL default `'fieldwork'` — 기본값이 있어 2단계 배포가 필요 없다)·`client_tabs`,
-  활성 링크 UNIQUE 를 `(survey_id)` → `(survey_id, kind)` 로. 이름이 박힌 인덱스·CHECK·PK·FK 를
-  함께 옮겼다(Postgres 는 테이블 개명 때 따라 바꾸지 않는다). **귀속 칸 `fieldwork_link_id` 넷은
-  이름을 그대로 둔다** — 채우는 것이 외주 링크뿐이다. 재적용이 까다롭다: 0126 의
-  `CREATE TABLE IF NOT EXISTS` 가 옛 이름의 빈 껍데기를 다시 세우므로 0134 가 그것을 지운다(행이
-  있으면 멈춘다). **테이블 개명은 옛 코드와 양립하지 않는다** — 스테이징은 푸시 직전에 적용하고,
-  프로덕션은 0126·0127·0133·0134 를 함께 적용한다(그 테이블이 아직 없다)
-- **main 계열 0124·0125** (2026-09-17): main 이 같은 날 0111·0112 로 만든 입력칸 높이·제목 서식본은 위 역할 모델 v2 번호(0111~0123)와 겹쳐 staging 병합 전에 0124·0125 로 옮겼다 — 번호 기록 표가 DB 에 없어 파일 이름만 바뀌고 이미 적용한 DB 는 그대로다
-- **main 계열 0128~0132** (2026-09-30\~10-06): 0128 「행별 척도」 CHECK 갱신 · 0129 「항목 단위 카드」 CHECK 갱신 · 0130 최대 선택 개수 연동 `max_selections_source` · 0131 항목 단위 카드 블록 시작 열 `mobile_item_card_block_columns` · 0132 행 차례로 열기 `staged_rows_config`. main 이 0126·0127(외주 링크)을 비워 두고 0128 부터 썼다. **0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼우므로 배열에서 이 순서를 지킬 것** — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. 배열은 0126·0127 뒤에 0128\~0132, 그 뒤에 0133 이다(0133 은 0126 의 링크 테이블만 전제하고 main 쪽 다섯과 만지는 객체가 서로소다)
-- **main 계열 0135~0137** (2026-10-16\~10-19): 0135 메일 대체 발송 `mail_campaigns.parent_campaign_id`·kind `fallback`·`mail_recipients.email_column_key`/`source_recipient_id`·`next_fallback_run_number` · 0136 컨택원 배정 `contact_assignments`·`contact_targets.assignment_id` · 0137 대체 발송 처리 대기 `mail_recipients.fallback_pending_at`. main 이 staging 의 0133·0134(외주 링크 귀속·링크 테이블 개명)를 비워 두고 0135 부터 썼다. 배열은 0134 뒤에 0135\~0137 이다. 0133 과 0135 는 둘 다 `mail_campaigns` 에 칸·제약을 더하지만 이름이 겹치지 않는다(0133 은 `fieldwork_link_id`·배타 CHECK, 0135 는 `parent_campaign_id`·kind CHECK)
+- **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
+- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호): 역할 모델 v2 는 **0112~0122** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다
+- 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 
 ---
 
