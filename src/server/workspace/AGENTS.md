@@ -134,9 +134,11 @@
     **같은 팀 키**(`lockTeamMembers`)를 쓰고 최종 UPDATE 에 `status='active'` 조건을 함께 건다:
     잠금만으로는 앞선 해산 뒤에 락을 받은 두 번째가 감사 행을 더 쓰고 archivedBy 를 덮는다.
     **해산 취소 procedure 를 만들지 말 것** — 확인 모달의 "되돌릴 수 없습니다" 가 거짓이 되고
-    정식 복구 경로는 재배치 센터(티켓 14)다. 해산 뒤에도 **공개 응답·예약 메일·Inngest 잡·
-    게스트 콘솔은 계속 돈다**(그 경로들이 팀 컬럼을 읽지 않는 것이 근거다 — 새 응답 게이트를
-    만들 때 `teamId`·`assignmentStatus` 를 끌어들이면 그 약속이 깨진다). 「해산이 끝이어야
+    정식 복구 경로는 재배치 센터(티켓 14)다. 해산 뒤에도 **공개 응답·예약 메일·Inngest 잡은
+    계속 돈다**(그 경로들이 팀 컬럼을 읽지 않는 것이 근거다 — 새 응답 게이트를
+    만들 때 `teamId`·`assignmentStatus` 를 끌어들이면 그 약속이 깨진다). 게스트·실사 계정과 외부
+    링크는 반대로 **닫힌다** — 해산된 설문은 배치 대기라 `resolveSurveyCapabilities` 의 배치 대기 분기와
+    「닫힘 표」가 막는다. 「해산이 끝이어야
     하는데 열려 있던」 경로 셋도 함께 닫혔다 — 슈퍼어드민은 관문을 소속 조회 없이 통과하므로
     archived 팀의 **멤버 명부**(members 3종에 `requireActiveTeam`)·**그룹 쓰기**
     (`getSurveyGroupTeamId` 가 active 팀만)·**새 설문 귀속**(`resolveNewSurveyOwnership` 이

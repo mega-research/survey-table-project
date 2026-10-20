@@ -160,3 +160,13 @@ src/
 - 합계형(`sumConstraints`): 좌변(선택 셀 합계 또는 `leftExpr` 수식) `eq|ne|gte|lte|gt|lt` 우변(리터럴 또는 `targetExpr` 수식), `tolerance`는 eq/ne 전용 절대 오차. `aggregate: 'count'` 면 좌변이 **입력된 칸 수**다 — 인터랙티브 셀 전부가 대상이고, 합계와 달리 전부 비었거나 표를 건드리지 않아도 검사한다("10행 중 하나 이상 입력" — CONTEXT.md "입력된 칸 수")
 - 검증 문구 자리표시자: 저작자 문구(합계 제약 `errorMessage` · 셀 수식 검증 `formulaErrorMessage` · 계산 칸 `calcValidation.errorMessage`)에 `{현재값}`·`{기준값}` 을 쓰면 검증에 쓴 실제 숫자로 바뀐다(`fillMessageValues`, numeric-validation). 쓰지 않으면 값은 드러나지 않는다 — 기준값 미노출은 기본 문구와 자리표시자 없는 문구에서 그대로다
 - 차단 검증과 분기 규칙은 분리된 개념 — `docs/adr/0013-blocking-validation-separate-from-branch-rules.md` 참조
+
+---
+
+## 쓰기·검사 경계 규칙
+
+CONTEXT.md 에서 옮겨 온 호출부 규칙이다 — 용어의 뜻은 CONTEXT.md 에, 지키는 방법은 여기에 둔다.
+
+- **응답 쓰기는 질문 응답 쓰기 채널을 거친다** (CONTEXT.md 「질문 응답 쓰기 채널」). 새 응답 쓰기 지점은 모드 분기(isTestMode 스위치 등)를 만들지 말고 `features/question-renderer/hooks/use-question-response-writer.ts` 를 경유한다. 응답 원본이 주입돼 있는지·props 인지는 채널이 고르고, 호출자는 `mergePatch(patch)` 하나만 안다.
+- **셀 편집 폼에서 필드 여럿을 함께 바꾸는 입력은 폼 동작으로** (CONTEXT.md 「셀 편집 폼 동작」). 그 규칙은 `cell-editor/utils/cell-form-transitions.ts`(순수 함수)가 소유하고 폼 훅 `use-cell-form` 이 `actions` 로 내놓는다 — 하위 탭은 setter 여럿을 이어 부르지 말고 이것을 부른다. 굵게 3지선다(굵게 없음 · 셀 전체 · 첫 줄만)는 공용 `CellStyleFields`(`table-editor/cell-style-fields.tsx`)의 조작이라 이 모듈로 옮기지 않는다.
+- **잠금 면제는 `cellLockTemplate(cell)` 로 묻는다** (CONTEXT.md 「이월 값과 본문 프리필 토큰의 우선순위」). 표 input 셀의 「응답자가 고칠 수 있게」(`TableCell.prefillEditable`)를 켠 칸은 명단 값이 있어도 잠그지 않는다. 그래서 잠금 면제(형식 검사 · 응답 품질 검사 · 저장 경계의 형식 정돈)를 묻는 자리는 셀의 `defaultValueTemplate` 을 직접 읽지 말고 `features/question-renderer/utils/token-prefill.ts` 의 `cellLockTemplate(cell)` 을 거친다 — 직접 읽으면 고칠 수 있는 칸이 잠긴 칸처럼 검사를 면제받는다. 지금 이 판정을 지는 자리는 `numeric-validation`·`format-normalize`·`cell-text-quality` 다.

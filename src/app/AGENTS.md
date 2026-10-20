@@ -146,3 +146,12 @@ src/
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. 실사 대행은 같은 주소에 `&fw=1` 힌트가 붙는다(티켓 27) — 배너를 물을지만 정하고 **권한은 주지 않는다**. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
 > 운영 집계·파티션은 `src/server/operations/AGENTS.md`, 메일 발송 주소·대체 발송은 `src/server/mail/AGENTS.md`, 컨택원 배정·조사 대상 필터 해석·ID 목록 검색은 `src/server/contacts/AGENTS.md`, 필터 바 구조는 `src/features/operations/AGENTS.md` 에 있다.
+
+---
+
+## 외주 링크 콘솔이 와이어프레임과 다르게 간 곳
+
+ADR-0026 머리말이 「CONTEXT.md 「외주 실사 링크」 절의 구현 상태」로 넘기던 근거다(CONTEXT.md 를 용어집으로 줄이면서 여기로 옮겼다). **외주 링크 콘솔은 와이어프레임(`pencil/팀_워크스페이스_와이어프레임_v2.pen` FLOW 10·11)과 두 곳에서 다르게 갔다 — 그림에 맞춰 「고치지」 말 것.**
+
+1. 10-4 의 **평문 조사 대상 목록** → 운영 콘솔과 같은 **마스킹 목록**을 쓴다. 그 그림은 옛 실사 콘솔(`read-models/fieldwork-contacts`)의 잔재이고 같은 파일의 11-2(사내 실사, 마스킹)와 어긋나 있었다 — 통화 동선이 어차피 단건 상세를 지나므로(거기서 복호 평문을 본다) 목록 마스킹이 추가 비용을 만들지 않는다.
+2. 10-2 의 토큰 예시 `7Kq2xVb9`(8자) → **16자 이상**. 그림은 자리 표시이고 길이는 추측 저항이 정한다.
