@@ -313,3 +313,70 @@ describe('resumeOrCreateResponse — 초대(컨택) 재개 이관 (티켓 03)', 
     expect(migrationSet()).toBeUndefined();
   });
 });
+
+describe('resumeOrCreateResponse — 대상자 테스트 재개 이관 (2026-10-20)', () => {
+  // 재발행 뒤 테스트 대상자 링크로 다시 들어오면 초기화하지 않고 실응답처럼 이관해 이어 간다.
+  beforeEach(async () => {
+    selectQueue.length = 0;
+    updateSetCalls.length = 0;
+    selectMock.mockClear();
+    updateReturningMock.mockReset();
+    updateReturningMock.mockResolvedValue([{ id: 'response-1' }]);
+    const { findContactByInviteToken } = await import('@/server/read-models/invite-lookup');
+    vi.mocked(findContactByInviteToken).mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'contact-1',
+      isTest: true,
+    } as Awaited<ReturnType<typeof findContactByInviteToken>>);
+  });
+
+  const TEST_ROW = { ...ROW_BASE, isTest: true, sessionId: 'row-session' };
+
+  // 대상자 테스트는 매 진입 새 sessionId 다
+  const resumeTestTarget = () =>
+    resumeOrCreateResponse({ surveyId: 'survey-1', sessionId: 'new-session', inviteToken: 'invite-1' });
+
+  it('버전이 다르면 현재 버전으로 이관하고 생존 답변·진행 위치를 복원한다', async () => {
+    selectQueue.push([TEST_ROW], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    const result = await resumeTestTarget();
+
+    expect(result).toMatchObject({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { 'q-text': '유지되는 답' },
+      currentStepId: 'page:q-text',
+      affectedQuestionIds: ['q-radio'],
+      draftSeq: 5,
+    });
+    expect(migrationSet()?.['versionId']).toBe('v-current');
+  });
+
+  it('구버전 drop 행은 이관과 동시에 되살려 이어 간다', async () => {
+    selectQueue.push([{ ...TEST_ROW, status: 'drop' }], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    const result = await resumeTestTarget();
+
+    expect(result).toMatchObject({
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: { 'q-text': '유지되는 답' },
+    });
+    expect(migrationSet()?.['status']).toBe('in_progress');
+  });
+
+  it('이관할 수 없으면(현재 스냅샷 훼손) 복원하지 않는다 — 첫 입력이 초기화한다', async () => {
+    selectQueue.push([TEST_ROW], [{ snapshot: {} }]);
+
+    await expect(resumeTestTarget()).resolves.toBeNull();
+    expect(migrationSet()).toBeUndefined();
+  });
+
+  it('종결 상태는 버전이 달라도 이관하지 않는다', async () => {
+    selectQueue.push([{ ...TEST_ROW, status: 'completed' }]);
+
+    await expect(resumeTestTarget()).resolves.toBeNull();
+    expect(migrationSet()).toBeUndefined();
+  });
+});

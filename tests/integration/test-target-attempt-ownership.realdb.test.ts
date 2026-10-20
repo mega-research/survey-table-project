@@ -8,6 +8,7 @@ import { prepareContactInsertScope } from '@/server/contacts/services/contact-in
 import {
   recordStepVisit,
   recordVisibilitySegment,
+  resumeOrCreateResponse,
 } from '@/server/survey-response/services/lifecycle';
 import { completeResponse } from '@/server/survey-response/services/response-completion';
 import { saveTestTargetFirstAnswer } from '@/server/survey-response/services/response-entry';
@@ -227,6 +228,78 @@ run('기존 attempt 재사용 식별자 검증', () => {
       expect(new Date(String(state[0]?.responded_at)).toISOString()).toBe(
         originalRespondedAt.toISOString(),
       );
+    } finally {
+      await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+    }
+  });
+});
+
+run('대상자 테스트 재발행 뒤 이어하기 (2026-10-20)', () => {
+  it('재발행 뒤 다시 들어오면 답을 이관해 복원하고, 첫 입력도 초기화하지 않는다', async () => {
+    const surveyId = randomUUID();
+    const targetId = randomUUID();
+    const responseId = randomUUID();
+    const oldVersionId = randomUUID();
+    const currentVersionId = randomUUID();
+    const inviteToken = randomUUID();
+    const qText = randomUUID();
+    const qRadio = randomUUID();
+    const snapshot = (options: string[]) => ({
+      questions: [
+        { id: qText, type: 'text', title: '단답', required: false, order: 0 },
+        {
+          id: qRadio, type: 'radio', title: '보기', required: false, order: 1,
+          options: options.map((v) => ({ id: `o${v}`, label: v, value: v })),
+        },
+      ],
+    });
+    await db.execute(
+      sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'republish-resume',true)`,
+    );
+    try {
+      // 재발행: 보기 「3」을 더했다 — 기존 답은 그대로 살아야 한다
+      await db.execute(sql`
+        INSERT INTO survey_versions (id,survey_id,version_number,status,snapshot)
+        VALUES (${oldVersionId},${surveyId},1,'superseded',${JSON.stringify(snapshot(['1', '2']))}::jsonb),
+               (${currentVersionId},${surveyId},2,'published',${JSON.stringify(snapshot(['1', '2', '3']))}::jsonb)
+      `);
+      await db.execute(sql`UPDATE surveys SET current_version_id=${currentVersionId} WHERE id=${surveyId}`);
+      await db.execute(sql`
+        INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_token,invite_code)
+        VALUES (${targetId},${surveyId},1,true,${inviteToken},${randomUUID()})
+      `);
+      const answers = { [qText]: '이어서 할 답', [qRadio]: '2' };
+      await db.execute(sql`
+        INSERT INTO survey_responses (
+          id,survey_id,question_responses,is_test,contact_target_id,session_id,
+          version_id,is_completed,status,current_step_id
+        ) VALUES (
+          ${responseId},${surveyId},${JSON.stringify(answers)}::jsonb,true,${targetId},'before-republish',
+          ${oldVersionId},false,'drop','page:2'
+        )
+      `);
+
+      const resumed = await resumeOrCreateResponse({ surveyId, sessionId: 'after-republish', inviteToken });
+      expect(resumed).toMatchObject({
+        id: responseId, status: 'in_progress', resumed: true,
+        questionResponses: answers, currentStepId: 'page:2',
+      });
+      expect(resumed).not.toHaveProperty('affectedQuestionIds');
+
+      const acquired = await db.transaction((tx) =>
+        acquireTestTargetResponse(tx, {
+          surveyId, contactTargetId: targetId, sessionId: 'after-republish',
+          attemptId: randomUUID(), currentStepId: 'page:2',
+        }),
+      );
+      expect(acquired.reset).toBe(false);
+      const rows = await db.execute<{ version_id: string; status: string; question_responses: unknown; metadata: Record<string, unknown> }>(
+        sql`SELECT version_id, status, question_responses, metadata FROM survey_responses WHERE id=${responseId}`,
+      );
+      expect(rows[0]).toMatchObject({
+        version_id: currentVersionId, status: 'in_progress', question_responses: answers,
+        metadata: { migratedFromVersionId: oldVersionId },
+      });
     } finally {
       await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
     }
