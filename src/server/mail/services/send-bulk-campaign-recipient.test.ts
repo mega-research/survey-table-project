@@ -52,6 +52,20 @@ describe('sendCampaignRecipient', () => {
     );
   });
 
+  it('한 칸에 주소가 여럿이면 메일 한 통의 받는 사람 여러 명으로 보낸다', async () => {
+    sendMock.mockResolvedValue({ data: { id: 'message-2' }, error: null });
+
+    await sendCampaignRecipient({
+      ...input,
+      recipient: { ...input.recipient, to: 'ceo@example.com / staff@example.co.kr' },
+    });
+
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ['ceo@example.com', 'staff@example.co.kr'] }),
+      { idempotencyKey: input.idempotencyKey },
+    );
+  });
+
   it('재시도로 해결되지 않는 Resend 오류는 permanent failure로 반환한다', async () => {
     sendMock.mockResolvedValue({
       data: null,

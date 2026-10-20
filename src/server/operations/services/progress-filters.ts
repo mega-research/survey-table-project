@@ -9,13 +9,20 @@ import {
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
 } from '@/lib/operations/filter-shared';
-import { parseIdListInput, type NumRange } from '@/lib/operations/range-list';
+import {
+  parseIdListInput,
+  parseParityKeyword,
+  type NumRange,
+  type Parity,
+} from '@/lib/operations/range-list';
 
 export type ColumnCandidate = ColumnCandidateWithPii;
 
 export type FilterCondition =
   | { source: 'system.resid'; mode: 'idlist'; ranges: NumRange[] }
   | { source: 'system.resid'; mode: 'text'; value: string }
+  // `짝수`/`홀수` 한 단어 — 조사 대상 필터와 같은 홀짝 문법 (attrs 는 숫자 값만 판정)
+  | { source: 'system.resid' | `attrs.${string}`; mode: 'parity'; parity: Parity }
   | { source: `attrs.${string}`; mode: 'text'; value: string }
   | { source: `pii.${string}`; mode: 'exact'; value: string; blindIndex: string };
 
@@ -35,6 +42,11 @@ export function parseConditionFromUrl(
 
   const candidate = candidates.find((c) => c.source === col);
   if (!candidate) return null;
+
+  const parity = parseParityKeyword(trimmed);
+  if (parity && (col === FILTER_SOURCE.RESID || col.startsWith(FILTER_SOURCE.ATTRS_PREFIX))) {
+    return { source: col as 'system.resid' | `attrs.${string}`, mode: 'parity', parity };
+  }
 
   if (col === FILTER_SOURCE.RESID) {
     const ranges = parseIdListInput(trimmed);
@@ -90,6 +102,18 @@ export function buildFilterSql(
   cols: FilterColumnRefs = DEFAULT_FILTER_COLS,
 ): SQL {
   if (!condition) return sql`TRUE`;
+
+  if (condition.mode === 'parity') {
+    const remainder = condition.parity === 'even' ? 0 : 1;
+    if (condition.source === FILTER_SOURCE.RESID) {
+      return sql`(${cols.resid} % 2 = ${remainder})`;
+    }
+    // 값 전체가 숫자인 행만 정수로 읽는다 (앞자리 0 허용). 숫자가 아닌 값·빈 값은 NULL 이라
+    // 짝수에도 홀수에도 걸리지 않는다. 가드는 CASE — AND 평가 순서는 보장되지 않는다.
+    const key = condition.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
+    const numExpr = sql`(CASE WHEN ${cols.attrs}->>${key} ~ '^[0-9]+$' THEN (${cols.attrs}->>${key})::numeric END)`;
+    return sql`(${numExpr} % 2 = ${remainder})`;
+  }
 
   if (condition.source === FILTER_SOURCE.RESID) {
     if (condition.mode === 'idlist') {

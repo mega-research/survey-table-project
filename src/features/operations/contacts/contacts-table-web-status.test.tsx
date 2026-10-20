@@ -37,6 +37,7 @@ function row(overrides: Partial<ContactsRow>): ContactsRow {
     responseStatus: null,
     inviteToken: 'tok',
     createdAt: new Date('2026-08-01T00:00:00Z'),
+    assignment: null,
     ...overrides,
   };
 }

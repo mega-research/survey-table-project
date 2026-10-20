@@ -16,6 +16,7 @@ import {
 import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { PlaceholderField } from '@/features/survey-builder/placeholder-field';
 import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
 import { isInputFormat } from '@/types/input-type';
@@ -23,21 +24,26 @@ import type { Question } from '@/types/survey';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
-import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
+import type { CellFormActions, CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
 interface InputCellTabProps {
   form: UseCellFormResult['form'];
   setters: CellFormSetters;
   /** prefill 템플릿 입력칸 — 변수 버튼이 커서 위치에 토큰을 꽂는다. */
   inputTemplateRef: RefObject<HTMLInputElement | null>;
-  /** 숫자 모드를 이 세션에서 처음 켰는지 — 초기값 기본 ON 을 한 번만 적용한다. */
-  emptyDefaultAutoAppliedRef: { current: boolean };
+  actions: CellFormActions;
   ownQuestion: Question;
   questions: Question[];
   variableCatalog: VariableDef[];
   /** 표 질문일 때만 셀 단위 인용 컨트롤을 보여준다. */
   showCellAnswerQuote: boolean;
   answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 이 표의 input 셀에 prefill 이 실제로 깔리는가 — 테이블 유형 문항만 그렇다. 보기·순위 문항의
+   * 내장 표는 input 셀을 사이드카 입력칸으로 그려 템플릿을 깔지 않으므로, 동작하지 않는 설정을
+   * 내놓지 않는다(이미 적힌 템플릿은 지울 수 있게 칸만 남긴다).
+   */
+  prefillSupported?: boolean | undefined;
 }
 
 /**
@@ -48,12 +54,13 @@ export function InputCellTab({
   form,
   setters,
   inputTemplateRef,
-  emptyDefaultAutoAppliedRef,
+  actions,
   ownQuestion,
   questions,
   variableCatalog,
   showCellAnswerQuote,
   answerQuoteEnabled = false,
+  prefillSupported = true,
 }: InputCellTabProps) {
   const {
     inputType,
@@ -68,6 +75,7 @@ export function InputCellTab({
     formulaErrorMessage,
     inputPlaceholder,
     inputDefaultValueTemplate,
+    inputPrefillEditable,
     inputMaxLength,
     inputRows,
     inputAutoGrow,
@@ -92,6 +100,7 @@ export function InputCellTab({
     setFormulaErrorMessage,
     setInputPlaceholder,
     setInputDefaultValueTemplate,
+    setInputPrefillEditable,
     setInputMaxLength,
     setInputRows,
     setInputAutoGrow,
@@ -131,16 +140,8 @@ export function InputCellTab({
               id="input-type-number"
               disabled={isInputFormat(inputType)}
               checked={inputType === 'number'}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setInputType(checked ? 'number' : 'text');
-                if (checked && !emptyDefaultAutoAppliedRef.current) {
-                  // 숫자 모드를 이 세션에서 처음 켤 때만 emptyDefault 기본 ON (기본값 0).
-                  // 이후 사용자가 초기값 옵션을 끈 뒤 다시 토글해도 강제로 켜지지 않는다.
-                  emptyDefaultAutoAppliedRef.current = true;
-                  setEmptyDefaultEnabled(true);
-                }
-              }}
+              // 이번 편집에서 처음 켤 때만 초기값(0)도 켠다 (cell-form-transitions)
+              onChange={(e) => actions.toggleNumberMode(e.target.checked)}
               className="mt-0.5 h-4 w-4"
             />
             <label htmlFor="input-type-number" className="flex-1 cursor-pointer text-sm">
@@ -265,41 +266,74 @@ export function InputCellTab({
         <Label htmlFor="input-placeholder" className="text-sm font-medium">
           안내 문구 (Placeholder)
         </Label>
-        <Input
+        {/* 응답 화면(input-cell)과 같은 판정 — 평문 모드에서 줄 수 2 이상이거나 높이 늘리기를 켠 칸이 여러 줄이다 */}
+        <PlaceholderField
           id="input-placeholder"
           value={inputPlaceholder}
-          onChange={(e) => setInputPlaceholder(e.target.value)}
-          placeholder="예: 이름을 입력하세요"
+          onChange={setInputPlaceholder}
+          multiline={
+            isPlainTextInput({ type: 'text', inputType }) &&
+            ((typeof inputRows === 'number' && inputRows >= 2) || inputAutoGrow === true)
+          }
           className="w-full"
         />
-        <p className="text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="input-default-value-template" className="text-sm font-medium">
-          응답값 prefill <span className="font-normal text-gray-500">(선택)</span>
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="input-default-value-template"
-            ref={inputTemplateRef}
-            value={inputDefaultValueTemplate}
-            onChange={(e) => setInputDefaultValueTemplate(e.target.value)}
-            placeholder="예: {{전시회명}}"
-            className="flex-1"
-          />
-          {variableCatalog.length > 0 && (
-            <VariableButton
-              catalog={variableCatalog}
-              inputRef={inputTemplateRef}
-              onChange={(v) => setInputDefaultValueTemplate(v)}
+      {(prefillSupported || inputDefaultValueTemplate.trim().length > 0) && (
+        <div className="space-y-2">
+          <Label htmlFor="input-default-value-template" className="text-sm font-medium">
+            응답값 prefill <span className="font-normal text-gray-500">(선택)</span>
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="input-default-value-template"
+              ref={inputTemplateRef}
+              value={inputDefaultValueTemplate}
+              onChange={(e) => setInputDefaultValueTemplate(e.target.value)}
+              placeholder="예: {{전시회명}}"
+              className="flex-1"
             />
+            {variableCatalog.length > 0 && (
+              <VariableButton
+                catalog={variableCatalog}
+                inputRef={inputTemplateRef}
+                onChange={(v) => setInputDefaultValueTemplate(v)}
+              />
+            )}
+          </div>
+          {prefillSupported ? (
+            <p className="text-xs text-gray-500">
+              명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
+              입력합니다
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700">
+              보기·순위 문항의 표에서는 prefill 이 채워지지 않습니다. 이 칸을 비워 두세요 — 명단
+              값을 미리 채우려면 테이블 유형 문항을 쓰세요
+            </p>
           )}
+          {prefillSupported &&
+            (inputDefaultValueTemplate.trim().length > 0 || inputPrefillEditable) && (
+              <div className="flex items-start justify-between gap-4 pt-1">
+                <div>
+                  <Label htmlFor="input-prefill-editable" className="text-sm font-medium">
+                    응답자가 고칠 수 있게
+                  </Label>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    켜면 명단 값을 잠그지 않고 처음 한 번만 채워 둡니다. 응답자가 고치거나 지운 값이
+                    저장됩니다
+                  </p>
+                </div>
+                <Switch
+                  id="input-prefill-editable"
+                  checked={inputPrefillEditable}
+                  onCheckedChange={setInputPrefillEditable}
+                  disabled={inputDefaultValueTemplate.trim().length === 0}
+                />
+              </div>
+            )}
         </div>
-        <p className="text-xs text-gray-500">
-          변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
-        </p>
-      </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="input-rows">입력칸 줄 수</Label>

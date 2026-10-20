@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { listQueryFromSearchParams } from '@/features/operations/contacts/contacts-list-return';
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
@@ -38,11 +39,14 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   // 이 페이지가 서비스를 직접 불러 데이터를 렌더할 수 있어 여기서 다시 묻는다(티켓 10).
   const { capabilities } = await assertSurveyConsolePageAccess(surveyId, 'contacts.view');
   const scope = await getOperationsDataScope(surveyId);
+  const sp = await searchParams;
   const data = await loadContactsListPage({
     surveyId,
     scope,
     canViewMail: capabilities.has('mail.view'),
-    searchParams: await searchParams,
+    // 내부 콘솔 — 내부 계정만 지난다. 컨택원 열·필터·정렬을 싣는다.
+    includeContactOwner: true,
+    searchParams: sp,
   });
 
   return (
@@ -52,6 +56,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
       capabilities={capabilities}
       canOpenDetail
       data={data}
+      listQuery={listQueryFromSearchParams(sp)}
     />
   );
 }

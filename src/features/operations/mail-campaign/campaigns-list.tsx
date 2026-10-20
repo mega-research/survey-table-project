@@ -4,8 +4,15 @@ import { Send } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_ITEM_DISABLED_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import type { CampaignRow } from '@/shared/contracts/mail-io';
 import { internalOperationsPaths } from '../operations-paths';
 
@@ -53,6 +60,10 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+
+  const nav = pageBlockNavTargets(page, totalPages);
+
   return (
     <div className="space-y-3">
       <Card className="overflow-x-auto">
@@ -92,7 +103,14 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                 >
                   <td className="font-mono text-xs text-slate-600">
                     <Link href={detailHref} className="block px-3 py-3">
-                      #{r.runNumber}
+                      {/* 대체 발송 회차는 별도 대역(2000001~) 번호라 번호 대신 표시만 — 원래 회차는 제목에 */}
+                      {r.kind === 'fallback' ? (
+                        <span className="rounded bg-amber-50 px-1.5 py-0.5 font-sans text-amber-700">
+                          대체
+                        </span>
+                      ) : (
+                        `#${r.runNumber}`
+                      )}
                     </Link>
                   </td>
                   <td className="font-medium text-gray-900">
@@ -180,22 +198,22 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
 
       {totalPages > 1 ? (
         <div className="flex items-center justify-end gap-1 text-sm">
-          <span className="mr-1 text-slate-500">
+          <span className={PAGER_STATUS_CLASS}>
             {page} / {totalPages}
           </span>
-          <PageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
+          <PageLink surveyId={surveyId} page={nav.prev ?? 1} disabled={nav.prev === null}>
             이전
           </PageLink>
           {buildPageItems(page, totalPages).map((item, i) =>
             item === 'ellipsis' ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+              <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                 …
               </span>
             ) : item === page ? (
               <span
                 key={item}
                 aria-current="page"
-                className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+                className={PAGER_ITEM_CURRENT_CLASS}
               >
                 {item}
               </span>
@@ -205,7 +223,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               </PageLink>
             ),
           )}
-          <PageLink surveyId={surveyId} page={page + 1} disabled={page >= totalPages}>
+          <PageLink surveyId={surveyId} page={nav.next ?? totalPages} disabled={nav.next === null}>
             다음
           </PageLink>
           <PagerJump
@@ -231,13 +249,15 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">{children}</span>
+      <span aria-disabled="true" className={PAGER_ITEM_DISABLED_CLASS}>
+        {children}
+      </span>
     );
   }
   return (
     <Link
       href={`${internalOperationsPaths(surveyId).mailCampaigns}?page=${page}`}
-      className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
+      className={PAGER_ITEM_CLASS}
     >
       {children}
     </Link>

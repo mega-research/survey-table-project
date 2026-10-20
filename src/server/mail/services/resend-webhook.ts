@@ -3,9 +3,11 @@ import 'server-only';
 
 import { type DbTransaction as Tx, db } from '@/db';
 import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
+import { requestRecipientFallbacks } from './campaign-fallback';
 import {
   applyRecipientTransition,
   mapResendWebhookType,
+  triggersFallback,
 } from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
@@ -15,9 +17,9 @@ async function applyResendEvent(
   eventType: string,
   createdAtRaw: string,
   tags?: Record<string, string>,
-): Promise<void> {
+): Promise<string | null> {
   const newStatus = mapResendWebhookType(eventType);
-  if (!newStatus) return;
+  if (!newStatus) return null;
 
   const eventAt = new Date(createdAtRaw);
   if (Number.isNaN(eventAt.getTime())) eventAt.setTime(Date.now());
@@ -47,14 +49,14 @@ async function applyResendEvent(
       );
     candidate = taggedRows[0];
   }
-  if (!candidate) return;
+  if (!candidate) return null;
 
   const [campaign] = await tx
     .select({ id: mailCampaigns.id })
     .from(mailCampaigns)
     .where(eq(mailCampaigns.id, candidate.campaignId))
     .for('update');
-  if (!campaign) return;
+  if (!campaign) return null;
 
   const [row] = await tx
     .select({
@@ -67,17 +69,17 @@ async function applyResendEvent(
     .from(mailRecipients)
     .where(eq(mailRecipients.id, candidate.id))
     .for('update');
-  if (!row || row.campaignId !== candidate.campaignId) return;
+  if (!row || row.campaignId !== candidate.campaignId) return null;
 
   if (row.resendMessageId !== resendMessageId) {
-    if (row.resendMessageId !== null || row.status !== 'sending') return;
+    if (row.resendMessageId !== null || row.status !== 'sending') return null;
     await tx
       .update(mailRecipients)
       .set({ resendMessageId, updatedAt: new Date() })
       .where(and(eq(mailRecipients.id, row.id), isNull(mailRecipients.resendMessageId)));
   }
 
-  await applyRecipientTransition(tx, {
+  const applied = await applyRecipientTransition(tx, {
     recipientId: row.id,
     campaignId: row.campaignId,
     prevStatus: row.status as MailRecipientStatus,
@@ -85,6 +87,8 @@ async function applyResendEvent(
     eventAt,
     recipientArchivedAt: row.archivedAt,
   });
+  // 반송·실패로 바뀐 수신자 — 커밋 뒤 다음 순위 주소로 대체 발송을 건다.
+  return applied && triggersFallback(newStatus) ? row.id : null;
 }
 
 /** 검증된 Resend 이벤트를 recipient 상태와 campaign 집계에 반영한다. */
@@ -94,9 +98,10 @@ export async function processResendEvent(
   createdAtRaw: string,
   tags?: Record<string, string>,
 ): Promise<void> {
-  await db.transaction((tx) =>
+  const fallbackRecipientId = await db.transaction((tx) =>
     applyResendEvent(tx, resendMessageId, eventType, createdAtRaw, tags),
   );
+  if (fallbackRecipientId) await requestRecipientFallbacks([fallbackRecipientId]);
 }
 
 export interface VerifiedResendWebhookEvent {
@@ -114,16 +119,26 @@ export interface VerifiedResendWebhookEvent {
 export async function processResendWebhookEvent(
   event: VerifiedResendWebhookEvent,
 ): Promise<'processed' | 'deduped' | 'ignored'> {
-  return db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(webhookEvents)
       .values({ id: event.id, source: 'resend', eventType: event.type })
       .onConflictDoNothing()
       .returning({ id: webhookEvents.id });
-    if (inserted.length === 0) return 'deduped';
-    if (!event.resendMessageId || !mapResendWebhookType(event.type)) return 'ignored';
+    if (inserted.length === 0) return { result: 'deduped' as const, fallbackRecipientId: null };
+    if (!event.resendMessageId || !mapResendWebhookType(event.type)) {
+      return { result: 'ignored' as const, fallbackRecipientId: null };
+    }
 
-    await applyResendEvent(tx, event.resendMessageId, event.type, event.createdAt, event.tags);
-    return 'processed';
+    const fallbackRecipientId = await applyResendEvent(
+      tx,
+      event.resendMessageId,
+      event.type,
+      event.createdAt,
+      event.tags,
+    );
+    return { result: 'processed' as const, fallbackRecipientId };
   });
+  if (outcome.fallbackRecipientId) await requestRecipientFallbacks([outcome.fallbackRecipientId]);
+  return outcome.result;
 }

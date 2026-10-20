@@ -9,10 +9,20 @@ import {
   mailRecipients,
   mailTemplates,
 } from '@/db/schema';
-import { decryptPii } from '@/lib/crypto/aes';
-import { blindIndex } from '@/lib/crypto/blind';
-import { firstEmailRowByTarget, selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
+import type { MailEmailOrder } from '@/lib/contacts/mail-email-order';
+import { getMaskHintsForTargets } from '@/lib/crypto/contact-pii-repo';
 import { maskEmail } from '@/lib/operations/contacts-format';
+import {
+  type BouncedAddresses,
+  allCandidatesBouncedSql,
+  firstEmailRowByTarget,
+  hasEmailCandidateSql,
+  loadBouncedAddresses,
+  loadMailEmailOrder,
+  loadMailEmailOrders,
+  resolveSendAddresses,
+  selectEmailPiiRows,
+} from '@/server/read-models/send-address';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -36,9 +46,11 @@ import {
   testFlagForScope,
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
+import type { ResolvedContactFilter } from '@/server/read-models/contact-filter-resolution';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
+  MailCampaignKind,
   MailCampaignStatus,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
@@ -85,7 +97,8 @@ export async function listCampaignsForSurvey(args: {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const where = and(
     eq(mailCampaigns.surveyId, args.surveyId),
-    eq(mailCampaigns.kind, 'bulk'),
+    // 대체 발송(실패·반송 뒤 다음 순위 주소로 자동 재발송) 회차도 목록에 함께 보인다. 단건은 컨택 상세에.
+    inArray(mailCampaigns.kind, ['bulk', 'fallback']),
     campaignScopeCondition(args.scope),
     isNull(mailCampaigns.archivedAt),
   )!;
@@ -103,6 +116,7 @@ export async function listCampaignsForSurvey(args: {
     .select({
       id: mailCampaigns.id,
       runNumber: mailCampaigns.runNumber,
+      kind: mailCampaigns.kind,
       isTest: mailCampaigns.isTest,
       title: mailCampaigns.title,
       status: mailCampaigns.status,
@@ -144,6 +158,9 @@ export interface CampaignDetail {
   id: string;
   surveyId: string;
   runNumber: number;
+  kind: MailCampaignKind;
+  /** 대체 발송 회차면 원래(부모) 회차 */
+  parentCampaignId: string | null;
   title: string;
   status: MailCampaignStatus;
   mailTemplateId: string | null;
@@ -234,6 +251,8 @@ export async function getCampaignDetail(
     id: c.id,
     surveyId: c.surveyId,
     runNumber: c.runNumber,
+    kind: c.kind,
+    parentCampaignId: c.parentCampaignId,
     title: c.title,
     status: c.status as MailCampaignStatus,
     mailTemplateId: c.mailTemplateId,
@@ -260,6 +279,16 @@ export async function getCampaignDetail(
     createdAt: c.createdAt,
     createdBy: c.createdBy,
   };
+}
+
+/**
+ * 대상이 지금 맡겨진 컨택원 이름(메일 표의 컨택원 열). 꺼져 있으면 읽지 않고 NULL —
+ * 외부 주체 화면은 켜지 않는다. contact_targets 와 상관되므로 세 표의 FROM 이 그 테이블이어야 한다.
+ */
+function assignmentNameExpr(include: boolean | undefined) {
+  return include
+    ? sql<string | null>`(SELECT name FROM contact_assignments WHERE id = "contact_targets".assignment_id)`
+    : sql<string | null>`NULL::text`;
 }
 
 export interface ListCampaignRecipientsResult {
@@ -403,6 +432,10 @@ export async function listCampaignRecipients(args: {
   errorReasons?: string[];
   /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
   resultCodes?: string[];
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 내부 콘솔 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -459,6 +492,7 @@ export async function listCampaignRecipients(args: {
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
       contactAttrs: contactTargets.attrs,
+      contactAssignmentName: assignmentNameExpr(args.includeAssignment),
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
@@ -479,6 +513,11 @@ export async function listCampaignRecipients(args: {
     .limit(pageSize)
     .offset(offset);
 
+  const piiMasks = await fetchPiiMasks(
+    rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
+    args.piiMaskKeys,
+  );
+
   return {
     rows: rows.map((r) => ({
       id: r.id,
@@ -486,6 +525,8 @@ export async function listCampaignRecipients(args: {
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
       contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
+      contactPiiMasks: (r.contactTargetId && piiMasks.get(r.contactTargetId)) || {},
+      contactAssignmentName: r.contactAssignmentName,
       latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
@@ -563,76 +604,29 @@ function mailStatusRankExpr(scope: OperationsDataScope): SQL<number | null> {
   END)`;
 }
 
-// "이 컨택에 email PII 가 등록돼 있나" 정확검사. NULL/'' 무관 — contact_pii row 존재 자체가 기준.
-const HAS_EMAIL_PII = sql`EXISTS (
-  SELECT 1 FROM contact_pii cp
-  WHERE cp.contact_target_id = "contact_targets"."id"
-    AND cp.field_type = 'email'
-)`;
-
 /**
- * 이 설문에서 반송된 주소의 blind index 집합.
+ * 반송 이력으로 발송에서 자동 제외될 컨택 id 목록 — 마법사 목록 위 예고 숫자용 **칸 단위 근사**
+ * (`allCandidatesBouncedSql`). 보낼 열이 하나라도 남은 컨택은 빼지 않는다 — 발송은 다음 순위 열로 넘어간다.
+ * 발송 직전 사전 점검(preflightRecipients)과 발송은 칸을 복호화해 정확히 판정한다.
  *
- * 설문 스코프를 contact_targets 가 아니라 mail_campaigns.survey_id 로 잡는다 —
- * 조사대상자 교체 업로드는 contact_targets 를 통째로 DELETE 하고
- * mail_recipients.contact_target_id 는 ON DELETE SET NULL 이라, 컨택 기준으로 좁히면
- * 교체 직후 반송 이력이 통째로 사라진다. email_snapshot 은 컨택 삭제와 무관하게 남으므로
- * 주소 기준 판정은 교체를 넘어 보존된다.
- */
-async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ emailSnapshot: mailRecipients.emailSnapshot })
-    .from(mailRecipients)
-    .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    .where(and(eq(mailCampaigns.surveyId, surveyId), eq(mailRecipients.status, 'bounced')));
-
-  const blinds = new Set<string>();
-  for (const r of rows) {
-    if (!r.emailSnapshot) continue; // snapshot 이 비면 대조 불가
-    const blind = blindIndex('email', r.emailSnapshot);
-    if (blind) blinds.add(blind); // 정규화 후 빈 값도 대조 불가
-  }
-  return [...blinds];
-}
-
-/**
- * 반송 이력으로 발송에서 자동 제외할 컨택 id 목록.
- *
- * 반송(bounced)은 컨택이 아니라 "주소"의 속성이다 — 하드바운스 주소에 재발송하면
- * 발신 도메인 평판이 깎이므로 반송된 주소를 아직 쓰는 컨택만 제외한다. 관리자가 이메일을
- * 수정하거나 병합 업로드로 주소가 바뀌면 대조가 어긋나 자동으로 다시 발송 대상이 된다.
- *
- * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
- * 미리보기 목록에서는 제외하지 않는다 — 발송 시점(preflight·createCampaign)에만 적용.
- * 단건 발송에는 적용하지 않는다 — 관리자가 특정 컨택을 지목한 의도적 발송이므로 반송
- * 주소여도 허용한다 (2026-08-13 결정). 단건은 createCampaign(kind='single') 경로를
- * 재사용하므로 스킵은 createCampaign 내부에서 kind 로 분기한다.
+ * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다. 미리보기 목록에서는 제외하지 않는다.
+ * 이 함수는 파티션을 가리지 않고 설문 전체를 보는데 순서는 파티션마다 다르다 —
+ * 실/테스트 스킴의 순서를 각각 읽어 행의 is_test 로 갈라 쓴다.
  */
 export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
-  const blinds = await listBouncedEmailBlindIndexes(surveyId);
-  if (blinds.length === 0) return [];
+  const bounced = await loadBouncedAddresses(surveyId);
+  if (bounced.blindIndexes.length === 0) return [];
 
-  // 발송이 쓰는 주소의 근사치를 대조한다 — createCampaign 은 contact_pii 를 column_key
-  // 오름차순으로 훑되(campaigns.ts 의 asc(contactPii.columnKey)), 첫 email 컬럼의
-  // 복호화가 실패하거나 결과가 공백이면 다음 컬럼으로 폴백한다. 이 서브쿼리는 그 폴백을
-  // 모델링하지 않고 단순 column_key 최솟값만 본다 — 복호화 가능 여부는 SQL 술어로 표현할 수
-  // 없고, 정확히 맞추려면 설문 전체 컨택의 cipher 를 매번 복호화해야 해서 preflight 비용이
-  // 과다하기 때문이다. 그 갭 때문에 첫 컬럼이 실제로 사용 불가능해 두 번째 컬럼으로 발송된
-  // 컨택은, 그 두 번째 주소가 반송돼도 이 판정으로는 제외되지 않는다(cipher 손상·키 미스매치
-  // 등 좁은 조건에서만 발동). 발송 쪽 선택 규칙이 바뀌면 아래 서브쿼리도 함께 바꿔야 한다.
-  const sendAddressBlind = sql`(
-    SELECT cp.blind_index
-    FROM contact_pii cp
-    WHERE cp.contact_target_id = ${contactTargets.id}
-      AND cp.field_type = 'email'
-    ORDER BY cp.column_key
-    LIMIT 1
-  )`;
+  const orders = await loadMailEmailOrders(surveyId);
+  const excluded = sql`(CASE WHEN ${contactTargets.isTest}
+    THEN ${allCandidatesBouncedSql(orders.test, bounced)}
+    ELSE ${allCandidatesBouncedSql(orders.real, bounced)}
+  END)`;
 
   const rows = await db
     .select({ id: contactTargets.id })
     .from(contactTargets)
-    .where(and(eq(contactTargets.surveyId, surveyId), inArray(sendAddressBlind, blinds)));
+    .where(and(eq(contactTargets.surveyId, surveyId), excluded));
 
   return rows.map((r) => r.id);
 }
@@ -656,14 +650,14 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  * 항상 적용되는 자동 제외:
  *   - unsubscribed_at IS NULL (수신거부 — 메일 해지)
  *   - 최근 결과코드 수신거부 아님 (status 무관 — neutral 수신거부 코드도 메일 제외)
- *   - email PII 존재 (이메일 누락 제외)
+ *   - 발송 주소로 쓸 email PII 존재 (이메일 누락 제외 — 발송 주소 순서에 든 열 기준)
  *   - 부정 결과코드 마킹 제외
  * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
  *
  * 반송 이력 컨택은 미리보기 명단에는 그대로 표시하고 발송 시점(preflight·
  * createCampaign)에만 제외한다 — 목록에서 조용히 사라지면 명단 대조가 어렵다.
  *
- * clauses 의 PII blindIndex 는 호출자(page/action)의 parseClausesFromUrl 에서 이미
+ * clauses 의 PII blindIndex 는 호출자의 조사 대상 필터 해석(resolveContactFilter)에서 이미
  * 계산되어 들어오므로 여기서는 비동기 PII 조회를 하지 않는다 → 동기 함수.
  */
 function buildCandidateWhere(
@@ -672,13 +666,14 @@ function buildCandidateWhere(
   clauses: FilterClause[],
   unrespondedOnly: boolean,
   negativeCodes: string[],
+  emailOrder: MailEmailOrder,
 ): SQL {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
     isNull(contactTargets.unsubscribedAt),
     sql`NOT (${latestResultUnsubscribedSql})`,
-    HAS_EMAIL_PII,
+    hasEmailCandidateSql(emailOrder),
     buildNotExcludedByNegativeCode(negativeCodes),
     buildContactsFilterSql(clauses),
   ];
@@ -705,7 +700,9 @@ async function countCandidateExclusions(
   unrespondedOnly: boolean,
   negativeCodes: string[],
   bouncedContactIds: readonly string[],
+  emailOrder: MailEmailOrder,
 ): Promise<CampaignExclusionCounts> {
+  const hasEmailPii = hasEmailCandidateSql(emailOrder);
   const baseParts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
@@ -725,8 +722,8 @@ async function countCandidateExclusions(
     .select({
       unsubscribed: sql<number>`count(*) FILTER (WHERE ${unsubCond})::int`,
       negativeCode: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND ${negExists})::int`,
-      emailMissing: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
-      bounced: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
+      emailMissing: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND NOT ${hasEmailPii})::int`,
+      bounced: sql<number>`count(*) FILTER (WHERE NOT ${unsubCond} AND NOT ${negExists} AND ${hasEmailPii} AND ${bouncedCond})::int`,
     })
     .from(contactTargets)
     .where(and(...baseParts)!);
@@ -735,14 +732,18 @@ async function countCandidateExclusions(
 }
 
 /**
- * contact_id 목록에 대해 첫 email PII 의 mask_hint 일괄 조회.
- * 한 컨택에 여러 email 컬럼이 있으면 column_key 알파벳 순 첫 번째.
+ * contact_id 목록에 대해 발송 주소 email PII 의 mask_hint 일괄 조회.
+ * 한 컨택에 여러 email 컬럼이 있으면 발송 주소 순서가 가장 앞선 것 — 반송된 칸을 건너뛰지 않는다
+ * (표시는 순서상 첫 주소, 2026-10-19 결정). 단체 발송은 반송 칸을 건너뛰어 다른 주소로 나갈 수 있다.
  */
-async function fetchEmailMaskHints(contactIds: readonly string[]): Promise<Map<string, string>> {
+async function fetchEmailMaskHints(
+  contactIds: readonly string[],
+  emailOrder: MailEmailOrder,
+): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   if (contactIds.length === 0) return result;
 
-  const rows = await selectEmailPiiRows(db, contactIds);
+  const rows = await selectEmailPiiRows(db, contactIds, emailOrder);
   for (const r of firstEmailRowByTarget(rows).values()) {
     result.set(r.contactTargetId, r.maskHint ?? '');
   }
@@ -750,6 +751,28 @@ async function fetchEmailMaskHints(contactIds: readonly string[]): Promise<Map<s
 }
 
 const EMAIL_DASH = '—';
+
+/**
+ * 메일 표시를 켠 개인정보 열의 마스킹 힌트 — 조사 대상 목록과 같은 값(평문 복호화 없음).
+ * 켠 열이 없으면 조회하지 않는다. 결과는 contact_id → (column_key → 힌트), 힌트가 없는 칸은 뺀다.
+ */
+async function fetchPiiMasks(
+  contactIds: readonly string[],
+  keys: readonly string[] | undefined,
+): Promise<Map<string, Record<string, string>>> {
+  const result = new Map<string, Record<string, string>>();
+  if (!keys || keys.length === 0 || contactIds.length === 0) return result;
+  const wanted = new Set(keys);
+  const hints = await getMaskHintsForTargets(contactIds);
+  for (const [id, byKey] of hints) {
+    const masks: Record<string, string> = {};
+    for (const [key, hint] of Object.entries(byKey)) {
+      if (wanted.has(key) && hint.maskHint) masks[key] = hint.maskHint;
+    }
+    result.set(id, masks);
+  }
+  return result;
+}
 
 /**
  * 미리보기 정렬 컬럼 매핑. id tiebreaker 는 호출부에서 추가.
@@ -785,25 +808,32 @@ function buildCandidateOrderBy(
 export async function previewCampaignCandidates(args: {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   unrespondedOnly: boolean;
   sort?: CampaignSortKey;
   dir?: CampaignSortDir;
   page?: number;
   pageSize?: number;
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 내부 콘솔 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
-  const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+  const [{ negative: negativeCodes }, bouncedContactIds, emailOrder] = await Promise.all([
     getResultCodeStatuses(args.surveyId),
     listBouncedContactIds(args.surveyId),
+    loadMailEmailOrder(args.surveyId, testFlagForScope(args.scope)),
   ]);
   // 반송 컨택은 목록에 포함 — bouncedContactIds 는 exclusions 카운트(발송 시 제외 예고)에만 사용.
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.clauses,
+    args.filter.clauses,
     args.unrespondedOnly,
     negativeCodes,
+    emailOrder,
   );
 
   const [[countRow], exclusions] = await Promise.all([
@@ -814,10 +844,11 @@ export async function previewCampaignCandidates(args: {
     countCandidateExclusions(
       args.surveyId,
       args.scope,
-      args.clauses,
+      args.filter.clauses,
       args.unrespondedOnly,
       negativeCodes,
       bouncedContactIds,
+      emailOrder,
     ),
   ]);
   const total = countRow?.total ?? 0;
@@ -831,6 +862,7 @@ export async function previewCampaignCandidates(args: {
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
+      assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       respondedAt: contactTargets.respondedAt,
       // 표시·필터가 같은 매칭(matchedResponseSubquery)을 공유해야 한다 — 갈라지면
       // "진행 중" 으로 거른 행이 표에서는 "미응답" 으로 보인다.
@@ -852,7 +884,10 @@ export async function previewCampaignCandidates(args: {
     .limit(pageSize)
     .offset(offset);
 
-  const maskMap = await fetchEmailMaskHints(rows.map((r) => r.id));
+  const [maskMap, piiMasks] = await Promise.all([
+    fetchEmailMaskHints(rows.map((r) => r.id), emailOrder),
+    fetchPiiMasks(rows.map((r) => r.id), args.piiMaskKeys),
+  ]);
 
   return {
     rows: rows.map((r) => ({
@@ -862,6 +897,8 @@ export async function previewCampaignCandidates(args: {
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
+      piiMasks: piiMasks.get(r.id) ?? {},
+      assignmentName: r.assignmentName,
       respondedAt: r.respondedAt,
       responseStatus: r.responseStatus,
       progressPct: r.progressPct,
@@ -877,16 +914,21 @@ export async function previewCampaignCandidates(args: {
 export async function countCampaignCandidates(args: {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   unrespondedOnly: boolean;
 }): Promise<number> {
-  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const [{ negative: negativeCodes }, emailOrder] = await Promise.all([
+    getResultCodeStatuses(args.surveyId),
+    loadMailEmailOrder(args.surveyId, testFlagForScope(args.scope)),
+  ]);
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.clauses,
+    args.filter.clauses,
     args.unrespondedOnly,
     negativeCodes,
+    emailOrder,
   );
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -911,6 +953,10 @@ export async function listUnsubscribedContacts(args: {
   scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
+  /** 메일 표시를 켠 개인정보 열 — 이 열들의 마스킹 힌트만 행에 싣는다. 비면 읽지 않는다. */
+  piiMaskKeys?: readonly string[];
+  /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 내부 콘솔 화면만 켠다. */
+  includeAssignment?: boolean;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
@@ -936,6 +982,7 @@ export async function listUnsubscribedContacts(args: {
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
+      assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       unsubscribedAt: contactTargets.unsubscribedAt,
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptAt: latestAttemptAtExpr.as('latest_attempt_at'),
@@ -948,7 +995,14 @@ export async function listUnsubscribedContacts(args: {
     .limit(pageSize)
     .offset(offset);
 
-  const maskMap = await fetchEmailMaskHints(rows.map((r) => r.id));
+  const emailOrder = await loadMailEmailOrder(args.surveyId, testFlagForScope(args.scope));
+  const [maskMap, piiMasks] = await Promise.all([
+    fetchEmailMaskHints(
+      rows.map((r) => r.id),
+      emailOrder,
+    ),
+    fetchPiiMasks(rows.map((r) => r.id), args.piiMaskKeys),
+  ]);
 
   return {
     rows: rows.map((r) => ({
@@ -957,6 +1011,8 @@ export async function listUnsubscribedContacts(args: {
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
+      piiMasks: piiMasks.get(r.id) ?? {},
+      assignmentName: r.assignmentName,
       unsubscribedAt: r.unsubscribedAt,
       resultUnsubscribedAt: isUnsubscribeResultCode(r.latestResultCode)
         ? r.latestAttemptAt
@@ -972,47 +1028,48 @@ export async function listUnsubscribedContacts(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RecipientPreflightResult {
-  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, email!=null, 반송 이력 없음)
+  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, 보낼 주소 있음)
   unsubscribedIds: string[]; // 사용자 선택 후 unsubscribed 로 전이됨
   excludedByCodeIds: string[]; // negative result_code 마킹으로 제외
-  emailMissingIds: string[]; // email 비어있음
-  bouncedIds: string[]; // 반송 이력 (현재 주소 기준) 으로 제외
+  emailMissingIds: string[]; // 쓸 수 있는 이메일 칸 없음 (없음·빈 값·복호화 실패)
+  bouncedIds: string[]; // 쓸 수 있는 칸이 전부 반송 주소
   notFoundIds: string[]; // 컨택 삭제됨
 }
 
+/**
+ * 발송 직전 확인 — 선택 명단을 실제 발송(createCampaign)과 **같은 판정**으로 나눈다.
+ * 우선순위: unsubscribed → excludedByCode → 발송 주소 해석(missing → emailMissing, bounced → bounced, send → valid).
+ * 발송 주소는 칸을 복호화해 규칙(resolveSendAddresses)으로 판정하므로 숫자가 실제 큐잉 수와 맞는다 —
+ * 마법사 목록 예고(listBouncedContactIds, 칸 단위 SQL 근사)와 달리 정확하다.
+ */
 export async function preflightRecipients(args: {
   surveyId: string;
   scope: OperationsDataScope;
   selectedContactIds: string[];
-  /** listBouncedContactIds 결과 — 호출자가 계산해 주입 (createCampaign 재검증과 공유) */
-  bouncedContactIds: readonly string[];
+  /** 이 설문의 반송 주소 — 호출자가 읽어 넘긴다(loadBouncedAddresses) */
+  bounced: BouncedAddresses;
 }): Promise<RecipientPreflightResult> {
-  if (args.selectedContactIds.length === 0) {
-    return {
-      validIds: [],
-      unsubscribedIds: [],
-      excludedByCodeIds: [],
-      emailMissingIds: [],
-      bouncedIds: [],
-      notFoundIds: [],
-    };
-  }
+  const empty: RecipientPreflightResult = {
+    validIds: [],
+    unsubscribedIds: [],
+    excludedByCodeIds: [],
+    emailMissingIds: [],
+    bouncedIds: [],
+    notFoundIds: [],
+  };
+  if (args.selectedContactIds.length === 0) return empty;
 
-  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const [{ negative: negativeCodes }, emailOrder] = await Promise.all([
+    getResultCodeStatuses(args.surveyId),
+    loadMailEmailOrder(args.surveyId, testFlagForScope(args.scope)),
+  ]);
 
-  // contact_targets + email PII 존재 여부 + negative code EXISTS 를 한 쿼리로.
-  // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
   const rows = await db
     .select({
       id: contactTargets.id,
       unsubscribedAt: contactTargets.unsubscribedAt,
       // 최근 결과코드 수신거부 — status(negative) 무관하게 수신거부 버킷으로 분류.
       resultUnsubscribed: sql<boolean>`(${latestResultUnsubscribedSql})`.as('result_unsubscribed'),
-      hasEmail: sql<boolean>`EXISTS (
-        SELECT 1 FROM contact_pii cp
-        WHERE cp.contact_target_id = "contact_targets"."id"
-          AND cp.field_type = 'email'
-      )`.as('has_email'),
       excludedByCode: sql<boolean>`${buildNegativeCodeExists(
         negativeCodes,
         sql`"contact_targets"."id"`,
@@ -1027,89 +1084,30 @@ export async function preflightRecipients(args: {
       ),
     );
 
-  const validIds: string[] = [];
-  const unsubscribedIds: string[] = [];
-  const excludedByCodeIds: string[] = [];
-  const emailMissingIds: string[] = [];
-  const bouncedIds: string[] = [];
-  const bouncedSet = new Set(args.bouncedContactIds);
+  const result = { ...empty, validIds: [] as string[] };
   const found = new Set<string>();
-
-  // 1차 분류 — unsubscribed / excludedByCode / contact_pii row 부재(!hasEmail) / 반송 이력까지.
-  // hasEmail 통과분은 cipher 복호화로 2차 검증한다 (아래 참조).
-  const decryptCandidateIds: string[] = [];
+  const addressCandidateIds: string[] = [];
   for (const r of rows) {
     found.add(r.id);
-    // 우선순위: unsubscribed → excludedByCode → !hasEmail → bounced → (복호화 검증) → valid
     if (r.unsubscribedAt !== null || r.resultUnsubscribed) {
-      unsubscribedIds.push(r.id);
+      result.unsubscribedIds.push(r.id);
     } else if (r.excludedByCode) {
-      excludedByCodeIds.push(r.id);
-    } else if (!r.hasEmail) {
-      emailMissingIds.push(r.id);
-    } else if (bouncedSet.has(r.id)) {
-      bouncedIds.push(r.id);
+      result.excludedByCodeIds.push(r.id);
     } else {
-      // contact_pii row 는 있으나 cipher 가 빈 문자열/공백으로 복호화되거나 복호화에
-      // 실패하는 컨택은 createCampaign 에서 발송 대상에서 빠진다(line 137~145). preflight
-      // 도 동일 기준으로 검증해야 "실제 발송" 카운트가 실제 큐잉 수와 일치한다 — 그렇지
-      // 않으면 valid 가 과대 보고되고 그 차이가 skippedUnsubscribedCount 로 흡수된다.
-      decryptCandidateIds.push(r.id);
+      addressCandidateIds.push(r.id);
     }
   }
 
-  if (decryptCandidateIds.length > 0) {
-    const usableIds = await fetchContactIdsWithUsableEmail(decryptCandidateIds);
-    for (const id of decryptCandidateIds) {
-      if (usableIds.has(id)) {
-        validIds.push(id);
-      } else {
-        emailMissingIds.push(id);
-      }
-    }
+  const addresses = await resolveSendAddresses(db, addressCandidateIds, emailOrder, args.bounced);
+  for (const id of addressCandidateIds) {
+    const kind = addresses.get(id)?.kind ?? 'missing';
+    if (kind === 'send') result.validIds.push(id);
+    else if (kind === 'bounced') result.bouncedIds.push(id);
+    else result.emailMissingIds.push(id);
   }
 
-  const notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
-
-  return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, bouncedIds, notFoundIds };
-}
-
-/**
- * 주어진 컨택 id 중 "발송 가능한 email cipher" 를 가진 id Set 반환.
- *
- * createCampaign(campaigns.ts) 의 발송 명단 산출과 동일 기준:
- *   - 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순으로 훑어
- *     "복호화에 성공한(빈 문자열/공백 아님) 첫 컬럼" 을 발송 email 로 채택.
- *   - 첫 컬럼이 blank/공백/복호화 실패면 다음 컬럼으로 폴백한다.
- *   - 어떤 컬럼도 usable 하지 않으면 제외.
- *
- * preflight 가 EXISTS(contact_pii) 만으로 valid 를 세면 위 케이스를 놓쳐 과대 보고하므로,
- * 후보(EXISTS 통과)에 한해 실제 복호화로 재검증한다. send path 가 SoT 이므로
- * "첫 usable 컬럼" 폴백 동작까지 동일하게 맞춰야 큐잉 수와 preflight 카운트가 일치한다.
- */
-async function fetchContactIdsWithUsableEmail(contactIds: readonly string[]): Promise<Set<string>> {
-  const usable = new Set<string>();
-  if (contactIds.length === 0) return usable;
-
-  const rows = await selectEmailPiiRows(db, contactIds);
-
-  // send path(createCampaign) 와 동일하게 "첫 usable 컬럼" 폴백:
-  // blank/공백/복호화 실패 컬럼에서는 seen 을 마킹하지 않고 다음 컬럼으로 넘어간다.
-  // 한 컨택이라도 usable 컬럼이 하나 나오면 그 시점에만 seen 처리해 중복을 차단한다.
-  const seen = new Set<string>();
-  for (const r of rows) {
-    if (seen.has(r.contactTargetId)) continue; // 이미 usable 컬럼을 찾은 컨택
-    try {
-      const email = decryptPii(r.cipher);
-      if (email && email.trim()) {
-        usable.add(r.contactTargetId);
-        seen.add(r.contactTargetId);
-      }
-    } catch {
-      // 복호화 실패 컬럼은 건너뛰고 다음 컬럼으로 폴백 (seen 미마킹)
-    }
-  }
-  return usable;
+  result.notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

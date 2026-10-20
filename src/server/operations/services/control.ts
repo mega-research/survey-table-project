@@ -5,6 +5,7 @@ import 'server-only';
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
+import { readBrowserTestView } from '@/server/data-scope';
 
 import { CLOSABLE_SURVEY_STATUSES, SurveyNotClosableError } from '../domain/survey-close';
 
@@ -15,7 +16,13 @@ export interface SurveyControlState {
   pausedMessage: string | null;
   /** 설문 종료 여부 (ADR-0030) — `surveys.status === 'closed'`. 중단과 독립이다. */
   isClosed: boolean;
+  /** 설문의 테스트 환경(테스트 링크·테스트 대상자 링크가 산다) — 모든 사람에게 같다. */
   testModeEnabled: boolean;
+  /**
+   * 이 브라우저가 콘솔을 테스트 파티션으로 보기로 했는가(쿠키). 콘솔이 실제로 테스트 데이터를 보는 것은
+   * testModeEnabled 와 둘 다 참일 때다 — 판정은 server/data-scope.
+   */
+  testViewInBrowser: boolean;
   testToken: string | null;
   accessIdentifier: string;
   testResponseCount: number;
@@ -26,6 +33,7 @@ export interface SurveyControlState {
 export async function getControlState(surveyId: string): Promise<SurveyControlState | null> {
   // mode와 두 count, 첫 invite를 한 SQL statement snapshot에서 읽어 대상자 생성/삭제나
   // 다른 관리자의 OFF가 query 사이에 끼어드는 혼합 상태를 반환하지 않는다.
+  const testViewInBrowserPromise = readBrowserTestView(surveyId);
   const [row] = await db
     .select({
       isPaused: surveys.isPaused,
@@ -71,6 +79,7 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
     pausedMessage: row.pausedMessage,
     isClosed: row.status === 'closed',
     testModeEnabled: row.testModeEnabled,
+    testViewInBrowser: await testViewInBrowserPromise,
     testToken: row.testToken,
     accessIdentifier: getSurveyAccessIdentifier(row),
     testResponseCount: row.testResponseCount,

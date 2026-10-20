@@ -7,8 +7,8 @@ import { contactIdLists } from '@/db/schema';
 import { parseIdListToken } from '@/lib/operations/filter-shared';
 
 /**
- * URL q 값들에서 `list:<uuid>` 토큰만 골라 저장된 ID 목록을 읽는다 — parseClausesFromUrl 의
- * extra.idLists 재료. 파서가 동기라 페이지/서비스가 파싱 전에 한 번 호출한다.
+ * URL q 값들에서 `list:<uuid>` 토큰만 골라 저장된 ID 목록을 읽는다 — 조사 대상 필터 해석
+ * (contact-filter-resolution)이 하위 파서에 넘길 재료로 해석 전에 한 번 부른다.
  * survey_id 로 걸러 타 설문 토큰은 모르는 토큰(0건)으로 접힌다.
  */
 export async function loadIdListsForValues(

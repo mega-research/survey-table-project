@@ -27,17 +27,21 @@ const scheme: ContactColumnScheme = {
     { key: 'resid', label: '시스템ID', source: 'system.resid', order: 1 },
     { key: '리스트ID', label: '리스트ID', source: 'attrs.리스트ID', order: 2 },
     { key: '회사명', label: '회사명', source: 'attrs.회사명', order: 3, showInMail: true },
+    { key: '대표자명', label: '대표자명', source: 'pii.대표자명', order: 4, piiType: 'name' },
+    { key: 'web', label: 'web', source: 'system.web', order: 5 },
   ],
 };
 
 describe('ColumnSchemeEditor 메일 표시 토글', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('attrs 컬럼에만 메일 표시 스위치가 있다', () => {
+  it('attrs·개인정보·시스템ID 에 메일 표시 스위치가 있고, 운영 컬럼에는 없다', () => {
     render(<ColumnSchemeEditor surveyId="sv-1" scheme={scheme} />);
 
     expect(screen.getByRole('switch', { name: '리스트ID 메일 표시' })).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: '시스템ID 메일 표시' })).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '대표자명 메일 표시' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: '시스템ID 메일 표시' })).toBeChecked();
+    expect(screen.queryByRole('switch', { name: 'web 메일 표시' })).not.toBeInTheDocument();
   });
 
   it('켜고 저장하면 showInMail: true 로, 끄면 필드 없이 저장된다', async () => {
@@ -53,5 +57,19 @@ describe('ColumnSchemeEditor 메일 표시 토글', () => {
     const saved = updateMock.mock.calls[0]![0].scheme.columns;
     expect(saved[1]).toMatchObject({ key: '리스트ID', showInMail: true });
     expect(saved[2]).not.toHaveProperty('showInMail');
+  });
+
+  it('시스템ID 를 끄면 showInMail: false, 개인정보 열을 켜면 true 로 저장된다', async () => {
+    updateMock.mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    render(<ColumnSchemeEditor surveyId="sv-1" scheme={scheme} />);
+
+    await user.click(screen.getByRole('switch', { name: '시스템ID 메일 표시' }));
+    await user.click(screen.getByRole('switch', { name: '대표자명 메일 표시' }));
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    const saved = updateMock.mock.calls[0]![0].scheme.columns;
+    expect(saved[0]).toMatchObject({ key: 'resid', showInMail: false });
+    expect(saved[3]).toMatchObject({ key: '대표자명', showInMail: true });
   });
 });

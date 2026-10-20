@@ -84,7 +84,8 @@ const SCREENING_QUESTION = {
   ],
 } as unknown as Question;
 
-vi.mock('@/server/read-models/version-snapshot', () => ({
+vi.mock('@/server/read-models/version-snapshot', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/version-snapshot')>()),
   loadVersionSnapshot: vi.fn(async () => ({
     questions: [SCREENING_QUESTION],
     groups: [],

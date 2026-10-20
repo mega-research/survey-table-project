@@ -47,7 +47,17 @@ describe('collectNumericIssues — 응답 품질 검사', () => {
       defaultValueTemplate: '{{company}}',
       textValidation: { minLength: 10 },
     });
-    expect(collectNumericIssues(prefilled, '메가')).toEqual([]);
+    const ctx = { allResponses: {}, allQuestions: [], contactAttrs: { company: '메가' } };
+    expect(collectNumericIssues(prefilled, '메가', ctx)).toEqual([]);
+  });
+
+  it('명단 값이 비어 잠기지 않은 prefill 단답형은 응답자가 적은 값이므로 검사한다', () => {
+    const prefilled = q('text', {
+      defaultValueTemplate: '{{company}}',
+      textValidation: { minLength: 10 },
+    });
+    const ctx = { allResponses: {}, allQuestions: [], contactAttrs: {} };
+    expect(collectNumericIssues(prefilled, '메가', ctx)[0]?.kind).toBe('text-quality');
   });
 });
 

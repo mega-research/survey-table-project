@@ -28,6 +28,14 @@ vi.mock('@/db', () => {
 
 import { updateContactColumns } from './contact-columns';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 describe('updateContactColumns 현재 스코프', () => {
   beforeEach(() => {
     capturedSets.length = 0;
@@ -60,13 +68,14 @@ describe('updateContactColumns 현재 스코프', () => {
     expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
   });
 
-  it('메일 표시(showInMail)는 attrs 컬럼에 저장된다', async () => {
+  it('메일 표시(showInMail)는 attrs·pii 컬럼에 저장되고, 시스템ID 는 끈 값(false)이 저장된다', async () => {
     const scheme = {
       version: 1,
       headerRow: 1,
       columns: [
-        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1 },
+        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1, showInMail: false },
         { key: '리스트ID', label: '리스트ID', source: 'attrs.리스트ID' as const, order: 2, showInMail: true },
+        { key: '대표자명', label: '대표자명', source: 'pii.대표자명' as const, order: 3, showInMail: true },
       ],
     };
 
@@ -75,17 +84,17 @@ describe('updateContactColumns 현재 스코프', () => {
     expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
   });
 
-  it('메일 표시는 시스템·pii 컬럼에 걸면 거부한다 — attrs 에 값이 없어 표시 불가', async () => {
+  it('메일 표시는 운영 컬럼에 걸면 거부한다 — 메일 표에 따로 있는 열', async () => {
     const scheme = {
       version: 1,
       headerRow: 1,
       columns: [
-        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1, showInMail: true },
+        { key: 'web', label: 'web', source: 'system.web' as const, order: 1, showInMail: true },
       ],
     };
 
     await expect(updateContactColumns({ surveyId: 'sv-1', scheme })).rejects.toThrow(
-      '메일 표시는 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.',
+      '메일 표시는 명단 속성·개인정보·시스템ID 열에만 지정할 수 있습니다.',
     );
     expect(capturedSets).toEqual([]);
   });

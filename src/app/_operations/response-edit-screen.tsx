@@ -7,6 +7,7 @@ import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
 import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
 import { getResponseById } from '@/server/read-models/responses';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
@@ -84,7 +85,7 @@ export async function ResponseEditScreen({ surveyId, responseId, basePath, scope
             eq(contactTargets.surveyId, surveyId),
             eq(contactTargets.isTest, testFlagForScope(scope)),
           ),
-          columns: { attrs: true },
+          columns: { id: true },
         })
       : Promise.resolve(null),
     isResponseExcluded(surveyId, responseId, scope),
@@ -98,8 +99,9 @@ export async function ResponseEditScreen({ surveyId, responseId, basePath, scope
         })
       : Promise.resolve(null),
   ]);
-  // contactTargetId 가 없으면 익명 응답이므로 빈 객체.
-  const contactAttrs = contactRow?.attrs ?? {};
+  // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
+  // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
+  const contactAttrs = contactRow ? await loadRespondentContactAttrs(contactRow.id) : {};
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
   // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.

@@ -1,5 +1,5 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
-import type { NumRange } from './range-list';
+import type { NumRange, Parity } from './range-list';
 
 export type CombineOp = 'AND' | 'OR';
 export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
@@ -32,6 +32,11 @@ export interface FilterCondition {
    * 텍스트 컬럼("A1")에서는 종전 부분검색으로 남게 하는 이음새.
    */
   textFallback?: boolean;
+  /**
+   * mode === 'idlist' 의 홀짝 키워드(`짝수`/`홀수`) — ranges 대신 번호 홀짝으로 건다.
+   * 시스템ID 는 resid, attrs 는 값 전체가 숫자인 행만(앞자리 0 허용) 정수로 읽는다.
+   */
+  parity?: Parity;
 }
 
 export interface FilterClause {
@@ -63,6 +68,11 @@ export const FILTER_SOURCE = {
   CONTACT_RESULT: 'system.contact_result',
   WEB: 'system.web',
   EMAIL: 'system.email_count',
+  /**
+   * 현재 컨택원 — 값은 컨택원 id, 배정 없음은 FILTER_NONE_VALUE. 파서가 이 설문·파티션의
+   * 컨택원 id 로 검증한다(ParseExtraHooks.assignmentIds). 외부 주체 표면 후보에는 넣지 않는다.
+   */
+  CONTACT_OWNER: 'system.contact_owner',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
 } as const;
@@ -240,6 +250,22 @@ export function webFilterOptionsFor(
  * 클라이언트(드롭다운 직렬화)와 서버(parseHeaderFiltersFromUrl)가 공유한다.
  */
 export const HEADER_FILTER_VALUE_SEPARATOR = '\u001f';
+
+/**
+ * 조건 줄 값 하나에 여러 값을 담는다 — 컨택원 수정 화면 오른쪽 값 목록에서 체크한 값들.
+ * 파서는 헤더 체크박스 필터와 같은 in 절로 읽는다(컬럼 내 OR). 양끝에도 구분자를 둬
+ * 값 다듬기(trim)가 첫·끝 값의 앞뒤 공백을 지우지 않게 한다 — 엑셀 값엔 "서울 " 이 실존한다.
+ */
+export function encodeMultiClauseValue(values: readonly string[]): string {
+  if (values.length === 0) return '';
+  return `${HEADER_FILTER_VALUE_SEPARATOR}${values.join(HEADER_FILTER_VALUE_SEPARATOR)}${HEADER_FILTER_VALUE_SEPARATOR}`;
+}
+
+/** encodeMultiClauseValue 의 역 — 여러 값 형식이 아니면 null. 공백뿐인 토큰만 버린다. */
+export function decodeMultiClauseValue(value: string): string[] | null {
+  if (!value.includes(HEADER_FILTER_VALUE_SEPARATOR)) return null;
+  return value.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
+}
 
 /** 헤더 필터 URL hm 파라미터가 가질 수 있는 모드. */
 export const HEADER_FILTER_MODES = ['in', 'text', 'exact'] as const;

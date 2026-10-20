@@ -106,7 +106,7 @@ const fetchCandidateIds = scoped
   .handler(async ({ context, input }) => {
     // 발송 마법사 전용 조회(수신 후보 확정) — 발송 흐름의 일부라 mail.view 가 아니라 mail.send 를 따른다.
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
-    return svc.fetchCandidateIds(input);
+    return svc.fetchCandidateIds(input, isExternalActor(context.actor));
   });
 
 const previewPreflight = scoped

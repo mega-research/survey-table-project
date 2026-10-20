@@ -372,11 +372,9 @@ export function ChoiceOptCellTab({
           <InputFormatSelect
             id="choice-text-format"
             value={textInputType}
-            onChange={(next) => {
-              onTextInputTypeChange(next);
-              // 형식과 숫자 모드는 배타 — 숫자 서식을 남기지 않는다.
-              if (next !== 'number') onTextInputNumberFormatChange(undefined);
-            }}
+            // 형식과 숫자 서식의 배타는 저장(buildUpdatedCell)이 거른다 — input 셀과 같다.
+            // 편집 중에는 서식을 남겨 숫자 모드로 되돌리면 그대로 돌아온다.
+            onChange={onTextInputTypeChange}
           />
           <div className="flex items-start gap-2">
             <input

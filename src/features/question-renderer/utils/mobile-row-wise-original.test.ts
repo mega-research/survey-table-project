@@ -215,3 +215,34 @@ describe('buildMobileRowWiseOriginalModel — 제외한 앞쪽 열의 응답 칸
     expect(byRow.get('etc')?.title).toBe('');
   });
 });
+
+describe('buildMobileRowWiseOriginalModel — 구분 열 없이 보기만 놓인 척도 한 줄', () => {
+  // 예술기업 15번 모양 — 열 제목이 척도 이름, 칸은 보기(①~⑤)뿐이고 글자 칸이 없다.
+  const scaleColumns: TableColumn[] = ['매우 불만족함', '불만족', '보통', '만족', '매우 만족'].map(
+    (label, n) => ({ id: `s${n}`, label }),
+  );
+  const scaleRow: TableRow = {
+    id: 'scale',
+    label: '전반적 만족도',
+    cells: ['①', '②', '③', '④', '⑤'].map((content, n) => ({
+      id: `c${n}`,
+      type: 'choice_opt' as const,
+      content,
+    })),
+  };
+
+  it('첫 보기의 글자를 섹션 이름으로 쓰지 않는다 — 응답 칸은 이름의 출처가 아니다', () => {
+    const model = buildMobileRowWiseOriginalModel({
+      authoredColumns: scaleColumns,
+      visibleColumns: scaleColumns,
+      authoredRows: [scaleRow],
+      displayRows: [scaleRow],
+      hideColumnLabels: false,
+      settings: { omitLeadingAuthoredColumns: 0 },
+      answerableCellTypes: ['choice_opt'],
+    });
+    expect(model.sections).toHaveLength(1);
+    expect(model.sections[0]!.label).toBe('');
+    expect(model.sections[0]!.subgroups[0]!.questions[0]!.rowId).toBe('scale');
+  });
+});

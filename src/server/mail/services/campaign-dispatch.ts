@@ -14,6 +14,7 @@ import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger';
+import { requestRecipientFallbacks } from './campaign-fallback';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from './recipient-status-transition';
 import { resolveSendReplyTo } from './reply-to';
@@ -146,7 +147,11 @@ async function claimRecipientDelivery(
     if (!recipientRef) return { kind: 'unavailable' };
 
     const [campaign] = await tx
-      .select({ status: mailCampaigns.status, archivedAt: mailCampaigns.archivedAt })
+      .select({
+        status: mailCampaigns.status,
+        archivedAt: mailCampaigns.archivedAt,
+        kind: mailCampaigns.kind,
+      })
       .from(mailCampaigns)
       .where(eq(mailCampaigns.id, campaignId))
       .for('update');
@@ -160,6 +165,7 @@ async function claimRecipientDelivery(
           .select({
             id: contactTargets.id,
             unsubscribedAt: contactTargets.unsubscribedAt,
+            respondedAt: contactTargets.respondedAt,
           })
           .from(contactTargets)
           .where(eq(contactTargets.id, recipientRef.contactTargetId))
@@ -263,6 +269,11 @@ async function claimRecipientDelivery(
       }
       if (currentContact.unsubscribedAt !== null) {
         return finishWithoutSend('skipped_unsubscribed', null);
+      }
+      // 대체 발송은 응답을 받으려는 재시도다 — 큐잉 → dispatch 사이에 응답을 마친 사람에게는 보내지 않는다.
+      // 단체·단건 발송은 응답자에게 일부러 보내는 경우(감사 메일 등)가 있어 여기서 거르지 않는다.
+      if (campaign.kind === 'fallback' && currentContact.respondedAt !== null) {
+        return finishWithoutSend('skipped_unsubscribed', '응답 완료로 대체 발송 생략');
       }
       // 큐잉 → dispatch 사이에 수신거부 결과코드 회차가 기록된 컨택 재검증.
       if (await latestResultCodeUnsubscribed(currentContact.id)) {
@@ -438,6 +449,8 @@ async function settleClaimedRecipient(
         : {
             status: 'failed',
             errorReason: activeRecipientErrorReason(result.errorReason),
+            // 대체 발송 처리 대기 — 커밋 뒤 대체 발송 등록이 빠져도 정기 점검이 다시 처리한다.
+            fallbackPendingAt: now,
             sendAttemptedAt: null,
             sendLeaseToken: null,
             sendLeaseExpiresAt: null,
@@ -949,8 +962,14 @@ export async function dispatchCampaignChunk(
       result,
     );
     if (!applied) continue;
-    if (result.kind === 'accepted') sent += 1;
-    else failed += 1;
+    if (result.kind === 'accepted') {
+      sent += 1;
+    } else {
+      failed += 1;
+      // 메일 서비스가 주소를 거부한 실패 — 다음 순위 주소로 대체 발송을 건다. 청크 뒤로 모으지 않고
+      // 바로 거는 것은 이후 수신자에서 재시도 오류가 나 청크가 끊겨도 이미 확정된 실패를 놓치지 않기 위해서다.
+      await requestRecipientFallbacks([proposed.recipientId]);
+    }
   }
 
   // 전건 failed(message_id 없음)로 끝나면 webhook이 도착하지 않아 finalize가 영영

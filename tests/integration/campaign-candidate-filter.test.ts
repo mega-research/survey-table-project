@@ -2,6 +2,8 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { extractRawSql } from './_helpers/result-code-mock';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+
 // countCampaignCandidates 는 getResultCodeStatuses + db.select(count).where(...) 만 사용.
 // where 의 raw SQL 을 extractRawSql 로 평탄화해 자동 제외/필터 결합을 검증한다.
 // (preflight-exclusion.test.ts 패턴 — db / result-code-statuses mock)
@@ -39,6 +41,14 @@ vi.mock('@/db', () => ({
   },
 }));
 
+// 발송 주소 순서는 컬럼 설정에서 읽는다 — 이 스위트는 순서 미지정(열 이름순)을 전제로 하고
+// 스킴 조회 자체는 검증 대상이 아니다. 통 mock 대신 원본에 덮어써 import 체인 확장에 견딘다.
+vi.mock('@/server/read-models/send-address', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/send-address')>()),
+  loadMailEmailOrder: vi.fn(async () => null),
+  loadMailEmailOrders: vi.fn(async () => ({ real: null, test: null })),
+}));
+
 vi.mock('@/server/read-models/result-code-statuses', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
@@ -64,7 +74,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('contact_pii'); // HAS_EMAIL_PII
@@ -79,7 +89,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses,
+      filter: resolvedFilterForTest(clauses),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('attrs');
@@ -95,7 +105,7 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     await countCampaignCandidates({
       surveyId: SURVEY_ID,
       scope: 'real',
-      clauses,
+      filter: resolvedFilterForTest(clauses),
       unrespondedOnly: false,
     });
     expect(state.lastWhereRaw).toContain('responded_at');

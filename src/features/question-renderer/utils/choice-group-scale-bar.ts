@@ -11,7 +11,7 @@ import { expandHeaderGrid } from './expand-header-grid';
  *
  * - 제목 줄: 비지 않은 칸 하나가 대상 열 전체를 덮는다 — 버린다(카드의 그룹 이름과 겹친다)
  * - 칸 줄: 비지 않은 칸이 전부 한 칸짜리이고 대상 열을 빠짐없이 덮는다 — 칸 글자의 대체 출처,
- *   5칸 이하 칸 안 라벨
+ *   5칸 이하 칸 안 라벨, 6칸 이상(구간 줄 없음)은 막대 아래 칸 이름 목록
  * - 구간 줄: 그 밖(여러 칸을 묶었거나 일부 칸만 이름이 있다) — 구간 띠·양끝/가운데 라벨·선택값 표시
  *
  * 고정 문구는 없다. 모든 글자는 보기 칸의 평문 content 와 헤더에서만 읽는다 — exportLabel 은
@@ -26,6 +26,11 @@ export interface ScaleBarCell {
   text: string;
   /** 5칸 이하일 때 칸 글자 아래 라벨 — 칸 글자와 같으면 두지 않는다(한 번만 보인다) */
   inCellLabel?: string;
+  /**
+   * 6칸 이상이고 칸마다 이름이 따로 있을 때 막대 아래 목록에 적는 그 칸의 이름 — 칸 폭(약 50px)에는
+   * 이름이 들어가지 않고, 구간 줄이 없어 양끝 라벨·선택값 표시도 쓸 수 없는 척도다. 전부 있거나 전부 없다.
+   */
+  legendLabel?: string;
   bandIndex: number | null;
 }
 
@@ -177,7 +182,9 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     if (next === prev + 1) continue;
     // 사이에 낀 칸이 입력칸 등이면 「보기 칸이 아닌 것이 섞였다」, 다른 그룹 보기·병합 칸이면 비연속
     const between = row.cells.slice(prev + 1, Math.max(next, prev + 1));
-    const hasNonChoice = between.some((cell) => isScaleBarVisibleCell(cell) && cell.type !== 'choice_opt');
+    const hasNonChoice = between.some(
+      (cell) => isScaleBarVisibleCell(cell) && cell.type !== 'choice_opt',
+    );
     return fallback(hasNonChoice ? 'non-choice-cell' : 'non-contiguous');
   }
 
@@ -231,6 +238,18 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     );
   };
 
+  // 6칸 이상인데 구간 줄이 없으면 칸 이름이 설 자리가 없다 — 칸마다 이름이 따로 있는 척도(「ⓞ 전혀
+  // 관련 없음 · ① 전혀 도움되지 않음 …」)는 막대 아래에 「칸 글자 + 이름」 목록으로 적는다. 한 칸이라도
+  // 이름이 없거나 번호뿐이거나 칸 글자와 같으면 목록을 두지 않는다(반쪽 목록은 빠진 칸을 숨긴다).
+  const legendNames =
+    labelsBelowBar && bands.length === 0 && cellLine
+      ? texts.map((text, i) => {
+          const name = cellLine[i]?.label ?? '';
+          return name !== '' && name !== text && !NUMBER_MARK.test(name) ? name : null;
+        })
+      : [];
+  const hasLegend = legendNames.length === count && legendNames.every((name) => name !== null);
+
   const cells: ScaleBarCell[] = targetCells.map((cell, i) => {
     const text = texts[i]!;
     const bandIndex = bandIndexAt(i);
@@ -239,6 +258,7 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
       cellId: cell.id,
       text,
       ...(inCellLabel !== undefined ? { inCellLabel } : {}),
+      ...(hasLegend ? { legendLabel: legendNames[i]! } : {}),
       bandIndex,
     };
   });

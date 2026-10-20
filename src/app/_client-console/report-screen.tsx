@@ -7,7 +7,7 @@ import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import type { SortDir } from '@/lib/operations/report-progress-format';
+import type { ProgressGroupKey, SortDir } from '@/lib/operations/report-progress-format';
 import {
   EMPTY_PROGRESS_TOTALS,
   parseProgressSort,
@@ -83,6 +83,8 @@ export async function ClientReportScreen({ surveyId, searchParams: sp }: Props) 
   // 해석은 운영 콘솔과 같은 함수다 — 두 화면이 같은 표를 그리므로 규칙도 하나여야 한다.
   const activeCriteria = resolveActiveGroupKeys(groupByCriteria, sp.groupBy);
   const activeKeys = activeCriteria.map((c) => c.key);
+  // 클라이언트 링크는 명단 attrs 기준만 쓴다 — 컨택원(시스템 기준)은 내부 실사 운영 정보라 칩이 없다.
+  const activeGroupKeys: ProgressGroupKey[] = activeKeys.map((key) => ({ kind: 'attrs', key }));
   const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
@@ -107,9 +109,9 @@ export async function ClientReportScreen({ surveyId, searchParams: sp }: Props) 
           sort,
           dir,
           metaKeys,
-          groupByKeys: activeKeys,
+          groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, null, activeKeys),
+        getProgressTotals(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, null, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

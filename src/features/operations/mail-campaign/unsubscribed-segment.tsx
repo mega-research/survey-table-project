@@ -2,9 +2,16 @@ import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_ITEM_DISABLED_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -18,6 +25,8 @@ interface Props {
   pageSize: number;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 export function UnsubscribedSegment({
@@ -27,8 +36,11 @@ export function UnsubscribedSegment({
   page,
   pageSize,
   mailColumns,
+  showResid,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+  const nav = pageBlockNavTargets(page, totalPages);
 
   return (
     <section className="space-y-3">
@@ -53,9 +65,9 @@ export function UnsubscribedSegment({
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                  <th className="px-4 py-3">시스템ID</th>
+                  {showResid ? <th className="px-4 py-3">시스템ID</th> : null}
                   {mailColumns.map((c) => (
-                    <th key={c.key} className="px-4 py-3">
+                    <th key={`${c.kind}.${c.key}`} className="px-4 py-3">
                       {c.label}
                     </th>
                   ))}
@@ -74,10 +86,12 @@ export function UnsubscribedSegment({
                       key={r.id}
                       className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                     >
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      {showResid ? (
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">#{r.resid}</td>
+                      ) : null}
                       {mailColumns.map((c) => (
-                        <td key={c.key} className="px-4 py-3 text-slate-600">
-                          {r.attrs[c.key] || '—'}
+                        <td key={`${c.kind}.${c.key}`} className="px-4 py-3 text-slate-600">
+                          {mailColumnValue(c, r.attrs, r.piiMasks, r.assignmentName) || '—'}
                         </td>
                       ))}
                       <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
@@ -119,22 +133,22 @@ export function UnsubscribedSegment({
           </Card>
           {totalPages > 1 ? (
             <div className="flex items-center justify-end gap-1 text-sm">
-              <span className="mr-1 text-slate-500">
+              <span className={PAGER_STATUS_CLASS}>
                 {page} / {totalPages}
               </span>
-              <SegPageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
+              <SegPageLink surveyId={surveyId} page={nav.prev ?? 1} disabled={nav.prev === null}>
                 이전
               </SegPageLink>
               {buildPageItems(page, totalPages).map((item, i) =>
                 item === 'ellipsis' ? (
-                  <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                  <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                     …
                   </span>
                 ) : item === page ? (
                   <span
                     key={item}
                     aria-current="page"
-                    className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+                    className={PAGER_ITEM_CURRENT_CLASS}
                   >
                     {item}
                   </span>
@@ -144,7 +158,7 @@ export function UnsubscribedSegment({
                   </SegPageLink>
                 ),
               )}
-              <SegPageLink surveyId={surveyId} page={page + 1} disabled={page >= totalPages}>
+              <SegPageLink surveyId={surveyId} page={nav.next ?? totalPages} disabled={nav.next === null}>
                 다음
               </SegPageLink>
               <PagerJump
@@ -172,13 +186,15 @@ function SegPageLink({
 }) {
   if (disabled) {
     return (
-      <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">{children}</span>
+      <span aria-disabled="true" className={PAGER_ITEM_DISABLED_CLASS}>
+        {children}
+      </span>
     );
   }
   return (
     <Link
       href={`${internalOperationsPaths(surveyId).mailCampaigns}?unsubPage=${page}#unsubscribed`}
-      className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
+      className={PAGER_ITEM_CLASS}
     >
       {children}
     </Link>

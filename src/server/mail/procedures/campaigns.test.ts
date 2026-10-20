@@ -120,7 +120,7 @@ describe('mail.campaigns procedures', () => {
       SURVEY_ID,
       'mail.send',
     );
-    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input);
+    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ids: [CONTACT_ID], total: 1, truncated: false });
   });
 
@@ -231,6 +231,21 @@ describe('mail.campaigns procedures', () => {
     const res = await client.campaigns.create(input);
     expect(svc.createCampaign).toHaveBeenCalledWith(input, { accountUserId: 'guest-1', fieldworkLinkId: null }, true);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('외부 계정의 fetchCandidateIds 는 isExternal=true 로 위임된다 — 컨택원 조건을 해석하지 않는다', async () => {
+    vi.mocked(svc.fetchCandidateIds).mockResolvedValue({
+      ids: [],
+      total: 0,
+      truncated: false,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' } } },
+    );
+    const input = { surveyId: SURVEY_ID, filter: { unrespondedOnly: true } };
+    await client.campaigns.fetchCandidateIds(input);
+    expect(svc.fetchCandidateIds).toHaveBeenCalledWith(input, true);
   });
 
   it('타 팀 설문 id 로 create 하면 관문 NOT_FOUND — 서비스에 닿지 않는다', async () => {

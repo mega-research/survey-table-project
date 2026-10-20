@@ -2,6 +2,35 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 import eslintConfigPrettier from "eslint-config-prettier/flat";
 
+// 조사 대상 필터의 하위 파서 — 저장된 ID 목록 읽기·컨택원 검증·외부 주체 가리기·해석 안 되는 조건
+// 거부를 모르는 단계라, 직접 부르면 그 단계가 빠져 조건이 조용히 넓어지거나 0건이 된다.
+// 입구는 contact-filter-resolution 이고, 응답 내역(다른 열을 보는 표면)과 테스트만 예외다.
+const CONTACT_FILTER_PARSE_PATTERN = {
+  group: ["@/server/read-models/contacts-filter-parse", "**/contacts-filter-parse"],
+  message:
+    "조사 대상 필터는 @/server/read-models/contact-filter-resolution 의 loadContactFilterContext → resolveContactFilter 로 해석하세요. 하위 파서(contacts-filter-parse)는 해석 모듈·응답 내역·테스트만 씁니다.",
+};
+
+// 서버 층 구조 패턴 — 아래 서버 블록과, 같은 파일에서 하위 파서만 여는 예외 블록이 함께 쓴다
+// (같은 파일에 no-restricted-imports 블록이 둘이면 마지막이 통째로 덮어쓴다).
+const SERVER_LAYER_PATTERNS = [
+  {
+    group: [
+      "@/server/*/**",
+      "!@/server/*",
+      "!@/server/read-models/**",
+      "!@/server/storage-lifecycle/**",
+      "!@/server/workflows/**",
+    ],
+    message:
+      "서버 도메인 간 직접 import 금지. 읽기 전용 projection 은 @/server/read-models, 여러 도메인 쓰기 조율은 @/server/workflows 로 빼세요. (자기 도메인 내부는 상대경로)",
+  },
+  {
+    group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
+    message: "서버는 features/(UI) 를 import 하지 않습니다.",
+  },
+];
+
 const eslintConfig = [
   {
     ignores: [
@@ -91,26 +120,29 @@ const eslintConfig = [
     rules: {
       "no-restricted-imports": [
         "error",
-        {
-          patterns: [
-            {
-              group: [
-                "@/server/*/**",
-                "!@/server/*",
-                "!@/server/read-models/**",
-                "!@/server/storage-lifecycle/**",
-                "!@/server/workflows/**",
-              ],
-              message:
-                "서버 도메인 간 직접 import 금지. 읽기 전용 projection 은 @/server/read-models, 여러 도메인 쓰기 조율은 @/server/workflows 로 빼세요. (자기 도메인 내부는 상대경로)",
-            },
-            {
-              group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
-              message: "서버는 features/(UI) 를 import 하지 않습니다.",
-            },
-          ],
-        },
+        { patterns: [...SERVER_LAYER_PATTERNS, CONTACT_FILTER_PARSE_PATTERN] },
       ],
+    },
+  },
+  {
+    // 조사 대상 필터 하위 파서를 여는 자리 — 해석 모듈 · 응답 내역 · 서버 트리 테스트.
+    // 위 블록을 덮어쓰므로 서버 층 패턴은 그대로 이어받는다.
+    files: [
+      "src/server/read-models/contact-filter-resolution.ts",
+      "src/server/operations/services/profiles-filters.ts",
+      "src/server/*/**/*.test.{ts,tsx}",
+    ],
+    ignores: ["src/server/workflows/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: SERVER_LAYER_PATTERNS }],
+    },
+  },
+  {
+    // 라우트(페이지·Route Handler)도 조사 대상 필터는 해석 모듈로만 읽는다.
+    files: ["src/app/**/*.{ts,tsx}"],
+    ignores: ["src/app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [CONTACT_FILTER_PARSE_PATTERN] }],
     },
   },
   {
@@ -126,6 +158,7 @@ const eslintConfig = [
               group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
               message: "서버는 features/(UI) 를 import 하지 않습니다.",
             },
+            CONTACT_FILTER_PARSE_PATTERN,
           ],
         },
       ],

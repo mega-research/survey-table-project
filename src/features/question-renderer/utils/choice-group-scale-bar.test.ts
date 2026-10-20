@@ -235,6 +235,8 @@ describe('projectScaleBar — 헤더 줄 역할 판정', () => {
     expect(model.bands).toEqual([]);
     expect(model.anchors).toEqual({});
     expect(model.showsSelectionLabel).toBe(false);
+    // 6칸 이상이라 칸 안에 못 넣는 칸 이름은 막대 아래 목록으로 간다
+    expect(model.cells.map((c) => c.legendLabel)).toEqual(labels);
   });
 
   it('일부 칸에만 이름이 있는 줄(양끝·가운데)은 구간 줄이다', () => {
@@ -557,5 +559,67 @@ describe('projectScaleBar — 다단 헤더 없는 표(열 제목 한 줄)', () 
     if (!result.ok) return;
     expect(result.model.cells.map((c) => c.inCellLabel)).toEqual(LABELS);
     expect(result.model.cells.map((c) => c.text)).toEqual(['①', '②', '③', '④', '⑤']);
+  });
+});
+
+describe('projectScaleBar — 막대 아래 칸 이름 목록', () => {
+  // 예술기업 11-1 모양 — 한 줄 표, 열 제목이 칸마다 이름, 보기 칸 글자는 번호 6개.
+  const NAMES = [
+    '전혀 관련 없음\n(지원사업 시점* 불일치)',
+    '전혀\n도움되지 않음',
+    '도움되지 않음',
+    '보통',
+    '도움이 되는 편',
+    '매우 도움 됨',
+  ];
+  const sixCells = ['ⓞ', '①', '②', '③', '④', '⑤'].map((text, n) => choice(`c${n}`, text));
+  const lineOf = (
+    cells: TableCell[],
+    labels: string[],
+    headerGrid?: HeaderCell[][],
+  ): ProjectScaleBarInput => ({
+    selectionType: 'radio',
+    columns: labels.map((label, n) => ({ id: `s${n}`, label })),
+    headerGrid,
+    row: { id: 'r1', label: '도움 정도', cells },
+    targetCells: cells,
+  });
+
+  it('6칸 이상이고 칸마다 이름이 있으면 칸 이름을 목록으로 싣는다 — 줄바꿈은 공백으로 잇는다', () => {
+    const model = modelOf(lineOf(sixCells, NAMES));
+    expect(model.cells.map((c) => c.legendLabel)).toEqual([
+      '전혀 관련 없음 (지원사업 시점* 불일치)',
+      '전혀 도움되지 않음',
+      '도움되지 않음',
+      '보통',
+      '도움이 되는 편',
+      '매우 도움 됨',
+    ]);
+    expect(model.cells.every((c) => c.inCellLabel === undefined)).toBe(true);
+    expect(model.anchors).toEqual({});
+  });
+
+  it('5칸 이하는 칸 안 라벨이 있으므로 목록이 없다', () => {
+    const model = modelOf(lineOf(sixCells.slice(1), NAMES.slice(1)));
+    expect(model.cells.every((c) => c.legendLabel === undefined)).toBe(true);
+    expect(model.cells[0]!.inCellLabel).toBe('전혀 도움되지 않음');
+  });
+
+  it('구간 줄이 있으면 양끝 라벨·선택값 표시가 맡으므로 목록이 없다', () => {
+    const model = modelOf(c4());
+    expect(model.bands.length).toBeGreaterThan(0);
+    expect(model.cells.every((c) => c.legendLabel === undefined)).toBe(true);
+  });
+
+  it('이름이 번호뿐이거나 칸 글자와 같은 칸이 하나라도 있으면 목록을 두지 않는다', () => {
+    const numbered = modelOf(lineOf(sixCells, ['0', '1', '2', '3', '4', '5']));
+    expect(numbered.cells.every((c) => c.legendLabel === undefined)).toBe(true);
+    const sameAsText = modelOf(
+      lineOf(
+        NAMES.map((_, n) => choice(`c${n}`, n === 3 ? '보통' : String(n))),
+        NAMES,
+      ),
+    );
+    expect(sameAsText.cells.every((c) => c.legendLabel === undefined)).toBe(true);
   });
 });

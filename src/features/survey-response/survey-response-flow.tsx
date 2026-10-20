@@ -451,6 +451,9 @@ function SurveyResponseFlowActive({
   // (기존 안정 콜백 관례와 같은 2줄 패턴).
   const priorAnswersRef = useRef<PriorAnswers | null>(priorAnswers);
   useSyncLatestRef(priorAnswersRef, priorAnswers);
+  // 명단 값은 토큰 프리필로 잠긴 칸인지 가리는 데 쓴다 — 같은 이유로 ref 로 따라간다.
+  const contactAttrsRef = useRef(contactAttrs);
+  useSyncLatestRef(contactAttrsRef, contactAttrs);
 
   /**
    * 제출 페이로드 조립 — 기타 상세기재 정리 + 입력 형식 정규화.
@@ -464,6 +467,7 @@ function SurveyResponseFlowActive({
       normalizeFormatValues(
         visible,
         buildOptTextsPayload(visible, current),
+        contactAttrsRef.current,
         priorAnswersRef.current,
       ),
     [],

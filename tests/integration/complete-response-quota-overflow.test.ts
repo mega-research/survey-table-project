@@ -123,13 +123,15 @@ const QUOTA_CONFIG = {
 // select 호출 순서(versionId=null, contactTargetId=null, quota enabled):
 //   0) 가용성 게이트 완료 카운트 (countCompletedResponses)
 //   1) 유효 questionId 집합 (loadValidQuestionIds)
-//   2) detectQuotaOverflow 완료 응답 로드 (quota 미설정이면 소비되지 않음)
-//   3) loadPiiQuestionIds (큐 소진 → [] 로 처리됨)
+//   2·3) 응답 확정 재료의 loadPiiTargets — 질문 단위·셀 단위 (레거시 폴백, 빈 결과)
+//   4) detectQuotaOverflow 완료 응답 로드 (quota 미설정이면 소비되지 않음)
 function queueSelects(completedAnswersRows: Record<string, unknown>[]) {
   selectTerminalQueue.length = 0;
   selectTerminalQueue.push(
     [{ total: 0 }],
     [{ id: GATE_QID }],
+    [],
+    [],
     completedAnswersRows.map((answers) => ({ questionResponses: answers })),
   );
 }

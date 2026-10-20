@@ -41,21 +41,14 @@ export interface ListContactAttrValuesResult {
 }
 
 /**
- * 헤더 필터 드롭다운용 attrs 컬럼 distinct 값 조회.
- *
- * - 컬럼 스킴 화이트리스트 검증: 보이는(hidden 아님) attrs 컬럼만 허용.
- *   attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를
- *   열거하는 것을 막는다 (ForbiddenAttrColumnError).
- * - LIMIT+1 조회로 고카디널리티 감지 — 초과 시 truncated=true.
- * - 빈 문자열/미기재 값은 목록에서 제외하고 hasEmpty 플래그로만 알린다. 값 목록에
- *   섞으면 빈 문자열이 체크박스 라벨로 렌더돼 클릭할 수 없는 항목이 되고, 고카디널리티
- *   판정(LIMIT)의 한 자리도 잡아먹는다.
+ * 컬럼 스킴 화이트리스트 검증: 보이는(hidden 아님) attrs 컬럼만 허용.
+ * attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를 열거하는 것을 막는다.
  */
-export async function listContactAttrValues(
-  input: ListContactAttrValuesInput,
-): Promise<ListContactAttrValuesResult> {
-  const { surveyId, attrsKey, scope } = input;
-
+export async function assertAttrColumnAllowed(
+  surveyId: string,
+  attrsKey: string,
+  scope: OperationsDataScope,
+): Promise<void> {
   const [schemeRow] = await db
     .select({
       scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
@@ -78,6 +71,24 @@ export async function listContactAttrValues(
     );
   }
   if (!allowed) throw new ForbiddenAttrColumnError(attrsKey);
+}
+
+/**
+ * 헤더 필터 드롭다운용 attrs 컬럼 distinct 값 조회.
+ *
+ * - 컬럼 스킴 화이트리스트 검증: 보이는(hidden 아님) attrs 컬럼만 허용.
+ *   attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를
+ *   열거하는 것을 막는다 (ForbiddenAttrColumnError).
+ * - LIMIT+1 조회로 고카디널리티 감지 — 초과 시 truncated=true.
+ * - 빈 문자열/미기재 값은 목록에서 제외하고 hasEmpty 플래그로만 알린다. 값 목록에
+ *   섞으면 빈 문자열이 체크박스 라벨로 렌더돼 클릭할 수 없는 항목이 되고, 고카디널리티
+ *   판정(LIMIT)의 한 자리도 잡아먹는다.
+ */
+export async function listContactAttrValues(
+  input: ListContactAttrValuesInput,
+): Promise<ListContactAttrValuesResult> {
+  const { surveyId, attrsKey, scope } = input;
+  await assertAttrColumnAllowed(surveyId, attrsKey, scope);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
 
@@ -124,4 +135,28 @@ export async function listContactAttrValues(
     .filter((v) => v !== FILTER_NONE_VALUE)
     .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }));
   return { values, truncated, hasEmpty: emptyRows.length > 0 };
+}
+
+/**
+ * 값이 있는데 숫자가 아닌 행 수 — 홀짝 조건(`짝수`/`홀수`)이 이 행들을 어느 쪽에도 걸지
+ * 않으므로 입력 상태줄이 「숫자가 아닌 값 N명 제외」로 알린다. 숫자 판정은 필터 SQL 과
+ * 같은 `^[0-9]+$` (앞자리 0 허용). 빈 값은 세지 않는다 — 빈 값은 원래 비교 대상이 아니다.
+ */
+export async function countNonNumericAttrValues(
+  input: ListContactAttrValuesInput,
+): Promise<number> {
+  const { surveyId, attrsKey, scope } = input;
+  await assertAttrColumnAllowed(surveyId, attrsKey, scope);
+  const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(contactTargets)
+    .where(
+      and(
+        eq(contactTargets.surveyId, surveyId),
+        targetScopeCondition(scope),
+        sql`${valueExpr} IS NOT NULL AND ${valueExpr} <> '' AND ${valueExpr} !~ '^[0-9]+$'`,
+      ),
+    );
+  return Number(row?.n ?? 0);
 }

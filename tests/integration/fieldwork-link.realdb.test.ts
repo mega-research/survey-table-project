@@ -870,6 +870,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         surveyId,
         scope: await loadOperationsDataScope(surveyId, session.actor),
         canViewMail: false,
+        includeContactOwner: false,
         searchParams: {},
       });
       expect(page.total).toBe(1);
@@ -903,7 +904,12 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         })
         .where(eq(surveysTable.id, surveyId));
 
-      const args = { surveyId, scope: 'real' as const, searchParams: { sort: 'mailStatus' } };
+      const args = {
+        surveyId,
+        scope: 'real' as const,
+        includeContactOwner: false,
+        searchParams: { sort: 'mailStatus' },
+      };
       const researcher = await loadContactsListPage({ ...args, canViewMail: true });
       const outsourced = await loadContactsListPage({ ...args, canViewMail: false });
 

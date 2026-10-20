@@ -55,6 +55,18 @@ export function normalizeContactColumnScheme(
 }
 
 /**
+ * 「컨택원」 열을 뺀 스킴 — 외부 주체 화면용. 컨택원은 내부 실사 운영 정보라 외부 주체에게는
+ * 목록 열·필터 후보·상세 어디에도 보이지 않는다(CONTEXT.md 「컨택원」).
+ */
+export function withoutContactOwnerColumn<T extends ContactColumnScheme>(
+  scheme: T | null,
+): T | null {
+  if (!scheme) return scheme;
+  if (!scheme.columns.some((c) => c.source === 'system.contact_owner')) return scheme;
+  return { ...scheme, columns: scheme.columns.filter((c) => c.source !== 'system.contact_owner') };
+}
+
+/**
  * 사전 정의된 시스템 정렬 키. attrs.* 정렬은 별도로 `attrs.<key>` 형태로 받음
  * (`isAttrsSortKey` / `attrsSortKey` helper).
  */
@@ -70,6 +82,8 @@ export const CONTACTS_SORT_KEYS = [
   // 메일 컬럼 헤더 정렬 — 최신 수신 상태 순위(열람 → 전달 완료 → … → 실패),
   // 발송 이력 없음은 항상 마지막.
   'mailStatus',
+  // 컨택원 컬럼 헤더 정렬 — 컨택원 순서 → 이름, 배정 없음은 항상 마지막.
+  'owner',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
 

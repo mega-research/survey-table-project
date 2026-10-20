@@ -2,7 +2,20 @@
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
-import { InputType, TableCell } from '@/types/survey';
+import { generateId } from '@/lib/utils';
+import { CellEnableCondition, TableCell } from '@/types/survey';
+import { getMaxSpssCode } from '@/utils/option-code-generator';
+import {
+  type CellAutoCodes,
+  changeContentType,
+  changeGatingCondition,
+  editCellCode,
+  editExportLabel,
+  resetCellCode,
+  resetExportLabel,
+  toggleMerge,
+  toggleNumberMode,
+} from '@/features/survey-builder/table-editor/cell-editor/utils/cell-form-transitions';
 import { CellFormState, ContentType, cellToFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 
 /**
@@ -19,7 +32,9 @@ import { CellFormState, ContentType, cellToFormState } from '@/features/survey-b
 
 type Action =
   | { type: 'HYDRATE'; cell: TableCell }
-  | { type: 'SET_FIELD'; field: keyof CellFormState; value: CellFormState[keyof CellFormState] };
+  | { type: 'SET_FIELD'; field: keyof CellFormState; value: CellFormState[keyof CellFormState] }
+  /** 필드 여럿을 함께 바꾸는 폼 동작 (cell-form-transitions 의 순수 함수) */
+  | { type: 'UPDATE'; update: (state: CellFormState) => CellFormState };
 
 function reducer(state: CellFormState, action: Action): CellFormState {
   switch (action.type) {
@@ -27,96 +42,39 @@ function reducer(state: CellFormState, action: Action): CellFormState {
       return cellToFormState(action.cell);
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
+    case 'UPDATE':
+      return action.update(state);
     default:
       return state;
   }
 }
 
-export interface CellFormSetters {
-  setContentType: (v: ContentType) => void;
-  setTextContent: (v: string) => void;
-  setTextContentHtml: (v: string) => void;
-  setImageUrl: (v: string) => void;
-  setVideoUrl: (v: string) => void;
-  setCheckboxOptions: (v: CellFormState['checkboxOptions']) => void;
-  setRadioOptions: (v: CellFormState['radioOptions']) => void;
-  setRadioGroupName: (v: string) => void;
-  setDistinctGroup: (v: string) => void;
-  setSelectOptions: (v: CellFormState['selectOptions']) => void;
-  setAllowOtherOption: (v: boolean) => void;
-  setCellOptionsColumns: (v: number | undefined) => void;
-  setCellMobileOptionsColumns: (v: number | undefined) => void;
-  setInputPlaceholder: (v: string) => void;
-  setInputMaxLength: (v: number | '') => void;
-  setInputRows: (v: number | '') => void;
-  setInputAutoGrow: (v: boolean) => void;
-  setInputWidth: (v: number | '') => void;
-  setHideRightBorder: (v: boolean) => void;
-  setInputDefaultValueTemplate: (v: string) => void;
-  setInputType: (v: InputType) => void;
-  setInputPiiEncrypted: (v: CellFormState['inputPiiEncrypted']) => void;
-  setEmptyDefaultEnabled: (v: boolean) => void;
-  setEmptyDefaultRaw: (v: string) => void;
-  setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
-  setCellTextValidation: (v: CellFormState['cellTextValidation']) => void;
-  setCellRequired: (v: boolean) => void;
-  setCellRequiredMessage: (v: string) => void;
-  setGatingCondition: (v: CellFormState['gatingCondition']) => void;
-  setGatingRequiredWhenEnabled: (v: boolean) => void;
-  setMinSelections: (v: number | undefined) => void;
-  setMaxSelections: (v: number | undefined) => void;
-  setRankingOptions: (v: CellFormState['rankingOptions']) => void;
-  setRankingConfig: (v: CellFormState['rankingConfig']) => void;
-  setRankSuffixPattern: (v: string) => void;
-  setRankVarNames: (v: string[]) => void;
-  setRankingLabel: (v: string) => void;
-  setCellSpssNumericCode: (v: number | '') => void;
-  setIsOtherRankingCell: (v: boolean) => void;
-  setChoiceLabel: (v: string) => void;
-  setChoiceAllowTextInput: (v: boolean) => void;
-  setChoiceExclusive: (v: boolean) => void;
-  setChoiceExclusiveScope: (v: 'group' | 'table') => void;
-  setChoiceTextInputType: (v: CellFormState['choiceTextInputType']) => void;
-  setChoiceTextInputNumberFormat: (v: CellFormState['choiceTextInputNumberFormat']) => void;
-  setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
-  setChoiceGroupId: (v: string) => void;
-  setTextBold: (v: boolean) => void;
-  setBoldFirstLine: (v: boolean) => void;
-  setBackgroundColor: (v: string) => void;
-  setTextColor: (v: string) => void;
-  setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
-  setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
-  setMobileLabel: (v: string) => void;
-  setOptionTextSlot: (v: boolean) => void;
-  setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
-  setTextPosition: (v: CellFormState['textPosition']) => void;
-  setInputTextAlign: (v: CellFormState['inputTextAlign']) => void;
-  setIsMergeEnabled: (v: boolean) => void;
-  setRowspan: (v: number | '') => void;
-  setColspan: (v: number | '') => void;
-  setCellCode: (v: string) => void;
-  setIsCustomCellCode: (v: boolean) => void;
-  setExportLabel: (v: string) => void;
-  setIsCustomExportLabel: (v: boolean) => void;
-  setSpssVarType: (v: CellFormState['spssVarType']) => void;
-  setSpssMeasure: (v: CellFormState['spssMeasure']) => void;
-  setAnswerQuoteText: (v: string) => void;
-  setAnswerQuoteEnabled: (v: boolean) => void;
-  setAnswerQuoteName: (v: string) => void;
-  setFormula: (v: CellFormState['formula']) => void;
-  setFormulaValidationEnabled: (v: boolean) => void;
-  setFormulaToleranceRaw: (v: string) => void;
-  setFormulaErrorMessage: (v: string) => void;
-  setCalcValidationEnabled: (v: boolean) => void;
-  setCalcValidationOperator: (v: CellFormState['calcValidationOperator']) => void;
-  setCalcValidationTarget: (v: CellFormState['calcValidationTarget']) => void;
-  setCalcValidationToleranceRaw: (v: string) => void;
-  setCalcValidationErrorMessage: (v: string) => void;
+/** 폼 필드마다 `set<필드 이름>` setter 하나 — 필드를 더하면 setter 가 저절로 생긴다 */
+export type CellFormSetters = {
+  [K in keyof CellFormState as `set${Capitalize<K>}`]: (v: CellFormState[K]) => void;
+};
+
+// cellToFormState 는 객체 리터럴이라 값이 undefined 인 필드도 키로 갖는다
+const CELL_FORM_FIELDS = Object.keys(
+  cellToFormState({ id: '', type: 'text', content: '' }),
+) as (keyof CellFormState)[];
+
+/** 입력 하나가 폼 필드 여럿을 함께 바꾸는 동작 — 규칙은 cell-form-transitions 가 소유한다 */
+export interface CellFormActions {
+  changeContentType: (next: ContentType, auto: CellAutoCodes) => void;
+  changeGatingCondition: (condition: CellEnableCondition | undefined) => void;
+  toggleNumberMode: (on: boolean) => void;
+  editCellCode: (value: string, autoCellCode: string | undefined) => void;
+  resetCellCode: (autoCellCode: string | undefined) => void;
+  editExportLabel: (value: string, autoExportLabel: string | undefined) => void;
+  resetExportLabel: (autoExportLabel: string | undefined) => void;
+  toggleMerge: (on: boolean) => void;
 }
 
 export interface UseCellFormResult {
   form: CellFormState;
   setters: CellFormSetters;
+  actions: CellFormActions;
   /** 원본 cell 값으로 폼 롤백 (취소 시) */
   reset: () => void;
 }
@@ -142,93 +100,46 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
     dispatch({ type: 'HYDRATE', cell });
   }, [cell]);
 
-  const setters = useMemo<CellFormSetters>(() => {
-    const set =
-      <K extends keyof CellFormState>(field: K) =>
-      (value: CellFormState[K]) =>
-        dispatch({ type: 'SET_FIELD', field, value });
+  const setters = useMemo(
+    () =>
+      Object.fromEntries(
+        CELL_FORM_FIELDS.map((field) => [
+          `set${field.charAt(0).toUpperCase()}${field.slice(1)}`,
+          (value: CellFormState[typeof field]) => dispatch({ type: 'SET_FIELD', field, value }),
+        ]),
+      ) as CellFormSetters,
+    [],
+  );
+
+  const actions = useMemo<CellFormActions>(() => {
+    const update = (fn: (state: CellFormState) => CellFormState) =>
+      dispatch({ type: 'UPDATE', update: fn });
     return {
-      setContentType: set('contentType'),
-      setTextContent: set('textContent'),
-      setTextContentHtml: set('textContentHtml'),
-      setImageUrl: set('imageUrl'),
-      setVideoUrl: set('videoUrl'),
-      setCheckboxOptions: set('checkboxOptions'),
-      setRadioOptions: set('radioOptions'),
-      setRadioGroupName: set('radioGroupName'),
-      setDistinctGroup: set('distinctGroup'),
-      setSelectOptions: set('selectOptions'),
-      setAllowOtherOption: set('allowOtherOption'),
-      setCellOptionsColumns: set('cellOptionsColumns'),
-      setCellMobileOptionsColumns: set('cellMobileOptionsColumns'),
-      setInputPlaceholder: set('inputPlaceholder'),
-      setInputMaxLength: set('inputMaxLength'),
-      setInputRows: set('inputRows'),
-      setInputAutoGrow: set('inputAutoGrow'),
-      setInputWidth: set('inputWidth'),
-      setHideRightBorder: set('hideRightBorder'),
-      setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
-      setInputType: set('inputType'),
-      setInputPiiEncrypted: set('inputPiiEncrypted'),
-      setEmptyDefaultEnabled: set('emptyDefaultEnabled'),
-      setEmptyDefaultRaw: set('emptyDefaultRaw'),
-      setCellNumberFormat: set('cellNumberFormat'),
-      setCellTextValidation: set('cellTextValidation'),
-      setCellRequired: set('cellRequired'),
-      setCellRequiredMessage: set('cellRequiredMessage'),
-      setGatingCondition: set('gatingCondition'),
-      setGatingRequiredWhenEnabled: set('gatingRequiredWhenEnabled'),
-      setMinSelections: set('minSelections'),
-      setMaxSelections: set('maxSelections'),
-      setRankingOptions: set('rankingOptions'),
-      setRankingConfig: set('rankingConfig'),
-      setRankSuffixPattern: set('rankSuffixPattern'),
-      setRankVarNames: set('rankVarNames'),
-      setRankingLabel: set('rankingLabel'),
-      setCellSpssNumericCode: set('cellSpssNumericCode'),
-      setIsOtherRankingCell: set('isOtherRankingCell'),
-      setChoiceLabel: set('choiceLabel'),
-      setChoiceAllowTextInput: set('choiceAllowTextInput'),
-      setChoiceExclusive: set('choiceExclusive'),
-      setChoiceExclusiveScope: set('choiceExclusiveScope'),
-      setChoiceTextInputType: set('choiceTextInputType'),
-      setChoiceTextInputNumberFormat: set('choiceTextInputNumberFormat'),
-      setChoiceBranchRule: set('choiceBranchRule'),
-      setChoiceGroupId: set('choiceGroupId'),
-      setTextBold: set('textBold'),
-      setBoldFirstLine: set('boldFirstLine'),
-      setBackgroundColor: set('backgroundColor'),
-      setTextColor: set('textColor'),
-      setHorizontalAlign: set('horizontalAlign'),
-      setMobileDisplay: set('mobileDisplay'),
-      setMobileLabel: set('mobileLabel'),
-      setOptionTextSlot: set('optionTextSlot'),
-      setVerticalAlign: set('verticalAlign'),
-      setTextPosition: set('textPosition'),
-      setInputTextAlign: set('inputTextAlign'),
-      setIsMergeEnabled: set('isMergeEnabled'),
-      setRowspan: set('rowspan'),
-      setColspan: set('colspan'),
-      setCellCode: set('cellCode'),
-      setIsCustomCellCode: set('isCustomCellCode'),
-      setExportLabel: set('exportLabel'),
-      setIsCustomExportLabel: set('isCustomExportLabel'),
-      setSpssVarType: set('spssVarType'),
-      setSpssMeasure: set('spssMeasure'),
-      setAnswerQuoteText: set('answerQuoteText'),
-      setAnswerQuoteEnabled: set('answerQuoteEnabled'),
-      setAnswerQuoteName: set('answerQuoteName'),
-      setFormula: set('formula'),
-      setFormulaValidationEnabled: set('formulaValidationEnabled'),
-      setFormulaToleranceRaw: set('formulaToleranceRaw'),
-      setFormulaErrorMessage: set('formulaErrorMessage'),
-      setCalcValidationEnabled: set('calcValidationEnabled'),
-      setCalcValidationOperator: set('calcValidationOperator'),
-      setCalcValidationTarget: set('calcValidationTarget'),
-      setCalcValidationToleranceRaw: set('calcValidationToleranceRaw'),
-      setCalcValidationErrorMessage: set('calcValidationErrorMessage'),
+      changeContentType: (next, auto) => {
+        // 기본 보기는 id 를 새로 발급하므로 리듀서 밖에서 만든다 (리듀서는 순수해야 한다)
+        const defaultRankingOptions =
+          next === 'ranking'
+            ? [
+                { id: generateId(), label: '옵션 1', value: 'opt1', spssNumericCode: getMaxSpssCode([]) + 1 },
+                { id: generateId(), label: '옵션 2', value: 'opt2', spssNumericCode: getMaxSpssCode([]) + 2 },
+              ]
+            : undefined;
+        update((s) =>
+          changeContentType(s, next, {
+            ...auto,
+            ...(defaultRankingOptions ? { defaultRankingOptions } : {}),
+          }),
+        );
+      },
+      changeGatingCondition: (condition) => update((s) => changeGatingCondition(s, condition)),
+      toggleNumberMode: (on) => update((s) => toggleNumberMode(s, on)),
+      editCellCode: (value, auto) => update((s) => editCellCode(s, value, auto)),
+      resetCellCode: (auto) => update((s) => resetCellCode(s, auto)),
+      editExportLabel: (value, auto) => update((s) => editExportLabel(s, value, auto)),
+      resetExportLabel: (auto) => update((s) => resetExportLabel(s, auto)),
+      toggleMerge: (on) => update((s) => toggleMerge(s, on)),
     };
   }, []);
 
-  return { form, setters, reset };
+  return { form, setters, actions, reset };
 }

@@ -30,11 +30,19 @@ export interface ContactColumnDef {
   /** 숨김 (운영 컬럼 일부는 hide 불가 — UI 가드) */
   hidden?: boolean;
   /**
-   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표)에 이 컬럼을 표시.
-   * attrs.* 소스 전용 — system/pii 컬럼은 attrs 에 값이 없어 표시할 수 없다(서비스 가드).
-   * 조사 대상 목록의 hidden 과는 독립이다.
+   * 메일 발송 표(단체 메일 위저드 미리보기·캠페인 상세 수신자 표·수신거부 명단)에 이 컬럼을 표시.
+   * attrs.*·pii.*(마스킹 힌트로)·system.resid 만 — 운영 컬럼은 서비스 가드가 거부한다.
+   * attrs·pii 는 켜야(true) 보이고, 시스템ID 는 기본으로 보여 끈 경우에만 false 가 저장된다.
+   * 조사 대상 목록의 hidden 과는 독립이다. 해석은 `lib/contacts/mail-display-columns`.
    */
   showInMail?: boolean;
+  /**
+   * 메일 발송 주소 순서 (1부터). 이메일로 암호화된 열(`piiType: 'email'`) 전용.
+   * 순위를 준 열만 발송 주소 후보가 되고, 순위 오름차순으로 값이 있는 첫 열의 주소로 보낸다.
+   * 어느 열에도 순위가 없으면 종전대로 열 이름(column_key) 오름차순 첫 열이다.
+   * 해석은 `lib/contacts/mail-email-order` 의 `resolveMailEmailOrder` 한 곳.
+   */
+  mailOrder?: number;
   /**
    * PII 매핑 타입. 지정되면 해당 엑셀 컬럼 값이 contact_pii 사이드 테이블에
    * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
@@ -52,6 +60,17 @@ export interface ContactColumnDef {
    * '종사자 구간' 컬럼에 2(중분류). 진척보고는 레벨 순서대로 조합 집계한다.
    */
   groupLevel?: 1 | 2 | 3 | 4;
+}
+
+/**
+ * contact_assignments.last_clauses — 마지막으로 교체 적용한 조건 줄 한 개.
+ * 조사 대상 필터 URL 의 col/q/op 와 같은 모양이다(source=col, value=q, op=op).
+ * 첫 줄의 op 는 빈 문자열. 2,000개 넘는 ID 목록은 `list:<uuid>:<count>` 토큰으로 담긴다.
+ */
+export interface ContactAssignmentClause {
+  source: string;
+  value: string;
+  op: '' | 'AND' | 'OR';
 }
 
 /** 컨택 업로드 모드. replace=전체 교체(기존 동작), merge=키 일치 갱신, append=신규 추가 */

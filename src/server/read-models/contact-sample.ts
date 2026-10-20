@@ -3,17 +3,21 @@ import 'server-only';
 import { and, asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { decryptPii } from '@/lib/crypto/aes';
+import { contactTargets } from '@/db/schema/contacts';
 import {
   targetScopeCondition,
+  testFlagForScope,
   type OperationsDataScope,
 } from '@/server/data-scope';
 
+import { loadSendEmailForTarget } from './send-address';
+
 export interface FirstContactSample {
+  /** contact_targets.id */
+  id: string;
   attrs: Record<string, string>;
   inviteCode: string;
-  /** 첫 email PII 의 복호화 평문 — 미리보기 표시용. 없으면 null. */
+  /** 발송 주소(email PII 복호화 평문) — 미리보기 표시용. 없으면 null. */
   email: string | null;
   resid: number;
 }
@@ -27,31 +31,22 @@ interface ContactSampleRow {
 
 /**
  * email 복호화 블록 — `getFirstContactSample` / `getContactSampleById` 공유.
- * 한 컨택에 여러 email 컬럼이 있으면 column_key 알파벳 순 첫 번째 사용.
+ * 한 컨택에 여러 email 컬럼이 있으면 발송 주소 규칙으로 고른다(`loadSendEmailForTarget`) — 순서상
+ * 보낼 수 있는 첫 주소이고 반송은 보지 않는다(단건 발송이 쓰는 주소와 같다).
  */
-async function withDecryptedEmail(row: ContactSampleRow): Promise<FirstContactSample> {
-  const [emailRow] = await db
-    .select({ cipher: contactPii.cipher })
-    .from(contactPii)
-    .where(
-      and(
-        eq(contactPii.contactTargetId, row.id),
-        eq(contactPii.fieldType, 'email'),
-      ),
-    )
-    .orderBy(asc(contactPii.columnKey))
-    .limit(1);
-
-  let email: string | null = null;
-  if (emailRow) {
-    try {
-      email = decryptPii(emailRow.cipher);
-    } catch {
-      // 복호화 실패 시 email null — 미리보기에 이메일 비공개로 표시됨.
-    }
-  }
+async function withDecryptedEmail(
+  row: ContactSampleRow,
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<FirstContactSample> {
+  const email = await loadSendEmailForTarget({
+    id: row.id,
+    surveyId,
+    isTest: testFlagForScope(scope),
+  });
 
   return {
+    id: row.id,
     attrs: row.attrs as Record<string, string>,
     inviteCode: row.inviteCode,
     email,
@@ -65,7 +60,7 @@ async function withDecryptedEmail(row: ContactSampleRow): Promise<FirstContactSa
  * 컨택이 0건이면 null.
  *
  * email 은 contact_pii 사이드 테이블에서 복호화 — 한 컨택에 여러 email 컬럼이 있으면
- * column_key 알파벳 순 첫 번째 사용.
+ * 발송 주소 순서를 따른다.
  */
 export async function getFirstContactSample(
   surveyId: string,
@@ -84,7 +79,7 @@ export async function getFirstContactSample(
     .limit(1);
   if (!row) return null;
 
-  return withDecryptedEmail(row);
+  return withDecryptedEmail(row, surveyId, scope);
 }
 
 /**
@@ -112,5 +107,5 @@ export async function getContactSampleById(
     )
     .limit(1);
   if (!row) return null;
-  return withDecryptedEmail(row);
+  return withDecryptedEmail(row, surveyId, scope);
 }

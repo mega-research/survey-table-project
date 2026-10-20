@@ -44,6 +44,24 @@ describe('TextResponseInput prefill·emptyDefault 쓰기 횟수', () => {
     expect(second).not.toHaveBeenCalled();
   });
 
+  it('명단 값이 빈 prefill 단답형은 잠그지 않는다 — 응답자가 적은 값을 지우지 않는다', () => {
+    const question = {
+      id: 'q-text-empty',
+      type: 'text',
+      title: '사업자등록번호',
+      required: false,
+      order: 0,
+      defaultValueTemplate: '{{사업자등록번호}}',
+    } as unknown as Question;
+    const onChange = vi.fn();
+    const { container } = render(renderText(question, '123-45-67891', onChange));
+    const input = container.querySelector('input');
+    expect(input).not.toBeNull();
+    expect(input?.disabled).toBe(false);
+    expect(input?.value).toBe('123-45-67891');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('emptyDefault 는 값 미존재일 때 1회, 빈 문자열로 지운 뒤 0회', () => {
     const question = {
       id: 'q-num',

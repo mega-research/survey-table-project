@@ -1,31 +1,19 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
-import {
-  decryptQuestionResponses,
-  encryptResponsesForStorage,
-  hasPiiTargets,
-  type PiiTargets,
-} from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { notTestResponse } from '@/server/response-filters';
 import {
-  loadVersionSnapshot,
-  snapshotLookups as readSnapshotLookups,
-  snapshotQuestions as readSnapshotQuestions,
-} from '@/server/read-models/version-snapshot';
-import { detectScreenOut } from '../domain/screen-out';
-import { responsesToLookupShape } from '@/utils/branch-eval';
-import type { PageVisit } from '@/shared/contracts/survey-response';
-import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
+  isOpenResponseStatus,
+  openResponseStatusValues,
+  type PageVisit,
+} from '@/shared/contracts/survey-response';
 
 import type { CompleteResponseInput, CompleteResponseResult } from '../domain/response';
 import { replaceResponseAnswers } from './response-answers';
@@ -41,10 +29,10 @@ import {
   type QuotaTargetCell,
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
+import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
 import {
   detectQuotaOverflow,
-  encryptPiiAnswers,
-  loadPiiTargets,
+  dropOversizedStoredValues,
   restorePrefillAnswers,
   sanitizeSubmittedResponses,
 } from './submitted-answers';
@@ -158,141 +146,33 @@ export async function completeResponse(
     await restorePrefillAnswers(validatedResponses, gateRow);
   }
 
-  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 주입한 계산값을 그대로 믿지 않고,
-  // 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전 클라이언트가
-  // 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와 일치한다
-  // ("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  // 응답 확정 (CONTEXT.md 「응답 확정」) — 숨은 문항 strip → 게이팅 strip → calc 재계산 → 등록
+  // 사이드카만 → 자격미달 판정 → 암호화. 클라이언트가 이미 지우고 계산하지만 이탈 beacon 이 지움
+  // 전 값을, 요청 변조·구버전 클라이언트가 수식과 다른 값을 보낼 수 있다 — 응답 시점 버전
+  // 스냅샷으로 다시 확정한다("수식 결과와 다른 저장값은 존재하지 않는다" — 계산 셀 불변식).
+  // 판정은 클라이언트 신고를 믿지 않고 스냅샷의 분기 규칙을 서버가 다시 평가한다(pub 표면).
   //
-  // data 없이 complete 만 호출하는 우회도 막아야 한다: 위조값을 saveDraft/beacon 으로
-  // 먼저 저장한 뒤 빈 complete 를 부르면 저장된 JSONB 가 그대로 확정되므로, 스냅샷에
-  // calc 셀이 있으면 저장된 응답을 재계산해 덮어쓴다. 이 경로의 읽기·재계산·저장은
-  // 아래 트랜잭션 안에서 row lock(FOR UPDATE) 으로 묶는다 — tx 밖에서 읽어 통째로
-  // 덮어쓰면 읽기~UPDATE 사이에 도착한 draft 답변이 유실되는 경합이 생긴다.
-  //
-  // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
-  // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
-  // 자격미달 판정(detectScreenOut)이 쓰는 응답 시점 스냅샷 질문. calc/게이팅 재계산이
-  // 필요 없는 설문에서도 판정은 해야 하므로 아래 if 블록 밖에서 보관한다.
-  let snapshotQuestions: Question[] = [];
-  // 자격미달 판정의 표시 조건 평가 재료 — 클라이언트와 같은 컨텍스트를 써야 판정이 갈리지
-  // 않는다 (그룹 표시 조건, LUT 우변 비교, 컨택 attrs 참조).
-  let snapshotGroups: QuestionGroup[] = [];
-  let snapshotLookups: SurveyLookup[] = [];
-  let snapshotContactAttrs: Record<string, string | undefined> = {};
-  let storedRecalc: {
-    questions: Question[];
-    groups: QuestionGroup[];
-    lookups: SurveyLookup[];
-    contactAttrs: Record<string, string | undefined>;
-    piiTargets: PiiTargets;
-  } | null = null;
-  if (gateRow?.versionId) {
-    // JSONB 스키마 드리프트 방어(비배열 → 빈 배열)는 snapshot* 헬퍼가 맡는다.
-    const snap = await loadVersionSnapshot(gateRow.versionId);
-    const snapQuestions = readSnapshotQuestions(snap);
-    snapshotQuestions = snapQuestions;
-    const snapLookups = readSnapshotLookups(snap);
-    snapshotLookups = snapLookups;
-    snapshotGroups = Array.isArray(snap?.groups) ? (snap.groups as QuestionGroup[]) : [];
-    const hasCalcCells = snapQuestions.some((q) =>
-      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
-    );
-    const hasGatedCells = snapQuestions.some((q) =>
-      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
-    );
+  // 재료는 여기(잠금 밖)서 읽는다. 빈 complete 는 아래 트랜잭션의 row lock 아래에서 저장분을
+  // 확정한다 — data 없이 complete 만 부르는 우회(위조값을 draft/beacon 으로 먼저 저장)를 막고,
+  // 읽기~UPDATE 사이에 도착한 draft 를 잃지 않기 위해서다. 스냅샷 미확보(레거시 versionId null,
+  // prune, 손상 행)면 확정 단계를 건너뛴다 — 응답자 저장을 막지 않는 fail-safe.
+  const material = gateRow
+    ? await loadFinalizationMaterial({
+        surveyId: gateRow.surveyId,
+        versionId: gateRow.versionId,
+        contactTargetId: gateRow.contactTargetId,
+        responseId,
+      })
+    : null;
 
-    // 컨택 attrs 는 calc 수식뿐 아니라 표시 조건 평가(숨은 문항 strip·자격미달 판정)에도
-    // 쓰이므로, 하나라도 필요하면 한 번만 읽어 공유한다. **숨은 문항 strip 보다 먼저**
-    // 읽어야 한다 — 그 strip 이 이 attrs 를 평가 컨텍스트로 받는다.
-    // 표 행 표시조건도 센다 — 숨은 행 strip 이 같은 attrs 로 행을 판정한다. 빠뜨리면 attrs 를
-    // 읽는 행 조건(응답 × 컨택 계수 등)이 빈 attrs 로 거짓이 되어, 응답자에게 보였던 행의 답을
-    // 제출에서 지운다.
-    const hasDisplayConditions =
-      snapQuestions.some(
-        (q) => q.displayCondition || (q.tableRowsData ?? []).some((row) => row.displayCondition),
-      ) || snapshotGroups.some((g) => g.displayCondition);
-    if ((hasCalcCells || hasDisplayConditions) && gateRow.contactTargetId) {
-      const [target] = await db
-        .select({ attrs: contactTargets.attrs })
-        .from(contactTargets)
-        .where(eq(contactTargets.id, gateRow.contactTargetId))
-        .limit(1);
-      snapshotContactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
-    }
-
-    // 숨은 문항 값 strip — 게이팅 strip 보다 **먼저** 온다. 문항이 통째로 사라지면 그 표의
-    // 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다 (스펙 §배선).
-    // 클라이언트가 이미 지우지만, 이탈 시점 beacon 이 지움 전 값을 실어 보낼 수 있다.
-    // 평가 컨텍스트는 자격미달 재판정(buildScreenOutOptions)과 같은 재료를 넘긴다 —
-    // 안 넘기면 LUT·컨택 attrs·수식을 쓰는 조건이 서버에서만 다르게 풀려 방어가 무력해진다.
-    if (validatedResponses) {
-      validatedResponses = stripHiddenQuestionValues(
-        snapQuestions,
-        validatedResponses,
-        snapshotGroups,
-        {
-          responses: responsesToLookupShape(validatedResponses),
-          contactAttrs: snapshotContactAttrs,
-          lookups: snapLookups,
-        },
-      );
-    }
-
-    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
-    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
-    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
-    if (validatedResponses && hasGatedCells) {
-      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
-    }
-
-    if (hasCalcCells || hasGatedCells) {
-      const calcAttrs = snapshotContactAttrs;
-      if (validatedResponses) {
-        // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
-        // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
-        // 게이팅만 있는 설문은 위 strip 으로 충분 — calc 셀이 있을 때만 재계산한다.
-        if (hasCalcCells) {
-          validatedResponses = withCalcValues(validatedResponses, {
-            questions: snapQuestions,
-            responses: validatedResponses,
-            lookups: snapLookups,
-            contactAttrs: calcAttrs,
-          });
-        }
-      } else {
-        // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
-        storedRecalc = {
-          questions: snapQuestions,
-          groups: snapshotGroups,
-          lookups: snapLookups,
-          contactAttrs: calcAttrs,
-          piiTargets: await loadPiiTargets(gateRow.versionId, gateRow.surveyId),
-        };
-      }
-    }
-  }
-
-  // 판정용 표시 조건 평가 컨텍스트. 응답 페이지가 쓰는 것과 같은 재료(스냅샷 그룹·LUT·
-  // 컨택 attrs)를 넘겨야 서버 판정이 응답자가 실제로 본 화면과 어긋나지 않는다.
-  const buildScreenOutOptions = (judged: Record<string, unknown>) => ({
-    groups: snapshotGroups,
-    evalCtx: {
-      responses: responsesToLookupShape(judged),
-      contactAttrs: snapshotContactAttrs,
-      lookups: snapshotLookups,
-    },
-  });
-
-  // 자격미달 판정 — 클라이언트 신고를 신뢰하지 않고 응답 시점 스냅샷의 분기 규칙을
-  // 서버가 다시 평가한다 (응답 페이지는 pub 표면). 스냅샷이 없으면(prune·레거시)
-  // 판정을 건너뛰어 기존 완료 동작을 유지한다 — 저장을 막지 않는 fail-safe.
   let screenedOut = false;
-  if (validatedResponses && snapshotQuestions.length > 0) {
-    screenedOut = detectScreenOut(
-      snapshotQuestions,
-      validatedResponses,
-      buildScreenOutOptions(validatedResponses),
-    );
+  // 페이로드 경로의 저장값 — 아래 쿼터 판정은 평문(validatedResponses)으로 하고, 저장 직전에 갈아 끼운다.
+  let payloadStored: Record<string, unknown> | undefined;
+  if (validatedResponses && material) {
+    const finalized = finalizeAnswers(material, validatedResponses);
+    validatedResponses = finalized.plain;
+    payloadStored = finalized.stored;
+    screenedOut = finalized.screenedOut ?? false;
   }
 
   // 쿼터 — 옵션에 따라 두 경로로 갈린다. 쿼터 차원 매칭은 평문 답변 기준이므로 PII 암호화보다
@@ -353,8 +233,10 @@ export async function completeResponse(
     }
   }
 
-  if (validatedResponses && gateRow) {
-    validatedResponses = await encryptPiiAnswers(validatedResponses, gateRow);
+  // 저장값으로 갈아 끼운다. 바이트 필터 2단(저장값 기준): 받은 답 검사의 평문 필터를 통과했어도
+  // 암호문은 상한을 넘을 수 있다 — 그 키만 silent drop 하고 완주자의 완료 자체는 막지 않는다.
+  if (payloadStored) {
+    validatedResponses = dropOversizedStoredValues(payloadStored);
   }
 
   const completedAt = new Date();
@@ -384,69 +266,35 @@ export async function completeResponse(
         sessionId: input.sessionId,
       });
     }
-    // 빈 complete 의 calc 재계산 — row lock 을 잡은 뒤 저장분을 읽어 재계산한다.
-    // 동시 draft UPDATE 는 이 lock 을 대기하므로 읽기~쓰기 사이 유실 경합이 없다.
+    // 빈 complete 의 응답 확정 — row lock 을 잡은 뒤 저장분을 읽어 확정한다. 동시 draft UPDATE 는
+    // 이 lock 을 대기하므로 읽기~쓰기 사이 유실 경합이 없다. 자격미달 판정과 쿼터 셀 재분류도
+    // 이 잠금 아래의 확정 평문으로 한다 — draft 로 저장해 둔 자격미달 답변이 payload 없는
+    // complete 로 우회 완료되지 않게(스펙 §클라이언트 비신뢰 재확정).
     //
-    // 빈 complete(payload 없이 responseId 만 호출)는 자격미달 판정도 이 잠금 아래에서
-    // 다시 해야 한다 — storedRecalc 는 calc/게이팅 셀이 있는 설문에서만 준비되지만,
-    // 그 조건과 무관하게 draft 로 저장해 둔 자격미달 답변이 payload 없는 complete 로
-    // 우회 완료될 수 있다(리뷰 지적 — 스펙 §클라이언트 비신뢰 재확정). 판정 재료는
-    // 항상 이 잠금 아래에서 확보한다.
+    // 저장분은 확정이 바꿨을 때만 다시 쓴다. 이 경로에는 크기 가드를 두지 않는다 — 재료가 이미
+    // 저장된 행이라 새 주입 표면이 아니고, 복호화→재암호화 왕복은 크기를 되돌릴 뿐이다. 여기서
+    // drop 하면 이미 수집된 답변을 완료 시점에 조용히 잃는다.
     let storedRecalcResponses: Record<string, unknown> | undefined;
-    const needsScreenOutLookup = !validatedResponses && snapshotQuestions.length > 0;
-    if (storedRecalc || needsScreenOutLookup || hardCloseFromStored) {
+    // response_answers 정규화 재료 — JSONB 를 다시 쓰지 않아도 확정된 맵으로 정규화한다.
+    let storedFinalized: Record<string, unknown> | undefined;
+    // 스냅샷이 없으면 확정할 것이 없다(fail-safe) — 쿼터 셀을 저장분으로 다시 분류할 때만 읽는다.
+    if (!validatedResponses && material && (material.snapshot || hardCloseFromStored)) {
       const [locked] = await tx
         .select({ questionResponses: surveyResponses.questionResponses })
         .from(surveyResponses)
         .where(eq(surveyResponses.id, responseId))
         .for('update');
-      // 수식이 암호화된 숫자 단답을 참조할 수 있으므로 평문화 후 재계산, 저장 직전 재암호화.
-      // 분기 매칭도 평문 기준이어야 하므로 자격미달 판정은 이 평문 단계에서 수행한다.
-      const plain = decryptQuestionResponses(
-        (locked?.questionResponses ?? {}) as Record<string, unknown>,
-        { responseId },
+      // 수식이 암호화된 숫자 단답을 참조할 수 있으므로 평문화 후 확정, 저장 직전 재암호화.
+      const finalized = finalizeAnswers(
+        material,
+        decryptQuestionResponses((locked?.questionResponses ?? {}) as Record<string, unknown>, {
+          responseId,
+        }),
       );
-      // 판정에 쓸 최종 평문 응답 — calc/게이팅 셀이 있으면 strip+재계산 결과, 없으면
-      // 저장된 값 그대로.
-      let judgedResponses: Record<string, unknown> = plain;
-      if (storedRecalc) {
-        // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 문항이 통째로 사라지면 그
-        // 표의 셀 값도 함께 사라져 게이팅 판정의 입력이 달라진다. 그 다음 비활성 셀 잔존
-        // 값을 지운 뒤 그 기준으로 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로
-        // 저장된 값도 여기서 봉합).
-        const hiddenStripped = stripHiddenQuestionValues(
-          storedRecalc.questions,
-          plain,
-          storedRecalc.groups,
-          {
-            responses: responsesToLookupShape(plain),
-            contactAttrs: storedRecalc.contactAttrs,
-            lookups: storedRecalc.lookups,
-          },
-        );
-        const stripped = stripDisabledCellValues(storedRecalc.questions, hiddenStripped);
-        let recomputed = withCalcValues(stripped, {
-          questions: storedRecalc.questions,
-          responses: stripped,
-          lookups: storedRecalc.lookups,
-          contactAttrs: storedRecalc.contactAttrs,
-        });
-        judgedResponses = recomputed;
-        // 이 경로에는 크기 가드를 두지 않는다 — 재료가 이미 저장된 행이라 새 주입 표면이
-        // 아니고(모든 쓰기 경로가 저장값 기준으로 걸러진 뒤의 값이다), 복호화→재암호화 왕복은
-        // 크기를 되돌릴 뿐이다. 여기서 drop 하면 이미 수집된 답변을 완료 시점에 조용히 잃는다.
-        if (hasPiiTargets(storedRecalc.piiTargets)) {
-          recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiTargets);
-        }
-        storedRecalcResponses = recomputed;
-      }
-      if (needsScreenOutLookup) {
-        screenedOut = detectScreenOut(
-          snapshotQuestions,
-          judgedResponses,
-          buildScreenOutOptions(judgedResponses),
-        );
-      }
+      const judgedResponses = finalized.plain;
+      storedFinalized = finalized.stored;
+      if (finalized.changed) storedRecalcResponses = finalized.stored;
+      screenedOut = finalized.screenedOut ?? false;
       // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 자격미달이면 셀을
       // 소비하지 않는다. 잠금 전에 고른 셀과 다르면 이 셀의 잠금을 쥐고 있지 않으므로 세지 않고
       // 되돌린다 — 바깥 재시도가 바뀐 셀의 잠금부터 다시 잡는다. 미분류가 됐으면 쿼터에 걸리지 않는다.
@@ -515,14 +363,17 @@ export async function completeResponse(
             }
           : {}),
       })
-      // soft-delete(deletedAt) 또는 종결 상태(completed/screened_out/quotaful_out/bad/drop)
+      // soft-delete(deletedAt) 또는 종결 상태(completed/screened_out/quotaful_out/bad)
       // 행은 완료 처리에서 제외한다. pub 엔드포인트는 responseId 만 있으면 호출 가능하므로,
       // 지연/리플레이된 complete 호출이 삭제된 행을 되살리거나 종결 status 를 덮어쓰지 못하게 막는다.
+      // drop 은 종결이 아니다 — sweep 이 3시간 활동 없는 행에 붙인 표시라, 탭을 열어 둔 채 자리를
+      // 비웠다 돌아와 제출한 응답자의 답을 받아 완료로 확정한다(2026-10-20 — 전에는 「이미 완료」로
+      // 흡수해 마지막 답을 버리고 조사 대상을 응답함으로 연결했다).
       .where(
         and(
           eq(surveyResponses.id, responseId),
           isNull(surveyResponses.deletedAt),
-          eq(surveyResponses.status, 'in_progress'),
+          inArray(surveyResponses.status, openResponseStatusValues),
         ),
       )
       .returning();
@@ -540,7 +391,7 @@ export async function completeResponse(
       // 가드는 isCompleted 가 아니라 status 로 종결을 판정한다 — screened_out 행은
       // is_completed=false 인데도 이미 종결 상태라, isCompleted 만 보면 자격미달 응답의
       // 재시도 complete 가 멱등 흡수 대신 에러로 떨어진다(리뷰 지적).
-      if (existing && existing.status !== 'in_progress' && existing.deletedAt == null) {
+      if (existing && !isOpenResponseStatus(existing.status) && existing.deletedAt == null) {
         completedResponse = existing;
         // 이미 종결된 행에 대한 늦은 complete — 다른 화면이 먼저 제출했거나 본인 재시도.
         // 클라이언트가 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내로 접도록 표식한다.
@@ -587,8 +438,8 @@ export async function completeResponse(
       }
 
       // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-      // 빈 complete 의 calc 재계산 경로도 JSONB 와 동일한 맵으로 정규화한다.
-      const normalizedSource = validatedResponses ?? storedRecalcResponses;
+      // 빈 complete 도 확정된 맵으로 정규화한다 — JSONB 를 다시 쓰지 않은(바뀐 것 없는) 경우에도.
+      const normalizedSource = validatedResponses ?? storedFinalized;
       if (normalizedSource && Object.keys(normalizedSource).length > 0) {
         await replaceResponseAnswers(tx, responseId, updated.surveyId, normalizedSource);
       }

@@ -23,6 +23,7 @@ export interface OperationsPaths {
   readonly contactsResultCodes: string;
   readonly contactsUpload: string;
   readonly contactsUploadNew: string;
+  readonly contactsAssignments: string;
   readonly mailTemplates: string;
   readonly mailTemplateNew: string;
   readonly mailCampaigns: string;
@@ -30,6 +31,7 @@ export interface OperationsPaths {
   readonly quota: string;
   readonly demand: string;
   contact(contactId: string): string;
+  contactsAssignment(assignmentId: string): string;
   profileEdit(responseId: string): string;
   mailTemplateEdit(templateId: string): string;
   mailCampaign(campaignId: string): string;
@@ -58,6 +60,7 @@ export function operationsPaths(base: string): OperationsPaths {
     contactsResultCodes: `${contacts}/result-codes`,
     contactsUpload: `${contacts}/upload`,
     contactsUploadNew: `${contacts}/upload/new`,
+    contactsAssignments: `${contacts}/assignments`,
     mailTemplates: `${mail}/templates`,
     mailTemplateNew: `${mail}/templates/new`,
     mailCampaigns: `${mail}/campaigns`,
@@ -65,6 +68,7 @@ export function operationsPaths(base: string): OperationsPaths {
     quota: `${root}/quota`,
     demand: `${root}/demand`,
     contact: (contactId) => `${contacts}/${contactId}`,
+    contactsAssignment: (assignmentId) => `${contacts}/assignments/${assignmentId}`,
     profileEdit: (responseId) => `${profiles}/${responseId}/edit`,
     mailTemplateEdit: (templateId) => `${mail}/templates/${templateId}/edit`,
     mailCampaign: (campaignId) => `${mail}/campaigns/${campaignId}`,

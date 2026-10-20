@@ -1,6 +1,8 @@
 import { relations, sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -71,6 +73,10 @@ export const mailCampaigns = pgTable(
     isTest: boolean('is_test').notNull().default(false),
     title: text('title').notNull(),
     kind: text('kind').$type<MailCampaignKind>().notNull().default('bulk'),
+    /** 대체 발송(kind='fallback')의 부모 회차 — 부모마다 대체 회차는 하나(0135 부분 유일 인덱스). */
+    parentCampaignId: uuid('parent_campaign_id').references((): AnyPgColumn => mailCampaigns.id, {
+      onDelete: 'set null',
+    }),
 
     // 발송 시점 스냅샷
     subjectSnapshot: text('subject_snapshot').notNull(),
@@ -115,6 +121,9 @@ export const mailCampaigns = pgTable(
       table.isTest,
       table.runNumber,
     ),
+    fallbackParentUnique: uniqueIndex('mail_campaigns_fallback_parent_unique')
+      .on(table.parentCampaignId)
+      .where(sql`${table.kind} = 'fallback' AND ${table.parentCampaignId} IS NOT NULL`),
   }),
 );
 
@@ -147,8 +156,19 @@ export const mailRecipients = pgTable(
       onDelete: 'set null',
     }),
     emailSnapshot: text('email_snapshot'),
+    /** 이 수신자 주소를 꺼낸 명단 이메일 열(contact_pii.column_key). 0135 이전 행은 NULL. */
+    emailColumnKey: text('email_column_key'),
+    /** 대체 발송 수신자면 실패·반송된 출처 수신자. */
+    sourceRecipientId: uuid('source_recipient_id').references((): AnyPgColumn => mailRecipients.id, {
+      onDelete: 'set null',
+    }),
     inviteTokenSnapshot: uuid('invite_token_snapshot'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /**
+     * 대체 발송 처리 대기 (0137) — 반송·거부로 바뀌는 트랜잭션이 찍고, 대체 발송 처리가 커밋될 때 지운다.
+     * 오래 남은 행은 정기 점검이 다시 처리한다(campaign-fallback). NULL = 처리할 것 없음.
+     */
+    fallbackPendingAt: timestamp('fallback_pending_at', { withTimezone: true }),
 
     status: text('status').$type<MailRecipientStatus>().notNull().default('queued'),
     resendMessageId: text('resend_message_id'),
@@ -176,6 +196,9 @@ export const mailRecipients = pgTable(
     resendMessageIdUnique: uniqueIndex('mail_recipients_resend_msg_idx')
       .on(table.resendMessageId)
       .where(sql`${table.resendMessageId} IS NOT NULL`),
+    fallbackPendingIdx: index('mail_recipients_fallback_pending_idx')
+      .on(table.fallbackPendingAt)
+      .where(sql`${table.fallbackPendingAt} IS NOT NULL`),
   }),
 );
 

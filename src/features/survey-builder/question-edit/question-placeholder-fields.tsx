@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { PlaceholderField } from '@/features/survey-builder/placeholder-field';
 import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { QuestionInputHeightFields } from '@/features/survey-builder/question-edit/question-input-height-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
@@ -36,6 +37,13 @@ export function QuestionPlaceholderFields({
   hasTokenPrefill,
   variableCatalog,
 }: QuestionPlaceholderFieldsProps) {
+  // 응답 화면과 같은 판정(question-input) — 장문형은 언제나, 단답형은 평문 모드에서 줄 수 2 이상이거나
+  // 높이 늘리기를 켰을 때 여러 줄 입력칸이다. 여러 줄 칸만 안내 문구의 줄바꿈을 그린다.
+  const answersInMultilineField =
+    question.type === 'textarea' ||
+    (isPlainTextInput({ type: question.type, inputType: formData.inputType }) &&
+      ((formData.inputRows ?? 1) >= 2 || formData.inputAutoGrow === true));
+
   return (
     <>
   {/* 안내 문구는 단답형·장문형 공용 — 둘 다 자유 기입 칸이라 같은 설정이 필요하다.
@@ -43,14 +51,13 @@ export function QuestionPlaceholderFields({
   {(question.type === 'text' || question.type === 'textarea') && (
     <div>
       <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
-      <Input
+      <PlaceholderField
         id="placeholder"
         value={formData.placeholder || ''}
-        onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
-        placeholder="예: 이름을 입력하세요"
+        onChange={(next) => setFormData((prev) => ({ ...prev, placeholder: next }))}
+        multiline={answersInMultilineField}
         className="mt-2"
       />
-      <p className="mt-1 text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
     </div>
   )}
 
@@ -110,7 +117,8 @@ export function QuestionPlaceholderFields({
           )}
         </div>
         <p className="text-xs text-gray-500">
-          변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+          명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
+          입력합니다
         </p>
       </div>
       <div className="space-y-2">

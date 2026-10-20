@@ -38,6 +38,8 @@ vi.mock('@/db', () => {
   function makeSelectChain(): Record<string, unknown> {
     const chain: Record<string, unknown> = {};
     chain['from'] = vi.fn(() => chain);
+    // 명단 값 로더(respondent-contact-attrs)는 조사 대상 ⋈ 설문으로 읽는다.
+    chain['innerJoin'] = vi.fn(() => chain);
     chain['where'] = vi.fn(() => {
       // .where() 자체를 thenable 로 — 뒤에 .limit() 이 붙으면 그쪽이 우선 소비
       const whereResult: Record<string, unknown> = {
@@ -120,7 +122,7 @@ function queueSelects(opts: {
   template: string;
 }) {
   // 호출 순서: 0) 가용성 게이트 완료 카운트  1) 유효 questionId 집합(loadValidQuestionIds)
-  //           2) contactTargets  3) prefillQuestions
+  //           2) contactTargets  3) contact_pii 행  4) prefillQuestions
   // (prefill 의 contactTargetId/surveyId 는 gateRow 재사용으로 별도 responseRow select 없음)
   // 유효 집합은 prefill 질문(PREFILL_QID)과 비-prefill 키('other')를 포함해 멤버십 필터를 통과시킨다.
   selectTerminalQueue.length = 0;
@@ -128,6 +130,8 @@ function queueSelects(opts: {
     [{ total: 0 }],
     [{ id: PREFILL_QID }, { id: 'other' }],
     [{ attrs: opts.attrs }],
+    // 개인정보 열 행(read-models/respondent-contact-attrs) — 없음
+    [],
     [{ id: PREFILL_QID, template: opts.template }],
   );
 }
@@ -207,6 +211,27 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
     expect(
       (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
     ).toBe('홍길동');
+  });
+
+  it('명단 값이 비어 잠기지 않은 prefill 질문은 응답자가 적은 값을 그대로 둔다', async () => {
+    // 명단에 name 이 없다 — 화면은 이 문항을 잠그지 않고 응답자가 직접 적는다.
+    queueSelects({ attrs: {}, template: '{{name}}' });
+
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { [PREFILL_QID]: '직접 적은 이름' } },
+    });
+
+    const mainSet = capturedUpdateSets.find(
+      (s) => s['questionResponses'] !== undefined,
+    );
+    expect(
+      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
+    ).toBe('직접 적은 이름');
   });
 
   it('응답에 포함되지 않은(미노출) prefill 질문에는 허위 답변을 주입하지 않는다', async () => {

@@ -424,6 +424,13 @@ export interface TableCell {
    * (년 칸 | 월 칸 처럼 입력칸 둘을 나란히 둘 때). 빌더 편집 격자는 셀 경계를 보여야 해서 그대로 그린다.
    */
   hideRightBorder?: boolean;
+  /**
+   * 상세 기재 입력칸을 표 아래에 — 체크박스·라디오·선택 칸의 「기타」 입력칸을 좁은 칸 안이 아니라
+   * 표 아래 한 줄(열 제목 · 행 제목 라벨 + 입력칸)로 그린다. 격자 표(데스크톱·모바일 원본 표)에서만
+   * 옮기고, 모바일 카드는 칸이 넓어 그대로 칸 안에 둔다. 값이 사는 자리(`__optTexts__`)는 같다.
+   * 테이블 유형 문항 전용 — 판정은 question-renderer/utils/option-text-below-table.
+   */
+  optionTextBelowTable?: boolean;
   // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
   choiceGroupId?: string;
   /**
@@ -500,6 +507,12 @@ export interface TableCell {
   inputWidth?: number;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
+  /**
+   * prefill 값을 응답자가 고칠 수 있게 둔다. 켜면 명단 값은 잠금 값이 아니라 **처음 한 번 깔리는
+   * 초기값**이다 — 칸은 평범한 입력칸이라 형식·품질 검사를 받고, 응답자가 고치거나 지운 값이 남는다.
+   * 미지정이면 종전대로 명단 값으로 잠근다. 표 input 셀 전용(단답형 문항에는 없다).
+   */
+  prefillEditable?: boolean;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위

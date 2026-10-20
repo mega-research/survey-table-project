@@ -36,6 +36,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
       scope={scope}
       // 연구원은 종전대로 초대 링크를 본다 — 발송 문의·수동 안내에 쓰는 값이다.
       canProxyRespond
+      includeContactOwner
     />
   );
 }

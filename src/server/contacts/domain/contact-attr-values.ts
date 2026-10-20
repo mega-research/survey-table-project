@@ -15,3 +15,7 @@ export const ListContactAttrValuesOutput = z.object({
   hasEmpty: z.boolean(),
 });
 export type ListContactAttrValuesOutput = z.infer<typeof ListContactAttrValuesOutput>;
+
+/** 홀짝 조건 상태줄 — 값이 있는데 숫자가 아닌 행 수. */
+export const CountNonNumericAttrValuesOutput = z.object({ count: z.number().int().nonnegative() });
+export type CountNonNumericAttrValuesOutput = z.infer<typeof CountNonNumericAttrValuesOutput>;

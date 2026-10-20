@@ -16,6 +16,7 @@ import type {
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '../data-scope';
 
+import { contactFilterFromServerClauses } from './contact-filter-resolution';
 import { getContactColumnScheme, getContactResultCodes, listContactsForSurvey } from './contacts';
 
 /**
@@ -76,8 +77,10 @@ export async function listFieldworkContacts(
     scope,
     page: args.page,
     pageSize: CONTACTS_PAGE_SIZE,
-    clauses: buildClauses(args),
+    filter: contactFilterFromServerClauses(buildClauses(args)),
     ...(args.groupValue ? { groupValue: args.groupValue } : {}),
+    // 컨택원은 내부 실사 운영 정보 — 실사 계정 화면에는 싣지 않는다.
+    includeAssignment: false,
     sort: 'resid',
     dir: 'asc',
   });

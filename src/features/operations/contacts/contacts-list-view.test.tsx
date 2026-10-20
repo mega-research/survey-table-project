@@ -33,6 +33,7 @@ function data(overrides: Partial<ContactsListPageData> = {}): ContactsListPageDa
     scheme: SCHEME,
     resultCodes: [],
     columnCandidates: [{ source: 'attrs.회사명', label: '회사명' }],
+    assignmentOptions: [],
     initialClauses: [],
     rows: [],
     total: 0,

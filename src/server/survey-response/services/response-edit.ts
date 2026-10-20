@@ -9,27 +9,16 @@ import {
   surveys,
 } from '@/db/schema';
 import { SurveyAccessError, type ActorAttribution } from '@/server/survey-access';
-import {
-  decryptQuestionResponses,
-  encryptResponsesForStorage,
-  hasPiiTargets,
-} from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { resolveWriteScopeIsTest } from '@/server/data-scope';
+import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
-import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
-import { responsesToLookupShape } from '@/utils/branch-eval';
 
-import { detectScreenOut } from '../domain/screen-out';
 import type { SaveAdminEditInput } from '../domain/response-edit';
 import { replaceResponseAnswers } from './response-answers';
-import { assertAnswerValueSize, detectQuotaOverflow, loadPiiTargets } from './submitted-answers';
+import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
+import { assertAnswerValueSize, detectQuotaOverflow } from './submitted-answers';
 
 /** 응답 편집 거부 사유. */
 export type ResponseEditErrorReason =
@@ -141,7 +130,11 @@ export async function saveAdminEdit(
     throw new ResponseEditError('version_conflict');
   }
 
-  const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isExternal);
+  const isTest = resolveWriteScopeIsTest(
+    ownerRow.testModeEnabled,
+    isExternal,
+    await readBrowserTestView(surveyId),
+  );
 
   const existing = await db.query.surveyResponses.findFirst({
     where: and(
@@ -169,17 +162,6 @@ export async function saveAdminEdit(
     (existing.questionResponses ?? {}) as Record<string, unknown>,
     { responseId },
   );
-  // 클라 제출값 기준 diff — 아래 calc 재계산 대상 조회 여부를 결정하는 게이트로만 쓰고,
-  // audit 로 남길 최종 changedIds/changedQuestions 는 재계산 이후(아래) 다시 확정한다.
-  // (재계산이 cross-question 수식이나 payload 에 없던 calc 질문까지 값을 바꿀 수 있어
-  // 클라 diff 만으로는 "실제로 DB 값이 바뀐 질문"을 다 못 잡는다.)
-  const clientChangedIds = diffQuestionResponses(prevResponses, questionResponses);
-  // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
-  let versionSnapshot: SurveyVersionSnapshot | null = null;
-  if (clientChangedIds.length > 0) {
-    versionSnapshot = await loadVersionSnapshot(effectiveVersionId);
-  }
-
   // 이탈(drop) 완료 전환 여부 — 아래 UPDATE set 과 progress 분기, 컨택 후처리가 공유한다.
   const completesDrop = existing.status === 'drop';
 
@@ -205,114 +187,36 @@ export async function saveAdminEdit(
     );
   }
 
-  // calc 셀 서버 재계산 (스펙 §5) — 클라 저장 경로(draft flush/beacon/제출)와 동일한 순수
-  // 함수 withCalcValues 를 서버에서도 다시 태운다(신뢰 경계: 클라 주입값을 그대로 믿지 않음).
-  // 반드시 평문 단계(위 diff 비교 이후, 아래 encryptResponsesForStorage 이전)에서 수행 —
-  // 암호문을 수식에 넣으면 쓰레기 값이 나온다.
-  // 재계산은 이번 저장이 기준 삼는 버전(렌더 버전, 미배포만 응답 버전 폴백) 스냅샷 기준이다 —
-  // 빌더가 이후 수식을 바꿔도 이미 수집된 이 응답에는 적용되지 않는다(스펙 요구사항).
-  // clientChangedIds 가 없으면(=diff 없음)
-  // versionSnapshot 을 아예 조회하지 않았으므로 이 블록은 자연히 skip 된다.
-  // fail-safe: 스냅샷을 못 얻으면(레거시 versionId=null, 버전 행 삭제 등) 재계산을 건너뛰고
-  // 기존 값을 그대로 유지한다 — 운영자의 정당한 수정이 서버 오류로 통째로 실패해선 안 된다.
-  // 결과는 questionResponses 를 직접 mutate 하지 않고 finalResponses 로 따로 들고 있는다 —
-  // input.questionResponses 를 in-place 로 건드리면 이후 호출부가 원본 input 을 재사용/로깅할
-  // 때 조용히 값이 달라져 있는 사고를 유발할 수 있다.
-  let finalResponses = questionResponses;
-  // 자격미달 재판정도 같은 재료(스냅샷 질문·그룹·LUT·컨택 attrs)를 써야 판정이 갈리지
-  // 않으므로 블록 밖에서 보관한다.
-  let snapshotForCalc: {
-    questions: Question[];
-    lookups: SurveyLookup[];
-    groups: QuestionGroup[];
-  } | null = null;
-  let contactAttrs: Record<string, string | undefined> = {};
-  if (versionSnapshot) {
-    // contracts/survey 의 SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
-    // 보장이 타입 레벨엔 없다(questions 는 필수로 선언돼 있지만 손상된 스냅샷 행이 들어오면
-    // undefined/비배열일 수 있음, lookups 는 아예 타입에 없음) — buildChangedQuestions
-    // (lib/operations/response-edit-diff.ts 의 `snapshot?.questions ?? []`)와 동일하게 방어적으로 읽는다.
-    // lookups 는 buildSurveySnapshot(server/survey-builder/services/versioning/snapshot-builder.ts) 이 publish 시 항상
-    // 함께 freeze 해 넣지만(survey-builder/services/survey-read.ts 의 snapshot.lookups 사용과 동일 근거)
-    // 타입에 없으므로 안전 단언 캐스팅.
-    const rawSnapshotForCalc = versionSnapshot as unknown as {
-      questions?: unknown;
-      lookups?: unknown;
-      groups?: unknown;
-    };
-    // JSONB 스키마 드리프트 방어 — questions/lookups/groups 가 비배열(객체·문자열)이면
-    // withCalcValues 순회나 lookup find 에서 크래시해 운영자 수정 전체가 실패한다.
-    // Array.isArray 로 걸러 손상 스냅샷에서도 재계산만 조용히 스킵되게 한다.
-    snapshotForCalc = {
-      questions: Array.isArray(rawSnapshotForCalc.questions)
-        ? (rawSnapshotForCalc.questions as Question[])
-        : [],
-      lookups: Array.isArray(rawSnapshotForCalc.lookups)
-        ? (rawSnapshotForCalc.lookups as SurveyLookup[])
-        : [],
-      groups: Array.isArray(rawSnapshotForCalc.groups)
-        ? (rawSnapshotForCalc.groups as QuestionGroup[])
-        : [],
-    };
+  // 응답 확정 (CONTEXT.md 「응답 확정」) — 운영자 수정도 응답자 플로우와 같은 신뢰 경계다.
+  // 숨은 문항 strip → 게이팅 strip → calc 재계산 → 등록 사이드카만 → 자격미달 판정 → 암호화.
+  // 기준은 이번 저장이 기준 삼는 버전(렌더 버전, 미배포만 응답 버전 폴백) 스냅샷이다 — 빌더가
+  // 이후 수식을 바꿔도 이미 수집된 이 응답에는 적용되지 않는다.
+  //
+  // **바뀐 문항이 없어도 늘 확정한다.** 변경이 없으면 스냅샷을 읽지 않던 시절, 아무것도 안 고친
+  // 이탈 응답이 strip·자격미달 판정 없이 completed 로 확정됐다(2026-10-19 수리).
+  //
+  // **구버전 응답 이관(migrating)에는 숨은 문항 strip 을 걸지 않는다.** 이 응답이 수집된 버전과
+  // 지금 저장 기준이 되는 버전이 다르면, 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된
+  // 답을 소급해 지운다 — 스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다" 정면 위반이고,
+  // 편집 화면도 그 문항을 그리지 않아 운영자는 손실을 볼 수조차 없다(edit log 는 값을 남기지
+  // 않아 복구 불가). 클라이언트 쪽 같은 게이트는 survey-response-flow.tsx 에 있다.
+  //
+  // 스냅샷을 못 얻으면(레거시 versionId=null, 버전 행 삭제, 손상 행) 확정 단계를 건너뛰고 제출값을
+  // 그대로 저장한다 — 운영자의 정당한 수정이 서버 오류로 통째로 실패해선 안 된다.
+  const material = await loadFinalizationMaterial({
+    surveyId,
+    versionId: effectiveVersionId,
+    contactTargetId: existing.contactTargetId,
+    responseId,
+  });
+  const finalized = finalizeAnswers(material, questionResponses, { skipHiddenStrip: migrating });
+  const finalResponses = finalized.plain;
 
-    if (existing.contactTargetId) {
-      const [target] = await db
-        .select({ attrs: contactTargets.attrs })
-        .from(contactTargets)
-        .where(eq(contactTargets.id, existing.contactTargetId))
-        .limit(1);
-      contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
-    }
-
-    // 숨은 문항 strip → 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와
-    // 같은 신뢰 경계다. 문항이 통째로 사라지면 그 표의 셀 값도 함께 사라져 게이팅 판정의
-    // 입력이 달라지므로 먼저 수행한다. 비활성 셀에 실려온 값은 저장하지 않고, 수식은
-    // 지워진 값 기준으로 계산한다.
-    //
-    // **구버전 응답 이관(migrating)에는 걸지 않는다.** 이 응답이 수집된 버전과 지금 저장
-    // 기준이 되는 버전이 다르면, 재배포로 새로 생기거나 좁혀진 표시 조건이 이미 수집된
-    // 답을 소급해 지운다 — 스펙 결정 "이미 수집된 응답은 소급 정리하지 않는다" 정면 위반이고,
-    // 편집 화면도 그 문항을 그리지 않아 운영자는 손실을 볼 수조차 없다(edit log 는 값을
-    // 남기지 않아 복구 불가). 클라이언트 쪽 같은 게이트는 survey-response-flow.tsx 에 있다.
-    //
-    // 표시 조건 평가 컨텍스트는 응답 페이지가 쓰는 것과 같은 재료(스냅샷 그룹·LUT·컨택
-    // attrs)를 넘긴다 — 안 넘기면 LUT·attrs·수식 조건이 서버에서만 다르게 풀린다.
-    const hiddenStripped = migrating
-      ? questionResponses
-      : stripHiddenQuestionValues(
-          snapshotForCalc.questions,
-          questionResponses,
-          snapshotForCalc.groups,
-          {
-            responses: responsesToLookupShape(questionResponses),
-            contactAttrs,
-            lookups: snapshotForCalc.lookups,
-          },
-        );
-    const strippedResponses = stripDisabledCellValues(
-      snapshotForCalc.questions ?? [],
-      hiddenStripped,
-    );
-    finalResponses = withCalcValues(strippedResponses, {
-      questions: snapshotForCalc.questions ?? [],
-      responses: strippedResponses,
-      lookups: snapshotForCalc.lookups ?? [],
-      contactAttrs,
-    });
-  }
-
-  // 변경 질문 확정 (audit 용). 재계산이 실제로 일어난 경우(versionSnapshot 이 있는 경우)엔
-  // prevResponses ↔ finalResponses(재계산 이후) 를 다시 diff 한다 — withCalcValues 는
-  // ctx.questions 전체를 순회해 calc 셀이 있는 모든 질문을 다시 계산하므로, 클라가 직접
-  // 건드리지 않은 질문(다른 질문 값 변경으로 트리거된 cross-question 수식, 혹은 payload 에
-  // 아예 없다가 새로 채워진 calc 질문)도 DB 값이 바뀔 수 있다 — clientChangedIds 만 쓰면
-  // 그 변경이 edit log 에서 누락된다. finalResponses 는 클라의 명시적 변경분을 그대로 포함한
-  // 상위집합이므로 이 diff 하나로 "운영자가 고친 것" + "재계산으로 바뀐 것"을 함께 잡는다.
-  // (재계산이 없었던 경우, 즉 versionSnapshot 이 null 이면 clientChangedIds 를 그대로 쓴다.)
-  const changedIds = versionSnapshot
-    ? diffQuestionResponses(prevResponses, finalResponses)
-    : clientChangedIds;
-  const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
+  // 변경 질문 확정 (audit 용) — 이전 값 ↔ 확정 평문. 확정은 스냅샷의 calc 셀을 전부 다시 계산하므로
+  // 클라가 직접 건드리지 않은 질문(cross-question 수식, payload 에 없다가 새로 채워진 calc 질문)이나
+  // strip 으로 지워진 질문도 DB 값이 바뀔 수 있다 — 그 변경까지 edit log 에 잡는다.
+  const changedIds = diffQuestionResponses(prevResponses, finalResponses);
+  const changedQuestions = buildChangedQuestions(changedIds, material.snapshot);
 
   // ── 자격미달 양방향 재판정 ───────────────────────────────────────────────
   // 운영자가 자격미달 조건 문항을 고치면 상태도 따라가야 한다. 종전에는 status 를
@@ -322,23 +226,12 @@ export async function saveAdminEdit(
   // in_progress 는 응답자 세션 중이라 건드리지 않고(기존 규약), quotaful_out·bad 는
   // 자격미달과 다른 축의 종결이라 재판정이 덮어써선 안 된다.
   //
-  // 판정 재료는 평문 finalResponses(= 숨은 문항 strip → 게이팅 strip → calc 재계산 이후)
-  // 다. 암호화 이전이어야 분기 매칭이 성립한다. 스냅샷을 못 얻으면(레거시 versionId,
-  // 손상 행, 변경 0건) 재판정을 건너뛰고 기존 상태를 보존한다 — 운영자의 정당한 수정이
-  // 판정 불능으로 실패하거나 조용히 강등되지 않게 하는 fail-safe (calc 재계산과 같은 정책).
+  // 판정은 응답 확정이 확정 평문으로 한다(암호화 이전이어야 분기 매칭이 성립한다). 스냅샷을
+  // 못 얻으면(레거시 versionId, 손상 행) 판정이 null 이라 기존 상태를 보존한다 — 운영자의 정당한
+  // 수정이 판정 불능으로 실패하거나 조용히 강등되지 않게 하는 fail-safe.
   const reJudgeable =
     existing.status === 'completed' || existing.status === 'screened_out' || completesDrop;
-  const screenedOut =
-    reJudgeable && snapshotForCalc && snapshotForCalc.questions.length > 0
-      ? detectScreenOut(snapshotForCalc.questions, finalResponses, {
-          groups: snapshotForCalc.groups,
-          evalCtx: {
-            responses: responsesToLookupShape(finalResponses),
-            contactAttrs,
-            lookups: snapshotForCalc.lookups,
-          },
-        })
-      : null;
+  const screenedOut = reJudgeable ? finalized.screenedOut : null;
 
   // 종결 상태 set — 재판정이 돌았으면 그 결과가, 안 돌았으면 기존 drop→completed 예외만
   // 반영된다. completedAt 은 이미 있으면 보존한다(자격미달도 완료 시점에 기록된다).
@@ -382,11 +275,8 @@ export async function saveAdminEdit(
     ? sql`${migrationMetadataSql ?? sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb)`} || '{"quotaOverflow":true}'::jsonb`
     : migrationMetadataSql;
 
-  // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
-  const piiTargets = await loadPiiTargets(effectiveVersionId, surveyId);
-  const storedResponses = hasPiiTargets(piiTargets)
-    ? encryptResponsesForStorage(finalResponses, piiTargets)
-    : finalResponses;
+  // 저장값 — 판단 기준은 이번 저장 버전 스냅샷(레거시 null 은 questions 폴백)의 암호화 대상.
+  const storedResponses = finalized.stored;
 
   // 크기 가드 — 응답자 경로와 같은 임계·같은 에러(assertAnswerValueSize)를 쓴다. 종전에는
   // 이 경로에만 가드가 전무해 questionResponses 가 verbatim UPDATE 됐다(입력 zod 도 검증자

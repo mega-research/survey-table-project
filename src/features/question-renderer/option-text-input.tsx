@@ -3,7 +3,8 @@
 import { useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
-import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
+import { useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import {
@@ -43,6 +44,12 @@ interface OptionTextInputProps {
     /** 표 input 셀의 응답 품질 검사 — 보기 상세기재에는 아직 없다 */
     textValidation?: TextValidation | null | undefined;
     defaultValueTemplate?: string | undefined;
+    /**
+     * 표 input 셀의 「응답자가 고칠 수 있게」 — 이 입력칸은 값을 깔지도 잠그지도 않고, 품질 검사의
+     * 잠금 면제 판정에만 쓴다. 차단 검증(numeric-validation)이 셀을 통째로 넘겨 같은 판정을 하므로
+     * 빠뜨리면 문구 없이 「다음」만 막힌다.
+     */
+    prefillEditable?: boolean | undefined;
     /**
      * 여러 줄 입력 — 표 input 셀의 inputRows·inputAutoGrow 를 그대로 받는다. 평문 모드의
      * 기본 렌더에서만 textarea 로 그리고, 숫자·형식·칩 셸 모드는 한 줄 그대로다.
@@ -126,15 +133,18 @@ export function OptionTextInput({
   // 응답 품질 위반(표 input 셀 전용) — 평문 모드·이월 면제 판정은 검증 쪽 함수가 쥔다
   // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
   const focus = useFieldFocus();
+  const attrs = useContactAttrs();
   const qualityViolation = focus.focused
     ? null
     : resolveCellTextQualityViolation(
         {
           inputType: option.textInputType,
           defaultValueTemplate: option.defaultValueTemplate,
+          prefillEditable: option.prefillEditable,
           textValidation: option.textValidation,
         },
         rawValue,
+        attrs,
         priorOptionText(priorAnswersForFormat, questionId, option.id),
       );
 

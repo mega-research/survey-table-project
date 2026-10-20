@@ -19,6 +19,14 @@ export const STATUS_ALLOWED_PREV: Partial<Record<MailRecipientStatus, MailRecipi
   failed: ['queued', 'sending', 'sent'],
 };
 
+/** 대체 발송을 일으키는 수신자 상태. 스팸 신고(complained)는 수신거부라 넣지 않는다. */
+export const FALLBACK_TRIGGER_STATUSES: readonly MailRecipientStatus[] = ['bounced', 'failed'];
+
+/** 수신자 상태가 대체 발송을 일으키는가. */
+export function triggersFallback(status: MailRecipientStatus): boolean {
+  return FALLBACK_TRIGGER_STATUSES.includes(status);
+}
+
 /** prev -> next 전이가 허용되는지(역행/중복이면 false). */
 export function canTransition(prev: MailRecipientStatus, next: MailRecipientStatus): boolean {
   return STATUS_ALLOWED_PREV[next]?.includes(prev) ?? false;
@@ -139,6 +147,11 @@ export async function applyRecipientTransition(
     .set({
       status: newStatus,
       ...buildTimestampUpdate(newStatus, eventAt),
+      // 대체 발송 처리 대기 — 전이와 같은 트랜잭션에 남겨, 커밋 뒤 대체 발송 등록이 빠져도
+      // 정기 점검이 다시 처리한다(campaign-fallback). 보관된 수신자는 대체 발송하지 않는다.
+      ...(triggersFallback(newStatus) && recipientArchivedAt === null
+        ? { fallbackPendingAt: new Date() }
+        : {}),
       ...(prevStatus === 'sending'
         ? {
             sendAttemptedAt: null,

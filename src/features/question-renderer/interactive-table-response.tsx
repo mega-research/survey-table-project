@@ -84,6 +84,7 @@ import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
 import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
+import { OptionTextBelowTableHost } from './cells/option-text-placement-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
@@ -97,6 +98,7 @@ import { MobileColumnAxisCards } from './mobile-column-axis-cards';
 import { MobileItemCards } from './mobile-item-cards';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
+import { OptionTextBelowTable } from './option-text-below-table';
 import { StagedRowsButtons } from './staged-rows-buttons';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
 
@@ -1508,7 +1510,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   <MobileTableStepper {...mobileTableProps} />
                 )
               ) : (
-                renderTableView()
+                // 격자 표만 「상세 기재 입력칸을 표 아래에」를 켠 칸의 입력칸을 표 아래 줄로 내보낸다 —
+                // 위의 모바일 카드 계열은 이 호스트를 두르지 않아 종전대로 칸 안에 그린다.
+                // 줄은 가로 스크롤 컨테이너 밖이라 표를 옆으로 밀어도 제자리다.
+                <OptionTextBelowTableHost>
+                  {renderTableView()}
+                  <OptionTextBelowTable
+                    questionId={questionId}
+                    columns={visibleColumns}
+                    headerGrid={visibleHeaderGrid}
+                    displayRows={displayRows}
+                    value={value}
+                  />
+                </OptionTextBelowTableHost>
               )}
             </div>
 

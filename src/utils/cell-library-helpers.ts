@@ -8,41 +8,16 @@ import type {
 } from '@/types/survey';
 
 import { hasExistingOtherRankingCell } from './ranking-source';
+import { CELL_LIBRARY_DROPPED_KEYS, omitCellKeys } from './table-cell-field-policy';
 
 /**
- * 셀을 보관함에 저장할 때 위치/메타/이미지 필드를 제거한다.
+ * 셀을 보관함에 저장할 때 다른 자리에서 뜻이 없는 필드를 제거한다.
+ * 제거할 키는 셀 필드 정책(library: 'drop')이 정한다 — 위치·병합·이미지·표 안 관계·설문 전역 이름.
  */
 export function sanitizeCellForLibrary(cell: TableCell): Partial<TableCell> {
-  const {
-    // 제거 대상: 위치/메타
-    id: _id,
-    cellCode: _cellCode,
-    isCustomCellCode: _isCustomCellCode,
-    exportLabel: _exportLabel,
-    isCustomExportLabel: _isCustomExportLabel,
-    // 제거 대상: 병합
-    rowspan: _rowspan,
-    colspan: _colspan,
-    isHidden: _isHidden,
-    // 제거 대상: 이미지 (원본 삭제 시 깨짐 방지)
-    imageUrl: _imageUrl,
-    // 제거 대상: 라디오 그룹명 (테이블 위치에 종속)
-    radioGroupName: _radioGroupName,
-    // 제거 대상: 중복 불가 묶음 이름 (그 표의 다른 선택 칸들과 맺은 관계 — 다른 표로 가면 뜻이 없다)
-    distinctGroup: _distinctGroup,
-    // 제거 대상: 순위별 수동 SPSS 변수명 (원본 셀 전용, 다른 위치에 로드되면 충돌)
-    rankVarNames: _rankVarNames,
-    // 제거 대상: 응답 인용 토글·이름 (설문 전역 식별자 — 다른 위치/설문에 로드되면
-    // 의도치 않은 이름 충돌·병합이 생긴다)
-    answerQuoteEnabled: _answerQuoteEnabled,
-    answerQuoteName: _answerQuoteName,
-    // 보존 대상
-    ...rest
-  } = cell;
+  const sanitized: Partial<TableCell> = omitCellKeys(cell, CELL_LIBRARY_DROPPED_KEYS);
 
   // 옵션 내 branchRule 제거
-  const sanitized: Partial<TableCell> = { ...rest };
-
   if (sanitized.checkboxOptions) {
     sanitized.checkboxOptions = sanitized.checkboxOptions.map(
       ({ branchRule: _br, ...opt }) => opt as CheckboxOption,

@@ -8,16 +8,17 @@ import {
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
 import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
+import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   isPriorChoice,
   matchesPriorChoice,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
-import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { CheckboxOption } from '@/types/survey';
 
 import { CellOptionsContainer } from './cell-options-container';
+import { useOptionTextMovedBelowTable } from './option-text-placement-context';
 import type { InteractiveCellProps } from './types';
 
 /** 체크박스 셀 (인터랙티브) */
@@ -34,6 +35,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const textInputBelowTable = useOptionTextMovedBelowTable(cell);
   const isPriorOption = (optionKey: string) =>
     priorChoiceValue !== undefined
       ? matchesPriorChoice(priorChoiceValue, optionKey)
@@ -100,7 +102,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   // 기타 입력란(1d): 선택한 allowTextInput 옵션의 입력란을 옵션 그리드 아래
   // [옵션 라벨 칩 | 풀폭 입력란] 행으로 선택 순서(cellResponse 배열 순서)대로 쌓는다.
   // 셀 안(footer 슬롯)에 렌더하므로 테이블 그리드/폭에는 영향 없음.
-  const textInputEntries = cellResponseArray
+  // 「표 아래에」를 켠 칸은 격자 표가 표 아래 줄로 그린다 — 여기서는 접는다.
+  const textInputEntries = (textInputBelowTable ? [] : cellResponseArray)
     .map((key) =>
       cell.checkboxOptions?.find(
         (option) => option.allowTextInput && (option.value ?? option.id) === key,

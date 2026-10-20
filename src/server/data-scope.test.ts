@@ -23,6 +23,17 @@ vi.mock('@/db', () => ({
 
 vi.mock('@/lib/auth/external-viewer', () => ({ isExternalViewer: vi.fn() }));
 
+// 이 브라우저의 「테스트 모드로 보기」 쿠키 — 테스트마다 켜고 끈다.
+const { browserCookie } = vi.hoisted(() => ({ browserCookie: { value: undefined as string | undefined } }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === 'ops-test-view-11111111-1111-4111-8111-111111111111' && browserCookie.value !== undefined
+        ? { name, value: browserCookie.value }
+        : undefined,
+  }),
+}));
+
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('testFlagForScope', () => {
@@ -36,15 +47,30 @@ describe('loadOperationsDataScope', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     rows.value = [];
+    browserCookie.value = '1';
   });
 
-  it('어드민 세션은 테스트 모드 ON 이면 test 스코프를 받는다', async () => {
+  it('내부 계정은 테스트 모드 ON 이고 이 브라우저가 테스트 보기면 test 스코프를 받는다', async () => {
     vi.mocked(isExternalViewer).mockResolvedValue(false);
     rows.value = [{ enabled: true }];
     await expect(loadOperationsDataScope(SURVEY_ID)).resolves.toBe('test');
   });
 
-  it('어드민 세션은 테스트 모드 OFF 면 real 스코프를 받는다', async () => {
+  it('테스트 모드가 ON 이어도 이 브라우저가 테스트 보기를 켜지 않았으면 real 이다 — 다른 사람이 켠 테스트 모드', async () => {
+    vi.mocked(isExternalViewer).mockResolvedValue(false);
+    rows.value = [{ enabled: true }];
+    browserCookie.value = undefined;
+    await expect(loadOperationsDataScope(SURVEY_ID)).resolves.toBe('real');
+  });
+
+  it('쿠키 값이 1 이 아니면 테스트 보기로 치지 않는다', async () => {
+    vi.mocked(isExternalViewer).mockResolvedValue(false);
+    rows.value = [{ enabled: true }];
+    browserCookie.value = '0';
+    await expect(loadOperationsDataScope(SURVEY_ID)).resolves.toBe('real');
+  });
+
+  it('내부 계정은 테스트 모드 OFF 면 real 스코프를 받는다', async () => {
     vi.mocked(isExternalViewer).mockResolvedValue(false);
     rows.value = [{ enabled: false }];
     await expect(loadOperationsDataScope(SURVEY_ID)).resolves.toBe('real');
@@ -70,16 +96,18 @@ describe('loadOperationsDataScope', () => {
 });
 
 describe('resolveWriteScopeIsTest', () => {
-  // 순수 동기 함수 — isGuest 는 호출부가 트랜잭션 밖에서 미리 구해 넘긴다.
-  // isExternalViewer mock 에 의존하지 않고 네 조합을 직접 인자로 검증한다.
+  // 순수 동기 함수 — isExternal·쿠키는 호출부가 미리 구해 넘긴다.
+  // mock 에 의존하지 않고 조합을 직접 인자로 검증한다.
 
-  it('내부 계정만 전역 플래그를 그대로 통과시킨다', () => {
-    expect(resolveWriteScopeIsTest(true, false)).toBe(true);
-    expect(resolveWriteScopeIsTest(false, false)).toBe(false);
+  it('내부 계정은 전역 플래그와 이 브라우저의 테스트 보기가 둘 다 켜졌을 때만 test 다', () => {
+    expect(resolveWriteScopeIsTest(true, false, true)).toBe(true);
+    expect(resolveWriteScopeIsTest(true, false, false)).toBe(false);
+    expect(resolveWriteScopeIsTest(false, false, true)).toBe(false);
+    expect(resolveWriteScopeIsTest(false, false, false)).toBe(false);
   });
 
-  it('외부 계정은 전역 플래그가 ON 이어도 real 파티션에 쓴다', () => {
-    expect(resolveWriteScopeIsTest(true, true)).toBe(false);
-    expect(resolveWriteScopeIsTest(false, true)).toBe(false);
+  it('외부 계정은 전역 플래그·쿠키와 무관하게 real 파티션에 쓴다', () => {
+    expect(resolveWriteScopeIsTest(true, true, true)).toBe(false);
+    expect(resolveWriteScopeIsTest(false, true, false)).toBe(false);
   });
 });

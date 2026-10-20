@@ -1,6 +1,6 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import { type DbOrTx, type DbTransaction as Tx, db } from '@/db';
+import { type DbTransaction as Tx, db } from '@/db';
 import { type NewContactPii, contactPii } from '@/db/schema';
 
 import { decryptPii, encryptPii } from './aes';
@@ -112,57 +112,6 @@ export async function insertPiiRows(tx: Tx, rows: readonly NewContactPii[]): Pro
     .insert(contactPii)
     .values([...rows])
     .onConflictDoNothing();
-}
-
-export interface EmailPiiRow {
-  id: string;
-  contactTargetId: string;
-  columnKey: string;
-  cipher: string;
-  maskHint: string | null;
-}
-
-/**
- * 컨택들의 email PII 행을 (contact_target_id, column_key) 오름차순으로 조회한다.
- * "컨택의 이메일 = field_type='email' 이고 column_key 오름차순 첫 컬럼" 불변식의 단일 소스.
- *
- * DISTINCT ON 으로 첫 행만 자르지 않고 전 행을 돌려준다 — 발송 경로(createCampaign·preflight)는
- * 첫 컬럼이 복호화 실패/공백이면 다음 컬럼으로 폴백하므로 "첫 usable 컬럼" 선택은 호출부가 맡는다.
- * 순수하게 첫 컬럼만 필요한 호출부는 firstEmailRowByTarget 으로 줄인다.
- * 트랜잭션 안팎 모두에서 쓰도록 executor 를 주입받는다.
- */
-export async function selectEmailPiiRows(
-  executor: DbOrTx,
-  contactTargetIds: readonly string[],
-): Promise<EmailPiiRow[]> {
-  if (contactTargetIds.length === 0) return [];
-  return executor
-    .select({
-      id: contactPii.id,
-      contactTargetId: contactPii.contactTargetId,
-      columnKey: contactPii.columnKey,
-      cipher: contactPii.cipher,
-      maskHint: contactPii.maskHint,
-    })
-    .from(contactPii)
-    .where(
-      and(
-        eq(contactPii.fieldType, 'email'),
-        inArray(contactPii.contactTargetId, [...contactTargetIds]),
-      ),
-    )
-    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
-}
-
-/** selectEmailPiiRows 결과(정렬 보장)에서 컨택당 첫 행만 남긴다 — column_key 오름차순 첫 컬럼. */
-export function firstEmailRowByTarget<T extends { contactTargetId: string }>(
-  rows: readonly T[],
-): Map<string, T> {
-  const first = new Map<string, T>();
-  for (const row of rows) {
-    if (!first.has(row.contactTargetId)) first.set(row.contactTargetId, row);
-  }
-  return first;
 }
 
 /**

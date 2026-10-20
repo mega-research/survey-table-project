@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
-import { buildColumnAxisCards } from './column-axis-cards';
+import { buildColumnAxisCards, withRowTitleAsCheckLabel } from './column-axis-cards';
 
 // AI 실태조사 Q22 모양 — 구분 열(들여쓰기 칸 포함) + 연도 열 둘, 칸마다 「명」 단위가 붙은 입력칸.
 const columns: TableColumn[] = [
@@ -159,5 +159,57 @@ describe('buildColumnAxisCards — 상위 구분', () => {
       ['① 독자', []],
       ['② 공동', []],
     ]);
+  });
+});
+
+describe('withRowTitleAsCheckLabel — 글자 없는 체크박스 하나짜리 칸은 행 제목이 라벨', () => {
+  const lone = (extra: Partial<TableCell> = {}): TableCell => ({
+    id: 'c',
+    type: 'checkbox',
+    content: '',
+    checkboxOptions: [{ id: 'o1', label: '', value: '1' }],
+    ...extra,
+  });
+
+  it('행 제목을 보기 라벨로 옮기고 보기 id·값은 그대로 둔다', () => {
+    const out = withRowTitleAsCheckLabel(lone(), '① 벤처캐피탈(VC)');
+    expect(out?.checkboxOptions).toEqual([{ id: 'o1', label: '① 벤처캐피탈(VC)', value: '1' }]);
+    expect(out?.id).toBe('c');
+  });
+
+  it('PC 열 폭에 맞춘 줄바꿈은 띄어쓰기로 편다', () => {
+    const out = withRowTitleAsCheckLabel(
+      lone(),
+      '② 스타트업 투자자\n(엑셀러레이터,\n컴퍼니빌더 등)',
+    );
+    expect(out?.checkboxOptions?.[0]?.label).toBe(
+      '② 스타트업 투자자 (엑셀러레이터, 컴퍼니빌더 등)',
+    );
+  });
+
+  it('보기에 글자가 있거나 보기가 여럿이면 종전대로 둔다 — 행 제목은 묶음 이름이다', () => {
+    expect(
+      withRowTitleAsCheckLabel(
+        lone({ checkboxOptions: [{ id: 'o1', label: '받은 적 없음', value: '1' }] }),
+        '해당 없음',
+      ),
+    ).toBeNull();
+    expect(
+      withRowTitleAsCheckLabel(
+        lone({
+          checkboxOptions: [
+            { id: 'o1', label: '', value: '1' },
+            { id: 'o2', label: '', value: '2' },
+          ],
+        }),
+        '기관',
+      ),
+    ).toBeNull();
+  });
+
+  it('행 제목이 없거나 체크 칸이 아니거나 칸에 글자가 있으면 해당 없다', () => {
+    expect(withRowTitleAsCheckLabel(lone(), '  ')).toBeNull();
+    expect(withRowTitleAsCheckLabel(lone({ type: 'radio' }), '제목')).toBeNull();
+    expect(withRowTitleAsCheckLabel(lone({ content: '설명' }), '제목')).toBeNull();
   });
 });

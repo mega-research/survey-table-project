@@ -7,15 +7,18 @@ import {
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import type { SortDir } from '@/lib/operations/report-progress-format';
-import {
-  EMPTY_PROGRESS_TOTALS,
-  parseProgressSort,
-  resolveActiveGroupKeys,
-} from '@/lib/operations/report-progress-format';
 import type { OperationsDataScope } from '@/server/data-scope';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
+import {
+  EMPTY_PROGRESS_TOTALS,
+  formatProgressGroupKey,
+  parseProgressSort,
+  resolveActiveGroupKeys,
+  type ProgressGroupKey,
+  type SortDir,
+} from '@/lib/operations/report-progress-format';
 import {
   countContactTargets,
   getProgressColumnScheme,
@@ -26,14 +29,24 @@ import {
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
+/** 분류 기준 칩 하나 — key 는 주소·정렬에 실리는 직렬화된 태그 키. */
+interface GroupCriterion extends GroupByOption {
+  groupKey: ProgressGroupKey;
+  /** 값 없는 그룹 표기 (기본 「(미분류)」) */
+  nullLabel?: string;
+}
+
+const CONTACT_OWNER_GROUP_KEY: ProgressGroupKey = { kind: 'system', key: 'contact_owner' };
+
 /**
  * 그룹별 진척률 화면의 본문 — 내부 콘솔(`app/(internal)`)과 외주 실사 링크 트리가 함께 쓰는 **한 벌**
  * (ADR-0026, 티켓 06·07).
  *
- * 형제 `overview-screen` 의 주석에 이 폴더의 규칙이 있다. 트리마다 갈리는 것은 둘이다.
+ * 형제 `overview-screen` 의 주석에 이 폴더의 규칙이 있다. 트리마다 갈리는 것은 셋이다.
  *  - `basePath` — 빈 상태 카드와 필터바가 자기 트리 안의 주소를 만든다.
  *  - `capabilities` — 명단이 비었을 때의 안내가 갈린다. 「업로드하세요」는 `contacts.manage`
  *    를 가진 사람에게만 할 수 있는 말이고, 그 링크가 여는 화면도 admin 트리에만 있다.
+ *  - `includeContactOwner` — 「컨택원」 분류 칩. 컨택원은 내부 실사 운영 정보라 내부 콘솔만 켠다.
  */
 export interface ReportProgressSearchParams {
   col?: string;
@@ -51,6 +64,8 @@ interface Props {
   basePath: string;
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
+  /** 「컨택원」 분류 칩을 낼 수 있는가 — 내부 콘솔만 참. 외주 실사 링크에는 컨택원을 보이지 않는다. */
+  includeContactOwner: boolean;
   searchParams: ReportProgressSearchParams;
 }
 
@@ -59,6 +74,7 @@ export async function ReportProgressScreen({
   basePath,
   capabilities,
   scope,
+  includeContactOwner,
   searchParams: sp,
 }: Props) {
   // page 파싱 NaN 가드 — `?page=abc` / 음수 / undefined 모두 1 로 fallback.
@@ -75,6 +91,9 @@ export async function ReportProgressScreen({
     getProgressGroupLabel(surveyId, scope),
     getContactColumnScheme(surveyId, scope),
   ]);
+  // 컨택원은 내부 실사 운영 정보 — 외부 주체에게는 분류 기준 칩이 없다.
+  const hasAssignments =
+    includeContactOwner && (await listAssignmentOptions(surveyId, scope)).length > 0;
   const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
   // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
   const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
@@ -99,21 +118,38 @@ export async function ReportProgressScreen({
 
   // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
   // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
-  const groupByCriteria: GroupByOption[] = resolveGroupCriteria(contactScheme).map((c) => ({
-    key: c.key,
-    label: c.label,
-  }));
+  // 「컨택원」 칩은 컨택원이 하나라도 있을 때 맨 끝에 나오고 처음에는 꺼져 있다 — 보던 진척
+  // 보고가 컨택원이 생겼다고 갑자기 바뀌지 않게 (defaultOff).
+  const groupByCriteria: GroupCriterion[] = [
+    ...resolveGroupCriteria(contactScheme).map((c) => {
+      const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
+      return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
+    }),
+    ...(hasAssignments
+      ? [
+          {
+            key: formatProgressGroupKey(CONTACT_OWNER_GROUP_KEY),
+            label: '컨택원',
+            groupKey: CONTACT_OWNER_GROUP_KEY,
+            nullLabel: '(배정 없음)',
+            defaultOff: true,
+          },
+        ]
+      : []),
+  ];
   // URL groupBy 해석:
   // - 미지정 → 컬럼 설정에서 지정한 분류 기준 전체를 설정 순서(대>중>소>세부)대로 자동
   //   선택. 미리 설정해두면 URL 진입만으로 조합 집계가 나오는 모델 (2026-08-14 결정).
   // - 콤마 목록 → 지정된 분류 기준 키만 채택(칩 좁혀보기), 기준 순서로 정규화 + 중복
-  //   제거. 유효 키가 하나도 없으면 전체 기준 폴백.
+  //   제거. 유효 키가 하나도 없으면 전체 기준 폴백. 모르는 시스템 키(`system:…`)는
+  //   태그 키 파싱에서 버려진다.
   // - 분류 기준 미지정 설문은 기존처럼 업로드 그룹(group_value) 기준 (칩 없음).
-  const activeCriteria: GroupByOption[] = resolveActiveGroupKeys(
+  const activeCriteria: GroupCriterion[] = resolveActiveGroupKeys(
     groupByCriteria,
     typeof sp.groupBy === 'string' ? sp.groupBy : undefined,
   );
   const activeKeys = activeCriteria.map((c) => c.key);
+  const activeGroupKeys = activeCriteria.map((c) => c.groupKey);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
   const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
@@ -142,9 +178,9 @@ export async function ReportProgressScreen({
           sort,
           dir,
           metaKeys,
-          groupByKeys: activeKeys,
+          groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, scope, condition, activeKeys),
+        getProgressTotals(surveyId, scope, condition, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (
@@ -161,13 +197,24 @@ export async function ReportProgressScreen({
       ) : (
         <>
           {groupByCriteria.length > 0 && (
-            <ProgressGroupByTabs options={groupByCriteria} activeKeys={activeKeys} />
+            <ProgressGroupByTabs
+              options={groupByCriteria.map(({ key, label, defaultOff }) => ({
+                key,
+                label,
+                ...(defaultOff ? { defaultOff } : {}),
+              }))}
+              activeKeys={activeKeys}
+            />
           )}
           <ProgressFilterBar
             basePath={basePath}
             initialSource={condition?.source ?? null}
-            // idlist 모드는 FilterCondition 에 value 없음(ranges 만) — rawQ 로 원본 입력값 복원
-            initialValue={condition && condition.mode !== 'idlist' ? condition.value : (rawQ ?? '')}
+            // idlist·parity 모드는 FilterCondition 에 value 없음 — rawQ 로 원본 입력값 복원
+            initialValue={
+              condition && condition.mode !== 'idlist' && condition.mode !== 'parity'
+                ? condition.value
+                : (rawQ ?? '')
+            }
             columnCandidates={columnCandidates}
           />
           <ProgressTable
@@ -176,7 +223,11 @@ export async function ReportProgressScreen({
             metaColumns={visibleColumns}
             residLabel={residLabel}
             showResid={showResid}
-            groupColumns={activeCriteria.map((c) => ({ key: c.key, label: c.label }))}
+            groupColumns={activeCriteria.map((c) => ({
+              key: c.key,
+              label: c.label,
+              ...(c.nullLabel ? { nullLabel: c.nullLabel } : {}),
+            }))}
             page={page}
             size={size}
             sort={sort}

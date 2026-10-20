@@ -11,20 +11,19 @@ import {
   type CampaignSortKey,
 } from '@/server/mail/services/campaigns-read';
 import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-} from '@/server/read-models/contacts';
-import {
-  parseClausesFromUrl,
-  parseHeaderFiltersFromUrl,
-} from '@/server/read-models/contacts-filters';
+  contactFilterInputFromUrl,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
 import { getOperationsDataScope } from '@/server/data-scope';
-import type { FilterClause } from '@/lib/operations/filter-shared';
-import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
-import { loadIdListsForValues } from '@/server/read-models/contact-id-lists';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
+import {
+  mailPiiMaskKeys,
+  mailShowsContactOwner,
+  resolveMailDisplayColumns,
+  resolveMailShowsResid,
+} from '@/lib/contacts/mail-display-columns';
 import { buildTemplateRedirectQuery } from '@/features/operations/mail-campaign/campaign-wizard-url';
-import { CAMPAIGN_HEADER_FILTER_COLUMNS } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
   type HeaderFilterEntry,
@@ -116,38 +115,18 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     );
   }
 
-  const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-  ]);
-  const columnCandidates = buildColumnCandidates(scheme);
-  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
-  const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
-    idLists,
+  // 「현재 컨택원」 조건은 내부 실사 운영 정보라 외부 계정 위저드에는 열·후보·선택지를 싣지 않는다.
+  // 미리보기 표는 고정 컬럼이라 깔때기 후보에 고정 목록이 붙는다(surface: 'mail').
+  const isExternal = await isExternalViewer();
+  const filterCtx = await loadContactFilterContext(surveyId, scope, { isExternal, surface: 'mail' });
+  const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
+  const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {
+    mode: 'read',
   });
-  // 미리보기 표는 고정 컬럼이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
-  const headerCandidates = [
-    ...columnCandidates,
-    ...CAMPAIGN_HEADER_FILTER_COLUMNS.filter(
-      (c) => !columnCandidates.some((cc) => cc.source === c.source),
-    ),
-  ];
-  const headerClauses = parseHeaderFiltersFromUrl(
-    sp.hcol,
-    sp.hm,
-    sp.hv,
-    headerCandidates,
-    resultCodes,
-  );
-  // 조사 대상 목록과 같은 결합 규칙 — UI 는 상호배타지만 URL 직접 조작 시 AND 로 무해 처리.
-  const clauses: FilterClause[] = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
+  const { builderClauses, headerClauses } = filter;
+  // 주소의 조건 중 지금 해석되지 않는 것(지워진 컨택원 등) — 해석에서 빠져 명단이 넓어진다.
+  // 「미응답자 재발송」의 자동 전체 선택이 그 넓어진 명단을 고르지 않도록 위저드에 알린다.
+  const unresolvedClauseCount = filter.unresolved.length;
   const unrespondedOnly = sp.unresponded === '1';
 
   const sort: CampaignSortKey = CAMPAIGN_SORT_KEYS.includes(sp.sort as CampaignSortKey)
@@ -155,15 +134,19 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     : 'resid';
   const dir: CampaignSortDir = sp.dir === 'desc' ? 'desc' : 'asc';
 
+  // 컨택원 열은 내부 실사 정보라 외부 계정 표에는 켜 두어도 싣지 않는다.
+  const mailColumns = resolveMailDisplayColumns(scheme, { includeContactOwner: !isExternal });
   const candidates = await previewCampaignCandidates({
     surveyId,
     scope,
-    clauses,
+    filter,
     unrespondedOnly,
     sort,
     dir,
     page: parsePage(sp.page),
     pageSize: PAGE_SIZE,
+    piiMaskKeys: mailPiiMaskKeys(mailColumns),
+    includeAssignment: mailShowsContactOwner(mailColumns),
   });
 
   // 스냅샷은 빌더/깔때기를 따로 담는다 — 깔때기의 in 모드 다중값은 {source,value,op}
@@ -217,10 +200,13 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         initialTemplateId={sp.templateId}
         columnCandidates={columnCandidates}
         resultCodeOptions={resultCodes}
+        assignmentOptions={assignmentOptions}
+        unresolvedClauseCount={unresolvedClauseCount}
         initialClauses={initialClauses}
         sort={sort}
         dir={dir}
-        mailColumns={resolveMailDisplayColumns(scheme)}
+        mailColumns={mailColumns}
+        showResid={resolveMailShowsResid(scheme)}
       />
     </main>
   );

@@ -79,6 +79,14 @@ vi.mock('@/db', () => ({
 
 import { cancelCampaign } from './campaigns';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 const CAMPAIGN_ID = '44444444-4444-4444-8444-444444444444';
 

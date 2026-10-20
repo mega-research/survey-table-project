@@ -1,15 +1,15 @@
 'use server';
 
-import { and, asc, eq, type SQL } from 'drizzle-orm';
+import { eq, type SQL } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import * as Sentry from '@sentry/nextjs';
 
 import { db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { decryptPii } from '@/lib/crypto/aes';
+import { contactTargets } from '@/db/schema/contacts';
 import { UUID_RE } from '@/lib/mail/constants';
+import { loadSendEmailForTarget } from '@/server/read-models/send-address';
 
 export interface UnsubscribeResult {
   ok: boolean;
@@ -61,40 +61,28 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
   }
 
   try {
-    // contact_targets + contact_pii(email) LEFT JOIN — 이메일은 마스킹/표시용으로만 사용.
-    // 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째.
-    const rows = await db
+    const [existing] = await db
       .select({
         id: contactTargets.id,
         surveyId: contactTargets.surveyId,
+        isTest: contactTargets.isTest,
         unsubscribedAt: contactTargets.unsubscribedAt,
-        cipher: contactPii.cipher,
-        columnKey: contactPii.columnKey,
       })
       .from(contactTargets)
-      .leftJoin(
-        contactPii,
-        and(
-          eq(contactPii.contactTargetId, contactTargets.id),
-          eq(contactPii.fieldType, 'email'),
-        ),
-      )
       .where(eq(contactTargets.unsubscribeToken, token))
-      .orderBy(asc(contactPii.columnKey))
       .limit(1);
 
-    const existing = rows[0];
     if (!existing) {
       return { ok: false, email: null, alreadyUnsubscribed: false };
     }
 
+    // 이메일은 표시용으로만 사용. 한 컨택에 email 컬럼이 여러 개면 발송과 같은 규칙으로 고른다.
+    // 조회가 실패해도 해지는 진행한다 — 페이지가 이메일 없는 fallback 메시지를 표시한다.
     let email: string | null = null;
-    if (existing.cipher) {
-      try {
-        email = decryptPii(existing.cipher);
-      } catch {
-        // 복호화 실패 시 email 노출 안 함 — 페이지가 이메일 없는 fallback 메시지 표시.
-      }
+    try {
+      email = await loadSendEmailForTarget(existing);
+    } catch {
+      // 표시용 주소를 못 읽은 것이 수신거부를 막아서는 안 된다.
     }
 
     const alreadyUnsubscribed = existing.unsubscribedAt !== null;

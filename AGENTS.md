@@ -15,6 +15,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 작업 영역                                                               | 읽을 문서                                |
 | ----------------------------------------------------------------------- | ---------------------------------------- |
 | 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소                           | `src/app/AGENTS.md`                      |
+| 메일 발송 주소·대체 발송 · 컨택원 배정 · 조사 대상 필터 해석            | `src/app/AGENTS.md`                      |
 | 서버 트리 · 인증과 권한(capability·팀·소유권·참여자·링크) · 테스트 모드 | `src/server/AGENTS.md`                   |
 | 쿼터                                                                    | `src/server/quota/AGENTS.md`             |
 | 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                          | `src/server/survey-document/AGENTS.md`   |
@@ -124,7 +125,7 @@ src/
 │
 ├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
 │
-├── hooks/                      # 범용 훅 3개 — use-latest-ref · use-media-query · use-formatted-numeric-input
+├── hooks/                      # 범용 훅 4개 — use-latest-ref · use-media-query · use-formatted-numeric-input · use-auto-grow-textarea(renderer 입력칸·컨택원 수정 ID 목록 칸)
 │                               # (기능 전용 훅·query 훅은 features/<x>/hooks·queries 로 흡수, 루트 배럴 없음)
 │
 ├── lib/                        # 인프라 어댑터 + 프론트·서버가 함께 쓰는 계산 (도메인 로직 흡수 완료 — 트래커 E-1)
@@ -137,6 +138,7 @@ src/
 │   ├── option-code-generator / table-cell-code-generator.ts # 코드 발번 (option-value-remap 은 features/survey-builder/utils)
 │   ├── spss-var-name.ts        # SPSS 변수명 생성
 │   ├── cell-label / cell-style / cell-library-helpers.ts  # (cell-type-detector·serialize-cell 은 survey-builder 아래로 이동)
+│   ├── table-cell-field-policy.ts  # 셀 필드 정책 — TableCell 키마다 폼 소유(owned·kept·dropped)·보관함(carry·drop). 새 필드는 여기 한 줄 없으면 tsc 오류, owned 면 serialize-cell 견본 셀도 넣을 것 (CONTEXT.md 「셀 필드 정책」)
 │   ├── table-merge-helpers / table-cell-optimizer.ts  # (table-grid-utils · expand-header-grid 는 question-renderer/utils)
 │   ├── mobile-drilldown-repeat-header / mobile-table-display-mode.ts  # 서버도 import — 나머지 mobile-* 는 question-renderer/utils
 │   ├── number-format / numeric-input.ts  # (expression-migration 은 survey-builder/condition/utils, header-style 은 table-editor/utils)
@@ -210,15 +212,16 @@ GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다
 
 ## 백그라운드 잡 (Inngest)
 
-`server/workflows/jobs/` — 4개 함수 (`jobs/index.ts` 등록). 잡은 여러 도메인의 쓰기를 조율하므로 workflows 층이 집이다.
+`server/workflows/jobs/` — 5개 함수 (`jobs/index.ts` 등록). 잡은 여러 도메인의 쓰기를 조율하므로 workflows 층이 집이다.
 클라이언트 어댑터(`lib/inngest/client.ts`)만 인프라로 lib 에 남는다.
 
-| 함수                 | 트리거                           | 역할                                                      |
-| -------------------- | -------------------------------- | --------------------------------------------------------- |
-| `campaignDispatcher` | event `mail/campaign.queued`     | 캠페인 발송 실행 (수신자 lease 기반)                      |
-| `campaignReconciler` | event `mail/campaign.dispatched` | 발송 후 1/5/30분 reconcile — sent 멈춤(webhook race) 복구 |
-| `r2DeletionExecutor` | cron `TZ=Asia/Seoul 0 4 * * *`   | R2 유예 삭제 집행 (일 1회)                                |
-| `r2KeyRefAudit`      | cron `TZ=Asia/Seoul 0 3 1 * *`   | R2 참조 인덱스 전량 재추출 (월 1회)                       |
+| 함수                  | 트리거                            | 역할                                                      |
+| --------------------- | --------------------------------- | --------------------------------------------------------- |
+| `campaignDispatcher`  | event `mail/campaign.queued`      | 캠페인 발송 실행 (수신자 lease 기반)                      |
+| `campaignReconciler`  | event `mail/campaign.dispatched`  | 발송 후 1/5/30분 reconcile — sent 멈춤(webhook race) 복구 |
+| `r2DeletionExecutor`  | cron `TZ=Asia/Seoul 0 4 * * *`    | R2 유예 삭제 집행 (일 1회)                                |
+| `r2KeyRefAudit`       | cron `TZ=Asia/Seoul 0 3 1 * *`    | R2 참조 인덱스 전량 재추출 (월 1회)                       |
+| `mailFallbackSweeper` | cron `TZ=Asia/Seoul */10 * * * *` | 대체 발송 누락·큐 미발행 복구 (10분마다)                  |
 
 로컬 dev: `pnpm inngest`. **Inngest 자동 sync가 끊겨 있어 함수 변경 배포 후 대시보드에서 수동 Resync 필요.**
 
@@ -430,6 +433,49 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 ---
 
+## 쓰기 변경 체크리스트
+
+데이터를 쓰거나 권한·외부 호출이 걸린 변경은 **스펙(PRD) 단계**와 **적대적 리뷰 단계** 두 번 이 절을 거친다. 2026-10-19 컨택원 배정에서 테스트·리뷰가 통과한 뒤에야 동시성·일관성 문제가 질문으로 드러났다 — 스펙에 적히지 않은 성질은 TDD 가 테스트를 만들지 않고, 리뷰도 눈에 띄는 버그에서 멈춘다.
+
+### 1. 변경 종류를 먼저 정한다
+
+| 변경 종류                    | 예                                | 볼 항목                                                       |
+| ---------------------------- | --------------------------------- | ------------------------------------------------------------- |
+| 읽기만 하는 화면·문구        | 라벨, 정렬, 표시 방식             | 인가 · 기밀성                                                 |
+| 한 행을 쓰는 작업            | 상세에서 한 명 바꾸기             | + 정확성 · 멱등성 · 중복 방지 · 원자성                        |
+| 여러 행을 한꺼번에 쓰는 작업 | 교체 적용, 명단 업로드, 일괄 배정 | 아래 항목 전부 — 특히 동시성 · 데드락 · 경쟁 상태 · 격리 수준 |
+| 외부 서비스·비동기 작업      | 메일 발송, Inngest, webhook       | + 가용성 · 재시도 · 최종 일관성 · 장애 복구 · 로그            |
+
+### 2. 항목마다 답을 적는다
+
+답은 셋 중 하나다 — **지킨다(어떻게)** / **해당 없음(이유)** / **일부러 안 지킨다(이유)**. 이유 없는 "해당 없음"은 답이 아니다. 추상적으로 다시 생각하지 말고 **이 레포에 이미 있는 장치를 썼는가**로 확인한다.
+
+| 항목                 | 질문                                                                                                                        | 이 레포에서 확인할 것                                                                                                                                                                                                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 정확성               | 경계값·빈 조건·자기가 바꾸는 값을 조건으로 다시 읽는 경우에도 맞는가? 해석 못 한 입력을 조용히 버려 범위가 넓어지지 않는가? | 쓰기 경로는 해석 실패를 거부한다(컨택원 교체 적용·단체 메일 `fetchCandidateIds` 선례). 조건 판정은 `COALESCE(…, FALSE)`                                                                                                                                                                                  |
+| 멱등성 · 재시도      | 같은 요청이 두 번 오거나 실패 후 재시도해도 결과가 같은가?                                                                  | "결과 상태를 정하는" 쓰기인가. 교착·직렬화 실패는 `retryOnTxConflict`(lib/pg-error)                                                                                                                                                                                                                      |
+| 중복 방지            | 중복 행이 생길 수 있는가?                                                                                                   | DB 유일 제약 + `isUniqueViolation`(drizzle 이 감싼 `cause` 까지 본다). 앱 쪽 존재 확인만으로 막지 않는다                                                                                                                                                                                                 |
+| 동시성 · 경쟁 상태   | 같은 대상을 두 사람이 동시에? 다른 대상끼리 겹치면? 누가 이기는가?                                                          | 쓰기 파티션은 `lockWriteScope`, 같은 묶음 직렬화는 행 `FOR UPDATE`, 셀·키 단위 직렬화는 `pg_advisory_xact_lock`(쿼터 진행 중 마감 선례)                                                                                                                                                                  |
+| 데드락               | 여러 행을 다른 순서로 잠그는 작업끼리 엇갈리는가?                                                                           | 잠금 순서 통일 또는 한 줄 세우기, 최소한 `retryOnTxConflict`                                                                                                                                                                                                                                             |
+| 격리 수준 · 트랜잭션 | 읽고 나서 쓰는 사이 데이터가 바뀌면? 두 문장이 서로의 결과를 다시 읽는가?                                                   | 기본은 READ COMMITTED 다. 판정과 쓰기를 한 문장으로 묶거나(교체 적용 단일 UPDATE 선례) 행을 잠근다                                                                                                                                                                                                       |
+| 원자성 · 장애 복구   | 중간에 실패하면 반쯤 바뀐 상태가 남는가?                                                                                    | 한 `db.transaction` 안인가. 트랜잭션 밖 부수 효과(메일·R2·큐 발행)는 커밋 뒤에, 유실 시 복구 경로(sweeper·유예 큐)가 있는가                                                                                                                                                                              |
+| 무결성               | 지켜야 할 규칙을 DB 가 막는가, 코드만 막는가?                                                                               | FK · CHECK · UNIQUE 로 막을 수 있으면 마이그레이션에 넣는다. 코드로만 막으면 그 사실과 쓰기 경로 목록을 스펙에 적는다                                                                                                                                                                                    |
+| 일관성 · 최종 일관성 | 화면 숫자·미리보기·실제 결과가 같은 기준·같은 시점인가? 비동기면 언제 맞춰지는가?                                           | 표시·필터·정렬이 같은 SQL 식을 공유하는가(`matchedResponseSubquery` 등). 비동기는 reconcile·sweeper 가 있는가                                                                                                                                                                                            |
+| 인증 · 인가          | 권한 없는 사용자·외부 주체·다른 설문 사용자가 들어오면?                                                                     | `authed`/`scoped` 베이스 + 핸들러 첫 줄 capability 관문(`assertSurveyCapabilityRpc`·`assertScopedSurveyCapabilityRpc`), RSC 는 `requireAdminPage` + `assertSurveyCapabilityPage`, 외부 주체 판정은 `isExternalActor`/`isExternalViewer`. 설문 id 를 받는 새 표면은 `cross-team-idor-rpc` 인벤토리에 등재 |
+| 기밀성               | 개인정보 평문이 화면·RSC props·로그·내보내기로 나가는가?                                                                    | 목록·패널은 마스킹 힌트만, 로그는 `redact` 경로, 평문을 내보내면 no-store                                                                                                                                                                                                                                |
+| 가용성               | 외부 API·DB 가 느리거나 죽으면? 실패하면 사용자에게 뭐가 보이는가?                                                          | 레이트리밋 fail 방향(`withRateLimit`), 타임아웃, 재시도·안내 문구                                                                                                                                                                                                                                        |
+| 확장성               | 트래픽·데이터가 10배면?                                                                                                     | 인덱스, 페이지 상한, 한 요청이 도는 행 수, URL·바인드 파라미터 한계                                                                                                                                                                                                                                      |
+| 관측성               | 문제가 나면 로그로 원인을 찾을 수 있는가?                                                                                   | RPC 는 `rpcLoggingMiddleware` 가 1줄 남긴다. 재시도·충돌·조용한 폴백은 따로 경고 로그                                                                                                                                                                                                                    |
+
+### 3. 단계별 쓰는 법
+
+- **스펙(PRD) 단계**: 1의 변경 종류와 2의 답을 PRD 의 「Implementation Decisions」 또는 별도 절에 적는다. 「지킨다」로 적은 항목은 수락 기준이 되고, 티켓·TDD 가 그 테스트를 만든다(동시성·데드락은 실DB 테스트 — `*.realdb.test.ts`).
+- **적대적 리뷰 단계**: 초점 문구로 이 절을 넘긴다. 예 —
+  `/codex:adversarial-review AGENTS.md 「쓰기 변경 체크리스트」 항목별로 실패 시나리오를 찾고, 문제없는 항목도 근거를 적어줘. 결과는 한국어로`
+- **리뷰를 받은 뒤**: 지적마다 실DB 테스트로 먼저 재현하고(RED) 고친다. 재현이 안 되면 그 근거를 남긴다.
+
+---
+
 ## 주의사항
 
 1. **타입 안전성**: Drizzle ORM + TypeScript strict. JSONB 컬럼은 `src/shared/contracts/*`의 타입으로 `.$type<...>()` 지정. 클라이언트 트리(features/components/hooks/stores/utils)는 `@/db` 값 import 금지(ESLint, type 은 허용).
@@ -472,13 +518,13 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
     **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 계산 키가 `undefined` 로 등록되고, 그 사이드카가 등록 목록에서 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝나므로 아무도 모른다. 2026-09-16 에 실제로 닫혀 있었고(`__optTexts__` 를 `lib/option-text-read.ts` 로 내려 끊었다), 순환을 만든 것은 등록부의 직접 import 가 아니라 `prior-answers → response-sidecars` 라는 **전이 closure 안쪽 간선**이었다. 그래서 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 봐야 한다. `lib/survey/response-sidecars-import-order.test.ts` 가 소스를 읽어 이 간선을 막고, 등록 키 집합 전체를 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
 
-15. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정 — 세션 되돌리기 버퍼는 검토 후 미채택). 판정·삭제는 `lib/survey/question-visibility.ts` 의 `resolveVisibleQuestionIds`/`stripHiddenQuestionValues` 한 곳이다. 복제 금지 — 셀 게이팅(`cell-gating.ts`)과 같은 규약. 저장 경계 순서는 **숨은 문항 strip → 게이팅 strip → calc 재계산**. **초안·구간 저장에는 걸지 않는다.** 그쪽 answers 는 더티 키만 담은 부분 패치이고 저장이 jsonb 합집합 병합이라, strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것.
+15. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정 — 세션 되돌리기 버퍼는 검토 후 미채택). 판정·삭제는 `lib/survey/question-visibility.ts` 의 `resolveVisibleQuestionIds`/`stripHiddenQuestionValues` 한 곳이다. 복제 금지 — 셀 게이팅(`cell-gating.ts`)과 같은 규약. 저장 경계 순서는 **숨은 문항 strip → 게이팅 strip → calc 재계산**이고, 완료 제출(페이로드·빈 complete)과 관리자 수정은 이 순서를 직접 조립하지 않고 **응답 확정** `server/survey-response/services/answer-finalization.ts` 의 `loadFinalizationMaterial`(잠금 밖) + `finalizeAnswers`(동기, 잠금 아래 가능)를 거친다 — 세 단계는 설문 구성·변경 유무와 무관하게 늘 돌고, 등록 사이드카 정제·자격미달 판정·암호화까지 한 번에 낸다(2026-10-19 — 계산 칸·게이팅 칸 유무로 건너뛰던 시절 표시 조건만 있는 설문의 빈 complete 와 안 고친 이탈 응답의 관리자 저장이 strip 을 빠뜨렸다). **초안·구간 저장에는 걸지 않는다.** 그쪽 answers 는 더티 키만 담은 부분 패치이고 저장이 jsonb 합집합 병합이라, strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것.
 
     **표 행도 같다**(2026-09-29): 보기 그룹 표(table)에서 행 표시조건으로 숨은 행의 셀 값·`__choiceGroups` 선택·`__optTexts__` 항목도 `stripHiddenQuestionValues` 가 지운다(문항 숨김과 번갈아 고정점 수렴). 필수 판정은 숨은 행·열의 보기 그룹을 뺀다 — `resolveChoiceGroupVisibleCellIds`(numeric-validation) 로 만든 집합을 `isQuestionAnswered`·`collectUnfilledChoiceGroup*`·`resolveGroupedRequiredMessage` 에 **같이** 넘길 것(하나라도 빠지면 「빨갛지 않은데 다음이 막힘」). 레거시 보기 소스 표(radio/checkbox)는 동적 행 선택이 표 응답 밖에 있어 이 필터를 쓰지 않는다.
 
 16. **응답 종결 판정은 `status` 로 한다 — `is_completed` 는 종결 게이트가 아니다**: 자격미달(`screened_out`)은 완료 수 분자에서 빠지도록 `is_completed=false` 로 저장된다(`response-completion` 의 `isCompleted: !screenedOut`). 그래서 `is_completed` 를 "끝난 응답인가" 게이트로 쓰면 자격미달만 조용히 빠진다 — 재응답 허용이 `ok:true` 를 돌려주면서 아무것도 안 하던 사고가 이것이다(2026-09-21 수리). 어휘와 술어는 `shared/contracts/survey-response.ts` 가 SSOT 다: 열림 `isOpenResponseStatus` · 종결 `isConcludedResponseStatus` · 재응답 허용 대상 `isReeditableResponseStatus`(completed·screened_out). `is_completed=false` 를 쿼리에 쓰는 것 자체는 무방하나(열린 행 **후보** 조회 범위), 판정은 반드시 status 술어로 한 번 더 한다 — `lifecycle`·`response-row-create` 의 컨택 재사용 조회가 그 패턴이다.
 
-17. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe).
+17. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe). 바뀐 문항이 없어도 확정·재판정한다 — 판정은 응답 확정의 `screenedOut` 이다.
 
 18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
 
@@ -526,6 +572,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
   프로덕션은 0126·0127·0133·0134 를 함께 적용한다(그 테이블이 아직 없다)
 - **main 계열 0124·0125** (2026-09-17): main 이 같은 날 0111·0112 로 만든 입력칸 높이·제목 서식본은 위 역할 모델 v2 번호(0111~0123)와 겹쳐 staging 병합 전에 0124·0125 로 옮겼다 — 번호 기록 표가 DB 에 없어 파일 이름만 바뀌고 이미 적용한 DB 는 그대로다
 - **main 계열 0128~0132** (2026-09-30\~10-06): 0128 「행별 척도」 CHECK 갱신 · 0129 「항목 단위 카드」 CHECK 갱신 · 0130 최대 선택 개수 연동 `max_selections_source` · 0131 항목 단위 카드 블록 시작 열 `mobile_item_card_block_columns` · 0132 행 차례로 열기 `staged_rows_config`. main 이 0126·0127(외주 링크)을 비워 두고 0128 부터 썼다. **0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼우므로 배열에서 이 순서를 지킬 것** — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. 배열은 0126·0127 뒤에 0128\~0132, 그 뒤에 0133 이다(0133 은 0126 의 링크 테이블만 전제하고 main 쪽 다섯과 만지는 객체가 서로소다)
+- **main 계열 0135~0137** (2026-10-16\~10-19): 0135 메일 대체 발송 `mail_campaigns.parent_campaign_id`·kind `fallback`·`mail_recipients.email_column_key`/`source_recipient_id`·`next_fallback_run_number` · 0136 컨택원 배정 `contact_assignments`·`contact_targets.assignment_id` · 0137 대체 발송 처리 대기 `mail_recipients.fallback_pending_at`. main 이 staging 의 0133·0134(외주 링크 귀속·링크 테이블 개명)를 비워 두고 0135 부터 썼다. 배열은 0134 뒤에 0135\~0137 이다. 0133 과 0135 는 둘 다 `mail_campaigns` 에 칸·제약을 더하지만 이름이 겹치지 않는다(0133 은 `fieldwork_link_id`·배타 CHECK, 0135 는 `parent_campaign_id`·kind CHECK)
 
 ---
 

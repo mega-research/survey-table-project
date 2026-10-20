@@ -27,11 +27,12 @@ interface Props {
   /** 시스템ID(firstResid) 컬럼 표시 여부 (progressColumns.showResid). 기본 true. */
   showResid?: boolean;
   /**
-   * 분류 기준(groupBy) 활성 시 기준 값 컬럼들 (key=attrs 키 — 정렬 식별자,
-   * label=컬럼 설정 라벨). 순서는 row.groupValues 와 일치. 빈 배열이면 기존과
-   * 동일 — 그룹 라벨 컬럼을 자동 노출하지 않고 번호(firstResid) 컬럼을 표시한다.
+   * 분류 기준(groupBy) 활성 시 기준 값 컬럼들 (key=직렬화된 분류 키 — 정렬 식별자,
+   * label=컬럼 설정 라벨, nullLabel=값 없는 그룹 표기 — 기본 「(미분류)」). 순서는
+   * row.groupValues 와 일치. 빈 배열이면 기존과 동일 — 그룹 라벨 컬럼을 자동 노출하지
+   * 않고 번호(firstResid) 컬럼을 표시한다.
    */
-  groupColumns?: Array<{ key: string; label: string }>;
+  groupColumns?: Array<{ key: string; label: string; nullLabel?: string }>;
   page: number;
   size: number;
   sort: ProgressSortKey;
@@ -223,7 +224,11 @@ export function ProgressTable({
                       className="max-w-[240px] truncate whitespace-nowrap px-3 py-2 font-medium text-slate-800"
                       title={v ?? undefined}
                     >
-                      {v ?? <span className="font-normal text-slate-400">(미분류)</span>}
+                      {v ?? (
+                        <span className="font-normal text-slate-400">
+                          {c.nullLabel ?? '(미분류)'}
+                        </span>
+                      )}
                     </td>
                   );
                 })}
@@ -286,8 +291,6 @@ export function ProgressTable({
           total={totals.groupCount}
           page={page}
           totalPages={totalPages}
-          onPrev={() => handlePageChange(page - 1)}
-          onNext={() => handlePageChange(page + 1)}
           onPage={handlePageChange}
         />
       )}

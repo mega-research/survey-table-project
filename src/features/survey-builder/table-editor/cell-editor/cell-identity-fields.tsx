@@ -28,7 +28,7 @@ import {
   TEXT_POSITION_CELL_TYPES,
 } from './utils/serialize-cell';
 
-import type { CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
+import type { CellFormActions, CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
 
 const TEXT_POSITION_OPTIONS: Array<{
   value: NonNullable<TableCell['textPosition']>;
@@ -56,6 +56,7 @@ const INPUT_TEXT_ALIGN_OPTIONS: Array<{
 interface CellIdentityFieldsProps {
   form: UseCellFormResult['form'];
   setters: CellFormSetters;
+  actions: CellFormActions;
   cell: TableCell;
   /** 사용자가 코드를 직접 쓰지 않았을 때 보여줄 자동 발번 값. */
   autoCellCode: string | undefined;
@@ -70,6 +71,7 @@ interface CellIdentityFieldsProps {
 export function CellIdentityFields({
   form,
   setters,
+  actions,
   cell,
   autoCellCode,
   autoExportLabel,
@@ -93,10 +95,6 @@ export function CellIdentityFields({
     setTextContentHtml,
     setTextPosition,
     setInputTextAlign,
-    setCellCode,
-    setIsCustomCellCode,
-    setExportLabel,
-    setIsCustomExportLabel,
     setSpssVarType,
     setSpssMeasure,
   } = setters;
@@ -182,12 +180,8 @@ export function CellIdentityFields({
             <Input
               id="cell-code"
               value={cellCode}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCellCode(val);
-                // 사용자가 자동생성값과 다르게 수정하면 커스텀으로 표시
-                setIsCustomCellCode(val !== '' && val !== autoCellCode);
-              }}
+              // 자동값과 다르게 쓰면 수동 값으로 표시한다 (cell-form-transitions)
+              onChange={(e) => actions.editCellCode(e.target.value, autoCellCode)}
               placeholder={autoCellCode || '예: Q4-1_r1_c1'}
               className="h-9"
             />
@@ -196,10 +190,7 @@ export function CellIdentityFields({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  setCellCode(autoCellCode || '');
-                  setIsCustomCellCode(false);
-                }}
+                onClick={() => actions.resetCellCode(autoCellCode)}
                 title="자동값으로 초기화"
                 className="h-9 w-9 shrink-0"
               >
@@ -223,11 +214,7 @@ export function CellIdentityFields({
             <Input
               id="export-label"
               value={exportLabel}
-              onChange={(e) => {
-                const val = e.target.value;
-                setExportLabel(val);
-                setIsCustomExportLabel(val !== '' && val !== autoExportLabel);
-              }}
+              onChange={(e) => actions.editExportLabel(e.target.value, autoExportLabel)}
               placeholder={autoExportLabel || '예: 가구TV보유_TV종류_UHD'}
               className="h-9"
             />
@@ -236,10 +223,7 @@ export function CellIdentityFields({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  setExportLabel(autoExportLabel || '');
-                  setIsCustomExportLabel(false);
-                }}
+                onClick={() => actions.resetExportLabel(autoExportLabel)}
                 title="자동값으로 초기화"
                 className="h-9 w-9 shrink-0"
               >

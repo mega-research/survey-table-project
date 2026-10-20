@@ -740,7 +740,10 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
   });
 
   it('isTest 행은 isPaused 여도 재개된다', async () => {
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    // 세션 키로 이어받는 테스트 행은 테스트 링크 세션에서만 이어진다(세션·행의 테스트 여부가 같아야 한다).
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
+    );
     selectLimitMock.mockResolvedValue([{ id: 'resp-3', status: 'drop', isTest: true }]);
 
     const { resumeOrCreateResponse } =
@@ -748,6 +751,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'sess-paused-3',
+      testToken: 'tok',
     });
     expect(result).toEqual({
       id: 'resp-3',
@@ -935,11 +939,10 @@ describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
       await import('@/server/survey-response/services/response-completion');
     await completeResponse({ responseId: 'r1' });
 
-    // completeResponse 이 시나리오(data 없음, versionId 없음)에서는 정원 count 쿼리 1건만
-    // db.select(...).where(...) 를 탄다 — 그 조건에 notTestResponse(is_test=false) 가
-    // 실제로 포함됐는지 SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로
-    // 결과값 비교만으로는 누락을 잡지 못한다).
-    expect(selectWhereLogMock).toHaveBeenCalledTimes(1);
+    // completeResponse 의 첫 db.select(...).where(...) 는 정원 count 쿼리다(그 뒤는 응답 확정
+    // 재료의 PII 대상 조회) — 그 조건에 notTestResponse(is_test=false) 가 실제로 포함됐는지
+    // SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로 결과값 비교만으로는
+    // 누락을 잡지 못한다).
     const whereArg = selectWhereLogMock.mock.calls[0]![0];
     const query = dialect.sqlToQuery(whereArg);
     expect(query.sql).toContain('is_test');
@@ -1167,8 +1170,10 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     ).resolves.toMatchObject({ id: 'r1' });
   });
 
-  it('재진입: 유효한 테스트 링크 세션이면 비-테스트 행도 중단을 면제받는다', async () => {
-    // 기존 케이스는 "행 자체가 isTest" 갈래만 덮는다. isTestSession 갈래 박제.
+  it('재진입: 테스트 링크 세션은 같은 세션 키의 실응답 행을 이어받지 않는다', async () => {
+    // 2026-10-15 전에는 이어받아 중단까지 면제했다 — 테스트 링크로 적은 답이 실응답 행에 섞였다.
+    // 익명 테스트 링크와 공개 링크가 브라우저의 같은 세션 키를 쓰므로 한 브라우저에서 두 링크를
+    // 오가면 생긴다. null 이면 클라이언트가 새 세션으로 테스트 응답을 시작한다.
     surveyFindFirstMock.mockResolvedValue(
       publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
     );
@@ -1183,7 +1188,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
       sessionId: 'a1-test-session',
       testToken: 'tok',
     });
-    expect(result).toMatchObject({ id: 'resp-ts', status: 'in_progress' });
+    expect(result).toBeNull();
   });
 
   it('재진입: 제어 플래그 조회가 null 이면 중단 판정 없이 통과한다 (fail-open)', async () => {

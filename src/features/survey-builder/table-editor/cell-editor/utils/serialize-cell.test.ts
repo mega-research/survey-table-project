@@ -498,6 +498,25 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputWidth).toBe('');
   });
 
+  it('상세 기재 입력칸을 표 아래에 — 선택형 칸에서 켰을 때만 키를 남기고, 유형을 바꾸면 떨어진다', () => {
+    const on = buildUpdatedCell({ ...baseForm('checkbox'), optionTextBelowTable: true }, baseCell);
+    expect(on.optionTextBelowTable).toBe(true);
+    expect(cellToFormState(on).optionTextBelowTable).toBe(true);
+
+    const off = buildUpdatedCell(
+      { ...baseForm('checkbox'), optionTextBelowTable: false },
+      { id: 'c1', type: 'checkbox', content: '', optionTextBelowTable: true },
+    );
+    expect(off).not.toHaveProperty('optionTextBelowTable');
+
+    // 입력 칸으로 바꾸면 폼에 켜져 있어도 저장하지 않는다
+    const retyped = buildUpdatedCell(
+      { ...baseForm('input'), optionTextBelowTable: true },
+      { id: 'c1', type: 'checkbox', content: '', optionTextBelowTable: true },
+    );
+    expect(retyped).not.toHaveProperty('optionTextBelowTable');
+  });
+
   it('오른쪽 세로선 숨김은 켰을 때만 hideRightBorder 키를 남기고, 끄면 기존 값도 지운다', () => {
     const on = buildUpdatedCell({ ...baseForm('text'), hideRightBorder: true }, baseCell);
     expect(on.hideRightBorder).toBe(true);
@@ -508,6 +527,29 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
       { id: 'c1', type: 'input', content: '', hideRightBorder: true },
     );
     expect(off).not.toHaveProperty('hideRightBorder');
+  });
+
+  it('prefill 「응답자가 고칠 수 있게」는 템플릿이 있을 때만 prefillEditable 키를 남긴다', () => {
+    const on = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '{{기업명}}', inputPrefillEditable: true },
+      baseCell,
+    );
+    expect(on.prefillEditable).toBe(true);
+    expect(cellToFormState(on).inputPrefillEditable).toBe(true);
+
+    // 템플릿을 지우면 옵션도 함께 사라진다 — 깔 값이 없는 초기값 옵션은 뜻이 없다
+    const noTemplate = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '', inputPrefillEditable: true },
+      on,
+    );
+    expect(noTemplate).not.toHaveProperty('prefillEditable');
+
+    const off = buildUpdatedCell(
+      { ...baseForm('input'), inputDefaultValueTemplate: '{{기업명}}', inputPrefillEditable: false },
+      on,
+    );
+    expect(off).not.toHaveProperty('prefillEditable');
+    expect(off.defaultValueTemplate).toBe('{{기업명}}');
   });
 
   it('입력한 만큼 높이 늘리기는 평문 칸에서 켰을 때만 inputAutoGrow 키를 남긴다', () => {
@@ -840,6 +882,23 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
     const cell: TableCell = { id: 'c1', type: 'radio', content: '', required: true };
     const out = buildUpdatedCell({ ...baseForm('radio'), cellRequired: false }, cell);
     expect(out).not.toHaveProperty('required');
+  });
+
+  it('안내 문구를 지우면 기존 requiredMessage 가 되살아나지 않는다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      required: true,
+      requiredMessage: '옛 문구',
+    };
+    const cleared = buildUpdatedCell(
+      { ...baseForm('radio'), cellRequired: true, cellRequiredMessage: '' },
+      cell,
+    );
+    expect(cleared).not.toHaveProperty('requiredMessage');
+    const unrequired = buildUpdatedCell({ ...cellToFormState(cell), cellRequired: false }, cell);
+    expect(unrequired).not.toHaveProperty('requiredMessage');
   });
 
   it('비대상 타입(text)은 cellRequired 를 저장하지 않는다', () => {

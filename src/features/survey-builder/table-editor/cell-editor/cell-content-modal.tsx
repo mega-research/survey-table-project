@@ -46,6 +46,7 @@ import {
   type ContentType,
   MOBILE_DISPLAY_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
+  OPTION_TEXT_BELOW_TABLE_CELL_TYPES,
   buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
@@ -53,7 +54,6 @@ import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-sty
 import { runAsyncAction } from '@/utils/run-async-action';
 import { collapseRepeatRows } from '@/lib/question/row-repeat';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-import { generateId } from '@/lib/utils';
 import {
   CalcCellValidation,
   ChoiceGroup,
@@ -65,15 +65,11 @@ import {
 } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
-import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
-  INTERACTIVE_CELL_TYPES,
   generateCellCode,
   generateExportLabel,
-  inferSpssMeasure,
-  inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
 
 import { CellChoiceEditor } from './cell-choice-editor';
@@ -185,10 +181,6 @@ export function CellContentModal({
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
-  // 숫자 모드 진입 시 emptyDefault 기본 ON 을 "이 편집 세션에서 한 번만" 적용하기 위한 가드.
-  // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
-  // (모달 오픈/cell.id 변경 시 리셋)
-  const emptyDefaultAutoAppliedRef = useRef(false);
   // 이번 편집 세션 중 옵션 optionCode blur 커밋이 value 를 동기화시킨 변경 쌍 누적.
   // Save 시점에 onSave 로 함께 전달해 게이팅 리매핑을 셀 저장과 같은 커밋에 묶는다
   // (blur 마다 즉시 리매핑하면 이후 취소 시 다른 셀의 게이팅만 남는 불일치가 생긴다).
@@ -197,7 +189,7 @@ export function CellContentModal({
   // 35개 편집 필드를 단일 폼 상태로 통합. hydrate(모달 오픈/cell.id 변경)와
   // reset(취소 롤백)이 한 소스(cellToFormState)를 공유해 필드 누락 drift 가 없다.
   // (ranking 은 8번째 탭, ranking_opt 는 9번째 탭, choice_opt 는 10번째 탭)
-  const { form, setters, reset } = useCellForm(cell, isOpen);
+  const { form, setters, actions, reset } = useCellForm(cell, isOpen);
   const {
     contentType,
     textContent,
@@ -213,6 +205,7 @@ export function CellContentModal({
     cellMobileOptionsColumns,
     inputDefaultValueTemplate,
     hideRightBorder,
+    optionTextBelowTable,
     cellNumberFormat,
     cellRequired,
     cellRequiredMessage,
@@ -242,11 +235,6 @@ export function CellContentModal({
     horizontalAlign,
     optionTextSlot,
     cellCode,
-    isCustomCellCode,
-    exportLabel,
-    isCustomExportLabel,
-    spssVarType,
-    spssMeasure,
     answerQuoteText,
     answerQuoteEnabled: cellAnswerQuoteEnabled,
     answerQuoteName: cellAnswerQuoteName,
@@ -266,10 +254,26 @@ export function CellContentModal({
   // 표-소스 선택형 질문(radio/checkbox + choice_opt)의 다른 셀들은 응답 페이지에서 inert 라
   // 값이 생기지 않는다 — 거기에 토글을 노출하면 켜도 아무 일이 없는 죽은 설정이 된다.
   const showCellAnswerQuote = parentQuestionType === 'table';
+  // prefill 은 테이블 유형 문항의 input 셀에만 깔린다 — 보기·순위 문항의 내장 표는 사이드카 입력칸이라
+  // 템플릿을 읽지 않는다. 호스트를 모르면(스토어에 아직 없는 문항) 종전대로 내놓는다.
+  const prefillSupported = parentQuestionType === undefined || parentQuestionType === 'table';
+  // 「상세 기재 입력칸을 표 아래에」 — 표 문항의 격자 표만 표 아래 줄을 그린다(보기·순위 문항의
+  // 내장 표는 다른 렌더러). 상세 기재 보기가 없으면 옮길 입력칸이 없어 스위치를 숨긴다.
+  const cellTextOptions =
+    contentType === 'checkbox'
+      ? checkboxOptions
+      : contentType === 'radio'
+        ? radioOptions
+        : contentType === 'select'
+          ? selectOptions
+          : [];
+  const showOptionTextBelowTable =
+    parentQuestionType === 'table' &&
+    OPTION_TEXT_BELOW_TABLE_CELL_TYPES.has(contentType) &&
+    (optionTextBelowTable || cellTextOptions.some((option) => option.allowTextInput));
   const showContentMobileDisplay = MOBILE_DISPLAY_CELL_TYPES.has(contentType);
   const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
-    setContentType,
     setImageUrl,
     setVideoUrl,
     setCheckboxOptions,
@@ -281,10 +285,10 @@ export function CellContentModal({
     setCellOptionsColumns,
     setCellMobileOptionsColumns,
     setHideRightBorder,
+    setOptionTextBelowTable,
     setCellNumberFormat,
     setCellRequired,
     setCellRequiredMessage,
-    setGatingCondition,
     setGatingRequiredWhenEnabled,
     setMinSelections,
     setMaxSelections,
@@ -309,10 +313,6 @@ export function CellContentModal({
     setTextColor,
     setHorizontalAlign,
     setOptionTextSlot,
-    setCellCode,
-    setExportLabel,
-    setSpssVarType,
-    setSpssMeasure,
     setAnswerQuoteText,
     setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
     setAnswerQuoteName: setCellAnswerQuoteName,
@@ -359,9 +359,8 @@ export function CellContentModal({
     }
   }
 
-  // 새 편집 세션(모달 오픈/cell.id 변경)마다 emptyDefault 자동 적용 가드를 리셋한다.
+  // 새 편집 세션(모달 오픈/cell.id 변경)마다 옵션 value 변경 누적을 비운다.
   useEffect(() => {
-    emptyDefaultAutoAppliedRef.current = false;
     pendingOptionValueChangesRef.current = [];
   }, [isOpen, cell?.id]);
 
@@ -540,6 +539,7 @@ export function CellContentModal({
         <CellIdentityFields
           form={form}
           setters={setters}
+          actions={actions}
           cell={cell}
           autoCellCode={autoCellCode}
           autoExportLabel={autoExportLabel}
@@ -548,49 +548,10 @@ export function CellContentModal({
 
         <Tabs
           value={contentType}
-          onValueChange={(value) => {
-            const newType = value as ContentType;
-            setContentType(newType);
-            // 셀 타입 변경 시 SPSS 필드 자동 처리
-            if (INTERACTIVE_CELL_TYPES.has(newType)) {
-              // 입력 타입으로 변경 → 변수 타입/측정 수준 자동 설정 (기존값 없을 때만)
-              if (!spssVarType) setSpssVarType(inferSpssVarType(newType));
-              if (!spssMeasure) setSpssMeasure(inferSpssMeasure(newType));
-            } else {
-              // 비입력 타입 (ranking 포함) → 셀 단위 SPSS 필드는 사용하지 않음
-              setSpssVarType(undefined);
-              setSpssMeasure(undefined);
-            }
-            // ranking 첫 진입 시 디폴트 주입
-            if (newType === 'ranking') {
-              if (rankingOptions.length === 0) {
-                setRankingOptions([
-                  {
-                    id: generateId(),
-                    label: '옵션 1',
-                    value: 'opt1',
-                    spssNumericCode: getMaxSpssCode([]) + 1,
-                  },
-                  {
-                    id: generateId(),
-                    label: '옵션 2',
-                    value: 'opt2',
-                    spssNumericCode: getMaxSpssCode([]) + 2,
-                  },
-                ]);
-              }
-              if (!rankingConfig) {
-                setRankingConfig({ positions: 3 });
-              }
-            }
-            // 모든 타입: 코드가 없고 커스텀이 아니면 자동생성
-            if (!cellCode && !isCustomCellCode && autoCellCode) {
-              setCellCode(autoCellCode);
-            }
-            if (!exportLabel && !isCustomExportLabel && autoExportLabel) {
-              setExportLabel(autoExportLabel);
-            }
-          }}
+          onValueChange={(value) =>
+            // SPSS 필드·순위형 기본값·빈 셀 코드와 엑셀 라벨을 함께 맞춘다 (cell-form-transitions)
+            actions.changeContentType(value as ContentType, { autoCellCode, autoExportLabel })
+          }
         >
           <TabsList
             className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}
@@ -739,12 +700,13 @@ export function CellContentModal({
               form={form}
               setters={setters}
               inputTemplateRef={inputTemplateRef}
-              emptyDefaultAutoAppliedRef={emptyDefaultAutoAppliedRef}
+              actions={actions}
               ownQuestion={ownQuestion}
               questions={questions}
               variableCatalog={variableCatalog}
               showCellAnswerQuote={showCellAnswerQuote}
               answerQuoteEnabled={answerQuoteEnabled}
+              prefillSupported={prefillSupported}
             />
           </TabsContent>
 
@@ -1054,14 +1016,8 @@ export function CellContentModal({
               rows={gatingRows}
               condition={gatingCondition}
               requiredWhenEnabled={gatingRequiredWhenEnabled}
-              onConditionChange={(cond) => {
-                // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
-                // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
-                if (cond && !gatingCondition && cellRequired) {
-                  setGatingRequiredWhenEnabled(true);
-                }
-                setGatingCondition(cond);
-              }}
+              // 처음 켤 때 필수 체크를 「활성일 때 필수」로 옮긴다 (cell-form-transitions)
+              onConditionChange={actions.changeGatingCondition}
               onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
             />
           )}
@@ -1099,6 +1055,32 @@ export function CellContentModal({
             </div>
           )}
 
+        {/* 상세 기재 입력칸을 표 아래에 — 좁은 칸의 「기타」 입력칸을 표 아래 한 줄로 옮긴다 */}
+        {showOptionTextBelowTable && (
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label
+                  htmlFor="option-text-below-table"
+                  className="text-sm font-medium text-gray-900"
+                >
+                  상세 기재 입력칸을 표 아래에
+                </Label>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  「기타」처럼 상세 기재를 받는 보기를 고르면 입력칸을 칸 안이 아니라 표 아래 한
+                  줄로 보입니다. 칸이 좁아 입력칸이 잘릴 때 씁니다. 어느 칸의 입력인지는 행 제목 ·
+                  열 제목으로 표시합니다. 모바일 카드에서는 그대로 칸 안에 나옵니다.
+                </p>
+              </div>
+              <Switch
+                id="option-text-below-table"
+                checked={optionTextBelowTable}
+                onCheckedChange={setOptionTextBelowTable}
+              />
+            </div>
+          </div>
+        )}
+
         {/* 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 다음 셀과 한 칸처럼 이어 보인다 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
           <div className="flex items-center justify-between gap-4">
@@ -1120,7 +1102,7 @@ export function CellContentModal({
         </div>
 
         {/* 셀 병합 설정 */}
-        <CellMergeFields form={form} setters={setters} />
+        <CellMergeFields form={form} setters={setters} actions={actions} />
 
         {/* 모바일 카드 표시 설정 */}
         <CellMobileFields

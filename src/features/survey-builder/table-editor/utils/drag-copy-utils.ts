@@ -20,7 +20,7 @@ export interface CopiedRegion {
 
 /**
  * 영역 복사 시 제외할 속성 키 (위치/ID/병합 관련)
- * 이 키들은 대상 셀의 원래 값을 유지하거나 재생성해야 함
+ * 이 키들은 붙여넣기에서 대상 칸 id 를 남기고 셀 코드·라벨을 다시 만든다
  *
  * radioGroupName 은 일부러 제외하지 않는다. 같은 그룹명을 공유하던 라디오 셀들의
  * 상대 그룹 관계를 붙여넣기 시 복원하려면 원본 그룹명이 스냅샷에 남아 있어야 한다.
@@ -33,19 +33,6 @@ const REGION_EXCLUDED_KEYS = new Set<keyof TableCell>([
   'isCustomCellCode',
   'isCustomExportLabel',
 ]);
-
-/** 타입별 정리 대상 속성 — 셀 타입이 바뀔 때 이전 타입의 잔여 데이터 제거용 */
-const TYPE_SPECIFIC_KEYS: Record<string, (keyof TableCell)[]> = {
-  checkbox: ['checkboxOptions', 'minSelections', 'maxSelections'],
-  radio: ['radioOptions', 'radioGroupName'],
-  select: ['selectOptions', 'allowOtherOption'],
-  input: ['placeholder', 'inputMaxLength'],
-  image: ['imageUrl'],
-  video: ['videoUrl'],
-  ranking: ['rankingOptions', 'rankingConfig', 'rankSuffixPattern', 'rankVarNames'],
-  ranking_opt: ['rankingLabel', 'isOtherRankingCell', 'allowTextInput'],
-  choice_opt: ['choiceLabel', 'branchRule', 'allowTextInput', 'textInputPlaceholder'],
-};
 
 /**
  * 영역 붙여넣기 시 라디오 그룹명을 재발급하는 매퍼를 만든다.
@@ -164,24 +151,6 @@ export function pruneDeadGatingAfterPaste(
       if (insideArea || newlyHidden) {
         delete cell.enabledWhen;
         delete cell.requiredWhenEnabled;
-      }
-    }
-  }
-}
-
-/**
- * 대상 셀에서 새 타입에 해당하지 않는 잔여 속성을 정리한다.
- * 예: checkbox → radio 복사 시, 대상의 기존 checkboxOptions 제거
- */
-export function clearStaleTypeProperties(
-  targetCell: Record<string, unknown>,
-  newType: string,
-): void {
-  for (const [type, keys] of Object.entries(TYPE_SPECIFIC_KEYS)) {
-    if (type === newType) continue;
-    for (const key of keys) {
-      if (key in targetCell) {
-        targetCell[key] = undefined;
       }
     }
   }

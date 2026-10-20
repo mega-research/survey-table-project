@@ -5,7 +5,7 @@ import {
   parseHeaderFiltersFromUrl,
   placeholderFor,
   type ColumnCandidate,
-} from './contacts-filters';
+} from './contacts-filter-parse';
 import {
   FILTER_NONE_LABEL,
   FILTER_NONE_VALUE,
@@ -982,5 +982,120 @@ describe('parseClausesFromUrl - ID 목록 붙여넣기 (단일 컬럼 상한·�
       { idLists: new Map() },
     );
     expect(clause?.condition).toMatchObject({ mode: 'idlist', ranges: [] });
+  });
+});
+
+describe('parseClausesFromUrl — 짝수·홀수', () => {
+  const candidates: ColumnCandidate[] = [
+    { source: 'system.resid', label: '시스템ID' },
+    { source: 'attrs.명단ID', label: '명단ID' },
+  ];
+
+  it('시스템ID 짝수 → parity even idlist 절', () => {
+    const [c] = parseClausesFromUrl(['system.resid'], ['짝수'], [''], candidates, []);
+    expect(c?.condition).toMatchObject({ source: 'system.resid', mode: 'idlist', parity: 'even', value: '짝수' });
+  });
+
+  it('명단 열 홀수 → parity odd idlist 절', () => {
+    const [c] = parseClausesFromUrl(['attrs.명단ID'], ['홀수'], [''], candidates, []);
+    expect(c?.condition).toMatchObject({ source: 'attrs.명단ID', mode: 'idlist', parity: 'odd' });
+  });
+
+  it('섞인 토큰은 키워드가 아니다 — 시스템ID 는 text 폴백, 명단 열은 부분검색', () => {
+    const [r] = parseClausesFromUrl(['system.resid'], ['짝수 1-10'], [''], candidates, []);
+    expect(r?.condition.mode).toBe('text');
+    expect(r?.condition.parity).toBeUndefined();
+    const [a] = parseClausesFromUrl(['attrs.명단ID'], ['짝수 1-10'], [''], candidates, []);
+    expect(a?.condition.mode).toBe('text');
+  });
+});
+
+describe('「현재 컨택원」 조건', () => {
+  const A1 = '11111111-1111-4111-8111-111111111111';
+  const A2 = '22222222-2222-4222-8222-222222222222';
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+  const candidates: ColumnCandidate[] = [{ source: 'system.contact_owner', label: '컨택원' }];
+  const assignmentIds = new Set([A1, A2]);
+
+  it('검색바: 이 설문·파티션의 컨택원 id 는 enum 절', () => {
+    const [c] = parseClausesFromUrl(['system.contact_owner'], [A1], [''], candidates, [], {
+      assignmentIds,
+    });
+    expect(c?.condition).toEqual({ source: 'system.contact_owner', mode: 'enum', value: A1 });
+  });
+
+  it('검색바: 배정 없음 센티널은 includeNull', () => {
+    const [c] = parseClausesFromUrl(
+      ['system.contact_owner'],
+      [FILTER_NONE_VALUE],
+      [''],
+      candidates,
+      [],
+      { assignmentIds },
+    );
+    expect(c?.condition).toMatchObject({ mode: 'enum', includeNull: true });
+  });
+
+  it('다른 설문·파티션 id 는 조건 미적용 — 0건으로 접지 않는다', () => {
+    expect(
+      parseClausesFromUrl(['system.contact_owner'], [OTHER], [''], candidates, [], { assignmentIds }),
+    ).toEqual([]);
+    // 컨택원 목록을 넘기지 않는 파서(게스트 표면 등)는 이 절을 만들지 않는다.
+    expect(parseClausesFromUrl(['system.contact_owner'], [A1], [''], candidates, [])).toEqual([]);
+  });
+
+  it('헤더: 여러 컨택원 + 배정 없음 in 절, 모르는 id 는 버린다', () => {
+    const [c] = parseHeaderFiltersFromUrl(
+      ['system.contact_owner'],
+      ['in'],
+      [[A1, OTHER, FILTER_NONE_VALUE].join(SEP)],
+      candidates,
+      [],
+      { assignmentIds },
+    );
+    expect(c?.condition).toEqual({
+      source: 'system.contact_owner',
+      mode: 'in',
+      value: '',
+      values: [A1],
+      includeNull: true,
+    });
+    expect(
+      parseHeaderFiltersFromUrl(['system.contact_owner'], ['in'], [OTHER], candidates, [], {
+        assignmentIds,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('조건 줄의 여러 값 (체크한 값들)', () => {
+  const candidates: ColumnCandidate[] = [
+    { source: 'attrs.참가 전시회', label: '참가 전시회' },
+    { source: 'system.web', label: 'web' },
+  ];
+
+  it('헤더 체크박스와 같은 in 절이고 값 앞뒤 공백을 보존한다', async () => {
+    const { encodeMultiClauseValue } = await import('@/lib/operations/filter-shared');
+    const q = encodeMultiClauseValue(['CES 2026', '서울 ', FILTER_NONE_VALUE]);
+    const [c] = parseClausesFromUrl(['attrs.참가 전시회'], [q.trim()], [''], candidates, []);
+    expect(c?.condition).toEqual({
+      source: 'attrs.참가 전시회',
+      mode: 'in',
+      value: '',
+      values: ['CES 2026', '서울 '],
+      includeNull: true,
+    });
+  });
+
+  it('응답 상태 여러 개', async () => {
+    const { encodeMultiClauseValue } = await import('@/lib/operations/filter-shared');
+    const [c] = parseClausesFromUrl(
+      ['system.web'],
+      [encodeMultiClauseValue(['completed', 'none'])],
+      [''],
+      candidates,
+      [],
+    );
+    expect(c?.condition).toMatchObject({ mode: 'in', values: ['completed', 'none'] });
   });
 });

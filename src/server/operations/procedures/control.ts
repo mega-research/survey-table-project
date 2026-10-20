@@ -12,6 +12,7 @@ const ControlStateSchema = z.object({
   pausedMessage: z.string().nullable(),
   isClosed: z.boolean(),
   testModeEnabled: z.boolean(),
+  testViewInBrowser: z.boolean(),
   testToken: z.string().nullable(),
   accessIdentifier: z.string(),
   testResponseCount: z.number().int(),

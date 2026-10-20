@@ -57,7 +57,7 @@ interface OperationsTabStripProps {
  *
  * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` 드롭다운
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
- * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
+ * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` / `컨택원 관리`(contacts.manage) 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`) — 링크 셸에서는 「쿼터 현황」(읽기 전용 현황판)이고
  *   쿼터가 없는 설문에서는 서지 않는다
@@ -93,20 +93,24 @@ export function OperationsTabStrip({
   const contactsUploadHref = paths.contactsUpload;
   const contactsColumnsHref = paths.contactsColumns;
   const contactsResultCodesHref = paths.contactsResultCodes;
+  const contactsAssignmentsHref = paths.contactsAssignments;
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
      !pathname.startsWith(contactsUploadHref) &&
      !pathname.startsWith(contactsColumnsHref) &&
-     !pathname.startsWith(contactsResultCodesHref));
+     !pathname.startsWith(contactsResultCodesHref) &&
+     !pathname.startsWith(contactsAssignmentsHref));
   const isContactsUploadActive = pathname.startsWith(contactsUploadHref);
   const isContactsColumnsActive = pathname.startsWith(contactsColumnsHref);
   const isContactsResultCodesActive = pathname.startsWith(contactsResultCodesHref);
+  const isContactsAssignmentsActive = pathname.startsWith(contactsAssignmentsHref);
   const isContactsActive =
     isContactsRootActive ||
     isContactsUploadActive ||
     isContactsColumnsActive ||
-    isContactsResultCodesActive;
+    isContactsResultCodesActive ||
+    isContactsAssignmentsActive;
 
   const mailCampaignsHref = paths.mailCampaigns;
   const mailTemplatesHref = paths.mailTemplates;
@@ -204,6 +208,10 @@ export function OperationsTabStrip({
                   </SubLink>
                   <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
                     결과코드 설정
+                  </SubLink>
+                  {/* 컨택원은 내부 실사 운영 도구 — contacts.manage 는 내부 계정만 가진다 */}
+                  <SubLink href={contactsAssignmentsHref} active={isContactsAssignmentsActive}>
+                    컨택원 관리
                   </SubLink>
                 </>
               )}

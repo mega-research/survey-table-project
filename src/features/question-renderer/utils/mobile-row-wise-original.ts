@@ -1,19 +1,22 @@
-import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { type ClassifiedLeaf, classifyTable } from '@/features/question-renderer/utils/classify-table';
 import {
-  excludeMobileDrilldownRepeatedRows,
-  getMobileDrilldownRepeatedBodyRowIds,
-  includesMobileDrilldownColumnHeader,
-  resolveMobileDrilldownRepeatHeaderRange,
-} from '@/utils/mobile-drilldown-repeat-header';
+  type ClassifiedLeaf,
+  classifyTable,
+} from '@/features/question-renderer/utils/classify-table';
 import {
   type MobileOriginalRowProjection,
   getMobileOriginalRowLabelCandidate,
   isMobileOriginalRowInteractiveCell,
   projectMobileOriginalRow,
 } from '@/features/question-renderer/utils/mobile-original-row';
-import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 import { buildTableRowspanCoverage } from '@/features/question-renderer/utils/table-rowspan-coverage';
+import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import {
+  excludeMobileDrilldownRepeatedRows,
+  getMobileDrilldownRepeatedBodyRowIds,
+  includesMobileDrilldownColumnHeader,
+  resolveMobileDrilldownRepeatHeaderRange,
+} from '@/utils/mobile-drilldown-repeat-header';
+import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 
 export interface OriginalRowDetailSettings {
   omitLeadingAuthoredColumns: number;
@@ -88,11 +91,7 @@ function materializeRowsForClassification(
       ...row,
       cells: row.cells.map((cell, columnIndex) => {
         const source = coveredCells[columnIndex];
-        if (
-          !source ||
-          source.id === cell.id ||
-          (!cell.isHidden && !cell._isContinuation)
-        ) {
+        if (!source || source.id === cell.id || (!cell.isHidden && !cell._isContinuation)) {
           return cell;
         }
         const materialized = { ...source };
@@ -104,6 +103,9 @@ function materializeRowsForClassification(
     };
   });
 }
+
+/** 이름(섹션·행 제목)의 출처가 될 수 있는 칸 — 글자·이미지·영상 칸. 그 밖은 응답 칸이다 */
+const DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 export function buildMobileRowWiseOriginalModel(
   input: BuildMobileRowWiseOriginalModelInput,
@@ -118,16 +120,13 @@ export function buildMobileRowWiseOriginalModel(
     input.authoredRows,
     repeatHeaderRange,
   );
-  const navigationRows = excludeMobileDrilldownRepeatedRows(
-    orderedDisplayRows,
-    repeatedRowIds,
-  );
+  const navigationRows = excludeMobileDrilldownRepeatedRows(orderedDisplayRows, repeatedRowIds);
   const rowById = new Map(orderedDisplayRows.map((row) => [row.id, row]));
-  const resolveChoiceLabel = input.resolveChoiceLabel ?? (() => undefined);
-  const classificationRows = materializeRowsForClassification(
-    orderedDisplayRows,
-    navigationRows,
+  const cellById = new Map(
+    orderedDisplayRows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const)),
   );
+  const resolveChoiceLabel = input.resolveChoiceLabel ?? (() => undefined);
+  const classificationRows = materializeRowsForClassification(orderedDisplayRows, navigationRows);
   const classifiedSections = classifyTable({
     tableColumns: input.visibleColumns,
     tableRowsData: classificationRows,
@@ -139,9 +138,7 @@ export function buildMobileRowWiseOriginalModel(
     input.settings.omitLeadingAuthoredColumns,
     input.authoredColumns.length,
   );
-  const omittedColumnIds = new Set(
-    input.authoredColumns.slice(0, omit).map((column) => column.id),
-  );
+  const omittedColumnIds = new Set(input.authoredColumns.slice(0, omit).map((column) => column.id));
   const omittedVisibleIndices = input.visibleColumns.flatMap((column, index) =>
     omittedColumnIds.has(column.id) ? [index] : [],
   );
@@ -203,8 +200,17 @@ export function buildMobileRowWiseOriginalModel(
 
       const questions = subgroups.flatMap((subgroup) => subgroup.questions);
       if (questions.length === 0) return [];
+      // 섹션 이름은 목차 열(첫 열)의 칸 글자에서 온다. 그 칸이 글자 칸이 아니라 응답 칸이면 이름이
+      // 아니다 — 구분 열 없이 보기만 한 줄로 놓인 척도 표에서 첫 보기의 글자(「①」)가 카드 머리에
+      // 섹션 이름처럼 걸렸다.
+      const sectionSourceCell = section.labelSourceCellId
+        ? cellById.get(section.labelSourceCellId)
+        : undefined;
+      const sectionSourceIsAnswerCell =
+        sectionSourceCell !== undefined && !DISPLAY_CELL_TYPES.has(sectionSourceCell.type);
       const rawSectionLabel =
-        section.labelSourceCellId && input.isLabelSourceHidden?.(section.labelSourceCellId)
+        sectionSourceIsAnswerCell ||
+        (section.labelSourceCellId && input.isLabelSourceHidden?.(section.labelSourceCellId))
           ? ''
           : section.label.trim();
       const only = questions.length === 1 ? questions[0] : undefined;
@@ -216,11 +222,13 @@ export function buildMobileRowWiseOriginalModel(
       if (keepsSectionHeader) only.title = '';
       const label = duplicatesTitle && !keepsSectionHeader ? '' : rawSectionLabel;
 
-      return [{
-        id: section.labelSourceCellId ?? `section:${sectionIndex}`,
-        label,
-        subgroups,
-      }];
+      return [
+        {
+          id: section.labelSourceCellId ?? `section:${sectionIndex}`,
+          label,
+          subgroups,
+        },
+      ];
     },
   );
 

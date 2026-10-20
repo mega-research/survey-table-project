@@ -33,6 +33,8 @@ import type { ORPCContext } from '@/server/context';
 import { columns } from '@/server/contacts/procedures/columns';
 import { targets } from '@/server/contacts/procedures/targets';
 
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+
 // prod 방어선: DATABASE_URL이 로컬이 아니면 전체 suite 스킵
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -219,7 +221,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     const result = await listContactsForSurvey({
       surveyId: survey.id,
       scope: 'real',
-      clauses: [],
+      filter: resolvedFilterForTest(),
       page: 1,
       pageSize: 20,
       sort: 'resid',

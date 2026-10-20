@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CampaignRecipientsTable } from '@/features/operations/mail-campaign/campaign-recipients-table';
+import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
 import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
 
 vi.mock('next/navigation', () => ({
@@ -22,6 +23,8 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     contactResid: 1,
     contactGroupValue: null,
     contactAttrs: {},
+    contactPiiMasks: {},
+    contactAssignmentName: null,
     latestResultCode: null,
     emailMasked: 'lsj...@meg...',
     status: 'sent',
@@ -39,7 +42,8 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
 
 function renderTable(
   rows: CampaignRecipientRow[],
-  mailColumns: Array<{ key: string; label: string }>,
+  mailColumns: MailDisplayColumn[],
+  showResid = true,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -57,6 +61,7 @@ function renderTable(
         errorOptions={[]}
         resultOptions={[]}
         mailColumns={mailColumns}
+        showResid={showResid}
       />
     </QueryClientProvider>,
   );
@@ -80,7 +85,7 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
         recipient({ id: 'r-1', contactResid: 1, contactAttrs: { 리스트ID: 'L-001' } }),
         recipient({ id: 'r-2', contactTargetId: null, contactResid: null, contactAttrs: {} }),
       ],
-      [{ key: '리스트ID', label: '리스트 ID' }],
+      [{ key: '리스트ID', label: '리스트 ID', kind: 'attrs' }],
     );
 
     // [0] 시스템ID, [1] 리스트 ID
@@ -93,5 +98,24 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
 
     expect(headerLabels()).toHaveLength(9);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
+  });
+
+  it('개인정보 열은 마스킹 힌트를 그린다 — attrs 에 같은 키가 있어도 힌트를 쓴다', () => {
+    renderTable(
+      [
+        recipient({ id: 'x-1', contactAttrs: { 대표자명: '평문' }, contactPiiMasks: { 대표자명: '김*수' } }),
+        recipient({ id: 'x-2', contactPiiMasks: {} }),
+      ],
+      [{ key: '대표자명', label: '대표자', kind: 'pii' }],
+    );
+
+    expect(columnCells('대표자')).toEqual(['김*수', '—']);
+  });
+
+  it('시스템ID 를 끄면 그 열이 빠진다', () => {
+    renderTable([recipient({})], [], false);
+
+    expect(headerLabels()).toHaveLength(8);
+    expect(headerLabels()).not.toContain('시스템ID');
   });
 });

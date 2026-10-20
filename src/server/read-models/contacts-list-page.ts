@@ -6,19 +6,15 @@ import {
   effectiveSortKey,
   normalizeSortKey,
 } from '@/lib/operations/contacts-format';
-import { FILTER_SOURCE, type FilterClause } from '@/lib/operations/filter-shared';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 
 import type { OperationsDataScope } from '../data-scope';
-import { loadIdListsForValues } from './contact-id-lists';
 import {
-  buildColumnCandidates,
-  getContactColumnScheme,
-  getContactResultCodes,
-  listContactsForSurvey,
-} from './contacts';
-import { parseClausesFromUrl, parseHeaderFiltersFromUrl } from './contacts-filters';
+  contactFilterInputFromUrl,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from './contact-filter-resolution';
+import { listContactsForSurvey } from './contacts';
 
 /**
  * 조사 대상 목록 화면의 조립 (ADR-0026, 티켓 06).
@@ -50,6 +46,11 @@ export interface ContactsListPageArgs {
    * 초대 토큰이 곧 권한 상승이 아니다 — 그 노출 판정은 단건 상세(티켓 08)가 진다.
    */
   canViewMail: boolean;
+  /**
+   * 「컨택원」 열·필터·정렬을 싣는가 — 내부 콘솔만 참. 컨택원은 내부 실사 운영 정보라
+   * 외주 실사 링크 목록에는 열·값·후보·선택지 모두 보내지 않는다.
+   */
+  includeContactOwner: boolean;
   /** 라우트가 읽은 URL 쿼리 그대로. 키 이름은 주소 계약이라 두 트리가 같다. */
   searchParams: {
     col?: string | string[];
@@ -68,17 +69,21 @@ export async function loadContactsListPage({
   surveyId,
   scope,
   canViewMail,
+  includeContactOwner,
   searchParams: sp,
 }: ContactsListPageArgs): Promise<ContactsListPageData> {
   const pageRaw = Number(sp.page);
   const parsedPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
 
-  const [rawScheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-  ]);
-  const scheme = canViewMail ? rawScheme : stripMailColumns(rawScheme);
+  // 스킴·결과코드·컨택원·필터 후보 — 메일 축·컨택원을 못 보는 주체면 그 열·후보·선택지가 빠져 있다.
+  // 후보는 걸러진 스킴에서 나온다 — 헤더 필터·조건 파싱이 전부 이 목록을 화이트리스트로 쓴다.
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isExternal: !includeContactOwner,
+    surface: 'contacts',
+    canViewMail,
+  });
+  const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 
   // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
   const visibleAttrsKeys = new Set(
@@ -88,47 +93,34 @@ export async function loadContactsListPage({
       .filter((k): k is string => k != null),
   );
   const requestedSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
-  const sort = !canViewMail && requestedSort === 'mailStatus' ? 'resid' : requestedSort;
+  const sort =
+    (!canViewMail && requestedSort === 'mailStatus') ||
+    (!includeContactOwner && requestedSort === 'owner')
+      ? 'resid'
+      : requestedSort;
 
-  // 후보는 걸러진 스킴에서 나온다 — 헤더 필터·조건 파싱이 전부 이 목록을 화이트리스트로 쓴다.
-  const columnCandidates = buildColumnCandidates(scheme);
-
-  // 붙여넣기 대용량 목록은 URL 에 `list:<uuid>` 토큰으로만 실린다 — 파싱 전에 실체를 읽는다.
-  const idLists = await loadIdListsForValues(surveyId, sp.q);
-  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes, {
-    idLists,
+  // 붙여넣기 대용량 목록(`list:<uuid>` 토큰)은 해석 모듈이 읽는다.
+  const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {
+    mode: 'read',
   });
-  const headerClauses = parseHeaderFiltersFromUrl(
-    sp.hcol,
-    sp.hm,
-    sp.hv,
-    columnCandidates,
-    resultCodes,
-  );
-  // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
-  // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리.
-  const clauses: FilterClause[] = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
+  const { builderClauses, clauses } = filter;
 
   const { rows, total, page } = await listContactsForSurvey({
     surveyId,
     scope,
     pageSize: CONTACTS_PAGE_SIZE,
-    clauses,
+    filter,
     page: parsedPage,
     sort,
     dir,
+    includeAssignment: includeContactOwner,
   });
 
   return {
     scheme,
     resultCodes,
     columnCandidates,
+    assignmentOptions,
     initialClauses: builderClauses.map((c) => ({
       op: c.op,
       source: c.condition.source,
@@ -143,17 +135,4 @@ export async function loadContactsListPage({
     hasFilter: clauses.length > 0,
     isTestScope: scope === 'test',
   };
-}
-
-/**
- * 메일 축 열을 뺀 스킴 — 없으면 그대로 없다.
- *
- * 스킴은 JSONB 문서라 얕은 사본으로 충분하다(컬럼 배열만 갈아 끼운다). 원본을 건드리면
- * `getContactColumnScheme` 의 React cache 가 같은 요청 안의 다른 소비자에게 깎인 스킴을
- * 돌려준다 — 컬럼 설정 화면과 목록이 같은 캐시를 본다.
- */
-function stripMailColumns(scheme: ContactColumnScheme | null): ContactColumnScheme | null {
-  if (!scheme) return scheme;
-  const columns = scheme.columns.filter((column) => column.source !== FILTER_SOURCE.EMAIL);
-  return columns.length === scheme.columns.length ? scheme : { ...scheme, columns };
 }

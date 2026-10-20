@@ -28,6 +28,7 @@ const CONTROL = {
   pausedMessage: null,
   isClosed: false,
   testModeEnabled: false,
+  testViewInBrowser: false,
   testToken: null,
   accessIdentifier: 'sv-1',
   testResponseCount: 0,

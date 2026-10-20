@@ -9,10 +9,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // 핵심 시나리오:
 //   - cipher 가 정상 복호화되면 email 은 평문이 아니라 maskHint('email', plain) 결과여야 한다.
 //   - 복호화가 throw 하면 email 은 null 로 유지된다(기존 동작 보존).
-//   - cipher 자체가 없으면 email 은 null.
+//   - email PII 행 자체가 없으면 email 은 null.
 //
-// db 는 drizzle fluent chain 흉내.
-// select 체인: .from -> .leftJoin -> .where -> .orderBy -> .limit
+// db 는 drizzle fluent chain 흉내. lookup 은 select 를 세 번 한다(큐에 순서대로 넣는다):
+//   1. 컨택            .from -> .where -> .limit
+//   2. 설문 컬럼 설정   .from -> .where -> .limit   (발송 주소 순서)
+//   3. email PII 행    .from -> .where -> .orderBy
 // decryptPii 는 mock 으로 평문/throw 를 제어한다.
 
 const { selectResultQueue } = vi.hoisted(() => ({
@@ -33,9 +35,8 @@ vi.mock('@/db', () => {
   function makeSelectChain(): Record<string, unknown> {
     const chain: Record<string, unknown> = {};
     chain['from'] = vi.fn(() => chain);
-    chain['leftJoin'] = vi.fn(() => chain);
     chain['where'] = vi.fn(() => chain);
-    chain['orderBy'] = vi.fn(() => chain);
+    chain['orderBy'] = vi.fn(() => Promise.resolve(shiftSelect()));
     chain['limit'] = vi.fn(() => Promise.resolve(shiftSelect()));
     return chain;
   }
@@ -52,6 +53,17 @@ import { lookupContactByToken } from '@/server/mail/services/unsubscribe';
 // 유효한 UUID v4 형식 토큰 (UUID_RE 통과용)
 const VALID_TOKEN = '11111111-1111-4111-8111-111111111111';
 
+const CONTACT = { id: 'ct-1', surveyId: 'sv-1', isTest: false, unsubscribedAt: null };
+/** 발송 주소 순서 미지정 설문 — 열 이름순. */
+const NO_ORDER = [{ real: null, test: null }];
+const piiRow = (columnKey: string, cipher: string) => ({
+  id: `pii-${columnKey}`,
+  contactTargetId: 'ct-1',
+  columnKey,
+  cipher,
+  maskHint: null,
+});
+
 beforeEach(() => {
   selectResultQueue.length = 0;
   decryptPiiMock.mockReset();
@@ -60,14 +72,7 @@ beforeEach(() => {
 describe('lookupContactByToken PII 마스킹 (#13)', () => {
   it('복호화 성공 시 평문 이메일을 노출하지 않고 마스킹해서 반환한다', async () => {
     const PLAIN = 'asdfghjk@naver.com';
-    selectResultQueue.push([
-      {
-        id: 'ct-1',
-        unsubscribedAt: null,
-        cipher: 'v1:cipher-blob',
-        columnKey: 'email',
-      },
-    ]);
+    selectResultQueue.push([CONTACT], NO_ORDER, [piiRow('email', 'v1:cipher-blob')]);
     decryptPiiMock.mockReturnValue(PLAIN);
 
     const result = await lookupContactByToken({ token: VALID_TOKEN });
@@ -80,14 +85,7 @@ describe('lookupContactByToken PII 마스킹 (#13)', () => {
   });
 
   it('복호화 실패 시 email 은 null 로 유지된다(기존 동작 보존)', async () => {
-    selectResultQueue.push([
-      {
-        id: 'ct-1',
-        unsubscribedAt: null,
-        cipher: 'v1:corrupt-blob',
-        columnKey: 'email',
-      },
-    ]);
+    selectResultQueue.push([CONTACT], NO_ORDER, [piiRow('email', 'v1:corrupt-blob')]);
     decryptPiiMock.mockImplementation(() => {
       throw new Error('decryptPii: bad payload');
     });
@@ -98,15 +96,24 @@ describe('lookupContactByToken PII 마스킹 (#13)', () => {
     expect(result.email).toBeNull();
   });
 
-  it('cipher 가 없으면 email 은 null', async () => {
-    selectResultQueue.push([
-      {
-        id: 'ct-1',
-        unsubscribedAt: null,
-        cipher: null,
-        columnKey: null,
-      },
+  it('첫 열이 복호화되지 않으면 다음 열의 주소를 마스킹해 돌려준다 — 발송과 같은 폴백', async () => {
+    selectResultQueue.push([CONTACT], NO_ORDER, [
+      piiRow('email', 'v1:corrupt-blob'),
+      piiRow('email2', 'v1:cipher-blob'),
     ]);
+    decryptPiiMock.mockImplementation((token) => {
+      if (token === 'v1:corrupt-blob') throw new Error('decryptPii: bad payload');
+      return 'asdfghjk@naver.com';
+    });
+
+    const result = await lookupContactByToken({ token: VALID_TOKEN });
+
+    expect(result.ok).toBe(true);
+    expect(result.email).toBe('asd...@nav...');
+  });
+
+  it('email PII 행이 없으면 email 은 null', async () => {
+    selectResultQueue.push([CONTACT], NO_ORDER, []);
 
     const result = await lookupContactByToken({ token: VALID_TOKEN });
 

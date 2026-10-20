@@ -14,9 +14,15 @@ import {
   listCampaignRecipientFacets,
   listCampaignRecipients,
 } from '@/server/mail/services/campaigns-read';
-import { resolveMailDisplayColumns } from '@/lib/contacts/mail-display-columns';
+import {
+  mailPiiMaskKeys,
+  mailShowsContactOwner,
+  resolveMailDisplayColumns,
+  resolveMailShowsResid,
+} from '@/lib/contacts/mail-display-columns';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
 import {
   parseHeaderFilterEntries,
@@ -110,7 +116,14 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
     notFound();
   }
 
-  const [recipients, facets, scheme] = await Promise.all([
+  // 수신자 표는 메일 표시를 켠 개인정보 열의 힌트를 실어야 해서 스킴을 먼저 읽는다.
+  const [scheme, isExternal] = await Promise.all([
+    getContactColumnScheme(surveyId, scope),
+    isExternalViewer(),
+  ]);
+  // 컨택원 열은 내부 실사 정보라 외부 계정 표에는 켜 두어도 싣지 않는다.
+  const mailColumns = resolveMailDisplayColumns(scheme, { includeContactOwner: !isExternal });
+  const [recipients, facets] = await Promise.all([
     listCampaignRecipients({
       surveyId,
       campaignId: cid,
@@ -122,9 +135,10 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
       groupValues,
       errorReasons,
       resultCodes,
+      piiMaskKeys: mailPiiMaskKeys(mailColumns),
+      includeAssignment: mailShowsContactOwner(mailColumns),
     }),
     listCampaignRecipientFacets({ surveyId, campaignId: cid, scope }),
-    getContactColumnScheme(surveyId, scope),
   ]);
 
   // 깔때기 체크박스 선택지 — 빈 값 항목은 실제로 그런 행이 있을 때만 내민다.
@@ -186,7 +200,13 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-slate-500">#{campaign.runNumber}</span>
+              {campaign.kind === 'fallback' ? (
+                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+                  대체 발송
+                </span>
+              ) : (
+                <span className="font-mono text-xs text-slate-500">#{campaign.runNumber}</span>
+              )}
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge.tone}`}
               >
@@ -196,6 +216,20 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               {campaign.title}
             </h1>
+            {campaign.kind === 'fallback' ? (
+              <p className="text-sm text-slate-500">
+                원래 회차에서 실패·반송된 사람에게 발송 주소 순서의 다음 이메일로 자동으로 다시 보낸
+                회차입니다.{' '}
+                {campaign.parentCampaignId ? (
+                  <Link
+                    href={`/surveys/${surveyId}/operations/mail/campaigns/${campaign.parentCampaignId}`}
+                    className="text-blue-600 hover:underline"
+                  >
+                    원래 회차 보기
+                  </Link>
+                ) : null}
+              </p>
+            ) : null}
             {campaign.templateName ? (
               <p className="text-sm text-slate-500">
                 템플릿:{' '}
@@ -294,7 +328,8 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         groupOptions={groupOptions}
         errorOptions={errorOptions}
         resultOptions={resultOptions}
-        mailColumns={resolveMailDisplayColumns(scheme)}
+        mailColumns={mailColumns}
+        showResid={resolveMailShowsResid(scheme)}
       />
     </main>
   );

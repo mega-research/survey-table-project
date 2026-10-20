@@ -5,6 +5,9 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
+import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
+import { appendContactPii } from '@/server/read-models/respondent-contact-attrs';
+import { loadCurrentVersionSnapshot } from '@/server/read-models/version-snapshot';
 import {
   classifyInviteTokenOwner,
   findInviteTokenOwner,
@@ -27,6 +30,7 @@ export class InvalidTestLinkError extends Error {
 
 /**
  * inviteToken 으로 attrs 조회. 무효 토큰이면 null 반환 (silent fallback).
+ * 개인정보 열 중 발행본이 읽는 것의 복호화 값도 합쳐서 돌려준다(read-models/respondent-contact-attrs).
  * - lookup_contact_by_invite_token RPC 와 동일한 매칭 정책 (surveyId + inviteToken)
  * - 응답 도중 새로고침 시 매번 fresh 로드 — 운영자가 attrs 수정하면 다음 진입에 반영
  * - 실제 대상자는 테스트 모드와 무관하게 조회, OFF인 테스트 대상자는 INVALID_TEST_LINK
@@ -55,6 +59,7 @@ export async function lookupContactAttrs(
 
   const [row] = await db
     .select({
+      id: contactTargets.id,
       attrs: contactTargets.attrs,
       isTest: contactTargets.isTest,
       testModeEnabled: surveys.testModeEnabled,
@@ -75,5 +80,9 @@ export async function lookupContactAttrs(
     return null;
   }
   if (row.isTest && !row.testModeEnabled) throw new InvalidTestLinkError();
-  return row.attrs;
+  // 개인정보로 암호화된 열도 합친다 — 단 응답자 브라우저로 가는 값이라 발행본이 토큰·조건으로
+  // 실제로 읽는 열만 보낸다. 쓰지도 않는 남의 연락처가 초대 링크로 새어 나가면 안 된다.
+  return appendContactPii(row, {
+    allowedKeys: async () => collectReferencedContactKeys(await loadCurrentVersionSnapshot(surveyId)),
+  });
 }

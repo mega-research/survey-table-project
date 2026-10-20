@@ -138,14 +138,15 @@ surveys                    # 설문 설정
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
 │                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
-│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표에 attrs 컬럼 노출, attrs.* 전용)
+│                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표·수신거부 명단에 열 노출 — attrs.* 는 값, pii.* 는 마스킹 힌트(켠 열만 서버가 읽는다), system.contact_owner 는 컨택원 이름(외부 주체 화면 제외), system.resid 는 기본 보임이라 끈 경우만 false. 해석 lib/contacts/mail-display-columns)
+│                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — src/app/AGENTS.md 「메일 발송 주소 순서」)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
 ├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
-├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
+├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — src/server/AGENTS.md 「테스트 모드」
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
@@ -184,7 +185,7 @@ questions                  # 개별 질문
 ├── rankingConfig (JSONB)         # 순위형 전용
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── maxSelectionsSource (JSONB)   # 최대 선택 개수를 다른 문항의 숫자 응답에서 가져온다 {questionId, unlimitedFrom} — NULL=고정값만 (0130)
-├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
+├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원 — 명단 값이 있으면 그 값으로 잠그고, 치환 결과가 비면 잠그지 않아 응답자가 직접 적는다. 표 input 셀의 defaultValueTemplate 도 같은 규칙이고 셀에는 `prefillEditable`(응답자가 고칠 수 있게 — 잠그지 않고 처음 한 번만 깐다)이 더 있다, CONTEXT.md "이월 값과 본문 프리필 토큰의 우선순위")
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
 ├── inputRows, inputAutoGrow      # 단답형·장문형 입력칸 줄 수(1~20, NULL=유형 기본: 단답형 1줄·장문형 4줄)·입력한 만큼 높이 늘리기. 숫자·형식 칸은 한 줄 고정 (0124)
 ├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, maxLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, features/question-renderer/utils/text-quality)
@@ -295,7 +296,14 @@ contact_targets            # 컨택 = 응답 대상
 ├── unsubscribeToken (UUID, UNIQUE), unsubscribedAt
 ├── uploadId, responseId, respondedAt  # 응답 매칭
 ├── memo, contactMethod
+├── assignmentId                  # 지금 맡은 컨택원 (0136, ON DELETE SET NULL — 컨택원을 지우면 배정 없음). 교체 업로드는 대상을 새로 만들어 풀린다
 └── createdAt, updatedAt  (UNIQUE surveyId+isTest+resid)
+
+contact_assignments        # 컨택원 — 이름 붙은 배정 묶음 (0136). 계정·로그인과 무관
+├── id, surveyId (cascade), isTest           # 실/테스트 파티션마다 따로
+├── name, order                              # UNIQUE surveyId+isTest+name · order = 필터 선택지·진척 보고 줄 순서
+├── lastClauses (JSONB)                      # 마지막 교체 적용 조건 { source, value, op }[] (contacts 계약 ContactAssignmentClause)
+└── lastAppliedAt, createdAt, updatedAt
 
 contact_pii                # 컨택 PII 분리 저장 (암호화)
 ├── id, contactTargetId
@@ -336,7 +344,8 @@ mail_templates             # 메일 템플릿
 
 mail_campaigns             # 발송 회차
 ├── id, surveyId, mailTemplateId, runNumber, title
-├── kind                   # bulk | 단건 발송 등 캠페인 종류
+├── kind                   # bulk(단체) | single(단건, 1000001~) | fallback(대체 발송, 2000001~ — 0135 CHECK)
+├── parentCampaignId       # 대체 발송의 원래 회차 (부모마다 대체 회차 하나 — 부분 유일 인덱스)
 ├── isTest                 # 테스트 파티션 여부
 ├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 캠페인 생성 시점 스냅샷
 │                          # replyToSnapshot 만 NULL 을 허용하고, NULL 이면 발송 시점 소유자로 해석
@@ -351,6 +360,8 @@ mail_campaigns             # 발송 회차
 mail_recipients            # 수신자별 status + Resend message id
 ├── id, campaignId, contactTargetId
 ├── emailSnapshot, inviteTokenSnapshot
+├── emailColumnKey, sourceRecipientId  # 주소를 꺼낸 명단 이메일 열 · 대체 발송의 출처 수신자 (0135, 이전 행은 NULL)
+├── fallbackPendingAt      # 대체 발송 처리 대기 (0137) — 반송·거부 전이와 같은 트랜잭션이 찍고 대체 발송 처리가 지운다
 ├── status                 # queued|sending|sent|delivered|opened|bounced|complained|failed|skipped_unsubscribed
 ├── resendMessageId, errorReason
 ├── sendAttemptedAt, sendLeaseToken, sendLeaseExpiresAt, sendPayloadSnapshot  # 중복 발송 방지 lease
@@ -417,7 +428,8 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)
-                 └─ (1) contact_prior_answers (이월 응답)
+                 ├─ (1) contact_prior_answers (이월 응답)
+                 └─ (1) contact_assignments [optional — 지금 맡은 컨택원, 같은 isTest]
 
 saved_questions / saved_lookups / saved_cells / question_categories (standalone)
 mail_billing_periods / webhook_events (standalone)

@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { ORPCError } from '@orpc/server';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -9,11 +10,19 @@ import {
   mailRecipients,
   mailTemplates,
 } from '@/db/schema/mail';
-import { decryptPii } from '@/lib/crypto/aes';
+import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { inngest } from '@/lib/inngest/client';
+import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { ActorAttribution } from '@/server/survey-access';
+import {
+  NO_BOUNCED_ADDRESSES,
+  decryptSendAddressCells,
+  emailCandidateSql,
+  emailOrderSql,
+  loadBouncedAddresses,
+} from '@/server/read-models/send-address';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -65,11 +74,18 @@ export async function createCampaign(
 
   const result = await db.transaction(async (tx) => {
     // a. 현재 운영 scope 잠금. 모드 전환과 캠페인 생성을 직렬화하고 클라이언트 값은 신뢰하지 않는다.
-    const locked = await lockWriteScope(tx, input.surveyId, isExternal, { lock: 'share' });
+    //    같은 잠금으로 컬럼 설정도 읽는다 — 발송 주소 순서가 캠페인 생성 도중 바뀌지 않는다.
+    const locked = await lockWriteScope(tx, input.surveyId, isExternal, {
+      lock: 'share',
+      columns: ['contactColumns', 'testContactColumns'],
+    });
     if (!locked) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
     const { isTest } = locked;
+    const emailOrder = resolveMailEmailOrder(
+      isTest ? locked.row.testContactColumns : locked.row.contactColumns,
+    );
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx
@@ -139,22 +155,20 @@ export async function createCampaign(
       throw new Error('단체 메일 생성에 실패했습니다.');
     }
 
-    // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
-    //    한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째 사용 (앞에서 dedupe).
-    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지)·반송 이력
-    //    컨택을 제외한다. 제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는
-    //    발송되는 미스매치 발생.
-    //    반송 제외는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
-    //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
-    //    으로 단건 발송 자체가 실패한다.
+    // e. valid contact 재페치 — contact_pii 에서 발송 주소 후보 칸까지 같이 가져온다.
+    //    어느 주소로 보낼지는 발송 주소 규칙(resolveSendAddress) 하나가 정한다 — 발송 주소 순서대로
+    //    보낼 수 있는 첫 칸이고, 반송된 칸·주소는 건너뛰어 다음 순위로 넘어간다. 보낼 곳이 남지 않으면
+    //    그 컨택은 빠진다. 사전 점검(preflightRecipients)이 같은 규칙으로 센다.
+    //    preflight 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
+    //    반송 건너뛰기는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
+    //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정).
     const { buildNegativeCodeExists, getResultCodeStatuses } =
       await import('@/server/read-models/result-code-statuses');
     const { latestResultUnsubscribedSql } =
       await import('@/lib/operations/contacts-filter-sql.server');
-    const { listBouncedContactIds } = await import('./campaigns-read');
-    const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+    const [{ negative: negativeCodes }, bounced] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
-      kind === 'single' ? Promise.resolve([]) : listBouncedContactIds(input.surveyId),
+      kind === 'single' ? Promise.resolve(NO_BOUNCED_ADDRESSES) : loadBouncedAddresses(input.surveyId),
     ]);
     const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
       negativeCodes,
@@ -171,7 +185,7 @@ export async function createCampaign(
       .from(contactTargets)
       .innerJoin(
         contactPii,
-        and(eq(contactPii.contactTargetId, contactTargets.id), eq(contactPii.fieldType, 'email')),
+        and(eq(contactPii.contactTargetId, contactTargets.id), emailCandidateSql(emailOrder)),
       )
       .where(
         and(
@@ -182,25 +196,29 @@ export async function createCampaign(
           // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
           sql`NOT (${latestResultUnsubscribedSql})`,
           notExcludedByCode,
-          ...(bouncedContactIds.length > 0
-            ? [notInArray(contactTargets.id, bouncedContactIds)]
-            : []),
         ),
       )
-      .orderBy(asc(contactTargets.id), asc(contactPii.columnKey));
+      .orderBy(asc(contactTargets.id), asc(emailOrderSql(emailOrder)));
 
-    const seen = new Set<string>();
-    const validContacts: Array<{ id: string; email: string; inviteToken: string }> = [];
-    for (const r of piiJoined) {
-      if (seen.has(r.id)) continue; // 첫 email 컬럼만
-      try {
-        const email = decryptPii(r.cipher);
-        if (!email || !email.trim()) continue;
-        seen.add(r.id);
-        validContacts.push({ id: r.id, email, inviteToken: r.inviteToken });
-      } catch {
-        // 복호화 실패 행은 발송 대상에서 제외 (cipher 손상/키 미스매치)
-      }
+    const inviteTokens = new Map(piiJoined.map((r) => [r.id, r.inviteToken]));
+    const cellsByTarget = decryptSendAddressCells(
+      piiJoined.map((r) => ({ contactTargetId: r.id, columnKey: r.columnKey, cipher: r.cipher })),
+    );
+    const validContacts: Array<{
+      id: string;
+      email: string;
+      columnKey: string;
+      inviteToken: string;
+    }> = [];
+    for (const [id, cells] of cellsByTarget) {
+      const resolved = resolveSendAddress(cells, (v) => bounced.has(v));
+      if (resolved.kind !== 'send') continue;
+      validContacts.push({
+        id,
+        email: resolved.email,
+        columnKey: resolved.columnKey,
+        inviteToken: inviteTokens.get(id)!,
+      });
     }
 
     const validCount = validContacts.length;
@@ -217,6 +235,8 @@ export async function createCampaign(
       campaignId: campaign.id,
       contactTargetId: c.id,
       emailSnapshot: c.email,
+      // 대체 발송이 「다음 순위 열」을 고를 때 기준이 된다.
+      emailColumnKey: c.columnKey,
       inviteTokenSnapshot: c.inviteToken,
       status: 'queued' as const,
     }));
@@ -326,78 +346,43 @@ export async function resyncCampaign(input: ResyncCampaignInput): Promise<Resync
  */
 export async function fetchCandidateIds(
   input: FetchCandidateIdsInput,
+  isExternal: boolean,
 ): Promise<FetchCandidateIdsResult> {
   const { surveyId, filter } = input;
 
   const { previewCampaignCandidates, countCampaignCandidates } =
     await import('./campaigns-read');
-  const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
-    await import('@/server/read-models/contacts');
-  const { parseClausesFromUrl, parseHeaderFiltersFromUrl } = await import(
-    '@/server/read-models/contacts-filters'
+  const { loadContactFilterContext, resolveContactFilter } = await import(
+    '@/server/read-models/contact-filter-resolution'
   );
-  const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
-  const { loadIdListsForValues } = await import('@/server/read-models/contact-id-lists');
   const scope = await loadOperationsDataScope(surveyId);
 
-  const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-  ]);
-  const candidates = buildColumnCandidates(scheme);
-  const rawClauses = filter.clauses ?? [];
-  // 스냅샷의 `list:<uuid>` 토큰도 마법사 페이지와 같은 실체로 해석해야 같은 집합을 고른다.
-  const idLists = await loadIdListsForValues(
-    surveyId,
-    rawClauses.map((c) => c.value),
-  );
-  const builderClauses = parseClausesFromUrl(
-    rawClauses.map((c) => c.source),
-    rawClauses.map((c) => c.value),
-    rawClauses.map((c) => c.op ?? ''),
-    candidates,
-    resultCodes,
-    { idLists },
-  );
-  // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
-  const headerCandidates = [
-    ...candidates,
-    ...CAMPAIGN_HEADER_FILTER_COLUMNS.filter(
-      (c) => !candidates.some((cc) => cc.source === c.source),
-    ),
-  ];
-  const rawHeaderClauses = filter.headerClauses ?? [];
-  const headerClauses = parseHeaderFiltersFromUrl(
-    rawHeaderClauses.map((c) => c.source),
-    rawHeaderClauses.map((c) => c.mode),
-    rawHeaderClauses.map((c) => c.hv),
-    headerCandidates,
-    resultCodes,
-  );
-  // 마법사 페이지의 결합 규칙과 동일해야 한다 — 어긋나면 "필터 결과 전체 선택"이
-  // 화면에 보이는 명단과 다른 집합을 고른다.
-  const clauses = [
-    ...builderClauses,
-    ...headerClauses.map((c, i) => ({
-      condition: c.condition,
-      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
-    })),
-  ];
+  // 마법사 페이지와 같은 컨텍스트·같은 해석 — 어긋나면 "필터 결과 전체 선택"이 화면에 보이는
+  // 명단과 다른 집합을 고른다. 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 해석되지 않는
+  // 조건이 생기면 write 해석이 거부한다 — 버리면 화면보다 넓은 명단(빈 조건이면 전체)을 고른다.
+  const filterCtx = await loadContactFilterContext(surveyId, scope, { isExternal, surface: 'mail' });
+  const resolved = await resolveContactFilter(filterCtx, filter, { mode: 'write' });
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 
-  const total = await countCampaignCandidates({ surveyId, scope, clauses, unrespondedOnly });
+  const total = await countCampaignCandidates({
+    surveyId,
+    scope,
+    filter: resolved,
+    unrespondedOnly,
+  });
   const MAX_IDS = 10_000;
   if (total > MAX_IDS) {
-    throw new Error(
-      `필터에 해당하는 수신자가 ${total.toLocaleString('ko-KR')}명입니다. 한 단체 메일당 최대 ${MAX_IDS.toLocaleString('ko-KR')}명 — 필터를 좁혀주세요.`,
-    );
+    throw new ORPCError('BAD_REQUEST', {
+      message:
+        `필터에 해당하는 수신자가 ${total.toLocaleString('ko-KR')}명입니다. 한 단체 메일당 최대 ${MAX_IDS.toLocaleString('ko-KR')}명 — 필터를 좁혀주세요.`,
+    });
   }
 
   // page=1, pageSize=total 로 한 번에 전체 페치
   const result = await previewCampaignCandidates({
     surveyId,
     scope,
-    clauses,
+    filter: resolved,
     unrespondedOnly,
     page: 1,
     pageSize: Math.max(1, total),
@@ -417,17 +402,16 @@ export async function previewPreflight(
 ): Promise<PreviewPreflightResult> {
   const { surveyId, selectedContactIds } = input;
 
-  const { preflightRecipients, listBouncedContactIds } =
-    await import('./campaigns-read');
-  const [scope, bouncedContactIds] = await Promise.all([
+  const { preflightRecipients } = await import('./campaigns-read');
+  const [scope, bounced] = await Promise.all([
     loadOperationsDataScope(surveyId),
-    listBouncedContactIds(surveyId),
+    loadBouncedAddresses(surveyId),
   ]);
   const result = await preflightRecipients({
     surveyId,
     scope,
     selectedContactIds,
-    bouncedContactIds,
+    bounced,
   });
   return {
     validCount: result.validIds.length,

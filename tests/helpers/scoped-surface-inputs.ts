@@ -40,6 +40,7 @@ export const SCOPED_INPUTS: Record<string, Record<string, unknown>> = {
   'contacts.attempts.update': { contactTargetId: CHILD_ID, id: CHILD_ID, resultCode: 'x' },
   'contacts.attempts.remove': { contactTargetId: CHILD_ID, id: CHILD_ID },
   'contacts.attrValues.list': { attrsKey: 'k' },
+  'contacts.attrValues.nonNumericCount': { attrsKey: 'k' },
   'contacts.idLists.create': { ids: [1] },
   'mail.templates.create': { input: MAIL_TEMPLATE_INPUT },
   'mail.templates.update': { templateId: CHILD_ID, input: MAIL_TEMPLATE_INPUT },
@@ -74,10 +75,11 @@ export const SCOPED_PATHS = Object.keys(SCOPED_INPUTS).sort();
  *
  * 링크 열은 capability 여섯이고(`survey.view`·`operations.view`·`contacts.view`·
  * `contacts.writeAttempts`·`responses.view`·`mail.sendSingle`) 그중 scoped 표면이 실제로 요구하는
- * 것은 뒤의 넷이다. 그래서 여기 있는 아홉이 「밖에서 두드려 통과하는 문」의 전부다 — 이 목록이
+ * 것은 뒤의 넷이다. 그래서 여기 있는 열이 「밖에서 두드려 통과하는 문」의 전부다 — 이 목록이
  * 곧 외주에게 나가는 쓰기 반경이므로, 한 줄이 늘면 리뷰가 그 줄을 보게 된다.
  *
- * ADR-0027 이 더한 셋 — 응답 수정 저장·단건 발송·단건 발송 창의 미리보기. 메일 탭(템플릿·
+ * ADR-0027 이 더한 셋 — 응답 수정 저장·단건 발송·단건 발송 창의 미리보기. 홀짝 조건 상태줄
+ * (`contacts.attrValues.nonNumericCount`)은 조사 대상 필터의 일부라 `attrValues.list` 와 같은 권한으로 열린다. 메일 탭(템플릿·
  * 단체 메일·테스트 발송)과 템플릿 편집기의 미리보기(`mail.preview.sample`)는 여전히 막힌 쪽이다.
  *
  * 나머지는 파생이다(`LINK_BLOCKED_SCOPED_PATHS`). 새 scoped procedure 가 붙으면 자동으로
@@ -89,6 +91,7 @@ export const LINK_OPEN_SCOPED_PATHS = [
   'contacts.attempts.remove',
   'contacts.attempts.update',
   'contacts.attrValues.list',
+  'contacts.attrValues.nonNumericCount',
   'contacts.idLists.create',
   'contacts.targets.setMemo',
   'mail.campaigns.sendSingle',

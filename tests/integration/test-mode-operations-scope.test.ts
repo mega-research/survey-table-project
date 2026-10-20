@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+
 const { mockExecute, mockInnerJoin, mockWhere } = vi.hoisted(() => ({
   mockExecute: vi.fn(),
   mockInnerJoin: vi.fn(),
@@ -91,7 +93,7 @@ describe('운영 응답 범위', () => {
     await listContactsForSurvey({
       surveyId: `contacts-${scope}`,
       scope,
-      clauses: [],
+      filter: resolvedFilterForTest(),
       page: 1,
       pageSize: 20,
       sort: 'resid',

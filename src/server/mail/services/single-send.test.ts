@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
+import type { SendAddressResolution } from '@/lib/mail/send-address';
+import { resolveSendAddresses } from '@/server/read-models/send-address';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
 import { createCampaign } from './campaigns';
@@ -35,19 +36,16 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
   buildNegativeCodeExists: vi.fn(() => sql`FALSE`),
 }));
 
-// 이메일 존재 검사는 contact-pii-repo 의 selectEmailPiiRows seam 을 탄다 — db 체인 큐와 분리해 고정한다.
-vi.mock('@/lib/crypto/contact-pii-repo', () => ({
-  selectEmailPiiRows: vi.fn(async () => []),
+// 보낼 주소 검사는 발송 주소 모듈의 resolveSendAddresses seam 을 탄다 — db 체인 큐와 분리해 고정한다.
+vi.mock('@/server/read-models/send-address', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/send-address')>()),
+  loadMailEmailOrder: vi.fn(async () => null),
+  resolveSendAddresses: vi.fn(async () => new Map()),
 }));
 
 const INPUT = { surveyId: 'sv-1', contactTargetId: 'ct-1', mailTemplateId: 'tpl-1' };
-const EMAIL_ROW = {
-  id: 'pii-1',
-  contactTargetId: 'ct-1',
-  columnKey: 'email',
-  cipher: 'v1:cipher',
-  maskHint: null,
-};
+const addressOf = (resolution: SendAddressResolution) => new Map([['ct-1', resolution]]);
+const SENDABLE = addressOf({ kind: 'send', columnKey: 'email', email: 'a@x.com' });
 
 describe('sendSingleCampaign 가드', () => {
   beforeEach(() => {
@@ -95,16 +93,26 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
-    vi.mocked(selectEmailPiiRows).mockResolvedValueOnce([]); // email pii empty
+    vi.mocked(resolveSendAddresses).mockResolvedValueOnce(addressOf({ kind: 'missing' }));
     await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow('이메일 정보가 없는');
     expect(createCampaign).not.toHaveBeenCalled();
+  });
+
+  it('반송은 단건을 막지 않는다 — 반송 주소를 넘기지 않고 판정한다', async () => {
+    selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
+    selectResultQueue.push([]); // 부정 결과코드 없음
+    vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
+    await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
+    expect(vi.mocked(resolveSendAddresses).mock.calls[0]).toHaveLength(3);
+    expect(createCampaign).toHaveBeenCalled();
   });
 
   it('템플릿이 없으면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
-    vi.mocked(selectEmailPiiRows).mockResolvedValueOnce([EMAIL_ROW]);
+    vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
     vi.mocked(getMailTemplate).mockResolvedValueOnce(null);
     await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
       '메일 템플릿을 찾을 수 없습니다.',
@@ -116,7 +124,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
-    vi.mocked(selectEmailPiiRows).mockResolvedValueOnce([EMAIL_ROW]);
+    vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
     const res = await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
     expect(createCampaign).toHaveBeenCalledWith(
       {

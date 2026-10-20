@@ -14,7 +14,11 @@ import {
   attrsKeyOf,
   piiKeyOf,
 } from '@/lib/operations/contacts-format';
-import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
+import {
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  withNoneOption,
+} from '@/lib/operations/filter-shared';
 import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles-format';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import type {
@@ -22,7 +26,7 @@ import type {
   ContactColumnScheme,
   ContactResultCode,
 } from '@/shared/contracts/contacts';
-import type { ContactsRow } from '@/shared/contracts/contacts-io';
+import type { ContactAssignmentOption, ContactsRow } from '@/shared/contracts/contacts-io';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -38,6 +42,8 @@ interface ContactsTableProps {
   surveyId: string;
   /** system.contact_result 헤더 필터 체크박스 옵션 */
   resultCodeOptions: ContactResultCode[];
+  /** system.contact_owner 헤더 필터 체크박스 옵션 (컨택원 순서) + 「— (없음)」. */
+  assignmentOptions?: ContactAssignmentOption[];
   /** 행 클릭 시 호출 — 단건 편집 라우트로 push */
   onRowClick?: (row: ContactsRow) => void;
 }
@@ -49,7 +55,8 @@ function isHeaderFilterable(source: string): boolean {
     source.startsWith(FILTER_SOURCE.PII_PREFIX) ||
     source === FILTER_SOURCE.CONTACT_RESULT ||
     source === FILTER_SOURCE.WEB ||
-    source === FILTER_SOURCE.EMAIL
+    source === FILTER_SOURCE.EMAIL ||
+    source === FILTER_SOURCE.CONTACT_OWNER
   );
 }
 
@@ -66,6 +73,9 @@ function sortKeyOf(source: string): ContactsSortKey | null {
     case 'system.email_count':
       // 최신 메일 수신 상태 순위 기준 (열람 → 전달 완료 → … → 실패, 없음 마지막).
       return 'mailStatus';
+    case 'system.contact_owner':
+      // 컨택원 순서 → 이름, 배정 없음 마지막.
+      return 'owner';
     default:
       return null;
   }
@@ -155,7 +165,17 @@ function computeCell(
       };
     }
     case 'system.contact_owner':
-      return { display: '—', plain: undefined }; // 후속 슬라이스 면접원
+      // 지금 맡은 컨택원 — 배정 없음은 다른 열의 빈 값과 같은 「—」.
+      return row.assignment
+        ? {
+            display: (
+              <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                {row.assignment.name}
+              </span>
+            ),
+            plain: row.assignment.name,
+          }
+        : { display: '—', plain: undefined };
     default:
       return { display: '—', plain: undefined };
   }
@@ -168,7 +188,7 @@ function computeCell(
  * - attrs.* source: row.attrs[키] 표시 (이메일/사업자번호는 마스킹)
  * - system.resid/contact_result/web: 시스템 필드
  * - system.email_count: 최신 메일 수신 상태 badge (mail_recipients, 발송 이력 없으면 —)
- * - system.contact_owner: 다음 슬라이스 (면접원) 까지 placeholder
+ * - system.contact_owner: 지금 맡은 컨택원 이름 칩 (배정 없음은 —)
  *
  * 페이지네이션은 TablePagerFooter (totalPages/onPrev/onNext) 패턴을 그대로 사용.
  */
@@ -182,6 +202,7 @@ export function ContactsTable({
   dir,
   surveyId,
   resultCodeOptions,
+  assignmentOptions = [],
   onRowClick,
 }: ContactsTableProps) {
   const pushParams = useSearchParamsMutator();
@@ -259,6 +280,13 @@ export function ContactsTable({
                                 })),
                               }
                             : {})}
+                          {...(col.source === FILTER_SOURCE.CONTACT_OWNER
+                            ? {
+                                fixedOptions: withNoneOption(
+                                  assignmentOptions.map((o) => ({ value: o.id, label: o.name })),
+                                ),
+                              }
+                            : {})}
                           resultCodeOptions={resultCodeOptions}
                         />
                       )}
@@ -302,8 +330,6 @@ export function ContactsTable({
           total={total}
           page={page}
           totalPages={totalPages}
-          onPrev={() => handlePageChange(page - 1)}
-          onNext={() => handlePageChange(page + 1)}
           onPage={handlePageChange}
         />
       )}

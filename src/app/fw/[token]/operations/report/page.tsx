@@ -37,6 +37,7 @@ export default async function FieldworkLinkReportPage({ params, searchParams }: 
       basePath={fieldworkLinkOperationsBase(token)}
       capabilities={capabilities}
       scope={scope}
+      includeContactOwner={false}
       searchParams={await searchParams}
     />
   );

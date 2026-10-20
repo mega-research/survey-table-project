@@ -31,9 +31,15 @@ import { FilterResetButton } from '@/features/operations/filters/filter-reset-bu
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles-format';
 import type { MailTemplate } from '@/db/schema/mail';
@@ -45,6 +51,7 @@ import {
 import { getErrorMessage } from '@/lib/get-error-message';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 import type {
   CampaignCandidateRow,
@@ -73,11 +80,20 @@ interface Props {
   initialTemplateId: string | null;
   columnCandidates: ColumnCandidate[];
   resultCodeOptions: ContactResultCode[];
+  /** 「현재 컨택원」 값 선택지 — 외부 주체에게는 빈 배열(후보에도 열이 없다). */
+  assignmentOptions: ContactAssignmentOption[];
+  /**
+   * 주소에 실렸지만 지금 해석되지 않아 빠진 조건 수(지워진 컨택원 등). 0 보다 크면 명단이
+   * 원래 조건보다 넓으므로 경고하고 「미응답자 재발송」의 자동 전체 선택을 하지 않는다.
+   */
+  unresolvedClauseCount: number;
   initialClauses: { op: 'AND' | 'OR' | null; source: string; value: string }[];
   sort: CampaignSortKey;
   dir: CampaignSortDir;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 export function CampaignWizard({
@@ -88,10 +104,13 @@ export function CampaignWizard({
   initialTemplateId,
   columnCandidates,
   resultCodeOptions,
+  assignmentOptions,
+  unresolvedClauseCount,
   initialClauses,
   sort,
   dir,
   mailColumns,
+  showResid,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -132,6 +151,10 @@ export function CampaignWizard({
   }
 
   const totalPages = Math.max(1, Math.ceil(candidates.total / candidates.pageSize));
+
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+
+  const nav = pageBlockNavTargets(candidates.page, totalPages);
   const selectedCount = selectedIds.size;
   const visibleIds = useMemo(() => candidates.rows.map((r) => r.id), [candidates.rows]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
@@ -220,7 +243,7 @@ export function CampaignWizard({
       router.replace(`?${next.toString()}`, { scroll: false });
     };
 
-    if (candidates.total === 0) {
+    if (candidates.total === 0 || unresolvedClauseCount > 0) {
       stripFlag();
       return;
     }
@@ -237,7 +260,15 @@ export function CampaignWizard({
       }
       stripFlag();
     });
-  }, [searchParams, candidates.total, surveyId, currentFilter, router, fetchCandidateIdsAsync]);
+  }, [
+    searchParams,
+    candidates.total,
+    unresolvedClauseCount,
+    surveyId,
+    currentFilter,
+    router,
+    fetchCandidateIdsAsync,
+  ]);
 
   async function openConfirm() {
     if (selectedCount === 0) {
@@ -335,9 +366,20 @@ export function CampaignWizard({
           initialClauses={initialClauses}
           columnCandidates={columnCandidates}
           resultCodeOptions={resultCodeOptions}
+          assignmentOptions={assignmentOptions}
           ariaLabel="수신자 필터"
           resetExtraParams={['unresponded']}
         />
+
+        {unresolvedClauseCount > 0 ? (
+          <p
+            role="alert"
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          >
+            적용할 수 없는 조건 {unresolvedClauseCount}개가 빠져 아래 명단이 원래 조건보다 넓습니다
+            (지워진 컨택원·열 등). 조건을 다시 걸어 주세요.
+          </p>
+        ) : null}
 
         <div className="flex items-center gap-2">
           <Checkbox
@@ -422,17 +464,19 @@ export function CampaignWizard({
                     aria-label="현재 페이지 전체 선택"
                   />
                 </th>
-                <th className="px-3 py-2">
-                  <SortHeader
-                    label={RESID_DEFAULT_LABEL}
-                    sortKey="resid"
-                    activeSort={sort}
-                    dir={dir}
-                    onSort={changeSort}
-                  />
-                </th>
+                {showResid ? (
+                  <th className="px-3 py-2">
+                    <SortHeader
+                      label={RESID_DEFAULT_LABEL}
+                      sortKey="resid"
+                      activeSort={sort}
+                      dir={dir}
+                      onSort={changeSort}
+                    />
+                  </th>
+                ) : null}
                 {mailColumns.map((c) => (
-                  <th key={c.key} className="px-3 py-2">
+                  <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
                     {c.label}
                   </th>
                 ))}
@@ -485,7 +529,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7 + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6 + (showResid ? 1 : 0) + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -502,10 +546,12 @@ export function CampaignWizard({
                         aria-label={`${r.emailMasked} 선택`}
                       />
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    {showResid ? (
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.resid}</td>
+                    ) : null}
                     {mailColumns.map((c) => (
-                      <td key={c.key} className="px-3 py-2 text-slate-600">
-                        {r.attrs[c.key] || '—'}
+                      <td key={`${c.kind}.${c.key}`} className="px-3 py-2 text-slate-600">
+                        {mailColumnValue(c, r.attrs, r.piiMasks, r.assignmentName) || '—'}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
@@ -532,43 +578,45 @@ export function CampaignWizard({
 
         {totalPages > 1 ? (
           <div className="flex items-center justify-end gap-1 text-sm">
-            <span className="mr-1 text-slate-500">
+            <span className={PAGER_STATUS_CLASS}>
               {candidates.page} / {totalPages}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => changePage(candidates.page - 1)}
-              disabled={candidates.page <= 1}
+            <button
+              type="button"
+              onClick={() => nav.prev !== null && changePage(nav.prev)}
+              disabled={nav.prev === null}
+              className={PAGER_ITEM_CLASS}
             >
               이전
-            </Button>
+            </button>
             {buildPageItems(candidates.page, totalPages).map((item, i) =>
               item === 'ellipsis' ? (
-                <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                   …
                 </span>
+              ) : item === candidates.page ? (
+                <span key={item} aria-current="page" className={PAGER_ITEM_CURRENT_CLASS}>
+                  {item}
+                </span>
               ) : (
-                <Button
+                <button
                   key={item}
-                  variant={item === candidates.page ? 'default' : 'outline'}
-                  size="sm"
+                  type="button"
                   onClick={() => changePage(item)}
-                  aria-current={item === candidates.page ? 'page' : undefined}
-                  className={item === candidates.page ? 'pointer-events-none' : undefined}
+                  className={PAGER_ITEM_CLASS}
                 >
                   {item}
-                </Button>
+                </button>
               ),
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => changePage(candidates.page + 1)}
-              disabled={candidates.page >= totalPages}
+            <button
+              type="button"
+              onClick={() => nav.next !== null && changePage(nav.next)}
+              disabled={nav.next === null}
+              className={PAGER_ITEM_CLASS}
             >
               다음
-            </Button>
+            </button>
             <PagerJump totalPages={totalPages} onJump={changePage} />
           </div>
         ) : null}

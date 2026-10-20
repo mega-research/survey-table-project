@@ -8,7 +8,7 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
-import { useAutoGrowTextarea } from '@/features/question-renderer/hooks/use-auto-grow-textarea';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
 import {
@@ -26,6 +26,7 @@ import {
   getHorizontalItemsClass,
   getInputTextAlignClass,
 } from '@/features/question-renderer/utils/table-grid-utils';
+import { resolveTokenPrefill } from '@/features/question-renderer/utils/token-prefill';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -52,15 +53,18 @@ export const InputCell = React.memo(function InputCell({
   const quotes = useAnswerQuotes();
   // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
   const { markSeedWrite } = useResponseSources();
-  const template = cell.defaultValueTemplate ?? '';
-  const isPrefilled = template.trim().length > 0;
   // prefill 은 attrs 만 치환한다(quotes 를 넘기지 않는다). 이 결과는 onUpdateValue 로 응답에
   // 저장되는데(questionResponses → response_answers → 엑셀/SPSS export), 응답 인용은
   // "저장되지 않는 파생값"이 불변식이다(utils/answer-quote.ts).
   // 게다가 표 셀 답변은 셀에 piiEncrypted 를 켠 경우에만 암호화되므로, 인용을 허용하면
   // 암호화 단답형의 원문이 인용값을 타고 평문 셀 답변으로 새는 경로가 열린다.
   // 질문 레벨 prefill(question-input.tsx)·서버 재검증(server/survey-response/services/submitted-answers.ts)도 attrs 기준이다.
-  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  // 명단 값이 비면 잠그지 않는다 — 그 칸은 응답자가 직접 적는 평범한 입력칸이다(token-prefill).
+  const resolvedPrefill = resolveTokenPrefill(cell.defaultValueTemplate, attrs);
+  // 「응답자가 고칠 수 있게」를 켠 칸은 잠그지 않는다 — 명단 값은 아래에서 처음 한 번만 깔린다.
+  const seedValue = cell.prefillEditable === true ? resolvedPrefill : null;
+  const prefilledValue = cell.prefillEditable === true ? '' : (resolvedPrefill ?? '');
+  const isPrefilled = prefilledValue !== '';
   const currentValue = (cellResponse as string) || '';
   const textValue = isPrefilled ? prefilledValue : currentValue;
 
@@ -109,13 +113,27 @@ export const InputCell = React.memo(function InputCell({
     priorOriginal: priorAnswerText(priorAnswersForFormat, questionId, cell.id),
   });
 
+  // 고칠 수 있는 prefill — 응답값이 아예 없을 때(undefined)만 명단 값을 깐다. 응답자가 지워
+  // 빈 문자열이 되면 다시 깔지 않는다(emptyDefault 와 같은 규칙 — 지운 뜻을 지킨다).
+  const applySeed = useEffectEvent(() => {
+    if (seedValue !== null && cellResponse === undefined) {
+      markSeedWrite?.(questionId);
+      onUpdateValue(seedValue);
+    }
+  });
+  useEffect(() => {
+    applySeed();
+  }, [cellResponse, seedValue]);
+
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
+  // 고칠 수 있는 prefill 값이 있으면 그쪽이 이긴다(명단 값이 일반 기본치보다 구체적이다).
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
   const applyEmptyDefault = useEffectEvent(() => {
     // 게이팅 비활성 셀은 컨테이너(interactive-cell.tsx)가 언마운트로 숨기므로
     // 이 effect 자체가 돌지 않는다 — 지움과의 무한 루프 없음. 활성화(재마운트) 시 재채움.
     if (
       !isPrefilled &&
+      seedValue === null &&
       isNumberMode &&
       typeof cell.emptyDefault === 'number' &&
       cellResponse === undefined
@@ -126,7 +144,7 @@ export const InputCell = React.memo(function InputCell({
   });
   useEffect(() => {
     applyEmptyDefault();
-  }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
+  }, [cellResponse, isPrefilled, seedValue, isNumberMode, cell.emptyDefault]);
 
   // 응답 품질 위반 — 평문 모드·prefill·이월 면제 판정은 검증 쪽 함수가 쥔다(표·보기 표 공용)
   // 문구는 포커스가 빠진 뒤에만 — 한글 조합 중 첫 자모에 반응하지 않게(형식 검사와 같은 규칙)
@@ -136,6 +154,7 @@ export const InputCell = React.memo(function InputCell({
     : resolveCellTextQualityViolation(
         cell,
         currentValue,
+        attrs,
         priorAnswerText(priorAnswersForFormat, questionId, cell.id),
       );
   const hasViolation =

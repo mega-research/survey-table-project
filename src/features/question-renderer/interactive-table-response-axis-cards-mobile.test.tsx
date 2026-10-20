@@ -106,3 +106,101 @@ describe('InteractiveTableResponse — 축 단위 카드(열 = 축)', () => {
     expect(document.querySelector('[data-cell-id="r1-26"] .ring-red-300')).toBeNull();
   });
 });
+
+describe('InteractiveTableResponse — 축 단위 카드의 글자 없는 체크박스 칸', () => {
+  const checkColumns: TableColumn[] = [
+    { id: 'item', label: '구분', width: 300 },
+    { id: 'y25', label: '2025년', width: 120 },
+  ];
+  const checkRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '',
+      cells: [
+        { id: 'r1-label', type: 'text', content: '① 벤처캐피탈(VC)' },
+        {
+          id: 'r1-25',
+          type: 'checkbox',
+          content: '',
+          checkboxOptions: [{ id: 'o1', label: '', value: '1' }],
+        },
+      ],
+    },
+    {
+      id: 'r2',
+      label: '',
+      cells: [
+        { id: 'r2-label', type: 'text', content: '투자유치 횟수' },
+        { id: 'r2-25', type: 'input', content: '건', textPosition: 'right' },
+      ],
+    },
+  ];
+
+  function CheckHarness() {
+    const [value, setValue] = useState<Record<string, unknown>>({});
+    return (
+      <>
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={checkColumns}
+          rows={checkRows}
+          mobileTableDisplayMode="axis-cards"
+          value={value}
+          onChange={setValue}
+        />
+        <output data-testid="value">{JSON.stringify(value)}</output>
+      </>
+    );
+  }
+
+  it('행 제목이 체크박스의 라벨로 옆에 붙고, 라벨을 눌러 체크할 수 있다', () => {
+    render(<CheckHarness />);
+    const card = screen.getByTestId('column-axis-card-y25');
+    // 행 제목은 한 번만 — 체크박스의 라벨로만 그려진다
+    expect(within(card).getAllByText('① 벤처캐피탈(VC)')).toHaveLength(1);
+    const checkbox = within(card).getByLabelText('① 벤처캐피탈(VC)');
+    expect(checkbox).toHaveAttribute('type', 'checkbox');
+
+    fireEvent.click(within(card).getByText('① 벤처캐피탈(VC)'));
+    expect(screen.getByTestId('value')).toHaveTextContent('"r1-25":["1"]');
+    // 입력 칸의 행 제목은 종전대로 칸 위에 선다
+    expect(within(card).getByText('투자유치 횟수').tagName).not.toBe('LABEL');
+  });
+
+  it('상세 기재를 받는 체크박스를 고르면 입력칸 칩이 「(라벨 없음)」이 아니라 행 제목을 쓴다', () => {
+    const otherRows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'r1-label', type: 'text', content: '⑦ 기타' },
+          {
+            id: 'r1-25',
+            type: 'checkbox',
+            content: '',
+            checkboxOptions: [{ id: 'o1', label: '', value: '1', allowTextInput: true }],
+          },
+        ],
+      },
+    ];
+    function OtherHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>({});
+      return (
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={checkColumns}
+          rows={otherRows}
+          mobileTableDisplayMode="axis-cards"
+          value={value}
+          onChange={setValue}
+        />
+      );
+    }
+    render(<OtherHarness />);
+    const card = screen.getByTestId('column-axis-card-y25');
+    fireEvent.click(within(card).getByLabelText('⑦ 기타'));
+    expect(within(card).queryByText('(라벨 없음)')).toBeNull();
+    // 체크박스 라벨 + 입력칸 칩
+    expect(within(card).getAllByText('⑦ 기타')).toHaveLength(2);
+  });
+});

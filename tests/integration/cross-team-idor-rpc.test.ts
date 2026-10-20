@@ -496,6 +496,65 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'contacts.view',
     input: { surveyId: S, attrsKey: 'k' },
   },
+  'contacts.attrValues.nonNumericCount': {
+    gate: 'scoped',
+    capability: 'contacts.view',
+    input: { surveyId: S, attrsKey: 'k' },
+  },
+  'contacts.assignments.list': {
+    gate: 'rpc',
+    capability: 'contacts.view',
+    input: { surveyId: S },
+  },
+  'contacts.assignments.create': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, name: '주입' },
+  },
+  'contacts.assignments.setTarget': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, contactTargetId: C, assignmentId: null },
+  },
+  'contacts.assignments.rename': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, id: C, name: '주입' },
+  },
+  'contacts.assignments.reorder': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, ids: [C] },
+  },
+  'contacts.assignments.remove': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, id: C },
+  },
+  'contacts.assignments.preview': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, assignmentId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+  },
+  'contacts.assignments.apply': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, assignmentId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+  },
+  'contacts.assignments.facets': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: { surveyId: S, source: 'system.web' },
+  },
+  'contacts.assignments.matches': {
+    gate: 'rpc',
+    capability: 'contacts.manage',
+    input: {
+      surveyId: S,
+      clauses: [{ source: 'system.resid', value: '1', op: '' }],
+      page: 1,
+    },
+  },
 
   // ── 메일 ────────────────────────────────────────────────────────────────
   'mail.templates.create': {

@@ -6,6 +6,15 @@ import { lockWriteScope } from './data-scope';
 vi.mock('@/db', () => ({ db: {} }));
 vi.mock('@/lib/auth/external-viewer', () => ({ isExternalViewer: vi.fn() }));
 
+// 이 브라우저의 「테스트 모드로 보기」 쿠키 — 기본은 켜짐(테스트 보기 브라우저).
+const { browserCookie } = vi.hoisted(() => ({ browserCookie: { on: true } }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      browserCookie.on && name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined,
+  }),
+}));
+
 interface Captured {
   selection: Record<string, unknown> | null;
   lock: string | null;
@@ -42,6 +51,16 @@ const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 describe('lockWriteScope', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    browserCookie.on = true;
+  });
+
+  it('전역 플래그가 켜져 있어도 이 브라우저가 테스트 보기가 아니면 real 파티션에 쓴다', async () => {
+    browserCookie.on = false;
+    const { executor } = makeExecutor([{ enabled: true }]);
+
+    const locked = await lockWriteScope(executor, SURVEY_ID, false, { lock: 'update' });
+
+    expect(locked).toEqual({ isTest: false, scope: 'real', row: { enabled: true } });
   });
 
   it("lock:'update' 는 FOR UPDATE 로 잠그고 어드민은 전역 플래그를 그대로 파티션으로 쓴다", async () => {

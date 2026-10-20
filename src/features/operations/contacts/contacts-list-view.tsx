@@ -11,6 +11,7 @@ import { operationsPaths } from '../operations-paths';
 import { ContactUploadAction } from './contact-upload-action';
 import { ContactsDownloadDialog } from './contacts-download-dialog';
 import { ContactsFilterBar } from './contacts-filter-bar';
+import { contactDetailHref } from './contacts-list-return';
 import { ContactsPageClient } from './contacts-page-client';
 
 /**
@@ -46,6 +47,11 @@ interface Props {
    */
   canOpenDetail: boolean;
   data: ContactsListPageData;
+  /**
+   * 지금 목록 주소의 쿼리(`listQueryFromSearchParams`) — 「+ 조사 대상 추가」가 실어 가 저장 뒤
+   * 이 목록의 페이지·필터로 돌아온다. 행 클릭은 클라이언트가 주소에서 직접 읽는다.
+   */
+  listQuery?: string;
 }
 
 export function ContactsListView({
@@ -54,6 +60,7 @@ export function ContactsListView({
   capabilities,
   canOpenDetail,
   data,
+  listQuery = '',
 }: Props) {
   const paths = operationsPaths(basePath);
   const canManage = capabilities.has('contacts.manage');
@@ -116,7 +123,9 @@ export function ContactsListView({
                 <Link href={`${paths.contacts}/prior-answers`}>이월 응답 임포트</Link>
               </Button>
               <Button asChild size="sm">
-                <Link href={`${paths.contacts}/new`}>+ 조사 대상 추가</Link>
+                <Link href={contactDetailHref(paths.contacts, 'new', listQuery)}>
+                  + 조사 대상 추가
+                </Link>
               </Button>
             </>
           )}
@@ -130,6 +139,7 @@ export function ContactsListView({
             initialClauses={data.initialClauses}
             columnCandidates={data.columnCandidates}
             resultCodeOptions={data.resultCodes}
+            assignmentOptions={data.assignmentOptions}
             {...(canManage ? { columnsSettingsHref: paths.contactsColumns } : {})}
           />
           {data.rows.length === 0 ? (
@@ -156,6 +166,7 @@ export function ContactsListView({
               sort={data.sort}
               dir={data.dir}
               resultCodeOptions={data.resultCodes}
+              assignmentOptions={data.assignmentOptions}
             />
           )}
         </CardContent>

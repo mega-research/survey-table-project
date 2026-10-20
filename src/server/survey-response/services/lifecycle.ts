@@ -460,6 +460,12 @@ export async function resumeOrCreateResponse(
 
   if (!existing) return null;
 
+  // 세션의 테스트 여부와 행이 다르면 이어받지 않는다. 익명 테스트 링크와 공개 링크는 브라우저에
+  // 같은 세션 키를 써서, 테스트 모드를 끈 뒤 공개 링크로 들어오면 예전 테스트 행을 이어받고 그 행의
+  // 쓰기 가드가 저장마다 거부했다(2026-10-15). 반대로 테스트 링크가 실응답 행을 이어받으면 테스트 답이
+  // 실데이터에 섞인다. null 이면 클라이언트가 저장 키를 지우고 새 세션으로 시작한다.
+  if (existing.isTest !== isTestSession) return null;
+
   const now = new Date();
   const draftSeq = extractDraftSeq(existing.metadata);
 

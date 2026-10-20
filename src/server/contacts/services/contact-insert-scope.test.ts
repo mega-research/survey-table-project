@@ -4,6 +4,14 @@ vi.mock('@/db', () => ({ db: {} }));
 
 import { prepareContactInsertScope } from './contact-insert-scope';
 
+// 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
+// (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
+
 /**
  * lockWriteScope 의 잠금 조회와 대상자 count 를 한 select stub 으로 받는다.
  * 잠금 쪽만 `.for('update')` 를 붙이므로 호출 순서에 기대지 않고 갈린다.

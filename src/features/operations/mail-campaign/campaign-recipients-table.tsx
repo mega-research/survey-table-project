@@ -3,9 +3,16 @@ import Link from 'next/link';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import {
+  PAGER_ELLIPSIS_CLASS,
+  PAGER_ITEM_CLASS,
+  PAGER_ITEM_CURRENT_CLASS,
+  PAGER_ITEM_DISABLED_CLASS,
+  PAGER_STATUS_CLASS,
+} from '@/features/operations/pager-classes';
 import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
-import type { MailDisplayColumn } from '@/lib/contacts/mail-display-columns';
+import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
+import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
 import {
@@ -38,6 +45,8 @@ interface Props {
   resultOptions: Array<{ value: string; label: string }>;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
+  /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
+  showResid: boolean;
 }
 
 // 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
@@ -108,8 +117,11 @@ export function CampaignRecipientsTable({
   errorOptions,
   resultOptions,
   mailColumns,
+  showResid,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // 이전·다음은 10개 묶음 단위로 넘긴다 (다음 = 다음 묶음 첫 페이지, 이전 = 이전 묶음 마지막 페이지).
+  const nav = pageBlockNavTargets(page, totalPages);
 
   // 모든 링크가 활성 깔때기를 기본으로 물고 간다 — 한 군데라도 빠뜨리면 그 링크를
   // 누르는 순간 필터가 조용히 풀린다.
@@ -215,9 +227,9 @@ export function CampaignRecipientsTable({
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                <th className="px-3 py-2">시스템ID</th>
+                {showResid ? <th className="px-3 py-2">시스템ID</th> : null}
                 {mailColumns.map((c) => (
-                  <th key={c.key} className="px-3 py-2">
+                  <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
                     {c.label}
                   </th>
                 ))}
@@ -274,12 +286,14 @@ export function CampaignRecipientsTable({
                     key={r.id}
                     className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-slate-600">
-                      {r.contactResid === null ? '—' : `#${r.contactResid}`}
-                    </td>
+                    {showResid ? (
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                        {r.contactResid === null ? '—' : `#${r.contactResid}`}
+                      </td>
+                    ) : null}
                     {mailColumns.map((c) => (
-                      <td key={c.key} className="px-3 py-2 text-slate-600">
-                        {r.contactAttrs[c.key] || '—'}
+                      <td key={`${c.kind}.${c.key}`} className="px-3 py-2 text-slate-600">
+                        {mailColumnValue(c, r.contactAttrs, r.contactPiiMasks, r.contactAssignmentName) || '—'}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
@@ -327,16 +341,16 @@ export function CampaignRecipientsTable({
 
       {totalPages > 1 ? (
         <div className="flex items-center justify-end gap-1 text-sm">
-          <span className="mr-1 text-slate-500">
+          <span className={PAGER_STATUS_CLASS}>
             {page} / {totalPages}
           </span>
           <PageLink
             href={
-              page > 1
+              nav.prev !== null
                 ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
-                    recipPage: page - 1,
+                    recipPage: nav.prev,
                   })
                 : null
             }
@@ -345,14 +359,14 @@ export function CampaignRecipientsTable({
           </PageLink>
           {buildPageItems(page, totalPages).map((item, i) =>
             item === 'ellipsis' ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+              <span key={`ellipsis-${i}`} className={PAGER_ELLIPSIS_CLASS}>
                 …
               </span>
             ) : item === page ? (
               <span
                 key={item}
                 aria-current="page"
-                className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+                className={PAGER_ITEM_CURRENT_CLASS}
               >
                 {item}
               </span>
@@ -371,11 +385,11 @@ export function CampaignRecipientsTable({
           )}
           <PageLink
             href={
-              page < totalPages
+              nav.next !== null
                 ? hrefFor({
                     statuses: currentStatuses,
                     q: currentQuery,
-                    recipPage: page + 1,
+                    recipPage: nav.next,
                   })
                 : null
             }
@@ -399,13 +413,15 @@ export function CampaignRecipientsTable({
 function PageLink({ href, children }: { href: string | null; children: React.ReactNode }) {
   if (!href) {
     return (
-      <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">{children}</span>
+      <span aria-disabled="true" className={PAGER_ITEM_DISABLED_CLASS}>
+        {children}
+      </span>
     );
   }
   return (
     <Link
       href={href}
-      className="rounded border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50"
+      className={PAGER_ITEM_CLASS}
     >
       {children}
     </Link>

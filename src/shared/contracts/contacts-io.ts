@@ -11,7 +11,7 @@ import type {
   ContactResultCode,
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +103,55 @@ export type MatchContactUploadResult = z.infer<typeof MatchContactUploadResultSc
 // 조회 자체는 server/read-models/contacts.server 소관이고 여기는 모양만 둔다.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** 컨택원 선택지 — 목록 열·상세 드롭다운·필터 선택지가 공유한다. 배열은 컨택원 순서대로. */
+export const ContactAssignmentOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  order: z.number().int(),
+});
+export type ContactAssignmentOption = z.infer<typeof ContactAssignmentOptionSchema>;
+
+/**
+ * 컨택원 관리 목록의 인원 — 응답 상태는 조사 대상 목록의 응답 상태(web 열·필터)와 같은 식이라
+ * 두 화면 숫자가 같다. 완료=completed · 진행 중=in_progress · 미접속=응답 없음. 그 밖의 상태
+ * (이탈·자격 미달 등)는 배정 인원에만 들어간다.
+ */
+export interface ContactAssignmentStats {
+  assigned: number;
+  completed: number;
+  inProgress: number;
+  notStarted: number;
+}
+
+export interface ContactAssignmentListRow extends ContactAssignmentOption {
+  stats: ContactAssignmentStats;
+  lastAppliedAt: Date | null;
+}
+
+export interface ContactAssignmentListResult {
+  rows: ContactAssignmentListRow[];
+  /** 배정 없는 대상 인원 */
+  unassigned: ContactAssignmentStats;
+  /** 이 파티션의 조사 대상 전체 */
+  total: number;
+}
+
+/** 컨택원 수정 화면 오른쪽 대상 목록 한 줄 — 개인정보 열은 목록 화면과 같은 마스킹 힌트만. */
+export interface ContactAssignmentMatchRow {
+  id: string;
+  resid: number;
+  attrs: Record<string, string>;
+  piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
+  assignment: { id: string; name: string } | null;
+}
+
+export interface ContactAssignmentMatchesResult {
+  rows: ContactAssignmentMatchRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface ContactsRow {
   id: string;
   resid: number;
@@ -140,6 +189,11 @@ export interface ContactsRow {
    */
   inviteToken: string;
   createdAt: Date;
+  /**
+   * 지금 맡은 컨택원. 배정 없음이면 null. 외부 주체 목록은 컨택원을 싣지 않아 늘 null 이다
+   * (내부 실사 운영 정보 — CONTEXT.md 「컨택원」).
+   */
+  assignment: { id: string; name: string } | null;
 }
 
 export interface ContactUploadRow {
@@ -166,8 +220,8 @@ export interface MailHistoryRow {
   id: string;
   campaignTitle: string;
   runNumber: number;
-  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기 */
-  kind: 'bulk' | 'single';
+  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기. 'fallback'이면 대체 발송(제목에 표기) */
+  kind: MailCampaignKind;
   status: MailRecipientStatus;
   sentAt: Date | null;
   deliveredAt: Date | null;
@@ -382,6 +436,8 @@ export interface ContactsListPageData {
   scheme: ContactColumnScheme | null;
   resultCodes: ContactResultCode[];
   columnCandidates: ColumnCandidateWithPii[];
+  /** 「현재 컨택원」 필터·열 머리 선택지 (컨택원 순서). 컨택원을 싣지 않는 목록은 빈 배열. */
+  assignmentOptions: ContactAssignmentOption[];
   /** 필터바가 되그릴 초기 절 — URL 에서 읽은 것 그대로. */
   initialClauses: ClientFilterClause[];
   rows: ContactsRow[];

@@ -17,6 +17,7 @@ import {
   getMailRecipientsForTarget,
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -63,6 +64,12 @@ interface Props {
    * 않다. 걷은 행은 화면이 「관리자」로, 외주가 고친 행은 「외주」로 읽는다.
    */
   hideStaffEmails?: boolean;
+  /**
+   * 「컨택원」 드롭다운을 낼 수 있는가 — 내부 콘솔만 켠다. 컨택원은 내부 실사 운영 정보라
+   * 외주 실사 링크 트리에는 읽지도 내리지도 않는다. 바꾸는 procedure 가 `contacts.manage` 라
+   * 그 권한이 없으면 켜도 읽지 않는다.
+   */
+  includeContactOwner?: boolean;
 }
 
 export async function ContactDetailScreen({
@@ -73,6 +80,7 @@ export async function ContactDetailScreen({
   scope,
   canProxyRespond,
   hideStaffEmails = false,
+  includeContactOwner = false,
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
@@ -93,13 +101,16 @@ export async function ContactDetailScreen({
     ? isReeditableResponseStatus(editable.status)
     : detail.contact.responseId != null;
 
-  const [scheme, resultCodes, mailHistory, rawEditLogs, mailTemplates] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
-    permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
-    permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
-    permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
-  ]);
+  const showAssignment = includeContactOwner && permissions.manageContacts;
+  const [scheme, resultCodes, mailHistory, rawEditLogs, mailTemplates, assignmentOptions] =
+    await Promise.all([
+      getContactColumnScheme(surveyId, scope),
+      getContactResultCodes(surveyId),
+      permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
+      permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
+      permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
+      showAssignment ? listAssignmentOptions(surveyId, scope) : null,
+    ]);
   if (!scheme) notFound();
   // 화면에서 감추지 않고 payload 에서 뺀다 — 감추기만 하면 이메일이 RSC payload 로 나간다.
   const editLogs = hideStaffEmails
@@ -156,6 +167,14 @@ export async function ContactDetailScreen({
             }
           : {})}
         permissions={permissions}
+        {...(assignmentOptions
+          ? {
+              assignment: {
+                currentId: detail.contact.assignmentId,
+                options: assignmentOptions,
+              },
+            }
+          : {})}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,

@@ -21,6 +21,7 @@ import {
 import {
   hasLeadingZeroToken,
   parseIdListInput,
+  parseParityKeyword,
   SINGLE_COLUMN_ID_LIST_MAX,
 } from '@/lib/operations/range-list';
 
@@ -58,6 +59,19 @@ export interface ParseExtraHooks {
    * loadIdListsForValues 로 미리 읽어 넘긴다 (파서는 동기). 없는 토큰은 0건으로 접힌다.
    */
   idLists?: ReadonlyMap<string, number[]>;
+  /**
+   * 이 설문·이 세션 파티션의 컨택원 id — 「현재 컨택원」 절 검증용(결과코드 목록과 같은 역할).
+   * 넘기지 않으면 그 절을 만들지 않는다 — 외부 주체 표면처럼 컨택원 조건이 없는 표면이
+   * 주소 조작으로 이 조건을 받지 않게 하는 기본값이다.
+   */
+  assignmentIds?: ReadonlySet<string>;
+}
+
+/** `짝수`/`홀수` 한 단어면 홀짝 idlist 절. 아니면 null (섞인 토큰은 종전 규칙). */
+function parityCondition(col: string, trimmed: string): FilterCondition | null {
+  const parity = parseParityKeyword(trimmed);
+  if (!parity) return null;
+  return { source: col, mode: 'idlist', value: trimmed, ranges: [], parity };
 }
 
 /**
@@ -145,7 +159,7 @@ export function parseHeaderFiltersFromUrl(
     const mode = modeRaw as HeaderFilterMode;
     const condition =
       extra?.header?.(col, mode, hv) ??
-      buildHeaderCondition(col, mode, hv, candidates, resultCodes);
+      buildHeaderCondition(col, mode, hv, candidates, resultCodes, extra);
     if (!condition) continue;
     bySource.set(col, condition);
   }
@@ -162,9 +176,26 @@ function buildHeaderCondition(
   hv: string,
   candidates: ColumnCandidate[],
   resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
 ): FilterCondition | null {
   const candidate = candidates.find((c) => c.source === col);
   if (!candidate) return null;
+
+  if (col === FILTER_SOURCE.CONTACT_OWNER) {
+    if (mode !== 'in' || !extra?.assignmentIds) return null;
+    const raw = splitHeaderValues(hv);
+    // 센티널이 항상 이긴다. 다른 설문·다른 파티션 id 는 버린다 — 남은 게 없으면 조건 미적용.
+    const includeNull = raw.includes(FILTER_NONE_VALUE);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE && extra.assignmentIds!.has(v));
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
+  }
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
@@ -274,6 +305,8 @@ function attrsTextOrIdlistCondition(
 ): FilterCondition {
   const fromToken = idListTokenCondition(col, trimmed, extra);
   if (fromToken) return fromToken;
+  const fromParity = parityCondition(col, trimmed);
+  if (fromParity) return fromParity;
   // 단일 컬럼이라 전체 검색의 컬럼 곱연산 상한(200)이 아니라 인라인 상한(2,000)을 쓴다.
   const ranges = hasLeadingZeroToken(trimmed)
     ? null
@@ -316,6 +349,13 @@ function buildClause(
 
   const extraCondition = extra?.clause?.(col, trimmed) ?? null;
   if (extraCondition) return { op, condition: extraCondition };
+
+  // 여러 값(체크한 값들 — encodeMultiClauseValue)은 헤더 체크박스 필터와 같은 in 절이다.
+  // 원형 q 를 넘긴다 — 값 앞뒤 공백까지 보존해야 IN 비교가 맞는다(splitHeaderValues 주석).
+  if (q.includes(HEADER_FILTER_VALUE_SEPARATOR)) {
+    const condition = buildHeaderCondition(col, 'in', q, candidates, resultCodes, extra);
+    return condition ? { op, condition } : null;
+  }
 
   // 전체 컬럼 검색 — candidates 화이트리스트 안의 attrs/pii 로만 전개하므로
   // whitelist 조회 없이 자체 처리 (전개 자체가 화이트리스트 검증).
@@ -363,6 +403,8 @@ function buildClause(
   if (col === FILTER_SOURCE.RESID) {
     const fromToken = idListTokenCondition(col, trimmed, extra);
     if (fromToken) return { op, condition: fromToken };
+    const fromParity = parityCondition(col, trimmed);
+    if (fromParity) return { op, condition: fromParity };
     const ranges = parseIdListInput(trimmed, { maxTokens: SINGLE_COLUMN_ID_LIST_MAX });
     if (ranges !== null) {
       return { op, condition: { source: 'system.resid', mode: 'idlist', value: trimmed, ranges } };
@@ -392,6 +434,19 @@ function buildClause(
   if (col === FILTER_SOURCE.WEB) {
     if (!WEB_FILTER_VALUES.has(trimmed)) return null;
     return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.CONTACT_OWNER) {
+    if (!extra?.assignmentIds) return null;
+    if (trimmed === FILTER_NONE_VALUE) {
+      return {
+        op,
+        condition: { source: col, mode: 'enum', value: FILTER_NONE_VALUE, includeNull: true },
+      };
+    }
+    // 다른 설문·다른 파티션의 id 는 조건 미적용 — 조용히 0건이 되지 않게 절을 버린다.
+    if (!extra.assignmentIds.has(trimmed)) return null;
+    return { op, condition: { source: col, mode: 'enum', value: trimmed } };
   }
 
   if (col === FILTER_SOURCE.EMAIL) {

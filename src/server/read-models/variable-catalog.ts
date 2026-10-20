@@ -5,7 +5,9 @@ import 'server-only';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
+import { piiKeyOf } from '@/lib/operations/contacts-format';
 import { contactTargets } from '@/db/schema/contacts';
+import { surveys } from '@/db/schema/surveys';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 
 export const getVariableCatalog = cache(
@@ -51,6 +53,28 @@ export const getVariableCatalog = cache(
       }
     }
 
-    return [...attrsKeys, ...system];
+    // 설문 토큰은 개인정보로 암호화된 열도 읽는다(응답 화면이 명단 값에 합친다 —
+    // read-models/respondent-contact-attrs). 메일 본문은 합치지 않으므로 survey 목적에만 싣는다.
+    // 빌더는 파티션을 가리지 않으므로 실·테스트 스킴의 개인정보 열을 함께 싣는다.
+    let piiKeys: VariableDef[] = [];
+    if (purpose === 'survey') {
+      const [schemes] = await db
+        .select({ test: surveys.testContactColumns })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId))
+        .limit(1);
+      const byKey = new Map<string, VariableDef>();
+      for (const c of [
+        ...(survey?.contactColumns?.columns ?? []),
+        ...(schemes?.test?.columns ?? []),
+      ]) {
+        const key = piiKeyOf(c.source);
+        if (key == null || attrsKeys.some((v) => v.key === key) || byKey.has(key)) continue;
+        byKey.set(key, { key, label: c.label, category: 'attrs', description: '개인정보 열' });
+      }
+      piiKeys = [...byKey.values()];
+    }
+
+    return [...attrsKeys, ...piiKeys, ...system];
   },
 );

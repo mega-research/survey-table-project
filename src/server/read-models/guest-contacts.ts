@@ -7,6 +7,7 @@ import type { GuestContactRow, GuestContactsPage } from '@/shared/contracts/work
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '../data-scope';
 
+import { contactFilterFromServerClauses } from './contact-filter-resolution';
 import { getContactColumnScheme, listContactsForSurvey } from './contacts';
 
 /**
@@ -41,7 +42,9 @@ export async function listGuestContacts(
     scope: EXTERNAL_VIEWER_DATA_SCOPE,
     page,
     pageSize: CONTACTS_PAGE_SIZE,
-    clauses: [],
+    filter: contactFilterFromServerClauses([]),
+    // 컨택원은 내부 실사 운영 정보 — 외부 화면에는 싣지 않는다.
+    includeAssignment: false,
     sort: 'resid',
     dir: 'asc',
   });

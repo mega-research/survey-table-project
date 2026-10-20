@@ -70,7 +70,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import type { FilterClause } from '@/lib/operations/filter-shared';
+import type { ResolvedContactFilter } from './contact-filter-resolution';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
 // 기존 호출부(RSC·서비스)의 import 경로를 유지한다.
@@ -85,7 +85,8 @@ export type {
 export interface ListContactsArgs {
   surveyId: string;
   scope: OperationsDataScope;
-  clauses: FilterClause[];
+  /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
+  filter: ResolvedContactFilter;
   page: number;
   sort: ContactsSortKey;
   dir: ContactsSortDir;
@@ -99,6 +100,11 @@ export interface ListContactsArgs {
    * 「그룹 · 전체」 드롭다운(.pen 10-2)이 첫 소비자다.
    */
   groupValue?: string;
+  /**
+   * 컨택원(지금 맡은 배정)을 행에 싣는가. 외부 계정·링크 목록은 false — 내부 실사 운영 정보라
+   * 열·값 모두 외부 주체에게 보내지 않는다. 기본 true.
+   */
+  includeAssignment?: boolean;
 }
 
 export interface ListContactsResult {
@@ -137,6 +143,18 @@ const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
 
 // 최신 메일 수신 상태 표현식은 contacts-filter-sql 로 이관 — 필터·정렬과 공유.
 
+// 지금 맡은 컨택원 이름 — 목록 「컨택원」 열. 배정 없음이면 NULL.
+const assignmentNameExpr = sql<string | null>`(
+  SELECT name FROM contact_assignments
+  WHERE contact_assignments.id = "contact_targets".assignment_id
+)`;
+
+// 「컨택원」 열 정렬 축 — 컨택원 순서. 배정 없음은 NULL(NULLS LAST)이라 방향과 무관하게 끝.
+const assignmentOrderExpr = sql<number | null>`(
+  SELECT "order" FROM contact_assignments
+  WHERE contact_assignments.id = "contact_targets".assignment_id
+)`;
+
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
@@ -146,7 +164,7 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *
  * 핵심:
  * - contact_targets 베이스 + 최신 contact_attempts (correlated subquery) 조인
- * - FilterClause[] 기반 다중 조건 필터 (buildContactsFilterSql)
+ * - 조사 대상 필터 해석 결과의 다중 조건 필터 (buildContactsFilterSql)
  * - page 클램프 (profiles.server.ts 패턴)
  * - PII 마스킹 (email/biz)
  *
@@ -154,13 +172,23 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, clauses, sort, dir, groupValue } = args;
+  const {
+    surveyId,
+    scope,
+    page,
+    pageSize,
+    filter,
+    sort,
+    dir,
+    groupValue,
+    includeAssignment = true,
+  } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
   if (groupValue !== undefined) whereParts.push(eq(contactTargets.groupValue, groupValue));
 
-  whereParts.push(buildContactsFilterSql(clauses));
+  whereParts.push(buildContactsFilterSql(filter.clauses));
 
   const whereClause = and(...whereParts)!;
 
@@ -196,12 +224,19 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
         ? // 메일 상태 순위 축 — 오름차순 열람 → 전달 완료 → … → 실패,
           // 발송 이력 없음(NULL)은 방향 무관 항상 마지막. 같은 상태 안은 시스템ID 순.
           [orderExpr(mailStatusRankExpr, dir), asc(contactTargets.resid)]
-        : [
-            orderExpr(
-              SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
-              dir,
-            ),
-          ];
+        : sort === 'owner'
+          ? // 컨택원 순서 → 이름, 배정 없음은 끝. 같은 컨택원 안은 시스템ID 순.
+            [
+              orderExpr(assignmentOrderExpr, dir),
+              orderExpr(assignmentNameExpr, dir),
+              asc(contactTargets.resid),
+            ]
+          : [
+              orderExpr(
+                SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+                dir,
+              ),
+            ];
 
   const dataRows = await db
     .select({
@@ -218,6 +253,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
       unsubscribedAt: contactTargets.unsubscribedAt,
+      assignmentId: contactTargets.assignmentId,
+      assignmentName: assignmentNameExpr.as('assignment_name'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -243,6 +280,10 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     unsubscribedAt: r.unsubscribedAt,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
+    assignment:
+      includeAssignment && r.assignmentId != null && r.assignmentName != null
+        ? { id: r.assignmentId, name: r.assignmentName }
+        : null,
   }));
 
   return { rows, total, page: clampedPage };
@@ -337,11 +378,14 @@ export const getContactColumnScheme = cache(
 
 /**
  * 필터 컬럼 후보 생성 — 조사대상목록·단체 메일 마법사 공유.
- * 맨 앞 "전체"(system.all) + system.resid / contact_result / web + attrs.* + pii.*.
- * placeholder 전용 컬럼(system.email_count / system.contact_owner)은 제외.
+ * 맨 앞 "전체"(system.all) + system.resid / contact_result / web / email_count + attrs.* + pii.*.
+ *
+ * 「현재 컨택원」(system.contact_owner)은 includeContactOwner 를 켠 표면(조사 대상 목록·컨택원
+ * 수정·단체 메일 위저드)만 받는다 — 셋 다 외부 주체에게는 끈다. 응답 내역은 받지 않는다.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,
+  opts: { includeContactOwner?: boolean } = {},
 ): ColumnCandidateWithPii[] {
   const columns = (scheme?.columns ?? [])
     .filter(
@@ -350,6 +394,7 @@ export function buildColumnCandidates(
         c.source === FILTER_SOURCE.CONTACT_RESULT ||
         c.source === FILTER_SOURCE.WEB ||
         c.source === FILTER_SOURCE.EMAIL ||
+        (opts.includeContactOwner === true && c.source === FILTER_SOURCE.CONTACT_OWNER) ||
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
@@ -382,6 +427,8 @@ export interface ContactDetailRow {
   respondedAt: Date | null;
   unsubscribedAt: Date | null;
   responseId: string | null;
+  /** 지금 맡은 컨택원 id (배정 없음이면 null). 외부 주체 화면에는 내리지 않는다. */
+  assignmentId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -422,6 +469,7 @@ export async function getContactDetailById(
       respondedAt: contactTargets.respondedAt,
       unsubscribedAt: contactTargets.unsubscribedAt,
       responseId: contactTargets.responseId,
+      assignmentId: contactTargets.assignmentId,
       createdAt: contactTargets.createdAt,
       updatedAt: contactTargets.updatedAt,
     })

@@ -38,8 +38,8 @@ export interface ProgressRow {
   /** 원본 group_value (NULL 식별용). 다중 기준이면 조합 키(progressCellKey). */
   groupValueRaw: string | null;
   /**
-   * 활성 분류 기준 키 순서대로의 그룹 값. 기본(group_value) 모드면 길이 1.
-   * null = 해당 기준 값 미분류.
+   * 활성 분류 기준 키 순서대로의 그룹 표시 값. 기본(group_value) 모드면 길이 1.
+   * attrs 기준은 값 그대로, 시스템 기준은 표시 이름. null = 해당 기준 값 미분류.
    */
   groupValues: (string | null)[];
   /** 그룹 내 MIN(resid) — 표 첫 컬럼 '#' 에 표시. */
@@ -54,6 +54,44 @@ export interface ProgressRow {
   meta: Record<string, string | null>;
 }
 
+/**
+ * 진척 보고 분류 기준 중 명단 attrs 가 아닌 것 — 시스템이 아는 축.
+ * 주소(`groupBy=`)·정렬(`group:<키>`)에는 `system:<이름>` 으로 실린다.
+ */
+export const PROGRESS_SYSTEM_GROUP_KEYS = [
+  // 지금 맡은 컨택원 — 완료도 지금 맡은 컨택원 기준으로 센다 (CONTEXT.md 「배정」).
+  'contact_owner',
+] as const;
+export type ProgressSystemGroupKey = (typeof PROGRESS_SYSTEM_GROUP_KEYS)[number];
+
+/**
+ * 분류 기준 태그 키 — attrs 키와 시스템 기준을 구분한다.
+ * attrs 키는 접두 없이 그대로 직렬화해 기존 `groupBy=키1,키2` 주소가 그대로 열린다.
+ */
+export type ProgressGroupKey =
+  | { kind: 'attrs'; key: string }
+  | { kind: 'system'; key: ProgressSystemGroupKey };
+
+const SYSTEM_GROUP_KEY_PREFIX = 'system:';
+
+/**
+ * 직렬화된 분류 키 → 태그 키. `system:` 접두는 항상 시스템 기준으로 읽고(attrs 키가
+ * 우연히 같은 접두를 가져도 이긴다), 모르는 시스템 이름은 null — 호출부가 버린다.
+ */
+export function parseProgressGroupKey(raw: string): ProgressGroupKey | null {
+  if (raw.length === 0) return null;
+  if (raw.startsWith(SYSTEM_GROUP_KEY_PREFIX)) {
+    const name = raw.slice(SYSTEM_GROUP_KEY_PREFIX.length);
+    const known = (PROGRESS_SYSTEM_GROUP_KEYS as readonly string[]).includes(name);
+    return known ? { kind: 'system', key: name as ProgressSystemGroupKey } : null;
+  }
+  return { kind: 'attrs', key: raw };
+}
+
+export function formatProgressGroupKey(key: ProgressGroupKey): string {
+  return key.kind === 'attrs' ? key.key : `${SYSTEM_GROUP_KEY_PREFIX}${key.key}`;
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'
@@ -61,7 +99,7 @@ export type ProgressSortKey =
   | 'completedCount'
   | 'responseRate'
   | `meta:${string}`
-  // group:<attrs키> — 배열 인덱스가 아닌 안정 식별자 (칩 on/off 재인덱싱에 불변)
+  // group:<직렬화된 분류 키> — 배열 인덱스가 아닌 안정 식별자 (칩 on/off 재인덱싱에 불변)
   | `group:${string}`;
 
 export type SortDir = 'asc' | 'desc';
@@ -163,22 +201,25 @@ export function parseProgressSort(
 }
 
 /**
- * `?groupBy=` 해석 — 미지정이면 지정된 분류 기준 **전체**, 콤마 목록이면 그중 유효한 것만.
+ * `?groupBy=` 해석 — 미지정이면 기본 켜짐 기준 전체(`defaultOff` 가 아닌 것), 콤마 목록이면 그중 유효한 것만.
  *
- * 유효 키가 하나도 없으면 전체로 되돌린다(칩이 전부 꺼진 화면을 만들지 않는다).
+ * 유효 키가 하나도 없으면 기본으로 되돌린다(칩이 전부 꺼진 화면을 만들지 않는다).
  * 순서는 언제나 기준 목록 순서다 — URL 이 클릭 순서에 좌우되지 않게 한다.
+ * 요청 키는 태그 키로 읽었다가 다시 직렬화해 비교한다 — 모르는 시스템 키(`system:…`)는 여기서 버려진다.
  */
-export function resolveActiveGroupKeys<T extends { key: string }>(
+export function resolveActiveGroupKeys<T extends { key: string; defaultOff?: boolean }>(
   criteria: readonly T[],
   raw: string | undefined,
 ): T[] {
-  if (typeof raw !== 'string') return [...criteria];
+  const defaults = criteria.filter((c) => !c.defaultOff);
+  if (typeof raw !== 'string') return defaults;
   const requested = raw
     .split(',')
-    .map((key) => key.trim())
-    .filter((key) => key.length > 0);
+    .map((key) => parseProgressGroupKey(key.trim()))
+    .filter((key): key is ProgressGroupKey => key !== null)
+    .map(formatProgressGroupKey);
   const matched = criteria.filter((c) => requested.includes(c.key));
-  return matched.length > 0 ? matched : [...criteria];
+  return matched.length > 0 ? matched : defaults;
 }
 
 export const EMPTY_PROGRESS_TOTALS: ProgressTotals = {

@@ -16,7 +16,10 @@ import { isInputFormat } from '@/types/input-type';
 import type { Question, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { parseInputFormat } from '@/features/question-renderer/utils/input-format';
-import { isTokenPrefilled } from '@/features/question-renderer/utils/token-prefill';
+import {
+  cellLockTemplate,
+  isTokenPrefilled,
+} from '@/features/question-renderer/utils/token-prefill';
 
 import {
   type PriorAnswers,
@@ -26,16 +29,20 @@ import {
 } from '@/lib/survey/prior-answers';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 
+/** 토큰 프리필 잠금 판정에 쓰는 명단 값 — 호출부(응답 흐름)가 넘긴다 */
+type PrefillAttrs = Record<string, string | undefined> | null | undefined;
+
 /** 한 칸의 형식 정돈 — 대상이 아니거나 형식이 틀리면 원문 그대로. */
 function normalizeOne(
   value: unknown,
   inputType: Question['inputType'] | undefined,
   defaultValueTemplate: string | null | undefined,
+  attrs: PrefillAttrs,
   priorOriginal: string | null,
 ): unknown {
   if (!isInputFormat(inputType)) return value;
   if (typeof value !== 'string') return value;
-  if (isTokenPrefilled(defaultValueTemplate)) return value;
+  if (isTokenPrefilled(defaultValueTemplate, attrs)) return value;
   if (isUntouchedPriorValue(value, priorOriginal)) return value;
   const result = parseInputFormat(inputType, value);
   return result.ok && result.normalized !== '' ? result.normalized : value;
@@ -52,6 +59,7 @@ function flatCellsOf(question: Question): TableCell[] {
 export function normalizeFormatValues(
   questions: readonly Question[],
   payload: Record<string, unknown>,
+  attrs: PrefillAttrs,
   priorAnswers?: PriorAnswers | null,
 ): Record<string, unknown> {
   let changed = false;
@@ -70,6 +78,7 @@ export function normalizeFormatValues(
         next[question.id],
         question.inputType,
         question.defaultValueTemplate,
+        attrs,
         priorAnswerText(priorAnswers, question.id),
       );
       if (normalized !== next[question.id]) {
@@ -90,7 +99,8 @@ export function normalizeFormatValues(
         const normalized = normalizeOne(
           cells[cell.id],
           cell.inputType,
-          cell.defaultValueTemplate,
+          cellLockTemplate(cell),
+          attrs,
           priorAnswerText(priorAnswers, question.id, cell.id),
         );
         if (normalized !== cells[cell.id]) {
@@ -121,6 +131,7 @@ export function normalizeFormatValues(
         current,
         inputType,
         template,
+        attrs,
         priorOptionText(priorAnswers, question.id, id),
       );
       if (typeof normalized === 'string' && normalized !== current) {
@@ -134,7 +145,7 @@ export function normalizeFormatValues(
     }
     for (const cell of flatCellsOf(question)) {
       if (cell.type !== 'input') continue;
-      applyToId(cell.id, cell.inputType, cell.defaultValueTemplate);
+      applyToId(cell.id, cell.inputType, cellLockTemplate(cell));
     }
     if (textChanged) {
       nextSidecar[question.id] = updated;

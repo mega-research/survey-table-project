@@ -37,6 +37,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
       basePath={internalOperationsBase(surveyId)}
       capabilities={capabilities}
       scope={scope}
+      includeContactOwner
       searchParams={await searchParams}
     />
   );
