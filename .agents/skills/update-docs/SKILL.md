@@ -22,7 +22,7 @@ description: This skill should be used when the user asks to "update documentati
 
 `CLAUDE.md` 는 같은 폴더의 `AGENTS.md` 를 가리키는 심볼릭 링크다. **항상 `AGENTS.md` 만 편집**한다.
 
-**루트 `AGENTS.md` 는 4만 자 안팎을 유지한다**(Claude Code 는 15만 자를 넘으면 경고하고, 매 세션 통째로 실린다). 새 서브시스템의 상세 절은 루트가 아니라 그 코드 옆 영역 문서에 쓰고, 루트에는 "문서 지도" 표에 한 줄만 더한다. 영역 문서를 새로 만들면 같은 폴더에 `ln -s AGENTS.md CLAUDE.md` 를 함께 만든다.
+**크기 상한은 `tests/repo/agent-docs-size.test.ts` 가 강제한다** — 루트 4.5만 자, 영역 문서 3만 자(루트는 매 세션 통째로 실리고, Claude Code 는 15만 자를 넘으면 경고한다). 영역 문서가 상한에 닿으면 문장을 줄이기 전에 **더 깊은 폴더로 내릴 수 있는지**를 먼저 본다. 같은 테스트가 영역 문서마다 `CLAUDE.md` 심볼릭 링크와 루트 "문서 지도" 등재를 확인한다. 새 서브시스템의 상세 절은 루트가 아니라 그 코드 옆 영역 문서에 쓰고, 루트에는 "문서 지도" 표에 한 줄만 더한다. 영역 문서를 새로 만들면 같은 폴더에 `ln -s AGENTS.md CLAUDE.md` 를 함께 만든다.
 
 **변경 이력("최종 갱신" 블록)을 쓰지 않는다.** 2026-10-20 에 루트 상단의 갱신 기록 8천 자를 지웠다 — git log 와 ADR 이 그 자리다. `docs/` 는 gitignore 대상이라 ADR·plan·spec 변경은 로컬 전용이다.
 
@@ -55,7 +55,7 @@ DOCS=$(git ls-files 'AGENTS.md' 'src/**/AGENTS.md')
 grep -n '^## ' $DOCS                   # 절 구성과 순서
 grep -c '^```' $DOCS                   # 코드펜스 짝수 확인
 pnpm exec prettier --write $DOCS       # 표 정렬 — 뒤에 grep -n '~~' 로 취소선 변환을 확인
-wc -m AGENTS.md                        # 루트 4만 자 안팎인지
+pnpm exec vitest run tests/repo/agent-docs-size.test.ts   # 크기 상한 · CLAUDE.md 링크 · 문서 지도 등재
 find . -name CLAUDE.md -path './src/*' -o -name CLAUDE.md -maxdepth 1 | xargs ls -la   # 심볼릭 링크가 살아있는지
 ````
 
