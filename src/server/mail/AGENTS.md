@@ -1,0 +1,21 @@
+# 메일 발송
+
+> 루트 `AGENTS.md` 에서 떼어 낸 상세 참조다. 이 디렉터리 아래를 만질 때 읽는다.
+> 공통 규칙(주의사항·코드 컨벤션·마이그레이션 번호·CI 게이트)은 루트 `AGENTS.md` 에 있다.
+> `CLAUDE.md` 는 이 파일을 가리키는 심볼릭 링크다 — 수정은 이 파일에 한다.
+
+## 메일 발송 주소 순서
+
+**메일 발송 주소 순서** (2026-10-14): 명단에 이메일로 암호화된 열이 여럿이면(대표자 e-mail · 실무자 e-mail …) 컬럼 설정(`contacts/columns`)의 「발송 주소 순서」로 어느 열의 주소로 보낼지 정한다 — 이메일 열이 둘 이상일 때만 열이 나온다. 저장은 컬럼별 `mailOrder`(1부터)이고 파티션마다 스킴이 따로라 순서도 따로다. **순위를 준 열만 후보**이고 순위 오름차순으로 값이 있는 첫 열의 주소를 쓴다(1순위가 비면 다음 순위). 순위 밖 열에만 주소가 있는 대상은 발송되지 않고 사전 점검이 「이메일 누락」으로 센다. **어느 열에도 순위가 없으면 종전대로 `column_key` 오름차순 첫 열**이다 — 그래서 미설정 설문은 `대표자 e-mail` 이 `실무자 e-mail` 을 이긴다. 해석은 `lib/contacts/mail-email-order.ts` 의 `resolveMailEmailOrder`(→ `MailEmailOrder`, null = 미지정) 한 곳이다. 이 순서를 타는 자리는 일곱이다 — 발송(`createCampaign`, 스코프 SHARE 잠금으로 스킴을 같이 읽는다) · 사전 점검(`preflightRecipients`) · 후보 목록·제외 집계(`hasEmailCandidateSql`) · 반송 제외 예고(`listBouncedContactIds` — 파티션을 가리지 않는 함수라 `is_test` 로 순서를 갈라 쓴다) · 단건 선검증 · 미리보기 샘플 · 수신거부 화면(`loadSendEmailForTarget`). 일곱 모두 아래 「발송 주소 모듈」을 거친다. 교체 업로드는 스킴을 다시 만들지만 순서는 열 이름이 같은 이메일 열에 이어 붙인다(`carryOverMailOrder`) — 빠지면 재업로드 한 번에 조용히 대표자 주소로 돌아간다. 이미 만든 캠페인은 `email_snapshot` 이 고정이라 영향이 없다. 대상별 지정(컨택 상세에서 한 명만 다른 열로)은 미구현이다.
+
+---
+
+## 발송 주소 모듈
+
+**발송 주소 모듈** (2026-10-19 — CONTEXT.md 「발송 주소」가 정본): 「이 대상에게 어느 주소로 보내는가」 — 이메일 열 · 발송 주소 순서 · 복호화 실패 · 칸 안 여러 주소 · 반송 주소 — 를 한 곳이 소유한다. 규칙(순수)은 `lib/mail/send-address.ts`(`resolveSendAddress` → `send`/`bounced`/`missing`, `pickSendAddress`, `sendableValue`, `remainingSendValue`)이고 DB 얼굴은 `server/read-models/send-address.ts` 다 — 순서 로더(`loadMailEmailOrder(s)`) · 반송 주소(`loadBouncedAddresses` → `BouncedAddresses`, 칸 값 그대로 + 주소 하나로 보낸 메일의 주소) · 행 얼굴(`selectEmailPiiRows`·`decryptSendAddressCells`·`resolveSendAddresses`·`loadSendAddressCells`·`loadSendEmailForTarget`) · SQL 얼굴(`emailCandidateSql`·`emailOrderSql`·`hasEmailCandidateSql`·`allCandidatesBouncedSql`). **행 얼굴은 정확하고 SQL 얼굴은 칸 단위 근사다** — 암호문은 SQL 이 나눌 수 없어, 칸 안 주소가 하나씩 따로 반송된 대상은 마법사 목록 위 「반송 이력 제외」 예고에서 빠진다(2026-10-19 결정 — 예고는 근사, 발송 직전 사전 점검은 발송과 같은 판정으로 정확). 발송 · 사전 점검 · 대체 발송이 같은 `resolveSendAddress`/`pickSendAddress` 를 써서, 칸째 반송된 칸(여러 주소 한 통의 반송)은 대체 발송도 건너뛴다. 단건 발송·미리보기 샘플·수신거부 화면·마법사 목록 마스킹은 반송을 보지 않는다 — 순서상 첫 주소를 보인다(같은 날 결정, 단건이 실제로 쓰는 주소). **새로 "이 대상의 이메일"을 읽는 자리를 만들면 `field_type='email'` 을 직접 거르지 말고 이 모듈을 쓸 것.** `lib/crypto/contact-pii-repo.ts` 는 PII 저장·복호화만 남았다.
+
+---
+
+## 메일 대체 발송
+
+**메일 대체 발송** (2026-10-16, 0135): 수신자가 **반송**(webhook·reconcile)되거나 메일 서비스가 주소를 **거부**(발송 시 영구 실패)하면, 발송 주소 순서의 **다음 이메일 열**로 자동으로 한 통을 더 보낸다. 원래 회차 아래 `kind='fallback'` 회차를 하나 붙여 그 수신자로 넣고 `mail/campaign.queued` 를 다시 낸다 — 발송·lease·webhook·집계는 기존 장치 그대로. 대체 발송이 또 반송되면 그 대체 회차의 자식 회차(「· 대체 발송 2차」)로 3순위 …. 수신자 한 줄 = (회차, 조사 대상) 유일 제약 때문에 같은 회차에 쌓지 않는다. 다음 주소 판정은 `lib/mail/fallback-address.ts` 의 `pickFallbackAddress`(쓴 열의 다음 열 · 사슬에서 보낸 주소와 이 설문 반송 주소는 건너뜀 · 쓴 열을 모르면 값으로 찾음), 서비스는 `server/mail/services/campaign-fallback.ts` 의 `requestRecipientFallbacks` 이고 **상태 전이가 커밋된 뒤** webhook·reconcile·dispatch(영구 실패 settle 직후) 세 곳이 부른다. 응답 완료·수신거부·스팸 신고(complained — 수신거부로 수렴)·연락 금지 결과코드·회차 취소/보관이면 보내지 않는다. 끝난 대체 회차에 늦은 반송이 오면 회차를 `queued` 로 다시 연다. 단건 발송도 같다. 대기 중에 응답을 마치면 발송 직전 확인(claim)이 대체 회차에 한해 건너뛴다(`skipped_unsubscribed` + 사유 「응답 완료로 대체 발송 생략」 — 단체·단건은 응답자에게 일부러 보내는 경우가 있어 거르지 않는다). **대체 발송 등록 자체가 빠지는 경우**(전이 커밋 뒤 DB 오류·프로세스 종료 — webhook 은 중복 제거로 다시 오지 않는다)는 0137 `fallback_pending_at` 이 막는다: 반송·거부 전이(`applyRecipientTransition`·dispatch 영구 실패 settle)와 **같은 트랜잭션**에서 표식을 찍고, `queueRecipientFallback` 이 대체 회차에 넣거나 보내지 않기로 판정하면서 같은 트랜잭션에서 지운다(표식이 없으면 아무것도 안 한다 — 즉시 경로와 점검이 겹쳐도 한 번). 표식이 2분 넘게 남은 수신자는 Inngest cron `mailFallbackSweeper`(10분마다)가 `retryPendingRecipientFallbacks` 로 다시 처리하고, 3일이 넘은 표식은 늦은 발송이 되므로 건너뛴다. 대체 수신자를 커밋한 뒤 큐 발행이 실패해도 같은 점검이 대기 수신자가 2분 넘게 그대로인 대체 회차를 다시 큐에 올린다 — **배포 뒤 Inngest 대시보드 수동 Resync 필요**. 반송·이미 보낸 주소 비교는 칸이 아니라 **주소 하나하나**로 한다(`lib/mail/send-address` 의 `remainingSendValue`) — 「a / b」 칸이면 반송된 a 만 빼고 b 로 보낸다. 반송 주소로 확정하는 것은 주소 하나로 보낸 메일의 반송뿐이다(여러 주소 한 통의 반송은 어느 주소인지 몰라 칸 값 통째로만 막는다). 한 통에 담기는 주소는 `lib/mail/split-email-addresses.ts` 가 칸 하나의 여러 주소(`/` `,` `;` 줄바꿈)를 나눈 것이다. **반송 제외 규칙** — `listBouncedContactIds` 는 후보 이메일 열이 **전부** 반송 주소인 컨택만 빼고, `createCampaign`(bulk)은 반송된 열을 건너뛰고 다음 순위 열을 쓴다.
