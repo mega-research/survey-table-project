@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -6,6 +6,7 @@ import { surveyResponses } from '@/db/schema';
 import { encryptAnswerForQuestion, type QuestionPiiFlag } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { sanitizeRootSidecar, splitRootSidecars } from '@/lib/survey/response-sidecars';
+import { isOpenResponseStatus, openResponseStatusValues } from '@/shared/contracts/survey-response';
 
 import type { SaveDraftResponseInput } from '../domain/response';
 import {
@@ -31,6 +32,18 @@ import { lockAndAssertResponseMutation } from './test-target-attempt';
  * progress_pct 는 배치 중 가장 뒤에 있는 문항의 위치로 계산한다(단건 경로를 답변 수만큼
  * 반복한 결과와 동일 — GREATEST 로 단조 증가라 최대값만 남는다).
  */
+/**
+ * draft 가 쓰는 행의 상태·활동 시각.
+ *
+ * 열린 행(in_progress·drop)에 쓴다. drop 은 sweep_stale_sessions 가 3시간 활동이 없는 행에 붙인
+ * 표시일 뿐 종결이 아니다 — 탭을 열어 둔 채 자리를 비웠다 돌아온 응답자는 페이지를 다시 부르지
+ * 않고 「다음」을 누른다. 그 쓰기에서 진행 중으로 되살리고, 입력 중인 행이 sweep 에 걸리지 않게
+ * 활동 시각을 올린다. 예전에는 in_progress 만 받아 drop 행이 「이미 완료」로 접혔다(2026-10-20).
+ */
+function activeRowTouch() {
+  return { status: 'in_progress' as const, lastActivityAt: new Date() };
+}
+
 /**
  * draft 답변 병합 UPDATE.
  *
@@ -66,12 +79,13 @@ export async function applyDraftAnswersUpdate(
       .set({
         questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
           || ${JSON.stringify(storedAnswers)}::jsonb`,
+        ...activeRowTouch(),
       })
       .where(
         and(
           eq(surveyResponses.id, responseId),
           isNull(surveyResponses.deletedAt),
-          eq(surveyResponses.status, 'in_progress'),
+          inArray(surveyResponses.status, openResponseStatusValues),
           ...seqGuard,
         ),
       )
@@ -88,6 +102,7 @@ export async function applyDraftAnswersUpdate(
     .set({
       questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
         || ${JSON.stringify(storedAnswers)}::jsonb`,
+      ...activeRowTouch(),
       progressPct: sql`NULLIF(LEAST(100, GREATEST(
         COALESCE(${surveyResponses.progressPct}, 0),
         COALESCE((
@@ -117,7 +132,7 @@ export async function applyDraftAnswersUpdate(
       and(
         eq(surveyResponses.id, responseId),
         isNull(surveyResponses.deletedAt),
-        eq(surveyResponses.status, 'in_progress'),
+        inArray(surveyResponses.status, openResponseStatusValues),
         ...seqGuard,
       ),
     )
@@ -143,7 +158,7 @@ async function judgeDraftZeroRow(
   const row = rows[0];
   if (seq !== undefined && row?.draft_seq != null && Number(row.draft_seq) > seq) return 'stale';
   // 종결(완료·스크린아웃 등) 행에 대한 잔여 화면의 쓰기 — 에러가 아니라 "이미 완료됨" 신호.
-  if (row && !row.deleted && row.status !== 'in_progress') return 'concluded';
+  if (row && !row.deleted && !isOpenResponseStatus(row.status)) return 'concluded';
   throw new Error('응답을 수정할 수 없습니다.');
 }
 
@@ -317,7 +332,7 @@ function judgeRowGate(
 ): { saved: false; skipped: 'not_found' | 'deleted' | 'concluded' } | null {
   if (!row) return { saved: false, skipped: 'not_found' };
   if (row.deletedAt !== null) return { saved: false, skipped: 'deleted' };
-  if (row.status !== 'in_progress') return { saved: false, skipped: 'concluded' };
+  if (!isOpenResponseStatus(row.status)) return { saved: false, skipped: 'concluded' };
   return null;
 }
 

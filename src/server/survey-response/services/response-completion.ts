@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -9,7 +9,11 @@ import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import { notTestResponse } from '@/server/response-filters';
-import type { PageVisit } from '@/shared/contracts/survey-response';
+import {
+  isOpenResponseStatus,
+  openResponseStatusValues,
+  type PageVisit,
+} from '@/shared/contracts/survey-response';
 
 import type { CompleteResponseInput, CompleteResponseResult } from '../domain/response';
 import { replaceResponseAnswers } from './response-answers';
@@ -359,14 +363,17 @@ export async function completeResponse(
             }
           : {}),
       })
-      // soft-delete(deletedAt) 또는 종결 상태(completed/screened_out/quotaful_out/bad/drop)
+      // soft-delete(deletedAt) 또는 종결 상태(completed/screened_out/quotaful_out/bad)
       // 행은 완료 처리에서 제외한다. pub 엔드포인트는 responseId 만 있으면 호출 가능하므로,
       // 지연/리플레이된 complete 호출이 삭제된 행을 되살리거나 종결 status 를 덮어쓰지 못하게 막는다.
+      // drop 은 종결이 아니다 — sweep 이 3시간 활동 없는 행에 붙인 표시라, 탭을 열어 둔 채 자리를
+      // 비웠다 돌아와 제출한 응답자의 답을 받아 완료로 확정한다(2026-10-20 — 전에는 「이미 완료」로
+      // 흡수해 마지막 답을 버리고 조사 대상을 응답함으로 연결했다).
       .where(
         and(
           eq(surveyResponses.id, responseId),
           isNull(surveyResponses.deletedAt),
-          eq(surveyResponses.status, 'in_progress'),
+          inArray(surveyResponses.status, openResponseStatusValues),
         ),
       )
       .returning();
@@ -384,7 +391,7 @@ export async function completeResponse(
       // 가드는 isCompleted 가 아니라 status 로 종결을 판정한다 — screened_out 행은
       // is_completed=false 인데도 이미 종결 상태라, isCompleted 만 보면 자격미달 응답의
       // 재시도 complete 가 멱등 흡수 대신 에러로 떨어진다(리뷰 지적).
-      if (existing && existing.status !== 'in_progress' && existing.deletedAt == null) {
+      if (existing && !isOpenResponseStatus(existing.status) && existing.deletedAt == null) {
         completedResponse = existing;
         // 이미 종결된 행에 대한 늦은 complete — 다른 화면이 먼저 제출했거나 본인 재시도.
         // 클라이언트가 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내로 접도록 표식한다.
