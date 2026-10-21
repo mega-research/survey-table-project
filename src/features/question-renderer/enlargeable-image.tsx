@@ -20,16 +20,11 @@ import { type ImageFit, type ImageSize, canEnlargeImage } from './utils/image-en
 // 응답자 경로 번들에서 라이트박스를 떼어 낸다 — 누를 때 처음 불러온다
 const ImageEnlargeViewer = lazy(() => import('./image-enlarge-viewer'));
 
-/**
- * 「이미지 크게 보기」(CONTEXT.md)를 붙인 이미지 — 원본 전체가 화면에 다 보이지 않으면(줄었거나 잘림)
- * 눌러서 크게 본다. 다 보이면 평범한 이미지와 같다(배지·포커스·커서 없음).
- *
- * 크게 볼 수 있다는 표시는 마우스 유무로 가른다(화면 폭이 아니다 — 넓은 태블릿도 마우스가 없다):
- * 마우스 있는 기기는 올렸을 때만 배지·어두운 막·확대 커서, 터치 기기는 배지가 늘 보인다.
- */
 export interface EnlargeableImageProps {
   src: string;
   alt: string;
+  /** false 면 크게 보기 없이 평범한 이미지로 그린다(빌더 편집 화면의 표 등). 기본 true */
+  enabled?: boolean | undefined;
   /** 이미지를 상자에 맞추는 방식 — 그려진 크기와 원본을 비교하는 기준 */
   fit: ImageFit;
   className?: string | undefined;
@@ -42,11 +37,20 @@ export interface EnlargeableImageProps {
   onError?: (() => void) | undefined;
 }
 
-const ZERO: ImageSize = { width: 0, height: 0 };
+/** 로드 전 — 원본 크기를 아직 모른다 */
+const UNKNOWN_SIZE: ImageSize = { width: 0, height: 0 };
 
+/**
+ * 「이미지 크게 보기」(CONTEXT.md)를 붙인 이미지 — 원본 전체가 화면에 다 보이지 않으면(줄었거나 잘림)
+ * 눌러서 크게 본다. 다 보이면 평범한 이미지와 같다(배지·포커스·커서 없음).
+ *
+ * 크게 볼 수 있다는 표시는 마우스 유무로 가른다(화면 폭이 아니다 — 넓은 태블릿도 마우스가 없다):
+ * 마우스 있는 기기는 올렸을 때만 배지·어두운 막·확대 커서, 터치 기기는 배지가 늘 보인다.
+ */
 export function EnlargeableImage({
   src,
   alt,
+  enabled = true,
   fit,
   className,
   style,
@@ -56,9 +60,10 @@ export function EnlargeableImage({
   onError,
 }: EnlargeableImageProps) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [natural, setNatural] = useState<ImageSize>(ZERO);
+  const [natural, setNatural] = useState<ImageSize>(UNKNOWN_SIZE);
   const [enlargeable, setEnlargeable] = useState(false);
   const [open, setOpen] = useState(false);
+  const canOpen = enabled && enlargeable;
 
   const measure = useCallback(() => {
     const img = imgRef.current;
@@ -106,21 +111,22 @@ export function EnlargeableImage({
         ref={imgRef}
         src={src}
         alt={alt}
-        className={cn(className, enlargeable && 'cursor-zoom-in')}
+        className={cn(className, canOpen && 'cursor-zoom-in')}
         style={style}
         onLoad={measure}
         onError={handleError}
-        {...(enlargeable
+        {...(canOpen
           ? {
               role: 'button',
               tabIndex: 0,
-              'aria-label': '이미지 크게 보기',
+              // 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다
+              'aria-label': `${alt.trim() || '이미지'} 크게 보기`,
               onClick: () => setOpen(true),
               onKeyDown: handleKeyDown,
             }
           : {})}
       />
-      {enlargeable && (
+      {canOpen && (
         <>
           <span
             aria-hidden

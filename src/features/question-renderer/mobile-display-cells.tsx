@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { EnlargeableImage } from './enlargeable-image';
-import { useImageEnlargeTitle } from './image-enlarge-labels';
+import { useTableImageEnlarge } from './table-image-enlarge';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -18,7 +18,7 @@ import { splitMobileDisplayCells } from '@/features/question-renderer/utils/spli
 export function DisplayCellContent({ cell }: { cell: TableCell }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const enlargeTitle = useImageEnlargeTitle(cell.id);
+  const enlarge = useTableImageEnlarge(cell.id);
 
   if (cell.type === 'image' && cell.imageUrl) {
     return (
@@ -28,7 +28,8 @@ export function DisplayCellContent({ cell }: { cell: TableCell }) {
         alt=""
         fit="contain"
         className="max-w-full rounded-md"
-        title={enlargeTitle}
+        enabled={enlarge !== null}
+        title={enlarge?.title}
         subtitle={substituteTokens(cell.content ?? '', attrs, quotes).trim() || undefined}
       />
     );

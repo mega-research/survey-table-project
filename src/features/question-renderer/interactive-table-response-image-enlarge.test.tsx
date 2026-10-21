@@ -82,7 +82,7 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
     const { container } = renderTable();
     loadImageWithSize(imageIn(container), shrunk);
 
-    fireEvent.click(screen.getByRole('button', { name: '이미지 크게 보기' }));
+    fireEvent.click(screen.getByRole('button', { name: '셀 이미지 크게 보기' }));
 
     // 창은 누를 때 처음 불러온다(lazy)
     const dialog = await screen.findByRole('dialog', { name: '이미지 크게 보기' });
@@ -94,7 +94,9 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
     const { container } = renderTable();
     loadImageWithSize(imageIn(container), shrunk);
 
-    fireEvent.keyDown(screen.getByRole('button', { name: '이미지 크게 보기' }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('button', { name: '셀 이미지 크게 보기' }), {
+      key: 'Enter',
+    });
 
     expect(await screen.findByRole('dialog', { name: '이미지 크게 보기' })).toBeInTheDocument();
   });
@@ -104,7 +106,7 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
     const img = imageIn(container);
     loadImageWithSize(img, fullSize);
 
-    expect(screen.queryByRole('button', { name: '이미지 크게 보기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '셀 이미지 크게 보기' })).toBeNull();
     expect(img).not.toHaveAttribute('tabindex');
     fireEvent.click(img);
     await Promise.resolve();
@@ -116,13 +118,13 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
     fireEvent.error(imageIn(container));
 
     expect(screen.getByText('이미지 오류')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '이미지 크게 보기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '셀 이미지 크게 보기' })).toBeNull();
   });
 
   it('닫기 버튼과 Esc 로 닫힌다', async () => {
     const { container } = renderTable();
     loadImageWithSize(imageIn(container), shrunk);
-    const trigger = screen.getByRole('button', { name: '이미지 크게 보기' });
+    const trigger = screen.getByRole('button', { name: '셀 이미지 크게 보기' });
 
     fireEvent.click(trigger);
     fireEvent.click(await screen.findByRole('button', { name: '닫기' }));
@@ -143,5 +145,26 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '이미지 크게 보기' });
     expect(within(dialog).getByText('시안 A · 이미지')).toBeInTheDocument();
+  });
+
+  it.each([
+    { device: '마우스 있는 기기', mobile: false, closes: true },
+    { device: '터치 기기', mobile: true, closes: false },
+  ])('이미지 바깥 배경을 누르면 $device 에서는 닫힘=$closes', async ({ mobile, closes }) => {
+    const { container } = renderTable({ mobile });
+    loadImageWithSize(imageIn(container), shrunk);
+    fireEvent.click(screen.getByRole('button', { name: /크게 보기/ }));
+    const dialog = await screen.findByRole('dialog', { name: '이미지 크게 보기' });
+
+    const backdrop = dialog.querySelector('.yarl__slide') as HTMLElement;
+    fireEvent.pointerDown(backdrop, { pointerId: 1, button: 0, buttons: 1 });
+    fireEvent.pointerUp(backdrop, { pointerId: 1, button: 0 });
+
+    if (closes) {
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(screen.queryByRole('dialog')).not.toBeNull();
+    }
   });
 });

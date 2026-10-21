@@ -79,7 +79,6 @@ import {
   recalculateRowspansForVisibleRows,
 } from '@/utils/table-merge-helpers';
 
-import { ImageEnlargeLabelsProvider } from './image-enlarge-labels';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
@@ -87,6 +86,7 @@ import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { OptionTextBelowTableHost } from './cells/option-text-placement-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { TableImageEnlargeProvider } from './table-image-enlarge';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
 import {
@@ -564,21 +564,18 @@ function useMergedResponseChange(
   );
 }
 
-/**
- * 표 안 이미지의 크게 보기 머리 줄(「행 제목 · 열 제목」)을 표 구조로 계산해 내려 준다 — 이미지 셀은
- * 제 칸만 안다(CONTEXT.md 「이미지 크게 보기」).
- */
+/** 응답 화면의 표 — 이미지 셀에 크게 보기를 켠다(CONTEXT.md 「이미지 크게 보기」) */
 export const InteractiveTableResponse = React.memo(function InteractiveTableResponse(
   props: InteractiveTableResponseProps,
 ) {
   return (
-    <ImageEnlargeLabelsProvider
+    <TableImageEnlargeProvider
       columns={props.columns ?? EMPTY_COLUMNS}
       headerGrid={props.tableHeaderGrid}
       rows={props.rows ?? EMPTY_ROWS}
     >
       <InteractiveTableResponseBody {...props} />
-    </ImageEnlargeLabelsProvider>
+    </TableImageEnlargeProvider>
   );
 });
 

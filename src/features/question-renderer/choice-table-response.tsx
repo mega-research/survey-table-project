@@ -73,9 +73,9 @@ import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
+import { TableImageEnlargeProvider } from './table-image-enlarge';
 import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
-import { ImageEnlargeLabelsProvider } from './image-enlarge-labels';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 import { ValidationIssueBanner } from './validation-issue-banner';
@@ -133,13 +133,13 @@ const CHOICE_TABLE_ROW_WISE_ANSWERABLE_TYPES: readonly TableCell['type'][] = [
 export function ChoiceTableResponse(props: ChoiceTableResponseProps) {
   const { question } = props;
   return (
-    <ImageEnlargeLabelsProvider
+    <TableImageEnlargeProvider
       columns={question.tableColumns ?? EMPTY_COLUMNS}
       headerGrid={question.tableHeaderGrid ?? undefined}
       rows={question.tableRowsData ?? EMPTY_ROWS}
     >
       <ChoiceTableResponseBody {...props} />
-    </ImageEnlargeLabelsProvider>
+    </TableImageEnlargeProvider>
   );
 }
 

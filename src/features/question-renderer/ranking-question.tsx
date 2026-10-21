@@ -8,7 +8,14 @@ import { TablePreview } from '@/features/question-renderer/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { Question, QuestionOption, RankingAnswer, TableCell, TableRow } from '@/types/survey';
+import {
+  Question,
+  QuestionOption,
+  RankingAnswer,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
 import {
   collectRankingGroups,
   GroupedRankingAnswer,
@@ -22,6 +29,7 @@ import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/r
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { RankingDropdownStack } from './cells/ranking-dropdown-stack';
 import { MobileOptionCard, MobileOptionCardProps, MobileOptionRow } from './mobile-card-shared';
+import { TableImageEnlargeProvider } from './table-image-enlarge';
 import {
   buildRankingClickHandle,
   RankingClickHandle,
@@ -174,7 +182,24 @@ function RankingMobileCardList({
  * - optionsSource='table' + 그룹(isGroupedRankingQuestion): 그룹마다 요약 줄, 표는 하나
  *   (GroupedRankingAnswer 응답)
  */
-export function RankingQuestion({ question, value, onChange }: RankingQuestionProps) {
+/** 표 소스 순위형의 표도 응답 화면의 표다 — 이미지 셀에 크게 보기를 켠다(CONTEXT.md 「이미지 크게 보기」) */
+export function RankingQuestion(props: RankingQuestionProps) {
+  const { question } = props;
+  return (
+    <TableImageEnlargeProvider
+      columns={question.tableColumns ?? EMPTY_COLUMNS}
+      headerGrid={question.tableHeaderGrid ?? undefined}
+      rows={question.tableRowsData ?? EMPTY_ROWS}
+    >
+      <RankingQuestionBody {...props} />
+    </TableImageEnlargeProvider>
+  );
+}
+
+const EMPTY_COLUMNS: TableColumn[] = [];
+const EMPTY_ROWS: TableRow[] = [];
+
+function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps) {
   const config = question.rankingConfig;
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
