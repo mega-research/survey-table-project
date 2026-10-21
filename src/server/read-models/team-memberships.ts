@@ -1,15 +1,16 @@
-import 'server-only';
-
 import { and, asc, eq } from 'drizzle-orm';
+import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { teamMembers, teams } from '@/db/schema';
-import type { TeamRole } from '@/shared/contracts/workspace';
+import type { TeamKind, TeamRole } from '@/shared/contracts/workspace';
 
 export interface ActiveTeamMembership {
   teamId: string;
   teamName: string;
   teamOrder: number;
+  /** 팀 종류(0139) — 사이드바 표시 전용. 판정 코어는 읽지 않는다. */
+  teamKind: TeamKind;
   role: TeamRole;
 }
 
@@ -32,6 +33,7 @@ export async function getActiveTeamMemberships(
       teamId: teamMembers.teamId,
       teamName: teams.name,
       teamOrder: teams.order,
+      teamKind: teams.kind,
       role: teamMembers.role,
     })
     .from(teamMembers)

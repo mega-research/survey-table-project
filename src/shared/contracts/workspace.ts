@@ -13,6 +13,22 @@ export const teamStatusValues = ['active', 'archived'] as const;
 export type TeamStatus = (typeof teamStatusValues)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// teams.kind — 팀 종류 (SSOT, 0139)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// **화면 표시 하나를 위한 값이다** — 실사팀 범위의 사이드바만 「참여 중」을 주인공으로 그린다.
+// 권한 판정(capability 코어·작업 범위·관문)은 이 값을 읽지 않는다. 실사원이 다른 팀 설문을
+// 여는 길은 여전히 참여자 초대 하나다(「실사팀은 그냥 팀」 — 표시만 갈린다).
+
+export const teamKindValues = ['standard', 'fieldwork'] as const;
+export type TeamKind = (typeof teamKindValues)[number];
+
+export const TEAM_KIND_LABEL: Record<TeamKind, string> = {
+  standard: '일반 팀',
+  fieldwork: '실사팀',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // team_members.role — 팀 역할 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────
 //
@@ -44,6 +60,7 @@ export const teamLifecycleActionValues = [
   'member_add',
   'member_role',
   'member_remove',
+  'kind_change',
 ] as const;
 export type TeamLifecycleAction = (typeof teamLifecycleActionValues)[number];
 
@@ -56,6 +73,9 @@ export type TeamLifecycleAction = (typeof teamLifecycleActionValues)[number];
 export interface TeamLifecycleMetadata {
   teamName?: string;
   previousName?: string;
+  /** kind_change 의 전후 종류. */
+  kind?: TeamKind;
+  previousKind?: TeamKind;
   /** 멤버 사건의 역할 — member_add 는 to 만, member_role 은 from·to 둘 다. */
   fromRole?: TeamRole;
   toRole?: TeamRole;

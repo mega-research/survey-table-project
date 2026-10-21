@@ -9,6 +9,7 @@ import {
   DuplicateTeamNameError,
   ListTeamsOutput,
   RenameTeamInput,
+  SetTeamKindInput,
   TeamDetailOutput,
   TeamIdInput,
   TeamNameMismatchError,
@@ -85,4 +86,15 @@ const dissolve = superadmin
     svc.dissolveTeam(context.user.id, input).catch(rethrowWorkspaceError),
   );
 
-export const teams = { list, create, rename, detail, dissolve };
+/**
+ * 팀 종류 지정 (슈퍼어드민) — 실사팀 표시(0139). 이름 변경과 같은 축이다: 조직 표시를 바꾸는
+ * 일이라 팀장에게 열지 않는다. 권한은 바뀌지 않는다(사이드바 표시 전용).
+ */
+const setKind = superadmin
+  .input(SetTeamKindInput)
+  .output(WorkspaceActionOutput)
+  .handler(({ input, context }) =>
+    svc.setTeamKind(context.user.id, input).catch(rethrowWorkspaceError),
+  );
+
+export const teams = { list, create, rename, setKind, detail, dissolve };

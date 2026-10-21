@@ -17,6 +17,7 @@ vi.mock('../services/teams', () => ({
   listTeams: vi.fn(),
   createTeam: vi.fn(),
   renameTeam: vi.fn(),
+  setTeamKind: vi.fn(),
   getTeamDetail: vi.fn(),
   dissolveTeam: vi.fn(),
 }));
@@ -48,6 +49,7 @@ beforeEach(() => {
   });
   vi.mocked(svc.createTeam).mockResolvedValue({ id: TEAM_ID });
   vi.mocked(svc.renameTeam).mockResolvedValue({ success: true });
+  vi.mocked(svc.setTeamKind).mockResolvedValue({ success: true });
   vi.mocked(svc.getTeamDetail).mockResolvedValue({
     id: TEAM_ID,
     name: '연구1본부 - 1팀',
@@ -156,7 +158,40 @@ describe('팀 해산', () => {
 
   it('해산 취소 표면은 존재하지 않는다 (ADR-0011)', () => {
     const surface = Object.keys(teams);
-    expect(surface).toEqual(['list', 'create', 'rename', 'detail', 'dissolve']);
+    expect(surface).toEqual(['list', 'create', 'rename', 'setKind', 'detail', 'dissolve']);
     expect(surface.some((k) => /restore|undo|reactivate|unarchive/i.test(k))).toBe(false);
+  });
+});
+
+/**
+ * 팀 종류 지정(0139) — 이름 변경과 같은 축. 조직 표시를 바꾸는 일이라 슈퍼어드민만 한다.
+ */
+describe('팀 종류 지정', () => {
+  it('슈퍼어드민만 지정할 수 있다 — 팀장도 못 한다', async () => {
+    await expect(
+      clientWith().teams.setKind({ teamId: TEAM_ID, kind: 'fieldwork' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.setTeamKind).not.toHaveBeenCalled();
+  });
+
+  it('슈퍼어드민의 요청은 행위자와 함께 서비스로 간다', async () => {
+    await clientWith({ isSuperadmin: true }).teams.setKind({ teamId: TEAM_ID, kind: 'fieldwork' });
+    expect(svc.setTeamKind).toHaveBeenCalledWith(ACTOR_ID, { teamId: TEAM_ID, kind: 'fieldwork' });
+  });
+
+  it('어휘 밖의 종류는 경계에서 막는다', async () => {
+    await expect(
+      clientWith({ isSuperadmin: true }).teams.setKind({
+        teamId: TEAM_ID,
+        kind: 'vendor' as never,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('해산된 팀은 NOT_FOUND 로 옮긴다', async () => {
+    vi.mocked(svc.setTeamKind).mockRejectedValue(new TeamNotFoundError());
+    await expect(
+      clientWith({ isSuperadmin: true }).teams.setKind({ teamId: TEAM_ID, kind: 'fieldwork' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

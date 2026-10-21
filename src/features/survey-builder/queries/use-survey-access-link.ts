@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { AccessLinkKind, SurveyGuestTab } from '@/shared/contracts/workspace';
 import { client, orpc } from '@/shared/lib/rpc';
-
-import { surveyKeys } from './use-surveys';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 /**
  * 설문 접속 링크(외주 실사 링크 · 클라이언트 링크) 쿼리·변경 (ADR-0026·0029, .pen FLOW 10-2).

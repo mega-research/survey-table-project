@@ -5,11 +5,11 @@ import { useCallback, useRef, useState, useTransition } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { buildSurveyDiffPayload } from '@/features/survey-builder/lib/diff-payload';
-import { surveyKeys } from '@/features/survey-builder/queries/use-surveys';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { client } from '@/shared/lib/rpc';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 /**
  * 설문 빌더와 DB를 동기화하는 훅

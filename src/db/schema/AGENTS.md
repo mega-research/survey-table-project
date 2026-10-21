@@ -55,6 +55,7 @@ user_status_events         # 계정 상태 전이 감사 (append-only)
 teams                      # 팀 = 설문 소유·접근 경계 (0115)
 ├── id, name (전체 조직 경로 포함 표시명), order
 ├── status                 # active | archived — 해산은 삭제가 아니라 archived (ADR-0011, 티켓 13)
+├── kind                   # standard | fieldwork (0139, CHECK) — 실사팀 사이드바 표시 전용, 권한 판정은 안 읽는다
 ├── archivedBy, archivedAt
 └── createdAt, updatedAt   (UNIQUE partial(name) WHERE status='active')
 
@@ -65,7 +66,7 @@ team_members               # 소속의 단일 정본 (ADR-0008)
 
 team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 구성
 ├── id, teamId (FK restrict)
-├── action                 # create|rename|dissolve | member_add|member_role|member_remove
+├── action                 # create|rename|dissolve|kind_change | member_add|member_role|member_remove
 ├── targetUserId           # 멤버 사건의 대상 (팀 자체 사건은 NULL)
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
 └── createdAt

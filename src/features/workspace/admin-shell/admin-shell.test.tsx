@@ -62,8 +62,8 @@ function renderShell() {
         user={{ id: 'u-1', name: '박팀장', isSuperadmin: true, image: null }}
         memberships={[{ teamId: TEAM_A, teamName: '연구1본부 - 1팀', role: 'leader' }]}
         teams={[
-          { id: TEAM_A, name: '연구1본부 - 1팀' },
-          { id: TEAM_B, name: '연구2본부 - 2팀' },
+          { id: TEAM_A, name: '연구1본부 - 1팀', kind: 'standard' },
+          { id: TEAM_B, name: '연구2본부 - 2팀', kind: 'standard' },
         ]}
         initialScope={{ kind: 'team', teamId: TEAM_A }}
       >

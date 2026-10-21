@@ -8,8 +8,7 @@ import type {
   SetSurveyGuestTabsInput,
 } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
-
-import { surveyKeys } from './use-surveys';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 /**
  * 설문 게스트 부여 쿼리·변경 (역할 모델 v2 티켓 21, .pen FLOW 4-2 클라이언트 블록).

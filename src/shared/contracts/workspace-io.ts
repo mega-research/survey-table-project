@@ -5,15 +5,15 @@ import * as z from 'zod';
 
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
+  type SurveyGuestTabs,
   accessLinkKindValues,
   fieldworkOrgStatusValues,
   surveyParticipantAccessLevelValues,
   surveyParticipantKindValues,
   surveyVisibilityValues,
-  type SurveyGuestTabs,
+  teamKindValues,
   teamRoleValues,
 } from './workspace';
-
 
 const TeamRoleSchema = z.enum(teamRoleValues);
 
@@ -27,6 +27,8 @@ const TeamNameField = z.string().trim().min(1, '팀 이름을 입력하세요.')
 export const TeamListItem = z.object({
   id: z.uuid(),
   name: z.string(),
+  /** 팀 종류(0139) — 카드의 「실사팀」 배지와 케밥 문구. */
+  kind: z.enum(teamKindValues),
   memberCount: z.number().int(),
   /**
    * 이 팀이 소유한 설문 수.
@@ -121,6 +123,10 @@ export type CreateTeamOutput = z.infer<typeof CreateTeamOutput>;
 
 export const RenameTeamInput = z.object({ teamId: z.uuid(), name: TeamNameField });
 export type RenameTeamInput = z.infer<typeof RenameTeamInput>;
+
+/** 팀 종류 지정 (0139) — 실사팀 표시. 사이드바 표시 전용이라 권한은 바뀌지 않는다. */
+export const SetTeamKindInput = z.object({ teamId: z.uuid(), kind: z.enum(teamKindValues) });
+export type SetTeamKindInput = z.infer<typeof SetTeamKindInput>;
 
 /**
  * 팀 해산 (.pen FLOW 8-1) — **확인 문구로 팀 이름을 다시 받는다.**
@@ -1082,9 +1088,7 @@ export const IssuedAccessLinkOutput = z.object({
 export type IssuedAccessLinkOutput = z.infer<typeof IssuedAccessLinkOutput>;
 
 export const RevealedAccessLinkPasswordOutput = z.object({ password: z.string() });
-export type RevealedAccessLinkPasswordOutput = z.infer<
-  typeof RevealedAccessLinkPasswordOutput
->;
+export type RevealedAccessLinkPasswordOutput = z.infer<typeof RevealedAccessLinkPasswordOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 외주 실사 링크 세션 (ADR-0026, 티켓 05)

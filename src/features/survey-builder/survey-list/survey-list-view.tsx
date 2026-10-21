@@ -10,15 +10,11 @@ import { Folder, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
+import { surveyListQueryOptions } from '@/shared/lib/survey-list-queries';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
-import {
-  surveyListQueryOptions,
-  useDeleteSurvey,
-  useDuplicateSurvey,
-  useRestoreSurvey,
-} from '../queries/use-surveys';
+import { useDeleteSurvey, useDuplicateSurvey, useRestoreSurvey } from '../queries/use-surveys';
 import { useSurveyListStore } from '../stores/survey-list-ui-store';
 import { AdvancedSearchPanel } from './advanced-search-panel';
 import { CreateTeamPickDialog } from './create-team-pick-dialog';
@@ -40,6 +36,7 @@ import {
   distinctOwners,
   filterSurveyList,
   narrowToGroup,
+  narrowToTeam,
   paginateSurveyList,
   sortSurveyList,
 } from './survey-list-pipeline';
@@ -107,6 +104,9 @@ export function SurveyListView() {
   // 링크 공유가 살아 있어야 해서 스토어가 아니라 URL 이 정본이다.
   const searchParams = useSearchParams();
   const requestedGroupId = searchParams.get('group');
+  // 소유 팀 좁힘(`?team=<id>`, `&ungrouped=1`) — 실사팀 사이드바의 팀 줄·「미분류」가 연다(0139).
+  const requestedTeamId = searchParams.get('team');
+  const ungroupedOnly = requestedTeamId !== null && searchParams.get('ungrouped') === '1';
   // 그룹은 팀 소유물이라 **서버가 해석한 범위**로 물어야 한다 — 화면 컨텍스트의 팀을 쓰면
   // 쿠키가 접힌 경우(해산된 팀 등) 팀 A 의 그룹 목록으로 팀 B 의 설문을 좁히게 된다.
   const resolvedScope = data?.scope ?? contextScope ?? null;
@@ -127,7 +127,7 @@ export function SurveyListView() {
     contextScope?.kind === 'team'
       ? `team:${contextScope.teamId}`
       : (contextScope?.kind ?? 'no-shell')
-  }|group:${requestedGroupId ?? ''}`;
+  }|group:${requestedGroupId ?? ''}|team:${requestedTeamId ?? ''}:${ungroupedOnly ? 'u' : ''}`;
   const prevScopeKeyRef = useRef(scopeKey);
   useEffect(() => {
     if (prevScopeKeyRef.current === scopeKey) return;
@@ -160,18 +160,42 @@ export function SurveyListView() {
     router.replace('/surveys');
   }, [requestedGroupId, groupsSettled, activeGroup, router]);
 
-  // 칩 카운트·소유자 목록은 그룹 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
-  const scopedSurveys = useMemo(() => narrowToGroup(allSurveys, groupId), [allSurveys, groupId]);
+  // 칩 카운트·소유자 목록은 그룹·팀 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
+  const scopedSurveys = useMemo(
+    () => narrowToTeam(narrowToGroup(allSurveys, groupId), requestedTeamId, ungroupedOnly),
+    [allSurveys, groupId, requestedTeamId, ungroupedOnly],
+  );
+  // 팀 좁힘이 실제로 걸렸을 때만 제목을 바꾼다 — 지목한 팀 설문이 없으면 narrowToTeam 이 좁히지 않는다.
+  const activeTeamName =
+    requestedTeamId !== null
+      ? (allSurveys.find((s) => s.teamId === requestedTeamId)?.teamName ?? null)
+      : null;
   const counts = useMemo(() => countByStatusChip(scopedSurveys), [scopedSurveys]);
   const owners = useMemo(() => distinctOwners(scopedSurveys), [scopedSurveys]);
 
   const filtered = useMemo(
     () =>
       sortSurveyList(
-        filterSurveyList(allSurveys, { searchQuery, statusChip, advanced, groupId }),
+        filterSurveyList(allSurveys, {
+          searchQuery,
+          statusChip,
+          advanced,
+          groupId,
+          teamId: requestedTeamId,
+          ungroupedOnly,
+        }),
         sortBy,
       ),
-    [allSurveys, searchQuery, statusChip, advanced, groupId, sortBy],
+    [
+      allSurveys,
+      searchQuery,
+      statusChip,
+      advanced,
+      groupId,
+      requestedTeamId,
+      ungroupedOnly,
+      sortBy,
+    ],
   );
 
   const {
@@ -254,6 +278,11 @@ export function SurveyListView() {
             groupName={activeGroup.name}
             foreignTeamName={activeGroup.foreignTeamName}
           />
+        ) : activeTeamName ? (
+          <h1 className="text-2xl font-semibold text-[#1C1C1E]">
+            {activeTeamName}
+            {ungroupedOnly && <span className="text-[#6E6E73]"> · 미분류</span>}
+          </h1>
         ) : (
           <h1 className="text-2xl font-semibold text-[#1C1C1E]">
             {isSystemScope ? '설문 목록 — 시스템 전체 보기' : '설문 목록'}

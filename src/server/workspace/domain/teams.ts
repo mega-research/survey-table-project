@@ -15,6 +15,7 @@ export {
   RenameTeamInput,
   SearchAssignableUsersInput,
   SearchAssignableUsersOutput,
+  SetTeamKindInput,
   TeamDetailOutput,
   TeamIdInput,
   TeamListItem,

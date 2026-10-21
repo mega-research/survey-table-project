@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 
 import { ArrowLeft, ArrowRight, Loader2, MoreVertical, Plus, TriangleAlert } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -14,13 +15,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
+import { SYSTEM_SCOPE, TEAM_KIND_LABEL } from '@/shared/contracts/workspace';
 import type { TeamListItem } from '@/shared/contracts/workspace-io';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import { PRIMARY_BUTTON } from '../field-styles';
-
-import { useTeams } from './queries/use-teams';
+import { useSetTeamKind, useTeams } from './queries/use-teams';
 import { TeamDissolveModal } from './team-dissolve-modal';
 import { TeamFormModal } from './team-form-modal';
 
@@ -39,10 +39,36 @@ function CardStats({ items }: { items: { value: number; label: string }[] }) {
 }
 
 function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => void }) {
+  const { mutate: setTeamKind, isPending: kindPending } = useSetTeamKind();
+  const isFieldwork = team.kind === 'fieldwork';
+
+  function toggleKind() {
+    setTeamKind(
+      { teamId: team.id, kind: isFieldwork ? 'standard' : 'fieldwork' },
+      {
+        onSuccess: () =>
+          toast.success(
+            isFieldwork
+              ? `${team.name}을 일반 팀으로 되돌렸습니다`
+              : `${team.name}을 실사팀으로 지정했습니다`,
+          ),
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : '팀 종류를 바꾸지 못했습니다.'),
+      },
+    );
+  }
+
   return (
     <div className="flex flex-col gap-[5px] rounded-xl border border-[#E5E5EA] bg-white p-[14px]">
       <div className="flex items-center justify-between">
-        <span className="text-[15.5px] font-semibold text-[#1C1C1E]">{team.name}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[15.5px] font-semibold text-[#1C1C1E]">{team.name}</span>
+          {isFieldwork && (
+            <span className="shrink-0 rounded-full bg-[#FEF3C7] px-2 py-px text-[11.5px] font-semibold text-[#B45309]">
+              {TEAM_KIND_LABEL.fieldwork}
+            </span>
+          )}
+        </span>
         {/* 케밥은 일반 팀 카드에만 있다 — 메가리서치는 팀이 아니라 대상이 될 수 없다. */}
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -54,6 +80,10 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
           <DropdownMenuContent align="end" className="min-w-[150px]">
             <DropdownMenuItem asChild>
               <Link href={`/teams/${team.id}`}>팀 상세</Link>
+            </DropdownMenuItem>
+            {/* 실사팀 표시는 사이드바 모양만 바꾼다 — 권한은 그대로다(0139). */}
+            <DropdownMenuItem onSelect={toggleKind} disabled={kindPending}>
+              {isFieldwork ? '일반 팀으로 되돌리기' : '실사팀으로 지정'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {/* .pen FLOW 7-1 의 케밥은 이 항목을 **항상 강조**해 둔다(bg #FEF2F2) — 되돌릴 수
@@ -118,10 +148,7 @@ export function TeamListView() {
 
         <div className="flex items-start justify-between">
           <h1 className="text-[22px] font-semibold text-[#1C1C1E]">팀 관리</h1>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className={PRIMARY_BUTTON}
-          >
+          <Button onClick={() => setCreateOpen(true)} className={PRIMARY_BUTTON}>
             <Plus className="mr-1 h-4 w-4" />새 팀
           </Button>
         </div>
@@ -163,11 +190,7 @@ export function TeamListView() {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                onDissolve={() => setDissolveTargetId(team.id)}
-              />
+              <TeamCard key={team.id} team={team} onDissolve={() => setDissolveTargetId(team.id)} />
             ))}
           </div>
 

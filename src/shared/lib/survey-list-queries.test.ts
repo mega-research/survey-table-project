@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { surveyKeys, surveyListQueryOptions } from './survey-list-queries';
+
 const listCall = vi.fn();
 
 vi.mock('@/shared/lib/rpc', () => ({
@@ -14,8 +16,6 @@ vi.mock('@/shared/lib/rpc', () => ({
     },
   },
 }));
-
-import { surveyKeys, surveyListQueryOptions } from '@/features/survey-builder/queries/use-surveys';
 
 describe('surveyListQueryOptions', () => {
   it('짧은 stale window 로 설문 목록 재마운트 중복 요청을 줄인다', () => {

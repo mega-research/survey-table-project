@@ -25,6 +25,7 @@ import {
   DuplicateTeamNameError,
   type ListTeamsOutput,
   type RenameTeamInput,
+  type SetTeamKindInput,
   type TeamDetailOutput,
   TeamNameMismatchError,
   TeamNotFoundError,
@@ -48,6 +49,7 @@ export async function listTeams(): Promise<ListTeamsOutput> {
       .select({
         id: teams.id,
         name: teams.name,
+        kind: teams.kind,
         memberCount: sql<number>`count(${teamMembers.id})::int`,
       })
       .from(teams)
@@ -157,6 +159,44 @@ export async function renameTeam(
     if (isUniqueViolation(err)) throw new DuplicateTeamNameError();
     throw err;
   }
+}
+
+/**
+ * 팀 종류 지정 (0139) — 실사팀 표시. 슈퍼어드민 전용(procedure 베이스).
+ *
+ * 사이드바 표시 하나를 바꿀 뿐이라 권한·설문·멤버십은 아무것도 움직이지 않는다. 모양은
+ * renameTeam 과 같다 — 같은 값이면 아무것도 하지 않고(감사도 없다), UPDATE 에 status 조건을
+ * 걸어 해산과 겹친 창에서 archived 팀을 바꾸지 않는다. 두 슈퍼어드민이 반대로 동시에 바꾸면
+ * 나중 커밋이 이긴다 — 표시 플래그라 일부러 막지 않고, 감사 행이 둘 다 남는다.
+ */
+export async function setTeamKind(
+  actorUserId: string,
+  input: SetTeamKindInput,
+): Promise<WorkspaceActionOutput> {
+  return db.transaction(async (tx) => {
+    const before = await tx.query.teams.findFirst({
+      where: and(eq(teams.id, input.teamId), eq(teams.status, 'active')),
+      columns: { id: true, name: true, kind: true },
+    });
+    if (!before) throw new TeamNotFoundError();
+    if (before.kind === input.kind) return OK;
+
+    const [updated] = await tx
+      .update(teams)
+      .set({ kind: input.kind, updatedAt: new Date() })
+      .where(and(eq(teams.id, before.id), eq(teams.status, 'active')))
+      .returning({ id: teams.id });
+    if (!updated) throw new TeamNotFoundError();
+
+    await tx.insert(teamLifecycleEvents).values({
+      teamId: before.id,
+      action: 'kind_change',
+      changedBy: actorUserId,
+      metadata: { teamName: before.name, kind: input.kind, previousKind: before.kind },
+    });
+
+    return OK;
+  });
 }
 
 /**

@@ -5,7 +5,6 @@
 //
 // 그룹 필터(티켓 12)는 여기 상태가 아니라 **URL 이 정한다**(`?group=<id>`) — 그룹 화면은
 // 브레드크럼과 제목을 가진 별개의 화면이라 뒤로 가기·새로고침·링크 공유가 살아 있어야 한다.
-
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
 
 export type SurveyListStatusChip = 'all' | 'draft' | 'published' | 'closed';
@@ -40,6 +39,10 @@ export interface SurveyListFilterState {
   advanced: SurveyListAdvancedFilters;
   /** 그룹 화면(`?group=<id>`)의 좁힘. null 이면 그룹과 무관하게 전부 본다. */
   groupId?: string | null;
+  /** 소유 팀 좁힘(`?team=<id>`) — 실사팀 사이드바의 팀 줄이 연다(0139). */
+  teamId?: string | null;
+  /** 그 팀의 그룹 밖 설문만(`?ungrouped=1`) — 사이드바의 「미분류」 줄. */
+  ungroupedOnly?: boolean;
 }
 
 /**
@@ -55,6 +58,23 @@ export function narrowToGroup(
 ): readonly SurveyListItem[] {
   if (!groupId) return items;
   return items.filter((s) => s.surveyGroupId === groupId);
+}
+
+/**
+ * 소유 팀 좁힘 — 실사팀 사이드바의 팀 줄(`?team=<id>`)과 「미분류」(`&ungrouped=1`)가 보는 부분집합.
+ *
+ * 지목한 팀의 설문이 하나도 없으면 좁히지 않는다 — 참여가 끝난 팀 주소를 새로고침했을 때
+ * 빈 화면에 갇히지 않게(그룹 화면이 사라진 그룹 id 를 다루는 것과 같은 폴백).
+ */
+export function narrowToTeam(
+  items: readonly SurveyListItem[],
+  teamId: string | null,
+  ungroupedOnly: boolean,
+): readonly SurveyListItem[] {
+  if (!teamId) return items;
+  const ofTeam = items.filter((s) => s.teamId === teamId);
+  if (ofTeam.length === 0) return items;
+  return ungroupedOnly ? ofTeam.filter((s) => s.surveyGroupId === null) : ofTeam;
 }
 
 /** 상태 칩별 목록 건수 — 툴바 칩에 "전체 N" 형태로 표시. */
@@ -94,6 +114,7 @@ export function filterSurveyList(
 
   // 그룹 좁힘이 먼저다 — 칩 카운트와 같은 부분집합에서 출발해야 화면과 숫자가 어긋나지 않는다.
   result = narrowToGroup(result, filters.groupId ?? null);
+  result = narrowToTeam(result, filters.teamId ?? null, filters.ungroupedOnly ?? false);
 
   if (filters.statusChip !== 'all') {
     result = result.filter((s) => s.status === filters.statusChip);
@@ -175,9 +196,7 @@ export function paginateSurveyList<T>(
  * 목록 내 소유자 distinct(상세 검색 「소유자」 드롭다운용) — 이름순 정렬.
  * 소유자 없는 행(0116 2단계 배포 이전의 옛 설문)은 후보가 될 수 없어 건너뛴다.
  */
-export function distinctOwners(
-  items: readonly SurveyListItem[],
-): { id: string; name: string }[] {
+export function distinctOwners(items: readonly SurveyListItem[]): { id: string; name: string }[] {
   const map = new Map<string, string>();
   for (const s of items) {
     if (s.ownerUserId && !map.has(s.ownerUserId)) map.set(s.ownerUserId, s.ownerName ?? '');

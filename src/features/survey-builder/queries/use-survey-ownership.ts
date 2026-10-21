@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { TransferSurveyOwnershipInput } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 import { surveyParticipantKeys } from './use-survey-participants';
-import { surveyKeys } from './use-surveys';
 
 /**
  * 소유권 이전 쿼리·변경 (역할 모델 v2 티켓 19, .pen FLOW 4-4).
@@ -32,8 +32,7 @@ export function useTransferCandidates(surveyId: string) {
 export function useTransferSurveyOwnership() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: TransferSurveyOwnershipInput) =>
-      client.workspace.ownership.transfer(input),
+    mutationFn: (input: TransferSurveyOwnershipInput) => client.workspace.ownership.transfer(input),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.all });
       queryClient.invalidateQueries({ queryKey: surveyParticipantKeys.all });

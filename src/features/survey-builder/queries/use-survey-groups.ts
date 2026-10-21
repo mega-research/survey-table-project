@@ -11,8 +11,7 @@ import type {
 } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
 import { surveyGroupKeys, surveyGroupListQueryOptions } from '@/shared/lib/survey-group-queries';
-
-import { surveyKeys } from './use-surveys';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 /**
  * 설문 그룹 쿼리·변경 (역할 모델 v2 티켓 12, .pen FLOW 2).

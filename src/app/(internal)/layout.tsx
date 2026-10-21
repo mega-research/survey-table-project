@@ -9,7 +9,7 @@ import { readSessionUser } from '@/lib/auth/session';
 import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
 import { listActiveTeams } from '@/server/read-models/teams';
 import { resolveWorkScopeFor } from '@/server/work-scope';
-import { isActiveUser, isInternalUser, type AuthUser } from '@/shared/contracts/auth';
+import { type AuthUser, isActiveUser, isInternalUser } from '@/shared/contracts/auth';
 import { WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
 
 // TanStack Query 는 관리자 화면만 쓴다. 공개 응답 페이지(/survey, /i, /preview, /unsubscribe)는
@@ -75,7 +75,7 @@ async function InternalShell({ user, children }: { user: AuthUser; children: Rea
   const memberships = await getActiveTeamMemberships(user.id);
   const teams = user.isSuperadmin
     ? await listActiveTeams()
-    : memberships.map((m) => ({ id: m.teamId, name: m.teamName }));
+    : memberships.map((m) => ({ id: m.teamId, name: m.teamName, kind: m.teamKind }));
 
   const requestedScope = (await cookies()).get(WORK_SCOPE_COOKIE)?.value ?? null;
   const subject = {

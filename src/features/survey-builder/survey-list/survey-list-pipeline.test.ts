@@ -3,14 +3,15 @@ import { describe, expect, it } from 'vitest';
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
 
 import {
+  INITIAL_ADVANCED_FILTERS,
+  SURVEY_LIST_PAGE_SIZE,
   countByStatusChip,
   distinctOwners,
   filterSurveyList,
-  INITIAL_ADVANCED_FILTERS,
   narrowToGroup,
+  narrowToTeam,
   paginateSurveyList,
   sortSurveyList,
-  SURVEY_LIST_PAGE_SIZE,
 } from './survey-list-pipeline';
 
 function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
@@ -34,10 +35,10 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     ownerUserId: 'u-1',
     ownerName: '홍길동',
     surveyGroupId: null,
-  deletedAt: null,
-  isParticipant: false,
-  isFullParticipant: false,
-  isLedParticipant: false,
+    deletedAt: null,
+    isParticipant: false,
+    isFullParticipant: false,
+    isLedParticipant: false,
     ...over,
   };
 }
@@ -93,7 +94,6 @@ describe('filterSurveyList', () => {
     const out = filterSurveyList(rows, { ...baseFilters, statusChip: 'draft', groupId: 'g-1' });
     expect(out.map((s) => s.id)).toEqual(['a']);
   });
-
 
   it('종료 칩은 종료된 설문만 남긴다 — 진행중 칩에는 종료된 설문이 없다', () => {
     const rows = [
@@ -237,5 +237,37 @@ describe('distinctOwners', () => {
       { id: 'u-1', name: '강도현' },
       { id: 'u-2', name: '나윤희' },
     ]);
+  });
+});
+
+describe('narrowToTeam — 실사팀 사이드바의 소유 팀 좁힘', () => {
+  const a1 = item({ id: 'a1', teamId: 'team-a', surveyGroupId: 'g-1' });
+  const a2 = item({ id: 'a2', teamId: 'team-a', surveyGroupId: null });
+  const b1 = item({ id: 'b1', teamId: 'team-b', surveyGroupId: null });
+
+  it('팀을 지목하지 않으면 그대로 둔다', () => {
+    expect(narrowToTeam([a1, a2, b1], null, false)).toEqual([a1, a2, b1]);
+  });
+
+  it('지목한 소유 팀의 설문만 남긴다', () => {
+    expect(narrowToTeam([a1, a2, b1], 'team-a', false).map((s) => s.id)).toEqual(['a1', 'a2']);
+  });
+
+  it('미분류만 보면 그 팀의 그룹 밖 설문만 남긴다', () => {
+    expect(narrowToTeam([a1, a2, b1], 'team-a', true).map((s) => s.id)).toEqual(['a2']);
+  });
+
+  it('지목한 팀의 설문이 하나도 없으면 좁히지 않는다 — 빈 화면에 갇히지 않게', () => {
+    expect(narrowToTeam([a1, b1], 'team-x', false)).toEqual([a1, b1]);
+  });
+
+  it('filterSurveyList 가 팀 좁힘을 먼저 건다', () => {
+    const out = filterSurveyList([a1, a2, b1], {
+      searchQuery: '',
+      statusChip: 'all',
+      advanced: INITIAL_ADVANCED_FILTERS,
+      teamId: 'team-b',
+    });
+    expect(out.map((s) => s.id)).toEqual(['b1']);
   });
 });

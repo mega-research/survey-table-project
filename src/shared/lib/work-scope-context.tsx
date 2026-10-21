@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from 'react';
 
-import type { WorkScope } from '@/shared/contracts/workspace';
+import type { TeamKind, WorkScope } from '@/shared/contracts/workspace';
 
 /**
  * 작업 범위 컨텍스트 — admin 셸이 값을 채우고 하위 화면이 읽는다 (역할 모델 v2 티켓 08).
@@ -15,8 +15,8 @@ import type { WorkScope } from '@/shared/contracts/workspace';
 export interface WorkScopeContextValue {
   /** 현재 작업 범위 — 서버가 해석한 값에서 출발한다. 화면이 고른 값이 아니다. */
   scope: WorkScope;
-  /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀. */
-  teams: { id: string; name: string }[];
+  /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀. kind 는 사이드바 표시용(0139). */
+  teams: { id: string; name: string; kind: TeamKind }[];
   /** 「메가리서치」(시스템 전체 보기)를 고를 수 있는가 — 슈퍼어드민만. */
   canSeeSystemScope: boolean;
   isSuperadmin: boolean;

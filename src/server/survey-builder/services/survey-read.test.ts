@@ -6,6 +6,7 @@ import {
   getResponseCountsGroupedBySurvey,
   hasOpenResponseForContact,
 } from '@/server/read-models/responses';
+import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import * as readModels from '@/server/read-models/survey-structure';
 import {
   countDeletedSurveys,
@@ -13,7 +14,6 @@ import {
   getScopedSurveys,
   getSurveyWithDetails as getSurveyWithDetailsData,
 } from '@/server/read-models/survey-structure';
-import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { getActiveTeamMemberships } from '@/server/read-models/team-memberships';
 import { listActiveTeams } from '@/server/read-models/teams';
 import type { Survey as SurveyType } from '@/types/survey';
@@ -170,7 +170,13 @@ describe('survey-read.service getSurveyListWithCounts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getActiveTeamMemberships).mockResolvedValue([
-      { teamId: 'team-1', teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'member' },
+      {
+        teamId: 'team-1',
+        teamName: '연구1본부 - 1팀',
+        teamOrder: 0,
+        teamKind: 'standard',
+        role: 'member',
+      },
     ]);
     vi.mocked(listActiveTeams).mockResolvedValue([]);
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(new Map());
@@ -243,7 +249,13 @@ describe('survey-read.service getSurveyListWithCounts', () => {
 
   it('그 팀의 팀장은 invite_only 까지 보는 조건으로 조회한다', async () => {
     vi.mocked(getActiveTeamMemberships).mockResolvedValue([
-      { teamId: 'team-1', teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'leader' },
+      {
+        teamId: 'team-1',
+        teamName: '연구1본부 - 1팀',
+        teamOrder: 0,
+        teamKind: 'standard',
+        role: 'leader',
+      },
     ]);
 
     await getSurveyListWithCounts(member, 'team-1');
@@ -254,7 +266,9 @@ describe('survey-read.service getSurveyListWithCounts', () => {
   });
 
   it('슈퍼어드민의 기본 범위는 시스템 전체이고 고를 수 있는 팀은 전 팀이다', async () => {
-    vi.mocked(listActiveTeams).mockResolvedValue([{ id: 'team-9', name: '연구3본부 - 7팀' }]);
+    vi.mocked(listActiveTeams).mockResolvedValue([
+      { id: 'team-9', name: '연구3본부 - 7팀', kind: 'standard' },
+    ]);
 
     const result = await getSurveyListWithCounts(
       { id: 'su-1', isSuperadmin: true, userType: 'internal' },
@@ -265,7 +279,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
     expect(getScopedSurveys).toHaveBeenCalledWith({ kind: 'all', viewerId: 'su-1' });
     expect(result.scope).toEqual({ kind: 'system' });
     expect(result.canSeeSystemScope).toBe(true);
-    expect(result.teams).toEqual([{ id: 'team-9', name: '연구3본부 - 7팀' }]);
+    expect(result.teams).toEqual([{ id: 'team-9', name: '연구3본부 - 7팀', kind: 'standard' }]);
   });
 
   it('팀 미배치 사용자는 아무 설문도 조회하지 않는다', async () => {
@@ -855,7 +869,10 @@ describe('survey-read.service getSurveyForResponse control — 설문 종료', (
     vi.mocked(hasOpenResponseForContact).mockResolvedValue(true);
     mockDetails('s-closed');
 
-    const result = await getSurveyForResponse({ surveyId: 's-closed', inviteToken: 'invite-token' });
+    const result = await getSurveyForResponse({
+      surveyId: 's-closed',
+      inviteToken: 'invite-token',
+    });
 
     expect(hasOpenResponseForContact).toHaveBeenCalledWith('target-1');
     expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: true });
@@ -867,7 +884,10 @@ describe('survey-read.service getSurveyForResponse control — 설문 종료', (
     vi.mocked(hasOpenResponseForContact).mockResolvedValue(false);
     mockDetails('s-closed');
 
-    const result = await getSurveyForResponse({ surveyId: 's-closed', inviteToken: 'invite-token' });
+    const result = await getSurveyForResponse({
+      surveyId: 's-closed',
+      inviteToken: 'invite-token',
+    });
 
     expect(result?.control).toMatchObject({ isClosed: true, resumableByInvite: false });
   });

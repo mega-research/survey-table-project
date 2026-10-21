@@ -11,6 +11,7 @@ import type {
   DissolveTeamInput,
   RemoveTeamMemberInput,
   RenameTeamInput,
+  SetTeamKindInput,
   UpdateMemberJobTitleInput,
 } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
@@ -77,6 +78,25 @@ export function useRenameTeam() {
   return useMutation({
     mutationFn: (input: RenameTeamInput) => client.workspace.teams.rename(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: teamKeys.all }),
+  });
+}
+
+/**
+ * 팀 종류 지정 — 실사팀 표시(0139).
+ *
+ * 종류는 레이아웃이 RSC props 로 내려주는 스위처 팀 목록에 실려 사이드바 모양을 정한다.
+ * 그래서 해산과 같은 이유로 `router.refresh()` 가 함께 있어야 한다 — 없으면 지정한 뒤에도
+ * 사이드바가 새로고침 전까지 옛 모양이다.
+ */
+export function useSetTeamKind() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  return useMutation({
+    mutationFn: (input: SetTeamKindInput) => client.workspace.teams.setKind(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: teamKeys.all });
+      router.refresh();
+    },
   });
 }
 

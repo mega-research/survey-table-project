@@ -113,6 +113,7 @@
     "0134_survey_access_links",
     "0135_mail_fallback_campaigns",
     "0136_contact_assignments",
-    "0137_mail_recipient_fallback_pending"
+    "0137_mail_recipient_fallback_pending",
+    "0139_team_kind"
   ]
 }

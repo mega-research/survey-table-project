@@ -9,17 +9,18 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TeamDissolveModal } from './team-dissolve-modal';
+
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
 vi.mock('./queries/use-teams', () => ({
   useDissolveTeam: () => ({ mutateAsync, isPending: false }),
 }));
 
-import { TeamDissolveModal } from './team-dissolve-modal';
-
 const TEAM = {
   id: '22222222-2222-4222-8222-222222222222',
   name: '연구1본부 - 1팀',
+  kind: 'standard' as const,
   memberCount: 3,
   surveyCount: 8,
 };
@@ -44,7 +45,9 @@ describe('TeamDissolveModal', () => {
     expect(screen.getByText(/팀원 3명이 미배치로 전환됩니다/)).toBeInTheDocument();
     expect(screen.getByText(/설문 8개가 배치 대기로 이동합니다/)).toBeInTheDocument();
     // 바뀌지 않는 것도 말해야 한다 — 이 줄이 없으면 조사가 도는 팀은 아무도 못 누른다.
-    expect(screen.getByText(/외부 응답 · 게스트 열람 · 메일 발송은 계속 동작합니다/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/외부 응답 · 게스트 열람 · 메일 발송은 계속 동작합니다/),
+    ).toBeInTheDocument();
   });
 
   it('이름이 정확히 일치하기 전에는 해산 버튼이 잠겨 있다', async () => {

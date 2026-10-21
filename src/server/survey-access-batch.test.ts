@@ -13,6 +13,13 @@ import type {
   SurveyVisibility,
 } from '@/shared/contracts/workspace';
 
+import { getActiveTeamMemberships } from './read-models/team-memberships';
+import {
+  SurveyAccessError,
+  assertSurveyCapabilityBatch,
+  loadSurveyCapabilitiesBatch,
+} from './survey-access';
+
 interface Row {
   id: string;
   teamId: string | null;
@@ -39,13 +46,6 @@ vi.mock('@/db', () => {
 
 vi.mock('./read-models/team-memberships', () => ({ getActiveTeamMemberships: vi.fn() }));
 
-import { getActiveTeamMemberships } from './read-models/team-memberships';
-import {
-  assertSurveyCapabilityBatch,
-  loadSurveyCapabilitiesBatch,
-  SurveyAccessError,
-} from './survey-access';
-
 const TEAM_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_TEAM_ID = '22222222-2222-4222-8222-222222222222';
 const MEMBER = { id: '33333333-3333-4333-8333-333333333333', isSuperadmin: false } as const;
@@ -70,7 +70,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   surveyRows.length = 0;
   vi.mocked(getActiveTeamMemberships).mockResolvedValue([
-    { teamId: TEAM_ID, teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'member' },
+    {
+      teamId: TEAM_ID,
+      teamName: '연구1본부 - 1팀',
+      teamOrder: 0,
+      teamKind: 'standard',
+      role: 'member',
+    },
   ]);
 });
 
@@ -112,9 +118,9 @@ describe('assertSurveyCapabilityBatch', () => {
   it('타 팀 설문이 하나라도 섞이면 not_found 로 전부 거부한다', async () => {
     surveyRows.push(row({ id: A }), row({ id: B, teamId: OTHER_TEAM_ID }));
 
-    await expect(
-      assertSurveyCapabilityBatch(user, [A, B], ['survey.edit']),
-    ).rejects.toMatchObject({ reason: 'not_found' });
+    await expect(assertSurveyCapabilityBatch(user, [A, B], ['survey.edit'])).rejects.toMatchObject({
+      reason: 'not_found',
+    });
   });
 
   it('없는 설문 id 는 not_found — 존재를 알려주지 않는다', async () => {

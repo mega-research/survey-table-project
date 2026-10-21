@@ -2,12 +2,18 @@
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 
-import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 
-import { SYSTEM_SCOPE, type TeamRole, type WorkScope } from '@/shared/contracts/workspace';
-import { writeWorkScopeCookie } from '@/shared/lib/work-scope-cookie';
+import { useQueryClient } from '@tanstack/react-query';
+
+import {
+  SYSTEM_SCOPE,
+  type TeamKind,
+  type TeamRole,
+  type WorkScope,
+} from '@/shared/contracts/workspace';
 import { WorkScopeContext } from '@/shared/lib/work-scope-context';
+import { writeWorkScopeCookie } from '@/shared/lib/work-scope-cookie';
 
 import { Sidebar } from './sidebar';
 import { isSidebarHiddenPath } from './sidebar-menu';
@@ -41,8 +47,8 @@ interface AdminShellProps {
   user: { id: string; name: string; isSuperadmin: boolean; image: string | null };
   /** 내 활성 소속(역할 포함) — 프로필 역할 라벨·팀장 지름길용. */
   memberships: { teamId: string; teamName: string; role: TeamRole }[];
-  /** 스위처가 고를 수 있는 팀 — 내 소속. 슈퍼어드민은 전 활성 팀. */
-  teams: { id: string; name: string }[];
+  /** 스위처가 고를 수 있는 팀 — 내 소속. 슈퍼어드민은 전 활성 팀. kind 는 사이드바 표시용(0139). */
+  teams: { id: string; name: string; kind: TeamKind }[];
   /** 레이아웃이 서버에서 해석한 초기 범위(server/work-scope) — 쿠키를 그대로 믿은 값이 아니다. */
   initialScope: WorkScope;
   children: React.ReactNode;

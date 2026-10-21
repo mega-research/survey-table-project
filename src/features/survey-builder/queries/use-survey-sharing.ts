@@ -5,8 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SetSurveyVisibilityInput } from '@/shared/contracts/workspace-io';
 import { client } from '@/shared/lib/rpc';
 import { surveyGroupKeys } from '@/shared/lib/survey-group-queries';
-
-import { surveyKeys } from './use-surveys';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
 /**
  * 설문 공개 범위 변경 (역할 모델 v2 티켓 16, .pen FLOW 4-2).

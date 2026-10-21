@@ -9,18 +9,20 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { useTeams } = vi.hoisted(() => ({ useTeams: vi.fn() }));
+import { TeamListView } from './team-list-view';
+
+const { useTeams, setTeamKind } = vi.hoisted(() => ({ useTeams: vi.fn(), setTeamKind: vi.fn() }));
 
 vi.mock('./queries/use-teams', () => ({
   useTeams,
   useDissolveTeam: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetTeamKind: () => ({ mutate: setTeamKind, isPending: false }),
 }));
-
-import { TeamListView } from './team-list-view';
 
 const TEAM = {
   id: '22222222-2222-4222-8222-222222222222',
   name: '연구1본부 - 1팀',
+  kind: 'standard' as const,
   memberCount: 3,
   surveyCount: 8,
 };
@@ -86,6 +88,42 @@ describe('TeamListView — 해산 진입점', () => {
     expect(within(dialog).getByLabelText('확인을 위해 팀 이름을 입력하세요')).toHaveAttribute(
       'placeholder',
       renamed.name,
+    );
+  });
+});
+
+describe('TeamListView — 실사팀 표시 (0139)', () => {
+  it('케밥에서 실사팀으로 지정한다', async () => {
+    const user = userEvent.setup();
+    render(<TeamListView />);
+
+    await user.click(screen.getByRole('button', { name: `${TEAM.name} 메뉴` }));
+    await user.click(within(await screen.findByRole('menu')).getByText('실사팀으로 지정'));
+
+    expect(setTeamKind).toHaveBeenCalledWith(
+      { teamId: TEAM.id, kind: 'fieldwork' },
+      expect.anything(),
+    );
+  });
+
+  it('실사팀 카드에는 배지가 서고 케밥은 되돌리기를 준다', async () => {
+    useTeams.mockReturnValue({
+      data: {
+        teams: [{ ...TEAM, kind: 'fieldwork' as const }],
+        systemSummary: { teamCount: 1, surveyCount: 8 },
+      },
+      isLoading: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<TeamListView />);
+
+    expect(screen.getByText('실사팀')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: `${TEAM.name} 메뉴` }));
+    await user.click(within(await screen.findByRole('menu')).getByText('일반 팀으로 되돌리기'));
+    expect(setTeamKind).toHaveBeenCalledWith(
+      { teamId: TEAM.id, kind: 'standard' },
+      expect.anything(),
     );
   });
 });

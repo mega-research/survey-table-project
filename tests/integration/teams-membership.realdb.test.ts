@@ -7,13 +7,11 @@
  *
  * 실행 조건: DATABASE_URL 이 127.0.0.1/localhost 일 때만 (pnpm test:integration).
  */
-
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { teamLifecycleEvents, teamMembers, teams, users } from '@/db/schema';
-import type { UserType } from '@/shared/contracts/auth';
 import {
   AlreadyTeamMemberError,
   CrossTeamAssignmentError,
@@ -30,7 +28,14 @@ import {
   searchAssignableUsers,
   updateMemberJobTitle,
 } from '@/server/workspace/services/members';
-import { createTeam, getTeamDetail, listTeams } from '@/server/workspace/services/teams';
+import {
+  createTeam,
+  dissolveTeam,
+  getTeamDetail,
+  listTeams,
+  setTeamKind,
+} from '@/server/workspace/services/teams';
+import type { UserType } from '@/shared/contracts/auth';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -97,6 +102,64 @@ afterAll(async () => {
   if (createdUserIds.length > 0) {
     await db.delete(users).where(inArray(users.id, createdUserIds));
   }
+});
+
+describe.skipIf(!isLocalDb)('팀 종류 — 실사팀 표시 (real local DB)', () => {
+  async function kindOf(teamId: string) {
+    const [row] = await db.select({ kind: teams.kind }).from(teams).where(eq(teams.id, teamId));
+    return row?.kind;
+  }
+  async function kindEvents(teamId: string) {
+    return db
+      .select({ action: teamLifecycleEvents.action, metadata: teamLifecycleEvents.metadata })
+      .from(teamLifecycleEvents)
+      .where(
+        and(eq(teamLifecycleEvents.teamId, teamId), eq(teamLifecycleEvents.action, 'kind_change')),
+      );
+  }
+
+  it('새 팀은 일반 팀으로 시작하고 목록이 종류를 함께 준다', async () => {
+    const teamId = await seedTeam(actorId, '종류기본');
+    expect(await kindOf(teamId)).toBe('standard');
+    const { teams: list } = await listTeams();
+    expect(list.find((t) => t.id === teamId)?.kind).toBe('standard');
+  });
+
+  it('실사팀으로 지정하면 종류가 바뀌고 감사 행이 전후 종류를 남긴다', async () => {
+    const teamId = await seedTeam(actorId, '종류지정');
+    await setTeamKind(actorId, { teamId, kind: 'fieldwork' });
+
+    expect(await kindOf(teamId)).toBe('fieldwork');
+    const events = await kindEvents(teamId);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.metadata).toMatchObject({ kind: 'fieldwork', previousKind: 'standard' });
+  });
+
+  it('같은 종류로 다시 지정하면 아무 일도 하지 않는다 — 감사 행도 없다', async () => {
+    const teamId = await seedTeam(actorId, '종류멱등');
+    await setTeamKind(actorId, { teamId, kind: 'fieldwork' });
+    await setTeamKind(actorId, { teamId, kind: 'fieldwork' });
+    expect(await kindEvents(teamId)).toHaveLength(1);
+  });
+
+  it('해산된 팀의 종류는 바꿀 수 없다', async () => {
+    const name = uniqueName('종류해산');
+    const { id: teamId } = await createTeam(actorId, { name });
+    createdTeamIds.push(teamId);
+    await dissolveTeam(actorId, { teamId, confirmName: name });
+
+    await expect(setTeamKind(actorId, { teamId, kind: 'fieldwork' })).rejects.toBeInstanceOf(
+      TeamNotFoundError,
+    );
+    expect(await kindOf(teamId)).toBe('standard');
+  });
+
+  it('DB 가 어휘 밖의 값을 막는다', async () => {
+    const teamId = await seedTeam(actorId, '종류제약');
+    await expect(
+      db.execute(sql`update teams set kind = 'vendor' where id = ${teamId}`),
+    ).rejects.toThrow();
+  });
 });
 
 describe.skipIf(!isLocalDb)('팀 생성 (real local DB)', () => {
@@ -192,9 +255,7 @@ describe.skipIf(!isLocalDb)('팀원 추가 (real local DB)', () => {
     await addMember(SUPERADMIN, { teamId: teamA, userId: assigned, role: 'member' });
 
     const found = await searchAssignableUsers(SUPERADMIN, { teamId: teamB, query: 'ticket06' });
-    const order = found
-      .map((u) => u.userId)
-      .filter((id) => id === assigned || id === unassigned);
+    const order = found.map((u) => u.userId).filter((id) => id === assigned || id === unassigned);
 
     expect(order).toEqual([unassigned, assigned]);
   });
@@ -231,9 +292,9 @@ describe.skipIf(!isLocalDb)('팀원 추가 (real local DB)', () => {
     const teamId = await seedTeam(actorId);
     const guestId = await seedUser({ userType: 'guest' });
 
-    await expect(addMember(SUPERADMIN, { teamId, userId: guestId, role: 'member' })).rejects.toBeInstanceOf(
-      UnassignableUserError,
-    );
+    await expect(
+      addMember(SUPERADMIN, { teamId, userId: guestId, role: 'member' }),
+    ).rejects.toBeInstanceOf(UnassignableUserError);
   });
 
   it('해산된 팀에는 아무도 넣지 않는다', async () => {
@@ -334,10 +395,7 @@ describe.skipIf(!isLocalDb)('멤버 구성 감사 (real local DB)', () => {
       })
       .from(teamLifecycleEvents)
       .where(
-        and(
-          eq(teamLifecycleEvents.teamId, teamId),
-          eq(teamLifecycleEvents.targetUserId, userId),
-        ),
+        and(eq(teamLifecycleEvents.teamId, teamId), eq(teamLifecycleEvents.targetUserId, userId)),
       )
       .orderBy(asc(teamLifecycleEvents.createdAt));
 
@@ -362,10 +420,7 @@ describe.skipIf(!isLocalDb)('멤버 구성 감사 (real local DB)', () => {
       .select({ action: teamLifecycleEvents.action })
       .from(teamLifecycleEvents)
       .where(
-        and(
-          eq(teamLifecycleEvents.teamId, teamId),
-          eq(teamLifecycleEvents.targetUserId, userId),
-        ),
+        and(eq(teamLifecycleEvents.teamId, teamId), eq(teamLifecycleEvents.targetUserId, userId)),
       );
     expect(events.map((event) => event.action)).toEqual(['member_add']);
   });
@@ -396,7 +451,10 @@ describe.skipIf(!isLocalDb)('직책 수정의 팀 경계 (real local DB)', () =>
     await addMember(SUPERADMIN, { teamId, userId, role: 'member' });
 
     await updateMemberJobTitle({ teamId, userId, jobTitle: '책임연구원' });
-    let [row] = await db.select({ jobTitle: users.jobTitle }).from(users).where(eq(users.id, userId));
+    let [row] = await db
+      .select({ jobTitle: users.jobTitle })
+      .from(users)
+      .where(eq(users.id, userId));
     expect(row?.jobTitle).toBe('책임연구원');
 
     await updateMemberJobTitle({ teamId, userId, jobTitle: null });

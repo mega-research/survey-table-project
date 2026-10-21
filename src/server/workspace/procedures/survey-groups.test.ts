@@ -93,7 +93,13 @@ beforeEach(() => {
   );
   // 요청자는 팀 A 의 **팀원**(팀장 아님) — 그룹 구조는 팀 공용이라 이걸로 충분해야 한다.
   vi.mocked(getActiveTeamMemberships).mockResolvedValue([
-    { teamId: TEAM_A, teamName: '연구1본부 - 1팀', teamOrder: 0, role: 'member' },
+    {
+      teamId: TEAM_A,
+      teamName: '연구1본부 - 1팀',
+      teamOrder: 0,
+      teamKind: 'standard',
+      role: 'member',
+    },
   ]);
 });
 

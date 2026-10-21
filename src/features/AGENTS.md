@@ -70,6 +70,9 @@ src/
 │   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만)
 │   │   │                       # + sidebar-group-tree(설문 그룹 트리 — 그룹 화면 입구, 티켓 12). 범위 전환 시 쿠키 기록
 │   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
+│   │   │                       # + sidebar-participation-tree(**실사팀 범위만** — 「설문 목록」·그룹 트리 대신 「참여 중」 →
+│   │   │                       #   소유 팀 줄(?team=) → 폴더·미분류(?ungrouped=1). 수치는 participation-tree 순수 계산이
+│   │   │                       #   본문과 같은 read.list 응답에서 센다, 0139)
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── account-vocabulary.ts # 계정 표시 어휘(유형·상태 라벨·상태 배지) — 사용자 관리·팀 관리·실사 업체 셋이 쓴다
 │   │   ├── account-query-keys.ts # 사용자·업체 쿼리 키 — 업체 mutation 이 양쪽 캐시를 접어야 해서 루트에 있다

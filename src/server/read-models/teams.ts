@@ -1,9 +1,9 @@
-import 'server-only';
-
 import { asc, eq } from 'drizzle-orm';
+import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { teams } from '@/db/schema';
+import type { TeamKind } from '@/shared/contracts/workspace';
 
 /**
  * 활성 팀 목록 — 이름만 필요한 소비자용 projection.
@@ -14,9 +14,9 @@ import { teams } from '@/db/schema';
  */
 export async function listActiveTeams(
   executor: DbOrTx = db,
-): Promise<{ id: string; name: string }[]> {
+): Promise<{ id: string; name: string; kind: TeamKind }[]> {
   return executor
-    .select({ id: teams.id, name: teams.name })
+    .select({ id: teams.id, name: teams.name, kind: teams.kind })
     .from(teams)
     .where(eq(teams.status, 'active'))
     .orderBy(asc(teams.order), asc(teams.name));

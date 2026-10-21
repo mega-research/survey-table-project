@@ -13,6 +13,7 @@ import { useWorkScope } from '@/shared/lib/work-scope-context';
 
 import { SidebarGroupTree } from './sidebar-group-tree';
 import { getSidebarMenuItemIds } from './sidebar-menu';
+import { SidebarParticipationTree } from './sidebar-participation-tree';
 import { SidebarProfile } from './sidebar-profile';
 import { TeamSwitcher } from './team-switcher';
 
@@ -35,9 +36,14 @@ interface SidebarProps {
 /** admin 좌측 사이드바 (.pen FLOW 6-1) — 로고 행 · 팀 스위처 · 메뉴 · 하단 프로필. */
 export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { scope } = useWorkScope();
+  const { scope, teams } = useWorkScope();
 
   const menuItemIds = getSidebarMenuItemIds(scope.kind, user.isSuperadmin);
+  // 실사팀 범위만 「참여 중」을 주인공으로 그린다(0139) — 권한은 바뀌지 않고 표시만 갈린다.
+  const fieldworkTeamId =
+    scope.kind === 'team' && teams.find((t) => t.id === scope.teamId)?.kind === 'fieldwork'
+      ? scope.teamId
+      : null;
 
   return (
     <aside
@@ -66,7 +72,21 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
       <TeamSwitcher memberships={memberships} collapsed={collapsed} />
 
       <nav className="flex flex-col gap-[3px]">
-        {menuItemIds.includes('surveys') && (
+        {menuItemIds.includes('surveys') &&
+          fieldworkTeamId !== null &&
+          // 접힌 사이드바는 이름 없는 줄만 남으므로 「참여 중」 아이콘 하나로 줄인다.
+          (collapsed ? (
+            <SidebarMenuLink
+              href="/surveys"
+              label="참여 중"
+              icon={<Users className="h-4 w-4 shrink-0" />}
+              active={pathname?.startsWith('/surveys') ?? false}
+              collapsed
+            />
+          ) : (
+            <SidebarParticipationTree teamId={fieldworkTeamId} />
+          ))}
+        {menuItemIds.includes('surveys') && fieldworkTeamId === null && (
           <>
             <SidebarMenuLink
               href="/surveys"
