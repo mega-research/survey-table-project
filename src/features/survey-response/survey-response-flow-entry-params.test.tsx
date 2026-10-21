@@ -145,6 +145,37 @@ describe('이어 넘길 값', () => {
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     const link = await screen.findByRole('link', { name: '여기를 눌러 주세요' });
     expect(link).toHaveAttribute('href', 'https://tally.so/r/rDyxNl?euid=12345');
+    // 이동하는 동안 완료 카드를 그리지 않는다 — 패널 종료 페이지가 열리기 전 잠깐 비치지 않게
+    expect(screen.queryByText('감사합니다.')).not.toBeInTheDocument();
+  });
+
+  it('테스트 링크는 이동하지 않고 완료 화면에 갈 주소를 보인다', async () => {
+    forResponse.mockResolvedValue({
+      survey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'anonymous',
+        priorWaveLabel: null,
+        changeConfirmEnabled: false,
+        endRedirects: { completed: 'https://tally.so/r/rDyxNl', passParams: ['euid'] },
+      },
+    });
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="panel-survey"
+        inviteToken={null}
+        testToken="test-token"
+        entryQuery="test=test-token&euid=12345"
+      />,
+    );
+    await answer();
+    fireEvent.click(screen.getByRole('button', { name: /제출|다음/ }));
+    expect(await screen.findByText('감사합니다.')).toBeInTheDocument();
+    expect(screen.getByText('https://tally.so/r/rDyxNl?euid=12345')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '여기를 눌러 주세요' })).not.toBeInTheDocument();
   });
 
   it('설정이 없으면 링크에 값이 있어도 싣지 않는다', async () => {

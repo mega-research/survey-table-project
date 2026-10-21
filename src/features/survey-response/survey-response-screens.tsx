@@ -201,26 +201,35 @@ export function SurveyCompletedScreen({
 }
 
 /**
- * 종료 후 이동 안내 (패널 연동). 실응답은 곧바로 이동하므로 잠깐 보이는 안내 + 수동 링크,
- * 테스트·미리보기는 패널 집계에 잡히지 않게 이동하지 않고 어디로 갈지만 보인다.
+ * 종료 후 이동 중 화면 (패널 연동). 실응답이 종료 주소로 가는 동안 완료 카드 대신 이것만 그린다 —
+ * 패널 종료 페이지가 열리기 전 잠깐 「응답 완료」가 비치면 응답자가 거기서 창을 닫는다.
+ * 이동이 막힌 경우를 위해 손으로 누를 링크를 남긴다.
  */
-export function EndRedirectNotice({ url, mode }: { url: string; mode: 'redirecting' | 'test' }) {
+export function EndRedirectingScreen({ url }: { url: string }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
+      <Loader2 className="h-8 w-8 animate-spin text-blue-500" aria-hidden />
+      <p className="text-gray-700">잠시만 기다려 주세요.</p>
+      <p className="text-sm text-gray-500">
+        이동하지 않으면{' '}
+        <a href={url} className="font-medium text-blue-600 underline">
+          여기를 눌러 주세요
+        </a>
+        .
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 종료 후 이동 안내 (패널 연동) — 테스트·미리보기는 패널 집계에 잡히지 않게 이동하지 않고
+ * 완료 화면 아래에 어디로 갈지만 보인다. 실응답은 EndRedirectingScreen 이 대신 선다.
+ */
+export function EndRedirectNotice({ url }: { url: string }) {
   return (
     <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-      {mode === 'redirecting' ? (
-        <p>
-          잠시 후 이동합니다. 이동하지 않으면{' '}
-          <a href={url} className="font-medium text-blue-600 underline">
-            여기를 눌러 주세요
-          </a>
-          .
-        </p>
-      ) : (
-        <>
-          <p>테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.</p>
-          <p className="mt-1 font-medium break-all text-gray-900">{url}</p>
-        </>
-      )}
+      <p>테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.</p>
+      <p className="mt-1 font-medium break-all text-gray-900">{url}</p>
     </div>
   );
 }

@@ -47,6 +47,7 @@ import { SurveyResponseHeader } from '@/features/question-renderer/survey-respon
 import {
   DesktopOnlyScreen,
   EndRedirectNotice,
+  EndRedirectingScreen,
   InvalidTestLinkScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
@@ -1838,9 +1839,9 @@ function SurveyResponseFlowActive({
       ? resolveEndRedirectUrl(control?.endRedirects, endOutcome, entryParams)
       : null;
   const redirectsNow = endRedirectUrl !== null && !isPreview && !isTestSession;
-  const endRedirectFooter = endRedirectUrl ? (
-    <EndRedirectNotice url={endRedirectUrl} mode={redirectsNow ? 'redirecting' : 'test'} />
-  ) : null;
+  // 테스트·미리보기만 완료 화면 아래에 갈 주소를 보인다. 실응답은 아래에서 이동 중 화면으로 바꾼다.
+  const endRedirectFooter =
+    endRedirectUrl && !redirectsNow ? <EndRedirectNotice url={endRedirectUrl} /> : null;
   useEffect(() => {
     // replace — 뒤로 가기로 우리 종료 화면에 돌아와 같은 주소로 다시 튕기지 않게 한다
     if (redirectsNow && endRedirectUrl) window.location.replace(endRedirectUrl);
@@ -1858,6 +1859,12 @@ function SurveyResponseFlowActive({
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [isPreview, hasResponses, isCompleted, redirectsNow]);
+
+  // 종료 후 이동 — 완료·쿼터 마감 화면을 그리지 않고 곧장 이동 중 화면. 완료 카드가 패널 종료
+  // 페이지가 열리기 전 잠깐 비치면 응답자가 거기서 창을 닫는다(이동은 위 effect 가 건다).
+  if (redirectsNow && endRedirectUrl) {
+    return <EndRedirectingScreen url={endRedirectUrl} />;
+  }
 
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
