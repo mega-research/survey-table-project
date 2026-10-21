@@ -49,7 +49,7 @@ interface Props {
  * 운영 헤더의 설문 중단·종료 메뉴 (ADR-0030).
  *
  * 테스트 모드처럼 버튼은 메뉴만 열고 바꾸는 일은 메뉴 안 토글이 한다. 버튼 이름이 지금 상태를
- * 말한다 — 응답 받는 중 · 중단 중(rose) · 종료됨(slate). 두 축은 독립이라 함께 켜질 수 있고,
+ * 말한다 — 설문 중 · 설문 중단(rose) · 설문 종료(slate). 두 축은 독립이라 함께 켜질 수 있고,
  * 그때 버튼은 더 넓게 닫는 종료를 앞세우고 「중단」 표식을 곁에 단다.
  *
  * 뜻이 다르다는 것은 토글 안내와 확인 창이 말한다. 중단은 「잠깐 멈춤」이라 응답자에게 보일
@@ -149,7 +149,7 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
             className={buttonTone}
           >
             <ButtonIcon className="mr-2 h-4 w-4" />
-            {isClosed ? '종료됨' : isPaused ? '중단 중' : '응답 받는 중'}
+            {isClosed ? '설문 종료' : isPaused ? '설문 중단' : '설문 중'}
             {isClosed && isPaused ? (
               <span className="ml-2 rounded bg-rose-500 px-1.5 py-0.5 text-[11px] leading-none font-bold text-white">
                 중단

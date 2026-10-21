@@ -62,7 +62,7 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl();
 
-    const menu = await openMenu(user, /응답 받는 중/);
+    const menu = await openMenu(user, /^설문 중$/);
     const toggles = within(menu).getAllByRole('menuitemcheckbox');
     expect(toggles.map((t) => t.textContent?.slice(0, 5))).toEqual(['설문 중단', '설문 종료']);
     expect(toggles.every((t) => t.getAttribute('aria-checked') === 'false')).toBe(true);
@@ -74,7 +74,7 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl();
 
-    const menu = await openMenu(user, /응답 받는 중/);
+    const menu = await openMenu(user, /^설문 중$/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 중단/ }));
     const dialog = await screen.findByRole('dialog');
     const textarea = within(dialog).getByRole('textbox');
@@ -83,7 +83,7 @@ describe('SurveyStatusControl', () => {
     await user.click(within(dialog).getByRole('button', { name: '설문 중단' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /중단 중/ })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: /^설문 중단/ })).toBeInTheDocument(),
     );
     expect(setPaused).toHaveBeenCalledWith({
       surveyId: 'sv-1',
@@ -97,13 +97,13 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl({ isPaused: true, pausedMessage: '점검' });
 
-    const menu = await openMenu(user, /중단 중/);
+    const menu = await openMenu(user, /^설문 중단/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 중단/ }));
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: '재개' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /응답 받는 중/ })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: /^설문 중$/ })).toBeInTheDocument(),
     );
     expect(setPaused).toHaveBeenCalledWith({ surveyId: 'sv-1', isPaused: false });
   });
@@ -112,7 +112,7 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl();
 
-    const menu = await openMenu(user, /응답 받는 중/);
+    const menu = await openMenu(user, /^설문 중$/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 종료/ }));
     const dialog = await screen.findByRole('alertdialog');
 
@@ -131,13 +131,15 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl();
 
-    const menu = await openMenu(user, /응답 받는 중/);
+    const menu = await openMenu(user, /^설문 중$/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 종료/ }));
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: '종료' }),
     );
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /종료됨/ })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^설문 종료/ })).toBeInTheDocument(),
+    );
     expect(setClosed).toHaveBeenCalledWith({ surveyId: 'sv-1', isClosed: true });
     expect(refresh).toHaveBeenCalled();
   });
@@ -146,7 +148,7 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl({ isClosed: true });
 
-    const menu = await openMenu(user, /종료됨/);
+    const menu = await openMenu(user, /^설문 종료/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 종료/ }));
     const dialog = await screen.findByRole('alertdialog');
     expect(
@@ -155,7 +157,7 @@ describe('SurveyStatusControl', () => {
     await user.click(within(dialog).getByRole('button', { name: '종료 취소' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /응답 받는 중/ })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: /^설문 중$/ })).toBeInTheDocument(),
     );
     expect(setClosed).toHaveBeenCalledWith({ surveyId: 'sv-1', isClosed: false });
   });
@@ -164,9 +166,9 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl({ isPaused: true, isClosed: true });
 
-    const button = screen.getByRole('button', { name: /종료됨/ });
+    const button = screen.getByRole('button', { name: /^설문 종료/ });
     expect(button).toHaveTextContent('중단');
-    const menu = await openMenu(user, /종료됨/);
+    const menu = await openMenu(user, /^설문 종료/);
     expect(
       within(menu)
         .getAllByRole('menuitemcheckbox')
@@ -179,7 +181,7 @@ describe('SurveyStatusControl', () => {
     const user = userEvent.setup();
     renderControl();
 
-    const menu = await openMenu(user, /응답 받는 중/);
+    const menu = await openMenu(user, /^설문 중$/);
     await user.click(within(menu).getByRole('menuitemcheckbox', { name: /설문 종료/ }));
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: '종료' }),
@@ -188,7 +190,7 @@ describe('SurveyStatusControl', () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith('발행된 적 없는 설문은 종료할 수 없습니다.'),
     );
-    expect(screen.queryByRole('button', { name: /종료됨/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^설문 종료/ })).not.toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
   });
 });

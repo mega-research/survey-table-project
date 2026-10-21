@@ -1,16 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render as rtlRender, screen } from '@testing-library/react';
+import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 import { describe, expect, it, vi } from 'vitest';
+
+import { OperationsPageHeader } from '@/features/operations/operations-page-header';
+import { type SurveyCapability, surveyCapabilityValues } from '@/shared/contracts/workspace';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
   usePathname: () => '/surveys/sv-1/operations/contacts',
   useSearchParams: () => new URLSearchParams(),
 }));
-
-import { OperationsPageHeader } from '@/features/operations/operations-page-header';
-import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
-import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 
 /**
  * 헤더의 자리는 **두 축**이 정한다 (ADR-0026 티켓 02·06).
@@ -116,7 +116,7 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
 
 describe('OperationsPageHeader — 설문 종료는 중단과 같은 자리·같은 자격이다 (ADR-0030)', () => {
   // 중단·종료는 한 버튼의 메뉴 토글 둘이다 — 버튼이 보이면 둘 다 누를 수 있다.
-  const STATUS_BUTTON = /응답 받는 중|중단 중|종료됨/;
+  const STATUS_BUTTON = /^설문 (중|중단|종료)/;
 
   it('설문을 고칠 수 있는 주체에게 중단·종료 메뉴 버튼이 보인다', () => {
     renderHeader(surveyCapabilityValues);
