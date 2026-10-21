@@ -6,6 +6,11 @@ export interface InteractiveCellProps {
   cellResponse: unknown;
   onUpdateValue: (value: string | string[] | object) => void;
   /**
+   * 같은 표의 여러 칸을 한 번에 쓴다(칸 id → 값). input 셀의 목록에서 찾기가 고른 행을 이 칸과
+   * 채울 칸에 함께 쓴다. 응답 표(InteractiveCell) 밖에서 그리는 셀은 받지 않는다.
+   */
+  onPatchValues?: ((patch: Record<string, string>) => void) | undefined;
+  /**
    * 부모 테이블 질문의 ID. radio/checkbox/select 셀의 allowTextInput 옵션 텍스트를
    * 옵션 텍스트 원본(response-sources)의 [questionId][optionId] 키로 저장하기 위해 사용.
    */

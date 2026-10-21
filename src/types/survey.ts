@@ -221,6 +221,24 @@ export interface NumericComparison {
 // 설문에 복사된 LUT 사본 (snapshot 시점 freeze)
 // LUT 자체는 키/값 구분 없이 columns + rows 만 보유. 어떤 컬럼이 키이고 어떤 컬럼이
 // 비교 값인지는 조건 에디터(RightOperand.lookup)에서 결정한다.
+/**
+ * 표 입력 칸 「목록에서 찾기」 설정 (TableCell.lookupSearch).
+ * fills 의 cellId 는 같은 표의 입력 칸이다 — 셀 id 를 새로 발번하는 경로는 remapCellRefs 가 옮긴다.
+ */
+export interface CellLookupSearch {
+  /** 설문 참조표 id (SurveyLookup.id) */
+  lookupId: string;
+  /** 후보로 보이고 이 칸에 들어갈 열 */
+  labelColumn: string;
+  /** 고르면 함께 채울 칸 — 참조표 열 → 같은 표의 입력 칸 */
+  fills?: CellLookupFill[];
+}
+
+export interface CellLookupFill {
+  column: string;
+  cellId: string;
+}
+
 export interface SurveyLookup {
   id: string; // nanoid
   name: string;
@@ -514,6 +532,13 @@ export interface TableCell {
    * 오른쪽 단위 글자(년·월)가 입력칸 바로 뒤에 붙는다. 모바일 카드는 무시하고 폭 전체를 쓴다.
    */
   inputWidth?: number;
+  /**
+   * 목록에서 찾기 — 응답자가 글자를 치면 설문 참조표(LUT)의 행을 후보로 띄우고, 고르면 이 칸에
+   * 표시 열 값을, 같은 표의 다른 입력 칸에 지정한 열 값을 채운다(기업명 → 법인번호·사업자번호).
+   * 평문 한 줄 입력 칸 전용이고 목록에 없는 값도 직접 적을 수 있다. 판정은
+   * features/question-renderer/utils/lookup-search.
+   */
+  lookupSearch?: CellLookupSearch;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   /**

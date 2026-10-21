@@ -115,6 +115,11 @@ const SAMPLES: Record<string, TableCell> = {
     inputType: 'text',
     piiEncrypted: true,
     textValidation: { minLength: 2, rejectMeaningless: true },
+    lookupSearch: {
+      lookupId: 'lut-1',
+      labelColumn: '기업명',
+      fills: [{ column: '사업자등록번호', cellId: 'c9' }],
+    },
     inputTextAlign: 'right',
     answerQuoteText: '인용 문구',
     ...CODE,

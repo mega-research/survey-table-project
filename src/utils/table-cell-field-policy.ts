@@ -63,6 +63,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   inputRows: OWNED,
   inputAutoGrow: OWNED,
   inputWidth: OWNED,
+  // 목록에서 찾기 — 설문 참조표와 같은 표의 칸을 가리켜 보관함에는 싣지 않는다
+  lookupSearch: OWNED_NOT_LIBRARY,
   defaultValueTemplate: OWNED,
   prefillEditable: OWNED,
   inputType: OWNED,

@@ -49,6 +49,7 @@ const CellRouter = React.memo(function CellRouter({
   cell,
   cellResponse,
   onUpdateValue,
+  onPatchValues,
   questionId,
   groupName,
   inputIdScope,
@@ -103,6 +104,7 @@ const CellRouter = React.memo(function CellRouter({
           cell={cell}
           cellResponse={cellResponse}
           onUpdateValue={onUpdateValue}
+          onPatchValues={onPatchValues}
           questionId={questionId}
           inputIdScope={inputIdScope}
           ariaInvalid={ariaInvalid}
@@ -216,7 +218,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const { questionResponses: source } = useResponseSources();
-  const { cellResponse, updateValue, clearValue } = useCellResponse(
+  const { cellResponse, updateValue, clearValue, patchValues } = useCellResponse(
     questionId,
     cell.id,
     value,
@@ -349,6 +351,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       cell={cell}
       cellResponse={cellResponse}
       onUpdateValue={updateValue}
+      onPatchValues={patchValues}
       questionId={questionId}
       inputIdScope={inputIdScope}
       ariaInvalid={ariaInvalid}

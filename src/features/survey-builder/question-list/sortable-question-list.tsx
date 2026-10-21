@@ -873,7 +873,8 @@ export function SortableQuestionList({
   return (
     <>
       {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
-      <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes}>
+      {/* 참조표도 함께 — 표 입력 칸의 목록에서 찾기가 빌더 미리보기에서도 후보를 띄운다 */}
+      <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes} lookups={lookups}>
         <FormulaEvalProvider value={testFormulaCtx}>
           <div ref={editContainerRef}>
             <DndContext

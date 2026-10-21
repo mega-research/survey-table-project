@@ -23,7 +23,7 @@ describe('셀 필드 정책', () => {
     expect(dropped).toEqual(['textInputPlaceholder']);
   });
 
-  it('보관함 제거 목록 — 위치·병합·이미지·표 안 관계·설문 전역 이름·렌더 표식·보기 칸 변수번호', () => {
+  it('보관함 제거 목록 — 위치·병합·이미지·표 안 관계(목록에서 찾기 포함)·설문 전역 이름·렌더 표식·보기 칸 변수번호', () => {
     expect([...CELL_LIBRARY_DROPPED_KEYS].sort()).toEqual(
       [
         'id',
@@ -37,6 +37,7 @@ describe('셀 필드 정책', () => {
         'imageUrl',
         'radioGroupName',
         'distinctGroup',
+        'lookupSearch',
         'rankVarNames',
         'optionCode',
         'answerQuoteEnabled',
