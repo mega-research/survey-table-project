@@ -79,6 +79,7 @@ import {
   recalculateRowspansForVisibleRows,
 } from '@/utils/table-merge-helpers';
 
+import { ImageEnlargeLabelsProvider } from './image-enlarge-labels';
 import { InteractiveCell } from './cells';
 import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { ChoiceGroupsProvider } from './cells/choice-groups-context';
@@ -563,7 +564,28 @@ function useMergedResponseChange(
   );
 }
 
-export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
+/**
+ * 표 안 이미지의 크게 보기 머리 줄(「행 제목 · 열 제목」)을 표 구조로 계산해 내려 준다 — 이미지 셀은
+ * 제 칸만 안다(CONTEXT.md 「이미지 크게 보기」).
+ */
+export const InteractiveTableResponse = React.memo(function InteractiveTableResponse(
+  props: InteractiveTableResponseProps,
+) {
+  return (
+    <ImageEnlargeLabelsProvider
+      columns={props.columns ?? EMPTY_COLUMNS}
+      headerGrid={props.tableHeaderGrid}
+      rows={props.rows ?? EMPTY_ROWS}
+    >
+      <InteractiveTableResponseBody {...props} />
+    </ImageEnlargeLabelsProvider>
+  );
+});
+
+const EMPTY_COLUMNS: TableColumn[] = [];
+const EMPTY_ROWS: TableRow[] = [];
+
+function InteractiveTableResponseBody({
   questionId,
   tableTitle,
   columns = [],
@@ -1597,4 +1619,4 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       </GatingTableCellsProvider>
     </ChoiceGroupsProvider>
   );
-});
+}

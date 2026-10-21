@@ -152,6 +152,35 @@ export function buildColumnAxisCards(input: {
 }
 
 /**
+ * 셀마다 「행 제목 · 열 제목」 — 축 단위 카드와 같은 행 제목·열 제목 규칙으로, 응답 칸이 아닌 셀
+ * (표 이미지 셀 등)에도 자리를 붙인다. 이미지 크게 보기의 머리 줄이 쓴다. 빈 조각과 앞 조각과 같은
+ * 글자는 뺀다. 토큰 치환 전이다.
+ */
+export function buildCellPositionLabels(input: {
+  columns: readonly TableColumn[];
+  headerGrid?: HeaderCell[][] | undefined;
+  displayRows: TableRow[];
+}): Map<string, string> {
+  const coverage = buildTableRowspanCoverage(input.displayRows);
+  const columnTitles = input.columns.map(
+    (_, columnIndex) => headerPath(input.columns, input.headerGrid, columnIndex).at(-1) ?? '',
+  );
+  const labels = new Map<string, string>();
+  for (const row of input.displayRows) {
+    const rowTitle = normalize(rowLabel(row, coverage.get(row.id) ?? row.cells).label);
+    for (const [columnIndex, cell] of row.cells.entries()) {
+      if (!isVisible(cell)) continue;
+      const parts: string[] = [];
+      for (const part of [rowTitle, columnTitles[columnIndex] ?? '']) {
+        if (part && !parts.includes(part)) parts.push(part);
+      }
+      labels.set(cell.id, parts.join(' · '));
+    }
+  }
+  return labels;
+}
+
+/**
  * 행 제목을 체크 칸의 보기 라벨로 옮긴 셀 — 「행 제목 한 줄 + 그 아래 글자 없는 체크박스 하나」를
  * 「☐ 행 제목」 한 줄로 그리기 위한 것이다. 해당하지 않으면 null(종전대로 제목 위 · 컨트롤 아래).
  *

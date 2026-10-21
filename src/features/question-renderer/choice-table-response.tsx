@@ -39,7 +39,7 @@ import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/features/question-
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { Question, TableCell, TableRow } from '@/types/survey';
+import type { Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
   type GroupedChoiceAnswer,
@@ -75,6 +75,7 @@ import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { ChoiceTableGatedCell } from './choice-table-gated-cell';
 import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
+import { ImageEnlargeLabelsProvider } from './image-enlarge-labels';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
 import { ValidationIssueBanner } from './validation-issue-banner';
@@ -129,7 +130,23 @@ const CHOICE_TABLE_ROW_WISE_ANSWERABLE_TYPES: readonly TableCell['type'][] = [
   ...([...CHOICE_TABLE_CONTROL_CELL_TYPES] as TableCell['type'][]),
 ];
 
-export function ChoiceTableResponse({
+export function ChoiceTableResponse(props: ChoiceTableResponseProps) {
+  const { question } = props;
+  return (
+    <ImageEnlargeLabelsProvider
+      columns={question.tableColumns ?? EMPTY_COLUMNS}
+      headerGrid={question.tableHeaderGrid ?? undefined}
+      rows={question.tableRowsData ?? EMPTY_ROWS}
+    >
+      <ChoiceTableResponseBody {...props} />
+    </ImageEnlargeLabelsProvider>
+  );
+}
+
+const EMPTY_COLUMNS: TableColumn[] = [];
+const EMPTY_ROWS: TableRow[] = [];
+
+function ChoiceTableResponseBody({
   question,
   value,
   onChange,
