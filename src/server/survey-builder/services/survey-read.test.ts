@@ -215,7 +215,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         teamName: '연구1본부 - 1팀',
         visibility: 'team',
         assignmentStatus: 'assigned',
-        // 소유자는 화면 편의(작성자 표기·소유자 필터·버튼 노출 근사, 티켓 08)다.
+        // 소유자는 화면 편의(소유자 표기·소유자 필터·버튼 노출 근사, 티켓 08)다.
         // 접근 판정은 여전히 서버 capability 엔진만 한다(티켓 07).
         ownerUserId: 'u-1',
         ownerName: '홍길동',

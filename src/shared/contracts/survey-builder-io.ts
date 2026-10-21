@@ -28,7 +28,7 @@ export function normalizeSurveyStatus(value: string): SurveyStatus {
 /**
  * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
  *
- * owner 두 필드는 화면 편의다 — 카드의 「작성자」 표기와 상세 검색 소유자 필터,
+ * owner 두 필드는 화면 편의다 — 카드의 「소유자」 표기와 상세 검색 소유자 필터,
  * 그리고 수정·삭제 버튼의 노출 근사(canEditSurveyCard)에 쓴다. 실제 판정은 언제나
  * 서버 capability 엔진이 한다(티켓 07).
  */

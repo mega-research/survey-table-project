@@ -61,7 +61,7 @@ interface SurveyCardProps {
   onMoveToGroup: ((surveyId: string, groupId: string | null) => void) | null;
 }
 
-/** 수정일 텍스트 접미사 — 내 설문이 아니면 작성자를, 남의 팀 설문이면 소유 팀을 잇는다. */
+/** 수정일 텍스트 접미사 — 내 설문이 아니면 소유자를, 남의 팀 설문이면 소유 팀을 잇는다. */
 function modifiedDateSuffix(
   survey: SurveyListItem,
   scope: WorkScope,
@@ -70,7 +70,7 @@ function modifiedDateSuffix(
   if (scope.kind !== 'team') return '';
   if (currentUserId !== null && survey.ownerUserId === currentUserId) return '';
   if (survey.teamId === scope.teamId) {
-    return survey.ownerName ? ` · 작성자 ${survey.ownerName}` : '';
+    return survey.ownerName ? ` · 소유자 ${survey.ownerName}` : '';
   }
   return survey.teamName ? ` · ${survey.teamName} 소유` : '';
 }
