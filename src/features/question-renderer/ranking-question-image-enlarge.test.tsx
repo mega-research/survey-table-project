@@ -2,10 +2,15 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import type { Question } from '@/types/survey';
 
-import { loadImageWithSize, stubMatchMedia } from '../../../tests/helpers/image-size';
+import {
+  loadImageWithSize,
+  settleImageEnlargeHistory,
+  stubMatchMedia,
+} from '../../../tests/helpers/image-size';
 
 /**
  * 「이미지 크게 보기」 — 순위형 보기 이미지. 보기를 누르면 순위가 매겨지므로(클릭 방식) 입력 방식과
@@ -18,8 +23,7 @@ afterEach(async () => {
   cleanup();
   restoreMatchMedia?.();
   restoreMatchMedia = undefined;
-  // 연 채 끝난 크게 보기는 정리 뒤 한 박자 늦게 방문 기록 칸을 걷는다 — 다음 테스트로 새지 않게 기다린다
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await settleImageEnlargeHistory();
 });
 
 const IMAGE_URL = 'https://cdn.example.com/a.png';
@@ -138,5 +142,22 @@ describe('순위형 보기 이미지 — 돋보기 버튼', () => {
     });
 
     expect(screen.queryByRole('button', { name: 'A안 크게 보기' })).toBeNull();
+  });
+
+  it('보기 라벨의 명단 토큰은 버튼 이름에서도 치환된다', () => {
+    restoreMatchMedia = stubMatchMedia({ mobile: false, hover: true });
+    const question = rankingQuestion('click');
+    question.tableRowsData![0]!.cells[0]!.content = '{{기업명}} 시안';
+    const { container } = render(
+      <ContactAttrsProvider attrs={{ 기업명: '메가리서치' }}>
+        <RankingQuestion question={question} value={null} onChange={vi.fn()} />
+      </ContactAttrsProvider>,
+    );
+    loadImageWithSize(
+      container.querySelector(`img[src="${IMAGE_URL}"]`) as HTMLImageElement,
+      cropped,
+    );
+
+    expect(screen.getByRole('button', { name: '메가리서치 시안 크게 보기' })).toBeInTheDocument();
   });
 });

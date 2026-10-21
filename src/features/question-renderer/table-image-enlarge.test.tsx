@@ -5,7 +5,11 @@ import { PreviewCell } from '@/features/question-renderer/cells/preview-cell';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import type { Question, TableCell } from '@/types/survey';
 
-import { loadImageWithSize, stubMatchMedia } from '../../../tests/helpers/image-size';
+import {
+  loadImageWithSize,
+  settleImageEnlargeHistory,
+  stubMatchMedia,
+} from '../../../tests/helpers/image-size';
 
 /**
  * 「이미지 크게 보기」의 범위 — 응답 화면의 표(테이블 · 보기 · 순위 문항)만 켜진다. 빌더 편집 화면의 표
@@ -18,8 +22,7 @@ afterEach(async () => {
   cleanup();
   restoreMatchMedia?.();
   restoreMatchMedia = undefined;
-  // 연 채 끝난 크게 보기는 정리 뒤 한 박자 늦게 방문 기록 칸을 걷는다 — 다음 테스트로 새지 않게 기다린다
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await settleImageEnlargeHistory();
 });
 
 const shrunk = { natural: { width: 1920, height: 1400 }, rendered: { width: 132, height: 96 } };

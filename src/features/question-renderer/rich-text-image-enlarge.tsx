@@ -10,7 +10,7 @@ import {
 } from 'react';
 
 import { ImageEnlargeOverlay } from './enlargeable-image';
-import { type ImageSize, canEnlargeImage } from './utils/image-enlarge';
+import { type ImageSize, canEnlargeImage, enlargeTriggerLabel } from './utils/image-enlarge';
 
 /**
  * 본문(안내문 · 설명) 이미지의 「이미지 크게 보기」(CONTEXT.md). 본문은 HTML 을 그대로 넣어 그리므로
@@ -47,7 +47,7 @@ function markImage(img: HTMLImageElement): void {
     img.setAttribute(ENLARGE_MARK, '');
     img.setAttribute('role', 'button');
     img.setAttribute('tabindex', '0');
-    img.setAttribute('aria-label', `${img.alt.trim() || '이미지'} 크게 보기`);
+    img.setAttribute('aria-label', enlargeTriggerLabel(img.alt));
   } else {
     for (const name of [ENLARGE_MARK, 'role', 'tabindex', 'aria-label']) img.removeAttribute(name);
   }

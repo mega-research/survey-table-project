@@ -22,18 +22,19 @@ export function RankingOptionImage({ cell, className }: { cell: TableCell; class
   const quotes = useAnswerQuotes();
   const enlarge = useTableImageEnlarge(cell.id);
   if (!cell.imageUrl) return null;
-  const label = buildRankingOptLabel(cell, '');
+  // 대체 텍스트·머리 줄 모두 보기 라벨(토큰 치환 후)이다
+  const label = substituteTokens(buildRankingOptLabel(cell, ''), attrs, quotes);
   return (
     <EnlargeableImage
       key={cell.imageUrl}
       src={cell.imageUrl}
-      alt={cell.content || cell.rankingLabel || '순위 옵션 이미지'}
+      alt={label || '순위 옵션 이미지'}
       enabled={enlarge !== null}
       fit="cover"
       trigger="button"
       wrapperClassName="w-full"
       className={cn('w-full rounded object-cover', className)}
-      title={label ? substituteTokens(label, attrs, quotes) : undefined}
+      title={label || undefined}
     />
   );
 }

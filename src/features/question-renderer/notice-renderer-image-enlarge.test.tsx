@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 
-import { loadImageWithSize, stubMatchMedia } from '../../../tests/helpers/image-size';
+import {
+  loadImageWithSize,
+  settleImageEnlargeHistory,
+  stubMatchMedia,
+} from '../../../tests/helpers/image-size';
 
 /**
  * 「이미지 크게 보기」 — 안내문 본문 이미지. 본문은 HTML 을 그대로 넣어 그리므로 이미지마다 부품을 끼울
@@ -17,8 +21,7 @@ afterEach(async () => {
   cleanup();
   restoreMatchMedia?.();
   restoreMatchMedia = undefined;
-  // 연 채 끝난 크게 보기는 정리 뒤 한 박자 늦게 방문 기록 칸을 걷는다 — 다음 테스트로 새지 않게 기다린다
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await settleImageEnlargeHistory();
 });
 
 const TABLE_IMAGE = 'https://cdn.example.com/table.png';

@@ -15,6 +15,11 @@ export interface ImageSize {
 /** 이미지를 상자에 맞추는 방식 — 줄여 넣기(전체 보임) / 잘라 채우기(넘치는 쪽이 잘림) */
 export type ImageFit = 'contain' | 'cover';
 
+/** 크게 보기를 여는 버튼의 이름 — 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다 */
+export function enlargeTriggerLabel(alt: string): string {
+  return `${alt.trim() || '이미지'} 크게 보기`;
+}
+
 /** 반 픽셀 미만의 차이는 반올림 오차로 본다 — 1px 줄어든 이미지는 잡고 소수점 측정값은 흘린다 */
 const PIXEL_TOLERANCE = 0.5;
 

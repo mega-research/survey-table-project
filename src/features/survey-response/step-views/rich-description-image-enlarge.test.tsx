@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadImageWithSize, stubMatchMedia } from '../../../../tests/helpers/image-size';
+import {
+  loadImageWithSize,
+  settleImageEnlargeHistory,
+  stubMatchMedia,
+} from '../../../../tests/helpers/image-size';
 import { RichDescription } from './rich-description';
 
 /** 「이미지 크게 보기」 — 문항·그룹 설명 본문 이미지도 안내문 본문과 같은 규칙으로 크게 본다 */
@@ -12,8 +16,7 @@ afterEach(async () => {
   cleanup();
   restoreMatchMedia?.();
   restoreMatchMedia = undefined;
-  // 연 채 끝난 크게 보기는 정리 뒤 한 박자 늦게 방문 기록 칸을 걷는다 — 다음 테스트로 새지 않게 기다린다
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await settleImageEnlargeHistory();
 });
 
 describe('설명 본문 이미지 — 이미지 크게 보기', () => {

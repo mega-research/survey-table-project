@@ -16,7 +16,12 @@ import { Maximize2, ZoomIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import type { ImageEnlargeViewerProps } from './image-enlarge-viewer';
-import { type ImageFit, type ImageSize, canEnlargeImage } from './utils/image-enlarge';
+import {
+  type ImageFit,
+  type ImageSize,
+  canEnlargeImage,
+  enlargeTriggerLabel,
+} from './utils/image-enlarge';
 
 // 응답자 경로 번들에서 라이트박스를 떼어 낸다 — 누를 때 처음 불러온다
 const ImageEnlargeViewer = lazy(() => import('./image-enlarge-viewer'));
@@ -72,8 +77,7 @@ export function EnlargeableImage({
   const [open, setOpen] = useState(false);
   const canOpen = enabled && enlargeable;
   const opensFromImage = canOpen && trigger === 'image';
-  // 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다
-  const triggerLabel = `${alt.trim() || '이미지'} 크게 보기`;
+  const triggerLabel = enlargeTriggerLabel(alt);
 
   const measure = useCallback(() => {
     const img = imgRef.current;
