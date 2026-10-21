@@ -1,17 +1,7 @@
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
-
-import { getSurveyById } from '@/server/read-models/survey-structure';
-import {
-  assertSurveyCapability,
-  loadAccountAccessSubject,
-  SurveyAccessError,
-  type SurveyAccessUser,
-} from '@/server/survey-access';
-import { resolveWorkScope } from '@/server/work-scope';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
-import { db, type DbOrTx } from '@/db';
+import { type DbOrTx, db } from '@/db';
 import {
   NewQuestion,
   NewQuestionGroup,
@@ -22,18 +12,29 @@ import {
   teams,
 } from '@/db/schema';
 import { mailCampaigns } from '@/db/schema/mail';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
+import { generateId } from '@/lib/utils';
+import { getSurveyById } from '@/server/read-models/survey-structure';
 import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue';
 import { collectSurveyContentKeys } from '@/server/storage-lifecycle/entity-collectors';
 import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-diff-collector';
-import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
-import { generateId } from '@/lib/utils';
+import {
+  SurveyAccessError,
+  type SurveyAccessUser,
+  assertSurveyCapability,
+  loadAccountAccessSubject,
+} from '@/server/survey-access';
+import { resolveWorkScope } from '@/server/work-scope';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 
-import { copyKeepsOriginalTeam, SurveyOwnershipRequiredError } from '../domain/survey';
+import { SurveyOwnershipRequiredError, copyKeepsOriginalTeam } from '../domain/survey';
 import type {
   CreateSurveyInput,
   EnsureSurveyInDbInput,
   EnsureSurveyResult,
+  SetSurveyCardTitleInput,
+  SetSurveyCardTitleOutput,
   SurveyIdInput,
   SurveyRow,
   UpdateSurveyInput,
@@ -45,7 +46,6 @@ import type {
 //
 // 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
 // 소비처 query invalidation(use-survey-sync)으로 대체한다.
-
 
 /**
  * 새 설문이 붙을 팀 (역할 모델 v2 티켓 07).
@@ -62,7 +62,12 @@ export async function resolveNewSurveyOwnership(
   requestedScope: string | null | undefined,
   /** INSERT 와 **같은 트랜잭션**을 넘겨야 한다 — 아래 FOR SHARE 가 그때만 의미를 갖는다. */
   executor: DbOrTx = db,
-): Promise<{ teamId: string; ownerUserId: string; createdBy: string; assignmentStatus: 'assigned' }> {
+): Promise<{
+  teamId: string;
+  ownerUserId: string;
+  createdBy: string;
+  assignmentStatus: 'assigned';
+}> {
   const scope = await resolveWorkScope(actor, requestedScope ?? null);
   if (scope.kind !== 'team') {
     throw new SurveyOwnershipRequiredError();
@@ -327,6 +332,25 @@ export async function restoreSurvey(input: SurveyIdInput): Promise<void> {
   if (restored.length === 0) throw new SurveyAccessError('not_found');
 }
 
+/**
+ * 카드 제목 지정 (0140) — 관리용 이름. 관문(survey.edit)은 procedure 가 진다.
+ *
+ * `updatedAt` 을 건드리지 않는다 — 카드 이름은 설문 내용이 아니라 내부에서 부르는 이름이라
+ * 공개 범위·그룹 이동과 같은 축이다(바꾸면 「최신 수정순」이 이름 바꾸기 한 번에 뒤집힌다).
+ * 관문과 이 UPDATE 사이에 삭제가 커밋되면 0행이라 not_found 로 접는다.
+ */
+export async function setSurveyCardTitle(
+  input: SetSurveyCardTitleInput,
+): Promise<SetSurveyCardTitleOutput> {
+  const [row] = await db
+    .update(surveys)
+    .set({ cardTitle: input.cardTitle })
+    .where(and(eq(surveys.id, input.surveyId), isNull(surveys.deletedAt)))
+    .returning({ cardTitle: surveys.cardTitle });
+  if (!row) throw new SurveyAccessError('not_found');
+  return row;
+}
+
 // 복제 시 질문 id 는 새로 발번되므로 JSONB 안의 질문 id 참조 — 표시조건의
 // sourceQuestionId, expression 조건의 questionId(CellRef·question operand),
 // 분기 goto 의 targetQuestionId/targetQuestionMap 값 — 를 새 id 로 치환한다.
@@ -408,13 +432,13 @@ export async function duplicateSurvey(
       const ownedTeam =
         original.teamId === null
           ? null
-          : (
+          : ((
               await tx
                 .select({ id: teams.id })
                 .from(teams)
                 .where(and(eq(teams.id, original.teamId), eq(teams.status, 'active')))
                 .for('share')
-            )[0] ?? null;
+            )[0] ?? null);
       const copyTeamId = ownedTeam ? original.teamId : null;
       ownership = {
         teamId: copyTeamId,
@@ -433,6 +457,8 @@ export async function duplicateSurvey(
         ...ownership,
         visibility: original.visibility,
         title: `${original.title} (복사본)`,
+        // 카드 제목도 원본을 잇는다 — 없으면 사본도 설문지 제목을 따라간다.
+        cardTitle: original.cardTitle ? `${original.cardTitle} (복사본)` : null,
         description: original.description,
         isPublic: original.isPublic,
         allowMultipleResponses: original.allowMultipleResponses,
@@ -525,7 +551,9 @@ export async function duplicateSurvey(
         required: question.required,
         requiredMessage: question.requiredMessage,
         order: question.order,
-        options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
+        options: (question.options
+          ? stripOptionCodes(question.options)
+          : question.options) as NewQuestion['options'],
         selectLevels: question.selectLevels as NewQuestion['selectLevels'],
         tableTitle: question.tableTitle,
         tableColumns: question.tableColumns as NewQuestion['tableColumns'],
@@ -575,10 +603,8 @@ export async function duplicateSurvey(
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
-        priorAnswerCondition:
-          question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
-        priorAnswerDisabled:
-          question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
+        priorAnswerCondition: question.priorAnswerCondition as NewQuestion['priorAnswerCondition'],
+        priorAnswerDisabled: question.priorAnswerDisabled as NewQuestion['priorAnswerDisabled'],
         answerQuoteEnabled: question.answerQuoteEnabled,
         answerQuoteName: question.answerQuoteName,
         answerQuoteText: question.answerQuoteText,

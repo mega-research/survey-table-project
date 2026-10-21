@@ -21,18 +21,18 @@
  * 들고 나오므로 단언이 실패한다.
  */
 import { createRouterClient } from '@orpc/server';
+import { internalActorContext } from '@tests/helpers/rpc-context';
+import {
+  type ProcedureEntry,
+  enumerateProcedures,
+  isInternalBase,
+  takesSurveyId,
+} from '@tests/helpers/rpc-surface';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { router } from '@/server/router';
 import * as gate from '@/server/rpc-survey-access';
 import * as accessCore from '@/server/survey-access';
-import { internalActorContext } from '@tests/helpers/rpc-context';
-import {
-  enumerateProcedures,
-  isInternalBase,
-  takesSurveyId,
-  type ProcedureEntry,
-} from '@tests/helpers/rpc-surface';
 
 /**
  * 모킹 팩토리는 호이스트되어 파일 상단의 const 를 볼 수 없다 — 양쪽이 함께 쓰는 값은
@@ -187,6 +187,11 @@ const SURFACES: Record<string, SurfaceSpec> = {
     gate: 'rpc',
     capability: 'survey.delete',
     input: { surveyId: S },
+  },
+  'surveyBuilder.surveys.setCardTitle': {
+    gate: 'rpc',
+    capability: 'survey.edit',
+    input: { surveyId: S, cardTitle: '남의 팀 카드' },
   },
   'surveyBuilder.surveys.duplicate': {
     gate: 'service',
@@ -534,12 +539,20 @@ const SURFACES: Record<string, SurfaceSpec> = {
   'contacts.assignments.preview': {
     gate: 'rpc',
     capability: 'contacts.manage',
-    input: { surveyId: S, assignmentId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+    input: {
+      surveyId: S,
+      assignmentId: C,
+      clauses: [{ source: 'system.resid', value: '1', op: '' }],
+    },
   },
   'contacts.assignments.apply': {
     gate: 'rpc',
     capability: 'contacts.manage',
-    input: { surveyId: S, assignmentId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+    input: {
+      surveyId: S,
+      assignmentId: C,
+      clauses: [{ source: 'system.resid', value: '1', op: '' }],
+    },
   },
   'contacts.assignments.facets': {
     gate: 'rpc',
@@ -964,10 +977,7 @@ const client = createRouterClient(router, {
 function callerFor(path: string): (input: unknown) => Promise<unknown> {
   const fn = path
     .split('.')
-    .reduce<unknown>(
-      (node, key) => (node as Record<string, unknown>)[key],
-      client as unknown,
-    );
+    .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], client as unknown);
   if (typeof fn !== 'function') throw new Error(`호출할 수 없는 경로: ${path}`);
   return fn as (input: unknown) => Promise<unknown>;
 }
@@ -1034,9 +1044,7 @@ describe('표면 인벤토리 (라우터 열거)', () => {
     const childIdKey = /^ids?$|Ids?$/;
     const unexplained = procedures
       .filter((p) => isInternalBase(p.base) && p.hasObjectInput && !takesSurveyId(p))
-      .filter((p) =>
-        p.inputKeys.some((key) => childIdKey.test(key) && !TEAM_SCOPE_KEYS.has(key)),
-      )
+      .filter((p) => p.inputKeys.some((key) => childIdKey.test(key) && !TEAM_SCOPE_KEYS.has(key)))
       .map((p) => p.path)
       .filter((path) => !(path in OTHER_BOUNDARY_SURFACES) && !(path in ALIASED_SURVEY_SURFACES));
     expect(unexplained).toEqual([]);
@@ -1086,9 +1094,7 @@ describe('표면 인벤토리 (라우터 열거)', () => {
       .filter((p) => !isInternalBase(p.base) && takesSurveyId(p))
       .map((p) => p.path)
       .sort();
-    expect(others).toEqual(
-      [...RESPONDENT_SURFACES, ...SUPERADMIN_SURVEY_SURFACES].sort(),
-    );
+    expect(others).toEqual([...RESPONDENT_SURFACES, ...SUPERADMIN_SURVEY_SURFACES].sort());
   });
 
   it('scoped 베이스는 설문 관문 없이 쓰이지 않는다 — 예외가 하나도 없다', () => {

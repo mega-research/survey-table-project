@@ -16,13 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
-import type {
-  SurveyAssignmentStatus,
-  SurveyOwnershipAction,
-  SurveyOwnershipEventMetadata,
-  SurveyOwnershipStatus,
-  SurveyVisibility,
-} from '@/shared/contracts/workspace';
+import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 import type { ProfileColumnScheme, ProgressColumnScheme } from '@/shared/contracts/operations';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type {
@@ -36,18 +30,26 @@ import type {
   ResponseEditChange,
   ResponseStatus,
 } from '@/shared/contracts/survey-response';
+import type {
+  SurveyAssignmentStatus,
+  SurveyOwnershipAction,
+  SurveyOwnershipEventMetadata,
+  SurveyOwnershipStatus,
+  SurveyVisibility,
+} from '@/shared/contracts/workspace';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import type {
   ChoiceGroup,
   DynamicRowGroupConfig,
   HeaderCell,
+  MaxSelectionsSource,
   NumberFormat,
   QuestionConditionGroup,
   QuestionOption,
   RankingConfig,
   RowRepeatConfig,
-  StagedRowsConfig,
   SelectLevel,
+  StagedRowsConfig,
   SumConstraint,
   SurveyLookup,
   TableCell,
@@ -55,9 +57,7 @@ import type {
   TableRow,
   TableValidationRule,
   TextValidation,
-  MaxSelectionsSource,
 } from '@/types/survey';
-import type { PriorAnswerImportConfig } from '@/shared/contracts/contacts';
 
 import { users } from './auth';
 import { surveyGroups, teams } from './workspace';
@@ -68,6 +68,11 @@ export const surveys = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     title: text('title').notNull(),
+    /**
+     * 카드 제목 (0140) — 설문 목록 카드·운영 콘솔 머리에 보이는 관리용 이름. 응답자는 보지 않는다.
+     * NULL 이면 설문지 제목(title)을 쓴다(`surveyCardTitle`). 빈 문자열은 CHECK 가 막는다.
+     */
+    cardTitle: text('card_title'),
     description: text('description'),
     slug: text('slug').unique(),
     privateToken: uuid('private_token').defaultRandom(),

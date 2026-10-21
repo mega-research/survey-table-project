@@ -163,6 +163,7 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
         : leadsParticipantTeam(leaderTeamIds).mapWith(Boolean),
     id: surveys.id,
     title: surveys.title,
+    cardTitle: surveys.cardTitle,
     description: surveys.description,
     slug: surveys.slug,
     privateToken: surveys.privateToken,
@@ -227,10 +228,7 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
 
   return db
     .select({
-      ...surveyListColumns(
-        filter.viewerId,
-        filter.kind === 'team' ? filter.leaderTeamIds : [],
-      ),
+      ...surveyListColumns(filter.viewerId, filter.kind === 'team' ? filter.leaderTeamIds : []),
       // 그룹은 팀 소유물이라 팀이 다른 그룹 id 가 남아 있으면 그건 깨진 상태다(팀을 옮기는
       // 흐름이 surveyGroupId 를 안 내린 경우). 목록에서는 미분류로 보여 그 상태를 정상처럼
       // 그리지 않는다 — 그룹 화면 필터도 이 값을 보므로 유령 그룹에 갇히지 않는다.
@@ -399,9 +397,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     ...(q.placeholder != null ? { placeholder: q.placeholder } : {}),
     ...(q.defaultValueTemplate != null ? { defaultValueTemplate: q.defaultValueTemplate } : {}),
-    ...((q.inputType as InputType | null) != null
-      ? { inputType: q.inputType as InputType }
-      : {}),
+    ...((q.inputType as InputType | null) != null ? { inputType: q.inputType as InputType } : {}),
     ...(q.emptyDefault != null ? { emptyDefault: q.emptyDefault } : {}),
     ...(q.tableValidationRules != null
       ? {
@@ -443,7 +439,9 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
-    ...(q.mobileItemCardBlockColumns != null ? { mobileItemCardBlockColumns: q.mobileItemCardBlockColumns } : {}),
+    ...(q.mobileItemCardBlockColumns != null
+      ? { mobileItemCardBlockColumns: q.mobileItemCardBlockColumns }
+      : {}),
     ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
     ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
     ...(q.displayCondition != null

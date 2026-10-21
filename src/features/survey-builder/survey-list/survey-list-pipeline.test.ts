@@ -35,6 +35,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     ownerUserId: 'u-1',
     ownerName: '홍길동',
     surveyGroupId: null,
+    cardTitle: null,
     deletedAt: null,
     isParticipant: false,
     isFullParticipant: false,
@@ -269,5 +270,32 @@ describe('narrowToTeam — 실사팀 사이드바의 소유 팀 좁힘', () => {
       teamId: 'team-b',
     });
     expect(out.map((s) => s.id)).toEqual(['b1']);
+  });
+});
+
+describe('카드 제목 (0140) — 검색·정렬은 카드에 보이는 이름을 본다', () => {
+  const a = item({ id: 'a', title: '응답자용 긴 제목 가', cardTitle: '2026 1차' });
+  const b = item({ id: 'b', title: '나 설문', cardTitle: null });
+
+  it('검색은 카드 제목으로 찾는다', () => {
+    const out = filterSurveyList([a, b], {
+      searchQuery: '1차',
+      statusChip: 'all',
+      advanced: INITIAL_ADVANCED_FILTERS,
+    });
+    expect(out.map((s) => s.id)).toEqual(['a']);
+  });
+
+  it('카드 제목이 없으면 설문지 제목으로 찾는다', () => {
+    const out = filterSurveyList([a, b], {
+      searchQuery: '나 설문',
+      statusChip: 'all',
+      advanced: INITIAL_ADVANCED_FILTERS,
+    });
+    expect(out.map((s) => s.id)).toEqual(['b']);
+  });
+
+  it('이름순 정렬은 카드 제목 기준이다', () => {
+    expect(sortSurveyList([b, a], 'title').map((s) => s.id)).toEqual(['a', 'b']);
   });
 });

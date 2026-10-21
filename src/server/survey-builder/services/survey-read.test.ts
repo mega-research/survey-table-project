@@ -142,6 +142,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
     return {
       id: 'survey-1',
       title: '첫 설문',
+      cardTitle: null,
       description: null,
       slug: 'first',
       privateToken: '11111111-1111-1111-1111-111111111111',
@@ -207,6 +208,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       {
         id: 'survey-1',
         title: '첫 설문',
+        cardTitle: null,
         description: null,
         slug: 'first',
         privateToken: '11111111-1111-1111-1111-111111111111',

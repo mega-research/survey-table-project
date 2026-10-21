@@ -114,6 +114,24 @@ export const SurveyIdInput = z.object({
 });
 export type SurveyIdInput = z.infer<typeof SurveyIdInput>;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// setSurveyCardTitle — 카드 제목 (0140)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 다듬은 뒤 비면 null — 설문지 제목을 따라간다(DB CHECK 가 빈 문자열을 막는 것과 짝). */
+export const SetSurveyCardTitleInput = z.object({
+  surveyId: z.string(),
+  cardTitle: z
+    .string()
+    .max(200)
+    .nullable()
+    .transform((v) => (v === null || v.trim() === '' ? null : v.trim())),
+});
+export type SetSurveyCardTitleInput = z.output<typeof SetSurveyCardTitleInput>;
+
+export const SetSurveyCardTitleOutput = z.object({ cardTitle: z.string().nullable() });
+export type SetSurveyCardTitleOutput = z.infer<typeof SetSurveyCardTitleOutput>;
+
 /**
  * 성공만 알리면 되는 설문 수명주기 변경 — 삭제와 복구가 함께 쓴다(티켓 17).
  *

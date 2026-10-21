@@ -1,7 +1,13 @@
 import { createRouterClient } from '@orpc/server';
+import { ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { SurveyAccessError } from '@/server/survey-access';
+
+import * as svc from '../services/surveys';
+import { surveys } from './surveys';
 
 vi.mock('../services/surveys', () => ({
   ensureSurveyInDb: vi.fn(),
@@ -10,6 +16,7 @@ vi.mock('../services/surveys', () => ({
   deleteSurvey: vi.fn(),
   restoreSurvey: vi.fn(),
   duplicateSurvey: vi.fn(),
+  setSurveyCardTitle: vi.fn(),
 }));
 
 // capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
@@ -19,16 +26,18 @@ vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
   assertSurveyCapabilityRpc: vi.fn(),
 }));
 
-import { ORPCError } from '@orpc/server';
-
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-import { SurveyAccessError } from '@/server/survey-access';
-
-import * as svc from '../services/surveys';
-import { surveys } from './surveys';
-
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
+  return {
+    db: {} as never,
+    user: {
+      id: 'admin-1',
+      email: 'a@b.com',
+      name: '관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
 }
 
 function anonContext(): ORPCContext {
@@ -306,5 +315,45 @@ describe('surveyBuilder.surveys.restore — 슈퍼어드민 전용 (티켓 17)',
     await expect(client.surveys.delete({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+});
+
+/**
+ * 카드 제목 (0140) — 관리용 이름이라 설문 편집 권한과 같은 축이다. 비우면 null(설문지 제목을 따라간다).
+ */
+describe('surveyBuilder.surveys.setCardTitle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(svc.setSurveyCardTitle).mockResolvedValue({ cardTitle: '2026 1차' });
+  });
+
+  it('survey.edit 관문을 지나 서비스에 다듬은 값을 넘긴다', async () => {
+    const context = authedContext();
+    const client = createRouterClient({ surveys }, { context });
+    const res = await client.surveys.setCardTitle({
+      surveyId: SURVEY_ID,
+      cardTitle: '  2026 1차  ',
+    });
+    expect(assertSurveyCapabilityRpc).toHaveBeenCalledWith(context.user, SURVEY_ID, 'survey.edit');
+    expect(svc.setSurveyCardTitle).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      cardTitle: '2026 1차',
+    });
+    expect(res).toEqual({ cardTitle: '2026 1차' });
+  });
+
+  it('빈 값은 null 로 보내 설문지 제목을 따라가게 한다', async () => {
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+    await client.surveys.setCardTitle({ surveyId: SURVEY_ID, cardTitle: '   ' });
+    expect(svc.setSurveyCardTitle).toHaveBeenCalledWith({ surveyId: SURVEY_ID, cardTitle: null });
+  });
+
+  it('관문이 거부하면 서비스까지 가지 않는다', async () => {
+    vi.mocked(assertSurveyCapabilityRpc).mockRejectedValueOnce(new ORPCError('NOT_FOUND'));
+    const client = createRouterClient({ surveys }, { context: authedContext() });
+    await expect(
+      client.surveys.setCardTitle({ surveyId: SURVEY_ID, cardTitle: 'x' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(svc.setSurveyCardTitle).not.toHaveBeenCalled();
   });
 });

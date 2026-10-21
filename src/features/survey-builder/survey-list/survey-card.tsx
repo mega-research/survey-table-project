@@ -20,6 +20,7 @@ import {
   MessageCircle,
   Pencil,
   Share2,
+  TextCursorInput,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,11 +35,12 @@ import {
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
-import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 import { SURVEY_VISIBILITY_LABEL, type WorkScope } from '@/shared/contracts/workspace';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
 import { ShareSettingsModal } from '../sharing/share-settings-modal';
+import { CardTitleDialog } from './card-title-dialog';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
 import {
   type SurveyCardViewer,
@@ -116,6 +118,8 @@ export function SurveyCard({
   // 공개 범위 변경은 survey.manageAccess — 팀원은 편집은 되지만 여기는 잠긴다.
   const canManageAccess = canManageSurveyAccessCard(survey, viewer);
   const [sharingOpen, setSharingOpen] = useState(false);
+  const [cardTitleOpen, setCardTitleOpen] = useState(false);
+  const displayTitle = surveyCardTitle(survey);
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
     {
@@ -135,8 +139,12 @@ export function SurveyCard({
             <FileText className="h-[21px] w-[21px] text-[#2743AE]" />
           </span>
           {/* 목업은 긴 제목을 두 줄로 보여준다 — 한 줄 말줄임이면 비슷한 제목끼리 구별이 안 된다. */}
-          <h3 className="line-clamp-2 min-w-0 text-[16px] leading-[1.35] font-semibold break-keep text-[#1C1C1E]">
-            {survey.title}
+          {/* 카드 제목(0140)을 보이고, 응답자가 보는 설문지 제목이 다르면 툴팁으로 남긴다. */}
+          <h3
+            title={displayTitle !== survey.title ? `설문지 제목: ${survey.title}` : undefined}
+            className="line-clamp-2 min-w-0 text-[16px] leading-[1.35] font-semibold break-keep text-[#1C1C1E]"
+          >
+            {displayTitle}
           </h3>
         </div>
 
@@ -156,6 +164,10 @@ export function SurveyCard({
                 <Pencil className="h-3.5 w-3.5" />
                 수정
               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canEdit} onSelect={() => setCardTitleOpen(true)}>
+              <TextCursorInput className="h-3.5 w-3.5" />
+              카드 제목 변경
             </DropdownMenuItem>
             {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
             <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
@@ -275,10 +287,18 @@ export function SurveyCard({
         />
       </div>
 
+      {cardTitleOpen && (
+        <CardTitleDialog
+          surveyId={survey.id}
+          surveyTitle={survey.title}
+          cardTitle={survey.cardTitle}
+          onClose={() => setCardTitleOpen(false)}
+        />
+      )}
       {sharingOpen && (
         <ShareSettingsModal
           surveyId={survey.id}
-          surveyTitle={survey.title}
+          surveyTitle={displayTitle}
           visibility={survey.visibility}
           canManageAccess={canManageAccess}
           currentOwnerName={survey.ownerName}

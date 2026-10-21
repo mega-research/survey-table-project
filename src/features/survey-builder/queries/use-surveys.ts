@@ -76,6 +76,22 @@ export function useDeleteSurvey() {
 }
 
 /**
+ * 카드 제목 지정 (0140) — 비우면 null 로 가 설문지 제목을 따라간다. 목록 카드가 이 이름을 보이므로
+ * 목록 캐시를 접는다. 운영 콘솔 머리는 RSC 라 그 화면에서 바꾸면 호출측이 router.refresh 한다.
+ */
+export function useSetSurveyCardTitle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { surveyId: string; cardTitle: string | null }) =>
+      client.surveyBuilder.surveys.setCardTitle(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+    },
+  });
+}
+
+/**
  * 설문 복제
  */
 export function useDuplicateSurvey() {

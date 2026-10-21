@@ -2,8 +2,8 @@
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
-import type { SurveyAnchorSnapshot } from './survey-document';
 
+import type { SurveyAnchorSnapshot } from './survey-document';
 import type { SurveyAssignmentStatus, SurveyVisibility, WorkScope } from './workspace';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,13 @@ export function normalizeSurveyStatus(value: string): SurveyStatus {
  */
 export interface SurveyListItem {
   id: string;
+  /** 설문지 제목 — 응답자에게 보이는 이름. */
   title: string;
+  /**
+   * 카드 제목 (0140) — 목록 카드·운영 콘솔 머리의 관리용 이름. null 이면 설문지 제목을 쓴다.
+   * 화면은 직접 고르지 말고 `surveyCardTitle` 로 읽는다(검색·정렬·표시가 같은 이름을 보게).
+   */
+  cardTitle: string | null;
   description: string | null;
   slug: string | null;
   privateToken: string | null;
@@ -199,4 +205,9 @@ export interface ResponseEntrySeed {
   contactAttrs: Record<string, string> | null;
   /** attrs 조회가 테스트 링크 만료로 거부됐다(RPC 의 INVALID_TEST_LINK 와 같은 뜻). */
   attrsInvalidTest?: boolean;
+}
+
+/** 카드에 보이는 이름 — 카드 제목이 없으면 설문지 제목(0140). 검색·정렬·표시가 함께 쓴다. */
+export function surveyCardTitle(survey: { title: string; cardTitle: string | null }): string {
+  return survey.cardTitle ?? survey.title;
 }

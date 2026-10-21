@@ -57,13 +57,14 @@ export default async function OperationsLayout({ children, params }: LayoutProps
     <div className="min-h-screen bg-gray-50">
       <OperationsPageHeader
         surveyId={surveyId}
-        surveyTitle={survey.title}
+        // 머리는 카드 제목(관리용 이름)을 보인다 — 없으면 설문지 제목(0140).
+        surveyTitle={survey.cardTitle ?? survey.title}
         capabilities={capabilities}
         control={control}
         shareAction={
           <ShareSettingsButton
             surveyId={surveyId}
-            surveyTitle={survey.title}
+            surveyTitle={survey.cardTitle ?? survey.title}
             visibility={survey.visibility}
             canManageAccess={capabilities.has('survey.manageAccess')}
             currentOwnerName={ownerRows[0]?.name ?? null}

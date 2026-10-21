@@ -134,6 +134,7 @@ survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, �
 ```
 surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken, previewToken
+├── cardTitle                     # 카드 제목 (0140, nullable) — 목록 카드·운영 콘솔 머리의 관리용 이름. NULL 이면 title. 응답자는 안 본다
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
 ├── endDate, maxResponses, thankYouMessage, screenedOutMessage (자격미달 종료 문구, NULL=완료 문구 폴백, 0110), contactEmail, responseHeader (JSONB)
 ├── piiRetentionUntil (개인정보 보관기한)

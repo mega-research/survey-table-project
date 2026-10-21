@@ -27,6 +27,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     ownerUserId: 'u-1',
     ownerName: '홍길동',
     surveyGroupId: null,
+    cardTitle: null,
     deletedAt: null,
     isParticipant: false,
     isFullParticipant: false,
@@ -78,5 +79,19 @@ describe('SurveyCard — 종료 배지', () => {
     unmount();
     renderCard(item({ status: 'draft' }));
     expect(screen.queryByText('종료')).toBeNull();
+  });
+});
+
+describe('SurveyCard — 카드 제목 (0140)', () => {
+  it('카드 제목이 있으면 그것을 보이고 설문지 제목은 툴팁으로 둔다', () => {
+    renderCard(item({ title: '응답자에게 보이는 긴 제목', cardTitle: '2026 1차' }));
+    const heading = screen.getByText('2026 1차');
+    expect(heading).toHaveAttribute('title', '설문지 제목: 응답자에게 보이는 긴 제목');
+    expect(screen.queryByText('응답자에게 보이는 긴 제목')).toBeNull();
+  });
+
+  it('카드 제목이 없으면 설문지 제목을 보인다', () => {
+    renderCard(item({ title: '고객 만족도 조사', cardTitle: null }));
+    expect(screen.getByText('고객 만족도 조사')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@
 import { Clock, FileText, Loader2, RotateCcw } from 'lucide-react';
 
 import { formatLocalDate } from '@/lib/date-formatters';
-import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 
 interface DeletedSurveyCardProps {
   survey: SurveyListItem;
@@ -30,7 +30,7 @@ export function DeletedSurveyCard({ survey, onRestore, isRestoring }: DeletedSur
           <FileText className="h-[21px] w-[21px] text-[#9CA3AF]" />
         </span>
         <h3 className="min-w-0 truncate text-[16px] font-semibold text-[#6E6E73]">
-          {survey.title}
+          {surveyCardTitle(survey)}
         </h3>
       </div>
 

@@ -9,6 +9,8 @@ import {
   DuplicateResultSchema,
   EnsureSurveyInDbInput,
   EnsureSurveyResultSchema,
+  SetSurveyCardTitleInput,
+  SetSurveyCardTitleOutput,
   SurveyIdInput,
   SurveyLifecycleOutput,
   SurveyOwnershipRequiredError,
@@ -114,10 +116,27 @@ const duplicate = authed
     }
   });
 
+/**
+ * 카드 제목 (0140) — 목록 카드·운영 콘솔 머리의 관리용 이름. 설문을 고칠 수 있는 주체만.
+ *
+ * update 의 allowlist(UpdateSurveyDataSchema)에 넣지 않고 표면을 따로 둔다 — 빌더 저장은 설문지
+ * 내용만 실어 오므로, 거기 섞이면 빌더를 저장할 때마다 카드 이름이 폼 값으로 덮인다.
+ */
+const setCardTitle = authed
+  .input(SetSurveyCardTitleInput)
+  .output(SetSurveyCardTitleOutput)
+  .handler(async ({ context, input }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
+    return svc.setSurveyCardTitle(input).catch((error: unknown) => {
+      throw toRpcSurveyAccessError(error);
+    });
+  });
+
 export const surveys = {
   ensure,
   create,
   update,
+  setCardTitle,
   delete: del,
   restore,
   duplicate,

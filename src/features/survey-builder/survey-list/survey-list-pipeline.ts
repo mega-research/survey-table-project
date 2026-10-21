@@ -5,7 +5,7 @@
 //
 // 그룹 필터(티켓 12)는 여기 상태가 아니라 **URL 이 정한다**(`?group=<id>`) — 그룹 화면은
 // 브레드크럼과 제목을 가진 별개의 화면이라 뒤로 가기·새로고침·링크 공유가 살아 있어야 한다.
-import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 
 export type SurveyListStatusChip = 'all' | 'draft' | 'published' | 'closed';
 export type SurveyListSortBy = 'updatedAt' | 'createdAt' | 'title' | 'responses';
@@ -122,7 +122,8 @@ export function filterSurveyList(
 
   const q = filters.searchQuery.trim().toLowerCase();
   if (q) {
-    result = result.filter((s) => s.title.toLowerCase().includes(q));
+    // 카드에 보이는 이름으로 찾는다 — 카드 제목이 없으면 설문지 제목(0140).
+    result = result.filter((s) => surveyCardTitle(s).toLowerCase().includes(q));
   }
 
   const { advanced } = filters;
@@ -163,7 +164,7 @@ export function sortSurveyList(
       sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       break;
     case 'title':
-      sorted.sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+      sorted.sort((a, b) => surveyCardTitle(a).localeCompare(surveyCardTitle(b), 'ko'));
       break;
     case 'responses':
       sorted.sort((a, b) => b.responseCount - a.responseCount);

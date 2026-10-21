@@ -1,8 +1,6 @@
 import { and, asc, eq, isNull, ne } from 'drizzle-orm';
 import 'server-only';
 
-import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
-
 import { db } from '@/db';
 import {
   contactTargets,
@@ -12,6 +10,7 @@ import {
   surveys,
 } from '@/db/schema';
 import { normalizeQuestions } from '@/lib/question';
+import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
@@ -42,8 +41,8 @@ import {
 } from '@/server/survey-access';
 import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
-import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
@@ -148,6 +147,7 @@ export async function getSurveyListWithCounts(
     surveys: surveyList.map((survey) => ({
       id: survey.id,
       title: survey.title,
+      cardTitle: survey.cardTitle,
       description: survey.description,
       slug: survey.slug,
       privateToken: survey.privateToken,
