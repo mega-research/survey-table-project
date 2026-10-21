@@ -19,7 +19,7 @@ import {
   Lock,
   MessageCircle,
   Pencil,
-  UserPlus,
+  Share2,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,8 +44,8 @@ import {
   type SurveyCardViewer,
   canDeleteSurveyCard,
   canEditSurveyCard,
-  canManageSurveyGroupCard,
   canManageSurveyAccessCard,
+  canManageSurveyGroupCard,
 } from './survey-list-capability';
 
 interface SurveyCardProps {
@@ -157,9 +157,10 @@ export function SurveyCard({
                 수정
               </Link>
             </DropdownMenuItem>
+            {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
             <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
-              <UserPlus className="h-3.5 w-3.5" />
-              초대
+              <Share2 className="h-3.5 w-3.5" />
+              공유
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
