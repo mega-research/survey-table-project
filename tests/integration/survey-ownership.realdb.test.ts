@@ -172,6 +172,43 @@ describe.skipIf(!isLocalDb)('소유권 이전 · 승계 (real local DB)', () => 
   // ① 같은 팀 이전
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * 소유 이동은 설문 내용이 아니다 — 공개 범위·그룹 이동과 같은 계약. 건드리면 「최신 수정순」
+   * 기본 정렬과 카드의 수정일이 이전·승계 한 번에 그날로 바뀐다.
+   */
+  describe('updatedAt 보존', () => {
+    const OLD = new Date('2026-01-02T03:04:05.000Z');
+    async function updatedAtOf() {
+      const [row] = await db
+        .select({ updatedAt: surveysTable.updatedAt })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      return row?.updatedAt?.getTime();
+    }
+
+    it('이전이 수정일을 건드리지 않는다', async () => {
+      await db.update(surveysTable).set({ updatedAt: OLD }).where(eq(surveysTable.id, surveyId));
+      await ownershipClient(OWNER_ID).ownership.transfer({
+        surveyId,
+        newOwnerUserId: TEAMMATE_ID,
+        expectedOwnerUserId: OWNER_ID,
+      });
+      expect(await updatedAtOf()).toBe(OLD.getTime());
+    });
+
+    it('승계 대기 전환이 수정일을 건드리지 않는다', async () => {
+      await db.update(surveysTable).set({ updatedAt: OLD }).where(eq(surveysTable.id, surveyId));
+      await usersClient(SUPERADMIN_ID).users.changeStatus({
+        action: 'depart',
+        userId: OWNER_ID,
+        succession: [{ surveyId, newOwnerUserId: null }],
+      });
+      expect(await updatedAtOf()).toBe(OLD.getTime());
+
+      await db.update(usersTable).set({ status: 'active' }).where(eq(usersTable.id, OWNER_ID));
+    });
+  });
+
   describe('같은 팀 이전', () => {
     it('소유자만 바뀌고 팀·그룹은 그대로다', async () => {
       await ownershipClient(OWNER_ID).ownership.transfer({

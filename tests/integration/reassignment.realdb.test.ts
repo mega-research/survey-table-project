@@ -270,6 +270,31 @@ describe.skipIf(!isLocalDb)('재배치 센터 (real local DB)', () => {
     expect(events[1]?.toTeamId).toBe(destination);
   });
 
+  it('해산과 배치가 수정일을 건드리지 않는다 — 소유 이동은 설문 내용이 아니다', async () => {
+    const OLD = new Date('2026-01-02T03:04:05.000Z');
+    const { teamId, teamName, surveyId } = await seedTeamWithWork('수정일');
+    await db.update(surveysTable).set({ updatedAt: OLD }).where(eq(surveysTable.id, surveyId));
+    const updatedAtOf = async () => {
+      const [row] = await db
+        .select({ updatedAt: surveysTable.updatedAt })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      return row?.updatedAt?.getTime();
+    };
+
+    await admin.teams.dissolve({ teamId, confirmName: teamName });
+    expect(await updatedAtOf()).toBe(OLD.getTime());
+
+    const destination = await seedDestination('수정일', OUTSIDER_ID);
+    await admin.reassignment.assignSurveys({
+      surveyIds: [surveyId],
+      teamId: destination,
+      ownerUserId: OUTSIDER_ID,
+      visibility: 'team',
+    });
+    expect(await updatedAtOf()).toBe(OLD.getTime());
+  });
+
   it('배치된 설문의 소유자가 실제로 전권을 갖는다', async () => {
     // 이 티켓의 핵심 불변식. 판정 코어의 소유자 분기는 **소유 팀 소속일 때만** 전권을 주므로
     // (티켓 13 하드닝) 컬럼만 확인하는 테스트는 팀 밖 소유자 결함을 잡지 못한다.

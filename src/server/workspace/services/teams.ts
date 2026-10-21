@@ -318,7 +318,8 @@ export async function dissolveTeam(
           teamId: null,
           assignmentStatus: 'assignment_pending',
           surveyGroupId: null,
-          updatedAt: new Date(),
+          // updatedAt 은 건드리지 않는다 — 소유 이동은 설문 내용이 아니다(reassignment 의
+          // assignSurveys 주석). 배치가 되돌아올 때도 같아서 해산·배치를 거쳐도 수정일이 남는다.
         })
         .where(
           inArray(

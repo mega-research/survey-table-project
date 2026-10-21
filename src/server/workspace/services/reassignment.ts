@@ -376,8 +376,10 @@ export async function assignUserToTeamInTx(
  * 맞추는 것이 목적이 아니라, 해산과 배치가 **정확히 반대 방향의 같은 이동**이라 서로를
  * 기다려야 하기 때문이다.
  *
- * `updatedAt` 을 갱신한다. 그룹 이동(티켓 12)이 갱신하지 않는 것과 갈리는데, 그쪽은 폴더에
- * 넣는 일이고 이쪽은 소유 팀·소유자·공개 범위가 바뀌는 일이다. 해산도 같은 이유로 갱신한다.
+ * `updatedAt` 을 건드리지 않는다. 소유 팀·소유자·공개 범위는 설문 내용이 아니라 누가 보고
+ * 누가 책임지는가의 문제다 — 공개 범위 변경·그룹 이동과 같은 계약이고, 해산·이전·승계도 같다.
+ * 건드리면 0116 백필이 세운 배치 대기 설문을 정리하는 날 전부의 수정일이 그날로 바뀌고
+ * 「최신 수정순」 기본 정렬이 배치 순서가 된다.
  */
 export async function assignSurveys(
   actorUserId: string,
@@ -447,7 +449,6 @@ export async function assignSurveys(
         assignmentStatus: 'assigned',
         // 승계 대기도 여기서 해소된다 — 새 소유자가 정해졌다는 것이 그 상태의 종료 조건이다.
         ownershipStatus: 'normal',
-        updatedAt: new Date(),
       })
       .where(inArray(surveys.id, input.surveyIds));
 

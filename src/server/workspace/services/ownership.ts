@@ -321,7 +321,7 @@ export async function transferOwnershipInTx(
       // 이전이 끝나면 승계 대기 상태는 해소된다.
       ownershipStatus: 'normal' as const,
       assignmentStatus: 'assigned' as const,
-      updatedAt: new Date(),
+      // updatedAt 은 건드리지 않는다 — 소유 이동은 설문 내용이 아니다(assignSurveys 주석).
     })
     .where(eq(surveys.id, surveyId));
 
@@ -490,7 +490,7 @@ export async function applySuccessionInTx(
     // 후임 없음 — 승계 대기로 세운다. 소유자는 그대로 둔다(누가 두고 갔는지가 계보다).
     await tx
       .update(surveys)
-      .set({ ownershipStatus: 'succession_pending', updatedAt: new Date() })
+      .set({ ownershipStatus: 'succession_pending' })
       .where(eq(surveys.id, assignment.surveyId));
   }
 }
