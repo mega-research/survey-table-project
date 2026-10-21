@@ -23,6 +23,8 @@ src/
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
+│   │   │                       # 입구는 둘 — 설문 카드 케밥 「공유」와 운영 헤더 「공유」(share-settings-button, 내부 운영 레이아웃이
+│   │   │                       # 헤더의 shareAction 자리에 끼운다 — operations 는 이 묶음을 import 할 수 없다)
 │   │   │                       # 공개 범위·참여자·클라이언트·실사 네 블록 + 소유권 이전(티켓 16·18·21·25)
 │   │   │                       # 링크 패널은 access-link-panel 한 벌(`AccessLinkPanel({ surveyId, kind })`) — 클라이언트 블록은
 │   │   │                       # 그것만 그리고(탭 칩 포함), 실사 블록은 「내부 실사원 | 외주」 세그먼트의 외주 쪽에 쓴다.

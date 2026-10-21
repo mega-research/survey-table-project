@@ -3,14 +3,15 @@ import { notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyDocuments } from '@/db/schema';
+import { surveyDocuments, teams, users } from '@/db/schema';
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
-import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
-import { getControlState } from '@/server/operations/services/control';
-import { getSurveyById } from '@/server/survey-builder/services/survey-read';
-import { requireAuth } from '@/lib/auth';
-import { loadSurveyCapabilities } from '@/server/survey-access';
 import { internalOperationsBase } from '@/features/operations/operations-paths';
+import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
+import { ShareSettingsButton } from '@/features/survey-builder/sharing/share-settings-button';
+import { requireAuth } from '@/lib/auth';
+import { getControlState } from '@/server/operations/services/control';
+import { loadSurveyCapabilities } from '@/server/survey-access';
+import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,7 +33,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   // 헤더·탭이 무엇을 그릴지 정할 판정 결과만 읽는다. 화면이 스스로 판정을 복제하지 않도록
   // 불리언이 아니라 capability 집합을 그대로 넘긴다.
   const viewer = await requireAuth();
-  const [control, capabilities, documentRows] = await Promise.all([
+  const [control, capabilities, documentRows, ownerRows, teamRows] = await Promise.all([
     getControlState(surveyId),
     loadSurveyCapabilities(viewer, surveyId),
     // 조사표가 붙은 설문에서만 '문항 수요' 탭을 낸다 — 다른 설문에는 쓸 일이 없다.
@@ -41,6 +42,13 @@ export default async function OperationsLayout({ children, params }: LayoutProps
       .from(surveyDocuments)
       .where(eq(surveyDocuments.surveyId, surveyId))
       .limit(1),
+    // 헤더 「공유」 모달의 소유자·소유 팀 표기 — 설문 카드가 목록 행에서 읽는 것과 같은 두 이름.
+    survey.ownerUserId
+      ? db.select({ name: users.name }).from(users).where(eq(users.id, survey.ownerUserId)).limit(1)
+      : Promise.resolve([]),
+    survey.teamId
+      ? db.select({ name: teams.name }).from(teams).where(eq(teams.id, survey.teamId)).limit(1)
+      : Promise.resolve([]),
   ]);
   // 위에서 설문 존재를 확인했으므로 null 은 그 사이 삭제된 극단 케이스 — 404 로 접는다.
   if (!control) notFound();
@@ -52,6 +60,17 @@ export default async function OperationsLayout({ children, params }: LayoutProps
         surveyTitle={survey.title}
         capabilities={capabilities}
         control={control}
+        shareAction={
+          <ShareSettingsButton
+            surveyId={surveyId}
+            surveyTitle={survey.title}
+            visibility={survey.visibility}
+            canManageAccess={capabilities.has('survey.manageAccess')}
+            currentOwnerName={ownerRows[0]?.name ?? null}
+            currentOwnerUserId={survey.ownerUserId}
+            ownerTeamName={teamRows[0]?.name ?? null}
+          />
+        }
       />
       <OperationsTabStrip
         basePath={internalOperationsBase(surveyId)}

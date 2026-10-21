@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LINK_CAPABILITIES } from '@tests/fixtures/survey-capability-columns';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -43,7 +44,12 @@ const CONTROL = {
  */
 function renderHeader(
   capabilities: readonly SurveyCapability[],
-  options: { internalShell?: boolean; trailing?: React.ReactNode; previewHref?: string } = {},
+  options: {
+    internalShell?: boolean;
+    trailing?: React.ReactNode;
+    previewHref?: string;
+    shareAction?: React.ReactNode;
+  } = {},
 ) {
   const queryClient = new QueryClient();
   return rtlRender(
@@ -54,6 +60,7 @@ function renderHeader(
       internalShell={options.internalShell ?? true}
       {...(options.trailing !== undefined ? { trailing: options.trailing } : {})}
       {...(options.previewHref !== undefined ? { previewHref: options.previewHref } : {})}
+      {...(options.shareAction !== undefined ? { shareAction: options.shareAction } : {})}
       {...(options.internalShell === false ? {} : { control: CONTROL })}
     />,
     {
@@ -64,8 +71,8 @@ function renderHeader(
   );
 }
 
-/** 링크 셸에 있어서는 안 되는 자리들. */
-const INTERNAL_ONLY = ['목록으로', '설문 편집'];
+/** 링크 셸에 있어서는 안 되는 자리들 — 「설문 열기」는 편집이 든 메뉴라 내부 셸에만 선다. */
+const INTERNAL_ONLY = ['목록으로', '설문 열기'];
 
 describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만 남는다', () => {
   it('전권 내부 주체는 admin 자리를 전부 본다', () => {
@@ -73,10 +80,37 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
     for (const label of INTERNAL_ONLY) {
       expect(screen.queryAllByText(label).length, `${label} 가 없다`).toBeGreaterThan(0);
     }
+  });
+
+  it('내부 셸의 설문 보기·편집은 「설문 열기」 메뉴 하나에 있다', async () => {
+    const user = userEvent.setup();
+    renderHeader(surveyCapabilityValues);
+    expect(screen.queryByText('설문 보기')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /설문 열기/ }));
+    const menu = await screen.findByRole('menu');
     // 내부 셸의 설문 보기는 빌더 미리보기로 간다.
+    expect(within(menu).getByRole('menuitem', { name: /설문 보기/ })).toHaveAttribute(
+      'href',
+      '/surveys/sv-1/preview',
+    );
+    expect(within(menu).getByRole('menuitem', { name: /설문 편집/ })).toHaveAttribute(
+      'href',
+      '/surveys/sv-1/edit',
+    );
+  });
+
+  it('편집 권한이 없으면 메뉴 대신 설문 보기 버튼 하나다', () => {
+    renderHeader(surveyCapabilityValues.filter((cap) => cap !== 'survey.edit'));
+    expect(screen.queryByRole('button', { name: /설문 열기/ })).toBeNull();
     expect(screen.getByText('설문 보기').closest('a')?.getAttribute('href')).toBe(
       '/surveys/sv-1/preview',
     );
+  });
+
+  it('공유 자리에 셸이 준 것을 그린다', () => {
+    renderHeader(surveyCapabilityValues, { shareAction: <button type="button">공유</button> });
+    expect(screen.getByRole('button', { name: '공유' })).toBeTruthy();
   });
 
   it('외주 링크 셸의 설문 보기는 링크 트리의 열람 화면으로 간다 — admin 주소가 아니다', () => {

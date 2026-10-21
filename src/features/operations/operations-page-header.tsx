@@ -1,19 +1,16 @@
 import Link from 'next/link';
 
-import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
+import { Activity, ArrowLeft, Eye } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import {
-  surveyEditPath,
-  surveyListPath,
-  surveyPreviewPath,
-} from './operations-paths';
+import { surveyEditPath, surveyListPath, surveyPreviewPath } from './operations-paths';
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
+import { SurveyOpenMenu } from './survey-open-menu';
 
 interface Props {
   surveyId: string;
@@ -44,6 +41,14 @@ interface Props {
    * 받으면 헤더는 자리만 알고 무엇이 오는지는 모른다.
    */
   trailing?: React.ReactNode;
+  /**
+   * 「공유」 자리 — 공유 설정 모달을 여는 버튼이 온다.
+   *
+   * 모달은 survey-builder 묶음에 산다(설문 카드 케밥이 같은 모달을 연다). 운영 콘솔은 그 묶음을
+   * import 할 수 없으므로 라우트(내부 레이아웃)가 버튼을 만들어 넣고 헤더는 자리만 안다 —
+   * `trailing` 과 같은 이유다. 링크 셸은 주지 않는다(공유는 계정 화면의 일이다).
+   */
+  shareAction?: React.ReactNode;
   /**
    * 「설문 보기」가 여는 주소. 주지 않으면 내부 셸은 빌더 미리보기(`/surveys/<id>/preview`)로,
    * 링크 셸은 버튼을 그리지 않는다.
@@ -85,6 +90,7 @@ export function OperationsPageHeader({
   capabilities,
   internalShell = true,
   trailing,
+  shareAction,
   previewHref: previewHrefProp,
   control,
 }: Props) {
@@ -128,21 +134,19 @@ export function OperationsPageHeader({
           <RefreshButton />
           {/* 설문 중단·종료·테스트 모드는 설문을 고칠 수 있는 주체만 */}
           {canEdit && control && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          {previewHref && (
-            <Link href={previewHref}>
-              <Button variant="outline" size="sm">
-                <Eye className="mr-2 h-4 w-4" />
-                설문 보기
-              </Button>
-            </Link>
-          )}
-          {canEdit && (
-            <Link href={surveyEditPath(surveyId)}>
-              <Button variant="outline" size="sm">
-                <Pencil className="mr-2 h-4 w-4" />
-                설문 편집
-              </Button>
-            </Link>
+          {shareAction}
+          {/* 고칠 수 있으면 보기·편집을 한 메뉴로, 볼 수만 있으면 설문 보기 버튼 하나 */}
+          {canEdit ? (
+            <SurveyOpenMenu previewHref={previewHref} editHref={surveyEditPath(surveyId)} />
+          ) : (
+            previewHref && (
+              <Link href={previewHref}>
+                <Button variant="outline" size="sm">
+                  <Eye className="mr-2 h-4 w-4" />
+                  설문 보기
+                </Button>
+              </Link>
+            )
           )}
           {/* 로그아웃은 계정 동작이다 — 링크 세션의 「나가기」는 쿠키를 지우는 다른 일이다. */}
           {internalShell && <LogoutButton iconOnly />}
