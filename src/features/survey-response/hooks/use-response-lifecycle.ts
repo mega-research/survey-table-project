@@ -91,6 +91,11 @@ interface UseResponseLifecycleArgs {
   inviteToken: string | null;
   /** ?test=<token>. isTestSession 일 때만 create/complete 게이트로 전달해 isTest 로 기록시킨다. */
   testToken: string | null;
+  /**
+   * 이어 넘길 값 — 들어온 링크의 쿼리 중 설정된 이름의 값(패널 회원 ID). 응답 행을 만드는
+   * create 두 경로에 실어 서버가 metadata.entryParams 로 남기게 한다. 없으면 빈 객체.
+   */
+  entryParams?: Readonly<Record<string, string>>;
   /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
   isTestSession: boolean;
   /** 대상자 테스트에서만 존재하는 현재 화면의 안정적인 attempt/session 식별자. */
@@ -210,6 +215,8 @@ interface UseResponseLifecycleResult {
  * - isQuestionRequired(= question.required)는 원본에서 비메모 인라인 함수라 deps 에 없으므로
  *   여기서도 module-level 동등 함수로 두고 deps 에 넣지 않는다 (참조 안정성/의미론 동일).
  */
+const NO_ENTRY_PARAMS: Readonly<Record<string, string>> = {};
+
 export function useResponseLifecycle({
   isAdminEdit,
   isPreview = false,
@@ -218,6 +225,7 @@ export function useResponseLifecycle({
   adminContext,
   inviteToken,
   testToken,
+  entryParams = NO_ENTRY_PARAMS,
   isTestSession,
   testIdentity,
   hasTestAttemptOwnership,
@@ -567,6 +575,7 @@ export function useResponseLifecycle({
           ...(inviteToken != null ? { inviteToken } : {}),
           ...(isTestSession && testToken != null ? { testToken } : {}),
           ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
+          ...(Object.keys(entryParams).length > 0 ? { entryParams } : {}),
           clientSignals: signalsRef.current,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         });
@@ -663,6 +672,7 @@ export function useResponseLifecycle({
       setCurrentResponseId,
       inviteToken,
       testToken,
+      entryParams,
       isTestSession,
       testIdentity,
       hasTestAttemptOwnership,
@@ -864,6 +874,7 @@ export function useResponseLifecycle({
             ...(inviteToken != null ? { inviteToken } : {}),
             ...(isTestSession && testToken != null ? { testToken } : {}),
             ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
+            ...(Object.keys(entryParams).length > 0 ? { entryParams } : {}),
             clientSignals: signalsRef.current,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
@@ -1081,6 +1092,7 @@ export function useResponseLifecycle({
     onVersionRebase,
     visibleQuestions,
     testToken,
+    entryParams,
     isTestSession,
     testIdentity,
     hasTestAttemptOwnership,

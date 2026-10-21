@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import type { SurveyResponse } from '@/db/schema';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
+import { MAX_ENTRY_PARAM_VALUE_LENGTH, MAX_PASS_PARAMS } from '@/lib/survey/end-redirect';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 export type { SurveyResponse, BlockReason, ClientSignals };
@@ -119,6 +120,15 @@ export const SaveDraftResponseOutput = z.object({
 // createResponseWithFirstAnswer / createBlankResponse
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 이어 넘길 값 — 응답자가 들어온 링크의 쿼리 중 설정된 이름의 값(패널 회원 ID).
+ * 여기서는 크기만 묶는다. 어떤 이름을 받을지는 서버가 설문 설정으로 다시 고른다(pickEntryParams).
+ */
+const EntryParamsSchema = z
+  .record(z.string().max(40), z.string().max(MAX_ENTRY_PARAM_VALUE_LENGTH))
+  .refine((params) => Object.keys(params).length <= MAX_PASS_PARAMS)
+  .optional();
+
 export const CreateResponseWithFirstAnswerInput = z.object({
   surveyId: z.string(),
   sessionId: z.string(),
@@ -137,6 +147,7 @@ export const CreateResponseWithFirstAnswerInput = z.object({
   // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
   testToken: z.string().optional(),
   attemptId: TestAttemptIdentityFields.attemptId,
+  entryParams: EntryParamsSchema,
 });
 export type CreateResponseWithFirstAnswerInput = z.infer<typeof CreateResponseWithFirstAnswerInput>;
 
@@ -156,6 +167,7 @@ export const CreateBlankResponseInput = z.object({
   // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
   testToken: z.string().optional(),
   attemptId: TestAttemptIdentityFields.attemptId,
+  entryParams: EntryParamsSchema,
 });
 export type CreateBlankResponseInput = z.infer<typeof CreateBlankResponseInput>;
 

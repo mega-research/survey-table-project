@@ -11,12 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { isEndRedirectUrl, normalizeEndRedirects } from '@/lib/survey/end-redirect';
+import {
+  type EndRedirectUrlKey,
+  isEndRedirectUrl,
+  normalizeEndRedirects,
+  parsePassParamNames,
+} from '@/lib/survey/end-redirect';
 import type { SurveyEndRedirects } from '@/shared/contracts/survey';
 
-type RedirectDraft = Required<Record<keyof SurveyEndRedirects, string>>;
+type RedirectDraft = Record<EndRedirectUrlKey, string>;
 
-const REDIRECT_FIELDS: { key: keyof SurveyEndRedirects; label: string }[] = [
+const REDIRECT_FIELDS: { key: EndRedirectUrlKey; label: string }[] = [
   { key: 'completed', label: '완료' },
   { key: 'screenedOut', label: '자격 미달' },
   { key: 'quotaClosed', label: '쿼터 마감' },
@@ -28,6 +33,10 @@ function toRedirectDraft(redirects: SurveyEndRedirects | null | undefined): Redi
     screenedOut: redirects?.screenedOut ?? '',
     quotaClosed: redirects?.quotaClosed ?? '',
   };
+}
+
+function toPassParamsDraft(redirects: SurveyEndRedirects | null | undefined): string {
+  return (redirects?.passParams ?? []).join(', ');
 }
 
 /** 비어 있으면 통과(이동 안 함), 무언가 적었으면 http(s) 주소여야 한다. */
@@ -55,9 +64,12 @@ export function CompletionMessageModal() {
   const [draftMessage, setDraftMessage] = useState(thankYouMessage);
   const [draftScreenedOut, setDraftScreenedOut] = useState(screenedOutMessage);
   const [draftRedirects, setDraftRedirects] = useState(() => toRedirectDraft(endRedirects));
-  const redirectsValid = REDIRECT_FIELDS.every(({ key }) =>
-    isRedirectDraftValid(draftRedirects[key]),
-  );
+  const [draftPassParams, setDraftPassParams] = useState(() => toPassParamsDraft(endRedirects));
+  const parsedPassParams = parsePassParamNames(draftPassParams);
+  const passParamsValid = parsedPassParams.invalid.length === 0;
+  const redirectsValid =
+    passParamsValid &&
+    REDIRECT_FIELDS.every(({ key }) => isRedirectDraftValid(draftRedirects[key]));
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
@@ -65,6 +77,7 @@ export function CompletionMessageModal() {
       setDraftMessage(thankYouMessage);
       setDraftScreenedOut(screenedOutMessage);
       setDraftRedirects(toRedirectDraft(endRedirects));
+      setDraftPassParams(toPassParamsDraft(endRedirects));
     }
     setOpen(next);
   };
@@ -73,7 +86,10 @@ export function CompletionMessageModal() {
     if (!redirectsValid) return;
     updateSurveySettings({
       // 빈 칸은 빠지고 하나도 없으면 null — 서버 저장도 같은 정규화를 한 번 더 건다
-      endRedirects: normalizeEndRedirects(draftRedirects),
+      endRedirects: normalizeEndRedirects({
+        ...draftRedirects,
+        passParams: parsedPassParams.names,
+      }),
       thankYouMessage: draftMessage,
       // 비우면 null — 완료 문구로 폴백한다(CONTEXT.md 「자격미달 종료 문구」)
       screenedOutMessage: draftScreenedOut.trim() === '' ? null : draftScreenedOut,
@@ -177,6 +193,29 @@ export function CompletionMessageModal() {
               패널 업체 연동용입니다. 주소를 적은 결과로 끝나면 종료 화면 대신 그 주소로 바로
               이동합니다. 비워 두면 위 멘트가 나옵니다. 테스트 링크·미리보기는 이동하지 않고 주소만
               보여 줍니다. 배포 없이 즉시 반영됩니다.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="end-redirect-pass-params">이어 넘길 값</Label>
+            <Input
+              id="end-redirect-pass-params"
+              value={draftPassParams}
+              onChange={(e) => setDraftPassParams(e.target.value)}
+              placeholder="예: euid"
+              aria-invalid={!passParamsValid}
+              className="h-8 text-sm"
+            />
+            {!passParamsValid && (
+              <p className="text-xs text-red-600">
+                쓸 수 없는 이름: {parsedPassParams.invalid.join(', ')} — 영문자로 시작하는 영문·숫자
+                이름만 받습니다(invite·test 제외).
+              </p>
+            )}
+            <p className="text-xs text-gray-400">
+              패널이 설문 링크 뒤에 붙여 보내는 회원 식별값의 이름입니다(예: 링크 끝{' '}
+              <code>?euid=회원ID</code> 이면 euid). 들어온 값을 위 주소 뒤에 그대로 붙여 보내고
+              Raw Data 에도 열로 남깁니다. 여러 개면 쉼표로 구분합니다.
             </p>
           </div>
 

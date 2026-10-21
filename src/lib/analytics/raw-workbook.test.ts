@@ -714,3 +714,40 @@ describe('조사 대상 명단 열', () => {
     expect(names).not.toContain('성명');
   });
 });
+
+describe('이어 넘길 값 열 (패널 회원 ID)', () => {
+  const panelCtx: RawExportContext = { ...TEST_CTX, hasContacts: false, entryParamNames: ['euid'] };
+
+  it('순번(과 명단 열) 다음·개별 URL 앞에 이름 그대로 열이 붙는다', () => {
+    expect(buildRawMetaHeaders(panelCtx).slice(0, 4)).toEqual([
+      'IP 해시',
+      '순번',
+      'euid',
+      '개별 URL',
+    ]);
+    expect(
+      buildRawMetaHeaders({
+        ...panelCtx,
+        contactColumns: [{ source: 'attrs.기수', label: '기수', kind: 'attrs', key: '기수' }],
+      }).slice(2, 5),
+    ).toEqual(['기수', 'euid', '개별 URL']);
+  });
+
+  it('값은 응답 행의 entryParams 에서, 없으면 빈칸', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ entryParams: { euid: '12345' } }), makeRow({ id: 'r-2' })],
+      panelCtx,
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect(ws.getRow(4).getCell(3).value).toBe('12345');
+    expect(ws.getRow(5).getCell(3).value).toBe('');
+    const list = wb.getWorksheet('응답 내역')!;
+    expect(list.getRow(1).getCell(2).value).toBe('euid');
+    expect(list.getRow(2).getCell(2).value).toBe('12345');
+  });
+
+  it('설정이 없으면 열이 없다', () => {
+    expect(buildRawMetaHeaders({ ...TEST_CTX, entryParamNames: [] })).not.toContain('euid');
+  });
+});

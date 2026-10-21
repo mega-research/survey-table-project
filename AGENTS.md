@@ -271,7 +271,7 @@ surveys                    # 설문 설정
 ├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — 아래 "테스트 모드"
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
-├── endRedirects (JSONB)          # 종료 후 이동 주소 {completed, screenedOut, quotaClosed} — 패널 연동, 라이브 컬럼(0138). http(s) 만, 판정 lib/survey/end-redirect. 테스트·미리보기는 이동 안 함 (CONTEXT.md 「종료 후 이동 주소」)
+├── endRedirects (JSONB)          # 종료 후 이동 주소 {completed, screenedOut, quotaClosed, passParams} — 패널 연동, 라이브 컬럼(0138). http(s) 만, 판정 lib/survey/end-redirect. 테스트·미리보기는 이동 안 함. passParams(이어 넘길 값, 리멤버 `euid`)는 들어온 링크의 그 이름 값을 종료 주소에 붙이고 응답 행 metadata.entryParams 에 남긴다(Raw Data 열) — 마이그레이션 없음 (CONTEXT.md 「종료 후 이동 주소」)
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
 │                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부

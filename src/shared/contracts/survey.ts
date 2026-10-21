@@ -67,6 +67,11 @@ export interface SurveyEndRedirects {
   completed?: string;
   screenedOut?: string;
   quotaClosed?: string;
+  /**
+   * 이어 넘길 값 — 응답자가 들어온 링크의 이 이름들의 쿼리 값을 종료 주소에 그대로 붙이고
+   * 응답 행 metadata.entryParams 에 기록한다(리멤버 `euid`). 정규화는 normalizePassParamNames.
+   */
+  passParams?: string[];
 }
 
 export interface GroupNameDesign {

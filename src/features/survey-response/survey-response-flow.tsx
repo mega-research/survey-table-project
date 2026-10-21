@@ -66,7 +66,12 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
-import { type EndRedirectOutcome, resolveEndRedirectUrl } from '@/lib/survey/end-redirect';
+import {
+  type EndRedirectOutcome,
+  normalizePassParamNames,
+  pickEntryParams,
+  resolveEndRedirectUrl,
+} from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
@@ -159,6 +164,11 @@ export interface SurveyResponseFlowProps {
   inviteToken?: string | null;
   // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
   testToken?: string | null;
+  /**
+   * 들어온 링크의 쿼리 문자열 전체. 설정된 이름(종료 후 이동 주소의 passParams — 리멤버 `euid`)의
+   * 값만 골라 종료 주소에 붙이고 응답 행에 남긴다. public 모드에서만 의미가 있다.
+   */
+  entryQuery?: string | null;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -304,6 +314,7 @@ function SurveyResponseFlowControl({
   entrySeed,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
+  entryQuery = null,
   mode = 'public',
   adminContext,
   previewContext,
@@ -367,6 +378,7 @@ function SurveyResponseFlowControl({
         surveyIdentifier,
         inviteToken: inviteTokenProp,
         testToken: testTokenProp,
+        entryQuery,
         mode,
         ...(adminContext ? { adminContext } : {}),
         ...(previewContext ? { previewContext } : {}),
@@ -400,6 +412,7 @@ function SurveyResponseFlowActive({
   flowProps: {
     inviteToken: inviteTokenProp = null,
     testToken: testTokenProp = null,
+    entryQuery = null,
     mode = 'public',
     adminContext,
   },
@@ -423,6 +436,16 @@ function SurveyResponseFlowActive({
   const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
   const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
+  // 이어 넘길 값(패널 회원 ID) — 설정은 라이브 값(control)이라 재발행 없이 반영된다.
+  // 관리자 수정·미리보기는 응답자가 들어온 링크가 없다.
+  const passParamsKey = normalizePassParamNames(control?.endRedirects?.passParams).join(',');
+  const entryParams = useMemo(
+    () =>
+      isAdminEdit || isPreview || passParamsKey === ''
+        ? {}
+        : pickEntryParams(passParamsKey.split(','), new URLSearchParams(entryQuery ?? '')),
+    [isAdminEdit, isPreview, passParamsKey, entryQuery],
+  );
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
   const { setCurrentResponseId, setPendingResponse, resetResponseState } = useSurveyResponseStore(
@@ -1368,6 +1391,7 @@ function SurveyResponseFlowActive({
       adminContext,
       inviteToken,
       testToken,
+      entryParams,
       isTestSession,
       testIdentity,
       hasTestAttemptOwnership,
@@ -1810,7 +1834,9 @@ function SurveyResponseFlowActive({
       ? 'quota_closed'
       : null;
   const endRedirectUrl =
-    endOutcome && !isAdminEdit ? resolveEndRedirectUrl(control?.endRedirects, endOutcome) : null;
+    endOutcome && !isAdminEdit
+      ? resolveEndRedirectUrl(control?.endRedirects, endOutcome, entryParams)
+      : null;
   const redirectsNow = endRedirectUrl !== null && !isPreview && !isTestSession;
   const endRedirectFooter = endRedirectUrl ? (
     <EndRedirectNotice url={endRedirectUrl} mode={redirectsNow ? 'redirecting' : 'test'} />
