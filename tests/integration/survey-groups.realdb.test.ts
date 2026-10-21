@@ -494,6 +494,40 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       expect(visible[0]?.foreignTeamName).toContain('그룹팀A');
     });
 
+    it('슈퍼어드민이 B팀을 고르면 B팀 팀원이 참여한 타 팀 그룹이 선다 — 팀장 화면과 같다', async () => {
+      // 실사팀처럼 소유 설문 없이 참여로만 일하는 팀을 슈퍼어드민이 열면 비어 있던 자리다.
+      const superadminId = crypto.randomUUID();
+      await seedUser(superadminId);
+      createdUserIds.push(superadminId);
+      const superadmin = createRouterClient(
+        { surveyGroups },
+        {
+          context: {
+            ...contextFor(superadminId),
+            user: { ...contextFor(superadminId).user!, isSuperadmin: true },
+          },
+        },
+      );
+
+      const shared = await seedGroup(member, TEAM_A, '협업 폴더');
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.move({ surveyId, groupId: shared });
+
+      // B팀 팀원이 참여하기 전 — B팀 범위에 붙을 이유가 없다.
+      expect(await superadmin.surveyGroups.list({ teamId: TEAM_B })).toEqual([]);
+
+      await db.insert(participantsTable).values({
+        surveyId,
+        userId: OUTSIDER_ID,
+        kind: 'member',
+        addedBy: MEMBER_ID,
+      });
+
+      const visible = await superadmin.surveyGroups.list({ teamId: TEAM_B });
+      expect(visible).toEqual(await outsider.surveyGroups.list({ teamId: TEAM_B }));
+      expect(visible[0]).toMatchObject({ id: shared, surveyCount: 1 });
+    });
+
     it('초대받지 않은 설문만 담긴 그룹은 이름조차 보이지 않는다', async () => {
       const shared = await seedGroup(member, TEAM_A, '협업 폴더');
       const secret = await seedGroup(member, TEAM_A, '비공개 폴더');

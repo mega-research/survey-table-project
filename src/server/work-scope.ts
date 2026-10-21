@@ -178,6 +178,23 @@ export function buildSurveyScopeFilter(
     teamId: scope.teamId,
     viewerId: subject.userId,
     seesInviteOnly: subject.isSuperadmin || subject.leaderTeamIds.includes(scope.teamId),
-    leaderTeamIds: subject.leaderTeamIds,
+    leaderTeamIds: scopeLeaderTeamIds(subject, scope.teamId),
   };
+}
+
+/**
+ * 이 팀 범위에서 초대의 팀장 전파를 받는 팀들.
+ *
+ * 슈퍼어드민은 지목한 팀의 팀장처럼 본다 — 그 팀 팀원이 참여한 타 팀 설문까지. 실사팀은 소유
+ * 설문이 거의 없고 일감이 전부 그쪽이라, 전파가 없으면 슈퍼어드민의 실사팀 화면은 언제나
+ * 비어 있었다. 목록과 그룹 트리가 같은 값을 써야 「폴더는 있는데 설문이 없는」 어긋남이 없다.
+ */
+export function scopeLeaderTeamIds(
+  subject: AccountAccessSubject,
+  teamId: string,
+): readonly string[] {
+  if (!subject.isSuperadmin || subject.leaderTeamIds.includes(teamId)) {
+    return subject.leaderTeamIds;
+  }
+  return [...subject.leaderTeamIds, teamId];
 }

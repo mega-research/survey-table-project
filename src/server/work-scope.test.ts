@@ -129,6 +129,25 @@ describe('buildSurveyScopeFilter — 목록 조회 조건', () => {
     });
   });
 
+  it('슈퍼어드민이 지목한 팀은 그 팀 팀장처럼 팀원 참여 설문까지 본다', () => {
+    /**
+     * 실사팀은 소유 설문이 거의 없고 일감이 전부 「팀원이 참여한 타 팀 설문」이다. 슈퍼어드민은
+     * 그 팀 팀장이 아니라 전파가 붙지 않아, 실사팀을 고르면 언제나 0건이었다. 지목한 팀의
+     * 팀장 전파를 얹어 팀장 화면과 같은 목록을 본다.
+     */
+    const su = subject({ isSuperadmin: true, activeTeamIds: [], leaderTeamIds: [] });
+    expect(buildSurveyScopeFilter(su, { kind: 'team', teamId: 'team-9' })).toMatchObject({
+      leaderTeamIds: ['team-9'],
+    });
+  });
+
+  it('슈퍼어드민이 이미 그 팀 팀장이면 전파 팀을 겹쳐 싣지 않는다', () => {
+    const su = subject({ isSuperadmin: true, leaderTeamIds: ['team-1'] });
+    expect(buildSurveyScopeFilter(su, { kind: 'team', teamId: 'team-1' })).toMatchObject({
+      leaderTeamIds: ['team-1'],
+    });
+  });
+
   it('범위가 없으면 아무것도 조회하지 않는다', () => {
     expect(buildSurveyScopeFilter(subject({ activeTeamIds: [] }), { kind: 'none' })).toEqual({
       kind: 'none',

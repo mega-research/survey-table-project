@@ -28,6 +28,7 @@ import {
   resolveSurveyCapabilities,
   surveyClosedColumn,
 } from '@/server/survey-access';
+import { scopeLeaderTeamIds } from '@/server/work-scope';
 
 import {
   type CollectSurveysIntoGroupInput,
@@ -82,6 +83,8 @@ export async function listSurveyGroups(
 
   const isTeamMember = subject.isSuperadmin || subject.activeTeamIds.includes(teamId);
   const seesInviteOnly = subject.isSuperadmin || subject.leaderTeamIds.includes(teamId);
+  // 목록(buildSurveyScopeFilter)과 같은 전파 팀 — 슈퍼어드민은 지목한 팀의 팀장처럼 본다.
+  const leaderTeamIds = scopeLeaderTeamIds(subject, teamId);
   // 내 팀 그룹의 카운트도 **설문 목록과 같은 술어**를 봐야 한다. 팀 공개·내 소유만 세면,
   // 같은 팀의 남의 `invite_only` 설문에 **초대받아** 볼 수 있는 사람에게 그 설문만 담긴
   // 그룹이 사라진다 — 목록에는 설문이 보이는데 폴더는 없는 상태다. 협업 조회는 내 범위 팀을
@@ -92,9 +95,7 @@ export async function listSurveyGroups(
         eq(surveys.visibility, 'team'),
         eq(surveys.ownerUserId, subject.userId),
         participatesInSurvey(subject.userId),
-        subject.leaderTeamIds.length > 0
-          ? leadsParticipantTeam(subject.leaderTeamIds)
-          : undefined,
+        leaderTeamIds.length > 0 ? leadsParticipantTeam(leaderTeamIds) : undefined,
       );
 
   const own = isTeamMember
@@ -126,7 +127,7 @@ export async function listSurveyGroups(
         .orderBy(asc(surveyGroups.order), asc(surveyGroups.name))
     : [];
 
-  return [...own, ...(await listCollaboratingGroups(subject, teamId))];
+  return [...own, ...(await listCollaboratingGroups(subject.userId, leaderTeamIds, teamId))];
 }
 
 /**
@@ -172,16 +173,14 @@ function groupHoldsAnySurvey(): SQL<boolean> {
  * 멤버가 아닌 팀의 teamId 가 범위로 들어오는 경로가 없다(work-scope 가 내 팀으로 접는다).
  */
 async function listCollaboratingGroups(
-  subject: Awaited<ReturnType<typeof loadAccountAccessSubject>>,
+  viewerId: string,
+  leaderTeamIds: readonly string[],
   scopeTeamId: string,
 ): Promise<ListSurveyGroupsOutput> {
   const accessible =
-    subject.leaderTeamIds.length > 0
-      ? or(
-          participatesInSurvey(subject.userId),
-          leadsParticipantTeam(subject.leaderTeamIds),
-        )!
-      : participatesInSurvey(subject.userId);
+    leaderTeamIds.length > 0
+      ? or(participatesInSurvey(viewerId), leadsParticipantTeam(leaderTeamIds))!
+      : participatesInSurvey(viewerId);
 
   return db
     .select({
