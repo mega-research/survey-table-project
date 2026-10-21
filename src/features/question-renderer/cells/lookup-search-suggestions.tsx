@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useLayoutEffect, useState } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { LookupSearchHit } from '@/features/question-renderer/utils/lookup-search';
@@ -48,9 +48,24 @@ export function LookupSearchSuggestions({
     };
   }, [anchorRef]);
 
+  // 키보드로 옮긴 후보와 열 때 고른 회사가 목록 밖으로 밀려 있지 않게 한다. 목록 자체의 스크롤만
+  // 옮긴다 — scrollIntoView 는 창까지 움직여 응답자가 페이지를 넘기는 중에 끌려간다.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const shown = rect !== null;
+  useEffect(() => {
+    const list = listRef.current;
+    const item = list?.querySelector<HTMLElement>(`[data-position="${activeIndex}"]`);
+    if (!list || !item) return;
+    if (item.offsetTop < list.scrollTop) list.scrollTop = item.offsetTop;
+    else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight;
+    }
+  }, [activeIndex, shown]);
+
   if (rect === null || typeof document === 'undefined') return null;
   return createPortal(
     <ul
+      ref={listRef}
       id={listboxId}
       role="listbox"
       className="fixed z-50 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 text-base shadow-lg"
@@ -60,6 +75,7 @@ export function LookupSearchSuggestions({
         <li
           key={hit.index}
           id={`${listboxId}-${position}`}
+          data-position={position}
           role="option"
           aria-selected={position === activeIndex}
           className={cn(

@@ -90,6 +90,23 @@ describe('목록에서 찾기', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
+  it('칸을 누르기만 해도 목록 전체가 펼쳐지고, 치면 좁혀진다', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const { name, biz } = inputs();
+
+    await user.click(name);
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '삼성전자',
+      '삼성에스디에스',
+      '다우기술',
+    ]);
+    await user.type(name, '다우');
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['다우기술']);
+    await user.click(screen.getByRole('option', { name: '다우기술' }));
+    expect(biz).toHaveValue('220-81-02810');
+  });
+
   it('화살표와 Enter 로 고른다', async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -113,7 +130,7 @@ describe('목록에서 찾기', () => {
     expect(corp).toHaveValue('');
   });
 
-  it('Escape 와 포커스 이탈은 목록을 닫는다', async () => {
+  it('Escape 와 포커스 이탈은 목록을 닫고, 아래 화살표는 다시 연다', async () => {
     const user = userEvent.setup();
     render(<Harness />);
     const { name } = inputs();
@@ -123,7 +140,7 @@ describe('목록에서 찾기', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 
-    await user.type(name, '기');
+    await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     await user.tab();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();

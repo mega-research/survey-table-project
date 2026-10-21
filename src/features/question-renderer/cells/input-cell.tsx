@@ -112,11 +112,23 @@ export const InputCell = React.memo(function InputCell({
       ? resolveLookupSearch(cell.lookupSearch, lookups)
       : null;
   const [suggestOpen, setSuggestOpen] = useState(false);
+  // 누르거나 아래 화살표로 연 목록은 선택 상자처럼 전체를 보인다 — 이미 고른 회사를 바꾸려는데
+  // 적힌 이름으로 좁혀 그 회사 하나만 보이면 안 된다. 글자를 치면 그 글자로 좁힌다.
+  const [browseAll, setBrowseAll] = useState(false);
   const [activeHit, setActiveHit] = useState(0);
-  const allHits = lookupSearch && suggestOpen ? searchLookupRows(lookupSearch, currentValue) : [];
-  // 방금 고른 값과 똑같은 후보 하나만 남으면 띄우지 않는다
-  const hits = allHits.length === 1 && allHits[0]?.label === currentValue.trim() ? [] : allHits;
+  const hits =
+    lookupSearch && suggestOpen
+      ? searchLookupRows(lookupSearch, browseAll ? '' : currentValue)
+      : [];
   const listboxId = useId();
+  const openBrowse = () => {
+    if (!lookupSearch || suggestOpen) return;
+    const all = searchLookupRows(lookupSearch, '');
+    const current = all.findIndex((hit) => hit.label === currentValue.trim());
+    setBrowseAll(true);
+    setActiveHit(current >= 0 ? current : 0);
+    setSuggestOpen(true);
+  };
   const pickHit = (position: number) => {
     const hit = hits[position];
     if (!hit || !lookupSearch || !tableCells || !onPatchValues) return;
@@ -124,6 +136,11 @@ export const InputCell = React.memo(function InputCell({
     setSuggestOpen(false);
   };
   const handleLookupKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestOpen && e.key === 'ArrowDown') {
+      e.preventDefault();
+      openBrowse();
+      return;
+    }
     if (hits.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -326,12 +343,14 @@ export const InputCell = React.memo(function InputCell({
                   : lookupSearch
                     ? (e) => {
                         handleChange(e);
+                        setBrowseAll(false);
                         setSuggestOpen(true);
                         setActiveHit(0);
                       }
                     : handleChange
               }
               onKeyDown={lookupSearch ? handleLookupKeyDown : undefined}
+              onClick={lookupSearch ? openBrowse : undefined}
               {...(lookupSearch
                 ? {
                     role: 'combobox',
@@ -347,6 +366,7 @@ export const InputCell = React.memo(function InputCell({
                 handleFocus();
                 formatField.handleFocus();
                 focus.onFocus();
+                openBrowse();
               }}
               onBlur={() => {
                 handleBlur();

@@ -91,9 +91,15 @@ describe('searchLookupRows', () => {
     expect(searchLookupRows(resolved, '코퍼레이션').map((h) => h.index)).toEqual([3]);
   });
 
-  it('빈 검색어는 후보가 없고, 개수는 상한까지', () => {
-    expect(searchLookupRows(resolved, '  ')).toEqual([]);
+  it('빈 검색어(법인 표기만 친 것 포함)는 목록 전체를 순서대로 — 선택 상자처럼 훑어 고른다', () => {
+    const all = companies.rows.map((r) => r['기업명']);
+    expect(searchLookupRows(resolved, '').map((h) => h.label)).toEqual(all);
+    expect(searchLookupRows(resolved, '(주)').map((h) => h.label)).toEqual(all);
+  });
+
+  it('개수는 상한까지', () => {
     expect(searchLookupRows(resolved, '삼성', 2)).toHaveLength(2);
+    expect(searchLookupRows(resolved, '', 2)).toHaveLength(2);
   });
 });
 

@@ -14,8 +14,11 @@ import { isInputFormat } from '@/types/input-type';
 import { parseInputFormat } from './input-format';
 import { cellLockTemplate } from './token-prefill';
 
-/** 후보 개수 상한 — 칸 아래 목록이 화면을 덮지 않을 만큼. */
-export const LOOKUP_SEARCH_LIMIT = 8;
+/**
+ * 후보 개수 상한. 목록은 스크롤되므로 화면이 아니라 그리는 비용을 막는 값이다 — 조사명부(80개사)는
+ * 통째로 들어가고, 수천 행짜리 참조표도 글자를 치기 전에 수천 줄을 그리지 않는다.
+ */
+export const LOOKUP_SEARCH_LIMIT = 100;
 
 export interface ResolvedLookupSearch {
   lookup: SurveyLookup;
@@ -65,18 +68,21 @@ function cellText(value: unknown): string {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
-/** 표시 열이 검색어를 품은 행 — 앞이 맞는 행을 먼저, 그다음 참조표 순서. */
+/**
+ * 표시 열이 검색어를 품은 행 — 앞이 맞는 행을 먼저, 그다음 참조표 순서. 검색어가 비면(법인 표기만
+ * 친 것 포함) 목록 전체를 참조표 순서로 — 선택 상자처럼 훑어 고르는 경우다.
+ */
 export function searchLookupRows(
   resolved: ResolvedLookupSearch,
   query: string,
   limit: number = LOOKUP_SEARCH_LIMIT,
 ): LookupSearchHit[] {
   const needle = normalizeLookupSearchText(query);
-  if (needle === '') return [];
   const prefix: LookupSearchHit[] = [];
   const contains: LookupSearchHit[] = [];
   resolved.lookup.rows.forEach((row, index) => {
     const label = cellText(row[resolved.labelColumn]);
+    if (label === '') return;
     const haystack = normalizeLookupSearchText(label);
     const at = haystack.indexOf(needle);
     if (at < 0) return;
