@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useEffectEvent } from 'react';
+
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
@@ -34,6 +36,38 @@ function hasHover(): boolean {
   return typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches;
 }
 
+/** 크게 보기가 방문 기록에 쌓는 칸의 표식 */
+const HISTORY_MARK = 'imageEnlarge';
+
+function isEnlargeEntry(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && HISTORY_MARK in state;
+}
+
+/**
+ * 휴대폰·브라우저 뒤로 가기로 닫는다 — 열 때 방문 기록에 칸을 하나 쌓고 그 칸이 걷히면(popstate) 닫는다.
+ * 지금 칸을 그대로 이어 쌓으므로(응답 흐름의 `stepIndex` 포함) 걷혀도 같은 페이지 칸으로 돌아온다 —
+ * 응답 흐름은 그 뒤로 가기에서 페이지를 넘기지 않는다. X·Esc·배경 클릭으로 닫을 때는 쌓은 칸을 스스로
+ * 걷어(`history.back`) 같은 길로 닫는다. 그래야 닫은 뒤의 뒤로 가기가 헛돌지 않는다.
+ *
+ * 이미 표식 칸 위면 다시 쌓지 않는다 — StrictMode 이중 실행이 칸 두 개를 쌓지 않게.
+ */
+function useCloseOnHistoryBack(onClose: () => void): () => void {
+  const handlePopState = useEffectEvent(() => onClose());
+  useEffect(() => {
+    const state: unknown = window.history.state;
+    if (!isEnlargeEntry(state)) {
+      window.history.pushState({ ...(state as object | null), [HISTORY_MARK]: true }, '');
+    }
+    const listener = () => handlePopState();
+    window.addEventListener('popstate', listener);
+    return () => window.removeEventListener('popstate', listener);
+  }, []);
+  return () => {
+    if (isEnlargeEntry(window.history.state)) window.history.back();
+    else onClose();
+  };
+}
+
 export default function ImageEnlargeViewer({
   src,
   alt,
@@ -42,10 +76,11 @@ export default function ImageEnlargeViewer({
   subtitle,
   onClose,
 }: ImageEnlargeViewerProps) {
+  const requestClose = useCloseOnHistoryBack(onClose);
   return (
     <Lightbox
       open
-      close={onClose}
+      close={requestClose}
       slides={[{ src, alt, width: natural.width, height: natural.height }]}
       plugins={[Zoom]}
       zoom={{ maxZoomPixelRatio: MAX_ZOOM_PIXEL_RATIO, scrollToZoom: true }}

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { TableColumn, TableRow } from '@/types/survey';
@@ -167,4 +167,16 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
       expect(screen.queryByRole('dialog')).not.toBeNull();
     }
   });
+
+  it('응답 흐름 밖(빌더 미리보기 등)에서도 뒤로 가기로 닫힌다', async () => {
+    const { container } = renderTable();
+    loadImageWithSize(imageIn(container), shrunk);
+    fireEvent.click(screen.getByRole('button', { name: '셀 이미지 크게 보기' }));
+    await screen.findByRole('dialog', { name: '이미지 크게 보기' });
+
+    act(() => window.history.back());
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
 });
+
