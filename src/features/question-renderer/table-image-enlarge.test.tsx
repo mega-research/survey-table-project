@@ -14,10 +14,12 @@ import { loadImageWithSize, stubMatchMedia } from '../../../tests/helpers/image-
 
 let restoreMatchMedia: (() => void) | undefined;
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   restoreMatchMedia?.();
   restoreMatchMedia = undefined;
+  // 연 채 끝난 크게 보기는 정리 뒤 한 박자 늦게 방문 기록 칸을 걷는다 — 다음 테스트로 새지 않게 기다린다
+  await new Promise((resolve) => setTimeout(resolve, 10));
 });
 
 const shrunk = { natural: { width: 1920, height: 1400 }, rendered: { width: 132, height: 96 } };

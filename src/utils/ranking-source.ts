@@ -27,7 +27,7 @@ export function collectRankingOptCells(
  * ranking_opt 셀의 표시 라벨을 결정.
  * 우선순위: content(사용자 가시 텍스트) > rankingLabel(SPSS 라벨용) > fallback.
  */
-function buildRankingOptLabel(cell: TableCell, fallback: string): string {
+export function buildRankingOptLabel(cell: TableCell, fallback: string): string {
   return (cell.content ?? '').trim() || (cell.rankingLabel ?? '').trim() || fallback;
 }
 

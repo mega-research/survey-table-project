@@ -11,10 +11,11 @@ import {
   useState,
 } from 'react';
 
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, ZoomIn } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+import type { ImageEnlargeViewerProps } from './image-enlarge-viewer';
 import { type ImageFit, type ImageSize, canEnlargeImage } from './utils/image-enlarge';
 
 // 응답자 경로 번들에서 라이트박스를 떼어 낸다 — 누를 때 처음 불러온다
@@ -27,6 +28,11 @@ export interface EnlargeableImageProps {
   enabled?: boolean | undefined;
   /** 이미지를 상자에 맞추는 방식 — 그려진 크기와 원본을 비교하는 기준 */
   fit: ImageFit;
+  /**
+   * 여는 방식 — 이미지 누르기(기본) / 이미지 위 돋보기 버튼만. 이미지 누르기에 이미 뜻이 있는 자리
+   * (순위형 보기: 누르면 순위가 매겨진다)는 돋보기 버튼으로 비켜 간다.
+   */
+  trigger?: 'image' | 'button' | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
   /** 이미지와 배지를 감싸는 상자 — 기본은 이미지 크기에 맞춘다 */
@@ -52,6 +58,7 @@ export function EnlargeableImage({
   alt,
   enabled = true,
   fit,
+  trigger = 'image',
   className,
   style,
   wrapperClassName,
@@ -64,6 +71,9 @@ export function EnlargeableImage({
   const [enlargeable, setEnlargeable] = useState(false);
   const [open, setOpen] = useState(false);
   const canOpen = enabled && enlargeable;
+  const opensFromImage = canOpen && trigger === 'image';
+  // 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다
+  const triggerLabel = `${alt.trim() || '이미지'} 크게 보기`;
 
   const measure = useCallback(() => {
     const img = imgRef.current;
@@ -111,22 +121,35 @@ export function EnlargeableImage({
         ref={imgRef}
         src={src}
         alt={alt}
-        className={cn(className, canOpen && 'cursor-zoom-in')}
+        className={cn(className, opensFromImage && 'cursor-zoom-in')}
         style={style}
         onLoad={measure}
         onError={handleError}
-        {...(canOpen
+        {...(opensFromImage
           ? {
               role: 'button',
               tabIndex: 0,
-              // 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다
-              'aria-label': `${alt.trim() || '이미지'} 크게 보기`,
+              'aria-label': triggerLabel,
               onClick: () => setOpen(true),
               onKeyDown: handleKeyDown,
             }
           : {})}
       />
-      {canOpen && (
+      {canOpen && trigger === 'button' && (
+        <button
+          type="button"
+          aria-label={triggerLabel}
+          // 바깥 보기 버튼(순위 지정)으로 번지지 않게 — 키보드로 눌러도 버튼은 click 으로 온다
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(true);
+          }}
+          className="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-black/65 text-white transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/enlarge:opacity-100"
+        >
+          <ZoomIn className="size-3.5" />
+        </button>
+      )}
+      {opensFromImage && (
         <>
           <span
             aria-hidden
@@ -142,17 +165,36 @@ export function EnlargeableImage({
         </>
       )}
       {open && (
-        <Suspense fallback={null}>
-          <ImageEnlargeViewer
-            src={src}
-            alt={alt}
-            natural={natural}
-            title={title}
-            subtitle={subtitle}
-            onClose={() => setOpen(false)}
-          />
-        </Suspense>
+        <ImageEnlargeOverlay
+          src={src}
+          alt={alt}
+          natural={natural}
+          title={title}
+          subtitle={subtitle}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * 크게 보기 창을 띄우는 자리 — 표 이미지 셀과 본문 이미지가 같이 쓴다. 창은 누를 때 처음 불러온다.
+ *
+ * 창은 포털이지만 React 이벤트는 이 자리로 거슬러 오른다 — 창 안의 누르기·키 입력이 바깥 보기 버튼·
+ * 셀로 번지지 않게 여기서 끊는다.
+ */
+export function ImageEnlargeOverlay(props: ImageEnlargeViewerProps) {
+  return (
+    <span
+      className="contents"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Suspense fallback={null}>
+        <ImageEnlargeViewer {...props} />
+      </Suspense>
+    </span>
   );
 }

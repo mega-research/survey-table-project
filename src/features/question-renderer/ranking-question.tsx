@@ -29,6 +29,7 @@ import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/r
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { RankingDropdownStack } from './cells/ranking-dropdown-stack';
 import { MobileOptionCard, MobileOptionCardProps, MobileOptionRow } from './mobile-card-shared';
+import { RankingOptionImage } from './ranking-option-image';
 import { TableImageEnlargeProvider } from './table-image-enlarge';
 import {
   buildRankingClickHandle,
@@ -73,14 +74,7 @@ function cellLabelNode(
 ): ReactNode {
   return (
     <>
-      {cell.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cell.imageUrl}
-          alt={cell.content || cell.rankingLabel || '순위 옵션 이미지'}
-          className="mb-1 h-20 w-full rounded object-cover"
-        />
-      )}
+      <RankingOptionImage cell={cell} className="mb-1 h-20" />
       <span className={getCellTextClassName(opt)} style={getCellTextStyle(opt)}>
         <CellText text={label} html={resolveCellTextHtml(cell, attrs, quotes)} />
       </span>
