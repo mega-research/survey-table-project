@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -50,17 +50,29 @@ function isEnlargeEntry(state: unknown): boolean {
  * 걷어(`history.back`) 같은 길로 닫는다. 그래야 닫은 뒤의 뒤로 가기가 헛돌지 않는다.
  *
  * 이미 표식 칸 위면 다시 쌓지 않는다 — StrictMode 이중 실행이 칸 두 개를 쌓지 않게.
+ *
+ * 닫히지 않은 채 화면에서 빠지면(화면 회전으로 모바일 카드가 데스크톱 표로 바뀌는 등) 쌓은 칸을
+ * 걷는다 — 남으면 그 아래 페이지 칸과 스텝이 같아 나중의 뒤로 가기 한 번이 헛돈다. 걷기는 한 박자
+ * 미룬다: StrictMode 는 정리 직후 다시 마운트하므로 그때는 걷지 않는다.
  */
-function useCloseOnHistoryBack(onClose: () => void): () => void {
+function useHistoryBackedClose(onClose: () => void): () => void {
   const handlePopState = useEffectEvent(() => onClose());
+  const mounted = useRef(false);
   useEffect(() => {
+    mounted.current = true;
     const state: unknown = window.history.state;
     if (!isEnlargeEntry(state)) {
       window.history.pushState({ ...(state as object | null), [HISTORY_MARK]: true }, '');
     }
     const listener = () => handlePopState();
     window.addEventListener('popstate', listener);
-    return () => window.removeEventListener('popstate', listener);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener('popstate', listener);
+      setTimeout(() => {
+        if (!mounted.current && isEnlargeEntry(window.history.state)) window.history.back();
+      }, 0);
+    };
   }, []);
   return () => {
     if (isEnlargeEntry(window.history.state)) window.history.back();
@@ -76,7 +88,7 @@ export default function ImageEnlargeViewer({
   subtitle,
   onClose,
 }: ImageEnlargeViewerProps) {
-  const requestClose = useCloseOnHistoryBack(onClose);
+  const requestClose = useHistoryBackedClose(onClose);
   return (
     <Lightbox
       open

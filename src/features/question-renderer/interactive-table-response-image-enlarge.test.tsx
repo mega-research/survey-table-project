@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -178,5 +180,44 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
-});
 
+  it('창이 닫히지 않은 채 화면에서 빠져도(화면 회전으로 표가 바뀌는 등) 쌓은 칸을 걷는다', async () => {
+    const { container, unmount } = renderTable();
+    loadImageWithSize(imageIn(container), shrunk);
+    fireEvent.click(screen.getByRole('button', { name: '셀 이미지 크게 보기' }));
+    await screen.findByRole('dialog', { name: '이미지 크게 보기' });
+    expect(window.history.state).toMatchObject({ imageEnlarge: true });
+
+    unmount();
+
+    await waitFor(() => expect(window.history.state?.imageEnlarge).toBeUndefined());
+  });
+
+  it('StrictMode 이중 실행에서도 칸을 하나만 쌓고 창이 저절로 닫히지 않는다', async () => {
+    restoreMatchMedia = stubMatchMedia({ mobile: false, hover: true });
+    const { container } = render(
+      <StrictMode>
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns}
+          rows={rowsWith()}
+          value={{}}
+          onChange={() => {}}
+          enableSticky={false}
+        />
+      </StrictMode>,
+    );
+    loadImageWithSize(imageIn(container), shrunk);
+
+    fireEvent.click(screen.getByRole('button', { name: '셀 이미지 크게 보기' }));
+    await screen.findByRole('dialog', { name: '이미지 크게 보기' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole('dialog', { name: '이미지 크게 보기' })).toBeInTheDocument();
+
+    // 칸이 하나면 뒤로 가기 한 번에 표식 칸을 벗어난다(jsdom 의 history.length 는 앞 테스트가 남긴
+    // 앞으로 가기 칸 때문에 셀 수 없다)
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.history.state?.imageEnlarge).toBeUndefined();
+  });
+});
