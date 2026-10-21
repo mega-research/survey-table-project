@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -34,6 +34,8 @@ import {
   testViewCookieName,
 } from '@/lib/operations/test-view-cookie';
 import { client } from '@/shared/lib/rpc';
+
+import { ToggleMenuItem, useHoverMenu } from './hover-toggle-menu';
 
 interface TestModeState {
   testModeEnabled: boolean;
@@ -199,35 +201,9 @@ export function TestModeControl({ surveyId, initial }: Props) {
     };
   }, [router, surveyId]);
 
-  // 테스트 모드 드롭다운 — 클릭 외에 호버로도 열린다. 대각선 이동 중 닫힘을 막기 위해
-  // mouseleave 후 200ms 지연 뒤 닫고, 트리거/콘텐츠 어느 쪽이든 재진입하면 취소한다.
-  const [testMenuOpen, setTestMenuOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuCloseTimer = useRef<number | null>(null);
-
-  const openTestMenu = () => {
-    if (menuCloseTimer.current !== null) {
-      window.clearTimeout(menuCloseTimer.current);
-      menuCloseTimer.current = null;
-    }
-    setTestMenuOpen(true);
-  };
-
-  const scheduleTestMenuClose = () => {
-    if (menuCloseTimer.current !== null) {
-      window.clearTimeout(menuCloseTimer.current);
-    }
-    menuCloseTimer.current = window.setTimeout(() => setTestMenuOpen(false), 200);
-  };
-
-  useEffect(
-    () => () => {
-      if (menuCloseTimer.current !== null) {
-        window.clearTimeout(menuCloseTimer.current);
-      }
-    },
-    [],
-  );
+  // 테스트 모드 드롭다운 — 클릭 외에 호버로도 열린다(hover-toggle-menu, 중단·종료 메뉴와 공용).
+  const testMenu = useHoverMenu();
+  const setTestMenuOpen = testMenu.setOpen;
 
   // 설문의 테스트 모드(모든 사람) · 이 브라우저의 콘솔이 지금 테스트 데이터를 보는가(서버 판정 server/data-scope 와 같은 식).
   const envOn = state?.testModeEnabled === true;
@@ -416,10 +392,10 @@ export function TestModeControl({ surveyId, initial }: Props) {
   return (
     <>
       {/* 버튼은 아무 동작이 없고 메뉴만 연다(호버·클릭). modal={false}: 호버 오픈 중 배경 잠금이 없어야 mouseleave 닫힘이 자연스럽다 */}
-      <DropdownMenu open={testMenuOpen} onOpenChange={setTestMenuOpen} modal={false}>
+      <DropdownMenu open={testMenu.open} onOpenChange={setTestMenuOpen} modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
-            ref={triggerRef}
+            {...testMenu.triggerProps}
             type="button"
             variant="outline"
             size="sm"
@@ -431,12 +407,6 @@ export function TestModeControl({ surveyId, initial }: Props) {
                   ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
                   : undefined
             }
-            onMouseEnter={openTestMenu}
-            onMouseLeave={scheduleTestMenuClose}
-            // 호버로 이미 열린 메뉴를 클릭이 다시 닫지 않게 — 기본 동작을 막으면 Radix 가 토글을 건너뛴다.
-            onPointerDown={(e) => {
-              if (testMenuOpen) e.preventDefault();
-            }}
           >
             <FlaskConical className="mr-2 h-4 w-4" />
             {viewingTest ? '테스트 데이터 보는 중' : '테스트 모드'}
@@ -452,16 +422,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
             <ChevronDown className="ml-1 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="w-[340px]"
-          onMouseEnter={openTestMenu}
-          onMouseLeave={scheduleTestMenuClose}
-          // 버튼 위 클릭은 메뉴 바깥 클릭으로 치지 않는다 — 열린 메뉴를 닫지 않게(위 onPointerDown 과 짝).
-          onPointerDownOutside={(e) => {
-            if (triggerRef.current?.contains(e.target as Node)) e.preventDefault();
-          }}
-        >
+        <DropdownMenuContent align="end" className="w-[340px]" {...testMenu.contentProps}>
           <ToggleMenuItem
             icon={<Power className="h-4 w-4" />}
             label="테스트 모드"
@@ -559,52 +520,5 @@ export function TestModeControl({ surveyId, initial }: Props) {
         </AlertDialogContent>
       </AlertDialog>
     </>
-  );
-}
-
-/**
- * 메뉴 안의 켜고 끄는 항목 — 고른 뒤에도 메뉴를 닫지 않는다(스위치가 바뀌는 걸 보게).
- * 스위치는 모양만이고 상태는 menuitemcheckbox 의 aria-checked 로 알린다.
- */
-function ToggleMenuItem({
-  icon,
-  label,
-  hint,
-  checked,
-  disabled,
-  onToggle,
-}: {
-  icon: ReactNode;
-  label: string;
-  hint: string;
-  checked: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <DropdownMenuItem
-      role="menuitemcheckbox"
-      aria-checked={checked}
-      disabled={disabled}
-      onSelect={(e) => {
-        e.preventDefault();
-        onToggle();
-      }}
-      className="items-start gap-2"
-    >
-      <span className="mt-0.5">{icon}</span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span>{label}</span>
-        <span className="text-xs text-slate-500">{hint}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        className={`mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-          checked ? 'justify-end bg-blue-500' : 'justify-start bg-slate-300'
-        }`}
-      >
-        <span className="h-4 w-4 rounded-full bg-white" />
-      </span>
-    </DropdownMenuItem>
   );
 }

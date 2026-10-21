@@ -115,21 +115,21 @@ describe('OperationsPageHeader — 링크 셸에는 새로고침과 나가기만
 });
 
 describe('OperationsPageHeader — 설문 종료는 중단과 같은 자리·같은 자격이다 (ADR-0030)', () => {
-  it('설문을 고칠 수 있는 주체에게 중단과 종료가 함께 보인다', () => {
+  // 중단·종료는 한 버튼의 메뉴 토글 둘이다 — 버튼이 보이면 둘 다 누를 수 있다.
+  const STATUS_BUTTON = /응답 받는 중|중단 중|종료됨/;
+
+  it('설문을 고칠 수 있는 주체에게 중단·종료 메뉴 버튼이 보인다', () => {
     renderHeader(surveyCapabilityValues);
-    expect(screen.getByRole('button', { name: '설문 중단' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '설문 종료' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: STATUS_BUTTON })).toBeTruthy();
   });
 
-  it('survey.edit 이 없으면 둘 다 보이지 않는다 — 한쪽만 누를 수 있는 사람이 없다', () => {
+  it('survey.edit 이 없으면 보이지 않는다 — 한쪽만 누를 수 있는 사람이 없다', () => {
     renderHeader(surveyCapabilityValues.filter((cap) => cap !== 'survey.edit'));
-    expect(screen.queryByRole('button', { name: '설문 중단' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '설문 종료' })).toBeNull();
+    expect(screen.queryByRole('button', { name: STATUS_BUTTON })).toBeNull();
   });
 
-  it('외주 링크 셸에는 종료 버튼이 없다', () => {
+  it('외주 링크 셸에는 중단·종료 메뉴가 없다', () => {
     renderHeader(LINK_CAPABILITIES, { internalShell: false });
-    expect(screen.queryByRole('button', { name: '설문 종료' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '종료됨' })).toBeNull();
+    expect(screen.queryByRole('button', { name: STATUS_BUTTON })).toBeNull();
   });
 });

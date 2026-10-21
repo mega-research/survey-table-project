@@ -257,7 +257,8 @@
   `published ⇄ closed` 뿐이고(`operations.control.setClosed`, **`survey.edit`**, 조건부 UPDATE 라
   그 밖의 상태에서는 CONFLICT) **재발행이 published 로 되돌린다**. `isPaused` 와 독립이라 둘이
   함께 설 수 있다. 종료가 닫는 것은 둘이다 — 외부 링크(위 표)와 **새 응답**(루트 AGENTS.md 주의사항 18).
-  내부 콘솔·분석·내보내기는 그대로다. 「발행된 적 있는가」를 `status === 'published'` 로 묻던
+  내부 콘솔·분석·내보내기는 그대로다. 화면은 운영 헤더의 버튼 하나(`features/operations/survey-status-control`)다 —
+  테스트 모드처럼 버튼은 상태(응답 받는 중·중단 중·종료됨)만 말하고 메뉴를 열며, 중단과 종료는 그 안의 토글 둘이다. 「발행된 적 있는가」를 `status === 'published'` 로 묻던
   자리는 전부 고쳤고(`status_not_published` 술어·게스트 카드 진행 상태·발행 확인 문구),
   `tests/repo/survey-status-readers.test.ts` 가 `surveys.status` 를 읽는 서버 파일을 목록으로
   고정한다 — **새 독자가 붙으면 그 파일이 빨개지고, 종료를 어떻게 다룰지 정한 뒤 등재한다.**
