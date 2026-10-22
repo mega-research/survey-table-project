@@ -1,8 +1,8 @@
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
+import { stripUnreachedQuestionValues } from '@/lib/survey/answer-path';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 import { responsesToLookupShape } from '@/utils/branch-eval';
@@ -85,6 +85,8 @@ export interface ExportStripContext {
   groups?: QuestionGroup[] | undefined;
   lookups?: SurveyLookup[] | undefined;
   contactAttrs?: Record<string, string | undefined> | undefined;
+  /** 그 버전의 설정 — 문항 섞기가 켜져 있으면 경로 밖 strip 을 건너뛴다(lib/survey/answer-path). */
+  settings?: { shuffleQuestions?: boolean | null } | null | undefined;
 }
 
 /**
@@ -94,7 +96,10 @@ export interface ExportStripContext {
  *
  * **DB 는 건드리지 않는다.** 내보내는 값에서만 뺀다 — 되돌릴 수 있게 두려는 것이다.
  *
- * 순서는 저장 경계와 같다 — **숨은 문항 strip → 게이팅 strip**. 문항이 통째로 사라지면 그
+ * 순서는 응답 확정과 같다 — **숨은 문항 strip → 경로 밖 strip(둘을 고정점까지) → 게이팅 strip**.
+ * 경로 밖은 분기 이동(goto·end)으로 건너뛴 페이지의 답이다. 첫 페이지부터 지금 답으로 끝까지 걸어
+ * 판정하므로 진행 중 행이 아직 가지 않은 뒤쪽 경로 페이지는 남는다. 행의 `currentStepId`(응답자가
+ * 마지막으로 선 페이지)가 계산한 경로 밖이면 경로를 믿지 않고 건너뛴다. 문항이 통째로 사라지면 그
  * 표의 셀 값도 함께 사라져 게이팅 판정의 입력이 달라지므로 순서를 바꾸면 안 된다. 저장
  * 경계의 세 번째 단계인 calc 재계산은 **일부러 뺐다** — 앞 둘은 값을 지우기만 하지만 calc 는
  * 저장된 적 없는 새 값을 써넣는다. 내보내기가 원본에 없던 숫자를 만들어내면 안 된다.
@@ -112,7 +117,7 @@ export function stripHiddenFromExportRows(
   return rows.map((row) => {
     const ctx = contextByRowId.get(row.id);
     if (!ctx) return row;
-    const hiddenStripped = stripHiddenQuestionValues(
+    const { responses: reached } = stripUnreachedQuestionValues(
       ctx.questions,
       row.questionResponses,
       ctx.groups,
@@ -121,8 +126,9 @@ export function stripHiddenFromExportRows(
         contactAttrs: ctx.contactAttrs ?? {},
         lookups: ctx.lookups ?? [],
       },
+      { settings: ctx.settings, lastStepId: row.currentStepId },
     );
-    const stripped = stripDisabledCellValues(ctx.questions, hiddenStripped);
+    const stripped = stripDisabledCellValues(ctx.questions, reached);
     return stripped === row.questionResponses ? row : { ...row, questionResponses: stripped };
   });
 }

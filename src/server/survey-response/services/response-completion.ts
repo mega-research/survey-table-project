@@ -100,6 +100,8 @@ export async function completeResponse(
       isTest: true,
       // 재응답 허용 표식(reeditPendingSince) — 쿼터 하드 차단 면제 판정에 쓴다.
       metadata: true,
+      // 응답자가 마지막으로 선 페이지 — 응답 확정의 경로 밖 strip 이 계산한 경로와 맞춰 본다.
+      currentStepId: true,
     },
   });
   if (gateRow) {
@@ -146,7 +148,7 @@ export async function completeResponse(
     await restorePrefillAnswers(validatedResponses, gateRow);
   }
 
-  // 응답 확정 (CONTEXT.md 「응답 확정」) — 숨은 문항 strip → 게이팅 strip → calc 재계산 → 등록
+  // 응답 확정 (CONTEXT.md 「응답 확정」) — 숨은 문항 strip → 경로 밖 strip → 게이팅 strip → calc 재계산 → 등록
   // 사이드카만 → 자격미달 판정 → 암호화. 클라이언트가 이미 지우고 계산하지만 이탈 beacon 이 지움
   // 전 값을, 요청 변조·구버전 클라이언트가 수식과 다른 값을 보낼 수 있다 — 응답 시점 버전
   // 스냅샷으로 다시 확정한다("수식 결과와 다른 저장값은 존재하지 않는다" — 계산 셀 불변식).
@@ -169,7 +171,9 @@ export async function completeResponse(
   // 페이로드 경로의 저장값 — 아래 쿼터 판정은 평문(validatedResponses)으로 하고, 저장 직전에 갈아 끼운다.
   let payloadStored: Record<string, unknown> | undefined;
   if (validatedResponses && material) {
-    const finalized = finalizeAnswers(material, validatedResponses);
+    const finalized = finalizeAnswers(material, validatedResponses, {
+      lastStepId: gateRow?.currentStepId ?? null,
+    });
     validatedResponses = finalized.plain;
     payloadStored = finalized.stored;
     screenedOut = finalized.screenedOut ?? false;
@@ -290,6 +294,7 @@ export async function completeResponse(
         decryptQuestionResponses((locked?.questionResponses ?? {}) as Record<string, unknown>, {
           responseId,
         }),
+        { lastStepId: gateRow?.currentStepId ?? null },
       );
       const judgedResponses = finalized.plain;
       storedFinalized = finalized.stored;

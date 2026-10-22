@@ -280,7 +280,7 @@ async function loadStripContexts(
 
   for (const r of candidates) {
     const snap = snapshotById.get(r.versionId as string) as
-      | { questions?: unknown; groups?: unknown; lookups?: unknown }
+      | { questions?: unknown; groups?: unknown; lookups?: unknown; settings?: unknown }
       | null
       | undefined;
     if (!snap || !Array.isArray(snap.questions)) continue;
@@ -294,6 +294,11 @@ async function loadStripContexts(
         ? (snap.lookups as ExportStripContext['lookups'])
         : undefined,
       contactAttrs: attrs,
+      // 문항 섞기 여부 — 켜진 버전은 경로 밖 strip 을 건너뛴다.
+      settings:
+        snap.settings && typeof snap.settings === 'object'
+          ? (snap.settings as ExportStripContext['settings'])
+          : undefined,
     });
   }
   return out;

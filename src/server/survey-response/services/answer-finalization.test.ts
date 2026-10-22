@@ -300,3 +300,163 @@ describe('finalizeAnswers — 자격미달 판정과 암호화', () => {
     expect(result.stored['q-ctrl']).toBe('yes');
   });
 });
+
+/**
+ * 경로 밖 문항 — 분기 이동으로 건너뛴 페이지의 답.
+ *
+ *   1페이지 q-route : 'skip' → q-last 로 goto, 'out' → 자격미달 종료
+ *   2페이지 q-mid   : 자격미달 보기를 가진 문항
+ *   3페이지 q-last  : 평범한 문항 + 계산 표 q-sum (자기 셀을 그대로 옮기는 계산 칸)
+ */
+const ROUTE_QUESTIONS = [
+  {
+    id: 'q-route',
+    type: 'radio',
+    title: '경로',
+    order: 0,
+    options: [
+      {
+        id: 'opt-skip',
+        label: '건너뛰기',
+        value: 'skip',
+        branchRule: { id: 'br-skip', value: '', action: 'goto', targetQuestionId: 'q-last' },
+      },
+      {
+        id: 'opt-out',
+        label: '대상 아님',
+        value: 'out',
+        branchRule: { id: 'br-out', value: '', action: 'end', endOutcome: 'screened_out' },
+      },
+      { id: 'opt-stay', label: '계속', value: 'stay' },
+    ],
+  },
+  {
+    id: 'q-mid',
+    type: 'radio',
+    title: '중간',
+    order: 1,
+    pageBreakBefore: true,
+    options: [
+      {
+        id: 'opt-mid-out',
+        label: '해당 없음',
+        value: 'mid-out',
+        branchRule: { id: 'br-mid', value: '', action: 'end', endOutcome: 'screened_out' },
+      },
+      { id: 'opt-mid-in', label: '해당', value: 'mid-in' },
+    ],
+  },
+  { id: 'q-last', type: 'text', title: '끝', order: 2, pageBreakBefore: true },
+  {
+    id: 'q-sum',
+    type: 'table',
+    title: '합계 표',
+    order: 3,
+    tableRowsData: [
+      {
+        id: 'sr1',
+        label: 'sr1',
+        cells: [
+          { id: 'sum_in', content: '', type: 'input', inputType: 'number' },
+          {
+            id: 'sum_out',
+            content: '',
+            type: 'calc',
+            formula: { kind: 'cell', cellId: 'sum_in' },
+          },
+        ],
+      },
+    ],
+  },
+] as unknown as Question[];
+
+describe('finalizeAnswers — 경로 밖 문항', () => {
+  it('건너뛴 페이지에 남은 자격미달 보기는 지우고 완료로 판정한다', () => {
+    const result = finalizeAnswers(material(ROUTE_QUESTIONS), {
+      'q-route': 'skip',
+      'q-mid': 'mid-out',
+      'q-last': '답',
+    });
+
+    expect(result.plain['q-mid']).toBeUndefined();
+    expect(result.plain['q-last']).toBe('답');
+    expect(result.screenedOut).toBe(false);
+    expect(result.changed).toBe(true);
+  });
+
+  it('첫 페이지에서 자격미달로 끝나면 뒤쪽 답을 지우고 계산 표에 값을 채우지 않는다', () => {
+    const result = finalizeAnswers(material(ROUTE_QUESTIONS), {
+      'q-route': 'out',
+      'q-last': '전에 적은 답',
+      'q-sum': { sum_out: '0' },
+    });
+
+    expect(result.plain).toEqual({ 'q-route': 'out' });
+    expect(result.screenedOut).toBe(true);
+  });
+
+  it('경로 위 계산 표는 종전대로 채운다', () => {
+    const result = finalizeAnswers(material(ROUTE_QUESTIONS), {
+      'q-route': 'stay',
+      'q-mid': 'mid-in',
+      'q-sum': { sum_in: '4' },
+    });
+
+    expect(result.plain['q-sum']).toEqual({ sum_in: '4', sum_out: '4' });
+    expect(result.screenedOut).toBe(false);
+  });
+
+  it('숨은 문항의 계산 표에는 값을 채우지 않는다', () => {
+    const hiddenCalc = hiddenByCtrl('q-hcalc', {
+      type: 'table',
+      tableRowsData: [
+        {
+          id: 'hc1',
+          label: 'hc1',
+          cells: [
+            { id: 'hc_in', content: '', type: 'input', inputType: 'number' },
+            { id: 'hc_out', content: '', type: 'calc', formula: { kind: 'cell', cellId: 'hc_in' } },
+          ],
+        },
+      ],
+    } as Partial<Question>);
+    const result = finalizeAnswers(material([CTRL, hiddenCalc]), { 'q-ctrl': 'no' });
+
+    expect(result.plain).toEqual({ 'q-ctrl': 'no' });
+    expect(result.changed).toBe(false);
+  });
+
+  it('문항 섞기 설문은 경로 밖 strip 을 건너뛴다', () => {
+    const snapshot = {
+      questions: ROUTE_QUESTIONS,
+      settings: { shuffleQuestions: true },
+    } as unknown as SurveyVersionSnapshot;
+    const result = finalizeAnswers(material(ROUTE_QUESTIONS, { snapshot }), {
+      'q-route': 'skip',
+      'q-mid': 'mid-in',
+      'q-last': '답',
+    });
+
+    expect(result.plain['q-mid']).toBe('mid-in');
+  });
+
+  it('구버전 이관(skipHiddenStrip)이면 경로 밖 답도 남긴다', () => {
+    const result = finalizeAnswers(
+      material(ROUTE_QUESTIONS),
+      { 'q-route': 'skip', 'q-mid': 'mid-in', 'q-last': '답' },
+      { skipHiddenStrip: true },
+    );
+
+    expect(result.plain['q-mid']).toBe('mid-in');
+  });
+
+  it('기록된 마지막 페이지가 계산한 경로 밖이면 건너뛴다', () => {
+    const result = finalizeAnswers(
+      material(ROUTE_QUESTIONS),
+      { 'q-route': 'skip', 'q-mid': 'mid-in', 'q-last': '답' },
+      { lastStepId: 'page:q-mid' },
+    );
+
+    expect(result.plain['q-mid']).toBe('mid-in');
+  });
+});
